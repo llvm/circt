@@ -677,13 +677,13 @@ struct RvalueExprVisitor {
     auto conditionalOp = builder.create<moore::ConditionalOp>(loc, type, value);
 
     // Create blocks for true region and false region.
-    conditionalOp.getTrueRegion().emplaceBlock();
-    conditionalOp.getFalseRegion().emplaceBlock();
+    auto &trueBlock = conditionalOp.getTrueRegion().emplaceBlock();
+    auto &falseBlock = conditionalOp.getFalseRegion().emplaceBlock();
 
     OpBuilder::InsertionGuard g(builder);
 
     // Handle left expression.
-    builder.setInsertionPointToStart(conditionalOp.getBody(0));
+    builder.setInsertionPointToStart(&trueBlock);
     auto trueValue = context.convertRvalueExpression(expr.left());
     if (!trueValue)
       return {};
@@ -692,7 +692,7 @@ struct RvalueExprVisitor {
     builder.create<moore::YieldOp>(loc, trueValue);
 
     // Handle right expression.
-    builder.setInsertionPointToStart(conditionalOp.getBody(1));
+    builder.setInsertionPointToStart(&falseBlock);
     auto falseValue = context.convertRvalueExpression(expr.right());
     if (!falseValue)
       return {};
