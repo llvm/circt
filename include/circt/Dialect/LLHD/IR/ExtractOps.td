@@ -18,8 +18,8 @@ class SigPtrIndexBitWidthConstraint<string index, string input>
   : TypesMatchWith<"Index width should be exactly clog2 (size of array)",
                    input, index,
                    [{
-                     IntegerType::get($_self.getContext(), std::max<uint64_t>(
-                       llvm::Log2_64_Ceil(llhd::getLLHDTypeWidth($_self)), 1))
+                      IntegerType::get($_self.getContext(), 
+                        llvm::Log2_64_Ceil(llhd::getLLHDTypeWidth($_self)))
                    }]>;
 
 class SigArrayElementTypeConstraint<string result, string input>

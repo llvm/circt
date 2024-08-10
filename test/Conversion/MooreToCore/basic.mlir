@@ -46,7 +46,7 @@ func.func @UnrealizedConversionCast(%arg0: !moore.i8) -> !moore.i16 {
 }
 
 // CHECK-LABEL: func @Expressions
-func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %arg3: !moore.i5, %arg4: !moore.i1) {
+func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %arg3: !moore.i5, %arg4: !moore.i1, %arg5: !moore.array<5 x i32>, %arg6: !moore.ref<i1>, %arg7: !moore.ref<!moore.array<5 x i32>>) {
   // CHECK-NEXT: %0 = comb.concat %arg0, %arg0 : i1, i1
   // CHECK-NEXT: %1 = comb.concat %arg1, %arg1 : i1, i1
   moore.concat %arg0, %arg0 : (!moore.i1, !moore.i1) -> !moore.i2
@@ -107,9 +107,27 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
 
   // CHECK-NEXT: %c2_i32 = hw.constant 2 : i32
   %2 = moore.constant 2 : !moore.i32
+  // CHECK-NEXT: %c0_i32 = hw.constant 0 : i32
+  %c0 = moore.constant 0 : !moore.i32
 
   // CHECK-NEXT: comb.extract %arg2 from 2 : (i6) -> i2
   moore.extract %arg2 from 2 : !moore.i6 -> !moore.i2
+  // CHECK-NEXT: [[V0:%.+]] = hw.constant 2 : i3
+  // CHECK-NEXT: hw.array_slice %arg5[[[V0]]] : (!hw.array<5xi32>) -> !hw.array<2xi32>
+  moore.extract %arg5 from 2 : !moore.array<5 x i32> -> !moore.array<2 x i32>
+  // CHECK-NEXT: [[V0:%.+]] = hw.constant 2 : i3
+  // CHECK-NEXT: hw.array_get %arg5[[[V0]]] : !hw.array<5xi32>
+  moore.extract %arg5 from 2 : !moore.array<5 x i32> -> i32
+
+  // CHECK-NEXT: [[V0:%.+]] = hw.constant 0 : i0
+  // CHECK-NEXT: llhd.sig.extract %arg6 from [[V0]] : (!hw.inout<i1>) -> !hw.inout<i1>
+  moore.extract_ref %arg6 from 0 : !moore.ref<!moore.i1> -> !moore.ref<!moore.i1>
+  // CHECK-NEXT: [[V0:%.+]] = hw.constant 2 : i3
+  // CHECK-NEXT: llhd.sig.array_slice %arg7 at [[V0]] : (!hw.inout<array<5xi32>>) -> !hw.inout<array<2xi32>>
+  moore.extract_ref %arg7 from 2 : !moore.ref<!moore.array<5 x i32>> -> !moore.ref<!moore.array<2 x i32>>
+  // CHECK-NEXT: [[V0:%.+]] = hw.constant 2 : i3
+  // CHECK-NEXT: llhd.sig.array_get %arg7[[[V0]]] : !hw.inout<array<5xi32>>
+  moore.extract_ref %arg7 from 2 : !moore.ref<!moore.array<5 x i32>> -> !moore.ref<i32>
 
   // CHECK-NEXT: [[V21:%.+]] = comb.extract %c2_i32 from 6 : (i32) -> i26
   // CHECK-NEXT: [[CONST_0:%.+]] = hw.constant 0 : i26
@@ -120,6 +138,47 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: [[V25:%.+]] = comb.shru %arg2, [[V24]] : i6
   // CHECK-NEXT: comb.extract [[V25]] from 0 : (i6) -> i1
   moore.dyn_extract %arg2 from %2 : !moore.i6, !moore.i32 -> !moore.i1
+  // CHECK-NEXT: [[V21:%.+]] = comb.extract %c2_i32 from 3 : (i32) -> i29
+  // CHECK-NEXT: [[CONST_0:%.+]] = hw.constant 0 : i29
+  // CHECK-NEXT: [[V22:%.+]] = comb.icmp eq [[V21]], [[CONST_0]] : i29
+  // CHECK-NEXT: [[V23:%.+]] = comb.extract %c2_i32 from 0 : (i32) -> i3
+  // CHECK-NEXT: [[MAX:%.+]] = hw.constant -1 : i3
+  // CHECK-NEXT: [[V24:%.+]] = comb.mux [[V22]], [[V23]], [[MAX]] : i3
+  // CHECK-NEXT: hw.array_slice %arg5[[[V24]]] : (!hw.array<5xi32>) -> !hw.array<2xi32>
+  moore.dyn_extract %arg5 from %2 : !moore.array<5 x i32>, !moore.i32 -> !moore.array<2 x i32>
+  // CHECK-NEXT: [[V21:%.+]] = comb.extract %c2_i32 from 3 : (i32) -> i29
+  // CHECK-NEXT: [[CONST_0:%.+]] = hw.constant 0 : i29
+  // CHECK-NEXT: [[V22:%.+]] = comb.icmp eq [[V21]], [[CONST_0]] : i29
+  // CHECK-NEXT: [[V23:%.+]] = comb.extract %c2_i32 from 0 : (i32) -> i3
+  // CHECK-NEXT: [[MAX:%.+]] = hw.constant -1 : i3
+  // CHECK-NEXT: [[V24:%.+]] = comb.mux [[V22]], [[V23]], [[MAX]] : i3
+  // CHECK-NEXT: hw.array_get %arg5[[[V24]]] : !hw.array<5xi32>
+  moore.dyn_extract %arg5 from %2 : !moore.array<5 x i32>, !moore.i32 -> !moore.i32
+
+  // CHECK-NEXT: [[V21:%.+]] = comb.extract %c0_i32 from 0 : (i32) -> i32
+  // CHECK-NEXT: [[CONST_0:%.+]] = hw.constant 0 : i32
+  // CHECK-NEXT: [[V22:%.+]] = comb.icmp eq [[V21]], [[CONST_0]] : i32
+  // CHECK-NEXT: [[V23:%.+]] = comb.extract %c0_i32 from 0 : (i32) -> i0
+  // CHECK-NEXT: [[MAX:%.+]] = hw.constant 0 : i0
+  // CHECK-NEXT: [[V24:%.+]] = comb.mux [[V22]], [[V23]], [[MAX]] : i0
+  // CHECK-NEXT: llhd.sig.extract %arg6 from [[V24]] : (!hw.inout<i1>) -> !hw.inout<i1>
+  moore.dyn_extract_ref %arg6 from %c0 : !moore.ref<!moore.i1>, !moore.i32 -> !moore.ref<!moore.i1>
+  // CHECK-NEXT: [[V21:%.+]] = comb.extract %c2_i32 from 3 : (i32) -> i29
+  // CHECK-NEXT: [[CONST_0:%.+]] = hw.constant 0 : i29
+  // CHECK-NEXT: [[V22:%.+]] = comb.icmp eq [[V21]], [[CONST_0]] : i29
+  // CHECK-NEXT: [[V23:%.+]] = comb.extract %c2_i32 from 0 : (i32) -> i3
+  // CHECK-NEXT: [[MAX:%.+]] = hw.constant -1 : i3
+  // CHECK-NEXT: [[V24:%.+]] = comb.mux [[V22]], [[V23]], [[MAX]] : i3
+  // CHECK-NEXT: llhd.sig.array_slice %arg7 at [[V24]] : (!hw.inout<array<5xi32>>) -> !hw.inout<array<2xi32>>
+  moore.dyn_extract_ref %arg7 from %2 : !moore.ref<!moore.array<5 x i32>>, !moore.i32 -> !moore.ref<!moore.array<2 x i32>>
+  // CHECK-NEXT: [[V21:%.+]] = comb.extract %c2_i32 from 3 : (i32) -> i29
+  // CHECK-NEXT: [[CONST_0:%.+]] = hw.constant 0 : i29
+  // CHECK-NEXT: [[V22:%.+]] = comb.icmp eq [[V21]], [[CONST_0]] : i29
+  // CHECK-NEXT: [[V23:%.+]] = comb.extract %c2_i32 from 0 : (i32) -> i3
+  // CHECK-NEXT: [[MAX:%.+]] = hw.constant -1 : i3
+  // CHECK-NEXT: [[V24:%.+]] = comb.mux [[V22]], [[V23]], [[MAX]] : i3
+  // CHECK-NEXT: llhd.sig.array_get %arg7[[[V24]]] : !hw.inout<array<5xi32>>
+  moore.dyn_extract_ref %arg7 from %2 : !moore.ref<!moore.array<5 x i32>>, !moore.i32 -> !moore.ref<!moore.i32>
 
   // CHECK-NEXT: [[V26:%.+]] = hw.constant -1 : i6
   // CHECK-NEXT: comb.icmp eq %arg2, [[V26]] : i6
@@ -210,14 +269,6 @@ func.func @AdvancedConversion(%arg0: !moore.array<5 x struct<{exp_bits: i32, man
   %2 = moore.conversion %arg0 : !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>> -> !moore.i320  
   // CHECK: return [[V1]], [[V2]]
   return %1, %2 : !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>, !moore.i320
-}
-
-// CHECK-LABEL: func.func @DynExtractConversion
-func.func @DynExtractConversion(%arg0: !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>) -> !moore.struct<{exp_bits: i32, man_bits: i32}> {
-  %0 = moore.constant 3 : !moore.i32
-  // CHECK: hw.array_get %arg0[{{.*}}] : !hw.array<5xstruct<exp_bits: i32, man_bits: i32>>, i3
-  %1 = moore.dyn_extract %arg0 from %0 : !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>, !moore.i32 -> !moore.struct<{exp_bits: i32, man_bits: i32}>
-  return %1 : !moore.struct<{exp_bits: i32, man_bits: i32}>
 }
 
 // CHECK-LABEL: hw.module @InstanceNull() {
@@ -312,7 +363,7 @@ moore.module @Variable() {
 }
 
 // CHECK-LABEL: hw.module @Struct
-moore.module @Struct(in %arg0 : !moore.struct<{exp_bits: i32, man_bits: i32}>, in %arg1 : !moore.ref<!moore.struct<{exp_bits: i32, man_bits: i32}>>, out a : !moore.i32, out b : !moore.struct<{exp_bits: i32, man_bits: i32}>, out c : !moore.struct<{exp_bits: i32, man_bits: i32}>) {
+moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.struct<{exp_bits: i32, man_bits: i32}>, in %arg1 : !moore.ref<!moore.struct<{exp_bits: i32, man_bits: i32}>>, out a : !moore.i32, out b : !moore.struct<{exp_bits: i32, man_bits: i32}>, out c : !moore.struct<{exp_bits: i32, man_bits: i32}>) {
   // CHECK: hw.struct_extract %arg0["exp_bits"] : !hw.struct<exp_bits: i32, man_bits: i32>
   %0 = moore.struct_extract %arg0, "exp_bits" : !moore.struct<{exp_bits: i32, man_bits: i32}> -> i32
 
@@ -329,6 +380,9 @@ moore.module @Struct(in %arg0 : !moore.struct<{exp_bits: i32, man_bits: i32}>, i
 
   %3 = moore.read %1 : <struct<{exp_bits: i32, man_bits: i32}>>
   %4 = moore.read %2 : <struct<{exp_bits: i32, man_bits: i32}>>
+
+  // CHECK; hw.struct_create %a, %b : !hw.struct<a: i32, b: i32>
+  moore.struct_create %a, %b : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
 
   moore.output %0, %3, %4 : !moore.i32, !moore.struct<{exp_bits: i32, man_bits: i32}>, !moore.struct<{exp_bits: i32, man_bits: i32}>
 }
