@@ -208,6 +208,9 @@ public:
   /// Compute a mask of all the Z bits in this integer.
   APInt getZBits() const { return value & unknown; }
 
+  /// Compute a mask of all the X and Z bits in this integer.
+  APInt getUnknownBits() const { return unknown; }
+
   /// Set the value of all bits in the mask to 0.
   template <typename T>
   void setZeroBits(const T &mask) {
