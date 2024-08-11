@@ -32,8 +32,6 @@ struct CheckUninferredResetsPass
     : public circt::firrtl::impl::CheckUninferredResetsBase<
           CheckUninferredResetsPass> {
   void runOnOperation() override;
-
-  LogicalResult verifyNoAbstractReset();
 };
 } // namespace
 
