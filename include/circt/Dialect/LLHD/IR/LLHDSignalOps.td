@@ -1,4 +1,4 @@
-//===- SignalOps.td - LLHD signal operations ---------------*- tablegen -*-===//
+//===- LLHDSignalOps.td - LLHD signal operations -----------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -12,7 +12,7 @@
 
 include "mlir/IR/EnumAttr.td"
 
-def LLHD_SigOp : LLHD_Op<"sig", [
+def SigOp : LLHDOp<"sig", [
     ParentOneOf<["hw::HWModuleOp", "llhd::ProcessOp"]>,
     TypesMatchWith<
       "type of 'init' and underlying type of 'signal' have to match.",
@@ -25,67 +25,51 @@ def LLHD_SigOp : LLHD_Op<"sig", [
     result type will always be a signal carrying the type of the init operand.
     A signal defines a unique name within the entity it resides in.
 
-    Syntax:
-
-    ```
-    sig-op ::= ssa-id `=` `llhd.sig` sig-name ssa-init attr-dict `:` init-type
-    ```
-
     Example:
 
     ```mlir
-    %init_i64 = llhd.const 123 : i64
-    %sig_i64 = llhd.sig "foo" %init_64 : i64
-
-    %init_i1 = llhd.const 1 : i1
-    %sig_i1 = llhd.sig "bar" %init_i1 : i1
+    %c123_i64 = hw.constant 123 : i64
+    %sig_i64 = llhd.sig "foo" %c123_i64 : i64
     ```
 
-    The first `llhd.sig` instruction creates a new signal named "foo", carrying
-    an `i64` type with initial value of 123, while the second one creates a new
-    signal named "bar", carrying an `i1` type with initial value of 1.
+    This example creates a new signal named "foo", carrying an `i64` type with
+    initial value of 123.
   }];
 
-  let arguments = (ins StrAttr: $name, LLHD_AnyElementType: $init);
+  let arguments = (ins StrAttr: $name, HWValueType: $init);
   let results = (outs InOutType: $result);
 
   let assemblyFormat = "$name $init attr-dict `:` qualified(type($init))";
 }
 
-def LLHD_PrbOp : LLHD_Op<"prb", [
+def PrbOp : LLHDOp<"prb", [
     TypesMatchWith<
       "type of 'result' and underlying type of 'signal' have to match.",
       "signal", "result", "llvm::cast<hw::InOutType>($_self).getElementType()">
   ]> {
   let summary = "Probe a signal.";
   let description = [{
-    The `llhd.prb` instruction probes a signal and returns the value it
+    This operation probes a signal and returns the value it
     currently carries as a new SSA operand. The result type is always
     the type carried by the signal.
-
-    Syntax:
-
-    ```
-    prb-op ::= ssa-id `=` `llhd.prb` ssa-sig attr-dict `:` !hw.inout<type>
-    ```
 
     Example:
 
     ```mlir
-    %const_i1 = llhd.const 1 : i1
-    %sig_i1 = llhd.sig %const_i1 : i1
+    %true = hw.constant true
+    %sig_i1 = llhd.sig %true : i1
     %prbd = llhd.prb %sig_i1 : !hw.inout<i1>
     ```
   }];
 
   let arguments = (ins Arg<InOutType, "the signal to probe from",
                            [MemRead]>: $signal);
-  let results = (outs LLHD_AnyElementType: $result);
+  let results = (outs HWValueType: $result);
 
   let assemblyFormat = "$signal attr-dict `:` qualified(type($signal))";
 }
 
-def LLHD_OutputOp : LLHD_Op<"output", [
+def OutputOp : LLHDOp<"output", [
     TypesMatchWith<
       "type of 'value' and underlying type of 'result' have to match.",
       "value", "result", "hw::InOutType::get($_self)">
@@ -101,22 +85,22 @@ def LLHD_OutputOp : LLHD_Op<"output", [
     Example:
 
     ```mlir
-    %value = llhd.const 1 : i1
-    %time = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
+    %value = hw.constant true
+    %time = llhd.constant_time <1ns, 0d, 0e>
     %sig = llhd.output "sigName" %value after %time : i1
 
     // is equivalent to
 
-    %value = llhd.const 1 : i1
-    %time = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
+    %value = hw.constant true
+    %time = llhd.constant_time <1ns, 0d, 0e>
     %sig = llhd.sig "sigName" %value : i1
     llhd.drv %sig, %value after %time : !hw.inout<i1>
     ```
   }];
 
   let arguments = (ins OptionalAttr<StrAttr>: $name,
-                       LLHD_AnyElementType: $value,
-                       LLHD_TimeType: $time);
+                       HWValueType: $value,
+                       LLHDTimeType: $time);
 
   let results = (outs InOutType: $result);
 
@@ -125,7 +109,7 @@ def LLHD_OutputOp : LLHD_Op<"output", [
   }];
 }
 
-def LLHD_DrvOp : LLHD_Op<"drv", [
+def DrvOp : LLHDOp<"drv", [
     TypesMatchWith<
       "type of 'value' and underlying type of 'signal' have to match.",
       "signal", "value", "llvm::cast<hw::InOutType>($_self).getElementType()">
@@ -139,31 +123,23 @@ def LLHD_DrvOp : LLHD_Op<"drv", [
     value is 1. In case no enable signal is passed the drive will always be
     performed. This operation does not define any new SSA operands.
 
-    Syntax:
-
-    ```
-    drv-op ::= `llhd.drv` ssa-signal `,` ssa-const `after` ssa-time
-      (`if` ssa-enable)? `:` !hw.inout<const-type>
-    ```
-
     Example:
 
     ```mlir
-    %init = llhd.const 1 : i1
-    %en = llhd.const 0 : i1
-    %time = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
-    %sig = llhd.sig %init : i1
-    %new = llhd.not %init : i1
+    %true = hw.constant true
+    %false = hw.constant false
+    %time = llhd.constant_time <1ns, 0d, 0e>
+    %sig = llhd.sig %true : i1
 
-    llhd.drv %sig, %new after %time : !hw.inout<i1>
-    llhd.drv %sig, %new after %time if %en : !hw.inout<i1>
+    llhd.drv %sig, %false after %time : !hw.inout<i1>
+    llhd.drv %sig, %false after %time if %true : !hw.inout<i1>
     ```
   }];
 
   let arguments = (ins Arg<InOutType, "the signal to drive to",
                            [MemWrite]>: $signal,
-                       LLHD_AnyElementType: $value,
-                       LLHD_TimeType: $time,
+                       HWValueType: $value,
+                       LLHDTimeType: $time,
                        Optional<I1>: $enable);
 
   let assemblyFormat = [{
@@ -175,7 +151,7 @@ def LLHD_DrvOp : LLHD_Op<"drv", [
   let hasCanonicalizeMethod = 1;
 }
 
-def DelayOp : LLHD_Op<"delay", [Pure, SameOperandsAndResultType]> {
+def DelayOp : LLHDOp<"delay", [Pure, SameOperandsAndResultType]> {
   let summary = "specifies value propagation delay";
   let description = [{
     This operation propagates all value changes of the input to the output after
@@ -185,7 +161,7 @@ def DelayOp : LLHD_Op<"delay", [Pure, SameOperandsAndResultType]> {
     store.
   }];
 
-  let arguments = (ins HWNonInOutType:$input, LLHD_TimeAttr:$delay);
+  let arguments = (ins HWNonInOutType:$input, LLHDTimeAttr:$delay);
   let results = (outs HWNonInOutType:$result);
 
   let assemblyFormat = "$input `by` $delay attr-dict `:` type($result)";
