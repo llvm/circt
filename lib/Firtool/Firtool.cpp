@@ -142,7 +142,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
-  pm.nest<firrtl::CircuitOp>().addPass(
+  pm.nest<firrtl::CircuitOp>().addNestedPass<firrtl::FModuleOp>(
       firrtl::createCheckUninferredResetsPass());
 
   // Preset the random initialization parameters for each module. The current

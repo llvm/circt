@@ -36,23 +36,18 @@ struct CheckUninferredResetsPass
 } // namespace
 
 void CheckUninferredResetsPass::runOnOperation() {
-  bool hasAbstractResetPorts = false;
-  for (FModuleLike module :
-       getOperation().getBodyBlock()->getOps<FModuleLike>()) {
-    for (PortInfo port : module.getPorts()) {
-      if (getBaseOfType<ResetType>(port.type)) {
-        auto diag = emitError(port.loc)
-                    << "a port \"" << port.getName()
-                    << "\" with abstract reset type was unable to be "
-                       "inferred by InferResets (is this a top-level port?)";
-        diag.attachNote(module->getLoc())
-            << "the module with this uninferred reset port was defined here";
-        hasAbstractResetPorts = true;
-      }
+  auto module = getOperation();
+  for (auto port : module.getPorts()) {
+    if (getBaseOfType<ResetType>(port.type)) {
+      auto diag = emitError(port.loc)
+                  << "a port \"" << port.getName()
+                  << "\" with abstract reset type was unable to be "
+                     "inferred by InferResets (is this a top-level port?)";
+      diag.attachNote(module->getLoc())
+          << "the module with this uninferred reset port was defined here";
+      return signalPassFailure();
     }
   }
-  if (hasAbstractResetPorts)
-    return signalPassFailure();
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createCheckUninferredResetsPass() {
