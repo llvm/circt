@@ -25,6 +25,7 @@
 #include <vector>
 
 namespace esi {
+class Type;
 
 //===----------------------------------------------------------------------===//
 // Common accelerator description types.
@@ -53,12 +54,18 @@ public:
 };
 bool operator<(const AppIDPath &a, const AppIDPath &b);
 
+struct Constant {
+  std::any value;
+  std::optional<const Type *> type;
+};
+
 struct ModuleInfo {
   std::optional<std::string> name;
   std::optional<std::string> summary;
   std::optional<std::string> version;
   std::optional<std::string> repo;
   std::optional<std::string> commitHash;
+  std::map<std::string, Constant> constants;
   std::map<std::string, std::any> extra;
 };
 

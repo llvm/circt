@@ -107,6 +107,10 @@ private:
     return ctxt.getType(id);
   }
 
+  std::any getAny(const nlohmann::json &value) const;
+  void parseModuleMetadata(ModuleInfo &info, const nlohmann::json &mod) const;
+  void parseModuleConsts(ModuleInfo &info, const nlohmann::json &mod) const;
+
   // The parsed json.
   nlohmann::json manifestJson;
   // Cache the module info for each symbol.
@@ -138,42 +142,50 @@ static ServicePortDesc parseServicePort(const nlohmann::json &jsonPort) {
 
 /// Convert the json value to a 'std::any', which can be exposed outside of this
 /// file.
-static std::any getAny(const nlohmann::json &value) {
-  auto getObject = [](const nlohmann::json &json) {
+std::any Manifest::Impl::getAny(const nlohmann::json &value) const {
+  auto getObject = [this](const nlohmann::json &json) -> std::any {
     std::map<std::string, std::any> ret;
     for (auto &e : json.items())
       ret[e.key()] = getAny(e.value());
     return ret;
   };
 
-  auto getArray = [](const nlohmann::json &json) {
+  auto getArray = [this](const nlohmann::json &json) -> std::any {
     std::vector<std::any> ret;
     for (auto &e : json)
       ret.push_back(getAny(e));
     return ret;
   };
 
-  if (value.is_string())
-    return value.get<std::string>();
-  else if (value.is_number_integer())
-    return value.get<int64_t>();
-  else if (value.is_number_unsigned())
-    return value.get<uint64_t>();
-  else if (value.is_number_float())
-    return value.get<double>();
-  else if (value.is_boolean())
-    return value.get<bool>();
-  else if (value.is_null())
-    return value.get<std::nullptr_t>();
-  else if (value.is_object())
-    return getObject(value);
-  else if (value.is_array())
-    return getArray(value);
-  else
-    throw std::runtime_error("Unknown type in manifest: " + value.dump(2));
+  auto getValue = [&](const nlohmann::json &innerValue) -> std::any {
+    if (innerValue.is_string())
+      return innerValue.get<std::string>();
+    else if (innerValue.is_number_integer())
+      return innerValue.get<int64_t>();
+    else if (innerValue.is_number_unsigned())
+      return innerValue.get<uint64_t>();
+    else if (innerValue.is_number_float())
+      return innerValue.get<double>();
+    else if (innerValue.is_boolean())
+      return innerValue.get<bool>();
+    else if (innerValue.is_null())
+      return innerValue.get<std::nullptr_t>();
+    else if (innerValue.is_object())
+      return getObject(innerValue);
+    else if (innerValue.is_array())
+      return getArray(innerValue);
+    else
+      throw std::runtime_error("Unknown type in manifest: " +
+                               innerValue.dump(2));
+  };
+
+  if (!value.is_object() || !value.contains("type") || !value.contains("value"))
+    return getValue(value);
+  return Constant{getValue(value.at("value")), getType(value.at("type"))};
 }
 
-static void parseModuleInfo(ModuleInfo &info, const nlohmann::json &mod) {
+void Manifest::Impl::parseModuleMetadata(ModuleInfo &info,
+                                         const nlohmann::json &mod) const {
   for (auto &extra : mod.items())
     if (extra.key() != "name" && extra.key() != "summary" &&
         extra.key() != "version" && extra.key() != "repo" &&
@@ -193,6 +205,19 @@ static void parseModuleInfo(ModuleInfo &info, const nlohmann::json &mod) {
   info.commitHash = value("commitHash");
 }
 
+void Manifest::Impl::parseModuleConsts(ModuleInfo &info,
+                                       const nlohmann::json &mod) const {
+  for (auto &item : mod.items()) {
+    std::any value = getAny(item.value());
+    auto *c = std::any_cast<Constant>(&value);
+    if (c)
+      info.constants[item.key()] = *c;
+    else
+      // If the value isn't a "proper" constant, present it as one with no type.
+      info.constants[item.key()] = Constant{value, std::nullopt};
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // Manifest::Impl class implementation.
 //===----------------------------------------------------------------------===//
@@ -209,7 +234,9 @@ Manifest::Impl::Impl(Context &ctxt, const std::string &manifestStr)
     for (auto &mod : manifestJson.at("symbols")) {
       ModuleInfo info;
       if (mod.contains("sym_info"))
-        parseModuleInfo(info, mod);
+        parseModuleMetadata(info, mod.at("sym_info"));
+      if (mod.contains("sym_consts"))
+        parseModuleConsts(info, mod.at("sym_consts"));
       symbolInfoCache.insert(make_pair(mod.at("symbol"), info));
     }
   } catch (const std::exception &e) {
@@ -577,6 +604,9 @@ const std::vector<const Type *> &Manifest::getTypeTable() const {
 // Print a module info, including the extra metadata.
 std::ostream &operator<<(std::ostream &os, const ModuleInfo &m) {
   auto printAny = [&os](std::any a) {
+    if (auto *c = std::any_cast<Constant>(&a))
+      a = std::any_cast<Constant>(a).value;
+
     const std::type_info &t = a.type();
     if (t == typeid(std::string))
       os << std::any_cast<std::string>(a);
@@ -609,6 +639,15 @@ std::ostream &operator<<(std::ostream &os, const ModuleInfo &m) {
   if (m.summary)
     os << ": " << *m.summary;
   os << "\n";
+
+  if (!m.constants.empty()) {
+    os << "  Constants:\n";
+    for (auto &e : m.constants) {
+      os << "    " << e.first << ": ";
+      printAny(e.second);
+      os << "\n";
+    }
+  }
 
   if (!m.extra.empty()) {
     os << "  Extra metadata:\n";
