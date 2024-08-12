@@ -231,10 +231,6 @@ void circt::om::ClassOp::getAsmBlockArgumentNames(
   getClassLikeAsmBlockArgumentNames(*this, region, setNameFn);
 }
 
-ClassFieldsLike circt::om::ClassOp::getFieldsOp() {
-  return cast<ClassFieldsOp>(this->getBodyBlock()->getTerminator());
-}
-
 void circt::om::ClassOp::addFields(mlir::OpBuilder &builder, mlir::Location loc,
                                    llvm::ArrayRef<mlir::Attribute> fieldNames,
                                    llvm::ArrayRef<mlir::Value> fieldValues) {
@@ -402,10 +398,6 @@ LogicalResult circt::om::ClassExternOp::verify() {
 void circt::om::ClassExternOp::getAsmBlockArgumentNames(
     Region &region, OpAsmSetValueNameFn setNameFn) {
   getClassLikeAsmBlockArgumentNames(*this, region, setNameFn);
-}
-
-ClassFieldsLike circt::om::ClassExternOp::getFieldsOp() {
-  return cast<ClassExternFieldsOp>(this->getBodyBlock()->getTerminator());
 }
 
 void circt::om::ClassExternOp::addFields(

@@ -86,7 +86,11 @@ def ClassLike : OpInterface<"ClassLike"> {
       "mlir::Block *", "getBodyBlock", (ins),
       /*methodBody=*/[{ return $_op.getBodyBlock(); }]>,
     InterfaceMethod<"Get the class-like fields op",
-      "circt::om::ClassFieldsLike", "getFieldsOp", (ins)>
+      "circt::om::ClassFieldsLike", "getFieldsOp", (ins),
+      /*methodBody=*/[{}],
+      /*defaultImplementation=*/[{ 
+        return mlir::cast<ClassFieldsLike>($_op.getBodyBlock()->getTerminator());
+      }]>
   ];
 }
 
