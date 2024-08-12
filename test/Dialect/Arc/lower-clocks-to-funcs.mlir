@@ -18,10 +18,11 @@
 // CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    %c1_i9002 = hw.constant 1 : i9002
 // CHECK-NEXT:    %0 = comb.mux %true, %c1_i9002, %c1_i9002 : i9002
+// CHECK-NEXT:    call @Trivial_passthrough(%arg0) : (!arc.storage<42>) -> ()
 // CHECK-NEXT:    return
 // CHECK-NEXT:  }
 
-// CHECK-LABEL: arc.model @Trivial io !hw.modty<> {
+// CHECK-LABEL: arc.model @Trivial io !hw.modty<> initializer @Trivial_initial  {
 // CHECK-NEXT:  ^bb0(%arg0: !arc.storage<42>):
 // CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    %false = hw.constant false

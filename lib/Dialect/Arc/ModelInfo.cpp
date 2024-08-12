@@ -108,13 +108,6 @@ LogicalResult circt::arc::collectStates(Value storage, unsigned offset,
 LogicalResult circt::arc::collectModels(mlir::ModuleOp module,
                                         SmallVector<ModelInfo> &models) {
 
-  // TODO: This sucks
-  llvm::StringSet<> initFns;
-  for (auto fnOp : module.getOps<func::FuncOp>()) {
-    if (fnOp.getName().ends_with(initialFunctionSuffix))
-      initFns.insert(fnOp.getName());
-  }
-
   for (auto modelOp : module.getOps<ModelOp>()) {
     auto storageArg = modelOp.getBody().getArgument(0);
     auto storageType = cast<StorageType>(storageArg.getType());
@@ -124,13 +117,8 @@ LogicalResult circt::arc::collectModels(mlir::ModuleOp module,
       return failure();
     llvm::sort(states, [](auto &a, auto &b) { return a.offset < b.offset; });
 
-    SmallString<32> initialName;
-    initialName += modelOp.getName();
-    initialName += initialFunctionSuffix;
-    bool hasInitialFn = initFns.contains(initialName);
-
     models.emplace_back(std::string(modelOp.getName()), storageType.getSize(),
-                        std::move(states), hasInitialFn);
+                        std::move(states), modelOp.getInitialFn().has_value());
   }
 
   return success();
@@ -145,6 +133,7 @@ void circt::arc::serializeModelInfoToJson(llvm::raw_ostream &outputStream,
       json.object([&] {
         json.attribute("name", model.name);
         json.attribute("numStateBytes", model.numStateBytes);
+        json.attribute("hasInitialFn", model.hasInitialFn);
         json.attributeArray("states", [&] {
           for (const auto &state : model.states) {
             json.object([&] {
@@ -174,7 +163,6 @@ void circt::arc::serializeModelInfoToJson(llvm::raw_ostream &outputStream,
             });
           }
         });
-        json.attribute("hasInitialFn", model.hasInitialFn);
       });
     }
   });

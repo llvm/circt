@@ -134,6 +134,8 @@ def StateOp : ArcOp<"state", [
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
   AttrSizedOperandSegments,
   DeclareOpInterfaceMethods<ClockedOpInterface>,
+  PredOpTrait<"types of initial arguments must match result types", CPred<
+    [{getInitials().empty() || llvm::equal(getInitials().getType(), getResults().getType())}]>>
 ]> {
   let summary = "State transfer arc";
 
@@ -143,12 +145,13 @@ def StateOp : ArcOp<"state", [
     Optional<I1>:$enable,
     Optional<I1>:$reset,
     I32Attr:$latency,
-    Variadic<AnyType>:$inputs);
+    Variadic<AnyType>:$inputs,
+    Variadic<AnyType>:$initials);
   let results = (outs Variadic<AnyType>:$outputs);
 
   let assemblyFormat = [{
     $arc `(` $inputs `)` (`clock` $clock^)? (`enable` $enable^)?
-    (`reset` $reset^)? `latency` $latency attr-dict
+    (`reset` $reset^)?   ( `initial` ` ` `(` $initials^ `:` type($initials) `)`)?  `latency` $latency attr-dict
     `:` functional-type($inputs, results)
   }];
 
@@ -157,21 +160,23 @@ def StateOp : ArcOp<"state", [
 
   let builders = [
     OpBuilder<(ins "DefineOp":$arc, "mlir::Value":$clock, "mlir::Value":$enable,
-      "unsigned":$latency, CArg<"mlir::ValueRange", "{}">:$inputs), [{
+      "unsigned":$latency, CArg<"mlir::ValueRange", "{}">:$inputs,
+      CArg<"mlir::ValueRange", "{}">:$initials), [{
       build($_builder, $_state, mlir::SymbolRefAttr::get(arc),
             arc.getFunctionType().getResults(), clock, enable, latency,
-            inputs);
+            inputs, initials);
     }]>,
     OpBuilder<(ins "mlir::SymbolRefAttr":$arc, "mlir::TypeRange":$results,
       "mlir::Value":$clock, "mlir::Value":$enable, "unsigned":$latency,
-      CArg<"mlir::ValueRange", "{}">:$inputs
+      CArg<"mlir::ValueRange", "{}">:$inputs, CArg<"mlir::ValueRange", "{}">:$initials
     ), [{
       build($_builder, $_state, arc, results, clock, enable, Value(), latency,
-      inputs);
+      inputs, initials);
     }]>,
     OpBuilder<(ins "mlir::SymbolRefAttr":$arc, "mlir::TypeRange":$results,
       "mlir::Value":$clock, "mlir::Value":$enable, "mlir::Value":$reset,
-      "unsigned":$latency, CArg<"mlir::ValueRange", "{}">:$inputs
+      "unsigned":$latency, CArg<"mlir::ValueRange", "{}">:$inputs,
+      CArg<"mlir::ValueRange", "{}">:$initials
     ), [{
       if (clock)
         $_state.addOperands(clock);
@@ -180,6 +185,7 @@ def StateOp : ArcOp<"state", [
       if (reset)
         $_state.addOperands(reset);
       $_state.addOperands(inputs);
+      $_state.addOperands(initials);
       $_state.addAttribute("arc", arc);
       $_state.addAttribute("latency", $_builder.getI32IntegerAttr(latency));
       $_state.addAttribute(getOperandSegmentSizeAttr(),
@@ -187,23 +193,24 @@ def StateOp : ArcOp<"state", [
           clock ? 1 : 0,
           enable ? 1 : 0,
           reset ? 1 : 0,
-          static_cast<int32_t>(inputs.size())}));
+          static_cast<int32_t>(inputs.size()),
+          static_cast<int32_t>(initials.size())}));
       $_state.addTypes(results);
     }]>,
     OpBuilder<(ins "mlir::StringAttr":$arc, "mlir::TypeRange":$results,
       "mlir::Value":$clock, "mlir::Value":$enable, "unsigned":$latency,
-      CArg<"mlir::ValueRange", "{}">:$inputs
+      CArg<"mlir::ValueRange", "{}">:$inputs, CArg<"mlir::ValueRange", "{}">:$initials
     ), [{
       build($_builder, $_state, mlir::SymbolRefAttr::get(arc), results, clock,
-            enable, latency, inputs);
+            enable, latency, inputs, initials);
     }]>,
     OpBuilder<(ins "mlir::StringRef":$arc, "mlir::TypeRange":$results,
       "mlir::Value":$clock, "mlir::Value":$enable, "unsigned":$latency,
-      CArg<"mlir::ValueRange", "{}">:$inputs
+      CArg<"mlir::ValueRange", "{}">:$inputs, CArg<"mlir::ValueRange", "{}">:$initials
     ), [{
       build($_builder, $_state,
             mlir::StringAttr::get($_builder.getContext(), arc),
-            results, clock, enable, latency, inputs);
+            results, clock, enable, latency, inputs, initials);
     }]>
   ];
   let skipDefaultBuilders = 1;
@@ -452,7 +459,7 @@ def PassThroughOp : ArcOp<"passthrough", [NoTerminator, NoRegionArguments]> {
   }];
 }
 
-def InitialOp : ArcOp<"initial", [NoTerminator, NoRegionArguments]> {
+def InitialOp : ArcOp<"initial", [RecursiveMemoryEffects, NoTerminator, NoRegionArguments]> {
   let summary = "Clock-less logic called at the start of simulation";
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
@@ -461,6 +468,9 @@ def InitialOp : ArcOp<"initial", [NoTerminator, NoRegionArguments]> {
   let extraClassDeclaration = [{
     mlir::Block &getBodyBlock() { return getBody().front(); }
   }];
+  let builders = [
+    OpBuilder<(ins), "build($_builder, $_state, ValueRange{});">
+  ];
 }
 
 //===----------------------------------------------------------------------===//
@@ -670,11 +680,12 @@ def ModelOp : ArcOp<"model", [RegionKindInterface, IsolatedFromAbove,
     specifies the I/O of the module associated to this model.
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
-                       TypeAttrOf<ModuleType>:$io);
+                       TypeAttrOf<ModuleType>:$io,
+                       OptionalAttr<FlatSymbolRefAttr>:$initialFn);
   let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = [{
-    $sym_name `io` $io attr-dict-with-keyword $body
+    $sym_name `io` $io (`initializer` $initialFn^)? attr-dict-with-keyword $body
   }];
 
   let extraClassDeclaration = [{

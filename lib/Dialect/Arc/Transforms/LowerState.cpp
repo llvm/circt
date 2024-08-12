@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -85,6 +86,8 @@ struct ClockLowering {
   Value materializeValue(Value value);
   Value getOrCreateAnd(Value lhs, Value rhs, Location loc);
   Value getOrCreateOr(Value lhs, Value rhs, Location loc);
+
+  bool isInitialTree() const { return isa<InitialOp>(treeOp); }
 };
 
 struct GatedClockLowering {
@@ -113,7 +116,7 @@ struct ModuleLowering {
 
   GatedClockLowering getOrCreateClockLowering(Value clock);
   ClockLowering &getOrCreatePassThrough();
-  ClockLowering &getOrCreateInitial();
+  ClockLowering &getInitial();
   Value replaceValueWithStateRead(Value value, Value state);
 
   void addStorageArg();
@@ -123,7 +126,8 @@ struct ModuleLowering {
   template <typename CallTy>
   LogicalResult lowerStateLike(Operation *op, Value clock, Value enable,
                                Value reset, ArrayRef<Value> inputs,
-                               FlatSymbolRefAttr callee);
+                               FlatSymbolRefAttr callee,
+                               ArrayRef<Value> initialValues = {});
   LogicalResult lowerState(StateOp stateOp);
   LogicalResult lowerState(sim::DPICallOp dpiCallOp);
   LogicalResult lowerState(MemoryOp memOp);
@@ -159,6 +163,17 @@ static bool shouldMaterialize(Value value) {
     return false;
 
   return shouldMaterialize(op);
+}
+
+static bool canBeMaterializedInInitializer(Operation *op) {
+  if (!op)
+    return false;
+  if (op->hasTrait<OpTrait::ConstantLike>())
+    return true;
+  if (isa<comb::CombDialect>(op->getDialect()))
+    return true;
+  // TODO: There are some other op's we probably want to allow
+  return false;
 }
 
 /// Materialize a value within this clock tree. This clones or moves all
@@ -208,6 +223,14 @@ Value ClockLowering::materializeValue(Value value) {
 
   while (!worklist.empty()) {
     auto &workItem = worklist.back();
+    if (isInitialTree() && !canBeMaterializedInInitializer(workItem.op)) {
+      treeOp->emitOpError("initial value cannot be materialized.");
+      if (workItem.op)
+        workItem.op->emitRemark("Operation cannot be used in initializer.");
+      else
+        treeOp->emitRemark("Initializer depends on argument value.");
+      return {};
+    }
     if (!workItem.operands.empty()) {
       auto operand = workItem.operands.pop_back_val();
       if (materializedValues.contains(operand) || !shouldMaterialize(operand))
@@ -319,12 +342,8 @@ ClockLowering &ModuleLowering::getOrCreatePassThrough() {
   return *slot;
 }
 
-ClockLowering &ModuleLowering::getOrCreateInitial() {
-  if (!initialLowering) {
-    auto treeOp = clockBuilder.create<InitialOp>(moduleOp.getLoc());
-    treeOp.getBody().emplaceBlock();
-    initialLowering = std::make_unique<ClockLowering>(Value{}, treeOp, stats);
-  }
+ClockLowering &ModuleLowering::getInitial() {
+  assert(!!initialLowering && "Initial tree op should have been constructed");
   return *initialLowering;
 }
 
@@ -426,7 +445,8 @@ LogicalResult ModuleLowering::lowerStates() {
 template <typename CallOpTy>
 LogicalResult ModuleLowering::lowerStateLike(
     Operation *stateOp, Value stateClock, Value stateEnable, Value stateReset,
-    ArrayRef<Value> stateInputs, FlatSymbolRefAttr callee) {
+    ArrayRef<Value> stateInputs, FlatSymbolRefAttr callee,
+    ArrayRef<Value> initialValues) {
   // Grab all operands from the state op at the callsite and make it drop all
   // its references. This allows `materializeValue` to move an operation if this
   // state was the last user.
@@ -481,8 +501,18 @@ LogicalResult ModuleLowering::lowerStateLike(
       thenBuilder.create<StateWriteOp>(stateOp->getLoc(), alloc, constZero,
                                        Value());
     }
-
     nonResetBuilder = ifOp.getElseBodyBuilder();
+  }
+
+  if (!initialValues.empty()) {
+    assert(initialValues.size() == allocatedStates.size() &&
+           "Unexpected number of initializers");
+    auto initialTree = getInitial();
+    for (auto [alloc, init] : llvm::zip(allocatedStates, initialValues)) {
+      auto matierializedInit = initialTree.materializeValue(init);
+      initialTree.builder.create<StateWriteOp>(stateOp->getLoc(), alloc,
+                                               matierializedInit, Value());
+    }
   }
 
   stateOp->dropAllReferences();
@@ -512,10 +542,11 @@ LogicalResult ModuleLowering::lowerState(StateOp stateOp) {
     return stateOp.emitError("state with latency > 1 not supported");
 
   auto stateInputs = SmallVector<Value>(stateOp.getInputs());
+  auto stateInitializers = SmallVector<Value>(stateOp.getInitials());
 
-  return lowerStateLike<arc::CallOp>(stateOp, stateOp.getClock(),
-                                     stateOp.getEnable(), stateOp.getReset(),
-                                     stateInputs, stateOp.getArcAttr());
+  return lowerStateLike<arc::CallOp>(
+      stateOp, stateOp.getClock(), stateOp.getEnable(), stateOp.getReset(),
+      stateInputs, stateOp.getArcAttr(), stateInitializers);
 }
 
 LogicalResult ModuleLowering::lowerState(sim::DPICallOp callOp) {
@@ -835,8 +866,15 @@ LogicalResult LowerStatePass::runOnModule(HWModuleOp moduleOp,
   // Add sentinel ops to separate state allocations from clock trees.
   lowering.stateBuilder.setInsertionPointToStart(moduleOp.getBodyBlock());
 
+  auto initialTreeOp =
+      lowering.stateBuilder.create<InitialOp>(moduleOp.getLoc());
+  initialTreeOp.getBody().emplaceBlock();
+  lowering.initialLowering =
+      std::make_unique<ClockLowering>(Value{}, initialTreeOp, stats);
+
   Operation *stateSentinel =
       lowering.stateBuilder.create<hw::OutputOp>(moduleOp.getLoc());
+
   Operation *clockSentinel =
       lowering.stateBuilder.create<hw::OutputOp>(moduleOp.getLoc());
 
@@ -867,9 +905,9 @@ LogicalResult LowerStatePass::runOnModule(HWModuleOp moduleOp,
   moduleOp.getBodyBlock()->eraseArguments(
       [&](auto arg) { return arg != lowering.storageArg; });
   ImplicitLocOpBuilder builder(moduleOp.getLoc(), moduleOp);
-  auto modelOp =
-      builder.create<ModelOp>(moduleOp.getLoc(), moduleOp.getModuleNameAttr(),
-                              TypeAttr::get(moduleOp.getModuleType()));
+  auto modelOp = builder.create<ModelOp>(
+      moduleOp.getLoc(), moduleOp.getModuleNameAttr(),
+      TypeAttr::get(moduleOp.getModuleType()), mlir::FlatSymbolRefAttr());
   modelOp.getBody().takeBody(moduleOp.getBody());
   moduleOp->erase();
   sortTopologically(&modelOp.getBodyBlock());

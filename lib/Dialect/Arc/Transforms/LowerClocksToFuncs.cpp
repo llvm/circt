@@ -103,12 +103,13 @@ LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
 
   // Pick a name for the clock function.
   SmallString<32> funcName;
-  funcName.append(clockOp->getParentOfType<ModelOp>().getName());
+  auto modelOp = clockOp->getParentOfType<ModelOp>();
+  funcName.append(modelOp.getName());
 
   if (isa<PassThroughOp>(clockOp))
     funcName.append("_passthrough");
   else if (isa<InitialOp>(clockOp))
-    funcName.append(initialFunctionSuffix);
+    funcName.append("_initial");
   else
     funcName.append("_clock");
 
@@ -130,12 +131,26 @@ LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
   } else if (isa<PassThroughOp>(clockOp)) {
     builder.create<func::CallOp>(clockOp->getLoc(), funcOp,
                                  ValueRange{modelStorageArg});
+  } else if (isa<InitialOp>(clockOp)) {
+    assert(!modelOp.getInitialFn() &&
+           "Model should not have an initializer at this point.");
+    modelOp.setInitialFnAttr(FlatSymbolRefAttr::get(funcOp.getSymNameAttr()));
   }
 
   // Move the clock's body block to the function and remove the old clock op.
   funcOp.getBody().takeBody(clockRegion);
-  clockOp->erase();
 
+  if (isa<InitialOp>(clockOp)) {
+    // Call PassThroughOp after init
+    builder.setInsertionPoint(funcOp.getBlocks().front().getTerminator());
+    funcName.clear();
+    funcName.append(modelOp.getName());
+    funcName.append("_passthrough");
+    builder.create<func::CallOp>(clockOp->getLoc(), funcName, TypeRange{},
+                                 ValueRange{funcOp.getBody().getArgument(0)});
+  }
+
+  clockOp->erase();
   return success();
 }
 

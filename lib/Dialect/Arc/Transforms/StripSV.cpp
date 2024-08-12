@@ -104,6 +104,8 @@ void StripSVPass::runOnOperation() {
   for (auto verb : mlirModule.getOps<sv::MacroDeclOp>())
     opsToDelete.push_back(verb);
 
+  auto hwDialect = getContext().getLoadedDialect<hw::HWDialect>();
+
   for (auto module : mlirModule.getOps<hw::HWModuleOp>()) {
     for (Operation &op : *module.getBodyBlock()) {
       // Remove ifdefs and verbatim.
@@ -151,9 +153,21 @@ void StripSVPass::runOnOperation() {
         else
           next = reg.getNext();
 
+        Value presetValue;
+        // Materialize initial value, assume zero initialization as default.
+        if (reg.getPreset() && !reg.getPreset()->isZero()) {
+          assert(hw::type_isa<IntegerType>(reg.getType()) &&
+                 "cannot lower non integer preset");
+          auto presetCst = hwDialect->materializeConstant(
+              builder, IntegerAttr::get(reg.getType(), *reg.getPreset()),
+              reg.getType(), reg.getLoc());
+          presetValue = presetCst->getResult(0);
+        }
+
         Value compReg = builder.create<seq::CompRegOp>(
             reg.getLoc(), next.getType(), next, reg.getClk(), reg.getNameAttr(),
-            Value{}, Value{}, Value{}, reg.getInnerSymAttr());
+            Value{}, Value{}, /*powerOnValue*/ presetValue,
+            reg.getInnerSymAttr());
         reg.replaceAllUsesWith(compReg);
         opsToDelete.push_back(reg);
         continue;

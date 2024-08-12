@@ -63,8 +63,8 @@ class StateHierarchy:
 class ModelInfo:
   name: str
   numStateBytes: int
-  states: List[StateInfo]
   hasInitialFn: bool
+  states: List[StateInfo]
   io: List[StateInfo]
   hierarchy: List[StateHierarchy]
 

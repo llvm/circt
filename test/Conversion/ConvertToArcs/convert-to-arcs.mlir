@@ -110,6 +110,36 @@ hw.module @Reshuffling(in %clockA: !seq.clock, in %clockB: !seq.clock, out z0: i
 
 hw.module.extern private @Reshuffling2(out z0: i4, out z1: i4, out z2: i4, out z3: i4)
 
+// CHECK-LABEL: arc.define @ReshufflingInit_arc(%arg0: i4, %arg1: i4)
+// CHECK-NEXT:    arc.output %arg0, %arg1
+// CHECK-NEXT:  }
+
+// CHECK-LABEL: arc.define @ReshufflingInit_arc_0(%arg0: i4, %arg1: i4)
+// CHECK-NEXT:    arc.output %arg0, %arg1
+// CHECK-NEXT:  }
+
+// CHECK-LABEL: hw.module @ReshufflingInit
+hw.module @ReshufflingInit(in %clockA: !seq.clock, in %clockB: !seq.clock, out z0: i4, out z1: i4, out z2: i4, out z3: i4) {
+  // CHECK-NEXT: [[C1:%.+]] = hw.constant 1 : i4
+  // CHECK-NEXT: [[C2:%.+]] = hw.constant 2 : i4
+  // CHECK-NEXT: [[C3:%.+]] = hw.constant 3 : i4
+  // CHECK-NEXT: hw.instance "x" @Reshuffling2()
+  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i4
+  // CHECK-NEXT: arc.state @ReshufflingInit_arc(%x.z0, %x.z1) clock %clockA initial ([[C0]], [[C1]] : i4, i4) latency 1
+  // CHECK-NEXT: arc.state @ReshufflingInit_arc_0(%x.z2, %x.z3) clock %clockB initial ([[C2]], [[C3]] : i4, i4) latency 1
+  // CHECK-NEXT: hw.output
+  %cst1 = hw.constant 1 : i4
+  %cst2 = hw.constant 2 : i4
+  %cst3 = hw.constant 3 : i4
+  %x.z0, %x.z1, %x.z2, %x.z3 = hw.instance "x" @Reshuffling2() -> (z0: i4, z1: i4, z2: i4, z3: i4)
+  %4 = seq.compreg %x.z0, %clockA : i4
+  %5 = seq.compreg %x.z1, %clockA powerOn %cst1 : i4
+  %6 = seq.compreg %x.z2, %clockB powerOn %cst2 : i4
+  %7 = seq.compreg %x.z3, %clockB powerOn %cst3 : i4
+  hw.output %4, %5, %6, %7 : i4, i4, i4, i4
+}
+// CHECK-NEXT: }
+
 
 // CHECK-LABEL: arc.define @FactorOutCommonOps_arc(
 // CHECK-NEXT:    comb.xor
@@ -192,6 +222,22 @@ hw.module @Trivial(in %clock: !seq.clock, in %i0: i4, in %reset: i1, out out: i4
   // CHECK-NEXT: hw.output [[RES0:%.+]]
   %0 = hw.constant 0 : i4
   %foo = seq.compreg %i0, %clock reset %reset, %0 : i4
+  hw.output %foo : i4
+}
+// CHECK-NEXT: }
+
+// CHECK:   arc.define @[[TRIVIALINIT_ARC:.+]]([[ARG0:%.+]]: i4)
+// CHECK-NEXT:     arc.output [[ARG0]]
+// CHECK-NEXT:  }
+
+// CHECK-LABEL: hw.module @TrivialWithInit(
+hw.module @TrivialWithInit(in %clock: !seq.clock, in %i0: i4, in %reset: i1, out out: i4) {
+  // CHECK: [[CST2:%.+]] = hw.constant 2 : i4
+  // CHECK: [[RES0:%.+]] = arc.state @[[TRIVIALINIT_ARC]](%i0) clock %clock reset %reset initial ([[CST2]] : i4) latency 1 {names = ["foo"]
+  // CHECK-NEXT: hw.output [[RES0:%.+]]
+  %0 = hw.constant 0 : i4
+  %cst2 = hw.constant 2 : i4
+  %foo = seq.compreg %i0, %clock reset %reset, %0 powerOn %cst2: i4
   hw.output %foo : i4
 }
 // CHECK-NEXT: }
