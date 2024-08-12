@@ -257,7 +257,7 @@ struct ObjectModelIR {
         }
         SmallVector<Attribute> namepath;
         bool foundDut = dutMod == nullptr;
-        // The hiarpath will be created to the pre-extracted
+        // The hierpath will be created to the pre-extracted
         // instance, thus drop the leaf instance of the path, which can be
         // extracted in subsequent passes.
         igraph::InstanceOpInterface preExtractedLeafInstance;
