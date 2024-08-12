@@ -73,8 +73,6 @@ void VerifyObjectFieldsPass::runOnOperation() {
               for (size_t i = 0, e = fields.size(); i < e; ++i) {
                 // Verify the field exists on the ClassOp.
                 auto field = fields[i];
-                // auto *it = tables.find(classDef);
-                // assert(it != tables.end() && "must be visited");
                 Type fieldType = classDef.getFieldsOp().getFieldType(field.getAttr());
 
                 if (!fieldType) {
