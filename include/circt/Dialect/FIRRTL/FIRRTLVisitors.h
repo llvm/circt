@@ -65,8 +65,8 @@ public:
             UninferredResetCastOp, ConstCastOp, RefCastOp,
             // Property expressions.
             StringConstantOp, FIntegerConstantOp, BoolConstantOp,
-            DoubleConstantOp, ListCreateOp, UnresolvedPathOp, PathOp,
-            IntegerAddOp, IntegerMulOp, IntegerShrOp>(
+            DoubleConstantOp, ListCreateOp, ListConcatOp, UnresolvedPathOp,
+            PathOp, IntegerAddOp, IntegerMulOp, IntegerShrOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitExpr(expr, args...);
             })
@@ -219,6 +219,7 @@ public:
   HANDLE(BoolConstantOp, Unhandled);
   HANDLE(DoubleConstantOp, Unhandled);
   HANDLE(ListCreateOp, Unhandled);
+  HANDLE(ListConcatOp, Unhandled);
   HANDLE(PathOp, Unhandled);
   HANDLE(UnresolvedPathOp, Unhandled);
   HANDLE(IntegerAddOp, Unhandled);
