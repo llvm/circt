@@ -1,5 +1,11 @@
+from __future__ import annotations
+
 from .circt import support
 from .circt import ir
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+  from .types import Type
 
 import os
 
@@ -41,6 +47,13 @@ def _obj_to_attribute(obj) -> ir.Attribute:
     return ir.DictAttr.get(attrs)
   raise TypeError(f"Cannot convert type '{type(obj)}' to MLIR attribute. "
                   "This is required for parameters.")
+
+
+def obj_to_typed_attribute(obj: object, type: Type) -> ir.Attribute:
+  from .types import BitVectorType
+  if isinstance(type, BitVectorType):
+    return ir.IntegerAttr.get(type._type, obj)
+  raise ValueError(f"Type '{type}' conversion to attribute not supported yet.")
 
 
 __dir__ = os.path.dirname(__file__)

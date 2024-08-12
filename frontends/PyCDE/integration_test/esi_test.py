@@ -7,6 +7,7 @@
 import pycde
 from pycde import (AppID, Clock, Module, Reset, modparams, generator)
 from pycde.bsp import cosim
+from pycde.common import Constant
 from pycde.constructs import Reg, Wire
 from pycde.esi import FuncService, MMIO, MMIOReadWriteCmdType
 from pycde.types import (Bits, Channel, UInt)
@@ -15,21 +16,23 @@ from pycde.behavioral import If, Else, EndIf
 import sys
 
 
-class LoopbackInOutAdd7(Module):
+class LoopbackInOutAdd(Module):
   """Loopback the request from the host, adding 7 to the first 15 bits."""
   clk = Clock()
   rst = Reset()
 
+  add_amt = Constant(UInt(16), 11)
+
   @generator
   def construct(ports):
     loopback = Wire(Channel(UInt(16)))
-    args = FuncService.get_call_chans(AppID("loopback_add7"),
+    args = FuncService.get_call_chans(AppID("add"),
                                       arg_type=UInt(24),
                                       result=loopback)
 
     ready = Wire(Bits(1))
     data, valid = args.unwrap(ready)
-    plus7 = data + 7
+    plus7 = data + LoopbackInOutAdd.add_amt.value
     data_chan, data_ready = loopback.type.wrap(plus7.as_uint(16), valid)
     data_chan_buffered = data_chan.buffer(ports.clk, ports.rst, 5)
     ready.assign(data_ready)
@@ -96,7 +99,7 @@ class Top(Module):
 
   @generator
   def construct(ports):
-    LoopbackInOutAdd7(clk=ports.clk, rst=ports.rst)
+    LoopbackInOutAdd(clk=ports.clk, rst=ports.rst, appid=AppID("loopback"))
     for i in range(4, 18, 5):
       MMIOClient(i)()
     MMIOReadWriteClient(clk=ports.clk, rst=ports.rst)
