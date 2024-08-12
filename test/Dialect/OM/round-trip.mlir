@@ -158,6 +158,22 @@ om.class @ListCreate() {
   om.class.field @list_field, %list : !om.list<!om.class.type<@Widget>>
 }
 
+// CHECK-LABEL: @ListConcat
+om.class @ListConcat() {
+  %0 = om.constant #om.integer<0 : i8> : !om.integer
+  %1 = om.constant #om.integer<1 : i8> : !om.integer
+  %2 = om.constant #om.integer<2 : i8> : !om.integer
+
+  // CHECK: [[L0:%.+]] = om.list_create %0, %1
+  %l0 = om.list_create %0, %1 : !om.integer
+
+  // CHECK: [[L1:%.+]] = om.list_create %2
+  %l1 = om.list_create %2 : !om.integer
+
+  // CHECK: om.list_concat [[L0]], [[L1]]
+  %concat = om.list_concat %l0, %l1 : !om.list<!om.integer>
+}
+
 // CHECK-LABEL: @Integer
 om.class @IntegerConstant() {
   // CHECK: %[[const1:.+]] = om.constant #om.integer<36755551979133953793 : i67> : !om.integer
