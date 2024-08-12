@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_MOORE_MOOREOPS_H
 
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/Moore/MooreAttributes.h"
 #include "circt/Dialect/Moore/MooreDialect.h"
 #include "circt/Dialect/Moore/MooreTypes.h"
 #include "mlir/IR/RegionKindInterface.h"

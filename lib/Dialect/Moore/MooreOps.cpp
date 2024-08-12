@@ -13,6 +13,7 @@
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/HW/CustomDirectiveImpl.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
+#include "circt/Dialect/Moore/MooreAttributes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/SmallString.h"
@@ -258,55 +259,107 @@ void VariableOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), *getName());
 }
 
-llvm::SmallVector<MemorySlot> VariableOp::getPromotableSlots() {
-  if (isa<SVModuleOp>(getOperation()->getParentOp()))
+LogicalResult VariableOp::canonicalize(VariableOp op,
+                                       PatternRewriter &rewriter) {
+  // If the variable is embedded in an SSACFG region, move the initial value
+  // into an assignment immediately after the variable op. This allows the
+  // mem2reg pass which cannot handle variables with initial values.
+  auto initial = op.getInitial();
+  if (initial && mlir::mayHaveSSADominance(*op->getParentRegion())) {
+    rewriter.modifyOpInPlace(op, [&] { op.getInitialMutable().clear(); });
+    rewriter.setInsertionPointAfter(op);
+    rewriter.create<BlockingAssignOp>(initial.getLoc(), op, initial);
+    return success();
+  }
+
+  // Check if the variable has one unique continuous assignment to it, all other
+  // uses are reads, and that all uses are in the same block as the variable
+  // itself.
+  auto *block = op->getBlock();
+  ContinuousAssignOp uniqueAssignOp;
+  for (auto *user : op->getUsers()) {
+    // Ensure that all users of the variable are in the same block.
+    if (user->getBlock() != block)
+      return failure();
+
+    // Ensure there is at most one unique continuous assignment to the variable.
+    if (auto assignOp = dyn_cast<ContinuousAssignOp>(user)) {
+      if (uniqueAssignOp)
+        return failure();
+      uniqueAssignOp = assignOp;
+      continue;
+    }
+
+    // Ensure all other users are reads.
+    if (!isa<ReadOp>(user))
+      return failure();
+  }
+  if (!uniqueAssignOp)
+    return failure();
+
+  // If the original variable had a name, create an `AssignedVariableOp` as a
+  // replacement. Otherwise substitute the assigned value directly.
+  Value assignedValue = uniqueAssignOp.getSrc();
+  if (auto name = op.getNameAttr(); name && !name.empty())
+    assignedValue = rewriter.create<AssignedVariableOp>(
+        op.getLoc(), name, uniqueAssignOp.getSrc());
+
+  // Remove the assign op and replace all reads with the new assigned var op.
+  rewriter.eraseOp(uniqueAssignOp);
+  for (auto *user : llvm::make_early_inc_range(op->getUsers())) {
+    auto readOp = cast<ReadOp>(user);
+    rewriter.replaceOp(readOp, assignedValue);
+  }
+
+  // Remove the original variable.
+  rewriter.eraseOp(op);
+  return success();
+}
+
+SmallVector<MemorySlot> VariableOp::getPromotableSlots() {
+  // We cannot promote variables with an initial value, since that value may not
+  // dominate the location where the default value needs to be constructed.
+  if (mlir::mayBeGraphRegion(*getOperation()->getParentRegion()) ||
+      getInitial())
     return {};
-  if (getInitial())
+
+  // Ensure that `getDefaultValue` can conjure up a default value for the
+  // variable's type.
+  if (!isa<PackedType>(getType().getNestedType()))
     return {};
-  return {MemorySlot{getResult(), getType()}};
+
+  return {MemorySlot{getResult(), getType().getNestedType()}};
 }
 
 Value VariableOp::getDefaultValue(const MemorySlot &slot, OpBuilder &builder) {
-  if (auto value = getInitial())
-    return value;
-  return builder.create<ConstantOp>(
-      getLoc(),
-      cast<moore::IntType>(cast<RefType>(slot.elemType).getNestedType()), 0);
+  auto packedType = dyn_cast<PackedType>(slot.elemType);
+  if (!packedType)
+    return {};
+  auto bitWidth = packedType.getBitSize();
+  if (!bitWidth)
+    return {};
+  auto fvint = packedType.getDomain() == Domain::FourValued
+                   ? FVInt::getAllX(*bitWidth)
+                   : FVInt::getZero(*bitWidth);
+  Value value = builder.create<ConstantOp>(
+      getLoc(), IntType::get(getContext(), *bitWidth, packedType.getDomain()),
+      fvint);
+  if (value.getType() != packedType)
+    builder.create<ConversionOp>(getLoc(), packedType, value);
+  return value;
 }
 
 void VariableOp::handleBlockArgument(const MemorySlot &slot,
                                      BlockArgument argument,
                                      OpBuilder &builder) {}
 
-::std::optional<::mlir::PromotableAllocationOpInterface>
+std::optional<mlir::PromotableAllocationOpInterface>
 VariableOp::handlePromotionComplete(const MemorySlot &slot, Value defaultValue,
                                     OpBuilder &builder) {
-  if (defaultValue.use_empty())
+  if (defaultValue && defaultValue.use_empty())
     defaultValue.getDefiningOp()->erase();
   this->erase();
-  return std::nullopt;
-}
-
-LogicalResult VariableOp::canonicalize(VariableOp op,
-                                       ::mlir::PatternRewriter &rewriter) {
-  Value initial;
-  for (auto *user : op->getUsers())
-    if (isa<ContinuousAssignOp>(user) &&
-        (user->getOperand(0) == op.getResult())) {
-      // Don't canonicalize the multiple continuous assignment to the same
-      // variable.
-      if (initial)
-        return failure();
-      initial = user->getOperand(1);
-    }
-
-  if (initial) {
-    rewriter.replaceOpWithNewOp<AssignedVarOp>(op, op.getType(),
-                                               op.getNameAttr(), initial);
-    return success();
-  }
-
-  return failure();
+  return {};
 }
 
 SmallVector<DestructurableMemorySlot> VariableOp::getDestructurableSlots() {
@@ -370,13 +423,116 @@ void NetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), *getName());
 }
 
+LogicalResult NetOp::canonicalize(NetOp op, PatternRewriter &rewriter) {
+  bool modified = false;
+
+  // Check if the net has one unique continuous assignment to it, and
+  // additionally if all other users are reads.
+  auto *block = op->getBlock();
+  ContinuousAssignOp uniqueAssignOp;
+  bool allUsesAreReads = true;
+  for (auto *user : op->getUsers()) {
+    // Ensure that all users of the net are in the same block.
+    if (user->getBlock() != block)
+      return failure();
+
+    // Ensure there is at most one unique continuous assignment to the net.
+    if (auto assignOp = dyn_cast<ContinuousAssignOp>(user)) {
+      if (uniqueAssignOp)
+        return failure();
+      uniqueAssignOp = assignOp;
+      continue;
+    }
+
+    // Ensure all other users are reads.
+    if (!isa<ReadOp>(user))
+      allUsesAreReads = false;
+  }
+
+  // If there was one unique assignment, and the `NetOp` does not yet have an
+  // assigned value set, fold the assignment into the net.
+  if (uniqueAssignOp && !op.getAssignment()) {
+    rewriter.modifyOpInPlace(
+        op, [&] { op.getAssignmentMutable().assign(uniqueAssignOp.getSrc()); });
+    rewriter.eraseOp(uniqueAssignOp);
+    modified = true;
+    uniqueAssignOp = {};
+  }
+
+  // If all users of the net op are reads, and any potential unique assignment
+  // has been folded into the net op itself, directly replace the reads with the
+  // net's assigned value.
+  if (!uniqueAssignOp && allUsesAreReads && op.getAssignment()) {
+    // If the original net had a name, create an `AssignedVariableOp` as a
+    // replacement. Otherwise substitute the assigned value directly.
+    auto assignedValue = op.getAssignment();
+    if (auto name = op.getNameAttr(); name && !name.empty())
+      assignedValue =
+          rewriter.create<AssignedVariableOp>(op.getLoc(), name, assignedValue);
+
+    // Replace all reads with the new assigned var op and remove the original
+    // net op.
+    for (auto *user : llvm::make_early_inc_range(op->getUsers())) {
+      auto readOp = cast<ReadOp>(user);
+      rewriter.replaceOp(readOp, assignedValue);
+    }
+    rewriter.eraseOp(op);
+    modified = true;
+  }
+
+  return success(modified);
+}
+
 //===----------------------------------------------------------------------===//
-// AssignedVarOp
+// AssignedVariableOp
 //===----------------------------------------------------------------------===//
 
-void AssignedVarOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void AssignedVariableOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   if (getName() && !getName()->empty())
     setNameFn(getResult(), *getName());
+}
+
+LogicalResult AssignedVariableOp::canonicalize(AssignedVariableOp op,
+                                               PatternRewriter &rewriter) {
+  // Eliminate chained variables with the same name.
+  // var(name, var(name, x)) -> var(name, x)
+  if (auto otherOp = op.getInput().getDefiningOp<AssignedVariableOp>()) {
+    if (otherOp.getNameAttr() == op.getNameAttr()) {
+      rewriter.replaceOp(op, otherOp);
+      return success();
+    }
+  }
+
+  // Eliminate variables that alias an input port of the same name.
+  if (auto blockArg = dyn_cast<BlockArgument>(op.getInput())) {
+    if (auto moduleOp =
+            dyn_cast<SVModuleOp>(blockArg.getOwner()->getParentOp())) {
+      auto moduleType = moduleOp.getModuleType();
+      auto portName = moduleType.getInputNameAttr(blockArg.getArgNumber());
+      if (portName == op.getNameAttr()) {
+        rewriter.replaceOp(op, blockArg);
+        return success();
+      }
+    }
+  }
+
+  // Eliminate variables that feed an output port of the same name.
+  for (auto &use : op->getUses()) {
+    auto outputOp = dyn_cast<OutputOp>(use.getOwner());
+    if (!outputOp)
+      continue;
+    auto moduleOp = dyn_cast<SVModuleOp>(outputOp.getParentOp());
+    if (!moduleOp)
+      break;
+    auto moduleType = moduleOp.getModuleType();
+    auto portName = moduleType.getOutputNameAttr(use.getOperandNumber());
+    if (portName == op.getNameAttr()) {
+      rewriter.replaceOp(op, op.getInput());
+      return success();
+    }
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
@@ -385,19 +541,21 @@ void AssignedVarOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 void ConstantOp::print(OpAsmPrinter &p) {
   p << " ";
-  p.printAttributeWithoutType(getValueAttr());
+  printFVInt(p, getValue());
   p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
   p << " : ";
   p.printStrippedAttrOrType(getType());
 }
 
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
-  // Parse the constant value without bit width.
-  APInt value;
+  // Parse the constant value.
+  FVInt value;
   auto valueLoc = parser.getCurrentLocation();
+  if (parseFVInt(parser, value))
+    return failure();
 
-  if (parser.parseInteger(value) ||
-      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon())
+  // Parse any optional attributes and the `:`.
+  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon())
     return failure();
 
   // Parse the result type.
@@ -417,16 +575,21 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
     unsigned neededBits =
         value.isNegative() ? value.getSignificantBits() : value.getActiveBits();
     if (type.getWidth() < neededBits)
-      return parser.emitError(valueLoc,
-                              "constant out of range for result type ")
-             << type;
+      return parser.emitError(valueLoc)
+             << "value requires " << neededBits
+             << " bits, but result type only has " << type.getWidth();
     value = value.trunc(type.getWidth());
   }
 
-  // Build the attribute and op.
-  auto attrType = IntegerType::get(parser.getContext(), type.getWidth());
-  auto attrValue = IntegerAttr::get(attrType, value);
+  // If the constant contains any X or Z bits, the result type must be
+  // four-valued.
+  if (value.hasUnknown() && type.getDomain() != Domain::FourValued)
+    return parser.emitError(valueLoc)
+           << "value contains X or Z bits, but result type " << type
+           << " only allows two-valued bits";
 
+  // Build the attribute and op.
+  auto attrValue = FVIntegerAttr::get(parser.getContext(), value);
   result.addAttribute("value", attrValue);
   result.addTypes(type);
   return success();
@@ -442,11 +605,17 @@ LogicalResult ConstantOp::verify() {
 }
 
 void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
+                       const FVInt &value) {
+  assert(type.getWidth() == value.getBitWidth() &&
+         "FVInt width must match type width");
+  build(builder, result, type, FVIntegerAttr::get(builder.getContext(), value));
+}
+
+void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
                        const APInt &value) {
   assert(type.getWidth() == value.getBitWidth() &&
          "APInt width must match type width");
-  build(builder, result, type,
-        builder.getIntegerAttr(builder.getIntegerType(type.getWidth()), value));
+  build(builder, result, type, FVInt(value));
 }
 
 /// This builder allows construction of small signed integers like 0, 1, -1
@@ -857,6 +1026,23 @@ OpFoldResult ConversionOp::fold(FoldAdaptor adaptor) {
   // Fold away no-op casts.
   if (getInput().getType() == getResult().getType())
     return getInput();
+
+  // Convert domains of constant integer inputs.
+  auto intInput = dyn_cast_or_null<FVIntegerAttr>(adaptor.getInput());
+  auto fromIntType = dyn_cast<IntType>(getInput().getType());
+  auto toIntType = dyn_cast<IntType>(getResult().getType());
+  if (intInput && fromIntType && toIntType &&
+      fromIntType.getWidth() == toIntType.getWidth()) {
+    // If we are going *to* a four-valued type, simply pass through the
+    // constant.
+    if (toIntType.getDomain() == Domain::FourValued)
+      return intInput;
+
+    // Otherwise map all unknown bits to zero (the default in SystemVerilog) and
+    // return a new constant.
+    return FVIntegerAttr::get(getContext(), intInput.getValue().toAPInt(false));
+  }
+
   return {};
 }
 
@@ -896,8 +1082,7 @@ bool BlockingAssignOp::canUsesBeRemoved(
     return false;
   Value blockingUse = (*blockingUses.begin())->get();
   return blockingUse == slot.ptr && getDst() == slot.ptr &&
-         getSrc() != slot.ptr &&
-         getSrc().getType() == cast<RefType>(slot.elemType).getNestedType();
+         getSrc() != slot.ptr && getSrc().getType() == slot.elemType;
 }
 
 DeletionKind BlockingAssignOp::removeBlockingUses(
@@ -912,7 +1097,7 @@ DeletionKind BlockingAssignOp::removeBlockingUses(
 //===----------------------------------------------------------------------===//
 
 bool ReadOp::loadsFrom(const MemorySlot &slot) {
-  return getOperand() == slot.ptr;
+  return getInput() == slot.ptr;
 }
 
 bool ReadOp::storesTo(const MemorySlot &slot) { return false; }
@@ -931,7 +1116,7 @@ bool ReadOp::canUsesBeRemoved(const MemorySlot &slot,
     return false;
   Value blockingUse = (*blockingUses.begin())->get();
   return blockingUse == slot.ptr && getOperand() == slot.ptr &&
-         getResult().getType() == cast<RefType>(slot.elemType).getNestedType();
+         getResult().getType() == slot.elemType;
 }
 
 DeletionKind
@@ -941,6 +1126,74 @@ ReadOp::removeBlockingUses(const MemorySlot &slot,
                            const DataLayout &dataLayout) {
   getResult().replaceAllUsesWith(reachingDefinition);
   return DeletionKind::Delete;
+}
+
+//===----------------------------------------------------------------------===//
+// PowSOp
+//===----------------------------------------------------------------------===//
+
+static OpFoldResult powCommonFolding(MLIRContext *ctxt, Attribute lhs,
+                                     Attribute rhs) {
+  auto lhsValue = dyn_cast_or_null<FVIntegerAttr>(lhs);
+  if (lhsValue && lhsValue.getValue() == 1)
+    return lhs;
+
+  auto rhsValue = dyn_cast_or_null<FVIntegerAttr>(rhs);
+  if (rhsValue && rhsValue.getValue().isZero())
+    return FVIntegerAttr::get(ctxt,
+                              FVInt(rhsValue.getValue().getBitWidth(), 1));
+
+  return {};
+}
+
+OpFoldResult PowSOp::fold(FoldAdaptor adaptor) {
+  return powCommonFolding(getContext(), adaptor.getLhs(), adaptor.getRhs());
+}
+
+LogicalResult PowSOp::canonicalize(PowSOp op, PatternRewriter &rewriter) {
+  Location loc = op.getLoc();
+  auto intType = cast<IntType>(op.getRhs().getType());
+  if (auto baseOp = op.getLhs().getDefiningOp<ConstantOp>()) {
+    if (baseOp.getValue() == 2) {
+      Value constOne = rewriter.create<ConstantOp>(loc, intType, 1);
+      Value constZero = rewriter.create<ConstantOp>(loc, intType, 0);
+      Value shift = rewriter.create<ShlOp>(loc, constOne, op.getRhs());
+      Value isNegative = rewriter.create<SltOp>(loc, op.getRhs(), constZero);
+      auto condOp = rewriter.replaceOpWithNewOp<ConditionalOp>(
+          op, op.getLhs().getType(), isNegative);
+      Block *thenBlock = rewriter.createBlock(&condOp.getTrueRegion());
+      rewriter.setInsertionPointToStart(thenBlock);
+      rewriter.create<YieldOp>(loc, constZero);
+      Block *elseBlock = rewriter.createBlock(&condOp.getFalseRegion());
+      rewriter.setInsertionPointToStart(elseBlock);
+      rewriter.create<YieldOp>(loc, shift);
+      return success();
+    }
+  }
+
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// PowUOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult PowUOp::fold(FoldAdaptor adaptor) {
+  return powCommonFolding(getContext(), adaptor.getLhs(), adaptor.getRhs());
+}
+
+LogicalResult PowUOp::canonicalize(PowUOp op, PatternRewriter &rewriter) {
+  Location loc = op.getLoc();
+  auto intType = cast<IntType>(op.getRhs().getType());
+  if (auto baseOp = op.getLhs().getDefiningOp<ConstantOp>()) {
+    if (baseOp.getValue() == 2) {
+      Value constOne = rewriter.create<ConstantOp>(loc, intType, 1);
+      rewriter.replaceOpWithNewOp<ShlOp>(op, constOne, op.getRhs());
+      return success();
+    }
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//

@@ -50,9 +50,10 @@ int main(int argc, const char *argv[]) {
     std::unique_ptr<AcceleratorConnection> acc = ctxt.connect(backend, conn);
     const auto &info = *acc->getService<services::SysInfo>();
     Manifest manifest(ctxt, info.getJsonManifest());
-    std::unique_ptr<Accelerator> accel = manifest.buildAccelerator(*acc);
+    Accelerator *accel = manifest.buildAccelerator(*acc);
+    acc->getServiceThread()->addPoll(*accel);
 
-    registerCallbacks(accel.get());
+    registerCallbacks(accel);
 
     if (cmd == "loop") {
       while (true) {

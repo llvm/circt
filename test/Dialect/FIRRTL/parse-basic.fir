@@ -1671,6 +1671,20 @@ circuit IntegerArithmetic :
     propassign e, integer_shr(a, b)
 
 ;// -----
+FIRRTL version 4.0.0
+
+; CHECK-LABEL: firrtl.circuit "PropertyListOps"
+circuit PropertyListOps :
+  public module PropertyListOps :
+    input a : List<Integer>
+    input b : List<Integer>
+    output c : List<Integer>
+
+    ; CHECK: [[C:%.+]] = firrtl.list.concat %a, %b
+    ; CHECK: firrtl.propassign %c, [[C]]
+    propassign c, list_concat(a, b)
+
+;// -----
 FIRRTL version 3.1.0
 
 ; CHECK-LABEL: circuit "BundleOfProps"

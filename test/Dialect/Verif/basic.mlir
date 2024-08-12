@@ -58,69 +58,39 @@ verif.formal @formal1(k = 20) {
 
 // CHECK-LABEL: hw.module @Bar
 hw.module @Bar(in %foo : i8, out "" : i8, out "1" : i8) { 
-  // CHECK: verif.contract(%foo) : (i8) {
-  verif.contract (%foo) : (i8) {
-    // CHECK: ^bb0(%[[ARG:.+]]: i8, %[[OUT:.+]]: i8, %[[OUT1:.+]]: i8):
-    ^bb0(%arg1 : i8, %bar.0 : i8, %bar.1 : i8): 
+  // CHECK: %[[C1:.+]] = hw.constant
+  %c1_8 = hw.constant 1 : i8
+  // CHECK: %[[O1:.+]] = comb.add
+  %to0 = comb.add bin %foo, %c1_8 : i8
+  // CHECK: %[[O2:.+]] = comb.sub
+  %to1 = comb.sub bin %foo, %c1_8 : i8
+
+  // CHECK: %[[OUT:.+]]:2 = verif.contract(%[[O1]], %[[O2]]) : (i8, i8) -> (i8, i8) {
+  %o0, %o1 = verif.contract (%to0, %to1) : (i8, i8) -> (i8, i8) {
+    // CHECK: ^bb0(%[[BAR0:.+]]: i8, %[[BAR1:.+]]: i8):
+    ^bb0(%bar.0 : i8, %bar.1 : i8): 
       // CHECK: %[[C0:.+]] = hw.constant 0 : i8
       %c0_8 = hw.constant 0 : i8 
-      // CHECK: %[[PREC:.+]] = comb.icmp bin ugt %[[ARG]], %[[C0]] : i8
-      %prec = comb.icmp bin ugt %arg1, %c0_8 : i8
+      // CHECK: %[[PREC:.+]] = comb.icmp bin ugt %foo, %[[C0]] : i8
+      %prec = comb.icmp bin ugt %foo, %c0_8 : i8
       // CHECK: verif.require %[[PREC]] : i1
       verif.require %prec : i1
 
-      // CHECK: %[[P0:.+]] = comb.icmp bin ugt %[[OUT]], %[[ARG]] : i8
-      %post = comb.icmp bin ugt %bar.0, %arg1 : i8
-      // CHECK: %[[P1:.+]] = comb.icmp bin ult %[[OUT1]], %[[ARG]] : i8
-      %post1 = comb.icmp bin ult %bar.1, %arg1 : i8
+      // CHECK: %[[P0:.+]] = comb.icmp bin ugt %[[BAR0]], %foo : i8
+      %post = comb.icmp bin ugt %bar.0, %foo : i8
+      // CHECK: %[[P1:.+]] = comb.icmp bin ult %[[BAR1]], %foo : i8
+      %post1 = comb.icmp bin ult %bar.1, %foo : i8
       // CHECK: verif.ensure %[[P0]] : i1
       verif.ensure %post : i1
       // CHECK: verif.ensure %[[P1]] : i1
       verif.ensure %post1 : i1
-  }
-  // CHECK: %[[C1:.+]] = hw.constant
-  %c1_8 = hw.constant 1 : i8
-  // CHECK: %[[O1:.+]] = comb.add
-  %o0 = comb.add bin %foo, %c1_8 : i8
-  // CHECK: %[[O2:.+]] = comb.sub
-  %o1 = comb.sub bin %foo, %c1_8 : i8
+      // CHECK: verif.yield %[[BAR0]], %[[BAR1]] : i8, i8
+      verif.yield %bar.0, %bar.1 : i8, i8
+  } 
+  
   // CHECK-LABEL: hw.output
   hw.output %o0, %o1 : i8, i8
 }
-
-// CHECK-LABEL: hw.module @Foo1
-hw.module @Foo1(in %0 "0": i1, in %1 "1": i1, out "" : i8, out "1" : i8) {
-  // CHECK: %[[C42:.+]] = hw.constant 42 : i8
-  %c42_8 = hw.constant 42 : i8
-  // CHECK: %[[OUTS:.+]]:2 = verif.instance(%[[C42]]) : (i8) -> (i8, i8) {
-  %bar.0, %bar.1 = verif.instance (%c42_8) : (i8) -> (i8, i8) {
-    // CHECK: ^bb0(%[[ARG:.+]]: i8):
-    ^bb0(%arg1: i8):
-      // CHECK: %[[C0:.+]] = hw.constant 0 : i8
-      %c0_8 = hw.constant 0 : i8
-      // CHECK: %[[PREC:.+]] = comb.icmp bin ugt %[[ARG]], %[[C0]] : i8
-      %prec = comb.icmp bin ugt %arg1, %c0_8 : i8
-      // CHECK: verif.assert %[[PREC]] : i1
-      verif.assert %prec : i1
-
-      // CHECK: %[[OUT0:.+]] = verif.symbolic_input : i8
-      %bar.0 = verif.symbolic_input : i8
-      // CHECK: %[[OUT1:.+]] = verif.symbolic_input : i8
-      %bar.1 = verif.symbolic_input : i8
-      // CHECK: %[[P0:.+]] = comb.icmp bin ugt %[[OUT0]], %[[ARG]] : i8
-      %post = comb.icmp bin ugt %bar.0, %arg1 : i8
-      // CHECK: %[[P1:.+]] = comb.icmp bin ult %[[OUT1]], %[[ARG]] : i8
-      %post1 = comb.icmp bin ult %bar.1, %arg1 : i8
-      // CHECK: verif.assume %[[P0]] : i1
-      verif.assume %post : i1
-      // CHECK: verif.assume %[[P1]] : i1
-      verif.assume %post1 : i1
-      // CHECK: verif.yield %[[OUT0]], %[[OUT1]] : i8, i8
-      verif.yield %bar.0, %bar.1 : i8, i8
-  } 
-  // CHECK: hw.output %[[OUTS]]#0, %[[OUTS]]#1 : i8, i8
-  hw.output %bar.0, %bar.1 : i8, i8
- }
 
 //===----------------------------------------------------------------------===//
 // Print-related

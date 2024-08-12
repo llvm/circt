@@ -94,6 +94,9 @@ TEST(FVIntTest, StringConversion) {
             StringRef("12345XZ67890ABCDEF"));
   ASSERT_EQ(FVInt::fromString("12345xz67890abcdef", 16).toString(16, false),
             StringRef("12345xz67890abcdef"));
+
+  // Narrow <4 bit integers printed as hex.
+  ASSERT_EQ(FVInt::fromString("10", 2).toString(16), StringRef("2"));
 }
 
 TEST(FVIntTest, LogicOps) {

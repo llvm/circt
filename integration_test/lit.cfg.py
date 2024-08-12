@@ -187,6 +187,9 @@ if config.bindings_python_enabled:
 if config.bindings_tcl_enabled:
   config.available_features.add('bindings_tcl')
 
+# Add host c compiler.
+config.substitutions.append(("%host_cc", config.host_cc))
+
 # Enable clang-tidy if it has been detected.
 if config.clang_tidy_path != "":
   tool_dirs.append(config.clang_tidy_path)

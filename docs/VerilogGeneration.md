@@ -136,6 +136,9 @@ The current set of "lint warnings fix" Lowering Options is:
    collisions with Verilog keywords insensitively.  E.g., this will treat a
    variable called `WIRE` as a collision with the keyword and rename it to
    `WIRE_0` (or similar).  When set to `false`, then `WIRE` will not be renamed.
+ * `fixUpEmptyModules` (default=`false`). If true, then add a dummy wire to
+   empty modules since some vendor tools consider empty modules as a blackbox and
+   raise synthesis errors.
 
 ## Recommended `LoweringOptions` by Target
 

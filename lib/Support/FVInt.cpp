@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Support/FVInt.h"
+#include "mlir/IR/OpImplementation.h"
 #include "llvm/ADT/StringExtras.h"
 
 #define DEBUG_TYPE "fvint"
@@ -102,8 +103,9 @@ bool FVInt::tryToString(SmallVectorImpl<char> &str, unsigned radix,
   while (!value.isZero() || !unknown.isZero()) {
     unsigned digitValue = value.getRawData()[0] & radixMask;
     unsigned digitUnknown = unknown.getRawData()[0] & radixMask;
-    value.lshrInPlace(radixLog2);
-    unknown.lshrInPlace(radixLog2);
+    unsigned shiftAmount = std::min(radixLog2, getBitWidth());
+    value.lshrInPlace(shiftAmount);
+    unknown.lshrInPlace(shiftAmount);
 
     // Handle unknown bits. Since we only get to print a single X or Z character
     // to the string, either all bits in the digit have to be X, or all have to
@@ -136,4 +138,58 @@ void FVInt::print(raw_ostream &os) const {
     if (!tryToString(buffer, 16))
       tryToString(buffer, 2);
   os << buffer;
+}
+
+llvm::hash_code circt::hash_value(const FVInt &a) {
+  return llvm::hash_combine(a.getRawValue(), a.getRawUnknown());
+}
+
+void circt::printFVInt(AsmPrinter &p, const FVInt &value) {
+  SmallString<32> buffer;
+  if (value.getBitWidth() > 1 && value.isNegative() &&
+      (-value).tryToString(buffer)) {
+    p << "-" << buffer;
+  } else if (value.tryToString(buffer)) {
+    p << buffer;
+  } else if (value.tryToString(buffer, 16)) {
+    p << "h" << buffer;
+  } else {
+    value.tryToString(buffer, 2);
+    p << "b" << buffer;
+  }
+}
+
+ParseResult circt::parseFVInt(AsmParser &p, FVInt &result) {
+  // Parse the value as either a keyword (`b[01XZ]+` for binary or
+  // `h[0-9A-FXZ]+` for hexadecimal), or an integer value (for decimal).
+  FVInt value;
+  StringRef strValue;
+  auto valueLoc = p.getCurrentLocation();
+  if (succeeded(p.parseOptionalKeyword(&strValue))) {
+    // Determine the radix based on the `b` or `h` prefix.
+    unsigned base = 0;
+    if (strValue.consume_front("b")) {
+      base = 2;
+    } else if (strValue.consume_front("h")) {
+      base = 16;
+    } else {
+      return p.emitError(valueLoc) << "expected `b` or `h` prefix";
+    }
+
+    // Parse the value.
+    auto parsedValue = FVInt::tryFromString(strValue, base);
+    if (!parsedValue) {
+      return p.emitError(valueLoc)
+             << "expected base-" << base << " four-valued integer";
+    }
+
+    // Add a zero bit at the top to ensure the value reads as positive.
+    result = parsedValue->zext(parsedValue->getBitWidth() + 1);
+  } else {
+    APInt intValue;
+    if (p.parseInteger(intValue))
+      return failure();
+    result = std::move(intValue);
+  }
+  return success();
 }

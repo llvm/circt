@@ -1154,6 +1154,23 @@ def ListCreateOp : FIRRTLOp<"list.create", [Pure, SameTypeOperands]> {
   let hasVerifier = 1;
 }
 
+def ListConcatOp : FIRRTLOp<"list.concat", [Pure, SameOperandsAndResultType]> {
+  let summary = "Concatenate multiple lists to produce a new list";
+  let description = [{
+    Produces a value of list type by concatenating the provided lists.
+
+    Example:
+    ```mlir
+    %3 = firrtl.list.concat %0, %1, %2 : !firrtl.list<string>
+    ```
+  }];
+
+  let arguments = (ins Variadic<ListType>:$subLists);
+  let results = (outs ListType:$result);
+
+  let assemblyFormat = "$subLists attr-dict `:` type($result)";
+}
+
 def BoolConstantOp : FIRRTLOp<"bool", [Pure, ConstantLike]> {
   let summary = "Produce a constant boolean value";
   let description = [{

@@ -2,23 +2,33 @@
 
 FIRRTL version 4.0.0
 circuit DPI:
-; CHECK-LABEL: import "DPI-C" context function void clocked_result(
+; CHECK-LABEL: `ifndef __CIRCT_DPI_IMPORT_CLOCKED_RESULT
+; CHECK-NEXT: import "DPI-C" context function void clocked_result(
 ; CHECK-NEXT:   input  byte foo,
 ; CHECK-NEXT:               bar,
 ; CHECK-NEXT:   output byte baz
 ; CHECK-NEXT: );
+; CHECK:      `define __CIRCT_DPI_IMPORT_CLOCKED_RESULT
+; CHECK-NEXT: `endif
 
-; CHECK-LABEL: import "DPI-C" context function void clocked_void(
+; CHECK-LABEL: `ifndef __CIRCT_DPI_IMPORT_CLOCKED_VOID
+; CHECK-NEXT: import "DPI-C" context function void clocked_void(
 ; CHECK-NEXT:   input byte in_0,
 ; CHECK-NEXT:              in_1,
 ; CHECK-NEXT:              in_2[]
 ; CHECK-NEXT: );
+; CHECK:      `define __CIRCT_DPI_IMPORT_CLOCKED_VOID
+; CHECK-NEXT: `endif
 
-; CHECK-LABEL: import "DPI-C" context function void unclocked_result(
+
+; CHECK-LABEL: `ifndef __CIRCT_DPI_IMPORT_UNCLOCKED_RESULT
+; CHECK-NEXT: import "DPI-C" context function void unclocked_result(
 ; CHECK-NEXT:   input  byte in_0,
 ; CHECK-NEXT:                    in_1,
 ; CHECK-NEXT:   output byte out_0
 ; CHECK-NEXT: );
+; CHECK:      `define __CIRCT_DPI_IMPORT_UNCLOCKED_RESULT
+; CHECK-NEXT: `endif
 
 ; CHECK-LABEL: module DPI(
 ; CHECK:        logic [7:0] [[TMP:_.+]];

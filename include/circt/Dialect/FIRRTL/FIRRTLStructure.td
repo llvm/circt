@@ -445,7 +445,7 @@ def LayerOp : FIRRTLOp<
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
-    $sym_name $convention attr-dict-with-keyword $body
+    $sym_name `` $convention attr-dict-with-keyword $body
   }];
 }
 

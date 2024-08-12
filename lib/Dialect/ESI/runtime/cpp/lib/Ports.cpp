@@ -47,7 +47,7 @@ void ReadChannelPort::connect(std::function<bool(MessageData)> callback,
     throw std::runtime_error("Channel already connected");
   mode = Mode::Callback;
   this->callback = callback;
-  ChannelPort::connect(bufferSize);
+  connectImpl(bufferSize);
 }
 
 void ReadChannelPort::connect(std::optional<unsigned> bufferSize) {
@@ -71,7 +71,7 @@ void ReadChannelPort::connect(std::optional<unsigned> bufferSize) {
     }
     return true;
   };
-  ChannelPort::connect(bufferSize);
+  connectImpl(bufferSize);
 }
 
 std::future<MessageData> ReadChannelPort::readAsync() {
