@@ -224,6 +224,13 @@ firrtl.circuit "PathModule" {
     // CHECK:  %[[c1:.+]] = om.list_create %propIn, %[[c0]] : !om.integer
     // CHECK:  om.class.field @propOut, %[[c1]] : !om.list<!om.integer>
   }
+
+   firrtl.module @ListConcat(in %propIn0: !firrtl.list<integer>, in %propIn1: !firrtl.list<integer>, out %propOut: !firrtl.list<integer>) {
+    // CHECK: [[CONCAT:%.+]] = om.list_concat %propIn0, %propIn1
+    %1 = firrtl.list.concat %propIn0, %propIn1 : !firrtl.list<integer>
+    // CHECK: om.class.field @propOut, [[CONCAT]]
+    firrtl.propassign %propOut, %1 : !firrtl.list<integer>
+  }
 }
 
 // CHECK-LABEL: firrtl.circuit "WireProp"
