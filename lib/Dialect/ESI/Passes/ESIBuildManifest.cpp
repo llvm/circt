@@ -39,10 +39,13 @@ private:
   void gatherFilters(Operation *);
   void gatherFilters(Attribute);
 
-  /// Get a JSON representation of a type.
-  llvm::json::Value json(Operation *errorOp, Type);
-  /// Get a JSON representation of a type.
-  llvm::json::Value json(Operation *errorOp, Attribute);
+  /// Get a JSON representation of a type. 'useTable' indicates whether to use
+  /// the type table to determine if the type should be emitted as a reference
+  /// if it already exists in the type table.
+  llvm::json::Value json(Operation *errorOp, Type, bool useTable = true);
+  /// Get a JSON representation of a type. 'elideType' indicates to not print
+  /// the type if it would have been printed.
+  llvm::json::Value json(Operation *errorOp, Attribute, bool elideType = false);
 
   // Output a node in the appid hierarchy.
   void emitNode(llvm::json::OStream &, AppIDHierNodeOp nodeOp);
@@ -87,6 +90,12 @@ void ESIBuildManifestPass::runOnOperation() {
   // Gather the relevant types under the appid hierarchy root only. This avoids
   // scraping unnecessary types.
   appidRoot->walk([&](Operation *op) { gatherFilters(op); });
+
+  // Also gather types from the manifest data.
+  for (Region &region : mod->getRegions())
+    for (Block &block : region)
+      for (auto manifestInfo : block.getOps<IsManifestData>())
+        gatherFilters(manifestInfo);
 
   // JSONify the manifest.
   std::string jsonManifest = json();
@@ -165,15 +174,34 @@ std::string ESIBuildManifestPass::json() {
   j.attribute("api_version", esiApiVersion);
 
   j.attributeArray("symbols", [&]() {
-    for (auto symInfo : mod.getBody()->getOps<SymbolMetadataOp>()) {
-      if (!symbols.contains(symInfo.getSymbolRefAttr()))
+    // First, gather all of the manifest data for each symbol.
+    DenseMap<SymbolRefAttr, SmallVector<IsManifestData>> symbolInfoLookup;
+    for (auto symInfo : mod.getBody()->getOps<IsManifestData>()) {
+      FlatSymbolRefAttr sym = symInfo.getSymbolRefAttr();
+      if (!sym || !symbols.contains(sym))
         continue;
+      symbolInfoLookup[sym].push_back(symInfo);
+    }
+
+    // Now, emit a JSON object for each symbol.
+    for (const auto &symNameInfo : symbolInfoLookup) {
       j.object([&] {
-        SmallVector<NamedAttribute, 4> attrs;
-        symInfo.getDetails(attrs);
-        for (auto attr : attrs)
-          j.attribute(attr.getName().getValue(),
-                      json(symInfo, attr.getValue()));
+        j.attribute("symbol", json(symNameInfo.second.front(),
+                                   symNameInfo.first, /*elideType=*/true));
+        for (auto symInfo : symNameInfo.second) {
+          j.attributeBegin(symInfo.getManifestClass());
+          j.object([&] {
+            SmallVector<NamedAttribute, 4> attrs;
+            symInfo.getDetails(attrs);
+            for (auto attr : attrs) {
+              if (attr.getName().getValue() == "symbolRef")
+                continue;
+              j.attribute(attr.getName().getValue(),
+                          json(symInfo, attr.getValue()));
+            }
+          });
+          j.attributeEnd();
+        }
       });
     }
   });
@@ -215,7 +243,7 @@ std::string ESIBuildManifestPass::json() {
 
   j.attributeArray("types", [&]() {
     for (auto type : types) {
-      j.value(json(mod, type));
+      j.value(json(mod, type, /*useTable=*/false));
     }
   });
   j.objectEnd();
@@ -245,6 +273,7 @@ void ESIBuildManifestPass::gatherFilters(Attribute attr) {
   // This is far from complete. Build out as necessary.
   TypeSwitch<Attribute>(attr)
       .Case([&](TypeAttr a) { addType(a.getValue()); })
+      .Case([&](IntegerAttr a) { addType(a.getType()); })
       .Case([&](FlatSymbolRefAttr a) { symbols.insert(a); })
       .Case([&](hw::InnerRefAttr a) { symbols.insert(a.getModuleRef()); })
       .Case([&](ArrayAttr a) {
@@ -259,10 +288,20 @@ void ESIBuildManifestPass::gatherFilters(Attribute attr) {
 
 /// Get a JSON representation of a type.
 // NOLINTNEXTLINE(misc-no-recursion)
-llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp, Type type) {
+llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp, Type type,
+                                             bool useTable) {
   using llvm::json::Array;
   using llvm::json::Object;
   using llvm::json::Value;
+
+  if (useTable && typeLookup.contains(type)) {
+    // If the type is in the type table, it'll be present in the types
+    // section. Just give the circt type name, which is guaranteed to
+    // uniquely identify the type.
+    std::string typeName;
+    llvm::raw_string_ostream(typeName) << type;
+    return typeName;
+  }
 
   std::string m;
   Object o =
@@ -270,7 +309,7 @@ llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp, Type type) {
       TypeSwitch<Type, Object>(type)
           .Case([&](ChannelType t) {
             m = "channel";
-            return Object({{"inner", json(errorOp, t.getInner())}});
+            return Object({{"inner", json(errorOp, t.getInner(), useTable)}});
           })
           .Case([&](ChannelBundleType t) {
             m = "bundle";
@@ -279,7 +318,7 @@ llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp, Type type) {
               channels.push_back(Object(
                   {{"name", field.name.getValue()},
                    {"direction", stringifyChannelDirection(field.direction)},
-                   {"type", json(errorOp, field.type)}}));
+                   {"type", json(errorOp, field.type, useTable)}}));
             return Object({{"channels", Value(std::move(channels))}});
           })
           .Case([&](AnyType t) {
@@ -288,25 +327,29 @@ llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp, Type type) {
           })
           .Case([&](ListType t) {
             m = "list";
-            return Object({{"element", json(errorOp, t.getElementType())}});
+            return Object(
+                {{"element", json(errorOp, t.getElementType(), useTable)}});
           })
           .Case([&](hw::ArrayType t) {
             m = "array";
-            return Object({{"size", t.getNumElements()},
-                           {"element", json(errorOp, t.getElementType())}});
+            return Object(
+                {{"size", t.getNumElements()},
+                 {"element", json(errorOp, t.getElementType(), useTable)}});
           })
           .Case([&](hw::StructType t) {
             m = "struct";
             Array fields;
             for (auto field : t.getElements())
-              fields.push_back(Object({{"name", field.name.getValue()},
-                                       {"type", json(errorOp, field.type)}}));
+              fields.push_back(
+                  Object({{"name", field.name.getValue()},
+                          {"type", json(errorOp, field.type, useTable)}}));
             return Object({{"fields", Value(std::move(fields))}});
           })
           .Case([&](hw::TypeAliasType t) {
             m = "alias";
-            return Object({{"name", t.getTypeDecl(symCache).getPreferredName()},
-                           {"inner", json(errorOp, t.getInnerType())}});
+            return Object(
+                {{"name", t.getTypeDecl(symCache).getPreferredName()},
+                 {"inner", json(errorOp, t.getInnerType(), useTable)}});
           })
           .Case([&](IntegerType t) {
             m = "int";
@@ -322,9 +365,9 @@ llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp, Type type) {
           });
 
   // Common metadata.
-  std::string circtName;
-  llvm::raw_string_ostream(circtName) << type;
-  o["circt_name"] = circtName;
+  std::string typeID;
+  llvm::raw_string_ostream(typeID) << type;
+  o["id"] = typeID;
 
   int64_t width = hw::getBitWidth(type);
   if (auto chanType = dyn_cast<ChannelType>(type))
@@ -340,59 +383,58 @@ llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp, Type type) {
 
 // Serialize an attribute to a JSON value.
 // NOLINTNEXTLINE(misc-no-recursion)
-llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp,
-                                             Attribute attr) {
+llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp, Attribute attr,
+                                             bool elideType) {
+
   // This is far from complete. Build out as necessary.
+  using llvm::json::Object;
   using llvm::json::Value;
-  return TypeSwitch<Attribute, Value>(attr)
-      .Case([&](StringAttr a) { return a.getValue(); })
-      .Case([&](IntegerAttr a) { return a.getValue().getLimitedValue(); })
-      .Case([&](TypeAttr a) {
-        Type t = a.getValue();
+  Value value =
+      TypeSwitch<Attribute, Value>(attr)
+          .Case([&](StringAttr a) { return a.getValue(); })
+          .Case([&](IntegerAttr a) { return a.getValue().getLimitedValue(); })
+          .Case([&](TypeAttr a) { return json(errorOp, a.getValue()); })
+          .Case([&](ArrayAttr a) {
+            return llvm::json::Array(llvm::map_range(
+                a, [&](Attribute a) { return json(errorOp, a); }));
+          })
+          .Case([&](DictionaryAttr a) {
+            llvm::json::Object dict;
+            for (const auto &entry : a.getValue())
+              dict[entry.getName().getValue()] =
+                  json(errorOp, entry.getValue());
+            return dict;
+          })
+          .Case([&](hw::InnerRefAttr ref) {
+            llvm::json::Object dict;
+            dict["outer_sym"] = ref.getModule().getValue();
+            dict["inner"] = ref.getName().getValue();
+            return dict;
+          })
+          .Case([&](AppIDAttr appid) {
+            llvm::json::Object dict;
+            dict["name"] = appid.getName().getValue();
+            auto idx = appid.getIndex();
+            if (idx)
+              dict["index"] = *idx;
+            return dict;
+          })
+          .Default([&](Attribute a) {
+            std::string value;
+            llvm::raw_string_ostream(value) << a;
+            return value;
+          });
 
-        llvm::json::Object typeMD;
-        if (typeLookup.contains(t)) {
-          // If the type is in the type table, it'll be present in the types
-          // section. Just give the circt type name, which is guaranteed to
-          // uniquely identify the type.
-          std::string buff;
-          llvm::raw_string_ostream(buff) << a;
-          typeMD["circt_name"] = buff;
-          return typeMD;
-        }
+  // Don't print the type if it's None or we're eliding it.
+  auto typedAttr = llvm::dyn_cast<TypedAttr>(attr);
+  if (elideType || !typedAttr || isa<NoneType>(typedAttr.getType()))
+    return value;
 
-        typeMD["type"] = json(errorOp, t);
-        return typeMD;
-      })
-      .Case([&](ArrayAttr a) {
-        return llvm::json::Array(
-            llvm::map_range(a, [&](Attribute a) { return json(errorOp, a); }));
-      })
-      .Case([&](DictionaryAttr a) {
-        llvm::json::Object dict;
-        for (const auto &entry : a.getValue())
-          dict[entry.getName().getValue()] = json(errorOp, entry.getValue());
-        return dict;
-      })
-      .Case([&](hw::InnerRefAttr ref) {
-        llvm::json::Object dict;
-        dict["outer_sym"] = ref.getModule().getValue();
-        dict["inner"] = ref.getName().getValue();
-        return dict;
-      })
-      .Case([&](AppIDAttr appid) {
-        llvm::json::Object dict;
-        dict["name"] = appid.getName().getValue();
-        auto idx = appid.getIndex();
-        if (idx)
-          dict["index"] = *idx;
-        return dict;
-      })
-      .Default([&](Attribute a) {
-        std::string buff;
-        llvm::raw_string_ostream(buff) << a;
-        return buff;
-      });
+  // Otherwise, return an object with the value and type.
+  Object dict;
+  dict["value"] = value;
+  dict["type"] = json(errorOp, typedAttr.getType());
+  return dict;
 }
 
 std::unique_ptr<OperationPass<ModuleOp>>
