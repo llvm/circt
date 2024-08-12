@@ -322,6 +322,12 @@ SmallVector<MemorySlot> VariableOp::getPromotableSlots() {
   if (mlir::mayBeGraphRegion(*getOperation()->getParentRegion()) ||
       getInitial())
     return {};
+
+  // Ensure that `getDefaultValue` can conjure up a default value for the
+  // variable's type.
+  if (!isa<PackedType>(getType().getNestedType()))
+    return {};
+
   return {MemorySlot{getResult(), getType().getNestedType()}};
 }
 

@@ -462,7 +462,7 @@ def NamedConstantOp : MooreOp<"named_constant", [
   }];
 }
 
-def StringConstantOp : MooreOp<"string_constant", [Pure, ConstantLike]> {
+def StringConstantOp : MooreOp<"string_constant", [Pure]> {
   let summary = "Produce a constant string value";
   let description = [{
     Produces a constant value of string type.
