@@ -169,7 +169,7 @@ def AppIDHierNodeOp : ESI_Op<"manifest.hier_node", [
   }];
 }
 
-def SymbolConstantsOp : ESI_Op<"manifest.consts", [
+def SymbolConstantsOp : ESI_Op<"manifest.constants", [
   DeclareOpInterfaceMethods<IsManifestData>]> {
   let summary = "Constant values associated with a symbol";
 

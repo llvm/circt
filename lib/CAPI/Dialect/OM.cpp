@@ -29,6 +29,12 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(OM, om, OMDialect)
 // Type API.
 //===----------------------------------------------------------------------===//
 
+/// Is the Type an AnyType.
+bool omTypeIsAAnyType(MlirType type) { return isa<AnyType>(unwrap(type)); }
+
+/// Get the TypeID for an AnyType.
+MlirTypeID omAnyTypeGetTypeID(void) { return wrap(AnyType::getTypeID()); }
+
 /// Is the Type a ClassType.
 bool omTypeIsAClassType(MlirType type) { return isa<ClassType>(unwrap(type)); }
 
@@ -58,6 +64,17 @@ bool omTypeIsAFrozenPathType(MlirType type) {
 /// Get the TypeID for a FrozenPathType.
 MlirTypeID omFrozenPathTypeGetTypeID(void) {
   return wrap(FrozenPathType::getTypeID());
+}
+
+/// Is the Type a ListType.
+bool omTypeIsAListType(MlirType type) { return isa<ListType>(unwrap(type)); }
+
+/// Get the TypeID for a ListType.
+MlirTypeID omListTypeGetTypeID(void) { return wrap(ListType::getTypeID()); }
+
+// Return a element type of a ListType.
+MlirType omListTypeGetElementType(MlirType type) {
+  return wrap(cast<ListType>(unwrap(type)).getElementType());
 }
 
 /// Is the Type a StringType.

@@ -497,6 +497,46 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         continue;
       }
 
+      // Handle subfields, subindexes, and subaccesses which are indexing into
+      // non-passive values.  If these are kept in the module, then the module
+      // must create bi-directional ports.  This doesn't make sense as the
+      // FIRRTL spec states that no layerblock may write to values outside it.
+      // Fix this for subfield and subindex by moving these ops outside the
+      // layerblock.  Try to fix this for subaccess and error if the move can't
+      // be made because the index is defined inside the layerblock.  (This case
+      // is exceedingly rare given that subaccesses are almost always unexepcted
+      // when this pass runs.)
+      if (isa<SubfieldOp, SubindexOp>(op)) {
+        auto input = op.getOperand(0);
+        if (!firrtl::type_cast<FIRRTLBaseType>(input.getType()).isPassive() &&
+            !isAncestorOfValueOwner(layerBlock, input))
+          op.moveBefore(layerBlock);
+        continue;
+      }
+
+      if (auto subOp = dyn_cast<SubaccessOp>(op)) {
+        auto input = subOp.getInput();
+        if (firrtl::type_cast<FIRRTLBaseType>(input.getType()).isPassive())
+          continue;
+
+        if (!isAncestorOfValueOwner(layerBlock, input) &&
+            !isAncestorOfValueOwner(layerBlock, subOp.getIndex())) {
+          subOp->moveBefore(layerBlock);
+          continue;
+        }
+        auto diag = op.emitOpError()
+                    << "has a non-passive operand and captures a value defined "
+                       "outside its enclosing bind-convention layerblock.  The "
+                       "'LowerLayers' pass cannot lower this as it would "
+                       "create an output port on the resulting module.";
+        diag.attachNote(layerBlock.getLoc())
+            << "the layerblock is defined here";
+        return WalkResult::interrupt();
+      }
+
+      // Beyond this point, we are handling operations which capture values
+      // defined outside the layerblock.  Whenever we see this, we need to
+      // create ports for the module that this layerblock will become.
       if (auto refSend = dyn_cast<RefSendOp>(op)) {
         auto src = refSend.getBase();
         if (!isAncestorOfValueOwner(layerBlock, src))

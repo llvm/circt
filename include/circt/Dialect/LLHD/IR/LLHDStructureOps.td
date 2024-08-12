@@ -1,4 +1,4 @@
-//===- StructureOps.td - Process and Entity definitions ----*- tablegen -*-===//
+//===- LLHDStructureOps.td - Process and Entity defs -------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-def LLHD_ProcessOp : LLHD_Op<"process", [
+def ProcessOp : LLHDOp<"process", [
   NoRegionArguments,
   HasParent<"hw::HWModuleOp">
 ]> {
@@ -51,7 +51,7 @@ def LLHD_ProcessOp : LLHD_Op<"process", [
   let assemblyFormat = "attr-dict-with-keyword $body";
 }
 
-def LLHD_ConnectOp : LLHD_Op<"con", [
+def ConnectOp : LLHDOp<"con", [
     SameTypeOperands,
     HasParent<"hw::HWModuleOp">
   ]> {
@@ -71,7 +71,7 @@ def LLHD_ConnectOp : LLHD_Op<"con", [
   let hasCanonicalizeMethod = 1;
 }
 
-def LLHD_WaitOp : LLHD_Op<"wait", [
+def WaitOp : LLHDOp<"wait", [
     Terminator,
     AttrSizedOperandSegments,
     HasParent<"ProcessOp">,
@@ -97,7 +97,7 @@ def LLHD_WaitOp : LLHD_Op<"wait", [
   }];
 
   let arguments = (ins Variadic<InOutType>:$obs,
-                       Optional<LLHD_TimeType>:$time,
+                       Optional<LLHDTimeType>:$time,
                        Variadic<AnyType>:$destOps);
 
   let successors = (successor AnySuccessor:$dest);
@@ -108,26 +108,11 @@ def LLHD_WaitOp : LLHD_Op<"wait", [
   }];
 }
 
-def LLHD_HaltOp : LLHD_Op<"halt", [Terminator, HasParent<"ProcessOp">]> {
+def HaltOp : LLHDOp<"halt", [Terminator, HasParent<"ProcessOp">]> {
   let summary = "Terminates execution of a process.";
   let description = [{
     The `halt` instruction terminates execution of a process. All processes
     must halt eventually or consist of an infinite loop.
-
-    * This is a terminator instruction
-    * This instruction is only allowed in processes (`llhd.process`).
-
-    Syntax:
-
-    ```
-    halt-op ::= `llhd.halt`
-    ```
-
-    Example:
-
-    ```mlir
-    llhd.halt
-    ```
   }];
 
   let assemblyFormat = "attr-dict";

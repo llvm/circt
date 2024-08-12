@@ -266,19 +266,20 @@ def NetOp : MooreOp<"net", [
     `` custom<ImplicitSSAName>($name) $kind ($assignment^)? attr-dict
     `:` type($result)
   }];
+  let hasCanonicalizeMethod = true;
 }
 
-def AssignedVarOp : MooreOp<"assigned_variable", [
+def AssignedVariableOp : MooreOp<"assigned_variable", [
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-  TypesMatchWith<"initial value and variable types match",
-    "result", "initial", "cast<RefType>($_self).getNestedType()">
+  SameOperandsAndResultType
 ]> {
-  let summary = "The copy of variable must have the initial value";
-  let arguments = (ins OptionalAttr<StrAttr>:$name, UnpackedType:$initial);
-  let results = (outs Res<RefType, "", [MemAlloc]>:$result);
+  let summary = "A variable with a unique continuously assigned value";
+  let arguments = (ins OptionalAttr<StrAttr>:$name, UnpackedType:$input);
+  let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    `` custom<ImplicitSSAName>($name) $initial attr-dict `:` type($result)
+    `` custom<ImplicitSSAName>($name) $input attr-dict `:` type($input)
   }];
+  let hasCanonicalizeMethod = true;
 }
 
 def ReadOp : MooreOp<"read", [
@@ -416,7 +417,7 @@ def EventOp : MooreOp<"wait_event", [
 // Expressions
 //===----------------------------------------------------------------------===//
 
-def ConstantOp : MooreOp<"constant", [Pure]> {
+def ConstantOp : MooreOp<"constant", [Pure, ConstantLike]> {
   let summary = "A constant integer value";
   let arguments = (ins FVIntegerAttr:$value);
   let results = (outs IntType:$result);
@@ -685,6 +686,9 @@ class PowOpBase<string mnemonic> : BinaryOpBase<mnemonic> {
 
     See IEEE 1800-2017 § 11.4.3 "Arithmetic operators".
   }];
+
+  let hasCanonicalizeMethod = 1;
+  let hasFolder = 1;
 }
 
 def PowUOp : PowOpBase<"powu">;
@@ -1220,24 +1224,21 @@ def UnionExtractRefOp : MooreOp<"union_extract_ref"> {
 def ConditionalOp : MooreOp<"conditional",[
   RecursiveMemoryEffects,
   NoRegionArguments,
-  SingleBlockImplicitTerminator<"moore::YieldOp">
 ]> {
   let summary = "Conditional operation";
   let description = [{
-    If cond_predicate is true, the operator returns the value of the first 
-    expression without evaluating the second expression; if false, it returns 
-    the value of the second expression without evaluating the first expression.
-    If cond_predicate evaluates to an ambiguous value (x or z), then both the
-    first expression and the second expression shall be evaluated, and compared
-    for logical equivalence. If that comparison is true (1), the operator shall
-    return either the first or second expression. Otherwise the operator returns
-    a result based on the data types of the expressions.
+    If the condition is true, this op evaluates the first region and returns its
+    result without evaluating the second region. If the the condition is false,
+    this op evaluates the second region and returns its result without
+    evaluating the first region.
 
-    When both the first and second expressions are of integral types, if the
-    cond_predicate evaluates to an ambiguous value and the expressions are not
-    logically equivalent, their results shall be combined bit by bit using the
-    table below to calculate the final result. The first and second expressions
-    are extended to the same width.
+    If the condition is unknown (X or Z), _both_ regions are evaluated. If both
+    results are equal as per `case_eq`, one of the results is returned. If the
+    results are not equal, this op returns a value based on the data types of
+    the results.
+
+    In case the results of the first and second region are of an integral type,
+    they are merged by applying the following bit-wise truth table:
 
     |?: | 0 | 1 | X | Z |
     |---|---|---|---|---|
@@ -1246,6 +1247,7 @@ def ConditionalOp : MooreOp<"conditional",[
     | X | X | X | X | X |
     | Z | X | X | X | X |
 
+    Non-integral data types define other rules which are not yet implemented.
     See IEEE 1800-2017 § 11.4.11 "Conditional operator".
   }];
   let arguments = (ins AnySingleBitType:$condition);
@@ -1276,7 +1278,6 @@ def YieldOp : MooreOp<"yield", [
     yielded.
   }];
   let arguments = (ins UnpackedType:$result);
-  let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
   let assemblyFormat = [{
     attr-dict $result `:` type($result)
   }];

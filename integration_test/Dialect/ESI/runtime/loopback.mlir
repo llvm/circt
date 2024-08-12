@@ -96,7 +96,7 @@ hw.module @CallableFunc1() {
 }
 
 esi.manifest.sym @Loopback name "LoopbackIP" version "v0.0" summary "IP which simply echos bytes" {foo=1}
-esi.manifest.consts @Loopback {depth=5:ui32}
+esi.manifest.constants @Loopback {depth=5:ui32}
 
 hw.module @top(in %clk: !seq.clock, in %rst: i1) {
   esi.service.instance #esi.appid<"cosim"> svc @HostComms impl as "cosim" (%clk, %rst) : (!seq.clock, i1) -> ()

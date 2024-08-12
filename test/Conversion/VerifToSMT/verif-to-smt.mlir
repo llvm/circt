@@ -11,15 +11,15 @@ func.func @test(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
 
   // CHECK: [[EQ:%.+]] = smt.solver() : () -> i1
   // CHECK: [[IN0:%.+]] = smt.declare_fun : !smt.bv<32>
-  // CHECK: [[V0:%.+]] = builtin.unrealized_conversion_cast [[IN0]] : !smt.bv<32> to i32
   // CHECK: [[IN1:%.+]] = smt.declare_fun : !smt.bv<32>
-  // CHECK: [[V1:%.+]] = builtin.unrealized_conversion_cast [[IN1]] : !smt.bv<32> to i32
-  // CHECK: [[V2:%.+]]:2 = "some_op"([[V0]], [[V1]]) : (i32, i32) -> (i32, i32)
-  // CHECK: [[V3:%.+]] = builtin.unrealized_conversion_cast [[V2]]#0 : i32 to !smt.bv<32>
-  // CHECK: [[V4:%.+]] = smt.distinct [[IN0]], [[V3]] : !smt.bv<32>
-  // CHECK: [[V5:%.+]] = builtin.unrealized_conversion_cast [[V2]]#1 : i32 to !smt.bv<32>
-  // CHECK: [[V6:%.+]] = smt.distinct [[IN1]], [[V5]] : !smt.bv<32>
-  // CHECK: [[V7:%.+]] = smt.or [[V4]], [[V6]]
+  // CHECK-DAG: [[V0:%.+]] = builtin.unrealized_conversion_cast [[IN0]] : !smt.bv<32> to i32
+  // CHECK-DAG: [[V1:%.+]] = builtin.unrealized_conversion_cast [[IN1]] : !smt.bv<32> to i32
+  // CHECK-DAG: [[V2:%.+]]:2 = "some_op"([[V0]], [[V1]]) : (i32, i32) -> (i32, i32)
+  // CHECK-DAG: [[V3:%.+]] = builtin.unrealized_conversion_cast [[V2]]#0 : i32 to !smt.bv<32>
+  // CHECK-DAG: [[V4:%.+]] = smt.distinct [[IN0]], [[V3]] : !smt.bv<32>
+  // CHECK-DAG: [[V5:%.+]] = builtin.unrealized_conversion_cast [[V2]]#1 : i32 to !smt.bv<32>
+  // CHECK-DAG: [[V6:%.+]] = smt.distinct [[IN1]], [[V5]] : !smt.bv<32>
+  // CHECK-DAG: [[V7:%.+]] = smt.or [[V4]], [[V6]]
   // CHECK: smt.assert [[V7]]
   // CHECK: [[FALSE:%.+]] = arith.constant false
   // CHECK: [[TRUE:%.+]] = arith.constant true

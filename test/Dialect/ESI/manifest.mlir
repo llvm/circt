@@ -33,7 +33,7 @@ hw.module @Loopback (in %clk: !seq.clock) {
 }
 
 esi.manifest.sym @Loopback name "LoopbackIP" version "v0.0" summary "IP which simply echos bytes" {foo=1}
-esi.manifest.consts @Loopback {depth=5:ui32}
+esi.manifest.constants @Loopback {depth=5:ui32}
 
 esi.service.std.func @funcs
 
