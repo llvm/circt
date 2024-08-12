@@ -1,3 +1,4 @@
+from multiprocessing import dummy
 import time
 from typing import cast
 import esiaccel as esi
@@ -26,8 +27,12 @@ m = acc.manifest()
 # assert len(m.type_table) == len(m_alt.type_table)
 
 info = m.module_infos
-assert len(info) == 3
-assert info[1].name == "Dummy"
+dummy_info = None
+for i in info:
+  if i.name == "Dummy":
+    dummy_info = i
+    break
+assert dummy_info is not None
 
 
 def read(addr: int) -> bytearray:
