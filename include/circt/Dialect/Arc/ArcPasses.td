@@ -58,9 +58,9 @@ def Dedup : Pass<"arc-dedup", "mlir::ModuleOp"> {
   ];
 }
 
-def DummyAnalysisTester : Pass<"arc-dummy-analysis-tester", "mlir::ModuleOp"> {
+def PrintCostModel : Pass<"arc-print-cost-model", "mlir::ModuleOp"> {
   let summary = "A dymmy pass to test analysis passes";
-  let constructor = "circt::arc::createDummyAnalysisTesterPass()";
+  let constructor = "circt::arc::createPrintCostModelPass()";
   let dependentDialects = ["arc::ArcDialect"];
   let statistics = [
     Statistic<"moduleCost", "Operation(s)",

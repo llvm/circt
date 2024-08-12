@@ -16,52 +16,65 @@ using namespace circt;
 using namespace arc;
 using namespace std;
 
-size_t ArcCostModel::getCost(Operation *op) { return computeOperationCost(op); }
+// FIXME: May be refined and we have more accurate operation costs
+enum class OperationCost : size_t {
+  NOCOST,
+  NORMALCOST,
+  PACKCOST = 2,
+  EXTRACTCOST = 3,
+  CONCATCOST = 3,
+  SAMEVECTORNOSHUFFLE = 0,
+  SAMEVECTORSHUFFLECOST = 2,
+  DIFFERENTVECTORNOSHUFFLE = 2,
+  DIFFERENTVECTORSHUFFLECOST = 3
+};
 
-size_t ArcCostModel::computeOperationCost(Operation *op) {
-  if (opCostCash.count(op))
-    return opCostCash[op];
-  if (isa<circt::comb::ConcatOp>(op))
-    return opCostCash[op] = size_t(OperationCost::CONCATCOST);
-  if (isa<circt::comb::ExtractOp>(op))
-    return opCostCash[op] = size_t(OperationCost::EXTRACTCOST);
-  // We have some other functions that need to be handled in a different way
-  // arc::StateOp, arc::CallOp, mlir::func::CallOp and arc::VectorizeOp, each of
-  // these functions have bodies so the cost of the op equals the cost of its
-  // body.
-  if (isa<arc::StateOp>(op) || isa<arc::CallOp>(op) ||
-      isa<mlir::func::CallOp>(op)) {
-    size_t totalCost = 0;
-    const auto regions =
-        dyn_cast<CallOpInterface>(op).resolveCallable()->getRegions();
-    for (auto &region : regions)
-      for (auto &block : region)
-        for (auto &innerOp : block)
-          totalCost += computeOperationCost(&innerOp);
-    return opCostCash[op] = totalCost;
-  }
-
-  if (isa<arc::VectorizeOp>(op)) {
-    size_t inputVecCost = getInputVectorsCost(dyn_cast<VectorizeOp>(op));
-    size_t vecOpBodyCost = 0;
-    auto regions = op->getRegions();
-    for (auto &region : regions)
-      for (auto &block : region)
-        for (auto &innerOp : block)
-          vecOpBodyCost += computeOperationCost(&innerOp);
-
-    vectoroizeOpsBodyCost += vecOpBodyCost;
-    allVectorizeOpsCost += inputVecCost + vecOpBodyCost;
-    return opCostCash[op] = inputVecCost + vecOpBodyCost;
-  }
-
-  return opCostCash[op] = size_t(OperationCost::NORMALCOST);
+OperationCosts ArcCostModel::getCost(Operation *op) {
+  return computeOperationCost(op);
 }
 
-size_t ArcCostModel::getInputVectorsCost(VectorizeOp vecOp) {
-  // per VectorizeOp packing and shuffling costs
-  size_t localPackCost = 0;
-  size_t localShufflingCost = 0;
+OperationCosts ArcCostModel::computeOperationCost(Operation *op) {
+  if (auto it = opCostCache.find(op); it != opCostCache.end())
+    return it->second;
+
+  OperationCosts costs;
+
+  if (isa<circt::comb::ConcatOp>(op))
+    costs.normalCost = size_t(OperationCost::CONCATCOST);
+  else if (isa<circt::comb::ExtractOp>(op))
+    costs.normalCost = size_t(OperationCost::EXTRACTCOST);
+  else if (auto vecOp = dyn_cast<arc::VectorizeOp>(op)) {
+    // VectorizeOpCost = packingCost + shufflingCost + bodyCost
+    OperationCosts inputVecCosts = getInputVectorsCost(vecOp);
+    costs.packingCost += inputVecCosts.packingCost;
+    costs.shufflingCost += inputVecCosts.shufflingCost;
+
+    for (auto &region : op->getRegions()) {
+      for (auto &block : region) {
+        for (auto &innerOp : block) {
+          OperationCosts innerCosts = computeOperationCost(&innerOp);
+          costs.vectorizeOpsBodyCost += innerCosts.totalCost();
+        }
+      }
+    }
+  } else if (auto callableOp = dyn_cast<CallOpInterface>(op)) {
+    // Callable Op? then resolve!
+    if (auto *calledOp = callableOp.resolveCallable())
+      return opCostCache[callableOp] = computeOperationCost(calledOp);
+  } else if (isa<func::FuncOp, arc::DefineOp, mlir::ModuleOp>(op)) {
+    // Get the body cost
+    for (auto &region : op->getRegions())
+      for (auto &block : region)
+        for (auto &innerOp : block)
+          costs += computeOperationCost(&innerOp);
+  } else
+    costs.normalCost = size_t(OperationCost::NORMALCOST);
+
+  return opCostCache[op] = costs;
+}
+
+OperationCosts ArcCostModel::getInputVectorsCost(VectorizeOp vecOp) {
+  OperationCosts costs;
   for (auto inputVec : vecOp.getInputs()) {
     if (auto otherVecOp = inputVec[0].getDefiningOp<VectorizeOp>();
         all_of(inputVec.begin(), inputVec.end(), [&](auto element) {
@@ -72,19 +85,18 @@ size_t ArcCostModel::getInputVectorsCost(VectorizeOp vecOp) {
 
       // Check if they all scalars we multiply by the PACKCOST (SHL/R + OR)
       if (!otherVecOp)
-        localPackCost += inputVec.size() * size_t(OperationCost::PACKCOST);
+        costs.packingCost += inputVec.size() * size_t(OperationCost::PACKCOST);
       else
-        localShufflingCost += inputVec == otherVecOp.getResults()
-                                  ? size_t(OperationCost::SAMEVECTORNOSHUFFLE)
-                                  : getShufflingCost(inputVec, true);
+        costs.shufflingCost += inputVec == otherVecOp.getResults()
+                                   ? size_t(OperationCost::SAMEVECTORNOSHUFFLE)
+                                   : getShufflingCost(inputVec, true);
     } else
       // inputVector consists of elements from different vectotrize ops and
       // may have scalars as well.
-      localShufflingCost += getShufflingCost(inputVec);
+      costs.shufflingCost += getShufflingCost(inputVec);
   }
-  packingCost += localPackCost;
-  shufflingCost += localShufflingCost;
-  return localShufflingCost + localPackCost;
+
+  return costs;
 }
 
 size_t ArcCostModel::getShufflingCost(const ValueRange &inputVec, bool isSame) {

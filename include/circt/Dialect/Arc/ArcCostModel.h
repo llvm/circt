@@ -18,30 +18,29 @@ using namespace mlir;
 namespace circt {
 namespace arc {
 
-// FIXME: May be refined and we have more accurate operation costs
-enum class OperationCost : size_t {
-  NOCOST,
-  NORMALCOST,
-  PACKCOST = 2,
-  EXTRACTCOST = 3,
-  CONCATCOST = 3,
-  SAMEVECTORNOSHUFFLE = 0,
-  SAMEVECTORSHUFFLECOST = 2,
-  DIFFERENTVECTORNOSHUFFLE = 2,
-  DIFFERENTVECTORSHUFFLECOST = 3
+struct OperationCosts {
+  size_t normalCost{0};
+  size_t packingCost{0};
+  size_t shufflingCost{0};
+  size_t vectorizeOpsBodyCost{0};
+  size_t totalCost() const {
+    return normalCost + packingCost + shufflingCost + vectorizeOpsBodyCost;
+  }
+  OperationCosts &operator+=(const OperationCosts &other) {
+    this->normalCost += other.normalCost;
+    this->packingCost += other.packingCost;
+    this->shufflingCost += other.shufflingCost;
+    this->vectorizeOpsBodyCost += other.vectorizeOpsBodyCost;
+    return *this;
+  }
 };
 
 class ArcCostModel {
 public:
-  size_t getCost(Operation *op);
-  size_t getPackingCost() const { return packingCost; }
-  // This is a public interface for other passes to call
-  size_t getShufflingCost() const { return shufflingCost; }
-  size_t getVectorizeOpsBodyCost() const { return vectoroizeOpsBodyCost; }
-  size_t getAllVectorizeOpsCost() const { return allVectorizeOpsCost; }
+  OperationCosts getCost(Operation *op);
 
 private:
-  size_t computeOperationCost(Operation *op);
+  OperationCosts computeOperationCost(Operation *op);
 
   // gets the cost to pack the vectors we have some cases we need to consider:
   // 1: the input is scalar so we can give it a cost of 1
@@ -52,13 +51,9 @@ private:
   // 4: the input is a mix of some vectors:
   //    a) same order we multiply by 2
   //    b) shuffling we multiply by 3
-  size_t getInputVectorsCost(VectorizeOp vecOp);
+  OperationCosts getInputVectorsCost(VectorizeOp vecOp);
   size_t getShufflingCost(const ValueRange &inputVec, bool isSame = false);
-  DenseMap<Operation *, size_t> opCostCash;
-  size_t packingCost{0};
-  size_t shufflingCost{0};
-  size_t vectoroizeOpsBodyCost{0};
-  size_t allVectorizeOpsCost{0};
+  DenseMap<Operation *, OperationCosts> opCostCache;
 };
 
 } // namespace arc

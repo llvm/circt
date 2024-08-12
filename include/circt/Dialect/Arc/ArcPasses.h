@@ -30,7 +30,6 @@ createAddTapsPass(const AddTapsOptions &options = {});
 std::unique_ptr<mlir::Pass> createAllocateStatePass();
 std::unique_ptr<mlir::Pass> createArcCanonicalizerPass();
 std::unique_ptr<mlir::Pass> createDedupPass();
-std::unique_ptr<mlir::Pass> createDummyAnalysisTesterPass();
 std::unique_ptr<mlir::Pass> createFindInitialVectorsPass();
 std::unique_ptr<mlir::Pass> createGroupResetsAndEnablesPass();
 std::unique_ptr<mlir::Pass>
@@ -47,6 +46,7 @@ std::unique_ptr<mlir::Pass> createLowerVectorizationsPass(
     LowerVectorizationsModeEnum mode = LowerVectorizationsModeEnum::Full);
 std::unique_ptr<mlir::Pass> createMakeTablesPass();
 std::unique_ptr<mlir::Pass> createMuxToControlFlowPass();
+std::unique_ptr<mlir::Pass> createPrintCostModelPass();
 std::unique_ptr<mlir::Pass> createSimplifyVariadicOpsPass();
 std::unique_ptr<mlir::Pass> createSplitLoopsPass();
 std::unique_ptr<mlir::Pass> createStripSVPass();
