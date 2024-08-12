@@ -187,7 +187,7 @@ firrtl.circuit "top"
 // CHECK-LABEL: firrtl.circuit "OneMemory"
 firrtl.circuit "OneMemory" {
   firrtl.module @OneMemory() {
-    %0:5= firrtl.instance MWrite_ext sym @MWrite_ext_0  @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>, in user_input: !firrtl.uint<5>)
+    %0:5= firrtl.instance MWrite_ext_inst sym @MWrite_ext_0  @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>, in user_input: !firrtl.uint<5>)
   }
   firrtl.memmodule @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>, in user_input: !firrtl.uint<5>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [{direction = "input", name = "user_input", width = 5 : ui32}], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
 
@@ -203,9 +203,11 @@ firrtl.circuit "OneMemory" {
   // CHECK:    firrtl.propassign %writeLatency, %writeLatency_in : !firrtl.integer
   // CHECK:    firrtl.propassign %readLatency, %readLatency_in : !firrtl.integer
   // CHECK:    firrtl.propassign %hierarchy, %hierarchy_in : !firrtl.list<path>
-  
+  // CHECK:    firrtl.propassign %preExtInstName, %preExtInstName_in : !firrtl.list<string>
   // CHECK: firrtl.class @MemoryMetadata
-  // CHECK:   firrtl.path instance distinct[0]<>
+  // CHECK:   %[[V0:.+]] = firrtl.string "MWrite_ext_inst"
+  // CHECK:   %[[V1:.+]] = firrtl.path reference distinct[0]<>
+  // CHECK:   %[[V2:.+]] = firrtl.list.create %[[V0]] : !firrtl.list<string>
   // CHECK:   %MWrite_ext = firrtl.object @MemorySchema
   // CHECK:   firrtl.string "MWrite_ext"
   // CHECK:   firrtl.object.subfield %MWrite_ext[name_in]
@@ -226,11 +228,13 @@ firrtl.circuit "OneMemory" {
   // CHECK:   firrtl.integer 1
   // CHECK:   firrtl.object.subfield %MWrite_ext[readLatency_in]
   // CHECK:   firrtl.object.subfield %MWrite_ext[hierarchy_in]
+  // CHECK:   %[[V33:.+]] = firrtl.object.subfield %MWrite_ext[preExtInstName_in]
+  // CHECK:   firrtl.propassign %[[V33]], %[[V2]] : !firrtl.list<string>
   // CHECK:   firrtl.propassign %MWrite_ext_field, %MWrite_ext
   // CHECK: }
 
   // CHECK:               emit.file "metadata{{/|\\\\}}seq_mems.json" {
-  // CHECK-NEXT{LITERAL}:   sv.verbatim  "[\0A {\0A \22module_name\22: \22{{0}}\22,\0A \22depth\22: 12,\0A \22width\22: 42,\0A \22masked\22: false,\0A \22read\22: 0,\0A \22write\22: 1,\0A \22readwrite\22: 0,\0A \22extra_ports\22: [\0A {\0A \22name\22: \22user_input\22,\0A \22direction\22: \22input\22,\0A \22width\22: 5\0A }\0A ],\0A \22hierarchy\22: [\0A \22{{1}}.MWrite_ext\22\0A ]\0A }\0A]"
+  // CHECK-NEXT{LITERAL}:   sv.verbatim  "[\0A {\0A \22module_name\22: \22{{0}}\22,\0A \22depth\22: 12,\0A \22width\22: 42,\0A \22masked\22: false,\0A \22read\22: 0,\0A \22write\22: 1,\0A \22readwrite\22: 0,\0A \22extra_ports\22: [\0A {\0A \22name\22: \22user_input\22,\0A \22direction\22: \22input\22,\0A \22width\22: 5\0A }\0A ],\0A \22hierarchy\22: [\0A \22{{1}}.MWrite_ext_inst\22\0A ]\0A }\0A]"
   // CHECK-SAME:              {symbols = [@MWrite_ext, @OneMemory]}
   // CHECK-NEXT:          }
 
@@ -272,8 +276,9 @@ firrtl.circuit "ReadOnlyMemory" {
 // CHECK-LABEL: firrtl.circuit "top"
 firrtl.circuit "top" {
     // CHECK: hw.hierpath @[[DUTNLA:.+]] [@top::@sym]
+    // CHECK-LABEL: firrtl.module @top
     firrtl.module @top()  {
-      // CHECK: firrtl.instance dut sym @[[DUT_SYM:.+]] {annotations = [{circt.nonlocal = @dutNLA, class = "circt.tracker", id = distinct[0]<>}]} @DUT() 
+      // CHECK: firrtl.instance dut sym @[[DUT_SYM:.+]] {annotations = [{circt.nonlocal = @dutNLA, class = "circt.tracker", id = distinct[0]<>}]} @DUT()
       firrtl.instance dut @DUT()
       firrtl.instance mem1 @Mem1()
       firrtl.instance mem2 @Mem2()
@@ -284,9 +289,11 @@ firrtl.circuit "top" {
     firrtl.module private @Mem2() {
       %0:4 =  firrtl.instance head_0_ext  @head_0_ext(in W0_addr: !firrtl.uint<5>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<5>)
     }
+    // CHECK-LABEL: firrtl.module private @DUT(
     firrtl.module private @DUT() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
-      // CHECK: firrtl.instance mem1 sym @[[MEM1_SYM:.+]] @Mem(
+      // CHECK: firrtl.instance mem1 sym @[[MEM1_SYM:.+]] {annotations = [{
+      // CHECK-SAME: circt.nonlocal = @memNLA, class = "circt.tracker", id = distinct
       firrtl.instance mem1 @Mem()
     }
     firrtl.module private @Mem() {
@@ -298,6 +305,12 @@ firrtl.circuit "top" {
     firrtl.memmodule private @memory_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<8>, in RW0_addr: !firrtl.uint<4>, in RW0_en: !firrtl.uint<1>, in RW0_clk: !firrtl.clock, in RW0_wmode: !firrtl.uint<1>, in RW0_wdata: !firrtl.uint<8>, out RW0_rdata: !firrtl.uint<8>) attributes {dataWidth = 8 : ui32, depth = 16 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 0 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
     firrtl.memmodule private @dumm_ext(in R0_addr: !firrtl.uint<5>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<5>, in W0_addr: !firrtl.uint<5>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<5>) attributes {dataWidth = 5 : ui32, depth = 20 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
 
+  // CHECK-LABEL:  firrtl.class @MemoryMetadata
+  // CHECK:  %[[V2:.+]] = firrtl.string "memory_ext"
+  // CHECK:  %[[V3:.+]] = firrtl.path instance distinct[1]<>
+  // CHECK:  firrtl.list.create %[[V2]] : !firrtl.list<string>
+  // CHECK:  firrtl.list.create %[[V3]] : !firrtl.list<path>
+
   // CHECK:               emit.file "metadata{{/|\\\\}}seq_mems.json" {
   // CHECK-NEXT{LITERAL}:   sv.verbatim "[\0A {\0A \22module_name\22: \22{{0}}\22,\0A \22depth\22: 16,\0A \22width\22: 8,\0A \22masked\22: false,\0A \22read\22: 1,\0A \22write\22: 0,\0A \22readwrite\22: 1,\0A \22extra_ports\22: [],\0A \22hierarchy\22: [\0A \22{{3}}.{{4}}.memory_ext\22\0A ]\0A },\0A {\0A \22module_name\22: \22{{5}}\22,\0A \22depth\22: 20,\0A \22width\22: 5,\0A \22masked\22: false,\0A \22read\22: 1,\0A \22write\22: 1,\0A \22readwrite\22: 0,\0A \22extra_ports\22: [],\0A \22hierarchy\22: [\0A \22{{3}}.{{4}}.dumm_ext\22\0A ]\0A }\0A]"
   // CHECK-SAME:              {symbols = [@memory_ext, @top, #hw.innerNameRef<@top::@[[DUT_SYM]]>, @DUT, #hw.innerNameRef<@DUT::@[[MEM1_SYM]]>, @dumm_ext]}
@@ -308,7 +321,7 @@ firrtl.circuit "top" {
   // CHECK-SAME:              {symbols = [@head_ext, @head_0_ext, @memory_ext, @dumm_ext]}
   // CHECK-NEXT:          }
 
-  // CHECK:  firrtl.class @SiFive_Metadata
+  // CHECK-LABEL:  firrtl.class @SiFive_Metadata
   // CHECK:    %[[V0:.+]] = firrtl.path instance distinct[0]<>
   // CHECK-NEXT:    %[[V1:.+]] = firrtl.list.create %[[V0]] : !firrtl.list<path>
   // CHECK-NEXT:    firrtl.propassign %dutModulePath_field_1, %[[V1]] : !firrtl.list<path>
