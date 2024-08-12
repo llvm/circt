@@ -49,28 +49,6 @@ void VerifyObjectFieldsPass::runOnOperation() {
          "op must have a single region and symbol table trait");
   auto &symbolTable = getAnalysis<SymbolTable>();
 
-  /// A map from a class and field name to a field.
-  // llvm::MapVector<ClassLike, llvm::DenseMap<StringAttr, Type>> tables;
-  // for (auto op : module->getRegion(0).getOps<om::ClassLike>())
-  //   tables.insert({op, llvm::DenseMap<StringAttr, Type>()});
-  //
-  // // Peel tables parallelly.
-  // if (failed(
-  //         mlir::failableParallelForEach(&getContext(), tables, [](auto &entry) {
-  //           ClassLike classLike = entry.first;
-  //           auto &table = entry.second;
-  //           std::optional<llvm::MapVector<mlir::StringAttr, mlir::Type>>
-  //               fieldTypes = classLike.getFieldTypes();
-  //           if (!fieldTypes.has_value()) {
-  //             return LogicalResult::failure();
-  //           }
-  //           for (auto [name, type] : fieldTypes.value()) {
-  //             table.insert({name, type});
-  //           }
-  //           return LogicalResult::success();
-  //         })))
-  //   return signalPassFailure();
-
   // Run actual verification. Make sure not to mutate `tables`.
   auto result = mlir::failableParallelForEach(
       &getContext(), module->getRegion(0).getOps<om::ClassLike>(), [&symbolTable](ClassLike classLike) {
