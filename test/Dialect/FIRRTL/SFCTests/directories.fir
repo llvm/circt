@@ -151,7 +151,7 @@ circuit TestHarness:
 ; MLIR_OUT:    om.class.fields(
 ; MLIR_OUT:      @Foo_BlackBox_field %1 : !om.class.type<@SitestBlackBoxModulesSchema>,
 ; MLIR_OUT:      @Bar_BlackBox_field %3 : !om.class.type<@SitestBlackBoxModulesSchema>,
-; MLIR_OUT:      @Baa_BlackBox_field %5 : !om.class.type<@SitestBlackBoxModulesSchema>
+; MLIR_OUT:      @Baz_BlackBox_field %5 : !om.class.type<@SitestBlackBoxModulesSchema>
 ; MLIR_OUT:    )
 ; MLIR_OUT:  }
 
@@ -163,11 +163,11 @@ circuit TestHarness:
 ; MLIR_OUT:      @maskBits %maskBits_in : !om.integer,
 ; MLIR_OUT:      @readPorts %readPorts_in : !om.integer,
 ; MLIR_OUT:      @writePorts %writePorts_in : !om.integer,
-; MLIR_OUT:      @readWritePorts %readwritePorts_in : !om.integer,
+; MLIR_OUT:      @readwritePorts %readwritePorts_in : !om.integer,
 ; MLIR_OUT:      @writeLatency %writeLatency_in : !om.integer,
 ; MLIR_OUT:      @readLatency %readLatency_in : !om.integer,
 ; MLIR_OUT:      @hierarchy %hierarchy_in : !om.list<!om.path>,
-; MLIR_OUT:      @inDut %inDut_in : !i1,
+; MLIR_OUT:      @inDut %inDut_in : i1,
 ; MLIR_OUT:      @extraPorts %extraPorts_in : !om.list<!om.class.type<@ExtraPortsMemorySchema>>
 ; MLIR_OUT:    )
 ; MLIR_OUT:  }
