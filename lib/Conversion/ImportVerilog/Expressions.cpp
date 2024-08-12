@@ -62,32 +62,6 @@ struct RvalueExprVisitor {
     return {};
   }
 
-  /// Helper function to convert a value to its "truthy" boolean value.
-  Value convertToBool(Value value) {
-    if (!value)
-      return {};
-    if (auto type = dyn_cast_or_null<moore::IntType>(value.getType()))
-      if (type.getBitSize() == 1)
-        return value;
-    if (auto type = dyn_cast_or_null<moore::UnpackedType>(value.getType()))
-      return builder.create<moore::BoolCastOp>(loc, value);
-    mlir::emitError(loc, "expression of type ")
-        << value.getType() << " cannot be cast to a boolean";
-    return {};
-  }
-
-  /// Helper function to convert a value to its "truthy" boolean value and
-  /// convert it to the given domain.
-  Value convertToBool(Value value, Domain domain) {
-    value = convertToBool(value);
-    if (!value)
-      return {};
-    auto type = moore::IntType::get(context.getContext(), 1, domain);
-    if (value.getType() == type)
-      return value;
-    return builder.create<moore::ConversionOp>(loc, type, value);
-  }
-
   // Handle references to the left-hand side of a parent assignment.
   Value visit(const slang::ast::LValueReferenceExpression &expr) {
     assert(!context.lvalueStack.empty() && "parent assignments push lvalue");
@@ -98,8 +72,12 @@ struct RvalueExprVisitor {
   // Handle named values, such as references to declared variables.
   Value visit(const slang::ast::NamedValueExpression &expr) {
     if (auto value = context.valueSymbols.lookup(&expr.symbol)) {
-      if (isa<moore::RefType>(value.getType()))
-        value = builder.create<moore::ReadOp>(loc, value);
+      if (isa<moore::RefType>(value.getType())) {
+        auto readOp = builder.create<moore::ReadOp>(loc, value);
+        if (context.rvalueReadCallback)
+          context.rvalueReadCallback(readOp);
+        value = readOp.getResult();
+      }
       return value;
     }
 
@@ -229,7 +207,7 @@ struct RvalueExprVisitor {
       return createReduction<moore::ReduceXorOp>(arg, true);
 
     case UnaryOperator::LogicalNot:
-      arg = convertToBool(arg);
+      arg = context.convertToBool(arg);
       if (!arg)
         return {};
       return builder.create<moore::NotOp>(loc, arg);
@@ -358,10 +336,10 @@ struct RvalueExprVisitor {
     case BinaryOperator::LogicalAnd: {
       // TODO: This should short-circuit. Put the RHS code into a separate
       // block.
-      lhs = convertToBool(lhs, domain);
+      lhs = context.convertToBool(lhs, domain);
       if (!lhs)
         return {};
-      rhs = convertToBool(rhs, domain);
+      rhs = context.convertToBool(rhs, domain);
       if (!rhs)
         return {};
       return builder.create<moore::AndOp>(loc, lhs, rhs);
@@ -369,20 +347,20 @@ struct RvalueExprVisitor {
     case BinaryOperator::LogicalOr: {
       // TODO: This should short-circuit. Put the RHS code into a separate
       // block.
-      lhs = convertToBool(lhs, domain);
+      lhs = context.convertToBool(lhs, domain);
       if (!lhs)
         return {};
-      rhs = convertToBool(rhs, domain);
+      rhs = context.convertToBool(rhs, domain);
       if (!rhs)
         return {};
       return builder.create<moore::OrOp>(loc, lhs, rhs);
     }
     case BinaryOperator::LogicalImplication: {
       // `(lhs -> rhs)` equivalent to `(!lhs || rhs)`.
-      lhs = convertToBool(lhs, domain);
+      lhs = context.convertToBool(lhs, domain);
       if (!lhs)
         return {};
-      rhs = convertToBool(rhs, domain);
+      rhs = context.convertToBool(rhs, domain);
       if (!rhs)
         return {};
       auto notLHS = builder.create<moore::NotOp>(loc, lhs);
@@ -390,10 +368,10 @@ struct RvalueExprVisitor {
     }
     case BinaryOperator::LogicalEquivalence: {
       // `(lhs <-> rhs)` equivalent to `(lhs && rhs) || (!lhs && !rhs)`.
-      lhs = convertToBool(lhs, domain);
+      lhs = context.convertToBool(lhs, domain);
       if (!lhs)
         return {};
-      rhs = convertToBool(rhs, domain);
+      rhs = context.convertToBool(rhs, domain);
       if (!rhs)
         return {};
       auto notLHS = builder.create<moore::NotOp>(loc, lhs);
@@ -671,7 +649,8 @@ struct RvalueExprVisitor {
       mlir::emitError(loc) << "unsupported conditional expression with pattern";
       return {};
     }
-    auto value = convertToBool(context.convertRvalueExpression(*cond.expr));
+    auto value =
+        context.convertToBool(context.convertRvalueExpression(*cond.expr));
     if (!value)
       return {};
     auto conditionalOp = builder.create<moore::ConditionalOp>(loc, type, value);
@@ -1044,3 +1023,29 @@ Value Context::convertLvalueExpression(const slang::ast::Expression &expr) {
   return expr.visit(LvalueExprVisitor(*this, loc));
 }
 // NOLINTEND(misc-no-recursion)
+
+/// Helper function to convert a value to its "truthy" boolean value.
+Value Context::convertToBool(Value value) {
+  if (!value)
+    return {};
+  if (auto type = dyn_cast_or_null<moore::IntType>(value.getType()))
+    if (type.getBitSize() == 1)
+      return value;
+  if (auto type = dyn_cast_or_null<moore::UnpackedType>(value.getType()))
+    return builder.create<moore::BoolCastOp>(value.getLoc(), value);
+  mlir::emitError(value.getLoc(), "expression of type ")
+      << value.getType() << " cannot be cast to a boolean";
+  return {};
+}
+
+/// Helper function to convert a value to its "truthy" boolean value and
+/// convert it to the given domain.
+Value Context::convertToBool(Value value, Domain domain) {
+  value = convertToBool(value);
+  if (!value)
+    return {};
+  auto type = moore::IntType::get(getContext(), 1, domain);
+  if (value.getType() == type)
+    return value;
+  return builder.create<moore::ConversionOp>(value.getLoc(), type, value);
+}

@@ -26,6 +26,8 @@
 namespace circt {
 namespace ImportVerilog {
 
+using moore::Domain;
+
 /// Port lowering information.
 struct PortLowering {
   const slang::ast::PortSymbol &ast;
@@ -102,8 +104,15 @@ struct Context {
   Value convertLvalueExpression(const slang::ast::Expression &expr);
 
   // Convert a slang timing control into an MLIR timing control.
-  LogicalResult
-  convertTimingControl(const slang::ast::TimingControl &timingControl);
+  LogicalResult convertTimingControl(const slang::ast::TimingControl &ctrl,
+                                     const slang::ast::Statement &stmt);
+
+  /// Helper function to convert a value to its "truthy" boolean value.
+  Value convertToBool(Value value);
+
+  /// Helper function to convert a value to its "truthy" boolean value and
+  /// convert it to the given domain.
+  Value convertToBool(Value value, Domain domain);
 
   slang::ast::Compilation &compilation;
   mlir::ModuleOp intoModuleOp;
@@ -152,6 +161,12 @@ struct Context {
   /// part of the loop body statements will use this information to branch to
   /// the correct block.
   SmallVector<LoopFrame> loopStack;
+
+  /// A listener called for every variable or net being read. This can be used
+  /// to collect all variables read as part of an expression or statement, for
+  /// example to populate the list of observed signals in an implicit event
+  /// control `@*`.
+  std::function<void(moore::ReadOp)> rvalueReadCallback;
 };
 
 } // namespace ImportVerilog
