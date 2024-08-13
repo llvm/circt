@@ -9,7 +9,7 @@ hw.module @Top() {
 om.class @OM(%basepath: !om.basepath) {
   // expected-error @below {{component does not have verilog name}}
   %path = om.path_create reference %basepath @nla
-  om.class.fields
+  om.class.fields()
 }
 
 // -----
@@ -22,5 +22,5 @@ hw.module @Top() {
 om.class @OM(%basepath: !om.basepath) {
   // expected-error @below {{basepath must target an instance}}
   %path = om.basepath_create %basepath @nla
-  om.class.fields
+  om.class.fields()
 }
