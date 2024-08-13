@@ -555,3 +555,11 @@ func.func @IncorrectArg_initial(!arc.storage<24>) {
 arc.model @IncorrectArg io !hw.modty<> initializer @IncorrectArg_initial {
   ^bb0(%arg0: !arc.storage<42>):
 }
+
+// -----
+
+hw.module @InvalidInitType(in %clock: !seq.clock, in %input: i7) {
+  %cst = hw.constant 0 : i8
+  // expected-error @below {{failed to verify that types of initial arguments must match result types}}
+  %res = arc.state @Bar(%input) clock %clock initial (%cst: i8) latency 1 : (i7) -> i7
+}
