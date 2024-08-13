@@ -152,8 +152,9 @@ def StateOp : ArcOp<"state", [
 
   let assemblyFormat = [{
     $arc `(` $inputs `)` (`clock` $clock^)? (`enable` $enable^)?
-    (`reset` $reset^)?   ( `initial` ` ` `(` $initials^ `:` type($initials) `)`)?  `latency` $latency attr-dict
-    `:` functional-type($inputs, results)
+    (`reset` $reset^)?
+    ( `initial` ` ` `(` $initials^ `:` type($initials) `)`)?
+    `latency` $latency attr-dict `:` functional-type($inputs, results)
   }];
 
   let hasFolder = 1;
@@ -169,7 +170,8 @@ def StateOp : ArcOp<"state", [
     }]>,
     OpBuilder<(ins "mlir::SymbolRefAttr":$arc, "mlir::TypeRange":$results,
       "mlir::Value":$clock, "mlir::Value":$enable, "unsigned":$latency,
-      CArg<"mlir::ValueRange", "{}">:$inputs, CArg<"mlir::ValueRange", "{}">:$initials
+      CArg<"mlir::ValueRange", "{}">:$inputs,
+      CArg<"mlir::ValueRange", "{}">:$initials
     ), [{
       build($_builder, $_state, arc, results, clock, enable, Value(), latency,
       inputs, initials);
@@ -200,14 +202,16 @@ def StateOp : ArcOp<"state", [
     }]>,
     OpBuilder<(ins "mlir::StringAttr":$arc, "mlir::TypeRange":$results,
       "mlir::Value":$clock, "mlir::Value":$enable, "unsigned":$latency,
-      CArg<"mlir::ValueRange", "{}">:$inputs, CArg<"mlir::ValueRange", "{}">:$initials
+      CArg<"mlir::ValueRange", "{}">:$inputs,
+      CArg<"mlir::ValueRange", "{}">:$initials
     ), [{
       build($_builder, $_state, mlir::SymbolRefAttr::get(arc), results, clock,
             enable, latency, inputs, initials);
     }]>,
     OpBuilder<(ins "mlir::StringRef":$arc, "mlir::TypeRange":$results,
       "mlir::Value":$clock, "mlir::Value":$enable, "unsigned":$latency,
-      CArg<"mlir::ValueRange", "{}">:$inputs, CArg<"mlir::ValueRange", "{}">:$initials
+      CArg<"mlir::ValueRange", "{}">:$inputs,
+      CArg<"mlir::ValueRange", "{}">:$initials
     ), [{
       build($_builder, $_state,
             mlir::StringAttr::get($_builder.getContext(), arc),
@@ -460,18 +464,15 @@ def PassThroughOp : ArcOp<"passthrough", [NoTerminator, NoRegionArguments]> {
   }];
 }
 
-def InitialOp : ArcOp<"initial", [RecursiveMemoryEffects, NoTerminator, NoRegionArguments]> {
+def InitialOp : ArcOp<"initial", [
+  RecursiveMemoryEffects, NoTerminator, NoRegionArguments, SingleBlock,
+  HasParent<"ModelOp">
+]> {
   let summary = "Clock-less logic called at the start of simulation";
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
     attr-dict-with-keyword $body
   }];
-  let extraClassDeclaration = [{
-    mlir::Block &getBodyBlock() { return getBody().front(); }
-  }];
-  let builders = [
-    OpBuilder<(ins), "build($_builder, $_state, ValueRange{});">
-  ];
 }
 
 //===----------------------------------------------------------------------===//
@@ -673,9 +674,10 @@ def TapOp : ArcOp<"tap"> {
   let assemblyFormat = [{ $value attr-dict `:` type($value) }];
 }
 
-def ModelOp : ArcOp<"model", [RegionKindInterface, IsolatedFromAbove,
-                              NoTerminator, Symbol,
-                              DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+def ModelOp : ArcOp<"model", [
+  RegionKindInterface, IsolatedFromAbove, NoTerminator, Symbol,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
   let summary = "A model with stratified clocks";
   let description = [{
     A model with stratified clocks. The `io` optional attribute
