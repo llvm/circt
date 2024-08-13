@@ -673,7 +673,8 @@ def TapOp : ArcOp<"tap"> {
 }
 
 def ModelOp : ArcOp<"model", [RegionKindInterface, IsolatedFromAbove,
-                              NoTerminator, Symbol]> {
+                              NoTerminator, Symbol,
+                              DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "A model with stratified clocks";
   let description = [{
     A model with stratified clocks. The `io` optional attribute
