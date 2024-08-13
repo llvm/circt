@@ -1625,21 +1625,26 @@ struct ClassFieldsOpConversion : public OpConversionPattern<ClassFieldsOp> {
   LogicalResult
   matchAndRewrite(ClassFieldsOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    bool failed = false;
     rewriter.modifyOpInPlace(op, [&]() {
       llvm::SmallVector<NamedAttribute> fieldTypes;
       for (auto operand : op.getOperands()) {
         operand.setType(typeConverter->convertType(operand.getType()));
       }
       for (auto field : op.getFieldNames()) {
-        auto type = op.getFieldType(cast<StringAttr>(field));
+        std::optional<Type> type = op.getFieldType(cast<StringAttr>(field));
+        if (!type.has_value()) {
+          failed = true;
+          continue;
+        }
         fieldTypes.push_back(mlir::NamedAttribute(
             cast<StringAttr>(field),
-            mlir::TypeAttr::get(typeConverter->convertType(type))));
+            mlir::TypeAttr::get(typeConverter->convertType(type.value()))));
       }
       op->setAttr("fieldTypes",
                   mlir::DictionaryAttr::get(op.getContext(), fieldTypes));
     });
-    return success();
+    return llvm::failure(failed);
   }
 };
 
@@ -1666,10 +1671,12 @@ struct ClassExternFieldsOpConversion
       llvm::SmallVector<NamedAttribute> fieldTypes;
       // TODO: Unify with non-extern
       for (auto field : op.getFieldNames()) {
-        auto type = op.getFieldType(cast<StringAttr>(field));
+        std::optional<Type> type = op.getFieldType(cast<StringAttr>(field));
+        if (!type.has_value())
+          return failure();
         fieldTypes.push_back(mlir::NamedAttribute(
             cast<StringAttr>(field),
-            mlir::TypeAttr::get(typeConverter->convertType(type))));
+            mlir::TypeAttr::get(typeConverter->convertType(type.value()))));
       }
       op->setAttr("fieldTypes",
                   mlir::DictionaryAttr::get(op.getContext(), fieldTypes));
@@ -1797,7 +1804,8 @@ static void populateConversionTarget(ConversionTarget &target) {
     auto fieldNames = op.getFieldNames();
     return llvm::all_of(fieldNames, [&](auto field) {
       // TODO: Avoid StringAttr cast?
-      return !isa<FIRRTLType>(op.getFieldType(cast<StringAttr>(field)));
+      std::optional<Type> type = op.getFieldType(cast<StringAttr>(field)); 
+      return type.has_value() && !isa<FIRRTLType>(type.value());
     });
   });
 

@@ -73,15 +73,16 @@ void VerifyObjectFieldsPass::runOnOperation() {
               for (size_t i = 0, e = fields.size(); i < e; ++i) {
                 // Verify the field exists on the ClassOp.
                 auto field = fields[i];
-                Type fieldType = classDef.getFieldsOp().getFieldType(field.getAttr());
+                std::optional<Type> fieldTypeOpt = classDef.getFieldsOp().getFieldType(field.getAttr());
 
-                if (!fieldType) {
+                if (!fieldTypeOpt) {
                   auto error =
                       objectField.emitOpError("referenced non-existent field ")
                       << field;
                   error.attachNote(classDef.getLoc()) << "class defined here";
                   return WalkResult::interrupt();
                 }
+                Type fieldType = fieldTypeOpt.value();
 
                 // If there are more fields, verify the current field is of
                 // ClassType, and look up the ClassOp for that field.

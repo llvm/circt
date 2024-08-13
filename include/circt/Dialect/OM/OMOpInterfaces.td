@@ -41,14 +41,19 @@ def ClassFieldsLike : OpInterface<"ClassFieldsLike"> {
   }];
   let methods = [
     InterfaceMethod<"Get the class-like field to type map",
-      "mlir::Type", "getFieldType", (ins "mlir::StringAttr":$name),
+      "std::optional<mlir::Type>", "getFieldType", (ins "mlir::StringAttr":$name),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{ 
+        // TODO: Check or enforce dict exits
         mlir::DictionaryAttr fieldTypes =
           mlir::cast<mlir::DictionaryAttr>(
             this->getOperation()->getAttr("fieldTypes")
           );
-        return mlir::cast<mlir::TypeAttr>(fieldTypes.get(name)).getValue();
+        mlir::Attribute type = fieldTypes.get(name);
+        // TODO: Could add hasFieldType API instead of this optional style
+        if (!type)
+          return std::nullopt;
+        return mlir::cast<mlir::TypeAttr>(type).getValue();
       }]>,
     InterfaceMethod<"Get the class-like field names",
       "llvm::ArrayRef<mlir::Attribute>", "getFieldNames", (ins),

@@ -193,15 +193,21 @@ static FailureOr<bool> resolveClasses(StringAttr name,
     auto fieldNames = op.getFieldsOp().getFieldNames();
 
     for (auto name : fieldNames) {
-      auto opType = op.getFieldsOp().getFieldType(cast<StringAttr>(name));
-      // TODO: Store fieldsOp
-      auto classType = classOp.getFieldsOp().getFieldType(cast<StringAttr>(name));
+      std::optional<Type> opTypeOpt =
+        op.getFieldsOp().getFieldType(cast<StringAttr>(name));
+
+      if (!opTypeOpt.has_value())
+        return emitError(op) << " no type for field " << name;
+      Type opType = opTypeOpt.value();
+
+      std::optional<Type> classTypeOpt =
+          classOp.getFieldsOp().getFieldType(cast<StringAttr>(name));
 
       // Field not found in its definition.
-      // TODO: Validate null find
-      if (!classType)
+      if (!classTypeOpt.has_value())
         return emitError(op) << "declaration has a field " << name
                              << " but not found in its definition";
+      Type classType = classTypeOpt.value();
 
       if (classType != opType)
         return emitError(op)

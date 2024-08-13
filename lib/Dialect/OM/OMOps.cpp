@@ -290,11 +290,23 @@ static ParseResult parseFieldName(OpAsmParser &parser, StringAttr &name) {
   return success();
 }
 
-static ParseResult parseField(OpAsmParser &parser, FieldParse &result,
-                              bool hasOperand = true) {
+static ParseResult parseField(OpAsmParser &parser,
+                              llvm::MapVector<StringAttr, SMLoc> &parsedFieldNames,
+
+                              FieldParse &result, bool hasOperand = true) {
   NamedAttrList attrs;
   if (parseFieldName(parser, result.name))
     return failure();
+  SMLoc currLoc = parser.getCurrentLocation();
+  if (parsedFieldNames.contains(result.name)) {
+    parser.emitError(currLoc, "op field ")
+                << result.name << " is defined twice";
+    // TODO: Is there a way to attach a note to a parser error?
+    parser.emitError(parsedFieldNames.lookup(result.name))
+        << "previous definition is here";
+    return failure();
+  }
+  parsedFieldNames[result.name] = currLoc;
   if (hasOperand && parser.parseOperand(result.ssaName))
     return failure();
   if (parser.parseColonType(result.type) ||
@@ -322,8 +334,9 @@ void buildFieldAttrs(OperationState &state,
 ParseResult circt::om::ClassFieldsOp::parse(OpAsmParser &parser,
                                             OperationState &state) {
   llvm::SmallVector<FieldParse> parsedFields;
+  llvm::MapVector<StringAttr, SMLoc> parsedFieldNames;
   auto parseOnePort = [&]() -> ParseResult {
-    return parseField(parser, parsedFields.emplace_back());
+    return parseField(parser, parsedFieldNames, parsedFields.emplace_back());
   };
   if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
                                      parseOnePort, " in field list"))
@@ -443,8 +456,10 @@ void circt::om::ClassExternOp::addFields(
 ParseResult circt::om::ClassExternFieldsOp::parse(OpAsmParser &parser,
                                             OperationState &state) {
   llvm::SmallVector<FieldParse> parsedFields;
+  llvm::MapVector<StringAttr, SMLoc> parsedFieldNames;
   auto parseOnePort = [&]() -> ParseResult {
-    return parseField(parser, parsedFields.emplace_back(), false);
+    return parseField(parser, parsedFieldNames, parsedFields.emplace_back(),
+                      false);
   };
   if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
                                      parseOnePort, " in field list"))
