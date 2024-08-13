@@ -869,17 +869,17 @@ LogicalResult LowerStatePass::runOnModule(HWModuleOp moduleOp,
   // Add sentinel ops to separate state allocations from clock trees.
   lowering.stateBuilder.setInsertionPointToStart(moduleOp.getBodyBlock());
 
+  Operation *stateSentinel =
+      lowering.stateBuilder.create<hw::OutputOp>(moduleOp.getLoc());
+  Operation *clockSentinel =
+      lowering.stateBuilder.create<hw::OutputOp>(moduleOp.getLoc());
+
+  // Create the 'initial' pseudo clock tree.
   auto initialTreeOp =
       lowering.stateBuilder.create<InitialOp>(moduleOp.getLoc());
   initialTreeOp.getBody().emplaceBlock();
   lowering.initialLowering =
       std::make_unique<ClockLowering>(Value{}, initialTreeOp, stats);
-
-  Operation *stateSentinel =
-      lowering.stateBuilder.create<hw::OutputOp>(moduleOp.getLoc());
-
-  Operation *clockSentinel =
-      lowering.stateBuilder.create<hw::OutputOp>(moduleOp.getLoc());
 
   lowering.stateBuilder.setInsertionPoint(stateSentinel);
   lowering.clockBuilder.setInsertionPoint(clockSentinel);

@@ -12,8 +12,6 @@
 
 #include "circt/Dialect/Arc/ModelInfo.h"
 #include "circt/Dialect/Arc/ArcOps.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "llvm/ADT/StringSet.h"
 #include "llvm/Support/JSON.h"
 
 using namespace mlir;
