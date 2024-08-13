@@ -1667,13 +1667,16 @@ struct ClassExternFieldsOpConversion
   LogicalResult
   matchAndRewrite(ClassExternFieldsOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    bool failed = false;
     rewriter.modifyOpInPlace(op, [&]() {
       llvm::SmallVector<NamedAttribute> fieldTypes;
       // TODO: Unify with non-extern
       for (auto field : op.getFieldNames()) {
         std::optional<Type> type = op.getFieldType(cast<StringAttr>(field));
-        if (!type.has_value())
-          return failure();
+        if (!type.has_value()) {
+          failed = true;
+          continue;
+        }
         fieldTypes.push_back(mlir::NamedAttribute(
             cast<StringAttr>(field),
             mlir::TypeAttr::get(typeConverter->convertType(type.value()))));
@@ -1681,7 +1684,7 @@ struct ClassExternFieldsOpConversion
       op->setAttr("fieldTypes",
                   mlir::DictionaryAttr::get(op.getContext(), fieldTypes));
     });
-    return success();
+    return llvm::failure(failed);
   }
 };
 

@@ -17,20 +17,29 @@ with Context() as ctx, Location.unknown():
     om.class @node() {
       %0 = om.constant #om.list<!om.string,["MyThing" : !om.string]> : !om.list<!om.string>
       %1 = om.constant "Component.inst1.foo" : !om.string
-      om.class.fields {field_names = ["field2"]} %1 : !om.string
+      om.class.fields(
+        @field2 %1 : !om.string
+      )
     }
     
     om.class @comp(
         %inst1_propOut_bore: !om.class.type<@node>,
         %inst2_propOut_bore: !om.class.type<@node>) {
-      om.class.fields {field_names = ["field2", "field3"]} %inst1_propOut_bore, %inst2_propOut_bore : !om.class.type<@node>, !om.class.type<@node>
+      om.class.fields(
+        @field2 %inst1_propOut_bore : !om.class.type<@node>,
+        @field3 %inst2_propOut_bore : !om.class.type<@node>
+      )
     }
     
     om.class  @Client() {
       %0 = om.object @node() : () -> !om.class.type<@node>
       %2 = om.object @comp(%0, %0) : (!om.class.type<@node>, !om.class.type<@node>) -> !om.class.type<@comp>
     
-      om.class.fields {field_names = ["client_omnode_0_OMIROut", "node0_OMIROut", "node1_OMIROut"]} %2, %0, %0 : !om.class.type<@comp>, !om.class.type<@node>, !om.class.type<@node>
+      om.class.fields(
+        @client_omnode_0_OMIROut %2 : !om.class.type<@comp>,
+        @node0_OMIROut %0 : !om.class.type<@node>,
+        @node1_OMIROut %0 : !om.class.type<@node>
+      )
     }
 
     om.class @Test(%param: !om.integer) {
@@ -58,15 +67,28 @@ with Context() as ctx, Location.unknown():
 
       %map = om.map_create %entry1, %entry2: !om.string, !om.integer
 
-      om.class.fields {field_names = ["field", "child", "reference", "list", "tuple", "nest", "map", "map_create"]} %param, %0, %sym, %list, %tuple, %2, %3, %map : !om.integer, !om.class.type<@Child>, !om.ref, !om.list<!om.string>, tuple<!om.list<!om.string>, !om.integer>, !om.class.type<@Nest>, !om.map<!om.string, !om.integer>, !om.map<!om.string, !om.integer>
+      om.class.fields(
+        @field %param : !om.integer,
+        @child %0 : !om.class.type<@Child>,
+        @reference %sym : !om.ref,
+        @list %list : !om.list<!om.string>,
+        @tuple %tuple : tuple<!om.list<!om.string>, !om.integer>,
+        @nest %2 : !om.class.type<@Nest>,
+        @map %3 : !om.map<!om.string, !om.integer>,
+        @map_create %map : !om.map<!omg.string, !om.integer>
+      )
     }
 
     om.class @Child(%0: !om.integer) {
-      om.class.fields {field_names = ["foo"]} %0 : !om.integer
+      om.class.fields(
+        @foo %0 : !om.integer
+      )
     }
 
     om.class @Nest(%0: !om.list<!om.class.type<@Child>>) {
-      om.class.fields {field_names = ["list_child"]} %0 : !om.list<!om.class.type<@Child>>
+      om.class.fields(
+        @list_child %0 : !om.list<!om.class.type<@Child>>
+      )
     }
 
     hw.module @Root(in %clock: i1) {
@@ -78,17 +100,25 @@ with Context() as ctx, Location.unknown():
       %1 = om.frozenpath_create reference %0 "Bar/baz:Baz>w"
 
       %3 = om.frozenpath_empty
-      om.class.fields {field_names = ["path", "deleted"]} %1, %3 : !om.frozenpath, !om.frozenpath
+      om.class.fields(
+        @path %1 : !om.frozenpath,
+        @deleted %3 : !om.frozenpath
+      )
     }
 
     om.class @Class1(%input: !om.integer) {
       %0 = om.constant #om.integer<1 : si3> : !om.integer
-      om.class.fields {field_names = ["value", "input"]} %0, %input : !om.integer, !om.integer
+      om.class.fields(
+        @value %0 : !om.integer,
+        @input %input : !om.integer
+      )
     }
 
     om.class @Class2() {
       %0 = om.constant #om.integer<2 : si3> : !om.integer
-      om.class.fields {field_names = ["value"]} %0 : !om.integer
+      om.class.fields(
+        @value %0 : !om.integer
+      )
     }
 
     om.class @IntegerBinaryArithmeticObjectsDelayed() {
@@ -99,7 +129,9 @@ with Context() as ctx, Location.unknown():
       %3 = om.object.field %2, [@value] : (!om.class.type<@Class2>) -> !om.integer
 
       %5 = om.integer.add %1, %3 : !om.integer
-      om.class.fields {field_names = ["result"]} %5 : !om.integer
+      om.class.fields(
+        @result %5 : !om.integer
+      )
     }
   }
   """)
