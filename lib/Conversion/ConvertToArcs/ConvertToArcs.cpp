@@ -356,7 +356,7 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
       if (!arc.getInitials().empty()) {
         return arc.emitError(
             "StateOp tried to infer initial values from CompReg, but already "
-            "had a initial values.");
+            "had an initial value.");
       }
       // Create 0 constants for default initialization
       for (unsigned i = 0; i < initialValues.size(); ++i) {

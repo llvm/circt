@@ -134,8 +134,9 @@ def StateOp : ArcOp<"state", [
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
   AttrSizedOperandSegments,
   DeclareOpInterfaceMethods<ClockedOpInterface>,
-  PredOpTrait<"types of initial arguments must match result types", CPred<
-    [{getInitials().empty() || llvm::equal(getInitials().getType(), getResults().getType())}]>>
+  PredOpTrait<"types of initial arguments match result types",
+    CPred<[{getInitials().empty() ||
+              llvm::equal(getInitials().getType(), getResults().getType())}]>>
 ]> {
   let summary = "State transfer arc";
 

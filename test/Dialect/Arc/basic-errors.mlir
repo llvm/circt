@@ -560,6 +560,6 @@ arc.model @IncorrectArg io !hw.modty<> initializer @IncorrectArg_initial {
 
 hw.module @InvalidInitType(in %clock: !seq.clock, in %input: i7) {
   %cst = hw.constant 0 : i8
-  // expected-error @below {{failed to verify that types of initial arguments must match result types}}
+  // expected-error @below {{failed to verify that types of initial arguments match result types}}
   %res = arc.state @Bar(%input) clock %clock initial (%cst: i8) latency 1 : (i7) -> i7
 }
