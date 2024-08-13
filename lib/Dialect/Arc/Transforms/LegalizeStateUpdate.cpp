@@ -30,6 +30,8 @@ using namespace arc;
 
 /// Check if an operation partakes in state accesses.
 static bool isOpInteresting(Operation *op) {
+  if (isa<InitialOp>(op))
+    return false;
   if (isa<StateReadOp, StateWriteOp, CallOpInterface, CallableOpInterface>(op))
     return true;
   if (op->getNumRegions() > 0)
