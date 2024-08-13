@@ -1,4 +1,3 @@
-
 // RUN: arcilator %s --run --jit-entry=main | FileCheck %s
 // REQUIRES: arcilator-jit
 

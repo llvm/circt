@@ -11,7 +11,7 @@ module {
   arc.model @initmodel io !hw.modty<> {
   ^bb0(%arg0: !arc.storage):
     arc.passthrough {
-      %dummy = llvm.mlir.constant(0 : i32) : i32
+      ^bb0:
     }
     arc.initial {
       %cst0 = llvm.mlir.constant(0 : i32) : i32
