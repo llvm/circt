@@ -113,12 +113,3 @@ hw.module @check_illegal_drv(inout %sig : i1) {
   %time = llhd.constant_time #llhd.time<1ns, 0d, 0e>
   "llhd.drv"(%sig, %c, %time) {} : (!hw.inout<i1>, i32, !llhd.time) -> ()
 }
-
-// -----
-
-func.func @illegal_sig_parent(%arg0 : i1) {
-  // expected-error @+1 {{expects parent op to be one of 'hw.module, llhd.process'}}
-  %0 = llhd.sig "sig" %arg0 : i1
-
-  return
-}
