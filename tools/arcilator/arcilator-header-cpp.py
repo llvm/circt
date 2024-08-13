@@ -70,8 +70,9 @@ class ModelInfo:
 
   def decode(d: dict) -> "ModelInfo":
     return ModelInfo(d["name"], d["numStateBytes"],
-                     d.get("hasInitialFn", False),
-                     [StateInfo.decode(d) for d in d["states"]],  list(), list())
+                     d.get("hasInitialFn",
+                           False), [StateInfo.decode(d) for d in d["states"]],
+                     list(), list())
 
 
 with open(args.state_json, "r") as f:
