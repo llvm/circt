@@ -30,9 +30,10 @@ circuit PlusArgTest:
     ; CHECK-NEXT:   sv.assign [[FOUND_BAR_REG]], %false : i1
     ; CHECK-NEXT: } else {
     ; CHECK-NEXT:   sv.initial {
+    ; CHECK-NEXT:     [[CST_ZERO:%.+]] = hw.constant 0 : i32
     ; CHECK-NEXT:     [[FORMAT_BAR:%.+]] = sv.constantStr "foo=%d"
     ; CHECK-NEXT:     [[TMP_BAR:%.+]] = sv.system "value$plusargs"([[FORMAT_BAR]], [[RESULT_BAR_REG]]) : (!hw.string, !hw.inout<i32>) -> i32
-    ; CHECK-NEXT:     [[FOUND_BAR_VAL:%.+]] = comb.icmp bin ne [[TMP_BAR]], %c0_i32 : i32
+    ; CHECK-NEXT:     [[FOUND_BAR_VAL:%.+]] = comb.icmp bin ne [[TMP_BAR]], [[CST_ZERO]] : i32
     ; CHECK-NEXT:     sv.bpassign [[FOUND_BAR_REG]], [[FOUND_BAR_VAL]] : i1
     ; CHECK-NEXT:   }
     ; CHECK-NEXT: }
