@@ -131,7 +131,9 @@ void circt::arc::serializeModelInfoToJson(llvm::raw_ostream &outputStream,
       json.object([&] {
         json.attribute("name", model.name);
         json.attribute("numStateBytes", model.numStateBytes);
-        json.attribute("hasInitialFn", !!model.initialFnSym);
+        json.attribute("initialFnSym", !model.initialFnSym
+                                           ? ""
+                                           : model.initialFnSym.getValue());
         json.attributeArray("states", [&] {
           for (const auto &state : model.states) {
             json.object([&] {

@@ -63,15 +63,15 @@ class StateHierarchy:
 class ModelInfo:
   name: str
   numStateBytes: int
-  hasInitialFn: bool
+  initialFnSym: str
   states: List[StateInfo]
   io: List[StateInfo]
   hierarchy: List[StateHierarchy]
 
   def decode(d: dict) -> "ModelInfo":
     return ModelInfo(d["name"], d["numStateBytes"],
-                     d.get("hasInitialFn",
-                           False), [StateInfo.decode(d) for d in d["states"]],
+                     d.get("initialFnSym",
+                           ""), [StateInfo.decode(d) for d in d["states"]],
                      list(), list())
 
 
@@ -243,7 +243,7 @@ for model in models:
       io.name = io.name + "_"
 
   print('extern "C" {')
-  if model.hasInitialFn:
+  if model.initialFnSym:
     print(f"void {model.name}_initial(void* state);")
   print(f"void {model.name}_eval(void* state);")
   print('}')
@@ -304,8 +304,8 @@ for model in models:
   print(
       f"  {model.name}() : storage({model.name}Layout::numStateBytes, 0), view(&storage[0]) {{"
   )
-  if model.hasInitialFn:
-    print(f"    {model.name}_initial(&storage[0]);")
+  if model.initialFnSym:
+    print(f"    {model.initialFnSym}(&storage[0]);")
   print("  }")
   print(f"  void eval() {{ {model.name}_eval(&storage[0]); }}")
   print(
