@@ -36,12 +36,13 @@ struct ModelInfo {
   std::string name;
   size_t numStateBytes;
   llvm::SmallVector<StateInfo> states;
-  bool hasInitialFn;
+  mlir::FlatSymbolRefAttr initialFnSym;
 
   ModelInfo(std::string name, size_t numStateBytes,
-            llvm::SmallVector<StateInfo> states, bool hasInitialFn)
+            llvm::SmallVector<StateInfo> states,
+            mlir::FlatSymbolRefAttr initialFnSym)
       : name(std::move(name)), numStateBytes(numStateBytes),
-        states(std::move(states)), hasInitialFn(hasInitialFn) {}
+        states(std::move(states)), initialFnSym(initialFnSym) {}
 };
 
 /// Collects information about states within the provided Arc model storage

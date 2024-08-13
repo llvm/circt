@@ -77,6 +77,10 @@ struct ClockLowering {
   /// A cache of OR gates created for aggregating enable conditions.
   DenseMap<std::pair<Value, Value>, Value> orCache;
 
+  // Prevent accidental construction and copying
+  ClockLowering() = delete;
+  ClockLowering(const ClockLowering &other) = delete;
+
   ClockLowering(Value clock, Operation *treeOp, Statistics &stats)
       : clock(clock), treeOp(treeOp), stats(stats), builder(treeOp) {
     assert((isa<ClockTreeOp, PassThroughOp, InitialOp>(treeOp)));
@@ -507,8 +511,9 @@ LogicalResult ModuleLowering::lowerStateLike(
   if (!initialValues.empty()) {
     assert(initialValues.size() == allocatedStates.size() &&
            "Unexpected number of initializers");
-    auto initialTree = getInitial();
+    auto &initialTree = getInitial();
     for (auto [alloc, init] : llvm::zip(allocatedStates, initialValues)) {
+      // TODO: Can we get away without materialization?
       auto matierializedInit = initialTree.materializeValue(init);
       initialTree.builder.create<StateWriteOp>(stateOp->getLoc(), alloc,
                                                matierializedInit, Value());

@@ -118,7 +118,7 @@ LogicalResult circt::arc::collectModels(mlir::ModuleOp module,
     llvm::sort(states, [](auto &a, auto &b) { return a.offset < b.offset; });
 
     models.emplace_back(std::string(modelOp.getName()), storageType.getSize(),
-                        std::move(states), modelOp.getInitialFn().has_value());
+                        std::move(states), modelOp.getInitialFnAttr());
   }
 
   return success();
@@ -133,7 +133,7 @@ void circt::arc::serializeModelInfoToJson(llvm::raw_ostream &outputStream,
       json.object([&] {
         json.attribute("name", model.name);
         json.attribute("numStateBytes", model.numStateBytes);
-        json.attribute("hasInitialFn", model.hasInitialFn);
+        json.attribute("hasInitialFn", !!model.initialFnSym);
         json.attributeArray("states", [&] {
           for (const auto &state : model.states) {
             json.object([&] {

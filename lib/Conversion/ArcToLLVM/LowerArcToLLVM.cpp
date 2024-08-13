@@ -318,7 +318,7 @@ namespace {
 struct ModelInfoMap {
   size_t numStateBytes;
   llvm::DenseMap<StringRef, StateInfo> states;
-  FlatSymbolRefAttr initialFnSymbol;
+  mlir::FlatSymbolRefAttr initialFnSymbol;
 };
 
 template <typename OpTy>
@@ -653,20 +653,12 @@ void LowerArcToLLVMPass::runOnOperation() {
 
   llvm::DenseMap<StringRef, ModelInfoMap> modelMap(models.size());
   for (ModelInfo &modelInfo : models) {
-    FlatSymbolRefAttr initialSymAttr;
-    if (modelInfo.hasInitialFn) {
-      initialSymAttr = FlatSymbolRefAttr::get(
-          StringAttr::get(&getContext(), Twine(modelInfo.name) + "_initial"));
-      assert(!!cache.getDefinition(initialSymAttr) &&
-             "Missing initial function definition");
-    }
-
     llvm::DenseMap<StringRef, StateInfo> states(modelInfo.states.size());
     for (StateInfo &stateInfo : modelInfo.states)
       states.insert({stateInfo.name, stateInfo});
-    modelMap.insert(
-        {modelInfo.name, ModelInfoMap{modelInfo.numStateBytes,
-                                      std::move(states), initialSymAttr}});
+    modelMap.insert({modelInfo.name,
+                     ModelInfoMap{modelInfo.numStateBytes, std::move(states),
+                                  modelInfo.initialFnSym}});
   }
 
   patterns.add<SimInstantiateOpLowering, SimSetInputOpLowering,
