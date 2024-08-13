@@ -524,3 +524,20 @@ hw.module @vectorize(in %in0: i4, in %in1: i4, out out0: i4) {
 
 // expected-error @below {{state type must have a known bit width}}
 func.func @InvalidStateType(%arg0: !arc.state<index>)
+
+// -----
+
+// expected-note @below {{prior use here}}
+hw.module @assert(in %in : i4) {
+  // expected-error @below {{use of value '%in' expects different type than prior uses: 'i1' vs 'i4'}}
+  arc.assert %in
+  hw.output
+}
+
+// -----
+
+hw.module @assert_missing_message(in %in0: i1, in %clk: !seq.clock) {
+  // expected-error @below {{'arc.assert' op assertion message cannot be empty}}
+  arc.assert %in0, %clk, ""
+  hw.output
+}

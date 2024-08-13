@@ -178,6 +178,72 @@ struct StorageGetOpLowering : public OpConversionPattern<arc::StorageGetOp> {
   }
 };
 
+struct AssertOpLowering : public OpConversionPattern<arc::AssertOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(arc::AssertOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+
+    Value negateCondition = rewriter.create<arith::XOrIOp>(
+        op.getLoc(), adaptor.getProperty(),
+        rewriter.create<arith::ConstantOp>(op.getLoc(),
+                                           rewriter.getBoolAttr(true)));
+
+    rewriter.replaceOpWithNewOp<scf::IfOp>(
+        op, negateCondition, [&](OpBuilder &builder, Location loc) {
+          // If the condition doesn't hold then print the message and abort
+          auto message = op.getMsg().value_or("");
+          auto module = op->getParentOfType<ModuleOp>();
+
+          LLVM::LLVMFuncOp putsFunc;
+          LLVM::GlobalOp globalOp;
+
+          // If there's no message just abort
+          if (!message.empty()) {
+            {
+              OpBuilder::InsertionGuard guard(rewriter);
+              rewriter.setInsertionPointToStart(module.getBody());
+              putsFunc = lookupOrCreateFn(
+                  module, "puts", LLVM::LLVMPointerType::get(getContext()),
+                  LLVM::LLVMVoidType::get(getContext()), false);
+
+              // Get the integer type with the correct bit width.
+              Type int8Type = rewriter.getI8Type();
+
+              // Generate new names for global strings.
+              // Messgaes with the same contents, and the same locations
+              // are mapped to the same names
+              std::string msgGlobalName =
+                  std::string("Arc_Assert_Op_Msg: ") + message.str();
+              globalOp = module.lookupSymbol<LLVM::GlobalOp>(msgGlobalName);
+              // Create a global constant with the message, iff it wasn't there
+              // before
+              if (!globalOp)
+                globalOp = rewriter.create<LLVM::GlobalOp>(
+                    loc, LLVM::LLVMArrayType::get(int8Type, message.size()),
+                    /*isConstant=*/true, LLVM::Linkage::Internal, msgGlobalName,
+                    rewriter.getStringAttr(message));
+            }
+
+            // print the message!
+            Value globalString =
+                rewriter.create<LLVM::AddressOfOp>(loc, globalOp);
+            rewriter.create<LLVM::CallOp>(loc, putsFunc,
+                                          ValueRange{globalString});
+          }
+
+          // Abort!
+          auto abortFunc =
+              lookupOrCreateFn(module, "abort", ArrayRef<Type>(),
+                               LLVM::LLVMVoidType::get(getContext()), false);
+          rewriter.create<LLVM::CallOp>(loc, abortFunc, std::nullopt);
+
+          builder.template create<scf::YieldOp>(loc);
+        });
+    return success();
+  }
+};
+
 struct MemoryAccess {
   Value ptr;
   Value withinBounds;
@@ -630,7 +696,8 @@ void LowerArcToLLVMPass::runOnOperation() {
     StateReadOpLowering,
     StateWriteOpLowering,
     StorageGetOpLowering,
-    ZeroCountOpLowering
+    ZeroCountOpLowering,
+    AssertOpLowering
   >(converter, &getContext());
   // clang-format on
 

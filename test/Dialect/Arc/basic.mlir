@@ -368,3 +368,18 @@ func.func @with_attr() {
   arc.sim.instantiate @sim_test as %model attributes {foo = "foo"} {}
   return
 }
+
+// -----
+
+hw.module @assert(in %in0: i1, in %in1: !seq.clock) {
+  arc.assert %in0
+  arc.assert %in0, %in1
+  arc.assert %in0, %in1, "Oops"
+  hw.output
+}
+
+// CHECK-LABEL: hw.module @assert(in %in0 : i1, in %in1 : !seq.clock)
+//       CHECK:   arc.assert %in0
+//       CHECK:   arc.assert %in0, %in1
+//       CHECK:   arc.assert %in0, %in1, "Oops"
+//       CHECK:   hw.output
