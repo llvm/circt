@@ -254,6 +254,17 @@ void circt::om::ClassOp::addFields(mlir::OpBuilder &builder,
   this->addFields(builder, builder.getFusedLoc(locs), fieldNames, fieldValues);
 }
 
+void circt::om::ClassOp::addFields(mlir::OpBuilder &builder,
+                                   mlir::Location loc,
+                                   llvm::ArrayRef<llvm::StringRef> fieldNames,
+                                   llvm::ArrayRef<mlir::Value> fieldValues) {
+  this->addFields(builder, loc,
+                  llvm::map_to_vector(fieldNames,
+                                      [&](llvm::StringRef fieldName) {
+                                        return cast<mlir::Attribute>(builder.getStringAttr(fieldName));
+                                      }),
+                  fieldValues);
+}
 
 //===----------------------------------------------------------------------===//
 // ClassFieldOp

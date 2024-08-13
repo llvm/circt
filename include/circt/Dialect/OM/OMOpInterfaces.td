@@ -54,10 +54,13 @@ def ClassFieldsLike : OpInterface<"ClassFieldsLike"> {
       "llvm::ArrayRef<mlir::Attribute>", "getFieldNames", (ins),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{ 
+        mlir::Attribute fieldNames = this->getOperation()->getAttr("fieldNames");
+        // TODO: Should we enforce an invariant that this attribute always
+        // exists?
+        if (!fieldNames) 
+          return {};
         return
-          mlir::cast<mlir::ArrayAttr>(
-            this->getOperation()->getAttr("fieldNames")
-          ).getValue();
+          mlir::cast<mlir::ArrayAttr>(fieldNames).getValue();
       }]>
   ];
 }
