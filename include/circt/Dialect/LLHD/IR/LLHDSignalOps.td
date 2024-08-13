@@ -13,7 +13,6 @@
 include "mlir/IR/EnumAttr.td"
 
 def SigOp : LLHDOp<"sig", [
-    ParentOneOf<["hw::HWModuleOp", "llhd::ProcessOp"]>,
     TypesMatchWith<
       "type of 'init' and underlying type of 'signal' have to match.",
       "init", "result", "hw::InOutType::get($_self)">
