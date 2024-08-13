@@ -919,4 +919,115 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticWidthMismatch) {
                    .getValue());
 }
 
+TEST(EvaluatorTests, ListConcat) {
+  StringRef mod = "om.class @ListConcat() {"
+                  "  %0 = om.constant #om.integer<0 : i8> : !om.integer"
+                  "  %1 = om.constant #om.integer<1 : i8> : !om.integer"
+                  "  %2 = om.constant #om.integer<2 : i8> : !om.integer"
+                  "  %l0 = om.list_create %0, %1 : !om.integer"
+                  "  %l1 = om.list_create %2 : !om.integer"
+                  "  %concat = om.list_concat %l0, %l1 : !om.list<!om.integer>"
+                  "  om.class.field @result, %concat : !om.list<!om.integer>"
+                  "}";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto result =
+      evaluator.instantiate(StringAttr::get(&context, "ListConcat"), {});
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
+                        ->getField("result")
+                        .value();
+
+  auto finalList =
+      llvm::cast<evaluator::ListValue>(fieldValue.get())->getElements();
+
+  ASSERT_EQ(3, finalList.size());
+
+  ASSERT_EQ(0, llvm::cast<evaluator::AttributeValue>(finalList[0].get())
+                   ->getAs<circt::om::IntegerAttr>()
+                   .getValue()
+                   .getValue());
+
+  ASSERT_EQ(1, llvm::cast<evaluator::AttributeValue>(finalList[1].get())
+                   ->getAs<circt::om::IntegerAttr>()
+                   .getValue()
+                   .getValue());
+
+  ASSERT_EQ(2, llvm::cast<evaluator::AttributeValue>(finalList[2].get())
+                   ->getAs<circt::om::IntegerAttr>()
+                   .getValue()
+                   .getValue());
+}
+
+TEST(EvaluatorTests, ListConcatField) {
+  StringRef mod =
+      "om.class @ListField() {"
+      "  %0 = om.constant #om.integer<2 : i8> : !om.integer"
+      "  %1 = om.list_create %0 : !om.integer"
+      "  om.class.field @value, %1 : !om.list<!om.integer>"
+      "}"
+      "om.class @ListConcatField() {"
+      "  %listField = om.object @ListField() : () -> !om.class.type<@ListField>"
+      "  %0 = om.constant #om.integer<0 : i8> : !om.integer"
+      "  %1 = om.constant #om.integer<1 : i8> : !om.integer"
+      "  %l0 = om.list_create %0, %1 : !om.integer"
+      "  %l1 = om.object.field %listField, [@value] : "
+      "(!om.class.type<@ListField>) -> !om.list<!om.integer>"
+      "  %concat = om.list_concat %l0, %l1 : !om.list<!om.integer>"
+      "  om.class.field @result, %concat : !om.list<!om.integer>"
+      "}";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto result =
+      evaluator.instantiate(StringAttr::get(&context, "ListConcatField"), {});
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
+                        ->getField("result")
+                        .value();
+
+  auto finalList =
+      llvm::cast<evaluator::ListValue>(fieldValue.get())->getElements();
+
+  ASSERT_EQ(3, finalList.size());
+
+  ASSERT_EQ(0, llvm::cast<evaluator::AttributeValue>(finalList[0].get())
+                   ->getAs<circt::om::IntegerAttr>()
+                   .getValue()
+                   .getValue());
+
+  ASSERT_EQ(1, llvm::cast<evaluator::AttributeValue>(finalList[1].get())
+                   ->getAs<circt::om::IntegerAttr>()
+                   .getValue()
+                   .getValue());
+
+  ASSERT_EQ(2, llvm::cast<evaluator::AttributeValue>(finalList[2].get())
+                   ->getAs<circt::om::IntegerAttr>()
+                   .getValue()
+                   .getValue());
+}
+
 } // namespace

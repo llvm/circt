@@ -167,10 +167,10 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                           evaluator::PathValue::getEmptyPath(loc));
                   return success(result);
                 })
-                .Case<ListCreateOp, TupleCreateOp, MapCreateOp, ObjectFieldOp>(
-                    [&](auto op) {
-                      return getPartiallyEvaluatedValue(op.getType(), loc);
-                    })
+                .Case<ListCreateOp, ListConcatOp, TupleCreateOp, MapCreateOp,
+                      ObjectFieldOp>([&](auto op) {
+                  return getPartiallyEvaluatedValue(op.getType(), loc);
+                })
                 .Case<ObjectOp>([&](auto op) {
                   return getPartiallyEvaluatedValue(op.getType(), op.getLoc());
                 })
@@ -359,6 +359,9 @@ circt::om::Evaluator::evaluateValue(Value value, ActualParameters actualParams,
             })
             .Case([&](ListCreateOp op) {
               return evaluateListCreate(op, actualParams, loc);
+            })
+            .Case([&](ListConcatOp op) {
+              return evaluateListConcat(op, actualParams, loc);
             })
             .Case([&](TupleCreateOp op) {
               return evaluateTupleCreate(op, actualParams, loc);
@@ -578,6 +581,45 @@ circt::om::Evaluator::evaluateListCreate(ListCreateOp op,
   }
 
   // Return the list.
+  llvm::cast<evaluator::ListValue>(list.value().get())
+      ->setElements(std::move(values));
+  return list;
+}
+
+/// Evaluator dispatch function for List concatenation.
+FailureOr<evaluator::EvaluatorValuePtr>
+circt::om::Evaluator::evaluateListConcat(ListConcatOp op,
+                                         ActualParameters actualParams,
+                                         Location loc) {
+  // Evaluate the List concat op itself, in case it hasn't been evaluated yet.
+  SmallVector<evaluator::EvaluatorValuePtr> values;
+  auto list = getOrCreateValue(op, actualParams, loc);
+
+  // Extract the ListValue, either directly or through an object reference.
+  auto extractList = [](evaluator::EvaluatorValue *value) {
+    return std::move(
+        llvm::TypeSwitch<evaluator::EvaluatorValue *, evaluator::ListValue *>(
+            value)
+            .Case([](evaluator::ListValue *val) { return val; })
+            .Case([](evaluator::ReferenceValue *val) {
+              return cast<evaluator::ListValue>(val->getStrippedValue()->get());
+            }));
+  };
+
+  for (auto operand : op.getOperands()) {
+    auto result = evaluateValue(operand, actualParams, loc);
+    if (failed(result))
+      return result;
+    if (!result.value()->isFullyEvaluated())
+      return list;
+
+    // Append each EvaluatorValue from the sublist.
+    evaluator::ListValue *subList = extractList(result.value().get());
+    for (auto subValue : subList->getElements())
+      values.push_back(subValue);
+  }
+
+  // Return the concatenated list.
   llvm::cast<evaluator::ListValue>(list.value().get())
       ->setElements(std::move(values));
   return list;
