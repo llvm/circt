@@ -228,11 +228,7 @@ Value ClockLowering::materializeValue(Value value) {
   while (!worklist.empty()) {
     auto &workItem = worklist.back();
     if (isInitialTree() && !canBeMaterializedInInitializer(workItem.op)) {
-      treeOp->emitOpError("initial value cannot be materialized.");
-      if (workItem.op)
-        workItem.op->emitRemark("Operation cannot be used in initializer.");
-      else
-        treeOp->emitRemark("Initializer depends on argument value.");
+      workItem.op->emitError("Value cannot be used in initializer.");
       return {};
     }
     if (!workItem.operands.empty()) {
@@ -515,6 +511,8 @@ LogicalResult ModuleLowering::lowerStateLike(
     for (auto [alloc, init] : llvm::zip(allocatedStates, initialValues)) {
       // TODO: Can we get away without materialization?
       auto matierializedInit = initialTree.materializeValue(init);
+      if (!matierializedInit)
+        return failure();
       initialTree.builder.create<StateWriteOp>(stateOp->getLoc(), alloc,
                                                matierializedInit, Value());
     }
