@@ -1804,7 +1804,7 @@ static void populateConversionTarget(ConversionTarget &target) {
     auto fieldNames = op.getFieldNames();
     return llvm::all_of(fieldNames, [&](auto field) {
       // TODO: Avoid StringAttr cast?
-      std::optional<Type> type = op.getFieldType(cast<StringAttr>(field)); 
+      std::optional<Type> type = op.getFieldType(cast<StringAttr>(field));
       return type.has_value() && !isa<FIRRTLType>(type.value());
     });
   });

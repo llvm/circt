@@ -238,8 +238,7 @@ void circt::om::ClassOp::addFields(mlir::OpBuilder &builder, mlir::Location loc,
   llvm::SmallVector<NamedAttribute> fieldTypes;
   for (auto [name, value] : llvm::zip(fieldNames, fieldValues)) {
     fieldTypes.push_back(mlir::NamedAttribute(
-        cast<StringAttr>(name),
-        mlir::TypeAttr::get(value.getType())));
+        cast<StringAttr>(name), mlir::TypeAttr::get(value.getType())));
   }
   op.getOperation()->setAttr(
       "fieldNames", mlir::ArrayAttr::get(this->getContext(), fieldNames));
@@ -254,14 +253,14 @@ void circt::om::ClassOp::addFields(mlir::OpBuilder &builder,
   this->addFields(builder, builder.getFusedLoc(locs), fieldNames, fieldValues);
 }
 
-void circt::om::ClassOp::addFields(mlir::OpBuilder &builder,
-                                   mlir::Location loc,
+void circt::om::ClassOp::addFields(mlir::OpBuilder &builder, mlir::Location loc,
                                    llvm::ArrayRef<llvm::StringRef> fieldNames,
                                    llvm::ArrayRef<mlir::Value> fieldValues) {
   this->addFields(builder, loc,
                   llvm::map_to_vector(fieldNames,
                                       [&](llvm::StringRef fieldName) {
-                                        return cast<mlir::Attribute>(builder.getStringAttr(fieldName));
+                                        return cast<mlir::Attribute>(
+                                            builder.getStringAttr(fieldName));
                                       }),
                   fieldValues);
 }
@@ -290,17 +289,18 @@ static ParseResult parseFieldName(OpAsmParser &parser, StringAttr &name) {
   return success();
 }
 
-static ParseResult parseField(OpAsmParser &parser,
-                              llvm::MapVector<StringAttr, SMLoc> &parsedFieldNames,
+static ParseResult
+parseField(OpAsmParser &parser,
+           llvm::MapVector<StringAttr, SMLoc> &parsedFieldNames,
 
-                              FieldParse &result, bool hasOperand = true) {
+           FieldParse &result, bool hasOperand = true) {
   NamedAttrList attrs;
   if (parseFieldName(parser, result.name))
     return failure();
   SMLoc currLoc = parser.getCurrentLocation();
   if (parsedFieldNames.contains(result.name)) {
     parser.emitError(currLoc, "op field ")
-                << result.name << " is defined twice";
+        << result.name << " is defined twice";
     // TODO: Is there a way to attach a note to a parser error?
     parser.emitError(parsedFieldNames.lookup(result.name))
         << "previous definition is here";
@@ -317,8 +317,7 @@ static ParseResult parseField(OpAsmParser &parser,
   return success();
 }
 
-void buildFieldAttrs(OperationState &state,
-                     mlir::MLIRContext *ctx,
+void buildFieldAttrs(OperationState &state, mlir::MLIRContext *ctx,
                      llvm::SmallVector<FieldParse> &parsedFields) {
   llvm::SmallVector<Attribute> fieldNames;
   llvm::SmallVector<NamedAttribute> fieldTypes;
@@ -454,7 +453,7 @@ void circt::om::ClassExternOp::addFields(
 //===----------------------------------------------------------------------===//
 
 ParseResult circt::om::ClassExternFieldsOp::parse(OpAsmParser &parser,
-                                            OperationState &state) {
+                                                  OperationState &state) {
   llvm::SmallVector<FieldParse> parsedFields;
   llvm::MapVector<StringAttr, SMLoc> parsedFieldNames;
   auto parseOnePort = [&]() -> ParseResult {

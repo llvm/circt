@@ -194,7 +194,7 @@ static FailureOr<bool> resolveClasses(StringAttr name,
 
     for (auto name : fieldNames) {
       std::optional<Type> opTypeOpt =
-        op.getFieldsOp().getFieldType(cast<StringAttr>(name));
+          op.getFieldsOp().getFieldType(cast<StringAttr>(name));
 
       if (!opTypeOpt.has_value())
         return emitError(op) << " no type for field " << name;

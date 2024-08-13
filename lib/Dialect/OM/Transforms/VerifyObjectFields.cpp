@@ -51,7 +51,8 @@ void VerifyObjectFieldsPass::runOnOperation() {
 
   // Run actual verification. Make sure not to mutate `tables`.
   auto result = mlir::failableParallelForEach(
-      &getContext(), module->getRegion(0).getOps<om::ClassLike>(), [&symbolTable](ClassLike classLike) {
+      &getContext(), module->getRegion(0).getOps<om::ClassLike>(),
+      [&symbolTable](ClassLike classLike) {
         auto result =
             classLike.walk([&](ObjectFieldOp objectField) -> WalkResult {
               auto objectInstType =
@@ -73,7 +74,8 @@ void VerifyObjectFieldsPass::runOnOperation() {
               for (size_t i = 0, e = fields.size(); i < e; ++i) {
                 // Verify the field exists on the ClassOp.
                 auto field = fields[i];
-                std::optional<Type> fieldTypeOpt = classDef.getFieldsOp().getFieldType(field.getAttr());
+                std::optional<Type> fieldTypeOpt =
+                    classDef.getFieldsOp().getFieldType(field.getAttr());
 
                 if (!fieldTypeOpt) {
                   auto error =

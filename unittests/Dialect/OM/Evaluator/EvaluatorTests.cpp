@@ -627,15 +627,14 @@ TEST(EvaluatorTests, InstantiateCycle) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticAdd) {
-  StringRef mod =
-      "om.class @IntegerBinaryArithmeticAdd() {"
-      "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
-      "  %1 = om.constant #om.integer<2 : si3> : !om.integer"
-      "  %2 = om.integer.add %0, %1 : !om.integer"
-      "  om.class.fields("
-      "    @result %2 : !om.integer"
-      "  )"
-      "}";
+  StringRef mod = "om.class @IntegerBinaryArithmeticAdd() {"
+                  "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
+                  "  %1 = om.constant #om.integer<2 : si3> : !om.integer"
+                  "  %2 = om.integer.add %0, %1 : !om.integer"
+                  "  om.class.fields("
+                  "    @result %2 : !om.integer"
+                  "  )"
+                  "}";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -664,15 +663,14 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticAdd) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticMul) {
-  StringRef mod =
-      "om.class @IntegerBinaryArithmeticMul() {"
-      "  %0 = om.constant #om.integer<2 : si3> : !om.integer"
-      "  %1 = om.constant #om.integer<3 : si3> : !om.integer"
-      "  %2 = om.integer.mul %0, %1 : !om.integer"
-      "  om.class.fields("
-      "    @result %2 : !om.integer"
-      "  )"
-      "}";
+  StringRef mod = "om.class @IntegerBinaryArithmeticMul() {"
+                  "  %0 = om.constant #om.integer<2 : si3> : !om.integer"
+                  "  %1 = om.constant #om.integer<3 : si3> : !om.integer"
+                  "  %2 = om.integer.mul %0, %1 : !om.integer"
+                  "  om.class.fields("
+                  "    @result %2 : !om.integer"
+                  "  )"
+                  "}";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -701,15 +699,14 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticMul) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticShr) {
-  StringRef mod =
-      "om.class @IntegerBinaryArithmeticShr() {"
-      "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
-      "  %1 = om.constant #om.integer<2 : si3> : !om.integer"
-      "  %2 = om.integer.shr %0, %1 : !om.integer"
-      "  om.class.fields("
-      "    @result %2 : !om.integer"
-      "  )"
-      "}";
+  StringRef mod = "om.class @IntegerBinaryArithmeticShr() {"
+                  "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
+                  "  %1 = om.constant #om.integer<2 : si3> : !om.integer"
+                  "  %2 = om.integer.shr %0, %1 : !om.integer"
+                  "  om.class.fields("
+                  "    @result %2 : !om.integer"
+                  "  )"
+                  "}";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -738,15 +735,14 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticShr) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticShrNegative) {
-  StringRef mod =
-      "om.class @IntegerBinaryArithmeticShrNegative() {"
-      "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
-      "  %1 = om.constant #om.integer<-2 : si3> : !om.integer"
-      "  %2 = om.integer.shr %0, %1 : !om.integer"
-      "  om.class.fields("
-      "    @result %2 : !om.integer"
-      "  )"
-      "}";
+  StringRef mod = "om.class @IntegerBinaryArithmeticShrNegative() {"
+                  "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
+                  "  %1 = om.constant #om.integer<-2 : si3> : !om.integer"
+                  "  %2 = om.integer.shr %0, %1 : !om.integer"
+                  "  om.class.fields("
+                  "    @result %2 : !om.integer"
+                  "  )"
+                  "}";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -774,16 +770,15 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticShrNegative) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticShrTooLarge) {
-  StringRef mod =
-      "om.class @IntegerBinaryArithmeticShrTooLarge() {"
-      "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
-      "  %1 = om.constant #om.integer<36893488147419100000 : si66> "
-      ": !om.integer"
-      "  %2 = om.integer.shr %0, %1 : !om.integer"
-      "  om.class.fields("
-      "    @result %2 : !om.integer"
-      "  )"
-      "}";
+  StringRef mod = "om.class @IntegerBinaryArithmeticShrTooLarge() {"
+                  "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
+                  "  %1 = om.constant #om.integer<36893488147419100000 : si66> "
+                  ": !om.integer"
+                  "  %2 = om.integer.shr %0, %1 : !om.integer"
+                  "  om.class.fields("
+                  "    @result %2 : !om.integer"
+                  "  )"
+                  "}";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -812,35 +807,34 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticShrTooLarge) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticObjects) {
-  StringRef mod =
-      "om.class @Class1() {"
-      "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
-      "  om.class.fields("
-      "    @value %0 : !om.integer"
-      "  )"
-      "}"
-      ""
-      "om.class @Class2() {"
-      "  %0 = om.constant #om.integer<2 : si3> : !om.integer"
-      "  om.class.fields("
-      "    @value %0 : !om.integer"
-      "  )"
-      "}"
-      ""
-      "om.class @IntegerBinaryArithmeticObjects() {"
-      "  %0 = om.object @Class1() : () -> !om.class.type<@Class1>"
-      "  %1 = om.object.field %0, [@value] : "
-      "(!om.class.type<@Class1>) -> !om.integer"
-      ""
-      "  %2 = om.object @Class2() : () -> !om.class.type<@Class2>"
-      "  %3 = om.object.field %2, [@value] : "
-      "(!om.class.type<@Class2>) -> !om.integer"
-      ""
-      "  %5 = om.integer.add %1, %3 : !om.integer"
-      "  om.class.fields("
-      "    @result %5 : !om.integer"
-      "  )"
-      "}";
+  StringRef mod = "om.class @Class1() {"
+                  "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
+                  "  om.class.fields("
+                  "    @value %0 : !om.integer"
+                  "  )"
+                  "}"
+                  ""
+                  "om.class @Class2() {"
+                  "  %0 = om.constant #om.integer<2 : si3> : !om.integer"
+                  "  om.class.fields("
+                  "    @value %0 : !om.integer"
+                  "  )"
+                  "}"
+                  ""
+                  "om.class @IntegerBinaryArithmeticObjects() {"
+                  "  %0 = om.object @Class1() : () -> !om.class.type<@Class1>"
+                  "  %1 = om.object.field %0, [@value] : "
+                  "(!om.class.type<@Class1>) -> !om.integer"
+                  ""
+                  "  %2 = om.object @Class2() : () -> !om.class.type<@Class2>"
+                  "  %3 = om.object.field %2, [@value] : "
+                  "(!om.class.type<@Class2>) -> !om.integer"
+                  ""
+                  "  %5 = om.integer.add %1, %3 : !om.integer"
+                  "  om.class.fields("
+                  "    @result %5 : !om.integer"
+                  "  )"
+                  "}";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -927,15 +921,14 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticObjectsDelayed) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticWidthMismatch) {
-  StringRef mod =
-      "om.class @IntegerBinaryArithmeticWidthMismatch() {"
-      "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
-      "  %1 = om.constant #om.integer<2 : si4> : !om.integer"
-      "  %2 = om.integer.add %0, %1 : !om.integer"
-      "  om.class.fields("
-      "    @result %2 : !om.integer"
-      "  )"
-      "}";
+  StringRef mod = "om.class @IntegerBinaryArithmeticWidthMismatch() {"
+                  "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
+                  "  %1 = om.constant #om.integer<2 : si4> : !om.integer"
+                  "  %2 = om.integer.add %0, %1 : !om.integer"
+                  "  om.class.fields("
+                  "    @result %2 : !om.integer"
+                  "  )"
+                  "}";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
