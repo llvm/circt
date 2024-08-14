@@ -183,7 +183,7 @@ print("field:", obj.get_field_loc("field"))
 
 # CHECK: 14
 print(obj.child.foo)
-# CHECK: loc("-":68:21)
+# CHECK: loc("-":73:21)
 print(obj.child.get_field_loc("foo"))
 # CHECK: ('Root', 'x')
 print(obj.reference)
@@ -281,12 +281,11 @@ paths_class = [
 base_path_type = paths_class.regions[0].blocks[0].arguments[0].type
 assert isinstance(base_path_type, om.BasePathType)
 
-paths_fields = [
-    op for op in paths_class.regions[0].blocks[0]
-    if isinstance(op, om.ClassFieldOp)
-]
-for paths_field in paths_fields:
-  assert isinstance(paths_field.value.type, om.PathType)
+paths_ops = paths_class.regions[0].blocks[0].operations
+class_fields_op = paths_ops[len(paths_ops) - 1]
+assert len(class_fields_op.operands)
+for arg in class_fields_op.operands:
+  assert isinstance(arg.type, om.PathType)
 
 delayed = evaluator.instantiate("IntegerBinaryArithmeticObjectsDelayed")
 
