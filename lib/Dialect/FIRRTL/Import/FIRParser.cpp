@@ -4634,6 +4634,7 @@ private:
   ParseResult parseExtModule(CircuitOp circuit, unsigned indent);
   ParseResult parseIntModule(CircuitOp circuit, unsigned indent);
   ParseResult parseModule(CircuitOp circuit, bool isPublic, unsigned indent);
+  ParseResult parseFormal(CircuitOp circuit, unsigned indent);
 
   ParseResult parseLayerName(SymbolRefAttr &result);
   ParseResult parseOptionalEnabledLayers(ArrayAttr &result);
@@ -4939,6 +4940,7 @@ ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
     case FIRToken::kw_extclass:
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule:
+    case FIRToken::kw_formal:
     case FIRToken::kw_module:
     case FIRToken::kw_public:
     case FIRToken::kw_layer:
@@ -5202,6 +5204,39 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
   return success();
 }
 
+ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
+  consumeToken(FIRToken::kw_formal);
+  StringRef id, moduleName, boundSpelling;
+  int64_t bound = -1;
+  LocWithInfo info(getToken().getLoc(), this);
+
+  // Parse the formal operation
+  if (parseId(id, "expected a formal test name") ||
+      parseToken(FIRToken::kw_of,
+                 "expected keyword 'of' after formal test name") ||
+      parseId(moduleName, "expected the name of a module") ||
+      parseToken(FIRToken::comma, "expected ','") ||
+      parseGetSpelling(boundSpelling) ||
+      parseToken(FIRToken::identifier,
+                 "expected parameter 'bound' after ','") ||
+      parseToken(FIRToken::equal, "expected '=' after 'bound'") ||
+      parseIntLit(bound, "expected integer in bound specification") ||
+      info.parseOptionalInfo())
+    return failure();
+
+  // Check that the parameter is valid
+  if (boundSpelling != "bound" || bound <= 0)
+    return emitError("Invalid parameter given to formal test: ")
+               << boundSpelling << " = " << bound,
+           failure();
+
+  // Build out the firrtl mlir op
+  auto builder = circuit.getBodyBuilder();
+  builder.create<firrtl::FormalOp>(info.getLoc(), id, moduleName, bound);
+
+  return success();
+}
+
 ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
                                                       unsigned indent) {
   switch (getToken().getKind()) {
@@ -5216,6 +5251,10 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
     return parseExtClass(circuit, indent);
   case FIRToken::kw_extmodule:
     return parseExtModule(circuit, indent);
+  case FIRToken::kw_formal:
+    if (requireFeature({4, 0, 0}, "inline formal tests"))
+      return failure();
+    return parseFormal(circuit, indent);
   case FIRToken::kw_intmodule:
     if (removedFeature({4, 0, 0}, "intrinsic modules"))
       return failure();
@@ -5563,6 +5602,7 @@ ParseResult FIRCircuitParser::parseCircuit(
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule:
     case FIRToken::kw_layer:
+    case FIRToken::kw_formal:
     case FIRToken::kw_module:
     case FIRToken::kw_option:
     case FIRToken::kw_public:

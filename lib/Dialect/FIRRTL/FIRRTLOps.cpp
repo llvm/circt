@@ -3362,6 +3362,25 @@ void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
+//===----------------------------------------------------------------------===//
+// FormalOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+FormalOp::verifySymbolUses(::mlir::SymbolTableCollection &symbolTable) {
+  // The referenced symbol is restricted to FModuleOps
+  auto referencedModule = symbolTable.lookupNearestSymbolFrom<FModuleOp>(
+      *this, getModuleNameAttr());
+  if (!referencedModule)
+    return (*this)->emitOpError("invalid symbol reference");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// WireOp
+//===----------------------------------------------------------------------===//
+
 void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
@@ -3383,6 +3402,10 @@ LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
       refType, getLoc(), getOperation()->getParentOfType<CircuitOp>(),
       symbolTable, Twine("'") + getOperationName() + "' op is");
 }
+
+//===----------------------------------------------------------------------===//
+// ObjectOp
+//===----------------------------------------------------------------------===//
 
 void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassLike klass,
                      StringRef name) {
