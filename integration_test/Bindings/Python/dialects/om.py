@@ -75,7 +75,7 @@ with Context() as ctx, Location.unknown():
         @tuple %tuple : tuple<!om.list<!om.string>, !om.integer>,
         @nest %2 : !om.class.type<@Nest>,
         @map %3 : !om.map<!om.string, !om.integer>,
-        @map_create %map : !om.map<!omg.string, !om.integer>
+        @map_create %map : !om.map<!om.string, !om.integer>
       )
     }
 
@@ -173,12 +173,12 @@ print(obj.type.name)
 print(obj.field)
 
 # location of the om.class.field @field
-# CHECK: loc("-":22:20)
+# CHECK: loc("-":31:20)
 print("field:", obj.get_field_loc("field"))
 
 # CHECK: 14
 print(obj.child.foo)
-# CHECK: loc("-":50:21)
+# CHECK: loc("-":68:21)
 print("foo", obj.child.get_field_loc("foo"))
 # CHECK: ('Root', 'x')
 print(obj.reference)
@@ -186,10 +186,10 @@ print(obj.reference)
 # CHECK: 14
 print(snd)
 
-# CHECK: loc("-":31:16)
+# CHECK: loc("-":40:16)
 print("tuple", obj.get_field_loc("tuple"))
 
-# CHECK: loc("-":22:5)
+# CHECK: loc("-":31:5)
 print(obj.loc)
 
 try:
@@ -201,13 +201,13 @@ except IndexError as e:
 for (name, field) in obj:
   # location from om.class.field @child, %0 : !om.class.type<@Child>
   # CHECK: name: child, field: <circt.dialects.om.Object object
-  # CHECK-SAME: loc: loc("-":26:12)
+  # CHECK-SAME: loc: loc("-":35:12)
   # location from om.class.field @field, %param : !om.integer
   # CHECK: name: field, field: 42
-  # CHECK-SAME: loc: loc("-":22:20)
+  # CHECK-SAME: loc: loc("-":31:20)
   # location from om.class.field @reference, %sym : !om.ref
   # CHECK: name: reference, field: ('Root', 'x')
-  # CHECK-SAME: loc: loc("-":23:14)
+  # CHECK-SAME: loc: loc("-":32:14)
   loc = obj.get_field_loc(name)
   print(f"name: {name}, field: {field}, loc: {loc}")
 
