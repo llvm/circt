@@ -282,6 +282,7 @@ base_path_type = paths_class.regions[0].blocks[0].arguments[0].type
 assert isinstance(base_path_type, om.BasePathType)
 
 paths_ops = paths_class.regions[0].blocks[0].operations
+# NOTE: would be nice if this supported [-1] indexing syntax
 class_fields_op = paths_ops[len(paths_ops) - 1]
 assert len(class_fields_op.operands)
 for arg in class_fields_op.operands:
