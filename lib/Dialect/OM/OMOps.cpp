@@ -266,16 +266,6 @@ void circt::om::ClassOp::addFields(mlir::OpBuilder &builder, mlir::Location loc,
 }
 
 //===----------------------------------------------------------------------===//
-// ClassFieldOp
-//===----------------------------------------------------------------------===//
-
-Type circt::om::ClassFieldOp::getType() { return getValue().getType(); }
-
-void circt::om::ClassFieldOp::setType(Type type) {
-  return getValue().setType(type);
-}
-
-//===----------------------------------------------------------------------===//
 // ClassFieldsOpField
 //===----------------------------------------------------------------------===//
 

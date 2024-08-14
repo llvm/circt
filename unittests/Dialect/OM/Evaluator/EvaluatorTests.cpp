@@ -964,7 +964,9 @@ TEST(EvaluatorTests, ListConcat) {
                   "  %l0 = om.list_create %0, %1 : !om.integer"
                   "  %l1 = om.list_create %2 : !om.integer"
                   "  %concat = om.list_concat %l0, %l1 : !om.list<!om.integer>"
-                  "  om.class.field @result, %concat : !om.list<!om.integer>"
+                  "  om.class.fields("
+                  "    @result %concat : !om.list<!om.integer>"
+                  "  )"
                   "}";
 
   DialectRegistry registry;
@@ -1013,7 +1015,9 @@ TEST(EvaluatorTests, ListConcatField) {
       "om.class @ListField() {"
       "  %0 = om.constant #om.integer<2 : i8> : !om.integer"
       "  %1 = om.list_create %0 : !om.integer"
-      "  om.class.field @value, %1 : !om.list<!om.integer>"
+      "  om.class.fields("
+      "    @value %1 : !om.list<!om.integer>"
+      "  )"
       "}"
       "om.class @ListConcatField() {"
       "  %listField = om.object @ListField() : () -> !om.class.type<@ListField>"
@@ -1023,7 +1027,9 @@ TEST(EvaluatorTests, ListConcatField) {
       "  %l1 = om.object.field %listField, [@value] : "
       "(!om.class.type<@ListField>) -> !om.list<!om.integer>"
       "  %concat = om.list_concat %l0, %l1 : !om.list<!om.integer>"
-      "  om.class.field @result, %concat : !om.list<!om.integer>"
+      "  om.class.fields("
+      "    @result %concat : !om.list<!om.integer>"
+      "  )"
       "}";
 
   DialectRegistry registry;

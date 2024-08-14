@@ -58,11 +58,6 @@ class OMClassLike<string mnemonic, list<Trait> traits = []> :
   let hasVerifier = 1;
 }
 
-class OMClassFieldLike<string mnemonic, list<Trait> traits = []> :
-  OMOp<mnemonic, traits # [
-    DeclareOpInterfaceMethods<ClassFieldLike>]> {
-}
-
 class OMClassFieldsLike<string mnemonic, list<Trait> traits = []> :
   OMOp<mnemonic, traits # [Terminator, ReturnLike, Pure,
     DeclareOpInterfaceMethods<ClassFieldsLike>]> {
@@ -105,17 +100,6 @@ def ClassOp : OMClassLike<"class", [
                    mlir::Location loc, 
                    llvm::ArrayRef<llvm::StringRef> fieldNames,
                    llvm::ArrayRef<mlir::Value> fieldValues);
-  }];
-}
-
-def ClassFieldOp : OMClassFieldLike<"class.field",
-    [HasParent<"ClassFieldsOp">]> {
-  let arguments = (ins
-    SymbolNameAttr:$name,
-    AnyType:$value
-  );
-  let assemblyFormat = [{
-    $name `,` $value  attr-dict `:` type($value)
   }];
 }
 

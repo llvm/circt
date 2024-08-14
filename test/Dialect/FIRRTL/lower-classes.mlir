@@ -248,7 +248,9 @@ firrtl.circuit "PathModule" {
    firrtl.module @ListConcat(in %propIn0: !firrtl.list<integer>, in %propIn1: !firrtl.list<integer>, out %propOut: !firrtl.list<integer>) {
     // CHECK: [[CONCAT:%.+]] = om.list_concat %propIn0, %propIn1
     %1 = firrtl.list.concat %propIn0, %propIn1 : !firrtl.list<integer>
-    // CHECK: om.class.field @propOut, [[CONCAT]]
+    // CHECK: om.class.fields(
+    // CHECK:   @propOut [[CONCAT]]
+    // CHECK: )
     firrtl.propassign %propOut, %1 : !firrtl.list<integer>
   }
 }

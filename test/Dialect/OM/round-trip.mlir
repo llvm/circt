@@ -204,6 +204,8 @@ om.class @ListConcat() {
 
   // CHECK: om.list_concat [[L0]], [[L1]]
   %concat = om.list_concat %l0, %l1 : !om.list<!om.integer>
+
+  om.class.fields()
 }
 
 // CHECK-LABEL: @Integer

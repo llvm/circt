@@ -15,23 +15,6 @@
 
 include "mlir/IR/OpBase.td"
 
-def ClassFieldLike : OpInterface<"ClassFieldLike"> {
-  let cppNamespace = "circt::om";
-
-  let description = [{
-    Common functionality for class-like field operations.
-  }];
-
-  let methods = [
-    InterfaceMethod<"Get the class-like field's type",
-      "mlir::Type", "getType", (ins)>,
-    InterfaceMethod<"Get the class-like field's type",
-      "void", "setType", (ins "mlir::Type":$type)>,
-    InterfaceMethod<"Get the class-like field's name attribute",
-      "mlir::StringAttr", "getNameAttr", (ins)>
-  ];
-}
-
 def ClassFieldsLike : OpInterface<"ClassFieldsLike"> {
   let cppNamespace = "circt::om";
 

@@ -1664,18 +1664,6 @@ struct ClassFieldsOpConversion : public OpConversionPattern<ClassFieldsOp> {
   }
 };
 
-struct ClassFieldOpConversion : public OpConversionPattern<ClassFieldOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(ClassFieldOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<ClassFieldOp>(op, adaptor.getNameAttr(),
-                                              adaptor.getValue());
-    return success();
-  }
-};
-
 struct ClassExternFieldsOpConversion
     : public OpConversionPattern<ClassExternFieldsOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -1934,7 +1922,6 @@ static void populateRewritePatterns(
   patterns.add<AnyCastOpConversion>(converter, patterns.getContext());
   patterns.add<ObjectSubfieldOpConversion>(converter, patterns.getContext(),
                                            classTypeTable);
-  patterns.add<ClassFieldOpConversion>(converter, patterns.getContext());
   patterns.add<ClassFieldsOpConversion>(converter, patterns.getContext());
   patterns.add<ClassExternFieldsOpConversion>(converter, patterns.getContext());
   patterns.add<ClassOpSignatureConversion>(converter, patterns.getContext());

@@ -155,7 +155,7 @@ circuit TestHarness:
 ; MLIR_OUT:    )
 ; MLIR_OUT:  }
 
-; MLIR_OUT:  om.class @MemorySchema(%basepath: !om.basepath, %name_in: !om.string, %depth_in: !om.integer, %width_in: !om.integer, %maskBits_in: !om.integer, %readPorts_in: !om.integer, %writePorts_in: !om.integer, %readwritePorts_in: !om.integer, %writeLatency_in: !om.integer, %readLatency_in: !om.integer, %hierarchy_in: !om.list<!om.path>, %inDut_in: i1, %extraPorts_in: !om.list<!om.class.type<@ExtraPortsMemorySchema>>)
+; MLIR_OUT:  om.class @MemorySchema(%basepath: !om.basepath, %name_in: !om.string, %depth_in: !om.integer, %width_in: !om.integer, %maskBits_in: !om.integer, %readPorts_in: !om.integer, %writePorts_in: !om.integer, %readwritePorts_in: !om.integer, %writeLatency_in: !om.integer, %readLatency_in: !om.integer, %hierarchy_in: !om.list<!om.path>, %inDut_in: i1, %extraPorts_in: !om.list<!om.class.type<@ExtraPortsMemorySchema>>
 ; MLIR_OUT:    om.class.fields(
 ; MLIR_OUT:      @name %name_in : !om.string,
 ; MLIR_OUT:      @depth %depth_in : !om.integer,
@@ -167,10 +167,8 @@ circuit TestHarness:
 ; MLIR_OUT:      @writeLatency %writeLatency_in : !om.integer,
 ; MLIR_OUT:      @readLatency %readLatency_in : !om.integer,
 ; MLIR_OUT:      @hierarchy %hierarchy_in : !om.list<!om.path>,
-; MLIR_OUT:      @inDut %inDut_in : i1,
 ; MLIR_OUT:      @extraPorts %extraPorts_in : !om.list<!om.class.type<@ExtraPortsMemorySchema>>
 ; MLIR_OUT:    )
-; MLIR_OUT:  }
 ; MLIR_OUT:  om.class @MemoryMetadata(%basepath: !om.basepath)
 ; MLIR_OUT:     om.path_create instance %basepath @memNLA
 ; MLIR_OUT:     om.list_create
