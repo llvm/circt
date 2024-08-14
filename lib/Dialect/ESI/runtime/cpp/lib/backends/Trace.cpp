@@ -49,6 +49,8 @@ struct esi::backends::trace::TraceAccelerator::Impl {
       if (!traceWrite->is_open())
         throw std::runtime_error("failed to open trace file '" +
                                  traceFile.string() + "'");
+    } else if (mode == Discard) {
+      traceWrite = nullptr;
     } else {
       assert(false && "not implemented");
     }
@@ -76,9 +78,11 @@ struct esi::backends::trace::TraceAccelerator::Impl {
   void write(const AppIDPath &id, const std::string &portName, const void *data,
              size_t size);
   std::ostream &write(std::string service) {
+    assert(traceWrite && "traceWrite is null");
     *traceWrite << "[" << service << "] ";
     return *traceWrite;
   }
+  bool isWriteable() { return traceWrite; }
 
 private:
   std::ofstream *traceWrite;
@@ -90,6 +94,8 @@ private:
 void TraceAccelerator::Impl::write(const AppIDPath &id,
                                    const std::string &portName,
                                    const void *data, size_t size) {
+  if (!isWriteable())
+    return;
   std::string b64data;
   utils::encodeBase64(data, size, b64data);
 
@@ -105,7 +111,7 @@ TraceAccelerator::connect(Context &ctxt, std::string connectionString) {
 
   // Parse the connection std::string.
   // <mode>:<manifest path>[:<traceFile>]
-  std::regex connPattern("(\\w):([^:]+)(:(\\w+))?");
+  std::regex connPattern("([\\w-]):([^:]+)(:(\\w+))?");
   std::smatch match;
   if (regex_search(connectionString, match, connPattern)) {
     modeStr = match[1];
@@ -121,6 +127,8 @@ TraceAccelerator::connect(Context &ctxt, std::string connectionString) {
   Mode mode;
   if (modeStr == "w")
     mode = Write;
+  else if (modeStr == "-")
+    mode = Discard;
   else
     throw std::runtime_error("unknown mode '" + modeStr + "'");
 
@@ -260,7 +268,8 @@ public:
       this->size = size;
     }
     virtual ~TraceHostMemRegion() {
-      impl.write("HostMem") << "free " << ptr << std::endl;
+      if (impl.isWriteable())
+        impl.write("HostMem") << "free " << ptr << std::endl;
       free(ptr);
     }
     virtual void *getPtr() const override { return ptr; }
@@ -276,22 +285,26 @@ public:
   allocate(std::size_t size, HostMem::Options opts) const override {
     auto ret =
         std::unique_ptr<HostMemRegion>(new TraceHostMemRegion(size, impl));
-    impl.write("HostMem 0x")
-        << ret->getPtr() << " allocate " << size
-        << " bytes. Writeable: " << opts.writeable
-        << ", useLargePages: " << opts.useLargePages << std::endl;
+    if (impl.isWriteable())
+      impl.write("HostMem 0x")
+          << ret->getPtr() << " allocate " << size
+          << " bytes. Writeable: " << opts.writeable
+          << ", useLargePages: " << opts.useLargePages << std::endl;
     return ret;
   }
   virtual bool mapMemory(void *ptr, std::size_t size,
                          HostMem::Options opts) const override {
-    impl.write("HostMem") << "map 0x" << ptr << " size " << size
-                          << " bytes. Writeable: " << opts.writeable
-                          << ", useLargePages: " << opts.useLargePages
-                          << std::endl;
+
+    if (impl.isWriteable())
+      impl.write("HostMem")
+          << "map 0x" << ptr << " size " << size
+          << " bytes. Writeable: " << opts.writeable
+          << ", useLargePages: " << opts.useLargePages << std::endl;
     return true;
   }
   virtual void unmapMemory(void *ptr) const override {
-    impl.write("HostMem") << "unmap 0x" << ptr << std::endl;
+    if (impl.isWriteable())
+      impl.write("HostMem") << "unmap 0x" << ptr << std::endl;
   }
 
 private:
