@@ -22,8 +22,21 @@ func.func @VictimInit(%arg0: !arc.storage<42>) {
 // expected-warning @below {{Existing model initializer 'VictimInit' will be overridden.}}
 arc.model @ExistingInit io !hw.modty<> initializer @VictimInit {
 ^bb0(%arg0: !arc.storage<42>):
-  arc.initial {
-    %c0_i9001 = hw.constant 0 : i9001
-    %1 = comb.sub %c0_i9001, %c0_i9001 : i9001
-  }
+  arc.initial {}
+}
+
+// -----
+
+// expected-error @below {{op containing multiple PassThroughOps cannot be lowered.}}
+// expected-error @below {{op containing multiple InitialOps is currently unsupported.}}
+arc.model @MultiInitAndPassThrough io !hw.modty<> {
+^bb0(%arg0: !arc.storage<1>):
+  // expected-note @below {{Conflicting PassThroughOp:}}
+  arc.passthrough {}
+  // expected-note @below {{Conflicting InitialOp:}}
+  arc.initial {}
+  // expected-note @below {{Conflicting PassThroughOp:}}
+  arc.passthrough {}
+  // expected-note @below {{Conflicting InitialOp:}}
+  arc.initial {}
 }

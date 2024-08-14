@@ -69,13 +69,38 @@ LogicalResult LowerClocksToFuncsPass::lowerModel(ModelOp modelOp) {
                           << "`\n");
 
   // Find the clocks to extract.
-  hasPassthroughOp = false;
+  SmallVector<InitialOp, 1> initialOps;
+  SmallVector<PassThroughOp, 1> passthroughOps;
   SmallVector<Operation *> clocks;
   modelOp.walk([&](Operation *op) {
-    if (isa<ClockTreeOp, PassThroughOp, InitialOp>(op))
-      clocks.push_back(op);
-    hasPassthroughOp |= isa<PassThroughOp>(op);
+    TypeSwitch<Operation *, void>(op)
+        .Case<ClockTreeOp>([&](auto) { clocks.push_back(op); })
+        .Case<InitialOp>([&](auto initOp) {
+          initialOps.push_back(initOp);
+          clocks.push_back(initOp);
+        })
+        .Case<PassThroughOp>([&](auto ptOp) {
+          passthroughOps.push_back(ptOp);
+          clocks.push_back(ptOp);
+        });
   });
+  hasPassthroughOp = !passthroughOps.empty();
+
+  // Sanity check
+  if (passthroughOps.size() > 1) {
+    auto diag = modelOp.emitOpError()
+                << "containing multiple PassThroughOps cannot be lowered.";
+    for (auto ptOp : passthroughOps)
+      diag.attachNote(ptOp.getLoc()) << "Conflicting PassThroughOp:";
+  }
+  if (initialOps.size() > 1) {
+    auto diag = modelOp.emitOpError()
+                << "containing multiple InitialOps is currently unsupported.";
+    for (auto initOp : initialOps)
+      diag.attachNote(initOp.getLoc()) << "Conflicting InitialOp:";
+  }
+  if (passthroughOps.size() > 1 || initialOps.size() > 1)
+    return failure();
 
   // Perform the actual extraction.
   OpBuilder funcBuilder(modelOp);
