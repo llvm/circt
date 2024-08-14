@@ -19,7 +19,7 @@ func.func @VictimInit(%arg0: !arc.storage<42>) {
   return
 }
 
-// expected-warning @below {{Existing model initializer 'VictimInit' will be overriden.}}
+// expected-warning @below {{Existing model initializer 'VictimInit' will be overridden.}}
 arc.model @ExistingInit io !hw.modty<> initializer @VictimInit {
 ^bb0(%arg0: !arc.storage<42>):
   arc.initial {

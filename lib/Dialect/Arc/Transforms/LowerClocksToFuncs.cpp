@@ -144,7 +144,7 @@ LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
         if (modelOp.getInitialFn().has_value())
           modelOp.emitWarning() << "Existing model initializer '"
                                 << modelOp.getInitialFnAttr().getValue()
-                                << "' will be overriden.";
+                                << "' will be overridden.";
         modelOp.setInitialFnAttr(
             FlatSymbolRefAttr::get(funcOp.getSymNameAttr()));
       });
