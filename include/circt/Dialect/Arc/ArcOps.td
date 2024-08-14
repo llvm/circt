@@ -441,35 +441,35 @@ def ClockDomainOp : ArcOp<"clock_domain", [
   let hasCanonicalizeMethod = 1;
 }
 
-def ClockTreeOp : ArcOp<"clock_tree", [NoTerminator, NoRegionArguments]> {
+//===----------------------------------------------------------------------===//
+// (Pseudo) Clock Trees
+//===----------------------------------------------------------------------===//
+
+class ClockTreeLikeOp<string mnemonic, list<Trait> traits = []>:
+  ArcOp<mnemonic, !listconcat(traits, [
+    RecursiveMemoryEffects, NoTerminator, NoRegionArguments, SingleBlock,
+    HasParent<"ModelOp">
+])> {
+  let regions = (region SizedRegion<1>:$body);
+}
+
+def ClockTreeOp : ClockTreeLikeOp<"clock_tree"> {
   let summary = "A clock tree";
   let arguments = (ins I1:$clock);
-  let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
     $clock attr-dict-with-keyword $body
   }];
-  let extraClassDeclaration = [{
-    mlir::Block &getBodyBlock() { return getBody().front(); }
-  }];
 }
 
-def PassThroughOp : ArcOp<"passthrough", [NoTerminator, NoRegionArguments]> {
+def PassThroughOp : ClockTreeLikeOp<"passthrough"> {
   let summary = "Clock-less logic that is on the pass-through path";
-  let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
     attr-dict-with-keyword $body
   }];
-  let extraClassDeclaration = [{
-    mlir::Block &getBodyBlock() { return getBody().front(); }
-  }];
 }
 
-def InitialOp : ArcOp<"initial", [
-  RecursiveMemoryEffects, NoTerminator, NoRegionArguments, SingleBlock,
-  HasParent<"ModelOp">
-]> {
+def InitialOp : ClockTreeLikeOp<"initial"> {
   let summary = "Clock-less logic called at the start of simulation";
-  let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
     attr-dict-with-keyword $body
   }];
