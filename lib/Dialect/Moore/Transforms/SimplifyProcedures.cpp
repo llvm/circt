@@ -43,8 +43,9 @@ void SimplifyProceduresPass::runOnOperation() {
 
     // Use to collect blocking assignments that have been replaced by a "shadow"
     // variable.
-    DenseSet<Operation *> assignOps;
-    for (auto &nestedOp : procedureOp) {
+    procedureOp.walk([&](Operation *op) {
+      SmallVector<std::tuple<BlockingAssignOp, Value, Value>> assignOps;
+      auto &nestedOp = *op;
       // Only create a "shadow" varaible for the global variable used by other
       // operations in the procedure body.
       if (isa<ReadOp>(nestedOp) &&
@@ -54,27 +55,28 @@ void SimplifyProceduresPass::runOnOperation() {
         DenseSet<Operation *> users;
         for (auto *user : nestedOp.getOperand(0).getUsers())
           // Ensuring don't handle the users existing in another procedure body.
-          if (user->getBlock() == procedureOp.getBody())
+          if (procedureOp->isAncestor(user))
             users.insert(user);
 
         // Because the operand of moore.event_wait is net.
         if (auto varOp = llvm::dyn_cast_or_null<VariableOp>(
                 nestedOp.getOperand(0).getDefiningOp())) {
           auto resultType = varOp.getResult().getType();
-          builder.setInsertionPointToStart(procedureOp.getBody());
+          builder.setInsertionPointToStart(&procedureOp.getBody().front());
           auto readOp = builder.create<ReadOp>(
               nestedOp.getLoc(), cast<RefType>(resultType).getNestedType(),
               varOp.getResult());
           auto newVarOp = builder.create<VariableOp>(
-              nestedOp.getLoc(), resultType, StringAttr{}, readOp);
+              nestedOp.getLoc(), resultType, StringAttr{}, Value{});
+          builder.create<BlockingAssignOp>(nestedOp.getLoc(), newVarOp, readOp);
           builder.clearInsertionPoint();
 
           // Replace the users of the global variable with a corresponding
           // "shadow" variable.
           for (auto *user : users) {
             user->replaceUsesOfWith(user->getOperand(0), newVarOp);
-            if (isa<BlockingAssignOp>(user))
-              assignOps.insert(user);
+            if (auto assignOp = dyn_cast<BlockingAssignOp>(user))
+              assignOps.push_back({assignOp, newVarOp, varOp});
           }
         }
       }
@@ -82,20 +84,12 @@ void SimplifyProceduresPass::runOnOperation() {
       // Ensure the global variable has the correct value. So needing to create
       // a blocking assign for the global variable when the "shadow" variable
       // has a new value.
-      for (auto *assignOp : assignOps)
-        if (auto localVarOp = llvm::dyn_cast_or_null<VariableOp>(
-                assignOp->getOperand(0).getDefiningOp())) {
-          auto resultType = localVarOp.getResult().getType();
-          builder.setInsertionPointAfter(assignOp);
-          auto readOp = builder.create<ReadOp>(
-              localVarOp.getLoc(), cast<RefType>(resultType).getNestedType(),
-              localVarOp.getResult());
-          builder.create<BlockingAssignOp>(
-              nestedOp.getLoc(),
-              localVarOp.getInitial().getDefiningOp()->getOperand(0), readOp);
-          builder.clearInsertionPoint();
-          assignOps.erase(assignOp);
-        }
-    }
+      for (auto [assignOp, localVar, var] : assignOps) {
+        builder.setInsertionPointAfter(assignOp);
+        auto readOp = builder.create<ReadOp>(assignOp.getLoc(), localVar);
+        builder.create<BlockingAssignOp>(assignOp.getLoc(), var, readOp);
+        builder.clearInsertionPoint();
+      }
+    });
   });
 }

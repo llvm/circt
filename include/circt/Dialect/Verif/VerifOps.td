@@ -249,7 +249,10 @@ def LogicEquivalenceCheckingOp : VerifOp<"lec", [
 
 def YieldOp : VerifOp<"yield", [
   Terminator,
-  ParentOneOf<["verif::LogicEquivalenceCheckingOp", "verif::BoundedModelCheckingOp"]>
+  ParentOneOf<[
+    "verif::LogicEquivalenceCheckingOp", "verif::BoundedModelCheckingOp",
+    "verif::ContractOp"
+  ]>
 ]> {
   let summary = "yields values from a region";
 
@@ -309,7 +312,9 @@ def FormalOp : VerifOp<"formal", [
 // Formal Verification Ops
 //===----------------------------------------------------------------------===//
 
-def SymbolicInputOp : VerifOp<"symbolic_input", [HasParent<"verif::FormalOp">]>{
+def SymbolicInputOp : VerifOp<"symbolic_input", [
+  ParentOneOf<["verif::FormalOp"]>
+]>{
   let summary = "declare a symbolic input for formal verification";
   let description = [{
     This operation declares a symbolic input that can then be used to reason 
@@ -342,6 +347,127 @@ def ConcreteInputOp : VerifOp<"concrete_input", [
 
   let assemblyFormat = [{
     $init `,` $update attr-dict `:` type($result)
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Formal Contract Ops
+//===----------------------------------------------------------------------===//
+
+def ContractOp : VerifOp<"contract", [
+  SingleBlockImplicitTerminator<"verif::YieldOp">,
+  HasParent<"hw::HWModuleOp">, 
+  RegionKindInterface
+]>{
+  let summary = "declare a formal contract";
+  let description = [{
+    This operation declares a formal contract that is used to create precondition 
+    and postconditions on a parent module. These are used as an abstraction to 
+    better modularize formal verification such that each module containing a contract 
+    is checked exactly once. The contract contains a single block where the block arguments 
+    represent the results of the code block that the contract is abstracting over. The 
+    operands represent the SSA values that this contract's results will replace.
+          
+    e.g. 
+    ```
+    hw.module @Bar(in %foo : i8, out "" : i8, out "1" : i8) { 
+      %o0, %o1 = verif.contract (%to0, %to1) : (i8, i8) -> (i8, i8) {
+        ^bb0(%bar.0 : i8, %bar.1 : i8): 
+          %c0_8 = hw.constant 0 : i8 
+          %prec = comb.icmp bin ugt %foo, %c0_8 : i8
+          verif.require %prec : i1
+
+          %post = comb.icmp bin ugt %bar.0, %foo : i8
+          %post1 = comb.icmp bin ult %bar.1, %foo : i8
+          verif.ensure %post : i1
+          verif.ensure %post1 : i1
+          verif.yield %bar.0, %bar.1 : i8, i8
+      } 
+      /* ... Module definition ... */
+    }
+    ```
+
+    This later is used to replace any instance of Bar during verification:  
+    ```
+    %bar.0, %bar.1 = hw.instance "bar" @Bar("foo" : %c42_8 : i8)  -> ("" : i8, "1" : i8)
+
+    /* ... After PrepareForFormal Pass becomes ... */
+
+    %bar.0, %bar.1 = verif.contract (%c42_8) : (i8) -> (i8, i8) {
+      ^bb0(%arg1: i8):
+        %c0_8 = hw.constant 0 : i8
+        %prec = comb.icmp bin ugt %arg1, %c0_8 : i8
+        verif.assert %prec : i1
+
+        %bar.0 = verif.symbolic_input : i8
+        %bar.1 = verif.symbolic_input : i8
+        %post = comb.icmp bin ugt %bar.0, %arg1 : i8
+        %post1 = comb.icmp bin ult %bar.1, %arg1 : i8
+        verif.assume %post : i1
+        verif.assume %post1 : i1
+        verif.yield %bar.0, %bar.1 : i8, i8
+    }
+    
+    ```
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>:$results);
+  let regions = (region SizedRegion<1>:$body);
+
+  let assemblyFormat = [{
+    `(` $inputs `)` attr-dict `:` `(` type($inputs) `)` `->` `(` type($results) `)` $body
+  }];
+
+  let extraClassDeclaration = [{
+    /// Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { 
+      return RegionKind::Graph;
+    }
+
+    /// Retrieves the region block arguments
+    BlockArgument getRegionArg(unsigned index) {
+      return getBody().front().getArguments()[index];
+    }
+
+    /// Retrieves the number of block arguments
+    unsigned getNumRegionArgs() {
+      return getBody().front().getNumArguments();
+    }
+  }];
+
+  let hasRegionVerifier = 1;
+}
+
+class RequireLikeOp<string mnemonic, list<Trait> traits = [
+  HasParent<"verif::ContractOp">, AttrSizedOperandSegments
+]> : VerifOp<mnemonic, traits> {
+  let arguments = (ins LTLAnyPropertyType:$property,
+                      OptionalAttr<ClockEdgeAttr>:$edge, Optional<I1>:$clock,
+                      Optional<I1>:$enable,
+                      OptionalAttr<StrAttr>:$label);
+  let assemblyFormat = [{
+    $property (`if` $enable^)? (`,` $edge^ $clock)? 
+    (`label` $label^)? attr-dict `:` type($property)
+  }];
+}
+
+def RequireOp : RequireLikeOp<"require"> {
+  let summary = "define a precondition for the given contract";
+  let description = [{
+    This operation defines a precondition for the parent contract. 
+    Preconditions are assumed during the verification of a module and 
+    asserted during the verification of an instance of a module.
+  }];
+}
+
+
+def EnsureOp : RequireLikeOp<"ensure">{
+  let summary = "define a postcondition for the given contract";
+  let description = [{
+    This operation defines a postcondition for the parent contract. 
+    Postconditions are asserted during the verification of a module and 
+    assumed during the verification of an instance of a module.
   }];
 }
 

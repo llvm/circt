@@ -7,28 +7,32 @@
 import pycde
 from pycde import (AppID, Clock, Module, Reset, modparams, generator)
 from pycde.bsp import cosim
-from pycde.constructs import Wire
-from pycde.esi import FuncService, MMIO
+from pycde.common import Constant
+from pycde.constructs import Reg, Wire
+from pycde.esi import FuncService, MMIO, MMIOReadWriteCmdType
 from pycde.types import (Bits, Channel, UInt)
+from pycde.behavioral import If, Else, EndIf
 
 import sys
 
 
-class LoopbackInOutAdd7(Module):
+class LoopbackInOutAdd(Module):
   """Loopback the request from the host, adding 7 to the first 15 bits."""
   clk = Clock()
   rst = Reset()
 
+  add_amt = Constant(UInt(16), 11)
+
   @generator
   def construct(ports):
     loopback = Wire(Channel(UInt(16)))
-    args = FuncService.get_call_chans(AppID("loopback_add7"),
+    args = FuncService.get_call_chans(AppID("add"),
                                       arg_type=UInt(24),
                                       result=loopback)
 
     ready = Wire(Bits(1))
     data, valid = args.unwrap(ready)
-    plus7 = data + 7
+    plus7 = data + LoopbackInOutAdd.add_amt.value
     data_chan, data_ready = loopback.type.wrap(plus7.as_uint(16), valid)
     data_chan_buffered = data_chan.buffer(ports.clk, ports.rst, 5)
     ready.assign(data_ready)
@@ -48,7 +52,7 @@ def MMIOClient(add_amt: int):
 
       address_chan_wire = Wire(Channel(UInt(32)))
       address, address_valid = address_chan_wire.unwrap(1)
-      response_data = (address.as_uint() + add_amt).as_bits(64)
+      response_data = (address + add_amt).as_bits(64)
       response_chan, response_ready = Channel(Bits(64)).wrap(
           response_data, address_valid)
 
@@ -58,15 +62,47 @@ def MMIOClient(add_amt: int):
   return MMIOClient
 
 
+class MMIOReadWriteClient(Module):
+  clk = Clock()
+  rst = Reset()
+
+  @generator
+  def build(ports):
+    mmio_read_write_bundle = MMIO.read_write(appid=AppID("mmio_rw_client"))
+
+    cmd_chan_wire = Wire(Channel(MMIOReadWriteCmdType))
+    resp_ready_wire = Wire(Bits(1))
+    cmd, cmd_valid = cmd_chan_wire.unwrap(resp_ready_wire)
+
+    add_amt = Reg(UInt(64),
+                  clk=ports.clk,
+                  rst=ports.rst,
+                  rst_value=0,
+                  ce=cmd_valid & cmd.write & (cmd.offset == 0x8).as_bits())
+    add_amt.assign(cmd.data.as_uint())
+    with If(cmd.write):
+      response_data = Bits(64)(0)
+    with Else():
+      response_data = (cmd.offset + add_amt).as_bits(64)
+    EndIf()
+    response_chan, response_ready = Channel(Bits(64)).wrap(
+        response_data, cmd_valid)
+    resp_ready_wire.assign(response_ready)
+
+    cmd_chan = mmio_read_write_bundle.unpack(data=response_chan)['cmd']
+    cmd_chan_wire.assign(cmd_chan)
+
+
 class Top(Module):
   clk = Clock()
   rst = Reset()
 
   @generator
   def construct(ports):
-    LoopbackInOutAdd7(clk=ports.clk, rst=ports.rst)
+    LoopbackInOutAdd(clk=ports.clk, rst=ports.rst, appid=AppID("loopback"))
     for i in range(4, 18, 5):
       MMIOClient(i)()
+    MMIOReadWriteClient(clk=ports.clk, rst=ports.rst)
 
 
 if __name__ == "__main__":

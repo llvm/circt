@@ -1400,6 +1400,22 @@ struct ListCreateOpConversion
   }
 };
 
+struct ListConcatOpConversion
+    : public OpConversionPattern<firrtl::ListConcatOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::ListConcatOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto listType = getTypeConverter()->convertType<om::ListType>(op.getType());
+    if (!listType)
+      return failure();
+    rewriter.replaceOpWithNewOp<om::ListConcatOp>(op, listType,
+                                                  adaptor.getSubLists());
+    return success();
+  }
+};
+
 struct IntegerAddOpConversion
     : public OpConversionPattern<firrtl::IntegerAddOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -1927,6 +1943,7 @@ static void populateRewritePatterns(
   patterns.add<ObjectOpConversion>(converter, patterns.getContext());
   patterns.add<ObjectFieldOpConversion>(converter, patterns.getContext());
   patterns.add<ListCreateOpConversion>(converter, patterns.getContext());
+  patterns.add<ListConcatOpConversion>(converter, patterns.getContext());
   patterns.add<BoolConstantOpConversion>(converter, patterns.getContext());
   patterns.add<DoubleConstantOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerAddOpConversion>(converter, patterns.getContext());

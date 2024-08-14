@@ -33,19 +33,41 @@ namespace esi {
 class ChannelPort {
 public:
   ChannelPort(const Type *type) : type(type) {}
-  virtual ~ChannelPort() { disconnect(); }
+  virtual ~ChannelPort() {}
 
-  virtual void connect() { connectImpl(); }
-  virtual void disconnect() {}
+  /// Set up a connection to the accelerator. The buffer size is optional and
+  /// should be considered merely a hint. Individual implementations use it
+  /// however they like. The unit is number of messages of the port type.
+  virtual void connect(std::optional<unsigned> bufferSize = std::nullopt) = 0;
+  virtual void disconnect() = 0;
+  virtual bool isConnected() const = 0;
+
+  /// Poll for incoming data. Returns true if data was read or written into a
+  /// buffer as a result of the poll. Calling the call back could (will) also
+  /// happen in that case. Some backends need this to be called periodically. In
+  /// the usual case, this will be called by a background thread, but the ESI
+  /// runtime does not want to assume that the host processes use standard
+  /// threads. If the user wants to provide their own threads, they need to call
+  /// this on each port occasionally. This is also called from the 'master' poll
+  /// method in the Accelerator class.
+  bool poll() {
+    if (isConnected())
+      return pollImpl();
+    return false;
+  }
 
   const Type *getType() const { return type; }
 
-private:
+protected:
   const Type *type;
+
+  /// Method called by poll() to actually poll the channel if the channel is
+  /// connected.
+  virtual bool pollImpl() { return false; }
 
   /// Called by all connect methods to let backends initiate the underlying
   /// connections.
-  virtual void connectImpl() {}
+  virtual void connectImpl(std::optional<unsigned> bufferSize) {}
 };
 
 /// A ChannelPort which sends data to the accelerator.
@@ -53,8 +75,19 @@ class WriteChannelPort : public ChannelPort {
 public:
   using ChannelPort::ChannelPort;
 
+  virtual void
+  connect(std::optional<unsigned> bufferSize = std::nullopt) override {
+    connectImpl(bufferSize);
+    connected = true;
+  }
+  virtual void disconnect() override { connected = false; }
+  virtual bool isConnected() const override { return connected; }
+
   /// A very basic write API. Will likely change for performance reasons.
   virtual void write(const MessageData &) = 0;
+
+private:
+  volatile bool connected = false;
 };
 
 /// A ChannelPort which reads data from the accelerator. It has two modes:
@@ -67,6 +100,9 @@ public:
   ReadChannelPort(const Type *type)
       : ChannelPort(type), mode(Mode::Disconnected) {}
   virtual void disconnect() override { mode = Mode::Disconnected; }
+  virtual bool isConnected() const override {
+    return mode != Mode::Disconnected;
+  }
 
   //===--------------------------------------------------------------------===//
   // Callback mode: To use a callback, connect with a callback function which
@@ -79,7 +115,8 @@ public:
   // wait, and be notified.
   //===--------------------------------------------------------------------===//
 
-  virtual void connect(std::function<bool(MessageData)> callback);
+  virtual void connect(std::function<bool(MessageData)> callback,
+                       std::optional<unsigned> bufferSize = std::nullopt);
 
   //===--------------------------------------------------------------------===//
   // Polling mode methods: To use futures or blocking reads, connect without any
@@ -90,7 +127,8 @@ public:
   static constexpr uint64_t DefaultMaxDataQueueMsgs = 32;
 
   /// Connect to the channel in polling mode.
-  virtual void connect() override;
+  virtual void
+  connect(std::optional<unsigned> bufferSize = std::nullopt) override;
 
   /// Asynchronous read.
   virtual std::future<MessageData> readAsync();
@@ -105,13 +143,16 @@ public:
 
   /// Set maximum number of messages to store in the dataQueue. 0 means no
   /// limit. This is only used in polling mode and is set to default of 32 upon
-  /// connect.
+  /// connect. While it may seem redundant to have this and bufferSize, there
+  /// may be (and are) backends which have a very small amount of memory which
+  /// are accelerator accessible and want to move messages out as quickly as
+  /// possible.
   void setMaxDataQueueMsgs(uint64_t maxMsgs) { maxDataQueueMsgs = maxMsgs; }
 
 protected:
   /// Indicates the current mode of the channel.
   enum Mode { Disconnected, Callback, Polling };
-  Mode mode;
+  volatile Mode mode;
 
   /// Backends call this callback when new data is available.
   std::function<bool(MessageData)> callback;
@@ -166,6 +207,15 @@ public:
   template <typename T>
   T *getAs() const {
     return const_cast<T *>(dynamic_cast<const T *>(this));
+  }
+
+  /// Calls `poll` on all channels in the bundle and returns true if any of them
+  /// returned true.
+  bool poll() {
+    bool result = false;
+    for (auto &channel : channels)
+      result |= channel.second.poll();
+    return result;
   }
 
 private:

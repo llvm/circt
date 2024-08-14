@@ -135,6 +135,7 @@ TraceAccelerator::TraceAccelerator(Context &ctxt, Mode mode,
     : AcceleratorConnection(ctxt) {
   impl = std::make_unique<Impl>(mode, manifestJson, traceFile);
 }
+TraceAccelerator::~TraceAccelerator() { disconnect(); }
 
 Service *TraceAccelerator::createService(Service::Type svcType,
                                          AppIDPath idPath, std::string implName,
@@ -197,22 +198,7 @@ public:
       : ReadChannelPort(type) {}
   ~ReadTraceChannelPort() { disconnect(); }
 
-  void disconnect() override {
-    ReadChannelPort::disconnect();
-    if (!dataPushThread.joinable())
-      return;
-    shutdown = true;
-    shutdownCV.notify_all();
-    dataPushThread.join();
-  }
-
 private:
-  void connectImpl() override {
-    assert(!dataPushThread.joinable() && "already connected");
-    shutdown = false;
-    dataPushThread = std::thread(&ReadTraceChannelPort::dataPushLoop, this);
-  }
-
   MessageData genMessage() {
     std::ptrdiff_t numBits = getType()->getBitWidth();
     if (numBits < 0)
@@ -227,19 +213,7 @@ private:
     return MessageData(bytes);
   }
 
-  void dataPushLoop() {
-    std::mutex m;
-    std::unique_lock<std::mutex> lock(m);
-    while (!shutdown) {
-      shutdownCV.wait_for(lock, std::chrono::milliseconds(100));
-      while (this->callback(genMessage()))
-        shutdownCV.wait_for(lock, std::chrono::milliseconds(10));
-    }
-  }
-
-  std::thread dataPushThread;
-  std::condition_variable shutdownCV;
-  std::atomic<bool> shutdown;
+  bool pollImpl() override { return callback(genMessage()); }
 };
 } // namespace
 
@@ -289,8 +263,8 @@ public:
       impl.write("HostMem") << "free " << ptr << std::endl;
       free(ptr);
     }
-    virtual void *getPtr() const { return ptr; }
-    virtual std::size_t getSize() const { return size; }
+    virtual void *getPtr() const override { return ptr; }
+    virtual std::size_t getSize() const override { return size; }
 
   private:
     void *ptr;
@@ -298,8 +272,8 @@ public:
     TraceAccelerator::Impl &impl;
   };
 
-  virtual std::unique_ptr<HostMemRegion> allocate(std::size_t size,
-                                                  HostMem::Options opts) const {
+  virtual std::unique_ptr<HostMemRegion>
+  allocate(std::size_t size, HostMem::Options opts) const override {
     auto ret =
         std::unique_ptr<HostMemRegion>(new TraceHostMemRegion(size, impl));
     impl.write("HostMem 0x")
@@ -309,14 +283,14 @@ public:
     return ret;
   }
   virtual bool mapMemory(void *ptr, std::size_t size,
-                         HostMem::Options opts) const {
+                         HostMem::Options opts) const override {
     impl.write("HostMem") << "map 0x" << ptr << " size " << size
                           << " bytes. Writeable: " << opts.writeable
                           << ", useLargePages: " << opts.useLargePages
                           << std::endl;
     return true;
   }
-  virtual void unmapMemory(void *ptr) const {
+  virtual void unmapMemory(void *ptr) const override {
     impl.write("HostMem") << "unmap 0x" << ptr << std::endl;
   }
 

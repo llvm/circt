@@ -64,6 +64,14 @@ circt::esi::ChannelType ChannelBufferOp::channelType() {
   return cast<circt::esi::ChannelType>(getInput().getType());
 }
 
+LogicalResult ChannelBufferOp::verify() {
+  if (getInput().getType().getSignaling() != ChannelSignaling::ValidReady)
+    return emitOpError("currently only supports valid-ready signaling");
+  if (getOutput().getType().getDataDelay() != 0)
+    return emitOpError("currently only supports channels with zero data delay");
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // PipelineStageOp functions.
 //===----------------------------------------------------------------------===//
@@ -202,7 +210,7 @@ ParseResult parseWrapFIFOType(OpAsmParser &p, Type &dataType,
   ChannelType chType;
   if (p.parseType(chType))
     return failure();
-  if (chType.getSignaling() != ChannelSignaling::FIFO0)
+  if (chType.getSignaling() != ChannelSignaling::FIFO)
     return p.emitError(loc, "can only wrap into FIFO type");
   dataType = chType.getInner();
   chanInputType = chType;
@@ -215,7 +223,7 @@ void printWrapFIFOType(OpAsmPrinter &p, WrapFIFOOp wrap, Type dataType,
 }
 
 LogicalResult WrapFIFOOp::verify() {
-  if (getChanOutput().getType().getSignaling() != ChannelSignaling::FIFO0)
+  if (getChanOutput().getType().getSignaling() != ChannelSignaling::FIFO)
     return emitOpError("only supports FIFO signaling");
   return success();
 }
@@ -225,7 +233,7 @@ circt::esi::ChannelType UnwrapFIFOOp::channelType() {
 }
 
 LogicalResult UnwrapFIFOOp::verify() {
-  if (getChanInput().getType().getSignaling() != ChannelSignaling::FIFO0)
+  if (getChanInput().getType().getSignaling() != ChannelSignaling::FIFO)
     return emitOpError("only supports FIFO signaling");
   return success();
 }
@@ -687,6 +695,12 @@ void ServiceRequestRecordOp::getDetails(
 }
 
 StringRef SymbolMetadataOp::getManifestClass() { return "sym_info"; }
+
+StringRef SymbolConstantsOp::getManifestClass() { return "sym_consts"; }
+void SymbolConstantsOp::getDetails(SmallVectorImpl<NamedAttribute> &results) {
+  for (auto &attr : getConstantsAttr())
+    results.push_back(attr);
+}
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/ESI/ESI.cpp.inc"

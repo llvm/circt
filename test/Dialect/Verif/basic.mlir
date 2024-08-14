@@ -53,7 +53,43 @@ verif.formal @formal1(k = 20) {
   // CHECK: %8 = verif.concrete_input %[[C1]], %[[CLK_U]] : i1
   %8 = verif.concrete_input %c1_i1, %clk_update : i1
   // CHECK: %foo.0, %foo.1 = hw.instance "foo" @Foo("0": %6: i1, "1": %8: i1) -> ("": i1, "1": i1)
-  %foo.0, %foo.1 = hw.instance "foo" @Foo("0": %sym: i1, "1": %8 : i1)  -> ("" : i1, "1" : i1)
+  %foo.0, %foo.1 = hw.instance "foo" @Foo("0": %sym: i1, "1": %8 : i1) -> ("" : i1, "1" : i1)
+}
+
+// CHECK-LABEL: hw.module @Bar
+hw.module @Bar(in %foo : i8, out "" : i8, out "1" : i8) { 
+  // CHECK: %[[C1:.+]] = hw.constant
+  %c1_8 = hw.constant 1 : i8
+  // CHECK: %[[O1:.+]] = comb.add
+  %to0 = comb.add bin %foo, %c1_8 : i8
+  // CHECK: %[[O2:.+]] = comb.sub
+  %to1 = comb.sub bin %foo, %c1_8 : i8
+
+  // CHECK: %[[OUT:.+]]:2 = verif.contract(%[[O1]], %[[O2]]) : (i8, i8) -> (i8, i8) {
+  %o0, %o1 = verif.contract (%to0, %to1) : (i8, i8) -> (i8, i8) {
+    // CHECK: ^bb0(%[[BAR0:.+]]: i8, %[[BAR1:.+]]: i8):
+    ^bb0(%bar.0 : i8, %bar.1 : i8): 
+      // CHECK: %[[C0:.+]] = hw.constant 0 : i8
+      %c0_8 = hw.constant 0 : i8 
+      // CHECK: %[[PREC:.+]] = comb.icmp bin ugt %foo, %[[C0]] : i8
+      %prec = comb.icmp bin ugt %foo, %c0_8 : i8
+      // CHECK: verif.require %[[PREC]] : i1
+      verif.require %prec : i1
+
+      // CHECK: %[[P0:.+]] = comb.icmp bin ugt %[[BAR0]], %foo : i8
+      %post = comb.icmp bin ugt %bar.0, %foo : i8
+      // CHECK: %[[P1:.+]] = comb.icmp bin ult %[[BAR1]], %foo : i8
+      %post1 = comb.icmp bin ult %bar.1, %foo : i8
+      // CHECK: verif.ensure %[[P0]] : i1
+      verif.ensure %post : i1
+      // CHECK: verif.ensure %[[P1]] : i1
+      verif.ensure %post1 : i1
+      // CHECK: verif.yield %[[BAR0]], %[[BAR1]] : i8, i8
+      verif.yield %bar.0, %bar.1 : i8, i8
+  } 
+  
+  // CHECK-LABEL: hw.output
+  hw.output %o0, %o1 : i8, i8
 }
 
 //===----------------------------------------------------------------------===//

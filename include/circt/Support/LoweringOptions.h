@@ -166,6 +166,10 @@ struct LoweringOptions {
 
   /// If true, then update the the mlir to include output verilog locations.
   bool emitVerilogLocations = false;
+
+  /// If true, add a dummy wire to empty modules to prevent tools from regarding
+  /// the module as blackbox.
+  bool fixUpEmptyModules = false;
 };
 } // namespace circt
 

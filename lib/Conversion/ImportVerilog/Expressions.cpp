@@ -12,6 +12,20 @@
 
 using namespace circt;
 using namespace ImportVerilog;
+using moore::Domain;
+
+/// Convert a Slang `SVInt` to a CIRCT `FVInt`.
+static FVInt convertSVIntToFVInt(const slang::SVInt &svint) {
+  if (svint.hasUnknown()) {
+    unsigned numWords = svint.getNumWords() / 2;
+    auto value = ArrayRef<uint64_t>(svint.getRawPtr(), numWords);
+    auto unknown = ArrayRef<uint64_t>(svint.getRawPtr() + numWords, numWords);
+    return FVInt(APInt(svint.getBitWidth(), value),
+                 APInt(svint.getBitWidth(), unknown));
+  }
+  auto value = ArrayRef<uint64_t>(svint.getRawPtr(), svint.getNumWords());
+  return FVInt(APInt(svint.getBitWidth(), value));
+}
 
 // NOLINTBEGIN(misc-no-recursion)
 namespace {
@@ -28,10 +42,21 @@ struct RvalueExprVisitor {
   Value convertToSimpleBitVector(Value value) {
     if (!value)
       return {};
-    if (isa<moore::IntType>(value.getType()) ||
-        isa<moore::IntType>(
-            dyn_cast<moore::RefType>(value.getType()).getNestedType()))
+    if (isa<moore::IntType>(value.getType()))
       return value;
+
+    // Some operations in Slang's AST, for example bitwise or `|`, don't cast
+    // packed struct/array operands to simple bit vectors but directly operate
+    // on the struct/array. Since the corresponding IR ops operate only on
+    // simple bit vectors, insert a conversion in this case.
+    if (auto packed = dyn_cast<moore::PackedType>(value.getType())) {
+      if (auto bits = packed.getBitSize()) {
+        auto sbvType =
+            moore::IntType::get(value.getContext(), *bits, packed.getDomain());
+        return builder.create<moore::ConversionOp>(loc, sbvType, value);
+      }
+    }
+
     mlir::emitError(loc, "expression of type ")
         << value.getType() << " cannot be cast to a simple bit vector";
     return {};
@@ -51,20 +76,30 @@ struct RvalueExprVisitor {
     return {};
   }
 
+  /// Helper function to convert a value to its "truthy" boolean value and
+  /// convert it to the given domain.
+  Value convertToBool(Value value, Domain domain) {
+    value = convertToBool(value);
+    if (!value)
+      return {};
+    auto type = moore::IntType::get(context.getContext(), 1, domain);
+    if (value.getType() == type)
+      return value;
+    return builder.create<moore::ConversionOp>(loc, type, value);
+  }
+
   // Handle references to the left-hand side of a parent assignment.
   Value visit(const slang::ast::LValueReferenceExpression &expr) {
     assert(!context.lvalueStack.empty() && "parent assignments push lvalue");
     auto lvalue = context.lvalueStack.back();
-    return builder.create<moore::ReadOp>(
-        loc, cast<moore::RefType>(lvalue.getType()).getNestedType(), lvalue);
+    return builder.create<moore::ReadOp>(loc, lvalue);
   }
 
   // Handle named values, such as references to declared variables.
   Value visit(const slang::ast::NamedValueExpression &expr) {
     if (auto value = context.valueSymbols.lookup(&expr.symbol)) {
-      if (auto refType = dyn_cast<moore::RefType>(value.getType()))
-        value =
-            builder.create<moore::ReadOp>(loc, refType.getNestedType(), value);
+      if (isa<moore::RefType>(value.getType()))
+        value = builder.create<moore::ReadOp>(loc, value);
       return value;
     }
 
@@ -76,14 +111,14 @@ struct RvalueExprVisitor {
       auto type = context.convertType(*expr.type);
       if (!type)
         return {};
-      return convertSVInt(constant.integer(), type);
+      return materializeSVInt(constant.integer(), type);
     }
 
     // Otherwise some other part of ImportVerilog should have added an MLIR
     // value for this expression's symbol to the `context.valueSymbols` table.
     auto d = mlir::emitError(loc, "unknown name `") << expr.symbol.name << "`";
     d.attachNote(context.convertLocation(expr.symbol.location))
-        << "no value generated for " << slang::ast::toString(expr.symbol.kind);
+        << "no rvalue generated for " << slang::ast::toString(expr.symbol.kind);
     return {};
   }
 
@@ -92,19 +127,20 @@ struct RvalueExprVisitor {
     auto type = context.convertType(*expr.type);
     if (!type)
       return {};
-    auto operand = context.convertRvalueExpression(expr.operand());
-    if (!operand)
-      return {};
-    return builder.create<moore::ConversionOp>(loc, type, operand);
+    return context.convertRvalueExpression(expr.operand(), type);
   }
 
   // Handle blocking and non-blocking assignments.
   Value visit(const slang::ast::AssignmentExpression &expr) {
     auto lhs = context.convertLvalueExpression(expr.left());
+    if (!lhs)
+      return {};
+
     context.lvalueStack.push_back(lhs);
-    auto rhs = context.convertRvalueExpression(expr.right());
+    auto rhs = context.convertRvalueExpression(
+        expr.right(), cast<moore::RefType>(lhs.getType()).getNestedType());
     context.lvalueStack.pop_back();
-    if (!lhs || !rhs)
+    if (!rhs)
       return {};
 
     if (expr.timingControl) {
@@ -113,15 +149,6 @@ struct RvalueExprVisitor {
       return {};
     }
 
-    if (auto refOp = lhs.getDefiningOp<moore::StructExtractRefOp>()) {
-      auto input = refOp.getInput();
-      if (isa<moore::SVModuleOp>(input.getDefiningOp()->getParentOp())) {
-        builder.create<moore::StructInjectOp>(loc, input.getType(), input,
-                                              refOp.getFieldNameAttr(), rhs);
-        refOp->erase();
-        return rhs;
-      }
-    }
     if (expr.isNonBlocking())
       builder.create<moore::NonBlockingAssignOp>(loc, lhs, rhs);
     else
@@ -144,19 +171,16 @@ struct RvalueExprVisitor {
 
   // Helper function to create pre and post increments and decrements.
   Value createIncrement(Value arg, bool isInc, bool isPost) {
-    auto preValue = convertToSimpleBitVector(arg);
-    if (!preValue)
-      return {};
-    preValue = builder.create<moore::ReadOp>(
-        loc, cast<moore::RefType>(preValue.getType()).getNestedType(),
-        preValue);
+    auto preValue = builder.create<moore::ReadOp>(loc, arg);
     auto one = builder.create<moore::ConstantOp>(
         loc, cast<moore::IntType>(preValue.getType()), 1);
     auto postValue =
         isInc ? builder.create<moore::AddOp>(loc, preValue, one).getResult()
               : builder.create<moore::SubOp>(loc, preValue, one).getResult();
     builder.create<moore::BlockingAssignOp>(loc, arg, postValue);
-    return isPost ? preValue : postValue;
+    if (isPost)
+      return preValue;
+    return postValue;
   }
 
   // Handle unary operators.
@@ -229,8 +253,10 @@ struct RvalueExprVisitor {
   template <class ConcreteOp>
   Value createBinary(Value lhs, Value rhs) {
     lhs = convertToSimpleBitVector(lhs);
+    if (!lhs)
+      return {};
     rhs = convertToSimpleBitVector(rhs);
-    if (!lhs || !rhs)
+    if (!rhs)
       return {};
     return builder.create<ConcreteOp>(loc, lhs, rhs);
   }
@@ -238,9 +264,17 @@ struct RvalueExprVisitor {
   // Handle binary operators.
   Value visit(const slang::ast::BinaryExpression &expr) {
     auto lhs = context.convertRvalueExpression(expr.left());
-    auto rhs = context.convertRvalueExpression(expr.right());
-    if (!lhs || !rhs)
+    if (!lhs)
       return {};
+    auto rhs = context.convertRvalueExpression(expr.right());
+    if (!rhs)
+      return {};
+
+    // Determine the domain of the result.
+    Domain domain = Domain::TwoValued;
+    if (expr.type->isFourState() || expr.left().type->isFourState() ||
+        expr.right().type->isFourState())
+      domain = Domain::FourValued;
 
     using slang::ast::BinaryOperator;
     switch (expr.op) {
@@ -260,6 +294,18 @@ struct RvalueExprVisitor {
         return createBinary<moore::ModSOp>(lhs, rhs);
       else
         return createBinary<moore::ModUOp>(lhs, rhs);
+    case BinaryOperator::Power: {
+      // Slang casts the LHS and result of the `**` operator to a four-valued
+      // type, since the operator can return X even for two-valued inputs. To
+      // maintain uniform types across operands and results, cast the RHS to
+      // that four-valued type as well.
+      auto rhsCast =
+          builder.create<moore::ConversionOp>(loc, lhs.getType(), rhs);
+      if (expr.type->isSigned())
+        return createBinary<moore::PowSOp>(lhs, rhsCast);
+      else
+        return createBinary<moore::PowUOp>(lhs, rhsCast);
+    }
 
     case BinaryOperator::BinaryAnd:
       return createBinary<moore::AndOp>(lhs, rhs);
@@ -310,35 +356,45 @@ struct RvalueExprVisitor {
 
     // See IEEE 1800-2017 § 11.4.7 "Logical operators".
     case BinaryOperator::LogicalAnd: {
-      // TODO: This should short-circuit. Put the RHS code into an scf.if.
-      lhs = convertToBool(lhs);
-      rhs = convertToBool(rhs);
-      if (!lhs || !rhs)
+      // TODO: This should short-circuit. Put the RHS code into a separate
+      // block.
+      lhs = convertToBool(lhs, domain);
+      if (!lhs)
+        return {};
+      rhs = convertToBool(rhs, domain);
+      if (!rhs)
         return {};
       return builder.create<moore::AndOp>(loc, lhs, rhs);
     }
     case BinaryOperator::LogicalOr: {
-      // TODO: This should short-circuit. Put the RHS code into an scf.if.
-      lhs = convertToBool(lhs);
-      rhs = convertToBool(rhs);
-      if (!lhs || !rhs)
+      // TODO: This should short-circuit. Put the RHS code into a separate
+      // block.
+      lhs = convertToBool(lhs, domain);
+      if (!lhs)
+        return {};
+      rhs = convertToBool(rhs, domain);
+      if (!rhs)
         return {};
       return builder.create<moore::OrOp>(loc, lhs, rhs);
     }
     case BinaryOperator::LogicalImplication: {
       // `(lhs -> rhs)` equivalent to `(!lhs || rhs)`.
-      lhs = convertToBool(lhs);
-      rhs = convertToBool(rhs);
-      if (!lhs || !rhs)
+      lhs = convertToBool(lhs, domain);
+      if (!lhs)
+        return {};
+      rhs = convertToBool(rhs, domain);
+      if (!rhs)
         return {};
       auto notLHS = builder.create<moore::NotOp>(loc, lhs);
       return builder.create<moore::OrOp>(loc, notLHS, rhs);
     }
     case BinaryOperator::LogicalEquivalence: {
       // `(lhs <-> rhs)` equivalent to `(lhs && rhs) || (!lhs && !rhs)`.
-      lhs = convertToBool(lhs);
-      rhs = convertToBool(rhs);
-      if (!lhs || !rhs)
+      lhs = convertToBool(lhs, domain);
+      if (!lhs)
+        return {};
+      rhs = convertToBool(rhs, domain);
+      if (!rhs)
         return {};
       auto notLHS = builder.create<moore::NotOp>(loc, lhs);
       auto notRHS = builder.create<moore::NotOp>(loc, rhs);
@@ -364,32 +420,23 @@ struct RvalueExprVisitor {
         return builder.create<moore::AShrOp>(loc, lhs, rhs);
       return builder.create<moore::ShrOp>(loc, lhs, rhs);
     }
-
-    case BinaryOperator::Power:
-      break;
     }
 
     mlir::emitError(loc, "unsupported binary operator");
     return {};
   }
 
-  // Materialize a Slang integer literal as a constant op.
-  Value convertSVInt(const slang::SVInt &value, Type type) {
-    if (value.hasUnknown()) {
-      mlir::emitError(loc, "literals with X or Z bits not supported");
-      return {};
-    }
-    if (value.getBitWidth() > 64) {
-      mlir::emitError(loc, "unsupported bit width: literal is ")
-          << value.getBitWidth() << " bits wide; only 64 supported";
-      return {};
-    }
-    auto intType =
-        moore::IntType::get(context.getContext(), value.getBitWidth(),
-                            value.hasUnknown() ? moore::Domain::FourValued
+  /// Materialize a Slang integer literal as a constant op.
+  Value materializeSVInt(const slang::SVInt &svint, Type type) {
+    auto fvint = convertSVIntToFVInt(svint);
+    bool typeIsFourValued = false;
+    if (auto unpackedType = dyn_cast<moore::UnpackedType>(type))
+      typeIsFourValued = unpackedType.getDomain() == moore::Domain::FourValued;
+    auto intType = moore::IntType::get(
+        context.getContext(), fvint.getBitWidth(),
+        fvint.hasUnknown() || typeIsFourValued ? moore::Domain::FourValued
                                                : moore::Domain::TwoValued);
-    auto truncValue = value.as<uint64_t>().value();
-    Value result = builder.create<moore::ConstantOp>(loc, intType, truncValue);
+    Value result = builder.create<moore::ConstantOp>(loc, intType, fvint);
     if (result.getType() != type)
       result = builder.create<moore::ConversionOp>(loc, type, result);
     return result;
@@ -400,7 +447,7 @@ struct RvalueExprVisitor {
     auto type = context.convertType(*expr.type);
     if (!type)
       return {};
-    return convertSVInt(expr.getValue(), type);
+    return materializeSVInt(expr.getValue(), type);
   }
 
   // Handle integer literals.
@@ -408,7 +455,7 @@ struct RvalueExprVisitor {
     auto type = context.convertType(*expr.type);
     if (!type)
       return {};
-    return convertSVInt(expr.getValue(), type);
+    return materializeSVInt(expr.getValue(), type);
   }
 
   // Handle concatenations.
@@ -440,24 +487,47 @@ struct RvalueExprVisitor {
   Value visit(const slang::ast::ElementSelectExpression &expr) {
     auto type = context.convertType(*expr.type);
     auto value = context.convertRvalueExpression(expr.value());
-    auto lowBit = context.convertRvalueExpression(expr.selector());
-
-    if (!type || !value || !lowBit)
+    if (!type || !value)
       return {};
-    return builder.create<moore::ExtractOp>(loc, type, value, lowBit);
+    if (auto *constValue = expr.selector().constant) {
+      assert(!constValue->hasUnknown());
+      assert(constValue->size() <= 32);
+
+      auto lowBit = constValue->integer().as<uint32_t>().value();
+      return builder.create<moore::ExtractOp>(loc, type, value, lowBit);
+    }
+    auto lowBit = context.convertRvalueExpression(expr.selector());
+    if (!lowBit)
+      return {};
+    return builder.create<moore::DynExtractOp>(loc, type, value, lowBit);
   }
 
   // Handle range bits selections.
   Value visit(const slang::ast::RangeSelectExpression &expr) {
     auto type = context.convertType(*expr.type);
     auto value = context.convertRvalueExpression(expr.value());
-    Value lowBit;
+    if (!type || !value)
+      return {};
+
+    Value dynLowBit;
+    uint32_t constLowBit;
+    auto *leftConst = expr.left().constant;
+    auto *rightConst = expr.right().constant;
+    if (leftConst) {
+      assert(!leftConst->hasUnknown());
+      assert(leftConst->size() <= 32);
+    }
+    if (rightConst) {
+      assert(!rightConst->hasUnknown());
+      assert(rightConst->size() <= 32);
+    }
+
     if (expr.getSelectionKind() == slang::ast::RangeSelectionKind::Simple) {
-      if (expr.left().constant && expr.right().constant) {
-        auto lhs = expr.left().constant->integer().as<uint64_t>().value();
-        auto rhs = expr.right().constant->integer().as<uint64_t>().value();
-        lowBit = lhs < rhs ? context.convertRvalueExpression(expr.left())
-                           : context.convertRvalueExpression(expr.right());
+      if (leftConst && rightConst) {
+        // Estimate whether is big endian or little endian.
+        auto lhs = leftConst->integer().as<uint32_t>().value();
+        auto rhs = rightConst->integer().as<uint32_t>().value();
+        constLowBit = lhs < rhs ? lhs : rhs;
       } else {
         mlir::emitError(loc, "unsupported a variable as the index in the")
             << slang::ast::toString(expr.getSelectionKind()) << "kind";
@@ -468,29 +538,39 @@ struct RvalueExprVisitor {
       // IndexedDown: arr[7-:8]. It's equivalent to arr[7:0] or arr[0:7]
       // depending on little endian or bit endian. No matter which situation,
       // the low bit must be "0".
-      auto minuend = context.convertRvalueExpression(expr.left());
-      auto minuendType = cast<moore::UnpackedType>(minuend.getType());
-      auto intType = moore::IntType::get(context.getContext(),
-                                         minuendType.getBitSize().value(),
-                                         minuendType.getDomain());
-      auto sliceWidth =
-          expr.right().constant->integer().as<uint64_t>().value() - 1;
-      auto subtraction =
-          builder.create<moore::ConstantOp>(loc, intType, sliceWidth);
-      lowBit = builder.create<moore::SubOp>(loc, minuend, subtraction);
-    } else
+      if (leftConst) {
+        auto subtrahend = leftConst->integer().as<uint32_t>().value();
+        auto sliceWidth =
+            expr.right().constant->integer().as<uint32_t>().value();
+        constLowBit = subtrahend - sliceWidth - 1;
+      } else {
+        auto subtrahend = context.convertRvalueExpression(expr.left());
+        auto subtrahendType = cast<moore::UnpackedType>(subtrahend.getType());
+        auto intType = moore::IntType::get(context.getContext(),
+                                           subtrahendType.getBitSize().value(),
+                                           subtrahendType.getDomain());
+        auto sliceWidth =
+            expr.right().constant->integer().as<uint32_t>().value() - 1;
+        auto minuend =
+            builder.create<moore::ConstantOp>(loc, intType, sliceWidth);
+        dynLowBit = builder.create<moore::SubOp>(loc, subtrahend, minuend);
+      }
+    } else {
       // IndexedUp: arr[0+:8]. "0" is the low bit, "8" is the bits slice width.
-      lowBit = context.convertRvalueExpression(expr.left());
-
-    if (!type || !value || !lowBit)
-      return {};
-    return builder.create<moore::ExtractOp>(loc, type, value, lowBit);
+      if (leftConst)
+        constLowBit = leftConst->integer().as<uint32_t>().value();
+      else
+        dynLowBit = context.convertRvalueExpression(expr.left());
+    }
+    if (leftConst && rightConst)
+      return builder.create<moore::ExtractOp>(loc, type, value, constLowBit);
+    return builder.create<moore::DynExtractOp>(loc, type, value, dynLowBit);
   }
 
   Value visit(const slang::ast::MemberAccessExpression &expr) {
     auto type = context.convertType(*expr.type);
     auto valueType = expr.value().type;
-    auto value = context.convertLvalueExpression(expr.value());
+    auto value = context.convertRvalueExpression(expr.value());
     if (!type || !value)
       return {};
     if (valueType->isStruct()) {
@@ -581,31 +661,43 @@ struct RvalueExprVisitor {
     auto type = context.convertType(*expr.type);
 
     // Handle condition.
-    Value cond = convertToSimpleBitVector(
-        context.convertRvalueExpression(*expr.conditions.begin()->expr));
-    cond = convertToBool(cond);
-    if (!cond)
+    if (expr.conditions.size() > 1) {
+      mlir::emitError(loc)
+          << "unsupported conditional expression with more than one condition";
       return {};
-    auto conditionalOp = builder.create<moore::ConditionalOp>(loc, type, cond);
+    }
+    const auto &cond = expr.conditions[0];
+    if (cond.pattern) {
+      mlir::emitError(loc) << "unsupported conditional expression with pattern";
+      return {};
+    }
+    auto value = convertToBool(context.convertRvalueExpression(*cond.expr));
+    if (!value)
+      return {};
+    auto conditionalOp = builder.create<moore::ConditionalOp>(loc, type, value);
 
     // Create blocks for true region and false region.
-    conditionalOp.getTrueRegion().emplaceBlock();
-    conditionalOp.getFalseRegion().emplaceBlock();
+    auto &trueBlock = conditionalOp.getTrueRegion().emplaceBlock();
+    auto &falseBlock = conditionalOp.getFalseRegion().emplaceBlock();
 
     OpBuilder::InsertionGuard g(builder);
 
     // Handle left expression.
-    builder.setInsertionPointToStart(conditionalOp.getBody(0));
+    builder.setInsertionPointToStart(&trueBlock);
     auto trueValue = context.convertRvalueExpression(expr.left());
     if (!trueValue)
       return {};
+    if (trueValue.getType() != type)
+      trueValue = builder.create<moore::ConversionOp>(loc, type, trueValue);
     builder.create<moore::YieldOp>(loc, trueValue);
 
     // Handle right expression.
-    builder.setInsertionPointToStart(conditionalOp.getBody(1));
+    builder.setInsertionPointToStart(&falseBlock);
     auto falseValue = context.convertRvalueExpression(expr.right());
     if (!falseValue)
       return {};
+    if (falseValue.getType() != type)
+      falseValue = builder.create<moore::ConversionOp>(loc, type, falseValue);
     builder.create<moore::YieldOp>(loc, falseValue);
 
     return conditionalOp.getResult();
@@ -682,6 +774,76 @@ struct RvalueExprVisitor {
     return {};
   }
 
+  /// Handle string literals.
+  Value visit(const slang::ast::StringLiteral &expr) {
+    auto type = context.convertType(*expr.type);
+    return builder.create<moore::StringConstantOp>(loc, type, expr.getValue());
+  }
+
+  /// Handle assignment patterns.
+  Value visitAssignmentPattern(
+      const slang::ast::AssignmentPatternExpressionBase &expr,
+      unsigned replCount = 1) {
+    auto type = context.convertType(*expr.type);
+
+    // Convert the individual elements first.
+    auto elementCount = expr.elements().size();
+    SmallVector<Value> elements;
+    elements.reserve(replCount * elementCount);
+    for (auto elementExpr : expr.elements()) {
+      auto value = context.convertRvalueExpression(*elementExpr);
+      if (!value)
+        return {};
+      elements.push_back(value);
+    }
+    for (unsigned replIdx = 1; replIdx < replCount; ++replIdx)
+      for (unsigned elementIdx = 0; elementIdx < elementCount; ++elementIdx)
+        elements.push_back(elements[elementIdx]);
+
+    // Handle packed structs.
+    if (auto structType = dyn_cast<moore::StructType>(type)) {
+      assert(structType.getMembers().size() == elements.size());
+      return builder.create<moore::StructCreateOp>(loc, structType, elements);
+    }
+
+    // Handle unpacked structs.
+    if (auto structType = dyn_cast<moore::UnpackedStructType>(type)) {
+      assert(structType.getMembers().size() == elements.size());
+      return builder.create<moore::StructCreateOp>(loc, structType, elements);
+    }
+
+    // Handle packed arrays.
+    if (auto arrayType = dyn_cast<moore::ArrayType>(type)) {
+      assert(arrayType.getSize() == elements.size());
+      return builder.create<moore::ArrayCreateOp>(loc, arrayType, elements);
+    }
+
+    // Handle unpacked arrays.
+    if (auto arrayType = dyn_cast<moore::UnpackedArrayType>(type)) {
+      assert(arrayType.getSize() == elements.size());
+      return builder.create<moore::ArrayCreateOp>(loc, arrayType, elements);
+    }
+
+    mlir::emitError(loc) << "unsupported assignment pattern with type " << type;
+    return {};
+  }
+
+  Value visit(const slang::ast::SimpleAssignmentPatternExpression &expr) {
+    return visitAssignmentPattern(expr);
+  }
+
+  Value visit(const slang::ast::StructuredAssignmentPatternExpression &expr) {
+    return visitAssignmentPattern(expr);
+  }
+
+  Value visit(const slang::ast::ReplicatedAssignmentPatternExpression &expr) {
+    slang::ast::EvalContext evalContext(context.compilation,
+                                        slang::ast::EvalFlags::CacheResults);
+    auto count = expr.count().eval(evalContext).integer().as<unsigned>();
+    assert(count && "Slang guarantees constant non-zero replication count");
+    return visitAssignmentPattern(expr, *count);
+  }
+
   /// Emit an error for all other expressions.
   template <typename T>
   Value visit(T &&node) {
@@ -725,7 +887,7 @@ struct LvalueExprVisitor {
       return value;
     auto d = mlir::emitError(loc, "unknown name `") << expr.symbol.name << "`";
     d.attachNote(context.convertLocation(expr.symbol.location))
-        << "no value generated for " << slang::ast::toString(expr.symbol.kind);
+        << "no lvalue generated for " << slang::ast::toString(expr.symbol.kind);
     return {};
   }
 
@@ -746,13 +908,92 @@ struct LvalueExprVisitor {
   Value visit(const slang::ast::ElementSelectExpression &expr) {
     auto type = context.convertType(*expr.type);
     auto value = context.convertLvalueExpression(expr.value());
-    auto lowBit = context.convertRvalueExpression(expr.selector());
-
-    if (!type || !value || !lowBit)
+    if (!type || !value)
       return {};
-    return builder.create<moore::ExtractRefOp>(
+    if (auto *constValue = expr.selector().constant) {
+      assert(!constValue->hasUnknown());
+      assert(constValue->size() <= 32);
+
+      auto lowBit = constValue->integer().as<uint32_t>().value();
+      return builder.create<moore::ExtractRefOp>(
+          loc, moore::RefType::get(cast<moore::UnpackedType>(type)), value,
+          lowBit);
+    }
+    auto lowBit = context.convertRvalueExpression(expr.selector());
+    if (!lowBit)
+      return {};
+    return builder.create<moore::DynExtractRefOp>(
         loc, moore::RefType::get(cast<moore::UnpackedType>(type)), value,
         lowBit);
+  }
+
+  // Handle range bits selections.
+  Value visit(const slang::ast::RangeSelectExpression &expr) {
+    auto type = context.convertType(*expr.type);
+    auto value = context.convertLvalueExpression(expr.value());
+    if (!type || !value)
+      return {};
+
+    Value dynLowBit;
+    uint32_t constLowBit;
+    auto *leftConst = expr.left().constant;
+    auto *rightConst = expr.right().constant;
+    if (leftConst) {
+      assert(!leftConst->hasUnknown());
+      assert(leftConst->size() <= 32);
+    }
+    if (rightConst) {
+      assert(!rightConst->hasUnknown());
+      assert(rightConst->size() <= 32);
+    }
+
+    if (expr.getSelectionKind() == slang::ast::RangeSelectionKind::Simple) {
+      if (leftConst && rightConst) {
+        // Estimate whether is big endian or little endian.
+        auto lhs = leftConst->integer().as<uint32_t>().value();
+        auto rhs = rightConst->integer().as<uint32_t>().value();
+        constLowBit = lhs < rhs ? lhs : rhs;
+      } else {
+        mlir::emitError(loc, "unsupported a variable as the index in the")
+            << slang::ast::toString(expr.getSelectionKind()) << "kind";
+        return {};
+      }
+    } else if (expr.getSelectionKind() ==
+               slang::ast::RangeSelectionKind::IndexedDown) {
+      // IndexedDown: arr[7-:8]. It's equivalent to arr[7:0] or arr[0:7]
+      // depending on little endian or bit endian. No matter which situation,
+      // the low bit must be "0".
+      if (leftConst) {
+        auto subtrahend = leftConst->integer().as<uint32_t>().value();
+        auto sliceWidth =
+            expr.right().constant->integer().as<uint32_t>().value();
+        constLowBit = subtrahend - sliceWidth - 1;
+      } else {
+        auto subtrahend = context.convertRvalueExpression(expr.left());
+        auto subtrahendType = cast<moore::UnpackedType>(subtrahend.getType());
+        auto intType = moore::IntType::get(context.getContext(),
+                                           subtrahendType.getBitSize().value(),
+                                           subtrahendType.getDomain());
+        auto sliceWidth =
+            expr.right().constant->integer().as<uint32_t>().value() - 1;
+        auto minuend =
+            builder.create<moore::ConstantOp>(loc, intType, sliceWidth);
+        dynLowBit = builder.create<moore::SubOp>(loc, subtrahend, minuend);
+      }
+    } else {
+      // IndexedUp: arr[0+:8]. "0" is the low bit, "8" is the bits slice width.
+      if (leftConst)
+        constLowBit = leftConst->integer().as<uint32_t>().value();
+      else
+        dynLowBit = context.convertRvalueExpression(expr.left());
+    }
+    if (leftConst && rightConst)
+      return builder.create<moore::ExtractRefOp>(
+          loc, moore::RefType::get(cast<moore::UnpackedType>(type)), value,
+          constLowBit);
+    return builder.create<moore::DynExtractRefOp>(
+        loc, moore::RefType::get(cast<moore::UnpackedType>(type)), value,
+        dynLowBit);
   }
 
   Value visit(const slang::ast::MemberAccessExpression &expr) {
@@ -776,48 +1017,6 @@ struct LvalueExprVisitor {
     return {};
   }
 
-  // Handle range bits selections.
-  Value visit(const slang::ast::RangeSelectExpression &expr) {
-    auto type = context.convertType(*expr.type);
-    auto value = context.convertLvalueExpression(expr.value());
-    Value lowBit;
-    if (expr.getSelectionKind() == slang::ast::RangeSelectionKind::Simple) {
-      if (expr.left().constant && expr.right().constant) {
-        auto lhs = expr.left().constant->integer().as<uint64_t>().value();
-        auto rhs = expr.right().constant->integer().as<uint64_t>().value();
-        lowBit = lhs < rhs ? context.convertRvalueExpression(expr.left())
-                           : context.convertRvalueExpression(expr.right());
-      } else {
-        mlir::emitError(loc, "unsupported a variable as the index in the")
-            << slang::ast::toString(expr.getSelectionKind()) << "kind";
-        return {};
-      }
-    } else if (expr.getSelectionKind() ==
-               slang::ast::RangeSelectionKind::IndexedDown) {
-      // IndexedDown: arr[7-:8]. It's equivalent to arr[7:0] or arr[0:7]
-      // depending on little endian or bit endian. No matter which situation,
-      // the low bit must be "0".
-      auto minuend = context.convertRvalueExpression(expr.left());
-      auto minuendType = cast<moore::UnpackedType>(minuend.getType());
-      auto intType = moore::IntType::get(context.getContext(),
-                                         minuendType.getBitSize().value(),
-                                         minuendType.getDomain());
-      auto sliceWidth =
-          expr.right().constant->integer().as<uint64_t>().value() - 1;
-      auto subtraction =
-          builder.create<moore::ConstantOp>(loc, intType, sliceWidth);
-      lowBit = builder.create<moore::SubOp>(loc, minuend, subtraction);
-    } else
-      // IndexedUp: arr[0+:8]. "0" is the low bit, "8" is the bits slice width.
-      lowBit = context.convertRvalueExpression(expr.left());
-
-    if (!type || !value || !lowBit)
-      return {};
-    return builder.create<moore::ExtractRefOp>(
-        loc, moore::RefType::get(cast<moore::UnpackedType>(type)), value,
-        lowBit);
-  }
-
   /// Emit an error for all other expressions.
   template <typename T>
   Value visit(T &&node) {
@@ -831,9 +1030,13 @@ struct LvalueExprVisitor {
 };
 } // namespace
 
-Value Context::convertRvalueExpression(const slang::ast::Expression &expr) {
+Value Context::convertRvalueExpression(const slang::ast::Expression &expr,
+                                       Type requiredType) {
   auto loc = convertLocation(expr.sourceRange);
-  return expr.visit(RvalueExprVisitor(*this, loc));
+  auto value = expr.visit(RvalueExprVisitor(*this, loc));
+  if (value && requiredType && value.getType() != requiredType)
+    value = builder.create<moore::ConversionOp>(loc, requiredType, value);
+  return value;
 }
 
 Value Context::convertLvalueExpression(const slang::ast::Expression &expr) {

@@ -99,14 +99,14 @@ hw.module @i0Typed(in %a: !esi.channel<i0>, in %clk : !seq.clock, in %rst : i1, 
   hw.output %ch : !esi.channel<i0>
 }
 
-hw.module.extern @i1Fifo0(in %in: !esi.channel<i1, FIFO0>, out out: !esi.channel<i1, FIFO0>)
+hw.module.extern @i1Fifo(in %in: !esi.channel<i1, FIFO>, out out: !esi.channel<i1, FIFO>)
 
-// CHECK-LABEL:  hw.module @fifo0WrapUnwrap()
-// CHECK-NEXT:     %chanOutput, %rden = esi.wrap.fifo %data, %empty : !esi.channel<i1, FIFO0>
-// CHECK-NEXT:     %foo.out = hw.instance "foo" @i1Fifo0(in: %chanOutput: !esi.channel<i1, FIFO0>) -> (out: !esi.channel<i1, FIFO0>)
-// CHECK-NEXT:     %data, %empty = esi.unwrap.fifo %foo.out, %rden : !esi.channel<i1, FIFO0>
-hw.module @fifo0WrapUnwrap() {
-  %in, %rden = esi.wrap.fifo %data, %empty : !esi.channel<i1, FIFO0>
-  %out = hw.instance "foo" @i1Fifo0(in: %in: !esi.channel<i1, FIFO0>) -> (out: !esi.channel<i1, FIFO0>)
-  %data, %empty = esi.unwrap.fifo %out, %rden : !esi.channel<i1, FIFO0>
+// CHECK-LABEL:  hw.module @fifoWrapUnwrap()
+// CHECK-NEXT:     %chanOutput, %rden = esi.wrap.fifo %data, %empty : !esi.channel<i1, FIFO>
+// CHECK-NEXT:     %foo.out = hw.instance "foo" @i1Fifo(in: %chanOutput: !esi.channel<i1, FIFO>) -> (out: !esi.channel<i1, FIFO>)
+// CHECK-NEXT:     %data, %empty = esi.unwrap.fifo %foo.out, %rden : !esi.channel<i1, FIFO>
+hw.module @fifoWrapUnwrap() {
+  %in, %rden = esi.wrap.fifo %data, %empty : !esi.channel<i1, FIFO>
+  %out = hw.instance "foo" @i1Fifo(in: %in: !esi.channel<i1, FIFO>) -> (out: !esi.channel<i1, FIFO>)
+  %data, %empty = esi.unwrap.fifo %out, %rden : !esi.channel<i1, FIFO>
 }

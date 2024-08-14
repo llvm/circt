@@ -199,6 +199,8 @@ std::unique_ptr<mlir::Pass> createMaterializeDebugInfoPass();
 
 std::unique_ptr<mlir::Pass> createLintingPass();
 
+std::unique_ptr<mlir::Pass> createProbesToSignalsPass();
+
 std::unique_ptr<mlir::Pass> createSpecializeLayersPass();
 
 std::unique_ptr<mlir::Pass> createSpecializeOptionPass();

@@ -18,6 +18,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   LowerVectorizations.cpp
   MakeTables.cpp
   MuxToControlFlow.cpp
+  PrintCostModel.cpp
   SimplifyVariadicOps.cpp
   SplitFuncs.cpp
   SplitLoops.cpp
@@ -35,6 +36,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   CIRCTOM
   CIRCTSV
   CIRCTSeq
+  CIRCTSim
   CIRCTSupport
   MLIRFuncDialect
   MLIRLLVMDialect

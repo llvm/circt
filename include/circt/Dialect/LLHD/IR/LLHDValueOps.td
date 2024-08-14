@@ -1,4 +1,4 @@
-//===- ValueOps.td - LLHD value operations -----------------*- tablegen -*-===//
+//===- LLHDValueOps.td - LLHD value operations -------------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-def LLHD_ConstantTimeOp : LLHD_Op<"constant_time",
+def ConstantTimeOp : LLHDOp<"constant_time",
                                   [ConstantLike, Pure]> {
   let summary = "Introduce a new time constant.";
   let description = [{
@@ -35,8 +35,8 @@ def LLHD_ConstantTimeOp : LLHD_Op<"constant_time",
                    "unsigned":$epsilon)>
   ];
 
-  let arguments = (ins LLHD_TimeAttr: $value);
-  let results = (outs LLHD_TimeType: $result);
+  let arguments = (ins LLHDTimeAttr: $value);
+  let results = (outs LLHDTimeType: $result);
 
   let hasFolder = 1;
 }

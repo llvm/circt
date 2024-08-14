@@ -296,12 +296,13 @@ class Port:
     self.owner = owner
     self.cpp_port = cpp_port
     self.type = _get_esi_type(cpp_port.type)
+
+  def connect(self, buffer_size: Optional[int] = None):
     (supports_host, reason) = self.type.supports_host
     if not supports_host:
       raise TypeError(f"unsupported type: {reason}")
 
-  def connect(self):
-    self.cpp_port.connect()
+    self.cpp_port.connect(buffer_size)
     return self
 
 

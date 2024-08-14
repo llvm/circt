@@ -7,7 +7,7 @@ import time
 platform = sys.argv[1]
 acc = esiaccel.AcceleratorConnection(platform, sys.argv[2])
 
-hostmem = acc.get_host_memory()
+hostmem = acc.get_service_hostmem()
 if hostmem is not None:
   mem1 = hostmem.allocate(1024)
   assert mem1.size == 1024
@@ -21,6 +21,13 @@ assert m.api_version == 0
 for esiType in m.type_table:
   print(f"{esiType}")
 
+for info in m.module_infos:
+  print(f"{info.name}")
+  for const_name, const in info.constants.items():
+    print(f"  {const_name}: {const.value} {const.type}")
+    if info.name == "LoopbackIP" and const_name == "depth":
+      assert const.value == 5
+
 d = acc.build_accelerator()
 
 loopback = d.children[esiaccel.AppID("loopback_inst", 0)]
@@ -30,7 +37,7 @@ assert appid.name == "loopback_inst"
 assert appid.idx == 0
 
 mysvc_send = loopback.ports[esiaccel.AppID("mysvc_recv")].write_port("recv")
-mysvc_send.connect()
+mysvc_send.connect(buffer_size=12)
 mysvc_send.write(None)
 print(f"mysvc_send.type: {mysvc_send.type}")
 assert isinstance(mysvc_send.type, types.VoidType)
@@ -94,4 +101,7 @@ result: List[int] = result_chan.read()
 print(f"result: {result}")
 if platform != "trace":
   assert result == [-21, -22]
+
+acc = None
+
 print("PASS")

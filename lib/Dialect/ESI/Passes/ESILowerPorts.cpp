@@ -107,7 +107,7 @@ public:
           if (signaling == ChannelSignaling::ValidReady)
             return {std::make_unique<ValidReady>(converter, port)};
 
-          if (signaling == ChannelSignaling::FIFO0)
+          if (signaling == ChannelSignaling::FIFO)
             return {std::make_unique<FIFO>(converter, port)};
 
           auto error = converter.getModule().emitOpError(

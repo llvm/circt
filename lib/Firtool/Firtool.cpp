@@ -78,7 +78,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(
-      firrtl::createMemToRegOfVecPass(opt.shouldReplicateSequentialMemories(),
+      firrtl::createMemToRegOfVecPass(opt.shouldReplaceSequentialMemories(),
                                       opt.shouldIgnoreReadEnableMemories()));
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
@@ -128,6 +128,10 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // hide errors.
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeLayersPass());
 
+  // Run after inference, layer specialization.
+  if (opt.shouldConvertProbesToSignals())
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createProbesToSignalsPass());
+
   {
     auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
     modulePM.addPass(firrtl::createLayerMergePass());
@@ -157,7 +161,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createInferReadWritePass());
 
-  if (opt.shouldReplicateSequentialMemories())
+  if (opt.shouldReplaceSequentialMemories())
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerMemoryPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());
@@ -172,7 +176,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
 
   pm.addPass(firrtl::createCreateSiFiveMetadataPass(
-      opt.shouldReplicateSequentialMemories(),
+      opt.shouldReplaceSequentialMemories(),
       opt.getReplaceSequentialMemoriesFile()));
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createExtractInstancesPass());
@@ -299,7 +303,7 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
            FirtoolOptions::RandomKind::Mem),
        /*disableRegRandomization=*/
        !opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg),
-       /*replSeqMem=*/opt.shouldReplicateSequentialMemories(),
+       /*replSeqMem=*/opt.shouldReplaceSequentialMemories(),
        /*readEnableMode=*/opt.shouldIgnoreReadEnableMemories()
            ? seq::ReadEnableMode::Ignore
            : seq::ReadEnableMode::Undefined,
@@ -450,6 +454,11 @@ struct FirtoolCmdOptions {
   llvm::cl::opt<bool> allowAddingPortsOnPublic{
       "allow-adding-ports-on-public-modules",
       llvm::cl::desc("Allow adding ports to public modules"),
+      llvm::cl::init(false), llvm::cl::Hidden};
+
+  llvm::cl::opt<bool> probesToSignals{
+      "probes-to-signals",
+      llvm::cl::desc("Convert probes to non-probe signals"),
       llvm::cl::init(false), llvm::cl::Hidden};
 
   llvm::cl::opt<circt::firrtl::PreserveAggregate::PreserveMode>
@@ -728,7 +737,7 @@ void circt::firtool::registerFirtoolCLOptions() {
 circt::firtool::FirtoolOptions::FirtoolOptions()
     : outputFilename("-"), disableAnnotationsUnknown(false),
       disableAnnotationsClassless(false), lowerAnnotationsNoRefTypePorts(false),
-      allowAddingPortsOnPublic(false),
+      allowAddingPortsOnPublic(false), probesToSignals(false),
       preserveAggregate(firrtl::PreserveAggregate::None),
       preserveMode(firrtl::PreserveValues::None), enableDebugInfo(false),
       buildMode(BuildModeRelease), disableOptimization(false),
@@ -755,6 +764,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   disableAnnotationsClassless = clOptions->disableAnnotationsClassless;
   lowerAnnotationsNoRefTypePorts = clOptions->lowerAnnotationsNoRefTypePorts;
   allowAddingPortsOnPublic = clOptions->allowAddingPortsOnPublic;
+  probesToSignals = clOptions->probesToSignals;
   preserveAggregate = clOptions->preserveAggregate;
   preserveMode = clOptions->preserveMode;
   enableDebugInfo = clOptions->enableDebugInfo;

@@ -406,4 +406,41 @@ def BitType : MooreType<CPred<[{
   }];
 }
 
+/// A packed or unpacked array type with a fixed size.
+def AnyStaticArrayType : MooreType<
+  Or<[ArrayType.predicate, UnpackedArrayType.predicate]>,
+  "packed or unpacked static array type",
+  "moore::UnpackedType">;
+
+/// A packed or unpacked struct type.
+def AnyStructType : MooreType<
+  Or<[StructType.predicate, UnpackedStructType.predicate]>,
+  "packed or unpacked struct type",
+  "moore::UnpackedType">;
+
+/// A packed or unpacked union type.
+def AnyUnionType : MooreType<
+  Or<[UnionType.predicate, UnpackedUnionType.predicate]>,
+  "packed or unpacked union type",
+  "moore::UnpackedType">;
+
+/// A ref type with the specified constraints on the nested type.
+class SpecificRefType<Type type> : ConfinedType<RefType,
+  [SubstLeaves<"$_self", "llvm::cast<moore::RefType>($_self).getNestedType()",
+               type.predicate>],
+  "ref of " # type.summary, "moore::RefType"
+> {
+  Type nestedType = type;
+}
+
+/// Struct references.
+def StructRefType : SpecificRefType<StructType>;
+def UnpackedStructRefType : SpecificRefType<UnpackedStructType>;
+def AnyStructRefType : SpecificRefType<AnyStructType>;
+
+/// Union references.
+def UnionRefType : SpecificRefType<UnionType>;
+def UnpackedUnionRefType : SpecificRefType<UnpackedUnionType>;
+def AnyUnionRefType : SpecificRefType<AnyUnionType>;
+
 #endif // CIRCT_DIALECT_MOORE_MOORETYPES

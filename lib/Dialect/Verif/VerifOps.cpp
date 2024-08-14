@@ -94,6 +94,41 @@ LogicalResult CoverOp::canonicalize(CoverOp op, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
+// Formal contract verifiers
+//===----------------------------------------------------------------------===//
+
+LogicalResult ContractOp::verifyRegions() {
+  // Retrieve the number of inputs from the parent module
+  auto parent = (*this)->getParentOfType<hw::HWModuleOp>();
+  // Sanity check: parent should always be a hw.module
+  if (!parent)
+    return emitOpError() << "parent of contract must be an hw.module!";
+
+  auto nRes = (*this)->getNumResults();
+  auto resTypes = (*this)->getResultTypes();
+  auto *yield = getBody().front().getTerminator();
+
+  // Check that the region terminator yields the same number of ops as the
+  // number of results
+  if (yield->getNumOperands() != nRes)
+    return emitOpError() << "region terminator must yield the same number of "
+                         << "operands as there are results!";
+
+  // Check that the region terminator yields the same types of ops as the
+  // types of results
+  if (yield->getOperandTypes() != resTypes)
+    return emitOpError() << "region terminator must yield the same types of "
+                         << "operands as the result types!";
+
+  // Check that the region block arguments share the same types as the results
+  if (getBody().front().getArgumentTypes() != resTypes)
+    return emitOpError() << "region must have the same type of arguments "
+                         << "as the type of results!";
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // LogicalEquivalenceCheckingOp
 //===----------------------------------------------------------------------===//
 

@@ -814,7 +814,7 @@ def VectorizeOp : ArcOp<"vectorize", [
     ```
     or SIMD vectors.
     ```mlir
-    %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : 
+    %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) :
       (i1, i1, i1, i1) -> (i1, i1) {
     ^bb0(%arg0: vector<2xi1>, %arg1: vector<2xi1>):
       %1 = arith.and %arg0, %arg1 : vector<2xi1>

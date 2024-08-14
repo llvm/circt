@@ -41,15 +41,16 @@ ReadChannelPort &BundlePort::getRawRead(const std::string &name) const {
     throw std::runtime_error("Channel '" + name + "' is not a read channel");
   return *read;
 }
-void ReadChannelPort::connect(std::function<bool(MessageData)> callback) {
+void ReadChannelPort::connect(std::function<bool(MessageData)> callback,
+                              std::optional<unsigned> bufferSize) {
   if (mode != Mode::Disconnected)
     throw std::runtime_error("Channel already connected");
   mode = Mode::Callback;
   this->callback = callback;
-  ChannelPort::connect();
+  connectImpl(bufferSize);
 }
 
-void ReadChannelPort::connect() {
+void ReadChannelPort::connect(std::optional<unsigned> bufferSize) {
   mode = Mode::Polling;
   maxDataQueueMsgs = DefaultMaxDataQueueMsgs;
   this->callback = [this](MessageData data) {
@@ -70,7 +71,7 @@ void ReadChannelPort::connect() {
     }
     return true;
   };
-  ChannelPort::connect();
+  connectImpl(bufferSize);
 }
 
 std::future<MessageData> ReadChannelPort::readAsync() {

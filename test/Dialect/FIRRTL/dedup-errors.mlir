@@ -290,6 +290,95 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
 
 // -----
 
+// Check same number of blocks but instructions across are same.
+// https://github.com/llvm/circt/issues/7415
+// expected-error@below {{module "Test1" not deduplicated with "Test0"}}
+firrtl.circuit "SameInstDiffBlock" attributes {annotations = [{
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~SameInstDiffBlock|Test0", "~SameInstDiffBlock|Test1"]
+    }]} {
+  firrtl.module private @Test0(in %a : !firrtl.uint<1>) {
+    "test"()({
+      ^bb0:
+        // expected-note@below {{first block has more operations}}
+        "return"() : () -> ()
+    }, {
+      ^bb0:
+    }) : () -> ()
+  }
+  firrtl.module private @Test1(in %a : !firrtl.uint<1>) {
+    // expected-note@below {{second block here}}
+    "test"() ({
+      ^bb0:
+    }, {
+      ^bb0:
+        "return"() : () -> ()
+    }): () -> ()
+  }
+  firrtl.module @SameInstDiffBlock() {
+    firrtl.instance test0 @Test0(in a : !firrtl.uint<1>)
+    firrtl.instance test1 @Test1(in a : !firrtl.uint<1>)
+  }
+}
+
+// -----
+
+// Check differences in block arguments.
+// expected-error@below {{module "Test1" not deduplicated with "Test0"}}
+firrtl.circuit "BlockArgTypes" attributes {annotations = [{
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~BlockArgTypes|Test0", "~BlockArgTypes|Test1"]
+    }]} {
+  firrtl.module private @Test0(in %a : !firrtl.uint<1>) {
+    // expected-note@below {{types don't match, first type is 'i32'}}
+    "test"()({
+      ^bb0(%arg0 : i32):
+        "return"() : () -> ()
+    }) : () -> ()
+  }
+  firrtl.module private @Test1(in %a : !firrtl.uint<1>) {
+    // expected-note@below {{second type is 'i64'}}
+    "test"() ({
+      ^bb0(%arg0 : i64):
+        "return"() : () -> ()
+    }): () -> ()
+  }
+  firrtl.module @BlockArgTypes() {
+    firrtl.instance test0 @Test0(in a : !firrtl.uint<1>)
+    firrtl.instance test1 @Test1(in a : !firrtl.uint<1>)
+  }
+}
+
+// -----
+
+// Check empty block not same as no block.
+// https://github.com/llvm/circt/issues/7416
+// expected-error@below {{module "B" not deduplicated with "A"}}
+firrtl.circuit "NoBlockEmptyBlock" attributes {annotations = [{
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~NoBlockEmptyBlock|A", "~NoBlockEmptyBlock|B"]
+    }]} {
+  firrtl.module private @A(in %x: !firrtl.uint<1>) {
+    // expected-note @below {{operation regions have different number of blocks}}
+    firrtl.when %x : !firrtl.uint<1> {
+    }
+  }
+  firrtl.module private @B(in %x: !firrtl.uint<1>) {
+    // expected-note @below {{second operation here}}
+    firrtl.when %x : !firrtl.uint<1> {
+    } else {
+    }
+  }
+  firrtl.module @NoBlockEmptyBlock(in %x: !firrtl.uint<1>) {
+    %a_x = firrtl.instance a @A(in x: !firrtl.uint<1>)
+    firrtl.matchingconnect %a_x, %x : !firrtl.uint<1>
+    %b_x = firrtl.instance b @B(in x: !firrtl.uint<1>)
+    firrtl.matchingconnect %b_x, %x : !firrtl.uint<1>
+  }
+}
+
+// -----
+
 // expected-error@below {{module "Test1" not deduplicated with "Test0"}}
 firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
@@ -539,5 +628,58 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
   firrtl.module @MustDedup() {
     firrtl.instance test0 @Test0(in in : !firrtl.vector<uint<1>, 2>)
     firrtl.instance test1 @Test1(in in : !firrtl.vector<uint<1>, 2>)
+  }
+}
+
+// -----
+
+// Modules instantiating equivalent public modules do not dedup.
+// Check diagnostic.
+// expected-error @below {{module "Test1Parent" not deduplicated with "Test0Parent"}}
+// expected-note @below {{in instance "test0" of "Test0", and instance "test1" of "Test1"}}
+firrtl.circuit "InstOfEquivPublic" attributes {annotations = [{
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~InstOfEquivPublic|Test0Parent", "~InstOfEquivPublic|Test1Parent"]
+    }]} {
+  // expected-note @below {{module is public}}
+  firrtl.module public @Test0() { }
+  firrtl.module public @Test1() { }
+  firrtl.module private @Test0Parent() {
+    firrtl.instance test0 @Test0()
+  }
+  firrtl.module private @Test1Parent() {
+    firrtl.instance test1 @Test1()
+  }
+
+  firrtl.module @InstOfEquivPublic() {
+    firrtl.instance test0p @Test0Parent()
+    firrtl.instance test1p @Test1Parent()
+  }
+}
+
+// -----
+
+// Modules instantiating mixed public/private do not dedup.
+// Check diagnostic.
+// expected-error @below {{module "Test1Parent" not deduplicated with "Test0Parent"}}
+// expected-note @below {{in instance "test0" of "Test0", and instance "test1" of "Test1"}}
+firrtl.circuit "InstOfPublicPrivate" attributes {annotations = [{
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~InstOfPublicPrivate|Test0Parent", "~InstOfPublicPrivate|Test1Parent"]
+    }]} {
+  firrtl.module private @Test0() { }
+  // expected-note @below {{module is public}}
+  firrtl.module public @Test1() { }
+
+  firrtl.module private @Test0Parent() {
+    firrtl.instance test0 @Test0()
+  }
+  firrtl.module private @Test1Parent() {
+    firrtl.instance test1 @Test1()
+  }
+
+  firrtl.module @InstOfPublicPrivate() {
+    firrtl.instance test0p @Test0Parent()
+    firrtl.instance test1p @Test1Parent()
   }
 }

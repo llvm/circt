@@ -10,15 +10,20 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_LLHD_IR_LLHDTYPES_TD
+#define CIRCT_DIALECT_LLHD_IR_LLHDTYPES_TD
+
+include "circt/Dialect/LLHD/IR/LLHDDialect.td"
+include "mlir/IR/AttrTypeBase.td"
+
 // Base class for other typedefs. Provides dialact-specific defaults.
-class LLHDType<string name> : TypeDef<LLHD_Dialect, name> { }
+class LLHDType<string name> : TypeDef<LLHDDialect, name> { }
 
 //===----------------------------------------------------------------------===//
 // Type declarations
 //===----------------------------------------------------------------------===//
 
-// Declares the llhd::PtrType in C++.
-def PtrTypeImpl : LLHDType<"Ptr"> {
+def LLHDPtrType : LLHDType<"Ptr"> {
   let summary = "pointer type";
   let description = [{
     Represents a pointer to a memory location holding a value of its element
@@ -36,8 +41,7 @@ def PtrTypeImpl : LLHDType<"Ptr"> {
   ];
 }
 
-// Declares the llhd::TimeType in C++.
-def TimeTypeImpl : LLHDType<"Time"> {
+def LLHDTimeType : LLHDType<"Time"> {
   let summary = "time type";
   let description = [{
     Represents a simulation time value as a combination of a real time value in
@@ -50,11 +54,20 @@ def TimeTypeImpl : LLHDType<"Time"> {
 }
 
 //===----------------------------------------------------------------------===//
+// Type Constraints
+//===----------------------------------------------------------------------===//
+
+class LLHDPtrTypeOf<list<Type> allowedTypes>
+  : ContainerType<AnyTypeOf<allowedTypes>, CPred<"llvm::isa<PtrType>($_self)">,
+    "llvm::cast<PtrType>($_self).getElementType()", "LLHD pointer type">;
+
+def LLHDAnySigOrPtrType : AnyTypeOf<[LLHDPtrType, InOutType]>;
+
+//===----------------------------------------------------------------------===//
 // Attribute declarations
 //===----------------------------------------------------------------------===//
 
-// Declares the llhd::TimeAttr in C++.
-def LLHD_TimeAttr : AttrDef<LLHD_Dialect, "Time", []> {
+def LLHDTimeAttr : AttrDef<LLHDDialect, "Time", []> {
   let summary = "time attribute";
   let description = [{
     Represents a value of the LLHD time type.
@@ -83,3 +96,5 @@ def LLHD_TimeAttr : AttrDef<LLHD_Dialect, "Time", []> {
       time, timeUnit, delta, epsilon);
   }]>];
 }
+
+#endif // CIRCT_DIALECT_LLHD_IR_LLHDTYPES_TD

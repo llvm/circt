@@ -53,18 +53,23 @@ moore.module @Foo(out a: !moore.string) {
 
 // -----
 
-// expected-error @below {{constant out of range for result type '!moore.i1'}}
+// expected-error @below {{value requires 6 bits, but result type only has 1}}
 moore.constant 42 : !moore.i1
 
 // -----
 
-// expected-error @below {{constant out of range for result type '!moore.i1'}}
+// expected-error @below {{value requires 2 bits, but result type only has 1}}
 moore.constant -2 : !moore.i1
 
 // -----
 
+// expected-error @below {{value contains X or Z bits, but result type '!moore.i4' only allows two-valued bits}}
+moore.constant b10XZ : !moore.i4
+
+// -----
+
 // expected-error @below {{attribute width 9 does not match return type's width 8}}
-"moore.constant" () {value = 42 : i9} : () -> !moore.i8
+"moore.constant" () {value = #moore.fvint<42 : 9>} : () -> !moore.i8
 
 // -----
 
@@ -74,7 +79,7 @@ moore.yield %0 : i8
 
 // -----
 
-%0 = moore.constant true : i1
+%0 = moore.constant 1 : i1
 %1 = moore.constant 42 : i8
 %2 = moore.constant 42 : i32
 
@@ -87,7 +92,7 @@ moore.conditional %0 : i1 -> i32 {
 
 // -----
 
-%0 = moore.constant true : i1
+%0 = moore.constant 1 : i1
 %1 = moore.constant 42 : i32
 %2 = moore.constant 42 : i8
 
@@ -97,3 +102,53 @@ moore.conditional %0 : i1 -> i32 {
   // expected-error @below {{yield type must match conditional. Expected '!moore.i32', but got '!moore.i8'}}
   moore.yield %2 : i8
 }
+
+// -----
+
+%0 = moore.constant 42 : i32
+// expected-error @below {{op has 1 operands, but result type requires 2}}
+moore.struct_create %0 : !moore.i32 -> struct<{a: i32, b: i32}>
+
+// -----
+
+%0 = moore.constant 42 : i32
+// expected-error @below {{op operand #0 has type '!moore.i32', but struct field "a" requires '!moore.i1337'}}
+moore.struct_create %0 : !moore.i32 -> struct<{a: i1337}>
+
+// -----
+
+%0 = unrealized_conversion_cast to !moore.struct<{a: i32}>
+// expected-error @below {{op extracts field "b" which does not exist}}
+moore.struct_extract %0, "b" : struct<{a: i32}> -> i9001
+
+// -----
+
+%0 = unrealized_conversion_cast to !moore.struct<{a: i32}>
+// expected-error @below {{op result type '!moore.i9001' must match struct field type '!moore.i32'}}
+moore.struct_extract %0, "a" : struct<{a: i32}> -> i9001
+
+// -----
+
+%0 = unrealized_conversion_cast to !moore.ref<struct<{a: i32}>>
+// expected-error @below {{op extracts field "b" which does not exist}}
+moore.struct_extract_ref %0, "b" : <struct<{a: i32}>> -> <i9001>
+
+// -----
+
+%0 = unrealized_conversion_cast to !moore.ref<struct<{a: i32}>>
+// expected-error @below {{op result ref of type '!moore.i9001' must match struct field type '!moore.i32'}}
+moore.struct_extract_ref %0, "a" : <struct<{a: i32}>> -> <i9001>
+
+// -----
+
+%0 = unrealized_conversion_cast to !moore.struct<{a: i32}>
+%1 = moore.constant 42 : i32
+// expected-error @below {{op injects field "b" which does not exist}}
+moore.struct_inject %0, "b", %1 : struct<{a: i32}>, i32
+
+// -----
+
+%0 = unrealized_conversion_cast to !moore.struct<{a: i32}>
+%1 = moore.constant 42 : i9001
+// expected-error @below {{op injected value '!moore.i9001' must match struct field type '!moore.i32'}}
+moore.struct_inject %0, "a", %1 : struct<{a: i32}>, i9001

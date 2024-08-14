@@ -29,12 +29,16 @@ def MooreDialect : Dialect {
   let extraClassDeclaration = [{
     /// Register all Moore types.
     void registerTypes();
+    /// Register all Moore attributes.
+    void registerAttributes();
 
     /// Type parsing and printing.
     Type parseType(DialectAsmParser &parser) const override;
     void printType(Type, DialectAsmPrinter &) const override;
   }];
+  let useDefaultAttributePrinterParser = 1;
   let useDefaultTypePrinterParser = 0;
+  let hasConstantMaterializer = 1;
   let dependentDialects = ["hw::HWDialect"];
 }
 

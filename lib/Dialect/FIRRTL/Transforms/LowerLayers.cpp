@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/Utils.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Mutex.h"
@@ -32,17 +33,6 @@ namespace firrtl {
 
 using namespace circt;
 using namespace firrtl;
-
-//===----------------------------------------------------------------------===//
-// Helpers
-//===----------------------------------------------------------------------===//
-
-static bool isAncestor(Operation *op, Value value) {
-  if (auto result = dyn_cast<OpResult>(value))
-    return op->isAncestor(result.getOwner());
-  auto argument = cast<BlockArgument>(value);
-  return op->isAncestor(argument.getOwner()->getParentOp());
-}
 
 namespace {
 
@@ -123,7 +113,8 @@ static SmallString<32> fileNameForLayer(StringRef circuitName,
 }
 
 /// For a layerblock `@A::@B::@C`, the verilog macro is `A_B_C`.
-static SmallString<32> macroNameForLayer(ArrayRef<StringAttr> layerName) {
+static SmallString<32>
+macroNameForLayer(ArrayRef<FlatSymbolRefAttr> layerName) {
   SmallString<32> result;
   for (auto part : layerName)
     appendName(part, result);
@@ -137,8 +128,7 @@ static SmallString<32> macroNameForLayer(ArrayRef<StringAttr> layerName) {
 class LowerLayersPass
     : public circt::firrtl::impl::LowerLayersBase<LowerLayersPass> {
   hw::OutputFileAttr getOutputFile(SymbolRefAttr layerName) {
-    auto layer =
-        cast<LayerOp>(SymbolTable::lookupSymbolIn(getOperation(), layerName));
+    auto layer = symbolToLayer.lookup(layerName);
     if (!layer)
       return nullptr;
     return layer->getAttrOfType<hw::OutputFileAttr>("output_file");
@@ -162,10 +152,10 @@ class LowerLayersPass
                            SmallVectorImpl<PortInfo> &ports);
 
   /// Strip layer colors from the module's interface.
-  InnerRefMap runOnModuleLike(FModuleLike moduleLike);
+  FailureOr<InnerRefMap> runOnModuleLike(FModuleLike moduleLike);
 
   /// Extract layerblocks and strip probe colors from all ops under the module.
-  void runOnModuleBody(FModuleOp moduleOp, InnerRefMap &innerRefMap);
+  LogicalResult runOnModuleBody(FModuleOp moduleOp, InnerRefMap &innerRefMap);
 
   /// Update the module's port types to remove any explicit layer requirements
   /// from any probe types.
@@ -181,10 +171,11 @@ class LowerLayersPass
   /// Lower an inline layerblock to an ifdef block.
   void lowerInlineLayerBlock(LayerOp layer, LayerBlockOp layerBlock);
 
-  /// Create macro declarations for a given layer, and its child layers.
-  void createMacroDecls(CircuitNamespace &ns, OpBuilder &b, LayerOp layer,
-                        SmallVector<StringAttr> &stack);
-  void createMacroDecls(CircuitNamespace &ns, LayerOp layer);
+  /// Preprocess layers to build macro declarations and cache information about
+  /// the layers so that this can be quired later.
+  void preprocessLayers(CircuitNamespace &ns, OpBuilder &b, LayerOp layer,
+                        SmallVector<FlatSymbolRefAttr> &stack);
+  void preprocessLayers(CircuitNamespace &ns, LayerOp layer);
 
   /// Entry point for the function.
   void runOnOperation() override;
@@ -197,6 +188,9 @@ class LowerLayersPass
 
   /// A map from inline layers to their macro names.
   DenseMap<LayerOp, FlatSymbolRefAttr> macroNames;
+
+  /// A mapping of symbol name to layer operation.
+  DenseMap<SymbolRefAttr, LayerOp> symbolToLayer;
 };
 
 /// Multi-process safe function to build a module in the circuit and return it.
@@ -272,7 +266,8 @@ void LowerLayersPass::removeLayersFromPorts(FModuleLike moduleLike) {
   }
 }
 
-InnerRefMap LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
+FailureOr<InnerRefMap>
+LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
   LLVM_DEBUG({
     llvm::dbgs() << "Module: " << moduleLike.getModuleName() << "\n";
     llvm::dbgs() << "  Examining Layer Blocks:\n";
@@ -280,18 +275,24 @@ InnerRefMap LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
 
   // Strip away layers from the interface of the module-like op.
   InnerRefMap innerRefMap;
-  TypeSwitch<Operation *, void>(moduleLike.getOperation())
-      .Case<FModuleOp>([&](auto op) {
-        op.setLayers({});
-        removeLayersFromPorts(op);
-        runOnModuleBody(op, innerRefMap);
-      })
-      .Case<FExtModuleOp, FIntModuleOp, FMemModuleOp>([&](auto op) {
-        op.setLayers({});
-        removeLayersFromPorts(op);
-      })
-      .Case<ClassOp, ExtClassOp>([](auto) {})
-      .Default([](auto) { assert(0 && "unknown module-like op"); });
+  auto result =
+      TypeSwitch<Operation *, LogicalResult>(moduleLike.getOperation())
+          .Case<FModuleOp>([&](auto op) {
+            op.setLayers({});
+            removeLayersFromPorts(op);
+            return runOnModuleBody(op, innerRefMap);
+          })
+          .Case<FExtModuleOp, FIntModuleOp, FMemModuleOp>([&](auto op) {
+            op.setLayers({});
+            removeLayersFromPorts(op);
+            return success();
+          })
+          .Case<ClassOp, ExtClassOp>([](auto) { return success(); })
+          .Default(
+              [](auto *op) { return op->emitError("unknown module-like op"); });
+
+  if (failed(result))
+    return failure();
 
   return innerRefMap;
 }
@@ -305,8 +306,8 @@ void LowerLayersPass::lowerInlineLayerBlock(LayerOp layer,
   layerBlock.erase();
 }
 
-void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
-                                      InnerRefMap &innerRefMap) {
+LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
+                                               InnerRefMap &innerRefMap) {
   CircuitOp circuitOp = moduleOp->getParentOfType<CircuitOp>();
   StringRef circuitName = circuitOp.getName();
   hw::InnerSymbolNamespace ns(moduleOp);
@@ -327,7 +328,7 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
   //    this layer block to the new module.
   // 4. Instantiate the new module outside the layer block and hook it up.
   // 5. Erase the layer block.
-  moduleOp.walk<mlir::WalkOrder::PostOrder>([&](Operation *op) {
+  auto result = moduleOp.walk<mlir::WalkOrder::PostOrder>([&](Operation *op) {
     // Strip layer requirements from any op that might represent a probe.
     if (auto wire = dyn_cast<WireOp>(op)) {
       removeLayersFromValue(wire.getResult());
@@ -352,8 +353,7 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
     if (!layerBlock)
       return WalkResult::advance();
 
-    auto layer = cast<LayerOp>(
-        SymbolTable::lookupSymbolIn(getOperation(), layerBlock.getLayerName()));
+    auto layer = symbolToLayer.lookup(layerBlock.getLayerName());
 
     if (layer.getConvention() == LayerConvention::Inline) {
       lowerInlineLayerBlock(layer, layerBlock);
@@ -497,15 +497,55 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         continue;
       }
 
+      // Handle subfields, subindexes, and subaccesses which are indexing into
+      // non-passive values.  If these are kept in the module, then the module
+      // must create bi-directional ports.  This doesn't make sense as the
+      // FIRRTL spec states that no layerblock may write to values outside it.
+      // Fix this for subfield and subindex by moving these ops outside the
+      // layerblock.  Try to fix this for subaccess and error if the move can't
+      // be made because the index is defined inside the layerblock.  (This case
+      // is exceedingly rare given that subaccesses are almost always unexepcted
+      // when this pass runs.)
+      if (isa<SubfieldOp, SubindexOp>(op)) {
+        auto input = op.getOperand(0);
+        if (!firrtl::type_cast<FIRRTLBaseType>(input.getType()).isPassive() &&
+            !isAncestorOfValueOwner(layerBlock, input))
+          op.moveBefore(layerBlock);
+        continue;
+      }
+
+      if (auto subOp = dyn_cast<SubaccessOp>(op)) {
+        auto input = subOp.getInput();
+        if (firrtl::type_cast<FIRRTLBaseType>(input.getType()).isPassive())
+          continue;
+
+        if (!isAncestorOfValueOwner(layerBlock, input) &&
+            !isAncestorOfValueOwner(layerBlock, subOp.getIndex())) {
+          subOp->moveBefore(layerBlock);
+          continue;
+        }
+        auto diag = op.emitOpError()
+                    << "has a non-passive operand and captures a value defined "
+                       "outside its enclosing bind-convention layerblock.  The "
+                       "'LowerLayers' pass cannot lower this as it would "
+                       "create an output port on the resulting module.";
+        diag.attachNote(layerBlock.getLoc())
+            << "the layerblock is defined here";
+        return WalkResult::interrupt();
+      }
+
+      // Beyond this point, we are handling operations which capture values
+      // defined outside the layerblock.  Whenever we see this, we need to
+      // create ports for the module that this layerblock will become.
       if (auto refSend = dyn_cast<RefSendOp>(op)) {
         auto src = refSend.getBase();
-        if (!isAncestor(layerBlock, src))
+        if (!isAncestorOfValueOwner(layerBlock, src))
           createInputPort(src, op.getLoc());
         continue;
       }
 
       if (auto refCast = dyn_cast<RefCastOp>(op)) {
-        if (!isAncestor(layerBlock, refCast))
+        if (!isAncestorOfValueOwner(layerBlock, refCast))
           createInputPort(refCast.getInput(), op.getLoc());
         continue;
       }
@@ -513,8 +553,8 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       if (auto connect = dyn_cast<FConnectLike>(op)) {
         auto src = connect.getSrc();
         auto dst = connect.getDest();
-        auto srcInLayerBlock = isAncestor(layerBlock, src);
-        auto dstInLayerBlock = isAncestor(layerBlock, dst);
+        auto srcInLayerBlock = isAncestorOfValueOwner(layerBlock, src);
+        auto dstInLayerBlock = isAncestorOfValueOwner(layerBlock, dst);
         if (!srcInLayerBlock && !dstInLayerBlock) {
           connect->moveBefore(layerBlock);
           continue;
@@ -560,7 +600,7 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
 
       // For any other ops, create input ports for any captured operands.
       for (auto operand : op.getOperands()) {
-        if (!isAncestor(layerBlock, operand))
+        if (!isAncestorOfValueOwner(layerBlock, operand))
           createInputPort(operand, op.getLoc());
       }
     }
@@ -656,12 +696,17 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
 
     return WalkResult::advance();
   });
+  return success(!result.wasInterrupted());
 }
 
-void LowerLayersPass::createMacroDecls(CircuitNamespace &ns, OpBuilder &b,
+void LowerLayersPass::preprocessLayers(CircuitNamespace &ns, OpBuilder &b,
                                        LayerOp layer,
-                                       SmallVector<StringAttr> &stack) {
-  stack.emplace_back(layer.getSymNameAttr());
+                                       SmallVector<FlatSymbolRefAttr> &stack) {
+  stack.emplace_back(FlatSymbolRefAttr::get(layer.getSymNameAttr()));
+  ArrayRef stackRef(stack);
+  symbolToLayer.insert(
+      {SymbolRefAttr::get(stackRef.front().getAttr(), stackRef.drop_front()),
+       layer});
   if (layer.getConvention() == LayerConvention::Inline) {
     auto *ctx = &getContext();
     auto macName = macroNameForLayer(stack);
@@ -677,14 +722,14 @@ void LowerLayersPass::createMacroDecls(CircuitNamespace &ns, OpBuilder &b,
     macroNames[layer] = FlatSymbolRefAttr::get(&getContext(), symNameAttr);
   }
   for (auto child : layer.getOps<LayerOp>())
-    createMacroDecls(ns, b, child, stack);
+    preprocessLayers(ns, b, child, stack);
   stack.pop_back();
 }
 
-void LowerLayersPass::createMacroDecls(CircuitNamespace &ns, LayerOp layer) {
+void LowerLayersPass::preprocessLayers(CircuitNamespace &ns, LayerOp layer) {
   OpBuilder b(layer);
-  SmallVector<StringAttr> stack;
-  createMacroDecls(ns, b, layer, stack);
+  SmallVector<FlatSymbolRefAttr> stack;
+  preprocessLayers(ns, b, layer, stack);
 }
 
 /// Process a circuit to remove all layer blocks in each module and top-level
@@ -712,24 +757,35 @@ void LowerLayersPass::runOnOperation() {
       continue;
     }
     // Build verilog macro declarations for each inline layer declarations.
+    // Cache layer symbol refs for lookup later.
     if (auto layerOp = dyn_cast<LayerOp>(op)) {
-      createMacroDecls(ns, layerOp);
+      preprocessLayers(ns, layerOp);
       continue;
     }
   }
 
   auto mergeMaps = [](auto &&a, auto &&b) {
-    for (auto bb : b)
-      a.insert(bb);
+    if (failed(a))
+      return std::forward<decltype(a)>(a);
+    if (failed(b))
+      return std::forward<decltype(b)>(b);
+
+    for (auto bb : *b)
+      a->insert(bb);
     return std::forward<decltype(a)>(a);
   };
 
   // Lower the layer blocks of each module.
   SmallVector<FModuleLike> modules(
       circuitOp.getBodyBlock()->getOps<FModuleLike>());
-  auto innerRefMap =
-      transformReduce(circuitOp.getContext(), modules, InnerRefMap{}, mergeMaps,
-                      [this](FModuleLike mod) { return runOnModuleLike(mod); });
+  auto failureOrInnerRefMap = transformReduce(
+      circuitOp.getContext(), modules, FailureOr<InnerRefMap>(InnerRefMap{}),
+      mergeMaps, [this](FModuleLike mod) -> FailureOr<InnerRefMap> {
+        return runOnModuleLike(mod);
+      });
+  if (failed(failureOrInnerRefMap))
+    return signalPassFailure();
+  auto &innerRefMap = *failureOrInnerRefMap;
 
   // Rewrite any hw::HierPathOps which have namepaths that contain rewritting
   // inner refs.

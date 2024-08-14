@@ -52,6 +52,7 @@ public:
   ///   is opened for writing. For 'Read' mode, this file is opened for reading.
   TraceAccelerator(Context &, Mode mode, std::filesystem::path manifestJson,
                    std::filesystem::path traceFile);
+  ~TraceAccelerator() override;
 
   /// Parse the connection string and instantiate the accelerator. Format is:
   /// "<mode>:<manifest path>[:<traceFile>]".

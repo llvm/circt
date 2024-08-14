@@ -74,11 +74,11 @@ public:
 
 /// Abstract class representing a connection to an accelerator. Actual
 /// connections (e.g. to a co-simulation or actual device) are implemented by
-/// subclasses.
+/// subclasses. No methods in here are thread safe.
 class AcceleratorConnection {
 public:
   AcceleratorConnection(Context &ctxt);
-  virtual ~AcceleratorConnection() = default;
+  virtual ~AcceleratorConnection();
   Context &getCtxt() const { return ctxt; }
 
   /// Disconnect from the accelerator cleanly.
@@ -89,7 +89,12 @@ public:
   virtual std::map<std::string, ChannelPort &>
   requestChannelsFor(AppIDPath, const BundleType *) = 0;
 
-  AcceleratorServiceThread *getServiceThread() { return serviceThread.get(); }
+  /// Return a pointer to the accelerator 'service' thread (or threads). If the
+  /// thread(s) are not running, they will be started when this method is
+  /// called. `std::thread` is used. If users don't want the runtime to spin up
+  /// threads, don't call this method. `AcceleratorServiceThread` is owned by
+  /// AcceleratorConnection and governed by the lifetime of the this object.
+  AcceleratorServiceThread *getServiceThread();
 
   using Service = services::Service;
   /// Get a typed reference to a particular service type. Caller does *not* take
@@ -108,6 +113,10 @@ public:
                               std::string implName = {},
                               ServiceImplDetails details = {},
                               HWClientDetails clients = {});
+
+  /// Assume ownership of an accelerator object. Ties the lifetime of the
+  /// accelerator to this connection. Returns a raw pointer to the object.
+  Accelerator *takeOwnership(std::unique_ptr<Accelerator> accel);
 
 protected:
   /// Called by `getServiceImpl` exclusively. It wraps the pointer returned by
@@ -128,21 +137,26 @@ private:
   std::map<ServiceCacheKey, std::unique_ptr<Service>> serviceCache;
 
   std::unique_ptr<AcceleratorServiceThread> serviceThread;
+
+  /// List of accelerator objects owned by this connection. These are destroyed
+  /// when the connection dies or is shutdown.
+  std::vector<std::unique_ptr<Accelerator>> ownedAccelerators;
 };
 
 namespace registry {
 
 // Connect to an ESI accelerator given a backend name and connection specifier.
 // Alternatively, instantiate the backend directly (if you're using C++).
-std::unique_ptr<AcceleratorConnection>
-connect(Context &ctxt, std::string backend, std::string connection);
+std::unique_ptr<AcceleratorConnection> connect(Context &ctxt,
+                                               const std::string &backend,
+                                               const std::string &connection);
 
 namespace internal {
 
 /// Backends can register themselves to be connected via a connection string.
 using BackendCreate = std::function<std::unique_ptr<AcceleratorConnection>(
     Context &, std::string)>;
-void registerBackend(std::string name, BackendCreate create);
+void registerBackend(const std::string &name, BackendCreate create);
 
 // Helper struct to
 template <typename TAccelerator>
@@ -171,6 +185,9 @@ public:
   void
   addListener(std::initializer_list<ReadChannelPort *> listenPorts,
               std::function<void(ReadChannelPort *, MessageData)> callback);
+
+  /// Poll this module.
+  void addPoll(HWModule &module);
 
   /// Instruct the service thread to stop running.
   void stop();

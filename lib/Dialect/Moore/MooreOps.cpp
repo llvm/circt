@@ -13,6 +13,7 @@
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/HW/CustomDirectiveImpl.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
+#include "circt/Dialect/Moore/MooreAttributes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/SmallString.h"
@@ -258,57 +259,113 @@ void VariableOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), *getName());
 }
 
-llvm::SmallVector<MemorySlot> VariableOp::getPromotableSlots() {
-  if (isa<SVModuleOp>(getOperation()->getParentOp()))
+LogicalResult VariableOp::canonicalize(VariableOp op,
+                                       PatternRewriter &rewriter) {
+  // If the variable is embedded in an SSACFG region, move the initial value
+  // into an assignment immediately after the variable op. This allows the
+  // mem2reg pass which cannot handle variables with initial values.
+  auto initial = op.getInitial();
+  if (initial && mlir::mayHaveSSADominance(*op->getParentRegion())) {
+    rewriter.modifyOpInPlace(op, [&] { op.getInitialMutable().clear(); });
+    rewriter.setInsertionPointAfter(op);
+    rewriter.create<BlockingAssignOp>(initial.getLoc(), op, initial);
+    return success();
+  }
+
+  // Check if the variable has one unique continuous assignment to it, all other
+  // uses are reads, and that all uses are in the same block as the variable
+  // itself.
+  auto *block = op->getBlock();
+  ContinuousAssignOp uniqueAssignOp;
+  for (auto *user : op->getUsers()) {
+    // Ensure that all users of the variable are in the same block.
+    if (user->getBlock() != block)
+      return failure();
+
+    // Ensure there is at most one unique continuous assignment to the variable.
+    if (auto assignOp = dyn_cast<ContinuousAssignOp>(user)) {
+      if (uniqueAssignOp)
+        return failure();
+      uniqueAssignOp = assignOp;
+      continue;
+    }
+
+    // Ensure all other users are reads.
+    if (!isa<ReadOp>(user))
+      return failure();
+  }
+  if (!uniqueAssignOp)
+    return failure();
+
+  // If the original variable had a name, create an `AssignedVariableOp` as a
+  // replacement. Otherwise substitute the assigned value directly.
+  Value assignedValue = uniqueAssignOp.getSrc();
+  if (auto name = op.getNameAttr(); name && !name.empty())
+    assignedValue = rewriter.create<AssignedVariableOp>(
+        op.getLoc(), name, uniqueAssignOp.getSrc());
+
+  // Remove the assign op and replace all reads with the new assigned var op.
+  rewriter.eraseOp(uniqueAssignOp);
+  for (auto *user : llvm::make_early_inc_range(op->getUsers())) {
+    auto readOp = cast<ReadOp>(user);
+    rewriter.replaceOp(readOp, assignedValue);
+  }
+
+  // Remove the original variable.
+  rewriter.eraseOp(op);
+  return success();
+}
+
+SmallVector<MemorySlot> VariableOp::getPromotableSlots() {
+  // We cannot promote variables with an initial value, since that value may not
+  // dominate the location where the default value needs to be constructed.
+  if (mlir::mayBeGraphRegion(*getOperation()->getParentRegion()) ||
+      getInitial())
     return {};
-  return {MemorySlot{getResult(), getType()}};
+
+  // Ensure that `getDefaultValue` can conjure up a default value for the
+  // variable's type.
+  if (!isa<PackedType>(getType().getNestedType()))
+    return {};
+
+  return {MemorySlot{getResult(), getType().getNestedType()}};
 }
 
 Value VariableOp::getDefaultValue(const MemorySlot &slot, OpBuilder &builder) {
-  if (auto value = getInitial())
-    return value;
-  return builder.create<ConstantOp>(
-      getLoc(),
-      cast<moore::IntType>(cast<RefType>(slot.elemType).getNestedType()), 0);
+  auto packedType = dyn_cast<PackedType>(slot.elemType);
+  if (!packedType)
+    return {};
+  auto bitWidth = packedType.getBitSize();
+  if (!bitWidth)
+    return {};
+  auto fvint = packedType.getDomain() == Domain::FourValued
+                   ? FVInt::getAllX(*bitWidth)
+                   : FVInt::getZero(*bitWidth);
+  Value value = builder.create<ConstantOp>(
+      getLoc(), IntType::get(getContext(), *bitWidth, packedType.getDomain()),
+      fvint);
+  if (value.getType() != packedType)
+    builder.create<ConversionOp>(getLoc(), packedType, value);
+  return value;
 }
 
 void VariableOp::handleBlockArgument(const MemorySlot &slot,
                                      BlockArgument argument,
                                      OpBuilder &builder) {}
 
-::std::optional<::mlir::PromotableAllocationOpInterface>
+std::optional<mlir::PromotableAllocationOpInterface>
 VariableOp::handlePromotionComplete(const MemorySlot &slot, Value defaultValue,
                                     OpBuilder &builder) {
-  if (defaultValue.use_empty())
+  if (defaultValue && defaultValue.use_empty())
     defaultValue.getDefiningOp()->erase();
   this->erase();
-  return std::nullopt;
-}
-
-LogicalResult VariableOp::canonicalize(VariableOp op,
-                                       ::mlir::PatternRewriter &rewriter) {
-  Value initial;
-  for (auto *user : op->getUsers())
-    if (isa<ContinuousAssignOp>(user) &&
-        (user->getOperand(0) == op.getResult())) {
-      // Don't canonicalize the multiple continuous assignment to the same
-      // variable.
-      if (initial)
-        return failure();
-      initial = user->getOperand(1);
-    }
-
-  if (initial) {
-    rewriter.replaceOpWithNewOp<AssignedVarOp>(op, op.getType(),
-                                               op.getNameAttr(), initial);
-    return success();
-  }
-
-  return failure();
+  return {};
 }
 
 SmallVector<DestructurableMemorySlot> VariableOp::getDestructurableSlots() {
   if (isa<SVModuleOp>(getOperation()->getParentOp()))
+    return {};
+  if (getInitial())
     return {};
 
   auto refType = getType();
@@ -328,6 +385,7 @@ DenseMap<Attribute, MemorySlot> VariableOp::destructure(
     const SmallPtrSetImpl<Attribute> &usedIndices, OpBuilder &builder,
     SmallVectorImpl<DestructurableAllocationOpInterface> &newAllocators) {
   assert(slot.ptr == getResult());
+  assert(!getInitial());
   builder.setInsertionPointAfter(*this);
 
   auto destructurableType = cast<DestructurableTypeInterface>(getType());
@@ -335,8 +393,12 @@ DenseMap<Attribute, MemorySlot> VariableOp::destructure(
   for (Attribute index : usedIndices) {
     auto elemType = cast<RefType>(destructurableType.getTypeAtIndex(index));
     assert(elemType && "used index must exist");
-    auto varOp = builder.create<VariableOp>(getLoc(), elemType,
-                                            cast<StringAttr>(index), Value());
+    StringAttr varName;
+    if (auto name = getName(); name && !name->empty())
+      varName = StringAttr::get(
+          getContext(), (*name) + "." + cast<StringAttr>(index).getValue());
+    auto varOp =
+        builder.create<VariableOp>(getLoc(), elemType, varName, Value());
     newAllocators.push_back(varOp);
     slotMap.try_emplace<MemorySlot>(index, {varOp.getResult(), elemType});
   }
@@ -361,13 +423,116 @@ void NetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), *getName());
 }
 
+LogicalResult NetOp::canonicalize(NetOp op, PatternRewriter &rewriter) {
+  bool modified = false;
+
+  // Check if the net has one unique continuous assignment to it, and
+  // additionally if all other users are reads.
+  auto *block = op->getBlock();
+  ContinuousAssignOp uniqueAssignOp;
+  bool allUsesAreReads = true;
+  for (auto *user : op->getUsers()) {
+    // Ensure that all users of the net are in the same block.
+    if (user->getBlock() != block)
+      return failure();
+
+    // Ensure there is at most one unique continuous assignment to the net.
+    if (auto assignOp = dyn_cast<ContinuousAssignOp>(user)) {
+      if (uniqueAssignOp)
+        return failure();
+      uniqueAssignOp = assignOp;
+      continue;
+    }
+
+    // Ensure all other users are reads.
+    if (!isa<ReadOp>(user))
+      allUsesAreReads = false;
+  }
+
+  // If there was one unique assignment, and the `NetOp` does not yet have an
+  // assigned value set, fold the assignment into the net.
+  if (uniqueAssignOp && !op.getAssignment()) {
+    rewriter.modifyOpInPlace(
+        op, [&] { op.getAssignmentMutable().assign(uniqueAssignOp.getSrc()); });
+    rewriter.eraseOp(uniqueAssignOp);
+    modified = true;
+    uniqueAssignOp = {};
+  }
+
+  // If all users of the net op are reads, and any potential unique assignment
+  // has been folded into the net op itself, directly replace the reads with the
+  // net's assigned value.
+  if (!uniqueAssignOp && allUsesAreReads && op.getAssignment()) {
+    // If the original net had a name, create an `AssignedVariableOp` as a
+    // replacement. Otherwise substitute the assigned value directly.
+    auto assignedValue = op.getAssignment();
+    if (auto name = op.getNameAttr(); name && !name.empty())
+      assignedValue =
+          rewriter.create<AssignedVariableOp>(op.getLoc(), name, assignedValue);
+
+    // Replace all reads with the new assigned var op and remove the original
+    // net op.
+    for (auto *user : llvm::make_early_inc_range(op->getUsers())) {
+      auto readOp = cast<ReadOp>(user);
+      rewriter.replaceOp(readOp, assignedValue);
+    }
+    rewriter.eraseOp(op);
+    modified = true;
+  }
+
+  return success(modified);
+}
+
 //===----------------------------------------------------------------------===//
-// AssignedVarOp
+// AssignedVariableOp
 //===----------------------------------------------------------------------===//
 
-void AssignedVarOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void AssignedVariableOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   if (getName() && !getName()->empty())
     setNameFn(getResult(), *getName());
+}
+
+LogicalResult AssignedVariableOp::canonicalize(AssignedVariableOp op,
+                                               PatternRewriter &rewriter) {
+  // Eliminate chained variables with the same name.
+  // var(name, var(name, x)) -> var(name, x)
+  if (auto otherOp = op.getInput().getDefiningOp<AssignedVariableOp>()) {
+    if (otherOp.getNameAttr() == op.getNameAttr()) {
+      rewriter.replaceOp(op, otherOp);
+      return success();
+    }
+  }
+
+  // Eliminate variables that alias an input port of the same name.
+  if (auto blockArg = dyn_cast<BlockArgument>(op.getInput())) {
+    if (auto moduleOp =
+            dyn_cast<SVModuleOp>(blockArg.getOwner()->getParentOp())) {
+      auto moduleType = moduleOp.getModuleType();
+      auto portName = moduleType.getInputNameAttr(blockArg.getArgNumber());
+      if (portName == op.getNameAttr()) {
+        rewriter.replaceOp(op, blockArg);
+        return success();
+      }
+    }
+  }
+
+  // Eliminate variables that feed an output port of the same name.
+  for (auto &use : op->getUses()) {
+    auto outputOp = dyn_cast<OutputOp>(use.getOwner());
+    if (!outputOp)
+      continue;
+    auto moduleOp = dyn_cast<SVModuleOp>(outputOp.getParentOp());
+    if (!moduleOp)
+      break;
+    auto moduleType = moduleOp.getModuleType();
+    auto portName = moduleType.getOutputNameAttr(use.getOperandNumber());
+    if (portName == op.getNameAttr()) {
+      rewriter.replaceOp(op, op.getInput());
+      return success();
+    }
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
@@ -376,19 +541,21 @@ void AssignedVarOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 void ConstantOp::print(OpAsmPrinter &p) {
   p << " ";
-  p.printAttributeWithoutType(getValueAttr());
+  printFVInt(p, getValue());
   p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
   p << " : ";
   p.printStrippedAttrOrType(getType());
 }
 
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
-  // Parse the constant value without bit width.
-  APInt value;
+  // Parse the constant value.
+  FVInt value;
   auto valueLoc = parser.getCurrentLocation();
+  if (parseFVInt(parser, value))
+    return failure();
 
-  if (parser.parseInteger(value) ||
-      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon())
+  // Parse any optional attributes and the `:`.
+  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon())
     return failure();
 
   // Parse the result type.
@@ -408,16 +575,21 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
     unsigned neededBits =
         value.isNegative() ? value.getSignificantBits() : value.getActiveBits();
     if (type.getWidth() < neededBits)
-      return parser.emitError(valueLoc,
-                              "constant out of range for result type ")
-             << type;
+      return parser.emitError(valueLoc)
+             << "value requires " << neededBits
+             << " bits, but result type only has " << type.getWidth();
     value = value.trunc(type.getWidth());
   }
 
-  // Build the attribute and op.
-  auto attrType = IntegerType::get(parser.getContext(), type.getWidth());
-  auto attrValue = IntegerAttr::get(attrType, value);
+  // If the constant contains any X or Z bits, the result type must be
+  // four-valued.
+  if (value.hasUnknown() && type.getDomain() != Domain::FourValued)
+    return parser.emitError(valueLoc)
+           << "value contains X or Z bits, but result type " << type
+           << " only allows two-valued bits";
 
+  // Build the attribute and op.
+  auto attrValue = FVIntegerAttr::get(parser.getContext(), value);
   result.addAttribute("value", attrValue);
   result.addTypes(type);
   return success();
@@ -433,11 +605,17 @@ LogicalResult ConstantOp::verify() {
 }
 
 void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
+                       const FVInt &value) {
+  assert(type.getWidth() == value.getBitWidth() &&
+         "FVInt width must match type width");
+  build(builder, result, type, FVIntegerAttr::get(builder.getContext(), value));
+}
+
+void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
                        const APInt &value) {
   assert(type.getWidth() == value.getBitWidth() &&
          "APInt width must match type width");
-  build(builder, result, type,
-        builder.getIntegerAttr(builder.getIntegerType(type.getWidth()), value));
+  build(builder, result, type, FVInt(value));
 }
 
 /// This builder allows construction of small signed integers like 0, 1, -1
@@ -504,50 +682,95 @@ LogicalResult ConcatRefOp::inferReturnTypes(
 }
 
 //===----------------------------------------------------------------------===//
+// ArrayCreateOp
+//===----------------------------------------------------------------------===//
+
+static std::pair<unsigned, UnpackedType> getArrayElements(Type type) {
+  if (auto arrayType = dyn_cast<ArrayType>(type))
+    return {arrayType.getSize(), arrayType.getElementType()};
+  if (auto arrayType = dyn_cast<UnpackedArrayType>(type))
+    return {arrayType.getSize(), arrayType.getElementType()};
+  assert(0 && "expected ArrayType or UnpackedArrayType");
+  return {};
+}
+
+LogicalResult ArrayCreateOp::verify() {
+  auto [size, elementType] = getArrayElements(getType());
+
+  // Check that the number of operands matches the array size.
+  if (getElements().size() != size)
+    return emitOpError() << "has " << getElements().size()
+                         << " operands, but result type requires " << size;
+
+  // Check that the operand types match the array element type. We only need to
+  // check one of the operands, since the `SameTypeOperands` trait ensures all
+  // operands have the same type.
+  if (size > 0) {
+    auto value = getElements()[0];
+    if (value.getType() != elementType)
+      return emitOpError() << "operands have type " << value.getType()
+                           << ", but array requires " << elementType;
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // StructCreateOp
 //===----------------------------------------------------------------------===//
 
+static std::optional<uint32_t> getStructFieldIndex(Type type, StringAttr name) {
+  if (auto structType = dyn_cast<StructType>(type))
+    return structType.getFieldIndex(name);
+  if (auto structType = dyn_cast<UnpackedStructType>(type))
+    return structType.getFieldIndex(name);
+  assert(0 && "expected StructType or UnpackedStructType");
+  return {};
+}
+
+static ArrayRef<StructLikeMember> getStructMembers(Type type) {
+  if (auto structType = dyn_cast<StructType>(type))
+    return structType.getMembers();
+  if (auto structType = dyn_cast<UnpackedStructType>(type))
+    return structType.getMembers();
+  assert(0 && "expected StructType or UnpackedStructType");
+  return {};
+}
+
+static UnpackedType getStructFieldType(Type type, StringAttr name) {
+  if (auto index = getStructFieldIndex(type, name))
+    return getStructMembers(type)[*index].type;
+  return {};
+}
+
 LogicalResult StructCreateOp::verify() {
-  /// checks if the types of the inputs are exactly equal to the types of the
-  /// result struct fields
-  return TypeSwitch<Type, LogicalResult>(getType().getNestedType())
-      .Case<StructType, UnpackedStructType>([this](auto &type) {
-        auto members = type.getMembers();
-        auto inputs = getInput();
-        if (inputs.size() != members.size())
-          return failure();
-        for (size_t i = 0; i < members.size(); i++) {
-          auto memberType = cast<UnpackedType>(members[i].type);
-          auto inputType = inputs[i].getType();
-          if (inputType != memberType) {
-            emitOpError("input types must match struct field types and orders");
-            return failure();
-          }
-        }
-        return success();
-      })
-      .Default([this](auto &) {
-        emitOpError("Result type must be StructType or UnpackedStructType");
-        return failure();
-      });
+  auto members = getStructMembers(getType());
+
+  // Check that the number of operands matches the number of struct fields.
+  if (getFields().size() != members.size())
+    return emitOpError() << "has " << getFields().size()
+                         << " operands, but result type requires "
+                         << members.size();
+
+  // Check that the operand types match the struct field types.
+  for (auto [index, pair] : llvm::enumerate(llvm::zip(getFields(), members))) {
+    auto [value, member] = pair;
+    if (value.getType() != member.type)
+      return emitOpError() << "operand #" << index << " has type "
+                           << value.getType() << ", but struct field "
+                           << member.name << " requires " << member.type;
+  }
+  return success();
 }
 
 OpFoldResult StructCreateOp::fold(FoldAdaptor adaptor) {
-  auto inputs = adaptor.getInput();
-
-  if (llvm::any_of(inputs, [](Attribute attr) { return !attr; }))
-    return {};
-
-  auto members = TypeSwitch<Type, ArrayRef<StructLikeMember>>(
-                     cast<RefType>(getType()).getNestedType())
-                     .Case<StructType, UnpackedStructType>(
-                         [](auto &type) { return type.getMembers(); })
-                     .Default([](auto) { return std::nullopt; });
-  SmallVector<NamedAttribute> namedInputs;
-  for (auto [input, member] : llvm::zip(inputs, members))
-    namedInputs.push_back(NamedAttribute(member.name, input));
-
-  return DictionaryAttr::get(getContext(), namedInputs);
+  SmallVector<NamedAttribute> fields;
+  for (auto [member, field] :
+       llvm::zip(getStructMembers(getType()), adaptor.getFields())) {
+    if (!field)
+      return {};
+    fields.push_back(NamedAttribute(member.name, field));
+  }
+  return DictionaryAttr::get(getContext(), fields);
 }
 
 //===----------------------------------------------------------------------===//
@@ -555,73 +778,36 @@ OpFoldResult StructCreateOp::fold(FoldAdaptor adaptor) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult StructExtractOp::verify() {
-  /// checks if the type of the result match field type in this struct
-  return TypeSwitch<Type, LogicalResult>(getInput().getType().getNestedType())
-      .Case<StructType, UnpackedStructType>([this](auto &type) {
-        auto members = type.getMembers();
-        auto filedName = getFieldName();
-        auto resultType = getType();
-        for (const auto &member : members) {
-          if (member.name == filedName && member.type == resultType) {
-            return success();
-          }
-        }
-        emitOpError("result type must match struct field type");
-        return failure();
-      })
-      .Default([this](auto &) {
-        emitOpError("input type must be StructType or UnpackedStructType");
-        return failure();
-      });
-}
-
-bool StructExtractOp::canRewire(const DestructurableMemorySlot &slot,
-                                SmallPtrSetImpl<Attribute> &usedIndices,
-                                SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
-                                const DataLayout &dataLayout) {
-  if (slot.ptr == getInput()) {
-    usedIndices.insert(getFieldNameAttr());
-    return true;
-  }
-  return false;
-}
-
-DeletionKind StructExtractOp::rewire(const DestructurableMemorySlot &slot,
-                                     DenseMap<Attribute, MemorySlot> &subslots,
-                                     OpBuilder &builder,
-                                     const DataLayout &dataLayout) {
-  auto index = getFieldNameAttr();
-  const auto &memorySlot = subslots.at(index);
-  auto readOp = builder.create<moore::ReadOp>(
-      getLoc(), cast<RefType>(memorySlot.elemType).getNestedType(),
-      memorySlot.ptr);
-  replaceAllUsesWith(readOp.getResult());
-  getInputMutable().drop();
-  erase();
-  return DeletionKind::Keep;
+  auto type = getStructFieldType(getInput().getType(), getFieldNameAttr());
+  if (!type)
+    return emitOpError() << "extracts field " << getFieldNameAttr()
+                         << " which does not exist in " << getInput().getType();
+  if (type != getType())
+    return emitOpError() << "result type " << getType()
+                         << " must match struct field type " << type;
+  return success();
 }
 
 OpFoldResult StructExtractOp::fold(FoldAdaptor adaptor) {
-  if (auto constOperand = adaptor.getInput()) {
-    auto operandAttr = llvm::cast<DictionaryAttr>(constOperand);
-    for (const auto &ele : operandAttr)
-      if (ele.getName() == getFieldNameAttr())
-        return ele.getValue();
+  // Extract on a constant struct input.
+  if (auto fields = dyn_cast_or_null<DictionaryAttr>(adaptor.getInput()))
+    if (auto value = fields.get(getFieldNameAttr()))
+      return value;
+
+  // extract(inject(s, "field", v), "field") -> v
+  if (auto inject = getInput().getDefiningOp<StructInjectOp>()) {
+    if (inject.getFieldNameAttr() == getFieldNameAttr())
+      return inject.getNewValue();
+    return {};
   }
 
-  if (auto structInject = getInput().getDefiningOp<StructInjectOp>())
-    return structInject.getFieldNameAttr() == getFieldNameAttr()
-               ? structInject.getNewValue()
-               : Value();
-  if (auto structCreate = getInput().getDefiningOp<StructCreateOp>()) {
-    auto ind = TypeSwitch<Type, std::optional<uint32_t>>(
-                   getInput().getType().getNestedType())
-                   .Case<StructType, UnpackedStructType>([this](auto &type) {
-                     return type.getFieldIndex(getFieldNameAttr());
-                   })
-                   .Default([](auto &) { return std::nullopt; });
-    return ind.has_value() ? structCreate->getOperand(ind.value()) : Value();
+  // extract(create({"field": v, ...}), "field") -> v
+  if (auto create = getInput().getDefiningOp<StructCreateOp>()) {
+    if (auto index = getStructFieldIndex(create.getType(), getFieldNameAttr()))
+      return create.getFields()[*index];
+    return {};
   }
+
   return {};
 }
 
@@ -630,25 +816,15 @@ OpFoldResult StructExtractOp::fold(FoldAdaptor adaptor) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult StructExtractRefOp::verify() {
-  /// checks if the type of the result match field type in this struct
-  return TypeSwitch<Type, LogicalResult>(getInput().getType().getNestedType())
-      .Case<StructType, UnpackedStructType>([this](auto &type) {
-        auto members = type.getMembers();
-        auto filedName = getFieldName();
-        auto resultType = getType().getNestedType();
-        for (const auto &member : members) {
-          if (member.name == filedName && member.type == resultType) {
-            return success();
-          }
-        }
-        emitOpError("result type must match struct field type");
-        return failure();
-      })
-      .Default([this](auto &) {
-        emitOpError("input type must be refrence of StructType or "
-                    "UnpackedStructType");
-        return failure();
-      });
+  auto type = getStructFieldType(
+      cast<RefType>(getInput().getType()).getNestedType(), getFieldNameAttr());
+  if (!type)
+    return emitOpError() << "extracts field " << getFieldNameAttr()
+                         << " which does not exist in " << getInput().getType();
+  if (type != getType().getNestedType())
+    return emitOpError() << "result ref of type " << getType().getNestedType()
+                         << " must match struct field type " << type;
+  return success();
 }
 
 bool StructExtractRefOp::canRewire(
@@ -682,75 +858,14 @@ StructExtractRefOp::rewire(const DestructurableMemorySlot &slot,
 //===----------------------------------------------------------------------===//
 
 LogicalResult StructInjectOp::verify() {
-  /// checks if the type of the new value match field type in this struct
-  return TypeSwitch<Type, LogicalResult>(getInput().getType().getNestedType())
-      .Case<StructType, UnpackedStructType>([this](auto &type) {
-        auto members = type.getMembers();
-        auto filedName = getFieldName();
-        auto newValueType = getNewValue().getType();
-        for (const auto &member : members) {
-          if (member.name == filedName && member.type == newValueType) {
-            return success();
-          }
-        }
-        emitOpError("new value type must match struct field type");
-        return failure();
-      })
-      .Default([this](auto &) {
-        emitOpError("input type must be StructType or UnpackedStructType");
-        return failure();
-      });
-}
-
-void StructInjectOp::print(OpAsmPrinter &p) {
-  p << " ";
-  p.printOperand(getInput());
-  p << ", " << getFieldNameAttr() << ", ";
-  p.printOperand(getNewValue());
-  p << " : " << getInput().getType();
-}
-
-ParseResult StructInjectOp::parse(OpAsmParser &parser, OperationState &result) {
-  llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
-  OpAsmParser::UnresolvedOperand operand, val;
-  StringAttr fieldName;
-  Type declType;
-
-  if (parser.parseOperand(operand) || parser.parseComma() ||
-      parser.parseAttribute(fieldName) || parser.parseComma() ||
-      parser.parseOperand(val) || parser.parseColonType(declType))
-    return failure();
-
-  return TypeSwitch<Type, ParseResult>(cast<RefType>(declType).getNestedType())
-      .Case<StructType, UnpackedStructType>([&parser, &result, &declType,
-                                             &fieldName, &operand, &val,
-                                             &inputOperandsLoc](auto &type) {
-        auto members = type.getMembers();
-        Type fieldType;
-        for (const auto &member : members)
-          if (member.name == fieldName)
-            fieldType = member.type;
-        if (!fieldType) {
-          parser.emitError(parser.getNameLoc(),
-                           "field name '" + fieldName.getValue() +
-                               "' not found in struct type");
-          return failure();
-        }
-
-        auto fieldNameAttr =
-            StringAttr::get(parser.getContext(), Twine(fieldName));
-        result.addAttribute("fieldName", fieldNameAttr);
-        result.addTypes(declType);
-        if (parser.resolveOperands({operand, val}, {declType, fieldType},
-                                   inputOperandsLoc, result.operands))
-          return failure();
-
-        return success();
-      })
-      .Default([&parser, &inputOperandsLoc](auto &) {
-        return parser.emitError(inputOperandsLoc,
-                                "invalid kind of type specified");
-      });
+  auto type = getStructFieldType(getInput().getType(), getFieldNameAttr());
+  if (!type)
+    return emitOpError() << "injects field " << getFieldNameAttr()
+                         << " which does not exist in " << getInput().getType();
+  if (type != getNewValue().getType())
+    return emitOpError() << "injected value " << getNewValue().getType()
+                         << " must match struct field type " << type;
+  return success();
 }
 
 OpFoldResult StructInjectOp::fold(FoldAdaptor adaptor) {
@@ -758,66 +873,51 @@ OpFoldResult StructInjectOp::fold(FoldAdaptor adaptor) {
   auto newValue = adaptor.getNewValue();
   if (!input || !newValue)
     return {};
-  SmallVector<NamedAttribute> array;
-  llvm::copy(cast<DictionaryAttr>(input), std::back_inserter(array));
-  for (auto &ele : array) {
-    if (ele.getName() == getFieldName())
-      ele.setValue(newValue);
-  }
-  return DictionaryAttr::get(getContext(), array);
+  NamedAttrList fields(cast<DictionaryAttr>(input));
+  fields.set(getFieldNameAttr(), newValue);
+  return fields.getDictionary(getContext());
 }
 
 LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
                                            PatternRewriter &rewriter) {
-  // Canonicalize multiple injects into a create op and eliminate overwrites.
-  SmallPtrSet<Operation *, 4> injects;
-  DenseMap<StringAttr, Value> fields;
+  auto members = getStructMembers(op.getType());
 
-  // Chase a chain of injects. Bail out if cycles are present.
-  StructInjectOp inject = op;
-  Value input;
-  do {
-    if (!injects.insert(inject).second)
+  // Chase a chain of `struct_inject` ops, with an optional final
+  // `struct_create`, and take note of the values assigned to each field.
+  SmallPtrSet<Operation *, 4> injectOps;
+  DenseMap<StringAttr, Value> fieldValues;
+  Value input = op;
+  while (auto injectOp = input.getDefiningOp<StructInjectOp>()) {
+    if (!injectOps.insert(injectOp).second)
       return failure();
+    fieldValues.insert({injectOp.getFieldNameAttr(), injectOp.getNewValue()});
+    input = injectOp.getInput();
+  }
+  if (auto createOp = input.getDefiningOp<StructCreateOp>())
+    for (auto [value, member] : llvm::zip(createOp.getFields(), members))
+      fieldValues.insert({member.name, value});
 
-    fields.try_emplace(inject.getFieldNameAttr(), inject.getNewValue());
-    input = inject.getInput();
-    inject = input.getDefiningOp<StructInjectOp>();
-  } while (inject);
-  assert(input && "missing input to inject chain");
-
-  auto members = TypeSwitch<Type, ArrayRef<StructLikeMember>>(
-                     cast<RefType>(op.getType()).getNestedType())
-                     .Case<StructType, UnpackedStructType>(
-                         [](auto &type) { return type.getMembers(); })
-                     .Default([](auto) { return std::nullopt; });
-
-  // If the inject chain sets all fields, canonicalize to create.
-  if (fields.size() == members.size()) {
-    SmallVector<Value> createFields;
-    for (const auto &member : members) {
-      auto it = fields.find(member.name);
-      assert(it != fields.end() && "missing field");
-      createFields.push_back(it->second);
-    }
-    op.getInputMutable();
-    rewriter.replaceOpWithNewOp<StructCreateOp>(op, op.getType(), createFields);
+  // If the inject chain sets all fields, canonicalize to a `struct_create`.
+  if (fieldValues.size() == members.size()) {
+    SmallVector<Value> values;
+    values.reserve(fieldValues.size());
+    for (auto member : members)
+      values.push_back(fieldValues.lookup(member.name));
+    rewriter.replaceOpWithNewOp<StructCreateOp>(op, op.getType(), values);
     return success();
   }
 
-  // Nothing to canonicalize, only the original inject in the chain.
-  if (injects.size() == fields.size())
+  // If each inject op in the chain assigned to a unique field, there is nothing
+  // to canonicalize.
+  if (injectOps.size() == fieldValues.size())
     return failure();
 
-  // Eliminate overwrites. The hash map contains the last write to each field.
-  for (const auto &member : members) {
-    auto it = fields.find(member.name);
-    if (it == fields.end())
-      continue;
-    input = rewriter.create<StructInjectOp>(op.getLoc(), op.getType(), input,
-                                            member.name, it->second);
-  }
-
+  // Otherwise we can eliminate overwrites by creating new injects. The hash map
+  // of field values contains the last assigned value for each field.
+  for (auto member : members)
+    if (auto value = fieldValues.lookup(member.name))
+      input = rewriter.create<StructInjectOp>(op.getLoc(), op.getType(), input,
+                                              member.name, value);
   rewriter.replaceOp(op, input);
   return success();
 }
@@ -926,6 +1026,23 @@ OpFoldResult ConversionOp::fold(FoldAdaptor adaptor) {
   // Fold away no-op casts.
   if (getInput().getType() == getResult().getType())
     return getInput();
+
+  // Convert domains of constant integer inputs.
+  auto intInput = dyn_cast_or_null<FVIntegerAttr>(adaptor.getInput());
+  auto fromIntType = dyn_cast<IntType>(getInput().getType());
+  auto toIntType = dyn_cast<IntType>(getResult().getType());
+  if (intInput && fromIntType && toIntType &&
+      fromIntType.getWidth() == toIntType.getWidth()) {
+    // If we are going *to* a four-valued type, simply pass through the
+    // constant.
+    if (toIntType.getDomain() == Domain::FourValued)
+      return intInput;
+
+    // Otherwise map all unknown bits to zero (the default in SystemVerilog) and
+    // return a new constant.
+    return FVIntegerAttr::get(getContext(), intInput.getValue().toAPInt(false));
+  }
+
   return {};
 }
 
@@ -965,8 +1082,7 @@ bool BlockingAssignOp::canUsesBeRemoved(
     return false;
   Value blockingUse = (*blockingUses.begin())->get();
   return blockingUse == slot.ptr && getDst() == slot.ptr &&
-         getSrc() != slot.ptr &&
-         getSrc().getType() == cast<RefType>(slot.elemType).getNestedType();
+         getSrc() != slot.ptr && getSrc().getType() == slot.elemType;
 }
 
 DeletionKind BlockingAssignOp::removeBlockingUses(
@@ -981,7 +1097,7 @@ DeletionKind BlockingAssignOp::removeBlockingUses(
 //===----------------------------------------------------------------------===//
 
 bool ReadOp::loadsFrom(const MemorySlot &slot) {
-  return getOperand() == slot.ptr;
+  return getInput() == slot.ptr;
 }
 
 bool ReadOp::storesTo(const MemorySlot &slot) { return false; }
@@ -1000,7 +1116,7 @@ bool ReadOp::canUsesBeRemoved(const MemorySlot &slot,
     return false;
   Value blockingUse = (*blockingUses.begin())->get();
   return blockingUse == slot.ptr && getOperand() == slot.ptr &&
-         getResult().getType() == cast<RefType>(slot.elemType).getNestedType();
+         getResult().getType() == slot.elemType;
 }
 
 DeletionKind
@@ -1010,6 +1126,74 @@ ReadOp::removeBlockingUses(const MemorySlot &slot,
                            const DataLayout &dataLayout) {
   getResult().replaceAllUsesWith(reachingDefinition);
   return DeletionKind::Delete;
+}
+
+//===----------------------------------------------------------------------===//
+// PowSOp
+//===----------------------------------------------------------------------===//
+
+static OpFoldResult powCommonFolding(MLIRContext *ctxt, Attribute lhs,
+                                     Attribute rhs) {
+  auto lhsValue = dyn_cast_or_null<FVIntegerAttr>(lhs);
+  if (lhsValue && lhsValue.getValue() == 1)
+    return lhs;
+
+  auto rhsValue = dyn_cast_or_null<FVIntegerAttr>(rhs);
+  if (rhsValue && rhsValue.getValue().isZero())
+    return FVIntegerAttr::get(ctxt,
+                              FVInt(rhsValue.getValue().getBitWidth(), 1));
+
+  return {};
+}
+
+OpFoldResult PowSOp::fold(FoldAdaptor adaptor) {
+  return powCommonFolding(getContext(), adaptor.getLhs(), adaptor.getRhs());
+}
+
+LogicalResult PowSOp::canonicalize(PowSOp op, PatternRewriter &rewriter) {
+  Location loc = op.getLoc();
+  auto intType = cast<IntType>(op.getRhs().getType());
+  if (auto baseOp = op.getLhs().getDefiningOp<ConstantOp>()) {
+    if (baseOp.getValue() == 2) {
+      Value constOne = rewriter.create<ConstantOp>(loc, intType, 1);
+      Value constZero = rewriter.create<ConstantOp>(loc, intType, 0);
+      Value shift = rewriter.create<ShlOp>(loc, constOne, op.getRhs());
+      Value isNegative = rewriter.create<SltOp>(loc, op.getRhs(), constZero);
+      auto condOp = rewriter.replaceOpWithNewOp<ConditionalOp>(
+          op, op.getLhs().getType(), isNegative);
+      Block *thenBlock = rewriter.createBlock(&condOp.getTrueRegion());
+      rewriter.setInsertionPointToStart(thenBlock);
+      rewriter.create<YieldOp>(loc, constZero);
+      Block *elseBlock = rewriter.createBlock(&condOp.getFalseRegion());
+      rewriter.setInsertionPointToStart(elseBlock);
+      rewriter.create<YieldOp>(loc, shift);
+      return success();
+    }
+  }
+
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// PowUOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult PowUOp::fold(FoldAdaptor adaptor) {
+  return powCommonFolding(getContext(), adaptor.getLhs(), adaptor.getRhs());
+}
+
+LogicalResult PowUOp::canonicalize(PowUOp op, PatternRewriter &rewriter) {
+  Location loc = op.getLoc();
+  auto intType = cast<IntType>(op.getRhs().getType());
+  if (auto baseOp = op.getLhs().getDefiningOp<ConstantOp>()) {
+    if (baseOp.getValue() == 2) {
+      Value constOne = rewriter.create<ConstantOp>(loc, intType, 1);
+      rewriter.replaceOpWithNewOp<ShlOp>(op, constOne, op.getRhs());
+      return success();
+    }
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//

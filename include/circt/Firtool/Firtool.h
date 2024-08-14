@@ -95,7 +95,8 @@ public:
   bool shouldAllowAddingPortsOnPublic() const {
     return allowAddingPortsOnPublic;
   }
-  bool shouldReplicateSequentialMemories() const { return replSeqMem; }
+  bool shouldConvertProbesToSignals() const { return probesToSignals; }
+  bool shouldReplaceSequentialMemories() const { return replSeqMem; }
   bool shouldDisableOptimization() const { return disableOptimization; }
   bool shouldLowerMemories() const { return lowerMemories; }
   bool shouldDedup() const { return !noDedup; }
@@ -155,6 +156,11 @@ public:
 
   FirtoolOptions &setAllowAddingPortsOnPublic(bool value) {
     allowAddingPortsOnPublic = value;
+    return *this;
+  }
+
+  FirtoolOptions &setConvertProbesToSignals(bool value) {
+    probesToSignals = value;
     return *this;
   }
 
@@ -362,6 +368,7 @@ private:
   bool disableAnnotationsClassless;
   bool lowerAnnotationsNoRefTypePorts;
   bool allowAddingPortsOnPublic;
+  bool probesToSignals;
   firrtl::PreserveAggregate::PreserveMode preserveAggregate;
   firrtl::PreserveValues::PreserveMode preserveMode;
   bool enableDebugInfo;

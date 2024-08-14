@@ -77,12 +77,12 @@ moore.module @Module() {
   // CHECK: moore.procedure always_comb {
   // CHECK: moore.procedure always_latch {
   // CHECK: moore.procedure always_ff {
-  moore.procedure initial {}
-  moore.procedure final {}
-  moore.procedure always {}
-  moore.procedure always_comb {}
-  moore.procedure always_latch {}
-  moore.procedure always_ff {}
+  moore.procedure initial { moore.return }
+  moore.procedure final { moore.return }
+  moore.procedure always { moore.return }
+  moore.procedure always_comb { moore.return }
+  moore.procedure always_latch { moore.return }
+  moore.procedure always_ff { moore.return }
 
   // CHECK: %[[TMP1:.+]] = moore.read %v2
   // CHECK: moore.assign %v1, %[[TMP1]] : i1
@@ -100,6 +100,7 @@ moore.module @Module() {
     moore.nonblocking_assign %v1, %4 : i1
     // CHECK: %a = moore.variable : <i32>
     %a = moore.variable : <i32>
+    moore.return
   }
 }
 
@@ -132,14 +133,33 @@ moore.module @Expressions(
   // CHECK-SAME: in [[REF_ARRAY1:%[^:]+]] : !moore.ref<uarray<4 x i8>>
   in %refArray1: !moore.ref<!moore.uarray<4 x i8>>,
   // CHECK-SAME: in [[REF_ARRAY2:%[^:]+]] : !moore.ref<uarray<2 x uarray<4 x i8>>>
-  in %refArray2: !moore.ref<uarray<2 x uarray<4 x i8>>>
+  in %refArray2: !moore.ref<uarray<2 x uarray<4 x i8>>>,
+
+  // CHECK-SAME: in [[STRUCT1:%.+]] : !moore.struct<{a: i32, b: i32}>
+  in %struct1: !moore.struct<{a: i32, b: i32}>,
+  // CHECK-SAME: in [[REF_STRUCT1:%.+]] : !moore.ref<struct<{a: i32, b: i32}>>
+  in %refStruct1: !moore.ref<struct<{a: i32, b: i32}>>
 ) {
+  // CHECK: moore.constant 0 : i0
+  moore.constant 0 : i0
+  // CHECK: moore.constant 0 : i1
+  moore.constant 0 : i1
+  // CHECK: moore.constant 1 : i1
+  moore.constant 1 : i1
   // CHECK: moore.constant 0 : i32
   moore.constant 0 : i32
   // CHECK: moore.constant -2 : i2
   moore.constant 2 : i2
   // CHECK: moore.constant -2 : i2
   moore.constant -2 : i2
+  // CHECK: moore.constant 1311768467463790320 : i64
+  moore.constant h123456789ABCDEF0 : i64
+  // CHECK: moore.constant h123456789ABCDEF0XZ : l72
+  moore.constant h123456789ABCDEF0XZ : l72
+  // CHECK: moore.constant 10 : i8
+  moore.constant b1010 : i8
+  // CHECK: moore.constant b1010XZ : l8
+  moore.constant b1010XZ : l8
 
   // CHECK: moore.conversion [[A]] : !moore.i32 -> !moore.l32
   moore.conversion %a : !moore.i32 -> !moore.l32
@@ -245,19 +265,19 @@ moore.module @Expressions(
   // CHECK: moore.replicate [[X]] : i1 -> i4
   moore.replicate %x : i1 -> i4
 
-  // CHECK: moore.extract [[A]] from [[B]] : i32, i32 -> i1
-  moore.extract %a from %b : i32, i32 -> i1
-  // CHECK: moore.extract [[ARRAY2]] from [[A]] : uarray<2 x uarray<4 x i8>>, i32 -> uarray<4 x i8>
-  moore.extract %array2 from %a : uarray<2 x uarray<4 x i8>>, i32 -> uarray<4 x i8>
-  // CHECK: moore.extract [[ARRAY1]] from [[A]] : uarray<4 x i8>, i32 -> i8
-  moore.extract %array1 from %a : uarray<4 x i8>, i32 -> i8
+  // CHECK: moore.dyn_extract [[A]] from [[B]] : i32, i32 -> i1
+  moore.dyn_extract %a from %b : i32, i32 -> i1
+  // CHECK: moore.dyn_extract [[ARRAY2]] from [[A]] : uarray<2 x uarray<4 x i8>>, i32 -> uarray<4 x i8>
+  moore.dyn_extract %array2 from %a : uarray<2 x uarray<4 x i8>>, i32 -> uarray<4 x i8>
+  // CHECK: moore.dyn_extract [[ARRAY1]] from [[A]] : uarray<4 x i8>, i32 -> i8
+  moore.dyn_extract %array1 from %a : uarray<4 x i8>, i32 -> i8
 
-  // CHECK: moore.extract_ref [[REF_A]] from [[B]] : <i32>, i32 -> <i1>
-  moore.extract_ref %refA from %b : <i32>, i32 -> <i1>
-  // CHECK: moore.extract_ref [[REF_ARRAY2]] from [[A]] : <uarray<2 x uarray<4 x i8>>>, i32 -> <uarray<4 x i8>>
-  moore.extract_ref %refArray2 from %a : <uarray<2 x uarray<4 x i8>>>, i32 -> <uarray<4 x i8>>
-  // CHECK: moore.extract_ref [[REF_ARRAY1]] from [[A]] : <uarray<4 x i8>>, i32 -> <i8>
-  moore.extract_ref %refArray1 from %a : <uarray<4 x i8>>, i32 -> <i8>
+  // CHECK: moore.dyn_extract_ref [[REF_A]] from [[B]] : <i32>, i32 -> <i1>
+  moore.dyn_extract_ref %refA from %b : <i32>, i32 -> <i1>
+  // CHECK: moore.dyn_extract_ref [[REF_ARRAY2]] from [[A]] : <uarray<2 x uarray<4 x i8>>>, i32 -> <uarray<4 x i8>>
+  moore.dyn_extract_ref %refArray2 from %a : <uarray<2 x uarray<4 x i8>>>, i32 -> <uarray<4 x i8>>
+  // CHECK: moore.dyn_extract_ref [[REF_ARRAY1]] from [[A]] : <uarray<4 x i8>>, i32 -> <i8>
+  moore.dyn_extract_ref %refArray1 from %a : <uarray<4 x i8>>, i32 -> <i8>
 
   // CHECK: moore.conditional [[X]] : i1 -> i32 {
   // CHECK:   moore.yield [[A]] : i32
@@ -269,6 +289,19 @@ moore.module @Expressions(
   } {
     moore.yield %b : i32
   }
+
+  // CHECK: moore.array_create [[A]], [[B]] : !moore.i32, !moore.i32 -> array<2 x i32>
+  moore.array_create %a, %b : !moore.i32, !moore.i32 -> array<2 x i32>
+
+  // CHECK: moore.struct_create [[A]], [[B]] : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
+  moore.struct_create %a, %b : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
+  // CHECK: moore.struct_extract [[STRUCT1]], "a" : struct<{a: i32, b: i32}> -> i32
+  moore.struct_extract %struct1, "a" : struct<{a: i32, b: i32}> -> i32
+  // CHECK: moore.struct_extract_ref [[REF_STRUCT1]], "a" : <struct<{a: i32, b: i32}>> -> <i32>
+  moore.struct_extract_ref %refStruct1, "a" : <struct<{a: i32, b: i32}>> -> <i32>
+  // CHECK: moore.struct_inject [[STRUCT1]], "a", [[B]] : struct<{a: i32, b: i32}>, i32
+  moore.struct_inject %struct1, "a", %b : struct<{a: i32, b: i32}>, i32
+
   moore.output
 }
 

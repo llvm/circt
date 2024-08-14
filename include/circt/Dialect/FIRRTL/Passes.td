@@ -397,11 +397,13 @@ def InferResets : Pass<"firrtl-infer-resets", "firrtl::CircuitOp"> {
   let summary = "Infer reset synchronicity and add implicit resets";
   let description = [{
     This pass infers whether resets are synchronous or asynchronous, and extends
-    reset-less registers with an asynchronous reset based on the following
+    reset-less registers with a reset based on the following
     annotations:
 
-    - `sifive.enterprise.firrtl.FullAsyncResetAnnotation`
-    - `sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation`
+    - `circt.FullResetAnnotation`
+    - `circt.ExcludeFromFullResetAnnotation`
+    - `sifive.enterprise.firrtl.FullAsyncResetAnnotation` (deprecated)
+    - `sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation` (deprecated)
   }];
   let constructor = "circt::firrtl::createInferResetsPass()";
 }
@@ -942,6 +944,30 @@ def AssignOutputDirs : Pass<"firrtl-assign-output-dirs", "firrtl::CircuitOp"> {
     Option<"outputDirOption", "output-dir", "std::string", "",
       "The default output directory.">
   ];
+}
+
+def ProbesToSignals : Pass<"firrtl-probes-to-signals", "firrtl::CircuitOp"> {
+  let summary = "Convert probes to signals.";
+  let description = [{
+    This pass transforms the design to replace probes with non-probe signals
+    that are explicitly routed through the design instead of remote access.
+    The result will not be ABI-compatible but provide similar behavior without the
+    use of potentially unsynthesizable cross-module references.
+
+    The pass will do a complete conversion or produce an error.
+
+    Not all FIRRTL designs with probes can be equivalently represented
+    with non-probes.
+
+    Run after LowerOpenAggs, ExpandWhens (so ref.define can always be replaced),
+    and any colored probes are removed through specialization.
+
+    Due to differences in width and reset inference, it is suggested to run
+    those first as well but not required.
+
+    RWProbes and related operations are not supported.
+  }];
+  let constructor = "circt::firrtl::createProbesToSignalsPass()";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

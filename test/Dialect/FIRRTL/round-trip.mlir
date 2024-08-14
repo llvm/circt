@@ -1,7 +1,12 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 // Basic MLIR operation parser round-tripping
 
-firrtl.circuit "Basic" {
+firrtl.circuit "Basic" attributes {
+  // CHECK: firrtl.specialization_disable = #firrtl<layerspecialization disable>
+  firrtl.specialization_disable = #firrtl<layerspecialization disable>,
+  // CHECK: firrtl.specialization_enable = #firrtl<layerspecialization enable>
+  firrtl.specialization_enable = #firrtl<layerspecialization enable>
+  } {
 firrtl.extmodule @Basic()
 
 // CHECK-LABEL: firrtl.module @Intrinsics
@@ -97,6 +102,22 @@ firrtl.module @PropertyArithmetic() {
 
   // CHECK: firrtl.integer.shr %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
   %4 = firrtl.integer.shr %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+}
+
+// CHECK-LABEL: firrtl.module @PropertyListOps
+firrtl.module @PropertyListOps() {
+  %0 = firrtl.integer 0
+  %1 = firrtl.integer 1
+  %2 = firrtl.integer 2
+
+  // CHECK: [[L0:%.+]] = firrtl.list.create %0, %1
+  %l0 = firrtl.list.create %0, %1 : !firrtl.list<integer>
+
+  // CHECK: [[L1:%.+]] = firrtl.list.create %2
+  %l1 = firrtl.list.create %2 : !firrtl.list<integer>
+
+  // CHECK: firrtl.list.concat [[L0]], [[L1]] : !firrtl.list<integer>
+  %concat = firrtl.list.concat %l0, %l1 : !firrtl.list<integer>
 }
 
 }

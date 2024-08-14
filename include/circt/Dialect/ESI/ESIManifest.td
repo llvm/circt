@@ -169,6 +169,23 @@ def AppIDHierNodeOp : ESI_Op<"manifest.hier_node", [
   }];
 }
 
+def SymbolConstantsOp : ESI_Op<"manifest.constants", [
+  DeclareOpInterfaceMethods<IsManifestData>]> {
+  let summary = "Constant values associated with a symbol";
+
+  let arguments = (ins FlatSymbolRefAttr:$symbolRef,
+                       DictionaryAttr:$constants);
+  let assemblyFormat = [{
+    $symbolRef $constants attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    // Get information which needs to appear in the manifest for the host to
+    // connect to this service.
+    void getDetails(SmallVectorImpl<NamedAttribute> &results);
+  }];
+}
+
 def SymbolMetadataOp : ESI_Op<"manifest.sym", [
   DeclareOpInterfaceMethods<IsManifestData>]> {
   let summary = "Metadata about a symbol";

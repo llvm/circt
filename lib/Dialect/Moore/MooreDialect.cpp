@@ -21,14 +21,24 @@ using namespace circt::moore;
 //===----------------------------------------------------------------------===//
 
 void MooreDialect::initialize() {
-  // Register types.
+  // Register types and attributes.
   registerTypes();
+  registerAttributes();
 
   // Register operations.
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/Moore/Moore.cpp.inc"
       >();
+}
+
+Operation *MooreDialect::materializeConstant(OpBuilder &builder,
+                                             Attribute value, Type type,
+                                             Location loc) {
+  if (auto intType = dyn_cast<IntType>(type))
+    if (auto intValue = dyn_cast<FVIntegerAttr>(value))
+      return builder.create<ConstantOp>(loc, intType, intValue);
+  return nullptr;
 }
 
 #include "circt/Dialect/Moore/MooreDialect.cpp.inc"

@@ -1,5 +1,6 @@
 add_circt_library(CIRCTBMCTransforms
   ExternalizeRegisters.cpp
+  LowerToBMC.cpp
 
   DEPENDS
   CIRCTBMCTransformsIncGen
@@ -7,7 +8,10 @@ add_circt_library(CIRCTBMCTransforms
   LINK_LIBS PUBLIC
   CIRCTHW
   CIRCTSeq
+  CIRCTComb
+  CIRCTVerif
 
+  MLIRFuncDialect
   MLIRIR
   MLIRSupport
   MLIRSCFDialect
