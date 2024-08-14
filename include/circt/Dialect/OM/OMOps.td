@@ -85,8 +85,6 @@ def ClassOp : OMClassLike<"class", [
       return mlir::RegionKind::Graph;
     }
 
-    llvm::SmallVector<FieldValue> getFieldValues();
-
     void addFields(mlir::OpBuilder &builder, mlir::Location loc,
                    llvm::ArrayRef<mlir::Attribute> fieldNames,
                    llvm::ArrayRef<mlir::Value> fieldValues);

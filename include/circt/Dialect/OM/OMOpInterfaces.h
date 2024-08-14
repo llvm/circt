@@ -15,38 +15,6 @@
 
 #include "mlir/IR/OpDefinition.h"
 #include "llvm/ADT/APSInt.h"
-#include "llvm/ADT/MapVector.h"
-
-namespace circt::om {
-
-class Field {
-  mlir::StringAttr name;
-  mlir::Location loc;
-  mlir::Type type;
-
-public:
-  Field(mlir::StringAttr name, mlir::Location loc, mlir::Type type)
-      : name(name), loc(loc), type(type) {}
-  mlir::StringAttr getName() { return this->name; };
-  mlir::Location getLoc() { return this->loc; };
-  mlir::Type getType() { return this->type; };
-};
-
-class FieldValue : public Field {
-  mlir::Value value;
-
-public:
-  FieldValue(mlir::StringAttr name, mlir::Value value)
-      : Field(name, value.getLoc(), value.getType()), value(value) {}
-  mlir::Value getValue() { return this->value; };
-};
-
-struct FieldsArg {
-  mlir::StringAttr name;
-  mlir::Value value;
-};
-
-} // namespace circt::om
 
 #include "circt/Dialect/OM/OMOpInterfaces.h.inc"
 
