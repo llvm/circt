@@ -69,10 +69,8 @@ class ModelInfo:
   hierarchy: List[StateHierarchy]
 
   def decode(d: dict) -> "ModelInfo":
-    return ModelInfo(d["name"], d["numStateBytes"],
-                     d.get("initialFnSym",
-                           ""), [StateInfo.decode(d) for d in d["states"]],
-                     list(), list())
+    return ModelInfo(d["name"], d["numStateBytes"], d.get("initialFnSym", ""),
+                     [StateInfo.decode(d) for d in d["states"]], list(), list())
 
 
 with open(args.state_json, "r") as f:
