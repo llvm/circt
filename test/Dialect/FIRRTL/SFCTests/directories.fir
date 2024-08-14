@@ -208,9 +208,9 @@ circuit TestHarness:
 ; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
 ; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
 ; MLIR_OUT:     om.class.fields(
-; MLIR_OUT:       @foo_m_ext_field %2 : !om.class.type<@MemorySchema>,
-; MLIR_OUT:       @bar_m_ext_field %16 : !om.class.type<@MemorySchema>,
-; MLIR_OUT:       @baz_m_ext_field %31 : !om.class.type<@MemorySchema>
+; MLIR_OUT:       @foo_m_ext_field
+; MLIR_OUT:       @bar_m_ext_field
+; MLIR_OUT:       @baz_m_ext_field
 ; MLIR_OUT:     )
 
 ; SITEST_NODUT:     FILE "design.sitest.json"

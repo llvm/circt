@@ -1635,60 +1635,45 @@ struct ObjectSubfieldOpConversion
   const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable;
 };
 
+LogicalResult convertClassFieldsTypes(ClassFieldsLike oldOp,
+                                      ClassFieldsLike newOp,
+                                      const TypeConverter *typeConverter) {
+  llvm::SmallVector<NamedAttribute> fieldTypes;
+  llvm::ArrayRef<Attribute> fieldNames = oldOp.getFieldNames();
+  for (auto field : fieldNames) {
+    std::optional<Type> type = oldOp.getFieldType(cast<StringAttr>(field));
+    if (!type.has_value())
+      return failure();
+    fieldTypes.push_back(mlir::NamedAttribute(
+        cast<StringAttr>(field),
+        mlir::TypeAttr::get(typeConverter->convertType(type.value()))));
+  }
+  auto *ctx = newOp.getContext();
+  newOp->setAttr("fieldNames", mlir::ArrayAttr::get(ctx, fieldNames));
+  newOp->setAttr("fieldTypes", mlir::DictionaryAttr::get(ctx, fieldTypes));
+  return llvm::success();
+}
+
 struct ClassFieldsOpConversion : public OpConversionPattern<ClassFieldsOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
   matchAndRewrite(ClassFieldsOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    bool failed = false;
-    rewriter.modifyOpInPlace(op, [&]() {
-      llvm::SmallVector<NamedAttribute> fieldTypes;
-      for (auto operand : op.getOperands()) {
-        operand.setType(typeConverter->convertType(operand.getType()));
-      }
-      for (auto field : op.getFieldNames()) {
-        std::optional<Type> type = op.getFieldType(cast<StringAttr>(field));
-        if (!type.has_value()) {
-          failed = true;
-          continue;
-        }
-        fieldTypes.push_back(mlir::NamedAttribute(
-            cast<StringAttr>(field),
-            mlir::TypeAttr::get(typeConverter->convertType(type.value()))));
-      }
-      op->setAttr("fieldTypes",
-                  mlir::DictionaryAttr::get(op.getContext(), fieldTypes));
-    });
-    return llvm::failure(failed);
+    auto newOp =
+        rewriter.replaceOpWithNewOp<ClassFieldsOp>(op, adaptor.getOperands());
+    return convertClassFieldsTypes(op, newOp, typeConverter);
   }
 };
 
-struct ClassExternFieldsOpConversion
-    : public OpConversionPattern<ClassExternFieldsOp> {
+struct ClassExternFieldsOpConversion : public OpConversionPattern<ClassExternFieldsOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
   matchAndRewrite(ClassExternFieldsOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    bool failed = false;
-    rewriter.modifyOpInPlace(op, [&]() {
-      llvm::SmallVector<NamedAttribute> fieldTypes;
-      // TODO: Unify with non-extern
-      for (auto field : op.getFieldNames()) {
-        std::optional<Type> type = op.getFieldType(cast<StringAttr>(field));
-        if (!type.has_value()) {
-          failed = true;
-          continue;
-        }
-        fieldTypes.push_back(mlir::NamedAttribute(
-            cast<StringAttr>(field),
-            mlir::TypeAttr::get(typeConverter->convertType(type.value()))));
-      }
-      op->setAttr("fieldTypes",
-                  mlir::DictionaryAttr::get(op.getContext(), fieldTypes));
-    });
-    return llvm::failure(failed);
+    auto newOp = rewriter.replaceOpWithNewOp<ClassExternFieldsOp>(op);
+    return convertClassFieldsTypes(op, newOp, typeConverter);
   }
 };
 
