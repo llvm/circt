@@ -1666,7 +1666,8 @@ struct ClassFieldsOpConversion : public OpConversionPattern<ClassFieldsOp> {
   }
 };
 
-struct ClassExternFieldsOpConversion : public OpConversionPattern<ClassExternFieldsOp> {
+struct ClassExternFieldsOpConversion
+    : public OpConversionPattern<ClassExternFieldsOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
