@@ -233,8 +233,8 @@ def HWModuleOp : HWModuleOpBase<"module",
     LogicalResult verifyBody();
 
     void appendPorts(
-    ArrayRef<std::tuple<StringAttr, Type, Location>> insertInputs,
-    ArrayRef<std::pair<StringAttr, Value>> insertOutputs);
+                  ArrayRef<std::tuple<StringAttr, Type, Location>> insertInputs,
+                  ArrayRef<std::pair<StringAttr, Value>> insertOutputs);
   }];
 
   let hasCustomAssemblyFormat = 1;

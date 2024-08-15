@@ -1,4 +1,4 @@
-//===- SinkClockGates.cpp - Sink clock gates to its users. -----===//
+//===----------SinkClockGates.cpp - Sink clock gates to its users.---------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -14,7 +14,7 @@
 // there are instances of a module, that have gated clock while others have
 // un-gated clock, then the un-gated versions add a constant true enable
 // condition. This analysis relies on the fact that the HW instance graph cannot
-// have cycles/recursion. It is guarunteed that any instance operand will be
+// have cycles/recursion. It is guaranteed that any instance operand will be
 // updated only once. This assert checks for it:
 // `assert(llvm::isa_and_nonnull<ConstantOp>(def))`
 // This doesnot handle gated clocks returned from an output port yet.
@@ -216,8 +216,12 @@ void SinkClockGatesPass::runOnOperation() {
   };
   // Seed phase, find the instances to start the traversal from.
   // These instances have a gated clock as input.
-  getOperation()->walk(
-      [&](hw::HWModuleOp hwModule) { findInstancesWithGatedClock(hwModule); });
+  for (auto *node : *graph) {
+    if (auto hwModule = node->getModule<HWModuleOp>())
+      findInstancesWithGatedClock(hwModule);
+  }
+  // Get the initial set of clock gates which this pass tries to sink.
+  numClockGatesConverted = instancesWithGatedClk.size();
 
   // Transformation phase, push the clock_gate through the instances and find
   // all the indirect instances that have a gated clock.
