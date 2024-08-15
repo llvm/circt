@@ -654,7 +654,7 @@ def ConvertToArcs : Pass<"convert-to-arcs", "mlir::ModuleOp"> {
     latency.
   }];
   let constructor = "circt::createConvertToArcsPass()";
-  let dependentDialects = ["circt::arc::ArcDialect"];
+  let dependentDialects = ["circt::arc::ArcDialect", "circt::hw::HWDialect"];
   let options = [
     Option<"tapRegisters", "tap-registers", "bool", "true",
       "Make registers observable">,

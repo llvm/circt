@@ -524,3 +524,42 @@ hw.module @vectorize(in %in0: i4, in %in1: i4, out out0: i4) {
 
 // expected-error @below {{state type must have a known bit width}}
 func.func @InvalidStateType(%arg0: !arc.state<index>)
+
+// -----
+
+// expected-error @below {{Cannot find declaration of initializer function 'MissingInitilaizer_initial'.}}
+arc.model @MissingInitilaizer io !hw.modty<> initializer @MissingInitilaizer_initial {
+  ^bb0(%arg0: !arc.storage<42>):
+}
+
+// -----
+
+// expected-note @below {{Initializer declared here:}}
+hw.module @NonFuncInitilaizer_initial() {
+}
+
+// expected-error @below {{Referenced initializer must be a 'func.func' op.}}
+arc.model @NonFuncInitilaizer io !hw.modty<> initializer @NonFuncInitilaizer_initial {
+  ^bb0(%arg0: !arc.storage<42>):
+}
+
+// -----
+
+// expected-note @below {{Initializer declared here:}}
+func.func @IncorrectArg_initial(!arc.storage<24>) {
+  ^bb0(%arg0: !arc.storage<24>):
+  return
+}
+
+// expected-error @below {{Arguments of initializer function must match arguments of model body.}}
+arc.model @IncorrectArg io !hw.modty<> initializer @IncorrectArg_initial {
+  ^bb0(%arg0: !arc.storage<42>):
+}
+
+// -----
+
+hw.module @InvalidInitType(in %clock: !seq.clock, in %input: i7) {
+  %cst = hw.constant 0 : i8
+  // expected-error @below {{failed to verify that types of initial arguments match result types}}
+  %res = arc.state @Bar(%input) clock %clock initial (%cst: i8) latency 1 : (i7) -> i7
+}

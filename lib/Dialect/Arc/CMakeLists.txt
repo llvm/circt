@@ -32,6 +32,7 @@ add_circt_dialect_library(CIRCTArc
   CIRCTSeq
   MLIRIR
   MLIRInferTypeOpInterface
+  MLIRFuncDialect
   MLIRSideEffectInterfaces
   MLIRFuncDialect
 )
