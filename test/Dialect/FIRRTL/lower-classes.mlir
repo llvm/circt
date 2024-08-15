@@ -458,3 +458,16 @@ firrtl.circuit "OwningModulePrefix" {
     firrtl.path reference distinct[0]<>
   }
 }
+
+// CHECK-LABEL: firrtl.circuit "PathTargetReplaced"
+firrtl.circuit "PathTargetReplaced" {
+  // CHECK: hw.hierpath private [[NLA:@.+]] [@PathTargetReplaced::[[SYM:@.+]]]
+  firrtl.module @PathTargetReplaced() {
+    // CHECK: firrtl.instance replaced sym [[SYM]]
+    firrtl.instance replaced {annotations = [{class = "circt.tracker", id = distinct[0]<>}]} @WillBeReplaced(out output: !firrtl.integer)
+    // CHECK: om.path_create instance %basepath [[NLA]]
+    %path = firrtl.path instance distinct[0]<>
+  }
+  firrtl.module private @WillBeReplaced(out %output: !firrtl.integer) {
+  }
+}
