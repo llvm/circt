@@ -5671,11 +5671,11 @@ DoneParsing:
   // a SymbolRefAttr.
   auto parseLayerName = [&](StringRef name) {
     // Parse the layer name into a SymbolRefAttr.
-    auto [head, rest] = name.split("::");
+    auto [head, rest] = name.split(".");
     SmallVector<FlatSymbolRefAttr> nestedRefs;
     while (!rest.empty()) {
       StringRef next;
-      std::tie(next, rest) = rest.split("::");
+      std::tie(next, rest) = rest.split(".");
       nestedRefs.push_back(FlatSymbolRefAttr::get(getContext(), next));
     }
     return SymbolRefAttr::get(getContext(), head, nestedRefs);
