@@ -11,12 +11,14 @@
 //===----------------------------------------------------------------------===//
 
 include "mlir/IR/EnumAttr.td"
+include "mlir/IR/OpAsmInterface.td"
 
-def SigOp : LLHDOp<"sig", [
-    TypesMatchWith<
-      "type of 'init' and underlying type of 'signal' have to match.",
-      "init", "result", "hw::InOutType::get($_self)">
-  ]> {
+def SignalOp : LLHDOp<"sig", [
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+  TypesMatchWith<
+    "type of 'init' and underlying type of 'signal' have to match.",
+    "init", "result", "hw::InOutType::get($_self)">
+]> {
   let summary = "Create a signal.";
   let description = [{
     The `llhd.sig` instruction introduces a new signal in the IR. The input
@@ -28,17 +30,22 @@ def SigOp : LLHDOp<"sig", [
 
     ```mlir
     %c123_i64 = hw.constant 123 : i64
-    %sig_i64 = llhd.sig "foo" %c123_i64 : i64
+    %foo = llhd.sig %c123_i64 : i64
+    %0 = llhd.sig name "foo" %c123_i64 : i64
     ```
 
     This example creates a new signal named "foo", carrying an `i64` type with
     initial value of 123.
   }];
-
-  let arguments = (ins StrAttr: $name, HWValueType: $init);
-  let results = (outs InOutType: $result);
-
-  let assemblyFormat = "$name $init attr-dict `:` qualified(type($init))";
+  let arguments = (ins
+    OptionalAttr<StrAttr>:$name,
+    HWValueType:$init
+  );
+  let results = (outs Res<InOutType, "", [MemAlloc]>:$result);
+  let assemblyFormat = [{
+    `` custom<ImplicitSSAName>($name) $init attr-dict
+    `:` type($init)
+  }];
 }
 
 def PrbOp : LLHDOp<"prb", [

@@ -337,8 +337,8 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
       init = rewriter.createOrFold<hw::BitcastOp>(loc, elementType, constZero);
     }
 
-    rewriter.replaceOpWithNewOp<llhd::SigOp>(op, resultType, op.getNameAttr(),
-                                             init);
+    rewriter.replaceOpWithNewOp<llhd::SignalOp>(op, resultType,
+                                                op.getNameAttr(), init);
     return success();
   }
 };

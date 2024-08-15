@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Matchers.h"
@@ -24,6 +25,7 @@
 
 using namespace circt;
 using namespace mlir;
+using namespace llhd;
 
 unsigned circt::llhd::getLLHDTypeWidth(Type type) {
   if (auto sig = dyn_cast<hw::InOutType>(type))
@@ -62,6 +64,15 @@ void llhd::ConstantTimeOp::build(OpBuilder &builder, OperationState &result,
   auto *ctx = builder.getContext();
   auto attr = TimeAttr::get(ctx, time, timeUnit, delta, epsilon);
   return build(builder, result, TimeType::get(ctx), attr);
+}
+
+//===----------------------------------------------------------------------===//
+// SignalOp
+//===----------------------------------------------------------------------===//
+
+void SignalOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  if (getName() && !getName()->empty())
+    setNameFn(getResult(), *getName());
 }
 
 //===----------------------------------------------------------------------===//
