@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-resets))' --verify-diagnostics --split-input-file %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-resets,any(firrtl-check-uninferred-resets)))' --verify-diagnostics --split-input-file %s
 
 // Tests extracted from:
 // - github.com/chipsalliance/firrtl:

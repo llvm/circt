@@ -970,4 +970,16 @@ def ProbesToSignals : Pass<"firrtl-probes-to-signals", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createProbesToSignalsPass()";
 }
 
+def CheckUninferredResets : InterfacePass<"firrtl-check-uninferred-resets", "firrtl::FModuleLike"> {
+  let summary = "Verify no uninferred resets";
+  let description = [{
+    This pass checks to see if there are abstract type resets which have not
+    been inferred correctly.
+    
+    Run after Inliner since the reset type of an unreferenced module (which
+    doesn't have a parent module) cannot be inferred.
+  }];
+  let constructor = "circt::firrtl::createCheckUninferredResetsPass()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
