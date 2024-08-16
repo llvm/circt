@@ -266,7 +266,7 @@ void circt::om::ClassOp::addFields(mlir::OpBuilder &builder, mlir::Location loc,
 }
 
 //===----------------------------------------------------------------------===//
-// ClassFieldsOpField
+// ClassFieldsLike
 //===----------------------------------------------------------------------===//
 
 struct FieldParse : OpAsmParser::Argument {
@@ -335,6 +335,10 @@ ParseResult parseFields(OperationState &state, OpAsmParser &parser,
   state.addAttribute("fieldNames", mlir::ArrayAttr::get(ctx, fieldNames));
   return success();
 }
+
+//===----------------------------------------------------------------------===//
+// ClassFieldsOp
+//===----------------------------------------------------------------------===//
 
 ParseResult circt::om::ClassFieldsOp::parse(OpAsmParser &parser,
                                             OperationState &state) {
