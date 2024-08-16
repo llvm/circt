@@ -369,31 +369,31 @@ moore.module @ParamTest(){
 
 moore.module @Variable() {
   // CHECK: [[TMP0:%.+]] = hw.constant 0 : i32
-  // CHECK: [[A:%.+]] = llhd.sig "a" [[TMP0]] : i32
+  // CHECK: %a = llhd.sig [[TMP0]] : i32
   %a = moore.variable : <i32>
 
   // CHECK: [[TMP1:%.+]] = hw.constant 0 : i8
-  // CHECK: [[B:%.+]] = llhd.sig "b1" [[TMP1]] : i8
+  // CHECK: %b1 = llhd.sig [[TMP1]] : i8
   %b1 = moore.variable : <i8>
 
-  // CHECK: [[PRB:%.+]] = llhd.prb [[B]] : !hw.inout<i8>
+  // CHECK: [[PRB:%.+]] = llhd.prb %b1 : !hw.inout<i8>
   %0 = moore.read %b1 : <i8>
-  // CHECK: llhd.sig "b2" [[PRB]] : i8
+  // CHECK: %b2 = llhd.sig [[PRB]] : i8
   %b2 = moore.variable %0 : <i8>
 
   // CHECK: %true = hw.constant true
   %1 = moore.constant 1 : l1
-  // CHECK: llhd.sig "l" %true : i1
+  // CHECK: %l = llhd.sig %true : i1
   %l = moore.variable %1 : <l1>
   // CHECK: [[TMP:%.+]] = hw.constant 0 : i19
-  // CHECK: llhd.sig "m" [[TMP]] : i19
+  // CHECK: %m = llhd.sig [[TMP]] : i19
   %m = moore.variable : <l19>
 
   // CHECK: [[TMP2:%.+]] = hw.constant 10 : i32
   %3 = moore.constant 10 : i32
   
   // CHECK: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
-  // CHECK: llhd.drv [[A]], [[TMP2]] after [[TIME]] : !hw.inout<i32>
+  // CHECK: llhd.drv %a, [[TMP2]] after [[TIME]] : !hw.inout<i32>
   moore.assign %a, %3 : i32
 
   // CHECK: hw.output
@@ -411,8 +411,8 @@ moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.s
   
   // CHECK: [[C0:%.+]] = hw.constant 0 : i64
   // CHECK: [[INIT:%.+]] = hw.bitcast [[C0]] : (i64) -> !hw.struct<exp_bits: i32, man_bits: i32>
-  // CHECK: llhd.sig "" [[INIT]] : !hw.struct<exp_bits: i32, man_bits: i32>
-  // CHECK: llhd.sig "" %arg0 : !hw.struct<exp_bits: i32, man_bits: i32>
+  // CHECK: llhd.sig [[INIT]] : !hw.struct<exp_bits: i32, man_bits: i32>
+  // CHECK: llhd.sig %arg0 : !hw.struct<exp_bits: i32, man_bits: i32>
   %1 = moore.variable : <struct<{exp_bits: i32, man_bits: i32}>>
   %2 = moore.variable %arg0 : <struct<{exp_bits: i32, man_bits: i32}>>
 
@@ -427,10 +427,10 @@ moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.s
 
 // CHECK-LABEL: hw.module @Process
 moore.module @Process(in %cond : i1) {
-  // CHECK: [[B:%.+]] = llhd.sig "b"
-  // CHECK: [[C:%.+]] = llhd.sig "c"
-  // CHECK: [[D:%.+]] = llhd.sig "d"
-  // CHECK: [[E:%.+]] = llhd.sig "e"
+  // CHECK: [[B:%b]] = llhd.sig
+  // CHECK: [[C:%c]] = llhd.sig
+  // CHECK: [[D:%d]] = llhd.sig
+  // CHECK: [[E:%e]] = llhd.sig
   %b = moore.variable : <i1>
   %c = moore.variable : <i1>
   %d = moore.variable : <i1>

@@ -90,22 +90,22 @@ func.func @check_store(%int : !llhd.ptr<i32>, %intC : i32 , %array : !llhd.ptr<!
 hw.module @checkSigInst() {
   // CHECK: %[[CI1:.*]] = hw.constant
   %cI1 = hw.constant 0 : i1
-  // CHECK-NEXT: %{{.*}} = llhd.sig "sigI1" %[[CI1]] : i1
-  %sigI1 = llhd.sig "sigI1" %cI1 : i1
+  // CHECK-NEXT: %sigI1 = llhd.sig %[[CI1]] : i1
+  %sigI1 = llhd.sig %cI1 : i1
   // CHECK-NEXT: %[[CI64:.*]] = hw.constant
   %cI64 = hw.constant 0 : i64
-  // CHECK-NEXT: %{{.*}} = llhd.sig "sigI64" %[[CI64]] : i64
-  %sigI64 = llhd.sig "sigI64" %cI64 : i64
+  // CHECK-NEXT: %sigI64 = llhd.sig %[[CI64]] : i64
+  %sigI64 = llhd.sig %cI64 : i64
 
   // CHECK-NEXT: %[[TUP:.*]] = hw.struct_create
   %tup = hw.struct_create (%cI1, %cI64) : !hw.struct<foo: i1, bar: i64>
-  // CHECK-NEXT: %{{.*}} = llhd.sig "sigTup" %[[TUP]] : !hw.struct<foo: i1, bar: i64>
-  %sigTup = llhd.sig "sigTup" %tup : !hw.struct<foo: i1, bar: i64>
+  // CHECK-NEXT: %sigTup = llhd.sig %[[TUP]] : !hw.struct<foo: i1, bar: i64>
+  %sigTup = llhd.sig %tup : !hw.struct<foo: i1, bar: i64>
 
   // CHECK-NEXT: %[[ARRAY:.*]] = hw.array_create
   %array = hw.array_create %cI1, %cI1 : i1
-  // CHECK-NEXT: %{{.*}} = llhd.sig "sigArray" %[[ARRAY]] : !hw.array<2xi1>
-  %sigArray = llhd.sig "sigArray" %array : !hw.array<2xi1>
+  // CHECK-NEXT: %sigArray = llhd.sig %[[ARRAY]] : !hw.array<2xi1>
+  %sigArray = llhd.sig %array : !hw.array<2xi1>
 }
 
 // CHECK-LABEL: @checkPrb
