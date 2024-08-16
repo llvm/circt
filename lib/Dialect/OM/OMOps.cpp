@@ -307,17 +307,23 @@ parseField(OpAsmParser &parser,
   return success();
 }
 
-void buildFieldAttrs(OperationState &state, mlir::MLIRContext *ctx,
-                     llvm::SmallVector<FieldParse> &parsedFields) {
+ParseResult buildFieldAttrs(OperationState &state, OpAsmParser &parser,
+                     llvm::SmallVector<FieldParse> &parsedFields,
+                     bool resolveOperands=false) {
+  mlir::MLIRContext *ctx = parser.getContext();
   llvm::SmallVector<Attribute> fieldNames;
   llvm::SmallVector<NamedAttribute> fieldTypes;
   for (auto &field : parsedFields) {
     fieldTypes.push_back(mlir::NamedAttribute(mlir::StringAttr(field.name),
                                               mlir::TypeAttr::get(field.type)));
     fieldNames.push_back(field.name);
+    if (resolveOperands &&
+        parser.resolveOperand(field.ssaName, field.type, state.operands))
+      return failure();
   }
   state.addAttribute("fieldTypes", mlir::DictionaryAttr::get(ctx, fieldTypes));
   state.addAttribute("fieldNames", mlir::ArrayAttr::get(ctx, fieldNames));
+  return success();
 }
 
 ParseResult circt::om::ClassFieldsOp::parse(OpAsmParser &parser,
@@ -331,13 +337,8 @@ ParseResult circt::om::ClassFieldsOp::parse(OpAsmParser &parser,
                                      parseOnePort, " in field list"))
     return failure();
 
-  buildFieldAttrs(state, parser.getContext(), parsedFields);
-
-  // TODO: Could try to fuse this into buildFieldAttrsLoop
-  for (auto &field : parsedFields) {
-    if (parser.resolveOperand(field.ssaName, field.type, state.operands))
-      return failure();
-  }
+  if (buildFieldAttrs(state, parser, parsedFields, true))
+    return failure();
 
   // TODO: field attrs
   // TODO: field locs
@@ -454,7 +455,8 @@ ParseResult circt::om::ClassExternFieldsOp::parse(OpAsmParser &parser,
                                      parseOnePort, " in field list"))
     return failure();
 
-  buildFieldAttrs(state, parser.getContext(), parsedFields);
+  if (buildFieldAttrs(state, parser, parsedFields))
+    return failure();
 
   // TODO: field attrs
   // TODO: field locs
