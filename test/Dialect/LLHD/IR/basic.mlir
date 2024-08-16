@@ -199,3 +199,13 @@ hw.module @check_wait_3 (inout %arg0 : i64, inout %arg1 : i1) {
     llhd.halt
   }
 }
+
+// CHECK-LABEL: @FinalProcess
+hw.module @FinalProcess () {
+  // CHECK-NEXT: llhd.final {
+  // CHECK-NEXT:   llhd.halt
+  // CHECK-NEXT: }
+  llhd.final {
+    llhd.halt
+  }
+}

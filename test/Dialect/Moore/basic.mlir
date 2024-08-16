@@ -310,3 +310,22 @@ moore.module @GraphRegion() {
   %1 = moore.add %0, %0 : i32
   %0 = moore.constant 0 : i32
 }
+
+// CHECK-LABEL: func.func @WaitEvent
+func.func @WaitEvent(%arg0: !moore.i1, %arg1: !moore.i1) {
+  // CHECK: moore.wait_event {
+  moore.wait_event {
+    // CHECK: moore.detect_event any %arg0 : i1
+    moore.detect_event any %arg0 : i1
+    // CHECK: moore.detect_event posedge %arg0 : i1
+    moore.detect_event posedge %arg0 : i1
+    // CHECK: moore.detect_event negedge %arg0 : i1
+    moore.detect_event negedge %arg0 : i1
+    // CHECK: moore.detect_event edge %arg0 : i1
+    moore.detect_event edge %arg0 : i1
+    // CHECK: moore.detect_event any %arg0 if %arg1 : i1
+    moore.detect_event any %arg0 if %arg1 : i1
+  }
+  // CHECK: }
+  return
+}

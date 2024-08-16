@@ -358,58 +358,103 @@ def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
 // Statements
 //===----------------------------------------------------------------------===//
 
-def None: I32EnumAttrCase<"None", 0, "none">;
-/// Transit from 0 to x/z/1, and from x/z to 1.
+// Any change on the input.
+def AnyChange: I32EnumAttrCase<"AnyChange", 0, "any">;
+// A transition from 0 to X/Z/1, or from X/Z to 1.
 def PosEdge: I32EnumAttrCase<"PosEdge", 1, "posedge">;
-/// Transit from 1 to x/z/0, and from x/z to 0.
+// A transition from 1 to X/Z/0, or from X/Z to 0.
 def NegEdge: I32EnumAttrCase<"NegEdge", 2, "negedge">;
-/// Include the negedge and posedge.
+// The combination of `PosEdge` and `NegEdge`.
 def BothEdges: I32EnumAttrCase<"BothEdges", 3, "edge">;
 
-def EdgeAtrr: I32EnumAttr<"Edge", "Edge kind",
-                          [None, PosEdge, NegEdge, BothEdges]>{
+def EdgeAttr: I32EnumAttr<"Edge", "Edge kind",
+                          [AnyChange, PosEdge, NegEdge, BothEdges]> {
   let cppNamespace = "circt::moore";
 }
 
-def EventOp : MooreOp<"wait_event", [
-  HasParent<"ProcedureOp">
+def WaitEventOp : MooreOp<"wait_event", [
+  RecursiveMemoryEffects,
+  NoRegionArguments,
+  SingleBlock,
+  NoTerminator
 ]> {
-  let summary = "Detecting posedge and negedge";
+  let summary = "Suspend execution until an event occurs";
   let description = [{
-    It is introduced by the symbol `@`, and it allows statement execution to
-    be delayed until the occurrence of some simulation event occurring in a
-    procedure executing concurrently with this procedure.
+    The `moore.wait_event` op suspends execution of the current process until
+    its body signals that an event has been the detected. Conceptually, the body
+    of this op is executed whenever any potentially relevant signal has changed.
+    If one of the contained `moore.detect_event` ops detect an event, execution
+    resumes after the `moore.wait_event` operation. If no event is detected, the
+    current process remains suspended.
 
-    For the implicit event control(`@(*)`), there are two situations that are
-    not automatically added to event expression:
-      1. Identifiers that only appear in wait or event expressions.
-         ```
-          always @(*) begin    // equivalent to @(b)
-            @(n) kid = b;      // n is not added to @(*)
-          end
-         ```
-      2. Identifiers that only appear as a hierarchical_variable_identifier
-         in the variable_lvalue of the left-hand side of assignments.
-         ```
-          always @(*) begin
-            a = b + c;         // a is not added to @(*)
-          end
-         ```
+    Example corresponding to the SystemVerilog `@(posedge x, negedge y iff z)`:
+    ```
+    moore.wait_event {
+      %0 = moore.read %x : <i1>
+      %1 = moore.read %y : <i1>
+      %2 = moore.read %z : <i1>
+      moore.detect_event posedge %0 : i1
+      moore.detect_event negedge %1 if %2 : i1
+    }
+    ```
 
-    Example:
+    The body may also contain any operations necessary to evaluate the event
+    conditions. For example, the SV `@(posedge ~x iff i == 42)`:
     ```
-      @(a, b, c)        // none
-      @(posedge clk)    // positive edge
-      @(negedge clk)    // negative edge
-      @(edge clk)       // both edge
-      @(*)              // implicit event control
+    moore.wait_event {
+      %0 = moore.read %x : <i1>
+      %1 = moore.not %0 : i1
+      %2 = moore.read %i : <i19>
+      %3 = moore.constant 42 : i19
+      %4 = moore.eq %2, %3 : i19
+      moore.detect_event posedge %0 if %4 : i1
+    }
     ```
+
     See IEEE 1800-2017 § 9.4.2 "Event control".
   }];
-  let arguments = (ins EdgeAtrr:$edge, UnpackedType:$input);
-  let results = (outs);
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{ attr-dict-with-keyword $body }];
+}
+
+def DetectEventOp : MooreOp<"detect_event", [
+  HasParent<"WaitEventOp">
+]> {
+  let summary = "Check if an event occured within a `wait_event` op";
+  let description = [{
+    The `moore.detect_event` op is used inside the body of a `moore.wait_event`
+    to check if an interesting value change has occurred on its operand. The
+    `moore.detect_event` op implicitly stores the previous value of its operand
+    and compares it against the current value to detect an interesting edge:
+
+    - `posedge` checks for a low-to-high transition
+    - `negedge` checks for a high-to-low transition
+    - `edge` checks for either a `posedge` or a `negedge`
+    - `any` checks for any value change (including e.g. X to Z)
+
+    The edges are detected as follows:
+
+    - `0` to `1 X Z`: `posedge`
+    - `1` to `0 X Z`: `negedge`
+    - `X Z` to `1`: `posedge`
+    - `X Z` to `0`: `negedge`
+
+    | From  | To 0    | To 1    | To X    | To Z    |
+    |-------|---------|---------|---------|---------|
+    | 0     | -       | posedge | posedge | posedge |
+    | 1     | negedge | -       | negedge | negedge |
+    | X     | negedge | posedge | -       | -       |
+    | Z     | negedge | posedge | -       | -       |
+
+    See IEEE 1800-2017 § 9.4.2 "Event control".
+  }];
+  let arguments = (ins
+    EdgeAttr:$edge,
+    UnpackedType:$input,
+    Optional<BitType>:$condition
+  );
   let assemblyFormat = [{
-    $edge $input attr-dict `:` type($input)
+    $edge $input (`if` $condition^)? attr-dict `:` type($input)
   }];
 }
 
