@@ -115,6 +115,21 @@ firrtl.circuit "LayerDisableInARow" attributes {
   firrtl.extmodule @LayerDisableInARow()
 }
 
+// CHECK:     firrtl.circuit "LayerblockEnableNestedChildren"
+// CHECK-NOT:   firrtl.layer
+firrtl.circuit "LayerblockEnableNestedChildren" attributes {
+  enable_layers = [@A, @A::@B, @A::@C]
+} {
+  firrtl.layer @A bind {
+    firrtl.layer @B bind {
+    }
+    firrtl.layer @C bind {
+    }
+  }
+  firrtl.module @LayerblockEnableNestedChildren() {
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // LayerBlock Specialization
 //===----------------------------------------------------------------------===//
