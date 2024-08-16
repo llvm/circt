@@ -339,6 +339,46 @@ ParseResult parseClassFieldsLike(OperationState &state, OpAsmParser &parser,
   return success();
 }
 
+void printClassFieldsLike(OpAsmPrinter &printer, Operation* op, SmallVector<Value> operands) {
+  printer << "(";
+  printer.increaseIndent();
+  mlir::ArrayAttr fieldNames =
+      cast<ArrayAttr>(op->getAttr("fieldNames"));
+  mlir::DictionaryAttr fieldTypes =
+      cast<DictionaryAttr>(op->getAttr("fieldTypes"));
+  for (unsigned i = 0; i < fieldNames.size(); i++) {
+    auto name = cast<StringAttr>(fieldNames[i]).getValue();
+    if (i > 0) {
+      printer << ",";
+    }
+    printer.printNewline();
+    printer.printSymbolName(name);
+    if (!operands.empty()) {
+      printer << " ";
+      printer.printOperand(operands[i]);
+    }
+    printer << " : ";
+
+    // TODO: fieldTypes dictionary is not always up to date, we should
+    // enforce an API that fixes this, for now we get the latest type from the
+    // operand
+    Type type;
+    if (!operands.empty()) {
+      type = operands[i].getType();
+    } else {
+      type = cast<TypeAttr>(fieldTypes.get(name)).getValue();
+    }
+    printer.printType(type);
+  }
+  printer.decreaseIndent();
+  if (!fieldNames.empty())
+    printer.printNewline();
+  printer << ")";
+  // printer.printRegion(this->getBody());
+  // TODO: attrs
+  // printer.printOptionalAttrDictWithKeyword(this->getOperation()->getAttrs());
+}
+
 //===----------------------------------------------------------------------===//
 // ClassFieldsOp
 //===----------------------------------------------------------------------===//
@@ -349,28 +389,7 @@ ParseResult circt::om::ClassFieldsOp::parse(OpAsmParser &parser,
 }
 
 void circt::om::ClassFieldsOp::print(OpAsmPrinter &printer) {
-  printer << "(";
-  printer.increaseIndent();
-  auto operands = this->getOperands();
-  auto names = this->getFieldNames();
-  for (unsigned i = 0; i < operands.size(); i++) {
-    if (i > 0) {
-      printer << ",";
-    }
-    printer.printNewline();
-    printer.printSymbolName(cast<StringAttr>(names[i]));
-    printer << " ";
-    printer.printOperand(operands[i]);
-    printer << " : ";
-    printer.printType(operands[i].getType());
-  }
-  printer.decreaseIndent();
-  if (!operands.empty())
-    printer.printNewline();
-  printer << ")";
-  // printer.printRegion(this->getBody());
-  // TODO: attrs
-  // printer.printOptionalAttrDictWithKeyword(this->getOperation()->getAttrs());
+  printClassFieldsLike(printer, this->getOperation(), this->getOperands());
 }
 
 //===----------------------------------------------------------------------===//
@@ -422,7 +441,8 @@ void circt::om::ClassExternOp::addFields(
     llvm::ArrayRef<mlir::StringAttr> fieldNames,
     llvm::ArrayRef<mlir::Type> fieldTypes) {
   auto *op = builder.create<ClassExternFieldsOp>(loc).getOperation();
-  // TODO: Merge with parseClassFieldsLike code
+
+  // TODO: Merge with parseClassFieldsLike code with buildFieldAttrDict API
   auto *ctx = builder.getContext();
   llvm::SmallVector<NamedAttribute> namedAttrs;
   llvm::SmallVector<Attribute> fieldAttrs;
@@ -452,28 +472,7 @@ ParseResult circt::om::ClassExternFieldsOp::parse(OpAsmParser &parser,
 }
 
 void circt::om::ClassExternFieldsOp::print(OpAsmPrinter &printer) {
-  printer << "(";
-  printer.increaseIndent();
-  mlir::ArrayAttr fieldNames =
-      cast<ArrayAttr>(this->getOperation()->getAttr("fieldNames"));
-  mlir::DictionaryAttr fieldTypes =
-      cast<DictionaryAttr>(this->getOperation()->getAttr("fieldTypes"));
-  for (unsigned i = 0; i < fieldNames.size(); i++) {
-    auto name = cast<StringAttr>(fieldNames[i]).getValue();
-    auto type = cast<TypeAttr>(fieldTypes.get(name)).getValue();
-    if (i > 0) {
-      printer << ",";
-    }
-    printer.printNewline();
-    printer.printSymbolName(name);
-    printer << " : ";
-    printer.printType(type);
-  }
-  printer.decreaseIndent();
-  if (!fieldNames.empty())
-    printer.printNewline();
-  printer << ")";
-  // TODO: attrs
+  printClassFieldsLike(printer, this->getOperation(), {});
 }
 
 //===----------------------------------------------------------------------===//
