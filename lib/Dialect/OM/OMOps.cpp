@@ -308,8 +308,8 @@ parseField(OpAsmParser &parser,
   return success();
 }
 
-ParseResult parseFields(OperationState &state, OpAsmParser &parser,
-                        bool hasOperand) {
+ParseResult parseClassFieldsLike(OperationState &state, OpAsmParser &parser,
+                                 bool hasOperand) {
   llvm::SmallVector<FieldParse> parsedFields;
   llvm::MapVector<StringAttr, SMLoc> parsedFieldNames;
   auto parseOnePort = [&]() -> ParseResult {
@@ -333,6 +333,9 @@ ParseResult parseFields(OperationState &state, OpAsmParser &parser,
   }
   state.addAttribute("fieldTypes", mlir::DictionaryAttr::get(ctx, fieldTypes));
   state.addAttribute("fieldNames", mlir::ArrayAttr::get(ctx, fieldNames));
+
+  // TODO: field attrs
+  // TODO: field locs
   return success();
 }
 
@@ -342,12 +345,7 @@ ParseResult parseFields(OperationState &state, OpAsmParser &parser,
 
 ParseResult circt::om::ClassFieldsOp::parse(OpAsmParser &parser,
                                             OperationState &state) {
-  if (parseFields(state, parser, true))
-    return failure();
-
-  // TODO: field attrs
-  // TODO: field locs
-  return success();
+  return parseClassFieldsLike(state, parser, true);
 }
 
 void circt::om::ClassFieldsOp::print(OpAsmPrinter &printer) {
@@ -424,7 +422,7 @@ void circt::om::ClassExternOp::addFields(
     llvm::ArrayRef<mlir::StringAttr> fieldNames,
     llvm::ArrayRef<mlir::Type> fieldTypes) {
   auto *op = builder.create<ClassExternFieldsOp>(loc).getOperation();
-  // TODO: Merge with parseFields code
+  // TODO: Merge with parseClassFieldsLike code
   auto *ctx = builder.getContext();
   llvm::SmallVector<NamedAttribute> namedAttrs;
   llvm::SmallVector<Attribute> fieldAttrs;
@@ -450,12 +448,7 @@ void circt::om::ClassExternOp::addFields(
 
 ParseResult circt::om::ClassExternFieldsOp::parse(OpAsmParser &parser,
                                                   OperationState &state) {
-  if (parseFields(state, parser, false))
-    return failure();
-
-  // TODO: field attrs
-  // TODO: field locs
-  return success();
+  return parseClassFieldsLike(state, parser, false);
 }
 
 void circt::om::ClassExternFieldsOp::print(OpAsmPrinter &printer) {
