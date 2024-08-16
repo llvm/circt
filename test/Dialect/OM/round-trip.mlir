@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s -verify-diagnostics --mlir-print-local-scope --mlir-print-debuginfo | circt-opt --mlir-print-local-scope --mlir-print-debuginfo -verify-diagnostics | FileCheck %s
 
 // CHECK-LABEL: om.class @Thingy
 // CHECK-SAME: (%blue_1: i8, %blue_2: i32)
@@ -22,15 +22,16 @@ om.class @Thingy(%blue_1: i8, %blue_2: i32) {
 
   // CHECK: om.class.fields(
   om.class.fields(
-    // CHECK: @widget %[[widget]] : !om.class.type<@Widget>,
-    @widget %2 : !om.class.type<@Widget>,
+    // CHECK: @widget %[[widget]] : !om.class.type<@Widget> {test = "fieldAttr"} loc("test"),
+    @widget %2 : !om.class.type<@Widget> {test = "fieldAttr"} loc("test"),
     // CHECK: @gadget %[[gadget]] : !om.class.type<@Gadget>,
     @gadget %5 : !om.class.type<@Gadget>,
     // CHECK: @blue_1 %blue_1 : i8,
     @blue_1 %blue_1 : i8,
     // CHECK: @blue_2 %[[widget_field]] : i8
     @blue_2 %6 : i8
-  )
+  // CHECK: ) {test = "fieldsAttr"}  loc("test")
+  ) {test = "fieldsAttr"} loc("test")
 }
 
 // CHECK-LABEL: om.class @Widget
