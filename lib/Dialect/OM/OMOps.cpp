@@ -339,11 +339,11 @@ ParseResult parseClassFieldsLike(OperationState &state, OpAsmParser &parser,
   return success();
 }
 
-void printClassFieldsLike(OpAsmPrinter &printer, Operation* op, SmallVector<Value> operands) {
+void printClassFieldsLike(OpAsmPrinter &printer, Operation *op,
+                          SmallVector<Value> operands) {
   printer << "(";
   printer.increaseIndent();
-  mlir::ArrayAttr fieldNames =
-      cast<ArrayAttr>(op->getAttr("fieldNames"));
+  mlir::ArrayAttr fieldNames = cast<ArrayAttr>(op->getAttr("fieldNames"));
   mlir::DictionaryAttr fieldTypes =
       cast<DictionaryAttr>(op->getAttr("fieldTypes"));
   for (unsigned i = 0; i < fieldNames.size(); i++) {
