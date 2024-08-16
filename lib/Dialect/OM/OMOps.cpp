@@ -283,7 +283,7 @@ static ParseResult
 parseField(OpAsmParser &parser,
            llvm::MapVector<StringAttr, SMLoc> &parsedFieldNames,
 
-           FieldParse &result, bool hasOperand = true) {
+           FieldParse &result, bool hasOperand) {
   NamedAttrList attrs;
   if (parseFieldName(parser, result.name))
     return failure();
@@ -292,6 +292,7 @@ parseField(OpAsmParser &parser,
     parser.emitError(currLoc, "op field ")
         << result.name << " is defined twice";
     // TODO: Is there a way to attach a note to a parser error?
+    // For now, just emit another error
     parser.emitError(parsedFieldNames.lookup(result.name))
         << "previous definition is here";
     return failure();
@@ -307,9 +308,18 @@ parseField(OpAsmParser &parser,
   return success();
 }
 
-ParseResult buildFieldAttrs(OperationState &state, OpAsmParser &parser,
-                            llvm::SmallVector<FieldParse> &parsedFields,
-                            bool resolveOperands = false) {
+ParseResult parseFields(OperationState &state, OpAsmParser &parser,
+                        bool hasOperand) {
+  llvm::SmallVector<FieldParse> parsedFields;
+  llvm::MapVector<StringAttr, SMLoc> parsedFieldNames;
+  auto parseOnePort = [&]() -> ParseResult {
+    return parseField(parser, parsedFieldNames, parsedFields.emplace_back(),
+                      hasOperand);
+  };
+  if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                     parseOnePort, " in field list"))
+    return failure();
+
   mlir::MLIRContext *ctx = parser.getContext();
   llvm::SmallVector<Attribute> fieldNames;
   llvm::SmallVector<NamedAttribute> fieldTypes;
@@ -317,7 +327,7 @@ ParseResult buildFieldAttrs(OperationState &state, OpAsmParser &parser,
     fieldTypes.push_back(mlir::NamedAttribute(mlir::StringAttr(field.name),
                                               mlir::TypeAttr::get(field.type)));
     fieldNames.push_back(field.name);
-    if (resolveOperands &&
+    if (hasOperand &&
         parser.resolveOperand(field.ssaName, field.type, state.operands))
       return failure();
   }
@@ -328,16 +338,7 @@ ParseResult buildFieldAttrs(OperationState &state, OpAsmParser &parser,
 
 ParseResult circt::om::ClassFieldsOp::parse(OpAsmParser &parser,
                                             OperationState &state) {
-  llvm::SmallVector<FieldParse> parsedFields;
-  llvm::MapVector<StringAttr, SMLoc> parsedFieldNames;
-  auto parseOnePort = [&]() -> ParseResult {
-    return parseField(parser, parsedFieldNames, parsedFields.emplace_back());
-  };
-  if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
-                                     parseOnePort, " in field list"))
-    return failure();
-
-  if (buildFieldAttrs(state, parser, parsedFields, true))
+  if (parseFields(state, parser, true))
     return failure();
 
   // TODO: field attrs
@@ -419,7 +420,7 @@ void circt::om::ClassExternOp::addFields(
     llvm::ArrayRef<mlir::StringAttr> fieldNames,
     llvm::ArrayRef<mlir::Type> fieldTypes) {
   auto *op = builder.create<ClassExternFieldsOp>(loc).getOperation();
-  // TODO: Merge with buildFieldAttrs code
+  // TODO: Merge with parseFields code
   auto *ctx = builder.getContext();
   llvm::SmallVector<NamedAttribute> namedAttrs;
   llvm::SmallVector<Attribute> fieldAttrs;
@@ -445,17 +446,7 @@ void circt::om::ClassExternOp::addFields(
 
 ParseResult circt::om::ClassExternFieldsOp::parse(OpAsmParser &parser,
                                                   OperationState &state) {
-  llvm::SmallVector<FieldParse> parsedFields;
-  llvm::MapVector<StringAttr, SMLoc> parsedFieldNames;
-  auto parseOnePort = [&]() -> ParseResult {
-    return parseField(parser, parsedFieldNames, parsedFields.emplace_back(),
-                      false);
-  };
-  if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
-                                     parseOnePort, " in field list"))
-    return failure();
-
-  if (buildFieldAttrs(state, parser, parsedFields))
+  if (parseFields(state, parser, false))
     return failure();
 
   // TODO: field attrs
