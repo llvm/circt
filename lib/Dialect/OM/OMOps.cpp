@@ -308,8 +308,8 @@ parseField(OpAsmParser &parser,
 }
 
 ParseResult buildFieldAttrs(OperationState &state, OpAsmParser &parser,
-                     llvm::SmallVector<FieldParse> &parsedFields,
-                     bool resolveOperands=false) {
+                            llvm::SmallVector<FieldParse> &parsedFields,
+                            bool resolveOperands = false) {
   mlir::MLIRContext *ctx = parser.getContext();
   llvm::SmallVector<Attribute> fieldNames;
   llvm::SmallVector<NamedAttribute> fieldTypes;
