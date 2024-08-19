@@ -174,6 +174,27 @@ void getClassLikeAsmBlockArgumentNames(ClassLike classLike, Region &region,
     setNameFn(args[i], argNames[i]);
 }
 
+mlir::NamedAttribute makeFieldType(mlir::StringAttr name, mlir::Type type) {
+  return mlir::NamedAttribute(name, mlir::TypeAttr::get(type));
+}
+
+mlir::NamedAttribute makeFieldIdx(MLIRContext *ctx, mlir::StringAttr name,
+                                  unsigned i) {
+  return mlir::NamedAttribute(
+      mlir::StringAttr(name),
+      mlir::IntegerAttr::get(mlir::IndexType::get(ctx), i));
+}
+
+void addFieldAttrs(MLIRContext *ctx, llvm::ArrayRef<mlir::Attribute> fieldNames,
+                   llvm::ArrayRef<NamedAttribute> fieldIdxs,
+                   llvm::ArrayRef<mlir::NamedAttribute> fieldTypes,
+                   const std::function<void(StringRef, Attribute)> &func) {
+  func("fieldNames", mlir::ArrayAttr::get(ctx, fieldNames));
+  func("fieldIdxs", mlir::DictionaryAttr::get(ctx, fieldIdxs));
+  if (!fieldTypes.empty())
+    func("fieldTypes", mlir::DictionaryAttr::get(ctx, fieldTypes));
+}
+
 //===----------------------------------------------------------------------===//
 // ClassOp
 //===----------------------------------------------------------------------===//
@@ -237,16 +258,14 @@ void circt::om::ClassOp::addFields(mlir::OpBuilder &builder, mlir::Location loc,
   ClassFieldsOp op = builder.create<ClassFieldsOp>(loc, fieldValues);
   llvm::SmallVector<NamedAttribute> fieldIdxs;
   unsigned i = 0;
-  for (auto [name, value] : llvm::zip(fieldNames, fieldValues)) {
-    fieldIdxs.push_back(mlir::NamedAttribute(
-        cast<StringAttr>(name),
-        mlir::IntegerAttr::get(mlir::IndexType::get(this->getContext()), i++)));
+  for (auto name : fieldNames) {
+    fieldIdxs.push_back(
+        makeFieldIdx(this->getContext(), cast<StringAttr>(name), i++));
   }
-  // TODO: unify with extern addfields
-  op.getOperation()->setAttr(
-      "fieldNames", mlir::ArrayAttr::get(this->getContext(), fieldNames));
-  op.getOperation()->setAttr(
-      "fieldIdxs", mlir::DictionaryAttr::get(this->getContext(), fieldIdxs));
+  addFieldAttrs(op->getContext(), fieldNames, fieldIdxs, {},
+                [&](StringRef field, Attribute attr) {
+                  op.getOperation()->setAttr(field, attr);
+                });
 }
 
 void circt::om::ClassOp::addFields(mlir::OpBuilder &builder,
@@ -333,11 +352,8 @@ ParseResult parseClassFieldsLike(OperationState &state, OpAsmParser &parser,
   for (unsigned i = 0; i < n; i++) {
     auto &field = parsedFields[i];
     if (!hasOperand)
-      fieldTypes.push_back(mlir::NamedAttribute(
-          mlir::StringAttr(field.name), mlir::TypeAttr::get(field.type)));
-    fieldIdxs.push_back(mlir::NamedAttribute(
-        mlir::StringAttr(field.name),
-        mlir::IntegerAttr::get(mlir::IndexType::get(ctx), i)));
+      fieldTypes.push_back(makeFieldType(field.name, field.type));
+    fieldIdxs.push_back(makeFieldIdx(ctx, field.name, i));
     fieldNames.push_back(field.name);
     if (hasOperand &&
         parser.resolveOperand(field.ssaName, field.type, state.operands))
@@ -351,11 +367,10 @@ ParseResult parseClassFieldsLike(OperationState &state, OpAsmParser &parser,
     perFieldLocs.push_back(field.sourceLoc ? Location(*field.sourceLoc)
                                            : UnknownLoc::get(ctx));
   }
-  if (!hasOperand)
-    state.addAttribute("fieldTypes",
-                       mlir::DictionaryAttr::get(ctx, fieldTypes));
-  state.addAttribute("fieldIdxs", mlir::DictionaryAttr::get(ctx, fieldIdxs));
-  state.addAttribute("fieldNames", mlir::ArrayAttr::get(ctx, fieldNames));
+  addFieldAttrs(ctx, fieldNames, fieldIdxs, fieldTypes,
+                [&](StringRef field, Attribute attr) {
+                  state.addAttribute(field, attr);
+                });
   state.addAttribute("perFieldAttrs", mlir::ArrayAttr::get(ctx, perFieldAttrs));
   state.addAttribute("perFieldLocs", mlir::ArrayAttr::get(ctx, perFieldLocs));
 
@@ -440,23 +455,19 @@ void circt::om::ClassExternOp::addFields(
     llvm::ArrayRef<mlir::Type> fieldTypes) {
   auto *op = builder.create<ClassExternFieldsOp>(loc).getOperation();
 
-  // TODO: Merge with parseClassFieldsLike code with buildFieldAttrDict API
   auto *ctx = builder.getContext();
-  llvm::SmallVector<NamedAttribute> namedAttrs;
+  llvm::SmallVector<NamedAttribute> typeAttrs;
   llvm::SmallVector<Attribute> fieldAttrs;
   llvm::SmallVector<NamedAttribute> fieldIdxs;
   unsigned i = 0;
   for (auto [name, type] : llvm::zip(fieldNames, fieldTypes)) {
-    namedAttrs.push_back(mlir::NamedAttribute(mlir::StringAttr(name),
-                                              mlir::TypeAttr::get(type)));
+    typeAttrs.push_back(makeFieldType(name, type));
     fieldAttrs.push_back(cast<Attribute>(name));
-    fieldIdxs.push_back(mlir::NamedAttribute(
-        mlir::StringAttr(name),
-        mlir::IntegerAttr::get(mlir::IndexType::get(ctx), i++)));
+    fieldIdxs.push_back(makeFieldIdx(ctx, name, i));
   }
-  op->setAttr("fieldNames", mlir::ArrayAttr::get(ctx, fieldAttrs));
-  op->setAttr("fieldTypes", mlir::DictionaryAttr::get(ctx, namedAttrs));
-  op->setAttr("fieldIdxs", mlir::DictionaryAttr::get(ctx, fieldIdxs));
+  addFieldAttrs(
+      ctx, fieldAttrs, fieldIdxs, typeAttrs,
+      [&](StringRef field, Attribute attr) { op->setAttr(field, attr); });
 }
 
 void circt::om::ClassExternOp::addFields(
