@@ -322,6 +322,19 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
       rewriter.eraseOp(detectOp);
     }
 
+    auto setInsertionPointAfterDef = [&](Value value) {
+      if (auto *op = value.getDefiningOp())
+        rewriter.setInsertionPointAfter(op);
+      if (auto arg = dyn_cast<BlockArgument>(value))
+        rewriter.setInsertionPointToStart(value.getParentBlock());
+    };
+
+    auto probeIfSignal = [&](Value value) -> Value {
+      if (!isa<hw::InOutType>(value.getType()))
+        return value;
+      return rewriter.create<llhd::PrbOp>(loc, value);
+    };
+
     // Determine the values used during event detection that are defined outside
     // the `wait_event`'s body region. We want to wait for a change on these
     // signals before we check if any interesting event happened.
@@ -334,12 +347,16 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
         if (!alreadyObserved.insert(value).second)
           continue;
         if (auto remapped = rewriter.getRemappedValue(value)) {
-          observeValues.push_back(remapped);
+          OpBuilder::InsertionGuard g(rewriter);
+          setInsertionPointAfterDef(remapped);
+          observeValues.push_back(probeIfSignal(remapped));
         } else {
+          OpBuilder::InsertionGuard g(rewriter);
+          setInsertionPointAfterDef(value);
           auto type = typeConverter->convertType(value.getType());
           auto converted = typeConverter->materializeTargetConversion(
               rewriter, loc, type, value);
-          observeValues.push_back(converted);
+          observeValues.push_back(probeIfSignal(converted));
         }
       }
     });

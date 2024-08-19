@@ -536,8 +536,19 @@ func.func private @dummyC() -> ()
 // CHECK-LABEL: hw.module @WaitEvent
 moore.module @WaitEvent() {
   // CHECK: %a = llhd.sig
+  // CHECK: [[PRB_A6:%.+]] = llhd.prb %a
+  // CHECK: [[PRB_A5:%.+]] = llhd.prb %a
+  // CHECK: [[PRB_A4:%.+]] = llhd.prb %a
+  // CHECK: [[PRB_A3:%.+]] = llhd.prb %a
+  // CHECK: [[PRB_A2:%.+]] = llhd.prb %a
+  // CHECK: [[PRB_A1:%.+]] = llhd.prb %a
+  // CHECK: [[PRB_A0:%.+]] = llhd.prb %a
   // CHECK: %b = llhd.sig
+  // CHECK: [[PRB_B2:%.+]] = llhd.prb %b
+  // CHECK: [[PRB_B1:%.+]] = llhd.prb %b
+  // CHECK: [[PRB_B0:%.+]] = llhd.prb %b
   // CHECK: %c = llhd.sig
+  // CHECK: [[PRB_C:%.+]] = llhd.prb %c
   %a = moore.variable : <i1>
   %b = moore.variable : <i1>
   %c = moore.variable : <i1>
@@ -569,7 +580,7 @@ moore.module @WaitEvent() {
   // CHECK: llhd.process {
   moore.procedure initial {
     // CHECK:   [[BEFORE:%.+]] = llhd.prb %a
-    // CHECK:   llhd.wait (%a : {{.+}}), ^[[CHECK:.+]]
+    // CHECK:   llhd.wait ([[PRB_A0]] : {{.+}}), ^[[CHECK:.+]]
     // CHECK: ^[[CHECK]]:
     // CHECK:   [[AFTER:%.+]] = llhd.prb %a
     // CHECK:   [[TMP:%.+]] = comb.icmp bin ne [[BEFORE]], [[AFTER]]
@@ -585,7 +596,7 @@ moore.module @WaitEvent() {
   moore.procedure initial {
     // CHECK:   [[BEFORE_A:%.+]] = llhd.prb %a
     // CHECK:   [[BEFORE_B:%.+]] = llhd.prb %b
-    // CHECK:   llhd.wait (%a, %b : {{.+}}), ^[[CHECK:.+]]
+    // CHECK:   llhd.wait ([[PRB_A1]], [[PRB_B0]] : {{.+}}), ^[[CHECK:.+]]
     // CHECK: ^[[CHECK]]:
     // CHECK:   [[AFTER_A:%.+]] = llhd.prb %a
     // CHECK:   [[AFTER_B:%.+]] = llhd.prb %b
@@ -605,7 +616,7 @@ moore.module @WaitEvent() {
     // CHECK:   [[BEFORE_A:%.+]] = llhd.prb %a
     // CHECK:   [[BEFORE_B:%.+]] = llhd.prb %b
     // CHECK:   [[BEFORE_C:%.+]] = llhd.prb %c
-    // CHECK:   llhd.wait (%a, %b, %c : {{.+}}), ^[[CHECK:.+]]
+    // CHECK:   llhd.wait ([[PRB_A2]], [[PRB_B1]], [[PRB_C]] : {{.+}}), ^[[CHECK:.+]]
     // CHECK: ^[[CHECK]]:
     // CHECK:   [[AFTER_A:%.+]] = llhd.prb %a
     // CHECK:   [[AFTER_B:%.+]] = llhd.prb %b
@@ -629,7 +640,7 @@ moore.module @WaitEvent() {
   // CHECK: llhd.process {
   moore.procedure initial {
     // CHECK:   [[BEFORE:%.+]] = llhd.prb %a
-    // CHECK:   llhd.wait (%a : {{.+}}), ^[[CHECK:.+]]
+    // CHECK:   llhd.wait ([[PRB_A3]] : {{.+}}), ^[[CHECK:.+]]
     // CHECK: ^[[CHECK]]:
     // CHECK:   [[AFTER:%.+]] = llhd.prb %a
     // CHECK:   [[TRUE:%.+]] = hw.constant true
@@ -646,7 +657,7 @@ moore.module @WaitEvent() {
   // CHECK: llhd.process {
   moore.procedure initial {
     // CHECK:   [[BEFORE:%.+]] = llhd.prb %a
-    // CHECK:   llhd.wait (%a : {{.+}}), ^[[CHECK:.+]]
+    // CHECK:   llhd.wait ([[PRB_A4]] : {{.+}}), ^[[CHECK:.+]]
     // CHECK: ^[[CHECK]]:
     // CHECK:   [[AFTER:%.+]] = llhd.prb %a
     // CHECK:   [[TRUE:%.+]] = hw.constant true
@@ -663,7 +674,7 @@ moore.module @WaitEvent() {
   // CHECK: llhd.process {
   moore.procedure initial {
     // CHECK:   [[BEFORE:%.+]] = llhd.prb %a
-    // CHECK:   llhd.wait (%a : {{.+}}), ^[[CHECK:.+]]
+    // CHECK:   llhd.wait ([[PRB_A5]] : {{.+}}), ^[[CHECK:.+]]
     // CHECK: ^[[CHECK]]:
     // CHECK:   [[AFTER:%.+]] = llhd.prb %a
     // CHECK:   [[TRUE:%.+]] = hw.constant true
@@ -682,7 +693,7 @@ moore.module @WaitEvent() {
 
   // CHECK: llhd.process {
   moore.procedure initial {
-    // CHECK: llhd.wait (%a, %b :
+    // CHECK: llhd.wait ([[PRB_A6]], [[PRB_B2]] :
     moore.wait_event {
       %0 = moore.constant 0 : i1
       %1 = moore.conditional %0 : i1 -> i1 {

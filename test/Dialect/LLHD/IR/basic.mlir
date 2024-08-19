@@ -176,10 +176,14 @@ hw.module @check_wait_1 () {
 
 // CHECK: @check_wait_2(inout %[[ARG0:.*]] : i64, inout %[[ARG1:.*]] : i1) {
 hw.module @check_wait_2 (inout %arg0 : i64, inout %arg1 : i1) {
+  // CHECK: [[PRB0:%.+]] = llhd.prb %arg0
+  %prb0 = llhd.prb %arg0 : !hw.inout<i64>
+  // CHECK: [[PRB1:%.+]] = llhd.prb %arg1
+  %prb1 = llhd.prb %arg1 : !hw.inout<i1>
   // CHECK-NEXT: llhd.process
   llhd.process {
-    // CHECK-NEXT: llhd.wait (%[[ARG0]], %[[ARG1]] : !hw.inout<i64>, !hw.inout<i1>), ^[[BB:.*]](%[[ARG1]] : !hw.inout<i1>)
-    llhd.wait (%arg0, %arg1 : !hw.inout<i64>, !hw.inout<i1>), ^bb1(%arg1 : !hw.inout<i1>)
+    // CHECK-NEXT: llhd.wait ([[PRB0]], [[PRB1]] : i64, i1), ^[[BB:.*]](%[[ARG1]] : !hw.inout<i1>)
+    llhd.wait (%prb0, %prb1 : i64, i1), ^bb1(%arg1 : !hw.inout<i1>)
     // CHECK: ^[[BB]](%[[A:.*]]: !hw.inout<i1>):
   ^bb1(%a: !hw.inout<i1>):
     llhd.halt
@@ -188,12 +192,16 @@ hw.module @check_wait_2 (inout %arg0 : i64, inout %arg1 : i1) {
 
 // CHECK: hw.module @check_wait_3(inout %[[ARG0:.*]] : i64, inout %[[ARG1:.*]] : i1) {
 hw.module @check_wait_3 (inout %arg0 : i64, inout %arg1 : i1) {
+  // CHECK: [[PRB0:%.+]] = llhd.prb %arg0
+  %prb0 = llhd.prb %arg0 : !hw.inout<i64>
+  // CHECK: [[PRB1:%.+]] = llhd.prb %arg1
+  %prb1 = llhd.prb %arg1 : !hw.inout<i1>
   // CHECK-NEXT: llhd.process
   llhd.process {
     // CHECK-NEXT: %[[TIME:.*]] = llhd.constant_time
     %time = llhd.constant_time #llhd.time<0ns, 0d, 0e>
-    // CHECK-NEXT: llhd.wait for %[[TIME]], (%[[ARG0]], %[[ARG1]] : !hw.inout<i64>, !hw.inout<i1>), ^[[BB:.*]](%[[ARG1]], %[[ARG0]] : !hw.inout<i1>, !hw.inout<i64>)
-    llhd.wait for %time, (%arg0, %arg1 : !hw.inout<i64>, !hw.inout<i1>), ^bb1(%arg1, %arg0 : !hw.inout<i1>, !hw.inout<i64>)
+    // CHECK-NEXT: llhd.wait for %[[TIME]], ([[PRB0]], [[PRB1]] : i64, i1), ^[[BB:.*]](%[[ARG1]], %[[ARG0]] : !hw.inout<i1>, !hw.inout<i64>)
+    llhd.wait for %time, (%prb0, %prb1 : i64, i1), ^bb1(%arg1, %arg0 : !hw.inout<i1>, !hw.inout<i64>)
     // CHECK: ^[[BB]](%[[A:.*]]: !hw.inout<i1>, %[[B:.*]]: !hw.inout<i64>):
   ^bb1(%a: !hw.inout<i1>, %b: !hw.inout<i64>):
     llhd.halt

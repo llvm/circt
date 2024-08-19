@@ -130,14 +130,14 @@ def WaitOp : LLHDOp<"wait", [
     ```
   }];
 
-  let arguments = (ins Variadic<InOutType>:$obs,
+  let arguments = (ins Variadic<HWValueType>:$observed,
                        Optional<LLHDTimeType>:$time,
                        Variadic<AnyType>:$destOps);
 
   let successors = (successor AnySuccessor:$dest);
 
   let assemblyFormat = [{
-    (`for` $time^ `,`)? (`(`$obs^ `:` qualified(type($obs))`)` `,`)?
+    (`for` $time^ `,`)? (`(`$observed^ `:` qualified(type($observed))`)` `,`)?
     $dest (`(` $destOps^ `:` qualified(type($destOps)) `)`)? attr-dict
   }];
 }
