@@ -329,6 +329,13 @@ PYBIND11_MODULE(esiCppAccel, m) {
             return acc;
           },
           py::return_value_policy::reference)
-      .def_property_readonly("type_table", &Manifest::getTypeTable)
+      .def_property_readonly("type_table",
+                             [](Manifest &m) {
+                               std::vector<py::object> ret;
+                               std::ranges::transform(m.getTypeTable(),
+                                                      std::back_inserter(ret),
+                                                      getPyType);
+                               return ret;
+                             })
       .def_property_readonly("module_infos", &Manifest::getModuleInfos);
 }

@@ -2,10 +2,10 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-# Code generation from ESI manifests to C++ headers. Intended to be extensible
-# for other languages.
+# Code generation from ESI manifests to source code. C++ header support included
+# with the runtime, though it is intended to be extensible for other languages.
 
-from typing import List, Type, Optional
+from typing import List, TextIO, Type, Optional
 from .accelerator import AcceleratorConnection
 from .esiCppAccel import ModuleInfo
 from . import types
@@ -61,7 +61,7 @@ class CppGenerator(Generator):
     return "\n".join(const_strs)
 
   def write_modules(self, output_dir: Path, system_name: str):
-    """Write the C++ one header for each module in the manifest."""
+    """Write the C++ header. One for each module in the manifest."""
 
     for module_info in self.manifest.module_infos:
       s = f"""
@@ -81,7 +81,7 @@ class CppGenerator(Generator):
       with open(hdr_file, "w") as hdr:
         hdr.write(textwrap.dedent(s))
 
-  def write_type(self, hdr, type: types.ESIType):
+  def write_type(self, hdr: TextIO, type: types.ESIType):
     if isinstance(type, (types.BitsType, types.IntType)):
       # Bit vector types use standard C++ types.
       return
@@ -142,19 +142,23 @@ def run(generator: Type[Generator] = CppGenerator,
   argparser.add_argument(
       "--platform",
       type=str,
-      help="Name of backend for live accelerator connection.")
+      help="Name of platform for live accelerator connection.")
   argparser.add_argument(
       "--connection",
       type=str,
       help="Connection string for live accelerator connection.")
-  argparser.add_argument("--output-dir",
-                         type=str,
-                         default=".",
-                         help="Output directory for generated files.")
-  argparser.add_argument("--system-name",
-                         type=str,
-                         default="esi_system",
-                         help="Name of the ESI system.")
+  argparser.add_argument(
+      "--output-dir",
+      type=str,
+      default="esi",
+      help="Output directory for generated files. Recommend adding either `esi`"
+      " or the system name to the end of the path so as to avoid header name"
+      "conflicts. Defaults to `esi`")
+  argparser.add_argument(
+      "--system-name",
+      type=str,
+      default="esi_system",
+      help="Name of the ESI system. For C++, this will be the namespace.")
 
   if (len(cmdline_args) <= 1):
     argparser.print_help()
