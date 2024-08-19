@@ -70,10 +70,10 @@ class CppGenerator(Generator):
       #include "types.h"
 
       namespace {system_name} {{
-        class {module_info.name} {{
-        public:
-          {self.get_consts_str(module_info)}
-        }};
+      class {module_info.name} {{
+      public:
+        {self.get_consts_str(module_info)}
+      }};
       }} // namespace {system_name}
       """
 

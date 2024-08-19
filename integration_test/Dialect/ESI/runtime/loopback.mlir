@@ -181,8 +181,8 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // LOOPBACK-H-NEXT:  #pragma once
 // LOOPBACK-H-NEXT:  #include "types.h"
 // LOOPBACK-H-LABEL: namespace esi_system {
-// LOOPBACK-H-LABEL:   class LoopbackIP {
-// LOOPBACK-H-NEXT:    public:
-// LOOPBACK-H-NEXT:      static constexpr uint32_t depth = 0x5;
-// LOOPBACK-H-NEXT:    };
+// LOOPBACK-H-LABEL: class LoopbackIP {
+// LOOPBACK-H-NEXT:  public:
+// LOOPBACK-H-NEXT:    static constexpr uint32_t depth = 0x5;
+// LOOPBACK-H-NEXT:  };
 // LOOPBACK-H-NEXT:  } // namespace esi_system
