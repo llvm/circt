@@ -723,6 +723,10 @@ def InitialOp : SeqOp<"initial", [SingleBlock,
   let assemblyFormat = [{
     $body attr-dict `:` type(results)
   }];
+
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &getBody().front(); }
+  }];
 }
 
 def YieldOp : SeqOp<"yield",

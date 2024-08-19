@@ -1047,13 +1047,20 @@ void InitialOp::build(OpBuilder &builder, OperationState &result,
 }
 
 TypedValue<hw::ImmutableType>
-circt::seq::getConstantInitialValue(OpBuilder builder, Location loc,
-                                    mlir::IntegerAttr attr) {
+circt::seq::createConstantInitialValue(OpBuilder builder, Location loc,
+                                       mlir::IntegerAttr attr) {
   auto initial = builder.create<seq::InitialOp>(loc, attr.getType(), [&]() {
     auto constant = builder.create<hw::ConstantOp>(loc, attr);
     builder.create<seq::YieldOp>(loc, ArrayRef<Value>{constant});
   });
   return cast<TypedValue<hw::ImmutableType>>(initial->getResult(0));
+}
+
+Value circt::seq::unwrapImmutableValue(TypedValue<hw::ImmutableType> value) {
+  auto resultNum = cast<OpResult>(value).getResultNumber();
+  auto initialOp = value.getDefiningOp<seq::InitialOp>();
+  assert(initialOp);
+  return initialOp.getBodyBlock()->getTerminator()->getOperand(resultNum);
 }
 
 //===----------------------------------------------------------------------===//

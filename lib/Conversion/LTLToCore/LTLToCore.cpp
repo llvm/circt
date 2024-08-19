@@ -53,7 +53,7 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
                   ConversionPatternRewriter &rewriter) const override {
     auto i1 = rewriter.getI1Type();
     // Generate the constant used to set the register value
-    Value constZero = seq::getConstantInitialValue(
+    Value constZero = seq::createConstantInitialValue(
         rewriter, op->getLoc(), rewriter.getIntegerAttr(i1, 0));
 
     // Generate the constant used to enegate the

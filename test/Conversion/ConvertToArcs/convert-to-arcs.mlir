@@ -128,14 +128,18 @@ hw.module @ReshufflingInit(in %clockA: !seq.clock, in %clockB: !seq.clock, out z
   // CHECK-NEXT: arc.state @ReshufflingInit_arc(%x.z0, %x.z1) clock %clockA initial ([[C0]], [[C1]] : i4, i4) latency 1
   // CHECK-NEXT: arc.state @ReshufflingInit_arc_0(%x.z2, %x.z3) clock %clockB initial ([[C2]], [[C3]] : i4, i4) latency 1
   // CHECK-NEXT: hw.output
-  %cst1 = hw.constant 1 : i4
-  %cst2 = hw.constant 2 : i4
-  %cst3 = hw.constant 3 : i4
+
   %x.z0, %x.z1, %x.z2, %x.z3 = hw.instance "x" @Reshuffling2() -> (z0: i4, z1: i4, z2: i4, z3: i4)
   %4 = seq.compreg %x.z0, %clockA : i4
-  %5 = seq.compreg %x.z1, %clockA initial %cst1 : i4
-  %6 = seq.compreg %x.z2, %clockB initial %cst2 : i4
-  %7 = seq.compreg %x.z3, %clockB initial %cst3 : i4
+  %init0, %init1, %init2 = seq.initial {
+    %cst1 = hw.constant 1 : i4
+    %cst2 = hw.constant 2 : i4
+    %cst3 = hw.constant 3 : i4
+    seq.yield %cst1, %cst2, %cst3 : i4, i4, i4
+  } : () -> !hw.immutable<i4>, !hw.immutable<i4>, !hw.immutable<i4>
+  %5 = seq.compreg %x.z1, %clockA initial %init0 : i4
+  %6 = seq.compreg %x.z2, %clockB initial %init1 : i4
+  %7 = seq.compreg %x.z3, %clockB initial %init2 : i4
   hw.output %4, %5, %6, %7 : i4, i4, i4, i4
 }
 // CHECK-NEXT: }

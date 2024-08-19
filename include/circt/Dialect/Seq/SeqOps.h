@@ -60,7 +60,9 @@ struct FirMemory {
 };
 
 mlir::TypedValue<hw::ImmutableType>
-getConstantInitialValue(OpBuilder builder, Location loc, mlir::IntegerAttr attr);
+createConstantInitialValue(OpBuilder builder, Location loc,
+                           mlir::IntegerAttr attr);
+Value unwrapImmutableValue(mlir::TypedValue<hw::ImmutableType> immutableVal);
 
 } // namespace seq
 } // namespace circt
