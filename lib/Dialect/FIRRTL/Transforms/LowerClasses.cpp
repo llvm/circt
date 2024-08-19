@@ -1639,11 +1639,11 @@ LogicalResult convertClassFieldsTypes(ClassFieldsLike oldOp,
                                       ClassFieldsLike newOp,
                                       const TypeConverter *typeConverter) {
   llvm::SmallVector<NamedAttribute> fieldTypes;
-  llvm::ArrayRef<Attribute> fieldNames = oldOp.getFieldNames();
+  llvm::SmallVector<StringAttr> fieldNames = oldOp.getFieldNames();
   mlir::DictionaryAttr fieldIdxs =
       mlir::cast<mlir::DictionaryAttr>(oldOp->getAttr("fieldIdxs"));
   for (auto field : fieldNames) {
-    std::optional<Type> type = oldOp.getFieldType(cast<StringAttr>(field));
+    std::optional<Type> type = oldOp.getFieldType(field);
     if (!type.has_value())
       return failure();
     fieldTypes.push_back(mlir::NamedAttribute(
@@ -1651,7 +1651,8 @@ LogicalResult convertClassFieldsTypes(ClassFieldsLike oldOp,
         mlir::TypeAttr::get(typeConverter->convertType(type.value()))));
   }
   auto *ctx = newOp.getContext();
-  newOp->setAttr("fieldNames", mlir::ArrayAttr::get(ctx, fieldNames));
+  newOp->setAttr("fieldNames", mlir::ArrayAttr::get(ctx, {fieldNames.begin(),
+                                                          fieldNames.end()}));
   newOp->setAttr("fieldTypes", mlir::DictionaryAttr::get(ctx, fieldTypes));
   newOp->setAttr("fieldIdxs", fieldIdxs);
   return llvm::success();
@@ -1799,8 +1800,7 @@ static void populateConversionTarget(ConversionTarget &target) {
   target.addDynamicallyLegalOp<ClassExternFieldsOp>([](ClassExternFieldsOp op) {
     auto fieldNames = op.getFieldNames();
     return llvm::all_of(fieldNames, [&](auto field) {
-      // TODO: Avoid StringAttr cast?
-      std::optional<Type> type = op.getFieldType(cast<StringAttr>(field));
+      std::optional<Type> type = op.getFieldType(field);
       return type.has_value() && !isa<FIRRTLType>(type.value());
     });
   });

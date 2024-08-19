@@ -168,7 +168,8 @@ TEST(EvaluatorTests, GetFieldInvalidName) {
   auto cls = builder.create<ClassOp>("MyClass");
   auto &body = cls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&body);
-  builder.create<ClassFieldsOp>(SmallVector<Value>());
+  cls.addFields(builder, loc, llvm::ArrayRef<mlir::Attribute>(),
+                llvm::ArrayRef<mlir::Value>());
 
   Evaluator evaluator(mod);
 
@@ -387,7 +388,8 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
   auto innerCls = builder.create<ClassOp>("MyInnerClass");
   auto &innerBody = innerCls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&innerBody);
-  builder.create<ClassFieldsOp>(SmallVector<Value>());
+  innerCls.addFields(builder, loc, llvm::ArrayRef<mlir::Attribute>(),
+                     llvm::ArrayRef<mlir::Value>());
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto cls = builder.create<ClassOp>("MyClass");
@@ -448,7 +450,8 @@ TEST(EvaluatorTests, AnyCastObject) {
   auto innerCls = builder.create<ClassOp>("MyInnerClass");
   auto &innerBody = innerCls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&innerBody);
-  builder.create<ClassFieldsOp>(SmallVector<Value>());
+  innerCls.addFields(builder, loc, llvm::ArrayRef<mlir::Attribute>(),
+                     llvm::ArrayRef<mlir::Value>());
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto cls = builder.create<ClassOp>("MyClass");

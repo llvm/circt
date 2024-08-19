@@ -267,7 +267,7 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
     if (failed(result))
       return result;
 
-    fields[cast<StringAttr>(name)] = result.value();
+    fields[name] = result.value();
   }
 
   // If the there is an instance, we must update the object value.

@@ -49,8 +49,10 @@ def ClassFieldsLike : OpInterface<"ClassFieldsLike"> {
           if (i > 0) {
             printer << ",";
           }
+
           printer.printNewline();
           printer.printSymbolName(name);
+
           if (!operands.empty()) {
             printer << " ";
             printer.printOperand(operands[i]);
@@ -58,11 +60,13 @@ def ClassFieldsLike : OpInterface<"ClassFieldsLike"> {
           printer << " : ";
 
           std::optional<mlir::Type> type = $_op.getFieldType(nameAttr);
-          assert(type.has_value());
+          assert(type.has_value() && "class field has no type");
           printer.printType(type.value());
+
           if (!perFieldAttrs.empty())
             if (auto fieldAttr = mlir::dyn_cast<mlir::DictionaryAttr>(perFieldAttrs[i]))
               printer.printOptionalAttrDict(fieldAttr.getValue());
+
           if (!perFieldLocs.empty()) {
             mlir::Location loc = mlir::cast<mlir::Location>(perFieldLocs[i]);
             if (!mlir::isa<mlir::UnknownLoc>(loc))
@@ -79,16 +83,17 @@ def ClassFieldsLike : OpInterface<"ClassFieldsLike"> {
                                                        "perFieldLocs"});
       }]>,
     InterfaceMethod<"Get the class-like field names",
-      "llvm::ArrayRef<mlir::Attribute>", "getFieldNames", (ins),
+      "llvm::SmallVector<mlir::StringAttr>", "getFieldNames", (ins),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{ 
         mlir::Attribute fieldNames = this->getOperation()->getAttr("fieldNames");
-        // TODO: Should we enforce an invariant that this attribute always
-        // exists?
-        if (!fieldNames) 
-          return {};
-        return
-          mlir::cast<mlir::ArrayAttr>(fieldNames).getValue();
+        assert(fieldNames && "class fields op has no field names");
+
+        llvm::SmallVector<mlir::StringAttr> names;
+        for (auto name : mlir::cast<mlir::ArrayAttr>(fieldNames).getValue()) {
+          names.push_back(mlir::cast<mlir::StringAttr>(name));
+        }
+        return names;
       }]>
   ];
 }
