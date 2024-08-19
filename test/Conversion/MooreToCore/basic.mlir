@@ -691,6 +691,45 @@ moore.module @WaitEvent() {
     moore.return
   }
 
+  // CHECK: [[FALSE:%.+]] = hw.constant false
+  // CHECK: [[PRB_A:%.+]] = llhd.prb %a
+  // CHECK: [[PRB_B:%.+]] = llhd.prb %b
+  // CHECK: llhd.process {
+  %cond = moore.constant 0 : i1
+  moore.procedure always_comb {
+    // CHECK:   cf.br ^[[BB1:.+]]
+    // CHECK: ^[[BB1]]:
+    // CHECK:   llhd.prb %a
+    // CHECK:   llhd.prb %b
+    // CHECK:   cf.br ^[[BB2:.+]]
+    // CHECK: ^[[BB2]]:
+    // CHECK:   llhd.wait ([[FALSE]], [[PRB_A]], [[PRB_B]] : {{.*}}), ^[[BB1]]
+    %1 = moore.conditional %cond : i1 -> i1 {
+      %2 = moore.read %a : <i1>
+      moore.yield %2 : !moore.i1
+    } {
+      %3 = moore.read %b : <i1>
+      moore.yield %3 : !moore.i1
+    }
+    moore.return
+  }
+
+  // CHECK: [[PRB_D:%.+]] = llhd.prb %d
+  // CHECK: llhd.process {
+  // CHECK:   cf.br ^[[BB1:.+]]
+  // CHECK: ^[[BB1]]:
+  // CHECK:   llhd.prb %d
+  // CHECK:   cf.br ^[[BB2:.+]]
+  // CHECK: ^[[BB2]]:
+  // CHECK:   llhd.wait ([[PRB_D]] : {{.*}}), ^[[BB1]]
+  moore.procedure always_latch {
+    %3 = moore.read %d : <i1>
+    moore.return
+  }
+
+  // CHECK: %d = llhd.sig %false
+  %d = moore.variable : <i1>
+
   // CHECK: llhd.process {
   moore.procedure initial {
     // CHECK: llhd.wait ([[PRB_A6]], [[PRB_B2]] :
@@ -707,4 +746,39 @@ moore.module @WaitEvent() {
     }
     moore.return
   }
+}
+
+// Just check that block without predecessors are handled without crashing
+// CHECK-LABEL: @NoPredecessorBlockErasure
+moore.module @NoPredecessorBlockErasure(in %clk_i : !moore.l1, in %raddr_i : !moore.array<2 x l5>, out rdata_o : !moore.array<2 x l32>, in %waddr_i : !moore.array<1 x l5>, in %wdata_i : !moore.array<1 x l32>, in %we_i : !moore.l1) {
+  %0 = moore.constant 0 : l32
+  %1 = moore.constant 1 : i32
+  %2 = moore.constant 0 : i32
+  %rdata_o = moore.variable : <array<2 x l32>>
+  %mem = moore.variable : <array<32 x l32>>
+  moore.procedure always_ff {
+    cf.br ^bb1(%2 : !moore.i32)
+  ^bb1(%4: !moore.i32):  // 2 preds: ^bb0, ^bb8
+    moore.return
+  ^bb2:  // no predecessors
+    cf.br ^bb3(%2 : !moore.i32)
+  ^bb3(%5: !moore.i32):  // 2 preds: ^bb2, ^bb6
+    cf.br ^bb8
+  ^bb4:  // no predecessors
+    cf.br ^bb6
+  ^bb5:  // no predecessors
+    cf.br ^bb6
+  ^bb6:  // 2 preds: ^bb4, ^bb5
+    %6 = moore.add %5, %1 : i32
+    cf.br ^bb3(%6 : !moore.i32)
+  ^bb7:  // no predecessors
+    %7 = moore.extract_ref %mem from 0 : <array<32 x l32>> -> <l32>
+    moore.nonblocking_assign %7, %0 : l32
+    cf.br ^bb8
+  ^bb8:  // 2 preds: ^bb3, ^bb7
+    %8 = moore.add %4, %1 : i32
+    cf.br ^bb1(%8 : !moore.i32)
+  }
+  %3 = moore.read %rdata_o : <array<2 x l32>>
+  moore.output %3 : !moore.array<2 x l32>
 }
