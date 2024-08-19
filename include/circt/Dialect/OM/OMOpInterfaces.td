@@ -24,19 +24,59 @@ def ClassFieldsLike : OpInterface<"ClassFieldsLike"> {
   }];
   let methods = [
     InterfaceMethod<"Get the class-like field to type map",
-      "std::optional<mlir::Type>", "getFieldType", (ins "mlir::StringAttr":$name),
+      "std::optional<mlir::Type>", "getFieldType", (ins "mlir::StringAttr":$name)>,
+    InterfaceMethod<"Get the class-like field to type map",
+      "void", "printClassFieldsLike", (ins "mlir::OpAsmPrinter &":$printer,
+                                           "llvm::SmallVector<mlir::Value>":$operands),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{ 
-        // TODO: Check or enforce dict exits
-        mlir::DictionaryAttr fieldTypes =
-          mlir::cast<mlir::DictionaryAttr>(
-            this->getOperation()->getAttr("fieldTypes")
-          );
-        mlir::Attribute type = fieldTypes.get(name);
-        // TODO: Could add hasFieldType API instead of this optional style
-        if (!type)
-          return std::nullopt;
-        return mlir::cast<mlir::TypeAttr>(type).getValue();
+        mlir::Operation *op = $_op.getOperation();
+        printer << "(";
+        printer.increaseIndent();
+        mlir::ArrayAttr fieldNames = mlir::cast<mlir::ArrayAttr>(op->getAttr("fieldNames"));
+
+        mlir::ArrayRef<mlir::Attribute> perFieldAttrs;
+        if (auto attrs = op->getAttr("perFieldAttrs"))
+          perFieldAttrs = mlir::cast<mlir::ArrayAttr>(attrs).getValue();
+
+        mlir::ArrayRef<mlir::Attribute> perFieldLocs;
+        if (auto locs = op->getAttr("perFieldLocs"))
+          perFieldLocs = mlir::cast<mlir::ArrayAttr>(locs).getValue();
+
+        for (unsigned i = 0; i < fieldNames.size(); i++) {
+          mlir::StringAttr nameAttr = mlir::cast<mlir::StringAttr>(fieldNames[i]);
+          auto name = nameAttr.getValue();
+          if (i > 0) {
+            printer << ",";
+          }
+          printer.printNewline();
+          printer.printSymbolName(name);
+          if (!operands.empty()) {
+            printer << " ";
+            printer.printOperand(operands[i]);
+          }
+          printer << " : ";
+
+          std::optional<mlir::Type> type = $_op.getFieldType(nameAttr);
+          assert(type.has_value());
+          printer.printType(type.value());
+          if (!perFieldAttrs.empty())
+            if (auto fieldAttr = mlir::dyn_cast<mlir::DictionaryAttr>(perFieldAttrs[i]))
+              printer.printOptionalAttrDict(fieldAttr.getValue());
+          if (!perFieldLocs.empty()) {
+            mlir::Location loc = mlir::cast<mlir::Location>(perFieldLocs[i]);
+            if (!mlir::isa<mlir::UnknownLoc>(loc))
+              printer.printOptionalLocationSpecifier(loc);
+          }
+        }
+        printer.decreaseIndent();
+        if (!fieldNames.empty())
+          printer.printNewline();
+        printer << ")";
+        printer.printOptionalAttrDict(op->getAttrs(),
+                                      /*elidedAttrs=*/{"fieldTypes", "fieldNames",
+                                                       "fieldIdxs", "perFieldAttrs",
+                                                       "perFieldLocs"});
       }]>,
     InterfaceMethod<"Get the class-like field names",
       "llvm::ArrayRef<mlir::Attribute>", "getFieldNames", (ins),

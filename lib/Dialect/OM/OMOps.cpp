@@ -236,14 +236,22 @@ void circt::om::ClassOp::addFields(mlir::OpBuilder &builder, mlir::Location loc,
                                    llvm::ArrayRef<mlir::Value> fieldValues) {
   ClassFieldsOp op = builder.create<ClassFieldsOp>(loc, fieldValues);
   llvm::SmallVector<NamedAttribute> fieldTypes;
+  llvm::SmallVector<NamedAttribute> fieldIdxs;
+  unsigned i = 0;
   for (auto [name, value] : llvm::zip(fieldNames, fieldValues)) {
     fieldTypes.push_back(mlir::NamedAttribute(
         cast<StringAttr>(name), mlir::TypeAttr::get(value.getType())));
+    fieldIdxs.push_back(mlir::NamedAttribute(
+        cast<StringAttr>(name),
+        mlir::IntegerAttr::get(mlir::IndexType::get(this->getContext()), i++)));
   }
+  // TODO: unify with extern addfields
   op.getOperation()->setAttr(
       "fieldNames", mlir::ArrayAttr::get(this->getContext(), fieldNames));
   op.getOperation()->setAttr(
       "fieldTypes", mlir::DictionaryAttr::get(this->getContext(), fieldTypes));
+  op.getOperation()->setAttr(
+      "fieldIdxs", mlir::DictionaryAttr::get(this->getContext(), fieldIdxs));
 }
 
 void circt::om::ClassOp::addFields(mlir::OpBuilder &builder,
@@ -302,7 +310,6 @@ parseField(OpAsmParser &parser,
     return failure();
   if (parser.parseColonType(result.type) ||
       parser.parseOptionalAttrDict(attrs) ||
-      // TODO: TestLoc in roundtrip
       parser.parseOptionalLocationSpecifier(result.sourceLoc))
     return failure();
   result.attrs = attrs.getDictionary(parser.getContext());
@@ -324,11 +331,17 @@ ParseResult parseClassFieldsLike(OperationState &state, OpAsmParser &parser,
   mlir::MLIRContext *ctx = parser.getContext();
   llvm::SmallVector<Attribute> fieldNames;
   llvm::SmallVector<NamedAttribute> fieldTypes;
+  llvm::SmallVector<NamedAttribute> fieldIdxs;
   llvm::SmallVector<Attribute> perFieldAttrs;
   SmallVector<Attribute> perFieldLocs;
-  for (auto &field : parsedFields) {
+  size_t n = parsedFields.size();
+  for (unsigned i = 0; i < n; i++) {
+    auto &field = parsedFields[i];
     fieldTypes.push_back(mlir::NamedAttribute(mlir::StringAttr(field.name),
                                               mlir::TypeAttr::get(field.type)));
+    fieldIdxs.push_back(mlir::NamedAttribute(
+        mlir::StringAttr(field.name),
+        mlir::IntegerAttr::get(mlir::IndexType::get(ctx), i)));
     fieldNames.push_back(field.name);
     if (hasOperand &&
         parser.resolveOperand(field.ssaName, field.type, state.operands))
@@ -343,6 +356,7 @@ ParseResult parseClassFieldsLike(OperationState &state, OpAsmParser &parser,
                                            : UnknownLoc::get(ctx));
   }
   state.addAttribute("fieldTypes", mlir::DictionaryAttr::get(ctx, fieldTypes));
+  state.addAttribute("fieldIdxs", mlir::DictionaryAttr::get(ctx, fieldIdxs));
   state.addAttribute("fieldNames", mlir::ArrayAttr::get(ctx, fieldNames));
   state.addAttribute("perFieldAttrs", mlir::ArrayAttr::get(ctx, perFieldAttrs));
   state.addAttribute("perFieldLocs", mlir::ArrayAttr::get(ctx, perFieldLocs));
@@ -350,64 +364,6 @@ ParseResult parseClassFieldsLike(OperationState &state, OpAsmParser &parser,
   if (parser.parseOptionalAttrDict(state.attributes))
     return failure();
   return success();
-}
-
-void printClassFieldsLike(OpAsmPrinter &printer, Operation *op,
-                          SmallVector<Value> operands) {
-  printer << "(";
-  printer.increaseIndent();
-  mlir::ArrayAttr fieldNames = cast<ArrayAttr>(op->getAttr("fieldNames"));
-  mlir::DictionaryAttr fieldTypes =
-      cast<DictionaryAttr>(op->getAttr("fieldTypes"));
-
-  ArrayRef<Attribute> perFieldAttrs;
-  if (auto attrs = op->getAttr("perFieldAttrs"))
-    perFieldAttrs = cast<ArrayAttr>(attrs).getValue();
-
-  ArrayRef<Attribute> perFieldLocs;
-  if (auto locs = op->getAttr("perFieldLocs"))
-    perFieldLocs = cast<ArrayAttr>(locs).getValue();
-
-  for (unsigned i = 0; i < fieldNames.size(); i++) {
-    auto name = cast<StringAttr>(fieldNames[i]).getValue();
-    if (i > 0) {
-      printer << ",";
-    }
-    printer.printNewline();
-    printer.printSymbolName(name);
-    if (!operands.empty()) {
-      printer << " ";
-      printer.printOperand(operands[i]);
-    }
-    printer << " : ";
-
-    // TODO: fieldTypes dictionary is not always up to date, we should
-    // enforce an API that fixes this, for now we get the latest type from the
-    // operand
-    Type type;
-    if (!operands.empty()) {
-      type = operands[i].getType();
-    } else {
-      type = cast<TypeAttr>(fieldTypes.get(name)).getValue();
-    }
-    printer.printType(type);
-    if (!perFieldAttrs.empty())
-      if (auto fieldAttr = dyn_cast<DictionaryAttr>(perFieldAttrs[i]))
-        printer.printOptionalAttrDict(fieldAttr.getValue());
-    if (!perFieldLocs.empty()) {
-      Location loc = cast<Location>(perFieldLocs[i]);
-      if (!isa<UnknownLoc>(loc))
-        printer.printOptionalLocationSpecifier(loc);
-    }
-  }
-  printer.decreaseIndent();
-  if (!fieldNames.empty())
-    printer.printNewline();
-  printer << ")";
-  printer.printOptionalAttrDict(op->getAttrs(),
-                                /*elidedAttrs=*/{"fieldTypes", "fieldNames",
-                                                 "perFieldAttrs",
-                                                 "perFieldLocs"});
 }
 
 //===----------------------------------------------------------------------===//
@@ -420,7 +376,20 @@ ParseResult circt::om::ClassFieldsOp::parse(OpAsmParser &parser,
 }
 
 void circt::om::ClassFieldsOp::print(OpAsmPrinter &printer) {
-  printClassFieldsLike(printer, this->getOperation(), this->getOperands());
+  printClassFieldsLike(printer, this->getOperands());
+}
+
+std::optional<mlir::Type>
+circt::om::ClassFieldsOp::getFieldType(mlir::StringAttr name) {
+  auto operands = this->getOperands();
+  if (operands.empty())
+    return std::nullopt;
+  mlir::DictionaryAttr fieldIdxs = mlir::cast<mlir::DictionaryAttr>(
+      this->getOperation()->getAttr("fieldIdxs"));
+  mlir::Attribute idx = fieldIdxs.get(name);
+  if (!idx)
+    return std::nullopt;
+  return operands[mlir::cast<mlir::IntegerAttr>(idx).getInt()].getType();
 }
 
 //===----------------------------------------------------------------------===//
@@ -477,13 +446,19 @@ void circt::om::ClassExternOp::addFields(
   auto *ctx = builder.getContext();
   llvm::SmallVector<NamedAttribute> namedAttrs;
   llvm::SmallVector<Attribute> fieldAttrs;
+  llvm::SmallVector<NamedAttribute> fieldIdxs;
+  unsigned i = 0;
   for (auto [name, type] : llvm::zip(fieldNames, fieldTypes)) {
     namedAttrs.push_back(mlir::NamedAttribute(mlir::StringAttr(name),
                                               mlir::TypeAttr::get(type)));
     fieldAttrs.push_back(cast<Attribute>(name));
+    fieldIdxs.push_back(mlir::NamedAttribute(
+        mlir::StringAttr(name),
+        mlir::IntegerAttr::get(mlir::IndexType::get(ctx), i++)));
   }
   op->setAttr("fieldNames", mlir::ArrayAttr::get(ctx, fieldAttrs));
   op->setAttr("fieldTypes", mlir::DictionaryAttr::get(ctx, namedAttrs));
+  op->setAttr("fieldIdxs", mlir::DictionaryAttr::get(ctx, fieldIdxs));
 }
 
 void circt::om::ClassExternOp::addFields(
@@ -503,7 +478,20 @@ ParseResult circt::om::ClassExternFieldsOp::parse(OpAsmParser &parser,
 }
 
 void circt::om::ClassExternFieldsOp::print(OpAsmPrinter &printer) {
-  printClassFieldsLike(printer, this->getOperation(), {});
+  printClassFieldsLike(printer, {});
+}
+
+std::optional<mlir::Type>
+circt::om::ClassExternFieldsOp::getFieldType(mlir::StringAttr name) {
+  mlir::DictionaryAttr fieldTypes =
+    mlir::cast<mlir::DictionaryAttr>(
+      this->getOperation()->getAttr("fieldTypes")
+    );
+  mlir::Attribute type = fieldTypes.get(name);
+  // TODO: Could add hasFieldType API instead of this optional style
+  if (!type)
+    return std::nullopt;
+  return mlir::cast<mlir::TypeAttr>(type).getValue();
 }
 
 //===----------------------------------------------------------------------===//
