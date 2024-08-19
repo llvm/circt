@@ -140,6 +140,13 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     modulePM.addPass(firrtl::createLayerSinkPass());
   }
 
+  // Run canonicalization before LowerLayers.  LowerLayers creates modules which
+  // makes certain optimizations much harderd.  E.g., many trivial
+  // canonicalizers will not work after LowerLayers outlines module bodies.
+  if (!opt.shouldDisableOptimization())
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        createSimpleCanonicalizerPass());
+
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerLayersPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
