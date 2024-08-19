@@ -71,11 +71,11 @@ circuit Foo: %[[
   ; CHECK:   );
   ; CHECK: endmodule
 
+; // -----
+
 ; This is an end-to-end example of a test-harness enabling verification, probing
 ; into a device-under-test, and reading from hardware which is only present if
 ; the verification layer is enabled.
-
-; // -----
 
 FIRRTL version 4.0.0
 
