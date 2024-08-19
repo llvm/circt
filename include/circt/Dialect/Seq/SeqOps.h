@@ -59,6 +59,9 @@ struct FirMemory {
   FirMemory(hw::HWModuleGeneratedOp op);
 };
 
+mlir::TypedValue<hw::ImmutableType>
+getConstantInitialValue(OpBuilder builder, Location loc, mlir::IntegerAttr attr);
+
 } // namespace seq
 } // namespace circt
 

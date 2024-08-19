@@ -10,7 +10,7 @@ module {
     //CHECK:    [[NID3:[0-9]+]] constd [[NID0]] 0
     %false = hw.constant false
     //CHECK:    [[INIT:[0-9]+]] init [[NID0]] [[NID2]] [[NID3]]
-    %reg = seq.compreg %false, %clock reset %reset, %false powerOn %false : i1  
+    %reg = seq.compreg %false, %clock reset %reset, %false initial %false : i1  
 
     //CHECK:    [[NID4:[0-9]+]] eq [[NID0]] [[NID2]] [[NID3]]
     %10 = comb.icmp bin eq %reg, %false : i1

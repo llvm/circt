@@ -95,7 +95,7 @@ def HWStringType :
 // A handle to refer to circt::hw::ImmutableType in ODS.
 def ImmutableType : DialectType<HWDialect,
     CPred<"isa<circt::hw::ImmutableType>($_self)">,
-          "an ImmutableType", "ImmutableType>">;
+          "an ImmutableType", "::circt::hw::ImmutableType">;
 
 /// A flat symbol reference or a reference to a name within a module.
 def NameRefAttr : Attr<

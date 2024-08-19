@@ -79,7 +79,7 @@ public:
 
     auto svReg = rewriter.create<sv::RegOp>(loc, regTy, reg.getNameAttr(),
                                             reg.getInnerSymAttr(),
-                                            reg.getPowerOnValue());
+                                            reg.getInitialValue());
     svReg->setDialectAttrs(reg->getDialectAttrs());
 
     circt::sv::setSVAttributes(svReg, circt::sv::getSVAttributes(reg));

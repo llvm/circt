@@ -10,7 +10,7 @@ module {
     //CHECK:  %false = hw.constant false
     //CHECK:  %true = hw.constant true
     //CHECK:  [[TMP:%.+]] = comb.or %reset, %hbr : i1
-    //CHECK:  %hbr = seq.compreg [[TMP]], %clock powerOn %false : i1  
+    //CHECK:  %hbr = seq.compreg [[TMP]], %clock initial %false : i1  
     %1 = verif.has_been_reset %0, sync %reset
 
     //CHECK:  [[TMP1:%.+]] = comb.xor %reset, %true : i1

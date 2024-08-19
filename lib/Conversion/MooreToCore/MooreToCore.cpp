@@ -183,7 +183,6 @@ struct InstanceOpConversion : public OpConversionPattern<InstanceOp> {
 
     // Replace uses chain and erase the original op.
     op.replaceAllUsesWith(instOp.getResults());
-    rewriter.eraseOp(op);
     return success();
   }
 };

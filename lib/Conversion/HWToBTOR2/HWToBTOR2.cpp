@@ -874,7 +874,7 @@ public:
 
     // Check for initial values which must be emitted before the state in
     // btor2
-    Value pov = reg.getPowerOnValue();
+    Value pov = reg.getInitialValue();
 
     // Generate state instruction (represents the register declaration)
     genState(reg, w, regName);

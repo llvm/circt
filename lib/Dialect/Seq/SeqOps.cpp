@@ -1030,6 +1030,31 @@ LogicalResult InitialOp::verify() {
   }
   return success();
 }
+void InitialOp::build(OpBuilder &builder, OperationState &result,
+                      TypeRange resultTypes, std::function<void()> ctor) {
+  OpBuilder::InsertionGuard guard(builder);
+
+  builder.createBlock(result.addRegion());
+  SmallVector<Type> types;
+  for (auto t : resultTypes) {
+    types.push_back(hw::ImmutableType::get(t));
+  }
+  result.addTypes(types);
+
+  // Fill in the body of the #ifdef.
+  if (ctor)
+    ctor();
+}
+
+TypedValue<hw::ImmutableType>
+circt::seq::getConstantInitialValue(OpBuilder builder, Location loc,
+                                    mlir::IntegerAttr attr) {
+  auto initial = builder.create<seq::InitialOp>(loc, attr.getType(), [&]() {
+    auto constant = builder.create<hw::ConstantOp>(loc, attr);
+    builder.create<seq::YieldOp>(loc, ArrayRef<Value>{constant});
+  });
+  return cast<TypedValue<hw::ImmutableType>>(initial->getResult(0));
+}
 
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.

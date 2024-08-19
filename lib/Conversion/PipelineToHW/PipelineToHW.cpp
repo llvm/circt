@@ -406,7 +406,7 @@ public:
       if (enablePowerOnValues) {
         llvm::TypeSwitch<Operation *, void>(stageEnabled.getDefiningOp())
             .Case<seq::CompRegOp, seq::CompRegClockEnabledOp>([&](auto op) {
-              op.getPowerOnValueMutable().assign(enableRegResetVal);
+              op.getInitialValueMutable().assign(enableRegResetVal);
             });
       }
     }

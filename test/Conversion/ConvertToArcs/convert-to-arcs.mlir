@@ -133,9 +133,9 @@ hw.module @ReshufflingInit(in %clockA: !seq.clock, in %clockB: !seq.clock, out z
   %cst3 = hw.constant 3 : i4
   %x.z0, %x.z1, %x.z2, %x.z3 = hw.instance "x" @Reshuffling2() -> (z0: i4, z1: i4, z2: i4, z3: i4)
   %4 = seq.compreg %x.z0, %clockA : i4
-  %5 = seq.compreg %x.z1, %clockA powerOn %cst1 : i4
-  %6 = seq.compreg %x.z2, %clockB powerOn %cst2 : i4
-  %7 = seq.compreg %x.z3, %clockB powerOn %cst3 : i4
+  %5 = seq.compreg %x.z1, %clockA initial %cst1 : i4
+  %6 = seq.compreg %x.z2, %clockB initial %cst2 : i4
+  %7 = seq.compreg %x.z3, %clockB initial %cst3 : i4
   hw.output %4, %5, %6, %7 : i4, i4, i4, i4
 }
 // CHECK-NEXT: }
@@ -237,7 +237,7 @@ hw.module @TrivialWithInit(in %clock: !seq.clock, in %i0: i4, in %reset: i1, out
   // CHECK-NEXT: hw.output [[RES0:%.+]]
   %0 = hw.constant 0 : i4
   %cst2 = hw.constant 2 : i4
-  %foo = seq.compreg %i0, %clock reset %reset, %0 powerOn %cst2: i4
+  %foo = seq.compreg %i0, %clock reset %reset, %0 initial %cst2: i4
   hw.output %foo : i4
 }
 // CHECK-NEXT: }

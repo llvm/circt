@@ -308,7 +308,7 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
         }
       }
 
-      initialValues.push_back(regOp.getPowerOnValue());
+      initialValues.push_back(regOp.getInitialValue());
 
       absorbedRegs.push_back(regOp);
       // If we absorb a register into the arc, the arc effectively produces that
@@ -421,7 +421,7 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
         types.push_back(regOp.getType());
         outputs.push_back(block->addArgument(regOp.getType(), regOp.getLoc()));
         names.push_back(regOp->getAttrOfType<StringAttr>("name"));
-        initialValues.push_back(regOp.getPowerOnValue());
+        initialValues.push_back(regOp.getInitialValue());
       }
       regToOutputMapping.push_back(it->second);
     }

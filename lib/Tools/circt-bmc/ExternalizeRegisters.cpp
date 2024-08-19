@@ -93,7 +93,7 @@ void ExternalizeRegistersPass::runOnOperation() {
             regOp.emitError("registers with reset signals not yet supported");
             return signalPassFailure();
           }
-          if (regOp.getPowerOnValue()) {
+          if (regOp.getInitialValue()) {
             regOp.emitError("registers with power-on values not yet supported");
             return signalPassFailure();
           }
