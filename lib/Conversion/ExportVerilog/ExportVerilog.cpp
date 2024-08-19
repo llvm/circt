@@ -341,6 +341,13 @@ static Type stripUnpackedTypes(Type type) {
       .Default([](Type type) { return type; });
 }
 
+/// Return true if the type has a leading unpacked type.
+static bool hasLeadingUnpackedType(Type type) {
+  assert(isa<hw::InOutType>(type) && "inout type is expected");
+  auto elementType = cast<hw::InOutType>(type).getElementType();
+  return stripUnpackedTypes(elementType) != elementType;
+}
+
 /// Return true if type has a struct type as a subtype.
 static bool hasStructType(Type type) {
   return TypeSwitch<Type, bool>(type)
@@ -5855,8 +5862,11 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     }
 
     // Try inlining an assignment into declarations.
+    // FIXME: Unpacked array is not inlined since several tools doesn't support
+    // that syntax. See Issue 6363.
     if (isa<sv::WireOp, LogicOp>(op) &&
-        !op->getParentOp()->hasTrait<ProceduralRegion>()) {
+        !op->getParentOp()->hasTrait<ProceduralRegion>() &&
+        !hasLeadingUnpackedType(op->getResult(0).getType())) {
       // Get a single assignments if any.
       if (auto singleAssign = getSingleAssignAndCheckUsers<AssignOp>(op)) {
         auto *source = singleAssign.getSrc().getDefiningOp();
@@ -5877,7 +5887,10 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     }
 
     // Try inlining a blocking assignment to logic op declaration.
-    if (isa<LogicOp>(op) && op->getParentOp()->hasTrait<ProceduralRegion>()) {
+    // FIXME: Unpacked array is not inlined since several tools doesn't support
+    // that syntax. See Issue 6363.
+    if (isa<LogicOp>(op) && op->getParentOp()->hasTrait<ProceduralRegion>() &&
+        !hasLeadingUnpackedType(op->getResult(0).getType())) {
       // Get a single assignment which might be possible to inline.
       if (auto singleAssign = getSingleAssignAndCheckUsers<BPAssignOp>(op)) {
         // It is necessary for the assignment to dominate users of the op.
