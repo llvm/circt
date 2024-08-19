@@ -1301,8 +1301,9 @@ struct FIRModuleContext : public FIRParser {
   llvm::DenseMap<std::pair<Attribute, Type>, Value> constantCache;
 
   /// Get a cached constant.
-  Value getCachedConstantInt(ImplicitLocOpBuilder &builder, Attribute attr,
-                             IntType type, APInt &value) {
+  template <typename OpTy = ConstantOp, typename... Args>
+  Value getCachedConstant(ImplicitLocOpBuilder &builder, Attribute attr,
+                          Type type, Args &&...args) {
     auto &result = constantCache[{attr, type}];
     if (result)
       return result;
@@ -1312,15 +1313,15 @@ struct FIRModuleContext : public FIRParser {
     OpBuilder::InsertPoint savedIP;
 
     auto *parentOp = builder.getInsertionBlock()->getParentOp();
-    if (!isa<FModuleOp>(parentOp)) {
+    if (!isa<FModuleLike>(parentOp)) {
       savedIP = builder.saveInsertionPoint();
-      while (!isa<FModuleOp>(parentOp)) {
+      while (!isa<FModuleLike>(parentOp)) {
         builder.setInsertionPoint(parentOp);
         parentOp = builder.getInsertionBlock()->getParentOp();
       }
     }
 
-    result = builder.create<ConstantOp>(type, value);
+    result = builder.create<OpTy>(type, std::forward<Args>(args)...);
 
     if (savedIP.isSet())
       builder.setInsertionPoint(savedIP.getBlock(), savedIP.getPoint());
@@ -1913,8 +1914,9 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
                    "expected string literal in String expression") ||
         parseToken(FIRToken::r_paren, "expected ')' in String expression"))
       return failure();
-    result = builder.create<StringConstantOp>(
-        builder.getStringAttr(FIRToken::getStringValue(spelling)));
+    auto attr = builder.getStringAttr(FIRToken::getStringValue(spelling));
+    result = moduleContext.getCachedConstant<StringConstantOp>(
+        builder, attr, builder.getType<StringType>(), attr);
     break;
   }
   case FIRToken::kw_Integer: {
@@ -1927,8 +1929,10 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
         parseIntLit(value, "expected integer literal in Integer expression") ||
         parseToken(FIRToken::r_paren, "expected ')' in Integer expression"))
       return failure();
-    result =
-        builder.create<FIntegerConstantOp>(APSInt(value, /*isUnsigned=*/false));
+    APSInt apint(value, /*isUnsigned=*/false);
+    result = moduleContext.getCachedConstant<FIntegerConstantOp>(
+        builder, IntegerAttr::get(getContext(), apint),
+        builder.getType<FIntegerType>(), apint);
     break;
   }
   case FIRToken::kw_Bool: {
@@ -1947,7 +1951,9 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return emitError("expected true or false in Bool expression");
     if (parseToken(FIRToken::r_paren, "expected ')' in Bool expression"))
       return failure();
-    result = builder.create<BoolConstantOp>(value);
+    auto attr = builder.getBoolAttr(value);
+    result = moduleContext.getCachedConstant<BoolConstantOp>(
+        builder, attr, builder.getType<BoolType>(), value);
     break;
   }
   case FIRToken::kw_Double: {
@@ -1967,7 +1973,9 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     double d;
     if (!llvm::to_float(spelling, d))
       return emitError("invalid double");
-    result = builder.create<DoubleConstantOp>(builder.getF64FloatAttr(d));
+    auto attr = builder.getF64FloatAttr(d);
+    result = moduleContext.getCachedConstant<DoubleConstantOp>(
+        builder, attr, builder.getType<DoubleType>(), attr);
     break;
   }
   case FIRToken::kw_List: {
@@ -2424,7 +2432,7 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
   }
 
   locationProcessor.setLoc(loc);
-  result = moduleContext.getCachedConstantInt(builder, attr, type, value);
+  result = moduleContext.getCachedConstant(builder, attr, type, attr);
   return success();
 }
 
@@ -3749,7 +3757,7 @@ ParseResult FIRStmtParser::parseRefForceInitial() {
                                                       value.getBitWidth(),
                                                       IntegerType::Unsigned),
                                      value);
-  auto pred = moduleContext.getCachedConstantInt(builder, attr, type, value);
+  auto pred = moduleContext.getCachedConstant(builder, attr, type, attr);
   builder.create<RefForceInitialOp>(pred, dest, src);
 
   return success();
@@ -3812,7 +3820,7 @@ ParseResult FIRStmtParser::parseRefReleaseInitial() {
                                                       value.getBitWidth(),
                                                       IntegerType::Unsigned),
                                      value);
-  auto pred = moduleContext.getCachedConstantInt(builder, attr, type, value);
+  auto pred = moduleContext.getCachedConstant(builder, attr, type, attr);
   builder.create<RefReleaseInitialOp>(pred, dest);
 
   return success();
