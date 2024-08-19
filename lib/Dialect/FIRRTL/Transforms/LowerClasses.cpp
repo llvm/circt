@@ -1640,8 +1640,8 @@ LogicalResult convertClassFieldsTypes(ClassFieldsLike oldOp,
                                       const TypeConverter *typeConverter) {
   llvm::SmallVector<NamedAttribute> fieldTypes;
   llvm::ArrayRef<Attribute> fieldNames = oldOp.getFieldNames();
-  mlir::DictionaryAttr fieldIdxs = mlir::cast<mlir::DictionaryAttr>(
-        oldOp->getAttr("fieldIdxs"));
+  mlir::DictionaryAttr fieldIdxs =
+      mlir::cast<mlir::DictionaryAttr>(oldOp->getAttr("fieldIdxs"));
   for (auto field : fieldNames) {
     std::optional<Type> type = oldOp.getFieldType(cast<StringAttr>(field));
     if (!type.has_value())

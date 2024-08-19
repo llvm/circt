@@ -483,10 +483,8 @@ void circt::om::ClassExternFieldsOp::print(OpAsmPrinter &printer) {
 
 std::optional<mlir::Type>
 circt::om::ClassExternFieldsOp::getFieldType(mlir::StringAttr name) {
-  mlir::DictionaryAttr fieldTypes =
-    mlir::cast<mlir::DictionaryAttr>(
-      this->getOperation()->getAttr("fieldTypes")
-    );
+  mlir::DictionaryAttr fieldTypes = mlir::cast<mlir::DictionaryAttr>(
+      this->getOperation()->getAttr("fieldTypes"));
   mlir::Attribute type = fieldTypes.get(name);
   // TODO: Could add hasFieldType API instead of this optional style
   if (!type)
