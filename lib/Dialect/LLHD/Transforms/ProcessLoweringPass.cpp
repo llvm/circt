@@ -34,40 +34,6 @@ struct ProcessLoweringPass
   void runOnOperation() override;
 };
 
-/// Backtrack a signal value and make sure that every part of it is in the
-/// observer list at some point. Assumes that there is no operation that adds
-/// parts to a signal that it does not take as input (e.g. something like
-/// llhd.sig.zext %sig : !hw.inout<i32> -> !hw.inout<i64>).
-static LogicalResult checkSignalsAreObserved(OperandRange obs, Value value) {
-  // If the value in the observer list, we don't need to backtrack further.
-  if (llvm::is_contained(obs, value))
-    return success();
-
-  if (Operation *op = value.getDefiningOp()) {
-    // If no input is a signal, this operation creates one and thus this is the
-    // last point where it could have been observed. As we've already checked
-    // that, we can fail here. This includes for example llhd.sig
-    if (llvm::none_of(op->getOperands(), [](Value arg) {
-          return isa<hw::InOutType>(arg.getType());
-        }))
-      return failure();
-
-    // Only recusively backtrack signal values. Other values cannot be changed
-    // from outside or with a delay. If they come from probes at some point,
-    // they are covered by that probe. As soon as we find a signal that is not
-    // observed no matter how far we backtrack, we fail.
-    return success(llvm::all_of(op->getOperands(), [&](Value arg) {
-      return !isa<hw::InOutType>(arg.getType()) ||
-             succeeded(checkSignalsAreObserved(obs, arg));
-    }));
-  }
-
-  // If the value is a module argument (no block arguments except for the entry
-  // block are allowed here) and was not observed, we cannot backtrack further
-  // and thus fail.
-  return failure();
-}
-
 static LogicalResult isProcValidToLower(llhd::ProcessOp op) {
   size_t numBlocks = op.getBody().getBlocks().size();
 
@@ -98,13 +64,24 @@ static LogicalResult isProcValidToLower(llhd::ProcessOp op) {
             "during process-lowering: llhd.wait terminators with optional time "
             "argument cannot be lowered to structural LLHD");
 
+      SmallVector<Value> observedSignals;
+      for (Value obs : wait.getObserved())
+        if (auto prb = obs.getDefiningOp<llhd::PrbOp>())
+          if (!op.getBody().isAncestor(prb->getParentRegion()))
+            observedSignals.push_back(prb.getSignal());
+
       // Every probed signal has to occur in the observed signals list in
       // the wait instruction
-      WalkResult result = op.walk([&wait](llhd::PrbOp prbOp) -> WalkResult {
-        if (failed(checkSignalsAreObserved(wait.getObs(), prbOp.getSignal())))
-          return wait.emitOpError(
-              "during process-lowering: the wait terminator is required to "
-              "have all probed signals as arguments");
+      WalkResult result = op.walk([&](Operation *operation) -> WalkResult {
+        // TODO: value does not need to be observed if all values this value is
+        // a combinatorial result of are observed.
+        for (Value operand : operation->getOperands())
+          if (!op.getBody().isAncestor(operand.getParentRegion()) &&
+              !llvm::is_contained(wait.getObserved(), operand) &&
+              !llvm::is_contained(observedSignals, operand))
+            return wait.emitOpError(
+                "during process-lowering: the wait terminator is required to "
+                "have values used in the process as arguments");
 
         return WalkResult::advance();
       });

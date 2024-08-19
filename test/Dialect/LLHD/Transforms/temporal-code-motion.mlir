@@ -32,6 +32,14 @@ hw.module @basic(in %cond: i1) {
   %n = llhd.sig %c0_i5 : i5
   %o = llhd.sig %c0_i5 : i5
 
+  %prb_k = llhd.prb %k : !hw.inout<i5>
+  %prb_c = llhd.prb %c : !hw.inout<i1>
+  %prb_e = llhd.prb %e : !hw.inout<i1>
+  %prb_h = llhd.prb %h : !hw.inout<i4>
+  %prb_d = llhd.prb %d : !hw.inout<i1>
+  %prb_f = llhd.prb %f : !hw.inout<i1>
+  %prb_g = llhd.prb %g : !hw.inout<i4>
+
   // COM: Check that an auxillary block is created and all drives are moved to
   // COM: the exit block with the correct enable condition
   // CHECK: llhd.process
@@ -41,7 +49,7 @@ hw.module @basic(in %cond: i1) {
   // CHECK: ^[[BB1]]:
   ^bb1:
     // CHECK: llhd.wait ({{.*}}), ^[[BB2:.+]]
-    llhd.wait (%k, %c, %e, %h, %d, %f, %g : !hw.inout<i5>, !hw.inout<i1>, !hw.inout<i1>, !hw.inout<i4>, !hw.inout<i1>, !hw.inout<i1>, !hw.inout<i4>), ^bb2
+    llhd.wait (%prb_k, %prb_c, %prb_e, %prb_h, %prb_d, %prb_f, %prb_g : i5, i1, i1, i4, i1, i1, i4), ^bb2
   // CHECK: ^[[BB2]]:
   ^bb2:
     // CHECK: [[V14:%.+]] = llhd.prb %k
