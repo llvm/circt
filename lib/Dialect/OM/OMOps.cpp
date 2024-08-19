@@ -235,12 +235,9 @@ void circt::om::ClassOp::addFields(mlir::OpBuilder &builder, mlir::Location loc,
                                    llvm::ArrayRef<mlir::Attribute> fieldNames,
                                    llvm::ArrayRef<mlir::Value> fieldValues) {
   ClassFieldsOp op = builder.create<ClassFieldsOp>(loc, fieldValues);
-  llvm::SmallVector<NamedAttribute> fieldTypes;
   llvm::SmallVector<NamedAttribute> fieldIdxs;
   unsigned i = 0;
   for (auto [name, value] : llvm::zip(fieldNames, fieldValues)) {
-    fieldTypes.push_back(mlir::NamedAttribute(
-        cast<StringAttr>(name), mlir::TypeAttr::get(value.getType())));
     fieldIdxs.push_back(mlir::NamedAttribute(
         cast<StringAttr>(name),
         mlir::IntegerAttr::get(mlir::IndexType::get(this->getContext()), i++)));
@@ -248,8 +245,6 @@ void circt::om::ClassOp::addFields(mlir::OpBuilder &builder, mlir::Location loc,
   // TODO: unify with extern addfields
   op.getOperation()->setAttr(
       "fieldNames", mlir::ArrayAttr::get(this->getContext(), fieldNames));
-  op.getOperation()->setAttr(
-      "fieldTypes", mlir::DictionaryAttr::get(this->getContext(), fieldTypes));
   op.getOperation()->setAttr(
       "fieldIdxs", mlir::DictionaryAttr::get(this->getContext(), fieldIdxs));
 }
@@ -337,8 +332,9 @@ ParseResult parseClassFieldsLike(OperationState &state, OpAsmParser &parser,
   size_t n = parsedFields.size();
   for (unsigned i = 0; i < n; i++) {
     auto &field = parsedFields[i];
-    fieldTypes.push_back(mlir::NamedAttribute(mlir::StringAttr(field.name),
-                                              mlir::TypeAttr::get(field.type)));
+    if (!hasOperand)
+      fieldTypes.push_back(mlir::NamedAttribute(
+          mlir::StringAttr(field.name), mlir::TypeAttr::get(field.type)));
     fieldIdxs.push_back(mlir::NamedAttribute(
         mlir::StringAttr(field.name),
         mlir::IntegerAttr::get(mlir::IndexType::get(ctx), i)));
@@ -355,7 +351,9 @@ ParseResult parseClassFieldsLike(OperationState &state, OpAsmParser &parser,
     perFieldLocs.push_back(field.sourceLoc ? Location(*field.sourceLoc)
                                            : UnknownLoc::get(ctx));
   }
-  state.addAttribute("fieldTypes", mlir::DictionaryAttr::get(ctx, fieldTypes));
+  if (!hasOperand)
+    state.addAttribute("fieldTypes",
+                       mlir::DictionaryAttr::get(ctx, fieldTypes));
   state.addAttribute("fieldIdxs", mlir::DictionaryAttr::get(ctx, fieldIdxs));
   state.addAttribute("fieldNames", mlir::ArrayAttr::get(ctx, fieldNames));
   state.addAttribute("perFieldAttrs", mlir::ArrayAttr::get(ctx, perFieldAttrs));
