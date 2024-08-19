@@ -77,7 +77,7 @@ void VerifyObjectFieldsPass::runOnOperation() {
                 std::optional<Type> fieldTypeOpt =
                     classDef.getFieldsOp().getFieldType(field.getAttr());
 
-                if (!fieldTypeOpt) {
+                if (!fieldTypeOpt.has_value()) {
                   auto error =
                       objectField.emitOpError("referenced non-existent field ")
                       << field;
