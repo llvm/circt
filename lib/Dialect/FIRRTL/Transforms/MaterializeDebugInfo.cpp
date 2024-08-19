@@ -425,10 +425,20 @@ void MaterializeDebugInfoPass::materializeVariable(
 
     auto typeName = tywavesAnno ? tywavesAnno->typeName : StringAttr{};
     auto params = tywavesAnno ? tywavesAnno->params : ArrayAttr{};
-    auto enumDef = tywavesAnno ? (tywavesAnno->getEnumDef(name)
-                                      ? tywavesAnno->getEnumDef(name)
-                                      : Value{})
-                               : Value{};
+
+    Value enumDef = Value{};
+    if (tywavesAnno) {
+      if (auto _enumDef = tywavesAnno->getEnumDef(name)) {
+        enumDef = builder.cloneWithoutRegions(_enumDef);
+      }
+    }
+
+    // auto enumDef = tywavesAnno ? (tywavesAnno->getEnumDef(name)
+    //                                   ? tywavesAnno->getEnumDef(name)
+    //                                   : Value{})
+    //                            : Value{};
+    // auto _enumDef = dyn_cast<debug::EnumDefOp>(enumDef);
+    // llvm::errs() << builder.cloneWithoutRegions(_enumDef);
 
     builder.create<debug::VariableOp>(value.getLoc(), name, dbgValue,
                                       /*typeName=*/typeName,
@@ -491,10 +501,17 @@ MaterializeDebugInfoPass::convertToDebugAggregates(
   // 2. Extract the source language type information
   const auto typeName = tywavesAnno ? tywavesAnno->typeName : StringAttr{};
   const auto params = tywavesAnno ? tywavesAnno->params : ArrayAttr();
-  const auto enumDef = tywavesAnno ? (tywavesAnno->getEnumDef(name)
-                                          ? tywavesAnno->getEnumDef(name)
-                                          : Value{})
-                                   : Value{};
+  // const auto enumDef = tywavesAnno ? (tywavesAnno->getEnumDef(name)
+  //                                         ? tywavesAnno->getEnumDef(name)
+  //                                         : Value{})
+  //                                  : Value{};
+
+  Value enumDef = Value{};
+  if (tywavesAnno) {
+    if (auto _enumDef = tywavesAnno->getEnumDef(name)) {
+      enumDef = builder.cloneWithoutRegions(_enumDef);
+    }
+  }
   // This enables the creation of a SubFieldOp for the current value (only if
   // child of an aggregate and tywavesAnno is not null/none)
   auto isChildOfAggregate = circtSubFieldId && tywavesAnno;
