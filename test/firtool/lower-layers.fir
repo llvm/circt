@@ -67,7 +67,7 @@ circuit Foo: %[[
   ; CHECK: module Foo();
   ; CHECK:  wire d = Foo.bar.verification.c_probe;
   ; CHECK:   Bar bar (
-  ; CHECK:   .a (d)  
+  ; CHECK:   .a (d)
   ; CHECK:   );
   ; CHECK: endmodule
 
