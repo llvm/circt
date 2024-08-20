@@ -229,14 +229,18 @@ static void populateMooreTransforms(PassManager &pm) {
     // modules/functions.
     auto &anyPM = pm.nestAny();
     anyPM.addPass(mlir::createCSEPass());
-    anyPM.addPass(createSimpleCanonicalizerPass());
+    anyPM.addPass(mlir::createCanonicalizerPass());
   }
 
   {
     // Perform module-specific transformations.
     auto &modulePM = pm.nest<moore::SVModuleOp>();
     modulePM.addPass(moore::createLowerConcatRefPass());
-    modulePM.addPass(moore::createSimplifyProceduresPass());
+    // TODO: Enable the following once it not longer interferes with @(...)
+    // event control checks. The introduced dummy variables make the event
+    // control observe a static local variable that never changes, instead of
+    // observing a module-wide signal.
+    // modulePM.addPass(moore::createSimplifyProceduresPass());
   }
 
   {
@@ -245,7 +249,7 @@ static void populateMooreTransforms(PassManager &pm) {
     anyPM.addPass(mlir::createSROA());
     anyPM.addPass(mlir::createMem2Reg());
     anyPM.addPass(mlir::createCSEPass());
-    anyPM.addPass(createSimpleCanonicalizerPass());
+    anyPM.addPass(mlir::createCanonicalizerPass());
   }
 }
 
@@ -259,7 +263,7 @@ static void populateMooreToCoreLowering(PassManager &pm) {
     // opportunities.
     auto &anyPM = pm.nestAny();
     anyPM.addPass(mlir::createCSEPass());
-    anyPM.addPass(createSimpleCanonicalizerPass());
+    anyPM.addPass(mlir::createCanonicalizerPass());
   }
 }
 

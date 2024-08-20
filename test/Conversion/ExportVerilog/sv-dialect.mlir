@@ -521,7 +521,8 @@ hw.module @reg_0(in %in4: i4, in %in8: i8, in %in8_2: i8, out a: i8, out b: i8) 
 
   %unpacked_array = sv.unpacked_array_create %in8, %in8_2 : (i8, i8) -> !hw.uarray<2xi8>
   %unpacked_wire = sv.wire : !hw.inout<uarray<2xi8>>
-  // CHECK: wire [7:0] unpacked_wire[0:1] = '{in8_2, in8};
+  // CHECK: wire [7:0] unpacked_wire[0:1];
+  // CHECK-NEXT: assign unpacked_wire = '{in8_2, in8};
   sv.assign %unpacked_wire, %unpacked_array: !hw.uarray<2xi8>
 
   // CHECK-NEXT: assign a = myReg;
@@ -1109,6 +1110,23 @@ hw.module @DontDuplicateSideEffectingVerbatim() {
     // CHECK: a = NO_EFFECT_;
     sv.bpassign %a, %tmp2 : i42
   }
+}
+
+// Issue 6363
+// CHECK-LABEL: module DontInlineAssignmentForUnpackedArrays(
+hw.module @DontInlineAssignmentForUnpackedArrays(in %a: !hw.uarray<2xi1>) {
+// CHECK:      wire w[0:1];
+// CHECK-NEXT: assign w = a;
+   %w = sv.wire  : !hw.inout<uarray<2xi1>>
+   sv.assign %w, %a : !hw.uarray<2xi1>
+   // CHECK: logic u[0:1];
+   // CHECK-NEXT: u = a;
+   sv.initial {
+    %u = sv.logic  : !hw.inout<uarray<2xi1>>
+    sv.bpassign %u, %a : !hw.uarray<2xi1>
+   }
+
+   hw.output
 }
 
 hw.generator.schema @verbatim_schema, "Simple", ["ports", "write_latency", "read_latency"]
@@ -1789,7 +1807,8 @@ sv.func private @open_array(in %array : !sv.open_uarray<i8>)
 sv.func.dpi.import @open_array
 
 // CHECK-LABEL: test_open_array
-// CHECK: wire [7:0] _GEN[0:1] = '{in_0, in_1};
+// CHECK: wire [7:0] _GEN[0:1];
+// CHECK-NEXT: assign _GEN = '{in_0, in_1};
 // CHECK-NEXT: always @(posedge clock)
 // CHECK-NEXT:   open_array(_GEN);
 hw.module @test_open_array(in %clock : i1, in %in_0 : i8, in %in_1 : i8) {

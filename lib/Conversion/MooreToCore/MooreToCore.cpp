@@ -19,9 +19,11 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinDialect.h"
+#include "mlir/IR/Iterators.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
@@ -34,6 +36,7 @@ using namespace circt;
 using namespace moore;
 
 using comb::ICmpPredicate;
+using llvm::SmallDenseSet;
 
 namespace {
 
@@ -163,148 +166,286 @@ struct InstanceOpConversion : public OpConversionPattern<InstanceOp> {
   }
 };
 
+static void getValuesToObserve(Region *region,
+                               function_ref<void(Value)> setInsertionPoint,
+                               const TypeConverter *typeConverter,
+                               ConversionPatternRewriter &rewriter,
+                               SmallVector<Value> &observeValues) {
+  SmallDenseSet<Value> alreadyObserved;
+  Location loc = region->getLoc();
+
+  auto probeIfSignal = [&](Value value) -> Value {
+    if (!isa<hw::InOutType>(value.getType()))
+      return value;
+    return rewriter.create<llhd::PrbOp>(loc, value);
+  };
+
+  region->getParentOp()->walk<WalkOrder::PreOrder, ForwardDominanceIterator<>>(
+      [&](Operation *operation) {
+        for (auto value : operation->getOperands()) {
+          if (region->isAncestor(value.getParentRegion()))
+            continue;
+          if (!alreadyObserved.insert(value).second)
+            continue;
+
+          OpBuilder::InsertionGuard g(rewriter);
+          if (auto remapped = rewriter.getRemappedValue(value)) {
+            setInsertionPoint(remapped);
+            observeValues.push_back(probeIfSignal(remapped));
+          } else {
+            setInsertionPoint(value);
+            auto type = typeConverter->convertType(value.getType());
+            auto converted = typeConverter->materializeTargetConversion(
+                rewriter, loc, type, value);
+            observeValues.push_back(probeIfSignal(converted));
+          }
+        }
+      });
+}
+
 struct ProcedureOpConversion : public OpConversionPattern<ProcedureOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
   matchAndRewrite(ProcedureOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Location loc = op.getLoc();
-    auto procOp = rewriter.create<llhd::ProcessOp>(loc);
+    // Collect values to observe before we do any modifications to the region.
+    SmallVector<Value> observedValues;
+    if (op.getKind() == ProcedureKind::AlwaysComb ||
+        op.getKind() == ProcedureKind::AlwaysLatch) {
+      auto setInsertionPoint = [&](Value value) {
+        rewriter.setInsertionPoint(op);
+      };
+      getValuesToObserve(&op.getBody(), setInsertionPoint, typeConverter,
+                         rewriter, observedValues);
+    }
 
-    // TODO: properly handle the procedure kind attribute
-    if (op.getKind() != ProcedureKind::Always)
-      return rewriter.notifyMatchFailure(loc, "not yet supported");
+    auto loc = op.getLoc();
+    if (failed(rewriter.convertRegionTypes(&op.getBody(), *typeConverter)))
+      return failure();
 
-    // Collect all event ops in the procedure.
-    SmallVector<EventOp> events(op.getOps<EventOp>());
+    // Handle initial and final procedures. These lower to a corresponding
+    // `llhd.process` or `llhd.final` op that executes the body and then halts.
+    if (op.getKind() == ProcedureKind::Initial ||
+        op.getKind() == ProcedureKind::Final) {
+      Operation *newOp;
+      if (op.getKind() == ProcedureKind::Initial)
+        newOp = rewriter.create<llhd::ProcessOp>(loc);
+      else
+        newOp = rewriter.create<llhd::FinalOp>(loc);
+      auto &body = newOp->getRegion(0);
+      rewriter.inlineRegionBefore(op.getBody(), body, body.end());
+      for (auto returnOp :
+           llvm::make_early_inc_range(body.getOps<ReturnOp>())) {
+        rewriter.setInsertionPoint(returnOp);
+        rewriter.replaceOpWithNewOp<llhd::HaltOp>(returnOp);
+      }
+      rewriter.eraseOp(op);
+      return success();
+    }
 
-    auto *entry = rewriter.createBlock(&procOp.getBody());
-    auto *wait = rewriter.createBlock(&procOp.getBody());
-    auto *check = rewriter.createBlock(&procOp.getBody());
+    // All other procedures lower to a an `llhd.process`.
+    auto newOp = rewriter.create<llhd::ProcessOp>(loc);
 
     // We need to add an empty entry block because it is not allowed in MLIR to
     // branch back to the entry block. Instead we put the logic in the second
     // block and branch to that.
-    rewriter.setInsertionPointToStart(entry);
-    rewriter.create<cf::BranchOp>(loc, wait);
+    rewriter.createBlock(&newOp.getBody());
+    auto *block = &op.getBody().front();
+    rewriter.create<cf::BranchOp>(loc, block);
+    rewriter.inlineRegionBefore(op.getBody(), newOp.getBody(),
+                                newOp.getBody().end());
 
-    // The block in which we can sample the past and where the wait terminator
-    // resides.
-    rewriter.setInsertionPointToStart(wait);
-
-    auto getSignal = [&](Value input) -> Value {
-      // If the read op input is defined outside and before the procedure
-      // operation, we can get the remapped value directly.
-      Value signal = rewriter.getRemappedValue(input);
-
-      // Otherwise, it hasn't been converted yet, so we take the old one and
-      // insert a cast.
-      if (!signal) {
-        Type convertedType = typeConverter->convertType(input.getType());
-        assert(convertedType &&
-               "if the input has not been converted yet, it should have a "
-               "moore type and a valid type conversion");
-        signal =
-            rewriter
-                .create<UnrealizedConversionCastOp>(loc, convertedType, input)
-                ->getResult(0);
-      }
-
-      return signal;
-    };
-
-    // All signals to observe in the `llhd.wait` operation.
-    SmallVector<Value> toObserve;
-    DenseSet<Value> alreadyObserved;
-    // If there are no event operations in the procedure, it's a combinational
-    // one. Thus we need to collect all signals used.
-    if (events.empty()) {
-      op->walk([&](Operation *operation) {
-        for (auto &operand : operation->getOpOperands()) {
-          Value value = getSignal(operand.get());
-          auto memOp = dyn_cast<MemoryEffectOpInterface>(operation);
-          if (!memOp)
-            return;
-
-          // The process is only sensitive to values that are read.
-          if (isa<RefType>(operand.get().getType()) &&
-              memOp.getEffectOnValue<MemoryEffects::Read>(operand.get())
-                  .has_value()) {
-            if (!alreadyObserved.contains(value))
-              toObserve.push_back(value);
-
-            alreadyObserved.insert(value);
-          }
-        }
-      });
+    // Add special handling for `always_comb` and `always_latch` procedures.
+    // These run once at simulation startup and then implicitly wait for any of
+    // the values they access to change before running again. To implement this,
+    // we create another basic block that contains the implicit wait, and make
+    // all `moore.return` ops branch to that wait block instead of immediately
+    // jumping back up to the body.
+    if (op.getKind() == ProcedureKind::AlwaysComb ||
+        op.getKind() == ProcedureKind::AlwaysLatch) {
+      Block *waitBlock = rewriter.createBlock(&newOp.getBody());
+      rewriter.create<llhd::WaitOp>(loc, observedValues, Value(), ValueRange{},
+                                    block);
+      block = waitBlock;
     }
 
-    // Forall edge triggered events, probe the old value
-    SmallVector<Value> oldValues(events.size(), Value());
-    for (auto [i, event] : llvm::enumerate(events)) {
-      auto readOp = event.getInput().getDefiningOp<ReadOp>();
-      if (!readOp)
-        return failure();
-
-      Value signal = getSignal(readOp.getInput());
-      toObserve.push_back(signal);
-
-      // Non-edge triggered events only need the value in the present
-      if (event.getEdge() != Edge::None)
-        oldValues[i] = rewriter.create<llhd::PrbOp>(loc, signal);
-    }
-
-    rewriter.create<llhd::WaitOp>(loc, toObserve, Value(), ValueRange{}, check);
-    rewriter.setInsertionPointToStart(check);
-
-    if (events.empty()) {
-      rewriter.create<cf::BranchOp>(loc, &op.getBody().front());
-    } else {
-      SmallVector<Value> disjuncts;
-      for (auto [i, signal, event] : llvm::enumerate(toObserve, events)) {
-        if (event.getEdge() == Edge::None)
-          disjuncts.push_back(rewriter.create<llhd::PrbOp>(loc, signal));
-
-        if (event.getEdge() == Edge::PosEdge ||
-            event.getEdge() == Edge::BothEdges) {
-          Value currVal = rewriter.create<llhd::PrbOp>(loc, signal);
-          Value trueVal = rewriter.create<hw::ConstantOp>(loc, APInt(1, 1));
-          Value notOldVal =
-              rewriter.create<comb::XorOp>(loc, oldValues[i], trueVal);
-          Value posedge = rewriter.create<comb::AndOp>(loc, notOldVal, currVal);
-          disjuncts.push_back(posedge);
-        }
-        if (event.getEdge() == Edge::NegEdge ||
-            event.getEdge() == Edge::BothEdges) {
-          Value currVal = rewriter.create<llhd::PrbOp>(loc, signal);
-          Value trueVal = rewriter.create<hw::ConstantOp>(loc, APInt(1, 1));
-          Value notCurrVal =
-              rewriter.create<comb::XorOp>(loc, currVal, trueVal);
-          Value posedge =
-              rewriter.create<comb::AndOp>(loc, oldValues[i], notCurrVal);
-          disjuncts.push_back(posedge);
-        }
-      }
-
-      Value isValid = rewriter.create<comb::OrOp>(loc, disjuncts, false);
-      rewriter.create<cf::CondBranchOp>(loc, isValid, &op.getBody().front(),
-                                        wait);
-    }
-
-    for (auto event : events)
-      rewriter.eraseOp(event);
-
-    rewriter.inlineRegionBefore(op.getBody(), procOp.getBody(),
-                                procOp.getBody().end());
-
-    for (auto returnOp : procOp.getOps<ReturnOp>()) {
+    // Make all `moore.return` ops branch back up to the beginning of the
+    // process, or the wait block created above for `always_comb` and
+    // `always_latch` procedures.
+    for (auto returnOp : llvm::make_early_inc_range(newOp.getOps<ReturnOp>())) {
       rewriter.setInsertionPoint(returnOp);
-      rewriter.create<cf::BranchOp>(loc, wait);
+      rewriter.create<cf::BranchOp>(loc, block);
       rewriter.eraseOp(returnOp);
     }
 
     rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(WaitEventOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // In order to convert the `wait_event` op we need to create three separate
+    // blocks at the location of the op:
+    //
+    // - A "wait" block that reads the current state of any values used to
+    //   detect events and then waits until any of those values change. When a
+    //   change occurs, control transfers to the "check" block.
+    // - A "check" block which is executed after any interesting signal has
+    //   changed. This is where any `detect_event` ops read the current state of
+    //   interesting values and compare them against their state before the wait
+    //   in order to detect an event. If any events were detected, control
+    //   transfers to the "resume" block; otherwise control goes back to the
+    //   "wait" block.
+    // - A "resume" block which holds any ops after the `wait_event` op. This is
+    //   where control is expected to resume after an event has happened.
+    //
+    // Block structure before:
+    //     opA
+    //     moore.wait_event { ... }
+    //     opB
+    //
+    // Block structure after:
+    //     opA
+    //     cf.br ^wait
+    // ^wait:
+    //     <read "before" values>
+    //     llhd.wait ^check, ...
+    // ^check:
+    //     <read "after" values>
+    //     <detect edges>
+    //     cf.cond_br %event, ^resume, ^wait
+    // ^resume:
+    //     opB
+    auto *resumeBlock =
+        rewriter.splitBlock(op->getBlock(), ++Block::iterator(op));
+    auto *waitBlock = rewriter.createBlock(resumeBlock);
+    auto *checkBlock = rewriter.createBlock(resumeBlock);
+
+    auto loc = op.getLoc();
+    rewriter.setInsertionPoint(op);
+    rewriter.create<cf::BranchOp>(loc, waitBlock);
+
+    // We need to inline two copies of the `wait_event`'s body region: one is
+    // used to determine the values going into `detect_event` ops before the
+    // `llhd.wait`, and one will do the actual event detection after the
+    // `llhd.wait`.
+    //
+    // Create a copy of the entire `wait_event` op in the wait block, which also
+    // creates a copy of its region. Take note of all inputs to `detect_event`
+    // ops and delete the `detect_event` ops in this copy.
+    SmallVector<Value> valuesBefore;
+    rewriter.setInsertionPointToEnd(waitBlock);
+    auto clonedOp = cast<WaitEventOp>(rewriter.clone(*op));
+    for (auto detectOp :
+         llvm::make_early_inc_range(clonedOp.getOps<DetectEventOp>())) {
+      valuesBefore.push_back(detectOp.getInput());
+      rewriter.eraseOp(detectOp);
+    }
+
+    // Determine the values used during event detection that are defined outside
+    // the `wait_event`'s body region. We want to wait for a change on these
+    // signals before we check if any interesting event happened.
+    SmallVector<Value> observeValues;
+    auto setInsertionPointAfterDef = [&](Value value) {
+      if (auto *op = value.getDefiningOp())
+        rewriter.setInsertionPointAfter(op);
+      if (auto arg = dyn_cast<BlockArgument>(value))
+        rewriter.setInsertionPointToStart(value.getParentBlock());
+    };
+
+    getValuesToObserve(&clonedOp.getBody(), setInsertionPointAfterDef,
+                       typeConverter, rewriter, observeValues);
+
+    // Create the `llhd.wait` op that suspends the current process and waits for
+    // a change in the interesting values listed in `observeValues`. When a
+    // change is detected, execution resumes in the "check" block.
+    auto waitOp = rewriter.create<llhd::WaitOp>(loc, observeValues, Value(),
+                                                ValueRange{}, checkBlock);
+    rewriter.inlineBlockBefore(&clonedOp.getBody().front(), waitOp);
+    rewriter.eraseOp(clonedOp);
+
+    // Collect a list of all detect ops and inline the `wait_event` body into
+    // the check block.
+    SmallVector<DetectEventOp> detectOps(op.getBody().getOps<DetectEventOp>());
+    rewriter.inlineBlockBefore(&op.getBody().front(), checkBlock,
+                               checkBlock->end());
+    rewriter.eraseOp(op);
+
+    // Helper function to detect if a certain change occurred between a value
+    // before the `llhd.wait` and after.
+    auto computeTrigger = [&](Value before, Value after, Edge edge) -> Value {
+      before = typeConverter->materializeTargetConversion(
+          rewriter, loc, rewriter.getI1Type(), before);
+      after = typeConverter->materializeTargetConversion(
+          rewriter, loc, rewriter.getI1Type(), after);
+
+      if (edge == Edge::AnyChange)
+        return rewriter.create<comb::ICmpOp>(loc, ICmpPredicate::ne, before,
+                                             after, true);
+
+      SmallVector<Value> disjuncts;
+      Value trueVal = rewriter.create<hw::ConstantOp>(loc, APInt(1, 1));
+
+      if (edge == Edge::PosEdge || edge == Edge::BothEdges) {
+        Value notOldVal =
+            rewriter.create<comb::XorOp>(loc, before, trueVal, true);
+        Value posedge =
+            rewriter.create<comb::AndOp>(loc, notOldVal, after, true);
+        disjuncts.push_back(posedge);
+      }
+
+      if (edge == Edge::NegEdge || edge == Edge::BothEdges) {
+        Value notCurrVal =
+            rewriter.create<comb::XorOp>(loc, after, trueVal, true);
+        Value posedge =
+            rewriter.create<comb::AndOp>(loc, before, notCurrVal, true);
+        disjuncts.push_back(posedge);
+      }
+
+      return rewriter.createOrFold<comb::OrOp>(loc, disjuncts, true);
+    };
+
+    // Convert all `detect_event` ops into a check for the corresponding event
+    // between the value before and after the `llhd.wait`. The "before" value
+    // has been collected into `valuesBefore` in the "wait" block; the "after"
+    // value corresponds to the detect op's input.
+    SmallVector<Value> triggers;
+    for (auto [detectOp, before] : llvm::zip(detectOps, valuesBefore)) {
+      // TODO: Support multi-bit values. Edge detection occurs per-bit.
+      if (auto intType = dyn_cast<IntType>(before.getType());
+          !intType || intType.getWidth() != 1)
+        return detectOp->emitError() << "requires single bit operand";
+
+      rewriter.setInsertionPoint(detectOp);
+      auto trigger =
+          computeTrigger(before, detectOp.getInput(), detectOp.getEdge());
+      if (detectOp.getCondition()) {
+        auto condition = typeConverter->materializeTargetConversion(
+            rewriter, loc, rewriter.getI1Type(), detectOp.getCondition());
+        trigger = rewriter.create<comb::AndOp>(loc, trigger, condition, true);
+      }
+      triggers.push_back(trigger);
+      rewriter.eraseOp(detectOp);
+    }
+
+    // If any `detect_event` op detected an event, branch to the "resume" block
+    // which contains any code after the `wait_event` op. If no events were
+    // detected, branch back to the "wait" block to wait for the next change on
+    // the interesting signals.
+    rewriter.setInsertionPointToEnd(checkBlock);
+    if (!triggers.empty()) {
+      auto triggered = rewriter.createOrFold<comb::OrOp>(loc, triggers, true);
+      rewriter.create<cf::CondBranchOp>(loc, triggered, resumeBlock, waitBlock);
+    } else {
+      rewriter.create<cf::BranchOp>(loc, waitBlock);
+    }
+
     return success();
   }
 };
@@ -337,8 +478,8 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
       init = rewriter.createOrFold<hw::BitcastOp>(loc, elementType, constZero);
     }
 
-    rewriter.replaceOpWithNewOp<llhd::SigOp>(op, resultType, op.getNameAttr(),
-                                             init);
+    rewriter.replaceOpWithNewOp<llhd::SignalOp>(op, resultType,
+                                                op.getNameAttr(), init);
     return success();
   }
 };
@@ -1133,9 +1274,11 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
       [&](mlir::OpBuilder &builder, mlir::Type resultType,
           mlir::ValueRange inputs,
           mlir::Location loc) -> std::optional<mlir::Value> {
-        if (inputs.size() != 1)
+        if (inputs.size() != 1 || !inputs[0])
           return std::nullopt;
-        return inputs[0];
+        return builder
+            .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
+            .getResult(0);
       });
 
   typeConverter.addSourceMaterialization(
@@ -1199,7 +1342,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
     CaseXZEqOpConversion<CaseXZEqOp, false>,
     
     // Patterns of structural operations.
-    SVModuleOpConversion, InstanceOpConversion, ProcedureOpConversion,
+    SVModuleOpConversion, InstanceOpConversion, ProcedureOpConversion, WaitEventOpConversion,
 
     // Patterns of shifting operations.
     ShrOpConversion, ShlOpConversion, AShrOpConversion,
@@ -1245,6 +1388,9 @@ std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertMooreToCorePass() {
 void MooreToCorePass::runOnOperation() {
   MLIRContext &context = getContext();
   ModuleOp module = getOperation();
+
+  IRRewriter rewriter(module);
+  (void)mlir::eraseUnreachableBlocks(rewriter, module->getRegions());
 
   ConversionTarget target(context);
   TypeConverter typeConverter;

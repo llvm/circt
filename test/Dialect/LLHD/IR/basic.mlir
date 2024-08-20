@@ -90,22 +90,22 @@ func.func @check_store(%int : !llhd.ptr<i32>, %intC : i32 , %array : !llhd.ptr<!
 hw.module @checkSigInst() {
   // CHECK: %[[CI1:.*]] = hw.constant
   %cI1 = hw.constant 0 : i1
-  // CHECK-NEXT: %{{.*}} = llhd.sig "sigI1" %[[CI1]] : i1
-  %sigI1 = llhd.sig "sigI1" %cI1 : i1
+  // CHECK-NEXT: %sigI1 = llhd.sig %[[CI1]] : i1
+  %sigI1 = llhd.sig %cI1 : i1
   // CHECK-NEXT: %[[CI64:.*]] = hw.constant
   %cI64 = hw.constant 0 : i64
-  // CHECK-NEXT: %{{.*}} = llhd.sig "sigI64" %[[CI64]] : i64
-  %sigI64 = llhd.sig "sigI64" %cI64 : i64
+  // CHECK-NEXT: %sigI64 = llhd.sig %[[CI64]] : i64
+  %sigI64 = llhd.sig %cI64 : i64
 
   // CHECK-NEXT: %[[TUP:.*]] = hw.struct_create
   %tup = hw.struct_create (%cI1, %cI64) : !hw.struct<foo: i1, bar: i64>
-  // CHECK-NEXT: %{{.*}} = llhd.sig "sigTup" %[[TUP]] : !hw.struct<foo: i1, bar: i64>
-  %sigTup = llhd.sig "sigTup" %tup : !hw.struct<foo: i1, bar: i64>
+  // CHECK-NEXT: %sigTup = llhd.sig %[[TUP]] : !hw.struct<foo: i1, bar: i64>
+  %sigTup = llhd.sig %tup : !hw.struct<foo: i1, bar: i64>
 
   // CHECK-NEXT: %[[ARRAY:.*]] = hw.array_create
   %array = hw.array_create %cI1, %cI1 : i1
-  // CHECK-NEXT: %{{.*}} = llhd.sig "sigArray" %[[ARRAY]] : !hw.array<2xi1>
-  %sigArray = llhd.sig "sigArray" %array : !hw.array<2xi1>
+  // CHECK-NEXT: %sigArray = llhd.sig %[[ARRAY]] : !hw.array<2xi1>
+  %sigArray = llhd.sig %array : !hw.array<2xi1>
 }
 
 // CHECK-LABEL: @checkPrb
@@ -176,10 +176,14 @@ hw.module @check_wait_1 () {
 
 // CHECK: @check_wait_2(inout %[[ARG0:.*]] : i64, inout %[[ARG1:.*]] : i1) {
 hw.module @check_wait_2 (inout %arg0 : i64, inout %arg1 : i1) {
+  // CHECK: [[PRB0:%.+]] = llhd.prb %arg0
+  %prb0 = llhd.prb %arg0 : !hw.inout<i64>
+  // CHECK: [[PRB1:%.+]] = llhd.prb %arg1
+  %prb1 = llhd.prb %arg1 : !hw.inout<i1>
   // CHECK-NEXT: llhd.process
   llhd.process {
-    // CHECK-NEXT: llhd.wait (%[[ARG0]], %[[ARG1]] : !hw.inout<i64>, !hw.inout<i1>), ^[[BB:.*]](%[[ARG1]] : !hw.inout<i1>)
-    llhd.wait (%arg0, %arg1 : !hw.inout<i64>, !hw.inout<i1>), ^bb1(%arg1 : !hw.inout<i1>)
+    // CHECK-NEXT: llhd.wait ([[PRB0]], [[PRB1]] : i64, i1), ^[[BB:.*]](%[[ARG1]] : !hw.inout<i1>)
+    llhd.wait (%prb0, %prb1 : i64, i1), ^bb1(%arg1 : !hw.inout<i1>)
     // CHECK: ^[[BB]](%[[A:.*]]: !hw.inout<i1>):
   ^bb1(%a: !hw.inout<i1>):
     llhd.halt
@@ -188,14 +192,28 @@ hw.module @check_wait_2 (inout %arg0 : i64, inout %arg1 : i1) {
 
 // CHECK: hw.module @check_wait_3(inout %[[ARG0:.*]] : i64, inout %[[ARG1:.*]] : i1) {
 hw.module @check_wait_3 (inout %arg0 : i64, inout %arg1 : i1) {
+  // CHECK: [[PRB0:%.+]] = llhd.prb %arg0
+  %prb0 = llhd.prb %arg0 : !hw.inout<i64>
+  // CHECK: [[PRB1:%.+]] = llhd.prb %arg1
+  %prb1 = llhd.prb %arg1 : !hw.inout<i1>
   // CHECK-NEXT: llhd.process
   llhd.process {
     // CHECK-NEXT: %[[TIME:.*]] = llhd.constant_time
     %time = llhd.constant_time #llhd.time<0ns, 0d, 0e>
-    // CHECK-NEXT: llhd.wait for %[[TIME]], (%[[ARG0]], %[[ARG1]] : !hw.inout<i64>, !hw.inout<i1>), ^[[BB:.*]](%[[ARG1]], %[[ARG0]] : !hw.inout<i1>, !hw.inout<i64>)
-    llhd.wait for %time, (%arg0, %arg1 : !hw.inout<i64>, !hw.inout<i1>), ^bb1(%arg1, %arg0 : !hw.inout<i1>, !hw.inout<i64>)
+    // CHECK-NEXT: llhd.wait for %[[TIME]], ([[PRB0]], [[PRB1]] : i64, i1), ^[[BB:.*]](%[[ARG1]], %[[ARG0]] : !hw.inout<i1>, !hw.inout<i64>)
+    llhd.wait for %time, (%prb0, %prb1 : i64, i1), ^bb1(%arg1, %arg0 : !hw.inout<i1>, !hw.inout<i64>)
     // CHECK: ^[[BB]](%[[A:.*]]: !hw.inout<i1>, %[[B:.*]]: !hw.inout<i64>):
   ^bb1(%a: !hw.inout<i1>, %b: !hw.inout<i64>):
+    llhd.halt
+  }
+}
+
+// CHECK-LABEL: @FinalProcess
+hw.module @FinalProcess () {
+  // CHECK-NEXT: llhd.final {
+  // CHECK-NEXT:   llhd.halt
+  // CHECK-NEXT: }
+  llhd.final {
     llhd.halt
   }
 }

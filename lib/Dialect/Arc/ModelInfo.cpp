@@ -105,6 +105,7 @@ LogicalResult circt::arc::collectStates(Value storage, unsigned offset,
 
 LogicalResult circt::arc::collectModels(mlir::ModuleOp module,
                                         SmallVector<ModelInfo> &models) {
+
   for (auto modelOp : module.getOps<ModelOp>()) {
     auto storageArg = modelOp.getBody().getArgument(0);
     auto storageType = cast<StorageType>(storageArg.getType());
@@ -115,7 +116,7 @@ LogicalResult circt::arc::collectModels(mlir::ModuleOp module,
     llvm::sort(states, [](auto &a, auto &b) { return a.offset < b.offset; });
 
     models.emplace_back(std::string(modelOp.getName()), storageType.getSize(),
-                        std::move(states));
+                        std::move(states), modelOp.getInitialFnAttr());
   }
 
   return success();
@@ -130,6 +131,9 @@ void circt::arc::serializeModelInfoToJson(llvm::raw_ostream &outputStream,
       json.object([&] {
         json.attribute("name", model.name);
         json.attribute("numStateBytes", model.numStateBytes);
+        json.attribute("initialFnSym", !model.initialFnSym
+                                           ? ""
+                                           : model.initialFnSym.getValue());
         json.attributeArray("states", [&] {
           for (const auto &state : model.states) {
             json.object([&] {

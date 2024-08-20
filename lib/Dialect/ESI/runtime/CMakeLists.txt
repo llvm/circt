@@ -59,6 +59,7 @@ if(ZLIB_FOUND)
   set(ZLIB_LIBRARY ZLIB::ZLIB)
 else()
   message("-- zlib not found, pulling down zlib from git")
+  set(ZLIB_BUILD_EXAMPLES OFF)
   FetchContent_Declare(
     ZLIB
     GIT_REPOSITORY https://github.com/madler/zlib.git

@@ -181,6 +181,20 @@ void LowerIntmodulesPass::runOnOperation() {
         };
 
         auto inputs = replaceResults(builder, inst.getResults().drop_back());
+        // en and test_en are swapped between extmodule and intrinsic.
+        if (inputs.size() > 2) {
+          auto port1 = inst.getPortName(1);
+          auto port2 = inst.getPortName(2);
+          if (port1 != "test_en") {
+            mlir::emitError(op.getPortLocation(1),
+                            "expected port named 'test_en'");
+            return signalPassFailure();
+          } else if (port2 != "en") {
+            mlir::emitError(op.getPortLocation(2), "expected port named 'en'");
+            return signalPassFailure();
+          } else
+            std::swap(inputs[1], inputs[2]);
+        }
         auto intop = builder.create<GenericIntrinsicOp>(
             builder.getType<ClockType>(), "circt_clock_gate", inputs,
             op.getParameters());

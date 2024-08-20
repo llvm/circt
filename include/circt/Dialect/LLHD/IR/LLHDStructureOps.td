@@ -12,6 +12,7 @@
 
 def ProcessOp : LLHDOp<"process", [
   NoRegionArguments,
+  RecursiveMemoryEffects,
   HasParent<"hw::HWModuleOp">
 ]> {
   let summary = "create a process";
@@ -48,6 +49,39 @@ def ProcessOp : LLHDOp<"process", [
 
   let regions = (region MinSizedRegion<1>: $body);
 
+  let assemblyFormat = "attr-dict-with-keyword $body";
+}
+
+def FinalOp : LLHDOp<"final", [
+  NoRegionArguments,
+  RecursiveMemoryEffects,
+  HasParent<"hw::HWModuleOp">,
+]> {
+  let summary = "A process that runs at the end of simulation";
+  let description = [{
+    An `llhd.final` op encapsulates a region of IR that is to be executed after
+    the last time step of a simulation has completed. This can be used to
+    implement various forms of state cleanup and tear-down. Some verifications
+    ops may also want to check that certain final conditions hold at the end of
+    a simulation run.
+
+    The `llhd.wait` terminator is not allowed in `llhd.final` processes since
+    there is no later time slot for the execution to resume. Control flow must
+    eventually end in an `llhd.halt` terminator.
+
+    Execution order between multiple `llhd.final` ops is undefined.
+
+    Example:
+    ```mlir
+    hw.module @Foo() {
+      llhd.final {
+        func.call @printSimulationStatistics() : () -> ()
+        llhd.halt
+      }
+    }
+    ```
+  }];
+  let regions = (region MinSizedRegion<1>: $body);
   let assemblyFormat = "attr-dict-with-keyword $body";
 }
 
@@ -96,24 +130,26 @@ def WaitOp : LLHDOp<"wait", [
     ```
   }];
 
-  let arguments = (ins Variadic<InOutType>:$obs,
+  let arguments = (ins Variadic<HWValueType>:$observed,
                        Optional<LLHDTimeType>:$time,
                        Variadic<AnyType>:$destOps);
 
   let successors = (successor AnySuccessor:$dest);
 
   let assemblyFormat = [{
-    (`for` $time^ `,`)? (`(`$obs^ `:` qualified(type($obs))`)` `,`)?
+    (`for` $time^ `,`)? (`(`$observed^ `:` qualified(type($observed))`)` `,`)?
     $dest (`(` $destOps^ `:` qualified(type($destOps)) `)`)? attr-dict
   }];
 }
 
-def HaltOp : LLHDOp<"halt", [Terminator, HasParent<"ProcessOp">]> {
+def HaltOp : LLHDOp<"halt", [
+  Terminator,
+  ParentOneOf<["ProcessOp", "FinalOp"]>
+]> {
   let summary = "Terminates execution of a process.";
   let description = [{
     The `halt` instruction terminates execution of a process. All processes
     must halt eventually or consist of an infinite loop.
   }];
-
   let assemblyFormat = "attr-dict";
 }

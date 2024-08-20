@@ -6,7 +6,7 @@ hw.module @prbAndWaitNotObserved(inout %arg0 : i64) {
     cf.br ^bb1
   ^bb1:
     %0 = llhd.prb %arg0 : !hw.inout<i64>
-    // expected-error @+1 {{during process-lowering: the wait terminator is required to have all probed signals as arguments}}
+    // expected-error @+1 {{during process-lowering: the wait terminator is required to have values used in the process as arguments}}
     llhd.wait ^bb1
   }
 }
@@ -17,9 +17,10 @@ hw.module @prbAndWaitNotObserved(inout %arg0 : i64) {
 hw.module @blockArgumentsNotAllowed(inout %arg0 : i64) {
   // expected-error @+1 {{during process-lowering: the second block (containing the llhd.wait) is not allowed to have arguments}}
   llhd.process {
-    cf.br ^bb1(%arg0 : !hw.inout<i64>)
-  ^bb1(%a : !hw.inout<i64>):
-    llhd.wait ^bb1(%a : !hw.inout<i64>)
+    %prb = llhd.prb %arg0 : !hw.inout<i64>
+    cf.br ^bb1(%prb : i64)
+  ^bb1(%a : i64):
+    llhd.wait ^bb1(%a: i64)
   }
 }
 
@@ -83,7 +84,7 @@ hw.module @muxedSignal(inout %arg0 : i64, inout %arg1 : i64, inout %arg2 : i1) {
     %cond = llhd.prb %arg2 : !hw.inout<i1>
     %sig = comb.mux %cond, %arg0, %arg1 : !hw.inout<i64>
     %0 = llhd.prb %sig : !hw.inout<i64>
-    // expected-error @+1 {{during process-lowering: the wait terminator is required to have all probed signals as arguments}}
-    llhd.wait (%arg0, %arg2 : !hw.inout<i64>, !hw.inout<i1>), ^bb1
+    // expected-error @+1 {{during process-lowering: the wait terminator is required to have values used in the process as arguments}}
+    llhd.wait (%cond : i1), ^bb1
   }
 }

@@ -235,9 +235,12 @@ endmodule
 // CHECK-LABEL: func.func private @dummyA(
 // CHECK-LABEL: func.func private @dummyB(
 // CHECK-LABEL: func.func private @dummyC(
+// CHECK-LABEL: func.func private @dummyD(
 function void dummyA(); endfunction
 function void dummyB(); endfunction
 function void dummyC(); endfunction
+function void dummyD(int a); endfunction
+function bit dummyE(bit a); return a; endfunction
 
 // CHECK-LABEL: func.func private @ConditionalStatements(
 // CHECK-SAME: %arg0: !moore.i1
@@ -1523,53 +1526,6 @@ module PortsUnconnected(
   // CHECK: moore.output [[D_READ]], [[E_READ]] : !moore.l1, !moore.l1
 endmodule
 
-// CHECK-LABEL: moore.module @EventControl(in %clk : !moore.l1)
-module EventControl(input clk);
-  // CHECK: %clk_0 = moore.net name "clk" wire : <l1>
-
-  int a1, a2, b, c;
-
-  // CHECK: moore.procedure always
-  // CHECK:   [[CLK_READ:%.+]] = moore.read %clk_0
-  // CHECK:   moore.wait_event posedge [[CLK_READ]] : l1
-  always @(posedge clk) begin end;
-
-  // CHECK: moore.procedure always
-  // CHECK:   [[CLK_READ:%.+]] = moore.read %clk_0
-  // CHECK:   moore.wait_event negedge [[CLK_READ]] : l1
-  always @(negedge clk) begin end;
-
-  // CHECK: moore.procedure always
-  // CHECK:   [[CLK_READ:%.+]] = moore.read %clk_0
-  // CHECK:   moore.wait_event edge [[CLK_READ]] : l1
-  always @(edge clk) begin end;
-
-  // CHECK: moore.procedure always {
-  // CHECK:   [[B_READ:%.+]] = moore.read %b
-  // CHECK:   moore.wait_event none [[B_READ]] : i32
-  // CHECK:   [[C_READ:%.+]] = moore.read %c
-  // CHECK:   moore.wait_event none [[C_READ]] : i32
-  always @(b, c) begin
-    // CHECK: [[B_READ:%.+]] = moore.read %b
-    // CHECK: [[C_READ:%.+]] = moore.read %c
-    // CHECK: [[ADD:%.+]] = moore.add [[B_READ]], [[C_READ]] : i32
-    // CHECK: moore.blocking_assign %a1, [[ADD]] : i32
-    a1 = b + c;
-  end;
-
-  // CHECK: moore.procedure always
-  always @(*) begin
-    // CHECK: [[B_READ:%.+]] = moore.read %b
-    // CHECK: [[C_READ:%.+]] = moore.read %c
-    // CHECK: [[ADD:%.+]] = moore.add [[B_READ]], [[C_READ]] : i32
-    // CHECK: moore.blocking_assign %a2, [[ADD]] : i32
-    a2 = b + c;
-  end
-
-  // CHECK: moore.assign %clk_0, %clk : l1
-  // CHECK: moore.output
-endmodule
-
 // CHECK-LABEL: moore.module @GenerateConstructs()
 module GenerateConstructs;
   genvar i;
@@ -1731,3 +1687,220 @@ function void ConvertConditionalExprsToResultType(bit [15:0] x, struct packed { 
   // CHECK: }
   r = z ? y : x;
 endfunction
+
+// CHECK-LABEL: func.func private @ImplicitEventControl(
+// CHECK-SAME: [[X:%[^:]+]]: !moore.ref<i32>
+// CHECK-SAME: [[Y:%[^:]+]]: !moore.ref<i32>
+task automatic ImplicitEventControl(ref int x, ref int y);
+  // CHECK: moore.wait_event {
+  // CHECK: }
+  // CHECK: call @dummyA()
+  @* dummyA();
+
+  // CHECK: moore.wait_event {
+  // CHECK:   [[TMP:%.+]] = moore.read [[X]]
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK: }
+  // CHECK: [[TMP:%.+]] = moore.read [[X]]
+  // CHECK: call @dummyD([[TMP]])
+  @* dummyD(x);
+
+  // CHECK: moore.wait_event {
+  // CHECK:   [[TMP:%.+]] = moore.read [[X]]
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK:   [[TMP:%.+]] = moore.read [[Y]]
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK: }
+  // CHECK: [[TMP1:%.+]] = moore.read [[X]]
+  // CHECK: [[TMP2:%.+]] = moore.read [[Y]]
+  // CHECK: [[TMP3:%.+]] = moore.add [[TMP1]], [[TMP2]]
+  // CHECK: call @dummyD([[TMP3]])
+  @* dummyD(x + y);
+endtask
+
+// CHECK-LABEL: func.func private @SignalEventControl(
+// CHECK-SAME: [[X:%[^:]+]]: !moore.ref<i32>
+// CHECK-SAME: [[Y:%[^:]+]]: !moore.ref<i32>
+// CHECK-SAME: [[U:%[^:]+]]: !moore.ref<i1>
+// CHECK-SAME: [[V:%[^:]+]]: !moore.ref<l1>
+task automatic SignalEventControl(ref int x, ref int y, ref bit u, ref logic v);
+  // CHECK: moore.wait_event {
+  // CHECK:   [[TMP:%.+]] = moore.read [[X]]
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK: }
+  // CHECK: call @dummyA()
+  @x dummyA();
+
+  // CHECK: moore.wait_event {
+  // CHECK:   [[TMP:%.+]] = moore.read [[X]]
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK: }
+  // CHECK: call @dummyA()
+  @(x) dummyA();
+
+  // CHECK: moore.wait_event {
+  // CHECK:   [[TMP:%.+]] = moore.read [[X]]
+  // CHECK:   moore.detect_event posedge [[TMP]]
+  // CHECK: }
+  // CHECK: call @dummyA()
+  @(posedge x) dummyA();
+
+  // CHECK: moore.wait_event {
+  // CHECK:   [[TMP:%.+]] = moore.read [[X]]
+  // CHECK:   moore.detect_event negedge [[TMP]]
+  // CHECK: }
+  // CHECK: call @dummyA()
+  @(negedge x) dummyA();
+
+  // CHECK: moore.wait_event {
+  // CHECK:   [[TMP:%.+]] = moore.read [[X]]
+  // CHECK:   moore.detect_event edge [[TMP]]
+  // CHECK: }
+  // CHECK: call @dummyA()
+  @(edge x) dummyA();
+
+  // CHECK: moore.wait_event {
+  // CHECK:   [[TMP1:%.+]] = moore.read [[X]]
+  // CHECK:   [[TMP2:%.+]] = moore.read [[U]]
+  // CHECK:   moore.detect_event posedge [[TMP1]] if [[TMP2]]
+  // CHECK: }
+  // CHECK: call @dummyA()
+  @(posedge x iff u) dummyA();
+
+  // CHECK: moore.wait_event {
+  // CHECK:   [[TMP1:%.+]] = moore.read [[X]]
+  // CHECK:   [[TMP2:%.+]] = moore.read [[V]] : <l1>
+  // CHECK:   [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.l1 -> !moore.i1
+  // CHECK:   moore.detect_event posedge [[TMP1]] if [[TMP3]]
+  // CHECK: }
+  // CHECK: call @dummyA()
+  @(posedge x iff v) dummyA();
+
+  // CHECK: moore.wait_event {
+  // CHECK:   [[TMP1:%.+]] = moore.read [[X]]
+  // CHECK:   [[TMP2:%.+]] = moore.read [[Y]]
+  // CHECK:   [[TMP3:%.+]] = moore.bool_cast [[TMP2]] : i32 -> i1
+  // CHECK:   moore.detect_event posedge [[TMP1]] if [[TMP3]]
+  // CHECK: }
+  // CHECK: call @dummyA()
+  @(posedge x iff y) dummyA();
+
+  // CHECK: moore.wait_event {
+  // CHECK:   [[TMP:%.+]] = moore.read [[X]]
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK:   [[TMP:%.+]] = moore.read [[Y]]
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK: }
+  // CHECK: call @dummyA()
+  @(x or y) dummyA();
+
+  // CHECK: moore.wait_event {
+  // CHECK:   [[TMP:%.+]] = moore.read [[X]]
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK:   [[TMP:%.+]] = moore.read [[Y]]
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK: }
+  // CHECK: call @dummyA()
+  @(x, y) dummyA();
+
+  // CHECK: moore.wait_event {
+  // CHECK:   [[TMP1:%.+]] = moore.read [[X]]
+  // CHECK:   [[TMP2:%.+]] = moore.read [[U]]
+  // CHECK:   moore.detect_event posedge [[TMP1]] if [[TMP2]]
+  // CHECK:   [[TMP1:%.+]] = moore.read [[Y]]
+  // CHECK:   [[TMP2:%.+]] = moore.read [[V]]
+  // CHECK:   [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.l1 -> !moore.i1
+  // CHECK:   moore.detect_event negedge [[TMP1]] if [[TMP3]]
+  // CHECK: }
+  // CHECK: call @dummyA()
+  @(posedge x iff u, negedge y iff v) dummyA();
+endtask
+
+// CHECK-LABEL: func.func private @ImplicitEventControlExamples(
+task automatic ImplicitEventControlExamples();
+  // Taken from IEEE 1800-2017 section 9.4.2.2 "Implicit event_expression list".
+  bit a, b, c, d, f, y, tmp1, tmp2;
+  int x;
+
+  // Example 1
+  // CHECK: moore.wait_event {
+  // CHECK:   [[TMP:%.+]] = moore.read %a
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK:   [[TMP:%.+]] = moore.read %b
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK:   [[TMP:%.+]] = moore.read %c
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK:   [[TMP:%.+]] = moore.read %d
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK:   [[TMP:%.+]] = moore.read %f
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK: }
+  @(*) y = (a & b) | (c & d) | dummyE(f);  // equivalent to @(a, b, c, d, f)
+
+  // Example 2
+  // CHECK: moore.wait_event {
+  // CHECK:   [[TMP:%.+]] = moore.read %a
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK:   [[TMP:%.+]] = moore.read %b
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK:   [[TMP:%.+]] = moore.read %c
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK:   [[TMP:%.+]] = moore.read %d
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK:   [[TMP:%.+]] = moore.read %tmp1
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK:   [[TMP:%.+]] = moore.read %tmp2
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK: }
+  @* begin  // equivalent to @(a, b, c, d, tmp1, tmp2)
+    tmp1 = a & b;
+    tmp2 = c & d;
+    y = tmp1 | tmp2;
+  end
+
+  // Example 3
+  // CHECK: moore.wait_event {
+  // CHECK:   [[TMP:%.+]] = moore.read %b
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK: }
+  // CHECK: moore.wait_event {
+  // CHECK:   [[TMP:%.+]] = moore.read %a
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK: }
+  @* begin // equivalent to @(b)
+    @(a) y = b; // a inside @(a) is not added to outer @*
+  end
+
+  // Example 4
+  // CHECK: moore.wait_event {
+  // CHECK:   [[TMP:%.+]] = moore.read %a
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK:   [[TMP:%.+]] = moore.read %b
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK:   [[TMP:%.+]] = moore.read %c
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK:   [[TMP:%.+]] = moore.read %d
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK: }
+  // CHECK: moore.wait_event {
+  // CHECK:   [[TMP:%.+]] = moore.read %c
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK:   [[TMP:%.+]] = moore.read %d
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK: }
+  @* begin // equivalent to @(a, b, c, d)
+    y = a ^ b;
+    @* y = c ^ d; // equivalent to @(c, d)
+  end
+
+  // Example 5
+  // CHECK: moore.wait_event {
+  // CHECK:   [[TMP:%.+]] = moore.read %a
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK:   [[TMP:%.+]] = moore.read %b
+  // CHECK:   moore.detect_event any [[TMP]]
+  // CHECK: }
+  @* begin // equivalent to @(a, b)
+    x[a] = !b;
+  end
+endtask

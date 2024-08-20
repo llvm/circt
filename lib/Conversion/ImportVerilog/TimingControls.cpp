@@ -8,57 +8,197 @@
 
 #include "ImportVerilogInternals.h"
 #include "slang/ast/TimingControl.h"
+#include "llvm/ADT/ScopeExit.h"
+
 using namespace circt;
 using namespace ImportVerilog;
+
+static moore::Edge convertEdgeKind(const slang::ast::EdgeKind edge) {
+  using slang::ast::EdgeKind;
+  switch (edge) {
+  case EdgeKind::None:
+    return moore::Edge::AnyChange;
+  case EdgeKind::PosEdge:
+    return moore::Edge::PosEdge;
+  case EdgeKind::NegEdge:
+    return moore::Edge::NegEdge;
+  case EdgeKind::BothEdges:
+    return moore::Edge::BothEdges;
+  }
+  llvm_unreachable("all edge kinds handled");
+}
+
+// NOLINTBEGIN(misc-no-recursion)
 namespace {
-struct TimingCtrlVisitor {
+
+// Handle any of the event control constructs.
+struct EventControlVisitor {
   Context &context;
   Location loc;
   OpBuilder &builder;
 
-  TimingCtrlVisitor(Context &context, Location loc)
-      : context(context), loc(loc), builder(context.builder) {}
-
+  // Handle single signal events like `posedge x`, `negedge y iff z`, or `w`.
   LogicalResult visit(const slang::ast::SignalEventControl &ctrl) {
-    // TODO: When updating slang to the latest version, we will handle
-    // "iffCondition".
-    auto loc = context.convertLocation(ctrl.sourceRange.start());
-    auto input = context.convertRvalueExpression(ctrl.expr);
-    builder.create<moore::EventOp>(loc, static_cast<moore::Edge>(ctrl.edge),
-                                   input);
+    auto edge = convertEdgeKind(ctrl.edge);
+    auto expr = context.convertRvalueExpression(ctrl.expr);
+    if (!expr)
+      return failure();
+    Value condition;
+    if (ctrl.iffCondition) {
+      condition = context.convertRvalueExpression(*ctrl.iffCondition);
+      condition = context.convertToBool(condition, Domain::TwoValued);
+      if (!condition)
+        return failure();
+    }
+    builder.create<moore::DetectEventOp>(loc, edge, expr, condition);
     return success();
   }
 
-  LogicalResult visit(const slang::ast::ImplicitEventControl &ctrl) {
-    return success();
-  }
-
+  // Handle a list of signal events.
   LogicalResult visit(const slang::ast::EventListControl &ctrl) {
-    for (auto *event : ctrl.as<slang::ast::EventListControl>().events) {
-      if (failed(context.convertTimingControl(*event)))
+    for (const auto *event : ctrl.events) {
+      auto visitor = *this;
+      visitor.loc = context.convertLocation(event->sourceRange);
+      if (failed(event->visit(visitor)))
         return failure();
     }
     return success();
   }
 
-  /// Emit an error for all other timing controls.
+  // Emit an error for all other timing controls.
   template <typename T>
-  LogicalResult visit(T &&node) {
-    mlir::emitError(loc, "unspported timing control: ")
-        << slang::ast::toString(node.kind);
-    return failure();
-  }
-
-  LogicalResult visitInvalid(const slang::ast::TimingControl &ctrl) {
-    mlir::emitError(loc, "invalid timing control");
-    return failure();
+  LogicalResult visit(T &&ctrl) {
+    return mlir::emitError(loc)
+           << "unsupported event control: " << slang::ast::toString(ctrl.kind);
   }
 };
+
+// Handle any of the delay control constructs.
+struct DelayControlVisitor {
+  Context &context;
+  Location loc;
+  OpBuilder &builder;
+
+  // Emit an error for all other timing controls.
+  template <typename T>
+  LogicalResult visit(T &&ctrl) {
+    return mlir::emitError(loc)
+           << "unsupported delay control: " << slang::ast::toString(ctrl.kind);
+  }
+};
+
 } // namespace
 
-LogicalResult
-Context::convertTimingControl(const slang::ast::TimingControl &timingControl) {
-  auto loc = convertLocation(timingControl.sourceRange.start());
-  TimingCtrlVisitor visitor{*this, loc};
-  return timingControl.visit(visitor);
+// Entry point to timing control handling. This deals with the layer of repeats
+// that a timing control may be wrapped in, and also handles the implicit event
+// control which may appear at that point. For any event control a `WaitEventOp`
+// will be created and populated by `handleEventControl`. Any delay control will
+// be handled by `handleDelayControl`.
+static LogicalResult handleRoot(Context &context,
+                                const slang::ast::TimingControl &ctrl,
+                                moore::WaitEventOp &implicitWaitOp) {
+  auto &builder = context.builder;
+  auto loc = context.convertLocation(ctrl.sourceRange);
+
+  using slang::ast::TimingControlKind;
+  switch (ctrl.kind) {
+    // TODO: Actually implement a lowering for repeated event control. The main
+    // way to trigger this is through an intra-assignment timing control, which
+    // is not yet supported:
+    //
+    //   a = repeat(3) @(posedge b) c;
+    //
+    // This will want to recursively call this function at the right insertion
+    // point to handle the timing control being repeated.
+  case TimingControlKind::RepeatedEvent:
+    return mlir::emitError(loc) << "unsupported repeated event control";
+
+    // Handle implicit events, i.e. `@*` and `@(*)`. This implicitly includes
+    // all variables read within the statement that follows after the event
+    // control. Since we haven't converted that statement yet, simply create and
+    // empty wait op and let `Context::convertTimingControl` populate it once
+    // the statement has been lowered.
+  case TimingControlKind::ImplicitEvent:
+    implicitWaitOp = builder.create<moore::WaitEventOp>(loc);
+    return success();
+
+    // Handle event control.
+  case TimingControlKind::SignalEvent:
+  case TimingControlKind::EventList: {
+    auto waitOp = builder.create<moore::WaitEventOp>(loc);
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(&waitOp.getBody().emplaceBlock());
+    EventControlVisitor visitor{context, loc, builder};
+    return ctrl.visit(visitor);
+  }
+
+    // Handle delay control.
+  case TimingControlKind::Delay:
+  case TimingControlKind::Delay3:
+  case TimingControlKind::OneStepDelay:
+  case TimingControlKind::CycleDelay: {
+    DelayControlVisitor visitor{context, loc, builder};
+    return ctrl.visit(visitor);
+  }
+
+  default:
+    return mlir::emitError(loc, "unsupported timing control: ")
+           << slang::ast::toString(ctrl.kind);
+  }
 }
+
+LogicalResult
+Context::convertTimingControl(const slang::ast::TimingControl &ctrl,
+                              const slang::ast::Statement &stmt) {
+  // Convert the timing control. Implicit event control will create a new empty
+  // `WaitEventOp` and assign it to `implicitWaitOp`. This op will be populated
+  // further down.
+  moore::WaitEventOp implicitWaitOp;
+  {
+    auto previousCallback = rvalueReadCallback;
+    auto done =
+        llvm::make_scope_exit([&] { rvalueReadCallback = previousCallback; });
+    // Reads happening as part of the event control should not be added to a
+    // surrounding implicit event control's list of implicitly observed
+    // variables.
+    rvalueReadCallback = nullptr;
+    if (failed(handleRoot(*this, ctrl, implicitWaitOp)))
+      return failure();
+  }
+
+  // Convert the statement. In case `implicitWaitOp` is set, we register a
+  // callback to collect all the variables read by the statement into
+  // `readValues`, such that we can populate the op with implicitly observed
+  // variables afterwards.
+  llvm::SmallSetVector<Value, 8> readValues;
+  {
+    auto previousCallback = rvalueReadCallback;
+    auto done =
+        llvm::make_scope_exit([&] { rvalueReadCallback = previousCallback; });
+    if (implicitWaitOp) {
+      rvalueReadCallback = [&](moore::ReadOp readOp) {
+        readValues.insert(readOp.getInput());
+        if (previousCallback)
+          previousCallback(readOp);
+      };
+    }
+    if (failed(convertStatement(stmt)))
+      return failure();
+  }
+
+  // Populate the implicit wait op with reads from the variables read by the
+  // statement.
+  if (implicitWaitOp) {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(&implicitWaitOp.getBody().emplaceBlock());
+    for (auto readValue : readValues) {
+      auto value =
+          builder.create<moore::ReadOp>(implicitWaitOp.getLoc(), readValue);
+      builder.create<moore::DetectEventOp>(
+          implicitWaitOp.getLoc(), moore::Edge::AnyChange, value, Value{});
+    }
+  }
+
+  return success();
+}
+// NOLINTEND(misc-no-recursion)

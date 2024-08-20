@@ -837,7 +837,7 @@ void LowerLayersPass::runOnOperation() {
   StringRef circuitName = circuitOp.getName();
   circuitOp.walk<mlir::WalkOrder::PreOrder>([&](LayerOp layerOp) {
     auto parentOp = layerOp->getParentOfType<LayerOp>();
-    while (parentOp && parentOp != layers.back().first)
+    while (!layers.empty() && parentOp != layers.back().first)
       layers.pop_back();
 
     if (layerOp.getConvention() == LayerConvention::Inline) {

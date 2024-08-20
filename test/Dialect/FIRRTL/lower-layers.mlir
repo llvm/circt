@@ -717,3 +717,22 @@ firrtl.circuit "Foo" attributes {
 //
 // CHECK:       sv.verbatim
 // CHECK-SAME:    #hw.output_file<"testbench{{/|\\\\}}layers_Foo_A.sv", excludeFromFileList>
+
+
+// -----
+// Check that we correctly implement the verilog header and footer for B.
+
+firrtl.circuit "Foo" {
+  firrtl.layer @A bind {
+    firrtl.layer @X bind {}
+  }
+  firrtl.layer @B bind {}
+  firrtl.module @Foo() {}
+}
+
+// CHECK: firrtl.circuit "Foo" {
+// CHECK:   sv.verbatim "`ifndef layers_Foo_B\0A`define layers_Foo_B" {output_file = #hw.output_file<"layers_Foo_B.sv", excludeFromFileList>}
+// CHECK:   firrtl.module @Foo() {
+// CHECK:   }
+// CHECK:   sv.verbatim "`endif // layers_Foo_B" {output_file = #hw.output_file<"layers_Foo_B.sv", excludeFromFileList>}
+// CHECK: }
