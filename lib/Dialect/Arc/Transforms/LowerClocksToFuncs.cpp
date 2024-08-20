@@ -11,6 +11,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "arc-lower-clocks-to-funcs"
@@ -50,6 +51,9 @@ struct LowerClocksToFuncsPass
 
   Statistic numOpsCopied{this, "ops-copied", "Ops copied into clock trees"};
   Statistic numOpsMoved{this, "ops-moved", "Ops moved into clock trees"};
+
+private:
+  bool hasPassthroughOp;
 };
 } // namespace
 
@@ -65,11 +69,38 @@ LogicalResult LowerClocksToFuncsPass::lowerModel(ModelOp modelOp) {
                           << "`\n");
 
   // Find the clocks to extract.
+  SmallVector<InitialOp, 1> initialOps;
+  SmallVector<PassThroughOp, 1> passthroughOps;
   SmallVector<Operation *> clocks;
   modelOp.walk([&](Operation *op) {
-    if (isa<ClockTreeOp, PassThroughOp>(op))
-      clocks.push_back(op);
+    TypeSwitch<Operation *, void>(op)
+        .Case<ClockTreeOp>([&](auto) { clocks.push_back(op); })
+        .Case<InitialOp>([&](auto initOp) {
+          initialOps.push_back(initOp);
+          clocks.push_back(initOp);
+        })
+        .Case<PassThroughOp>([&](auto ptOp) {
+          passthroughOps.push_back(ptOp);
+          clocks.push_back(ptOp);
+        });
   });
+  hasPassthroughOp = !passthroughOps.empty();
+
+  // Sanity check
+  if (passthroughOps.size() > 1) {
+    auto diag = modelOp.emitOpError()
+                << "containing multiple PassThroughOps cannot be lowered.";
+    for (auto ptOp : passthroughOps)
+      diag.attachNote(ptOp.getLoc()) << "Conflicting PassThroughOp:";
+  }
+  if (initialOps.size() > 1) {
+    auto diag = modelOp.emitOpError()
+                << "containing multiple InitialOps is currently unsupported.";
+    for (auto initOp : initialOps)
+      diag.attachNote(initOp.getLoc()) << "Conflicting InitialOp:";
+  }
+  if (passthroughOps.size() > 1 || initialOps.size() > 1)
+    return failure();
 
   // Perform the actual extraction.
   OpBuilder funcBuilder(modelOp);
@@ -84,7 +115,7 @@ LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
                                                  Value modelStorageArg,
                                                  OpBuilder &funcBuilder) {
   LLVM_DEBUG(llvm::dbgs() << "- Lowering clock " << clockOp->getName() << "\n");
-  assert((isa<ClockTreeOp, PassThroughOp>(clockOp)));
+  assert((isa<ClockTreeOp, PassThroughOp, InitialOp>(clockOp)));
 
   // Add a `StorageType` block argument to the clock's body block which we are
   // going to use to pass the storage pointer to the clock once it has been
@@ -103,8 +134,16 @@ LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
 
   // Pick a name for the clock function.
   SmallString<32> funcName;
-  funcName.append(clockOp->getParentOfType<ModelOp>().getName());
-  funcName.append(isa<PassThroughOp>(clockOp) ? "_passthrough" : "_clock");
+  auto modelOp = clockOp->getParentOfType<ModelOp>();
+  funcName.append(modelOp.getName());
+
+  if (isa<PassThroughOp>(clockOp))
+    funcName.append("_passthrough");
+  else if (isa<InitialOp>(clockOp))
+    funcName.append("_initial");
+  else
+    funcName.append("_clock");
+
   auto funcOp = funcBuilder.create<func::FuncOp>(
       clockOp->getLoc(), funcName,
       builder.getFunctionType({modelStorageArg.getType()}, {}));
@@ -114,21 +153,41 @@ LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
 
   // Create a call to the function within the model.
   builder.setInsertionPoint(clockOp);
-  if (auto treeOp = dyn_cast<ClockTreeOp>(clockOp)) {
-    auto ifOp =
-        builder.create<scf::IfOp>(clockOp->getLoc(), treeOp.getClock(), false);
-    auto builder = ifOp.getThenBodyBuilder();
-    builder.create<func::CallOp>(clockOp->getLoc(), funcOp,
-                                 ValueRange{modelStorageArg});
-  } else {
-    builder.create<func::CallOp>(clockOp->getLoc(), funcOp,
-                                 ValueRange{modelStorageArg});
-  }
+  TypeSwitch<Operation *, void>(clockOp)
+      .Case<ClockTreeOp>([&](auto treeOp) {
+        auto ifOp = builder.create<scf::IfOp>(clockOp->getLoc(),
+                                              treeOp.getClock(), false);
+        auto builder = ifOp.getThenBodyBuilder();
+        builder.template create<func::CallOp>(clockOp->getLoc(), funcOp,
+                                              ValueRange{modelStorageArg});
+      })
+      .Case<PassThroughOp>([&](auto) {
+        builder.template create<func::CallOp>(clockOp->getLoc(), funcOp,
+                                              ValueRange{modelStorageArg});
+      })
+      .Case<InitialOp>([&](auto) {
+        if (modelOp.getInitialFn().has_value())
+          modelOp.emitWarning() << "Existing model initializer '"
+                                << modelOp.getInitialFnAttr().getValue()
+                                << "' will be overridden.";
+        modelOp.setInitialFnAttr(
+            FlatSymbolRefAttr::get(funcOp.getSymNameAttr()));
+      });
 
   // Move the clock's body block to the function and remove the old clock op.
   funcOp.getBody().takeBody(clockRegion);
-  clockOp->erase();
 
+  if (isa<InitialOp>(clockOp) && hasPassthroughOp) {
+    // Call PassThroughOp after init
+    builder.setInsertionPoint(funcOp.getBlocks().front().getTerminator());
+    funcName.clear();
+    funcName.append(modelOp.getName());
+    funcName.append("_passthrough");
+    builder.create<func::CallOp>(clockOp->getLoc(), funcName, TypeRange{},
+                                 ValueRange{funcOp.getBody().getArgument(0)});
+  }
+
+  clockOp->erase();
   return success();
 }
 

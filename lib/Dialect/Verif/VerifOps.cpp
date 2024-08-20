@@ -104,50 +104,26 @@ LogicalResult ContractOp::verifyRegions() {
   if (!parent)
     return emitOpError() << "parent of contract must be an hw.module!";
 
-  auto nInputsInModule = parent.getNumInputPorts();
-  auto nOutputsInModule = parent.getNumOutputPorts();
-  auto nOps = (*this)->getNumOperands();
+  auto nRes = (*this)->getNumResults();
+  auto resTypes = (*this)->getResultTypes();
+  auto *yield = getBody().front().getTerminator();
 
-  // Check that the region block arguments match the op's inputs
-  if (nInputsInModule != nOps)
-    return emitOpError() << "contract must have the same number of arguments "
-                         << "as the number of inputs in the parent module!";
+  // Check that the region terminator yields the same number of ops as the
+  // number of results
+  if (yield->getNumOperands() != nRes)
+    return emitOpError() << "region terminator must yield the same number of "
+                         << "operands as there are results!";
 
-  // Check that the region block arguments match the op's inputs
-  if (getNumRegionArgs() != (nOps + nOutputsInModule))
-    return emitOpError() << "region must have the same number of arguments "
-                         << "as the number of arguments in the parent module!";
+  // Check that the region terminator yields the same types of ops as the
+  // types of results
+  if (yield->getOperandTypes() != resTypes)
+    return emitOpError() << "region terminator must yield the same types of "
+                         << "operands as the result types!";
 
-  // Check that the region block arguments share the same types as the inputs
-  if (getBody().front().getArgumentTypes() != parent.getPortTypes())
+  // Check that the region block arguments share the same types as the results
+  if (getBody().front().getArgumentTypes() != resTypes)
     return emitOpError() << "region must have the same type of arguments "
-                         << "as the type of inputs!";
-
-  return success();
-}
-
-LogicalResult InstanceOp::verifyRegions() {
-  // Check that the region block arguments match the op's inputs
-  if (getNumRegionArgs() != (*this)->getNumOperands())
-    return emitOpError() << "region must have the same number of arguments "
-                         << "as the number of inputs!";
-
-  // Check that the region block arguments share the same types as the inputs
-  if (getBody().front().getArgumentTypes() != (*this)->getOperandTypes())
-    return emitOpError() << "region must have the same type of arguments "
-                         << "as the type of inputs!";
-
-  // Check that verif.yield yielded the expected number of operations
-  if ((*this)->getNumResults() !=
-      getBody().front().getTerminator()->getNumOperands())
-    return emitOpError() << "region terminator must yield the same number"
-                         << "of operations as there are results!";
-
-  // Check that the yielded types match the result types
-  if ((*this)->getResultTypes() !=
-      getBody().front().getTerminator()->getOperandTypes())
-    return emitOpError() << "region terminator must yield the same types"
-                         << "as the result types!";
+                         << "as the type of results!";
 
   return success();
 }

@@ -10,6 +10,7 @@
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
@@ -25,7 +26,7 @@ using llvm::MapVector;
 static bool isArcBreakingOp(Operation *op) {
   return op->hasTrait<OpTrait::ConstantLike>() ||
          isa<hw::InstanceOp, seq::CompRegOp, MemoryOp, ClockedOpInterface,
-             seq::ClockGateOp>(op) ||
+             seq::ClockGateOp, sim::DPICallOp>(op) ||
          op->getNumResults() > 1;
 }
 
@@ -265,6 +266,7 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
     auto stateOp = dyn_cast<StateOp>(callOp.getOperation());
     Value clock = stateOp ? stateOp.getClock() : Value{};
     Value reset;
+    SmallVector<Value> initialValues;
     SmallVector<seq::CompRegOp> absorbedRegs;
     SmallVector<Attribute> absorbedNames(callOp->getNumResults(), {});
     if (auto names = callOp->getAttrOfType<ArrayAttr>("names"))
@@ -306,6 +308,8 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
         }
       }
 
+      initialValues.push_back(regOp.getPowerOnValue());
+
       absorbedRegs.push_back(regOp);
       // If we absorb a register into the arc, the arc effectively produces that
       // register's value. So if the register had a name, ensure that we assign
@@ -344,6 +348,28 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
             "had a reset.");
       arc.getResetMutable().assign(reset);
     }
+
+    bool onlyDefaultInitializers =
+        llvm::all_of(initialValues, [](auto val) -> bool { return !val; });
+
+    if (!onlyDefaultInitializers) {
+      if (!arc.getInitials().empty()) {
+        return arc.emitError(
+            "StateOp tried to infer initial values from CompReg, but already "
+            "had an initial value.");
+      }
+      // Create 0 constants for default initialization
+      for (unsigned i = 0; i < initialValues.size(); ++i) {
+        if (!initialValues[i]) {
+          OpBuilder zeroBuilder(arc);
+          initialValues[i] = zeroBuilder.createOrFold<hw::ConstantOp>(
+              arc.getLoc(),
+              zeroBuilder.getIntegerAttr(arc.getResult(i).getType(), 0));
+        }
+      }
+      arc.getInitialsMutable().assign(initialValues);
+    }
+
     if (tapRegisters && llvm::any_of(absorbedNames, [](auto name) {
           return !cast<StringAttr>(name).getValue().empty();
         }))
@@ -384,6 +410,7 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
     SmallVector<Value> outputs;
     SmallVector<Attribute> names;
     SmallVector<Type> types;
+    SmallVector<Value> initialValues;
     SmallDenseMap<Value, unsigned> mapping;
     SmallVector<unsigned> regToOutputMapping;
     for (auto regOp : regOps) {
@@ -394,6 +421,7 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
         types.push_back(regOp.getType());
         outputs.push_back(block->addArgument(regOp.getType(), regOp.getLoc()));
         names.push_back(regOp->getAttrOfType<StringAttr>("name"));
+        initialValues.push_back(regOp.getPowerOnValue());
       }
       regToOutputMapping.push_back(it->second);
     }
@@ -410,9 +438,22 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
     defOp.getBody().push_back(block.release());
 
     builder.setInsertionPoint(module.getBodyBlock()->getTerminator());
+
+    bool onlyDefaultInitializers =
+        llvm::all_of(initialValues, [](auto val) -> bool { return !val; });
+
+    if (onlyDefaultInitializers)
+      initialValues.clear();
+    else
+      for (unsigned i = 0; i < initialValues.size(); ++i) {
+        if (!initialValues[i])
+          initialValues[i] = builder.createOrFold<hw::ConstantOp>(
+              loc, builder.getIntegerAttr(types[i], 0));
+      }
+
     auto arcOp =
         builder.create<StateOp>(loc, defOp, std::get<0>(clockAndResetAndOp),
-                                /*enable=*/Value{}, 1, inputs);
+                                /*enable=*/Value{}, 1, inputs, initialValues);
     auto reset = std::get<1>(clockAndResetAndOp);
     if (reset)
       arcOp.getResetMutable().assign(reset);

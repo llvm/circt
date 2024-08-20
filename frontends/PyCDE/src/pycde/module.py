@@ -6,9 +6,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, List, Optional, Set, Tuple, Dict
 
-from .common import (AppID, Clock, Input, ModuleDecl, Output, PortError,
-                     _PyProxy, Reset)
-from .support import (get_user_loc, _obj_to_attribute, create_type_string,
+from .common import (AppID, Clock, Constant, Input, ModuleDecl, Output,
+                     PortError, _PyProxy, Reset)
+from .support import (get_user_loc, _obj_to_attribute, obj_to_typed_attribute,
                       create_const_zero)
 from .signals import ClockSignal, Signal, _FromCirctValue
 from .types import ClockType, Type, _FromCirctType
@@ -237,6 +237,7 @@ class ModuleLikeBuilderBase(_PyProxy):
     clock_ports = set()
     reset_ports = set()
     generators = {}
+    constants = {}
     num_inputs = 0
     num_outputs = 0
     for attr_name, attr in self.cls_dct.items():
@@ -273,11 +274,14 @@ class ModuleLikeBuilderBase(_PyProxy):
         ports.append(attr)
       elif isinstance(attr, Generator):
         generators[attr_name] = attr
+      elif isinstance(attr, Constant):
+        constants[attr_name] = attr
 
     self.ports = ports
     self.clocks = clock_ports
     self.resets = reset_ports
     self.generators = generators
+    self.constants = constants
 
   def create_port_proxy(self) -> PortProxyBase:
     """Create a proxy class for generators to use in order to access module
@@ -474,6 +478,17 @@ class ModuleBuilder(ModuleLikeBuilderBase):
       self.add_metadata(sys, symbol, meta)
     else:
       self.add_metadata(sys, symbol, None)
+
+    # If there are associated constants, add them to the manifest.
+    if len(self.constants) > 0:
+      constants_dict: Dict[str, ir.Attribute] = {}
+      for name, constant in self.constants.items():
+        constant_attr = obj_to_typed_attribute(constant.value, constant.type)
+        constants_dict[name] = constant_attr
+      with ir.InsertionPoint(sys.mod.body):
+        from .dialects.esi import esi
+        esi.SymbolConstantsOp(symbolRef=ir.FlatSymbolRefAttr.get(symbol),
+                              constants=ir.DictAttr.get(constants_dict))
 
     if len(self.generators) > 0:
       if hasattr(self, "parameters") and self.parameters is not None:

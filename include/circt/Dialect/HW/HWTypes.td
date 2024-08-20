@@ -39,7 +39,7 @@ def HWNonInOutType : DialectType<HWDialect,
 
 def InOutType : DialectType<HWDialect,
     CPred<"::circt::hw::type_isa<circt::hw::InOutType>($_self)">,
-          "InOutType", "InOutType">;
+          "InOutType", "::circt::hw::InOutType">;
 
 class InOutTypeOf<list<Type> allowedTypes>
   : ContainerType<AnyTypeOf<allowedTypes>, CPred<"::circt::hw::type_isa<::circt::hw::InOutType>($_self)">,
@@ -62,7 +62,7 @@ def StructType : DialectType<HWDialect,
 // A handle to refer to circt::hw::UnionType in ODS.
 def UnionType : DialectType<HWDialect,
     CPred<"::circt::hw::type_isa<circt::hw::UnionType>($_self)">,
-          "a UnionType", "::circt::hw::TypeAliasOr<hw::UnionType>">;
+          "a UnionType", "::circt::hw::TypeAliasOr<::circt::hw::UnionType>">;
 
 // A handle to refer to circt::hw::EnumType in ODS.
 def EnumType : DialectType<HWDialect,

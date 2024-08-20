@@ -71,9 +71,9 @@ static cl::opt<std::string> secondModuleName(
     cl::desc("Specify a named module for the second circuit of the comparison"),
     cl::value_desc("module name"), cl::cat(mainCategory));
 
-static cl::opt<std::string> inputFilename(cl::Positional, cl::Required,
-                                          cl::desc("<input file>"),
-                                          cl::cat(mainCategory));
+static cl::list<std::string> inputFilenames(cl::Positional, cl::OneOrMore,
+                                            cl::desc("<input files>"),
+                                            cl::cat(mainCategory));
 
 static cl::opt<std::string> outputFilename("o", cl::desc("Output filename"),
                                            cl::value_desc("filename"),
@@ -122,6 +122,65 @@ static cl::opt<OutputFormat> outputFormat(
 // Tool implementation
 //===----------------------------------------------------------------------===//
 
+// Move all operations in `src` to `dest`. Rename all symbols in `src` to avoid
+// conflict.
+static FailureOr<StringAttr> mergeModules(ModuleOp dest, ModuleOp src,
+                                          StringAttr name) {
+
+  SymbolTable destTable(dest), srcTable(src);
+  StringAttr newName = {};
+  for (auto &op : src.getOps()) {
+    if (SymbolOpInterface symbol = dyn_cast<SymbolOpInterface>(op)) {
+      auto oldSymbol = symbol.getNameAttr();
+      auto result = srcTable.renameToUnique(&op, {&destTable});
+      if (failed(result))
+        return src->emitError() << "failed to rename symbol " << oldSymbol;
+
+      if (oldSymbol == name) {
+        assert(!newName && "symbol must be unique");
+        newName = *result;
+      }
+    }
+  }
+
+  if (!newName)
+    return src->emitError()
+           << "module " << name << " was not found in the second module";
+
+  dest.getBody()->getOperations().splice(dest.getBody()->begin(),
+                                         src.getBody()->getOperations());
+  return newName;
+}
+
+// Parse one or two MLIR modules and merge it into a single module.
+static FailureOr<OwningOpRef<ModuleOp>>
+parseAndMergeModules(MLIRContext &context, TimingScope &ts) {
+  auto parserTimer = ts.nest("Parse and merge MLIR input(s)");
+
+  if (inputFilenames.size() > 2) {
+    llvm::errs() << "more than 2 files are provided!\n";
+    return failure();
+  }
+
+  auto module = parseSourceFile<ModuleOp>(inputFilenames[0], &context);
+  if (!module)
+    return failure();
+
+  if (inputFilenames.size() == 2) {
+    auto moduleOpt = parseSourceFile<ModuleOp>(inputFilenames[1], &context);
+    if (!moduleOpt)
+      return failure();
+    auto result = mergeModules(module.get(), moduleOpt.get(),
+                               StringAttr::get(&context, secondModuleName));
+    if (failed(result))
+      return failure();
+
+    secondModuleName.setValue(result->getValue().str());
+  }
+
+  return module;
+}
+
 /// This functions initializes the various components of the tool and
 /// orchestrates the work to be done.
 static LogicalResult executeLEC(MLIRContext &context) {
@@ -130,14 +189,11 @@ static LogicalResult executeLEC(MLIRContext &context) {
   applyDefaultTimingManagerCLOptions(tm);
   auto ts = tm.getRootScope();
 
-  OwningOpRef<ModuleOp> module;
-  {
-    auto parserTimer = ts.nest("Parse MLIR input");
-    // Parse the provided input files.
-    module = parseSourceFile<ModuleOp>(inputFilename, &context);
-  }
-  if (!module)
+  auto parsedModule = parseAndMergeModules(context, ts);
+  if (failed(parsedModule))
     return failure();
+
+  OwningOpRef<ModuleOp> module = std::move(parsedModule.value());
 
   // Create the output directory or output file depending on our mode.
   std::optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;

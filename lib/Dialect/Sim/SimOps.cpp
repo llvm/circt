@@ -13,8 +13,10 @@
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
+#include "llvm/ADT/MapVector.h"
 
 using namespace mlir;
 using namespace circt;
@@ -69,12 +71,15 @@ ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
 
 LogicalResult
 sim::DPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto referencedOp = dyn_cast_or_null<sim::DPIFuncOp>(
-      symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr()));
+  auto referencedOp =
+      symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr());
   if (!referencedOp)
     return emitError("cannot find function declaration '")
            << getCallee() << "'";
-  return success();
+  if (isa<func::FuncOp, sim::DPIFuncOp>(referencedOp))
+    return success();
+  return emitError("callee must be 'sim.dpi.func' or 'func.func' but got '")
+         << referencedOp->getName() << "'";
 }
 
 void DPIFuncOp::print(OpAsmPrinter &p) {

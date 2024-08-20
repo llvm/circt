@@ -53,18 +53,23 @@ moore.module @Foo(out a: !moore.string) {
 
 // -----
 
-// expected-error @below {{constant out of range for result type '!moore.i1'}}
+// expected-error @below {{value requires 6 bits, but result type only has 1}}
 moore.constant 42 : !moore.i1
 
 // -----
 
-// expected-error @below {{constant out of range for result type '!moore.i1'}}
+// expected-error @below {{value requires 2 bits, but result type only has 1}}
 moore.constant -2 : !moore.i1
 
 // -----
 
+// expected-error @below {{value contains X or Z bits, but result type '!moore.i4' only allows two-valued bits}}
+moore.constant b10XZ : !moore.i4
+
+// -----
+
 // expected-error @below {{attribute width 9 does not match return type's width 8}}
-"moore.constant" () {value = 42 : i9} : () -> !moore.i8
+"moore.constant" () {value = #moore.fvint<42 : 9>} : () -> !moore.i8
 
 // -----
 
@@ -74,7 +79,7 @@ moore.yield %0 : i8
 
 // -----
 
-%0 = moore.constant true : i1
+%0 = moore.constant 1 : i1
 %1 = moore.constant 42 : i8
 %2 = moore.constant 42 : i32
 
@@ -87,7 +92,7 @@ moore.conditional %0 : i1 -> i32 {
 
 // -----
 
-%0 = moore.constant true : i1
+%0 = moore.constant 1 : i1
 %1 = moore.constant 42 : i32
 %2 = moore.constant 42 : i8
 

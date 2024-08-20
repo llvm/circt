@@ -46,7 +46,7 @@ struct ObjectModelIR {
   ObjectModelIR(
       CircuitOp circtOp, FModuleOp dutMod, InstanceGraph &instanceGraph,
       DenseMap<Operation *, hw::InnerSymbolNamespace> &moduleNamespaces)
-      : circtOp(circtOp), dutMod(dutMod),
+      : context(circtOp->getContext()), circtOp(circtOp), dutMod(dutMod),
         circtNamespace(CircuitNamespace(circtOp)),
         instancePathCache(InstancePathCache(instanceGraph)),
         moduleNamespaces(moduleNamespaces) {}
@@ -54,20 +54,22 @@ struct ObjectModelIR {
   // Add the tracker annotation to the op and get a PathOp to the op.
   PathOp createPathRef(Operation *op, hw::HierPathOp nla,
                        mlir::ImplicitLocOpBuilder &builderOM) {
-    auto *context = op->getContext();
 
-    NamedAttrList fields;
     auto id = DistinctAttr::create(UnitAttr::get(context));
-    fields.append("id", id);
-    fields.append("class", StringAttr::get(context, "circt.tracker"));
-    if (nla)
-      fields.append("circt.nonlocal", mlir::FlatSymbolRefAttr::get(nla));
-    AnnotationSet annos(op);
-    annos.addAnnotations(DictionaryAttr::get(context, fields));
-    annos.applyToOperation(op);
     TargetKind kind = TargetKind::Reference;
-    if (isa<InstanceOp, FModuleLike>(op))
-      kind = TargetKind::Instance;
+    // If op is null, then create an empty path.
+    if (op) {
+      NamedAttrList fields;
+      fields.append("id", id);
+      fields.append("class", StringAttr::get(context, "circt.tracker"));
+      if (nla)
+        fields.append("circt.nonlocal", mlir::FlatSymbolRefAttr::get(nla));
+      AnnotationSet annos(op);
+      annos.addAnnotations(DictionaryAttr::get(context, fields));
+      annos.applyToOperation(op);
+      if (isa<InstanceOp, FModuleLike>(op))
+        kind = TargetKind::Instance;
+    }
 
     // Create the path operation.
     return builderOM.create<PathOp>(kind, id);
@@ -101,7 +103,6 @@ struct ObjectModelIR {
   }
 
   void createMemorySchema() {
-    auto *context = circtOp.getContext();
 
     auto unknownLoc = mlir::UnknownLoc::get(context);
     auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
@@ -121,7 +122,7 @@ struct ObjectModelIR {
         buildSimpleClassOp(builderOM, unknownLoc, "ExtraPortsMemorySchema",
                            extraPortFields, extraPortsType);
 
-    mlir::Type classFieldTypes[12] = {
+    mlir::Type classFieldTypes[13] = {
         StringType::get(context),
         FIntegerType::get(context),
         FIntegerType::get(context),
@@ -133,9 +134,11 @@ struct ObjectModelIR {
         FIntegerType::get(context),
         ListType::get(context, cast<PropertyType>(PathType::get(context))),
         BoolType::get(context),
-        ListType::get(context,
-                      cast<PropertyType>(detail::getInstanceTypeForClassLike(
-                          extraPortsClass)))};
+        ListType::get(
+            context, cast<PropertyType>(
+                         detail::getInstanceTypeForClassLike(extraPortsClass))),
+        ListType::get(context, cast<PropertyType>(StringType::get(context))),
+    };
 
     memorySchemaClass =
         buildSimpleClassOp(builderOM, unknownLoc, "MemorySchema",
@@ -149,7 +152,6 @@ struct ObjectModelIR {
   }
 
   void createRetimeModulesSchema() {
-    auto *context = circtOp.getContext();
     auto unknownLoc = mlir::UnknownLoc::get(context);
     auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
         unknownLoc, circtOp.getBodyBlock());
@@ -189,7 +191,6 @@ struct ObjectModelIR {
   }
 
   void addBlackBoxModulesSchema() {
-    auto *context = circtOp.getContext();
     auto unknownLoc = mlir::UnknownLoc::get(context);
     auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
         unknownLoc, circtOp.getBodyBlock());
@@ -232,7 +233,6 @@ struct ObjectModelIR {
       createMemorySchema();
     auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
         mem.getLoc(), memoryMetadataClass.getBodyBlock());
-    auto *context = builderOM.getContext();
     auto createConstField = [&](Attribute constVal) -> Value {
       if (auto boolConstant = dyn_cast_or_null<mlir::BoolAttr>(constVal))
         return builderOM.create<BoolConstantOp>(boolConstant);
@@ -246,32 +246,52 @@ struct ObjectModelIR {
 
     auto memPaths = instancePathCache.getAbsolutePaths(mem);
     SmallVector<Value> memoryHierPaths;
-    for (auto memPath : memPaths) {
-      Operation *finalInst = memPath.leaf();
-      SmallVector<Attribute> namepath;
-      bool foundDut = dutMod == nullptr;
-      for (auto inst : memPath) {
-        if (!foundDut)
-          if (inst->getParentOfType<FModuleOp>() == dutMod)
-            foundDut = true;
-        if (!foundDut)
-          continue;
+    SmallVector<Value> finalInstanceNames;
+    // Memory hierarchy is relevant only for memories under DUT.
+    if (inDut) {
+      for (auto memPath : memPaths) {
+        {
+          igraph::InstanceOpInterface finalInst = memPath.leaf();
+          finalInstanceNames.emplace_back(builderOM.create<StringConstantOp>(
+              finalInst.getInstanceNameAttr()));
+        }
+        SmallVector<Attribute> namepath;
+        bool foundDut = dutMod == nullptr;
+        // The hierpath will be created to the pre-extracted
+        // instance, thus drop the leaf instance of the path, which can be
+        // extracted in subsequent passes.
+        igraph::InstanceOpInterface preExtractedLeafInstance;
+        for (auto inst : llvm::drop_end(memPath)) {
+          if (!foundDut)
+            if (inst->getParentOfType<FModuleOp>() == dutMod)
+              foundDut = true;
+          if (!foundDut)
+            continue;
 
-        namepath.emplace_back(firrtl::getInnerRefTo(
-            inst, [&](auto mod) -> hw::InnerSymbolNamespace & {
-              return getModuleNamespace(mod);
-            }));
+          namepath.emplace_back(firrtl::getInnerRefTo(
+              inst, [&](auto mod) -> hw::InnerSymbolNamespace & {
+                return getModuleNamespace(mod);
+              }));
+          preExtractedLeafInstance = inst;
+        }
+        PathOp pathRef;
+        if (!namepath.empty()) {
+          auto nla = nlaBuilder.create<hw::HierPathOp>(
+              mem->getLoc(),
+              nlaBuilder.getStringAttr(circtNamespace.newName("memNLA")),
+              nlaBuilder.getArrayAttr(namepath));
+          pathRef = createPathRef(preExtractedLeafInstance, nla, builderOM);
+        } else {
+          pathRef = createPathRef({}, {}, builderOM);
+        }
+
+        // Create the path operation.
+        memoryHierPaths.push_back(pathRef);
       }
-      if (namepath.empty())
-        continue;
-      auto nla = nlaBuilder.create<hw::HierPathOp>(
-          mem->getLoc(),
-          nlaBuilder.getStringAttr(circtNamespace.newName("memNLA")),
-          nlaBuilder.getArrayAttr(namepath));
-
-      // Create the path operation.
-      memoryHierPaths.emplace_back(createPathRef(finalInst, nla, builderOM));
     }
+    auto finalInstNamesList = builderOM.create<ListCreateOp>(
+        ListType::get(context, cast<PropertyType>(StringType::get(context))),
+        finalInstanceNames);
     auto hierpaths = builderOM.create<ListCreateOp>(
         ListType::get(context, cast<PropertyType>(PathType::get(context))),
         memoryHierPaths);
@@ -313,10 +333,13 @@ struct ObjectModelIR {
               .Case("writeLatency", mem.getWriteLatencyAttr())
               .Case("hierarchy", {})
               .Case("inDut", BoolAttr::get(context, inDut))
-              .Case("extraPorts", {}));
+              .Case("extraPorts", {})
+              .Case("preExtInstName", {}));
       if (!propVal) {
         if (field.value() == "hierarchy")
           propVal = hierpaths;
+        else if (field.value() == "preExtInstName")
+          propVal = finalInstNamesList;
         else
           propVal = extraPorts;
       }
@@ -408,7 +431,6 @@ struct ObjectModelIR {
         // Create the path ref op and record it.
         pathOpsToDut.emplace_back(createPathRef(leafInst, nla, builder));
       }
-      auto *context = builder.getContext();
       // Create the list of paths op and add it as a field of the class.
       auto pathList = builder.create<ListCreateOp>(
           ListType::get(context, cast<PropertyType>(PathType::get(context))),
@@ -425,6 +447,7 @@ struct ObjectModelIR {
   hw::InnerSymbolNamespace &getModuleNamespace(FModuleLike module) {
     return moduleNamespaces.try_emplace(module, module).first->second;
   }
+  MLIRContext *context;
   CircuitOp circtOp;
   FModuleOp dutMod;
   CircuitNamespace circtNamespace;
@@ -435,10 +458,11 @@ struct ObjectModelIR {
   ClassOp memoryMetadataClass;
   ClassOp retimeModulesMetadataClass, retimeModulesSchemaClass;
   ClassOp blackBoxModulesSchemaClass, blackBoxMetadataClass;
-  StringRef memoryParamNames[12] = {
-      "name",        "depth",      "width",          "maskBits",
-      "readPorts",   "writePorts", "readwritePorts", "writeLatency",
-      "readLatency", "hierarchy",  "inDut",          "extraPorts"};
+  StringRef memoryParamNames[13] = {
+      "name",          "depth",      "width",          "maskBits",
+      "readPorts",     "writePorts", "readwritePorts", "writeLatency",
+      "readLatency",   "hierarchy",  "inDut",          "extraPorts",
+      "preExtInstName"};
   StringRef retimeModulesParamNames[1] = {"moduleName"};
   StringRef blackBoxModulesParamNames[1] = {"moduleName"};
   llvm::SmallDenseSet<StringRef> blackboxModules;

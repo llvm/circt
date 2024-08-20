@@ -1,4 +1,4 @@
-//===- ExtractOps.td - LLHD extract operations -------------*- tablegen -*-===//
+//===- LLHDExtractOps.td - LLHD extract operations ---------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -18,8 +18,8 @@ class SigPtrIndexBitWidthConstraint<string index, string input>
   : TypesMatchWith<"Index width should be exactly clog2 (size of array)",
                    input, index,
                    [{
-                     IntegerType::get($_self.getContext(), std::max<uint64_t>(
-                       llvm::Log2_64_Ceil(llhd::getLLHDTypeWidth($_self)), 1))
+                      IntegerType::get($_self.getContext(), 
+                        llvm::Log2_64_Ceil(llhd::getLLHDTypeWidth($_self)))
                    }]>;
 
 class SigArrayElementTypeConstraint<string result, string input>
@@ -47,7 +47,7 @@ class SmallerOrEqualResultTypeWidthConstraint<string result, string input>
 // Integer Operations
 //===----------------------------------------------------------------------===//
 
-def LLHD_SigExtractOp : LLHD_Op<"sig.extract",
+def SigExtractOp : LLHDOp<"sig.extract",
     [Pure,
      SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
      SigPtrIndexBitWidthConstraint<"lowBit", "input">]> {
@@ -74,7 +74,7 @@ def LLHD_SigExtractOp : LLHD_Op<"sig.extract",
   let hasFolder = true;
 }
 
-def LLHD_PtrExtractOp : LLHD_Op<"ptr.extract",
+def PtrExtractOp : LLHDOp<"ptr.extract",
     [Pure,
      SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
      SigPtrIndexBitWidthConstraint<"lowBit", "input">]> {
@@ -86,9 +86,9 @@ def LLHD_PtrExtractOp : LLHD_Op<"ptr.extract",
     operand. The result length is defined by the result type.
   }];
 
-  let arguments = (ins LLHD_PtrType<[HWIntegerType]>:$input,
+  let arguments = (ins LLHDPtrTypeOf<[HWIntegerType]>:$input,
                        HWIntegerType:$lowBit);
-  let results = (outs LLHD_PtrType<[HWIntegerType]>: $result);
+  let results = (outs LLHDPtrTypeOf<[HWIntegerType]>: $result);
 
   let assemblyFormat = [{
     $input `from` $lowBit attr-dict `:` functional-type($input, $result)
@@ -105,7 +105,7 @@ def LLHD_PtrExtractOp : LLHD_Op<"ptr.extract",
 // Array Operations
 //===----------------------------------------------------------------------===//
 
-def LLHD_SigArraySliceOp : LLHD_Op<"sig.array_slice",
+def SigArraySliceOp : LLHDOp<"sig.array_slice",
     [Pure,
      SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
      SameSigPtrArrayElementTypeConstraint<"result", "input">,
@@ -156,7 +156,7 @@ def LLHD_SigArraySliceOp : LLHD_Op<"sig.array_slice",
   let hasCanonicalizeMethod = true;
 }
 
-def LLHD_PtrArraySliceOp : LLHD_Op<"ptr.array_slice",
+def PtrArraySliceOp : LLHDOp<"ptr.array_slice",
     [Pure,
      SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
      SameSigPtrArrayElementTypeConstraint<"result", "input">,
@@ -183,9 +183,9 @@ def LLHD_PtrArraySliceOp : LLHD_Op<"ptr.array_slice",
     ```
   }];
 
-  let arguments = (ins LLHD_PtrType<[ArrayType]>: $input,
+  let arguments = (ins LLHDPtrTypeOf<[ArrayType]>: $input,
                        HWIntegerType: $lowIndex);
-  let results = (outs LLHD_PtrType<[ArrayType]>: $result);
+  let results = (outs LLHDPtrTypeOf<[ArrayType]>: $result);
 
   let assemblyFormat = [{
     $input `at` $lowIndex attr-dict `:` functional-type($input, $result)
@@ -207,7 +207,7 @@ def LLHD_PtrArraySliceOp : LLHD_Op<"ptr.array_slice",
   let hasCanonicalizeMethod = true;
 }
 
-def LLHD_SigArrayGetOp : LLHD_Op<"sig.array_get",
+def SigArrayGetOp : LLHDOp<"sig.array_get",
     [Pure,
      SigPtrIndexBitWidthConstraint<"index", "input">,
      SigArrayElementTypeConstraint<"result", "input">]> {
@@ -239,7 +239,7 @@ def LLHD_SigArrayGetOp : LLHD_Op<"sig.array_get",
   }];
 }
 
-def LLHD_PtrArrayGetOp : LLHD_Op<"ptr.array_get",
+def PtrArrayGetOp : LLHDOp<"ptr.array_get",
     [Pure,
      SigPtrIndexBitWidthConstraint<"index", "input">,
      PtrArrayElementTypeConstraint<"result", "input">]> {
@@ -258,8 +258,8 @@ def LLHD_PtrArrayGetOp : LLHD_Op<"ptr.array_get",
     ```
   }];
 
-  let arguments = (ins LLHD_PtrType<[ArrayType]>:$input, HWIntegerType:$index);
-  let results = (outs LLHD_PtrType<[HWNonInOutType]>: $result);
+  let arguments = (ins LLHDPtrTypeOf<[ArrayType]>:$input, HWIntegerType:$index);
+  let results = (outs LLHDPtrTypeOf<[HWNonInOutType]>: $result);
 
   let assemblyFormat = "$input `[` $index `]` attr-dict `:` qualified(type($input))";
 
@@ -275,7 +275,7 @@ def LLHD_PtrArrayGetOp : LLHD_Op<"ptr.array_get",
 // Structure Operations
 //===----------------------------------------------------------------------===//
 
-def LLHD_SigStructExtractOp : LLHD_Op<"sig.struct_extract", [Pure,
+def SigStructExtractOp : LLHDOp<"sig.struct_extract", [Pure,
   DeclareOpInterfaceMethods<InferTypeOpInterface>, InferTypeOpInterface]> {
   let summary = "Extract a field from a signal of a struct.";
   let description = [{
@@ -305,7 +305,7 @@ def LLHD_SigStructExtractOp : LLHD_Op<"sig.struct_extract", [Pure,
   }];
 }
 
-def LLHD_PtrStructExtractOp : LLHD_Op<"ptr.struct_extract", [Pure,
+def PtrStructExtractOp : LLHDOp<"ptr.struct_extract", [Pure,
   DeclareOpInterfaceMethods<InferTypeOpInterface>, InferTypeOpInterface]> {
   let summary = "Extract a field from a pointer to a struct.";
   let description = [{
@@ -322,8 +322,8 @@ def LLHD_PtrStructExtractOp : LLHD_Op<"ptr.struct_extract", [Pure,
     ```
   }];
 
-  let arguments = (ins LLHD_PtrType<[StructType]>:$input, StrAttr:$field);
-  let results = (outs LLHD_PtrType<[HWNonInOutType]>:$result);
+  let arguments = (ins LLHDPtrTypeOf<[StructType]>:$input, StrAttr:$field);
+  let results = (outs LLHDPtrTypeOf<[HWNonInOutType]>:$result);
 
   let assemblyFormat = "$input `[` $field `]` attr-dict `:` qualified(type($input))";
 

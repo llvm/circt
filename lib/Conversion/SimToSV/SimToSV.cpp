@@ -268,8 +268,17 @@ void LowerDPIFunc::lower(sim::DPIFuncOp func) {
   auto name = builder.getStringAttr(nameSpace.newName(
       func.getSymNameAttr().getValue(), "dpi_import_fragument"));
 
+  // Add include guards to avoid duplicate declarations. See Issue 7458.
+  auto macroDecl = builder.create<sv::MacroDeclOp>(nameSpace.newName(
+      "__CIRCT_DPI_IMPORT", func.getSymNameAttr().getValue().upper()));
   builder.create<emit::FragmentOp>(name, [&]() {
-    builder.create<sv::FuncDPIImportOp>(func.getSymNameAttr(), StringAttr());
+    builder.create<sv::IfDefOp>(
+        macroDecl.getSymNameAttr(), []() {},
+        [&]() {
+          builder.create<sv::FuncDPIImportOp>(func.getSymNameAttr(),
+                                              StringAttr());
+          builder.create<sv::MacroDefOp>(macroDecl.getSymNameAttr(), "");
+        });
   });
 
   symbolToFragment.insert({func.getSymNameAttr(), name});

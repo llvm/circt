@@ -123,6 +123,7 @@ hw.module @check_blockarg(inout %sig : i32) {
 
 // CHECK-LABEL:   @loop
 // CHECK-SAME:      (inout %[[VAL_0:.*]] : i2)
+// CHECK:           [[PRB:%.+]] = llhd.prb %in_i
 // CHECK:           llhd.process
 // CHECK:           %[[VAL_1:.*]] = hw.constant 0 : i32
 // CHECK:           %[[VAL_2:.*]] = hw.constant 2 : i32
@@ -138,7 +139,7 @@ hw.module @check_blockarg(inout %sig : i32) {
 // CHECK:           %[[VAL_8:.*]] = llhd.prb %[[VAL_0]] : !hw.inout<i2>
 // CHECK:           cf.cond_br %[[VAL_7]], ^[[BB4:.+]], ^[[BB3:.+]]
 // CHECK:         ^[[BB3]]:
-// CHECK:           llhd.wait (%[[VAL_0]] : !hw.inout<i2>), ^[[BB1]]
+// CHECK:           llhd.wait ([[PRB]] : i2), ^[[BB1]]
 // CHECK:         ^[[BB4]]:
 // CHECK:           %[[VAL_9:.*]] = llhd.load %[[VAL_5]] : !llhd.ptr<i32>
 // CHECK:           %[[VAL_10:.*]] = comb.add %[[VAL_9]], %[[VAL_4]] : i32
@@ -146,6 +147,7 @@ hw.module @check_blockarg(inout %sig : i32) {
 // CHECK:           cf.br ^[[BB2]]
 // CHECK:         }
 hw.module @loop(inout %in_i : i2) {
+  %prb0 = llhd.prb %in_i : !hw.inout<i2>
   llhd.process {
     // TR: -1
     cf.br ^body
@@ -162,7 +164,7 @@ hw.module @loop(inout %in_i : i2) {
     cf.cond_br %2, ^loop_continue, ^check
   ^check:
     // TR: 1
-    llhd.wait (%in_i : !hw.inout<i2>), ^body
+    llhd.wait (%prb0 : i2), ^body
   ^loop_continue:
     // TR: 1
     %3 = hw.constant 0 : i2
@@ -177,6 +179,8 @@ hw.module @loop(inout %in_i : i2) {
 
 // CHECK-LABEL:   @complicated
 // CHECK-SAME:      (inout %[[VAL_0:.*]] : i1, inout %[[VAL_1:.*]] : i1, inout %[[VAL_2:.*]] : i1, inout %[[VAL_3:.*]] : i1, inout %[[VAL_4:.*]] : i1)
+// CHECK:           [[PRB_CLK:%.+]] = llhd.prb %[[VAL_1]]
+// CHECK:           [[PRB_RST:%.+]] = llhd.prb %[[VAL_0]]
 // CHECK:           llhd.process
 // CHECK:           %[[ALLSET:.*]] = hw.constant true
 // CHECK:           %[[VAL_5:.*]] = hw.constant false
@@ -191,7 +195,7 @@ hw.module @loop(inout %in_i : i2) {
 // CHECK:           %[[VAL_10:.*]] = llhd.prb %[[VAL_0]] : !hw.inout<i1>
 // CHECK:           %[[VAL_11:.*]] = comb.icmp eq %[[VAL_9]], %[[VAL_5]] : i1
 // CHECK:           %[[VAL_12:.*]] = comb.icmp ne %[[VAL_10]], %[[VAL_5]] : i1
-// CHECK:           llhd.wait (%[[VAL_1]], %[[VAL_0]] : !hw.inout<i1>, !hw.inout<i1>), ^[[BB3:.+]]
+// CHECK:           llhd.wait ([[PRB_CLK]], [[PRB_RST]] : i1, i1), ^[[BB3:.+]]
 // CHECK:         ^[[BB3]]:
 // CHECK:           %[[VAL_13:.*]] = llhd.prb %[[VAL_3]] : !hw.inout<i1>
 // CHECK:           llhd.store %[[VAL_8]], %[[VAL_13]] : !llhd.ptr<i1>
@@ -221,6 +225,8 @@ hw.module @loop(inout %in_i : i2) {
 // CHECK:           cf.br ^[[BB1]]
 // CHECK:         }
 hw.module @complicated(inout %rst_ni: i1, inout %clk_i: i1, inout %async_ack_i: i1, inout %ack_src_q: i1, inout %ack_q: i1) {
+  %prb_clk = llhd.prb %clk_i : !hw.inout<i1>
+  %prb_rst = llhd.prb %rst_ni : !hw.inout<i1>
   llhd.process {
     %allset = hw.constant 1 : i1
     // TR: -1
@@ -234,7 +240,7 @@ hw.module @complicated(inout %rst_ni: i1, inout %clk_i: i1, inout %async_ack_i: 
     // TR: 2
     %clk_i_prb = llhd.prb %clk_i : !hw.inout<i1>
     %rst_ni_prb = llhd.prb %rst_ni : !hw.inout<i1>
-    llhd.wait (%clk_i, %rst_ni : !hw.inout<i1>, !hw.inout<i1>), ^check
+    llhd.wait (%prb_clk, %prb_rst : i1, i1), ^check
   ^check:
     // TR: 0
     %2 = llhd.prb %ack_src_q : !hw.inout<i1>

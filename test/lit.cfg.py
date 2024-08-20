@@ -60,8 +60,8 @@ tool_dirs = [
 tools = [
     'arcilator', 'circt-as', 'circt-capi-ir-test', 'circt-capi-om-test',
     'circt-capi-firrtl-test', 'circt-capi-firtool-test', 'circt-dis',
-    'circt-reduce', 'circt-translate', 'firtool', 'hlstool', 'om-linker',
-    'ibistool'
+    'circt-lec', 'circt-reduce', 'circt-translate', 'firtool', 'hlstool',
+    'om-linker', 'ibistool'
 ]
 
 if "CIRCT_OPT_CHECK_IR_ROUNDTRIP" in os.environ:

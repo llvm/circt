@@ -286,16 +286,6 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-  // expected-note @+1 {{containing module declared here}}
-  firrtl.module @Foo() {
-    // expected-error @+1 {{'firrtl.instance' op is a recursive instantiation of its containing module}}
-    firrtl.instance "" @Foo()
-  }
-}
-
-// -----
-
-firrtl.circuit "Foo" {
   // expected-note @+1 {{original module declared here}}
   firrtl.module @Callee(in %arg0: !firrtl.uint<1>) { }
   firrtl.module @Foo() {
@@ -1888,23 +1878,6 @@ firrtl.circuit "WrongLayerBlockNesting" {
     firrtl.layerblock @A {
       // expected-error @below {{'firrtl.layerblock' op is nested under an illegal layer block}}
       firrtl.layerblock @B::@C {}
-    }
-  }
-}
-
-// -----
-
-// A layer block captures a non-passive type.
-firrtl.circuit "NonPassiveCapture" {
-  firrtl.layer @A bind {}
-  firrtl.module @NonPassiveCapture() {
-    // expected-note @below {{operand is defined here}}
-    %a = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
-    // expected-error @below {{'firrtl.layerblock' op captures an operand which is not a passive type}}
-    firrtl.layerblock @A {
-      %b = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
-      // expected-note @below {{operand is used here}}
-      firrtl.connect %b, %a : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
     }
   }
 }

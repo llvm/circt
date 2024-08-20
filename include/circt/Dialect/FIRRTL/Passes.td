@@ -397,11 +397,13 @@ def InferResets : Pass<"firrtl-infer-resets", "firrtl::CircuitOp"> {
   let summary = "Infer reset synchronicity and add implicit resets";
   let description = [{
     This pass infers whether resets are synchronous or asynchronous, and extends
-    reset-less registers with an asynchronous reset based on the following
+    reset-less registers with a reset based on the following
     annotations:
 
-    - `sifive.enterprise.firrtl.FullAsyncResetAnnotation`
-    - `sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation`
+    - `circt.FullResetAnnotation`
+    - `circt.ExcludeFromFullResetAnnotation`
+    - `sifive.enterprise.firrtl.FullAsyncResetAnnotation` (deprecated)
+    - `sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation` (deprecated)
   }];
   let constructor = "circt::firrtl::createInferResetsPass()";
 }
@@ -966,6 +968,20 @@ def ProbesToSignals : Pass<"firrtl-probes-to-signals", "firrtl::CircuitOp"> {
     RWProbes and related operations are not supported.
   }];
   let constructor = "circt::firrtl::createProbesToSignalsPass()";
+}
+
+def CheckRecursiveInstantiation : Pass<"firrtl-check-recursive-instantiation",
+    "firrtl::CircuitOp"> {
+  let summary = "Check for illegal recursive instantiation";
+  let description = [{
+    This pass checks for illegal recursive module instantion.  Recursive
+    instantiation is when a module instantiates itself, either directly or
+    indirectly through other modules it instantiates.  Recursive module 
+    instantiation is illegal because it would require infinite hardware to
+    synthesize. Recursive class instantiation is illegal as it would create an
+    infinite loop.
+  }];
+  let constructor = "circt::firrtl::createCheckRecursiveInstantiation()";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

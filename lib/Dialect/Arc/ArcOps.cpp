@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
@@ -304,6 +305,30 @@ LogicalResult ModelOp::verify() {
   for (const hw::ModulePort &port : getIo().getPorts())
     if (port.dir == hw::ModulePort::Direction::InOut)
       return emitOpError("inout ports are not supported");
+  return success();
+}
+
+LogicalResult ModelOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  if (!getInitialFn().has_value())
+    return success();
+
+  auto referencedOp =
+      symbolTable.lookupNearestSymbolFrom(*this, getInitialFnAttr());
+  if (!referencedOp)
+    return emitError("Cannot find declaration of initializer function '")
+           << *getInitialFn() << "'.";
+  auto funcOp = dyn_cast<func::FuncOp>(referencedOp);
+  if (!funcOp) {
+    auto diag = emitError("Referenced initializer must be a 'func.func' op.");
+    diag.attachNote(referencedOp->getLoc()) << "Initializer declared here:";
+    return diag;
+  }
+  if (!llvm::equal(funcOp.getArgumentTypes(), getBody().getArgumentTypes())) {
+    auto diag = emitError("Arguments of initializer function must match "
+                          "arguments of model body.");
+    diag.attachNote(referencedOp->getLoc()) << "Initializer declared here:";
+    return diag;
+  }
   return success();
 }
 

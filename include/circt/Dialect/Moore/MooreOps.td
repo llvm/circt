@@ -9,6 +9,7 @@
 #ifndef CIRCT_DIALECT_MOORE_MOOREOPS
 #define CIRCT_DIALECT_MOORE_MOOREOPS
 
+include "circt/Dialect/Moore/MooreAttributes.td"
 include "circt/Dialect/Moore/MooreDialect.td"
 include "circt/Dialect/Moore/MooreTypes.td"
 include "mlir/IR/OpAsmInterface.td"
@@ -265,19 +266,20 @@ def NetOp : MooreOp<"net", [
     `` custom<ImplicitSSAName>($name) $kind ($assignment^)? attr-dict
     `:` type($result)
   }];
+  let hasCanonicalizeMethod = true;
 }
 
-def AssignedVarOp : MooreOp<"assigned_variable", [
+def AssignedVariableOp : MooreOp<"assigned_variable", [
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-  TypesMatchWith<"initial value and variable types match",
-    "result", "initial", "cast<RefType>($_self).getNestedType()">
+  SameOperandsAndResultType
 ]> {
-  let summary = "The copy of variable must have the initial value";
-  let arguments = (ins OptionalAttr<StrAttr>:$name, UnpackedType:$initial);
-  let results = (outs Res<RefType, "", [MemAlloc]>:$result);
+  let summary = "A variable with a unique continuously assigned value";
+  let arguments = (ins OptionalAttr<StrAttr>:$name, UnpackedType:$input);
+  let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    `` custom<ImplicitSSAName>($name) $initial attr-dict `:` type($result)
+    `` custom<ImplicitSSAName>($name) $input attr-dict `:` type($input)
   }];
+  let hasCanonicalizeMethod = true;
 }
 
 def ReadOp : MooreOp<"read", [
@@ -356,58 +358,103 @@ def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
 // Statements
 //===----------------------------------------------------------------------===//
 
-def None: I32EnumAttrCase<"None", 0, "none">;
-/// Transit from 0 to x/z/1, and from x/z to 1.
+// Any change on the input.
+def AnyChange: I32EnumAttrCase<"AnyChange", 0, "any">;
+// A transition from 0 to X/Z/1, or from X/Z to 1.
 def PosEdge: I32EnumAttrCase<"PosEdge", 1, "posedge">;
-/// Transit from 1 to x/z/0, and from x/z to 0.
+// A transition from 1 to X/Z/0, or from X/Z to 0.
 def NegEdge: I32EnumAttrCase<"NegEdge", 2, "negedge">;
-/// Include the negedge and posedge.
+// The combination of `PosEdge` and `NegEdge`.
 def BothEdges: I32EnumAttrCase<"BothEdges", 3, "edge">;
 
-def EdgeAtrr: I32EnumAttr<"Edge", "Edge kind",
-                          [None, PosEdge, NegEdge, BothEdges]>{
+def EdgeAttr: I32EnumAttr<"Edge", "Edge kind",
+                          [AnyChange, PosEdge, NegEdge, BothEdges]> {
   let cppNamespace = "circt::moore";
 }
 
-def EventOp : MooreOp<"wait_event", [
-  HasParent<"ProcedureOp">
+def WaitEventOp : MooreOp<"wait_event", [
+  RecursiveMemoryEffects,
+  NoRegionArguments,
+  SingleBlock,
+  NoTerminator
 ]> {
-  let summary = "Detecting posedge and negedge";
+  let summary = "Suspend execution until an event occurs";
   let description = [{
-    It is introduced by the symbol `@`, and it allows statement execution to
-    be delayed until the occurrence of some simulation event occurring in a
-    procedure executing concurrently with this procedure.
+    The `moore.wait_event` op suspends execution of the current process until
+    its body signals that an event has been the detected. Conceptually, the body
+    of this op is executed whenever any potentially relevant signal has changed.
+    If one of the contained `moore.detect_event` ops detect an event, execution
+    resumes after the `moore.wait_event` operation. If no event is detected, the
+    current process remains suspended.
 
-    For the implicit event control(`@(*)`), there are two situations that are
-    not automatically added to event expression:
-      1. Identifiers that only appear in wait or event expressions.
-         ```
-          always @(*) begin    // equivalent to @(b)
-            @(n) kid = b;      // n is not added to @(*)
-          end
-         ```
-      2. Identifiers that only appear as a hierarchical_variable_identifier
-         in the variable_lvalue of the left-hand side of assignments.
-         ```
-          always @(*) begin
-            a = b + c;         // a is not added to @(*)
-          end
-         ```
+    Example corresponding to the SystemVerilog `@(posedge x, negedge y iff z)`:
+    ```
+    moore.wait_event {
+      %0 = moore.read %x : <i1>
+      %1 = moore.read %y : <i1>
+      %2 = moore.read %z : <i1>
+      moore.detect_event posedge %0 : i1
+      moore.detect_event negedge %1 if %2 : i1
+    }
+    ```
 
-    Example:
+    The body may also contain any operations necessary to evaluate the event
+    conditions. For example, the SV `@(posedge ~x iff i == 42)`:
     ```
-      @(a, b, c)        // none
-      @(posedge clk)    // positive edge
-      @(negedge clk)    // negative edge
-      @(edge clk)       // both edge
-      @(*)              // implicit event control
+    moore.wait_event {
+      %0 = moore.read %x : <i1>
+      %1 = moore.not %0 : i1
+      %2 = moore.read %i : <i19>
+      %3 = moore.constant 42 : i19
+      %4 = moore.eq %2, %3 : i19
+      moore.detect_event posedge %0 if %4 : i1
+    }
     ```
+
     See IEEE 1800-2017 § 9.4.2 "Event control".
   }];
-  let arguments = (ins EdgeAtrr:$edge, UnpackedType:$input);
-  let results = (outs);
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{ attr-dict-with-keyword $body }];
+}
+
+def DetectEventOp : MooreOp<"detect_event", [
+  HasParent<"WaitEventOp">
+]> {
+  let summary = "Check if an event occured within a `wait_event` op";
+  let description = [{
+    The `moore.detect_event` op is used inside the body of a `moore.wait_event`
+    to check if an interesting value change has occurred on its operand. The
+    `moore.detect_event` op implicitly stores the previous value of its operand
+    and compares it against the current value to detect an interesting edge:
+
+    - `posedge` checks for a low-to-high transition
+    - `negedge` checks for a high-to-low transition
+    - `edge` checks for either a `posedge` or a `negedge`
+    - `any` checks for any value change (including e.g. X to Z)
+
+    The edges are detected as follows:
+
+    - `0` to `1 X Z`: `posedge`
+    - `1` to `0 X Z`: `negedge`
+    - `X Z` to `1`: `posedge`
+    - `X Z` to `0`: `negedge`
+
+    | From  | To 0    | To 1    | To X    | To Z    |
+    |-------|---------|---------|---------|---------|
+    | 0     | -       | posedge | posedge | posedge |
+    | 1     | negedge | -       | negedge | negedge |
+    | X     | negedge | posedge | -       | -       |
+    | Z     | negedge | posedge | -       | -       |
+
+    See IEEE 1800-2017 § 9.4.2 "Event control".
+  }];
+  let arguments = (ins
+    EdgeAttr:$edge,
+    UnpackedType:$input,
+    Optional<BitType>:$condition
+  );
   let assemblyFormat = [{
-    $edge $input attr-dict `:` type($input)
+    $edge $input (`if` $condition^)? attr-dict `:` type($input)
   }];
 }
 
@@ -415,14 +462,15 @@ def EventOp : MooreOp<"wait_event", [
 // Expressions
 //===----------------------------------------------------------------------===//
 
-def ConstantOp : MooreOp<"constant", [Pure]> {
+def ConstantOp : MooreOp<"constant", [Pure, ConstantLike]> {
   let summary = "A constant integer value";
-  let arguments = (ins APIntAttr:$value);
+  let arguments = (ins FVIntegerAttr:$value);
   let results = (outs IntType:$result);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
   let hasFolder = 1;
   let builders = [
+    OpBuilder<(ins "IntType":$type, "const FVInt &":$value)>,
     OpBuilder<(ins "IntType":$type, "const APInt &":$value)>,
     OpBuilder<(ins "IntType":$type, "int64_t":$value)>,
   ];
@@ -459,7 +507,7 @@ def NamedConstantOp : MooreOp<"named_constant", [
   }];
 }
 
-def StringConstantOp : MooreOp<"string_constant", [Pure, ConstantLike]> {
+def StringConstantOp : MooreOp<"string_constant", [Pure]> {
   let summary = "Produce a constant string value";
   let description = [{
     Produces a constant value of string type.
@@ -683,6 +731,9 @@ class PowOpBase<string mnemonic> : BinaryOpBase<mnemonic> {
 
     See IEEE 1800-2017 § 11.4.3 "Arithmetic operators".
   }];
+
+  let hasCanonicalizeMethod = 1;
+  let hasFolder = 1;
 }
 
 def PowUOp : PowOpBase<"powu">;
@@ -1218,24 +1269,21 @@ def UnionExtractRefOp : MooreOp<"union_extract_ref"> {
 def ConditionalOp : MooreOp<"conditional",[
   RecursiveMemoryEffects,
   NoRegionArguments,
-  SingleBlockImplicitTerminator<"moore::YieldOp">
 ]> {
   let summary = "Conditional operation";
   let description = [{
-    If cond_predicate is true, the operator returns the value of the first 
-    expression without evaluating the second expression; if false, it returns 
-    the value of the second expression without evaluating the first expression.
-    If cond_predicate evaluates to an ambiguous value (x or z), then both the
-    first expression and the second expression shall be evaluated, and compared
-    for logical equivalence. If that comparison is true (1), the operator shall
-    return either the first or second expression. Otherwise the operator returns
-    a result based on the data types of the expressions.
+    If the condition is true, this op evaluates the first region and returns its
+    result without evaluating the second region. If the the condition is false,
+    this op evaluates the second region and returns its result without
+    evaluating the first region.
 
-    When both the first and second expressions are of integral types, if the
-    cond_predicate evaluates to an ambiguous value and the expressions are not
-    logically equivalent, their results shall be combined bit by bit using the
-    table below to calculate the final result. The first and second expressions
-    are extended to the same width.
+    If the condition is unknown (X or Z), _both_ regions are evaluated. If both
+    results are equal as per `case_eq`, one of the results is returned. If the
+    results are not equal, this op returns a value based on the data types of
+    the results.
+
+    In case the results of the first and second region are of an integral type,
+    they are merged by applying the following bit-wise truth table:
 
     |?: | 0 | 1 | X | Z |
     |---|---|---|---|---|
@@ -1244,6 +1292,7 @@ def ConditionalOp : MooreOp<"conditional",[
     | X | X | X | X | X |
     | Z | X | X | X | X |
 
+    Non-integral data types define other rules which are not yet implemented.
     See IEEE 1800-2017 § 11.4.11 "Conditional operator".
   }];
   let arguments = (ins AnySingleBitType:$condition);
@@ -1274,7 +1323,6 @@ def YieldOp : MooreOp<"yield", [
     yielded.
   }];
   let arguments = (ins UnpackedType:$result);
-  let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
   let assemblyFormat = [{
     attr-dict $result `:` type($result)
   }];

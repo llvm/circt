@@ -1027,6 +1027,42 @@ circuit Top:
     propassign c, integer_shr(a, b)
 
 ;// -----
+FIRRTL version 4.0.0
+
+; CHECK-LABEL: firrtl.circuit "Top"
+circuit Top :
+  public module Top :
+    input a : Integer
+    output b : List<Integer>
+
+    ; expected-error @below {{unexpected expression of type '!firrtl.integer' in List concat expression}}
+    propassign b, list_concat(a)
+
+;// -----
+FIRRTL version 4.0.0
+
+; CHECK-LABEL: firrtl.circuit "Top"
+circuit Top :
+  public module Top :
+    input a : List<Integer>
+    input b : List<String>
+    output c : List<Integer>
+
+    ; expected-error @below {{unexpected expression of type '!firrtl.list<string>' in List concat expression of type '!firrtl.list<integer>'}}
+    propassign c, list_concat(a, b)
+
+;// -----
+FIRRTL version 4.0.0
+
+; CHECK-LABEL: firrtl.circuit "Top"
+circuit Top :
+  public module Top :
+    output c : List<Integer>
+
+    ; expected-error @below {{need at least one List to concatenate}}
+    propassign c, list_concat()
+
+;// -----
 FIRRTL version 3.3.0
 
 circuit Top:

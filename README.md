@@ -5,7 +5,7 @@
 
 # ⚡️ "CIRCT" / Circuit IR Compilers and Tools
 
-"CIRCT" stands for "Circuit IR Compilers and Tools".  One might also interpret
+"CIRCT" stands for "Circuit Intermediate Representations (IR) Compilers and Tools".  One might also interpret
 it as the recursively as "CIRCT IR Compiler and Tools".  The T can be
 selectively expanded as Tool, Translator, Team, Technology, Target, Tree, Type,
 ... we're ok with the ambiguity.
