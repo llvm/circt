@@ -44,3 +44,4 @@ classifiers = [
 [project.scripts]
 esiquery = "esiaccel.utils:run_esiquery"
 esi-cosim = "esiaccel.utils:run_esi_cosim"
+esi-cppgen = "esiaccel.utils:run_cppgen"
