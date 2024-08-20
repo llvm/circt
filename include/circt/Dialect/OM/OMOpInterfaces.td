@@ -30,10 +30,17 @@ def ClassFieldsLike : OpInterface<"ClassFieldsLike"> {
                                            "llvm::SmallVector<mlir::Value>":$operands),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{ 
+        // * assumes fieldNames dictionary attr exists
+        // * assumes each name in fieldNames has an entry in fieldTypes
+        //   dictionary attr mapping the name to type
+        // * perFieldAttrs, perFieldLocs optional attr/locs for each field
+        // * each field is emitted on a separate line
         mlir::Operation *op = $_op.getOperation();
+
         printer << "(";
         printer.increaseIndent();
-        mlir::ArrayAttr fieldNames = mlir::cast<mlir::ArrayAttr>(op->getAttr("fieldNames"));
+
+        llvm::SmallVector<mlir::StringAttr> fieldNames = $_op.getFieldNames();
 
         mlir::ArrayRef<mlir::Attribute> perFieldAttrs;
         if (auto attrs = op->getAttr("perFieldAttrs"))
@@ -44,29 +51,33 @@ def ClassFieldsLike : OpInterface<"ClassFieldsLike"> {
           perFieldLocs = mlir::cast<mlir::ArrayAttr>(locs).getValue();
 
         for (unsigned i = 0; i < fieldNames.size(); i++) {
-          mlir::StringAttr nameAttr = mlir::cast<mlir::StringAttr>(fieldNames[i]);
-          auto name = nameAttr.getValue();
+          mlir::StringAttr name = fieldNames[i];
           if (i > 0) {
             printer << ",";
           }
-
           printer.printNewline();
-          printer.printSymbolName(name);
 
+          // print symbol
+          printer.printSymbolName(name.getValue());
+
+          // print operand if exists
           if (!operands.empty()) {
             printer << " ";
             printer.printOperand(operands[i]);
           }
-          printer << " : ";
 
-          std::optional<mlir::Type> type = $_op.getFieldType(nameAttr);
+          // print type
+          std::optional<mlir::Type> type = $_op.getFieldType(name);
           assert(type.has_value() && "class field has no type");
+          printer << " : ";
           printer.printType(type.value());
 
+          // print optional attr
           if (!perFieldAttrs.empty())
             if (auto fieldAttr = mlir::dyn_cast<mlir::DictionaryAttr>(perFieldAttrs[i]))
               printer.printOptionalAttrDict(fieldAttr.getValue());
 
+          // print optional loc
           if (!perFieldLocs.empty()) {
             mlir::Location loc = mlir::cast<mlir::Location>(perFieldLocs[i]);
             if (!mlir::isa<mlir::UnknownLoc>(loc))
@@ -86,6 +97,8 @@ def ClassFieldsLike : OpInterface<"ClassFieldsLike"> {
       "llvm::SmallVector<mlir::StringAttr>", "getFieldNames", (ins),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{ 
+        // convenience method that converts generic field names attr into small
+        // vector of string attrs
         mlir::Attribute fieldNames = this->getOperation()->getAttr("fieldNames");
         assert(fieldNames && "class fields op has no field names");
 

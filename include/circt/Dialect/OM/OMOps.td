@@ -85,6 +85,7 @@ def ClassOp : OMClassLike<"class", [
       return mlir::RegionKind::Graph;
     }
 
+    // Convenience methods for creating ClassFieldsOp
     void addFields(mlir::OpBuilder &builder, mlir::Location loc,
                    llvm::ArrayRef<mlir::Attribute> fieldNames,
                    llvm::ArrayRef<mlir::Value> fieldValues);
@@ -121,6 +122,7 @@ def ClassExternOp : OMClassLike<"class.extern", [
       return mlir::RegionKind::Graph;
     }
 
+    // Convenience methods for creating ClassExternFieldsOp
     void addFields(mlir::OpBuilder &builder, mlir::Location loc,
                    llvm::ArrayRef<mlir::StringAttr> fieldNames,
                    llvm::ArrayRef<mlir::Type> fieldTypes);
