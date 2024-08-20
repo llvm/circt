@@ -829,6 +829,61 @@ bool LowerClassesPass::shouldCreateClass(StringAttr modName) {
   return shouldCreateClassMemo.at(modName);
 }
 
+template <typename T>
+static om::ClassLike buildClassLike(OpBuilder builder, Location loc, Twine name,
+                                    ArrayRef<StringRef> formalParamNames,
+                                    ArrayRef<Attribute> fieldNames,
+                                    ArrayRef<NamedAttribute> fieldTypes) {
+  return builder.create<T>(loc, builder.getStringAttr(name),
+                           builder.getStrArrayAttr(formalParamNames),
+                           builder.getArrayAttr(fieldNames),
+                           builder.getDictionaryAttr(fieldTypes));
+}
+
+static om::ClassLike convertExtClass(FModuleLike moduleLike, OpBuilder builder,
+                                     Twine name,
+                                     ArrayRef<StringRef> formalParamNames) {
+  SmallVector<Attribute> fieldNames;
+  SmallVector<NamedAttribute> fieldTypes;
+  for (unsigned i = 0, e = moduleLike.getNumPorts(); i < e; ++i) {
+    auto type = moduleLike.getPortType(i);
+    if (!isa<PropertyType>(type))
+      continue;
+
+    auto direction = moduleLike.getPortDirection(i);
+    if (direction != Direction::In) {
+      auto name = moduleLike.getPortNameAttr(i);
+      fieldNames.push_back(name);
+      fieldTypes.push_back(NamedAttribute(name, TypeAttr::get(type)));
+    }
+  }
+  return buildClassLike<om::ClassExternOp>(builder, moduleLike.getLoc(), name,
+                                           formalParamNames, fieldNames,
+                                           fieldTypes);
+}
+
+static om::ClassLike convertClass(FModuleLike moduleLike, OpBuilder builder,
+                                  Twine name,
+                                  ArrayRef<StringRef> formalParamNames) {
+  // Collect output property assignments to get field names and types.
+  SmallVector<Attribute> fieldNames;
+  SmallVector<NamedAttribute> fieldTypes;
+  for (auto op : llvm::make_early_inc_range(
+           moduleLike->getRegion(0).getOps<PropAssignOp>())) {
+    auto outputPort = dyn_cast<BlockArgument>(op.getDest());
+    if (!outputPort)
+      continue;
+
+    StringAttr name = moduleLike.getPortNameAttr(outputPort.getArgNumber());
+
+    fieldNames.push_back(name);
+    fieldTypes.push_back(
+        NamedAttribute(name, TypeAttr::get(op.getSrc().getType())));
+  }
+  return buildClassLike<om::ClassOp>(builder, moduleLike.getLoc(), name,
+                                     formalParamNames, fieldNames, fieldTypes);
+}
+
 // Create an OM Class op from a FIRRTL Class op or Module op with properties.
 om::ClassLike
 LowerClassesPass::createClass(FModuleLike moduleLike,
@@ -866,12 +921,14 @@ LowerClassesPass::createClass(FModuleLike moduleLike,
 
   // Construct the OM Class with the FIRRTL Class name and parameter names.
   om::ClassLike loweredClassOp;
-  if (isa<firrtl::ExtClassOp, firrtl::FExtModuleOp>(moduleLike.getOperation()))
-    loweredClassOp = builder.create<om::ClassExternOp>(
-        moduleLike.getLoc(), className + suffix, formalParamNames);
-  else
-    loweredClassOp = builder.create<om::ClassOp>(
-        moduleLike.getLoc(), className + suffix, formalParamNames);
+  if (isa<firrtl::ExtClassOp, firrtl::FExtModuleOp>(
+          moduleLike.getOperation())) {
+    loweredClassOp = convertExtClass(moduleLike, builder, className + suffix,
+                                     formalParamNames);
+  } else {
+    loweredClassOp =
+        convertClass(moduleLike, builder, className + suffix, formalParamNames);
+  }
 
   return loweredClassOp;
 }
@@ -962,6 +1019,8 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
       opsToErase.push_back(&op);
   }
 
+  llvm::SmallVector<mlir::Location> locs;
+  llvm::SmallVector<mlir::Value> fieldValues;
   // Convert any output property assignments to Field ops.
   for (auto op : llvm::make_early_inc_range(classOp.getOps<PropAssignOp>())) {
     // Property assignments will currently be pointing back to the original
@@ -970,11 +1029,13 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
     if (!outputPort)
       continue;
 
-    // Get the original port name, create a Field, and erase the propassign.
-    auto name = moduleLike.getPortName(outputPort.getArgNumber());
-    builder.create<ClassFieldOp>(op.getLoc(), name, op.getSrc());
+    locs.push_back(op.getLoc());
+    fieldValues.push_back(op.getSrc());
+
     op.erase();
   }
+
+  builder.create<ClassFieldsOp>(builder.getFusedLoc(locs), fieldValues);
 
   // If the module-like is a Class, it will be completely erased later.
   // Otherwise, erase just the property ports and ops.
@@ -995,7 +1056,6 @@ void LowerClassesPass::lowerClassExtern(ClassExternOp classExternOp,
   // Add a class.extern.field op for each output.
   BitVector portsToErase(moduleLike.getNumPorts());
   Block *classBody = &classExternOp.getRegion().emplaceBlock();
-  OpBuilder builder = OpBuilder::atBlockBegin(classBody);
 
   // Every class gets a base path as its first parameter.
   classBody->addArgument(BasePathType::get(&getContext()),
@@ -1010,10 +1070,6 @@ void LowerClassesPass::lowerClassExtern(ClassExternOp classExternOp,
     auto direction = moduleLike.getPortDirection(i);
     if (direction == Direction::In)
       classBody->addArgument(type, loc);
-    else {
-      auto name = moduleLike.getPortNameAttr(i);
-      builder.create<om::ClassExternFieldOp>(loc, name, type);
-    }
 
     // In case this is a Module, remember to erase this port.
     portsToErase.set(i);
@@ -1632,30 +1688,13 @@ struct ObjectSubfieldOpConversion
   const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable;
 };
 
-struct ClassFieldOpConversion : public OpConversionPattern<ClassFieldOp> {
+struct ClassFieldsOpConversion : public OpConversionPattern<ClassFieldsOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(ClassFieldOp op, OpAdaptor adaptor,
+  matchAndRewrite(ClassFieldsOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<ClassFieldOp>(op, adaptor.getNameAttr(),
-                                              adaptor.getValue());
-    return success();
-  }
-};
-
-struct ClassExternFieldOpConversion
-    : public OpConversionPattern<ClassExternFieldOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(ClassExternFieldOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto type = typeConverter->convertType(adaptor.getType());
-    if (!type)
-      return failure();
-    rewriter.replaceOpWithNewOp<ClassExternFieldOp>(op, adaptor.getNameAttr(),
-                                                    type);
+    rewriter.replaceOpWithNewOp<ClassFieldsOp>(op, adaptor.getOperands());
     return success();
   }
 };
@@ -1675,28 +1714,41 @@ struct ObjectOpConversion : public OpConversionPattern<om::ObjectOp> {
   }
 };
 
+static LogicalResult convertClassLike(om::ClassLike classOp,
+                                      TypeConverter typeConverter,
+                                      ConversionPatternRewriter &rewriter) {
+  Block *body = classOp.getBodyBlock();
+  TypeConverter::SignatureConversion result(body->getNumArguments());
+
+  // Convert block argument types.
+  if (failed(
+          typeConverter.convertSignatureArgs(body->getArgumentTypes(), result)))
+    return failure();
+
+  // Convert the body.
+  if (failed(rewriter.convertRegionTypes(body->getParent(), typeConverter,
+                                         &result)))
+    return failure();
+
+  rewriter.modifyOpInPlace(classOp, [&]() {
+    mlir::AttrTypeReplacer replacer;
+    replacer.addReplacement([&](TypeAttr typeAttr) {
+      return mlir::TypeAttr::get(
+          typeConverter.convertType(typeAttr.getValue()));
+    });
+    classOp.replaceFieldTypes(replacer);
+  });
+
+  return success();
+}
+
 struct ClassOpSignatureConversion : public OpConversionPattern<om::ClassOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
   matchAndRewrite(om::ClassOp classOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Block *body = classOp.getBodyBlock();
-    TypeConverter::SignatureConversion result(body->getNumArguments());
-
-    // Convert block argument types.
-    if (failed(typeConverter->convertSignatureArgs(body->getArgumentTypes(),
-                                                   result)))
-      return failure();
-
-    // Convert the body.
-    if (failed(rewriter.convertRegionTypes(body->getParent(), *typeConverter,
-                                           &result)))
-      return failure();
-
-    rewriter.modifyOpInPlace(classOp, []() {});
-
-    return success();
+    return convertClassLike(classOp, *typeConverter, rewriter);
   }
 };
 
@@ -1707,22 +1759,7 @@ struct ClassExternOpSignatureConversion
   LogicalResult
   matchAndRewrite(om::ClassExternOp classOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Block *body = classOp.getBodyBlock();
-    TypeConverter::SignatureConversion result(body->getNumArguments());
-
-    // Convert block argument types.
-    if (failed(typeConverter->convertSignatureArgs(body->getArgumentTypes(),
-                                                   result)))
-      return failure();
-
-    // Convert the body.
-    if (failed(rewriter.convertRegionTypes(body->getParent(), *typeConverter,
-                                           &result)))
-      return failure();
-
-    rewriter.modifyOpInPlace(classOp, []() {});
-
-    return success();
+    return convertClassLike(classOp, *typeConverter, rewriter);
   }
 };
 
@@ -1773,17 +1810,19 @@ static void populateConversionTarget(ConversionTarget &target) {
     return noFIRRTLOperands && noFIRRTLResults;
   });
 
-  // the OM op class.extern.field doesn't have operands or results, so we must
-  // check it's type for a firrtl dialect.
-  target.addDynamicallyLegalOp<ClassExternFieldOp>(
-      [](ClassExternFieldOp op) { return !isa<FIRRTLType>(op.getType()); });
-
   // OM Class ops are legal if they don't use FIRRTL types for block arguments.
   target.addDynamicallyLegalOp<om::ClassOp, om::ClassExternOp>(
       [](Operation *op) -> std::optional<bool> {
         auto classLike = dyn_cast<om::ClassLike>(op);
         if (!classLike)
           return std::nullopt;
+        auto fieldNames = classLike.getFieldNames();
+        if (!llvm::all_of(fieldNames, [&](auto field) {
+              std::optional<Type> type =
+                  classLike.getFieldType(cast<StringAttr>(field));
+              return type.has_value() && !isa<FIRRTLType>(type.value());
+            }))
+          return false;
 
         return llvm::none_of(
             classLike.getBodyBlock()->getArgumentTypes(),
@@ -1888,8 +1927,7 @@ static void populateRewritePatterns(
   patterns.add<AnyCastOpConversion>(converter, patterns.getContext());
   patterns.add<ObjectSubfieldOpConversion>(converter, patterns.getContext(),
                                            classTypeTable);
-  patterns.add<ClassFieldOpConversion>(converter, patterns.getContext());
-  patterns.add<ClassExternFieldOpConversion>(converter, patterns.getContext());
+  patterns.add<ClassFieldsOpConversion>(converter, patterns.getContext());
   patterns.add<ClassOpSignatureConversion>(converter, patterns.getContext());
   patterns.add<ClassExternOpSignatureConversion>(converter,
                                                  patterns.getContext());

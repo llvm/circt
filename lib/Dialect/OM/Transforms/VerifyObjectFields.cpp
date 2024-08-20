@@ -49,36 +49,10 @@ void VerifyObjectFieldsPass::runOnOperation() {
          "op must have a single region and symbol table trait");
   auto &symbolTable = getAnalysis<SymbolTable>();
 
-  /// A map from a class and field name to a field.
-  llvm::MapVector<ClassLike, llvm::DenseMap<StringAttr, ClassFieldLike>> tables;
-  for (auto op : module->getRegion(0).getOps<om::ClassLike>())
-    tables.insert({op, llvm::DenseMap<StringAttr, ClassFieldLike>()});
-
-  // Peel tables parallelly.
-  if (failed(
-          mlir::failableParallelForEach(&getContext(), tables, [](auto &entry) {
-            ClassLike classLike = entry.first;
-            auto &table = entry.second;
-            auto result = classLike.walk([&](ClassFieldLike fieldLike)
-                                             -> WalkResult {
-              if (table.insert({fieldLike.getNameAttr(), fieldLike}).second)
-                return WalkResult::advance();
-
-              auto emit = fieldLike.emitOpError()
-                          << "field " << fieldLike.getNameAttr()
-                          << " is defined twice";
-              emit.attachNote(table.lookup(fieldLike.getNameAttr()).getLoc())
-                  << "previous definition is here";
-              return WalkResult::interrupt();
-            });
-            return LogicalResult::failure(result.wasInterrupted());
-          })))
-    return signalPassFailure();
-
   // Run actual verification. Make sure not to mutate `tables`.
   auto result = mlir::failableParallelForEach(
-      &getContext(), tables, [&tables, &symbolTable](const auto &entry) {
-        ClassLike classLike = entry.first;
+      &getContext(), module->getRegion(0).getOps<om::ClassLike>(),
+      [&symbolTable](ClassLike classLike) {
         auto result =
             classLike.walk([&](ObjectFieldOp objectField) -> WalkResult {
               auto objectInstType =
@@ -94,40 +68,39 @@ void VerifyObjectFieldsPass::runOnOperation() {
               }
 
               // Traverse the field path, verifying each field exists.
-              ClassFieldLike finalField;
+              Type finalFieldType;
               auto fields = SmallVector<FlatSymbolRefAttr>(
                   objectField.getFieldPath().getAsRange<FlatSymbolRefAttr>());
               for (size_t i = 0, e = fields.size(); i < e; ++i) {
                 // Verify the field exists on the ClassOp.
                 auto field = fields[i];
-                ClassFieldLike fieldDef;
-                auto *it = tables.find(classDef);
-                assert(it != tables.end() && "must be visited");
-                fieldDef = it->second.lookup(field.getAttr());
+                std::optional<Type> fieldTypeOpt =
+                    classDef.getFieldType(field.getAttr());
 
-                if (!fieldDef) {
+                if (!fieldTypeOpt.has_value()) {
                   auto error =
                       objectField.emitOpError("referenced non-existent field ")
                       << field;
                   error.attachNote(classDef.getLoc()) << "class defined here";
                   return WalkResult::interrupt();
                 }
+                Type fieldType = fieldTypeOpt.value();
 
                 // If there are more fields, verify the current field is of
                 // ClassType, and look up the ClassOp for that field.
                 if (i < e - 1) {
-                  auto classType = dyn_cast<ClassType>(fieldDef.getType());
+                  auto classType = dyn_cast<ClassType>(fieldType);
                   if (!classType) {
                     objectField.emitOpError("nested field access into ")
                         << field << " requires a ClassType, but found "
-                        << fieldDef.getType();
+                        << fieldType;
                     return WalkResult::interrupt();
                   }
 
                   // Check if the nested ClassOp exists. ObjectInstOp verifier
                   // already checked the class exits but it's not verified yet
                   // if the object is an input argument.
-                  classDef = symbolTable.lookupNearestSymbolFrom<ClassLike>(
+                  classDef = symbolTable.lookupNearestSymbolFrom<ClassOp>(
                       objectField, classType.getClassName());
 
                   if (!classDef) {
@@ -143,14 +116,14 @@ void VerifyObjectFieldsPass::runOnOperation() {
 
                 // On the last iteration down the path, save the final field
                 // being accessed.
-                finalField = fieldDef;
+                finalFieldType = fieldType;
               }
 
               // Verify the accessed field type matches the result type.
-              if (finalField.getType() != objectField.getResult().getType()) {
+              if (finalFieldType != objectField.getResult().getType()) {
                 objectField.emitOpError("expected type ")
                     << objectField.getResult().getType()
-                    << ", but accessed field has type " << finalField.getType();
+                    << ", but accessed field has type " << finalFieldType;
 
                 return WalkResult::interrupt();
               }

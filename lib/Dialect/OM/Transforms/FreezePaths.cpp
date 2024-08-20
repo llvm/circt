@@ -89,8 +89,7 @@ static bool hasPathType(Type type) {
   return isPathType;
 }
 
-// Convert potentially nested lists of PathType or BasePathType to frozen lists.
-static Type processType(Type type) {
+mlir::AttrTypeReplacer makeReplacer() {
   mlir::AttrTypeReplacer replacer;
   replacer.addReplacement([](BasePathType innerType) {
     return FrozenBasePathType::get(innerType.getContext());
@@ -98,7 +97,12 @@ static Type processType(Type type) {
   replacer.addReplacement([](PathType innerType) {
     return FrozenPathType::get(innerType.getContext());
   });
+  return replacer;
+}
 
+// Convert potentially nested lists of PathType or BasePathType to frozen lists.
+static Type processType(Type type) {
+  mlir::AttrTypeReplacer replacer = makeReplacer();
   return replacer.replace(type);
 }
 
@@ -298,6 +302,9 @@ LogicalResult PathVisitor::run(ModuleOp module) {
     });
     if (result.wasInterrupted())
       return failure();
+
+    // Transform field types
+    classLike.replaceFieldTypes(makeReplacer());
   }
   return success();
 }

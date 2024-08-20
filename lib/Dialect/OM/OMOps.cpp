@@ -77,6 +77,37 @@ static void printPathString(OpAsmPrinter &p, Operation *op, PathAttr path,
 //===----------------------------------------------------------------------===//
 // Shared definitions
 //===----------------------------------------------------------------------===//
+static ParseResult parseClassFieldsList(OpAsmParser &parser,
+                                        SmallVectorImpl<Attribute> &fieldNames,
+                                        SmallVectorImpl<Type> &fieldTypes) {
+
+  llvm::StringMap<SMLoc> nameLocMap;
+  auto parseElt = [&]() -> ParseResult {
+    // Parse the field name.
+    std::string fieldName;
+    if (parser.parseKeywordOrString(&fieldName))
+      return failure();
+    SMLoc currLoc = parser.getCurrentLocation();
+    if (nameLocMap.count(fieldName)) {
+      parser.emitError(currLoc, "field \"")
+          << fieldName << "\" is defined twice";
+      parser.emitError(nameLocMap[fieldName]) << "previous definition is here";
+      return failure();
+    }
+    nameLocMap[fieldName] = currLoc;
+    fieldNames.push_back(StringAttr::get(parser.getContext(), fieldName));
+
+    // Parse the field type.
+    fieldTypes.emplace_back();
+    if (parser.parseColonType(fieldTypes.back()))
+      return failure();
+
+    return success();
+  };
+
+  return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                        parseElt);
+}
 
 static ParseResult parseClassLike(OpAsmParser &parser, OperationState &state) {
   // Parse the Class symbol name.
@@ -90,6 +121,23 @@ static ParseResult parseClassLike(OpAsmParser &parser, OperationState &state) {
   if (parser.parseArgumentList(args, OpAsmParser::Delimiter::Paren,
                                /*allowType=*/true, /*allowAttrs=*/false))
     return failure();
+
+  SmallVector<Type> fieldTypes;
+  SmallVector<Attribute> fieldNames;
+  if (succeeded(parser.parseOptionalArrow()))
+    if (failed(parseClassFieldsList(parser, fieldNames, fieldTypes)))
+      return failure();
+
+  SmallVector<NamedAttribute> fieldTypesMap;
+  if (!fieldNames.empty()) {
+    for (auto [name, type] : zip(fieldNames, fieldTypes))
+      fieldTypesMap.push_back(
+          NamedAttribute(cast<StringAttr>(name), TypeAttr::get(type)));
+  }
+  auto *ctx = parser.getContext();
+  state.addAttribute("fieldNames", mlir::ArrayAttr::get(ctx, fieldNames));
+  state.addAttribute("fieldTypes",
+                     mlir::DictionaryAttr::get(ctx, fieldTypesMap));
 
   // Parse the optional attribute dictionary.
   if (failed(parser.parseOptionalAttrDictWithKeyword(state.attributes)))
@@ -134,9 +182,27 @@ static void printClassLike(ClassLike classLike, OpAsmPrinter &printer) {
   }
   printer << ") ";
 
+  ArrayRef<Attribute> fieldNames =
+      cast<ArrayAttr>(classLike->getAttr("fieldNames")).getValue();
+
+  if (!fieldNames.empty()) {
+    printer << " -> (";
+    for (size_t i = 0, e = fieldNames.size(); i < e; ++i) {
+      if (i != 0)
+        printer << ", ";
+      StringAttr name = cast<StringAttr>(fieldNames[i]);
+      printer.printKeywordOrString(name.getValue());
+      printer << ": ";
+      Type type = classLike.getFieldType(name).value();
+      printer.printType(type);
+    }
+    printer << ") ";
+  }
+
   // Print the optional attribute dictionary.
   SmallVector<StringRef> elidedAttrs{classLike.getSymNameAttrName(),
-                                     classLike.getFormalParamNamesAttrName()};
+                                     classLike.getFormalParamNamesAttrName(),
+                                     "fieldTypes", "fieldNames"};
   printer.printOptionalAttrDictWithKeyword(classLike.getOperation()->getAttrs(),
                                            elidedAttrs);
 
@@ -174,6 +240,39 @@ void getClassLikeAsmBlockArgumentNames(ClassLike classLike, Region &region,
     setNameFn(args[i], argNames[i]);
 }
 
+NamedAttribute makeFieldType(StringAttr name, Type type) {
+  return NamedAttribute(name, TypeAttr::get(type));
+}
+
+NamedAttribute makeFieldIdx(MLIRContext *ctx, mlir::StringAttr name,
+                            unsigned i) {
+  return NamedAttribute(StringAttr(name),
+                        mlir::IntegerAttr::get(mlir::IndexType::get(ctx), i));
+}
+
+std::optional<Type> getClassLikeFieldType(ClassLike classLike,
+                                          StringAttr name) {
+  DictionaryAttr fieldTypes = mlir::cast<DictionaryAttr>(
+      classLike.getOperation()->getAttr("fieldTypes"));
+  Attribute type = fieldTypes.get(name);
+  if (!type)
+    return std::nullopt;
+  return cast<TypeAttr>(type).getValue();
+}
+
+void replaceClassLikeFieldTypes(ClassLike classLike,
+                                AttrTypeReplacer &replacer) {
+  classLike->setAttr("fieldTypes", cast<DictionaryAttr>(replacer.replace(
+                                       classLike.getFieldTypes())));
+}
+
+ArrayAttr buildFieldNames(OpBuilder &odsBuilder, DictionaryAttr fieldTypes) {
+  return odsBuilder.getArrayAttr(llvm::map_to_vector(
+      fieldTypes.getValue(), [&](NamedAttribute field) -> Attribute {
+        return cast<Attribute>(field.getName());
+      }));
+}
+
 //===----------------------------------------------------------------------===//
 // ClassOp
 //===----------------------------------------------------------------------===//
@@ -183,35 +282,35 @@ ParseResult circt::om::ClassOp::parse(OpAsmParser &parser,
   return parseClassLike(parser, state);
 }
 
-void circt::om::ClassOp::build(OpBuilder &odsBuilder, OperationState &odsState,
-                               Twine name,
-                               ArrayRef<StringRef> formalParamNames) {
-  return build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
-               odsBuilder.getStrArrayAttr(formalParamNames));
-}
-
 circt::om::ClassOp circt::om::ClassOp::buildSimpleClassOp(
     OpBuilder &odsBuilder, Location loc, Twine name,
     ArrayRef<StringRef> formalParamNames, ArrayRef<StringRef> fieldNames,
     ArrayRef<Type> fieldTypes) {
   circt::om::ClassOp classOp = odsBuilder.create<circt::om::ClassOp>(
-      loc, odsBuilder.getStringAttr(name),
-      odsBuilder.getStrArrayAttr(formalParamNames));
+      loc, name, formalParamNames,
+      odsBuilder.getDictionaryAttr(llvm::map_to_vector(
+          llvm::zip(fieldNames, fieldTypes), [&](auto field) -> NamedAttribute {
+            return NamedAttribute(odsBuilder.getStringAttr(std::get<0>(field)),
+                                  TypeAttr::get(std::get<1>(field)));
+          })));
   Block *body = &classOp.getRegion().emplaceBlock();
   auto prevLoc = odsBuilder.saveInsertionPoint();
   odsBuilder.setInsertionPointToEnd(body);
-  for (auto [name, type] : llvm::zip(fieldNames, fieldTypes))
-    odsBuilder.create<circt::om::ClassFieldOp>(loc, name,
-                                               body->addArgument(type, loc));
+  odsBuilder.create<ClassFieldsOp>(
+      loc, llvm::map_to_vector(fieldTypes, [&](Type type) -> Value {
+        return body->addArgument(type, loc);
+      }));
   odsBuilder.restoreInsertionPoint(prevLoc);
 
   return classOp;
 }
 
 void circt::om::ClassOp::build(OpBuilder &odsBuilder, OperationState &odsState,
-                               Twine name) {
-  return build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
-               odsBuilder.getStrArrayAttr({}));
+                               Twine name, ArrayRef<StringRef> formalParamNames,
+                               DictionaryAttr fieldTypes) {
+  build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
+        odsBuilder.getStrArrayAttr(formalParamNames),
+        buildFieldNames(odsBuilder, fieldTypes), fieldTypes);
 }
 
 void circt::om::ClassOp::print(OpAsmPrinter &printer) {
@@ -225,11 +324,14 @@ void circt::om::ClassOp::getAsmBlockArgumentNames(
   getClassLikeAsmBlockArgumentNames(*this, region, setNameFn);
 }
 
-//===----------------------------------------------------------------------===//
-// ClassFieldOp
-//===----------------------------------------------------------------------===//
+std::optional<mlir::Type>
+circt::om::ClassOp::getFieldType(mlir::StringAttr field) {
+  return getClassLikeFieldType(*this, field);
+}
 
-Type circt::om::ClassFieldOp::getType() { return getValue().getType(); }
+void circt::om::ClassOp::replaceFieldTypes(AttrTypeReplacer replacer) {
+  replaceClassLikeFieldTypes(*this, replacer);
+}
 
 //===----------------------------------------------------------------------===//
 // ClassExternOp
@@ -241,16 +343,12 @@ ParseResult circt::om::ClassExternOp::parse(OpAsmParser &parser,
 }
 
 void circt::om::ClassExternOp::build(OpBuilder &odsBuilder,
-                                     OperationState &odsState, Twine name) {
-  return build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
-               odsBuilder.getStrArrayAttr({}));
-}
-
-void circt::om::ClassExternOp::build(OpBuilder &odsBuilder,
                                      OperationState &odsState, Twine name,
-                                     ArrayRef<StringRef> formalParamNames) {
-  return build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
-               odsBuilder.getStrArrayAttr(formalParamNames));
+                                     ArrayRef<StringRef> formalParamNames,
+                                     DictionaryAttr fieldTypes) {
+  build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
+        odsBuilder.getStrArrayAttr(formalParamNames),
+        buildFieldNames(odsBuilder, fieldTypes), fieldTypes);
 }
 
 void circt::om::ClassExternOp::print(OpAsmPrinter &printer) {
@@ -261,11 +359,10 @@ LogicalResult circt::om::ClassExternOp::verify() {
   if (failed(verifyClassLike(*this))) {
     return failure();
   }
-
-  // Verify that only external class field declarations are present in the body.
-  for (auto &op : getOps())
-    if (!isa<ClassExternFieldOp>(op))
-      return op.emitOpError("not allowed in external class");
+  // Verify body is empty
+  if (!this->getBodyBlock()->getOperations().empty()) {
+    return this->emitOpError("external class body should be empty");
+  }
 
   return success();
 }
@@ -273,6 +370,15 @@ LogicalResult circt::om::ClassExternOp::verify() {
 void circt::om::ClassExternOp::getAsmBlockArgumentNames(
     Region &region, OpAsmSetValueNameFn setNameFn) {
   getClassLikeAsmBlockArgumentNames(*this, region, setNameFn);
+}
+
+std::optional<mlir::Type>
+circt::om::ClassExternOp::getFieldType(mlir::StringAttr field) {
+  return getClassLikeFieldType(*this, field);
+}
+
+void circt::om::ClassExternOp::replaceFieldTypes(AttrTypeReplacer replacer) {
+  replaceClassLikeFieldTypes(*this, replacer);
 }
 
 //===----------------------------------------------------------------------===//

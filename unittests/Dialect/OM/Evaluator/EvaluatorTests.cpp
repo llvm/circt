@@ -166,7 +166,9 @@ TEST(EvaluatorTests, GetFieldInvalidName) {
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto cls = builder.create<ClassOp>("MyClass");
-  cls.getBody().emplaceBlock();
+  auto &body = cls.getBody().emplaceBlock();
+  builder.setInsertionPointToStart(&body);
+  builder.create<ClassFieldsOp>(loc, llvm::ArrayRef<mlir::Value>());
 
   Evaluator evaluator(mod);
 
@@ -240,12 +242,18 @@ TEST(EvaluatorTests, InstantiateObjectWithConstantField) {
   auto mod = builder.create<ModuleOp>(loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto cls = builder.create<ClassOp>("MyClass");
+  auto constantType = builder.getI32IntegerAttr(42);
+  auto cls = builder.create<ClassOp>(
+      "MyClass",
+      builder.getDictionaryAttr({
+          NamedAttribute(builder.getStringAttr("field"), constantType),
+
+      }));
   auto &body = cls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&body);
   auto constant = builder.create<ConstantOp>(
-      circt::om::IntegerAttr::get(&context, builder.getI32IntegerAttr(42)));
-  builder.create<ClassFieldOp>("field", constant);
+      circt::om::IntegerAttr::get(&context, constantType));
+  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({constant}));
 
   Evaluator evaluator(mod);
 
@@ -284,12 +292,19 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
                                               params, fields, types);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto cls = builder.create<ClassOp>("MyClass", params);
+  auto innerType = TypeAttr::get(ClassType::get(
+      builder.getContext(), mlir::FlatSymbolRefAttr::get(innerCls)));
+  auto cls = builder.create<ClassOp>(
+      "MyClass", params,
+      builder.getDictionaryAttr({
+          NamedAttribute(builder.getStringAttr("field"), innerType),
+
+      }));
   auto &body = cls.getBody().emplaceBlock();
   body.addArgument(circt::om::OMIntegerType::get(&context), cls.getLoc());
   builder.setInsertionPointToStart(&body);
   auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
-  builder.create<ClassFieldOp>("field", object);
+  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({object}));
 
   Evaluator evaluator(mod);
 
@@ -337,7 +352,14 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
                                               params, fields, types);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto cls = builder.create<ClassOp>("MyClass", params);
+  auto innerType = TypeAttr::get(ClassType::get(
+      builder.getContext(), mlir::FlatSymbolRefAttr::get(innerCls)));
+  auto cls = builder.create<ClassOp>(
+      "MyClass", params,
+      builder.getDictionaryAttr({
+          NamedAttribute(builder.getStringAttr("field"), innerType),
+
+      }));
   auto &body = cls.getBody().emplaceBlock();
   body.addArgument(circt::om::OMIntegerType::get(&context), cls.getLoc());
   builder.setInsertionPointToStart(&body);
@@ -346,7 +368,7 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
       builder.create<ObjectFieldOp>(builder.getI32Type(), object,
                                     builder.getArrayAttr(FlatSymbolRefAttr::get(
                                         builder.getStringAttr("field"))));
-  builder.create<ClassFieldOp>("field", field);
+  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({field}));
 
   Evaluator evaluator(mod);
 
@@ -383,15 +405,23 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto innerCls = builder.create<ClassOp>("MyInnerClass");
-  innerCls.getBody().emplaceBlock();
+  auto &innerBody = innerCls.getBody().emplaceBlock();
+  builder.setInsertionPointToStart(&innerBody);
+  builder.create<ClassFieldsOp>(loc, llvm::ArrayRef<mlir::Value>());
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto cls = builder.create<ClassOp>("MyClass");
+  auto innerType = TypeAttr::get(ClassType::get(
+      builder.getContext(), mlir::FlatSymbolRefAttr::get(innerCls)));
+  auto cls = builder.create<ClassOp>(
+      "MyClass", builder.getDictionaryAttr({
+                     NamedAttribute(builder.getStringAttr("field1"), innerType),
+                     NamedAttribute(builder.getStringAttr("field2"), innerType),
+
+                 }));
   auto &body = cls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&body);
   auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
-  builder.create<ClassFieldOp>("field1", object);
-  builder.create<ClassFieldOp>("field2", object);
+  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({object, object}));
 
   Evaluator evaluator(mod);
 
@@ -443,15 +473,23 @@ TEST(EvaluatorTests, AnyCastObject) {
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto innerCls = builder.create<ClassOp>("MyInnerClass");
-  innerCls.getBody().emplaceBlock();
+  auto &innerBody = innerCls.getBody().emplaceBlock();
+  builder.setInsertionPointToStart(&innerBody);
+  builder.create<ClassFieldsOp>(loc, llvm::ArrayRef<mlir::Value>());
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto cls = builder.create<ClassOp>("MyClass");
+  auto innerType = TypeAttr::get(ClassType::get(
+      builder.getContext(), mlir::FlatSymbolRefAttr::get(innerCls)));
+  auto cls = builder.create<ClassOp>(
+      "MyClass", builder.getDictionaryAttr({
+                     NamedAttribute(builder.getStringAttr("field"), innerType),
+
+                 }));
   auto &body = cls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&body);
   auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
   auto cast = builder.create<AnyCastOp>(object);
-  builder.create<ClassFieldOp>("field", cast);
+  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({cast}));
 
   Evaluator evaluator(mod);
 
@@ -491,14 +529,21 @@ TEST(EvaluatorTests, AnyCastParam) {
   auto i64 = builder.getIntegerType(64);
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
-  auto cls = builder.create<ClassOp>("MyClass", params);
+  auto innerType = TypeAttr::get(ClassType::get(
+      builder.getContext(), mlir::FlatSymbolRefAttr::get(innerCls)));
+  auto cls = builder.create<ClassOp>(
+      "MyClass", params,
+      builder.getDictionaryAttr({
+          NamedAttribute(builder.getStringAttr("field"), innerType),
+
+      }));
   auto &body = cls.getBody().emplaceBlock();
   body.addArguments({i64}, {builder.getLoc()});
   builder.setInsertionPointToStart(&body);
   auto cast = builder.create<AnyCastOp>(body.getArgument(0));
   SmallVector<Value> objectParams = {cast};
   auto object = builder.create<ObjectOp>(innerCls, objectParams);
-  builder.create<ClassFieldOp>("field", object);
+  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({object}));
 
   Evaluator evaluator(mod);
 
@@ -526,17 +571,16 @@ TEST(EvaluatorTests, AnyCastParam) {
 TEST(EvaluatorTests, InstantiateGraphRegion) {
   StringRef module =
       "!ty = !om.class.type<@LinkedList>"
-      "om.class @LinkedList(%n: !ty, %val: !om.string) {"
-      "  om.class.field @n, %n : !ty"
-      "  om.class.field @val, %val : !om.string"
+      "om.class @LinkedList(%n: !ty, %val: !om.string) -> (n: !ty, val: "
+      "!om.string){"
+      "  om.class.fields %n, %val : !ty, !om.string"
       "}"
-      "om.class @ReferenceEachOther() {"
+      "om.class @ReferenceEachOther() -> (field1: !ty, field2: !ty) {"
       "  %str = om.constant \"foo\" : !om.string"
       "  %val = om.object.field %1, [@n, @n, @val] : (!ty) -> !om.string"
       "  %0 = om.object @LinkedList(%1, %val) : (!ty, !om.string) -> !ty"
       "  %1 = om.object @LinkedList(%0, %str) : (!ty, !om.string) -> !ty"
-      "  om.class.field @field1, %0 : !ty"
-      "  om.class.field @field2, %1 : !ty"
+      "  om.class.fields %0, %1 : !ty, !ty"
       "}";
 
   DialectRegistry registry;
@@ -582,13 +626,13 @@ TEST(EvaluatorTests, InstantiateGraphRegion) {
 
 TEST(EvaluatorTests, InstantiateCycle) {
   StringRef module = "!ty = !om.class.type<@LinkedList>"
-                     "om.class @LinkedList(%n: !ty) {"
-                     "  om.class.field @n, %n : !ty"
+                     "om.class @LinkedList(%n: !ty) -> (n: !ty){"
+                     "  om.class.fields %n : !ty"
                      "}"
-                     "om.class @ReferenceEachOther() {"
+                     "om.class @ReferenceEachOther() -> (field: !ty){"
                      "  %val = om.object.field %0, [@n] : (!ty) -> !ty"
                      "  %0 = om.object @LinkedList(%val) : (!ty) -> !ty"
-                     "  om.class.field @field, %0 : !ty"
+                     "  om.class.fields %0 : !ty"
                      "}";
 
   DialectRegistry registry;
@@ -614,12 +658,13 @@ TEST(EvaluatorTests, InstantiateCycle) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticAdd) {
-  StringRef mod = "om.class @IntegerBinaryArithmeticAdd() {"
-                  "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
-                  "  %1 = om.constant #om.integer<2 : si3> : !om.integer"
-                  "  %2 = om.integer.add %0, %1 : !om.integer"
-                  "  om.class.field @result, %2 : !om.integer"
-                  "}";
+  StringRef mod =
+      "om.class @IntegerBinaryArithmeticAdd() -> (result: !om.integer) {"
+      "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
+      "  %1 = om.constant #om.integer<2 : si3> : !om.integer"
+      "  %2 = om.integer.add %0, %1 : !om.integer"
+      "  om.class.fields %2 : !om.integer"
+      "}";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -648,12 +693,13 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticAdd) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticMul) {
-  StringRef mod = "om.class @IntegerBinaryArithmeticMul() {"
-                  "  %0 = om.constant #om.integer<2 : si3> : !om.integer"
-                  "  %1 = om.constant #om.integer<3 : si3> : !om.integer"
-                  "  %2 = om.integer.mul %0, %1 : !om.integer"
-                  "  om.class.field @result, %2 : !om.integer"
-                  "}";
+  StringRef mod =
+      "om.class @IntegerBinaryArithmeticMul() -> (result: !om.integer) {"
+      "  %0 = om.constant #om.integer<2 : si3> : !om.integer"
+      "  %1 = om.constant #om.integer<3 : si3> : !om.integer"
+      "  %2 = om.integer.mul %0, %1 : !om.integer"
+      "  om.class.fields %2 : !om.integer"
+      "}";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -682,12 +728,13 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticMul) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticShr) {
-  StringRef mod = "om.class @IntegerBinaryArithmeticShr() {"
-                  "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
-                  "  %1 = om.constant #om.integer<2 : si3> : !om.integer"
-                  "  %2 = om.integer.shr %0, %1 : !om.integer"
-                  "  om.class.field @result, %2 : !om.integer"
-                  "}";
+  StringRef mod =
+      "om.class @IntegerBinaryArithmeticShr() -> (result: !om.integer){"
+      "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
+      "  %1 = om.constant #om.integer<2 : si3> : !om.integer"
+      "  %2 = om.integer.shr %0, %1 : !om.integer"
+      "  om.class.fields %2 : !om.integer"
+      "}";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -716,12 +763,13 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticShr) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticShrNegative) {
-  StringRef mod = "om.class @IntegerBinaryArithmeticShrNegative() {"
-                  "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
-                  "  %1 = om.constant #om.integer<-2 : si3> : !om.integer"
-                  "  %2 = om.integer.shr %0, %1 : !om.integer"
-                  "  om.class.field @result, %2 : !om.integer"
-                  "}";
+  StringRef mod =
+      "om.class @IntegerBinaryArithmeticShrNegative() -> (result: !om.integer){"
+      "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
+      "  %1 = om.constant #om.integer<-2 : si3> : !om.integer"
+      "  %2 = om.integer.shr %0, %1 : !om.integer"
+      "  om.class.fields %2 : !om.integer"
+      "}";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -749,13 +797,14 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticShrNegative) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticShrTooLarge) {
-  StringRef mod = "om.class @IntegerBinaryArithmeticShrTooLarge() {"
-                  "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
-                  "  %1 = om.constant #om.integer<36893488147419100000 : si66> "
-                  ": !om.integer"
-                  "  %2 = om.integer.shr %0, %1 : !om.integer"
-                  "  om.class.field @result, %2 : !om.integer"
-                  "}";
+  StringRef mod =
+      "om.class @IntegerBinaryArithmeticShrTooLarge() -> (result: !om.integer){"
+      "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
+      "  %1 = om.constant #om.integer<36893488147419100000 : si66> "
+      ": !om.integer"
+      "  %2 = om.integer.shr %0, %1 : !om.integer"
+      "  om.class.fields %2 : !om.integer"
+      "}";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -784,28 +833,29 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticShrTooLarge) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticObjects) {
-  StringRef mod = "om.class @Class1() {"
-                  "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
-                  "  om.class.field @value, %0 : !om.integer"
-                  "}"
-                  ""
-                  "om.class @Class2() {"
-                  "  %0 = om.constant #om.integer<2 : si3> : !om.integer"
-                  "  om.class.field @value, %0 : !om.integer"
-                  "}"
-                  ""
-                  "om.class @IntegerBinaryArithmeticObjects() {"
-                  "  %0 = om.object @Class1() : () -> !om.class.type<@Class1>"
-                  "  %1 = om.object.field %0, [@value] : "
-                  "(!om.class.type<@Class1>) -> !om.integer"
-                  ""
-                  "  %2 = om.object @Class2() : () -> !om.class.type<@Class2>"
-                  "  %3 = om.object.field %2, [@value] : "
-                  "(!om.class.type<@Class2>) -> !om.integer"
-                  ""
-                  "  %5 = om.integer.add %1, %3 : !om.integer"
-                  "  om.class.field @result, %5 : !om.integer"
-                  "}";
+  StringRef mod =
+      "om.class @Class1() -> (value: !om.integer){"
+      "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
+      "  om.class.fields %0 : !om.integer"
+      "}"
+      ""
+      "om.class @Class2() -> (value: !om.integer){"
+      "  %0 = om.constant #om.integer<2 : si3> : !om.integer"
+      "  om.class.fields %0 : !om.integer"
+      "}"
+      ""
+      "om.class @IntegerBinaryArithmeticObjects() -> (result: !om.integer) {"
+      "  %0 = om.object @Class1() : () -> !om.class.type<@Class1>"
+      "  %1 = om.object.field %0, [@value] : "
+      "(!om.class.type<@Class1>) -> !om.integer"
+      ""
+      "  %2 = om.object @Class2() : () -> !om.class.type<@Class2>"
+      "  %3 = om.object.field %2, [@value] : "
+      "(!om.class.type<@Class2>) -> !om.integer"
+      ""
+      "  %5 = om.integer.add %1, %3 : !om.integer"
+      "  om.class.fields %5 : !om.integer"
+      "}";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -835,18 +885,19 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticObjects) {
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticObjectsDelayed) {
   StringRef mod =
-      "om.class @Class1(%input: !om.integer) {"
+      "om.class @Class1(%input: !om.integer) -> (value: !om.integer, input: "
+      "!om.integer) {"
       "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
-      "  om.class.field @value, %0 : !om.integer"
-      "  om.class.field @input, %input : !om.integer"
+      "  om.class.fields %0, %input : !om.integer, !om.integer"
       "}"
       ""
-      "om.class @Class2() {"
+      "om.class @Class2() -> (value: !om.integer){"
       "  %0 = om.constant #om.integer<2 : si3> : !om.integer"
-      "  om.class.field @value, %0 : !om.integer"
+      "  om.class.fields %0 : !om.integer"
       "}"
       ""
-      "om.class @IntegerBinaryArithmeticObjectsDelayed() {"
+      "om.class @IntegerBinaryArithmeticObjectsDelayed() -> (result: "
+      "!om.integer){"
       "  %0 = om.object @Class1(%5) : (!om.integer) -> !om.class.type<@Class1>"
       "  %1 = om.object.field %0, [@value] : "
       "(!om.class.type<@Class1>) -> !om.integer"
@@ -856,7 +907,7 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticObjectsDelayed) {
       "(!om.class.type<@Class2>) -> !om.integer"
       ""
       "  %5 = om.integer.add %1, %3 : !om.integer"
-      "  om.class.field @result, %5 : !om.integer"
+      "  om.class.fields %5 : !om.integer"
       "}";
 
   DialectRegistry registry;
@@ -886,11 +937,12 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticObjectsDelayed) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticWidthMismatch) {
-  StringRef mod = "om.class @IntegerBinaryArithmeticWidthMismatch() {"
+  StringRef mod = "om.class @IntegerBinaryArithmeticWidthMismatch() -> "
+                  "(result: !om.integer) {"
                   "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
                   "  %1 = om.constant #om.integer<2 : si4> : !om.integer"
                   "  %2 = om.integer.add %0, %1 : !om.integer"
-                  "  om.class.field @result, %2 : !om.integer"
+                  "  om.class.fields %2 : !om.integer"
                   "}";
 
   DialectRegistry registry;
@@ -920,14 +972,14 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticWidthMismatch) {
 }
 
 TEST(EvaluatorTests, ListConcat) {
-  StringRef mod = "om.class @ListConcat() {"
+  StringRef mod = "om.class @ListConcat() -> (result: !om.list<!om.integer>) {"
                   "  %0 = om.constant #om.integer<0 : i8> : !om.integer"
                   "  %1 = om.constant #om.integer<1 : i8> : !om.integer"
                   "  %2 = om.constant #om.integer<2 : i8> : !om.integer"
                   "  %l0 = om.list_create %0, %1 : !om.integer"
                   "  %l1 = om.list_create %2 : !om.integer"
                   "  %concat = om.list_concat %l0, %l1 : !om.list<!om.integer>"
-                  "  om.class.field @result, %concat : !om.list<!om.integer>"
+                  "  om.class.fields %concat : !om.list<!om.integer>"
                   "}";
 
   DialectRegistry registry;
@@ -973,12 +1025,12 @@ TEST(EvaluatorTests, ListConcat) {
 
 TEST(EvaluatorTests, ListConcatField) {
   StringRef mod =
-      "om.class @ListField() {"
+      "om.class @ListField() -> (value: !om.list<!om.integer>) {"
       "  %0 = om.constant #om.integer<2 : i8> : !om.integer"
       "  %1 = om.list_create %0 : !om.integer"
-      "  om.class.field @value, %1 : !om.list<!om.integer>"
+      "  om.class.fields %1 : !om.list<!om.integer>"
       "}"
-      "om.class @ListConcatField() {"
+      "om.class @ListConcatField() -> (result: !om.list<!om.integer>){"
       "  %listField = om.object @ListField() : () -> !om.class.type<@ListField>"
       "  %0 = om.constant #om.integer<0 : i8> : !om.integer"
       "  %1 = om.constant #om.integer<1 : i8> : !om.integer"
@@ -986,7 +1038,7 @@ TEST(EvaluatorTests, ListConcatField) {
       "  %l1 = om.object.field %listField, [@value] : "
       "(!om.class.type<@ListField>) -> !om.list<!om.integer>"
       "  %concat = om.list_concat %l0, %l1 : !om.list<!om.integer>"
-      "  om.class.field @result, %concat : !om.list<!om.integer>"
+      "  om.class.fields %concat : !om.list<!om.integer>"
       "}";
 
   DialectRegistry registry;
