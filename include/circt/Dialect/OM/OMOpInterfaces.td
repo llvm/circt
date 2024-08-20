@@ -25,7 +25,7 @@ def ClassFieldsLike : OpInterface<"ClassFieldsLike"> {
   let methods = [
     InterfaceMethod<"Get the class-like field to type map",
       "std::optional<mlir::Type>", "getFieldType", (ins "mlir::StringAttr":$name)>,
-    InterfaceMethod<"Get the class-like field to type map",
+    InterfaceMethod<"Print class fields like",
       "void", "printClassFieldsLike", (ins "mlir::OpAsmPrinter &":$printer,
                                            "llvm::SmallVector<mlir::Value>":$operands),
       /*methodBody=*/[{}],
