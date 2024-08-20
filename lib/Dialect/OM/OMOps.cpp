@@ -304,7 +304,6 @@ static ParseResult parseFieldName(OpAsmParser &parser, StringAttr &name) {
 static ParseResult
 parseField(OpAsmParser &parser,
            llvm::MapVector<StringAttr, SMLoc> &parsedFieldNames,
-
            FieldParse &result, bool hasOperand) {
   NamedAttrList attrs;
   if (parseFieldName(parser, result.name))
