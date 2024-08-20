@@ -24,6 +24,9 @@ else ()
   add_compile_options(-Wno-cast-qual)
 endif ()
 
+find_program(BISON bison required)
+find_program(FLEX flex required)
+
 add_circt_translation_library(CIRCTExportYosys
   ExportRTLIL.cpp
   ImportRTLIL.cpp

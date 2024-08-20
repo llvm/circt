@@ -193,12 +193,14 @@ private:
   template <typename OpName>
   void addOpPattern(StringRef typeName, ArrayRef<StringRef> inputPortNames,
                     StringRef outputPortName);
-  template <typename OpName> void addOpPatternBinary(StringRef typeName);
+  template <typename OpName>
+  void addOpPatternBinary(StringRef typeName);
 
   void registerPatterns();
 };
 
-template <typename OpName> struct CellOpPattern : public CellPatternBase {
+template <typename OpName>
+struct CellOpPattern : public CellPatternBase {
   using CellPatternBase::CellPatternBase;
   Value convert(Cell *cell, OpBuilder &builder, Location location,
                 ValueRange inputValues) override {
@@ -206,7 +208,8 @@ template <typename OpName> struct CellOpPattern : public CellPatternBase {
   }
 };
 
-template <bool isAnd> struct AndOrNotOpPattern : public CellPatternBase {
+template <bool isAnd>
+struct AndOrNotOpPattern : public CellPatternBase {
   using CellPatternBase::CellPatternBase;
   Value convert(Cell *cell, OpBuilder &builder, Location location,
                 ValueRange inputValues) override {
@@ -707,10 +710,20 @@ static Range getRoot(Value value) {
 }
 
 static LogicalResult cleanUpHWModule(hw::HWModuleOp module) {
-  DenseMap<sv::WireOp, SmallVector<std::pair<unsigned, Value>>> values;
-  module.walk([&](sv::WireOp wire) { values.insert({wire, {}}); });
-  module.walk([&](sv::AssignOp assign) { assign.getDest(); });
+  llvm::MapVector<sv::WireOp, SmallVector<std::pair<Range, Value>>> writes;
+  module.walk([&](sv::AssignOp assign) {
+    auto range = getRoot(assign.getDest());
+    if (!range.root)
+      return;
+    writes[range.root].emplace_back(range);
+  });
+  for(auto& [wire, writes]: writes){
+    llvm::sort(writes.begin(), writes.end(), [](const auto& lhs, const auto&rhs){
+
+    });
+  }
 }
+
 static LogicalResult postProcess(mlir::ModuleOp module) {}
 
 LogicalResult ImportRTLILDesign::run(mlir::ModuleOp module) {
