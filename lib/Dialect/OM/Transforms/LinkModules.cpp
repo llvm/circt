@@ -190,16 +190,14 @@ static FailureOr<bool> resolveClasses(StringAttr name,
     // Check declared fields.
     llvm::DenseSet<StringAttr> declaredFields;
 
-    auto classOpFieldsOp = classOp.getFieldsOp();
-
     for (auto name : op.getFieldsOp().getFieldNames()) {
-      std::optional<Type> opTypeOpt = op.getFieldsOp().getFieldType(name);
+      std::optional<Type> opTypeOpt = op.getFieldType(name);
 
       if (!opTypeOpt.has_value())
         return emitError(op) << " no type for field " << name;
       Type opType = opTypeOpt.value();
 
-      std::optional<Type> classTypeOpt = classOpFieldsOp.getFieldType(name);
+      std::optional<Type> classTypeOpt = classOp.getFieldType(name);
 
       // Field not found in its definition.
       if (!classTypeOpt.has_value())
@@ -214,7 +212,7 @@ static FailureOr<bool> resolveClasses(StringAttr name,
       declaredFields.insert(name);
     }
 
-    for (auto fieldName : classOpFieldsOp.getFieldNames())
+    for (auto fieldName : classOp.getFieldNames())
       if (!declaredFields.count(fieldName))
         return emitError(op) << "definition has a field " << fieldName
                              << " but not found in this declaration";

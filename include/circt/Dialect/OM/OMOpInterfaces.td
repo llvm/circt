@@ -126,6 +126,18 @@ def ClassLike : OpInterface<"ClassLike"> {
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{ 
         return mlir::cast<ClassFieldsLike>($_op.getBodyBlock()->getTerminator());
+      }]>,
+    InterfaceMethod<"Get the class-like field type",
+      "std::optional<mlir::Type>", "getFieldType", (ins "mlir::StringAttr":$field),
+      /*methodBody=*/[{}],
+      /*defaultImplementation=*/[{ 
+        return $_op.getFieldsOp().getFieldType(field);
+      }]>,
+    InterfaceMethod<"Get the class-like field names",
+      "llvm::SmallVector<mlir::StringAttr>", "getFieldNames", (ins),
+      /*methodBody=*/[{}],
+      /*defaultImplementation=*/[{ 
+        return $_op.getFieldsOp().getFieldNames();
       }]>
   ];
 }

@@ -75,7 +75,7 @@ void VerifyObjectFieldsPass::runOnOperation() {
                 // Verify the field exists on the ClassOp.
                 auto field = fields[i];
                 std::optional<Type> fieldTypeOpt =
-                    classDef.getFieldsOp().getFieldType(field.getAttr());
+                    classDef.getFieldType(field.getAttr());
 
                 if (!fieldTypeOpt.has_value()) {
                   auto error =

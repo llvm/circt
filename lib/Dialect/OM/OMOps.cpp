@@ -456,16 +456,14 @@ void circt::om::ClassExternOp::addFields(
 
   auto *ctx = builder.getContext();
   llvm::SmallVector<NamedAttribute> typeAttrs;
-  llvm::SmallVector<Attribute> fieldAttrs;
   llvm::SmallVector<NamedAttribute> fieldIdxs;
-  unsigned i = 0;
-  for (auto [name, type] : llvm::zip(fieldNames, fieldTypes)) {
-    typeAttrs.push_back(makeFieldType(name, type));
-    fieldAttrs.push_back(cast<Attribute>(name));
+  for (unsigned i = 0; i < fieldNames.size(); i++) {
+    auto name = fieldNames[i];
+    typeAttrs.push_back(makeFieldType(name, fieldTypes[i]));
     fieldIdxs.push_back(makeFieldIdx(ctx, name, i));
   }
   addFieldAttrs(
-      ctx, fieldAttrs, fieldIdxs, typeAttrs,
+      ctx, {fieldNames.begin(), fieldNames.end()}, fieldIdxs, typeAttrs,
       [&](StringRef field, Attribute attr) { op->setAttr(field, attr); });
 }
 
