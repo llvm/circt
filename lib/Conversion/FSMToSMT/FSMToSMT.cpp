@@ -92,116 +92,165 @@ class MachineOpConverter{
 };
 } //namespace 
 
-// mlir::Value manageCombExp(Operation &op, SmallVector<mlir::Value> &vec, Location &loc, OpBuilder &b) {
+struct Transition{
+  int from;
+  int to;
+  bool hasGuard, hasAction, hasOutput;
+  std::function<mlir::Value(llvm::SmallVector<mlir::Value>)> guard;
+  std::function<llvm::SmallVector<mlir::Value>(llvm::SmallVector<mlir::Value>)> action, output;
+};
 
-//   if (auto add = dyn_cast<comb::AddOp>(op)) {
-//     auto combFun = b.create<smt::IntAddOp>(loc, vec[0], vec[1]);
-//     return combFun;
-//   }
-//   // if (auto add = dyn_cast<comb::AndOp>(op)) {
-//   //   auto combFun = b.create<comb::AndOp>(loc, vec[0], vec[1]);
-//   //   llvm::outs()<<"\n\nfrom manageComb: "<<combFun;
-//   //   return combFun;
-//   // }
-// }
+mlir::Value getSmt(mlir::Value opr, SmallVector<std::pair<mlir::Value, mlir::Value>> variables, Location &loc, 
+OpBuilder &b){
+  for(auto &e: variables){
+    if (e.first == opr)
+      return e.second;
+  }
+  if (auto constOp = dyn_cast<hw::ConstantOp>(opr.getDefiningOp())){
+    if (constOp.getType().getIntOrFloatBitWidth() > 1)
+      return b.create<smt::IntConstantOp>(loc, constOp->getResult(0));
+        return b.create<smt::BoolConstantOp>(loc, constOp->getResult(0));
+  }
+}
 
-// mlir::Value getExpr(mlir::Value v, SmallVector<std::pair<mlir::Value, mlir::Value>> &exprMap) {
+int insertStates(llvm::SmallVector<std::string> states, const std::string& st){
+  for(auto [id, s]: llvm::enumerate(states)){
+    if(s == st)
+      return id;
+  }
+  states.push_back(st);
+  return states.size()-1;
+}
 
-//   for (auto e : exprMap) {
-//     if (e.second == v)
-//       return e.first;
-//   }
+mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b){
+  // if (auto addOp = llvm::dyn_cast<comb::AddOp>(op)){
+  //   auto newOp = b.create<smt::IntAddOp>(loc);
+  //   return newOp;
+  // }
+  if (auto andOp = llvm::dyn_cast<comb::AndOp>(op))
+    return b.create<smt::AndOp>(loc, andOp->getOperand(0), andOp->getOperand(1));
+  // if (auto xorOp = llvm::dyn_cast<comb::XorOp>(op))
+  //   return b.create<smt::XOrOp>(loc, xorOp->getOperand(0), xorOp->getOperand(1));
+  // if (auto orOp = llvm::dyn_cast<comb::OrOp>(op))
+  //   return b.create<smt::AndOp>(loc, orOp->getOperand(0), orOp->getOperand(1));
+  // if (auto mulOp = llvm::dyn_cast<comb::MulOp>(op))
+  //   return b.create<smt::AndOp>(loc, mulOp->getOperand(0), mulOp->getOperand(1));
+  // if (auto icmp = llvm::dyn_cast<comb::ICmpOp>(op)){
+  //   circt::comb::ICmpPredicate predicate = icmp.getPredicate();
+  //     switch (predicate) {
+  //     case circt::comb::ICmpPredicate::eq:
+  //       return b.create<smt::EqOp>(loc, icmp->getOperand(0), icmp->getOperand(1));
+  //     case circt::comb::ICmpPredicate::ne:
+  //       return b.create<smt::DistinctOp>(loc, icmp->getOperand(0), icmp->getOperand(1));
+  //     }
+  //   }
+  
+}
 
-//   if (auto constop = dyn_cast<hw::ConstantOp>(v.getDefiningOp())) {
-//     return v;
-//     // if (constop.getType().getIntOrFloatBitWidth() > 1)
-//     //   hw::ConstantOp r(constop.getValue().getSExtValue());
-//       // return smt::IntConstantOp();
-//     // else
-//     //   return smt::BoolConstantOp();
-//   }
-//   llvm::errs() << "Expression not found.";
-// }
 
-// smt::BoolType getGuardExpr(llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> &varExprMap, Region &guard, Location &loc, OpBuilder &b) {
+mlir::Value getGuard(SmallVector<std::pair<mlir::Value, mlir::Value>> variables, Region &r, Location &loc, OpBuilder &b){
+  for (auto &op : r.getOps()){
+      if (auto retOp = llvm::dyn_cast<fsm::ReturnOp>(op)){
+        for(auto &v: variables){
+          if(v.first == retOp->getOperand(0))
+            return v.first;
+        }
+      } else {
+        llvm::SmallVector<mlir::Value> vec;
+        for (auto opr : op.getOperands()){
+          vec.push_back(getSmt(opr, variables, loc, b));
+        }
+        variables.push_back({getCombValue(op, loc, b), op.getResult(0)});
+      }
+    }
+}
 
-//   for (auto &op : guard.getOps()) {
-//     if (auto retop = dyn_cast<fsm::ReturnOp>(op)) {
-//       for (auto e : varExprMap) {
-//         if (e.second == retop.getOperand()) {
+llvm::SmallVector<mlir::Value> getAction(llvm::SmallVector<mlir::Value> toUpdate, SmallVector<std::pair<mlir::Value, mlir::Value>> variables, Region &r, Location &loc, OpBuilder &b){
+  llvm::SmallVector<mlir::Value> updatedVec;
+  for(auto v : toUpdate){
+    bool found = false;
+    for (auto &op: r.getOps()){
+      if(!found){
+        if (auto updateop = dyn_cast<fsm::UpdateOp>(op)) {
+          if (v == updateop.getOperands()[0]) {
+            updatedVec.push_back(
+                getSmt(updateop.getOperands()[1], variables, loc, b));
+            found = true;
+          }
+        } else {
+          llvm::SmallVector<mlir::Value> vec;
+          for(auto opr:op.getOperands())
+            vec.push_back(getSmt(opr, variables, loc, b));
+          variables.push_back({getCombValue(op, loc, b), op.getResult(0)});
+        }
+      }
+    }
+    if(!found){
+      for(auto &e : variables)
+        if (e.first == v)
+          updatedVec.push_back(e.second);
+    }
+  }
+  return updatedVec;
+}
 
-//           return e.first;
-//         }
-//       }
-//     }
-//     SmallVector<mlir::Value> vec;
-//     for (auto operand : op.getOperands()) {
-//       vec.push_back(getExpr(operand, varExprMap));
-//     }
-//     varExprMap.push_back({manageCombExp(op, vec, loc, b), op.getResult(0)});
-//   }
-//   // return expr(c.bool_const("true"));
-//   // }
-// }
 
-//   } else if (auto and_op = dyn_cast<comb::AndOp>(op)) {
-//     return expr(vec[0] && vec[1]);
-//   } else if (auto xor_op = dyn_cast<comb::XorOp>(op)) {
-//     return expr(vec[0] ^ vec[1]);
-//   } else if (auto or_op = dyn_cast<comb::OrOp>(op)) {
-//     return expr(vec[0] | vec[1]);
-//   } else if (auto mul_op = dyn_cast<comb::MulOp>(op)) {
-//     return expr(vec[0] * vec[1]);
-//   } else if (auto icmp = dyn_cast<comb::ICmpOp>(op)) {
-//     circt::comb::ICmpPredicate predicate = icmp.getPredicate();
-//     switch (predicate) {
-//     case circt::comb::ICmpPredicate::eq:
-//       return expr(vec[0] == vec[1]);
-//     case circt::comb::ICmpPredicate::ne:
-//       return expr(vec[0] != vec[1]);
-//     case circt::comb::ICmpPredicate::slt:
-//       return expr(vec[0] < vec[1]);
-//     case circt::comb::ICmpPredicate::sle:
-//       return expr(vec[0] <= vec[1]);
-//     case circt::comb::ICmpPredicate::sgt:
-//       return expr(vec[0] > vec[1]);
-//     case circt::comb::ICmpPredicate::sge:
-//       return expr(vec[0] >= vec[1]);
-//     case circt::comb::ICmpPredicate::ult:
-//       return expr(vec[0] < vec[1]);
-//     case circt::comb::ICmpPredicate::ule:
-//       return expr(vec[0] <= vec[1]);
-//     case circt::comb::ICmpPredicate::ugt:
-//       return expr(vec[0] > vec[1]);
-//     case circt::comb::ICmpPredicate::uge:
-//       return expr(vec[0] >= vec[1]);
-//     case circt::comb::ICmpPredicate::ceq:
-//       return expr(vec[0] == vec[1]);
-//     case circt::comb::ICmpPredicate::cne:
-//       return expr(vec[0] != vec[1]);
-//     case circt::comb::ICmpPredicate::weq:
-//       return expr(vec[0] == vec[1]);
-//     case circt::comb::ICmpPredicate::wne:
-//       return expr(vec[0] != vec[1]);
-//     }
-//   }
-//   assert(false && "LLVM unreachable");
-// }
+Transition parseTransition(fsm::TransitionOp t, int from, llvm::SmallVector<std::string> &states, 
+    const SmallVector<std::pair<mlir::Value, mlir::Value>> variables, Location &loc, OpBuilder &b, 
+    llvm::SmallVector<mlir::Value> vecVal){
+  Transition tr = {.from = from, .to = insertStates(states, t.getNextState().str())};
+
+  if (!t.getGuard().empty()){
+    tr.hasGuard = true;
+    auto &r = t.getGuard();
+    // function g will be invoked when translating this transition
+    std::function<mlir::Value(llvm::SmallVector<mlir::Value>)> g = [&r, &vecVal, &loc, &b](llvm::SmallVector<mlir::Value> vec) -> mlir::Value {
+      llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> varTmp;
+      for (auto [v, e] : llvm::zip(vecVal, vec)){
+        varTmp.push_back({v, e});
+      }
+      mlir::Value guardExpr = getGuard(varTmp, r, loc, b);
+      return guardExpr;
+    };
+    tr.guard = g;
+  }
+  if(!t.getAction().empty()){
+    tr.hasAction = true;
+    auto &r = t.getAction();
+    std::function<llvm::SmallVector<mlir::Value>(llvm::SmallVector<mlir::Value>)> a = [&r, &vecVal, &variables, &loc, &b] (llvm::SmallVector<mlir::Value> vec) -> llvm::SmallVector<mlir::Value> {
+      auto time = vec[vec.size() - 1];
+      SmallVector<std::pair<mlir::Value, mlir::Value>> tmpVar;
+      for (auto [value, expr] : llvm::zip(vecVal, vec)) {
+        tmpVar.push_back({expr, value});
+      }
+      llvm::SmallVector<mlir::Value> vec2 = getAction(vec, variables, r, loc, b);
+      vec2.push_back(time);
+      return vec2;
+    };
+    tr.action = a;
+  } else {
+    tr.hasAction = true;
+    std::function<llvm::SmallVector<mlir::Value>(llvm::SmallVector<mlir::Value>)> a = [] (llvm::SmallVector<mlir::Value> vec) -> llvm::SmallVector<mlir::Value> {
+      return vec;
+    };
+    tr.action = a;
+  }
+  // todo: output
+}
 
 LogicalResult MachineOpConverter::dispatch(){
   b.setInsertionPoint(machineOp);
   auto loc = machineOp.getLoc();
-  llvm::outs()<<"am in dispatcher\n";
   
   auto args = machineOp.getArguments();
 
   llvm::SmallVector<mlir::Type> argVarTypes;
   llvm::SmallVector<mlir::Value> argVars;
   llvm::SmallVector<mlir::Value> val;
+  llvm::SmallVector<int> initVal;
 
 
-
-  SmallVector<std::pair<mlir::Value, mlir::Value>> varExprMap;
+  SmallVector<std::pair<mlir::Value, mlir::Value>> variables;
 
   for (auto a : args){
     if (a.getType().getIntOrFloatBitWidth()>1){
@@ -209,15 +258,15 @@ LogicalResult MachineOpConverter::dispatch(){
       mlir::Value tmp = b.create<smt::IntConstantOp>(loc, a);
       val.push_back(tmp);
       argVarTypes.push_back(intVal);
+      
     }
     else{
       auto intVal = b.getType<smt::BoolType>();
-      mlir::Value tmp = b.create<smt::VariadicBoolOp>(loc, a);
+      mlir::Value tmp = b.create<smt::BoolConstantOp>(loc, a);
       val.push_back(tmp);
       argVarTypes.push_back(intVal);
     }
-    
-    varExprMap.push_back({a,a});
+    variables.push_back({a,a});
   }
 
   for (auto variableOp : machineOp.front().getOps<fsm::VariableOp>()) {
@@ -227,518 +276,91 @@ LogicalResult MachineOpConverter::dispatch(){
       mlir::Value tmp = b.create<smt::IntConstantOp>(loc, variableOp->getResult(0));
       val.push_back(tmp);
       argVarTypes.push_back(intVal);
+      // int iv = llvm::cast<int>(variableOp.getInitValue());
+      // initVal.push_back(iv);
     }
     else{
       auto intVal = b.getType<smt::BoolType>();
       mlir::Value tmp = b.create<smt::BoolConstantOp>(loc, variableOp->getResult(0));
       val.push_back(tmp);
       argVarTypes.push_back(intVal);
+      // int iv = llvm::cast<int>(variableOp.getInitValue());
+      // initVal.push_back(iv);
     }
-    varExprMap.push_back({variableOp.getResult(),variableOp.getResult()});
+    variables.push_back({variableOp.getResult(),variableOp.getResult()});
   }
 
-  llvm::DenseMap<StringRef, mlir::Value> stateTransitionMap;
+  llvm::SmallVector<Transition> transitions;
+
+  llvm::SmallVector<std::string> states;
+
+  // populate states vector, each state has its unique index that is used to populate transitions, too
+  insertStates(states, "supp");
+  
+  // the first state is a support one we add to ensure that there is one unique initial transition activated
+  // as initial condition of the fsm
+  std::string initialState = machineOp.getInitialState().str();
+
+  insertStates(states, initialState);
+
+  // the "fake" initial state is connect to the real one with a transition with no guards nor action
+
+  Transition support = {.from = 0, .to = 1, .hasGuard = false, .hasAction = false, .hasOutput = false};
+
+  transitions.push_back(support);
+
+  // todo: populate outputs
+
+  // populate transitions vector
+
+  // add time
 
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
-    llvm::outs()<<"\nstate\n";
-
-    auto stateName = stateOp.getSymName();
-
-    llvm::outs()<<stateName<<"\n";
-
-    auto range = b.getType<smt::BoolType>();
-
-    auto stateFun = b.create<smt::DeclareFunOp>(loc, b.getType<smt::SMTFuncType>(argVarTypes, range));
-
-    llvm::outs()<<"state fun: "<<stateFun;
-
-    stateFun.setNamePrefix(stateName);
-
-    stateTransitionMap.insert({stateName, stateFun});
-
-    // TODO: output region 
-
-    // second region (idx 1) always conains the transitions
-    for (auto transitionOp : stateOp->getRegion(1).front().getOps<fsm::TransitionOp>()) {
-
-      auto nextState = transitionOp.getNextState();
-
-      llvm::outs()<<"\nto "<<nextState<<"\n\n";
-
-      if (!transitionOp->getRegion(0).empty()){
-        // TODO: guard region
-      } 
-
-      if (!transitionOp->getRegion(1).empty()){
-        // TODO: action region
-      } 
-
-      // smt::BoolType rhs;
-      // mlir::Value rhsVal = rhs.build(true);
-      // smt::BoolType lhs;
-      // smt::ImpliesOp io;
-
-      // ::mlir::TypeRange resultTypes, ::mlir::Value func, 
-      // llvm::StringRef s = "ciao";
-      auto applyLhsFun = b.create<smt::ApplyFuncOp>(loc, b.getType<smt::BoolType>(), stateFun, val);
-      // mlir::Value tmpVal = b.create<func::ConstantOp>(loc, b.getI1Type(), s);
-      // auto tmpThing = b.create<smt::AssertOp>(loc, tmpVal);
-
-      // applyLhsFun.dump();
-
-      // io.build(b, boh, lhs, rhs);
-
-      // smt::ImpliesOp io(lhs, rhs);
-
-      // smt::ImpliesOp(lhs, rhs);
-      
-
+    auto fromState = insertStates(states, stateOp.getName().str());
+    for (auto tr: stateOp.getTransitions().front().getOps<fsm::TransitionOp>()){
+      auto t = parseTransition(tr, fromState, states, variables, loc, b, argVars);
+      transitions.push_back(t);
     }
-
   }
 
-  // machineOp.erase();
-
+  // llvm::SmallVector<>
   return success();
-
-
 }
 
-
-FailureOr<mlir::Value>
-MachineOpConverter::convertArgsAndVars(MachineOp machine, llvm::SmallVector<mlir::Value> vars){
-  
-    // mlir::ArrayAttr args = machine.getArgAttrsAttr();
-    // mlir::ArrayAttr argNames = machine.getArgNamesAttr();
-
-    // llvm::outs()<<"my first pass\n";
-    // args.print(llvm::outs());
-  
-}
-
-
-// using z3Fun = std::function<expr(SmallVector<expr>)>;
-
-// using z3FunA = std::function<SmallVector<expr>(SmallVector<expr>)>;
-
-// struct transition {
-//   int from, to;
-//   z3Fun guard;
-//   bool isGuard, isAction, isOutput;
-//   z3FunA action, output;
-// };
-
-
-// // @brief Prints solver assertions
-
-// void printSolverAssertions(z3::context &c, z3::solver &solver, string output,
-//                            SmallVector<func_decl> stateInvFun) {
-
-//   ofstream outfile;
-//   outfile.open(output);
-
-//   outfile << "(set-logic HORN)" << std::endl;
-
-//   z3::expr_SmallVector assertions = solver.assertions();
-
-//   llvm::outs() << "assertions size: " << assertions.size() << "\n\n";
-
-//   for (auto fd : stateInvFun) {
-//     outfile << fd.to_string() << "\n";
-//   }
-
-//   for (unsigned i = 0; i < assertions.size(); ++i) {
-//     Z3_ast ast = assertions[i];
-//     outfile << "(assert " << Z3_ast_to_string(c, ast) << ")" << std::endl;
-//   }
-//   outfile << "(check-sat)" << std::endl;
-
-//   outfile.close();
-// }
-
-
-// // @brief Prints FSM transition
-
-// void printTransitions(SmallVector<transition> &transitions) {
-//   llvm::outs() << "\nPRINTING TRANSITIONS\n";
-//   for (auto t : transitions) {
-//     llvm::outs() << "\ntransition from " << t.from << " to " << t.to << "\n";
-//   }
-// }
-
-
-
-// @brief Prints z3::expr-mlir::Value map
-
-// void printExprValMap(SmallVector<std::pair<expr, mlir::Value>> &exprMap) {
-//   llvm::outs() << "\n\nEXPR-VAL:";
-//   for (auto e : exprMap) {
-//     llvm::outs() << "\n\nexpr: " << e.first.to_string()
-//                  << ", value: " << e.second;
-//   }
-//   llvm::outs() << "END\n";
-// }
-
-// // @brief Returns FSM's initial state
- 
-// string getInitialState(Operation &mod) {
-//   for (Region &rg : mod.getRegions()) {
-//     for (Block &block : rg) {
-//       for (Operation &op : block) {
-//         if (auto machine = dyn_cast<fsm::MachineOp>(op)) {
-//           return machine.getInitialState().str();
-//         }
-//       }
-//     }
-//   }
-//   llvm::errs() << "Initial state does not exist\n";
-// }
-
-
-// // @brief Returns list of values to be updated within an action region
- 
-// SmallVector<mlir::Value> actionsCounter(Region &action) {
-//   SmallVector<mlir::Value> toUpdate;
-//   for (auto &op : action.getOps()) {
-//     if (auto updateop = dyn_cast<fsm::UpdateOp>(op)) {
-//       toUpdate.push_back(updateop.getOperands()[0]);
-//     }
-//   }
-//   return toUpdate;
-// }
-
-
-// // @brief Returns expression from Comb dialect operator
- 
-
-
-
-// // @brief Returns expression from densemap or constant operator
-
-
-
-
-// // @brief Returns guard expression for input region
-
-// expr getGuardExpr(SmallVector<std::pair<expr, mlir::Value>> &exprMap, Region &guard,
-//                   z3::context &c) {
-
-//   for (auto &op : guard.getOps()) {
-//     if (auto retop = dyn_cast<fsm::ReturnOp>(op)) {
-//       for (auto e : exprMap) {
-//         if (e.second == retop.getOperand()) {
-
-//           return e.first;
-//         }
-//       }
-//     }
-//     SmallVector<expr> vec;
-//     for (auto operand : op.getOperands()) {
-//       vec.push_back(getExpr(operand, exprMap, c));
-//     }
-
-//     exprMap.push_back({manageCombExp(op, vec, c), op.getResult(0)});
-//   }
-//   return expr(c.bool_const("true"));
-// }
-
-
-// // @brief Returns output expression for input region
- 
-// SmallVector<expr> getOutputExpr(SmallVector<std::pair<expr, mlir::Value>> &exprMap,
-//                            Region &guard, z3::context &c) {
-//   SmallVector<expr> outputExp;
-//   // printExprValMap(exprMap);
-//   for (auto &op : guard.getOps()) {
-//     if (auto outop = dyn_cast<fsm::OutputOp>(op)) {
-//       for (auto opr : outop.getOperands()) {
-//         for (auto e : exprMap) {
-//           if (e.second == opr) {
-//             llvm::outs() << "\npushing " << e.second;
-//             outputExp.push_back(e.first);
-//           }
-//         }
-//       }
-//       return outputExp;
-//     }
-//     SmallVector<expr> vec;
-//     for (auto operand : op.getOperands()) {
-//       vec.push_back(getExpr(operand, exprMap, c));
-//     }
-//     exprMap.push_back({manageCombExp(op, vec, c), op.getResult(0)});
-//   }
-// }
-
-
-// // @brief Returns actions for all expressions for the input region
-
-// SmallVector<expr> getActionExpr(Region &action, context &c,
-//                            SmallVector<mlir::Value> &toUpdate,
-//                            SmallVector<std::pair<expr, mlir::Value>> &exprMap) {
-//   SmallVector<expr> updatedVec;
-//   for (auto v : toUpdate) {
-//     bool found = false;
-//     for (auto &op : action.getOps()) {
-//       if (!found) {
-//         if (auto updateop = dyn_cast<fsm::UpdateOp>(op)) {
-//           if (v == updateop.getOperands()[0]) {
-
-//             updatedVec.push_back(
-//                 getExpr(updateop.getOperands()[1], exprMap, c));
-
-//             found = true;
-//           }
-//         } else {
-//           SmallVector<expr> vec;
-//           for (auto operand : op.getOperands()) {
-
-//             vec.push_back(getExpr(operand, exprMap, c));
-//           }
-
-//           exprMap.push_back({manageCombExp(op, vec, c), op.getResult(0)});
-//         }
-//       }
-//     }
-//     if (!found) {
-//       for (auto e : exprMap) {
-//         if (e.second == v)
-//           updatedVec.push_back(e.first);
-//       }
-//     }
-//   }
-//   return updatedVec;
-// }
-
-
-// @brief Parse FSM arguments and add them to the variable map
-
-
-
-
-// @brief Parse FSM output and add them to the variable map
-
-// int populateOutputs(Operation &mod, SmallVector<mlir::Value> &vecVal,
-//                     MLIRContext &context, OwningOpRef<ModuleOp> &module) {
-//   int numOutput = 0;
-//   for (Region &rg : mod.getRegions()) {
-//     for (Block &bl : rg) {
-//       for (Operation &op : bl) {
-//         if (auto machine = dyn_cast<fsm::MachineOp>(op)) {
-//           for (auto opr : machine.getFunctionType().getResults()) {
-//             // is this conceptually correct?
-//             OpBuilder builder(&machine.getBody());
-
-//             auto loc = builder.getUnknownLoc();
-
-//             auto variable = builder.create<fsm::VariableOp>(
-//                 loc, builder.getIntegerType(opr.getIntOrFloatBitWidth()),
-//                 IntegerAttr::get(
-//                     builder.getIntegerType(opr.getIntOrFloatBitWidth()), 0),
-//                 builder.getStringAttr("outputVal"));
-
-//             mlir::Value v = variable.getResult();
-
-//             vecVal.push_back(v);
-//           }
-//         }
-//       }
-//     }
-//   }
-//   return numOutput;
-// }
-
-
-// @brief Parse FSM variables and add them to the variable map
-
-// void populateVars(Operation &mod, SmallVector<mlir::Value> &vecVal,
-//                   SmallVector<std::pair<expr, mlir::Value>> &variables,
-//                   z3::context &c, int numArgs) {
-//   for (Region &rg : mod.getRegions()) {
-//     for (Block &bl : rg) {
-//       for (Operation &op : bl) {
-//         if (auto machine = dyn_cast<fsm::MachineOp>(op)) {
-//           for (Region &rg : op.getRegions()) {
-//             for (Block &block : rg) {
-//               for (Operation &op : block) {
-//                 if (auto varOp = dyn_cast<fsm::VariableOp>(op)) {
-//                   vecVal.push_back(varOp.getResult());
-//                 }
-//               }
-//             }
-//           }
-//         }
-//       }
-//     }
-//   }
-// }
-
-
-// // @brief Insert state if not present, return position in SmallVector otherwise
-
-// int insertState(string state, SmallVector<string> &stateInv) {
-//   int i = 0;
-//   for (auto s : stateInv) {
-//     // return index
-//     if (s == state)
-//       return i;
-//     i++;
-//   }
-//   stateInv.push_back(state);
-//   return stateInv.size() - 1;
-// }
-
-
-// // @brief Parse FSM states and add them to the state map
-
-// void populateST(Operation &mod, context &c, SmallVector<string> &stateInv,
-//                 SmallVector<transition> &transitions, SmallVector<mlir::Value> &vecVal,
-//                 int numOutput) {
-//   for (Region &rg : mod.getRegions()) {
-//     for (Block &bl : rg) {
-//       for (Operation &op : bl) {
-//         if (auto machine = dyn_cast<fsm::MachineOp>(op)) {
-//           for (Region &rg : op.getRegions()) {
-//             for (Block &block : rg) {
-//               int numState = 0;
-//               for (Operation &op : block) {
-//                 if (auto state = dyn_cast<fsm::StateOp>(op)) {
-//                   string currentState = state.getName().str();
-//                   insertState(currentState, stateInv);
-//                   numState++;
-//                   if (V) {
-//                     llvm::outs() << "inserting state " << currentState << "\n";
-//                   }
-//                   auto regions = state.getRegions();
-//                   bool existsOutput = false;
-//                   if (!regions[0]->empty())
-//                     existsOutput = true;
-//                   // transitions region
-//                   for (Block &bl1 : *regions[1]) {
-//                     for (Operation &op : bl1.getOperations()) {
-//                       if (auto transop = dyn_cast<fsm::TransitionOp>(op)) {
-//                         transition t;
-//                         t.from = insertState(currentState, stateInv);
-//                         t.to =
-//                             insertState(transop.getNextState().str(), stateInv);
-//                         t.isGuard = false;
-//                         t.isAction = false;
-//                         t.isOutput = false;
-
-//                         auto trRegions = transop.getRegions();
-//                         string nextState = transop.getNextState().str();
-//                         // guard
-//                         if (!trRegions[0]->empty()) {
-//                           Region &r = *trRegions[0];
-//                           z3Fun g = [&r, &vecVal, &c](SmallVector<expr> vec) {
-//                             SmallVector<std::pair<expr, mlir::Value>> exprMapTmp;
-//                             for (auto [value, expr] : llvm::zip(vecVal, vec)) {
-//                               exprMapTmp.push_back({expr, value});
-//                             }
-//                             expr guardExpr = getGuardExpr(exprMapTmp, r, c);
-//                             return guardExpr;
-//                           };
-//                           t.guard = g;
-//                           t.isGuard = true;
-//                         }
-//                         // action
-//                         if (!trRegions[1]->empty()) {
-//                           Region &r = *trRegions[1];
-//                           SmallVector<mlir::Value> toUpdate = actionsCounter(r);
-//                           z3FunA a = [&r, &vecVal,
-//                                       &c](SmallVector<expr> vec) -> SmallVector<expr> {
-//                             expr time = vec[vec.size() - 1];
-//                             SmallVector<std::pair<expr, mlir::Value>> tmpVar;
-//                             for (auto [value, expr] : llvm::zip(vecVal, vec)) {
-//                               tmpVar.push_back({expr, value});
-//                             }
-//                             SmallVector<expr> vec2 =
-//                                 getActionExpr(r, c, vecVal, tmpVar);
-//                             vec2.push_back(time);
-//                             return vec2;
-//                           };
-//                           t.action = a;
-//                           t.isAction = true;
-//                         }
-//                         if (existsOutput) {
-//                           Region &r2 = *regions[0];
-//                           z3FunA tf = [&r2, &numOutput, &vecVal,
-//                                        &c](SmallVector<expr> vec) -> SmallVector<expr> {
-//                             SmallVector<std::pair<expr, mlir::Value>> tmpOut;
-//                             for (auto [value, expr] : llvm::zip(vecVal, vec)) {
-//                               tmpOut.push_back({expr, value});
-//                             }
-//                             SmallVector<expr> outputExpr =
-//                                 getOutputExpr(tmpOut, r2, c);
-//                             for (int j = 0; j < outputExpr.size(); j++) {
-//                               vec[vec.size() - 1 - outputExpr.size() + j] =
-//                                   outputExpr[j];
-//                             }
-//                             return vec;
-//                           };
-//                           t.output = tf;
-//                           t.isOutput = true;
-//                         }
-
-//                         transitions.push_back(t);
-//                       }
-//                     }
-//                   }
-//                 }
-//               }
-//             }
-//           }
-//         }
-//       }
-//     }
-//   }
-// }
-
-
-// // @brief Nest SMT assertion for all variables in the variables SmallVector
-
-// expr nestedForall(SmallVector<expr> &solverVars, expr &body, int i,
+// /**
+//  * @brief Nest SMT assertion for all variables in the variables vector
+//  */
+// expr nestedForall(vector<expr> &solverVars, expr &body, int numArgs,
 //                   int numOutputs, z3::context &c) {
-//   z3::expr_SmallVector univQ(c);
-
-//   for(int idx = 0; idx < solverVars.size()-1-numOutputs; idx++){
+//   z3::expr_vector univQ(c);
+//   for(int idx = 0; idx < int(int(solverVars.size()))-numOutputs-1; idx++){
 //     univQ.push_back(solverVars[idx]);
 //   }
-//   univQ.push_back(solverVars[solverVars.size()-1]);
-
+//   // quantify next input if present
+//   for (int idx = 0; idx < numArgs; idx++){
+//     expr tmp = solverVars[idx];
+//     if (tmp.is_bool())
+//       tmp = c.bool_const((tmp.to_string()+"_p").c_str());
+//     else
+//       tmp = c.int_const((tmp.to_string()+"_p").c_str());
+//     univQ.push_back(tmp);   
+//   }
+//   univQ.push_back(solverVars[int(solverVars.size())-1]);
 //   expr ret = forall(univQ, body);
-
 //   return ret;
 // }
-
-
-// // @brief Build Z3 boolean function for each state in the state map
-
-// void populateStateInvMap(SmallVector<string> &stateInv, context &c,
-//                          SmallVector<Z3_sort> &invInput,
-//                          SmallVector<func_decl> &stateInvFun) {
-//   for (auto s : stateInv) {
-//     const symbol cc = c.str_symbol(s.c_str());
-//     Z3_func_decl I =
-//         Z3_mk_func_decl(c, cc, invInput.size(), invInput.data(), c.bool_sort());
-//     func_decl I2 = func_decl(c, I);
-//     stateInvFun.push_back(I2);
-//   }
-// }
-
-
-// // @brief Build Z3 sort for each input argument
-
-// void populateInvInput(SmallVector<std::pair<expr, mlir::Value>> &variables,
-//                       context &c, SmallVector<expr> &solverVars,
-//                       SmallVector<Z3_sort> &invInput, int numArgs, int numOutputs) {
-
+// /**
+//  * @brief Build Z3 sort for each input argument
+//  */
+// void populateInvInput(vector<std::pair<expr, mlir::Value>> &variables,
+//                       context &c, vector<expr> &solverVars,
+//                       vector<Z3_sort> &invInput, int numArgs, int numOutputs) {
 //   int i = 0;
-
-//   for (auto e : variables) {
+//   for (const auto& e : variables) {
 //     string name = "var";
 //     if (numArgs != 0 && i < numArgs) {
 //       name = "input";
-//     } else if (numOutputs != 0 && i >= variables.size() - numOutputs) {
+//     } else if (numOutputs != 0 && i >= int(variables.size()) - numOutputs) {
 //       name = "output";
 //     }
 //     expr input = c.bool_const((name + to_string(i)).c_str());
@@ -757,430 +379,159 @@ MachineOpConverter::convertArgsAndVars(MachineOp machine, llvm::SmallVector<mlir
 // }
 
 
-// // @brief Parse LTL dialect file expressing property
+//   vector<func_decl> transitionActive;
 
-// expr parseLTL(string inputFile, SmallVector<expr> &solverVars,
-//               SmallVector<string> &stateInv, 
-//               SmallVector<func_decl> &stateInvFun, int numArgs, int numOutputs,
-//               context &c) {
-//   DialectRegistry registry;
+//   vector<expr> solverVars;
 
-//   registry.insert<ltl::LTLDialect>();
-
-//   MLIRContext context(registry);
-
-//   // Parse the MLIR code into a module.
-//   OwningOpRef<ModuleOp> module =
-//       mlir::parseSourceFile<ModuleOp>(inputFile, &context);
-
-//   Operation &mod = module.get()[0];
-
-//   for (Region &rg : mod.getRegions()) {
-//     for (Block &bl : rg) {
-//       for (Operation &op : bl) {
-//         if (auto ev = dyn_cast<ltl::EventuallyOp>(op)) {
-//           auto attrDict = ev.getOperation()->getAttrs();
-//           if (attrDict.size() == 1) {
-//             // reachability
-//             auto a0 = (attrDict[0].getValue());
-//             string state;
-//             raw_string_ostream os1(state);
-//             a0.print(os1);
-//             os1.flush();
-//             state = state.substr(1, state.size() - 2);
-
-//             if (V)
-//               llvm::outs()<<"\n\n\nTesting reachability of state "<<state;
-
-//             // for (int i = 0; i < int(argInputs.size()); i++) {
-//             //   solverVars[i] = argInputs[i](solverVars[solverVars.size() - 1]);
-//             // }
-
-//             expr body = implies(stateInvFun.at(insertState(state, stateInv))(
-//                 solverVars.size(), solverVars.data()), false);
-
-//             expr ret = nestedForall(solverVars, body, numArgs, numOutputs, c);
-
-//             return ret;
-//           } else {
-//             llvm::outs() << "Reachability Property can not be parsed.";
-//           }
-//         } else if (auto rep = dyn_cast<ltl::NotOp>(op)) {
-//           auto attrDict = rep.getOperation()->getAttrs();
-//           if (attrDict.size() == 3) {
-//             // combinational
-//             auto a0 = (attrDict[0].getValue());
-//             string state;
-//             raw_string_ostream os1(state);
-//             a0.print(os1);
-//             os1.flush();
-//             state = state.substr(1, state.size() - 2);
-
-//             auto a1 = (attrDict[1].getValue());
-//             string var;
-//             raw_string_ostream os2(var);
-//             a1.print(os2);
-//             os2.flush();
-//             var = var.substr(1, var.size() - 2);
-//             int id = stoi(var);
-
-//             auto a2 = (attrDict[2].getValue());
-//             string val;
-//             raw_string_ostream os3(val);
-//             a2.print(os3);
-//             os3.flush();
-//             val = val.substr(1, val.size() - 2);
-//             int v = stoi(val);
-
-//             expr b1 = implies((stateInvFun[insertState(state, stateInv)](
-//                             solverVars.size(), solverVars.data())) &&
-//                         (solverVars[v] != id), false);
-
-
-//             expr r1 = nestedForall(solverVars, b1, numArgs, numOutputs, c);
-
-
-
-
-//             return (r1);
-//           } else {
-//             llvm::outs() << "Comb Property can not be parsed.";
-//           }
-//         } else if (auto impl = dyn_cast<ltl::ImplicationOp>(op)) {
-//           auto attrDict = impl.getOperation()->getAttrs();
-//           if (attrDict.size() == 3) {
-//             // error
-//             auto a3 = (attrDict[2].getValue());
-//             string state;
-//             raw_string_ostream os0(state);
-//             a3.print(os0);
-//             os0.flush();
-//             state = state.substr(1, state.size() - 2);
-
-//             llvm::outs()<<"\n\nstate: "<<state;
-
-//             auto a0 = (attrDict[1].getValue());
-//             string sig;
-//             raw_string_ostream os1(sig);
-//             a0.print(os1);
-//             os1.flush();
-//             sig = sig.substr(1, sig.size() - 2);
-//             int signal = stoi(sig);
-//             llvm::outs()<<"\n\nsignal: "<<signal;
-
-
-//             auto a1 = (attrDict[0].getValue());
-//             string var;
-//             raw_string_ostream os2(var);
-//             a1.print(os2);
-//             os2.flush();
-//             var = var.substr(1, var.size() - 2);
-//             int input = stoi(var);
-//             llvm::outs()<<"\n\ninput: "<<input;
-
-
-//             // for (int i = 0; i < int(argInputs.size()); i++) {
-//             //   solverVars[i] = argInputs[i](solverVars[solverVars.size() - 1]);
-//             // }
-
-//             SmallVector<expr> solverVarsAfter;
-
-//             copy(solverVars.begin(), solverVars.end(),
-//                  back_inserter(solverVarsAfter));
-
-//             solverVarsAfter[solverVarsAfter.size() - 1] =
-//                 solverVarsAfter[solverVarsAfter.size() - 1] + 1;
-//             // for (int i = 0; i < int(argInputs.size()); i++) {
-//             //   solverVarsAfter[i] =
-//             //       argInputs[i](solverVarsAfter[solverVarsAfter.size() - 1]);
-//             // }
-
-//             expr body = implies((solverVars[signal]==input), !(stateInvFun[insertState(state, stateInv)])(solverVarsAfter.size(), solverVarsAfter.data()));
-
-//             llvm::outs()<<body.to_string()<<"\n\n";
-
-//             // expr body = !(stateInvFun[insertState(state,
-//             // stateInv)])(solverVarsAfter.size(), solverVarsAfter.data()); expr
-//             // ret = (forall(solverVars[solverVars.size()-1],
-//             // implies((solverVars[solverVars.size()-1]>0 &&
-//             // solverVars[solverVars.size()-1]<time-1 &&
-//             // (solverVars[signal]==input) && (stateInvFun[insertState(state,
-//             // stateInv)])(solverVars.size(), solverVars.data())),
-//             // nestedForall(solverVars, body, numArgs, numOutputs)))); return
-//             // ret;
-
-//             return nestedForall(solverVars, body, numArgs, numOutputs, c);
-
-//           } else {
-//             llvm::outs() << "Error Management Property can not be parsed.";
-//           }
-//         }
-//       }
-//     }
-//   }
-//   llvm::outs() << "Property can not be parsed.";
-//   return c.bool_val(true);
-// }
-
-
-// @brief Parse FSM and build SMT model
-
-// static LogicalResult translateFSM(MLIRContext &context) {
-
-//   DialectRegistry registry;
-
-//   registry.insert<comb::CombDialect, fsm::FSMDialect, hw::HWDialect>();
-
-//   MLIRContext context(registry);
-
-//   // Parse the MLIR code into a module.
-//   OwningOpRef<ModuleOp> module =
-//       mlir::parseSourceFile<ModuleOp>(input, &context);
-
-//   Operation &mod = module.get()[0];
-
-//   z3::context c;
-
-//   Z3_set_ast_print_mode(c, Z3_PRINT_SMTLIB_FULL);
-
-//   solver s(c);
-
-//   SmallVector<string> stateInv;
-
-//   SmallVector<std::pair<expr, mlir::Value>> variables;
-
-//   SmallVector<mlir::Value> vecVal;
-
-//   SmallVector<transition> transitions;
-
-//   string initialState = getInitialState(mod);
-
-//   // initial state is by default associated with id 0
-
-//   insertState(initialState, stateInv);
-
-//   if (V) {
-//     llvm::outs() << "initial state: " << initialState << "\n";
-//   }
-
-//   int numArgs = populateArgs(mod, vecVal, variables, c);
-
-//   populateVars(mod, vecVal, variables, c, numArgs);
-
-//   int numOutputs = populateOutputs(mod, vecVal, variables, c, context, module);
-
-//   populateST(mod, c, stateInv, transitions, vecVal, numOutputs);
-
-//   // preparing the model
-
-//   SmallVector<expr> solverVars;
-
-//   SmallVector<Z3_sort> invInput;
-
-//   // SmallVector<func_decl> argInputs;
-
-//   SmallVector<func_decl> stateInvFun;
+//   vector<Z3_sort> invInput;
 
 //   populateInvInput(variables, c, solverVars, invInput, numArgs, numOutputs);
 
-//   expr timeVar = c.int_const("time");
-//   z3::sort timeInv = c.int_sort();
+//   expr time = c.int_const("time");
 
-//   solverVars.push_back(timeVar);
-//   invInput.push_back(timeInv);
+//   solverVars.push_back(time);
 
-//   // generate functions for inputs
+//   Z3_sort timeSort = c.int_sort();
 
-//   if (V)
-//     llvm::outs() << "number of args: " << numArgs << "\n\n";
+//   invInput.push_back(timeSort);
 
-//   // for (int i = 0; i < numArgs; i++) {
-//   //   const symbol cc = c.str_symbol(("input-arg" + to_string(i)).c_str());
-//   //   Z3_func_decl I =
-//   //       Z3_mk_func_decl(c, cc, 1, &invInput[invInput.size() - 1], c.int_sort());
-//   //   func_decl I2 = func_decl(c, I);
-//   //   argInputs.push_back(I2);
-//   // }
 
-//   populateStateInvMap(stateInv, c, invInput, stateInvFun);
 
-//   if (V) {
-//     llvm::outs() << "number of variables + args: " << solverVars.size() << "\n";
-//     for (auto v : solverVars) {
-//       llvm::outs() << "variable: " << v.to_string() << "\n";
-//     }
-//   }
+//   // initialize variables' values
 
-//   int j = 0;
-
-//   SmallVector<expr> solverVarsInit;
+//   vector<expr> solverVarsInit;
 //   copy(solverVars.begin(), solverVars.end(), back_inserter(solverVarsInit));
-
-//   for(int i=numArgs; i<int(variables.size()); i++){
-
-//     if (variables[i].second.getType().getIntOrFloatBitWidth() > 1) {
-//       int initValue =
-//       stoi(variables[i].first.to_string().substr(variables[i].first.to_string().find("_")+1));
-//       solverVarsInit[i] = c.int_val(initValue);
-//     } else {
-//       bool initValue = stoi(variables[i].first.to_string().substr(variables[i].first.to_string().find("_")+1));
-//       solverVarsInit.at(i) = c.bool_val(initValue);
-//     }
-//   }
-//   // for (int i = 0; i < numArgs; i++) {
-//   //   solverVarsInit[i] = argInputs[i](0);
-//   // }
-//   if (V) {
-//     for (auto sv : solverVarsInit) {
-//       llvm::outs() << "\nsvI[i]: " << sv.to_string();
-//     }
-//     llvm::outs() << "\n\n";
+//   for (auto [idx, iv]: llvm::enumerate(initValues)){
+//       if(solverVarsInit[numArgs+idx].is_bool())
+//         solverVarsInit[numArgs + idx] = c.bool_val(iv);
+//       else 
+//         solverVarsInit[numArgs + idx] = c.int_val(iv);
 //   }
 
-//   if(V)
-//     printTransitions(transitions);
+//   // enforce self-loops if none of the guards is respected
+//   vector<int> visited;
 
-//   expr initState =
-//       (stateInvFun[0](solverVarsInit.size(), solverVarsInit.data()));
-//   expr body =
-//       implies((solverVarsInit[solverVarsInit.size() - 1] == 0),
-//               initState);
-
-//   // initial condition
-//   s.add(nestedForall(solverVars, body, 0, numOutputs, c));
-
-//   for (auto t : transitions) {
-
-//     SmallVector<expr> solverVarsAfter;
-
-//     // for (int i = 0; i < int(argInputs.size()); i++) {
-//     //   solverVars[i] = argInputs[i](solverVars[solverVars.size() - 1]);
-//     // }
-
-//     copy(solverVars.begin(), solverVars.end(), back_inserter(solverVarsAfter));
-//     solverVarsAfter.at(solverVarsAfter.size() - 1) =
-//         solverVars[solverVars.size() - 1] + 1;
-
-//     // for (int i = 0; i < int(argInputs.size()); i++) {
-//     //   solverVarsAfter[i] =
-//     //       argInputs[i](solverVarsAfter.at(solverVarsAfter.size() - 1));
-//     // }
-
-//     if (t.isOutput) {
-//       if (t.isGuard && t.isAction) {
-//         expr body = implies(
-//             (stateInvFun[t.from](solverVars.size(), solverVars.data())) &&
-//                 t.guard(solverVars),
-//             stateInvFun[t.to](t.output(t.action(solverVarsAfter)).size(),
-//                               t.output(t.action(solverVarsAfter)).data()));
-//         s.add(nestedForall(solverVars, body, 0, numOutputs, c));
-//       } else if (t.isGuard) {
-//         expr body = implies(
-//             (stateInvFun[t.from](solverVars.size(), solverVars.data()) &&
-//              t.guard(solverVars)),
-//             stateInvFun[t.to](t.output((solverVarsAfter)).size(),
-//                               t.output((solverVarsAfter)).data()));
-//         s.add(nestedForall(solverVars, body, 0, numOutputs, c));
-//       } else if (t.isAction) {
-//         expr body = implies(
-//             stateInvFun[t.from](solverVars.size(), solverVars.data()),
-//             stateInvFun[t.to](t.output(t.action(solverVarsAfter)).size(),
-//                               t.output(t.action(solverVarsAfter)).data()));
-//         s.add(nestedForall(solverVars, body, 0, numOutputs, c));
-//       } else {
-//         expr body =
-//             implies((stateInvFun[t.from](solverVars.size(), solverVars.data())),
-//                     stateInvFun[t.to](t.output(solverVarsAfter).size(),
-//                                       t.output(solverVarsAfter).data()));
-//         s.add(nestedForall(solverVars, body, 0, numOutputs, c));
+//   for(auto [idx1, t1]: llvm::enumerate(transitions)){
+//     bool found = false;
+//     for (auto v: visited)
+//       if (t1.from == v)
+//         found = true;
+//     if (t1.isGuard && !found){
+//       visited.push_back(t1.from);
+//       vector<z3Fun> tmpGuards;
+//       tmpGuards.push_back(t1.guard);  
+//       for(auto [idx2, t2]: llvm::enumerate(transitions)){
+//         if(idx1!=idx2 && t1.from == t2.from && t2.isGuard)
+//           tmpGuards.push_back(t2.guard);
 //       }
-//     } else {
-//       if (t.isGuard && t.isAction) {
-//         expr body = implies(
-//             (stateInvFun[t.from](solverVars.size(), solverVars.data())) &&
-//                 t.guard(solverVars),
-//             stateInvFun[t.to](t.action(solverVarsAfter).size(),
-//                               t.action(solverVarsAfter).data()));
-//         s.add(nestedForall(solverVars, body, 0, numOutputs, c));
-//       } else if (t.isGuard) {
-//         expr body = implies(
-//             (stateInvFun[t.from](solverVars.size(), solverVars.data()) &&
-//              t.guard(solverVars)),
-//             stateInvFun[t.to]((solverVarsAfter).size(),
-//                               (solverVarsAfter).data()));
-//         s.add(nestedForall(solverVars, body, 0, numOutputs, c));
-//       } else if (t.isAction) {
-//         expr body =
-//             implies(stateInvFun[t.from](solverVars.size(), solverVars.data()),
-//                     stateInvFun[t.to](t.action(solverVarsAfter).size(),
-//                                       t.action(solverVarsAfter).data()));
-//         s.add(nestedForall(solverVars, body, 0, numOutputs, c));
-//       } else {
-//         expr body =
-//             implies((stateInvFun[t.from](solverVars.size(), solverVars.data())),
-//                     stateInvFun[t.to]((solverVarsAfter).size(),
-//                                       (solverVarsAfter).data()));
-//         s.add(nestedForall(solverVars, body, 0, numOutputs, c));
+
+//       z3Fun tmpG = [tmpGuards, &c](const vector<expr>& vec) {
+//         expr neg = c.bool_val(true);
+//         for(const auto& tmp: tmpGuards){
+//           neg = neg && !tmp(vec);
+//         }
+//         return neg;
+//       };
+//       Transition t;
+//       t.from = t1.from;
+//       t.to = t1.from;
+//       t.isGuard = true;
+//       t.guard = tmpG;
+//       t.isAction = false;
+//       t.isOutput = false;
+//       transitions.push_back(t);
+//     }
+//   }
+
+//   // create uninterpreted function vec -> bool for each transition
+
+//   for (const auto& t: transitions){
+//     const symbol cc = c.str_symbol(("tr"+to_string(t.from)+to_string(t.to)).c_str());
+//     Z3_func_decl inv = Z3_mk_func_decl(c, cc, invInput.size(), invInput.data(), c.bool_sort());
+//     func_decl inv2 = func_decl(c, inv);
+//     transitionActive.push_back(inv2);
+//   }
+
+//   // initial condition (fake transition with no action nor guards)
+
+//   expr tail = solverVars[solverVars.size()-1]==-1;
+//   expr head = transitionActive[0](solverVarsInit.size(), solverVarsInit.data());
+//   expr body = implies(tail, head);
+//   s.add(nestedForall(solverVars, body, numArgs, numOutputs, c));
+
+//   // traverse all transitions and build implications from one to the other 
+
+//   for(auto [idx1, t1]: llvm::enumerate(transitions)){
+//     for(auto [idx2, t2]: llvm::enumerate(transitions)){
+//       if(t1.to == t2.from && idx1 != idx2){
+//         // build implication here (tail = lhs, head = rhs)
+//         vector<expr> solverVarsAfter;
+//         copy(solverVars.begin(), solverVars.end(), back_inserter(solverVarsAfter));
+        
+//         if (t1.isAction)
+//           solverVarsAfter = t1.action(solverVars);
+//         for (int k=0;k<numArgs; k++){
+//           if (solverVarsAfter[k].is_bool())
+//             solverVarsAfter[k] = c.bool_const((solverVarsAfter[k].to_string()+"_p").c_str());
+//           else
+//             solverVarsAfter[k] = c.int_const((solverVarsAfter[k].to_string()+"_p").c_str());
+//         }
+//         solverVarsAfter[solverVarsAfter.size()-1]= solverVarsAfter[solverVarsAfter.size()-1] + 1;
+//         expr guard1 = c.bool_val(true);
+//         expr guard2 = c.bool_val(true);
+
+//         if(t1.isGuard)
+//           guard1 = t1.guard(solverVars);
+//         if(t2.isGuard)
+//           guard2 = t2.guard(solverVarsAfter);
+
+
+//         expr tail = transitionActive[idx1](solverVars.size(), solverVars.data()) && guard1 && guard2;
+//         expr head = transitionActive[idx2](solverVarsAfter.size(), solverVarsAfter.data());
+//         expr body = implies(tail, head);
+//         expr imp = nestedForall(solverVars, body, numArgs, numOutputs, c);
+//         s.add(imp);
 //       }
 //     }
 //   }
+//   vector<func_decl> argInputs;
+//   // mutual exclusion 
 
-//   // for(auto state1 : stateInvFun){
-//   //   expr mutualExc = c.bool_val(true);
-//   //   for(auto state2: stateInvFun){
-//   //     if(state1.to_string() != state2.to_string()){
-//   //       mutualExc = mutualExc && !state2(solverVars.size(), solverVars.data());
-//   //     }
-//   //   }
-//   //   expr stateMutualExc = implies(state1(solverVars.size(), solverVars.data()), mutualExc);
-//   //   s.add(nestedForall(solverVars, stateMutualExc, numArgs, numOutputs, c));
-//   // }
+//   for (auto [idx1, t1]: llvm::enumerate(transitions)){
+//     expr tail = transitionActive[idx1](solverVars.size(), solverVars.data());
+//     expr head = c.bool_val(true);
+//     for(auto [idx2, t2]: llvm::enumerate(transitions)){
+//       if (idx1!=idx2)
+//         head = head && (!transitionActive[idx2](solverVars.size(), solverVars.data()));
+//     }
+//     expr body = implies(tail, head);
+//     // do not change the 0 here 
+//     s.add(nestedForall(solverVars, body, 0, numOutputs, c));
+//   }
 
-//   expr r = parseLTL(property, solverVars, stateInv, stateInvFun,
-//                     0, numOutputs, c);
-
+//   auto r = parseLTL(property, solverVars, stateInv, transitions, transitionActive, numArgs, numOutputs, c);
 //   s.add(r);
 
-//   printSolverAssertions(c, s, output, stateInvFun);
-
-//   return success();
+//   printSolverAssertions(c, s, output, transitionActive, argInputs);
 // }
 
-// // / The entry point for the `circt-fsmt` tool:
-// // / parses the input file and calls the `convertFSM` function to do the actual work.
-
 // int main(int argc, char **argv) {
+//   string input = argv[1];
+//   cout << "input file: " << input << endl;
 
-//   llvm::InitLLVM y(argc, argv);
+//   string prop = argv[2];
+//   cout << "property file: " << prop << endl;
 
-//   cl::ParseCommandLineOptions(
-//       argc, argv,
-//       "circt-fsmt - FSM representation model checker\n\n"
-//       "\tThis tool verifies a property over the FSM hardware abstraction.\n");
+//   string output = argv[3];
+//   cout << "output file: " << output << endl;
 
-//   llvm::setBugReportMsg(circt::circtBugReportMsg);
-
-//   DialectRegistry registry;
-//   registry.insert<circt::comb::CombDialect, circt::hw::HWDialect,
-//                   circt::smt::SMTDialect, circt::fsm::FSMDialect,
-//                   mlir::LLVM::LLVMDialect, mlir::BuiltinDialect>();
-//   mlir::func::registerInlinerExtension(registry);
-//   mlir::registerBuiltinDialectTranslation(registry);
-//   mlir::registerLLVMDialectTranslation(registry);
-//   MLIRContext context(registry);
-
-//   llvm::SourceMgr sourceMgr;
-//   SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
-
-//   context.printOpOnDiagnostic(false);
-
-//   // exit(failed(translateFSM(context)));
-
-//   // translateFSM(input, prop, output);
+//   parseFSM(input, prop, output);
 
 //   return 0;
 // }
-namespace{
+
+ 
+namespace {
 struct FSMToSMTPass : public circt::impl::ConvertFSMToSMTBase<FSMToSMTPass> {
   void runOnOperation() override;
 };
@@ -1211,218 +562,6 @@ void FSMToSMTPass::runOnOperation() {
     }
   }
 
-  // for(auto machineOp: machineOps){
-
-  //   smt::SolverOp solver = target.create<smt::SolverOp>(loc, b.getI1Type(), ValueRange{});
-
-  //   mlir::ArrayAttr args = machineOp.getArgAttrsAttr();
-  //   mlir::ArrayAttr argNames = machineOp.getArgNamesAttr();
-  //   for(auto a: args)
-  //     llvm::outs()<<a;
-  //   // int numArgs = populateArgs(mod, vecVal);
-
-  // }
-
-  // parse variables, arguments, outputs separately
-
-  // then for each state (thus, for each transition)
-  // output the corresponding assertion
-
-
-  
-
-
-
-  // populateVars(mod, vecVal, numArgs);
-
-  // int numOutputs = populateOutputs(mod, vecVal, context, module);
-
-
-  // SmallVector<string> stateInv;
-
-  // string initialState = getInitialState(mod);
-
-  // // initial state is by default associated with id 0
-
-  // insertState(initialState, stateInv);
-
-  // populateST(mod, c, stateInv, transitions, vecVal, numOutputs);
-
-  // // preparing the model
-
-  // SmallVector<expr> solverVars;
-
-  // SmallVector<Z3_sort> invInput;
-
-  // SmallVector<func_decl> stateInvFun;
-
-  // populateInvInput(variables, c, solverVars, invInput, numArgs, numOutputs);
-
-  // expr timeVar = c.int_const("time");
-  // z3::sort timeInv = c.int_sort();
-
-  // solverVars.push_back(timeVar);
-  // invInput.push_back(timeInv);
-
-  // populateStateInvMap(stateInv, c, invInput, stateInvFun);
-
-  // if (V) {
-  //   llvm::outs() << "number of variables + args: " << solverVars.size() << "\n";
-  //   for (auto v : solverVars) {
-  //     llvm::outs() << "variable: " << v.to_string() << "\n";
-  //   }
-  // }
-
-  // int j = 0;
-
-  // SmallVector<expr> solverVarsInit;
-  // copy(solverVars.begin(), solverVars.end(), back_inserter(solverVarsInit));
-
-  // for(int i=numArgs; i<int(variables.size()); i++){
-
-  //   if (variables[i].second.getType().getIntOrFloatBitWidth() > 1) {
-  //     int initValue =
-  //     stoi(variables[i].first.to_string().substr(variables[i].first.to_string().find("_")+1));
-  //     solverVarsInit[i] = c.int_val(initValue);
-  //   } else {
-  //     bool initValue = stoi(variables[i].first.to_string().substr(variables[i].first.to_string().find("_")+1));
-  //     solverVarsInit.at(i) = c.bool_val(initValue);
-  //   }
-  // }
-  // for (int i = 0; i < numArgs; i++) {
-  //   solverVarsInit[i] = argInputs[i](0);
-  // }
-  // expr initState =
-  //     (stateInvFun[0](solverVarsInit.size(), solverVarsInit.data()));
-  // expr body =
-  //     implies((solverVarsInit[solverVarsInit.size() - 1] == 0),
-  //             initState);
-
-  // initial condition
-  // s.add(nestedForall(solverVars, body, 0, numOutputs, c));
-
-  // for (auto t : transitions) {
-
-//   SmallVector<expr> solverVarsAfter;
-
-//     copy(solverVars.begin(), solverVars.end(), back_inserter(solverVarsAfter));
-//     solverVarsAfter.at(solverVarsAfter.size() - 1) =
-//         solverVars[solverVars.size() - 1] + 1;
-
-//     if (t.isOutput) {
-//       if (t.isGuard && t.isAction) {
-//         expr body = implies(
-//             (stateInvFun[t.from](solverVars.size(), solverVars.data())) &&
-//                 t.guard(solverVars),
-//             stateInvFun[t.to](t.output(t.action(solverVarsAfter)).size(),
-//                               t.output(t.action(solverVarsAfter)).data()));
-//         s.add(nestedForall(solverVars, body, 0, numOutputs, c));
-//       } else if (t.isGuard) {
-//         expr body = implies(
-//             (stateInvFun[t.from](solverVars.size(), solverVars.data()) &&
-//              t.guard(solverVars)),
-//             stateInvFun[t.to](t.output((solverVarsAfter)).size(),
-//                               t.output((solverVarsAfter)).data()));
-//         s.add(nestedForall(solverVars, body, 0, numOutputs, c));
-//       } else if (t.isAction) {
-//         expr body = implies(
-//             stateInvFun[t.from](solverVars.size(), solverVars.data()),
-//             stateInvFun[t.to](t.output(t.action(solverVarsAfter)).size(),
-//                               t.output(t.action(solverVarsAfter)).data()));
-//         s.add(nestedForall(solverVars, body, 0, numOutputs, c));
-//       } else {
-//         expr body =
-//             implies((stateInvFun[t.from](solverVars.size(), solverVars.data())),
-//                     stateInvFun[t.to](t.output(solverVarsAfter).size(),
-//                                       t.output(solverVarsAfter).data()));
-//         s.add(nestedForall(solverVars, body, 0, numOutputs, c));
-//       }
-//     } else {
-//       if (t.isGuard && t.isAction) {
-//         expr body = implies(
-//             (stateInvFun[t.from](solverVars.size(), solverVars.data())) &&
-//                 t.guard(solverVars),
-//             stateInvFun[t.to](t.action(solverVarsAfter).size(),
-//                               t.action(solverVarsAfter).data()));
-//         s.add(nestedForall(solverVars, body, 0, numOutputs, c));
-//       } else if (t.isGuard) {
-//         expr body = implies(
-//             (stateInvFun[t.from](solverVars.size(), solverVars.data()) &&
-//              t.guard(solverVars)),
-//             stateInvFun[t.to]((solverVarsAfter).size(),
-//                               (solverVarsAfter).data()));
-//         s.add(nestedForall(solverVars, body, 0, numOutputs, c));
-//       } else if (t.isAction) {
-//         expr body =
-//             implies(stateInvFun[t.from](solverVars.size(), solverVars.data()),
-//                     stateInvFun[t.to](t.action(solverVarsAfter).size(),
-//                                       t.action(solverVarsAfter).data()));
-//         s.add(nestedForall(solverVars, body, 0, numOutputs, c));
-//       } else {
-//         expr body =
-//             implies((stateInvFun[t.from](solverVars.size(), solverVars.data())),
-//                     stateInvFun[t.to]((solverVarsAfter).size(),
-//                                       (solverVarsAfter).data()));
-//         s.add(nestedForall(solverVars, body, 0, numOutputs, c));
-//       }
-//     }
-//   }
-
-//   // for(auto state1 : stateInvFun){
-//   //   expr mutualExc = c.bool_val(true);
-//   //   for(auto state2: stateInvFun){
-//   //     if(state1.to_string() != state2.to_string()){
-//   //       mutualExc = mutualExc && !state2(solverVars.size(), solverVars.data());
-//   //     }
-//   //   }
-//   //   expr stateMutualExc = implies(state1(solverVars.size(), solverVars.data()), mutualExc);
-//   //   s.add(nestedForall(solverVars, stateMutualExc, numArgs, numOutputs, c));
-//   // }
-
-//   expr r = parseLTL(property, solverVars, stateInv, stateInvFun,
-//                     0, numOutputs, c);
-
-//   s.add(r);
-
-//   printSolverAssertions(c, s, output, stateInvFun);
-
-//   return success();
-// }
-
-/// The entry point for the `circt-fsmt` tool:
-/// parses the input file and calls the `convertFSM` function to do the actual work.
-
-// int main(int argc, char **argv) {
-
-//   llvm::InitLLVM y(argc, argv);
-
-//   cl::ParseCommandLineOptions(
-//       argc, argv,
-//       "circt-fsmt - FSM representation model checker\n\n"
-//       "\tThis tool verifies a property over the FSM hardware abstraction.\n");
-
-//   llvm::setBugReportMsg(circt::circtBugReportMsg);
-
-//   DialectRegistry registry;
-//   registry.insert<circt::comb::CombDialect, circt::hw::HWDialect,
-//                   circt::smt::SMTDialect, circt::fsm::FSMDialect,
-//                   mlir::LLVM::LLVMDialect, mlir::BuiltinDialect>();
-//   mlir::func::registerInlinerExtension(registry);
-//   mlir::registerBuiltinDialectTranslation(registry);
-//   mlir::registerLLVMDialectTranslation(registry);
-//   MLIRContext context(registry);
-
-//   llvm::SourceMgr sourceMgr;
-//   SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
-
-//   context.printOpOnDiagnostic(false);
-
-//   // exit(failed(translateFSM(context)));
-
-//   // translateFSM(input, prop, output);
-
-//   return 0;
-// }
 }
 } // namespace
 
