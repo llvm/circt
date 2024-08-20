@@ -19,9 +19,11 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinDialect.h"
+#include "mlir/IR/Iterators.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
@@ -103,30 +105,6 @@ static hw::ModulePortInfo getModulePortInfo(const TypeConverter &typeConverter,
   return hw::ModulePortInfo(inputs, outputs);
 }
 
-/// Erase all dead blocks in a region.
-static void eraseDeadBlocks(PatternRewriter &rewriter, Region &region) {
-  SmallVector<Block *> worklist;
-  for (auto &block : llvm::make_early_inc_range(llvm::drop_begin(region, 1))) {
-    if (!block.use_empty())
-      continue;
-    worklist.push_back(&block);
-    while (!worklist.empty()) {
-      auto *block = worklist.pop_back_val();
-      if (!block->use_empty())
-        continue;
-      for (auto *successor : block->getSuccessors())
-        worklist.push_back(successor);
-      rewriter.eraseBlock(block);
-    }
-  }
-}
-
-/// Erase all dead blocks in an op.
-static void eraseDeadBlocks(PatternRewriter &rewriter, Operation *op) {
-  for (auto &region : op->getRegions())
-    eraseDeadBlocks(rewriter, region);
-}
-
 //===----------------------------------------------------------------------===//
 // Structural Conversion
 //===----------------------------------------------------------------------===//
@@ -188,16 +166,63 @@ struct InstanceOpConversion : public OpConversionPattern<InstanceOp> {
   }
 };
 
+static void getValuesToObserve(Region *region,
+                               function_ref<void(Value)> setInsertionPoint,
+                               const TypeConverter *typeConverter,
+                               ConversionPatternRewriter &rewriter,
+                               SmallVector<Value> &observeValues) {
+  SmallDenseSet<Value> alreadyObserved;
+  Location loc = region->getLoc();
+
+  auto probeIfSignal = [&](Value value) -> Value {
+    if (!isa<hw::InOutType>(value.getType()))
+      return value;
+    return rewriter.create<llhd::PrbOp>(loc, value);
+  };
+
+  region->getParentOp()->walk<WalkOrder::PreOrder, ForwardDominanceIterator<>>(
+      [&](Operation *operation) {
+        for (auto value : operation->getOperands()) {
+          if (region->isAncestor(value.getParentRegion()))
+            continue;
+          if (!alreadyObserved.insert(value).second)
+            continue;
+
+          OpBuilder::InsertionGuard g(rewriter);
+          if (auto remapped = rewriter.getRemappedValue(value)) {
+            setInsertionPoint(remapped);
+            observeValues.push_back(probeIfSignal(remapped));
+          } else {
+            setInsertionPoint(value);
+            auto type = typeConverter->convertType(value.getType());
+            auto converted = typeConverter->materializeTargetConversion(
+                rewriter, loc, type, value);
+            observeValues.push_back(probeIfSignal(converted));
+          }
+        }
+      });
+}
+
 struct ProcedureOpConversion : public OpConversionPattern<ProcedureOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
   matchAndRewrite(ProcedureOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    // Collect values to observe before we do any modifications to the region.
+    SmallVector<Value> observedValues;
+    if (op.getKind() == ProcedureKind::AlwaysComb ||
+        op.getKind() == ProcedureKind::AlwaysLatch) {
+      auto setInsertionPoint = [&](Value value) {
+        rewriter.setInsertionPoint(op);
+      };
+      getValuesToObserve(&op.getBody(), setInsertionPoint, typeConverter,
+                         rewriter, observedValues);
+    }
+
     auto loc = op.getLoc();
     if (failed(rewriter.convertRegionTypes(&op.getBody(), *typeConverter)))
       return failure();
-    eraseDeadBlocks(rewriter, op);
 
     // Handle initial and final procedures. These lower to a corresponding
     // `llhd.process` or `llhd.final` op that executes the body and then halts.
@@ -239,9 +264,10 @@ struct ProcedureOpConversion : public OpConversionPattern<ProcedureOp> {
     // jumping back up to the body.
     if (op.getKind() == ProcedureKind::AlwaysComb ||
         op.getKind() == ProcedureKind::AlwaysLatch) {
-      block = rewriter.createBlock(&newOp.getBody());
-      // TODO: Collect observed signals and add LLHD wait op.
-      return failure();
+      Block *waitBlock = rewriter.createBlock(&newOp.getBody());
+      rewriter.create<llhd::WaitOp>(loc, observedValues, Value(), ValueRange{},
+                                    block);
+      block = waitBlock;
     }
 
     // Make all `moore.return` ops branch back up to the beginning of the
@@ -322,6 +348,10 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
       rewriter.eraseOp(detectOp);
     }
 
+    // Determine the values used during event detection that are defined outside
+    // the `wait_event`'s body region. We want to wait for a change on these
+    // signals before we check if any interesting event happened.
+    SmallVector<Value> observeValues;
     auto setInsertionPointAfterDef = [&](Value value) {
       if (auto *op = value.getDefiningOp())
         rewriter.setInsertionPointAfter(op);
@@ -329,37 +359,8 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
         rewriter.setInsertionPointToStart(value.getParentBlock());
     };
 
-    auto probeIfSignal = [&](Value value) -> Value {
-      if (!isa<hw::InOutType>(value.getType()))
-        return value;
-      return rewriter.create<llhd::PrbOp>(loc, value);
-    };
-
-    // Determine the values used during event detection that are defined outside
-    // the `wait_event`'s body region. We want to wait for a change on these
-    // signals before we check if any interesting event happened.
-    SmallVector<Value> observeValues;
-    SmallDenseSet<Value> alreadyObserved;
-    clonedOp.getBody().walk([&](Operation *operation) {
-      for (auto value : operation->getOperands()) {
-        if (clonedOp.getBody().isAncestor(value.getParentRegion()))
-          continue;
-        if (!alreadyObserved.insert(value).second)
-          continue;
-        if (auto remapped = rewriter.getRemappedValue(value)) {
-          OpBuilder::InsertionGuard g(rewriter);
-          setInsertionPointAfterDef(remapped);
-          observeValues.push_back(probeIfSignal(remapped));
-        } else {
-          OpBuilder::InsertionGuard g(rewriter);
-          setInsertionPointAfterDef(value);
-          auto type = typeConverter->convertType(value.getType());
-          auto converted = typeConverter->materializeTargetConversion(
-              rewriter, loc, type, value);
-          observeValues.push_back(probeIfSignal(converted));
-        }
-      }
-    });
+    getValuesToObserve(&clonedOp.getBody(), setInsertionPointAfterDef,
+                       typeConverter, rewriter, observeValues);
 
     // Create the `llhd.wait` op that suspends the current process and waits for
     // a change in the interesting values listed in `observeValues`. When a
@@ -1387,6 +1388,9 @@ std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertMooreToCorePass() {
 void MooreToCorePass::runOnOperation() {
   MLIRContext &context = getContext();
   ModuleOp module = getOperation();
+
+  IRRewriter rewriter(module);
+  (void)mlir::eraseUnreachableBlocks(rewriter, module->getRegions());
 
   ConversionTarget target(context);
   TypeConverter typeConverter;
