@@ -190,13 +190,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.addNestedPass<firrtl::CircuitOp>(
       firrtl::createGrandCentralPass(opt.getCompanionMode()));
 
-  // Read black box source files into the IR.
-  StringRef blackBoxRoot = opt.getBlackBoxRootPath().empty()
-                               ? llvm::sys::path::parent_path(inputFilename)
-                               : opt.getBlackBoxRootPath();
-  pm.nest<firrtl::CircuitOp>().addPass(
-      firrtl::createBlackBoxReaderPass(blackBoxRoot));
-
   // Run SymbolDCE as late as possible, but before InnerSymbolDCE. This is for
   // hierpathop's and just for general cleanup.
   pm.addNestedPass<firrtl::CircuitOp>(mlir::createSymbolDCEPass());
@@ -237,6 +230,13 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.nest<firrtl::CircuitOp>().addPass(
       firrtl::createAssignOutputDirsPass(outputFilename));
+
+  // Read black box source files into the IR.
+  StringRef blackBoxRoot = opt.getBlackBoxRootPath().empty()
+                               ? llvm::sys::path::parent_path(inputFilename)
+                               : opt.getBlackBoxRootPath();
+  pm.nest<firrtl::CircuitOp>().addPass(
+      firrtl::createBlackBoxReaderPass(blackBoxRoot));
   return success();
 }
 
