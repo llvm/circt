@@ -12,6 +12,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Support/Debug.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -98,6 +99,7 @@ struct AssignOutputDirsPass
 } // namespace
 
 void AssignOutputDirsPass::runOnOperation() {
+  LLVM_DEBUG(debugPassHeader(this) << "\n");
   SmallString<64> outputDir(outputDirOption);
   if (fs::make_absolute(outputDir)) {
     emitError(mlir::UnknownLoc::get(&getContext()),
@@ -112,6 +114,7 @@ void AssignOutputDirsPass::runOnOperation() {
 
   bool changed = false;
 
+  LLVM_DEBUG(llvm::dbgs() << "Updating modules:\n");
   DenseSet<InstanceGraphNode *> visited;
   for (auto *root : getAnalysis<InstanceGraph>()) {
     for (auto *node : llvm::inverse_post_order_ext(root, visited)) {
@@ -149,12 +152,17 @@ void AssignOutputDirsPass::runOnOperation() {
             hw::OutputFileAttr::getAsDirectory(&getContext(), moduleOutputDir);
         module->setAttr("output_file", f);
         changed = true;
+        LLVM_DEBUG({
+          llvm::dbgs() << "  - name: " << module.getName() << "\n"
+                       << "    directory: " << f.getFilename() << "\n";
+        });
       }
     }
   }
 
   if (!changed)
     markAllAnalysesPreserved();
+  LLVM_DEBUG(debugFooter() << "\n");
 }
 
 std::unique_ptr<mlir::Pass>
