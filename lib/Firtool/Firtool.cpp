@@ -151,6 +151,21 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createRandomizeRegisterInitPass());
 
+  // Run after inference, layer specialization.
+  if (opt.shouldConvertProbesToSignals())
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createProbesToSignalsPass());
+
+  {
+    auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
+    modulePM.addPass(firrtl::createLayerMergePass());
+  }
+
+  if (!opt.shouldDisableOptimization() && opt.shouldLayerSink())
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLayerSinkPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerLayersPass());
+
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
+
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
   if (!opt.shouldDisableOptimization())
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
@@ -564,6 +579,10 @@ struct FirtoolCmdOptions {
       "output-omir", llvm::cl::desc("File name for the output omir"),
       llvm::cl::init("")};
 
+  llvm::cl::opt<bool> layerSink{"layer-sink",
+                                llvm::cl::desc("Sink logic into layer blocks"),
+                                llvm::cl::init(false)};
+
   llvm::cl::opt<bool> lowerMemories{
       "lower-memories",
       llvm::cl::desc("Lower memories to have memories with masks as an "
@@ -747,10 +766,11 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       exportChiselInterface(false), chiselInterfaceOutDirectory(""),
       vbToBV(false), noDedup(false), companionMode(firrtl::CompanionMode::Bind),
       disableAggressiveMergeConnections(false), emitOMIR(true), omirOutFile(""),
-      lowerMemories(false), blackBoxRootPath(""), replSeqMem(false),
-      replSeqMemFile(""), extractTestCode(false), ignoreReadEnableMem(false),
-      disableRandom(RandomKind::None), outputAnnotationFilename(""),
-      enableAnnotationWarning(false), addMuxPragmas(false),
+      layerSink(false), lowerMemories(false), blackBoxRootPath(""),
+      replSeqMem(false), replSeqMemFile(""), extractTestCode(false),
+      ignoreReadEnableMem(false), disableRandom(RandomKind::None),
+      outputAnnotationFilename(""), enableAnnotationWarning(false),
+      addMuxPragmas(false),
       verificationFlavor(firrtl::VerificationFlavor::None),
       emitSeparateAlwaysBlocks(false), etcDisableInstanceExtraction(false),
       etcDisableRegisterExtraction(false), etcDisableModuleInlining(false),
@@ -782,6 +802,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       clOptions->disableAggressiveMergeConnections;
   emitOMIR = clOptions->emitOMIR;
   omirOutFile = clOptions->omirOutFile;
+  layerSink = clOptions->layerSink;
   lowerMemories = clOptions->lowerMemories;
   blackBoxRootPath = clOptions->blackBoxRootPath;
   replSeqMem = clOptions->replSeqMem;

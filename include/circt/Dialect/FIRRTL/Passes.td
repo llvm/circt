@@ -846,7 +846,7 @@ def LayerMerge : Pass<"firrtl-layer-merge", "firrtl::FModuleOp"> {
   ];
 }
 
-def LayerSink : Pass<"firrtl-layer-sink", "firrtl::FModuleOp"> {
+def LayerSink : Pass<"firrtl-layer-sink", "firrtl::CircuitOp"> {
   let summary = "Sink operations into layer blocks";
   let description = [{
 
