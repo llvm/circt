@@ -374,8 +374,8 @@ public:
     } else {
       auto stageRegPrefix = getStagePrefix(stageIndex);
       auto enableRegName = (stageRegPrefix.strref() + "_enable").str();
-      Value enableRegResetVal =
-          builder.create<hw::ConstantOp>(loc, APInt(1, 0, false)).getResult();
+      hw::ConstantOp enableRegResetVal =
+          builder.create<hw::ConstantOp>(loc, APInt(1, 0, false));
 
       switch (stageKind) {
       case StageKind::Continuous:
@@ -406,7 +406,8 @@ public:
       if (enablePowerOnValues) {
         llvm::TypeSwitch<Operation *, void>(stageEnabled.getDefiningOp())
             .Case<seq::CompRegOp, seq::CompRegClockEnabledOp>([&](auto op) {
-              op.getInitialValueMutable().assign(enableRegResetVal);
+              op.getInitialValueMutable().assign(circt::seq::createConstantInitialValue(builder,
+                                                     enableRegResetVal));
             });
       }
     }

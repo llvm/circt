@@ -62,6 +62,8 @@ struct FirMemory {
 mlir::TypedValue<hw::ImmutableType>
 createConstantInitialValue(OpBuilder builder, Location loc,
                            mlir::IntegerAttr attr);
+mlir::TypedValue<hw::ImmutableType>
+createConstantInitialValue(OpBuilder builder, Operation *constantLike);
 Value unwrapImmutableValue(mlir::TypedValue<hw::ImmutableType> immutableVal);
 
 } // namespace seq

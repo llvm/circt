@@ -28,8 +28,12 @@ hw.module @reg_with_reset(in %clk: !seq.clock, in %rst: i1, in %in: i32, out out
 // -----
 
 hw.module @reg_with_initial(in %clk: !seq.clock, in %in: i32, out out: i32) {
-  %c0_i32 = hw.constant 0 : i32
+  %init = seq.initial {
+    %c0_i32 = hw.constant 0 : i32
+    seq.yield %c0_i32 : i32
+  } : !hw.immutable<i32>
+
   // expected-error @below {{registers with power-on values not yet supported}}
-  %1 = seq.compreg %in, %clk initial %c0_i32 : i32
+  %1 = seq.compreg %in, %clk initial %init : i32
   hw.output %1 : i32
 }

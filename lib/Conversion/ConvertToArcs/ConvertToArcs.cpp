@@ -29,6 +29,18 @@ static bool isArcBreakingOp(Operation *op) {
              seq::ClockGateOp, sim::DPICallOp>(op) ||
          op->getNumResults() > 1;
 }
+static FailureOr<Value> getInitialValueConstant(seq::CompRegOp reg) {
+  if (!reg.getInitialValue())
+    return Value();
+  auto init = circt::seq::unwrapImmutableValue(reg.getInitialValue());
+  if (!init.getDefiningOp<hw::ConstantOp>())
+    return reg.emitError() << "non-constant initial value not supported";
+
+  // Clone the initial value to the top-level.
+  auto *op = init.getDefiningOp()->clone();
+  op->moveBefore(reg);
+  return op->getResult(0);
+}
 
 //===----------------------------------------------------------------------===//
 // Conversion
@@ -84,7 +96,7 @@ LogicalResult Converter::runOnModule(HWModuleOp module) {
   arcBreakers.clear();
   arcBreakerIndices.clear();
   for (Operation &op : *module.getBodyBlock()) {
-    if (op.getNumRegions() > 0)
+    if (op.getNumRegions() > 0 && !isa<seq::InitialOp>(&op))
       return op.emitOpError("has regions; not supported by ConvertToArcs");
     if (!isArcBreakingOp(&op) && !isa<hw::OutputOp>(&op))
       continue;
@@ -308,7 +320,12 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
         }
       }
 
-      initialValues.push_back(regOp.getInitialValue());
+      if (regOp.getInitialValue()) {
+        auto result = getInitialValueConstant(regOp);
+        if (failed(result))
+          return failure();
+        initialValues.push_back(*result);
+      }
 
       absorbedRegs.push_back(regOp);
       // If we absorb a register into the arc, the arc effectively produces that
@@ -421,7 +438,12 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
         types.push_back(regOp.getType());
         outputs.push_back(block->addArgument(regOp.getType(), regOp.getLoc()));
         names.push_back(regOp->getAttrOfType<StringAttr>("name"));
-        initialValues.push_back(regOp.getInitialValue());
+        if (regOp.getInitialValue()) {
+          auto result = getInitialValueConstant(regOp);
+          if (failed(result))
+            return failure();
+          initialValues.push_back(*result);
+        }
       }
       regToOutputMapping.push_back(it->second);
     }

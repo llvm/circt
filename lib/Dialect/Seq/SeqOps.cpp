@@ -1056,6 +1056,18 @@ circt::seq::createConstantInitialValue(OpBuilder builder, Location loc,
   return cast<TypedValue<hw::ImmutableType>>(initial->getResult(0));
 }
 
+mlir::TypedValue<hw::ImmutableType>
+circt::seq::createConstantInitialValue(OpBuilder builder, Operation *op) {
+  assert(op->getNumResults() == 1 &&
+         op->hasTrait<mlir::OpTrait::ConstantLike>());
+  auto initial =
+      builder.create<seq::InitialOp>(op->getLoc(), op->getResultTypes(), [&]() {
+        auto clonedOp = builder.clone(*op);
+        builder.create<seq::YieldOp>(op->getLoc(), clonedOp->getResults());
+      });
+  return cast<mlir::TypedValue<hw::ImmutableType>>(initial.getResult(0));
+}
+
 Value circt::seq::unwrapImmutableValue(TypedValue<hw::ImmutableType> value) {
   auto resultNum = cast<OpResult>(value).getResultNumber();
   auto initialOp = value.getDefiningOp<seq::InitialOp>();

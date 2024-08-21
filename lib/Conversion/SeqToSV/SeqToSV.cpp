@@ -79,7 +79,7 @@ public:
 
     auto svReg = rewriter.create<sv::RegOp>(loc, regTy, reg.getNameAttr(),
                                             reg.getInnerSymAttr(),
-                                            reg.getInitialValue());
+                                            adaptor.getInitialValue());
     svReg->setDialectAttrs(reg->getDialectAttrs());
 
     circt::sv::setSVAttributes(svReg, circt::sv::getSVAttributes(reg));
@@ -126,6 +126,39 @@ public:
 
 private:
   bool lowerToAlwaysFF;
+};
+
+class InitialLowering : public OpConversionPattern<InitialOp> {
+public:
+  using OpConversionPattern<InitialOp>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<InitialOp>::OpAdaptor;
+  LogicalResult
+  matchAndRewrite(InitialOp initialOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto loc = initialOp.getLoc();
+    llvm::SmallVector<Value> regs, results;
+
+    auto yieldOp =
+        cast<seq::YieldOp>(initialOp.getBodyBlock()->getTerminator());
+
+    for (auto operand : yieldOp->getOperands()) {
+      regs.push_back(rewriter.create<sv::RegOp>(loc, operand.getType()));
+      results.push_back(rewriter.create<sv::ReadInOutOp>(loc, regs.back()));
+    }
+
+    auto lowered = rewriter.create<sv::InitialOp>(loc, [&]() {});
+
+    lowered.getBodyBlock()->getOperations().splice(
+        lowered.begin(), initialOp.getBodyBlock()->getOperations());
+
+    rewriter.setInsertionPointToEnd(lowered.getBodyBlock());
+    for (auto [reg, val] : llvm::zip(regs, yieldOp->getOperands()))
+      rewriter.create<sv::BPAssignOp>(loc, reg, val);
+
+    rewriter.replaceOp(initialOp, results);
+    rewriter.eraseOp(yieldOp);
+    return success();
+  }
 };
 
 /// Create the assign.
@@ -226,6 +259,7 @@ public:
 struct SeqToSVTypeConverter : public TypeConverter {
   SeqToSVTypeConverter() {
     addConversion([&](Type type) { return type; });
+    addConversion([&](hw::ImmutableType type) { return type.getInnerType(); });
     addConversion([&](seq::ClockType type) {
       return IntegerType::get(type.getContext(), 1);
     });
@@ -397,6 +431,12 @@ static bool isLegalOp(Operation *op) {
   return allOperandsLowered && allResultsLowered;
 }
 
+struct InitialOpLowering {
+  DenseMap<Value, Value> immutableValToReg;
+  sv::InitialOp intiialOp;
+  LogicalResult lower(seq::InitialOp initial);
+};
+
 void SeqToSVPass::runOnOperation() {
   auto circuit = getOperation();
   MLIRContext *context = &getContext();
@@ -498,6 +538,7 @@ void SeqToSVPass::runOnOperation() {
   patterns.add<ClockMuxLowering>(typeConverter, context);
   patterns.add<ClockDividerLowering>(typeConverter, context);
   patterns.add<ClockConstLowering>(typeConverter, context);
+  patterns.add<InitialLowering>(typeConverter, context);
   patterns.add<TypeConversionPattern>(typeConverter, context);
 
   if (failed(applyPartialConversion(circuit, target, std::move(patterns))))

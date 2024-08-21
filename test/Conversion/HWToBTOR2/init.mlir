@@ -10,9 +10,14 @@ module {
     //CHECK:    [[NID3:[0-9]+]] constd [[NID0]] 0
     %false = hw.constant false
     //CHECK:    [[INIT:[0-9]+]] init [[NID0]] [[NID2]] [[NID3]]
-    %reg = seq.compreg %false, %clock reset %reset, %false initial %false : i1  
+    %init = seq.initial {
+      %false_0 = hw.constant false
+      seq.yield %false_0 : i1
+    } : !hw.immutable<i1>
+    //CHECK:    [[RESET:[0-9]+]] constd [[NID0]] 0
+    %reg = seq.compreg %false, %clock reset %reset, %false initial %init : i1
 
-    //CHECK:    [[NID4:[0-9]+]] eq [[NID0]] [[NID2]] [[NID3]]
+    //CHECK:    [[NID4:[0-9]+]] eq [[NID0]] [[NID2]] [[RESET]]
     %10 = comb.icmp bin eq %reg, %false : i1
 
     sv.always posedge %0 {
@@ -20,7 +25,7 @@ module {
         //CHECK:    [[NID6:[0-9]+]] bad [[NID5]]
         sv.assert %10, immediate
     }
-    //CHECK:    [[NID7:[0-9]+]] ite [[NID0]] [[NID1]] [[NID3]] [[NID3]]
+    //CHECK:    [[NID7:[0-9]+]] ite [[NID0]] [[NID1]] [[RESET]] [[RESET]]
     //CHECK:    [[NID8:[0-9]+]] next [[NID0]] [[NID2]] [[NID7]]
   }
 
