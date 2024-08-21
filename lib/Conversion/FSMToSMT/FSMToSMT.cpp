@@ -6,53 +6,32 @@
 //
 //===----------------------------------------------------------------------===//
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/Comb/CombDialect.h"
-#include "circt/Dialect/FSM/FSMOps.h"
-#include "mlir/Pass/PassManager.h"
-#include "mlir/IR/Builders.h"
-#include "mlir/IR/Value.h"
-#include "mlir/IR/Operation.h"
-
-#include "mlir/Parser/Parser.h"
 #include "circt/Conversion/FSMToSMT.h"
-#include "circt/Conversion/HWToSMT.h"
-#include "circt/Conversion/CombToSMT.h"
-#include "circt/Dialect/SMT/SMTOps.h"
-#include "circt/Dialect/SMT/SMTDialect.h"
-
-#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/FSM/FSMOps.h"
-#include "circt/Dialect/HW/HWOpInterfaces.h"
+#include "circt/Dialect/FSM/FSMOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
-#include "circt/Dialect/SV/SVOps.h"
-#include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/SMT/SMTOps.h"
 #include "circt/Support/BackedgeBuilder.h"
+#include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/MLIRContext.h"
-#include "mlir/IR/Value.h"
-#include "mlir/Transforms/RegionUtils.h"
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/TypeSwitch.h"
-
-#include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
-#include "mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/Pass/Pass.h"
-#include "mlir/IR/Region.h"
 #include "mlir/IR/Operation.h"
-
+#include "mlir/IR/Operation.h"
+#include "mlir/IR/Region.h"
+#include "mlir/IR/Value.h"
+#include "mlir/IR/Value.h"
+#include "mlir/Parser/Parser.h"
+#include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassManager.h"
+#include "llvm/ADT/SmallVector.h"
 
 #include "mlir/Transforms/DialectConversion.h"
-#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-
 #include <functional>
 #include <memory>
-#include <optional>
-#include <variant>
-#include <vector>
 
 namespace circt {
 #define GEN_PASS_DEF_CONVERTFSMTOSMT
@@ -100,7 +79,7 @@ struct Transition{
   std::function<llvm::SmallVector<mlir::Value>(llvm::SmallVector<mlir::Value>)> action, output;
 };
 
-mlir::Value getSmt(mlir::Value opr, SmallVector<std::pair<mlir::Value, mlir::Value>> variables, Location &loc, 
+mlir::Value getSmt(mlir::Value opr, SmallVector<std::pair<mlir::Value, mlir::Value>> &variables, Location &loc, 
 OpBuilder &b){
   for(auto &e: variables){
     if (e.first == opr)
@@ -128,7 +107,7 @@ mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b){
   //   return newOp;
   // }
   if (auto andOp = llvm::dyn_cast<comb::AndOp>(op))
-    return b.create<smt::AndOp>(loc, andOp->getOperand(0), andOp->getOperand(1));
+    return b.create<smt::AndOp>(loc, andOp->getOperands());
   // if (auto xorOp = llvm::dyn_cast<comb::XorOp>(op))
   //   return b.create<smt::XOrOp>(loc, xorOp->getOperand(0), xorOp->getOperand(1));
   // if (auto orOp = llvm::dyn_cast<comb::OrOp>(op))
@@ -165,7 +144,7 @@ mlir::Value getGuard(SmallVector<std::pair<mlir::Value, mlir::Value>> variables,
     }
 }
 
-llvm::SmallVector<mlir::Value> getAction(llvm::SmallVector<mlir::Value> toUpdate, SmallVector<std::pair<mlir::Value, mlir::Value>> variables, Region &r, Location &loc, OpBuilder &b){
+llvm::SmallVector<mlir::Value> getAction(llvm::SmallVector<mlir::Value> &toUpdate, SmallVector<std::pair<mlir::Value, mlir::Value>> variables, Region &r, Location &loc, OpBuilder &b){
   llvm::SmallVector<mlir::Value> updatedVec;
   for(auto v : toUpdate){
     bool found = false;
@@ -236,6 +215,7 @@ Transition parseTransition(fsm::TransitionOp t, int from, llvm::SmallVector<std:
     tr.action = a;
   }
   // todo: output
+  return tr;
 }
 
 LogicalResult MachineOpConverter::dispatch(){
@@ -540,7 +520,6 @@ struct FSMToSMTPass : public circt::impl::ConvertFSMToSMTBase<FSMToSMTPass> {
 void FSMToSMTPass::runOnOperation() {
 
   auto module = getOperation();
-  auto loc = module.getLoc();
   auto b = OpBuilder(module);
 
   // // only continue if at least one fsm exists
