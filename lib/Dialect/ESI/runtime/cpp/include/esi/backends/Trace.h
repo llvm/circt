@@ -43,6 +43,9 @@ public:
     // Data read from the accelerator is read from the trace file.
     // TODO: Full trace mode not yet supported.
     // Read
+
+    // Discard all data sent to the accelerator. Disable trace file generation.
+    Discard,
   };
 
   /// Create a trace-based accelerator backend.

@@ -1221,17 +1221,26 @@ hw.module @test1560(in %value: i38, out a: i1) {
 }
 
 // CHECK-LABEL: hw.module @extractShift
-hw.module @extractShift(in %arg0 : i4, out o1 : i1, out o2: i1) {
+hw.module @extractShift(in %arg0 : i4, out o1 : i1, out o2: i1, out o3: i1, out o4: i1) {
   %c1 = hw.constant 1: i4
   %0 = comb.shl %c1, %arg0 : i4
+  %1 = comb.shl %c1, %arg0 : i4
+  %2 = comb.shl %c1, %arg0 : i4
 
-  // CHECK:  %0 = comb.icmp eq %arg0, %c0_i4 : i4
-  %1 = comb.extract %0 from 0 : (i4) -> i1
+  // CHECK: %[[O1:.+]] = comb.icmp eq %arg0, %c0_i4 : i4
+  %3 = comb.extract %0 from 0 : (i4) -> i1
 
-  // CHECK: %1 = comb.icmp eq %arg0, %c2_i4 : i4
-  %2 = comb.extract %0 from 2 : (i4) -> i1
-  // CHECK: hw.output %0, %1
-  hw.output %1, %2: i1, i1
+  // CHECK: %[[O2:.+]] = comb.icmp eq %arg0, %c2_i4 : i4
+  %4 = comb.extract %1 from 2 : (i4) -> i1
+
+  // CHECK: %[[O3:.+]] = comb.extract
+  %5 = comb.extract %2 from 2 : (i4) -> i1
+
+  // CHECK: %[[O4:.+]] = comb.extract
+  %6 = comb.extract %2 from 2 : (i4) -> i1
+
+  // CHECK: hw.output %[[O1]], %[[O2]], %[[O3]], %[[O4]]
+  hw.output %3, %4, %5, %6: i1, i1, i1, i1
 }
 
 // CHECK-LABEL: hw.module @moduloZeroDividend

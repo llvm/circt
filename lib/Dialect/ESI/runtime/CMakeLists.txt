@@ -123,6 +123,7 @@ set(ESICppRuntimeBackendHeaders
 set(ESIPythonRuntimeSources
   python/esiaccel/__init__.py
   python/esiaccel/accelerator.py
+  python/esiaccel/codegen.py
   python/esiaccel/types.py
   python/esiaccel/utils.py
 )
