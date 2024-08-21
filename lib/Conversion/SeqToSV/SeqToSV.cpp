@@ -432,9 +432,15 @@ static bool isLegalOp(Operation *op) {
 }
 
 struct InitialOpLowering {
+  InitialOpLowering(hw::HWModuleOp module) : builder(module.getModuleBody()) {}
+  sv::InitialOp initialOp = {};
   DenseMap<Value, Value> immutableValToReg;
-  sv::InitialOp intiialOp;
-  LogicalResult lower(seq::InitialOp initial);
+  OpBuilder builder;
+  hw::HWModuleOp module;
+  LogicalResult lower(seq::InitialOp initial) {
+    if (!initialOp)
+      initialOp = builder.create<sv::InitialOp>(initial->getLoc());
+  }
 };
 
 void SeqToSVPass::runOnOperation() {
@@ -538,7 +544,7 @@ void SeqToSVPass::runOnOperation() {
   patterns.add<ClockMuxLowering>(typeConverter, context);
   patterns.add<ClockDividerLowering>(typeConverter, context);
   patterns.add<ClockConstLowering>(typeConverter, context);
-  patterns.add<InitialLowering>(typeConverter, context);
+  // patterns.add<InitialLowering>(typeConverter, context);
   patterns.add<TypeConversionPattern>(typeConverter, context);
 
   if (failed(applyPartialConversion(circuit, target, std::move(patterns))))

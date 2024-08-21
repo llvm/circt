@@ -334,6 +334,8 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
         if (failed(result))
           return failure();
         initialValues.push_back(*result);
+      } else {
+        initialValues.push_back({});
       }
 
       absorbedRegs.push_back(regOp);
@@ -452,6 +454,8 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
           if (failed(result))
             return failure();
           initialValues.push_back(*result);
+        } else {
+          initialValues.push_back({});
         }
       }
       regToOutputMapping.push_back(it->second);

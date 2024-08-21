@@ -120,10 +120,10 @@ hw.module.extern private @Reshuffling2(out z0: i4, out z1: i4, out z2: i4, out z
 
 // CHECK-LABEL: hw.module @ReshufflingInit
 hw.module @ReshufflingInit(in %clockA: !seq.clock, in %clockB: !seq.clock, out z0: i4, out z1: i4, out z2: i4, out z3: i4) {
+  // CHECK-NEXT: hw.instance "x" @Reshuffling2()
   // CHECK-NEXT: [[C1:%.+]] = hw.constant 1 : i4
   // CHECK-NEXT: [[C2:%.+]] = hw.constant 2 : i4
   // CHECK-NEXT: [[C3:%.+]] = hw.constant 3 : i4
-  // CHECK-NEXT: hw.instance "x" @Reshuffling2()
   // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i4
   // CHECK-NEXT: arc.state @ReshufflingInit_arc(%x.z0, %x.z1) clock %clockA initial ([[C0]], [[C1]] : i4, i4) latency 1
   // CHECK-NEXT: arc.state @ReshufflingInit_arc_0(%x.z2, %x.z3) clock %clockB initial ([[C2]], [[C3]] : i4, i4) latency 1
