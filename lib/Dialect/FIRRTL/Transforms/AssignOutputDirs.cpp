@@ -118,9 +118,12 @@ void AssignOutputDirsPass::runOnOperation() {
   DenseSet<InstanceGraphNode *> visited;
   for (auto *root : getAnalysis<InstanceGraph>()) {
     for (auto *node : llvm::inverse_post_order_ext(root, visited)) {
-      auto module = dyn_cast<FModuleOp>(node->getModule().getOperation());
-      if (!module || module->getAttrOfType<hw::OutputFileAttr>("output_file") ||
-          module.isPublic())
+      FModuleLike moduleLike =
+          dyn_cast<FModuleLike>(node->getModule().getOperation());
+      if (!moduleLike || !isa<FModuleOp, FExtModuleOp>(moduleLike))
+        continue;
+      if (moduleLike->getAttrOfType<hw::OutputFileAttr>("output_file") ||
+          moduleLike.isPublic())
         continue;
 
       // Get the output directory of the first parent, and then fold the current
@@ -150,10 +153,10 @@ void AssignOutputDirsPass::runOnOperation() {
       if (!moduleOutputDir.empty()) {
         auto f =
             hw::OutputFileAttr::getAsDirectory(&getContext(), moduleOutputDir);
-        module->setAttr("output_file", f);
+        moduleLike->setAttr("output_file", f);
         changed = true;
         LLVM_DEBUG({
-          llvm::dbgs() << "  - name: " << module.getName() << "\n"
+          llvm::dbgs() << "  - name: " << moduleLike.getName() << "\n"
                        << "    directory: " << f.getFilename() << "\n";
         });
       }
