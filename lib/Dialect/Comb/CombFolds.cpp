@@ -693,17 +693,20 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   // `extract(lowBit, shl(1, x))` -> `x == lowBit` when a single bit is
   // extracted.
   if (cast<IntegerType>(op.getType()).getWidth() == 1 && inputOp)
-    if (auto shlOp = dyn_cast<ShlOp>(inputOp))
-      if (auto lhsCst = shlOp.getOperand(0).getDefiningOp<hw::ConstantOp>())
-        if (lhsCst.getValue().isOne()) {
-          auto newCst = rewriter.create<hw::ConstantOp>(
-              shlOp.getLoc(),
-              APInt(lhsCst.getValue().getBitWidth(), op.getLowBit()));
-          replaceOpWithNewOpAndCopyName<ICmpOp>(rewriter, op, ICmpPredicate::eq,
-                                                shlOp->getOperand(1), newCst,
-                                                false);
-          return success();
-        }
+    if (auto shlOp = dyn_cast<ShlOp>(inputOp)) {
+      // Don't canonicalize if the shift is multiply used.
+      if (shlOp->hasOneUse())
+        if (auto lhsCst = shlOp.getLhs().getDefiningOp<hw::ConstantOp>())
+          if (lhsCst.getValue().isOne()) {
+            auto newCst = rewriter.create<hw::ConstantOp>(
+                shlOp.getLoc(),
+                APInt(lhsCst.getValue().getBitWidth(), op.getLowBit()));
+            replaceOpWithNewOpAndCopyName<ICmpOp>(
+                rewriter, op, ICmpPredicate::eq, shlOp->getOperand(1), newCst,
+                false);
+            return success();
+          }
+    }
 
   return failure();
 }
