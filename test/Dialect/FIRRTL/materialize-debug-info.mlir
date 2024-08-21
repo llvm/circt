@@ -1,6 +1,13 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-materialize-debug-info)))' %s | FileCheck %s
 
-firrtl.circuit "Ports" {
+firrtl.circuit "Ports" attributes {
+  annotations = [
+    {
+      class = "chisel3.experimental.EnumAnnotations$EnumDefAnnotation", 
+      definition = {IDLE = 0 : i64, A = 1 : i64, B = 2 : i64, C = 3 : i64, D = 4 : i64}, 
+      typeName = "MyEnumMod$MyEnum"
+    }]
+  } {
 
 // CHECK-LABEL: firrtl.module @Ports
 firrtl.module @Ports(
@@ -22,8 +29,12 @@ firrtl.module @Ports(
   in %inTypedD: !firrtl.bundle<clocks: vector<clock, 4>> [{class = "chisel3.tywavesinternal.TywavesAnnotation", target = "~Ports|Ports>inTypedD", typeName = "IO[BundleVecClock]"},
                                                           {circt.fieldID = 1 : i32, class = "chisel3.tywavesinternal.TywavesAnnotation", target = "~Ports|Ports>inTypedD.clocks", typeName = "IO[Clock[4]]"},
                                                           {circt.fieldID = 2 : i32, class = "chisel3.tywavesinternal.TywavesAnnotation", target = "~Ports|Ports>inTypedD.clocks[0]", typeName = "IO[Clock]"}],
+  in %inTypedEnum1: !firrtl.uint<3> [{class = "chisel3.experimental.EnumAnnotations$EnumComponentAnnotation", enumTypeName = "MyEnumMod$MyEnum", target = "~Ports|Ports>inTypedEnum"}],
+  in %inTypedEnum2: !firrtl.uint<10> [{class = "chisel3.experimental.EnumAnnotations$EnumComponentAnnotation", enumTypeName = "MyEnumMod$MyEnum", target = "~Ports|Ports>inTypedEnum"}],
+  
   out %outTypedA: !firrtl.uint<42> [{class = "chisel3.tywavesinternal.TywavesAnnotation", typeName = "Any Custom string"}]
 ) {
+  // CHECK-NEXT: [[EDEF0:%.+]] = dbg.enumdef "MyEnumMod$MyEnum", id 0, {A = 1 : i64, B = 2 : i64, C = 3 : i64, D = 4 : i64, IDLE = 0 : i64}
   // CHECK-NEXT: dbg.variable "inA", %inA
 
   // CHECK-NEXT: [[TMP0:%.+]] = firrtl.subfield %inB[a]
@@ -81,6 +92,11 @@ firrtl.module @Ports(
   // CHECK-NEXT: [[TMP:%.+]] = dbg.struct {"clocks": [[TMP10]]}
   // CHECK-NEXT: dbg.variable "inTypedD", [[TMP]] {typeName = "IO[BundleVecClock]"} 
   
+  // CHECK-NEXT: [[EDEF0:%.+]] = dbg.enumdef "MyEnumMod$MyEnum", id 0, {A = 1 : i64, B = 2 : i64, C = 3 : i64, D = 4 : i64, IDLE = 0 : i64}
+  // CHECK-NEXT: dbg.variable "inTypedEnum1", %inTypedEnum1 enumDef [[EDEF0]] 
+  // CHECK-NEXT: [[EDEF0:%.+]] = dbg.enumdef "MyEnumMod$MyEnum", id 0, {A = 1 : i64, B = 2 : i64, C = 3 : i64, D = 4 : i64, IDLE = 0 : i64}
+  // CHECK-NEXT: dbg.variable "inTypedEnum2", %inTypedEnum2 enumDef [[EDEF0]] 
+
   // CHECK-NEXT: dbg.variable "outTypedA", %outTypedA {typeName = "Any Custom string"}
 
   // CHECK-NEXT: firrtl.strictconnect
@@ -93,6 +109,7 @@ firrtl.module @Ports(
 
 // CHECK-LABEL: firrtl.module @Decls
 firrtl.module @Decls() {
+  // CHECK-NEXT: [[EDEF0:%.+]] = dbg.enumdef "MyEnumMod$MyEnum", id 0, {A = 1 : i64, B = 2 : i64, C = 3 : i64, D = 4 : i64, IDLE = 0 : i64}
   // CHECK-NEXT: firrtl.constant
   // CHECK-NEXT: firrtl.constant
   // CHECK-NEXT: firrtl.specialconstant
@@ -137,6 +154,7 @@ firrtl.module @Decls() {
 
 // CHECK-LABEL: firrtl.module @ConstructorParams
 firrtl.module @ConstructorParams() {
+  // CHECK-NEXT: [[EDEF0:%.+]] = dbg.enumdef "MyEnumMod$MyEnum", id 0, {A = 1 : i64, B = 2 : i64, C = 3 : i64, D = 4 : i64, IDLE = 0 : i64}
   // CHECK-NEXT: firrtl.constant
   %c0_ui17 = firrtl.constant 0 : !firrtl.uint<17>
 

@@ -331,7 +331,8 @@ void MaterializeDebugInfoPass::runOnOperation() {
   auto builder = OpBuilder::atBlockBegin(module.getBodyBlock());
 
   // Create enum operations
-  // Get the enum definition annotation
+  // Get the enum definition annotations for each module and cache them (do not
+  // optimize unused definitions at this stage)
   if (auto topCircuit = module->getParentOfType<CircuitOp>())
     if (auto annoListArray = annohelper::getAnnotationList(topCircuit)) {
       auto idEnum = 0;
@@ -347,7 +348,7 @@ void MaterializeDebugInfoPass::runOnOperation() {
             auto variantsMap =
                 annoDict.getAs<mlir::DictionaryAttr>("definition");
             auto idAttr = builder.getI16IntegerAttr(idEnum++);
-            // Materialize in hw.enum
+            // Create the dbg enumDefOp
             auto enumDefOp =
                 builder.create<debug::EnumDefOp>(module.getLoc(),
                                                  /*typeName=*/typeName,
@@ -429,6 +430,7 @@ void MaterializeDebugInfoPass::materializeVariable(
     Value enumDef = Value{};
     if (tywavesAnno) {
       if (auto _enumDef = tywavesAnno->getEnumDef(name)) {
+        llvm::errs() << "Clone the enum definition #1\n";
         enumDef = builder.cloneWithoutRegions(_enumDef);
       }
     }
@@ -498,6 +500,10 @@ MaterializeDebugInfoPass::convertToDebugAggregates(
   LLVM_DEBUG(llvm::dbgs() << "  - EXTRACTED TYWAVES INFO:\n"
                           << tywavesAnno << "\n");
 
+  // This enables the creation of a SubFieldOp for the current value (only if
+  // child of an aggregate and tywavesAnno is not null/none)
+  auto isChildOfAggregate = circtSubFieldId && tywavesAnno;
+
   // 2. Extract the source language type information
   const auto typeName = tywavesAnno ? tywavesAnno->typeName : StringAttr{};
   const auto params = tywavesAnno ? tywavesAnno->params : ArrayAttr();
@@ -507,14 +513,12 @@ MaterializeDebugInfoPass::convertToDebugAggregates(
   //                                  : Value{};
 
   Value enumDef = Value{};
-  if (tywavesAnno) {
+  if (isChildOfAggregate) {
     if (auto _enumDef = tywavesAnno->getEnumDef(name)) {
+      llvm::errs() << "Clone the enum definition #2\n";
       enumDef = builder.cloneWithoutRegions(_enumDef);
     }
   }
-  // This enables the creation of a SubFieldOp for the current value (only if
-  // child of an aggregate and tywavesAnno is not null/none)
-  auto isChildOfAggregate = circtSubFieldId && tywavesAnno;
 
   // 3. Generate the result
 

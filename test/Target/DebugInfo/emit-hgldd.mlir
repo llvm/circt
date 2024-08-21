@@ -68,6 +68,19 @@
 // CHECK-NOT:         "params"
 // CHECK-NEXT:        "type_name": "Foo_SourceLangTypeName"
 // CHECK-NEXT:   }
+// CHECK-NEXT:   "enum_defs"
+// CHECK-NEXT:   "0":
+// CHECK-NEXT:     "0": "IDLE"
+// CHECK-NEXT:     "1": "A"
+// CHECK-NEXT:     "2": "B"
+// CHECK-NEXT:     "3": "C"
+// CHECK-NEXT:     "4": "D"
+// CHECK-NEXT:     }
+// CHECK-NEXT:   "1":
+// CHECK-NEXT:     "1": "A"
+// CHECK-NEXT:     "2": "B"
+// CHECK-NEXT:     }
+// CHECK-NEXT:   }
 // CHECK-NEXT:   "port_vars"
 // CHECK:          "var_name": "inA"
 // CHECK:          "source_lang_type_info"
@@ -99,6 +112,12 @@
 // CHECK-NEXT:        "type_name": "UInt<8>"
 // CHECK:          "var_name": "var2"
 // CHECK-NOT:      "source_lang_type_info"
+// CHECK:          "var_name": "myEnumVar0"
+// CHECK:          "enum_def_ref": 0
+// CHECK-NOT:      "source_lang_type_info"
+// CHECK:          "var_name": "myEnumVar1"
+// CHECK:          "enum_def_ref": 1
+// CHECK-NOT:      "source_lang_type_info"
 // CHECK:        "children"
 // CHECK-LABEL:    "name": "b0"
 // CHECK:          "obj_name": "Bar"
@@ -120,6 +139,14 @@ hw.module @Foo(in %a: i32 loc(#loc2), out b: i32 loc(#loc3)) {
   dbg.variable "var2", %c21_i8 : i8 loc(#loc3)
   %b0.y = hw.instance "b0" @Bar(x: %a: i32) -> (y: i32) loc(#loc4)
   %b1.y = hw.instance "b1" @Bar(x: %b0.y: i32) -> (y: i32) loc(#loc5)
+
+  %edef0 = dbg.enumdef "MyEnumMod$MyEnum", id 0, {A = 1 : i64, B = 2 : i64, C = 3 : i64, D = 4 : i64, IDLE = 0 : i64}
+  %cen0 = hw.constant 2 : i8
+  dbg.variable "myEnumVar0", %cen0 enumDef %edef0 : i8 loc(#loc3)
+  %cen1 = hw.constant 0 : i8
+  %edef1 = dbg.enumdef "MyEnumMod$MyEnum2", id 1, {A = 1 : i64, B = 2 : i64}
+  dbg.variable "myEnumVar1", %cen1 enumDef %edef1 : i8 loc(#loc3)
+
   hw.output %b1.y : i32 loc(#loc1)
 } loc(fused[#loc1, "emitted"(#loc10)])
 
@@ -169,6 +196,17 @@ hw.module private @Bar(in %x: i32 loc(#loc7), out y: i32 loc(#loc8)) {
 // CHECK-NOT:       "params"
 // CHECK-NEXT:      "type_name": "i17[2]"
 // CHECK:         "var_name": "c"
+// CHECK-LABEL: "obj_name": "Aggregates_data_enum"
+// CHECK:          "enum_def_ref": 0
+// CHECK-NOT:      "source_lang_type_info"
+// CHECK:         "var_name": "aa"
+// CHECK:          "enum_def_ref": 2
+// CHECK-NOT:      "source_lang_type_info"
+// CHECK:         "var_name": "bb"
+// CHECK:          "enum_def_ref": 2
+// CHECK-NOT:      "source_lang_type_info"
+// CHECK:         "var_name": "cc"
+
 // CHECK-LABEL: "obj_name": "Aggregates"
 // CHECK:       "module_name": "Aggregates"
 // CHECK:         "var_name": "data"
@@ -184,6 +222,20 @@ hw.module @Aggregates(in %data_a: i32, in %data_b: i42, in %data_c_0: i17, in %d
   %5 = dbg.subfield "c", %4 {typeName = "i17[2]"}: !dbg.array
   %6 = dbg.struct {"a": %0, "b": %1, "c": %5} : !dbg.subfield, !dbg.subfield, !dbg.subfield
   dbg.variable "data", %6 {typeName = "abc_struct"}: !dbg.struct
+
+  // Enum
+  %enumA = dbg.enumdef "MyEnumA", id 0, {A = 1 : i64, B = 2 : i64}
+  %enumB = dbg.enumdef "MyEnumB", id 2, {C = 1 : i64, D = 2 : i64}
+
+  %7 = dbg.subfield "data_a_enumA", %data_a enumDef %enumA: i32
+  %8 = dbg.subfield "data_b_enumB", %data_b enumDef %enumB: i42
+  %9 = dbg.subfield "data_c_enumB", %data_c_0 enumDef %enumB: i17
+  %10 = dbg.subfield "data_c_enumB", %data_c_1 enumDef %enumB: i17
+  %11 = dbg.array [%9, %10] : !dbg.subfield
+  %12 = dbg.subfield "cc", %11: !dbg.array
+  %13 = dbg.struct {"aa": %7, "bb": %8, "cc": %12} : !dbg.subfield, !dbg.subfield, !dbg.subfield
+  dbg.variable "data_enum", %13 {typeName = "abc_struct"}: !dbg.struct
+
 }
 
 // CHECK-LABEL: "obj_name": "EmptyAggregates"
