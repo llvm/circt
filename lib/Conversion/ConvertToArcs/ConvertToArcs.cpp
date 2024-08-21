@@ -26,7 +26,7 @@ using llvm::MapVector;
 static bool isArcBreakingOp(Operation *op) {
   return op->hasTrait<OpTrait::ConstantLike>() ||
          isa<hw::InstanceOp, seq::CompRegOp, MemoryOp, ClockedOpInterface,
-             seq::ClockGateOp, sim::DPICallOp>(op) ||
+             seq::InitialOp, seq::ClockGateOp, sim::DPICallOp>(op) ||
          op->getNumResults() > 1;
 }
 static FailureOr<Value> getInitialValueConstant(seq::CompRegOp reg) {
@@ -38,7 +38,7 @@ static FailureOr<Value> getInitialValueConstant(seq::CompRegOp reg) {
 
   // Clone the initial value to the top-level.
   auto *op = init.getDefiningOp()->clone();
-  op->moveBefore(reg);
+  reg->getBlock()->getOperations().insert(Block::iterator(reg), op);
   return op->getResult(0);
 }
 
@@ -95,8 +95,13 @@ LogicalResult Converter::runOnModule(HWModuleOp module) {
   // Find all arc-breaking operations in this module and assign them an index.
   arcBreakers.clear();
   arcBreakerIndices.clear();
+  SmallVector<seq::InitialOp> initialOps;
   for (Operation &op : *module.getBodyBlock()) {
-    if (op.getNumRegions() > 0 && !isa<seq::InitialOp>(&op))
+    if (isa<seq::InitialOp>(&op)) {
+      initialOps.push_back(cast<seq::InitialOp>(&op));
+      continue;
+    }
+    if (op.getNumRegions() > 0)
       return op.emitOpError("has regions; not supported by ConvertToArcs");
     if (!isArcBreakingOp(&op) && !isa<hw::OutputOp>(&op))
       continue;
@@ -121,6 +126,10 @@ LogicalResult Converter::runOnModule(HWModuleOp module) {
   extractArcs(module);
   if (failed(absorbRegs(module)))
     return failure();
+
+  for (auto init : initialOps)
+    init->erase();
+
   return success();
 }
 
