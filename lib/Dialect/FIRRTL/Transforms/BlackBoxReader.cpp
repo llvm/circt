@@ -23,6 +23,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/Debug.h"
 #include "circt/Support/Path.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/Pass/Pass.h"
@@ -156,6 +157,7 @@ private:
 
 /// Emit the annotated source code for black boxes in a circuit.
 void BlackBoxReaderPass::runOnOperation() {
+  LLVM_DEBUG(debugPassHeader(this) << "\n");
   CircuitOp circuitOp = getOperation();
   CircuitNamespace ns(circuitOp);
 
@@ -326,6 +328,7 @@ void BlackBoxReaderPass::runOnOperation() {
   // Clean up.
   emittedFileMap.clear();
   fileListFiles.clear();
+  LLVM_DEBUG(debugFooter() << "\n");
 }
 
 /// Run on an operation-annotation pair. The annotation need not be a black box
