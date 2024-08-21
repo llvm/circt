@@ -1,6 +1,7 @@
 add_circt_dialect_library(CIRCTFIRRTLTransforms
-  AssignOutputDirs.cpp
   AddSeqMemPorts.cpp
+  AdvancedLayerSink.cpp
+  AssignOutputDirs.cpp
   BlackBoxReader.cpp
   CheckCombLoops.cpp
   CheckLayers.cpp

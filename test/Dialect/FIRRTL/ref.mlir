@@ -1,5 +1,5 @@
 // RUN: circt-opt %s -split-input-file | circt-opt -split-input-file
-// RUN: firtool %s -split-input-file
+// RUN: firtool %s -preserve-values=named -split-input-file
 // These tests are just for demonstrating RefOps, and expected to not error.
 
 // Simple 1 level read from wire.
@@ -27,7 +27,7 @@ firrtl.circuit "SimpleRead" {
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
   }
   firrtl.module @SimpleRead() {
-    %bar_a = firrtl.instance bar @Bar(out _a: !firrtl.probe<uint<1>>)
+    %bar_a = firrtl.instance bar interesting_name @Bar(out _a: !firrtl.probe<uint<1>>)
     %a = firrtl.wire : !firrtl.uint<1>
     %0 = firrtl.ref.resolve %bar_a : !firrtl.probe<uint<1>>
     firrtl.matchingconnect %a, %0 : !firrtl.uint<1>
@@ -48,7 +48,7 @@ firrtl.circuit "ForwardToInstance" {
     firrtl.ref.define %_a, %bar_2 : !firrtl.probe<uint<1>>
   }
   firrtl.module @ForwardToInstance() {
-    %bar_a = firrtl.instance bar @Bar(out _a: !firrtl.probe<uint<1>>)
+    %bar_a = firrtl.instance bar interesting_name @Bar(out _a: !firrtl.probe<uint<1>>)
     %a = firrtl.wire : !firrtl.uint<1>
     %0 = firrtl.ref.resolve %bar_a : !firrtl.probe<uint<1>>
     firrtl.matchingconnect %a, %0 : !firrtl.uint<1>
@@ -74,7 +74,7 @@ firrtl.circuit "ForwardToInstance" {
   }
   firrtl.module @ForwardToInstance() {
     %bar_a = firrtl.instance bar @Bar(out _a: !firrtl.probe<uint<1>>)
-    %a = firrtl.wire : !firrtl.uint<1>
+    %a = firrtl.wire interesting_name : !firrtl.uint<1>
     // Reader 2
     %0 = firrtl.ref.resolve %bar_a : !firrtl.probe<uint<1>>
     firrtl.matchingconnect %a, %0 : !firrtl.uint<1>
@@ -98,8 +98,8 @@ firrtl.circuit "DUT" {
     firrtl.ref.define %ref_out2, %2 : !firrtl.probe<uint<4>>
   }
   firrtl.module @DUT() {
-    %view_out1, %view_out2 = firrtl.instance sub @Submodule(out ref_out1: !firrtl.probe<uint<1>>, out ref_out2: !firrtl.probe<uint<4>>)
-    %view_in1, %view_in2 = firrtl.instance MyView_companion @MyView_companion(in ref_in1: !firrtl.uint<1>, in ref_in2: !firrtl.uint<4>)
+    %view_out1, %view_out2 = firrtl.instance sub interesting_name @Submodule(out ref_out1: !firrtl.probe<uint<1>>, out ref_out2: !firrtl.probe<uint<4>>)
+    %view_in1, %view_in2 = firrtl.instance MyView_companion interesting_name @MyView_companion(in ref_in1: !firrtl.uint<1>, in ref_in2: !firrtl.uint<4>)
 
     %1 = firrtl.ref.resolve %view_out1 : !firrtl.probe<uint<1>>
     %2 = firrtl.ref.resolve %view_out2 : !firrtl.probe<uint<4>>
@@ -155,7 +155,7 @@ firrtl.circuit "Issue3715" {
     }
   }
   firrtl.module @Issue3715(in %p: !firrtl.uint<1>) {
-    %test_in, %test_x = firrtl.instance test @Test(in p: !firrtl.uint<1>, out x: !firrtl.probe<uint<2>>)
+    %test_in, %test_x = firrtl.instance test interesting_name @Test(in p: !firrtl.uint<1>, out x: !firrtl.probe<uint<2>>)
     firrtl.matchingconnect %test_in, %p : !firrtl.uint<1>
     %x = firrtl.ref.resolve %test_x : !firrtl.probe<uint<2>>
   }
