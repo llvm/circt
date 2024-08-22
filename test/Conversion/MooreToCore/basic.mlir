@@ -691,7 +691,6 @@ moore.module @WaitEvent() {
     moore.return
   }
 
-  // CHECK: [[FALSE:%.+]] = hw.constant false
   // CHECK: [[PRB_A:%.+]] = llhd.prb %a
   // CHECK: [[PRB_B:%.+]] = llhd.prb %b
   // CHECK: llhd.process {
@@ -703,7 +702,7 @@ moore.module @WaitEvent() {
     // CHECK:   llhd.prb %b
     // CHECK:   cf.br ^[[BB2:.+]]
     // CHECK: ^[[BB2]]:
-    // CHECK:   llhd.wait ([[FALSE]], [[PRB_A]], [[PRB_B]] : {{.*}}), ^[[BB1]]
+    // CHECK:   llhd.wait ([[PRB_A]], [[PRB_B]] : {{.*}}), ^[[BB1]]
     %1 = moore.conditional %cond : i1 -> i1 {
       %2 = moore.read %a : <i1>
       moore.yield %2 : !moore.i1

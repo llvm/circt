@@ -185,6 +185,9 @@ static void getValuesToObserve(Region *region,
         for (auto value : operation->getOperands()) {
           if (region->isAncestor(value.getParentRegion()))
             continue;
+          if (auto *defOp = value.getDefiningOp();
+              defOp && defOp->hasTrait<OpTrait::ConstantLike>())
+            continue;
           if (!alreadyObserved.insert(value).second)
             continue;
 
