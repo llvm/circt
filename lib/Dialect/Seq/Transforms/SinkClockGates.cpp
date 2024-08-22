@@ -18,6 +18,8 @@
 // updated only once. This assert checks for it:
 // `assert(llvm::isa_and_nonnull<ConstantOp>(def))`
 // This doesnot handle gated clocks returned from an output port yet.
+//
+//===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -113,7 +115,7 @@ struct SinkClockGatesPass
   /// Get the referenced module for an instance, and add all the instances of
   /// the module to `instances`.
   HWModuleOp getReferencedModules(HWInstanceLike inst,
-                                  SmallVector<HWInstanceLike, 2> &instances) {
+                                  SmallVectorImpl<HWInstanceLike> &instances) {
     HWModuleOp instModule = {};
     auto refModNames = inst.getReferencedModuleNamesAttr();
     if (refModNames.size() != 1) {
@@ -123,7 +125,9 @@ struct SinkClockGatesPass
     auto *node = graph->lookup(cast<StringAttr>(*refModNames.begin()));
     if (node)
       instModule = dyn_cast_or_null<HWModuleOp>(*node->getModule());
-    if (instModule.isPublic())
+
+    // Cannot modify public module signature.
+    if (!instModule || instModule.isPublic())
       return {};
 
     for (auto *use : node->uses()) {
@@ -157,6 +161,7 @@ struct SinkClockGatesPass
   /// Combine two consecutive clock_gate ops, into one.
   void collapseConsecutiveClockGates(ClockGateOp driverGate,
                                      ClockGateOp userGate) {
+    auto *context = &getContext();
     mlir::OpBuilder builder(context);
     builder.setInsertionPoint(userGate);
     Value enable = getEnable(driverGate);
@@ -169,10 +174,11 @@ struct SinkClockGatesPass
   /// If the clock_gate op has `test_enable`, combine it with the `enable` and
   /// return the final enable.
   Value getEnable(ClockGateOp clkGate) {
+    auto *context = &getContext();
     Value enable = clkGate.getEnable();
     // If there is testEnable, or it.
     if (auto testEnable = clkGate.getTestEnable()) {
-      OpBuilder builder(clkGate.getContext());
+      OpBuilder builder(context);
       builder.setInsertionPointAfter(clkGate);
       enable =
           builder.create<comb::OrOp>(clkGate->getLoc(), enable, testEnable);
@@ -186,7 +192,6 @@ private:
   using ClockEnablePortPairs = DenseMap<unsigned, unsigned>;
   InstanceGraph *graph;
   DenseSet<Operation *> opsToErase;
-  mlir::MLIRContext *context;
   DenseMap<HWModuleOp, ClockEnablePortPairs> moduleClockGateEnableMap;
 };
 
@@ -195,7 +200,7 @@ void SinkClockGatesPass::runOnOperation() {
   // A setvector is required for a deterministic output.
   SetVector<HWInstanceLike> instancesWithGatedClk;
   DenseSet<Operation *> opsWithGatedClock;
-  context = getOperation().getContext();
+  auto *context = &getContext();
 
   // Record all the instances that have clock_gate as an input. This will be
   // used to push the clock_gate down through the hierarchy to its users.
@@ -340,6 +345,7 @@ void SinkClockGatesPass::runOnOperation() {
   }
   for (auto *op : opsToErase)
     op->erase();
+  moduleClockGateEnableMap.clear();
 }
 } // anonymous namespace
 
