@@ -736,3 +736,34 @@ firrtl.circuit "Foo" {
 // CHECK:   }
 // CHECK:   sv.verbatim "`endif // layers_Foo_B" {output_file = #hw.output_file<"layers_Foo_B.sv", excludeFromFileList>}
 // CHECK: }
+
+// -----
+
+// Check rwprobe ops are updated.
+// CHECK-LABEL: circuit "RWTH"
+firrtl.circuit "RWTH" {
+  firrtl.layer @T  bind { }
+  firrtl.module @RWTH() attributes {convention = #firrtl<convention scalarized>, layers = [@T]} {
+    %d_p = firrtl.instance d @DUT(out p: !firrtl.rwprobe<uint<1>, @T>)
+    %one = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.ref.force_initial %one, %d_p, %one: !firrtl.uint<1>, !firrtl.rwprobe<uint<1>, @T>, !firrtl.uint<1>
+  }
+//      CHECK:    firrtl.module private @DUT_T(out %p: !firrtl.rwprobe<uint<1>>) {
+// CHECK-NEXT:      %w = firrtl.wire sym @[[SYM:.+]] : !firrtl.uint<1>
+// CHECK-NEXT:      %0 = firrtl.ref.rwprobe <@DUT_T::@[[SYM]]> : !firrtl.rwprobe<uint<1>>
+// CHECK-NEXT:      firrtl.ref.define %p, %0 : !firrtl.rwprobe<uint<1>>
+// CHECK-NEXT:    }
+// CHECK-NEXT:    firrtl.module @DUT(out %p: !firrtl.rwprobe<uint<1>>) attributes {convention = #firrtl<convention scalarized>} {
+// CHECK-NEXT:      %t_p = firrtl.instance t sym @t {lowerToBind, output_file = #hw.output_file<"layers_RWTH_T.sv", excludeFromFileList>} @DUT_T(out p: !firrtl.rwprobe<uint<1>>)
+// CHECK-NEXT:      firrtl.ref.define %p, %t_p : !firrtl.rwprobe<uint<1>>
+// CHECK-NEXT:    }
+
+  firrtl.module @DUT(out %p: !firrtl.rwprobe<uint<1>, @T>) attributes {convention = #firrtl<convention scalarized>} {
+    firrtl.layerblock @T {
+      %w = firrtl.wire sym @sym : !firrtl.uint<1>
+      %0 = firrtl.ref.rwprobe <@DUT::@sym> : !firrtl.rwprobe<uint<1>>
+      %1 = firrtl.ref.cast %0 : (!firrtl.rwprobe<uint<1>>) -> !firrtl.rwprobe<uint<1>, @T>
+      firrtl.ref.define %p, %1 : !firrtl.rwprobe<uint<1>, @T>
+    }
+  }
+}
