@@ -15,7 +15,6 @@
 #include "circt/Dialect/SMT/SMTOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/MLIRContext.h"
