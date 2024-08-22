@@ -75,7 +75,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1, in %i: i32, in %s: !hw.struct<f
   %rv = seq.initial {
     %c0_i32_0 = hw.constant 0 : i32
     seq.yield %c0_i32_0 : i32
-  } : !hw.immutable<i32>
+  } : !seq.immutable<i32>
 
   %c0_i32 = hw.constant 0 : i32
 
@@ -88,7 +88,7 @@ hw.module @top_ce(in %clk: !seq.clock, in %rst: i1, in %ce: i1, in %i: i32) {
   %init = seq.initial {
     %c0_i32 = hw.constant 0 : i32
     seq.yield %c0_i32 : i32
-  } : !hw.immutable<i32>
+  } : !seq.immutable<i32>
 
   %r0 = seq.compreg.ce %i, %clk, %ce reset %rst, %rv : i32
   // CHECK: %r0 = seq.compreg.ce %i, %clk, %ce reset %rst, %c0_i32  : i32

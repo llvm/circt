@@ -10,7 +10,7 @@
 // LO     %0 = seq.initial {
 // LO       %c0_i32_0 = hw.constant 0 : i32
 // LO       seq.yield %c0_i32_0 : i32
-// LO     } : !hw.immutable<i32>
+// LO     } : !seq.immutable<i32>
 // LO:    %myShiftReg_sh1 = seq.compreg.ce sym @myShiftReg_sh1  %i, %clk, %ce reset %rst, %c0_i32 initial %0 : i32
 // LO:    %myShiftReg_sh2 = seq.compreg.ce sym @myShiftReg_sh2  %myShiftReg_sh1, %clk, %ce reset %rst, %c0_i32 initial %0 : i32
 // LO:    %myShiftReg_sh3 = seq.compreg.ce sym @myShiftReg_sh3  %myShiftReg_sh2, %clk, %ce reset %rst, %c0_i32 initial %0 : i32

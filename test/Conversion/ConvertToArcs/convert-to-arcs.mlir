@@ -136,7 +136,7 @@ hw.module @ReshufflingInit(in %clockA: !seq.clock, in %clockB: !seq.clock, out z
     %cst2 = hw.constant 2 : i4
     %cst3 = hw.constant 3 : i4
     seq.yield %cst1, %cst2, %cst3 : i4, i4, i4
-  } : !hw.immutable<i4>, !hw.immutable<i4>, !hw.immutable<i4>
+  } : !seq.immutable<i4>, !seq.immutable<i4>, !seq.immutable<i4>
   %5 = seq.compreg %x.z1, %clockA initial %init0 : i4
   %6 = seq.compreg %x.z2, %clockB initial %init1 : i4
   %7 = seq.compreg %x.z3, %clockB initial %init2 : i4
@@ -243,7 +243,7 @@ hw.module @TrivialWithInit(in %clock: !seq.clock, in %i0: i4, in %reset: i1, out
   %init = seq.initial {
     %cst2 = hw.constant 2 : i4
     seq.yield %cst2: i4
-  } : !hw.immutable<i4>
+  } : !seq.immutable<i4>
   %foo = seq.compreg %i0, %clock reset %reset, %0 initial %init: i4
   hw.output %foo : i4
 }

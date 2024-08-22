@@ -10,7 +10,7 @@
 // CHECK:           %[[INIT]] = seq.initial {
 // CHECK:             %false_0 = hw.constant false
 // CHECK:             seq.yield %false_0 : i1
-// CHECK:           } : !hw.immutable<i1>
+// CHECK:           } : !seq.immutable<i1>
 // CHECK:           %[[VAL_10:.*]] = comb.add %[[VAL_6]], %[[VAL_7]] : i32
 // CHECK:           hw.output %[[VAL_10]], %[[VAL_9]] : i32, i1
 // CHECK:         }

@@ -356,7 +356,7 @@ public:
 struct SeqToSVTypeConverter : public TypeConverter {
   SeqToSVTypeConverter() {
     addConversion([&](Type type) { return type; });
-    addConversion([&](hw::ImmutableType type) { return type.getInnerType(); });
+    addConversion([&](seq::ImmutableType type) { return type.getInnerType(); });
     addConversion([&](seq::ClockType type) {
       return IntegerType::get(type.getContext(), 1);
     });
@@ -654,14 +654,15 @@ void SeqToSVPass::runOnOperation() {
 
   for (auto &op : llvm::make_early_inc_range(circuit.getOps())) {
     if (!isa<hw::HWModuleOp>(op))
-      applyPartialConversion(&op);
+      if (failed(applyPartialConversion(&op)))
+        return signalPassFailure();
   }
 
   if (failed(mlir::failableParallelForEach(
           circuit->getContext(), modules, [&](hw::HWModuleOp module) {
             return mlir::applyPartialConversion(module, target, frozenPatterns);
           })))
-    signalPassFailure();
+    return signalPassFailure();
 
   auto loc = UnknownLoc::get(context);
   auto b = ImplicitLocOpBuilder::atBlockBegin(loc, circuit.getBody());

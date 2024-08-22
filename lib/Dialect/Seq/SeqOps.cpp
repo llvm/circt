@@ -89,7 +89,7 @@ static ParseResult parseOptionalImmutableTypeMatch(
     OpAsmParser &parser, Type refType,
     std::optional<OpAsmParser::UnresolvedOperand> operand, Type &type) {
   if (operand)
-    type = hw::ImmutableType::get(refType);
+    type = seq::ImmutableType::get(refType);
   return success();
 }
 
@@ -1023,8 +1023,8 @@ LogicalResult InitialOp::verify() {
     return emitError() << "result type doesn't match with the terminator";
   for (auto [lhs, rhs] :
        llvm::zip(terminator->getOperands().getTypes(), getResultTypes())) {
-    if (cast<hw::ImmutableType>(rhs).getInnerType() != lhs) {
-      return emitError() << cast<hw::ImmutableType>(rhs).getInnerType()
+    if (cast<seq::ImmutableType>(rhs).getInnerType() != lhs) {
+      return emitError() << cast<seq::ImmutableType>(rhs).getInnerType()
                          << " is expected but got " << lhs;
     }
   }
@@ -1037,7 +1037,7 @@ void InitialOp::build(OpBuilder &builder, OperationState &result,
   builder.createBlock(result.addRegion());
   SmallVector<Type> types;
   for (auto t : resultTypes) {
-    types.push_back(hw::ImmutableType::get(t));
+    types.push_back(seq::ImmutableType::get(t));
   }
   result.addTypes(types);
 
@@ -1046,17 +1046,17 @@ void InitialOp::build(OpBuilder &builder, OperationState &result,
     ctor();
 }
 
-TypedValue<hw::ImmutableType>
+TypedValue<seq::ImmutableType>
 circt::seq::createConstantInitialValue(OpBuilder builder, Location loc,
                                        mlir::IntegerAttr attr) {
   auto initial = builder.create<seq::InitialOp>(loc, attr.getType(), [&]() {
     auto constant = builder.create<hw::ConstantOp>(loc, attr);
     builder.create<seq::YieldOp>(loc, ArrayRef<Value>{constant});
   });
-  return cast<TypedValue<hw::ImmutableType>>(initial->getResult(0));
+  return cast<TypedValue<seq::ImmutableType>>(initial->getResult(0));
 }
 
-mlir::TypedValue<hw::ImmutableType>
+mlir::TypedValue<seq::ImmutableType>
 circt::seq::createConstantInitialValue(OpBuilder builder, Operation *op) {
   assert(op->getNumResults() == 1 &&
          op->hasTrait<mlir::OpTrait::ConstantLike>());
@@ -1065,10 +1065,10 @@ circt::seq::createConstantInitialValue(OpBuilder builder, Operation *op) {
         auto clonedOp = builder.clone(*op);
         builder.create<seq::YieldOp>(op->getLoc(), clonedOp->getResults());
       });
-  return cast<mlir::TypedValue<hw::ImmutableType>>(initial.getResult(0));
+  return cast<mlir::TypedValue<seq::ImmutableType>>(initial.getResult(0));
 }
 
-Value circt::seq::unwrapImmutableValue(TypedValue<hw::ImmutableType> value) {
+Value circt::seq::unwrapImmutableValue(TypedValue<seq::ImmutableType> value) {
   auto resultNum = cast<OpResult>(value).getResultNumber();
   auto initialOp = value.getDefiningOp<seq::InitialOp>();
   assert(initialOp);

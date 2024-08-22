@@ -92,11 +92,6 @@ def HWStringType :
       "a HW string", "::circt::hw::StringType">,
     BuildableType<"::circt::hw::StringType::get($_builder.getContext())">;
 
-// A handle to refer to circt::hw::ImmutableType in ODS.
-def ImmutableType : DialectType<HWDialect,
-    CPred<"isa<circt::hw::ImmutableType>($_self)">,
-          "an ImmutableType", "::circt::hw::ImmutableType">;
-
 /// A flat symbol reference or a reference to a name within a module.
 def NameRefAttr : Attr<
   CPred<"llvm::isa<::mlir::FlatSymbolRefAttr, ::circt::hw::InnerRefAttr>($_self)">,

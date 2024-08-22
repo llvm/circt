@@ -13,7 +13,7 @@ module {
     %init = seq.initial {
       %false_0 = hw.constant false
       seq.yield %false_0 : i1
-    } : !hw.immutable<i1>
+    } : !seq.immutable<i1>
     //CHECK:    [[RESET:[0-9]+]] constd [[NID0]] 0
     %reg = seq.compreg %false, %clock reset %reset, %false initial %init : i1
 

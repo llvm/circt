@@ -59,12 +59,12 @@ struct FirMemory {
   FirMemory(hw::HWModuleGeneratedOp op);
 };
 
-mlir::TypedValue<hw::ImmutableType>
+mlir::TypedValue<seq::ImmutableType>
 createConstantInitialValue(OpBuilder builder, Location loc,
                            mlir::IntegerAttr attr);
-mlir::TypedValue<hw::ImmutableType>
+mlir::TypedValue<seq::ImmutableType>
 createConstantInitialValue(OpBuilder builder, Operation *constantLike);
-Value unwrapImmutableValue(mlir::TypedValue<hw::ImmutableType> immutableVal);
+Value unwrapImmutableValue(mlir::TypedValue<seq::ImmutableType> immutableVal);
 
 } // namespace seq
 } // namespace circt
