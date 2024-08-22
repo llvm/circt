@@ -57,15 +57,81 @@ struct SeqToSVPass : public impl::LowerSeqToSVBase<SeqToSVPass> {
 } // namespace circt
 
 namespace {
+struct ModuleLoweringState {
+  struct InitialOpLowering {
+    InitialOpLowering(hw::HWModuleOp module)
+        : builder(module.getModuleBody()), module(module) {}
+    sv::InitialOp svInitialOp = {};
+    DenseMap<Value, Value> mapping;
+    OpBuilder builder;
+    hw::HWModuleOp module;
+    LogicalResult lower() {
+      auto loweringFailed = module
+                                .walk([&](seq::InitialOp initialOp) {
+                                  if (failed(lower(initialOp)))
+                                    return mlir::WalkResult::interrupt();
+                                  return mlir::WalkResult::advance();
+                                })
+                                .wasInterrupted();
+      return LogicalResult::failure(loweringFailed);
+    }
+    LogicalResult lower(seq::InitialOp initialOp) {
+      if (!svInitialOp) {
+        svInitialOp = builder.create<sv::InitialOp>(initialOp->getLoc());
+      }
+      auto loc = initialOp.getLoc();
+      llvm::SmallVector<Value> results;
+
+      auto yieldOp =
+          cast<seq::YieldOp>(initialOp.getBodyBlock()->getTerminator());
+
+      for (auto [result, operand] :
+           llvm::zip(initialOp.getResults(), yieldOp->getOperands())) {
+        auto placeholder =
+            builder
+                .create<mlir::UnrealizedConversionCastOp>(
+                    loc, ArrayRef<Type>{result.getType()}, ArrayRef<Value>{})
+                ->getResult(0);
+        result.replaceAllUsesWith(placeholder);
+        mapping.insert({placeholder, operand});
+      }
+
+      svInitialOp.getBodyBlock()->getOperations().splice(
+          svInitialOp.begin(), initialOp.getBodyBlock()->getOperations());
+
+      assert(initialOp->use_empty());
+      initialOp->erase();
+      yieldOp->erase();
+      return success();
+    }
+    void erase() {
+      for (auto [placeHolder, _] : mapping)
+        placeHolder.getDefiningOp()->erase();
+    }
+  };
+  ModuleLoweringState(HWModuleOp module)
+      : initalOpLowering(std::make_unique<InitialOpLowering>(module)),
+        module(module) {}
+  struct FragmentInfo {
+    bool needsRegFragment = false;
+    bool needsMemFragment = false;
+  } fragment;
+
+  std::unique_ptr<InitialOpLowering> initalOpLowering;
+  HWModuleOp module;
+};
+
 /// Lower CompRegOp to `sv.reg` and `sv.alwaysff`. Use a posedge clock and
 /// synchronous reset.
 template <typename OpTy>
 class CompRegLower : public OpConversionPattern<OpTy> {
 public:
-  CompRegLower(TypeConverter &typeConverter, MLIRContext *context,
-               bool lowerToAlwaysFF)
+  CompRegLower(
+      TypeConverter &typeConverter, MLIRContext *context, bool lowerToAlwaysFF,
+      const MapVector<StringAttr, ModuleLoweringState> &moduleLoweringStates)
       : OpConversionPattern<OpTy>(typeConverter, context),
-        lowerToAlwaysFF(lowerToAlwaysFF) {}
+        lowerToAlwaysFF(lowerToAlwaysFF),
+        moduleLoweringStates(moduleLoweringStates) {}
 
   using OpAdaptor = typename OpConversionPattern<OpTy>::OpAdaptor;
 
@@ -76,10 +142,40 @@ public:
 
     auto regTy =
         ConversionPattern::getTypeConverter()->convertType(reg.getType());
-
+    auto module = reg->template getParentOfType<hw::HWModuleOp>();
+    assert(module);
     auto svReg = rewriter.create<sv::RegOp>(loc, regTy, reg.getNameAttr(),
-                                            reg.getInnerSymAttr(),
-                                            adaptor.getInitialValue());
+                                            reg.getInnerSymAttr());
+
+    if (auto init = reg.getInitialValue()) {
+      const auto &initial =
+          *(moduleLoweringStates.find(module.getModuleNameAttr())
+                ->second.initalOpLowering.get());
+
+      llvm::errs() << init << "\n";
+      module.dump();
+      llvm::errs() << module.getAsOpaquePointer() << "\n";
+
+      // assert(moduleLoweringStates.count(module.get));
+      // assert(moduleLoweringStates.find(module)
+      //            ->second.initalOpLowering->mapping.count(init));
+      // llvm::errs() << "whats" << "\n";
+
+      Value initialValue = initial.mapping.lookup(init);
+      assert(initialValue);
+
+      if (auto op = initialValue.getDefiningOp();
+          op && op->hasTrait<mlir::OpTrait::ConstantLike>()) {
+        auto clonedConstant = rewriter.clone(*op);
+        rewriter.moveOpBefore(clonedConstant, svReg);
+        svReg.getInitMutable().assign(clonedConstant->getResult(0));
+      } else {
+        OpBuilder::InsertionGuard guard(rewriter);
+        auto in = initial.svInitialOp;
+        rewriter.setInsertionPointToEnd(in.getBodyBlock());
+        rewriter.create<sv::BPAssignOp>(reg->getLoc(), svReg, initialValue);
+      }
+    }
     svReg->setDialectAttrs(reg->getDialectAttrs());
 
     circt::sv::setSVAttributes(svReg, circt::sv::getSVAttributes(reg));
@@ -126,6 +222,7 @@ public:
 
 private:
   bool lowerToAlwaysFF;
+  const MapVector<StringAttr, ModuleLoweringState> &moduleLoweringStates;
 };
 
 class InitialLowering : public OpConversionPattern<InitialOp> {
@@ -431,18 +528,6 @@ static bool isLegalOp(Operation *op) {
   return allOperandsLowered && allResultsLowered;
 }
 
-struct InitialOpLowering {
-  InitialOpLowering(hw::HWModuleOp module) : builder(module.getModuleBody()) {}
-  sv::InitialOp initialOp = {};
-  DenseMap<Value, Value> immutableValToReg;
-  OpBuilder builder;
-  hw::HWModuleOp module;
-  LogicalResult lower(seq::InitialOp initial) {
-    if (!initialOp)
-      initialOp = builder.create<sv::InitialOp>(initial->getLoc());
-  }
-};
-
 void SeqToSVPass::runOnOperation() {
   auto circuit = getOperation();
   MLIRContext *context = &getContext();
@@ -466,39 +551,47 @@ void SeqToSVPass::runOnOperation() {
   }
 
   // Lower memories and registers in modules in parallel.
-  bool needsRegRandomization = false;
-  bool needsMemRandomization = false;
+  std::atomic<bool> needsRegRandomization = false;
+  std::atomic<bool> needsMemRandomization = false;
 
-  struct FragmentInfo {
-    bool needsRegFragment;
-    bool needsMemFragment;
-  };
-  DenseMap<HWModuleOp, FragmentInfo> moduleFragmentInfo;
-  llvm::sys::SmartMutex<true> fragmentsMutex;
+  MapVector<StringAttr, ModuleLoweringState> moduleLoweringStates;
+  for (auto module : circuit.getOps<HWModuleOp>()) {
+    // module.dump();
+    llvm::errs() << module.getAsOpaquePointer() << "\n";
 
-  mlir::parallelForEach(&getContext(), modules, [&](HWModuleOp module) {
-    SeqToSVTypeConverter typeConverter;
-    FirRegLowering regLowering(typeConverter, module, disableRegRandomization,
-                               emitSeparateAlwaysBlocks);
-    regLowering.lower();
-    if (regLowering.needsRegRandomization()) {
-      if (!disableRegRandomization) {
-        llvm::sys::SmartScopedLock<true> lock(fragmentsMutex);
-        moduleFragmentInfo[module].needsRegFragment = true;
-      }
-      needsRegRandomization = true;
-    }
-    numSubaccessRestored += regLowering.numSubaccessRestored;
+    moduleLoweringStates.try_emplace(module.getModuleNameAttr(),
+                                     ModuleLoweringState(module));
+  }
 
-    if (auto *it = memsByModule.find(module); it != memsByModule.end()) {
-      memLowering.lowerMemoriesInModule(module, it->second);
-      if (!disableMemRandomization) {
-        llvm::sys::SmartScopedLock<true> lock(fragmentsMutex);
-        moduleFragmentInfo[module].needsMemFragment = true;
-      }
-      needsMemRandomization = true;
-    }
-  });
+  // DenseMap<HWModuleOp, FragmentInfo> moduleFragmentInfo;
+  // llvm::sys::SmartMutex<true> fragmentsMutex;
+
+  mlir::parallelForEach(
+      &getContext(), moduleLoweringStates, [&](auto &moduleAndState) {
+        auto &state = moduleAndState.second;
+        auto module = state.module;
+        SeqToSVTypeConverter typeConverter;
+        FirRegLowering regLowering(typeConverter, module,
+                                   disableRegRandomization,
+                                   emitSeparateAlwaysBlocks);
+        regLowering.lower();
+        if (regLowering.needsRegRandomization()) {
+          if (!disableRegRandomization) {
+            state.fragment.needsRegFragment = true;
+          }
+          needsRegRandomization = true;
+        }
+        numSubaccessRestored += regLowering.numSubaccessRestored;
+
+        if (auto *it = memsByModule.find(module); it != memsByModule.end()) {
+          memLowering.lowerMemoriesInModule(module, it->second);
+          if (!disableMemRandomization) {
+            state.fragment.needsMemFragment = true;
+          }
+          needsMemRandomization = true;
+        }
+        (void)state.initalOpLowering->lower();
+      });
 
   auto randomInitFragmentName =
       FlatSymbolRefAttr::get(context, "RANDOM_INIT_FRAGMENT");
@@ -507,11 +600,15 @@ void SeqToSVPass::runOnOperation() {
   auto randomInitMemFragmentName =
       FlatSymbolRefAttr::get(context, "RANDOM_INIT_MEM_FRAGMENT");
 
-  for (auto &[module, info] : moduleFragmentInfo) {
-    assert((info.needsRegFragment || info.needsMemFragment) &&
-           "module should use memories or registers");
+  for (auto &[_, state] : moduleLoweringStates) {
+    const auto &info = state.fragment;
+    if (!info.needsRegFragment && !info.needsMemFragment) {
+      // If neither is emitted, just skip it.
+      continue;
+    }
 
     SmallVector<Attribute> fragmentAttrs;
+    auto module = state.module;
     if (auto others =
             module->getAttrOfType<ArrayAttr>(emit::getFragmentsAttrName()))
       fragmentAttrs = llvm::to_vector(others);
@@ -533,10 +630,10 @@ void SeqToSVPass::runOnOperation() {
   target.markUnknownOpDynamicallyLegal(isLegalOp);
 
   RewritePatternSet patterns(context);
-  patterns.add<CompRegLower<CompRegOp>>(typeConverter, context,
-                                        lowerToAlwaysFF);
-  patterns.add<CompRegLower<CompRegClockEnabledOp>>(typeConverter, context,
-                                                    lowerToAlwaysFF);
+  patterns.add<CompRegLower<CompRegOp>>(typeConverter, context, lowerToAlwaysFF,
+                                        moduleLoweringStates);
+  patterns.add<CompRegLower<CompRegClockEnabledOp>>(
+      typeConverter, context, lowerToAlwaysFF, moduleLoweringStates);
   patterns.add<ClockCastLowering<seq::FromClockOp>>(typeConverter, context);
   patterns.add<ClockCastLowering<seq::ToClockOp>>(typeConverter, context);
   patterns.add<ClockGateLowering>(typeConverter, context);
@@ -547,7 +644,23 @@ void SeqToSVPass::runOnOperation() {
   // patterns.add<InitialLowering>(typeConverter, context);
   patterns.add<TypeConversionPattern>(typeConverter, context);
 
-  if (failed(applyPartialConversion(circuit, target, std::move(patterns))))
+  // if (failed(applyPartialConversion(circuit, target, std::move(patterns))))
+  //   signalPassFailure();
+
+  mlir::FrozenRewritePatternSet frozenPatterns(std::move(patterns));
+  auto applyPartialConversion = [&](Operation *op) {
+    return mlir::applyPartialConversion(op, target, frozenPatterns);
+  };
+
+  for (auto &op : llvm::make_early_inc_range(circuit.getOps())) {
+    if (!isa<hw::HWModuleOp>(op))
+      applyPartialConversion(&op);
+  }
+
+  if (failed(mlir::failableParallelForEach(
+          circuit->getContext(), modules, [&](hw::HWModuleOp module) {
+            return mlir::applyPartialConversion(module, target, frozenPatterns);
+          })))
     signalPassFailure();
 
   auto loc = UnknownLoc::get(context);
@@ -616,8 +729,7 @@ void SeqToSVPass::runOnOperation() {
 
   // Helper function to emit #ifndef guard.
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
-    b.create<sv::IfDefOp>(
-        guard, []() {}, body);
+    b.create<sv::IfDefOp>(guard, []() {}, body);
   };
 
   b.create<emit::FragmentOp>(randomInitFragmentName.getAttr(), [&] {
