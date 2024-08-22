@@ -1933,7 +1933,6 @@ void GrandCentralPass::runOnOperation() {
                 //   2) The module is NOT instantiated by the effective DUT or
                 //      is under a bind.
                 auto *modNode = instancePaths->instanceGraph.lookup(mod);
-                SmallVector<InstanceRecord *> instances(modNode->uses());
                 if (modNode != companionNode && dutModules.count(modNode))
                   continue;
 
