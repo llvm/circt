@@ -81,17 +81,18 @@ static bool shouldCreateClassImpl(igraph::InstanceGraphNode *node) {
 /// to the targeted operation.
 struct PathInfo {
   PathInfo() = default;
-  PathInfo(Operation *op, FlatSymbolRefAttr symRef,
+  PathInfo(Location loc, bool canBeInstanceTarget, FlatSymbolRefAttr symRef,
            StringAttr altBasePathModule)
-      : op(op), symRef(symRef), altBasePathModule(altBasePathModule) {
-    assert(op && "op must not be null");
+      : loc(loc), canBeInstanceTarget(canBeInstanceTarget), symRef(symRef),
+        altBasePathModule(altBasePathModule) {
     assert(symRef && "symRef must not be null");
   }
 
-  operator bool() const { return op != nullptr; }
+  /// The Location of the hardware component targeted by this path.
+  std::optional<Location> loc = std::nullopt;
 
-  /// The hardware component targeted by this path.
-  Operation *op = nullptr;
+  /// Flag to indicate if the hardware component can be targeted as an instance.
+  bool canBeInstanceTarget = false;
 
   /// A reference to the hierarchical path targeting the op.
   FlatSymbolRefAttr symRef = nullptr;
@@ -584,17 +585,23 @@ LogicalResult PathTracker::updatePathInfoTable(PathInfoTable &pathInfoTable,
     auto [it, inserted] = pathInfoTable.table.try_emplace(entry.id);
     auto &pathInfo = it->second;
     if (!inserted) {
-      auto diag =
-          emitError(pathInfo.op->getLoc(), "duplicate identifier found");
+      assert(pathInfo.loc.has_value() && "all PathInfo should have a Location");
+      auto diag = emitError(pathInfo.loc.value(), "duplicate identifier found");
       diag.attachNote(entry.op->getLoc()) << "other identifier here";
       return failure();
     }
 
-    if (entry.pathAttr)
-      pathInfo = {entry.op, cache.getRefFor(entry.pathAttr),
-                  entry.altBasePathModule};
-    else
-      pathInfo.op = entry.op;
+    // Check if the op is targetable by an instance target. The op pointer may
+    // be invalidated later, so this is the last time we want to access it here.
+    bool canBeInstanceTarget = isa<InstanceOp, FModuleLike>(entry.op);
+
+    if (entry.pathAttr) {
+      pathInfo = {entry.op->getLoc(), canBeInstanceTarget,
+                  cache.getRefFor(entry.pathAttr), entry.altBasePathModule};
+    } else {
+      pathInfo.loc = entry.op->getLoc();
+      pathInfo.canBeInstanceTarget = canBeInstanceTarget;
+    }
   }
   return success();
 }
@@ -1385,6 +1392,22 @@ struct ListCreateOpConversion
   }
 };
 
+struct ListConcatOpConversion
+    : public OpConversionPattern<firrtl::ListConcatOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::ListConcatOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto listType = getTypeConverter()->convertType<om::ListType>(op.getType());
+    if (!listType)
+      return failure();
+    rewriter.replaceOpWithNewOp<om::ListConcatOp>(op, listType,
+                                                  adaptor.getSubLists());
+    return success();
+  }
+};
+
 struct IntegerAddOpConversion
     : public OpConversionPattern<firrtl::IntegerAddOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -1437,14 +1460,14 @@ struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
                   ConversionPatternRewriter &rewriter) const override {
     auto *context = op->getContext();
     auto pathType = om::PathType::get(context);
-    auto pathInfo = pathInfoTable.table.lookup(op.getTarget());
+    auto pathInfoIt = pathInfoTable.table.find(op.getTarget());
 
     // The 0'th argument is the base path by default.
     auto basePath = op->getBlock()->getArgument(0);
 
     // If the target was optimized away, then replace the path operation with
     // a deleted path.
-    if (!pathInfo) {
+    if (pathInfoIt == pathInfoTable.table.end()) {
       if (op.getTargetKind() == firrtl::TargetKind::DontTouch)
         return emitError(op.getLoc(), "DontTouch target was deleted");
       if (op.getTargetKind() == firrtl::TargetKind::Instance)
@@ -1453,6 +1476,7 @@ struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
       return success();
     }
 
+    auto pathInfo = pathInfoIt->second;
     auto symbol = pathInfo.symRef;
 
     // Convert the target kind to an OMIR target.  Member references are updated
@@ -1466,15 +1490,15 @@ struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
       targetKind = om::TargetKind::Reference;
       break;
     case firrtl::TargetKind::Instance:
-      if (!isa<InstanceOp, FModuleLike>(pathInfo.op))
+      if (!pathInfo.canBeInstanceTarget)
         return emitError(op.getLoc(), "invalid target for instance path")
-                   .attachNote(pathInfo.op->getLoc())
+                   .attachNote(pathInfo.loc)
                << "target not instance or module";
       targetKind = om::TargetKind::Instance;
       break;
     case firrtl::TargetKind::MemberInstance:
     case firrtl::TargetKind::MemberReference:
-      if (isa<InstanceOp, FModuleLike>(pathInfo.op))
+      if (pathInfo.canBeInstanceTarget)
         targetKind = om::TargetKind::MemberInstance;
       else
         targetKind = om::TargetKind::MemberReference;
@@ -1864,6 +1888,7 @@ static void populateRewritePatterns(
   patterns.add<ObjectOpConversion>(converter, patterns.getContext());
   patterns.add<ObjectFieldOpConversion>(converter, patterns.getContext());
   patterns.add<ListCreateOpConversion>(converter, patterns.getContext());
+  patterns.add<ListConcatOpConversion>(converter, patterns.getContext());
   patterns.add<BoolConstantOpConversion>(converter, patterns.getContext());
   patterns.add<DoubleConstantOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerAddOpConversion>(converter, patterns.getContext());

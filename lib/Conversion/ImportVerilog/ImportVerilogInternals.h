@@ -13,8 +13,8 @@
 #include "circt/Conversion/ImportVerilog.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "slang/ast/ASTVisitor.h"
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/Support/Debug.h"
@@ -25,6 +25,8 @@
 
 namespace circt {
 namespace ImportVerilog {
+
+using moore::Domain;
 
 /// Port lowering information.
 struct PortLowering {
@@ -44,6 +46,15 @@ struct ModuleLowering {
 /// Function lowering information.
 struct FunctionLowering {
   mlir::func::FuncOp op;
+};
+
+/// Information about a loops continuation and exit blocks relevant while
+/// lowering the loop's body statements.
+struct LoopFrame {
+  /// The block to jump to from a `continue` statement.
+  Block *continueBlock;
+  /// The block to jump to from a `break` statement.
+  Block *breakBlock;
 };
 
 /// A helper class to facilitate the conversion from a Slang AST to MLIR
@@ -88,12 +99,20 @@ struct Context {
   LogicalResult convertStatement(const slang::ast::Statement &stmt);
 
   // Convert an expression AST node to MLIR ops.
-  Value convertRvalueExpression(const slang::ast::Expression &expr);
+  Value convertRvalueExpression(const slang::ast::Expression &expr,
+                                Type requiredType = {});
   Value convertLvalueExpression(const slang::ast::Expression &expr);
 
   // Convert a slang timing control into an MLIR timing control.
-  LogicalResult
-  convertTimingControl(const slang::ast::TimingControl &timingControl);
+  LogicalResult convertTimingControl(const slang::ast::TimingControl &ctrl,
+                                     const slang::ast::Statement &stmt);
+
+  /// Helper function to convert a value to its "truthy" boolean value.
+  Value convertToBool(Value value);
+
+  /// Helper function to convert a value to its "truthy" boolean value and
+  /// convert it to the given domain.
+  Value convertToBool(Value value, Domain domain);
 
   slang::ast::Compilation &compilation;
   mlir::ModuleOp intoModuleOp;
@@ -135,6 +154,19 @@ struct Context {
   /// side. This allows expressions to resolve the opaque
   /// `LValueReferenceExpression`s in the AST.
   SmallVector<Value> lvalueStack;
+
+  /// A stack of loop continuation and exit blocks. Each loop will push the
+  /// relevant info onto this stack, lower its loop body statements, and pop the
+  /// info off the stack again. Continue and break statements encountered as
+  /// part of the loop body statements will use this information to branch to
+  /// the correct block.
+  SmallVector<LoopFrame> loopStack;
+
+  /// A listener called for every variable or net being read. This can be used
+  /// to collect all variables read as part of an expression or statement, for
+  /// example to populate the list of observed signals in an implicit event
+  /// control `@*`.
+  std::function<void(moore::ReadOp)> rvalueReadCallback;
 };
 
 } // namespace ImportVerilog

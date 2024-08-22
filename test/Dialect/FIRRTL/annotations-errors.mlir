@@ -438,23 +438,19 @@ firrtl.circuit "Top" attributes {
 // -----
 // OutputDirAnnotation targeting a non-public module should fail.
 
-// expected-error @below {{Unable to apply annotation: {class = "circt.OutputDirAnnotation", dirname = "foo", target = "~Top|Top"}}}
+// expected-error @below {{Unable to apply annotation: {class = "circt.OutputDirAnnotation", dirname = "foo", target = "~Top|NotTop"}}}
 firrtl.circuit "Top" attributes {
   rawAnnotations = [
     {
       class = "circt.OutputDirAnnotation",
       dirname = "foo",
-      target = "~Top|Top"
-    },
-        {
-      class = "circt.OutputDirAnnotation",
-      dirname = "foo",
-      target = "~Top|Top"
+      target = "~Top|NotTop"
     }
   ]
 } {
+  firrtl.module @Top() {}
   // expected-error @below {{circt.OutputDirAnnotation must target a public module}}
-  firrtl.module private @Top() {}
+  firrtl.module private @NotTop() {}
 }
 
 // -----

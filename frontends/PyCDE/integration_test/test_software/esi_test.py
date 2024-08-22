@@ -67,12 +67,20 @@ assert m.api_version == 0
 print(m.type_table)
 
 d = acc.build_accelerator()
-
-recv = d.ports[esi.AppID("loopback_add7")].read_port("result")
+loopback = d.children[esi.AppID("loopback")]
+recv = loopback.ports[esi.AppID("add")].read_port("result")
 recv.connect()
 
-send = d.ports[esi.AppID("loopback_add7")].write_port("arg")
+send = loopback.ports[esi.AppID("add")].write_port("arg")
 send.connect()
+
+loopback_info = None
+for mod_info in m.module_infos:
+  if mod_info.name == "LoopbackInOutAdd":
+    loopback_info = mod_info
+    break
+assert loopback_info is not None
+add_amt = mod_info.constants["add_amt"].value
 
 ################################################################################
 # Loopback add 7 tests
@@ -85,6 +93,6 @@ resp = recv.read()
 
 print(f"data: {data}")
 print(f"resp: {resp}")
-assert resp == data + 7
+assert resp == data + add_amt
 
 print("PASS")

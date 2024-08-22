@@ -42,7 +42,44 @@ struct polymorphic_type_hook<ChannelPort> {
     return port;
   }
 };
+
+namespace detail {
+/// Pybind11 doesn't have a built-in type caster for std::any
+/// (https://github.com/pybind/pybind11/issues/1590). We must provide one which
+/// knows about all of the potential types which the any might be.
+template <>
+struct type_caster<std::any> {
+public:
+  PYBIND11_TYPE_CASTER(std::any, const_name("object"));
+
+  static handle cast(std::any src, return_value_policy /* policy */,
+                     handle /* parent */) {
+    const std::type_info &t = src.type();
+    if (t == typeid(std::string))
+      return py::str(std::any_cast<std::string>(src));
+    else if (t == typeid(int64_t))
+      return py::int_(std::any_cast<int64_t>(src));
+    else if (t == typeid(uint64_t))
+      return py::int_(std::any_cast<uint64_t>(src));
+    else if (t == typeid(double))
+      return py::float_(std::any_cast<double>(src));
+    else if (t == typeid(bool))
+      return py::bool_(std::any_cast<bool>(src));
+    else if (t == typeid(std::nullptr_t))
+      return py::none();
+    return py::none();
+  }
+};
+} // namespace detail
 } // namespace pybind11
+
+/// Resolve a Type to the Python wrapper object.
+py::object getPyType(std::optional<const Type *> t) {
+  py::object typesModule = py::module_::import("esiaccel.types");
+  if (!t)
+    return py::none();
+  return typesModule.attr("_get_esi_type")(*t);
+}
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 PYBIND11_MODULE(esiCppAccel, m) {
@@ -75,6 +112,12 @@ PYBIND11_MODULE(esiCppAccel, m) {
                              py::return_value_policy::reference)
       .def_property_readonly("size", &ArrayType::getSize);
 
+  py::class_<Constant>(m, "Constant")
+      .def_property_readonly("value", [](Constant &c) { return c.value; })
+      .def_property_readonly(
+          "type", [](Constant &c) { return getPyType(*c.type); },
+          py::return_value_policy::reference);
+
   py::class_<ModuleInfo>(m, "ModuleInfo")
       .def_property_readonly("name", [](ModuleInfo &info) { return info.name; })
       .def_property_readonly("summary",
@@ -84,6 +127,8 @@ PYBIND11_MODULE(esiCppAccel, m) {
       .def_property_readonly("repo", [](ModuleInfo &info) { return info.repo; })
       .def_property_readonly("commit_hash",
                              [](ModuleInfo &info) { return info.commitHash; })
+      .def_property_readonly("constants",
+                             [](ModuleInfo &info) { return info.constants; })
       // TODO: "extra" field.
       .def("__repr__", [](ModuleInfo &info) {
         std::string ret;
@@ -161,13 +206,19 @@ PYBIND11_MODULE(esiCppAccel, m) {
            })
       .def("__eq__", [](AppID &a, AppID &b) { return a == b; })
       .def("__hash__", [](AppID &id) {
-        // TODO: This is a bad hash function. Replace it.
-        return std::hash<std::string>{}(id.name) ^
-               (std::hash<uint32_t>{}(id.idx.value_or(-1)) << 1);
+        return utils::hash_combine(std::hash<std::string>{}(id.name),
+                                   std::hash<uint32_t>{}(id.idx.value_or(-1)));
       });
 
+  // py::class_<std::__basic_future<MessageData>>(m, "MessageDataFuture");
   py::class_<std::future<MessageData>>(m, "MessageDataFuture")
-      .def("valid", &std::future<MessageData>::valid)
+      .def("valid",
+           [](std::future<MessageData> &f) {
+             // For some reason, if we just pass the function pointer, pybind11
+             // sees `std::__basic_future` as the type and pybind11_stubgen
+             // emits an error.
+             return f.valid();
+           })
       .def("wait", &std::future<MessageData>::wait)
       .def("get", [](std::future<MessageData> &f) {
         MessageData data = f.get();
@@ -270,8 +321,21 @@ PYBIND11_MODULE(esiCppAccel, m) {
   py::class_<Manifest>(m, "Manifest")
       .def(py::init<Context &, std::string>())
       .def_property_readonly("api_version", &Manifest::getApiVersion)
-      .def("build_accelerator", &Manifest::buildAccelerator,
-           py::return_value_policy::take_ownership)
-      .def_property_readonly("type_table", &Manifest::getTypeTable)
+      .def(
+          "build_accelerator",
+          [&](Manifest &m, AcceleratorConnection &conn) {
+            auto acc = m.buildAccelerator(conn);
+            conn.getServiceThread()->addPoll(*acc);
+            return acc;
+          },
+          py::return_value_policy::reference)
+      .def_property_readonly("type_table",
+                             [](Manifest &m) {
+                               std::vector<py::object> ret;
+                               std::ranges::transform(m.getTypeTable(),
+                                                      std::back_inserter(ret),
+                                                      getPyType);
+                               return ret;
+                             })
       .def_property_readonly("module_infos", &Manifest::getModuleInfos);
 }

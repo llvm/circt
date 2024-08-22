@@ -33,6 +33,7 @@ public:
   struct Impl;
 
   XrtAccelerator(Context &, std::string xclbin, std::string kernelName);
+  ~XrtAccelerator();
   static std::unique_ptr<AcceleratorConnection>
   connect(Context &, std::string connectionString);
 

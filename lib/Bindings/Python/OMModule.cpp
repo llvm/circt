@@ -380,8 +380,18 @@ static PythonPrimitive omPrimitiveToPythonValue(MlirAttribute attr) {
     return py::str(strRef.data, strRef.length);
   }
 
+  // BoolAttr's are IntegerAttr's, check this first.
   if (mlirAttributeIsABool(attr)) {
     return py::bool_(mlirBoolAttrGetValue(attr));
+  }
+
+  if (mlirAttributeIsAInteger(attr)) {
+    MlirType type = mlirAttributeGetType(attr);
+    if (mlirTypeIsAIndex(type) || mlirIntegerTypeIsSignless(type))
+      return py::int_(mlirIntegerAttrGetValueInt(attr));
+    if (mlirIntegerTypeIsSigned(type))
+      return py::int_(mlirIntegerAttrGetValueSInt(attr));
+    return py::int_(mlirIntegerAttrGetValueUInt(attr));
   }
 
   if (omAttrIsAReferenceAttr(attr)) {
@@ -602,6 +612,9 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
       .def("__len__", &omMapAttrGetNumElements);
   PyMapAttrIterator::bind(m);
 
+  // Add the AnyType class definition.
+  mlir_type_subclass(m, "AnyType", omTypeIsAAnyType, omAnyTypeGetTypeID);
+
   // Add the ClassType class definition.
   mlir_type_subclass(m, "ClassType", omTypeIsAClassType, omClassTypeGetTypeID)
       .def_property_readonly("name", [](MlirType type) {
@@ -612,6 +625,10 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
   // Add the BasePathType class definition.
   mlir_type_subclass(m, "BasePathType", omTypeIsAFrozenBasePathType,
                      omFrozenBasePathTypeGetTypeID);
+
+  // Add the ListType class definition.
+  mlir_type_subclass(m, "ListType", omTypeIsAListType, omListTypeGetTypeID)
+      .def_property_readonly("element_type", omListTypeGetElementType);
 
   // Add the PathType class definition.
   mlir_type_subclass(m, "PathType", omTypeIsAFrozenPathType,

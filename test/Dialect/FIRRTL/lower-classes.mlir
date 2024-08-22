@@ -224,6 +224,13 @@ firrtl.circuit "PathModule" {
     // CHECK:  %[[c1:.+]] = om.list_create %propIn, %[[c0]] : !om.integer
     // CHECK:  om.class.field @propOut, %[[c1]] : !om.list<!om.integer>
   }
+
+   firrtl.module @ListConcat(in %propIn0: !firrtl.list<integer>, in %propIn1: !firrtl.list<integer>, out %propOut: !firrtl.list<integer>) {
+    // CHECK: [[CONCAT:%.+]] = om.list_concat %propIn0, %propIn1
+    %1 = firrtl.list.concat %propIn0, %propIn1 : !firrtl.list<integer>
+    // CHECK: om.class.field @propOut, [[CONCAT]]
+    firrtl.propassign %propOut, %1 : !firrtl.list<integer>
+  }
 }
 
 // CHECK-LABEL: firrtl.circuit "WireProp"
@@ -335,7 +342,7 @@ firrtl.circuit "AnyCast" {
 // CHECK-LABEL: firrtl.circuit "ModuleWithPropertySubmodule"
 firrtl.circuit "ModuleWithPropertySubmodule" {
   // CHECK: om.class @ModuleWithPropertySubmodule_Class
-  firrtl.module private @ModuleWithPropertySubmodule() {
+  firrtl.module @ModuleWithPropertySubmodule() {
     %c0 = firrtl.integer 0
     // CHECK: om.object @SubmoduleWithProperty_Class
     %inst.prop = firrtl.instance inst @SubmoduleWithProperty(in prop: !firrtl.integer)
@@ -449,5 +456,18 @@ firrtl.circuit "OwningModulePrefix" {
   firrtl.class @OwningModuleClass() {
     // CHECK: om.path_create reference %basepath [[NLA]]
     firrtl.path reference distinct[0]<>
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "PathTargetReplaced"
+firrtl.circuit "PathTargetReplaced" {
+  // CHECK: hw.hierpath private [[NLA:@.+]] [@PathTargetReplaced::[[SYM:@.+]]]
+  firrtl.module @PathTargetReplaced() {
+    // CHECK: firrtl.instance replaced sym [[SYM]]
+    firrtl.instance replaced {annotations = [{class = "circt.tracker", id = distinct[0]<>}]} @WillBeReplaced(out output: !firrtl.integer)
+    // CHECK: om.path_create instance %basepath [[NLA]]
+    %path = firrtl.path instance distinct[0]<>
+  }
+  firrtl.module private @WillBeReplaced(out %output: !firrtl.integer) {
   }
 }

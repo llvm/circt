@@ -155,7 +155,7 @@ firrtl.circuit "Foo" {
     firrtl.int.generic "circt_fpga_probe"  %data, %clock : (!firrtl.uint<32>, !firrtl.clock) -> ()
   }
 
-  // CHECK-LABEL: firrtl.module private @DPIIntrinsicTest(in %clock: !firrtl.clock, in %enable: !firrtl.uint<1>, in %in1: !firrtl.uint<8>, in %in2: !firrtl.uint<8>)
+  // CHECK-LABEL: firrtl.module private @DPIIntrinsicTest
   firrtl.module private @DPIIntrinsicTest(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in1: !firrtl.uint<8>, in %in2: !firrtl.uint<8>) {
     // CHECK-NEXT: %0 = firrtl.int.dpi.call "clocked_result"(%in1, %in2) clock %clock enable %enable {inputNames = ["foo", "bar"], outputName = "baz"} : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
     %0 = firrtl.int.generic "circt_dpi_call" <isClocked: ui32 = 1, functionName: none = "clocked_result", inputNames: none = "foo;bar", outputName: none = "baz"> %clock, %enable, %in1, %in2 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>

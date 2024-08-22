@@ -78,6 +78,7 @@ XrtAccelerator::XrtAccelerator(Context &ctxt, std::string xclbin,
     : AcceleratorConnection(ctxt) {
   impl = make_unique<Impl>(xclbin, device_id);
 }
+XrtAccelerator::~XrtAccelerator() { disconnect(); }
 
 namespace {
 class XrtMMIO : public MMIO {

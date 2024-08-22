@@ -15,7 +15,9 @@
 #include "circt/Conversion/ImportVerilog.h"
 #include "circt/Conversion/MooreToCore.h"
 #include "circt/Dialect/Moore/MoorePasses.h"
+#include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
+#include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
@@ -216,27 +218,62 @@ struct CLOptions {
 
 static CLOptions opts;
 
-/// Parse specified files that had been translated into Moore dialect IR. After
-/// that simplify these files like deleting local variables, and then emit the
-/// resulting Moore dialect IR .
-static LogicalResult populateMooreTransforms(mlir::PassManager &pm) {
-  auto &modulePM = pm.nest<moore::SVModuleOp>();
-  modulePM.addPass(moore::createLowerConcatRefPass());
-  modulePM.addPass(moore::createSimplifyProceduresPass());
+//===----------------------------------------------------------------------===//
+// Pass Pipeline
+//===----------------------------------------------------------------------===//
 
-  pm.addPass(mlir::createSROA());
-  pm.addPass(mlir::createMem2Reg());
+/// Optimize and simplify the Moore dialect IR.
+static void populateMooreTransforms(PassManager &pm) {
+  {
+    // Perform an initial cleanup and preprocessing across all
+    // modules/functions.
+    auto &anyPM = pm.nestAny();
+    anyPM.addPass(mlir::createCSEPass());
+    anyPM.addPass(mlir::createCanonicalizerPass());
+  }
 
-  // TODO: like dedup pass.
+  {
+    // Perform module-specific transformations.
+    auto &modulePM = pm.nest<moore::SVModuleOp>();
+    modulePM.addPass(moore::createLowerConcatRefPass());
+    // TODO: Enable the following once it not longer interferes with @(...)
+    // event control checks. The introduced dummy variables make the event
+    // control observe a static local variable that never changes, instead of
+    // observing a module-wide signal.
+    // modulePM.addPass(moore::createSimplifyProceduresPass());
+  }
 
-  return success();
+  {
+    // Perform a final cleanup across all modules/functions.
+    auto &anyPM = pm.nestAny();
+    anyPM.addPass(mlir::createSROA());
+    anyPM.addPass(mlir::createMem2Reg());
+    anyPM.addPass(mlir::createCSEPass());
+    anyPM.addPass(mlir::createCanonicalizerPass());
+  }
 }
 
 /// Convert Moore dialect IR into core dialect IR
-static LogicalResult populateMooreToCoreLowering(mlir::PassManager &pm) {
+static void populateMooreToCoreLowering(PassManager &pm) {
+  // Perform the conversion.
   pm.addPass(createConvertMooreToCorePass());
 
-  return success();
+  {
+    // Conversion to the core dialects likely uncovers new canonicalization
+    // opportunities.
+    auto &anyPM = pm.nestAny();
+    anyPM.addPass(mlir::createCSEPass());
+    anyPM.addPass(mlir::createCanonicalizerPass());
+  }
+}
+
+/// Populate the given pass manager with transformations as configured by the
+/// command line options.
+static void populatePasses(PassManager &pm) {
+  populateMooreTransforms(pm);
+  if (opts.loweringMode == LoweringMode::OutputIRMoore)
+    return;
+  populateMooreToCoreLowering(pm);
 }
 
 //===----------------------------------------------------------------------===//
@@ -308,22 +345,22 @@ static LogicalResult executeWithSources(MLIRContext *context,
   if (failed(importVerilog(sourceMgr, context, ts, module.get(), &options)))
     return failure();
 
-  PassManager pm(context);
-  if (opts.loweringMode == LoweringMode::OutputIRMoore ||
-      opts.loweringMode == LoweringMode::OutputIRHW) {
+  // If the user requested for the files to be only linted, the module remains
+  // empty and there is nothing left to do.
+  if (opts.loweringMode == LoweringMode::OnlyLint)
+    return success();
 
-    // Simplify the Moore dialect IR.
-    if (failed(populateMooreTransforms(pm)))
+  // If the user requested anything besides simply parsing the input, run the
+  // appropriate transformation passes according to the command line options.
+  if (opts.loweringMode != LoweringMode::OnlyParse) {
+    PassManager pm(context);
+    pm.enableVerifier(true);
+    if (failed(applyPassManagerCLOptions(pm)))
       return failure();
-
-    if (opts.loweringMode == LoweringMode::OutputIRHW)
-      // Convert Moore IR into core IR.
-      if (failed(populateMooreToCoreLowering(pm)))
-        return failure();
+    populatePasses(pm);
+    if (failed(pm.run(module.get())))
+      return failure();
   }
-
-  if (failed(pm.run(module.get())))
-    return failure();
 
   // Print the final MLIR.
   module->print(outputFile->os());

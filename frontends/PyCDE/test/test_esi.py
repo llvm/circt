@@ -4,7 +4,7 @@
 from pycde import (Clock, Input, InputChannel, Output, OutputChannel, Module,
                    Reset, generator, types)
 from pycde import esi
-from pycde.common import AppID, RecvBundle, SendBundle
+from pycde.common import AppID, Constant, RecvBundle, SendBundle
 from pycde.constructs import Wire
 from pycde.esi import MMIO
 from pycde.module import Metadata
@@ -36,6 +36,7 @@ class HostComms:
 
 
 # CHECK: esi.manifest.sym @LoopbackInOutTop name "LoopbackInOut" {{.*}}version "0.1" {bar = "baz", foo = 1 : i64}
+# CHECK: esi.manifest.constants @LoopbackInOutTop {c1 = 54 : ui8}
 
 
 # CHECK-LABEL: hw.module @LoopbackInOutTop(in %clk : !seq.clock, in %rst : i1)
@@ -58,6 +59,8 @@ class LoopbackInOutTop(Module):
           "bar": "baz"
       },
   )
+
+  c1 = Constant(UInt(8), 54)
 
   @generator
   def construct(self):

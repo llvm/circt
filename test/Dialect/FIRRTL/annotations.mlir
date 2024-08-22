@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-annotations{allow-adding-ports-on-public-modules=true}))' --split-input-file %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-annotations{allow-adding-ports-on-public-modules=true}))'  --verify-diagnostics --split-input-file %s | FileCheck %s
 
 // circt.test copies the annotation to the target
 // circt.testNT puts the targetless annotation on the circuit
@@ -1952,4 +1952,36 @@ firrtl.circuit "Top" attributes {
   // CHECK-LABEL: firrtl.module @Top
   // CHECK-SAME:  attributes {output_file = #hw.output_file<"foobarbaz{{/|\\\\}}qux{{/|\\\\}}">}
   firrtl.module @Top() {}
+}
+
+// -----
+// Check that FullAsyncResetAnnotation is lowered to FullResetAnnotation (and prints a warning)
+// CHECK-LABEL: firrtl.circuit "Top"
+firrtl.circuit "Top" attributes {
+  rawAnnotations = [
+    {
+      class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation",
+      target = "~Top|Top>reset"
+    }]
+  } {
+  // CHECK-LABEL: firrtl.module @Top
+  // CHECK-SAME: (in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}])
+  // expected-warning @+1 {{'sifive.enterprise.firrtl.FullAsyncResetAnnotation' is deprecated, use 'circt.FullResetAnnotation' instead}}
+  firrtl.module @Top(in %reset: !firrtl.asyncreset) {}
+}
+
+// -----
+// Check that IgnoreFullAsyncResetAnnotation is lowered to ExcludeFromFullResetAnnotation (and prints a warning)
+// CHECK-LABEL: firrtl.circuit "Top"
+firrtl.circuit "Top" attributes {
+  rawAnnotations = [
+    {
+      class = "sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation",
+      target = "~Top|Top"
+    }]
+  } {
+  // CHECK-LABEL: firrtl.module @Top
+  // CHECK-SAME: (in %reset: !firrtl.asyncreset) attributes {annotations = [{class = "circt.ExcludeFromFullResetAnnotation"}]}
+  // expected-warning @+1 {{'sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation' is deprecated, use 'circt.ExcludeFromFullResetAnnotation' instead}}
+  firrtl.module @Top(in %reset: !firrtl.asyncreset) {}
 }

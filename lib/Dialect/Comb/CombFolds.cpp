@@ -122,7 +122,7 @@ static inline ComplementMatcher<SubType> m_Complement(const SubType &subExpr) {
 }
 
 /// Return true if the op will be flattened afterwards. Op will be flattend if
-/// it has a single user which has a same op type.
+/// it has a single user which has a same op type.  User must be in same block.
 static bool shouldBeFlattened(Operation *op) {
   assert((isa<AndOp, OrOp, XorOp, AddOp, MulOp>(op) &&
           "must be commutative operations"));
@@ -130,7 +130,8 @@ static bool shouldBeFlattened(Operation *op) {
     auto *user = *op->getUsers().begin();
     return user->getName() == op->getName() &&
            op->getAttrOfType<UnitAttr>("twoState") ==
-               user->getAttrOfType<UnitAttr>("twoState");
+               user->getAttrOfType<UnitAttr>("twoState") &&
+           op->getBlock() == user->getBlock();
   }
   return false;
 }
@@ -169,8 +170,11 @@ static bool tryFlatteningOperands(Operation *op, PatternRewriter &rewriter) {
 
     Value value = *element.current++;
     auto *flattenOp = value.getDefiningOp();
+    // If not defined by a compatible operation of the same kind and
+    // from the same block, keep this as-is.
     if (!flattenOp || flattenOp->getName() != op->getName() ||
-        flattenOp == op || binFlag != op->hasAttrOfType<UnitAttr>("twoState")) {
+        flattenOp == op || binFlag != op->hasAttrOfType<UnitAttr>("twoState") ||
+        flattenOp->getBlock() != op->getBlock()) {
       newOperands.push_back(value);
       continue;
     }
@@ -689,17 +693,20 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   // `extract(lowBit, shl(1, x))` -> `x == lowBit` when a single bit is
   // extracted.
   if (cast<IntegerType>(op.getType()).getWidth() == 1 && inputOp)
-    if (auto shlOp = dyn_cast<ShlOp>(inputOp))
-      if (auto lhsCst = shlOp.getOperand(0).getDefiningOp<hw::ConstantOp>())
-        if (lhsCst.getValue().isOne()) {
-          auto newCst = rewriter.create<hw::ConstantOp>(
-              shlOp.getLoc(),
-              APInt(lhsCst.getValue().getBitWidth(), op.getLowBit()));
-          replaceOpWithNewOpAndCopyName<ICmpOp>(rewriter, op, ICmpPredicate::eq,
-                                                shlOp->getOperand(1), newCst,
-                                                false);
-          return success();
-        }
+    if (auto shlOp = dyn_cast<ShlOp>(inputOp)) {
+      // Don't canonicalize if the shift is multiply used.
+      if (shlOp->hasOneUse())
+        if (auto lhsCst = shlOp.getLhs().getDefiningOp<hw::ConstantOp>())
+          if (lhsCst.getValue().isOne()) {
+            auto newCst = rewriter.create<hw::ConstantOp>(
+                shlOp.getLoc(),
+                APInt(lhsCst.getValue().getBitWidth(), op.getLowBit()));
+            replaceOpWithNewOpAndCopyName<ICmpOp>(
+                rewriter, op, ICmpPredicate::eq, shlOp->getOperand(1), newCst,
+                false);
+            return success();
+          }
+    }
 
   return failure();
 }
@@ -933,34 +940,48 @@ static Value getCommonOperand(Op op) {
 /// Example: `and(x, y, x, z)` -> `and(x, y, z)`
 template <typename Op>
 static bool canonicalizeIdempotentInputs(Op op, PatternRewriter &rewriter) {
+  // Depth limit to search, in operations.  Chosen arbitrarily, keep small.
+  constexpr unsigned limit = 3;
   auto inputs = op.getInputs();
 
   llvm::SmallSetVector<Value, 8> uniqueInputs(inputs.begin(), inputs.end());
-  llvm::SmallDenseSet<Value, 8> checked;
+  llvm::SmallDenseSet<Op, 8> checked;
   checked.insert(op);
 
-  llvm::SmallVector<Value, 8> worklist;
-  for (auto input : inputs) {
-    if (input != op)
-      worklist.push_back(input);
-  }
+  struct OpWithDepth {
+    Op op;
+    unsigned depth;
+  };
+  llvm::SmallVector<OpWithDepth, 8> worklist;
+
+  auto enqueue = [&worklist, &checked, &op](Value input, unsigned depth) {
+    // Add to worklist if within depth limit, is defined in the same block by
+    // the same kind of operation, has same two-state-ness, and not enqueued
+    // previously.
+    if (depth < limit && input.getParentBlock() == op->getBlock()) {
+      auto inputOp = input.template getDefiningOp<Op>();
+      if (inputOp && inputOp.getTwoState() == op.getTwoState() &&
+          checked.insert(inputOp).second)
+        worklist.push_back({inputOp, depth + 1});
+    }
+  };
+
+  for (auto input : uniqueInputs)
+    enqueue(input, 0);
 
   while (!worklist.empty()) {
-    auto element = worklist.pop_back_val();
+    auto item = worklist.pop_back_val();
 
-    if (auto idempotentOp = element.getDefiningOp<Op>()) {
-      for (auto input : idempotentOp.getInputs()) {
-        uniqueInputs.remove(input);
-
-        if (checked.insert(input).second)
-          worklist.push_back(input);
-      }
+    for (auto input : item.op.getInputs()) {
+      uniqueInputs.remove(input);
+      enqueue(input, item.depth);
     }
   }
 
   if (uniqueInputs.size() < inputs.size()) {
     replaceOpWithNewOpAndCopyName<Op>(rewriter, op, op.getType(),
-                                      uniqueInputs.getArrayRef());
+                                      uniqueInputs.getArrayRef(),
+                                      op.getTwoState());
     return true;
   }
 
@@ -968,12 +989,8 @@ static bool canonicalizeIdempotentInputs(Op op, PatternRewriter &rewriter) {
 }
 
 LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
-  if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
-
   auto inputs = op.getInputs();
   auto size = inputs.size();
-  assert(size > 1 && "expected 2 or more operands, `fold` should handle this");
 
   // and(x, and(...)) -> and(x, ...) -- flatten
   if (tryFlatteningOperands(op, rewriter))
@@ -984,6 +1001,10 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
   // Trivial and(x), and(x, x) cases are handled by [AndOp::fold] above.
   if (size > 1 && canonicalizeIdempotentInputs(op, rewriter))
     return success();
+
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
+  assert(size > 1 && "expected 2 or more operands, `fold` should handle this");
 
   // Patterns for and with a constant on RHS.
   APInt value;
@@ -1255,12 +1276,8 @@ static bool canonicalizeOrOfConcatsWithCstOperands(OrOp op, size_t concatIdx1,
 }
 
 LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
-  if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
-
   auto inputs = op.getInputs();
   auto size = inputs.size();
-  assert(size > 1 && "expected 2 or more operands");
 
   // or(x, or(...)) -> or(x, ...) -- flatten
   if (tryFlatteningOperands(op, rewriter))
@@ -1271,6 +1288,10 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
   // Trivial or(x), or(x, x) cases are handled by [OrOp::fold].
   if (size > 1 && canonicalizeIdempotentInputs(op, rewriter))
     return success();
+
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
+  assert(size > 1 && "expected 2 or more operands");
 
   // Patterns for and with a constant on RHS.
   APInt value;

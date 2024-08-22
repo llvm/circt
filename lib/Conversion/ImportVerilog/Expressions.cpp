@@ -12,6 +12,20 @@
 
 using namespace circt;
 using namespace ImportVerilog;
+using moore::Domain;
+
+/// Convert a Slang `SVInt` to a CIRCT `FVInt`.
+static FVInt convertSVIntToFVInt(const slang::SVInt &svint) {
+  if (svint.hasUnknown()) {
+    unsigned numWords = svint.getNumWords() / 2;
+    auto value = ArrayRef<uint64_t>(svint.getRawPtr(), numWords);
+    auto unknown = ArrayRef<uint64_t>(svint.getRawPtr() + numWords, numWords);
+    return FVInt(APInt(svint.getBitWidth(), value),
+                 APInt(svint.getBitWidth(), unknown));
+  }
+  auto value = ArrayRef<uint64_t>(svint.getRawPtr(), svint.getNumWords());
+  return FVInt(APInt(svint.getBitWidth(), value));
+}
 
 // NOLINTBEGIN(misc-no-recursion)
 namespace {
@@ -28,26 +42,23 @@ struct RvalueExprVisitor {
   Value convertToSimpleBitVector(Value value) {
     if (!value)
       return {};
-    if (isa<moore::IntType>(value.getType()) ||
-        isa<moore::IntType>(
-            dyn_cast<moore::RefType>(value.getType()).getNestedType()))
+    if (isa<moore::IntType>(value.getType()))
       return value;
+
+    // Some operations in Slang's AST, for example bitwise or `|`, don't cast
+    // packed struct/array operands to simple bit vectors but directly operate
+    // on the struct/array. Since the corresponding IR ops operate only on
+    // simple bit vectors, insert a conversion in this case.
+    if (auto packed = dyn_cast<moore::PackedType>(value.getType())) {
+      if (auto bits = packed.getBitSize()) {
+        auto sbvType =
+            moore::IntType::get(value.getContext(), *bits, packed.getDomain());
+        return builder.create<moore::ConversionOp>(loc, sbvType, value);
+      }
+    }
+
     mlir::emitError(loc, "expression of type ")
         << value.getType() << " cannot be cast to a simple bit vector";
-    return {};
-  }
-
-  /// Helper function to convert a value to its "truthy" boolean value.
-  Value convertToBool(Value value) {
-    if (!value)
-      return {};
-    if (auto type = dyn_cast_or_null<moore::IntType>(value.getType()))
-      if (type.getBitSize() == 1)
-        return value;
-    if (auto type = dyn_cast_or_null<moore::UnpackedType>(value.getType()))
-      return builder.create<moore::BoolCastOp>(loc, value);
-    mlir::emitError(loc, "expression of type ")
-        << value.getType() << " cannot be cast to a boolean";
     return {};
   }
 
@@ -55,16 +66,18 @@ struct RvalueExprVisitor {
   Value visit(const slang::ast::LValueReferenceExpression &expr) {
     assert(!context.lvalueStack.empty() && "parent assignments push lvalue");
     auto lvalue = context.lvalueStack.back();
-    return builder.create<moore::ReadOp>(
-        loc, cast<moore::RefType>(lvalue.getType()).getNestedType(), lvalue);
+    return builder.create<moore::ReadOp>(loc, lvalue);
   }
 
   // Handle named values, such as references to declared variables.
   Value visit(const slang::ast::NamedValueExpression &expr) {
     if (auto value = context.valueSymbols.lookup(&expr.symbol)) {
-      if (auto refType = dyn_cast<moore::RefType>(value.getType()))
-        value =
-            builder.create<moore::ReadOp>(loc, refType.getNestedType(), value);
+      if (isa<moore::RefType>(value.getType())) {
+        auto readOp = builder.create<moore::ReadOp>(loc, value);
+        if (context.rvalueReadCallback)
+          context.rvalueReadCallback(readOp);
+        value = readOp.getResult();
+      }
       return value;
     }
 
@@ -76,7 +89,7 @@ struct RvalueExprVisitor {
       auto type = context.convertType(*expr.type);
       if (!type)
         return {};
-      return convertSVInt(constant.integer(), type);
+      return materializeSVInt(constant.integer(), type);
     }
 
     // Otherwise some other part of ImportVerilog should have added an MLIR
@@ -92,19 +105,20 @@ struct RvalueExprVisitor {
     auto type = context.convertType(*expr.type);
     if (!type)
       return {};
-    auto operand = context.convertRvalueExpression(expr.operand());
-    if (!operand)
-      return {};
-    return builder.create<moore::ConversionOp>(loc, type, operand);
+    return context.convertRvalueExpression(expr.operand(), type);
   }
 
   // Handle blocking and non-blocking assignments.
   Value visit(const slang::ast::AssignmentExpression &expr) {
     auto lhs = context.convertLvalueExpression(expr.left());
+    if (!lhs)
+      return {};
+
     context.lvalueStack.push_back(lhs);
-    auto rhs = context.convertRvalueExpression(expr.right());
+    auto rhs = context.convertRvalueExpression(
+        expr.right(), cast<moore::RefType>(lhs.getType()).getNestedType());
     context.lvalueStack.pop_back();
-    if (!lhs || !rhs)
+    if (!rhs)
       return {};
 
     if (expr.timingControl) {
@@ -135,19 +149,16 @@ struct RvalueExprVisitor {
 
   // Helper function to create pre and post increments and decrements.
   Value createIncrement(Value arg, bool isInc, bool isPost) {
-    auto preValue = convertToSimpleBitVector(arg);
-    if (!preValue)
-      return {};
-    preValue = builder.create<moore::ReadOp>(
-        loc, cast<moore::RefType>(preValue.getType()).getNestedType(),
-        preValue);
+    auto preValue = builder.create<moore::ReadOp>(loc, arg);
     auto one = builder.create<moore::ConstantOp>(
         loc, cast<moore::IntType>(preValue.getType()), 1);
     auto postValue =
         isInc ? builder.create<moore::AddOp>(loc, preValue, one).getResult()
               : builder.create<moore::SubOp>(loc, preValue, one).getResult();
     builder.create<moore::BlockingAssignOp>(loc, arg, postValue);
-    return isPost ? preValue : postValue;
+    if (isPost)
+      return preValue;
+    return postValue;
   }
 
   // Handle unary operators.
@@ -196,7 +207,7 @@ struct RvalueExprVisitor {
       return createReduction<moore::ReduceXorOp>(arg, true);
 
     case UnaryOperator::LogicalNot:
-      arg = convertToBool(arg);
+      arg = context.convertToBool(arg);
       if (!arg)
         return {};
       return builder.create<moore::NotOp>(loc, arg);
@@ -220,8 +231,10 @@ struct RvalueExprVisitor {
   template <class ConcreteOp>
   Value createBinary(Value lhs, Value rhs) {
     lhs = convertToSimpleBitVector(lhs);
+    if (!lhs)
+      return {};
     rhs = convertToSimpleBitVector(rhs);
-    if (!lhs || !rhs)
+    if (!rhs)
       return {};
     return builder.create<ConcreteOp>(loc, lhs, rhs);
   }
@@ -229,9 +242,17 @@ struct RvalueExprVisitor {
   // Handle binary operators.
   Value visit(const slang::ast::BinaryExpression &expr) {
     auto lhs = context.convertRvalueExpression(expr.left());
-    auto rhs = context.convertRvalueExpression(expr.right());
-    if (!lhs || !rhs)
+    if (!lhs)
       return {};
+    auto rhs = context.convertRvalueExpression(expr.right());
+    if (!rhs)
+      return {};
+
+    // Determine the domain of the result.
+    Domain domain = Domain::TwoValued;
+    if (expr.type->isFourState() || expr.left().type->isFourState() ||
+        expr.right().type->isFourState())
+      domain = Domain::FourValued;
 
     using slang::ast::BinaryOperator;
     switch (expr.op) {
@@ -313,35 +334,45 @@ struct RvalueExprVisitor {
 
     // See IEEE 1800-2017 § 11.4.7 "Logical operators".
     case BinaryOperator::LogicalAnd: {
-      // TODO: This should short-circuit. Put the RHS code into an scf.if.
-      lhs = convertToBool(lhs);
-      rhs = convertToBool(rhs);
-      if (!lhs || !rhs)
+      // TODO: This should short-circuit. Put the RHS code into a separate
+      // block.
+      lhs = context.convertToBool(lhs, domain);
+      if (!lhs)
+        return {};
+      rhs = context.convertToBool(rhs, domain);
+      if (!rhs)
         return {};
       return builder.create<moore::AndOp>(loc, lhs, rhs);
     }
     case BinaryOperator::LogicalOr: {
-      // TODO: This should short-circuit. Put the RHS code into an scf.if.
-      lhs = convertToBool(lhs);
-      rhs = convertToBool(rhs);
-      if (!lhs || !rhs)
+      // TODO: This should short-circuit. Put the RHS code into a separate
+      // block.
+      lhs = context.convertToBool(lhs, domain);
+      if (!lhs)
+        return {};
+      rhs = context.convertToBool(rhs, domain);
+      if (!rhs)
         return {};
       return builder.create<moore::OrOp>(loc, lhs, rhs);
     }
     case BinaryOperator::LogicalImplication: {
       // `(lhs -> rhs)` equivalent to `(!lhs || rhs)`.
-      lhs = convertToBool(lhs);
-      rhs = convertToBool(rhs);
-      if (!lhs || !rhs)
+      lhs = context.convertToBool(lhs, domain);
+      if (!lhs)
+        return {};
+      rhs = context.convertToBool(rhs, domain);
+      if (!rhs)
         return {};
       auto notLHS = builder.create<moore::NotOp>(loc, lhs);
       return builder.create<moore::OrOp>(loc, notLHS, rhs);
     }
     case BinaryOperator::LogicalEquivalence: {
       // `(lhs <-> rhs)` equivalent to `(lhs && rhs) || (!lhs && !rhs)`.
-      lhs = convertToBool(lhs);
-      rhs = convertToBool(rhs);
-      if (!lhs || !rhs)
+      lhs = context.convertToBool(lhs, domain);
+      if (!lhs)
+        return {};
+      rhs = context.convertToBool(rhs, domain);
+      if (!rhs)
         return {};
       auto notLHS = builder.create<moore::NotOp>(loc, lhs);
       auto notRHS = builder.create<moore::NotOp>(loc, rhs);
@@ -373,20 +404,17 @@ struct RvalueExprVisitor {
     return {};
   }
 
-  // Materialize a Slang integer literal as a constant op.
-  Value convertSVInt(const slang::SVInt &value, Type type) {
-    if (value.hasUnknown()) {
-      mlir::emitError(loc, "literals with X or Z bits not supported");
-      return {};
-    }
-    auto intType =
-        moore::IntType::get(context.getContext(), value.getBitWidth(),
-                            value.hasUnknown() ? moore::Domain::FourValued
+  /// Materialize a Slang integer literal as a constant op.
+  Value materializeSVInt(const slang::SVInt &svint, Type type) {
+    auto fvint = convertSVIntToFVInt(svint);
+    bool typeIsFourValued = false;
+    if (auto unpackedType = dyn_cast<moore::UnpackedType>(type))
+      typeIsFourValued = unpackedType.getDomain() == moore::Domain::FourValued;
+    auto intType = moore::IntType::get(
+        context.getContext(), fvint.getBitWidth(),
+        fvint.hasUnknown() || typeIsFourValued ? moore::Domain::FourValued
                                                : moore::Domain::TwoValued);
-    Value result = builder.create<moore::ConstantOp>(
-        loc, intType,
-        APInt(value.getBitWidth(),
-              ArrayRef<uint64_t>(value.getRawPtr(), value.getNumWords())));
+    Value result = builder.create<moore::ConstantOp>(loc, intType, fvint);
     if (result.getType() != type)
       result = builder.create<moore::ConversionOp>(loc, type, result);
     return result;
@@ -397,7 +425,7 @@ struct RvalueExprVisitor {
     auto type = context.convertType(*expr.type);
     if (!type)
       return {};
-    return convertSVInt(expr.getValue(), type);
+    return materializeSVInt(expr.getValue(), type);
   }
 
   // Handle integer literals.
@@ -405,7 +433,7 @@ struct RvalueExprVisitor {
     auto type = context.convertType(*expr.type);
     if (!type)
       return {};
-    return convertSVInt(expr.getValue(), type);
+    return materializeSVInt(expr.getValue(), type);
   }
 
   // Handle concatenations.
@@ -611,31 +639,44 @@ struct RvalueExprVisitor {
     auto type = context.convertType(*expr.type);
 
     // Handle condition.
-    Value cond = convertToSimpleBitVector(
-        context.convertRvalueExpression(*expr.conditions.begin()->expr));
-    cond = convertToBool(cond);
-    if (!cond)
+    if (expr.conditions.size() > 1) {
+      mlir::emitError(loc)
+          << "unsupported conditional expression with more than one condition";
       return {};
-    auto conditionalOp = builder.create<moore::ConditionalOp>(loc, type, cond);
+    }
+    const auto &cond = expr.conditions[0];
+    if (cond.pattern) {
+      mlir::emitError(loc) << "unsupported conditional expression with pattern";
+      return {};
+    }
+    auto value =
+        context.convertToBool(context.convertRvalueExpression(*cond.expr));
+    if (!value)
+      return {};
+    auto conditionalOp = builder.create<moore::ConditionalOp>(loc, type, value);
 
     // Create blocks for true region and false region.
-    conditionalOp.getTrueRegion().emplaceBlock();
-    conditionalOp.getFalseRegion().emplaceBlock();
+    auto &trueBlock = conditionalOp.getTrueRegion().emplaceBlock();
+    auto &falseBlock = conditionalOp.getFalseRegion().emplaceBlock();
 
     OpBuilder::InsertionGuard g(builder);
 
     // Handle left expression.
-    builder.setInsertionPointToStart(conditionalOp.getBody(0));
+    builder.setInsertionPointToStart(&trueBlock);
     auto trueValue = context.convertRvalueExpression(expr.left());
     if (!trueValue)
       return {};
+    if (trueValue.getType() != type)
+      trueValue = builder.create<moore::ConversionOp>(loc, type, trueValue);
     builder.create<moore::YieldOp>(loc, trueValue);
 
     // Handle right expression.
-    builder.setInsertionPointToStart(conditionalOp.getBody(1));
+    builder.setInsertionPointToStart(&falseBlock);
     auto falseValue = context.convertRvalueExpression(expr.right());
     if (!falseValue)
       return {};
+    if (falseValue.getType() != type)
+      falseValue = builder.create<moore::ConversionOp>(loc, type, falseValue);
     builder.create<moore::YieldOp>(loc, falseValue);
 
     return conditionalOp.getResult();
@@ -716,6 +757,70 @@ struct RvalueExprVisitor {
   Value visit(const slang::ast::StringLiteral &expr) {
     auto type = context.convertType(*expr.type);
     return builder.create<moore::StringConstantOp>(loc, type, expr.getValue());
+  }
+
+  /// Handle assignment patterns.
+  Value visitAssignmentPattern(
+      const slang::ast::AssignmentPatternExpressionBase &expr,
+      unsigned replCount = 1) {
+    auto type = context.convertType(*expr.type);
+
+    // Convert the individual elements first.
+    auto elementCount = expr.elements().size();
+    SmallVector<Value> elements;
+    elements.reserve(replCount * elementCount);
+    for (auto elementExpr : expr.elements()) {
+      auto value = context.convertRvalueExpression(*elementExpr);
+      if (!value)
+        return {};
+      elements.push_back(value);
+    }
+    for (unsigned replIdx = 1; replIdx < replCount; ++replIdx)
+      for (unsigned elementIdx = 0; elementIdx < elementCount; ++elementIdx)
+        elements.push_back(elements[elementIdx]);
+
+    // Handle packed structs.
+    if (auto structType = dyn_cast<moore::StructType>(type)) {
+      assert(structType.getMembers().size() == elements.size());
+      return builder.create<moore::StructCreateOp>(loc, structType, elements);
+    }
+
+    // Handle unpacked structs.
+    if (auto structType = dyn_cast<moore::UnpackedStructType>(type)) {
+      assert(structType.getMembers().size() == elements.size());
+      return builder.create<moore::StructCreateOp>(loc, structType, elements);
+    }
+
+    // Handle packed arrays.
+    if (auto arrayType = dyn_cast<moore::ArrayType>(type)) {
+      assert(arrayType.getSize() == elements.size());
+      return builder.create<moore::ArrayCreateOp>(loc, arrayType, elements);
+    }
+
+    // Handle unpacked arrays.
+    if (auto arrayType = dyn_cast<moore::UnpackedArrayType>(type)) {
+      assert(arrayType.getSize() == elements.size());
+      return builder.create<moore::ArrayCreateOp>(loc, arrayType, elements);
+    }
+
+    mlir::emitError(loc) << "unsupported assignment pattern with type " << type;
+    return {};
+  }
+
+  Value visit(const slang::ast::SimpleAssignmentPatternExpression &expr) {
+    return visitAssignmentPattern(expr);
+  }
+
+  Value visit(const slang::ast::StructuredAssignmentPatternExpression &expr) {
+    return visitAssignmentPattern(expr);
+  }
+
+  Value visit(const slang::ast::ReplicatedAssignmentPatternExpression &expr) {
+    slang::ast::EvalContext evalContext(context.compilation,
+                                        slang::ast::EvalFlags::CacheResults);
+    auto count = expr.count().eval(evalContext).integer().as<unsigned>();
+    assert(count && "Slang guarantees constant non-zero replication count");
+    return visitAssignmentPattern(expr, *count);
   }
 
   /// Emit an error for all other expressions.
@@ -904,9 +1009,13 @@ struct LvalueExprVisitor {
 };
 } // namespace
 
-Value Context::convertRvalueExpression(const slang::ast::Expression &expr) {
+Value Context::convertRvalueExpression(const slang::ast::Expression &expr,
+                                       Type requiredType) {
   auto loc = convertLocation(expr.sourceRange);
-  return expr.visit(RvalueExprVisitor(*this, loc));
+  auto value = expr.visit(RvalueExprVisitor(*this, loc));
+  if (value && requiredType && value.getType() != requiredType)
+    value = builder.create<moore::ConversionOp>(loc, requiredType, value);
+  return value;
 }
 
 Value Context::convertLvalueExpression(const slang::ast::Expression &expr) {
@@ -914,3 +1023,29 @@ Value Context::convertLvalueExpression(const slang::ast::Expression &expr) {
   return expr.visit(LvalueExprVisitor(*this, loc));
 }
 // NOLINTEND(misc-no-recursion)
+
+/// Helper function to convert a value to its "truthy" boolean value.
+Value Context::convertToBool(Value value) {
+  if (!value)
+    return {};
+  if (auto type = dyn_cast_or_null<moore::IntType>(value.getType()))
+    if (type.getBitSize() == 1)
+      return value;
+  if (auto type = dyn_cast_or_null<moore::UnpackedType>(value.getType()))
+    return builder.create<moore::BoolCastOp>(value.getLoc(), value);
+  mlir::emitError(value.getLoc(), "expression of type ")
+      << value.getType() << " cannot be cast to a boolean";
+  return {};
+}
+
+/// Helper function to convert a value to its "truthy" boolean value and
+/// convert it to the given domain.
+Value Context::convertToBool(Value value, Domain domain) {
+  value = convertToBool(value);
+  if (!value)
+    return {};
+  auto type = moore::IntType::get(getContext(), 1, domain);
+  if (value.getType() == type)
+    return value;
+  return builder.create<moore::ConversionOp>(value.getLoc(), type, value);
+}

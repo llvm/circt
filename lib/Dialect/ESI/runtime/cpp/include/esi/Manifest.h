@@ -48,9 +48,10 @@ public:
   // Modules which have designer specified metadata.
   std::vector<ModuleInfo> getModuleInfos() const;
 
-  // Build a dynamic design hierarchy from the manifest.
-  std::unique_ptr<Accelerator>
-  buildAccelerator(AcceleratorConnection &acc) const;
+  // Build a dynamic design hierarchy from the manifest. The
+  // AcceleratorConnection owns the returned pointer so its lifetime is
+  // determined by the connection.
+  Accelerator *buildAccelerator(AcceleratorConnection &acc) const;
 
   /// The Type Table is an ordered list of types. The offset can be used to
   /// compactly and uniquely within a design. It does not include all of the

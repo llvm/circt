@@ -3,6 +3,7 @@ set(CIRCT_Arc_Sources
   ArcFolds.cpp
   ArcOps.cpp
   ArcTypes.cpp
+  ArcCostModel.cpp
   ModelInfo.cpp
 )
 
@@ -26,11 +27,14 @@ add_circt_dialect_library(CIRCTArc
   Support
 
   LINK_LIBS PUBLIC
+  CIRCTComb
   CIRCTHW
   CIRCTSeq
   MLIRIR
   MLIRInferTypeOpInterface
+  MLIRFuncDialect
   MLIRSideEffectInterfaces
+  MLIRFuncDialect
 )
 
 add_circt_library(CIRCTArcReductions

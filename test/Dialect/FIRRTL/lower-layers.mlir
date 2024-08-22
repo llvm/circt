@@ -201,6 +201,29 @@ firrtl.circuit "Test" {
     }
   }
 
+  // Test that subfield, subindex, and subaccess are moved out of layerblocks to
+  // avoid capturing non-passive types.
+  //
+  // CHECK:      firrtl.module private @[[SubOpsInLayerBlock_A:[A-Za-z0-9_]+]]
+  // CHECK-SAME:   in %[[port:[A-Za-z0-9_]+]]: !firrtl.uint<1>
+  // CHECK-NEXT:   firrtl.node %[[port]]
+  // CHECK-NEXT: }
+  // CHECK:      firrtl.module @SubOpsInLayerBlock
+  // CHECK-NEXT:   firrtl.subaccess
+  // CHECK-NEXT:   firrtl.subindex
+  // CHECK-NEXT:   firrtl.subfield
+  firrtl.module @SubOpsInLayerBlock(
+    in %a: !firrtl.vector<vector<bundle<a: uint<1>, b flip: uint<2>>, 2>, 2>,
+    in %b: !firrtl.uint<1>
+  ) {
+    firrtl.layerblock @A {
+      %0 = firrtl.subaccess %a[%b] : !firrtl.vector<vector<bundle<a: uint<1>, b flip: uint<2>>, 2>, 2>, !firrtl.uint<1>
+      %1 = firrtl.subindex %0[0] : !firrtl.vector<bundle<a: uint<1>, b flip: uint<2>>, 2>
+      %2 = firrtl.subfield %1[a] : !firrtl.bundle<a: uint<1>, b flip: uint<2>>
+      %3 = firrtl.node %2 : !firrtl.uint<1>
+    }
+  }
+
   //===--------------------------------------------------------------------===//
   // Connecting/Defining Refs
   //===--------------------------------------------------------------------===//
@@ -694,3 +717,22 @@ firrtl.circuit "Foo" attributes {
 //
 // CHECK:       sv.verbatim
 // CHECK-SAME:    #hw.output_file<"testbench{{/|\\\\}}layers_Foo_A.sv", excludeFromFileList>
+
+
+// -----
+// Check that we correctly implement the verilog header and footer for B.
+
+firrtl.circuit "Foo" {
+  firrtl.layer @A bind {
+    firrtl.layer @X bind {}
+  }
+  firrtl.layer @B bind {}
+  firrtl.module @Foo() {}
+}
+
+// CHECK: firrtl.circuit "Foo" {
+// CHECK:   sv.verbatim "`ifndef layers_Foo_B\0A`define layers_Foo_B" {output_file = #hw.output_file<"layers_Foo_B.sv", excludeFromFileList>}
+// CHECK:   firrtl.module @Foo() {
+// CHECK:   }
+// CHECK:   sv.verbatim "`endif // layers_Foo_B" {output_file = #hw.output_file<"layers_Foo_B.sv", excludeFromFileList>}
+// CHECK: }

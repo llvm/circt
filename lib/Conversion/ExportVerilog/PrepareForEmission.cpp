@@ -1315,6 +1315,24 @@ static LogicalResult legalizeHWModule(Block &block,
   return success();
 }
 
+static void fixUpEmptyModules(hw::HWEmittableModuleLike module) {
+  auto outputOp = dyn_cast<hw::OutputOp>(module.getBodyBlock()->begin());
+  if (!outputOp || outputOp->getNumOperands() > 0)
+    return; // Not empty so no need to fix up.
+  OpBuilder builder(module->getContext());
+  builder.setInsertionPoint(outputOp);
+  auto constant = builder.create<hw::ConstantOp>(module.getLoc(),
+                                                 builder.getBoolAttr(true));
+  auto wire = builder.create<sv::WireOp>(module.getLoc(), builder.getI1Type());
+  sv::setSVAttributes(wire,
+                      sv::SVAttributeAttr::get(
+                          builder.getContext(),
+                          "This wire is added to avoid emitting empty modules. "
+                          "See `fixUpEmptyModules` lowering option in CIRCT.",
+                          /*emitAsComment=*/true));
+  builder.create<sv::AssignOp>(module.getLoc(), wire, constant);
+}
+
 // NOLINTNEXTLINE(misc-no-recursion)
 LogicalResult ExportVerilog::prepareHWModule(hw::HWEmittableModuleLike module,
                                              const LoweringOptions &options) {
@@ -1324,6 +1342,10 @@ LogicalResult ExportVerilog::prepareHWModule(hw::HWEmittableModuleLike module,
 
   // Zero-valued logic pruning.
   pruneZeroValuedLogic(module);
+
+  // Fix up empty modules if necessary.
+  if (options.fixUpEmptyModules)
+    fixUpEmptyModules(module);
 
   // Legalization.
   if (failed(legalizeHWModule(*module.getBodyBlock(), options)))

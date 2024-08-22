@@ -43,6 +43,9 @@ public:
     // Data read from the accelerator is read from the trace file.
     // TODO: Full trace mode not yet supported.
     // Read
+
+    // Discard all data sent to the accelerator. Disable trace file generation.
+    Discard,
   };
 
   /// Create a trace-based accelerator backend.
@@ -52,6 +55,7 @@ public:
   ///   is opened for writing. For 'Read' mode, this file is opened for reading.
   TraceAccelerator(Context &, Mode mode, std::filesystem::path manifestJson,
                    std::filesystem::path traceFile);
+  ~TraceAccelerator() override;
 
   /// Parse the connection string and instantiate the accelerator. Format is:
   /// "<mode>:<manifest path>[:<traceFile>]".

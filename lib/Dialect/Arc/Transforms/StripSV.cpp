@@ -151,9 +151,19 @@ void StripSVPass::runOnOperation() {
         else
           next = reg.getNext();
 
+        Value presetValue;
+        // Materialize initial value, assume zero initialization as default.
+        if (reg.getPreset() && !reg.getPreset()->isZero()) {
+          assert(hw::type_isa<IntegerType>(reg.getType()) &&
+                 "cannot lower non integer preset");
+          presetValue = builder.createOrFold<hw::ConstantOp>(
+              reg.getLoc(), IntegerAttr::get(reg.getType(), *reg.getPreset()));
+        }
+
         Value compReg = builder.create<seq::CompRegOp>(
             reg.getLoc(), next.getType(), next, reg.getClk(), reg.getNameAttr(),
-            Value{}, Value{}, Value{}, reg.getInnerSymAttr());
+            Value{}, Value{}, /*powerOnValue*/ presetValue,
+            reg.getInnerSymAttr());
         reg.replaceAllUsesWith(compReg);
         opsToDelete.push_back(reg);
         continue;

@@ -37,11 +37,11 @@ hw.module @level2(in %in : !Struct2, out out: !Struct2) {
 hw.type_scope @foo {
   hw.typedecl @bar : !Struct1
 }
-!ScopedStruct = !hw.typealias<@foo::@bar,!Struct1>
+!ScopedStruct = !hw.typealias<@foo::@bar, !Struct1>
 
 // BASIC-LABEL: hw.module @scoped(in %arg0 : i32, in %in.a : i1, in %in.b : i2, in %arg1 : i32, out out0 : i32, out out.a : i1, out out.b : i2, out out1 : i32) {
-// BASIC-NEXT:    %0 = hw.struct_create (%in.a, %in.b) : !hw.struct<a: i1, b: i2>
-// BASIC-NEXT:    %a, %b = hw.struct_explode %0 : !hw.struct<a: i1, b: i2>
+// BASIC-NEXT:    %0 = hw.struct_create (%in.a, %in.b) : !hw.typealias<@foo::@bar, !hw.struct<a: i1, b: i2>>
+// BASIC-NEXT:    %a, %b = hw.struct_explode %0 : !hw.typealias<@foo::@bar, !hw.struct<a: i1, b: i2>>
 // BASIC-NEXT:    hw.output %arg0, %a, %b, %arg1 : i32, i1, i2, i32
 // BASIC-NEXT:  }
 hw.module @scoped(in %arg0 : i32, in %in : !ScopedStruct, in %arg1: i32, out out0 : i32, out out: !ScopedStruct, out out1: i32) {

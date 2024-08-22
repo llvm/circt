@@ -18,7 +18,8 @@ hw.module @checkPrbDceAndCseIn(inout %arg0 : i32, inout %arg1 : i32, inout %arg2
 
 // CHECK-LABEL: @checkPrbDceButNotCse
 hw.module @checkPrbDceButNotCse(inout %arg0 : i32, inout %arg1 : i32, inout %arg2 : i32) {
-  // CHECK-NEXT: llhd.process
+  %prb = llhd.prb %arg0 : !hw.inout<i32>
+  // CHECK: llhd.process
   llhd.process {
     // CHECK-NEXT: llhd.constant_time
     %time = llhd.constant_time <0ns, 1d, 0e>
@@ -26,7 +27,7 @@ hw.module @checkPrbDceButNotCse(inout %arg0 : i32, inout %arg1 : i32, inout %arg
     // CHECK-NEXT: [[P1:%.*]] = llhd.prb
     %1 = llhd.prb %arg0 : !hw.inout<i32>
     // CHECK-NEXT: llhd.wait
-    llhd.wait (%arg0: !hw.inout<i32>), ^bb1
+    llhd.wait (%prb: i32), ^bb1
   // CHECK-NEXT: ^bb1:
   ^bb1:
     // CHECK-NEXT: [[P2:%.*]] = llhd.prb

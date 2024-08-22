@@ -126,6 +126,7 @@ CosimAccelerator::CosimAccelerator(Context &ctxt, std::string hostname,
   rpcClient = new StubContainer(ChannelServer::NewStub(channel));
 }
 CosimAccelerator::~CosimAccelerator() {
+  disconnect();
   if (rpcClient)
     delete rpcClient;
   channels.clear();
@@ -418,23 +419,23 @@ public:
       this->size = size;
     }
     virtual ~CosimHostMemRegion() { free(ptr); }
-    virtual void *getPtr() const { return ptr; }
-    virtual std::size_t getSize() const { return size; }
+    virtual void *getPtr() const override { return ptr; }
+    virtual std::size_t getSize() const override { return size; }
 
   private:
     void *ptr;
     std::size_t size;
   };
 
-  virtual std::unique_ptr<HostMemRegion> allocate(std::size_t size,
-                                                  HostMem::Options opts) const {
+  virtual std::unique_ptr<HostMemRegion>
+  allocate(std::size_t size, HostMem::Options opts) const override {
     return std::unique_ptr<HostMemRegion>(new CosimHostMemRegion(size));
   }
   virtual bool mapMemory(void *ptr, std::size_t size,
-                         HostMem::Options opts) const {
+                         HostMem::Options opts) const override {
     return true;
   }
-  virtual void unmapMemory(void *ptr) const {}
+  virtual void unmapMemory(void *ptr) const override {}
 };
 
 } // namespace

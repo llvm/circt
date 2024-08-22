@@ -70,7 +70,7 @@ void EarlyCodeMotionPass::runOnProcess(llhd::ProcessOp proc) {
     for (auto iter = block->getOperations().begin();
          iter != block->getOperations().end(); ++iter) {
       Operation &op = *iter;
-      if (!isa<llhd::PrbOp>(op) && !isa<llhd::SigOp>(op) &&
+      if (!isa<llhd::PrbOp>(op) && !isa<llhd::SignalOp>(op) &&
           (!mlir::isMemoryEffectFree(&op) ||
            op.hasTrait<OpTrait::IsTerminator>()))
         continue;

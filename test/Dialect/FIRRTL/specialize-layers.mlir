@@ -115,6 +115,21 @@ firrtl.circuit "LayerDisableInARow" attributes {
   firrtl.extmodule @LayerDisableInARow()
 }
 
+// CHECK:     firrtl.circuit "LayerblockEnableNestedChildren"
+// CHECK-NOT:   firrtl.layer
+firrtl.circuit "LayerblockEnableNestedChildren" attributes {
+  enable_layers = [@A, @A::@B, @A::@C]
+} {
+  firrtl.layer @A bind {
+    firrtl.layer @B bind {
+    }
+    firrtl.layer @C bind {
+    }
+  }
+  firrtl.module @LayerblockEnableNestedChildren() {
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // LayerBlock Specialization
 //===----------------------------------------------------------------------===//
@@ -202,7 +217,7 @@ firrtl.circuit "LayerblockDisableB" attributes {
     }
   }
 }
-  
+
 //===----------------------------------------------------------------------===//
 // Default Specialization
 //===----------------------------------------------------------------------===//
@@ -254,7 +269,7 @@ firrtl.circuit "LayerDefaultDisable" attributes {
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: firrtl.circuit "EnableLayerB"
-firrtl.circuit "EnableLayerB" 
+firrtl.circuit "EnableLayerB"
 attributes {
     enable_layers = [@A::@B]
   } {
@@ -266,13 +281,13 @@ attributes {
   firrtl.option @Option {
     firrtl.option_case @Option
   }
-  
+
   firrtl.module public @EnableLayerB() {
     firrtl.layerblock @A {
       firrtl.layerblock @A::@B {
         firrtl.layerblock @A::@B::@C {
           // CHECK: firrtl.instance instance {layers = [@A, @A, @A::@B_C]} @ExtModule()
-          firrtl.instance instance {layers = [@A, @A::@B, @A::@B::@C]} @ExtModule() 
+          firrtl.instance instance {layers = [@A, @A::@B, @A::@B::@C]} @ExtModule()
           // CHECK: firrtl.instance_choice instance_choice
           // CHECK-SAME: {layers = [@A, @A, @A::@B_C]} @ExtModule
           firrtl.instance_choice instance_choice
@@ -343,8 +358,8 @@ firrtl.circuit "ProbeOpsEnableA" attributes {
     }
 
     // CHECK: firrtl.instance instance @ExtModule(out out: !firrtl.probe<uint<1>>)
-    firrtl.instance instance @ExtModule(out out : !firrtl.probe<uint<1>, @A>) 
-    
+    firrtl.instance instance @ExtModule(out out : !firrtl.probe<uint<1>, @A>)
+
     // CHECK: firrtl.instance_choice instance_choice @ExtModule
     // CHECK-SAME: alternatives @Option { @Option -> @ExtModule }
     // CHECK-SAME: (out out: !firrtl.probe<uint<1>>)
@@ -352,7 +367,7 @@ firrtl.circuit "ProbeOpsEnableA" attributes {
       alternatives @Option { @Option -> @ExtModule }
       (out out : !firrtl.probe<uint<1>, @A>)
   }
-  
+
   firrtl.extmodule @ExtModule(out out : !firrtl.probe<uint<1>, @A>)
 }
 
@@ -392,7 +407,7 @@ firrtl.circuit "ProbeOpsDisableA" attributes {
     }
 
     // CHECK: firrtl.instance instance @ExtModule()
-    firrtl.instance instance @ExtModule(out out : !firrtl.probe<uint<1>, @A>) 
+    firrtl.instance instance @ExtModule(out out : !firrtl.probe<uint<1>, @A>)
     // CHECK: firrtl.instance_choice instance_choice @ExtModule
     // CHECK-SAME: alternatives @Option { @Option -> @ExtModule }
     // CHECK-SAME: ()
@@ -429,13 +444,13 @@ firrtl.circuit "HierPathDelete" attributes {
   firrtl.module @HierPathDelete() {
     firrtl.instance middle sym @middle @Middle()
   }
-  
+
   firrtl.module @Middle() {
     firrtl.layerblock @Layer {
       firrtl.instance leaf sym @leaf @Leaf()
     }
   }
-  
+
   firrtl.extmodule @Leaf()
 
   // CHECK-NOT: hw.hierpath private @DeletedPath [@Deleted]
@@ -463,13 +478,13 @@ firrtl.circuit "HierPathDelete2" attributes {
       firrtl.instance middle sym @middle @Middle()
     }
   }
-  
+
   firrtl.module @Middle() {
     firrtl.layerblock @Layer {
       firrtl.instance leaf sym @leaf @Leaf()
     }
   }
-  
+
   firrtl.extmodule @Leaf()
 
   // CHECK-NOT: hw.hierpath private @DeletedPath [@Deleted]
@@ -495,11 +510,11 @@ firrtl.circuit "Annotations" attributes {
       firrtl.instance leaf sym @leaf @Leaf(in in : !firrtl.uint<1>)
     }
   }
-  
+
   // CHECK: firrtl.module @Leaf(in %in: !firrtl.uint<1>) {
   firrtl.module @Leaf(in %in : !firrtl.uint<1> [{circt.nonlocal = @Path}])
     attributes {annotations = [{circt.nonlocal = @Path}]} {
-    
+
     // CHECK: %w = firrtl.wire : !firrtl.uint<1>
     %w = firrtl.wire {annotations = [{circt.nonlocal = @Path}]} : !firrtl.uint<1>
 

@@ -1221,17 +1221,26 @@ hw.module @test1560(in %value: i38, out a: i1) {
 }
 
 // CHECK-LABEL: hw.module @extractShift
-hw.module @extractShift(in %arg0 : i4, out o1 : i1, out o2: i1) {
+hw.module @extractShift(in %arg0 : i4, out o1 : i1, out o2: i1, out o3: i1, out o4: i1) {
   %c1 = hw.constant 1: i4
   %0 = comb.shl %c1, %arg0 : i4
+  %1 = comb.shl %c1, %arg0 : i4
+  %2 = comb.shl %c1, %arg0 : i4
 
-  // CHECK:  %0 = comb.icmp eq %arg0, %c0_i4 : i4
-  %1 = comb.extract %0 from 0 : (i4) -> i1
+  // CHECK: %[[O1:.+]] = comb.icmp eq %arg0, %c0_i4 : i4
+  %3 = comb.extract %0 from 0 : (i4) -> i1
 
-  // CHECK: %1 = comb.icmp eq %arg0, %c2_i4 : i4
-  %2 = comb.extract %0 from 2 : (i4) -> i1
-  // CHECK: hw.output %0, %1
-  hw.output %1, %2: i1, i1
+  // CHECK: %[[O2:.+]] = comb.icmp eq %arg0, %c2_i4 : i4
+  %4 = comb.extract %1 from 2 : (i4) -> i1
+
+  // CHECK: %[[O3:.+]] = comb.extract
+  %5 = comb.extract %2 from 2 : (i4) -> i1
+
+  // CHECK: %[[O4:.+]] = comb.extract
+  %6 = comb.extract %2 from 2 : (i4) -> i1
+
+  // CHECK: hw.output %[[O1]], %[[O2]], %[[O3]], %[[O4]]
+  hw.output %3, %4, %5, %6: i1, i1, i1, i1
 }
 
 // CHECK-LABEL: hw.module @moduloZeroDividend
@@ -1552,6 +1561,59 @@ hw.module @OrMuxSameTrueValueAndZero(in %tag_0: i1, in %tag_1: i1, in %tag_2: i1
     %add2 = comb.add %add1, %c : i32
     "terminator"(%add2) : (i32) -> ()
 }) : () -> ()
+
+// CHECK-LABEL: "test.acrossBlockCanonicalizationBarrierFlattenAndIdem"
+// CHECK: ^bb1:
+// CHECK-NEXT: %[[OUT:.+]] = comb.or %0, %1, %2 : i32
+// CHECK-NEXT: "terminator"(%[[OUT]]) : (i32) -> ()
+"test.acrossBlockCanonicalizationBarrierFlattenAndIdem"() ({
+^bb0(%arg0: i32, %arg1: i32, %arg2: i32):
+  %0 = comb.or %arg0, %arg1 : i32
+  %1 = comb.or %arg1, %arg2 : i32
+  %2 = comb.or %arg0, %arg2 : i32
+  "terminator"() : () -> ()
+^bb1:  // no predecessors
+  // Flatten and unique, but not across blocks.
+  %3 = comb.or %0, %1 : i32
+  %4 = comb.or %1, %2 : i32
+  %5 = comb.or %3, %4, %0, %1, %1, %2 : i32
+
+  "terminator"(%5) : (i32) -> ()
+}) : () -> ()
+
+// CHECK-LABEL: "test.acrossBlockCanonicalizationBarrierIdem"
+// CHECK: ^bb1:
+// CHECK-NEXT: %[[OUT1:.+]] = comb.or %0, %1 : i32
+// CHECK-NEXT: %[[OUT2:.+]] = comb.or %[[OUT1]], %arg0 : i32
+// CHECK-NEXT: "terminator"(%[[OUT1]], %[[OUT2]]) : (i32, i32) -> ()
+"test.acrossBlockCanonicalizationBarrierIdem"() ({
+^bb0(%arg0: i32, %arg1: i32, %arg2: i32):
+  %0 = comb.or %arg0, %arg1 : i32
+  %1 = comb.or %arg1, %arg2 : i32
+  "terminator"() : () -> ()
+^bb1:  // no predecessors
+  %2 = comb.or %0, %1, %1 : i32
+  %3 = comb.or %2, %0, %1, %arg0 : i32
+
+  "terminator"(%2, %3) : (i32, i32) -> ()
+}) : () -> ()
+
+// Check multi-operation idempotent operand deduplication.
+// CHECK-LABEL: @IdemTwoState
+// CHECK-NEXT: %[[ZERO:.+]] = comb.or bin %cond, %val1
+// CHECK-NEXT: %[[ONE:.+]] = comb.or bin %val1, %val2
+// Don't allow dropping these (%0/%1) due to two-state differences.
+// CHECK-NEXT: %[[TWO:.+]] = comb.or %[[ZERO]], %[[ONE]]
+// New operation should preserve two-state-ness.
+// CHECK-NEXT: %[[THREE:.+]] = comb.or bin %[[TWO]], %[[ZERO]], %[[ONE]]
+// CHECK-NEXT: hw.output %[[ZERO]], %[[ONE]], %[[TWO]], %[[THREE]]
+hw.module @IdemTwoState(in %cond: i32, in %val1: i32, in %val2: i32, out o1: i32, out o2: i32, out o3: i32, out o4: i32) {
+  %0 = comb.or bin %cond, %val1 : i32
+  %1 = comb.or bin %val1, %val2: i32
+  %2 = comb.or %0, %1 : i32
+  %3 = comb.or bin %cond, %val1, %val2, %2, %0, %1 : i32
+  hw.output %0, %1, %2, %3: i32, i32, i32, i32
+}
 
 // CHECK-LABEL: hw.module @combineOppositeBinCmpIntoConstant
 // CHECK: %[[TRUE:.+]] = hw.constant true

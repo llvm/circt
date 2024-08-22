@@ -1,12 +1,17 @@
-// REQUIRES: esi-cosim, esi-runtime, rtl-sim, esitester
-// RUN: rm -rf %t6 && mkdir %t6 && cd %t6
-// RUN: circt-opt %s --esi-connect-services --esi-appid-hier=top=top --esi-build-manifest=top=top --esi-clean-metadata > %t4.mlir
-// RUN: circt-opt %t4.mlir --lower-esi-to-physical --lower-esi-bundles --lower-esi-ports --lower-esi-to-hw=platform=cosim --lower-seq-to-sv --lower-hwarith-to-hw --canonicalize --export-split-verilog -o %t3.mlir
-// RUN: cd ..
-// RUN: esi-cosim.py --source %t6 --top top -- esitester cosim env | FileCheck %s
+// REQUIRES: esi-cosim, esi-runtime, rtl-sim
 
-hw.module @EsiTesterTop(in %clk : !seq.clock, in %rst : i1) {
+// Generate SV files
+// RUN: rm -rf %t6 && mkdir %t6 && cd %t6
+// RUN: mkdir hw && cd hw
+// RUN: circt-opt %s --esi-connect-services --esi-appid-hier=top=top --esi-build-manifest=top=top --esi-clean-metadata --lower-esi-to-physical --lower-esi-bundles --lower-esi-ports --lower-esi-to-hw=platform=cosim --lower-seq-to-sv --lower-hwarith-to-hw --canonicalize --export-split-verilog
+// RUN: cd ..
+
+// Test cosimulation
+// RUN: esi-cosim.py --source %t6/hw --top top -- esitester cosim env wait | FileCheck %s
+
+hw.module @top(in %clk : !seq.clock, in %rst : i1) {
   hw.instance "PrintfExample" sym @PrintfExample @PrintfExample(clk: %clk: !seq.clock, rst: %rst: i1) -> ()
+  esi.service.instance #esi.appid<"cosim_default"> impl as "cosim" (%clk, %rst) : (!seq.clock, i1) -> ()
 }
 
 // CHECK:  PrintfExample: 7

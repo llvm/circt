@@ -605,6 +605,7 @@ struct SpecializeLayers {
                  llvm::make_early_inc_range(block->getOps<LayerOp>())) {
               nestedRefs.push_back(SymbolRefAttr::get(nested));
               handleLayer(nested, Block::iterator(nested), "");
+              nestedRefs.pop_back();
             }
             return;
           }
@@ -617,6 +618,7 @@ struct SpecializeLayers {
               nestedRefs.push_back(SymbolRefAttr::get(nested));
               handleLayer(nested, insertionPoint,
                           prefix + layer.getSymName() + "_");
+              nestedRefs.pop_back();
             }
             // Erase the now empty layer.
             layer->erase();

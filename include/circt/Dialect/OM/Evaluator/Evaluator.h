@@ -481,6 +481,9 @@ private:
   FailureOr<EvaluatorValuePtr> evaluateListCreate(ListCreateOp op,
                                                   ActualParameters actualParams,
                                                   Location loc);
+  FailureOr<EvaluatorValuePtr> evaluateListConcat(ListConcatOp op,
+                                                  ActualParameters actualParams,
+                                                  Location loc);
   FailureOr<EvaluatorValuePtr>
   evaluateTupleCreate(TupleCreateOp op, ActualParameters actualParams,
                       Location loc);

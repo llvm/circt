@@ -18,9 +18,11 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
+#include "circt/Dialect/FIRRTL/FieldRefCache.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
+#include "circt/Support/Utils.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -519,8 +521,16 @@ LogicalResult CircuitOp::verifyRegions() {
 
   mlir::SymbolTable symtbl(getOperation());
 
-  if (!symtbl.lookup(main))
-    return emitOpError().append("Module with same name as circuit not found");
+  auto *mainModule = symtbl.lookup(main);
+  if (!mainModule)
+    return emitOpError().append(
+        "does not contain module with same name as circuit");
+  if (!isa<FModuleLike>(mainModule))
+    return mainModule->emitError(
+        "entity with name of circuit must be a module");
+  if (symtbl.getSymbolVisibility(mainModule) !=
+      mlir::SymbolTable::Visibility::Public)
+    return mainModule->emitError("main module must be public");
 
   // Store a mapping of defname to either the first external module
   // that defines it or, preferentially, the first external module
@@ -3352,6 +3362,25 @@ void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
+//===----------------------------------------------------------------------===//
+// FormalOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+FormalOp::verifySymbolUses(::mlir::SymbolTableCollection &symbolTable) {
+  // The referenced symbol is restricted to FModuleOps
+  auto referencedModule = symbolTable.lookupNearestSymbolFrom<FModuleOp>(
+      *this, getModuleNameAttr());
+  if (!referencedModule)
+    return (*this)->emitOpError("invalid symbol reference");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// WireOp
+//===----------------------------------------------------------------------===//
+
 void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
@@ -3373,6 +3402,10 @@ LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
       refType, getLoc(), getOperation()->getParentOfType<CircuitOp>(),
       symbolTable, Twine("'") + getOperationName() + "' op is");
 }
+
+//===----------------------------------------------------------------------===//
+// ObjectOp
+//===----------------------------------------------------------------------===//
 
 void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassLike klass,
                      StringRef name) {
@@ -6193,10 +6226,30 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
     }
     return success();
   };
+
+  auto checkLayers = [&](Location loc) -> LogicalResult {
+    auto dstLayers = getAmbientLayersAt(target.getOp());
+    auto srcLayers = getLayersFor(getResult());
+    SmallVector<SymbolRefAttr> missingLayers;
+    if (!isLayerSetCompatibleWith(srcLayers, dstLayers, missingLayers)) {
+      auto diag = emitOpError("target has insufficient layer requirements");
+      auto &note = diag.attachNote(loc);
+      note << "target is missing layer requirements: ";
+      llvm::interleaveComma(missingLayers, note);
+      return failure();
+    }
+    return success();
+  };
+  auto checks = [&](auto type, Location loc) {
+    if (failed(checkLayers(loc)))
+      return failure();
+    return checkFinalType(type, loc);
+  };
+
   if (target.isPort()) {
     auto mod = cast<FModuleLike>(target.getOp());
-    return checkFinalType(mod.getPortType(target.getPort()),
-                          mod.getPortLocation(target.getPort()));
+    return checks(mod.getPortType(target.getPort()),
+                  mod.getPortLocation(target.getPort()));
   }
   hw::InnerSymbolOpInterface symOp =
       cast<hw::InnerSymbolOpInterface>(target.getOp());
@@ -6210,7 +6263,7 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
     return emitOpError("is not dominated by target")
         .attachNote(symOp.getLoc())
         .append("target here");
-  return checkFinalType(symOp.getTargetResult().getType(), symOp.getLoc());
+  return checks(symOp.getTargetResult().getType(), symOp.getLoc());
 }
 
 //===----------------------------------------------------------------------===//
@@ -6256,6 +6309,7 @@ LogicalResult LayerBlockOp::verify() {
   }
 
   // Verify the body of the region.
+  FieldRefCache fieldRefCache;
   auto result = getBody(0)->walk<mlir::WalkOrder::PreOrder>(
       [&](Operation *op) -> WalkResult {
         // Skip nested layer blocks.  Those will be verified separately.
@@ -6279,17 +6333,6 @@ LogicalResult LayerBlockOp::verify() {
             diag.attachNote(op->getLoc()) << "operand is used here";
             return WalkResult::interrupt();
           }
-
-          // Capturing a non-passive type is illegal.
-          if (auto baseType = type_dyn_cast<FIRRTLBaseType>(type)) {
-            if (!baseType.isPassive()) {
-              auto diag = emitOpError()
-                          << "captures an operand which is not a passive type";
-              diag.attachNote(operand.getLoc()) << "operand is defined here";
-              diag.attachNote(op->getLoc()) << "operand is used here";
-              return WalkResult::interrupt();
-            }
-          }
         }
 
         // Ensure that the layer block does not drive any sinks outside.
@@ -6298,11 +6341,27 @@ LogicalResult LayerBlockOp::verify() {
           if (isa<RefDefineOp>(connect))
             return WalkResult::advance();
 
-          // We can drive any destination inside the current layerblock.
-          auto dest = getFieldRefFromValue(connect.getDest()).getValue();
-          if (auto *destOp = dest.getDefiningOp())
-            if (getOperation()->isAncestor(destOp))
-              return WalkResult::advance();
+          // Verify that connects only drive values declared in the layer block.
+          // If we see a non-passive connect destination, then verify that the
+          // source is in the same layer block so that the source is not driven.
+          auto dest =
+              fieldRefCache.getFieldRefFromValue(connect.getDest()).getValue();
+          bool passive = true;
+          if (auto type =
+                  type_dyn_cast<FIRRTLBaseType>(connect.getDest().getType()))
+            passive = type.isPassive();
+          // TODO: Improve this verifier.  This is intentionally _not_ verifying
+          // a non-passive ConnectLike because it is hugely annoying to do
+          // so---it requires a full understanding of if the connect is driving
+          // destination-to-source, source-to-destination, or bi-directionally
+          // which requires deep inspection of the type.  Eventually, the FIRRTL
+          // pass pipeline will remove all flips (e.g., canonicalize connect to
+          // matchingconnect) and this hole won't exist.
+          if (!passive)
+            return WalkResult::advance();
+
+          if (isAncestorOfValueOwner(getOperation(), dest))
+            return WalkResult::advance();
 
           auto diag =
               connect.emitOpError()

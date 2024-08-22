@@ -1,11 +1,28 @@
 // REQUIRES: esi-cosim, esi-runtime, rtl-sim
 // RUN: rm -rf %t6 && mkdir %t6 && cd %t6
-// RUN: circt-opt %s --esi-connect-services --esi-appid-hier=top=top --esi-build-manifest=top=top --esi-clean-metadata > %t4.mlir
-// RUN: circt-opt %t4.mlir --lower-esi-to-physical --lower-esi-bundles --lower-esi-ports --lower-esi-to-hw=platform=cosim --lower-seq-to-sv --lower-hwarith-to-hw --canonicalize --export-split-verilog -o %t3.mlir
+
+// Generate SV files
+// RUN: mkdir hw && cd hw
+// RUN: circt-opt %s --esi-connect-services --esi-appid-hier=top=top --esi-build-manifest=top=top --esi-clean-metadata --lower-esi-to-physical --lower-esi-bundles --lower-esi-ports --lower-esi-to-hw=platform=cosim --lower-seq-to-sv --lower-hwarith-to-hw --canonicalize --export-split-verilog -o %t3.mlir
 // RUN: cd ..
-// RUN: esiquery trace w:%t6/esi_system_manifest.json hier | FileCheck %s --check-prefix=QUERY-HIER
-// RUN: %python %s.py trace w:%t6/esi_system_manifest.json
-// RUN: esi-cosim.py --source %t6 --top top -- %python %s.py cosim env
+
+// Test ESI utils
+// RUN: esiquery trace w:%t6/hw/esi_system_manifest.json info | FileCheck %s --check-prefix=QUERY-INFO
+// RUN: esiquery trace w:%t6/hw/esi_system_manifest.json hier | FileCheck %s --check-prefix=QUERY-HIER
+
+// Test cosimulation
+// RUN: esi-cosim.py --source %t6/hw --top top -- %python %s.py cosim env
+
+// Test C++ header generation against the manifest file
+// RUN: %python -m esiaccel.cppgen --file %t6/hw/esi_system_manifest.json --output-dir %t6/include/loopback/
+// RUN: %host_cxx -I %t6/include %s.cpp -o %t6/test
+// RUN: %t6/test | FileCheck %s --check-prefix=CPP-TEST
+// RUN: FileCheck %s --check-prefix=LOOPBACK-H --input-file %t6/include/loopback/LoopbackIP.h
+
+// Test C++ header generation against a live accelerator
+// RUN: esi-cosim.py --source %t6 --top top -- %python -m esiaccel.cppgen --platform cosim --connection env --output-dir %t6/include/loopback/
+// RUN: %host_cxx -I %t6/include %s.cpp -o %t6/test
+// RUN: %t6/test | FileCheck %s --check-prefix=CPP-TEST
 
 !sendI8 = !esi.bundle<[!esi.channel<i8> from "send"]>
 !recvI8 = !esi.bundle<[!esi.channel<i8> to "recv"]>
@@ -95,6 +112,7 @@ hw.module @CallableFunc1() {
 }
 
 esi.manifest.sym @Loopback name "LoopbackIP" version "v0.0" summary "IP which simply echos bytes" {foo=1}
+esi.manifest.constants @Loopback {depth=5:ui32}
 
 hw.module @top(in %clk: !seq.clock, in %rst: i1) {
   esi.service.instance #esi.appid<"cosim"> svc @HostComms impl as "cosim" (%clk, %rst) : (!seq.clock, i1) -> ()
@@ -106,6 +124,18 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
   hw.instance "loopback_struct" @LoopbackStruct() -> ()
   hw.instance "loopback_array" @LoopbackArray() -> ()
 }
+
+// CPP-TEST: depth: 0x5
+
+// QUERY-INFO: API version: 0
+// QUERY-INFO: ********************************
+// QUERY-INFO: * Module information
+// QUERY-INFO: ********************************
+// QUERY-INFO: - LoopbackIP v0.0 : IP which simply echos bytes
+// QUERY-INFO:   Constants:
+// QUERY-INFO:     depth: 5
+// QUERY-INFO:   Extra metadata:
+// QUERY-INFO:     foo: 1
 
 // QUERY-HIER: ********************************
 // QUERY-HIER: * Design hierarchy
@@ -145,3 +175,14 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // QUERY-HIER:         recv: !esi.channel<i0>
 // QUERY-HIER:       mysvc_send:
 // QUERY-HIER:         send: !esi.channel<i0>
+
+
+// LOOPBACK-H:       /// Generated header for esi_system module LoopbackIP.
+// LOOPBACK-H-NEXT:  #pragma once
+// LOOPBACK-H-NEXT:  #include "types.h"
+// LOOPBACK-H-LABEL: namespace esi_system {
+// LOOPBACK-H-LABEL: class LoopbackIP {
+// LOOPBACK-H-NEXT:  public:
+// LOOPBACK-H-NEXT:    static constexpr uint32_t depth = 0x5;
+// LOOPBACK-H-NEXT:  };
+// LOOPBACK-H-NEXT:  } // namespace esi_system

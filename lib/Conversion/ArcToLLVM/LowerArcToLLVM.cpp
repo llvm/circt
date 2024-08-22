@@ -318,6 +318,7 @@ namespace {
 struct ModelInfoMap {
   size_t numStateBytes;
   llvm::DenseMap<StringRef, StateInfo> states;
+  mlir::FlatSymbolRefAttr initialFnSymbol;
 };
 
 template <typename OpTy>
@@ -378,6 +379,16 @@ struct SimInstantiateOpLowering
     Value zero =
         rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI8Type(), 0);
     rewriter.create<LLVM::MemsetOp>(loc, allocated, zero, numStateBytes, false);
+
+    // Call the model's 'initial' function if present.
+    if (model.initialFnSymbol) {
+      auto initialFnType = LLVM::LLVMFunctionType::get(
+          LLVM::LLVMVoidType::get(op.getContext()),
+          {LLVM::LLVMPointerType::get(op.getContext())});
+      rewriter.create<LLVM::CallOp>(loc, initialFnType, model.initialFnSymbol,
+                                    ValueRange{allocated});
+    }
+
     rewriter.inlineBlockBefore(&adaptor.getBody().getBlocks().front(), op,
                                {allocated});
     rewriter.create<LLVM::CallOp>(loc, freeFunc, ValueRange{allocated});
@@ -646,7 +657,8 @@ void LowerArcToLLVMPass::runOnOperation() {
     for (StateInfo &stateInfo : modelInfo.states)
       states.insert({stateInfo.name, stateInfo});
     modelMap.insert({modelInfo.name,
-                     ModelInfoMap{modelInfo.numStateBytes, std::move(states)}});
+                     ModelInfoMap{modelInfo.numStateBytes, std::move(states),
+                                  modelInfo.initialFnSym}});
   }
 
   patterns.add<SimInstantiateOpLowering, SimSetInputOpLowering,

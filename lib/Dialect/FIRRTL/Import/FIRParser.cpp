@@ -1301,8 +1301,9 @@ struct FIRModuleContext : public FIRParser {
   llvm::DenseMap<std::pair<Attribute, Type>, Value> constantCache;
 
   /// Get a cached constant.
-  Value getCachedConstantInt(ImplicitLocOpBuilder &builder, Attribute attr,
-                             IntType type, APInt &value) {
+  template <typename OpTy = ConstantOp, typename... Args>
+  Value getCachedConstant(ImplicitLocOpBuilder &builder, Attribute attr,
+                          Type type, Args &&...args) {
     auto &result = constantCache[{attr, type}];
     if (result)
       return result;
@@ -1312,15 +1313,15 @@ struct FIRModuleContext : public FIRParser {
     OpBuilder::InsertPoint savedIP;
 
     auto *parentOp = builder.getInsertionBlock()->getParentOp();
-    if (!isa<FModuleOp>(parentOp)) {
+    if (!isa<FModuleLike>(parentOp)) {
       savedIP = builder.saveInsertionPoint();
-      while (!isa<FModuleOp>(parentOp)) {
+      while (!isa<FModuleLike>(parentOp)) {
         builder.setInsertionPoint(parentOp);
         parentOp = builder.getInsertionBlock()->getParentOp();
       }
     }
 
-    result = builder.create<ConstantOp>(type, value);
+    result = builder.create<OpTy>(type, std::forward<Args>(args)...);
 
     if (savedIP.isSet())
       builder.setInsertionPoint(savedIP.getBlock(), savedIP.getPoint());
@@ -1720,6 +1721,7 @@ private:
   ParseResult parsePrimExp(Value &result);
   ParseResult parseIntegerLiteralExp(Value &result);
   ParseResult parseListExp(Value &result);
+  ParseResult parseListConcatExp(Value &result);
 
   std::optional<ParseResult> parseExpWithLeadingKeyword(FIRToken keyword);
 
@@ -1912,8 +1914,9 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
                    "expected string literal in String expression") ||
         parseToken(FIRToken::r_paren, "expected ')' in String expression"))
       return failure();
-    result = builder.create<StringConstantOp>(
-        builder.getStringAttr(FIRToken::getStringValue(spelling)));
+    auto attr = builder.getStringAttr(FIRToken::getStringValue(spelling));
+    result = moduleContext.getCachedConstant<StringConstantOp>(
+        builder, attr, builder.getType<StringType>(), attr);
     break;
   }
   case FIRToken::kw_Integer: {
@@ -1926,8 +1929,10 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
         parseIntLit(value, "expected integer literal in Integer expression") ||
         parseToken(FIRToken::r_paren, "expected ')' in Integer expression"))
       return failure();
-    result =
-        builder.create<FIntegerConstantOp>(APSInt(value, /*isUnsigned=*/false));
+    APSInt apint(value, /*isUnsigned=*/false);
+    result = moduleContext.getCachedConstant<FIntegerConstantOp>(
+        builder, IntegerAttr::get(getContext(), apint),
+        builder.getType<FIntegerType>(), apint);
     break;
   }
   case FIRToken::kw_Bool: {
@@ -1946,7 +1951,9 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return emitError("expected true or false in Bool expression");
     if (parseToken(FIRToken::r_paren, "expected ')' in Bool expression"))
       return failure();
-    result = builder.create<BoolConstantOp>(value);
+    auto attr = builder.getBoolAttr(value);
+    result = moduleContext.getCachedConstant<BoolConstantOp>(
+        builder, attr, builder.getType<BoolType>(), value);
     break;
   }
   case FIRToken::kw_Double: {
@@ -1966,7 +1973,9 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     double d;
     if (!llvm::to_float(spelling, d))
       return emitError("invalid double");
-    result = builder.create<DoubleConstantOp>(builder.getF64FloatAttr(d));
+    auto attr = builder.getF64FloatAttr(d);
+    result = moduleContext.getCachedConstant<DoubleConstantOp>(
+        builder, attr, builder.getType<DoubleType>(), attr);
     break;
   }
   case FIRToken::kw_List: {
@@ -1978,6 +1987,16 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return failure();
     break;
   }
+
+  case FIRToken::lp_list_concat: {
+    if (isLeadingStmt)
+      return emitError("unexpected list_create() as start of statement");
+    if (requireFeature(nextFIRVersion, "List concat") ||
+        parseListConcatExp(result))
+      return failure();
+    break;
+  }
+
   case FIRToken::lp_path:
     if (isLeadingStmt)
       return emitError("unexpected path() as start of statement");
@@ -2413,7 +2432,7 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
   }
 
   locationProcessor.setLoc(loc);
-  result = moduleContext.getCachedConstantInt(builder, attr, type, value);
+  result = moduleContext.getCachedConstant(builder, attr, type, attr);
   return success();
 }
 
@@ -2452,6 +2471,44 @@ ParseResult FIRStmtParser::parseListExp(Value &result) {
 
   locationProcessor.setLoc(loc);
   result = builder.create<ListCreateOp>(listType, operands);
+  return success();
+}
+
+/// list-concat-exp ::= 'list_concat' '(' exp* ')'
+ParseResult FIRStmtParser::parseListConcatExp(Value &result) {
+  consumeToken(FIRToken::lp_list_concat);
+
+  auto loc = getToken().getLoc();
+  ListType type;
+  SmallVector<Value, 3> operands;
+  if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
+        Value operand;
+        locationProcessor.setLoc(loc);
+        if (parseExp(operand, "expected expression in List concat expression"))
+          return failure();
+
+        if (!type_isa<ListType>(operand.getType()))
+          return emitError(loc, "unexpected expression of type ")
+                 << operand.getType() << " in List concat expression";
+
+        if (!type)
+          type = type_cast<ListType>(operand.getType());
+
+        if (operand.getType() != type)
+          return emitError(loc, "unexpected expression of type ")
+                 << operand.getType() << " in List concat expression of type "
+                 << type;
+
+        operands.push_back(operand);
+        return success();
+      }))
+    return failure();
+
+  if (operands.empty())
+    return emitError(loc, "need at least one List to concatenate");
+
+  locationProcessor.setLoc(loc);
+  result = builder.create<ListConcatOp>(type, operands);
   return success();
 }
 
@@ -3700,7 +3757,7 @@ ParseResult FIRStmtParser::parseRefForceInitial() {
                                                       value.getBitWidth(),
                                                       IntegerType::Unsigned),
                                      value);
-  auto pred = moduleContext.getCachedConstantInt(builder, attr, type, value);
+  auto pred = moduleContext.getCachedConstant(builder, attr, type, attr);
   builder.create<RefForceInitialOp>(pred, dest, src);
 
   return success();
@@ -3763,7 +3820,7 @@ ParseResult FIRStmtParser::parseRefReleaseInitial() {
                                                       value.getBitWidth(),
                                                       IntegerType::Unsigned),
                                      value);
-  auto pred = moduleContext.getCachedConstantInt(builder, attr, type, value);
+  auto pred = moduleContext.getCachedConstant(builder, attr, type, attr);
   builder.create<RefReleaseInitialOp>(pred, dest);
 
   return success();
@@ -4585,6 +4642,7 @@ private:
   ParseResult parseExtModule(CircuitOp circuit, unsigned indent);
   ParseResult parseIntModule(CircuitOp circuit, unsigned indent);
   ParseResult parseModule(CircuitOp circuit, bool isPublic, unsigned indent);
+  ParseResult parseFormal(CircuitOp circuit, unsigned indent);
 
   ParseResult parseLayerName(SymbolRefAttr &result);
   ParseResult parseOptionalEnabledLayers(ArrayAttr &result);
@@ -4890,6 +4948,7 @@ ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
     case FIRToken::kw_extclass:
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule:
+    case FIRToken::kw_formal:
     case FIRToken::kw_module:
     case FIRToken::kw_public:
     case FIRToken::kw_layer:
@@ -5153,6 +5212,39 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
   return success();
 }
 
+ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
+  consumeToken(FIRToken::kw_formal);
+  StringRef id, moduleName, boundSpelling;
+  int64_t bound = -1;
+  LocWithInfo info(getToken().getLoc(), this);
+
+  // Parse the formal operation
+  if (parseId(id, "expected a formal test name") ||
+      parseToken(FIRToken::kw_of,
+                 "expected keyword 'of' after formal test name") ||
+      parseId(moduleName, "expected the name of a module") ||
+      parseToken(FIRToken::comma, "expected ','") ||
+      parseGetSpelling(boundSpelling) ||
+      parseToken(FIRToken::identifier,
+                 "expected parameter 'bound' after ','") ||
+      parseToken(FIRToken::equal, "expected '=' after 'bound'") ||
+      parseIntLit(bound, "expected integer in bound specification") ||
+      info.parseOptionalInfo())
+    return failure();
+
+  // Check that the parameter is valid
+  if (boundSpelling != "bound" || bound <= 0)
+    return emitError("Invalid parameter given to formal test: ")
+               << boundSpelling << " = " << bound,
+           failure();
+
+  // Build out the firrtl mlir op
+  auto builder = circuit.getBodyBuilder();
+  builder.create<firrtl::FormalOp>(info.getLoc(), id, moduleName, bound);
+
+  return success();
+}
+
 ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
                                                       unsigned indent) {
   switch (getToken().getKind()) {
@@ -5167,6 +5259,10 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
     return parseExtClass(circuit, indent);
   case FIRToken::kw_extmodule:
     return parseExtModule(circuit, indent);
+  case FIRToken::kw_formal:
+    if (requireFeature({4, 0, 0}, "inline formal tests"))
+      return failure();
+    return parseFormal(circuit, indent);
   case FIRToken::kw_intmodule:
     if (removedFeature({4, 0, 0}, "intrinsic modules"))
       return failure();
@@ -5514,6 +5610,7 @@ ParseResult FIRCircuitParser::parseCircuit(
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule:
     case FIRToken::kw_layer:
+    case FIRToken::kw_formal:
     case FIRToken::kw_module:
     case FIRToken::kw_option:
     case FIRToken::kw_public:
@@ -5582,11 +5679,11 @@ DoneParsing:
   // a SymbolRefAttr.
   auto parseLayerName = [&](StringRef name) {
     // Parse the layer name into a SymbolRefAttr.
-    auto [head, rest] = name.split("::");
+    auto [head, rest] = name.split(".");
     SmallVector<FlatSymbolRefAttr> nestedRefs;
     while (!rest.empty()) {
       StringRef next;
-      std::tie(next, rest) = rest.split("::");
+      std::tie(next, rest) = rest.split(".");
       nestedRefs.push_back(FlatSymbolRefAttr::get(getContext(), next));
     }
     return SymbolRefAttr::get(getContext(), head, nestedRefs);

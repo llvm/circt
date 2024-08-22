@@ -77,12 +77,12 @@ moore.module @Module() {
   // CHECK: moore.procedure always_comb {
   // CHECK: moore.procedure always_latch {
   // CHECK: moore.procedure always_ff {
-  moore.procedure initial {}
-  moore.procedure final {}
-  moore.procedure always {}
-  moore.procedure always_comb {}
-  moore.procedure always_latch {}
-  moore.procedure always_ff {}
+  moore.procedure initial { moore.return }
+  moore.procedure final { moore.return }
+  moore.procedure always { moore.return }
+  moore.procedure always_comb { moore.return }
+  moore.procedure always_latch { moore.return }
+  moore.procedure always_ff { moore.return }
 
   // CHECK: %[[TMP1:.+]] = moore.read %v2
   // CHECK: moore.assign %v1, %[[TMP1]] : i1
@@ -100,6 +100,7 @@ moore.module @Module() {
     moore.nonblocking_assign %v1, %4 : i1
     // CHECK: %a = moore.variable : <i32>
     %a = moore.variable : <i32>
+    moore.return
   }
 }
 
@@ -139,12 +140,26 @@ moore.module @Expressions(
   // CHECK-SAME: in [[REF_STRUCT1:%.+]] : !moore.ref<struct<{a: i32, b: i32}>>
   in %refStruct1: !moore.ref<struct<{a: i32, b: i32}>>
 ) {
+  // CHECK: moore.constant 0 : i0
+  moore.constant 0 : i0
+  // CHECK: moore.constant 0 : i1
+  moore.constant 0 : i1
+  // CHECK: moore.constant 1 : i1
+  moore.constant 1 : i1
   // CHECK: moore.constant 0 : i32
   moore.constant 0 : i32
   // CHECK: moore.constant -2 : i2
   moore.constant 2 : i2
   // CHECK: moore.constant -2 : i2
   moore.constant -2 : i2
+  // CHECK: moore.constant 1311768467463790320 : i64
+  moore.constant h123456789ABCDEF0 : i64
+  // CHECK: moore.constant h123456789ABCDEF0XZ : l72
+  moore.constant h123456789ABCDEF0XZ : l72
+  // CHECK: moore.constant 10 : i8
+  moore.constant b1010 : i8
+  // CHECK: moore.constant b1010XZ : l8
+  moore.constant b1010XZ : l8
 
   // CHECK: moore.conversion [[A]] : !moore.i32 -> !moore.l32
   moore.conversion %a : !moore.i32 -> !moore.l32
@@ -275,6 +290,9 @@ moore.module @Expressions(
     moore.yield %b : i32
   }
 
+  // CHECK: moore.array_create [[A]], [[B]] : !moore.i32, !moore.i32 -> array<2 x i32>
+  moore.array_create %a, %b : !moore.i32, !moore.i32 -> array<2 x i32>
+
   // CHECK: moore.struct_create [[A]], [[B]] : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
   moore.struct_create %a, %b : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
   // CHECK: moore.struct_extract [[STRUCT1]], "a" : struct<{a: i32, b: i32}> -> i32
@@ -291,4 +309,23 @@ moore.module @Expressions(
 moore.module @GraphRegion() {
   %1 = moore.add %0, %0 : i32
   %0 = moore.constant 0 : i32
+}
+
+// CHECK-LABEL: func.func @WaitEvent
+func.func @WaitEvent(%arg0: !moore.i1, %arg1: !moore.i1) {
+  // CHECK: moore.wait_event {
+  moore.wait_event {
+    // CHECK: moore.detect_event any %arg0 : i1
+    moore.detect_event any %arg0 : i1
+    // CHECK: moore.detect_event posedge %arg0 : i1
+    moore.detect_event posedge %arg0 : i1
+    // CHECK: moore.detect_event negedge %arg0 : i1
+    moore.detect_event negedge %arg0 : i1
+    // CHECK: moore.detect_event edge %arg0 : i1
+    moore.detect_event edge %arg0 : i1
+    // CHECK: moore.detect_event any %arg0 if %arg1 : i1
+    moore.detect_event any %arg0 if %arg1 : i1
+  }
+  // CHECK: }
+  return
 }

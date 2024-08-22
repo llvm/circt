@@ -2,6 +2,8 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+from . import codegen
+
 from pathlib import Path
 import subprocess
 import sys
@@ -24,6 +26,10 @@ def run_esi_cosim():
   cosim_import = importlib.util.module_from_spec(spec)
   spec.loader.exec_module(cosim_import)
   return cosim_import.__main__(sys.argv)
+
+
+def run_cppgen():
+  return codegen.run()
 
 
 def get_cmake_dir():

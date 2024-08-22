@@ -58,6 +58,24 @@ def Dedup : Pass<"arc-dedup", "mlir::ModuleOp"> {
   ];
 }
 
+def PrintCostModel : Pass<"arc-print-cost-model", "mlir::ModuleOp"> {
+  let summary = "A dymmy pass to test analysis passes";
+  let constructor = "circt::arc::createPrintCostModelPass()";
+  let dependentDialects = ["arc::ArcDialect"];
+  let statistics = [
+    Statistic<"moduleCost", "Operation(s)",
+      "Number of operations in the module">,
+    Statistic<"packingCost", "Pack operations(s)",
+      "Number of scalar to vector packking in the module">,
+    Statistic<"shufflingCost", "Shuffle operation(s)",
+      "Number of shuffles done to set up the VectorizeOps">,
+    Statistic<"vectoroizeOpsBodyCost", "VectorizeOps Body Cost",
+      "Number of operations inside the body of the VectorizeOps">,
+    Statistic<"allVectorizeOpsCost", "All VectorizeOps Cost",
+      "Total Cost of all VectorizeOps in the module">
+  ];
+}
+
 def FindInitialVectors : Pass<"arc-find-initial-vectors", "mlir::ModuleOp"> {
   let summary = "Find initial groups of vectorizable ops";
   let constructor = "circt::arc::createFindInitialVectorsPass()";

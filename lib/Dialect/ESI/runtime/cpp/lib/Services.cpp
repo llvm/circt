@@ -145,13 +145,27 @@ CallService::getPort(AppIDPath id, const BundleType *type,
   return new Callback(acc, id.back(), channels);
 }
 
+ReadChannelPort &getRead(const std::map<std::string, ChannelPort &> &channels,
+                         const std::string &name) {
+  auto f = channels.find(name);
+  if (f == channels.end())
+    throw std::runtime_error("CallService must have an '" + name + "' channel");
+  return dynamic_cast<ReadChannelPort &>(f->second);
+}
+
+WriteChannelPort &getWrite(const std::map<std::string, ChannelPort &> &channels,
+                           const std::string &name) {
+  auto f = channels.find(name);
+  if (f == channels.end())
+    throw std::runtime_error("CallService must have an '" + name + "' channel");
+  return dynamic_cast<WriteChannelPort &>(f->second);
+}
+
 CallService::Callback::Callback(
     AcceleratorConnection &acc, AppID id,
     const std::map<std::string, ChannelPort &> &channels)
-    : ServicePort(id, channels),
-      arg(dynamic_cast<ReadChannelPort &>(channels.at("arg"))),
-      result(dynamic_cast<WriteChannelPort &>(channels.at("result"))),
-      acc(acc) {
+    : ServicePort(id, channels), arg(getRead(channels, "arg")),
+      result(getWrite(channels, "result")), acc(acc) {
   if (channels.size() != 2)
     throw std::runtime_error("CallService must have exactly two channels");
 }

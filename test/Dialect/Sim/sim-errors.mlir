@@ -42,3 +42,12 @@ hw.module @proc_print_sv() {
     sim.proc.print %lit
   }
 }
+
+// -----
+
+hw.module.extern @non_func(out arg0: i1, in %arg1: i1, out arg2: i1)
+
+hw.module @dpi_call(in %clock : !seq.clock, in %in: i1) {
+  // expected-error @below {{callee must be 'sim.dpi.func' or 'func.func' but got 'hw.module.extern'}}
+  %0, %1 = sim.func.dpi.call @non_func(%in) : (i1) -> (i1, i1)
+}

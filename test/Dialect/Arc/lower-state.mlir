@@ -353,3 +353,54 @@ hw.module @BlackBox(in %clk: !seq.clock) {
 }
 // CHECK-NOT: hw.module.extern private @BlackBoxExt
 hw.module.extern private @BlackBoxExt(in %a: i42, in %b: i42, out c: i42, out d: i42)
+
+
+func.func private @func(%arg0: i32, %arg1: i32) -> i32
+// CHECK-LABEL: arc.model @adder
+hw.module @adder(in %clock : i1, in %a : i32, in %b : i32, out c : i32) {
+  %0 = seq.to_clock %clock
+  %1 = sim.func.dpi.call @func(%a, %b) clock %0 : (i32, i32) -> i32
+  // CHECK:      arc.clock_tree
+  // CHECK-NEXT:   %[[A:.+]] = arc.state_read %in_a : <i32>
+  // CHECK-NEXT:   %[[B:.+]] = arc.state_read %in_b : <i32>
+  // CHECK-NEXT:   %[[RESULT:.+]] = func.call @func(%6, %7) : (i32, i32) -> i32
+  hw.output %1 : i32
+}
+
+// CHECK-LABEL: arc.model @InitializedStates
+hw.module @InitializedStates(in %clk: !seq.clock, in %reset: i1, in %input: i42) {
+
+// CHECK:      [[ST1:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
+// CHECK-NEXT: [[ST2:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
+// CHECK-NEXT: [[ST3:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
+// CHECK-NEXT: [[ST4:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
+// CHECK-NEXT: [[ST5:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
+
+// CHECK: arc.initial {
+
+  %csta = hw.constant 1 : i42
+  %cstb = hw.constant 10 : i42
+  %cstc = hw.constant 100 : i42
+  %cstd = hw.constant 1000 : i42
+  %add = comb.add bin %cstb, %cstc, %csta : i42
+  %mul = comb.mul bin %add, %csta : i42
+
+  // CHECK-NEXT: [[CSTD:%.+]] = hw.constant 1000 : i42
+  // CHECK-NEXT: arc.state_write [[ST1]] = [[CSTD]] : <i42>
+  %0 = arc.state @DummyArc(%input) clock %clk initial (%cstd : i42) latency 1 : (i42) -> i42
+
+  // CHECK-DAG:  [[CSTA:%.+]] = hw.constant 1 : i42
+  // CHECK-DAG:  [[CSTB:%.+]] = hw.constant 10 : i42
+  // CHECK-DAG:  [[CSTC:%.+]] = hw.constant 100 : i42
+  // CHECK-DAG:  [[ADD:%.+]] = comb.add bin [[CSTB]], [[CSTC]], [[CSTA]] : i42
+  // CHECK-DAG:  [[MUL:%.+]] = comb.mul bin [[ADD]], [[CSTA]] : i42
+
+  // CHECK:      arc.state_write [[ST2]] = [[MUL]] : <i42>
+  %1 = arc.state @DummyArc(%0) clock %clk initial (%mul : i42) latency 1 : (i42) -> i42
+  // CHECK-NEXT: arc.state_write [[ST3]] = [[CSTB]] : <i42>
+  %2 = arc.state @DummyArc(%1) clock %clk reset %reset initial (%cstb : i42) latency 1 : (i42) -> i42
+  // CHECK-DAG: arc.state_write [[ST4]] = [[CSTB]] : <i42>
+  // CHECK-DAG: arc.state_write [[ST5]] = [[ADD]] : <i42>
+  %3, %4 = arc.state @DummyArc2(%2) clock %clk initial (%cstb, %add : i42, i42) latency 1 : (i42) -> (i42, i42)
+// CHECK: }
+}

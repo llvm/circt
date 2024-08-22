@@ -27,6 +27,11 @@ cmake_minimum_required(VERSION 3.20)
 project(ESIRuntime LANGUAGES CXX)
 include(FetchContent)
 
+set(ESI_STATIC_RUNTIME OFF CACHE BOOL "Build the ESI runtime as a static library.")
+if(ESI_STATIC_RUNTIME)
+  message("-- Building ESI runtime as a static library.")
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
@@ -44,12 +49,17 @@ if (NOT TARGET nlohmann_json)
   FetchContent_MakeAvailable(json)
 endif()
 
+if(ESI_STATIC_RUNTIME)
+  set(ZLIB_USE_STATIC_LIBS ON)
+endif()
+
 # We need zlib to uncompress the manifest.
 find_package(ZLIB)
 if(ZLIB_FOUND)
   set(ZLIB_LIBRARY ZLIB::ZLIB)
 else()
   message("-- zlib not found, pulling down zlib from git")
+  set(ZLIB_BUILD_EXAMPLES OFF)
   FetchContent_Declare(
     ZLIB
     GIT_REPOSITORY https://github.com/madler/zlib.git
@@ -57,7 +67,11 @@ else()
   )
   FetchContent_MakeAvailable(ZLIB)
   set(ZLIB_INCLUDE_DIR ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
-  set(ZLIB_LIBRARY zlib)
+  if(ESI_STATIC_RUNTIME)
+    set(ZLIB_LIBRARY zlibstatic)
+  else()
+    set(ZLIB_LIBRARY zlib)
+  endif()
 endif()
 
 # In a Python wheel build, we need to install libraries to different places.
@@ -109,6 +123,7 @@ set(ESICppRuntimeBackendHeaders
 set(ESIPythonRuntimeSources
   python/esiaccel/__init__.py
   python/esiaccel/accelerator.py
+  python/esiaccel/codegen.py
   python/esiaccel/types.py
   python/esiaccel/utils.py
 )
@@ -118,10 +133,17 @@ IF(MSVC)
     set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS 1)
 ENDIF(MSVC)
 
-# The core API. For now, compile the backends into it directly.
-add_library(ESICppRuntime SHARED
-  ${ESICppRuntimeSources}
-)
+if(ESI_STATIC_RUNTIME)
+  add_library(ESICppRuntime STATIC
+    ${ESICppRuntimeSources}
+  )
+else()
+  add_library(ESICppRuntime SHARED
+    ${ESICppRuntimeSources}
+  )
+endif()
+add_library(esiaccel::ESICppRuntime ALIAS ESICppRuntime)
+
 target_include_directories(ESICppRuntime PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include
 )
@@ -165,10 +187,12 @@ install(TARGETS ESICppRuntime
   COMPONENT ESIRuntime
 )
 
-install(IMPORTED_RUNTIME_ARTIFACTS ESICppRuntime
-  RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
-  COMPONENT ESIRuntime
-)
+if(NOT ESI_STATIC_RUNTIME)
+  install(IMPORTED_RUNTIME_ARTIFACTS ESICppRuntime
+    RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
+    COMPONENT ESIRuntime
+  )
+endif()
 install(RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
   DESTINATION ${LIB_DIR}
   PRE_EXCLUDE_REGEXES .*

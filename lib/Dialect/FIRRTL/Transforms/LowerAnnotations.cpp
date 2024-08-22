@@ -435,6 +435,45 @@ static LogicalResult applyOutputDirAnno(const AnnoPathValue &target,
   return success();
 }
 
+/// Convert from FullAsyncResetAnnotation to FullResetAnnotation
+static LogicalResult convertToFullResetAnnotation(const AnnoPathValue &target,
+                                                  DictionaryAttr anno,
+                                                  ApplyState &state) {
+  auto *op = target.ref.getOp();
+  auto *context = op->getContext();
+
+  mlir::emitWarning(op->getLoc())
+      << "'" << fullAsyncResetAnnoClass << "' is deprecated, use '"
+      << fullResetAnnoClass << "' instead";
+
+  NamedAttrList newAnno(anno.getValue());
+  newAnno.set("class", StringAttr::get(context, fullResetAnnoClass));
+  newAnno.append("resetType", StringAttr::get(context, "async"));
+
+  DictionaryAttr newDictionary = DictionaryAttr::get(op->getContext(), newAnno);
+
+  return applyWithoutTarget<false>(target, newDictionary, state);
+}
+
+/// Convert from IgnoreFullAsyncResetAnnotation to
+/// ExcludeFromFullResetAnnotation
+static LogicalResult convertToExcludeFromFullResetAnnotation(
+    const AnnoPathValue &target, DictionaryAttr anno, ApplyState &state) {
+  auto *op = target.ref.getOp();
+  auto *context = op->getContext();
+
+  mlir::emitWarning(op->getLoc())
+      << "'" << ignoreFullAsyncResetAnnoClass << "' is deprecated, use '"
+      << excludeFromFullResetAnnoClass << "' instead";
+
+  NamedAttrList newAnno(anno.getValue());
+  newAnno.set("class", StringAttr::get(context, excludeFromFullResetAnnoClass));
+
+  DictionaryAttr newDictionary = DictionaryAttr::get(op->getContext(), newAnno);
+
+  return applyWithoutTarget<true, FModuleOp>(target, newDictionary, state);
+}
+
 //===----------------------------------------------------------------------===//
 // Driving table
 //===----------------------------------------------------------------------===//
@@ -543,9 +582,12 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
     {addSeqMemPortsFileAnnoClass, NoTargetAnnotation},
     {extractClockGatesAnnoClass, NoTargetAnnotation},
     {extractBlackBoxAnnoClass, {stdResolve, applyWithoutTarget<false>}},
-    {fullAsyncResetAnnoClass, {stdResolve, applyWithoutTarget<false>}},
-    {ignoreFullAsyncResetAnnoClass,
+    {fullResetAnnoClass, {stdResolve, applyWithoutTarget<false>}},
+    {excludeFromFullResetAnnoClass,
      {stdResolve, applyWithoutTarget<true, FModuleOp>}},
+    {fullAsyncResetAnnoClass, {stdResolve, convertToFullResetAnnotation}},
+    {ignoreFullAsyncResetAnnoClass,
+     {stdResolve, convertToExcludeFromFullResetAnnotation}},
     {decodeTableAnnotation, {noResolve, drop}},
     {blackBoxTargetDirAnnoClass, NoTargetAnnotation},
     {traceNameAnnoClass, {stdResolve, applyTraceName}},

@@ -286,16 +286,6 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-  // expected-note @+1 {{containing module declared here}}
-  firrtl.module @Foo() {
-    // expected-error @+1 {{'firrtl.instance' op is a recursive instantiation of its containing module}}
-    firrtl.instance "" @Foo()
-  }
-}
-
-// -----
-
-firrtl.circuit "Foo" {
   // expected-note @+1 {{original module declared here}}
   firrtl.module @Callee(in %arg0: !firrtl.uint<1>) { }
   firrtl.module @Foo() {
@@ -1894,23 +1884,6 @@ firrtl.circuit "WrongLayerBlockNesting" {
 
 // -----
 
-// A layer block captures a non-passive type.
-firrtl.circuit "NonPassiveCapture" {
-  firrtl.layer @A bind {}
-  firrtl.module @NonPassiveCapture() {
-    // expected-note @below {{operand is defined here}}
-    %a = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
-    // expected-error @below {{'firrtl.layerblock' op captures an operand which is not a passive type}}
-    firrtl.layerblock @A {
-      %b = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
-      // expected-note @below {{operand is used here}}
-      firrtl.connect %b, %a : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
-    }
-  }
-}
-
-// -----
-
 // A layer block may not drive sinks outside the layer block.
 firrtl.circuit "LayerBlockDrivesSinksOutside" {
   firrtl.layer @A bind {}
@@ -2066,6 +2039,20 @@ firrtl.circuit "RWProbeUseDef" {
     } else {
       // expected-error @below {{not dominated by target}}
       %rw = firrtl.ref.rwprobe <@RWProbeUseDef::@x> : !firrtl.rwprobe<uint<1>>
+    }
+  }
+}
+
+// -----
+
+firrtl.circuit "RWProbeLayerRequirements" {
+  firrtl.layer @A bind { }
+  firrtl.module @RWProbeLayerRequirements(in %cond : !firrtl.uint<1>) {
+    // expected-note @below {{target is missing layer requirements: @A}}
+    %w = firrtl.wire sym @x : !firrtl.uint<1>
+    firrtl.layerblock @A {
+      // expected-error @below {{target has insufficient layer requirements}}
+      %rw = firrtl.ref.rwprobe <@RWProbeLayerRequirements::@x> : !firrtl.rwprobe<uint<1>>
     }
   }
 }
@@ -2554,3 +2541,23 @@ firrtl.module @LHSTypes() {
 }
 }
 
+// -----
+
+// expected-error @below {{op does not contain module with same name as circuit}}
+firrtl.circuit "NoMain" { }
+
+// -----
+
+firrtl.circuit "PrivateMain" {
+  // expected-error @below {{main module must be public}}
+  firrtl.module private @PrivateMain() {}
+}
+
+// -----
+
+firrtl.circuit "MainNotModule" {
+  // expected-error @below {{entity with name of circuit must be a module}}
+  func.func @MainNotModule() {
+    return
+  }
+}
