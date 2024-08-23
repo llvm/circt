@@ -360,60 +360,7 @@ VariableOp::handlePromotionComplete(const MemorySlot &slot, Value defaultValue,
   if (defaultValue && defaultValue.use_empty())
     defaultValue.getDefiningOp()->erase();
   this->erase();
-  return std::nullopt;
-}
-
-LogicalResult VariableOp::canonicalize(VariableOp op,
-                                       ::mlir::PatternRewriter &rewriter) {
-  if (!(isa<SVModuleOp>(op->getParentOp()) ||
-        isa<func::FuncOp>(op->getParentOp())))
-    return failure();
-  auto members = getStructMembers(op.getType().getNestedType());
-  if (!members.empty()) {
-    SmallVector<Value> createFields;
-    if (auto initial = op.getInitial()) {
-      auto addressOp = rewriter.create<AddressOp>(
-          op.getLoc(), RefType::get(cast<UnpackedType>(initial.getType())),
-          initial);
-      for (const auto &member : members) {
-        auto field = rewriter.create<StructExtractOp>(
-            op->getLoc(), cast<UnpackedType>(member.type), member.name,
-            addressOp);
-        createFields.push_back(field);
-      }
-    } else {
-      for (const auto &member : members) {
-        // todo: support 4-domain value
-        auto field = rewriter.create<ConstantOp>(op->getLoc(),
-                                                 cast<IntType>(member.type), 0);
-        createFields.push_back(field);
-      }
-    }
-    auto value = rewriter.create<StructCreateOp>(
-        op->getLoc(), op.getType().getNestedType(), createFields);
-    rewriter.replaceOpWithNewOp<AddressOp>(op, RefType::get(value.getType()),
-                                           value);
-    return success();
-  }
-
-  Value initial;
-  for (auto *user : op->getUsers())
-    if (isa<ContinuousAssignOp>(user) &&
-        (user->getOperand(0) == op.getResult())) {
-      // Don't canonicalize the multiple continuous assignment to the same
-      // variable.
-      if (initial)
-        return failure();
-      initial = user->getOperand(1);
-    }
-
-  if (initial) {
-    rewriter.replaceOpWithNewOp<AssignedVarOp>(op, op.getType(),
-                                               op.getNameAttr(), initial);
-    return success();
-  }
-
-  return failure();
+  return {};
 }
 
 SmallVector<DestructurableMemorySlot> VariableOp::getDestructurableSlots() {
@@ -1139,35 +1086,6 @@ DeletionKind BlockingAssignOp::removeBlockingUses(
   return DeletionKind::Delete;
 }
 
-LogicalResult BlockingAssignOp::canonicalize(BlockingAssignOp op,
-                                             PatternRewriter &rewriter) {
-  if (!(isa<SVModuleOp>(op->getParentOp()) ||
-        isa<func::FuncOp>(op->getParentOp())))
-    return failure();
-  if (auto refOp = op.getDst().getDefiningOp<moore::StructExtractRefOp>()) {
-    auto input = refOp.getInput();
-    if (isa<SVModuleOp>(input.getDefiningOp()->getParentOp())) {
-      auto value = rewriter.create<ReadOp>(
-          op->getLoc(), cast<RefType>(input.getType()).getNestedType(), input);
-      auto newOp = rewriter.create<moore::StructInjectOp>(
-          op->getLoc(), value.getType(), value, refOp.getFieldNameAttr(),
-          op.getSrc());
-      auto newOpAddress = rewriter.create<moore::AddressOp>(
-          op.getLoc(), RefType::get(newOp.getType()), newOp);
-      rewriter.replaceOpUsesWithIf(
-          input.getDefiningOp(), newOpAddress->getResults(),
-          [&op](OpOperand &operand) {
-            return !operand.getOwner()->isBeforeInBlock(op);
-          });
-      op.getDstMutable();
-      op.erase();
-      refOp.erase();
-      return success();
-    }
-  }
-  return failure();
-}
-
 //===----------------------------------------------------------------------===//
 // ReadOp
 //===----------------------------------------------------------------------===//
@@ -1202,19 +1120,6 @@ ReadOp::removeBlockingUses(const MemorySlot &slot,
                            const DataLayout &dataLayout) {
   getResult().replaceAllUsesWith(reachingDefinition);
   return DeletionKind::Delete;
-}
-
-LogicalResult ReadOp::canonicalize(ReadOp op, PatternRewriter &rewriter) {
-  if (!(isa<SVModuleOp>(op->getParentOp()) ||
-        isa<func::FuncOp>(op->getParentOp())))
-    return failure();
-  if (auto addr = op.getInput().getDefiningOp<AddressOp>()) {
-    auto value = addr.getInput();
-    op.replaceAllUsesWith(value);
-    op.erase();
-    return success();
-  }
-  return failure();
 }
 
 //===----------------------------------------------------------------------===//
