@@ -232,9 +232,10 @@ def HWModuleOp : HWModuleOpBase<"module",
     /// Verifies the body of the function.
     LogicalResult verifyBody();
 
-    void appendPorts(
-                  ArrayRef<std::tuple<StringAttr, Type, Location>> insertInputs,
-                  ArrayRef<std::pair<StringAttr, Value>> insertOutputs);
+    /// Append ports to the module, use the `outputVals` to update the output op
+    /// and set the `inputVals` with the new block args added.
+    void appendPorts(ArrayRef<PortInfo> ports, ArrayRef<Value> outputVals,
+                     SmallVectorImpl<Value> &inputVals);
   }];
 
   let hasCustomAssemblyFormat = 1;

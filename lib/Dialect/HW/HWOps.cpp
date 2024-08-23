@@ -503,9 +503,9 @@ OpFoldResult ParamValueOp::fold(FoldAdaptor adaptor) {
   return getValueAttr();
 }
 
-void HWModuleOp::appendPorts(
-    ArrayRef<std::tuple<StringAttr, Type, Location>> insertInputs,
-    ArrayRef<std::pair<StringAttr, Value>> insertOutputs) {
+void HWModuleOp::appendPorts(ArrayRef<PortInfo> ports,
+                             ArrayRef<Value> outputVals,
+                             SmallVectorImpl<Value> &inputVals) {
 
   HWModuleOp module = *this;
   auto *context = module->getContext();
@@ -514,57 +514,54 @@ void HWModuleOp::appendPorts(
 
   ArrayRef<ModulePort> oldPorts = oldType.getPorts();
 
-  unsigned newPortsCount =
-      oldPorts.size() + insertInputs.size() + insertOutputs.size();
+  unsigned newPortsCount = oldPorts.size() + ports.size();
 
   SmallVector<ModulePort> newPorts;
   newPorts.reserve(newPortsCount);
   newPorts.append(oldPorts.begin(), oldPorts.end());
 
-  for (auto &[name, type, loc] : insertInputs) {
-    body->addArgument(type, loc);
-    newPorts.emplace_back(ModulePort({name, type, ModulePort::Input}));
-  }
-
-  if (!insertOutputs.empty()) {
+  SmallVector<Attribute> newResultLocs;
+  if (!outputVals.empty()) {
+    // Update the output op.
     auto oldResultLocs = module.getResultLocs();
-    SmallVector<Attribute> newResultLocs;
-    newResultLocs.reserve(
-        (oldResultLocs.has_value() ? oldResultLocs->getValue().size() : 0) +
-        insertOutputs.size());
     if (oldResultLocs.has_value())
       newResultLocs.append(oldResultLocs->getValue().begin(),
                            oldResultLocs->getValue().end());
-
     auto outputOp = cast<OutputOp>(body->getTerminator());
     auto oldOperands = outputOp->getOperands();
 
-    SmallVector<Value> newOperands;
-    newOperands.reserve(oldOperands.size() + insertOutputs.size());
-    newOperands.append(oldOperands.begin(), oldOperands.end());
-
-    for (auto &[name, out] : insertOutputs) {
-      newOperands.emplace_back(out);
-      newPorts.emplace_back(
-          ModulePort({name, out.getType(), ModulePort::Output}));
-      newResultLocs.emplace_back(out.getLoc());
-    }
-    outputOp->setOperands(newOperands);
-    module.setResultLocsAttr(ArrayAttr::get(context, newResultLocs));
+    SmallVector<Value> newOutputOperands;
+    llvm::append_range(newOutputOperands, oldOperands);
+    llvm::append_range(newOutputOperands, outputVals);
+    outputOp->setOperands(newOutputOperands);
   }
+  auto oldPortAttrs = module.getAllPortAttrs();
+  SmallVector<Attribute> newPortAttrs(oldPortAttrs);
+  inputVals.reserve(ports.size() - outputVals.size());
+
+  for (auto &portInfo : ports) {
+    assert(!portInfo.isInOut() && "can only handle input or output ports");
+    if (portInfo.isInput())
+      inputVals.push_back(body->addArgument(portInfo.type, portInfo.loc));
+    else if (portInfo.isOutput())
+      newResultLocs.emplace_back(portInfo.loc);
+    newPorts.push_back(portInfo);
+    if (portInfo.attrs) {
+      if (newPortAttrs.empty() || newPortAttrs.size() < newPortsCount)
+        newPortAttrs.append(newPortsCount, {});
+      newPortAttrs[newPorts.size() - 1] = portInfo.attrs;
+    }
+  }
+
+  if (!outputVals.empty())
+    module.setResultLocsAttr(ArrayAttr::get(context, newResultLocs));
 
   auto newType = ModuleType::get(context, newPorts);
 
   module.setModuleType(newType);
-  auto oldPortAttrs = module.getPerPortAttrs();
-  if (oldPortAttrs.has_value()) {
-    auto portAttrs = oldPortAttrs->getValue();
-    SmallVector<Attribute> newPortAttrs;
-    newPortAttrs.reserve(newPortsCount);
-    newPortAttrs.append(portAttrs.begin(), portAttrs.end());
-    newPortAttrs.append(newPortsCount - oldPortAttrs->size(), {});
-  }
+  module.setAllPortAttrs(newPortAttrs);
 }
+
 //===----------------------------------------------------------------------===//
 // HWModuleOp
 //===----------------------------------------------------------------------===/

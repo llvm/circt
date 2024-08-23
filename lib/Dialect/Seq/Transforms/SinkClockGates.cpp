@@ -26,6 +26,7 @@
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/PortImplementation.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
@@ -61,19 +62,19 @@ struct SinkClockGatesPass
   /// Append input ports to the module and all its instances.
   /// Add the given values as operands to the `instance`. Add constant true op
   /// as input to the other instances of the module.
-  void appendInputsToModuleAndInstances(
+  SmallVector<Value> appendInputsToModuleAndInstances(
       HWInstanceLike instance, ArrayRef<HWInstanceLike> moduleInstances,
       ArrayRef<std::pair<StringAttr, Value>> inputs, HWModuleOp refMod) {
 
     if (inputs.empty())
-      return;
+      return {};
     SmallVector<Attribute> argNames;
     if (auto args = instance->getAttrOfType<ArrayAttr>("argNames"))
       argNames.insert(argNames.begin(), args.begin(), args.end());
 
     SmallVector<Value> newOperands;
     newOperands.reserve(inputs.size());
-    SmallVector<std::tuple<StringAttr, Type, Location>> newInputs;
+    SmallVector<PortInfo> newInputs;
     newInputs.reserve(inputs.size());
     for (const auto &[name, value] : inputs) {
       // If no argNames attribute, donot add it.
@@ -83,7 +84,12 @@ struct SinkClockGatesPass
       newOperands.push_back(value);
       // Prepare the additional input ports that need to be added to the
       // referenced module.
-      newInputs.emplace_back(name, value.getType(), value.getLoc());
+      PortInfo p;
+      p.name = name;
+      p.type = value.getType();
+      p.dir = ModulePort::Direction::Input;
+      p.loc = value.getLoc();
+      newInputs.push_back(p);
     }
     // Add the new operands to the instance.
     instance->insertOperands(instance->getNumOperands(), newOperands);
@@ -108,8 +114,10 @@ struct SinkClockGatesPass
         otherInstance->setAttr(
             "argNames", ArrayAttr::get(instance->getContext(), argNames));
     }
+    SmallVector<Value> inputPorts;
     // Update all the modules with the new input ports.
-    refMod.appendPorts(newInputs, {});
+    refMod.appendPorts(newInputs, {}, inputPorts);
+    return inputPorts;
   }
 
   /// Get the referenced module for an instance, and add all the instances of
@@ -299,20 +307,20 @@ void SinkClockGatesPass::runOnOperation() {
     }
     if (enablePorts.empty())
       continue;
-    unsigned oldNumInputs = inst->getNumOperands();
 
     // Now update the instance and all the referenced modules with the new
     // enable ports.
-    appendInputsToModuleAndInstances(inst, moduleInstances, enablePorts,
-                                     refMod);
+    auto newEnableInputs = appendInputsToModuleAndInstances(
+        inst, moduleInstances, enablePorts, refMod);
     // Third phase, Once all the modules are updated with the additional enable
     // ports, duplicate the clock_gate op in the referenced module.
     auto *block = refMod.getBodyBlock();
     auto builder = mlir::OpBuilder::atBlockBegin(block);
+    assert(gatedClkPorts.size() == newEnableInputs.size());
     for (auto [index, clkPort] : llvm::enumerate(gatedClkPorts)) {
       auto clk = block->getArgument(clkPort);
       assert(isa<ClockType>(clk.getType()));
-      auto enable = block->getArgument(oldNumInputs + index);
+      auto enable = newEnableInputs[index];
       auto clkGate = builder.create<ClockGateOp>(enable.getLoc(), clk, enable,
                                                  Value(), hw::InnerSymAttr());
       // Replace all the original clock users with the gated clock.
