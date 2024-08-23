@@ -10,6 +10,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/Debug.h"
@@ -54,21 +55,6 @@ static void tryMakeRelative(StringRef outputDir,
   if (moduleOutputDir.starts_with(outputDir))
     moduleOutputDir.erase(moduleOutputDir.begin(),
                           moduleOutputDir.begin() + outputDir.size());
-}
-
-static void makeCommonPrefix(SmallString<64> &a, StringRef b) {
-  // truncate 'a' to the common prefix of 'a' and 'b'.
-  size_t i = 0;
-  size_t e = std::min(a.size(), b.size());
-  for (; i < e; ++i)
-    if (a[i] != b[i])
-      break;
-  a.resize(i);
-
-  // truncate 'a' so it ends on a directory seperator.
-  auto sep = path::get_separator();
-  while (!a.empty() && !a.ends_with(sep))
-    a.pop_back();
 }
 
 static void makeCommonPrefix(StringRef outputDir, SmallString<64> &a,
