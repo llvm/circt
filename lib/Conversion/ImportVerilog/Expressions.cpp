@@ -69,6 +69,28 @@ struct RvalueExprVisitor {
     return {};
   }
 
+  // Handle hierarchical values, such as `x = Top.sub.var`.
+  Value visit(const slang::ast::HierarchicalValueExpression &expr) {
+    auto hierLoc = context.convertLocation(expr.symbol.location);
+    if (auto value = context.valueSymbols.lookup(&expr.symbol)) {
+      if (isa<moore::RefType>(value.getType())) {
+        auto readOp = builder.create<moore::ReadOp>(hierLoc, value);
+        if (context.rvalueReadCallback)
+          context.rvalueReadCallback(readOp);
+        value = readOp.getResult();
+      }
+      return value;
+    }
+
+    // Emit an error for those hierarchical values not recorded in the
+    // `valueSymbols`.
+    auto d = mlir::emitError(loc, "unknown hierarchical name `")
+             << expr.symbol.name << "`";
+    d.attachNote(hierLoc) << "no rvalue generated for "
+                          << slang::ast::toString(expr.symbol.kind);
+    return {};
+  }
+
   // Handle type conversions (explicit and implicit).
   Value visit(const slang::ast::ConversionExpression &expr) {
     auto type = context.convertType(*expr.type);
@@ -886,6 +908,20 @@ struct LvalueExprVisitor {
     if (auto value = context.valueSymbols.lookup(&expr.symbol))
       return value;
     auto d = mlir::emitError(loc, "unknown name `") << expr.symbol.name << "`";
+    d.attachNote(context.convertLocation(expr.symbol.location))
+        << "no lvalue generated for " << slang::ast::toString(expr.symbol.kind);
+    return {};
+  }
+
+  // Handle hierarchical values, such as `Top.sub.var = x`.
+  Value visit(const slang::ast::HierarchicalValueExpression &expr) {
+    if (auto value = context.valueSymbols.lookup(&expr.symbol))
+      return value;
+
+    // Emit an error for those hierarchical values not recorded in the
+    // `valueSymbols`.
+    auto d = mlir::emitError(loc, "unknown hierarchical name `")
+             << expr.symbol.name << "`";
     d.attachNote(context.convertLocation(expr.symbol.location))
         << "no lvalue generated for " << slang::ast::toString(expr.symbol.kind);
     return {};

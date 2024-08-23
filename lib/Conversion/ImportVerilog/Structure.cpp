@@ -401,6 +401,13 @@ struct ModuleVisitor : public BaseVisitor {
         value =
             builder.create<moore::ConversionOp>(value.getLoc(), type, value);
 
+    // Here we use the hierarchical value recorded in `Context::valueSymbols`.
+    // Then we pass it as the input port with the ref<T> type of the instance.
+    for (const auto &hierPath : context.hierPaths[&instNode.body])
+      if (auto hierValue = context.valueSymbols.lookup(hierPath.valueSym);
+          hierPath.hierName)
+        inputValues.push_back(hierValue);
+
     // Create the instance op itself.
     auto inputNames = builder.getArrayAttr(moduleType.getInputNames());
     auto outputNames = builder.getArrayAttr(moduleType.getOutputNames());
@@ -436,10 +443,16 @@ struct ModuleVisitor : public BaseVisitor {
         return failure();
     }
 
-    auto varOp = builder.create<moore::VariableOp>(
-        loc, moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
-        builder.getStringAttr(varNode.name), initial);
-    context.valueSymbols.insert(&varNode, varOp);
+    if (auto refValue = context.valueSymbols.lookup(&varNode)) {
+      if (initial)
+        builder.create<moore::ContinuousAssignOp>(loc, refValue, initial);
+    } else {
+      auto varOp = builder.create<moore::VariableOp>(
+          loc, moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
+          builder.getStringAttr(varNode.name), initial);
+      context.valueSymbols.insert(&varNode, varOp);
+    }
+
     return success();
   }
 
@@ -450,9 +463,8 @@ struct ModuleVisitor : public BaseVisitor {
       return failure();
 
     Value assignment;
-    if (netNode.getInitializer()) {
-      assignment = context.convertRvalueExpression(*netNode.getInitializer(),
-                                                   loweredType);
+    if (const auto *init = netNode.getInitializer()) {
+      assignment = context.convertRvalueExpression(*init, loweredType);
       if (!assignment)
         return failure();
     }
@@ -464,10 +476,15 @@ struct ModuleVisitor : public BaseVisitor {
       return mlir::emitError(loc, "unsupported net kind `")
              << netNode.netType.name << "`";
 
-    auto netOp = builder.create<moore::NetOp>(
-        loc, moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
-        builder.getStringAttr(netNode.name), netkind, assignment);
-    context.valueSymbols.insert(&netNode, netOp);
+    if (auto refValue = context.valueSymbols.lookup(&netNode)) {
+      if (assignment)
+        builder.create<moore::ContinuousAssignOp>(loc, refValue, assignment);
+    } else {
+      auto netOp = builder.create<moore::NetOp>(
+          loc, moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
+          builder.getStringAttr(netNode.name), netkind, assignment);
+      context.valueSymbols.insert(&netNode, netOp);
+    }
     return success();
   }
 
@@ -561,6 +578,12 @@ struct ModuleVisitor : public BaseVisitor {
 /// point for the conversion.
 LogicalResult Context::convertCompilation() {
   const auto &root = compilation.getRoot();
+
+  // First only to visit the whole AST to collect the hierarchical names without
+  // any operation creating.
+  for (auto *inst : root.topInstances)
+    if (failed(traverseInstanceBody(inst->body)))
+      return failure();
 
   // Visit all top-level declarations in all compilation units. This does not
   // include instantiable constructs like modules, interfaces, and programs,
@@ -671,6 +694,9 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   // Handle the port list.
   auto block = std::make_unique<Block>();
   SmallVector<hw::ModulePort> modulePorts;
+
+  // It's used to tag where a hierarchical name is on the input ports.
+  unsigned int inputIdx = 0;
   for (auto *symbol : module->getPortList()) {
     auto handlePort = [&](const PortSymbol &port) {
       auto portLoc = convertLocation(port.location);
@@ -682,6 +708,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
       if (port.direction == ArgumentDirection::Out) {
         modulePorts.push_back({portName, type, hw::ModulePort::Output});
       } else {
+        inputIdx++;
         // Only the ref type wrapper exists for the time being, the net type
         // wrapper for inout may be introduced later if necessary.
         if (port.direction != slang::ast::ArgumentDirection::In)
@@ -705,6 +732,22 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
           << "unsupported module port `" << symbol->name << "` ("
           << slang::ast::toString(symbol->kind) << ")";
       return {};
+    }
+  }
+
+  // Mapping the hierarchical names into the module's ports.
+  for (auto &hierPath : hierPaths[module]) {
+    auto hierLoc = convertLocation(hierPath.valueSym->location);
+    auto hierType = convertType(hierPath.valueSym->getType());
+    if (!hierType)
+      return {};
+
+    // All hierarchical names are regarded as the input ports with ref<T> types.
+    if (auto hierName = hierPath.hierName) {
+      hierType = moore::RefType::get(cast<moore::UnpackedType>(hierType));
+      hierPath.idx = inputIdx++;
+      modulePorts.push_back({hierName, hierType, hw::ModulePort::Input});
+      block->addArgument(hierType, hierLoc);
     }
   }
   auto moduleType = hw::ModuleType::get(getContext(), modulePorts);
@@ -746,8 +789,20 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
   OpBuilder::InsertionGuard g(builder);
   builder.setInsertionPointToEnd(lowering.op.getBody());
 
-  // Convert the body of the module.
   ValueSymbolScope scope(valueSymbols);
+  auto &hierPathInfo = hierPaths[module];
+
+  // Map a hierarchical value symbol with the corresponding block argument of
+  // the current module.
+  for (const auto &hierPath : hierPathInfo)
+    if (auto *scope = hierPath.valueSym->getParentScope();
+        scope->asSymbol().as_if<slang::ast::InstanceBodySymbol>())
+      if (hierPath.idx) {
+        auto hierValue = lowering.op.getBody()->getArgument(*hierPath.idx);
+        valueSymbols.insert(hierPath.valueSym, hierValue);
+      }
+
+  // Convert the body of the module.
   for (auto &member : module->members()) {
     auto loc = convertLocation(member.location);
     if (failed(member.visit(ModuleVisitor(*this, loc))))
@@ -775,9 +830,7 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
     // Collect output port values to be returned in the terminator.
     if (port.ast.direction == slang::ast::ArgumentDirection::Out) {
       if (isa<moore::RefType>(value.getType()))
-        value = builder.create<moore::ReadOp>(
-            value.getLoc(),
-            cast<moore::RefType>(value.getType()).getNestedType(), value);
+        value = builder.create<moore::ReadOp>(value.getLoc(), value);
       outputs.push_back(value);
       continue;
     }
