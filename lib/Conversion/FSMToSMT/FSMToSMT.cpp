@@ -74,8 +74,8 @@ struct Transition{
   int from;
   int to;
   bool hasGuard, hasAction, hasOutput;
-  std::function<mlir::Value(llvm::SmallVector<mlir::Value>)> guard;
-  std::function<llvm::SmallVector<mlir::Value>(llvm::SmallVector<mlir::Value>)> action, output;
+  smt::DeclareFunOp activeFun;
+  Region *guard, *action, *output;
 };
 
 mlir::Value getSmt(mlir::Value opr, SmallVector<std::pair<mlir::Value, mlir::Value>> &variables, Location &loc, 
@@ -126,11 +126,12 @@ mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b){
 }
 
 
-mlir::Value getGuard(SmallVector<std::pair<mlir::Value, mlir::Value>> variables, Region &r, Location &loc, OpBuilder &b){
+mlir::Value getGuardExp(SmallVector<std::pair<mlir::Value, mlir::Value>> variables, Region &r, Location &loc, OpBuilder &b){
   for (auto &op : r.getOps()){
       if (auto retOp = llvm::dyn_cast<fsm::ReturnOp>(op)){
         for(auto &v: variables){
           if(v.first == retOp->getOperand(0))
+            llvm::outs()<<"\nreturning "<<v.first;
             return v.first;
         }
       } else {
@@ -174,44 +175,17 @@ llvm::SmallVector<mlir::Value> getAction(llvm::SmallVector<mlir::Value> &toUpdat
 
 
 Transition parseTransition(fsm::TransitionOp t, int from, llvm::SmallVector<std::string> &states, 
-    const SmallVector<std::pair<mlir::Value, mlir::Value>> variables, Location &loc, OpBuilder &b, 
+    const SmallVector<std::pair<mlir::Value, mlir::Value>> variables, 
+    Location &loc, OpBuilder &b, 
     llvm::SmallVector<mlir::Value> vecVal){
   Transition tr = {.from = from, .to = insertStates(states, t.getNextState().str())};
-
   if (!t.getGuard().empty()){
     tr.hasGuard = true;
-    auto &r = t.getGuard();
-    // function g will be invoked when translating this transition
-    std::function<mlir::Value(llvm::SmallVector<mlir::Value>)> g = [&r, &vecVal, &loc, &b](llvm::SmallVector<mlir::Value> vec) -> mlir::Value {
-      llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> varTmp;
-      for (auto [v, e] : llvm::zip(vecVal, vec)){
-        varTmp.push_back({v, e});
-      }
-      mlir::Value guardExpr = getGuard(varTmp, r, loc, b);
-      return guardExpr;
-    };
-    tr.guard = g;
+    tr.guard = &t.getGuard();
   }
   if(!t.getAction().empty()){
     tr.hasAction = true;
-    auto &r = t.getAction();
-    std::function<llvm::SmallVector<mlir::Value>(llvm::SmallVector<mlir::Value>)> a = [&r, &vecVal, &variables, &loc, &b] (llvm::SmallVector<mlir::Value> vec) -> llvm::SmallVector<mlir::Value> {
-      auto time = vec[vec.size() - 1];
-      SmallVector<std::pair<mlir::Value, mlir::Value>> tmpVar;
-      for (auto [value, expr] : llvm::zip(vecVal, vec)) {
-        tmpVar.push_back({expr, value});
-      }
-      llvm::SmallVector<mlir::Value> vec2 = getAction(vec, variables, r, loc, b);
-      vec2.push_back(time);
-      return vec2;
-    };
-    tr.action = a;
-  } else {
-    tr.hasAction = true;
-    std::function<llvm::SmallVector<mlir::Value>(llvm::SmallVector<mlir::Value>)> a = [] (llvm::SmallVector<mlir::Value> vec) -> llvm::SmallVector<mlir::Value> {
-      return vec;
-    };
-    tr.action = a;
+    tr.action = &t.getAction();
   }
   // todo: output
   return tr;
@@ -230,43 +204,21 @@ LogicalResult MachineOpConverter::dispatch(){
 
 
   SmallVector<std::pair<mlir::Value, mlir::Value>> variables;
-
+  // everything is an Int (even i1) because we want to have everything in the same structure
+  // and we can not mix ints and bools in the same vec
   for (auto a : args){
-    if (a.getType().getIntOrFloatBitWidth()>1){
-      auto intVal = b.getType<smt::IntType>();
-      mlir::Value tmp = b.create<smt::IntConstantOp>(loc, a);
-      val.push_back(tmp);
-      argVarTypes.push_back(intVal);
-      
-    }
-    else{
-      auto intVal = b.getType<smt::BoolType>();
-      mlir::Value tmp = b.create<smt::BoolConstantOp>(loc, a);
-      val.push_back(tmp);
-      argVarTypes.push_back(intVal);
-    }
-    variables.push_back({a,a});
+    auto intVal = b.getType<smt::IntType>();
+    argVarTypes.push_back(intVal);
   }
 
   for (auto variableOp : machineOp.front().getOps<fsm::VariableOp>()) {
-    llvm::outs()<<"\nvar\n";
-    if (variableOp.getResult().getType().getIntOrFloatBitWidth()>1){
-      auto intVal = b.getType<smt::IntType>();
-      mlir::Value tmp = b.create<smt::IntConstantOp>(loc, variableOp->getResult(0));
-      val.push_back(tmp);
-      argVarTypes.push_back(intVal);
-      // int iv = llvm::cast<int>(variableOp.getInitValue());
-      // initVal.push_back(iv);
-    }
-    else{
-      auto intVal = b.getType<smt::BoolType>();
-      mlir::Value tmp = b.create<smt::BoolConstantOp>(loc, variableOp->getResult(0));
-      val.push_back(tmp);
-      argVarTypes.push_back(intVal);
-      // int iv = llvm::cast<int>(variableOp.getInitValue());
-      // initVal.push_back(iv);
-    }
-    variables.push_back({variableOp.getResult(),variableOp.getResult()});
+    auto intVal = b.getType<smt::IntType>();
+    // mlir::Value tmp = b.create<smt::IntConstantOp>(loc, variableOp->getResult(0));
+    // val.push_back(tmp);
+    argVarTypes.push_back(intVal);
+    // int iv = llvm::cast<int>(variableOp.getInitValue());
+    // initVal.push_back(iv);
+    // variables.push_back({variableOp.getResult(),variableOp.getResult()});
   }
 
   llvm::SmallVector<Transition> transitions;
@@ -293,14 +245,35 @@ LogicalResult MachineOpConverter::dispatch(){
   // populate transitions vector
 
   // add time
+  llvm::SmallVector<smt::DeclareFunOp> transitionActive;
 
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
     auto fromState = insertStates(states, stateOp.getName().str());
     for (auto tr: stateOp.getTransitions().front().getOps<fsm::TransitionOp>()){
       auto t = parseTransition(tr, fromState, states, variables, loc, b, argVars);
       transitions.push_back(t);
+      // push back function
+      // transitionActive.push_back(ValueParamT Elt)
     }
   }
+
+  for(auto [id1, t1] : llvm::enumerate(transitions)){
+    for(auto [id2, t2] : llvm::enumerate(transitions)){
+      if(id1!=id2 && t1.to == t2.from){
+        // head: parse guard regions directly
+
+        // tail 
+
+        // implication
+      }
+    }
+  }
+  // get guard1 expression 
+
+  // get guard2 expression 
+
+  // shovel evety
+
 
   // llvm::SmallVector<>
   return success();
