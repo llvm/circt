@@ -22,8 +22,6 @@ using namespace circt;
 using namespace circt::moore;
 using namespace mlir;
 
-static ArrayRef<StructLikeMember> getStructMembers(Type type);
-
 //===----------------------------------------------------------------------===//
 // SVModuleOp
 //===----------------------------------------------------------------------===//
@@ -888,9 +886,6 @@ OpFoldResult StructInjectOp::fold(FoldAdaptor adaptor) {
 
 LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
                                            PatternRewriter &rewriter) {
-  if (!(isa<SVModuleOp>(op->getParentOp()) ||
-        isa<func::FuncOp>(op->getParentOp())))
-    return failure();
   auto members = getStructMembers(op.getType());
 
   // Chase a chain of `struct_inject` ops, with an optional final
@@ -1084,6 +1079,20 @@ DeletionKind BlockingAssignOp::removeBlockingUses(
     OpBuilder &builder, Value reachingDefinition,
     const DataLayout &dataLayout) {
   return DeletionKind::Delete;
+}
+
+LogicalResult BlockingAssignOp::canonicalize(BlockingAssignOp op,
+                                             PatternRewriter &rewriter) {
+  if (auto refOp = op.getDst().getDefiningOp<moore::StructExtractRefOp>()) {
+    auto input = refOp.getInput();
+    auto read = rewriter.create<ReadOp>(op->getLoc(), input);
+    auto value = op.getSrc();
+    auto inject = rewriter.create<StructInjectOp>(
+        op->getLoc(), read, refOp.getFieldNameAttr(), value);
+    op->setOperands({input, inject});
+    return success();
+  }
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
