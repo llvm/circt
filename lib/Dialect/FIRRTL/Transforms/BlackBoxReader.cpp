@@ -18,6 +18,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -62,8 +63,8 @@ enum class Priority { TargetDir = 0, Verification, Explicit, TestBench, Unset };
 struct AnnotationInfo {
   /// The name of the file that should be created for this BlackBox.
   StringAttr name;
-  /// The output directory where this annotation should be written.
-  StringAttr outputFile;
+  /// The outputdirectory information for this extmodule.
+  hw::OutputFileAttr outputFileAttr;
   /// The body of the BlackBox.  (This should be Verilog text.)
   StringAttr inlineText;
   /// The priority of this annotation.  In the even that multiple annotations
@@ -71,8 +72,6 @@ struct AnnotationInfo {
   /// external module is instantiated multiple times and those multiple
   /// instantiations disagree on where the module should go.
   Priority priority = Priority::Unset;
-  /// Indicates whether the file is included in the file list.
-  bool excludeFromFileList = false;
 
 #if !defined(NDEBUG)
   /// Pretty print the AnnotationInfo in a YAML-esque format.
@@ -85,17 +84,17 @@ struct AnnotationInfo {
                         "{0}outputFile: {2}\n"
                         "{0}priority: {3}\n"
                         "{0}exclude: {4}\n",
-                        llvm::fmt_pad("", indent, 0), name, outputFile,
-                        (unsigned)priority, excludeFromFileList);
+                        llvm::fmt_pad("", indent, 0), name,
+                        outputFileAttr.getFilename(), (unsigned)priority,
+                        outputFileAttr.getExcludeFromFilelist().getValue());
   };
 #endif
 };
 
 /// Collects the attributes representing an output file.
 struct OutputFileInfo {
-  StringAttr fileName;
+  hw::OutputFileAttr outputFileAttr;
   Priority priority;
-  bool excludeFromFileList;
 };
 
 struct BlackBoxReaderPass
@@ -260,10 +259,23 @@ void BlackBoxReaderPass::runOnOperation() {
 
       LLVM_DEBUG(annotationInfo.print(llvm::dbgs().indent(6) << "- ", 8));
 
-      auto &bestAnnotationInfo = emittedFileMap[annotationInfo.name];
-      if (annotationInfo.priority < bestAnnotationInfo.priority) {
-        bestAnnotationInfo = annotationInfo;
-
+      // If we have seen a black box trying to create a blackbox with this
+      // filename before, then compute the lowest commmon ancestor between the
+      // two blackbox paths.  This is the same logic used in `AssignOutputDirs`.
+      // However, this needs to incorporate filenames that are only available
+      // _after_ output directories are assigned.
+      auto *ptr = emittedFileMap.find(annotationInfo.name);
+      if (ptr == emittedFileMap.end()) {
+        emittedFileMap[annotationInfo.name] = annotationInfo;
+      } else {
+        auto &fileAttr = ptr->second.outputFileAttr;
+        SmallString<64> directory(fileAttr.getDirectory());
+        makeCommonPrefix(directory,
+                         annotationInfo.outputFileAttr.getDirectory());
+        fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
+            context, directory, annotationInfo.name.getValue(),
+            /*excludeFromFileList=*/
+            fileAttr.getExcludeFromFilelist().getValue());
         // TODO: Check that the new text is the _exact same_ as the prior best.
       }
 
@@ -290,12 +302,12 @@ void BlackBoxReaderPass::runOnOperation() {
     auto fileName = ns.newName("blackbox_" + verilogName.getValue());
 
     auto fileOp = builder.create<emit::FileOp>(
-        loc, annotationInfo.outputFile, fileName,
+        loc, annotationInfo.outputFileAttr.getFilename(), fileName,
         [&, text = annotationInfo.inlineText] {
           builder.create<emit::VerbatimOp>(loc, text);
         });
 
-    if (!annotationInfo.excludeFromFileList)
+    if (!annotationInfo.outputFileAttr.getExcludeFromFilelist().getValue())
       fileListFiles.push_back(fileOp);
   }
 
@@ -349,11 +361,10 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
     }
 
     auto outputFile = getOutputFile(op, name, isCover);
-    annotationInfo.outputFile = outputFile.fileName;
+    annotationInfo.outputFileAttr = outputFile.outputFileAttr;
     annotationInfo.name = name;
     annotationInfo.inlineText = text;
     annotationInfo.priority = outputFile.priority;
-    annotationInfo.excludeFromFileList = outputFile.excludeFromFileList;
     return true;
   }
 
@@ -376,11 +387,10 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
     }
     auto name = builder.getStringAttr(llvm::sys::path::filename(path));
     auto outputFile = getOutputFile(op, name, isCover);
-    annotationInfo.outputFile = outputFile.fileName;
+    annotationInfo.outputFileAttr = outputFile.outputFileAttr;
     annotationInfo.name = name;
     annotationInfo.inlineText = text;
     annotationInfo.priority = outputFile.priority;
-    annotationInfo.excludeFromFileList = outputFile.excludeFromFileList;
     return true;
   }
 
@@ -412,8 +422,7 @@ OutputFileInfo BlackBoxReaderPass::getOutputFile(Operation *origOp,
                                                  bool isCover) {
   auto outputFile = origOp->getAttrOfType<hw::OutputFileAttr>("output_file");
   if (outputFile && !outputFile.isDirectory()) {
-    return {outputFile.getFilename(), Priority::TargetDir,
-            outputFile.getExcludeFromFilelist().getValue()};
+    return {outputFile, Priority::TargetDir};
   }
 
   // Exclude Verilog header files since we expect them to be included
@@ -440,7 +449,8 @@ OutputFileInfo BlackBoxReaderPass::getOutputFile(Operation *origOp,
   // update the targetDir to be the "../testbench".
   SmallString<128> outputFilePath(outDir.first);
   llvm::sys::path::append(outputFilePath, fileName);
-  return {StringAttr::get(context, outputFilePath), outDir.second, exclude};
+  return {hw::OutputFileAttr::getFromFilename(context, outputFilePath, exclude),
+          outDir.second};
 }
 
 /// Return true if module is in the DUT hierarchy.
