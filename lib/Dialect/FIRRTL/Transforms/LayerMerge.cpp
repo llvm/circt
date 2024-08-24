@@ -44,7 +44,7 @@ void LayerMerge::runOnOperation() {
                    << "Module: '" << getOperation().getName() << "'\n";);
 
   // Track the last layer block in a module associated with a specific layer.
-  llvm::DenseMap<SymbolRefAttr, LayerBlockOp> lastBlock;
+  llvm::DenseMap<SymbolRefAttr, LayerBlockOp> lastBlockMap;
 
   // Recursively visit LayerBlockOps in reverse order.  Merge all earlier layer
   // blocks into the last layer blocks of the same layer definition.
@@ -53,18 +53,17 @@ void LayerMerge::runOnOperation() {
   auto moduleOp = getOperation();
   mlir::IRRewriter rewriter(moduleOp.getContext());
   moduleOp.walk<mlir::WalkOrder::PostOrder, mlir::ReverseIterator>(
-      [&](LayerBlockOp layerBlock) {
-        auto layerName = layerBlock.getLayerName();
-        // If we haven't seen this block before, then mark it as the last.
-        auto [last, inserted] = lastBlock.try_emplace(layerName, layerBlock);
+      [&](LayerBlockOp thisBlock) {
+        auto layer = thisBlock.getLayerName();
+        // If we haven't seen this block before, then it is the last block.
+        auto [item, inserted] = lastBlockMap.try_emplace(layer, thisBlock);
         if (inserted)
           return WalkResult::advance();
 
-        auto &priorLayerBlock = last->getSecond();
-        rewriter.inlineBlockBefore(layerBlock.getBody(),
-                                   priorLayerBlock.getBody(),
-                                   priorLayerBlock.getBody()->begin());
-        layerBlock->erase();
+        auto &lastBlock = item->getSecond();
+        rewriter.inlineBlockBefore(thisBlock.getBody(), lastBlock.getBody(),
+                                   lastBlock.getBody()->begin());
+        thisBlock->erase();
         numMerged++;
         return WalkResult::advance();
       });
