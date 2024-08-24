@@ -149,17 +149,17 @@ systemc.module @emitcEmission () {
     %five = systemc.cpp.variable %0 : !emitc.opaque<"int">
 
     // Test: emitc.apply "&" without having to emit parentheses
-    // CHECK-NEXT: int* fiveptr = &five;
-    %1 = emitc.apply "&"(%five) : (!emitc.opaque<"int">) -> !emitc.ptr<!emitc.opaque<"int">>
-    %fiveptr = systemc.cpp.variable %1: !emitc.ptr<!emitc.opaque<"int">>
+    // COM: int* fiveptr = &five;
+    // COM: %1 = emitc.apply "&"(%five) : (!emitc.opaque<"int">) -> !emitc.ptr<!emitc.opaque<"int">>
+    // COM: %fiveptr = systemc.cpp.variable %1: !emitc.ptr<!emitc.opaque<"int">>
 
     // Test: emitc.apply "&" with parentheses to conform to the precedence rules
     // TODO: add this test-case once we have support for an inlinable operation that has lower precedence
 
     // Test: emitc.apply "*" without having to emit parentheses
-    // CHECK-NEXT: int fivederef = *fiveptr;
-    %2 = emitc.apply "*"(%fiveptr) : (!emitc.ptr<!emitc.opaque<"int">>) -> !emitc.opaque<"int">
-    %fivederef = systemc.cpp.variable %2: !emitc.opaque<"int">
+    // COM: int fivederef = *fiveptr;
+    // COM: %2 = emitc.apply "*"(%fiveptr) : (!emitc.ptr<!emitc.opaque<"int">>) -> !emitc.opaque<"int">
+    // COM: %fivederef = systemc.cpp.variable %2: !emitc.opaque<"int">
 
     // Test: emitc.apply "*" with parentheses to conform to the precedence rules
     // TODO: add this test-case once we have support for an inlinable operation that has lower precedence
