@@ -532,6 +532,37 @@ LogicalResult CircuitOp::verifyRegions() {
       mlir::SymbolTable::Visibility::Public)
     return mainModule->emitError("main module must be public");
 
+  // Check enable/disable layers arrays.
+  if (auto enabledLayers = getEnableLayersAttr())
+    for (auto enabledLayer : enabledLayers.getAsRange<SymbolRefAttr>()) {
+      auto *op = symtbl.lookupSymbolIn(*this, enabledLayer);
+      if (!op)
+        return emitOpError("unknown layer ")
+               << enabledLayer << " in enable layers list";
+      if (!isa<LayerOp>(op))
+        return emitOpError("expected layer for ")
+            .append(enabledLayer, " in enable layers list")
+            .attachNote(op->getLoc())
+            .append("not a layer");
+    }
+  if (auto disabledLayers = getDisableLayersAttr())
+    for (auto disabledLayer : disabledLayers.getAsRange<SymbolRefAttr>()) {
+      auto *op = symtbl.lookupSymbolIn(*this, disabledLayer);
+      if (!op)
+        return emitOpError("unknown layer ")
+               << disabledLayer << " in disable layers list";
+      if (!isa<LayerOp>(op))
+        return emitOpError("expected layer for ")
+            .append(disabledLayer, " in disable layers list")
+            .attachNote(op->getLoc())
+            .append("not a layer");
+      if (llvm::is_contained(cast<FModuleLike>(mainModule).getLayers(),
+                             disabledLayer))
+        return mainModule->emitOpError(
+                   "main module has circuit-disabled layer ")
+               << disabledLayer << " enabled";
+    }
+
   // Store a mapping of defname to either the first external module
   // that defines it or, preferentially, the first external module
   // that defines it and has no parameters.

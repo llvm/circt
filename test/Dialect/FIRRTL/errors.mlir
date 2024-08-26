@@ -2561,3 +2561,54 @@ firrtl.circuit "MainNotModule" {
     return
   }
 }
+
+// -----
+
+// Disable layer enabled by main.
+// In the future, check all public modules.
+
+firrtl.circuit "MainEnablesDisabledLayer" attributes {disable_layers = [@A]} {
+  firrtl.layer @A bind { }
+  // expected-error @below {{main module has circuit-disabled layer @A enabled}}
+  firrtl.module @MainEnablesDisabledLayer() attributes {layers = [@A]} { }
+}
+
+// -----
+
+// Disable layer that doesn't exist.
+
+// expected-error @below {{unknown layer @B in disable layers list}}
+firrtl.circuit "NotFoundDisable" attributes {disable_layers = [@B]} {
+  firrtl.module @NotFoundDisable() {}
+}
+
+// -----
+
+// Enable layer that doesn't exist.
+
+// expected-error @below {{unknown layer @B in enable layers list}}
+firrtl.circuit "NotFoundEnable" attributes {enable_layers = [@B]} {
+  firrtl.module @NotFoundEnable() {}
+}
+
+// -----
+
+// Disable layer that's not a layer.
+
+// expected-error @below {{expected layer for @B in disable layers list}}
+firrtl.circuit "NotLayerDisable" attributes {disable_layers = [@B]} {
+  // expected-note @below {{not a layer}}
+  firrtl.extmodule @B()
+  firrtl.module @NotLayerDisable() {}
+}
+
+// -----
+
+// Enable layer that's not a layer.
+
+// expected-error @below {{expected layer for @B in enable layers list}}
+firrtl.circuit "NotLayerEnable" attributes {enable_layers = [@B]} {
+  // expected-note @below {{not a layer}}
+  firrtl.extmodule @B()
+  firrtl.module @NotLayerEnable() {}
+}
