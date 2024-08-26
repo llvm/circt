@@ -353,6 +353,7 @@ firrtl.circuit "InstanceCannotHavePortSymbols" {
 // -----
 
 firrtl.circuit "InstanceMissingLayers" {
+  firrtl.layer @A bind {}
   // expected-note @below {{original module declared here}}
   firrtl.extmodule @Ext(in in : !firrtl.uint<1>) attributes {layers = [@A]}
   firrtl.module @InstanceMissingLayers() {
@@ -1977,6 +1978,38 @@ firrtl.circuit "UnknownEnabledLayer" {
 
 // -----
 
+// https://github.com/llvm/circt/issues/7448
+
+firrtl.circuit "NonLayerEnabledLayer" {
+  // expected-note @below {{expected layer}}
+  firrtl.extmodule @A()
+  // expected-error @below {{'firrtl.module' op enables non-layer '@A'}}
+  firrtl.module @NonLayerEnabledLayer() attributes {layers = [@A]} {}
+}
+
+// -----
+
+// Disable layer enabled by main.
+
+firrtl.circuit "MainEnablesDisabledLayer" attributes {disable_layers = [@A]} {
+  firrtl.layer @A bind { }
+  // expected-error @below {{public module has circuit-disabled layer @A enabled}}
+  firrtl.module @MainEnablesDisabledLayer() attributes {layers = [@A]} { }
+}
+
+// -----
+
+// Disable layer enabled by non-main public.
+
+firrtl.circuit "PublicEnablesDisabledLayer" attributes {disable_layers = [@A]} {
+  firrtl.layer @A bind { }
+  // expected-error @below {{public module has circuit-disabled layer @A enabled}}
+  firrtl.module @M() attributes {layers = [@A]} { }
+  firrtl.module @PublicEnablesDisabledLayer() { }
+}
+
+// -----
+
 firrtl.circuit "RWProbeRemote" {
   firrtl.module @Other() {
     %w = firrtl.wire sym @x : !firrtl.uint<1>
@@ -2561,3 +2594,4 @@ firrtl.circuit "MainNotModule" {
     return
   }
 }
+
