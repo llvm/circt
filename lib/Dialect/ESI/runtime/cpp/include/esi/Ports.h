@@ -83,8 +83,15 @@ public:
   virtual void disconnect() override { connected = false; }
   virtual bool isConnected() const override { return connected; }
 
-  /// A very basic write API. Will likely change for performance reasons.
+  /// A very basic blocking write API. Will likely change for performance
+  /// reasons.
   virtual void write(const MessageData &) = 0;
+
+  /// A basic non-blocking write API. Returns true if the data was written.
+  /// Support for non-blocking writes is optional for implementations.
+  virtual bool tryWrite(const MessageData &data) {
+    throw std::runtime_error("tryWrite not implemented");
+  }
 
 private:
   volatile bool connected = false;
