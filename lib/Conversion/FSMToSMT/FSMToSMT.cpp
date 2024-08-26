@@ -29,7 +29,6 @@
 #include "llvm/ADT/SmallVector.h"
 
 #include "mlir/Transforms/DialectConversion.h"
-#include <functional>
 #include <memory>
 
 namespace circt {
@@ -128,7 +127,6 @@ Transition parseTransition(fsm::TransitionOp t, int from, llvm::SmallVector<std:
     const SmallVector<std::pair<mlir::Value, mlir::Value>> variables, llvm::SmallVector<mlir::Type> argVarTypes,
     Location &loc, OpBuilder &b, 
     llvm::SmallVector<mlir::Value> vecVal){
-  llvm::outs()<<"\ntransition from "<<std::to_string(from)<<" to "<<std::to_string(insertStates(states, t.getNextState().str()));
   mlir::StringAttr acFunName = b.getStringAttr(("t"+std::to_string(from)+std::to_string(insertStates(states, t.getNextState().str()))));
   auto range = b.getType<smt::BoolType>();
   smt::DeclareFunOp acFun = b.create<smt::DeclareFunOp>(loc, b.getType<smt::SMTFuncType>(argVarTypes, range), acFunName);
@@ -285,9 +283,16 @@ LogicalResult MachineOpConverter::dispatch(){
     }
   }
 
+  // time
+
+  argVarTypes.push_back(b.getType<smt::IntType>());
+
+  // create solver region
+
   for(auto [id1, t1] : llvm::enumerate(transitions)){
     for(auto [id2, t2] : llvm::enumerate(transitions)){
       if(id1!=id2 && t1.to == t2.from){
+        // each implication op is in the same region 
         if (t1.hasAction){
           llvm::SmallVector<mlir::Value> updatedVec = getAction(t1, b, argVars, loc);
           for(auto uv: updatedVec)
@@ -304,19 +309,23 @@ LogicalResult MachineOpConverter::dispatch(){
           llvm::outs()<<"\nguard1: "<<g2;
         }
 
-        // generate the necessary smt expressions
+        // create a forall region whose args are the args and vars, these will be referenced by the implication
 
-        // tail
 
-        // head 
+        auto  forall = b.create<smt::ForallOp>(loc, argVarTypes, [&](OpBuilder &b, Location loc, ValueRange args) { 
+          auto tail = b.create<smt::ApplyFuncOp>(loc, t1.activeFun, args);
+          auto head = b.create<smt::ApplyFuncOp>(loc, t2.activeFun, args);
+          return b.create<smt::ImpliesOp>(loc, tail, head); 
+        });
 
-        // implication
       }
     }
     
   }
 
   // add mutual exclusion
+
+  machineOp.erase();
 
 
   return success();
