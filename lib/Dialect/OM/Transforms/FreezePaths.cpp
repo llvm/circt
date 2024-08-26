@@ -32,7 +32,7 @@ namespace {
 struct PathVisitor {
   PathVisitor(hw::InstanceGraph &instanceGraph, hw::InnerRefNamespace &irn,
               std::function<StringAttr(Operation *)> &getOpName)
-      : instanceGraph(instanceGraph), irn(irn), getOpName(getOpName) {}
+      : instanceGraph(instanceGraph), irn(irn), getOpNameFallback(getOpName) {}
 
   StringAttr field;
   LogicalResult processPath(Location loc, hw::HierPathOp hierPathOp,
@@ -45,7 +45,7 @@ struct PathVisitor {
   LogicalResult run(ModuleOp module);
   hw::InstanceGraph &instanceGraph;
   hw::InnerRefNamespace &irn;
-  std::function<StringAttr(Operation *)> getOpName;
+  std::function<StringAttr(Operation *)> getOpNameFallback;
 };
 } // namespace
 
@@ -120,8 +120,8 @@ LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
     auto *op = target.getOp();
     // Get the verilog name of the target.
     auto verilogName = op->getAttrOfType<StringAttr>("hw.verilogName");
-    if (!verilogName && getOpName)
-      verilogName = getOpName(op);
+    if (!verilogName && getOpNameFallback)
+      verilogName = getOpNameFallback(op);
     if (!verilogName) {
       auto diag = emitError(loc, "component does not have verilog name");
       diag.attachNote(op->getLoc()) << "component here";
@@ -151,8 +151,8 @@ LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
       auto currentModule = innerRef.getModule();
       // Get the verilog name of the target.
       auto verilogName = op->getAttrOfType<StringAttr>("hw.verilogName");
-      if (!verilogName && getOpName)
-        verilogName = getOpName(op);
+      if (!verilogName && getOpNameFallback)
+        verilogName = getOpNameFallback(op);
       if (!verilogName) {
         auto diag = emitError(loc, "component does not have verilog name");
         diag.attachNote(op->getLoc()) << "component here";
