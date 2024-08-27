@@ -1450,7 +1450,6 @@ public:
                     bool emitAsTwoStateType = false);
 
   void emitHWModule(HWModuleOp module);
-  void emitHWExternModule(HWModuleExternOp module);
   void emitHWGeneratedModule(HWModuleGeneratedOp module);
   void emitFunc(FuncOp);
 
@@ -5977,16 +5976,6 @@ void ModuleEmitter::emitSVAttributes(Operation *op) {
 // Module Driver
 //===----------------------------------------------------------------------===//
 
-void ModuleEmitter::emitHWExternModule(HWModuleExternOp module) {
-  auto verilogName = module.getVerilogModuleNameAttr();
-  startStatement();
-  ps.addCallback({module, true});
-  ps << "// external module " << PPExtString(verilogName.getValue())
-     << PP::newline;
-  ps.addCallback({module, false});
-  setPendingNewline();
-}
-
 void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
   auto verilogName = module.getVerilogModuleNameAttr();
   startStatement();
@@ -6678,10 +6667,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           // Build the IR cache.
           symbolCache.addDefinition(op.getNameAttr(), op);
           collectPorts(op);
-          if (separateModules)
-            separateFile(op, "extern_modules.sv");
-          else
-            rootFile.ops.push_back(info);
+          // External modules are _not_ emitted.
         })
         .Case<VerbatimOp, IfDefOp, MacroDefOp, FuncDPIImportOp>(
             [&](Operation *op) {
@@ -6810,8 +6796,9 @@ void SharedEmitterState::collectOpsForFile(const FileInfo &file,
 static void emitOperation(VerilogEmitterState &state, Operation *op) {
   TypeSwitch<Operation *>(op)
       .Case<HWModuleOp>([&](auto op) { ModuleEmitter(state).emitHWModule(op); })
-      .Case<HWModuleExternOp>(
-          [&](auto op) { ModuleEmitter(state).emitHWExternModule(op); })
+      .Case<HWModuleExternOp>([&](auto op) {
+        // External modules are _not_ emitted.
+      })
       .Case<HWModuleGeneratedOp>(
           [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
       .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })
