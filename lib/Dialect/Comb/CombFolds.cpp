@@ -1538,8 +1538,12 @@ LogicalResult SubOp::canonicalize(SubOp op, PatternRewriter &rewriter) {
   APInt value;
   if (matchPattern(op.getRhs(), m_ConstantInt(&value))) {
     auto negCst = rewriter.create<hw::ConstantOp>(op.getLoc(), -value);
-    replaceOpWithNewOpAndCopyName<AddOp>(rewriter, op, op.getLhs(), negCst,
-                                         false);
+    auto newOp =
+        rewriter.create<AddOp>(op.getLoc(), op.getLhs(), negCst, false);
+    // Keep dialect attributes
+    rewriter.modifyOpInPlace(
+        newOp, [&] { newOp->setDialectAttrs(op->getDialectAttrs()); });
+    rewriter.replaceOp(op, newOp);
     return success();
   }
 
