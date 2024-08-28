@@ -37,10 +37,32 @@ struct LowerMemoryInitializersPass
   LogicalResult processInitializerFunction(func::FuncOp funcOp);
   LogicalResult lowerFilledInitialization(InitializeMemoryOp initOp,
                                           InitMemoryFilledOp fillOp);
+  LogicalResult lowerRandomizedInitialization(InitializeMemoryOp initOp,
+                                              InitMemoryRandomizedOp randOp);
+
+  EnvironmentCallOp getEnvironmentCall(StringRef symName, FunctionType type);
 
   SymbolTable *symbolTable;
 };
 } // namespace
+
+EnvironmentCallOp
+LowerMemoryInitializersPass::getEnvironmentCall(StringRef symName,
+                                                FunctionType type) {
+  assert(!!symbolTable && "Missing symbol table.");
+
+  auto lookup = symbolTable->lookup(symName);
+  if (lookup)
+    return llvm::cast<EnvironmentCallOp>(lookup);
+
+  auto theModule = getOperation();
+  ImplicitLocOpBuilder builder(theModule.getLoc(), theModule.getContext());
+  builder.setInsertionPointToStart(theModule.getBody());
+  auto callOp = builder.create<EnvironmentCallOp>(symName, type, ArrayAttr(),
+                                                  ArrayAttr());
+  symbolTable->insert(callOp);
+  return callOp;
+}
 
 LogicalResult LowerMemoryInitializersPass::lowerFilledInitialization(
     InitializeMemoryOp initOp, InitMemoryFilledOp fillOp) {
@@ -83,6 +105,49 @@ LogicalResult LowerMemoryInitializersPass::lowerFilledInitialization(
   return success();
 }
 
+LogicalResult LowerMemoryInitializersPass::lowerRandomizedInitialization(
+    InitializeMemoryOp initOp, InitMemoryRandomizedOp randOp) {
+  auto loc =
+      FusedLoc::get(initOp.getContext(),
+                    std::array<Location, 2>{initOp.getLoc(), randOp.getLoc()});
+  ImplicitLocOpBuilder builder(loc, initOp);
+
+  auto oldStorageOp = initOp.getMemory().getDefiningOp<StorageGetOp>();
+  if (!oldStorageOp) {
+    initOp.emitError(
+        "Unable to retrive storage reference for lowering of initializer.");
+    return failure();
+  }
+
+  auto stride = initOp.getMemory().getType().getStride();
+  auto numWords = initOp.getMemory().getType().getNumWords();
+  unsigned sizeInBytes = numWords * stride;
+
+  auto envCall = getEnvironmentCall(
+      EnvironmentCallOp::fillRandomizedSymName,
+      EnvironmentCallOp::getFillRandomizedType(builder.getContext()));
+  auto inputTypes = envCall.getFunctionType().getInputs();
+
+  std::array<Value, 4> args;
+  auto storageType = StorageType::get(builder.getContext(), sizeInBytes);
+  // Memory reference
+  args[0] = builder.createOrFold<StorageGetOp>(
+      storageType, oldStorageOp.getStorage(), oldStorageOp.getOffsetAttr());
+  // Num Words
+  args[1] = builder.createOrFold<arith::ConstantOp>(
+      IntegerAttr::get(inputTypes[1], numWords));
+  // Word bits
+  args[2] = builder.createOrFold<arith::ConstantOp>(IntegerAttr::get(
+      inputTypes[2],
+      initOp.getMemory().getType().getWordType().getIntOrFloatBitWidth()));
+  // Stride
+  args[3] = builder.createOrFold<arith::ConstantOp>(
+      IntegerAttr::get(inputTypes[3], stride));
+  builder.create<CallEnvironmentOp>(TypeRange{}, envCall.getSymName(), args);
+
+  return success();
+}
+
 LogicalResult
 LowerMemoryInitializersPass::processInitializerFunction(func::FuncOp funcOp) {
   SmallVector<InitializeMemoryOp> initOps;
@@ -105,6 +170,9 @@ LowerMemoryInitializersPass::processInitializerFunction(func::FuncOp funcOp) {
     TypeSwitch<Operation *>(defOp)
         .Case<InitMemoryFilledOp>([&](auto op) {
           hasFailed |= failed(lowerFilledInitialization(initOp, op));
+        })
+        .Case<InitMemoryRandomizedOp>([&](auto op) {
+          hasFailed |= failed(lowerRandomizedInitialization(initOp, op));
         })
         .Default([&](auto) {
           defOp->emitOpError("is not a supported memory intitializer.");

@@ -176,7 +176,7 @@ static bool canBeMaterializedInInitializer(Operation *op) {
     return true;
   if (isa<comb::CombDialect>(op->getDialect()))
     return true;
-  if (isa<InitMemoryFilledOp>(op))
+  if (isa<InitMemoryFilledOp, InitMemoryRandomizedOp>(op))
     return true;
   // TODO: There are some other ops we probably want to allow
   return false;

@@ -198,7 +198,7 @@ def LowerMemoryInitializers : Pass<"arc-lower-memory-initializers",
                                    "mlir::ModuleOp"> {
   let summary = "Converts InitializeMemory ops to state writes";
   let dependentDialects = [
-    "hw::HWDialect", "arc::ArcDialect", "mlir::scf::SCFDialect"
+    "arc::ArcDialect", "mlir::arith::ArithDialect", "mlir::scf::SCFDialect"
   ];
 }
 
