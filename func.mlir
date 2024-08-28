@@ -1,41 +1,61 @@
-func.func @bitvectors() {
-  %4 = "smt.forall"() <{weight = 0 : i32}> ({
-  ^bb0(%arg0: !smt.int, %arg1: !smt.int):
-    %11 = "smt.apply_func"(%0, %arg0, %arg1) : (!smt.func<(!smt.int) !smt.bool>, !smt.int, !smt.int) -> !smt.bool
-    %12 = "smt.apply_func"(%1, %arg0, %arg1) : (!smt.func<(!smt.int) !smt.bool>, !smt.int, !smt.int) -> !smt.bool
-    %13 = "smt.implies"(%11, %12) : (!smt.bool, !smt.bool) -> !smt.bool
-    "smt.yield"(%13) : (!smt.bool) -> ()
-  }) : () -> !smt.bool
-
-  %5 = "smt.forall"() <{weight = 0 : i32}> ({
-  ^bb0(%arg0: !smt.int, %arg1: !smt.int):
-    %12 = "smt.apply_func"(%1, %arg0, %arg1) : (!smt.func<(!smt.int) !smt.bool>, !smt.int, !smt.int) -> !smt.bool
-    %13 = "smt.apply_func"(%2, %arg0, %arg1) : (!smt.func<(!smt.int) !smt.bool>, !smt.int, !smt.int) -> !smt.bool
-    %14 = "smt.implies"(%12, %13) : (!smt.bool, !smt.bool) -> !smt.bool
-    "smt.yield"(%14) : (!smt.bool) -> ()
-  }) : () -> !smt.bool
-
-  %6 = "smt.forall"() <{weight = 0 : i32}> ({
-  ^bb0(%arg0: !smt.int, %arg1: !smt.int):
-    %13 = "smt.apply_func"(%1, %arg0, %arg1) : (!smt.func<(!smt.int) !smt.bool>, !smt.int, !smt.int) -> !smt.bool
-    %14 = "smt.apply_func"(%3, %arg0, %arg1) : (!smt.func<(!smt.int) !smt.bool>, !smt.int, !smt.int) -> !smt.bool
-    %15 = "smt.implies"(%13, %14) : (!smt.bool, !smt.bool) -> !smt.bool
-    "smt.yield"(%15) : (!smt.bool) -> ()
-  }) : () -> !smt.bool
-
-  %7 = "smt.forall"() <{weight = 0 : i32}> ({
-  ^bb0(%arg0: !smt.int, %arg1: !smt.int):
-    %14 = "smt.apply_func"(%2, %arg0, %arg1) : (!smt.func<(!smt.int) !smt.bool>, !smt.int, !smt.int) -> !smt.bool
-    %15 = "smt.apply_func"(%1, %arg0, %arg1) : (!smt.func<(!smt.int) !smt.bool>, !smt.int, !smt.int) -> !smt.bool
-    %16 = "smt.implies"(%14, %15) : (!smt.bool, !smt.bool) -> !smt.bool
-    "smt.yield"(%16) : (!smt.bool) -> ()
-  }) : () -> !smt.bool
-
-  %8 = "smt.forall"() <{weight = 0 : i32}> ({
-  ^bb0(%arg0: !smt.int, %arg1: !smt.int):
-    %15 = "smt.apply_func"(%3, %arg0, %arg1) : (!smt.func<(!smt.int) !smt.bool>, !smt.int, !smt.int) -> !smt.bool
-    %16 = "smt.apply_func"(%2, %arg0, %arg1) : (!smt.func<(!smt.int) !smt.bool>, !smt.int, !smt.int) -> !smt.bool
-    %17 = "smt.implies"(%15, %16) : (!smt.bool, !smt.bool) -> !smt.bool
-    "smt.yield"(%17) : (!smt.bool) -> ()
-  }) : () -> !smt.bool
+func.func @entry() {
+  smt.solver () : () -> () {
+    %t01 = smt.declare_fun "t01" : !smt.func<(!smt.int, !smt.int) !smt.bool>
+    %t12 = smt.declare_fun "t12" : !smt.func<(!smt.int, !smt.int) !smt.bool>
+    %t21 = smt.declare_fun "t21" : !smt.func<(!smt.int, !smt.int) !smt.bool>
+    %t22 = smt.declare_fun "t22" : !smt.func<(!smt.int, !smt.int) !smt.bool>
+    %0 = smt.forall {
+    ^bb0(%arg0: !smt.int, %arg1: !smt.int):
+      %4 = smt.apply_func %t12(%arg0, %arg1) : !smt.func<(!smt.int, !smt.int) !smt.bool>
+      %5 = smt.apply_func %t21(%arg0, %arg1) : !smt.func<(!smt.int, !smt.int) !smt.bool>
+      %c5 = smt.int.constant 5
+      %6 = smt.eq %arg0, %c5 : !smt.int
+      %c1 = smt.int.constant 1
+      %7 = smt.eq %arg0, %c1 : !smt.int
+      %8 = smt.and %7, %6
+      %9 = smt.and %4, %8
+      %10 = smt.implies %9, %5
+      smt.yield %10 : !smt.bool
+    }
+    %1 = smt.forall {
+    ^bb0(%arg0: !smt.int, %arg1: !smt.int):
+      %4 = smt.apply_func %t12(%arg0, %arg1) : !smt.func<(!smt.int, !smt.int) !smt.bool>
+      %5 = smt.apply_func %t22(%arg0, %arg1) : !smt.func<(!smt.int, !smt.int) !smt.bool>
+      %c0 = smt.int.constant 0
+      %6 = smt.eq %arg0, %c0 : !smt.int
+      %c1 = smt.int.constant 1
+      %7 = smt.eq %arg0, %c1 : !smt.int
+      %8 = smt.and %7, %6
+      %9 = smt.and %4, %8
+      %10 = smt.implies %9, %5
+      smt.yield %10 : !smt.bool
+    }
+    %2 = smt.forall {
+    ^bb0(%arg0: !smt.int, %arg1: !smt.int):
+      %4 = smt.apply_func %t21(%arg0, %arg1) : !smt.func<(!smt.int, !smt.int) !smt.bool>
+      %5 = smt.apply_func %t12(%arg0, %arg1) : !smt.func<(!smt.int, !smt.int) !smt.bool>
+      %c1 = smt.int.constant 1
+      %6 = smt.eq %arg0, %c1 : !smt.int
+      %c5 = smt.int.constant 5
+      %7 = smt.eq %arg0, %c5 : !smt.int
+      %8 = smt.and %7, %6
+      %9 = smt.and %4, %8
+      %10 = smt.implies %9, %5
+      smt.yield %10 : !smt.bool
+    }
+    %3 = smt.forall {
+    ^bb0(%arg0: !smt.int, %arg1: !smt.int):
+      %4 = smt.apply_func %t22(%arg0, %arg1) : !smt.func<(!smt.int, !smt.int) !smt.bool>
+      %5 = smt.apply_func %t21(%arg0, %arg1) : !smt.func<(!smt.int, !smt.int) !smt.bool>
+      %c5 = smt.int.constant 5
+      %6 = smt.eq %arg0, %c5 : !smt.int
+      %c0 = smt.int.constant 0
+      %7 = smt.eq %arg0, %c0 : !smt.int
+      %8 = smt.and %7, %6
+      %9 = smt.and %4, %8
+      %10 = smt.implies %9, %5
+      smt.yield %10 : !smt.bool
+    }
+  }
+  return
 }

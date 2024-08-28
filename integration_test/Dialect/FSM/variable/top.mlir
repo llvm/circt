@@ -38,7 +38,10 @@ fsm.machine @top() -> (i16) attributes {initialState = "A"} {
       fsm.update %cnt, %c_0 : i16
     }
 
-    fsm.transition @B action {
+    fsm.transition @B guard {
+      %eq = comb.icmp ne %cnt, %c_5 : i16
+      fsm.return %eq
+    } action {
       %add1 = comb.add %cnt, %c_1 : i16
       fsm.update %cnt, %add1 : i16
     }
