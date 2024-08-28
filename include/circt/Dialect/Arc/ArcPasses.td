@@ -194,6 +194,14 @@ def LowerLUT : Pass<"arc-lower-lut", "arc::DefineOp"> {
   let dependentDialects = ["hw::HWDialect", "comb::CombDialect"];
 }
 
+def LowerMemoryInitializers : Pass<"arc-lower-memory-initializers",
+                                   "mlir::ModuleOp"> {
+  let summary = "Converts InitializeMemory ops to state writes";
+  let dependentDialects = [
+    "hw::HWDialect", "arc::ArcDialect", "mlir::scf::SCFDialect"
+  ];
+}
+
 def LowerState : Pass<"arc-lower-state", "mlir::ModuleOp"> {
   let summary = "Split state into read and write ops grouped by clock tree";
   let constructor = "circt::arc::createLowerStatePass()";
@@ -219,7 +227,7 @@ def LowerVectorizations : Pass<"arc-lower-vectorizations", "mlir::ModuleOp"> {
     This pass lowers `arc.vectorize` operations. By default, the operation will
     be fully lowered (i.e., the op disappears in the IR). Alternatively, it can
     be partially lowered.
-    
+
     The "mode" pass option allows to only lower the boundary, only the body, or
     only inline the body given that both the boundary and the body are already
     lowered.

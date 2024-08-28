@@ -176,6 +176,8 @@ static bool canBeMaterializedInInitializer(Operation *op) {
     return true;
   if (isa<comb::CombDialect>(op->getDialect()))
     return true;
+  if (isa<InitMemoryFilledOp>(op))
+    return true;
   // TODO: There are some other ops we probably want to allow
   return false;
 }
@@ -569,6 +571,17 @@ LogicalResult ModuleLowering::lowerState(MemoryOp memOp) {
   auto allocMemOp = stateBuilder.create<AllocMemoryOp>(
       memOp.getLoc(), memOp.getType(), storageArg, memOp->getAttrs());
   memOp.replaceAllUsesWith(allocMemOp.getResult());
+
+  if (auto initializer = memOp.getInitializer()) {
+    auto &initialTree = getInitial();
+    auto materializedInit = initialTree.materializeValue(initializer);
+    initialTree.builder.create<InitializeMemoryOp>(
+        memOp.getLoc(), materializedInit, allocMemOp.getResult());
+    if (initializer.getUses().empty())
+      if (auto initDefOp = initializer.getDefiningOp())
+        initDefOp->erase();
+  }
+
   memOp.erase();
   return success();
 }

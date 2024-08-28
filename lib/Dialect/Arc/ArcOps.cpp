@@ -634,6 +634,30 @@ LogicalResult SimStepOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
+void InitMemoryFilledOp::print(OpAsmPrinter &p) {
+  if (getRepeat())
+    p << " repeat";
+  p << " ";
+  p.printAttribute(getValueAttr());
+  p.printOptionalAttrDict((*this)->getAttrs(),
+                          /*elidedAttrs=*/{"value", "repeat"});
+}
+
+ParseResult InitMemoryFilledOp::parse(OpAsmParser &parser,
+                                      OperationState &result) {
+  IntegerAttr valueAttr;
+
+  if (!parser.parseOptionalKeyword("repeat"))
+    result.addAttribute("repeat", UnitAttr::get(parser.getContext()));
+
+  if (parser.parseAttribute(valueAttr, "value", result.attributes) ||
+      parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  result.addTypes(MemoryInitializerType::get(parser.getContext(), 0, {}));
+  return success();
+}
+
 #include "circt/Dialect/Arc/ArcInterfaces.cpp.inc"
 
 #define GET_OP_CLASSES

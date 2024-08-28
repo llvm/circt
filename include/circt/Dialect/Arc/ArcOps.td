@@ -281,10 +281,47 @@ def CallOp : ArcOp<"call", [
   }];
 }
 
-def MemoryOp : ArcOp<"memory", [MemoryEffects<[MemAlloc]>]> {
+class MemoryInitializerIsCompatible<string mem, string init> : PredOpTrait<
+  "initializer type is compatible with memory type",
+  CPred< !strconcat("!$", init, " ||",
+           "(::llvm::cast<::circt::arc::MemoryInitializerType>($",
+           init, ".getType()).isCompatible(",
+           "::llvm::cast<::circt::arc::MemoryType>($",
+           mem, ".getType())))" )>
+>;
+
+def MemoryOp : ArcOp<"memory", [
+  MemoryEffects<[MemAlloc]>,
+  MemoryInitializerIsCompatible<"memory", "initializer">
+]> {
   let summary = "Memory";
+  let arguments = (ins Optional<MemoryInitializerType>:$initializer);
   let results = (outs MemoryType:$memory);
-  let assemblyFormat = "type($memory) attr-dict";
+  let assemblyFormat = [{
+    type($memory) attr-dict (`initial`  $initializer^ `:` type($initializer))?
+  }];
+
+  let builders = [
+    OpBuilder<(ins "mlir::Type":$memType), [{
+      build($_builder, $_state, memType, {});
+    }]>];
+}
+
+def InitMemoryFilledOp : ArcOp<"init_memory_filled", [Pure]> {
+  let arguments = (ins APIntAttr:$value, UnitAttr:$repeat);
+  let results = (outs GenericMemoryInitializerType:$result);
+  let hasCustomAssemblyFormat = true;
+}
+
+def InitializeMemoryOp : ArcOp<"initialize_memory", [
+  MemoryEffects<[MemWrite]>,
+  MemoryInitializerIsCompatible<"memory", "initializer">
+]> {
+  let arguments = (ins MemoryInitializerType:$initializer, MemoryType:$memory);
+  let assemblyFormat = [{
+   $initializer `->` $memory attr-dict
+    `:` type($initializer) `,` type($memory)
+  }];
 }
 
 class MemoryAndDataTypesMatch<string mem, string data> : TypesMatchWith<

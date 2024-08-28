@@ -43,6 +43,37 @@ def MemoryType : ArcTypeDef<"Memory"> {
   }];
 }
 
+def MemoryInitializerType : ArcTypeDef<"MemoryInitializer"> {
+  let mnemonic = "memory_initializer";
+
+  let parameters = (ins OptionalParameter<"unsigned">:$numWords,
+                        OptionalParameter<"::mlir::IntegerType">:$wordType);
+
+  let hasCustomAssemblyFormat = true;
+
+  let extraClassDeclaration = [{
+    bool isCompatible(::circt::arc::MemoryType memType) const {
+      if (getNumWords() > 0 && getNumWords() != memType.getNumWords())
+        return false;
+      if (!!getWordType() && getWordType() != memType.getWordType())
+        return false;
+      return true;
+    }
+
+    bool isGeneric() const { return getNumWords() == 0 && !getWordType(); }
+
+  }];
+}
+
+def GenericMemoryInitializerType : DialectType<ArcDialect,
+  CPred<[{
+    ::llvm::isa<::circt::arc::MemoryInitializerType>($_self) &&
+    ::llvm::cast<::circt::arc::MemoryInitializerType>($_self).isGeneric()
+  }]>, "must be a generic memory initializer type">,
+  BuildableType<
+    "::circt::arc::MemoryInitializerType::get($_builder.getContext(), 0, {})"
+> {}
+
 def StorageType : ArcTypeDef<"Storage"> {
   let mnemonic = "storage";
   let parameters = (ins OptionalParameter<"unsigned">:$size);

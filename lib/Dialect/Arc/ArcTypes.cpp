@@ -37,6 +37,45 @@ unsigned MemoryType::getStride() {
   return llvm::alignToPowerOf2(stride, llvm::bit_ceil(std::min(stride, 16U)));
 }
 
+Type MemoryInitializerType::parse(AsmParser &odsParser) {
+  unsigned numWords = 0;
+  IntegerType wordType;
+
+  if (odsParser.parseLess())
+    return {};
+
+  if (odsParser.parseOptionalStar()) {
+    auto numLoc = odsParser.getCurrentLocation();
+    if (odsParser.parseInteger(numWords))
+      return {};
+    if (numWords == 0) {
+      odsParser.emitError(numLoc, "Number of words must not be zero.");
+      return {};
+    }
+  }
+
+  if (odsParser.parseXInDimensionList() ||
+      (odsParser.parseOptionalStar() && odsParser.parseType(wordType)) ||
+      odsParser.parseGreater())
+    return {};
+
+  return MemoryInitializerType::get(odsParser.getContext(), numWords, wordType);
+}
+
+void MemoryInitializerType::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << "<";
+  if (getNumWords() > 0)
+    odsPrinter << getNumWords();
+  else
+    odsPrinter << "*";
+  odsPrinter << " x ";
+  if (getWordType())
+    odsPrinter << getWordType();
+  else
+    odsPrinter << "*";
+  odsPrinter << ">";
+}
+
 void ArcDialect::registerTypes() {
   addTypes<
 #define GET_TYPEDEF_LIST

@@ -14,6 +14,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   LowerArcsToFuncs.cpp
   LowerClocksToFuncs.cpp
   LowerLUT.cpp
+  LowerMemoryInitializers.cpp
   LowerState.cpp
   LowerVectorizations.cpp
   MakeTables.cpp
