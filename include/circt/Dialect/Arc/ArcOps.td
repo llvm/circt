@@ -330,7 +330,7 @@ def InitializeMemoryOp : ArcOp<"initialize_memory", [
   let arguments = (ins MemoryInitializerType:$initializer, MemoryType:$memory);
   let assemblyFormat = [{
    $initializer `->` $memory attr-dict
-    `:` type($initializer) `,` type($memory)
+    `:` qualified(type($initializer)) `,` qualified(type($memory))
   }];
 }
 
