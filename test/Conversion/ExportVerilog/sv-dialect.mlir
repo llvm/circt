@@ -1372,7 +1372,7 @@ hw.module @MoveInstances(in %a_in: i8, out outc : i8){
   hw.output %outc : i8
 }
 
-// CHECK-LABEL: module extInst
+// CHECK-NOT: module extInst
 hw.module.extern @extInst(in %_h: i1, in %_i: i1, in %_j: i1, in %_k: i1, in %_z :i0)
 
 // CHECK-LABEL: module extInst2

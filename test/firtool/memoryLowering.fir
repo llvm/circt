@@ -32,7 +32,7 @@ circuit test:
     memory.w.mask <= wMask
     memory.w.data <= wData
 
-; CHECK: external module memory_ext
+; CHECK-NOT: module memory_ext
 
 ; CHECK-LABEL: FILE "metadata{{[/\]}}seq_mems.json"
 ; CHECK:      [
