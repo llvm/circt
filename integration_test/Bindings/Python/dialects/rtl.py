@@ -116,5 +116,5 @@ with Context() as ctx, Location.unknown():
   pm = PassManager.parse("builtin.module(hw.module(hw-cleanup))")
   pm.run(m.operation)
   # CHECK: module MyWidget
-  # CHECK: external module FancyThing
+  # CHECK-NOT: module FancyThing
   circt.export_verilog(m, sys.stdout)
