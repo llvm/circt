@@ -32,7 +32,7 @@ circuit Testbench: %[[
               "component": []
             },
             "tpe": {
-              "class": "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"
+              "class": "sifive.enterprise.grandcentral.GrandCentralView_UnknownGroundType_"
             }
           }
         }
@@ -120,7 +120,7 @@ circuit Testbench: %[[
 ;
 ; CHECK-DAG: FILE "verification{{[/\]}}testbench{{[/\]}}layers-Testbench-A.sv"
 ; CHECK-DAG: FILE "verification{{[/\]}}testbench{{[/\]}}Bar.sv"
-; CHECK-DAG: FILE "verification{{[/\]}}testbench{{[/\]}}DUT$A.sv"
+; CHECK-DAG: FILE "verification{{[/\]}}testbench{{[/\]}}DUT_A.sv"
 ; CHECK-DAG: FILE "verification{{[/\]}}testbench{{[/\]}}Testbench.sv"
 
 ; The following modules are all in the Grand Central directory.

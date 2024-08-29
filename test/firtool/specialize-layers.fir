@@ -4,8 +4,8 @@
 
 ; Check that layer specialization works.
 
-; SPECIALIZE-NOT: LayerSpecialization$A
-; DEFAULT: module LayerSpecialization$A
+; SPECIALIZE-NOT: LayerSpecialization_A
+; DEFAULT: module LayerSpecialization_A
 
 ; COMMON-LABEL: module LayerSpecialization();
 ; ENABLE-NEXT:    Ext ext ();

@@ -68,7 +68,7 @@ static void appendName(StringRef name, SmallString<32> &output,
     return;
   if (!output.empty()) {
     if (verilogSafe)
-      output.append("$");
+      output.append("_");
     else
       output.append("-");
   }
@@ -97,7 +97,7 @@ static SmallString<32> moduleNameForLayer(StringRef moduleName,
 }
 
 /// For a layerblock `@A::@B::@C`,
-/// the generated instance is called `a$b$c`.
+/// the generated instance is called `a_b_c`.
 static SmallString<32> instanceNameForLayer(SymbolRefAttr layerName) {
   SmallString<32> result;
   appendName(layerName, result, /*toLower=*/true, /*verilogSafe=*/true);
@@ -116,7 +116,7 @@ static SmallString<32> fileNameForLayer(StringRef circuitName,
   return result;
 }
 
-/// For a layerblock `@A::@B::@C`, the verilog macro is `A$B$C`.
+/// For a layerblock `@A::@B::@C`, the verilog macro is `A_B_C`.
 static SmallString<32>
 macroNameForLayer(ArrayRef<FlatSymbolRefAttr> layerName) {
   SmallString<32> result;
@@ -864,10 +864,10 @@ void LowerLayersPass::runOnOperation() {
   //
   //     `include "layers-A.sv"
   //     `include "layers-A-B.sv"
-  //     `ifndef layers$A$B$C
-  //     `define layers$A$B$C
+  //     `ifndef layers_A_B_C
+  //     `define layers_A_B_C
   //     <body>
-  //     `endif // layers$A$B$C
+  //     `endif // layers_A_B_C
   //
   // TODO: This would be better handled without the use of verbatim ops.
   OpBuilder builder(circuitOp);
@@ -885,18 +885,18 @@ void LowerLayersPass::runOnOperation() {
 
     builder.setInsertionPointToStart(circuitOp.getBodyBlock());
 
-    // Save the "layers-<circuit>-<group>" and "layers$<circuit>$<group>" string
+    // Save the "layers-<circuit>-<group>" and "layers_<circuit>_<group>" string
     // as this is reused a bunch.
-    SmallString<32> prefixFile("layers-"), prefixMacro("layers$");
+    SmallString<32> prefixFile("layers-"), prefixMacro("layers_");
     prefixFile.append(circuitName);
     prefixFile.append("-");
     prefixMacro.append(circuitName);
-    prefixMacro.append("$");
+    prefixMacro.append("_");
     for (auto [layer, _] : layers) {
       prefixFile.append(layer.getSymName());
       prefixFile.append("-");
       prefixMacro.append(layer.getSymName());
-      prefixMacro.append("$");
+      prefixMacro.append("_");
     }
     prefixFile.append(layerOp.getSymName());
     prefixMacro.append(layerOp.getSymName());

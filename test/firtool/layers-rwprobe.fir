@@ -15,7 +15,7 @@ FIRRTL version 4.0.0
 ; CHECK-NEXT:   DUT d ();
 ; CHECK-NEXT: endmodule
 
-;      CHECK: module DUT$T();
+;      CHECK: module DUT_T();
 ; CHECK-NEXT:   wire w = 1'h0;
 ; CHECK-NEXT: endmodule
 ;

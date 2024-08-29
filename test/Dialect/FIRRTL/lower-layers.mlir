@@ -380,33 +380,33 @@ firrtl.circuit "Test" {
 
   // CHECK: sv.macro.decl @[[INLINE:.*]]["Inline"]
   firrtl.layer @Inline inline {
-    // CHECK: sv.macro.decl @Inline$Inline
+    // CHECK: sv.macro.decl @Inline_Inline
     firrtl.layer @Inline inline {}
     firrtl.layer @Bound bind {
-      // CHECK: sv.macro.decl @Inline$Bound$Inline
+      // CHECK: sv.macro.decl @Inline_Bound_Inline
       firrtl.layer @Inline inline {}
       firrtl.layer @Bound bind {
-        // CHECK: sv.macro.decl @Inline$Bound$Bound$Inline
+        // CHECK: sv.macro.decl @Inline_Bound_Bound_Inline
         firrtl.layer @Inline inline {}
       }
     }
   }
 
   firrtl.layer @Bound bind {
-    // CHECK: sv.macro.decl @Bound$Inline
+    // CHECK: sv.macro.decl @Bound_Inline
     firrtl.layer @Inline inline {}
   }
 
-  // CHECK: firrtl.module private @ModuleWithInlineLayerBlocks$Inline$Bound() {
+  // CHECK: firrtl.module private @ModuleWithInlineLayerBlocks_Inline_Bound() {
   // CHECK:   %w3 = firrtl.wire : !firrtl.uint<3>
-  // CHECK:   sv.ifdef  @Inline$Bound$Inline {
+  // CHECK:   sv.ifdef  @Inline_Bound_Inline {
   // CHECK:     %w4 = firrtl.wire : !firrtl.uint<4>
   // CHECK:   }
   // CHECK: }
 
-  // CHECK: firrtl.module private @ModuleWithInlineLayerBlocks$Bound() {
+  // CHECK: firrtl.module private @ModuleWithInlineLayerBlocks_Bound() {
   // CHECK:   %w5 = firrtl.wire : !firrtl.uint<5>
-  // CHECK:   sv.ifdef @Bound$Inline {
+  // CHECK:   sv.ifdef @Bound_Inline {
   // CHECK:     %w6 = firrtl.wire : !firrtl.uint<6>
   // CHECK:   }
   // CHECK: }
@@ -414,12 +414,12 @@ firrtl.circuit "Test" {
   // CHECK: firrtl.module @ModuleWithInlineLayerBlocks() {
   // CHECK:   sv.ifdef @[[INLINE]] {
   // CHECK:     %w1 = firrtl.wire : !firrtl.uint<1>
-  // CHECK:     sv.ifdef  @Inline$Inline {
+  // CHECK:     sv.ifdef  @Inline_Inline {
   // CHECK:       %w2 = firrtl.wire : !firrtl.uint<2>
   // CHECK:     }
-  // CHECK:     firrtl.instance inline$bound {lowerToBind, output_file = #hw.output_file<"layers-Test-Inline-Bound.sv", excludeFromFileList>} @ModuleWithInlineLayerBlocks$Inline$Bound()
+  // CHECK:     firrtl.instance inline_bound {lowerToBind, output_file = #hw.output_file<"layers-Test-Inline-Bound.sv", excludeFromFileList>} @ModuleWithInlineLayerBlocks_Inline_Bound()
   // CHECK:   }
-  // CHECK:   firrtl.instance bound {lowerToBind, output_file = #hw.output_file<"layers-Test-Bound.sv", excludeFromFileList>} @ModuleWithInlineLayerBlocks$Bound()
+  // CHECK:   firrtl.instance bound {lowerToBind, output_file = #hw.output_file<"layers-Test-Bound.sv", excludeFromFileList>} @ModuleWithInlineLayerBlocks_Bound()
   // CHECK: }
   firrtl.module @ModuleWithInlineLayerBlocks() {
     firrtl.layerblock @Inline {
@@ -474,38 +474,38 @@ firrtl.circuit "Simple" {
 //
 // CHECK:      sv.verbatim "`include \22layers-Simple-A.sv\22\0A
 // CHECK-SAME:   `include \22layers-Simple-A-B.sv\22\0A
-// CHECK-SAME:   `ifndef layers$Simple$A$B$C\0A
-// CHECK-SAME:   define layers$Simple$A$B$C"
+// CHECK-SAME:   `ifndef layers_Simple_A_B_C\0A
+// CHECK-SAME:   define layers_Simple_A_B_C"
 // CHECK-SAME:   output_file = #hw.output_file<"layers-Simple-A-B-C.sv", excludeFromFileList>
 // CHECK:      sv.verbatim "`include \22layers-Simple-A.sv\22\0A
-// CHECK-SAME:   `ifndef layers$Simple$A$B\0A
-// CHECK-SAME:   define layers$Simple$A$B"
+// CHECK-SAME:   `ifndef layers_Simple_A_B\0A
+// CHECK-SAME:   define layers_Simple_A_B"
 // CHECK-SAME:   output_file = #hw.output_file<"layers-Simple-A-B.sv", excludeFromFileList>
-// CHECK:      sv.verbatim "`ifndef layers$Simple$A\0A
-// CHECK-SAME:   define layers$Simple$A"
+// CHECK:      sv.verbatim "`ifndef layers_Simple_A\0A
+// CHECK-SAME:   define layers_Simple_A"
 // CHECK-SAME:   output_file = #hw.output_file<"layers-Simple-A.sv", excludeFromFileList>
 //
-// CHECK:      firrtl.module private @Simple$A$B$C(
+// CHECK:      firrtl.module private @Simple_A_B_C(
 // CHECK-NOT:  firrtl.module
 // CHECK-SAME:   in %[[cc_port:[_a-zA-Z0-9]+]]: !firrtl.uint<3>
 // CHECK-NEXT:   %ccc = firrtl.node %[[cc_port]]
 // CHECK-NEXT: }
 //
-// CHECK:      firrtl.module private @Simple$A$B(
+// CHECK:      firrtl.module private @Simple_A_B(
 // CHECK-NOT:  firrtl.module
 // CHECK-SAME:   in %[[b_port:[_a-zA-Z0-9]+]]: !firrtl.uint<2>
 // CHECK-SAME:   in %[[c_port:[_a-zA-Z0-9]+]]: !firrtl.uint<3>
-// CHECK-SAME:   out %[[cc_port:[_a-zA-Z0-9$]+]]: !firrtl.probe<uint<3>>
+// CHECK-SAME:   out %[[cc_port:[_a-zA-Z0-9_]+]]: !firrtl.probe<uint<3>>
 // CHECK-NEXT:   %bb = firrtl.node %[[b_port]]
 // CHECK-NEXT:   %cc = firrtl.node %[[c_port]]
 // CHECK-NEXT:   %0 = firrtl.ref.send %cc
 // CHECK-NEXT:   firrtl.ref.define %[[cc_port]], %0
 // CHECK-NEXT: }
 //
-// CHECK:      firrtl.module private @Simple$A(
+// CHECK:      firrtl.module private @Simple_A(
 // CHECK-NOT:  firrtl.module
 // CHECK-SAME:   in %[[a_port:[_a-zA-Z0-9]+]]: !firrtl.uint<1>
-// CHECK-SAME:   out %[[c_port:[_a-zA-Z0-9$]+]]: !firrtl.probe<uint<3>>
+// CHECK-SAME:   out %[[c_port:[_a-zA-Z0-9_]+]]: !firrtl.probe<uint<3>>
 // CHECK-NEXT:   %aa = firrtl.node %[[a_port]]
 // CHECK:        %[[c_ref:[_a-zA-Z0-9]+]] = firrtl.ref.send %c
 // CHECK-NEXT:   firrtl.ref.define %[[c_port]], %[[c_ref]]
@@ -514,30 +514,30 @@ firrtl.circuit "Simple" {
 // CHECK:      firrtl.module @Simple() {
 // CHECK-NOT:  firrtl.module
 // CHECK-NOT:    firrtl.layerblock
-// CHECK:        %[[A_B_C_cc:[_a-zA-Z0-9$]+]] = firrtl.instance a$b$c {
+// CHECK:        %[[A_B_C_cc:[_a-zA-Z0-9_]+]] = firrtl.instance a_b_c {
 // CHECK-SAME:     lowerToBind
 // CHECK-SAME:     output_file = #hw.output_file<"layers-Simple-A-B-C.sv"
 // CHECK-SAME:     excludeFromFileList
-// CHECK-SAME:     @Simple$A$B$C(
-// CHECK-NEXT:   %[[A_B_b:[_a-zA-Z0-9$]+]], %[[A_B_c:[_a-zA-Z0-9$]+]], %[[A_B_cc:[_a-zA-Z0-9$]+]] = firrtl.instance a$b {
+// CHECK-SAME:     @Simple_A_B_C(
+// CHECK-NEXT:   %[[A_B_b:[_a-zA-Z0-9_]+]], %[[A_B_c:[_a-zA-Z0-9_]+]], %[[A_B_cc:[_a-zA-Z0-9_]+]] = firrtl.instance a_b {
 // CHECK-SAME:     lowerToBind
 // CHECK-SAME:     output_file = #hw.output_file<"layers-Simple-A-B.sv", excludeFromFileList>
-// CHECK-SAME:     @Simple$A$B(
+// CHECK-SAME:     @Simple_A_B(
 // CHECK-NEXT:   %[[A_B_cc_resolve:[_a-zA-Z0-9]+]] = firrtl.ref.resolve %[[A_B_cc]]
 // CHECK-NEXT:   firrtl.matchingconnect %[[A_B_C_cc]], %[[A_B_cc_resolve]]
 // CHECK-NEXT:   firrtl.matchingconnect %[[A_B_b]], %b
-// CHECK-NEXT:   %[[A_a:[_a-zA-Z0-9$]+]], %[[A_c:[_a-zA-Z0-9$]+]] = firrtl.instance a {
+// CHECK-NEXT:   %[[A_a:[_a-zA-Z0-9_]+]], %[[A_c:[_a-zA-Z0-9_]+]] = firrtl.instance a {
 // CHECK-SAME:     lowerToBind
 // CHECK-SAME:     output_file = #hw.output_file<"layers-Simple-A.sv", excludeFromFileList>
-// CHECK-SAME:     @Simple$A(
+// CHECK-SAME:     @Simple_A(
 // CHECK-NEXT:   %[[A_c_resolve:[_a-zA-Z0-9]+]] = firrtl.ref.resolve %[[A_c]]
 // CHECK-NEXT:   firrtl.matchingconnect %[[A_B_c]], %[[A_c_resolve]]
 // CHECK-NEXT:   firrtl.matchingconnect %[[A_a]], %a
 // CHECK:      }
 //
-// CHECK-DAG:  sv.verbatim "`endif // layers$Simple$A"
+// CHECK-DAG:  sv.verbatim "`endif // layers_Simple_A"
 // CHECK-SAME:   output_file = #hw.output_file<"layers-Simple-A.sv", excludeFromFileList>
-// CHECK-DAG:  sv.verbatim "`endif // layers$Simple$A$B"
+// CHECK-DAG:  sv.verbatim "`endif // layers_Simple_A_B"
 // CHECK-SAME:   output_file = #hw.output_file<"layers-Simple-A-B.sv", excludeFromFileList>
 
 // -----
@@ -556,7 +556,7 @@ firrtl.circuit "ModuleNameConflict" {
 
 // CHECK-LABEL: firrtl.circuit "ModuleNameConflict"
 //
-// CHECK:       firrtl.module private @[[groupModule:[_a-zA-Z0-9$]+]](in
+// CHECK:       firrtl.module private @[[groupModule:[_a-zA-Z0-9_]+]](in
 //
 // CHECK:       firrtl.module @ModuleNameConflict()
 // CHECK-NOT:   firrtl.module
@@ -663,7 +663,7 @@ firrtl.circuit "HierPathOps" {
 // CHECK-LABEL: firrtl.circuit "HierPathOps"
 //
 // CHECK:         hw.hierpath         @nla1 [@Foo::@foo_A]
-// CHECK-NEXT:    hw.hierpath         @nla2 [@Foo::@[[inst_sym:[_A-Za-z0-9]+]], @[[mod_sym:[_A-Za-z0-9$]+]]::@bar, @Bar]
+// CHECK-NEXT:    hw.hierpath         @nla2 [@Foo::@[[inst_sym:[_A-Za-z0-9]+]], @[[mod_sym:[_A-Za-z0-9_]+]]::@bar, @Bar]
 // CHECK-NEXT:    hw.hierpath private @nla3 [@Foo::@[[inst_sym]], @[[mod_sym]]::@baz]
 //
 // CHECK:         firrtl.module {{.*}} @[[mod_sym]]()
@@ -710,9 +710,9 @@ firrtl.circuit "Foo" attributes {
 // CHECK:       sv.verbatim
 // CHECK-SAME:    #hw.output_file<"testbench{{/|\\\\}}layers-Foo-A.sv", excludeFromFileList>
 //
-// CHECK:       firrtl.module {{.*}} @Bar$A
+// CHECK:       firrtl.module {{.*}} @Bar_A
 // CHECK-SAME:    #hw.output_file<"testbench{{/|\\\\}}", excludeFromFileList>
-// CHECK:       firrtl.module {{.*}} @Foo$A
+// CHECK:       firrtl.module {{.*}} @Foo_A
 // CHECK-SAME:    #hw.output_file<"testbench{{/|\\\\}}", excludeFromFileList>
 //
 // CHECK:       sv.verbatim
@@ -731,10 +731,10 @@ firrtl.circuit "Foo" {
 }
 
 // CHECK: firrtl.circuit "Foo" {
-// CHECK:   sv.verbatim "`ifndef layers$Foo$B\0A`define layers$Foo$B" {output_file = #hw.output_file<"layers-Foo-B.sv", excludeFromFileList>}
+// CHECK:   sv.verbatim "`ifndef layers_Foo_B\0A`define layers_Foo_B" {output_file = #hw.output_file<"layers-Foo-B.sv", excludeFromFileList>}
 // CHECK:   firrtl.module @Foo() {
 // CHECK:   }
-// CHECK:   sv.verbatim "`endif // layers$Foo$B" {output_file = #hw.output_file<"layers-Foo-B.sv", excludeFromFileList>}
+// CHECK:   sv.verbatim "`endif // layers_Foo_B" {output_file = #hw.output_file<"layers-Foo-B.sv", excludeFromFileList>}
 // CHECK: }
 
 // -----
@@ -748,13 +748,13 @@ firrtl.circuit "RWTH" {
     %one = firrtl.constant 1 : !firrtl.uint<1>
     firrtl.ref.force_initial %one, %d_p, %one: !firrtl.uint<1>, !firrtl.rwprobe<uint<1>, @T>, !firrtl.uint<1>
   }
-//      CHECK:    firrtl.module private @DUT$T(out %p: !firrtl.rwprobe<uint<1>>) {
+//      CHECK:    firrtl.module private @DUT_T(out %p: !firrtl.rwprobe<uint<1>>) {
 // CHECK-NEXT:      %w = firrtl.wire sym @[[SYM:.+]] : !firrtl.uint<1>
-// CHECK-NEXT:      %0 = firrtl.ref.rwprobe <@DUT$T::@[[SYM]]> : !firrtl.rwprobe<uint<1>>
+// CHECK-NEXT:      %0 = firrtl.ref.rwprobe <@DUT_T::@[[SYM]]> : !firrtl.rwprobe<uint<1>>
 // CHECK-NEXT:      firrtl.ref.define %p, %0 : !firrtl.rwprobe<uint<1>>
 // CHECK-NEXT:    }
 // CHECK-NEXT:    firrtl.module @DUT(out %p: !firrtl.rwprobe<uint<1>>) attributes {convention = #firrtl<convention scalarized>} {
-// CHECK-NEXT:      %t_p = firrtl.instance t sym @t {lowerToBind, output_file = #hw.output_file<"layers-RWTH-T.sv", excludeFromFileList>} @DUT$T(out p: !firrtl.rwprobe<uint<1>>)
+// CHECK-NEXT:      %t_p = firrtl.instance t sym @t {lowerToBind, output_file = #hw.output_file<"layers-RWTH-T.sv", excludeFromFileList>} @DUT_T(out p: !firrtl.rwprobe<uint<1>>)
 // CHECK-NEXT:      firrtl.ref.define %p, %t_p : !firrtl.rwprobe<uint<1>>
 // CHECK-NEXT:    }
 
