@@ -88,10 +88,9 @@ public:
   virtual void write(const MessageData &) = 0;
 
   /// A basic non-blocking write API. Returns true if the data was written.
-  /// Support for non-blocking writes is optional for implementations.
-  virtual bool tryWrite(const MessageData &data) {
-    throw std::runtime_error("tryWrite not implemented");
-  }
+  /// It is invalid for backends to always return false (i.e. backends must
+  /// eventually ensure that writes may succeed).
+  virtual bool tryWrite(const MessageData &data) = 0;
 
 private:
   volatile bool connected = false;
