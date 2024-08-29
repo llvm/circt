@@ -409,8 +409,6 @@ LogicalResult MachineOpConverter::dispatch(){
             llvm::SmallVector<mlir::Value> tmpSmtVal;
             llvm::SmallVector<mlir::Value> updatedSmtVal(argVars);
 
-
-
             for (auto [j, uv]: llvm::enumerate(updatedSmtVal)){
               if (int(j)  >= int(numArgs)){
                 bool found = false;
@@ -447,7 +445,7 @@ LogicalResult MachineOpConverter::dispatch(){
                   updatedSmtVal[j] = getSmt(*uv.getDefiningOp(), args, argVars, tmpSmtVal, b, loc);
               }
             }
-            return tmpSmtVal;
+            return updatedSmtVal;
           };
 
 
@@ -545,7 +543,7 @@ LogicalResult MachineOpConverter::dispatch(){
 
   // add mutual exclusion
 
-  machineOp.erase();
+  // machineOp.erase();
 
   return success();
 }
