@@ -63,11 +63,15 @@ using InnerRefMap =
 //===----------------------------------------------------------------------===//
 
 static void appendName(StringRef name, SmallString<32> &output,
-                       bool toLower = false) {
+                       bool toLower = false, bool verilogSafe = false) {
   if (name.empty())
     return;
-  if (!output.empty())
-    output.append("_");
+  if (!output.empty()) {
+    if (verilogSafe)
+      output.append("$");
+    else
+      output.append("-");
+  }
   output.append(name);
   if (!toLower)
     return;
@@ -76,10 +80,10 @@ static void appendName(StringRef name, SmallString<32> &output,
 }
 
 static void appendName(SymbolRefAttr name, SmallString<32> &output,
-                       bool toLower = false) {
-  appendName(name.getRootReference(), output, toLower);
+                       bool toLower = false, bool verilogSafe = false) {
+  appendName(name.getRootReference(), output, toLower, verilogSafe);
   for (auto nested : name.getNestedReferences())
-    appendName(nested.getValue(), output, toLower);
+    appendName(nested.getValue(), output, toLower, verilogSafe);
 }
 
 /// For a layer `@A::@B::@C` in module Module,
@@ -87,21 +91,21 @@ static void appendName(SymbolRefAttr name, SmallString<32> &output,
 static SmallString<32> moduleNameForLayer(StringRef moduleName,
                                           SymbolRefAttr layerName) {
   SmallString<32> result;
-  appendName(moduleName, result);
-  appendName(layerName, result);
+  appendName(moduleName, result, /*toLower=*/false, /*verilogSafe=*/true);
+  appendName(layerName, result, /*toLower=*/false, /*verilogSafe=*/true);
   return result;
 }
 
 /// For a layerblock `@A::@B::@C`,
-/// the generated instance is called `a_b_c`.
+/// the generated instance is called `a$b$c`.
 static SmallString<32> instanceNameForLayer(SymbolRefAttr layerName) {
   SmallString<32> result;
-  appendName(layerName, result, /*toLower=*/true);
+  appendName(layerName, result, /*toLower=*/true, /*verilogSafe=*/true);
   return result;
 }
 
 /// For all layerblocks `@A::@B::@C` in a circuit called Circuit,
-/// the output filename is `layers_Circuit_A_B_C.sv`.
+/// the output filename is `layers-Circuit-A-B-C.sv`.
 static SmallString<32> fileNameForLayer(StringRef circuitName,
                                         SymbolRefAttr layerName) {
   SmallString<32> result;
@@ -112,12 +116,12 @@ static SmallString<32> fileNameForLayer(StringRef circuitName,
   return result;
 }
 
-/// For a layerblock `@A::@B::@C`, the verilog macro is `A_B_C`.
+/// For a layerblock `@A::@B::@C`, the verilog macro is `A$B$C`.
 static SmallString<32>
 macroNameForLayer(ArrayRef<FlatSymbolRefAttr> layerName) {
   SmallString<32> result;
   for (auto part : layerName)
-    appendName(part, result);
+    appendName(part, result, /*toLower=*/false, /*verilogSafe=*/true);
   return result;
 }
 
@@ -858,12 +862,12 @@ void LowerLayersPass::runOnOperation() {
   // populated later when binds are exported to Verilog.  This produces text
   // like:
   //
-  //     `include "layers_A.sv"
-  //     `include "layers_A_B.sv"
-  //     `ifndef layers_A_B_C
-  //     `define layers_A_B_C
+  //     `include "layers-A.sv"
+  //     `include "layers-A-B.sv"
+  //     `ifndef layers$A$B$C
+  //     `define layers$A$B$C
   //     <body>
-  //     `endif // layers_A_B_C
+  //     `endif // layers$A$B$C
   //
   // TODO: This would be better handled without the use of verbatim ops.
   OpBuilder builder(circuitOp);
@@ -881,15 +885,21 @@ void LowerLayersPass::runOnOperation() {
 
     builder.setInsertionPointToStart(circuitOp.getBodyBlock());
 
-    // Save the "layers_CIRCUIT_GROUP" string as this is reused a bunch.
-    SmallString<32> prefix("layers_");
-    prefix.append(circuitName);
-    prefix.append("_");
+    // Save the "layers-<circuit>-<group>" and "layers$<circuit>$<group>" string
+    // as this is reused a bunch.
+    SmallString<32> prefixFile("layers-"), prefixMacro("layers$");
+    prefixFile.append(circuitName);
+    prefixFile.append("-");
+    prefixMacro.append(circuitName);
+    prefixMacro.append("$");
     for (auto [layer, _] : layers) {
-      prefix.append(layer.getSymName());
-      prefix.append("_");
+      prefixFile.append(layer.getSymName());
+      prefixFile.append("-");
+      prefixMacro.append(layer.getSymName());
+      prefixMacro.append("$");
     }
-    prefix.append(layerOp.getSymName());
+    prefixFile.append(layerOp.getSymName());
+    prefixMacro.append(layerOp.getSymName());
 
     SmallString<128> includes;
     for (auto [_, strAttr] : layers) {
@@ -904,23 +914,23 @@ void LowerLayersPass::runOnOperation() {
             layerOp->getAttrOfType<hw::OutputFileAttr>("output_file")) {
       auto dir = outputFile.getDirectory();
       bindFile = hw::OutputFileAttr::getFromDirectoryAndFilename(
-          &getContext(), dir, prefix + ".sv",
+          &getContext(), dir, prefixFile + ".sv",
           /*excludeFromFileList=*/true);
     } else {
       bindFile = hw::OutputFileAttr::getFromFilename(
-          &getContext(), prefix + ".sv", /*excludeFromFileList=*/true);
+          &getContext(), prefixFile + ".sv", /*excludeFromFileList=*/true);
     }
 
     // Write header to a verbatim.
     auto header = builder.create<sv::VerbatimOp>(
         layerOp.getLoc(),
-        includes + "`ifndef " + prefix + "\n" + "`define " + prefix);
+        includes + "`ifndef " + prefixMacro + "\n" + "`define " + prefixMacro);
     header->setAttr("output_file", bindFile);
 
     // Write footer to a verbatim.
     builder.setInsertionPointToEnd(circuitOp.getBodyBlock());
-    auto footer =
-        builder.create<sv::VerbatimOp>(layerOp.getLoc(), "`endif // " + prefix);
+    auto footer = builder.create<sv::VerbatimOp>(layerOp.getLoc(),
+                                                 "`endif // " + prefixMacro);
     footer->setAttr("output_file", bindFile);
 
     if (!layerOp.getBody().getOps<LayerOp>().empty())

@@ -118,9 +118,9 @@ circuit Testbench: %[[
 
 ; The following modules are all in the Testbench directory.
 ;
-; CHECK-DAG: FILE "verification{{[/\]}}testbench{{[/\]}}layers_Testbench_A.sv"
+; CHECK-DAG: FILE "verification{{[/\]}}testbench{{[/\]}}layers-Testbench-A.sv"
 ; CHECK-DAG: FILE "verification{{[/\]}}testbench{{[/\]}}Bar.sv"
-; CHECK-DAG: FILE "verification{{[/\]}}testbench{{[/\]}}DUT_A.sv"
+; CHECK-DAG: FILE "verification{{[/\]}}testbench{{[/\]}}DUT$A.sv"
 ; CHECK-DAG: FILE "verification{{[/\]}}testbench{{[/\]}}Testbench.sv"
 
 ; The following modules are all in the Grand Central directory.

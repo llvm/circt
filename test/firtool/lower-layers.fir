@@ -46,19 +46,19 @@ circuit Foo: %[[
   ; CHECK: );
   ; CHECK: endmodule
 
-  ; CHECK: FILE "testbench{{[/\]}}layers_Foo_Verification.sv"
-  ; CHECK: `ifndef layers_Foo_Verification
-  ; CHECK: `define layers_Foo_Verification
-  ; CHECK: bind Bar Bar_Verification verification ();
-  ; CHECK: `endif // layers_Foo_Verification
+  ; CHECK: FILE "testbench{{[/\]}}layers-Foo-Verification.sv"
+  ; CHECK: `ifndef layers$Foo$Verification
+  ; CHECK: `define layers$Foo$Verification
+  ; CHECK: bind Bar Bar$Verification verification ();
+  ; CHECK: `endif // layers$Foo$Verification
 
   ; CHECK: FILE "testbench{{[/\]}}VerificationHelper.sv"
   ; CHECK: module VerificationHelper();
   ; CHECK:   wire w = 1'h0;
   ; CHECK: endmodule
 
-  ; CHECK: FILE "testbench{{[/\]}}Bar_Verification.sv"
-  ; CHECK: module Bar_Verification();
+  ; CHECK: FILE "testbench{{[/\]}}Bar$Verification.sv"
+  ; CHECK: module Bar$Verification();
   ; CHECK:   wire c = 1'h0;
   ; CHECK:   wire c_probe = c;
   ; CHECK: endmodule
@@ -83,7 +83,7 @@ circuit TestHarness:
 
   layer Verification, bind:
 
-  ; CHECK: module DUT_Verification(
+  ; CHECK: module DUT$Verification(
   ; CHECK:   input        clock,
   ; CHECK:   input [31:0] a
   ; CHECK: );
@@ -124,7 +124,7 @@ circuit TestHarness:
     layerblock Verification:
       define trace = x
 
-  ; CHECK: module TestHarness_Verification(
+  ; CHECK: module TestHarness$Verification(
   ; CHECK:   input [31:0] dut_trace,
   ; CHECK:   input        clock,
   ; CHECK:                reset
@@ -164,16 +164,16 @@ circuit TestHarness:
     layerblock Verification:
       printf(clock, reset, "The last PC was: %x", read(dut.trace))
 
-; CHECK: FILE "layers_TestHarness_Verification.sv"
-; CHECK: `ifndef layers_TestHarness_Verification
-; CHECK: `define layers_TestHarness_Verification
-; CHECK: bind DUT DUT_Verification verification (
+; CHECK: FILE "layers-TestHarness-Verification.sv"
+; CHECK: `ifndef layers$TestHarness$Verification
+; CHECK: `define layers$TestHarness$Verification
+; CHECK: bind DUT DUT$Verification verification (
 ; CHECK:   .clock (clock),
 ; CHECK:   .a     (a)
 ; CHECK: );
-; CHECK: bind TestHarness TestHarness_Verification verification (
+; CHECK: bind TestHarness TestHarness$Verification verification (
 ; CHECK:   .dut_trace (TestHarness.dut.verification.pc_d_probe),
 ; CHECK:   .clock     (clock),
 ; CHECK:   .reset     (reset)
 ; CHECK: );
-; CHECK: `endif // layers_TestHarness_Verification
+; CHECK: `endif // layers$TestHarness$Verification

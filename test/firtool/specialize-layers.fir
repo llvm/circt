@@ -4,15 +4,15 @@
 
 ; Check that layer specialization works.
 
-; SPECIALIZE-NOT: LayerSpecialization_A
-; DEFAULT: module LayerSpecialization_A
+; SPECIALIZE-NOT: LayerSpecialization$A
+; DEFAULT: module LayerSpecialization$A
 
 ; COMMON-LABEL: module LayerSpecialization();
 ; ENABLE-NEXT:    Ext ext ();
 ; COMMON-NEXT:  endmodule
 
-; SPECIALIZE-NOT: LayerSpecialization_A
-; DEFAULT: "layers_LayerSpecialization_A.sv"
+; SPECIALIZE-NOT: LayerSpecialization-A
+; DEFAULT: "layers-LayerSpecialization-A.sv"
 FIRRTL version 4.0.0
 circuit LayerSpecialization:
   layer A, bind:

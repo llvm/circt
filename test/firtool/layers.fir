@@ -37,7 +37,7 @@ circuit Foo: %[[
             node z = x
             assert(clock, cond, enable, "Test")
 
-; CHECK-LABEL: module Foo_A_B(
+; CHECK-LABEL: module Foo$A$B(
 ; CHECK-NEXT:    input x,
 ; CHECK-NEXT:          cond,
 ; CHECK-NEXT:          enable,
@@ -51,28 +51,28 @@ circuit Foo: %[[
 ; CHECK-NEXT:    end // always @(posedge)
 ; CHECK-NEXT:  endmodule
 
-; CHECK-LABEL: module Foo_A(
+; CHECK-LABEL: module Foo$A(
 ; CHECK-NEXT:    input in
 ; CHECK:         wire x = in;
 ; CHECK-NEXT:    wire x_probe = x;
 ; CHECK-NEXT:  endmodule
 
-; CHECK-LABEL: FILE "layers_Foo_A_B.sv"
-; CHECK:       `include "layers_Foo_A.sv"
-; CHECK-NEXT:  `ifndef layers_Foo_A_B
-; CHECK-NEXT:  `define layers_Foo_A_B
-; CHECK-NEXT:  bind Foo Foo_A_B a_b (
+; CHECK-LABEL: FILE "layers-Foo-A-B.sv"
+; CHECK:       `include "layers-Foo-A.sv"
+; CHECK-NEXT:  `ifndef layers$Foo$A$B
+; CHECK-NEXT:  `define layers$Foo$A$B
+; CHECK-NEXT:  bind Foo Foo$A$B a$b (
 ; CHECK-NEXT:    .x (Foo.a.x_probe),
 ; CHECK-NEXT:    .cond (cond),
 ; CHECK-NEXT:    .enable (enable),
 ; CHECK-NEXT:    .clock (clock)
 ; CHECK-NEXT:  );
-; CHECK-NEXT:  `endif // layers_Foo_A_B
+; CHECK-NEXT:  `endif // layers$Foo$A$B
 
-; CHECK-LABEL: FILE "layers_Foo_A.sv"
-; CHECK:       `ifndef layers_Foo_A
-; CHECK-NEXT:  `define layers_Foo_A
-; CHECK-NEXT:   bind Foo Foo_A a (
+; CHECK-LABEL: FILE "layers-Foo-A.sv"
+; CHECK:       `ifndef layers$Foo$A
+; CHECK-NEXT:  `define layers$Foo$A
+; CHECK-NEXT:   bind Foo Foo$A a (
 ; CHECK-NEXT:     .in (in)
 ; CHECK-NEXT:   );
-; CHECK-NEXT:  `endif // layers_Foo_A
+; CHECK-NEXT:  `endif // layers$Foo$A

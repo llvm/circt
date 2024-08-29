@@ -15,7 +15,7 @@ FIRRTL version 4.0.0
 ; CHECK-NEXT:   DUT d ();
 ; CHECK-NEXT: endmodule
 
-;      CHECK: module DUT_T();
+;      CHECK: module DUT$T();
 ; CHECK-NEXT:   wire w = 1'h0;
 ; CHECK-NEXT: endmodule
 ;
@@ -36,4 +36,3 @@ circuit TH:
       wire w : UInt<1>
       connect w, UInt<1>(0)
       define p = rwprobe(w)
-
