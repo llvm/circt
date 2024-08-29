@@ -53,10 +53,62 @@ ARC_EXPORT int _arc_libc_fputc(int ch, FILE *stream) {
 #define ARC_ENV_DECL_GET_PRINT_STREAM(idarg)                                   \
   ARC_EXPORT FILE *_arc_env_get_print_stream(uint32_t idarg)
 
+#define ARC_ENV_DECL_FILL_RANDOMIZED(ptrarg, numwordsarg, wordbitsarg,         \
+                                     stridearg)                                \
+  ARC_EXPORT void _arc_env_fill_randomized(void *ptrarg, uint64_t numwordsarg, \
+                                           uint32_t wordbitsarg,               \
+                                           uint32_t stridearg)
+
+// Default implementations
+
 #ifndef ARC_NO_DEFAULT_GET_PRINT_STREAM
 ARC_ENV_DECL_GET_PRINT_STREAM(id) {
   (void)id;
   return stderr;
+}
+#endif // ARC_NO_DEFAULT_GET_PRINT_STREAM
+
+#ifndef ARC_NO_DEFAULT_FILL_RANDOMIZED
+
+#include <random>
+
+template <typename T>
+static void arc_random_fill_helper(T *ptr, std::mt19937_64 &prng,
+                                   uint64_t numWords, uint32_t wordBits,
+                                   uint32_t numChunks) {
+  constexpr unsigned typeBits = sizeof(T) * 8;
+  for (uint64_t word = 0; word < numWords; ++word) {
+    auto activeBits = wordBits;
+    for (uint32_t chunk = 0; chunk < numChunks; ++chunk) {
+      T mask;
+      if (activeBits < typeBits) {
+        mask = (static_cast<T>(1) << activeBits) - 1;
+        activeBits = 0;
+      } else {
+        mask = ~static_cast<T>(0);
+        activeBits -= typeBits;
+      }
+      uint64_t rand = prng();
+      *(ptr++) = mask & static_cast<T>(rand);
+    }
+  }
+}
+
+ARC_ENV_DECL_FILL_RANDOMIZED(ptr, numWords, wordBits, stride) {
+  // Yuck
+  static std::mt19937_64 prng(0x123456);
+  if (stride >= 8)
+    arc_random_fill_helper(reinterpret_cast<uint64_t *>(ptr), prng, numWords,
+                           wordBits, stride / 8);
+  else if (stride == 4)
+    arc_random_fill_helper(reinterpret_cast<uint32_t *>(ptr), prng, numWords,
+                           wordBits, 1);
+  else if (stride == 2)
+    arc_random_fill_helper(reinterpret_cast<uint16_t *>(ptr), prng, numWords,
+                           wordBits, 1);
+  else
+    arc_random_fill_helper(reinterpret_cast<uint8_t *>(ptr), prng, numWords,
+                           wordBits, 1);
 }
 #endif // ARC_NO_DEFAULT_GET_PRINT_STREAM
 

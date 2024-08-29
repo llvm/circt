@@ -76,6 +76,43 @@ struct ModelOpLowering : public OpConversionPattern<arc::ModelOp> {
   }
 };
 
+struct EnvironemtCallOpLowering
+    : public OpConversionPattern<arc::EnvironmentCallOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(arc::EnvironmentCallOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+
+    auto numResults = adaptor.getFunctionType().getNumResults();
+    if (numResults > 1) {
+      op.emitError("Cannot lower environment call with multiple results.");
+      return failure();
+    }
+    Type resType = numResults == 0
+                       ? LLVM::LLVMVoidType::get(rewriter.getContext())
+                       : adaptor.getFunctionType().getResult(0);
+    auto funcType = LLVM::LLVMFunctionType::get(
+        resType, adaptor.getFunctionType().getInputs());
+
+    rewriter.replaceOpWithNewOp<LLVM::LLVMFuncOp>(op, op.getName(), funcType);
+    return success();
+  };
+};
+
+struct CallEnvirionmentOpLowering
+    : public OpConversionPattern<arc::CallEnvironmentOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(arc::CallEnvironmentOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOpWithNewOp<LLVM::CallOp>(
+        op, op.getResultTypes(), op.getCallee(), adaptor.getOperands());
+    return success();
+  };
+};
+
 struct AllocStorageOpLowering
     : public OpConversionPattern<arc::AllocStorageOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -630,7 +667,9 @@ void LowerArcToLLVMPass::runOnOperation() {
     AllocStateLikeOpLowering<arc::RootInputOp>,
     AllocStateLikeOpLowering<arc::RootOutputOp>,
     AllocStorageOpLowering,
+    CallEnvirionmentOpLowering,
     ClockGateOpLowering,
+    EnvironemtCallOpLowering,
     MemoryReadOpLowering,
     MemoryWriteOpLowering,
     ModelOpLowering,

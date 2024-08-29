@@ -281,10 +281,57 @@ def CallOp : ArcOp<"call", [
   }];
 }
 
-def MemoryOp : ArcOp<"memory", [MemoryEffects<[MemAlloc]>]> {
+class OptionalMemoryInitializerIsCompatible
+<string predicate, string mem, string init> : PredOpTrait<
+  "initializer type is compatible with memory type",
+  CPred< !strconcat("!(", predicate, ") ||",
+           "(::llvm::cast<::circt::arc::MemoryInitializerType>($",
+           init, ".getType()).isCompatible(",
+           "::llvm::cast<::circt::arc::MemoryType>($",
+           mem, ".getType())))" )>
+>;
+
+class MemoryInitializerIsCompatible<string mem, string init>
+  : OptionalMemoryInitializerIsCompatible <"true", mem, init>;
+
+def MemoryOp : ArcOp<"memory", [
+  MemoryEffects<[MemAlloc]>,
+  OptionalMemoryInitializerIsCompatible<
+    "$_op.getNumOperands() > 0", "memory", "initializer">
+]> {
   let summary = "Memory";
+  let arguments = (ins Optional<MemoryInitializerType>:$initializer);
   let results = (outs MemoryType:$memory);
-  let assemblyFormat = "type($memory) attr-dict";
+  let assemblyFormat = [{
+    type($memory) attr-dict (`initial`  $initializer^ `:` type($initializer))?
+  }];
+
+  let builders = [
+    OpBuilder<(ins "mlir::Type":$memType), [{
+      build($_builder, $_state, memType, {});
+    }]>];
+}
+
+def InitMemoryFilledOp : ArcOp<"initmem.filled", [Pure]> {
+  let arguments = (ins APIntAttr:$value, UnitAttr:$repeat);
+  let results = (outs GenericMemoryInitializerType:$result);
+  let hasCustomAssemblyFormat = true;
+}
+
+def InitMemoryRandomizedOp : ArcOp<"initmem.randomized", [Pure]> {
+  let results = (outs GenericMemoryInitializerType:$result);
+  let assemblyFormat = "attr-dict";
+}
+
+def InitializeMemoryOp : ArcOp<"initialize_memory", [
+  MemoryEffects<[MemWrite]>,
+  MemoryInitializerIsCompatible<"memory", "initializer">
+]> {
+  let arguments = (ins MemoryInitializerType:$initializer, MemoryType:$memory);
+  let assemblyFormat = [{
+   $initializer `->` $memory attr-dict
+    `:` qualified(type($initializer)) `,` qualified(type($memory))
+  }];
 }
 
 class MemoryAndDataTypesMatch<string mem, string data> : TypesMatchWith<
@@ -903,6 +950,76 @@ def VectorizeReturnOp : ArcOp<"vectorize.return", [
   let summary = "arc.vectorized terminator";
   let arguments = (ins AnyType:$value);
   let assemblyFormat = "operands attr-dict `:` qualified(type(operands))";
+}
+
+def EnvironmentCallOp : ArcOp<"environment_call", [
+    FunctionOpInterface, IsolatedFromAbove, HasParent<"mlir::ModuleOp">
+  ]> {
+
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    TypeAttrOf<FunctionType>:$function_type,
+    OptionalAttr<DictArrayAttr>:$arg_attrs,
+    OptionalAttr<DictArrayAttr>:$res_attrs
+  );
+  let regions = (region AnyRegion:$body);
+
+  let extraClassDeclaration = [{
+
+    static constexpr ::llvm::StringLiteral fillRandomizedSymName =
+      "_arc_env_fill_randomized";
+
+    static ::mlir::FunctionType getFillRandomizedType(::mlir::MLIRContext *ctx);
+
+    //===------------------------------------------------------------------===//
+    // FunctionOpInterface Methods
+    //===------------------------------------------------------------------===//
+
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
+
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+
+    /// Returns the region on the function operation that is callable.
+    Region *getCallableRegion() {  return nullptr; }
+  }];
+
+  let hasCustomAssemblyFormat = 1;
+}
+
+def CallEnvironmentOp : ArcOp<"call_environment", [
+  Pure,
+  CallOpInterface,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+
+  let arguments = (ins FlatSymbolRefAttr:$callee, Variadic<AnyType>:$operands);
+  let results = (outs Variadic<AnyType>);
+
+  let extraClassDeclaration = [{
+
+    operand_range getArgOperands() {
+      return getOperands();
+    }
+    MutableOperandRange getArgOperandsMutable() {
+      return getOperandsMutable();
+    }
+
+    mlir::CallInterfaceCallable getCallableForCallee() {
+      return (*this)->getAttrOfType<mlir::FlatSymbolRefAttr>("callee");
+    }
+
+    /// Set the callee for this operation.
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      (*this)->setAttr(getCalleeAttrName(), callee.get<mlir::SymbolRefAttr>());
+    }
+  }];
+
+  let assemblyFormat = [{
+    $callee `(` $operands `)` attr-dict `:` functional-type($operands, results)
+  }];
+
 }
 
 #endif // CIRCT_DIALECT_ARC_ARCOPS_TD

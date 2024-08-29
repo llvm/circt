@@ -634,6 +634,82 @@ LogicalResult SimStepOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
+void InitMemoryFilledOp::print(OpAsmPrinter &p) {
+  if (getRepeat())
+    p << " repeat";
+  p << " ";
+  p.printAttribute(getValueAttr());
+  p.printOptionalAttrDict((*this)->getAttrs(),
+                          /*elidedAttrs=*/{"value", "repeat"});
+}
+
+ParseResult InitMemoryFilledOp::parse(OpAsmParser &parser,
+                                      OperationState &result) {
+  IntegerAttr valueAttr;
+
+  if (!parser.parseOptionalKeyword("repeat"))
+    result.addAttribute("repeat", UnitAttr::get(parser.getContext()));
+
+  if (parser.parseAttribute(valueAttr, "value", result.attributes) ||
+      parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  result.addTypes(MemoryInitializerType::get(parser.getContext(), 0, {}));
+  return success();
+}
+
+ParseResult EnvironmentCallOp::parse(OpAsmParser &parser,
+                                     OperationState &result) {
+  auto buildFuncType =
+      [](Builder &builder, ArrayRef<Type> argTypes, ArrayRef<Type> results,
+         function_interface_impl::VariadicFlag,
+         std::string &) { return builder.getFunctionType(argTypes, results); };
+
+  return function_interface_impl::parseFunctionOp(
+      parser, result, /*allowVariadic=*/false,
+      getFunctionTypeAttrName(result.name), buildFuncType,
+      getArgAttrsAttrName(result.name), getResAttrsAttrName(result.name));
+}
+
+void EnvironmentCallOp::print(OpAsmPrinter &p) {
+  function_interface_impl::printFunctionOp(
+      p, *this, /*isVariadic=*/false, "function_type", getArgAttrsAttrName(),
+      getResAttrsAttrName());
+}
+
+FunctionType EnvironmentCallOp::getFillRandomizedType(MLIRContext *ctxt) {
+  auto i64Type = IntegerType::get(ctxt, 64);
+  auto i32Type = IntegerType::get(ctxt, 32);
+  auto storageType = StorageType::get(ctxt, 0);
+
+  std::array<Type, 4> args;
+  args[0] = storageType; // Memory reference
+  args[1] = i64Type;     // Num Words
+  args[2] = i32Type;     // Word bits
+  args[3] = i32Type;     // Stride
+
+  return FunctionType::get(ctxt, args, TypeRange{});
+}
+
+LogicalResult
+CallEnvironmentOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto referencedOp =
+      symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr());
+
+  if (!referencedOp)
+    return emitError("Cannot find declaration of environment call '")
+           << getCallee() << "'.";
+  auto envCallOp = dyn_cast<EnvironmentCallOp>(referencedOp);
+  if (!envCallOp) {
+    auto diag =
+        emitError("Referenced operation must be an 'arc.environment_call' op.");
+    diag.attachNote(referencedOp->getLoc()) << "Symbol declared here:";
+    return diag;
+  }
+  // TODO : Verify argument and return types
+  return success();
+}
+
 #include "circt/Dialect/Arc/ArcInterfaces.cpp.inc"
 
 #define GET_OP_CLASSES

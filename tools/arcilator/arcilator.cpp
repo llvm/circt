@@ -356,6 +356,7 @@ static void populateArcToLLVMPipeline(PassManager &pm) {
   if (untilReached(UntilLLVMLowering))
     return;
   pm.addPass(createConvertCombToArithPass());
+  pm.addPass(arc::createLowerMemoryInitializers());
   pm.addPass(createLowerArcToLLVMPass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
