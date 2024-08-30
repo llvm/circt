@@ -1,6 +1,6 @@
 // RUN: circt-opt %s --test-apply-lowering-options='options=emittedLineLength=100,emitBindComments' -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s
 
-// CHECK-LABEL: // external module E
+// CHECK-NOT: module E
 hw.module.extern @E(in %a: i1, in %b: i1, in %c: i1)
 hw.module.extern @Array(in %a: !hw.array<2xi4>)
 
@@ -11,19 +11,19 @@ hw.module @TESTSIMPLE(in %a: i4, in %b: i4, in %c: i2, in %cond: i1,
                         in %structA: !hw.struct<foo: i2, bar:i4>,
                         in %arrOfStructA: !hw.array<5 x struct<foo: i2>>,
                         in %array1: !hw.array<1xi1>,
-  out r0: i4, out r2: i4, out r4: i4, out r6: i4, out r7: i4, 
+  out r0: i4, out r2: i4, out r4: i4, out r6: i4, out r7: i4,
   out r8: i4, out r9: i4, out r10: i4, out r11: i4,
-  out r12: i4, out r13: i4, out r14: i4, out r15: i4, 
+  out r12: i4, out r13: i4, out r14: i4, out r15: i4,
   out r16: i1, out r17: i1, out r18: i1, out r19: i1,
-  out r20: i1, out r21: i1, out r22: i1, out r23: i1, 
+  out r20: i1, out r21: i1, out r22: i1, out r23: i1,
   out r24: i1, out r25: i1, out r26: i1, out r27: i1,
-  out r28: i1, out r29: i12, out r30: i2, out r31: i9, 
+  out r28: i1, out r29: i12, out r30: i2, out r31: i9,
   out r33: i4, out r34: i4, out r35: !hw.array<3xi4>,
-  out r36: !hw.array<6xi4>, out r37: i4, out r38: i12, 
-  out r39: !hw.struct<a: i1, b: i1>, out r40: !hw.array<4xi2>, 
-  out r41: !hw.uarray<1xi1>, out r42: !hw.struct<a: !hw.array<1xi1>>, 
-  out r43: i4, out r44: !hw.struct<foo: i2, bar: i4>, 
-  out r45: !hw.struct<foo: i2, bar: i4>, 
+  out r36: !hw.array<6xi4>, out r37: i4, out r38: i12,
+  out r39: !hw.struct<a: i1, b: i1>, out r40: !hw.array<4xi2>,
+  out r41: !hw.uarray<1xi1>, out r42: !hw.struct<a: !hw.array<1xi1>>,
+  out r43: i4, out r44: !hw.struct<foo: i2, bar: i4>,
+  out r45: !hw.struct<foo: i2, bar: i4>,
   out r46: !hw.struct<foo: i2, bar: i4>, out r47: i1
   ) attributes {sv.attributes = [#sv.attribute<"svAttr">]} {
 
@@ -95,15 +95,15 @@ hw.module @TESTSIMPLE(in %a: i4, in %b: i4, in %c: i2, in %cond: i1,
   %none = hw.constant 0 : i0
   %47 = hw.array_get %array1[%none] : !hw.array<1xi1>, i0
 
-  hw.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, 
+  hw.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17,
             %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, %30,
             %31, %33, %34, %35, %36, %37, %38, %39, %40, %41, %42, %43, %44,
             %45, %46, %47:
     i4, i4, i4, i4, i4, i4, i4, i4, i4, i4, i4, i4, i4, i1, i1, i1, i1, i1, i1,
     i1, i1, i1, i1, i1, i1, i1, i12, i2, i9, i4, i4, !hw.array<3xi4>,
     !hw.array<6xi4>, i4, i12, !hw.struct<a: i1, b: i1>, !hw.array<4xi2>,
-    !hw.uarray<1xi1>, !hw.struct<a: !hw.array<1xi1>>, i4, 
-    !hw.struct<foo: i2, bar: i4>, !hw.struct<foo: i2, bar: i4>, 
+    !hw.uarray<1xi1>, !hw.struct<a: !hw.array<1xi1>>, i4,
+    !hw.struct<foo: i2, bar: i4>, !hw.struct<foo: i2, bar: i4>,
     !hw.struct<foo: i2, bar: i4>, i1
 }
 
@@ -549,7 +549,7 @@ hw.module @zeroElements(in %in0: i0, in %in1: i32, out out0: !hw.struct<z1: i0, 
   // CHECK-SAME: _GEN = '{};
   // CHECK-NEXT: wire struct packed {logic [31:0] d1; /*z: Zero Width;*/ } _GEN_0 = '{d1: in1};
   //      CHECK: wire
-  // CHECK-NEXT:   struct packed {/*z1: Zero Width;*/ logic [31:0] a; /*z2: Zero Width;*/ logic [31:0] b; /*c: Zero Width;*/ struct packed {logic [31:0] d1; /*z: Zero Width;*/ } d; } 
+  // CHECK-NEXT:   struct packed {/*z1: Zero Width;*/ logic [31:0] a; /*z2: Zero Width;*/ logic [31:0] b; /*c: Zero Width;*/ struct packed {logic [31:0] d1; /*z: Zero Width;*/ } d; }
   // CHECK-NEXT:   _GEN_1 = '{a: in1, b: in1, d: _GEN_0};
   // CHECK-NEXT: assign out0 = '{a: in1, b: _GEN_1.b, d: _GEN_1.d};
   %0 = hw.struct_create (%in0) : !hw.struct<z: i0>
@@ -584,9 +584,9 @@ hw.module @TestZeroStructInstance(in %structZero: !hw.struct<>, in %structZeroNe
 // CHECK-NEXT:   // output /*Zero Width*/ out2
 // CHECK-NEXT:  );
 
-// CHECK:   assign out = arg1[/*Zero width*/ 1'b0];	
-// CHECK-NEXT:   assign out1 = arg1[/*Zero width*/ 1'b0];	
-// CHECK-NEXT:   // Zero width: assign out2 = arg0;	
+// CHECK:   assign out = arg1[/*Zero width*/ 1'b0];
+// CHECK-NEXT:   assign out1 = arg1[/*Zero width*/ 1'b0];
+// CHECK-NEXT:   // Zero width: assign out2 = arg0;
 
 hw.module @testZeroArrayGet(in %arg0: i0, in %arg1 : !hw.array<1xi32>, out out: i32, out out1: i32, out out2: i0) {
   // Using an expression as index.
@@ -1081,7 +1081,7 @@ hw.module @renameKeyword(in %a: !hw.struct<repeat: i1, repeat_0: i1>, out r1: !h
 // CHECK-NEXT:  inout  struct packed {logic repeat_0; logic repeat_0_0; } a,
 // CHECK-NEXT:  output                                                    r1,
 // CHECK-NEXT:                                                            r2,
-// CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_0; } r3, 
+// CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_0; } r3,
 // CHECK-NEXT:                                                            r4
 // CHECK-NEXT:  );
 hw.module @useRenamedStruct(inout %a: !hw.struct<repeat: i1, repeat_0: i1>, out r1: i1, out r2: i1, out r3: !hw.struct<repeat: i1, repeat_0: i1>, out r4: !hw.struct<repeat: i1, repeat_0: i1>) {

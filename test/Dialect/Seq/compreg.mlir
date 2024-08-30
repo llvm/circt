@@ -2,9 +2,8 @@
 // RUN: circt-opt %s -verify-diagnostics --lower-seq-to-sv | circt-opt -verify-diagnostics | FileCheck %s --check-prefix=SV
 // RUN: circt-opt %s -verify-diagnostics --lower-seq-to-sv='lower-to-always-ff=false' | FileCheck %s --check-prefix=ALWAYS
 hw.module @top(in %clk: !seq.clock, in %rst: i1, in %i: i32, in %s: !hw.struct<foo: i32>) {
-  %rv = hw.constant 0 : i32
 
-  %r0 = seq.compreg %i, %clk reset %rst, %rv : i32
+  %r0 = seq.compreg %i, %clk reset %rst, %c0_i32 : i32
   seq.compreg %i, %clk : i32
   // CHECK: %{{.+}} = seq.compreg %i, %clk reset %rst, %c0_i32  : i32
   // CHECK: %{{.+}} = seq.compreg %i, %clk : i32
@@ -73,12 +72,23 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1, in %i: i32, in %s: !hw.struct<f
   // SV: %bar = sv.reg sym @reg1
   // SV: sv.reg sym @reg2
 
-  %withPowerOn = seq.compreg sym @withPowerOn %i, %clk reset %rst, %rv powerOn %rv : i32
-  // SV: %withPowerOn = sv.reg init %c0_i32 sym @withPowerOn : !hw.inout<i32>
+  %rv = seq.initial {
+    %c0_i32_0 = hw.constant 0 : i32
+    seq.yield %c0_i32_0 : i32
+  } : !seq.immutable<i32>
+
+  %c0_i32 = hw.constant 0 : i32
+
+  %withinitial = seq.compreg sym @withinitial %i, %clk reset %rst, %c0_i32 initial %rv : i32
+  // SV: %withinitial = sv.reg init %{{c0_i32.*}} sym @withinitial : !hw.inout<i32>
 }
 
 hw.module @top_ce(in %clk: !seq.clock, in %rst: i1, in %ce: i1, in %i: i32) {
   %rv = hw.constant 0 : i32
+  %init = seq.initial {
+    %c0_i32 = hw.constant 0 : i32
+    seq.yield %c0_i32 : i32
+  } : !seq.immutable<i32>
 
   %r0 = seq.compreg.ce %i, %clk, %ce reset %rst, %rv : i32
   // CHECK: %r0 = seq.compreg.ce %i, %clk, %ce reset %rst, %c0_i32  : i32
@@ -103,8 +113,8 @@ hw.module @top_ce(in %clk: !seq.clock, in %rst: i1, in %ce: i1, in %i: i32) {
   // ALWAYS:   }
   // ALWAYS: }
 
-  %withPowerOn = seq.compreg.ce sym @withPowerOn %i, %clk, %ce reset %rst, %rv powerOn %rv : i32
-  // SV: %withPowerOn = sv.reg init %c0_i32 sym @withPowerOn : !hw.inout<i32>
+  %withinitial = seq.compreg.ce sym @withinitial %i, %clk, %ce reset %rst, %rv initial %init : i32
+  // SV: %withinitial = sv.reg init %{{c0_i32.*}} sym @withinitial : !hw.inout<i32>
 }
 
 // SV-LABEL: @reg_of_clock_type
@@ -125,4 +135,20 @@ hw.module @reg_of_clock_type(in %clk: !seq.clock, in %rst: i1, in %i: !seq.clock
 
   // SV: hw.output [[REG1_VAL]] : i1
   hw.output %r1 : !seq.clock
+}
+
+hw.module @init_with_call(in %clk: !seq.clock, in %rst: i1, in %i: i32, in %s: !hw.struct<foo: i32>) {
+  // SV:     sv.initial {
+  // SV-NEXT:   %1 = sv.system "random"() : () -> i32
+  // SV-NEXT:   sv.bpassign %reg, %1 : i32
+  // SV-NEXT: }
+  %init = seq.initial {
+    %rand = sv.system "random"() : () -> i32
+    seq.yield %rand : i32
+  } : !seq.immutable<i32>
+
+  // SV: %reg = sv.reg : !hw.inout<i32>
+  %c0_i32 = hw.constant 0 : i32
+
+  %reg = seq.compreg %i, %clk initial %init : i32
 }

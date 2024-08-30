@@ -874,24 +874,26 @@ public:
 
     // Check for initial values which must be emitted before the state in
     // btor2
-    Value pov = reg.getPowerOnValue();
+    auto init = reg.getInitialValue();
 
     // Generate state instruction (represents the register declaration)
     genState(reg, w, regName);
 
-    if (pov) {
-      // Check that the powerOn value is a non-null constant
-      if (!isa_and_nonnull<hw::ConstantOp>(pov.getDefiningOp()))
+    if (init) {
+      // Check that the initial value is a non-null constant
+      auto initialConstant = circt::seq::unwrapImmutableValue(init)
+                                 .getDefiningOp<hw::ConstantOp>();
+      if (!initialConstant)
         reg->emitError("PowerOn Value must be constant!!");
 
       // Visit the powerOn Value to generate the constant
-      dispatchTypeOpVisitor(pov.getDefiningOp());
+      dispatchTypeOpVisitor(initialConstant);
 
       // Add it to the list of visited operations
-      handledOps.insert(pov.getDefiningOp());
+      handledOps.insert(initialConstant);
 
       // Finally generate the init statement
-      genInit(reg, pov, w);
+      genInit(reg, initialConstant, w);
     }
 
     // Record the operation for future `next` instruction generation
@@ -914,7 +916,8 @@ public:
         .Case<sv::MacroDefOp, sv::MacroDeclOp, sv::VerbatimOp,
               sv::VerbatimExprOp, sv::VerbatimExprSEOp, sv::IfOp, sv::IfDefOp,
               sv::IfDefProceduralOp, sv::AlwaysOp, sv::AlwaysCombOp,
-              sv::AlwaysFFOp, seq::FromClockOp, hw::OutputOp, hw::HWModuleOp>(
+              seq::InitialOp, sv::AlwaysFFOp, seq::FromClockOp, seq::InitialOp,
+              seq::YieldOp, hw::OutputOp, hw::HWModuleOp>(
             [&](auto expr) { ignore(op); })
 
         // Make sure that the design only contains one clock

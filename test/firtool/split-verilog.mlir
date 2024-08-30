@@ -50,7 +50,6 @@ sv.verbatim "// Bar" {output_file = #hw.output_file<"custom2.sv", excludeFromFil
 // LIST:      {{^}}foo.sv{{$}}
 // LIST-NEXT: {{^}}bar.sv{{$}}
 // LIST-NEXT: {{^}}usb.sv{{$}}
-// LIST-NEXT: {{^}}extern_modules.sv{{$}}
 // LIST-NEXT: {{^}}inout_3.sv{{$}}
 // LIST-NEXT: {{^}}custom1.sv{{$}}
 // LIST-NOT:  custom2.sv
@@ -111,10 +110,10 @@ sv.verbatim "// Bar" {output_file = #hw.output_file<"custom2.sv", excludeFromFil
 // VERILOG:       endmodule
 // VERILOG-LABEL: interface usb;
 // VERILOG:       endinterface
-// VERILOG:       // external module pll
-// VERILOG:       // external module inout_0
-// VERILOG:       // external module inout_1
-// VERILOG:       // external module inout_2
+// VERILOG-NOT:   module pll
+// VERILOG-NOT:   module inout_0
+// VERILOG-NOT:   module inout_1
+// VERILOG-NOT:   module inout_2
 // VERILOG-LABEL: FILE "custom1.sv"
 // VERILOG:       // Foo
 // VERILOG-LABEL: FILE "custom2.sv"

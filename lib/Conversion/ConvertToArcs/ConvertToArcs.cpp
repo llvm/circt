@@ -26,8 +26,25 @@ using llvm::MapVector;
 static bool isArcBreakingOp(Operation *op) {
   return op->hasTrait<OpTrait::ConstantLike>() ||
          isa<hw::InstanceOp, seq::CompRegOp, MemoryOp, ClockedOpInterface,
-             seq::ClockGateOp, sim::DPICallOp>(op) ||
+             seq::InitialOp, seq::ClockGateOp, sim::DPICallOp>(op) ||
          op->getNumResults() > 1;
+}
+
+static LogicalResult convertInitialValue(seq::CompRegOp reg,
+                                         SmallVectorImpl<Value> &values) {
+  if (!reg.getInitialValue())
+    return values.push_back({}), success();
+
+  auto init = circt::seq::unwrapImmutableValue(reg.getInitialValue());
+  if (!init.getDefiningOp<hw::ConstantOp>())
+    return reg.emitError() << "non-constant initial value not supported";
+
+  // Clone the initial value to the top-level.
+  auto *op = init.getDefiningOp()->clone();
+  reg->getBlock()->getOperations().insert(Block::iterator(reg), op);
+  auto result = op->getResult(0);
+  values.push_back(result);
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -83,7 +100,12 @@ LogicalResult Converter::runOnModule(HWModuleOp module) {
   // Find all arc-breaking operations in this module and assign them an index.
   arcBreakers.clear();
   arcBreakerIndices.clear();
+  SmallVector<seq::InitialOp> initialOps;
   for (Operation &op : *module.getBodyBlock()) {
+    if (isa<seq::InitialOp>(&op)) {
+      initialOps.push_back(cast<seq::InitialOp>(&op));
+      continue;
+    }
     if (op.getNumRegions() > 0)
       return op.emitOpError("has regions; not supported by ConvertToArcs");
     if (!isArcBreakingOp(&op) && !isa<hw::OutputOp>(&op))
@@ -109,6 +131,10 @@ LogicalResult Converter::runOnModule(HWModuleOp module) {
   extractArcs(module);
   if (failed(absorbRegs(module)))
     return failure();
+
+  for (auto init : initialOps)
+    init->erase();
+
   return success();
 }
 
@@ -308,7 +334,8 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
         }
       }
 
-      initialValues.push_back(regOp.getPowerOnValue());
+      if (failed(convertInitialValue(regOp, initialValues)))
+        return failure();
 
       absorbedRegs.push_back(regOp);
       // If we absorb a register into the arc, the arc effectively produces that
@@ -421,7 +448,8 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
         types.push_back(regOp.getType());
         outputs.push_back(block->addArgument(regOp.getType(), regOp.getLoc()));
         names.push_back(regOp->getAttrOfType<StringAttr>("name"));
-        initialValues.push_back(regOp.getPowerOnValue());
+        if (failed(convertInitialValue(regOp, initialValues)))
+          return failure();
       }
       regToOutputMapping.push_back(it->second);
     }

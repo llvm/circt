@@ -128,3 +128,19 @@ firrtl.circuit "EmptyOutputDir2" {
   }
   firrtl.module @EmptyOutputDir2() {}
 }
+
+// An external module should get an output file if it doesn't have one.  This
+// external module may be implemented by something else, e.g., an inline black
+// box annotation.
+//
+// See: https://github.com/llvm/circt/issues/7538
+//
+// CHECK-LABEL: firrtl.circuit "ExtModule"
+firrtl.circuit "ExtModule" {
+  // CHECK: firrtl.extmodule private @Foo
+  // CHECK-SAME: output_file = #hw.output_file<"path{{/|\\\\}}">
+  firrtl.extmodule private @Foo()
+  firrtl.module @ExtModule() attributes {output_file = #hw.output_file<"path/">} {
+    firrtl.instance foo @Foo()
+  }
+}

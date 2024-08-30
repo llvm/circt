@@ -30,8 +30,9 @@ using namespace om;
 
 namespace {
 struct PathVisitor {
-  PathVisitor(hw::InstanceGraph &instanceGraph, hw::InnerRefNamespace &irn)
-      : instanceGraph(instanceGraph), irn(irn) {}
+  PathVisitor(hw::InstanceGraph &instanceGraph, hw::InnerRefNamespace &irn,
+              std::function<StringAttr(Operation *)> &getOpName)
+      : instanceGraph(instanceGraph), irn(irn), getOpNameFallback(getOpName) {}
 
   StringAttr field;
   LogicalResult processPath(Location loc, hw::HierPathOp hierPathOp,
@@ -44,6 +45,7 @@ struct PathVisitor {
   LogicalResult run(ModuleOp module);
   hw::InstanceGraph &instanceGraph;
   hw::InnerRefNamespace &irn;
+  std::function<StringAttr(Operation *)> getOpNameFallback;
 };
 } // namespace
 
@@ -118,6 +120,8 @@ LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
     auto *op = target.getOp();
     // Get the verilog name of the target.
     auto verilogName = op->getAttrOfType<StringAttr>("hw.verilogName");
+    if (!verilogName && getOpNameFallback)
+      verilogName = getOpNameFallback(op);
     if (!verilogName) {
       auto diag = emitError(loc, "component does not have verilog name");
       diag.attachNote(op->getLoc()) << "component here";
@@ -147,6 +151,8 @@ LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
       auto currentModule = innerRef.getModule();
       // Get the verilog name of the target.
       auto verilogName = op->getAttrOfType<StringAttr>("hw.verilogName");
+      if (!verilogName && getOpNameFallback)
+        verilogName = getOpNameFallback(op);
       if (!verilogName) {
         auto diag = emitError(loc, "component does not have verilog name");
         diag.attachNote(op->getLoc()) << "component here";
@@ -299,7 +305,11 @@ LogicalResult PathVisitor::run(ModuleOp module) {
 namespace {
 struct FreezePathsPass
     : public circt::om::impl::FreezePathsBase<FreezePathsPass> {
+  FreezePathsPass(std::function<StringAttr(Operation *)> getOpName)
+      : getOpName(std::move(getOpName)) {}
   void runOnOperation() override;
+
+  std::function<StringAttr(Operation *)> getOpName;
 };
 } // namespace
 
@@ -310,10 +320,11 @@ void FreezePathsPass::runOnOperation() {
   auto &symbolTable = getAnalysis<SymbolTable>();
   hw::InnerSymbolTableCollection collection(module);
   hw::InnerRefNamespace irn{symbolTable, collection};
-  if (failed(PathVisitor(instanceGraph, irn).run(module)))
+  if (failed(PathVisitor(instanceGraph, irn, getOpName).run(module)))
     signalPassFailure();
 }
 
-std::unique_ptr<mlir::Pass> circt::om::createFreezePathsPass() {
-  return std::make_unique<FreezePathsPass>();
+std::unique_ptr<mlir::Pass> circt::om::createFreezePathsPass(
+    std::function<StringAttr(Operation *)> getOpName) {
+  return std::make_unique<FreezePathsPass>(getOpName);
 }

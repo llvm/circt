@@ -315,6 +315,13 @@ static ResultTy transformReduce(MLIRContext *context, RangeTy &&r,
                          transform);
 }
 
+//===----------------------------------------------------------------------===//
+// File utilities
+//===----------------------------------------------------------------------===//
+
+/// Truncate `a` to the common prefix of `a` and `b`.
+void makeCommonPrefix(SmallString<64> &a, StringRef b);
+
 } // namespace firrtl
 } // namespace circt
 

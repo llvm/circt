@@ -10,8 +10,10 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Support/Debug.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -55,21 +57,6 @@ static void tryMakeRelative(StringRef outputDir,
                           moduleOutputDir.begin() + outputDir.size());
 }
 
-static void makeCommonPrefix(SmallString<64> &a, StringRef b) {
-  // truncate 'a' to the common prefix of 'a' and 'b'.
-  size_t i = 0;
-  size_t e = std::min(a.size(), b.size());
-  for (; i < e; ++i)
-    if (a[i] != b[i])
-      break;
-  a.resize(i);
-
-  // truncate 'a' so it ends on a directory seperator.
-  auto sep = path::get_separator();
-  while (!a.empty() && !a.ends_with(sep))
-    a.pop_back();
-}
-
 static void makeCommonPrefix(StringRef outputDir, SmallString<64> &a,
                              OutputFileAttr attr) {
   if (attr) {
@@ -98,6 +85,7 @@ struct AssignOutputDirsPass
 } // namespace
 
 void AssignOutputDirsPass::runOnOperation() {
+  LLVM_DEBUG(debugPassHeader(this) << "\n");
   SmallString<64> outputDir(outputDirOption);
   if (fs::make_absolute(outputDir)) {
     emitError(mlir::UnknownLoc::get(&getContext()),
@@ -112,12 +100,16 @@ void AssignOutputDirsPass::runOnOperation() {
 
   bool changed = false;
 
+  LLVM_DEBUG(llvm::dbgs() << "Updating modules:\n");
   DenseSet<InstanceGraphNode *> visited;
   for (auto *root : getAnalysis<InstanceGraph>()) {
     for (auto *node : llvm::inverse_post_order_ext(root, visited)) {
-      auto module = dyn_cast<FModuleOp>(node->getModule().getOperation());
-      if (!module || module->getAttrOfType<hw::OutputFileAttr>("output_file") ||
-          module.isPublic())
+      FModuleLike moduleLike =
+          dyn_cast<FModuleLike>(node->getModule().getOperation());
+      if (!moduleLike || !isa<FModuleOp, FExtModuleOp>(moduleLike))
+        continue;
+      if (moduleLike->getAttrOfType<hw::OutputFileAttr>("output_file") ||
+          moduleLike.isPublic())
         continue;
 
       // Get the output directory of the first parent, and then fold the current
@@ -147,14 +139,19 @@ void AssignOutputDirsPass::runOnOperation() {
       if (!moduleOutputDir.empty()) {
         auto f =
             hw::OutputFileAttr::getAsDirectory(&getContext(), moduleOutputDir);
-        module->setAttr("output_file", f);
+        moduleLike->setAttr("output_file", f);
         changed = true;
+        LLVM_DEBUG({
+          llvm::dbgs() << "  - name: " << moduleLike.getName() << "\n"
+                       << "    directory: " << f.getFilename() << "\n";
+        });
       }
     }
   }
 
   if (!changed)
     markAllAnalysesPreserved();
+  LLVM_DEBUG(debugFooter() << "\n");
 }
 
 std::unique_ptr<mlir::Pass>

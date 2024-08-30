@@ -1,6 +1,7 @@
 import esiaccel as esi
 
 import sys
+import time
 
 platform = sys.argv[1]
 acc = esi.AcceleratorConnection(platform, sys.argv[2])
@@ -87,10 +88,28 @@ add_amt = mod_info.constants["add_amt"].value
 ################################################################################
 
 data = 10234
+# Blocking write interface
 send.write(data)
-got_data = False
 resp = recv.read()
 
+print(f"data: {data}")
+print(f"resp: {resp}")
+assert resp == data + add_amt
+
+# Non-blocking write interface
+data = 10235
+nb_wr_start = time.time()
+
+# Timeout of 5 seconds
+nb_timeout = nb_wr_start + 5
+write_succeeded = False
+while time.time() < nb_timeout:
+  write_succeeded = send.try_write(data)
+  if write_succeeded:
+    break
+
+assert (write_succeeded, "Non-blocking write failed")
+resp = recv.read()
 print(f"data: {data}")
 print(f"resp: {resp}")
 assert resp == data + add_amt

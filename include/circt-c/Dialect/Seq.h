@@ -24,6 +24,15 @@ MLIR_CAPI_EXPORTED bool seqTypeIsAClock(MlirType type);
 /// Creates an seq clock type
 MLIR_CAPI_EXPORTED MlirType seqClockTypeGet(MlirContext ctx);
 
+/// If the type is an immutable type
+MLIR_CAPI_EXPORTED bool seqTypeIsAImmutable(MlirType type);
+
+/// Creates a seq immutable type
+MLIR_CAPI_EXPORTED MlirType seqImmutableTypeGet(MlirType type);
+
+/// Creates a seq immutable type
+MLIR_CAPI_EXPORTED MlirType seqImmutableTypeGetInnerType(MlirType type);
+
 #ifdef __cplusplus
 }
 #endif

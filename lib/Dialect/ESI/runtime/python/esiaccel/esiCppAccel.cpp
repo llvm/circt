@@ -232,11 +232,18 @@ PYBIND11_MODULE(esiCppAccel, m) {
                              py::return_value_policy::reference);
 
   py::class_<WriteChannelPort, ChannelPort>(m, "WriteChannelPort")
-      .def("write", [](WriteChannelPort &p, py::bytearray &data) {
+      .def("write",
+           [](WriteChannelPort &p, py::bytearray &data) {
+             py::buffer_info info(py::buffer(data).request());
+             std::vector<uint8_t> dataVec((uint8_t *)info.ptr,
+                                          (uint8_t *)info.ptr + info.size);
+             p.write(dataVec);
+           })
+      .def("tryWrite", [](WriteChannelPort &p, py::bytearray &data) {
         py::buffer_info info(py::buffer(data).request());
         std::vector<uint8_t> dataVec((uint8_t *)info.ptr,
                                      (uint8_t *)info.ptr + info.size);
-        p.write(dataVec);
+        return p.tryWrite(dataVec);
       });
   py::class_<ReadChannelPort, ChannelPort>(m, "ReadChannelPort")
       .def(
@@ -329,6 +336,13 @@ PYBIND11_MODULE(esiCppAccel, m) {
             return acc;
           },
           py::return_value_policy::reference)
-      .def_property_readonly("type_table", &Manifest::getTypeTable)
+      .def_property_readonly("type_table",
+                             [](Manifest &m) {
+                               std::vector<py::object> ret;
+                               std::ranges::transform(m.getTypeTable(),
+                                                      std::back_inserter(ret),
+                                                      getPyType);
+                               return ret;
+                             })
       .def_property_readonly("module_infos", &Manifest::getModuleInfos);
 }

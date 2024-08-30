@@ -214,6 +214,8 @@ std::unique_ptr<mlir::Pass> createLowerDPIPass();
 std::unique_ptr<mlir::Pass>
 createAssignOutputDirsPass(mlir::StringRef outputDir = "");
 
+std::unique_ptr<mlir::Pass> createCheckLayers();
+
 std::unique_ptr<mlir::Pass> createCheckRecursiveInstantiation();
 
 /// Generate the code for registering passes.
