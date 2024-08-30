@@ -97,7 +97,7 @@ print(f"resp: {resp}")
 assert resp == data + add_amt
 
 # Non-blocking write interface
-data = 112233
+data = 10235
 nb_wr_start = time.time()
 
 # Timeout of 5 seconds
