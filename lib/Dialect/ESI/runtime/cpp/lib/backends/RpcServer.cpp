@@ -124,6 +124,10 @@ class RpcServerWritePort : public WriteChannelPort {
 public:
   RpcServerWritePort(Type *type) : WriteChannelPort(type) {}
   void write(const MessageData &data) override { writeQueue.push(data); }
+  bool tryWrite(const MessageData &data) override {
+    writeQueue.push(data);
+    return true;
+  }
 
   utils::TSQueue<MessageData> writeQueue;
 };

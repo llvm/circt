@@ -203,6 +203,11 @@ public:
                                ". Details: " + sendStatus.error_details());
   }
 
+  bool tryWrite(const MessageData &data) override {
+    write(data);
+    return true;
+  }
+
 protected:
   ChannelServer::Stub *rpcClient;
   /// The channel description as provided by the server.
