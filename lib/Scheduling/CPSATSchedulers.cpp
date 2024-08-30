@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Scheduling/CPSATSchedulers.h"
 #include "circt/Scheduling/Algorithms.h"
 
 #include "mlir/IR/Operation.h"
@@ -38,8 +39,8 @@ using llvm::format;
 /// https://github.com/google/or-tools/blob/stable/examples/python/rcpsp_sat.py
 /// but a gentler introduction (though with differing formulation) is
 /// https://python-mip.readthedocs.io/en/latest/examples.html
-LogicalResult scheduling::scheduleCPSAT(SharedOperatorsProblem &prob,
-                                        Operation *lastOp) {
+LogicalResult CPSATScheduler::schedule(SharedOperatorsProblem &prob,
+                                       Operation *lastOp) {
   Operation *containingOp = prob.getContainingOp();
   if (!prob.hasOperation(lastOp))
     return containingOp->emitError("problem does not include last operation");
