@@ -328,6 +328,12 @@ public:
 /// This class models the accumulation of physical propagation delays on
 /// combinational paths along SSA dependences.
 ///
+/// This class contains a field `targetCycleTime` which corresponds to the
+/// desired clock period after scheduling. The schedulers implemented use the
+/// target cycle time as a strict limit. Alternative approaches may be
+/// considered; some commercial HLS tools may may exceed this limit under
+/// certain circumstances.
+///
 /// Each operator type is annotated with estimated values for incoming and
 /// outgoing delays. Combinational operators (zero-latency, no internal
 /// registers) have only a single delay; this important special case is modeled
@@ -347,6 +353,8 @@ protected:
 private:
   OperatorTypeProperty<float> incomingDelay, outgoingDelay;
   OperationProperty<float> startTimeInCycle;
+
+  float targetCycleTime;
 
 public:
   /// The incoming delay denotes the propagation time from the operand inputs to
@@ -378,6 +386,11 @@ public:
     startTimeInCycle[op] = time;
   }
   void clearStartTimeInCycle() { startTimeInCycle.clear(); }
+
+  /// The target cycle time corresponds to the desired clock period after
+  /// scheduling.
+  float getTargetCycleTime() { return targetCycleTime; }
+  void setTargetCycleTime(float cycleTime) { targetCycleTime = cycleTime; }
 
   virtual PropertyStringVector getProperties(Operation *op) override;
   virtual PropertyStringVector getProperties(OperatorType opr) override;
