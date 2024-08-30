@@ -39,7 +39,9 @@ OperationCosts ArcCostModel::computeOperationCost(Operation *op) {
 
   OperationCosts costs;
 
-  if (isa<circt::comb::ConcatOp>(op))
+  if (isa<arc::VectorizeReturnOp>(op) || isa<arc::OutputOp>(op))
+    costs.normalCost = size_t(OperationCost::NOCOST);
+  else if (isa<circt::comb::ConcatOp>(op))
     costs.normalCost = size_t(OperationCost::CONCATCOST);
   else if (isa<circt::comb::ExtractOp>(op))
     costs.normalCost = size_t(OperationCost::EXTRACTCOST);
