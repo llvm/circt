@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Sim/SimTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/FoldUtils.h"
 #include "mlir/IR/Builders.h"
@@ -81,6 +82,20 @@ parseOptionalTypeMatch(OpAsmParser &parser, Type refType,
 
 static void printOptionalTypeMatch(OpAsmPrinter &p, Operation *op, Type refType,
                                    Value operand, Type type) {
+  // Nothing to do - this is strictly an implicit parsing helper.
+}
+
+static ParseResult parseOptionalImmutableTypeMatch(
+    OpAsmParser &parser, Type refType,
+    std::optional<OpAsmParser::UnresolvedOperand> operand, Type &type) {
+  if (operand)
+    type = seq::ImmutableType::get(refType);
+  return success();
+}
+
+static void printOptionalImmutableTypeMatch(OpAsmPrinter &p, Operation *op,
+                                            Type refType, Value operand,
+                                            Type type) {
   // Nothing to do - this is strictly an implicit parsing helper.
 }
 
@@ -1002,6 +1017,63 @@ FirMemory::FirMemory(hw::HWModuleGeneratedOp op) {
   initFilename = op->getAttrOfType<StringAttr>("initFilename").getValue();
   initIsBinary = op->getAttrOfType<BoolAttr>("initIsBinary").getValue();
   initIsInline = op->getAttrOfType<BoolAttr>("initIsInline").getValue();
+}
+
+LogicalResult InitialOp::verify() {
+  auto *terminator = this->getBody().front().getTerminator();
+  if (terminator->getOperands().size() != getNumResults())
+    return emitError() << "result type doesn't match with the terminator";
+  for (auto [lhs, rhs] :
+       llvm::zip(terminator->getOperands().getTypes(), getResultTypes())) {
+    if (cast<seq::ImmutableType>(rhs).getInnerType() != lhs)
+      return emitError() << cast<seq::ImmutableType>(rhs).getInnerType()
+                         << " is expected but got " << lhs;
+  }
+
+  return success();
+}
+void InitialOp::build(OpBuilder &builder, OperationState &result,
+                      TypeRange resultTypes, std::function<void()> ctor) {
+  OpBuilder::InsertionGuard guard(builder);
+
+  builder.createBlock(result.addRegion());
+  SmallVector<Type> types;
+  for (auto t : resultTypes)
+    types.push_back(seq::ImmutableType::get(t));
+
+  result.addTypes(types);
+
+  if (ctor)
+    ctor();
+}
+
+TypedValue<seq::ImmutableType>
+circt::seq::createConstantInitialValue(OpBuilder builder, Location loc,
+                                       mlir::IntegerAttr attr) {
+  auto initial = builder.create<seq::InitialOp>(loc, attr.getType(), [&]() {
+    auto constant = builder.create<hw::ConstantOp>(loc, attr);
+    builder.create<seq::YieldOp>(loc, ArrayRef<Value>{constant});
+  });
+  return cast<TypedValue<seq::ImmutableType>>(initial->getResult(0));
+}
+
+mlir::TypedValue<seq::ImmutableType>
+circt::seq::createConstantInitialValue(OpBuilder builder, Operation *op) {
+  assert(op->getNumResults() == 1 &&
+         op->hasTrait<mlir::OpTrait::ConstantLike>());
+  auto initial =
+      builder.create<seq::InitialOp>(op->getLoc(), op->getResultTypes(), [&]() {
+        auto clonedOp = builder.clone(*op);
+        builder.create<seq::YieldOp>(op->getLoc(), clonedOp->getResults());
+      });
+  return cast<mlir::TypedValue<seq::ImmutableType>>(initial.getResult(0));
+}
+
+Value circt::seq::unwrapImmutableValue(TypedValue<seq::ImmutableType> value) {
+  auto resultNum = cast<OpResult>(value).getResultNumber();
+  auto initialOp = value.getDefiningOp<seq::InitialOp>();
+  assert(initialOp);
+  return initialOp.getBodyBlock()->getTerminator()->getOperand(resultNum);
 }
 
 //===----------------------------------------------------------------------===//
