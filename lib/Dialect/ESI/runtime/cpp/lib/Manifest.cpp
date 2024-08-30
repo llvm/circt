@@ -136,8 +136,8 @@ static AppIDPath parseIDPath(const nlohmann::json &jsonIDPath) {
 }
 
 static ServicePortDesc parseServicePort(const nlohmann::json &jsonPort) {
-  return ServicePortDesc{jsonPort.at("outer_sym").get<std::string>(),
-                         jsonPort.at("inner").get<std::string>()};
+  return ServicePortDesc{jsonPort.at("serviceName").get<std::string>(),
+                         jsonPort.at("port").get<std::string>()};
 }
 
 /// Convert the json value to a 'std::any', which can be exposed outside of this
@@ -231,17 +231,17 @@ Manifest::Impl::Impl(Context &ctxt, const std::string &manifestStr)
     populateTypes(manifestJson.at("types"));
 
     // Populate the symbol info cache.
-    for (auto &mod : manifestJson.at("symbols")) {
+    for (auto &mod : manifestJson.at("modules")) {
       ModuleInfo info;
-      if (mod.contains("sym_info"))
-        parseModuleMetadata(info, mod.at("sym_info"));
-      if (mod.contains("sym_consts"))
-        parseModuleConsts(info, mod.at("sym_consts"));
+      if (mod.contains("symInfo"))
+        parseModuleMetadata(info, mod.at("symInfo"));
+      if (mod.contains("symConsts"))
+        parseModuleConsts(info, mod.at("symConsts"));
       symbolInfoCache.insert(make_pair(mod.at("symbol"), info));
     }
   } catch (const std::exception &e) {
     std::string msg = "malformed manifest: " + std::string(e.what());
-    if (manifestJson.at("api_version") == 0)
+    if (manifestJson.at("apiVersion") == 0)
       msg += " (schema version 0 is not considered stable)";
     throw std::runtime_error(msg);
   }
@@ -252,7 +252,7 @@ Manifest::Impl::buildAccelerator(AcceleratorConnection &acc) const {
   ServiceTable activeSvcs;
 
   // Get the initial active services table. Update it as we descend down.
-  auto svcDecls = manifestJson.at("service_decls");
+  auto svcDecls = manifestJson.at("serviceDeclarations");
   scanServiceDecls(acc, svcDecls, activeSvcs);
 
   // Get the services instantiated at the top level.
@@ -270,7 +270,7 @@ Manifest::Impl::buildAccelerator(AcceleratorConnection &acc) const {
 
 std::optional<ModuleInfo>
 Manifest::Impl::getModInfo(const nlohmann::json &json) const {
-  auto instOfIter = json.find("inst_of");
+  auto instOfIter = json.find("instOf");
   if (instOfIter == json.end())
     return std::nullopt;
   auto f = symbolInfoCache.find(instOfIter.value());
@@ -283,7 +283,7 @@ void Manifest::Impl::scanServiceDecls(AcceleratorConnection &acc,
                                       const nlohmann::json &svcDecls,
                                       ServiceTable &activeServices) const {
   for (auto &svcDecl : svcDecls) {
-    if (auto f = svcDecl.find("type_name"); f != svcDecl.end()) {
+    if (auto f = svcDecl.find("serviceName"); f != svcDecl.end()) {
       // Get the implementation details.
       ServiceImplDetails svcDetails;
       for (auto &detail : svcDecl.items())
@@ -317,7 +317,7 @@ std::unique_ptr<Instance>
 Manifest::Impl::getChildInstance(AppIDPath idPath, AcceleratorConnection &acc,
                                  ServiceTable activeServices,
                                  const nlohmann::json &child) const {
-  AppID childID = parseID(child.at("app_id"));
+  AppID childID = parseID(child.at("appID"));
   idPath.push_back(childID);
 
   std::vector<services::Service *> services =
@@ -325,7 +325,7 @@ Manifest::Impl::getChildInstance(AppIDPath idPath, AcceleratorConnection &acc,
 
   auto children = getChildInstances(idPath, acc, activeServices, child);
   auto ports = getBundlePorts(acc, idPath, activeServices, child);
-  return make_unique<Instance>(parseID(child.at("app_id")), getModInfo(child),
+  return make_unique<Instance>(parseID(child.at("appID")), getModInfo(child),
                                std::move(children), services, ports);
 }
 
@@ -339,12 +339,12 @@ Manifest::Impl::getService(AppIDPath idPath, AcceleratorConnection &acc,
 
   // Get all the client info, including the implementation details.
   HWClientDetails clientDetails;
-  for (auto &client : svcJson.at("client_details")) {
+  for (auto &client : svcJson.at("clientDetails")) {
     HWClientDetail clientDetail;
     for (auto &detail : client.items()) {
       if (detail.key() == "relAppIDPath")
         clientDetail.relPath = parseIDPath(detail.value());
-      else if (detail.key() == "port")
+      else if (detail.key() == "servicePort")
         clientDetail.port = parseServicePort(detail.value());
       else
         clientDetail.implOptions[detail.key()] = getAny(detail.value());
@@ -357,12 +357,12 @@ Manifest::Impl::getService(AppIDPath idPath, AcceleratorConnection &acc,
   std::string implName;
   std::string service;
   for (auto &detail : svcJson.items()) {
-    if (detail.key() == "appID" || detail.key() == "client_details")
+    if (detail.key() == "appID" || detail.key() == "clientDetails")
       continue;
     if (detail.key() == "serviceImplName")
       implName = detail.value();
     else if (detail.key() == "service")
-      service = detail.value().get<std::string>().substr(1);
+      service = detail.value().get<std::string>();
     else
       svcDetails[detail.key()] = getAny(detail.value());
   }
@@ -384,13 +384,12 @@ Manifest::Impl::getServices(AppIDPath idPath, AcceleratorConnection &acc,
                             const nlohmann::json &svcsJson,
                             ServiceTable &activeServices) const {
   std::vector<services::Service *> ret;
-  auto contentsIter = svcsJson.find("contents");
-  if (contentsIter == svcsJson.end())
+  auto svcsIter = svcsJson.find("services");
+  if (svcsIter == svcsJson.end())
     return ret;
 
-  for (auto &content : contentsIter.value())
-    if (content.at("class") == "service")
-      ret.emplace_back(getService(idPath, acc, content, activeServices));
+  for (auto &svc : svcsIter.value())
+    ret.emplace_back(getService(idPath, acc, svc, activeServices));
   return ret;
 }
 
@@ -399,14 +398,11 @@ Manifest::Impl::getBundlePorts(AcceleratorConnection &acc, AppIDPath idPath,
                                const ServiceTable &activeServices,
                                const nlohmann::json &instJson) const {
   std::vector<std::unique_ptr<BundlePort>> ret;
-  auto contentsIter = instJson.find("contents");
-  if (contentsIter == instJson.end())
+  auto clientPortsIter = instJson.find("clientPorts");
+  if (clientPortsIter == instJson.end())
     return ret;
 
-  for (auto &content : contentsIter.value()) {
-    if (content.at("class") != "client_port")
-      continue;
-
+  for (auto &content : clientPortsIter.value()) {
     // Lookup the requested service in the active services table.
     std::string serviceName = "";
     if (auto f = content.find("servicePort"); f != content.end())
@@ -422,7 +418,7 @@ Manifest::Impl::getBundlePorts(AcceleratorConnection &acc, AppIDPath idPath,
     }
     services::Service *svc = svcIter->second;
 
-    std::string typeName = content.at("bundleType");
+    std::string typeName = content.at("typeID");
     auto type = getType(typeName);
     if (!type)
       throw std::runtime_error(
@@ -482,7 +478,7 @@ ChannelType *parseChannelType(const nlohmann::json &typeJson, Context &cache) {
 Type *parseInt(const nlohmann::json &typeJson, Context &cache) {
   assert(typeJson.at("mnemonic") == "int");
   std::string sign = typeJson.at("signedness");
-  uint64_t width = typeJson.at("hw_bitwidth");
+  uint64_t width = typeJson.at("hwBitwidth");
   Type::ID id = typeJson.at("id");
 
   if (sign == "signed")
@@ -572,7 +568,7 @@ Manifest::Manifest(Context &ctxt, const std::string &jsonManifest)
 Manifest::~Manifest() { delete impl; }
 
 uint32_t Manifest::getApiVersion() const {
-  return impl->at("api_version").get<uint32_t>();
+  return impl->at("apiVersion").get<uint32_t>();
 }
 
 std::vector<ModuleInfo> Manifest::getModuleInfos() const {
