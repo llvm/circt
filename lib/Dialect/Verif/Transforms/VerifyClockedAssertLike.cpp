@@ -56,6 +56,9 @@ private:
 
     Operation *property = clockedAssertLikeOp->getOperand(0).getDefiningOp();
 
+    if (!property)
+      return;
+
     // Fill in our worklist
     worklist.insert({property, property->operand_begin()});
 
