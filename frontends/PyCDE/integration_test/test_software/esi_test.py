@@ -1,4 +1,5 @@
 import esiaccel as esi
+from esiaccel.types import MMIORegion
 
 import sys
 import time
@@ -10,64 +11,77 @@ mmio = acc.get_service_mmio()
 data = mmio.read(8)
 assert data == 0x207D98E5E5100E51
 
-################################################################################
-# MMIOClient tests
-################################################################################
-
-
-def read_offset(mmio_offset: int, offset: int, add_amt: int):
-  data = mmio.read(mmio_offset + offset)
-  if data == add_amt + offset:
-    print(f"PASS: read_offset({mmio_offset}, {offset}, {add_amt}) -> {data}")
-  else:
-    assert False, f"read_offset({mmio_offset}, {offset}, {add_amt}) -> {data}"
-
-
-# MMIO offset into mmio_client[9]. TODO: get this from the manifest. API coming.
-mmio_client_9_offset = 131072
-read_offset(mmio_client_9_offset, 0, 9)
-read_offset(mmio_client_9_offset, 13, 9)
-
-# MMIO offset into mmio_client[4].
-mmio_client_4_offset = 65536
-read_offset(mmio_client_4_offset, 0, 4)
-read_offset(mmio_client_4_offset, 13, 4)
-
-# MMIO offset into mmio_client[14].
-mmio_client_14_offset = 196608
-read_offset(mmio_client_14_offset, 0, 14)
-read_offset(mmio_client_14_offset, 13, 14)
-
-################################################################################
-# MMIOReadWriteClient tests
-################################################################################
-
-mmio_rw_client_offset = 262144
-
-
-def read_offset_check(i: int, add_amt: int):
-  d = mmio.read(mmio_rw_client_offset + i)
-  if d == i + 9:
-    print(f"PASS: read_offset_check({mmio_rw_client_offset} + {i}: {d}")
-  else:
-    assert False, f": read_offset_check({mmio_rw_client_offset} + {i}: {d}"
-
-
-mmio.write(mmio_rw_client_offset + 8, 9)
-read_offset_check(0, 9)
-read_offset_check(12, 9)
-read_offset_check(0x1400, 9)
-
-################################################################################
-# Manifest tests
-################################################################################
-
 assert acc.sysinfo().esi_version() == 0
 m = acc.manifest()
 assert m.api_version == 0
 print(m.type_table)
 
 d = acc.build_accelerator()
+
+mmio_svc: esi.accelerator.MMIO
+for svc in d.services:
+  if isinstance(svc, esi.accelerator.MMIO):
+    mmio_svc = svc
+    break
+
+for id, region in mmio_svc.regions.items():
+  print(f"Region {id}: {region.base} - {region.base + region.size}")
+
+assert len(mmio_svc.regions) == 4
+
+################################################################################
+# MMIOClient tests
+################################################################################
+
+
+def read_offset(mmio_x: MMIORegion, offset: int, add_amt: int):
+  data = mmio_x.read(offset)
+  if data == add_amt + offset:
+    print(f"PASS: read_offset({offset}, {add_amt}) -> {data}")
+  else:
+    assert False, f"read_offset({offset}, {add_amt}) -> {data}"
+
+
+mmio9 = d.ports[esi.AppID("mmio_client", 9)]
+read_offset(mmio9, 0, 9)
+read_offset(mmio9, 13, 9)
+
+mmio4 = d.ports[esi.AppID("mmio_client", 4)]
+read_offset(mmio4, 0, 4)
+read_offset(mmio4, 13, 4)
+
+mmio14 = d.ports[esi.AppID("mmio_client", 14)]
+read_offset(mmio14, 0, 14)
+read_offset(mmio14, 13, 14)
+
+assert mmio14.descriptor.base == 196608
+assert mmio14.descriptor.size == 65536
+
+################################################################################
+# MMIOReadWriteClient tests
+################################################################################
+
+mmio_rw = d.ports[esi.AppID("mmio_rw_client")]
+
+
+def read_offset_check(i: int, add_amt: int):
+  d = mmio_rw.read(i)
+  if d == i + add_amt:
+    print(f"PASS: read_offset_check({i}): {d}")
+  else:
+    assert False, f": read_offset_check({i}): {d}"
+
+
+add_amt = 137
+mmio_rw.write(8, add_amt)
+read_offset_check(0, add_amt)
+read_offset_check(12, add_amt)
+read_offset_check(0x1400, add_amt)
+
+################################################################################
+# Manifest tests
+################################################################################
+
 loopback = d.children[esi.AppID("loopback")]
 recv = loopback.ports[esi.AppID("add")].read_port("result")
 recv.connect()
@@ -108,7 +122,7 @@ while time.time() < nb_timeout:
   if write_succeeded:
     break
 
-assert (write_succeeded, "Non-blocking write failed")
+assert write_succeeded, "Non-blocking write failed"
 resp = recv.read()
 print(f"data: {data}")
 print(f"resp: {resp}")
