@@ -35,6 +35,8 @@ class ServicePort : public BundlePort {
 public:
   using BundlePort::BundlePort;
   virtual ~ServicePort() = default;
+  // Get a description of the service port.
+  virtual std::optional<std::string> toString() const { return std::nullopt; }
 };
 
 /// Parent class of all APIs modeled as 'services'. May or may not map to a
@@ -173,6 +175,14 @@ public:
 
     void connect();
     std::future<MessageData> call(const MessageData &arg);
+
+    virtual std::optional<std::string> toString() const override {
+      const esi::Type *argType =
+          dynamic_cast<const ChannelType *>(arg.getType())->getInner();
+      const esi::Type *resultType =
+          dynamic_cast<const ChannelType *>(result.getType())->getInner();
+      return "function " + resultType->getID() + "(" + argType->getID() + ")";
+    }
 
   private:
     std::mutex callMutex;
