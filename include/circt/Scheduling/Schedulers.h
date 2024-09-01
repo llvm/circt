@@ -43,15 +43,15 @@ namespace circt::scheduling {
 /// In this function, the `scheduler` argument can be used to schedule any
 /// instance of `MyProblem` and can be called with any `Scheduler` that handles
 /// `MyProblem`.
-template <typename Derived, typename... Ps>
-class Scheduler : public Scheduler<Derived, Ps>... {
+template <typename... Ps>
+class Scheduler : public Scheduler<Ps>... {
   static_assert(
       sizeof...(Ps) > 0,
       "A scheduler must be able to schedule at least one class of Problem.");
 };
 
-template <typename Derived, typename P>
-class Scheduler<Derived, P> {
+template <typename P>
+class Scheduler<P> {
   static_assert((std::is_base_of_v<Problem, P>),
                 "Elements scheduled by a Scheduler must be deried from the "
                 "Problem class.");

@@ -11,7 +11,7 @@
 
 namespace circt::scheduling {
 
-class LPScheduler : public Scheduler<LPScheduler, Problem, CyclicProblem> {
+class LPScheduler : public Scheduler<Problem, CyclicProblem> {
 public:
   LogicalResult schedule(Problem &problem, Operation *lastOp) override;
   LogicalResult schedule(CyclicProblem &problem, Operation *lastOp) override;
