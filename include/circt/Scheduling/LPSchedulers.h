@@ -6,15 +6,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Scheduling/Schedulers.h"
 #include "circt/Scheduling/Problems.h"
+#include "circt/Scheduling/Schedulers.h"
 
 namespace circt::scheduling {
 
-class LPScheduler: public Scheduler<LPScheduler, Problem, CyclicProblem> {
+class LPScheduler : public Scheduler<LPScheduler, Problem, CyclicProblem> {
 public:
   LogicalResult schedule(Problem &problem, Operation *lastOp) override;
   LogicalResult schedule(CyclicProblem &problem, Operation *lastOp) override;
 };
 
-};
+}; // namespace circt::scheduling

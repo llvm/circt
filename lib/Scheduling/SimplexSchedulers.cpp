@@ -950,8 +950,8 @@ LogicalResult ModuloSimplexScheduler::schedule(ModuloProblem &problem,
   parameterT = computeResMinII(problem);
   LLVM_DEBUG(dbgs() << "ResMinII = " << parameterT << "\n");
   buildTableau(problem, lastOp);
-//  dumpTableau();
-//  dbgs() << "\n\n\n";   
+  //  dumpTableau();
+  //  dbgs() << "\n\n\n";
   asapTimes.resize(startTimeLocations.size());
   alapTimes.resize(startTimeLocations.size());
 

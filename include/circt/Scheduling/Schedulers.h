@@ -46,7 +46,7 @@ namespace circt::scheduling {
 template <typename Derived, typename... Ps>
 class Scheduler : public Scheduler<Derived, Ps>... {
   static_assert(
-      sizeof...(Ps) > 0,  
+      sizeof...(Ps) > 0,
       "A scheduler must be able to schedule at least one class of Problem.");
 };
 

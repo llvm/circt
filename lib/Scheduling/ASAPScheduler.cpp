@@ -48,5 +48,5 @@ LogicalResult ASAPScheduler::schedule(Problem &prob, Operation *lastOp) {
 
 LogicalResult scheduling::scheduleASAP(Problem &prob) {
   ASAPScheduler scheduler;
-  return scheduler.schedule(prob, nullptr /* lastOp isn't used here*/); 
+  return scheduler.schedule(prob, nullptr /* lastOp isn't used here*/);
 }

@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Scheduling/Algorithms.h"
 #include "circt/Scheduling/LPSchedulers.h"
+#include "circt/Scheduling/Algorithms.h"
 
 #include "mlir/IR/Operation.h"
 
