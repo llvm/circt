@@ -10,7 +10,7 @@
 
 namespace circt::scheduling {
 
-class ASAPScheduler : public Scheduler<ASAPScheduler, Problem> {
+class ASAPScheduler : public Scheduler<Problem> {
 public:
   LogicalResult schedule(Problem &problem, Operation *lastOp) override;
 };

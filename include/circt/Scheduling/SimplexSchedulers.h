@@ -167,7 +167,7 @@ public:
 
 /// This class solves the basic, acyclic `Problem`.
 class SimplexScheduler : public SimplexSchedulerBase<SimplexScheduler, Problem>,
-                         public Scheduler<SimplexScheduler, Problem> {
+                         public Scheduler<Problem> {
   friend class SimplexSchedulerBase<SimplexScheduler, Problem>;
 
 protected:
@@ -189,7 +189,7 @@ public:
 /// schedulers.
 class CyclicSimplexScheduler
     : public SimplexSchedulerBase<CyclicSimplexScheduler, CyclicProblem>,
-      public Scheduler<CyclicSimplexScheduler, CyclicProblem> {
+      public Scheduler<CyclicProblem> {
   friend class SimplexSchedulerBase<CyclicSimplexScheduler, CyclicProblem>;
 
 protected:
@@ -213,8 +213,7 @@ public:
 class SharedOperatorsSimplexScheduler
     : public SimplexSchedulerBase<SharedOperatorsSimplexScheduler,
                                   SharedOperatorsProblem>,
-      public Scheduler<SharedOperatorsSimplexScheduler,
-                       SharedOperatorsProblem> {
+      public Scheduler<SharedOperatorsProblem> {
   friend class SimplexSchedulerBase<SharedOperatorsSimplexScheduler,
                                     SharedOperatorsProblem>;
 
@@ -238,7 +237,7 @@ public:
 class ModuloSimplexScheduler
     : public CyclicSimplexScheduler,
       public SimplexSchedulerBase<ModuloSimplexScheduler, ModuloProblem>,
-      public Scheduler<ModuloSimplexScheduler, ModuloProblem> {
+      public Scheduler<ModuloProblem> {
   friend class SimplexSchedulerBase<ModuloSimplexScheduler, ModuloProblem>;
 
 private:
@@ -303,7 +302,7 @@ public:
 // chain-breaking constraints.
 class ChainingSimplexScheduler
     : public SimplexSchedulerBase<ChainingSimplexScheduler, ChainingProblem>,
-      public Scheduler<ChainingSimplexScheduler, ChainingProblem> {
+      public Scheduler<ChainingProblem> {
   friend SimplexSchedulerBase<ChainingSimplexScheduler, ChainingProblem>;
 
 protected:
@@ -329,7 +328,7 @@ public:
 class ChainingCyclicSimplexScheduler
     : public SimplexSchedulerBase<ChainingCyclicSimplexScheduler,
                                   ChainingCyclicProblem>,
-      public Scheduler<ChainingCyclicSimplexScheduler, ChainingCyclicProblem> {
+      public Scheduler<ChainingCyclicProblem> {
 
   friend class SimplexSchedulerBase<ChainingCyclicSimplexScheduler,
                                     ChainingCyclicProblem>;

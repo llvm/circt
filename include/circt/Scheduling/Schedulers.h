@@ -20,10 +20,10 @@ namespace circt::scheduling {
 /// This class provides an interface for schedulers. Schedulers are used to
 /// schedule subclasses of `Problem`. A `Scheduler` can handle any number of
 /// `Problem` types and declare these problem classes as template parameters.
-/// For example: `class MyScheduler : public Scheduler<MyScheduler,
-/// ChainingProblem, CyclicProblem>` can schedule instances of both
-/// `ChainingProblem` and `CyclicProblem`. A `Scheduler` must be able to handle
-/// at least one type of `Problem`.
+/// For example: `class MyScheduler : public Scheduler<ChainingProblem,
+/// CyclicProblem>` can schedule instances of both `ChainingProblem` and
+/// `CyclicProblem`. A `Scheduler` must be able to handle at least one type of
+/// `Problem`.
 ///
 /// For every `Problem` class `P` managed by a `Scheduler`, the `Scheduler`
 /// must define a method `LogicalResult schedule(P &problem, Operation *lastOp)`
@@ -37,21 +37,20 @@ namespace circt::scheduling {
 /// Functions that schedule a specific problem can accept the `Scheduler` as an
 /// argument and be specialized accordingly. For example:
 /// ```cpp
-/// template <typename T>
-/// LogicalResult MyFunction(Scheduler<T, MyProblem> &scheduler) { ... }
+/// LogicalResult MyFunction(Scheduler<MyProblem> &scheduler) { ... }
 /// ```
 /// In this function, the `scheduler` argument can be used to schedule any
 /// instance of `MyProblem` and can be called with any `Scheduler` that handles
 /// `MyProblem`.
-template <typename Derived, typename... Ps>
-class Scheduler : public Scheduler<Derived, Ps>... {
+template <typename... Ps>
+class Scheduler : public Scheduler<Ps>... {
   static_assert(
       sizeof...(Ps) > 0,
       "A scheduler must be able to schedule at least one class of Problem.");
 };
 
-template <typename Derived, typename P>
-class Scheduler<Derived, P> {
+template <typename P>
+class Scheduler<P> {
   static_assert((std::is_base_of_v<Problem, P>),
                 "Elements scheduled by a Scheduler must be deried from the "
                 "Problem class.");

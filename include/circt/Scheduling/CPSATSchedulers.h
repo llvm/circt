@@ -11,8 +11,7 @@
 
 namespace circt::scheduling {
 
-class CPSATScheduler
-    : public Scheduler<CPSATScheduler, SharedOperatorsProblem> {
+class CPSATScheduler : public Scheduler<SharedOperatorsProblem> {
 public:
   LogicalResult schedule(SharedOperatorsProblem &problem,
                          Operation *lastOp) override;
