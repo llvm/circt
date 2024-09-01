@@ -148,3 +148,13 @@ LogicalResult LPScheduler::schedule(CyclicProblem &prob, Operation *lastOp) {
 
   return success();
 }
+
+LogicalResult scheduling::scheduleLP(Problem &prob, Operation *lastOp) {
+  LPScheduler scheduler;
+  return scheduler.schedule(prob, lastOp);
+}
+
+LogicalResult scheduling::scheduleLP(CyclicProblem &prob, Operation *lastOp) {
+  LPScheduler scheduler;
+  return scheduler.schedule(prob, lastOp);
+}

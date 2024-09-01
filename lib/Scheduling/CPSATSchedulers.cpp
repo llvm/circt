@@ -149,3 +149,9 @@ LogicalResult CPSATScheduler::schedule(SharedOperatorsProblem &prob,
   }
   return containingOp->emitError() << "infeasible";
 }
+
+LogicalResult scheduling::scheduleCPSAT(SharedOperatorsProblem &prob,
+                                        Operation *lastOp) {
+  CPSATScheduler scheduler;
+  return scheduler.schedule(prob, lastOp);
+}
