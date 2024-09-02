@@ -20,7 +20,7 @@ def Clocked : OpInterface<"Clocked"> {
   let description = "Trait for clocked elements";
 
   let methods = [
-    InterfaceMethod<"Get the clock signal", "Value", "getClk", (ins)>
+    InterfaceMethod<"Get the clock signal", "mlir::Value", "getClk">
   ];
 }
 
@@ -29,8 +29,8 @@ def Resettable : OpInterface<"Resettable"> {
   let description = "Trait for Resettable elements";
 
   let methods = [
-    InterfaceMethod<"Get the reset signal", "Value", "getReset", (ins)>,
-    InterfaceMethod<"Get the reset value", "Value", "getResetValue", (ins)>
+    InterfaceMethod<"Get the reset signal", "mlir::Value", "getReset">,
+    InterfaceMethod<"Get the reset value", "mlir::Value", "getResetValue">
   ];
 }
 
