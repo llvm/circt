@@ -24,6 +24,14 @@
 using namespace esi;
 using namespace esi::services;
 
+Service *Service::getChildService(AcceleratorConnection *conn,
+                                  Service::Type service, AppIDPath id,
+                                  std::string implName,
+                                  ServiceImplDetails details,
+                                  HWClientDetails clients) {
+  return conn->getService(service, id, implName, details, clients);
+}
+
 std::string SysInfo::getServiceSymbol() const { return "__builtin_SysInfo"; }
 
 // Allocate 10MB for the uncompressed manifest. This should be plenty.
@@ -41,7 +49,90 @@ std::string SysInfo::getJsonManifest() const {
   return std::string(reinterpret_cast<char *>(dst.data()), dstSize);
 }
 
-std::string MMIO::getServiceSymbol() const { return "__builtin_MMIO"; }
+//===----------------------------------------------------------------------===//
+// MMIO class implementations.
+//===----------------------------------------------------------------------===//
+
+MMIO::MMIO(Context &ctxt, AppIDPath idPath, std::string implName,
+           const ServiceImplDetails &details, const HWClientDetails &clients) {
+  for (const HWClientDetail &client : clients) {
+    auto offsetIter = client.implOptions.find("offset");
+    if (offsetIter == client.implOptions.end())
+      throw std::runtime_error("MMIO client missing 'offset' option");
+    Constant offset = std::any_cast<Constant>(offsetIter->second);
+    uint64_t offsetVal = std::any_cast<uint64_t>(offset.value);
+    if (offsetVal >= 1ul << 32)
+      throw std::runtime_error("MMIO client offset mustn't exceed 32 bits");
+
+    auto sizeIter = client.implOptions.find("size");
+    if (sizeIter == client.implOptions.end())
+      throw std::runtime_error("MMIO client missing 'size' option");
+    Constant size = std::any_cast<Constant>(sizeIter->second);
+    uint64_t sizeVal = std::any_cast<uint64_t>(size.value);
+    if (sizeVal >= 1ul << 32)
+      throw std::runtime_error("MMIO client size mustn't exceed 32 bits");
+    regions[client.relPath] =
+        RegionDescriptor{(uint32_t)offsetVal, (uint32_t)sizeVal};
+  }
+}
+
+std::string MMIO::getServiceSymbol() const {
+  return std::string(MMIO::StdName);
+}
+ServicePort *MMIO::getPort(AppIDPath id, const BundleType *type,
+                           const std::map<std::string, ChannelPort &> &,
+                           AcceleratorConnection &conn) const {
+  auto regionIter = regions.find(id);
+  if (regionIter == regions.end())
+    return nullptr;
+  return new MMIORegion(id.back(), const_cast<MMIO *>(this),
+                        regionIter->second);
+}
+
+namespace {
+class MMIOPassThrough : public MMIO {
+public:
+  MMIOPassThrough(Context &ctxt, AppIDPath idPath, std::string implName,
+                  const ServiceImplDetails &details,
+                  const HWClientDetails &clients, MMIO *parent)
+      : MMIO(ctxt, idPath, implName, details, clients), parent(parent) {}
+  uint64_t read(uint32_t addr) const override { return parent->read(addr); }
+  void write(uint32_t addr, uint64_t data) override {
+    parent->write(addr, data);
+  }
+
+private:
+  MMIO *parent;
+};
+} // namespace
+
+Service *MMIO::getChildService(AcceleratorConnection *conn,
+                               Service::Type service, AppIDPath id,
+                               std::string implName, ServiceImplDetails details,
+                               HWClientDetails clients) {
+  if (service != typeid(MMIO))
+    return Service::getChildService(conn, service, id, implName, details,
+                                    clients);
+  return new MMIOPassThrough(conn->getCtxt(), id, implName, details, clients,
+                             this);
+}
+
+//===----------------------------------------------------------------------===//
+// MMIO Region service port class implementations.
+//===----------------------------------------------------------------------===//
+
+MMIO::MMIORegion::MMIORegion(AppID id, MMIO *parent, RegionDescriptor desc)
+    : ServicePort(id, {}), parent(parent), desc(desc) {}
+uint64_t MMIO::MMIORegion::read(uint32_t addr) const {
+  if (addr >= desc.size)
+    throw std::runtime_error("MMIO read out of bounds: " + toHex(addr));
+  return parent->read(desc.base + addr);
+}
+void MMIO::MMIORegion::write(uint32_t addr, uint64_t data) {
+  if (addr >= desc.size)
+    throw std::runtime_error("MMIO write out of bounds: " + toHex(addr));
+  parent->write(desc.base + addr, data);
+}
 
 MMIOSysInfo::MMIOSysInfo(const MMIO *mmio) : mmio(mmio) {}
 
@@ -211,5 +302,7 @@ Service::Type ServiceRegistry::lookupServiceType(const std::string &svcName) {
     return typeid(FuncService);
   if (svcName == "esi.service.std.call")
     return typeid(CallService);
+  if (svcName == MMIO::StdName)
+    return typeid(MMIO);
   return typeid(CustomService);
 }

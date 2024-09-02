@@ -21,6 +21,7 @@
 #define ESI_RUNTIME_SERVICES_H
 
 #include "esi/Common.h"
+#include "esi/Context.h"
 #include "esi/Ports.h"
 
 #include <cstdint>
@@ -47,6 +48,19 @@ public:
   virtual ~Service() = default;
 
   virtual std::string getServiceSymbol() const = 0;
+
+  /// Create a "child" service of this service. Does not have to be the same
+  /// service type, but typically is. Used when a service already exists in the
+  /// active services table, but a new one wants to replace it. Useful for cases
+  /// where the child service needs to use the parent service. Defaults to
+  /// calling the `getService` method on `AcceleratorConnection` to get the
+  /// global service, implying that the child service does not need to use the
+  /// service it is replacing.
+  virtual Service *getChildService(AcceleratorConnection *conn,
+                                   Service::Type service, AppIDPath id = {},
+                                   std::string implName = {},
+                                   ServiceImplDetails details = {},
+                                   HWClientDetails clients = {});
 
   /// Get specialized port for this service to attach to the given appid path.
   /// Null returns mean nothing to attach.
@@ -94,10 +108,72 @@ public:
 
 class MMIO : public Service {
 public:
+  static constexpr std::string_view StdName = "esi.service.std.mmio";
+
+  /// Describe a region (slice) of MMIO space.
+  struct RegionDescriptor {
+    uint32_t base;
+    uint32_t size;
+  };
+
+  MMIO(Context &ctxt, AppIDPath idPath, std::string implName,
+       const ServiceImplDetails &details, const HWClientDetails &clients);
+  MMIO() = default;
   virtual ~MMIO() = default;
+
+  /// Read a 64-bit value from the global MMIO space.
   virtual uint64_t read(uint32_t addr) const = 0;
+  /// Write a 64-bit value to the global MMIO space.
   virtual void write(uint32_t addr, uint64_t data) = 0;
+  /// Get the regions of MMIO space that this service manages. Otherwise known
+  /// as the base address table.
+  const std::map<AppIDPath, RegionDescriptor> &getRegions() const {
+    return regions;
+  }
+
+  /// If the service is a MMIO service, return a region of the MMIO space which
+  /// peers into ours.
+  virtual Service *getChildService(AcceleratorConnection *conn,
+                                   Service::Type service, AppIDPath id = {},
+                                   std::string implName = {},
+                                   ServiceImplDetails details = {},
+                                   HWClientDetails clients = {}) override;
+
   virtual std::string getServiceSymbol() const override;
+
+  /// Get a MMIO region port for a particular region descriptor.
+  virtual ServicePort *getPort(AppIDPath id, const BundleType *type,
+                               const std::map<std::string, ChannelPort &> &,
+                               AcceleratorConnection &) const override;
+
+private:
+  /// MMIO base address table.
+  std::map<AppIDPath, RegionDescriptor> regions;
+
+public:
+  /// A "slice" of some parent MMIO space.
+  class MMIORegion : public ServicePort {
+    friend class MMIO;
+    MMIORegion(AppID id, MMIO *parent, RegionDescriptor desc);
+
+  public:
+    /// Get the offset (and size) of the region in the parent (usually global)
+    /// MMIO address space.
+    virtual RegionDescriptor getDescriptor() const { return desc; };
+    /// Read a 64-bit value from this region, not the global address space.
+    virtual uint64_t read(uint32_t addr) const;
+    /// Write a 64-bit value to this region, not the global address space.
+    virtual void write(uint32_t addr, uint64_t data);
+
+    virtual std::optional<std::string> toString() const override {
+      return "MMIO region " + toHex(desc.base) + " - " +
+             toHex(desc.base + desc.size);
+    }
+
+  private:
+    MMIO *parent;
+    RegionDescriptor desc;
+  };
 };
 
 /// Implement the SysInfo API for a standard MMIO protocol.

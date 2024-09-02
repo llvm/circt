@@ -147,7 +147,21 @@ std::any Manifest::Impl::getAny(const nlohmann::json &value) const {
     std::map<std::string, std::any> ret;
     for (auto &e : json.items())
       ret[e.key()] = getAny(e.value());
-    return ret;
+
+    // If this can be converted to a constant, do so.
+    if (ret.size() != 2 || !ret.contains("type") || !ret.contains("value"))
+      return ret;
+    std::any value = ret.at("value");
+    std::any typeID = ret.at("type");
+    if (typeID.type() != typeid(std::string))
+      return ret;
+    std::optional<const Type *> type =
+        getType(std::any_cast<std::string>(type));
+    if (!type)
+      return ret;
+    // TODO: Check or guide the conversion of the value to the type based on the
+    // type.
+    return Constant{value, type};
   };
 
   auto getArray = [this](const nlohmann::json &json) -> std::any {
@@ -160,10 +174,10 @@ std::any Manifest::Impl::getAny(const nlohmann::json &value) const {
   auto getValue = [&](const nlohmann::json &innerValue) -> std::any {
     if (innerValue.is_string())
       return innerValue.get<std::string>();
-    else if (innerValue.is_number_integer())
-      return innerValue.get<int64_t>();
     else if (innerValue.is_number_unsigned())
       return innerValue.get<uint64_t>();
+    else if (innerValue.is_number_integer())
+      return innerValue.get<int64_t>();
     else if (innerValue.is_number_float())
       return innerValue.get<double>();
     else if (innerValue.is_boolean())
@@ -368,11 +382,20 @@ Manifest::Impl::getService(AppIDPath idPath, AcceleratorConnection &acc,
   }
 
   // Create the service.
-  // TODO: Add support for 'standard' services.
-  services::Service::Type svcType =
-      services::ServiceRegistry::lookupServiceType(service);
-  services::Service *svc =
-      acc.getService(svcType, idPath, implName, svcDetails, clientDetails);
+  services::Service *svc = nullptr;
+  auto activeServiceIter = activeServices.find(service);
+  if (activeServiceIter != activeServices.end()) {
+    services::Service::Type svcType =
+        services::ServiceRegistry::lookupServiceType(
+            activeServiceIter->second->getServiceSymbol());
+    svc = activeServiceIter->second->getChildService(
+        &acc, svcType, idPath, implName, svcDetails, clientDetails);
+  } else {
+    services::Service::Type svcType =
+        services::ServiceRegistry::lookupServiceType(service);
+    svc = acc.getService(svcType, idPath, implName, svcDetails, clientDetails);
+  }
+
   if (svc)
     // Update the active services table.
     activeServices[service] = svc;
