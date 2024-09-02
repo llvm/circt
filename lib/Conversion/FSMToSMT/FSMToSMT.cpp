@@ -272,6 +272,7 @@ LogicalResult MachineOpConverter::dispatch(){
 
             for(auto [av, a] : llvm::zip(argVars, args))
               avToSmt.push_back({av, a});
+            llvm::outs()<<"\navSize: "<<avToSmt.size();
             for (auto [j, uv]: llvm::enumerate(avToSmt)){
               if(int(j) < numArgs*2){ // arguments 
                 llvm::outs()<<"\nupdating: "<<uv.second;
@@ -357,9 +358,9 @@ LogicalResult MachineOpConverter::dispatch(){
               llvm::outs()<<"\nactioned args: \n";
               for(auto aa: actionedArgs)
                 llvm::outs()<<aa<<"\n";
-              auto rhs = b.create<smt::ApplyFuncOp>(loc, t2.activeFun, action(args));
+              auto rhs = b.create<smt::ApplyFuncOp>(loc, t2.activeFun, actionedArgs);
               auto t1AndGuard1 = b.create<smt::AndOp>(loc, t1ac, guard1(args));
-              auto lhs = b.create<smt::AndOp>(loc, t1AndGuard1, guard2(args));
+              auto lhs = b.create<smt::AndOp>(loc, t1AndGuard1, guard2(actionedArgs));
               return b.create<smt::ImpliesOp>(loc, lhs, rhs); 
         });
 
