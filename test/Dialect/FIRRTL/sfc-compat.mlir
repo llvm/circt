@@ -34,7 +34,7 @@ firrtl.circuit "SFCCompatTests" {
   // converted to a reg.
   //
   // CHECK-LABEL: firrtl.module @AggregateInvalidThroughWire
-  firrtl.module @AggregateInvalidThroughWire(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %d: !firrtl.vector<bundle<a: uint<1>>, 2>, out %q: !firrtl.vector<bundle<a: uint<1>>, 2>) {
+  firrtl.module @AggregateInvalidThroughWire(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %d: !firrtl.vector<bundle<a: uint<1>>, 2>, out %q: !firrtl.vector<bundle<a: uint<1>>, 2>, in %foo: !firrtl.vector<uint<1>, 1>) {
     %inv = firrtl.wire : !firrtl.bundle<a: uint<1>>
     %inv_a = firrtl.subfield %inv[a] : !firrtl.bundle<a: uint<1>>
     %invalid = firrtl.invalidvalue : !firrtl.uint<1>
@@ -51,10 +51,6 @@ firrtl.circuit "SFCCompatTests" {
     firrtl.matchingconnect %r, %d : !firrtl.vector<bundle<a: uint<1>>, 2>
     firrtl.matchingconnect %q, %r : !firrtl.vector<bundle<a: uint<1>>, 2>
 
-    %foo = firrtl.wire : !firrtl.vector<uint<1>, 1>
-    %0 = firrtl.subindex %foo[0] : !firrtl.vector<uint<1>, 1>
-    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-    firrtl.matchingconnect %0, %c1_ui1 : !firrtl.uint<1>
     %bar = firrtl.wire : !firrtl.vector<vector<uint<1>, 1>, 1>
     %1 = firrtl.subindex %bar[0] : !firrtl.vector<vector<uint<1>, 1>, 1>
     %2 = firrtl.subindex %foo[0] : !firrtl.vector<uint<1>, 1>
