@@ -794,7 +794,7 @@ def ConvertFSMToSMT : Pass<"convert-fsm-to-smt", "mlir::ModuleOp"> {
   let constructor = "circt::createConvertFSMToSMTPass()";
   let dependentDialects = [
       "circt::comb::CombDialect",
-      "circt::smt::SMTDialect",
+      "circt::smt::SMTDialect"
   ];
 }
 
