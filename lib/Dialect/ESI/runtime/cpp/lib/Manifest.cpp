@@ -277,7 +277,7 @@ Manifest::Impl::buildAccelerator(AcceleratorConnection &acc) const {
   // Get the ports at the top level.
   auto ports = getBundlePorts(acc, {}, activeSvcs, designJson);
 
-  return make_unique<Accelerator>(
+  return std::make_unique<Accelerator>(
       getModInfo(designJson),
       getChildInstances({}, acc, activeSvcs, designJson), services, ports);
 }
@@ -339,8 +339,9 @@ Manifest::Impl::getChildInstance(AppIDPath idPath, AcceleratorConnection &acc,
 
   auto children = getChildInstances(idPath, acc, activeServices, child);
   auto ports = getBundlePorts(acc, idPath, activeServices, child);
-  return make_unique<Instance>(parseID(child.at("app_id")), getModInfo(child),
-                               std::move(children), services, ports);
+  return std::make_unique<Instance>(parseID(child.at("app_id")),
+                                    getModInfo(child), std::move(children),
+                                    services, ports);
 }
 
 services::Service *
