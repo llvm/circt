@@ -119,6 +119,9 @@ public:
     return MessageData(reinterpret_cast<const uint8_t *>(&t), sizeof(T));
   }
 
+  /// Convert the data to a hex string.
+  std::string toHex() const;
+
 private:
   std::vector<uint8_t> data;
 };

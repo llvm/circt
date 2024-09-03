@@ -116,7 +116,8 @@ static std::filesystem::path getLibPath() {
 /// Load a backend plugin dynamically. Plugins are expected to be named
 /// lib<BackendName>Backend.so and located in one of 1) CWD, 2) in the same
 /// directory as the application, or 3) in the same directory as this library.
-static void loadBackend(std::string backend) {
+static void loadBackend(Context &ctxt, std::string backend) {
+  Logger &logger = ctxt.getLogger();
   backend[0] = toupper(backend[0]);
 
   // Get the file name we are looking for.
@@ -135,15 +136,24 @@ static void loadBackend(std::string backend) {
   // First, try the current directory.
   std::filesystem::path backendPath = backendFileName;
   std::string backendPathStr;
+  logger.debug("CONNECT",
+               "trying to load backend plugin: " + backendPath.string());
   if (!std::filesystem::exists(backendPath)) {
     // Next, try the directory of the executable.
     backendPath = getExePath().parent_path().append(backendFileName);
+    logger.debug("CONNECT",
+                 "trying to load backend plugin: " + backendPath.string());
     if (!std::filesystem::exists(backendPath)) {
       // Finally, try the directory of the library.
       backendPath = getLibPath().parent_path().append(backendFileName);
-      if (!std::filesystem::exists(backendPath))
+      logger.debug("CONNECT",
+                   "trying to load backend plugin: " + backendPath.string());
+      if (!std::filesystem::exists(backendPath)) {
         // If all else fails, just try the name.
         backendPathStr = backendFileName;
+        logger.debug("CONNECT",
+                     "trying to load backend plugin: " + backendPathStr);
+      }
     }
   }
   // If the path was found, convert it to a string.
@@ -158,9 +168,13 @@ static void loadBackend(std::string backend) {
     // Attempt to load it.
 #ifdef __linux__
   void *handle = dlopen(backendPathStr.c_str(), RTLD_NOW | RTLD_GLOBAL);
-  if (!handle)
+  if (!handle) {
+    std::string error(dlerror());
+    logger.error("CONNECT",
+                 "while attempting to load backend plugin: " + error);
     throw std::runtime_error("While attempting to load backend plugin: " +
-                             std::string(dlerror()));
+                             error);
+  }
 #elif _WIN32
   // Set the DLL directory to the same directory as the backend DLL in case it
   // has transitive dependencies.
@@ -175,15 +189,21 @@ static void loadBackend(std::string backend) {
   HMODULE handle = LoadLibraryA(backendPathStr.c_str());
   if (!handle) {
     DWORD error = GetLastError();
-    if (error == ERROR_MOD_NOT_FOUND)
+    if (error == ERROR_MOD_NOT_FOUND) {
+      logger.error("CONNECT", "while attempting to load backend plugin: " +
+                                  backendPathStr + " not found");
       throw std::runtime_error("While attempting to load backend plugin: " +
                                backendPathStr + " not found");
+    }
+    logger.error("CONNECT", "while attempting to load backend plugin: " +
+                                std::to_string(error));
     throw std::runtime_error("While attempting to load backend plugin: " +
                              std::to_string(error));
   }
 #else
 #eror "Unsupported platform"
 #endif
+  logger.info("CONNECT", "loaded backend plugin: " + backendPathStr);
 }
 
 namespace registry {
@@ -215,11 +235,15 @@ std::unique_ptr<AcceleratorConnection> connect(Context &ctxt,
   auto f = registry.find(backend);
   if (f == registry.end()) {
     // If it's not already found in the registry, try to load it dynamically.
-    loadBackend(backend);
+    loadBackend(ctxt, backend);
     f = registry.find(backend);
-    if (f == registry.end())
+    if (f == registry.end()) {
+      ctxt.getLogger().error("CONNECT", "backend '" + backend + "' not found");
       throw std::runtime_error("Backend '" + backend + "' not found");
+    }
   }
+  ctxt.getLogger().info("CONNECT", "connecting to backend " + backend +
+                                       " via '" + connection + "'");
   return f->second(ctxt, connection);
 }
 

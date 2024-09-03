@@ -180,6 +180,14 @@ PYBIND11_MODULE(esiCppAccel, m) {
         return os.str();
       });
 
+  py::enum_<Logger::Level>(m, "LogLevel")
+      .value("Debug", Logger::Level::Debug)
+      .value("Info", Logger::Level::Info)
+      .value("Warning", Logger::Level::Warning)
+      .value("Error", Logger::Level::Error)
+      .export_values();
+  py::class_<Logger>(m, "Logger");
+
   py::class_<services::Service>(m, "Service");
 
   py::class_<SysInfo, services::Service>(m, "SysInfo")
@@ -339,7 +347,10 @@ PYBIND11_MODULE(esiCppAccel, m) {
 
   py::class_<Context>(m, "Context")
       .def(py::init<>())
-      .def("connect", &Context::connect);
+      .def("connect", &Context::connect)
+      .def("set_stdio_logger", [](Context &ctxt, Logger::Level level) {
+        ctxt.setLogger(std::make_unique<StreamLogger>(level));
+      });
 
   accConn.def(py::init(&registry::connect))
       .def(
