@@ -17,6 +17,23 @@
 #include <iostream>
 #include <sstream>
 
+using namespace esi;
+
+std::string MessageData::toHex() const {
+  std::ostringstream ss;
+  ss << std::hex;
+  for (size_t i = 0, e = data.size(); i != e; ++i) {
+    // Add spaces every 8 bytes.
+    if (i % 8 == 0 && i != 0)
+      ss << ' ';
+    // Add an extra space every 64 bytes.
+    if (i % 64 == 0 && i != 0)
+      ss << ' ';
+    ss << static_cast<unsigned>(data[i]);
+  }
+  return ss.str();
+}
+
 std::string esi::toHex(uint32_t val) {
   std::ostringstream ss;
   ss << std::hex << val;
