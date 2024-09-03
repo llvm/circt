@@ -46,7 +46,7 @@ circuit Foo: %[[
   ; CHECK: );
   ; CHECK: endmodule
 
-  ; CHECK: FILE "testbench{{[/\]}}layers_Foo_Verification.sv"
+  ; CHECK: FILE "testbench{{[/\]}}layers-Foo-Verification.sv"
   ; CHECK: `ifndef layers_Foo_Verification
   ; CHECK: `define layers_Foo_Verification
   ; CHECK: bind Bar Bar_Verification verification ();
@@ -164,7 +164,7 @@ circuit TestHarness:
     layerblock Verification:
       printf(clock, reset, "The last PC was: %x", read(dut.trace))
 
-; CHECK: FILE "layers_TestHarness_Verification.sv"
+; CHECK: FILE "layers-TestHarness-Verification.sv"
 ; CHECK: `ifndef layers_TestHarness_Verification
 ; CHECK: `define layers_TestHarness_Verification
 ; CHECK: bind DUT DUT_Verification verification (

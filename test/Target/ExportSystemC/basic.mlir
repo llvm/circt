@@ -149,8 +149,10 @@ systemc.module @emitcEmission () {
     %five = systemc.cpp.variable %0 : !emitc.opaque<"int">
 
     // Test: emitc.apply "&" without having to emit parentheses
-    // CHECK-NEXT: int* fiveptr = &five;
-    %1 = emitc.apply "&"(%five) : (!emitc.opaque<"int">) -> !emitc.ptr<!emitc.opaque<"int">>
+    // CHECK-NEXT: int f = 5;
+    // CHECK-NEXT: int* fiveptr = &f;
+    %f = "emitc.variable"() {value=#emitc.opaque<"5">, name="f"} : () -> !emitc.lvalue<!emitc.opaque<"int">>  
+    %1 = emitc.apply "&"(%f) : (!emitc.lvalue<!emitc.opaque<"int">>) -> !emitc.ptr<!emitc.opaque<"int">>
     %fiveptr = systemc.cpp.variable %1: !emitc.ptr<!emitc.opaque<"int">>
 
     // Test: emitc.apply "&" with parentheses to conform to the precedence rules

@@ -57,8 +57,8 @@ circuit Foo: %[[
 ; CHECK-NEXT:    wire x_probe = x;
 ; CHECK-NEXT:  endmodule
 
-; CHECK-LABEL: FILE "layers_Foo_A_B.sv"
-; CHECK:       `include "layers_Foo_A.sv"
+; CHECK-LABEL: FILE "layers-Foo-A-B.sv"
+; CHECK:       `include "layers-Foo-A.sv"
 ; CHECK-NEXT:  `ifndef layers_Foo_A_B
 ; CHECK-NEXT:  `define layers_Foo_A_B
 ; CHECK-NEXT:  bind Foo Foo_A_B a_b (
@@ -69,7 +69,7 @@ circuit Foo: %[[
 ; CHECK-NEXT:  );
 ; CHECK-NEXT:  `endif // layers_Foo_A_B
 
-; CHECK-LABEL: FILE "layers_Foo_A.sv"
+; CHECK-LABEL: FILE "layers-Foo-A.sv"
 ; CHECK:       `ifndef layers_Foo_A
 ; CHECK-NEXT:  `define layers_Foo_A
 ; CHECK-NEXT:   bind Foo Foo_A a (

@@ -3,13 +3,14 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from . import hw
+from . import seq
 from .._mlir_libs._circt._seq import *
 from ..dialects._ods_common import _cext as _ods_cext
-from ..ir import IntegerType, OpView, StringAttr
+from ..ir import IntegerType, OpView, StringAttr, InsertionPoint
 from ..support import BackedgeBuilder, NamedValueOpView
 from ._seq_ops_gen import *
 from ._seq_ops_gen import _Dialect
-from .seq import CompRegOp
+from .seq import CompRegOp, InitialOp
 
 
 # Create a computational register whose input is the given value, and is clocked
@@ -92,6 +93,21 @@ class CompRegLike:
       operands += [None, None]
 
     if power_on_value is not None:
+      if isinstance(power_on_value.type, seq.ImmutableType):
+        pass
+      else:
+        if power_on_value.owner is None:
+          assert False, "Initial value must not be port"
+        elif isinstance(power_on_value.owner.opview, hw.ConstantOp):
+          init = InitialOp([seq.ImmutableType.get(power_on_value.type)])
+          init.body.blocks.append()
+          with InsertionPoint(init.body.blocks[0]):
+            cloned_constant = power_on_value.owner.clone()
+            seq.YieldOp(cloned_constant)
+
+          power_on_value = init.results[0]
+        else:
+          assert False, "Non-constant initial value not supported"
       operands.append(power_on_value)
       operand_segment_sizes.append(1)
     else:

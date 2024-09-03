@@ -56,7 +56,7 @@ addressing, meaning that this operation sets / reads the entire value.
 - **reset**: Signal to set the state to 'resetValue'. Optional.
 - **resetValue**: A value which the state is set to upon reset. Required iff
 'reset' is present.
-- **powerOn**: A value which will be assigned to the register upon system power-on.
+- **initialValue**: An initial value for registers. This represents a system power-on value in FPGA.
 - **name**: A name for the register, defaults to `""`. Inferred from the textual
 SSA value name, or passed explicitly in builder APIs. The name will be passed to
 the `sv.reg` during lowering.
@@ -64,7 +64,7 @@ the `sv.reg` during lowering.
 passed to the `sv.reg` during lowering if present.
 
 ```mlir
-%q = seq.compreg %input, %clk [ reset %reset, %resetValue ] [powerOn %powerOn] : $type(input)
+%q = seq.compreg %input, %clk [ reset %reset, %resetValue ] [initial %initial] : $type(input)
 ```
 
 Upon initialization, the state is defined to be uninitialized.
@@ -329,3 +329,36 @@ The fifo operation is configurable with the following parameters:
 Like `seq.hlmem` there are no guarantees that all possible fifo configuration
 are able to be lowered. Available lowering passes will pattern match on the
 requested fifo configuration and attempt to provide a legal lowering.
+
+## State Initialization
+
+While ASICs might not have explicit initial values, they are crucial for simulation
+and FPGA implementation. FPGA designs often require constant initial values, while
+simulation allows for more complex initialization using expressions like function calls
+`$random`, `$readmem`, and `$fopen`.
+
+In order to represent various kinds of initialization, `seq.initial` op and `!seq.immutable` type
+are introduced. The `seq.initial` operation produces values with types wrapped in `!seq.immutable`.
+The `!seq.immutable` type wrapper prevents initial values from depending on time-variant values.
+Stateful operations typically require corresponding initial values with the `!seq.immutable` type.
+This ensures that the initial state of the operation is well-defined and independent of time-variant factors.
+
+Example Input:
+```mlir
+%r_init, %u_init = seq.initial {
+  %rand = sv.macro.ref.se @RANDOM() : () -> i32
+  %c0_i32 = hw.constant 0 : i32
+  seq.yield %rand, %c0_i32 : i32, i32
+} : !seq.immutable<i32>, !seq.immutable<i32>
+
+%r = seq.compreg %i, %clk initial %r_init : i32
+%u = seq.compreg %i, %clk initial %u_init : i32
+```
+
+Output Verilog:
+```verilog
+reg [31:0] r;
+initial
+  r = `RANDOM;
+reg [31:0] u = 32'h0;
+```

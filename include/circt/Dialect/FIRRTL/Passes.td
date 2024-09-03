@@ -984,4 +984,13 @@ def CheckRecursiveInstantiation : Pass<"firrtl-check-recursive-instantiation",
   let constructor = "circt::firrtl::createCheckRecursiveInstantiation()";
 }
 
+def CheckLayers : Pass<"firrtl-check-layers", "firrtl::CircuitOp"> {
+  let summary = "Check for illegal layers instantiated under layers";
+  let description = [{
+    This pass checks for illegal instantiation of a module with a layer
+    underneath another layer.
+  }];
+  let constructor = "circt::firrtl::createCheckLayers()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

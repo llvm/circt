@@ -76,7 +76,7 @@ struct esi::backends::trace::TraceAccelerator::Impl {
   void adoptChannelPort(ChannelPort *port) { channels.emplace_back(port); }
 
   void write(const AppIDPath &id, const std::string &portName, const void *data,
-             size_t size);
+             size_t size, const std::string &prefix = "");
   std::ostream &write(std::string service) {
     assert(traceWrite && "traceWrite is null");
     *traceWrite << "[" << service << "] ";
@@ -93,14 +93,15 @@ private:
 
 void TraceAccelerator::Impl::write(const AppIDPath &id,
                                    const std::string &portName,
-                                   const void *data, size_t size) {
+                                   const void *data, size_t size,
+                                   const std::string &prefix) {
   if (!isWriteable())
     return;
   std::string b64data;
   utils::encodeBase64(data, size, b64data);
 
-  *traceWrite << "write " << id << '.' << portName << ": " << b64data
-              << std::endl;
+  *traceWrite << prefix << (prefix.empty() ? "w" : "W") << "rite " << id << '.'
+              << portName << ": " << b64data << std::endl;
 }
 
 std::unique_ptr<AcceleratorConnection>
@@ -190,6 +191,11 @@ public:
 
   virtual void write(const MessageData &data) override {
     impl.write(id, portName, data.getBytes(), data.getSize());
+  }
+
+  bool tryWrite(const MessageData &data) override {
+    impl.write(id, portName, data.getBytes(), data.getSize(), "try");
+    return true;
   }
 
 protected:

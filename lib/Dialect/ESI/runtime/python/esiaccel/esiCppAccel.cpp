@@ -42,6 +42,24 @@ struct polymorphic_type_hook<ChannelPort> {
     return port;
   }
 };
+template <>
+struct polymorphic_type_hook<Service> {
+  static const void *get(const Service *svc, const std::type_info *&type) {
+    if (auto p = dynamic_cast<const MMIO *>(svc)) {
+      type = &typeid(MMIO);
+      return p;
+    }
+    if (auto p = dynamic_cast<const SysInfo *>(svc)) {
+      type = &typeid(SysInfo);
+      return p;
+    }
+    if (auto p = dynamic_cast<const HostMem *>(svc)) {
+      type = &typeid(HostMem);
+      return p;
+    }
+    return svc;
+  }
+};
 
 namespace detail {
 /// Pybind11 doesn't have a built-in type caster for std::any
@@ -118,6 +136,31 @@ PYBIND11_MODULE(esiCppAccel, m) {
           "type", [](Constant &c) { return getPyType(*c.type); },
           py::return_value_policy::reference);
 
+  py::class_<AppID>(m, "AppID")
+      .def(py::init<std::string, std::optional<uint32_t>>(), py::arg("name"),
+           py::arg("idx") = std::nullopt)
+      .def_property_readonly("name", [](AppID &id) { return id.name; })
+      .def_property_readonly("idx",
+                             [](AppID &id) -> py::object {
+                               if (id.idx)
+                                 return py::cast(id.idx);
+                               return py::none();
+                             })
+      .def("__repr__",
+           [](AppID &id) {
+             std::string ret = "<" + id.name;
+             if (id.idx)
+               ret = ret + "[" + std::to_string(*id.idx) + "]";
+             ret = ret + ">";
+             return ret;
+           })
+      .def("__eq__", [](AppID &a, AppID &b) { return a == b; })
+      .def("__hash__", [](AppID &id) {
+        return utils::hash_combine(std::hash<std::string>{}(id.name),
+                                   std::hash<uint32_t>{}(id.idx.value_or(-1)));
+      });
+  py::class_<AppIDPath>(m, "AppIDPath").def("__repr__", &AppIDPath::toStr);
+
   py::class_<ModuleInfo>(m, "ModuleInfo")
       .def_property_readonly("name", [](ModuleInfo &info) { return info.name; })
       .def_property_readonly("summary",
@@ -137,13 +180,22 @@ PYBIND11_MODULE(esiCppAccel, m) {
         return os.str();
       });
 
-  py::class_<SysInfo>(m, "SysInfo")
+  py::class_<services::Service>(m, "Service");
+
+  py::class_<SysInfo, services::Service>(m, "SysInfo")
       .def("esi_version", &SysInfo::getEsiVersion)
       .def("json_manifest", &SysInfo::getJsonManifest);
 
-  py::class_<services::MMIO>(m, "MMIO")
+  py::class_<MMIO::RegionDescriptor>(m, "MMIORegionDescriptor")
+      .def_property_readonly("base",
+                             [](MMIO::RegionDescriptor &r) { return r.base; })
+      .def_property_readonly("size",
+                             [](MMIO::RegionDescriptor &r) { return r.size; });
+  py::class_<services::MMIO, services::Service>(m, "MMIO")
       .def("read", &services::MMIO::read)
-      .def("write", &services::MMIO::write);
+      .def("write", &services::MMIO::write)
+      .def_property_readonly("regions", &services::MMIO::getRegions,
+                             py::return_value_policy::reference);
 
   py::class_<services::HostMem::HostMemRegion>(m, "HostMemRegion")
       .def_property_readonly("ptr",
@@ -168,7 +220,7 @@ PYBIND11_MODULE(esiCppAccel, m) {
         return ret;
       });
 
-  py::class_<services::HostMem>(m, "HostMem")
+  py::class_<services::HostMem, services::Service>(m, "HostMem")
       .def("allocate", &services::HostMem::allocate, py::arg("size"),
            py::arg("options") = services::HostMem::Options(),
            py::return_value_policy::take_ownership)
@@ -185,30 +237,6 @@ PYBIND11_MODULE(esiCppAccel, m) {
             return self.unmapMemory(reinterpret_cast<void *>(ptr));
           },
           py::arg("ptr"));
-
-  py::class_<AppID>(m, "AppID")
-      .def(py::init<std::string, std::optional<uint32_t>>(), py::arg("name"),
-           py::arg("idx") = std::nullopt)
-      .def_property_readonly("name", [](AppID &id) { return id.name; })
-      .def_property_readonly("idx",
-                             [](AppID &id) -> py::object {
-                               if (id.idx)
-                                 return py::cast(id.idx);
-                               return py::none();
-                             })
-      .def("__repr__",
-           [](AppID &id) {
-             std::string ret = "<" + id.name;
-             if (id.idx)
-               ret = ret + "[" + std::to_string(*id.idx) + "]";
-             ret = ret + ">";
-             return ret;
-           })
-      .def("__eq__", [](AppID &a, AppID &b) { return a == b; })
-      .def("__hash__", [](AppID &id) {
-        return utils::hash_combine(std::hash<std::string>{}(id.name),
-                                   std::hash<uint32_t>{}(id.idx.value_or(-1)));
-      });
 
   // py::class_<std::__basic_future<MessageData>>(m, "MessageDataFuture");
   py::class_<std::future<MessageData>>(m, "MessageDataFuture")
@@ -232,11 +260,18 @@ PYBIND11_MODULE(esiCppAccel, m) {
                              py::return_value_policy::reference);
 
   py::class_<WriteChannelPort, ChannelPort>(m, "WriteChannelPort")
-      .def("write", [](WriteChannelPort &p, py::bytearray &data) {
+      .def("write",
+           [](WriteChannelPort &p, py::bytearray &data) {
+             py::buffer_info info(py::buffer(data).request());
+             std::vector<uint8_t> dataVec((uint8_t *)info.ptr,
+                                          (uint8_t *)info.ptr + info.size);
+             p.write(dataVec);
+           })
+      .def("tryWrite", [](WriteChannelPort &p, py::bytearray &data) {
         py::buffer_info info(py::buffer(data).request());
         std::vector<uint8_t> dataVec((uint8_t *)info.ptr,
                                      (uint8_t *)info.ptr + info.size);
-        p.write(dataVec);
+        return p.tryWrite(dataVec);
       });
   py::class_<ReadChannelPort, ChannelPort>(m, "ReadChannelPort")
       .def(
@@ -259,6 +294,12 @@ PYBIND11_MODULE(esiCppAccel, m) {
            py::return_value_policy::reference);
 
   py::class_<ServicePort, BundlePort>(m, "ServicePort");
+
+  py::class_<MMIO::MMIORegion, ServicePort>(m, "MMIORegion")
+      .def_property_readonly("descriptor", &MMIO::MMIORegion::getDescriptor)
+      .def("read", &MMIO::MMIORegion::read)
+      .def("write", &MMIO::MMIORegion::write);
+
   py::class_<FuncService::Function, ServicePort>(m, "Function")
       .def(
           "call",
@@ -279,6 +320,8 @@ PYBIND11_MODULE(esiCppAccel, m) {
       py::class_<HWModule>(m, "HWModule")
           .def_property_readonly("info", &HWModule::getInfo)
           .def_property_readonly("ports", &HWModule::getPorts,
+                                 py::return_value_policy::reference)
+          .def_property_readonly("services", &HWModule::getServices,
                                  py::return_value_policy::reference);
 
   // In order to inherit methods from "HWModule", it needs to be defined first.

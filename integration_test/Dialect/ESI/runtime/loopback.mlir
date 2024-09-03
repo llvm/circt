@@ -145,15 +145,9 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // QUERY-HIER:     internal_write:
 // QUERY-HIER:       ack: !esi.channel<i0>
 // QUERY-HIER:       req: !esi.channel<!hw.struct<address: i5, data: i64>>
-// QUERY-HIER:     func1:
-// QUERY-HIER:       arg: !esi.channel<i16>
-// QUERY-HIER:       result: !esi.channel<i16>
-// QUERY-HIER:     structFunc:
-// QUERY-HIER:       arg: !esi.channel<!hw.struct<a: ui16, b: si8>>
-// QUERY-HIER:       result: !esi.channel<!hw.struct<x: si8, y: si8>>
-// QUERY-HIER:     arrayFunc:
-// QUERY-HIER:       arg: !esi.channel<!hw.array<1xsi8>>
-// QUERY-HIER:       result: !esi.channel<!hw.array<2xsi8>>
+// QUERY-HIER:     func1: function i16(i16)
+// QUERY-HIER:     structFunc: function !hw.struct<x: si8, y: si8>(!hw.struct<a: ui16, b: si8>)
+// QUERY-HIER:     arrayFunc: function !hw.array<2xsi8>(!hw.array<1xsi8>)
 // QUERY-HIER: * Children:
 // QUERY-HIER:   * Instance:loopback_inst[0]
 // QUERY-HIER:   * Ports:
