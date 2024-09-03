@@ -4,7 +4,6 @@
 // RUN: rm -rf %t6 && mkdir %t6 && cd %t6
 // RUN: mkdir hw && cd hw
 // RUN: circt-opt %s --esi-connect-services --esi-appid-hier=top=top --esi-build-manifest=top=top --esi-clean-metadata --lower-esi-to-physical --lower-esi-bundles --lower-esi-ports --lower-esi-to-hw=platform=cosim --lower-seq-to-sv --lower-hwarith-to-hw --canonicalize --export-split-verilog
-// RUN: cd ..
 
 // Test cosimulation
 // RUN: esi-cosim.py --source %t6/hw --top top -- esitester cosim env wait | FileCheck %s
