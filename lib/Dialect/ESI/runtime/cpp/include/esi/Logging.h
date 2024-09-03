@@ -119,25 +119,45 @@ protected:
   bool debugEnabled = false;
 };
 
+/// A thread-safe logger which calls functions implemented by subclasses. Only
+/// protects the `log` method. If subclasses override other methods and need to
+/// protect them, they need to do that themselves.
+class TSLogger : public Logger {
+public:
+  using Logger::Logger;
+
+  /// Grabs the lock and calls logImpl.
+  void log(Level level, const std::string &subsystem, const std::string &msg,
+           const std::map<std::string, std::any> *details) override final;
+
+protected:
+  /// Subclasses must implement this method to log messages.
+  virtual void logImpl(Level level, const std::string &subsystem,
+                       const std::string &msg,
+                       const std::map<std::string, std::any> *details) = 0;
+
+  /// Mutex to protect the stream from interleaved logging writes.
+  std::mutex mutex;
+};
+
 /// A logger that writes to a C++ std::ostream.
-class StreamLogger : public Logger {
+class StreamLogger : public TSLogger {
 public:
   /// Create a stream logger that logs to the given output stream and error
   /// output stream.
   StreamLogger(Level minLevel, std::ostream &out, std::ostream &error)
-      : Logger(minLevel == Level::Debug), minLevel(minLevel), outStream(out),
+      : TSLogger(minLevel == Level::Debug), minLevel(minLevel), outStream(out),
         errorStream(error) {}
   /// Create a stream logger that logs to stdout, stderr.
   StreamLogger(Level minLevel);
-  void log(Level level, const std::string &subsystem, const std::string &msg,
-           const std::map<std::string, std::any> *details) override;
+  void logImpl(Level level, const std::string &subsystem,
+               const std::string &msg,
+               const std::map<std::string, std::any> *details) override;
 
 private:
   /// The minimum log level to emit.
   Level minLevel;
 
-  /// Mutex to protect the stream from interleaved logging writes.
-  std::mutex mutex;
   /// Everything except errors goes here.
   std::ostream &outStream;
   /// Just for errors.

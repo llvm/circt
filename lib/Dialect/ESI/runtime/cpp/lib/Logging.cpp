@@ -20,22 +20,20 @@
 
 using namespace esi;
 
-// Necessary in some versions of the c++ standard library to avoid warnings
-// about scoped_lock deduction guides.
-struct allow_ctad_t;
-namespace std {
-scoped_lock(allow_ctad_t) -> scoped_lock<void>;
-lock_guard(allow_ctad_t) -> lock_guard<void>;
-} // namespace std
+void TSLogger::log(Level level, const std::string &subsystem,
+                   const std::string &msg,
+                   const std::map<std::string, std::any> *details) {
+  std::scoped_lock<std::mutex> lock(mutex);
+  logImpl(level, subsystem, msg, details);
+}
 
 StreamLogger::StreamLogger(Level minLevel)
-    : Logger(minLevel == Level::Debug), minLevel(minLevel),
+    : TSLogger(minLevel == Level::Debug), minLevel(minLevel),
       outStream(std::cout), errorStream(std::cerr) {}
 
-void StreamLogger::log(Level level, const std::string &subsystem,
-                       const std::string &msg,
-                       const std::map<std::string, std::any> *details) {
-  std::scoped_lock lock(mutex);
+void StreamLogger::logImpl(Level level, const std::string &subsystem,
+                           const std::string &msg,
+                           const std::map<std::string, std::any> *details) {
   std::ostream &os = level == Level::Error ? errorStream : outStream;
   unsigned indentSpaces = 0;
 
