@@ -115,7 +115,6 @@ struct SVModuleOpConversion : public OpConversionPattern<SVModuleOp> {
   LogicalResult
   matchAndRewrite(SVModuleOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto outputOp = op.getOutputOp();
     rewriter.setInsertionPoint(op);
 
     // Create the hw.module to replace moore.module
@@ -133,12 +132,19 @@ struct SVModuleOpConversion : public OpConversionPattern<SVModuleOp> {
     rewriter.inlineRegionBefore(op.getBodyRegion(), hwModuleOp.getBodyRegion(),
                                 hwModuleOp.getBodyRegion().end());
 
-    // Rewrite the hw.output op
-    rewriter.setInsertionPointToEnd(hwModuleOp.getBodyBlock());
-    rewriter.replaceOpWithNewOp<hw::OutputOp>(outputOp, outputOp.getOperands());
-
     // Erase the original op
     rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct OutputOpConversion : public OpConversionPattern<OutputOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(OutputOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<hw::OutputOp>(op, adaptor.getOperands());
     return success();
   }
 };
@@ -946,17 +952,6 @@ struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
 // Statement Conversion
 //===----------------------------------------------------------------------===//
 
-struct HWOutputOpConversion : public OpConversionPattern<hw::OutputOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(hw::OutputOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<hw::OutputOp>(op, adaptor.getOperands());
-    return success();
-  }
-};
-
 struct HWInstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -1308,7 +1303,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
     ConversionOpConversion, ReadOpConversion, NamedConstantOpConv,
     StructExtractOpConversion, StructExtractRefOpConversion,
     ExtractRefOpConversion, StructCreateOpConversion, ConditionalOpConversion,
-    YieldOpConversion,
+    YieldOpConversion, OutputOpConversion,
 
     // Patterns of unary operations.
     ReduceAndOpConversion, ReduceOrOpConversion, ReduceXorOpConversion,
@@ -1360,7 +1355,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
     CondBranchOpConversion, BranchOpConversion,
 
     // Patterns of other operations outside Moore dialect.
-    HWOutputOpConversion, HWInstanceOpConversion, ReturnOpConversion,
+    HWInstanceOpConversion, ReturnOpConversion,
     CallOpConversion, UnrealizedConversionCastConversion
   >(typeConverter, context);
   // clang-format on
