@@ -951,7 +951,12 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
       if (auto maybeDescription = field.get("description"))
         attrs.append("description", cast<StringAttr>(maybeDescription));
       attrs.append("name", name);
-      attrs.append("tpe", tpe.getAs<StringAttr>("class"));
+      auto tpeClass = tpe.getAs<StringAttr>("class");
+      if (!tpeClass) {
+        mlir::emitError(loc, "missing 'class' key in") << tpe;
+        return std::nullopt;
+      }
+      attrs.append("tpe", tpeClass);
       elements.push_back(*eltAttr);
     }
     // Add an annotation that stores information necessary to construct the
@@ -976,7 +981,12 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
   // either be an actual FIRRTL ground type or a GrandCentral uninferred type.
   // This can be ignored for us.
   if (classBase == "GroundType") {
-    auto maybeTarget = refToTarget(augmentedType.getAs<DictionaryAttr>("ref"));
+    auto augRef = augmentedType.getAs<DictionaryAttr>("ref");
+    if (!augRef) {
+      mlir::emitError(loc, "missing 'ref' key in ") << augmentedType;
+      return std::nullopt;
+    }
+    auto maybeTarget = refToTarget(augRef);
     if (!maybeTarget) {
       mlir::emitError(loc, "Failed to parse ReferenceTarget").attachNote()
           << "See the full Annotation here: " << root;
