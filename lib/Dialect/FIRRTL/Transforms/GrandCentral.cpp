@@ -876,6 +876,8 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
 
     auto refAttr =
         tryGetAs<StringAttr>(refTarget, refTarget, "ref", loc, clazz, path);
+    if (!refAttr)
+      return {};
 
     return (Twine("~" + circuitAttr.getValue() + "|" + moduleAttr.getValue() +
                   strpath + ">" + refAttr.getValue()) +
@@ -932,13 +934,15 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
       auto name = tryGetAs<StringAttr>(field, root, "name", loc, clazz, ePath);
       auto tpe =
           tryGetAs<DictionaryAttr>(field, root, "tpe", loc, clazz, ePath);
+      if (!name || !tpe)
+        return std::nullopt;
       std::optional<StringAttr> description;
       if (auto maybeDescription = field.get("description"))
         description = cast<StringAttr>(maybeDescription);
       auto eltAttr = parseAugmentedType(
           state, tpe, root, companion, name, defName, std::nullopt, description,
           clazz, companionAttr, path + "_" + name.getValue());
-      if (!name || !tpe || !eltAttr)
+      if (!eltAttr)
         return std::nullopt;
 
       // Collect information necessary to build a module with this view later.
