@@ -501,3 +501,8 @@ hw.module @Foo () {
   hw.instance_choice "inst" option "foo" @DoesNotExist () -> ()
 }
 
+// -----
+
+// Don't crash if hw.array attribute fails to parse as integer
+// expected-error @below {{floating point value not valid for specified type}}
+hw.module @arrayTypeError(in %in: !hw.array<44.44axi0>) { }
