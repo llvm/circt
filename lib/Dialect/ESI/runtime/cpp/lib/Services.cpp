@@ -61,7 +61,7 @@ MMIO::MMIO(Context &ctxt, AppIDPath idPath, std::string implName,
       throw std::runtime_error("MMIO client missing 'offset' option");
     Constant offset = std::any_cast<Constant>(offsetIter->second);
     uint64_t offsetVal = std::any_cast<uint64_t>(offset.value);
-    if (offsetVal >= 1ul << 32)
+    if (offsetVal >= 1ull << 32)
       throw std::runtime_error("MMIO client offset mustn't exceed 32 bits");
 
     auto sizeIter = client.implOptions.find("size");
@@ -69,7 +69,7 @@ MMIO::MMIO(Context &ctxt, AppIDPath idPath, std::string implName,
       throw std::runtime_error("MMIO client missing 'size' option");
     Constant size = std::any_cast<Constant>(sizeIter->second);
     uint64_t sizeVal = std::any_cast<uint64_t>(size.value);
-    if (sizeVal >= 1ul << 32)
+    if (sizeVal >= 1ull << 32)
       throw std::runtime_error("MMIO client size mustn't exceed 32 bits");
     regions[client.relPath] =
         RegionDescriptor{(uint32_t)offsetVal, (uint32_t)sizeVal};

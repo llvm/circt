@@ -34,6 +34,8 @@ StreamLogger::StreamLogger(Level minLevel)
 void StreamLogger::logImpl(Level level, const std::string &subsystem,
                            const std::string &msg,
                            const std::map<std::string, std::any> *details) {
+  if (level < minLevel)
+    return;
   std::ostream &os = level == Level::Error ? errorStream : outStream;
   unsigned indentSpaces = 0;
 

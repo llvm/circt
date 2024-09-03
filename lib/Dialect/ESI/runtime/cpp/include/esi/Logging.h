@@ -27,6 +27,7 @@
 #include <iosfwd>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 
 namespace esi {
@@ -34,11 +35,11 @@ namespace esi {
 class Logger {
 public:
   enum class Level {
-    Error,   // Many errors will be followed by exceptions which may get caught.
-    Warning, // May indicate a problem.
-    Info,    // General information, like connecting to an accelerator.
     Debug,   // Everything and the kitchen sink, possibly including _all_
              // messages written and read.
+    Info,    // General information, like connecting to an accelerator.
+    Warning, // May indicate a problem.
+    Error,   // Many errors will be followed by exceptions which may get caught.
   };
   Logger(bool debugEnabled) : debugEnabled(debugEnabled) {}
   virtual ~Logger() = default;
