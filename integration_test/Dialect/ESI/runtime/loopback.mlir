@@ -14,13 +14,13 @@
 // RUN: esi-cosim.py --source %t6/hw --top top -- %python %s.py cosim env
 
 // Test C++ header generation against the manifest file
-// RUN: %python -m esiaccel.cppgen --file %t6/hw/esi_system_manifest.json --output-dir %t6/include/loopback/
+// RUN: %python -m esiaccel.codegen --file %t6/hw/esi_system_manifest.json --output-dir %t6/include/loopback/
 // RUN: %host_cxx -I %t6/include %s.cpp -o %t6/test
 // RUN: %t6/test | FileCheck %s --check-prefix=CPP-TEST
 // RUN: FileCheck %s --check-prefix=LOOPBACK-H --input-file %t6/include/loopback/LoopbackIP.h
 
 // Test C++ header generation against a live accelerator
-// RUN: esi-cosim.py --source %t6 --top top -- %python -m esiaccel.cppgen --platform cosim --connection env --output-dir %t6/include/loopback/
+// RUN: esi-cosim.py --source %t6 --top top -- %python -m esiaccel.codegen --platform cosim --connection env --output-dir %t6/include/loopback/
 // RUN: %host_cxx -I %t6/include %s.cpp -o %t6/test
 // RUN: %t6/test | FileCheck %s --check-prefix=CPP-TEST
 
@@ -145,15 +145,9 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // QUERY-HIER:     internal_write:
 // QUERY-HIER:       ack: !esi.channel<i0>
 // QUERY-HIER:       req: !esi.channel<!hw.struct<address: i5, data: i64>>
-// QUERY-HIER:     func1:
-// QUERY-HIER:       arg: !esi.channel<i16>
-// QUERY-HIER:       result: !esi.channel<i16>
-// QUERY-HIER:     structFunc:
-// QUERY-HIER:       arg: !esi.channel<!hw.struct<a: ui16, b: si8>>
-// QUERY-HIER:       result: !esi.channel<!hw.struct<x: si8, y: si8>>
-// QUERY-HIER:     arrayFunc:
-// QUERY-HIER:       arg: !esi.channel<!hw.array<1xsi8>>
-// QUERY-HIER:       result: !esi.channel<!hw.array<2xsi8>>
+// QUERY-HIER:     func1: function i16(i16)
+// QUERY-HIER:     structFunc: function !hw.struct<x: si8, y: si8>(!hw.struct<a: ui16, b: si8>)
+// QUERY-HIER:     arrayFunc: function !hw.array<2xsi8>(!hw.array<1xsi8>)
 // QUERY-HIER: * Children:
 // QUERY-HIER:   * Instance:loopback_inst[0]
 // QUERY-HIER:   * Ports:

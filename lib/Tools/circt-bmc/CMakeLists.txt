@@ -13,6 +13,7 @@ add_circt_library(CIRCTBMCTransforms
 
   MLIRFuncDialect
   MLIRIR
+  MLIRLLVMDialect
   MLIRSupport
   MLIRSCFDialect
   MLIRTransforms

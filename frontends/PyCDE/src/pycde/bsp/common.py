@@ -152,11 +152,19 @@ class ChannelMMIO(esi.ServiceImplementation):
     for bundle in bundles.to_client_reqs:
       if bundle.port == 'read':
         table[offset] = bundle
-        bundle.add_record({"offset": offset, "type": "ro"})
+        bundle.add_record({
+            "offset": offset,
+            "size": ChannelMMIO.RegisterSpace,
+            "type": "ro"
+        })
         offset += ChannelMMIO.RegisterSpace
       elif bundle.port == 'read_write':
         table[offset] = bundle
-        bundle.add_record({"offset": offset, "type": "rw"})
+        bundle.add_record({
+            "offset": offset,
+            "size": ChannelMMIO.RegisterSpace,
+            "type": "rw"
+        })
         offset += ChannelMMIO.RegisterSpace
       else:
         assert False, "Unrecognized port name."

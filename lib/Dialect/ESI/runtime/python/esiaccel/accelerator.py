@@ -10,7 +10,7 @@
 #
 # ===-----------------------------------------------------------------------===#
 
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from .types import BundlePort
 from . import esiCppAccel as cpp
@@ -65,6 +65,13 @@ class HWModule:
         name: BundlePort(self, port)
         for name, port in self.cpp_hwmodule.ports.items()
     }
+
+  @property
+  def services(self) -> List[cpp.AppID]:
+    return self.cpp_hwmodule.services
+
+
+MMIO = cpp.MMIO
 
 
 class Instance(HWModule):
