@@ -529,8 +529,7 @@ LogicalResult AssignedVariableOp::canonicalize(AssignedVariableOp op,
         }
       } else
         break;
-    } else
-      continue;
+    }
   }
 
   return failure();
