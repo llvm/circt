@@ -1269,7 +1269,7 @@ static OpFoldResult foldMux(OpTy op, typename OpTy::FoldAdaptor adaptor) {
                       APInt(0, 0, op.getType().isSignedInteger()));
 
   // mux(cond, x, x) -> x
-  if (op.getHigh() == op.getLow())
+  if (op.getHigh() == op.getLow() && op.getHigh().getType() == op.getType())
     return op.getHigh();
 
   // The following folds require that the result has a known width. Otherwise
