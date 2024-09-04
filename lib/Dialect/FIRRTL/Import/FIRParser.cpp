@@ -1676,12 +1676,7 @@ InnerSymFixups::resolve(hw::InnerSymbolNamespaceCollection &isnc) {
         f.target, [&isnc](FModuleLike module) -> hw::InnerSymbolNamespace & {
           return isnc.get(module);
         });
-    // Defensively check this anyway, but this should be checked during parsing
-    // the operation being fixed up.
-    if (!ref)
-      return f.innerRefUser.emitError("unable to resolve inner symbol target")
-          .attachNote(f.target.getOp()->getLoc())
-          .append("target operation");
+    assert(ref && "unable to resolve inner symbol target");
 
     // Per-op fixup logic.  Only RWProbeOp's presently.
     auto result =
