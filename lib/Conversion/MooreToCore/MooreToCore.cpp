@@ -1301,7 +1301,9 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
           mlir::Location loc) -> std::optional<mlir::Value> {
         if (inputs.size() != 1)
           return std::nullopt;
-        return inputs[0];
+        return builder
+            .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
+            ->getResult(0);
       });
 }
 

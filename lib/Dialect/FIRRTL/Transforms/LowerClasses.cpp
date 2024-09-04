@@ -1857,14 +1857,16 @@ static void populateTypeConverter(TypeConverter &converter) {
   converter.addTargetMaterialization(
       [](OpBuilder &builder, Type type, ValueRange values, Location loc) {
         assert(values.size() == 1);
-        return values[0];
+        return builder.create<UnrealizedConversionCastOp>(loc, type, values[0])
+            ->getResult(0);
       });
 
   // Add a source materialization to fold away unrealized conversion casts.
   converter.addSourceMaterialization(
       [](OpBuilder &builder, Type type, ValueRange values, Location loc) {
         assert(values.size() == 1);
-        return values[0];
+        return builder.create<UnrealizedConversionCastOp>(loc, type, values[0])
+            ->getResult(0);
       });
 }
 

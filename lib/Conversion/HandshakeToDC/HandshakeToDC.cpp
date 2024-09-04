@@ -92,7 +92,9 @@ public:
           if (vt && !vt.getInnerType())
             return pack(builder, inputs.front());
 
-          return inputs[0];
+          return builder
+              .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
+              ->getResult(0);
         });
 
     addSourceMaterialization(
@@ -112,7 +114,9 @@ public:
           if (vt && !vt.getInnerType())
             return pack(builder, inputs.front());
 
-          return inputs[0];
+          return builder
+              .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
+              ->getResult(0);
         });
   }
 };
