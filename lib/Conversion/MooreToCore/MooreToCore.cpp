@@ -1258,6 +1258,22 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return hw::StructType::get(type.getContext(), fields);
   });
 
+  // FIXME: Mapping unpacked struct type to struct type in hw dialect may be a
+  // plain solution. The packed and unpacked data structures have some
+  // differences though they look similarily. The packed data structure is
+  // contiguous in memory but another is opposite. The differences will affect
+  // data layout and granularity of event tracking in simulation.
+  typeConverter.addConversion([&](UnpackedStructType type) {
+    SmallVector<hw::StructType::FieldInfo> fields;
+    for (auto field : type.getMembers()) {
+      hw::StructType::FieldInfo info;
+      info.type = typeConverter.convertType(field.type);
+      info.name = field.name;
+      fields.push_back(info);
+    }
+    return hw::StructType::get(type.getContext(), fields);
+  });
+
   typeConverter.addConversion([&](RefType type) -> std::optional<Type> {
     auto innerType = typeConverter.convertType(type.getNestedType());
     if (innerType)

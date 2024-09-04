@@ -439,6 +439,44 @@ moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.s
   moore.output %0, %3, %4 : !moore.i32, !moore.struct<{exp_bits: i32, man_bits: i32}>, !moore.struct<{exp_bits: i32, man_bits: i32}>
 }
 
+// CHECK-LABEL:   hw.module @UnpackedStruct
+moore.module @UnpackedStruct() {
+  // CHECK: %[[C1_32:.*]] = hw.constant 1 : i32
+  // CHECK: %[[C0_32:.*]] = hw.constant 0 : i32
+  %0 = moore.constant 1 : i32
+  %1 = moore.constant 0 : i32
+
+  // CHECK: %[[C0_64:.*]] = hw.constant 0 : i64
+  // CHECK: %[[INIT:.*]] = hw.bitcast %[[C0_64]] : (i64) -> !hw.struct<a: i32, b: i32>
+  // CHECK: %[[USTRUCT:.*]] = llhd.sig %[[INIT]] : !hw.struct<a: i32, b: i32>
+  %ms = moore.variable : <ustruct<{a: i32, b: i32}>>
+
+// CHECK: llhd.process {
+  moore.procedure initial {
+    // CHECK: %[[STRUCT_0:.*]] = hw.struct_create (%[[C0_32]], %[[C1_32]]) : !hw.struct<a: i32, b: i32>
+    %2 = moore.struct_create %1, %0 : !moore.i32, !moore.i32 -> ustruct<{a: i32, b: i32}>
+
+    // CHECK: %[[TIME_0:.*]] = llhd.constant_time <0ns, 0d, 1e>
+    // CHECK: llhd.drv %[[USTRUCT]], %[[STRUCT_0]] after %[[TIME_0]] : !hw.inout<struct<a: i32, b: i32>>
+    moore.blocking_assign %ms, %2 : ustruct<{a: i32, b: i32}>
+
+    // CHECK: %[[STRUCT_1:.*]] = hw.struct_create (%[[C1_32]], %[[C1_32]]) : !hw.struct<a: i32, b: i32>
+    %3 = moore.struct_create %0, %0 : !moore.i32, !moore.i32 -> ustruct<{a: i32, b: i32}>
+
+    // CHECK: %[[TIME_1:.*]] = llhd.constant_time <0ns, 0d, 1e>
+    // CHECK: llhd.drv %[[USTRUCT]], %[[STRUCT_1]] after %[[TIME_1]] : !hw.inout<struct<a: i32, b: i32>>
+    moore.blocking_assign %ms, %3 : ustruct<{a: i32, b: i32}>
+
+    // CHECK: %[[TIME_2:.*]] = llhd.constant_time <0ns, 0d, 1e>
+    // CHECK: llhd.drv %[[USTRUCT]], %[[STRUCT_1]] after %[[TIME_2]] : !hw.inout<struct<a: i32, b: i32>>
+    moore.blocking_assign %ms, %3 : ustruct<{a: i32, b: i32}>
+
+    // CHECK: llhd.halt
+    moore.return
+  }
+  moore.output
+}
+
 // CHECK-LABEL: func.func @CaseXZ(
 func.func @CaseXZ(%arg0: !moore.l8, %arg1: !moore.l8) {
   // CHECK: hw.constant -124 : i8
