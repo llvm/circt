@@ -181,8 +181,10 @@ static ParseResult parseHWElementType(AsmParser &p, Type &result) {
       typeString.starts_with("typealias<") || typeString.starts_with("int<") ||
       typeString.starts_with("enum<")) {
     llvm::StringRef mnemonic;
-    auto parseResult = generatedTypeParser(p, &mnemonic, result);
-    return parseResult.has_value() ? success() : failure();
+    if (auto parseResult = generatedTypeParser(p, &mnemonic, result);
+        parseResult.has_value())
+      return *parseResult;
+    return p.emitError(p.getNameLoc(), "invalid type `") << typeString << "`";
   }
 
   return p.parseType(result);
