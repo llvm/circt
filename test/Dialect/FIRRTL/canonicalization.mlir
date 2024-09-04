@@ -3635,4 +3635,9 @@ firrtl.module @multibit_mux_drop_front(in %vec_0: !firrtl.uint<8>, in %vec_1: !f
   firrtl.matchingconnect %c, %1 : !firrtl.uint<8>
 }
 
+firrtl.module private @Issue7562(in %sel : !firrtl.uint<1>, in %a : !firrtl.const.uint<1>, out %out : !firrtl.uint) {
+  %res = firrtl.mux(%sel, %a, %a) : (!firrtl.uint<1>, !firrtl.const.uint<1>, !firrtl.const.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %out, %res : !firrtl.uint, !firrtl.uint<1>
+}
+
 }
