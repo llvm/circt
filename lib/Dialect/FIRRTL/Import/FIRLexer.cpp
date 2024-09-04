@@ -352,9 +352,6 @@ FIRToken FIRLexer::lexInlineAnnotation(const char *tokStart) {
   bool stringMode = false;
   while (1) {
     switch (*curPtr++) {
-    case '\\':
-      ++curPtr;
-      break;
     case '"':
       stringMode = !stringMode;
       break;
@@ -370,6 +367,9 @@ FIRToken FIRLexer::lexInlineAnnotation(const char *tokStart) {
         break;
       ++depth;
       break;
+    case '\\':
+      ++curPtr;
+      [[fallthrough]];
     case 0:
       if (curPtr - 1 != curBuffer.end())
         break;
