@@ -195,6 +195,9 @@ struct ModuleVisitor : public BaseVisitor {
     return success();
   }
 
+  // Skip defparams which have been handled by slang.
+  LogicalResult visit(const slang::ast::DefParamSymbol &) { return success(); }
+
   // Ignore type parameters. These have already been handled by Slang's type
   // checking.
   LogicalResult visit(const slang::ast::TypeParameterSymbol &) {
