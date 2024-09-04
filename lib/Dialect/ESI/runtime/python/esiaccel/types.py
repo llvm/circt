@@ -362,6 +362,8 @@ class BundlePort:
     # TODO: add a proper registration mechanism for service ports.
     if isinstance(cpp_port, cpp.Function):
       return super().__new__(FunctionPort)
+    if isinstance(cpp_port, cpp.MMIORegion):
+      return super().__new__(MMIORegion)
     return super().__new__(cls)
 
   def __init__(self, owner: HWModule, cpp_port: cpp.BundlePort):
@@ -401,6 +403,28 @@ class MessageFuture(Future):
 
   def add_done_callback(self, fn: Callable[[Future], object]) -> None:
     raise NotImplementedError("add_done_callback is not implemented")
+
+
+class MMIORegion(BundlePort):
+  """A region of memory-mapped I/O space. This is a collection of named
+  channels, which are either read or read-write. The channels are accessed
+  by name, and can be connected to the host."""
+
+  def __init__(self, owner: HWModule, cpp_port: cpp.MMIORegion):
+    super().__init__(owner, cpp_port)
+    self.region = cpp_port
+
+  @property
+  def descriptor(self) -> cpp.MMIORegionDesc:
+    return self.region.descriptor
+
+  def read(self, offset: int) -> bytearray:
+    """Read a value from the MMIO region at the given offset."""
+    return self.region.read(offset)
+
+  def write(self, offset: int, data: bytearray) -> None:
+    """Write a value to the MMIO region at the given offset."""
+    self.region.write(offset, data)
 
 
 class FunctionPort(BundlePort):

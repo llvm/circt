@@ -648,7 +648,7 @@ void ServiceImplRecordOp::getDetails(SmallVectorImpl<NamedAttribute> &results) {
   SmallVector<Attribute, 8> reqDetails;
   for (auto reqDetail : getReqDetails().front().getOps<IsManifestData>())
     reqDetails.push_back(reqDetail.getDetailsAsDict());
-  results.emplace_back(StringAttr::get(ctxt, "client_details"),
+  results.emplace_back(StringAttr::get(ctxt, "clientDetails"),
                        ArrayAttr::get(ctxt, reqDetails));
 }
 
@@ -668,7 +668,7 @@ void printServiceImplRecordReqDetails(OpAsmPrinter &p, ServiceImplRecordOp,
 }
 
 StringRef ServiceImplClientRecordOp::getManifestClass() {
-  return "service_client";
+  return "serviceClient";
 }
 void ServiceImplClientRecordOp::getDetails(
     SmallVectorImpl<NamedAttribute> &results) {
@@ -676,27 +676,45 @@ void ServiceImplClientRecordOp::getDetails(
   // the bundle type since it is meaningless to the host and just clutters the
   // output.
   results.emplace_back(getRelAppIDPathAttrName(), getRelAppIDPathAttr());
-  results.emplace_back(getServicePortAttrName(), getServicePortAttr());
+  auto servicePort = getServicePortAttr();
+  results.emplace_back(
+      getServicePortAttrName(),
+      DictionaryAttr::get(
+          getContext(),
+          {
+              NamedAttribute(StringAttr::get(getContext(), "serviceName"),
+                             FlatSymbolRefAttr::get(servicePort.getModule())),
+              NamedAttribute(StringAttr::get(getContext(), "port"),
+                             servicePort.getName()),
+          }));
   // Don't add another level for the implementation details.
   for (auto implDetail : getImplDetailsAttr().getValue())
     results.push_back(implDetail);
 }
 
-StringRef ServiceRequestRecordOp::getManifestClass() { return "client_port"; }
+StringRef ServiceRequestRecordOp::getManifestClass() { return "clientPort"; }
 
 void ServiceRequestRecordOp::getDetails(
     SmallVectorImpl<NamedAttribute> &results) {
   auto *ctxt = getContext();
   results.emplace_back(StringAttr::get(ctxt, "appID"), getRequestorAttr());
-  results.emplace_back(getBundleTypeAttrName(), getBundleTypeAttr());
-  results.emplace_back(getServicePortAttrName(), getServicePortAttr());
-  if (auto stdSvc = getStdServiceAttr())
-    results.emplace_back(getStdServiceAttrName(), getStdServiceAttr());
+  results.emplace_back(getTypeIDAttrName(), getTypeIDAttr());
+  auto servicePort = getServicePortAttr();
+  results.emplace_back(
+      getServicePortAttrName(),
+      DictionaryAttr::get(
+          getContext(),
+          {
+              NamedAttribute(StringAttr::get(getContext(), "serviceName"),
+                             FlatSymbolRefAttr::get(servicePort.getModule())),
+              NamedAttribute(StringAttr::get(getContext(), "port"),
+                             servicePort.getName()),
+          }));
 }
 
-StringRef SymbolMetadataOp::getManifestClass() { return "sym_info"; }
+StringRef SymbolMetadataOp::getManifestClass() { return "symInfo"; }
 
-StringRef SymbolConstantsOp::getManifestClass() { return "sym_consts"; }
+StringRef SymbolConstantsOp::getManifestClass() { return "symConsts"; }
 void SymbolConstantsOp::getDetails(SmallVectorImpl<NamedAttribute> &results) {
   for (auto &attr : getConstantsAttr())
     results.push_back(attr);

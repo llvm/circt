@@ -65,11 +65,6 @@ struct ModuleLoweringState {
     InitialOpLowering(hw::HWModuleOp module)
         : builder(module.getModuleBody()), module(module) {}
 
-    ~InitialOpLowering() {
-      for (auto [placeHolder, _] : mapping)
-        placeHolder.getDefiningOp()->erase();
-    }
-
     // Lower initial ops.
     LogicalResult lower();
     LogicalResult lower(seq::InitialOp initialOp);

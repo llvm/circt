@@ -97,4 +97,8 @@ def MMIOServiceDeclOp: ESI_Op<"service.std.mmio",
   let assemblyFormat = [{
     $sym_name attr-dict
   }];
+
+  let extraClassDeclaration = [{
+    std::optional<StringRef> getTypeName() { return "esi.service.std.mmio"; }
+  }];
 }
