@@ -139,8 +139,8 @@ hw.module @reg_of_clock_type(in %clk: !seq.clock, in %rst: i1, in %i: !seq.clock
 
 hw.module @init_with_call(in %clk: !seq.clock, in %rst: i1, in %i: i32, in %s: !hw.struct<foo: i32>) {
   // SV:     sv.initial {
-  // SV-NEXT:   %1 = sv.system "random"() : () -> i32
-  // SV-NEXT:   sv.bpassign %reg, %1 : i32
+  // SV-NEXT:   [[V0:%.+]] = sv.system "random"() : () -> i32
+  // SV-NEXT:   sv.bpassign %reg, [[V0]] : i32
   // SV-NEXT: }
   %init = seq.initial {
     %rand = sv.system "random"() : () -> i32
