@@ -74,7 +74,7 @@ firrtl.module @VectorTarget(in %a : !firrtl.vector<uint<1>, 1>) {
 
 firrtl.circuit "AmbiguousPath" {
 firrtl.module @AmbiguousPath() {
-    // expected-warning @below {{unable to uniquely resolve target due to multiple instantiation}}
+    // expected-error @below {{unable to uniquely resolve target due to multiple instantiation}}
     %0 = firrtl.unresolved_path "OMReferenceTarget:~AmbiguousPath|Child"
     // expected-note @below {{instance here}}
     firrtl.instance child0 @Child()

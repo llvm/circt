@@ -384,16 +384,14 @@ PathTracker::getOrComputeNeedsAltBasePath(Location loc, StringAttr moduleName,
       break;
     }
     // If there is more than one instance of this module, then the path
-    // operation is ambiguous, which is a warning.  This should become an error
-    // once user code is properly enforcing single instantiation, but in
-    // practice this generates the same outputs as the original flow for now.
-    // See https://github.com/llvm/circt/issues/7128.
+    // operation is ambiguous, which is an error.
     if (!node->hasOneUse()) {
-      auto diag = mlir::emitWarning(loc)
+      auto diag = mlir::emitError(loc)
                   << "unable to uniquely resolve target due "
                      "to multiple instantiation";
       for (auto *use : node->uses())
         diag.attachNote(use->getInstance().getLoc()) << "instance here";
+      return diag;
     }
     node = (*node->usesBegin())->getParent();
   }
@@ -534,10 +532,8 @@ PathTracker::processPathTrackers(const AnnoTarget &target) {
       if (node->getModule() == owningModule || node->noUses())
         break;
 
-      // Append the next level of hierarchy to the path. Note that if there
-      // are multiple instances, which we warn about, this is where the
-      // ambiguity manifests. In practice, just picking usesBegin generates
-      // the same output as EmitOMIR would for now.
+      // Append the next level of hierarchy to the path.
+      assert(node->hasOneUse() && "expected single instantiation");
       InstanceRecord *inst = *node->usesBegin();
       path.push_back(
           OpAnnoTarget(inst->getInstance<InstanceOp>())
