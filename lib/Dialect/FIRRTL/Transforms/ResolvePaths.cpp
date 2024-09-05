@@ -58,15 +58,13 @@ struct PathResolver {
                << "unable to resolve path relative to owning module "
                << owningModule.getModuleNameAttr();
       // If there is more than one instance of this module, then the path
-      // operation is ambiguous, which is a warning. This should become an error
-      // once user code is properly enforcing single instantiation, but in
-      // practice this generates the same outputs as the original flow for now.
-      // See https://github.com/llvm/circt/issues/7128.
+      // operation is ambiguous, which is an error.
       if (!node->hasOneUse()) {
-        auto diag = emitWarning(loc) << "unable to uniquely resolve target due "
-                                        "to multiple instantiation";
+        auto diag = emitError(loc) << "unable to uniquely resolve target due "
+                                      "to multiple instantiation";
         for (auto *use : node->uses())
           diag.attachNote(use->getInstance().getLoc()) << "instance here";
+        return diag;
       }
       node = (*node->usesBegin())->getParent();
     }
