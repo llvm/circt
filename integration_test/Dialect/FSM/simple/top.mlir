@@ -9,10 +9,10 @@
 // CHECK: out: C
 // CHECK: out: A
 
-fsm.machine @top(%arg0: i1, %arg1: i1) -> (i8) attributes {initialState = "A"} {
+fsm.machine @top(%arg0: i16) -> (i8) attributes {initialState = "A"} {
 
-  %c1 = hw.constant 1: i1
-  %c0 = hw.constant 0: i1
+  %c1 = hw.constant 1: i16
+  %c0 = hw.constant 0: i16
 
   fsm.state @A output  {
     %c_0 = hw.constant 0 : i8
@@ -26,16 +26,12 @@ fsm.machine @top(%arg0: i1, %arg1: i1) -> (i8) attributes {initialState = "A"} {
     fsm.output %c_1 : i8
   } transitions {
     fsm.transition @C guard {
-      %g = comb.icmp eq %arg0, %c1 : i1
-      %h = comb.icmp eq %arg1, %c1 : i1
-      %j = comb.and %g, %h: i1
+      %j = comb.icmp eq %arg0, %c1 : i16
       fsm.return %j
     }
     fsm.transition @B guard {
-      %g = comb.icmp eq %arg0, %c0 : i1
-      %h = comb.icmp eq %arg1, %c0 : i1
-      %j = comb.and %g, %h: i1
-      fsm.return %j
+      %g = comb.icmp ne %arg0, %c1 : i16
+      fsm.return %g
     }
   }
 
@@ -44,11 +40,11 @@ fsm.machine @top(%arg0: i1, %arg1: i1) -> (i8) attributes {initialState = "A"} {
     fsm.output %c_2 : i8
   } transitions {
     fsm.transition @A guard {
-      %g = comb.icmp eq %arg0, %c1 : i1
+      %g = comb.icmp eq %arg0, %c1 : i16
       fsm.return %g
     }
     fsm.transition @B guard {
-      %g = comb.icmp eq %arg0, %c0 : i1
+      %g = comb.icmp ne %arg0, %c1 : i16
       fsm.return %g
     }
   }

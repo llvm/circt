@@ -225,10 +225,6 @@ LogicalResult MachineOpConverter::dispatch(){
   argVarTypes.push_back(b.getType<smt::IntType>());
   stateFunTypes.push_back(b.getType<smt::IntType>());
 
-  llvm::outs()<<"\n\nstateFunTypes.size() = "<<stateFunTypes.size();
-
-
-
   // populate state functions and transitions vector
 
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
@@ -311,7 +307,8 @@ LogicalResult MachineOpConverter::dispatch(){
       for(auto [av, a] : llvm::zip(argVars, args))
         avToSmt.push_back({av, a});
       for (auto [j, uv]: llvm::enumerate(avToSmt)){
-        updatedSmtValues.push_back(uv.second);
+        if (int(j)>=numArgs)
+          updatedSmtValues.push_back(uv.second);
       }
       //update time 
       mlir::IntegerAttr intAttr = b.getI32IntegerAttr(1);
@@ -369,41 +366,39 @@ LogicalResult MachineOpConverter::dispatch(){
 
   }
 
-  // // mutual exclusion
+  // mutual exclusion
 
-  // for(auto [id1, t1] : llvm::enumerate(transitions)){
-  //   for(auto [id2, t2] : llvm::enumerate(transitions)){
-  //     if(id1!=id2){
-  //       auto forall = b.create<smt::ForallOp>(loc, argVarTypes, [&t1, &t2, &numArgs](OpBuilder &b, Location loc, ValueRange args) { 
-  //         llvm::SmallVector<mlir::Value> oldArgs;
-  //         llvm::SmallVector<mlir::Value> newArgs;
+  for (auto [idx1, st1] : llvm::enumerate(stateFunctions)){
 
-  //         for(auto [i, a]: llvm::enumerate(args)){
-  //           if (i < numArgs*2 && i%2 == 0){
-  //             oldArgs.push_back(a);
-  //           } else if (i < numArgs*2 && i%2 == 1){
-  //             newArgs.push_back(a);
-  //           } else {
-  //             oldArgs.push_back(a);
-  //             newArgs.push_back(a);
-  //           }
-  //         }
+    llvm::SmallVector<mlir::Type> mutexcVarTypes;
 
-  //         auto lhs = b.create<smt::ApplyFuncOp>(loc, t1.activeFun, oldArgs);
-  //         auto t2Fun = b.create<smt::ApplyFuncOp>(loc, t2.activeFun, oldArgs);
-  //         auto rhs = b.create<smt::NotOp>(loc, t2Fun);
-  //         return b.create<smt::ImpliesOp>(loc, lhs, rhs); 
-  //       });
+    for (auto [i, avt] : llvm::enumerate(argVarTypes))
+      if (i >= numArgs)
+        mutexcVarTypes.push_back(avt);
 
-  //       b.create<smt::AssertOp>(loc, forall);
+    auto forall = b.create<smt::ForallOp>(loc, mutexcVarTypes, [&stateFunctions, &idx1](OpBuilder &b, Location loc, ValueRange args) { 
+      // split new and old arguments
 
-  //     }
-  //   }
-  // }
+      mlir::Value currAnd = b.create<smt::BoolConstantOp>(loc, true);
+
+      for (auto [idx2, st2] : llvm::enumerate(stateFunctions)){
+        if (idx1 != idx2) {
+          auto currState = b.create<smt::ApplyFuncOp>(loc, st2, args);
+          auto negState = b.create<smt::NotOp>(loc, currState);
+          auto newAnd = b.create<smt::AndOp>(loc, currAnd, negState);
+          currAnd = newAnd;
+        }
+      }
+
+      auto lhs = b.create<smt::ApplyFuncOp>(loc, stateFunctions[idx1], args);
+      return b.create<smt::ImpliesOp>(loc, lhs, currAnd); 
+    });
+
+    b.create<smt::AssertOp>(loc, forall);
+
+  }
 
   b.create<smt::YieldOp>(loc, typeRange, valueRange);
-
-  // b.getBlock()->dump();
 
   machineOp.erase();
 
