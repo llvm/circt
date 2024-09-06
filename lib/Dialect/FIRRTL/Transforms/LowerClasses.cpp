@@ -1849,18 +1849,22 @@ static void populateTypeConverter(TypeConverter &converter) {
   converter.addConversion(
       [](DoubleType type) { return FloatType::getF64(type.getContext()); });
 
-  // Add a target materialization to fold away unrealized conversion casts.
+  // Add a target materialization such that the conversion does not fail when a
+  // type conversion could not be reconciled automatically by the framework.
   converter.addTargetMaterialization(
       [](OpBuilder &builder, Type type, ValueRange values, Location loc) {
         assert(values.size() == 1);
-        return values[0];
+        return builder.create<UnrealizedConversionCastOp>(loc, type, values[0])
+            ->getResult(0);
       });
 
-  // Add a source materialization to fold away unrealized conversion casts.
+  // Add a source materialization such that the conversion does not fail when a
+  // type conversion could not be reconciled automatically by the framework.
   converter.addSourceMaterialization(
       [](OpBuilder &builder, Type type, ValueRange values, Location loc) {
         assert(values.size() == 1);
-        return values[0];
+        return builder.create<UnrealizedConversionCastOp>(loc, type, values[0])
+            ->getResult(0);
       });
 }
 
