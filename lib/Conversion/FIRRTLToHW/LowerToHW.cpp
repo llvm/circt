@@ -2604,7 +2604,8 @@ FailureOr<Value> FIRRTLLowering::lowerSubindex(SubindexOp op, Value input) {
     result = builder.createOrFold<sv::ArrayIndexInOutOp>(input, iIdx);
   else
     result = builder.createOrFold<hw::ArrayGetOp>(input, iIdx);
-  tryCopyName(result.getDefiningOp(), op);
+  if (auto *definingOp = result.getDefiningOp())
+    tryCopyName(definingOp, op);
   return result;
 }
 
@@ -2627,7 +2628,8 @@ FailureOr<Value> FIRRTLLowering::lowerSubaccess(SubaccessOp op, Value input) {
     result = builder.createOrFold<sv::ArrayIndexInOutOp>(input, valueIdx);
   else
     result = createArrayIndexing(input, valueIdx);
-  tryCopyName(result.getDefiningOp(), op);
+  if (auto *definingOp = result.getDefiningOp())
+    tryCopyName(definingOp, op);
   return result;
 }
 
@@ -2647,7 +2649,8 @@ FailureOr<Value> FIRRTLLowering::lowerSubfield(SubfieldOp op, Value input) {
     result = builder.createOrFold<sv::StructFieldInOutOp>(input, field);
   else
     result = builder.createOrFold<hw::StructExtractOp>(input, field);
-  tryCopyName(result.getDefiningOp(), op);
+  if (auto *definingOp = result.getDefiningOp())
+    tryCopyName(definingOp, op);
   return result;
 }
 
@@ -3500,7 +3503,8 @@ LogicalResult FIRRTLLowering::lowerDivLikeOp(Operation *op) {
   else
     result = builder.createOrFold<UnsignedOp>(lhs, rhs, true);
 
-  tryCopyName(result.getDefiningOp(), op);
+  if (auto *definingOp = result.getDefiningOp())
+    tryCopyName(definingOp, op);
 
   if (resultType == opType)
     return setLowering(op->getResult(0), result);
