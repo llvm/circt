@@ -3752,16 +3752,24 @@ ParseResult FIRStmtParser::parseRefForce() {
     return emitError(startTok.getLoc(),
                      "expected base-type for force source, got ")
            << src.getType();
+  if (!srcBaseType.isPassive())
+    return emitError(startTok.getLoc(),
+                     "expected passive value for force source, got ")
+           << srcBaseType;
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  // Cast ref to accomodate uninferred sources.
+  // Cast ref to accommodate uninferred sources.
   auto noConstSrcType = srcBaseType.getAllConstDroppedType();
   if (noConstSrcType != ref.getType()) {
     // Try to cast destination to rwprobe of source type (dropping const).
-    auto compatibleRWProbe = RefType::get(noConstSrcType, true);
+    auto compatibleRWProbe = RefType::get(noConstSrcType, true, ref.getLayer());
     if (areTypesRefCastable(compatibleRWProbe, ref))
       dest = builder.create<RefCastOp>(compatibleRWProbe, dest);
+    else
+      return emitError(startTok.getLoc(), "incompatible force source of type ")
+             << src.getType() << " cannot target destination "
+             << dest.getType();
   }
 
   builder.create<RefForceOp>(clock, pred, dest, src);
@@ -3794,16 +3802,25 @@ ParseResult FIRStmtParser::parseRefForceInitial() {
                      "expected base-type expression for force_initial "
                      "source, got ")
            << src.getType();
+  if (!srcBaseType.isPassive())
+    return emitError(startTok.getLoc(),
+                     "expected passive value for force_initial source, got ")
+           << srcBaseType;
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  // Cast ref to accomodate uninferred sources.
+  // Cast ref to accommodate uninferred sources.
   auto noConstSrcType = srcBaseType.getAllConstDroppedType();
   if (noConstSrcType != ref.getType()) {
     // Try to cast destination to rwprobe of source type (dropping const).
-    auto compatibleRWProbe = RefType::get(noConstSrcType, true);
+    auto compatibleRWProbe = RefType::get(noConstSrcType, true, ref.getLayer());
     if (areTypesRefCastable(compatibleRWProbe, ref))
       dest = builder.create<RefCastOp>(compatibleRWProbe, dest);
+    else
+      return emitError(startTok.getLoc(),
+                       "incompatible force_initial source of type ")
+             << src.getType() << " cannot target destination "
+             << dest.getType();
   }
 
   auto value = APInt::getAllOnes(1);
