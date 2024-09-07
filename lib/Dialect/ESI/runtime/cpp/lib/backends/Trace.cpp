@@ -263,6 +263,28 @@ TraceAccelerator::requestChannelsFor(AppIDPath idPath,
   return impl->requestChannelsFor(idPath, bundleType);
 }
 
+class TraceMMIO : public MMIO {
+public:
+  TraceMMIO(TraceAccelerator::Impl &impl) : impl(impl) {}
+
+  virtual uint64_t read(uint32_t addr) const override {
+    uint64_t data = rand();
+    if (impl.isWriteable())
+      impl.write("MMIO") << "[" << std::hex << addr << "] -> " << data
+                         << std::endl;
+    return data;
+  }
+  virtual void write(uint32_t addr, uint64_t data) override {
+    if (!impl.isWriteable())
+      return;
+    impl.write("MMIO") << "[" << std::hex << addr << "] <- " << data
+                       << std::endl;
+  }
+
+private:
+  TraceAccelerator::Impl &impl;
+};
+
 class TraceHostMem : public HostMem {
 public:
   TraceHostMem(TraceAccelerator::Impl &impl) : impl(impl) {}
@@ -323,6 +345,8 @@ TraceAccelerator::Impl::createService(Service::Type svcType, AppIDPath idPath,
                                       const HWClientDetails &clients) {
   if (svcType == typeid(SysInfo))
     return new TraceSysInfo(manifestJson);
+  if (svcType == typeid(MMIO))
+    return new TraceMMIO(*this);
   if (svcType == typeid(HostMem))
     return new TraceHostMem(*this);
   if (svcType == typeid(CustomService))
