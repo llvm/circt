@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "DialectModules.h"
+#include "CIRCTModules.h"
 
 #include "circt-c/Dialect/SV.h"
 #include "mlir-c/Bindings/Python/Interop.h"

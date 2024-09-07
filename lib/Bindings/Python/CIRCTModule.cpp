@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "DialectModules.h"
+#include "CIRCTModules.h"
 
 #include "circt-c/Conversion.h"
 #include "circt-c/Dialect/Comb.h"
@@ -142,4 +142,6 @@ PYBIND11_MODULE(_circt, m) {
   circt::python::populateDialectOMSubmodule(om);
   py::module sv = m.def_submodule("_sv", "SV API");
   circt::python::populateDialectSVSubmodule(sv);
+  py::module support = m.def_submodule("_support", "CIRCT support");
+  circt::python::populateSupportSubmodule(support);
 }

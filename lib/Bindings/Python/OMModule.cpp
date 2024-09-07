@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "DialectModules.h"
+#include "CIRCTModules.h"
 #include "circt-c/Dialect/HW.h"
 #include "circt-c/Dialect/OM.h"
 #include "mlir-c/BuiltinAttributes.h"
