@@ -174,14 +174,28 @@ LogicalResult MachineOpConverter::dispatch(){
 
   b.setInsertionPointToStart(solver.getBody());
 
+  llvm::SmallVector<mlir::Value> vats;
+  llvm::SmallVector<mlir::Value> vnats;
+
   // everything is an Int (even i1) because we want to have everything in the same structure
   // and we can not mix ints and bools in the same vec
-  for (auto a : args){
+  for (auto [i,a] : llvm::enumerate(args)){
     auto intVal = b.getType<smt::IntType>();
     // push twice because we will need it after to model the "next value" of inputs
     argVarTypes.push_back(intVal);
     argVars.push_back(a);
+    llvm::SmallVector<mlir::Type> tmpArgs;
+    tmpArgs.push_back(intVal);
+    tmpArgs.push_back(b.getType<smt::IntType>());
+    mlir::StringAttr atFunName = b.getStringAttr(("at_"+std::to_string(i)));
+    mlir::StringAttr notAtFunName = b.getStringAttr(("notAt_"+std::to_string(i)));
+    auto range = b.getType<smt::BoolType>();
+    smt::DeclareFunOp atFun = b.create<smt::DeclareFunOp>(loc, b.getType<smt::SMTFuncType>(tmpArgs, range), atFunName);
+    smt::DeclareFunOp notAtFun = b.create<smt::DeclareFunOp>(loc, b.getType<smt::SMTFuncType>(tmpArgs, range), notAtFunName);
+    vats.push_back(atFun);
+    vnats.push_back(notAtFun);
   }
+
   numArgs = argVars.size();
   llvm::SmallVector<int> varInitValues;
 
@@ -224,6 +238,108 @@ LogicalResult MachineOpConverter::dispatch(){
   // time (only needed in state functions)
   argVarTypes.push_back(b.getType<smt::IntType>());
   stateFunTypes.push_back(b.getType<smt::IntType>());
+
+  llvm::SmallVector<mlir::Type> timeOnly = {b.getType<smt::IntType>()};
+
+  for (auto [i, a]: llvm::enumerate(args)){
+
+    int width = a.getType().getIntOrFloatBitWidth();
+    auto intAttrBw = b.getI32IntegerAttr(2 ^ width-1);
+    auto intAttrGt = b.getI32IntegerAttr(0);
+
+
+    // existential 
+
+    auto existential = b.create<smt::ForallOp>(loc, timeOnly, [&](OpBuilder &b, Location loc, ValueRange args) -> mlir::Value { 
+      llvm::SmallVector<mlir::Type> existInputType = {b.getType<smt::IntType>()};
+      return b.create<smt::ExistsOp>(loc, existInputType, [&](OpBuilder &b, Location loc, ValueRange args2) -> mlir::Value { 
+        auto combGt = b.create<smt::IntCmpOp>(loc, smt::IntPredicate::gt, args2[0], b.create<smt::IntConstantOp>(loc, intAttrGt));
+        auto combLt = b.create<smt::IntCmpOp>(loc, smt::IntPredicate::lt, args2[0], b.create<smt::IntConstantOp>(loc, intAttrBw));
+        llvm::SmallVector<mlir::Value> vnatArgs = {args[0], args2[0]};
+        auto vnat = b.create<smt::ApplyFuncOp>(loc, vnats[i], vnatArgs);
+        auto notVnat = b.create<smt::NotOp>(loc, vnat);
+        llvm::SmallVector<mlir::Value> andInputs = {combGt, combLt, notVnat};
+        return b.create<smt::AndOp>(loc, b.getType<smt::BoolType>(), andInputs);
+      });
+    });
+
+    b.create<smt::AssertOp>(loc, existential);
+
+    // mutex
+
+    llvm::SmallVector<mlir::Type> mutexInputs = {b.getType<smt::IntType>(), b.getType<smt::IntType>(), b.getType<smt::IntType>()};
+
+    auto mutex = b.create<smt::ForallOp>(loc, mutexInputs, [&](OpBuilder &b, Location loc, ValueRange args) -> mlir::Value { 
+      llvm::SmallVector<mlir::Value> vatArgs1 = {args[1], args[0]};
+      llvm::SmallVector<mlir::Value> vatArgs2 = {args[2], args[0]};
+      auto rhs = b.create<smt::NotOp>(loc, b.create<smt::ApplyFuncOp>(loc, vats[i], vatArgs2));
+      auto vat1 = b.create<smt::ApplyFuncOp>(loc, vats[i], vatArgs1);
+      auto distinctOps = b.create<smt::DistinctOp>(loc, args[1], args[2]);
+      llvm::SmallVector<mlir::Value> allAndInputs = {vat1, distinctOps};
+      auto lhs = b.create<smt::AndOp>(loc, b.getType<smt::BoolType>(), allAndInputs);
+      return b.create<smt::ImpliesOp>(loc, lhs, rhs);
+    });
+
+    b.create<smt::AssertOp>(loc, mutex);
+
+    llvm::SmallVector<mlir::Type> negInputs = {b.getType<smt::IntType>(), b.getType<smt::IntType>()};
+
+    // neg1
+    // note: need to double check the order of arguments 
+
+    auto neg1 = b.create<smt::ForallOp>(loc, negInputs, [&](OpBuilder &b, Location loc, ValueRange args) -> mlir::Value { 
+      auto lhs = b.create<smt::ApplyFuncOp>(loc, vnats[i], args);
+      auto rhs = b.create<smt::NotOp>(loc, b.create<smt::ApplyFuncOp>(loc, vats[i], args));
+      return b.create<smt::ImpliesOp>(loc, lhs, rhs);
+    });
+    b.create<smt::AssertOp>(loc, neg1);
+
+    // neg2
+
+    auto neg2 = b.create<smt::ForallOp>(loc, negInputs, [&](OpBuilder &b, Location loc, ValueRange args) -> mlir::Value { 
+      auto lhs = b.create<smt::NotOp>(loc, b.create<smt::ApplyFuncOp>(loc, vnats[i], args));
+      auto rhs = b.create<smt::ApplyFuncOp>(loc, vats[i], args);
+      return b.create<smt::ImpliesOp>(loc, lhs, rhs);
+    });
+    b.create<smt::AssertOp>(loc, neg2);
+
+    // neg3
+
+    auto neg3 = b.create<smt::ForallOp>(loc, negInputs, [&](OpBuilder &b, Location loc, ValueRange args) -> mlir::Value { 
+      auto lhs = b.create<smt::ApplyFuncOp>(loc, vats[i], args);
+      auto rhs = b.create<smt::NotOp>(loc, b.create<smt::ApplyFuncOp>(loc, vnats[i], args));
+      return b.create<smt::ImpliesOp>(loc, lhs, rhs);
+    });
+    b.create<smt::AssertOp>(loc, neg3);
+
+    // neg4
+
+    auto neg4 = b.create<smt::ForallOp>(loc, negInputs, [&](OpBuilder &b, Location loc, ValueRange args) -> mlir::Value { 
+      auto lhs = b.create<smt::NotOp>(loc, b.create<smt::ApplyFuncOp>(loc, vats[i], args));
+      auto rhs = b.create<smt::ApplyFuncOp>(loc, vnats[i], args);
+      return b.create<smt::ImpliesOp>(loc, lhs, rhs);
+    });
+    b.create<smt::AssertOp>(loc, neg4);
+
+    // ensure bounds are respected 
+
+    auto ub = b.create<smt::ForallOp>(loc, negInputs, [&](OpBuilder &b, Location loc, ValueRange args) -> mlir::Value { 
+      auto lhs = b.create<smt::IntCmpOp>(loc, smt::IntPredicate::gt, args[1], b.create<smt::IntConstantOp>(loc, intAttrBw));
+      auto rhs = b.create<smt::ApplyFuncOp>(loc, vnats[i], args);
+      return b.create<smt::ImpliesOp>(loc, lhs, rhs);
+    });
+    b.create<smt::AssertOp>(loc, ub);
+
+    auto lb = b.create<smt::ForallOp>(loc, negInputs, [&](OpBuilder &b, Location loc, ValueRange args) -> mlir::Value { 
+      auto lhs = b.create<smt::IntCmpOp>(loc, smt::IntPredicate::lt, args[1], b.create<smt::IntConstantOp>(loc, intAttrGt));
+      auto rhs = b.create<smt::ApplyFuncOp>(loc, vnats[i], args);
+      return b.create<smt::ImpliesOp>(loc, lhs, rhs);
+    });
+    b.create<smt::AssertOp>(loc, ub);
+    
+  }
+
+
 
   // populate state functions and transitions vector
 
