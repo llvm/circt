@@ -489,8 +489,7 @@ private:
 
 /// A wrapper around a string that is used to encode a type which cannot be
 /// represented by an mlir::Type for some reason.  This is currently used to
-/// represent either an interface, a n-dimensional vector of interfaces, or a
-/// tombstone for an actually unsupported type (e.g., an AugmentedBooleanType).
+/// represent either an interface or an n-dimensional vector of interfaces.
 struct VerbatimType {
   /// The textual representation of the type.
   std::string str;
@@ -1140,28 +1139,6 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     return DictionaryAttr::getWithSorted(context, attrs);
   }
 
-  // Any of the following are known and expected, but are legacy AugmentedTypes
-  // do not have a target:
-  //   - AugmentedStringType
-  //   - AugmentedBooleanType
-  //   - AugmentedIntegerType
-  //   - AugmentedDoubleType
-  bool isIgnorable =
-      llvm::StringSwitch<bool>(classBase)
-          .Cases("StringType", "BooleanType", "IntegerType", "DoubleType", true)
-          .Default(false);
-  if (isIgnorable) {
-    NamedAttrList attrs;
-    attrs.append("class", classAttr);
-    attrs.append("name", name);
-    auto value =
-        tryGetAs<Attribute>(augmentedType, root, "value", loc, clazz, path);
-    if (!value)
-      return std::nullopt;
-    attrs.append("value", value);
-    return DictionaryAttr::getWithSorted(context, attrs);
-  }
-
   // Anything else is unexpected or a user error if they manually wrote
   // annotations.  Print an error and error out.
   mlir::emitError(loc, "found unknown AugmentedType '" + classAttr.getValue() +
@@ -1256,24 +1233,6 @@ std::optional<Attribute> GrandCentralPass::fromAttr(Attribute attr) {
                          << "' that does not have a scattered leaf to connect "
                             "to in the circuit "
                             "(was the leaf deleted or constant prop'd away?)";
-  } else if (classBase == "StringType") {
-    if (auto name = dict.getAs<StringAttr>("name"))
-      return AugmentedStringTypeAttr::get(&getContext(), dict);
-  } else if (classBase == "BooleanType") {
-    if (auto name = dict.getAs<StringAttr>("name"))
-      return AugmentedBooleanTypeAttr::get(&getContext(), dict);
-  } else if (classBase == "IntegerType") {
-    if (auto name = dict.getAs<StringAttr>("name"))
-      return AugmentedIntegerTypeAttr::get(&getContext(), dict);
-  } else if (classBase == "DoubleType") {
-    if (auto name = dict.getAs<StringAttr>("name"))
-      return AugmentedDoubleTypeAttr::get(&getContext(), dict);
-  } else if (classBase == "LiteralType") {
-    if (auto name = dict.getAs<StringAttr>("name"))
-      return AugmentedLiteralTypeAttr::get(&getContext(), dict);
-  } else if (classBase == "DeletedType") {
-    if (auto name = dict.getAs<StringAttr>("name"))
-      return AugmentedDeletedTypeAttr::get(&getContext(), dict);
   } else {
     emitCircuitError() << "has an invalid AugmentedType";
   }
@@ -1413,12 +1372,6 @@ bool GrandCentralPass::traverseField(
 
         return anyFailed;
       })
-      .Case<AugmentedStringTypeAttr>([&](auto a) { return false; })
-      .Case<AugmentedBooleanTypeAttr>([&](auto a) { return false; })
-      .Case<AugmentedIntegerTypeAttr>([&](auto a) { return false; })
-      .Case<AugmentedDoubleTypeAttr>([&](auto a) { return false; })
-      .Case<AugmentedLiteralTypeAttr>([&](auto a) { return false; })
-      .Case<AugmentedDeletedTypeAttr>([&](auto a) { return false; })
       .Default([](auto a) { return true; });
 }
 
@@ -1426,11 +1379,6 @@ std::optional<TypeSum> GrandCentralPass::computeField(
     Attribute field, IntegerAttr id, StringAttr prefix, VerbatimBuilder &path,
     SmallVector<VerbatimXMRbuilder> &xmrElems,
     SmallVector<InterfaceElemsBuilder> &interfaceBuilder) {
-
-  auto unsupported = [&](StringRef name, StringRef kind) {
-    return VerbatimType({("// <unsupported " + kind + " type>").str(), false});
-  };
-
   return TypeSwitch<Attribute, std::optional<TypeSum>>(field)
       .Case<AugmentedGroundTypeAttr>(
           [&](AugmentedGroundTypeAttr ground) -> std::optional<TypeSum> {
@@ -1491,25 +1439,7 @@ std::optional<TypeSum> GrandCentralPass::computeField(
                                             interfaceBuilder);
             assert(ifaceName && *ifaceName);
             return VerbatimType({ifaceName->str(), true});
-          })
-      .Case<AugmentedStringTypeAttr>([&](auto field) -> TypeSum {
-        return unsupported(field.getName().getValue(), "string");
-      })
-      .Case<AugmentedBooleanTypeAttr>([&](auto field) -> TypeSum {
-        return unsupported(field.getName().getValue(), "boolean");
-      })
-      .Case<AugmentedIntegerTypeAttr>([&](auto field) -> TypeSum {
-        return unsupported(field.getName().getValue(), "integer");
-      })
-      .Case<AugmentedDoubleTypeAttr>([&](auto field) -> TypeSum {
-        return unsupported(field.getName().getValue(), "double");
-      })
-      .Case<AugmentedLiteralTypeAttr>([&](auto field) -> TypeSum {
-        return unsupported(field.getName().getValue(), "literal");
-      })
-      .Case<AugmentedDeletedTypeAttr>([&](auto field) -> TypeSum {
-        return unsupported(field.getName().getValue(), "deleted");
-      });
+          });
 }
 
 /// Traverse an Annotation that is an AugmentedBundleType.  During traversal,
