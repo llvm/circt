@@ -1456,6 +1456,9 @@ std::optional<TypeSum> GrandCentralPass::computeField(
       .Case<AugmentedVectorTypeAttr>(
           [&](AugmentedVectorTypeAttr vector) -> std::optional<TypeSum> {
             auto elements = vector.getElements();
+            if (elements.empty())
+              llvm::report_fatal_error(
+                  "unexpected empty augmented vector in GrandCentral View");
             auto firstElement = fromAttr(elements[0]);
             if (!firstElement)
               return std::nullopt;
