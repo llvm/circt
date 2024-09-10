@@ -1457,6 +1457,8 @@ std::optional<TypeSum> GrandCentralPass::computeField(
           [&](AugmentedVectorTypeAttr vector) -> std::optional<TypeSum> {
             auto elements = vector.getElements();
             auto firstElement = fromAttr(elements[0]);
+            if (!firstElement)
+              return std::nullopt;
             auto elementType =
                 computeField(*firstElement, id, prefix,
                              path.snapshot().append("[" + Twine(0) + "]"),
