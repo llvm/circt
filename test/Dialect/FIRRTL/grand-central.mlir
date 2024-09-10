@@ -197,82 +197,6 @@ firrtl.circuit "InterfaceGroundType" attributes {
       name = "ConstantView"
     },
     {
-      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
-      defName = "UnsupportedView",
-      elements = [
-        {
-          class = "sifive.enterprise.grandcentral.AugmentedStringType",
-          name = "string"
-        },
-        {
-          class = "sifive.enterprise.grandcentral.AugmentedBooleanType",
-          name = "boolean"
-        },
-        {
-          class = "sifive.enterprise.grandcentral.AugmentedIntegerType",
-          name = "integer"
-        },
-        {
-          class = "sifive.enterprise.grandcentral.AugmentedDoubleType",
-          name = "double"
-        }
-      ],
-      id = 24 : i64,
-      name = "UnsupporteView"
-    },
-    {
-      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
-      defName = "VectorOfVerbatimView",
-      elements = [
-        {
-          class = "sifive.enterprise.grandcentral.AugmentedVectorType",
-          elements = [
-            {
-              class = "sifive.enterprise.grandcentral.AugmentedVectorType",
-              defName = "Vector4",
-              elements = [
-                {
-                  class = "sifive.enterprise.grandcentral.AugmentedStringType",
-                  name = "baz"
-                },
-                {
-                  class = "sifive.enterprise.grandcentral.AugmentedStringType",
-                  name = "baz"
-                },
-                {
-                  class = "sifive.enterprise.grandcentral.AugmentedStringType",
-                  name = "baz"
-                }
-              ],
-              name = "vector4"
-            },
-            {
-              class = "sifive.enterprise.grandcentral.AugmentedVectorType",
-              defName = "Vector4",
-              elements = [
-                {
-                  class = "sifive.enterprise.grandcentral.AugmentedStringType",
-                  name = "baz"
-                },
-                {
-                  class = "sifive.enterprise.grandcentral.AugmentedStringType",
-                  name = "baz"
-                },
-                {
-                  class = "sifive.enterprise.grandcentral.AugmentedStringType",
-                  name = "baz"
-                }
-              ],
-              name = "vector4"
-            }
-          ],
-          name = "vectorOfVerbatim"
-        }
-      ],
-      id = 25 : i64,
-      name = "VectorOfVerbatimView"
-    },
-    {
       class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
       directory = "gct-dir",
       filename = "bindings.sv"
@@ -326,18 +250,6 @@ firrtl.circuit "InterfaceGroundType" attributes {
         defName = "ConstantView",
         id = 21 : i64,
         name = "ConstantView"
-      },
-      {
-        class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
-        defName = "UnsupportedView",
-        id = 24 : i64,
-        name = "UnsupportedView"
-      },
-      {
-        class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
-        defName = "VectorOfVerbatimView",
-        id = 25 : i64,
-        name = "VectorOfVerbatimView"
       }
     ]
   } {
@@ -537,12 +449,6 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-SAME:         dimensions: [ ]
 // CHECK-SAME:         width: 2
 // CHECK-SAME:     instances: []
-// CHECK-SAME:   - name: UnsupportedView
-// CHECK-SAME:     fields: []
-// CHECK-SAME:     instances: []
-// CHECK-SAME:   - name: VectorOfVerbatimView
-// CHECK-SAME:     fields: []
-// CHECK-SAME:     instances: []
 
 // The shared companion contains all instantiated interfaces.
 // AugmentedGroundType annotations are removed.  Interface is driven via XMRs
@@ -551,8 +457,6 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK:          firrtl.module @Companion
 // CHECK-SAME:       output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
 //
-// CHECK-NEXT:       %VectorOfVerbatimView = sv.interface.instance sym @[[vectorOfVerbatim:[a-zA-Z0-9_]+]] : !sv.interface<@VectorOfVerbatimView>
-// CHECK-NEXT:       %UnsupportedView = sv.interface.instance sym @[[unsupportedSym:[a-zA-Z0-9_]+]] : !sv.interface<@UnsupportedView>
 // CHECK-NEXT:       %ConstantView = sv.interface.instance sym @[[constantSym:[a-zA-Z0-9_]+]] : !sv.interface<@ConstantView>
 // CHECK-NEXT:       %ZeroWidthView = sv.interface.instance sym @[[zeroWidthSym:[a-zA-Z0-9_]+]] : !sv.interface<@ZeroWidthView>
 // CHECK-NEXT:       %VectorOfVectorView = sv.interface.instance sym @[[vectorOfVectorSym:[a-zA-Z0-9_]+]] : !sv.interface<@VectorOfVectorView>
@@ -620,8 +524,8 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-SAME:         (%c-1_si2) : !firrtl.sint<2>
 // CHECK-SAME:         {symbols = [#hw.innerNameRef<@Companion::@[[constantSym]]>]}
 //
-// There are no more verbatim assigns after this.  The zero-width view and any
-// "unsupported" types, e.g., AugmentedStringType, are not given XMRs.
+// There are no more verbatim assigns after this.
+// Zero-width views are not given XMR's.
 //
 // CHECK-NOT:        sv.verbatim "assign
 
@@ -670,15 +574,6 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK:      sv.interface @ConstantView
 // CHECK-NEXT:   sv.interface.signal @foo : i1
 // CHECK-NEXT:   sv.interface.signal @bar : i2
-//
-// CHECK:      sv.interface @UnsupportedView
-// CHECK-NEXT:   sv.verbatim "// <unsupported string type> string;"
-// CHECK-NEXT:   sv.verbatim "// <unsupported boolean type> boolean;"
-// CHECK-NEXT:   sv.verbatim "// <unsupported integer type> integer;"
-// CHECK-NEXT:   sv.verbatim "// <unsupported double type> double;"
-//
-// CHECK:      sv.interface @VectorOfVerbatimView
-// CHECK-NEXT:   sv.verbatim "// <unsupported string type> vectorOfVerbatim[2][3];"
 
 // -----
 
