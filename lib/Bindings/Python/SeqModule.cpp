@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "DialectModules.h"
+#include "CIRCTModules.h"
 
 #include "circt-c/Dialect/Seq.h"
 #include "mlir/Bindings/Python/PybindAdaptors.h"

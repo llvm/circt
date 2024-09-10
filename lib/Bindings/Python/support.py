@@ -4,6 +4,8 @@
 
 from . import ir
 
+from ._mlir_libs._circt._support import _walk_with_filter
+from .ir import Operation
 from contextlib import AbstractContextManager
 from contextvars import ContextVar
 from typing import List
@@ -409,3 +411,13 @@ class NamedValueOpView:
   def operation(self):
     """Get the operation associated with this builder."""
     return self.opview.operation
+
+
+# Helper function to walk operation with a filter on operation names.
+# `op_views` is a list of operation views to visit. This is a wrapper
+# around the C++ implementation of walk_with_filter.
+def walk_with_filter(operation: Operation, op_views: List[ir.OpView], callback,
+                     walk_order):
+  op_names_identifiers = [name.OPERATION_NAME for name in op_views]
+  return _walk_with_filter(operation, op_names_identifiers, callback,
+                           walk_order)
