@@ -54,6 +54,15 @@ class OMClassLike<string mnemonic, list<Trait> traits = []> :
                    "::mlir::ArrayRef<::mlir::StringRef>":$formalParamNames,
                    "::mlir::DictionaryAttr":$fieldTypes)>,
     OpBuilder<(ins "::mlir::Twine":$name,
+                   "::mlir::ArrayRef<::mlir::StringRef>":$formalParamNames,
+                   "::mlir::ArrayRef<::mlir::Attribute>":$fieldNames,
+                   "::mlir::ArrayRef<::mlir::NamedAttribute>":$fieldTypes), [{
+      build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
+            odsBuilder.getStrArrayAttr(formalParamNames),
+            odsBuilder.getArrayAttr(fieldNames),
+            odsBuilder.getDictionaryAttr(fieldTypes));
+    }]>,
+    OpBuilder<(ins "::mlir::Twine":$name,
                    "::mlir::ArrayRef<::mlir::StringRef>":$formalParamNames), [{
       build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
             odsBuilder.getStrArrayAttr(formalParamNames));

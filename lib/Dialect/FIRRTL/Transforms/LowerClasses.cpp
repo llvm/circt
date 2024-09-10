@@ -829,17 +829,6 @@ bool LowerClassesPass::shouldCreateClass(StringAttr modName) {
   return shouldCreateClassMemo.at(modName);
 }
 
-template <typename T>
-static om::ClassLike buildClassLike(OpBuilder builder, Location loc, Twine name,
-                                    ArrayRef<StringRef> formalParamNames,
-                                    ArrayRef<Attribute> fieldNames,
-                                    ArrayRef<NamedAttribute> fieldTypes) {
-  return builder.create<T>(loc, builder.getStringAttr(name),
-                           builder.getStrArrayAttr(formalParamNames),
-                           builder.getArrayAttr(fieldNames),
-                           builder.getDictionaryAttr(fieldTypes));
-}
-
 static om::ClassLike convertExtClass(FModuleLike moduleLike, OpBuilder builder,
                                      Twine name,
                                      ArrayRef<StringRef> formalParamNames) {
@@ -857,9 +846,8 @@ static om::ClassLike convertExtClass(FModuleLike moduleLike, OpBuilder builder,
       fieldTypes.push_back(NamedAttribute(name, TypeAttr::get(type)));
     }
   }
-  return buildClassLike<om::ClassExternOp>(builder, moduleLike.getLoc(), name,
-                                           formalParamNames, fieldNames,
-                                           fieldTypes);
+  return builder.create<om::ClassExternOp>(
+      moduleLike.getLoc(), name, formalParamNames, fieldNames, fieldTypes);
 }
 
 static om::ClassLike convertClass(FModuleLike moduleLike, OpBuilder builder,
@@ -880,7 +868,7 @@ static om::ClassLike convertClass(FModuleLike moduleLike, OpBuilder builder,
     fieldTypes.push_back(
         NamedAttribute(name, TypeAttr::get(op.getSrc().getType())));
   }
-  return buildClassLike<om::ClassOp>(builder, moduleLike.getLoc(), name,
+  return builder.create<om::ClassOp>(moduleLike.getLoc(), name,
                                      formalParamNames, fieldNames, fieldTypes);
 }
 
