@@ -104,8 +104,8 @@ struct LowerMemoryPass
     : public circt::firrtl::impl::LowerMemoryBase<LowerMemoryPass> {
 
   /// Get the cached namespace for a module.
-  hw::InnerSymbolNamespace &getModuleNamespace(FModuleLike module) {
-    return moduleNamespaces.try_emplace(module, module).first->second;
+  hw::InnerSymbolNamespace &getModuleNamespace(FModuleLike moduleOp) {
+    return moduleNamespaces.try_emplace(moduleOp, moduleOp).first->second;
   }
 
   SmallVector<PortInfo> getMemoryModulePorts(const FirMemory &mem);
@@ -116,10 +116,10 @@ struct LowerMemoryPass
                                     bool shouldDedup);
   FModuleOp createWrapperModule(MemOp op, const FirMemory &summary,
                                 bool shouldDedup);
-  InstanceOp emitMemoryInstance(MemOp op, FModuleOp module,
+  InstanceOp emitMemoryInstance(MemOp op, FModuleOp moduleOp,
                                 const FirMemory &summary);
   void lowerMemory(MemOp mem, const FirMemory &summary, bool shouldDedup);
-  LogicalResult runOnModule(FModuleOp module, bool shouldDedup);
+  LogicalResult runOnModule(FModuleOp moduleOp, bool shouldDedup);
   void runOnOperation() override;
 
   /// Cached module namespaces.
@@ -218,14 +218,14 @@ LowerMemoryPass::getOrCreateMemModule(MemOp op, const FirMemory &summary,
 
   // Create a new module for this memory. This can update the name recorded in
   // the memory's summary.
-  auto module = emitMemoryModule(op, summary, ports);
+  auto moduleOp = emitMemoryModule(op, summary, ports);
 
   // Record the memory module.  We don't want to use this module for other
   // memories, then we don't add it to the table.
   if (shouldDedup)
-    memories[summary] = module;
+    memories[summary] = moduleOp;
 
-  return module;
+  return moduleOp;
 }
 
 void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
@@ -498,9 +498,10 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
   return inst;
 }
 
-LogicalResult LowerMemoryPass::runOnModule(FModuleOp module, bool shouldDedup) {
+LogicalResult LowerMemoryPass::runOnModule(FModuleOp moduleOp,
+                                           bool shouldDedup) {
   for (auto op :
-       llvm::make_early_inc_range(module.getBodyBlock()->getOps<MemOp>())) {
+       llvm::make_early_inc_range(moduleOp.getBodyBlock()->getOps<MemOp>())) {
     // Check that the memory has been properly lowered already.
     if (!type_isa<UIntType>(op.getDataType()))
       return op->emitError(
@@ -539,10 +540,10 @@ void LowerMemoryPass::runOnOperation() {
 
   // We iterate the circuit from top-to-bottom to make sure that we get
   // consistent memory names.
-  for (auto module : body->getOps<FModuleOp>()) {
+  for (auto moduleOp : body->getOps<FModuleOp>()) {
     // We don't dedup memories in the testharness with any other memories.
-    auto shouldDedup = dutModuleSet.contains(module);
-    if (failed(runOnModule(module, shouldDedup)))
+    auto shouldDedup = dutModuleSet.contains(moduleOp);
+    if (failed(runOnModule(moduleOp, shouldDedup)))
       return signalPassFailure();
   }
 
