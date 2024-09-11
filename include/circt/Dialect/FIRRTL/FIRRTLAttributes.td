@@ -101,44 +101,6 @@ def AugmentedGroundType : AugmentedType<"AugmentedGroundType"> {
   let assemblyFormat = "`<` $underlying `>`";
 }
 
-def AugmentedStringType : AugmentedType<"AugmentedStringType"> {
-  let summary = "GrandCentral AugmentedStringType";
-  let extraClassDeclaration = hasName;
-  let mnemonic = "augmentedString";
-  let assemblyFormat = "`<` $underlying `>`";
-}
-def AugmentedBooleanType : AugmentedType<"AugmentedBooleanType"> {
-  let summary = "GrandCentral AugmentedBooleanType";
-  let extraClassDeclaration = hasName;
-  let mnemonic = "augmentedBoolean";
-  let assemblyFormat = "`<` $underlying `>`";
-}
-def AugmentedIntegerType : AugmentedType<"AugmentedIntegerType"> {
-  let summary = "GrandCentral AugmentedIntegerType";
-  let extraClassDeclaration = hasName;
-  let mnemonic = "augmentedInteger";
-  let assemblyFormat = "`<` $underlying `>`";
-}
-def AugmentedDoubleType : AugmentedType<"AugmentedDoubleType"> {
-  let summary = "GrandCentral AugmentedDoubleType";
-  let extraClassDeclaration = hasName;
-  let mnemonic = "augmentedDouble";
-  let assemblyFormat = "`<` $underlying `>`";
-}
-def AugmentedLiteralType : AugmentedType<"AugmentedLiteralType"> {
-  let summary = "GrandCentral AugmentedLiteralType";
-  let extraClassDeclaration = hasName;
-  let mnemonic = "augmentedLiteral";
-  let assemblyFormat = "`<` $underlying `>`";
-}
-def AugmentedDeletedType : AugmentedType<"AugmentedDeletedType"> {
-  let summary = "GrandCentral AugmentedDeletedType";
-  let extraClassDeclaration = hasName;
-  let mnemonic = "augmentedDeleted";
-  let assemblyFormat = "`<` $underlying `>`";
-}
-
-
 def ParamDeclAttr : AttrDef<FIRRTLDialect, "ParamDecl", [TypedAttrInterface]> {
   let summary = "Module or instance parameter definition";
   let description = [{

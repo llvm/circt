@@ -489,8 +489,7 @@ private:
 
 /// A wrapper around a string that is used to encode a type which cannot be
 /// represented by an mlir::Type for some reason.  This is currently used to
-/// represent either an interface, a n-dimensional vector of interfaces, or a
-/// tombstone for an actually unsupported type (e.g., an AugmentedBooleanType).
+/// represent either an interface or an n-dimensional vector of interfaces.
 struct VerbatimType {
   /// The textual representation of the type.
   std::string str;
@@ -876,6 +875,8 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
 
     auto refAttr =
         tryGetAs<StringAttr>(refTarget, refTarget, "ref", loc, clazz, path);
+    if (!refAttr)
+      return {};
 
     return (Twine("~" + circuitAttr.getValue() + "|" + moduleAttr.getValue() +
                   strpath + ">" + refAttr.getValue()) +
@@ -932,13 +933,15 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
       auto name = tryGetAs<StringAttr>(field, root, "name", loc, clazz, ePath);
       auto tpe =
           tryGetAs<DictionaryAttr>(field, root, "tpe", loc, clazz, ePath);
+      if (!name || !tpe)
+        return std::nullopt;
       std::optional<StringAttr> description;
       if (auto maybeDescription = field.get("description"))
         description = cast<StringAttr>(maybeDescription);
       auto eltAttr = parseAugmentedType(
           state, tpe, root, companion, name, defName, std::nullopt, description,
           clazz, companionAttr, path + "_" + name.getValue());
-      if (!name || !tpe || !eltAttr)
+      if (!eltAttr)
         return std::nullopt;
 
       // Collect information necessary to build a module with this view later.
@@ -947,7 +950,12 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
       if (auto maybeDescription = field.get("description"))
         attrs.append("description", cast<StringAttr>(maybeDescription));
       attrs.append("name", name);
-      attrs.append("tpe", tpe.getAs<StringAttr>("class"));
+      auto tpeClass = tpe.getAs<StringAttr>("class");
+      if (!tpeClass) {
+        mlir::emitError(loc, "missing 'class' key in") << tpe;
+        return std::nullopt;
+      }
+      attrs.append("tpe", tpeClass);
       elements.push_back(*eltAttr);
     }
     // Add an annotation that stores information necessary to construct the
@@ -972,7 +980,12 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
   // either be an actual FIRRTL ground type or a GrandCentral uninferred type.
   // This can be ignored for us.
   if (classBase == "GroundType") {
-    auto maybeTarget = refToTarget(augmentedType.getAs<DictionaryAttr>("ref"));
+    auto augRef = augmentedType.getAs<DictionaryAttr>("ref");
+    if (!augRef) {
+      mlir::emitError(loc, "missing 'ref' key in ") << augmentedType;
+      return std::nullopt;
+    }
+    auto maybeTarget = refToTarget(augRef);
     if (!maybeTarget) {
       mlir::emitError(loc, "Failed to parse ReferenceTarget").attachNote()
           << "See the full Annotation here: " << root;
@@ -1126,28 +1139,6 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     return DictionaryAttr::getWithSorted(context, attrs);
   }
 
-  // Any of the following are known and expected, but are legacy AugmentedTypes
-  // do not have a target:
-  //   - AugmentedStringType
-  //   - AugmentedBooleanType
-  //   - AugmentedIntegerType
-  //   - AugmentedDoubleType
-  bool isIgnorable =
-      llvm::StringSwitch<bool>(classBase)
-          .Cases("StringType", "BooleanType", "IntegerType", "DoubleType", true)
-          .Default(false);
-  if (isIgnorable) {
-    NamedAttrList attrs;
-    attrs.append("class", classAttr);
-    attrs.append("name", name);
-    auto value =
-        tryGetAs<Attribute>(augmentedType, root, "value", loc, clazz, path);
-    if (!value)
-      return std::nullopt;
-    attrs.append("value", value);
-    return DictionaryAttr::getWithSorted(context, attrs);
-  }
-
   // Anything else is unexpected or a user error if they manually wrote
   // annotations.  Print an error and error out.
   mlir::emitError(loc, "found unknown AugmentedType '" + classAttr.getValue() +
@@ -1242,24 +1233,6 @@ std::optional<Attribute> GrandCentralPass::fromAttr(Attribute attr) {
                          << "' that does not have a scattered leaf to connect "
                             "to in the circuit "
                             "(was the leaf deleted or constant prop'd away?)";
-  } else if (classBase == "StringType") {
-    if (auto name = dict.getAs<StringAttr>("name"))
-      return AugmentedStringTypeAttr::get(&getContext(), dict);
-  } else if (classBase == "BooleanType") {
-    if (auto name = dict.getAs<StringAttr>("name"))
-      return AugmentedBooleanTypeAttr::get(&getContext(), dict);
-  } else if (classBase == "IntegerType") {
-    if (auto name = dict.getAs<StringAttr>("name"))
-      return AugmentedIntegerTypeAttr::get(&getContext(), dict);
-  } else if (classBase == "DoubleType") {
-    if (auto name = dict.getAs<StringAttr>("name"))
-      return AugmentedDoubleTypeAttr::get(&getContext(), dict);
-  } else if (classBase == "LiteralType") {
-    if (auto name = dict.getAs<StringAttr>("name"))
-      return AugmentedLiteralTypeAttr::get(&getContext(), dict);
-  } else if (classBase == "DeletedType") {
-    if (auto name = dict.getAs<StringAttr>("name"))
-      return AugmentedDeletedTypeAttr::get(&getContext(), dict);
   } else {
     emitCircuitError() << "has an invalid AugmentedType";
   }
@@ -1399,12 +1372,6 @@ bool GrandCentralPass::traverseField(
 
         return anyFailed;
       })
-      .Case<AugmentedStringTypeAttr>([&](auto a) { return false; })
-      .Case<AugmentedBooleanTypeAttr>([&](auto a) { return false; })
-      .Case<AugmentedIntegerTypeAttr>([&](auto a) { return false; })
-      .Case<AugmentedDoubleTypeAttr>([&](auto a) { return false; })
-      .Case<AugmentedLiteralTypeAttr>([&](auto a) { return false; })
-      .Case<AugmentedDeletedTypeAttr>([&](auto a) { return false; })
       .Default([](auto a) { return true; });
 }
 
@@ -1412,11 +1379,6 @@ std::optional<TypeSum> GrandCentralPass::computeField(
     Attribute field, IntegerAttr id, StringAttr prefix, VerbatimBuilder &path,
     SmallVector<VerbatimXMRbuilder> &xmrElems,
     SmallVector<InterfaceElemsBuilder> &interfaceBuilder) {
-
-  auto unsupported = [&](StringRef name, StringRef kind) {
-    return VerbatimType({("// <unsupported " + kind + " type>").str(), false});
-  };
-
   return TypeSwitch<Attribute, std::optional<TypeSum>>(field)
       .Case<AugmentedGroundTypeAttr>(
           [&](AugmentedGroundTypeAttr ground) -> std::optional<TypeSum> {
@@ -1442,7 +1404,12 @@ std::optional<TypeSum> GrandCentralPass::computeField(
       .Case<AugmentedVectorTypeAttr>(
           [&](AugmentedVectorTypeAttr vector) -> std::optional<TypeSum> {
             auto elements = vector.getElements();
+            if (elements.empty())
+              llvm::report_fatal_error(
+                  "unexpected empty augmented vector in GrandCentral View");
             auto firstElement = fromAttr(elements[0]);
+            if (!firstElement)
+              return std::nullopt;
             auto elementType =
                 computeField(*firstElement, id, prefix,
                              path.snapshot().append("[" + Twine(0) + "]"),
@@ -1472,25 +1439,7 @@ std::optional<TypeSum> GrandCentralPass::computeField(
                                             interfaceBuilder);
             assert(ifaceName && *ifaceName);
             return VerbatimType({ifaceName->str(), true});
-          })
-      .Case<AugmentedStringTypeAttr>([&](auto field) -> TypeSum {
-        return unsupported(field.getName().getValue(), "string");
-      })
-      .Case<AugmentedBooleanTypeAttr>([&](auto field) -> TypeSum {
-        return unsupported(field.getName().getValue(), "boolean");
-      })
-      .Case<AugmentedIntegerTypeAttr>([&](auto field) -> TypeSum {
-        return unsupported(field.getName().getValue(), "integer");
-      })
-      .Case<AugmentedDoubleTypeAttr>([&](auto field) -> TypeSum {
-        return unsupported(field.getName().getValue(), "double");
-      })
-      .Case<AugmentedLiteralTypeAttr>([&](auto field) -> TypeSum {
-        return unsupported(field.getName().getValue(), "literal");
-      })
-      .Case<AugmentedDeletedTypeAttr>([&](auto field) -> TypeSum {
-        return unsupported(field.getName().getValue(), "deleted");
-      });
+          });
 }
 
 /// Traverse an Annotation that is an AugmentedBundleType.  During traversal,

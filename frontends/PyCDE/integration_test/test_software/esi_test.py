@@ -4,6 +4,8 @@ from esiaccel.types import MMIORegion
 import sys
 import time
 
+esi.accelerator.ctxt.set_stdio_logger(esi.accelerator.cpp.LogLevel.Debug)
+
 platform = sys.argv[1]
 acc = esi.AcceleratorConnection(platform, sys.argv[2])
 

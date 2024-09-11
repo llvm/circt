@@ -115,7 +115,6 @@ struct SVModuleOpConversion : public OpConversionPattern<SVModuleOp> {
   LogicalResult
   matchAndRewrite(SVModuleOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto outputOp = op.getOutputOp();
     rewriter.setInsertionPoint(op);
 
     // Create the hw.module to replace moore.module
@@ -133,12 +132,19 @@ struct SVModuleOpConversion : public OpConversionPattern<SVModuleOp> {
     rewriter.inlineRegionBefore(op.getBodyRegion(), hwModuleOp.getBodyRegion(),
                                 hwModuleOp.getBodyRegion().end());
 
-    // Rewrite the hw.output op
-    rewriter.setInsertionPointToEnd(hwModuleOp.getBodyBlock());
-    rewriter.replaceOpWithNewOp<hw::OutputOp>(outputOp, outputOp.getOperands());
-
     // Erase the original op
     rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct OutputOpConversion : public OpConversionPattern<OutputOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(OutputOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<hw::OutputOp>(op, adaptor.getOperands());
     return success();
   }
 };
@@ -946,17 +952,6 @@ struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
 // Statement Conversion
 //===----------------------------------------------------------------------===//
 
-struct HWOutputOpConversion : public OpConversionPattern<hw::OutputOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(hw::OutputOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<hw::OutputOp>(op, adaptor.getOperands());
-    return success();
-  }
-};
-
 struct HWInstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -1263,6 +1258,22 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return hw::StructType::get(type.getContext(), fields);
   });
 
+  // FIXME: Mapping unpacked struct type to struct type in hw dialect may be a
+  // plain solution. The packed and unpacked data structures have some
+  // differences though they look similarily. The packed data structure is
+  // contiguous in memory but another is opposite. The differences will affect
+  // data layout and granularity of event tracking in simulation.
+  typeConverter.addConversion([&](UnpackedStructType type) {
+    SmallVector<hw::StructType::FieldInfo> fields;
+    for (auto field : type.getMembers()) {
+      hw::StructType::FieldInfo info;
+      info.type = typeConverter.convertType(field.type);
+      info.name = field.name;
+      fields.push_back(info);
+    }
+    return hw::StructType::get(type.getContext(), fields);
+  });
+
   typeConverter.addConversion([&](RefType type) -> std::optional<Type> {
     auto innerType = typeConverter.convertType(type.getNestedType());
     if (innerType)
@@ -1290,7 +1301,9 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
           mlir::Location loc) -> std::optional<mlir::Value> {
         if (inputs.size() != 1)
           return std::nullopt;
-        return inputs[0];
+        return builder
+            .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
+            ->getResult(0);
       });
 }
 
@@ -1308,7 +1321,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
     ConversionOpConversion, ReadOpConversion, NamedConstantOpConv,
     StructExtractOpConversion, StructExtractRefOpConversion,
     ExtractRefOpConversion, StructCreateOpConversion, ConditionalOpConversion,
-    YieldOpConversion,
+    YieldOpConversion, OutputOpConversion,
 
     // Patterns of unary operations.
     ReduceAndOpConversion, ReduceOrOpConversion, ReduceXorOpConversion,
@@ -1360,7 +1373,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
     CondBranchOpConversion, BranchOpConversion,
 
     // Patterns of other operations outside Moore dialect.
-    HWOutputOpConversion, HWInstanceOpConversion, ReturnOpConversion,
+    HWInstanceOpConversion, ReturnOpConversion,
     CallOpConversion, UnrealizedConversionCastConversion
   >(typeConverter, context);
   // clang-format on

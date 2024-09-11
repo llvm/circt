@@ -80,6 +80,7 @@ public:
   AcceleratorConnection(Context &ctxt);
   virtual ~AcceleratorConnection();
   Context &getCtxt() const { return ctxt; }
+  Logger &getLogger() const { return ctxt.getLogger(); }
 
   /// Disconnect from the accelerator cleanly.
   virtual void disconnect();

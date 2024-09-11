@@ -14,13 +14,13 @@
 // RUN: esi-cosim.py --source %t6/hw --top top -- %python %s.py cosim env
 
 // Test C++ header generation against the manifest file
-// RUN: %python -m esiaccel.cppgen --file %t6/hw/esi_system_manifest.json --output-dir %t6/include/loopback/
+// RUN: %python -m esiaccel.codegen --file %t6/hw/esi_system_manifest.json --output-dir %t6/include/loopback/
 // RUN: %host_cxx -I %t6/include %s.cpp -o %t6/test
 // RUN: %t6/test | FileCheck %s --check-prefix=CPP-TEST
 // RUN: FileCheck %s --check-prefix=LOOPBACK-H --input-file %t6/include/loopback/LoopbackIP.h
 
 // Test C++ header generation against a live accelerator
-// RUN: esi-cosim.py --source %t6 --top top -- %python -m esiaccel.cppgen --platform cosim --connection env --output-dir %t6/include/loopback/
+// RUN: esi-cosim.py --source %t6 --top top -- %python -m esiaccel.codegen --platform cosim --connection env --output-dir %t6/include/loopback/
 // RUN: %host_cxx -I %t6/include %s.cpp -o %t6/test
 // RUN: %t6/test | FileCheck %s --check-prefix=CPP-TEST
 

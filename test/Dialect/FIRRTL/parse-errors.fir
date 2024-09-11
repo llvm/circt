@@ -707,6 +707,27 @@ circuit ForceWithLiteral:
 ;// -----
 
 FIRRTL version 4.0.0
+circuit ForceBadTypes:
+  public module ForceBadTypes:
+    input in : { a : UInt<5>, b : UInt<4> }
+    node n = in
+    ; expected-error @below {{incompatible force_initial source of type '!firrtl.uint<4>' cannot target destination '!firrtl.rwprobe<bundle<a: uint<5>, b: uint<4>>>'}}
+    force_initial(rwprobe(n), in.b)
+
+;// -----
+
+FIRRTL version 4.0.0
+circuit ForceBadTypesWithFlips:
+  public module ForceBadTypesWithFlips:
+    output out : { flip a : UInt<5> }
+    wire w : { flip a : UInt<5> }
+    connect out, w
+    ; expected-error @below {{expected passive value for force_initial source, got '!firrtl.bundle<a flip: uint<5>>'}}
+    force_initial(rwprobe(w), out)
+
+;// -----
+
+FIRRTL version 4.0.0
 circuit RWProbeConst:
   extmodule RWProbeConst:
     output p : RWProbe<{a: const UInt}> ; expected-error {{rwprobe cannot contain const}}

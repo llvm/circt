@@ -181,8 +181,10 @@ static ParseResult parseHWElementType(AsmParser &p, Type &result) {
       typeString.starts_with("typealias<") || typeString.starts_with("int<") ||
       typeString.starts_with("enum<")) {
     llvm::StringRef mnemonic;
-    auto parseResult = generatedTypeParser(p, &mnemonic, result);
-    return parseResult.has_value() ? success() : failure();
+    if (auto parseResult = generatedTypeParser(p, &mnemonic, result);
+        parseResult.has_value())
+      return *parseResult;
+    return p.emitError(p.getNameLoc(), "invalid type `") << typeString << "`";
   }
 
   return p.parseType(result);
@@ -558,10 +560,16 @@ static ParseResult parseHWArray(AsmParser &p, Attribute &dim, Type &inner) {
   uint64_t dimLiteral;
   auto int64Type = p.getBuilder().getIntegerType(64);
 
-  if (auto res = p.parseOptionalInteger(dimLiteral); res.has_value())
+  if (auto res = p.parseOptionalInteger(dimLiteral); res.has_value()) {
+    if (failed(*res))
+      return failure();
     dim = p.getBuilder().getI64IntegerAttr(dimLiteral);
-  else if (!p.parseOptionalAttribute(dim, int64Type).has_value())
-    return failure();
+  } else if (auto res64 = p.parseOptionalAttribute(dim, int64Type);
+             res64.has_value()) {
+    if (failed(*res64))
+      return failure();
+  } else
+    return p.emitError(p.getNameLoc(), "expected integer");
 
   if (!isa<IntegerAttr, ParamExprAttr, ParamDeclRefAttr>(dim)) {
     p.emitError(p.getNameLoc(), "unsupported dimension kind in hw.array");

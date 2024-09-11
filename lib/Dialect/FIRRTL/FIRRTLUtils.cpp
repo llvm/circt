@@ -458,7 +458,13 @@ bool circt::firrtl::walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
         auto subRef = fieldRef.getSubField(subID);
         auto subOriginal = original.getSubField(subID);
         auto value = subfield.getResult();
-        workStack.emplace_back(subOriginal, subRef, value, fieldID - subID);
+        // If fieldID is zero, this points to entire subfields.
+        if (fieldID == 0)
+          workStack.emplace_back(subOriginal, subRef, value, 0);
+        else {
+          assert(fieldID >= subID);
+          workStack.emplace_back(subOriginal, subRef, value, fieldID - subID);
+        }
       } else if (auto subindex = dyn_cast<SubindexOp>(user)) {
         FVectorType vectorType = subindex.getInput().getType();
         auto index = subindex.getIndex();
@@ -469,7 +475,13 @@ bool circt::firrtl::walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
         auto subRef = fieldRef.getSubField(subID);
         auto subOriginal = original.getSubField(subID);
         auto value = subindex.getResult();
-        workStack.emplace_back(subOriginal, subRef, value, fieldID - subID);
+        // If fieldID is zero, this points to entire subfields.
+        if (fieldID == 0)
+          workStack.emplace_back(subOriginal, subRef, value, 0);
+        else {
+          assert(fieldID >= subID);
+          workStack.emplace_back(subOriginal, subRef, value, fieldID - subID);
+        }
       } else if (auto connect = dyn_cast<FConnectLike>(user)) {
         // Make sure that this connect is driving the value.
         if (connect.getDest() != current)

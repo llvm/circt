@@ -118,7 +118,9 @@ public:
           if (inputs.size() != 1)
             return std::nullopt;
 
-          return inputs[0];
+          return builder
+              .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
+              ->getResult(0);
         });
 
     addSourceMaterialization(
@@ -128,7 +130,9 @@ public:
           if (inputs.size() != 1)
             return std::nullopt;
 
-          return inputs[0];
+          return builder
+              .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
+              ->getResult(0);
         });
   }
 };

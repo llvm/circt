@@ -363,7 +363,10 @@ struct SeqToSVTypeConverter : public TypeConverter {
             mlir::Location loc) -> std::optional<mlir::Value> {
           if (inputs.size() != 1)
             return std::nullopt;
-          return inputs[0];
+          return builder
+              .create<mlir::UnrealizedConversionCastOp>(loc, resultType,
+                                                        inputs[0])
+              ->getResult(0);
         });
 
     addSourceMaterialization(
@@ -372,7 +375,10 @@ struct SeqToSVTypeConverter : public TypeConverter {
             mlir::Location loc) -> std::optional<mlir::Value> {
           if (inputs.size() != 1)
             return std::nullopt;
-          return inputs[0];
+          return builder
+              .create<mlir::UnrealizedConversionCastOp>(loc, resultType,
+                                                        inputs[0])
+              ->getResult(0);
         });
   }
 };

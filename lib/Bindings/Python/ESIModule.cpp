@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "DialectModules.h"
+#include "CIRCTModules.h"
 
 #include "circt/Dialect/ESI/ESIDialect.h"
 
