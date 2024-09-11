@@ -981,6 +981,8 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
   // Clone the property ops from the FIRRTL Class or Module to the OM Class.
   SmallVector<Operation *> opsToErase;
   OpBuilder builder = OpBuilder::atBlockBegin(classOp.getBodyBlock());
+  llvm::SmallVector<mlir::Location> fieldLocs;
+  llvm::SmallVector<mlir::Value> fieldValues;
   for (auto &op : moduleLike->getRegion(0).getOps()) {
     // Check if any operand is a property.
     auto propertyOperands = llvm::any_of(op.getOperandTypes(), [](Type type) {
@@ -998,8 +1000,15 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
     if (!needsClone && !propertyOperands && !propertyResults)
       continue;
 
-    // Actually clone the op over to the OM Class.
-    builder.clone(op, mapping);
+    if (isa<PropAssignOp>(op) &&
+        dyn_cast<BlockArgument>(cast<PropAssignOp>(op).getDest())) {
+      // Store any output property assignments into fields op inputs.
+      fieldLocs.push_back(op.getLoc());
+      fieldValues.push_back(mapping.lookup(cast<PropAssignOp>(op).getSrc()));
+    } else {
+      // Clone the op over to the OM Class.
+      builder.clone(op, mapping);
+    }
 
     // In case this is a Module, remember to erase this op, unless it is an
     // instance. Instances are handled later in updateInstances.
@@ -1007,23 +1016,7 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
       opsToErase.push_back(&op);
   }
 
-  llvm::SmallVector<mlir::Location> locs;
-  llvm::SmallVector<mlir::Value> fieldValues;
-  // Convert any output property assignments to Field ops.
-  for (auto op : llvm::make_early_inc_range(classOp.getOps<PropAssignOp>())) {
-    // Property assignments will currently be pointing back to the original
-    // FIRRTL Class for output ports.
-    auto outputPort = dyn_cast<BlockArgument>(op.getDest());
-    if (!outputPort)
-      continue;
-
-    locs.push_back(op.getLoc());
-    fieldValues.push_back(op.getSrc());
-
-    op.erase();
-  }
-
-  builder.create<ClassFieldsOp>(builder.getFusedLoc(locs), fieldValues);
+  builder.create<ClassFieldsOp>(builder.getFusedLoc(fieldLocs), fieldValues);
 
   // If the module-like is a Class, it will be completely erased later.
   // Otherwise, erase just the property ports and ops.
