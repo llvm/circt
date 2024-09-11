@@ -31,7 +31,7 @@ std::unique_ptr<mlir::Pass> createLowerSeqFIFOPass();
 std::unique_ptr<mlir::Pass>
 createHWMemSimImplPass(const HWMemSimImplOptions &options = {});
 std::unique_ptr<mlir::Pass> createLowerSeqShiftRegPass();
-
+std::unique_ptr<mlir::Pass> createRandomizeRegisterInitPass();
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/Seq/SeqPasses.h.inc"

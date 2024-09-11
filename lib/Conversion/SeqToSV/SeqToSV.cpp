@@ -629,7 +629,7 @@ void SeqToSVPass::runOnOperation() {
     if (needsMemRandomization)
       b.create<sv::MacroDeclOp>("RANDOMIZE_MEM_INIT");
     b.create<sv::MacroDeclOp>("RANDOMIZE_REG_INIT");
-    b.create<sv::MacroDeclOp>("RANDOMIZE");
+    // b.create<sv::MacroDeclOp>("RANDOMIZE");
     b.create<sv::MacroDeclOp>("RANDOMIZE_DELAY");
     b.create<sv::MacroDeclOp>("RANDOM");
     b.create<sv::MacroDeclOp>("INIT_RANDOM");

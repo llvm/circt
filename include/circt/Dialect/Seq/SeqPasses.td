@@ -107,4 +107,18 @@ def LowerSeqShiftReg : Pass<"lower-seq-shiftreg", "hw::HWModuleOp"> {
   let dependentDialects = ["circt::hw::HWDialect"];
 }
 
+def RandomizeRegisterInit : Pass<"randomize-register-init", "ModuleOp"> {
+  let summary = "Randomize initial values of registers";
+  let description = [{
+    This pass randomizes the initial values of registers in the design.
+    It replaces any existing initial values with randomly generated ones.
+  }];
+  let constructor = "circt::seq::createRandomizeRegisterInitPass()";
+  let dependentDialects = ["circt::hw::HWDialect", "circt::sv::SVDialect"];
+  // let options = [
+  //   Option<"emitSV", "emit-sv", "bool", "false",
+  //          "Emit SV code for register randomization. Otherwise emit interpretable IR">
+  // ];
+}
+
 #endif // CIRCT_DIALECT_SEQ_SEQPASSES
