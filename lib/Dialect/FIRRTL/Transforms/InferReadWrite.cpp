@@ -51,7 +51,26 @@ struct InferReadWritePass
                             << getOperation().getName());
     SmallVector<Operation *> opsToErase;
 
-    getOperation().walk([&](MemOp memOp) {
+    auto result = getOperation().walk([&](Operation *op) {
+      // This pass is going to have problems if it tries to determine signal
+      // drivers in the presence of WhenOps.  Conservatively error out if we see
+      // any WhenOps.
+      //
+      // TODO: This would be better handled if WhenOps were moved into the
+      // CHIRRTL dialect so that this pass could more strongly specify that it
+      // only works on FIRRTL as opposed to a subset of FIRRTL.
+      if (isa<WhenOp>(op)) {
+        op->emitOpError()
+            << "is unsupported by InferReadWrite as this pass cannot trace "
+               "signal drivers in their presence. Please run `ExpandWhens` to "
+               "remove these operations before running this pass.";
+        return WalkResult::interrupt();
+      }
+
+      MemOp memOp = dyn_cast<MemOp>(op);
+      if (!memOp)
+        return WalkResult::advance();
+
       inferUnmasked(memOp, opsToErase);
       simplifyWmode(memOp);
       size_t nReads, nWrites, nRWs, nDbgs;
@@ -223,6 +242,9 @@ struct InferReadWritePass
       opsToErase.push_back(memOp);
       return WalkResult::advance();
     });
+
+    if (result.wasInterrupted())
+      return signalPassFailure();
 
     for (auto *o : opsToErase)
       o->erase();
