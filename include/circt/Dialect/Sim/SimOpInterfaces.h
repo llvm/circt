@@ -18,6 +18,10 @@
 
 #include "circt/Dialect/Sim/SimOpInterfaces.h.inc"
 
+namespace circt {
+namespace sim {
+
+
+} // namespace sim
+} // namespace circt
 #endif // CIRCT_DIALECT_SIM_SEQOPINTERFACES_H
-
-

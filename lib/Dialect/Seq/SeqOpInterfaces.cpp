@@ -20,3 +20,17 @@ using namespace llvm;
 using namespace circt::seq;
 
 #include "circt/Dialect/Seq/SeqOpInterfaces.cpp.inc"
+
+LogicalResult circt::seq::verifyInProceduralRegion(Operation *op) {
+  if (op->getParentOp()->hasTrait<seq::ProceduralRegion>())
+    return success();
+  op->emitError() << op->getName() << " should be in a procedural region";
+  return failure();
+}
+
+LogicalResult circt::seq::verifyInNonProceduralRegion(Operation *op) {
+  if (!op->getParentOp()->hasTrait<seq::ProceduralRegion>())
+    return success();
+  op->emitError() << op->getName() << " should be in a non-procedural region";
+  return failure();
+}

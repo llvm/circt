@@ -11,8 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Sim/SimOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
-#include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/Seq/SeqOpInterfaces.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
@@ -375,9 +376,8 @@ LogicalResult PrintFormattedProcOp::verify() {
     return success();
   }
 
-  if (!parentOp->hasTrait<sim::ProceduralRegion>())
-    return emitOpError("must be within a procedural region.");
-  return success();
+  // if (!parentOp->hasTrait<seq::ProceduralRegion>())
+  //   return emitOpError("must be within a procedural region.");
 
   // Don't fail for dialects that are not explicitly handled.
   return success();

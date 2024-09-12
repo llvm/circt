@@ -267,7 +267,7 @@ Value HWLegalizeModulesPass::lowerLookupToCasez(Operation &op, Value input,
   // A casez is a procedural operation, so if we're in a
   // non-procedural region we need to inject an always_comb
   // block.
-  if (!op.getParentOp()->hasTrait<sv::ProceduralRegion>()) {
+  if (!op.getParentOp()->hasTrait<seq::ProceduralRegion>()) {
     auto alwaysComb = builder.create<sv::AlwaysCombOp>(loc);
     builder.setInsertionPointToEnd(alwaysComb.getBodyBlock());
   }

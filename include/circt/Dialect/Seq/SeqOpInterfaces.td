@@ -34,4 +34,16 @@ def Resettable : OpInterface<"Resettable"> {
   ];
 }
 
+def ProceduralRegion : NativeOpTrait<"ProceduralRegion"> {
+  let cppNamespace = "::circt::seq";
+}
+
+def ProceduralOp : NativeOpTrait<"ProceduralOp"> {
+  let cppNamespace = "::circt::seq";
+}
+
+def NonProceduralOp : NativeOpTrait<"NonProceduralOp"> {
+  let cppNamespace = "::circt::seq";
+}
+
 #endif

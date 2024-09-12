@@ -14,6 +14,7 @@
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Types.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
+include "circt/Dialect/Seq/SeqOpInterfaces.td"
 
 // Note that net declarations like 'wire' should not appear in an always block.
 def WireOp : SVOp<"wire", [NonProceduralOp,

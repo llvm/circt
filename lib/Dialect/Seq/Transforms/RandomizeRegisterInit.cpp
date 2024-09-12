@@ -45,6 +45,34 @@ struct RegLowerInfo {
   size_t width;
 };
 
+static Value initialize(OpBuilder &builder, RegLowerInfo reg,
+                        ArrayRef<Value> rands) {
+
+  auto loc = reg.compReg.getLoc();
+  SmallVector<Value> nibbles;
+  if (reg.width == 0)
+    return;
+
+  uint64_t width = reg.width;
+  uint64_t offset = reg.randStart;
+  while (width) {
+    auto index = offset / 32;
+    auto start = offset % 32;
+    auto nwidth = std::min(32 - start, width);
+    auto elemVal = builder.create<sv::ReadInOutOp>(loc, rands[index]);
+    auto elem =
+        builder.createOrFold<comb::ExtractOp>(loc, elemVal, start, nwidth);
+    nibbles.push_back(elem);
+    offset += nwidth;
+    width -= nwidth;
+  }
+  auto concat = builder.createOrFold<comb::ConcatOp>(loc, nibbles);
+  auto bitcast = builder.createOrFold<hw::BitcastOp>(
+      loc, reg.compReg.getResult().getType(), concat);
+
+  // Initialize register elements.
+  return bitcast;
+}
 void RandomizeRegisterInitPass::runOnOperation() {
   auto module = getOperation();
   OpBuilder builder(module);
@@ -131,6 +159,72 @@ void RandomizeRegisterInitPass::runOnModule(hw::HWModuleOp module) {
     }
 
     builder.create<seq::YieldOp>(results);
+  });
+
+  auto randInitRef =
+      sv::MacroIdentAttr::get(module.getContext(), "RANDOMIZE_REG_INIT");
+
+  auto loc = module.getLoc();
+
+  builder.create<seq::InitialOp>([&] {
+    if (enableSV) {
+      SmallVector<Value> initValues;
+      builder.create<sv::IfDefOp>("FIRRTL_BEFORE_INITIAL", [&] {
+        builder.create<sv::VerbatimOp>("`FIRRTL_BEFORE_INITIAL");
+      });
+      if (!regs.empty()) {
+        builder.create<sv::IfDefProceduralOp>("INIT_RANDOM_PROLOG_", [&] {
+          builder.create<sv::VerbatimOp>("`INIT_RANDOM_PROLOG_");
+        });
+        builder.create<sv::IfDefProceduralOp>(randInitRef, [&] {
+          // Create randomization vector
+          SmallVector<Value> randValues;
+          auto numRandomCalls = (maxBit + 31) / 32;
+          auto logic = builder.create<sv::LogicOp>(
+              loc,
+              hw::UnpackedArrayType::get(builder.getIntegerType(32),
+                                         numRandomCalls),
+              "_RANDOM");
+          // Indvar's width must be equal to `ceil(log2(numRandomCalls +
+          // 1))` to avoid overflow.
+          auto inducionVariableWidth = llvm::Log2_64_Ceil(numRandomCalls + 1);
+          auto arrayIndexWith = llvm::Log2_64_Ceil(numRandomCalls);
+          auto lb = builder.create<hw::ConstantOp>(
+              loc, APInt::getZero(inducionVariableWidth));
+          auto ub = builder.create<hw::ConstantOp>(
+              loc, APInt(inducionVariableWidth, numRandomCalls));
+          auto step = builder.create<hw::ConstantOp>(
+              loc, APInt(inducionVariableWidth, 1));
+          auto forLoop = builder.create<sv::ForOp>(
+              loc, lb, ub, step, "i", [&](BlockArgument iter) {
+                auto rhs = builder.create<sv::MacroRefExprSEOp>(
+                    loc, builder.getIntegerType(32), "RANDOM");
+                Value iterValue = iter;
+                if (!iter.getType().isInteger(arrayIndexWith))
+                  iterValue = builder.create<comb::ExtractOp>(loc, iterValue, 0,
+                                                              arrayIndexWith);
+                auto lhs = builder.create<sv::ArrayIndexInOutOp>(loc, logic,
+                                                                 iterValue);
+                builder.create<sv::BPAssignOp>(loc, lhs, rhs);
+              });
+          builder.setInsertionPointAfter(forLoop);
+          for (uint64_t x = 0; x < numRandomCalls; ++x) {
+            auto lhs = builder.create<sv::ArrayIndexInOutOp>(
+                loc, logic,
+                builder.create<hw::ConstantOp>(loc, APInt(arrayIndexWith, x)));
+            randValues.push_back(lhs.getResult());
+          }
+
+          // Create initialisers for all registers.
+          for (auto &svReg : regs)
+            initValues.push_back(::initialize(builder, svReg, randValues));
+        });
+      });
+
+      builder.create<sv::IfDefProceduralOp>("FIRRTL_AFTER_INITIAL", [&] {
+        builder.create<sv::VerbatimOp>("`FIRRTL_AFTER_INITIAL");
+      });
+    }
   });
 
   for (auto [reg, init] : llvm::zip(regs, initOp.getResults())) {

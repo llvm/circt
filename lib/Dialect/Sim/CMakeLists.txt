@@ -12,6 +12,7 @@
 add_circt_dialect_library(CIRCTSim
   SimDialect.cpp
   SimOps.cpp
+  SimOpInterfaces.cpp
   SimTypes.cpp
 
   ADDITIONAL_HEADER_DIRS

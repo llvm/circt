@@ -20,16 +20,4 @@ include "circt/Support/InstanceGraphInterface.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 
-def ProceduralRegion : NativeOpTrait<"ProceduralRegion"> {
-  let cppNamespace = "::circt::sim";
-}
-
-def ProceduralOp : NativeOpTrait<"ProceduralOp"> {
-  let cppNamespace = "::circt::sim";
-}
-
-def NonProceduralOp : NativeOpTrait<"NonProceduralOp"> {
-  let cppNamespace = "::circt::sim";
-}
-
 #endif

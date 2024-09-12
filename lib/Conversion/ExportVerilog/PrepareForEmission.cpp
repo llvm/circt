@@ -44,6 +44,7 @@ using namespace circt;
 using namespace comb;
 using namespace hw;
 using namespace sv;
+using namespace seq;
 using namespace ExportVerilog;
 
 // Check if the value is from read of a wire or reg or is a port.

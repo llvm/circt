@@ -15,6 +15,7 @@ include "mlir/IR/OpAsmInterface.td"
 include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "circt/Dialect/Emit/EmitOpInterfaces.td"
+include "circt/Dialect/Seq/SeqOpInterfaces.td"
 
 //===----------------------------------------------------------------------===//
 // Control flow like-operations

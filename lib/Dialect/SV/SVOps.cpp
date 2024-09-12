@@ -53,20 +53,6 @@ bool sv::isExpression(Operation *op) {
              MacroRefExprOp, MacroRefExprSEOp>(op);
 }
 
-LogicalResult sv::verifyInProceduralRegion(Operation *op) {
-  if (op->getParentOp()->hasTrait<sv::ProceduralRegion>())
-    return success();
-  op->emitError() << op->getName() << " should be in a procedural region";
-  return failure();
-}
-
-LogicalResult sv::verifyInNonProceduralRegion(Operation *op) {
-  if (!op->getParentOp()->hasTrait<sv::ProceduralRegion>())
-    return success();
-  op->emitError() << op->getName() << " should be in a non-procedural region";
-  return failure();
-}
-
 /// Returns the operation registered with the given symbol name with the regions
 /// of 'symbolTableOp'. recurse through nested regions which don't contain the
 /// symboltable trait. Returns nullptr if no valid symbol was found.

@@ -14,6 +14,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Sim/SimOpInterfaces.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
@@ -27,6 +28,8 @@ namespace sv {
 } // namespace circt
 
 using namespace circt;
+using namespace sv;
+
 //===----------------------------------------------------------------------===//
 // Helper utilities
 //===----------------------------------------------------------------------===//
@@ -143,7 +146,7 @@ void HWCleanupPass::runOnOperation() {
 /// Recursively process all of the regions in the specified op, dispatching to
 /// graph or procedural processing as appropriate.
 void HWCleanupPass::runOnRegionsInOp(Operation &op) {
-  if (op.hasTrait<sv::ProceduralRegion>()) {
+  if (op.hasTrait<seq::ProceduralRegion>()) {
     for (auto &region : op.getRegions())
       runOnProceduralRegion(region);
   } else {

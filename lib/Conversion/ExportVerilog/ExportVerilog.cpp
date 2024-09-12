@@ -65,6 +65,7 @@ using namespace circt;
 using namespace comb;
 using namespace hw;
 using namespace sv;
+using namespace seq;
 using namespace ExportVerilog;
 
 using namespace pretty;
@@ -4923,7 +4924,7 @@ LogicalResult StmtEmitter::emitPropertyAssertion(Op op, PPExtString opName) {
   Operation *parent = op->getParentOp();
   Value property = op.getProperty();
   bool isTemporal = !property.getType().isSignlessInteger(1);
-  bool isProcedural = parent->hasTrait<ProceduralRegion>();
+  bool isProcedural = parent->hasTrait<seq::ProceduralRegion>();
   bool emitAsImmediate = !isTemporal && isProcedural;
 
   startStatement();
