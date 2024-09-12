@@ -882,7 +882,7 @@ static Value getOperandFromBlock(MuxOp mux, Block *block) {
     return block == operand.getParentBlock();
   });
   assert(
-      inValueIt != mux.getOperands().end() &&
+      inValueIt != mux.getDataOperands().end() &&
       "Expected mux to have an operand originating from the requested block.");
   return *inValueIt;
 }
