@@ -27,7 +27,7 @@ void circt::python::populateSupportSubmodule(py::module &m) {
   // Walk with filter.
   m.def(
       "_walk_with_filter",
-      [](MlirOperation operation, std::vector<std::string> op_names,
+      [](MlirOperation operation, const std::vector<std::string> &opNames,
          std::function<MlirWalkResult(MlirOperation)> callback,
          MlirWalkOrder walkOrder) {
         struct UserData {
@@ -35,27 +35,29 @@ void circt::python::populateSupportSubmodule(py::module &m) {
           bool gotException;
           std::string exceptionWhat;
           py::object exceptionType;
-          std::vector<MlirIdentifier> op_names;
+          std::vector<MlirIdentifier> opNames;
         };
 
-        std::vector<MlirIdentifier> op_names_identifiers;
+        std::vector<MlirIdentifier> opNamesIdentifiers;
+        opNamesIdentifiers.reserve(opNames.size());
 
         // Construct MlirIdentifier from string to perform pointer comparison.
-        for (auto &op_name : op_names)
-          op_names_identifiers.push_back(mlirIdentifierGet(
+        for (auto &opName : opNames)
+          opNamesIdentifiers.push_back(mlirIdentifierGet(
               mlirOperationGetContext(operation),
-              mlirStringRefCreateFromCString(op_name.c_str())));
+              mlirStringRefCreateFromCString(opName.c_str())));
 
-        UserData userData{callback, false, {}, {}, op_names_identifiers};
+        UserData userData{
+            std::move(callback), false, {}, {}, opNamesIdentifiers};
         MlirOperationWalkCallback walkCallback = [](MlirOperation op,
                                                     void *userData) {
           UserData *calleeUserData = static_cast<UserData *>(userData);
-          auto op_name = mlirOperationGetName(op);
+          auto opName = mlirOperationGetName(op);
 
           // Check if the operation name is in the filter.
           bool inFilter = false;
-          for (auto &op_name_identifier : calleeUserData->op_names) {
-            if (mlirIdentifierEqual(op_name, op_name_identifier)) {
+          for (auto &opNamesIdentifier : calleeUserData->opNames) {
+            if (mlirIdentifierEqual(opName, opNamesIdentifier)) {
               inFilter = true;
               break;
             }
