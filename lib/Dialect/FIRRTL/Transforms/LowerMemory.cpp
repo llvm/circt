@@ -130,6 +130,9 @@ struct LowerMemoryPass
   /// The set of all memories seen so far.  This is used to "deduplicate"
   /// memories by emitting modules one module for equivalent memories.
   std::map<FirMemory, FMemModuleOp> memories;
+
+  /// A sequence of operations that should be erased later.
+  SmallPtrSet<Operation *, 32> operationsToErase;
 };
 } // end anonymous namespace
 
@@ -322,7 +325,7 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
     newAnnos.addAnnotations(newMemModAnnos);
     newAnnos.applyToOperation(memInst);
   }
-  mem->erase();
+  operationsToErase.insert(mem);
   ++numLoweredMems;
 }
 
@@ -441,8 +444,8 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
         enConnect->moveAfter(andOp);
         // Erase the old mask connect.
         auto *maskField = maskConnect->getOperand(0).getDefiningOp();
-        maskConnect->erase();
-        maskField->erase();
+        operationsToErase.insert(maskConnect);
+        operationsToErase.insert(maskField);
       };
 
       if (memportKind == MemOp::PortKind::Read) {
@@ -492,7 +495,7 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
   // Update all users of the result of read ports
   for (auto [subfield, result] : returnHolder) {
     subfield->getResult(0).replaceAllUsesWith(inst.getResult(result));
-    subfield->erase();
+    operationsToErase.insert(subfield);
   }
 
   return inst;
@@ -500,19 +503,30 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
 
 LogicalResult LowerMemoryPass::runOnModule(FModuleOp moduleOp,
                                            bool shouldDedup) {
-  for (auto op :
-       llvm::make_early_inc_range(moduleOp.getBodyBlock()->getOps<MemOp>())) {
+  assert(operationsToErase.empty() && "operationsToErase must be empty");
+
+  auto result = moduleOp.walk([&](MemOp op) {
     // Check that the memory has been properly lowered already.
-    if (!type_isa<UIntType>(op.getDataType()))
-      return op->emitError(
-          "memories should be flattened before running LowerMemory");
+    if (!type_isa<UIntType>(op.getDataType())) {
+      op->emitError("memories should be flattened before running LowerMemory");
+      return WalkResult::interrupt();
+    }
 
     auto summary = getSummary(op);
-    if (!summary.isSeqMem())
-      continue;
+    if (summary.isSeqMem())
+      lowerMemory(op, summary, shouldDedup);
 
-    lowerMemory(op, summary, shouldDedup);
-  }
+    return WalkResult::advance();
+  });
+
+  if (result.wasInterrupted())
+    return failure();
+
+  for (Operation *op : operationsToErase)
+    op->erase();
+
+  operationsToErase.clear();
+
   return success();
 }
 

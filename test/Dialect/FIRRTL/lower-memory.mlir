@@ -275,3 +275,24 @@ firrtl.module @DUT() {
 // CHECK-SAME:  {annotations = [{circt.nonlocal = @[[nla_1]], class = "test1"}]}
 // CHECK-SAME:  @mem0_ext(
 }
+
+// CHECK-LABEL: "MemoryInLayer"
+firrtl.circuit "MemoryInLayer" {
+firrtl.layer @A bind {}
+firrtl.module @MemoryInLayer() {
+
+  // CHECK:      firrtl.layerblock @A
+  // CHECK-NEXT:   firrtl.instance mem
+  firrtl.layerblock @A {
+    %mem_w = firrtl.mem sym @mem Undefined {
+      annotations = [],
+      depth = 2 : i64,
+      name = "mem",
+      portNames = ["w"],
+      readLatency = 1 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<1>, mask: uint<1>>
+  }
+
+}
+}
