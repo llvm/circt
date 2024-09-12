@@ -19,7 +19,7 @@ add_circt_dialect_library(CIRCTSim
 
   DEPENDS
   CIRCTHW
-  CIRCTSV
+  CIRCTSimOpInterfacesIncGen
   MLIRSimIncGen
 
   LINK_COMPONENTS
@@ -28,7 +28,6 @@ add_circt_dialect_library(CIRCTSim
   LINK_LIBS PUBLIC
   CIRCTHW
   CIRCTSeq
-  CIRCTSV
   MLIRFuncDialect
   MLIRIR
   MLIRPass

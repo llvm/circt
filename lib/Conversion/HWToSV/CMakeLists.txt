@@ -10,6 +10,7 @@ add_circt_conversion_library(CIRCTHWToSV
   LINK_LIBS PUBLIC
   CIRCTHW
   CIRCTSV
+  CIRCTSim
   MLIREmitCDialect
   MLIRTransforms
 )

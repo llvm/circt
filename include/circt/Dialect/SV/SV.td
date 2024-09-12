@@ -25,18 +25,6 @@ include "circt/Dialect/SV/SVDialect.td"
 class SVOp<string mnemonic, list<Trait> traits = []> :
     Op<SVDialect, mnemonic, traits>;
 
-def ProceduralRegion : NativeOpTrait<"ProceduralRegion"> {
-  let cppNamespace = "::circt::sv";
-}
-
-def ProceduralOp : NativeOpTrait<"ProceduralOp"> {
-  let cppNamespace = "::circt::sv";
-}
-
-def NonProceduralOp : NativeOpTrait<"NonProceduralOp"> {
-  let cppNamespace = "::circt::sv";
-}
-
 /// Mark an operation as being a vendor extension.
 def VendorExtension : NativeOpTrait<"VendorExtension"> {
   let cppNamespace = "::circt::sv";
@@ -44,6 +32,7 @@ def VendorExtension : NativeOpTrait<"VendorExtension"> {
 
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/HW/HWAttributesNaming.td"
+include "circt/Dialect/Sim/SimOpInterfaces.td"
 include "circt/Dialect/SV/SVAttributes.td"
 include "circt/Dialect/SV/SVTypes.td"
 include "circt/Dialect/SV/SVExpressions.td"

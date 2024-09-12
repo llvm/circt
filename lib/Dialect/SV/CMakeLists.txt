@@ -8,6 +8,7 @@ add_circt_dialect_library(CIRCTSV
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/SV
 
   DEPENDS
+  CIRCTSimOpInterfacesIncGen
   MLIRSVIncGen
 
   LINK_COMPONENTS
@@ -18,6 +19,7 @@ add_circt_dialect_library(CIRCTSV
   CIRCTHW
   CIRCTLTL
   CIRCTSupport
+  CIRCTSim
   MLIRIR
 )
 

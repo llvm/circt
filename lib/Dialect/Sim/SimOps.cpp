@@ -375,11 +375,9 @@ LogicalResult PrintFormattedProcOp::verify() {
     return success();
   }
 
-  if (isa<sv::SVDialect>(parentOp->getDialect())) {
-    if (!parentOp->hasTrait<sv::ProceduralRegion>())
-      return emitOpError("must be within a procedural region.");
-    return success();
-  }
+  if (!parentOp->hasTrait<sim::ProceduralRegion>())
+    return emitOpError("must be within a procedural region.");
+  return success();
 
   // Don't fail for dialects that are not explicitly handled.
   return success();

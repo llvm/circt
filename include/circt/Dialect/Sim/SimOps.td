@@ -20,6 +20,7 @@ include "circt/Dialect/Sim/SimTypes.td"
 include "circt/Dialect/Seq/SeqTypes.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/Sim/SimOpInterfaces.td"
 
 class SimOp<string mnemonic, list<Trait> traits = []> :
     Op<SimDialect, mnemonic, traits>;

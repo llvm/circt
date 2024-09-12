@@ -10,7 +10,6 @@ add_circt_dialect_library(CIRCTSimTransforms
   CIRCTHW
   CIRCTSim
   CIRCTSeq
-  CIRCTSV
   CIRCTComb
   CIRCTSupport
   MLIRFuncDialect
