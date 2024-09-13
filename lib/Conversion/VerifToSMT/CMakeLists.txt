@@ -13,6 +13,7 @@ add_circt_conversion_library(CIRCTVerifToSMT
   CIRCTSMT
   CIRCTVerif
   MLIRArithDialect
+  MLIRSCFDialect
   MLIRTransforms
   MLIRTransformUtils
   MLIRReconcileUnrealizedCasts
