@@ -950,3 +950,20 @@ firrtl.circuit "OMIRRemoval" {
     firrtl.matchingconnect %d, %tmp_3 : !firrtl.uint<4>
   }
 }
+
+
+// -----
+
+firrtl.circuit "Layers" {
+  // CHECK-LABEL: firrtl.module @Layers
+  firrtl.layer @A bind {}
+  firrtl.module @Layers() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK: firrtl.layerblock
+    firrtl.layerblock @A {
+      %a = firrtl.node %c0_ui1 : !firrtl.uint<1>
+      // CHECK-NEXT: %b = firrtl.node sym @sym_b %c0_ui1
+      %b = firrtl.node sym @sym_b %a : !firrtl.uint<1>
+    }
+  }
+}

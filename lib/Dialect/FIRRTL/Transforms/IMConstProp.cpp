@@ -483,6 +483,8 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
         .Case<InstanceOp>([&](auto instance) { markInstanceOp(instance); })
         .Case<ObjectOp>([&](auto obj) { markObjectOp(obj); })
         .Case<MemOp>([&](auto mem) { markMemOp(mem); })
+        .Case<LayerBlockOp>(
+            [&](auto layer) { markBlockExecutable(layer.getBody(0)); })
         .Default([&](auto _) {
           if (isa<mlir::UnrealizedConversionCastOp, VerbatimExprOp,
                   VerbatimWireOp, SubaccessOp>(op) ||
