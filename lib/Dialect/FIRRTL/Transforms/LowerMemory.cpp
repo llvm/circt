@@ -132,7 +132,7 @@ struct LowerMemoryPass
   std::map<FirMemory, FMemModuleOp> memories;
 
   /// A sequence of operations that should be erased later.
-  SmallPtrSet<Operation *, 32> operationsToErase;
+  SetVector<Operation *> operationsToErase;
 };
 } // end anonymous namespace
 
