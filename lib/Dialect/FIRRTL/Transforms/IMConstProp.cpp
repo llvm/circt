@@ -19,6 +19,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/APInt.h"
+#include "mlir/IR/Iterators.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/APSInt.h"
@@ -1006,88 +1007,92 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
   for (auto &port : body->getArguments())
     replaceValueIfPossible(port);
 
-  // TODO: Walk 'when's preorder with `walk`.
-
   // Walk the IR bottom-up when folding.  We often fold entire chains of
   // operations into constants, which make the intermediate nodes dead.  Going
   // bottom up eliminates the users of the intermediate ops, allowing us to
   // aggressively delete them.
+  //
+  // TODO: Handle WhenOps correctly.
   bool aboveCursor = false;
-  for (auto &op : llvm::make_early_inc_range(llvm::reverse(*body))) {
-    auto dropIfDead = [&](Operation &op, const Twine &debugPrefix) {
-      if (op.use_empty() &&
-          (wouldOpBeTriviallyDead(&op) || isDeletableWireOrRegOrNode(&op))) {
-        LLVM_DEBUG(
-            { logger.getOStream() << debugPrefix << " : " << op << "\n"; });
-        ++numErasedOp;
-        op.erase();
-        return true;
-      }
-      return false;
-    };
+  module.walk<mlir::WalkOrder::PreOrder, mlir::ReverseIterator>(
+      [&](Operation *op) {
+        auto dropIfDead = [&](Operation *op, const Twine &debugPrefix) {
+          if (op->use_empty() &&
+              (wouldOpBeTriviallyDead(op) || isDeletableWireOrRegOrNode(op))) {
+            LLVM_DEBUG(
+                { logger.getOStream() << debugPrefix << " : " << op << "\n"; });
+            ++numErasedOp;
+            op->erase();
+            return true;
+          }
+          return false;
+        };
 
-    if (aboveCursor) {
-      // Drop dead constants we materialized.
-      dropIfDead(op, "Trivially dead materialized constant");
-      continue;
-    }
-    // Stop once hit the generated constants.
-    if (&op == cursor) {
-      cursor.erase();
-      aboveCursor = true;
-      continue;
-    }
-
-    // Connects to values that we found to be constant can be dropped.
-    if (auto connect = dyn_cast<FConnectLike>(op)) {
-      if (auto *destOp = connect.getDest().getDefiningOp()) {
-        auto fieldRef = getOrCacheFieldRefFromValue(connect.getDest());
-        // Don't remove a field-level connection even if the src value is
-        // constant. If other elements of the aggregate value are not constant,
-        // the aggregate value cannot be replaced. We can forward the constant
-        // to its users, so IMDCE (or SV/HW canonicalizer) should remove the
-        // aggregate if entire aggregate is dead.
-        auto type = type_dyn_cast<FIRRTLType>(connect.getDest().getType());
-        if (!type)
-          continue;
-        auto baseType = type_dyn_cast<FIRRTLBaseType>(type);
-        if (baseType && !baseType.isGround())
-          continue;
-        if (isDeletableWireOrRegOrNode(destOp) && !isOverdefined(fieldRef)) {
-          connect.erase();
-          ++numErasedOp;
+        if (aboveCursor) {
+          // Drop dead constants we materialized.
+          dropIfDead(op, "Trivially dead materialized constant");
+          return WalkResult::advance();
         }
-      }
-      continue;
-    }
+        // Stop once hit the generated constants.
+        if (op == cursor) {
+          cursor.erase();
+          aboveCursor = true;
+          return WalkResult::advance();
+        }
 
-    // We only fold single-result ops and instances in practice, because they
-    // are the expressions.
-    if (op.getNumResults() != 1 && !isa<InstanceOp>(op))
-      continue;
+        // Connects to values that we found to be constant can be dropped.
+        if (auto connect = dyn_cast<FConnectLike>(op)) {
+          if (auto *destOp = connect.getDest().getDefiningOp()) {
+            auto fieldRef = getOrCacheFieldRefFromValue(connect.getDest());
+            // Don't remove a field-level connection even if the src value is
+            // constant. If other elements of the aggregate value are not
+            // constant, the aggregate value cannot be replaced. We can forward
+            // the constant to its users, so IMDCE (or SV/HW canonicalizer)
+            // should remove the aggregate if entire aggregate is dead.
+            auto type = type_dyn_cast<FIRRTLType>(connect.getDest().getType());
+            if (!type)
+              return WalkResult::advance();
+            auto baseType = type_dyn_cast<FIRRTLBaseType>(type);
+            if (baseType && !baseType.isGround())
+              return WalkResult::advance();
+            if (isDeletableWireOrRegOrNode(destOp) &&
+                !isOverdefined(fieldRef)) {
+              connect.erase();
+              ++numErasedOp;
+            }
+          }
+          return WalkResult::advance();
+        }
 
-    // If this operation is already dead, then go ahead and remove it.
-    if (dropIfDead(op, "Trivially dead"))
-      continue;
+        // We only fold single-result ops and instances in practice, because
+        // they are the expressions.
+        if (op->getNumResults() != 1 && !isa<InstanceOp>(op))
+          return WalkResult::advance();
 
-    // Don't "fold" constants (into equivalent), also because they
-    // may have name hints we'd like to preserve.
-    if (op.hasTrait<mlir::OpTrait::ConstantLike>())
-      continue;
+        // If this operation is already dead, then go ahead and remove it.
+        if (dropIfDead(op, "Trivially dead"))
+          return WalkResult::advance();
 
-    // If the op had any constants folded, replace them.
-    builder.setInsertionPoint(&op);
-    bool foldedAny = false;
-    for (auto result : op.getResults())
-      foldedAny |= replaceValueIfPossible(result);
+        // Don't "fold" constants (into equivalent), also because they
+        // may have name hints we'd like to preserve.
+        if (op->hasTrait<mlir::OpTrait::ConstantLike>())
+          return WalkResult::advance();
 
-    if (foldedAny)
-      ++numFoldedOp;
+        // If the op had any constants folded, replace them.
+        builder.setInsertionPoint(op);
+        bool foldedAny = false;
+        for (auto result : op->getResults())
+          foldedAny |= replaceValueIfPossible(result);
 
-    // If the operation folded to a constant then we can probably nuke it.
-    if (foldedAny && dropIfDead(op, "Made dead"))
-      continue;
-  }
+        if (foldedAny)
+          ++numFoldedOp;
+
+        // If the operation folded to a constant then we can probably nuke it.
+        if (foldedAny && dropIfDead(op, "Made dead"))
+          return WalkResult::advance();
+
+        return WalkResult::advance();
+      });
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createIMConstPropPass() {
