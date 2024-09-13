@@ -1904,3 +1904,41 @@ task automatic ImplicitEventControlExamples();
     x[a] = !b;
   end
 endtask
+
+// CHECK-LABEL: moore.module @Display() {
+module Display();
+  int a;
+  // CHECK: [[L:%.+]] = moore.variable : <uarray<8 x l1>>
+  logic l [7:0];
+  initial begin
+    // CHECK: [[READ_A1:%.+]] = moore.read %a : <i32>
+    // CHECK: [[READ_A2:%.+]] = moore.read %a : <i32>
+    // CHECK: [[READ_A3:%.+]] = moore.read %a : <i32>
+    // CHECK: moore.display "The values of a, a, a are: %d%d%d"([[READ_A1]], [[READ_A2]], [[READ_A3]]) : !moore.i32, !moore.i32, !moore.i32
+    $display("The values of a, a, a are: %d%d%d", a, a, a);
+
+    // CHECK: [[C100:%.+]] = moore.constant 100 : i32
+    // CHECK: moore.display([[C100]]) : !moore.i32
+    $displayb(100);
+
+    // CHECK: [[READ_A4:%.+]] = moore.read %a : <i32>
+    // CHECK: moore.display "The value of a is: %b"([[READ_A4]]) : !moore.i32
+    $displayo("The value of a is: %b", a);
+
+    // CHECK: moore.display "Wellcome to Moore!!!" 
+    $displayh("Wellcome to Moore!!!");
+
+    // CHECK: [[READ_L:%.+]] = moore.read [[L]] : <uarray<8 x l1>>
+    // CHECK: moore.display "l = %p"([[READ_L]]) : !moore.uarray<8 x l1>
+    $display("l = %p", l);
+
+    // CHECK-NOT: moore.display
+    $display();
+    // CHECK-NOT: moore.display
+    $display(,,);
+    
+    // CHECK: [[C520:%.+]] = moore.constant 520 : i32
+    // CHECK: moore.display([[C520]])
+    $display(,520,);
+  end
+endmodule

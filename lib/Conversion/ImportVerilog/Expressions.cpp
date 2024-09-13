@@ -748,6 +748,31 @@ struct RvalueExprVisitor {
     if (subroutine.name == "$signed" || subroutine.name == "$unsigned")
       return context.convertRvalueExpression(*expr.arguments()[0]);
 
+    if (subroutine.name == "$display" || subroutine.name == "$displayb" ||
+        subroutine.name == "$displayo" || subroutine.name == "$displayh") {
+      StringAttr information;
+      SmallVector<Value> datas;
+      for (auto *arg : expr.arguments()) {
+        if (auto *strNode = arg->as_if<slang::ast::StringLiteral>()) {
+          information = builder.getStringAttr(strNode->getValue());
+          continue;
+        }
+        auto rvalue = context.convertRvalueExpression(*arg);
+        if (rvalue)
+          datas.push_back(rvalue);
+      }
+      if (!datas.empty() || information)
+        builder.create<moore::DisplayOp>(loc, information, datas);
+
+      // Return a variable with the void type to "expression statements", which
+      // will be removed later. This ensures we can look at the correct IR.
+      slang::ast::VoidType vt;
+      Type voidType = context.convertType(vt);
+      return builder.create<moore::VariableOp>(
+          loc, moore::RefType::get(cast<moore::UnpackedType>(voidType)),
+          StringAttr{}, Value{});
+    }
+
     mlir::emitError(loc) << "unsupported system call `" << subroutine.name
                          << "`";
     return {};
@@ -769,7 +794,7 @@ struct RvalueExprVisitor {
     auto elementCount = expr.elements().size();
     SmallVector<Value> elements;
     elements.reserve(replCount * elementCount);
-    for (auto elementExpr : expr.elements()) {
+    for (auto *elementExpr : expr.elements()) {
       auto value = context.convertRvalueExpression(*elementExpr);
       if (!value)
         return {};
@@ -821,6 +846,13 @@ struct RvalueExprVisitor {
     auto count = expr.count().eval(evalContext).integer().as<unsigned>();
     assert(count && "Slang guarantees constant non-zero replication count");
     return visitAssignmentPattern(expr, *count);
+  }
+
+  // FIXME: It occurs in something like display tasks.
+  // Maybe have other situations? So I left a warning.
+  Value visit(const slang::ast::EmptyArgumentExpression &) {
+    mlir::emitWarning(loc, "Encounter an empty expression crash");
+    return {};
   }
 
   /// Emit an error for all other expressions.
