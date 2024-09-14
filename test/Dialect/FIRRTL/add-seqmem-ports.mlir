@@ -100,9 +100,9 @@ firrtl.circuit "Two" attributes {annotations = [
     firrtl.instance child0 @Child()
     firrtl.instance child1 @Child()
     // CHECK: %child0_sram_0_user_output, %child0_sram_0_user_input = firrtl.instance child0  @Child
-    // CHECK: %child1_sram_0_user_output, %child1_sram_0_user_input = firrtl.instance child1  @Child
     // CHECK: firrtl.matchingconnect %sram_0_user_output, %child0_sram_0_user_output : !firrtl.uint<4>
     // CHECK: firrtl.matchingconnect %child0_sram_0_user_input, %sram_0_user_input : !firrtl.uint<3>
+    // CHECK: %child1_sram_0_user_output, %child1_sram_0_user_input = firrtl.instance child1  @Child
     // CHECK: firrtl.matchingconnect %sram_1_user_output, %child1_sram_0_user_output : !firrtl.uint<4>
     // CHECK: firrtl.matchingconnect %child1_sram_0_user_input, %sram_1_user_input : !firrtl.uint<3>
 
@@ -190,4 +190,87 @@ firrtl.circuit "Complex" attributes {annotations = [
   // CHECK-SAME{LITERAL}:     2 -> {{0}}.{{3}}
   // CHECK-SAME:              {symbols = [@DUT, @[[memNLA]], @[[memNLA_0]], @[[memNLA_1]]]}
   // CHECK-NEXT:          }
+}
+
+// Memories under layers and modules that are wholly instantiated under layers
+// are excluded from AddSeqMemPorts.
+//
+// CHECK-LABEL: firrtl.circuit "LayerBlock"
+firrtl.circuit "LayerBlock" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
+      name = "user_input",
+      input = true,
+      width = 1
+    }
+  ]
+} {
+  firrtl.layer @A bind {}
+
+  // CHECK: firrtl.memmodule
+  // CHECK-SAME: extraPorts = []
+  firrtl.memmodule @mem0(
+    in W0_addr: !firrtl.uint<1>,
+    in W0_en: !firrtl.uint<1>,
+    in W0_clk: !firrtl.clock,
+    in W0_data: !firrtl.uint<1>
+  ) attributes {
+    dataWidth = 1 : ui32,
+    depth = 2 : ui64,
+    extraPorts = [],
+    maskBits = 1 : ui32,
+    numReadPorts = 0 : ui32,
+    numReadWritePorts = 0 : ui32,
+    numWritePorts = 1 : ui32,
+    readLatency = 1 : ui32,
+    writeLatency = 1 : ui32
+  }
+
+  // CHECK: firrtl.memmodule
+  // CHECK-SAME: extraPorts = []
+  firrtl.memmodule @mem1(
+    in W0_addr: !firrtl.uint<1>,
+    in W0_en: !firrtl.uint<1>,
+    in W0_clk: !firrtl.clock,
+    in W0_data: !firrtl.uint<1>
+  ) attributes {
+    dataWidth = 1 : ui32,
+    depth = 2 : ui64,
+    extraPorts = [],
+    maskBits = 1 : ui32,
+    numReadPorts = 0 : ui32,
+    numReadWritePorts = 0 : ui32,
+    numWritePorts = 1 : ui32,
+    readLatency = 1 : ui32,
+    writeLatency = 1 : ui32
+  }
+
+  firrtl.module @Foo() {
+    // CHECK: firrtl.layerblock @A
+    firrtl.layerblock @A {
+      // CHECK-NEXT: firrtl.instance mem1 @mem1
+      %0:4 = firrtl.instance mem1 @mem1(
+        in W0_addr: !firrtl.uint<1>,
+        in W0_en: !firrtl.uint<1>,
+        in W0_clk: !firrtl.clock,
+        in W0_data: !firrtl.uint<1>
+      )
+    }
+  }
+
+  firrtl.module @LayerBlock() {
+    // CHECK: firrtl.layerblock @A
+    firrtl.layerblock @A {
+      // CHECK-NEXT: firrtl.instance mem0 @mem0
+      %0:4 = firrtl.instance mem0 @mem0(
+        in W0_addr: !firrtl.uint<1>,
+        in W0_en: !firrtl.uint<1>,
+        in W0_clk: !firrtl.clock,
+        in W0_data: !firrtl.uint<1>
+      )
+      firrtl.instance foo @Foo()
+    }
+  }
+
 }

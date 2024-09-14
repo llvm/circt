@@ -72,6 +72,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LINK_LIBS PUBLIC
   CIRCTFIRRTLAnalysis
   CIRCTFIRRTL
+  CIRCTFIRRTLAnalysis
   CIRCTDebug
   CIRCTEmit
   CIRCTHW
