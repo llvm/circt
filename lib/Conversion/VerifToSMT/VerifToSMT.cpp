@@ -231,7 +231,10 @@ struct VerifBoundedModelCheckingOpConversion
     Location loc = op.getLoc();
     SmallVector<Type> oldLoopInputTy(op.getLoop().getArgumentTypes());
     SmallVector<Type> oldCircuitInputTy(op.getCircuit().getArgumentTypes());
-    SmallVector<Type> loopInputTy, circuitInputTy, initOutputTy, loopOutputTy,
+    // TODO: the init and loop regions should be able to be concrete instead of
+    // symbolic which is probably preferable - just need to convert back and
+    // forth
+    SmallVector<Type> loopInputTy, circuitInputTy, initOutputTy,
         circuitOutputTy;
     if (failed(typeConverter->convertTypes(oldLoopInputTy, loopInputTy)))
       return failure();
@@ -240,8 +243,6 @@ struct VerifBoundedModelCheckingOpConversion
     if (failed(typeConverter->convertTypes(
             op.getInit().front().back().getOperandTypes(), initOutputTy)))
       return failure();
-    // loop and init should have same output types
-    loopOutputTy = initOutputTy;
     if (failed(typeConverter->convertTypes(
             op.getCircuit().front().back().getOperandTypes(), circuitOutputTy)))
       return failure();
@@ -256,7 +257,9 @@ struct VerifBoundedModelCheckingOpConversion
         cast<IntegerAttr>(op->getAttr("num_regs")).getValue().getZExtValue();
 
     auto initFuncTy = rewriter.getFunctionType({}, initOutputTy);
-    auto loopFuncTy = rewriter.getFunctionType(loopInputTy, loopOutputTy);
+    // Loop and init output types are necessarily the same, so just use init
+    // output types
+    auto loopFuncTy = rewriter.getFunctionType(loopInputTy, initOutputTy);
     auto circuitFuncTy =
         rewriter.getFunctionType(circuitInputTy, circuitOutputTy);
 
@@ -280,7 +283,8 @@ struct VerifBoundedModelCheckingOpConversion
                                   circuitFuncOp.getFunctionBody(),
                                   circuitFuncOp.end());
       auto funcOps = {&initFuncOp, &loopFuncOp, &circuitFuncOp};
-      auto outputTys = {initOutputTy, loopOutputTy, circuitOutputTy};
+      // initOutputTy is the same as loop output types
+      auto outputTys = {initOutputTy, initOutputTy, circuitOutputTy};
       for (auto [funcOp, outputTy] : llvm::zip(funcOps, outputTys)) {
         auto operands = funcOp->getBody().front().back().getOperands();
         rewriter.eraseOp(&funcOp->getFunctionBody().front().back());
@@ -307,14 +311,13 @@ struct VerifBoundedModelCheckingOpConversion
     size_t initIndex = 0, curIndex = 0;
     SmallVector<Value> inputDecls;
     SmallVector<int> clockIndexes;
-    for (auto [oldTy, newTy] :
-         llvm::zip(oldCircuitInputTy, circuitInputTy)) {
+    for (auto [oldTy, newTy] : llvm::zip(oldCircuitInputTy, circuitInputTy)) {
       if (isa<seq::ClockType>(oldTy)) {
         inputDecls.push_back(initVals[initIndex++]);
         clockIndexes.push_back(curIndex);
-      }
-      else
+      } else {
         inputDecls.push_back(rewriter.create<smt::DeclareFunOp>(loc, newTy));
+      }
       curIndex++;
     }
 
@@ -363,26 +366,23 @@ struct VerifBoundedModelCheckingOpConversion
           Value violated = builder.create<arith::OrIOp>(
               loc, checkOp.getResult(0), iterArgs.back());
 
-          SmallVector<Value> newDecls;
-
           // Call loop func to update clock & state arg values
           SmallVector<Value> loopCallInputs;
-          // Get all clock inputs to module
-          // for (auto arg :
-          //      iterArgs.take_front(circuitFuncOp.getNumArguments())) {
-          // }
-          for (auto index: clockIndexes) {
+          // Fetch clock values to feed to loop
+          for (auto index : clockIndexes) {
             loopCallInputs.push_back(iterArgs[index]);
           }
-          for (auto stateArg: iterArgs.drop_back().take_back(numStateArgs)) {
+          // Fetch state args to feed to loop
+          for (auto stateArg : iterArgs.drop_back().take_back(numStateArgs)) {
             loopCallInputs.push_back(stateArg);
           }
           ValueRange loopVals =
-              builder
-                  .create<func::CallOp>(loc, loopFuncOp, loopCallInputs)
+              builder.create<func::CallOp>(loc, loopFuncOp, loopCallInputs)
                   ->getResults();
 
           size_t loopIndex = 0;
+          // Collect decls to yield at end of iteration
+          SmallVector<Value> newDecls;
           for (auto [oldTy, newTy] :
                llvm::zip(TypeRange(oldCircuitInputTy).drop_back(numRegs),
                          TypeRange(circuitInputTy).drop_back(numRegs))) {
