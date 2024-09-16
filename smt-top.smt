@@ -21,5 +21,4 @@
 
 (rule (=> (and (C input time) (distinct input 1)  ) (C input2 (+ time 1))))
 
-
 (query A :print-certificate true)
