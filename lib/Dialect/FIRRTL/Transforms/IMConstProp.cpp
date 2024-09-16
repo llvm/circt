@@ -1016,7 +1016,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
   //
   // TODO: Handle WhenOps correctly.
   bool aboveCursor = false;
-  module.walk<mlir::WalkOrder::PreOrder, mlir::ReverseIterator>(
+  module.walk<mlir::WalkOrder::PostOrder, mlir::ReverseIterator>(
       [&](Operation *op) {
         auto dropIfDead = [&](Operation *op, const Twine &debugPrefix) {
           if (op->use_empty() &&
