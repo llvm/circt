@@ -67,53 +67,6 @@ struct VerifAssumeOpConversion : OpConversionPattern<verif::AssumeOp> {
   }
 };
 
-// Fail to convert unsupported verif ops to avoid silent failure
-struct VerifCoverOpConversion : OpConversionPattern<verif::CoverOp> {
-  using OpConversionPattern<verif::CoverOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(verif::CoverOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    return op.emitError("Conversion of CoverOps to SMT not yet supported");
-  };
-};
-
-struct VerifClockedAssertOpConversion
-    : OpConversionPattern<verif::ClockedAssertOp> {
-  using OpConversionPattern<verif::ClockedAssertOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(verif::ClockedAssertOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    return op.emitError(
-        "Conversion of ClockedAssertOps to SMT not yet supported");
-  };
-};
-
-struct VerifClockedCoverOpConversion
-    : OpConversionPattern<verif::ClockedCoverOp> {
-  using OpConversionPattern<verif::ClockedCoverOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(verif::ClockedCoverOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    return op.emitError(
-        "Conversion of ClockedCoverOps to SMT not yet supported");
-  };
-};
-
-struct VerifClockedAssumeOpConversion
-    : OpConversionPattern<verif::ClockedAssumeOp> {
-  using OpConversionPattern<verif::ClockedAssumeOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(verif::ClockedAssumeOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    return op.emitError(
-        "Conversion of ClockedAssumeOps to SMT not yet supported");
-  };
-};
-
 /// Lower a verif::LecOp operation to a miter circuit encoded in SMT.
 /// More information on miter circuits can be found, e.g., in this paper:
 /// Brand, D., 1993, November. Verification of large synthesized designs. In
@@ -430,8 +383,6 @@ void circt::populateVerifToSMTConversionPatterns(TypeConverter &converter,
                                                  RewritePatternSet &patterns,
                                                  Namespace &names) {
   patterns.add<VerifAssertOpConversion, VerifAssumeOpConversion,
-               VerifCoverOpConversion, VerifClockedAssertOpConversion,
-               VerifClockedAssumeOpConversion, VerifClockedCoverOpConversion,
                LogicEquivalenceCheckingOpConversion>(converter,
                                                      patterns.getContext());
   patterns.add<VerifBoundedModelCheckingOpConversion>(
