@@ -116,12 +116,6 @@ func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
 // CHECK:    [[CN1_I32:%.+]] = hw.constant -1 : i32
 // CHECK:    [[ADD:%.+]] = comb.add [[C7]], [[C6]]
 // CHECK:    [[XOR:%.+]] = comb.xor [[C6]], [[CN1_I32]]
-// CHECK:    [[FALSE:%.+]] = hw.constant false
-// CHECK:    [[C8:%.+]] = builtin.unrealized_conversion_cast [[FALSE]] : i1 to !smt.bv<1>
-// CHECK:    [[CN1_BV:%.+]] = smt.bv.constant #smt.bv<-1> : !smt.bv<1>
-// CHECK:    [[EQ:%.+]] = smt.eq [[C8]], [[CN1_BV]]
-// CHECK:    [[NOT:%.+]] = smt.not [[EQ]]
-// CHECK:    smt.assert [[NOT]]
 // CHECK:    [[C9:%.+]] = builtin.unrealized_conversion_cast [[XOR]] : i32 to !smt.bv<32>
 // CHECK:    [[C10:%.+]] = builtin.unrealized_conversion_cast [[ADD]] : i32 to !smt.bv<32>
 // CHECK:    return [[C9]], [[C10]]
@@ -149,9 +143,6 @@ func.func @test_bmc() -> (i1) {
     %0 = comb.add %arg0, %state0 : i32
     // %state0 is the result of a seq.compreg taking %0 as input
     %2 = comb.xor %state0, %c-1_i32 : i32
-    %false = hw.constant false
-    // Arbitrary assertion so op verifies
-    verif.assert %false : i1
     verif.yield %2, %0 : i32, i32
   }
   func.return %bmc : i1
