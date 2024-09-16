@@ -19,6 +19,7 @@
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Target/DebugInfo.h"
 #include "circt/Target/ExportSMTLIB.h"
+#include "circt/Target/ExportDot.h"
 #include "circt/Target/ExportSystemC.h"
 
 #ifndef CIRCT_INITALLTRANSLATIONS_H
@@ -37,6 +38,7 @@ inline void registerAllTranslations() {
     firrtl::registerToFIRFileTranslation();
     ExportSMTLIB::registerExportSMTLIBTranslation();
     ExportSystemC::registerExportSystemCTranslation();
+    ExportDot::registerExportDotTranslation();
     debug::registerTranslations();
     return true;
   }();
