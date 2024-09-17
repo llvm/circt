@@ -31,14 +31,6 @@ using ValueMap = llvm::ScopedHashTable<mlir::Value, std::string>;
 
 #define DEBUG_TYPE "export-dot"
 
-
-//===----------------------------------------------------------------------===//
-// Unified Emitter implementation
-//===----------------------------------------------------------------------===//
-
-
-
-
 namespace {
 
 /// Contains the informations passed to the ExpressionVisitor methods. Makes it
@@ -60,11 +52,13 @@ llvm::SmallVector<std::pair<mlir::Value, std::string>> valueToName(const llvm::S
       }
     }
     if (!found){
-      std::string name = "data_"+std::to_string(currentMap.size());
+      std::string name = "in_"+std::to_string(currentMap.size());
       if (tokenFlag && i%2==0)
         name = "token_"+std::to_string(currentMap.size());
-      else if (inputFlag)
-        name = "input_"+std::to_string(currentMap.size());
+      else if (tokenFlag)
+        name = "in_"+std::to_string(currentMap.size());
+      // else if (inputFlag)
+      //   name = "input_"+std::to_string(currentMap.size());
       res.push_back({v, name});
       currentMap.push_back({v, name});
     }
@@ -177,18 +171,15 @@ static LogicalResult emitDot(Operation *module,
   for(auto [id, n] : llvm::enumerate(nodes)){
     if (n.nodeType == "unpack")
       for (auto ic: n.incoming)
-        stream << ic.second<<" -> "<<n.nodeType<<id<<" [inp = \""<<ic.second<<"\", out = out, label = \""<<ic.second<<"\"]\n";
+        stream <<"src_"<<id<<" -> "<<n.nodeType<<id<<R"( [inp = "in_0", out = "out", label = ")"<<ic.second<<"\"]\n";
   }
   for(auto [id1, n1] : llvm::enumerate(nodes)){
     for(auto [id2, n2] : llvm::enumerate(nodes)){
       if(id1 != id2) {
         for(const auto& n1Out: n1.outgoing){
-          for(const auto& n2In : n2.incoming){
+          for(const auto& [i, n2In] : llvm::enumerate(n2.incoming)){
             if (n1Out.first == n2In.first){
-              // print transition wiht label 
-              // combSge20 -> combMux21 [inp = "%12", out = "out", label = "%12"];
-
-                stream << n1.nodeType<<id1<<" -> "<<n2.nodeType<<id2<<" [inp = \""<<n1Out.second<<"\", out = out, label = \""<<n1Out.second<<"\"]\n";
+                stream << n1.nodeType<<id1<<" -> "<<n2.nodeType<<id2<<" [inp = \"in_"<<i<<R"(", out = "out", label = ")"<<n1Out.second<<"\"]\n";
             }
           }
         }
@@ -197,8 +188,8 @@ static LogicalResult emitDot(Operation *module,
   }
   for(auto [id, n] : llvm::enumerate(nodes)){
     if (n.nodeType == "pack")
-      for (auto ic: n.outgoing)
-        stream << n.nodeType<<id<<" -> "<<ic.second<<id<<" [inp = \""<<ic.second<<"\", out = out, label = \""<<ic.second<<"\"]\n";
+      for (const auto& ic: n.outgoing)
+        stream <<n.nodeType<<id<<R"( -> in_0 [inp = "in_0", out = "out", label = ")"<<ic.second<<"\"]\n";
   }
 
   // }
@@ -217,7 +208,8 @@ LogicalResult ExportDot::exportDot(Operation *module,
     return module->emitError("op region must have exactly one block");
 
   mlir::raw_indented_ostream ios(os);
-  if (!failed(emitDot(module, ios)))
+  if (failed(emitDot(module, ios)))
+    return failure();
   return success();
 }
 
