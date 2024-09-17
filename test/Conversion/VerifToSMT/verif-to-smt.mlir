@@ -1,5 +1,30 @@
 // RUN: circt-opt %s --convert-verif-to-smt --reconcile-unrealized-casts -allow-unregistered-dialect | FileCheck %s
 
+// CHECK: func.func @lower_assert([[ARG0:%.+]]: i1)
+// CHECK:   [[CAST:%.+]] = builtin.unrealized_conversion_cast [[ARG0]] : i1 to !smt.bv<1>
+// CHECK:   [[Cn1_BV:%.+]] = smt.bv.constant #smt.bv<-1>
+// CHECK:   [[EQ:%.+]] = smt.eq [[CAST]], [[Cn1_BV]]
+// CHECK:   [[NEQ:%.+]] = smt.not [[EQ]]
+// CHECK:   smt.assert [[NEQ]]
+// CHECK:   return
+
+func.func @lower_assert(%arg0: i1) {
+  verif.assert %arg0 : i1
+  return
+}
+
+// CHECK: func.func @lower_assume([[ARG0:%.+]]: i1)
+// CHECK:   [[CAST:%.+]] = builtin.unrealized_conversion_cast [[ARG0]] : i1 to !smt.bv<1>
+// CHECK:   [[Cn1_BV:%.+]] = smt.bv.constant #smt.bv<-1>
+// CHECK:   [[EQ:%.+]] = smt.eq [[CAST]], [[Cn1_BV]]
+// CHECK:   smt.assert [[EQ]]
+// CHECK:   return
+
+func.func @lower_assume(%arg0: i1) {
+  verif.assume %arg0 : i1
+  return
+}
+
 // CHECK-LABEL: func @test_lec
 // CHECK-SAME:  ([[ARG0:%.+]]: !smt.bv<1>)
 func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
