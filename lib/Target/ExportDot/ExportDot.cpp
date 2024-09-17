@@ -60,7 +60,6 @@ llvm::SmallVector<std::pair<mlir::Value, std::string>> valueToName(const llvm::S
       }
     }
     if (!found){
-      llvm::outs()<<"\nvalue: "<<v;
       std::string name = "data_"+std::to_string(currentMap.size());
       if (tokenFlag && i%2==0)
         name = "token_"+std::to_string(currentMap.size());
