@@ -261,17 +261,18 @@ struct VerifBoundedModelCheckingOpConversion
     // InputDecls order should be <circuit arguments> <state arguments>
     // <wasViolated>
     // Get list of clock indexes in circuit args
-    size_t initIndex = 0, curIndex = 0;
+    size_t initIndex = 0;
     SmallVector<Value> inputDecls;
     SmallVector<int> clockIndexes;
-    for (auto [oldTy, newTy] : llvm::zip(oldCircuitInputTy, circuitInputTy)) {
+    for (auto [curIndex, types] :
+         llvm::enumerate(llvm::zip(oldCircuitInputTy, circuitInputTy))) {
+      auto [oldTy, newTy] = types;
       if (isa<seq::ClockType>(oldTy)) {
         inputDecls.push_back(initVals[initIndex++]);
         clockIndexes.push_back(curIndex);
       } else {
         inputDecls.push_back(rewriter.create<smt::DeclareFunOp>(loc, newTy));
       }
-      curIndex++;
     }
 
     auto numStateArgs = initVals.size() - initIndex;
@@ -322,13 +323,11 @@ struct VerifBoundedModelCheckingOpConversion
           // Call loop func to update clock & state arg values
           SmallVector<Value> loopCallInputs;
           // Fetch clock values to feed to loop
-          for (auto index : clockIndexes) {
+          for (auto index : clockIndexes)
             loopCallInputs.push_back(iterArgs[index]);
-          }
           // Fetch state args to feed to loop
-          for (auto stateArg : iterArgs.drop_back().take_back(numStateArgs)) {
+          for (auto stateArg : iterArgs.drop_back().take_back(numStateArgs))
             loopCallInputs.push_back(stateArg);
-          }
           ValueRange loopVals =
               builder.create<func::CallOp>(loc, loopFuncOp, loopCallInputs)
                   ->getResults();
