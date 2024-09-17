@@ -35,15 +35,14 @@ static LogicalResult convertInitialValue(seq::CompRegOp reg,
   if (!reg.getInitialValue())
     return values.push_back({}), success();
 
-  auto init = circt::seq::unwrapImmutableValue(reg.getInitialValue());
-  if (!init.getDefiningOp<hw::ConstantOp>())
-    return reg.emitError() << "non-constant initial value not supported";
+  // unrealized_conversion_cast to normal type
+  OpBuilder builder(reg);
+  auto init = builder
+                  .create<mlir::UnrealizedConversionCastOp>(
+                      reg.getLoc(), reg.getType(), reg.getInitialValue())
+                  .getResult(0);
 
-  // Clone the initial value to the top-level.
-  auto *op = init.getDefiningOp()->clone();
-  reg->getBlock()->getOperations().insert(Block::iterator(reg), op);
-  auto result = op->getResult(0);
-  values.push_back(result);
+  values.push_back(init);
   return success();
 }
 
@@ -100,10 +99,8 @@ LogicalResult Converter::runOnModule(HWModuleOp module) {
   // Find all arc-breaking operations in this module and assign them an index.
   arcBreakers.clear();
   arcBreakerIndices.clear();
-  SmallVector<seq::InitialOp> initialOps;
   for (Operation &op : *module.getBodyBlock()) {
     if (isa<seq::InitialOp>(&op)) {
-      initialOps.push_back(cast<seq::InitialOp>(&op));
       continue;
     }
     if (op.getNumRegions() > 0)
@@ -131,9 +128,6 @@ LogicalResult Converter::runOnModule(HWModuleOp module) {
   extractArcs(module);
   if (failed(absorbRegs(module)))
     return failure();
-
-  for (auto init : initialOps)
-    init->erase();
 
   return success();
 }

@@ -114,11 +114,11 @@ def RandomizeRegisterInit : Pass<"randomize-register-init", "ModuleOp"> {
     It replaces any existing initial values with randomly generated ones.
   }];
   let constructor = "circt::seq::createRandomizeRegisterInitPass()";
-  let dependentDialects = ["circt::hw::HWDialect", "circt::sv::SVDialect"];
-  // let options = [
-  //   Option<"emitSV", "emit-sv", "bool", "false",
-  //          "Emit SV code for register randomization. Otherwise emit interpretable IR">
-  // ];
+  let dependentDialects = ["circt::hw::HWDialect", "circt::sv::SVDialect", "mlir::func::FuncDialect"];
+   let options = [
+     Option<"emitSV", "emit-sv", "bool", "false",
+            "Emit SV code for register randomization. Otherwise emit interpretable IR">
+   ];
 }
 
 #endif // CIRCT_DIALECT_SEQ_SEQPASSES
