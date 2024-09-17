@@ -181,6 +181,33 @@ struct VerifBoundedModelCheckingOpConversion
   LogicalResult
   matchAndRewrite(verif::BoundedModelCheckingOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    // Check there is exactly one assertion
+    auto topAssertions = op.getCircuit().getOps<verif::AssertOp>();
+    int numAssertions =
+        std::distance(topAssertions.begin(), topAssertions.end());
+    SymbolTable symbolTable(op->getParentOfType<ModuleOp>());
+    SmallVector<mlir::Operation *> worklist;
+    for (auto instance : op.getCircuit().getOps<InstanceOp>()) {
+      worklist.push_back(symbolTable.lookup(instance.getModuleName()));
+    }
+    // TODO: probably negligible compared to actual model checking time but
+    // cacheing the assertion count of modules would speed this up
+    for (auto *module : worklist) {
+      auto moduleAssertions = module->getRegion(0).getOps<verif::AssertOp>();
+      numAssertions +=
+          std::distance(moduleAssertions.begin(), moduleAssertions.end());
+      if (numAssertions > 1)
+        break;
+      for (auto instance : module->getBlock()->getOps<hw::InstanceOp>()) {
+        worklist.push_back(symbolTable.lookup(instance.getModuleName()));
+      }
+    }
+    if (numAssertions > 1) {
+      return op->emitError("designs with multiple assertions are not yet "
+                           "correctly handled - instead, you can assert the "
+                           "conjunction of your assertions");
+    }
+
     Location loc = op.getLoc();
     SmallVector<Type> oldLoopInputTy(op.getLoop().getArgumentTypes());
     SmallVector<Type> oldCircuitInputTy(op.getCircuit().getArgumentTypes());
