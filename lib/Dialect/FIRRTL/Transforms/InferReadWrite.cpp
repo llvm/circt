@@ -50,8 +50,27 @@ struct InferReadWritePass
     LLVM_DEBUG(llvm::dbgs() << "\n Running Infer Read Write on module:"
                             << getOperation().getName());
     SmallVector<Operation *> opsToErase;
-    for (MemOp memOp : llvm::make_early_inc_range(
-             getOperation().getBodyBlock()->getOps<MemOp>())) {
+
+    auto result = getOperation().walk([&](Operation *op) {
+      // This pass is going to have problems if it tries to determine signal
+      // drivers in the presence of WhenOps.  Conservatively error out if we see
+      // any WhenOps.
+      //
+      // TODO: This would be better handled if WhenOps were moved into the
+      // CHIRRTL dialect so that this pass could more strongly specify that it
+      // only works on FIRRTL as opposed to a subset of FIRRTL.
+      if (isa<WhenOp>(op)) {
+        op->emitOpError()
+            << "is unsupported by InferReadWrite as this pass cannot trace "
+               "signal drivers in their presence. Please run `ExpandWhens` to "
+               "remove these operations before running this pass.";
+        return WalkResult::interrupt();
+      }
+
+      MemOp memOp = dyn_cast<MemOp>(op);
+      if (!memOp)
+        return WalkResult::advance();
+
       inferUnmasked(memOp, opsToErase);
       simplifyWmode(memOp);
       size_t nReads, nWrites, nRWs, nDbgs;
@@ -60,7 +79,7 @@ struct InferReadWritePass
       // and write ports.
       if (!(nReads == 1 && nWrites == 1 && nRWs == 0) ||
           !(memOp.getReadLatency() == 1 && memOp.getWriteLatency() == 1))
-        continue;
+        return WalkResult::skip();
       SmallVector<Attribute, 4> resultNames;
       SmallVector<Type, 4> resultTypes;
       SmallVector<Attribute> portAtts;
@@ -106,7 +125,7 @@ struct InferReadWritePass
         // End of loop for getting MemOp port users.
       }
       if (!sameDriver(rClock, wClock))
-        continue;
+        return WalkResult::skip();
 
       rClock = wClock;
       LLVM_DEBUG(
@@ -126,7 +145,7 @@ struct InferReadWritePass
       // the write enable term.
       auto complementTerm = checkComplement(readTerms, writeTerms);
       if (!complementTerm)
-        continue;
+        return WalkResult::skip();
 
       // Create the merged rw port for the new memory.
       resultNames.push_back(StringAttr::get(memOp.getContext(), "rw"));
@@ -221,7 +240,12 @@ struct InferReadWritePass
       simplifyWmode(rwMem);
       // All uses for all results of mem removed, now erase the memOp.
       opsToErase.push_back(memOp);
-    }
+      return WalkResult::advance();
+    });
+
+    if (result.wasInterrupted())
+      return signalPassFailure();
+
     for (auto *o : opsToErase)
       o->erase();
   }

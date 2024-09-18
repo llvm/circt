@@ -104,8 +104,8 @@ struct LowerMemoryPass
     : public circt::firrtl::impl::LowerMemoryBase<LowerMemoryPass> {
 
   /// Get the cached namespace for a module.
-  hw::InnerSymbolNamespace &getModuleNamespace(FModuleLike module) {
-    return moduleNamespaces.try_emplace(module, module).first->second;
+  hw::InnerSymbolNamespace &getModuleNamespace(FModuleLike moduleOp) {
+    return moduleNamespaces.try_emplace(moduleOp, moduleOp).first->second;
   }
 
   SmallVector<PortInfo> getMemoryModulePorts(const FirMemory &mem);
@@ -116,10 +116,10 @@ struct LowerMemoryPass
                                     bool shouldDedup);
   FModuleOp createWrapperModule(MemOp op, const FirMemory &summary,
                                 bool shouldDedup);
-  InstanceOp emitMemoryInstance(MemOp op, FModuleOp module,
+  InstanceOp emitMemoryInstance(MemOp op, FModuleOp moduleOp,
                                 const FirMemory &summary);
   void lowerMemory(MemOp mem, const FirMemory &summary, bool shouldDedup);
-  LogicalResult runOnModule(FModuleOp module, bool shouldDedup);
+  LogicalResult runOnModule(FModuleOp moduleOp, bool shouldDedup);
   void runOnOperation() override;
 
   /// Cached module namespaces.
@@ -130,6 +130,9 @@ struct LowerMemoryPass
   /// The set of all memories seen so far.  This is used to "deduplicate"
   /// memories by emitting modules one module for equivalent memories.
   std::map<FirMemory, FMemModuleOp> memories;
+
+  /// A sequence of operations that should be erased later.
+  SetVector<Operation *> operationsToErase;
 };
 } // end anonymous namespace
 
@@ -218,14 +221,14 @@ LowerMemoryPass::getOrCreateMemModule(MemOp op, const FirMemory &summary,
 
   // Create a new module for this memory. This can update the name recorded in
   // the memory's summary.
-  auto module = emitMemoryModule(op, summary, ports);
+  auto moduleOp = emitMemoryModule(op, summary, ports);
 
   // Record the memory module.  We don't want to use this module for other
   // memories, then we don't add it to the table.
   if (shouldDedup)
-    memories[summary] = module;
+    memories[summary] = moduleOp;
 
-  return module;
+  return moduleOp;
 }
 
 void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
@@ -322,7 +325,7 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
     newAnnos.addAnnotations(newMemModAnnos);
     newAnnos.applyToOperation(memInst);
   }
-  mem->erase();
+  operationsToErase.insert(mem);
   ++numLoweredMems;
 }
 
@@ -441,8 +444,8 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
         enConnect->moveAfter(andOp);
         // Erase the old mask connect.
         auto *maskField = maskConnect->getOperand(0).getDefiningOp();
-        maskConnect->erase();
-        maskField->erase();
+        operationsToErase.insert(maskConnect);
+        operationsToErase.insert(maskField);
       };
 
       if (memportKind == MemOp::PortKind::Read) {
@@ -492,26 +495,38 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
   // Update all users of the result of read ports
   for (auto [subfield, result] : returnHolder) {
     subfield->getResult(0).replaceAllUsesWith(inst.getResult(result));
-    subfield->erase();
+    operationsToErase.insert(subfield);
   }
 
   return inst;
 }
 
-LogicalResult LowerMemoryPass::runOnModule(FModuleOp module, bool shouldDedup) {
-  for (auto op :
-       llvm::make_early_inc_range(module.getBodyBlock()->getOps<MemOp>())) {
+LogicalResult LowerMemoryPass::runOnModule(FModuleOp moduleOp,
+                                           bool shouldDedup) {
+  assert(operationsToErase.empty() && "operationsToErase must be empty");
+
+  auto result = moduleOp.walk([&](MemOp op) {
     // Check that the memory has been properly lowered already.
-    if (!type_isa<UIntType>(op.getDataType()))
-      return op->emitError(
-          "memories should be flattened before running LowerMemory");
+    if (!type_isa<UIntType>(op.getDataType())) {
+      op->emitError("memories should be flattened before running LowerMemory");
+      return WalkResult::interrupt();
+    }
 
     auto summary = getSummary(op);
-    if (!summary.isSeqMem())
-      continue;
+    if (summary.isSeqMem())
+      lowerMemory(op, summary, shouldDedup);
 
-    lowerMemory(op, summary, shouldDedup);
-  }
+    return WalkResult::advance();
+  });
+
+  if (result.wasInterrupted())
+    return failure();
+
+  for (Operation *op : operationsToErase)
+    op->erase();
+
+  operationsToErase.clear();
+
   return success();
 }
 
@@ -539,10 +554,10 @@ void LowerMemoryPass::runOnOperation() {
 
   // We iterate the circuit from top-to-bottom to make sure that we get
   // consistent memory names.
-  for (auto module : body->getOps<FModuleOp>()) {
+  for (auto moduleOp : body->getOps<FModuleOp>()) {
     // We don't dedup memories in the testharness with any other memories.
-    auto shouldDedup = dutModuleSet.contains(module);
-    if (failed(runOnModule(module, shouldDedup)))
+    auto shouldDedup = dutModuleSet.contains(moduleOp);
+    if (failed(runOnModule(moduleOp, shouldDedup)))
       return signalPassFailure();
   }
 

@@ -162,7 +162,7 @@ firrtl.circuit "Complex" attributes {annotations = [
   // CHECK:  hw.hierpath private @[[memNLA_1:.+]] [@DUT::@[[MWRITE_EXT_0:.+]]]
   firrtl.memmodule @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
   firrtl.module @Child() {
-    // CHECK: firrtl.instance MWrite_ext sym @[[CHILD_MWRITE_EXT]] 
+    // CHECK: firrtl.instance MWrite_ext sym @[[CHILD_MWRITE_EXT]]
     // CHECK-SAME: circt.nonlocal = @[[memNLA_0]]
     // CHECK-SAME: @MWrite_ext
     %0:4 = firrtl.instance MWrite_ext  @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
