@@ -9,8 +9,13 @@ add_circt_tool(circt-opt
   SUPPORT_PLUGINS
 )
 llvm_update_compile_flags(circt-opt)
+
+get_property(dialect_libs GLOBAL PROPERTY CIRCT_DIALECT_LIBS)
+
 target_link_libraries(circt-opt
   PRIVATE
+  ${dialect_libs}
+
   CIRCTAffineToLoopSchedule
   CIRCTAnalysisTestPasses
   CIRCTArc
