@@ -344,19 +344,19 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK:      sv.ifdef @SYNTHESIS {
     // CHECK-NEXT: } else  {
     // CHECK-NEXT:   sv.always posedge [[CLOCK]] {
-    // CHECK-NEXT:     %PRINTF_COND_ = sv.macro.ref @PRINTF_COND_() : () -> i1
+    // CHECK-NEXT:     %PRINTF_COND_ = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND_, %reset
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       [[FD:%.+]] = hw.constant -2147483646 : i32
     // CHECK-NEXT:       sv.fwrite [[FD]], "No operands!\0A"
     // CHECK-NEXT:     }
-    // CHECK-NEXT:     %PRINTF_COND__0 = sv.macro.ref @PRINTF_COND_() : () -> i1
+    // CHECK-NEXT:     %PRINTF_COND__0 = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND__0, %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       [[FD:%.+]] = hw.constant -2147483646 : i32
     // CHECK-NEXT:       sv.fwrite [[FD]], "Hi %x %x\0A"([[ADD]], %b) : i5, i4
     // CHECK-NEXT:     }
-    // CHECK-NEXT:     %PRINTF_COND__1 = sv.macro.ref @PRINTF_COND_() : () -> i1
+    // CHECK-NEXT:     %PRINTF_COND__1 = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND__1, %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       [[FD:%.+]] = hw.constant -2147483646 : i32
@@ -391,12 +391,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: hw.module private @Stop
   // CHECK-SAME: attributes {emit.fragments = [@STOP_COND_FRAGMENT]}
   firrtl.module private @Stop(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock, in %reset: !firrtl.uint<1>) {
-    // CHECK-NEXT: [[STOP_COND_1:%.+]] = sv.macro.ref @STOP_COND_
+    // CHECK-NEXT: [[STOP_COND_1:%.+]] = sv.macro.ref.expr @STOP_COND_
     // CHECK-NEXT: [[COND:%.+]] = comb.and bin [[STOP_COND_1]], %reset : i1
     // CHECK-NEXT: sim.fatal %clock1, [[COND]]
     firrtl.stop %clock1, %reset, 42 : !firrtl.clock, !firrtl.uint<1>
 
-    // CHECK-NEXT: [[STOP_COND_2:%.+]] = sv.macro.ref @STOP_COND_
+    // CHECK-NEXT: [[STOP_COND_2:%.+]] = sv.macro.ref.expr @STOP_COND_
     // CHECK-NEXT: [[COND:%.+]] = comb.and bin [[STOP_COND_2:%.+]], %reset : i1
     // CHECK-NEXT: sim.finish %clock2, [[COND]]
     firrtl.stop %clock2, %reset, 0 : !firrtl.clock, !firrtl.uint<1>
@@ -593,21 +593,21 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: } else {
     // CHECK-NEXT:   sv.always posedge [[CLOCK]] {
     // CHECK-NEXT:     sv.if [[TMP2]] {
-    // CHECK-NEXT:       [[ASSERT_VERBOSE_COND:%.+]] = sv.macro.ref @ASSERT_VERBOSE_COND_
+    // CHECK-NEXT:       [[ASSERT_VERBOSE_COND:%.+]] = sv.macro.ref.expr @ASSERT_VERBOSE_COND_
     // CHECK-NEXT:       sv.if [[ASSERT_VERBOSE_COND]] {
     // CHECK-NEXT:         sv.error "assert1 %d, %d"(%value, %false) : i42, i1
     // CHECK-NEXT:       }
-    // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.macro.ref @STOP_COND_
+    // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.macro.ref.expr @STOP_COND_
     // CHECK-NEXT:       sv.if [[STOP_COND]] {
     // CHECK-NEXT:         sv.fatal
     // CHECK-NEXT:       }
     // CHECK-NEXT:     }
     // CHECK-NEXT:     sv.if [[TMP4]] {
-    // CHECK-NEXT:       [[ASSERT_VERBOSE_COND:%.+]] = sv.macro.ref @ASSERT_VERBOSE_COND_
+    // CHECK-NEXT:       [[ASSERT_VERBOSE_COND:%.+]] = sv.macro.ref.expr @ASSERT_VERBOSE_COND_
     // CHECK-NEXT:       sv.if [[ASSERT_VERBOSE_COND]] {
     // CHECK-NEXT:         sv.error "assert2 %d"([[SIGNEDVAL]]) : i24
     // CHECK-NEXT:       }
-    // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.macro.ref @STOP_COND_
+    // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.macro.ref.expr @STOP_COND_
     // CHECK-NEXT:       sv.if [[STOP_COND]] {
     // CHECK-NEXT:         sv.fatal
     // CHECK-NEXT:       }

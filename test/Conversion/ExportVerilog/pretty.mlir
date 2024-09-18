@@ -256,7 +256,7 @@ hw.module @ForStatement(in %aaaaaaaaaaa: i5, in %xxxxxxxxxxxxxxx : i2, in %yyyyy
     // CHECK-NEXT:      _RANDOM[iiiiiiiiiiiiiiiiiiiiiiiii] = `RANDOM;{{.*}}
     // CHECK-NEXT:    end{{.*}}
     sv.for %iiiiiiiiiiiiiiiiiiiiiiiii = %lowerBound to %upperBound step %step : i2 {
-      %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
+      %RANDOM = sv.macro.ref.expr.se @RANDOM() : () -> i32
       %index = sv.array_index_inout %_RANDOM[%iiiiiiiiiiiiiiiiiiiiiiiii] : !hw.inout<uarray<3xi32>>, i2
       sv.bpassign %index, %RANDOM : i32
     }

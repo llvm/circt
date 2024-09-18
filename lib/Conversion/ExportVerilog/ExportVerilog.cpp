@@ -3990,6 +3990,7 @@ private:
   LogicalResult visitSV(CaseOp op);
   LogicalResult visitSV(FWriteOp op);
   LogicalResult visitSV(VerbatimOp op);
+  LogicalResult visitSV(MacroRefOp op);
 
   LogicalResult emitSimulationControlTask(Operation *op, PPExtString taskName,
                                           std::optional<unsigned> verbosity);
@@ -4529,6 +4530,36 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
 
   ps << PP::end;
 
+  emitLocationInfoAndNewLine(ops);
+  return success();
+}
+
+// Emit macro as a statement.
+LogicalResult StmtEmitter::visitSV(MacroRefOp op) {
+  if (hasSVAttributes(op)) {
+    emitError(op, "SV attributes emission is unimplemented for the op");
+    return failure();
+  }
+  startStatement();
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  ps << PP::neverbox;
+
+  // Use the specified name or the symbol name as appropriate.
+  auto macroOp = op.getReferencedMacro(&state.symbolCache);
+  assert(macroOp && "Invalid IR");
+  StringRef name =
+      macroOp.getVerilogName() ? *macroOp.getVerilogName() : macroOp.getName();
+  ps << "`" << PPExtString(name);
+  if (!op.getInputs().empty()) {
+    ps << "(";
+    llvm::interleaveComma(op.getInputs(), ps, [&](Value val) {
+      emitExpression(val, ops, LowestPrecedence,
+                     /*isAssignmentLikeContext=*/false);
+    });
+    ps << ")";
+  }
+  ps << PP::end;
   emitLocationInfoAndNewLine(ops);
   return success();
 }
