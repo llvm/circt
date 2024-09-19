@@ -1,4 +1,4 @@
-//===- RTGDialect.td - RTG dialect definition --------------*- tablegen -*-===//
+//===- RTG.td - RTG top-level definition -------------------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,27 +10,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_RTG_IR_RTGDIALECT_TD
-#define CIRCT_DIALECT_RTG_IR_RTGDIALECT_TD
+#ifndef CIRCT_DIALECT_RTG_IR_RTG_TD
+#define CIRCT_DIALECT_RTG_IR_RTG_TD
 
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 
-def RTGDialect : Dialect {
-  let name = "rtg";
 
-  let summary = "types and operations for random test generation";
-  let description = [{
-    This dialect defines the `rtg` dialect, which is intended to encode
-    constraints and randomization constructs for random test generation. Such a
-    test can, for example, be a sequence of ISA instructions to test a CPU core.
-  }];
-
-  let cppNamespace = "::circt::rtg";
-}
-
+include "circt/Dialect/RTG/IR/RTGDialect.td"
+include "circt/Dialect/RTG/IR/RTGTypes.td"
 include "circt/Dialect/RTG/IR/RTGOps.td"
 
-#endif // CIRCT_DIALECT_RTG_IR_RTGDIALECT_TD
+#endif // CIRCT_DIALECT_RTG_IR_RTG_TD

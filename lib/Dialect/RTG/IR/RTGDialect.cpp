@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/RTG/IR/RTGDialect.h"
 #include "circt/Dialect/RTG/IR/RTGOps.h"
+#include "circt/Dialect/RTG/IR/RTGTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -28,6 +29,10 @@ void RTGDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/RTG/IR/RTG.cpp.inc"
+      >();
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "circt/Dialect/RTG/IR/RTGTypes.cpp.inc"
       >();
 }
 
