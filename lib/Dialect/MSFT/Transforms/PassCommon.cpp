@@ -53,37 +53,3 @@ StringRef circt::msft::getValueName(Value v, const SymbolCache &syms,
 
   return "";
 }
-
-void PassCommon::getAndSortModules(ModuleOp topMod,
-                                   SmallVectorImpl<hw::HWModuleLike> &mods) {
-  // Add here _before_ we go deeper to prevent infinite recursion.
-  DenseSet<Operation *> modsSeen;
-  mods.clear();
-  moduleInstantiations.clear();
-  topMod.walk([&](hw::HWModuleLike mod) {
-    getAndSortModulesVisitor(mod, mods, modsSeen);
-  });
-}
-
-// Run a post-order DFS.
-void PassCommon::getAndSortModulesVisitor(
-    hw::HWModuleLike mod, SmallVectorImpl<hw::HWModuleLike> &mods,
-    DenseSet<Operation *> &modsSeen) {
-  if (modsSeen.contains(mod))
-    return;
-  modsSeen.insert(mod);
-
-  mod.walk([&](igraph::InstanceOpInterface inst) {
-    auto targetNameAttrs = inst.getReferencedModuleNamesAttr();
-    for (auto targetNameAttr : targetNameAttrs) {
-      Operation *modOp =
-          topLevelSyms.getDefinition(cast<StringAttr>(targetNameAttr));
-      assert(modOp);
-      moduleInstantiations[modOp].push_back(inst);
-      if (auto modLike = dyn_cast<hw::HWModuleLike>(modOp))
-        getAndSortModulesVisitor(modLike, mods, modsSeen);
-    }
-  });
-
-  mods.push_back(mod);
-}
