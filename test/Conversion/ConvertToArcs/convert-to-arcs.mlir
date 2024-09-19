@@ -242,7 +242,7 @@ hw.module @Trivial(in %clock: !seq.clock, in %i0: i4, in %reset: i1, out out: i4
 
 // CHECK-LABEL: hw.module @TrivialWithInit(
 hw.module @TrivialWithInit(in %clock: !seq.clock, in %i0: i4, in %reset: i1, out out: i4) {
-  // CHECK:      %[[INIT:.+]] = seq.initial {
+  // CHECK: %[[INIT:.+]] = seq.initial {
   // CHECK: %[[CAST:.+]] = builtin.unrealized_conversion_cast %[[INIT]]
   // CHECK: [[RES0:%.+]] = arc.state @[[TRIVIALINIT_ARC]](%i0) clock %clock reset %reset initial (%[[CAST]] : i4) latency 1 {names = ["foo"]
   // CHECK-NEXT: hw.output [[RES0:%.+]]

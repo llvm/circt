@@ -100,9 +100,8 @@ LogicalResult Converter::runOnModule(HWModuleOp module) {
   arcBreakers.clear();
   arcBreakerIndices.clear();
   for (Operation &op : *module.getBodyBlock()) {
-    if (isa<seq::InitialOp>(&op)) {
+    if (isa<seq::InitialOp>(&op))
       continue;
-    }
     if (op.getNumRegions() > 0)
       return op.emitOpError("has regions; not supported by ConvertToArcs");
     if (!isArcBreakingOp(&op) && !isa<hw::OutputOp>(&op))
