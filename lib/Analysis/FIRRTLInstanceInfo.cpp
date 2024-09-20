@@ -131,9 +131,7 @@ InstanceInfo::getModuleAttributes(FModuleOp op) {
   return moduleAttributes.find(op)->getSecond();
 }
 
-bool InstanceInfo::isDut(FModuleOp op) {
-  return getModuleAttributes(op).isDut;
-}
+bool InstanceInfo::isDut(FModuleOp op) { return getModuleAttributes(op).isDut; }
 
 bool InstanceInfo::isUnderDut(FModuleOp op) {
   auto underDut = getModuleAttributes(op).underDut;
