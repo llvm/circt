@@ -52,8 +52,6 @@ add_circt_library(CIRCTFIRRTLAnalysis
   FIRRTLInstanceInfo.cpp
 
   LINK_LIBS PUBLIC
-  CIRCTComb
-  CIRCTDebug
-  CIRCTHW
-  MLIRIR
+  CIRCTFIRRTL
+  CIRCTSupport
 )
