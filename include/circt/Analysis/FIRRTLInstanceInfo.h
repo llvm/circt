@@ -59,7 +59,7 @@ public:
   };
 
   struct ModuleAttributes {
-    /// Indicates that this module is the desgin-under-test.  This is indicated
+    /// Indicates that this module is the design-under-test.  This is indicated
     /// with a `sifive.enterprise.firrtl.MarkDUTAnnotation`.
     bool isDut;
 
