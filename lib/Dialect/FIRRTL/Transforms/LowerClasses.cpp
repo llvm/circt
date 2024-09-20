@@ -385,8 +385,8 @@ PathTracker::getOrComputeNeedsAltBasePath(Location loc, StringAttr moduleName,
       needsAltBasePath = true;
       break;
     }
-    // If there is more than one instance of this module, then the path
-    // operation is ambiguous, which is an error.
+    // If there is more than one instance of this module, and the target is
+    // non-local, then the path operation is ambiguous, which is an error.
     if (isNonLocal && !node->hasOneUse()) {
       auto diag = mlir::emitError(loc)
                   << "unable to uniquely resolve target due "
