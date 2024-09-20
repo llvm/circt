@@ -1247,6 +1247,14 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
                               type.getSize());
   });
 
+  // FIXME: In order to avoid the stack error caused by the conversion of
+  // "RefType" which can return "{}", such as "ref<uarray<4xi4>>", we can
+  // convert "moore::uarray" into "hw::array" temporarily.
+  typeConverter.addConversion([&](UnpackedArrayType type) {
+    return hw::UnpackedArrayType::get(
+        typeConverter.convertType(type.getElementType()), type.getSize());
+  });
+
   typeConverter.addConversion([&](StructType type) {
     SmallVector<hw::StructType::FieldInfo> fields;
     for (auto field : type.getMembers()) {
