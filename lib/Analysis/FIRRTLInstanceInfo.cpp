@@ -99,15 +99,6 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
                           /*underLayer=*/underLayer});
     }
   }
-  for (auto *node : llvm::depth_first(iGraph.getTopLevelNode())) {
-    auto moduleOp = node->getModule();
-
-    auto &attributes = moduleAttributes[moduleOp];
-
-    if (AnnotationSet(moduleOp).hasAnnotation(dutAnnoClass)) {
-      attributes.isDut = true;
-    }
-  }
 
   LLVM_DEBUG({
     llvm::dbgs() << "InstanceInfo Analysis Results:\n";
