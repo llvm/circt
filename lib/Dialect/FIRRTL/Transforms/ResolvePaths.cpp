@@ -43,9 +43,8 @@ struct PathResolver {
 
     // If the path is empty then this is a local reference and we should not
     // construct a HierPathOp.
-    if (target.instances.empty()) {
+    if (target.instances.empty())
       return success();
-    }
 
     // We want to root this path at the top level module, or in the case of an
     // unreachable module, we settle for as high as we can get.
