@@ -16,16 +16,19 @@
 #include "circt/Analysis/FIRRTLInstanceInfo.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
-#include "llvm/ADT/DepthFirstIterator.h"
+#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/Debug.h"
+
+#ifndef NDEBUG
+#include "llvm/ADT/DepthFirstIterator.h"
+#endif
 
 #define DEBUG_TYPE "firrtl-analysis-instanceinfo"
 
 using namespace circt;
 using namespace firrtl;
-using namespace detail;
 
-void InstanceInfo::LatticeValue::merge(LatticeValue that) {
+void InstanceInfo::LatticeValue::mergeIn(LatticeValue that) {
   if (kind > that.kind)
     return;
 
@@ -39,64 +42,45 @@ void InstanceInfo::LatticeValue::merge(LatticeValue that) {
     kind = Mixed;
 }
 
-void InstanceInfo::LatticeValue::merge(bool property) {
-  merge({/*kind=*/Constant, /*constant=*/property});
-}
-
-namespace {
-/// This struct is one frame of a worklist.  This is used to track what instance
-/// is being visited and with what information about its instantiation needs to
-/// be known.
-struct Frame {
-
-  /// The instance that will be visited.
-  InstanceGraphNode *node;
-
-  /// Indicates that the current hierarchy is under the DUT.
-  bool underDut = false;
-
-  /// Indicates that the current hierarchy is under a layer.
-  bool underLayer = false;
-};
-} // namespace
-
 InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
   auto &iGraph = am.getAnalysis<InstanceGraph>();
 
-  SmallVector<Frame> worklist({{iGraph.getTopLevelNode()}});
-  while (!worklist.empty()) {
-    auto frame = worklist.pop_back_val();
-    auto *node = frame.node;
-    auto moduleOp = node->getModule();
+  // Visit modules in reverse post-order (visit parents before children) because
+  // information flows in this direction---the attributes of modules are
+  // determinend by their instantiations.
+  DenseSet<InstanceGraphNode *> visited;
+  for (auto *root : iGraph) {
+    for (auto *modIt : llvm::inverse_post_order_ext(root, visited)) {
+      auto moduleOp = modIt->getModule();
 
-    // Compute information about this instance.
-    bool isDut = AnnotationSet(moduleOp).hasAnnotation(dutAnnoClass);
+      // Set baseline attributes for this module.
+      ModuleAttributes attributes(
+          {/*isDut=*/AnnotationSet(moduleOp).hasAnnotation(dutAnnoClass)});
 
-    // Set the baseline attributes.  This is what the attributes will be if
-    // there is no other, existing attributes.
-    ModuleAttributes attributes({/*isDut=*/isDut});
-    attributes.underDut.merge(frame.underDut);
-    attributes.underLayer.merge(frame.underLayer);
+      // Merge in attributes from instantiations one-by-one.
+      for (auto *useIt : modIt->uses()) {
+        auto parentAttrs =
+            moduleAttributes.find(useIt->getParent()->getModule())->getSecond();
+        // Merge underDut.
+        if (parentAttrs.isDut)
+          attributes.underDut.mergeIn({LatticeValue::Constant, true});
+        else
+          attributes.underDut.mergeIn(parentAttrs.underDut);
+        // Merge underLayer.
+        if (useIt->getInstance()->getParentOfType<LayerBlockOp>())
+          attributes.underLayer.mergeIn({LatticeValue::Constant, true});
+        else
+          attributes.underLayer.mergeIn(parentAttrs.underLayer);
+      }
 
-    // Merge the baseline attributes with the existing attributes, if they
-    // exist.
-    auto it = moduleAttributes.find(moduleOp);
-    if (it == moduleAttributes.end())
+      // If attributes are unknown at this point, set default values.
+      if (attributes.underDut.kind == LatticeValue::Unknown)
+        attributes.underDut.mergeIn({LatticeValue::Constant, false});
+      if (attributes.underLayer.kind == LatticeValue::Unknown)
+        attributes.underLayer.mergeIn({LatticeValue::Constant, false});
+
+      // Record the attributes for the module.
       moduleAttributes[moduleOp] = attributes;
-    else {
-      auto &oldAttributes = it->getSecond();
-      oldAttributes.underDut.merge(attributes.underDut);
-      oldAttributes.underLayer.merge(attributes.underLayer);
-      attributes = oldAttributes;
-    }
-
-    for (auto *inst : *frame.node) {
-      auto underDut = frame.underDut || isDut;
-      auto underLayer = frame.underLayer ||
-                        inst->getInstance()->getParentOfType<LayerBlockOp>();
-      worklist.push_back({inst->getTarget(),
-                          /*underDut=*/underDut,
-                          /*underLayer=*/underLayer});
     }
   }
 

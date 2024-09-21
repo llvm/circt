@@ -23,8 +23,6 @@
 namespace circt {
 namespace firrtl {
 
-using namespace detail;
-
 class InstanceInfo {
 
 public:
@@ -46,16 +44,13 @@ public:
     };
 
     /// Whether or not the property holds.
-    Kind kind = Unknown;
+    Kind kind = Kind::Unknown;
 
     /// The value of the property if `kind` is `Constant`.
     bool constant = false;
 
-    // Combine this lattice value with another lattice value.
-    void merge(LatticeValue that);
-
-    // Merge evidence that a property is true.
-    void merge(bool property);
+    /// Merge attributes from another LatticeValue into this one.
+    void mergeIn(LatticeValue that);
   };
 
   struct ModuleAttributes {
