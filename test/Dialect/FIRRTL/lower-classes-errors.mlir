@@ -32,9 +32,9 @@ firrtl.circuit "PathIllegalHierpath" {
 
 firrtl.circuit "PathDuplicateID" {
   firrtl.module @PathDuplicateID() {
-    // expected-error @below {{duplicate identifier found}}
+    // expected-error @below {{path identifier already found, paths must resolve to a unique target}}
     %a = firrtl.wire {annotations = [{class = "circt.tracker", id = distinct[0]<>}]} : !firrtl.uint<8>
-    // expected-note @below {{other identifier here}}
+    // expected-note @below {{other path identifier here}}
     %b = firrtl.wire {annotations = [{class = "circt.tracker", id = distinct[0]<>}]} : !firrtl.uint<8>
   }
 }

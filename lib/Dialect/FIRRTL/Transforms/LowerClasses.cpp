@@ -275,7 +275,8 @@ private:
   // and `owningModule`.
   FailureOr<bool> getOrComputeNeedsAltBasePath(Location loc,
                                                StringAttr moduleName,
-                                               FModuleOp owningModule);
+                                               FModuleOp owningModule,
+                                               bool isNonLocal);
   FModuleLike module;
 
   // Local data structures.
@@ -364,7 +365,8 @@ LogicalResult PathTracker::runOnModule() {
 
 FailureOr<bool>
 PathTracker::getOrComputeNeedsAltBasePath(Location loc, StringAttr moduleName,
-                                          FModuleOp owningModule) {
+                                          FModuleOp owningModule,
+                                          bool isNonLocal) {
 
   auto it = needsAltBasePathCache.find({moduleName, owningModule});
   if (it != needsAltBasePathCache.end())
@@ -383,9 +385,9 @@ PathTracker::getOrComputeNeedsAltBasePath(Location loc, StringAttr moduleName,
       needsAltBasePath = true;
       break;
     }
-    // If there is more than one instance of this module, then the path
-    // operation is ambiguous, which is an error.
-    if (!node->hasOneUse()) {
+    // If there is more than one instance of this module, and the target is
+    // non-local, then the path operation is ambiguous, which is an error.
+    if (isNonLocal && !node->hasOneUse()) {
       auto diag = mlir::emitError(loc)
                   << "unable to uniquely resolve target due "
                      "to multiple instantiation";
@@ -517,8 +519,8 @@ PathTracker::processPathTrackers(const AnnoTarget &target) {
     }
 
     // Check if we need an alternative base path.
-    auto needsAltBasePath =
-        getOrComputeNeedsAltBasePath(op->getLoc(), moduleName, owningModule);
+    auto needsAltBasePath = getOrComputeNeedsAltBasePath(
+        op->getLoc(), moduleName, owningModule, hierPathOp);
     if (failed(needsAltBasePath)) {
       error = true;
       return false;
@@ -528,6 +530,10 @@ PathTracker::processPathTrackers(const AnnoTarget &target) {
     // to the start of the annotation's NLA.
     InstanceGraphNode *node = instanceGraph.lookup(moduleName);
     while (true) {
+      // If it's not a non-local target, we don't have to append anything.
+      if (!hierPathOp)
+        break;
+
       // If we get to the owning module or the top, we're done.
       if (node->getModule() == owningModule || node->noUses())
         break;
@@ -582,8 +588,10 @@ LogicalResult PathTracker::updatePathInfoTable(PathInfoTable &pathInfoTable,
     auto &pathInfo = it->second;
     if (!inserted) {
       assert(pathInfo.loc.has_value() && "all PathInfo should have a Location");
-      auto diag = emitError(pathInfo.loc.value(), "duplicate identifier found");
-      diag.attachNote(entry.op->getLoc()) << "other identifier here";
+      auto diag = emitError(pathInfo.loc.value(),
+                            "path identifier already found, paths must resolve "
+                            "to a unique target");
+      diag.attachNote(entry.op->getLoc()) << "other path identifier here";
       return failure();
     }
 

@@ -91,6 +91,30 @@ firrtl.module @Child() {
 
 // -----
 
+// CHECK-LABEL: firrtl.circuit "LocalPath"
+firrtl.circuit "LocalPath" {
+// CHECK: firrtl.module @LocalPath()
+firrtl.module @LocalPath() {
+    // CHECK: %0 = firrtl.path instance distinct[0]<>
+    %0 = firrtl.unresolved_path "OMInstanceTarget:~LocalPath|Child"
+
+    // CHECK: %1 = firrtl.path reference distinct[1]<>
+    %1 = firrtl.unresolved_path "OMReferenceTarget:~LocalPath|Child>wire"
+
+    // CHECK: firrtl.instance child0 @Child()
+    // CHECK: firrtl.instance child1 @Child()
+    firrtl.instance child0 @Child()
+    firrtl.instance child1 @Child()
+}
+// CHECK: firrtl.module @Child() attributes {annotations = [{class = "circt.tracker", id = distinct[0]<>}]}
+firrtl.module @Child() {
+    // CHECK: %wire = firrtl.wire {annotations = [{class = "circt.tracker", id = distinct[1]<>}]} : !firrtl.uint<8>
+    %wire = firrtl.wire : !firrtl.uint<8>
+}
+}
+
+// -----
+
 // CHECK-LABEL: firrtl.circuit "PathMinimization"
 firrtl.circuit "PathMinimization" {
 // CHECK: firrtl.module @PathMinimization()

@@ -41,6 +41,11 @@ struct PathResolver {
                                 const AnnoPathValue &target,
                                 FlatSymbolRefAttr &result) {
 
+    // If the path is empty then this is a local reference and we should not
+    // construct a HierPathOp.
+    if (target.instances.empty())
+      return success();
+
     // We want to root this path at the top level module, or in the case of an
     // unreachable module, we settle for as high as we can get.
     auto module = target.ref.getModule();
@@ -67,12 +72,6 @@ struct PathResolver {
         return diag;
       }
       node = (*node->usesBegin())->getParent();
-    }
-
-    // If the path is empty then this is a local reference and we should not
-    // construct a HierPathOp.
-    if (target.instances.empty()) {
-      return success();
     }
 
     // Transform the instances into a list of FlatSymbolRefs.
