@@ -42,8 +42,8 @@ firrtl.circuit "Foo" {
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
     ]
   } {
-    firrtl.instance baz interesting_name @Baz()
-    firrtl.instance qux interesting_name @Qux()
+    firrtl.instance baz @Baz()
+    firrtl.instance qux @Qux()
   }
   // CHECK:      @Foo
   // CHECK-NEXT:   isDut: false
@@ -52,12 +52,12 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   isUnderLayer: false
   // CHECK-NEXT:   isFullyUnderLayer: false
   firrtl.module @Foo() {
-    firrtl.instance bar interesting_name @Bar()
-    firrtl.instance qux interesting_name @Qux()
+    firrtl.instance bar @Bar()
+    firrtl.instance qux @Qux()
     firrtl.layerblock @A {
-      firrtl.instance quz interesting_name @Quz()
-      firrtl.instance corge interesting_name @Corge()
+      firrtl.instance quz @Quz()
+      firrtl.instance corge @Corge()
     }
-    firrtl.instance corge2 interesting_name @Corge()
+    firrtl.instance corge2 @Corge()
   }
 }
