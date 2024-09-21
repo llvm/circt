@@ -3,45 +3,49 @@
 firrtl.circuit "Foo" {
   firrtl.layer @A bind {
   }
-  // CHECK:      firrtl.module @Corge
+  // CHECK:      @Corge
   // CHECK-NEXT:   isDut: false
   // CHECK-NEXT:   isUnderDut: false
   // CHECK-NEXT:   isFullyUnderDut: false
   // CHECK-NEXT:   isUnderLayer: true
   // CHECK-NEXT:   isFullyUnderLayer: false
-  firrtl.module @Corge() {}
-  // CHECK:      firrtl.module @Quz
+  firrtl.module private @Corge() {}
+  // CHECK:      @Quz
   // CHECK-NEXT:   isDut: false
   // CHECK-NEXT:   isUnderDut: false
   // CHECK-NEXT:   isFullyUnderDut: false
   // CHECK-NEXT:   isUnderLayer: true
   // CHECK-NEXT:   isFullyUnderLayer: true
-  firrtl.module @Quz() {}
-  // CHECK:      firrtl.module @Qux
+  firrtl.module private @Quz() {}
+  // CHECK:      @Qux
   // CHECK-NEXT:   isDut: false
   // CHECK-NEXT:   isUnderDut: true
   // CHECK-NEXT:   isFullyUnderDut: false
   // CHECK-NEXT:   isUnderLayer: false
   // CHECK-NEXT:   isFullyUnderLayer: false
-  firrtl.module @Qux() {}
-  // CHECK:      firrtl.module @Baz
+  firrtl.module private @Qux() {}
+  // CHECK:      @Baz
   // CHECK-NEXT:   isDut: false
   // CHECK-NEXT:   isUnderDut: true
   // CHECK-NEXT:   isFullyUnderDut: true
   // CHECK-NEXT:   isUnderLayer: false
   // CHECK-NEXT:   isFullyUnderLayer: false
-  firrtl.module @Baz() {}
-  // CHECK:      firrtl.module @Bar
+  firrtl.module private @Baz() {}
+  // CHECK:      @Bar
   // CHECK-NEXT:   isDut: true
   // CHECK-NEXT:   isUnderDut: false
   // CHECK-NEXT:   isFullyUnderDut: false
   // CHECK-NEXT:   isUnderLayer: false
   // CHECK-NEXT:   isFullyUnderLayer: false
-  firrtl.module @Bar() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+  firrtl.module private @Bar() attributes {
+    annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+    ]
+  } {
     firrtl.instance baz interesting_name @Baz()
     firrtl.instance qux interesting_name @Qux()
   }
-  // CHECK: firrtl.module @Foo
+  // CHECK:      @Foo
   // CHECK-NEXT:   isDut: false
   // CHECK-NEXT:   isUnderDut: false
   // CHECK-NEXT:   isFullyUnderDut: false
