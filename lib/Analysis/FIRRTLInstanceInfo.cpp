@@ -106,13 +106,15 @@ InstanceInfo::getModuleAttributes(FModuleOp op) {
 bool InstanceInfo::isDut(FModuleOp op) { return getModuleAttributes(op).isDut; }
 
 bool InstanceInfo::atLeastOneInstanceUnderDut(FModuleOp op) {
-  return getModuleAttributes(op).underDut.kind == LatticeValue::Mixed ||
+  return isDut(op) ||
+         getModuleAttributes(op).underDut.kind == LatticeValue::Mixed ||
          allInstancesUnderDut(op);
 }
 
 bool InstanceInfo::allInstancesUnderDut(FModuleOp op) {
   auto underDut = getModuleAttributes(op).underDut;
-  return underDut.kind == LatticeValue::Constant && underDut.constant;
+  return isDut(op) ||
+         (underDut.kind == LatticeValue::Constant && underDut.constant);
 }
 
 bool InstanceInfo::atLeastOneInstanceUnderLayer(FModuleOp op) {

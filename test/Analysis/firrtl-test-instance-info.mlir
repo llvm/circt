@@ -33,8 +33,8 @@ firrtl.circuit "Foo" {
   firrtl.module private @Baz() {}
   // CHECK:      @Bar
   // CHECK-NEXT:   isDut: true
-  // CHECK-NEXT:   atLeastOneInstanceUnderDut: false
-  // CHECK-NEXT:   allInstancesUnderDut: false
+  // CHECK-NEXT:   atLeastOneInstanceUnderDut: true
+  // CHECK-NEXT:   allInstancesUnderDut: true
   // CHECK-NEXT:   atLeastOneInstanceUnderLayer: false
   // CHECK-NEXT:   allInstancesUnderLayer: false
   firrtl.module private @Bar() attributes {

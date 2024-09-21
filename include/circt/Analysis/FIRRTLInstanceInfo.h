@@ -69,11 +69,13 @@ public:
   bool isDut(FModuleOp op);
 
   /// Return true if at least one instance of this module is under (or
-  /// transitively under) the design-under-test.
+  /// transitively under) the design-under-test.  This is true if the module is
+  /// the design-under-test.
   bool atLeastOneInstanceUnderDut(FModuleOp op);
 
   /// Return true if all instances of this module are under (or transitively
-  /// under) the design-under-test.
+  /// under) the design-under-test.  This is true if the module is the
+  /// design-under-test.
   bool allInstancesUnderDut(FModuleOp op);
 
   /// Return true if at least one instance of this module is under (or
