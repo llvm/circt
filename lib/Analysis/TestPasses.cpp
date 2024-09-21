@@ -211,11 +211,14 @@ static void printInfo(firrtl::FModuleOp op, firrtl::InstanceInfo &iInfo) {
   op->print(llvm::errs(), flags);
   llvm::errs() << "\n"
                << "    isDut: " << iInfo.isDut(op) << "\n"
-               << "    isUnderDut: " << iInfo.isUnderDut(op) << "\n"
-               << "    isFullyUnderDut: " << iInfo.isFullyUnderDut(op) << "\n"
-               << "    isUnderLayer: " << iInfo.isUnderLayer(op) << "\n"
-               << "    isFullyUnderLayer: " << iInfo.isFullyUnderLayer(op)
-               << "\n";
+               << "    atLeastOneInstanceUnderDut: "
+               << iInfo.atLeastOneInstanceUnderDut(op) << "\n"
+               << "    allInstancesUnderDut: " << iInfo.allInstancesUnderDut(op)
+               << "\n"
+               << "    atLeastOneInstanceUnderLayer: "
+               << iInfo.atLeastOneInstanceUnderLayer(op) << "\n"
+               << "    allInstancesUnderLayer: "
+               << iInfo.allInstancesUnderLayer(op) << "\n";
 }
 
 void FIRRTLInstanceInfoPass::runOnOperation() {

@@ -68,18 +68,21 @@ public:
   /// Return true if this module is the design-under-test.
   bool isDut(FModuleOp op);
 
-  /// Return true if this module is instantiated under the design-under-test.
-  bool isUnderDut(FModuleOp op);
+  /// Return true if at least one instance of this module is under (or
+  /// transitively under) the design-under-test.
+  bool atLeastOneInstanceUnderDut(FModuleOp op);
 
-  /// Return true if all instantiations of this module are under the
-  /// design-under-test.
-  bool isFullyUnderDut(FModuleOp op);
+  /// Return true if all instances of this module are under (or transitively
+  /// under) the design-under-test.
+  bool allInstancesUnderDut(FModuleOp op);
 
-  /// Return true if this module is instantiated under a layer block.
-  bool isUnderLayer(FModuleOp op);
+  /// Return true if at least one instance of this module is under (or
+  /// transitively under) a layer.
+  bool atLeastOneInstanceUnderLayer(FModuleOp op);
 
-  /// Return true if all instantiations of this module are under layer blocks.
-  bool isFullyUnderLayer(FModuleOp op);
+  /// Return true if all instances of this module are under (or transitively
+  /// under) layer blocks.
+  bool allInstancesUnderLayer(FModuleOp op);
 
 private:
   /// Internal mapping of operations to module attributes.

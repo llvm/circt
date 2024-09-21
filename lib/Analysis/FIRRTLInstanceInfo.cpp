@@ -105,24 +105,24 @@ InstanceInfo::getModuleAttributes(FModuleOp op) {
 
 bool InstanceInfo::isDut(FModuleOp op) { return getModuleAttributes(op).isDut; }
 
-bool InstanceInfo::isUnderDut(FModuleOp op) {
+bool InstanceInfo::atLeastOneInstanceUnderDut(FModuleOp op) {
   auto underDut = getModuleAttributes(op).underDut;
   return underDut.kind == LatticeValue::Mixed ||
          (underDut.kind == LatticeValue::Constant && underDut.constant);
 }
 
-bool InstanceInfo::isFullyUnderDut(FModuleOp op) {
+bool InstanceInfo::allInstancesUnderDut(FModuleOp op) {
   auto underDut = getModuleAttributes(op).underDut;
   return underDut.kind == LatticeValue::Constant && underDut.constant;
 }
 
-bool InstanceInfo::isUnderLayer(FModuleOp op) {
+bool InstanceInfo::atLeastOneInstanceUnderLayer(FModuleOp op) {
   auto underLayer = getModuleAttributes(op).underLayer;
   return underLayer.kind == LatticeValue::Mixed ||
          (underLayer.kind == LatticeValue::Constant && underLayer.constant);
 }
 
-bool InstanceInfo::isFullyUnderLayer(FModuleOp op) {
+bool InstanceInfo::allInstancesUnderLayer(FModuleOp op) {
   auto underLayer = getModuleAttributes(op).underLayer;
   return underLayer.kind == LatticeValue::Constant && underLayer.constant;
 }
