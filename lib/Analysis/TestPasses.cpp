@@ -221,7 +221,8 @@ static void printInfo(firrtl::FModuleOp op, firrtl::InstanceInfo &iInfo) {
 void FIRRTLInstanceInfoPass::runOnOperation() {
   auto &iInfo = getAnalysis<firrtl::InstanceInfo>();
 
-  getOperation()->walk([&](firrtl::FModuleOp op) { printInfo(op, iInfo); });
+  for (auto op : getOperation().getBodyBlock()->getOps<firrtl::FModuleOp>())
+    printInfo(op, iInfo);
 }
 
 //===----------------------------------------------------------------------===//
