@@ -86,11 +86,8 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
 
   LLVM_DEBUG({
     llvm::dbgs() << "InstanceInfo Analysis Results:\n";
-    DenseSet<Operation *> visited;
     for (auto *node : llvm::depth_first(iGraph.getTopLevelNode())) {
       auto moduleOp = node->getModule();
-      if (!visited.insert(moduleOp.getOperation()).second)
-        continue;
       auto attributes = moduleAttributes[moduleOp];
       llvm::dbgs() << "  - module: " << moduleOp.getModuleName() << "\n"
                    << "    isDut:      "
