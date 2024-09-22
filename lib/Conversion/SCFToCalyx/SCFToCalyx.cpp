@@ -118,10 +118,15 @@ struct CallScheduleable {
   func::CallOp callOp;
 };
 
+struct ParScheduleable {
+  /// Parallel operation to schedule.
+  scf::ParallelOp parOp;
+};
+
 /// A variant of types representing scheduleable operations.
 using Scheduleable =
     std::variant<calyx::GroupOp, WhileScheduleable, ForScheduleable,
-                 IfScheduleable, CallScheduleable>;
+                 IfScheduleable, CallScheduleable, ParScheduleable>;
 
 class IfLoweringStateInterface {
 public:
@@ -274,6 +279,7 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
               .template Case<arith::ConstantOp, ReturnOp, BranchOpInterface,
                              /// SCF
                              scf::YieldOp, scf::WhileOp, scf::ForOp, scf::IfOp,
+                             scf::ParallelOp, scf::ReduceOp,
                              /// memref
                              memref::AllocOp, memref::AllocaOp, memref::LoadOp,
                              memref::StoreOp,
@@ -333,6 +339,10 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, scf::WhileOp whileOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter, scf::ForOp forOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter, scf::IfOp ifOp) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        scf::ReduceOp reduceOp) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        scf::ParallelOp parallelOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter, CallOp callOp) const;
 
   /// buildLibraryOp will build a TCalyxLibOp inside a TGroupOp based on the
@@ -1045,6 +1055,17 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     scf::ReduceOp reduceOp) const {
+  return success();
+}
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     scf::ParallelOp parOp) const {
+  getState<ComponentLoweringState>().addBlockScheduleable(
+      parOp.getOperation()->getBlock(), ParScheduleable{parOp});
+  return success();
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      CallOp callOp) const {
   std::string instanceName = calyx::getInstanceName(callOp);
   calyx::InstanceOp instanceOp =
@@ -1435,6 +1456,1086 @@ class BuildIfGroups : public calyx::FuncOpPartialLoweringPattern {
   }
 };
 
+class BuildParGroups : public calyx::FuncOpPartialLoweringPattern {
+public:
+  BuildParGroups(MLIRContext *context, LogicalResult &resRef,
+                 calyx::PatternApplicationState &patternState,
+                 DenseMap<FuncOp, calyx::ComponentOp> &funcMap,
+                 calyx::CalyxLoweringState &pls, std::string &availBanksJson)
+      : calyx::FuncOpPartialLoweringPattern(context, resRef, patternState,
+                                            funcMap, pls),
+        availBanksJsonValue(parseJsonFile(availBanksJson)){};
+  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
+  LogicalResult
+  partiallyLowerFuncToComp(FuncOp funcOp,
+                           PatternRewriter &rewriter) const override {
+    LogicalResult res = success();
+    auto moduleOp = funcOp->getParentOfType<ModuleOp>();
+    moduleOp.walk([&](Operation *op) {
+      if (isa<memref::AllocOp, memref::AllocaOp, memref::GetGlobalOp>(op))
+        memNum[op] = memNum.size();
+    });
+    // TraceBanks algorithm
+    DenseSet<Operation *> memories;
+    funcOp.walk([&](Operation *op) {
+      // Get all source definition of the memories that are used in the current
+      // `funcOp` into `memories` to get prepared for running the TraceBank
+      // algorithm
+      for (auto operand : op->getOperands()) {
+        if (op->getDialect()->getNamespace() ==
+                memref::MemRefDialect::getDialectNamespace() &&
+            isa<MemRefType>(operand.getType())) {
+          // Find the source definition
+          if (!isa<BlockArgument>(operand))
+            memories.insert(operand.getDefiningOp());
+          else {
+            auto blockArg = cast<BlockArgument>(operand);
+            for (auto otherFn : moduleOp.getOps<FuncOp>()) {
+              for (auto callOp : otherFn.getOps<CallOp>()) {
+                if (callOp.getCallee() == funcOp.getName()) {
+                  assert(callOp.getOperands().size() ==
+                             funcOp.getArguments().size() &&
+                         "callOp's operands size must match with the block "
+                         "argument size of the callee function");
+                  auto memRes = callOp.getOperand(blockArg.getArgNumber());
+                  memories.insert(memRes.getDefiningOp());
+                }
+              }
+            }
+          }
+        }
+      }
+      // Partial evaluate the access indices of all parallel ops to get prepared
+      // for running the TraceBank algorithm
+      if (auto scfParOp = dyn_cast<scf::ParallelOp>(op))
+        partialEval(rewriter, scfParOp);
+      return WalkResult::advance();
+    });
+    // For each external memory instance, run the TraceBank algorithm
+    for (auto *mem : memories)
+      traceBankAlgo(funcOp, mem);
+    // Create banks for each memory and replace the use of all old memories
+    IRMapping mapping;
+    // Get all the users, such as load/store/copy, of all memref results
+    DenseSet<Operation *> memRefUsers;
+    funcOp.walk([&](Operation *op) {
+      if (op->getDialect()->getNamespace() ==
+              memref::MemRefDialect::getDialectNamespace() &&
+          std::any_of(
+              op->getOperands().begin(), op->getOperands().end(),
+              [](Value operand) { return isa<MemRefType>(operand.getType()); }))
+        memRefUsers.insert(op);
+      return WalkResult::advance();
+    });
+    for (auto *user : memRefUsers) {
+      Value memOperand;
+      for (auto operand : user->getOperands()) {
+        if (isa<MemRefType>(operand.getType())) {
+          memOperand = operand;
+          break;
+        }
+      }
+      Operation *origMemDef;
+      if (!memOperand.getDefiningOp()) {
+        // If this is a BlockArgument, find out the original allocOp
+        auto blockArg = cast<BlockArgument>(memOperand);
+        moduleOp.walk([&](FuncOp otherFn) {
+          otherFn.walk([&](mlir::Operation *op) {
+            if (auto callOp = dyn_cast<CallOp>(op)) {
+              if (callOp.getCallee() == funcOp.getName())
+                origMemDef =
+                    callOp.getOperand(blockArg.getArgNumber()).getDefiningOp();
+            }
+          });
+        });
+      } else
+        origMemDef = memOperand.getDefiningOp();
+      Value accessIndex;
+      uint bankID = 0;
+      auto *jsonObj = availBanksJsonValue.getAsObject();
+      auto *banks = jsonObj->getArray("banks");
+      uint availableBanks = 0;
+      if (auto bankOpt = (*banks)[memNum.at(origMemDef)].getAsInteger())
+        availableBanks = *bankOpt;
+      else {
+        std::string dumpStr;
+        llvm::raw_string_ostream dumpStream(dumpStr);
+        origMemDef->print(dumpStream);
+        report_fatal_error(
+            llvm::Twine(
+                "Cannot find the number of banks associated with memory") +
+            dumpStream.str());
+      }
+      // Allocate new banks for `memOp` into `block`
+      auto allocateBanks = [&](Operation *memOp, MemRefType memTy,
+                               Block *insertBlock) -> SmallVector<Operation *> {
+        auto origShape = memTy.getShape();
+        if (origShape.front() % availableBanks != 0)
+          memOp->emitError()
+              << "memory shape must be divisible by the banking factor";
+        assert(origShape.size() == 1 &&
+               "memref must be flattened before scf-to-calyx pass");
+        uint bankSize = origShape.front() / availableBanks;
+        SmallVector<Operation *> banks;
+        OpBuilder builder = OpBuilder::atBlockBegin(insertBlock);
+        TypeSwitch<Operation *>(origMemDef)
+            .Case<memref::AllocOp>([&](memref::AllocOp allocOp) {
+              for (uint bankCnt = 0; bankCnt < availableBanks; bankCnt++) {
+                auto bankAllocOp = builder.create<memref::AllocOp>(
+                    insertBlock->getParentOp()->getLoc(),
+                    MemRefType::get(bankSize, memTy.getElementType(),
+                                    memTy.getLayout(), memTy.getMemorySpace()));
+                banks.push_back(bankAllocOp);
+              }
+            })
+            .Case<memref::GetGlobalOp>([&](memref::GetGlobalOp getGlobalOp) {
+              OpBuilder::InsertPoint globalOpsInsertPt, getGlobalOpsInsertPt;
+              for (uint bankCnt = 0; bankCnt < availableBanks; bankCnt++) {
+                auto *symbolTableOp =
+                    getGlobalOp->getParentWithTrait<OpTrait::SymbolTable>();
+                auto globalOp = dyn_cast_or_null<memref::GlobalOp>(
+                    SymbolTable::lookupSymbolIn(symbolTableOp,
+                                                getGlobalOp.getNameAttr()));
+                MemRefType type = globalOp.getType();
+                assert(
+                    circt::isUniDimensional(type) &&
+                    "GlobalOp must be flattened before the scf-to-calyx pass");
+                auto cstAttr = llvm::dyn_cast_or_null<DenseElementsAttr>(
+                    globalOp.getConstantInitValue());
+                uint beginIdx = bankSize * bankCnt;
+                uint endIdx = bankSize * (bankCnt + 1);
+                auto allAttrs = cstAttr.getValues<Attribute>();
+                SmallVector<Attribute, 8> extractedElements;
+                for (auto idx = beginIdx; idx < endIdx; idx++)
+                  extractedElements.push_back(allAttrs[idx]);
+                auto newMemRefTy =
+                    MemRefType::get(SmallVector<int64_t>{endIdx - beginIdx},
+                                    type.getElementType());
+                auto newTypeAttr = TypeAttr::get(newMemRefTy);
+                std::string newNameStr = llvm::formatv(
+                    "{0}_{1}x{2}_{3}", globalOp.getConstantAttrName(),
+                    endIdx - beginIdx, type.getElementType(), bankCnt);
+                RankedTensorType tensorType = RankedTensorType::get(
+                    {static_cast<int64_t>(extractedElements.size())},
+                    type.getElementType());
+                auto newInitValue =
+                    DenseElementsAttr::get(tensorType, extractedElements);
+                if (bankCnt == 0) {
+                  rewriter.setInsertionPointAfter(globalOp);
+                  globalOpsInsertPt = rewriter.saveInsertionPoint();
+                  rewriter.setInsertionPointAfter(getGlobalOp);
+                  getGlobalOpsInsertPt = rewriter.saveInsertionPoint();
+                }
+                rewriter.restoreInsertionPoint(globalOpsInsertPt);
+                auto newGlobalOp = rewriter.create<memref::GlobalOp>(
+                    rewriter.getUnknownLoc(),
+                    rewriter.getStringAttr(newNameStr),
+                    globalOp.getSymVisibilityAttr(), newTypeAttr, newInitValue,
+                    globalOp.getConstantAttr(), globalOp.getAlignmentAttr());
+                rewriter.setInsertionPointAfter(newGlobalOp);
+                globalOpsInsertPt = rewriter.saveInsertionPoint();
+                rewriter.restoreInsertionPoint(getGlobalOpsInsertPt);
+                auto newGetGlobalOp = rewriter.create<memref::GetGlobalOp>(
+                    rewriter.getUnknownLoc(), newMemRefTy,
+                    newGlobalOp.getName());
+                rewriter.setInsertionPointAfter(newGetGlobalOp);
+                getGlobalOpsInsertPt = rewriter.saveInsertionPoint();
+                banks.push_back(newGetGlobalOp);
+              }
+            })
+            .Default([](Operation *op) {
+              op->emitError("Unsupported memory operation type");
+            });
+        return banks;
+      };
+      auto eraseOperandInCallerCallees = [&](ModuleOp moduleOp, FuncOp callee,
+                                             Value operand) {
+        SmallVector<Type, 4> updatedCurFnArgTys(callee.getArgumentTypes());
+        for (auto otherFn : moduleOp.getOps<FuncOp>()) {
+          for (auto callOp : otherFn.getOps<CallOp>()) {
+            if (callOp.getCallee() == callee.getName()) {
+              auto pos = llvm::find(callOp.getOperands(), operand) -
+                         callOp.getOperands().begin();
+              updatedCurFnArgTys.erase(updatedCurFnArgTys.begin() + pos);
+              callee.getBlocks().front().eraseArgument(pos);
+              callOp->eraseOperand(pos);
+              if (auto getGlobalOp =
+                      dyn_cast<memref::GetGlobalOp>(operand.getDefiningOp())) {
+                auto *symbolTableOp =
+                    getGlobalOp
+                        ->getParentWithTrait<mlir::OpTrait::SymbolTable>();
+                auto globalOp = dyn_cast_or_null<memref::GlobalOp>(
+                    SymbolTable::lookupSymbolIn(symbolTableOp,
+                                                getGlobalOp.getNameAttr()));
+                getGlobalOp->remove();
+                globalOp->remove();
+              } else
+                operand.getDefiningOp()->remove();
+            }
+          }
+        }
+        return FunctionType::get(callee.getContext(), updatedCurFnArgTys,
+                                 callee.getFunctionType().getResults());
+      };
+      auto findNewMemRef = [&](FuncOp caller, FuncOp callee,
+                               Value newMemRef) -> std::optional<Value> {
+        std::optional<Value> foundValue;
+        caller.walk([&](mlir::Operation *op) {
+          if (auto callOp = dyn_cast<CallOp>(op)) {
+            if (callOp.getCallee() == callee.getName()) {
+              auto pos = llvm::find(callOp.getOperands(), newMemRef) -
+                         callOp.getOperands().begin();
+              foundValue = callee.getArgument(pos);
+              return mlir::WalkResult::interrupt();
+            }
+          }
+          return mlir::WalkResult::advance();
+        });
+        return foundValue;
+      };
+      auto replaceMemoryOp = [&](Operation *memOp, Value newMemRef,
+                                 Value newAddr, IRMapping mapping) {
+        TypeSwitch<Operation *>(memOp)
+            .Case<memref::LoadOp>([&](memref::LoadOp loadOp) {
+              Value newLoadResult = rewriter.replaceOpWithNewOp<memref::LoadOp>(
+                  loadOp, newMemRef, SmallVector<Value>{newAddr});
+              mapping.map(loadOp.getResult(), newLoadResult);
+            })
+            .Case<memref::StoreOp>([&](memref::StoreOp storeOp) {
+              rewriter.replaceOpWithNewOp<memref::StoreOp>(
+                  storeOp, storeOp.getValue(), newMemRef,
+                  SmallVector<Value>{newAddr});
+            })
+            .Default([](Operation *) {
+              llvm_unreachable("Unhandled memory operation type");
+            });
+      };
+      auto topLevelFn = cast<FuncOp>(SymbolTable::lookupSymbolIn(
+          moduleOp, loweringState().getTopLevelFunction()));
+      TypeSwitch<Operation *>(user)
+          .Case<memref::LoadOp, memref::StoreOp>([&](auto memUserOp) {
+            assert(memUserOp.getIndices().size() == 1);
+            accessIndex = memUserOp.getIndices().front();
+            bankID = getBankOfMemAccess(origMemDef, accessIndex);
+            if (getBanksForMem(origMemDef).empty()) {
+              auto allocatedBanks = allocateBanks(
+                  memUserOp, cast<MemRefType>(memUserOp.getMemRefType()),
+                  &topLevelFn.getBlocks()
+                       .front()); // we assume there is only one block
+                                  // in the top-level function
+              SmallVector<Value> allocatedResults;
+              for (auto *memOp : allocatedBanks) {
+                TypeSwitch<Operation *>(memOp)
+                    .template Case<memref::AllocOp>(
+                        [&](memref::AllocOp allocOp) {
+                          allocatedResults.push_back(allocOp.getResult());
+                        })
+                    .template Case<memref::GetGlobalOp>(
+                        [&](memref::GetGlobalOp getGlobalOp) {
+                          allocatedResults.push_back(getGlobalOp.getResult());
+                        });
+              }
+              setBanksForMem(origMemDef, allocatedBanks);
+              auto newAddr = insertNewAddress(rewriter, memUserOp, accessIndex,
+                                              availableBanks);
+              Value newMemRef = getBankForMemAndID(origMemDef, bankID);
+              if (topLevelFn.getName() != funcOp.getName()) {
+                auto newFnType = calyx::updateFnType(funcOp, allocatedResults);
+                funcOp.setType(newFnType);
+                calyx::updateCallSites(moduleOp, funcOp, allocatedResults);
+              }
+              if (isa<BlockArgument>(memOperand)) {
+                if (auto foundValue =
+                        findNewMemRef(topLevelFn, funcOp, newMemRef))
+                  newMemRef = *foundValue;
+              }
+              replaceMemoryOp(memUserOp, newMemRef, newAddr, mapping);
+            } else {
+              auto newAddr = insertNewAddress(rewriter, memUserOp, accessIndex,
+                                              availableBanks);
+              Value newMemRef = getBankForMemAndID(origMemDef, bankID);
+              if (isa<BlockArgument>(memOperand)) {
+                if (auto foundValue =
+                        findNewMemRef(topLevelFn, funcOp, newMemRef))
+                  newMemRef = *foundValue;
+              }
+              replaceMemoryOp(memUserOp, newMemRef, newAddr, mapping);
+              if (memOperand.use_empty()) {
+                if (memOperand.getDefiningOp()) {
+                  if (auto getGlobalOp = dyn_cast<memref::GetGlobalOp>(
+                          memOperand.getDefiningOp())) {
+                    auto *symbolTableOp =
+                        getGlobalOp
+                            ->getParentWithTrait<mlir::OpTrait::SymbolTable>();
+                    auto globalOp = dyn_cast_or_null<memref::GlobalOp>(
+                        SymbolTable::lookupSymbolIn(symbolTableOp,
+                                                    getGlobalOp.getNameAttr()));
+                    getGlobalOp->remove();
+                    globalOp->remove();
+                  } else
+                    memOperand.getDefiningOp()->remove();
+                } else {
+                  auto newFnType = eraseOperandInCallerCallees(
+                      moduleOp, funcOp, origMemDef->getResult(0));
+                  funcOp.setFunctionType(newFnType);
+                }
+              }
+            }
+          })
+          .Default([](Operation *) {
+            llvm_unreachable("Unhandled memory operation type");
+          });
+    }
+    return res;
+  };
+
+private:
+  class MaximalISetsCache {
+  public:
+    std::vector<std::set<Block *>>
+    getMaximalISets(const std::vector<Block *> &blocks,
+                    const std::unordered_map<Block *, std::set<Block *>>
+                        &complementAdjacencyMap) {
+      auto it = cache.find(blocks);
+      if (it != cache.end()) {
+        return it->second;
+      }
+      calyx::CliqueGraph<Block *> cliqueGraph(complementAdjacencyMap);
+      std::vector<std::set<Block *>> maximalIndependentSets =
+          cliqueGraph.findAllMaximalCliques();
+      cache[blocks] = maximalIndependentSets;
+      return maximalIndependentSets;
+    }
+
+  private:
+    struct BlocksVecHash {
+      std::size_t operator()(const std::vector<Block *> &blocks) const {
+        std::size_t seed = blocks.size();
+        for (Block *b : blocks) {
+          seed ^=
+              std::hash<Block *>()(b) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        }
+        return seed;
+      }
+    };
+    std::unordered_map<std::vector<Block *>, std::vector<std::set<Block *>>,
+                       BlocksVecHash>
+        cache;
+  };
+
+  mutable DenseMap<Operation *, int> memNum;
+  mutable MaximalISetsCache maximalISetsCache;
+  llvm::json::Value availBanksJsonValue;
+  llvm::json::Value parseJsonFile(const std::string &fileName) const {
+    std::string adjustedFileName = fileName;
+    if (adjustedFileName.find(".json") == std::string::npos) {
+      adjustedFileName += ".json";
+    }
+    llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> fileOrErr =
+        llvm::MemoryBuffer::getFile(adjustedFileName);
+    if (std::error_code ec = fileOrErr.getError()) {
+      llvm::report_fatal_error(llvm::Twine("Error reading JSON file: ") +
+                               adjustedFileName + " - " + ec.message());
+    }
+    auto jsonResult = llvm::json::parse(fileOrErr.get()->getBuffer());
+    if (!jsonResult) {
+      llvm::errs() << "Error parsing JSON: "
+                   << llvm::toString(jsonResult.takeError()) << "\n";
+      llvm::report_fatal_error(llvm::Twine("Failed to parse JSON file: ") +
+                               adjustedFileName);
+    }
+    return std::move(*jsonResult);
+  }
+  Value insertNewAddress(PatternRewriter &rewriter, Operation *op,
+                         Value accessIndex, unsigned availableBanks) const {
+    rewriter.setInsertionPoint(op);
+    Value constDivVal =
+        rewriter
+            .create<arith::ConstantOp>(rewriter.getUnknownLoc(),
+                                       rewriter.getIndexAttr(availableBanks))
+            .getResult();
+    Value newAddr = rewriter
+                        .create<arith::DivUIOp>(rewriter.getUnknownLoc(),
+                                                accessIndex, constDivVal)
+                        .getResult();
+    return newAddr;
+  }
+  bool isDefinedInsideRegion(Value value, Region *targetRegion) const {
+    Operation *definingOp = value.getDefiningOp();
+    if (!definingOp) {
+      Block *block = cast<BlockArgument>(value).getOwner();
+      Region *currentRegion = block->getParent();
+      while (currentRegion) {
+        if (currentRegion == targetRegion) {
+          return true;
+        }
+        Operation *parentOp = currentRegion->getParentOp();
+        currentRegion = parentOp ? parentOp->getParentRegion() : nullptr;
+      }
+      return false;
+    }
+    Operation *parentOp = definingOp;
+    while (parentOp) {
+      if (parentOp->getParentRegion() == targetRegion) {
+        return true;
+      }
+      parentOp = parentOp->getParentOp();
+    }
+    return false;
+  }
+
+  scf::ParallelOp partialEval(PatternRewriter &rewriter,
+                              scf::ParallelOp scfParOp) const {
+    assert(scfParOp.getLoopSteps() && "Parallel loop must have steps");
+    auto *body = scfParOp.getBody();
+    auto parOpIVs = scfParOp.getInductionVars();
+    auto steps = scfParOp.getStep();
+    auto lowerBounds = scfParOp.getLowerBound();
+    auto upperBounds = scfParOp.getUpperBound();
+    rewriter.setInsertionPointAfter(scfParOp);
+    scf::ParallelOp newParOp = scfParOp.cloneWithoutRegions();
+    auto loc = newParOp.getLoc();
+    rewriter.insert(newParOp);
+    OpBuilder insideBuilder(newParOp);
+    Block *currBlock = nullptr;
+    auto &region = newParOp.getRegion();
+    IRMapping operandMap;
+    std::function<void(SmallVector<int64_t, 4> &, unsigned)> genIVCombinations;
+    genIVCombinations = [&](SmallVector<int64_t, 4> &indices, unsigned dim) {
+      if (dim == lowerBounds.size()) {
+        currBlock = &region.emplaceBlock();
+        insideBuilder.setInsertionPointToEnd(currBlock);
+        for (unsigned i = 0; i < indices.size(); ++i) {
+          Value ivConstant =
+              insideBuilder.create<arith::ConstantIndexOp>(loc, indices[i]);
+          operandMap.map(parOpIVs[i], ivConstant);
+        }
+        for (auto it = body->begin(); it != std::prev(body->end()); ++it)
+          insideBuilder.clone(*it, operandMap);
+        return;
+      }
+      auto lb = lowerBounds[dim].getDefiningOp<arith::ConstantIndexOp>();
+      auto ub = upperBounds[dim].getDefiningOp<arith::ConstantIndexOp>();
+      auto stepOp = steps[dim].getDefiningOp<arith::ConstantIndexOp>();
+      assert(lb && ub && stepOp && "Bounds and steps must be constants");
+      int64_t lbVal = lb.value();
+      int64_t ubVal = ub.value();
+      int64_t stepVal = stepOp.value();
+      for (int64_t iv = lbVal; iv < ubVal; iv += stepVal) {
+        indices[dim] = iv;
+        genIVCombinations(indices, dim + 1);
+      }
+    };
+    SmallVector<int64_t, 4> indices(lowerBounds.size());
+    genIVCombinations(indices, 0);
+    rewriter.replaceOp(scfParOp, newParOp);
+    return newParOp;
+  }
+
+  std::function<int(Value)> evaluateIndex = [&](Value val) -> int {
+    Operation *op = val.getDefiningOp();
+    if (!op)
+      llvm_unreachable("Value is not defined by any operation");
+    return TypeSwitch<Operation *, int>(op)
+        .Case<arith::ConstantIndexOp>(
+            [](arith::ConstantIndexOp constOp) -> int {
+              return constOp.value();
+            })
+        .Case<arith::AddIOp>([&](arith::AddIOp addOp) -> int {
+          int lhs = evaluateIndex(addOp.getLhs());
+          int rhs = evaluateIndex(addOp.getRhs());
+          return lhs + rhs;
+        })
+        .Case<arith::MulIOp>([&](arith::MulIOp mulOp) -> int {
+          int lhs = evaluateIndex(mulOp.getLhs());
+          int rhs = evaluateIndex(mulOp.getRhs());
+          return lhs * rhs;
+        })
+        .Case<arith::ShLIOp>([&](arith::ShLIOp shlOp) -> int {
+          int lhs = evaluateIndex(shlOp.getLhs());
+          int rhs = evaluateIndex(shlOp.getRhs());
+          return lhs << rhs;
+        })
+        .Case<arith::SubIOp>([&](arith::SubIOp subOp) -> int {
+          int lhs = evaluateIndex(subOp.getLhs());
+          int rhs = evaluateIndex(subOp.getRhs());
+          return lhs - rhs;
+        })
+        // Add more cases. We can do this only because we would have got error
+        // if we failed to get induction variables as constants.
+        .Default([&](Operation *) -> int {
+          llvm_unreachable("unsupported operation for index evaluation");
+        });
+  };
+
+  SmallVector<scf::ParallelOp, 4> getAncestorParOps(Block *block) const {
+    SmallVector<scf::ParallelOp, 4> ancestors;
+    Operation *parentOp = block->getParentOp();
+    while (parentOp) {
+      if (auto parallelOp = dyn_cast<scf::ParallelOp>(parentOp)) {
+        ancestors.push_back(parallelOp);
+      }
+      parentOp = parentOp->getParentOp();
+    }
+    return ancestors;
+  }
+
+  std::optional<scf::ParallelOp>
+  closestCommonAncestorParOp(Block *block, Block *anotherBlock) const {
+    auto blockAncestorPars = getAncestorParOps(block);
+    Operation *anotherParent = anotherBlock->getParentOp();
+    while (anotherParent) {
+      if (auto anotherAncestorPar = dyn_cast<scf::ParallelOp>(anotherParent)) {
+        for (auto ancestorPar : blockAncestorPars) {
+          if (ancestorPar == anotherAncestorPar)
+            return ancestorPar;
+        }
+      }
+      anotherParent = anotherParent->getParentOp();
+    }
+    return std::nullopt;
+  }
+
+  bool containsBlock(Block &block, Block *nestedBlock) const {
+    for (Operation &nestedOp : block) {
+      for (Region &region : nestedOp.getRegions()) {
+        for (Block &blk : region) {
+          if (&blk == nestedBlock)
+            return true;
+          // Recursively check nested blocks
+          if (containsBlock(blk, nestedBlock))
+            return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  bool inTheSameChildBlock(scf::ParallelOp parOp, Block *block1,
+                           Block *block2) const {
+    // Check if both blocks are the same block
+    if (block1 == block2)
+      return true;
+    // Iterate through child blocks of parOp's region
+    for (auto &childBlock : parOp.getRegion().getBlocks()) {
+      bool inBlock1 = containsBlock(childBlock, block1);
+      bool inBlock2 = containsBlock(childBlock, block2);
+      // If both blocks are in the same child block
+      if (inBlock1 && inBlock2)
+        return true;
+    }
+    return false;
+  }
+
+  Value getMemAddr(Operation *memOp) const {
+    Value memAddr;
+    TypeSwitch<Operation *>(memOp)
+        .Case<memref::LoadOp>([&](memref::LoadOp loadOp) {
+          assert(loadOp.getIndices().size() == 1);
+          memAddr = loadOp.getIndices().front();
+        })
+        .Case<memref::StoreOp>([&](memref::StoreOp storeOp) {
+          assert(storeOp.getIndices().size() == 1);
+          memAddr = storeOp.getIndices().front();
+        })
+        .Default([](Operation *) {
+          llvm_unreachable("Unhandled memory operation type");
+        });
+    return memAddr;
+  }
+
+  bool nonParallel(Block *block1, Block *block2) const {
+    if (auto parOp = closestCommonAncestorParOp(block1, block2)) {
+      return inTheSameChildBlock(*parOp, block1, block2);
+    }
+    return true;
+  }
+
+  // Computes the raw traces of a given memory use
+  SmallVector<SmallVector<Value>> computeRawTrace(Operation *memUser) const {
+    // blocks that can potentially be run in parallel
+    DenseSet<Block *> parallelBlocks{memUser->getBlock()};
+    std::set<Operation *> potentialOps;
+    Value memOperand;
+    TypeSwitch<Operation *>(memUser)
+        .Case<memref::LoadOp, memref::StoreOp>([&](auto memOp) {
+          memOperand = memOp.getMemRef();
+          for (auto *otherUser : memOperand.getUsers()) {
+            if (!nonParallel(memUser->getBlock(), otherUser->getBlock())) {
+              parallelBlocks.insert(otherUser->getBlock());
+              potentialOps.insert(otherUser);
+            }
+          }
+        })
+        .Default([](Operation *) {
+          llvm_unreachable("Unhandled memory operation type");
+        });
+    DenseSet<Block *> iSetVertices(parallelBlocks.begin(),
+                                   parallelBlocks.end());
+    DenseMap<Block *, DenseSet<Block *>> adjacencyMap;
+    for (Block *vertex : iSetVertices)
+      adjacencyMap[vertex] = DenseSet<Block *>();
+    for (auto it = iSetVertices.begin(); it != iSetVertices.end(); ++it) {
+      auto it2 = std::next(it);
+      for (; it2 != iSetVertices.end(); ++it2) {
+        if (nonParallel(*it, *it2)) {
+          adjacencyMap[*it].insert(*it2);
+          adjacencyMap[*it2].insert(*it);
+        }
+      }
+    }
+    std::unordered_map<Block *, std::set<Block *>> complementAdjacencyMap;
+    for (Block *vertex : iSetVertices) {
+      std::set<Block *> complementNeighbors(iSetVertices.begin(),
+                                            iSetVertices.end());
+      complementNeighbors.erase(vertex);
+      for (Block *neighbor : adjacencyMap[vertex]) {
+        complementNeighbors.erase(neighbor);
+      }
+      complementAdjacencyMap[vertex] = complementNeighbors;
+    }
+    calyx::CliqueGraph<Block *> cliqueGraph(complementAdjacencyMap);
+    std::vector<Block *> blocksVec(parallelBlocks.begin(),
+                                   parallelBlocks.end());
+    std::sort(blocksVec.begin(), blocksVec.end());
+    auto maximalISets =
+        maximalISetsCache.getMaximalISets(blocksVec, complementAdjacencyMap);
+    std::vector<std::vector<Operation *>> allCombs;
+    generateOpCombinations(maximalISets, potentialOps, memUser, allCombs);
+    // TODO: maybe add a boolean to raw traces to indicate if it will
+    // potentially modify the memory
+    auto rawTraces =
+        llvm::to_vector(llvm::map_range(allCombs, [&](const auto &innerSet) {
+          return llvm::to_vector(llvm::map_range(
+              innerSet, [&](Operation *op) { return getMemAddr(op); }));
+        }));
+    return rawTraces;
+  }
+
+  void generateOpCombinations(
+      const std::vector<std::set<Block *>> &maximalISets,
+      const std::set<Operation *> &potentialOps, Operation *memUser,
+      std::vector<std::vector<Operation *>> &allCombs) const {
+    Block *memUserBlock = memUser->getBlock();
+    // Step 1: Cache eligible operations per block
+    std::unordered_map<Block *, std::vector<Operation *>> eligibleOpsCache;
+    for (const auto &iset : maximalISets) {
+      for (Block *blk : iset) {
+        if (blk == memUserBlock)
+          continue; // Skip the block containing memUser
+        if (eligibleOpsCache.find(blk) == eligibleOpsCache.end()) {
+          std::vector<Operation *> ops;
+          for (auto &op : blk->getOperations()) {
+            if (potentialOps.find(&op) != potentialOps.end()) {
+              ops.push_back(&op);
+              break;
+            }
+          }
+          eligibleOpsCache[blk] = std::move(ops);
+        }
+      }
+    }
+    // Step 2: Iterate over each maximal independent set
+    for (const auto &iset : maximalISets) {
+      SmallVector<Operation *, 4> currentComb;
+      currentComb.push_back(memUser);
+      std::vector<std::vector<Operation *>> eligibleOpsPerBlock;
+      eligibleOpsPerBlock.reserve(iset.size());
+      bool skipSet = false;
+      for (Block *blk : iset) {
+        if (blk == memUserBlock)
+          continue;
+        auto it = eligibleOpsCache.find(blk);
+        if (it == eligibleOpsCache.end() || it->second.empty()) {
+          skipSet = true;
+          break;
+        }
+        eligibleOpsPerBlock.push_back(it->second);
+      }
+      if (skipSet)
+        continue;
+      // Iterative backtracking
+      size_t numBlocks = eligibleOpsPerBlock.size();
+      SmallVector<size_t, 4> indices(numBlocks, 0);
+      while (true) {
+        // Build the current combination
+        std::vector<Operation *> comb;
+        comb.push_back(memUser);
+        for (size_t i = 0; i < numBlocks; ++i) {
+          comb.push_back(eligibleOpsPerBlock[i][indices[i]]);
+        }
+        allCombs.emplace_back(std::move(comb));
+        size_t block = numBlocks;
+        while (block > 0) {
+          block--;
+          if (indices[block] + 1 < eligibleOpsPerBlock[block].size()) {
+            indices[block]++;
+            // Reset all subsequent indices
+            for (size_t j = block + 1; j < numBlocks; ++j) {
+              indices[j] = 0;
+            }
+            break;
+          }
+        }
+        if (block == 0 && indices[0] + 1 >= eligibleOpsPerBlock[0].size())
+          break; // All combinations are generated
+      }
+    }
+  }
+  // TODO: maybe we can turn `Trace` into a class
+  SmallVector<SmallVector<Value>>
+  initCompress(SmallVector<SmallVector<Value>> &unCompressedTraces) const {
+    // 1. Remove redundant info: memory access with the same address in the same
+    // step
+    SmallVector<SmallVector<Value>> redundantRemoved;
+    for (const auto &step : unCompressedTraces) {
+      DenseSet<int> seenAddr;
+      SmallVector<Value> simplifiedStep;
+      for (const auto addrVal : step) {
+        auto addrInt = evaluateIndex(addrVal);
+        if (seenAddr.insert(addrInt).second)
+          simplifiedStep.push_back(addrVal);
+      }
+      redundantRemoved.push_back(simplifiedStep);
+    }
+    // 2. Combine steps with identical access into a single step
+    std::set<std::set<int>> seenStep;
+    SmallVector<SmallVector<Value>> compressedTraces;
+    for (const auto &step : redundantRemoved) {
+      std::set<int> stepInt;
+      for (const auto addrVal : step) {
+        stepInt.insert(evaluateIndex(addrVal));
+      }
+      if (seenStep.insert(stepInt).second)
+        compressedTraces.push_back(step);
+    }
+    return compressedTraces;
+  }
+  SmallVector<std::string> generateAllMaskBits(int numMasks,
+                                               int addrSize) const {
+    SmallVector<std::string> result;
+    std::string bitmask(numMasks, '1');
+    bitmask.resize(addrSize, '0');
+    do {
+      result.push_back(bitmask);
+    } while (std::prev_permutation(bitmask.begin(), bitmask.end()));
+    return result;
+  }
+  // Evaluate the conflicts by counting the number of times when two addresses
+  // in the same step have the same mask ID
+  uint calculateConflicts(SmallVector<SmallVector<Value>> &compressedTraces,
+                          const std::string &maskBits) const {
+    uint numConflicts = 0;
+    for (const auto &traceInStep : compressedTraces) {
+      std::set<std::string> seenMaskIDs;
+      for (auto trace : traceInStep) {
+        auto sizedBinTrace = getSizedTrace(trace, maskBits.length());
+        std::string bitWiseAnd;
+        for (size_t i = 0; i < maskBits.length(); ++i) {
+          if (sizedBinTrace[i] == '1' && maskBits[i] == '1')
+            bitWiseAnd += '1';
+          else
+            bitWiseAnd += '0';
+        }
+        numConflicts += seenMaskIDs.insert(bitWiseAnd).second ? 0 : 1;
+      }
+    }
+    return numConflicts;
+  }
+  std::string extractMaskIDs(const std::string &sizedBinTrace,
+                             const std::string &maskBits) const {
+    assert(sizedBinTrace.size() == maskBits.size() &&
+           "sizedBinTrace and maskBits must be of the same length");
+    std::string maskedBits;
+    for (size_t i = 0; i < maskBits.length(); ++i) {
+      if (maskBits[i] == '1')
+        maskedBits += sizedBinTrace[i];
+    }
+    return maskedBits;
+  }
+  std::string findMasksBits(const uint availableBanks,
+                            SmallVector<SmallVector<Value>> &compressedTraces,
+                            Operation *memory) const {
+    // `nA` is the maximum number of memory accesses in all steps in the
+    // compressed memory trace
+    uint32_t nA = 0;
+    for (const auto &traceInStep : compressedTraces) {
+      nA = std::max(nA, static_cast<uint32_t>(traceInStep.size()));
+    }
+    ArrayRef<int64_t> memRefShape;
+    TypeSwitch<Operation *>(memory)
+        .Case<memref::AllocOp, memref::AllocaOp>([&](auto allocOp) {
+          memRefShape = allocOp.getMemref().getType().getShape();
+        })
+        .Case<memref::GetGlobalOp>([&](memref::GetGlobalOp getGlobalOp) {
+          memRefShape = getGlobalOp.getType().getShape();
+        })
+        .Default([](Operation *) {
+          llvm_unreachable("Unhandled memory operation type");
+        });
+    assert(memRefShape.size() == 1 &&
+           "memref type must be flattened before this pass");
+    auto addrSize = llvm::Log2_32_Ceil(memRefShape.front());
+    uint32_t minConflicts = std::numeric_limits<uint32_t>::max();
+    uint32_t minColors = std::numeric_limits<uint32_t>::max();
+    std::string bestMaskBits;
+    for (auto nBits = llvm::Log2_32_Ceil(nA); nBits <= addrSize; nBits++) {
+      SmallVector<std::string> allMaskBits =
+          generateAllMaskBits(nBits, addrSize);
+      for (const auto &maskBits : allMaskBits) {
+        auto numConflicts = calculateConflicts(compressedTraces, maskBits);
+        if (numConflicts < minConflicts) {
+          minConflicts = numConflicts;
+          minColors = std::numeric_limits<uint32_t>::max();
+        }
+        if (numConflicts == minConflicts) {
+          auto maskedCompressedTraces = applyMask(compressedTraces, maskBits);
+          calyx::ConflictGraph graph(maskedCompressedTraces);
+          auto numColors = graph.findMaxClique();
+          if (numColors < minColors) {
+            minColors = numColors;
+            bestMaskBits = maskBits;
+          }
+          if (numConflicts == 0 && numColors == minColors &&
+              minColors <= availableBanks)
+            return bestMaskBits;
+        }
+      }
+    }
+    report_fatal_error(llvm::Twine("Cannot find masks bits"));
+  }
+  SmallVector<SmallVector<std::string>> maskCompress(
+      const SmallVector<SmallVector<std::string>> &unCompressedMasks) const {
+    std::set<SmallVector<std::string>> seenMaskIDs;
+    SmallVector<SmallVector<std::string>> compressedMasks;
+    for (const auto &step : unCompressedMasks) {
+      if (seenMaskIDs.insert(step).second)
+        compressedMasks.push_back(step);
+    }
+    return compressedMasks;
+  }
+  std::string
+  bestFirstSearch(const SmallVector<SmallVector<Value>> &compressedTraces,
+                  const std::string &mask, uint32_t availableBanks) const {
+    size_t minColors = std::numeric_limits<size_t>::max();
+    int bestBitIndex = -1;
+    // Find indices where mask bits are '0'
+    std::vector<size_t> zeroBitsIndices;
+    for (size_t i = 0; i < mask.size(); ++i) {
+      if (mask[i] == '0') {
+        zeroBitsIndices.push_back(i);
+      }
+    }
+    // Iterate over each bit that is not currently in the mask
+    for (size_t bitIndex : zeroBitsIndices) {
+      // Create a new mask by adding the current bit
+      std::string tempMask = mask;
+      tempMask[bitIndex] = '1';
+      // Generate mask IDs for the new mask
+      auto rawMaskIDs = applyMask(compressedTraces, tempMask);
+      SmallVector<SmallVector<std::string>> compressedMasks =
+          maskCompress(rawMaskIDs);
+      calyx::ConflictGraph conflictGraph(compressedMasks);
+      size_t numColors = conflictGraph.findMaxClique();
+      // Check if the graph can be colored with available banks
+      if (numColors <= availableBanks) {
+        return tempMask;
+      }
+      if (numColors < minColors) {
+        minColors = numColors;
+        bestBitIndex = bitIndex;
+      }
+    }
+    if (bestBitIndex != -1) {
+      // Modify the original mask by adding the best bit
+      std::string modifiedMask = mask;
+      modifiedMask[bestBitIndex] = '1';
+      return modifiedMask;
+    }
+    // No improvement found; return the original mask
+    return mask;
+  }
+  std::string getSizedTrace(Value trace, uint len) const {
+    auto traceInt = evaluateIndex(trace);
+    std::bitset<32> bitsetTrace(traceInt);
+    auto binTrace = bitsetTrace.to_string();
+    return binTrace.substr(binTrace.size() - len);
+  }
+  SmallVector<SmallVector<std::string>>
+  applyMask(const SmallVector<SmallVector<Value>> &traces,
+            const std::string &mask) const {
+    SmallVector<SmallVector<std::string>> maskIDs;
+    for (const auto &step : traces) {
+      SmallVector<std::string> maskIDInStep;
+      for (const auto &trace : step) {
+        auto sizedBinTrace = getSizedTrace(trace, mask.length());
+        auto maskID = extractMaskIDs(sizedBinTrace, mask);
+        maskIDInStep.push_back(maskID);
+      }
+      maskIDs.push_back(maskIDInStep);
+    }
+    return maskIDs;
+  }
+  std::unordered_map<std::string, uint32_t>
+  mapMaskIDsToBanks(const uint32_t availableBanks,
+                    SmallVector<SmallVector<Value>> &compressedTraces,
+                    std::string &mask) const {
+    bool canBeColored = false;
+    std::unordered_map<std::string, uint32_t> maskToBanks;
+    do {
+      auto rawMaskIDs = applyMask(compressedTraces, mask);
+      SmallVector<SmallVector<std::string>> compressedMaskIDs =
+          maskCompress(rawMaskIDs);
+      calyx::ConflictGraph conflictGraph(compressedMaskIDs);
+      auto colorRes = conflictGraph.graphColoring(availableBanks);
+      canBeColored = colorRes.has_value();
+      if (canBeColored) {
+        maskToBanks = *colorRes;
+      }
+      auto isAllOnes = [](const std::string &binaryString) -> bool {
+        return std::all_of(binaryString.begin(), binaryString.end(),
+                           [](char c) { return c == '1'; });
+      };
+      if (isAllOnes(mask))
+        break;
+      if (!canBeColored)
+        mask = bestFirstSearch(compressedTraces, mask, availableBanks);
+    } while (!canBeColored);
+    assert(!maskToBanks.empty() &&
+           "The number of vailable banks is not sufficient for banking");
+    return maskToBanks;
+  }
+  mutable DenseMap<Operation *, DenseMap<Value, uint>> memoryToBankIDs;
+  uint getBankOfMemAccess(Operation *memory, Value accessIndex) const {
+    return memoryToBankIDs[memory][accessIndex];
+  }
+  mutable DenseMap<Operation *, SmallVector<Operation *>> memoryToBanks;
+  SmallVector<Operation *> getBanksForMem(Operation *memory) const {
+    return memoryToBanks[memory];
+  }
+  Value getBankForMemAndID(Operation *memory, uint bankID) const {
+    auto *op = memoryToBanks[memory][bankID];
+    return TypeSwitch<Operation *, Value>(op)
+        .Case<memref::AllocOp, memref::AllocaOp, memref::GetGlobalOp>(
+            [](auto memRefOp) { return memRefOp.getResult(); })
+        .Default([](Operation *op) -> Value {
+          op->emitError("Unsupported memory operation type");
+          return nullptr;
+        });
+  }
+  void setBanksForMem(Operation *memory,
+                      SmallVector<Operation *> &allocatedBanks) const {
+    memoryToBanks[memory] = allocatedBanks;
+  }
+  BlockArgument getCalleeBlockArg(FuncOp callerFnOp, FuncOp calleeFnOp,
+                                  Value opRes) const {
+    bool foundCalleeBlockArg = false;
+    BlockArgument foundBlockArg;
+    callerFnOp.walk([&](Operation *op) {
+      if (auto callOp = dyn_cast<CallOp>(op)) {
+        if (callOp.getCallee() == calleeFnOp.getName()) {
+          assert(callOp.getOperandTypes() ==
+                     calleeFnOp.getBody().getArgumentTypes() &&
+                 "function call operand types must match callee's block "
+                 "argument types");
+          if (llvm::find(callOp.getOperands(), opRes) !=
+              callOp.getOperands().end()) {
+            auto pos = llvm::find(callOp.getOperands(), opRes) -
+                       callOp.getOperands().begin();
+            foundBlockArg = calleeFnOp.getArgument(pos);
+            foundCalleeBlockArg = true;
+            return WalkResult::interrupt();
+          }
+        }
+      }
+      return WalkResult::advance();
+    });
+    assert(foundCalleeBlockArg &&
+           "must have found the corresponding block arg");
+    return foundBlockArg;
+  }
+  // Given `funcOp`, get all `step`s that `memory` might access in parallel,
+  // then compute the addresses-to-banks mapping
+  void traceBankAlgo(FuncOp funcOp, Operation *memory) const {
+    // Raw trace of a given memory at all steps
+    Value memRes;
+    MemRefType memTy;
+    TypeSwitch<Operation *>(memory)
+        .Case<memref::AllocOp, memref::AllocaOp, memref::GetGlobalOp>(
+            [&](auto memRefOp) {
+              memRes = memRefOp.getResult();
+              memTy = cast<MemRefType>(memRefOp.getType());
+            })
+        .Default([](Operation *) {
+          llvm_unreachable("Unhandled memory operation type");
+        });
+    // For each memory use, get all access indices including this use
+    // and the access indices to `memory` if current block and
+    // that block are both descendant of the same scf::parallelOp
+    if (!isDefinedInsideRegion(memRes, &funcOp.getRegion())) {
+      auto callerFnOp = memRes.getDefiningOp()->getParentOfType<FuncOp>();
+      memRes = getCalleeBlockArg(callerFnOp, funcOp, memRes);
+    }
+    // `rawTraces` store the raw trace for each "step" of the given `memory`.
+    // A "step" here is a set of blocks that are the descendant of
+    // the same scf::parallelOp b/c the partial evaluation step
+    // separate parallel operations to multiple blocks based on
+    // the induction variables.
+    // A memory "trace" is a sequence of addresses that are grouped into steps.
+    SmallVector<SmallVector<Value>> rawTraces;
+    for (auto *user : memRes.getUsers()) {
+      // For each `use` of the allocated `memory` result,
+      // compute its trace
+      auto rawTrace = computeRawTrace(user);
+      rawTraces.append(rawTrace.begin(), rawTrace.end());
+    }
+    auto compressedTraces = initCompress(rawTraces);
+    auto *jsonObj = availBanksJsonValue.getAsObject();
+    auto *banks = jsonObj->getArray("banks");
+    uint availableBanks = 0;
+    if (auto bankOpt = (*banks)[memNum.at(memory)].getAsInteger())
+      availableBanks = *bankOpt;
+    else {
+      std::string dumpStr;
+      llvm::raw_string_ostream dumpStream(dumpStr);
+      memory->print(dumpStream);
+      report_fatal_error(
+          llvm::Twine(
+              "Cannot find the number of banks associated with memory") +
+          dumpStream.str());
+    }
+    auto masksBits = findMasksBits(availableBanks, compressedTraces, memory);
+    std::unordered_map<std::string, uint32_t> maskIDsToBanks =
+        mapMaskIDsToBanks(availableBanks, compressedTraces, masksBits);
+    SmallVector<SmallVector<uint>> accessIndicesToBanks;
+    for (const auto &step : rawTraces) {
+      SmallVector<uint> banksInStep;
+      for (auto trace : step) {
+        auto sizedBinTrace = getSizedTrace(trace, masksBits.length());
+        auto maskID = extractMaskIDs(sizedBinTrace, masksBits);
+        banksInStep.push_back(maskIDsToBanks[maskID]);
+      }
+      accessIndicesToBanks.push_back(banksInStep);
+    }
+    for (uint bankCnt = 0; bankCnt < availableBanks; ++bankCnt) {
+      for (size_t i = 0; i < accessIndicesToBanks.size(); ++i) {
+        const auto &currentAccessIndices = accessIndicesToBanks[i];
+        const auto &currentRawTraces = rawTraces[i];
+        for (size_t j = 0; j < currentAccessIndices.size(); ++j) {
+          if (currentAccessIndices[j] != bankCnt)
+            continue;
+          Value trace = currentRawTraces[j];
+          uint &assignedBank = memoryToBankIDs[memory][trace];
+          if (assignedBank == 0)
+            assignedBank = bankCnt;
+          else
+            assert(assignedBank == bankCnt && "Bank ID mismatch detected.");
+        }
+      }
+    }
+  }
+};
+
 /// Builds a control schedule by traversing the CFG of the function and
 /// associating this with the previously created groups.
 /// For simplicity, the generated control flow is expanded for all possible
@@ -1466,7 +2567,8 @@ private:
         getState<ComponentLoweringState>().getBlockScheduleables(block);
     auto loc = block->front().getLoc();
 
-    if (compBlockScheduleables.size() > 1) {
+    if (compBlockScheduleables.size() > 1 &&
+        !isa<scf::ParallelOp>(block->getParentOp())) {
       auto seqOp = rewriter.create<calyx::SeqOp>(loc);
       parentCtrlBlock = seqOp.getBodyBlock();
     }
@@ -1501,6 +2603,19 @@ private:
         rewriter.create<calyx::EnableOp>(whileLatchGroup.getLoc(),
                                          whileLatchGroup.getName());
 
+        if (res.failed())
+          return res;
+      } else if (auto *parSchedPtr = std::get_if<ParScheduleable>(&group)) {
+        auto parOp = parSchedPtr->parOp;
+        auto calyxParOp = rewriter.create<calyx::ParOp>(parOp.getLoc());
+        LogicalResult res = LogicalResult::success();
+        for (auto &innerBlock : parOp.getRegion().getBlocks()) {
+          rewriter.setInsertionPointToEnd(calyxParOp.getBodyBlock());
+          auto seqOp = rewriter.create<calyx::SeqOp>(parOp.getLoc());
+          rewriter.setInsertionPointToEnd(seqOp.getBodyBlock());
+          res = scheduleBasicBlock(rewriter, path, seqOp.getBodyBlock(),
+                                   &innerBlock);
+        }
         if (res.failed())
           return res;
       } else if (auto *forSchedPtr = std::get_if<ForScheduleable>(&group);
@@ -1949,6 +3064,9 @@ void SCFToCalyxPass::runOnOperation() {
   DenseMap<FuncOp, calyx::ComponentOp> funcMap;
   SmallVector<LoweringPattern, 8> loweringPatterns;
   calyx::PatternApplicationState patternState;
+
+  addOncePattern<BuildParGroups>(loweringPatterns, patternState, funcMap,
+                                 *loweringState, numAvailBanksOpt);
 
   /// Creates a new Calyx component for each FuncOp in the inpurt module.
   addOncePattern<FuncOpConversion>(loweringPatterns, patternState, funcMap,

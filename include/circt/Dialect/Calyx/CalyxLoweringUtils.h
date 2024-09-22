@@ -81,6 +81,15 @@ void buildAssignmentsForRegisterWrite(OpBuilder &builder,
                                       calyx::ComponentOp componentOp,
                                       calyx::RegisterOp &reg, Value inputValue);
 
+/// Update `funcOp`'s type by appending `newArgs` to the function
+FunctionType updateFnType(mlir::func::FuncOp funcOp,
+                          SmallVector<Value> &newArgs);
+
+/// Update each callOp in `moduleOp` that has `callee` as the callee by
+/// appending `newOperands`
+void updateCallSites(ModuleOp moduleOp, mlir::func::FuncOp callee,
+                     SmallVector<Value> &newOperands);
+
 // A structure representing a set of ports which act as a memory interface for
 // external memories.
 struct MemoryPortsImpl {
@@ -752,6 +761,122 @@ class BuildCallInstance : public calyx::FuncOpPartialLoweringPattern {
   partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
                            PatternRewriter &rewriter) const override;
   ComponentOp getCallComponent(mlir::func::CallOp callOp) const;
+};
+
+template <typename VertexType>
+class CliqueGraph {
+public:
+  CliqueGraph(
+      const std::unordered_map<VertexType, std::set<VertexType>> &adjacencyList)
+      : adjList(adjacencyList) {
+    for (const auto &entry : adjList) {
+      vertices.insert(entry.first);
+      vertices.insert(entry.second.begin(), entry.second.end());
+    }
+  }
+  std::vector<std::set<VertexType>> findAllMaximalCliques() const;
+
+private:
+  const std::unordered_map<VertexType, std::set<VertexType>> &adjList;
+  std::set<VertexType> vertices;
+  // Bron-Kerbosch algorithm for maximal cliques
+  void bronKerbosch(std::set<VertexType> &currClique,
+                    std::set<VertexType> &candidates,
+                    std::set<VertexType> &alreadyProcessed,
+                    std::vector<std::set<VertexType>> &maximalCliques) const;
+  const std::set<VertexType> &getNeighbors(const VertexType &vertex) const {
+    auto it = adjList.find(vertex);
+    if (it != adjList.end()) {
+      return it->second;
+    }
+    static const std::set<VertexType> emptySet;
+    return emptySet;
+  }
+};
+
+template <typename VertexType>
+void CliqueGraph<VertexType>::bronKerbosch(
+    std::set<VertexType> &currClique, std::set<VertexType> &candidates,
+    std::set<VertexType> &alreadyProcessed,
+    std::vector<std::set<VertexType>> &maximalCliques) const {
+  if (candidates.empty() && alreadyProcessed.empty()) {
+    maximalCliques.push_back(currClique);
+    return;
+  }
+  // Choose a pivot vertex u from P ∪ X
+  std::set<VertexType> unionPX = candidates;
+  unionPX.insert(alreadyProcessed.begin(), alreadyProcessed.end());
+  if (unionPX.empty())
+    return;
+  // Simple pivot selection: choose an arbitrary vertex
+  const VertexType &u = *unionPX.begin();
+  // Neighbors of u
+  const auto &neighborsU = getNeighbors(u);
+  // P \ N(u)
+  std::set<VertexType> pWithoutNeighbors;
+  std::set_difference(
+      candidates.begin(), candidates.end(), neighborsU.begin(),
+      neighborsU.end(),
+      std::inserter(pWithoutNeighbors, pWithoutNeighbors.begin()));
+  for (const VertexType &v : pWithoutNeighbors) {
+    // rNew = R \union {v}
+    std::set<VertexType> rNew = currClique;
+    rNew.insert(v);
+    const auto &neighborsV = getNeighbors(v);
+    // pNew = P \intersect N(v)
+    std::set<VertexType> pNew;
+    std::set_intersection(candidates.begin(), candidates.end(),
+                          neighborsV.begin(), neighborsV.end(),
+                          std::inserter(pNew, pNew.begin()));
+    // xNew = X \intersect N(v)
+    std::set<VertexType> xNew;
+    std::set_intersection(alreadyProcessed.begin(), alreadyProcessed.end(),
+                          neighborsV.begin(), neighborsV.end(),
+                          std::inserter(xNew, xNew.begin()));
+    bronKerbosch(rNew, pNew, xNew, maximalCliques);
+    candidates.erase(v);
+    alreadyProcessed.insert(v);
+  }
+}
+
+template <typename VertexType>
+std::vector<std::set<VertexType>>
+CliqueGraph<VertexType>::findAllMaximalCliques() const {
+  std::set<VertexType> currClique;
+  std::set<VertexType> candidates = vertices;
+  std::set<VertexType> alreadyProcessed;
+  std::vector<std::set<VertexType>> maximalCliques;
+  bronKerbosch(currClique, candidates, alreadyProcessed, maximalCliques);
+  return maximalCliques;
+}
+
+class ConflictGraph {
+public:
+  void addEdge(const std::string &id1, const std::string &id2);
+  void printGraph() const;
+  size_t findMaxClique() const;
+  ConflictGraph(const SmallVector<SmallVector<std::string>> &compressedTrace);
+  bool graphColoringUtil(const uint32_t m,
+                         std::unordered_map<std::string, uint32_t> &color,
+                         std::set<std::string>::const_iterator it) const;
+  std::optional<std::unordered_map<std::string, uint32_t>>
+  graphColoring(const uint32_t m) const;
+
+private:
+  struct PairHash {
+    template <class T1, class T2>
+    std::size_t operator()(const std::pair<T1, T2> &pair) const {
+      return std::hash<T1>()(pair.first) ^ std::hash<T2>()(pair.second);
+    }
+  };
+  std::set<std::string> vertices;
+  std::unordered_map<std::string, std::set<std::string>> adjList;
+  std::unordered_map<std::pair<std::string, std::string>, uint, PairHash>
+      edgeWeights;
+  void bronKerbosch(std::set<std::string> &currClique,
+                    std::set<std::string> &candidates,
+                    std::set<std::string> &alreadyProcessed,
+                    SmallVector<std::set<std::string>> &maximalCliques) const;
 };
 
 } // namespace calyx

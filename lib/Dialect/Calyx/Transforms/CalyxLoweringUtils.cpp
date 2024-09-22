@@ -156,6 +156,37 @@ void buildAssignmentsForRegisterWrite(OpBuilder &builder,
   builder.create<calyx::GroupDoneOp>(loc, reg.getDone());
 }
 
+FunctionType updateFnType(mlir::func::FuncOp funcOp,
+                          SmallVector<Value> &newArgs) {
+  SmallVector<Type, 4> updatedCurFnArgTys(funcOp.getArgumentTypes());
+  SmallVector<Type, 4> newArgTys;
+  for (auto arg : newArgs) {
+    funcOp.getBody().addArgument(arg.getType(), funcOp.getLoc());
+    newArgTys.push_back(arg.getType());
+  }
+  updatedCurFnArgTys.append(newArgTys.begin(), newArgTys.end());
+  return FunctionType::get(funcOp.getContext(), updatedCurFnArgTys,
+                           funcOp.getResultTypes());
+}
+
+void updateCallSites(ModuleOp moduleOp, func::FuncOp callee,
+                     SmallVector<Value> &newOperands) {
+  moduleOp.walk([&](func::FuncOp otherFn) {
+    otherFn.walk([&](mlir::Operation *op) {
+      if (auto callOp = dyn_cast<func::CallOp>(op)) {
+        if (callOp.getCallee() == callee.getName()) {
+          SmallVector<Value> callerOperands(callOp.getOperands());
+          callerOperands.append(newOperands);
+          callOp->setOperands(callerOperands);
+          assert(callOp.getNumOperands() == callee.getNumArguments() &&
+                 "number of operands and block arguments should match "
+                 "after appending new memory banks");
+        }
+      }
+    });
+  });
+};
+
 //===----------------------------------------------------------------------===//
 // MemoryInterface
 //===----------------------------------------------------------------------===//
@@ -827,6 +858,90 @@ BuildCallInstance::getCallComponent(mlir::func::CallOp callOp) const {
       return componentOp;
   }
   return nullptr;
+}
+
+ConflictGraph::ConflictGraph(
+    const SmallVector<SmallVector<std::string>> &compressedTrace) {
+  for (const auto &step : compressedTrace) {
+    std::unordered_set<std::string> seenMaskIDs;
+    for (const auto &maskID : step) {
+      vertices.insert(maskID);
+      for (const auto &otherID : seenMaskIDs)
+        addEdge(maskID, otherID);
+      seenMaskIDs.insert(maskID);
+    }
+  }
+}
+bool ConflictGraph::graphColoringUtil(
+    const uint32_t m, std::unordered_map<std::string, uint32_t> &color,
+    std::set<std::string>::const_iterator it) const {
+  if (it == vertices.end()) {
+    return true;
+  }
+  const std::string &node = *it;
+  for (size_t c = 1; c <= m; c++) {
+    if (std::all_of(adjList.at(node).begin(), adjList.at(node).end(),
+                    [&](const std::string &adjNode) {
+                      return color.at(adjNode) != c;
+                    })) {
+      color[node] = c;
+      auto nextIt = std::next(it);
+      if (graphColoringUtil(m, color, nextIt)) {
+        return true;
+      }
+      // If assigning color c doesn't lead to a solution, backtrack
+      color[node] = 0;
+    }
+  }
+  return false;
+}
+std::optional<std::unordered_map<std::string, uint32_t>>
+ConflictGraph::graphColoring(const uint32_t m) const {
+  std::unordered_map<std::string, uint32_t> color;
+  for (const auto &vertex : vertices) {
+    color[vertex] = 0;
+  }
+  if (graphColoringUtil(m, color, vertices.begin())) {
+    return std::make_optional(color);
+  }
+  return std::nullopt;
+}
+void ConflictGraph::addEdge(const std::string &id1, const std::string &id2) {
+  if (id1 == id2)
+    return;
+  adjList[id1].insert(id2);
+  adjList[id2].insert(id1);
+  // Create a consistent ordering for the edge
+  auto edgeKey = std::make_pair(std::min(id1, id2), std::max(id1, id2));
+  if (edgeWeights.find(edgeKey) != edgeWeights.end())
+    edgeWeights[edgeKey]++;
+  else
+    edgeWeights[edgeKey] = 1;
+}
+void ConflictGraph::printGraph() const {
+  llvm::errs() << "Conflict Graph:\n";
+  for (const auto &node : adjList) {
+    llvm::errs() << "Mask ID: " << node.first << " -> [";
+    for (const auto &adjNode : node.second) {
+      llvm::errs() << adjNode << " ";
+    }
+    llvm::errs() << "]\n";
+  }
+  llvm::errs() << "Edge Weights:\n";
+  for (const auto &edge : edgeWeights) {
+    llvm::errs() << "Edge: (" << edge.first.first << ", " << edge.first.second
+                 << ") Weight: " << edge.second << "\n";
+  }
+}
+size_t ConflictGraph::findMaxClique() const {
+  CliqueGraph<std::string> cliqueGraph(adjList);
+  auto maximalCliques = cliqueGraph.findAllMaximalCliques();
+  auto maxSetIt = std::max_element(
+      maximalCliques.begin(), maximalCliques.end(),
+      [](const std::set<std::string> &a, const std::set<std::string> &b) {
+        return a.size() < b.size();
+      });
+  return maxSetIt != maximalCliques.end() ? maxSetIt->size() : 0;
 }
 
 } // namespace calyx
