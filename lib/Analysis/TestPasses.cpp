@@ -12,7 +12,9 @@
 
 #include "circt/Analysis/DebugAnalysis.h"
 #include "circt/Analysis/DependenceAnalysis.h"
+#include "circt/Analysis/FIRRTLInstanceInfo.h"
 #include "circt/Analysis/SchedulingAnalysis.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Scheduling/Problems.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
@@ -21,6 +23,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/Support/Debug.h"
 
 using namespace mlir;
@@ -177,6 +180,55 @@ void InferTopModulePass::runOnOperation() {
 }
 
 //===----------------------------------------------------------------------===//
+// FIRRTL Instance Info
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct FIRRTLInstanceInfoPass
+    : public PassWrapper<FIRRTLInstanceInfoPass,
+                         OperationPass<firrtl::CircuitOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(FIRRTLInstanceInfoPass)
+
+  void runOnOperation() override;
+  StringRef getArgument() const override { return "test-firrtl-instance-info"; }
+  StringRef getDescription() const override {
+    return "Run firrtl::InstanceInfo analysis and show the results.  This pass "
+           "is intended to be used for testing purposes only.";
+  }
+};
+} // namespace
+
+static llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const bool a) {
+  if (a)
+    return os << "true";
+  return os << "false";
+}
+
+static void printInfo(firrtl::FModuleOp op, firrtl::InstanceInfo &iInfo) {
+  OpPrintingFlags flags;
+  flags.skipRegions();
+  llvm::errs() << "  - operation: ";
+  op->print(llvm::errs(), flags);
+  llvm::errs() << "\n"
+               << "    isDut: " << iInfo.isDut(op) << "\n"
+               << "    atLeastOneInstanceUnderDut: "
+               << iInfo.atLeastOneInstanceUnderDut(op) << "\n"
+               << "    allInstancesUnderDut: " << iInfo.allInstancesUnderDut(op)
+               << "\n"
+               << "    atLeastOneInstanceUnderLayer: "
+               << iInfo.atLeastOneInstanceUnderLayer(op) << "\n"
+               << "    allInstancesUnderLayer: "
+               << iInfo.allInstancesUnderLayer(op) << "\n";
+}
+
+void FIRRTLInstanceInfoPass::runOnOperation() {
+  auto &iInfo = getAnalysis<firrtl::InstanceInfo>();
+
+  for (auto op : getOperation().getBodyBlock()->getOps<firrtl::FModuleOp>())
+    printInfo(op, iInfo);
+}
+
+//===----------------------------------------------------------------------===//
 // Pass registration
 //===----------------------------------------------------------------------===//
 
@@ -194,6 +246,9 @@ void registerAnalysisTestPasses() {
   });
   registerPass([]() -> std::unique_ptr<Pass> {
     return std::make_unique<InferTopModulePass>();
+  });
+  registerPass([]() -> std::unique_ptr<Pass> {
+    return std::make_unique<FIRRTLInstanceInfoPass>();
   });
 }
 } // namespace test
