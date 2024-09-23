@@ -52,12 +52,19 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
   for (auto *root : iGraph) {
     for (auto *modIt : llvm::inverse_post_order_ext(root, visited)) {
       auto moduleOp = modIt->getModule();
+      ModuleAttributes &attributes = moduleAttributes[moduleOp];
 
-      // Set baseline attributes for this module.
-      ModuleAttributes attributes(
-          {/*isDut=*/AnnotationSet(moduleOp).hasAnnotation(dutAnnoClass)});
+      // Set isDut.
+      attributes.isDut = AnnotationSet(moduleOp).hasAnnotation(dutAnnoClass);
 
-      // Merge in attributes from instantiations one-by-one.
+      // If the module is not instantiated, then set attributes and early exit.
+      if (modIt->noUses()) {
+        attributes.underDut.mergeIn({LatticeValue::Constant, false});
+        attributes.underLayer.mergeIn({LatticeValue::Constant, false});
+        continue;
+      }
+
+      // Merge in attributes from modules that instantiate this module.
       for (auto *useIt : modIt->uses()) {
         auto parentAttrs =
             moduleAttributes.find(useIt->getParent()->getModule())->getSecond();
@@ -72,15 +79,6 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
         else
           attributes.underLayer.mergeIn(parentAttrs.underLayer);
       }
-
-      // If attributes are unknown at this point, set default values.
-      if (attributes.underDut.kind == LatticeValue::Unknown)
-        attributes.underDut.mergeIn({LatticeValue::Constant, false});
-      if (attributes.underLayer.kind == LatticeValue::Unknown)
-        attributes.underLayer.mergeIn({LatticeValue::Constant, false});
-
-      // Record the attributes for the module.
-      moduleAttributes[moduleOp] = attributes;
     }
   }
 
