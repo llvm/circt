@@ -626,7 +626,8 @@ void DesequentializationPass::runOnProcess(llhd::ProcessOp procOp) const {
       for (auto trigger : triggers) {
         llvm::dbgs() << "  - Trigger\n";
         for (auto [clk, kind] : llvm::zip(trigger.clocks, trigger.kinds))
-          llvm::dbgs() << "    - " << kind << " " << "clock: " << clk << "\n";
+          llvm::dbgs() << "    - " << kind << " "
+                       << "clock: " << clk << "\n";
 
         if (trigger.enable)
           llvm::dbgs() << "      with enable: " << trigger.enable << "\n";
