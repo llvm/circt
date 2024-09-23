@@ -175,15 +175,16 @@ struct VerifBoundedModelCheckingOpConversion
   using OpConversionPattern<verif::BoundedModelCheckingOp>::OpConversionPattern;
 
   VerifBoundedModelCheckingOpConversion(TypeConverter &converter,
-                                        MLIRContext *context, Namespace &names)
-      : OpConversionPattern(converter, context), names(names) {}
+                                        MLIRContext *context, Namespace &names,
+                                        SymbolTable &symbolTable)
+      : OpConversionPattern(converter, context), names(names),
+        symbolTable(symbolTable) {}
 
   LogicalResult
   matchAndRewrite(verif::BoundedModelCheckingOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Check there is exactly one assertion
     SmallVector<mlir::Operation *> worklist;
-    SymbolTable symbolTable(op->getParentOfType<ModuleOp>());
     int numAssertions = 0;
     op.walk([&](Operation *curOp) {
       if (isa<verif::AssertOp>(curOp))
@@ -194,13 +195,14 @@ struct VerifBoundedModelCheckingOpConversion
     // TODO: probably negligible compared to actual model checking time but
     // cacheing the assertion count of modules would speed this up
     for (auto *module : worklist) {
-      auto moduleAssertions = module->getRegion(0).getOps<verif::AssertOp>();
-      numAssertions +=
-          std::distance(moduleAssertions.begin(), moduleAssertions.end());
+      module->walk([&](Operation *curOp) {
+        if (isa<verif::AssertOp>(curOp))
+          numAssertions++;
+        if (auto inst = dyn_cast<InstanceOp>(curOp))
+          worklist.push_back(symbolTable.lookup(inst.getModuleName()));
+      });
       if (numAssertions > 1)
         break;
-      for (auto instance : module->getBlock()->getOps<hw::InstanceOp>())
-        worklist.push_back(symbolTable.lookup(instance.getModuleName()));
     }
     if (numAssertions > 1)
       return op->emitError("designs with multiple assertions are not yet "
@@ -388,6 +390,7 @@ struct VerifBoundedModelCheckingOpConversion
   }
 
   Namespace &names;
+  SymbolTable &symbolTable;
 };
 
 } // namespace
@@ -405,12 +408,13 @@ struct ConvertVerifToSMTPass
 
 void circt::populateVerifToSMTConversionPatterns(TypeConverter &converter,
                                                  RewritePatternSet &patterns,
-                                                 Namespace &names) {
+                                                 Namespace &names,
+                                                 SymbolTable &symbolTable) {
   patterns.add<VerifAssertOpConversion, VerifAssumeOpConversion,
                LogicEquivalenceCheckingOpConversion>(converter,
                                                      patterns.getContext());
   patterns.add<VerifBoundedModelCheckingOpConversion>(
-      converter, patterns.getContext(), names);
+      converter, patterns.getContext(), names, symbolTable);
 }
 
 void ConvertVerifToSMTPass::runOnOperation() {
@@ -428,7 +432,9 @@ void ConvertVerifToSMTPass::runOnOperation() {
   symCache.addDefinitions(getOperation());
   Namespace names;
   names.add(symCache);
-  populateVerifToSMTConversionPatterns(converter, patterns, names);
+  SymbolTable symbolTable(getOperation());
+
+  populateVerifToSMTConversionPatterns(converter, patterns, names, symbolTable);
 
   if (failed(mlir::applyPartialConversion(getOperation(), target,
                                           std::move(patterns))))
