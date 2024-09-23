@@ -259,8 +259,13 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
 
   auto fieldNames = cls.getFieldNames();
   auto operands = cls.getFieldsOp()->getOperands();
-  for (auto [name, value] : llvm::zip(fieldNames, operands)) {
-    Location loc = value.getLoc();
+  auto fieldsLoc = cls.getFieldsOp()->getLoc();
+  for (size_t i = 0; i < fieldNames.size(); ++i) {
+    auto name = fieldNames[i];
+    auto value = operands[i];
+    Location loc = fieldsLoc;
+    if (auto locs = dyn_cast<FusedLoc>(loc))
+      loc = locs.getLocations()[i];
     FailureOr<evaluator::EvaluatorValuePtr> result =
         evaluateValue(value, actualParams, loc);
     if (failed(result))
