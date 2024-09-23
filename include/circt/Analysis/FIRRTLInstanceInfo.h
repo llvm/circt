@@ -28,29 +28,50 @@ class InstanceInfo {
 public:
   explicit InstanceInfo(Operation *op, mlir::AnalysisManager &am);
 
-  /// A lattice value recording whether or not a property is true for a set of
-  /// operations.
-  struct LatticeValue {
+  /// A lattice value to record the value of a property.
+  class LatticeValue {
+
+  public:
     enum Kind {
-      // Indicates that we have no information about this instance.  If the
-      // circuit has been completely analyzed, then this is equivalent to the
-      // property holds for zero instances.
+      // Indicates that we have no information about this property.  Properties
+      // start in this state and then are changed to Constant or Mixed.
       Unknown = 0,
-      // Indicates that the property has a true or false value for all instances
-      // observed.
+
+      // Indicates that the property has a true or false value.
       Constant,
-      // Indicates that the property holds for some, but not all instances.
+
+      // Indicates that the property was found to be both true and false.
       Mixed
     };
 
+  private:
     /// Whether or not the property holds.
     Kind kind = Kind::Unknown;
 
     /// The value of the property if `kind` is `Constant`.
-    bool constant = false;
+    bool value = false;
+
+  public:
+    /// Return true if the kind is Unknown.
+    bool isUnknown() const;
+
+    /// Return true if the kind is Constant.
+    bool isConstant() const;
+
+    /// Return true if the kind is Mixed.
+    bool isMixed() const;
+
+    /// Return the value.  This should only be used if the kind is Constant.
+    bool getConstant() const;
+
+    /// Set this LatticeValue to a constant.
+    void markConstant(bool constant);
 
     /// Merge attributes from another LatticeValue into this one.
     void mergeIn(LatticeValue that);
+
+    /// Merge a constant value into this one.
+    void mergeIn(bool value);
   };
 
   struct ModuleAttributes {
@@ -59,10 +80,10 @@ public:
     bool isDut;
 
     /// Indicates if this module is instantiated under the design-under-test.
-    InstanceInfo::LatticeValue underDut = {LatticeValue::Kind::Unknown};
+    InstanceInfo::LatticeValue underDut;
 
     /// Indicates if this module is instantiated under a layer.
-    InstanceInfo::LatticeValue underLayer = {LatticeValue::Kind::Unknown};
+    InstanceInfo::LatticeValue underLayer;
   };
 
   /// Return true if this module is the design-under-test.
@@ -97,15 +118,11 @@ private:
 #ifndef NDEBUG
 inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
                                      const InstanceInfo::LatticeValue &value) {
-  switch (value.kind) {
-  case InstanceInfo::LatticeValue::Kind::Unknown:
+  if (value.isUnknown())
     return os << "unknown";
-  case InstanceInfo::LatticeValue::Kind::Constant:
-    return os << "constant<" << (value.constant ? "true" : "false") << ">";
-  case InstanceInfo::LatticeValue::Kind::Mixed:
-    return os << "mixed";
-  }
-  return os;
+  if (value.isConstant())
+    return os << "constant<" << (value.getConstant() ? "true" : "false") << ">";
+  return os << "mixed";
 }
 #endif
 

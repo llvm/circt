@@ -28,18 +28,40 @@
 using namespace circt;
 using namespace firrtl;
 
+bool InstanceInfo::LatticeValue::isUnknown() const { return kind == Unknown; }
+
+bool InstanceInfo::LatticeValue::isConstant() const { return kind == Constant; }
+
+bool InstanceInfo::LatticeValue::isMixed() const { return kind == Mixed; }
+
+bool InstanceInfo::LatticeValue::getConstant() const {
+  assert(isConstant());
+  return value;
+}
+
+void InstanceInfo::LatticeValue::markConstant(bool constant) {
+  kind = Constant;
+  value = constant;
+}
+
 void InstanceInfo::LatticeValue::mergeIn(LatticeValue that) {
   if (kind > that.kind)
     return;
 
   if (kind < that.kind) {
     kind = that.kind;
-    constant = that.constant;
+    value = that.value;
     return;
   }
 
-  if (kind == Constant && constant != that.constant)
+  if (isConstant() && getConstant() != that.value)
     kind = Mixed;
+}
+
+void InstanceInfo::LatticeValue::mergeIn(bool value) {
+  LatticeValue latticeValue;
+  latticeValue.markConstant(value);
+  mergeIn(latticeValue);
 }
 
 InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
@@ -58,8 +80,8 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
 
     // If the module is not instantiated, then set attributes and early exit.
     if (modIt->noUses()) {
-      attributes.underDut.mergeIn({LatticeValue::Constant, false});
-      attributes.underLayer.mergeIn({LatticeValue::Constant, false});
+      attributes.underDut.markConstant(false);
+      attributes.underLayer.markConstant(false);
       continue;
     }
 
@@ -69,12 +91,12 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
           moduleAttributes.find(useIt->getParent()->getModule())->getSecond();
       // Merge underDut.
       if (parentAttrs.isDut || attributes.isDut)
-        attributes.underDut.mergeIn({LatticeValue::Constant, true});
+        attributes.underDut.mergeIn(true);
       else
         attributes.underDut.mergeIn(parentAttrs.underDut);
       // Merge underLayer.
       if (useIt->getInstance()->getParentOfType<LayerBlockOp>())
-        attributes.underLayer.mergeIn({LatticeValue::Constant, true});
+        attributes.underLayer.mergeIn(true);
       else
         attributes.underLayer.mergeIn(parentAttrs.underLayer);
     }
@@ -102,21 +124,21 @@ InstanceInfo::getModuleAttributes(FModuleOp op) {
 bool InstanceInfo::isDut(FModuleOp op) { return getModuleAttributes(op).isDut; }
 
 bool InstanceInfo::atLeastOneInstanceUnderDut(FModuleOp op) {
-  return getModuleAttributes(op).underDut.kind == LatticeValue::Mixed ||
-         allInstancesUnderDut(op);
+  auto underDut = getModuleAttributes(op).underDut;
+  return underDut.isMixed() || allInstancesUnderDut(op);
 }
 
 bool InstanceInfo::allInstancesUnderDut(FModuleOp op) {
   auto underDut = getModuleAttributes(op).underDut;
-  return underDut.kind == LatticeValue::Constant && underDut.constant;
+  return underDut.isConstant() && underDut.getConstant();
 }
 
 bool InstanceInfo::atLeastOneInstanceUnderLayer(FModuleOp op) {
-  return getModuleAttributes(op).underLayer.kind == LatticeValue::Mixed ||
-         allInstancesUnderLayer(op);
+  auto underLayer = getModuleAttributes(op).underLayer;
+  return underLayer.isMixed() || allInstancesUnderLayer(op);
 }
 
 bool InstanceInfo::allInstancesUnderLayer(FModuleOp op) {
   auto underLayer = getModuleAttributes(op).underLayer;
-  return underLayer.kind == LatticeValue::Constant && underLayer.constant;
+  return underLayer.isConstant() && underLayer.getConstant();
 }
