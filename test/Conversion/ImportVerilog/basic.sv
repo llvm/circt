@@ -1904,3 +1904,78 @@ task automatic ImplicitEventControlExamples();
     x[a] = !b;
   end
 endtask
+
+// CHECK-LABEL: moore.module @ImmediateAssert(in %clk : !moore.l1) 
+module ImmediateAssert(input clk);
+  // CHECK: [[CLK:%.+]] = moore.net name "clk" wire : <l1>
+  // CHECK: [[A:%.+]] = moore.variable : <i1>
+  bit a;
+
+  // CHECK: moore.procedure always
+    // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+    // CHECK: [[OneBX:%.+]] = moore.constant bX : l1
+    // CHECK: [[NE:%.+]] = moore.ne [[READ_CLK]], [[OneBX]] : l1 -> l1
+    // CHECK: moore.assert immediate [[NE]] : l1
+  assert (clk != 1'bx);
+
+  // CHECK: moore.procedure always
+    // CHECK: [[C100:%.+]] = moore.constant 100 : i32
+    // CHECK: [[BC:%.+]] = moore.bool_cast [[C100]] : i32 -> i1
+    // CHECK: moore.assume observed [[BC]] : i1
+  assume #0 (100);
+
+  // CHECK: moore.procedure always
+    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+    // CHECK: moore.cover final [[READ_A]] : i1
+  cover final (a);
+endmodule
+
+// CHECK-LABEL: moore.module @ImmediateAssertiWithActionBlock() 
+module ImmediateAssertiWithActionBlock;
+  logic x;
+  int a;
+// CHEK: moore.procedure always {
+  // CHEK: [[READ_X:%.+]] = moore.read %x : <l1>
+  // CHEK: [[CONV_X:%.+]] = moore.conversion [[READ_X]] : !moore.l1 -> i1
+  // CHEK: cf.cond_br [[CONV_X]], ^bb1, ^bb2
+// CHEK: ^bb1:  // pred: ^bb0
+  // CHEK: [[C1:%.+]] = moore.constant 1 : i32
+  // CHEK: moore.blocking_assign %a, [[C1]] : i32
+  // CHEK: cf.br ^bb2
+// CHEK: ^bb2:  // 2 preds: ^bb0, ^bb1
+  // CHEK:   moore.return
+// CHEK: }
+  assert (x) a = 1;
+
+// CHEK: moore.procedure always {
+  // CHEK: [[READ_X:%.+]] = moore.read %x : <l1>
+  // CHEK: [[CONV_X:%.+]] = moore.conversion [[READ_X]] : !moore.l1 -> i1
+  // CHEK: cf.cond_br [[CONV_X]], ^bb1, ^bb2
+// CHEK: ^bb1:  // pred: ^bb0
+  // CHEK: cf.br ^bb3
+// CHEK: ^bb2:  // pred: ^bb0
+  // CHEK: [[C0:%.+]] = moore.constant 0 : i32
+  // CHEK: moore.blocking_assign %a, [[C0]] : i32
+  // CHEK: cf.br ^bb3
+// CHEK: ^bb3:  // 2 preds: ^bb1, ^bb2
+  // CHEK: moore.return
+// CHEK: }
+  assert (x) else a = 0;
+
+// CHEK: moore.procedure always {
+  // CHEK: [[READ_X:%.+]] = moore.read %x : <l1>
+  // CHEK: [[CONV_X:%.+]] = moore.conversion [[READ_X]] : !moore.l1 -> i1
+  // CHEK: cf.cond_br [[CONV_X]], ^bb1, ^bb2
+// CHEK: ^bb1:  // pred: ^bb0
+  // CHEK: [[C1:%.+]] = moore.constant 1 : i32
+  // CHEK: moore.blocking_assign %a, [[C1]] : i32
+  // CHEK: cf.br ^bb3
+// CHEK: ^bb2:  // pred: ^bb0
+  // CHEK: [[C0:%.+]] = moore.constant 0 : i32
+  // CHEK: moore.blocking_assign %a, [[C0]] : i32
+  // CHEK: cf.br ^bb3
+// CHEK: ^bb3:  // 2 preds: ^bb1, ^bb2
+  // CHEK: moore.return
+// CHEK: }
+  assert (x) a = 1; else a = 0;
+endmodule

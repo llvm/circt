@@ -1,4 +1,4 @@
-add_circt_library(CIRCTHandshakeToHW
+add_circt_conversion_library(CIRCTHandshakeToHW
   HandshakeToHW.cpp
 
   ADDITIONAL_HEADER_DIRS

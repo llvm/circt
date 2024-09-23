@@ -35,29 +35,9 @@ namespace esi {
 using namespace circt;
 using namespace circt::esi;
 
-LogicalResult
-ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req,
-                                     ServiceDeclOpInterface decl) {
-  // Lookup based on 'impl_type' attribute and pass through the generate request
-  // if found.
-  auto genF = genLookupTable.find(req.getImplTypeAttr().getValue());
-  if (genF == genLookupTable.end()) {
-    if (failIfNotFound)
-      return req.emitOpError("Could not find service generator for attribute '")
-             << req.getImplTypeAttr() << "'";
-    return success();
-  }
-
-  // Since we always need a record of generation, create it here then pass it to
-  // the generator for possible modification.
-  OpBuilder b(req);
-  auto implRecord = b.create<ServiceImplRecordOp>(
-      req.getLoc(), req.getAppID(), req.getServiceSymbolAttr(),
-      req.getStdServiceAttr(), req.getImplTypeAttr(), b.getDictionaryAttr({}));
-  implRecord.getReqDetails().emplaceBlock();
-
-  return genF->second(req, decl, implRecord);
-}
+//===----------------------------------------------------------------------===//
+// C++ service generators.
+//===----------------------------------------------------------------------===//
 
 /// The generator for the "cosim" impl_type.
 static LogicalResult
@@ -294,6 +274,34 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// Service generator dispatcher.
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req,
+                                     ServiceDeclOpInterface decl) {
+  // Lookup based on 'impl_type' attribute and pass through the generate request
+  // if found.
+  auto genF = genLookupTable.find(req.getImplTypeAttr().getValue());
+  if (genF == genLookupTable.end()) {
+    if (failIfNotFound)
+      return req.emitOpError("Could not find service generator for attribute '")
+             << req.getImplTypeAttr() << "'";
+    return success();
+  }
+
+  // Since we always need a record of generation, create it here then pass it to
+  // the generator for possible modification.
+  OpBuilder b(req);
+  auto implRecord = b.create<ServiceImplRecordOp>(
+      req.getLoc(), req.getAppID(), req.getServiceSymbolAttr(),
+      req.getStdServiceAttr(), req.getImplTypeAttr(), b.getDictionaryAttr({}));
+  implRecord.getReqDetails().emplaceBlock();
+
+  return genF->second(req, decl, implRecord);
+}
+
 static ServiceGeneratorDispatcher globalDispatcher(
     DenseMap<StringRef, ServiceGeneratorDispatcher::ServiceGeneratorFunc>{
         {"cosim", instantiateCosimEndpointOps},
@@ -314,12 +322,66 @@ void ServiceGeneratorDispatcher::registerGenerator(StringRef implType,
 //===----------------------------------------------------------------------===//
 
 namespace {
+/// Find all the modules and use the partial order of the instantiation DAG
+/// to sort them. If we use this order when "bubbling" up operations, we
+/// guarantee one-pass completeness. As a side-effect, populate the module to
+/// instantiation sites mapping.
+///
+/// Assumption (unchecked): there is not a cycle in the instantiation graph.
+struct ModuleSorter {
+protected:
+  SymbolCache topLevelSyms;
+  DenseMap<Operation *, SmallVector<igraph::InstanceOpInterface, 1>>
+      moduleInstantiations;
+
+  void getAndSortModules(ModuleOp topMod,
+                         SmallVectorImpl<hw::HWModuleLike> &mods);
+  void getAndSortModulesVisitor(hw::HWModuleLike mod,
+                                SmallVectorImpl<hw::HWModuleLike> &mods,
+                                DenseSet<Operation *> &modsSeen);
+};
+} // namespace
+
+void ModuleSorter::getAndSortModules(ModuleOp topMod,
+                                     SmallVectorImpl<hw::HWModuleLike> &mods) {
+  // Add here _before_ we go deeper to prevent infinite recursion.
+  DenseSet<Operation *> modsSeen;
+  mods.clear();
+  moduleInstantiations.clear();
+  topMod.walk([&](hw::HWModuleLike mod) {
+    getAndSortModulesVisitor(mod, mods, modsSeen);
+  });
+}
+
+// Run a post-order DFS.
+void ModuleSorter::getAndSortModulesVisitor(
+    hw::HWModuleLike mod, SmallVectorImpl<hw::HWModuleLike> &mods,
+    DenseSet<Operation *> &modsSeen) {
+  if (modsSeen.contains(mod))
+    return;
+  modsSeen.insert(mod);
+
+  mod.walk([&](igraph::InstanceOpInterface inst) {
+    auto targetNameAttrs = inst.getReferencedModuleNamesAttr();
+    for (auto targetNameAttr : targetNameAttrs) {
+      Operation *modOp =
+          topLevelSyms.getDefinition(cast<StringAttr>(targetNameAttr));
+      assert(modOp);
+      moduleInstantiations[modOp].push_back(inst);
+      if (auto modLike = dyn_cast<hw::HWModuleLike>(modOp))
+        getAndSortModulesVisitor(modLike, mods, modsSeen);
+    }
+  });
+
+  mods.push_back(mod);
+}
+namespace {
 /// Implements a pass to connect up ESI services clients to the nearest server
 /// instantiation. Wires up the ports and generates a generation request to
 /// call a user-specified generator.
 struct ESIConnectServicesPass
     : public circt::esi::impl::ESIConnectServicesBase<ESIConnectServicesPass>,
-      msft::PassCommon {
+      ModuleSorter {
 
   ESIConnectServicesPass(const ServiceGeneratorDispatcher &gen)
       : genDispatcher(gen) {}
