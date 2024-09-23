@@ -37,6 +37,7 @@
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/Pipeline/PipelineDialect.h"
 #include "circt/Dialect/RTG/IR/RTGDialect.h"
+#include "circt/Dialect/RTGTest/IR/RTGTestDialect.h"
 #include "circt/Dialect/SMT/SMTDialect.h"
 #include "circt/Dialect/SSP/SSPDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
@@ -75,6 +76,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     om::OMDialect,
     pipeline::PipelineDialect,
     rtg::RTGDialect,
+    rtgtest::RTGTestDialect,
     seq::SeqDialect,
     sim::SimDialect,
     smt::SMTDialect,
