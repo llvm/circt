@@ -182,14 +182,15 @@ struct VerifBoundedModelCheckingOpConversion
   matchAndRewrite(verif::BoundedModelCheckingOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Check there is exactly one assertion
-    auto topAssertions = op.getCircuit().getOps<verif::AssertOp>();
-    int numAssertions =
-        std::distance(topAssertions.begin(), topAssertions.end());
-    SymbolTable symbolTable(op->getParentOfType<ModuleOp>());
     SmallVector<mlir::Operation *> worklist;
-    for (auto instance : op.getCircuit().getOps<InstanceOp>()) {
-      worklist.push_back(symbolTable.lookup(instance.getModuleName()));
-    }
+    SymbolTable symbolTable(op->getParentOfType<ModuleOp>());
+    int numAssertions = 0;
+    op.walk([&](Operation *curOp) {
+      if (isa<verif::AssertOp>(curOp))
+        numAssertions++;
+      if (auto inst = dyn_cast<InstanceOp>(curOp))
+        worklist.push_back(symbolTable.lookup(inst.getModuleName()));
+    });
     // TODO: probably negligible compared to actual model checking time but
     // cacheing the assertion count of modules would speed this up
     for (auto *module : worklist) {
@@ -198,15 +199,13 @@ struct VerifBoundedModelCheckingOpConversion
           std::distance(moduleAssertions.begin(), moduleAssertions.end());
       if (numAssertions > 1)
         break;
-      for (auto instance : module->getBlock()->getOps<hw::InstanceOp>()) {
+      for (auto instance : module->getBlock()->getOps<hw::InstanceOp>())
         worklist.push_back(symbolTable.lookup(instance.getModuleName()));
-      }
     }
-    if (numAssertions > 1) {
+    if (numAssertions > 1)
       return op->emitError("designs with multiple assertions are not yet "
                            "correctly handled - instead, you can assert the "
                            "conjunction of your assertions");
-    }
 
     Location loc = op.getLoc();
     SmallVector<Type> oldLoopInputTy(op.getLoop().getArgumentTypes());
@@ -291,9 +290,8 @@ struct VerifBoundedModelCheckingOpConversion
     size_t initIndex = 0;
     SmallVector<Value> inputDecls;
     SmallVector<int> clockIndexes;
-    for (auto [curIndex, types] :
-         llvm::enumerate(llvm::zip(oldCircuitInputTy, circuitInputTy))) {
-      auto [oldTy, newTy] = types;
+    for (auto [curIndex, oldTy, newTy] :
+         llvm::enumerate(oldCircuitInputTy, circuitInputTy)) {
       if (isa<seq::ClockType>(oldTy)) {
         inputDecls.push_back(initVals[initIndex++]);
         clockIndexes.push_back(curIndex);
