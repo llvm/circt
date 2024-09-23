@@ -62,7 +62,7 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
         auto parentAttrs =
             moduleAttributes.find(useIt->getParent()->getModule())->getSecond();
         // Merge underDut.
-        if (parentAttrs.isDut)
+        if (parentAttrs.isDut || attributes.isDut)
           attributes.underDut.mergeIn({LatticeValue::Constant, true});
         else
           attributes.underDut.mergeIn(parentAttrs.underDut);
@@ -106,15 +106,13 @@ InstanceInfo::getModuleAttributes(FModuleOp op) {
 bool InstanceInfo::isDut(FModuleOp op) { return getModuleAttributes(op).isDut; }
 
 bool InstanceInfo::atLeastOneInstanceUnderDut(FModuleOp op) {
-  return isDut(op) ||
-         getModuleAttributes(op).underDut.kind == LatticeValue::Mixed ||
+  return getModuleAttributes(op).underDut.kind == LatticeValue::Mixed ||
          allInstancesUnderDut(op);
 }
 
 bool InstanceInfo::allInstancesUnderDut(FModuleOp op) {
   auto underDut = getModuleAttributes(op).underDut;
-  return isDut(op) ||
-         (underDut.kind == LatticeValue::Constant && underDut.constant);
+  return underDut.kind == LatticeValue::Constant && underDut.constant;
 }
 
 bool InstanceInfo::atLeastOneInstanceUnderLayer(FModuleOp op) {
