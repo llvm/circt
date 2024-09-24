@@ -267,7 +267,8 @@ LogicalResult ImportDriver::importVerilog(ModuleOp module) {
   mlirContext->loadDialect<moore::MooreDialect, hw::HWDialect,
                            cf::ControlFlowDialect, func::FuncDialect>();
   auto conversionTimer = ts.nest("Verilog to dialect mapping");
-  Context context(*compilation, module, driver.sourceManager, bufferFilePaths);
+  Context context(options, *compilation, module, driver.sourceManager,
+                  bufferFilePaths);
   if (failed(context.convertCompilation()))
     return failure();
   conversionTimer.stop();

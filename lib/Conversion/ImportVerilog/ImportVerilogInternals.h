@@ -61,10 +61,11 @@ struct LoopFrame {
 /// operations. Keeps track of the destination MLIR module, builders, and
 /// various worklists and utilities needed for conversion.
 struct Context {
-  Context(slang::ast::Compilation &compilation, mlir::ModuleOp intoModuleOp,
+  Context(const ImportVerilogOptions &options,
+          slang::ast::Compilation &compilation, mlir::ModuleOp intoModuleOp,
           const slang::SourceManager &sourceManager,
           SmallDenseMap<slang::BufferID, StringRef> &bufferFilePaths)
-      : compilation(compilation), intoModuleOp(intoModuleOp),
+      : options(options), compilation(compilation), intoModuleOp(intoModuleOp),
         sourceManager(sourceManager), bufferFilePaths(bufferFilePaths),
         builder(OpBuilder::atBlockEnd(intoModuleOp.getBody())),
         symbolTable(intoModuleOp) {}
@@ -123,6 +124,7 @@ struct Context {
   Value materializeConstant(const slang::ConstantValue &constant,
                             const slang::ast::Type &type, Location loc);
 
+  const ImportVerilogOptions &options;
   slang::ast::Compilation &compilation;
   mlir::ModuleOp intoModuleOp;
   const slang::SourceManager &sourceManager;
