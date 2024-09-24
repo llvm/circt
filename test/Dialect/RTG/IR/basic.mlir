@@ -1,8 +1,18 @@
 // RUN: circt-opt %s | FileCheck %s
 
-// CHECK: rtg.snippet attributes {rtg.some_attr} {
-rtg.snippet attributes {rtg.some_attr} {
+// CHECK: [[SNIPPET:%.+]] = rtg.snippet attributes {rtg.some_attr} {
+%snippet = rtg.snippet attributes {rtg.some_attr} {
 ^bb0:
+}
+
+// CHECK: rtg.snippet
+rtg.snippet {
+  // CHECK: [[RATIO:%.+]] = arith.constant 1 : i32
+  %ratio = arith.constant 1 : i32
+  // CHECK: rtg.select_random [[[SNIPPET]]], [[[RATIO]]]
+  rtg.select_random [%snippet], [%ratio]
+  // CHECK: rtg.select_random [[[SNIPPET]], [[SNIPPET]]], [[[RATIO]], [[RATIO]]]
+  rtg.select_random [%snippet, %snippet], [%ratio, %ratio]
 }
 
 // CHECK-LABEL: @types

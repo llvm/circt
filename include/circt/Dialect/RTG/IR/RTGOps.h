@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_RTG_IR_RTGOPS_H
 
 #include "circt/Dialect/RTG/IR/RTGDialect.h"
+#include "circt/Dialect/RTG/IR/RTGTypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpImplementation.h"
 

@@ -25,7 +25,17 @@ def SnippetOp : RTGOp<"snippet", [
   let description = [{
   }];
 
+  let results = (outs SnippetType:$snippet);
   let regions = (region SizedRegion<1>:$bodyRegion);
 
   let assemblyFormat = "attr-dict-with-keyword $bodyRegion";
+}
+
+def SelectRandomOp : RTGOp<"select_random", [SameVariadicOperandSize]> {
+  let summary = "places a random snippet in an instruction sequence";
+
+  let arguments = (ins Variadic<SnippetType>:$snippets,
+                       Variadic<I32>:$ratios);
+
+  let assemblyFormat = "` ` `[` $snippets `]` `,` `[` $ratios `]` attr-dict";
 }
