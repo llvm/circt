@@ -11,9 +11,9 @@ func.func @FuncArgsAndReturns(%arg0: !moore.i8, %arg1: !moore.i32, %arg2: !moore
 // CHECK-SAME: (%arg0: i32, %arg1: i1)
 func.func @ControlFlow(%arg0: !moore.i32, %arg1: i1) {
   // CHECK-NEXT:   cf.br ^bb1(%arg0 : i32)
-  // CHECK-NEXT: ^bb1(%0: i32):
-  // CHECK-NEXT:   cf.cond_br %arg1, ^bb1(%0 : i32), ^bb2(%arg0 : i32)
-  // CHECK-NEXT: ^bb2(%1: i32):
+  // CHECK-NEXT: ^bb1([[TMP:%.+]]: i32):
+  // CHECK-NEXT:   cf.cond_br %arg1, ^bb1([[TMP]] : i32), ^bb2(%arg0 : i32)
+  // CHECK-NEXT: ^bb2([[TMP:%.+]]: i32):
   // CHECK-NEXT:   return
   cf.br ^bb1(%arg0: !moore.i32)
 ^bb1(%0: !moore.i32):
@@ -47,8 +47,8 @@ func.func @UnrealizedConversionCast(%arg0: !moore.i8) -> !moore.i16 {
 
 // CHECK-LABEL: func @Expressions
 func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %arg3: !moore.i5, %arg4: !moore.i1, %arg5: !moore.array<5 x i32>, %arg6: !moore.ref<i1>, %arg7: !moore.ref<!moore.array<5 x i32>>) {
-  // CHECK-NEXT: %0 = comb.concat %arg0, %arg0 : i1, i1
-  // CHECK-NEXT: %1 = comb.concat %arg1, %arg1 : i1, i1
+  // CHECK-NEXT: comb.concat %arg0, %arg0 : i1, i1
+  // CHECK-NEXT: comb.concat %arg1, %arg1 : i1, i1
   moore.concat %arg0, %arg0 : (!moore.i1, !moore.i1) -> !moore.i2
   moore.concat %arg1, %arg1 : (!moore.l1, !moore.l1) -> !moore.l2
 
@@ -819,3 +819,16 @@ moore.module @NoPredecessorBlockErasure(in %clk_i : !moore.l1, in %raddr_i : !mo
   %3 = moore.read %rdata_o : <array<2 x l32>>
   moore.output %3 : !moore.array<2 x l32>
 }
+
+// CHECK: [[TMP:%.+]] = hw.constant 42 : i32
+%dbg0 = moore.constant 42 : l32
+// CHECK: dbg.variable "a", [[TMP]] : i32
+dbg.variable "a", %dbg0 : !moore.l32
+// CHECK: [[SCOPE:%.+]] = dbg.scope
+%dbg1 = dbg.scope "foo", "bar"
+// CHECK: dbg.variable "b", [[TMP]] scope [[SCOPE]] : i32
+dbg.variable "b", %dbg0 scope %dbg1 : !moore.l32
+// CHECK: dbg.array [[[TMP]]] : i32
+dbg.array [%dbg0] : !moore.l32
+// CHECK: dbg.struct {"q": [[TMP]]} : i32
+dbg.struct {"q": %dbg0} : !moore.l32

@@ -12,6 +12,7 @@
 
 #include "circt/Conversion/MooreToCore.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
@@ -1177,6 +1178,20 @@ struct YieldOpConversion : public OpConversionPattern<YieldOp> {
   }
 };
 
+template <typename SourceOp>
+struct InPlaceOpConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.modifyOpInPlace(op,
+                             [&]() { op->setOperands(adaptor.getOperands()); });
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -1214,6 +1229,11 @@ static void populateLegality(ConversionTarget &target) {
   addGenericLegality<func::CallOp>(target);
   addGenericLegality<func::ReturnOp>(target);
   addGenericLegality<UnrealizedConversionCastOp>(target);
+
+  target.addLegalOp<debug::ScopeOp>();
+  addGenericLegality<debug::ArrayOp>(target);
+  addGenericLegality<debug::StructOp>(target);
+  addGenericLegality<debug::VariableOp>(target);
 
   target.addDynamicallyLegalOp<func::FuncOp>([](func::FuncOp op) {
     auto argsConverted = llvm::none_of(op.getBlocks(), [](auto &block) {
@@ -1283,6 +1303,9 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
 
   // Valid target types.
   typeConverter.addConversion([](IntegerType type) { return type; });
+  typeConverter.addConversion([](debug::ArrayType type) { return type; });
+  typeConverter.addConversion([](debug::ScopeType type) { return type; });
+  typeConverter.addConversion([](debug::StructType type) { return type; });
 
   typeConverter.addTargetMaterialization(
       [&](mlir::OpBuilder &builder, mlir::Type resultType,
@@ -1312,7 +1335,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
   auto *context = patterns.getContext();
   // clang-format off
   patterns.add<
-  // Patterns of declaration operations.
+    // Patterns of declaration operations.
     VariableOpConversion,
 
     // Patterns of miscellaneous operations.
@@ -1374,7 +1397,10 @@ static void populateOpConversion(RewritePatternSet &patterns,
 
     // Patterns of other operations outside Moore dialect.
     HWInstanceOpConversion, ReturnOpConversion,
-    CallOpConversion, UnrealizedConversionCastConversion
+    CallOpConversion, UnrealizedConversionCastConversion,
+    InPlaceOpConversion<debug::ArrayOp>,
+    InPlaceOpConversion<debug::StructOp>,
+    InPlaceOpConversion<debug::VariableOp>
   >(typeConverter, context);
   // clang-format on
   mlir::populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(
