@@ -16,6 +16,8 @@
 #include "circt/Analysis/FIRRTLInstanceInfo.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Support/Debug.h"
+#include "circt/Support/InstanceGraph.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/Debug.h"
 
@@ -67,6 +69,8 @@ void InstanceInfo::LatticeValue::mergeIn(bool value) {
 InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
   auto &iGraph = am.getAnalysis<InstanceGraph>();
 
+  circuitAttributes.effectiveDutNode = iGraph.getTopLevelNode();
+
   // Visit modules in reverse post-order (visit parents before children) because
   // information flows in this direction---the attributes of modules are
   // determinend by their instantiations.
@@ -75,8 +79,12 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
     auto moduleOp = modIt->getModule();
     ModuleAttributes &attributes = moduleAttributes[moduleOp];
 
-    // Set isDut.
-    attributes.isDut = AnnotationSet(moduleOp).hasAnnotation(dutAnnoClass);
+    // Set DUT-related attributes.
+    auto isDut = AnnotationSet(moduleOp).hasAnnotation(dutAnnoClass);
+    if (isDut) {
+      circuitAttributes.dutNode = modIt;
+      circuitAttributes.effectiveDutNode = modIt;
+    }
 
     // If the module is not instantiated, then set attributes and early exit.
     if (modIt->noUses()) {
@@ -87,10 +95,10 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
 
     // Merge in attributes from modules that instantiate this module.
     for (auto *useIt : modIt->uses()) {
-      auto parentAttrs =
-          moduleAttributes.find(useIt->getParent()->getModule())->getSecond();
+      auto parentOp = useIt->getParent()->getModule();
+      auto parentAttrs = moduleAttributes.find(parentOp)->getSecond();
       // Merge underDut.
-      if (parentAttrs.isDut || attributes.isDut)
+      if (this->isDut(parentOp) || isDut)
         attributes.underDut.mergeIn(true);
       else
         attributes.underDut.mergeIn(parentAttrs.underDut);
@@ -103,42 +111,80 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
   }
 
   LLVM_DEBUG({
-    llvm::dbgs() << "InstanceInfo Analysis Results:\n";
+    mlir::OpPrintingFlags flags;
+    flags.skipRegions();
+    debugHeader("FIRRTL InstanceInfo Analysis")
+        << "\n"
+        << llvm::indent(2) << "circuit attributes:\n"
+        << llvm::indent(4) << "hasDut: " << (hasDut() ? "true" : "false")
+        << "\n"
+        << llvm::indent(4) << "dutNode: ";
+    if (auto dutNode = circuitAttributes.dutNode)
+      dutNode->getModule()->print(llvm::dbgs(), flags);
+    else
+      llvm::dbgs() << "null";
+    llvm::dbgs() << "\n" << llvm::indent(4) << "effectiveDutNode: ";
+    circuitAttributes.effectiveDutNode->getModule()->print(llvm::dbgs(), flags);
+    llvm::dbgs() << "\n" << llvm::indent(2) << "module attributes:\n";
     for (auto *node : llvm::depth_first(iGraph.getTopLevelNode())) {
       auto moduleOp = node->getModule();
       auto attributes = moduleAttributes[moduleOp];
-      llvm::dbgs() << "  - module: " << moduleOp.getModuleName() << "\n"
-                   << "    isDut:      "
-                   << (attributes.isDut ? "true" : "false") << "\n"
-                   << "    underDut:   " << attributes.underDut << "\n"
-                   << "    underLayer: " << attributes.underLayer << "\n";
+      llvm::dbgs().indent(4)
+          << "- module: " << moduleOp.getModuleName() << "\n"
+          << llvm::indent(6)
+          << "isDut: " << (isDut(moduleOp) ? "true" : "false") << "\n"
+          << llvm::indent(6)
+          << "isEffectiveDue: " << (isEffectiveDut(moduleOp) ? "true" : "false")
+          << "\n"
+          << llvm::indent(6) << "underDut: " << attributes.underDut << "\n"
+          << llvm::indent(6) << "underLayer: " << attributes.underLayer << "\n";
     }
   });
 }
 
 const InstanceInfo::ModuleAttributes &
-InstanceInfo::getModuleAttributes(FModuleOp op) {
+InstanceInfo::getModuleAttributes(igraph::ModuleOpInterface op) {
   return moduleAttributes.find(op)->getSecond();
 }
 
-bool InstanceInfo::isDut(FModuleOp op) { return getModuleAttributes(op).isDut; }
+bool InstanceInfo::hasDut() { return circuitAttributes.dutNode; }
 
-bool InstanceInfo::atLeastOneInstanceUnderDut(FModuleOp op) {
+bool InstanceInfo::isDut(igraph::ModuleOpInterface op) {
+  if (hasDut())
+    return op == circuitAttributes.dutNode->getModule();
+  return false;
+}
+
+bool InstanceInfo::isEffectiveDut(igraph::ModuleOpInterface op) {
+  if (hasDut())
+    return isDut(op);
+  return op == circuitAttributes.effectiveDutNode->getModule();
+}
+
+igraph::InstanceGraphNode *InstanceInfo::getDut() {
+  return circuitAttributes.dutNode;
+}
+
+igraph::InstanceGraphNode *InstanceInfo::getEffectiveDut() {
+  return circuitAttributes.effectiveDutNode;
+}
+
+bool InstanceInfo::atLeastOneInstanceUnderDut(igraph::ModuleOpInterface op) {
   auto underDut = getModuleAttributes(op).underDut;
   return underDut.isMixed() || allInstancesUnderDut(op);
 }
 
-bool InstanceInfo::allInstancesUnderDut(FModuleOp op) {
+bool InstanceInfo::allInstancesUnderDut(igraph::ModuleOpInterface op) {
   auto underDut = getModuleAttributes(op).underDut;
   return underDut.isConstant() && underDut.getConstant();
 }
 
-bool InstanceInfo::atLeastOneInstanceUnderLayer(FModuleOp op) {
+bool InstanceInfo::atLeastOneInstanceUnderLayer(igraph::ModuleOpInterface op) {
   auto underLayer = getModuleAttributes(op).underLayer;
   return underLayer.isMixed() || allInstancesUnderLayer(op);
 }
 
-bool InstanceInfo::allInstancesUnderLayer(FModuleOp op) {
+bool InstanceInfo::allInstancesUnderLayer(igraph::ModuleOpInterface op) {
   auto underLayer = getModuleAttributes(op).underLayer;
   return underLayer.isConstant() && underLayer.getConstant();
 }
