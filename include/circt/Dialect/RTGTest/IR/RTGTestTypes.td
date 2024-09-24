@@ -18,4 +18,13 @@ include "mlir/IR/AttrTypeBase.td"
 
 class RTGTestTypeDef<string name> : TypeDef<RTGTestDialect, name> { }
 
+def DummyType : RTGTestTypeDef<"Dummy"> {
+  let summary = "";
+  let description = [{
+  }];
+
+  let mnemonic = "dummy";
+  let assemblyFormat = "";
+}
+
 #endif // CIRCT_DIALECT_RTGTEST_IR_RTGTESTTYPES_TD
