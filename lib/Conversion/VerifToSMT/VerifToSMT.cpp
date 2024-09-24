@@ -397,7 +397,7 @@ void ConvertVerifToSMTPass::runOnOperation() {
   // Check BMC ops contain only one assertion (done outside pattern to avoid
   // issues with whether assertions are/aren't lowered yet)
   SymbolTable symbolTable(getOperation());
-  getOperation().walk(
+  WalkResult assertionCheck = getOperation().walk(
       [&](Operation *op) { // Check there is exactly one assertion
         if (isa<verif::BoundedModelCheckingOp>(op)) {
           SmallVector<mlir::Operation *> worklist;
@@ -427,11 +427,13 @@ void ConvertVerifToSMTPass::runOnOperation() {
                 "not yet "
                 "correctly handled - instead, you can assert the "
                 "conjunction of your assertions");
-            signalPassFailure();
+            return WalkResult::interrupt();
           }
         }
+        return WalkResult::advance();
       });
-
+  if (assertionCheck.wasInterrupted())
+    return signalPassFailure();
   RewritePatternSet patterns(&getContext());
   TypeConverter converter;
   populateHWToSMTTypeConverter(converter);

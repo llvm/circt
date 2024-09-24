@@ -53,6 +53,12 @@ func.func @multiple_asserting_modules_bmc() -> (i1) {
   func.return %bmc : i1
 }
 
+hw.module @OneAssertion(in %x: i1) {
+  verif.assert %x : i1
+}
+
+// -----
+
 func.func @two_separated_assertions() -> (i1) {
   // expected-error @below {{bounded model checking problems with multiple assertions are not yet correctly handled - instead, you can assert the conjunction of your assertions}}
   %bmc = verif.bmc bound 10 num_regs 1
