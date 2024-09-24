@@ -1,14 +1,5 @@
 // RUN: circt-opt %s -llhd-process-lowering | FileCheck %s
 
-// check that input and output signals are transferred correctly
-// CHECK-LABEL: hw.module @inputAndOutput
-hw.module @inputAndOutput(inout %arg0 : i64, inout %arg1 : i1, inout %arg2 : i1) {
-  llhd.process {
-    // CHECK-NEXT: hw.output
-    llhd.halt
-  }
-}
-
 // check wait suspended process
 // CHECK-LABEL: hw.module @simpleWait
 hw.module @simpleWait() {

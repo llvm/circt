@@ -38,104 +38,87 @@ struct ProcessLoweringPass
 };
 
 static LogicalResult isProcValidToLower(llhd::ProcessOp op) {
-  size_t numBlocks = op.getBody().getBlocks().size();
-
-  if (numBlocks == 1) {
-    if (!isa<llhd::HaltOp>(op.getBody().back().getTerminator())) {
-      LLVM_DEBUG({
-        llvm::dbgs()
-            << "entry block is required to be terminated by llhd.halt\n";
-      });
-      return failure();
-    }
-
-    return success();
-  }
-
-  if (numBlocks == 2) {
-    Block &first = op.getBody().front();
-    Block &last = op.getBody().back();
-
-    if (!last.getArguments().empty()) {
-      LLVM_DEBUG({
-        llvm::dbgs() << "the second block (containing the "
-                        "llhd.wait) is not allowed to have arguments\n";
-      });
-      return failure();
-    }
-
-    if (!isa<cf::BranchOp>(first.getTerminator())) {
-      LLVM_DEBUG({
-        llvm::dbgs() << "the first block has to "
-                        "be terminated by a cf.br operation\n";
-      });
-      return failure();
-    }
-
-    if (auto wait = dyn_cast<llhd::WaitOp>(last.getTerminator())) {
-      // No optional time argument is allowed
-      if (wait.getTime()) {
-        LLVM_DEBUG({
-          llvm::dbgs() << "llhd.wait terminators with optional time "
-                          "argument cannot be lowered to structural LLHD\n";
-        });
-        return failure();
-      }
-
-      SmallVector<Value> observedSignals;
-      for (Value obs : wait.getObserved())
-        if (auto prb = obs.getDefiningOp<llhd::PrbOp>())
-          if (!op.getBody().isAncestor(prb->getParentRegion()))
-            observedSignals.push_back(prb.getSignal());
-
-      // Every probed signal has to occur in the observed signals list in
-      // the wait instruction
-      WalkResult result = op.walk([&](Operation *operation) -> WalkResult {
-        // TODO: value does not need to be observed if all values this value is
-        // a combinatorial result of are observed.
-        for (Value operand : operation->getOperands()) {
-          if (op.getBody().isAncestor(operand.getParentRegion()))
-            continue;
-          if (llvm::is_contained(wait.getObserved(), operand))
-            continue;
-          if (llvm::is_contained(observedSignals, operand))
-            continue;
-          if (auto *defOp = operand.getDefiningOp();
-              defOp && defOp->hasTrait<OpTrait::ConstantLike>())
-            continue;
-          if (auto bitcastOp = operand.getDefiningOp<hw::BitcastOp>())
-            if (auto *defOp = bitcastOp.getInput().getDefiningOp();
-                defOp && defOp->hasTrait<OpTrait::ConstantLike>())
-              continue;
-
-          LLVM_DEBUG({
-            llvm::dbgs() << "the wait terminator is required to "
-                            "have values used in the process as arguments\n";
-          });
-          return failure();
-        }
-
-        return WalkResult::advance();
-      });
-
-      return failure(result.wasInterrupted());
-    }
-
+  if (op.getBody().getBlocks().size() != 2) {
     LLVM_DEBUG({
-      llvm::dbgs() << "the second block must be "
-                      "terminated by llhd.wait\n";
+      llvm::dbgs() << "process-lowering only supports processes with "
+                      "two basic blocks where the first "
+                      "contains a 'cf.br' terminator and the second one is "
+                      "terminated by a 'llhd.wait' operation\n";
     });
     return failure();
   }
 
+  Block &first = op.getBody().front();
+  Block &last = op.getBody().back();
+
+  if (!last.getArguments().empty()) {
+    LLVM_DEBUG({
+      llvm::dbgs() << "the second block (containing the "
+                      "llhd.wait) is not allowed to have arguments\n";
+    });
+    return failure();
+  }
+
+  if (!isa<cf::BranchOp>(first.getTerminator())) {
+    LLVM_DEBUG({
+      llvm::dbgs() << "the first block has to "
+                      "be terminated by a cf.br operation\n";
+    });
+    return failure();
+  }
+
+  if (auto wait = dyn_cast<llhd::WaitOp>(last.getTerminator())) {
+    // No optional time argument is allowed
+    if (wait.getTime()) {
+      LLVM_DEBUG({
+        llvm::dbgs() << "llhd.wait terminators with optional time "
+                        "argument cannot be lowered to structural LLHD\n";
+      });
+      return failure();
+    }
+
+    SmallVector<Value> observedSignals;
+    for (Value obs : wait.getObserved())
+      if (auto prb = obs.getDefiningOp<llhd::PrbOp>())
+        if (!op.getBody().isAncestor(prb->getParentRegion()))
+          observedSignals.push_back(prb.getSignal());
+
+    // Every probed signal has to occur in the observed signals list in
+    // the wait instruction
+    WalkResult result = op.walk([&](Operation *operation) -> WalkResult {
+      // TODO: value does not need to be observed if all values this value is
+      // a combinatorial result of are observed.
+      for (Value operand : operation->getOperands()) {
+        if (op.getBody().isAncestor(operand.getParentRegion()))
+          continue;
+        if (llvm::is_contained(wait.getObserved(), operand))
+          continue;
+        if (llvm::is_contained(observedSignals, operand))
+          continue;
+        if (auto *defOp = operand.getDefiningOp();
+            defOp && defOp->hasTrait<OpTrait::ConstantLike>())
+          continue;
+        if (auto bitcastOp = operand.getDefiningOp<hw::BitcastOp>())
+          if (auto *defOp = bitcastOp.getInput().getDefiningOp();
+              defOp && defOp->hasTrait<OpTrait::ConstantLike>())
+            continue;
+
+        LLVM_DEBUG({
+          llvm::dbgs() << "the wait terminator is required to "
+                          "have values used in the process as arguments\n";
+        });
+        return failure();
+      }
+
+      return WalkResult::advance();
+    });
+
+    return failure(result.wasInterrupted());
+  }
+
   LLVM_DEBUG({
-    llvm::dbgs() << "process-lowering only supports processes with either "
-                    "one basic block "
-                    "terminated by a llhd.halt operation or two basic blocks "
-                    "where the first "
-                    "one contains a cf.br terminator and the second one is "
-                    "terminated by a "
-                    "llhd.wait operation\n";
+    llvm::dbgs() << "the second block must be "
+                    "terminated by llhd.wait\n";
   });
   return failure();
 }
