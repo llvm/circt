@@ -1,11 +1,11 @@
-set(HANDSHAKE_SRCS
+set(DC_SRCS
   DCDialect.cpp
   DCOps.cpp
   DCTypes.cpp
   )
 
 add_circt_dialect_library(CIRCTDC
-  ${HANDSHAKE_SRCS}
+  ${DC_SRCS}
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/include
