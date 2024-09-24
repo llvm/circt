@@ -3,15 +3,15 @@
 // Test basic lowering of the three port types.
 // CHECK-LABEL: firrtl.circuit "ReadWrite" {
 firrtl.circuit "ReadWrite" {
-firrtl.module @ReadWrite() {
-  %MReadWrite_readwrite = firrtl.mem Undefined {depth = 12 : i64, name = "MReadWrite", portNames = ["readwrite"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
-  // CHECK: firrtl.instance MReadWrite  @MReadWrite(in RW0_addr: !firrtl.uint<4>, in RW0_en: !firrtl.uint<1>, in RW0_clk: !firrtl.clock, in RW0_wmode: !firrtl.uint<1>, in RW0_wdata: !firrtl.uint<42>, out RW0_rdata: !firrtl.uint<42>)
-}
 // CHECK: firrtl.module private @MReadWrite
 // CHECK:   firrtl.instance MReadWrite_ext  @MReadWrite_ext
 // CHECK:   firrtl.matchingconnect %MReadWrite_ext_RW0_addr, %RW0_addr
 // CHECK:   firrtl.matchingconnect %RW0_rdata, %MReadWrite_ext_RW0_rdata
 // CHECK: }
+firrtl.module @ReadWrite() {
+  %MReadWrite_readwrite = firrtl.mem Undefined {depth = 12 : i64, name = "MReadWrite", portNames = ["readwrite"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
+  // CHECK: firrtl.instance MReadWrite  @MReadWrite(in RW0_addr: !firrtl.uint<4>, in RW0_en: !firrtl.uint<1>, in RW0_clk: !firrtl.clock, in RW0_wmode: !firrtl.uint<1>, in RW0_wdata: !firrtl.uint<42>, out RW0_rdata: !firrtl.uint<42>)
+}
 }
 
 // CHECK-LABEL: firrtl.circuit "Write"
@@ -25,12 +25,12 @@ firrtl.module @Write() {
 // SeqMems need at least 1 write port, but this is primarily testing the Read
 // port.
 firrtl.circuit "Read" {
+// CHECK: firrtl.memmodule private @MRead_ext
+// CHECK-SAME: {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
 firrtl.module @Read() {
   %MRead_read, %MRead_write = firrtl.mem Undefined {depth = 12 : i64, name = "MRead", portNames = ["read", "write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
   // CHECK: firrtl.instance MRead  @MRead(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<42>, in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
 }
-// CHECK: firrtl.memmodule private @MRead_ext
-// CHECK-SAME: {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
 }
 
 // Test that the memory wrapper module is renamed when there is a collision.
@@ -38,12 +38,12 @@ firrtl.module @Read() {
 firrtl.circuit "Collision0" {
 // @test collides with the name of the wrapper module.
 firrtl.extmodule @test()
+// CHECK: firrtl.module private @test_0
+// CHECK-NEXT: firrtl.instance test_ext  @test_ext
 firrtl.module @Collision0() {
   %MWrite_write = firrtl.mem Undefined {depth = 12 : i64, name = "test", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
   // CHECK: firrtl.instance test  @test_0
 }
-// CHECK: firrtl.module private @test_0
-// CHECK-NEXT: firrtl.instance test_ext  @test_ext
 }
 
 // Test that the memory module is renamed when there is a collision.
@@ -51,25 +51,18 @@ firrtl.module @Collision0() {
 firrtl.circuit "Collision1" {
 // @test_ext collides with the name of the external memory module.
 firrtl.extmodule @test_ext()
+// CHECK: firrtl.module private @test
+// CHECK-NEXT: firrtl.instance test_0_ext @test_0_ext
+// CHECK: firrtl.memmodule private @test_0_ext
 firrtl.module @Collision1() {
   %MWrite_write = firrtl.mem Undefined {depth = 12 : i64, name = "test", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
   // CHECK: firrtl.instance test @test
 }
-// CHECK: firrtl.module private @test
-// CHECK-NEXT: firrtl.instance test_0_ext @test_0_ext
-
-// CHECK: firrtl.memmodule private @test_0_ext
 }
 
 // Test that the memory modules are deduplicated.
 // CHECK-LABEL: firrtl.circuit "Dedup"
 firrtl.circuit "Dedup" {
-firrtl.module @Dedup() {
-  %mem0_write = firrtl.mem Undefined {depth = 12 : i64, name = "mem0", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
-  %mem1_write = firrtl.mem Undefined {depth = 12 : i64, name = "mem1", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
-  // CHECK: firrtl.instance mem0  @mem0(
-  // CHECK: firrtl.instance mem1  @mem1(
-}
 // CHECK: firrtl.module private @mem0
 // CHECK-NEXT: firrtl.instance mem0_ext  @mem0_ext
 
@@ -77,12 +70,27 @@ firrtl.module @Dedup() {
 
 // CHECK: firrtl.module private @mem1
 // CHECK-NEXT: firrtl.instance mem0_ext @mem0_ext
+firrtl.module @Dedup() {
+  %mem0_write = firrtl.mem Undefined {depth = 12 : i64, name = "mem0", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
+  %mem1_write = firrtl.mem Undefined {depth = 12 : i64, name = "mem1", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
+  // CHECK: firrtl.instance mem0  @mem0(
+  // CHECK: firrtl.instance mem1  @mem1(
+}
 }
 
 // Test that memories in the testharness are not deduped with other memories in
 // the test harness.
 // CHECK-LABEL: firrtl.circuit "NoTestharnessDedup0"
 firrtl.circuit "NoTestharnessDedup0" {
+// CHECK: firrtl.module private @mem0
+// CHECK-NEXT: firrtl.instance mem0_ext  @mem0_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
+
+// CHECK: firrtl.memmodule private @mem0_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
+
+// CHECK: firrtl.module private @mem1
+// CHECK-NEXT: firrtl.instance mem1_ext  @mem1_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
+
+// CHECK: firrtl.memmodule private @mem1_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
 firrtl.module @NoTestharnessDedup0() {
   %mem0_write = firrtl.mem Undefined {depth = 12 : i64, name = "mem0", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
   // CHECK: firrtl.instance mem0  @mem0
@@ -91,40 +99,28 @@ firrtl.module @NoTestharnessDedup0() {
   firrtl.instance dut @DUT()
 }
 firrtl.module @DUT() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} { }
-
-// CHECK: firrtl.module private @mem0
-// CHECK-NEXT: firrtl.instance mem0_ext  @mem0_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
-
-// CHECK: firrtl.memmodule private @mem0_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
-
-// CHECK: firrtl.module private @mem1
-// CHECK-NEXT: firrtl.instance mem1_ext  @mem1_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
-
-// CHECK: firrtl.memmodule private @mem1_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
 }
 
 // Test that memories in the testharness are not deduped with other memories in the DUT.
 // CHECK-LABEL: firrtl.circuit "NoTestharnessDedup1"
 firrtl.circuit "NoTestharnessDedup1" {
+// CHECK: firrtl.module private @mem0
+// CHECK-NEXT: firrtl.instance mem0_ext  @mem0_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
+
+// CHECK: firrtl.memmodule private @mem0_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
 firrtl.module @NoTestharnessDedup1() {
   %mem0_write = firrtl.mem Undefined {depth = 12 : i64, name = "mem0", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
   // CHECK: firrtl.instance mem0  @mem0
   firrtl.instance dut @DUT()
 }
-firrtl.module @DUT() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
-  %mem1_write = firrtl.mem Undefined {depth = 12 :i64, name = "mem1", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
-  // CHECK: firrtl.instance mem1  @mem1
-}
-
-// CHECK: firrtl.module private @mem0
-// CHECK-NEXT: firrtl.instance mem0_ext  @mem0_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
-
-// CHECK: firrtl.memmodule private @mem0_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
-
 // CHECK: firrtl.module private @mem1
 // CHECK-NEXT: firrtl.instance mem1_ext  @mem1_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
 
 // CHECK: firrtl.memmodule private @mem1_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
+firrtl.module @DUT() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+  %mem1_write = firrtl.mem Undefined {depth = 12 :i64, name = "mem1", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
+  // CHECK: firrtl.instance mem1  @mem1
+}
 }
 
 // Check that when the mask is 1-bit, it is removed from the memory and the
@@ -168,6 +164,8 @@ firrtl.circuit "YesMask" {
 
 // CHECK-LABEL: firrtl.circuit "MemDepth1"
 firrtl.circuit "MemDepth1" {
+// CHECK: firrtl.memmodule private @mem0_ext
+// CHECK-SAME: depth = 1
   firrtl.module @MemDepth1(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>,
                            in %addr: !firrtl.uint<1>, in %data: !firrtl.uint<32>) {
     // CHECK: firrtl.instance mem0  @mem0(in W0_addr: !firrtl.uint<1>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<32>, in W0_mask: !firrtl.uint<4>)
@@ -182,8 +180,6 @@ firrtl.circuit "MemDepth1" {
     %2 = firrtl.subfield %mem0_write[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<4>>
     firrtl.connect %2, %data : !firrtl.uint<32>, !firrtl.uint<32>
 }
-// CHECK: firrtl.memmodule private @mem0_ext
-// CHECK-SAME: depth = 1
 }
 
 // CHECK-LABEL: firrtl.circuit "inferUnmaskedMemory"
@@ -227,13 +223,13 @@ firrtl.circuit "inferUnmaskedMemory" {
 // Check that annotations are copied over to the instance.
 // CHECK-LABEL: firrtl.circuit "Annotations"
 firrtl.circuit "Annotations" {
+// CHECK: firrtl.module private @mem0
+// CHECK-NEXT: firrtl.instance mem0_ext  {annotations = [{class = "test"}]} @mem0_ex
 firrtl.module @Annotations() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
   // No annotations copied to this instance.
   // CHECK: irrtl.instance mem0  @mem0
   %mem0_write = firrtl.mem Undefined {annotations = [{class = "test"}], depth = 12 : i64, name = "mem0", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
 }
-// CHECK: firrtl.module private @mem0
-// CHECK-NEXT: firrtl.instance mem0_ext  {annotations = [{class = "test"}]} @mem0_ex
 }
 
 // Check that annotations are copied over to the instance.
@@ -249,6 +245,17 @@ hw.hierpath private @nla1 [@NonLocalAnnotation::@dut, @DUT]
 firrtl.module @NonLocalAnnotation()  {
   firrtl.instance dut sym @dut @DUT()
 }
+// CHECK: firrtl.module private @mem0
+// CHECK:   firrtl.instance mem0_ext sym @mem0_ext
+// CHECK-SAME: {annotations = [{circt.nonlocal = @[[nla_0]], class = "test0"}]}
+// CHECK-SAME:  @mem0_ext(
+// CHECK: }
+
+// CHECK: firrtl.module private @mem1
+// CHECK:   firrtl.instance mem0_ext sym @mem0_ext
+// CHECK-SAME:  {annotations = [{circt.nonlocal = @[[nla_1]], class = "test1"}]}
+// CHECK-SAME:  @mem0_ext(
+
 // CHECK: firrtl.module @DUT()
 firrtl.module @DUT() {
   // This memory has a symbol and an NLA directly targetting it.
@@ -263,17 +270,6 @@ firrtl.module @DUT() {
   %MRead_read = firrtl.mem Undefined {depth = 12 : i64, name = "MRead", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
 // CHECK:   %MRead_read = firrtl.mem Undefined
 }
-
-// CHECK: firrtl.module private @mem0
-// CHECK:   firrtl.instance mem0_ext sym @mem0_ext
-// CHECK-SAME: {annotations = [{circt.nonlocal = @[[nla_0]], class = "test0"}]}
-// CHECK-SAME:  @mem0_ext(
-// CHECK: }
-
-// CHECK: firrtl.module private @mem1
-// CHECK:   firrtl.instance mem0_ext sym @mem0_ext
-// CHECK-SAME:  {annotations = [{circt.nonlocal = @[[nla_1]], class = "test1"}]}
-// CHECK-SAME:  @mem0_ext(
 }
 
 // CHECK-LABEL: "MemoryInLayer"

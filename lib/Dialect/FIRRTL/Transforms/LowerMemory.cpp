@@ -196,8 +196,8 @@ LowerMemoryPass::emitMemoryModule(MemOp op, const FirMemory &mem,
   auto newName = circuitNamespace.newName(mem.modName.getValue(), "ext");
   auto moduleName = StringAttr::get(&getContext(), newName);
 
-  // Insert the memory module at the bottom of the circuit.
-  auto b = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
+  // Insert the memory module just above the current module.
+  OpBuilder b(op->getParentOfType<FModuleOp>());
   ++numCreatedMemModules;
   auto moduleOp = b.create<FMemModuleOp>(
       mem.loc, moduleName, ports, mem.numReadPorts, mem.numWritePorts,
@@ -240,8 +240,8 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
   auto newName = circuitNamespace.newName(mem.getName());
   auto wrapperName = StringAttr::get(&getContext(), newName);
 
-  // Create the wrapper module, inserting it into the bottom of the circuit.
-  auto b = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
+  // Create the wrapper module, inserting it just before the current module.
+  OpBuilder b(mem->getParentOfType<FModuleOp>());
   auto wrapper = b.create<FModuleOp>(
       mem->getLoc(), wrapperName,
       ConventionAttr::get(context, Convention::Internal), ports);
