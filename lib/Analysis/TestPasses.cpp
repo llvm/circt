@@ -204,7 +204,27 @@ static llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const bool a) {
   return os << "false";
 }
 
-static void printInfo(firrtl::FModuleOp op, firrtl::InstanceInfo &iInfo) {
+static void printCircuitInfo(firrtl::CircuitOp op,
+                             firrtl::InstanceInfo &iInfo) {
+  OpPrintingFlags flags;
+  flags.skipRegions();
+  llvm::errs() << "  - operation: ";
+  op->print(llvm::errs(), flags);
+  llvm::errs() << "\n"
+               << "    hasDut: " << iInfo.hasDut() << "\n"
+               << "    dut: ";
+  if (auto *dutNode = iInfo.getDut())
+    dutNode->getModule()->print(llvm::errs(), flags);
+  else
+    llvm::errs() << "null";
+  llvm::errs() << "\n"
+               << "    effectiveDut: ";
+  iInfo.getEffectiveDut()->getModule()->print(llvm::errs(), flags);
+  llvm::errs() << "\n";
+}
+
+static void printModuleInfo(igraph::ModuleOpInterface op,
+                            firrtl::InstanceInfo &iInfo) {
   OpPrintingFlags flags;
   flags.skipRegions();
   llvm::errs() << "  - operation: ";
@@ -224,8 +244,10 @@ static void printInfo(firrtl::FModuleOp op, firrtl::InstanceInfo &iInfo) {
 void FIRRTLInstanceInfoPass::runOnOperation() {
   auto &iInfo = getAnalysis<firrtl::InstanceInfo>();
 
-  for (auto op : getOperation().getBodyBlock()->getOps<firrtl::FModuleOp>())
-    printInfo(op, iInfo);
+  printCircuitInfo(getOperation(), iInfo);
+  for (auto op :
+       getOperation().getBodyBlock()->getOps<igraph::ModuleOpInterface>())
+    printModuleInfo(op, iInfo);
 }
 
 //===----------------------------------------------------------------------===//

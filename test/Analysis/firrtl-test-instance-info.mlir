@@ -1,5 +1,12 @@
-// RUN: circt-opt %s -test-firrtl-instance-info 2>&1 | FileCheck %s
+// RUN: circt-opt %s -test-firrtl-instance-info -split-input-file 2>&1 | FileCheck %s
 
+// General test of DUT handling and layer handling when a `MarkDUTAnnotation` is
+// present.
+//
+// CHECK:      "Foo"
+// CHECK-NEXT:   hasDut: true
+// CHECK-NEXT:   dut: firrtl.module private @Bar
+// CHECK-NEXT:   effectiveDut: firrtl.module private @Bar
 firrtl.circuit "Foo" {
   firrtl.layer @A bind {
   }
@@ -59,5 +66,63 @@ firrtl.circuit "Foo" {
       firrtl.instance corge @Corge()
     }
     firrtl.instance corge2 @Corge()
+  }
+}
+
+// -----
+
+// Test behavior when a `MarkDUTAnnotation` is absent.
+//
+// CHECK:      "Foo"
+// CHECK-NEXT:   hasDut: false
+// CHECK-NEXT:   dut: null
+// CHECK-NEXT:   effectiveDut: firrtl.module @Foo
+firrtl.circuit "Foo" {
+  // CHECK:      @Foo
+  // CHECK-NEXT:   isDut: false
+  // CHECK-NEXT:   atLeastOneInstanceUnderDut: false
+  // CHECK-NEXT:   allInstancesUnderDut: false
+  // CHECK-NEXT:   atLeastOneInstanceUnderLayer: false
+  // CHECK-NEXT:   allInstancesUnderLayer: false
+  firrtl.module @Foo() {}
+}
+
+// -----
+
+// Test that a non-FModuleOp can be queried.
+firrtl.circuit "Foo" {
+  // CHECK:      @Mem
+  // CHECK-NEXT:   isDut: false
+  // CHECK-NEXT:   atLeastOneInstanceUnderDut: true
+  // CHECK-NEXT:   allInstancesUnderDut: true
+  // CHECK-NEXT:   atLeastOneInstanceUnderLayer: false
+  // CHECK-NEXT:   allInstancesUnderLayer: false
+  firrtl.memmodule @Mem(
+    in W0_addr: !firrtl.uint<1>,
+    in W0_en: !firrtl.uint<1>,
+    in W0_clk: !firrtl.clock,
+    in W0_data: !firrtl.uint<8>
+  ) attributes {
+    dataWidth = 8 : ui32,
+    depth = 2 : ui64,
+    extraPorts = [],
+    maskBits = 1 : ui32,
+    numReadPorts = 0 : ui32,
+    numReadWritePorts = 0 : ui32,
+    numWritePorts = 1 : ui32,
+    readLatency = 1 : ui32,
+    writeLatency = 1 : ui32
+  }
+  firrtl.module @Foo() attributes {
+    annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+    ]
+  } {
+    %0:4 = firrtl.instance Mem @Mem(
+      in W0_addr: !firrtl.uint<1>,
+      in W0_en: !firrtl.uint<1>,
+      in W0_clk: !firrtl.clock,
+      in W0_data: !firrtl.uint<8>
+    )
   }
 }
