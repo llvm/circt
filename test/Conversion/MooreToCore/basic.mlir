@@ -258,12 +258,8 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   moore.wildcard_eq %arg0, %arg0 : !moore.i1 -> !moore.i1
   moore.wildcard_ne %arg0, %arg0 : !moore.i1 -> !moore.i1
 
-  // CHECK-NEXT: [[RES:%.+]] = scf.if %arg0 -> (i6) {
-  // CHECK-NEXT:   scf.yield %arg2 : i6
-  // CHECK-NEXT: } else {
-  // CHECK-NEXT:   [[TMP:%.+]] = hw.constant 19 : i6
-  // CHECK-NEXT:   scf.yield [[TMP]] : i6
-  // CHECK-NEXT: }
+  // CHECK-NEXT: [[TMP:%.+]] = hw.constant 19 : i6
+  // CHECK-NEXT: [[RES:%.+]] = comb.mux %arg0, %arg2, [[TMP]]
   // CHECK-NEXT: comb.parity [[RES]] : i6
   %k0 = moore.conditional %arg0 : i1 -> i6 {
     moore.yield %arg2 : i6
@@ -275,6 +271,8 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
 
   // CHECK-NEXT: [[RES:%.+]] = scf.if %arg1 -> (i6) {
   // CHECK-NEXT:   [[TMP:%.+]] = hw.constant 0 : i6
+  // CHECK:        %var_l6 = llhd.sig
+  // CHECK:        llhd.drv %var_l6, [[TMP]] after
   // CHECK-NEXT:   scf.yield [[TMP]] : i6
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   [[TMP:%.+]] = hw.constant 19 : i6
@@ -283,6 +281,8 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: comb.parity [[RES]] : i6
   %k1 = moore.conditional %arg1 : l1 -> l6 {
     %0 = moore.constant bXXXXXX : l6
+    %var_l6 = moore.variable : <l6>
+    moore.blocking_assign %var_l6, %0 : l6
     moore.yield %0 : l6
   } {
     %0 = moore.constant 19 : l6
