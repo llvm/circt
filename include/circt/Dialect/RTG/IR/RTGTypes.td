@@ -27,15 +27,6 @@ def SnippetType : RTGTypeDef<"Snippet"> {
   let assemblyFormat = "";
 }
 
-def InstructionType : RTGTypeDef<"Instruction"> {
-  let summary = "";
-  let description = [{
-  }];
-
-  let mnemonic = "instruction";
-  let assemblyFormat = "";
-}
-
 def ResourceType : RTGTypeDef<"Resource"> {
   let summary = "";
   let description = [{
