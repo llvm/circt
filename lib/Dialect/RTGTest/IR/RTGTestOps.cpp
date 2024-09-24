@@ -12,9 +12,22 @@
 
 #include "circt/Dialect/RTGTest/IR/RTGTestOps.h"
 #include "mlir/IR/Builders.h"
+#include "llvm/ADT/APInt.h"
 
 using namespace circt;
 using namespace rtgtest;
+
+//===----------------------------------------------------------------------===//
+// InstrAOp
+//===----------------------------------------------------------------------===//
+
+APInt TestInstrAOp::getBinary(ArrayRef<APInt> operands) {
+  return APInt(7, 0b1110001).concat(operands[0]).concat(operands[1]);
+}
+
+void TestInstrAOp::printAssembly(raw_ostream &stream) {
+  stream << "instr_a " << getImm1() << ", " << getImm2();
+}
 
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.

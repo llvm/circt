@@ -11,8 +11,15 @@
 //===----------------------------------------------------------------------===//
 
 include "mlir/IR/EnumAttr.td"
+include "circt/Dialect/RTG/IR/RTGInterfaces.td"
 
 // Base class for the operation in this dialect.
 class RTGTestOp<string mnemonic, list<Trait> traits = []> :
-    Op<RTGTestDialect, mnemonic, traits>;
+  Op<RTGTestDialect, mnemonic, traits>;
 
+def TestInstrAOp : RTGTestOp<"instr_a", [
+  DeclareOpInterfaceMethods<InstructionOpInterface>,
+]> {
+  let arguments = (ins I32:$imm1, I32:$imm2);
+  let assemblyFormat = "$imm1 `,` $imm2 attr-dict";
+}

@@ -27,6 +27,8 @@ def RTGTestDialect : Dialect {
 
   let useDefaultTypePrinterParser = 1;
   let cppNamespace = "::circt::rtgtest";
+
+  let dependentDialects = ["circt::rtg::RTGDialect"];
 }
 
 #endif // CIRCT_DIALECT_RTGTEST_IR_RTGTESTDIALECT_TD

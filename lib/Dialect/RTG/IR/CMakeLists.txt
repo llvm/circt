@@ -8,6 +8,7 @@ add_circt_dialect_library(CIRCTRTGDialect
 
   DEPENDS
   MLIRRTGIncGen
+  CIRCTRTGInterfacesIncGen
   
   LINK_LIBS PUBLIC
   MLIRIR

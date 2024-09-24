@@ -18,6 +18,8 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpImplementation.h"
 
+#include "circt/Dialect/RTG/IR/RTGInterfaces.h.inc"
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/RTG/IR/RTG.h.inc"
 

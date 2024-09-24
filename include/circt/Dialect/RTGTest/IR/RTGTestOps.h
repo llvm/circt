@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_RTGTEST_IR_RTGTESTOPS_H
 #define CIRCT_DIALECT_RTGTEST_IR_RTGTESTOPS_H
 
+#include "circt/Dialect/RTG/IR/RTGOps.h"
 #include "circt/Dialect/RTGTest/IR/RTGTestDialect.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpImplementation.h"
