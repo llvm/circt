@@ -36,7 +36,4 @@ void RTGDialect::initialize() {
       >();
 }
 
-// Provide implementations for the enums we use.
-#include "circt/Dialect/RTG/IR/RTGEnums.cpp.inc"
-
 #include "circt/Dialect/RTG/IR/RTGDialect.cpp.inc"

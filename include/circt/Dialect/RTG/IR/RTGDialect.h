@@ -19,6 +19,5 @@
 
 // Pull in the Dialect definition.
 #include "circt/Dialect/RTG/IR/RTGDialect.h.inc"
-#include "circt/Dialect/RTG/IR/RTGEnums.h.inc"
 
 #endif // CIRCT_DIALECT_RTG_IR_RTGDIALECT_H

@@ -36,7 +36,4 @@ void RTGTestDialect::initialize() {
       >();
 }
 
-// Provide implementations for the enums we use.
-#include "circt/Dialect/RTGTest/IR/RTGTestEnums.cpp.inc"
-
 #include "circt/Dialect/RTGTest/IR/RTGTestDialect.cpp.inc"
