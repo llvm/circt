@@ -9,8 +9,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Analysis/FIRRTLInstanceInfo.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
-#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
@@ -532,31 +532,17 @@ LogicalResult LowerMemoryPass::runOnModule(FModuleOp moduleOp,
 
 void LowerMemoryPass::runOnOperation() {
   auto circuit = getOperation();
-  auto *body = circuit.getBodyBlock();
-  auto &instanceGraph = getAnalysis<InstanceGraph>();
+  auto &instanceInfo = getAnalysis<InstanceInfo>();
   symbolTable = &getAnalysis<SymbolTable>();
   circuitNamespace.add(circuit);
 
-  // Find the device under test and create a set of all modules underneath it.
-  // If no module is marked as the DUT, then the top module is the DUT.
-  auto *dut = instanceGraph.getTopLevelNode();
-  auto it = llvm::find_if(*body, [&](Operation &op) -> bool {
-    return AnnotationSet::hasAnnotation(&op, dutAnnoClass);
-  });
-  if (it != body->end())
-    dut = instanceGraph.lookup(cast<igraph::ModuleOpInterface>(*it));
-
-  // The set of all modules underneath the design under test module.
-  DenseSet<Operation *> dutModuleSet;
-  llvm::for_each(llvm::depth_first(dut), [&](igraph::InstanceGraphNode *node) {
-    dutModuleSet.insert(node->getModule());
-  });
-
-  // We iterate the circuit from top-to-bottom to make sure that we get
-  // consistent memory names.
-  for (auto moduleOp : body->getOps<FModuleOp>()) {
-    // We don't dedup memories in the testharness with any other memories.
-    auto shouldDedup = dutModuleSet.contains(moduleOp);
+  // We iterate the circuit from top-to-bottom.  This ensures that we get
+  // consistent memory names.  (Memory modules will be inserted before the
+  // module we are processing to prevent these being unnecessarily visited.)
+  // Deduplication of memories is allowed if the module is under the "effective"
+  // design-under-test (DUT).
+  for (auto moduleOp : circuit.getBodyBlock()->getOps<FModuleOp>()) {
+    auto shouldDedup = instanceInfo.anyInstanceUnderEffectiveDut(moduleOp);
     if (failed(runOnModule(moduleOp, shouldDedup)))
       return signalPassFailure();
   }
