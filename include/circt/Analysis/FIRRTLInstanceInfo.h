@@ -123,7 +123,7 @@ public:
   /// Return true if at least one instance of this module is under (or
   /// transitively under) the design-under-test.  This is true if the module is
   /// the design-under-test.
-  bool atLeastOneInstanceUnderDut(igraph::ModuleOpInterface op);
+  bool anyInstanceUnderDut(igraph::ModuleOpInterface op);
 
   /// Return true if all instances of this module are under (or transitively
   /// under) the design-under-test.  This is true if the module is the
@@ -133,7 +133,7 @@ public:
   /// Return true if at least one instance is under (or transitively under) the
   /// effective design-under-test.  This is true if the module is the effective
   /// design-under-test.
-  bool atLeastOneInstanceUnderEffectiveDut(igraph::ModuleOpInterface op);
+  bool anyInstanceUnderEffectiveDut(igraph::ModuleOpInterface op);
 
   /// Return true if all instances are under (or transitively under) the
   /// effective design-under-test.  This is true if the module is the effective
@@ -142,7 +142,7 @@ public:
 
   /// Return true if at least one instance of this module is under (or
   /// transitively under) a layer.
-  bool atLeastOneInstanceUnderLayer(igraph::ModuleOpInterface op);
+  bool anyInstanceUnderLayer(igraph::ModuleOpInterface op);
 
   /// Return true if all instances of this module are under (or transitively
   /// under) layer blocks.

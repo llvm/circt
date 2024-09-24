@@ -231,16 +231,16 @@ static void printModuleInfo(igraph::ModuleOpInterface op,
   op->print(llvm::errs(), flags);
   llvm::errs() << "\n"
                << "    isDut: " << iInfo.isDut(op) << "\n"
-               << "    atLeastOneInstanceUnderDut: "
-               << iInfo.atLeastOneInstanceUnderDut(op) << "\n"
+               << "    anyInstanceUnderDut: " << iInfo.anyInstanceUnderDut(op)
+               << "\n"
                << "    allInstancesUnderDut: " << iInfo.allInstancesUnderDut(op)
                << "\n"
-               << "    atLeastOneInstanceUnderEffectiveDut: "
-               << iInfo.atLeastOneInstanceUnderEffectiveDut(op) << "\n"
+               << "    anyInstanceUnderEffectiveDut: "
+               << iInfo.anyInstanceUnderEffectiveDut(op) << "\n"
                << "    allInstancesUnderEffectiveDut: "
                << iInfo.allInstancesUnderEffectiveDut(op) << "\n"
-               << "    atLeastOneInstanceUnderLayer: "
-               << iInfo.atLeastOneInstanceUnderLayer(op) << "\n"
+               << "    anyInstanceUnderLayer: "
+               << iInfo.anyInstanceUnderLayer(op) << "\n"
                << "    allInstancesUnderLayer: "
                << iInfo.allInstancesUnderLayer(op) << "\n";
 }

@@ -169,7 +169,7 @@ igraph::InstanceGraphNode *InstanceInfo::getEffectiveDut() {
   return circuitAttributes.effectiveDutNode;
 }
 
-bool InstanceInfo::atLeastOneInstanceUnderDut(igraph::ModuleOpInterface op) {
+bool InstanceInfo::anyInstanceUnderDut(igraph::ModuleOpInterface op) {
   auto underDut = getModuleAttributes(op).underDut;
   return underDut.isMixed() || allInstancesUnderDut(op);
 }
@@ -179,16 +179,15 @@ bool InstanceInfo::allInstancesUnderDut(igraph::ModuleOpInterface op) {
   return underDut.isConstant() && underDut.getConstant();
 }
 
-bool InstanceInfo::atLeastOneInstanceUnderEffectiveDut(
-    igraph::ModuleOpInterface op) {
-  return !hasDut() || atLeastOneInstanceUnderDut(op);
+bool InstanceInfo::anyInstanceUnderEffectiveDut(igraph::ModuleOpInterface op) {
+  return !hasDut() || anyInstanceUnderDut(op);
 }
 
 bool InstanceInfo::allInstancesUnderEffectiveDut(igraph::ModuleOpInterface op) {
   return !hasDut() || allInstancesUnderDut(op);
 }
 
-bool InstanceInfo::atLeastOneInstanceUnderLayer(igraph::ModuleOpInterface op) {
+bool InstanceInfo::anyInstanceUnderLayer(igraph::ModuleOpInterface op) {
   auto underLayer = getModuleAttributes(op).underLayer;
   return underLayer.isMixed() || allInstancesUnderLayer(op);
 }
