@@ -111,6 +111,10 @@ def EarlyCodeMotion : Pass<"llhd-early-code-motion", "hw::HWModuleOp"> {
   let constructor = "circt::llhd::createEarlyCodeMotionPass()";
 }
 
+def Sig2Reg : Pass<"llhd-sig2reg", "hw::HWModuleOp"> {
+  let summary = "promote LLHD signals to SSA values";
+}
+
 def TemporalCodeMotion : Pass<"llhd-temporal-code-motion", "hw::HWModuleOp"> {
   let summary = "move drive operations to the exit basic block in processes";
   let description = [{

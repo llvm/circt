@@ -36,6 +36,7 @@ std::unique_ptr<OperationPass<hw::HWModuleOp>> createEarlyCodeMotionPass();
 
 std::unique_ptr<OperationPass<hw::HWModuleOp>> createTemporalCodeMotionPass();
 
+#define GEN_PASS_DECL_SIG2REG
 #define GEN_PASS_DECL_DESEQUENTIALIZATION
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/LLHD/Transforms/Passes.h.inc"
