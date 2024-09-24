@@ -12,14 +12,14 @@
 //===----------------------------------------------------------------------===//
 
 #ifndef CIRCT_DIALECT_RTGTEST_IR_RTGTESTDIALECT_H
-#define CIRCT_DIALECT_RTGTEST_IR_RTGDTESTIALECT_H
+#define CIRCT_DIALECT_RTGTEST_IR_RTGTESTDIALECT_H
 
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
 // Pull in the Dialect definition.
-#include "circt/Dialect/RTG-Test/IR/RTGTestDialect.h.inc"
-#include "circt/Dialect/RTG-Test/IR/RTGTestEnums.h.inc"
+#include "circt/Dialect/RTGTest/IR/RTGTestDialect.h.inc"
+#include "circt/Dialect/RTGTest/IR/RTGTestEnums.h.inc"
 
 #endif // CIRCT_DIALECT_RTGTEST_IR_RTGTESTDIALECT_H

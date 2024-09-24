@@ -1,4 +1,4 @@
-//===- RTGOps.h - Declare RTG dialect operations ----------------*- C++ -*-===//
+//===- RTGTestOps.h - Declare RTGTest dialect operations --------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,18 +6,18 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file declares the operation classes for the RTG dialect.
+// This file declares the operation classes for the RTGTest dialect.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_RTG_IR_RTGOPS_H
-#define CIRCT_DIALECT_RTG_IR_RTGOPS_H
+#ifndef CIRCT_DIALECT_RTGTEST_IR_RTGTESTOPS_H
+#define CIRCT_DIALECT_RTGTEST_IR_RTGTESTOPS_H
 
-#include "circt/Dialect/RTG/IR/RTGDialect.h"
+#include "circt/Dialect/RTGTest/IR/RTGTestDialect.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpImplementation.h"
 
 #define GET_OP_CLASSES
-#include "circt/Dialect/RTG/IR/RTG.h.inc"
+#include "circt/Dialect/RTGTest/IR/RTGTest.h.inc"
 
-#endif // CIRCT_DIALECT_RTG_IR_RTGOPS_H
+#endif // CIRCT_DIALECT_RTGTEST_IR_RTGTESTOPS_H

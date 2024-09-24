@@ -13,7 +13,7 @@
 #ifndef CIRCT_DIALECT_RTGTEST_IR_RTGTESTTYPES_TD
 #define CIRCT_DIALECT_RTGTEST_IR_RTGTESTTYPES_TD
 
-include "circt/Dialect/RTGTest/IR/RTGTESTDialect.td"
+include "circt/Dialect/RTGTest/IR/RTGTestDialect.td"
 include "mlir/IR/AttrTypeBase.td"
 
 class RTGTestTypeDef<string name> : TypeDef<RTGTestDialect, name> { }

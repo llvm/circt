@@ -8,7 +8,6 @@ add_circt_dialect_library(CIRCTRTGTestDialect
 
   DEPENDS
   MLIRRTGTestIncGen
-  MLIRRTGTestEnumsIncGen
 
   LINK_LIBS PUBLIC
   MLIRIR

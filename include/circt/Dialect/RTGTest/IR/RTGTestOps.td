@@ -13,19 +13,6 @@
 include "mlir/IR/EnumAttr.td"
 
 // Base class for the operation in this dialect.
-class RTGOp<string mnemonic, list<Trait> traits = []> :
-    Op<RTGDialect, mnemonic, traits>;
+class RTGTestOp<string mnemonic, list<Trait> traits = []> :
+    Op<RTGTestDialect, mnemonic, traits>;
 
-
-def SnippetOp : RTGOp<"snippet", [
-  NoRegionArguments,
-  NoTerminator
-]> {
-  let summary = "a sequence of instructions";
-  let description = [{
-  }];
-
-  let regions = (region SizedRegion<1>:$bodyRegion);
-
-  let assemblyFormat = "attr-dict-with-keyword $bodyRegion";
-}
