@@ -30,7 +30,9 @@ def InstructionOpInterface : OpInterface<"InstructionOpInterface"> {
         stream. The format should be the one understood by common assembler
         tools.
       }],
-      "void", "printAssembly", (ins "llvm::raw_ostream &":$stream)>,
+      "void", "printAssembly",
+      (ins "llvm::raw_ostream &":$stream,
+           "llvm::function_ref<void(mlir::Value)>":$print)>,
   ];
 }
 
