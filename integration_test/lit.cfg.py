@@ -79,7 +79,8 @@ tool_dirs = [
 ]
 tools = [
     'arcilator', 'circt-opt', 'circt-translate', 'firtool', 'circt-rtl-sim.py',
-    'equiv-rtl.sh', 'handshake-runner', 'hlstool', 'ibistool', 'circt-lec'
+    'equiv-rtl.sh', 'handshake-runner', 'hlstool', 'ibistool', 'circt-lec',
+    'circt-bmc'
 ]
 
 # Enable python if its path was configured
@@ -216,6 +217,7 @@ if config.z3_library != "":
 if config.mlir_enable_execution_engine:
   config.available_features.add('mlir-cpu-runner')
   config.available_features.add('circt-lec-jit')
+  config.available_features.add('circt-bmc-jit')
   tools.append('mlir-cpu-runner')
 
 # Add circt-verilog if the Slang frontend is enabled.

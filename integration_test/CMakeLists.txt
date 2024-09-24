@@ -9,6 +9,7 @@ set(CIRCT_INTEGRATION_TEST_DEPENDS
   circt-translate
   circt-rtl-sim
   circt-lec
+  circt-bmc
   firtool
   hlstool
   ibistool
