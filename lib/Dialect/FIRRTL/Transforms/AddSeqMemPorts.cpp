@@ -46,14 +46,14 @@ struct AddSeqMemPortsPass
   LogicalResult processFileAnno(Location loc, StringRef metadataDir,
                                 Annotation anno);
   LogicalResult processAnnos(CircuitOp circuit);
-  void createOutputFile(igraph::ModuleOpInterface module);
+  void createOutputFile(igraph::ModuleOpInterface moduleOp);
   InstanceGraphNode *findDUT();
   void processMemModule(FMemModuleOp mem);
-  LogicalResult processModule(FModuleOp module, bool isDUT);
+  LogicalResult processModule(FModuleOp moduleOp, bool isDUT);
 
   /// Get the cached namespace for a module.
-  hw::InnerSymbolNamespace &getModuleNamespace(FModuleLike module) {
-    return moduleNamespaces.try_emplace(module, module).first->second;
+  hw::InnerSymbolNamespace &getModuleNamespace(FModuleLike moduleOp) {
+    return moduleNamespaces.try_emplace(moduleOp, moduleOp).first->second;
   }
 
   /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
@@ -194,20 +194,21 @@ void AddSeqMemPortsPass::processMemModule(FMemModuleOp mem) {
   mem.setExtraPortsAttr(extraPortsAttr);
 }
 
-LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
+LogicalResult AddSeqMemPortsPass::processModule(FModuleOp moduleOp,
+                                                bool isDUT) {
   auto *context = &getContext();
   // Insert the new port connections at the end of the module.
-  auto builder = OpBuilder::atBlockEnd(module.getBodyBlock());
-  auto &memInfo = memInfoMap[module];
+  auto builder = OpBuilder::atBlockEnd(moduleOp.getBodyBlock());
+  auto &memInfo = memInfoMap[moduleOp];
   auto &extraPorts = memInfo.extraPorts;
   // List of ports added to submodules which must be connected to this module's
   // ports.
   SmallVector<Value> values;
 
   // The base index to use when adding ports to the current module.
-  unsigned firstPortIndex = module.getNumPorts();
+  unsigned firstPortIndex = moduleOp.getNumPorts();
 
-  for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock())) {
+  for (auto &op : llvm::make_early_inc_range(*moduleOp.getBodyBlock())) {
     if (auto inst = dyn_cast<InstanceOp>(op)) {
       auto submodule = inst.getReferencedModule(*instanceGraph);
 
@@ -276,12 +277,12 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
   }
 
   // Add the extra ports to this module.
-  module.insertPorts(extraPorts);
+  moduleOp.insertPorts(extraPorts);
 
   // Connect the submodule ports to the parent module ports.
   for (unsigned i = 0, e = values.size(); i < e; ++i) {
     auto &[firstArg, port] = extraPorts[i];
-    Value modulePort = module.getArgument(firstArg + i);
+    Value modulePort = moduleOp.getArgument(firstArg + i);
     Value instPort = values[i];
     if (port.direction == Direction::In)
       std::swap(modulePort, instPort);
@@ -290,7 +291,7 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
   return success();
 }
 
-void AddSeqMemPortsPass::createOutputFile(igraph::ModuleOpInterface module) {
+void AddSeqMemPortsPass::createOutputFile(igraph::ModuleOpInterface moduleOp) {
   // Insert the verbatim at the bottom of the circuit.
   auto circuit = getOperation();
   auto builder = OpBuilder::atBlockEnd(circuit.getBodyBlock());
@@ -325,8 +326,8 @@ void AddSeqMemPortsPass::createOutputFile(igraph::ModuleOpInterface module) {
 
   // The current sram we are processing.
   unsigned sramIndex = 0;
-  auto &instancePaths = memInfoMap[module].instancePaths;
-  auto dutSymbol = FlatSymbolRefAttr::get(module.getModuleNameAttr());
+  auto &instancePaths = memInfoMap[moduleOp].instancePaths;
+  auto dutSymbol = FlatSymbolRefAttr::get(moduleOp.getModuleNameAttr());
 
   auto loc = builder.getUnknownLoc();
   // Put the information in a verbatim operation.
@@ -410,8 +411,8 @@ void AddSeqMemPortsPass::runOnOperation() {
     // Visit the nodes in post-order.
     for (auto *node : llvm::post_order(dutNode)) {
       auto op = node->getModule();
-      if (auto module = dyn_cast<FModuleOp>(*op)) {
-        if (failed(processModule(module, /*isDUT=*/node == dutNode)))
+      if (auto moduleOp = dyn_cast<FModuleOp>(*op)) {
+        if (failed(processModule(moduleOp, /*isDUT=*/node == dutNode)))
           return signalPassFailure();
       } else if (auto mem = dyn_cast<FMemModuleOp>(*op)) {
         processMemModule(mem);
