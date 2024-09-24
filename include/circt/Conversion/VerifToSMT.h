@@ -13,13 +13,15 @@
 #include <memory>
 
 namespace circt {
+class Namespace;
 
 #define GEN_PASS_DECL_CONVERTVERIFTOSMT
 #include "circt/Conversion/Passes.h.inc"
 
 /// Get the Verif to SMT conversion patterns.
 void populateVerifToSMTConversionPatterns(TypeConverter &converter,
-                                          RewritePatternSet &patterns);
+                                          RewritePatternSet &patterns,
+                                          Namespace &names);
 
 } // namespace circt
 
