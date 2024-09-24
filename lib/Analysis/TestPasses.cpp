@@ -235,6 +235,10 @@ static void printModuleInfo(igraph::ModuleOpInterface op,
                << iInfo.atLeastOneInstanceUnderDut(op) << "\n"
                << "    allInstancesUnderDut: " << iInfo.allInstancesUnderDut(op)
                << "\n"
+               << "    atLeastOneInstanceUnderEffectiveDut: "
+               << iInfo.atLeastOneInstanceUnderEffectiveDut(op) << "\n"
+               << "    allInstancesUnderEffectiveDut: "
+               << iInfo.allInstancesUnderEffectiveDut(op) << "\n"
                << "    atLeastOneInstanceUnderLayer: "
                << iInfo.atLeastOneInstanceUnderLayer(op) << "\n"
                << "    allInstancesUnderLayer: "

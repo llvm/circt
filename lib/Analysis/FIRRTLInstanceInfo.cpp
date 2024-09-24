@@ -179,6 +179,15 @@ bool InstanceInfo::allInstancesUnderDut(igraph::ModuleOpInterface op) {
   return underDut.isConstant() && underDut.getConstant();
 }
 
+bool InstanceInfo::atLeastOneInstanceUnderEffectiveDut(
+    igraph::ModuleOpInterface op) {
+  return !hasDut() || atLeastOneInstanceUnderDut(op);
+}
+
+bool InstanceInfo::allInstancesUnderEffectiveDut(igraph::ModuleOpInterface op) {
+  return !hasDut() || allInstancesUnderDut(op);
+}
+
 bool InstanceInfo::atLeastOneInstanceUnderLayer(igraph::ModuleOpInterface op) {
   auto underLayer = getModuleAttributes(op).underLayer;
   return underLayer.isMixed() || allInstancesUnderLayer(op);

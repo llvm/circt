@@ -130,6 +130,16 @@ public:
   /// design-under-test.
   bool allInstancesUnderDut(igraph::ModuleOpInterface op);
 
+  /// Return true if at least one instance is under (or transitively under) the
+  /// effective design-under-test.  This is true if the module is the effective
+  /// design-under-test.
+  bool atLeastOneInstanceUnderEffectiveDut(igraph::ModuleOpInterface op);
+
+  /// Return true if all instances are under (or transitively under) the
+  /// effective design-under-test.  This is true if the module is the effective
+  /// design-under-test.
+  bool allInstancesUnderEffectiveDut(igraph::ModuleOpInterface op);
+
   /// Return true if at least one instance of this module is under (or
   /// transitively under) a layer.
   bool atLeastOneInstanceUnderLayer(igraph::ModuleOpInterface op);

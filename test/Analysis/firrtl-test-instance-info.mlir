@@ -14,6 +14,8 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   isDut: false
   // CHECK-NEXT:   atLeastOneInstanceUnderDut: false
   // CHECK-NEXT:   allInstancesUnderDut: false
+  // CHECK-NEXT:   atLeastOneInstanceUnderEffectiveDut: false
+  // CHECK-NEXT:   allInstancesUnderEffectiveDut: false
   // CHECK-NEXT:   atLeastOneInstanceUnderLayer: true
   // CHECK-NEXT:   allInstancesUnderLayer: false
   firrtl.module private @Corge() {}
@@ -21,6 +23,8 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   isDut: false
   // CHECK-NEXT:   atLeastOneInstanceUnderDut: false
   // CHECK-NEXT:   allInstancesUnderDut: false
+  // CHECK-NEXT:   atLeastOneInstanceUnderEffectiveDut: false
+  // CHECK-NEXT:   allInstancesUnderEffectiveDut: false
   // CHECK-NEXT:   atLeastOneInstanceUnderLayer: true
   // CHECK-NEXT:   allInstancesUnderLayer: true
   firrtl.module private @Quz() {}
@@ -28,6 +32,8 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   isDut: false
   // CHECK-NEXT:   atLeastOneInstanceUnderDut: true
   // CHECK-NEXT:   allInstancesUnderDut: false
+  // CHECK-NEXT:   atLeastOneInstanceUnderEffectiveDut: true
+  // CHECK-NEXT:   allInstancesUnderEffectiveDut: false
   // CHECK-NEXT:   atLeastOneInstanceUnderLayer: false
   // CHECK-NEXT:   allInstancesUnderLayer: false
   firrtl.module private @Qux() {}
@@ -35,6 +41,8 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   isDut: false
   // CHECK-NEXT:   atLeastOneInstanceUnderDut: true
   // CHECK-NEXT:   allInstancesUnderDut: true
+  // CHECK-NEXT:   atLeastOneInstanceUnderEffectiveDut: true
+  // CHECK-NEXT:   allInstancesUnderEffectiveDut: true
   // CHECK-NEXT:   atLeastOneInstanceUnderLayer: false
   // CHECK-NEXT:   allInstancesUnderLayer: false
   firrtl.module private @Baz() {}
@@ -42,6 +50,8 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   isDut: true
   // CHECK-NEXT:   atLeastOneInstanceUnderDut: true
   // CHECK-NEXT:   allInstancesUnderDut: true
+  // CHECK-NEXT:   atLeastOneInstanceUnderEffectiveDut: true
+  // CHECK-NEXT:   allInstancesUnderEffectiveDut: true
   // CHECK-NEXT:   atLeastOneInstanceUnderLayer: false
   // CHECK-NEXT:   allInstancesUnderLayer: false
   firrtl.module private @Bar() attributes {
@@ -56,6 +66,8 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   isDut: false
   // CHECK-NEXT:   atLeastOneInstanceUnderDut: false
   // CHECK-NEXT:   allInstancesUnderDut: false
+  // CHECK-NEXT:   atLeastOneInstanceUnderEffectiveDut: false
+  // CHECK-NEXT:   allInstancesUnderEffectiveDut: false
   // CHECK-NEXT:   atLeastOneInstanceUnderLayer: false
   // CHECK-NEXT:   allInstancesUnderLayer: false
   firrtl.module @Foo() {
@@ -82,6 +94,8 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   isDut: false
   // CHECK-NEXT:   atLeastOneInstanceUnderDut: false
   // CHECK-NEXT:   allInstancesUnderDut: false
+  // CHECK-NEXT:   atLeastOneInstanceUnderEffectiveDut: true
+  // CHECK-NEXT:   allInstancesUnderEffectiveDut: true
   // CHECK-NEXT:   atLeastOneInstanceUnderLayer: false
   // CHECK-NEXT:   allInstancesUnderLayer: false
   firrtl.module @Foo() {}
@@ -95,6 +109,8 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   isDut: false
   // CHECK-NEXT:   atLeastOneInstanceUnderDut: true
   // CHECK-NEXT:   allInstancesUnderDut: true
+  // CHECK-NEXT:   atLeastOneInstanceUnderEffectiveDut: true
+  // CHECK-NEXT:   allInstancesUnderEffectiveDut: true
   // CHECK-NEXT:   atLeastOneInstanceUnderLayer: false
   // CHECK-NEXT:   allInstancesUnderLayer: false
   firrtl.memmodule @Mem(
