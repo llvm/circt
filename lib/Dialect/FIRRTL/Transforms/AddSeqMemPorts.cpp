@@ -185,6 +185,26 @@ InstanceGraphNode *AddSeqMemPortsPass::findDUT() {
 }
 
 LogicalResult AddSeqMemPortsPass::processMemModule(FMemModuleOp mem) {
+  // Error if the circuit has a DUT and if the instances are not under the
+  // design-under-test.
+  if (instanceInfo->hasDut() && !instanceInfo->allInstancesUnderDut(mem)) {
+    auto diag = mem->emitOpError()
+                << "cannot have ports added to it because it is instantiated "
+                   "both under and not under the design-under-test (DUT)";
+    for (auto *instNode : instanceGraph->lookup(mem)->uses()) {
+      auto instanceOp = instNode->getInstance();
+      if (instanceInfo->anyInstanceUnderDut(
+              instNode->getParent()->getModule())) {
+        diag.attachNote(instanceOp.getLoc())
+            << "this instance is under the DUT";
+        continue;
+      }
+      diag.attachNote(instanceOp.getLoc())
+          << "this instance is not under the DUT";
+    }
+    return failure();
+  }
+
   // Error if the memory is partially under a layer.
   //
   // TODO: There are several ways to handle a memory being under a layer:
