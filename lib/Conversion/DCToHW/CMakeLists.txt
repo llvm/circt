@@ -1,4 +1,4 @@
-add_circt_library(CIRCTDCToHW
+add_circt_conversion_library(CIRCTDCToHW
     DCToHW.cpp
 
     ADDITIONAL_HEADER_DIRS

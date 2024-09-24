@@ -12,9 +12,11 @@
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/IR/Dominance.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Region.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/LLVM.h"
+#include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/STLExtras.h"
 #include <queue>
 
@@ -287,12 +289,23 @@ LogicalResult TemporalCodeMotionPass::runOnProcess(llhd::ProcessOp procOp) {
           workQueue.push(succ);
       }
     }
+
+    // Merge entry and exit block of each TR, remove all other blocks
+    if (entryBlock != exitingBlock) {
+      entryBlock->getTerminator()->erase();
+      entryBlock->getOperations().splice(entryBlock->end(),
+                                         exitingBlock->getOperations());
+    }
   }
+
+  IRRewriter rewriter(procOp);
+  (void)mlir::eraseUnreachableBlocks(rewriter, procOp->getRegions());
 
   //===--------------------------------------------------------------------===//
   // Coalesce multiple drives to the same signal
   //===--------------------------------------------------------------------===//
 
+  trAnalysis = llhd::TemporalRegionAnalysis(procOp);
   DominanceInfo dom(procOp);
   for (unsigned currTR = 0; currTR < numTRs; ++currTR) {
     // We ensured this in the previous phase above.

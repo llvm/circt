@@ -1329,4 +1329,47 @@ def YieldOp : MooreOp<"yield", [
   let hasVerifier = 1;
 }
 
+//===----------------------------------------------------------------------===//
+// Assertions
+//===----------------------------------------------------------------------===//
+
+// Simple immediate assertions, like `assert`.
+def ImmediateAssert: I32EnumAttrCase<"Immediate", 0, "immediate">;
+// Observed deferred assertions, like `assert #0`.
+def ObservedAssert: I32EnumAttrCase<"Observed", 1, "observed">;
+// Final deferred assertions, like `assert final`.
+def FinalAssert: I32EnumAttrCase<"Final", 2, "final">;
+
+// A mode specifying how immediate/deferred assertions operate.
+def DeferAssertAttr : I32EnumAttr<
+  "DeferAssert", "assertion deferring mode",
+  [ImmediateAssert, ObservedAssert, FinalAssert]>
+{
+  let cppNamespace = "circt::moore";
+}
+
+class ImmediateAssertOp<string mnemonic, list<Trait> traits = []> : 
+    MooreOp<mnemonic, traits # [HasParent<"ProcedureOp">]>{
+  let arguments = (ins
+    DeferAssertAttr:$defer,
+    AnySingleBitType:$cond,
+    OptionalAttr<StrAttr>:$label
+  );
+  let assemblyFormat = [{
+    $defer $cond (`label` $label^)? attr-dict `:` type($cond)
+  }];
+}
+
+def AssertOp : ImmediateAssertOp<"assert">{
+  let summary = "If cond is not true, an error should be thrown.";
+}
+
+def AssumeOp : ImmediateAssertOp<"assume">{
+  let summary = "Verify the cond whether has the expected behavior.";
+}
+
+def CoverOp : ImmediateAssertOp<"cover">{
+  let summary = "Monitor the coverage information.";
+}
+
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

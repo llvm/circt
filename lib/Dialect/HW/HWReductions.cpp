@@ -135,6 +135,83 @@ struct HWConstantifier : public Reduction {
   std::string getName() const override { return "hw-constantifier"; }
 };
 
+/// Remove the first or last output of the top-level module depending on the
+/// 'Front' template parameter.
+template <bool Front>
+struct ModuleOutputPruner : public OpReduction<HWModuleOp> {
+  void beforeReduction(mlir::ModuleOp op) override {
+    useEmpty.clear();
+
+    SymbolTableCollection table;
+    SymbolUserMap users(table, op);
+    for (auto module : op.getOps<HWModuleOp>())
+      if (users.useEmpty(module))
+        useEmpty.insert(module);
+  }
+
+  uint64_t match(HWModuleOp op) override {
+    return op.getNumOutputPorts() != 0 && useEmpty.contains(op);
+  }
+
+  LogicalResult rewrite(HWModuleOp op) override {
+    Operation *terminator = op.getBody().front().getTerminator();
+    auto operands = terminator->getOperands();
+    ValueRange newOutputs = operands.drop_back();
+    unsigned portToErase = op.getNumOutputPorts() - 1;
+    if (Front) {
+      newOutputs = operands.drop_front();
+      portToErase = 0;
+    }
+
+    terminator->setOperands(newOutputs);
+    op.erasePorts({}, {portToErase});
+
+    return success();
+  }
+
+  std::string getName() const override {
+    return Front ? "hw-module-output-pruner-front"
+                 : "hw-module-output-pruner-back";
+  }
+
+  DenseSet<HWModuleOp> useEmpty;
+};
+
+/// Remove all input ports of the top-level module that have no users
+struct ModuleInputPruner : public OpReduction<HWModuleOp> {
+  void beforeReduction(mlir::ModuleOp op) override {
+    useEmpty.clear();
+
+    SymbolTableCollection table;
+    SymbolUserMap users(table, op);
+    for (auto module : op.getOps<HWModuleOp>())
+      if (users.useEmpty(module))
+        useEmpty.insert(module);
+  }
+
+  uint64_t match(HWModuleOp op) override { return useEmpty.contains(op); }
+
+  LogicalResult rewrite(HWModuleOp op) override {
+    SmallVector<unsigned> inputsToErase;
+    BitVector toErase(op.getNumPorts());
+    for (auto [i, arg] : llvm::enumerate(op.getBody().getArguments())) {
+      if (arg.use_empty()) {
+        toErase.set(i);
+        inputsToErase.push_back(i);
+      }
+    }
+
+    op.erasePorts(inputsToErase, {});
+    op.getBodyBlock()->eraseArguments(toErase);
+
+    return success();
+  }
+
+  std::string getName() const override { return "hw-module-input-pruner"; }
+
+  DenseSet<HWModuleOp> useEmpty;
+};
+
 //===----------------------------------------------------------------------===//
 // Reduction Registration
 //===----------------------------------------------------------------------===//
@@ -151,6 +228,9 @@ void HWReducePatternDialectInterface::populateReducePatterns(
   patterns.add<HWOperandForwarder<0>, 4>();
   patterns.add<HWOperandForwarder<1>, 3>();
   patterns.add<HWOperandForwarder<2>, 2>();
+  patterns.add<ModuleOutputPruner<true>, 2>();
+  patterns.add<ModuleOutputPruner<false>, 2>();
+  patterns.add<ModuleInputPruner, 2>();
 }
 
 void hw::registerReducePatternDialectInterface(

@@ -463,6 +463,76 @@ struct StmtVisitor {
     return success();
   }
 
+  // Handle immediate assertion statements.
+  LogicalResult visit(const slang::ast::ImmediateAssertionStatement &stmt) {
+    auto cond = context.convertRvalueExpression(stmt.cond);
+    cond = context.convertToBool(cond);
+    if (!cond)
+      return failure();
+
+    // Handle assertion statements that don't have an action block.
+    if (stmt.ifTrue && stmt.ifTrue->as_if<slang::ast::EmptyStatement>()) {
+      auto defer = moore::DeferAssert::Immediate;
+      if (stmt.isFinal)
+        defer = moore::DeferAssert::Final;
+      else if (stmt.isDeferred)
+        defer = moore::DeferAssert::Observed;
+
+      switch (stmt.assertionKind) {
+      case slang::ast::AssertionKind::Assert:
+        builder.create<moore::AssertOp>(loc, defer, cond, StringAttr{});
+        return success();
+      case slang::ast::AssertionKind::Assume:
+        builder.create<moore::AssumeOp>(loc, defer, cond, StringAttr{});
+        return success();
+      case slang::ast::AssertionKind::CoverProperty:
+        builder.create<moore::CoverOp>(loc, defer, cond, StringAttr{});
+        return success();
+      default:
+        break;
+      }
+      mlir::emitError(loc) << "unsupported immediate assertion kind: "
+                           << slang::ast::toString(stmt.assertionKind);
+      return failure();
+    }
+
+    // Regard assertion statements with an action block as the "if-else".
+    cond = builder.create<moore::ConversionOp>(loc, builder.getI1Type(), cond);
+
+    // Create the blocks for the true and false branches, and the exit block.
+    Block &exitBlock = createBlock();
+    Block *falseBlock = stmt.ifFalse ? &createBlock() : nullptr;
+    Block &trueBlock = createBlock();
+    builder.create<cf::CondBranchOp>(loc, cond, &trueBlock,
+                                     falseBlock ? falseBlock : &exitBlock);
+
+    // Generate the true branch.
+    builder.setInsertionPointToEnd(&trueBlock);
+    if (stmt.ifTrue && failed(context.convertStatement(*stmt.ifTrue)))
+      return failure();
+    if (!isTerminated())
+      builder.create<cf::BranchOp>(loc, &exitBlock);
+
+    if (stmt.ifFalse) {
+      // Generate the false branch if present.
+      builder.setInsertionPointToEnd(falseBlock);
+      if (failed(context.convertStatement(*stmt.ifFalse)))
+        return failure();
+      if (!isTerminated())
+        builder.create<cf::BranchOp>(loc, &exitBlock);
+    }
+
+    // If control never reaches the exit block, remove it and mark control flow
+    // as terminated. Otherwise we continue inserting ops in the exit block.
+    if (exitBlock.hasNoPredecessors()) {
+      exitBlock.erase();
+      setTerminated();
+    } else {
+      builder.setInsertionPointToEnd(&exitBlock);
+    }
+    return success();
+  }
+
   /// Emit an error for all other statements.
   template <typename T>
   LogicalResult visit(T &&stmt) {

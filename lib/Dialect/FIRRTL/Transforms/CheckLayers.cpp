@@ -21,6 +21,7 @@ namespace firrtl {
 
 using namespace circt;
 using namespace firrtl;
+using namespace mlir;
 
 namespace {
 class CheckLayers {
@@ -46,13 +47,13 @@ class CheckLayers {
 
   /// Walk a module, reporting any illegal instantation of layers under layers,
   /// and record if this module contains any layerblocks.
-  void run(FModuleOp module) {
+  void run(FModuleOp moduleOp) {
     // If this module directly contains a layerblock, or instantiates another
     // module with a layerblock, then this will point to the layerblock. We use
     // this for error reporting. We keep track of only the first layerblock
     // found.
     LayerBlockOp firstLayerblock = nullptr;
-    module.getBodyBlock()->walk<mlir::WalkOrder::PreOrder>([&](Operation *op) {
+    moduleOp.getBodyBlock()->walk<WalkOrder::PreOrder>([&](Operation *op) {
       // If we are instantiating a module, check if it contains a layerblock. If
       // it does, mark this target layerblock as our layerblock.
       if (auto instance = dyn_cast<FInstanceLike>(op)) {
@@ -81,7 +82,7 @@ class CheckLayers {
     });
     // If this module contained a layerblock, then record it.
     if (firstLayerblock)
-      layerBlocks.try_emplace(module, firstLayerblock);
+      layerBlocks.try_emplace(moduleOp, firstLayerblock);
   }
 
 public:
@@ -90,8 +91,8 @@ public:
     DenseSet<InstanceGraphNode *> visited;
     for (auto *root : instanceGraph) {
       for (auto *node : llvm::post_order_ext(root, visited)) {
-        if (auto module = dyn_cast<FModuleOp>(node->getModule<Operation *>()))
-          checkLayers.run(module);
+        if (auto moduleOp = dyn_cast<FModuleOp>(node->getModule<Operation *>()))
+          checkLayers.run(moduleOp);
       }
     }
     return failure(checkLayers.error);
@@ -116,6 +117,6 @@ public:
   }
 };
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createCheckLayers() {
+std::unique_ptr<Pass> circt::firrtl::createCheckLayers() {
   return std::make_unique<CheckLayersPass>();
 }
