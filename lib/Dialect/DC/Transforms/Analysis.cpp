@@ -11,19 +11,15 @@
 //===----------------------------------------------------------------------===//
 #include "circt/Dialect/DC/DCOps.h"
 #include "circt/Dialect/DC/DCPasses.h"
-#include "circt/Dialect/HW/HWDialect.h"
 #include "mlir/Pass/Pass.h"
 
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/DC/DCOps.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Support/IndentedOstream.h"
-#include "mlir/Tools/mlir-translate/Translation.h"
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/raw_ostream.h"
-#include <string>
 
 namespace circt {
 namespace dc {
@@ -38,19 +34,19 @@ using namespace mlir;
 
 using ValueMap = llvm::ScopedHashTable<mlir::Value, std::string>;
 
-// stores operand and results for each node in the dot graph
+/// stores operand and results for each node in the dot graph
 struct DotNode {
   std::string nodeType;
   llvm::SmallVector<std::pair<mlir::Value, std::string>> incoming;
   llvm::SmallVector<std::pair<mlir::Value, std::string>> outgoing;
 };
 
-// gives unique name to each value in the graph
+/// gives a unique name to each value in the graph
 llvm::SmallVector<std::pair<mlir::Value, std::string>>
-valueToName(const llvm::SmallVector<mlir::Value> &values,
+static valueToName(const llvm::SmallVector<mlir::Value> &values,
             llvm::SmallVector<std::pair<mlir::Value, std::string>> &currentMap,
             bool tokenFlag) {
-  llvm::SmallVector<std::pair<mlir::Value, std::string>> res;
+  SmallVector<std::pair<mlir::Value, std::string>> res;
   for (auto [i, v] : llvm::enumerate(values)) {
     auto found = false;
     for (const auto &cm : currentMap) {
@@ -70,6 +66,7 @@ valueToName(const llvm::SmallVector<mlir::Value> &values,
   return res;
 }
 
+/// creates node in the dataflow graph for DC operations
 DotNode createDCNode(
     Operation &op,
     llvm::SmallVector<std::pair<mlir::Value, std::string>> &valuesMap) {
@@ -85,6 +82,7 @@ DotNode createDCNode(
   return n;
 }
 
+/// creates node in the dataflow graph for Comb operations
 DotNode createCombNode(
     Operation &op,
     llvm::SmallVector<std::pair<mlir::Value, std::string>> &valuesMap) {
@@ -93,12 +91,12 @@ DotNode createCombNode(
                valueToName(op.getOperands(), valuesMap, false)};
 
   TypeSwitch<mlir::Operation *>(&op)
-      .Case<comb::AddOp>([&](auto op) { n.nodeType = "+"; })
-      .Case<comb::AndOp>([&](auto op) { n.nodeType = "&&"; })
-      .Case<comb::XorOp>([&](auto op) { n.nodeType = "^"; })
-      .Case<comb::OrOp>([&](auto op) { n.nodeType = "||"; })
-      .Case<comb::MulOp>([&](auto op) { n.nodeType = "x"; })
-      .Case<comb::MuxOp>([&](auto op) { n.nodeType = "mux"; })
+      .Case([&](comb::AddOp) { n.nodeType = "+"; })
+      .Case([&](comb::AndOp) { n.nodeType = "&&"; })
+      .Case([&](comb::XorOp) { n.nodeType = "^"; })
+      .Case([&](comb::OrOp) { n.nodeType = "||"; })
+      .Case([&](comb::MulOp) { n.nodeType = "x"; })
+      .Case([&](comb::MuxOp) { n.nodeType = "mux"; })
       .Case<comb::ICmpOp>([&](auto op) {
         switch (op.getPredicate()) {
         case circt::comb::ICmpPredicate::eq: {
@@ -177,7 +175,6 @@ struct DCDotPrintPass : public circt::dc::impl::DCDotPrintBase<DCDotPrintPass> {
     llvm::SmallVector<DotNode> nodes;
 
     auto &moduleOps = op->getRegion(0).getBlocks();
-    // getBlock()->getOps<hw::HWModuleOp>();
     for (auto &moduleOp : moduleOps) {
       auto hwModuleOp = moduleOp.getOps<hw::HWModuleOp>();
       for (auto hmo : hwModuleOp) {
