@@ -74,17 +74,11 @@ public:
     void mergeIn(bool value);
   };
 
-  /// Information about a circuit
-  struct CircuitAttributes {
-    /// The design-under-test if one is defined.
-    igraph::InstanceGraphNode *dutNode;
-
-    /// The design-under-test if one is defined or the top module.
-    igraph::InstanceGraphNode *effectiveDutNode;
-  };
-
-  /// Information about a module
   struct ModuleAttributes {
+    /// Indicates that this module is the design-under-test.  This is indicated
+    /// with a `sifive.enterprise.firrtl.MarkDUTAnnotation`.
+    bool isDut;
+
     /// Indicates if this module is instantiated under the design-under-test.
     InstanceInfo::LatticeValue underDut;
 
@@ -92,61 +86,33 @@ public:
     InstanceInfo::LatticeValue underLayer;
   };
 
-  //===--------------------------------------------------------------------===//
-  // Circuit Attribute Queries
-  //===--------------------------------------------------------------------===//
-
-  /// Return true if this circuit has a design-under-test.
-  bool hasDut();
-
-  /// Return the design-under-test if one is defined for the circuit, otherwise
-  /// return null.
-  igraph::InstanceGraphNode *getDut();
-
-  /// Return the "effective" design-under-test.  This will be the
-  /// design-under-test if one is defined.  Otherwise, this will be the root
-  /// node of the instance graph.
-  igraph::InstanceGraphNode *getEffectiveDut();
-
-  //===--------------------------------------------------------------------===//
-  // Module Attribute Queries
-  //===--------------------------------------------------------------------===//
-
   /// Return true if this module is the design-under-test.
-  bool isDut(igraph::ModuleOpInterface op);
-
-  /// Return true if this module is the design-under-test and the circuit has a
-  /// design-under-test.  If the circuit has no design-under-test, then return
-  /// true if this is the top module.
-  bool isEffectiveDut(igraph::ModuleOpInterface op);
+  bool isDut(FModuleOp op);
 
   /// Return true if at least one instance of this module is under (or
   /// transitively under) the design-under-test.  This is true if the module is
   /// the design-under-test.
-  bool atLeastOneInstanceUnderDut(igraph::ModuleOpInterface op);
+  bool atLeastOneInstanceUnderDut(FModuleOp op);
 
   /// Return true if all instances of this module are under (or transitively
   /// under) the design-under-test.  This is true if the module is the
   /// design-under-test.
-  bool allInstancesUnderDut(igraph::ModuleOpInterface op);
+  bool allInstancesUnderDut(FModuleOp op);
 
   /// Return true if at least one instance of this module is under (or
   /// transitively under) a layer.
-  bool atLeastOneInstanceUnderLayer(igraph::ModuleOpInterface op);
+  bool atLeastOneInstanceUnderLayer(FModuleOp op);
 
   /// Return true if all instances of this module are under (or transitively
   /// under) layer blocks.
-  bool allInstancesUnderLayer(igraph::ModuleOpInterface op);
+  bool allInstancesUnderLayer(FModuleOp op);
 
 private:
-  /// Stores circuit-level attributes.
-  CircuitAttributes circuitAttributes;
-
   /// Internal mapping of operations to module attributes.
   DenseMap<Operation *, ModuleAttributes> moduleAttributes;
 
   /// Return the module attributes associated with a module.
-  const ModuleAttributes &getModuleAttributes(igraph::ModuleOpInterface op);
+  const ModuleAttributes &getModuleAttributes(FModuleOp op);
 };
 
 #ifndef NDEBUG
