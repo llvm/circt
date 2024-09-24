@@ -21,12 +21,17 @@ class Pass;
 namespace circt {
 namespace dc {
 
+#define GEN_PASS_DECL
+#include "circt/Dialect/DC/DCPasses.h.inc"
+std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>> createDCDotPrintPass();
+
+
 std::unique_ptr<mlir::Pass> createDCMaterializeForksSinksPass();
 std::unique_ptr<mlir::Pass> createDCDematerializeForksSinksPass();
-std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>> createDCDotPrintPass();
 
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/DC/DCPasses.h.inc"
+
 
 } // namespace dc
 } // namespace circt
