@@ -403,7 +403,7 @@ void AddSeqMemPortsPass::runOnOperation() {
   extraPortsAttr = ArrayAttr::get(context, extraPorts);
 
   // If there are no user ports, don't do anything.
-  if (userPorts.size() > 0) {
+  if (!userPorts.empty()) {
     // Update ports statistic.
     numAddedPorts += userPorts.size();
 
@@ -428,7 +428,7 @@ void AddSeqMemPortsPass::runOnOperation() {
         // Find out how many memory ports we have to add.
         auto &subExtraPorts = dutMemInfo.extraPorts;
         // If there are no extra ports, we don't have to do anything.
-        if (subExtraPorts.size() == 0)
+        if (subExtraPorts.empty())
           continue;
 
         // Add the extra ports to the instance operation.
