@@ -10,7 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-include "mlir/IR/EnumAttr.td"
+include "mlir/IR/CommonTypeConstraints.td"
+include "mlir/IR/CommonAttrConstraints.td"
 
 // Base class for the operation in this dialect.
 class RTGOp<string mnemonic, list<Trait> traits = []> :
@@ -38,4 +39,15 @@ def SelectRandomOp : RTGOp<"select_random", [SameVariadicOperandSize]> {
                        Variadic<I32>:$ratios);
 
   let assemblyFormat = "` ` `[` $snippets `]` `,` `[` $ratios `]` attr-dict";
+}
+
+def LabelOp : RTGOp<"label", []> {
+  let summary = "places a label in an instruction sequence";
+
+  // TODO: 'args' can be generalized to more types (maybe based on a
+  // type interface?)
+  let arguments = (ins StrAttr:$formatString,
+                       Variadic<AnySignlessInteger>:$args);
+
+  let assemblyFormat = "$formatString (`,` $args^ `:` type($args))? attr-dict";
 }

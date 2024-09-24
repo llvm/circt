@@ -2,7 +2,11 @@
 
 // CHECK: [[SNIPPET:%.+]] = rtg.snippet attributes {rtg.some_attr} {
 %snippet = rtg.snippet attributes {rtg.some_attr} {
-^bb0:
+  %arg = arith.constant 1 : i32
+  // CHECK: rtg.label "label_string_{0}_{1}", %{{.*}}, %{{.*}} : i32, i32
+  rtg.label "label_string_{0}_{1}", %arg, %arg : i32, i32
+  // CHECK: rtg.label "label_string"
+  rtg.label "label_string"
 }
 
 // CHECK: rtg.snippet
