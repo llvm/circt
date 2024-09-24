@@ -144,20 +144,20 @@ print(obj.type.name)
 print(obj.field)
 
 # location of the om.class.field @field
-# CHECK: loc("-":22:20)
+# CHECK: field: loc("-":50:7)
 print("field:", obj.get_field_loc("field"))
 
-# CHECK: 14
-print(obj.child.foo)
-# CHECK: loc("-":53:21)
-print(obj.child.get_field_loc("foo"))
+# CHECK: child.foo: 14
+print("child.foo: ", obj.child.foo)
+# CHECK: child.foo.loc loc("-":54:7)
+print("child.foo.loc", obj.child.get_field_loc("foo"))
 # CHECK: ('Root', 'x')
 print(obj.reference)
 (fst, snd) = obj.tuple
 # CHECK: 14
 print(snd)
 
-# CHECK: loc("-":31:16)
+# CHECK: loc("-":50:7)
 print("tuple", obj.get_field_loc("tuple"))
 
 # CHECK: loc("-":22:5)
@@ -175,10 +175,10 @@ for (name, field) in obj:
   # CHECK-SAME: loc: loc("-":26:12)
   # location from om.class.field @field, %param : !om.integer
   # CHECK: name: field, field: 42
-  # CHECK-SAME: loc: loc("-":22:20)
+  # CHECK-SAME: loc: loc("-":50:7)
   # location from om.class.field @reference, %sym : !om.ref
   # CHECK: name: reference, field: ('Root', 'x')
-  # CHECK-SAME: loc: loc("-":23:14)
+  # CHECK-SAME: loc: loc("-":50:7)
   loc = obj.get_field_loc(name)
   print(f"name: {name}, field: {field}, loc: {loc}")
 
