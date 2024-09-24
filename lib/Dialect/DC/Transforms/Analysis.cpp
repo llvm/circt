@@ -73,138 +73,93 @@ valueToName(const llvm::SmallVector<mlir::Value> &values,
 DotNode createDCNode(
     Operation &op,
     llvm::SmallVector<std::pair<mlir::Value, std::string>> &valuesMap) {
-  if (auto castOp = llvm::dyn_cast<dc::ForkOp>(op))
-    return DotNode{.nodeType = "fork",
-                   .incoming = valueToName(op.getOperands(), valuesMap, false),
-                   .outgoing = valueToName(op.getResults(), valuesMap, false)};
-  if (auto castOp = llvm::dyn_cast<dc::JoinOp>(op))
-    return DotNode{.nodeType = "join",
-                   .incoming = valueToName(op.getOperands(), valuesMap, false),
-                   .outgoing = valueToName(op.getResults(), valuesMap, false)};
-  if (auto castOp = llvm::dyn_cast<dc::BranchOp>(op))
-    return DotNode{.nodeType = "branch",
-                   .incoming = valueToName(op.getOperands(), valuesMap, false),
-                   .outgoing = valueToName(op.getResults(), valuesMap, false)};
-  if (auto castOp = llvm::dyn_cast<dc::MergeOp>(op))
-    return DotNode{.nodeType = "merge",
-                   .incoming = valueToName(op.getOperands(), valuesMap, false),
-                   .outgoing = valueToName(op.getResults(), valuesMap, false)};
-  if (auto castOp = llvm::dyn_cast<dc::SourceOp>(op))
-    return DotNode{.nodeType = "source",
-                   .incoming = valueToName(op.getOperands(), valuesMap, false),
-                   .outgoing = valueToName(op.getResults(), valuesMap, false)};
-  if (auto castOp = llvm::dyn_cast<dc::SinkOp>(op))
-    return DotNode{.nodeType = "sink",
-                   .incoming = valueToName(op.getOperands(), valuesMap, false),
-                   .outgoing = valueToName(op.getResults(), valuesMap, false)};
-  if (auto castOp = llvm::dyn_cast<dc::SelectOp>(op))
-    return DotNode{.nodeType = "select",
-                   .incoming = valueToName(op.getOperands(), valuesMap, false),
-                   .outgoing = valueToName(op.getResults(), valuesMap, false)};
-  if (auto castOp = llvm::dyn_cast<dc::BufferOp>(op))
-    return DotNode{.nodeType = "buffer",
-                   .incoming = valueToName(op.getOperands(), valuesMap, false),
-                   .outgoing = valueToName(op.getResults(), valuesMap, false)};
-  if (auto castOp = llvm::dyn_cast<dc::FromESIOp>(op))
-    return DotNode{.nodeType = "fromESI",
-                   .incoming = valueToName(op.getOperands(), valuesMap, false),
-                   .outgoing = valueToName(op.getResults(), valuesMap, false)};
-  if (auto castOp = llvm::dyn_cast<dc::PackOp>(op))
-    return DotNode{.nodeType = "pack",
-                   .incoming = valueToName(op.getOperands(), valuesMap, false),
-                   .outgoing = valueToName(op.getResults(), valuesMap, false)};
-  if (auto castOp = llvm::dyn_cast<dc::ToESIOp>(op))
-    return DotNode{.nodeType = "toESI",
-                   .incoming = valueToName(op.getOperands(), valuesMap, false),
-                   .outgoing = valueToName(op.getResults(), valuesMap, false)};
-  if (auto castOp = llvm::dyn_cast<dc::UnpackOp>(op))
-    return DotNode{.nodeType = "unpack",
-                   .incoming = valueToName(op.getOperands(), valuesMap, false),
-                   .outgoing = valueToName(op.getResults(), valuesMap, true)};
+
+  auto tokenFlag = false;
+  if (isa<dc::UnpackOp>(op))
+    tokenFlag = true;
+
+  DotNode n = {op.getName().stripDialect().str(),
+               valueToName(op.getOperands(), valuesMap, false),
+               valueToName(op.getOperands(), valuesMap, tokenFlag)};
+
+  return n;
 }
 
 DotNode createCombNode(
     Operation &op,
     llvm::SmallVector<std::pair<mlir::Value, std::string>> &valuesMap) {
-  if (auto addOp = llvm::dyn_cast<comb::AddOp>(op))
-    return DotNode{.nodeType = "+",
-                   .incoming = valueToName(op.getOperands(), valuesMap, false),
-                   .outgoing = valueToName(op.getResults(), valuesMap, false)};
-  if (auto andOp = llvm::dyn_cast<comb::AndOp>(op))
-    return DotNode{.nodeType = "&&",
-                   .incoming = valueToName(op.getOperands(), valuesMap, false),
-                   .outgoing = valueToName(op.getResults(), valuesMap, false)};
-  if (auto xorOp = llvm::dyn_cast<comb::XorOp>(op))
-    return DotNode{.nodeType = "^",
-                   .incoming = valueToName(op.getOperands(), valuesMap, false),
-                   .outgoing = valueToName(op.getResults(), valuesMap, false)};
-  if (auto orOp = llvm::dyn_cast<comb::OrOp>(op))
-    return DotNode{.nodeType = "||",
-                   .incoming = valueToName(op.getOperands(), valuesMap, false),
-                   .outgoing = valueToName(op.getResults(), valuesMap, false)};
-  if (auto mulOp = llvm::dyn_cast<comb::MulOp>(op))
-    return DotNode{.nodeType = "x",
-                   .incoming = valueToName(op.getOperands(), valuesMap, false),
-                   .outgoing = valueToName(op.getResults(), valuesMap, false)};
-  if (auto muxOp = llvm::dyn_cast<comb::MuxOp>(op))
-    return DotNode{.nodeType = "mux",
-                   .incoming = valueToName(op.getOperands(), valuesMap, false),
-                   .outgoing = valueToName(op.getResults(), valuesMap, false)};
-  if (auto icmp = llvm::dyn_cast<comb::ICmpOp>(op)) {
-    if (icmp.getPredicate() == circt::comb::ICmpPredicate::eq)
-      return DotNode{
-          .nodeType = "==",
-          .incoming = valueToName(op.getOperands(), valuesMap, false),
-          .outgoing = valueToName(op.getResults(), valuesMap, false)};
-    if (icmp.getPredicate() == circt::comb::ICmpPredicate::ne)
-      return DotNode{
-          .nodeType = "!=",
-          .incoming = valueToName(op.getOperands(), valuesMap, false),
-          .outgoing = valueToName(op.getResults(), valuesMap, false)};
-    if (icmp.getPredicate() == circt::comb::ICmpPredicate::sgt)
-      return DotNode{
-          .nodeType = ">",
-          .incoming = valueToName(op.getOperands(), valuesMap, false),
-          .outgoing = valueToName(op.getResults(), valuesMap, false)};
-    if (icmp.getPredicate() == circt::comb::ICmpPredicate::sge)
-      return DotNode{
-          .nodeType = ">=",
-          .incoming = valueToName(op.getOperands(), valuesMap, false),
-          .outgoing = valueToName(op.getResults(), valuesMap, false)};
-    if (icmp.getPredicate() == circt::comb::ICmpPredicate::slt)
-      return DotNode{
-          .nodeType = "<",
-          .incoming = valueToName(op.getOperands(), valuesMap, false),
-          .outgoing = valueToName(op.getResults(), valuesMap, false)};
-    if (icmp.getPredicate() == circt::comb::ICmpPredicate::sle)
-      return DotNode{
-          .nodeType = "<=",
-          .incoming = valueToName(op.getOperands(), valuesMap, false),
-          .outgoing = valueToName(op.getResults(), valuesMap, false)};
-    if (icmp.getPredicate() == circt::comb::ICmpPredicate::ugt)
-      return DotNode{
-          .nodeType = ">",
-          .incoming = valueToName(op.getOperands(), valuesMap, false),
-          .outgoing = valueToName(op.getResults(), valuesMap, false)};
-    if (icmp.getPredicate() == circt::comb::ICmpPredicate::uge)
-      return DotNode{
-          .nodeType = ">=",
-          .incoming = valueToName(op.getOperands(), valuesMap, false),
-          .outgoing = valueToName(op.getResults(), valuesMap, false)};
-    if (icmp.getPredicate() == circt::comb::ICmpPredicate::ult)
-      return DotNode{
-          .nodeType = "<",
-          .incoming = valueToName(op.getOperands(), valuesMap, false),
-          .outgoing = valueToName(op.getResults(), valuesMap, false)};
-    if (icmp.getPredicate() == circt::comb::ICmpPredicate::ule)
-      return DotNode{
-          .nodeType = "<=",
-          .incoming = valueToName(op.getOperands(), valuesMap, false),
-          .outgoing = valueToName(op.getResults(), valuesMap, false)};
-  }
-  return DotNode{.nodeType = "combNull",
-                 .incoming = valueToName(op.getOperands(), valuesMap, false),
-                 .outgoing = valueToName(op.getResults(), valuesMap, false)};
+
+  DotNode n = {"", valueToName(op.getOperands(), valuesMap, false),
+               valueToName(op.getOperands(), valuesMap, false)};
+
+  TypeSwitch<mlir::Operation *>(&op)
+      .Case<comb::AddOp>([&](auto op) { n.nodeType = "+"; })
+      .Case<comb::AndOp>([&](auto op) { n.nodeType = "&&"; })
+      .Case<comb::XorOp>([&](auto op) { n.nodeType = "^"; })
+      .Case<comb::OrOp>([&](auto op) { n.nodeType = "||"; })
+      .Case<comb::MulOp>([&](auto op) { n.nodeType = "x"; })
+      .Case<comb::MuxOp>([&](auto op) { n.nodeType = "mux"; })
+      .Case<comb::ICmpOp>([&](auto op) {
+        switch (op.getPredicate()) {
+        case circt::comb::ICmpPredicate::eq: {
+          n.nodeType = "==";
+          break;
+        }
+        case circt::comb::ICmpPredicate::ne: {
+          n.nodeType = "!=";
+          break;
+        }
+        case circt::comb::ICmpPredicate::sgt: {
+          n.nodeType = ">";
+          break;
+        }
+        case circt::comb::ICmpPredicate::sge: {
+          n.nodeType = ">=";
+          break;
+        }
+        case circt::comb::ICmpPredicate::slt: {
+          n.nodeType = "<";
+          break;
+        }
+        case circt::comb::ICmpPredicate::sle: {
+          n.nodeType = "<=";
+          break;
+        }
+        case circt::comb::ICmpPredicate::ugt: {
+          n.nodeType = ">";
+          break;
+        }
+        case circt::comb::ICmpPredicate::uge: {
+          n.nodeType = ">=";
+          break;
+        }
+        case circt::comb::ICmpPredicate::ult: {
+          n.nodeType = "<=";
+          break;
+        }
+        case circt::comb::ICmpPredicate::ule: {
+          n.nodeType = "<";
+          break;
+        }
+        case circt::comb::ICmpPredicate::ceq: {
+          n.nodeType = "==";
+          break;
+        }
+        case circt::comb::ICmpPredicate::cne: {
+          n.nodeType = "!=";
+          break;
+        }
+        case circt::comb::ICmpPredicate::weq: {
+          n.nodeType = "==";
+          break;
+        }
+        case circt::comb::ICmpPredicate::wne: {
+          n.nodeType = "!=";
+          break;
+        }
+        }
+      });
+  return n;
 }
 
 namespace {
