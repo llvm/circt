@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "slang/ast/SystemSubroutine.h"
 #include "llvm/ADT/ScopeExit.h"
 
 using namespace mlir;
@@ -63,6 +64,19 @@ struct StmtVisitor {
 
   // Handle expression statements.
   LogicalResult visit(const slang::ast::ExpressionStatement &stmt) {
+    // Special handling for calls to system tasks that return no result value.
+    if (const auto *call = stmt.expr.as_if<slang::ast::CallExpression>()) {
+      if (const auto *info =
+              std::get_if<slang::ast::CallExpression::SystemCallInfo>(
+                  &call->subroutine)) {
+        auto handled = visitSystemCall(stmt, *call, *info);
+        if (failed(handled))
+          return failure();
+        if (handled == true)
+          return success();
+      }
+    }
+
     auto value = context.convertRvalueExpression(stmt.expr);
     if (!value)
       return failure();
@@ -531,6 +545,56 @@ struct StmtVisitor {
       builder.setInsertionPointToEnd(&exitBlock);
     }
     return success();
+  }
+
+  /// Handle the subset of system calls that return no result value. Return
+  /// true if the called system task could be handled, false otherwise. Return
+  /// failure if an error occurred.
+  FailureOr<bool>
+  visitSystemCall(const slang::ast::ExpressionStatement &stmt,
+                  const slang::ast::CallExpression &expr,
+                  const slang::ast::CallExpression::SystemCallInfo &info) {
+    const auto &subroutine = *info.subroutine;
+    auto args = expr.arguments();
+
+    if (subroutine.name == "$stop") {
+      createFinishMessage(args.size() >= 1 ? args[0] : nullptr);
+      builder.create<moore::StopBIOp>(loc);
+      return true;
+    }
+
+    if (subroutine.name == "$finish") {
+      createFinishMessage(args.size() >= 1 ? args[0] : nullptr);
+      builder.create<moore::FinishBIOp>(loc, 0);
+      builder.create<moore::UnreachableOp>(loc);
+      setTerminated();
+      return true;
+    }
+
+    if (subroutine.name == "$exit") {
+      // Calls to `$exit` from outside a `program` are ignored. Since we don't
+      // yet support programs, there is nothing to do here.
+      // TODO: Fix this once we support programs.
+      return true;
+    }
+
+    // Give up on any other system tasks. These will be tried again as an
+    // expression later.
+    return false;
+  }
+
+  /// Create the optional diagnostic message print for finish-like ops.
+  void createFinishMessage(const slang::ast::Expression *verbosityExpr) {
+    unsigned verbosity = 1;
+    if (verbosityExpr) {
+      auto value =
+          context.evaluateConstant(*verbosityExpr).integer().as<unsigned>();
+      assert(value && "Slang guarantees constant verbosity parameter");
+      verbosity = *value;
+    }
+    if (verbosity == 0)
+      return;
+    builder.create<moore::FinishMessageBIOp>(loc, verbosity > 1);
   }
 
   /// Emit an error for all other statements.

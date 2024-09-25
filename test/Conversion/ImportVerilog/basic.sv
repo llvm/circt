@@ -2025,3 +2025,33 @@ package ParamPackage;
   // CHECK: dbg.variable "ParamPackage::param2", [[TMP]] : !moore.i32
   localparam int param2 = 9001;
 endpackage
+
+// CHECK-LABEL: func.func private @SimulationControlBuiltins(
+function void SimulationControlBuiltins(bit x);
+  // CHECK: moore.builtin.finish_message false
+  // CHECK: moore.builtin.stop
+  $stop;
+  // CHECK-NOT: moore.builtin.finish_message
+  // CHECK: moore.builtin.stop
+  $stop(0);
+  // CHECK: moore.builtin.finish_message true
+  // CHECK: moore.builtin.stop
+  $stop(2);
+
+  // CHECK: moore.builtin.finish_message false
+  // CHECK: moore.builtin.finish 0
+  // CHECK: moore.unreachable
+  if (x) $finish;
+  // CHECK-NOT: moore.builtin.finish_message
+  // CHECK: moore.builtin.finish 0
+  // CHECK: moore.unreachable
+  if (x) $finish(0);
+  // CHECK: moore.builtin.finish_message true
+  // CHECK: moore.builtin.finish 0
+  // CHECK: moore.unreachable
+  if (x) $finish(2);
+
+  // Ignore `$exit` until we have support for programs.
+  // CHECK-NOT: moore.builtin.finish
+  $exit;
+endfunction
