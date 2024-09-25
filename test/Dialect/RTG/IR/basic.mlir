@@ -25,3 +25,56 @@ rtg.snippet {
 func.func @types(%arg1: !rtg.snippet, %arg2: !rtg.resource) {
   return
 }
+
+
+
+
+
+// A requirement for the snippet/sequence to run
+//rtg.requires()
+
+// A static check that the snippet/sequence should ever have been picked
+//rtg.static_assert()
+
+// resource declarations
+//??
+
+// Start/end of time
+//rtg.world_begin
+//rtg.world_end
+
+// start/end of this test
+// how to deal with multiple contexts
+//rtg.prerun
+//rtg.postrun
+
+// a context holder.  might be a cpu
+// need to allow a specific (parameter), a set, all, and remainder
+//rtg.context(id)
+
+// body of test
+// how to deal with multiple contexts
+//rtg.body
+
+// check a test
+//rtg.check
+
+
+// How to setup and specify exception handlers
+// Should these be part of machine state requirements?
+//??
+
+func.func @checkOnContext(%arg1 : !rtg.context_resource_set, %arg2: !rtg.context_resource_set) {
+  rtg.label "a"
+  rtg.on_context %arg1 {
+    rtg.label "b"
+    rtg.on_context %arg2 {
+      rtg.label "c"
+    }
+    rtg.label "d"
+  }
+  rtg.on_context %arg2 {
+    rtg.label "e"
+  }
+  return
+}

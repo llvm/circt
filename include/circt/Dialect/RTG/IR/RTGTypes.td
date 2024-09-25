@@ -36,4 +36,31 @@ def ResourceType : RTGTypeDef<"Resource"> {
   let assemblyFormat = "";
 }
 
+def ResourceSetType : RTGTypeDef<"ResourceSet"> {
+  let summary = "";
+  let description = [{
+  }];
+
+  let mnemonic = "resource_set";
+  let assemblyFormat = "";
+}
+
+def ContextResourceType : RTGTypeDef<"ContextResource"> {
+  let summary = "";
+  let description = [{
+  }];
+
+  let mnemonic = "context_resource";
+  let assemblyFormat = "";
+}
+
+def ContextResourceSetType : RTGTypeDef<"ContextResourceSet"> {
+  let summary = "";
+  let description = [{
+  }];
+
+  let mnemonic = "context_resource_set";
+  let assemblyFormat = "";
+}
+
 #endif // CIRCT_DIALECT_RTG_IR_RTGTYPES_TD

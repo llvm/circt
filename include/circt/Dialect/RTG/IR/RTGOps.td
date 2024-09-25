@@ -51,3 +51,25 @@ def LabelOp : RTGOp<"label", []> {
 
   let assemblyFormat = "$formatString (`,` $args^ `:` type($args))? attr-dict";
 }
+
+
+//===----------------------------------------------------------------------===//
+
+
+def OnContextOp : RTGOp<"on_context", [NoTerminator]> {
+  let summary = "places a sequence on a context";
+
+  let arguments = (ins ContextResourceSetType:$contexts);
+  let regions = (region SizedRegion<1>:$bodyRegion);
+
+  let assemblyFormat = "$contexts attr-dict-with-keyword $bodyRegion";
+}
+
+
+// Theory of structure:
+// A sequence/snippet is expanded to all contexts for the current set of active 
+// contexts.  This is maintained by the runtime.  The set of active contexts is
+// changed by an OnContextOp.  The body of a sequence is expanded in textural 
+// order.  This means a sequence can start adding operations to a context not
+// in the current set of active contexts.
+
