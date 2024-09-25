@@ -2561,3 +2561,33 @@ firrtl.circuit "MainNotModule" {
     return
   }
 }
+
+// -----
+
+firrtl.circuit "MultipleDUTModules" {
+  firrtl.module @MultipleDUTModules() {}
+  // expected-error @below {{is annotated as the design-under-test}}
+  firrtl.module @Foo() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {}
+  // expected-note @below {{is also annotated as the DUT}}
+  firrtl.module @Bar() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {}
+  // expected-note @below {{is also annotated as the DUT}}
+  firrtl.module @Baz() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {}
+}

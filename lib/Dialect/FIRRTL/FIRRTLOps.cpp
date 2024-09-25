@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
@@ -627,12 +628,30 @@ LogicalResult CircuitOp::verifyRegions() {
     return success();
   };
 
+  SmallVector<FModuleOp, 1> dutModules;
   for (auto &op : *getBodyBlock()) {
+    // Verify modules.
+    if (auto moduleOp = dyn_cast<FModuleOp>(op)) {
+      if (AnnotationSet(moduleOp).hasAnnotation(dutAnnoClass))
+        dutModules.push_back(moduleOp);
+      continue;
+    }
+
     // Verify external modules.
     if (auto extModule = dyn_cast<FExtModuleOp>(op)) {
       if (verifyExtModule(extModule).failed())
         return failure();
     }
+  }
+
+  // Error if there is more than one design-under-test.
+  if (dutModules.size() > 1) {
+    auto diag = dutModules[0]->emitOpError()
+                << "is annotated as the design-under-test (DUT), but other "
+                   "modules are also annotated";
+    for (auto moduleOp : ArrayRef(dutModules).drop_front())
+      diag.attachNote(moduleOp.getLoc()) << "is also annotated as the DUT";
+    return failure();
   }
 
   return success();
