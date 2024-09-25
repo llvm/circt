@@ -1,4 +1,5 @@
-//===- DCPrintDot.cpp - Analysis Pass -----------------------------*- C++ -*-===//
+//===- DCPrintDot.cpp - Analysis Pass -----------------------------*- C++
+//-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -41,13 +42,13 @@ struct DotNode {
   llvm::SmallVector<std::pair<mlir::Value, std::string>> incoming;
   llvm::SmallVector<std::pair<mlir::Value, std::string>> outgoing;
 };
-} // namespace 
+} // namespace
 
 /// gives a unique name to each value in the graph
-llvm::SmallVector<std::pair<mlir::Value, std::string>>
-static valueToName(const llvm::SmallVector<mlir::Value> &values,
-            llvm::SmallVector<std::pair<mlir::Value, std::string>> &currentMap,
-            bool tokenFlag) {
+llvm::SmallVector<std::pair<mlir::Value, std::string>> static valueToName(
+    const llvm::SmallVector<mlir::Value> &values,
+    llvm::SmallVector<std::pair<mlir::Value, std::string>> &currentMap,
+    bool tokenFlag) {
   SmallVector<std::pair<mlir::Value, std::string>> res;
   for (auto [i, v] : llvm::enumerate(values)) {
     auto found = false;
@@ -67,7 +68,6 @@ static valueToName(const llvm::SmallVector<mlir::Value> &values,
   }
   return res;
 }
-
 
 /// creates node in the dataflow graph for DC operations
 DotNode createDCNode(
@@ -228,7 +228,6 @@ struct DCDotPrintPass : public circt::dc::impl::DCDotPrintBase<DCDotPrintPass> {
     os << "}\n";
   }
   llvm::raw_ostream &os;
-
 };
 } // namespace
 
