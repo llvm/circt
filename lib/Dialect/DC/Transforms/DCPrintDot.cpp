@@ -36,9 +36,70 @@ using namespace mlir;
 using ValueMap = llvm::ScopedHashTable<mlir::Value, std::string>;
 
 namespace {
+
+/// all Comb and DC nodetypes 
+enum NodeType {
+  addOp, 
+  andOp,  
+  xorOp, 
+  orOp,
+  mulOp,
+  muxOp, 
+  eqOp,
+  neOp, 
+  gtOp, 
+  geOp, 
+  ltOp, 
+  leOp, 
+  branchOp, 
+  bufferOp, 
+  forkOp, 
+  fromESIOp, 
+  joinOp, 
+  mergeOp, 
+  packOp, 
+  selectOp, 
+  sinkOp, 
+  sourceOp, 
+  toESIOp, 
+  unpackOp,
+  null
+};
+
+std::string stringify(NodeType type) {
+    switch (type) {
+        case addOp: return "+";
+        case andOp: return "&&";
+        case xorOp: return "^";
+        case orOp: return "||";
+        case mulOp: return "x";
+        case muxOp: return "mux";
+        case eqOp: return "==";
+        case neOp: return "!=";
+        case gtOp: return ">";
+        case geOp: return ">=";
+        case ltOp: return "<";
+        case leOp: return "<=";
+        case branchOp: return "branch";
+        case bufferOp: return "buffer";
+        case forkOp: return "fork";
+        case fromESIOp: return "fromESI";
+        case joinOp: return "join";
+        case mergeOp: return "merge";
+        case packOp: return "pack";
+        case selectOp: return "select";
+        case sinkOp: return "sink";
+        case sourceOp: return "source";
+        case toESIOp: return "toESI";
+        case unpackOp: return "unpack";
+        case null: return "null";
+        default: return "Unknown NodeType";
+    }
+}
+
 /// stores operand and results for each node in the dot graph
 struct DotNode {
-  std::string nodeType;
+  NodeType nodeType;
   llvm::SmallVector<std::pair<mlir::Value, std::string>> incoming;
   llvm::SmallVector<std::pair<mlir::Value, std::string>> outgoing;
 };
@@ -78,10 +139,24 @@ DotNode createDCNode(
   if (isa<dc::UnpackOp>(op))
     tokenFlag = true;
 
-  DotNode n = {op.getName().stripDialect().str(),
+  DotNode n = {null,
                valueToName(op.getOperands(), valuesMap, false),
                valueToName(op.getOperands(), valuesMap, tokenFlag)};
 
+  TypeSwitch<mlir::Operation *>(&op)
+      .Case([&](dc::BranchOp) { n.nodeType = branchOp; })
+      .Case([&](dc::BufferOp) { n.nodeType = bufferOp; })
+      .Case([&](dc::ForkOp) { n.nodeType = forkOp; })
+      .Case([&](dc::FromESIOp) { n.nodeType = fromESIOp; })
+      .Case([&](dc::JoinOp) { n.nodeType = joinOp; })
+      .Case([&](dc::MergeOp) { n.nodeType = mergeOp; })
+      .Case([&](dc::PackOp) { n.nodeType = packOp; })
+      .Case([&](dc::SelectOp) { n.nodeType = selectOp; })
+      .Case([&](dc::SinkOp) { n.nodeType = sinkOp; })
+      .Case([&](dc::SourceOp) { n.nodeType = sourceOp; })
+      .Case([&](dc::ToESIOp) { n.nodeType = toESIOp; })
+      .Case([&](dc::UnpackOp) { n.nodeType = unpackOp; });
+    
   return n;
 }
 
@@ -90,72 +165,72 @@ DotNode createCombNode(
     Operation &op,
     llvm::SmallVector<std::pair<mlir::Value, std::string>> &valuesMap) {
 
-  DotNode n = {"", valueToName(op.getOperands(), valuesMap, false),
+  DotNode n = {null, valueToName(op.getOperands(), valuesMap, false),
                valueToName(op.getOperands(), valuesMap, false)};
 
   TypeSwitch<mlir::Operation *>(&op)
-      .Case([&](comb::AddOp) { n.nodeType = "+"; })
-      .Case([&](comb::AndOp) { n.nodeType = "&&"; })
-      .Case([&](comb::XorOp) { n.nodeType = "^"; })
-      .Case([&](comb::OrOp) { n.nodeType = "||"; })
-      .Case([&](comb::MulOp) { n.nodeType = "x"; })
-      .Case([&](comb::MuxOp) { n.nodeType = "mux"; })
+      .Case([&](comb::AddOp) { n.nodeType = addOp; })
+      .Case([&](comb::AndOp) { n.nodeType = andOp; })
+      .Case([&](comb::XorOp) { n.nodeType = xorOp; })
+      .Case([&](comb::OrOp) { n.nodeType = orOp; })
+      .Case([&](comb::MulOp) { n.nodeType = mulOp; })
+      .Case([&](comb::MuxOp) { n.nodeType = muxOp; })
       .Case<comb::ICmpOp>([&](auto op) {
         switch (op.getPredicate()) {
         case circt::comb::ICmpPredicate::eq: {
-          n.nodeType = "==";
+          n.nodeType = eqOp;
           break;
         }
         case circt::comb::ICmpPredicate::ne: {
-          n.nodeType = "!=";
+          n.nodeType = neOp;
           break;
         }
         case circt::comb::ICmpPredicate::sgt: {
-          n.nodeType = ">";
+          n.nodeType = gtOp;
           break;
         }
         case circt::comb::ICmpPredicate::sge: {
-          n.nodeType = ">=";
+          n.nodeType = geOp;
           break;
         }
         case circt::comb::ICmpPredicate::slt: {
-          n.nodeType = "<";
+          n.nodeType = ltOp;
           break;
         }
         case circt::comb::ICmpPredicate::sle: {
-          n.nodeType = "<=";
+          n.nodeType = leOp;
           break;
         }
         case circt::comb::ICmpPredicate::ugt: {
-          n.nodeType = ">";
+          n.nodeType = gtOp;
           break;
         }
         case circt::comb::ICmpPredicate::uge: {
-          n.nodeType = ">=";
+          n.nodeType = geOp;
           break;
         }
         case circt::comb::ICmpPredicate::ult: {
-          n.nodeType = "<=";
+          n.nodeType = leOp;
           break;
         }
         case circt::comb::ICmpPredicate::ule: {
-          n.nodeType = "<";
+          n.nodeType = ltOp;
           break;
         }
         case circt::comb::ICmpPredicate::ceq: {
-          n.nodeType = "==";
+          n.nodeType = eqOp;
           break;
         }
         case circt::comb::ICmpPredicate::cne: {
-          n.nodeType = "!=";
+          n.nodeType = neOp;
           break;
         }
         case circt::comb::ICmpPredicate::weq: {
-          n.nodeType = "==";
+          n.nodeType = eqOp;
           break;
         }
         case circt::comb::ICmpPredicate::wne: {
-          n.nodeType = "!=";
+          n.nodeType = neOp;
           break;
         }
         }
@@ -196,10 +271,10 @@ struct DCDotPrintPass : public circt::dc::impl::DCDotPrintBase<DCDotPrintPass> {
     os << "digraph{\n";
     // print all nodes first
     for (auto [i, n] : llvm::enumerate(nodes)) {
-      os << i << " [shape = polygon, label = \"" << n.nodeType << "\"]\n";
+      os << i << " [shape = polygon, label = \"" << stringify(n.nodeType) << "\"]\n";
     }
     for (auto [id, n] : llvm::enumerate(nodes)) {
-      if (n.nodeType == "unpack")
+      if (n.nodeType == unpackOp)
         for (auto ic : n.incoming)
           os << "token_" << ic.second << " -> " << id << R"( [label = ")"
              << ic.second << "\"]\n";
@@ -219,7 +294,7 @@ struct DCDotPrintPass : public circt::dc::impl::DCDotPrintBase<DCDotPrintPass> {
       }
     }
     for (auto [id, n] : llvm::enumerate(nodes)) {
-      if (n.nodeType == "pack")
+      if (n.nodeType == packOp)
         for (const auto &ic : n.outgoing)
           os << id << " -> " << ic.second << " [label = \"" << ic.second
              << "\"]\n";
