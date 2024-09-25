@@ -166,13 +166,12 @@ DotNode createCombNode(
 namespace {
 /// Emit the dot nodes
 struct DCDotPrintPass : public circt::dc::impl::DCDotPrintBase<DCDotPrintPass> {
+  DCDotPrintPass(llvm::raw_ostream &os) : os(os) {}
   void runOnOperation() override {
 
     ModuleOp op = getOperation();
 
     std::error_code ec;
-    llvm::raw_fd_ostream outfile("dc-out.dot", ec);
-    mlir::raw_indented_ostream os(outfile);
 
     llvm::SmallVector<std::pair<mlir::Value, std::string>> valuesMap;
     llvm::SmallVector<DotNode> nodes;
@@ -226,13 +225,14 @@ struct DCDotPrintPass : public circt::dc::impl::DCDotPrintBase<DCDotPrintPass> {
              << "\"]\n";
     }
 
-    os << "}";
-    outfile.close();
+    os << "}\n";
   }
+  llvm::raw_ostream &os;
+
 };
 } // namespace
 
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 circt::dc::createDCDotPrintPass() {
-  return std::make_unique<DCDotPrintPass>();
+  return std::make_unique<DCDotPrintPass>(llvm::errs());
 }
