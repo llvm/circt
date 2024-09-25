@@ -98,7 +98,7 @@ static cl::opt<OutputFormat> outputFormat(
     cl::desc("Specify output format"),
     cl::values(clEnumValN(OutputMLIR, "emit-mlir", "Emit LLVM MLIR dialect"),
                clEnumValN(OutputLLVM, "emit-llvm", "Emit LLVM"),
-               clEnumValN(OutputSMTLIB, "emit-smtlib", "Emit object file"),
+               clEnumValN(OutputSMTLIB, "emit-smtlib", "Emit SMT-LIB file"),
                clEnumValN(OutputRunJIT, "run",
                           "Perform BMC and output result")),
     cl::init(OutputRunJIT), cl::cat(mainCategory));
@@ -123,7 +123,7 @@ static cl::opt<OutputFormat> outputFormat(
 // Tool implementation
 //===----------------------------------------------------------------------===//
 
-/// This functions initializes the various components of the tool and
+/// This function initializes the various components of the tool and
 /// orchestrates the work to be done.
 static LogicalResult executeBMC(MLIRContext &context) {
   // Create the timing manager we use to sample execution times.
@@ -173,7 +173,6 @@ static LogicalResult executeBMC(MLIRContext &context) {
 
   if (outputFormat != OutputMLIR && outputFormat != OutputSMTLIB) {
     LowerSMTToZ3LLVMOptions options;
-    options.debug = true;
     pm.addPass(createLowerSMTToZ3LLVM(options));
     pm.addPass(createCSEPass());
     pm.addPass(createSimpleCanonicalizerPass());

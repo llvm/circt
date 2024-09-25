@@ -31,7 +31,6 @@ target_link_libraries(circt-bmc
   MLIRTargetLLVMIRExport
   MLIRFuncInlinerExtension
   MLIRBuiltinToLLVMIRTranslation
-  MLIRLLVMToLLVMIRTranslation
   LLVMSupport
 
   ${CIRCT_BMC_JIT_DEPS}
