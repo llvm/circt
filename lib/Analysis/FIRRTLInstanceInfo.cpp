@@ -74,39 +74,41 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
   // Visit modules in reverse post-order (visit parents before children) because
   // information flows in this direction---the attributes of modules are
   // determinend by their instantiations.
-  llvm::ReversePostOrderTraversal<InstanceGraph *> rpo(&iGraph);
-  for (auto *modIt : rpo) {
-    auto moduleOp = modIt->getModule();
-    ModuleAttributes &attributes = moduleAttributes[moduleOp];
+  DenseSet<InstanceGraphNode *> visited;
+  for (auto *root : iGraph) {
+    for (auto *modIt : llvm::inverse_post_order_ext(root, visited)) {
+      auto moduleOp = modIt->getModule();
+      ModuleAttributes &attributes = moduleAttributes[moduleOp];
 
-    // Set DUT-related attributes.
-    auto isDut = AnnotationSet(moduleOp).hasAnnotation(dutAnnoClass);
-    if (isDut) {
-      circuitAttributes.dutNode = modIt;
-      circuitAttributes.effectiveDutNode = modIt;
-    }
+      // Set DUT-related attributes.
+      auto isDut = AnnotationSet(moduleOp).hasAnnotation(dutAnnoClass);
+      if (isDut) {
+        circuitAttributes.dutNode = modIt;
+        circuitAttributes.effectiveDutNode = modIt;
+      }
 
-    // If the module is not instantiated, then set attributes and early exit.
-    if (modIt->noUses()) {
-      attributes.underDut.markConstant(false);
-      attributes.underLayer.markConstant(false);
-      continue;
-    }
+      // If the module is not instantiated, then set attributes and early exit.
+      if (modIt->noUses()) {
+        attributes.underDut.markConstant(false);
+        attributes.underLayer.markConstant(false);
+        continue;
+      }
 
-    // Merge in attributes from modules that instantiate this module.
-    for (auto *useIt : modIt->uses()) {
-      auto parentOp = useIt->getParent()->getModule();
-      auto parentAttrs = moduleAttributes.find(parentOp)->getSecond();
-      // Merge underDut.
-      if (this->isDut(parentOp) || isDut)
-        attributes.underDut.mergeIn(true);
-      else
-        attributes.underDut.mergeIn(parentAttrs.underDut);
-      // Merge underLayer.
-      if (useIt->getInstance()->getParentOfType<LayerBlockOp>())
-        attributes.underLayer.mergeIn(true);
-      else
-        attributes.underLayer.mergeIn(parentAttrs.underLayer);
+      // Merge in attributes from modules that instantiate this module.
+      for (auto *useIt : modIt->uses()) {
+        auto parentOp = useIt->getParent()->getModule();
+        auto parentAttrs = moduleAttributes.find(parentOp)->getSecond();
+        // Merge underDut.
+        if (this->isDut(parentOp) || isDut)
+          attributes.underDut.mergeIn(true);
+        else
+          attributes.underDut.mergeIn(parentAttrs.underDut);
+        // Merge underLayer.
+        if (useIt->getInstance()->getParentOfType<LayerBlockOp>())
+          attributes.underLayer.mergeIn(true);
+        else
+          attributes.underLayer.mergeIn(parentAttrs.underLayer);
+      }
     }
   }
 
