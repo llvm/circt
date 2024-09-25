@@ -298,8 +298,8 @@ attributes {
     }
   }
 
-  // CHECK: firrtl.extmodule @ExtModule() attributes {layers = [@A, @A, @A::@B_C]}
-  firrtl.extmodule @ExtModule() attributes {layers = [@A, @A::@B, @A::@B::@C]}
+  // CHECK: firrtl.extmodule private @ExtModule() attributes {layers = [@A, @A, @A::@B_C]}
+  firrtl.extmodule private @ExtModule() attributes {layers = [@A, @A::@B, @A::@B::@C]}
 }
 
 // CHECK-LABEL: firrtl.circuit "DisableLayerA"
@@ -307,12 +307,12 @@ firrtl.circuit "DisableLayerA" attributes {
     disable_layers = [@A]
   } {
   firrtl.layer @A bind { }
-  // CHECK-NOT: firrtl.extmodule @Test0()
-  firrtl.extmodule @Test0() attributes {layers = [@A]}
-  // CHECK-NOT: firrtl.extmodule @Test1() attributes {layers = [@A]}
-  firrtl.extmodule @Test1() attributes {layers = [@A]}
-  // CHECK-NOT: firrtl.extmodule @Test2() attributes {layers = [@A]}
-  firrtl.extmodule @Test2() attributes {layers = [@A]}
+  // CHECK-NOT: firrtl.extmodule private @Test0()
+  firrtl.extmodule private @Test0() attributes {layers = [@A]}
+  // CHECK-NOT: firrtl.extmodule private @Test1() attributes {layers = [@A]}
+  firrtl.extmodule private @Test1() attributes {layers = [@A]}
+  // CHECK-NOT: firrtl.extmodule private @Test2() attributes {layers = [@A]}
+  firrtl.extmodule private @Test2() attributes {layers = [@A]}
 
   // Top level module, which can't be deleted by the pass.
   firrtl.extmodule @DisableLayerA()
@@ -368,7 +368,7 @@ firrtl.circuit "ProbeOpsEnableA" attributes {
       (out out : !firrtl.probe<uint<1>, @A>)
   }
 
-  firrtl.extmodule @ExtModule(out out : !firrtl.probe<uint<1>, @A>)
+  firrtl.extmodule private @ExtModule(out out : !firrtl.probe<uint<1>, @A>)
 }
 
 // CHECK-LABEL: firrtl.circuit "ProbeOpsDisableA"
@@ -416,8 +416,8 @@ firrtl.circuit "ProbeOpsDisableA" attributes {
       (out out : !firrtl.probe<uint<1>, @A>)
   }
 
-  // CHECK: firrtl.extmodule @ExtModule()
-  firrtl.extmodule @ExtModule(out out : !firrtl.probe<uint<1>, @A>)
+  // CHECK: firrtl.extmodule private @ExtModule()
+  firrtl.extmodule private @ExtModule(out out : !firrtl.probe<uint<1>, @A>)
 }
 
 //===----------------------------------------------------------------------===//
@@ -451,11 +451,11 @@ firrtl.circuit "HierPathDelete" attributes {
     }
   }
 
-  firrtl.extmodule @Leaf()
+  firrtl.extmodule private @Leaf()
 
   // CHECK-NOT: hw.hierpath private @DeletedPath [@Deleted]
   hw.hierpath private @DeletedPath [@Deleted]
-  firrtl.extmodule @Deleted() attributes {layers = [@Layer]}
+  firrtl.extmodule private @Deleted() attributes {layers = [@Layer]}
 }
 
 // CHECK-LABEL: firrtl.circuit "HierPathDelete2"
@@ -485,11 +485,11 @@ firrtl.circuit "HierPathDelete2" attributes {
     }
   }
 
-  firrtl.extmodule @Leaf()
+  firrtl.extmodule private @Leaf()
 
   // CHECK-NOT: hw.hierpath private @DeletedPath [@Deleted]
   hw.hierpath private @DeletedPath [@Deleted]
-  firrtl.extmodule @Deleted() attributes {layers = [@Layer]}
+  firrtl.extmodule private @Deleted() attributes {layers = [@Layer]}
 }
 
 

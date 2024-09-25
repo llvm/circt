@@ -1694,23 +1694,51 @@ static LogicalResult verifyPortSymbolUses(FModuleLike module,
   return success();
 }
 
-LogicalResult FModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  if (failed(
-          verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable)))
-    return failure();
+static LogicalResult verifyEnabledLayers(FModuleLike module,
+                                         SymbolTableCollection &symbolTable) {
+  auto circuitOp = module->getParentOfType<CircuitOp>();
+  for (auto layer : module.getLayers()) {
+    auto *op =
+        symbolTable.lookupSymbolIn(circuitOp, cast<SymbolRefAttr>(layer));
+    if (!op)
+      return module->emitOpError() << "enables unknown layer '" << layer << "'";
+    if (!isa<LayerOp>(op))
+      return module->emitOpError()
+          .append("enables non-layer '", layer, "'")
+          .attachNote(op->getLoc())
+          .append("expected layer");
+  }
 
-  auto circuitOp = (*this)->getParentOfType<CircuitOp>();
-  for (auto layer : getLayers()) {
-    if (!symbolTable.lookupSymbolIn(circuitOp, cast<SymbolRefAttr>(layer)))
-      return emitOpError() << "enables unknown layer '" << layer << "'";
+  // Check public modules don't enable circuit-disabled layers.
+  if (auto disabledLayers = circuitOp.getDisableLayersAttr()) {
+    auto disabledLayersSymRefs = disabledLayers.getAsRange<SymbolRefAttr>();
+    if (module.isPublic()) {
+      for (auto layer : module.getLayers())
+        if (llvm::is_contained(disabledLayersSymRefs, layer))
+          return module->emitOpError(
+                     "public module has circuit-disabled layer ")
+                 << layer << " enabled";
+    }
   }
 
   return success();
 }
 
+LogicalResult FModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  if (failed(
+          verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable)))
+    return failure();
+
+  return verifyEnabledLayers(cast<FModuleLike>(getOperation()), symbolTable);
+}
+
 LogicalResult
 FExtModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+  if (failed(
+          verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable)))
+    return failure();
+
+  return verifyEnabledLayers(cast<FModuleLike>(getOperation()), symbolTable);
 }
 
 LogicalResult
