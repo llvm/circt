@@ -132,6 +132,8 @@ class AppID:
     return self._appid.index
 
   def __repr__(self) -> str:
+    if self.index is None:
+      return self.name
     return f"{self.name}[{self.index}]"
 
 

@@ -74,6 +74,16 @@ else()
   endif()
 endif()
 
+# Command line parser for executables. Not required for the runtime libraries.
+if (NOT TARGET CLI11)
+  message("-- ESI runtime pulling down CLI11")
+  FetchContent_Declare(cli11_proj
+    GIT_REPOSITORY https://github.com/CLIUtils/CLI11.git
+    GIT_TAG v2.3.2
+  )
+  FetchContent_MakeAvailable(cli11_proj)
+endif()
+
 # In a Python wheel build, we need to install libraries to different places.
 option(WHEEL_BUILD "Set up the build for a Python wheel." OFF)
 if (WHEEL_BUILD)
@@ -226,7 +236,11 @@ set(ESIRuntimePath "${CMAKE_CURRENT_BINARY_DIR}"
 add_executable(esiquery
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/tools/esiquery.cpp
 )
-target_link_libraries(esiquery PRIVATE ESICppRuntime)
+target_link_libraries(esiquery
+  PRIVATE
+  ESICppRuntime
+  CLI11::CLI11
+ "CatapultBackend")
 add_dependencies(ESIRuntime esiquery)
 install(TARGETS esiquery
   DESTINATION bin

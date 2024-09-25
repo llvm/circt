@@ -291,9 +291,8 @@ protected:
 
 } // namespace
 
-std::map<std::string, ChannelPort &>
-CosimAccelerator::requestChannelsFor(AppIDPath idPath,
-                                     const BundleType *bundleType) {
+std::map<std::string, ChannelPort &> CosimAccelerator::requestChannelsFor(
+    AppIDPath idPath, const BundleType *bundleType, const ServiceTable &) {
   std::map<std::string, ChannelPort &> channelResults;
 
   // Find the client details for the port at 'fullPath'.
