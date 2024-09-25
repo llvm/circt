@@ -265,8 +265,12 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
       // CHECK-NEXT: $fwrite(32'h80000002, "M: %x\n", `MACRO(8'(val + 8'h2A), val ^ 8'h2A));
       sv.fwrite %fd, "M: %x\n"(%text) : i8
 
+      // CHECK-NEXT: `INIT_RANDOM
+      sv.macro.ref @INIT_RANDOM
       // CHECK-NEXT: `INIT_RANDOM(val)
       sv.macro.ref @INIT_RANDOM (%val) : i8
+      // CHECK-NEXT: `INIT_RANDOM(val, val, val)
+      sv.macro.ref @INIT_RANDOM (%val, %val, %val) : i8, i8, i8
 
     }// CHECK-NEXT:   {{end$}}
   } {sv.attributes = [#sv.attribute<"sv attr">]}

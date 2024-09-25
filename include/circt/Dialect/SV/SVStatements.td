@@ -550,7 +550,7 @@ def MacroRefOp : SVOp<"macro.ref", [
   let summary = "Statement to refer to a SystemVerilog macro";
   let description = [{
     This operation represent a statement by referencing a named macro.
-    }];
+  }];
 
   let arguments = (ins FlatSymbolRefAttr:$macroName, Variadic<AnyType>:$inputs);
   let results = (outs);
