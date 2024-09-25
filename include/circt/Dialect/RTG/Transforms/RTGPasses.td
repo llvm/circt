@@ -15,6 +15,10 @@
 
 include "mlir/Pass/PassBase.td"
 
+def Elaboration : Pass<"rtg-elaborate", "mlir::ModuleOp"> {
+  let summary = "Elaborate the randomizing parts of RTG";
+}
+
 def ExportRTGToElf : Pass<"rtg-to-elf", "mlir::ModuleOp"> {
   let summary = "Generate an elf file for a given test sequence.";
   let options = [
