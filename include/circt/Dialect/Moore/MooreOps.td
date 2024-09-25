@@ -459,7 +459,7 @@ def DetectEventOp : MooreOp<"detect_event", [
 }
 
 //===----------------------------------------------------------------------===//
-// Expressions
+// Constants
 //===----------------------------------------------------------------------===//
 
 def ConstantOp : MooreOp<"constant", [Pure, ConstantLike]> {
@@ -476,37 +476,6 @@ def ConstantOp : MooreOp<"constant", [Pure, ConstantLike]> {
   ];
 }
 
-def Parameter : I32EnumAttrCase<"Parameter", 0, "parameter">;
-def LocalParameter : I32EnumAttrCase<"LocalParameter", 1, "localparam">;
-def SpecParameter : I32EnumAttrCase<"SpecParameter", 2, "specparam">;
-
-def NamedConstAttr : I32EnumAttr<"NamedConst", "elaboration-time constants", 
-       [Parameter, LocalParameter, SpecParameter]>{
-    let cppNamespace = "circt::moore";
-}
-
-def NamedConstantOp : MooreOp<"named_constant", [
-  SameOperandsAndResultType,
-  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
-]>{
-  let summary = "An elaboration time constant expression";
-  let description = [{
-    Constants are named data objects that never change. SystemVerilog provides
-    three elaboration-time constants: parameter, localparam, and specparam.
-
-    See IEEE 1800-2017 § 6.20 "Constants".
-  }];
-  let arguments = (ins StrAttr:$name,
-                       NamedConstAttr:$kind,
-                       IntType:$value);
-  let results = (outs IntType:$result);
-  let assemblyFormat = [{
-    $kind
-    ``custom<ImplicitSSAName>($name)
-    $value `:` type($result) attr-dict
-  }];
-}
-
 def StringConstantOp : MooreOp<"string_constant", [Pure]> {
   let summary = "Produce a constant string value";
   let description = [{
@@ -521,6 +490,10 @@ def StringConstantOp : MooreOp<"string_constant", [Pure]> {
   let results = (outs IntType:$result);
   let assemblyFormat = "$value attr-dict `:` type($result)";
 }
+
+//===----------------------------------------------------------------------===//
+// Expressions
+//===----------------------------------------------------------------------===//
 
 def ConversionOp : MooreOp<"conversion", [Pure]> {
   let summary = "A type conversion";

@@ -13,6 +13,21 @@ using namespace circt;
 using namespace ImportVerilog;
 
 //===----------------------------------------------------------------------===//
+// Utilities
+//===----------------------------------------------------------------------===//
+
+static void guessNamespacePrefix(const slang::ast::Symbol &symbol,
+                                 SmallString<64> &prefix) {
+  if (symbol.kind != slang::ast::SymbolKind::Package)
+    return;
+  guessNamespacePrefix(symbol.getParentScope()->asSymbol(), prefix);
+  if (!symbol.name.empty()) {
+    prefix += symbol.name;
+    prefix += "::";
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // Base Visitor
 //===----------------------------------------------------------------------===//
 
@@ -20,6 +35,13 @@ namespace {
 /// Base visitor which ignores AST nodes that are handled by Slang's name
 /// resolution and type checking.
 struct BaseVisitor {
+  Context &context;
+  Location loc;
+  OpBuilder &builder;
+
+  BaseVisitor(Context &context, Location loc)
+      : context(context), loc(loc), builder(context.builder) {}
+
   // Skip semicolons.
   LogicalResult visit(const slang::ast::EmptyMemberSymbol &) {
     return success();
@@ -41,6 +63,46 @@ struct BaseVisitor {
   LogicalResult visit(const slang::ast::WildcardImportSymbol &) {
     return success();
   }
+
+  // Skip type parameters. The Slang AST is already monomorphized.
+  LogicalResult visit(const slang::ast::TypeParameterSymbol &) {
+    return success();
+  }
+
+  // Handle parameters.
+  LogicalResult visit(const slang::ast::ParameterSymbol &param) {
+    visitParameter(param);
+    return success();
+  }
+
+  LogicalResult visit(const slang::ast::SpecparamSymbol &param) {
+    visitParameter(param);
+    return success();
+  }
+
+  template <class Node>
+  void visitParameter(const Node &param) {
+    // If debug info is enabled, try to materialize the parameter's constant
+    // value on a best-effort basis and create a `dbg.variable` to track the
+    // value.
+    if (!context.options.debugInfo)
+      return;
+    auto value =
+        context.materializeConstant(param.getValue(), param.getType(), loc);
+    if (!value)
+      return;
+    if (builder.getInsertionBlock()->getParentOp() == context.intoModuleOp)
+      context.orderedRootOps.insert({param.location, value.getDefiningOp()});
+
+    // Prefix the parameter name with the surrounding namespace to create
+    // somewhat sane names in the IR.
+    SmallString<64> paramName;
+    guessNamespacePrefix(param.getParentScope()->asSymbol(), paramName);
+    paramName += param.name;
+
+    builder.create<debug::VariableOp>(loc, builder.getStringAttr(paramName),
+                                      value, Value{});
+  }
 };
 } // namespace
 
@@ -50,14 +112,8 @@ struct BaseVisitor {
 
 namespace {
 struct RootVisitor : public BaseVisitor {
+  using BaseVisitor::BaseVisitor;
   using BaseVisitor::visit;
-
-  Context &context;
-  Location loc;
-  OpBuilder &builder;
-
-  RootVisitor(Context &context, Location loc)
-      : context(context), loc(loc), builder(context.builder) {}
 
   // Handle packages.
   LogicalResult visit(const slang::ast::PackageSymbol &package) {
@@ -85,21 +141,8 @@ struct RootVisitor : public BaseVisitor {
 
 namespace {
 struct PackageVisitor : public BaseVisitor {
+  using BaseVisitor::BaseVisitor;
   using BaseVisitor::visit;
-
-  Context &context;
-  Location loc;
-  OpBuilder &builder;
-
-  PackageVisitor(Context &context, Location loc)
-      : context(context), loc(loc), builder(context.builder) {}
-
-  // Ignore parameters. These are materialized on-the-fly as `ConstantOp`s.
-  LogicalResult visit(const slang::ast::ParameterSymbol &) { return success(); }
-  LogicalResult visit(const slang::ast::SpecparamSymbol &) { return success(); }
-  LogicalResult visit(const slang::ast::TypeParameterSymbol &) {
-    return success();
-  }
 
   // Handle functions and tasks.
   LogicalResult visit(const slang::ast::SubroutineSymbol &subroutine) {
@@ -177,14 +220,8 @@ static moore::NetKind convertNetKind(slang::ast::NetType::NetKind kind) {
 
 namespace {
 struct ModuleVisitor : public BaseVisitor {
+  using BaseVisitor::BaseVisitor;
   using BaseVisitor::visit;
-
-  Context &context;
-  Location loc;
-  OpBuilder &builder;
-
-  ModuleVisitor(Context &context, Location loc)
-      : context(context), loc(loc), builder(context.builder) {}
 
   // Skip ports which are already handled by the module itself.
   LogicalResult visit(const slang::ast::PortSymbol &) { return success(); }
@@ -450,45 +487,6 @@ struct ModuleVisitor : public BaseVisitor {
       return failure();
     if (builder.getBlock())
       builder.create<moore::ReturnOp>(loc);
-    return success();
-  }
-
-  // Handle parameters.
-  LogicalResult visit(const slang::ast::ParameterSymbol &paramNode) {
-    auto type = cast<moore::IntType>(context.convertType(paramNode.getType()));
-    if (!type)
-      return failure();
-
-    auto valueInt = paramNode.getValue().integer().as<uint64_t>().value();
-    Value value = builder.create<moore::ConstantOp>(loc, type, valueInt);
-
-    auto namedConstantOp = builder.create<moore::NamedConstantOp>(
-        loc, type, builder.getStringAttr(paramNode.name),
-        paramNode.isLocalParam()
-            ? moore::NamedConstAttr::get(context.getContext(),
-                                         moore::NamedConst::LocalParameter)
-            : moore::NamedConstAttr::get(context.getContext(),
-                                         moore::NamedConst::Parameter),
-        value);
-    context.valueSymbols.insert(&paramNode, namedConstantOp);
-    return success();
-  }
-
-  // Handle specparam.
-  LogicalResult visit(const slang::ast::SpecparamSymbol &spNode) {
-    auto type = cast<moore::IntType>(context.convertType(spNode.getType()));
-    if (!type)
-      return failure();
-
-    auto valueInt = spNode.getValue().integer().as<uint64_t>().value();
-    Value value = builder.create<moore::ConstantOp>(loc, type, valueInt);
-
-    auto namedConstantOp = builder.create<moore::NamedConstantOp>(
-        loc, type, builder.getStringAttr(spNode.name),
-        moore::NamedConstAttr::get(context.getContext(),
-                                   moore::NamedConst::SpecParameter),
-        value);
-    context.valueSymbols.insert(&spNode, namedConstantOp);
     return success();
   }
 
@@ -792,17 +790,6 @@ Context::convertPackage(const slang::ast::PackageSymbol &package) {
       return failure();
   }
   return success();
-}
-
-static void guessNamespacePrefix(const slang::ast::Symbol &symbol,
-                                 SmallString<64> &prefix) {
-  if (symbol.kind == slang::ast::SymbolKind::Root)
-    return;
-  guessNamespacePrefix(symbol.getParentScope()->asSymbol(), prefix);
-  if (!symbol.name.empty()) {
-    prefix += symbol.name;
-    prefix += "::";
-  }
 }
 
 /// Convert a function and its arguments to a function declaration in the IR.

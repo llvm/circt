@@ -40,6 +40,7 @@ add_circt_translation_library(CIRCTImportVerilog
   slang_slang
 
   LINK_LIBS PUBLIC
+  CIRCTDebug
   CIRCTHW
   CIRCTMoore
   MLIRFuncDialect

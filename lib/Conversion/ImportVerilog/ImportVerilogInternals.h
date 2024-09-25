@@ -11,6 +11,7 @@
 #define CONVERSION_IMPORTVERILOG_IMPORTVERILOGINTERNALS_H
 
 #include "circt/Conversion/ImportVerilog.h"
+#include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
