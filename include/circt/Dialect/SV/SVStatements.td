@@ -545,6 +545,29 @@ def VerbatimOp : SVOp<"verbatim"> {
   ];
 }
 
+def MacroRefOp : SVOp<"macro.ref", [
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Statement to refer to a SystemVerilog macro";
+  let description = [{
+    This operation represent a statement by referencing a named macro.
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$macroName, Variadic<AnyType>:$inputs);
+  let results = (outs);
+
+  let assemblyFormat = "$macroName (`(` $inputs^ `)` `:` type($inputs))? attr-dict";
+
+  let builders = [
+    OpBuilder<(ins "StringRef":$ident),
+               "build(odsBuilder, odsState, "
+                "FlatSymbolRefAttr::get($_builder.getContext(), ident), {});">
+  ];
+
+  let extraClassDeclaration = [{
+    MacroDeclOp getReferencedMacro(const hw::HWSymbolCache *cache);
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Bind Statements
 //===----------------------------------------------------------------------===//
