@@ -69,6 +69,11 @@ struct BaseVisitor {
     return success();
   }
 
+  // Skip elaboration system tasks. These are reported directly by Slang.
+  LogicalResult visit(const slang::ast::ElabSystemTaskSymbol &) {
+    return success();
+  }
+
   // Handle parameters.
   LogicalResult visit(const slang::ast::ParameterSymbol &param) {
     visitParameter(param);
