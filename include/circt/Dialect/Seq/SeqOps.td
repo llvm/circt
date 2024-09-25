@@ -711,7 +711,7 @@ def InitialOp : SeqOp<"initial", [SingleBlock,
     See the Seq dialect rationale for a longer description.
   }];
 
-  let arguments = (ins);
+  let arguments = (ins Variadic<ImmutableType>: $inputs);
   let results = (outs Variadic<ImmutableType>); // seq.immutable values
   let regions = (region SizedRegion<1>:$body);
   let hasVerifier = 1;
@@ -721,7 +721,7 @@ def InitialOp : SeqOp<"initial", [SingleBlock,
   ];
 
   let assemblyFormat = [{
-    $body attr-dict `:` type(results)
+    `(` $inputs `)` $body attr-dict `:` functional-type($inputs, results)
   }];
 
   let extraClassDeclaration = [{
@@ -739,4 +739,13 @@ def YieldOp : SeqOp<"yield",
   ];
 
   let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
+}
+
+def FromImmutableOp : SeqOp<"from_immutable", [Pure]> {
+  let summary = "Cast from an immutable type to a wire type";
+
+  let arguments = (ins ImmutableType:$input);
+  let results = (outs AnyType:$output);
+
+  let assemblyFormat = "$input attr-dict `:` functional-type(operands, results)";
 }

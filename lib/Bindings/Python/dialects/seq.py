@@ -99,7 +99,7 @@ class CompRegLike:
         if power_on_value.owner is None:
           assert False, "Initial value must not be port"
         elif isinstance(power_on_value.owner.opview, hw.ConstantOp):
-          init = InitialOp([seq.ImmutableType.get(power_on_value.type)])
+          init = InitialOp([seq.ImmutableType.get(power_on_value.type)], [])
           init.body.blocks.append()
           with InsertionPoint(init.body.blocks[0]):
             cloned_constant = power_on_value.owner.clone()

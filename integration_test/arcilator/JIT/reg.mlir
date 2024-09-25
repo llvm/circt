@@ -19,12 +19,12 @@ hw.module @counter(in %clk: i1, out o1: i8, out o2: i8) {
 
   %r0 = seq.compreg %added1, %seq_clk initial %0#0 : i8
   %r1 = seq.compreg %added2, %seq_clk initial %0#1 : i8
-  %0:2 = seq.initial {
+  %0:2 = seq.initial () {
     %1 = func.call @random() : () -> i32
     %2 = comb.extract %1 from 0 : (i32) -> i8
     %3 = hw.constant 5 : i8
     seq.yield %2, %3: i8, i8
-  } : !seq.immutable<i8>, !seq.immutable<i8>
+  } : () -> (!seq.immutable<i8>, !seq.immutable<i8>)
 
   %one = hw.constant 1 : i8
   %added1 = comb.add %r0, %one : i8

@@ -6,10 +6,10 @@ module {
   hw.module @test(in %clock : !seq.clock, in %reset : i1, in %a : i1) {
     //CHECK:  [[CLK:%.+]] = seq.from_clock %clock
     %0 = seq.from_clock %clock 
-    // CHECK-NEXT: %[[INIT:.+]] = seq.initial {
+    // CHECK-NEXT: %[[INIT:.+]] = seq.initial() {
     // CHECK-NEXT:   %false = hw.constant false
     // CHECK-NEXT:   seq.yield %false : i1
-    // CHECK-NEXT: } : !seq.immutable<i1>
+    // CHECK-NEXT: } : () -> !seq.immutable<i1>
 
     //CHECK:  %true = hw.constant true
     //CHECK:  [[TMP:%.+]] = comb.or %reset, %hbr : i1
