@@ -457,7 +457,7 @@ private:
 
   void computeTruthTable() {
     uint64_t numEntries = 1 << primitives.size();
-    for (auto _ : primitives)
+    for (auto _ [[maybe_unused]] : primitives)
       truthTable.push_back(APInt(numEntries, 0));
 
     for (uint64_t i = 0; i < numEntries; ++i)
