@@ -152,7 +152,7 @@ class ChannelMMIO(esi.ServiceImplementation):
     for bundle in bundles.to_client_reqs:
       if bundle.port == 'read':
         table[offset] = bundle
-        bundle.add_record({
+        bundle.add_record(details={
             "offset": offset,
             "size": ChannelMMIO.RegisterSpace,
             "type": "ro"
@@ -160,7 +160,7 @@ class ChannelMMIO(esi.ServiceImplementation):
         offset += ChannelMMIO.RegisterSpace
       elif bundle.port == 'read_write':
         table[offset] = bundle
-        bundle.add_record({
+        bundle.add_record(details={
             "offset": offset,
             "size": ChannelMMIO.RegisterSpace,
             "type": "rw"

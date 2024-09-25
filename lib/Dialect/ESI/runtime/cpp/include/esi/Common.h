@@ -50,6 +50,16 @@ public:
   using std::vector<AppID>::vector;
 
   AppIDPath operator+(const AppIDPath &b);
+  AppIDPath operator+(const AppID &b) {
+    AppIDPath result = *this;
+    result.push_back(b);
+    return result;
+  }
+  AppIDPath pop() {
+    AppIDPath result = *this;
+    result.pop_back();
+    return result;
+  }
   std::string toStr() const;
 };
 bool operator<(const AppIDPath &a, const AppIDPath &b);
@@ -76,11 +86,18 @@ struct ServicePortDesc {
   std::string portName;
 };
 
+struct ChannelAssignment {
+  std::string type;
+  std::map<std::string, std::any> implOptions;
+};
+using ChannelAssignments = std::map<std::string, ChannelAssignment>;
+
 /// A description of a hardware client. Used pretty exclusively in setting up
 /// the design.
 struct HWClientDetail {
   AppIDPath relPath;
   ServicePortDesc port;
+  ChannelAssignments channelAssignments;
   std::map<std::string, std::any> implOptions;
 };
 using HWClientDetails = std::vector<HWClientDetail>;

@@ -687,9 +687,13 @@ void ServiceImplClientRecordOp::getDetails(
               NamedAttribute(StringAttr::get(getContext(), "port"),
                              servicePort.getName()),
           }));
+  if (const auto &channelAssignments = getChannelAssignments())
+    results.push_back(
+        NamedAttribute(getChannelAssignmentsAttrName(), *channelAssignments));
   // Don't add another level for the implementation details.
-  for (auto implDetail : getImplDetailsAttr().getValue())
-    results.push_back(implDetail);
+  if (const auto &implDetails = getImplDetails())
+    for (const auto &implDetail : *implDetails)
+      results.push_back(implDetail);
 }
 
 StringRef ServiceRequestRecordOp::getManifestClass() { return "clientPort"; }
