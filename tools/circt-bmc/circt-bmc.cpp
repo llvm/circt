@@ -114,7 +114,7 @@ static cl::opt<OutputFormat> outputFormat(
     cl::desc("Specify output format"),
     cl::values(clEnumValN(OutputMLIR, "emit-mlir", "Emit LLVM MLIR dialect"),
                clEnumValN(OutputLLVM, "emit-llvm", "Emit LLVM"),
-               clEnumValN(OutputSMTLIB, "emit-smtlib", "Emit object file")),
+               clEnumValN(OutputSMTLIB, "emit-smtlib", "Emit SMT-LIB file")),
     cl::init(OutputLLVM), cl::cat(mainCategory));
 
 #endif
