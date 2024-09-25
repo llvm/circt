@@ -14,13 +14,13 @@ hw.module @noResetNoEnable(inout %clk : i1, inout %sig : i1) {
   %time = llhd.constant_time <0ns, 1d, 0e>
   %false = hw.constant false
   %true = hw.constant true
+  %p2 = llhd.prb %clk : !hw.inout<i1>
   llhd.process {
     cf.br ^bb1
   ^bb1:
     %p1 = llhd.prb %clk : !hw.inout<i1>
-    llhd.wait (%p1 : i1), ^bb2
+    llhd.wait (%p2 : i1), ^bb2
   ^bb2:
-    %p2 = llhd.prb %clk : !hw.inout<i1>
     %old = comb.xor %p1, %true : i1
     %posedge = comb.and %old, %p2 : i1
     llhd.drv %sig, %false after %time if %posedge : !hw.inout<i1>
@@ -39,13 +39,13 @@ hw.module @negedgeClk(inout %clk : i1, inout %sig : i1) {
   %time = llhd.constant_time <0ns, 1d, 0e>
   %false = hw.constant false
   %true = hw.constant true
+  %p2 = llhd.prb %clk : !hw.inout<i1>
   llhd.process {
     cf.br ^bb1
   ^bb1:
     %p1 = llhd.prb %clk : !hw.inout<i1>
-    llhd.wait (%p1 : i1), ^bb2
+    llhd.wait (%p2 : i1), ^bb2
   ^bb2:
-    %p2 = llhd.prb %clk : !hw.inout<i1>
     %old = comb.xor %p2, %true : i1
     %posedge = comb.and %old, %p1 : i1
     llhd.drv %sig, %false after %time if %posedge : !hw.inout<i1>
@@ -64,13 +64,13 @@ hw.module @enable(in %c : i1, inout %clk : i1, inout %sig : i1) {
   %time = llhd.constant_time <0ns, 1d, 0e>
   %false = hw.constant false
   %true = hw.constant true
+  %p2 = llhd.prb %clk : !hw.inout<i1>
   llhd.process {
     cf.br ^bb1
   ^bb1:
     %p1 = llhd.prb %clk : !hw.inout<i1>
-    llhd.wait (%p1 : i1), ^bb2
+    llhd.wait (%p2 : i1), ^bb2
   ^bb2:
-    %p2 = llhd.prb %clk : !hw.inout<i1>
     %old = comb.xor %p1, %true : i1
     %posedge = comb.and %old, %p2 : i1
     %cond = comb.and %posedge, %c : i1
@@ -91,15 +91,41 @@ hw.module @asyncReset(inout %rst : i1, inout %clk : i1, inout %sig : i1) {
   %time = llhd.constant_time <0ns, 1d, 0e>
   %false = hw.constant false
   %true = hw.constant true
+  %p2 = llhd.prb %clk : !hw.inout<i1>
+  %r2 = llhd.prb %rst : !hw.inout<i1>
   llhd.process {
     cf.br ^bb1
   ^bb1:
     %p1 = llhd.prb %clk : !hw.inout<i1>
     %r1 = llhd.prb %rst : !hw.inout<i1>
-    llhd.wait (%p1 : i1), ^bb2
+    llhd.wait (%p2, %r2 : i1, i1), ^bb2
   ^bb2:
-    %p2 = llhd.prb %clk : !hw.inout<i1>
-    %r2 = llhd.prb %rst : !hw.inout<i1>
+    %old = comb.xor %p1, %true : i1
+    %posedge = comb.and %old, %p2 : i1
+    %0 = comb.xor %r2, %true : i1
+    %negedge = comb.and %0, %r1 : i1
+    %cond = comb.or %negedge, %posedge : i1
+    llhd.drv %sig, %false after %time if %cond : !hw.inout<i1>
+    cf.br ^bb1
+  }
+}
+
+// CHECK-LABEL: @asyncResetNotObserved
+// CHECK-SAME: (inout [[RST:%.+]] : i1, inout [[CLK:%.+]] : i1, inout [[SIG:%.+]] : i1)
+hw.module @asyncResetNotObserved(inout %rst : i1, inout %clk : i1, inout %sig : i1) {
+  // CHECK: llhd.process
+  %time = llhd.constant_time <0ns, 1d, 0e>
+  %false = hw.constant false
+  %true = hw.constant true
+  %p2 = llhd.prb %clk : !hw.inout<i1>
+  %r2 = llhd.prb %rst : !hw.inout<i1>
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    %p1 = llhd.prb %clk : !hw.inout<i1>
+    %r1 = llhd.prb %rst : !hw.inout<i1>
+    llhd.wait (%p2 : i1), ^bb2
+  ^bb2:
     %old = comb.xor %p1, %true : i1
     %posedge = comb.and %old, %p2 : i1
     %0 = comb.xor %r2, %true : i1

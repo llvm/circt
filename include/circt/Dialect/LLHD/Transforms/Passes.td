@@ -141,6 +141,11 @@ def Desequentialization : Pass<"llhd-desequentialize", "hw::HWModuleOp"> {
     is inlined into the surrounding module.
   }];
 
+  let options = [
+    Option<"maxPrimitives", "max-primitives", "unsigned", "8",
+           "The maximum number of primitives to analyze.">,
+  ];
+
   let dependentDialects = [
     "comb::CombDialect", "hw::HWDialect", "seq::SeqDialect"
   ];

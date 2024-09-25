@@ -159,8 +159,8 @@ private:
   unsigned width;
 };
 
-/// Represents a single register trigger. This is basically one row in the in
-/// the DNF truth table. However, several ones can typically combined into one.
+/// Represents a single register trigger. This is basically one row in the DNF
+/// truth table. However, several ones can typically combined into one.
 struct Trigger {
   enum class Kind {
     PosEdge,
@@ -268,7 +268,12 @@ public:
   LogicalResult
   computeTriggers(OpBuilder &builder, Location loc,
                   function_ref<bool(Value, Value)> sampledFromSameSignal,
-                  SmallVectorImpl<Trigger> &triggers) {
+                  SmallVectorImpl<Trigger> &triggers, unsigned maxPrimitives) {
+    if (primitives.size() > maxPrimitives) {
+      LLVM_DEBUG({ llvm::dbgs() << "  Too many primitives, skipping...\n"; });
+      return failure();
+    }
+
     // Populate the truth table and the result APInt.
     computeTruthTable();
 
@@ -492,17 +497,24 @@ private:
 
 struct DesequentializationPass
     : public llhd::impl::DesequentializationBase<DesequentializationPass> {
+  DesequentializationPass()
+      : llhd::impl::DesequentializationBase<DesequentializationPass>() {}
+  DesequentializationPass(const llhd::DesequentializationOptions &options)
+      : llhd::impl::DesequentializationBase<DesequentializationPass>(options) {
+    maxPrimitives.setValue(options.maxPrimitives);
+  }
   void runOnOperation() override;
   void runOnProcess(llhd::ProcessOp procOp) const;
-  LogicalResult isSupportedSequentialProcess(
-      llhd::ProcessOp procOp,
-      const llhd::TemporalRegionAnalysis &trAnalysis) const;
+  LogicalResult
+  isSupportedSequentialProcess(llhd::ProcessOp procOp,
+                               const llhd::TemporalRegionAnalysis &trAnalysis,
+                               SmallVectorImpl<Value> &observed) const;
 };
 } // namespace
 
 LogicalResult DesequentializationPass::isSupportedSequentialProcess(
-    llhd::ProcessOp procOp,
-    const llhd::TemporalRegionAnalysis &trAnalysis) const {
+    llhd::ProcessOp procOp, const llhd::TemporalRegionAnalysis &trAnalysis,
+    SmallVectorImpl<Value> &observed) const {
   unsigned numTRs = trAnalysis.getNumTemporalRegions();
 
   // We only consider the case with three basic blocks and two TRs, because
@@ -524,12 +536,12 @@ LogicalResult DesequentializationPass::isSupportedSequentialProcess(
 
   bool seenWait = false;
   WalkResult result = procOp.walk([&](llhd::WaitOp op) -> WalkResult {
-    LLVM_DEBUG({
-      llvm::dbgs() << "  Analyzing Wait Operation:\n";
-      for (auto obs : op.getObserved())
-        llvm::dbgs() << "  - Observes: " << obs << "\n";
-      llvm::dbgs() << "\n";
-    });
+    LLVM_DEBUG({ llvm::dbgs() << "  Analyzing Wait Operation:\n"; });
+    for (auto obs : op.getObserved()) {
+      observed.push_back(obs);
+      LLVM_DEBUG({ llvm::dbgs() << "  - Observes: " << obs << "\n"; });
+    }
+    LLVM_DEBUG({ llvm::dbgs() << "\n"; });
 
     if (seenWait)
       return failure();
@@ -567,7 +579,8 @@ void DesequentializationPass::runOnProcess(llhd::ProcessOp procOp) const {
   llhd::TemporalRegionAnalysis trAnalysis(procOp);
 
   // If we don't support it, just skip it.
-  if (failed(isSupportedSequentialProcess(procOp, trAnalysis)))
+  SmallVector<Value> observed;
+  if (failed(isSupportedSequentialProcess(procOp, trAnalysis, observed)))
     return;
 
   OpBuilder builder(procOp);
@@ -609,7 +622,7 @@ void DesequentializationPass::runOnProcess(llhd::ProcessOp procOp) const {
 
     if (failed(DnfAnalyzer(op.getEnable(), sampledInPast)
                    .computeTriggers(builder, loc, sampledFromSameSignal,
-                                    triggers))) {
+                                    triggers, maxPrimitives))) {
       LLVM_DEBUG({
         llvm::dbgs() << "  Unable to compute trigger list for drive condition, "
                         "skipping...\n";
@@ -646,6 +659,12 @@ void DesequentializationPass::runOnProcess(llhd::ProcessOp procOp) const {
     if (triggers[0].kinds[0] == Trigger::Kind::Edge)
       return WalkResult::interrupt();
 
+    if (!llvm::any_of(observed, [&](Value val) {
+          return sampledFromSameSignal(val, triggers[0].clocks[0]) &&
+                 val.getParentRegion() != procOp.getBody();
+        }))
+      return WalkResult::interrupt();
+
     Value clock = builder.create<seq::ToClockOp>(loc, triggers[0].clocks[0]);
     Value reset, resetValue;
 
@@ -666,6 +685,12 @@ void DesequentializationPass::runOnProcess(llhd::ProcessOp procOp) const {
 
       // TODO: add support
       if (triggers[1].enable)
+        return WalkResult::interrupt();
+
+      if (!llvm::any_of(observed, [&](Value val) {
+            return sampledFromSameSignal(val, triggers[1].clocks[0]) &&
+                   val.getParentRegion() != procOp.getBody();
+          }))
         return WalkResult::interrupt();
 
       reset = triggers[1].clocks[0];
