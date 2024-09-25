@@ -472,6 +472,8 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
                   ConversionPatternRewriter &rewriter) const override {
     Location loc = op.getLoc();
     Type resultType = typeConverter->convertType(op.getResult().getType());
+    if (!resultType)
+      return rewriter.notifyMatchFailure(op.getLoc(), "invalid variable type");
 
     // Determine the initial value of the signal.
     Value init = adaptor.getInitial();
