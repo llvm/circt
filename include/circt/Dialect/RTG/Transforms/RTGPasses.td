@@ -1,4 +1,4 @@
-//===-- Passes.td - RTG pass definition file ---------------*- tablegen -*-===//
+//===-- RTGPasses.td - RTG pass definition file ------------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,18 +10,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_RTG_PASSES_TD
-#define CIRCT_DIALECT_RTG_PASSES_TD
+#ifndef CIRCT_DIALECT_RTG_RTGPASSES_TD
+#define CIRCT_DIALECT_RTG_RTGPASSES_TD
 
 include "mlir/Pass/PassBase.td"
 
 def ExportRTGToElf : Pass<"rtg-to-elf", "mlir::ModuleOp"> {
   let summary = "Generate an elf file for a given test sequence.";
-  let constructor =  "circt::rtg::createRTGToElfPass()";
   let options = [
     Option<"outputFilename", "output-filename", "std::string", "",
       "The name of the output file to generate.">,
   ];
 }
 
-#endif // CIRCT_DIALECT_RTG_PASSES_TD
+#endif // CIRCT_DIALECT_RTG_RTGPASSES_TD

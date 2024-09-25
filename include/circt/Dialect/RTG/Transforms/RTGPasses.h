@@ -14,21 +14,17 @@
 #define CIRCT_DIALECT_RTG_RTGPASSES_H
 
 #include "mlir/Pass/Pass.h"
-#include "mlir/Pass/PassRegistry.h"
 #include <memory>
 #include <optional>
 
 namespace circt {
 namespace rtg {
 
-#define GEN_PASS_DECL
-#include "circt/Dialect/RTG/IR/Passes.h.inc"
-
-std::unique_ptr<mlir::Pass> createRTGToElfPass();
-
 /// Generate the code for registering passes.
+#define GEN_PASS_DECL
+#define GEN_PASS_DEF_RTGTOELF
 #define GEN_PASS_REGISTRATION
-#include "circt/Dialect/RTG/IR/Passes.h.inc"
+#include "circt/Dialect/RTG/Transforms/RTGPasses.h.inc"
 
 } // namespace rtg
 } // namespace circt
