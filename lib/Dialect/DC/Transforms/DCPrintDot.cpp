@@ -37,64 +37,90 @@ using ValueMap = llvm::ScopedHashTable<mlir::Value, std::string>;
 
 namespace {
 
-/// all Comb and DC nodetypes 
+/// all Comb and DC nodetypes
 enum NodeType {
-  addOp, 
-  andOp,  
-  xorOp, 
+  addOp,
+  andOp,
+  xorOp,
   orOp,
   mulOp,
-  muxOp, 
+  muxOp,
   eqOp,
-  neOp, 
-  gtOp, 
-  geOp, 
-  ltOp, 
-  leOp, 
-  branchOp, 
-  bufferOp, 
-  forkOp, 
-  fromESIOp, 
-  joinOp, 
-  mergeOp, 
-  packOp, 
-  selectOp, 
-  sinkOp, 
-  sourceOp, 
-  toESIOp, 
+  neOp,
+  gtOp,
+  geOp,
+  ltOp,
+  leOp,
+  branchOp,
+  bufferOp,
+  forkOp,
+  fromESIOp,
+  joinOp,
+  mergeOp,
+  packOp,
+  selectOp,
+  sinkOp,
+  sourceOp,
+  toESIOp,
   unpackOp,
   null
 };
 
 std::string stringify(NodeType type) {
-    switch (type) {
-        case addOp: return "+";
-        case andOp: return "&&";
-        case xorOp: return "^";
-        case orOp: return "||";
-        case mulOp: return "x";
-        case muxOp: return "mux";
-        case eqOp: return "==";
-        case neOp: return "!=";
-        case gtOp: return ">";
-        case geOp: return ">=";
-        case ltOp: return "<";
-        case leOp: return "<=";
-        case branchOp: return "branch";
-        case bufferOp: return "buffer";
-        case forkOp: return "fork";
-        case fromESIOp: return "fromESI";
-        case joinOp: return "join";
-        case mergeOp: return "merge";
-        case packOp: return "pack";
-        case selectOp: return "select";
-        case sinkOp: return "sink";
-        case sourceOp: return "source";
-        case toESIOp: return "toESI";
-        case unpackOp: return "unpack";
-        case null: return "null";
-        default: return "Unknown NodeType";
-    }
+  switch (type) {
+  case addOp:
+    return "+";
+  case andOp:
+    return "&&";
+  case xorOp:
+    return "^";
+  case orOp:
+    return "||";
+  case mulOp:
+    return "x";
+  case muxOp:
+    return "mux";
+  case eqOp:
+    return "==";
+  case neOp:
+    return "!=";
+  case gtOp:
+    return ">";
+  case geOp:
+    return ">=";
+  case ltOp:
+    return "<";
+  case leOp:
+    return "<=";
+  case branchOp:
+    return "branch";
+  case bufferOp:
+    return "buffer";
+  case forkOp:
+    return "fork";
+  case fromESIOp:
+    return "fromESI";
+  case joinOp:
+    return "join";
+  case mergeOp:
+    return "merge";
+  case packOp:
+    return "pack";
+  case selectOp:
+    return "select";
+  case sinkOp:
+    return "sink";
+  case sourceOp:
+    return "source";
+  case toESIOp:
+    return "toESI";
+  case unpackOp:
+    return "unpack";
+  case null:
+    return "null";
+  default:
+    return "Unknown NodeType";
+  }
 }
 
 /// stores operand and results for each node in the dot graph
@@ -139,8 +165,7 @@ DotNode createDCNode(
   if (isa<dc::UnpackOp>(op))
     tokenFlag = true;
 
-  DotNode n = {null,
-               valueToName(op.getOperands(), valuesMap, false),
+  DotNode n = {null, valueToName(op.getOperands(), valuesMap, false),
                valueToName(op.getOperands(), valuesMap, tokenFlag)};
 
   TypeSwitch<mlir::Operation *>(&op)
@@ -156,7 +181,7 @@ DotNode createDCNode(
       .Case([&](dc::SourceOp) { n.nodeType = sourceOp; })
       .Case([&](dc::ToESIOp) { n.nodeType = toESIOp; })
       .Case([&](dc::UnpackOp) { n.nodeType = unpackOp; });
-    
+
   return n;
 }
 
@@ -271,7 +296,8 @@ struct DCDotPrintPass : public circt::dc::impl::DCDotPrintBase<DCDotPrintPass> {
     os << "digraph{\n";
     // print all nodes first
     for (auto [i, n] : llvm::enumerate(nodes)) {
-      os << i << " [shape = polygon, label = \"" << stringify(n.nodeType) << "\"]\n";
+      os << i << " [shape = polygon, label = \"" << stringify(n.nodeType)
+         << "\"]\n";
     }
     for (auto [id, n] : llvm::enumerate(nodes)) {
       if (n.nodeType == unpackOp)
