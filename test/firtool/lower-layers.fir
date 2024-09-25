@@ -177,3 +177,33 @@ circuit TestHarness:
 ; CHECK:   .reset     (reset)
 ; CHECK: );
 ; CHECK: `endif // layers_TestHarness_Verification
+
+; // -----
+
+; This is a test that the modules created from lowering layerblocks to modules
+; still have reasonable optimizations that are only possible with
+; canonicalization.  Creating modules from layers destroys a lot of optimization
+; opportunities and this test is ensuring that these are preserved.
+;
+; See: https://github.com/llvm/circt/issues/7533
+
+FIRRTL version 4.0.0
+
+circuit Foo: %[[
+  {"class": "firrtl.transforms.DontTouchAnnotation", "target": "~Foo|Foo>c"}
+]]
+  layer A, bind:
+  public module Foo:
+    input clock: Clock
+    input a: UInt<2>
+    output d: UInt<2>
+
+    node b = bits(a, 1, 0)
+    layerblock A :
+      node c = eq(a, b)
+
+    connect d, b
+
+; CHECK:     module Foo_A
+; CHECK-NOT: endmodule
+; CHECK:       wire c = 1'h1;
