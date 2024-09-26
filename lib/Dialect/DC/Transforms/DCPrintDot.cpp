@@ -1,5 +1,4 @@
-//===- DCPrintDot.cpp - Analysis Pass -----------------------------*- C++
-//-*-===//
+//===- DCPrintDot.cpp - Analysis Pass -----------------------------*- C++-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -7,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Contains the definitions of the Analysis pass.
+// Contains the definitions of the DCPrintDot pass.
 //
 //===----------------------------------------------------------------------===//
 #include "circt/Dialect/DC/DCOps.h"
@@ -38,97 +37,63 @@ using ValueMap = llvm::ScopedHashTable<mlir::Value, std::string>;
 namespace {
 
 /// all Comb and DC nodetypes
-class NodeType {
-  public:
-    static const NodeType AddOp;
-    static const NodeType AndOp;
-    static const NodeType XorOp;
-    static const NodeType MulOp;
-    static const NodeType OrOp;
-    static const NodeType MuxOp;
-    static const NodeType EqOp;
-    static const NodeType NeOp;
-    static const NodeType GtOp;
-    static const NodeType GeOp;
-    static const NodeType LtOp;
-    static const NodeType LeOp;
-    static const NodeType BranchOp;
-    static const NodeType BufferOp;
-    static const NodeType ForkOp;
-    static const NodeType FromESIOp;
-    static const NodeType JoinOp;
-    static const NodeType MergeOp;
-    static const NodeType PackOp;
-    static const NodeType SelectOp;
-    static const NodeType SinkOp;
-    static const NodeType SourceOp;
-    static const NodeType ToESIOp;
-    static const NodeType UnpackOp;
-    static const NodeType Null;
-
-  std::string stringify() const {
-    switch (value) {
-    case 0:
-      return "+";
-    case 1:
-      return "&&";
-    case 2:
-      return "^";
-    case 3:
-      return "||";
-    case 4:
-      return "x";
-    case 5:
-      return "mux";
-    case 6:
-      return "==";
-    case 7:
-      return "!=";
-    case 8:
-      return ">";
-    case 9:
-      return ">=";
-    case 10:
-      return "<";
-    case 11:
-      return "<=";
-    case 12:
-      return "branch";
-    case 13:
-      return "buffer";
-    case 14:
-      return "fork";
-    case 15:
-      return "fromESI";
-    case 16:
-      return "join";
-    case 17:
-      return "merge";
-    case 18:
-      return "pack";
-    case 19:
-      return "select";
-    case 20:
-      return "sink";
-    case 21:
-      return "source";
-    case 22:
-      return "toESI";
-    case 23:
-      return "unpack";
-    case 24:
-      return "null";
-    }
-  }
-
-  bool operator==(const NodeType& other) const {
-        return value == other.value;
-    }
-
-private:
-  NodeType(int val) : value(val) {}
-  int value;
+enum class NodeType {
+    AddOp,
+    AndOp,
+    XorOp,
+    MulOp,
+    OrOp,
+    MuxOp,
+    EqOp,
+    NeOp,
+    GtOp,
+    GeOp,
+    LtOp,
+    LeOp,
+    BranchOp,
+    BufferOp,
+    ForkOp,
+    FromESIOp,
+    JoinOp,
+    MergeOp,
+    PackOp,
+    SelectOp,
+    SinkOp,
+    SourceOp,
+    ToESIOp,
+    UnpackOp,
+    Null
 };
+
+std::string stringify(NodeType type) {
+    switch (type) {
+        case NodeType::AddOp: return "+";
+        case NodeType::AndOp: return "&&";
+        case NodeType::XorOp: return "^";
+        case NodeType::OrOp: return "||";
+        case NodeType::MulOp: return "x";
+        case NodeType::MuxOp: return "mux";
+        case NodeType::EqOp: return "==";
+        case NodeType::NeOp: return "!=";
+        case NodeType::GtOp: return ">";
+        case NodeType::GeOp: return ">=";
+        case NodeType::LtOp: return "<";
+        case NodeType::LeOp: return "<=";
+        case NodeType::BranchOp: return "branch";
+        case NodeType::BufferOp: return "buffer";
+        case NodeType::ForkOp: return "fork";
+        case NodeType::FromESIOp: return "fromESI";
+        case NodeType::JoinOp: return "join";
+        case NodeType::MergeOp: return "merge";
+        case NodeType::PackOp: return "pack";
+        case NodeType::SelectOp: return "select";
+        case NodeType::SinkOp: return "sink";
+        case NodeType::SourceOp: return "source";
+        case NodeType::ToESIOp: return "toESI";
+        case NodeType::UnpackOp: return "unpack";
+        case NodeType::Null: return "null";
+    }
+}
 
 /// stores operand and results for each node in the dot graph
 struct DotNode {
@@ -304,7 +269,7 @@ struct DCDotPrintPass
     os << "digraph{\n";
     // print all nodes first
     for (auto [i, n] : llvm::enumerate(nodes)) {
-      os << i << " [shape = polygon, label = \"" << n.nodeType.stringify()
+      os << i << " [shape = polygon, label = \"" << stringify(n.nodeType)
          << "\"]\n";
     }
     for (auto [id, n] : llvm::enumerate(nodes)) {
