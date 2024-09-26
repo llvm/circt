@@ -949,10 +949,10 @@ void Inliner::flattenInto(StringRef prefix, InliningLevel &il,
     }
 
     // If it's not a regular module we can't inline it. Mark it as live.
-    auto *module = symbolTable.lookup(instance.getModuleName());
-    auto childModule = dyn_cast<FModuleOp>(module);
+    auto *moduleOp = symbolTable.lookup(instance.getModuleName());
+    auto childModule = dyn_cast<FModuleOp>(moduleOp);
     if (!childModule) {
-      liveModules.insert(module);
+      liveModules.insert(moduleOp);
 
       cloneAndRename(prefix, il, mapper, op, symbolRenames, localSymbols);
       continue;
@@ -1004,9 +1004,8 @@ void Inliner::flattenInstances(FModuleOp module) {
       // Preorder update of any non-local annotations this instance participates
       // in.  This needs to happen _before_ visiting modules so that internal
       // non-local annotations can be deleted if they are now local.
-      for (auto targetNLA : instOpHierPaths[innerRef]) {
+      for (auto targetNLA : instOpHierPaths[innerRef])
         nlaMap[targetNLA].flattenModule(target);
-      }
     }
 
     // Add any NLAs which start at this instance to the localSymbols set.
@@ -1058,10 +1057,10 @@ void Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
     }
 
     // If it's not a regular module we can't inline it. Mark it as live.
-    auto *module = symbolTable.lookup(instance.getModuleName());
-    auto childModule = dyn_cast<FModuleOp>(module);
+    auto *moduleOp = symbolTable.lookup(instance.getModuleName());
+    auto childModule = dyn_cast<FModuleOp>(moduleOp);
     if (!childModule) {
-      liveModules.insert(module);
+      liveModules.insert(moduleOp);
       cloneAndRename(prefix, il, mapper, op, symbolRenames, {});
       continue;
     }
@@ -1345,15 +1344,15 @@ void Inliner::run() {
   // If the module is marked for flattening, flatten it. Otherwise, inline
   // every instance marked to be inlined.
   while (!worklist.empty()) {
-    auto module = worklist.pop_back_val();
-    if (shouldFlatten(module)) {
-      flattenInstances(module);
+    auto moduleOp = worklist.pop_back_val();
+    if (shouldFlatten(moduleOp)) {
+      flattenInstances(moduleOp);
       // Delete the flatten annotation, the transform was performed.
       // Even if visited again in our walk (for inlining),
       // we've just flattened it and so the annotation is no longer needed.
-      AnnotationSet::removeAnnotations(module, flattenAnnoClass);
+      AnnotationSet::removeAnnotations(moduleOp, flattenAnnoClass);
     } else {
-      inlineInstances(module);
+      inlineInstances(moduleOp);
     }
   }
 
