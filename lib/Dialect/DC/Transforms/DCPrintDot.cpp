@@ -121,7 +121,7 @@ std::string stringify(NodeType type) {
 }
 
 /// stores operand and results for each node in the dot graph
-struct DotNode {
+static struct DotNode {
   NodeType nodeType;
   SmallVector<std::pair<mlir::Value, std::string>> incoming;
   SmallVector<std::pair<mlir::Value, std::string>> outgoing;
@@ -129,7 +129,7 @@ struct DotNode {
 } // namespace
 
 /// gives a unique name to each value in the graph
-SmallVector<std::pair<mlir::Value, std::string>> static valueToName(
+static SmallVector<std::pair<mlir::Value, std::string>> static valueToName(
     const SmallVector<mlir::Value> &values,
     SmallVector<std::pair<mlir::Value, std::string>> &currentMap,
     bool tokenFlag) {
@@ -183,7 +183,7 @@ createDCNode(Operation &op,
 }
 
 /// creates node in the dataflow graph for Comb operations
-DotNode
+static DotNode
 createCombNode(Operation &op,
                SmallVector<std::pair<mlir::Value, std::string>> &valuesMap) {
 
@@ -263,7 +263,7 @@ createCombNode(Operation &op,
 namespace {
 /// Emit the dot nodes
 struct DCDotPrintPass : public circt::dc::impl::DCDotPrintBase<DCDotPrintPass> {
-  DCDotPrintPass(raw_ostream &os) : os(os) {}
+explicit  DCDotPrintPass(raw_ostream &os) : os(os) {}
   void runOnOperation() override {
 
     ModuleOp op = getOperation();
