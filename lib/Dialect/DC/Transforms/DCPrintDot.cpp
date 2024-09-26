@@ -263,7 +263,7 @@ createCombNode(Operation &op,
 namespace {
 /// Emit the dot nodes
 struct DCDotPrintPass : public circt::dc::impl::DCDotPrintBase<DCDotPrintPass> {
-explicit  DCDotPrintPass(raw_ostream &os) : os(os) {}
+  explicit DCDotPrintPass(raw_ostream &os) : os(os) {}
   void runOnOperation() override {
 
     ModuleOp op = getOperation();
