@@ -954,51 +954,43 @@ LogicalResult Inliner::inliningWalk(
 
   inliningStack.push_back(IPs{builder.saveInsertionPoint(), block->begin()});
   OpBuilder::InsertionGuard guard(builder);
+
   while (!inliningStack.empty()) {
-    auto &ips = inliningStack.back();
-    builder.restoreInsertionPoint(ips.target);
-    auto end = ips.source->getBlock()->end();
-    for (; ips.source != end; ++ips.source) {
-      auto &source = *ips.source;
-
-      // Handle ops with regions below.
-      if (source.getNumRegions() != 0)
-        break;
-
-      assert(builder.saveInsertionPoint().getPoint() == ips.target.getPoint());
-      // Clone source into insertion point 'target'.
-      if (failed(process(&source)))
-        return failure();
-      assert(builder.saveInsertionPoint().getPoint() == ips.target.getPoint());
+    auto target = inliningStack.back().target;
+    builder.restoreInsertionPoint(target);
+    Operation *source;
+    // Get next source operation.
+    {
+      auto &ips = inliningStack.back();
+      source = &*ips.source;
+      auto end = source->getBlock()->end();
+      if (++ips.source == end)
+        inliningStack.pop_back();
     }
 
-    // If we've finished inlining this block, pop and continue to next.
-    if (ips.source == end) {
-      inliningStack.pop_back();
+    // Does the source have regions? If not, use callback to process.
+    if (source->getNumRegions() == 0) {
+      assert(builder.saveInsertionPoint().getPoint() == target.getPoint());
+      // Clone source into insertion point 'target'.
+      if (failed(process(source)))
+        return failure();
+      assert(builder.saveInsertionPoint().getPoint() == target.getPoint());
+
       continue;
     }
 
-    // Otherwise, we have an operation with regions.
-    auto &sourceWithRegions = *ips.source;
-    assert(builder.saveInsertionPoint().getPoint() == ips.target.getPoint());
-
-    // Advance source iterator, we'll handle this operation below.
-    // If this is the last operation of current level, pop off stack.
-    if (++ips.source == end)
-      inliningStack.pop_back();
-
     // Limited support for region-containing operations.
-    if (!isa<LayerBlockOp, WhenOp, MatchOp>(sourceWithRegions))
-      return sourceWithRegions.emitError("unsupported operation '")
-             << sourceWithRegions.getName() << "' cannot be inlined";
+    if (!isa<LayerBlockOp, WhenOp, MatchOp>(source))
+      return source->emitError("unsupported operation '")
+             << source->getName() << "' cannot be inlined";
 
     // Note: This does not use cloneAndRename for simplicity,
     // as there are no annotations, symbols to rename, or names
     // to prefix.  This does mean these operations do not appear
     // in `il.newOps` for inner-ref renaming walk, FWIW.
-    auto *newOp = builder.cloneWithoutRegions(sourceWithRegions, mapper);
-    for (auto [newRegion, oldRegion] : llvm::reverse(llvm::zip_equal(
-             newOp->getRegions(), sourceWithRegions.getRegions()))) {
+    auto *newOp = builder.cloneWithoutRegions(*source, mapper);
+    for (auto [newRegion, oldRegion] : llvm::reverse(
+             llvm::zip_equal(newOp->getRegions(), source->getRegions()))) {
       // If region has no blocks, skip.
       if (oldRegion.empty()) {
         assert(newRegion.empty());
