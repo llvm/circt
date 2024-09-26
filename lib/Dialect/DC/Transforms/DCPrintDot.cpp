@@ -1,4 +1,4 @@
-//===- DCPrintDot.cpp - Analysis Pass -----------------------------*- C++-*-===//
+//===- DCPrintDot.cpp - Analysis Pass -----------------------------*-C++-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -38,61 +38,86 @@ namespace {
 
 /// all Comb and DC nodetypes
 enum class NodeType {
-    AddOp,
-    AndOp,
-    XorOp,
-    MulOp,
-    OrOp,
-    MuxOp,
-    EqOp,
-    NeOp,
-    GtOp,
-    GeOp,
-    LtOp,
-    LeOp,
-    BranchOp,
-    BufferOp,
-    ForkOp,
-    FromESIOp,
-    JoinOp,
-    MergeOp,
-    PackOp,
-    SelectOp,
-    SinkOp,
-    SourceOp,
-    ToESIOp,
-    UnpackOp,
-    Null
+  AddOp,
+  AndOp,
+  XorOp,
+  MulOp,
+  OrOp,
+  MuxOp,
+  EqOp,
+  NeOp,
+  GtOp,
+  GeOp,
+  LtOp,
+  LeOp,
+  BranchOp,
+  BufferOp,
+  ForkOp,
+  FromESIOp,
+  JoinOp,
+  MergeOp,
+  PackOp,
+  SelectOp,
+  SinkOp,
+  SourceOp,
+  ToESIOp,
+  UnpackOp,
+  Null
 };
 
 std::string stringify(NodeType type) {
-    switch (type) {
-        case NodeType::AddOp: return "+";
-        case NodeType::AndOp: return "&&";
-        case NodeType::XorOp: return "^";
-        case NodeType::OrOp: return "||";
-        case NodeType::MulOp: return "x";
-        case NodeType::MuxOp: return "mux";
-        case NodeType::EqOp: return "==";
-        case NodeType::NeOp: return "!=";
-        case NodeType::GtOp: return ">";
-        case NodeType::GeOp: return ">=";
-        case NodeType::LtOp: return "<";
-        case NodeType::LeOp: return "<=";
-        case NodeType::BranchOp: return "branch";
-        case NodeType::BufferOp: return "buffer";
-        case NodeType::ForkOp: return "fork";
-        case NodeType::FromESIOp: return "fromESI";
-        case NodeType::JoinOp: return "join";
-        case NodeType::MergeOp: return "merge";
-        case NodeType::PackOp: return "pack";
-        case NodeType::SelectOp: return "select";
-        case NodeType::SinkOp: return "sink";
-        case NodeType::SourceOp: return "source";
-        case NodeType::ToESIOp: return "toESI";
-        case NodeType::UnpackOp: return "unpack";
-        case NodeType::Null: return "null";
-    }
+  switch (type) {
+  case NodeType::AddOp:
+    return "+";
+  case NodeType::AndOp:
+    return "&&";
+  case NodeType::XorOp:
+    return "^";
+  case NodeType::OrOp:
+    return "||";
+  case NodeType::MulOp:
+    return "x";
+  case NodeType::MuxOp:
+    return "mux";
+  case NodeType::EqOp:
+    return "==";
+  case NodeType::NeOp:
+    return "!=";
+  case NodeType::GtOp:
+    return ">";
+  case NodeType::GeOp:
+    return ">=";
+  case NodeType::LtOp:
+    return "<";
+  case NodeType::LeOp:
+    return "<=";
+  case NodeType::BranchOp:
+    return "branch";
+  case NodeType::BufferOp:
+    return "buffer";
+  case NodeType::ForkOp:
+    return "fork";
+  case NodeType::FromESIOp:
+    return "fromESI";
+  case NodeType::JoinOp:
+    return "join";
+  case NodeType::MergeOp:
+    return "merge";
+  case NodeType::PackOp:
+    return "pack";
+  case NodeType::SelectOp:
+    return "select";
+  case NodeType::SinkOp:
+    return "sink";
+  case NodeType::SourceOp:
+    return "source";
+  case NodeType::ToESIOp:
+    return "toESI";
+  case NodeType::UnpackOp:
+    return "unpack";
+  case NodeType::Null:
+    return "null";
+  }
 }
 
 /// stores operand and results for each node in the dot graph
@@ -237,8 +262,7 @@ createCombNode(Operation &op,
 
 namespace {
 /// Emit the dot nodes
-struct DCDotPrintPass
-    : public circt::dc::impl::DCDotPrintBase<DCDotPrintPass> {
+struct DCDotPrintPass : public circt::dc::impl::DCDotPrintBase<DCDotPrintPass> {
   DCDotPrintPass(raw_ostream &os) : os(os) {}
   void runOnOperation() override {
 
