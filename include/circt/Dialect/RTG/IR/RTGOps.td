@@ -62,7 +62,7 @@ def OnContextOp : RTGOp<"on_context", [NoTerminator]> {
   let arguments = (ins ContextResourceSetType:$contexts);
   let regions = (region SizedRegion<1>:$bodyRegion);
 
-  let assemblyFormat = "$contexts attr-dict-with-keyword $bodyRegion";
+  let assemblyFormat = "$contexts `:` type($contexts) attr-dict-with-keyword $bodyRegion";
 }
 
 

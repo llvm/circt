@@ -14,7 +14,6 @@
 #define CIRCT_DIALECT_RTG_IR_RTGDIALECT_H
 
 #include "circt/Support/LLVM.h"
-#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
 // Pull in the Dialect definition.

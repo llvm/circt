@@ -27,6 +27,10 @@ def RTGDialect : Dialect {
 
   let useDefaultTypePrinterParser = 1;
   let cppNamespace = "::circt::rtg";
+
+  let extraClassDeclaration = [{
+    void registerTypes();
+  }];
 }
 
 #endif // CIRCT_DIALECT_RTG_IR_RTGDIALECT_TD

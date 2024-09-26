@@ -27,4 +27,22 @@ def DummyType : RTGTestTypeDef<"Dummy"> {
   let assemblyFormat = "";
 }
 
+class BogusRegType : RTGTestTypeDef<"BogusReg"> {
+  let summary = "";
+  let description = [{
+  }];
+
+  let mnemonic = "bogus_reg";
+  let assemblyFormat = "";
+}
+
+def BogusRegType : RTGTestTypeDef<"BogusReg"> {
+  let summary = "";
+  let description = [{
+  }];
+
+  let mnemonic = "bogus_reg";
+  let assemblyFormat = "";
+}
+
 #endif // CIRCT_DIALECT_RTGTEST_IR_RTGTESTTYPES_TD

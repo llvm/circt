@@ -17,3 +17,10 @@ using namespace rtg;
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/RTG/IR/RTGTypes.cpp.inc"
+
+void circt::rtg::RTGDialect::registerTypes() {
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "circt/Dialect/RTG/IR/RTGTypes.cpp.inc"
+      >();
+}

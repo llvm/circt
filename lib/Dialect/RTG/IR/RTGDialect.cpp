@@ -25,14 +25,11 @@ using namespace rtg;
 //===----------------------------------------------------------------------===//
 
 void RTGDialect::initialize() {
+  registerTypes();
   // Register operations.
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/RTG/IR/RTG.cpp.inc"
-      >();
-  addTypes<
-#define GET_TYPEDEF_LIST
-#include "circt/Dialect/RTG/IR/RTGTypes.cpp.inc"
       >();
 }
 

@@ -14,10 +14,7 @@
 #define CIRCT_DIALECT_RTG_IR_RTG_TD
 
 include "mlir/IR/OpBase.td"
-include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
-include "mlir/IR/SymbolInterfaces.td"
-
 
 include "circt/Dialect/RTG/IR/RTGDialect.td"
 include "circt/Dialect/RTG/IR/RTGTypes.td"
