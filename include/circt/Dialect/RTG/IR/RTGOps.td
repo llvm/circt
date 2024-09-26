@@ -19,6 +19,7 @@ class RTGOp<string mnemonic, list<Trait> traits = []> :
 
 
 def SnippetOp : RTGOp<"snippet", [
+  SingleBlock,
   NoRegionArguments,
   NoTerminator
 ]> {
