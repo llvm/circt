@@ -1270,41 +1270,49 @@ firrtl.module private @test3() {
 
 // -----
 
+// Directly check simplest example of inlining a module containing a layerblock.
+
+firrtl.circuit "InlineLayerBlockSimple" {
+  firrtl.layer @I inline { }
+  // CHECK-NOT: @Child
+  firrtl.module private @Child() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.layerblock @I {
+      %o = firrtl.wire interesting_name : !firrtl.uint<8>
+    }
+  }
+  // CHECK: @InlineLayerBlockSimple
+  firrtl.module @InlineLayerBlockSimple() {
+    // Check inlined structure.
+    // CHECK-NEXT: layerblock @I
+    // CHECK-NEXT:   firrtl.wire
+    // CHECK-NEXT: }
+    firrtl.instance c @Child()
+  }
+}
+
+// -----
+
 // Test inlining into nested layer, and cloning operations with blocks + blockargs (match).
 
 firrtl.circuit "MatchInline" attributes {enable_layers = [@I]} {
-  firrtl.layer @I  inline {
-    firrtl.layer @J  inline { }
-  }
-  // CHECK-NOT: @GChild
-  firrtl.module private @GChild(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
-    %0 = firrtl.not %in : (!firrtl.uint<8>) -> !firrtl.uint<8>
-    firrtl.matchingconnect %out, %0 : !firrtl.uint<8>
-  }
-  firrtl.module private @Child(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
-    %gc_in, %gc_out = firrtl.instance gc @GChild(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
-    firrtl.matchingconnect %gc_in, %in : !firrtl.uint<8>
-    firrtl.matchingconnect %out, %gc_out : !firrtl.uint<8>
+  firrtl.layer @I inline {
+    firrtl.layer @J inline { }
   }
   // CHECK-NOT: @MatchAgain
   firrtl.module private @MatchAgain(in %i: !firrtl.enum<Some: uint<8>, None: uint<0>>, out %o: !firrtl.uint<8>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
     firrtl.match %i : !firrtl.enum<Some: uint<8>, None: uint<0>> {
       case Some(%arg0) {
-        %c_in, %c_out = firrtl.instance c @Child(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
-        firrtl.matchingconnect %c_in, %arg0 : !firrtl.uint<8>
-        firrtl.matchingconnect %o, %c_out : !firrtl.uint<8>
+        %not = firrtl.not %arg0 : (!firrtl.uint<8>) -> !firrtl.uint<8>
+        firrtl.matchingconnect %o, %not : !firrtl.uint<8>
       }
       case None(%arg0) {
-        %c_in, %c_out = firrtl.instance c @Child(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
         %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8>
-        firrtl.matchingconnect %c_in, %invalid_ui8 : !firrtl.uint<8>
-        firrtl.matchingconnect %o, %c_out : !firrtl.uint<8>
+        firrtl.matchingconnect %o, %invalid_ui8 : !firrtl.uint<8>
       }
     }
   }
   // CHECK: @MatchInline
-  firrtl.module @MatchInline(in %i: !firrtl.enum<Some: uint<8>, None: uint<0>>,
-                             out %o: !firrtl.probe<uint<8>, @I::@J>) attributes {convention = #firrtl<convention scalarized>} {
+  firrtl.module @MatchInline(in %i: !firrtl.enum<Some: uint<8>, None: uint<0>>) {
     // CHECK-NEXT: layerblock @I
     firrtl.layerblock @I {
       // CHECK-NEXT: layerblock @I::@J
@@ -1312,15 +1320,10 @@ firrtl.circuit "MatchInline" attributes {enable_layers = [@I]} {
         // CHECK-NOT: @MatchAgain
         // CHECK: firrtl.match
         // CHECK-NEXT: Some(%arg0)
-        // CHECK-NEXT: %c_c_in, %c_c_out = firrtl.instance c_c @Child
-        // CHECK-NEXT: firrtl.matchingconnect %c_c_in, %arg0
+        // CHECK-NEXT: firrtl.not %arg0
         // CHECK: None(%arg0)
-        // CHECK-NEXT: %c_c_in, %c_c_out = firrtl.instance c_c @Child
         %c_i, %c_o = firrtl.instance c @MatchAgain(in i: !firrtl.enum<Some: uint<8>, None: uint<0>>, out o: !firrtl.uint<8>)
         firrtl.matchingconnect %c_i, %i : !firrtl.enum<Some: uint<8>, None: uint<0>>
-        %0 = firrtl.ref.send %c_o : !firrtl.uint<8>
-        %1 = firrtl.ref.cast %0 : (!firrtl.probe<uint<8>>) -> !firrtl.probe<uint<8>, @I::@J>
-        firrtl.ref.define %o, %1 : !firrtl.probe<uint<8>, @I::@J>
       }
     }
   }
@@ -1329,10 +1332,13 @@ firrtl.circuit "MatchInline" attributes {enable_layers = [@I]} {
 // -----
 
 // Test inlining module containing various operations with blocks.
+// Include operations before/after regions as well as populating block bodies
+// and using results to check inlining actually does work here and the
+// management of the insertion points throughout.
 
 firrtl.circuit "InlineBlocks" {
-  firrtl.layer @I  inline {
-    firrtl.layer @J  inline { }
+  firrtl.layer @I inline {
+    firrtl.layer @J inline { }
   }
   firrtl.module private @HasBlocks(in %i: !firrtl.enum<Some: uint<8>, None: uint<0>>,
                                    in %cond: !firrtl.uint<1>,
