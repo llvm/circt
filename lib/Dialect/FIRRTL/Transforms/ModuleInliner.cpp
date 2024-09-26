@@ -1004,9 +1004,8 @@ void Inliner::flattenInstances(FModuleOp module) {
       // Preorder update of any non-local annotations this instance participates
       // in.  This needs to happen _before_ visiting modules so that internal
       // non-local annotations can be deleted if they are now local.
-      for (auto targetNLA : instOpHierPaths[innerRef]) {
+      for (auto targetNLA : instOpHierPaths[innerRef])
         nlaMap[targetNLA].flattenModule(target);
-      }
     }
 
     // Add any NLAs which start at this instance to the localSymbols set.
