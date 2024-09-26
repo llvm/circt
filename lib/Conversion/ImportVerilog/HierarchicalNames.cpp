@@ -58,15 +58,14 @@ struct HierPathValueExprVisitor {
           if (scope)
             parentInstBody = scope->getContainingInstance();
 
-          // Such as `Top.sub.a`, we will record`sub.a` for the port list,
-          if (currentInstBody !=
-              outermostModule.as_if<slang::ast::InstanceBodySymbol>()) {
+          // Such as `Top.sub.a`, we will record `sub.a` into the port lists.
+          if (parentInstBody &&
+              parentInstBody !=
+                  outermostModule.as_if<slang::ast::InstanceBodySymbol>()) {
             hierName =
                 builder.getStringAttr(sym->parentInstance->name +
                                       llvm::Twine(".") + hierName.getValue());
-
-            if (parentInstBody)
-              collectHierarchicalPaths(parentInstBody);
+            collectHierarchicalPaths(parentInstBody);
           }
         };
     collectHierarchicalPaths(currentInstBody);

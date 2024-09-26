@@ -2,37 +2,31 @@
 // RUN: circt-verilog --ir-moore %s
 // REQUIRES: slang
 
-// CHECK-LABEL: moore.module @Foo(in %subA.subB.y : !moore.ref<i32>, in %subA.subB.x : !moore.ref<i32>)
+// CHECK-LABEL: moore.module @Foo()
 module Foo;
-  // CHECK: %0 = moore.read %subA.subB.y : <i32>
-  // CHECK: %s = moore.variable %0 : <i32>
-  int s = subA.subB.y;
-  // CHECK: %r = moore.variable : <i32>
-  int r;
-  // CHECK: %1 = moore.read %r : <i32>
-  // CHECK: moore.assign %subA.subB.x, %1 : i32
-  assign subA.subB.x = r;
-  // CHECK: moore.instance "subA" @SubA(subB.y: %subA.subB.y: !moore.ref<i32>, subB.x: %subA.subB.x: !moore.ref<i32>) -> ()
+  // CHECK: %subA.subB.y, %subA.subB.x = moore.instance "subA" @SubA() -> (subB.y: !moore.ref<i32>, subB.x: !moore.ref<i32>)
   SubA subA();
+  // CHECK: [[RD_SA_SB_Y:%.+]] = moore.read %subA.subB.y : <i32>
+  int s = subA.subB.y;
+  int r;
+  // CHECK: [[RD_R:%.+]] = moore.read %r : <i32>
+  // CHECK: moore.assign %subA.subB.x, [[RD_R]] : i32
+  assign subA.subB.x = r;
 endmodule
 
-// CHECK-LABEL: moore.module private @SubA(in %subB.y : !moore.ref<i32>, in %subB.x : !moore.ref<i32>)
+// CHECK-LABEL: moore.module private @SubA(out subB.y : !moore.ref<i32>, out subB.x : !moore.ref<i32>)
 module SubA;
-  // CHECK: %a = moore.variable : <i32>
   int a;
-  // CHECK: moore.instance "subB" @SubB(y: %subB.y: !moore.ref<i32>, x: %subB.x: !moore.ref<i32>) -> ()
+  // CHECK: %subB.y, %subB.x = moore.instance "subB" @SubB() -> (y: !moore.ref<i32>, x: !moore.ref<i32>)
   SubB subB();
-  // CHECK: %0 = moore.read %subB.y : <i32>
-  // CHECK: moore.assign %a, %0 : i32
+  // CHECK: [[RD_SB_Y:%.+]] = moore.read %subB.y : <i32>
+  // CHECK: moore.assign %a, [[RD_SB_Y]] : i32
   assign a = subB.y;
 endmodule
 
-// CHECK-LABEL: moore.module private @SubB(in %y : !moore.ref<i32>, in %x : !moore.ref<i32>)
+// CHECK-LABEL: moore.module private @SubB(out y : !moore.ref<i32>, out x : !moore.ref<i32>)
 module SubB;
-  // CHECK-NOT: %x_0 = moore.variable
-  // CHECK-NOT: %y_1 = moore.variable
   int x, y;
-  // CHECK: moore.output
 endmodule
 
 // CHECK-LABEL: moore.module @Bar(in %subC1.subD.z : !moore.ref<i32>, in %subC2.subD.z : !moore.ref<i32>)
@@ -49,19 +43,17 @@ module Bar;
   assign subC2.subD.z = u;
 endmodule
 
-// CHECK-LABEL: moore.module private @SubC(in %subD.z : !moore.ref<i32>)
+// CHECK-LABEL: moore.module private @SubC(out subD.z : !moore.ref<i32>)
 module SubC;
-  // CHECK: moore.instance "subD" @SubD(z: %subD.z: !moore.ref<i32>) -> ()
+  // CHECK: %subD.z = moore.instance "subD" @SubD() -> (z: !moore.ref<i32>)
   SubD subD();
 endmodule
 
-// CHECK-LABEL: moore.module private @SubD(in %z : !moore.ref<i32>)
+// CHECK-LABEL: moore.module private @SubD(out z : !moore.ref<i32>)
 module SubD;
-  // CHECK-NOT: %z_0 = moore.variable
   int z;
-  // CHECK: %w = moore.variable : <i32>
   int w;
-  // CHECK: %0 = moore.read %z : <i32>
-  // CHECK: moore.assign %w, %0 : i32
+  // CHECK: [[RD_Z:%.+]] = moore.read %z : <i32>
+  // CHECK: moore.assign %w, [[RD_Z]] : i32
   assign SubD.w = SubD.z;
 endmodule
