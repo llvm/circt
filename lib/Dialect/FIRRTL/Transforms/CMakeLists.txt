@@ -70,7 +70,6 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   MLIROMOpInterfacesIncGen
 
   LINK_LIBS PUBLIC
-  CIRCTFIRRTLAnalysis
   CIRCTFIRRTL
   CIRCTFIRRTLAnalysis
   CIRCTDebug
