@@ -38,110 +38,117 @@ using ValueMap = llvm::ScopedHashTable<mlir::Value, std::string>;
 namespace {
 
 /// all Comb and DC nodetypes
-enum NodeType {
-  addOp,
-  andOp,
-  xorOp,
-  orOp,
-  mulOp,
-  muxOp,
-  eqOp,
-  neOp,
-  gtOp,
-  geOp,
-  ltOp,
-  leOp,
-  branchOp,
-  bufferOp,
-  forkOp,
-  fromESIOp,
-  joinOp,
-  mergeOp,
-  packOp,
-  selectOp,
-  sinkOp,
-  sourceOp,
-  toESIOp,
-  unpackOp,
-  null
-};
+class NodeType {
+  public:
+    static const NodeType AddOp;
+    static const NodeType AndOp;
+    static const NodeType XorOp;
+    static const NodeType MulOp;
+    static const NodeType OrOp;
+    static const NodeType MuxOp;
+    static const NodeType EqOp;
+    static const NodeType NeOp;
+    static const NodeType GtOp;
+    static const NodeType GeOp;
+    static const NodeType LtOp;
+    static const NodeType LeOp;
+    static const NodeType BranchOp;
+    static const NodeType BufferOp;
+    static const NodeType ForkOp;
+    static const NodeType FromESIOp;
+    static const NodeType JoinOp;
+    static const NodeType MergeOp;
+    static const NodeType PackOp;
+    static const NodeType SelectOp;
+    static const NodeType SinkOp;
+    static const NodeType SourceOp;
+    static const NodeType ToESIOp;
+    static const NodeType UnpackOp;
+    static const NodeType Null;
 
-std::string stringify(NodeType type) {
-  switch (type) {
-  case addOp:
-    return "+";
-  case andOp:
-    return "&&";
-  case xorOp:
-    return "^";
-  case orOp:
-    return "||";
-  case mulOp:
-    return "x";
-  case muxOp:
-    return "mux";
-  case eqOp:
-    return "==";
-  case neOp:
-    return "!=";
-  case gtOp:
-    return ">";
-  case geOp:
-    return ">=";
-  case ltOp:
-    return "<";
-  case leOp:
-    return "<=";
-  case branchOp:
-    return "branch";
-  case bufferOp:
-    return "buffer";
-  case forkOp:
-    return "fork";
-  case fromESIOp:
-    return "fromESI";
-  case joinOp:
-    return "join";
-  case mergeOp:
-    return "merge";
-  case packOp:
-    return "pack";
-  case selectOp:
-    return "select";
-  case sinkOp:
-    return "sink";
-  case sourceOp:
-    return "source";
-  case toESIOp:
-    return "toESI";
-  case unpackOp:
-    return "unpack";
-  case null:
-    return "null";
-  default:
-    return "Unknown NodeType";
+  std::string stringify() const {
+    switch (value) {
+    case 0:
+      return "+";
+    case 1:
+      return "&&";
+    case 2:
+      return "^";
+    case 3:
+      return "||";
+    case 4:
+      return "x";
+    case 5:
+      return "mux";
+    case 6:
+      return "==";
+    case 7:
+      return "!=";
+    case 8:
+      return ">";
+    case 9:
+      return ">=";
+    case 10:
+      return "<";
+    case 11:
+      return "<=";
+    case 12:
+      return "branch";
+    case 13:
+      return "buffer";
+    case 14:
+      return "fork";
+    case 15:
+      return "fromESI";
+    case 16:
+      return "join";
+    case 17:
+      return "merge";
+    case 18:
+      return "pack";
+    case 19:
+      return "select";
+    case 20:
+      return "sink";
+    case 21:
+      return "source";
+    case 22:
+      return "toESI";
+    case 23:
+      return "unpack";
+    case 24:
+      return "null";
+    }
   }
-}
+
+  bool operator==(const NodeType& other) const {
+        return value == other.value;
+    }
+
+private:
+  NodeType(int val) : value(val) {}
+  int value;
+};
 
 /// stores operand and results for each node in the dot graph
 struct DotNode {
   NodeType nodeType;
-  llvm::SmallVector<std::pair<mlir::Value, std::string>> incoming;
-  llvm::SmallVector<std::pair<mlir::Value, std::string>> outgoing;
+  SmallVector<std::pair<mlir::Value, std::string>> incoming;
+  SmallVector<std::pair<mlir::Value, std::string>> outgoing;
 };
 } // namespace
 
 /// gives a unique name to each value in the graph
-llvm::SmallVector<std::pair<mlir::Value, std::string>> static valueToName(
-    const llvm::SmallVector<mlir::Value> &values,
-    llvm::SmallVector<std::pair<mlir::Value, std::string>> &currentMap,
+SmallVector<std::pair<mlir::Value, std::string>> static valueToName(
+    const SmallVector<mlir::Value> &values,
+    SmallVector<std::pair<mlir::Value, std::string>> &currentMap,
     bool tokenFlag) {
   SmallVector<std::pair<mlir::Value, std::string>> res;
   for (auto [i, v] : llvm::enumerate(values)) {
     auto found = false;
-    for (const auto &cm : currentMap) {
-      if (v == cm.first) {
-        res.push_back({v, cm.second});
+    for (const auto [key, value] : currentMap) {
+      if (v == key) {
+        res.push_back({v, value});
         found = true;
       }
     }
@@ -157,105 +164,105 @@ llvm::SmallVector<std::pair<mlir::Value, std::string>> static valueToName(
 }
 
 /// creates node in the dataflow graph for DC operations
-DotNode createDCNode(
-    Operation &op,
-    llvm::SmallVector<std::pair<mlir::Value, std::string>> &valuesMap) {
+DotNode
+createDCNode(Operation &op,
+             SmallVector<std::pair<mlir::Value, std::string>> &valuesMap) {
 
   auto tokenFlag = false;
   if (isa<dc::UnpackOp>(op))
     tokenFlag = true;
 
-  DotNode n = {null, valueToName(op.getOperands(), valuesMap, false),
+  DotNode n = {NodeType::Null, valueToName(op.getOperands(), valuesMap, false),
                valueToName(op.getOperands(), valuesMap, tokenFlag)};
 
   TypeSwitch<mlir::Operation *>(&op)
-      .Case([&](dc::BranchOp) { n.nodeType = branchOp; })
-      .Case([&](dc::BufferOp) { n.nodeType = bufferOp; })
-      .Case([&](dc::ForkOp) { n.nodeType = forkOp; })
-      .Case([&](dc::FromESIOp) { n.nodeType = fromESIOp; })
-      .Case([&](dc::JoinOp) { n.nodeType = joinOp; })
-      .Case([&](dc::MergeOp) { n.nodeType = mergeOp; })
-      .Case([&](dc::PackOp) { n.nodeType = packOp; })
-      .Case([&](dc::SelectOp) { n.nodeType = selectOp; })
-      .Case([&](dc::SinkOp) { n.nodeType = sinkOp; })
-      .Case([&](dc::SourceOp) { n.nodeType = sourceOp; })
-      .Case([&](dc::ToESIOp) { n.nodeType = toESIOp; })
-      .Case([&](dc::UnpackOp) { n.nodeType = unpackOp; });
+      .Case([&](dc::BranchOp) { n.nodeType = NodeType::BranchOp; })
+      .Case([&](dc::BufferOp) { n.nodeType = NodeType::BufferOp; })
+      .Case([&](dc::ForkOp) { n.nodeType = NodeType::ForkOp; })
+      .Case([&](dc::FromESIOp) { n.nodeType = NodeType::FromESIOp; })
+      .Case([&](dc::JoinOp) { n.nodeType = NodeType::JoinOp; })
+      .Case([&](dc::MergeOp) { n.nodeType = NodeType::MergeOp; })
+      .Case([&](dc::PackOp) { n.nodeType = NodeType::PackOp; })
+      .Case([&](dc::SelectOp) { n.nodeType = NodeType::SelectOp; })
+      .Case([&](dc::SinkOp) { n.nodeType = NodeType::SinkOp; })
+      .Case([&](dc::SourceOp) { n.nodeType = NodeType::SourceOp; })
+      .Case([&](dc::ToESIOp) { n.nodeType = NodeType::ToESIOp; })
+      .Case([&](dc::UnpackOp) { n.nodeType = NodeType::UnpackOp; });
 
   return n;
 }
 
 /// creates node in the dataflow graph for Comb operations
-DotNode createCombNode(
-    Operation &op,
-    llvm::SmallVector<std::pair<mlir::Value, std::string>> &valuesMap) {
+DotNode
+createCombNode(Operation &op,
+               SmallVector<std::pair<mlir::Value, std::string>> &valuesMap) {
 
-  DotNode n = {null, valueToName(op.getOperands(), valuesMap, false),
+  DotNode n = {NodeType::Null, valueToName(op.getOperands(), valuesMap, false),
                valueToName(op.getOperands(), valuesMap, false)};
 
   TypeSwitch<mlir::Operation *>(&op)
-      .Case([&](comb::AddOp) { n.nodeType = addOp; })
-      .Case([&](comb::AndOp) { n.nodeType = andOp; })
-      .Case([&](comb::XorOp) { n.nodeType = xorOp; })
-      .Case([&](comb::OrOp) { n.nodeType = orOp; })
-      .Case([&](comb::MulOp) { n.nodeType = mulOp; })
-      .Case([&](comb::MuxOp) { n.nodeType = muxOp; })
+      .Case([&](comb::AddOp) { n.nodeType = NodeType::AddOp; })
+      .Case([&](comb::AndOp) { n.nodeType = NodeType::AndOp; })
+      .Case([&](comb::XorOp) { n.nodeType = NodeType::XorOp; })
+      .Case([&](comb::OrOp) { n.nodeType = NodeType::OrOp; })
+      .Case([&](comb::MulOp) { n.nodeType = NodeType::MulOp; })
+      .Case([&](comb::MuxOp) { n.nodeType = NodeType::MuxOp; })
       .Case<comb::ICmpOp>([&](auto op) {
         switch (op.getPredicate()) {
         case circt::comb::ICmpPredicate::eq: {
-          n.nodeType = eqOp;
+          n.nodeType = NodeType::EqOp;
           break;
         }
         case circt::comb::ICmpPredicate::ne: {
-          n.nodeType = neOp;
+          n.nodeType = NodeType::NeOp;
           break;
         }
         case circt::comb::ICmpPredicate::sgt: {
-          n.nodeType = gtOp;
+          n.nodeType = NodeType::GtOp;
           break;
         }
         case circt::comb::ICmpPredicate::sge: {
-          n.nodeType = geOp;
+          n.nodeType = NodeType::GeOp;
           break;
         }
         case circt::comb::ICmpPredicate::slt: {
-          n.nodeType = ltOp;
+          n.nodeType = NodeType::LtOp;
           break;
         }
         case circt::comb::ICmpPredicate::sle: {
-          n.nodeType = leOp;
+          n.nodeType = NodeType::LeOp;
           break;
         }
         case circt::comb::ICmpPredicate::ugt: {
-          n.nodeType = gtOp;
+          n.nodeType = NodeType::GtOp;
           break;
         }
         case circt::comb::ICmpPredicate::uge: {
-          n.nodeType = geOp;
+          n.nodeType = NodeType::GeOp;
           break;
         }
         case circt::comb::ICmpPredicate::ult: {
-          n.nodeType = leOp;
+          n.nodeType = NodeType::LeOp;
           break;
         }
         case circt::comb::ICmpPredicate::ule: {
-          n.nodeType = ltOp;
+          n.nodeType = NodeType::LtOp;
           break;
         }
         case circt::comb::ICmpPredicate::ceq: {
-          n.nodeType = eqOp;
+          n.nodeType = NodeType::EqOp;
           break;
         }
         case circt::comb::ICmpPredicate::cne: {
-          n.nodeType = neOp;
+          n.nodeType = NodeType::NeOp;
           break;
         }
         case circt::comb::ICmpPredicate::weq: {
-          n.nodeType = eqOp;
+          n.nodeType = NodeType::EqOp;
           break;
         }
         case circt::comb::ICmpPredicate::wne: {
-          n.nodeType = neOp;
+          n.nodeType = NodeType::NeOp;
           break;
         }
         }
@@ -265,16 +272,17 @@ DotNode createCombNode(
 
 namespace {
 /// Emit the dot nodes
-struct DCDotPrintPass : public circt::dc::impl::DCDotPrintBase<DCDotPrintPass> {
-  DCDotPrintPass(llvm::raw_ostream &os) : os(os) {}
+struct DCDotPrintPass
+    : public circt::dc::impl::DCDotPrintBase<DCDotPrintPass> {
+  DCDotPrintPass(raw_ostream &os) : os(os) {}
   void runOnOperation() override {
 
     ModuleOp op = getOperation();
 
     std::error_code ec;
 
-    llvm::SmallVector<std::pair<mlir::Value, std::string>> valuesMap;
-    llvm::SmallVector<DotNode> nodes;
+    SmallVector<std::pair<mlir::Value, std::string>> valuesMap;
+    SmallVector<DotNode> nodes;
 
     auto &moduleOps = op->getRegion(0).getBlocks();
     for (auto &moduleOp : moduleOps) {
@@ -296,11 +304,11 @@ struct DCDotPrintPass : public circt::dc::impl::DCDotPrintBase<DCDotPrintPass> {
     os << "digraph{\n";
     // print all nodes first
     for (auto [i, n] : llvm::enumerate(nodes)) {
-      os << i << " [shape = polygon, label = \"" << stringify(n.nodeType)
+      os << i << " [shape = polygon, label = \"" << n.nodeType.stringify()
          << "\"]\n";
     }
     for (auto [id, n] : llvm::enumerate(nodes)) {
-      if (n.nodeType == unpackOp)
+      if (n.nodeType == NodeType::UnpackOp)
         for (auto ic : n.incoming)
           os << "token_" << ic.second << " -> " << id << R"( [label = ")"
              << ic.second << "\"]\n";
@@ -320,7 +328,7 @@ struct DCDotPrintPass : public circt::dc::impl::DCDotPrintBase<DCDotPrintPass> {
       }
     }
     for (auto [id, n] : llvm::enumerate(nodes)) {
-      if (n.nodeType == packOp)
+      if (n.nodeType == NodeType::PackOp)
         for (const auto &ic : n.outgoing)
           os << id << " -> " << ic.second << " [label = \"" << ic.second
              << "\"]\n";
@@ -328,7 +336,7 @@ struct DCDotPrintPass : public circt::dc::impl::DCDotPrintBase<DCDotPrintPass> {
 
     os << "}\n";
   }
-  llvm::raw_ostream &os;
+  raw_ostream &os;
 };
 } // namespace
 
