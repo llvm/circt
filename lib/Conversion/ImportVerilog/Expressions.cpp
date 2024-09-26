@@ -825,7 +825,7 @@ struct RvalueExprVisitor {
         auto type = cast<moore::UnpackedType>(value.getType());
         auto intType = moore::IntType::get(
             context.getContext(), type.getBitSize().value(), type.getDomain());
-        // do not care if it's signed, because we will not do expansion
+        // Do not care if it's signed, because we will not do expansion.
         value = context.materializeConversion(intType, value, false, loc);
       } else {
         value = context.convertRvalueExpression(*stream.operand);
@@ -843,7 +843,7 @@ struct RvalueExprVisitor {
 
     if (operands.size() == 1) {
       // There must be at least one element, otherwise slang will report an
-      // error
+      // error.
       value = operands.front();
     } else {
       value = builder.create<moore::ConcatOp>(loc, operands).getResult();
@@ -1048,7 +1048,7 @@ struct LvalueExprVisitor {
             cast<moore::RefType>(value.getType()).getNestedType());
         auto intType = moore::RefType::get(moore::IntType::get(
             context.getContext(), type.getBitSize().value(), type.getDomain()));
-        // do not care if it's signed, because we will not do expansion
+        // Do not care if it's signed, because we will not do expansion.
         value = context.materializeConversion(intType, value, false, loc);
       } else {
         value = context.convertLvalueExpression(*stream.operand);
@@ -1061,7 +1061,7 @@ struct LvalueExprVisitor {
     Value value;
     if (operands.size() == 1) {
       // There must be at least one element, otherwise slang will report an
-      // error
+      // error.
       value = operands.front();
     } else {
       value = builder.create<moore::ConcatRefOp>(loc, operands).getResult();

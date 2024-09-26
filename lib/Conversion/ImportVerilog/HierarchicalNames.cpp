@@ -30,46 +30,68 @@ struct HierPathValueExprVisitor {
   LogicalResult visit(const slang::ast::HierarchicalValueExpression &expr) {
     auto *currentInstBody =
         expr.symbol.getParentScope()->getContainingInstance();
+    auto *outermostInstBody =
+        outermostModule.as_if<slang::ast::InstanceBodySymbol>();
 
-    // Like module Foo; int a; "Foo.a;" endmodule.
+    // Like module Foo; int a; Foo.a; endmodule.
     // Ignore "Foo.a" invoked by this module itself.
-    if (currentInstBody ==
-        outermostModule.as_if<slang::ast::InstanceBodySymbol>())
+    if (currentInstBody == outermostInstBody)
       return success();
 
     auto hierName = builder.getStringAttr(expr.symbol.name);
     const slang::ast::InstanceBodySymbol *parentInstBody = nullptr;
 
-    // Collect the hierarchical names that are added to the port list.
-    std::function<void(const slang::ast::InstanceBodySymbol *)>
-        collectHierarchicalPaths = [&](auto sym) {
+    // Collect hierarchical names that are added to the port list.
+    std::function<void(const slang::ast::InstanceBodySymbol *, bool)>
+        collectHierarchicalPaths = [&](auto sym, bool isUpward) {
           // Here we use "sameHierPaths" to avoid collecting the repeat
           // hierarchical names on the same path.
           if (!context.sameHierPaths.contains(hierName) ||
               !context.hierPaths.contains(sym)) {
             context.hierPaths[sym].push_back(
-                HierPathInfo{hierName, {}, &expr.symbol});
+                HierPathInfo{hierName,
+                             {},
+                             isUpward ? slang::ast::ArgumentDirection::Out
+                                      : slang::ast::ArgumentDirection::In,
+                             &expr.symbol});
             context.sameHierPaths.insert(hierName);
           }
 
-          // The instance body must have instance header. So only estimate the
-          // parent scope of the instance header whether exists.
-          auto *scope = sym->parentInstance->getParentScope();
-          if (scope)
-            parentInstBody = scope->getContainingInstance();
+          // Iterate up from the current instance body symbol until meeting the
+          // outermost module.
+          parentInstBody =
+              sym->parentInstance->getParentScope()->getContainingInstance();
+          if (!parentInstBody)
+            return;
 
-          // Such as `Top.sub.a`, we will record`sub.a` for the port list,
-          if (currentInstBody !=
-              outermostModule.as_if<slang::ast::InstanceBodySymbol>()) {
-            hierName =
-                builder.getStringAttr(sym->parentInstance->name +
-                                      llvm::Twine(".") + hierName.getValue());
-
-            if (parentInstBody)
-              collectHierarchicalPaths(parentInstBody);
+          if (isUpward) {
+            // Avoid collecting hierarchical names into the outermost module.
+            if (parentInstBody && parentInstBody != outermostInstBody) {
+              hierName =
+                  builder.getStringAttr(sym->parentInstance->name +
+                                        llvm::Twine(".") + hierName.getValue());
+              collectHierarchicalPaths(parentInstBody, isUpward);
+            }
+          } else {
+            if (parentInstBody && parentInstBody != currentInstBody)
+              collectHierarchicalPaths(parentInstBody, isUpward);
           }
         };
-    collectHierarchicalPaths(currentInstBody);
+
+    // Determine whether hierarchical names are upward or downward.
+    auto *tempInstBody = currentInstBody;
+    while (tempInstBody) {
+      tempInstBody = tempInstBody->parentInstance->getParentScope()
+                         ->getContainingInstance();
+      if (tempInstBody == outermostInstBody) {
+        collectHierarchicalPaths(currentInstBody, true);
+        return success();
+      }
+    }
+
+    hierName = builder.getStringAttr(currentInstBody->parentInstance->name +
+                                     llvm::Twine(".") + hierName.getValue());
+    collectHierarchicalPaths(outermostInstBody, false);
     return success();
   }
 

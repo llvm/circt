@@ -62,9 +62,12 @@ struct LoopFrame {
 /// The "hierName" means a different hierarchical name at different module
 /// levels.
 /// The "idx" means where the current hierarchical name is on the portlists.
+/// The "direction" means hierarchical names whether downward(In) or
+/// upward(Out).
 struct HierPathInfo {
   mlir::StringAttr hierName;
   std::optional<unsigned int> idx;
+  slang::ast::ArgumentDirection direction;
   const slang::ast::ValueSymbol *valueSym;
 };
 
