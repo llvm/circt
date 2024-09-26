@@ -28,14 +28,14 @@ struct TemporalRegionAnalysis {
 
   void recalculate(Operation *);
 
-  unsigned getNumTemporalRegions() { return numTRs; }
+  unsigned getNumTemporalRegions() const { return numTRs; }
 
-  int getBlockTR(Block *);
-  SmallVector<Block *, 8> getBlocksInTR(int);
+  int getBlockTR(Block *) const;
+  SmallVector<Block *, 8> getBlocksInTR(int) const;
 
-  SmallVector<Block *, 8> getExitingBlocksInTR(int);
+  SmallVector<Block *, 8> getExitingBlocksInTR(int) const;
   Block *getTREntryBlock(int);
-  bool hasSingleExitBlock(int tr) {
+  bool hasSingleExitBlock(int tr) const {
     return getExitingBlocksInTR(tr).size() == 1;
   }
   bool isOwnTRSuccessor(int tr) {

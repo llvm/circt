@@ -82,15 +82,13 @@ struct RvalueExprVisitor {
     }
 
     // Try to materialize constant values directly.
+    using slang::ast::EvalFlags;
     slang::ast::EvalContext evalContext(context.compilation,
-                                        slang::ast::EvalFlags::CacheResults);
+                                        EvalFlags::CacheResults |
+                                            EvalFlags::SpecparamsAllowed);
     auto constant = expr.eval(evalContext);
-    if (constant.isInteger()) {
-      auto type = context.convertType(*expr.type);
-      if (!type)
-        return {};
-      return materializeSVInt(constant.integer(), type);
-    }
+    if (auto value = context.materializeConstant(constant, *expr.type, loc))
+      return value;
 
     // Otherwise some other part of ImportVerilog should have added an MLIR
     // value for this expression's symbol to the `context.valueSymbols` table.
@@ -404,36 +402,14 @@ struct RvalueExprVisitor {
     return {};
   }
 
-  /// Materialize a Slang integer literal as a constant op.
-  Value materializeSVInt(const slang::SVInt &svint, Type type) {
-    auto fvint = convertSVIntToFVInt(svint);
-    bool typeIsFourValued = false;
-    if (auto unpackedType = dyn_cast<moore::UnpackedType>(type))
-      typeIsFourValued = unpackedType.getDomain() == moore::Domain::FourValued;
-    auto intType = moore::IntType::get(
-        context.getContext(), fvint.getBitWidth(),
-        fvint.hasUnknown() || typeIsFourValued ? moore::Domain::FourValued
-                                               : moore::Domain::TwoValued);
-    Value result = builder.create<moore::ConstantOp>(loc, intType, fvint);
-    if (result.getType() != type)
-      result = builder.create<moore::ConversionOp>(loc, type, result);
-    return result;
-  }
-
   // Handle `'0`, `'1`, `'x`, and `'z` literals.
   Value visit(const slang::ast::UnbasedUnsizedIntegerLiteral &expr) {
-    auto type = context.convertType(*expr.type);
-    if (!type)
-      return {};
-    return materializeSVInt(expr.getValue(), type);
+    return context.materializeSVInt(expr.getValue(), *expr.type, loc);
   }
 
   // Handle integer literals.
   Value visit(const slang::ast::IntegerLiteral &expr) {
-    auto type = context.convertType(*expr.type);
-    if (!type)
-      return {};
-    return materializeSVInt(expr.getValue(), type);
+    return context.materializeSVInt(expr.getValue(), *expr.type, loc);
   }
 
   // Handle concatenations.
@@ -1035,6 +1011,35 @@ Value Context::convertToBool(Value value) {
     return builder.create<moore::BoolCastOp>(value.getLoc(), value);
   mlir::emitError(value.getLoc(), "expression of type ")
       << value.getType() << " cannot be cast to a boolean";
+  return {};
+}
+
+/// Materialize a Slang integer literal as a constant op.
+Value Context::materializeSVInt(const slang::SVInt &svint,
+                                const slang::ast::Type &astType, Location loc) {
+  auto type = convertType(astType);
+  if (!type)
+    return {};
+
+  bool typeIsFourValued = false;
+  if (auto unpackedType = dyn_cast<moore::UnpackedType>(type))
+    typeIsFourValued = unpackedType.getDomain() == moore::Domain::FourValued;
+
+  auto fvint = convertSVIntToFVInt(svint);
+  auto intType = moore::IntType::get(getContext(), fvint.getBitWidth(),
+                                     fvint.hasUnknown() || typeIsFourValued
+                                         ? moore::Domain::FourValued
+                                         : moore::Domain::TwoValued);
+  Value result = builder.create<moore::ConstantOp>(loc, intType, fvint);
+  if (result.getType() != type)
+    result = builder.create<moore::ConversionOp>(loc, type, result);
+  return result;
+}
+
+Value Context::materializeConstant(const slang::ConstantValue &constant,
+                                   const slang::ast::Type &type, Location loc) {
+  if (constant.isInteger())
+    return materializeSVInt(constant.integer(), type, loc);
   return {};
 }
 

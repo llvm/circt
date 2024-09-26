@@ -26,6 +26,10 @@ circuit Foo : %[[
     "target": "~Foo|Baz>mem"
   }
 ]]
+
+  ; REPL-FIR: firrtl.memmodule private @prefix1_mem
+  ; REPL-HW: hw.module.extern @prefix1_mem
+
   ; CHECK-FIR-LABEL: firrtl.module private @prefix1_Bar
   ; CHECK-HW-LABEL: hw.module private @prefix1_Bar
   module Bar :
@@ -68,6 +72,9 @@ circuit Foo : %[[
       mem.MPORT.mask <= UInt<1>(0h0)
       mem.MPORT.data <= writeData
       mem.MPORT.mask <= UInt<1>(0h1)
+
+  ; REPL-FIR: firrtl.memmodule private @prefix2_mem
+  ; REPL-HW: hw.module.extern @prefix2_mem
 
   ; CHECK-HW-LABEL: hw.module private @prefix2_Baz
   module Baz :
@@ -137,9 +144,3 @@ circuit Foo : %[[
     baz.writeData <= writeData
     node _readData_T = xor(bar.readData, baz.readData)
     readData <= _readData_T
-
-; REPL-FIR: firrtl.memmodule private @prefix1_mem
-; REPL-FIR: firrtl.memmodule private @prefix2_mem
-
-; REPL-HW: hw.module.extern @prefix1_mem
-; REPL-HW: hw.module.extern @prefix2_mem

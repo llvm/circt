@@ -72,3 +72,23 @@ module Foo;
   // expected-error @below {{unpacked arrays in 'inside' expressions not supported}}
   int c = a inside { b };
 endmodule
+
+// -----
+module Foo;
+  // expected-remark @below {{hello}}
+  $info("hello");
+  // expected-warning @below {{hello}}
+  $warning("hello");
+endmodule
+
+// -----
+module Foo;
+  // expected-error @below {{hello}}
+  $error("hello");
+endmodule
+
+// -----
+module Foo;
+  // expected-error @below {{hello}}
+  $fatal(0, "hello");
+endmodule

@@ -11,9 +11,9 @@ func.func @FuncArgsAndReturns(%arg0: !moore.i8, %arg1: !moore.i32, %arg2: !moore
 // CHECK-SAME: (%arg0: i32, %arg1: i1)
 func.func @ControlFlow(%arg0: !moore.i32, %arg1: i1) {
   // CHECK-NEXT:   cf.br ^bb1(%arg0 : i32)
-  // CHECK-NEXT: ^bb1(%0: i32):
-  // CHECK-NEXT:   cf.cond_br %arg1, ^bb1(%0 : i32), ^bb2(%arg0 : i32)
-  // CHECK-NEXT: ^bb2(%1: i32):
+  // CHECK-NEXT: ^bb1([[TMP:%.+]]: i32):
+  // CHECK-NEXT:   cf.cond_br %arg1, ^bb1([[TMP]] : i32), ^bb2(%arg0 : i32)
+  // CHECK-NEXT: ^bb2([[TMP:%.+]]: i32):
   // CHECK-NEXT:   return
   cf.br ^bb1(%arg0: !moore.i32)
 ^bb1(%0: !moore.i32):
@@ -47,8 +47,8 @@ func.func @UnrealizedConversionCast(%arg0: !moore.i8) -> !moore.i16 {
 
 // CHECK-LABEL: func @Expressions
 func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %arg3: !moore.i5, %arg4: !moore.i1, %arg5: !moore.array<5 x i32>, %arg6: !moore.ref<i1>, %arg7: !moore.ref<!moore.array<5 x i32>>) {
-  // CHECK-NEXT: %0 = comb.concat %arg0, %arg0 : i1, i1
-  // CHECK-NEXT: %1 = comb.concat %arg1, %arg1 : i1, i1
+  // CHECK-NEXT: comb.concat %arg0, %arg0 : i1, i1
+  // CHECK-NEXT: comb.concat %arg1, %arg1 : i1, i1
   moore.concat %arg0, %arg0 : (!moore.i1, !moore.i1) -> !moore.i2
   moore.concat %arg1, %arg1 : (!moore.l1, !moore.l1) -> !moore.l2
 
@@ -258,12 +258,8 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   moore.wildcard_eq %arg0, %arg0 : !moore.i1 -> !moore.i1
   moore.wildcard_ne %arg0, %arg0 : !moore.i1 -> !moore.i1
 
-  // CHECK-NEXT: [[RES:%.+]] = scf.if %arg0 -> (i6) {
-  // CHECK-NEXT:   scf.yield %arg2 : i6
-  // CHECK-NEXT: } else {
-  // CHECK-NEXT:   [[TMP:%.+]] = hw.constant 19 : i6
-  // CHECK-NEXT:   scf.yield [[TMP]] : i6
-  // CHECK-NEXT: }
+  // CHECK-NEXT: [[TMP:%.+]] = hw.constant 19 : i6
+  // CHECK-NEXT: [[RES:%.+]] = comb.mux %arg0, %arg2, [[TMP]]
   // CHECK-NEXT: comb.parity [[RES]] : i6
   %k0 = moore.conditional %arg0 : i1 -> i6 {
     moore.yield %arg2 : i6
@@ -275,6 +271,8 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
 
   // CHECK-NEXT: [[RES:%.+]] = scf.if %arg1 -> (i6) {
   // CHECK-NEXT:   [[TMP:%.+]] = hw.constant 0 : i6
+  // CHECK:        %var_l6 = llhd.sig
+  // CHECK:        llhd.drv %var_l6, [[TMP]] after
   // CHECK-NEXT:   scf.yield [[TMP]] : i6
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   [[TMP:%.+]] = hw.constant 19 : i6
@@ -283,6 +281,8 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: comb.parity [[RES]] : i6
   %k1 = moore.conditional %arg1 : l1 -> l6 {
     %0 = moore.constant bXXXXXX : l6
+    %var_l6 = moore.variable : <l6>
+    moore.blocking_assign %var_l6, %0 : l6
     moore.yield %0 : l6
   } {
     %0 = moore.constant 19 : l6
@@ -360,25 +360,6 @@ moore.module private @SubModule_0(in %a : !moore.l1, in %b : !moore.l1, out c : 
 
   // CHECK-NEXT: hw.output %[[V2]] : i1
   moore.output %0 : !moore.l1
-}
-
-// CHECK-LABEL: hw.module @ParamTest() {
-moore.module @ParamTest(){
-
-  // CHECK-NEXT: [[Pa:%.+]] = hw.constant 1 : i32
-  // CHECK-NEXT: %p1 = hw.wire [[Pa]] sym @parameter_p1 : i32
-  %0 = moore.constant 1 : l32
-  %p1 = moore.named_constant parameter %0 : l32
-
-  // CHECK-NEXT: [[LPa:%.+]] = hw.constant 2 : i32
-  // CHECK-NEXT: %lp1 = hw.wire [[LPa]] sym @localparameter_lp1 : i32
-  %1 = moore.constant 2 : l32
-  %lp1 = moore.named_constant localparam %1 : l32
-
-  // CHECK-NEXT: [[SPa:%.+]] = hw.constant 3 : i32
-  // CHECK-NEXT: %sp1 = hw.wire [[SPa]] sym @specparameter_sp1 : i32
-  %2 = moore.constant 3 : l32
-  %sp1 = moore.named_constant specparam %2 : l32
 }
 
 moore.module @Variable() {
@@ -819,3 +800,16 @@ moore.module @NoPredecessorBlockErasure(in %clk_i : !moore.l1, in %raddr_i : !mo
   %3 = moore.read %rdata_o : <array<2 x l32>>
   moore.output %3 : !moore.array<2 x l32>
 }
+
+// CHECK: [[TMP:%.+]] = hw.constant 42 : i32
+%dbg0 = moore.constant 42 : l32
+// CHECK: dbg.variable "a", [[TMP]] : i32
+dbg.variable "a", %dbg0 : !moore.l32
+// CHECK: [[SCOPE:%.+]] = dbg.scope
+%dbg1 = dbg.scope "foo", "bar"
+// CHECK: dbg.variable "b", [[TMP]] scope [[SCOPE]] : i32
+dbg.variable "b", %dbg0 scope %dbg1 : !moore.l32
+// CHECK: dbg.array [[[TMP]]] : i32
+dbg.array [%dbg0] : !moore.l32
+// CHECK: dbg.struct {"q": [[TMP]]} : i32
+dbg.struct {"q": %dbg0} : !moore.l32

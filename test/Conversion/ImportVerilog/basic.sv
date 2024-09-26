@@ -1,4 +1,4 @@
-// RUN: circt-translate --import-verilog %s | FileCheck %s
+// RUN: circt-verilog --parse-only -g %s | FileCheck %s
 // RUN: circt-verilog --ir-moore %s
 // REQUIRES: slang
 
@@ -132,30 +132,6 @@ module Basic;
   bit [0:0] b1;
   bit b2 = b1;
 
-  // CHECK: [[TMP:%.+]] = moore.constant 1 : l32
-  // CHECK: %p1 = moore.named_constant parameter [[TMP]] : l32
-  parameter p1 = 1;
-
-  // CHECK: [[TMP:%.+]] = moore.constant 1 : l32
-  // CHECK: %p2 = moore.named_constant parameter [[TMP]] : l32
-  parameter p2 = p1;
-
-  // CHECK: [[TMP:%.+]] = moore.constant 2 : l32
-  // CHECK: %lp1 = moore.named_constant localparam [[TMP]] : l32
-  localparam lp1 = 2;
-
-  // CHECK: [[TMP:%.+]] = moore.constant 2 : l32
-  // CHECK: %lp2 = moore.named_constant localparam [[TMP]] : l32
-  localparam lp2 = lp1;
-
-  // CHECK: [[TMP:%.+]] = moore.constant 3 : l32
-  // CHECK: %sp1 = moore.named_constant specparam [[TMP]] : l32
-  specparam sp1 = 3;
-
-  // CHECK: [[TMP:%.+]] = moore.constant 3 : l32
-  // CHECK: %sp2 = moore.named_constant specparam [[TMP]] : l32
-  specparam sp2 = sp1;
-
   // CHECK: moore.procedure initial {
   // CHECK: }
   initial;
@@ -236,11 +212,62 @@ endmodule
 // CHECK-LABEL: func.func private @dummyB(
 // CHECK-LABEL: func.func private @dummyC(
 // CHECK-LABEL: func.func private @dummyD(
+// CHECK-LABEL: func.func private @dummyE(
+// CHECK-LABEL: func.func private @dummyF(
 function void dummyA(); endfunction
 function void dummyB(); endfunction
 function void dummyC(); endfunction
 function void dummyD(int a); endfunction
 function bit dummyE(bit a); return a; endfunction
+function void dummyF(integer a); endfunction
+
+// CHECK-LABEL: moore.module @Parameters(
+module Parameters;
+  // CHECK: [[TMP:%.+]] = moore.constant 1 : l32
+  // CHECK: dbg.variable "p1", [[TMP]] : !moore.l32
+  parameter p1 = 1;
+
+  // CHECK: [[TMP:%.+]] = moore.constant 1 : l32
+  // CHECK: dbg.variable "p2", [[TMP]] : !moore.l32
+  parameter p2 = p1;
+
+  // CHECK: [[TMP:%.+]] = moore.constant 2 : l32
+  // CHECK: dbg.variable "lp1", [[TMP]] : !moore.l32
+  localparam lp1 = 2;
+
+  // CHECK: [[TMP:%.+]] = moore.constant 2 : l32
+  // CHECK: dbg.variable "lp2", [[TMP]] : !moore.l32
+  localparam lp2 = lp1;
+
+  // CHECK: [[TMP:%.+]] = moore.constant 3 : l32
+  // CHECK: dbg.variable "sp1", [[TMP]] : !moore.l32
+  specparam sp1 = 3;
+
+  // CHECK: [[TMP:%.+]] = moore.constant 3 : l32
+  // CHECK: dbg.variable "sp2", [[TMP]] : !moore.l32
+  specparam sp2 = sp1;
+
+  initial begin
+    // CHECK: [[TMP:%.+]] = moore.constant 1 : l32
+    // CHECK: func.call @dummyF([[TMP]])
+    // CHECK: [[TMP:%.+]] = moore.constant 1 : l32
+    // CHECK: func.call @dummyF([[TMP]])
+    // CHECK: [[TMP:%.+]] = moore.constant 2 : l32
+    // CHECK: func.call @dummyF([[TMP]])
+    // CHECK: [[TMP:%.+]] = moore.constant 2 : l32
+    // CHECK: func.call @dummyF([[TMP]])
+    // CHECK: [[TMP:%.+]] = moore.constant 3 : l32
+    // CHECK: func.call @dummyF([[TMP]])
+    // CHECK: [[TMP:%.+]] = moore.constant 3 : l32
+    // CHECK: func.call @dummyF([[TMP]])
+    dummyF(p1);
+    dummyF(p2);
+    dummyF(lp1);
+    dummyF(lp2);
+    dummyF(sp1);
+    dummyF(sp2);
+  end
+endmodule
 
 // CHECK-LABEL: func.func private @ConditionalStatements(
 // CHECK-SAME: %arg0: !moore.i1
@@ -1529,27 +1556,28 @@ endmodule
 // CHECK-LABEL: moore.module @GenerateConstructs()
 module GenerateConstructs;
   genvar i;
-  parameter p=2;
+  // CHECK: [[TMP:%.+]] = moore.constant 2
+  // CHECK: dbg.variable "p", [[TMP]]
+  parameter p = 2;
   
   generate
-    // CHECK: [[TMP1:%.+]] = moore.constant 0 : l32
-    // CHECK: %i = moore.named_constant localparam [[TMP1]] : l32
-    // CHECK: [[TMP2:%.+]] = moore.conversion %i : !moore.l32 -> !moore.i32
-    // CHECK: %g1 = moore.variable [[TMP2]] : <i32>
-    // CHECK: [[TMP3:%.+]] = moore.constant 1 : l32
-    // CHECK: %i_0 = moore.named_constant localparam name "i" [[TMP3]] : l32
-    // CHECK: [[TMP4:%.+]] = moore.conversion %i_0 : !moore.l32 -> !moore.i32
-    // CHECK: %g1_1 = moore.variable name "g1" [[TMP4]] : <i32>
-    for(i=0; i<2; i=i+1) begin
-      int g1 = i;
+    // CHECK: [[TMP:%.+]] = moore.constant 0
+    // CHECK: dbg.variable "i", [[TMP]]
+    // CHECK: [[TMP:%.+]] = moore.constant 0
+    // CHECK: %g1 = moore.variable [[TMP]]
+    // CHECK: [[TMP:%.+]] = moore.constant 1
+    // CHECK: dbg.variable "i", [[TMP]]
+    // CHECK: [[TMP:%.+]] = moore.constant 1
+    // CHECK: moore.variable name "g1" [[TMP]]
+    for (i = 0; i < 2; i = i + 1) begin
+      integer g1 = i;
     end
 
     // CHECK: [[TMP:%.+]] = moore.constant 2 : i32
     // CHECK: %g2 = moore.variable [[TMP]] : <i32>
-    if(p == 2) begin
+    if (p == 2) begin
       int g2 = 2;
-    end
-    else begin
+    end else begin
       int g2 = 3;
     end
     
@@ -1558,10 +1586,10 @@ module GenerateConstructs;
     case (p)
       2: begin
         int g3 = 2;
-        end
+      end
       default: begin
         int g3 = 3;
-        end
+      end
     endcase
   endgenerate
 endmodule
@@ -1979,3 +2007,21 @@ module ImmediateAssertiWithActionBlock;
 // CHEK: }
   assert (x) a = 1; else a = 0;
 endmodule
+
+// CHECK: [[TMP:%.+]] = moore.constant 42 : i32
+// CHECK: dbg.variable "rootParam1", [[TMP]] : !moore.i32
+parameter int rootParam1 = 42;
+
+// CHECK: [[TMP:%.+]] = moore.constant 9001 : i32
+// CHECK: dbg.variable "rootParam2", [[TMP]] : !moore.i32
+localparam int rootParam2 = 9001;
+
+package ParamPackage;
+  // CHECK: [[TMP:%.+]] = moore.constant 42 : i32
+  // CHECK: dbg.variable "ParamPackage::param1", [[TMP]] : !moore.i32
+  parameter int param1 = 42;
+
+  // CHECK: [[TMP:%.+]] = moore.constant 9001 : i32
+  // CHECK: dbg.variable "ParamPackage::param2", [[TMP]] : !moore.i32
+  localparam int param2 = 9001;
+endpackage
