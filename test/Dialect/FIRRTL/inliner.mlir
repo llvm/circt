@@ -1292,6 +1292,31 @@ firrtl.circuit "InlineLayerBlockSimple" {
 
 // -----
 
+// Check recurse into instances not at top-level.
+
+firrtl.circuit "WalkIntoInstancesUnderLayerBlock" {
+  firrtl.layer @I inline { }
+  // CHECK-NOT: @GChild
+  firrtl.module private @GChild() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %o = firrtl.wire interesting_name : !firrtl.uint<8>
+  }
+  // CHECK: @Child
+  firrtl.module private @Child() {
+    // CHECK-NEXT: %gc_o = firrtl.wire
+    firrtl.instance gc @GChild()
+  }
+  // CHECK: @WalkIntoInstancesUnderLayerBlock
+  firrtl.module @WalkIntoInstancesUnderLayerBlock() {
+    // CHECK-NEXT: layerblock @I
+    // CHECK-NEXT:   firrtl.instance c @Child
+    firrtl.layerblock @I {
+      firrtl.instance c @Child()
+    }
+  }
+}
+
+// -----
+
 // Test inlining into nested layer, and cloning operations with blocks + blockargs (match).
 
 firrtl.circuit "MatchInline" attributes {enable_layers = [@I]} {
