@@ -330,6 +330,35 @@ func.func @WaitEvent(%arg0: !moore.i1, %arg1: !moore.i1) {
   return
 }
 
+
+// CHECK-LABEL: func.func @FormatStrings
+// CHECK-SAME: %arg0: !moore.format_string
+func.func @FormatStrings(%arg0: !moore.format_string, %arg1: !moore.i42) {
+  // CHECK: moore.fmt.literal "hello"
+  moore.fmt.literal "hello"
+  // CHECK: moore.fmt.concat ()
+  moore.fmt.concat ()
+  // CHECK: moore.fmt.concat (%arg0)
+  moore.fmt.concat (%arg0)
+  // CHECK: moore.fmt.concat (%arg0, %arg0)
+  moore.fmt.concat (%arg0, %arg0)
+  // CHECK: moore.fmt.int binary %arg1, width 42, align left, pad zero : i42
+  moore.fmt.int binary %arg1, width 42, align left, pad zero : i42
+  // CHECK: moore.fmt.int binary %arg1, width 42, align right, pad zero : i42
+  moore.fmt.int binary %arg1, width 42, align right, pad zero : i42
+  // CHECK: moore.fmt.int binary %arg1, width 42, align right, pad space : i42
+  moore.fmt.int binary %arg1, width 42, align right, pad space : i42
+  // CHECK: moore.fmt.int octal %arg1, width 42, align left, pad zero : i42
+  moore.fmt.int octal %arg1, width 42, align left, pad zero : i42
+  // CHECK: moore.fmt.int decimal %arg1, width 42, align left, pad zero : i42
+  moore.fmt.int decimal %arg1, width 42, align left, pad zero : i42
+  // CHECK: moore.fmt.int hex_lower %arg1, width 42, align left, pad zero : i42
+  moore.fmt.int hex_lower %arg1, width 42, align left, pad zero : i42
+  // CHECK: moore.fmt.int hex_upper %arg1, width 42, align left, pad zero : i42
+  moore.fmt.int hex_upper %arg1, width 42, align left, pad zero : i42
+  return
+}
+
 // CHECK-LABEL: func.func @SimulationControlBuiltins
 func.func @SimulationControlBuiltins() {
   // CHECK: moore.builtin.stop
@@ -340,4 +369,19 @@ func.func @SimulationControlBuiltins() {
   moore.builtin.finish_message false
   // CHECK: moore.unreachable
   moore.unreachable
+}
+
+// CHECK-LABEL: func.func @SeverityAndDisplayBuiltins
+func.func @SeverityAndDisplayBuiltins(%arg0: !moore.format_string) {
+  // CHECK: moore.builtin.display %arg0
+  moore.builtin.display %arg0
+  // CHECK: moore.builtin.severity info %arg0
+  moore.builtin.severity info %arg0
+  // CHECK: moore.builtin.severity warning %arg0
+  moore.builtin.severity warning %arg0
+  // CHECK: moore.builtin.severity error %arg0
+  moore.builtin.severity error %arg0
+  // CHECK: moore.builtin.severity fatal %arg0
+  moore.builtin.severity fatal %arg0
+  return
 }

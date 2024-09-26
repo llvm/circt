@@ -116,6 +116,11 @@ struct Context {
   /// convert it to the given domain.
   Value convertToBool(Value value, Domain domain);
 
+  /// Helper function to convert a value to its simple bit vector
+  /// representation, if it has one. Otherwise returns null. Also returns null
+  /// if the given value is null.
+  Value convertToSimpleBitVector(Value value);
+
   /// Helper function to materialize an `SVInt` as an SSA value.
   Value materializeSVInt(const slang::SVInt &svint,
                          const slang::ast::Type &type, Location loc);
@@ -124,6 +129,15 @@ struct Context {
   /// null if the constant cannot be materialized.
   Value materializeConstant(const slang::ConstantValue &constant,
                             const slang::ast::Type &type, Location loc);
+
+  /// Convert a list of string literal arguments with formatting specifiers and
+  /// arguments to be interpolated into a `!moore.format_string` value. Returns
+  /// failure if an error occurs. Returns a null value if the formatted string
+  /// is trivially empty. Otherwise returns the formatted string.
+  FailureOr<Value> convertFormatString(
+      slang::span<const slang::ast::Expression *const> arguments, Location loc,
+      moore::IntFormat defaultFormat = moore::IntFormat::Decimal,
+      bool appendNewline = false);
 
   /// Evaluate the constant value of an expression.
   slang::ConstantValue evaluateConstant(const slang::ast::Expression &expr);

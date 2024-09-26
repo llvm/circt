@@ -375,6 +375,21 @@ def RefType : MooreTypeDef<"Ref", [
 }
 
 //===----------------------------------------------------------------------===//
+// Format String
+//===----------------------------------------------------------------------===//
+
+def FormatStringType : MooreTypeDef<"FormatString"> {
+  let mnemonic = "format_string";
+  let summary = "a format string type";
+  let description = [{
+    An interpolated string produced by one of the string formatting operations.
+    It is used to parse format strings present in Verilog source text and
+    represent them as a sequence of IR operations that specify the formatting of
+    individual arguments.
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Constraints
 //===----------------------------------------------------------------------===//
 
