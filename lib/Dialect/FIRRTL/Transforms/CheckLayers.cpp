@@ -12,7 +12,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/InstanceGraphInterface.h"
 #include "mlir/Pass/Pass.h"
-#include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/DepthFirstIterator.h"
 
 namespace circt {
 namespace firrtl {
@@ -28,13 +28,13 @@ using namespace mlir;
 namespace {
 class CheckLayers {
   CheckLayers(InstanceGraph &instanceGraph, InstanceInfo &instanceInfo)
-      : instanceGraph(instanceGraph), instanceInfo(instanceInfo) {}
+      : iGraph(instanceGraph), iInfo(instanceInfo) {}
 
   /// Walk a module, reporting any illegal instantation of layers under layers,
   /// and record if this module contains any layerblocks.
   void run(FModuleOp moduleOp) {
     // No instance is under a layer block.  No further examination is necessary.
-    if (!instanceInfo.anyInstanceUnderLayer(moduleOp))
+    if (!iInfo.anyInstanceUnderLayer(moduleOp))
       return;
 
     // The module is under a layer block.  Verify that it has no layer blocks.
@@ -49,23 +49,23 @@ class CheckLayers {
     // The module contains layer blocks and is instantiated under a layer block.
     // Walk up the instance hierarchy to find the first instance which is
     // directly under a layer block.
-    SmallVector<igraph::ModuleOpInterface> worklist({moduleOp});
-    while (!worklist.empty()) {
-      auto current = worklist.pop_back_val();
-      for (auto *instNode : instanceGraph.lookup(current)->uses()) {
+    error = true;
+    for (auto *node : llvm::inverse_depth_first(iGraph.lookup(moduleOp))) {
+      auto modOp = node->getModule();
+      if (previousErrors.contains(node) || !iInfo.anyInstanceUnderLayer(modOp))
+        continue;
+      for (auto *instNode : node->uses()) {
         auto instanceOp = instNode->getInstance();
-        auto parentModuleOp = instNode->getParent()->getModule();
         if (instanceOp->getParentOfType<LayerBlockOp>()) {
-          auto moduleName = current.getModuleNameAttr();
+          auto moduleName = modOp.getModuleNameAttr();
           auto diag = emitError(instanceOp.getLoc())
                       << "cannot instantiate " << moduleName
                       << " under a layerblock, because " << moduleName
                       << " contains a layerblock";
           diag.attachNote(layerBlockOp->getLoc()) << "layerblock here";
+          previousErrors.insert(node);
           continue;
         }
-        if (instanceInfo.anyInstanceUnderLayer(parentModuleOp))
-          worklist.push_back(parentModuleOp);
       }
     }
   }
@@ -74,20 +74,22 @@ public:
   static LogicalResult run(InstanceGraph &instanceGraph,
                            InstanceInfo &instanceInfo) {
     CheckLayers checkLayers(instanceGraph, instanceInfo);
-    DenseSet<InstanceGraphNode *> visited;
-    for (auto *node : instanceGraph) {
+    for (auto *node : instanceGraph)
       if (auto moduleOp = dyn_cast<FModuleOp>(node->getModule<Operation *>()))
         checkLayers.run(moduleOp);
-    }
     return failure(checkLayers.error);
   }
 
 private:
-  InstanceGraph &instanceGraph;
-  InstanceInfo &instanceInfo;
-  /// A mapping from a module to the first layerblock that it contains,
-  /// transitively through instances.
-  DenseMap<Operation *, LayerBlockOp> layerBlocks;
+  /// Pre-populated analyses
+  InstanceGraph &iGraph;
+  InstanceInfo &iInfo;
+
+  /// This records modules for which we have already generated errors when doing
+  /// a top-down walk.
+  DenseSet<const InstanceGraphNode *> previousErrors;
+
+  /// Indicates if this checker found an error.
   bool error = false;
 };
 } // end anonymous namespace
