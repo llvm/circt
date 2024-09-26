@@ -12,6 +12,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/InstanceGraphInterface.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 
 namespace circt {
@@ -74,9 +75,13 @@ public:
   static LogicalResult run(InstanceGraph &instanceGraph,
                            InstanceInfo &instanceInfo) {
     CheckLayers checkLayers(instanceGraph, instanceInfo);
-    for (auto *node : instanceGraph)
-      if (auto moduleOp = dyn_cast<FModuleOp>(node->getModule<Operation *>()))
-        checkLayers.run(moduleOp);
+    DenseSet<InstanceGraphNode *> visited;
+    for (auto *root : instanceGraph) {
+      for (auto *node : llvm::inverse_post_order_ext(root, visited)) {
+        if (auto moduleOp = dyn_cast<FModuleOp>(node->getModule<Operation *>()))
+          checkLayers.run(moduleOp);
+      }
+    }
     return failure(checkLayers.error);
   }
 
