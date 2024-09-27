@@ -77,10 +77,10 @@ public:
   /// Information about a circuit
   struct CircuitAttributes {
     /// The design-under-test if one is defined.
-    igraph::InstanceGraphNode *dutNode;
+    igraph::ModuleOpInterface dutNode;
 
     /// The design-under-test if one is defined or the top module.
-    igraph::InstanceGraphNode *effectiveDutNode;
+    igraph::ModuleOpInterface effectiveDutNode;
   };
 
   /// Information about a module
@@ -101,12 +101,12 @@ public:
 
   /// Return the design-under-test if one is defined for the circuit, otherwise
   /// return null.
-  igraph::InstanceGraphNode *getDut();
+  igraph::ModuleOpInterface getDut();
 
   /// Return the "effective" design-under-test.  This will be the
   /// design-under-test if one is defined.  Otherwise, this will be the root
   /// node of the instance graph.
-  igraph::InstanceGraphNode *getEffectiveDut();
+  igraph::ModuleOpInterface getEffectiveDut();
 
   //===--------------------------------------------------------------------===//
   // Module Attribute Queries
