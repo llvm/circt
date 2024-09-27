@@ -77,10 +77,10 @@ public:
   /// Information about a circuit
   struct CircuitAttributes {
     /// The design-under-test if one is defined.
-    igraph::ModuleOpInterface dutNode;
+    igraph::ModuleOpInterface dut;
 
     /// The design-under-test if one is defined or the top module.
-    igraph::ModuleOpInterface effectiveDutNode;
+    igraph::ModuleOpInterface effectiveDut;
   };
 
   /// Information about a module
