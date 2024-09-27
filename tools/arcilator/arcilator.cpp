@@ -36,6 +36,7 @@
 #include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/LLVMIR/Transforms/InlinerInterfaceImpl.h"
 #include "mlir/Dialect/LLVMIR/Transforms/Passes.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
@@ -601,6 +602,7 @@ static LogicalResult executeArcilator(MLIRContext &context) {
   arc::initAllExternalInterfaces(registry);
 
   mlir::func::registerInlinerExtension(registry);
+  mlir::LLVM::registerInlinerInterface(registry);
 
   mlir::registerBuiltinDialectTranslation(registry);
   mlir::registerLLVMDialectTranslation(registry);
