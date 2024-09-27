@@ -32,7 +32,7 @@ add_circt_library(CIRCTOpCountAnalysis
   OpCountAnalysis.cpp
 
   LINK_LIBS PUBLIC
-  MLIRPass
+  MLIRIR
 )
 
 add_circt_library(CIRCTSchedulingAnalysis
