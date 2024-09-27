@@ -7,7 +7,8 @@
 //===----------------------------------------------------------------------===//
 //
 // This header file defines prototypes for methods that perform analysis
-// involving the quantity of different kinds of operation.
+// involving the frequency of different kinds of operations found in a
+// builtin.module.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,6 +16,7 @@
 #define CIRCT_ANALYSIS_OPCOUNT_ANALYSIS_H
 
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/Operation.h"
 #include "llvm/ADT/DenseMap.h"
 
 namespace mlir {
@@ -27,6 +29,7 @@ struct OpCountAnalysis {
   OpCountAnalysis(Operation *moduleOp, mlir::AnalysisManager &am);
 
   size_t getOpCount(OperationName opName);
+  SmallVector<OperationName> getFoundOpNames();
   DenseMap<size_t, size_t> getOperandCountMap(OperationName opName);
 
 private:

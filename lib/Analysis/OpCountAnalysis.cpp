@@ -6,20 +6,20 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the InstanceInfo analysis.  This is an analysis that
-// depends on the InstanceGraph analysis, but provides additional information
-// about FIRRTL operations.  This is useful if you find yourself needing to
-// selectively iterate over parts of the design.
+// This file defines the op count analysis.  This is an analysis that
+// provides information about the frequency of different kinds of operations
+// found in a builtin.module.
 //
 //===----------------------------------------------------------------------===//
 
 #include "circt/Analysis/OpCountAnalysis.h"
 #include "mlir/IR/Operation.h"
-#include "mlir/IR/OperationSupport.h"
 
 using namespace circt;
+using namespace analysis;
 
-circt::analysis::OpCountAnalysis::OpCountAnalysis(Operation *moduleOp, mlir::AnalysisManager &am) {
+OpCountAnalysis::OpCountAnalysis(Operation *moduleOp,
+                                 mlir::AnalysisManager &am) {
   moduleOp->walk([&](Operation *op) {
     auto opName = op->getName();
     // Update opCounts
@@ -27,25 +27,35 @@ circt::analysis::OpCountAnalysis::OpCountAnalysis(Operation *moduleOp, mlir::Ana
       opCounts[opName] = 1;
     else
       opCounts[op->getName()]++;
-    
+
     // Update operandCounts
     if (operandCounts.find(opName) == operandCounts.end())
       operandCounts[opName] = DenseMap<size_t, size_t>();
-    if (operandCounts[opName].find(op->getNumOperands()) == operandCounts[opName].end())
+    if (operandCounts[opName].find(op->getNumOperands()) ==
+        operandCounts[opName].end())
       operandCounts[opName][op->getNumOperands()] = 1;
     else
       operandCounts[opName][op->getNumOperands()]++;
   });
 }
 
-size_t circt::analysis::OpCountAnalysis::getOpCount(OperationName opName) {
+SmallVector<OperationName> OpCountAnalysis::getFoundOpNames() {
+  SmallVector<OperationName> opNames;
+  for (auto pair : opCounts) {
+    opNames.push_back(pair.first);
+  }
+  return opNames;
+}
+
+size_t OpCountAnalysis::getOpCount(OperationName opName) {
   size_t count = 0;
   if (opCounts.find(opName) != opCounts.end())
     count = opCounts[opName];
   return count;
 }
 
-DenseMap<size_t, size_t> circt::analysis::OpCountAnalysis::getOperandCountMap(OperationName opName) {
+DenseMap<size_t, size_t>
+OpCountAnalysis::getOperandCountMap(OperationName opName) {
   auto map = DenseMap<size_t, size_t>();
   if (operandCounts.find(opName) != operandCounts.end())
     map = operandCounts[opName];
