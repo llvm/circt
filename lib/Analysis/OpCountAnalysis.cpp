@@ -26,16 +26,14 @@ OpCountAnalysis::OpCountAnalysis(Operation *moduleOp,
     if (opCounts.find(opName) == opCounts.end())
       opCounts[opName] = 1;
     else
-      opCounts[op->getName()]++;
+      opCounts[opName]++;
 
     // Update operandCounts
-    if (operandCounts.find(opName) == operandCounts.end())
-      operandCounts[opName] = DenseMap<size_t, size_t>();
-    if (operandCounts[opName].find(op->getNumOperands()) ==
-        operandCounts[opName].end())
-      operandCounts[opName][op->getNumOperands()] = 1;
+    auto &counts = operandCounts[opName];
+    if (counts.find(op->getNumOperands()) == counts.end())
+      counts[op->getNumOperands()] = 1;
     else
-      operandCounts[opName][op->getNumOperands()]++;
+      counts[op->getNumOperands()]++;
   });
 }
 
@@ -47,16 +45,12 @@ SmallVector<OperationName> OpCountAnalysis::getFoundOpNames() {
 }
 
 size_t OpCountAnalysis::getOpCount(OperationName opName) {
-  size_t count = 0;
   if (opCounts.find(opName) != opCounts.end())
-    count = opCounts[opName];
-  return count;
+    return opCounts[opName];
+  return 0;
 }
 
 DenseMap<size_t, size_t>
 OpCountAnalysis::getOperandCountMap(OperationName opName) {
-  auto map = DenseMap<size_t, size_t>();
-  if (operandCounts.find(opName) != operandCounts.end())
-    map = operandCounts[opName];
-  return map;
+  return operandCounts[opName];
 }

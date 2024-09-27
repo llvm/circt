@@ -25,11 +25,18 @@ class AnalysisManager;
 namespace circt {
 namespace analysis {
 
-struct OpCountAnalysis {
+class OpCountAnalysis {
+public:
   OpCountAnalysis(Operation *moduleOp, mlir::AnalysisManager &am);
 
+  /// Get the frequency of operations of a specific name
   size_t getOpCount(OperationName opName);
+
+  /// Get the names of all distinct operations found by the analysis
   SmallVector<OperationName> getFoundOpNames();
+
+  /// Get a map from number of operands to corresponding frequency for the given
+  /// operation
   DenseMap<size_t, size_t> getOperandCountMap(OperationName opName);
 
 private:
