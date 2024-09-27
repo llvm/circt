@@ -150,8 +150,8 @@ public:
 
 private:
   /// Stores circuit-level attributes.
-  CircuitAttributes circuitAttributes = {/*dutNode=*/nullptr,
-                                         /*effectiveDutNode=*/nullptr};
+  CircuitAttributes circuitAttributes = {/*dut=*/nullptr,
+                                         /*effectiveDut=*/nullptr};
 
   /// Internal mapping of operations to module attributes.
   DenseMap<Operation *, ModuleAttributes> moduleAttributes;
