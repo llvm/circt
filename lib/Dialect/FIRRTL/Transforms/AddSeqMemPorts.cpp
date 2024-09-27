@@ -49,7 +49,7 @@ struct AddSeqMemPortsPass
   LogicalResult processAnnos(CircuitOp circuit);
   void createOutputFile(igraph::ModuleOpInterface moduleOp);
   InstanceGraphNode *findDUT();
-  void processMemModule(FMemModuleOp mem);
+  LogicalResult processMemModule(FMemModuleOp mem);
   LogicalResult processModule(FModuleOp moduleOp);
 
   /// Get the cached namespace for a module.
@@ -184,7 +184,38 @@ InstanceGraphNode *AddSeqMemPortsPass::findDUT() {
   return instanceGraph->getTopLevelNode();
 }
 
-void AddSeqMemPortsPass::processMemModule(FMemModuleOp mem) {
+LogicalResult AddSeqMemPortsPass::processMemModule(FMemModuleOp mem) {
+  // Error if the memory is partially under a layer.
+  //
+  // TODO: There are several ways to handle a memory being under a layer:
+  // duplication or tie-off.  However, it is unclear if either if these is
+  // intended or correct.  Additionally, this can be handled with pass order by
+  // preventing deduplication of memories that have this property in
+  // `LowerMemories`.
+  if (instanceInfo->anyInstanceUnderLayer(mem)) {
+    auto diag = mem->emitOpError()
+                << "cannot have ports added to it because it is "
+                   "instantiated under "
+                   "both the design-under-test and layer blocks";
+    for (auto *instNode : instanceGraph->lookup(mem)->uses()) {
+      auto instanceOp = instNode->getInstance();
+      if (auto layerBlockOp = instanceOp->getParentOfType<LayerBlockOp>()) {
+        diag.attachNote(instanceOp.getLoc())
+            << "this instance is under a layer block";
+        diag.attachNote(layerBlockOp.getLoc())
+            << "the innermost layer block is here";
+        continue;
+      }
+      if (instanceInfo->anyInstanceUnderLayer(
+              instNode->getParent()->getModule())) {
+        diag.attachNote(instanceOp.getLoc())
+            << "this instance is inside a module that is instantiated "
+               "under a layer block";
+      }
+    }
+    return failure();
+  }
+
   // We have to add the user ports to every mem module.
   size_t portIndex = mem.getNumPorts();
   auto &memInfo = memInfoMap[mem];
@@ -194,6 +225,7 @@ void AddSeqMemPortsPass::processMemModule(FMemModuleOp mem) {
   mem.insertPorts(extraPorts);
   // Attach the extraPorts metadata.
   mem.setExtraPortsAttr(extraPortsAttr);
+  return success();
 }
 
 LogicalResult AddSeqMemPortsPass::processModule(FModuleOp moduleOp) {
@@ -435,43 +467,13 @@ void AddSeqMemPortsPass::runOnOperation() {
       if (instanceInfo->allInstancesUnderLayer(op))
         continue;
 
-      // Process the module or memory.  Error if the memory is partially under a
-      // layer.
-      //
-      // TODO: There are several ways to handle a memory being under a layer:
-      // duplication or tie-off.  However, it is unclear if either if these is
-      // intended or correct.  Additionally, this can be handled with pass order
-      // by preventing deduplication of memories that have this property in
-      // `LowerMemories`.
+      // Process the module or memory.
       if (auto moduleOp = dyn_cast<FModuleOp>(*op)) {
         if (failed(processModule(moduleOp)))
           return signalPassFailure();
       } else if (auto mem = dyn_cast<FMemModuleOp>(*op)) {
-        if (instanceInfo->anyInstanceUnderLayer(mem)) {
-          auto diag = op->emitOpError()
-                      << "cannot have ports added to it because it is "
-                         "instantiated under "
-                         "both the design-under-test and layer blocks";
-          for (auto *instNode : node->uses()) {
-            auto instanceOp = instNode->getInstance();
-            if (auto layerBlockOp =
-                    instanceOp->getParentOfType<LayerBlockOp>()) {
-              diag.attachNote(instanceOp.getLoc())
-                  << "this instance is under a layer block";
-              diag.attachNote(layerBlockOp.getLoc())
-                  << "the innermost layer block is here";
-              continue;
-            }
-            if (instanceInfo->anyInstanceUnderLayer(
-                    instNode->getParent()->getModule())) {
-              diag.attachNote(instanceOp.getLoc())
-                  << "this instance is inside a module that is instantiated "
-                     "under a layer block";
-            }
-          }
+        if (failed(processMemModule(mem)))
           return signalPassFailure();
-        }
-        processMemModule(mem);
       }
     }
 
