@@ -655,6 +655,8 @@ module Expressions;
   bit [1:0][31:0] arrayInt;
   // CHECK: %uarrayInt = moore.variable : <uarray<2 x i32>>
   bit [31:0] uarrayInt [2];
+  // CHECK: %m = moore.variable : <l4>
+  logic [3:0] m;
 
   initial begin
     // CHECK: moore.constant 0 : i32
@@ -1275,6 +1277,13 @@ module Expressions;
     // CHECK: [[TMP3:%.+]] = moore.array_create [[TMP0]], [[TMP1]], [[TMP2]], [[TMP0]], [[TMP1]], [[TMP2]] : !moore.i4, !moore.i4, !moore.i4, !moore.i4, !moore.i4, !moore.i4 -> uarray<6 x i4>
     // CHECK: moore.array_create [[TMP3]], [[TMP3]], [[TMP3]] : !moore.uarray<6 x i4>, !moore.uarray<6 x i4>, !moore.uarray<6 x i4> -> uarray<3 x uarray<6 x i4>>
     arr = '{3{'{2{4'd1, 4'd2, 4'd3}}}};
+
+    // CHECK: [[TMP0:%.+]] = moore.constant 0 :
+    // CHECK: [[TMP1:%.+]] = moore.constant 0 :
+    // CHECK: [[TMP2:%.+]] = moore.constant 1 :
+    // CHECK: [[TMP3:%.+]] = moore.constant 0 :
+    // CHECK: moore.concat [[TMP3]], [[TMP2]], [[TMP1]], [[TMP0]] : (!moore.l1, !moore.l1, !moore.l1, !moore.l1) -> l4
+    m = '{default: '0, 2: '1};
  
     //===------------------------------------------------------------------===//
     // Builtin Functions
