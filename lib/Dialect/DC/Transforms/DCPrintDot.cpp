@@ -129,10 +129,10 @@ struct DotNode {
 } // namespace
 
 /// gives a unique name to each value in the graph
-static SmallVector<std::pair<mlir::Value, std::string>> valueToName(
-    const SmallVector<mlir::Value> &values,
-    SmallVector<std::pair<mlir::Value, std::string>> &currentMap,
-    bool tokenFlag) {
+static SmallVector<std::pair<mlir::Value, std::string>>
+valueToName(const SmallVector<mlir::Value> &values,
+            SmallVector<std::pair<mlir::Value, std::string>> &currentMap,
+            bool tokenFlag) {
   SmallVector<std::pair<mlir::Value, std::string>> res;
   for (auto [i, v] : llvm::enumerate(values)) {
     auto found = false;
