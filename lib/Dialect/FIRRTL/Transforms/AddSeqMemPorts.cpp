@@ -460,8 +460,6 @@ void AddSeqMemPortsPass::runOnOperation() {
   }
   extraPortsAttr = ArrayAttr::get(context, extraPorts);
 
-  auto *effectiveDut = instanceInfo->getEffectiveDut();
-
   // If there are no user ports, don't do anything.
   if (!userPorts.empty()) {
     // Update ports statistic.
@@ -471,7 +469,8 @@ void AddSeqMemPortsPass::runOnOperation() {
     // design-under-test. Skip any modules that are wholly instantiated under
     // layers.  If any memories are partially instantiated under a layer then
     // error.
-    for (auto *node : llvm::post_order(instanceInfo->getEffectiveDut())) {
+    for (auto *node : llvm::post_order(
+             instanceGraph->lookup(instanceInfo->getEffectiveDut()))) {
       auto op = node->getModule();
 
       // Skip anything wholly under a layer.
@@ -489,12 +488,13 @@ void AddSeqMemPortsPass::runOnOperation() {
     }
 
     // We handle the DUT differently than the rest of the modules.
-    if (auto dut = dyn_cast<FModuleOp>(effectiveDut->getModule())) {
+    auto effectiveDut = instanceInfo->getEffectiveDut();
+    if (auto *dut = dyn_cast<FModuleOp>(&effectiveDut)) {
       // For each instance of the dut, add the instance ports, but tie the port
       // to 0 instead of wiring them to the parent.
-      for (auto *instRec : effectiveDut->uses()) {
+      for (auto *instRec : instanceGraph->lookup(effectiveDut)->uses()) {
         auto inst = cast<InstanceOp>(*instRec->getInstance());
-        auto &dutMemInfo = memInfoMap[dut];
+        auto &dutMemInfo = memInfoMap[*dut];
         // Find out how many memory ports we have to add.
         auto &subExtraPorts = dutMemInfo.extraPorts;
         // If there are no extra ports, we don't have to do anything.
@@ -528,7 +528,7 @@ void AddSeqMemPortsPass::runOnOperation() {
 
   // If there is an output file, create it.
   if (outputFile)
-    createOutputFile(effectiveDut->getModule<igraph::ModuleOpInterface>());
+    createOutputFile(instanceInfo->getEffectiveDut());
 
   if (anythingChanged)
     markAnalysesPreserved<InstanceGraph>();

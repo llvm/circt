@@ -213,13 +213,13 @@ static void printCircuitInfo(firrtl::CircuitOp op,
   llvm::errs() << "\n"
                << "    hasDut: " << iInfo.hasDut() << "\n"
                << "    dut: ";
-  if (auto *dutNode = iInfo.getDut())
-    dutNode->getModule()->print(llvm::errs(), flags);
+  if (auto dutNode = iInfo.getDut())
+    dutNode->print(llvm::errs(), flags);
   else
     llvm::errs() << "null";
   llvm::errs() << "\n"
                << "    effectiveDut: ";
-  iInfo.getEffectiveDut()->getModule()->print(llvm::errs(), flags);
+  iInfo.getEffectiveDut()->print(llvm::errs(), flags);
   llvm::errs() << "\n";
 }
 
