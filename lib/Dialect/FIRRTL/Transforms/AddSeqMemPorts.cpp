@@ -185,8 +185,7 @@ InstanceGraphNode *AddSeqMemPortsPass::findDUT() {
 }
 
 LogicalResult AddSeqMemPortsPass::processMemModule(FMemModuleOp mem) {
-  // Error if the circuit has a DUT and if the instances are not under the
-  // design-under-test.
+  // Error if all instances are not under the effective DUT.
   if (!instanceInfo->allInstancesUnderEffectiveDut(mem)) {
     auto diag = mem->emitOpError()
                 << "cannot have ports added to it because it is instantiated "
