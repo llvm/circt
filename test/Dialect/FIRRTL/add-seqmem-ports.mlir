@@ -100,9 +100,9 @@ firrtl.circuit "Two" attributes {annotations = [
     firrtl.instance child0 @Child()
     firrtl.instance child1 @Child()
     // CHECK: %child0_sram_0_user_output, %child0_sram_0_user_input = firrtl.instance child0  @Child
-    // CHECK: %child1_sram_0_user_output, %child1_sram_0_user_input = firrtl.instance child1  @Child
     // CHECK: firrtl.matchingconnect %sram_0_user_output, %child0_sram_0_user_output : !firrtl.uint<4>
     // CHECK: firrtl.matchingconnect %child0_sram_0_user_input, %sram_0_user_input : !firrtl.uint<3>
+    // CHECK: %child1_sram_0_user_output, %child1_sram_0_user_input = firrtl.instance child1  @Child
     // CHECK: firrtl.matchingconnect %sram_1_user_output, %child1_sram_0_user_output : !firrtl.uint<4>
     // CHECK: firrtl.matchingconnect %child1_sram_0_user_input, %sram_1_user_input : !firrtl.uint<3>
 

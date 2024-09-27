@@ -230,8 +230,7 @@ LogicalResult AddSeqMemPortsPass::processMemModule(FMemModuleOp mem) {
 
 LogicalResult AddSeqMemPortsPass::processModule(FModuleOp moduleOp) {
   auto *context = &getContext();
-  // Insert the new port connections at the end of the module.
-  auto builder = OpBuilder::atBlockEnd(moduleOp.getBodyBlock());
+  auto builder = OpBuilder(moduleOp.getContext());
   auto &memInfo = memInfoMap[moduleOp];
   auto &extraPorts = memInfo.extraPorts;
   // List of ports added to submodules which must be connected to this module's
@@ -320,13 +319,21 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp moduleOp) {
   moduleOp.insertPorts(extraPorts);
 
   // Connect the submodule ports to the parent module ports.
+  DenseMap<Operation *, OpBuilder::InsertPoint> instToInsertionPoint;
   for (unsigned i = 0, e = values.size(); i < e; ++i) {
     auto &[firstArg, port] = extraPorts[i];
     Value modulePort = moduleOp.getArgument(firstArg + i);
     Value instPort = values[i];
+    Operation *instOp = instPort.getDefiningOp();
+    auto insertPoint = instToInsertionPoint.find(instOp);
+    if (insertPoint == instToInsertionPoint.end())
+      builder.setInsertionPointAfter(instOp);
+    else
+      builder.restoreInsertionPoint(insertPoint->getSecond());
     if (port.direction == Direction::In)
       std::swap(modulePort, instPort);
     builder.create<MatchingConnectOp>(port.loc, modulePort, instPort);
+    instToInsertionPoint[instOp] = builder.saveInsertionPoint();
   }
   return success();
 }
