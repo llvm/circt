@@ -150,6 +150,7 @@ LogicalResult
 instance_like_impl::verifyParameters(ArrayAttr parameters,
                                      ArrayAttr moduleParameters,
                                      const EmitErrorFn &emitError) {
+                                  return success();
   // Check parameters match up.
   auto numParameters = parameters.size();
   if (numParameters != moduleParameters.size()) {

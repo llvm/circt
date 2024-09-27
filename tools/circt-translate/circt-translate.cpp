@@ -21,6 +21,7 @@
 #ifdef CIRCT_SLANG_FRONTEND_ENABLED
 #include "circt/Conversion/ImportVerilog.h"
 #endif
+#include "circt/Conversion/ExportRTLIL.h"
 
 int main(int argc, char **argv) {
   // Set the bug report message to indicate users should file issues on
@@ -31,6 +32,7 @@ int main(int argc, char **argv) {
 #ifdef CIRCT_SLANG_FRONTEND_ENABLED
   circt::registerFromVerilogTranslation();
 #endif
+  circt::registerRTLILTranslation();
 
   return mlir::failed(
       mlir::mlirTranslateMain(argc, argv, "CIRCT Translation Testing Tool"));
