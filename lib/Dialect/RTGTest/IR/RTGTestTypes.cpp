@@ -15,5 +15,18 @@
 using namespace circt;
 using namespace rtgtest;
 
+
+std::string BogusRegType::getName() const {
+    return "bogus registers of test dialect";
+}
+
+
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/RTGTest/IR/RTGTestTypes.cpp.inc"
+
+void circt::rtgtest::RTGTestDialect::registerTypes() {
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "circt/Dialect/RTGTest/IR/RTGTestTypes.cpp.inc"
+      >();
+}

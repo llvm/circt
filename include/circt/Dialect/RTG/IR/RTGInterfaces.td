@@ -36,4 +36,19 @@ def InstructionOpInterface : OpInterface<"InstructionOpInterface"> {
   ];
 }
 
+def ResourceTypeInterface : TypeInterface<"ResourceTypeInterface"> {
+  let description = [{
+    This interface should be implemented by types that represent resources.
+  }];
+  let cppNamespace = "::circt::rtg";
+
+  let methods = [
+    InterfaceMethod<[{
+        Returns the name of the resource.
+      }],
+      "std::string", "getName",
+      (ins)>,
+  ];
+}
+
 #endif // CIRCT_DIALECT_RTG_RTGINTERFACES_TD

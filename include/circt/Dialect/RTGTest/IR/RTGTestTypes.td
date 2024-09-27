@@ -14,29 +14,14 @@
 #define CIRCT_DIALECT_RTGTEST_IR_RTGTESTTYPES_TD
 
 include "circt/Dialect/RTGTest/IR/RTGTestDialect.td"
+include "circt/Dialect/RTG/IR/RTGInterfaces.td"
 include "mlir/IR/AttrTypeBase.td"
 
-class RTGTestTypeDef<string name> : TypeDef<RTGTestDialect, name> { }
+class RTGTestTypeDef<string name, list<Trait> traits = []> 
+  : TypeDef<RTGTestDialect, name, traits> { }
 
-def DummyType : RTGTestTypeDef<"Dummy"> {
-  let summary = "";
-  let description = [{
-  }];
-
-  let mnemonic = "dummy";
-  let assemblyFormat = "";
-}
-
-class BogusRegType : RTGTestTypeDef<"BogusReg"> {
-  let summary = "";
-  let description = [{
-  }];
-
-  let mnemonic = "bogus_reg";
-  let assemblyFormat = "";
-}
-
-def BogusRegType : RTGTestTypeDef<"BogusReg"> {
+def BogusRegType : RTGTestTypeDef<"BogusReg",
+    [DeclareTypeInterfaceMethods<ResourceTypeInterface>]> {
   let summary = "";
   let description = [{
   }];

@@ -29,6 +29,10 @@ def RTGTestDialect : Dialect {
   let cppNamespace = "::circt::rtgtest";
 
   let dependentDialects = ["circt::rtg::RTGDialect"];
+
+  let extraClassDeclaration = [{
+    void registerTypes();
+  }];
 }
 
 #endif // CIRCT_DIALECT_RTGTEST_IR_RTGTESTDIALECT_TD

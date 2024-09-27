@@ -60,7 +60,7 @@ def ContextResourceSetType : RTGTypeDef<"ContextResourceSet"> {
   }];
 
   let mnemonic = "context_resource_set";
-  let parameters = (ins "ContextResourceType":$contextResourceType);
+  let parameters = (ins "::circt::rtg::ResourceTypeInterface":$contextResourceType);
   let assemblyFormat = "`<` $contextResourceType `>`";
 }
 

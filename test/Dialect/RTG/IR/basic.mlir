@@ -64,20 +64,22 @@ func.func @types(%arg1: !rtg.snippet, %arg2: !rtg.resource) {
 // Should these be part of machine state requirements?
 //??
 
-func.func @checkOnContext(
-    %arg1 : !rtg.context_resource_set<!rtg.context_resource>, 
-    %arg2: !rtg.context_resource_set<!rtg.context_resource>
-  ) {
-  rtg.label "a"
-  rtg.on_context %arg1 : !rtg.context_resource_set<!rtg.context_resource> {
-    rtg.label "b"
-    rtg.on_context %arg2 : !rtg.context_resource_set<!rtg.context_resource> {
-      rtg.label "c"
-    }
-    rtg.label "d"
-  }
-  rtg.on_context %arg2 : !rtg.context_resource_set<!rtg.context_resource> {
-    rtg.label "e"
-  }
-  return
-}
+
+// No suitable resource type in this dialect
+//func.func @checkOnContext(
+//    %arg1 : !rtg.context_resource_set<!rtg.context_resource>, 
+//    %arg2: !rtg.context_resource_set<!rtg.context_resource>
+//  ) {
+//  rtg.label "a"
+//  rtg.on_context %arg1 : !rtg.context_resource_set<!rtg.context_resource> {
+//    rtg.label "b"
+//    rtg.on_context %arg2 : !rtg.context_resource_set<!rtg.context_resource> {
+//      rtg.label "c"
+//    }
+//    rtg.label "d"
+//  }
+//  rtg.on_context %arg2 : !rtg.context_resource_set<!rtg.context_resource> {
+//    rtg.label "e"
+//  }
+//  return
+//}
