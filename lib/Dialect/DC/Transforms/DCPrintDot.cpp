@@ -121,7 +121,7 @@ std::string stringify(NodeType type) {
 }
 
 /// stores operand and results for each node in the dot graph
-static struct DotNode {
+struct DotNode {
   NodeType nodeType;
   SmallVector<std::pair<mlir::Value, std::string>> incoming;
   SmallVector<std::pair<mlir::Value, std::string>> outgoing;
@@ -129,7 +129,7 @@ static struct DotNode {
 } // namespace
 
 /// gives a unique name to each value in the graph
-static SmallVector<std::pair<mlir::Value, std::string>> static valueToName(
+static SmallVector<std::pair<mlir::Value, std::string>> valueToName(
     const SmallVector<mlir::Value> &values,
     SmallVector<std::pair<mlir::Value, std::string>> &currentMap,
     bool tokenFlag) {
@@ -154,7 +154,7 @@ static SmallVector<std::pair<mlir::Value, std::string>> static valueToName(
 }
 
 /// creates node in the dataflow graph for DC operations
-DotNode
+static DotNode
 createDCNode(Operation &op,
              SmallVector<std::pair<mlir::Value, std::string>> &valuesMap) {
 
