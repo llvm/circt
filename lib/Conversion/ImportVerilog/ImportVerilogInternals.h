@@ -125,6 +125,9 @@ struct Context {
   Value materializeConstant(const slang::ConstantValue &constant,
                             const slang::ast::Type &type, Location loc);
 
+  /// Evaluate the constant value of an expression.
+  slang::ConstantValue evaluateConstant(const slang::ast::Expression &expr);
+
   const ImportVerilogOptions &options;
   slang::ast::Compilation &compilation;
   mlir::ModuleOp intoModuleOp;

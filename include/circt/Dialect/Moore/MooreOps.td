@@ -187,6 +187,18 @@ def ReturnOp : MooreOp<"return", [
   let assemblyFormat = [{ attr-dict }];
 }
 
+def UnreachableOp : MooreOp<"unreachable", [Terminator]> {
+  let summary = "Terminates a block as unreachable";
+  let description = [{
+    The `moore.unreachable` op is used to indicate that control flow never
+    reaches the end of a block. This is useful for operations such as `$fatal`
+    which never return as they cause the simulator to shut down. Behavior is
+    undefined if control actually _does_ reach this terminator, but should
+    probably crash the process with a useful error message.
+  }];
+  let assemblyFormat = "attr-dict";
+}
+
 //===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//
@@ -1343,6 +1355,69 @@ def AssumeOp : ImmediateAssertOp<"assume">{
 
 def CoverOp : ImmediateAssertOp<"cover">{
   let summary = "Monitor the coverage information.";
+}
+
+//===----------------------------------------------------------------------===//
+// Builtin System Tasks and Functions
+//===----------------------------------------------------------------------===//
+
+class Builtin<string mnemonic, list<Trait> traits = []> :
+    MooreOp<"builtin." # mnemonic, traits>;
+
+//===----------------------------------------------------------------------===//
+// Simulation Control
+//===----------------------------------------------------------------------===//
+
+def StopBIOp : Builtin<"stop"> {
+  let summary = "Suspend simulation";
+  let description = [{
+    Corresponds to the `$stop` system task. Causes the simulation to be
+    suspended but the simulator does not exit. Printing of the optional
+    diagnostic message is handled by the `finish_message` op.
+
+    See IEEE 1800-2017 § 20.2 "Simulation control system tasks".
+  }];
+  let assemblyFormat = "attr-dict";
+}
+
+def FinishBIOp : Builtin<"finish"> {
+  let summary = "Exit simulation";
+  let description = [{
+    Corresponds to the `$finish` system task. Causes the simulator to exit and
+    pass control back to the host operating system. Printing of the optional
+    diagnostic message is handled by the `finish_message` op.
+
+    The exit code argument of this op is not directly accessible from Verilog,
+    but is used to distinguish between the implicit `$finish` call in `$fatal`
+    and an explicit `$finish` called by the user.
+
+    See IEEE 1800-2017 § 20.2 "Simulation control system tasks".
+  }];
+  let arguments = (ins I8Attr:$exitCode);
+  let assemblyFormat = "$exitCode attr-dict";
+}
+
+def FinishMessageBIOp : Builtin<"finish_message"> {
+  let summary = "Print diagnostic message for the finish system task";
+  let description = [{
+    Prints the diagnostic message for `$stop`, `$finish`, `$exit`, and `$fatal`
+    mandated by the SystemVerilog standard. The exact message is controlled by
+    the verbosity parameter as specified in the standard:
+
+    - The absence of this op corresponds to `$finish(0)`.
+    - `moore.builtin.finish_message false` corresponds to `$finish(1)`.
+    - `moore.builtin.finish_message true` corresponds to `$finish(2)`.
+
+    The `withStats` argument controls how detailed the printed message is:
+
+    - **false**: Print simulation time and location.
+    - **true**: Print simulation time, location, and statistics about the memory
+      and CPU usage of the simulator.
+
+    See IEEE 1800-2017 § 20.2 "Simulation control system tasks".
+  }];
+  let arguments = (ins I1Attr:$withStats);
+  let assemblyFormat = "$withStats attr-dict";
 }
 
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

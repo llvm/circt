@@ -82,11 +82,7 @@ struct RvalueExprVisitor {
     }
 
     // Try to materialize constant values directly.
-    using slang::ast::EvalFlags;
-    slang::ast::EvalContext evalContext(context.compilation,
-                                        EvalFlags::CacheResults |
-                                            EvalFlags::SpecparamsAllowed);
-    auto constant = expr.eval(evalContext);
+    auto constant = context.evaluateConstant(expr);
     if (auto value = context.materializeConstant(constant, *expr.type, loc))
       return value;
 
@@ -792,9 +788,8 @@ struct RvalueExprVisitor {
   }
 
   Value visit(const slang::ast::ReplicatedAssignmentPatternExpression &expr) {
-    slang::ast::EvalContext evalContext(context.compilation,
-                                        slang::ast::EvalFlags::CacheResults);
-    auto count = expr.count().eval(evalContext).integer().as<unsigned>();
+    auto count =
+        context.evaluateConstant(expr.count()).integer().as<unsigned>();
     assert(count && "Slang guarantees constant non-zero replication count");
     return visitAssignmentPattern(expr, *count);
   }
@@ -1041,6 +1036,14 @@ Value Context::materializeConstant(const slang::ConstantValue &constant,
   if (constant.isInteger())
     return materializeSVInt(constant.integer(), type, loc);
   return {};
+}
+
+slang::ConstantValue
+Context::evaluateConstant(const slang::ast::Expression &expr) {
+  using slang::ast::EvalFlags;
+  slang::ast::EvalContext evalContext(
+      compilation, EvalFlags::CacheResults | EvalFlags::SpecparamsAllowed);
+  return expr.eval(evalContext);
 }
 
 /// Helper function to convert a value to its "truthy" boolean value and

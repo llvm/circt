@@ -329,3 +329,15 @@ func.func @WaitEvent(%arg0: !moore.i1, %arg1: !moore.i1) {
   // CHECK: }
   return
 }
+
+// CHECK-LABEL: func.func @SimulationControlBuiltins
+func.func @SimulationControlBuiltins() {
+  // CHECK: moore.builtin.stop
+  moore.builtin.stop
+  // CHECK: moore.builtin.finish 42
+  moore.builtin.finish 42
+  // CHECK: moore.builtin.finish_message false
+  moore.builtin.finish_message false
+  // CHECK: moore.unreachable
+  moore.unreachable
+}
