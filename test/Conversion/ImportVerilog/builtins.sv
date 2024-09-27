@@ -5,6 +5,9 @@
 // Internal issue in Slang v3 about jump depending on uninitialised value.
 // UNSUPPORTED: valgrind
 
+function void dummyA(int x); endfunction
+
+// IEEE 1800-2017 § 20.2 "Simulation control system tasks"
 // CHECK-LABEL: func.func private @SimulationControlBuiltins(
 function void SimulationControlBuiltins(bit x);
   // CHECK: moore.builtin.finish_message false
@@ -35,6 +38,8 @@ function void SimulationControlBuiltins(bit x);
   $exit;
 endfunction
 
+// IEEE 1800-2017 § 20.10 "Severity tasks"
+// IEEE 1800-2017 § 21.2 "Display system tasks"
 // CHECK-LABEL: func.func private @DisplayAndSeverityBuiltins(
 // CHECK-SAME: [[X:%.+]]: !moore.i32
 function void DisplayAndSeverityBuiltins(int x);
@@ -180,4 +185,15 @@ function void DisplayAndSeverityBuiltins(int x);
   // CHECK: moore.builtin.severity fatal [[TMP]]
   // CHECK: moore.unreachable
   if (0) $fatal(1, "%d", x);
+endfunction
+
+// IEEE 1800-2017 § 20.8 "Math functions"
+// CHECK-LABEL: func.func private @MathBuiltins(
+// CHECK-SAME: [[X:%.+]]: !moore.i32
+// CHECK-SAME: [[Y:%.+]]: !moore.l42
+function void MathBuiltins(int x, logic [41:0] y);
+  // CHECK: moore.builtin.clog2 [[X]] : i32
+  dummyA($clog2(x));
+  // CHECK: moore.builtin.clog2 [[Y]] : l42
+  dummyA($clog2(y));
 endfunction

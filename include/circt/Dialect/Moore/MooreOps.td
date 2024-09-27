@@ -1443,7 +1443,7 @@ class Builtin<string mnemonic, list<Trait> traits = []> :
     MooreOp<"builtin." # mnemonic, traits>;
 
 //===----------------------------------------------------------------------===//
-// Simulation Control
+// Simulation Control Builtins
 //===----------------------------------------------------------------------===//
 
 def StopBIOp : Builtin<"stop"> {
@@ -1499,7 +1499,7 @@ def FinishMessageBIOp : Builtin<"finish_message"> {
 }
 
 //===----------------------------------------------------------------------===//
-// Severity and Display
+// Severity and Display Builtins
 //===----------------------------------------------------------------------===//
 
 def DisplayBIOp : Builtin<"display"> {
@@ -1542,6 +1542,28 @@ def SeverityBIOp : Builtin<"severity"> {
     FormatStringType:$message
   );
   let assemblyFormat = "$severity $message attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
+// Math Builtins
+//===----------------------------------------------------------------------===//
+
+def Clog2BIOp : Builtin<"clog2", [SameOperandsAndResultType]> {
+  let summary = "Compute ceil(log2(x)) of x";
+  let description = [{
+    Computes the ceiling of the base-2 logarithm of the argument. The argument
+    is interpreted as unsigned. The result is 0 if the argument is 0. The result
+    corresponds to the minimum address width necessary to address a given number
+    of elements, or the number of bits necessary to represent a given number of
+    states.
+
+    If any of the bits in the argument are X or Z, the result is X.
+
+    See IEEE 1800-2017 § 20.8.1 "Integer math functions".
+  }];
+  let arguments = (ins IntType:$value);
+  let results = (outs IntType:$result);
+  let assemblyFormat = "$value attr-dict `:` type($value)";
 }
 
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS
