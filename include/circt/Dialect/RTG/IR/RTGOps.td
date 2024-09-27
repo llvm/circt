@@ -57,6 +57,14 @@ def LabelOp : RTGOp<"label", []> {
 //===----------------------------------------------------------------------===//
 
 
+
+// Theory of structure:
+// A sequence/snippet is expanded to all contexts for the current set of active 
+// contexts.  This is maintained by the runtime.  The set of active contexts is
+// changed by an OnContextOp.  The body of a sequence is expanded in textural 
+// order.  This means a sequence can start adding operations to a context not
+// in the current set of active contexts.
+
 def OnContextOp : RTGOp<"on_context", [NoTerminator]> {
   let summary = "places a sequence on a context";
 
@@ -67,10 +75,23 @@ def OnContextOp : RTGOp<"on_context", [NoTerminator]> {
 }
 
 
-// Theory of structure:
-// A sequence/snippet is expanded to all contexts for the current set of active 
-// contexts.  This is maintained by the runtime.  The set of active contexts is
-// changed by an OnContextOp.  The body of a sequence is expanded in textural 
-// order.  This means a sequence can start adding operations to a context not
-// in the current set of active contexts.
 
+//===- Resource Set Operations --------------------------------------------===//
+
+def SelectRandomResource : RTGOp<"select_random_resource", [AllTypesMatch<["resources", "output"]>]> {
+  let summary = "places a random resource in an instruction sequence";
+
+  let arguments = (ins ContextResourceSetType:$resources);
+  let results = (outs ContextResourceSetType:$output);
+
+  let assemblyFormat = "$resources `:` type($resources) attr-dict";
+}
+
+def SetDifferenceResource : RTGOp<"set_difference_resource", [AllTypesMatch<["resourcesSrc", "resourcesDiff", "output"]>]> {
+  let summary = "places a random resource in an instruction sequence";
+
+  let arguments = (ins ContextResourceSetType:$resourcesSrc, ContextResourceSetType:$resourcesDiff);
+  let results = (outs ContextResourceSetType:$output);
+
+  let assemblyFormat = "$resourcesSrc `,` $resourcesDiff `:` type($output) attr-dict";
+}

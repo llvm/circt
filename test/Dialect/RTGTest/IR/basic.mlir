@@ -10,10 +10,10 @@ rtgtest.instr_a %imm1, %imm2
 
 
 func.func @checkOnContext(
-    %arg1 : !rtg.context_resource_set<!rtgtest.bogus_reg>, 
-    %arg2: !rtg.context_resource_set<!rtgtest.bogus_reg>
+    %arg1 : !rtg.context_resource_set<!rtgtest.bogus_reg>
   ) {
   rtg.label "a"
+  %arg2 = rtg.select_random_resource %arg1 : !rtg.context_resource_set<!rtgtest.bogus_reg>
   rtg.on_context %arg1 : !rtg.context_resource_set<!rtgtest.bogus_reg> {
     rtg.label "b"
     rtg.on_context %arg2 : !rtg.context_resource_set<!rtgtest.bogus_reg> {
@@ -21,7 +21,8 @@ func.func @checkOnContext(
     }
     rtg.label "d"
   }
-  rtg.on_context %arg2 : !rtg.context_resource_set<!rtgtest.bogus_reg> {
+  %arg3 = rtg.set_difference_resource %arg1, %arg2 : !rtg.context_resource_set<!rtgtest.bogus_reg>
+  rtg.on_context %arg3 : !rtg.context_resource_set<!rtgtest.bogus_reg> {
     rtg.label "e"
   }
   return
