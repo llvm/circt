@@ -424,18 +424,12 @@ void AddSeqMemPortsPass::runOnOperation() {
     // Update ports statistic.
     numAddedPorts += userPorts.size();
 
-    // Visit the modules in post-order in one of two ways:
-    //
-    //   1. If no design-under-test is specified, visit all modules.
-    //   2. If the design-under-test is specified, only visit modules under it.
-    //
-    // Additionally, skip any modules that are wholly instantiated under layers.
-    // If any memories are partially instantiated under a layer then error.
-    for (auto *node : llvm::post_order(instanceGraph)) {
+    // Visit the modules in post-order starting from the effective
+    // design-under-test. Skip any modules that are wholly instantiated under
+    // layers.  If any memories are partially instantiated under a layer then
+    // error.
+    for (auto *node : llvm::post_order(instanceInfo->getEffectiveDut())) {
       auto op = node->getModule();
-      // Skip the module if there is a DUT and no instances are under it.
-      if (instanceInfo->hasDut() && !instanceInfo->anyInstanceUnderDut(op))
-        continue;
 
       // Skip anything wholly under a layer.
       if (instanceInfo->allInstancesUnderLayer(op))
