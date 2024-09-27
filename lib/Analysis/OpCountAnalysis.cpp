@@ -41,9 +41,8 @@ OpCountAnalysis::OpCountAnalysis(Operation *moduleOp,
 
 SmallVector<OperationName> OpCountAnalysis::getFoundOpNames() {
   SmallVector<OperationName> opNames;
-  for (auto pair : opCounts) {
+  for (auto pair : opCounts)
     opNames.push_back(pair.first);
-  }
   return opNames;
 }
 

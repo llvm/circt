@@ -283,10 +283,9 @@ void printOpAndOperandCounts(OpCountAnalysis &opCount) {
     for (auto pair : operandMap)
       keys.push_back(pair.first);
     llvm::sort(keys);
-    for (auto num : keys) {
+    for (auto num : keys)
       llvm::errs() << " with " << num << " operands: " << operandMap[num]
                    << "\n";
-    }
   }
 }
 
