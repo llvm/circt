@@ -387,7 +387,10 @@ void circt::registerFromVerilogTranslation() {
         TimingScope ts;
         OwningOpRef<ModuleOp> module(
             ModuleOp::create(UnknownLoc::get(context)));
-        if (failed(importVerilog(sourceMgr, context, ts, module.get())))
+        ImportVerilogOptions options;
+        options.debugInfo = true;
+        if (failed(
+                importVerilog(sourceMgr, context, ts, module.get(), &options)))
           module = {};
         return module;
       });
