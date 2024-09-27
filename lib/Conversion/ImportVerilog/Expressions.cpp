@@ -37,31 +37,6 @@ struct RvalueExprVisitor {
   RvalueExprVisitor(Context &context, Location loc)
       : context(context), loc(loc), builder(context.builder) {}
 
-  /// Helper function to convert a value to its simple bit vector
-  /// representation, if it has one. Otherwise returns null.
-  Value convertToSimpleBitVector(Value value) {
-    if (!value)
-      return {};
-    if (isa<moore::IntType>(value.getType()))
-      return value;
-
-    // Some operations in Slang's AST, for example bitwise or `|`, don't cast
-    // packed struct/array operands to simple bit vectors but directly operate
-    // on the struct/array. Since the corresponding IR ops operate only on
-    // simple bit vectors, insert a conversion in this case.
-    if (auto packed = dyn_cast<moore::PackedType>(value.getType())) {
-      if (auto bits = packed.getBitSize()) {
-        auto sbvType =
-            moore::IntType::get(value.getContext(), *bits, packed.getDomain());
-        return builder.create<moore::ConversionOp>(loc, sbvType, value);
-      }
-    }
-
-    mlir::emitError(loc, "expression of type ")
-        << value.getType() << " cannot be cast to a simple bit vector";
-    return {};
-  }
-
   // Handle references to the left-hand side of a parent assignment.
   Value visit(const slang::ast::LValueReferenceExpression &expr) {
     assert(!context.lvalueStack.empty() && "parent assignments push lvalue");
@@ -132,7 +107,7 @@ struct RvalueExprVisitor {
   // to a reduction op, and optionally invert the result.
   template <class ConcreteOp>
   Value createReduction(Value arg, bool invert) {
-    arg = convertToSimpleBitVector(arg);
+    arg = context.convertToSimpleBitVector(arg);
     if (!arg)
       return {};
     Value result = builder.create<ConcreteOp>(loc, arg);
@@ -173,16 +148,16 @@ struct RvalueExprVisitor {
       // `+a` is simply `a`, but converted to a simple bit vector type since
       // this is technically an arithmetic operation.
     case UnaryOperator::Plus:
-      return convertToSimpleBitVector(arg);
+      return context.convertToSimpleBitVector(arg);
 
     case UnaryOperator::Minus:
-      arg = convertToSimpleBitVector(arg);
+      arg = context.convertToSimpleBitVector(arg);
       if (!arg)
         return {};
       return builder.create<moore::NegOp>(loc, arg);
 
     case UnaryOperator::BitwiseNot:
-      arg = convertToSimpleBitVector(arg);
+      arg = context.convertToSimpleBitVector(arg);
       if (!arg)
         return {};
       return builder.create<moore::NotOp>(loc, arg);
@@ -224,10 +199,10 @@ struct RvalueExprVisitor {
   // pass them into a binary op.
   template <class ConcreteOp>
   Value createBinary(Value lhs, Value rhs) {
-    lhs = convertToSimpleBitVector(lhs);
+    lhs = context.convertToSimpleBitVector(lhs);
     if (!lhs)
       return {};
-    rhs = convertToSimpleBitVector(rhs);
+    rhs = context.convertToSimpleBitVector(rhs);
     if (!rhs)
       return {};
     return builder.create<ConcreteOp>(loc, lhs, rhs);
@@ -384,8 +359,8 @@ struct RvalueExprVisitor {
     case BinaryOperator::ArithmeticShiftRight: {
       // The `>>>` operator is an arithmetic right shift if the LHS operand is
       // signed, or a logical right shift if the operand is unsigned.
-      lhs = convertToSimpleBitVector(lhs);
-      rhs = convertToSimpleBitVector(rhs);
+      lhs = context.convertToSimpleBitVector(lhs);
+      rhs = context.convertToSimpleBitVector(rhs);
       if (!lhs || !rhs)
         return {};
       if (expr.type->isSigned())
@@ -415,7 +390,7 @@ struct RvalueExprVisitor {
       auto value = context.convertRvalueExpression(*operand);
       if (!value)
         continue;
-      value = convertToSimpleBitVector(value);
+      value = context.convertToSimpleBitVector(value);
       operands.push_back(value);
     }
     return builder.create<moore::ConcatOp>(loc, operands);
@@ -538,8 +513,8 @@ struct RvalueExprVisitor {
 
   // Handle set membership operator.
   Value visit(const slang::ast::InsideExpression &expr) {
-    auto lhs =
-        convertToSimpleBitVector(context.convertRvalueExpression(expr.left()));
+    auto lhs = context.convertToSimpleBitVector(
+        context.convertRvalueExpression(expr.left()));
     if (!lhs)
       return {};
     // All conditions for determining whether it is inside.
@@ -553,9 +528,9 @@ struct RvalueExprVisitor {
       if (const auto *openRange =
               listExpr->as_if<slang::ast::OpenRangeExpression>()) {
         // Handle ranges.
-        auto lowBound = convertToSimpleBitVector(
+        auto lowBound = context.convertToSimpleBitVector(
             context.convertRvalueExpression(openRange->left()));
-        auto highBound = convertToSimpleBitVector(
+        auto highBound = context.convertToSimpleBitVector(
             context.convertRvalueExpression(openRange->right()));
         if (!lowBound || !highBound)
           return {};
@@ -587,7 +562,7 @@ struct RvalueExprVisitor {
               loc, "only simple bit vectors supported in 'inside' expressions");
           return {};
         }
-        auto value = convertToSimpleBitVector(
+        auto value = context.convertToSimpleBitVector(
             context.convertRvalueExpression(*listExpr));
         if (!value)
           return {};
@@ -818,19 +793,6 @@ struct LvalueExprVisitor {
   LvalueExprVisitor(Context &context, Location loc)
       : context(context), loc(loc), builder(context.builder) {}
 
-  /// Helper function to convert a value to its simple bit vector
-  /// representation, if it has one. Otherwise returns null.
-  Value convertToSimpleBitVector(Value value) {
-    if (!value)
-      return {};
-    if (isa<moore::IntType>(
-            cast<moore::RefType>(value.getType()).getNestedType()))
-      return value;
-    mlir::emitError(loc, "expression of type ")
-        << value.getType() << " cannot be cast to a simple bit vector";
-    return {};
-  }
-
   // Handle named values, such as references to declared variables.
   Value visit(const slang::ast::NamedValueExpression &expr) {
     if (auto value = context.valueSymbols.lookup(&expr.symbol))
@@ -848,7 +810,6 @@ struct LvalueExprVisitor {
       auto value = context.convertLvalueExpression(*operand);
       if (!value)
         continue;
-      value = convertToSimpleBitVector(value);
       operands.push_back(value);
     }
     return builder.create<moore::ConcatRefOp>(loc, operands);
@@ -1056,4 +1017,28 @@ Value Context::convertToBool(Value value, Domain domain) {
   if (value.getType() == type)
     return value;
   return builder.create<moore::ConversionOp>(value.getLoc(), type, value);
+}
+
+Value Context::convertToSimpleBitVector(Value value) {
+  if (!value)
+    return {};
+  if (isa<moore::IntType>(value.getType()))
+    return value;
+
+  // Some operations in Slang's AST, for example bitwise or `|`, don't cast
+  // packed struct/array operands to simple bit vectors but directly operate
+  // on the struct/array. Since the corresponding IR ops operate only on
+  // simple bit vectors, insert a conversion in this case.
+  if (auto packed = dyn_cast<moore::PackedType>(value.getType())) {
+    if (auto bits = packed.getBitSize()) {
+      auto sbvType =
+          moore::IntType::get(value.getContext(), *bits, packed.getDomain());
+      return builder.create<moore::ConversionOp>(value.getLoc(), sbvType,
+                                                 value);
+    }
+  }
+
+  mlir::emitError(value.getLoc()) << "expression of type " << value.getType()
+                                  << " cannot be cast to a simple bit vector";
+  return {};
 }

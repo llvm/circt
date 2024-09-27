@@ -557,6 +557,8 @@ struct StmtVisitor {
     const auto &subroutine = *info.subroutine;
     auto args = expr.arguments();
 
+    // Simulation Control Tasks
+
     if (subroutine.name == "$stop") {
       createFinishMessage(args.size() >= 1 ? args[0] : nullptr);
       builder.create<moore::StopBIOp>(loc);
@@ -575,6 +577,83 @@ struct StmtVisitor {
       // Calls to `$exit` from outside a `program` are ignored. Since we don't
       // yet support programs, there is nothing to do here.
       // TODO: Fix this once we support programs.
+      return true;
+    }
+
+    // Display and Write Tasks (`$display[boh]?` or `$write[boh]?`)
+
+    // Check for a `$display` or `$write` prefix.
+    bool isDisplay = false;     // display or write
+    bool appendNewline = false; // display
+    StringRef remainingName = subroutine.name;
+    if (remainingName.consume_front("$display")) {
+      isDisplay = true;
+      appendNewline = true;
+    } else if (remainingName.consume_front("$write")) {
+      isDisplay = true;
+    }
+
+    // Check for optional `b`, `o`, or `h` suffix indicating default format.
+    using moore::IntFormat;
+    IntFormat defaultFormat = IntFormat::Decimal;
+    if (isDisplay && !remainingName.empty()) {
+      if (remainingName == "b")
+        defaultFormat = IntFormat::Binary;
+      else if (remainingName == "o")
+        defaultFormat = IntFormat::Octal;
+      else if (remainingName == "h")
+        defaultFormat = IntFormat::HexLower;
+      else
+        isDisplay = false;
+    }
+
+    if (isDisplay) {
+      auto message =
+          context.convertFormatString(args, loc, defaultFormat, appendNewline);
+      if (failed(message))
+        return failure();
+      if (*message == Value{})
+        return true;
+      builder.create<moore::DisplayBIOp>(loc, *message);
+      return true;
+    }
+
+    // Severity Tasks
+    using moore::Severity;
+    std::optional<Severity> severity;
+    if (subroutine.name == "$info")
+      severity = Severity::Info;
+    else if (subroutine.name == "$warning")
+      severity = Severity::Warning;
+    else if (subroutine.name == "$error")
+      severity = Severity::Error;
+    else if (subroutine.name == "$fatal")
+      severity = Severity::Fatal;
+
+    if (severity) {
+      // The `$fatal` task has an optional leading verbosity argument.
+      const slang::ast::Expression *verbosityExpr = nullptr;
+      if (severity == Severity::Fatal && args.size() >= 1) {
+        verbosityExpr = args[0];
+        args = args.subspan(1);
+      }
+
+      // Handle the string formatting.
+      auto message = context.convertFormatString(args, loc);
+      if (failed(message))
+        return failure();
+      if (*message == Value{})
+        *message = builder.create<moore::FormatLiteralOp>(loc, "");
+
+      builder.create<moore::SeverityBIOp>(loc, *severity, *message);
+
+      // Handle the `$fatal` case which behaves like a `$finish`.
+      if (severity == Severity::Fatal) {
+        createFinishMessage(verbosityExpr);
+        builder.create<moore::FinishBIOp>(loc, 1);
+        builder.create<moore::UnreachableOp>(loc);
+        setTerminated();
+      }
       return true;
     }
 

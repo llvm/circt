@@ -1358,6 +1358,84 @@ def CoverOp : ImmediateAssertOp<"cover">{
 }
 
 //===----------------------------------------------------------------------===//
+// Format Strings
+//===----------------------------------------------------------------------===//
+
+def FormatLiteralOp : MooreOp<"fmt.literal", [Pure]> {
+  let summary = "A constant string fragment";
+  let description = [{
+    Creates a constant string fragment to be used as a format string. The
+    literal is printed as is, without any further escaping or processing of its
+    characters.
+  }];
+  let arguments = (ins StrAttr:$literal);
+  let results = (outs FormatStringType:$result);
+  let assemblyFormat = "$literal attr-dict";
+}
+
+def FormatConcatOp : MooreOp<"fmt.concat", [Pure]> {
+  let summary = "Concatenate string fragments";
+  let description = [{
+    Concatenates an arbitrary number of format string into one larger format
+    string. The strings are concatenated from left to right, with the first
+    operand appearing at the left start of the result string, and the last
+    operand appearing at the right end. Produces an empty string if no inputs
+    are provided.
+  }];
+  let arguments = (ins Variadic<FormatStringType>:$inputs);
+  let results = (outs FormatStringType:$result);
+  let assemblyFormat = "` ` `(` $inputs `)` attr-dict";
+}
+
+def FmtDec : I32EnumAttrCase<"Decimal", 0, "decimal">;
+def FmtBin : I32EnumAttrCase<"Binary", 1, "binary">;
+def FmtOct : I32EnumAttrCase<"Octal", 2, "octal">;
+def FmtHexL : I32EnumAttrCase<"HexLower", 3, "hex_lower">;
+def FmtHexU : I32EnumAttrCase<"HexUpper", 4, "hex_upper">;
+def IntFormatAttr : I32EnumAttr<"IntFormat", "Integer format",
+                               [FmtDec, FmtBin, FmtOct, FmtHexL, FmtHexU]> {
+  let cppNamespace = "circt::moore";
+}
+
+def AlignRight : I32EnumAttrCase<"Right", 0, "right">;
+def AlignLeft : I32EnumAttrCase<"Left", 1, "left">;
+def IntAlignAttr : I32EnumAttr<"IntAlign", "Integer alignment",
+                              [AlignRight, AlignLeft]> {
+  let cppNamespace = "circt::moore";
+}
+
+def PadSpace : I32EnumAttrCase<"Space", 0, "space">;
+def PadZero : I32EnumAttrCase<"Zero", 1, "zero">;
+def IntPaddingAttr : I32EnumAttr<"IntPadding", "Integer alignment",
+                                 [PadSpace, PadZero]> {
+  let cppNamespace = "circt::moore";
+}
+
+def FormatIntOp : MooreOp<"fmt.int", [Pure]> {
+  let summary = "Format an integer value";
+  let description = [{
+    Format an integer value as a string according to the specified format.
+
+    See IEEE 1800-2017 § 21.2.1.2 "Format specifications".
+  }];
+  let arguments = (ins
+    IntType:$value,
+    IntFormatAttr:$format,
+    I32Attr:$width,
+    IntAlignAttr:$alignment,
+    IntPaddingAttr:$padding
+  );
+  let results = (outs FormatStringType:$result);
+  let assemblyFormat = [{
+    $format $value `,`
+    `width` $width `,`
+    `align` $alignment `,`
+    `pad` $padding
+    attr-dict `:` type($value)
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Builtin System Tasks and Functions
 //===----------------------------------------------------------------------===//
 
@@ -1418,6 +1496,52 @@ def FinishMessageBIOp : Builtin<"finish_message"> {
   }];
   let arguments = (ins I1Attr:$withStats);
   let assemblyFormat = "$withStats attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
+// Severity and Display
+//===----------------------------------------------------------------------===//
+
+def DisplayBIOp : Builtin<"display"> {
+  let summary = "Print a text message";
+  let description = [{
+    Prints the given format string to the standard text output of the simulator.
+    In most cases this should be stdout. This corresponds to the `$display` and
+    `$write` system tasks. Message formatting is handled by `moore.fmt.*` ops.
+
+    See IEEE 1800-2017 § 21.2 "Display system tasks".
+  }];
+  let arguments = (ins FormatStringType:$message);
+  let assemblyFormat = "$message attr-dict";
+}
+
+def SeverityInfo : I32EnumAttrCase<"Info", 0, "info">;
+def SeverityWarning : I32EnumAttrCase<"Warning", 1, "warning">;
+def SeverityError : I32EnumAttrCase<"Error", 2, "error">;
+def SeverityFatal : I32EnumAttrCase<"Fatal", 3, "fatal">;
+def SeverityAttr : I32EnumAttr<"Severity", "Diagnostic severity", [
+  SeverityInfo, SeverityWarning, SeverityError, SeverityFatal
+]> {
+  let cppNamespace = "circt::moore";
+}
+
+def SeverityBIOp : Builtin<"severity"> {
+  let summary = "Print a diagnostic message";
+  let description = [{
+    Prints the given format string to the standard diagnostic output of the
+    simulator. In most cases this should be stderr. This corresponds to the
+    `$info`, `$warning`, `$error`, and `$fatal` system tasks. Message formatting
+    is handled by `moore.fmt.*` ops. This only handles the message printing of
+    `$fatal`; printing of the additional statistics and the call to `$finish`
+    must be done through the `finish_message` and `finish` ops.
+
+    See IEEE 1800-2017 § 20.10 "Severity tasks".
+  }];
+  let arguments = (ins
+    SeverityAttr:$severity,
+    FormatStringType:$message
+  );
+  let assemblyFormat = "$severity $message attr-dict";
 }
 
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS
