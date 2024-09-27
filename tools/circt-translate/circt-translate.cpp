@@ -22,6 +22,10 @@
 #include "circt/Conversion/ImportVerilog.h"
 #endif
 
+#ifdef CIRCT_YOSYS_INTEGRATION_ENABLED
+#include "circt/Conversion/ExportRTLIL.h"
+#endif
+
 int main(int argc, char **argv) {
   // Set the bug report message to indicate users should file issues on
   // llvm/circt and not llvm/llvm-project.
@@ -30,6 +34,10 @@ int main(int argc, char **argv) {
   circt::registerAllTranslations();
 #ifdef CIRCT_SLANG_FRONTEND_ENABLED
   circt::registerFromVerilogTranslation();
+#endif
+
+#ifdef CIRCT_YOSYS_INTEGRATION_ENABLED
+  circt::registerRTLILTranslation();
 #endif
 
   return mlir::failed(

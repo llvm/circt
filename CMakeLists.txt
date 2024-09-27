@@ -614,6 +614,39 @@ else()
   set(ARCILATOR_JIT_ENABLED 0)
 endif()
 
+option(CIRCT_YOSYS_INTEGRATION_ENABLED "Enables the Yosys integration." OFF)
+llvm_canonicalize_cmake_booleans(CIRCT_YOSYS_INTEGRATION_ENABLED)
+
+if(CIRCT_YOSYS_INTEGRATION_ENABLED)
+  # TODO: Switch to use the installed yosys
+  # FIXME: Yosys doesn't use cmake so need to manually configure
+  message(STATUS "Yosys integration is enabled")
+  include(ExternalProject)
+  ExternalProject_Add(yosys
+    URL https://github.com/YosysHQ/yosys/archive/refs/tags/yosys-0.40.zip
+    URL_HASH SHA256=3f20dcaeee9be882a818885d857ff476e8cc491657447f2c3629da82723ccd1f
+    SOURCE_DIR "${CMAKE_BINARY_DIR}/third-party/yosys"
+    BINARY_DIR "${CMAKE_BINARY_DIR}/third-party/yosys"
+    INSTALL_DIR "${CMAKE_BINARY_DIR}/third-party/yosys"
+    # CONFIGURE_COMMAND sed -i "s/ENABLE_LIBYOSYS := 0/ENABLE_LIBYOSYS := 1/" Makefile && make config-gcc # TODO: Switch `make config-clang` or `make config-gcc` based on CXX_COMPILER
+    CONFIGURE_COMMAND make config-gcc && echo "ENABLE_LIBYOSYS := 1" >> Makefile.conf && echo "PREFIX := ${CMAKE_BINARY_DIR}" >> Makefile.conf
+    BUILD_COMMAND make # TODO: Make the number of workers configurable.
+    INSTALL_COMMAND make install
+    TEST_COMMAND ""
+    BUILD_BYPRODUCTS "${CMAKE_BINARY_DIR}/third-party/yosys/libyosys.so"
+  )
+  ExternalProject_Get_Property(yosys INSTALL_DIR)
+  include_directories(${INSTALL_DIR}/share/include)
+  add_library (libyosys SHARED IMPORTED)
+  add_dependencies(libyosys yosys)
+  set_target_properties(libyosys PROPERTIES 
+    IMPORTED_LOCATION "${INSTALL_DIR}/libyosys.so"
+    INSTALL_RPATH "${INSTALL_RPATH}"
+    INTERFACE_INCLUDE_DIRECTORIES "${INSTALL_DIR}/share/include/"
+  )
+  set(CMAKE_BUILD_RPATH "${INSTALL_DIR}")
+endif()
+
 #-------------------------------------------------------------------------------
 # Directory setup
 #-------------------------------------------------------------------------------

@@ -13,6 +13,7 @@ target_link_libraries(firtool PRIVATE
   CIRCTExportVerilog
   CIRCTImportFIRFile
   CIRCTFIRRTLTransforms
+  CIRCTExportYosys
   CIRCTHWTransforms
   CIRCTOMTransforms
   CIRCTVerifTransforms
