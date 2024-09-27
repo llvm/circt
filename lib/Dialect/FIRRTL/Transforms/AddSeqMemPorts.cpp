@@ -318,6 +318,18 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp moduleOp) {
   // Add the extra ports to this module.
   moduleOp.insertPorts(extraPorts);
 
+  // Get an existing invalid value or create a new one.
+  DenseMap<Type, InvalidValueOp> invalids;
+  auto getOrCreateInvalid = [&](Type type) -> InvalidValueOp {
+    auto it = invalids.find(type);
+    if (it != invalids.end())
+      return it->getSecond();
+    return invalids
+        .insert({type,
+                 builder.create<InvalidValueOp>(builder.getUnknownLoc(), type)})
+        .first->getSecond();
+  };
+
   // Connect the submodule ports to the parent module ports.
   DenseMap<Operation *, OpBuilder::InsertPoint> instToInsertionPoint;
   for (unsigned i = 0, e = values.size(); i < e; ++i) {
@@ -332,8 +344,17 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp moduleOp) {
       builder.restoreInsertionPoint(insertPoint->getSecond());
     if (port.direction == Direction::In)
       std::swap(modulePort, instPort);
-    builder.create<MatchingConnectOp>(port.loc, modulePort, instPort);
+    auto connectOp =
+        builder.create<MatchingConnectOp>(port.loc, modulePort, instPort);
     instToInsertionPoint[instOp] = builder.saveInsertionPoint();
+    // If the connect was created inside a WhenOp, then the port needs to be
+    // invalidated to make a legal circuit.
+    if (port.direction == Direction::Out &&
+        connectOp->getParentOfType<WhenOp>()) {
+      builder.setInsertionPointToStart(moduleOp.getBodyBlock());
+      builder.create<MatchingConnectOp>(port.loc, modulePort,
+                                        getOrCreateInvalid(port.type));
+    }
   }
   return success();
 }

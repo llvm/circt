@@ -274,3 +274,68 @@ firrtl.circuit "LayerBlock" attributes {
   }
 
 }
+
+// Check that the pass works for memories under whens.  This should:
+//   1. Create a connection under the when block
+//   2. Create an invalidation of the port
+//
+// CHECK-LABEL: firrtl.circuit "WhenBlock"
+firrtl.circuit "WhenBlock" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
+      name = "foo",
+      input = false,
+      width = 1
+    }
+  ]
+} {
+
+  // CHECK: firrtl.memmodule
+  // CHECK-SAME: extraPorts = [{direction = "output", name = "foo", width = 1 : ui32}]
+  firrtl.memmodule @mem(
+    in waddr: !firrtl.uint<1>,
+    in wen: !firrtl.uint<1>,
+    in wclk: !firrtl.clock,
+    in wdata: !firrtl.uint<1>
+  ) attributes {
+    dataWidth = 1 : ui32,
+    depth = 2 : ui64,
+    extraPorts = [],
+    maskBits = 1 : ui32,
+    numReadPorts = 0 : ui32,
+    numReadWritePorts = 0 : ui32,
+    numWritePorts = 1 : ui32,
+    readLatency = 1 : ui32,
+    writeLatency = 1 : ui32
+  }
+
+  // CHECK:      firrtl.module @WhenBlock
+  // CHECK-SAME:   out %[[foo:[a-zA-Z0-9_]+]]
+  firrtl.module @WhenBlock(
+    in %a : !firrtl.uint<1>,
+    in %waddr : !firrtl.uint<1>,
+    in %wen : !firrtl.uint<1>,
+    in %wclk : !firrtl.clock,
+    in %wdata : !firrtl.uint<1>
+  ) {
+    // CHECK-NEXT: %[[invalid:[a-zA-Z0-9_]+]] = firrtl.invalidvalue
+    // CHECK-NEXT: firrtl.matchingconnect %[[foo]], %[[invalid]]
+    // CHECK-NEXT: firrtl.when
+    firrtl.when %a : !firrtl.uint<1> {
+      // CHECK-NEXT: firrtl.instance
+      %0, %1, %2, %3 = firrtl.instance mem @mem(
+        in waddr: !firrtl.uint<1>,
+        in wen: !firrtl.uint<1>,
+        in wclk: !firrtl.clock,
+        in wdata: !firrtl.uint<1>
+      )
+      // CHECK-NEXT: firrtl.matchingconnect %[[foo]], %mem_foo
+      firrtl.matchingconnect %0, %waddr : !firrtl.uint<1>
+      firrtl.matchingconnect %1, %wen : !firrtl.uint<1>
+      firrtl.matchingconnect %2, %wclk : !firrtl.clock
+      firrtl.matchingconnect %3, %wdata : !firrtl.uint<1>
+    }
+  }
+
+}
