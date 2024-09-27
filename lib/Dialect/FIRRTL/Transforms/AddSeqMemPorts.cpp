@@ -48,7 +48,6 @@ struct AddSeqMemPortsPass
                                 Annotation anno);
   LogicalResult processAnnos(CircuitOp circuit);
   void createOutputFile(igraph::ModuleOpInterface moduleOp);
-  InstanceGraphNode *findDUT();
   LogicalResult processMemModule(FMemModuleOp mem);
   LogicalResult processModule(FModuleOp moduleOp);
 
@@ -173,15 +172,6 @@ LogicalResult AddSeqMemPortsPass::processAnnos(CircuitOp circuit) {
     return false;
   });
   return failure(error);
-}
-
-InstanceGraphNode *AddSeqMemPortsPass::findDUT() {
-  // Find the DUT module.
-  for (auto *node : *instanceGraph) {
-    if (AnnotationSet::hasAnnotation(node->getModule(), dutAnnoClass))
-      return node;
-  }
-  return instanceGraph->getTopLevelNode();
 }
 
 LogicalResult AddSeqMemPortsPass::processMemModule(FMemModuleOp mem) {
