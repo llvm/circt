@@ -735,6 +735,13 @@ struct RvalueExprVisitor {
       for (unsigned elementIdx = 0; elementIdx < elementCount; ++elementIdx)
         elements.push_back(elements[elementIdx]);
 
+    // Handle integers.
+    if (auto intType = dyn_cast<moore::IntType>(type)) {
+      assert(intType.getWidth() == elements.size());
+      std::reverse(elements.begin(), elements.end());
+      return builder.create<moore::ConcatOp>(loc, intType, elements);
+    }
+
     // Handle packed structs.
     if (auto structType = dyn_cast<moore::StructType>(type)) {
       assert(structType.getMembers().size() == elements.size());
