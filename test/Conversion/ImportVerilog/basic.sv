@@ -2034,3 +2034,18 @@ package ParamPackage;
   // CHECK: dbg.variable "ParamPackage::param2", [[TMP]] : !moore.i32
   localparam int param2 = 9001;
 endpackage
+
+// CHECK-LABEL: moore.module @PortCastA()
+module PortCastA;
+  bit [31:0] a, b;
+  // CHECK: [[TMP1:%.+]] = moore.read %a : <i32>
+  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.array<1 x i32>
+  // CHECK: [[TMP3:%.+]] = moore.instance "sub" @PortCastB(a: [[TMP2]]: !moore.array<1 x i32>)
+  // CHECK: [[TMP4:%.+]] = moore.conversion [[TMP3]] : !moore.array<1 x i32> -> !moore.i32
+  // CHECK: moore.assign %b, [[TMP4]] : i32
+  PortCastB sub(a, b);
+endmodule
+
+module PortCastB (input bit [0:0][31:0] a, output bit [0:0][31:0] b);
+  assign b = a;
+endmodule

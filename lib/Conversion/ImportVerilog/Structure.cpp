@@ -394,6 +394,13 @@ struct ModuleVisitor : public BaseVisitor {
         inputValues.push_back(value);
     }
 
+    // Insert conversions for input ports.
+    for (auto [value, type] :
+         llvm::zip(inputValues, moduleType.getInputTypes()))
+      if (value.getType() != type)
+        value =
+            builder.create<moore::ConversionOp>(value.getLoc(), type, value);
+
     // Create the instance op itself.
     auto inputNames = builder.getArrayAttr(moduleType.getInputNames());
     auto outputNames = builder.getArrayAttr(moduleType.getOutputNames());
@@ -403,9 +410,15 @@ struct ModuleVisitor : public BaseVisitor {
         inputNames, outputNames);
 
     // Assign output values from the instance to the connected expression.
-    for (auto [lvalue, output] : llvm::zip(outputValues, inst.getOutputs()))
-      if (lvalue)
-        builder.create<moore::ContinuousAssignOp>(loc, lvalue, output);
+    for (auto [lvalue, output] : llvm::zip(outputValues, inst.getOutputs())) {
+      if (!lvalue)
+        continue;
+      Value rvalue = output;
+      auto dstType = cast<moore::RefType>(lvalue.getType()).getNestedType();
+      if (dstType != rvalue.getType())
+        rvalue = builder.create<moore::ConversionOp>(loc, dstType, rvalue);
+      builder.create<moore::ContinuousAssignOp>(loc, lvalue, rvalue);
+    }
 
     return success();
   }
