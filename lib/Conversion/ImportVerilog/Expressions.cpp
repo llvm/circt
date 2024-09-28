@@ -691,9 +691,18 @@ struct RvalueExprVisitor {
   Value visitCall(const slang::ast::CallExpression &expr,
                   const slang::ast::CallExpression::SystemCallInfo &info) {
     const auto &subroutine = *info.subroutine;
+    auto args = expr.arguments();
 
     if (subroutine.name == "$signed" || subroutine.name == "$unsigned")
-      return context.convertRvalueExpression(*expr.arguments()[0]);
+      return context.convertRvalueExpression(*args[0]);
+
+    if (subroutine.name == "$clog2") {
+      auto value = context.convertToSimpleBitVector(
+          context.convertRvalueExpression(*args[0]));
+      if (!value)
+        return {};
+      return builder.create<moore::Clog2BIOp>(loc, value);
+    }
 
     mlir::emitError(loc) << "unsupported system call `" << subroutine.name
                          << "`";

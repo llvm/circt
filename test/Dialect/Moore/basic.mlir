@@ -385,3 +385,12 @@ func.func @SeverityAndDisplayBuiltins(%arg0: !moore.format_string) {
   moore.builtin.severity fatal %arg0
   return
 }
+
+// CHECK-LABEL: func.func @MathBuiltins
+func.func @MathBuiltins(%arg0: !moore.i32, %arg1: !moore.l42) {
+  // CHECK: moore.builtin.clog2 %arg0 : i32
+  moore.builtin.clog2 %arg0 : i32
+  // CHECK: moore.builtin.clog2 %arg1 : l42
+  moore.builtin.clog2 %arg1 : l42
+  return
+}
