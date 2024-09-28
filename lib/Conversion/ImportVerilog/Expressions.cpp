@@ -636,6 +636,12 @@ struct RvalueExprVisitor {
       mlir::emitError(loc, "unsupported class method call");
       return {};
     }
+
+    // Try to materialize constant values directly.
+    auto constant = context.evaluateConstant(expr);
+    if (auto value = context.materializeConstant(constant, *expr.type, loc))
+      return value;
+
     return std::visit(
         [&](auto &subroutine) { return visitCall(expr, subroutine); },
         expr.subroutine);
