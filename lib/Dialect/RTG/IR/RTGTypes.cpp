@@ -24,3 +24,5 @@ void circt::rtg::RTGDialect::registerTypes() {
 #include "circt/Dialect/RTG/IR/RTGTypes.cpp.inc"
       >();
 }
+
+std::string ResourceType::getName() const { return "unknown resource type"; }

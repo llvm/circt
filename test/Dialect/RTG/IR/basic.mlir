@@ -21,8 +21,8 @@ rtg.snippet {
 
 // CHECK-LABEL: @types
 // CHECK-SAME: !rtg.snippet
-// CHECK-SAME: !rtg.resource
-func.func @types(%arg1: !rtg.snippet, %arg2: !rtg.resource) {
+// CHECK-SAME: !rtg.resource<
+func.func @types(%arg1: !rtg.snippet, %arg2: !rtg.resource<!rtgtest.bogus_reg>) {
   return
 }
 

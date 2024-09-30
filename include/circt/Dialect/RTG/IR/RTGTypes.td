@@ -14,9 +14,11 @@
 #define CIRCT_DIALECT_RTG_IR_RTGTYPES_TD
 
 include "circt/Dialect/RTG/IR/RTGDialect.td"
+include "circt/Dialect/RTG/IR/RTGInterfaces.td"
 include "mlir/IR/AttrTypeBase.td"
 
-class RTGTypeDef<string name> : TypeDef<RTGDialect, name> { }
+class RTGTypeDef<string name, list<Trait> traits = []> :
+  TypeDef<RTGDialect, name, traits> { }
 
 def SnippetType : RTGTypeDef<"Snippet"> {
   let summary = "";
@@ -27,13 +29,18 @@ def SnippetType : RTGTypeDef<"Snippet"> {
   let assemblyFormat = "";
 }
 
-def ResourceType : RTGTypeDef<"Resource"> {
+def ResourceType : RTGTypeDef<"Resource", [
+  DeclareTypeInterfaceMethods<ResourceTypeInterface>
+]> {
   let summary = "";
   let description = [{
   }];
 
+  let parameters = (ins 
+    ArrayRefParameter<"::circt::rtg::ResourceTypeInterface", "set elements">:$elements);
+
   let mnemonic = "resource";
-  let assemblyFormat = "";
+  let assemblyFormat = "`<` $elements `>`";
 }
 
 def ResourceSetType : RTGTypeDef<"ResourceSet"> {
@@ -41,8 +48,11 @@ def ResourceSetType : RTGTypeDef<"ResourceSet"> {
   let description = [{
   }];
 
+  let parameters = (ins 
+    ArrayRefParameter<"::circt::rtg::ResourceTypeInterface", "set elements">:$elements);
+
   let mnemonic = "resource_set";
-  let assemblyFormat = "";
+  let assemblyFormat = "`<` $elements `>`";
 }
 
 def ContextResourceType : RTGTypeDef<"ContextResource"> {
@@ -61,8 +71,11 @@ def ContextResourceSetType : RTGTypeDef<"ContextResourceSet"> {
 
   let mnemonic = "context_resource_set";
   let parameters = (ins 
-    "::circt::rtg::ResourceTypeInterface":$contextResourceType);
-  let assemblyFormat = "`<` $contextResourceType `>`";
+    ArrayRefParameter<"::circt::rtg::ResourceTypeInterface", "set elements">:$elements);
+  let assemblyFormat = "`<` $elements `>`";
 }
+
+def AnyResourceType : Type<CPred<"llvm::isa<::circt::rtg::ResourceTypeInterface>($_self)">, "any resource type">;
+def AnyResourceSetType : AnyTypeOf<[ResourceSetType, ContextResourceSetType]>;
 
 #endif // CIRCT_DIALECT_RTG_IR_RTGTYPES_TD

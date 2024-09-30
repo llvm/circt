@@ -78,9 +78,22 @@ def OnContextOp : RTGOp<"on_context", [NoTerminator]> {
 
 
 
+def SelectRandomResource : RTGOp<"select_random_resource", [
+  TypesMatchWith<"summary", "resources", "output", "::circt::rtg::ResourceType::get($_ctxt, llvm::cast<::circt::rtg::ResourceSetType>($_self).getElements())">
+]> {
+  let summary = "places a random resource in an instruction sequence";
+
+  let arguments = (ins AnyResourceSetType:$resources);
+  let results = (outs AnyResourceType:$output);
+
+  let assemblyFormat = [{
+    $resources `:` type($resources) attr-dict
+  }];
+}
+
 //===- Resource Set Operations --------------------------------------------===//
 
-def SelectRandomResource : RTGOp<"select_random_resource", [
+def SelectRandomContextResource : RTGOp<"select_random_context_resource", [
   AllTypesMatch<["resources", "output"]>
 ]> {
   let summary = "places a random resource in an instruction sequence";
@@ -96,9 +109,11 @@ def SetDifferenceResource : RTGOp<"set_difference_resource", [
 ]> {
   let summary = "places a random resource in an instruction sequence";
 
-  let arguments = (ins ContextResourceSetType:$resourcesSrc,
-                       ContextResourceSetType:$resourcesDiff);
-  let results = (outs ContextResourceSetType:$output);
+  let arguments = (ins AnyResourceSetType:$resourcesSrc,
+                       AnyResourceSetType:$resourcesDiff);
+  let results = (outs AnyResourceSetType:$output);
 
-  let assemblyFormat = "$resourcesSrc `,` $resourcesDiff `:` type($output) attr-dict";
+  let assemblyFormat = [{
+    $resourcesSrc `,` $resourcesDiff `:` type($output) attr-dict
+  }];
 }
