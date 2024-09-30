@@ -62,6 +62,8 @@ void ExportYosysPass::runOnOperation() {
   init_yosys(redirectLog.getValue());
   auto theDesign =
       circt::rtlil::exportRTLILDesign(getOperation());
+  if (failed(theDesign))
+    return signalPassFailure();
 
   auto *design = theDesign->get();
 

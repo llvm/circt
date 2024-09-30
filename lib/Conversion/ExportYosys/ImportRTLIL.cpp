@@ -600,6 +600,114 @@ LogicalResult ImportRTLILModule::importCell(
   return result;
 }
 
+// RTLIL importer creates a bunch of array wires to mimic bit-sensitive
+// assignments. Eliminate all of them in the post-process.
+struct Range {
+  Range() = default;
+  sv::WireOp root = {};
+  int64_t start = 0;
+  int64_t width = 0;
+};
+
+static std::optional<int64_t> getConstantValue(Value value) {
+  auto constantIndex = value.template getDefiningOp<hw::ConstantOp>();
+  if (constantIndex)
+    if (constantIndex.getValue().getBitWidth() <= 63)
+      return constantIndex.getValue().getZExtValue();
+
+  return {};
+}
+
+static Range getRoot(Value value) {
+  auto op = value.getDefiningOp();
+  if (!op)
+    return Range();
+  auto width =
+      hw::getBitWidth(cast<hw::InOutType>(value.getType()).getElementType());
+  return TypeSwitch<Operation *, Range>(op)
+      .Case<sv::WireOp>([&](auto op) {
+        return Range{op, 0, width};
+      })
+      .Case<sv::ArrayIndexInOutOp>([&](sv::ArrayIndexInOutOp op) {
+        auto result = getRoot(op.getInput());
+        auto index = getConstantValue(op.getIndex());
+        if (!index)
+          return Range();
+        result.start += *index;
+        result.width = width;
+        return result;
+      })
+      .Case<sv::IndexedPartSelectInOutOp>([&](sv::IndexedPartSelectInOutOp op) {
+        auto result = getRoot(op.getInput());
+        auto index = getConstantValue(op.getBase());
+        if (!index)
+          return Range();
+        result.start += *index;
+        result.width = width;
+        return result;
+      })
+      .Default([](auto) { return Range(); });
+}
+// Eliminate all SV wires used in the module.
+static LogicalResult cleanUpHWModule(hw::HWModuleOp module) {
+  llvm::MapVector<sv::WireOp, SmallVector<std::pair<Range, sv::AssignOp>>> writes;
+  llvm::MapVector<sv::WireOp, SmallVector<std::pair<Range, Value>>> reads;
+  module.dump();
+  module.walk([&](sv::WireOp wire) { writes.insert({wire, {}}); });
+  module.walk([&](sv::AssignOp assign) {
+    auto range = getRoot(assign.getDest());
+    if (range.root)
+      writes[range.root].emplace_back(range, assign);
+  });
+  module.walk([&](sv::ReadInOutOp read) {
+    auto range = getRoot(read.getInput());
+    if (range.root)
+      reads[range.root].emplace_back(range, read);
+  });
+  for (auto &[wire, elements] : writes) {
+    llvm::sort(elements.begin(), elements.end(),
+               [](const auto &lhs, const auto &rhs) {
+                 return lhs.first.start < rhs.first.start;
+               });
+    int64_t currentIdx = 0;
+    bool failed = false;
+    for (auto elem : elements) {
+      if (elem.first.start != currentIdx || elem.first.width < 0) {
+        failed = true;
+        break;
+      }
+      currentIdx += elem.first.width;
+    }
+    if (failed)
+      return failure();
+
+    // Fully written.
+    if (currentIdx == hw::getBitWidth(wire.getType().getElementType())) {
+      wire.dump();
+      OpBuilder builder(wire);
+      SmallVector<Value> concatInputs;
+      for (auto elem : elements) {
+        // Bitcast to integer and comb concat.
+        auto bitcast = builder.createOrFold<hw::BitcastOp>(
+            wire.getLoc(), builder.getIntegerType(elem.first.width),
+            elem.second.getSrc());
+        concatInputs.push_back(bitcast);
+        elem.second->erase();
+      }
+      std::reverse(concatInputs.begin(), concatInputs.end());
+      auto concat =
+          builder.createOrFold<comb::ConcatOp>(wire.getLoc(), concatInputs);
+
+      for (auto &[range, readOp] : reads[wire]) {
+        auto extract = builder.create<comb::ExtractOp>(
+            wire.getLoc(), concat, range.start, range.width);
+        readOp.replaceAllUsesWith(extract);
+        readOp.getDefiningOp()->erase();
+      }
+    }
+  }
+  return success();
+}
 LogicalResult ImportRTLILModule::importBody(
     const ImportRTLILDesign::ModuleMappingTy &moduleMapping) {
   if (isa<HWModuleExternOp>(module))
@@ -652,6 +760,10 @@ LogicalResult ImportRTLILModule::importBody(
       return failure();
   }
 
+  if (auto hwModule = dyn_cast<hw::HWModuleOp>(*module))
+    if (failed(cleanUpHWModule(hwModule)))
+      return failure();
+
   return success();
 }
 
@@ -669,99 +781,6 @@ LogicalResult CellPatternBase::convert(ImportRTLILModule &importer,
   auto lhsSig = importer.getPortSig(cell, outputPortName);
   auto lhsValue = importer.getInOutValue(location, lhsSig);
   return importer.connect(location, lhsValue, rhsValue);
-}
-
-// RTLIL importer creates a bunch of array wires to mimic bit-sensitive
-// assignments. Eliminate all of them in the post-process.
-struct Range {
-  Range() = default;
-  sv::WireOp root = {};
-  int64_t start = 0;
-  int64_t width = 0;
-};
-
-static std::optional<int64_t> getConstantValue(Value value) {
-  auto constantIndex = value.template getDefiningOp<hw::ConstantOp>();
-  if (constantIndex)
-    if (constantIndex.getValue().getBitWidth() <= 63)
-      return constantIndex.getValue().getZExtValue();
-
-  return {};
-}
-
-static Range getRoot(Value value) {
-  auto op = value.getDefiningOp();
-  if (!op)
-    return Range();
-  auto width =
-      hw::getBitWidth(cast<hw::InOutType>(value.getType()).getElementType());
-  return TypeSwitch<Operation *, Range>(op)
-      .Case<sv::WireOp>([&](auto op) {
-        return Range{op, 0, width};
-      })
-      .Case<sv::ArrayIndexInOutOp>([&](sv::ArrayIndexInOutOp op) {
-        auto result = getRoot(op.getInput());
-        auto index = getConstantValue(op.getIndex());
-        if (!index)
-          return Range();
-        result.start += *index;
-        result.width = width;
-        return Range();
-      })
-      .Case<sv::IndexedPartSelectInOutOp>([&](sv::IndexedPartSelectInOutOp op) {
-        auto result = getRoot(op.getInput());
-        auto index = getConstantValue(op.getBase());
-        if (!index)
-          return Range();
-        result.start += *index;
-        result.width = width;
-        return result;
-      })
-      .Default([](auto) { return Range(); });
-}
-
-static LogicalResult cleanUpHWModule(hw::HWModuleOp module) {
-  llvm::MapVector<sv::WireOp, SmallVector<std::pair<Range, Value>>> writes;
-  llvm::MapVector<sv::WireOp, SmallVector<std::pair<Range, Value>>> reads;
-  module.walk([&](sv::WireOp wire) { writes.insert({wire, {}}); });
-  module.walk([&](sv::AssignOp assign) {
-    auto range = getRoot(assign.getDest());
-    if (range.root)
-      writes[range.root].emplace_back(range, assign.getSrc());
-  });
-  module.walk([&](sv::ReadInOutOp read) {
-    auto range = getRoot(read.getInput());
-    if (range.root)
-      writes[range.root].emplace_back(range, assign.getSrc());
-  });
-  for (auto &[wire, elements] : writes) {
-    llvm::sort(
-        elements.begin(), elements.end(),
-        [](const auto &lhs, const auto &rhs) { return lhs.index < rhs.index; });
-    int64_t currentIdx = 0;
-    bool failed = false;
-    for (auto elem : elements) {
-      if (elem.first.start != currentIdx || elem.first < 0) {
-        failed = true;
-        break;
-      }
-      currentIdx += elem.first.width;
-    }
-    if (failed)
-      return failure();
-
-    if (currentIdx == hw::getBitWidth(wire.getType().getElementType())) {
-      for (auto elem : elements) {
-        // Bitcast to integer and comb concat.
-        auto bitcast = builder.create<hw::BitcastOp>(
-            wire.getLoc(), builder.getIntegerType(elem.first.width),
-            elem.second);
-        auto concat = builder.create<comb::ConcatOp>(
-            wire.getLoc(), SmallVector<Value>{wire, bitcast});
-        wire.replaceAllUsesWith(concat);
-      }
-    }
-  }
 }
 
 static LogicalResult postProcess(mlir::ModuleOp module) {}

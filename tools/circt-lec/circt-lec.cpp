@@ -189,13 +189,8 @@ static LogicalResult executeLEC(MLIRContext &context) {
   applyDefaultTimingManagerCLOptions(tm);
   auto ts = tm.getRootScope();
 
-  OwningOpRef<ModuleOp> module;
-  {
-    auto parserTimer = ts.nest("Parse MLIR input");
-    // Parse the provided input files.
-    module = parseSourceFile<ModuleOp>(inputFilenames[0], &context);
-  }
-  if (!module)
+  auto parsedModule = parseAndMergeModules(context, ts);
+  if (failed(parsedModule))
     return failure();
 
   OwningOpRef<ModuleOp> module = std::move(parsedModule.value());
