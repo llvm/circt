@@ -111,6 +111,10 @@ def EarlyCodeMotion : Pass<"llhd-early-code-motion", "hw::HWModuleOp"> {
   let constructor = "circt::llhd::createEarlyCodeMotionPass()";
 }
 
+def Sig2Reg : Pass<"llhd-sig2reg", "hw::HWModuleOp"> {
+  let summary = "promote LLHD signals to SSA values";
+}
+
 def TemporalCodeMotion : Pass<"llhd-temporal-code-motion", "hw::HWModuleOp"> {
   let summary = "move drive operations to the exit basic block in processes";
   let description = [{
@@ -126,6 +130,29 @@ def TemporalCodeMotion : Pass<"llhd-temporal-code-motion", "hw::HWModuleOp"> {
   }];
 
   let constructor = "circt::llhd::createTemporalCodeMotionPass()";
+}
+
+def Desequentialization : Pass<"llhd-desequentialize", "hw::HWModuleOp"> {
+  let summary = "convert sequential processes to registers";
+  let description = [{
+    Analyzes the drive conditions of all drives in sequential processes and
+    tries to convert them to registers.
+    This is not always possible because a process might consist of more than two
+    temporal regions, or the drive condition might depend on values sampled in the
+    past that are not a clock, or the condition depends on the conjunction of two
+    clocks which is not supported by regular registers, etc.
+    If all drives in a process were successfully lowered to registers, the process
+    is inlined into the surrounding module.
+  }];
+
+  let options = [
+    Option<"maxPrimitives", "max-primitives", "unsigned", "8",
+           "The maximum number of primitives to analyze.">,
+  ];
+
+  let dependentDialects = [
+    "comb::CombDialect", "hw::HWDialect", "seq::SeqDialect"
+  ];
 }
 
 #endif // CIRCT_DIALECT_LLHD_TRANSFORMS_PASSES

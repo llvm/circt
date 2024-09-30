@@ -171,9 +171,9 @@ circuit test:
 ; CHECK: dutModule2 [[m:.+]] (
 
 
-; CHECK-LABEL: external module tbMemoryKind1_ext
-; CHECK-LABEL: external module dutMemory_ext
-; CHECK-LABEL: external module tbMemoryKind1_0_ext
+; CHECK-NOT: module tbMemoryKind1_ext
+; CHECK-NOT: module dutMemory_ext
+; CHECK-NOT: module tbMemoryKind1_0_ext
 
 
 ; CHECK-LABEL: FILE "metadata{{[/\]}}seq_mems.json"

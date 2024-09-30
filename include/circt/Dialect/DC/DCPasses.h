@@ -9,6 +9,7 @@
 #ifndef CIRCT_DIALECT_DC_DCPASSES_H
 #define CIRCT_DIALECT_DC_DCPASSES_H
 
+#include "circt/Support/LLVM.h"
 #include "mlir/Pass/Pass.h"
 #include <memory>
 
@@ -18,6 +19,10 @@ class Pass;
 
 namespace circt {
 namespace dc {
+
+#define GEN_PASS_DECL
+#include "circt/Dialect/DC/DCPasses.h.inc"
+std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>> createDCDotPrintPass();
 
 std::unique_ptr<mlir::Pass> createDCMaterializeForksSinksPass();
 std::unique_ptr<mlir::Pass> createDCDematerializeForksSinksPass();

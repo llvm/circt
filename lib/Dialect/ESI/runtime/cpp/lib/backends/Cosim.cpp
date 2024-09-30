@@ -203,6 +203,11 @@ public:
                                ". Details: " + sendStatus.error_details());
   }
 
+  bool tryWrite(const MessageData &data) override {
+    write(data);
+    return true;
+  }
+
 protected:
   ChannelServer::Stub *rpcClient;
   /// The channel description as provided by the server.
@@ -373,11 +378,13 @@ public:
     cmdMMIO->connect();
   }
 
+#pragma pack(push, 1)
   struct MMIOCmd {
     uint64_t data;
     uint32_t offset;
     bool write;
-  } __attribute__((packed));
+  };
+#pragma pack(pop)
 
   // Call the read function and wait for a response.
   uint64_t read(uint32_t addr) const override {

@@ -264,10 +264,12 @@ LogicalResult ImportDriver::importVerilog(ModuleOp module) {
     return success();
 
   // Traverse the parsed Verilog AST and map it to the equivalent CIRCT ops.
-  mlirContext->loadDialect<moore::MooreDialect, hw::HWDialect,
-                           cf::ControlFlowDialect, func::FuncDialect>();
+  mlirContext
+      ->loadDialect<moore::MooreDialect, hw::HWDialect, cf::ControlFlowDialect,
+                    func::FuncDialect, debug::DebugDialect>();
   auto conversionTimer = ts.nest("Verilog to dialect mapping");
-  Context context(*compilation, module, driver.sourceManager, bufferFilePaths);
+  Context context(options, *compilation, module, driver.sourceManager,
+                  bufferFilePaths);
   if (failed(context.convertCompilation()))
     return failure();
   conversionTimer.stop();
@@ -385,7 +387,10 @@ void circt::registerFromVerilogTranslation() {
         TimingScope ts;
         OwningOpRef<ModuleOp> module(
             ModuleOp::create(UnknownLoc::get(context)));
-        if (failed(importVerilog(sourceMgr, context, ts, module.get())))
+        ImportVerilogOptions options;
+        options.debugInfo = true;
+        if (failed(
+                importVerilog(sourceMgr, context, ts, module.get(), &options)))
           module = {};
         return module;
       });

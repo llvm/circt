@@ -37,31 +37,6 @@ struct RvalueExprVisitor {
   RvalueExprVisitor(Context &context, Location loc)
       : context(context), loc(loc), builder(context.builder) {}
 
-  /// Helper function to convert a value to its simple bit vector
-  /// representation, if it has one. Otherwise returns null.
-  Value convertToSimpleBitVector(Value value) {
-    if (!value)
-      return {};
-    if (isa<moore::IntType>(value.getType()))
-      return value;
-
-    // Some operations in Slang's AST, for example bitwise or `|`, don't cast
-    // packed struct/array operands to simple bit vectors but directly operate
-    // on the struct/array. Since the corresponding IR ops operate only on
-    // simple bit vectors, insert a conversion in this case.
-    if (auto packed = dyn_cast<moore::PackedType>(value.getType())) {
-      if (auto bits = packed.getBitSize()) {
-        auto sbvType =
-            moore::IntType::get(value.getContext(), *bits, packed.getDomain());
-        return builder.create<moore::ConversionOp>(loc, sbvType, value);
-      }
-    }
-
-    mlir::emitError(loc, "expression of type ")
-        << value.getType() << " cannot be cast to a simple bit vector";
-    return {};
-  }
-
   // Handle references to the left-hand side of a parent assignment.
   Value visit(const slang::ast::LValueReferenceExpression &expr) {
     assert(!context.lvalueStack.empty() && "parent assignments push lvalue");
@@ -82,15 +57,9 @@ struct RvalueExprVisitor {
     }
 
     // Try to materialize constant values directly.
-    slang::ast::EvalContext evalContext(context.compilation,
-                                        slang::ast::EvalFlags::CacheResults);
-    auto constant = expr.eval(evalContext);
-    if (constant.isInteger()) {
-      auto type = context.convertType(*expr.type);
-      if (!type)
-        return {};
-      return materializeSVInt(constant.integer(), type);
-    }
+    auto constant = context.evaluateConstant(expr);
+    if (auto value = context.materializeConstant(constant, *expr.type, loc))
+      return value;
 
     // Otherwise some other part of ImportVerilog should have added an MLIR
     // value for this expression's symbol to the `context.valueSymbols` table.
@@ -138,7 +107,7 @@ struct RvalueExprVisitor {
   // to a reduction op, and optionally invert the result.
   template <class ConcreteOp>
   Value createReduction(Value arg, bool invert) {
-    arg = convertToSimpleBitVector(arg);
+    arg = context.convertToSimpleBitVector(arg);
     if (!arg)
       return {};
     Value result = builder.create<ConcreteOp>(loc, arg);
@@ -179,16 +148,16 @@ struct RvalueExprVisitor {
       // `+a` is simply `a`, but converted to a simple bit vector type since
       // this is technically an arithmetic operation.
     case UnaryOperator::Plus:
-      return convertToSimpleBitVector(arg);
+      return context.convertToSimpleBitVector(arg);
 
     case UnaryOperator::Minus:
-      arg = convertToSimpleBitVector(arg);
+      arg = context.convertToSimpleBitVector(arg);
       if (!arg)
         return {};
       return builder.create<moore::NegOp>(loc, arg);
 
     case UnaryOperator::BitwiseNot:
-      arg = convertToSimpleBitVector(arg);
+      arg = context.convertToSimpleBitVector(arg);
       if (!arg)
         return {};
       return builder.create<moore::NotOp>(loc, arg);
@@ -230,10 +199,10 @@ struct RvalueExprVisitor {
   // pass them into a binary op.
   template <class ConcreteOp>
   Value createBinary(Value lhs, Value rhs) {
-    lhs = convertToSimpleBitVector(lhs);
+    lhs = context.convertToSimpleBitVector(lhs);
     if (!lhs)
       return {};
-    rhs = convertToSimpleBitVector(rhs);
+    rhs = context.convertToSimpleBitVector(rhs);
     if (!rhs)
       return {};
     return builder.create<ConcreteOp>(loc, lhs, rhs);
@@ -390,8 +359,8 @@ struct RvalueExprVisitor {
     case BinaryOperator::ArithmeticShiftRight: {
       // The `>>>` operator is an arithmetic right shift if the LHS operand is
       // signed, or a logical right shift if the operand is unsigned.
-      lhs = convertToSimpleBitVector(lhs);
-      rhs = convertToSimpleBitVector(rhs);
+      lhs = context.convertToSimpleBitVector(lhs);
+      rhs = context.convertToSimpleBitVector(rhs);
       if (!lhs || !rhs)
         return {};
       if (expr.type->isSigned())
@@ -404,36 +373,14 @@ struct RvalueExprVisitor {
     return {};
   }
 
-  /// Materialize a Slang integer literal as a constant op.
-  Value materializeSVInt(const slang::SVInt &svint, Type type) {
-    auto fvint = convertSVIntToFVInt(svint);
-    bool typeIsFourValued = false;
-    if (auto unpackedType = dyn_cast<moore::UnpackedType>(type))
-      typeIsFourValued = unpackedType.getDomain() == moore::Domain::FourValued;
-    auto intType = moore::IntType::get(
-        context.getContext(), fvint.getBitWidth(),
-        fvint.hasUnknown() || typeIsFourValued ? moore::Domain::FourValued
-                                               : moore::Domain::TwoValued);
-    Value result = builder.create<moore::ConstantOp>(loc, intType, fvint);
-    if (result.getType() != type)
-      result = builder.create<moore::ConversionOp>(loc, type, result);
-    return result;
-  }
-
   // Handle `'0`, `'1`, `'x`, and `'z` literals.
   Value visit(const slang::ast::UnbasedUnsizedIntegerLiteral &expr) {
-    auto type = context.convertType(*expr.type);
-    if (!type)
-      return {};
-    return materializeSVInt(expr.getValue(), type);
+    return context.materializeSVInt(expr.getValue(), *expr.type, loc);
   }
 
   // Handle integer literals.
   Value visit(const slang::ast::IntegerLiteral &expr) {
-    auto type = context.convertType(*expr.type);
-    if (!type)
-      return {};
-    return materializeSVInt(expr.getValue(), type);
+    return context.materializeSVInt(expr.getValue(), *expr.type, loc);
   }
 
   // Handle concatenations.
@@ -443,7 +390,7 @@ struct RvalueExprVisitor {
       auto value = context.convertRvalueExpression(*operand);
       if (!value)
         continue;
-      value = convertToSimpleBitVector(value);
+      value = context.convertToSimpleBitVector(value);
       operands.push_back(value);
     }
     return builder.create<moore::ConcatOp>(loc, operands);
@@ -566,8 +513,8 @@ struct RvalueExprVisitor {
 
   // Handle set membership operator.
   Value visit(const slang::ast::InsideExpression &expr) {
-    auto lhs =
-        convertToSimpleBitVector(context.convertRvalueExpression(expr.left()));
+    auto lhs = context.convertToSimpleBitVector(
+        context.convertRvalueExpression(expr.left()));
     if (!lhs)
       return {};
     // All conditions for determining whether it is inside.
@@ -581,9 +528,9 @@ struct RvalueExprVisitor {
       if (const auto *openRange =
               listExpr->as_if<slang::ast::OpenRangeExpression>()) {
         // Handle ranges.
-        auto lowBound = convertToSimpleBitVector(
+        auto lowBound = context.convertToSimpleBitVector(
             context.convertRvalueExpression(openRange->left()));
-        auto highBound = convertToSimpleBitVector(
+        auto highBound = context.convertToSimpleBitVector(
             context.convertRvalueExpression(openRange->right()));
         if (!lowBound || !highBound)
           return {};
@@ -615,7 +562,7 @@ struct RvalueExprVisitor {
               loc, "only simple bit vectors supported in 'inside' expressions");
           return {};
         }
-        auto value = convertToSimpleBitVector(
+        auto value = context.convertToSimpleBitVector(
             context.convertRvalueExpression(*listExpr));
         if (!value)
           return {};
@@ -689,6 +636,12 @@ struct RvalueExprVisitor {
       mlir::emitError(loc, "unsupported class method call");
       return {};
     }
+
+    // Try to materialize constant values directly.
+    auto constant = context.evaluateConstant(expr);
+    if (auto value = context.materializeConstant(constant, *expr.type, loc))
+      return value;
+
     return std::visit(
         [&](auto &subroutine) { return visitCall(expr, subroutine); },
         expr.subroutine);
@@ -744,9 +697,18 @@ struct RvalueExprVisitor {
   Value visitCall(const slang::ast::CallExpression &expr,
                   const slang::ast::CallExpression::SystemCallInfo &info) {
     const auto &subroutine = *info.subroutine;
+    auto args = expr.arguments();
 
     if (subroutine.name == "$signed" || subroutine.name == "$unsigned")
-      return context.convertRvalueExpression(*expr.arguments()[0]);
+      return context.convertRvalueExpression(*args[0]);
+
+    if (subroutine.name == "$clog2") {
+      auto value = context.convertToSimpleBitVector(
+          context.convertRvalueExpression(*args[0]));
+      if (!value)
+        return {};
+      return builder.create<moore::Clog2BIOp>(loc, value);
+    }
 
     mlir::emitError(loc) << "unsupported system call `" << subroutine.name
                          << "`";
@@ -778,6 +740,13 @@ struct RvalueExprVisitor {
     for (unsigned replIdx = 1; replIdx < replCount; ++replIdx)
       for (unsigned elementIdx = 0; elementIdx < elementCount; ++elementIdx)
         elements.push_back(elements[elementIdx]);
+
+    // Handle integers.
+    if (auto intType = dyn_cast<moore::IntType>(type)) {
+      assert(intType.getWidth() == elements.size());
+      std::reverse(elements.begin(), elements.end());
+      return builder.create<moore::ConcatOp>(loc, intType, elements);
+    }
 
     // Handle packed structs.
     if (auto structType = dyn_cast<moore::StructType>(type)) {
@@ -816,9 +785,8 @@ struct RvalueExprVisitor {
   }
 
   Value visit(const slang::ast::ReplicatedAssignmentPatternExpression &expr) {
-    slang::ast::EvalContext evalContext(context.compilation,
-                                        slang::ast::EvalFlags::CacheResults);
-    auto count = expr.count().eval(evalContext).integer().as<unsigned>();
+    auto count =
+        context.evaluateConstant(expr.count()).integer().as<unsigned>();
     assert(count && "Slang guarantees constant non-zero replication count");
     return visitAssignmentPattern(expr, *count);
   }
@@ -847,19 +815,6 @@ struct LvalueExprVisitor {
   LvalueExprVisitor(Context &context, Location loc)
       : context(context), loc(loc), builder(context.builder) {}
 
-  /// Helper function to convert a value to its simple bit vector
-  /// representation, if it has one. Otherwise returns null.
-  Value convertToSimpleBitVector(Value value) {
-    if (!value)
-      return {};
-    if (isa<moore::IntType>(
-            cast<moore::RefType>(value.getType()).getNestedType()))
-      return value;
-    mlir::emitError(loc, "expression of type ")
-        << value.getType() << " cannot be cast to a simple bit vector";
-    return {};
-  }
-
   // Handle named values, such as references to declared variables.
   Value visit(const slang::ast::NamedValueExpression &expr) {
     if (auto value = context.valueSymbols.lookup(&expr.symbol))
@@ -877,7 +832,6 @@ struct LvalueExprVisitor {
       auto value = context.convertLvalueExpression(*operand);
       if (!value)
         continue;
-      value = convertToSimpleBitVector(value);
       operands.push_back(value);
     }
     return builder.create<moore::ConcatRefOp>(loc, operands);
@@ -1038,6 +992,43 @@ Value Context::convertToBool(Value value) {
   return {};
 }
 
+/// Materialize a Slang integer literal as a constant op.
+Value Context::materializeSVInt(const slang::SVInt &svint,
+                                const slang::ast::Type &astType, Location loc) {
+  auto type = convertType(astType);
+  if (!type)
+    return {};
+
+  bool typeIsFourValued = false;
+  if (auto unpackedType = dyn_cast<moore::UnpackedType>(type))
+    typeIsFourValued = unpackedType.getDomain() == moore::Domain::FourValued;
+
+  auto fvint = convertSVIntToFVInt(svint);
+  auto intType = moore::IntType::get(getContext(), fvint.getBitWidth(),
+                                     fvint.hasUnknown() || typeIsFourValued
+                                         ? moore::Domain::FourValued
+                                         : moore::Domain::TwoValued);
+  Value result = builder.create<moore::ConstantOp>(loc, intType, fvint);
+  if (result.getType() != type)
+    result = builder.create<moore::ConversionOp>(loc, type, result);
+  return result;
+}
+
+Value Context::materializeConstant(const slang::ConstantValue &constant,
+                                   const slang::ast::Type &type, Location loc) {
+  if (constant.isInteger())
+    return materializeSVInt(constant.integer(), type, loc);
+  return {};
+}
+
+slang::ConstantValue
+Context::evaluateConstant(const slang::ast::Expression &expr) {
+  using slang::ast::EvalFlags;
+  slang::ast::EvalContext evalContext(
+      compilation, EvalFlags::CacheResults | EvalFlags::SpecparamsAllowed);
+  return expr.eval(evalContext);
+}
+
 /// Helper function to convert a value to its "truthy" boolean value and
 /// convert it to the given domain.
 Value Context::convertToBool(Value value, Domain domain) {
@@ -1048,4 +1039,28 @@ Value Context::convertToBool(Value value, Domain domain) {
   if (value.getType() == type)
     return value;
   return builder.create<moore::ConversionOp>(value.getLoc(), type, value);
+}
+
+Value Context::convertToSimpleBitVector(Value value) {
+  if (!value)
+    return {};
+  if (isa<moore::IntType>(value.getType()))
+    return value;
+
+  // Some operations in Slang's AST, for example bitwise or `|`, don't cast
+  // packed struct/array operands to simple bit vectors but directly operate
+  // on the struct/array. Since the corresponding IR ops operate only on
+  // simple bit vectors, insert a conversion in this case.
+  if (auto packed = dyn_cast<moore::PackedType>(value.getType())) {
+    if (auto bits = packed.getBitSize()) {
+      auto sbvType =
+          moore::IntType::get(value.getContext(), *bits, packed.getDomain());
+      return builder.create<moore::ConversionOp>(value.getLoc(), sbvType,
+                                                 value);
+    }
+  }
+
+  mlir::emitError(value.getLoc()) << "expression of type " << value.getType()
+                                  << " cannot be cast to a simple bit vector";
+  return {};
 }

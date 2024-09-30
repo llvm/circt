@@ -112,25 +112,26 @@ void llhd::TemporalRegionAnalysis::recalculate(Operation *operation) {
   numTRs = nextTRnum + 1;
 }
 
-int llhd::TemporalRegionAnalysis::getBlockTR(Block *block) {
+int llhd::TemporalRegionAnalysis::getBlockTR(Block *block) const {
   assert(blockMap.count(block) &&
          "This block is not present in the temporal regions map.");
-  return blockMap[block];
-}
-
-SmallVector<Block *, 8> llhd::TemporalRegionAnalysis::getBlocksInTR(int tr) {
-  if (!trMap.count(tr))
-    return SmallVector<Block *, 8>();
-  return trMap[tr];
+  return blockMap.at(block);
 }
 
 SmallVector<Block *, 8>
-llhd::TemporalRegionAnalysis::getExitingBlocksInTR(int tr) {
+llhd::TemporalRegionAnalysis::getBlocksInTR(int tr) const {
+  if (!trMap.count(tr))
+    return SmallVector<Block *, 8>();
+  return trMap.at(tr);
+}
+
+SmallVector<Block *, 8>
+llhd::TemporalRegionAnalysis::getExitingBlocksInTR(int tr) const {
   SmallVector<Block *, 8> blocks = getBlocksInTR(tr);
   SmallVector<Block *, 8> exitingBlocks;
   for (Block *block : blocks) {
-    for (auto succ : block->getSuccessors()) {
-      if (blockMap[succ] != blockMap[block] ||
+    for (auto *succ : block->getSuccessors()) {
+      if (blockMap.at(succ) != blockMap.at(block) ||
           isa<WaitOp>(block->getTerminator())) {
         exitingBlocks.push_back(block);
         break;

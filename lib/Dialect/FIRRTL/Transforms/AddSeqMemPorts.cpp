@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Analysis/FIRRTLInstanceInfo.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
@@ -46,14 +47,13 @@ struct AddSeqMemPortsPass
   LogicalResult processFileAnno(Location loc, StringRef metadataDir,
                                 Annotation anno);
   LogicalResult processAnnos(CircuitOp circuit);
-  void createOutputFile(igraph::ModuleOpInterface module);
-  InstanceGraphNode *findDUT();
-  void processMemModule(FMemModuleOp mem);
-  LogicalResult processModule(FModuleOp module, bool isDUT);
+  void createOutputFile(igraph::ModuleOpInterface moduleOp);
+  LogicalResult processMemModule(FMemModuleOp mem);
+  LogicalResult processModule(FModuleOp moduleOp);
 
   /// Get the cached namespace for a module.
-  hw::InnerSymbolNamespace &getModuleNamespace(FModuleLike module) {
-    return moduleNamespaces.try_emplace(module, module).first->second;
+  hw::InnerSymbolNamespace &getModuleNamespace(FModuleLike moduleOp) {
+    return moduleNamespaces.try_emplace(moduleOp, moduleOp).first->second;
   }
 
   /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
@@ -83,6 +83,7 @@ struct AddSeqMemPortsPass
   DenseMap<Attribute, Operation *> innerRefToInstanceMap;
 
   InstanceGraph *instanceGraph;
+  InstanceInfo *instanceInfo;
 
   /// If the metadata output file was specified in an annotation.
   StringAttr outputFile;
@@ -173,41 +174,82 @@ LogicalResult AddSeqMemPortsPass::processAnnos(CircuitOp circuit) {
   return failure(error);
 }
 
-InstanceGraphNode *AddSeqMemPortsPass::findDUT() {
-  // Find the DUT module.
-  for (auto *node : *instanceGraph) {
-    if (AnnotationSet::hasAnnotation(node->getModule(), dutAnnoClass))
-      return node;
+LogicalResult AddSeqMemPortsPass::processMemModule(FMemModuleOp mem) {
+  // Error if all instances are not under the effective DUT.
+  if (!instanceInfo->allInstancesUnderEffectiveDut(mem)) {
+    auto diag = mem->emitOpError()
+                << "cannot have ports added to it because it is instantiated "
+                   "both under and not under the design-under-test (DUT)";
+    for (auto *instNode : instanceGraph->lookup(mem)->uses()) {
+      auto instanceOp = instNode->getInstance();
+      if (instanceInfo->anyInstanceUnderDut(
+              instNode->getParent()->getModule())) {
+        diag.attachNote(instanceOp.getLoc())
+            << "this instance is under the DUT";
+        continue;
+      }
+      diag.attachNote(instanceOp.getLoc())
+          << "this instance is not under the DUT";
+    }
+    return failure();
   }
-  return instanceGraph->getTopLevelNode();
-}
 
-void AddSeqMemPortsPass::processMemModule(FMemModuleOp mem) {
+  // Error if the memory is partially under a layer.
+  //
+  // TODO: There are several ways to handle a memory being under a layer:
+  // duplication or tie-off.  However, it is unclear if either if these is
+  // intended or correct.  Additionally, this can be handled with pass order by
+  // preventing deduplication of memories that have this property in
+  // `LowerMemories`.
+  if (instanceInfo->anyInstanceUnderLayer(mem)) {
+    auto diag = mem->emitOpError()
+                << "cannot have ports added to it because it is "
+                   "instantiated under "
+                   "both the design-under-test and layer blocks";
+    for (auto *instNode : instanceGraph->lookup(mem)->uses()) {
+      auto instanceOp = instNode->getInstance();
+      if (auto layerBlockOp = instanceOp->getParentOfType<LayerBlockOp>()) {
+        diag.attachNote(instanceOp.getLoc())
+            << "this instance is under a layer block";
+        diag.attachNote(layerBlockOp.getLoc())
+            << "the innermost layer block is here";
+        continue;
+      }
+      if (instanceInfo->anyInstanceUnderLayer(
+              instNode->getParent()->getModule())) {
+        diag.attachNote(instanceOp.getLoc())
+            << "this instance is inside a module that is instantiated "
+               "under a layer block";
+      }
+    }
+    return failure();
+  }
+
   // We have to add the user ports to every mem module.
   size_t portIndex = mem.getNumPorts();
   auto &memInfo = memInfoMap[mem];
   auto &extraPorts = memInfo.extraPorts;
-  for (auto &p : userPorts)
+  for (auto const &p : userPorts)
     extraPorts.emplace_back(portIndex, p);
   mem.insertPorts(extraPorts);
   // Attach the extraPorts metadata.
   mem.setExtraPortsAttr(extraPortsAttr);
+  return success();
 }
 
-LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
+LogicalResult AddSeqMemPortsPass::processModule(FModuleOp moduleOp) {
   auto *context = &getContext();
-  // Insert the new port connections at the end of the module.
-  auto builder = OpBuilder::atBlockEnd(module.getBodyBlock());
-  auto &memInfo = memInfoMap[module];
+  auto builder = OpBuilder(moduleOp.getContext());
+  auto &memInfo = memInfoMap[moduleOp];
   auto &extraPorts = memInfo.extraPorts;
   // List of ports added to submodules which must be connected to this module's
   // ports.
   SmallVector<Value> values;
 
   // The base index to use when adding ports to the current module.
-  unsigned firstPortIndex = module.getNumPorts();
+  unsigned firstPortIndex = moduleOp.getNumPorts();
 
-  for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock())) {
+  auto result = moduleOp.walk([&](Operation *op) {
     if (auto inst = dyn_cast<InstanceOp>(op)) {
       auto submodule = inst.getReferencedModule(*instanceGraph);
 
@@ -215,7 +257,7 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
       // If there are no extra ports, we don't have to do anything.
       if (subMemInfoIt == memInfoMap.end() ||
           subMemInfoIt->second.extraPorts.empty())
-        continue;
+        return WalkResult::advance();
       auto &subMemInfo = subMemInfoIt->second;
       // Find out how many memory ports we have to add.
       auto &subExtraPorts = subMemInfo.extraPorts;
@@ -233,7 +275,7 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
         auto &[firstSubIndex, portInfo] = subExtraPorts[i];
         // This is the index of the user port we are adding.
         auto userIndex = i % userPorts.size();
-        auto &sramPort = userPorts[userIndex];
+        auto const &sramPort = userPorts[userIndex];
         // Construct a port name, e.g. "sram_0_user_inputs".
         auto sramIndex = extraPorts.size() / userPorts.size();
         auto portName =
@@ -247,7 +289,7 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
              {portName, type_cast<FIRRTLType>(portType), portDirection}});
         // If this is the DUT, then add a DontTouchAnnotation to any added ports
         // to guarantee that it won't be removed.
-        if (isDUT)
+        if (instanceInfo->isEffectiveDut(moduleOp))
           extraPorts.back().second.annotations.addDontTouch();
         // Record the instance result for now, so that we can connect it to the
         // parent module port after we actually add the ports.
@@ -272,25 +314,61 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
           instancePaths.back().push_back(ref);
         }
       }
+
+      return WalkResult::advance();
     }
-  }
+
+    return WalkResult::advance();
+  });
+
+  if (result.wasInterrupted())
+    return failure();
 
   // Add the extra ports to this module.
-  module.insertPorts(extraPorts);
+  moduleOp.insertPorts(extraPorts);
+
+  // Get an existing invalid value or create a new one.
+  DenseMap<Type, InvalidValueOp> invalids;
+  auto getOrCreateInvalid = [&](Type type) -> InvalidValueOp {
+    auto it = invalids.find(type);
+    if (it != invalids.end())
+      return it->getSecond();
+    return invalids
+        .insert({type,
+                 builder.create<InvalidValueOp>(builder.getUnknownLoc(), type)})
+        .first->getSecond();
+  };
 
   // Connect the submodule ports to the parent module ports.
+  DenseMap<Operation *, OpBuilder::InsertPoint> instToInsertionPoint;
   for (unsigned i = 0, e = values.size(); i < e; ++i) {
     auto &[firstArg, port] = extraPorts[i];
-    Value modulePort = module.getArgument(firstArg + i);
+    Value modulePort = moduleOp.getArgument(firstArg + i);
     Value instPort = values[i];
+    Operation *instOp = instPort.getDefiningOp();
+    auto insertPoint = instToInsertionPoint.find(instOp);
+    if (insertPoint == instToInsertionPoint.end())
+      builder.setInsertionPointAfter(instOp);
+    else
+      builder.restoreInsertionPoint(insertPoint->getSecond());
     if (port.direction == Direction::In)
       std::swap(modulePort, instPort);
-    builder.create<MatchingConnectOp>(port.loc, modulePort, instPort);
+    auto connectOp =
+        builder.create<MatchingConnectOp>(port.loc, modulePort, instPort);
+    instToInsertionPoint[instOp] = builder.saveInsertionPoint();
+    // If the connect was created inside a WhenOp, then the port needs to be
+    // invalidated to make a legal circuit.
+    if (port.direction == Direction::Out &&
+        connectOp->getParentOfType<WhenOp>()) {
+      builder.setInsertionPointToStart(moduleOp.getBodyBlock());
+      builder.create<MatchingConnectOp>(port.loc, modulePort,
+                                        getOrCreateInvalid(port.type));
+    }
   }
   return success();
 }
 
-void AddSeqMemPortsPass::createOutputFile(igraph::ModuleOpInterface module) {
+void AddSeqMemPortsPass::createOutputFile(igraph::ModuleOpInterface moduleOp) {
   // Insert the verbatim at the bottom of the circuit.
   auto circuit = getOperation();
   auto builder = OpBuilder::atBlockEnd(circuit.getBodyBlock());
@@ -325,8 +403,8 @@ void AddSeqMemPortsPass::createOutputFile(igraph::ModuleOpInterface module) {
 
   // The current sram we are processing.
   unsigned sramIndex = 0;
-  auto &instancePaths = memInfoMap[module].instancePaths;
-  auto dutSymbol = FlatSymbolRefAttr::get(module.getModuleNameAttr());
+  auto &instancePaths = memInfoMap[moduleOp].instancePaths;
+  auto dutSymbol = FlatSymbolRefAttr::get(moduleOp.getModuleNameAttr());
 
   auto loc = builder.getUnknownLoc();
   // Put the information in a verbatim operation.
@@ -366,6 +444,7 @@ void AddSeqMemPortsPass::runOnOperation() {
   auto *context = &getContext();
   auto circuit = getOperation();
   instanceGraph = &getAnalysis<InstanceGraph>();
+  instanceInfo = &getAnalysis<InstanceInfo>();
   circtNamespace = CircuitNamespace(circuit);
   // Clear the state.
   userPorts.clear();
@@ -380,8 +459,6 @@ void AddSeqMemPortsPass::runOnOperation() {
   // SFC adds the ports in the opposite order they are attached, so we reverse
   // the list here to match exactly.
   std::reverse(userPorts.begin(), userPorts.end());
-
-  auto *dutNode = findDUT();
 
   // Process the extra ports so we can attach it as metadata on to each memory.
   SmallVector<Attribute> extraPorts;
@@ -403,32 +480,44 @@ void AddSeqMemPortsPass::runOnOperation() {
   extraPortsAttr = ArrayAttr::get(context, extraPorts);
 
   // If there are no user ports, don't do anything.
-  if (userPorts.size() > 0) {
+  if (!userPorts.empty()) {
     // Update ports statistic.
     numAddedPorts += userPorts.size();
 
-    // Visit the nodes in post-order.
-    for (auto *node : llvm::post_order(dutNode)) {
+    // Visit the modules in post-order starting from the effective
+    // design-under-test. Skip any modules that are wholly instantiated under
+    // layers.  If any memories are partially instantiated under a layer then
+    // error.
+    for (auto *node : llvm::post_order(
+             instanceGraph->lookup(instanceInfo->getEffectiveDut()))) {
       auto op = node->getModule();
-      if (auto module = dyn_cast<FModuleOp>(*op)) {
-        if (failed(processModule(module, /*isDUT=*/node == dutNode)))
+
+      // Skip anything wholly under a layer.
+      if (instanceInfo->allInstancesUnderLayer(op))
+        continue;
+
+      // Process the module or memory.
+      if (auto moduleOp = dyn_cast<FModuleOp>(*op)) {
+        if (failed(processModule(moduleOp)))
           return signalPassFailure();
       } else if (auto mem = dyn_cast<FMemModuleOp>(*op)) {
-        processMemModule(mem);
+        if (failed(processMemModule(mem)))
+          return signalPassFailure();
       }
     }
 
     // We handle the DUT differently than the rest of the modules.
-    if (auto dut = dyn_cast<FModuleOp>(*dutNode->getModule())) {
+    auto effectiveDut = instanceInfo->getEffectiveDut();
+    if (auto *dut = dyn_cast<FModuleOp>(&effectiveDut)) {
       // For each instance of the dut, add the instance ports, but tie the port
       // to 0 instead of wiring them to the parent.
-      for (auto *instRec : dutNode->uses()) {
+      for (auto *instRec : instanceGraph->lookup(effectiveDut)->uses()) {
         auto inst = cast<InstanceOp>(*instRec->getInstance());
-        auto &dutMemInfo = memInfoMap[dut];
+        auto &dutMemInfo = memInfoMap[*dut];
         // Find out how many memory ports we have to add.
         auto &subExtraPorts = dutMemInfo.extraPorts;
         // If there are no extra ports, we don't have to do anything.
-        if (subExtraPorts.size() == 0)
+        if (subExtraPorts.empty())
           continue;
 
         // Add the extra ports to the instance operation.
@@ -458,7 +547,7 @@ void AddSeqMemPortsPass::runOnOperation() {
 
   // If there is an output file, create it.
   if (outputFile)
-    createOutputFile(dutNode->getModule<igraph::ModuleOpInterface>());
+    createOutputFile(instanceInfo->getEffectiveDut());
 
   if (anythingChanged)
     markAnalysesPreserved<InstanceGraph>();

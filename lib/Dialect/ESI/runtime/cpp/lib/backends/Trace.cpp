@@ -76,7 +76,7 @@ struct esi::backends::trace::TraceAccelerator::Impl {
   void adoptChannelPort(ChannelPort *port) { channels.emplace_back(port); }
 
   void write(const AppIDPath &id, const std::string &portName, const void *data,
-             size_t size);
+             size_t size, const std::string &prefix = "");
   std::ostream &write(std::string service) {
     assert(traceWrite && "traceWrite is null");
     *traceWrite << "[" << service << "] ";
@@ -93,14 +93,15 @@ private:
 
 void TraceAccelerator::Impl::write(const AppIDPath &id,
                                    const std::string &portName,
-                                   const void *data, size_t size) {
+                                   const void *data, size_t size,
+                                   const std::string &prefix) {
   if (!isWriteable())
     return;
   std::string b64data;
   utils::encodeBase64(data, size, b64data);
 
-  *traceWrite << "write " << id << '.' << portName << ": " << b64data
-              << std::endl;
+  *traceWrite << prefix << (prefix.empty() ? "w" : "W") << "rite " << id << '.'
+              << portName << ": " << b64data << std::endl;
 }
 
 std::unique_ptr<AcceleratorConnection>
@@ -192,6 +193,11 @@ public:
     impl.write(id, portName, data.getBytes(), data.getSize());
   }
 
+  bool tryWrite(const MessageData &data) override {
+    impl.write(id, portName, data.getBytes(), data.getSize(), "try");
+    return true;
+  }
+
 protected:
   TraceAccelerator::Impl &impl;
   AppIDPath id;
@@ -257,6 +263,28 @@ TraceAccelerator::requestChannelsFor(AppIDPath idPath,
   return impl->requestChannelsFor(idPath, bundleType);
 }
 
+class TraceMMIO : public MMIO {
+public:
+  TraceMMIO(TraceAccelerator::Impl &impl) : impl(impl) {}
+
+  virtual uint64_t read(uint32_t addr) const override {
+    uint64_t data = rand();
+    if (impl.isWriteable())
+      impl.write("MMIO") << "[" << std::hex << addr << "] -> " << data
+                         << std::endl;
+    return data;
+  }
+  virtual void write(uint32_t addr, uint64_t data) override {
+    if (!impl.isWriteable())
+      return;
+    impl.write("MMIO") << "[" << std::hex << addr << "] <- " << data
+                       << std::endl;
+  }
+
+private:
+  TraceAccelerator::Impl &impl;
+};
+
 class TraceHostMem : public HostMem {
 public:
   TraceHostMem(TraceAccelerator::Impl &impl) : impl(impl) {}
@@ -317,6 +345,8 @@ TraceAccelerator::Impl::createService(Service::Type svcType, AppIDPath idPath,
                                       const HWClientDetails &clients) {
   if (svcType == typeid(SysInfo))
     return new TraceSysInfo(manifestJson);
+  if (svcType == typeid(MMIO))
+    return new TraceMMIO(*this);
   if (svcType == typeid(HostMem))
     return new TraceHostMem(*this);
   if (svcType == typeid(CustomService))

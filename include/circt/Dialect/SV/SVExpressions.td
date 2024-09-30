@@ -100,7 +100,7 @@ def VerbatimExprSEOp : SVOp<"verbatim.expr.se", [HasCustomSSAName]> {
   ];
 }
 
-def MacroRefExprOp : SVOp<"macro.ref", [Pure, HasCustomSSAName,
+def MacroRefExprOp : SVOp<"macro.ref.expr", [Pure, HasCustomSSAName,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Expression to refer to a SystemVerilog macro";
   let description = [{
@@ -127,7 +127,7 @@ def MacroRefExprOp : SVOp<"macro.ref", [Pure, HasCustomSSAName,
   }];
 }
 
-def MacroRefExprSEOp : SVOp<"macro.ref.se", [HasCustomSSAName,
+def MacroRefExprSEOp : SVOp<"macro.ref.expr.se", [HasCustomSSAName,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Expression to refer to a SystemVerilog macro";
   let description = [{

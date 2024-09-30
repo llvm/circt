@@ -24,7 +24,7 @@ hw.module @test1(in %arg0: i1, in %arg1: i1, in %arg8: i8) {
   sv.always posedge  %arg0 {
     sv.ifdef.procedural @SYNTHESIS {
     } else {
-      %tmp = sv.macro.ref @PRINTF_COND_() : () -> i1
+      %tmp = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
       %tmpx = sv.constantX : i1
       %tmpz = sv.constantZ : i1
       %tmp2 = comb.and %tmp, %tmpx, %tmpz, %arg1 : i1
@@ -43,7 +43,7 @@ hw.module @test1(in %arg0: i1, in %arg1: i1, in %arg8: i8) {
   // CHECK-NEXT: sv.always posedge %arg0 {
   // CHECK-NEXT:   sv.ifdef.procedural @SYNTHESIS {
   // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     %PRINTF_COND_ = sv.macro.ref @PRINTF_COND
+  // CHECK-NEXT:     %PRINTF_COND_ = sv.macro.ref.expr @PRINTF_COND
   // CHECK-NEXT:     %x_i1 = sv.constantX : i1
   // CHECK-NEXT:     %z_i1 = sv.constantZ : i1
   // CHECK-NEXT:     [[COND:%.*]] = comb.and %PRINTF_COND_, %x_i1, %z_i1, %arg1 : i1

@@ -1450,7 +1450,6 @@ public:
                     bool emitAsTwoStateType = false);
 
   void emitHWModule(HWModuleOp module);
-  void emitHWExternModule(HWModuleExternOp module);
   void emitHWGeneratedModule(HWModuleGeneratedOp module);
   void emitFunc(FuncOp);
 
@@ -3991,6 +3990,7 @@ private:
   LogicalResult visitSV(CaseOp op);
   LogicalResult visitSV(FWriteOp op);
   LogicalResult visitSV(VerbatimOp op);
+  LogicalResult visitSV(MacroRefOp op);
 
   LogicalResult emitSimulationControlTask(Operation *op, PPExtString taskName,
                                           std::optional<unsigned> verbosity);
@@ -4530,6 +4530,36 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
 
   ps << PP::end;
 
+  emitLocationInfoAndNewLine(ops);
+  return success();
+}
+
+// Emit macro as a statement.
+LogicalResult StmtEmitter::visitSV(MacroRefOp op) {
+  if (hasSVAttributes(op)) {
+    emitError(op, "SV attributes emission is unimplemented for the op");
+    return failure();
+  }
+  startStatement();
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  ps << PP::neverbox;
+
+  // Use the specified name or the symbol name as appropriate.
+  auto macroOp = op.getReferencedMacro(&state.symbolCache);
+  assert(macroOp && "Invalid IR");
+  StringRef name =
+      macroOp.getVerilogName() ? *macroOp.getVerilogName() : macroOp.getName();
+  ps << "`" << PPExtString(name);
+  if (!op.getInputs().empty()) {
+    ps << "(";
+    llvm::interleaveComma(op.getInputs(), ps, [&](Value val) {
+      emitExpression(val, ops, LowestPrecedence,
+                     /*isAssignmentLikeContext=*/false);
+    });
+    ps << ")";
+  }
+  ps << PP::end;
   emitLocationInfoAndNewLine(ops);
   return success();
 }
@@ -5977,16 +6007,6 @@ void ModuleEmitter::emitSVAttributes(Operation *op) {
 // Module Driver
 //===----------------------------------------------------------------------===//
 
-void ModuleEmitter::emitHWExternModule(HWModuleExternOp module) {
-  auto verilogName = module.getVerilogModuleNameAttr();
-  startStatement();
-  ps.addCallback({module, true});
-  ps << "// external module " << PPExtString(verilogName.getValue())
-     << PP::newline;
-  ps.addCallback({module, false});
-  setPendingNewline();
-}
-
 void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
   auto verilogName = module.getVerilogModuleNameAttr();
   startStatement();
@@ -6678,10 +6698,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           // Build the IR cache.
           symbolCache.addDefinition(op.getNameAttr(), op);
           collectPorts(op);
-          if (separateModules)
-            separateFile(op, "extern_modules.sv");
-          else
-            rootFile.ops.push_back(info);
+          // External modules are _not_ emitted.
         })
         .Case<VerbatimOp, IfDefOp, MacroDefOp, FuncDPIImportOp>(
             [&](Operation *op) {
@@ -6810,8 +6827,9 @@ void SharedEmitterState::collectOpsForFile(const FileInfo &file,
 static void emitOperation(VerilogEmitterState &state, Operation *op) {
   TypeSwitch<Operation *>(op)
       .Case<HWModuleOp>([&](auto op) { ModuleEmitter(state).emitHWModule(op); })
-      .Case<HWModuleExternOp>(
-          [&](auto op) { ModuleEmitter(state).emitHWExternModule(op); })
+      .Case<HWModuleExternOp>([&](auto op) {
+        // External modules are _not_ emitted.
+      })
       .Case<HWModuleGeneratedOp>(
           [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
       .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })

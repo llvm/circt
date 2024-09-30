@@ -158,6 +158,7 @@ firrtl.circuit "PathModule" {
   // CHECK: hw.hierpath private [[WIRE_PATH:@.+]] [@PathModule::[[WIRE_SYM:@.+]]]
   // CHECK: hw.hierpath private [[VECTOR_PATH:@.+]] [@PathModule::[[VECTOR_SYM:@.+]]]
   // CHECK: hw.hierpath private [[INST_PATH:@.+]] [@PathModule::@child]
+  // CHECK: hw.hierpath private [[LOCAL_PATH:@.+]] [@Child]
   // CHECK: hw.hierpath private [[MODULE_PATH:@.+]] [@PathModule::@child, @Child::[[NONLOCAL_SYM:@.+]]]
 
   // CHECK: firrtl.module @PathModule(in %in: !firrtl.uint<1> sym [[PORT_SYM]]) {
@@ -209,7 +210,7 @@ firrtl.circuit "PathModule" {
     // CHECK: om.path_create member_instance %basepath [[INST_PATH]]
     // CHECK: om.path_create member_instance %basepath [[INST_PATH]]
     // CHECK: om.path_create instance %basepath [[INST_PATH]]
-    // CHECK: om.path_create reference %basepath [[NONLOCAL_PATH]]
+    // CHECK: om.path_create reference %basepath [[LOCAL_PATH]]
     %instance_member_instance = firrtl.path member_instance distinct[4]<>
     %instance_member_reference = firrtl.path member_reference distinct[4]<>
     %instance = firrtl.path instance distinct[4]<>
@@ -469,5 +470,27 @@ firrtl.circuit "PathTargetReplaced" {
     %path = firrtl.path instance distinct[0]<>
   }
   firrtl.module private @WillBeReplaced(out %output: !firrtl.integer) {
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "LocalPath"
+firrtl.circuit "LocalPath" {
+  // CHECK: hw.hierpath private [[MODULE_NLA:@.+]] [@Child]
+  // CHECK: hw.hierpath private [[WIRE_NLA:@.+]] [@Child::[[WIRE_SYM:@.+]]]
+
+  firrtl.module @Child() attributes {annotations = [{class = "circt.tracker", id = distinct[0]<>}]} {
+    // CHECK: firrtl.wire sym [[WIRE_SYM]]
+    %wire = firrtl.wire {annotations = [{class = "circt.tracker", id = distinct[1]<>}]} : !firrtl.uint<8>
+  }
+
+  firrtl.module @LocalPath() {
+    // CHECK: om.path_create instance %basepath [[MODULE_NLA]]
+    %0 = firrtl.path instance distinct[0]<>
+
+    // CHECK: om.path_create reference %basepath [[WIRE_NLA]]
+    %1 = firrtl.path reference distinct[1]<>
+
+    firrtl.instance child0 @Child()
+    firrtl.instance child1 @Child()
   }
 }

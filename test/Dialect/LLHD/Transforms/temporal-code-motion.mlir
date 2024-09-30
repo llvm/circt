@@ -67,7 +67,6 @@ hw.module @basic(in %cond: i1) {
     // CHECK: [[V26:%.+]] = llhd.prb %g
     // CHECK: [[V27:%.+]] = comb.concat %false{{.*}}, [[V26]] : i1, i4
     // CHECK: [[V28:%.+]] = comb.add [[V25]], [[V27]] : i5
-    // CHECK: cf.cond_br [[V15]], ^[[BB3:.+]], ^[[BB4:.+]]
     %25 = llhd.prb %k : !hw.inout<i5>
     llhd.drv %k, %25 after %1 : !hw.inout<i5>
     %26 = llhd.prb %c : !hw.inout<i1>
@@ -85,39 +84,24 @@ hw.module @basic(in %cond: i1) {
     %38 = comb.concat %false, %37 : i1, i4
     %39 = comb.add %36, %38 : i5
     cf.cond_br %26, ^bb3, ^bb4
-  // CHECK: ^[[BB3]]:
   ^bb3:
     llhd.drv %l, %c0_i5 after %1 if %cond : !hw.inout<i5>
-    // CHECK: cf.br ^[[BB10:.+]]
     cf.br ^bb1
-  // CHECK: ^[[BB4]]:
   ^bb4:
-    // CHECK: cf.cond_br [[V16]], ^[[BB5:.+]], ^[[BB6:.+]]
     cf.cond_br %27, ^bb5, ^bb6
-  // CHECK: ^[[BB5]]:
   ^bb5:
     llhd.drv %m, %29 after %1 : !hw.inout<i5>
-    // CHECK: cf.br ^[[BB10]]
     cf.br ^bb1
-  // CHECK: ^[[BB6]]:
   ^bb6:
-    // CHECK: cf.cond_br [[V19]], ^[[BB7:.+]], ^[[BB10]]
     cf.cond_br %30, ^bb7, ^bb1
-  // CHECK: ^[[BB7]]:
   ^bb7:
-    // CHECK: cf.cond_br [[V20]], ^[[BB8:.+]], ^[[BB9:.+]]
     cf.cond_br %31, ^bb8, ^bb9
-  // CHECK: ^[[BB8]]:
   ^bb8:
     llhd.drv %n, %35 after %1 : !hw.inout<i5>
-    // CHECK: cf.br ^[[BB10]]
     cf.br ^bb1
-  // CHECK: ^[[BB9]]:
   ^bb9:
     llhd.drv %o, %39 after %1 : !hw.inout<i5>
-    // CHECK: cf.br ^[[BB10]]
     cf.br ^bb1
-    // CHECK: ^[[BB10]]:
     // CHECK: llhd.drv %k, [[V14]] after [[V1]] if %true{{.*}} : !hw.inout<i5>
 
     // CHECK: [[V29:%.+]] = comb.and %true{{.*}}, [[V15]] : i1

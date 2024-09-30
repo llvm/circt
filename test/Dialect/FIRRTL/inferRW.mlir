@@ -322,5 +322,26 @@ firrtl.circuit "TLRAM" {
     firrtl.connect %syncreadmem_singleport_readwritePortA_readData_rw_wmask_x, %readwritePortA_isWrite_2 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %syncreadmem_singleport_readwritePortA_readData_rw_wmask_y, %readwritePortA_isWrite_2 : !firrtl.uint<1>, !firrtl.uint<1>
   }
-}
 
+  // Test that this pass walks into layers.
+  // CHECK-LABEL: firrtl.module @Layers
+  firrtl.layer @A bind {}
+  firrtl.module @Layers() {
+    firrtl.layerblock @A {
+      %mem_w = firrtl.mem Undefined {
+        depth = 2 : i64,
+        name = "mem",
+        portNames = ["w"],
+        readLatency = 1 : i32,
+        writeLatency = 1 : i32
+      } : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<2>, mask: uint<2>>
+      // CHECK:      %mem_w = firrtl.mem
+      // CHECK-SAME:   mask: uint<1>
+      %0 = firrtl.subfield %mem_w[mask] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<2>, mask: uint<2>>
+      %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+      %1 = firrtl.cat %c1_ui1, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+      firrtl.matchingconnect %0, %1 : !firrtl.uint<2>
+    }
+  }
+
+}

@@ -44,3 +44,9 @@ hw.module @deeplynested(in %clk: i1, in %a: i1, in %b: i1) {
 
   verif.clocked_assert %o1 if %b, posedge %clk : !ltl.property
 }
+
+// -----
+
+hw.module @clockedarg(in %clocked: !ltl.property, in %a: i1, in %clk: i1) {
+  verif.clocked_assert %clocked if %a, posedge %clk : !ltl.property
+}

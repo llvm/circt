@@ -132,30 +132,6 @@ module Basic;
   bit [0:0] b1;
   bit b2 = b1;
 
-  // CHECK: [[TMP:%.+]] = moore.constant 1 : l32
-  // CHECK: %p1 = moore.named_constant parameter [[TMP]] : l32
-  parameter p1 = 1;
-
-  // CHECK: [[TMP:%.+]] = moore.constant 1 : l32
-  // CHECK: %p2 = moore.named_constant parameter [[TMP]] : l32
-  parameter p2 = p1;
-
-  // CHECK: [[TMP:%.+]] = moore.constant 2 : l32
-  // CHECK: %lp1 = moore.named_constant localparam [[TMP]] : l32
-  localparam lp1 = 2;
-
-  // CHECK: [[TMP:%.+]] = moore.constant 2 : l32
-  // CHECK: %lp2 = moore.named_constant localparam [[TMP]] : l32
-  localparam lp2 = lp1;
-
-  // CHECK: [[TMP:%.+]] = moore.constant 3 : l32
-  // CHECK: %sp1 = moore.named_constant specparam [[TMP]] : l32
-  specparam sp1 = 3;
-
-  // CHECK: [[TMP:%.+]] = moore.constant 3 : l32
-  // CHECK: %sp2 = moore.named_constant specparam [[TMP]] : l32
-  specparam sp2 = sp1;
-
   // CHECK: moore.procedure initial {
   // CHECK: }
   initial;
@@ -236,11 +212,62 @@ endmodule
 // CHECK-LABEL: func.func private @dummyB(
 // CHECK-LABEL: func.func private @dummyC(
 // CHECK-LABEL: func.func private @dummyD(
+// CHECK-LABEL: func.func private @dummyE(
+// CHECK-LABEL: func.func private @dummyF(
 function void dummyA(); endfunction
 function void dummyB(); endfunction
 function void dummyC(); endfunction
 function void dummyD(int a); endfunction
 function bit dummyE(bit a); return a; endfunction
+function void dummyF(integer a); endfunction
+
+// CHECK-LABEL: moore.module @Parameters(
+module Parameters;
+  // CHECK: [[TMP:%.+]] = moore.constant 1 : l32
+  // CHECK: dbg.variable "p1", [[TMP]] : !moore.l32
+  parameter p1 = 1;
+
+  // CHECK: [[TMP:%.+]] = moore.constant 1 : l32
+  // CHECK: dbg.variable "p2", [[TMP]] : !moore.l32
+  parameter p2 = p1;
+
+  // CHECK: [[TMP:%.+]] = moore.constant 2 : l32
+  // CHECK: dbg.variable "lp1", [[TMP]] : !moore.l32
+  localparam lp1 = 2;
+
+  // CHECK: [[TMP:%.+]] = moore.constant 2 : l32
+  // CHECK: dbg.variable "lp2", [[TMP]] : !moore.l32
+  localparam lp2 = lp1;
+
+  // CHECK: [[TMP:%.+]] = moore.constant 3 : l32
+  // CHECK: dbg.variable "sp1", [[TMP]] : !moore.l32
+  specparam sp1 = 3;
+
+  // CHECK: [[TMP:%.+]] = moore.constant 3 : l32
+  // CHECK: dbg.variable "sp2", [[TMP]] : !moore.l32
+  specparam sp2 = sp1;
+
+  initial begin
+    // CHECK: [[TMP:%.+]] = moore.constant 1 : l32
+    // CHECK: func.call @dummyF([[TMP]])
+    // CHECK: [[TMP:%.+]] = moore.constant 1 : l32
+    // CHECK: func.call @dummyF([[TMP]])
+    // CHECK: [[TMP:%.+]] = moore.constant 2 : l32
+    // CHECK: func.call @dummyF([[TMP]])
+    // CHECK: [[TMP:%.+]] = moore.constant 2 : l32
+    // CHECK: func.call @dummyF([[TMP]])
+    // CHECK: [[TMP:%.+]] = moore.constant 3 : l32
+    // CHECK: func.call @dummyF([[TMP]])
+    // CHECK: [[TMP:%.+]] = moore.constant 3 : l32
+    // CHECK: func.call @dummyF([[TMP]])
+    dummyF(p1);
+    dummyF(p2);
+    dummyF(lp1);
+    dummyF(lp2);
+    dummyF(sp1);
+    dummyF(sp2);
+  end
+endmodule
 
 // CHECK-LABEL: func.func private @ConditionalStatements(
 // CHECK-SAME: %arg0: !moore.i1
@@ -628,6 +655,8 @@ module Expressions;
   bit [1:0][31:0] arrayInt;
   // CHECK: %uarrayInt = moore.variable : <uarray<2 x i32>>
   bit [31:0] uarrayInt [2];
+  // CHECK: %m = moore.variable : <l4>
+  logic [3:0] m;
 
   initial begin
     // CHECK: moore.constant 0 : i32
@@ -1248,6 +1277,13 @@ module Expressions;
     // CHECK: [[TMP3:%.+]] = moore.array_create [[TMP0]], [[TMP1]], [[TMP2]], [[TMP0]], [[TMP1]], [[TMP2]] : !moore.i4, !moore.i4, !moore.i4, !moore.i4, !moore.i4, !moore.i4 -> uarray<6 x i4>
     // CHECK: moore.array_create [[TMP3]], [[TMP3]], [[TMP3]] : !moore.uarray<6 x i4>, !moore.uarray<6 x i4>, !moore.uarray<6 x i4> -> uarray<3 x uarray<6 x i4>>
     arr = '{3{'{2{4'd1, 4'd2, 4'd3}}}};
+
+    // CHECK: [[TMP0:%.+]] = moore.constant 0 :
+    // CHECK: [[TMP1:%.+]] = moore.constant 0 :
+    // CHECK: [[TMP2:%.+]] = moore.constant 1 :
+    // CHECK: [[TMP3:%.+]] = moore.constant 0 :
+    // CHECK: moore.concat [[TMP3]], [[TMP2]], [[TMP1]], [[TMP0]] : (!moore.l1, !moore.l1, !moore.l1, !moore.l1) -> l4
+    m = '{default: '0, 2: '1};
  
     //===------------------------------------------------------------------===//
     // Builtin Functions
@@ -1529,27 +1565,28 @@ endmodule
 // CHECK-LABEL: moore.module @GenerateConstructs()
 module GenerateConstructs;
   genvar i;
-  parameter p=2;
+  // CHECK: [[TMP:%.+]] = moore.constant 2
+  // CHECK: dbg.variable "p", [[TMP]]
+  parameter p = 2;
   
   generate
-    // CHECK: [[TMP1:%.+]] = moore.constant 0 : l32
-    // CHECK: %i = moore.named_constant localparam [[TMP1]] : l32
-    // CHECK: [[TMP2:%.+]] = moore.conversion %i : !moore.l32 -> !moore.i32
-    // CHECK: %g1 = moore.variable [[TMP2]] : <i32>
-    // CHECK: [[TMP3:%.+]] = moore.constant 1 : l32
-    // CHECK: %i_0 = moore.named_constant localparam name "i" [[TMP3]] : l32
-    // CHECK: [[TMP4:%.+]] = moore.conversion %i_0 : !moore.l32 -> !moore.i32
-    // CHECK: %g1_1 = moore.variable name "g1" [[TMP4]] : <i32>
-    for(i=0; i<2; i=i+1) begin
-      int g1 = i;
+    // CHECK: [[TMP:%.+]] = moore.constant 0
+    // CHECK: dbg.variable "i", [[TMP]]
+    // CHECK: [[TMP:%.+]] = moore.constant 0
+    // CHECK: %g1 = moore.variable [[TMP]]
+    // CHECK: [[TMP:%.+]] = moore.constant 1
+    // CHECK: dbg.variable "i", [[TMP]]
+    // CHECK: [[TMP:%.+]] = moore.constant 1
+    // CHECK: moore.variable name "g1" [[TMP]]
+    for (i = 0; i < 2; i = i + 1) begin
+      integer g1 = i;
     end
 
     // CHECK: [[TMP:%.+]] = moore.constant 2 : i32
     // CHECK: %g2 = moore.variable [[TMP]] : <i32>
-    if(p == 2) begin
+    if (p == 2) begin
       int g2 = 2;
-    end
-    else begin
+    end else begin
       int g2 = 3;
     end
     
@@ -1558,10 +1595,10 @@ module GenerateConstructs;
     case (p)
       2: begin
         int g3 = 2;
-        end
+      end
       default: begin
         int g3 = 3;
-        end
+      end
     endcase
   endgenerate
 endmodule
@@ -1904,3 +1941,111 @@ task automatic ImplicitEventControlExamples();
     x[a] = !b;
   end
 endtask
+
+// CHECK-LABEL: moore.module @ImmediateAssert(in %clk : !moore.l1) 
+module ImmediateAssert(input clk);
+  // CHECK: [[CLK:%.+]] = moore.net name "clk" wire : <l1>
+  // CHECK: [[A:%.+]] = moore.variable : <i1>
+  bit a;
+
+  // CHECK: moore.procedure always
+    // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+    // CHECK: [[OneBX:%.+]] = moore.constant bX : l1
+    // CHECK: [[NE:%.+]] = moore.ne [[READ_CLK]], [[OneBX]] : l1 -> l1
+    // CHECK: moore.assert immediate [[NE]] : l1
+  assert (clk != 1'bx);
+
+  // CHECK: moore.procedure always
+    // CHECK: [[C100:%.+]] = moore.constant 100 : i32
+    // CHECK: [[BC:%.+]] = moore.bool_cast [[C100]] : i32 -> i1
+    // CHECK: moore.assume observed [[BC]] : i1
+  assume #0 (100);
+
+  // CHECK: moore.procedure always
+    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+    // CHECK: moore.cover final [[READ_A]] : i1
+  cover final (a);
+endmodule
+
+// CHECK-LABEL: moore.module @ImmediateAssertiWithActionBlock() 
+module ImmediateAssertiWithActionBlock;
+  logic x;
+  int a;
+// CHEK: moore.procedure always {
+  // CHEK: [[READ_X:%.+]] = moore.read %x : <l1>
+  // CHEK: [[CONV_X:%.+]] = moore.conversion [[READ_X]] : !moore.l1 -> i1
+  // CHEK: cf.cond_br [[CONV_X]], ^bb1, ^bb2
+// CHEK: ^bb1:  // pred: ^bb0
+  // CHEK: [[C1:%.+]] = moore.constant 1 : i32
+  // CHEK: moore.blocking_assign %a, [[C1]] : i32
+  // CHEK: cf.br ^bb2
+// CHEK: ^bb2:  // 2 preds: ^bb0, ^bb1
+  // CHEK:   moore.return
+// CHEK: }
+  assert (x) a = 1;
+
+// CHEK: moore.procedure always {
+  // CHEK: [[READ_X:%.+]] = moore.read %x : <l1>
+  // CHEK: [[CONV_X:%.+]] = moore.conversion [[READ_X]] : !moore.l1 -> i1
+  // CHEK: cf.cond_br [[CONV_X]], ^bb1, ^bb2
+// CHEK: ^bb1:  // pred: ^bb0
+  // CHEK: cf.br ^bb3
+// CHEK: ^bb2:  // pred: ^bb0
+  // CHEK: [[C0:%.+]] = moore.constant 0 : i32
+  // CHEK: moore.blocking_assign %a, [[C0]] : i32
+  // CHEK: cf.br ^bb3
+// CHEK: ^bb3:  // 2 preds: ^bb1, ^bb2
+  // CHEK: moore.return
+// CHEK: }
+  assert (x) else a = 0;
+
+// CHEK: moore.procedure always {
+  // CHEK: [[READ_X:%.+]] = moore.read %x : <l1>
+  // CHEK: [[CONV_X:%.+]] = moore.conversion [[READ_X]] : !moore.l1 -> i1
+  // CHEK: cf.cond_br [[CONV_X]], ^bb1, ^bb2
+// CHEK: ^bb1:  // pred: ^bb0
+  // CHEK: [[C1:%.+]] = moore.constant 1 : i32
+  // CHEK: moore.blocking_assign %a, [[C1]] : i32
+  // CHEK: cf.br ^bb3
+// CHEK: ^bb2:  // pred: ^bb0
+  // CHEK: [[C0:%.+]] = moore.constant 0 : i32
+  // CHEK: moore.blocking_assign %a, [[C0]] : i32
+  // CHEK: cf.br ^bb3
+// CHEK: ^bb3:  // 2 preds: ^bb1, ^bb2
+  // CHEK: moore.return
+// CHEK: }
+  assert (x) a = 1; else a = 0;
+endmodule
+
+// CHECK: [[TMP:%.+]] = moore.constant 42 : i32
+// CHECK: dbg.variable "rootParam1", [[TMP]] : !moore.i32
+parameter int rootParam1 = 42;
+
+// CHECK: [[TMP:%.+]] = moore.constant 9001 : i32
+// CHECK: dbg.variable "rootParam2", [[TMP]] : !moore.i32
+localparam int rootParam2 = 9001;
+
+package ParamPackage;
+  // CHECK: [[TMP:%.+]] = moore.constant 42 : i32
+  // CHECK: dbg.variable "ParamPackage::param1", [[TMP]] : !moore.i32
+  parameter int param1 = 42;
+
+  // CHECK: [[TMP:%.+]] = moore.constant 9001 : i32
+  // CHECK: dbg.variable "ParamPackage::param2", [[TMP]] : !moore.i32
+  localparam int param2 = 9001;
+endpackage
+
+// CHECK-LABEL: moore.module @PortCastA()
+module PortCastA;
+  bit [31:0] a, b;
+  // CHECK: [[TMP1:%.+]] = moore.read %a : <i32>
+  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.array<1 x i32>
+  // CHECK: [[TMP3:%.+]] = moore.instance "sub" @PortCastB(a: [[TMP2]]: !moore.array<1 x i32>)
+  // CHECK: [[TMP4:%.+]] = moore.conversion [[TMP3]] : !moore.array<1 x i32> -> !moore.i32
+  // CHECK: moore.assign %b, [[TMP4]] : i32
+  PortCastB sub(a, b);
+endmodule
+
+module PortCastB (input bit [0:0][31:0] a, output bit [0:0][31:0] b);
+  assign b = a;
+endmodule

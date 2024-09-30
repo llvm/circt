@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "DialectModules.h"
+#include "CIRCTModules.h"
 
 #include "circt-c/Dialect/MSFT.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"

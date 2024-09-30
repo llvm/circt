@@ -314,18 +314,25 @@ class WritePort(Port):
     super().__init__(owner, cpp_port)
     self.cpp_port: cpp.WriteChannelPort = cpp_port
 
-  def write(self, msg=None) -> bool:
-    """Write a typed message to the channel. Attempts to serialize 'msg' to what
-    the accelerator expects, but will fail if the object is not convertible to
-    the port type."""
-
+  def __serialize_msg(self, msg=None) -> bytearray:
     valid, reason = self.type.is_valid(msg)
     if not valid:
       raise ValueError(
           f"'{msg}' cannot be converted to '{self.type}': {reason}")
     msg_bytes: bytearray = self.type.serialize(msg)
-    self.cpp_port.write(msg_bytes)
+    return msg_bytes
+
+  def write(self, msg=None) -> bool:
+    """Write a typed message to the channel. Attempts to serialize 'msg' to what
+        the accelerator expects, but will fail if the object is not convertible to
+        the port type."""
+    self.cpp_port.write(self.__serialize_msg(msg))
     return True
+
+  def try_write(self, msg=None) -> bool:
+    """Like 'write', but uses the non-blocking tryWrite method of the underlying
+        port. Returns True if the write was successful, False otherwise."""
+    return self.cpp_port.tryWrite(self.__serialize_msg(msg))
 
 
 class ReadPort(Port):
@@ -355,6 +362,8 @@ class BundlePort:
     # TODO: add a proper registration mechanism for service ports.
     if isinstance(cpp_port, cpp.Function):
       return super().__new__(FunctionPort)
+    if isinstance(cpp_port, cpp.MMIORegion):
+      return super().__new__(MMIORegion)
     return super().__new__(cls)
 
   def __init__(self, owner: HWModule, cpp_port: cpp.BundlePort):
@@ -394,6 +403,28 @@ class MessageFuture(Future):
 
   def add_done_callback(self, fn: Callable[[Future], object]) -> None:
     raise NotImplementedError("add_done_callback is not implemented")
+
+
+class MMIORegion(BundlePort):
+  """A region of memory-mapped I/O space. This is a collection of named
+  channels, which are either read or read-write. The channels are accessed
+  by name, and can be connected to the host."""
+
+  def __init__(self, owner: HWModule, cpp_port: cpp.MMIORegion):
+    super().__init__(owner, cpp_port)
+    self.region = cpp_port
+
+  @property
+  def descriptor(self) -> cpp.MMIORegionDesc:
+    return self.region.descriptor
+
+  def read(self, offset: int) -> bytearray:
+    """Read a value from the MMIO region at the given offset."""
+    return self.region.read(offset)
+
+  def write(self, offset: int, data: bytearray) -> None:
+    """Write a value to the MMIO region at the given offset."""
+    self.region.write(offset, data)
 
 
 class FunctionPort(BundlePort):

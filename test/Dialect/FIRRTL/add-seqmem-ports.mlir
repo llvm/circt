@@ -100,9 +100,9 @@ firrtl.circuit "Two" attributes {annotations = [
     firrtl.instance child0 @Child()
     firrtl.instance child1 @Child()
     // CHECK: %child0_sram_0_user_output, %child0_sram_0_user_input = firrtl.instance child0  @Child
-    // CHECK: %child1_sram_0_user_output, %child1_sram_0_user_input = firrtl.instance child1  @Child
     // CHECK: firrtl.matchingconnect %sram_0_user_output, %child0_sram_0_user_output : !firrtl.uint<4>
     // CHECK: firrtl.matchingconnect %child0_sram_0_user_input, %sram_0_user_input : !firrtl.uint<3>
+    // CHECK: %child1_sram_0_user_output, %child1_sram_0_user_input = firrtl.instance child1  @Child
     // CHECK: firrtl.matchingconnect %sram_1_user_output, %child1_sram_0_user_output : !firrtl.uint<4>
     // CHECK: firrtl.matchingconnect %child1_sram_0_user_input, %sram_1_user_input : !firrtl.uint<3>
 
@@ -162,7 +162,7 @@ firrtl.circuit "Complex" attributes {annotations = [
   // CHECK:  hw.hierpath private @[[memNLA_1:.+]] [@DUT::@[[MWRITE_EXT_0:.+]]]
   firrtl.memmodule @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
   firrtl.module @Child() {
-    // CHECK: firrtl.instance MWrite_ext sym @[[CHILD_MWRITE_EXT]] 
+    // CHECK: firrtl.instance MWrite_ext sym @[[CHILD_MWRITE_EXT]]
     // CHECK-SAME: circt.nonlocal = @[[memNLA_0]]
     // CHECK-SAME: @MWrite_ext
     %0:4 = firrtl.instance MWrite_ext  @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
@@ -190,4 +190,152 @@ firrtl.circuit "Complex" attributes {annotations = [
   // CHECK-SAME{LITERAL}:     2 -> {{0}}.{{3}}
   // CHECK-SAME:              {symbols = [@DUT, @[[memNLA]], @[[memNLA_0]], @[[memNLA_1]]]}
   // CHECK-NEXT:          }
+}
+
+// Memories under layers and modules that are wholly instantiated under layers
+// are excluded from AddSeqMemPorts.
+//
+// CHECK-LABEL: firrtl.circuit "LayerBlock"
+firrtl.circuit "LayerBlock" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
+      name = "user_input",
+      input = true,
+      width = 1
+    }
+  ]
+} {
+  firrtl.layer @A bind {}
+
+  // CHECK: firrtl.memmodule
+  // CHECK-SAME: extraPorts = []
+  firrtl.memmodule @mem0(
+    in W0_addr: !firrtl.uint<1>,
+    in W0_en: !firrtl.uint<1>,
+    in W0_clk: !firrtl.clock,
+    in W0_data: !firrtl.uint<1>
+  ) attributes {
+    dataWidth = 1 : ui32,
+    depth = 2 : ui64,
+    extraPorts = [],
+    maskBits = 1 : ui32,
+    numReadPorts = 0 : ui32,
+    numReadWritePorts = 0 : ui32,
+    numWritePorts = 1 : ui32,
+    readLatency = 1 : ui32,
+    writeLatency = 1 : ui32
+  }
+
+  // CHECK: firrtl.memmodule
+  // CHECK-SAME: extraPorts = []
+  firrtl.memmodule @mem1(
+    in W0_addr: !firrtl.uint<1>,
+    in W0_en: !firrtl.uint<1>,
+    in W0_clk: !firrtl.clock,
+    in W0_data: !firrtl.uint<1>
+  ) attributes {
+    dataWidth = 1 : ui32,
+    depth = 2 : ui64,
+    extraPorts = [],
+    maskBits = 1 : ui32,
+    numReadPorts = 0 : ui32,
+    numReadWritePorts = 0 : ui32,
+    numWritePorts = 1 : ui32,
+    readLatency = 1 : ui32,
+    writeLatency = 1 : ui32
+  }
+
+  firrtl.module @Foo() {
+    // CHECK: firrtl.layerblock @A
+    firrtl.layerblock @A {
+      // CHECK-NEXT: firrtl.instance mem1 @mem1
+      %0:4 = firrtl.instance mem1 @mem1(
+        in W0_addr: !firrtl.uint<1>,
+        in W0_en: !firrtl.uint<1>,
+        in W0_clk: !firrtl.clock,
+        in W0_data: !firrtl.uint<1>
+      )
+    }
+  }
+
+  firrtl.module @LayerBlock() {
+    // CHECK: firrtl.layerblock @A
+    firrtl.layerblock @A {
+      // CHECK-NEXT: firrtl.instance mem0 @mem0
+      %0:4 = firrtl.instance mem0 @mem0(
+        in W0_addr: !firrtl.uint<1>,
+        in W0_en: !firrtl.uint<1>,
+        in W0_clk: !firrtl.clock,
+        in W0_data: !firrtl.uint<1>
+      )
+      firrtl.instance foo @Foo()
+    }
+  }
+
+}
+
+// Check that the pass works for memories under whens.  This should:
+//   1. Create a connection under the when block
+//   2. Create an invalidation of the port
+//
+// CHECK-LABEL: firrtl.circuit "WhenBlock"
+firrtl.circuit "WhenBlock" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
+      name = "foo",
+      input = false,
+      width = 1
+    }
+  ]
+} {
+
+  // CHECK: firrtl.memmodule
+  // CHECK-SAME: extraPorts = [{direction = "output", name = "foo", width = 1 : ui32}]
+  firrtl.memmodule @mem(
+    in waddr: !firrtl.uint<1>,
+    in wen: !firrtl.uint<1>,
+    in wclk: !firrtl.clock,
+    in wdata: !firrtl.uint<1>
+  ) attributes {
+    dataWidth = 1 : ui32,
+    depth = 2 : ui64,
+    extraPorts = [],
+    maskBits = 1 : ui32,
+    numReadPorts = 0 : ui32,
+    numReadWritePorts = 0 : ui32,
+    numWritePorts = 1 : ui32,
+    readLatency = 1 : ui32,
+    writeLatency = 1 : ui32
+  }
+
+  // CHECK:      firrtl.module @WhenBlock
+  // CHECK-SAME:   out %[[foo:[a-zA-Z0-9_]+]]
+  firrtl.module @WhenBlock(
+    in %a : !firrtl.uint<1>,
+    in %waddr : !firrtl.uint<1>,
+    in %wen : !firrtl.uint<1>,
+    in %wclk : !firrtl.clock,
+    in %wdata : !firrtl.uint<1>
+  ) {
+    // CHECK-NEXT: %[[invalid:[a-zA-Z0-9_]+]] = firrtl.invalidvalue
+    // CHECK-NEXT: firrtl.matchingconnect %[[foo]], %[[invalid]]
+    // CHECK-NEXT: firrtl.when
+    firrtl.when %a : !firrtl.uint<1> {
+      // CHECK-NEXT: firrtl.instance
+      %0, %1, %2, %3 = firrtl.instance mem @mem(
+        in waddr: !firrtl.uint<1>,
+        in wen: !firrtl.uint<1>,
+        in wclk: !firrtl.clock,
+        in wdata: !firrtl.uint<1>
+      )
+      // CHECK-NEXT: firrtl.matchingconnect %[[foo]], %mem_foo
+      firrtl.matchingconnect %0, %waddr : !firrtl.uint<1>
+      firrtl.matchingconnect %1, %wen : !firrtl.uint<1>
+      firrtl.matchingconnect %2, %wclk : !firrtl.clock
+      firrtl.matchingconnect %3, %wdata : !firrtl.uint<1>
+    }
+  }
+
 }

@@ -886,16 +886,19 @@ CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
 }
 
 void CreateSiFiveMetadataPass::runOnOperation() {
-
-  auto moduleOp = getOperation();
-  auto circuits = moduleOp.getOps<CircuitOp>();
+  auto circuits = getOperation().getOps<CircuitOp>();
   if (circuits.empty())
     return;
-  auto cIter = circuits.begin();
-  circuitOp = *cIter++;
 
-  assert(cIter == circuits.end() &&
-         "cannot handle more than one CircuitOp in a mlir::ModuleOp");
+  circuitOp = *circuits.begin();
+
+  if (!llvm::hasSingleElement(circuits)) {
+    mlir::emitError(circuitOp.getLoc(),
+                    "cannot process multiple circuit operations")
+            .attachNote((*std::next(circuits.begin())).getLoc())
+        << "second circuit here";
+    return signalPassFailure();
+  }
 
   auto *body = circuitOp.getBodyBlock();
   // Find the device under test and create a set of all modules underneath it.

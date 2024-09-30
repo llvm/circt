@@ -321,3 +321,11 @@ hw.module @Sampled(in %in: i1) {
   %2 = sv.system.sampled %in : i1
   hw.output
 }
+
+// CHECK-LABEL: @Issue7563
+// CHECK-NEXT: hw.output
+hw.module @Issue7563(in %in: i8) {
+  %r = sv.reg : !hw.inout<i8>
+  sv.assign %r, %in : i8
+  hw.output
+}

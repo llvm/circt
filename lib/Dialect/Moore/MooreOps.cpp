@@ -518,17 +518,17 @@ LogicalResult AssignedVariableOp::canonicalize(AssignedVariableOp op,
 
   // Eliminate variables that feed an output port of the same name.
   for (auto &use : op->getUses()) {
-    auto outputOp = dyn_cast<OutputOp>(use.getOwner());
-    if (!outputOp)
-      continue;
-    auto moduleOp = dyn_cast<SVModuleOp>(outputOp.getParentOp());
-    if (!moduleOp)
-      break;
-    auto moduleType = moduleOp.getModuleType();
-    auto portName = moduleType.getOutputNameAttr(use.getOperandNumber());
-    if (portName == op.getNameAttr()) {
-      rewriter.replaceOp(op, op.getInput());
-      return success();
+    auto *useOwner = use.getOwner();
+    if (auto outputOp = dyn_cast<OutputOp>(useOwner)) {
+      if (auto moduleOp = dyn_cast<SVModuleOp>(outputOp->getParentOp())) {
+        auto moduleType = moduleOp.getModuleType();
+        auto portName = moduleType.getOutputNameAttr(use.getOperandNumber());
+        if (portName == op.getNameAttr()) {
+          rewriter.replaceOp(op, op.getInput());
+          return success();
+        }
+      } else
+        break;
     }
   }
 
@@ -631,14 +631,6 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
 OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
   assert(adaptor.getOperands().empty() && "constant has no operands");
   return getValueAttr();
-}
-
-//===----------------------------------------------------------------------===//
-// NamedConstantOp
-//===----------------------------------------------------------------------===//
-
-void NamedConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getResult(), getName());
 }
 
 //===----------------------------------------------------------------------===//

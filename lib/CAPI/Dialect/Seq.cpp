@@ -26,3 +26,15 @@ bool seqTypeIsAClock(MlirType type) {
 MlirType seqClockTypeGet(MlirContext ctx) {
   return wrap(ClockType::get(unwrap(ctx)));
 }
+
+bool seqTypeIsAImmutable(MlirType type) {
+  return llvm::isa<ImmutableType>(unwrap(type));
+}
+
+MlirType seqImmutableTypeGet(MlirType innerType) {
+  return wrap(ImmutableType::get(unwrap(innerType)));
+}
+
+MlirType seqImmutableTypeGetInnerType(MlirType type) {
+  return wrap(llvm::cast<ImmutableType>(unwrap(type)).getInnerType());
+}

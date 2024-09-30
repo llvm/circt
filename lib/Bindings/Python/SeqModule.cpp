@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "DialectModules.h"
+#include "CIRCTModules.h"
 
 #include "circt-c/Dialect/Seq.h"
 #include "mlir/Bindings/Python/PybindAdaptors.h"
@@ -33,4 +33,13 @@ void circt::python::populateDialectSeqSubmodule(py::module &m) {
             return cls(seqClockTypeGet(ctx));
           },
           py::arg("cls"), py::arg("context") = py::none());
+
+  mlir_type_subclass(m, "ImmutableType", seqTypeIsAImmutable)
+      .def_classmethod("get",
+                       [](py::object cls, MlirType innerType) {
+                         return cls(seqImmutableTypeGet(innerType));
+                       })
+      .def_property_readonly("inner_type", [](MlirType self) {
+        return seqImmutableTypeGetInnerType(self);
+      });
 }

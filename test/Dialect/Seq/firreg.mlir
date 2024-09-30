@@ -129,7 +129,7 @@ hw.module @lowering(in %clk : !seq.clock, in %rst : i1, in %in : i32, out a : i3
   // CHECK-NEXT:       sv.ifdef.procedural @RANDOMIZE_REG_INIT {
   // CHECK-NEXT:         %_RANDOM = sv.logic : !hw.inout<uarray<8xi32>>
   // CHECK-NEXT:         sv.for %i = %c0_i4 to %c-8_i4 step %c1_i4 : i4 {
-  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
+  // CHECK-NEXT:           %RANDOM = sv.macro.ref.expr.se @RANDOM() : () -> i32
   // CHECK-NEXT:           %24 = comb.extract %i from 0 : (i4) -> i3
   // CHECK-NEXT:           %25 = sv.array_index_inout %_RANDOM[%24] : !hw.inout<uarray<8xi32>>, i3
   // CHECK-NEXT:           sv.bpassign %25, %RANDOM : i32
@@ -210,7 +210,7 @@ hw.module private @UninitReg1(in %clock : !seq.clock, in %reset : i1, in %cond :
   // CHECK-NEXT:       sv.ifdef.procedural @RANDOMIZE_REG_INIT {
   // CHECK-NEXT:         %_RANDOM = sv.logic : !hw.inout<uarray<1xi32>>
   // CHECK:              sv.for %i = %{{false.*}} to %{{true.*}} step %{{true.*}} : i1 {
-  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
+  // CHECK-NEXT:           %RANDOM = sv.macro.ref.expr.se @RANDOM() : () -> i32
   // CHECK-NEXT:           %6 = comb.extract %i from 0 : (i1) -> i0
   // CHECK-NEXT:           %7 = sv.array_index_inout %_RANDOM[%6] : !hw.inout<uarray<1xi32>>, i0
   // CHECK-NEXT:           sv.bpassign %7, %RANDOM : i32
@@ -317,7 +317,7 @@ hw.module private @InitReg1(in %clock: !seq.clock, in %reset: i1, in %io_d: i32,
   // CHECK-NEXT:       sv.ifdef.procedural @RANDOMIZE_REG_INIT {
   // CHECK-NEXT:          %_RANDOM = sv.logic : !hw.inout<uarray<3xi32>>
   // CHECK-NEXT:          sv.for %i = %c0_i2 to %c-1_i2 step %c1_i2 : i2 {
-  // CHECK-NEXT:            %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
+  // CHECK-NEXT:            %RANDOM = sv.macro.ref.expr.se @RANDOM() : () -> i32
   // CHECK-NEXT:            %14 = sv.array_index_inout %_RANDOM[%i] : !hw.inout<uarray<3xi32>>, i2
   // CHECK-NEXT:            sv.bpassign %14, %RANDOM : i32
   // CHECK-NEXT:          }
@@ -366,7 +366,7 @@ hw.module private @UninitReg42(in %clock: !seq.clock, in %reset: i1, in %cond: i
   // CHECK-NEXT:       sv.ifdef.procedural @RANDOMIZE_REG_INIT {
   // CHECK-NEXT:         %_RANDOM = sv.logic : !hw.inout<uarray<2xi32>>
   // CHECK-NEXT:         sv.for %i = %c0_i2 to %c-2_i2 step %c1_i2 : i2 {
-  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
+  // CHECK-NEXT:           %RANDOM = sv.macro.ref.expr.se @RANDOM() : () -> i32
   // CHECK-NEXT:           %9 = comb.extract %i from 0 : (i2) -> i1
   // CHECK-NEXT:           %10 = sv.array_index_inout %_RANDOM[%9] : !hw.inout<uarray<2xi32>>, i1
   // CHECK-NEXT:           sv.bpassign %10, %RANDOM : i32
@@ -412,7 +412,7 @@ hw.module private @init1DVector(in %clock: !seq.clock, in %a: !hw.array<2xi1>, o
   // CHECK-NEXT:       sv.ifdef.procedural @RANDOMIZE_REG_INIT {
   // CHECK-NEXT:       %_RANDOM = sv.logic : !hw.inout<uarray<1xi32>>
   // CHECK-NEXT:       sv.for %i = %false to %true step %true : i1 {
-  // CHECK-NEXT:         %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
+  // CHECK-NEXT:         %RANDOM = sv.macro.ref.expr.se @RANDOM() : () -> i32
   // CHECK-NEXT:         %8 = comb.extract %i from 0 : (i1) -> i0
   // CHECK-NEXT:         %9 = sv.array_index_inout %_RANDOM[%8] : !hw.inout<uarray<1xi32>>, i0
   // CHECK-NEXT:         sv.bpassign %9, %RANDOM : i32
@@ -459,7 +459,7 @@ hw.module private @init2DVector(in %clock: !seq.clock, in %a: !hw.array<1xarray<
   // CHECK-NEXT:       sv.ifdef.procedural @RANDOMIZE_REG_INIT {
   // CHECK-NEXT:         %_RANDOM = sv.logic : !hw.inout<uarray<1xi32>>
   // CHECK-NEXT:         sv.for %i = %false to %true step %true : i1 {
-  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
+  // CHECK-NEXT:           %RANDOM = sv.macro.ref.expr.se @RANDOM() : () -> i32
   // CHECK-NEXT:           %6 = comb.extract %i from 0 : (i1) -> i0
   // CHECK-NEXT:           %7 = sv.array_index_inout %_RANDOM[%6] : !hw.inout<uarray<1xi32>>, i0
   // CHECK-NEXT:           sv.bpassign %7, %RANDOM : i32

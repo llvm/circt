@@ -159,7 +159,7 @@ LogicalResult AccessAnalysis::analyze(Operation *op) {
 
     // Track the relationship between callers and callees.
     if (auto callOp = dyn_cast<CallOpInterface>(opNode.op))
-      if (auto *calleeOp = callOp.resolveCallable(&symbolTable))
+      if (auto *calleeOp = callOp.resolveCallableInTable(&symbolTable))
         get(calleeOp).callers.insert(&opNode);
 
     // Create the seed accesses.

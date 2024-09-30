@@ -176,6 +176,10 @@ MacroDeclOp MacroDefOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
   return ::getReferencedMacro(cache, *this, getMacroNameAttr());
 }
 
+MacroDeclOp MacroRefOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
+  return ::getReferencedMacro(cache, *this, getMacroNameAttr());
+}
+
 /// Ensure that the symbol being instantiated exists and is a MacroDefOp.
 LogicalResult
 MacroRefExprOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
@@ -190,6 +194,11 @@ MacroRefExprSEOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 /// Ensure that the symbol being instantiated exists and is a MacroDefOp.
 LogicalResult MacroDefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyMacroIdentSymbolUses(*this, getMacroNameAttr(), symbolTable);
+}
+
+/// Ensure that the symbol being instantiated exists and is a MacroDefOp.
+LogicalResult MacroRefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return verifyMacroIdentSymbolUses(*this, getMacroNameAttr(), symbolTable);
 }
 
@@ -303,13 +312,13 @@ LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
     return failure();
   // Check that all operations on the wire are sv.assigns. All other wire
   // operations will have been handled by other canonicalization.
-  for (auto &use : op.getResult().getUses())
-    if (!isa<AssignOp>(use.getOwner()))
+  for (auto *user : op.getResult().getUsers())
+    if (!isa<AssignOp>(user))
       return failure();
 
   // Remove all uses of the wire.
-  for (auto &use : op.getResult().getUses())
-    rewriter.eraseOp(use.getOwner());
+  for (auto *user : llvm::make_early_inc_range(op.getResult().getUsers()))
+    rewriter.eraseOp(user);
 
   // Remove the wire.
   rewriter.eraseOp(op);

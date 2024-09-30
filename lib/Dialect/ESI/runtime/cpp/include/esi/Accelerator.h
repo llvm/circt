@@ -80,9 +80,10 @@ public:
   AcceleratorConnection(Context &ctxt);
   virtual ~AcceleratorConnection();
   Context &getCtxt() const { return ctxt; }
+  Logger &getLogger() const { return ctxt.getLogger(); }
 
   /// Disconnect from the accelerator cleanly.
-  void disconnect();
+  virtual void disconnect();
 
   /// Request the host side channel ports for a particular instance (identified
   /// by the AppID path). For convenience, provide the bundle type.

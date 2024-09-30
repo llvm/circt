@@ -9,6 +9,7 @@
 #ifndef CIRCT_DIALECT_OM_OMPASSES_H
 #define CIRCT_DIALECT_OM_OMPASSES_H
 
+#include "circt/Support/LLVM.h"
 #include "mlir/Pass/Pass.h"
 #include <memory>
 
@@ -20,7 +21,8 @@ namespace circt {
 namespace om {
 
 std::unique_ptr<mlir::Pass> createOMLinkModulesPass();
-std::unique_ptr<mlir::Pass> createFreezePathsPass();
+std::unique_ptr<mlir::Pass> createFreezePathsPass(
+    std::function<StringAttr(Operation *)> getOpNameFallback = {});
 std::unique_ptr<mlir::Pass> createVerifyObjectFieldsPass();
 
 #define GEN_PASS_REGISTRATION

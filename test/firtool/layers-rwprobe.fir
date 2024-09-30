@@ -36,4 +36,3 @@ circuit TH:
       wire w : UInt<1>
       connect w, UInt<1>(0)
       define p = rwprobe(w)
-

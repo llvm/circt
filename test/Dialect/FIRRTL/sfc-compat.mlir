@@ -34,7 +34,7 @@ firrtl.circuit "SFCCompatTests" {
   // converted to a reg.
   //
   // CHECK-LABEL: firrtl.module @AggregateInvalidThroughWire
-  firrtl.module @AggregateInvalidThroughWire(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %d: !firrtl.vector<bundle<a: uint<1>>, 2>, out %q: !firrtl.vector<bundle<a: uint<1>>, 2>) {
+  firrtl.module @AggregateInvalidThroughWire(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %d: !firrtl.vector<bundle<a: uint<1>>, 2>, out %q: !firrtl.vector<bundle<a: uint<1>>, 2>, in %foo: !firrtl.vector<uint<1>, 1>) {
     %inv = firrtl.wire : !firrtl.bundle<a: uint<1>>
     %inv_a = firrtl.subfield %inv[a] : !firrtl.bundle<a: uint<1>>
     %invalid = firrtl.invalidvalue : !firrtl.uint<1>
@@ -50,6 +50,18 @@ firrtl.circuit "SFCCompatTests" {
     %r = firrtl.regreset %clock, %reset, %inv1  : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<bundle<a: uint<1>>, 2>, !firrtl.vector<bundle<a: uint<1>>, 2>
     firrtl.matchingconnect %r, %d : !firrtl.vector<bundle<a: uint<1>>, 2>
     firrtl.matchingconnect %q, %r : !firrtl.vector<bundle<a: uint<1>>, 2>
+
+    %bar = firrtl.wire : !firrtl.vector<vector<uint<1>, 1>, 1>
+    %1 = firrtl.subindex %bar[0] : !firrtl.vector<vector<uint<1>, 1>, 1>
+    %2 = firrtl.subindex %foo[0] : !firrtl.vector<uint<1>, 1>
+    %3 = firrtl.subindex %1[0] : !firrtl.vector<uint<1>, 1>
+    firrtl.matchingconnect %3, %2 : !firrtl.uint<1>
+    // Check that firrtl.regreset is not transformed into reg op if wire is not invalid
+    // CHECK: firrtl.regreset
+    %x = firrtl.regreset %clock, %reset, %bar : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<vector<uint<1>, 1>, 1>, !firrtl.vector<vector<uint<1>, 1>, 1>
+    %4 = firrtl.subindex %x[0] : !firrtl.vector<vector<uint<1>, 1>, 1>
+    %5 = firrtl.subindex %4[0] : !firrtl.vector<uint<1>, 1>
+    firrtl.matchingconnect %5, %5 : !firrtl.uint<1>
   }
 
   // A regreset invalidated via an output port should be converted to a reg.

@@ -7,7 +7,7 @@ from .constructs import AssignableSignal, Mux, Wire
 from .module import generator, Module, ModuleLikeBuilderBase, PortProxyBase
 from .signals import (BitsSignal, BundleSignal, ChannelSignal, Signal,
                       _FromCirctValue)
-from .support import get_user_loc
+from .support import _obj_to_attribute, get_user_loc, obj_to_typed_attribute
 from .system import System
 from .types import (Bits, Bundle, BundledChannel, Channel, ChannelDirection,
                     StructType, Type, UInt, types, _FromCirctType)
@@ -144,9 +144,9 @@ class _OutputBundleSetter(AssignableSignal):
     give the runtime necessary information about how to connect to the client
     through the generated service. For instance, offsets into an MMIO space."""
 
-    ir_details: Dict[str, ir.StringAttr] = {}
+    ir_details: Dict[str, ir.Attribute] = {}
     for k, v in details.items():
-      ir_details[k] = ir.StringAttr.get(str(v))
+      ir_details[k] = _obj_to_attribute(v)
     with get_user_loc(), ir.InsertionPoint.at_block_begin(
         self.rec.reqDetails.blocks[0]):
       raw_esi.ServiceImplClientRecordOp(

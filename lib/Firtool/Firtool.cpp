@@ -28,6 +28,7 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
                                                     const FirtoolOptions &opt) {
   pm.nest<firrtl::CircuitOp>().addPass(
       firrtl::createCheckRecursiveInstantiation());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckLayers());
   // Legalize away "open" aggregates to hw-only versions.
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerOpenAggsPass());
 
@@ -140,8 +141,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     modulePM.addPass(firrtl::createLayerSinkPass());
   }
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerLayersPass());
-
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
   // Preset the random initialization parameters for each module. The current
@@ -175,6 +174,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   if (!opt.shouldDisableOptimization())
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
 
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerLayersPass());
+
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
 
   pm.addPass(firrtl::createCreateSiFiveMetadataPass(
@@ -189,13 +190,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // collateral is resolved entirely by LowerAnnotations.
   pm.addNestedPass<firrtl::CircuitOp>(
       firrtl::createGrandCentralPass(opt.getCompanionMode()));
-
-  // Read black box source files into the IR.
-  StringRef blackBoxRoot = opt.getBlackBoxRootPath().empty()
-                               ? llvm::sys::path::parent_path(inputFilename)
-                               : opt.getBlackBoxRootPath();
-  pm.nest<firrtl::CircuitOp>().addPass(
-      firrtl::createBlackBoxReaderPass(blackBoxRoot));
 
   // Run SymbolDCE as late as possible, but before InnerSymbolDCE. This is for
   // hierpathop's and just for general cleanup.
@@ -237,6 +231,13 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.nest<firrtl::CircuitOp>().addPass(
       firrtl::createAssignOutputDirsPass(outputFilename));
+
+  // Read black box source files into the IR.
+  StringRef blackBoxRoot = opt.getBlackBoxRootPath().empty()
+                               ? llvm::sys::path::parent_path(inputFilename)
+                               : opt.getBlackBoxRootPath();
+  pm.nest<firrtl::CircuitOp>().addPass(
+      firrtl::createBlackBoxReaderPass(blackBoxRoot));
   return success();
 }
 

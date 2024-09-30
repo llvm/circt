@@ -53,7 +53,8 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
                   ConversionPatternRewriter &rewriter) const override {
     auto i1 = rewriter.getI1Type();
     // Generate the constant used to set the register value
-    Value constZero = rewriter.create<hw::ConstantOp>(op.getLoc(), i1, 0);
+    Value constZero = seq::createConstantInitialValue(
+        rewriter, op->getLoc(), rewriter.getIntegerAttr(i1, 0));
 
     // Generate the constant used to enegate the
     Value constOne = rewriter.create<hw::ConstantOp>(op.getLoc(), i1, 1);
@@ -137,7 +138,9 @@ void LowerLTLToCorePass::runOnOperation() {
           mlir::Location loc) -> std::optional<mlir::Value> {
         if (inputs.size() != 1)
           return std::nullopt;
-        return inputs[0];
+        return builder
+            .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
+            ->getResult(0);
       });
 
   converter.addSourceMaterialization(
@@ -146,7 +149,9 @@ void LowerLTLToCorePass::runOnOperation() {
           mlir::Location loc) -> std::optional<mlir::Value> {
         if (inputs.size() != 1)
           return std::nullopt;
-        return inputs[0];
+        return builder
+            .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
+            ->getResult(0);
       });
 
   // Create the operation rewrite patters

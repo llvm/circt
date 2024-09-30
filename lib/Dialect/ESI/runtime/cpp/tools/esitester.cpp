@@ -29,7 +29,7 @@
 
 using namespace esi;
 
-static void registerCallbacks(Accelerator *);
+static void registerCallbacks(AcceleratorConnection *, Accelerator *);
 
 int main(int argc, const char *argv[]) {
   // TODO: find a command line parser library rather than doing this by hand.
@@ -46,14 +46,14 @@ int main(int argc, const char *argv[]) {
     cmd = argv[3];
 
   try {
-    Context ctxt;
+    Context ctxt = Context::withLogger<StreamLogger>(Logger::Level::Debug);
     std::unique_ptr<AcceleratorConnection> acc = ctxt.connect(backend, conn);
     const auto &info = *acc->getService<services::SysInfo>();
     Manifest manifest(ctxt, info.getJsonManifest());
     Accelerator *accel = manifest.buildAccelerator(*acc);
     acc->getServiceThread()->addPoll(*accel);
 
-    registerCallbacks(accel);
+    registerCallbacks(acc.get(), accel);
 
     if (cmd == "loop") {
       while (true) {
@@ -73,14 +73,22 @@ int main(int argc, const char *argv[]) {
   }
 }
 
-void registerCallbacks(Accelerator *accel) {
+void registerCallbacks(AcceleratorConnection *conn, Accelerator *accel) {
   auto ports = accel->getPorts();
   auto f = ports.find(AppID("PrintfExample"));
   if (f != ports.end()) {
     auto callPort = f->second.getAs<services::CallService::Callback>();
     if (callPort)
       callPort->connect(
-          [](const MessageData &data) -> MessageData {
+          [conn](const MessageData &data) -> MessageData {
+            conn->getLogger().debug(
+                [&](std::string &subsystem, std::string &msg,
+                    std::unique_ptr<std::map<std::string, std::any>> &details) {
+                  subsystem = "ESITESTER";
+                  msg = "Received PrintfExample message";
+                  details = std::make_unique<std::map<std::string, std::any>>();
+                  details->emplace("data", data);
+                });
             std::cout << "PrintfExample: " << *data.as<uint32_t>() << std::endl;
             return MessageData();
           },

@@ -36,18 +36,27 @@ public:
                   ConversionPatternRewriter &rewriter) const final {
     Value in = adaptor.getInput();
     auto baseName = op.getName();
+    Value init = {};
+    if (auto powerOn = adaptor.getPowerOnValue()) {
+      if (auto op = powerOn.getDefiningOp()) {
+        if (op->hasTrait<mlir::OpTrait::ConstantLike>())
+          init = createConstantInitialValue(rewriter, op);
+      }
+
+      if (!init)
+        return op->emitError() << "non-constant initial value is not supported";
+    }
+
     for (size_t i = 0; i < op.getNumElements(); ++i) {
       StringAttr name;
       if (baseName.has_value())
         name = rewriter.getStringAttr(baseName.value() + "_sh" + Twine(i + 1));
       in = rewriter.create<seq::CompRegClockEnabledOp>(
           op.getLoc(), in, adaptor.getClk(), adaptor.getClockEnable(),
-          adaptor.getReset(), adaptor.getResetValue(), name,
-          op.getPowerOnValue());
+          adaptor.getReset(), adaptor.getResetValue(), name, init);
     }
 
-    op.replaceAllUsesWith(in);
-    rewriter.eraseOp(op);
+    rewriter.replaceOp(op, in);
     return success();
   }
 };
@@ -64,7 +73,7 @@ void LowerSeqShiftRegPass::runOnOperation() {
   ConversionTarget target(ctxt);
 
   target.addIllegalOp<seq::ShiftRegOp>();
-  target.addLegalDialect<seq::SeqDialect>();
+  target.addLegalDialect<seq::SeqDialect, hw::HWDialect>();
   RewritePatternSet patterns(&ctxt);
   patterns.add<ShiftRegLowering>(&ctxt);
 

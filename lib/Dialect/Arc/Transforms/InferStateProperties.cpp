@@ -396,7 +396,7 @@ void InferStatePropertiesPass::runOnOperation() {
   getOperation()->walk([&](arc::StateOp stateOp) {
     auto arc =
         cast<arc::DefineOp>(cast<mlir::CallOpInterface>(stateOp.getOperation())
-                                .resolveCallable(&symbolTable));
+                                .resolveCallableInTable(&symbolTable));
     runOnStateOp(stateOp, arc, resetConditionMap);
   });
 }

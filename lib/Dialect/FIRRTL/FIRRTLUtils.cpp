@@ -17,6 +17,7 @@
 #include "circt/Support/Naming.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Path.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -457,7 +458,13 @@ bool circt::firrtl::walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
         auto subRef = fieldRef.getSubField(subID);
         auto subOriginal = original.getSubField(subID);
         auto value = subfield.getResult();
-        workStack.emplace_back(subOriginal, subRef, value, fieldID - subID);
+        // If fieldID is zero, this points to entire subfields.
+        if (fieldID == 0)
+          workStack.emplace_back(subOriginal, subRef, value, 0);
+        else {
+          assert(fieldID >= subID);
+          workStack.emplace_back(subOriginal, subRef, value, fieldID - subID);
+        }
       } else if (auto subindex = dyn_cast<SubindexOp>(user)) {
         FVectorType vectorType = subindex.getInput().getType();
         auto index = subindex.getIndex();
@@ -468,7 +475,13 @@ bool circt::firrtl::walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
         auto subRef = fieldRef.getSubField(subID);
         auto subOriginal = original.getSubField(subID);
         auto value = subindex.getResult();
-        workStack.emplace_back(subOriginal, subRef, value, fieldID - subID);
+        // If fieldID is zero, this points to entire subfields.
+        if (fieldID == 0)
+          workStack.emplace_back(subOriginal, subRef, value, 0);
+        else {
+          assert(fieldID >= subID);
+          workStack.emplace_back(subOriginal, subRef, value, fieldID - subID);
+        }
       } else if (auto connect = dyn_cast<FConnectLike>(user)) {
         // Make sure that this connect is driving the value.
         if (connect.getDest() != current)
@@ -1046,4 +1059,19 @@ Type circt::firrtl::lowerType(
     return IntegerType::get(type.getContext(), width);
 
   return {};
+}
+
+void circt::firrtl::makeCommonPrefix(SmallString<64> &a, StringRef b) {
+  // truncate 'a' to the common prefix of 'a' and 'b'.
+  size_t i = 0;
+  size_t e = std::min(a.size(), b.size());
+  for (; i < e; ++i)
+    if (a[i] != b[i])
+      break;
+  a.resize(i);
+
+  // truncate 'a' so it ends on a directory seperator.
+  auto sep = llvm::sys::path::get_separator();
+  while (!a.empty() && !a.ends_with(sep))
+    a.pop_back();
 }
