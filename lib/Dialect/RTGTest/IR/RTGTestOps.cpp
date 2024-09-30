@@ -25,14 +25,6 @@ APInt TestInstrAOp::getBinary(ArrayRef<APInt> operands) {
   return APInt(7, 0b1110001).concat(operands[0]).concat(operands[1]);
 }
 
-void TestInstrAOp::printAssembly(raw_ostream &stream,
-                                 function_ref<void(Value)> print) {
-  stream << "instr_a ";
-  print(getImm1());
-  stream << ", ";
-  print(getImm2());
-}
-
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//

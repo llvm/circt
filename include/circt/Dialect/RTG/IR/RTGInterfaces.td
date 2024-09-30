@@ -32,7 +32,12 @@ def InstructionOpInterface : OpInterface<"InstructionOpInterface"> {
       }],
       "void", "printAssembly",
       (ins "llvm::raw_ostream &":$stream,
-           "llvm::function_ref<void(mlir::Value)>":$print)>,
+           "llvm::function_ref<void(mlir::Value)>":$print), [{}], [{
+        stream << $_op->getName().getStringRef() << " ";
+        llvm::interleaveComma($_op->getOperands(), stream, [&](Value val){
+          print(val);
+        });
+      }]>,
   ];
 }
 
@@ -46,8 +51,7 @@ def ResourceTypeInterface : TypeInterface<"ResourceTypeInterface"> {
     InterfaceMethod<[{
         Returns the name of the resource.
       }],
-      "std::string", "getName",
-      (ins)>,
+      "std::string", "getName">,
   ];
 }
 
