@@ -71,14 +71,18 @@ def OnContextOp : RTGOp<"on_context", [NoTerminator]> {
   let arguments = (ins ContextResourceSetType:$contexts);
   let regions = (region SizedRegion<1>:$bodyRegion);
 
-  let assemblyFormat = "$contexts `:` type($contexts) attr-dict-with-keyword $bodyRegion";
+  let assemblyFormat = [{
+    $contexts `:` type($contexts) attr-dict-with-keyword $bodyRegion
+  }];
 }
 
 
 
 //===- Resource Set Operations --------------------------------------------===//
 
-def SelectRandomResource : RTGOp<"select_random_resource", [AllTypesMatch<["resources", "output"]>]> {
+def SelectRandomResource : RTGOp<"select_random_resource", [
+  AllTypesMatch<["resources", "output"]>
+]> {
   let summary = "places a random resource in an instruction sequence";
 
   let arguments = (ins ContextResourceSetType:$resources);
@@ -87,10 +91,13 @@ def SelectRandomResource : RTGOp<"select_random_resource", [AllTypesMatch<["reso
   let assemblyFormat = "$resources `:` type($resources) attr-dict";
 }
 
-def SetDifferenceResource : RTGOp<"set_difference_resource", [AllTypesMatch<["resourcesSrc", "resourcesDiff", "output"]>]> {
+def SetDifferenceResource : RTGOp<"set_difference_resource", [
+  AllTypesMatch<["resourcesSrc", "resourcesDiff", "output"]>
+]> {
   let summary = "places a random resource in an instruction sequence";
 
-  let arguments = (ins ContextResourceSetType:$resourcesSrc, ContextResourceSetType:$resourcesDiff);
+  let arguments = (ins ContextResourceSetType:$resourcesSrc,
+                       ContextResourceSetType:$resourcesDiff);
   let results = (outs ContextResourceSetType:$output);
 
   let assemblyFormat = "$resourcesSrc `,` $resourcesDiff `:` type($output) attr-dict";
