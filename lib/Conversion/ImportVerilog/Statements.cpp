@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "slang/ast/SystemSubroutine.h"
 #include "llvm/ADT/ScopeExit.h"
 
 using namespace mlir;
@@ -63,6 +64,19 @@ struct StmtVisitor {
 
   // Handle expression statements.
   LogicalResult visit(const slang::ast::ExpressionStatement &stmt) {
+    // Special handling for calls to system tasks that return no result value.
+    if (const auto *call = stmt.expr.as_if<slang::ast::CallExpression>()) {
+      if (const auto *info =
+              std::get_if<slang::ast::CallExpression::SystemCallInfo>(
+                  &call->subroutine)) {
+        auto handled = visitSystemCall(stmt, *call, *info);
+        if (failed(handled))
+          return failure();
+        if (handled == true)
+          return success();
+      }
+    }
+
     auto value = context.convertRvalueExpression(stmt.expr);
     if (!value)
       return failure();
@@ -461,6 +475,205 @@ struct StmtVisitor {
     builder.create<cf::BranchOp>(loc, context.loopStack.back().breakBlock);
     setTerminated();
     return success();
+  }
+
+  // Handle immediate assertion statements.
+  LogicalResult visit(const slang::ast::ImmediateAssertionStatement &stmt) {
+    auto cond = context.convertRvalueExpression(stmt.cond);
+    cond = context.convertToBool(cond);
+    if (!cond)
+      return failure();
+
+    // Handle assertion statements that don't have an action block.
+    if (stmt.ifTrue && stmt.ifTrue->as_if<slang::ast::EmptyStatement>()) {
+      auto defer = moore::DeferAssert::Immediate;
+      if (stmt.isFinal)
+        defer = moore::DeferAssert::Final;
+      else if (stmt.isDeferred)
+        defer = moore::DeferAssert::Observed;
+
+      switch (stmt.assertionKind) {
+      case slang::ast::AssertionKind::Assert:
+        builder.create<moore::AssertOp>(loc, defer, cond, StringAttr{});
+        return success();
+      case slang::ast::AssertionKind::Assume:
+        builder.create<moore::AssumeOp>(loc, defer, cond, StringAttr{});
+        return success();
+      case slang::ast::AssertionKind::CoverProperty:
+        builder.create<moore::CoverOp>(loc, defer, cond, StringAttr{});
+        return success();
+      default:
+        break;
+      }
+      mlir::emitError(loc) << "unsupported immediate assertion kind: "
+                           << slang::ast::toString(stmt.assertionKind);
+      return failure();
+    }
+
+    // Regard assertion statements with an action block as the "if-else".
+    cond = builder.create<moore::ConversionOp>(loc, builder.getI1Type(), cond);
+
+    // Create the blocks for the true and false branches, and the exit block.
+    Block &exitBlock = createBlock();
+    Block *falseBlock = stmt.ifFalse ? &createBlock() : nullptr;
+    Block &trueBlock = createBlock();
+    builder.create<cf::CondBranchOp>(loc, cond, &trueBlock,
+                                     falseBlock ? falseBlock : &exitBlock);
+
+    // Generate the true branch.
+    builder.setInsertionPointToEnd(&trueBlock);
+    if (stmt.ifTrue && failed(context.convertStatement(*stmt.ifTrue)))
+      return failure();
+    if (!isTerminated())
+      builder.create<cf::BranchOp>(loc, &exitBlock);
+
+    if (stmt.ifFalse) {
+      // Generate the false branch if present.
+      builder.setInsertionPointToEnd(falseBlock);
+      if (failed(context.convertStatement(*stmt.ifFalse)))
+        return failure();
+      if (!isTerminated())
+        builder.create<cf::BranchOp>(loc, &exitBlock);
+    }
+
+    // If control never reaches the exit block, remove it and mark control flow
+    // as terminated. Otherwise we continue inserting ops in the exit block.
+    if (exitBlock.hasNoPredecessors()) {
+      exitBlock.erase();
+      setTerminated();
+    } else {
+      builder.setInsertionPointToEnd(&exitBlock);
+    }
+    return success();
+  }
+
+  /// Handle the subset of system calls that return no result value. Return
+  /// true if the called system task could be handled, false otherwise. Return
+  /// failure if an error occurred.
+  FailureOr<bool>
+  visitSystemCall(const slang::ast::ExpressionStatement &stmt,
+                  const slang::ast::CallExpression &expr,
+                  const slang::ast::CallExpression::SystemCallInfo &info) {
+    const auto &subroutine = *info.subroutine;
+    auto args = expr.arguments();
+
+    // Simulation Control Tasks
+
+    if (subroutine.name == "$stop") {
+      createFinishMessage(args.size() >= 1 ? args[0] : nullptr);
+      builder.create<moore::StopBIOp>(loc);
+      return true;
+    }
+
+    if (subroutine.name == "$finish") {
+      createFinishMessage(args.size() >= 1 ? args[0] : nullptr);
+      builder.create<moore::FinishBIOp>(loc, 0);
+      builder.create<moore::UnreachableOp>(loc);
+      setTerminated();
+      return true;
+    }
+
+    if (subroutine.name == "$exit") {
+      // Calls to `$exit` from outside a `program` are ignored. Since we don't
+      // yet support programs, there is nothing to do here.
+      // TODO: Fix this once we support programs.
+      return true;
+    }
+
+    // Display and Write Tasks (`$display[boh]?` or `$write[boh]?`)
+
+    // Check for a `$display` or `$write` prefix.
+    bool isDisplay = false;     // display or write
+    bool appendNewline = false; // display
+    StringRef remainingName = subroutine.name;
+    if (remainingName.consume_front("$display")) {
+      isDisplay = true;
+      appendNewline = true;
+    } else if (remainingName.consume_front("$write")) {
+      isDisplay = true;
+    }
+
+    // Check for optional `b`, `o`, or `h` suffix indicating default format.
+    using moore::IntFormat;
+    IntFormat defaultFormat = IntFormat::Decimal;
+    if (isDisplay && !remainingName.empty()) {
+      if (remainingName == "b")
+        defaultFormat = IntFormat::Binary;
+      else if (remainingName == "o")
+        defaultFormat = IntFormat::Octal;
+      else if (remainingName == "h")
+        defaultFormat = IntFormat::HexLower;
+      else
+        isDisplay = false;
+    }
+
+    if (isDisplay) {
+      auto message =
+          context.convertFormatString(args, loc, defaultFormat, appendNewline);
+      if (failed(message))
+        return failure();
+      if (*message == Value{})
+        return true;
+      builder.create<moore::DisplayBIOp>(loc, *message);
+      return true;
+    }
+
+    // Severity Tasks
+    using moore::Severity;
+    std::optional<Severity> severity;
+    if (subroutine.name == "$info")
+      severity = Severity::Info;
+    else if (subroutine.name == "$warning")
+      severity = Severity::Warning;
+    else if (subroutine.name == "$error")
+      severity = Severity::Error;
+    else if (subroutine.name == "$fatal")
+      severity = Severity::Fatal;
+
+    if (severity) {
+      // The `$fatal` task has an optional leading verbosity argument.
+      const slang::ast::Expression *verbosityExpr = nullptr;
+      if (severity == Severity::Fatal && args.size() >= 1) {
+        verbosityExpr = args[0];
+        args = args.subspan(1);
+      }
+
+      // Handle the string formatting.
+      auto message = context.convertFormatString(args, loc);
+      if (failed(message))
+        return failure();
+      if (*message == Value{})
+        *message = builder.create<moore::FormatLiteralOp>(loc, "");
+
+      builder.create<moore::SeverityBIOp>(loc, *severity, *message);
+
+      // Handle the `$fatal` case which behaves like a `$finish`.
+      if (severity == Severity::Fatal) {
+        createFinishMessage(verbosityExpr);
+        builder.create<moore::FinishBIOp>(loc, 1);
+        builder.create<moore::UnreachableOp>(loc);
+        setTerminated();
+      }
+      return true;
+    }
+
+    // Give up on any other system tasks. These will be tried again as an
+    // expression later.
+    return false;
+  }
+
+  /// Create the optional diagnostic message print for finish-like ops.
+  void createFinishMessage(const slang::ast::Expression *verbosityExpr) {
+    unsigned verbosity = 1;
+    if (verbosityExpr) {
+      auto value =
+          context.evaluateConstant(*verbosityExpr).integer().as<unsigned>();
+      assert(value && "Slang guarantees constant verbosity parameter");
+      verbosity = *value;
+    }
+    if (verbosity == 0)
+      return;
+    builder.create<moore::FinishMessageBIOp>(loc, verbosity > 1);
   }
 
   /// Emit an error for all other statements.

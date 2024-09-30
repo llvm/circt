@@ -70,14 +70,20 @@ def CompRegOp : SeqOp<"compreg",
                    /*initialValue*/ Value(),
                    hw::InnerSymAttr::get(nameAttr));
     }]>,
+    /// Create a register with a reset and optional power-on value.
+    OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$reset, "Value":$rstValue,
+                   CArg<"Value", "{}">:$initialValue), [{
+      return build($_builder, $_state, input.getType(), input, clk, StringAttr(),
+                   reset, rstValue, initialValue, hw::InnerSymAttr());
+    }]>,
     /// Create a register with a reset, with an inner_sym matching the
-   /// register's name, and optional power-on value.
+    /// register's name, and optional power-on value.
     OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$reset, "Value":$rstValue,
                    "StringAttrOrRef":$name, CArg<"Value", "{}">:$initialValue), [{
       auto nameAttr = name.get($_builder.getContext());
       return build($_builder, $_state, input.getType(), input, clk, nameAttr,
                    reset, rstValue, initialValue, hw::InnerSymAttr::get(nameAttr));
-    }]>
+    }]>,
   ];
 }
 
@@ -407,6 +413,13 @@ def ClockGateOp : SeqOp<"clock_gate", [
   );
 
   let results = (outs ClockType:$output);
+
+  let builders = [
+    OpBuilder<(ins "Value":$clock, "Value":$enable), [{
+      build($_builder, $_state, clock, enable, Value(), hw::InnerSymAttr());
+    }]>,
+  ];
+
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
   let assemblyFormat = [{

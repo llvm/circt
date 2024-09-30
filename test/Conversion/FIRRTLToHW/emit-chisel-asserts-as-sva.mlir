@@ -17,7 +17,7 @@ firrtl.circuit "ifElseFatalToSVA" {
 
     // IF_ELSE_FATAL:       sv.always posedge [[CLK]] {
     // IF_ELSE_FATAL-NEXT:    sv.if {{%.+}} {
-    // IF_ELSE_FATAL-NEXT:      %ASSERT_VERBOSE_COND_ = sv.macro.ref @ASSERT_VERBOSE_COND_()
+    // IF_ELSE_FATAL-NEXT:      %ASSERT_VERBOSE_COND_ = sv.macro.ref.expr @ASSERT_VERBOSE_COND_()
     // IF_ELSE_FATAL-NEXT:      sv.if %ASSERT_VERBOSE_COND_ {
     // IF_ELSE_FATAL-NEXT:        sv.error "assert0"
     // IF_ELSE_FATAL-NEXT:      }

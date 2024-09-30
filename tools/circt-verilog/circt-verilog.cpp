@@ -81,6 +81,9 @@ struct CLOptions {
                      "core dialect IR")),
       cl::init(LoweringMode::Full), cl::cat(cat)};
 
+  cl::opt<bool> debugInfo{"g", cl::desc("Generate debug information"),
+                          cl::cat(cat)};
+
   //===--------------------------------------------------------------------===//
   // Include paths
   //===--------------------------------------------------------------------===//
@@ -293,6 +296,7 @@ static LogicalResult executeWithSources(MLIRContext *context,
     options.mode = ImportVerilogOptions::Mode::OnlyLint;
   else if (opts.loweringMode == LoweringMode::OnlyParse)
     options.mode = ImportVerilogOptions::Mode::OnlyParse;
+  options.debugInfo = opts.debugInfo;
 
   options.includeDirs = opts.includeDirs;
   options.includeSystemDirs = opts.includeSystemDirs;

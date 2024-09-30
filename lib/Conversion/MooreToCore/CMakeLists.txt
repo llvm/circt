@@ -9,6 +9,7 @@ add_circt_conversion_library(CIRCTMooreToCore
 
   LINK_LIBS PUBLIC
   CIRCTComb
+  CIRCTDebug
   CIRCTHW
   CIRCTLLHD
   CIRCTMoore

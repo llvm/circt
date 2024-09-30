@@ -176,6 +176,10 @@ MacroDeclOp MacroDefOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
   return ::getReferencedMacro(cache, *this, getMacroNameAttr());
 }
 
+MacroDeclOp MacroRefOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
+  return ::getReferencedMacro(cache, *this, getMacroNameAttr());
+}
+
 /// Ensure that the symbol being instantiated exists and is a MacroDefOp.
 LogicalResult
 MacroRefExprOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
@@ -190,6 +194,11 @@ MacroRefExprSEOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 /// Ensure that the symbol being instantiated exists and is a MacroDefOp.
 LogicalResult MacroDefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyMacroIdentSymbolUses(*this, getMacroNameAttr(), symbolTable);
+}
+
+/// Ensure that the symbol being instantiated exists and is a MacroDefOp.
+LogicalResult MacroRefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return verifyMacroIdentSymbolUses(*this, getMacroNameAttr(), symbolTable);
 }
 

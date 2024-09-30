@@ -12,6 +12,7 @@
 
 #include "circt/Conversion/MooreToCore.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
@@ -471,6 +472,8 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
                   ConversionPatternRewriter &rewriter) const override {
     Location loc = op.getLoc();
     Type resultType = typeConverter->convertType(op.getResult().getType());
+    if (!resultType)
+      return rewriter.notifyMatchFailure(op.getLoc(), "invalid variable type");
 
     // Determine the initial value of the signal.
     Value init = adaptor.getInitial();
@@ -508,35 +511,6 @@ struct ConstantOpConv : public OpConversionPattern<ConstantOp> {
     auto type = rewriter.getIntegerType(value.getBitWidth());
     rewriter.replaceOpWithNewOp<hw::ConstantOp>(
         op, type, rewriter.getIntegerAttr(type, value));
-    return success();
-  }
-};
-
-struct NamedConstantOpConv : public OpConversionPattern<NamedConstantOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(NamedConstantOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    Type resultType = typeConverter->convertType(op.getResult().getType());
-    SmallString<32> symStr;
-    switch (op.getKind()) {
-    case NamedConst::Parameter:
-      symStr = "parameter";
-      break;
-    case NamedConst::LocalParameter:
-      symStr = "localparameter";
-      break;
-    case NamedConst::SpecParameter:
-      symStr = "specparameter";
-      break;
-    }
-    auto symAttr =
-        rewriter.getStringAttr(symStr + Twine("_") + adaptor.getName());
-    rewriter.replaceOpWithNewOp<hw::WireOp>(op, resultType, adaptor.getValue(),
-                                            op.getNameAttr(),
-                                            hw::InnerSymAttr::get(symAttr));
     return success();
   }
 };
@@ -1155,6 +1129,40 @@ struct ConditionalOpConversion : public OpConversionPattern<ConditionalOp> {
     // evaluated and merged with the appropriate lookup table. See documentation
     // for `ConditionalOp`.
     auto type = typeConverter->convertType(op.getType());
+
+    auto hasNoWriteEffect = [](Region &region) {
+      auto result = region.walk([](Operation *operation) {
+        if (auto memOp = dyn_cast<MemoryEffectOpInterface>(operation))
+          if (!memOp.hasEffect<MemoryEffects::Write>() &&
+              !memOp.hasEffect<MemoryEffects::Free>())
+            return WalkResult::advance();
+
+        return WalkResult::interrupt();
+      });
+      return !result.wasInterrupted();
+    };
+
+    if (hasNoWriteEffect(op.getTrueRegion()) &&
+        hasNoWriteEffect(op.getFalseRegion())) {
+      Operation *trueTerm = op.getTrueRegion().front().getTerminator();
+      Operation *falseTerm = op.getFalseRegion().front().getTerminator();
+
+      rewriter.inlineBlockBefore(&op.getTrueRegion().front(), op);
+      rewriter.inlineBlockBefore(&op.getFalseRegion().front(), op);
+
+      Value convTrueVal = typeConverter->materializeTargetConversion(
+          rewriter, op.getLoc(), type, trueTerm->getOperand(0));
+      Value convFalseVal = typeConverter->materializeTargetConversion(
+          rewriter, op.getLoc(), type, falseTerm->getOperand(0));
+
+      rewriter.eraseOp(trueTerm);
+      rewriter.eraseOp(falseTerm);
+
+      rewriter.replaceOpWithNewOp<comb::MuxOp>(op, adaptor.getCondition(),
+                                               convTrueVal, convFalseVal);
+      return success();
+    }
+
     auto ifOp =
         rewriter.create<scf::IfOp>(op.getLoc(), type, adaptor.getCondition());
     rewriter.inlineRegionBefore(op.getTrueRegion(), ifOp.getThenRegion(),
@@ -1177,64 +1185,51 @@ struct YieldOpConversion : public OpConversionPattern<YieldOp> {
   }
 };
 
+template <typename SourceOp>
+struct InPlaceOpConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.modifyOpInPlace(op,
+                             [&]() { op->setOperands(adaptor.getOperands()); });
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
 // Conversion Infrastructure
 //===----------------------------------------------------------------------===//
 
-static bool isMooreType(Type type) { return isa<UnpackedType>(type); }
-
-static bool hasMooreType(TypeRange types) {
-  return llvm::any_of(types, isMooreType);
-}
-
-static bool hasMooreType(ValueRange values) {
-  return hasMooreType(values.getTypes());
-}
-
-template <typename Op>
-static void addGenericLegality(ConversionTarget &target) {
-  target.addDynamicallyLegalOp<Op>([](Op op) {
-    return !hasMooreType(op->getOperands()) && !hasMooreType(op->getResults());
-  });
-}
-
-static void populateLegality(ConversionTarget &target) {
+static void populateLegality(ConversionTarget &target,
+                             const TypeConverter &converter) {
   target.addIllegalDialect<MooreDialect>();
   target.addLegalDialect<mlir::BuiltinDialect>();
   target.addLegalDialect<hw::HWDialect>();
   target.addLegalDialect<llhd::LLHDDialect>();
   target.addLegalDialect<comb::CombDialect>();
 
-  addGenericLegality<cf::CondBranchOp>(target);
-  addGenericLegality<cf::BranchOp>(target);
-  addGenericLegality<scf::IfOp>(target);
-  addGenericLegality<scf::YieldOp>(target);
-  addGenericLegality<func::CallOp>(target);
-  addGenericLegality<func::ReturnOp>(target);
-  addGenericLegality<UnrealizedConversionCastOp>(target);
+  target.addLegalOp<debug::ScopeOp>();
 
-  target.addDynamicallyLegalOp<func::FuncOp>([](func::FuncOp op) {
-    auto argsConverted = llvm::none_of(op.getBlocks(), [](auto &block) {
-      return hasMooreType(block.getArguments());
-    });
-    auto resultsConverted = !hasMooreType(op.getResultTypes());
-    return argsConverted && resultsConverted;
+  target.addDynamicallyLegalOp<
+      cf::CondBranchOp, cf::BranchOp, scf::IfOp, scf::YieldOp, func::CallOp,
+      func::ReturnOp, UnrealizedConversionCastOp, hw::OutputOp, hw::InstanceOp,
+      debug::ArrayOp, debug::StructOp, debug::VariableOp>(
+      [&](Operation *op) { return converter.isLegal(op); });
+
+  target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp op) {
+    return converter.isSignatureLegal(op.getFunctionType()) &&
+           converter.isLegal(&op.getFunctionBody());
   });
 
-  target.addDynamicallyLegalOp<hw::HWModuleOp>([](hw::HWModuleOp op) {
-    return !hasMooreType(op.getInputTypes()) &&
-           !hasMooreType(op.getOutputTypes()) &&
-           !hasMooreType(op.getBody().getArgumentTypes());
+  target.addDynamicallyLegalOp<hw::HWModuleOp>([&](hw::HWModuleOp op) {
+    return converter.isSignatureLegal(op.getModuleType().getFuncType()) &&
+           converter.isLegal(&op.getBody());
   });
-
-  target.addDynamicallyLegalOp<hw::InstanceOp>([](hw::InstanceOp op) {
-    return !hasMooreType(op.getInputs()) && !hasMooreType(op.getResults());
-  });
-
-  target.addDynamicallyLegalOp<hw::OutputOp>(
-      [](hw::OutputOp op) { return !hasMooreType(op.getOutputs()); });
 }
 
 static void populateTypeConversion(TypeConverter &typeConverter) {
@@ -1242,16 +1237,19 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return IntegerType::get(type.getContext(), type.getWidth());
   });
 
-  typeConverter.addConversion([&](ArrayType type) {
-    return hw::ArrayType::get(typeConverter.convertType(type.getElementType()),
-                              type.getSize());
+  typeConverter.addConversion([&](ArrayType type) -> std::optional<Type> {
+    if (auto elementType = typeConverter.convertType(type.getElementType()))
+      return hw::ArrayType::get(elementType, type.getSize());
+    return {};
   });
 
-  typeConverter.addConversion([&](StructType type) {
+  typeConverter.addConversion([&](StructType type) -> std::optional<Type> {
     SmallVector<hw::StructType::FieldInfo> fields;
     for (auto field : type.getMembers()) {
       hw::StructType::FieldInfo info;
       info.type = typeConverter.convertType(field.type);
+      if (!info.type)
+        return {};
       info.name = field.name;
       fields.push_back(info);
     }
@@ -1263,26 +1261,56 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   // differences though they look similarily. The packed data structure is
   // contiguous in memory but another is opposite. The differences will affect
   // data layout and granularity of event tracking in simulation.
-  typeConverter.addConversion([&](UnpackedStructType type) {
-    SmallVector<hw::StructType::FieldInfo> fields;
-    for (auto field : type.getMembers()) {
-      hw::StructType::FieldInfo info;
-      info.type = typeConverter.convertType(field.type);
-      info.name = field.name;
-      fields.push_back(info);
-    }
-    return hw::StructType::get(type.getContext(), fields);
-  });
+  typeConverter.addConversion(
+      [&](UnpackedStructType type) -> std::optional<Type> {
+        SmallVector<hw::StructType::FieldInfo> fields;
+        for (auto field : type.getMembers()) {
+          hw::StructType::FieldInfo info;
+          info.type = typeConverter.convertType(field.type);
+          if (!info.type)
+            return {};
+          info.name = field.name;
+          fields.push_back(info);
+        }
+        return hw::StructType::get(type.getContext(), fields);
+      });
 
   typeConverter.addConversion([&](RefType type) -> std::optional<Type> {
-    auto innerType = typeConverter.convertType(type.getNestedType());
-    if (innerType)
+    if (auto innerType = typeConverter.convertType(type.getNestedType()))
       return hw::InOutType::get(innerType);
     return {};
   });
 
   // Valid target types.
   typeConverter.addConversion([](IntegerType type) { return type; });
+  typeConverter.addConversion([](debug::ArrayType type) { return type; });
+  typeConverter.addConversion([](debug::ScopeType type) { return type; });
+  typeConverter.addConversion([](debug::StructType type) { return type; });
+
+  typeConverter.addConversion([&](hw::InOutType type) -> std::optional<Type> {
+    if (auto innerType = typeConverter.convertType(type.getElementType()))
+      return hw::InOutType::get(innerType);
+    return {};
+  });
+
+  typeConverter.addConversion([&](hw::ArrayType type) -> std::optional<Type> {
+    if (auto elementType = typeConverter.convertType(type.getElementType()))
+      return hw::ArrayType::get(elementType, type.getNumElements());
+    return {};
+  });
+
+  typeConverter.addConversion([&](hw::StructType type) -> std::optional<Type> {
+    SmallVector<hw::StructType::FieldInfo> fields;
+    for (auto field : type.getElements()) {
+      hw::StructType::FieldInfo info;
+      info.type = typeConverter.convertType(field.type);
+      if (!info.type)
+        return {};
+      info.name = field.name;
+      fields.push_back(info);
+    }
+    return hw::StructType::get(type.getContext(), fields);
+  });
 
   typeConverter.addTargetMaterialization(
       [&](mlir::OpBuilder &builder, mlir::Type resultType,
@@ -1312,13 +1340,13 @@ static void populateOpConversion(RewritePatternSet &patterns,
   auto *context = patterns.getContext();
   // clang-format off
   patterns.add<
-  // Patterns of declaration operations.
+    // Patterns of declaration operations.
     VariableOpConversion,
 
     // Patterns of miscellaneous operations.
     ConstantOpConv, ConcatOpConversion, ReplicateOpConversion,
     ExtractOpConversion, DynExtractOpConversion, DynExtractRefOpConversion,
-    ConversionOpConversion, ReadOpConversion, NamedConstantOpConv,
+    ConversionOpConversion, ReadOpConversion,
     StructExtractOpConversion, StructExtractRefOpConversion,
     ExtractRefOpConversion, StructCreateOpConversion, ConditionalOpConversion,
     YieldOpConversion, OutputOpConversion,
@@ -1374,11 +1402,14 @@ static void populateOpConversion(RewritePatternSet &patterns,
 
     // Patterns of other operations outside Moore dialect.
     HWInstanceOpConversion, ReturnOpConversion,
-    CallOpConversion, UnrealizedConversionCastConversion
+    CallOpConversion, UnrealizedConversionCastConversion,
+    InPlaceOpConversion<debug::ArrayOp>,
+    InPlaceOpConversion<debug::StructOp>,
+    InPlaceOpConversion<debug::VariableOp>
   >(typeConverter, context);
   // clang-format on
-  mlir::populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(
-      patterns, typeConverter);
+  mlir::populateAnyFunctionOpInterfaceTypeConversionPattern(patterns,
+                                                            typeConverter);
 
   hw::populateHWModuleLikeTypeConversionPattern(
       hw::HWModuleOp::getOperationName(), patterns, typeConverter);
@@ -1411,8 +1442,8 @@ void MooreToCorePass::runOnOperation() {
   ConversionTarget target(context);
   TypeConverter typeConverter;
   RewritePatternSet patterns(&context);
-  populateLegality(target);
   populateTypeConversion(typeConverter);
+  populateLegality(target, typeConverter);
   populateOpConversion(patterns, typeConverter);
 
   if (failed(applyFullConversion(module, target, std::move(patterns))))

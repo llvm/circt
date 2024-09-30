@@ -1,4 +1,4 @@
-add_circt_library(CIRCTCFToHandshake
+add_circt_conversion_library(CIRCTCFToHandshake
   CFToHandshake.cpp
 
   ADDITIONAL_HEADER_DIRS

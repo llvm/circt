@@ -12,7 +12,7 @@ circuit PrintTest:
     ; CHECK:      sv.ifdef  @SYNTHESIS {
     ; CHECK-NEXT: } else {
     ; CHECK-NEXT:   sv.always posedge %clock {
-    ; CHECK-NEXT:     [[PRINTF_COND:%.+]] = sv.macro.ref @PRINTF_COND_() : () -> i1
+    ; CHECK-NEXT:     [[PRINTF_COND:%.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     ; CHECK-NEXT:     [[COND:%.+]] = comb.and bin [[PRINTF_COND]], %cond : i1
     ; CHECK-NEXT:     sv.if [[COND]] {
     ; CHECK-NEXT:       sv.fwrite %c-2147483646_i32, "test %d\0A"(%var) : i32

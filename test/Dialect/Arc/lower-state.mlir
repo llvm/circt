@@ -404,3 +404,41 @@ hw.module @InitializedStates(in %clk: !seq.clock, in %reset: i1, in %input: i42)
   %3, %4 = arc.state @DummyArc2(%2) clock %clk initial (%cstb, %add : i42, i42) latency 1 : (i42) -> (i42, i42)
 // CHECK: }
 }
+
+func.func private @random() -> i32
+arc.define @counter_arc(%arg0: i8) -> i8 {
+  %c1_i8 = hw.constant 1 : i8
+  %0 = comb.add %arg0, %c1_i8 : i8
+  arc.output %0 : i8
+}
+arc.define @counter_arc_0(%arg0: i1) -> !seq.clock {
+  %0 = seq.to_clock %arg0
+  arc.output %0 : !seq.clock
+}
+// CHECK-LABEL: arc.model @seqInitial
+hw.module @seqInitial(in %clk : i1, out o1 : i8, out o2 : i8) {
+  // CHECK:      %[[STATE1:.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i8>
+  // CHECK-NEXT: %[[STATE2:.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i8>
+
+  // CHECK:        arc.initial {
+  // CHECK-NEXT:     %c5_i8 = hw.constant 5 : i8
+  // CHECK-NEXT:     %[[RAND:.+]] = func.call @random() : () -> i32
+  // CHECK-NEXT:     %[[EXTRACT:.+]] = comb.extract %[[RAND]] from 0 : (i32) -> i8
+  // CHECK-NEXT:     %[[VAL1:.+]] = builtin.unrealized_conversion_cast %[[EXTRACT]] : i8 to i8
+  // CHECK-NEXT:     arc.state_write %[[STATE1]] = %[[VAL1:.+]] : <i8>
+  // CHECK-NEXT:     %[[VAL2:.+]] = builtin.unrealized_conversion_cast %c5_i8 : i8 to i8
+  // CHECK-NEXT:     arc.state_write %[[STATE2]] = %[[VAL2:.+]] : <i8>
+  // CHECK-NEXT:   }
+  %0 = builtin.unrealized_conversion_cast %2#0 : !seq.immutable<i8> to i8
+  %1 = builtin.unrealized_conversion_cast %2#1 : !seq.immutable<i8> to i8
+  %2:2 = seq.initial {
+    %c5_i8 = hw.constant 5 : i8
+    %6 = func.call @random() : () -> i32
+    %7 = comb.extract %6 from 0 : (i32) -> i8
+    seq.yield %7, %c5_i8 : i8, i8
+  } : !seq.immutable<i8>, !seq.immutable<i8>
+  %3 = arc.state @counter_arc(%3) clock %4 initial (%0 : i8) latency 1 : (i8) -> i8
+  %4 = arc.call @counter_arc_0(%clk) : (i1) -> !seq.clock
+  %5 = arc.state @counter_arc(%5) clock %4 initial (%1 : i8) latency 1 : (i8) -> i8
+  hw.output %3, %5 : i8, i8
+}

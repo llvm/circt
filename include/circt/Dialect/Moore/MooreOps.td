@@ -187,6 +187,18 @@ def ReturnOp : MooreOp<"return", [
   let assemblyFormat = [{ attr-dict }];
 }
 
+def UnreachableOp : MooreOp<"unreachable", [Terminator]> {
+  let summary = "Terminates a block as unreachable";
+  let description = [{
+    The `moore.unreachable` op is used to indicate that control flow never
+    reaches the end of a block. This is useful for operations such as `$fatal`
+    which never return as they cause the simulator to shut down. Behavior is
+    undefined if control actually _does_ reach this terminator, but should
+    probably crash the process with a useful error message.
+  }];
+  let assemblyFormat = "attr-dict";
+}
+
 //===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//
@@ -459,7 +471,7 @@ def DetectEventOp : MooreOp<"detect_event", [
 }
 
 //===----------------------------------------------------------------------===//
-// Expressions
+// Constants
 //===----------------------------------------------------------------------===//
 
 def ConstantOp : MooreOp<"constant", [Pure, ConstantLike]> {
@@ -476,37 +488,6 @@ def ConstantOp : MooreOp<"constant", [Pure, ConstantLike]> {
   ];
 }
 
-def Parameter : I32EnumAttrCase<"Parameter", 0, "parameter">;
-def LocalParameter : I32EnumAttrCase<"LocalParameter", 1, "localparam">;
-def SpecParameter : I32EnumAttrCase<"SpecParameter", 2, "specparam">;
-
-def NamedConstAttr : I32EnumAttr<"NamedConst", "elaboration-time constants", 
-       [Parameter, LocalParameter, SpecParameter]>{
-    let cppNamespace = "circt::moore";
-}
-
-def NamedConstantOp : MooreOp<"named_constant", [
-  SameOperandsAndResultType,
-  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
-]>{
-  let summary = "An elaboration time constant expression";
-  let description = [{
-    Constants are named data objects that never change. SystemVerilog provides
-    three elaboration-time constants: parameter, localparam, and specparam.
-
-    See IEEE 1800-2017 § 6.20 "Constants".
-  }];
-  let arguments = (ins StrAttr:$name,
-                       NamedConstAttr:$kind,
-                       IntType:$value);
-  let results = (outs IntType:$result);
-  let assemblyFormat = [{
-    $kind
-    ``custom<ImplicitSSAName>($name)
-    $value `:` type($result) attr-dict
-  }];
-}
-
 def StringConstantOp : MooreOp<"string_constant", [Pure]> {
   let summary = "Produce a constant string value";
   let description = [{
@@ -521,6 +502,10 @@ def StringConstantOp : MooreOp<"string_constant", [Pure]> {
   let results = (outs IntType:$result);
   let assemblyFormat = "$value attr-dict `:` type($result)";
 }
+
+//===----------------------------------------------------------------------===//
+// Expressions
+//===----------------------------------------------------------------------===//
 
 def ConversionOp : MooreOp<"conversion", [Pure]> {
   let summary = "A type conversion";
@@ -1327,6 +1312,258 @@ def YieldOp : MooreOp<"yield", [
     attr-dict $result `:` type($result)
   }];
   let hasVerifier = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// Assertions
+//===----------------------------------------------------------------------===//
+
+// Simple immediate assertions, like `assert`.
+def ImmediateAssert: I32EnumAttrCase<"Immediate", 0, "immediate">;
+// Observed deferred assertions, like `assert #0`.
+def ObservedAssert: I32EnumAttrCase<"Observed", 1, "observed">;
+// Final deferred assertions, like `assert final`.
+def FinalAssert: I32EnumAttrCase<"Final", 2, "final">;
+
+// A mode specifying how immediate/deferred assertions operate.
+def DeferAssertAttr : I32EnumAttr<
+  "DeferAssert", "assertion deferring mode",
+  [ImmediateAssert, ObservedAssert, FinalAssert]>
+{
+  let cppNamespace = "circt::moore";
+}
+
+class ImmediateAssertOp<string mnemonic, list<Trait> traits = []> : 
+    MooreOp<mnemonic, traits # [HasParent<"ProcedureOp">]>{
+  let arguments = (ins
+    DeferAssertAttr:$defer,
+    AnySingleBitType:$cond,
+    OptionalAttr<StrAttr>:$label
+  );
+  let assemblyFormat = [{
+    $defer $cond (`label` $label^)? attr-dict `:` type($cond)
+  }];
+}
+
+def AssertOp : ImmediateAssertOp<"assert">{
+  let summary = "If cond is not true, an error should be thrown.";
+}
+
+def AssumeOp : ImmediateAssertOp<"assume">{
+  let summary = "Verify the cond whether has the expected behavior.";
+}
+
+def CoverOp : ImmediateAssertOp<"cover">{
+  let summary = "Monitor the coverage information.";
+}
+
+//===----------------------------------------------------------------------===//
+// Format Strings
+//===----------------------------------------------------------------------===//
+
+def FormatLiteralOp : MooreOp<"fmt.literal", [Pure]> {
+  let summary = "A constant string fragment";
+  let description = [{
+    Creates a constant string fragment to be used as a format string. The
+    literal is printed as is, without any further escaping or processing of its
+    characters.
+  }];
+  let arguments = (ins StrAttr:$literal);
+  let results = (outs FormatStringType:$result);
+  let assemblyFormat = "$literal attr-dict";
+}
+
+def FormatConcatOp : MooreOp<"fmt.concat", [Pure]> {
+  let summary = "Concatenate string fragments";
+  let description = [{
+    Concatenates an arbitrary number of format string into one larger format
+    string. The strings are concatenated from left to right, with the first
+    operand appearing at the left start of the result string, and the last
+    operand appearing at the right end. Produces an empty string if no inputs
+    are provided.
+  }];
+  let arguments = (ins Variadic<FormatStringType>:$inputs);
+  let results = (outs FormatStringType:$result);
+  let assemblyFormat = "` ` `(` $inputs `)` attr-dict";
+}
+
+def FmtDec : I32EnumAttrCase<"Decimal", 0, "decimal">;
+def FmtBin : I32EnumAttrCase<"Binary", 1, "binary">;
+def FmtOct : I32EnumAttrCase<"Octal", 2, "octal">;
+def FmtHexL : I32EnumAttrCase<"HexLower", 3, "hex_lower">;
+def FmtHexU : I32EnumAttrCase<"HexUpper", 4, "hex_upper">;
+def IntFormatAttr : I32EnumAttr<"IntFormat", "Integer format",
+                               [FmtDec, FmtBin, FmtOct, FmtHexL, FmtHexU]> {
+  let cppNamespace = "circt::moore";
+}
+
+def AlignRight : I32EnumAttrCase<"Right", 0, "right">;
+def AlignLeft : I32EnumAttrCase<"Left", 1, "left">;
+def IntAlignAttr : I32EnumAttr<"IntAlign", "Integer alignment",
+                              [AlignRight, AlignLeft]> {
+  let cppNamespace = "circt::moore";
+}
+
+def PadSpace : I32EnumAttrCase<"Space", 0, "space">;
+def PadZero : I32EnumAttrCase<"Zero", 1, "zero">;
+def IntPaddingAttr : I32EnumAttr<"IntPadding", "Integer alignment",
+                                 [PadSpace, PadZero]> {
+  let cppNamespace = "circt::moore";
+}
+
+def FormatIntOp : MooreOp<"fmt.int", [Pure]> {
+  let summary = "Format an integer value";
+  let description = [{
+    Format an integer value as a string according to the specified format.
+
+    See IEEE 1800-2017 § 21.2.1.2 "Format specifications".
+  }];
+  let arguments = (ins
+    IntType:$value,
+    IntFormatAttr:$format,
+    I32Attr:$width,
+    IntAlignAttr:$alignment,
+    IntPaddingAttr:$padding
+  );
+  let results = (outs FormatStringType:$result);
+  let assemblyFormat = [{
+    $format $value `,`
+    `width` $width `,`
+    `align` $alignment `,`
+    `pad` $padding
+    attr-dict `:` type($value)
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Builtin System Tasks and Functions
+//===----------------------------------------------------------------------===//
+
+class Builtin<string mnemonic, list<Trait> traits = []> :
+    MooreOp<"builtin." # mnemonic, traits>;
+
+//===----------------------------------------------------------------------===//
+// Simulation Control Builtins
+//===----------------------------------------------------------------------===//
+
+def StopBIOp : Builtin<"stop"> {
+  let summary = "Suspend simulation";
+  let description = [{
+    Corresponds to the `$stop` system task. Causes the simulation to be
+    suspended but the simulator does not exit. Printing of the optional
+    diagnostic message is handled by the `finish_message` op.
+
+    See IEEE 1800-2017 § 20.2 "Simulation control system tasks".
+  }];
+  let assemblyFormat = "attr-dict";
+}
+
+def FinishBIOp : Builtin<"finish"> {
+  let summary = "Exit simulation";
+  let description = [{
+    Corresponds to the `$finish` system task. Causes the simulator to exit and
+    pass control back to the host operating system. Printing of the optional
+    diagnostic message is handled by the `finish_message` op.
+
+    The exit code argument of this op is not directly accessible from Verilog,
+    but is used to distinguish between the implicit `$finish` call in `$fatal`
+    and an explicit `$finish` called by the user.
+
+    See IEEE 1800-2017 § 20.2 "Simulation control system tasks".
+  }];
+  let arguments = (ins I8Attr:$exitCode);
+  let assemblyFormat = "$exitCode attr-dict";
+}
+
+def FinishMessageBIOp : Builtin<"finish_message"> {
+  let summary = "Print diagnostic message for the finish system task";
+  let description = [{
+    Prints the diagnostic message for `$stop`, `$finish`, `$exit`, and `$fatal`
+    mandated by the SystemVerilog standard. The exact message is controlled by
+    the verbosity parameter as specified in the standard:
+
+    - The absence of this op corresponds to `$finish(0)`.
+    - `moore.builtin.finish_message false` corresponds to `$finish(1)`.
+    - `moore.builtin.finish_message true` corresponds to `$finish(2)`.
+
+    The `withStats` argument controls how detailed the printed message is:
+
+    - **false**: Print simulation time and location.
+    - **true**: Print simulation time, location, and statistics about the memory
+      and CPU usage of the simulator.
+
+    See IEEE 1800-2017 § 20.2 "Simulation control system tasks".
+  }];
+  let arguments = (ins I1Attr:$withStats);
+  let assemblyFormat = "$withStats attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
+// Severity and Display Builtins
+//===----------------------------------------------------------------------===//
+
+def DisplayBIOp : Builtin<"display"> {
+  let summary = "Print a text message";
+  let description = [{
+    Prints the given format string to the standard text output of the simulator.
+    In most cases this should be stdout. This corresponds to the `$display` and
+    `$write` system tasks. Message formatting is handled by `moore.fmt.*` ops.
+
+    See IEEE 1800-2017 § 21.2 "Display system tasks".
+  }];
+  let arguments = (ins FormatStringType:$message);
+  let assemblyFormat = "$message attr-dict";
+}
+
+def SeverityInfo : I32EnumAttrCase<"Info", 0, "info">;
+def SeverityWarning : I32EnumAttrCase<"Warning", 1, "warning">;
+def SeverityError : I32EnumAttrCase<"Error", 2, "error">;
+def SeverityFatal : I32EnumAttrCase<"Fatal", 3, "fatal">;
+def SeverityAttr : I32EnumAttr<"Severity", "Diagnostic severity", [
+  SeverityInfo, SeverityWarning, SeverityError, SeverityFatal
+]> {
+  let cppNamespace = "circt::moore";
+}
+
+def SeverityBIOp : Builtin<"severity"> {
+  let summary = "Print a diagnostic message";
+  let description = [{
+    Prints the given format string to the standard diagnostic output of the
+    simulator. In most cases this should be stderr. This corresponds to the
+    `$info`, `$warning`, `$error`, and `$fatal` system tasks. Message formatting
+    is handled by `moore.fmt.*` ops. This only handles the message printing of
+    `$fatal`; printing of the additional statistics and the call to `$finish`
+    must be done through the `finish_message` and `finish` ops.
+
+    See IEEE 1800-2017 § 20.10 "Severity tasks".
+  }];
+  let arguments = (ins
+    SeverityAttr:$severity,
+    FormatStringType:$message
+  );
+  let assemblyFormat = "$severity $message attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
+// Math Builtins
+//===----------------------------------------------------------------------===//
+
+def Clog2BIOp : Builtin<"clog2", [SameOperandsAndResultType]> {
+  let summary = "Compute ceil(log2(x)) of x";
+  let description = [{
+    Computes the ceiling of the base-2 logarithm of the argument. The argument
+    is interpreted as unsigned. The result is 0 if the argument is 0. The result
+    corresponds to the minimum address width necessary to address a given number
+    of elements, or the number of bits necessary to represent a given number of
+    states.
+
+    If any of the bits in the argument are X or Z, the result is X.
+
+    See IEEE 1800-2017 § 20.8.1 "Integer math functions".
+  }];
+  let arguments = (ins IntType:$value);
+  let results = (outs IntType:$result);
+  let assemblyFormat = "$value attr-dict `:` type($value)";
 }
 
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

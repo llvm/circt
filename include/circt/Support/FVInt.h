@@ -22,6 +22,11 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/raw_ostream.h"
 
+namespace llvm {
+template <typename T, typename Enable>
+struct DenseMapInfo;
+} // namespace llvm
+
 namespace circt {
 
 /// Four-valued arbitrary precision integers.
@@ -194,6 +199,10 @@ public:
   void setBit(unsigned index, Bit bit) {
     value.setBitVal(index, (bit >> 0) & 1);
     unknown.setBitVal(index, (bit >> 1) & 1);
+  }
+
+  void setBit(unsigned index, bool val) {
+    setBit(index, static_cast<Bit>(val));
   }
 
   /// Compute a mask of all the 0 bits in this integer.
@@ -675,5 +684,25 @@ void printFVInt(AsmPrinter &p, const FVInt &value);
 ParseResult parseFVInt(AsmParser &p, FVInt &result);
 
 } // namespace circt
+
+namespace llvm {
+/// Provide DenseMapInfo for FVInt.
+template <>
+struct DenseMapInfo<circt::FVInt, void> {
+  static inline circt::FVInt getEmptyKey() {
+    return circt::FVInt(DenseMapInfo<APInt>::getEmptyKey());
+  }
+
+  static inline circt::FVInt getTombstoneKey() {
+    return circt::FVInt(DenseMapInfo<APInt>::getTombstoneKey());
+  }
+
+  static unsigned getHashValue(const circt::FVInt &Key);
+
+  static bool isEqual(const circt::FVInt &LHS, const circt::FVInt &RHS) {
+    return LHS == RHS;
+  }
+};
+} // namespace llvm
 
 #endif // CIRCT_SUPPORT_FVINT_H

@@ -10,6 +10,7 @@ add_circt_conversion_library(CIRCTHWToSMT
   LINK_LIBS PUBLIC
   CIRCTHW
   CIRCTSMT
+  CIRCTSeq
   MLIRFuncDialect
   MLIRTransforms
   MLIRTransformUtils

@@ -46,6 +46,9 @@ struct ImportVerilogOptions {
   };
   Mode mode = Mode::Full;
 
+  /// Generate debug information in the form of debug dialect ops in the IR.
+  bool debugInfo = false;
+
   //===--------------------------------------------------------------------===//
   // Include paths
   //===--------------------------------------------------------------------===//

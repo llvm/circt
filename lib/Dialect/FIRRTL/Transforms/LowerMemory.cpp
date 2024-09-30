@@ -9,8 +9,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Analysis/FIRRTLInstanceInfo.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
-#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
@@ -130,6 +130,9 @@ struct LowerMemoryPass
   /// The set of all memories seen so far.  This is used to "deduplicate"
   /// memories by emitting modules one module for equivalent memories.
   std::map<FirMemory, FMemModuleOp> memories;
+
+  /// A sequence of operations that should be erased later.
+  SetVector<Operation *> operationsToErase;
 };
 } // end anonymous namespace
 
@@ -193,8 +196,8 @@ LowerMemoryPass::emitMemoryModule(MemOp op, const FirMemory &mem,
   auto newName = circuitNamespace.newName(mem.modName.getValue(), "ext");
   auto moduleName = StringAttr::get(&getContext(), newName);
 
-  // Insert the memory module at the bottom of the circuit.
-  auto b = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
+  // Insert the memory module just above the current module.
+  OpBuilder b(op->getParentOfType<FModuleOp>());
   ++numCreatedMemModules;
   auto moduleOp = b.create<FMemModuleOp>(
       mem.loc, moduleName, ports, mem.numReadPorts, mem.numWritePorts,
@@ -237,8 +240,8 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
   auto newName = circuitNamespace.newName(mem.getName());
   auto wrapperName = StringAttr::get(&getContext(), newName);
 
-  // Create the wrapper module, inserting it into the bottom of the circuit.
-  auto b = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
+  // Create the wrapper module, inserting it just before the current module.
+  OpBuilder b(mem->getParentOfType<FModuleOp>());
   auto wrapper = b.create<FModuleOp>(
       mem->getLoc(), wrapperName,
       ConventionAttr::get(context, Convention::Internal), ports);
@@ -322,7 +325,7 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
     newAnnos.addAnnotations(newMemModAnnos);
     newAnnos.applyToOperation(memInst);
   }
-  mem->erase();
+  operationsToErase.insert(mem);
   ++numLoweredMems;
 }
 
@@ -441,8 +444,8 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
         enConnect->moveAfter(andOp);
         // Erase the old mask connect.
         auto *maskField = maskConnect->getOperand(0).getDefiningOp();
-        maskConnect->erase();
-        maskField->erase();
+        operationsToErase.insert(maskConnect);
+        operationsToErase.insert(maskField);
       };
 
       if (memportKind == MemOp::PortKind::Read) {
@@ -492,7 +495,7 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
   // Update all users of the result of read ports
   for (auto [subfield, result] : returnHolder) {
     subfield->getResult(0).replaceAllUsesWith(inst.getResult(result));
-    subfield->erase();
+    operationsToErase.insert(subfield);
   }
 
   return inst;
@@ -500,49 +503,46 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
 
 LogicalResult LowerMemoryPass::runOnModule(FModuleOp moduleOp,
                                            bool shouldDedup) {
-  for (auto op :
-       llvm::make_early_inc_range(moduleOp.getBodyBlock()->getOps<MemOp>())) {
+  assert(operationsToErase.empty() && "operationsToErase must be empty");
+
+  auto result = moduleOp.walk([&](MemOp op) {
     // Check that the memory has been properly lowered already.
-    if (!type_isa<UIntType>(op.getDataType()))
-      return op->emitError(
-          "memories should be flattened before running LowerMemory");
+    if (!type_isa<UIntType>(op.getDataType())) {
+      op->emitError("memories should be flattened before running LowerMemory");
+      return WalkResult::interrupt();
+    }
 
     auto summary = getSummary(op);
-    if (!summary.isSeqMem())
-      continue;
+    if (summary.isSeqMem())
+      lowerMemory(op, summary, shouldDedup);
 
-    lowerMemory(op, summary, shouldDedup);
-  }
+    return WalkResult::advance();
+  });
+
+  if (result.wasInterrupted())
+    return failure();
+
+  for (Operation *op : operationsToErase)
+    op->erase();
+
+  operationsToErase.clear();
+
   return success();
 }
 
 void LowerMemoryPass::runOnOperation() {
   auto circuit = getOperation();
-  auto *body = circuit.getBodyBlock();
-  auto &instanceGraph = getAnalysis<InstanceGraph>();
+  auto &instanceInfo = getAnalysis<InstanceInfo>();
   symbolTable = &getAnalysis<SymbolTable>();
   circuitNamespace.add(circuit);
 
-  // Find the device under test and create a set of all modules underneath it.
-  // If no module is marked as the DUT, then the top module is the DUT.
-  auto *dut = instanceGraph.getTopLevelNode();
-  auto it = llvm::find_if(*body, [&](Operation &op) -> bool {
-    return AnnotationSet::hasAnnotation(&op, dutAnnoClass);
-  });
-  if (it != body->end())
-    dut = instanceGraph.lookup(cast<igraph::ModuleOpInterface>(*it));
-
-  // The set of all modules underneath the design under test module.
-  DenseSet<Operation *> dutModuleSet;
-  llvm::for_each(llvm::depth_first(dut), [&](igraph::InstanceGraphNode *node) {
-    dutModuleSet.insert(node->getModule());
-  });
-
-  // We iterate the circuit from top-to-bottom to make sure that we get
-  // consistent memory names.
-  for (auto moduleOp : body->getOps<FModuleOp>()) {
-    // We don't dedup memories in the testharness with any other memories.
-    auto shouldDedup = dutModuleSet.contains(moduleOp);
+  // We iterate the circuit from top-to-bottom.  This ensures that we get
+  // consistent memory names.  (Memory modules will be inserted before the
+  // module we are processing to prevent these being unnecessarily visited.)
+  // Deduplication of memories is allowed if the module is under the "effective"
+  // design-under-test (DUT).
+  for (auto moduleOp : circuit.getBodyBlock()->getOps<FModuleOp>()) {
+    auto shouldDedup = instanceInfo.anyInstanceUnderEffectiveDut(moduleOp);
     if (failed(runOnModule(moduleOp, shouldDedup)))
       return signalPassFailure();
   }

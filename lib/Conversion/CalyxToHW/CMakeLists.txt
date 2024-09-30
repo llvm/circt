@@ -1,4 +1,4 @@
-add_circt_library(CIRCTCalyxToHW
+add_circt_conversion_library(CIRCTCalyxToHW
   CalyxToHW.cpp
 
   ADDITIONAL_HEADER_DIRS

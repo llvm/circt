@@ -49,7 +49,7 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
     sv.ifdef.procedural @SYNTHESIS {
     } else {
   // CHECK-NEXT:     if ((`PRINTF_COND_) & 1'bx & 1'bz & 1'bz & cond & forceWire)
-      %tmp = sv.macro.ref @PRINTF_COND_() : () -> i1
+      %tmp = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
       %verb_tmp = sv.verbatim.expr "{{0}}" : () -> i1 {symbols = [#hw.innerNameRef<@M1::@wire1>] }
       %tmp1 = sv.constantX : i1
       %tmp2 = sv.constantZ : i1
@@ -264,6 +264,13 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
 
       // CHECK-NEXT: $fwrite(32'h80000002, "M: %x\n", `MACRO(8'(val + 8'h2A), val ^ 8'h2A));
       sv.fwrite %fd, "M: %x\n"(%text) : i8
+
+      // CHECK-NEXT: `INIT_RANDOM
+      sv.macro.ref @INIT_RANDOM
+      // CHECK-NEXT: `INIT_RANDOM(val)
+      sv.macro.ref @INIT_RANDOM (%val) : i8
+      // CHECK-NEXT: `INIT_RANDOM(val, val, val)
+      sv.macro.ref @INIT_RANDOM (%val, %val, %val) : i8, i8, i8
 
     }// CHECK-NEXT:   {{end$}}
   } {sv.attributes = [#sv.attribute<"sv attr">]}
@@ -1838,6 +1845,7 @@ hw.module @ConditionalComments() {
 
 sv.macro.decl @RANDOM
 sv.macro.decl @PRINTF_COND_
+sv.macro.decl @INIT_RANDOM
 
 // CHECK-LABEL: module ForStatement
 hw.module @ForStatement(in %a: i5) {
@@ -1851,7 +1859,7 @@ hw.module @ForStatement(in %a: i5) {
     // CHECK-NEXT:   _RANDOM[i] = `RANDOM;
     // CHECK-NEXT: end
     sv.for %i = %c0_i2 to %c-1_i2 step %c1_i2 : i2 {
-      %RANDOM = sv.macro.ref.se @RANDOM() : ()->i32
+      %RANDOM = sv.macro.ref.expr.se @RANDOM() : ()->i32
       %index = sv.array_index_inout %_RANDOM[%i] : !hw.inout<uarray<3xi32>>, i2
       sv.bpassign %index, %RANDOM : i32
     }

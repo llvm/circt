@@ -193,3 +193,7 @@ ParseResult circt::parseFVInt(AsmParser &p, FVInt &result) {
   }
   return success();
 }
+
+unsigned DenseMapInfo<FVInt, void>::getHashValue(const FVInt &Key) {
+  return static_cast<unsigned>(hash_value(Key));
+}

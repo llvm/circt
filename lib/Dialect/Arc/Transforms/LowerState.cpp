@@ -127,6 +127,7 @@ struct ModuleLowering {
   LogicalResult lowerPrimaryInputs();
   LogicalResult lowerPrimaryOutputs();
   LogicalResult lowerStates();
+  LogicalResult lowerInitials();
   template <typename CallTy>
   LogicalResult lowerStateLike(Operation *op, Value clock, Value enable,
                                Value reset, ArrayRef<Value> inputs,
@@ -175,6 +176,8 @@ static bool canBeMaterializedInInitializer(Operation *op) {
   if (op->hasTrait<OpTrait::ConstantLike>())
     return true;
   if (isa<comb::CombDialect>(op->getDialect()))
+    return true;
+  if (isa<mlir::UnrealizedConversionCastOp>(op))
     return true;
   // TODO: There are some other ops we probably want to allow
   return false;
@@ -420,6 +423,24 @@ LogicalResult ModuleLowering::lowerPrimaryOutputs() {
     }
   }
   outputOp.erase();
+  return success();
+}
+
+LogicalResult ModuleLowering::lowerInitials() {
+  // Move all operations except for seq.yield to arc.initial op.
+  for (auto op : moduleOp.getOps<seq::InitialOp>()) {
+    auto terminator = cast<seq::YieldOp>(op.getBodyBlock()->getTerminator());
+    getInitial().builder.getBlock()->getOperations().splice(
+        getInitial().builder.getBlock()->begin(),
+        op.getBodyBlock()->getOperations());
+
+    // Map seq.initial results to operands of the seq.yield op.
+    for (auto [result, operand] :
+         llvm::zip(op.getResults(), terminator.getOperands()))
+      getInitial().materializedValues.map(result, operand);
+    terminator.erase();
+  }
+
   return success();
 }
 
@@ -885,6 +906,8 @@ LogicalResult LowerStatePass::runOnModule(HWModuleOp moduleOp,
   lowering.clockBuilder.setInsertionPoint(clockSentinel);
 
   lowering.addStorageArg();
+  if (failed(lowering.lowerInitials()))
+    return failure();
   if (failed(lowering.lowerPrimaryInputs()))
     return failure();
   if (failed(lowering.lowerPrimaryOutputs()))

@@ -699,7 +699,12 @@ def ConvertHWToSMT : Pass<"convert-hw-to-smt", "mlir::ModuleOp"> {
 
 def ConvertVerifToSMT : Pass<"convert-verif-to-smt", "mlir::ModuleOp"> {
   let summary = "Convert Verif ops to SMT ops";
-  let dependentDialects = ["smt::SMTDialect", "mlir::arith::ArithDialect"];
+  let dependentDialects = [
+    "smt::SMTDialect",
+    "mlir::arith::ArithDialect",
+    "mlir::scf::SCFDialect",
+    "mlir::func::FuncDialect"
+  ];
 }
 
 //===----------------------------------------------------------------------===//

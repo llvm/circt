@@ -72,3 +72,37 @@ module Foo;
   // expected-error @below {{unpacked arrays in 'inside' expressions not supported}}
   int c = a inside { b };
 endmodule
+
+// -----
+module Foo;
+  // expected-remark @below {{hello}}
+  $info("hello");
+  // expected-warning @below {{hello}}
+  $warning("hello");
+endmodule
+
+// -----
+module Foo;
+  // expected-error @below {{hello}}
+  $error("hello");
+endmodule
+
+// -----
+module Foo;
+  // expected-error @below {{hello}}
+  $fatal(0, "hello");
+endmodule
+
+// -----
+module Top; endmodule
+function Foo;
+  // expected-error @below {{unsupported format specifier `%l`}}
+  $write("%l");
+endfunction
+
+// -----
+module Top; endmodule
+function Foo;
+  // expected-error @below {{string format specifier with width not supported}}
+  $write("%42s", "foo");
+endfunction
