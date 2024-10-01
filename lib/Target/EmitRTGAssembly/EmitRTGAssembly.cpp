@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Target/EmitRTGAssembly.h"
-#include "circt/Dialect/RTG/IR/RTGOps.h"
+#include "circt/Dialect/RTG/IR/RTGVisitors.h"
 #include "circt/Dialect/RTGTest/IR/RTGTestDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/BuiltinOps.h"

@@ -93,7 +93,7 @@ def RenderedContextOp : RTGOp<"rendered_context",
 
 //===- Resource Set Operations --------------------------------------------===//
 
-def SelectRandomResource : RTGOp<"select_random_resource", [
+def SelectRandomResourceOp : RTGOp<"select_random_resource", [
   AllTypesMatch<["resources", "output"]>
 ]> {
   let summary = "places a random resource in an instruction sequence";
@@ -104,7 +104,7 @@ def SelectRandomResource : RTGOp<"select_random_resource", [
   let assemblyFormat = "$resources `:` type($resources) attr-dict";
 }
 
-def SetDifferenceResource : RTGOp<"set_difference_resource", [
+def SetDifferenceResourceOp : RTGOp<"set_difference_resource", [
   AllTypesMatch<["resourcesSrc", "resourcesDiff", "output"]>
 ]> {
   let summary = "places a random resource in an instruction sequence";
