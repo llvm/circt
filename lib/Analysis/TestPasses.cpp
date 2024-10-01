@@ -13,6 +13,7 @@
 #include "circt/Analysis/DebugAnalysis.h"
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Analysis/FIRRTLInstanceInfo.h"
+#include "circt/Analysis/OpCountAnalysis.h"
 #include "circt/Analysis/SchedulingAnalysis.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
@@ -255,6 +256,49 @@ void FIRRTLInstanceInfoPass::runOnOperation() {
 }
 
 //===----------------------------------------------------------------------===//
+// Op Count
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct TestOpCountAnalysisPass
+    : public PassWrapper<TestOpCountAnalysisPass, OperationPass<ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestOpCountAnalysisPass)
+
+  void runOnOperation() override;
+  StringRef getArgument() const override { return "test-op-count-analysis"; }
+  StringRef getDescription() const override {
+    return "Run OpCountAnalysis and show the results.  This pass "
+           "is intended to be used for testing purposes only.";
+  }
+};
+} // namespace
+
+void printOpAndOperandCounts(OpCountAnalysis &opCount) {
+  auto opNames = opCount.getFoundOpNames();
+  // Sort to account for non-deterministic DenseMap ordering
+  llvm::sort(opNames, [](OperationName name1, OperationName name2) {
+    return name1.getStringRef() < name2.getStringRef();
+  });
+  for (auto opName : opNames) {
+    llvm::errs() << opName << ": " << opCount.getOpCount(opName) << "\n";
+    auto operandMap = opCount.getOperandCountMap(opName);
+    // Sort for determinism again
+    llvm::SmallVector<size_t> keys;
+    for (auto pair : operandMap)
+      keys.push_back(pair.first);
+    llvm::sort(keys);
+    for (auto num : keys)
+      llvm::errs() << " with " << num << " operands: " << operandMap[num]
+                   << "\n";
+  }
+}
+
+void TestOpCountAnalysisPass::runOnOperation() {
+  auto &opCount = getAnalysis<OpCountAnalysis>();
+  printOpAndOperandCounts(opCount);
+}
+
+//===----------------------------------------------------------------------===//
 // Pass registration
 //===----------------------------------------------------------------------===//
 
@@ -275,6 +319,9 @@ void registerAnalysisTestPasses() {
   });
   registerPass([]() -> std::unique_ptr<Pass> {
     return std::make_unique<FIRRTLInstanceInfoPass>();
+  });
+  registerPass([]() -> std::unique_ptr<Pass> {
+    return std::make_unique<TestOpCountAnalysisPass>();
   });
 }
 } // namespace test

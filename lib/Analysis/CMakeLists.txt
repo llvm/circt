@@ -3,6 +3,7 @@ set(LLVM_OPTIONAL_SOURCES
   DebugInfo.cpp
   DependenceAnalysis.cpp
   FIRRTLInstanceInfo.cpp
+  OpCountAnalysis.cpp
   SchedulingAnalysis.cpp
   TestPasses.cpp
 )
@@ -25,6 +26,13 @@ add_circt_library(CIRCTDependenceAnalysis
   MLIRIR
   MLIRAffineUtils
   MLIRTransformUtils
+)
+
+add_circt_library(CIRCTOpCountAnalysis
+  OpCountAnalysis.cpp
+
+  LINK_LIBS PUBLIC
+  MLIRIR
 )
 
 add_circt_library(CIRCTSchedulingAnalysis
@@ -50,6 +58,7 @@ add_circt_library(CIRCTAnalysisTestPasses
   LINK_LIBS PUBLIC
   CIRCTDebugAnalysis
   CIRCTDependenceAnalysis
+  CIRCTOpCountAnalysis
   CIRCTFIRRTLAnalysis
   CIRCTSchedulingAnalysis
   CIRCTHW
