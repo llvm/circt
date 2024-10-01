@@ -47,4 +47,4 @@ private:
 } // namespace analysis
 } // namespace circt
 
-#endif // CIRCT_ANALYSIS_SCHEDULING_ANALYSIS_H
+#endif // CIRCT_ANALYSIS_OPCOUNT_ANALYSIS_H
