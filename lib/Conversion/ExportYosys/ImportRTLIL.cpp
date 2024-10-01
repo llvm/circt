@@ -193,14 +193,12 @@ private:
   template <typename OpName>
   void addOpPattern(StringRef typeName, ArrayRef<StringRef> inputPortNames,
                     StringRef outputPortName);
-  template <typename OpName>
-  void addOpPatternBinary(StringRef typeName);
+  template <typename OpName> void addOpPatternBinary(StringRef typeName);
 
   void registerPatterns();
 };
 
-template <typename OpName>
-struct CellOpPattern : public CellPatternBase {
+template <typename OpName> struct CellOpPattern : public CellPatternBase {
   using CellPatternBase::CellPatternBase;
   Value convert(Cell *cell, OpBuilder &builder, Location location,
                 ValueRange inputValues) override {
@@ -208,8 +206,7 @@ struct CellOpPattern : public CellPatternBase {
   }
 };
 
-template <bool isAnd>
-struct AndOrNotOpPattern : public CellPatternBase {
+template <bool isAnd> struct AndOrNotOpPattern : public CellPatternBase {
   using CellPatternBase::CellPatternBase;
   Value convert(Cell *cell, OpBuilder &builder, Location location,
                 ValueRange inputValues) override {
