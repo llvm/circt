@@ -7,7 +7,7 @@ hw.module @basic(in %in: i1, out out: i1) {
 
 // hw.constant
 //  RUN: circt-lec %s -c1=basic -c2=notnot --shared-libs=%libz3 | FileCheck %s --check-prefix=HW_CONSTANT
-//  HW_CONSTANT: c1 == c2
+//  HW_CONSTANT: c1 != c2
 
 hw.module @onePlusTwo(out out: i2) {
   %one = hw.constant 1 : i2
