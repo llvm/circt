@@ -18,7 +18,7 @@
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Target/DebugInfo.h"
-#include "circt/Target/EmitAssembly.h"
+#include "circt/Target/EmitRTGAssembly.h"
 #include "circt/Target/ExportSMTLIB.h"
 #include "circt/Target/ExportSystemC.h"
 
@@ -36,7 +36,7 @@ inline void registerAllTranslations() {
     calyx::registerToCalyxTranslation();
     firrtl::registerFromFIRFileTranslation();
     firrtl::registerToFIRFileTranslation();
-    EmitAssembly::registerEmitAssemblyTranslation();
+    EmitRTGAssembly::registerEmitRTGAssemblyTranslation();
     ExportSMTLIB::registerExportSMTLIBTranslation();
     ExportSystemC::registerExportSystemCTranslation();
     debug::registerTranslations();

@@ -1,4 +1,4 @@
-//===- EmitAssembly.cpp - Assembly Emitter --------------------------------===//
+//===- EmitRTGAssembly.cpp - RTG Assembly Emitter -------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,11 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This is the main Assembly emitter implementation.
+// This is the main Assembly emitter implementation for the RTG dialect.
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Target/EmitAssembly.h"
+#include "circt/Target/EmitRTGAssembly.h"
 #include "circt/Dialect/RTG/IR/RTGOps.h"
 #include "circt/Dialect/RTGTest/IR/RTGTestDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -25,9 +25,9 @@
 
 using namespace circt;
 using namespace rtg;
-using namespace EmitAssembly;
+using namespace EmitRTGAssembly;
 
-#define DEBUG_TYPE "emit-assembly"
+#define DEBUG_TYPE "emit-rtg-assembly"
 
 static void printValue(Value val, raw_ostream &stream) {
   if (auto constOp = val.getDefiningOp<mlir::arith::ConstantOp>())
@@ -42,9 +42,9 @@ static FailureOr<APInt> getBinary(Value val) {
   return failure();
 }
 
-LogicalResult EmitAssembly::emitAssembly(Operation *module,
+LogicalResult EmitRTGAssembly::emitRTGAssembly(Operation *module,
                                          llvm::raw_ostream &os,
-                                         const EmitAssemblyOptions &options) {
+                                         const EmitRTGAssemblyOptions &options) {
   if (module->getNumRegions() != 1)
     return module->emitError("must have exactly one region");
   if (!module->getRegion(0).hasOneBlock())
@@ -79,7 +79,7 @@ LogicalResult EmitAssembly::emitAssembly(Operation *module,
 // circt-translate registration
 //===----------------------------------------------------------------------===//
 
-void EmitAssembly::registerEmitAssemblyTranslation() {
+void EmitRTGAssembly::registerEmitRTGAssemblyTranslation() {
   static llvm::cl::opt<std::string> allowedTextualInstructionsFile(
       "emit-assembly-allowed-instr-file",
       llvm::cl::desc("File with a comma-separated list of instructions "
@@ -92,7 +92,7 @@ void EmitAssembly::registerEmitAssemblyTranslation() {
           "Comma-separated list of instructions supported by the assembler."));
 
   auto getOptions = [] {
-    EmitAssemblyOptions opts;
+    EmitRTGAssemblyOptions opts;
     SmallVector<std::string> instrs;
     for (auto &instr : allowedInstructions)
       instrs.push_back(instr);
@@ -110,7 +110,7 @@ void EmitAssembly::registerEmitAssemblyTranslation() {
   static mlir::TranslateFromMLIRRegistration toAssembly(
       "emit-assembly", "emit assembly",
       [=](Operation *moduleOp, raw_ostream &output) {
-        return EmitAssembly::emitAssembly(moduleOp, output, getOptions());
+        return EmitRTGAssembly::emitRTGAssembly(moduleOp, output, getOptions());
       },
       [](mlir::DialectRegistry &registry) {
         registry.insert<rtgtest::RTGTestDialect, rtg::RTGDialect,

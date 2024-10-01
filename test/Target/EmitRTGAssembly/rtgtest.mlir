@@ -7,3 +7,13 @@ rtg.snippet {
   %c = arith.constant 4 : i32
   rtgtest.instr_a %c, %c
 }
+
+rtg.rendered_context [1, 2]
+{
+  %c = arith.constant 4 : i32
+  rtgtest.instr_a %c, %c
+},
+{
+  %c = arith.constant 5 : i32
+  rtgtest.instr_a %c, %c
+}

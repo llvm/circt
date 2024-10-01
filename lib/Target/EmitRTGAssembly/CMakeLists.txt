@@ -1,5 +1,5 @@
-add_circt_translation_library(CIRCTEmitAssembly
-  EmitAssembly.cpp
+add_circt_translation_library(CIRCTEmitRTGAssembly
+  EmitRTGAssembly.cpp
 
   ADDITIONAL_HEADER_DIRS
 

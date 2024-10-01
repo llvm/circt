@@ -12,6 +12,7 @@
 
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/CommonAttrConstraints.td"
+include "mlir/IR/Properties.td"
 
 // Base class for the operation in this dialect.
 class RTGOp<string mnemonic, list<Trait> traits = []> :
@@ -76,6 +77,18 @@ def OnContextOp : RTGOp<"on_context", [NoTerminator]> {
   }];
 }
 
+def RenderedContextOp : RTGOp<"rendered_context", 
+    [SingleBlock, NoRegionArguments, NoTerminator]> {
+  let summary = "a rendered context";
+  let description = [{
+  }];
+
+  let regions = (region VariadicRegion<SizedRegion<1>>:$contextRegions);
+  let arguments = (ins ArrayProperty<I64Property>:$selectors);
+  let results = (outs);
+
+  let assemblyFormat = "$selectors $contextRegions attr-dict-with-keyword";
+}
 
 
 //===- Resource Set Operations --------------------------------------------===//

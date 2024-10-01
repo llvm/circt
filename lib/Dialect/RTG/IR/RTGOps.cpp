@@ -12,7 +12,9 @@
 
 #include "circt/Dialect/RTG/IR/RTGOps.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/DialectImplementation.h"
 
+using namespace mlir;
 using namespace circt;
 using namespace rtg;
 
