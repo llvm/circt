@@ -683,7 +683,7 @@ void ExportSMTLIB::registerExportSMTLIBTranslation() {
       "smtlibexport-inline-single-use-values",
       llvm::cl::desc("Inline expressions that are used only once rather than "
                      "generating a let-binding"),
-      llvm::cl::init(false));
+      llvm::cl::init(true));
 
   auto getOptions = [] {
     SMTEmissionOptions opts;
