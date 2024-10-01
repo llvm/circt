@@ -302,7 +302,8 @@ struct DFFPattern : public CellPatternBase {
         builder.create<hw::ConstantOp>(location, APInt(1, resetValueConst));
     auto clk = builder.create<seq::ToClockOp>(location, inputValues[0]);
     return builder.create<seq::CompRegOp>(
-        location, inputValues[1], clk, inputValues[2], resetValue);
+        location, inputValues[1], clk, inputValues[2], resetValue,
+        builder.getStringAttr(cell->name.str()));
   }
 };
 
@@ -352,8 +353,10 @@ void ImportRTLILModule::registerPatterns() {
   addPattern<NandOpPattern>("$_NAND_", ArrayRef<StringRef>{"A", "B"}, "Y");
   addPattern<NotOpPattern>("$_NOT_", ArrayRef<StringRef>{"A"}, "Y");
   addPattern<MuxOpPattern>("$_MUX_", ArrayRef<StringRef>{"A", "B", "S"}, "Y");
-  addPattern<DFFPattern<false>>("$_SDFF_PP0_", ArrayRef<StringRef>{"C", "D", "R"}, "Q");
-  addPattern<DFFPattern<true>>("$_SDFF_PP1_", ArrayRef<StringRef>{"C", "D", "R"}, "Q");
+  addPattern<DFFPattern<false>>("$_SDFF_PP0_",
+                                ArrayRef<StringRef>{"C", "D", "R"}, "Q");
+  addPattern<DFFPattern<true>>("$_SDFF_PP1_",
+                               ArrayRef<StringRef>{"C", "D", "R"}, "Q");
 }
 
 ImportRTLILModule::ImportRTLILModule(MLIRContext *context,
