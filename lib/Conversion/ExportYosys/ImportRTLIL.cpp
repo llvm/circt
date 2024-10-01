@@ -13,6 +13,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/Pass/Pass.h"
@@ -193,12 +194,14 @@ private:
   template <typename OpName>
   void addOpPattern(StringRef typeName, ArrayRef<StringRef> inputPortNames,
                     StringRef outputPortName);
-  template <typename OpName> void addOpPatternBinary(StringRef typeName);
+  template <typename OpName>
+  void addOpPatternBinary(StringRef typeName);
 
   void registerPatterns();
 };
 
-template <typename OpName> struct CellOpPattern : public CellPatternBase {
+template <typename OpName>
+struct CellOpPattern : public CellPatternBase {
   using CellPatternBase::CellPatternBase;
   Value convert(Cell *cell, OpBuilder &builder, Location location,
                 ValueRange inputValues) override {
@@ -206,7 +209,8 @@ template <typename OpName> struct CellOpPattern : public CellPatternBase {
   }
 };
 
-template <bool isAnd> struct AndOrNotOpPattern : public CellPatternBase {
+template <bool isAnd>
+struct AndOrNotOpPattern : public CellPatternBase {
   using CellPatternBase::CellPatternBase;
   Value convert(Cell *cell, OpBuilder &builder, Location location,
                 ValueRange inputValues) override {
@@ -289,6 +293,19 @@ struct XnorOpPattern : public CellPatternBase {
   }
 };
 
+template <bool resetValueConst>
+struct DFFPattern : public CellPatternBase {
+  using CellPatternBase::CellPatternBase;
+  Value convert(Cell *cell, OpBuilder &builder, Location location,
+                ValueRange inputValues) override {
+    auto resetValue =
+        builder.create<hw::ConstantOp>(location, APInt(1, resetValueConst));
+    auto clk = builder.create<seq::ToClockOp>(location, inputValues[0]);
+    return builder.create<seq::CompRegOp>(
+        location, inputValues[1], clk, inputValues[2], resetValue);
+  }
+};
+
 } // namespace
 
 template <typename CellPattern, typename... Args>
@@ -335,6 +352,8 @@ void ImportRTLILModule::registerPatterns() {
   addPattern<NandOpPattern>("$_NAND_", ArrayRef<StringRef>{"A", "B"}, "Y");
   addPattern<NotOpPattern>("$_NOT_", ArrayRef<StringRef>{"A"}, "Y");
   addPattern<MuxOpPattern>("$_MUX_", ArrayRef<StringRef>{"A", "B", "S"}, "Y");
+  addPattern<DFFPattern<false>>("$_SDFF_PP0_", ArrayRef<StringRef>{"C", "D", "R"}, "Q");
+  addPattern<DFFPattern<true>>("$_SDFF_PP1_", ArrayRef<StringRef>{"C", "D", "R"}, "Q");
 }
 
 ImportRTLILModule::ImportRTLILModule(MLIRContext *context,
@@ -622,9 +641,7 @@ static Range getRoot(Value value) {
   auto width =
       hw::getBitWidth(cast<hw::InOutType>(value.getType()).getElementType());
   return TypeSwitch<Operation *, Range>(op)
-      .Case<sv::WireOp>([&](auto op) {
-        return Range{op, 0, width};
-      })
+      .Case<sv::WireOp>([&](auto op) { return Range{op, 0, width}; })
       .Case<sv::ArrayIndexInOutOp>([&](sv::ArrayIndexInOutOp op) {
         auto result = getRoot(op.getInput());
         auto index = getConstantValue(op.getIndex());
@@ -647,7 +664,8 @@ static Range getRoot(Value value) {
 }
 // Eliminate all SV wires used in the module.
 static LogicalResult cleanUpHWModule(hw::HWModuleOp module) {
-  llvm::MapVector<sv::WireOp, SmallVector<std::pair<Range, sv::AssignOp>>> writes;
+  llvm::MapVector<sv::WireOp, SmallVector<std::pair<Range, sv::AssignOp>>>
+      writes;
   llvm::MapVector<sv::WireOp, SmallVector<std::pair<Range, Value>>> reads;
   module.dump();
   module.walk([&](sv::WireOp wire) { writes.insert({wire, {}}); });
