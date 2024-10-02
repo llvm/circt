@@ -100,4 +100,27 @@ def MaximizeSSA : Pass<"maximize-ssa", "::mlir::ModuleOp"> {
   let constructor = "circt::createMaximizeSSAPass()";
 }
 
+def PrintOpCount : Pass<"print-op-count", "::mlir::ModuleOp"> {
+  let summary = "Print operation count analysis results";
+  let description = [{
+    This pass prints data on operation counts in a builtin.module.
+  }];
+  let constructor = "circt::createPrintOpCountPass()";
+  let options = [
+    Option<"emissionFormat", "emission-format",
+           "circt::OpCountEmissionFormat",
+           "circt::OpCountEmissionFormat::Readable",
+           "Specify the format to emit op count info in",
+           [{::llvm::cl::values(
+            clEnumValN(circt::OpCountEmissionFormat::Readable,
+              "readable", "Emit the data in human-readable form"),
+            clEnumValN(circt::OpCountEmissionFormat::ReadableSorted,
+              "readable-sorted", "Emit the data in human-readable form, sorted for output determinism"),
+            clEnumValN(circt::OpCountEmissionFormat::JSON,
+              "json", "Emit the data in JSON form")
+          )}]
+           >
+  ];
+}
+
 #endif // CIRCT_TRANSFORMS_PASSES
