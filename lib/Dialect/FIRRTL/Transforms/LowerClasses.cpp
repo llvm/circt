@@ -198,6 +198,13 @@ struct LoweringState {
   DenseMap<om::ClassLike, ClassLoweringState> classLoweringStateTable;
 };
 
+/// Helper struct to capture state about an object that needs RtlPorts added.
+struct RtlPortsInfo {
+  firrtl::PathOp containingModuleRef;
+  Value basePath;
+  om::ObjectOp object;
+};
+
 struct LowerClassesPass
     : public circt::firrtl::impl::LowerClassesBase<LowerClassesPass> {
   void runOnOperation() override;
@@ -216,9 +223,6 @@ private:
                             const PathInfoTable &pathInfoTable,
                             std::mutex &intraPassMutex);
 
-  // Declare an RtlPort class on the fly.
-  void declareRtlPortClass(OpBuilder &builder, std::mutex &intraPassMutex);
-
   // Lower the FIRRTL Class to OM Class.
   void lowerClassLike(FModuleLike moduleLike, om::ClassLike classLike,
                       const PathInfoTable &pathInfoTable);
@@ -230,9 +234,12 @@ private:
   LogicalResult updateInstances(Operation *op, InstanceGraph &instanceGraph,
                                 const LoweringState &state,
                                 const PathInfoTable &pathInfoTable,
-                                hw::InnerSymbolNamespaceCollection &namespaces,
-                                HierPathCache &hierPathCache,
                                 std::mutex &intraPassMutex);
+
+  /// Create and add all 'ports' lists of RtlPort objects for each object.
+  void createAllRtlPorts(const PathInfoTable &pathInfoTable,
+                         hw::InnerSymbolNamespaceCollection &namespaces,
+                         HierPathCache &hierPathCache);
 
   // Convert to OM ops and types in Classes or Modules.
   LogicalResult dialectConversion(
@@ -242,8 +249,8 @@ private:
   // State to memoize repeated calls to shouldCreateClass.
   DenseMap<StringAttr, bool> shouldCreateClassMemo;
 
-  // Flag to track if we've declared the optional RtlPorts class.
-  bool isRtlPortClassDeclared = false;
+  // State used while creating the optional 'ports' list of RtlPort objects.
+  SmallVector<RtlPortsInfo> rtlPortsToCreate;
 };
 
 struct PathTracker {
@@ -315,12 +322,19 @@ static Type getRtlPortsType(MLIRContext *context) {
       context, FlatSymbolRefAttr::get(context, kRtlPortClassName)));
 }
 
-static om::ListCreateOp
-createRtlPorts(firrtl::PathOp containingModuleRef, Value basePath,
-               const PathInfoTable &pathInfoTable,
-               hw::InnerSymbolNamespaceCollection &namespaces,
-               HierPathCache &hierPathCache, OpBuilder &builder,
-               std::mutex &intraPassMutex) {
+/// Create and add the 'ports' list of RtlPort objects for an object.
+static void createRtlPorts(const RtlPortsInfo &rtlPortToCreate,
+                           const PathInfoTable &pathInfoTable,
+                           hw::InnerSymbolNamespaceCollection &namespaces,
+                           HierPathCache &hierPathCache, OpBuilder &builder) {
+  firrtl::PathOp containingModuleRef = rtlPortToCreate.containingModuleRef;
+  Value basePath = rtlPortToCreate.basePath;
+  om::ObjectOp object = rtlPortToCreate.object;
+
+  // Set the builder to just before the object.
+  OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPoint(object);
+
   // Look up the module from the containingModuleRef.
 
   FlatSymbolRefAttr containingModulePathRef =
@@ -358,18 +372,14 @@ createRtlPorts(firrtl::PathOp containingModuleRef, Value basePath,
 
     auto portTarget = PortAnnoTarget(mod, i);
 
-    FlatSymbolRefAttr portPathRef;
-    {
-      std::lock_guard<std::mutex> guard(intraPassMutex);
+    auto portSym =
+        getInnerRefTo({portTarget.getPortNo(), portTarget.getOp(), 0},
+                      [&](FModuleLike m) -> hw::InnerSymbolNamespace & {
+                        return namespaces[m];
+                      });
 
-      auto portSym =
-          getInnerRefTo({portTarget.getPortNo(), portTarget.getOp(), 0},
-                        [&](FModuleLike m) -> hw::InnerSymbolNamespace & {
-                          return namespaces[m];
-                        });
-
-      portPathRef = hierPathCache.getRefFor(ArrayAttr::get(ctx, {portSym}));
-    }
+    FlatSymbolRefAttr portPathRef =
+        hierPathCache.getRefFor(ArrayAttr::get(ctx, {portSym}));
 
     auto portPath = builder.create<om::PathCreateOp>(
         loc, om::PathType::get(ctx),
@@ -408,7 +418,7 @@ createRtlPorts(firrtl::PathOp containingModuleRef, Value basePath,
       UnknownLoc::get(builder.getContext()),
       getRtlPortsType(builder.getContext()), ports);
 
-  return portsList;
+  object.getActualParamsMutable().append({portsList});
 }
 
 } // namespace
@@ -922,10 +932,13 @@ void LowerClassesPass::runOnOperation() {
   if (failed(
           mlir::failableParallelForEach(ctx, objectContainers, [&](auto *op) {
             return updateInstances(op, instanceGraph, loweringState,
-                                   pathInfoTable, namespaces, cache,
-                                   intraPassMutex);
+                                   pathInfoTable, intraPassMutex);
           })))
     return signalPassFailure();
+
+  // If needed, create and add 'ports' lists of RtlPort objects.
+  if (!rtlPortsToCreate.empty())
+    createAllRtlPorts(pathInfoTable, namespaces, cache);
 
   // Convert to OM ops and types in Classes or Modules in parallel.
   if (failed(
@@ -938,7 +951,7 @@ void LowerClassesPass::runOnOperation() {
   markAnalysesPreserved<InstanceGraph>();
 
   // Reset pass state.
-  isRtlPortClassDeclared = false;
+  rtlPortsToCreate.clear();
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createLowerClassesPass() {
@@ -982,13 +995,8 @@ om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike,
   OpBuilder builder = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
 
   // If there is a 'containingModule', add a parameter for 'ports'.
-  if (hasContainingModule) {
+  if (hasContainingModule)
     formalParamNames.push_back(kPortsName);
-
-    // If we do need to add 'ports', ensure an RtlPort class is declared now,
-    // for use later.
-    declareRtlPortClass(builder, intraPassMutex);
-  }
 
   // Take the name from the FIRRTL Class or Module to create the OM Class name.
   StringRef className = moduleLike.getName();
@@ -1013,23 +1021,6 @@ om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike,
         moduleLike.getLoc(), className + suffix, formalParamNames);
 
   return loweredClassOp;
-}
-
-void LowerClassesPass::declareRtlPortClass(OpBuilder &builder,
-                                           std::mutex &intraPassMutex) {
-  // Guard the variable read, modify, write and the global op creation by mutex.
-  std::lock_guard<std::mutex> guard(intraPassMutex);
-
-  if (isRtlPortClassDeclared)
-    return;
-
-  isRtlPortClassDeclared = true;
-
-  om::ClassOp::buildSimpleClassOp(
-      builder, UnknownLoc::get(&getContext()), kRtlPortClassName,
-      {"ref", "direction", "width"}, {"ref", "direction", "width"},
-      {om::PathType::get(&getContext()), om::StringType::get(&getContext()),
-       om::OMIntegerType::get(&getContext())});
 }
 
 void LowerClassesPass::lowerClassLike(FModuleLike moduleLike,
@@ -1199,12 +1190,10 @@ void LowerClassesPass::lowerClassExtern(ClassExternOp classExternOp,
 
 // Helper to update an Object instantiation. FIRRTL Object instances are
 // converted to OM Object instances.
-static LogicalResult
-updateObjectInClass(firrtl::ObjectOp firrtlObject,
-                    const PathInfoTable &pathInfoTable,
-                    hw::InnerSymbolNamespaceCollection &namespaces,
-                    HierPathCache &hierPathCache, std::mutex &intraPassMutex,
-                    SmallVectorImpl<Operation *> &opsToErase) {
+static LogicalResult updateObjectInClass(
+    firrtl::ObjectOp firrtlObject, const PathInfoTable &pathInfoTable,
+    SmallVectorImpl<RtlPortsInfo> &rtlPortsToCreate, std::mutex &intraPassMutex,
+    SmallVectorImpl<Operation *> &opsToErase) {
   // The 0'th argument is the base path.
   auto basePath = firrtlObject->getBlock()->getArgument(0);
   // build a table mapping the indices of input ports to their position in the
@@ -1295,17 +1284,17 @@ updateObjectInClass(firrtl::ObjectOp firrtlObject,
   auto className = firrtlObject.getType().getNameAttr();
   auto classType = om::ClassType::get(firrtlObject->getContext(), className);
 
+  // Create the new Object op.
   OpBuilder builder(firrtlObject);
 
-  // If there is a 'containingModule', Add the extra 'ports' argument.
-  if (containingModuleRef)
-    args.push_back(createRtlPorts(containingModuleRef, basePath, pathInfoTable,
-                                  namespaces, hierPathCache, builder,
-                                  intraPassMutex));
-
-  // Create the new Object op.
   auto object = builder.create<om::ObjectOp>(
       firrtlObject.getLoc(), classType, firrtlObject.getClassNameAttr(), args);
+
+  // If there is a 'containingModule', track that we need to add 'ports'.
+  if (containingModuleRef) {
+    std::lock_guard<std::mutex> guard(intraPassMutex);
+    rtlPortsToCreate.push_back({containingModuleRef, basePath, object});
+  }
 
   // Replace uses of the FIRRTL Object with the OM Object. The later dialect
   // conversion will take care of converting the types.
@@ -1465,21 +1454,15 @@ updateInstancesInModule(FModuleOp moduleOp, InstanceGraph &instanceGraph,
 static LogicalResult updateObjectsAndInstancesInClass(
     om::ClassOp classOp, InstanceGraph &instanceGraph,
     const LoweringState &state, const PathInfoTable &pathInfoTable,
-    hw::InnerSymbolNamespaceCollection &namespaces,
-    HierPathCache &hierPathCache, std::mutex &intraPassMutex,
+    SmallVectorImpl<RtlPortsInfo> &rtlPortsToCreate, std::mutex &intraPassMutex,
     SmallVectorImpl<Operation *> &opsToErase) {
-  // If this is a synthetic ClassOp we created, nothing else to do.
-  if (classOp.getSymName().starts_with(kRtlPortClassName))
-    return success();
-
   OpBuilder builder(classOp);
   auto &classState = state.classLoweringStateTable.at(classOp);
   auto it = classState.paths.begin();
   for (auto &op : classOp->getRegion(0).getOps()) {
     if (auto objectOp = dyn_cast<firrtl::ObjectOp>(op)) {
-      if (failed(updateObjectInClass(objectOp, pathInfoTable, namespaces,
-                                     hierPathCache, intraPassMutex,
-                                     opsToErase)))
+      if (failed(updateObjectInClass(objectOp, pathInfoTable, rtlPortsToCreate,
+                                     intraPassMutex, opsToErase)))
         return failure();
     } else if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
       if (failed(updateInstanceInClass(instanceOp, *it++, instanceGraph,
@@ -1493,9 +1476,7 @@ static LogicalResult updateObjectsAndInstancesInClass(
 // Update Object or Module instantiations in a FIRRTL Module or OM Class.
 LogicalResult LowerClassesPass::updateInstances(
     Operation *op, InstanceGraph &instanceGraph, const LoweringState &state,
-    const PathInfoTable &pathInfoTable,
-    hw::InnerSymbolNamespaceCollection &namespaces,
-    HierPathCache &hierPathCache, std::mutex &intraPassMutex) {
+    const PathInfoTable &pathInfoTable, std::mutex &intraPassMutex) {
 
   // Track ops to erase at the end. We can't do this eagerly, since we want to
   // loop over each op in the container's body, and we may end up removing some
@@ -1513,8 +1494,8 @@ LogicalResult LowerClassesPass::updateInstances(
             // Convert FIRRTL Module instance within a Class to OM
             // Object instance.
             return updateObjectsAndInstancesInClass(
-                classOp, instanceGraph, state, pathInfoTable, namespaces,
-                hierPathCache, intraPassMutex, opsToErase);
+                classOp, instanceGraph, state, pathInfoTable, rtlPortsToCreate,
+                intraPassMutex, opsToErase);
           })
           .Default([](auto *op) { return success(); });
   if (failed(result))
@@ -1524,6 +1505,34 @@ LogicalResult LowerClassesPass::updateInstances(
     op->erase();
 
   return success();
+}
+
+// Create and add all 'ports' lists of RtlPort objects for each object.
+void LowerClassesPass::createAllRtlPorts(
+    const PathInfoTable &pathInfoTable,
+    hw::InnerSymbolNamespaceCollection &namespaces,
+    HierPathCache &hierPathCache) {
+  MLIRContext *ctx = &getContext();
+
+  // Get a builder initialized to the end of the top-level module.
+  OpBuilder builder = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
+
+  // Declare an RtlPort class on the fly.
+  om::ClassOp::buildSimpleClassOp(
+      builder, UnknownLoc::get(ctx), kRtlPortClassName,
+      {"ref", "direction", "width"}, {"ref", "direction", "width"},
+      {om::PathType::get(ctx), om::StringType::get(ctx),
+       om::OMIntegerType::get(ctx)});
+
+  // Sort the collected rtlPortsToCreate and process each.
+  llvm::stable_sort(rtlPortsToCreate, [](auto lhs, auto rhs) {
+    return lhs.object.getClassName() < rhs.object.getClassName();
+  });
+
+  // Create each 'ports' list.
+  for (auto rtlPortToCreate : rtlPortsToCreate)
+    createRtlPorts(rtlPortToCreate, pathInfoTable, namespaces, hierPathCache,
+                   builder);
 }
 
 // Pattern rewriters for dialect conversion.
