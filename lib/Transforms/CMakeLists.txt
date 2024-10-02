@@ -4,7 +4,7 @@ add_circt_library(CIRCTTransforms
   MapArithToComb.cpp
   MaximizeSSA.cpp
   InsertMergeBlocks.cpp
-  EmitOpCount.cpp
+  PrintOpCount.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Transforms

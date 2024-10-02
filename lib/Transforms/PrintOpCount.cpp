@@ -1,4 +1,4 @@
-//===- EmitOpCount.cpp - Operation Count Emission Pass ----------*- C++ -*-===//
+//===- PrintOpCount.cpp - Operation Count Emission Pass ---------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -17,7 +17,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 
 namespace circt {
-#define GEN_PASS_DEF_EMITOPCOUNT
+#define GEN_PASS_DEF_PRINTOPCOUNT
 #include "circt/Transforms/Passes.h.inc"
 } // namespace circt
 
@@ -27,10 +27,10 @@ using namespace circt;
 namespace {
 
 void printOpAndOperandCounts(analysis::OpCountAnalysis &opCount,
-                             raw_ostream &os, bool alphabetical = false) {
+                             raw_ostream &os, bool sorted = false) {
   auto opNames = opCount.getFoundOpNames();
   // Sort to account for non-deterministic DenseMap ordering
-  if (alphabetical)
+  if (sorted)
     llvm::sort(opNames, [](OperationName name1, OperationName name2) {
       return name1.getStringRef() < name2.getStringRef();
     });
@@ -44,7 +44,7 @@ void printOpAndOperandCounts(analysis::OpCountAnalysis &opCount,
     llvm::SmallVector<size_t> keys;
     for (auto pair : operandMap)
       keys.push_back(pair.first);
-    if (alphabetical)
+    if (sorted)
       llvm::sort(keys);
     for (auto num : keys) {
       os << "    - operands: " << num << "\n";
@@ -75,9 +75,10 @@ void printOpAndOperandJSON(analysis::OpCountAnalysis &opCount,
   os << "}\n";
 }
 
-struct EmitOpCountPass : public circt::impl::EmitOpCountBase<EmitOpCountPass> {
+struct PrintOpCountPass
+    : public circt::impl::PrintOpCountBase<PrintOpCountPass> {
 public:
-  EmitOpCountPass(raw_ostream &os) : os(os) {}
+  PrintOpCountPass(raw_ostream &os) : os(os) {}
 
   void runOnOperation() override {
     auto &opCount = getAnalysis<circt::analysis::OpCountAnalysis>();
@@ -85,8 +86,8 @@ public:
     case OpCountEmissionFormat::Readable:
       printOpAndOperandCounts(opCount, os);
       break;
-    case OpCountEmissionFormat::ReadableAlphabetical:
-      printOpAndOperandCounts(opCount, os, /*alphabetical=*/true);
+    case OpCountEmissionFormat::ReadableSorted:
+      printOpAndOperandCounts(opCount, os, /*sorted=*/true);
       break;
     case OpCountEmissionFormat::JSON:
       printOpAndOperandJSON(opCount, os);
@@ -100,7 +101,7 @@ public:
 } // namespace
 
 namespace circt {
-std::unique_ptr<mlir::Pass> createEmitOpCountPass() {
-  return std::make_unique<EmitOpCountPass>(llvm::outs());
+std::unique_ptr<mlir::Pass> createPrintOpCountPass() {
+  return std::make_unique<PrintOpCountPass>(llvm::outs());
 }
 } // namespace circt
