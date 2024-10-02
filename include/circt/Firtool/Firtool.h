@@ -98,7 +98,7 @@ public:
   bool shouldConvertProbesToSignals() const { return probesToSignals; }
   bool shouldReplaceSequentialMemories() const { return replSeqMem; }
   bool shouldDisableOptimization() const { return disableOptimization; }
-  bool shouldLayerSink() const { return layerSink; }
+  bool shouldAdvancedLayerSink() const { return advancedLayerSink; }
   bool shouldLowerMemories() const { return lowerMemories; }
   bool shouldDedup() const { return !noDedup; }
   bool shouldEnableDebugInfo() const { return enableDebugInfo; }
@@ -232,8 +232,8 @@ public:
     return *this;
   }
 
-  FirtoolOptions &setLayerSink(bool value) {
-    layerSink = value;
+  FirtoolOptions &setAdvancedLayerSink(bool value) {
+    advancedLayerSink = value;
     return *this;
   }
 
@@ -388,7 +388,7 @@ private:
   bool disableAggressiveMergeConnections;
   bool emitOMIR;
   std::string omirOutFile;
-  bool layerSink;
+  bool advancedLayerSink;
   bool lowerMemories;
   std::string blackBoxRootPath;
   bool replSeqMem;

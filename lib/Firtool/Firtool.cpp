@@ -141,6 +141,9 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     modulePM.addPass(firrtl::createLayerSinkPass());
   }
 
+  if (opt.shouldAdvancedLayerSink())
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLayerSinkPass());
+
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
   // Preset the random initialization parameters for each module. The current
@@ -150,19 +153,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   if (opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg))
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createRandomizeRegisterInitPass());
-
-  // Run after inference, layer specialization.
-  if (opt.shouldConvertProbesToSignals())
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createProbesToSignalsPass());
-
-  {
-    auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-    modulePM.addPass(firrtl::createLayerMergePass());
-  }
-
-  if (!opt.shouldDisableOptimization() && opt.shouldLayerSink())
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLayerSinkPass());
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerLayersPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
@@ -579,9 +569,10 @@ struct FirtoolCmdOptions {
       "output-omir", llvm::cl::desc("File name for the output omir"),
       llvm::cl::init("")};
 
-  llvm::cl::opt<bool> layerSink{"layer-sink",
-                                llvm::cl::desc("Sink logic into layer blocks"),
-                                llvm::cl::init(false)};
+  llvm::cl::opt<bool> advancedLayerSink{
+      "advanced-layer-sink",
+      llvm::cl::desc("Sink logic into layer blocks (advanced)"),
+      llvm::cl::init(false)};
 
   llvm::cl::opt<bool> lowerMemories{
       "lower-memories",
@@ -766,7 +757,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       exportChiselInterface(false), chiselInterfaceOutDirectory(""),
       vbToBV(false), noDedup(false), companionMode(firrtl::CompanionMode::Bind),
       disableAggressiveMergeConnections(false), emitOMIR(true), omirOutFile(""),
-      layerSink(false), lowerMemories(false), blackBoxRootPath(""),
+      advancedLayerSink(false), lowerMemories(false), blackBoxRootPath(""),
       replSeqMem(false), replSeqMemFile(""), extractTestCode(false),
       ignoreReadEnableMem(false), disableRandom(RandomKind::None),
       outputAnnotationFilename(""), enableAnnotationWarning(false),
