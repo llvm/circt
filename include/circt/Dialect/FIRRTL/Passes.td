@@ -849,7 +849,18 @@ def LayerMerge : Pass<"firrtl-layer-merge", "firrtl::FModuleOp"> {
 def LayerSink : Pass<"firrtl-layer-sink", "firrtl::CircuitOp"> {
   let summary = "Sink operations into layer blocks";
   let description = [{
+  }];
+  let constructor = "::circt::firrtl::createLayerSinkPass()";
+  let statistics = [
+    Statistic<"numSunk", "num-sunk", "Number of operations sunk">,
+  ];
+}
 
+def AdvancedLayerSink : Pass<"firrtl-advanced-layer-sink", "firrtl::CircuitOp"> {
+  let summary = "Sink operations into layer blocks";
+  let description = [{
+    This pass sinks ops into layers, when the op's only uses are within the
+    layerblock. 
   }];
   let constructor = "::circt::firrtl::createLayerSinkPass()";
   let statistics = [
