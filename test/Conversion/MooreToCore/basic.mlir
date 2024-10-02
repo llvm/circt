@@ -362,6 +362,7 @@ moore.module private @SubModule_0(in %a : !moore.l1, in %b : !moore.l1, out c : 
   moore.output %0 : !moore.l1
 }
 
+// CHECK-LABEL: hw.module @Variable
 moore.module @Variable() {
   // CHECK: [[TMP0:%.+]] = hw.constant 0 : i32
   // CHECK: %a = llhd.sig [[TMP0]] : i32
@@ -393,6 +394,28 @@ moore.module @Variable() {
 
   // CHECK: hw.output
   moore.output
+}
+
+// CHECK-LABEL: hw.module @Net
+moore.module @Net() {
+  // CHECK: [[TMP:%.+]] = hw.constant 0 : i32
+  // CHECK: %a = llhd.sig [[TMP]] : i32
+  %a = moore.net wire : <i32>
+
+  // CHECK: [[PRB:%.+]] = llhd.prb %a : !hw.inout<i32>
+  %0 = moore.read %a : <i32>
+
+  // CHECK: [[TMP:%.+]] = hw.constant 0 : i32
+  // CHECK: %b = llhd.sig [[TMP]] : i32
+  // CHECK: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK: llhd.drv %b, [[PRB]] after [[TIME]] : !hw.inout<i32>
+  %b = moore.net wire %0 : <i32>
+
+  // CHECK: [[TMP:%.+]] = hw.constant 10 : i32
+  %3 = moore.constant 10 : i32
+  // CHECK: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK: llhd.drv %a, [[TMP]] after [[TIME]] : !hw.inout<i32>
+  moore.assign %a, %3 : i32
 }
 
 // CHECK-LABEL: hw.module @Struct

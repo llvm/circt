@@ -496,6 +496,44 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
   }
 };
 
+struct NetOpConversion : public OpConversionPattern<NetOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(NetOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    if (op.getKind() != NetKind::Wire)
+      return rewriter.notifyMatchFailure(loc, "only wire nets supported");
+
+    auto resultType = typeConverter->convertType(op.getResult().getType());
+    if (!resultType)
+      return rewriter.notifyMatchFailure(loc, "invalid net type");
+
+    // TODO: Once the core dialects support four-valued integers, this code
+    // will additionally need to generate an all-X value for four-valued nets.
+    auto elementType = cast<hw::InOutType>(resultType).getElementType();
+    int64_t width = hw::getBitWidth(elementType);
+    if (width == -1)
+      return failure();
+    auto constZero = rewriter.create<hw::ConstantOp>(loc, APInt(width, 0));
+    auto init =
+        rewriter.createOrFold<hw::BitcastOp>(loc, elementType, constZero);
+
+    auto signal = rewriter.replaceOpWithNewOp<llhd::SignalOp>(
+        op, resultType, op.getNameAttr(), init);
+
+    if (auto assignedValue = adaptor.getAssignment()) {
+      auto timeAttr = llhd::TimeAttr::get(resultType.getContext(), 0U,
+                                          llvm::StringRef("ns"), 0, 1);
+      auto time = rewriter.create<llhd::ConstantTimeOp>(loc, timeAttr);
+      rewriter.create<llhd::DrvOp>(loc, signal, assignedValue, time, Value{});
+    }
+
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Expression Conversion
 //===----------------------------------------------------------------------===//
@@ -1342,6 +1380,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
   patterns.add<
     // Patterns of declaration operations.
     VariableOpConversion,
+    NetOpConversion,
 
     // Patterns of miscellaneous operations.
     ConstantOpConv, ConcatOpConversion, ReplicateOpConversion,
