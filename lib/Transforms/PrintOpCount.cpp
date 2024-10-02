@@ -55,10 +55,10 @@ void printOpAndOperandCounts(analysis::OpCountAnalysis &opCount,
 void printOpAndOperandJSON(analysis::OpCountAnalysis &opCount,
                            raw_ostream &os) {
   auto jos = llvm::json::OStream(os);
-  jos.object([&]{
-    for (auto opName: opCount.getFoundOpNames())
-      jos.attributeObject(opName.getStringRef(), [&]{
-        for (auto pair: opCount.getOperandCountMap(opName))
+  jos.object([&] {
+    for (auto opName : opCount.getFoundOpNames())
+      jos.attributeObject(opName.getStringRef(), [&] {
+        for (auto pair : opCount.getOperandCountMap(opName))
           jos.attribute(std::to_string(pair.first), pair.second);
       });
   });
