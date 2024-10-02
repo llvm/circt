@@ -45,11 +45,17 @@ LogicalResult StateOp::fold(FoldAdaptor adaptor,
   if (getNumResults() > 0 && !getOperation()->hasAttr("name") &&
       !getOperation()->hasAttr("names")) {
     bool hasExplicitInitials = !getInitials().empty();
-    if (isAlways(adaptor.getEnable(), false)) {
+    bool allInitialsConstant =
+        !hasExplicitInitials ||
+        llvm::all_of(adaptor.getInitials(),
+                     [&](Attribute attr) { return !!attr; });
+    if (isAlways(adaptor.getEnable(), false) && allInitialsConstant) {
       // Fold to the explicit or implicit initial value if
-      // the state is never enabled.
+      // the state is never enabled and the initial values
+      // are compile-time constants.
       if (hasExplicitInitials)
-        results.append(getInitials().begin(), getInitials().end());
+        results.append(adaptor.getInitials().begin(),
+                       adaptor.getInitials().end());
       else
         for (auto resTy : getResultTypes())
           results.push_back(IntegerAttr::get(resTy, 0));
