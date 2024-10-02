@@ -8,12 +8,12 @@
 //
 // Contains a pass to emit operation count results
 //
-//
 //===----------------------------------------------------------------------===//
 
 #include "circt/Analysis/OpCountAnalysis.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/Support/JSON.h"
 
 namespace circt {
 #define GEN_PASS_DEF_PRINTOPCOUNT
@@ -54,23 +54,14 @@ void printOpAndOperandCounts(analysis::OpCountAnalysis &opCount,
 
 void printOpAndOperandJSON(analysis::OpCountAnalysis &opCount,
                            raw_ostream &os) {
-  auto opNames = opCount.getFoundOpNames();
-  os << "{\n";
-  for (auto [i, opName] : llvm::enumerate(opNames)) {
-    os << " \"" << opName << "\": {\n";
-    auto operandMap = opCount.getOperandCountMap(opName);
-    for (auto [j, pair] : llvm::enumerate(operandMap)) {
-      os << "  " << pair.first << ": " << pair.second;
-      if (j != operandMap.size() - 1)
-        os << ",";
-      os << "\n";
-    }
-    os << " }";
-    if (i != opNames.size() - 1)
-      os << ",";
-    os << "\n";
-  }
-  os << "}\n";
+  auto jos = llvm::json::OStream(os);
+  jos.object([&]{
+    for (auto opName: opCount.getFoundOpNames())
+      jos.attributeObject(opName.getStringRef(), [&]{
+        for (auto pair: opCount.getOperandCountMap(opName))
+          jos.attribute(std::to_string(pair.first), pair.second);
+      });
+  });
 }
 
 struct PrintOpCountPass
