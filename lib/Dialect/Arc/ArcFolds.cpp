@@ -41,14 +41,33 @@ static bool isAlways(Value value, bool expected) {
 
 LogicalResult StateOp::fold(FoldAdaptor adaptor,
                             SmallVectorImpl<OpFoldResult> &results) {
-  if ((isAlways(adaptor.getEnable(), false) ||
-       isAlways(adaptor.getReset(), true)) &&
-      !getOperation()->hasAttr("name") && !getOperation()->hasAttr("names")) {
-    // We can fold to zero here because the states are zero-initialized and
-    // don't ever change.
-    for (auto resTy : getResultTypes())
-      results.push_back(IntegerAttr::get(resTy, 0));
-    return success();
+
+  if (getNumResults() > 0 && !getOperation()->hasAttr("name") &&
+      !getOperation()->hasAttr("names")) {
+    bool hasExplicitInitials = !getInitials().empty();
+    bool allInitialsConstant =
+        !hasExplicitInitials ||
+        llvm::all_of(adaptor.getInitials(),
+                     [&](Attribute attr) { return !!attr; });
+    if (isAlways(adaptor.getEnable(), false) && allInitialsConstant) {
+      // Fold to the explicit or implicit initial value if
+      // the state is never enabled and the initial values
+      // are compile-time constants.
+      if (hasExplicitInitials)
+        results.append(adaptor.getInitials().begin(),
+                       adaptor.getInitials().end());
+      else
+        for (auto resTy : getResultTypes())
+          results.push_back(IntegerAttr::get(resTy, 0));
+      return success();
+    }
+    if (!hasExplicitInitials && isAlways(adaptor.getReset(), true)) {
+      // We assume both the implicit initial value and the
+      // implicit (synchronous) reset value to be zero.
+      for (auto resTy : getResultTypes())
+        results.push_back(IntegerAttr::get(resTy, 0));
+      return success();
+    }
   }
 
   // Remove operand when input is default value.
