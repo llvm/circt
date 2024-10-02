@@ -18,11 +18,32 @@ using namespace circt;
 using namespace rtgtest;
 
 //===----------------------------------------------------------------------===//
-// InstrAOp
+// TestInstrAOp
 //===----------------------------------------------------------------------===//
 
 APInt TestInstrAOp::getBinary(ArrayRef<APInt> operands) {
   return APInt(7, 0b1110001).concat(operands[0]).concat(operands[1]);
+}
+
+//===----------------------------------------------------------------------===//
+// TestInstrBOp
+//===----------------------------------------------------------------------===//
+
+APInt TestInstrBOp::getBinary(ArrayRef<APInt> operands) {
+  return APInt(7, 0b1110000)
+      .concat(operands[0])
+      .concat(operands[1])
+      .concat(APInt(9, 0));
+}
+
+//===----------------------------------------------------------------------===//
+// TestRegisterAOp
+//===----------------------------------------------------------------------===//
+
+APInt TestRegisterAOp::getBinary() { return APInt(8, getNumber()); }
+
+void TestRegisterAOp::printAssembly(llvm::raw_ostream &stream) {
+  stream << "x" << std::to_string(getNumber());
 }
 
 //===----------------------------------------------------------------------===//

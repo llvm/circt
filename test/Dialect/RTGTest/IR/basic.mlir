@@ -7,6 +7,12 @@
 %imm2 = arith.constant 8 : i32
 rtgtest.instr_a %imm1, %imm2
 
+// CHECK: [[REG0:%.+]] = rtgtest.reg_a 5
+// CHECK: [[REG1:%.+]] = rtgtest.reg_a 2
+// CHECK: rtgtest.instr_b [[REG0]], [[REG1]]
+%reg5 = rtgtest.reg_a 5
+%reg2 = rtgtest.reg_a 2
+rtgtest.instr_b %reg5, %reg2
 
 
 func.func @checkOnContext(

@@ -33,12 +33,19 @@ static void printValue(Value val, raw_ostream &stream) {
   if (auto constOp = val.getDefiningOp<mlir::arith::ConstantOp>())
     if (auto integerAttr = dyn_cast<IntegerAttr>(constOp.getValue()))
       stream << integerAttr.getValue().getZExtValue();
+
+  if (auto resourceOp = val.getDefiningOp<ResourceOpInterface>())
+    resourceOp.printAssembly(stream);
 }
 
 static FailureOr<APInt> getBinary(Value val) {
   if (auto constOp = val.getDefiningOp<mlir::arith::ConstantOp>())
     if (auto integerAttr = dyn_cast<IntegerAttr>(constOp.getValue()))
       return integerAttr.getValue();
+
+  if (auto resourceOp = val.getDefiningOp<ResourceOpInterface>())
+    return resourceOp.getBinary();
+
   return failure();
 }
 
@@ -89,13 +96,16 @@ void EmitRTGAssembly::registerEmitRTGAssemblyTranslation() {
   static llvm::cl::list<std::string> allowedInstructions(
       "emit-assembly-allowed-instr",
       llvm::cl::desc(
-          "Comma-separated list of instructions supported by the assembler."));
+          "Comma-separated list of instructions supported by the assembler."),
+      llvm::cl::MiscFlags::CommaSeparated);
 
   auto getOptions = [] {
     EmitRTGAssemblyOptions opts;
     SmallVector<std::string> instrs;
-    for (auto &instr : allowedInstructions)
+    for (auto &instr : allowedInstructions) {
+      llvm::errs() << instr << "\n";
       instrs.push_back(instr);
+    }
 
     if (!allowedTextualInstructionsFile.empty()) {
       std::ifstream input(allowedTextualInstructionsFile.getValue());

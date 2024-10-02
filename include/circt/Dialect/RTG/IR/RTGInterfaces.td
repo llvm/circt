@@ -41,6 +41,27 @@ def InstructionOpInterface : OpInterface<"InstructionOpInterface"> {
   ];
 }
 
+def ResourceOpInterface : OpInterface<"ResourceOpInterface"> {
+  let description = [{
+    This interface should be implemented by operations that represent
+    resources.
+  }];
+  let cppNamespace = "::circt::rtg";
+
+  let methods = [
+    InterfaceMethod<[{
+        Returns a binary representation of the resource as an APInt. 
+      }],
+      "::llvm::APInt", "getBinary">,
+    InterfaceMethod<[{
+        Emits the assembly representation of the resource to the provided
+        stream. The format should be the one understood by common assembler
+        tools.
+      }],
+      "void", "printAssembly", (ins "llvm::raw_ostream &":$stream)>,
+  ];
+}
+
 def ResourceTypeInterface : TypeInterface<"ResourceTypeInterface"> {
   let description = [{
     This interface should be implemented by types that represent resources.
