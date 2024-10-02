@@ -35,16 +35,21 @@ void printOpAndOperandCounts(analysis::OpCountAnalysis &opCount,
       return name1.getStringRef() < name2.getStringRef();
     });
   for (auto opName : opNames) {
-    os << opName << ": " << opCount.getOpCount(opName) << "\n";
+    os << "- name: " << opName << "\n";
+    os << "  count: " << opCount.getOpCount(opName) << "\n";
     auto operandMap = opCount.getOperandCountMap(opName);
+    if (operandMap.size() <= 1)
+      continue;
     // Sort for determinism again
     llvm::SmallVector<size_t> keys;
     for (auto pair : operandMap)
       keys.push_back(pair.first);
     if (alphabetical)
       llvm::sort(keys);
-    for (auto num : keys)
-      os << " with " << num << " operands: " << operandMap[num] << "\n";
+    for (auto num : keys) {
+      os << "    - operands: " << num << "\n";
+      os << "      count: " << operandMap[num] << "\n";
+    }
   }
 }
 
