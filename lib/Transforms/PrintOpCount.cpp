@@ -39,10 +39,10 @@ void printOpAndOperandCounts(analysis::OpCountAnalysis &opCount,
     auto operandMap = opCount.getOperandCountMap(opName);
     if (operandMap.size() <= 1)
       continue;
-    // Sort for determinism again
     llvm::SmallVector<size_t> keys;
     for (auto pair : operandMap)
       keys.push_back(pair.first);
+    // Sort for determinism if required again
     if (sorted)
       llvm::sort(keys);
     for (auto num : keys) {
@@ -55,7 +55,6 @@ void printOpAndOperandCounts(analysis::OpCountAnalysis &opCount,
 void printOpAndOperandJSON(analysis::OpCountAnalysis &opCount,
                            raw_ostream &os) {
   auto opNames = opCount.getFoundOpNames();
-  // Sort to account for non-deterministic DenseMap ordering
   os << "{\n";
   for (auto [i, opName] : llvm::enumerate(opNames)) {
     os << " \"" << opName << "\": {\n";
@@ -100,6 +99,12 @@ public:
 } // namespace
 
 namespace circt {
+// Construct with alternative output stream where desired
+std::unique_ptr<mlir::Pass> createPrintOpCountPass(llvm::raw_ostream &os) {
+  return std::make_unique<PrintOpCountPass>(os);
+}
+
+// Print to outs by default
 std::unique_ptr<mlir::Pass> createPrintOpCountPass() {
   return std::make_unique<PrintOpCountPass>(llvm::outs());
 }

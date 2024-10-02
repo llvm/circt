@@ -103,7 +103,7 @@ def MaximizeSSA : Pass<"maximize-ssa", "::mlir::ModuleOp"> {
 def PrintOpCount : Pass<"print-op-count", "::mlir::ModuleOp"> {
   let summary = "Print operation count analysis results";
   let description = [{
-    This pass prints data on operation counts in a builtin.module
+    This pass prints data on operation counts in a builtin.module.
   }];
   let constructor = "circt::createPrintOpCountPass()";
   let options = [
