@@ -58,7 +58,6 @@ add_circt_library(CIRCTAnalysisTestPasses
   LINK_LIBS PUBLIC
   CIRCTDebugAnalysis
   CIRCTDependenceAnalysis
-  CIRCTOpCountAnalysis
   CIRCTFIRRTLAnalysis
   CIRCTSchedulingAnalysis
   CIRCTHW

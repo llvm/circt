@@ -14,7 +14,6 @@
 #include "circt/Analysis/OpCountAnalysis.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Pass/Pass.h"
-#include "mlir/Transforms/DialectConversion.h"
 
 namespace circt {
 #define GEN_PASS_DEF_PRINTOPCOUNT
