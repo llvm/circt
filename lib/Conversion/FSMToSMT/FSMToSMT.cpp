@@ -223,7 +223,7 @@ LogicalResult MachineOpConverter::dispatch(){
   argVarTypes.push_back(b.getType<smt::IntType>());
   stateFunTypes.push_back(b.getType<smt::IntType>());
 
-  llvm::outs()<<"\n\nstateFunTypes.size() = "<<stateFunTypes.size();
+  // llvm::outs()<<"\n\nstateFunTypes.size() = "<<stateFunTypes.size();
 
   // populate state functions and transitions vector
 
@@ -231,7 +231,7 @@ LogicalResult MachineOpConverter::dispatch(){
     auto fromState = insertStates(states, stateOp.getName().str());
     mlir::StringAttr acFunName = b.getStringAttr(("F_"+stateOp.getName().str()));
     auto range = b.getType<smt::BoolType>();
-    smt::DeclareFunOp acFun = b.create<smt::DeclareFunOp>(loc, b.getType<smt::SMTFuncType>(argVarTypes, range), acFunName);
+    smt::DeclareFunOp acFun = b.create<smt::DeclareFunOp>(loc, b.getType<smt::SMTFuncType>(stateFunTypes, range), acFunName);
     stateFunctions.push_back(acFun);
     for (auto tr: stateOp.getTransitions().front().getOps<fsm::TransitionOp>()){
       auto t = parseTransition(tr, fromState, states, loc, b);
@@ -277,6 +277,7 @@ LogicalResult MachineOpConverter::dispatch(){
         for(auto [av, a] : llvm::zip(argVars, args))
           avToSmt.push_back({av, a});
         
+        // this is where the problem is 
         for (auto [j, uv]: llvm::enumerate(avToSmt)){
           if(int(j) >=  numArgs){ // only variables can be updated and time is updated separately
             bool found = false;
@@ -291,8 +292,6 @@ LogicalResult MachineOpConverter::dispatch(){
             }
             if(!found) // the value is not updated in the region 
               updatedSmtValues.push_back(uv.second);
-          } else {
-            updatedSmtValues.push_back(uv.second);
           }
         }
 
@@ -309,7 +308,8 @@ LogicalResult MachineOpConverter::dispatch(){
       for(auto [av, a] : llvm::zip(argVars, args))
         avToSmt.push_back({av, a});
       for (auto [j, uv]: llvm::enumerate(avToSmt)){
-        updatedSmtValues.push_back(uv.second);
+        if(int(j) >= numArgs)
+          updatedSmtValues.push_back(uv.second);
       }
       //update time 
       mlir::IntegerAttr intAttr = b.getI32IntegerAttr(1);
@@ -355,7 +355,6 @@ LogicalResult MachineOpConverter::dispatch(){
               actionArgs.push_back(a);
             }
           }
-
 
           auto t1ac = b.create<smt::ApplyFuncOp>(loc, stateFunctions[t1.from], stateArgs);
           auto actionedArgs = action(stateArgs);
