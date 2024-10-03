@@ -7,10 +7,10 @@
 // CHECK:           %[[VAL_7:.*]] = seq.compreg sym @p0_stage0_reg1 %[[VAL_0]], %[[VAL_3]] : i32
 // CHECK:           %[[VAL_8:.*]] = hw.constant false
 // CHECK:           %[[VAL_9:.*]] = seq.compreg sym @p0_stage1_enable %[[VAL_2]], %[[VAL_3]] reset %[[VAL_4]], %[[VAL_8]]  initial %[[INIT:.+]] : i1
-// CHECK:           %[[INIT]] = seq.initial {
+// CHECK:           %[[INIT]] = seq.initial() {
 // CHECK:             %false_0 = hw.constant false
 // CHECK:             seq.yield %false_0 : i1
-// CHECK:           } : !seq.immutable<i1>
+// CHECK:           } : () -> !seq.immutable<i1>
 // CHECK:           %[[VAL_10:.*]] = comb.add %[[VAL_6]], %[[VAL_7]] : i32
 // CHECK:           hw.output %[[VAL_10]], %[[VAL_9]] : i32, i1
 // CHECK:         }

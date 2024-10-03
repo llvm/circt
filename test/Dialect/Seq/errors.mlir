@@ -23,18 +23,18 @@ hw.module @fifo3(in %clk : !seq.clock, in %rst : i1, in %in : i32, in %rdEn : i1
 
 hw.module @init() {
   // expected-error @+1 {{result type doesn't match with the terminator}}
-  %0 = seq.initial {
+  %0 = seq.initial () {
     %1 = hw.constant 32: i32
     seq.yield %1, %1: i32, i32
-  }: !seq.immutable<i32>
+  }: () -> !seq.immutable<i32>
 }
 
 // -----
 
 hw.module @init() {
   // expected-error @+1 {{'i32' is expected but got 'i16'}}
-  %0 = seq.initial {
+  %0 = seq.initial () {
     %1 = hw.constant 32: i16
     seq.yield %1: i16
-  }: !seq.immutable<i32>
+  }: () -> !seq.immutable<i32>
 }
