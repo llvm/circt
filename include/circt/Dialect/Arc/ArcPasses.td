@@ -288,6 +288,15 @@ def MuxToControlFlow : Pass<"arc-mux-to-control-flow", "mlir::ModuleOp"> {
   let dependentDialects = ["mlir::scf::SCFDialect"];
 }
 
+def Partition : Pass<"arc-partition", "mlir::ModuleOp"> {
+  let summary = "Partition the computation";
+  let constructor = "circt::arc::createPartitionPass()";
+  let options = [
+    Option<"taskCount", "tasks", "unsigned", "2",
+      "The minimum number of independent tasks to form">
+  ];
+}
+
 def SimplifyVariadicOps : Pass<"arc-simplify-variadic-ops", "mlir::ModuleOp"> {
   let summary = "Convert variadic ops into distributed binary ops";
   let constructor = "circt::arc::createSimplifyVariadicOpsPass()";
