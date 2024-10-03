@@ -964,8 +964,7 @@ bool LowerClassesPass::shouldCreateClass(StringAttr modName) {
   return shouldCreateClassMemo.at(modName);
 }
 
-void checkAddContainingModulePorts(bool hasContainingModule,
-                                   OpBuilder builder,
+void checkAddContainingModulePorts(bool hasContainingModule, OpBuilder builder,
                                    SmallVector<Attribute> &fieldNames,
                                    SmallVector<NamedAttribute> &fieldTypes) {
   if (hasContainingModule) {
