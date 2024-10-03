@@ -783,6 +783,108 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticShrTooLarge) {
   ASSERT_TRUE(failed(result));
 }
 
+TEST(EvaluatorTests, IntegerBinaryArithmeticShl) {
+  StringRef mod = "om.class @IntegerBinaryArithmeticShl() {"
+                  "  %0 = om.constant #om.integer<8 : si7> : !om.integer"
+                  "  %1 = om.constant #om.integer<2 : si3> : !om.integer"
+                  "  %2 = om.integer.shl %0, %1 : !om.integer"
+                  "  om.class.field @result, %2 : !om.integer"
+                  "}";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto result = evaluator.instantiate(
+      StringAttr::get(&context, "IntegerBinaryArithmeticShl"), {});
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
+                        ->getField("result")
+                        .value();
+
+  ASSERT_EQ(32, llvm::cast<evaluator::AttributeValue>(fieldValue.get())
+                    ->getAs<circt::om::IntegerAttr>()
+                    .getValue()
+                    .getValue());
+}
+
+TEST(EvaluatorTests, IntegerBinaryArithmeticShlNegative) {
+  StringRef mod = "om.class @IntegerBinaryArithmeticShlNegative() {"
+                  "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
+                  "  %1 = om.constant #om.integer<-2 : si3> : !om.integer"
+                  "  %2 = om.integer.shl %0, %1 : !om.integer"
+                  "  om.class.field @result, %2 : !om.integer"
+                  "}";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
+    if (StringRef(diag.str()).starts_with("'om.integer.shl'"))
+      ASSERT_EQ(diag.str(),
+                "'om.integer.shl' op shift amount must be non-negative");
+    if (StringRef(diag.str()).starts_with("failed"))
+      ASSERT_EQ(diag.str(), "failed to evaluate integer operation");
+  });
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto result = evaluator.instantiate(
+      StringAttr::get(&context, "IntegerBinaryArithmeticShlNegative"), {});
+
+  ASSERT_TRUE(failed(result));
+}
+
+TEST(EvaluatorTests, IntegerBinaryArithmeticShlTooLarge) {
+  StringRef mod = "om.class @IntegerBinaryArithmeticShlTooLarge() {"
+                  "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
+                  "  %1 = om.constant #om.integer<36893488147419100000 : si66> "
+                  ": !om.integer"
+                  "  %2 = om.integer.shl %0, %1 : !om.integer"
+                  "  om.class.field @result, %2 : !om.integer"
+                  "}";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
+    if (StringRef(diag.str()).starts_with("'om.integer.shl'"))
+      ASSERT_EQ(
+          diag.str(),
+          "'om.integer.shl' op shift amount must be representable in 64 bits");
+    if (StringRef(diag.str()).starts_with("failed"))
+      ASSERT_EQ(diag.str(), "failed to evaluate integer operation");
+  });
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto result = evaluator.instantiate(
+      StringAttr::get(&context, "IntegerBinaryArithmeticShlTooLarge"), {});
+
+  ASSERT_TRUE(failed(result));
+}
+
 TEST(EvaluatorTests, IntegerBinaryArithmeticObjects) {
   StringRef mod = "om.class @Class1() {"
                   "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
