@@ -135,14 +135,14 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   if (opt.shouldConvertProbesToSignals())
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createProbesToSignalsPass());
 
-  {
-    auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-    modulePM.addPass(firrtl::createLayerMergePass());
-    modulePM.addPass(firrtl::createLayerSinkPass());
-  }
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+      firrtl::createLayerMergePass());
 
   if (opt.shouldAdvancedLayerSink())
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLayerSinkPass());
+  else
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createLayerSinkPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
