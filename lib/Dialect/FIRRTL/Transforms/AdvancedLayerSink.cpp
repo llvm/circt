@@ -479,13 +479,13 @@ bool CircuitLayerSink::operator()() {
 
 namespace {
 /// A control-flow sink pass.
-struct LayerSinkPass final
-    : public circt::firrtl::impl::LayerSinkBase<LayerSinkPass> {
+struct AdvancedLayerSinkPass final
+    : public circt::firrtl::impl::AdvancedLayerSinkBase<AdvancedLayerSinkPass> {
   void runOnOperation() override;
 };
 } // namespace
 
-void LayerSinkPass::runOnOperation() {
+void AdvancedLayerSinkPass::runOnOperation() {
   LLVM_DEBUG(debugPassHeader(this)
                  << "\n"
                  << "Module: '" << getOperation().getName() << "'\n";);
@@ -501,6 +501,6 @@ void LayerSinkPass::runOnOperation() {
 // Pass Constructor
 //===----------------------------------------------------------------------===//
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createLayerSinkPass() {
-  return std::make_unique<LayerSinkPass>();
+std::unique_ptr<mlir::Pass> circt::firrtl::createAdvancedLayerSinkPass() {
+  return std::make_unique<AdvancedLayerSinkPass>();
 }
