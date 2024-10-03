@@ -424,19 +424,22 @@ hw.module @seqInitial(in %clk : i1, out o1 : i8, out o2 : i8) {
   // CHECK-NEXT:     %c5_i8 = hw.constant 5 : i8
   // CHECK-NEXT:     %[[RAND:.+]] = func.call @random() : () -> i32
   // CHECK-NEXT:     %[[EXTRACT:.+]] = comb.extract %[[RAND]] from 0 : (i32) -> i8
-  // CHECK-NEXT:     %[[VAL1:.+]] = builtin.unrealized_conversion_cast %[[EXTRACT]] : i8 to i8
   // CHECK-NEXT:     arc.state_write %[[STATE1]] = %[[VAL1:.+]] : <i8>
-  // CHECK-NEXT:     %[[VAL2:.+]] = builtin.unrealized_conversion_cast %c5_i8 : i8 to i8
   // CHECK-NEXT:     arc.state_write %[[STATE2]] = %[[VAL2:.+]] : <i8>
   // CHECK-NEXT:   }
-  %0 = builtin.unrealized_conversion_cast %2#0 : !seq.immutable<i8> to i8
-  %1 = builtin.unrealized_conversion_cast %2#1 : !seq.immutable<i8> to i8
-  %2:2 = seq.initial {
+  %0 = seq.from_immutable %7 : (!seq.immutable<i8>) -> i8
+  %1 = seq.from_immutable %2#1 : (!seq.immutable<i8>) -> i8
+  %2:2 = seq.initial() {
     %c5_i8 = hw.constant 5 : i8
     %6 = func.call @random() : () -> i32
-    %7 = comb.extract %6 from 0 : (i32) -> i8
-    seq.yield %7, %c5_i8 : i8, i8
-  } : !seq.immutable<i8>, !seq.immutable<i8>
+    seq.yield %6, %c5_i8 : i32, i8
+  } : () -> (!seq.immutable<i32>, !seq.immutable<i8>)
+  %7 = seq.initial(%2#0) {
+    ^bb0(%arg0 : i32):
+    %ext = comb.extract %arg0 from 0 : (i32) -> i8
+    seq.yield %ext: i8
+  } : (!seq.immutable<i32>) -> (!seq.immutable<i8>)
+
   %3 = arc.state @counter_arc(%3) clock %4 initial (%0 : i8) latency 1 : (i8) -> i8
   %4 = arc.call @counter_arc_0(%clk) : (i1) -> !seq.clock
   %5 = arc.state @counter_arc(%5) clock %4 initial (%1 : i8) latency 1 : (i8) -> i8

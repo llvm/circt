@@ -19,6 +19,7 @@ target_link_libraries(arcilator
   CIRCTEmit
   CIRCTExportArc
   CIRCTOM
+  CIRCTVerif
   CIRCTSeqToSV
   CIRCTSeqTransforms
   CIRCTSimTransforms

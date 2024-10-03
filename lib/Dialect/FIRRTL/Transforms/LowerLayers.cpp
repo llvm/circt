@@ -539,22 +539,6 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         return WalkResult::interrupt();
       }
 
-      // Beyond this point, we are handling operations which capture values
-      // defined outside the layerblock.  Whenever we see this, we need to
-      // create ports for the module that this layerblock will become.
-      if (auto refSend = dyn_cast<RefSendOp>(op)) {
-        auto src = refSend.getBase();
-        if (!isAncestorOfValueOwner(layerBlock, src))
-          createInputPort(src, op.getLoc());
-        continue;
-      }
-
-      if (auto refCast = dyn_cast<RefCastOp>(op)) {
-        if (!isAncestorOfValueOwner(layerBlock, refCast))
-          createInputPort(refCast.getInput(), op.getLoc());
-        continue;
-      }
-
       if (auto rwprobe = dyn_cast<RWProbeOp>(op)) {
         rwprobes.push_back(rwprobe);
         continue;

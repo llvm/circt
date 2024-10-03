@@ -70,6 +70,12 @@ createConstantInitialValue(OpBuilder builder, Operation *constantLike);
 // initial op.
 Value unwrapImmutableValue(mlir::TypedValue<seq::ImmutableType> immutableVal);
 
+// Helper function to merge initial ops within the block into a single initial
+// op. Return failure if we cannot topologically sort the initial ops.
+// Return null if there is no initial op in the block. Return the initial op
+// otherwise.
+FailureOr<seq::InitialOp> mergeInitialOps(Block *block);
+
 } // namespace seq
 } // namespace circt
 

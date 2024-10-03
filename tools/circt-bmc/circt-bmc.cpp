@@ -107,7 +107,7 @@ static cl::list<std::string> sharedLibs{
     "shared-libs", llvm::cl::desc("Libraries to link dynamically"),
     cl::MiscFlags::CommaSeparated, llvm::cl::cat(mainCategory)};
 
-#elif
+#else
 
 enum OutputFormat { OutputMLIR, OutputLLVM, OutputSMTLIB };
 static cl::opt<OutputFormat> outputFormat(

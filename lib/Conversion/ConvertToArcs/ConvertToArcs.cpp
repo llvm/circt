@@ -35,12 +35,11 @@ static LogicalResult convertInitialValue(seq::CompRegOp reg,
   if (!reg.getInitialValue())
     return values.push_back({}), success();
 
-  // unrealized_conversion_cast to normal type
+  // Use from_immutable cast to convert the seq.immutable type to the reg's
+  // type.
   OpBuilder builder(reg);
-  auto init = builder
-                  .create<mlir::UnrealizedConversionCastOp>(
-                      reg.getLoc(), reg.getType(), reg.getInitialValue())
-                  .getResult(0);
+  auto init = builder.create<seq::FromImmutableOp>(reg.getLoc(), reg.getType(),
+                                                   reg.getInitialValue());
 
   values.push_back(init);
   return success();

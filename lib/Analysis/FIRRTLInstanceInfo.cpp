@@ -69,7 +69,7 @@ void InstanceInfo::LatticeValue::mergeIn(bool value) {
 InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
   auto &iGraph = am.getAnalysis<InstanceGraph>();
 
-  circuitAttributes.effectiveDutNode = iGraph.getTopLevelNode();
+  circuitAttributes.effectiveDut = iGraph.getTopLevelNode()->getModule();
 
   // Visit modules in reverse post-order (visit parents before children) because
   // information flows in this direction---the attributes of modules are
@@ -83,8 +83,8 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
       // Set DUT-related attributes.
       auto isDut = AnnotationSet(moduleOp).hasAnnotation(dutAnnoClass);
       if (isDut) {
-        circuitAttributes.dutNode = modIt;
-        circuitAttributes.effectiveDutNode = modIt;
+        circuitAttributes.dut = modIt->getModule();
+        circuitAttributes.effectiveDut = modIt->getModule();
       }
 
       // If the module is not instantiated, then set attributes and early exit.
@@ -120,13 +120,13 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
         << llvm::indent(2) << "circuit attributes:\n"
         << llvm::indent(4) << "hasDut: " << (hasDut() ? "true" : "false")
         << "\n"
-        << llvm::indent(4) << "dutNode: ";
-    if (auto dutNode = circuitAttributes.dutNode)
-      dutNode->getModule()->print(llvm::dbgs(), flags);
+        << llvm::indent(4) << "dut: ";
+    if (auto dut = circuitAttributes.dut)
+      dut->print(llvm::dbgs(), flags);
     else
       llvm::dbgs() << "null";
-    llvm::dbgs() << "\n" << llvm::indent(4) << "effectiveDutNode: ";
-    circuitAttributes.effectiveDutNode->getModule()->print(llvm::dbgs(), flags);
+    llvm::dbgs() << "\n" << llvm::indent(4) << "effectiveDut: ";
+    circuitAttributes.effectiveDut->print(llvm::dbgs(), flags);
     llvm::dbgs() << "\n" << llvm::indent(2) << "module attributes:\n";
     for (auto *node : llvm::depth_first(iGraph.getTopLevelNode())) {
       auto moduleOp = node->getModule();
@@ -149,26 +149,26 @@ InstanceInfo::getModuleAttributes(igraph::ModuleOpInterface op) {
   return moduleAttributes.find(op)->getSecond();
 }
 
-bool InstanceInfo::hasDut() { return circuitAttributes.dutNode; }
+bool InstanceInfo::hasDut() { return circuitAttributes.dut; }
 
 bool InstanceInfo::isDut(igraph::ModuleOpInterface op) {
   if (hasDut())
-    return op == circuitAttributes.dutNode->getModule();
+    return op == circuitAttributes.dut;
   return false;
 }
 
 bool InstanceInfo::isEffectiveDut(igraph::ModuleOpInterface op) {
   if (hasDut())
     return isDut(op);
-  return op == circuitAttributes.effectiveDutNode->getModule();
+  return op == circuitAttributes.effectiveDut;
 }
 
-igraph::InstanceGraphNode *InstanceInfo::getDut() {
-  return circuitAttributes.dutNode;
+igraph::ModuleOpInterface InstanceInfo::getDut() {
+  return circuitAttributes.dut;
 }
 
-igraph::InstanceGraphNode *InstanceInfo::getEffectiveDut() {
-  return circuitAttributes.effectiveDutNode;
+igraph::ModuleOpInterface InstanceInfo::getEffectiveDut() {
+  return circuitAttributes.effectiveDut;
 }
 
 bool InstanceInfo::anyInstanceUnderDut(igraph::ModuleOpInterface op) {

@@ -1265,6 +1265,21 @@ def IntegerShrOp : IntegerBinaryPrimOp<"integer.shr"> {
   }];
 }
 
+def IntegerShlOp : IntegerBinaryPrimOp<"integer.shl"> {
+  let summary = "Shift an FIntegerType value left by an FIntegerType value";
+  let description = [{
+    The shift left operation result is the arbitrary precision signed integer
+    shift left of the lhs operand by the rhs operand. The rhs operand must be
+    non-negative.
+
+    Example:
+    ```mlir
+    %2 = firrtl.integer.shl %0, %1 : (!firrtl.integer, !firrtl.integer) ->
+                                         !firrtl.integer
+    ```
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // RefOperations: Operations on the RefType.
 //

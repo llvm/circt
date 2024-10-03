@@ -1,4 +1,4 @@
-// RUN: circt-verilog --parse-only -g %s | FileCheck %s
+// RUN: circt-translate --import-verilog %s | FileCheck %s
 // RUN: circt-verilog --ir-moore %s
 // REQUIRES: slang
 
@@ -655,6 +655,8 @@ module Expressions;
   bit [1:0][31:0] arrayInt;
   // CHECK: %uarrayInt = moore.variable : <uarray<2 x i32>>
   bit [31:0] uarrayInt [2];
+  // CHECK: %m = moore.variable : <l4>
+  logic [3:0] m;
 
   initial begin
     // CHECK: moore.constant 0 : i32
@@ -1275,6 +1277,13 @@ module Expressions;
     // CHECK: [[TMP3:%.+]] = moore.array_create [[TMP0]], [[TMP1]], [[TMP2]], [[TMP0]], [[TMP1]], [[TMP2]] : !moore.i4, !moore.i4, !moore.i4, !moore.i4, !moore.i4, !moore.i4 -> uarray<6 x i4>
     // CHECK: moore.array_create [[TMP3]], [[TMP3]], [[TMP3]] : !moore.uarray<6 x i4>, !moore.uarray<6 x i4>, !moore.uarray<6 x i4> -> uarray<3 x uarray<6 x i4>>
     arr = '{3{'{2{4'd1, 4'd2, 4'd3}}}};
+
+    // CHECK: [[TMP0:%.+]] = moore.constant 0 :
+    // CHECK: [[TMP1:%.+]] = moore.constant 0 :
+    // CHECK: [[TMP2:%.+]] = moore.constant 1 :
+    // CHECK: [[TMP3:%.+]] = moore.constant 0 :
+    // CHECK: moore.concat [[TMP3]], [[TMP2]], [[TMP1]], [[TMP0]] : (!moore.l1, !moore.l1, !moore.l1, !moore.l1) -> l4
+    m = '{default: '0, 2: '1};
  
     //===------------------------------------------------------------------===//
     // Builtin Functions
@@ -2026,32 +2035,17 @@ package ParamPackage;
   localparam int param2 = 9001;
 endpackage
 
-// CHECK-LABEL: func.func private @SimulationControlBuiltins(
-function void SimulationControlBuiltins(bit x);
-  // CHECK: moore.builtin.finish_message false
-  // CHECK: moore.builtin.stop
-  $stop;
-  // CHECK-NOT: moore.builtin.finish_message
-  // CHECK: moore.builtin.stop
-  $stop(0);
-  // CHECK: moore.builtin.finish_message true
-  // CHECK: moore.builtin.stop
-  $stop(2);
+// CHECK-LABEL: moore.module @PortCastA()
+module PortCastA;
+  bit [31:0] a, b;
+  // CHECK: [[TMP1:%.+]] = moore.read %a : <i32>
+  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.array<1 x i32>
+  // CHECK: [[TMP3:%.+]] = moore.instance "sub" @PortCastB(a: [[TMP2]]: !moore.array<1 x i32>)
+  // CHECK: [[TMP4:%.+]] = moore.conversion [[TMP3]] : !moore.array<1 x i32> -> !moore.i32
+  // CHECK: moore.assign %b, [[TMP4]] : i32
+  PortCastB sub(a, b);
+endmodule
 
-  // CHECK: moore.builtin.finish_message false
-  // CHECK: moore.builtin.finish 0
-  // CHECK: moore.unreachable
-  if (x) $finish;
-  // CHECK-NOT: moore.builtin.finish_message
-  // CHECK: moore.builtin.finish 0
-  // CHECK: moore.unreachable
-  if (x) $finish(0);
-  // CHECK: moore.builtin.finish_message true
-  // CHECK: moore.builtin.finish 0
-  // CHECK: moore.unreachable
-  if (x) $finish(2);
-
-  // Ignore `$exit` until we have support for programs.
-  // CHECK-NOT: moore.builtin.finish
-  $exit;
-endfunction
+module PortCastB (input bit [0:0][31:0] a, output bit [0:0][31:0] b);
+  assign b = a;
+endmodule
