@@ -225,17 +225,10 @@ struct DemandInfo {
 
   Demand getDemandFor(Operation *op) const { return table.lookup(op); }
 
-  /// Phase 1: Starting at effectful ops and output ports, propagate the demand
-  /// of values through the design, running until fixpoint. At the end, we have
-  /// an accurate picture of where every operation can be sunk, while preserving
+  /// Starting at effectful ops and output ports, propagate the demand of values
+  /// through the design, running until fixpoint. At the end, we have an
+  /// accurate picture of where every operation can be sunk, while preserving
   /// effects in the program.
-  void phase1(const EffectInfo &, FModuleOp, WorkStack &);
-
-  /// Phase 2: in order to avoid deleting undemanded operations, pretend they
-  /// are demanded "wherever they are", and run again until fixpoint.
-  void phase2(const EffectInfo &, FModuleOp, WorkStack &);
-
-  /// Run to fixpoint.
   void run(const EffectInfo &, FModuleOp, WorkStack &);
 
   /// Update the demand for the given op. If the demand changes, place the op
@@ -259,22 +252,6 @@ struct DemandInfo {
 
 DemandInfo::DemandInfo(const EffectInfo &effectInfo, FModuleOp module) {
   WorkStack work;
-  phase1(effectInfo, module, work);
-}
-
-void DemandInfo::run(const EffectInfo &effectInfo, FModuleOp, WorkStack &work) {
-  while (!work.empty()) {
-    auto *op = work.back();
-    work.pop_back();
-    auto demand = getDemandFor(op);
-    for (auto rand : op->getOperands())
-      update(work, rand, demand);
-    updateConnects(work, op, demand);
-  }
-}
-
-void DemandInfo::phase1(const EffectInfo &effectInfo, FModuleOp module,
-                        WorkStack &work) {
   Block *body = module.getBodyBlock();
   ArrayRef<bool> dirs = module.getPortDirections();
   for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i)
@@ -287,14 +264,15 @@ void DemandInfo::phase1(const EffectInfo &effectInfo, FModuleOp module,
   run(effectInfo, module, work);
 }
 
-void DemandInfo::phase2(const EffectInfo &effectInfo, FModuleOp module,
-                        WorkStack &work) {
-  module.getBodyBlock()->walk([&](Operation *op) {
-    auto demand = table[op];
-    if (!demand)
-      update(work, op, op->getBlock());
-  });
-  run(effectInfo, module, work);
+void DemandInfo::run(const EffectInfo &effectInfo, FModuleOp, WorkStack &work) {
+  while (!work.empty()) {
+    auto *op = work.back();
+    work.pop_back();
+    auto demand = getDemandFor(op);
+    for (auto rand : op->getOperands())
+      update(work, rand, demand);
+    updateConnects(work, op, demand);
+  }
 }
 
 // The value represents a hardware declaration, such as a wire or port. Search
