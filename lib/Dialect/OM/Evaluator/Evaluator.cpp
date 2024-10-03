@@ -16,6 +16,7 @@
 #include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
+#include <iostream>
 
 #define DEBUG_TYPE "om-evaluator"
 
@@ -264,8 +265,12 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
     auto name = fieldNames[i];
     auto value = operands[i];
     Location fieldLoc = fieldsLoc;
-    if (auto locs = dyn_cast<FusedLoc>(fieldLoc))
-      fieldLoc = locs.getLocations()[i];
+    if (auto locs = dyn_cast<FusedLoc>(fieldLoc)) {
+      // TODO: Document FusedLoc logic
+      assert(dyn_cast<ArrayAttr>(locs.getMetadata()));
+      assert(dyn_cast<LocationAttr>(cast<ArrayAttr>(locs.getMetadata())[i]));
+      fieldLoc = Location(cast<LocationAttr>(cast<ArrayAttr>(locs.getMetadata())[i]));
+    }
     FailureOr<evaluator::EvaluatorValuePtr> result =
         evaluateValue(value, actualParams, fieldLoc);
     if (failed(result))
