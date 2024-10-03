@@ -269,7 +269,8 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
       // TODO: Document FusedLoc logic
       assert(dyn_cast<ArrayAttr>(locs.getMetadata()));
       assert(dyn_cast<LocationAttr>(cast<ArrayAttr>(locs.getMetadata())[i]));
-      fieldLoc = Location(cast<LocationAttr>(cast<ArrayAttr>(locs.getMetadata())[i]));
+      fieldLoc =
+          Location(cast<LocationAttr>(cast<ArrayAttr>(locs.getMetadata())[i]));
     }
     FailureOr<evaluator::EvaluatorValuePtr> result =
         evaluateValue(value, actualParams, fieldLoc);

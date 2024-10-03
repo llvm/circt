@@ -1196,9 +1196,8 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
 
   // TODO: Store set of locs?
   // TODO: Document FusedLoc logic
-  builder.create<ClassFieldsOp>(builder.getFusedLoc({},
-                                                    builder.getArrayAttr(fieldLocs)),
-                                fieldValues);
+  builder.create<ClassFieldsOp>(
+      builder.getFusedLoc({}, builder.getArrayAttr(fieldLocs)), fieldValues);
 
   // If the module-like is a Class, it will be completely erased later.
   // Otherwise, erase just the property ports and ops.
