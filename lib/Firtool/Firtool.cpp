@@ -793,7 +793,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       clOptions->disableAggressiveMergeConnections;
   emitOMIR = clOptions->emitOMIR;
   omirOutFile = clOptions->omirOutFile;
-  layerSink = clOptions->layerSink;
+  advancedLayerSink = clOptions->advancedLayerSink;
   lowerMemories = clOptions->lowerMemories;
   blackBoxRootPath = clOptions->blackBoxRootPath;
   replSeqMem = clOptions->replSeqMem;
