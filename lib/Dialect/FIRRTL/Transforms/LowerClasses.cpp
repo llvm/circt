@@ -964,9 +964,22 @@ bool LowerClassesPass::shouldCreateClass(StringAttr modName) {
   return shouldCreateClassMemo.at(modName);
 }
 
+void checkAddContainingModulePorts(bool hasContainingModule,
+                                   OpBuilder builder,
+                                   SmallVector<Attribute> &fieldNames,
+                                   SmallVector<NamedAttribute> &fieldTypes) {
+  if (hasContainingModule) {
+    auto name = builder.getStringAttr(kPortsName);
+    fieldNames.push_back(name);
+    fieldTypes.push_back(NamedAttribute(
+        name, TypeAttr::get(getRtlPortsType(builder.getContext()))));
+  }
+}
+
 static om::ClassLike convertExtClass(FModuleLike moduleLike, OpBuilder builder,
                                      Twine name,
-                                     ArrayRef<StringRef> formalParamNames) {
+                                     ArrayRef<StringRef> formalParamNames,
+                                     bool hasContainingModule) {
   SmallVector<Attribute> fieldNames;
   SmallVector<NamedAttribute> fieldTypes;
   for (unsigned i = 0, e = moduleLike.getNumPorts(); i < e; ++i) {
@@ -981,13 +994,16 @@ static om::ClassLike convertExtClass(FModuleLike moduleLike, OpBuilder builder,
       fieldTypes.push_back(NamedAttribute(name, TypeAttr::get(type)));
     }
   }
+  checkAddContainingModulePorts(hasContainingModule, builder, fieldNames,
+                                fieldTypes);
   return builder.create<om::ClassExternOp>(
       moduleLike.getLoc(), name, formalParamNames, fieldNames, fieldTypes);
 }
 
 static om::ClassLike convertClass(FModuleLike moduleLike, OpBuilder builder,
                                   Twine name,
-                                  ArrayRef<StringRef> formalParamNames) {
+                                  ArrayRef<StringRef> formalParamNames,
+                                  bool hasContainingModule) {
   // Collect output property assignments to get field names and types.
   SmallVector<Attribute> fieldNames;
   SmallVector<NamedAttribute> fieldTypes;
@@ -1003,6 +1019,8 @@ static om::ClassLike convertClass(FModuleLike moduleLike, OpBuilder builder,
     fieldTypes.push_back(
         NamedAttribute(name, TypeAttr::get(op.getSrc().getType())));
   }
+  checkAddContainingModulePorts(hasContainingModule, builder, fieldNames,
+                                fieldTypes);
   return builder.create<om::ClassOp>(moduleLike.getLoc(), name,
                                      formalParamNames, fieldNames, fieldTypes);
 }
@@ -1059,10 +1077,10 @@ om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike,
   if (isa<firrtl::ExtClassOp, firrtl::FExtModuleOp>(
           moduleLike.getOperation())) {
     loweredClassOp = convertExtClass(moduleLike, builder, className + suffix,
-                                     formalParamNames);
+                                     formalParamNames, hasContainingModule);
   } else {
-    loweredClassOp =
-        convertClass(moduleLike, builder, className + suffix, formalParamNames);
+    loweredClassOp = convertClass(moduleLike, builder, className + suffix,
+                                  formalParamNames, hasContainingModule);
   }
 
   return loweredClassOp;
@@ -1169,15 +1187,15 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
       opsToErase.push_back(&op);
   }
 
-  builder.create<ClassFieldsOp>(builder.getFusedLoc(fieldLocs), fieldValues);
-
   // If there is a 'containingModule', add an argument for 'ports', and a field.
   if (hasContainingModule) {
     BlockArgument argumentValue = classBody->addArgument(
         getRtlPortsType(&getContext()), UnknownLoc::get(&getContext()));
-    builder.create<ClassFieldOp>(argumentValue.getLoc(), kPortsName,
-                                 argumentValue);
+    fieldLocs.push_back(argumentValue.getLoc());
+    fieldValues.push_back(argumentValue);
   }
+
+  builder.create<ClassFieldsOp>(builder.getFusedLoc(fieldLocs), fieldValues);
 
   // If the module-like is a Class, it will be completely erased later.
   // Otherwise, erase just the property ports and ops.
