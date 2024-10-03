@@ -293,6 +293,7 @@ struct XnorOpPattern : public CellPatternBase {
   }
 };
 
+// TODO: Add async.
 template <bool resetValueConst>
 struct DFFPattern : public CellPatternBase {
   using CellPatternBase::CellPatternBase;
@@ -304,6 +305,18 @@ struct DFFPattern : public CellPatternBase {
     return builder.create<seq::CompRegOp>(
         location, inputValues[1], clk, inputValues[2], resetValue,
         builder.getStringAttr(cell->name.str()));
+  }
+};
+
+struct ResetlessDFFPattern : public CellPatternBase {
+  using CellPatternBase::CellPatternBase;
+  Value convert(Cell *cell, OpBuilder &builder, Location location,
+                ValueRange inputValues) override {
+    auto clk = builder.create<seq::ToClockOp>(location, inputValues[0]);
+    auto compregOp =
+        builder.create<seq::CompRegOp>(location, inputValues[1], clk);
+    compregOp.setName(cell->name.str());
+    return compregOp;
   }
 };
 
@@ -357,6 +370,8 @@ void ImportRTLILModule::registerPatterns() {
                                 ArrayRef<StringRef>{"C", "D", "R"}, "Q");
   addPattern<DFFPattern<true>>("$_SDFF_PP1_",
                                ArrayRef<StringRef>{"C", "D", "R"}, "Q");
+  addPattern<ResetlessDFFPattern>("$_DFF_P_", ArrayRef<StringRef>{"C", "D"},
+                                  "Q");
 }
 
 ImportRTLILModule::ImportRTLILModule(MLIRContext *context,

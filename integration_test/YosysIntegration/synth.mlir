@@ -1,12 +1,12 @@
 // REQUIRES: libz3
 // REQUIRES: circt-lec-jit
 
+// Run synthesis and check the LEC.
 // RUN: circt-opt --pass-pipeline='builtin.module(export-yosys{passes=synth},canonicalize)' -o %t.mlir %s
 // RUN: circt-lec %s %t.mlir -c1=Arith -c2=Arith --shared-libs=%libz3 | FileCheck %s --check-prefix=Comb
 // RUN: circt-lec %s %t.mlir -c1=ICmp -c2=ICmp --shared-libs=%libz3 | FileCheck %s --check-prefix=ICmp
 // Comb: c1 == c2
 // ICmp: c1 == c2
-
 
 hw.module @Arith(in %in1 : i2, in %in2 : i2, out add : i2, out sub: i2, out mul: i2) {
     %0 = comb.add %in1, %in2: i2
