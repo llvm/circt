@@ -263,11 +263,11 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
   for (size_t i = 0; i < fieldNames.size(); ++i) {
     auto name = fieldNames[i];
     auto value = operands[i];
-    Location loc = fieldsLoc;
-    if (auto locs = dyn_cast<FusedLoc>(loc))
-      loc = locs.getLocations()[i];
+    Location fieldLoc = fieldsLoc;
+    if (auto locs = dyn_cast<FusedLoc>(fieldLoc))
+      fieldLoc = locs.getLocations()[i];
     FailureOr<evaluator::EvaluatorValuePtr> result =
-        evaluateValue(value, actualParams, loc);
+        evaluateValue(value, actualParams, fieldLoc);
     if (failed(result))
       return result;
 
