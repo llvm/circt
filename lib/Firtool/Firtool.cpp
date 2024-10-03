@@ -154,8 +154,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createRandomizeRegisterInitPass());
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
-
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
   if (!opt.shouldDisableOptimization())
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
