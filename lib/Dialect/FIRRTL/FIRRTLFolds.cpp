@@ -952,6 +952,23 @@ OpFoldResult IntegerShrOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+OpFoldResult IntegerShlOp::fold(FoldAdaptor adaptor) {
+  if (auto rhsCst = getConstant(adaptor.getRhs())) {
+    // Constant folding
+    if (auto lhsCst = getConstant(adaptor.getLhs()))
+
+      return IntegerAttr::get(
+          IntegerType::get(getContext(), lhsCst->getBitWidth()),
+          lhsCst->shl(*rhsCst));
+
+    // integer.shl(x, 0) -> x
+    if (rhsCst->isZero())
+      return getLhs();
+  }
+
+  return {};
+}
+
 //===----------------------------------------------------------------------===//
 // Unary Operators
 //===----------------------------------------------------------------------===//
