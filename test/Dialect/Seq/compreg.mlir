@@ -140,15 +140,21 @@ hw.module @reg_of_clock_type(in %clk: !seq.clock, in %rst: i1, in %i: !seq.clock
 hw.module @init_with_call(in %clk: !seq.clock, in %rst: i1, in %i: i32, in %s: !hw.struct<foo: i32>, out o: i32) {
   // SV:     sv.initial {
   // SV-NEXT:   [[V0:%.+]] = sv.system "random"() : () -> i32
-  // SV-NEXT:   [[V1:%.+]] = comb.add [[V0]], [[V0]] : i32
-  // SV-NEXT:   sv.bpassign %reg, [[V0]] : i32
+  // SV-NEXT:   [[C:%.+]] = hw.constant 0
+  // SV-NEXT:   [[MUX:%.+]] = comb.mux %rst, [[C]], [[V0]]
+  // SV-NEXT:   [[V1:%.+]] = comb.add [[MUX]], [[MUX]] : i32
+  // SV-NEXT:   sv.bpassign %reg, [[MUX]] : i32
   // SV-NEXT:   sv.bpassign %reg2, [[V1]] : i32
   // SV-NEXT:   sv.bpassign [[REG:%.+]], [[V1]] : i32
   // SV-NEXT: }
-  %init = seq.initial () {
+  %reset_immut = seq.get_initial_value %rst : (i1) -> (!seq.immutable<i1>)
+  %init = seq.initial (%reset_immut) {
+    ^bb0(%r: i1):
     %rand = sv.system "random"() : () -> i32
-    seq.yield %rand : i32
-  } : () -> !seq.immutable<i32>
+    %c0_i32 = hw.constant 0 : i32
+    %mux = comb.mux %r, %c0_i32, %rand : i32
+    seq.yield %mux : i32
+  } : (!seq.immutable<i1>) -> !seq.immutable<i32>
 
   %add = seq.initial (%init) {
     ^bb0(%arg0 : i32):
