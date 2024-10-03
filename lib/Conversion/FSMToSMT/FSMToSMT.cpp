@@ -369,105 +369,105 @@ LogicalResult MachineOpConverter::dispatch(){
   // add self-loops in case no guard is satisfied
 
   
-  // for(auto [id1, t1] : llvm::enumerate(transitions)){
+  for(auto [id1, t1] : llvm::enumerate(transitions)){
 
-  //   if (!std::any_of(visitedTransitions.begin(), visitedTransitions.end(), [t1](int x){return (x == t1.from);}) && t1.hasGuard){
-  //     llvm::SmallVector<int> trSameStartingState;
-  //     trSameStartingState.push_back(id1);
+    if (!std::any_of(visitedTransitions.begin(), visitedTransitions.end(), [t1](int x){return (x == t1.from);}) && t1.hasGuard){
+      llvm::SmallVector<int> trSameStartingState;
+      trSameStartingState.push_back(id1);
 
-  //     for(auto [id2, t2] : llvm::enumerate(transitions)){
-  //       if (id1!=id2 && t2.from == t1.from && !std::any_of(trSameStartingState.begin(), trSameStartingState.end(), [t1](int x){return (x == t1.from);})){
-  //       trSameStartingState.push_back(id2);
-  //       }
-  //     }
+      for(auto [id2, t2] : llvm::enumerate(transitions)){
+        if (id1!=id2 && t2.from == t1.from && !std::any_of(trSameStartingState.begin(), trSameStartingState.end(), [t1](int x){return (x == t1.from);})){
+        trSameStartingState.push_back(id2);
+        }
+      }
 
-  //     // for all the transition starting from the same state, create self-loop whose guard is the negation of all the other guards
+      // for all the transition starting from the same state, create self-loop whose guard is the negation of all the other guards
 
-  //     llvm::SmallVector<std::function<mlir::Value(llvm::SmallVector<mlir::Value>)>> allGuards;
+      llvm::SmallVector<std::function<mlir::Value(llvm::SmallVector<mlir::Value>)>> allGuards;
 
-  //     for (auto id: trSameStartingState){
+      for (auto id: trSameStartingState){
 
-  //       auto t = transitions[id];
+        auto t = transitions[id];
 
-  //       auto g = [&t, &loc, this, &argVars](llvm::SmallVector<mlir::Value> args) -> mlir::Value {
-  //         if (t.hasGuard){
-  //           llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> avToSmt;
-  //           for(auto [av, a] : llvm::zip(argVars, args))
-  //             avToSmt.push_back({av, a});
-  //           for(auto &op: t.guard->getOps())
-  //             if (auto retOp = dyn_cast<fsm::ReturnOp>(op)){
-  //               // return negation in this case 
-  //               return b.create<smt::NotOp>(loc, getSmtValue(retOp->getOperand(0), avToSmt, b, loc));
-  //             }
-  //         } else {
-  //           // if one of the transitions has a guard all the others must, too
-  //           abort();
-  //         }
-  //       };
+        auto g = [&t, &loc, this, &argVars](llvm::SmallVector<mlir::Value> args) -> mlir::Value {
+          if (t.hasGuard){
+            llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> avToSmt;
+            for(auto [av, a] : llvm::zip(argVars, args))
+              avToSmt.push_back({av, a});
+            for(auto &op: t.guard->getOps())
+              if (auto retOp = dyn_cast<fsm::ReturnOp>(op)){
+                // return negation in this case 
+                return b.create<smt::NotOp>(loc, getSmtValue(retOp->getOperand(0), avToSmt, b, loc));
+              }
+          } else {
+            // if one of the transitions has a guard all the others must, too
+            abort();
+          }
+        };
 
-  //       allGuards.push_back(g);
+        allGuards.push_back(g);
 
-  //       auto forall = b.create<smt::ForallOp>(loc, argVarTypes, [&allGuards, &t1, &stateFunctions, &numArgs](OpBuilder &b, Location loc, ValueRange args) { 
-  //         // split new and old arguments
+        auto forall = b.create<smt::ForallOp>(loc, argVarTypes, [&allGuards, &t1, &stateFunctions, &numArgs](OpBuilder &b, Location loc, ValueRange args) { 
+          // split new and old arguments
 
-  //         llvm::SmallVector<mlir::Value> stateArgs;
-  //         llvm::SmallVector<mlir::Value> guardArgs;
-  //         llvm::SmallVector<mlir::Value> actionArgs;
+          llvm::SmallVector<mlir::Value> stateArgs;
+          llvm::SmallVector<mlir::Value> guardArgs;
+          llvm::SmallVector<mlir::Value> actionArgs;
 
 
-  //         for(auto [i, a]: llvm::enumerate(args)){
-  //           if (int(i)  < numArgs){
-  //             guardArgs.push_back(a);
-  //             actionArgs.push_back(a);
-  //           } else if (int(i)!=int(args.size())-1){
-  //             guardArgs.push_back(a);
-  //             stateArgs.push_back(a);
-  //             actionArgs.push_back(a);
-  //           } else {
-  //             guardArgs.push_back(a);
-  //             stateArgs.push_back(a);
-  //             actionArgs.push_back(a);
-  //           }
-  //         }
+          for(auto [i, a]: llvm::enumerate(args)){
+            if (int(i)  < numArgs){
+              guardArgs.push_back(a);
+              actionArgs.push_back(a);
+            } else if (int(i)!=int(args.size())-1){
+              guardArgs.push_back(a);
+              stateArgs.push_back(a);
+              actionArgs.push_back(a);
+            } else {
+              guardArgs.push_back(a);
+              stateArgs.push_back(a);
+              actionArgs.push_back(a);
+            }
+          }
 
-  //         llvm::SmallVector<mlir::Value> stateArgsAfter(stateArgs);
-  //         mlir::IntegerAttr intAttr = b.getI32IntegerAttr(1);
-  //         auto c1 = b.create<smt::IntConstantOp>(loc, intAttr);
-  //         llvm::SmallVector<mlir::Value> timeArgs = {args.back(), c1};
-  //         auto newTime = b.create<smt::IntAddOp>(loc, b.getType<smt::IntType>(), timeArgs);
-  //         stateArgsAfter.back() = newTime;
+          llvm::SmallVector<mlir::Value> stateArgsAfter(stateArgs);
+          mlir::IntegerAttr intAttr = b.getI32IntegerAttr(1);
+          auto c1 = b.create<smt::IntConstantOp>(loc, intAttr);
+          llvm::SmallVector<mlir::Value> timeArgs = {args.back(), c1};
+          auto newTime = b.create<smt::IntAddOp>(loc, b.getType<smt::IntType>(), timeArgs);
+          stateArgsAfter.back() = newTime;
 
-  //         if (allGuards.size() > 1){
-  //           auto tmp = b.create<smt::AndOp>(loc, allGuards[0](guardArgs), allGuards[1](guardArgs));
+          if (allGuards.size() > 1){
+            auto tmp = b.create<smt::AndOp>(loc, allGuards[0](guardArgs), allGuards[1](guardArgs));
             
-  //           for (auto [id, ag] : llvm::enumerate(allGuards)){
-  //             if (id > 1){
-  //               auto guardChain = b.create<smt::AndOp>(loc, tmp, allGuards[id](guardArgs));
-  //               tmp = guardChain; 
-  //             }
-  //           }
+            for (auto [id, ag] : llvm::enumerate(allGuards)){
+              if (id > 1){
+                auto guardChain = b.create<smt::AndOp>(loc, tmp, allGuards[id](guardArgs));
+                tmp = guardChain; 
+              }
+            }
 
-  //           auto t1ac = b.create<smt::ApplyFuncOp>(loc, stateFunctions[t1.from], stateArgs);
-  //           auto rhs = b.create<smt::ApplyFuncOp>(loc, stateFunctions[t1.from], stateArgsAfter);
-  //           auto lhs = b.create<smt::AndOp>(loc, t1ac, tmp);
-  //           return b.create<smt::ImpliesOp>(loc, lhs, rhs); 
+            auto t1ac = b.create<smt::ApplyFuncOp>(loc, stateFunctions[t1.from], stateArgs);
+            auto rhs = b.create<smt::ApplyFuncOp>(loc, stateFunctions[t1.from], stateArgsAfter);
+            auto lhs = b.create<smt::AndOp>(loc, t1ac, tmp);
+            return b.create<smt::ImpliesOp>(loc, lhs, rhs); 
 
-  //         }              
-  //         auto t1ac = b.create<smt::ApplyFuncOp>(loc, stateFunctions[t1.from], stateArgs);
-  //         auto rhs = b.create<smt::ApplyFuncOp>(loc, stateFunctions[t1.from], stateArgs);
-  //         auto lhs = b.create<smt::AndOp>(loc, t1ac, allGuards[0](guardArgs));
-  //         return b.create<smt::ImpliesOp>(loc, lhs, rhs); 
+          }              
+          auto t1ac = b.create<smt::ApplyFuncOp>(loc, stateFunctions[t1.from], stateArgs);
+          auto rhs = b.create<smt::ApplyFuncOp>(loc, stateFunctions[t1.from], stateArgs);
+          auto lhs = b.create<smt::AndOp>(loc, t1ac, allGuards[0](guardArgs));
+          return b.create<smt::ImpliesOp>(loc, lhs, rhs); 
           
-  //       });
+        });
 
-  //       b.create<smt::AssertOp>(loc, forall);
+        b.create<smt::AssertOp>(loc, forall);
 
-  //     }
+      }
 
-  //     visitedTransitions.push_back(id1);
-  //   }
+      visitedTransitions.push_back(id1);
+    }
 
-  // }
+  }
 
 
   // // mutual exclusion
