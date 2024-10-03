@@ -749,3 +749,19 @@ def FromImmutableOp : SeqOp<"from_immutable", [Pure]> {
 
   let assemblyFormat = "$input attr-dict `:` functional-type(operands, results)";
 }
+
+def GetInitialValueOp : SeqOp<"get_initial_value", [Pure]> {
+  let summary = "Get an initial value of the input";
+  let description = [{
+    This operation freezes a HW value while the initialization phase and
+    returns the frozen value as `seq.immutable` type. The input value must be valid
+    at the initialization and immutable through the initialization phase and otherwise
+    the result value is undefined. In other words time-variant values such as registers
+    cannot be used as an input.
+  }];
+
+  let arguments = (ins AnyType:$input);
+  let results = (outs ImmutableType:$output);
+
+  let assemblyFormat = "$input attr-dict `:` functional-type(operands, results)";
+}

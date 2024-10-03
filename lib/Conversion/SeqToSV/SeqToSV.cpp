@@ -110,9 +110,21 @@ ModuleLoweringState::ImmutableValueLowering::lower(seq::InitialOp initialOp) {
   OpBuilder builder = OpBuilder::atBlockBegin(module.getBodyBlock());
   if (!svInitialOp)
     svInitialOp = builder.create<sv::InitialOp>(initialOp->getLoc());
-  // Initial ops are merged to single one and must not have operands.
-  assert(initialOp.getNumOperands() == 0 &&
-         "initial op should have no operands");
+  // Replace immutable operands passed to initial op with already lowered
+  // values.
+  for (auto [blockArgument, operand] :
+       llvm::zip(initialOp.getBodyBlock()->getArguments(),
+                 initialOp->getOpOperands())) {
+
+    auto immut = operand.get().getDefiningOp<seq::GetInitialValueOp>();
+    if (!immut)
+      return initialOp.emitError()
+             << "invalid operand to initial op: " << operand.get();
+    blockArgument.replaceAllUsesWith(immut.getInput());
+    operand.drop();
+    if (immut.use_empty())
+      immut.erase();
+  }
 
   auto loc = initialOp.getLoc();
   llvm::SmallVector<Value> results;
