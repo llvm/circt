@@ -24,6 +24,7 @@
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Sim/SimPasses.h"
+#include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/InitAllDialects.h"
 #include "circt/InitAllPasses.h"
 #include "circt/Support/Passes.h"
@@ -595,7 +596,8 @@ static LogicalResult executeArcilator(MLIRContext &context) {
     om::OMDialect,
     seq::SeqDialect,
     sim::SimDialect,
-    sv::SVDialect
+    sv::SVDialect,
+    verif::VerifDialect
   >();
   // clang-format on
 
