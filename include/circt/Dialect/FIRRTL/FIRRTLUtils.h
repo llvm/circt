@@ -228,8 +228,7 @@ inline FIRRTLBaseType getBaseType(Type type) {
 }
 
 /// Get base type if isa<> the requested type, else null.
-template <typename T>
-inline T getBaseOfType(Type type) {
+template <typename T> inline T getBaseOfType(Type type) {
   return dyn_cast_or_null<T>(getBaseType(type));
 }
 
@@ -321,6 +320,20 @@ static ResultTy transformReduce(MLIRContext *context, RangeTy &&r,
 
 /// Truncate `a` to the common prefix of `a` and `b`.
 void makeCommonPrefix(SmallString<64> &a, StringRef b);
+
+//===----------------------------------------------------------------------===//
+// OM dialect utilities
+//===----------------------------------------------------------------------===//
+
+/// Create a ClassOp, with the specified fieldNames and fieldTypes as ports. The
+/// output property is set from the input property port.
+ClassOp buildSimpleClassOp(OpBuilder &odsBuilder, Location loc, Twine name,
+                           ArrayRef<StringRef> fieldNames,
+                           ArrayRef<Type> fieldTypes);
+
+/// Add the tracker annotation to the op and get a PathOp to the op.
+PathOp createPathRef(Operation *op, hw::HierPathOp nla,
+                     mlir::ImplicitLocOpBuilder &builderOM);
 
 } // namespace firrtl
 } // namespace circt
