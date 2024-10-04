@@ -2384,6 +2384,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
   case FIRToken::lp_integer_add:
   case FIRToken::lp_integer_mul:
   case FIRToken::lp_integer_shr:
+  case FIRToken::lp_integer_shl:
     if (requireFeature({4, 0, 0}, "Integer arithmetic expressions", loc))
       return failure();
     break;
