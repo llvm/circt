@@ -313,5 +313,8 @@ om.class @IntegerArithmetic() {
   // CHECK: om.integer.shr %0, %1 : !om.integer
   %4 = om.integer.shr %0, %1 : !om.integer
 
+  // CHECK: om.integer.shl %0, %1 : !om.integer
+  %5 = om.integer.shl %0, %1 : !om.integer
+
   om.class.fields
 }
