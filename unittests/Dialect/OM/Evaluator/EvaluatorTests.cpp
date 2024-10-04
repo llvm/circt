@@ -1055,7 +1055,7 @@ TEST(EvaluatorTests, ListConcat) {
   auto finalList =
       llvm::cast<evaluator::ListValue>(fieldValue.get())->getElements();
 
-  ASSERT_EQ(3, finalList.size());
+  ASSERT_EQ(3U, finalList.size());
 
   ASSERT_EQ(0, llvm::cast<evaluator::AttributeValue>(finalList[0].get())
                    ->getAs<circt::om::IntegerAttr>()
@@ -1114,7 +1114,7 @@ TEST(EvaluatorTests, ListConcatField) {
   auto finalList =
       llvm::cast<evaluator::ListValue>(fieldValue.get())->getElements();
 
-  ASSERT_EQ(3, finalList.size());
+  ASSERT_EQ(3U, finalList.size());
 
   ASSERT_EQ(0, llvm::cast<evaluator::AttributeValue>(finalList[0].get())
                    ->getAs<circt::om::IntegerAttr>()
