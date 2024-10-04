@@ -333,6 +333,38 @@ void circt::om::ClassOp::replaceFieldTypes(AttrTypeReplacer replacer) {
   replaceClassLikeFieldTypes(*this, replacer);
 }
 
+void circt::om::ClassOp::addFields(mlir::OpBuilder &builder,
+                                   mlir::ArrayRef<Location> locs,
+                                   mlir::ArrayRef<Value> values) {
+  // Store the original locations as a metadata array so that unique locations
+  // are preserved as a mapping from field index to location
+  mlir::SmallVector<Attribute> locAttrs;
+  for (auto loc : locs) {
+    locAttrs.push_back(cast<Attribute>(LocationAttr(loc)));
+  }
+  // Also store the locations incase there's some other analysis that might
+  // be able to use the default FusedLoc representation.
+  builder.create<ClassFieldsOp>(
+      builder.getFusedLoc(locs, builder.getArrayAttr(locAttrs)), values);
+}
+
+mlir::Location circt::om::ClassOp::getFieldLocByIndex(size_t i) {
+  Location loc = this->getFieldsOp()->getLoc();
+  if (auto locs = dyn_cast<FusedLoc>(loc)) {
+    // Because it's possible for a user to construct a fields op directly and
+    // place a FusedLoc that doersn't follow the storage format of addFields, we
+    // assert the information has been stored appropriately
+    ArrayAttr metadataArr = dyn_cast<ArrayAttr>(locs.getMetadata());
+    assert(metadataArr && "Expected fused loc to store metadata array");
+    assert(i < metadataArr.size() &&
+           "expected index to be less than array size");
+    LocationAttr locAttr = dyn_cast<LocationAttr>(metadataArr[i]);
+    assert(locAttr && "expected metadataArr entry to be location attribute");
+    loc = Location(locAttr);
+  }
+  return loc;
+}
+
 //===----------------------------------------------------------------------===//
 // ClassExternOp
 //===----------------------------------------------------------------------===//

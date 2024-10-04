@@ -112,6 +112,28 @@ def ClassOp : OMClassLike<"class", [
     circt::om::ClassFieldsOp getFieldsOp() {
       return mlir::cast<ClassFieldsOp>(this->getBodyBlock()->getTerminator());
     }
+
+    // The addFields API encapsulates the logic used to represent field
+    // locations under the hood.  Users should invoke this method rather
+    // than construct the operation directly, otherwise logic to retrieve
+    // the field location will break.
+    // This is required because MLIR's FusedLoc uses a "set" semantics where a
+    // single location is used to represent multiple fields with the same
+    // location.  The OM implementation uses the metadata attribute on FusedLoc
+    // to store the original array of locations, so that the specific location
+    // of a field may be easily retrieved by index using the
+    // `getFieldLocByIndex` API.
+    void addFields(mlir::OpBuilder &builder, mlir::ArrayRef<mlir::Location>
+                   locs, mlir::ArrayRef<mlir::Value> values);
+
+    // Return the location for a field referenced by index in the fieldNames
+    // array attribute.  If the field has a location added by addFields API,
+    // its location will be retrieved from the array of per field locations.
+    // Otherwise, it will inherit the location of the class op Using this with
+    // a ClassFieldsOp that has been constructed with a FusedLoc but not
+    // following the internal storage format of `addFields` will result in an
+    // assertion error
+    mlir::Location getFieldLocByIndex(size_t i);
   }];
 }
 
