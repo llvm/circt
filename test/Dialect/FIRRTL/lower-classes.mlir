@@ -372,18 +372,20 @@ firrtl.circuit "DownwardReferences" {
 
 // CHECK-LABEL: firrtl.circuit "IntegerArithmetic"
 firrtl.circuit "IntegerArithmetic" {
-  firrtl.module @IntegerArithmetic() {
-    %0 = firrtl.integer 1
-    %1 = firrtl.integer 2
+  firrtl.module @IntegerArithmetic() {}
 
-    // CHECK: om.integer.add %0, %1 : !om.integer
-    %2 = firrtl.integer.add %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  firrtl.class @IntegerArithmeticClass(in %in0: !firrtl.integer, in %in1: !firrtl.integer) {
+    // CHECK: om.integer.add %in0, %in1 : !om.integer
+    %0 = firrtl.integer.add %in0, %in1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
 
-    // CHECK: om.integer.mul %0, %1 : !om.integer
-    %3 = firrtl.integer.mul %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+    // CHECK: om.integer.mul %in0, %in1 : !om.integer
+    %1 = firrtl.integer.mul %in0, %in1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
 
-    // CHECK: om.integer.shr %0, %1 : !om.integer
-    %4 = firrtl.integer.shr %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+    // CHECK: om.integer.shr %in0, %in1 : !om.integer
+    %2 = firrtl.integer.shr %in0, %in1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
+    // CHECK: om.integer.shl %in0, %in1 : !om.integer
+    %3 = firrtl.integer.shl %in0, %in1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
   }
 }
 
