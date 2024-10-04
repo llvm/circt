@@ -833,12 +833,13 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticShrTooLarge) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticShl) {
-  StringRef mod = "om.class @IntegerBinaryArithmeticShl() -> (result: !om.integer){"
-                  "  %0 = om.constant #om.integer<8 : si7> : !om.integer"
-                  "  %1 = om.constant #om.integer<2 : si3> : !om.integer"
-                  "  %2 = om.integer.shl %0, %1 : !om.integer"
-                  "  om.class.fields %2 : !om.integer"
-                  "}";
+  StringRef mod =
+      "om.class @IntegerBinaryArithmeticShl() -> (result: !om.integer){"
+      "  %0 = om.constant #om.integer<8 : si7> : !om.integer"
+      "  %1 = om.constant #om.integer<2 : si3> : !om.integer"
+      "  %2 = om.integer.shl %0, %1 : !om.integer"
+      "  om.class.fields %2 : !om.integer"
+      "}";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -867,7 +868,8 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticShl) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticShlNegative) {
-  StringRef mod = "om.class @IntegerBinaryArithmeticShlNegative() -> (result: !om.integer) {"
+  StringRef mod = "om.class @IntegerBinaryArithmeticShlNegative() -> (result: "
+                  "!om.integer) {"
                   "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
                   "  %1 = om.constant #om.integer<-2 : si3> : !om.integer"
                   "  %2 = om.integer.shl %0, %1 : !om.integer"
@@ -900,7 +902,8 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticShlNegative) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticShlTooLarge) {
-  StringRef mod = "om.class @IntegerBinaryArithmeticShlTooLarge() -> (result: !om.integer) {"
+  StringRef mod = "om.class @IntegerBinaryArithmeticShlTooLarge() -> (result: "
+                  "!om.integer) {"
                   "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
                   "  %1 = om.constant #om.integer<36893488147419100000 : si66> "
                   ": !om.integer"
