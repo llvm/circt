@@ -248,7 +248,6 @@ LogicalResult MachineOpConverter::dispatch(){
       transitions.push_back(t);
       }
     }
-
   }
 
   // initial condition
