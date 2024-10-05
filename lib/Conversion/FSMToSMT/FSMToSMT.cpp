@@ -69,6 +69,12 @@ struct Transition{
 };
 
 
+void printFsmArgVals (const llvm::SmallVector<std::pair<mlir::Value, mlir::Value>>& fsmArgVals){
+  for (auto [v1, v2] : fsmArgVals)
+    llvm::outs()<<"\nv1: "<<v1<<", v2: "<<v2;
+}
+
+
 int insertStates(llvm::SmallVector<std::string> &states, const std::string& st){
   for(auto [id, s]: llvm::enumerate(states)){
     if(s == st)
@@ -131,11 +137,12 @@ mlir::Value getSmtValue(mlir::Value op, const llvm::SmallVector<std::pair<mlir::
   // op can be a constant
   if (auto constop = dyn_cast<hw::ConstantOp>(op.getDefiningOp())){
     // this is why bools wont work. cant mix them up in operations
-    // if (constop.getType().getIntOrFloatBitWidth()==1){
-    //   // this is prob a very stupid way to do this
-    //   bool bval = (constop.getValueAttr().getSInt()!=0);
-    //   return b.create<smt::BoolConstantOp>(loc, bval);
-    // }
+    if (constop.getType().getIntOrFloatBitWidth()==1){
+      // this is prob a very stupid way to do this
+      // printFsmArgVals(fsmArgVals);
+      bool bval = constop.getValueAttr().getValue().getBoolValue();
+      return b.create<smt::BoolConstantOp>(loc, bval);
+    }
     return b.create<smt::IntConstantOp>(loc, constop.getValueAttr());
   }
   if (op.getDefiningOp()->getName().getDialect()->getNamespace() == "comb"){
@@ -184,21 +191,18 @@ LogicalResult MachineOpConverter::dispatch(){
   // everything is an Int (even i1) because we want to have everything in the same structure
   // and we can not mix ints and bools in the same vec
   for (auto a : args){
-    // if (a.getType().getIntOrFloatBitWidth()==1){
-    //   auto intVal = b.getType<smt::BoolType>();
-    //   // push twice because we will need it after to model the "next value" of inputs
-    //   argVarTypes.push_back(intVal);
-    //   argVars.push_back(a);
-    // } else {
-    auto intVal = b.getType<smt::IntType>();
-    // push twice because we will need it after to model the "next value" of inputs
-    argVarTypes.push_back(intVal);
-    argVars.push_back(a);
-    // }
+    if (a.getType().getIntOrFloatBitWidth()==1){
+      auto intVal = b.getType<smt::BoolType>();
+      argVarTypes.push_back(intVal);
+      argVars.push_back(a);
+    } else {
+      auto intVal = b.getType<smt::IntType>();
+      argVarTypes.push_back(intVal);
+      argVars.push_back(a);
+    }
   }
   numArgs = argVars.size();
   llvm::SmallVector<int> varInitValues;
-
 
   for (auto variableOp : machineOp.front().getOps<fsm::VariableOp>()) {
     auto intVal = b.getType<smt::IntType>();
