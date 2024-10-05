@@ -130,6 +130,12 @@ mlir::Value getSmtValue(mlir::Value op, const llvm::SmallVector<std::pair<mlir::
     } 
   // op can be a constant
   if (auto constop = dyn_cast<hw::ConstantOp>(op.getDefiningOp())){
+    // this is why bools wont work. cant mix them up in operations
+    // if (constop.getType().getIntOrFloatBitWidth()==1){
+    //   // this is prob a very stupid way to do this
+    //   bool bval = (constop.getValueAttr().getSInt()!=0);
+    //   return b.create<smt::BoolConstantOp>(loc, bval);
+    // }
     return b.create<smt::IntConstantOp>(loc, constop.getValueAttr());
   }
   if (op.getDefiningOp()->getName().getDialect()->getNamespace() == "comb"){
@@ -178,10 +184,17 @@ LogicalResult MachineOpConverter::dispatch(){
   // everything is an Int (even i1) because we want to have everything in the same structure
   // and we can not mix ints and bools in the same vec
   for (auto a : args){
+    // if (a.getType().getIntOrFloatBitWidth()==1){
+    //   auto intVal = b.getType<smt::BoolType>();
+    //   // push twice because we will need it after to model the "next value" of inputs
+    //   argVarTypes.push_back(intVal);
+    //   argVars.push_back(a);
+    // } else {
     auto intVal = b.getType<smt::IntType>();
     // push twice because we will need it after to model the "next value" of inputs
     argVarTypes.push_back(intVal);
     argVars.push_back(a);
+    // }
   }
   numArgs = argVars.size();
   llvm::SmallVector<int> varInitValues;
@@ -229,10 +242,13 @@ LogicalResult MachineOpConverter::dispatch(){
     auto range = b.getType<smt::BoolType>();
     smt::DeclareFunOp acFun = b.create<smt::DeclareFunOp>(loc, b.getType<smt::SMTFuncType>(stateFunTypes, range), acFunName);
     stateFunctions.push_back(acFun);
-    for (auto tr: stateOp.getTransitions().front().getOps<fsm::TransitionOp>()){
-      auto t = parseTransition(tr, fromState, states, loc, b);
+    if (!stateOp.getTransitions().empty()){
+      for (auto tr: stateOp.getTransitions().front().getOps<fsm::TransitionOp>()){
+        auto t = parseTransition(tr, fromState, states, loc, b);
       transitions.push_back(t);
+      }
     }
+
   }
 
   // initial condition
@@ -298,7 +314,6 @@ LogicalResult MachineOpConverter::dispatch(){
         llvm::SmallVector<mlir::Value> timeArgs = {args.back(), c1};
         auto newTime = b.create<smt::IntAddOp>(loc, b.getType<smt::IntType>(), timeArgs);
         updatedSmtValues.push_back(newTime);
-        llvm::outs()<<"\n\nmannaggia2: "<<updatedSmtValues.size();
 
         return updatedSmtValues;
       } 
