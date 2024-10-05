@@ -375,15 +375,41 @@ def MemoryReadOp : ArcOp<"memory_read", [
   MemoryAndDataTypesMatch<"memory", "data">,
   MemoryAndAddressTypesMatch<"memory", "address">
 ]> {
-  let summary = "Read word from memory";
+  let summary = "Read a word from a memory";
+  let description = [{
+    Returns the current value of a word in memory. Does not consider any earlier
+    deferred writes. See `arc.state_read`.
+  }];
   let arguments = (ins
     MemoryType:$memory,
     AnyInteger:$address
   );
   let results = (outs AnyInteger:$data);
-
   let assemblyFormat = [{
     $memory `[` $address `]` attr-dict `:` type($memory)
+  }];
+}
+
+def DeferMemoryWriteOp : ArcOp<"defer_memory_write", [
+  MemoryAndDataTypesMatch<"memory", "data">,
+  MemoryAndAddressTypesMatch<"memory", "address">
+]> {
+  let summary = "Write a word to a memory after all reads";
+  let description = [{
+    Schedules a word in a memory to be updated to a new value once all reads
+    from that word have been executed. Due to this deferred behavior, this op
+    does not have a memory write side effect and can safely be moved across
+    `arc.memory_read` operations.
+  }];
+  let arguments = (ins
+    MemoryType:$memory,
+    AnyInteger:$address,
+    Optional<I1>:$enable,
+    AnyInteger:$data
+  );
+  let assemblyFormat = [{
+    $memory `[` $address `]` `,` $data (`if` $enable^)?
+    attr-dict `:` type($memory)
   }];
 }
 
@@ -392,19 +418,21 @@ def MemoryWriteOp : ArcOp<"memory_write", [
   MemoryAndDataTypesMatch<"memory", "data">,
   MemoryAndAddressTypesMatch<"memory", "address">
 ]> {
-  let summary = "Write word to memory";
+  let summary = "Write a word to a memory";
+  let description = [{
+    Updates a word in a memory to a new value. All subsequent `arc.memory_read`
+    operations will see the new value.
+  }];
   let arguments = (ins
     MemoryType:$memory,
     AnyInteger:$address,
     Optional<I1>:$enable,
     AnyInteger:$data
   );
-
   let assemblyFormat = [{
     $memory `[` $address `]` `,` $data (`if` $enable^)?
     attr-dict `:` type($memory)
   }];
-
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
 }
@@ -553,11 +581,9 @@ class StateAndValueTypesMatch<string state, string value> : TypesMatchWith<
   "state and value types must match", state, value,
   "llvm::cast<StateType>($_self).getType()">;
 
-def StateReadOp : ArcOp<"state_read", [
-  MemoryEffects<[MemRead]>,
-  StateAndValueTypesMatch<"state", "value">
-]> {
-  let summary = "Get a state's current value";
+class StateReadLikeOp<string mnemonic, list<Trait> traits = []> :
+  ArcOp<mnemonic, traits # [StateAndValueTypesMatch<"state", "value">]>
+{
   let arguments = (ins StateType:$state);
   let results = (outs AnyType:$value);
   let assemblyFormat = [{
@@ -565,28 +591,58 @@ def StateReadOp : ArcOp<"state_read", [
   }];
 }
 
-def StateWriteOp : ArcOp<"state_write", [
-  MemoryEffects<[MemWrite]>,
-  StateAndValueTypesMatch<"state", "value">
+class StateWriteLikeOp<string mnemonic, list<Trait> traits = []> :
+  ArcOp<mnemonic, traits # [StateAndValueTypesMatch<"state", "value">]>
+{
+  let arguments = (ins
+    StateType:$state,
+    AnyType:$value,
+    Optional<I1>:$condition
+  );
+  let assemblyFormat = [{
+    $state `=` $value (`if` $condition^)? attr-dict `:` type($state)
+  }];
+}
+
+def DeferStateReadOp : StateReadLikeOp<"defer_state_read"> {
+  let summary = "Read a state's value";
+  let description = [{
+    Returns the current value of a state. Does not consider any earlier deferred
+    writes. This allows `arc.state_read` to always return the value a state had
+    before the "eval" function was called, if all corresponding writes are
+    `arc.defer_state_write`.
+  }];
+}
+
+def StateReadOp : StateReadLikeOp<"state_read", [
+  MemoryEffects<[MemRead]>
+]> {
+  let summary = "Read a state's value";
+  let description = [{
+    Returns the current value of a state. Does not consider any earlier deferred
+    writes. This allows `arc.state_read` to always return the value a state had
+    before the "eval" function was called, if all corresponding writes are
+    `arc.defer_state_write`.
+  }];
+}
+
+def DeferStateWriteOp : StateWriteLikeOp<"defer_state_write"> {
+  let summary = "Update a state's value after all reads";
+  let description = [{
+    Schedules a value to be written to a state once all reads from the state
+    have been executed. Due to this deferred behavior, this op does not have a
+    memory write side effect and can safely be moved across `arc.state_read`
+    operations.
+  }];
+}
+
+def StateWriteOp : StateWriteLikeOp<"state_write", [
+  MemoryEffects<[MemWrite]>
 ]> {
   let summary = "Update a state's value";
   let description = [{
-    Changes the value of a state. This operation is treated as a deferred
-    assignment by most transformation passes, which allows them to change the
-    order of `arc.state_read` and `arc.state_write` ops on the same state
-    without affecting the correctness of the model. The reads are always assumed
-    to produce the current value of the state and writes to be deferred until
-    all operations in the model have been executed for the current time step.
-
-    The only exceptions to this are the state update legalization pass, which
-    inserts the necessary temporary variables such that writes can be performed
-    immediately without affecting correctness. This allows later lowering passes
-    to treat `arc.state_write` as an immediate assignment (without defering).
-  }];
-  let arguments = (ins StateType:$state, AnyType:$value,
-                       Optional<I1>:$condition);
-  let assemblyFormat = [{
-    $state `=` $value (`if` $condition^)? attr-dict `:` type($state)
+    Writes a value to a state. All subsequent `arc.state_read` operations will
+    see the new value.
   }];
 }
 
