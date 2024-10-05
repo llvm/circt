@@ -73,6 +73,7 @@ struct OpLowering {
       : op(op), phase(phase), module(module) {}
   LogicalResult lower();
   LogicalResult lower(StateOp op);
+  LogicalResult lower(InstanceOp op);
   LogicalResult lower(hw::OutputOp op);
   LogicalResult lowerDefault();
   Value lowerValue(Value value, Phase phase);
@@ -86,21 +87,29 @@ struct ModuleLowering {
   HWModuleOp moduleOp;
   /// The builder for the main body of the model.
   OpBuilder builder;
+
   /// The storage value that can be used for `arc.alloc_state` and friends.
   Value storageArg;
+
   /// A worklist of pending op lowerings.
   SmallVector<OpLowering> opsWorklist;
   /// The set of ops currently in the worklist. Used to detect cycles.
   SmallDenseSet<std::pair<Operation *, Phase>> opsSeen;
+  /// The ops that have already been lowered.
+  DenseSet<std::pair<Operation *, Phase>> loweredOps;
+  /// The values that have already been lowered.
+  DenseMap<std::pair<Value, Phase>, Value> loweredValues;
+
   /// The allocated input ports.
   SmallVector<Value> allocatedInputs;
   /// The allocated states as a mapping from op results to `arc.alloc_state`
   /// results.
   DenseMap<Value, Value> allocatedStates;
-  /// The ops that have already been lowered.
-  DenseSet<std::pair<Operation *, Phase>> loweredOps;
-  /// The values that have already been lowered.
-  DenseMap<std::pair<Value, Phase>, Value> loweredValues;
+  /// The allocated output ports for any black box instances in the design.
+  /// These behave like an root input, with data flowing out of the instance and
+  /// into the design.
+  DenseMap<Value, Value> allocatedInstanceOutputs;
+
   /// A mapping from unlowered clocks to a value indicating a posedge. This is
   /// used to not create an excessive number of posedge detectors.
   DenseMap<Value, Value> loweredPosedges;
@@ -115,6 +124,7 @@ struct ModuleLowering {
   LogicalResult run();
   LogicalResult lowerOp(Operation *op);
   Value getAllocatedState(OpResult result);
+  Value getAllocatedInstanceOutput(OpResult result);
   Value detectPosedge(Value clock);
 };
 } // namespace
@@ -183,10 +193,6 @@ LogicalResult ModuleLowering::lowerOp(Operation *op) {
         return failure();
       std::reverse(opLowering.pending.begin(), opLowering.pending.end());
       opLowering.initial = false;
-      if (!opLowering.pending.empty())
-        LLVM_DEBUG(llvm::dbgs() << "  - Found " << opLowering.pending.size()
-                                << " dependencies for " << opLowering.phase
-                                << " " << *opLowering.op << "\n");
     }
 
     // Push operands onto the worklist.
@@ -249,6 +255,45 @@ Value ModuleLowering::getAllocatedState(OpResult result) {
   return alloc;
 }
 
+/// Return the `arc.alloc_state` associated with the given instance op result.
+/// Creates the allocation ops if they do not yet exist.
+Value ModuleLowering::getAllocatedInstanceOutput(OpResult result) {
+  if (auto alloc = allocatedInstanceOutputs.lookup(result))
+    return alloc;
+
+  // Zip up to the body of the `ModelOp` we're currently populating and create
+  // the allocation ops there.
+  OpBuilder::InsertionGuard guard(builder);
+  while (builder.getBlock() != storageArg.getParentBlock())
+    builder.setInsertionPoint(builder.getBlock()->getParentOp());
+
+  // Then allocate storage for each instance output.
+  auto op = cast<InstanceOp>(result.getOwner());
+  for (auto [result, name] : llvm::zip(op.getResults(), op.getResultNames())) {
+    auto loc = result.getLoc(); // should actually be output port location
+    auto type = dyn_cast<IntegerType>(result.getType());
+    if (!type && isa<seq::ClockType>(result.getType()))
+      type = builder.getI1Type();
+    if (!type) {
+      mlir::emitError(loc) << "output " << name << " of instance "
+                           << op.getInstanceName() << " is of non-integer type "
+                           << result.getType();
+      return {};
+    }
+    auto state =
+        builder.create<AllocStateOp>(loc, StateType::get(type), storageArg);
+    state->setAttr("name",
+                   builder.getStringAttr(op.getInstanceName() + "/" +
+                                         cast<StringAttr>(name).getValue()));
+    auto read = builder.create<StateReadOp>(result.getLoc(), state);
+    if (isa<seq::ClockType>(result.getType()))
+      return builder.create<seq::ToClockOp>(result.getLoc(), read);
+    allocatedInstanceOutputs[result] = state;
+  }
+
+  return allocatedInstanceOutputs.lookup(result);
+}
+
 /// Allocate the necessary storage, reads, writes, and comparisons to detect a
 /// rising edge on a clock value.
 Value ModuleLowering::detectPosedge(Value clock) {
@@ -277,8 +322,9 @@ Value ModuleLowering::detectPosedge(Value clock) {
 
 LogicalResult OpLowering::lower() {
   return TypeSwitch<Operation *, LogicalResult>(op)
-      .Case<StateOp, hw::OutputOp>([&](auto op) { return lower(op); })
-      .Case<InstanceOp, TapOp, MemoryOp, MemoryReadPortOp, MemoryWritePortOp,
+      .Case<StateOp, InstanceOp, hw::OutputOp>(
+          [&](auto op) { return lower(op); })
+      .Case<TapOp, MemoryOp, MemoryReadPortOp, MemoryWritePortOp,
             sim::DPICallOp, seq::InitialOp>([&](auto op) {
         if (initial)
           return success();
@@ -459,6 +505,42 @@ LogicalResult OpLowering::lower(StateOp op) {
   return success();
 }
 
+LogicalResult OpLowering::lower(InstanceOp op) {
+  // Get the current values flowing into the instance's inputs.
+  SmallVector<Value> values;
+  for (auto operand : op.getOperands())
+    values.push_back(lowerValue(operand, Phase::New));
+  if (initial)
+    return success();
+  if (llvm::is_contained(values, Value{}))
+    return failure();
+
+  // Then allocate storage for each instance input and assign the corresponding
+  // value.
+  for (auto [value, name] : llvm::zip(values, op.getArgNames())) {
+    auto loc = value.getLoc(); // should actually be output port location
+    auto type = dyn_cast<IntegerType>(value.getType());
+    if (!type && isa<seq::ClockType>(value.getType()))
+      type = module.builder.getI1Type();
+    if (!type)
+      return mlir::emitError(loc, "input ")
+             << name << " of instance " << op.getInstanceName()
+             << " is of non-integer type " << value.getType();
+    auto castValue = value;
+    if (isa<seq::ClockType>(value.getType()))
+      castValue =
+          module.builder.create<seq::FromClockOp>(value.getLoc(), castValue);
+    auto state = module.builder.create<AllocStateOp>(loc, StateType::get(type),
+                                                     module.storageArg);
+    state->setAttr("name", module.builder.getStringAttr(
+                               op.getInstanceName() + "/" +
+                               cast<StringAttr>(name).getValue()));
+    module.builder.create<StateWriteOp>(value.getLoc(), state, castValue,
+                                        Value{});
+  }
+  return success();
+}
+
 LogicalResult OpLowering::lower(hw::OutputOp op) {
   // First get the current value of all outputs.
   SmallVector<Value> values;
@@ -511,6 +593,17 @@ Value OpLowering::lowerValue(Value value, Phase phase) {
   // handled above.)
   auto result = cast<OpResult>(value);
   auto *op = result.getOwner();
+
+  // Handle instance outputs. They behave essentially like a top-level module
+  // input, and read the same in all phases.
+  if (isa<InstanceOp>(op)) {
+    if (initial)
+      return {};
+    auto state = module.getAllocatedInstanceOutput(result);
+    if (!state)
+      return {};
+    return module.builder.create<StateReadOp>(result.getLoc(), state);
+  }
 
   // Special handling for state ops.
   if (isa<StateOp>(op)) {
