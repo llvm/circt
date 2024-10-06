@@ -169,6 +169,13 @@ MemoryInterface::MemoryInterface(const MemoryPortsImpl &ports) : impl(ports) {
 MemoryInterface::MemoryInterface(calyx::MemoryOp memOp) : impl(memOp) {}
 MemoryInterface::MemoryInterface(calyx::SeqMemoryOp memOp) : impl(memOp) {}
 
+bool MemoryInterface::isSeqMem() {
+  if (auto *memOp = std::get_if<calyx::SeqMemoryOp>(&impl); memOp) {
+    return true;
+  }
+  return false;
+}
+
 Value MemoryInterface::readData() {
   auto readData = readDataOpt();
   assert(readData.has_value() && "Memory does not have readData");
@@ -657,10 +664,10 @@ void InlineCombGroups::recurseInlineCombGroups(
     //   LateSSAReplacement)
     if (isa<BlockArgument>(src) ||
         isa<calyx::RegisterOp, calyx::MemoryOp, calyx::SeqMemoryOp,
-            hw::ConstantOp, mlir::arith::ConstantOp, calyx::MultPipeLibOp,
-            calyx::DivUPipeLibOp, calyx::DivSPipeLibOp, calyx::RemSPipeLibOp,
-            calyx::RemUPipeLibOp, mlir::scf::WhileOp, calyx::InstanceOp>(
-            src.getDefiningOp()))
+            calyx::ConstantOp, hw::ConstantOp, mlir::arith::ConstantOp,
+            calyx::MultPipeLibOp, calyx::DivUPipeLibOp, calyx::DivSPipeLibOp,
+            calyx::RemSPipeLibOp, calyx::RemUPipeLibOp, mlir::scf::WhileOp,
+            calyx::InstanceOp, calyx::AddFNOp>(src.getDefiningOp()))
       continue;
 
     auto srcCombGroup = dyn_cast<calyx::CombGroupOp>(
@@ -730,7 +737,8 @@ BuildBasicBlockRegs::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
 
     for (auto arg : enumerate(block->getArguments())) {
       Type argType = arg.value().getType();
-      assert(isa<IntegerType>(argType) && "unsupported block argument type");
+      assert((isa<IntegerType>(argType) || isa<FloatType>(argType)) &&
+             "unsupported block argument type");
       unsigned width = argType.getIntOrFloatBitWidth();
       std::string index = std::to_string(arg.index());
       std::string name = loweringState().blockName(block) + "_arg" + index;
@@ -753,11 +761,11 @@ BuildReturnRegs::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
 
   for (auto argType : enumerate(funcOp.getResultTypes())) {
     auto convArgType = calyx::convIndexType(rewriter, argType.value());
-    assert(isa<IntegerType>(convArgType) && "unsupported return type");
-    unsigned width = convArgType.getIntOrFloatBitWidth();
+    assert((isa<IntegerType>(convArgType) || isa<FloatType>(convArgType)) &&
+           "unsupported return type");
     std::string name = "ret_arg" + std::to_string(argType.index());
-    auto reg =
-        createRegister(funcOp.getLoc(), rewriter, getComponent(), width, name);
+    auto reg = createRegister(funcOp.getLoc(), rewriter, getComponent(),
+                              convArgType, name);
     getState().addReturnReg(reg, argType.index());
 
     rewriter.setInsertionPointToStart(
