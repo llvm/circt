@@ -16,6 +16,7 @@
 
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
+#include "circt/Dialect/Calyx/json.hpp"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -32,6 +33,8 @@
 
 namespace circt {
 namespace calyx {
+
+using json = nlohmann::ordered_json;
 
 void appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
                                   Value memref, unsigned memoryID,
@@ -425,6 +428,20 @@ public:
     return builder.create<TLibraryOp>(loc, getUniqueName(name), resTypes);
   }
 
+  json &getExtMemData() { return extMemData; }
+
+  const json &getExtMemData() const { return extMemData; }
+
+  void setDataField(StringRef name, const json::array_t &data) {
+    extMemData[name]["data"] = data;
+  }
+
+  void setFormat(StringRef name, std::string numType, bool isSigned,
+                 unsigned width) {
+    extMemData[name]["format"] = {
+        {"numeric_type", numType}, {"is_signed", true}, {"width", width}};
+  }
+
 private:
   /// The component which this lowering state is associated to.
   calyx::ComponentOp component;
@@ -461,6 +478,9 @@ private:
 
   /// A mapping between the callee and the instance.
   llvm::StringMap<calyx::InstanceOp> instanceMap;
+
+  /// A json file to store external global memory data
+  json extMemData;
 };
 
 /// An interface for conversion passes that lower Calyx programs. This handles
