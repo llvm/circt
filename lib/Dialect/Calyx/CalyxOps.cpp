@@ -1954,6 +1954,62 @@ ParseResult GroupDoneOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 //===----------------------------------------------------------------------===//
+// ConstantOp
+//===----------------------------------------------------------------------===//
+void ConstantOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  auto type = getType();
+  if (auto intCst = llvm::dyn_cast<IntegerAttr>(getValue())) {
+    auto intType = llvm::dyn_cast<IntegerType>(type);
+
+    // Sugar i1 constants with 'true' and 'false'.
+    if (intType && intType.getWidth() == 1)
+      return setNameFn(getResult(), (intCst.getInt() ? "true" : "false"));
+
+    // Otherwise, build a complex name with the value and type.
+    SmallString<32> specialNameBuffer;
+    llvm::raw_svector_ostream specialName(specialNameBuffer);
+    specialName << 'c' << intCst.getValue();
+    if (intType)
+      specialName << '_' << type;
+    setNameFn(getResult(), specialName.str());
+  } else {
+    setNameFn(getResult(), "cst");
+  }
+}
+
+LogicalResult ConstantOp::verify() {
+  auto type = getType();
+  // The value's type must match the return type.
+  if (getValue().getType() != type) {
+    return emitOpError() << "value type " << getValue().getType()
+                         << " must match return type: " << type;
+  }
+  // Integer values must be signless.
+  if (llvm::isa<IntegerType>(type) &&
+      !llvm::cast<IntegerType>(type).isSignless())
+    return emitOpError("integer return type must be signless");
+  // Any float or elements attribute are acceptable.
+  if (!llvm::isa<IntegerAttr, FloatAttr>(getValue())) {
+    return emitOpError("value must be an integer or float attribute");
+  }
+
+  return success();
+}
+
+OpFoldResult calyx::ConstantOp::fold(FoldAdaptor adaptor) {
+  return getValueAttr();
+}
+
+void calyx::ConstantOp::build(OpBuilder &builder, OperationState &state,
+                              FloatAttr attr) {
+  state.addAttribute("value", attr);
+  SmallVector<Type> types;
+  types.push_back(attr.getType()); // Out
+  state.addTypes(types);
+}
+
+//===----------------------------------------------------------------------===//
 // RegisterOp
 //===----------------------------------------------------------------------===//
 

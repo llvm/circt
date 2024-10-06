@@ -22,7 +22,9 @@
 #include "mlir/Tools/mlir-translate/Translation.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/FormatVariadic.h"
+#include <bitset>
 
 using namespace circt;
 using namespace calyx;
@@ -445,7 +447,7 @@ private:
       return;
     }
 
-    auto definingOp = value.getDefiningOp();
+    auto *definingOp = value.getDefiningOp();
     assert(definingOp && "Value does not have a defining operation.");
 
     TypeSwitch<Operation *>(definingOp)
@@ -479,6 +481,19 @@ private:
           emitValue(op.getInputs()[0], /*isIndented=*/false);
         })
         .Case<CycleOp>([&](auto op) { emitCycleValue(op); })
+        .Case<calyx::ConstantOp>([&](auto op) {
+          TypedAttr attr = op.getValueAttr();
+          if (auto fltAttr = dyn_cast<FloatAttr>(attr)) {
+            APFloat value = fltAttr.getValue();
+            auto type = cast<FloatType>(fltAttr.getType());
+            double floatValue = value.convertToFloat();
+            uint32_t bitPattern = floatToIEEE754(floatValue);
+            std::bitset<sizeof(float) * CHAR_BIT> bits(bitPattern);
+            (isIndented ? indent() : os)
+                << std::to_string(value.getSizeInBits(type.getFloatSemantics()))
+                << apostrophe() << "d" << bits.to_string();
+          }
+        })
         .Default(
             [&](auto op) { emitOpError(op, "not supported for emission"); });
   }
@@ -594,6 +609,15 @@ private:
   /// Current level of indentation. See `indent()` and
   /// `addIndent()`/`reduceIndent()`.
   unsigned currentIndent = 0;
+
+  uint32_t floatToIEEE754(float f) {
+    union {
+      float input;
+      uint32_t output;
+    } data;
+    data.input = f;
+    return data.output;
+  }
 };
 
 } // end anonymous namespace
@@ -637,7 +661,8 @@ void Emitter::emitComponent(ComponentInterface op) {
           .Case<RegisterOp>([&](auto op) { emitRegister(op); })
           .Case<MemoryOp>([&](auto op) { emitMemory(op); })
           .Case<SeqMemoryOp>([&](auto op) { emitSeqMemory(op); })
-          .Case<hw::ConstantOp>([&](auto op) { /*Do nothing*/ })
+          .Case<hw::ConstantOp, calyx::ConstantOp>(
+              [&](auto op) { /*Do nothing*/ })
           .Case<SliceLibOp, PadLibOp, ExtSILibOp>(
               [&](auto op) { emitLibraryPrimTypedByAllPorts(op); })
           .Case<LtLibOp, GtLibOp, EqLibOp, NeqLibOp, GeLibOp, LeLibOp, SltLibOp,
@@ -954,8 +979,8 @@ void Emitter::emitWires(WiresOp op) {
       TypeSwitch<Operation *>(&bodyOp)
           .Case<GroupInterface>([&](auto op) { emitGroup(op); })
           .Case<AssignOp>([&](auto op) { emitAssignment(op); })
-          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp, CycleOp>(
-              [&](auto op) { /* Do nothing. */ })
+          .Case<hw::ConstantOp, calyx::ConstantOp, comb::AndOp, comb::OrOp,
+                comb::XorOp, CycleOp>([&](auto op) { /* Do nothing. */ })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside wires section");
           });
