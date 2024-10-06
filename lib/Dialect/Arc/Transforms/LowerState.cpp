@@ -49,18 +49,32 @@ template <class OS>
 OS &operator<<(OS &os, Phase phase) {
   switch (phase) {
   case Phase::Initial:
-    return os << "Initial";
+    return os << "initial";
   case Phase::Old:
-    return os << "Old";
+    return os << "old";
   case Phase::New:
-    return os << "New";
+    return os << "new";
   case Phase::Final:
-    return os << "Final";
+    return os << "final";
   }
 }
 
 struct ModuleLowering;
 
+/// All state associated with lowering a single operation. Instances of this
+/// struct are kept on a worklist to perform a depth-first traversal of the
+/// module being lowered.
+///
+/// The actual lowering occurs in `lower()`. This function is called exactly
+/// twice. A first time with `initial` being true, where other values and
+/// operations that have to be lowered first may be marked with `addPending`. No
+/// actual lowering or error reporting should occur when `initial` is true. The
+/// worklist then ensures that all `pending` ops are lowered before `lower()` is
+/// called a second time with `initial` being false. At this point the actual
+/// lowering and error reporting should occur.
+///
+/// The `initial` variable is used to allow for a single block of code to mark
+/// values and ops as dependencies and actually do the lowering based on them.
 struct OpLowering {
   Operation *op;
   Phase phase;
@@ -71,12 +85,26 @@ struct OpLowering {
 
   OpLowering(Operation *op, Phase phase, ModuleLowering &module)
       : op(op), phase(phase), module(module) {}
+
+  // Operation Lowering.
   LogicalResult lower();
+  LogicalResult lowerDefault();
   LogicalResult lower(StateOp op);
+  LogicalResult lower(MemoryOp op);
   LogicalResult lower(InstanceOp op);
   LogicalResult lower(hw::OutputOp op);
-  LogicalResult lowerDefault();
+
+  scf::IfOp createIfClockOp(Value clock);
+
+  // Value Lowering. These functions are called from the `lower()` functions
+  // above. They handle values used by the `op`. This can generate reads from
+  // state and memory storage on-the-fly, or mark other ops as dependencies to
+  // be lowered first.
   Value lowerValue(Value value, Phase phase);
+  Value lowerValue(InstanceOp op, OpResult result, Phase phase);
+  Value lowerValue(StateOp op, OpResult result, Phase phase);
+  Value lowerValue(MemoryReadPortOp op, OpResult result, Phase phase);
+
   void addPending(Value value, Phase phase);
   void addPending(Operation *op, Phase phase);
 };
@@ -87,6 +115,8 @@ struct ModuleLowering {
   HWModuleOp moduleOp;
   /// The builder for the main body of the model.
   OpBuilder builder;
+  /// The builder for state allocation ops.
+  OpBuilder allocBuilder;
 
   /// The storage value that can be used for `arc.alloc_state` and friends.
   Value storageArg;
@@ -120,11 +150,11 @@ struct ModuleLowering {
   /// previous uf ops for the same reset value.
   std::pair<Value, Value> prevReset;
 
-  ModuleLowering(HWModuleOp moduleOp) : moduleOp(moduleOp), builder(moduleOp) {}
+  ModuleLowering(HWModuleOp moduleOp)
+      : moduleOp(moduleOp), builder(moduleOp), allocBuilder(moduleOp) {}
   LogicalResult run();
   LogicalResult lowerOp(Operation *op);
   Value getAllocatedState(OpResult result);
-  Value getAllocatedInstanceOutput(OpResult result);
   Value detectPosedge(Value clock);
 };
 } // namespace
@@ -146,17 +176,17 @@ LogicalResult ModuleLowering::run() {
       StorageType::get(builder.getContext(), {}), modelOp.getLoc());
   builder.setInsertionPointToStart(&modelBlock);
 
+  // Create a sentinel op such that we can build storage allocation ops above
+  // all other lowered ops.
+  auto sentinelOp =
+      builder.create<ConstantOp>(moduleOp.getLoc(), builder.getI1Type(), 0);
+  allocBuilder.setInsertionPoint(sentinelOp);
+
   // Allocate storage for the inputs.
   for (auto arg : moduleOp.getBodyBlock()->getArguments()) {
     auto name = moduleOp.getArgName(arg.getArgNumber());
-    auto type = dyn_cast<IntegerType>(arg.getType());
-    if (!type && isa<seq::ClockType>(arg.getType()))
-      type = builder.getI1Type();
-    if (!type)
-      return mlir::emitError(arg.getLoc(), "input ")
-             << name << " is of non-integer type " << arg.getType();
-    auto state = builder.create<RootInputOp>(arg.getLoc(), StateType::get(type),
-                                             name, storageArg);
+    auto state = allocBuilder.create<RootInputOp>(
+        arg.getLoc(), StateType::get(arg.getType()), name, storageArg);
     allocatedInputs.push_back(state);
   }
 
@@ -164,6 +194,8 @@ LogicalResult ModuleLowering::run() {
   for (auto &op : moduleOp.getOps()) {
     if (mlir::isMemoryEffectFree(&op) && !isa<hw::OutputOp>(op))
       continue;
+    if (isa<MemoryReadPortOp, MemoryWritePortOp>(op))
+      continue; // handled as part of `MemoryOp`
     if (failed(lowerOp(&op)))
       return failure();
   }
@@ -184,13 +216,21 @@ LogicalResult ModuleLowering::lowerOp(Operation *op) {
   opsWorklist.push_back(OpLowering(op, phase, *this));
   opsSeen.insert({op, phase});
 
+  auto dumpWorklist = [&] {
+    for (auto &opLowering : llvm::reverse(opsWorklist))
+      opLowering.op->emitRemark()
+          << "used for " << opLowering.phase << " phase here";
+  };
+
   while (!opsWorklist.empty()) {
     auto &opLowering = opsWorklist.back();
 
     // Collect an initial list of operands that need to be lowered.
     if (opLowering.initial) {
-      if (failed(opLowering.lower()))
+      if (failed(opLowering.lower())) {
+        dumpWorklist();
         return failure();
+      }
       std::reverse(opLowering.pending.begin(), opLowering.pending.end());
       opLowering.initial = false;
     }
@@ -202,6 +242,7 @@ LogicalResult ModuleLowering::lowerOp(Operation *op) {
         continue;
       if (!opsSeen.insert({defOp, phase}).second) {
         defOp->emitOpError("is on a combinational loop");
+        dumpWorklist();
         return failure();
       }
       opsWorklist.push_back(OpLowering(defOp, phase, *this));
@@ -212,8 +253,10 @@ LogicalResult ModuleLowering::lowerOp(Operation *op) {
     // lowered.
     LLVM_DEBUG(llvm::dbgs() << "  - Lowering " << opLowering.phase << " "
                             << *opLowering.op << "\n");
-    if (failed(opLowering.lower()))
+    if (failed(opLowering.lower())) {
+      dumpWorklist();
       return failure();
+    }
     loweredOps.insert({opLowering.op, opLowering.phase});
     opsSeen.erase({opLowering.op, opLowering.phase});
     opsWorklist.pop_back();
@@ -228,70 +271,37 @@ Value ModuleLowering::getAllocatedState(OpResult result) {
   if (auto alloc = allocatedStates.lookup(result))
     return alloc;
 
-  // Zip up to the body of the `ModelOp` we're currently populating and create
-  // the allocation op there.
-  OpBuilder::InsertionGuard guard(builder);
-  while (builder.getBlock() != storageArg.getParentBlock())
-    builder.setInsertionPoint(builder.getBlock()->getParentOp());
-
-  auto type = dyn_cast<IntegerType>(result.getType());
-  if (!type) {
-    result.getOwner()->emitOpError()
-        << "result #" << result.getResultNumber() << " is of non-integer type "
-        << result.getType();
-    return {};
+  // Handle memories.
+  if (auto memOp = dyn_cast<MemoryOp>(result.getOwner())) {
+    auto alloc = allocBuilder.create<AllocMemoryOp>(
+        memOp.getLoc(), memOp.getType(), storageArg, memOp->getAttrs());
+    allocatedStates.insert({result, alloc});
+    return alloc;
   }
-  auto alloc = builder.create<AllocStateOp>(result.getLoc(),
-                                            StateType::get(type), storageArg);
+
+  // Create the allocation op.
+  auto alloc = allocBuilder.create<AllocStateOp>(
+      result.getLoc(), StateType::get(result.getType()), storageArg);
   allocatedStates.insert({result, alloc});
+
+  // HACK: If the result comes from an instance op, add the instance and port
+  // name as an attribute to the allocation. This will make it show up in the C
+  // headers later. Get rid of this once we have proper debug dialect support.
+  if (auto instOp = dyn_cast<InstanceOp>(result.getOwner()))
+    alloc->setAttr(
+        "name", builder.getStringAttr(
+                    instOp.getInstanceName() + "/" +
+                    instOp.getResultName(result.getResultNumber()).getValue()));
 
   // HACK: If the result comes from an op that has a "names" attribute, use that
   // as a name for the allocation. This should no longer be necessary once we
   // properly support the Debug dialect.
-  if (auto names = result.getOwner()->getAttrOfType<ArrayAttr>("names"))
-    if (names.size() > result.getResultNumber())
-      alloc->setAttr("name", names[result.getResultNumber()]);
+  if (isa<StateOp>(result.getOwner()))
+    if (auto names = result.getOwner()->getAttrOfType<ArrayAttr>("names"))
+      if (result.getResultNumber() < names.size())
+        alloc->setAttr("name", names[result.getResultNumber()]);
 
   return alloc;
-}
-
-/// Return the `arc.alloc_state` associated with the given instance op result.
-/// Creates the allocation ops if they do not yet exist.
-Value ModuleLowering::getAllocatedInstanceOutput(OpResult result) {
-  if (auto alloc = allocatedInstanceOutputs.lookup(result))
-    return alloc;
-
-  // Zip up to the body of the `ModelOp` we're currently populating and create
-  // the allocation ops there.
-  OpBuilder::InsertionGuard guard(builder);
-  while (builder.getBlock() != storageArg.getParentBlock())
-    builder.setInsertionPoint(builder.getBlock()->getParentOp());
-
-  // Then allocate storage for each instance output.
-  auto op = cast<InstanceOp>(result.getOwner());
-  for (auto [result, name] : llvm::zip(op.getResults(), op.getResultNames())) {
-    auto loc = result.getLoc(); // should actually be output port location
-    auto type = dyn_cast<IntegerType>(result.getType());
-    if (!type && isa<seq::ClockType>(result.getType()))
-      type = builder.getI1Type();
-    if (!type) {
-      mlir::emitError(loc) << "output " << name << " of instance "
-                           << op.getInstanceName() << " is of non-integer type "
-                           << result.getType();
-      return {};
-    }
-    auto state =
-        builder.create<AllocStateOp>(loc, StateType::get(type), storageArg);
-    state->setAttr("name",
-                   builder.getStringAttr(op.getInstanceName() + "/" +
-                                         cast<StringAttr>(name).getValue()));
-    auto read = builder.create<StateReadOp>(result.getLoc(), state);
-    if (isa<seq::ClockType>(result.getType()))
-      return builder.create<seq::ToClockOp>(result.getLoc(), read);
-    allocatedInstanceOutputs[result] = state;
-  }
-
-  return allocatedInstanceOutputs.lookup(result);
 }
 
 /// Allocate the necessary storage, reads, writes, and comparisons to detect a
@@ -302,7 +312,7 @@ Value ModuleLowering::detectPosedge(Value clock) {
     clock = builder.createOrFold<seq::FromClockOp>(loc, clock);
 
   // Allocate storage to store the previous clock value.
-  auto oldStorage = builder.create<AllocStateOp>(
+  auto oldStorage = allocBuilder.create<AllocStateOp>(
       loc, StateType::get(builder.getI1Type()), storageArg);
 
   // Read the old clock value from storage and write the new clock value to
@@ -320,20 +330,49 @@ Value ModuleLowering::detectPosedge(Value clock) {
 // Operation Lowering
 //===----------------------------------------------------------------------===//
 
+/// Create a new `scf.if` operation with the given builder, or reuse a previous
+/// `scf.if` if the builder's insertion point is located right after it.
+static scf::IfOp createOrReuseIf(OpBuilder &builder, Value condition,
+                                 bool withElse) {
+  scf::IfOp ifClockOp;
+  if (auto ip = builder.getInsertionPoint(); ip != builder.getBlock()->begin())
+    if (auto ifOp = dyn_cast<scf::IfOp>(*std::prev(ip)))
+      if (ifOp.getCondition() == condition)
+        return ifOp;
+  return builder.create<scf::IfOp>(condition.getLoc(), condition, withElse);
+}
+
+/// This function is called from the lowering worklist in order to perform a
+/// depth-first traversal of the surrounding module. These functions call
+/// `lowerValue` to mark their operands as dependencies in the depth-first
+/// traversal, and to map them to the lowered value in one go.
 LogicalResult OpLowering::lower() {
   return TypeSwitch<Operation *, LogicalResult>(op)
-      .Case<StateOp, InstanceOp, hw::OutputOp>(
+      // Operations with special lowering.
+      .Case<StateOp, MemoryOp, InstanceOp, hw::OutputOp>(
           [&](auto op) { return lower(op); })
-      .Case<TapOp, MemoryOp, MemoryReadPortOp, MemoryWritePortOp,
-            sim::DPICallOp, seq::InitialOp>([&](auto op) {
+
+      // Operations that should be skipped entirely and never land on the
+      // worklist to be lowered.
+      .Case<MemoryWritePortOp, MemoryReadPortOp>([&](auto op) {
+        op.emitOpError() << "is handled by memory op and must be skipped";
+        return success();
+      })
+
+      // Not yet supported.
+      .Case<TapOp, sim::DPICallOp, seq::InitialOp>([&](auto op) {
         if (initial)
           return success();
         op.emitOpError() << "state lowering not yet implemented";
         return failure();
       })
+
+      // All other ops are simply cloned into the lowered model.
       .Default([&](auto) { return lowerDefault(); });
 }
 
+/// Called for all operations for which there is no special lowering. Simply
+/// clones the operation.
 LogicalResult OpLowering::lowerDefault() {
   if (op->getNumRegions() > 0)
     return op->emitOpError("has regions which is not supported in LowerState");
@@ -359,6 +398,10 @@ LogicalResult OpLowering::lowerDefault() {
   return success();
 }
 
+/// Lower a state to a corresponding storage allocation and write of the state's
+/// new value to it. This function uses the `Old` phase to get the values at the
+/// state input before the current update, and then uses them to compute the
+/// `New` value.
 LogicalResult OpLowering::lower(StateOp op) {
   if (phase != Phase::New)
     return op.emitOpError() << "cannot be lowered in the " << phase << " phase";
@@ -381,27 +424,14 @@ LogicalResult OpLowering::lower(StateOp op) {
     return op.emitOpError() << "must have a clock";
   if (!op.getInitials().empty())
     return op.emitOpError() << "must not have initial values";
-
-  // Detect the clock edge.
-  auto &posedge = module.loweredPosedges[op.getClock()];
-  if (!posedge) {
-    auto clock = lowerValue(op.getClock(), Phase::New);
-    if (!clock)
-      return failure();
-    posedge = module.detectPosedge(clock);
-  }
+  if (op.getLatency() > 1)
+    return op.emitOpError("latencies > 1 not supported yet");
 
   // Check if we're inserting right after an if op for the same clock edge, in
   // which case we can reuse that op. Otherwise create the new if op.
-  scf::IfOp ifClockOp;
-  if (auto ip = module.builder.getInsertionPoint();
-      ip != module.builder.getBlock()->begin())
-    if (auto ifOp = dyn_cast<scf::IfOp>(*std::prev(ip)))
-      if (ifOp.getCondition() == posedge)
-        ifClockOp = ifOp;
+  auto ifClockOp = createIfClockOp(op.getClock());
   if (!ifClockOp)
-    ifClockOp =
-        module.builder.create<scf::IfOp>(posedge.getLoc(), posedge, false);
+    return failure();
   OpBuilder::InsertionGuard guard(module.builder);
   module.builder.setInsertionPoint(ifClockOp.thenYield());
 
@@ -429,14 +459,7 @@ LogicalResult OpLowering::lower(StateOp op) {
 
     // Check if we're inserting right after an if op for the same reset, in
     // which case we can reuse that op. Otherwise create the new if op.
-    scf::IfOp ifResetOp;
-    if (auto ip = module.builder.getInsertionPoint();
-        ip != module.builder.getBlock()->begin())
-      if (auto ifOp = dyn_cast<scf::IfOp>(*std::prev(ip)))
-        if (ifOp.getCondition() == reset)
-          ifResetOp = ifOp;
-    if (!ifResetOp)
-      ifResetOp = module.builder.create<scf::IfOp>(op.getLoc(), reset, true);
+    auto ifResetOp = createOrReuseIf(module.builder, reset, true);
     module.builder.setInsertionPoint(ifResetOp.thenYield());
 
     // Generate the zero value writes.
@@ -467,18 +490,11 @@ LogicalResult OpLowering::lower(StateOp op) {
 
     // Check if we're inserting right after an if op for the same enable, in
     // which case we can reuse that op. Otherwise create the new if op.
-    scf::IfOp ifEnableOp;
-    if (auto ip = module.builder.getInsertionPoint();
-        ip != module.builder.getBlock()->begin())
-      if (auto ifOp = dyn_cast<scf::IfOp>(*std::prev(ip)))
-        if (ifOp.getCondition() == enable)
-          ifEnableOp = ifOp;
-    if (!ifEnableOp)
-      ifEnableOp = module.builder.create<scf::IfOp>(op.getLoc(), enable, false);
+    auto ifEnableOp = createOrReuseIf(module.builder, enable, false);
     module.builder.setInsertionPoint(ifEnableOp.thenYield());
   }
 
-  // Get the transfer function inputs. This potential inserts read ops.
+  // Get the transfer function inputs. This potentially inserts read ops.
   SmallVector<Value> inputs;
   for (auto input : op.getInputs()) {
     auto lowered = lowerValue(input, Phase::Old);
@@ -505,6 +521,119 @@ LogicalResult OpLowering::lower(StateOp op) {
   return success();
 }
 
+/// Lower a memory and its read and write ports to corresponding
+/// `arc.memory_write` operations. Reads are also executed at this point and
+/// stored in `loweredValues` for later operations to pick up.
+LogicalResult OpLowering::lower(MemoryOp op) {
+  if (phase != Phase::New)
+    return op.emitOpError() << "cannot be lowered in the " << phase << " phase";
+
+  // Collect all the reads and writes.
+  SmallVector<MemoryReadPortOp> reads;
+  SmallVector<MemoryWritePortOp> writes;
+
+  for (auto *user : op->getUsers()) {
+    if (auto read = dyn_cast<MemoryReadPortOp>(user)) {
+      reads.push_back(read);
+    } else if (auto write = dyn_cast<MemoryWritePortOp>(user)) {
+      writes.push_back(write);
+    } else {
+      auto d = op.emitOpError()
+               << "users must all be memory read or write port ops";
+      d.attachNote(user->getLoc())
+          << "but found " << user->getName() << " user here";
+      return d;
+    }
+  }
+
+  // Ensure all operands are lowered before we lower the memory itself.
+  if (initial) {
+    for (auto read : reads)
+      lowerValue(read, Phase::Old);
+    for (auto write : writes) {
+      if (write.getClock())
+        lowerValue(write.getClock(), Phase::New);
+      for (auto input : write.getInputs())
+        lowerValue(input, Phase::Old);
+    }
+    return success();
+  }
+
+  // Get the allocated storage for the memory.
+  auto state = module.getAllocatedState(op->getResult(0));
+
+  // Since we are going to write new values into storage, insert read ops that
+  // keep the old values around for any later ops that still need them.
+  for (auto read : reads) {
+    auto oldValue = lowerValue(read, Phase::Old);
+    if (!oldValue)
+      return failure();
+    module.loweredValues[{read, Phase::Old}] = oldValue;
+  }
+
+  // Lower the writes.
+  for (auto write : writes) {
+    if (!write.getClock())
+      return write.emitOpError() << "must have a clock";
+    if (write.getLatency() > 1)
+      return write.emitOpError("latencies > 1 not supported yet");
+
+    // Create the if op for the clock edge.
+    auto ifClockOp = createIfClockOp(write.getClock());
+    if (!ifClockOp)
+      return failure();
+    OpBuilder::InsertionGuard guard(module.builder);
+    module.builder.setInsertionPoint(ifClockOp.thenYield());
+
+    // Call the arc that computes the address, data, and enable.
+    SmallVector<Value> inputs;
+    for (auto input : write.getInputs()) {
+      auto lowered = lowerValue(input, Phase::Old);
+      if (!lowered)
+        return failure();
+      inputs.push_back(lowered);
+    }
+    auto callOp = module.builder.create<CallOp>(
+        write.getLoc(), write.getArcResultTypes(), write.getArc(), inputs);
+
+    // If the write has an enable, wrap the remaining logic in an if op.
+    if (write.getEnable()) {
+      auto ifEnableOp = createOrReuseIf(
+          module.builder, callOp.getResult(write.getEnableIdx()), false);
+      module.builder.setInsertionPoint(ifEnableOp.thenYield());
+    }
+
+    // If the write is masked, read the current
+    // value in the memory and merge it with the updated value.
+    auto address = callOp.getResult(write.getAddressIdx());
+    auto data = callOp.getResult(write.getDataIdx());
+    if (write.getMask()) {
+      auto mask = callOp.getResult(write.getMaskIdx(write.getEnable()));
+      auto maskInv = module.builder.createOrFold<comb::XorOp>(
+          write.getLoc(), mask,
+          module.builder.create<ConstantOp>(write.getLoc(), mask.getType(),
+                                            -1));
+      auto oldData =
+          module.builder.create<MemoryReadOp>(write.getLoc(), state, address);
+      auto oldMasked = module.builder.create<comb::AndOp>(
+          write.getLoc(), maskInv, oldData, true);
+      auto newMasked =
+          module.builder.create<comb::AndOp>(write.getLoc(), mask, data, true);
+      data = module.builder.create<comb::OrOp>(write.getLoc(), oldMasked,
+                                               newMasked, true);
+    }
+
+    // Actually write to the memory.
+    module.builder.create<MemoryWriteOp>(write.getLoc(), state, address,
+                                         Value{}, data);
+  }
+
+  return success();
+}
+
+/// Lower an instance by allocating state storage for each of its inputs and
+/// writing the current value into that storage. This makes instance inputs
+/// behave like outputs of the top-level module.
 LogicalResult OpLowering::lower(InstanceOp op) {
   // Get the current values flowing into the instance's inputs.
   SmallVector<Value> values;
@@ -518,29 +647,26 @@ LogicalResult OpLowering::lower(InstanceOp op) {
   // Then allocate storage for each instance input and assign the corresponding
   // value.
   for (auto [value, name] : llvm::zip(values, op.getArgNames())) {
-    auto loc = value.getLoc(); // should actually be output port location
-    auto type = dyn_cast<IntegerType>(value.getType());
-    if (!type && isa<seq::ClockType>(value.getType()))
-      type = module.builder.getI1Type();
-    if (!type)
-      return mlir::emitError(loc, "input ")
-             << name << " of instance " << op.getInstanceName()
-             << " is of non-integer type " << value.getType();
-    auto castValue = value;
-    if (isa<seq::ClockType>(value.getType()))
-      castValue =
-          module.builder.create<seq::FromClockOp>(value.getLoc(), castValue);
-    auto state = module.builder.create<AllocStateOp>(loc, StateType::get(type),
-                                                     module.storageArg);
+    auto state = module.allocBuilder.create<AllocStateOp>(
+        value.getLoc(), StateType::get(value.getType()), module.storageArg);
     state->setAttr("name", module.builder.getStringAttr(
                                op.getInstanceName() + "/" +
                                cast<StringAttr>(name).getValue()));
-    module.builder.create<StateWriteOp>(value.getLoc(), state, castValue,
-                                        Value{});
+    module.builder.create<StateWriteOp>(value.getLoc(), state, value, Value{});
   }
+
+  // HACK: Also ensure that storage has been allocated for all outputs.
+  // Otherwise only the actually used instance outputs would be allocated, which
+  // would make the optimization user-visible. Remove this once we use the debug
+  // dialect.
+  for (auto result : op.getResults())
+    module.getAllocatedState(result);
+
   return success();
 }
 
+/// Lower the main module's outputs by allocating storage for each and then
+/// writing the current value into that storage.
 LogicalResult OpLowering::lower(hw::OutputOp op) {
   // First get the current value of all outputs.
   SmallVector<Value> values;
@@ -554,35 +680,44 @@ LogicalResult OpLowering::lower(hw::OutputOp op) {
   // Then allocate storage for each output and assign the corresponding value.
   for (auto [value, name] :
        llvm::zip(values, module.moduleOp.getOutputNames())) {
-    auto loc = value.getLoc(); // should actually be output port location
-    auto type = dyn_cast<IntegerType>(value.getType());
-    if (!type && isa<seq::ClockType>(value.getType()))
-      type = module.builder.getI1Type();
-    if (!type)
-      return mlir::emitError(loc, "output ")
-             << name << " is of non-integer type " << value.getType();
-    auto state = module.builder.create<RootOutputOp>(
-        loc, StateType::get(type), cast<StringAttr>(name), module.storageArg);
-    auto castValue = value;
-    if (isa<seq::ClockType>(value.getType()))
-      castValue =
-          module.builder.create<seq::FromClockOp>(value.getLoc(), castValue);
-    module.builder.create<StateWriteOp>(value.getLoc(), state, castValue,
-                                        Value{});
+    auto state = module.allocBuilder.create<RootOutputOp>(
+        value.getLoc(), StateType::get(value.getType()), cast<StringAttr>(name),
+        module.storageArg);
+    module.builder.create<StateWriteOp>(value.getLoc(), state, value, Value{});
   }
   return success();
 }
 
+/// Create the operations necessary to detect a posedge on the given clock,
+/// potentially reusing a previous posedge detection, and create an `scf.if`
+/// operation for that posedge. This also tries to reuse an `scf.if` operation
+/// immediately before the builder's insertion point if possible.
+scf::IfOp OpLowering::createIfClockOp(Value clock) {
+  auto &posedge = module.loweredPosedges[clock];
+  if (!posedge) {
+    auto loweredClock = lowerValue(clock, Phase::New);
+    if (!loweredClock)
+      return {};
+    posedge = module.detectPosedge(loweredClock);
+  }
+  return createOrReuseIf(module.builder, posedge, false);
+}
+
+//===----------------------------------------------------------------------===//
+// Value Lowering
+//===----------------------------------------------------------------------===//
+
+/// Lower a value being used by the current operation. This will mark the
+/// defining operation as to be lowered first (through `addPending`) in most
+/// cases. Some operations and values have special handling though. For example,
+/// states and memory reads are immediately materialized as a new read op.
 Value OpLowering::lowerValue(Value value, Phase phase) {
   // Handle module inputs. They read the same in all phases.
   if (auto arg = dyn_cast<BlockArgument>(value)) {
     if (initial)
       return {};
     auto state = module.allocatedInputs[arg.getArgNumber()];
-    auto read = module.builder.create<StateReadOp>(arg.getLoc(), state);
-    if (isa<seq::ClockType>(arg.getType()))
-      return module.builder.create<seq::ToClockOp>(arg.getLoc(), read);
-    return read;
+    return module.builder.create<StateReadOp>(arg.getLoc(), state);
   }
 
   // Check if the value has already been lowered.
@@ -594,69 +729,102 @@ Value OpLowering::lowerValue(Value value, Phase phase) {
   auto result = cast<OpResult>(value);
   auto *op = result.getOwner();
 
-  // Handle instance outputs. They behave essentially like a top-level module
-  // input, and read the same in all phases.
-  if (isa<InstanceOp>(op)) {
-    if (initial)
-      return {};
-    auto state = module.getAllocatedInstanceOutput(result);
-    if (!state)
-      return {};
-    return module.builder.create<StateReadOp>(result.getLoc(), state);
-  }
+  // Special handling for some ops.
+  if (auto instOp = dyn_cast<InstanceOp>(op))
+    return lowerValue(instOp, result, phase);
+  if (auto stateOp = dyn_cast<StateOp>(op))
+    return lowerValue(stateOp, result, phase);
+  if (auto readOp = dyn_cast<MemoryReadPortOp>(op))
+    return lowerValue(readOp, result, phase);
 
-  // Special handling for state ops.
-  if (isa<StateOp>(op)) {
-    // The old value of a state can be read from its allocated storage. The
-    // lowering guarantees that the updated value has not yet been written to
-    // storage. (If such an update would have already happened, the
-    // `loweredValues` lookup above would have returned the old value of the
-    // state.)
-    if (phase == Phase::Old) {
-      if (initial)
-        return {};
-      assert(!module.loweredOps.contains({op, Phase::New}) &&
-             "need old value but new value already written");
-      auto state = module.getAllocatedState(result);
-      if (!state)
-        return {};
-      return module.builder.create<StateReadOp>(result.getLoc(), state);
-    }
-
-    // To get the new value of a state after it has been updated, first compute
-    // the state update itself, and then simply read back the updated value.
-    if (phase == Phase::New) {
-      if (initial) {
-        addPending(op, Phase::New);
-        return {};
-      }
-      auto state = module.getAllocatedState(result);
-      if (!state)
-        return {};
-      return module.builder.create<StateReadOp>(result.getLoc(), state);
-    }
-
-    if (!initial)
-      op->emitOpError() << "result cannot be used in " << phase << " phase\n";
-    return {};
-  }
-
-  // Otherwise we first have to lower the given value.
+  // Otherwise we mark the defining operation as to be lowered first. This will
+  // cause the lookup in `loweredValues` above to return a value the next time
+  // (i.e. when initial is false).
   if (initial) {
     addPending(op, phase);
     return {};
   }
-  auto d = op->emitOpError() << "operand value has not been lowered";
+  auto d = this->op->emitOpError() << "operand value has not been lowered";
   d.attachNote(result.getLoc()) << "value defined here";
   return {};
 }
 
+/// Handle instance outputs. They behave essentially like a top-level module
+/// input, and read the same in all phases.
+Value OpLowering::lowerValue(InstanceOp op, OpResult result, Phase phase) {
+  if (initial)
+    return {};
+  auto state = module.getAllocatedState(result);
+  return module.builder.create<StateReadOp>(result.getLoc(), state);
+}
+
+/// Handle uses of a state. This creates a `arc.state_read` op to read from the
+/// state's storage. If the new value after all updates is requested, marks the
+/// state as to be lowered first (which will perform the writes). If the old
+/// value is requested, asserts that no new values have been written.
+Value OpLowering::lowerValue(StateOp op, OpResult result, Phase phase) {
+  if (initial) {
+    // Ensure that new value is written before we attempt to read it.
+    if (phase == Phase::New)
+      addPending(op, Phase::New);
+    return {};
+  }
+
+  if (phase == Phase::Old) {
+    // If we want to read the old value, no writes must have been lowered yet.
+    assert(!module.loweredOps.contains({op, Phase::New}) &&
+           "need old value but new value already written");
+  } else if (phase != Phase::New) {
+    op.emitOpError() << "result cannot be used in " << phase << " phase\n";
+    return {};
+  }
+
+  auto state = module.getAllocatedState(result);
+  return module.builder.create<StateReadOp>(result.getLoc(), state);
+}
+
+/// Handle uses of a memory read operation. This creates an `arc.memory_read` op
+/// to read from the memory's storage. Similar to the `StateOp` handling
+/// otherwise.
+Value OpLowering::lowerValue(MemoryReadPortOp op, OpResult result,
+                             Phase phase) {
+  auto memOp = op.getMemory().getDefiningOp<MemoryOp>();
+  if (!memOp) {
+    if (!initial)
+      op->emitOpError() << "memory must be defined locally";
+    return {};
+  }
+
+  auto address = lowerValue(op.getAddress(), phase);
+  if (initial) {
+    // Ensure that all new values are written before we attempt to read them.
+    if (phase == Phase::New)
+      addPending(memOp.getOperation(), Phase::New);
+    return {};
+  }
+
+  if (phase == Phase::Old) {
+    // If we want to read the old value, no writes must have been lowered yet.
+    assert(!module.loweredOps.contains({memOp, Phase::New}) &&
+           "need old memory value but new value already written");
+  } else if (phase != Phase::New) {
+    op.emitOpError() << "result cannot be used in " << phase << " phase\n";
+    return {};
+  }
+
+  auto state = module.getAllocatedState(memOp->getResult(0));
+  return module.builder.create<MemoryReadOp>(result.getLoc(), state, address);
+}
+
+/// Mark a value as to be lowered before the current op.
 void OpLowering::addPending(Value value, Phase phase) {
   auto *defOp = value.getDefiningOp();
   assert(defOp && "block args should never be marked as a dependency");
   addPending(defOp, phase);
 }
 
+/// Mark an operation as to be lowered before the current op. This adds that
+/// operation to the `pending` list if the operation has not yet been lowered.
 void OpLowering::addPending(Operation *op, Phase phase) {
   auto pair = std::make_pair(op, phase);
   if (!module.loweredOps.contains(pair))
