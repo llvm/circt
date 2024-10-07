@@ -139,7 +139,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
       firrtl::createLayerMergePass());
 
   if (opt.shouldAdvancedLayerSink())
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLayerSinkPass());
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createAdvancedLayerSinkPass());
   else
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createLayerSinkPass());
