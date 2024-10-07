@@ -467,7 +467,7 @@ def TriggeredOp : SimOp<"triggered", [
   let description = [{
     Creates a procedural region which is invoked on a given trigger.
     The optional condition allows the execution of the body to be skipped, if
-    the condition evaluates to `false` at the time when the triggers's
+    the condition evaluates to `false` at the time when the trigger's
     root event occurs.
     The body region must complete without 'consuming' simulation time. It
     may not run indefinitely or wait for any simulation event. It is allowed to
