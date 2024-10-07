@@ -15,9 +15,13 @@
 
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/FunctionInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/IR/BuiltinAttributes.td"
+include "mlir/IR/RegionKindInterface.td"
 include "circt/Dialect/Sim/SimDialect.td"
 include "circt/Dialect/Sim/SimTypes.td"
 include "circt/Dialect/Seq/SeqTypes.td"
+include "circt/Dialect/HW/HWEnums.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 
@@ -319,12 +323,6 @@ def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
     /// and flattening continues without recursing into the cycle.
     LogicalResult getFlattenedInputs(llvm::SmallVectorImpl<Value> &flatOperands);
   }];
-
-  let builders = [
-    OpBuilder<(ins "mlir::ValueRange":$inputs), [{
-      return build($_builder, $_state, circt::sim::FormatStringType::get($_builder.getContext()), inputs);
-    }]>
-  ];
 }
 
 def PrintFormattedOp : SimOp<"print"> {
@@ -363,6 +361,125 @@ def PrintFormattedProcOp : SimOp<"proc.print"> {
   let hasCanonicalizeMethod = true;
 
   let assemblyFormat = "$input attr-dict";
+}
+
+// --- Trigger Ops ---
+
+def OnEdgeOp : SimOp<"on_edge", [
+  Pure,
+  DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>
+]> {
+  let summary = "Invoke a trigger on a clock edge event.";
+  let arguments = (ins ClockType:$clock, EventControlAttr:$event);
+  let results = (outs EdgeTriggerType:$result);
+  let assemblyFormat = "$event $clock attr-dict";
+}
+
+def OnInitOp : SimOp<"on_init", [Pure]> {
+  let summary = "Invoke a trigger at the start of simulation.";
+  let results = (outs InitTriggerType:$result);
+  let assemblyFormat = "attr-dict";
+}
+
+def TriggerSequenceOp : SimOp<"trigger_sequence", [
+  Pure,
+  DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>
+]> {
+  let summary = "Derive a sequence of triggers from a parent trigger.";
+  let description = [{
+   Creates a series of sequenced triggers.
+   The first resulting trigger is invoked when the parent trigger is invoked.
+   The subsequent triggers are invoked after all preceeding triggers
+   have completed. The operation completes after all result triggers have
+   completed.
+  }];
+  let arguments = (ins AnyTriggerType:$parent, UI32Attr:$length);
+  let results = (outs Variadic<AnyTriggerType>:$triggers);
+  let assemblyFormat =
+    "$parent `,` $length attr-dict `:` qualified(type($parent))";
+  let hasFolder = true;
+  let hasCanonicalizeMethod = true;
+  let hasVerifier = true;
+}
+
+def YieldSeqOp : SimOp<"yield_seq",[
+  Terminator, HasParent<"circt::sim::TriggeredOp">
+]> {
+  let summary = [{Yield results form a triggerd region with 'seq'
+   (i.e. register-like) semantics."}];
+  let description = [{
+    Terminates a triggered region and produces the given list of values.
+    The results only become visible after all triggers and register updates
+    occuring on the same event as the parent operation have completed.
+    E.g., the following snippet produces a counter that increments on every
+    rising edge of '%clk':
+    ```
+    %posedge = sim.on_edge posedge %clk
+    %counter = sim.triggered (%counter) on %posedge tieoff [0 : i8] {
+      ^bb0(%arg0: i8):
+      %cst1 = hw.constant 1 : i8
+      %inc = comb.add bin %arg0, %cst1 : i8
+      sim.yield_seq %inc : i8
+    } : (i8) -> (i8)
+    ```
+  }];
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let assemblyFormat = "($inputs^ `:` qualified(type($inputs)))? attr-dict";
+  let builders = [OpBuilder<(ins), "build($_builder, $_state, {});">];
+}
+
+def TriggeredOp : SimOp<"triggered", [
+  AttrSizedOperandSegments,
+  IsolatedFromAbove,
+  RegionKindInterface,
+  RecursiveMemoryEffects,
+  RecursivelySpeculatable,
+  SingleBlockImplicitTerminator<"sim::YieldSeqOp">,
+  HasParent<"circt::hw::HWModuleOp">
+]> {
+  let summary = [{
+    Defines a procedure invoked on a given trigger and condition.
+  }];
+  let description = [{
+    Creates a procedural region which is invoked on a given trigger.
+    The optional condition allows the execution of the body to be skipped, if
+    the condition evaluates to `false` at the time when the triggers's
+    root event occurs.
+    The body region must complete without 'consuming' simulation time. It
+    may not run indefinitely or wait for any simulation event. It is allowed to
+    have side-effects and produce results.
+    For every result a 'tieoff' constant must be provided. It specifies the
+    respective result's value before the body is first invoked.
+    For non-simulation flows the results are replaced by their tie-off values.
+  }];
+  let arguments = (ins AnyTriggerType:$trigger,
+                       Optional<I1>:$condition,
+                       Variadic<AnyType>:$inputs,
+                       OptionalAttr<TypedArrayAttrBase<
+                        TypedAttrInterface, "Tie-off constants">>:$tieoffs
+                  );
+  let results = (outs Variadic<AnyType>);
+  let regions = (region SizedRegion<1>:$body);
+
+  let assemblyFormat = [{
+    ` ` `(` $inputs `)`
+    `on` ` ` `(` $trigger `:` qualified(type($trigger)) `)`
+    (`if` $condition^)?
+    (`tieoff` $tieoffs^)? attr-dict-with-keyword
+    $body
+    `:` functional-type($inputs, results)
+  }];
+
+  let extraClassDeclaration = [{
+    // Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) {
+     return RegionKind::SSACFG;
+    }
+  }];
+
+  let hasVerifier = true;
+  let hasFolder = true;
+  let hasCanonicalizeMethod = true;
 }
 
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD
