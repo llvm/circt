@@ -70,9 +70,79 @@ void llhd::ConstantTimeOp::build(OpBuilder &builder, OperationState &result,
 // SignalOp
 //===----------------------------------------------------------------------===//
 
+static Value getValueAtIndex(OpBuilder &builder, Location loc, Value val,
+                             unsigned index) {
+  return TypeSwitch<Type, Value>(val.getType())
+      .Case<hw::StructType>([&](hw::StructType ty) -> Value {
+        return builder.create<hw::StructExtractOp>(
+            loc, val, ty.getElements()[index].name);
+      })
+      .Case<hw::ArrayType>([&](hw::ArrayType ty) -> Value {
+        Value idx = builder.create<hw::ConstantOp>(
+            loc,
+            builder.getIntegerType(llvm::Log2_64_Ceil(ty.getNumElements())),
+            index);
+        return builder.create<hw::ArrayGetOp>(loc, val, idx);
+      });
+}
+
 void SignalOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   if (getName() && !getName()->empty())
     setNameFn(getResult(), *getName());
+}
+
+SmallVector<DestructurableMemorySlot> SignalOp::getDestructurableSlots() {
+  auto type = getType().getElementType();
+
+  auto destructurable = llvm::dyn_cast<DestructurableTypeInterface>(type);
+  if (!destructurable)
+    return {};
+
+  auto destructuredType = destructurable.getSubelementIndexMap();
+  if (!destructuredType)
+    return {};
+
+  return {DestructurableMemorySlot{{getResult(), type}, *destructuredType}};
+}
+
+DenseMap<Attribute, MemorySlot> SignalOp::destructure(
+    const DestructurableMemorySlot &slot,
+    const SmallPtrSetImpl<Attribute> &usedIndices, OpBuilder &builder,
+    SmallVectorImpl<DestructurableAllocationOpInterface> &newAllocators) {
+  assert(slot.ptr == getResult());
+  builder.setInsertionPointAfter(*this);
+
+  auto destructurableType =
+      cast<DestructurableTypeInterface>(getType().getElementType());
+  DenseMap<Attribute, MemorySlot> slotMap;
+  SmallVector<std::pair<unsigned, Type>> indices;
+  for (auto attr : usedIndices) {
+    assert(isa<IntegerAttr>(attr));
+    auto elemType = destructurableType.getTypeAtIndex(attr);
+    assert(elemType && "used index must exist");
+    indices.push_back({cast<IntegerAttr>(attr).getInt(), elemType});
+  }
+
+  llvm::sort(indices, [](auto a, auto b) { return a.first < b.first; });
+
+  for (auto [index, type] : indices) {
+    Value init = getValueAtIndex(builder, getLoc(), getInit(), index);
+    auto sigOp = builder.create<SignalOp>(getLoc(), getNameAttr(), init);
+    newAllocators.push_back(sigOp);
+    slotMap.try_emplace<MemorySlot>(
+        IntegerAttr::get(IndexType::get(getContext()), index),
+        {sigOp.getResult(), type});
+  }
+
+  return slotMap;
+}
+
+std::optional<DestructurableAllocationOpInterface>
+SignalOp::handleDestructuringComplete(const DestructurableMemorySlot &slot,
+                                      OpBuilder &builder) {
+  assert(slot.ptr == getResult());
+  this->erase();
+  return std::nullopt;
 }
 
 //===----------------------------------------------------------------------===//
@@ -164,6 +234,51 @@ LogicalResult llhd::PtrArraySliceOp::canonicalize(llhd::PtrArraySliceOp op,
 }
 
 //===----------------------------------------------------------------------===//
+// SigArrayGetOp
+//===----------------------------------------------------------------------===//
+
+bool SigArrayGetOp::canRewire(const DestructurableMemorySlot &slot,
+                              SmallPtrSetImpl<Attribute> &usedIndices,
+                              SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                              const DataLayout &dataLayout) {
+  if (slot.ptr != getInput())
+    return false;
+  APInt idx;
+  if (!matchPattern(getIndex(), m_ConstantInt(&idx)))
+    return false;
+  auto index =
+      IntegerAttr::get(IndexType::get(getContext()), idx.getZExtValue());
+  if (!slot.subelementTypes.contains(index))
+    return false;
+  usedIndices.insert(index);
+  mustBeSafelyUsed.emplace_back<MemorySlot>(
+      {getResult(),
+       cast<hw::InOutType>(getResult().getType()).getElementType()});
+  return true;
+}
+
+DeletionKind SigArrayGetOp::rewire(const DestructurableMemorySlot &slot,
+                                   DenseMap<Attribute, MemorySlot> &subslots,
+                                   OpBuilder &builder,
+                                   const DataLayout &dataLayout) {
+  APInt idx;
+  bool result = matchPattern(getIndex(), m_ConstantInt(&idx));
+  assert(result);
+  auto index =
+      IntegerAttr::get(IndexType::get(getContext()), idx.getZExtValue());
+  auto it = subslots.find(index);
+  assert(it != subslots.end());
+  replaceAllUsesWith(it->getSecond().ptr);
+  return DeletionKind::Delete;
+}
+
+LogicalResult SigArrayGetOp::ensureOnlySafeAccesses(
+    const MemorySlot &slot, SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+    const DataLayout &dataLayout) {
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // SigStructExtractOp and PtrStructExtractOp
 //===----------------------------------------------------------------------===//
 
@@ -203,6 +318,102 @@ LogicalResult llhd::PtrStructExtractOp::inferReturnTypes(
       context, loc, operands, attrs, properties, regions, results);
 }
 
+bool SigStructExtractOp::canRewire(
+    const DestructurableMemorySlot &slot,
+    SmallPtrSetImpl<Attribute> &usedIndices,
+    SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+    const DataLayout &dataLayout) {
+  if (slot.ptr != getInput())
+    return false;
+  auto index = cast<hw::StructType>(
+                   cast<hw::InOutType>(getInput().getType()).getElementType())
+                   .getFieldIndex(getFieldAttr());
+  if (!index)
+    return false;
+  auto indexAttr = IntegerAttr::get(IndexType::get(getContext()), *index);
+  if (!slot.subelementTypes.contains(indexAttr))
+    return false;
+  usedIndices.insert(indexAttr);
+  mustBeSafelyUsed.emplace_back<MemorySlot>(
+      {getResult(),
+       cast<hw::InOutType>(getResult().getType()).getElementType()});
+  return true;
+}
+
+DeletionKind
+SigStructExtractOp::rewire(const DestructurableMemorySlot &slot,
+                           DenseMap<Attribute, MemorySlot> &subslots,
+                           OpBuilder &builder, const DataLayout &dataLayout) {
+  auto index = cast<hw::StructType>(
+                   cast<hw::InOutType>(getInput().getType()).getElementType())
+                   .getFieldIndex(getFieldAttr());
+  assert(index.has_value());
+  auto indexAttr = IntegerAttr::get(IndexType::get(getContext()), *index);
+  auto it = subslots.find(indexAttr);
+  assert(it != subslots.end());
+  replaceAllUsesWith(it->getSecond().ptr);
+  return DeletionKind::Delete;
+}
+
+LogicalResult SigStructExtractOp::ensureOnlySafeAccesses(
+    const MemorySlot &slot, SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+    const DataLayout &dataLayout) {
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// PrbOp
+//===----------------------------------------------------------------------===//
+
+static void getSortedPtrs(DenseMap<Attribute, MemorySlot> &subslots,
+                          SmallVectorImpl<std::pair<unsigned, Value>> &sorted) {
+  for (auto [attr, mem] : subslots) {
+    assert(isa<IntegerAttr>(attr));
+    sorted.push_back({cast<IntegerAttr>(attr).getInt(), mem.ptr});
+  }
+
+  llvm::sort(sorted, [](auto a, auto b) { return a.first < b.first; });
+}
+
+bool PrbOp::canRewire(const DestructurableMemorySlot &slot,
+                      SmallPtrSetImpl<Attribute> &usedIndices,
+                      SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                      const DataLayout &dataLayout) {
+  for (auto [key, _] : slot.subelementTypes)
+    usedIndices.insert(key);
+
+  return isa<hw::StructType, hw::ArrayType>(slot.elemType);
+}
+
+DeletionKind PrbOp::rewire(const DestructurableMemorySlot &slot,
+                           DenseMap<Attribute, MemorySlot> &subslots,
+                           OpBuilder &builder, const DataLayout &dataLayout) {
+  SmallVector<std::pair<unsigned, Value>> elements;
+  SmallVector<Value> probed;
+  getSortedPtrs(subslots, elements);
+  for (auto [_, val] : elements)
+    probed.push_back(builder.create<PrbOp>(getLoc(), val));
+
+  Value repl = TypeSwitch<Type, Value>(getType())
+                   .Case<hw::StructType>([&](auto ty) {
+                     return builder.create<hw::StructCreateOp>(
+                         getLoc(), getType(), probed);
+                   })
+                   .Case<hw::ArrayType>([&](auto ty) {
+                     return builder.create<hw::ArrayCreateOp>(getLoc(), probed);
+                   });
+
+  replaceAllUsesWith(repl);
+  return DeletionKind::Delete;
+}
+
+LogicalResult
+PrbOp::ensureOnlySafeAccesses(const MemorySlot &slot,
+                              SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                              const DataLayout &dataLayout) {
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // DrvOp
 //===----------------------------------------------------------------------===//
@@ -231,6 +442,37 @@ LogicalResult llhd::DrvOp::canonicalize(llhd::DrvOp op,
   }
 
   return failure();
+}
+
+bool DrvOp::canRewire(const DestructurableMemorySlot &slot,
+                      SmallPtrSetImpl<Attribute> &usedIndices,
+                      SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                      const DataLayout &dataLayout) {
+  for (auto [key, _] : slot.subelementTypes)
+    usedIndices.insert(key);
+
+  return isa<hw::StructType, hw::ArrayType>(slot.elemType);
+}
+
+DeletionKind DrvOp::rewire(const DestructurableMemorySlot &slot,
+                           DenseMap<Attribute, MemorySlot> &subslots,
+                           OpBuilder &builder, const DataLayout &dataLayout) {
+  SmallVector<std::pair<unsigned, Value>> driven;
+  getSortedPtrs(subslots, driven);
+
+  for (auto [idx, sig] : driven)
+    builder.create<DrvOp>(getLoc(), sig,
+                          getValueAtIndex(builder, getLoc(), getValue(), idx),
+                          getTime(), getEnable());
+
+  return DeletionKind::Delete;
+}
+
+LogicalResult
+DrvOp::ensureOnlySafeAccesses(const MemorySlot &slot,
+                              SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                              const DataLayout &dataLayout) {
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

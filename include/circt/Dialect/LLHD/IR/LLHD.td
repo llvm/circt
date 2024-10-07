@@ -22,6 +22,7 @@ include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/FunctionInterfaces.td"
+include "mlir/Interfaces/MemorySlotInterfaces.td"
 include "mlir/IR/SymbolInterfaces.td"
 
 include "circt/Dialect/LLHD/IR/LLHDDialect.td"

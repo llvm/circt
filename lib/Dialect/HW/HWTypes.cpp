@@ -22,6 +22,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/StorageUniquerSupport.h"
 #include "mlir/IR/Types.h"
+#include "mlir/Interfaces/MemorySlotInterfaces.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSet.h"
@@ -405,6 +406,23 @@ StructType::getIndexAndSubfieldID(uint64_t fieldID) const {
   return {index, fieldID - elementFieldID};
 }
 
+std::optional<DenseMap<Attribute, Type>>
+hw::StructType::getSubelementIndexMap() const {
+  DenseMap<Attribute, Type> destructured;
+  for (auto [i, field] : llvm::enumerate(getElements()))
+    destructured.insert(
+        {IntegerAttr::get(IndexType::get(getContext()), i), field.type});
+  return destructured;
+}
+
+Type hw::StructType::getTypeAtIndex(Attribute index) const {
+  auto indexAttr = llvm::dyn_cast<IntegerAttr>(index);
+  if (!indexAttr)
+    return {};
+
+  return getSubTypeByFieldID(indexAttr.getInt()).first;
+}
+
 //===----------------------------------------------------------------------===//
 // Union Type
 //===----------------------------------------------------------------------===//
@@ -637,6 +655,19 @@ ArrayType::getIndexAndSubfieldID(uint64_t fieldID) const {
 
 uint64_t ArrayType::getFieldID(uint64_t index) const {
   return 1 + index * (hw::FieldIdImpl::getMaxFieldID(getElementType()) + 1);
+}
+
+std::optional<DenseMap<Attribute, Type>>
+hw::ArrayType::getSubelementIndexMap() const {
+  DenseMap<Attribute, Type> destructured;
+  for (unsigned i = 0; i < getNumElements(); ++i)
+    destructured.insert(
+        {IntegerAttr::get(IndexType::get(getContext()), i), getElementType()});
+  return destructured;
+}
+
+Type hw::ArrayType::getTypeAtIndex(Attribute index) const {
+  return getElementType();
 }
 
 //===----------------------------------------------------------------------===//
