@@ -178,6 +178,7 @@ LogicalResult MachineOpConverter::dispatch(){
   llvm::SmallVector<mlir::Type> argVarTypes;
   llvm::SmallVector<mlir::Value> argVars;
   int numArgs = 0;
+  int numOut = 0;
 
   mlir::TypeRange typeRange;
   mlir::ValueRange valueRange; 
@@ -188,8 +189,7 @@ LogicalResult MachineOpConverter::dispatch(){
 
   b.setInsertionPointToStart(solver.getBody());
 
-  // everything is an Int (even i1) because we want to have everything in the same structure
-  // and we can not mix ints and bools in the same vec
+  // fsm arguments
   for (auto a : args){
     if (a.getType().getIntOrFloatBitWidth()==1){
       auto intVal = b.getType<smt::BoolType>();
@@ -200,8 +200,26 @@ LogicalResult MachineOpConverter::dispatch(){
       argVarTypes.push_back(intVal);
       argVars.push_back(a);
     }
+    numArgs++;
   }
-  numArgs = argVars.size();
+
+
+  // fsm outputs
+  if (machineOp->getResults().size() > 0){
+    for (auto o : machineOp->getResults()){
+      if (o.getType().getIntOrFloatBitWidth()==1){
+        auto intVal = b.getType<smt::BoolType>();
+        argVarTypes.push_back(intVal);
+        argVars.push_back(o);
+      } else {
+        auto intVal = b.getType<smt::IntType>();
+        argVarTypes.push_back(intVal);
+        argVars.push_back(o);
+      }
+      numOut++;
+    }
+  }
+
   llvm::SmallVector<int> varInitValues;
 
   for (auto variableOp : machineOp.front().getOps<fsm::VariableOp>()) {
@@ -246,10 +264,17 @@ LogicalResult MachineOpConverter::dispatch(){
     auto range = b.getType<smt::BoolType>();
     smt::DeclareFunOp acFun = b.create<smt::DeclareFunOp>(loc, b.getType<smt::SMTFuncType>(stateFunTypes, range), acFunName);
     stateFunctions.push_back(acFun);
+    
     if (!stateOp.getTransitions().empty()){
       for (auto tr: stateOp.getTransitions().front().getOps<fsm::TransitionOp>()){
         auto t = parseTransition(tr, fromState, states, loc, b);
-      transitions.push_back(t);
+        if (!stateOp.getOutput().empty()){
+          t.hasOutput = true;
+          t.output = &stateOp.getOutput();
+        } else {
+          t.hasOutput = false;
+        }
+        transitions.push_back(t);
       }
     }
   }
@@ -283,8 +308,35 @@ LogicalResult MachineOpConverter::dispatch(){
   for(auto [id1, t1] : llvm::enumerate(transitions)){
     // each implication op is in the same region
         
-    auto action = [&t1, &loc, this, &argVars, &numArgs](llvm::SmallVector<mlir::Value> args) -> llvm::SmallVector<mlir::Value> {
+    auto action = [&t1, &loc, this, &argVars, &numArgs, &numOut](llvm::SmallVector<mlir::Value> args) -> llvm::SmallVector<mlir::Value> {
       // args includes the time, argvars does not
+      // update outputs if possible first
+      if (t1.hasOutput){
+        llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> avToSmt;
+        llvm::SmallVector<mlir::Value> outputSmtValues;
+        for(auto [id, av] : llvm::enumerate(argVars))
+          avToSmt.push_back({av, args[id]});
+        
+        for (auto [j, uv]: llvm::enumerate(avToSmt)){
+          if(int(j) >=  numArgs && int(j) < numArgs+numOut){ // only variables can be updated and time is updated separately
+            bool found = false;
+            // look for updates in the region
+            for(auto &op: t1.action->getOps()){
+              // todo: check that updates requiring inputs for operations work
+              if (auto returnOp = dyn_cast<fsm::ReturnOp>(op)){
+                if (returnOp->getOperand(1)==uv.first){
+                  auto toRet = getSmtValue(returnOp->getOperand(0), avToSmt, b, loc);
+                  outputSmtValues.push_back(toRet);
+                  found = true;
+                }
+              }
+            }
+            if(!found) // the value is not updated in the region 
+              outputSmtValues.push_back(uv.second);
+          }
+        }
+
+      }
       if (t1.hasAction) {
         llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> avToSmt;
         llvm::SmallVector<mlir::Value> updatedSmtValues;
