@@ -1170,15 +1170,19 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
     if (!needsClone && !propertyOperands && !propertyResults)
       continue;
 
-    if (isa<PropAssignOp>(op) &&
-        dyn_cast<BlockArgument>(cast<PropAssignOp>(op).getDest())) {
-      // Store any output property assignments into fields op inputs.
-      fieldLocs.push_back(op.getLoc());
-      fieldValues.push_back(mapping.lookup(cast<PropAssignOp>(op).getSrc()));
-    } else {
+    bool isField = false;
+    if (auto propAssign = dyn_cast<PropAssignOp>(op)) {
+      if (isa<BlockArgument>(propAssign.getDest())) {
+        // Store any output property assignments into fields op inputs.
+        fieldLocs.push_back(op.getLoc());
+        fieldValues.push_back(mapping.lookup(cast<PropAssignOp>(op).getSrc()));
+        isField = true;
+      }
+    }
+
+    if (!isField)
       // Clone the op over to the OM Class.
       builder.clone(op, mapping);
-    }
 
     // In case this is a Module, remember to erase this op, unless it is an
     // instance. Instances are handled later in updateInstances.
