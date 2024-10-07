@@ -397,6 +397,183 @@ LogicalResult PrintFormattedProcOp::canonicalize(PrintFormattedProcOp op,
   return failure();
 }
 
+// --- OnEdgeOp ---
+
+LogicalResult OnEdgeOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> location, ValueRange operands,
+    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    SmallVectorImpl<Type> &inferredReturnTypes) {
+  auto eventAttr = properties.as<OnEdgeOp::Properties *>()->getEvent();
+  inferredReturnTypes.emplace_back(
+      EdgeTriggerType::get(context, eventAttr.getValue()));
+  return success();
+}
+
+// --- TriggeredOp ---
+
+LogicalResult TriggeredOp::verify() {
+  if (getNumResults() > 0 && !getTieoffs())
+    return emitError("Tie-off constants must be provided for all results.");
+  auto numTieoffs = !getTieoffs() ? 0 : getTieoffsAttr().size();
+  if (numTieoffs != getNumResults())
+    return emitError(
+        "Number of tie-off constants does not match number of results.");
+  if (numTieoffs == 0)
+    return success();
+  unsigned idx = 0;
+  bool failed = false;
+  for (const auto &[res, tieoff] :
+       llvm::zip(getResultTypes(), getTieoffsAttr())) {
+    if (res != cast<TypedAttr>(tieoff).getType()) {
+      emitError("Tie-off type does not match for result at index " +
+                Twine(idx));
+      failed = true;
+    }
+    ++idx;
+  }
+  return success(!failed);
+}
+
+LogicalResult TriggeredOp::fold(FoldAdaptor adaptor,
+                                SmallVectorImpl<OpFoldResult> &results) {
+  if (auto constCond = dyn_cast_or_null<IntegerAttr>(adaptor.getCondition())) {
+    if (constCond.getValue().isAllOnes()) {
+      // Strip constant true condition.
+      getConditionMutable().clear();
+      return success();
+    }
+    // Never enabled, fold to tie-offs.
+    if (getNumResults() > 0) {
+      results.append(adaptor.getTieoffsAttr().begin(),
+                     adaptor.getTieoffsAttr().end());
+      return success();
+    }
+  }
+  return failure();
+}
+
+LogicalResult TriggeredOp::canonicalize(TriggeredOp op,
+                                        PatternRewriter &rewriter) {
+  if (op.getNumResults() > 0)
+    return failure();
+
+  bool isDeadOrEmpty = false;
+
+  auto *bodyBlock = &op.getBodyRegion().front();
+  isDeadOrEmpty = bodyBlock->without_terminator().empty();
+
+  if (!isDeadOrEmpty && !!op.getCondition())
+    if (auto cstCond = op.getCondition().getDefiningOp<hw::ConstantOp>())
+      isDeadOrEmpty = cstCond.getValue().isZero();
+
+  if (!isDeadOrEmpty)
+    return failure();
+
+  rewriter.eraseOp(op);
+  return success();
+}
+
+// --- TriggerSequenceOp ---
+
+LogicalResult TriggerSequenceOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> location, ValueRange operands,
+    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    SmallVectorImpl<Type> &inferredReturnTypes) {
+  // Create N results matching the type of the parent trigger, where N is the
+  // specified length of the sequence.
+  auto lengthAttr =
+      properties.as<TriggerSequenceOp::Properties *>()->getLength();
+  uint32_t len = lengthAttr.getValue().getZExtValue();
+  Type trigType = operands.front().getType();
+  inferredReturnTypes.resize_for_overwrite(len);
+  for (size_t i = 0; i < len; ++i)
+    inferredReturnTypes[i] = trigType;
+  return success();
+}
+
+LogicalResult TriggerSequenceOp::verify() {
+  if (getLength() != getNumResults())
+    return emitOpError("specified length does not match number of results.");
+  return success();
+}
+
+LogicalResult TriggerSequenceOp::fold(FoldAdaptor adaptor,
+                                      SmallVectorImpl<OpFoldResult> &results) {
+  // Fold trivial sequences to the parent trigger.
+  if (getLength() == 1 && getResult(0) != getParent()) {
+    results.push_back(getParent());
+    return success();
+  }
+  return failure();
+}
+
+LogicalResult TriggerSequenceOp::canonicalize(TriggerSequenceOp op,
+                                              PatternRewriter &rewriter) {
+  // Check if there are unused results (which can be removed) or
+  // non-concurrent sub-sequences (which can be inlined).
+  auto getSingleSequenceUser = [](Value trigger) -> TriggerSequenceOp {
+    if (!trigger.hasOneUse())
+      return {};
+    return dyn_cast<TriggerSequenceOp>(trigger.use_begin()->getOwner());
+  };
+
+  bool canBeChanged = false;
+  for (auto res : op.getResults()) {
+    auto singleSeqUser = getSingleSequenceUser(res);
+    if (singleSeqUser == op) {
+      op.emitWarning("Recursive trigger sequence.");
+      return failure();
+    }
+    if (res.use_empty() || !!singleSeqUser) {
+      canBeChanged = true;
+      break;
+    }
+  }
+
+  if (!canBeChanged)
+    return failure();
+
+  // Build a list of new result values.
+  SmallVector<Value> resultValues;
+  SmallVector<Location> locs;
+  SmallVector<TriggerSequenceOp> childSeqs;
+  locs.emplace_back(op.getLoc());
+  resultValues.reserve(op.getNumResults());
+  for (auto res : op.getResults()) {
+    if (res.use_empty())
+      continue;
+
+    if (auto seqUser = getSingleSequenceUser(res)) {
+      resultValues.append(seqUser.getResults().begin(),
+                          seqUser.getResults().end());
+      locs.emplace_back(seqUser.getLoc());
+      childSeqs.emplace_back(seqUser);
+    } else {
+      resultValues.emplace_back(res);
+    }
+  }
+
+  // Remove empty sequences.
+  if (resultValues.empty()) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  // Replace the current operation with a new sequence.
+  rewriter.setInsertionPoint(op);
+  auto fusedLoc = FusedLoc::get(rewriter.getContext(), locs);
+  auto newOp = rewriter.create<TriggerSequenceOp>(fusedLoc, op.getParent(),
+                                                  resultValues.size());
+  for (auto [rval, newRes] : llvm::zip(resultValues, newOp.getResults()))
+    rewriter.replaceAllUsesWith(rval, newRes);
+  // Remove sequences that have been inlined
+  for (auto child : childSeqs)
+    rewriter.eraseOp(child);
+
+  rewriter.eraseOp(op);
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
