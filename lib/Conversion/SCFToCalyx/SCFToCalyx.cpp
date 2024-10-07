@@ -36,10 +36,8 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Casting.h"
-#include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/JSON.h"
-#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/FormatVariadic.h"
 
 #include <variant>
 
@@ -1130,15 +1128,8 @@ class InlineExecuteRegionOpPattern
 };
 
 class MemoryBanking : public calyx::FuncOpPartialLoweringPattern {
-public:
-  MemoryBanking(MLIRContext *context, LogicalResult &resRef,
-                calyx::PatternApplicationState &patternState,
-                DenseMap<FuncOp, calyx::ComponentOp> &funcMap,
-                calyx::CalyxLoweringState &cls, std::string &availBanksJson)
-      : calyx::FuncOpPartialLoweringPattern(context, resRef, patternState,
-                                            funcMap, cls),
-        availBanksJsonValue(parseJsonFile(availBanksJson)){};
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
+
   LogicalResult
   partiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
@@ -1156,10 +1147,13 @@ public:
     auto allMemRefDefinitions = collectAllMemRefDefns(funcOp);
 
     for (auto *defn : allMemRefDefinitions) {
-      auto availableBanks = getNumAvailableBanks(defn, allMemRefDefinitions);
-      auto banks = allocateBanks(rewriter, defn, availableBanks);
-      if (failed(replaceMemUseWithBanks(rewriter, defn, banks))) {
-        return failure();
+      if (auto bankAttr =
+              defn->template getAttrOfType<IntegerAttr>("calyx.num_banks")) {
+        uint availableBanks = bankAttr.getInt();
+        auto banks = allocateBanks(rewriter, defn, availableBanks);
+
+        if (failed(replaceMemUseWithBanks(rewriter, defn, banks)))
+          return failure();
       }
     }
 
@@ -1167,49 +1161,6 @@ public:
   }
 
 private:
-  llvm::json::Value availBanksJsonValue;
-  llvm::json::Value parseJsonFile(const std::string &fileName) const {
-    std::string adjustedFileName = fileName;
-    if (adjustedFileName.find(".json") == std::string::npos)
-      adjustedFileName += ".json";
-    llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> fileOrErr =
-        llvm::MemoryBuffer::getFile(adjustedFileName);
-    if (std::error_code ec = fileOrErr.getError())
-      llvm::report_fatal_error(
-          llvm::Twine("User forgets to input a JSON file for memory banking or "
-                      "error reading the file: ") +
-          adjustedFileName + " - " + ec.message());
-    auto jsonResult = llvm::json::parse(fileOrErr.get()->getBuffer());
-    if (!jsonResult) {
-      llvm::errs() << "Error parsing JSON: "
-                   << llvm::toString(jsonResult.takeError()) << "\n";
-      llvm::report_fatal_error(llvm::Twine("Failed to parse JSON file: ") +
-                               adjustedFileName);
-    }
-    return std::move(*jsonResult);
-  }
-
-  uint getNumAvailableBanks(Operation *definingMemOp,
-                            SmallVector<Operation *> &allMemDefns) const {
-    auto pos =
-        std::find(allMemDefns.begin(), allMemDefns.end(), definingMemOp) -
-        allMemDefns.begin();
-    auto *jsonObj = availBanksJsonValue.getAsObject();
-    auto *bankNums = jsonObj->getArray("banks");
-    if (auto bankOpt = (*bankNums)[pos].getAsInteger()) {
-      assert(*bankOpt > 0 &&
-             "number of available banks must be greater than zero");
-      return *bankOpt;
-    }
-
-    std::string dumpStr;
-    llvm::raw_string_ostream dumpStream(dumpStr);
-    definingMemOp->print(dumpStream);
-    report_fatal_error(
-        llvm::Twine("Cannot find the number of banks associated with memory") +
-        dumpStream.str());
-  }
-
   LogicalResult insertNewOperandsToCallSites(PatternRewriter &rewriter,
                                              CallOp callOp,
                                              SmallVector<Value> &newOperands,
@@ -1307,61 +1258,32 @@ private:
     IRMapping replaceMapping;
 
     auto oldArg = funcOp.getArgument(argPos);
-    unsigned numReplacements = endIdx - beginIdx;
+    SmallVector<Value> replaceArgs(funcOp.getArguments().begin() + beginIdx,
+                                   funcOp.getArguments().begin() + endIdx + 1);
+
     for (auto &use : llvm::make_early_inc_range(oldArg.getUses())) {
       Operation *op = use.getOwner();
-      auto loc = op->getLoc();
-      rewriter.setInsertionPoint(op);
-      Value numReplacementsValue =
-          rewriter.create<ConstantIndexOp>(loc, numReplacements);
 
-      if (auto loadOp = dyn_cast<memref::LoadOp>(op)) {
-        if (!circt::isUniDimensional(loadOp.getMemRefType()))
-          return rewriter.notifyMatchFailure(
-              loadOp,
-              "all memories must be flattened before the scf-to-calyx pass");
+      LogicalResult result =
+          TypeSwitch<Operation *, LogicalResult>(op)
+              .Case<memref::LoadOp, memref::StoreOp>([&](auto memUseOp) {
+                if (!isUniDimensional(memUseOp.getMemRefType()))
+                  return rewriter.notifyMatchFailure(
+                      memUseOp, "all memories must be flattened before the "
+                                "scf-to-calyx pass");
 
-        Value index = loadOp.getIndices().front();
-        auto modValue =
-            rewriter.create<RemUIOp>(loc, index, numReplacementsValue);
+                // Replace the memory operation with banked mem ops that uses
+                // memory references
+                return replaceMemOpWithBankedMemOps(rewriter, memUseOp,
+                                                    replaceArgs);
+              })
+              .Default([](Operation *) {
+                llvm_unreachable("Unhandled memory operation type");
+                return failure();
+              });
 
-        SmallVector<Type, 1> resultTypes;
-        if (op->getNumResults() > 0)
-          resultTypes.append(op->result_type_begin(), op->result_type_end());
-
-        SmallVector<int64_t, 8> caseValues;
-        // Prepare case values
-        for (unsigned i = 0; i < numReplacements; i++)
-          caseValues.push_back(i);
-
-        scf::IndexSwitchOp switchOp = rewriter.create<scf::IndexSwitchOp>(
-            loc, resultTypes, modValue, caseValues,
-            /*numRegions=*/numReplacements);
-
-        // Populate the case regions
-        auto caseRegions = switchOp.getCaseRegions();
-        assert(caseRegions.size() == numReplacements &&
-               "Mismatch in number of case regions");
-
-        for (unsigned i = 0; i < numReplacements; i++) {
-          Region &caseRegion = caseRegions[i];
-          rewriter.setInsertionPointToStart(&caseRegion.emplaceBlock());
-
-          Value newMemRef = funcOp.getArgument(beginIdx + i);
-          Value newAddress =
-              computeIntraBankingOffset(rewriter, index, numReplacements);
-
-          // Recreate the load operation with the replacement
-          auto newLoadOp = rewriter.create<memref::LoadOp>(
-              loc, newMemRef, SmallVector<Value>{newAddress});
-          // Yield the result of the new load operation
-          rewriter.create<scf::YieldOp>(loc, newLoadOp.getResult());
-        }
-
-        loadOp.getResult().replaceAllUsesWith(switchOp.getResult(0));
-
-        rewriter.eraseOp(loadOp);
-      }
+      if (failed(result))
+        return result;
     }
 
     return success();
@@ -1397,7 +1319,8 @@ private:
       bankResults.push_back(bank->getResult(0));
 
     for (auto &use : memOp->getResult(0).getUses()) {
-      if (auto callOp = dyn_cast<CallOp>(use.getOwner())) {
+      Operation *userOp = use.getOwner();
+      if (auto callOp = dyn_cast<CallOp>(userOp)) {
         FuncOp calleeFunc = SymbolTable::lookupNearestSymbolFrom<FuncOp>(
             callOp, callOp.getCalleeAttr());
         auto pos = llvm::find(callOp.getOperands(), memOp->getResult(0)) -
@@ -1420,8 +1343,105 @@ private:
           if (failed(eraseArgInFunc(calleeFunc, pos)))
             return failure();
         }
+      } else {
+        LogicalResult result =
+            TypeSwitch<Operation *, LogicalResult>(userOp)
+                .Case<memref::LoadOp, memref::StoreOp>([&](auto memUseOp) {
+                  if (!isUniDimensional(memUseOp.getMemRefType()))
+                    return rewriter.notifyMatchFailure(
+                        memUseOp, "all memories must be flattened before the "
+                                  "scf-to-calyx pass");
+
+                  // Replace the memory operation with banked mems
+                  return replaceMemOpWithBankedMemOps(rewriter, memUseOp,
+                                                      bankResults);
+                })
+                .Default([](Operation *) {
+                  llvm_unreachable("Unhandled memory operation type");
+                  return failure();
+                });
+
+        if (failed(result))
+          return result;
       }
     }
+
+    return success();
+  }
+
+  LogicalResult
+  replaceMemOpWithBankedMemOps(PatternRewriter &rewriter, Operation *memOp,
+                               SmallVector<Value> &bankResults) const {
+    Location loc = memOp->getLoc();
+    rewriter.setInsertionPoint(memOp);
+    TypeSwitch<Operation *>(memOp)
+        .Case<memref::LoadOp, memref::StoreOp>([&](auto memUseOp) {
+          // All memory has to be uni-dimensiona
+          Value index = memUseOp.getIndices().front();
+          unsigned numBanks = bankResults.size();
+          Value numBanksValue =
+              rewriter.create<arith::ConstantIndexOp>(loc, numBanks);
+
+          // Compute bank index and local index within the bank
+          Value bankIndex =
+              rewriter.create<arith::RemUIOp>(loc, index, numBanksValue);
+          Value bankAddress =
+              computeIntraBankingOffset(rewriter, index, numBanks);
+
+          // Create switchOp to select the bank
+          SmallVector<Type> resultTypes = {};
+          if (auto loadOp = cast<memref::LoadOp>(memUseOp))
+            resultTypes = {loadOp.getType()};
+
+          SmallVector<int64_t> caseValues;
+          for (unsigned i = 0; i < numBanks; ++i)
+            caseValues.push_back(i);
+
+          scf::IndexSwitchOp switchOp = rewriter.create<scf::IndexSwitchOp>(
+              loc, resultTypes, bankIndex, caseValues, /*numRegions=*/numBanks);
+
+          // Populate the case regions
+          for (unsigned i = 0; i < numBanks; ++i) {
+            Region &caseRegion = switchOp.getCaseRegions()[i];
+            rewriter.setInsertionPointToStart(&caseRegion.emplaceBlock());
+
+            Value bankMemRef = bankResults[i];
+            if (isa<memref::LoadOp>(memUseOp)) {
+              auto newLoadOp =
+                  rewriter.create<memref::LoadOp>(loc, bankMemRef, bankAddress);
+              // Yield the result of the new load operation
+              rewriter.create<scf::YieldOp>(loc, newLoadOp.getResult());
+            } else {
+              auto storeOp = cast<memref::StoreOp>(memUseOp);
+              rewriter.create<memref::StoreOp>(loc, storeOp.getValueToStore(),
+                                               bankMemRef, bankAddress);
+              rewriter.create<scf::YieldOp>(loc);
+            }
+          }
+
+          Region &defaultRegion = switchOp.getDefaultRegion();
+          assert(defaultRegion.empty() && "Default region should be empty");
+          rewriter.setInsertionPointToStart(&defaultRegion.emplaceBlock());
+
+          if (auto loadOp = cast<memref::LoadOp>(memUseOp)) {
+            Type loadType = loadOp.getType();
+            TypedAttr zeroAttr =
+                cast<TypedAttr>(rewriter.getZeroAttr(loadType));
+            auto defaultValue =
+                rewriter.create<arith::ConstantOp>(loc, zeroAttr);
+            // Yield the default value zero
+            rewriter.create<scf::YieldOp>(loc, defaultValue.getResult());
+
+            // Replace the original loadOp's result with the switchOp's result
+            loadOp.getResult().replaceAllUsesWith(switchOp.getResult(0));
+          } else
+            rewriter.create<scf::YieldOp>(loc);
+
+          rewriter.eraseOp(memUseOp);
+        })
+        .Default([](Operation *) {
+          llvm_unreachable("Unhandled memory operation type");
+        });
 
     return success();
   }
@@ -2371,12 +2391,10 @@ void SCFToCalyxPass::runOnOperation() {
   SmallVector<LoweringPattern, 8> loweringPatterns;
   calyx::PatternApplicationState patternState;
 
-  if (!numAvailBanksOpt.empty()) {
-    /// Replace memory accesses with their corresponding banks if the user has
-    /// specified the banking option.
-    addOncePattern<MemoryBanking>(loweringPatterns, patternState, funcMap,
-                                  *loweringState, numAvailBanksOpt);
-  }
+  /// Replace memory accesses with their corresponding banks if the user has
+  /// specified the number of available banks.
+  addOncePattern<MemoryBanking>(loweringPatterns, patternState, funcMap,
+                                *loweringState);
 
   /// Creates a new Calyx component for each FuncOp in the inpurt module.
   addOncePattern<FuncOpConversion>(loweringPatterns, patternState, funcMap,
