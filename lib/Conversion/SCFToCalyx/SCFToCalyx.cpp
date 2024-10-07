@@ -1390,8 +1390,10 @@ private:
 
           // Create switchOp to select the bank
           SmallVector<Type> resultTypes = {};
-          if (auto loadOp = cast<memref::LoadOp>(memUseOp))
+          if (isa<memref::LoadOp>(memUseOp)) {
+            auto loadOp = cast<memref::LoadOp>(memUseOp);
             resultTypes = {loadOp.getType()};
+          }
 
           SmallVector<int64_t> caseValues;
           for (unsigned i = 0; i < numBanks; ++i)
@@ -1423,7 +1425,8 @@ private:
           assert(defaultRegion.empty() && "Default region should be empty");
           rewriter.setInsertionPointToStart(&defaultRegion.emplaceBlock());
 
-          if (auto loadOp = cast<memref::LoadOp>(memUseOp)) {
+          if (isa<memref::LoadOp>(memUseOp)) {
+            auto loadOp = cast<memref::LoadOp>(memUseOp);
             Type loadType = loadOp.getType();
             TypedAttr zeroAttr =
                 cast<TypedAttr>(rewriter.getZeroAttr(loadType));
