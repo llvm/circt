@@ -415,9 +415,9 @@ namespace {
 /// a and b. The `sat` function performs this action.
 struct LinIneq {
   // x >= max(a*x+b, c) + (failed ? ∞ : 0)
-  int32_t rec_scale = 0;   // a
-  int32_t rec_bias = 0;    // b
-  int32_t nonrec_bias = 0; // c
+  int32_t recScale = 0;   // a
+  int32_t recBias = 0;    // b
+  int32_t nonrecBias = 0; // c
   bool failed = false;
 
   /// Create a new unsatisfiable inequality `x >= ∞`.
@@ -427,29 +427,29 @@ struct LinIneq {
   explicit LinIneq(bool failed = false) : failed(failed) {}
 
   /// Create a new inequality `x >= bias`.
-  explicit LinIneq(int32_t bias) : nonrec_bias(bias) {}
+  explicit LinIneq(int32_t bias) : nonrecBias(bias) {}
 
   /// Create a new inequality `x >= scale*x+bias`.
   explicit LinIneq(int32_t scale, int32_t bias) {
     if (scale != 0) {
-      rec_scale = scale;
-      rec_bias = bias;
+      recScale = scale;
+      recBias = bias;
     } else {
-      nonrec_bias = bias;
+      nonrecBias = bias;
     }
   }
 
-  /// Create a new inequality `x >= max(rec_scale*x+rec_bias, nonrec_bias) +
+  /// Create a new inequality `x >= max(recScale*x+recBias, nonrecBias) +
   /// (failed ? ∞ : 0)`.
-  explicit LinIneq(int32_t rec_scale, int32_t rec_bias, int32_t nonrec_bias,
+  explicit LinIneq(int32_t recScale, int32_t recBias, int32_t nonrecBias,
                    bool failed = false)
       : failed(failed) {
-    if (rec_scale != 0) {
-      this->rec_scale = rec_scale;
-      this->rec_bias = rec_bias;
-      this->nonrec_bias = nonrec_bias;
+    if (recScale != 0) {
+      this->recScale = recScale;
+      this->recBias = recBias;
+      this->nonrecBias = nonrecBias;
     } else {
-      this->nonrec_bias = std::max(rec_bias, nonrec_bias);
+      this->nonrecBias = std::max(recBias, nonrecBias);
     }
   }
 
@@ -461,9 +461,9 @@ struct LinIneq {
   /// a pessimistic upper bound, since e.g. `x >= 2x-10` and `x >= x-5` may both
   /// hold, but the resulting `x >= 2x-5` may pessimistically not hold.
   static LinIneq max(const LinIneq &lhs, const LinIneq &rhs) {
-    return LinIneq(std::max(lhs.rec_scale, rhs.rec_scale),
-                   std::max(lhs.rec_bias, rhs.rec_bias),
-                   std::max(lhs.nonrec_bias, rhs.nonrec_bias),
+    return LinIneq(std::max(lhs.recScale, rhs.recScale),
+                   std::max(lhs.recBias, rhs.recBias),
+                   std::max(lhs.nonrecBias, rhs.nonrecBias),
                    lhs.failed || rhs.failed);
   }
 
@@ -523,15 +523,15 @@ struct LinIneq {
   static LinIneq add(const LinIneq &lhs, const LinIneq &rhs) {
     // Determine the maximum scaling factor among the three possible recursive
     // terms.
-    auto enable1 = lhs.rec_scale > 0 && rhs.rec_scale > 0;
-    auto enable2 = lhs.rec_scale > 0;
-    auto enable3 = rhs.rec_scale > 0;
-    auto scale1 = lhs.rec_scale + rhs.rec_scale; // (a1+a2)
-    auto scale2 = lhs.rec_scale;                 // a1
-    auto scale3 = rhs.rec_scale;                 // a2
-    auto bias1 = lhs.rec_bias + rhs.rec_bias;    // (b1+b2)
-    auto bias2 = lhs.rec_bias + rhs.nonrec_bias; // (b1+c2)
-    auto bias3 = rhs.rec_bias + lhs.nonrec_bias; // (b2+c1)
+    auto enable1 = lhs.recScale > 0 && rhs.recScale > 0;
+    auto enable2 = lhs.recScale > 0;
+    auto enable3 = rhs.recScale > 0;
+    auto scale1 = lhs.recScale + rhs.recScale; // (a1+a2)
+    auto scale2 = lhs.recScale;                // a1
+    auto scale3 = rhs.recScale;                // a2
+    auto bias1 = lhs.recBias + rhs.recBias;    // (b1+b2)
+    auto bias2 = lhs.recBias + rhs.nonrecBias; // (b1+c2)
+    auto bias3 = rhs.recBias + lhs.nonrecBias; // (b2+c1)
     auto maxScale = std::max(scale1, std::max(scale2, scale3));
 
     // Among those terms that have a maximum scaling factor, determine the
@@ -546,15 +546,15 @@ struct LinIneq {
 
     // Pick from the recursive terms the one with maximum scaling factor and
     // minimum bias value.
-    auto nonrec_bias = lhs.nonrec_bias + rhs.nonrec_bias; // c1+c2
+    auto nonrecBias = lhs.nonrecBias + rhs.nonrecBias; // c1+c2
     auto failed = lhs.failed || rhs.failed;
     if (enable1 && scale1 == maxScale && bias1 == *maxBias)
-      return LinIneq(scale1, bias1, nonrec_bias, failed);
+      return LinIneq(scale1, bias1, nonrecBias, failed);
     if (enable2 && scale2 == maxScale && bias2 == *maxBias)
-      return LinIneq(scale2, bias2, nonrec_bias, failed);
+      return LinIneq(scale2, bias2, nonrecBias, failed);
     if (enable3 && scale3 == maxScale && bias3 == *maxBias)
-      return LinIneq(scale3, bias3, nonrec_bias, failed);
-    return LinIneq(0, 0, nonrec_bias, failed);
+      return LinIneq(scale3, bias3, nonrecBias, failed);
+    return LinIneq(0, 0, nonrecBias, failed);
   }
 
   /// Check if the inequality is satisfiable.
@@ -565,9 +565,9 @@ struct LinIneq {
   bool sat() const {
     if (failed)
       return false;
-    if (rec_scale > 1)
+    if (recScale > 1)
       return false;
-    if (rec_scale == 1 && rec_bias > 0)
+    if (recScale == 1 && recBias > 0)
       return false;
     return true;
   }
@@ -575,32 +575,32 @@ struct LinIneq {
   /// Dump the inequality in human-readable form.
   void print(llvm::raw_ostream &os) const {
     bool any = false;
-    bool both = (rec_scale != 0 || rec_bias != 0) && nonrec_bias != 0;
+    bool both = (recScale != 0 || recBias != 0) && nonrecBias != 0;
     os << "x >= ";
     if (both)
       os << "max(";
-    if (rec_scale != 0) {
+    if (recScale != 0) {
       any = true;
-      if (rec_scale != 1)
-        os << rec_scale << "*";
+      if (recScale != 1)
+        os << recScale << "*";
       os << "x";
     }
-    if (rec_bias != 0) {
+    if (recBias != 0) {
       if (any) {
-        if (rec_bias < 0)
-          os << " - " << -rec_bias;
+        if (recBias < 0)
+          os << " - " << -recBias;
         else
-          os << " + " << rec_bias;
+          os << " + " << recBias;
       } else {
         any = true;
-        os << rec_bias;
+        os << recBias;
       }
     }
     if (both)
       os << ", ";
-    if (nonrec_bias != 0) {
+    if (nonrecBias != 0) {
       any = true;
-      os << nonrec_bias;
+      os << nonrecBias;
     }
     if (both)
       os << ")";
@@ -620,7 +620,7 @@ public:
   ConstraintSolver() = default;
 
   VarExpr *var() {
-    auto v = vars.alloc();
+    auto *v = vars.alloc();
     exprs.push_back(v);
     if (currentInfo)
       info[v].insert(currentInfo);
@@ -783,10 +783,9 @@ LinIneq ConstraintSolver::checkCycles(VarExpr *var, Expr *expr,
             // representable.
             auto arg =
                 checkCycles(var, expr->arg, seenVars, reportInto, indent + 1);
-            if (arg.rec_scale != 0 || arg.nonrec_bias < 0 ||
-                arg.nonrec_bias >= 31)
+            if (arg.recScale != 0 || arg.nonrecBias < 0 || arg.nonrecBias >= 31)
               return LinIneq::unsat();
-            return LinIneq(1 << arg.nonrec_bias); // x >= 2**arg
+            return LinIneq(1 << arg.nonrecBias); // x >= 2**arg
           })
           .Case<AddExpr>([&](auto *expr) {
             return LinIneq::add(
@@ -812,15 +811,15 @@ LinIneq ConstraintSolver::checkCycles(VarExpr *var, Expr *expr,
     auto report = [&](Location loc) {
       auto &note = reportInto->attachNote(loc);
       note << "constrained width W >= ";
-      if (ineq.rec_scale == -1)
+      if (ineq.recScale == -1)
         note << "-";
-      if (ineq.rec_scale != 1)
-        note << ineq.rec_scale;
+      if (ineq.recScale != 1)
+        note << ineq.recScale;
       note << "W";
-      if (ineq.rec_bias < 0)
-        note << "-" << -ineq.rec_bias;
-      if (ineq.rec_bias > 0)
-        note << "+" << ineq.rec_bias;
+      if (ineq.recBias < 0)
+        note << "-" << -ineq.recBias;
+      if (ineq.recBias > 0)
+        note << "+" << ineq.recBias;
       note << " here:";
     };
     auto it = locs.find(expr);
@@ -1058,7 +1057,7 @@ LogicalResult ConstraintSolver::solve() {
     for (auto fieldRef : info.find(var)->second) {
       // Depending on whether this value stems from an operation or not, create
       // an appropriate diagnostic identifying the value.
-      auto op = fieldRef.getDefiningOp();
+      auto *op = fieldRef.getDefiningOp();
       auto diag = op ? op->emitOpError()
                      : mlir::emitError(fieldRef.getValue().getLoc())
                            << "value ";
@@ -1165,7 +1164,7 @@ void ConstraintSolver::emitUninferredWidthError(VarExpr *var) {
   // Try to hint the user at what kind of node this is.
   if (isa<BlockArgument>(value)) {
     diag << " port";
-  } else if (auto op = value.getDefiningOp()) {
+  } else if (auto *op = value.getDefiningOp()) {
     TypeSwitch<Operation *>(op)
         .Case<WireOp>([&](auto) { diag << " wire"; })
         .Case<RegOp, RegResetOp>([&](auto) { diag << " reg"; })
@@ -1945,7 +1944,7 @@ void InferenceMapping::constrainTypes(Expr *larger, Expr *smaller,
 
   // If the larger expr is a free variable, create a `expr >= x` constraint for
   // it that we can try to satisfy with the smallest width.
-  if (auto largerVar = dyn_cast<VarExpr>(larger)) {
+  if (auto *largerVar = dyn_cast<VarExpr>(larger)) {
     [[maybe_unused]] auto *c = solver.addGeqConstraint(largerVar, smaller);
     LLVM_DEBUG(llvm::dbgs()
                << "Constrained " << *largerVar << " >= " << *c << "\n");
@@ -2033,7 +2032,7 @@ Expr *InferenceMapping::getExpr(Value value) const {
 
 /// Get the constraint expression for a value.
 Expr *InferenceMapping::getExpr(FieldRef fieldRef) const {
-  auto expr = getExprOrNull(fieldRef);
+  auto *expr = getExprOrNull(fieldRef);
   assert(expr && "constraint expr should have been constructed for value");
   return expr;
 }
@@ -2221,7 +2220,7 @@ FailureOr<bool> InferenceTypeUpdate::updateValue(Value value) {
   }
 
   // Recreate the type, substituting the solved widths.
-  auto context = type.getContext();
+  auto *context = type.getContext();
   unsigned fieldID = 0;
   std::function<FIRRTLBaseType(FIRRTLBaseType)> updateBase =
       [&](FIRRTLBaseType type) -> FIRRTLBaseType {
@@ -2230,12 +2229,14 @@ FailureOr<bool> InferenceTypeUpdate::updateValue(Value value) {
       // Known width integers return themselves.
       fieldID++;
       return type;
-    } else if (width == -1) {
+    }
+    if (width == -1) {
       // Unknown width integers return the solved type.
       auto newType = updateType(FieldRef(value, fieldID), type);
       fieldID++;
       return newType;
-    } else if (auto bundleType = type_dyn_cast<BundleType>(type)) {
+    }
+    if (auto bundleType = type_dyn_cast<BundleType>(type)) {
       // Bundle types recursively update all bundle elements.
       fieldID++;
       llvm::SmallVector<BundleType::BundleElement, 3> elements;
@@ -2246,7 +2247,8 @@ FailureOr<bool> InferenceTypeUpdate::updateValue(Value value) {
         elements.emplace_back(element.name, element.isFlip, updatedBase);
       }
       return BundleType::get(context, elements, bundleType.isConst());
-    } else if (auto vecType = type_dyn_cast<FVectorType>(type)) {
+    }
+    if (auto vecType = type_dyn_cast<FVectorType>(type)) {
       fieldID++;
       auto save = fieldID;
       // TODO: this should recurse into the element type of 0 length vectors and
@@ -2262,7 +2264,8 @@ FailureOr<bool> InferenceTypeUpdate::updateValue(Value value) {
       }
       // If this is a 0 length vector return the original type.
       return type;
-    } else if (auto enumType = type_dyn_cast<FEnumType>(type)) {
+    }
+    if (auto enumType = type_dyn_cast<FEnumType>(type)) {
       fieldID++;
       llvm::SmallVector<FEnumType::EnumElement> elements;
       for (auto &element : enumType.getElements()) {
