@@ -845,6 +845,33 @@ firrtl.circuit "ZeroWidthRegister" {
 
 // -----
 
+// Every module which is contained inside a reset domain should be annotated as
+// such, so that internal registers can be lowered later correctly.
+// https://github.com/llvm/circt/issues/7675
+firrtl.circuit "top" {
+  // CHECK: firrtl.module private @test
+  // CHECK-SAME: annotations = [{class = "circt.FullResetAnnotation"}]
+  firrtl.module private @test(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    %resetvalue = firrtl.wire : !firrtl.uint<8>
+    %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8>
+    firrtl.matchingconnect %resetvalue, %invalid_ui8 : !firrtl.uint<8>
+    %reg1 = firrtl.regreset %clock, %reset, %resetvalue : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.matchingconnect %reg1, %in : !firrtl.uint<8>
+    firrtl.matchingconnect %out, %reg1 : !firrtl.uint<8>
+  }
+  // CHECK: firrtl.module @top
+  // CHECK-SAME: annotations = [{class = "circt.FullResetAnnotation"}]
+  firrtl.module @top(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}], in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) attributes {convention = #firrtl<convention scalarized>} {
+    %child_clock, %child_reset, %child_in, %child_out = firrtl.instance child @test(in clock: !firrtl.clock, in reset: !firrtl.asyncreset, in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    firrtl.matchingconnect %child_clock, %clock : !firrtl.clock
+    firrtl.matchingconnect %child_reset, %reset : !firrtl.asyncreset
+    firrtl.matchingconnect %child_in, %in : !firrtl.uint<8>
+    firrtl.matchingconnect %out, %child_out : !firrtl.uint<8>
+  }
+}
+
+// -----
+
 // Check that unaffected fields ("data") are not being affected by width
 // inference. See https://github.com/llvm/circt/issues/2857.
 // CHECK-LABEL: firrtl.module @ZeroLengthVectorInBundle1
