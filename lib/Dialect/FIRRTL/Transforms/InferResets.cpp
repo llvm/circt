@@ -1685,6 +1685,14 @@ LogicalResult InferResetsPass::implementFullReset(FModuleOp module,
     return success();
   }
 
+  // Add an annotation indicating that this module belongs to a reset domain.
+  auto *context = module.getContext();
+  AnnotationSet annotations(module);
+  annotations.addAnnotations(DictionaryAttr::get(
+      context, NamedAttribute(StringAttr::get(context, "class"),
+                              StringAttr::get(context, fullResetAnnoClass))));
+  annotations.applyToOperation(module);
+
   // If needed, add a reset port to the module.
   Value actualReset = domain.existingValue;
   if (domain.newPortName) {
