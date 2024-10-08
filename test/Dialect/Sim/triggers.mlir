@@ -1,4 +1,5 @@
 // RUN: circt-opt %s --canonicalize | FileCheck %s
+// RUN: circt-opt %s --canonicalize --cse | FileCheck %s
 
 // CHECK-LABEL: hw.module @root_triggers
 // CHECK-DAG:   [[PE:%.*]] = sim.on_edge posedge %clock
