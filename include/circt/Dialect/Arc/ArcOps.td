@@ -731,7 +731,7 @@ def TapOp : ArcOp<"tap"> {
 }
 
 def ModelOp : ArcOp<"model", [
-  RegionKindInterface, IsolatedFromAbove, NoTerminator, Symbol,
+  IsolatedFromAbove, NoTerminator, Symbol,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "A model with stratified clocks";
@@ -749,9 +749,6 @@ def ModelOp : ArcOp<"model", [
   }];
 
   let extraClassDeclaration = [{
-    static mlir::RegionKind getRegionKind(unsigned index) {
-      return mlir::RegionKind::Graph;
-    }
     mlir::Block &getBodyBlock() { return getBody().front(); }
   }];
 

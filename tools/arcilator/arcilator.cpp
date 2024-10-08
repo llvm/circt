@@ -316,6 +316,7 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   if (untilReached(UntilStateLowering))
     return;
   pm.addPass(arc::createLowerStatePass());
+  pm.addPass(arc::createMergeIfsPass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
 

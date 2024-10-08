@@ -17,6 +17,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   LowerState.cpp
   LowerVectorizations.cpp
   MakeTables.cpp
+  MergeIfs.cpp
   MuxToControlFlow.cpp
   PrintCostModel.cpp
   SimplifyVariadicOps.cpp

@@ -282,6 +282,17 @@ def MakeTables : Pass<"arc-make-tables", "mlir::ModuleOp"> {
   let dependentDialects = ["arc::ArcDialect"];
 }
 
+def MergeIfsPass : Pass<"arc-merge-ifs"> {
+  let summary = "Merge control flow structures";
+  let statistics = [
+    Statistic<"numOpsSunk", "sunk", "Ops sunk into blocks">,
+    Statistic<"numOpsMovedToUser", "moved-to-user", "Ops moved to first user">,
+    Statistic<"numIfsMerged", "ifs-merged", "Adjacent scf.if ops merged">,
+    Statistic<"numOpsMovedFromBetweenIfs", "moved-from-between-ifs",
+      "Ops moved from between ifs to enable merging">,
+  ];
+}
+
 def MuxToControlFlow : Pass<"arc-mux-to-control-flow", "mlir::ModuleOp"> {
   let summary = "Convert muxes with large independent fan-ins to if-statements";
   let constructor = "circt::arc::createMuxToControlFlowPass()";
