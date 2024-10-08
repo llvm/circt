@@ -336,7 +336,6 @@ LogicalResult MachineOpConverter::dispatch(){
     auto action = [&t1, &loc, this, &argVars, &numArgs, &numOut](llvm::SmallVector<mlir::Value> args) -> llvm::SmallVector<mlir::Value> {
       // args includes the time, argvars does not
       // update outputs if possible first
-      for (auto av : argVars) 
 
       if (t1.hasOutput){
         llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> avToSmt;
@@ -382,7 +381,7 @@ LogicalResult MachineOpConverter::dispatch(){
             for(auto &op: t1.action->getOps()){
               // todo: check that updates requiring inputs for operations work
               if (auto updateOp = dyn_cast<fsm::UpdateOp>(op)){
-                if (updateOp->getOperand(1)==uv.first){
+                if (updateOp->getOperand(0)==uv.first){
                   auto updatedVal = getSmtValue(updateOp->getOperand(1), avToSmt, b, loc);
                   updatedSmtValues.push_back(updatedVal);
                   found = true;
