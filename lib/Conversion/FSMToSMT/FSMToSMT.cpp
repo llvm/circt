@@ -180,6 +180,7 @@ LogicalResult MachineOpConverter::dispatch(){
   int numArgs = 0;
   int numOut = 0;
 
+
   mlir::TypeRange typeRange;
   mlir::ValueRange valueRange; 
 
@@ -203,18 +204,21 @@ LogicalResult MachineOpConverter::dispatch(){
     numArgs++;
   }
 
-
   // fsm outputs
-  if (machineOp->getResults().size() > 0){
-    for (auto o : machineOp->getResults()){
-      if (o.getType().getIntOrFloatBitWidth()==1){
+  if (machineOp.getResultTypes().size() > 0){
+    for (auto o : machineOp.getResultTypes()){
+      if (o.getIntOrFloatBitWidth() == 1 ){
         auto intVal = b.getType<smt::BoolType>();
         argVarTypes.push_back(intVal);
-        argVars.push_back(o);
+        mlir::BoolAttr intAttr = b.getBoolAttr(false);
+        auto ov = b.create<smt::BoolConstantOp>(loc, intAttr);
+        argVars.push_back(ov);
       } else {
         auto intVal = b.getType<smt::IntType>();
         argVarTypes.push_back(intVal);
-        argVars.push_back(o);
+        mlir::IntegerAttr intAttr = b.getI32IntegerAttr(0);
+        auto ov = b.create<smt::IntConstantOp>(loc, intAttr);
+        argVars.push_back(ov);
       }
       numOut++;
     }
@@ -254,8 +258,6 @@ LogicalResult MachineOpConverter::dispatch(){
   argVarTypes.push_back(b.getType<smt::IntType>());
   stateFunTypes.push_back(b.getType<smt::IntType>());
 
-  // llvm::outs()<<"\n\nstateFunTypes.size() = "<<stateFunTypes.size();
-
   // populate state functions and transitions vector
 
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
@@ -281,15 +283,37 @@ LogicalResult MachineOpConverter::dispatch(){
 
   // initial condition
 
-  auto forall = b.create<smt::ForallOp>(loc, argVarTypes, [&varInitValues, &stateFunctions, &numArgs](OpBuilder &b, Location loc, ValueRange args) -> mlir::Value { 
+  auto forall = b.create<smt::ForallOp>(loc, argVarTypes, [&varInitValues, &stateFunctions, &numArgs, &numOut](OpBuilder &b, Location loc, ValueRange args) -> mlir::Value { 
     llvm::SmallVector<mlir::Value> initArgs;
     // nb. args also has the time 
     for(auto [i, a]: llvm::enumerate(args)){
-      if (int(i) >= numArgs && i != args.size()-1){
-        // initialize all variables that are not time 
-        mlir::IntegerAttr intAttr = b.getI32IntegerAttr(varInitValues[int(i)-numArgs]);
-        auto initVarVal = b.create<smt::IntConstantOp>(loc, intAttr);
-        initArgs.push_back(initVarVal);
+      if (i != args.size()-1){
+        if (int(i) >= (numArgs + numOut)){
+          if (auto smtInt = llvm::dyn_cast<smt::IntType>(a.getType())){
+            // initialize all variables that are not time 
+            mlir::IntegerAttr intAttr = b.getI32IntegerAttr(varInitValues[int(i)-numArgs-numOut]);
+            auto initVarVal = b.create<smt::IntConstantOp>(loc, intAttr);
+            initArgs.push_back(initVarVal);
+          } else {
+            // initialize all variables that are not time 
+            mlir::BoolAttr intAttr = b.getBoolAttr(bool(varInitValues[int(i)-numArgs-numOut]));
+            auto initVarVal = b.create<smt::BoolConstantOp>(loc, intAttr);
+            initArgs.push_back(initVarVal);
+          }
+          
+        } else if (int(i)>=numArgs){
+          if (auto smtInt = llvm::dyn_cast<smt::IntType>(a.getType())){
+            // initialize all variables that are not time 
+            mlir::IntegerAttr intAttr = b.getI32IntegerAttr(0);
+            auto initVarVal = b.create<smt::IntConstantOp>(loc, intAttr);
+            initArgs.push_back(initVarVal);
+          } else {
+            // initialize all variables that are not time 
+            mlir::BoolAttr intAttr = b.getBoolAttr(false);
+            auto initVarVal = b.create<smt::BoolConstantOp>(loc, intAttr);
+            initArgs.push_back(initVarVal);
+          }
+        }
       }
     }
     initArgs.push_back(args.back());
@@ -307,10 +331,13 @@ LogicalResult MachineOpConverter::dispatch(){
 
   for(auto [id1, t1] : llvm::enumerate(transitions)){
     // each implication op is in the same region
-        
+
+
     auto action = [&t1, &loc, this, &argVars, &numArgs, &numOut](llvm::SmallVector<mlir::Value> args) -> llvm::SmallVector<mlir::Value> {
       // args includes the time, argvars does not
       // update outputs if possible first
+      for (auto av : argVars) 
+
       if (t1.hasOutput){
         llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> avToSmt;
         llvm::SmallVector<mlir::Value> outputSmtValues;
@@ -318,25 +345,29 @@ LogicalResult MachineOpConverter::dispatch(){
           avToSmt.push_back({av, args[id]});
         
         for (auto [j, uv]: llvm::enumerate(avToSmt)){
-          if(int(j) >=  numArgs && int(j) < numArgs+numOut){ // only variables can be updated and time is updated separately
-            bool found = false;
+          if(int(j) >=  numArgs && int(j) < numArgs+numOut){ // only output variables are updated at this stage 
             // look for updates in the region
-            for(auto &op: t1.action->getOps()){
+            bool found = false;
+            for(auto &op: t1.output->getOps()){
               // todo: check that updates requiring inputs for operations work
-              if (auto returnOp = dyn_cast<fsm::ReturnOp>(op)){
-                if (returnOp->getOperand(1)==uv.first){
-                  auto toRet = getSmtValue(returnOp->getOperand(0), avToSmt, b, loc);
+              if (auto outputOp = dyn_cast<fsm::OutputOp>(op)){
+                for (auto outs : outputOp->getResults()){
+                  if (outs==uv.first){
+                  auto toRet = getSmtValue(outs, avToSmt, b, loc);
                   outputSmtValues.push_back(toRet);
                   found = true;
+                  }
                 }
               }
             }
-            if(!found) // the value is not updated in the region 
+            if (!found){
               outputSmtValues.push_back(uv.second);
+            }
           }
         }
 
       }
+
       if (t1.hasAction) {
         llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> avToSmt;
         llvm::SmallVector<mlir::Value> updatedSmtValues;
@@ -405,7 +436,7 @@ LogicalResult MachineOpConverter::dispatch(){
     };
 
 
-    auto forall = b.create<smt::ForallOp>(loc, argVarTypes, [&guard1, &action, &t1, &stateFunctions, &numArgs](OpBuilder &b, Location loc, ValueRange args) { 
+    auto forall = b.create<smt::ForallOp>(loc, argVarTypes, [&guard1, &action, &t1, &stateFunctions, &numArgs, &numOut](OpBuilder &b, Location loc, ValueRange args) { 
       // split new and old arguments
 
       llvm::SmallVector<mlir::Value> stateArgs;
