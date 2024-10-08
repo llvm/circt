@@ -2355,24 +2355,20 @@ void InferWidthsPass::runOnOperation() {
   ConstraintSolver solver;
   InferenceMapping mapping(solver, getAnalysis<SymbolTable>(),
                            getAnalysis<hw::InnerSymbolTableCollection>());
-  if (failed(mapping.map(getOperation()))) {
-    signalPassFailure();
-    return;
-  }
-  if (mapping.areAllModulesSkipped()) {
-    markAllAnalysesPreserved();
-    return; // fast path if no inferrable widths are around
-  }
+  if (failed(mapping.map(getOperation())))
+    return signalPassFailure();
+
+  // fast path if no inferrable widths are around
+  if (mapping.areAllModulesSkipped())
+    return markAllAnalysesPreserved();
 
   // Solve the constraints.
-  if (failed(solver.solve())) {
-    signalPassFailure();
-    return;
-  }
+  if (failed(solver.solve()))
+    return signalPassFailure();
 
   // Update the types with the inferred widths.
   if (failed(InferenceTypeUpdate(mapping).update(getOperation())))
-    signalPassFailure();
+    return signalPassFailure();
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createInferWidthsPass() {
