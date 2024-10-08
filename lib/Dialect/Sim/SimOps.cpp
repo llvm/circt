@@ -509,6 +509,11 @@ LogicalResult TriggerSequenceOp::fold(FoldAdaptor adaptor,
 
 LogicalResult TriggerSequenceOp::canonicalize(TriggerSequenceOp op,
                                               PatternRewriter &rewriter) {
+  if (op.getNumResults() == 0) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
   // Check if there are unused results (which can be removed) or
   // non-concurrent sub-sequences (which can be inlined).
   auto getSingleSequenceUser = [](Value trigger) -> TriggerSequenceOp {

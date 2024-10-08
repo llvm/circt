@@ -406,7 +406,6 @@ def OnInitOp : SimOp<"on_init", [Pure]> {
 }
 
 def TriggerSequenceOp : SimOp<"trigger_sequence", [
-  Pure,
   DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>
 ]> {
   let summary = "Derive a sequence of triggers from a parent trigger.";
