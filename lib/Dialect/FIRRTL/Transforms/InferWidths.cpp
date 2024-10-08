@@ -325,11 +325,26 @@ void Expr::print(llvm::raw_ostream &os) const {
 
 namespace {
 
-/// An allocation slot in the `InternedAllocator`.
+// Hash slots in the interned allocator as if they were the pointed-to value
+// itself.
 template <typename T>
-struct InternedSlot {
-  T *ptr;
-  InternedSlot(T *ptr) : ptr(ptr) {}
+struct InternedSlotInfo : DenseMapInfo<T *> {
+  static T *getEmptyKey() {
+    auto *pointer = llvm::DenseMapInfo<void *>::getEmptyKey();
+    return static_cast<T *>(pointer);
+  }
+  static T *getTombstoneKey() {
+    auto *pointer = llvm::DenseMapInfo<void *>::getTombstoneKey();
+    return static_cast<T *>(pointer);
+  }
+  static unsigned getHashValue(const T *val) { return mlir::hash_value(*val); }
+  static bool isEqual(const T *lhs, const T *rhs) {
+    auto empty = getEmptyKey();
+    auto tombstone = getTombstoneKey();
+    if (lhs == empty || rhs == empty || lhs == tombstone || rhs == tombstone)
+      return lhs == rhs;
+    return *lhs == *rhs;
+  }
 };
 
 /// A simple bump allocator that ensures only ever one copy per object exists.
@@ -337,8 +352,7 @@ struct InternedSlot {
 template <typename T, typename std::enable_if_t<
                           std::is_trivially_destructible<T>::value, int> = 0>
 class InternedAllocator {
-  using Slot = InternedSlot<T>;
-  llvm::DenseSet<Slot> interned;
+  llvm::DenseSet<T *, InternedSlotInfo<T>> interned;
   llvm::BumpPtrAllocator &allocator;
 
 public:
@@ -349,14 +363,14 @@ public:
   /// derived from or be the type `T`.
   template <typename R = T, typename... Args>
   std::pair<R *, bool> alloc(Args &&...args) {
-    auto stack_value = R(std::forward<Args>(args)...);
-    auto stack_slot = Slot(&stack_value);
-    auto it = interned.find(stack_slot);
+    auto stackValue = R(std::forward<Args>(args)...);
+    auto *stackSlot = &stackValue;
+    auto it = interned.find(stackSlot);
     if (it != interned.end())
-      return std::make_pair(static_cast<R *>(it->ptr), false);
-    auto heap_value = new (allocator) R(std::move(stack_value));
-    interned.insert(Slot(heap_value));
-    return std::make_pair(heap_value, true);
+      return std::make_pair(static_cast<R *>(*it), false);
+    auto heapValue = new (allocator) R(std::move(stackValue));
+    interned.insert(heapValue);
+    return std::make_pair(heapValue, true);
   }
 };
 
@@ -988,9 +1002,7 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
           worklist.push_back({expr->lhs(), indent + 1});
           worklist.push_back({expr->rhs(), indent + 1});
         })
-        .Default([&](auto) {
-          setSolution(ExprSolution{std::nullopt, false});
-        });
+        .Default([&](auto) { setSolution(ExprSolution{std::nullopt, false}); });
   }
 
   return solvedExprs[expr];
@@ -2308,36 +2320,6 @@ FIRRTLBaseType InferenceTypeUpdate::updateType(FieldRef fieldRef,
   assert(solution >= 0); // The solver infers variables to be 0 or greater.
   return resizeType(type, solution);
 }
-
-//===----------------------------------------------------------------------===//
-// Hashing
-//===----------------------------------------------------------------------===//
-
-// Hash slots in the interned allocator as if they were the pointed-to value
-// itself.
-namespace llvm {
-template <typename T>
-struct DenseMapInfo<InternedSlot<T>> {
-  using Slot = InternedSlot<T>;
-  static Slot getEmptyKey() {
-    auto pointer = llvm::DenseMapInfo<void *>::getEmptyKey();
-    return Slot(static_cast<T *>(pointer));
-  }
-  static Slot getTombstoneKey() {
-    auto pointer = llvm::DenseMapInfo<void *>::getTombstoneKey();
-    return Slot(static_cast<T *>(pointer));
-  }
-  static unsigned getHashValue(Slot val) { return mlir::hash_value(*val.ptr); }
-  static bool isEqual(Slot LHS, Slot RHS) {
-    auto empty = getEmptyKey().ptr;
-    auto tombstone = getTombstoneKey().ptr;
-    if (LHS.ptr == empty || RHS.ptr == empty || LHS.ptr == tombstone ||
-        RHS.ptr == tombstone)
-      return LHS.ptr == RHS.ptr;
-    return *LHS.ptr == *RHS.ptr;
-  }
-};
-} // namespace llvm
 
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
