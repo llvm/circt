@@ -1547,17 +1547,17 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   case CmpIPredicate::eq: {
     StringRef opName = op.getOperationName().split(".").second;
     Type width = op.getResult().getType();
-    auto condReg = createRegister(
-        op.getLoc(), rewriter, getComponent(), width.getIntOrFloatBitWidth(),
-        getState<ComponentLoweringState>().getUniqueName(opName));
-
-    for (auto *user : op->getUsers()) {
-      if (auto ifOp = dyn_cast<scf::IfOp>(user))
-        getState<ComponentLoweringState>().setCondReg(ifOp, condReg);
-    }
-
     bool isSequential = isPipeLibOp(op.getLhs()) || isPipeLibOp(op.getRhs());
     if (isSequential) {
+      auto condReg = createRegister(
+          op.getLoc(), rewriter, getComponent(), width.getIntOrFloatBitWidth(),
+          getState<ComponentLoweringState>().getUniqueName(opName));
+
+      for (auto *user : op->getUsers()) {
+        if (auto ifOp = dyn_cast<scf::IfOp>(user))
+          getState<ComponentLoweringState>().setCondReg(ifOp, condReg);
+      }
+
       calyx::RegisterOp pipeResReg;
       if (isPipeLibOp(op.getLhs()))
         pipeResReg = getState<ComponentLoweringState>().getPipeResReg(
