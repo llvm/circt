@@ -497,7 +497,14 @@ def PassThroughOp : ClockTreeLikeOp<"passthrough"> {
 }
 
 def InitialOp : ClockTreeLikeOp<"initial"> {
-  let summary = "Clock-less logic called at the start of simulation";
+  let summary = "Region to be executed at the start of simulation";
+  let assemblyFormat = [{
+    attr-dict-with-keyword $body
+  }];
+}
+
+def FinalOp : ClockTreeLikeOp<"final"> {
+  let summary = "Region to be executed at the end of simulation";
   let assemblyFormat = [{
     attr-dict-with-keyword $body
   }];

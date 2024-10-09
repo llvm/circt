@@ -445,3 +445,85 @@ hw.module @seqInitial(in %clk : i1, out o1 : i8, out o2 : i8) {
   %5 = arc.state @counter_arc(%5) clock %4 initial (%1 : i8) latency 1 : (i8) -> i8
   hw.output %3, %5 : i8, i8
 }
+
+// ----- 8< ----- NEW TESTS ----- 8< -----
+
+func.func private @VoidFunc()
+func.func private @RandomI42() -> i42
+func.func private @ConsumeI42(i42)
+
+// CHECK-LABEL: arc.model @SimpleInitial
+hw.module @SimpleInitial() {
+  // CHECK: arc.initial {
+  // CHECK:   func.call @VoidFunc() {initA}
+  // CHECK:   func.call @VoidFunc() {initB}
+  // CHECK: }
+  // CHECK: func.call @VoidFunc() {body}
+  seq.initial() {
+    func.call @VoidFunc() {initA} : () -> ()
+  } : () -> ()
+  func.call @VoidFunc() {body} : () -> ()
+  seq.initial() {
+    func.call @VoidFunc() {initB} : () -> ()
+  } : () -> ()
+}
+
+// CHECK-LABEL: arc.model @InitialWithDependencies
+hw.module @InitialWithDependencies() {
+  // CHECK:      arc.initial {
+  // CHECK-NEXT:   func.call @VoidFunc() {before}
+  // CHECK-NEXT:   [[A:%.+]] = func.call @RandomI42() {initA}
+  // CHECK-NEXT:   [[B:%.+]] = func.call @RandomI42() {initB}
+  // CHECK-NEXT:   [[TMP:%.+]] = comb.add [[A]], [[B]]
+  // CHECK-NEXT:   func.call @ConsumeI42([[TMP]])
+  // CHECK-NEXT:   func.call @VoidFunc() {after}
+  // CHECK-NEXT: }
+
+  seq.initial() {
+    func.call @VoidFunc() {before} : () -> ()
+  } : () -> ()
+
+  // This pulls up %initA, %initB, %initC since it depends on their SSA values.
+  seq.initial(%initC) {
+  ^bb0(%arg0: i42):
+    func.call @ConsumeI42(%arg0) : (i42) -> ()
+  } : (!seq.immutable<i42>) -> ()
+
+  seq.initial() {
+    func.call @VoidFunc() {after} : () -> ()
+  } : () -> ()
+
+  // The following is pulled up.
+  %initA = seq.initial() {
+    %1 = func.call @RandomI42() {initA} : () -> i42
+    seq.yield %1 : i42
+  } : () -> (!seq.immutable<i42>)
+
+  %initB = seq.initial() {
+    %2 = func.call @RandomI42() {initB} : () -> i42
+    seq.yield %2 : i42
+  } : () -> (!seq.immutable<i42>)
+
+  %initC = seq.initial(%initA, %initB) {
+  ^bb0(%arg0: i42, %arg1: i42):
+    %3 = comb.add %arg0, %arg1 : i42
+    seq.yield %3 : i42
+  } : (!seq.immutable<i42>, !seq.immutable<i42>) -> (!seq.immutable<i42>)
+}
+
+// CHECK-LABEL: arc.model @FromImmutableCast
+hw.module @FromImmutableCast() {
+  // CHECK: [[STORAGE:%.+]] = arc.alloc_state
+  // CHECK: arc.initial {
+  // CHECK:   [[TMP:%.+]] = func.call @RandomI42()
+  // CHECK:   arc.state_write [[STORAGE]] = [[TMP]]
+  // CHECK: }
+  // CHECK: [[TMP:%.+]] = arc.state_read [[STORAGE]]
+  // CHECK: func.call @ConsumeI42([[TMP]])
+  func.call @ConsumeI42(%1) : (i42) -> ()
+  %1 = seq.from_immutable %0 : (!seq.immutable<i42>) -> i42
+  %0 = seq.initial() {
+    %2 = func.call @RandomI42() : () -> (i42)
+    seq.yield %2 : i42
+  } : () -> (!seq.immutable<i42>)
+}
