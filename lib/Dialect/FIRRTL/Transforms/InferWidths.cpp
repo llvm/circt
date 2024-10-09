@@ -848,26 +848,25 @@ computeBinary(ExprSolution lhs, ExprSolution rhs,
   return result;
 }
 
+namespace {
+struct Frame {
+  Frame(Expr *expr, unsigned indent) : expr(expr), indent(indent) {}
+  Expr *expr;
+  // Indent is only used for debug logs.
+  unsigned indent;
+};
+} // namespace
+
 /// Compute the value of a constraint `expr`. `seenVars` is used as a recursion
 /// breaker. Recursive variables are treated as zero. Returns the computed value
 /// and a boolean indicating whether a recursion was detected. This may be used
 /// to memoize the result of expressions in case they were not involved in a
 /// cycle (which may alter their value from the perspective of a variable).
 static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
-                              unsigned defaultWorklistSize) {
-
-  struct Frame {
-    Expr *expr;
-    unsigned indent;
-  };
-
-  // indent only used for debug logs.
-  unsigned indent = 1;
-  std::vector<Frame> worklist({{expr, indent}});
+                              std::vector<Frame> &worklist) {
+  worklist.clear();
+  worklist.emplace_back(expr, 1);
   llvm::DenseMap<Expr *, ExprSolution> solvedExprs;
-  // Reserving the vector size, to avoid frequent reallocs. The worklist can be
-  // quite large.
-  worklist.reserve(defaultWorklistSize);
 
   while (!worklist.empty()) {
     auto &frame = worklist.back();
@@ -898,8 +897,9 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
     if (frame.expr->solution) {
       LLVM_DEBUG({
         if (!isa<KnownExpr>(frame.expr))
-          llvm::dbgs().indent(indent * 2) << "- Cached " << *frame.expr << " = "
-                                          << *frame.expr->solution << "\n";
+          llvm::dbgs().indent(frame.indent * 2)
+              << "- Cached " << *frame.expr << " = " << *frame.expr->solution
+              << "\n";
       });
       setSolution(ExprSolution{*frame.expr->solution, false});
       continue;
@@ -943,21 +943,21 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
           if (!seenVars.insert(expr).second)
             return setSolution(ExprSolution{std::nullopt, true});
 
-          worklist.push_back({expr->constraint, indent + 1});
+          worklist.emplace_back(expr->constraint, frame.indent + 1);
           if (expr->upperBound)
-            worklist.push_back({expr->upperBound, indent + 1});
+            worklist.emplace_back(expr->upperBound, frame.indent + 1);
         })
         .Case<IdExpr>([&](auto *expr) {
           if (solvedExprs.contains(expr->arg))
             return setSolution(solvedExprs[expr->arg]);
-          worklist.push_back({expr->arg, indent + 1});
+          worklist.emplace_back(expr->arg, frame.indent + 1);
         })
         .Case<PowExpr>([&](auto *expr) {
           if (solvedExprs.contains(expr->arg))
             return setSolution(computeUnary(
                 solvedExprs[expr->arg], [](int32_t arg) { return 1 << arg; }));
 
-          worklist.push_back({expr->arg, indent + 1});
+          worklist.emplace_back(expr->arg, frame.indent + 1);
         })
         .Case<AddExpr>([&](auto *expr) {
           if (solvedExprs.contains(expr->lhs()) &&
@@ -966,8 +966,8 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
                 solvedExprs[expr->lhs()], solvedExprs[expr->rhs()],
                 [](int32_t lhs, int32_t rhs) { return lhs + rhs; }));
 
-          worklist.push_back({expr->lhs(), indent + 1});
-          worklist.push_back({expr->rhs(), indent + 1});
+          worklist.emplace_back(expr->lhs(), frame.indent + 1);
+          worklist.emplace_back(expr->rhs(), frame.indent + 1);
         })
         .Case<MaxExpr>([&](auto *expr) {
           if (solvedExprs.contains(expr->lhs()) &&
@@ -976,8 +976,8 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
                 solvedExprs[expr->lhs()], solvedExprs[expr->rhs()],
                 [](int32_t lhs, int32_t rhs) { return std::max(lhs, rhs); }));
 
-          worklist.push_back({expr->lhs(), indent + 1});
-          worklist.push_back({expr->rhs(), indent + 1});
+          worklist.emplace_back(expr->lhs(), frame.indent + 1);
+          worklist.emplace_back(expr->rhs(), frame.indent + 1);
         })
         .Case<MinExpr>([&](auto *expr) {
           if (solvedExprs.contains(expr->lhs()) &&
@@ -986,8 +986,8 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
                 solvedExprs[expr->lhs()], solvedExprs[expr->rhs()],
                 [](int32_t lhs, int32_t rhs) { return std::min(lhs, rhs); }));
 
-          worklist.push_back({expr->lhs(), indent + 1});
-          worklist.push_back({expr->rhs(), indent + 1});
+          worklist.emplace_back(expr->lhs(), frame.indent + 1);
+          worklist.emplace_back(expr->rhs(), frame.indent + 1);
         })
         .Default([&](auto) { setSolution(ExprSolution{std::nullopt, false}); });
   }
@@ -1072,7 +1072,7 @@ LogicalResult ConstraintSolver::solve() {
     llvm::dbgs() << "\n";
     debugHeader("Solving constraints") << "\n\n";
   });
-  unsigned defaultWorklistSize = exprs.size() / 2;
+  std::vector<Frame> worklist;
   for (auto *expr : exprs) {
     // Only work on variables.
     auto *var = dyn_cast<VarExpr>(expr);
@@ -1091,11 +1091,11 @@ LogicalResult ConstraintSolver::solve() {
     LLVM_DEBUG(llvm::dbgs()
                << "- Solving " << *var << " >= " << *var->constraint << "\n");
     seenVars.insert(var);
-    auto solution = solveExpr(var->constraint, seenVars, defaultWorklistSize);
+    auto solution = solveExpr(var->constraint, seenVars, worklist);
     // Compute the upperBound if there is one and haven't already.
     if (var->upperBound && !var->upperBoundSolution)
       var->upperBoundSolution =
-          solveExpr(var->upperBound, seenVars, defaultWorklistSize).first;
+          solveExpr(var->upperBound, seenVars, worklist).first;
     seenVars.clear();
 
     // Constrain variables >= 0.
