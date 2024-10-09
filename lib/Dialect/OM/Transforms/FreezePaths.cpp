@@ -42,6 +42,7 @@ struct PathVisitor {
   LogicalResult process(PathCreateOp pathOp);
   LogicalResult process(EmptyPathOp pathOp);
   LogicalResult process(ListCreateOp listCreateOp);
+  LogicalResult process(ObjectFieldOp objectFieldOp);
   LogicalResult run(ModuleOp module);
   hw::InstanceGraph &instanceGraph;
   hw::InnerRefNamespace &irn;
@@ -271,6 +272,27 @@ LogicalResult PathVisitor::process(ListCreateOp listCreateOp) {
   return success();
 }
 
+/// Replace an ObjectFieldOp of path types with frozen path types.
+LogicalResult PathVisitor::process(ObjectFieldOp objectFieldOp) {
+  Type resultType = objectFieldOp.getResult().getType();
+
+  // Check if there are any path types in the field.
+  if (!hasPathType(resultType))
+    return success();
+
+  // Create a new result Type with frozen path types.
+  auto newResultType = processType(resultType);
+
+  // Create a new op with the result type updated to replace path types.
+  OpBuilder builder(objectFieldOp);
+  auto newObjectFieldOp = builder.create<ObjectFieldOp>(
+      objectFieldOp.getLoc(), newResultType, objectFieldOp.getObject(),
+      objectFieldOp.getFieldPath());
+  objectFieldOp.replaceAllUsesWith(newObjectFieldOp.getResult());
+  objectFieldOp->erase();
+  return success();
+}
+
 LogicalResult PathVisitor::run(ModuleOp module) {
   auto updatePathType = [&](Value value) {
     if (hasPathType(value.getType()))
@@ -292,6 +314,9 @@ LogicalResult PathVisitor::run(ModuleOp module) {
           return WalkResult::interrupt();
       } else if (auto listCreate = dyn_cast<ListCreateOp>(op)) {
         if (failed(process(listCreate)))
+          return WalkResult::interrupt();
+      } else if (auto objectField = dyn_cast<ObjectFieldOp>(op)) {
+        if (failed(process(objectField)))
           return WalkResult::interrupt();
       }
       return WalkResult::advance();
