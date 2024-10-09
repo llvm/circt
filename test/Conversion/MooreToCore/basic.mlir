@@ -840,8 +840,8 @@ dbg.struct {"q": %dbg0} : !moore.l32
 // CHECK-LABEL: hw.module @Assert
 moore.module @Assert(in %cond : !moore.l1)  {
   moore.procedure always {
-  // CHECK: verif.assert %cond label "" : i1
-  moore.assert immediate %cond : l1
+  // CHECK: verif.assert %cond label "cond" : i1
+  moore.assert immediate %cond label "cond" : l1
   // CHECK: verif.assume %cond label "" : i1
   moore.assume observed %cond  : l1
   // CHECK: verif.cover %cond label "" : i1
