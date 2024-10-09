@@ -547,10 +547,10 @@ firrtl.circuit "RTLPorts" {
     firrtl.propassign %field2, %path : !firrtl.path
   }
 
-  // CHECK: om.class @NeedsRTLPorts(%basepath: !om.basepath, %containingModule_in: !om.path, %ports: !om.list<!om.class.type<@RtlPort>>)
+  // CHECK: om.class @NeedsRTLPorts(%basepath: !om.basepath, %containingModule_in: !om.path, %ports_in: !om.list<!om.class.type<@RtlPort>>)
   // CHECK-SAME: -> (containingModule: !om.path, ports: !om.list<!om.class.type<@RtlPort>>)
   firrtl.class @NeedsRTLPorts(in %containingModule_in: !firrtl.path, out %containingModule: !firrtl.path) {
-    // CHECK: om.class.fields  %containingModule_in, %ports : !om.path, !om.list<!om.class.type<@RtlPort>>
+    // CHECK: om.class.fields  %containingModule_in, %ports_in : !om.path, !om.list<!om.class.type<@RtlPort>>
     firrtl.propassign %containingModule, %containingModule_in : !firrtl.path
   }
 
