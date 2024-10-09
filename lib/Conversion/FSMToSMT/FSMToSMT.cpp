@@ -560,37 +560,23 @@ LogicalResult MachineOpConverter::dispatch(){
   }
 
 
-  // // mutual exclusion
+  // mutual exclusion of states
 
-  // for(auto [id1, t1] : llvm::enumerate(transitions)){
-  //   for(auto [id2, t2] : llvm::enumerate(transitions)){
-  //     if(id1!=id2){
-  //       auto forall = b.create<smt::ForallOp>(loc, argVarTypes, [&t1, &t2, &numArgs](OpBuilder &b, Location loc, ValueRange args) { 
-  //         llvm::SmallVector<mlir::Value> oldArgs;
-  //         llvm::SmallVector<mlir::Value> newArgs;
+  for (auto [id1, s1] : llvm::enumerate(stateFunctions)){
+    for (auto [id2, s2] : llvm::enumerate(stateFunctions)){
+      if (id1!=id2){
+        auto forall = b.create<smt::ForallOp>(loc, varTypes, [&s1, &s2, &stateFunctions, &numArgs](OpBuilder &b, Location loc, ValueRange forallArgs) { 
 
-  //         for(auto [i, a]: llvm::enumerate(args)){
-  //           if (i < numArgs*2 && i%2 == 0){
-  //             oldArgs.push_back(a);
-  //           } else if (i < numArgs*2 && i%2 == 1){
-  //             newArgs.push_back(a);
-  //           } else {
-  //             oldArgs.push_back(a);
-  //             newArgs.push_back(a);
-  //           }
-  //         }
+          auto lhs = b.create<smt::ApplyFuncOp>(loc, s1, forallArgs);
+          auto t2Fun = b.create<smt::ApplyFuncOp>(loc, s2, forallArgs);
+          auto rhs = b.create<smt::NotOp>(loc, t2Fun);
+          return b.create<smt::ImpliesOp>(loc, lhs, rhs); 
+        });
 
-  //         auto lhs = b.create<smt::ApplyFuncOp>(loc, t1.activeFun, oldArgs);
-  //         auto t2Fun = b.create<smt::ApplyFuncOp>(loc, t2.activeFun, oldArgs);
-  //         auto rhs = b.create<smt::NotOp>(loc, t2Fun);
-  //         return b.create<smt::ImpliesOp>(loc, lhs, rhs); 
-  //       });
-
-  //       b.create<smt::AssertOp>(loc, forall);
-
-  //     }
-  //   }
-  // }
+        b.create<smt::AssertOp>(loc, forall);
+      }
+    }
+  }
 
   b.create<smt::YieldOp>(loc, typeRange, valueRange);
 
