@@ -118,23 +118,39 @@ namespace {
 
 /// An expression on the right-hand side of a constraint.
 struct Expr {
-  enum class Kind { EXPR_KINDS };
-  std::optional<int32_t> solution;
-  Kind kind;
+  enum class Kind : uint8_t { EXPR_KINDS };
 
   /// Print a human-readable representation of this expr.
   void print(llvm::raw_ostream &os) const;
 
+  std::optional<int32_t> getSolution() const {
+    if (hasSolution)
+      return solution;
+    return std::nullopt;
+  }
+
+  void setSolution(int32_t solution) {
+    hasSolution = true;
+    this->solution = solution;
+  }
+
+  Kind getKind() const { return kind; }
+
 protected:
   Expr(Kind kind) : kind(kind) {}
   llvm::hash_code hash_value() const { return llvm::hash_value(kind); }
+
+private:
+  int32_t solution;
+  Kind kind;
+  bool hasSolution = false;
 };
 
 /// Helper class to CRTP-derive common functions.
 template <class DerivedT, Expr::Kind DerivedKind>
 struct ExprBase : public Expr {
   ExprBase() : Expr(DerivedKind) {}
-  static bool classof(const Expr *e) { return e->kind == DerivedKind; }
+  static bool classof(const Expr *e) { return e->getKind() == DerivedKind; }
   bool operator==(const Expr &other) const {
     if (auto otherSame = dyn_cast<DerivedT>(other))
       return *static_cast<DerivedT *>(this) == otherSame;
@@ -192,7 +208,7 @@ struct IdExpr : public ExprBase<IdExpr, Expr::Kind::Id> {
   IdExpr(Expr *arg) : arg(arg) { assert(arg); }
   void print(llvm::raw_ostream &os) const { os << "*" << *arg; }
   bool operator==(const IdExpr &other) const {
-    return kind == other.kind && arg == other.arg;
+    return getKind() == other.getKind() && arg == other.arg;
   }
   llvm::hash_code hash_value() const {
     return llvm::hash_combine(Expr::hash_value(), arg);
@@ -204,13 +220,13 @@ struct IdExpr : public ExprBase<IdExpr, Expr::Kind::Id> {
 
 /// A known constant value.
 struct KnownExpr : public ExprBase<KnownExpr, Expr::Kind::Known> {
-  KnownExpr(int32_t value) : ExprBase() { solution = value; }
-  void print(llvm::raw_ostream &os) const { os << *solution; }
+  KnownExpr(int32_t value) : ExprBase() { setSolution(value); }
+  void print(llvm::raw_ostream &os) const { os << *getSolution(); }
   bool operator==(const KnownExpr &other) const {
-    return *solution == *other.solution;
+    return *getSolution() == *other.getSolution();
   }
   llvm::hash_code hash_value() const {
-    return llvm::hash_combine(Expr::hash_value(), *solution);
+    return llvm::hash_combine(Expr::hash_value(), *getSolution());
   }
 };
 
@@ -218,7 +234,7 @@ struct KnownExpr : public ExprBase<KnownExpr, Expr::Kind::Known> {
 /// there for show and ease of use.
 struct UnaryExpr : public Expr {
   bool operator==(const UnaryExpr &other) const {
-    return kind == other.kind && arg == other.arg;
+    return getKind() == other.getKind() && arg == other.arg;
   }
   llvm::hash_code hash_value() const {
     return llvm::hash_combine(Expr::hash_value(), arg);
@@ -237,7 +253,7 @@ struct UnaryExprBase : public UnaryExpr {
   template <typename... Args>
   UnaryExprBase(Args &&...args)
       : UnaryExpr(DerivedKind, std::forward<Args>(args)...) {}
-  static bool classof(const Expr *e) { return e->kind == DerivedKind; }
+  static bool classof(const Expr *e) { return e->getKind() == DerivedKind; }
 };
 
 /// A power of two.
@@ -250,7 +266,8 @@ struct PowExpr : public UnaryExprBase<PowExpr, Expr::Kind::Pow> {
 /// merely there for show and ease of use.
 struct BinaryExpr : public Expr {
   bool operator==(const BinaryExpr &other) const {
-    return kind == other.kind && lhs() == other.lhs() && rhs() == other.rhs();
+    return getKind() == other.getKind() && lhs() == other.lhs() &&
+           rhs() == other.rhs();
   }
   llvm::hash_code hash_value() const {
     return llvm::hash_combine(Expr::hash_value(), *args);
@@ -274,7 +291,7 @@ struct BinaryExprBase : public BinaryExpr {
   template <typename... Args>
   BinaryExprBase(Args &&...args)
       : BinaryExpr(DerivedKind, std::forward<Args>(args)...) {}
-  static bool classof(const Expr *e) { return e->kind == DerivedKind; }
+  static bool classof(const Expr *e) { return e->getKind() == DerivedKind; }
 };
 
 /// An addition.
@@ -746,7 +763,8 @@ LinIneq ConstraintSolver::checkCycles(VarExpr *var, Expr *expr,
                                       unsigned indent) {
   auto ineq =
       TypeSwitch<Expr *, LinIneq>(expr)
-          .Case<KnownExpr>([&](auto *expr) { return LinIneq(*expr->solution); })
+          .Case<KnownExpr>(
+              [&](auto *expr) { return LinIneq(*expr->getSolution()); })
           .Case<VarExpr>([&](auto *expr) {
             if (expr == var)
               return LinIneq(1, 0); // x >= 1*x + 0
@@ -873,7 +891,7 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
     auto setSolution = [&](ExprSolution solution) {
       // Memoize the result.
       if (solution.first && !solution.second)
-        frame.expr->solution = *solution.first;
+        frame.expr->setSolution(*solution.first);
       solvedExprs[frame.expr] = solution;
 
       // Produce some useful debug prints.
@@ -894,14 +912,14 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
     };
 
     // See if we have a memoized result we can return.
-    if (frame.expr->solution) {
+    if (frame.expr->getSolution()) {
       LLVM_DEBUG({
         if (!isa<KnownExpr>(frame.expr))
           llvm::dbgs().indent(frame.indent * 2)
-              << "- Cached " << *frame.expr << " = " << *frame.expr->solution
-              << "\n";
+              << "- Cached " << *frame.expr << " = "
+              << *frame.expr->getSolution() << "\n";
       });
-      setSolution(ExprSolution{*frame.expr->solution, false});
+      setSolution(ExprSolution{*frame.expr->getSolution(), false});
       continue;
     }
 
@@ -914,7 +932,7 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
 
     TypeSwitch<Expr *>(frame.expr)
         .Case<KnownExpr>([&](auto *expr) {
-          setSolution(ExprSolution{*expr->solution, false});
+          setSolution(ExprSolution{*expr->getSolution(), false});
         })
         .Case<VarExpr>([&](auto *expr) {
           if (solvedExprs.contains(expr->constraint)) {
@@ -1099,9 +1117,11 @@ LogicalResult ConstraintSolver::solve() {
     seenVars.clear();
 
     // Constrain variables >= 0.
-    if (solution.first && *solution.first < 0)
-      solution.first = 0;
-    var->solution = solution.first;
+    if (solution.first) {
+      if (*solution.first < 0)
+        solution.first = 0;
+      var->setSolution(*solution.first);
+    }
 
     // In case the width could not be inferred, complain to the user. This might
     // be the case if the width depends on an unconstrained variable.
@@ -1132,13 +1152,13 @@ LogicalResult ConstraintSolver::solve() {
       continue;
 
     auto *assigned = derived->assigned;
-    if (!assigned || !assigned->solution) {
+    if (!assigned || !assigned->getSolution()) {
       LLVM_DEBUG(llvm::dbgs() << "- Unused " << *derived << " set to 0\n");
-      derived->solution = 0;
+      derived->setSolution(0);
     } else {
       LLVM_DEBUG(llvm::dbgs() << "- Deriving " << *derived << " = "
-                              << assigned->solution << "\n");
-      derived->solution = *assigned->solution;
+                              << assigned->getSolution() << "\n");
+      derived->setSolution(*assigned->getSolution());
     }
   }
 
@@ -1176,14 +1196,14 @@ void ConstraintSolver::emitUninferredWidthError(VarExpr *var) {
 
   if (!var->constraint) {
     diag << " is unconstrained";
-  } else if (var->solution && var->upperBoundSolution &&
-             var->solution > var->upperBoundSolution) {
+  } else if (var->getSolution() && var->upperBoundSolution &&
+             var->getSolution() > var->upperBoundSolution) {
     diag << " cannot satisfy all width requirements";
     LLVM_DEBUG(llvm::dbgs() << *var->constraint << "\n");
     LLVM_DEBUG(llvm::dbgs() << *var->upperBound << "\n");
     auto loc = locs.find(var->constraint)->second.back();
     diag.attachNote(loc) << "width is constrained to be at least "
-                         << *var->solution << " here:";
+                         << *var->getSolution() << " here:";
     loc = locs.find(var->upperBound)->second.back();
     diag.attachNote(loc) << "width is constrained to be at most "
                          << *var->upperBoundSolution << " here:";
@@ -2302,7 +2322,7 @@ FIRRTLBaseType InferenceTypeUpdate::updateType(FieldRef fieldRef,
   auto value = fieldRef.getValue();
   // Get the inferred width.
   Expr *expr = mapping.getExprOrNull(fieldRef);
-  if (!expr || !expr->solution) {
+  if (!expr || !expr->getSolution()) {
     // It should not be possible to arrive at an uninferred width at this point.
     // In case the constraints are not resolvable, checks before the calls to
     // `updateType` must have already caught the issues and aborted the pass
@@ -2310,7 +2330,7 @@ FIRRTLBaseType InferenceTypeUpdate::updateType(FieldRef fieldRef,
     mlir::emitError(value.getLoc(), "width should have been inferred");
     return {};
   }
-  int32_t solution = *expr->solution;
+  int32_t solution = *expr->getSolution();
   assert(solution >= 0); // The solver infers variables to be 0 or greater.
   return resizeType(type, solution);
 }
