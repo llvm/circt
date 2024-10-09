@@ -112,7 +112,7 @@ inline llvm::hash_code hash_value(const T &e) {
 
 namespace {
 #define EXPR_NAMES(x)                                                          \
-  Root##x, Var##x, Derived##x, Id##x, Known##x, Add##x, Pow##x, Max##x, Min##x
+  Var##x, Derived##x, Id##x, Known##x, Add##x, Pow##x, Max##x, Min##x
 #define EXPR_KINDS EXPR_NAMES()
 #define EXPR_CLASSES EXPR_NAMES(Expr)
 
@@ -140,13 +140,6 @@ struct ExprBase : public Expr {
       return *static_cast<DerivedT *>(this) == otherSame;
     return false;
   }
-};
-
-/// The root containing all expressions.
-struct RootExpr : public ExprBase<RootExpr, Expr::Kind::Root> {
-  RootExpr(std::vector<Expr *> &exprs) : exprs(exprs) {}
-  void print(llvm::raw_ostream &os) const { os << "root"; }
-  std::vector<Expr *> &exprs;
 };
 
 /// A free variable.
@@ -680,7 +673,6 @@ private:
 
   /// A list of expressions in the order they were created.
   std::vector<Expr *> exprs;
-  RootExpr root = {exprs};
 
   /// Add an allocated expression to the list above.
   template <typename R, typename T, typename... Args>
