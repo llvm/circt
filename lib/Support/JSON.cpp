@@ -11,12 +11,14 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OperationSupport.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace json = llvm::json;
 
 using namespace circt;
+using llvm::make_scope_exit;
 using mlir::UnitAttr;
 
 // NOLINTBEGIN(misc-no-recursion)
@@ -25,21 +27,21 @@ LogicalResult circt::convertAttributeToJSON(llvm::json::OStream &json,
   return TypeSwitch<Attribute, LogicalResult>(attr)
       .Case<DictionaryAttr>([&](auto attr) {
         json.objectBegin();
+        auto guard = make_scope_exit([&] { json.objectEnd(); });
         for (auto subAttr : attr) {
           json.attributeBegin(subAttr.getName());
+          auto guard = make_scope_exit([&] { json.attributeEnd(); });
           if (failed(convertAttributeToJSON(json, subAttr.getValue())))
             return failure();
-          json.attributeEnd();
         }
-        json.objectEnd();
         return success();
       })
       .Case<ArrayAttr>([&](auto attr) {
         json.arrayBegin();
+        auto guard = make_scope_exit([&] { json.arrayEnd(); });
         for (auto subAttr : attr)
           if (failed(convertAttributeToJSON(json, subAttr)))
             return failure();
-        json.arrayEnd();
         return success();
       })
       .Case<BoolAttr, StringAttr>([&](auto attr) {
@@ -50,8 +52,10 @@ LogicalResult circt::convertAttributeToJSON(llvm::json::OStream &json,
         // If the integer can be accurately represented by a double, print
         // it as an integer. Otherwise, convert it to an exact decimal string.
         const auto &apint = attr.getValue();
-        if (!apint.isSignedIntN(64))
+        if (!apint.isSignedIntN(64)) {
+          json.value(nullptr);
           return failure();
+        }
         json.value(apint.getSExtValue());
         return success();
       })
@@ -60,7 +64,10 @@ LogicalResult circt::convertAttributeToJSON(llvm::json::OStream &json,
         json.value(apfloat.convertToDouble());
         return success();
       })
-      .Default([&](auto) -> LogicalResult { return failure(); });
+      .Default([&](auto) -> LogicalResult {
+        json.value(nullptr);
+        return failure();
+      });
 }
 // NOLINTEND(misc-no-recursion)
 
