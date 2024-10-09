@@ -1218,6 +1218,7 @@ public:
       : solver(solver), symtbl(symtbl), irn{symtbl, istc} {}
 
   LogicalResult map(CircuitOp op);
+  bool allWidthsKnown(Operation *op);
   LogicalResult mapOperation(Operation *op);
 
   /// Declare all the variables in the value. If the value is a ground type,
@@ -1354,32 +1355,43 @@ LogicalResult InferenceMapping::map(CircuitOp op) {
   return success();
 }
 
+bool InferenceMapping::allWidthsKnown(Operation *op) {
+  /// Ignore property assignments, no widths to infer.
+  if (isa<PropAssignOp>(op))
+    return true;
+
+  // If this is a mux, and the select signal is uninferred, we need to set an
+  // upperbound limit on it.
+  if (isa<MuxPrimOp, Mux4CellIntrinsicOp, Mux2CellIntrinsicOp>(op))
+    if (hasUninferredWidth(op->getOperand(0).getType()))
+      return false;
+
+  //  We need to propagate through connects.
+  if (isa<FConnectLike, AttachOp>(op))
+    return false;
+
+  // Check if we know the width of every result of this operation.
+  for (auto result : op->getResults()) {
+    // Only consider FIRRTL types for width constraints. Ignore any foreign
+    // types as they don't participate in the width inference process.
+    auto type = type_dyn_cast<FIRRTLType>(result.getType());
+    if (!type)
+      continue;
+    if (hasUninferredWidth(type))
+      return false;
+    // Create KnownExprs for the known widths of this result.
+    declareVars(result, op->getLoc());
+  }
+  return true;
+}
+
 LogicalResult InferenceMapping::mapOperation(Operation *op) {
   // In case the operation result has a type without uninferred widths, don't
   // even bother to populate the constraint problem and treat that as a known
   // size directly. This is done in `declareVars`, which will generate
   // `KnownExpr` nodes for all known widths -- which are the only ones in this
   // case.
-  bool allWidthsKnown = true;
-  for (auto result : op->getResults()) {
-    if (isa<MuxPrimOp, Mux4CellIntrinsicOp, Mux2CellIntrinsicOp>(op))
-      if (hasUninferredWidth(op->getOperand(0).getType()))
-        allWidthsKnown = false;
-    // Only consider FIRRTL types for width constraints. Ignore any foreign
-    // types as they don't participate in the width inference process.
-    auto resultTy = type_dyn_cast<FIRRTLType>(result.getType());
-    if (!resultTy)
-      continue;
-    if (!hasUninferredWidth(resultTy))
-      declareVars(result, op->getLoc());
-    else
-      allWidthsKnown = false;
-  }
-  if (allWidthsKnown && !isa<FConnectLike, AttachOp>(op))
-    return success();
-
-  /// Ignore property assignments, no widths to infer.
-  if (isa<PropAssignOp>(op))
+  if (allWidthsKnown(op))
     return success();
 
   // Actually generate the necessary constraint expressions.
