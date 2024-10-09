@@ -16,6 +16,7 @@
 
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWTypeInterfaces.h"
+#include "mlir/Interfaces/MemorySlotInterfaces.h"
 
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinTypes.h"

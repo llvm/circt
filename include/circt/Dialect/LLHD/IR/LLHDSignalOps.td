@@ -14,6 +14,7 @@ include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
 
 def SignalOp : LLHDOp<"sig", [
+  DeclareOpInterfaceMethods<DestructurableAllocationOpInterface>,
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
   TypesMatchWith<
     "type of 'init' and underlying type of 'signal' have to match.",
@@ -49,6 +50,8 @@ def SignalOp : LLHDOp<"sig", [
 }
 
 def PrbOp : LLHDOp<"prb", [
+    DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
+    DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
     TypesMatchWith<
       "type of 'result' and underlying type of 'signal' have to match.",
       "signal", "result", "llvm::cast<hw::InOutType>($_self).getElementType()">
@@ -116,6 +119,8 @@ def OutputOp : LLHDOp<"output", [
 }
 
 def DrvOp : LLHDOp<"drv", [
+    DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
+    DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
     TypesMatchWith<
       "type of 'value' and underlying type of 'signal' have to match.",
       "signal", "value", "llvm::cast<hw::InOutType>($_self).getElementType()">
