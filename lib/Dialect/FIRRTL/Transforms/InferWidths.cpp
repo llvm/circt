@@ -230,6 +230,7 @@ struct KnownExpr : public ExprBase<KnownExpr, Expr::Kind::Known> {
   llvm::hash_code hash_value() const {
     return llvm::hash_combine(Expr::hash_value(), *getSolution());
   }
+  int32_t getValue() const { return *getSolution(); }
 };
 
 /// A unary expression. Contains the actual data. Concrete subclasses are merely
@@ -794,7 +795,7 @@ LinIneq ConstraintSolver::checkCycles(VarExpr *var, Expr *expr,
   auto ineq =
       TypeSwitch<Expr *, LinIneq>(expr)
           .Case<KnownExpr>(
-              [&](auto *expr) { return LinIneq(*expr->getSolution()); })
+              [&](auto *expr) { return LinIneq(expr->getValue()); })
           .Case<VarExpr>([&](auto *expr) {
             if (expr == var)
               return LinIneq(1, 0); // x >= 1*x + 0
@@ -962,7 +963,7 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
 
     TypeSwitch<Expr *>(frame.expr)
         .Case<KnownExpr>([&](auto *expr) {
-          setSolution(ExprSolution{*expr->getSolution(), false});
+          setSolution(ExprSolution{expr->getValue(), false});
         })
         .Case<VarExpr>([&](auto *expr) {
           if (solvedExprs.contains(expr->constraint)) {
