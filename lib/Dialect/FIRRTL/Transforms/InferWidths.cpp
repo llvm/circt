@@ -1624,15 +1624,6 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // (but don't solve to make this true, don't back-propagate)
         constrainTypes(op.getDest(), op.getSrc(), true);
       })
-      // MatchingConnect is an identify constraint
-      .Case<MatchingConnectOp>([&](auto op) {
-        // This back-propagates width from destination to source,
-        // causing source to sometimes be inferred wider than
-        // it should be (https://github.com/llvm/circt/issues/5391).
-        // This is needed to push the width into feeding widthCast?
-        constrainTypes(op.getDest(), op.getSrc());
-        constrainTypes(op.getSrc(), op.getDest());
-      })
       .Case<AttachOp>([&](auto op) {
         // Attach connects multiple analog signals together. All signals must
         // have the same bit width. Signals without bit width inherit from the
