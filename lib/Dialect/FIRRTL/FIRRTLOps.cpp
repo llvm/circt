@@ -1160,7 +1160,7 @@ printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
       // If the name wasn't printable in a way that agreed with portName, make
       // sure to print out an explicit portNames attribute.
       auto portName = cast<StringAttr>(portNames[i]).getValue();
-      if (!portName.empty() && tmpStream.str().drop_front() != portName)
+      if (tmpStream.str().drop_front() != portName)
         printedNamesDontMatch = true;
       p << tmpStream.str();
     } else {
