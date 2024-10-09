@@ -1076,32 +1076,6 @@ void circt::firrtl::makeCommonPrefix(SmallString<64> &a, StringRef b) {
     a.pop_back();
 }
 
-ClassOp circt::firrtl::buildSimpleClassOp(OpBuilder &odsBuilder, Location loc,
-                                          Twine name,
-                                          ArrayRef<StringRef> fieldNames,
-                                          ArrayRef<Type> fieldTypes) {
-  SmallVector<PortInfo, 10> ports;
-  for (auto [fieldName, fieldType] : llvm::zip(fieldNames, fieldTypes)) {
-    ports.emplace_back(odsBuilder.getStringAttr(fieldName + "_in"), fieldType,
-                       Direction::In);
-    ports.emplace_back(odsBuilder.getStringAttr(fieldName), fieldType,
-                       Direction::Out);
-  }
-
-  ClassOp classOp =
-      odsBuilder.create<ClassOp>(loc, odsBuilder.getStringAttr(name), ports);
-  Block *body = classOp.getBodyBlock();
-  auto prevLoc = odsBuilder.saveInsertionPoint();
-  odsBuilder.setInsertionPointToEnd(body);
-  auto args = body->getArguments();
-  for (unsigned i = 0, e = ports.size(); i != e; i += 2)
-    odsBuilder.create<PropAssignOp>(loc, args[i + 1], args[i]);
-
-  odsBuilder.restoreInsertionPoint(prevLoc);
-
-  return classOp;
-}
-
 PathOp circt::firrtl::createPathRef(Operation *op, hw::HierPathOp nla,
                                     mlir::ImplicitLocOpBuilder &builderOM) {
 

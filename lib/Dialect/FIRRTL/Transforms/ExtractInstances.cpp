@@ -165,6 +165,7 @@ struct ExtractInstancesPass
   DenseMap<Operation *, hw::InnerSymbolNamespace> moduleNamespaces;
   /// The metadata class ops.
   ClassOp extractMetadataClass, schemaClass;
+  const unsigned prefixNameFieldId = 0, pathFieldId = 2, fileNameFieldId = 4;
   /// Cache of the inner ref to the new instances created. Will be used to
   /// create a path to the instance
   DenseMap<InnerRefAttr, InstanceOp> innerRefToInstances;
@@ -209,13 +210,8 @@ void ExtractInstancesPass::runOnOperation() {
   if (anyFailures)
     return signalPassFailure();
 
-  ClassOp sifiveMetadata;
-  for (ClassOp classOp : circtOp.getOps<ClassOp>()) {
-    if (classOp.getSymNameAttr().getValue().compare("SiFive_Metadata"))
-      continue;
-    sifiveMetadata = classOp;
-    break;
-  }
+  ClassOp sifiveMetadata =
+      dyn_cast_or_null<ClassOp>(symbolTable->lookup("SiFive_Metadata"));
 
   // Generate the trace files that list where each instance was extracted from.
   createTraceFiles(sifiveMetadata);
@@ -843,6 +839,7 @@ void ExtractInstancesPass::extractInstances() {
 
         // No update to NLATable required, since it will be deleted from the
         // parent, and it should already exist in the new parent module.
+        continue;
       }
       AnnotationSet newInstAnnos(newInst);
       newInstAnnos.addAnnotations(newInstNonlocalAnnos);
@@ -1083,7 +1080,8 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
             inst.getLoc(), extractMetadataClass.getBodyBlock());
         auto prefixName = builderOM.create<StringConstantOp>(prefix);
         auto object = builderOM.create<ObjectOp>(schemaClass, prefix);
-        auto fPrefix = builderOM.create<ObjectSubfieldOp>(object, 0);
+        auto fPrefix =
+            builderOM.create<ObjectSubfieldOp>(object, prefixNameFieldId);
         builderOM.create<PropAssignOp>(fPrefix, prefixName);
 
         auto targetInstance = innerRefToInstances[path.front()];
@@ -1092,12 +1090,13 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
             ArrayAttr::get(circtOp->getContext(), pathOpAttr));
 
         auto pathOp = createPathRef(targetInstance, nla, builderOM);
-        builderOM.create<PropAssignOp>(
-            builderOM.create<ObjectSubfieldOp>(object, 2), pathOp);
-        builderOM.create<PropAssignOp>(
-            builderOM.create<ObjectSubfieldOp>(object, 4),
-            builderOM.create<StringConstantOp>(
-                builder.getStringAttr(fileName)));
+        auto fPath = builderOM.create<ObjectSubfieldOp>(object, pathFieldId);
+        builderOM.create<PropAssignOp>(fPath, pathOp);
+        auto fFile =
+            builderOM.create<ObjectSubfieldOp>(object, fileNameFieldId);
+        auto fileNameOp =
+            builderOM.create<StringConstantOp>(builder.getStringAttr(fileName));
+        builderOM.create<PropAssignOp>(fFile, fileNameOp);
 
         // Now add this to the output field of the class.
         auto portIndex = extractMetadataClass.getNumPorts();
@@ -1182,7 +1181,7 @@ void ExtractInstancesPass::createSchema() {
   };
   StringRef portFields[] = {"name", "path", "filename"};
 
-  schemaClass = buildSimpleClassOp(
+  schemaClass = ClassOp::buildSimpleClassOp(
       builderOM, unknownLoc, "ExtractInstancesSchema", portFields, portsType);
 
   // Now create the class that will instantiate the schema objects.
