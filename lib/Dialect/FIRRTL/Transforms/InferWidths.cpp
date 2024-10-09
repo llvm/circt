@@ -1676,10 +1676,10 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // module's ports, and use them for instance port wires. This way,
         // constraints imposed onto the ports of the instance will transparently
         // apply to the ports of the instantiated module.
-        for (auto it : llvm::zip(op->getResults(), module.getArguments())) {
-          unifyTypes(FieldRef(std::get<0>(it), 0), FieldRef(std::get<1>(it), 0),
-                     type_cast<FIRRTLType>(std::get<0>(it).getType()));
-        }
+        for (auto [result, arg] :
+             llvm::zip(op->getResults(), module.getArguments()))
+          unifyTypes({result, 0}, {arg, 0},
+                     type_cast<FIRRTLType>(result.getType()));
       })
 
       // Handle memories.
@@ -2214,10 +2214,10 @@ FailureOr<bool> InferenceTypeUpdate::updateValue(Value value) {
       return failure();
 
     assert(types.size() == op->getNumResults());
-    for (auto it : llvm::zip(op->getResults(), types)) {
-      LLVM_DEBUG(llvm::dbgs() << "Inferring " << std::get<0>(it) << " as "
-                              << std::get<1>(it) << "\n");
-      std::get<0>(it).setType(std::get<1>(it));
+    for (auto [result, type] : llvm::zip(op->getResults(), types)) {
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Inferring " << result << " as " << type << "\n");
+      result.setType(type);
     }
     return true;
   }
