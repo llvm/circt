@@ -1246,21 +1246,12 @@ struct AssertLikeOpConversion : public OpConversionPattern<MooreOpTy> {
   LogicalResult
   matchAndRewrite(MooreOpTy op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    DeferAssert defer = op.getDefer();
     StringAttr label =
         op.getLabel().has_value()
             ? StringAttr::get(op->getContext(), op.getLabel().value())
             : StringAttr::get(op->getContext());
-    switch (defer) {
-    case DeferAssert::Immediate:
-      rewriter.replaceOpWithNewOp<VerifOpTy>(op, adaptor.getCond(),
-                                             mlir::Value(), label);
-      break;
-    case DeferAssert::Observed:
-    case DeferAssert::Final:
-      assert(false && "Observed and Final not supported yet");
-      break;
-    }
+    rewriter.replaceOpWithNewOp<VerifOpTy>(op, adaptor.getCond(), mlir::Value(),
+                                           label);
     return success();
   }
 };

@@ -843,9 +843,9 @@ moore.module @Assert(in %cond : !moore.l1)  {
   // CHECK: verif.assert %cond label "" : i1
   moore.assert immediate %cond : l1
   // CHECK: verif.assume %cond label "" : i1
-  moore.assume immediate %cond  : l1
+  moore.assume observed %cond  : l1
   // CHECK: verif.cover %cond label "" : i1
-  moore.cover immediate %cond : l1
+  moore.cover final %cond : l1
   moore.return
   }
 }
