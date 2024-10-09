@@ -267,14 +267,17 @@ def YieldOp : VerifOp<"yield", [
 }
 
 //===----------------------------------------------------------------------===//
-// Verification intent ops
+// Verification Intent Ops
 //===----------------------------------------------------------------------===//
 
 def FormalOp : VerifOp<"formal", [
-  NoTerminator, RegionKindInterface, HasParent<"mlir::ModuleOp">, 
-  IsolatedFromAbove, Symbol
+  IsolatedFromAbove,
+  NoTerminator,
+  RegionKindInterface,
+  SingleBlock,
+  Symbol,
 ]> {
-  let summary = "defines a formal verification test";
+  let summary = "A formal test case";
   let description = [{
     This operation defines a formal verification test. This should be written 
     by declaring symbolic values that are then connected to a hardware instance. 
