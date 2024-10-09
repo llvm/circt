@@ -26,6 +26,7 @@ set(CIRCT_TEST_DEPENDS
   circt-dis
   circt-lec
   circt-opt
+  circt-test
   circt-translate
   circt-reduce
   handshake-runner
