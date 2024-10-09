@@ -44,6 +44,8 @@ using mlir::WalkOrder;
 using namespace circt;
 using namespace firrtl;
 
+#define PRINT_STATS 1
+
 //===----------------------------------------------------------------------===//
 // Helpers
 //===----------------------------------------------------------------------===//
@@ -612,7 +614,9 @@ class ConstraintSolver {
 public:
   ConstraintSolver() = default;
 
+  size_t varCount = 0;
   VarExpr *var() {
+    varCount++;
     auto *v = vars.alloc();
     exprs.push_back(v);
     if (currentInfo)
@@ -621,17 +625,43 @@ public:
       locs[v].insert(*currentLoc);
     return v;
   }
+  size_t derivedCount = 0;
   DerivedExpr *derived() {
+    derivedCount++;
     auto *d = derivs.alloc();
     exprs.push_back(d);
     return d;
   }
-  KnownExpr *known(int32_t value) { return alloc<KnownExpr>(knowns, value); }
-  IdExpr *id(Expr *arg) { return alloc<IdExpr>(ids, arg); }
-  PowExpr *pow(Expr *arg) { return alloc<PowExpr>(uns, arg); }
-  AddExpr *add(Expr *lhs, Expr *rhs) { return alloc<AddExpr>(bins, lhs, rhs); }
-  MaxExpr *max(Expr *lhs, Expr *rhs) { return alloc<MaxExpr>(bins, lhs, rhs); }
-  MinExpr *min(Expr *lhs, Expr *rhs) { return alloc<MinExpr>(bins, lhs, rhs); }
+  size_t knownCount = 0;
+  KnownExpr *known(int32_t value) {
+    knownCount++;
+    return alloc<KnownExpr>(knowns, value);
+  }
+  size_t idCount = 0;
+  IdExpr *id(Expr *arg) {
+    idCount++;
+    return alloc<IdExpr>(ids, arg);
+  }
+  size_t powCount = 0;
+  PowExpr *pow(Expr *arg) {
+    powCount++;
+    return alloc<PowExpr>(uns, arg);
+  }
+  size_t addCount = 0;
+  AddExpr *add(Expr *lhs, Expr *rhs) {
+    addCount++;
+    return alloc<AddExpr>(bins, lhs, rhs);
+  }
+  size_t maxCount = 0;
+  MaxExpr *max(Expr *lhs, Expr *rhs) {
+    maxCount++;
+    return alloc<MaxExpr>(bins, lhs, rhs);
+  }
+  size_t minCount = 0;
+  MinExpr *min(Expr *lhs, Expr *rhs) {
+    minCount++;
+    return alloc<MinExpr>(bins, lhs, rhs);
+  }
 
   /// Add a constraint `lhs >= rhs`. Multiple constraints on the same variable
   /// are coalesced into a `max(a, b)` expr.
@@ -2326,13 +2356,105 @@ class InferWidthsPass
 };
 } // namespace
 
+#ifdef PRINT_STATS
+static std::pair<size_t, size_t> countUninferred(Type type) {
+  auto fType = getBaseType(type);
+  if (!fType)
+    return {1, 0};
+
+  if (auto bundleType = type_dyn_cast<BundleType>(type)) {
+    // Bundle types recursively declare all bundle elements.
+    auto fieldCount = 0;
+    auto unfieldCount = 0;
+    for (auto &element : bundleType) {
+      auto [f, u] = countUninferred(element.type);
+      fieldCount += f;
+      unfieldCount += u;
+    }
+    return {fieldCount, unfieldCount};
+  }
+
+  if (auto vecType = type_dyn_cast<FVectorType>(type))
+    return countUninferred(vecType.getElementType());
+
+  if (auto enumType = type_dyn_cast<FEnumType>(type)) {
+    auto fieldCount = 0;
+    auto unfieldCount = 0;
+    for (auto &element : enumType) {
+      auto [f, u] = countUninferred(element.type);
+      fieldCount += f;
+      unfieldCount += u;
+    }
+    return {fieldCount, unfieldCount};
+  }
+
+  auto width = fType.getBitWidthOrSentinel();
+  if (width >= 0) {
+    return {1, 0};
+  }
+  return {1, 1};
+}
+#endif
+
 void InferWidthsPass::runOnOperation() {
+
+#ifdef PRINT_STATS
+  struct Data {
+    size_t count = 0;
+    size_t fieldCount = 0;
+    size_t unfieldCount = 0;
+  };
+  llvm::MapVector<OperationName, Data> info;
+  auto circuit = getOperation();
+  circuit->walk([&](Operation *op) {
+    auto &entry = info[op->getName()];
+    entry.count++;
+    for (auto result : op->getResults()) {
+      auto [f, u] = countUninferred(result.getType());
+      entry.fieldCount += f;
+      entry.unfieldCount += u;
+    }
+    for (auto &region : op->getRegions()) {
+      for (auto blarg : region.getArguments()) {
+        auto [f, u] = countUninferred(blarg.getType());
+        entry.fieldCount += f;
+        entry.unfieldCount += u;
+      }
+    }
+  });
+  size_t total = 0;
+  size_t totalFields = 0;
+  size_t totalUnfields = 0;
+  for (auto &[name, entry] : info) {
+    llvm::errs() << name << " count=" << entry.count
+                 << " fields=" << entry.fieldCount
+                 << " uninferred=" << entry.unfieldCount << "\n";
+    total += entry.count;
+    totalFields += entry.fieldCount;
+    totalUnfields += entry.unfieldCount;
+  }
+  llvm::errs() << "total=" << total << "\n";
+  llvm::errs() << "total fields=" << totalFields << "\n";
+  llvm::errs() << "total uninferred=" << totalUnfields << "\n";
+#endif
+
   // Collect variables and constraints
   ConstraintSolver solver;
   InferenceMapping mapping(solver, getAnalysis<SymbolTable>(),
                            getAnalysis<hw::InnerSymbolTableCollection>());
   if (failed(mapping.map(getOperation())))
     return signalPassFailure();
+
+#ifdef PRINT_STATS
+  llvm::errs() << "vars = " << solver.varCount << "\n";
+  llvm::errs() << "derived = " << solver.derivedCount << "\n";
+  llvm::errs() << "known = " << solver.knownCount << "\n";
+  llvm::errs() << "id = " << solver.idCount << "\n";
+  llvm::errs() << "pow = " << solver.powCount << "\n";
+  llvm::errs() << "add = " << solver.addCount << "\n";
+  llvm::errs() << "max = " << solver.maxCount << "\n";
+  llvm::errs() << "min = " << solver.minCount << "\n";
+#endif
 
   // fast path if no inferrable widths are around
   if (mapping.areAllModulesSkipped())
