@@ -315,7 +315,6 @@ private:
 
 static constexpr StringRef kContainingModuleName = "containingModule";
 static constexpr StringRef kPortsName = "ports";
-static constexpr StringRef kPortsNameIn = "ports_in";
 static constexpr StringRef kRtlPortClassName = "RtlPort";
 
 static Type getRtlPortsType(MLIRContext *context) {
@@ -1057,7 +1056,7 @@ om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike,
 
   // If there is a 'containingModule', add a parameter for 'ports'.
   if (hasContainingModule)
-    formalParamNames.push_back(kPortsNameIn);
+    formalParamNames.push_back(kPortsName);
 
   // Take the name from the FIRRTL Class or Module to create the OM Class name.
   StringRef className = moduleLike.getName();
