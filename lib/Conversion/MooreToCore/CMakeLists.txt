@@ -13,6 +13,7 @@ add_circt_conversion_library(CIRCTMooreToCore
   CIRCTHW
   CIRCTLLHD
   CIRCTMoore
+  CIRCTVerif
   MLIRControlFlowDialect
   MLIRFuncDialect
   MLIRSCFDialect

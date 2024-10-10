@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
+#include "circt/Dialect/Verif/VerifOps.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -1237,6 +1238,24 @@ struct InPlaceOpConversion : public OpConversionPattern<SourceOp> {
   }
 };
 
+template <typename MooreOpTy, typename VerifOpTy>
+struct AssertLikeOpConversion : public OpConversionPattern<MooreOpTy> {
+  using OpConversionPattern<MooreOpTy>::OpConversionPattern;
+  using OpAdaptor = typename MooreOpTy::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(MooreOpTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    StringAttr label =
+        op.getLabel().has_value()
+            ? StringAttr::get(op->getContext(), op.getLabel().value())
+            : StringAttr::get(op->getContext());
+    rewriter.replaceOpWithNewOp<VerifOpTy>(op, adaptor.getCond(), mlir::Value(),
+                                           label);
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -1250,6 +1269,7 @@ static void populateLegality(ConversionTarget &target,
   target.addLegalDialect<hw::HWDialect>();
   target.addLegalDialect<llhd::LLHDDialect>();
   target.addLegalDialect<comb::CombDialect>();
+  target.addLegalDialect<verif::VerifDialect>();
 
   target.addLegalOp<debug::ScopeOp>();
 
@@ -1423,7 +1443,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
     ICmpOpConversion<WildcardNeOp, ICmpPredicate::wne>,
     CaseXZEqOpConversion<CaseZEqOp, true>,
     CaseXZEqOpConversion<CaseXZEqOp, false>,
-    
+
     // Patterns of structural operations.
     SVModuleOpConversion, InstanceOpConversion, ProcedureOpConversion, WaitEventOpConversion,
 
@@ -1444,7 +1464,12 @@ static void populateOpConversion(RewritePatternSet &patterns,
     CallOpConversion, UnrealizedConversionCastConversion,
     InPlaceOpConversion<debug::ArrayOp>,
     InPlaceOpConversion<debug::StructOp>,
-    InPlaceOpConversion<debug::VariableOp>
+    InPlaceOpConversion<debug::VariableOp>,
+
+    // Patterns of assert-like operations
+    AssertLikeOpConversion<AssertOp, verif::AssertOp>,
+    AssertLikeOpConversion<AssumeOp, verif::AssumeOp>,
+    AssertLikeOpConversion<CoverOp, verif::CoverOp>
   >(typeConverter, context);
   // clang-format on
   mlir::populateAnyFunctionOpInterfaceTypeConversionPattern(patterns,
