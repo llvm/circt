@@ -290,6 +290,7 @@ def MergeIfsPass : Pass<"arc-merge-ifs"> {
     Statistic<"numIfsMerged", "ifs-merged", "Adjacent scf.if ops merged">,
     Statistic<"numOpsMovedFromBetweenIfs", "moved-from-between-ifs",
       "Ops moved from between ifs to enable merging">,
+    Statistic<"numIterations", "iterations", "Iterations run until no changes">,
   ];
 }
 

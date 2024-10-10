@@ -32,30 +32,13 @@ struct MergeIfsPass : public arc::impl::MergeIfsPassBase<MergeIfsPass> {
   void runOnOperation() override;
   using MergeIfsPassBase::MergeIfsPassBase;
   using MergeIfsPassBase::numIfsMerged;
+  using MergeIfsPassBase::numIterations;
   using MergeIfsPassBase::numOpsMovedFromBetweenIfs;
   using MergeIfsPassBase::numOpsMovedToUser;
   using MergeIfsPassBase::numOpsSunk;
 };
 
-using OpOrder = std::pair<unsigned, unsigned>;
-
-struct OpAndOrder {
-  Operation *op = nullptr;
-  OpOrder order = {0, 0};
-
-  explicit operator bool() const { return op; }
-
-  void minimize(const OpAndOrder &other) {
-    if (!op || (other.op && other.order < order))
-      *this = other;
-  }
-
-  void maximize(const OpAndOrder &other) {
-    if (!op || (other.op && other.order > order))
-      *this = other;
-  }
-};
-
+/// A helper to perform the op sinking within a specific block.
 struct Sinker {
   MergeIfsPass &pass;
   Block &rootBlock;
@@ -70,6 +53,8 @@ struct Sinker {
 } // namespace
 
 void MergeIfsPass::runOnOperation() {
+  // Go through the regions recursively, from outer regions to nested regions,
+  // and try to move/sink/merge ops in each.
   auto result = getOperation()->walk<WalkOrder::PreOrder>([&](Region *region) {
     if (region->hasOneBlock() && mlir::mayHaveSSADominance(*region))
       if (failed(Sinker(*this, region->front()).run()))
@@ -80,21 +65,20 @@ void MergeIfsPass::runOnOperation() {
     signalPassFailure();
 }
 
+/// Iteratively sink ops into block and move them closer to their uses, and
+/// merge adjacent `scf.if` operations.
 LogicalResult Sinker::run() {
   LLVM_DEBUG(llvm::dbgs() << "Running on block in "
                           << rootBlock.getParentOp()->getName() << "\n");
   unsigned iteration = 0;
   do {
-    if (iteration >= 10000)
+    if (++iteration > 10)
       return rootBlock.getParentOp()->emitOpError()
-             << "op sinking/merging did not converge";
-    ++iteration;
-
+             << "MergeIfs did not converge";
     anyChanges = false;
     sinkOps();
     mergeIfs();
   } while (anyChanges);
-
   return success();
 }
 
@@ -116,14 +100,52 @@ static Value getPointerReadByOp(Operation *op) {
   return {};
 }
 
+namespace {
+/// An integer indicating the position of an operation in its parent block. The
+/// first field is the initial order/position assigned. The second field is used
+/// to order ops that were moved to the same location, which makes them have
+/// same first field.
+using OpOrder = std::pair<unsigned, unsigned>;
+
+/// A helper that tracks an op and its order, and allows for convenient
+/// substitution with another op that has a higher/lower order.
+struct OpAndOrder {
+  Operation *op = nullptr;
+  OpOrder order = {0, 0};
+
+  explicit operator bool() const { return op; }
+
+  /// Assign `other` if its order is lower than this op, or this op is null.
+  void minimize(const OpAndOrder &other) {
+    if (!op || (other.op && other.order < order))
+      *this = other;
+  }
+
+  /// Assign `other` if its order is higher than this op, or this op is null.
+  void maximize(const OpAndOrder &other) {
+    if (!op || (other.op && other.order > order))
+      *this = other;
+  }
+};
+} // namespace
+
 /// Sink operations as close to their users as possible.
 void Sinker::sinkOps() {
+  // A numeric position assigned to ops as we encounter them. Ops at the end of
+  // the block get the lowest order number, ops at the beginning the highest.
   DenseMap<Operation *, OpOrder> opOrder;
+  // A lookup table that indicates where ops should be inserted. This is used to
+  // maintain the original op order if multiple ops pile up before the same
+  // other op that blocks their move.
   DenseMap<Operation *, Operation *> insertionPoints;
+  // The write ops to each state/memory pointer we've seen so far. ("Next"
+  // because we run from the end to the beginning of the block.)
   DenseMap<Value, Operation *> nextWrite;
+  // The most recent op that has an unknown (non-read/write) side-effect.
   Operation *nextSideEffect = nullptr;
 
   for (auto &op : llvm::make_early_inc_range(llvm::reverse(rootBlock))) {
+    // Assign an order to this op.
     auto order = OpOrder{opOrder.size() + 1, 0};
     opOrder[&op] = order;
 
@@ -203,16 +225,11 @@ void Sinker::sinkOps() {
       anyChanges = true;
       LLVM_DEBUG(llvm::dbgs() << "- Sunk " << op << "\n");
     } else {
-      // LLVM_DEBUG(llvm::dbgs() << "- Moving " << op << " (order " <<
-      // order.first
-      //                         << "/" << order.second << ")\n");
-      // LLVM_DEBUG(llvm::dbgs() << "  - Before " << *earliest.op << " (order "
-      //                         << earliest.order.first << "/"
-      //                         << earliest.order.second << ")\n");
-
       // Insert above other ops that we have already moved to this earliest op.
       // This ensures the original op order is maintained and we are not
-      // spuriously flipping ops around.
+      // spuriously flipping ops around. This also works without the
+      // `insertionPoint` lookup, but can cause significant linear scanning to
+      // find the op before which we want to insert.
       auto &insertionPoint = insertionPoints[earliest.op];
       if (insertionPoint) {
         auto order = opOrder.lookup(insertionPoint);
@@ -221,37 +238,23 @@ void Sinker::sinkOps() {
         earliest.op = insertionPoint;
         earliest.order = order;
       }
-
       while (auto *prevOp = earliest.op->getPrevNode()) {
         auto order = opOrder.lookup(prevOp);
         if (order.first != earliest.order.first)
           break;
-        // LLVM_DEBUG(llvm::dbgs() << "  - Skipping " << *prevOp << " (order "
-        //                         << order.first << "/" << order.second <<
-        //                         ")\n");
         assert(order.second > earliest.order.second);
         earliest.op = prevOp;
         earliest.order = order;
       }
       insertionPoint = earliest.op;
 
-      // auto &beforeOp = insertionPoints[earliest.op];
-      // if (!beforeOp)
-      //   beforeOp = earliest.op;
-      // auto beforeOrder = opOrder.lookup(beforeOp);
+      // Only move if the op isn't already in the right spot.
       if (op.getNextNode() != earliest.op) {
-        // LLVM_DEBUG(llvm::dbgs()
-        //            << "  - Inserting before " << earliest.op->getName()
-        //            << " (order " << earliest.order.first << "/"
-        //            << earliest.order.second << ")\n");
         LLVM_DEBUG(llvm::dbgs() << "- Moved " << op << "\n");
         op.moveBefore(earliest.op);
         ++pass.numOpsMovedToUser;
         anyChanges = true;
-      } else {
-        // LLVM_DEBUG(llvm::dbgs() << "  - Already at correct location\n");
       }
-      // beforeOp = &op;
 
       // Update the current op's order to reflect where it has been inserted.
       // This ensures that later moves to the same pile of moved ops do not
@@ -260,9 +263,6 @@ void Sinker::sinkOps() {
       assert(order.second < unsigned(-1));
       ++order.second;
       opOrder[&op] = order;
-      // LLVM_DEBUG(llvm::dbgs() << "  - Updated order to " << order.first <<
-      // "/"
-      //                         << order.second << "\n");
     }
   }
 }
@@ -276,7 +276,8 @@ void Sinker::mergeIfs() {
     if (!prevIfOp)
       continue;
 
-    // Only handle simple cases for now.
+    // Only handle simple cases for now. (Same condition, no results, only
+    // single blocks, and both ifs either have or don't have an else region.)
     if (ifOp.getCondition() != prevIfOp.getCondition())
       continue;
     if (ifOp.getNumResults() != 0 || prevIfOp.getNumResults() != 0)
