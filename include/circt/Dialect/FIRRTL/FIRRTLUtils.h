@@ -228,7 +228,8 @@ inline FIRRTLBaseType getBaseType(Type type) {
 }
 
 /// Get base type if isa<> the requested type, else null.
-template <typename T> inline T getBaseOfType(Type type) {
+template <typename T>
+inline T getBaseOfType(Type type) {
   return dyn_cast_or_null<T>(getBaseType(type));
 }
 

@@ -91,9 +91,8 @@ struct ObjectModelIR {
     };
     StringRef extraPortFields[3] = {"name", "direction", "width"};
 
-    extraPortsClass = ClassOp::buildSimpleClassOp(
-        builderOM, unknownLoc, "ExtraPortsMemorySchema", extraPortFields,
-        extraPortsType);
+    extraPortsClass = builderOM.create<ClassOp>(
+        "ExtraPortsMemorySchema", extraPortFields, extraPortsType);
 
     mlir::Type classFieldTypes[13] = {
         StringType::get(context),
@@ -113,9 +112,8 @@ struct ObjectModelIR {
         ListType::get(context, cast<PropertyType>(StringType::get(context))),
     };
 
-    memorySchemaClass =
-        ClassOp::buildSimpleClassOp(builderOM, unknownLoc, "MemorySchema",
-                                    memoryParamNames, classFieldTypes);
+    memorySchemaClass = builderOM.create<ClassOp>(
+        "MemorySchema", memoryParamNames, classFieldTypes);
 
     // Now create the class that will instantiate metadata class with all the
     // memories of the circt.
@@ -129,9 +127,8 @@ struct ObjectModelIR {
     auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
         unknownLoc, circtOp.getBodyBlock());
     Type classFieldTypes[] = {StringType::get(context)};
-    retimeModulesSchemaClass = ClassOp::buildSimpleClassOp(
-        builderOM, unknownLoc, "RetimeModulesSchema", retimeModulesParamNames,
-        classFieldTypes);
+    retimeModulesSchemaClass = builderOM.create<ClassOp>(
+        "RetimeModulesSchema", retimeModulesParamNames, classFieldTypes);
 
     SmallVector<PortInfo> mports;
     retimeModulesMetadataClass = builderOM.create<ClassOp>(
@@ -168,9 +165,9 @@ struct ObjectModelIR {
     auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
         unknownLoc, circtOp.getBodyBlock());
     Type classFieldTypes[] = {StringType::get(context)};
-    blackBoxModulesSchemaClass = ClassOp::buildSimpleClassOp(
-        builderOM, unknownLoc, "SitestBlackBoxModulesSchema",
-        blackBoxModulesParamNames, classFieldTypes);
+    blackBoxModulesSchemaClass =
+        builderOM.create<ClassOp>("SitestBlackBoxModulesSchema",
+                                  blackBoxModulesParamNames, classFieldTypes);
     SmallVector<PortInfo> mports;
     blackBoxMetadataClass = builderOM.create<ClassOp>(
         builderOM.getStringAttr("SitestBlackBoxMetadata"), mports);

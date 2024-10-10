@@ -1195,8 +1195,8 @@ void ExtractInstancesPass::createSchema() {
   };
   StringRef portFields[] = {"name", "path", "filename"};
 
-  schemaClass = ClassOp::buildSimpleClassOp(
-      builderOM, unknownLoc, "ExtractInstancesSchema", portFields, portsType);
+  schemaClass = builderOM.create<ClassOp>("ExtractInstancesSchema", portFields,
+                                          portsType);
 
   // Now create the class that will instantiate the schema objects.
   SmallVector<PortInfo> mports;
