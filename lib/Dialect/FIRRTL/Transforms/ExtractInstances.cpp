@@ -116,7 +116,7 @@ struct ExtractInstancesPass
   bool anythingChanged;
   bool anyFailures;
 
-  CircuitOp circtOp;
+  CircuitOp circuitOp;
   InstanceGraph *instanceGraph = nullptr;
   SymbolTable *symbolTable = nullptr;
 
@@ -174,7 +174,7 @@ struct ExtractInstancesPass
 
 /// Emit the annotated source code for black boxes in a circuit.
 void ExtractInstancesPass::runOnOperation() {
-  circtOp = getOperation();
+  circuitOp = getOperation();
   anythingChanged = false;
   anyFailures = false;
   annotatedModules.clear();
@@ -190,7 +190,10 @@ void ExtractInstancesPass::runOnOperation() {
   instPrefices.clear();
   moduleNamespaces.clear();
   circuitNamespace.clear();
-  circuitNamespace.add(circtOp);
+  circuitNamespace.add(circuitOp);
+  innerRefToInstances.clear();
+  extractMetadataClass = {};
+  schemaClass = {};
 
   // Walk the IR and gather all the annotations relevant for extraction that
   // appear on instances and the instantiated modules.
@@ -1054,7 +1057,7 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
     classOp.insertPorts(newPorts);
   };
 
-  HierPathCache pathCache(circtOp, *symbolTable);
+  HierPathCache pathCache(circuitOp, *symbolTable);
   SmallVector<std::pair<Value, Twine>> classFields;
   for (auto &[fileName, insts] : instsByTraceFile) {
     LLVM_DEBUG(llvm::dbgs() << "- " << fileName << "\n");
@@ -1108,7 +1111,7 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
         auto targetInstance = innerRefToInstances[path.front()];
         SmallVector<Attribute> pathOpAttr(llvm::reverse(path));
         auto nla = pathCache.getOpFor(
-            ArrayAttr::get(circtOp->getContext(), pathOpAttr));
+            ArrayAttr::get(circuitOp->getContext(), pathOpAttr));
 
         auto pathOp = createPathRef(targetInstance, nla, builderOM);
         auto fPath = builderOM.create<ObjectSubfieldOp>(object, pathFieldId);
@@ -1169,7 +1172,8 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
     assert(node && node->hasOneUse());
     ObjectOp metadataObj =
         dyn_cast_or_null<ObjectOp>((*node->usesBegin())->getInstance());
-    assert(metadataObj);
+    assert(metadataObj &&
+           "expected the class to be instantiated by an object op");
     builderOM.setInsertionPoint(metadataObj);
     auto newObj =
         builderOM.create<ObjectOp>(sifiveMetadataClass, metadataObj.getName());
@@ -1180,10 +1184,10 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
 
 void ExtractInstancesPass::createSchema() {
 
-  auto *context = circtOp->getContext();
+  auto *context = circuitOp->getContext();
   auto unknownLoc = mlir::UnknownLoc::get(context);
   auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
-      unknownLoc, circtOp.getBodyBlock());
+      unknownLoc, circuitOp.getBodyBlock());
   mlir::Type portsType[] = {
       StringType::get(context), // name
       PathType::get(context),   // extracted instance path

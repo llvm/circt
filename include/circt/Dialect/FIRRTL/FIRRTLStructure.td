@@ -364,9 +364,9 @@ def ClassOp : FIRRTLModuleLike<"class", [
     // This builds a ClassOp, with the specified fieldNames and fieldTypes as
     // ports. The output property is set from the input property port.
     ClassOp static buildSimpleClassOp(
-    mlir::OpBuilder &odsBuilder, mlir::Location loc, mlir::Twine name,
-    mlir::ArrayRef<mlir::StringRef> fieldNames,
-    mlir::ArrayRef<mlir::Type> fieldTypes);
+      mlir::OpBuilder &odsBuilder, mlir::Location loc, mlir::Twine name,
+      mlir::ArrayRef<mlir::StringRef> fieldNames,
+      mlir::ArrayRef<mlir::Type> fieldTypes);
 
     using iterator = Block::iterator;
     iterator begin() { return getBodyBlock()->begin(); }

@@ -228,8 +228,7 @@ inline FIRRTLBaseType getBaseType(Type type) {
 }
 
 /// Get base type if isa<> the requested type, else null.
-template <typename T>
-inline T getBaseOfType(Type type) {
+template <typename T> inline T getBaseOfType(Type type) {
   return dyn_cast_or_null<T>(getBaseType(type));
 }
 
@@ -323,7 +322,7 @@ static ResultTy transformReduce(MLIRContext *context, RangeTy &&r,
 void makeCommonPrefix(SmallString<64> &a, StringRef b);
 
 //===----------------------------------------------------------------------===//
-// OM dialect utilities
+// Object related utilities
 //===----------------------------------------------------------------------===//
 
 /// Add the tracker annotation to the op and get a PathOp to the op.
