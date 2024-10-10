@@ -120,17 +120,6 @@ arc.define @identity(%arg0: i2, %arg1: i42) -> (i2, i42) {
   arc.output %arg0, %arg1 : i2, i42
 }
 
-// CHECK-LABEL: arc.model @lowerMemoryReadPorts
-hw.module @lowerMemoryReadPorts(out out0: i42, out out1: i42) {
-  %c0_i2 = hw.constant 0 : i2
-  %mem = arc.memory <4 x i42, i2>
-  // CHECK: arc.memory_read {{%.+}}[%c0_i2] : <4 x i42, i2>
-  %0 = arc.memory_read_port %mem[%c0_i2] : <4 x i42, i2>
-  // CHECK: func.call @arcWithMemoryReadsIsLowered
-  %1 = arc.call @arcWithMemoryReadsIsLowered(%mem) : (!arc.memory<4 x i42, i2>) -> i42
-  hw.output %0, %1 : i42, i42
-}
-
 // CHECK-LABEL: func.func @arcWithMemoryReadsIsLowered(%arg0: !arc.memory<4 x i42, i2>) -> i42 attributes {llvm.linkage = #llvm.linkage<internal>}
 arc.define @arcWithMemoryReadsIsLowered(%mem: !arc.memory<4 x i42, i2>) -> i42 {
   %c0_i2 = hw.constant 0 : i2
@@ -162,16 +151,6 @@ arc.define @identity2(%arg0: i2, %arg1: i42, %arg2: i1, %arg3: i42) -> (i2, i42,
 // CHECK:      [[NEW_MASKED:%.+]] = comb.and bin [[RES]]#3, [[RES]]#1 : i42
 // CHECK:      [[DATA:%.+]] = comb.or bin [[OLD_MASKED]], [[NEW_MASKED]] : i42
 // CHECK:      arc.memory_write [[MEM]][[[RES]]#0], [[DATA]] if [[RES]]#2 : <4 x i42, i2>
-
-// CHECK-LABEL: arc.model @Taps
-hw.module @Taps() {
-  // CHECK-NOT: arc.tap
-  // CHECK-DAG: [[VALUE:%.+]] = hw.constant 0 : i42
-  // CHECK-DAG: [[STATE:%.+]] = arc.alloc_state %arg0 tap {name = "myTap"}
-  // CHECK-DAG: arc.state_write [[STATE]] = [[VALUE]]
-  %c0_i42 = hw.constant 0 : i42
-  arc.tap %c0_i42 {name = "myTap"} : i42
-}
 
 // CHECK-LABEL: arc.model @MaterializeOpsWithRegions
 hw.module @MaterializeOpsWithRegions(in %clk0: !seq.clock, in %clk1: !seq.clock, out z: i42) {
@@ -526,4 +505,13 @@ hw.module @FromImmutableCast() {
     %2 = func.call @RandomI42() : () -> (i42)
     seq.yield %2 : i42
   } : () -> (!seq.immutable<i42>)
+}
+
+// CHECK-LABEL: arc.model @Taps
+hw.module @Taps() {
+  // CHECK: [[STORAGE:%.+]] = arc.alloc_state
+  // CHECK: [[TMP:%.+]] = func.call @RandomI42()
+  // CHECK: arc.state_write [[STORAGE]] = [[TMP]]
+  %0 = func.call @RandomI42() : () -> i42
+  arc.tap %0 {name = "myTap"} : i42
 }

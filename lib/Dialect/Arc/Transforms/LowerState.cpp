@@ -91,6 +91,7 @@ struct OpLowering {
   LogicalResult lowerDefault();
   LogicalResult lower(StateOp op);
   LogicalResult lower(MemoryOp op);
+  LogicalResult lower(TapOp op);
   LogicalResult lower(InstanceOp op);
   LogicalResult lower(hw::OutputOp op);
   LogicalResult lower(seq::InitialOp op);
@@ -143,6 +144,8 @@ struct ModuleLowering {
   DenseMap<Value, Value> allocatedStates;
   /// The allocated storage for values computed during the initial phase.
   DenseMap<Value, Value> allocatedInitials;
+  /// The allocated storage for taps.
+  DenseMap<Operation *, Value> allocatedTaps;
 
   /// A mapping from unlowered clocks to a value indicating a posedge. This is
   /// used to not create an excessive number of posedge detectors.
@@ -390,7 +393,7 @@ static scf::IfOp createOrReuseIf(OpBuilder &builder, Value condition,
 LogicalResult OpLowering::lower() {
   return TypeSwitch<Operation *, LogicalResult>(op)
       // Operations with special lowering.
-      .Case<StateOp, MemoryOp, InstanceOp, hw::OutputOp, seq::InitialOp>(
+      .Case<StateOp, MemoryOp, TapOp, InstanceOp, hw::OutputOp, seq::InitialOp>(
           [&](auto op) { return lower(op); })
 
       // Operations that should be skipped entirely and never land on the
@@ -401,7 +404,7 @@ LogicalResult OpLowering::lower() {
       })
 
       // Not yet supported.
-      .Case<TapOp, sim::DPICallOp>([&](auto op) {
+      .Case<sim::DPICallOp>([&](auto op) {
         if (initial)
           return success();
         op.emitOpError() << "state lowering not yet implemented";
@@ -669,6 +672,27 @@ LogicalResult OpLowering::lower(MemoryOp op) {
                                          Value{}, data);
   }
 
+  return success();
+}
+
+/// Lower a tap by allocating state storage for it and writing the current value
+/// observed by the tap to it.
+LogicalResult OpLowering::lower(TapOp op) {
+  auto value = lowerValue(op.getValue(), phase);
+  if (initial)
+    return success();
+  if (!value)
+    return failure();
+
+  auto &state = module.allocatedTaps[op];
+  if (!state) {
+    auto alloc = module.allocBuilder.create<AllocStateOp>(
+        op.getLoc(), StateType::get(value.getType()), module.storageArg, true);
+    alloc->setAttr("name", op.getNameAttr());
+    state = alloc;
+  }
+  module.getBuilder(phase).create<StateWriteOp>(op.getLoc(), state, value,
+                                                Value{});
   return success();
 }
 
