@@ -11,7 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Conversion/ArcToLLVM.h"
 #include "circt/Conversion/CombToArith.h"
+#include "circt/Conversion/ConvertToArcs.h"
 #include "circt/Conversion/SeqToSV.h"
 #include "circt/Dialect/Arc/ArcDialect.h"
 #include "circt/Dialect/Arc/ArcInterfaces.h"
@@ -19,14 +21,16 @@
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Arc/ModelInfo.h"
 #include "circt/Dialect/Arc/ModelInfoExport.h"
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/HW/HWPasses.h"
+#include "circt/Dialect/LLHD/IR/LLHDDialect.h"
+#include "circt/Dialect/OM/OMDialect.h"
+#include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Sim/SimPasses.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
-#include "circt/InitAllDialects.h"
-#include "circt/InitAllPasses.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
 #include "mlir/Bytecode/BytecodeReader.h"
@@ -587,11 +591,12 @@ static LogicalResult executeArcilator(MLIRContext &context) {
     comb::CombDialect,
     emit::EmitDialect,
     hw::HWDialect,
-    mlir::DLTIDialect,
-    mlir::LLVM::LLVMDialect,
+    llhd::LLHDDialect,
     mlir::arith::ArithDialect,
     mlir::cf::ControlFlowDialect,
+    mlir::DLTIDialect,
     mlir::func::FuncDialect,
+    mlir::LLVM::LLVMDialect,
     mlir::scf::SCFDialect,
     om::OMDialect,
     seq::SeqDialect,

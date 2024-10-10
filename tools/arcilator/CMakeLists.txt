@@ -7,9 +7,7 @@ endif()
 
 set(LLVM_LINK_COMPONENTS Support ${ARCILATOR_JIT_LLVM_COMPONENTS})
 
-add_circt_tool(arcilator arcilator.cpp)
-target_link_libraries(arcilator
-  PRIVATE
+set(libs
   CIRCTArc
   CIRCTHWTransforms
   CIRCTArcToLLVM
@@ -19,6 +17,7 @@ target_link_libraries(arcilator
   CIRCTEmit
   CIRCTExportArc
   CIRCTOM
+  CIRCTLLHD
   CIRCTVerif
   CIRCTSeqToSV
   CIRCTSeqTransforms
@@ -32,7 +31,12 @@ target_link_libraries(arcilator
   MLIRLLVMToLLVMIRTranslation
   MLIRParser
   MLIRTargetLLVMIRExport
+)
 
+add_circt_tool(arcilator arcilator.cpp DEPENDS ${libs})
+target_link_libraries(arcilator
+  PRIVATE
+  ${libs}
   ${ARCILATOR_JIT_DEPS}
 )
 
