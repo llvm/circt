@@ -1023,7 +1023,7 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
   LLVM_DEBUG(llvm::dbgs() << "\nGenerating trace files\n");
 
   // Group the extracted instances by their trace file name.
-  SmallDenseMap<StringRef, SmallVector<InstanceOp>> instsByTraceFile;
+  llvm::MapVector<StringRef, SmallVector<InstanceOp>> instsByTraceFile;
   for (auto &[inst, info] : extractedInstances)
     if (!info.traceFilename.empty())
       instsByTraceFile[info.traceFilename].push_back(inst);
@@ -1034,7 +1034,28 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
   if (sifiveMetadataClass && !extractMetadataClass)
     createSchema();
 
+  auto addPortsToClass = [&](ArrayRef<std::pair<Value, Twine>> objFields,
+                             ClassOp classOp) {
+    auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
+        classOp.getLoc(), classOp.getBodyBlock());
+    auto portIndex = classOp.getNumPorts();
+    SmallVector<std::pair<unsigned, PortInfo>> newPorts;
+    for (auto [index, port] : enumerate(objFields)) {
+      portIndex += index;
+      auto obj = port.first;
+      newPorts.emplace_back(
+          portIndex,
+          PortInfo(builderOM.getStringAttr(port.second + Twine(portIndex)),
+                   obj.getType(), Direction::Out));
+      auto blockarg =
+          classOp.getBodyBlock()->addArgument(obj.getType(), obj.getLoc());
+      builderOM.create<PropAssignOp>(blockarg, obj);
+    }
+    classOp.insertPorts(newPorts);
+  };
+
   HierPathCache pathCache(circtOp, *symbolTable);
+  SmallVector<std::pair<Value, Twine>> classFields;
   for (auto &[fileName, insts] : instsByTraceFile) {
     LLVM_DEBUG(llvm::dbgs() << "- " << fileName << "\n");
     std::string buffer;
@@ -1099,14 +1120,7 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
         builderOM.create<PropAssignOp>(fFile, fileNameOp);
 
         // Now add this to the output field of the class.
-        auto portIndex = extractMetadataClass.getNumPorts();
-        SmallVector<std::pair<unsigned, PortInfo>> newPorts = {
-            {portIndex, PortInfo(builderOM.getStringAttr(prefix + "_field"),
-                                 object.getType(), Direction::Out)}};
-        extractMetadataClass.insertPorts(newPorts);
-        auto blockarg = extractMetadataClass.getBodyBlock()->addArgument(
-            object.getType(), inst->getLoc());
-        builderOM.create<PropAssignOp>(blockarg, object);
+        classFields.emplace_back(object, prefix + "_field");
       }
       // HACK: To match the Scala implementation, we strip all non-DUT modules
       // from the path and make the path look like it's rooted at the first DUT
@@ -1132,39 +1146,35 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
       // module.
       os << "\n";
     }
-    if (sifiveMetadataClass) {
-      auto unknownLoc = UnknownLoc::get(circtOp->getContext());
-      auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
-          unknownLoc, sifiveMetadataClass.getBodyBlock());
-      auto addPort = [&](Value obj, StringRef fieldName) {
-        auto portIndex = sifiveMetadataClass.getNumPorts();
-        SmallVector<std::pair<unsigned, PortInfo>> newPorts = {
-            {portIndex, PortInfo(builder.getStringAttr(fieldName + "_field_" +
-                                                       Twine(portIndex)),
-                                 obj.getType(), Direction::Out)}};
-        sifiveMetadataClass.insertPorts(newPorts);
-        auto blockarg = sifiveMetadataClass.getBodyBlock()->addArgument(
-            obj.getType(), unknownLoc);
-        builderOM.create<PropAssignOp>(blockarg, obj);
-      };
-      addPort(builderOM.create<ObjectOp>(
-                  extractMetadataClass,
-                  builder.getStringAttr("extract_instances_metadata")),
-              "extractedInstances");
-      auto *node = instanceGraph->lookup(sifiveMetadataClass);
-      assert(node && node->hasOneUse());
-      Operation *metadataObj = (*node->usesBegin())->getInstance();
-      assert(isa<ObjectOp>(metadataObj));
-      builderOM.setInsertionPoint(metadataObj);
-      auto newObj = builderOM.create<ObjectOp>(
-          sifiveMetadataClass, builder.getStringAttr("sifive_metadata"));
-      metadataObj->replaceAllUsesWith(newObj);
-      metadataObj->remove();
-    }
 
     // Put the information in a verbatim operation.
     builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), buffer,
                                    ValueRange{}, builder.getArrayAttr(symbols));
+  }
+  if (!classFields.empty()) {
+    addPortsToClass(classFields, extractMetadataClass);
+    // This extract instances metadata class, now needs to be instantiated
+    // inside the SifiveMetadata class. This also updates its signature, so keep
+    // the object of the SifiveMetadata class updated.
+    auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
+        sifiveMetadataClass->getLoc(), sifiveMetadataClass.getBodyBlock());
+    SmallVector<std::pair<Value, Twine>> classFields = {
+        {builderOM.create<ObjectOp>(
+             extractMetadataClass,
+             builderOM.getStringAttr("extract_instances_metadata")),
+         "extractedInstances_field"}};
+
+    addPortsToClass(classFields, sifiveMetadataClass);
+    auto *node = instanceGraph->lookup(sifiveMetadataClass);
+    assert(node && node->hasOneUse());
+    ObjectOp metadataObj =
+        dyn_cast_or_null<ObjectOp>((*node->usesBegin())->getInstance());
+    assert(metadataObj);
+    builderOM.setInsertionPoint(metadataObj);
+    auto newObj =
+        builderOM.create<ObjectOp>(sifiveMetadataClass, metadataObj.getName());
+    metadataObj->replaceAllUsesWith(newObj);
+    metadataObj->remove();
   }
 }
 

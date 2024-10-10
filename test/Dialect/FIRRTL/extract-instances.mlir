@@ -52,16 +52,16 @@ firrtl.circuit "ExtractBlackBoxesSimple" attributes {annotations = [{class = "fi
     firrtl.connect %out, %dut_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %dut_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
     %sifive_metadata = firrtl.object @SiFive_Metadata()
-    // CHECK:  firrtl.object @SiFive_Metadata(out extractedInstances_field_0: !firrtl.class<@ExtractInstancesMetadata
+    // CHECK:  firrtl.object @SiFive_Metadata(out [[extractedInstances_field_0:.+]]: !firrtl.class<@ExtractInstancesMetadata
     %0 = firrtl.object.anyref_cast %sifive_metadata : !firrtl.class<@SiFive_Metadata()>
     firrtl.propassign %metadataObj, %0 : !firrtl.anyref
   }
   firrtl.class @SiFive_Metadata() {}
   // CHECK:  firrtl.class @SiFive_Metadata(
-  // CHECK-SAME: out %extractedInstances_field_0: !firrtl.class<@ExtractInstancesMetadata
+  // CHECK-SAME: out %[[extractedInstances_field_0]]: !firrtl.class<@ExtractInstancesMetadata
   // CHECK-SAME: {
-  // CHECK:    %extract_instances_metadata = firrtl.object @ExtractInstancesMetadata(out bb_0_field: !firrtl.class<@ExtractInstancesSchema
-  // CHECK:    firrtl.propassign %extractedInstances_field_0, %extract_instances_metadata : !firrtl.class<@ExtractInstancesMetadata
+  // CHECK:    %extract_instances_metadata = firrtl.object @ExtractInstancesMetadata(out [[bb_0_field:.+]]: !firrtl.class<@ExtractInstancesSchema
+  // CHECK:    firrtl.propassign %[[extractedInstances_field_0]], %extract_instances_metadata : !firrtl.class<@ExtractInstancesMetadata
   // CHECK:  }
 
   // CHECK:  firrtl.class @ExtractInstancesSchema(in %name_in: !firrtl.string, out %name: !firrtl.string, in %path_in: !firrtl.path, out %path: !firrtl.path, in %filename_in: !firrtl.string, out %filename: !firrtl.string) {
@@ -70,7 +70,7 @@ firrtl.circuit "ExtractBlackBoxesSimple" attributes {annotations = [{class = "fi
   // CHECK:    firrtl.propassign %filename, %filename_in : !firrtl.string
   // CHECK:  }
 
-  // CHECK:  firrtl.class @ExtractInstancesMetadata(out %bb_0_field: !firrtl.class<@ExtractInstancesSchema 
+  // CHECK:  firrtl.class @ExtractInstancesMetadata(out %[[bb_0_field]]: !firrtl.class<@ExtractInstancesSchema 
   // CHECK-SAME: {
   // CHECK:    %[[V0:.+]] = firrtl.string "bb_0"
   // CHECK:    %[[bb_0:.+]] = firrtl.object @ExtractInstancesSchema
@@ -82,7 +82,7 @@ firrtl.circuit "ExtractBlackBoxesSimple" attributes {annotations = [{class = "fi
   // CHECK:    %[[V4:.+]] = firrtl.object.subfield %[[bb_0]][filename_in]
   // CHECK:    %[[V5:.+]] = firrtl.string "BlackBoxes.txt"
   // CHECK:    firrtl.propassign %[[V4]], %[[V5]] : !firrtl.string
-  // CHECK:    firrtl.propassign %bb_0_field, %[[bb_0]]
+  // CHECK:    firrtl.propassign %[[bb_0_field]], %[[bb_0]]
   // CHECK:  }
 
   // CHECK:               emit.file "BlackBoxes.txt" {
@@ -433,14 +433,23 @@ firrtl.circuit "ExtractClockGatesComposed" attributes {annotations = [
     firrtl.connect %child_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // CHECK-LABEL: firrtl.module @ExtractClockGatesComposed
-  firrtl.module @ExtractClockGatesComposed(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
+  firrtl.module @ExtractClockGatesComposed(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, out %metadataObj: !firrtl.anyref) {
     // CHECK: firrtl.instance gate sym [[SYM0]] @EICG_wrapper
     // CHECK: firrtl.instance gate sym [[SYM1]] @EICG_wrapper
     // CHECK: firrtl.instance mem_ext @mem_ext
     %dut_clock, %dut_en = firrtl.instance dut @DUTModule(in clock: !firrtl.clock, in en: !firrtl.uint<1>)
     firrtl.connect %dut_clock, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %dut_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
+    %sifive_metadata = firrtl.object @SiFive_Metadata()
+    // CHECK:  firrtl.object @SiFive_Metadata(
+    // CHECK-SAME: out extractedInstances_field0: !firrtl.class<@ExtractInstancesMetadata
+    // CHECK-SAME: (out mem_wiring_0_field0: !firrtl.class<@ExtractInstancesSchema(in name_in: !firrtl.string, out name: !firrtl.string, in path_in: !firrtl.path, out path: !firrtl.path, in filename_in: !firrtl.string, out filename: !firrtl.string)>
+    // CHECK-SAME: out clock_gate_0_field1: !firrtl.class<@ExtractInstancesSchema(in name_in: !firrtl.string, out name: !firrtl.string, in path_in: !firrtl.path, out path: !firrtl.path, in filename_in: !firrtl.string, out filename: !firrtl.string)>
+    // CHECK-SAME: out clock_gate_1_field3: !firrtl.class<@ExtractInstancesSchema(in name_in: !firrtl.string, out name: !firrtl.string, in path_in: !firrtl.path, out path: !firrtl.path, in filename_in: !firrtl.string, out filename: !firrtl.string)>)>)
+    %0 = firrtl.object.anyref_cast %sifive_metadata : !firrtl.class<@SiFive_Metadata()>
+    firrtl.propassign %metadataObj, %0 : !firrtl.anyref
   }
+  firrtl.class @SiFive_Metadata() {}
 
   // CHECK:               emit.file "SeqMems.txt" {
   // CHECK-NEXT:            sv.verbatim "
