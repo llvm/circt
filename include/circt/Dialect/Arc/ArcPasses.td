@@ -92,13 +92,6 @@ def FindInitialVectors : Pass<"arc-find-initial-vectors", "mlir::ModuleOp"> {
   ];
 }
 
-def GroupResetsAndEnables : Pass<"arc-group-resets-and-enables",
-                                 "mlir::ModuleOp"> {
-  let summary = "Group reset and enable conditions of lowered states";
-  let constructor = "circt::arc::createGroupResetsAndEnablesPass()";
-  let dependentDialects = ["arc::ArcDialect", "mlir::scf::SCFDialect"];
-}
-
 def InferMemories : Pass<"arc-infer-memories", "mlir::ModuleOp"> {
   let summary = "Convert `FIRRTL_Memory` instances to dedicated memory ops";
   let constructor = "circt::arc::createInferMemoriesPass()";
@@ -168,12 +161,6 @@ def LatencyRetiming : Pass<"arc-latency-retiming", "mlir::ModuleOp"> {
     Statistic<"latencyUnitsSaved", "latency-units-saved",
       "Number of latency units saved by merging them in a successor state">
   ];
-}
-
-def LegalizeStateUpdate : Pass<"arc-legalize-state-update", "mlir::ModuleOp"> {
-  let summary = "Insert temporaries such that state reads don't see writes";
-  let constructor = "circt::arc::createLegalizeStateUpdatePass()";
-  let dependentDialects = ["arc::ArcDialect"];
 }
 
 def LowerArcsToFuncs : Pass<"arc-lower-arcs-to-funcs", "mlir::ModuleOp"> {

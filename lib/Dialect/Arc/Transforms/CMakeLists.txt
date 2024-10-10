@@ -4,13 +4,11 @@ add_circt_dialect_library(CIRCTArcTransforms
   ArcCanonicalizer.cpp
   Dedup.cpp
   FindInitialVectors.cpp
-  GroupResetsAndEnables.cpp
   InferMemories.cpp
   InferStateProperties.cpp
   InlineArcs.cpp
   IsolateClocks.cpp
   LatencyRetiming.cpp
-  LegalizeStateUpdate.cpp
   LowerArcsToFuncs.cpp
   LowerClocksToFuncs.cpp
   LowerLUT.cpp
