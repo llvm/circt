@@ -320,6 +320,25 @@ func.func @Statements(%arg0: !moore.i42) {
   return
 }
 
+// CHECK-LABEL: func @FormatStrings
+func.func @FormatStrings(%arg0: !moore.i42) {
+  // CHECK: [[TMP:%.+]] = sim.fmt.lit "hello"
+  %0 = moore.fmt.literal "hello"
+  // CHECK: sim.fmt.concat ([[TMP]], [[TMP]])
+  %1 = moore.fmt.concat (%0, %0)
+  // CHECK: sim.fmt.dec %arg0 : i42
+  moore.fmt.int decimal %arg0, width 42, align right, pad space : i42
+  // CHECK: sim.fmt.bin %arg0 : i42
+  moore.fmt.int binary %arg0, width 42, align right, pad space : i42
+  // CHECK: sim.fmt.hex %arg0 : i42
+  moore.fmt.int hex_lower %arg0, width 42, align right, pad space : i42
+  // CHECK: sim.fmt.hex %arg0 : i42
+  moore.fmt.int hex_upper %arg0, width 42, align right, pad space : i42
+  // CHECK: sim.proc.print [[TMP]]
+  moore.builtin.display %0
+  return
+}
+
 // CHECK-LABEL: hw.module @InstanceNull() {
 moore.module @InstanceNull() {
 
