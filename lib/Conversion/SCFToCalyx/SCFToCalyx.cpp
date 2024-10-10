@@ -446,6 +446,15 @@ private:
                                TypeRange srcTypes, TypeRange dstTypes,
                                calyx::RegisterOp srcReg = nullptr,
                                calyx::RegisterOp dstReg = nullptr) const {
+    auto isPipeLibOp = [](Value val) -> bool {
+      if (Operation *defOp = val.getDefiningOp()) {
+        return isa<calyx::MultPipeLibOp, calyx::DivUPipeLibOp,
+                   calyx::DivSPipeLibOp, calyx::RemUPipeLibOp,
+                   calyx::RemSPipeLibOp>(defOp);
+      }
+      return false;
+    };
+
     assert((srcReg && dstReg) || (!srcReg && !dstReg));
     bool isSequential = srcReg && dstReg;
 
@@ -486,7 +495,7 @@ private:
     rewriter.setInsertionPointToEnd(group.getBodyBlock());
 
     for (auto dstOp : enumerate(opInputPorts)) {
-      if (isSequential)
+      if (isPipeLibOp(dstOp.value()))
         rewriter.create<calyx::AssignOp>(op.getLoc(), dstOp.value(),
                                          srcReg.getOut());
       else
