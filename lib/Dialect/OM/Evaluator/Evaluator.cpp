@@ -749,10 +749,6 @@ ArrayAttr circt::om::Object::getFieldNames() {
   for (auto &f : fields)
     fieldNames.push_back(f.first);
 
-  llvm::sort(fieldNames, [](Attribute a, Attribute b) {
-    return cast<StringAttr>(a).getValue() < cast<StringAttr>(b).getValue();
-  });
-
   return ArrayAttr::get(cls.getContext(), fieldNames);
 }
 
