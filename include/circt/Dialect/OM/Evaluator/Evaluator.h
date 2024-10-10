@@ -39,7 +39,7 @@ using EvaluatorValuePtr = std::shared_ptr<EvaluatorValue>;
 
 /// The fields of a composite Object, currently represented as a map. Further
 /// refinement is expected.
-using ObjectFields = llvm::MapVector<StringAttr, EvaluatorValuePtr>;
+using ObjectFields = SmallDenseMap<StringAttr, EvaluatorValuePtr>;
 
 /// Base class for evaluator runtime values.
 /// Enables the shared_from_this functionality so Evaluator Value pointers can
@@ -268,7 +268,7 @@ struct ObjectValue : EvaluatorValue {
   om::ClassOp getClassOp() const { return cls; }
   const auto &getFields() const { return fields; }
 
-  void setFields(ObjectFields newFields) {
+  void setFields(llvm::SmallDenseMap<StringAttr, EvaluatorValuePtr> newFields) {
     fields = std::move(newFields);
     markFullyEvaluated();
   }
@@ -301,7 +301,7 @@ struct ObjectValue : EvaluatorValue {
 
 private:
   om::ClassOp cls;
-  ObjectFields fields;
+  llvm::SmallDenseMap<StringAttr, EvaluatorValuePtr> fields;
 };
 
 /// Tuple values.

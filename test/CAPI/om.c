@@ -112,7 +112,7 @@ void testEvaluator(MlirContext ctx) {
   OMEvaluatorValue child = omEvaluatorObjectGetField(object, childFieldName);
 
   MlirAttribute fieldNamesO = omEvaluatorObjectGetFieldNames(object);
-  // CHECK: ["field", "child"]
+  // CHECK: ["child", "field"]
   mlirAttributeDump(fieldNamesO);
 
   // CHECK: 0
@@ -129,7 +129,7 @@ void testEvaluator(MlirContext ctx) {
 
   MlirAttribute fieldNamesC = omEvaluatorObjectGetFieldNames(child);
 
-  // CHECK: ["foo", "bar", "baz"]
+  // CHECK: ["bar", "baz", "foo"]
   mlirAttributeDump(fieldNamesC);
 
   // CHECK: child object field `foo` is primitive: 1
