@@ -31,7 +31,7 @@
 
 namespace circt {
 namespace arc {
-#define GEN_PASS_DEF_LOWERSTATE
+#define GEN_PASS_DEF_LOWERSTATEPASS
 #include "circt/Dialect/Arc/ArcPasses.h.inc"
 } // namespace arc
 } // namespace circt
@@ -969,8 +969,8 @@ void OpLowering::addPending(Operation *op, Phase phase) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct LowerStatePass : public arc::impl::LowerStateBase<LowerStatePass> {
-  using LowerStateBase::LowerStateBase;
+struct LowerStatePass : public arc::impl::LowerStatePassBase<LowerStatePass> {
+  using LowerStatePassBase::LowerStatePassBase;
   void runOnOperation() override;
 };
 } // namespace
@@ -985,8 +985,4 @@ void LowerStatePass::runOnOperation() {
   for (auto extModuleOp :
        llvm::make_early_inc_range(op.getOps<HWModuleExternOp>()))
     extModuleOp.erase();
-}
-
-std::unique_ptr<Pass> arc::createLowerStatePass() {
-  return std::make_unique<LowerStatePass>();
 }
