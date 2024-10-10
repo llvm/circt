@@ -92,8 +92,8 @@ def LabelOp : RTGOp<"label", []> {
     they must never be instantiated in the same rendered sequence.
   }];
 
-  let arguments = (ins AnySignlessInteger:$label);
-  let assemblyFormat = "$label attr-dict `:` type($label)";
+  let arguments = (ins AnySignlessInteger:$label, UnitAttr:$global);
+  let assemblyFormat = "(`global` $global^)? $label attr-dict `:` type($label)";
 }
 
 

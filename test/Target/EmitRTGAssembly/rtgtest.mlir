@@ -9,10 +9,15 @@ rtg.sequence {
 } -> !rtg.sequence
 
 rtg.sequence {
+  %0 = rtg.label.decl "label0" -> i32
   // CHECK: label0:
   // CHECK-ALLOWED: label0:
-  %0 = rtg.label.decl "label0" -> i32
   rtg.label %0 : i32
+  // CHECK: .global label0
+  // CHECK-ALLOWED: .global label0
+  // CHECK: label0:
+  // CHECK-ALLOWED: label0:
+  rtg.label global %0 : i32
   // CHECK: .word 0xE00A0400 
   // CHECK-ALLOWED: instr_b x5, x2
   %reg5 = rtgtest.reg_a 5

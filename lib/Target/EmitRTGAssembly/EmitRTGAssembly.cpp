@@ -85,6 +85,11 @@ LogicalResult EmitRTGAssembly::emitRTGAssembly(Operation *module,
         ios << ".word 0x" << str << "\n";
       }
       if (auto label = dyn_cast<LabelOp>(&op)) {
+        if (label.getGlobal()) {
+          os << ".global ";
+          printValue(label.getLabel(), os);
+          os << "\n";
+        }
         printValue(label.getLabel(), os);
         os << ":\n";
         continue;
