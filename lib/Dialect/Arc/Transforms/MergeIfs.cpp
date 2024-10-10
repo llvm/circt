@@ -98,6 +98,24 @@ LogicalResult Sinker::run() {
   return success();
 }
 
+/// Return the state/memory value being written by an op.
+static Value getPointerWrittenByOp(Operation *op) {
+  if (auto write = dyn_cast<StateWriteOp>(op))
+    return write.getState();
+  if (auto write = dyn_cast<MemoryWriteOp>(op))
+    return write.getMemory();
+  return {};
+}
+
+/// Return the state/memory value being read by an op.
+static Value getPointerReadByOp(Operation *op) {
+  if (auto read = dyn_cast<StateReadOp>(op))
+    return read.getState();
+  if (auto read = dyn_cast<MemoryReadOp>(op))
+    return read.getMemory();
+  return {};
+}
+
 /// Sink operations as close to their users as possible.
 void Sinker::sinkOps() {
   DenseMap<Operation *, OpOrder> opOrder;
@@ -105,33 +123,31 @@ void Sinker::sinkOps() {
   DenseMap<Value, Operation *> nextWrite;
   Operation *nextSideEffect = nullptr;
 
-  opOrder.clear();
-  // for (auto &op : rootBlock)
-  //   opOrder[&op] = {opOrder.size(), -1};
-
   for (auto &op : llvm::make_early_inc_range(llvm::reverse(rootBlock))) {
     auto order = OpOrder{opOrder.size() + 1, 0};
     opOrder[&op] = order;
 
     // Analyze the side effects in the op.
     op.walk([&](Operation *subOp) {
-      if (auto writeOp = dyn_cast<StateWriteOp>(subOp)) {
-        nextWrite[writeOp.getState()] = &op;
-      } else if (!isa<StateReadOp>(subOp) &&
-                 !subOp->hasTrait<OpTrait::HasRecursiveMemoryEffects>() &&
-                 !mlir::isMemoryEffectFree(subOp)) {
+      if (auto ptr = getPointerWrittenByOp(subOp))
+        nextWrite[ptr] = &op;
+      else if (!isa<StateReadOp, MemoryReadOp>(subOp) &&
+               !subOp->hasTrait<OpTrait::HasRecursiveMemoryEffects>() &&
+               !mlir::isMemoryEffectFree(subOp))
         nextSideEffect = &op;
-      }
     });
 
     // Determine how much the op can be moved.
     OpAndOrder moveLimit;
-    if (auto readOp = dyn_cast<StateReadOp>(&op)) {
-      if (auto *write = nextWrite.lookup(readOp.getState()))
+    if (auto ptr = getPointerReadByOp(&op)) {
+      // Don't move across writes to the same state/memory.
+      if (auto *write = nextWrite.lookup(ptr))
         moveLimit.maximize({write, opOrder.lookup(write)});
+      // Don't move across general side-effecting ops.
       if (nextSideEffect)
         moveLimit.maximize({nextSideEffect, opOrder.lookup(nextSideEffect)});
-    } else if (isa<StateWriteOp>(&op) || nextSideEffect == &op) {
+    } else if (isa<StateWriteOp, MemoryWriteOp>(&op) || nextSideEffect == &op) {
+      // Don't move writes or side-effecting ops.
       continue;
     }
 
@@ -281,15 +297,14 @@ void Sinker::mergeIfs() {
       writes.clear();
       reads.clear();
       prevIfOp.walk([&](Operation *op) {
-        if (auto writeOp = dyn_cast<StateWriteOp>(op)) {
-          writes.insert(writeOp.getState());
-        } else if (auto readOp = dyn_cast<StateReadOp>(op)) {
-          reads.insert(readOp.getState());
-        } else if (!hasSideEffects &&
-                   !op->hasTrait<OpTrait::HasRecursiveMemoryEffects>() &&
-                   !mlir::isMemoryEffectFree(op)) {
+        if (auto ptr = getPointerWrittenByOp(op))
+          writes.insert(ptr);
+        else if (auto ptr = getPointerReadByOp(op))
+          reads.insert(ptr);
+        else if (!hasSideEffects &&
+                 !op->hasTrait<OpTrait::HasRecursiveMemoryEffects>() &&
+                 !mlir::isMemoryEffectFree(op))
           hasSideEffects = true;
-        }
       });
 
       // Check if it is legal to throw all ops over the previous if op, given
@@ -300,14 +315,13 @@ void Sinker::mergeIfs() {
       for (auto &op : llvm::make_range(Block::iterator(prevIfOp->getNextNode()),
                                        Block::iterator(ifOp))) {
         auto result = op.walk([&](Operation *subOp) {
-          if (auto writeOp = dyn_cast<StateWriteOp>(subOp)) {
+          if (auto ptr = getPointerWrittenByOp(subOp)) {
             // We can't move writes over writes or reads of the same state.
-            if (writes.contains(writeOp.getState()) ||
-                reads.contains(writeOp.getState()))
+            if (writes.contains(ptr) || reads.contains(ptr))
               return WalkResult::interrupt();
-          } else if (auto readOp = dyn_cast<StateReadOp>(subOp)) {
-            // We can't move reads over writes of the same state.
-            if (writes.contains(readOp.getState()))
+          } else if (auto ptr = getPointerReadByOp(subOp)) {
+            // We can't move reads over writes to the same state.
+            if (writes.contains(ptr))
               return WalkResult::interrupt();
           } else if (!subOp->hasTrait<OpTrait::HasRecursiveMemoryEffects>() &&
                      !mlir::isMemoryEffectFree(subOp)) {
