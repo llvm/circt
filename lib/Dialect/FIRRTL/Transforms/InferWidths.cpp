@@ -632,7 +632,7 @@ public:
 
   VarExpr *var() {
     auto *v = vars.alloc();
-    exprs.push_back(v);
+    varExprs.push_back(v);
     if (currentInfo)
       info[v].insert(currentInfo);
     if (currentLoc)
@@ -641,7 +641,7 @@ public:
   }
   DerivedExpr *derived() {
     auto *d = derivs.alloc();
-    exprs.push_back(d);
+    derivedExprs.push_back(d);
     return d;
   }
   KnownExpr *known(int32_t value) { return alloc<KnownExpr>(knowns, value); }
@@ -690,19 +690,19 @@ private:
   InternedAllocator<BinaryExpr> bins = {allocator};
 
   /// A list of expressions in the order they were created.
-  std::vector<Expr *> exprs;
+  std::vector<VarExpr *> varExprs;
+  std::vector<DerivedExpr *> derivedExprs;
 
   /// Add an allocated expression to the list above.
   template <typename R, typename T, typename... Args>
   R *alloc(InternedAllocator<T> &allocator, Args &&...args) {
-    auto it = allocator.template alloc<R>(std::forward<Args>(args)...);
-    if (it.second)
-      exprs.push_back(it.first);
+    auto [expr, inserted] =
+        allocator.template alloc<R>(std::forward<Args>(args)...);
     if (currentInfo)
-      info[it.first].insert(currentInfo);
+      info[expr].insert(currentInfo);
     if (currentLoc)
-      locs[it.first].insert(*currentLoc);
-    return it.first;
+      locs[expr].insert(*currentLoc);
+    return expr;
   }
 
   /// Contextual information for each expression, indicating which values in the
@@ -731,13 +731,11 @@ private:
 
 /// Print all constraints in the solver to an output stream.
 void ConstraintSolver::dumpConstraints(llvm::raw_ostream &os) {
-  for (auto *e : exprs) {
-    if (auto *v = dyn_cast<VarExpr>(e)) {
-      if (v->constraint)
-        os << "- " << *v << " >= " << *v->constraint << "\n";
-      else
-        os << "- " << *v << " unconstrained\n";
-    }
+  for (auto *v : varExprs) {
+    if (v->constraint)
+      os << "- " << *v << " >= " << *v->constraint << "\n";
+    else
+      os << "- " << *v << " unconstrained\n";
   }
 }
 
@@ -1034,10 +1032,8 @@ LogicalResult ConstraintSolver::solve() {
   SmallPtrSet<Expr *, 16> seenVars;
   bool anyFailed = false;
 
-  for (auto *expr : exprs) {
-    // Only work on variables.
-    auto *var = dyn_cast<VarExpr>(expr);
-    if (!var || !var->constraint)
+  for (auto *var : varExprs) {
+    if (!var->constraint)
       continue;
     LLVM_DEBUG(llvm::dbgs()
                << "- Checking " << *var << " >= " << *var->constraint << "\n");
@@ -1094,12 +1090,7 @@ LogicalResult ConstraintSolver::solve() {
     debugHeader("Solving constraints") << "\n\n";
   });
   std::vector<Frame> worklist;
-  for (auto *expr : exprs) {
-    // Only work on variables.
-    auto *var = dyn_cast<VarExpr>(expr);
-    if (!var)
-      continue;
-
+  for (auto *var : varExprs) {
     // Complain about unconstrained variables.
     if (!var->constraint) {
       LLVM_DEBUG(llvm::dbgs() << "- Unconstrained " << *var << "\n");
@@ -1148,12 +1139,7 @@ LogicalResult ConstraintSolver::solve() {
   }
 
   // Copy over derived widths.
-  for (auto *expr : exprs) {
-    // Only work on derived values.
-    auto *derived = dyn_cast<DerivedExpr>(expr);
-    if (!derived)
-      continue;
-
+  for (auto *derived : derivedExprs) {
     auto *assigned = derived->assigned;
     if (!assigned || !assigned->getSolution()) {
       LLVM_DEBUG(llvm::dbgs() << "- Unused " << *derived << " set to 0\n");
