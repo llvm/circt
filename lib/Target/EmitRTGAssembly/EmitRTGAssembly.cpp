@@ -40,7 +40,8 @@ static void printValue(Value val, raw_ostream &stream) {
 
 static FailureOr<APInt> getBinary(Value val) {
   if (auto labelDeclOp = val.getDefiningOp<LabelDeclOp>())
-    return labelDeclOp->emitError("binary representation cannot be computed for labels");
+    return labelDeclOp->emitError(
+        "binary representation cannot be computed for labels");
 
   if (auto constOp = val.getDefiningOp<mlir::arith::ConstantOp>())
     if (auto integerAttr = dyn_cast<IntegerAttr>(constOp.getValue()))
@@ -66,8 +67,9 @@ LogicalResult EmitRTGAssembly::emitRTGAssembly(Operation *module,
       if (auto instr = dyn_cast<InstructionOpInterface>(&op)) {
         os << llvm::indent(4);
         if (llvm::is_contained(options.supportedInstructions,
-                              instr->getName().getStringRef())) {
-          instr.printAssembly(ios, [&](Value value) { printValue(value, ios); });
+                               instr->getName().getStringRef())) {
+          instr.printAssembly(ios,
+                              [&](Value value) { printValue(value, ios); });
           ios << "\n";
           continue;
         }

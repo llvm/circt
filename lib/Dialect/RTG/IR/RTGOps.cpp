@@ -23,7 +23,7 @@ using namespace rtg;
 //===----------------------------------------------------------------------===//
 
 APInt LabelDeclOp::getBinary() {
-  assert (false && "must not be used for label resources");
+  assert(false && "must not be used for label resources");
   return APInt();
 }
 

@@ -1,4 +1,5 @@
-// RUN: circt-opt --rtg-elaborate %s | FileCheck %s
+// RUN: circt-opt --rtg-elaborate=seed=0 %s | FileCheck %s --check-prefixes=CHECK-SEED0,CHECK
+// RUN: circt-opt --rtg-elaborate=seed=1 %s | FileCheck %s --check-prefixes=CHECK-SEED1,CHECK
 
 // CHECK-LABEL: rtg.snippet
 %0 = rtg.snippet {
@@ -18,5 +19,9 @@
 // CHECK-LABEL: rtg.snippet
 rtg.snippet {
   %c50 = arith.constant 50 : i32
+  // CHECK-NOT: rtg.select-random
+  // CHECK-SEED0: rtgtest.instr_a
+  // CHECK-SEED1: rtg.label.decl
+  // CHECK-NOT: rtg.select-random
   rtg.select_random [%0, %1], [%c50, %c50]
 }
