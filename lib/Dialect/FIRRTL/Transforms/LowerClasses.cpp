@@ -657,8 +657,10 @@ PathTracker::processPathTrackers(const AnnoTarget &target) {
     // to the start of the annotation's NLA.
     InstanceGraphNode *node = instanceGraph.lookup(moduleName);
     while (true) {
-      // If it's not a non-local target, we don't have to append anything.
-      if (!hierPathOp)
+      // If it's not a non-local target, we don't have to append anything,
+      // unless it needs an alternative base path, in which case we do need to
+      // make a hierarchical path.
+      if (!hierPathOp && !needsAltBasePath.value())
         break;
 
       // If we get to the owning module or the top, we're done.
