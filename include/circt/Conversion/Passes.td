@@ -512,12 +512,18 @@ def HandshakeToHW : Pass<"lower-handshake-to-hw", "mlir::ModuleOp"> {
 def ConvertMooreToCore : Pass<"convert-moore-to-core", "mlir::ModuleOp"> {
   let summary = "Convert Moore to Core";
   let description = [{
-    This pass translates Moore to the core dialects (Comb/HW/LLHD).
+    This pass translates Moore to the core dialects.
   }];
   let constructor = "circt::createConvertMooreToCorePass()";
-  let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
-                           "llhd::LLHDDialect", "mlir::cf::ControlFlowDialect",
-                           "mlir::scf::SCFDialect", "verif::VerifDialect"];
+  let dependentDialects = [
+    "comb::CombDialect",
+    "hw::HWDialect",
+    "llhd::LLHDDialect",
+    "mlir::cf::ControlFlowDialect",
+    "mlir::scf::SCFDialect",
+    "sim::SimDialect",
+    "verif::VerifDialect",
+  ];
 }
 
 //===----------------------------------------------------------------------===//

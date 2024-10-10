@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
+#include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -1256,6 +1257,69 @@ struct AssertLikeOpConversion : public OpConversionPattern<MooreOpTy> {
   }
 };
 
+//===----------------------------------------------------------------------===//
+// Format String Conversion
+//===----------------------------------------------------------------------===//
+
+struct FormatLiteralOpConversion : public OpConversionPattern<FormatLiteralOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FormatLiteralOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::FormatLitOp>(op, adaptor.getLiteral());
+    return success();
+  }
+};
+
+struct FormatConcatOpConversion : public OpConversionPattern<FormatConcatOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FormatConcatOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::FormatStringConcatOp>(op,
+                                                           adaptor.getInputs());
+    return success();
+  }
+};
+
+struct FormatIntOpConversion : public OpConversionPattern<FormatIntOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FormatIntOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // TODO: These should honor the width, alignment, and padding.
+    switch (op.getFormat()) {
+    case IntFormat::Decimal:
+      rewriter.replaceOpWithNewOp<sim::FormatDecOp>(op, adaptor.getValue());
+      return success();
+    case IntFormat::Binary:
+      rewriter.replaceOpWithNewOp<sim::FormatBinOp>(op, adaptor.getValue());
+      return success();
+    case IntFormat::HexLower:
+    case IntFormat::HexUpper:
+      rewriter.replaceOpWithNewOp<sim::FormatHexOp>(op, adaptor.getValue());
+      return success();
+    default:
+      return rewriter.notifyMatchFailure(op, "unsupported int format");
+    }
+  }
+};
+
+struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(DisplayBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::PrintFormattedProcOp>(
+        op, adaptor.getMessage());
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -1265,10 +1329,11 @@ struct AssertLikeOpConversion : public OpConversionPattern<MooreOpTy> {
 static void populateLegality(ConversionTarget &target,
                              const TypeConverter &converter) {
   target.addIllegalDialect<MooreDialect>();
-  target.addLegalDialect<mlir::BuiltinDialect>();
+  target.addLegalDialect<comb::CombDialect>();
   target.addLegalDialect<hw::HWDialect>();
   target.addLegalDialect<llhd::LLHDDialect>();
-  target.addLegalDialect<comb::CombDialect>();
+  target.addLegalDialect<mlir::BuiltinDialect>();
+  target.addLegalDialect<sim::SimDialect>();
   target.addLegalDialect<verif::VerifDialect>();
 
   target.addLegalOp<debug::ScopeOp>();
@@ -1293,6 +1358,10 @@ static void populateLegality(ConversionTarget &target,
 static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([&](IntType type) {
     return IntegerType::get(type.getContext(), type.getWidth());
+  });
+
+  typeConverter.addConversion([&](FormatStringType type) {
+    return sim::FormatStringType::get(type.getContext());
   });
 
   typeConverter.addConversion([&](ArrayType type) -> std::optional<Type> {
@@ -1469,12 +1538,18 @@ static void populateOpConversion(RewritePatternSet &patterns,
     // Patterns of assert-like operations
     AssertLikeOpConversion<AssertOp, verif::AssertOp>,
     AssertLikeOpConversion<AssumeOp, verif::AssumeOp>,
-    AssertLikeOpConversion<CoverOp, verif::CoverOp>
+    AssertLikeOpConversion<CoverOp, verif::CoverOp>,
+
+    // Format strings.
+    FormatLiteralOpConversion,
+    FormatConcatOpConversion,
+    FormatIntOpConversion,
+    DisplayBIOpConversion
   >(typeConverter, context);
   // clang-format on
+
   mlir::populateAnyFunctionOpInterfaceTypeConversionPattern(patterns,
                                                             typeConverter);
-
   hw::populateHWModuleLikeTypeConversionPattern(
       hw::HWModuleOp::getOperationName(), patterns, typeConverter);
 }
