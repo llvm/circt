@@ -1075,3 +1075,27 @@ void circt::firrtl::makeCommonPrefix(SmallString<64> &a, StringRef b) {
   while (!a.empty() && !a.ends_with(sep))
     a.pop_back();
 }
+
+PathOp circt::firrtl::createPathRef(Operation *op, hw::HierPathOp nla,
+                                    mlir::ImplicitLocOpBuilder &builderOM) {
+
+  auto *context = op->getContext();
+  auto id = DistinctAttr::create(UnitAttr::get(context));
+  TargetKind kind = TargetKind::Reference;
+  // If op is null, then create an empty path.
+  if (op) {
+    NamedAttrList fields;
+    fields.append("id", id);
+    fields.append("class", StringAttr::get(context, "circt.tracker"));
+    if (nla)
+      fields.append("circt.nonlocal", mlir::FlatSymbolRefAttr::get(nla));
+    AnnotationSet annos(op);
+    annos.addAnnotations(DictionaryAttr::get(context, fields));
+    annos.applyToOperation(op);
+    if (isa<InstanceOp, FModuleLike>(op))
+      kind = TargetKind::Instance;
+  }
+
+  // Create the path operation.
+  return builderOM.create<PathOp>(kind, id);
+}
