@@ -13,6 +13,7 @@
 #include "circt/Dialect/RTG/IR/RTGOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
+#include <numeric>
 
 using namespace mlir;
 using namespace circt;
@@ -30,6 +31,37 @@ APInt LabelDeclOp::getBinary() {
 void LabelDeclOp::printAssembly(llvm::raw_ostream &stream) {
   // TODO: perform substitutions
   stream << getFormatString();
+}
+
+//===----------------------------------------------------------------------===//
+// SequenceOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SequenceOp::verifyRegions() {
+  if (getBody()->getArgumentTypes() != getResult().getType().getArgTypes())
+    return emitOpError("argument types must match sequence type");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// SelectRandomOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SelectRandomOp::verify() {
+  if (getSequences().size() != getSequenceArgs().size())
+    return emitOpError("number of sequences and sequence arg lists must match");
+
+  if (getSequences().size() != getRatios().size())
+    return emitOpError("number of sequences and ratios must match");
+
+  for (auto [seq, args] : llvm::zip(getSequences(), getSequenceArgs()))
+    if (TypeRange(cast<SequenceType>(seq.getType()).getArgTypes()) !=
+        args.getTypes())
+      return emitOpError(
+          "sequence argument types do not match sequence requirements");
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

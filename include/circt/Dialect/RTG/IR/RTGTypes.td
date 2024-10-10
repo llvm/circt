@@ -18,13 +18,16 @@ include "mlir/IR/AttrTypeBase.td"
 
 class RTGTypeDef<string name> : TypeDef<RTGDialect, name> { }
 
-def SnippetType : RTGTypeDef<"Snippet"> {
+def SequenceType : RTGTypeDef<"Sequence"> {
   let summary = "";
   let description = [{
   }];
 
-  let mnemonic = "snippet";
-  let assemblyFormat = "";
+  let mnemonic = "sequence";
+  let parameters = (ins
+    OptionalArrayRefParameter<"::mlir::Type",
+                      "types of the sequence inputs">:$argTypes);
+  let assemblyFormat = "(`<` $argTypes^ `>`)?";
 }
 
 def ResourceType : RTGTypeDef<"Resource"> {

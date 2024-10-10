@@ -20,28 +20,41 @@ class RTGOp<string mnemonic, list<Trait> traits = []> :
     Op<RTGDialect, mnemonic, traits>;
 
 
-def SnippetOp : RTGOp<"snippet", [
+def SequenceOp : RTGOp<"sequence", [
   SingleBlock,
-  NoRegionArguments,
   NoTerminator
 ]> {
   let summary = "a sequence of instructions";
   let description = [{
   }];
 
-  let results = (outs SnippetType:$snippet);
+  let results = (outs SequenceType:$sequence);
   let regions = (region SizedRegion<1>:$bodyRegion);
 
-  let assemblyFormat = "attr-dict-with-keyword $bodyRegion";
+  let assemblyFormat = [{
+    attr-dict-with-keyword $bodyRegion `->` type($sequence)
+  }];
+
+  let hasRegionVerifier = true;
 }
 
-def SelectRandomOp : RTGOp<"select_random", [SameVariadicOperandSize]> {
-  let summary = "places a random snippet in an instruction sequence";
+def SelectRandomOp : RTGOp<"select_random", [AttrSizedOperandSegments]> {
+  let summary = "places a random sequence in anohter sequence";
 
-  let arguments = (ins Variadic<SnippetType>:$snippets,
-                       Variadic<I32>:$ratios);
+  let arguments = (ins
+    Variadic<SequenceType>:$sequences,
+    Variadic<I32>:$ratios,
+    VariadicOfVariadic<AnyType,
+                       "sequence_args_operand_segments">:$sequence_args,
+    DenseI32ArrayAttr:$sequence_args_operand_segments);
 
-  let assemblyFormat = "` ` `[` $snippets `]` `,` `[` $ratios `]` attr-dict";
+  // TODO: write a nice custom assembly
+  let assemblyFormat = [{
+    ` ` `[` $sequences `]` `(` $sequence_args `:` type($sequence_args) `)`
+    `,` `[` $ratios `]` attr-dict `:` type($sequences)
+  }];
+
+  let hasVerifier = true;
 }
 
 def LabelDeclOp : RTGOp<"label.decl", [

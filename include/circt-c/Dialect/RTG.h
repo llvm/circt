@@ -26,10 +26,12 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(RTG, rtg);
 //===----------------------------------------------------------------------===//
 
 /// If the type is an RTG snippet.
-MLIR_CAPI_EXPORTED bool rtgTypeIsASnippet(MlirType type);
+MLIR_CAPI_EXPORTED bool rtgTypeIsASequence(MlirType type);
 
 /// Creates an RTG snippet type in the context.
-MLIR_CAPI_EXPORTED MlirType rtgSnippetTypeGet(MlirContext ctxt);
+MLIR_CAPI_EXPORTED MlirType rtgSequenceTypeGet(MlirContext ctxt,
+                                               intptr_t numArgs,
+                                               MlirType const *argTypes);
 
 #ifdef __cplusplus
 }

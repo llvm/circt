@@ -1,7 +1,7 @@
 // RUN: circt-opt %s | FileCheck %s
 
-// CHECK: [[SNIPPET:%.+]] = rtg.snippet attributes {rtg.some_attr} {
-%snippet = rtg.snippet attributes {rtg.some_attr} {
+// CHECK: [[SNIPPET:%.+]] = rtg.sequence attributes {rtg.some_attr} {
+%snippet = rtg.sequence attributes {rtg.some_attr} {
   %arg = arith.constant 1 : i32
   // CHECK: [[LBL:%.*]] = rtg.label.decl "label_string_{0}_{1}", %{{.*}}, %{{.*}} : i32, i32 -> i32
   %0 = rtg.label.decl "label_string_{0}_{1}", %arg, %arg : i32, i32 -> i32
@@ -9,22 +9,26 @@
   %1 = rtg.label.decl "label_string" -> i32
   // CHECK: rtg.label [[LBL]] : i32
   rtg.label %0 : i32
-}
+} -> !rtg.sequence
 
-// CHECK: rtg.snippet
-rtg.snippet {
+// CHECK: rtg.sequence
+rtg.sequence {
   // CHECK: [[RATIO:%.+]] = arith.constant 1 : i32
   %ratio = arith.constant 1 : i32
-  // CHECK: rtg.select_random [[[SNIPPET]]], [[[RATIO]]]
-  rtg.select_random [%snippet], [%ratio]
-  // CHECK: rtg.select_random [[[SNIPPET]], [[SNIPPET]]], [[[RATIO]], [[RATIO]]]
-  rtg.select_random [%snippet, %snippet], [%ratio, %ratio]
-}
+  // CHECK: rtg.select_random [[[SNIPPET]]] (() : ()), [[[RATIO]]] : !rtg.sequence
+  rtg.select_random [%snippet](() : ()), [%ratio] : !rtg.sequence
+  // CHECK: rtg.select_random [[[SNIPPET]], [[SNIPPET]]] ((), () : (), ()), [[[RATIO]], [[RATIO]]] : !rtg.sequence, !rtg.sequence
+  rtg.select_random [%snippet, %snippet]((), () : (), ()), [%ratio, %ratio] : !rtg.sequence, !rtg.sequence
+} -> !rtg.sequence
+
+%0 = rtg.sequence {
+^bb0(%arg0: i32, %arg1: i64):
+} -> !rtg.sequence<i32, i64>
 
 // CHECK-LABEL: @types
-// CHECK-SAME: !rtg.snippet
+// CHECK-SAME: !rtg.sequence
 // CHECK-SAME: !rtg.resource
-func.func @types(%arg1: !rtg.snippet, %arg2: !rtg.resource) {
+func.func @types(%arg1: !rtg.sequence, %arg2: !rtg.resource) {
   return
 }
 

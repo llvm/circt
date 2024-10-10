@@ -60,13 +60,14 @@ static LogicalResult elaborate(rtg::SelectRandomOp op,
 
   unsigned selected = dist(rng);
 
-  auto snippet = op.getSnippets()[selected].getDefiningOp<rtg::SnippetOp>();
+  auto snippet = op.getSequences()[selected].getDefiningOp<rtg::SequenceOp>();
   if (!snippet)
     return failure();
 
   IRRewriter rewriter(op);
   auto *clone = snippet->clone();
-  rewriter.inlineBlockBefore(&clone->getRegion(0).front(), op);
+  rewriter.inlineBlockBefore(&clone->getRegion(0).front(), op,
+                             op.getSequenceArgs()[selected]);
   clone->erase();
 
   op->erase();

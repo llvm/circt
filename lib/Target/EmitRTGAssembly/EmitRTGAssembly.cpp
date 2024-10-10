@@ -62,7 +62,7 @@ LogicalResult EmitRTGAssembly::emitRTGAssembly(Operation *module,
     return module->emitError("op region must have exactly one block");
 
   mlir::raw_indented_ostream ios(os);
-  for (auto snippet : module->getRegion(0).getOps<rtg::SnippetOp>()) {
+  for (auto snippet : module->getRegion(0).getOps<rtg::SequenceOp>()) {
     for (auto &op : snippet.getBody()->getOperations()) {
       if (auto instr = dyn_cast<InstructionOpInterface>(&op)) {
         os << llvm::indent(4);

@@ -27,10 +27,9 @@ public:
   ResultType dispatchTypeOpVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<SnippetOp, SelectRandomOp, LabelOp, 
-        OnContextOp, RenderedContextOp, 
-        SelectRandomResourceOp, SetDifferenceResourceOp
-        >([&](auto expr) -> ResultType {
+        .template Case<SequenceOp, SelectRandomOp, LabelOp, OnContextOp,
+                       RenderedContextOp, SelectRandomResourceOp,
+                       SetDifferenceResourceOp>([&](auto expr) -> ResultType {
           return thisCast->visitOp(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -56,7 +55,7 @@ public:
                                                                     args...);  \
   }
 
-  HANDLE(SnippetOp, Unhandled);
+  HANDLE(SequenceOp, Unhandled);
   HANDLE(SelectRandomOp, Unhandled);
   HANDLE(LabelOp, Unhandled);
   HANDLE(OnContextOp, Unhandled);
