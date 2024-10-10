@@ -131,8 +131,7 @@ void Sinker::sinkOps() {
         moveLimit.maximize({write, opOrder.lookup(write)});
       if (nextSideEffect)
         moveLimit.maximize({nextSideEffect, opOrder.lookup(nextSideEffect)});
-    } else if (isa<StateWriteOp>(&op) || nextSideEffect == &op ||
-               op.use_empty()) {
+    } else if (isa<StateWriteOp>(&op) || nextSideEffect == &op) {
       continue;
     }
 
@@ -177,6 +176,8 @@ void Sinker::sinkOps() {
 
     // Ensure we don't move past the move limit imposed by side effects.
     earliest.maximize(moveLimit);
+    if (!earliest)
+      continue;
 
     // Either move the op inside the single block that contains all uses, or
     // move it to just before its earliest user.
