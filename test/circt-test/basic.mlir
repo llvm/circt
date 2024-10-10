@@ -14,8 +14,8 @@
 // JSON-NEXT: }
 // CHECK: Some.TestA formal {}
 // CHECK: Some.TestB formal {}
-verif.formal @Some.TestA (k=42) {}
-verif.formal @Some.TestB (k=42) {}
+verif.formal @Some.TestA {}
+verif.formal @Some.TestB {}
 
 // JSON-NEXT: {
 // JSON-NEXT:   "name": "Attrs"
@@ -32,7 +32,7 @@ verif.formal @Some.TestB (k=42) {}
 // JSON-NEXT:   }
 // JSON-NEXT: }
 // CHECK: Attrs formal {awesome = true, engine = "bmc", offset = 42 : i64, tags = ["sby", "induction"], wow = false}
-verif.formal @Attrs (k=42) attributes {
+verif.formal @Attrs attributes {
     awesome = true,
     engine = "bmc",
     offset = 42 : i64,
