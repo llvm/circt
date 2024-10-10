@@ -18,18 +18,23 @@ rtgtest.instr_b %reg5, %reg2
 func.func @checkOnContext(
     %arg1 : !rtg.context_resource_set<!rtgtest.bogus_reg>
   ) {
-  rtg.label "a"
+  %la = rtg.label.decl "a" -> i32
+  %lb = rtg.label.decl "b" -> i32
+  %lc = rtg.label.decl "c" -> i32
+  %ld = rtg.label.decl "d" -> i32
+  %le = rtg.label.decl "e" -> i32
+  rtg.label %la : i32
   %arg2 = rtg.select_random_resource %arg1 : !rtg.context_resource_set<!rtgtest.bogus_reg>
   rtg.on_context %arg1 : !rtg.context_resource_set<!rtgtest.bogus_reg> {
-    rtg.label "b"
+    rtg.label %lb : i32
     rtg.on_context %arg2 : !rtg.context_resource_set<!rtgtest.bogus_reg> {
-      rtg.label "c"
+      rtg.label %lc : i32
     }
-    rtg.label "d"
+    rtg.label %ld : i32
   }
   %arg3 = rtg.set_difference_resource %arg1, %arg2 : !rtg.context_resource_set<!rtgtest.bogus_reg>
   rtg.on_context %arg3 : !rtg.context_resource_set<!rtgtest.bogus_reg> {
-    rtg.label "e"
+    rtg.label %le : i32
   }
   return
 }

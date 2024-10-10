@@ -19,6 +19,20 @@ using namespace circt;
 using namespace rtg;
 
 //===----------------------------------------------------------------------===//
+// LabelDeclOp
+//===----------------------------------------------------------------------===//
+
+APInt LabelDeclOp::getBinary() {
+  assert (false && "must not be used for label resources");
+  return APInt();
+}
+
+void LabelDeclOp::printAssembly(llvm::raw_ostream &stream) {
+  // TODO: perform substitutions
+  stream << getFormatString();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

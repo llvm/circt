@@ -13,6 +13,7 @@
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/CommonAttrConstraints.td"
 include "mlir/IR/Properties.td"
+include "circt/Dialect/RTG/IR/RTGInterfaces.td"
 
 // Base class for the operation in this dialect.
 class RTGOp<string mnemonic, list<Trait> traits = []> :
@@ -43,15 +44,43 @@ def SelectRandomOp : RTGOp<"select_random", [SameVariadicOperandSize]> {
   let assemblyFormat = "` ` `[` $snippets `]` `,` `[` $ratios `]` attr-dict";
 }
 
-def LabelOp : RTGOp<"label", []> {
-  let summary = "places a label in an instruction sequence";
+def LabelDeclOp : RTGOp<"label.decl", [
+  DeclareOpInterfaceMethods<ResourceOpInterface>,
+]> {
+  let summary = "declares a label for an instruction sequence";
+  let description = [{
+    Declares a label that can then be placed by an `rtg.label` operation in an
+    instruction sequence, passed on to sequences via their arguments, and used
+    by instructions (e.g., as jump targets).
+    This operation returns a value of the target architectures word size because
+    a label is an alias for an immediate value of that will be determined after
+    rendering, assemblying, and linking.
+  }];
 
   // TODO: 'args' can be generalized to more types (maybe based on a
   // type interface?)
   let arguments = (ins StrAttr:$formatString,
                        Variadic<AnySignlessInteger>:$args);
+  // Note: this is an index because it must match the machine word size
+  let results = (outs AnySignlessInteger:$label);
 
-  let assemblyFormat = "$formatString (`,` $args^ `:` type($args))? attr-dict";
+  let assemblyFormat = [{
+    $formatString (`,` $args^ `:` type($args))? attr-dict `->` type($label)
+  }];
+}
+
+def LabelOp : RTGOp<"label", []> {
+  let summary = "places a label in an instruction sequence";
+  let description = [{
+    Any declared label must only be placed at most once in any rendered
+    instruction sequence. Otherwise, it would be ambiguous as a jump
+    target.
+    However, multiple snippets can place the same label. If they do so,
+    they must never be instantiated in the same rendered sequence.
+  }];
+
+  let arguments = (ins AnySignlessInteger:$label);
+  let assemblyFormat = "$label attr-dict `:` type($label)";
 }
 
 

@@ -3,10 +3,12 @@
 // CHECK: [[SNIPPET:%.+]] = rtg.snippet attributes {rtg.some_attr} {
 %snippet = rtg.snippet attributes {rtg.some_attr} {
   %arg = arith.constant 1 : i32
-  // CHECK: rtg.label "label_string_{0}_{1}", %{{.*}}, %{{.*}} : i32, i32
-  rtg.label "label_string_{0}_{1}", %arg, %arg : i32, i32
-  // CHECK: rtg.label "label_string"
-  rtg.label "label_string"
+  // CHECK: [[LBL:%.*]] = rtg.label.decl "label_string_{0}_{1}", %{{.*}}, %{{.*}} : i32, i32 -> i32
+  %0 = rtg.label.decl "label_string_{0}_{1}", %arg, %arg : i32, i32 -> i32
+  // CHECK: rtg.label.decl "label_string" -> i32
+  %1 = rtg.label.decl "label_string" -> i32
+  // CHECK: rtg.label [[LBL]] : i32
+  rtg.label %0 : i32
 }
 
 // CHECK: rtg.snippet
