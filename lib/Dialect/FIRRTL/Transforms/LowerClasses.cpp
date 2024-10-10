@@ -1175,7 +1175,7 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
       if (isa<BlockArgument>(propAssign.getDest())) {
         // Store any output property assignments into fields op inputs.
         fieldLocs.push_back(op.getLoc());
-        fieldValues.push_back(mapping.lookup(cast<PropAssignOp>(op).getSrc()));
+        fieldValues.push_back(mapping.lookup(propAssign.getSrc()));
         isField = true;
       }
     }
