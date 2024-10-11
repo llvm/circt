@@ -42,6 +42,30 @@ static FailureOr<APInt> getBinary(Value val) {
   return failure();
 }
 
+namespace {
+  class EmitRTGToElf : public RTGOpVisitor<EmitRTGToElf, LogicalResult, int> {
+    public:
+  
+    LogicalResult visitUnhandledOp(Operation *op, int ctx) {
+      op->emitError("unknown RTG operation");
+      return failure();
+    }
+
+    LogicalResult visitRenderedContextOp(RenderedContextOp op, int ctx) {
+      assert(ctx == -1);
+      for (auto [index, region] : llvm::zip(op.getSelectors(), op.getRegions())) {
+        auto &body = region->getBlocks().front();
+        for (auto &op : body.getOperations()) {
+          if (failed(dispatchOpVisitor(&op, index)))
+            return failure();
+        }
+      }
+      return success();
+    }
+
+  };
+}
+
 LogicalResult EmitRTGAssembly::emitRTGAssembly(Operation *module,
                                          llvm::raw_ostream &os,
                                          const EmitRTGAssemblyOptions &options) {

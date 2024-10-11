@@ -22,9 +22,9 @@ namespace rtg {
 /// This helps visit TypeOp nodes.
 template <typename ConcreteType, typename ResultType = void,
           typename... ExtraArgs>
-class TypeOpVisitor {
+class RTGOpVisitor {
 public:
-  ResultType dispatchTypeOpVisitor(Operation *op, ExtraArgs... args) {
+  ResultType dispatchOpVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<SnippetOp, SelectRandomOp, LabelOp, 
@@ -38,22 +38,21 @@ public:
         });
   }
 
-  /// This callback is invoked on any non-expression operations.
-  ResultType visitInvalidOp(Operation *op, ExtraArgs... args) {
-    op->emitOpError("unknown RTG operation");
-    abort();
-  }
-
   /// This callback is invoked on any operations that are not
   /// handled by the concrete visitor.
   ResultType visitUnhandledOp(Operation *op, ExtraArgs... args) {
     return ResultType();
   }
 
+  /// This callback is invoked on any non-expression operations.
+  ResultType visitInvalidOp(Operation *op, ExtraArgs... args) {
+    op->emitOpError("unknown RTG operation");
+    abort();
+  }
+
 #define HANDLE(OPTYPE, OPKIND)                                                 \
   ResultType visitOp(OPTYPE op, ExtraArgs... args) {                           \
-    return static_cast<ConcreteType *>(this)->visit##OPKIND##TypeOp(op,        \
-                                                                    args...);  \
+    return static_cast<ConcreteType *>(this)->visit##OPKIND##Op(op, args...);  \
   }
 
   HANDLE(SnippetOp, Unhandled);
