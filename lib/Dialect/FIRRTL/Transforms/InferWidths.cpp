@@ -1388,18 +1388,12 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       .Case<ConstantOp>([&](auto op) {
         // If the constant has a known width, use that. Otherwise pick the
         // smallest number of bits necessary to represent the constant.
-        Expr *e;
-        if (auto width = op.getType().base().getWidth())
-          e = solver.known(*width);
-        else {
-          auto v = op.getValue();
-          auto w = v.getBitWidth() - (v.isNegative() ? v.countLeadingOnes()
-                                                     : v.countLeadingZeros());
-          if (v.isSigned())
-            w += 1;
-          e = solver.known(std::max(w, 1u));
-        }
-        setExpr(op.getResult(), e);
+        auto v = op.getValue();
+        auto w = v.getBitWidth() - (v.isNegative() ? v.countLeadingOnes()
+                                                   : v.countLeadingZeros());
+        if (v.isSigned())
+          w += 1;
+        setExpr(op.getResult(), solver.known(std::max(w, 1u)));
       })
       .Case<SpecialConstantOp>([&](auto op) {
         // Nothing required.
@@ -1407,8 +1401,6 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       .Case<InvalidValueOp>([&](auto op) {
         // We must duplicate the invalid value for each use, since each use can
         // be inferred to a different width.
-        if (!hasUninferredWidth(op.getType()))
-          return;
         declareVars(op.getResult(), op.getLoc(), /*isDerived=*/true);
         if (op.use_empty())
           return;
