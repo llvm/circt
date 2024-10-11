@@ -356,10 +356,22 @@ def ClassOp : FIRRTLModuleLike<"class", [
   let builders = [
     OpBuilder<(ins
       "StringAttr":$name,
-      "ArrayRef<PortInfo>":$ports)>];
+      "ArrayRef<PortInfo>":$ports)>,
+    // This builds a ClassOp, with the specified fieldNames and fieldTypes as
+    // ports. The output property is set from the input property port.
+    OpBuilder<(ins
+      "Twine":$name,
+      "mlir::ArrayRef<mlir::StringRef>":$fieldNames,
+      "mlir::ArrayRef<mlir::Type>":$fieldTypes)>
+    ];
 
   let extraModuleClassDeclaration = [{
     Block *getBodyBlock() { return &getBody().front(); }
+
+    ClassOp static buildSimpleClassOp(
+      mlir::OpBuilder &odsBuilder, mlir::Location loc, mlir::Twine name,
+      mlir::ArrayRef<mlir::StringRef> fieldNames,
+      mlir::ArrayRef<mlir::Type> fieldTypes);
 
     using iterator = Block::iterator;
     iterator begin() { return getBodyBlock()->begin(); }

@@ -75,33 +75,6 @@ struct ObjectModelIR {
     return builderOM.create<PathOp>(kind, id);
   }
 
-  // Create a ClassOp, with the specified fieldNames and fieldTypes as ports.
-  // The output property is set from the input property port.
-  ClassOp buildSimpleClassOp(OpBuilder &odsBuilder, Location loc, Twine name,
-                             ArrayRef<StringRef> fieldNames,
-                             ArrayRef<Type> fieldTypes) {
-    SmallVector<PortInfo, 10> ports;
-    for (auto [fieldName, fieldType] : llvm::zip(fieldNames, fieldTypes)) {
-      ports.emplace_back(odsBuilder.getStringAttr(fieldName + "_in"), fieldType,
-                         Direction::In);
-      ports.emplace_back(odsBuilder.getStringAttr(fieldName), fieldType,
-                         Direction::Out);
-    }
-
-    ClassOp classOp =
-        odsBuilder.create<ClassOp>(loc, odsBuilder.getStringAttr(name), ports);
-    Block *body = classOp.getBodyBlock();
-    auto prevLoc = odsBuilder.saveInsertionPoint();
-    odsBuilder.setInsertionPointToEnd(body);
-    auto args = body->getArguments();
-    for (unsigned i = 0, e = ports.size(); i != e; i += 2)
-      odsBuilder.create<PropAssignOp>(loc, args[i + 1], args[i]);
-
-    odsBuilder.restoreInsertionPoint(prevLoc);
-
-    return classOp;
-  }
-
   void createMemorySchema() {
 
     auto unknownLoc = mlir::UnknownLoc::get(context);
@@ -118,9 +91,8 @@ struct ObjectModelIR {
     };
     StringRef extraPortFields[3] = {"name", "direction", "width"};
 
-    extraPortsClass =
-        buildSimpleClassOp(builderOM, unknownLoc, "ExtraPortsMemorySchema",
-                           extraPortFields, extraPortsType);
+    extraPortsClass = builderOM.create<ClassOp>(
+        "ExtraPortsMemorySchema", extraPortFields, extraPortsType);
 
     mlir::Type classFieldTypes[13] = {
         StringType::get(context),
@@ -140,9 +112,8 @@ struct ObjectModelIR {
         ListType::get(context, cast<PropertyType>(StringType::get(context))),
     };
 
-    memorySchemaClass =
-        buildSimpleClassOp(builderOM, unknownLoc, "MemorySchema",
-                           memoryParamNames, classFieldTypes);
+    memorySchemaClass = builderOM.create<ClassOp>(
+        "MemorySchema", memoryParamNames, classFieldTypes);
 
     // Now create the class that will instantiate metadata class with all the
     // memories of the circt.
@@ -156,9 +127,8 @@ struct ObjectModelIR {
     auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
         unknownLoc, circtOp.getBodyBlock());
     Type classFieldTypes[] = {StringType::get(context)};
-    retimeModulesSchemaClass =
-        buildSimpleClassOp(builderOM, unknownLoc, "RetimeModulesSchema",
-                           retimeModulesParamNames, classFieldTypes);
+    retimeModulesSchemaClass = builderOM.create<ClassOp>(
+        "RetimeModulesSchema", retimeModulesParamNames, classFieldTypes);
 
     SmallVector<PortInfo> mports;
     retimeModulesMetadataClass = builderOM.create<ClassOp>(
@@ -196,8 +166,8 @@ struct ObjectModelIR {
         unknownLoc, circtOp.getBodyBlock());
     Type classFieldTypes[] = {StringType::get(context)};
     blackBoxModulesSchemaClass =
-        buildSimpleClassOp(builderOM, unknownLoc, "SitestBlackBoxModulesSchema",
-                           blackBoxModulesParamNames, classFieldTypes);
+        builderOM.create<ClassOp>("SitestBlackBoxModulesSchema",
+                                  blackBoxModulesParamNames, classFieldTypes);
     SmallVector<PortInfo> mports;
     blackBoxMetadataClass = builderOM.create<ClassOp>(
         builderOM.getStringAttr("SitestBlackBoxMetadata"), mports);

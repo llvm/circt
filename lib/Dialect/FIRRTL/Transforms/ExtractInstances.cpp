@@ -14,6 +14,7 @@
 
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -73,7 +74,8 @@ struct ExtractInstancesPass
   void collectAnno(InstanceOp inst, Annotation anno);
   void extractInstances();
   void groupInstances();
-  void createTraceFiles();
+  void createTraceFiles(ClassOp &sifiveMetadata);
+  void createSchema();
 
   /// Get the cached namespace for a module.
   hw::InnerSymbolNamespace &getModuleNamespace(FModuleLike module) {
@@ -114,7 +116,9 @@ struct ExtractInstancesPass
   bool anythingChanged;
   bool anyFailures;
 
+  CircuitOp circuitOp;
   InstanceGraph *instanceGraph = nullptr;
+  SymbolTable *symbolTable = nullptr;
 
   /// The modules in the design that are annotated with one or more annotations
   /// relevant for instance extraction.
@@ -159,12 +163,18 @@ struct ExtractInstancesPass
   CircuitNamespace circuitNamespace;
   /// Cached module namespaces.
   DenseMap<Operation *, hw::InnerSymbolNamespace> moduleNamespaces;
+  /// The metadata class ops.
+  ClassOp extractMetadataClass, schemaClass;
+  const unsigned prefixNameFieldId = 0, pathFieldId = 2, fileNameFieldId = 4;
+  /// Cache of the inner ref to the new instances created. Will be used to
+  /// create a path to the instance
+  DenseMap<InnerRefAttr, InstanceOp> innerRefToInstances;
 };
 } // end anonymous namespace
 
 /// Emit the annotated source code for black boxes in a circuit.
 void ExtractInstancesPass::runOnOperation() {
-  CircuitOp circuitOp = getOperation();
+  circuitOp = getOperation();
   anythingChanged = false;
   anyFailures = false;
   annotatedModules.clear();
@@ -181,10 +191,14 @@ void ExtractInstancesPass::runOnOperation() {
   moduleNamespaces.clear();
   circuitNamespace.clear();
   circuitNamespace.add(circuitOp);
+  innerRefToInstances.clear();
+  extractMetadataClass = {};
+  schemaClass = {};
 
   // Walk the IR and gather all the annotations relevant for extraction that
   // appear on instances and the instantiated modules.
   instanceGraph = &getAnalysis<InstanceGraph>();
+  symbolTable = &getAnalysis<SymbolTable>();
   collectAnnos();
   if (anyFailures)
     return signalPassFailure();
@@ -199,8 +213,11 @@ void ExtractInstancesPass::runOnOperation() {
   if (anyFailures)
     return signalPassFailure();
 
+  ClassOp sifiveMetadata =
+      dyn_cast_or_null<ClassOp>(symbolTable->lookup("SiFive_Metadata"));
+
   // Generate the trace files that list where each instance was extracted from.
-  createTraceFiles();
+  createTraceFiles(sifiveMetadata);
   if (anyFailures)
     return signalPassFailure();
 
@@ -608,6 +625,8 @@ void ExtractInstancesPass::extractInstances() {
       auto newParent = oldParentInst->getParentOfType<FModuleLike>();
       LLVM_DEBUG(llvm::dbgs() << "- Updating " << oldParentInst << "\n");
       auto newParentInst = oldParentInst.cloneAndInsertPorts(newPorts);
+      if (newParentInst.getInnerSymAttr())
+        innerRefToInstances[getInnerRefTo(newParentInst)] = newParentInst;
 
       // Migrate connections to existing ports.
       for (unsigned portIdx = 0; portIdx < numParentPorts; ++portIdx)
@@ -633,6 +652,8 @@ void ExtractInstancesPass::extractInstances() {
       ImplicitLocOpBuilder builder(inst.getLoc(), newParentInst);
       builder.setInsertionPointAfter(newParentInst);
       builder.insert(newInst);
+      if (newParentInst.getInnerSymAttr())
+        innerRefToInstances[getInnerRefTo(newInst)] = newInst;
       for (unsigned portIdx = 0; portIdx < numInstPorts; ++portIdx) {
         auto dst = newInst.getResult(portIdx);
         auto src = newParentInst.getResult(numParentPorts + portIdx);
@@ -659,7 +680,9 @@ void ExtractInstancesPass::extractInstances() {
       // Inherit the old instance's extraction path.
       extractionPaths.try_emplace(newInst); // (create entry first)
       auto &extractionPath = (extractionPaths[newInst] = extractionPaths[inst]);
-      extractionPath.push_back(getInnerRefTo(newParentInst));
+      auto instInnerRef = getInnerRefTo(newParentInst);
+      innerRefToInstances[instInnerRef] = newParentInst;
+      extractionPath.push_back(instInnerRef);
       originalInstanceParents.try_emplace(newInst); // (create entry first)
       originalInstanceParents[newInst] = originalInstanceParents[inst];
       // Record the Nonlocal annotations that need to be applied to the new
@@ -999,11 +1022,11 @@ void ExtractInstancesPass::groupInstances() {
 /// Generate trace files, which are plain text metadata files that list the
 /// hierarchical path where each instance was extracted from. The file lists one
 /// instance per line in the form `<prefix> -> <original-path>`.
-void ExtractInstancesPass::createTraceFiles() {
+void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
   LLVM_DEBUG(llvm::dbgs() << "\nGenerating trace files\n");
 
   // Group the extracted instances by their trace file name.
-  SmallDenseMap<StringRef, SmallVector<InstanceOp>> instsByTraceFile;
+  llvm::MapVector<StringRef, SmallVector<InstanceOp>> instsByTraceFile;
   for (auto &[inst, info] : extractedInstances)
     if (!info.traceFilename.empty())
       instsByTraceFile[info.traceFilename].push_back(inst);
@@ -1011,7 +1034,31 @@ void ExtractInstancesPass::createTraceFiles() {
   // Generate the trace files.
   SmallVector<Attribute> symbols;
   SmallDenseMap<Attribute, unsigned> symbolIndices;
+  if (sifiveMetadataClass && !extractMetadataClass)
+    createSchema();
 
+  auto addPortsToClass = [&](ArrayRef<std::pair<Value, Twine>> objFields,
+                             ClassOp classOp) {
+    auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
+        classOp.getLoc(), classOp.getBodyBlock());
+    auto portIndex = classOp.getNumPorts();
+    SmallVector<std::pair<unsigned, PortInfo>> newPorts;
+    for (auto [index, port] : enumerate(objFields)) {
+      portIndex += index;
+      auto obj = port.first;
+      newPorts.emplace_back(
+          portIndex,
+          PortInfo(builderOM.getStringAttr(port.second + Twine(portIndex)),
+                   obj.getType(), Direction::Out));
+      auto blockarg =
+          classOp.getBodyBlock()->addArgument(obj.getType(), obj.getLoc());
+      builderOM.create<PropAssignOp>(blockarg, obj);
+    }
+    classOp.insertPorts(newPorts);
+  };
+
+  HierPathCache pathCache(circuitOp, *symbolTable);
+  SmallVector<std::pair<Value, Twine>> classFields;
   for (auto &[fileName, insts] : instsByTraceFile) {
     LLVM_DEBUG(llvm::dbgs() << "- " << fileName << "\n");
     std::string buffer;
@@ -1051,6 +1098,33 @@ void ExtractInstancesPass::createTraceFiles() {
                  << "  - " << prefix << ": " << inst.getName() << "\n");
       os << prefix << " -> ";
 
+      if (sifiveMetadataClass) {
+        // Create the entry for this extracted instance in the metadata class.
+        auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
+            inst.getLoc(), extractMetadataClass.getBodyBlock());
+        auto prefixName = builderOM.create<StringConstantOp>(prefix);
+        auto object = builderOM.create<ObjectOp>(schemaClass, prefix);
+        auto fPrefix =
+            builderOM.create<ObjectSubfieldOp>(object, prefixNameFieldId);
+        builderOM.create<PropAssignOp>(fPrefix, prefixName);
+
+        auto targetInstance = innerRefToInstances[path.front()];
+        SmallVector<Attribute> pathOpAttr(llvm::reverse(path));
+        auto nla = pathCache.getOpFor(
+            ArrayAttr::get(circuitOp->getContext(), pathOpAttr));
+
+        auto pathOp = createPathRef(targetInstance, nla, builderOM);
+        auto fPath = builderOM.create<ObjectSubfieldOp>(object, pathFieldId);
+        builderOM.create<PropAssignOp>(fPath, pathOp);
+        auto fFile =
+            builderOM.create<ObjectSubfieldOp>(object, fileNameFieldId);
+        auto fileNameOp =
+            builderOM.create<StringConstantOp>(builder.getStringAttr(fileName));
+        builderOM.create<PropAssignOp>(fFile, fileNameOp);
+
+        // Now add this to the output field of the class.
+        classFields.emplace_back(object, prefix + "_field");
+      }
       // HACK: To match the Scala implementation, we strip all non-DUT modules
       // from the path and make the path look like it's rooted at the first DUT
       // module (so `TestHarness.dut.foo.bar` becomes `DUTModule.foo.bar`).
@@ -1080,8 +1154,55 @@ void ExtractInstancesPass::createTraceFiles() {
     builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), buffer,
                                    ValueRange{}, builder.getArrayAttr(symbols));
   }
+  if (!classFields.empty()) {
+    addPortsToClass(classFields, extractMetadataClass);
+    // This extract instances metadata class, now needs to be instantiated
+    // inside the SifiveMetadata class. This also updates its signature, so keep
+    // the object of the SifiveMetadata class updated.
+    auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
+        sifiveMetadataClass->getLoc(), sifiveMetadataClass.getBodyBlock());
+    SmallVector<std::pair<Value, Twine>> classFields = {
+        {builderOM.create<ObjectOp>(
+             extractMetadataClass,
+             builderOM.getStringAttr("extract_instances_metadata")),
+         "extractedInstances_field"}};
+
+    addPortsToClass(classFields, sifiveMetadataClass);
+    auto *node = instanceGraph->lookup(sifiveMetadataClass);
+    assert(node && node->hasOneUse());
+    ObjectOp metadataObj =
+        dyn_cast_or_null<ObjectOp>((*node->usesBegin())->getInstance());
+    assert(metadataObj &&
+           "expected the class to be instantiated by an object op");
+    builderOM.setInsertionPoint(metadataObj);
+    auto newObj =
+        builderOM.create<ObjectOp>(sifiveMetadataClass, metadataObj.getName());
+    metadataObj->replaceAllUsesWith(newObj);
+    metadataObj->remove();
+  }
 }
 
+void ExtractInstancesPass::createSchema() {
+
+  auto *context = circuitOp->getContext();
+  auto unknownLoc = mlir::UnknownLoc::get(context);
+  auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
+      unknownLoc, circuitOp.getBodyBlock());
+  mlir::Type portsType[] = {
+      StringType::get(context), // name
+      PathType::get(context),   // extracted instance path
+      StringType::get(context)  // filename
+  };
+  StringRef portFields[] = {"name", "path", "filename"};
+
+  schemaClass = builderOM.create<ClassOp>("ExtractInstancesSchema", portFields,
+                                          portsType);
+
+  // Now create the class that will instantiate the schema objects.
+  SmallVector<PortInfo> mports;
+  extractMetadataClass = builderOM.create<ClassOp>(
+      builderOM.getStringAttr("ExtractInstancesMetadata"), mports);
+}
 //===----------------------------------------------------------------------===//
 // Pass Creation
 //===----------------------------------------------------------------------===//
