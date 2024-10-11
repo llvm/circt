@@ -1225,7 +1225,7 @@ public:
   /// Declare all the variables in the value. If the value is a ground type,
   /// there is a single variable declared.  If the value is an aggregate type,
   /// it sets up variables for each unknown width.
-  void declareVars(Value value, Location loc, bool isDerived = false);
+  void declareVars(Value value, bool isDerived = false);
 
   /// Assign the constraint expressions of the fields in the `result` argument
   /// as the max of expressions in the `rhs` and `lhs` arguments. Both fields
@@ -1309,7 +1309,7 @@ LogicalResult InferenceMapping::map(CircuitOp op) {
   for (auto module : op.getOps<FModuleOp>())
     for (auto arg : module.getArguments()) {
       solver.setCurrentContextInfo(FieldRef(arg, 0));
-      declareVars(arg, module.getLoc());
+      declareVars(arg);
     }
 
   for (auto module : op.getOps<FModuleOp>()) {
@@ -1401,16 +1401,15 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       .Case<InvalidValueOp>([&](auto op) {
         // We must duplicate the invalid value for each use, since each use can
         // be inferred to a different width.
-        declareVars(op.getResult(), op.getLoc(), /*isDerived=*/true);
+        declareVars(op.getResult(), /*isDerived=*/true);
       })
-      .Case<WireOp, RegOp>(
-          [&](auto op) { declareVars(op.getResult(), op.getLoc()); })
+      .Case<WireOp, RegOp>([&](auto op) { declareVars(op.getResult()); })
       .Case<RegResetOp>([&](auto op) {
         // The original Scala code also constrains the reset signal to be at
         // least 1 bit wide. We don't do this here since the MLIR FIRRTL
         // dialect enforces the reset signal to be an async reset or a
         // `uint<1>`.
-        declareVars(op.getResult(), op.getLoc());
+        declareVars(op.getResult());
         // Contrain the register to be greater than or equal to the reset
         // signal.
         constrainTypes(op.getResult(), op.getResetValue());
@@ -1649,7 +1648,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // Create constraint variables for all ports.
         unsigned nonDebugPort = 0;
         for (const auto &result : llvm::enumerate(op.getResults())) {
-          declareVars(result.value(), op.getLoc());
+          declareVars(result.value());
           if (!type_isa<RefType>(result.value().getType()))
             nonDebugPort = result.index();
         }
@@ -1704,15 +1703,15 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
 
       .Case<RefSendOp>([&](auto op) {
-        declareVars(op.getResult(), op.getLoc());
+        declareVars(op.getResult());
         constrainTypes(op.getResult(), op.getBase(), true);
       })
       .Case<RefResolveOp>([&](auto op) {
-        declareVars(op.getResult(), op.getLoc());
+        declareVars(op.getResult());
         constrainTypes(op.getResult(), op.getRef(), true);
       })
       .Case<RefCastOp>([&](auto op) {
-        declareVars(op.getResult(), op.getLoc());
+        declareVars(op.getResult());
         constrainTypes(op.getResult(), op.getInput(), true);
       })
       .Case<RWProbeOp>([&](auto op) {
@@ -1737,7 +1736,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         for (Value result : op.getResults()) {
           auto ty = result.getType();
           if (type_isa<FIRRTLType>(ty))
-            declareVars(result, op.getLoc());
+            declareVars(result);
         }
       })
       .Default([&](auto op) {
@@ -1755,7 +1754,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
 
 /// Declare free variables for the type of a value, and associate the resulting
 /// set of variables with that value.
-void InferenceMapping::declareVars(Value value, Location loc, bool isDerived) {
+void InferenceMapping::declareVars(Value value, bool isDerived) {
   // Declare a variable for every unknown width in the type. If this is a Bundle
   // type or a FVector type, we will have to potentially create many variables.
   unsigned fieldID = 0;
