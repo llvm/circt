@@ -29,8 +29,12 @@ using namespace mlir::python::adaptors;
 void circt::python::populateDialectRTGSubmodule(py::module &m) {
   m.doc() = "RTG dialect Python native extension";
 
-  mlir_type_subclass(m, "SnippetType", rtgTypeIsASnippet)
-      .def_classmethod("get", [](py::object cls, MlirContext ctxt) {
-        return cls(rtgSnippetTypeGet(ctxt));
-      });
+  mlir_type_subclass(m, "SequenceType", rtgTypeIsASequence)
+      .def_classmethod(
+          "get", [](py::object cls, MlirContext ctxt, py::list argTypes) {
+            std::vector<MlirType> types;
+            for (auto type : argTypes)
+              types.push_back(type.cast<MlirType>());
+            return cls(rtgSequenceTypeGet(ctxt, types.size(), types.data()));
+          });
 }

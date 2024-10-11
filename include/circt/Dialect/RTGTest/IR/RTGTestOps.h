@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/RTG/IR/RTGOps.h"
 #include "circt/Dialect/RTGTest/IR/RTGTestDialect.h"
+#include "circt/Dialect/RTGTest/IR/RTGTestTypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpImplementation.h"
 

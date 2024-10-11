@@ -25,8 +25,14 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(RTG, rtg, RTGDialect)
 // Type API.
 //===----------------------------------------------------------------------===//
 
-bool rtgTypeIsASnippet(MlirType type) { return isa<SnippetType>(unwrap(type)); }
+bool rtgTypeIsASequence(MlirType type) {
+  return isa<SequenceType>(unwrap(type));
+}
 
-MlirType rtgSnippetTypeGet(MlirContext ctxt) {
-  return wrap(SnippetType::get(unwrap(ctxt)));
+MlirType rtgSequenceTypeGet(MlirContext ctxt, intptr_t numArgs,
+                            MlirType const *argTypes) {
+  SmallVector<Type> types;
+  for (unsigned i = 0; i < numArgs; ++i)
+    types.push_back(unwrap(argTypes[i]));
+  return wrap(SequenceType::get(unwrap(ctxt), types));
 }

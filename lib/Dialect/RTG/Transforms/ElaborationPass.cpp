@@ -31,17 +31,20 @@ using namespace circt;
 
 namespace {
 struct ElaborationPass : public rtg::impl::ElaborationBase<ElaborationPass> {
+  using Base::Base;
   void runOnOperation() override;
 };
 } // end namespace
 
 static unsigned interpret(Value value) { return 1; }
 
-static LogicalResult elaborate(rtg::SelectRandomOp op) {
+static LogicalResult elaborate(rtg::SelectRandomOp op,
+                               std::optional<unsigned> seed) {
   std::random_device dev;
-  std::mt19937 rng(dev());
-  // std::uniform_int_distribution<std::mt19937::result_type> dist(0,
-  // op.getSnippets().size());
+  unsigned s = dev();
+  if (seed.has_value())
+    s = *seed;
+  std::mt19937 rng(s);
 
   std::vector<float> idx;
   std::vector<float> prob;
@@ -57,13 +60,14 @@ static LogicalResult elaborate(rtg::SelectRandomOp op) {
 
   unsigned selected = dist(rng);
 
-  auto snippet = op.getSnippets()[selected].getDefiningOp<rtg::SnippetOp>();
+  auto snippet = op.getSequences()[selected].getDefiningOp<rtg::SequenceOp>();
   if (!snippet)
     return failure();
 
   IRRewriter rewriter(op);
   auto *clone = snippet->clone();
-  rewriter.inlineBlockBefore(&clone->getRegion(0).front(), op);
+  rewriter.inlineBlockBefore(&clone->getRegion(0).front(), op,
+                             op.getSequenceArgs()[selected]);
   clone->erase();
 
   op->erase();
@@ -75,10 +79,14 @@ void ElaborationPass::runOnOperation() {
   auto moduleOp = getOperation();
   // TODO: Use a proper visitor
   if (moduleOp
-          .walk([](Operation *op) -> WalkResult {
+          .walk([&](Operation *op) -> WalkResult {
             return TypeSwitch<Operation *, LogicalResult>(op)
-                .Case<rtg::SelectRandomOp>(
-                    [](auto op) { return elaborate(op); })
+                .Case<rtg::SelectRandomOp>([&](auto op) {
+                  std::optional<unsigned> s = std::nullopt;
+                  if (seed.hasValue())
+                    s = seed.getValue();
+                  return elaborate(op, s);
+                })
                 .Default([](auto op) { return success(); });
           })
           .wasInterrupted())

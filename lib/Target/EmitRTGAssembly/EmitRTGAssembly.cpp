@@ -33,12 +33,23 @@ static void printValue(Value val, raw_ostream &stream) {
   if (auto constOp = val.getDefiningOp<mlir::arith::ConstantOp>())
     if (auto integerAttr = dyn_cast<IntegerAttr>(constOp.getValue()))
       stream << integerAttr.getValue().getZExtValue();
+
+  if (auto resourceOp = val.getDefiningOp<ResourceOpInterface>())
+    resourceOp.printAssembly(stream);
 }
 
 static FailureOr<APInt> getBinary(Value val) {
+  if (auto labelDeclOp = val.getDefiningOp<LabelDeclOp>())
+    return labelDeclOp->emitError(
+        "binary representation cannot be computed for labels");
+
   if (auto constOp = val.getDefiningOp<mlir::arith::ConstantOp>())
     if (auto integerAttr = dyn_cast<IntegerAttr>(constOp.getValue()))
       return integerAttr.getValue();
+
+  if (auto resourceOp = val.getDefiningOp<ResourceOpInterface>())
+    return resourceOp.getBinary();
+
   return failure();
 }
 
@@ -75,24 +86,38 @@ LogicalResult EmitRTGAssembly::emitRTGAssembly(Operation *module,
     return module->emitError("op region must have exactly one block");
 
   mlir::raw_indented_ostream ios(os);
-  for (auto snippet : module->getRegion(0).getOps<rtg::SnippetOp>()) {
-    for (auto instr : snippet.getOps<InstructionOpInterface>()) {
-      if (llvm::is_contained(options.supportedInstructions,
-                             instr->getName().getStringRef())) {
-        instr.printAssembly(ios, [&](Value value) { printValue(value, ios); });
-        ios << "\n";
+  for (auto snippet : module->getRegion(0).getOps<rtg::SequenceOp>()) {
+    for (auto &op : snippet.getBody()->getOperations()) {
+      if (auto instr = dyn_cast<InstructionOpInterface>(&op)) {
+        os << llvm::indent(4);
+        if (llvm::is_contained(options.supportedInstructions,
+                               instr->getName().getStringRef())) {
+          instr.printAssembly(ios,
+                              [&](Value value) { printValue(value, ios); });
+          ios << "\n";
+          continue;
+        }
+        SmallVector<APInt> operands;
+        for (auto operand : instr->getOperands()) {
+          auto res = getBinary(operand);
+          if (failed(res))
+            return failure();
+          operands.push_back(*res);
+        }
+        SmallVector<char> str;
+        instr.getBinary(operands).toString(str, 16, false);
+        ios << ".word 0x" << str << "\n";
+      }
+      if (auto label = dyn_cast<LabelOp>(&op)) {
+        if (label.getGlobal()) {
+          os << ".global ";
+          printValue(label.getLabel(), os);
+          os << "\n";
+        }
+        printValue(label.getLabel(), os);
+        os << ":\n";
         continue;
       }
-      SmallVector<APInt> operands;
-      for (auto operand : instr->getOperands()) {
-        auto res = getBinary(operand);
-        if (failed(res))
-          return failure();
-        operands.push_back(*res);
-      }
-      SmallVector<char> str;
-      instr.getBinary(operands).toString(str, 16, false);
-      ios << ".word 0x" << str << "\n";
     }
   }
 
@@ -113,13 +138,16 @@ void EmitRTGAssembly::registerEmitRTGAssemblyTranslation() {
   static llvm::cl::list<std::string> allowedInstructions(
       "emit-assembly-allowed-instr",
       llvm::cl::desc(
-          "Comma-separated list of instructions supported by the assembler."));
+          "Comma-separated list of instructions supported by the assembler."),
+      llvm::cl::MiscFlags::CommaSeparated);
 
   auto getOptions = [] {
     EmitRTGAssemblyOptions opts;
     SmallVector<std::string> instrs;
-    for (auto &instr : allowedInstructions)
+    for (auto &instr : allowedInstructions) {
+      llvm::errs() << instr << "\n";
       instrs.push_back(instr);
+    }
 
     if (!allowedTextualInstructionsFile.empty()) {
       std::ifstream input(allowedTextualInstructionsFile.getValue());
