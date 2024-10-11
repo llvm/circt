@@ -16,14 +16,12 @@
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/Sim/SimTypes.h"
 #include "circt/Support/Debug.h"
-
+#include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/IndexedMap.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Support/Debug.h"
-
-#include "mlir/Dialect/SCF/IR/SCF.h"
-#include "mlir/Pass/Pass.h"
 
 #define DEBUG_TYPE "proceduralize-sim"
 

@@ -113,7 +113,7 @@ firrtl.circuit "Test" {
     }
   }
 
-  // CHECK: firrtl.module private @[[A:.+]](in %[[p:.+]]: !firrtl.uint<1>) {
+  // CHECK: firrtl.module private @[[A:.+]](in %[[p:.+]]: !firrtl.uint<1>)
   // CHECK:   %w = firrtl.wire : !firrtl.uint<1>
   // CHECK:   firrtl.connect %w, %[[p]] : !firrtl.uint<1>
   // CHECK: }
@@ -130,7 +130,7 @@ firrtl.circuit "Test" {
     }
   }
 
-  // CHECK: firrtl.module private @[[A:.+]](in %[[p:.+]]: !firrtl.uint<1>) {
+  // CHECK: firrtl.module private @[[A:.+]](in %[[p:.+]]: !firrtl.uint<1>)
   // CHECK:   %0 = firrtl.ref.send %[[p]] : !firrtl.uint<1>
   // CHECK:   %1 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
   // CHECK: }
@@ -180,7 +180,7 @@ firrtl.circuit "Test" {
     }
   }
 
-  // CHECK: firrtl.module private @[[A:.+]](in %[[p:.+]]: !firrtl.uint<1>) {
+  // CHECK: firrtl.module private @[[A:.+]](in %[[p:.+]]: !firrtl.uint<1>)
   // CHECK:   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   // CHECK:   firrtl.when %[[p]] : !firrtl.uint<1> {
   // CHECK:     %0 = firrtl.add %[[p]], %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
@@ -248,7 +248,7 @@ firrtl.circuit "Test" {
 
   // Src Outside Layerblock.
   //
-  // CHECK: firrtl.module private @[[A:.+]](in %[[p:.+]]: !firrtl.uint<1>) {
+  // CHECK: firrtl.module private @[[A:.+]](in %[[p:.+]]: !firrtl.uint<1>)
   // CHECK:   %0 = firrtl.ref.send %[[p]] : !firrtl.uint<1>
   // CHECK:   %1 = firrtl.wire : !firrtl.probe<uint<1>>
   // CHECK:   firrtl.ref.define %1, %0 : !firrtl.probe<uint<1>>
@@ -269,7 +269,7 @@ firrtl.circuit "Test" {
 
   // Dst Outside Layerblock.
   //
-  // CHECK: firrtl.module private @[[A:.+]](out %[[p:.+]]: !firrtl.probe<uint<1>>) {
+  // CHECK: firrtl.module private @[[A:.+]](out %[[p:.+]]: !firrtl.probe<uint<1>>)
   // CHECK:   %0 = firrtl.wire : !firrtl.probe<uint<1>>
   // CHECK:   firrtl.ref.define %[[p]], %0 : !firrtl.probe<uint<1>>
   // CHECK: }
@@ -575,7 +575,7 @@ firrtl.circuit "CaptureHardwareMultipleTimes" {
 
   firrtl.extmodule @CaptureHardwareMultipleTimes ()
 
-  // CHECK: firrtl.module private @[[A:.+]](in %[[p:.+]]: !firrtl.uint<1>) {
+  // CHECK: firrtl.module private @[[A:.+]](in %[[p:.+]]: !firrtl.uint<1>)
   // CHECK:   %0 = firrtl.add %[[p]], %[[p]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
   // CHECK: }
   // CHECK: firrtl.module @CaptureSrcTwice() {

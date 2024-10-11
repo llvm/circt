@@ -9,6 +9,9 @@ firrtl.circuit "Basic" attributes {
   } {
 firrtl.extmodule @Basic()
 
+// CHECK: firrtl.module @Top(in %arg0: !firrtl.uint<1>) attributes {portNames = [""]}
+firrtl.module @Top(in %arg0: !firrtl.uint<1>) attributes {portNames = [""]} {}
+
 // CHECK-LABEL: firrtl.module @Intrinsics
 firrtl.module @Intrinsics(in %ui : !firrtl.uint, in %clock: !firrtl.clock, in %ui1: !firrtl.uint<1>) {
   // CHECK-NEXT: firrtl.int.sizeof %ui : (!firrtl.uint) -> !firrtl.uint<32>

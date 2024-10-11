@@ -267,87 +267,61 @@ def YieldOp : VerifOp<"yield", [
 }
 
 //===----------------------------------------------------------------------===//
-// Verification intent ops
+// Formal Test
 //===----------------------------------------------------------------------===//
 
 def FormalOp : VerifOp<"formal", [
-  NoTerminator, RegionKindInterface, HasParent<"mlir::ModuleOp">, 
-  IsolatedFromAbove, Symbol
+  IsolatedFromAbove,
+  NoTerminator,
+  RegionKindInterface,
+  SingleBlock,
+  Symbol,
 ]> {
-  let summary = "defines a formal verification test";
+  let summary = "A formal unit test";
   let description = [{
-    This operation defines a formal verification test. This should be written 
-    by declaring symbolic values that are then connected to a hardware instance. 
-    These symbols can then be used in additional assertions that are defined 
-    outside of the instantiated `hw.module` but inside of this region. 
-    Assertions/Assumptions defined within the instantiated module will also be 
-    used for verification. The region can then be converted into btor2, 
-    SystemVerilog, or used for verification directly in circt-bmc. The operations 
-    in this region are ignored during regular SystemVerilog emission. This allows 
-    for verification specific logic to be isolated from the design in a way that 
-    is similar to layers.   
-      
-    The attribute `k` defines the upper bound of cycles to check for this test 
-    w.r.t. the implicit clock defined by this operation within its region.
+    This operation defines a formal unit test that can be automatically run by
+    various tools. To describe a test, the body of this op should contain the
+    hardware to be tested, alongside any asserts, assumes, and covers to be
+    formally verified. The body can contain instances of other modules, in which
+    case all asserts, assumes, and covers in those modules are also verified.
+
+    The `verif.symbolic_value` op can be used to create symbolic values to feed
+    into the hardware to be tested. Testing tools will then try to find concrete
+    values for them that violate any asserts or make any covers true.
+
+    ### Example
+    ```
+    verif.formal @AdderTest {
+      %0 = verif.symbolic_value : i42
+      %1 = verif.symbolic_value : i42
+      %2 = hw.instance "dut" @Adder(a: %0: i42, b: %1: i42) -> (c: i42)
+      %3 = comb.add %0, %1 : i42
+      %4 = comb.icmp eq %2, %3 : i42
+      verif.assert %4 : i1
+    }
+    ```
   }];
-
-  let arguments = (ins SymbolNameAttr:$sym_name, APIntAttr:$k);
-
-  let regions = (region SizedRegion<1>:$test_region);
-
-  let assemblyFormat = [{
-    $sym_name `(``k` `=` $k `)` attr-dict-with-keyword
-    $test_region
-  }];
-
+  let arguments = (ins SymbolNameAttr:$sym_name);
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = "$sym_name attr-dict-with-keyword $body";
   let extraClassDeclaration = [{
-    /// Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { 
       return RegionKind::Graph;
     }
   }];
 }
 
-//===----------------------------------------------------------------------===//
-// Formal Verification Ops
-//===----------------------------------------------------------------------===//
-
-def SymbolicInputOp : VerifOp<"symbolic_input", [
-  ParentOneOf<["verif::FormalOp"]>
+def SymbolicValueOp : VerifOp<"symbolic_value", [
+  HasParent<"verif::FormalOp">,
 ]>{
-  let summary = "declare a symbolic input for formal verification";
+  let summary = "Create a symbolic value for formal verification";
   let description = [{
-    This operation declares a symbolic input that can then be used to reason 
-    about `hw.instance` inputs in a symbolic manner in assertions and 
-    assumptions. The result type must be explicitly marked. The resulting value 
-    is a new non-deterministic value for every clock cycle of the implicit clock 
-    defined by the parent `verif.formal`.  
+    This operation creates a new symbolic value that can be used to formally
+    verify designs. Verification tools will try to find concrete assignments for
+    symbolic values that violate asserts or make covers true.
   }];
   let results = (outs AnyType:$result);
-
   let assemblyFormat = "attr-dict `:` type($result)";
-}
-
-def ConcreteInputOp : VerifOp<"concrete_input", [
-  AllTypesMatch<["init", "update", "result"]>, HasParent<"verif::FormalOp">
-]> {
-  let summary = "declare a concrete input for formal verification";
-  let description = [{
-    This operation declares a concrete input that can then be used in the 
-    reasoning surrounding symbolic inputs, allowing for a form of concolic 
-    reasoning to take place in a `verif.formal` block. Concrete inputs are 
-    defined by an initial value and an update SSA value. This is equivalent 
-    to a register with the parent `verif.formal`'s implicit clock, which is 
-    initialized with the init value and obtains a new value every implicit 
-    clock tick from the update value.
-  }];
-
-  let arguments = (ins AnyType:$init, AnyType:$update);
-  let results = (outs AnyType:$result);
-
-  let assemblyFormat = [{
-    $init `,` $update attr-dict `:` type($result)
-  }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -399,8 +373,8 @@ def ContractOp : VerifOp<"contract", [
         %prec = comb.icmp bin ugt %arg1, %c0_8 : i8
         verif.assert %prec : i1
 
-        %bar.0 = verif.symbolic_input : i8
-        %bar.1 = verif.symbolic_input : i8
+        %bar.0 = verif.symbolic_value : i8
+        %bar.1 = verif.symbolic_value : i8
         %post = comb.icmp bin ugt %bar.0, %arg1 : i8
         %post1 = comb.icmp bin ult %bar.1, %arg1 : i8
         verif.assume %post : i1

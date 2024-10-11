@@ -391,15 +391,20 @@ firrtl.circuit "IntegerArithmetic" {
 
 // CHECK-LABEL: firrtl.circuit "AltBasePath"
 firrtl.circuit "AltBasePath" {
+  // CHECK: hw.hierpath private [[FOO_NLA:@.+]] [@AltBasePath::[[FOO_SYM:@.+]]]
+
   firrtl.class private @Node(in %path: !firrtl.path) {
   }
+
+  // CHECK: firrtl.module @AltBasePath
+  // CHECK: firrtl.instance foo sym [[FOO_SYM]]
 
   // CHECK: om.class @OMIR(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
   firrtl.class private @OMIR() {
     %node = firrtl.object @Node(in path: !firrtl.path)
     %0 = firrtl.object.subfield %node[path] : !firrtl.class<@Node(in path: !firrtl.path)>
 
-    // CHECK: om.path_create member_instance %alt_basepath_0
+    // CHECK: om.path_create member_instance %alt_basepath_0 [[FOO_NLA]]
     %1 = firrtl.path member_reference distinct[0]<>
     firrtl.propassign %0, %1 : !firrtl.path
   }
