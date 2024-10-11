@@ -1227,13 +1227,6 @@ public:
   /// it sets up variables for each unknown width.
   void declareVars(Value value, Location loc, bool isDerived = false);
 
-  /// Declare a variable associated with a specific field of an aggregate.
-  Expr *declareVar(FieldRef fieldRef, Location loc);
-
-  /// Declarate a variable for a type with an unknown width.  The type must be a
-  /// non-aggregate.
-  Expr *declareVar(FIRRTLType type, Location loc);
-
   /// Assign the constraint expressions of the fields in the `result` argument
   /// as the max of expressions in the `rhs` and `lhs` arguments. Both fields
   /// must be the same type.
@@ -1372,26 +1365,17 @@ bool InferenceMapping::allWidthsKnown(Operation *op) {
     return false;
 
   // Check if we know the width of every result of this operation.
-  for (auto result : op->getResults()) {
+  return llvm::all_of(op->getResults(), [&](auto result) {
     // Only consider FIRRTL types for width constraints. Ignore any foreign
     // types as they don't participate in the width inference process.
-    auto type = type_dyn_cast<FIRRTLType>(result.getType());
-    if (!type)
-      continue;
-    if (hasUninferredWidth(type))
-      return false;
-    // Create KnownExprs for the known widths of this result.
-    declareVars(result, op->getLoc());
-  }
-  return true;
+    if (auto type = type_dyn_cast<FIRRTLType>(result.getType()))
+      if (hasUninferredWidth(type))
+        return false;
+    return true;
+  });
 }
 
 LogicalResult InferenceMapping::mapOperation(Operation *op) {
-  // In case the operation result has a type without uninferred widths, don't
-  // even bother to populate the constraint problem and treat that as a known
-  // size directly. This is done in `declareVars`, which will generate
-  // `KnownExpr` nodes for all known widths -- which are the only ones in this
-  // case.
   if (allWidthsKnown(op))
     return success();
 
@@ -1802,8 +1786,6 @@ void InferenceMapping::declareVars(Value value, Location loc, bool isDerived) {
   std::function<void(FIRRTLBaseType)> declare = [&](FIRRTLBaseType type) {
     auto width = type.getBitWidthOrSentinel();
     if (width >= 0) {
-      // Known width integer create a known expression.
-      setExpr(FieldRef(value, fieldID), solver.known(width));
       fieldID++;
     } else if (width == -1) {
       // Unknown width integers create a variable.
@@ -1817,9 +1799,8 @@ void InferenceMapping::declareVars(Value value, Location loc, bool isDerived) {
     } else if (auto bundleType = type_dyn_cast<BundleType>(type)) {
       // Bundle types recursively declare all bundle elements.
       fieldID++;
-      for (auto &element : bundleType) {
+      for (auto &element : bundleType)
         declare(element.type);
-      }
     } else if (auto vecType = type_dyn_cast<FVectorType>(type)) {
       fieldID++;
       auto save = fieldID;
@@ -2043,7 +2024,17 @@ Expr *InferenceMapping::getExpr(FieldRef fieldRef) const {
 
 Expr *InferenceMapping::getExprOrNull(FieldRef fieldRef) const {
   auto it = opExprs.find(fieldRef);
-  return it != opExprs.end() ? it->second : nullptr;
+  if (it != opExprs.end())
+    return it->second;
+  // If we don't have an expression for this fieldRef, it should have a
+  // constant width.
+  auto baseType = getBaseType(fieldRef.getValue().getType());
+  auto type =
+      hw::FieldIdImpl::getFinalTypeByFieldID(baseType, fieldRef.getFieldID());
+  auto width = cast<FIRRTLBaseType>(type).getBitWidthOrSentinel();
+  if (width < 0)
+    return nullptr;
+  return solver.known(width);
 }
 
 /// Associate a constraint expression with a value.
