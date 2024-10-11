@@ -266,17 +266,19 @@ firrtl.circuit "ExtractBlackBoxesIntoDUTSubmodule"  {
 
 // CHECK: firrtl.circuit "ExtractClockGatesSimple"
 firrtl.circuit "ExtractClockGatesSimple" attributes {annotations = [{class = "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation", filename = "ClockGates.txt"}]} {
-  firrtl.extmodule private @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
-  firrtl.module private @DUTModule(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
-    %gate_in, %gate_en, %gate_out = firrtl.instance gate @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+  firrtl.extmodule private @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+  firrtl.module private @DUTModule(in %clock: !firrtl.clock, in %test_en: !firrtl.uint<1>, in %en: !firrtl.uint<1>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    %gate_in, %gate_test_en, %gate_en, %gate_out = firrtl.instance gate @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
     firrtl.connect %gate_in, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %gate_test_en, %test_en: !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %gate_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // CHECK-LABEL: firrtl.module @ExtractClockGatesSimple
-  firrtl.module @ExtractClockGatesSimple(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
+  firrtl.module @ExtractClockGatesSimple(in %clock: !firrtl.clock, in %test_en: !firrtl.uint<1>, in %en: !firrtl.uint<1>) {
     // CHECK: firrtl.instance gate @EICG_wrapper
-    %dut_clock, %dut_en = firrtl.instance dut @DUTModule(in clock: !firrtl.clock, in en: !firrtl.uint<1>)
+    %dut_clock, %dut_test_en, %dut_en = firrtl.instance dut @DUTModule(in clock: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>)
     firrtl.connect %dut_clock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %dut_test_en, %test_en: !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %dut_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // CHECK:               emit.file "ClockGates.txt" {
@@ -293,20 +295,22 @@ firrtl.circuit "ExtractClockGatesSimple" attributes {annotations = [{class = "si
 
 // CHECK: firrtl.circuit "ExtractClockGatesTestHarnessOnly"
 firrtl.circuit "ExtractClockGatesTestHarnessOnly" attributes {annotations = [{class = "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation", filename = "ClockGates.txt"}]} {
-  firrtl.extmodule private @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
-  firrtl.module private @DUTModule(in %clock: !firrtl.clock, in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>, in %en: !firrtl.uint<1>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+  firrtl.extmodule private @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+  firrtl.module private @DUTModule(in %clock: !firrtl.clock, in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>, in %test_en: !firrtl.uint<1>, in %en: !firrtl.uint<1>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     %0 = firrtl.add %in, %en : (!firrtl.uint<8>, !firrtl.uint<1>) -> !firrtl.uint<9>
     %_io_out_T = firrtl.node %0 : !firrtl.uint<9>
     %1 = firrtl.tail %_io_out_T, 1 : (!firrtl.uint<9>) -> !firrtl.uint<8>
     %_io_out_T_1 = firrtl.node %1 : !firrtl.uint<8>
     firrtl.connect %out, %_io_out_T_1 : !firrtl.uint<8>, !firrtl.uint<8>
   }
-  firrtl.module @ExtractClockGatesTestHarnessOnly(in %clock: !firrtl.clock, in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>, in %en: !firrtl.uint<1>) {
-    %gate_in, %gate_en, %gate_out = firrtl.instance gate @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+  firrtl.module @ExtractClockGatesTestHarnessOnly(in %clock: !firrtl.clock, in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>, in %test_en: !firrtl.uint<1>, in %en: !firrtl.uint<1>) {
+    %gate_in, %gate_test_en, %gate_en, %gate_out = firrtl.instance gate @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
     firrtl.connect %gate_in, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %gate_test_en, %test_en: !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %gate_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
-    %dut_clock, %dut_in, %dut_out, %dut_en = firrtl.instance dut @DUTModule(in clock: !firrtl.clock, in in: !firrtl.uint<8>, out out: !firrtl.uint<8>, in en: !firrtl.uint<1>)
+    %dut_clock, %dut_in, %dut_out, %dut_test_en, %dut_en = firrtl.instance dut @DUTModule(in clock: !firrtl.clock, in in: !firrtl.uint<8>, out out: !firrtl.uint<8>, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>)
     firrtl.connect %dut_clock, %gate_out : !firrtl.clock, !firrtl.clock
+    firrtl.connect %dut_test_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %dut_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %out, %dut_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %dut_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
@@ -321,37 +325,42 @@ firrtl.circuit "ExtractClockGatesTestHarnessOnly" attributes {annotations = [{cl
 // Mixed ClockGate extraction should only extract clock gates in the DUT
 // CHECK: firrtl.circuit "ExtractClockGatesMixed"
 firrtl.circuit "ExtractClockGatesMixed" attributes {annotations = [{class = "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation", filename = "ClockGates.txt"}]} {
-  firrtl.extmodule private @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+  firrtl.extmodule private @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
   // CHECK-LABEL: firrtl.module private @Child
-  firrtl.module private @Child(in %clock: !firrtl.clock, in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>, in %en: !firrtl.uint<1>) {
+  firrtl.module private @Child(in %clock: !firrtl.clock, in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>, in %test_en: !firrtl.uint<1>, in %en: !firrtl.uint<1>) {
     // CHECK-NOT: firrtl.instance gate sym @ckg1 @EICG_wrapper
-    %gate_in, %gate_en, %gate_out = firrtl.instance gate sym @ckg1 @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    %gate_in, %gate_test_en, %gate_en, %gate_out = firrtl.instance gate sym @ckg1 @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
     firrtl.connect %gate_in, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %gate_test_en, %test_en : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %gate_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
   }
   // CHECK-LABEL: firrtl.module private @DUTModule
-  firrtl.module private @DUTModule(in %clock: !firrtl.clock, in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>, in %en: !firrtl.uint<1>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
-    %inst_clock, %inst_in, %inst_out, %inst_en = firrtl.instance inst sym @inst @Child(in clock: !firrtl.clock, in in: !firrtl.uint<8>, out out: !firrtl.uint<8>, in en: !firrtl.uint<1>)
+  firrtl.module private @DUTModule(in %clock: !firrtl.clock, in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>, in %test_en: !firrtl.uint<1>, in %en: !firrtl.uint<1>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    %inst_clock, %inst_in, %inst_out, %inst_test_en, %inst_en = firrtl.instance inst sym @inst @Child(in clock: !firrtl.clock, in in: !firrtl.uint<8>, out out: !firrtl.uint<8>, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>)
     firrtl.connect %inst_clock, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %inst_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.connect %inst_test_en, %test_en : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %inst_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK-NOT: firrtl.instance gate sym @ckg2 @EICG_wrapper
-    %gate_in, %gate_en, %gate_out = firrtl.instance gate sym @ckg2 @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    %gate_in, %gate_test_en, %gate_en, %gate_out = firrtl.instance gate sym @ckg2 @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
     firrtl.connect %gate_in, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %gate_test_en, %test_en : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %gate_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
   }
   // CHECK-LABEL: firrtl.module @ExtractClockGatesMixed
-  firrtl.module @ExtractClockGatesMixed(in %clock: !firrtl.clock, in %intf_in: !firrtl.uint<8>, out %intf_out: !firrtl.uint<8>, in %intf_en: !firrtl.uint<1>, in %en: !firrtl.uint<1>) {
+  firrtl.module @ExtractClockGatesMixed(in %clock: !firrtl.clock, in %intf_in: !firrtl.uint<8>, out %intf_out: !firrtl.uint<8>, in %intf_test_en: !firrtl.uint<1>, in %intf_en: !firrtl.uint<1>, in %test_en: !firrtl.uint<1>, in %en: !firrtl.uint<1>) {
     // CHECK: firrtl.instance gate sym @ckg3 @EICG_wrapper
-    %gate_in, %gate_en, %gate_out = firrtl.instance gate sym @ckg3 @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    %gate_in, %gate_test_en, %gate_en, %gate_out = firrtl.instance gate sym @ckg3 @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
     firrtl.connect %gate_in, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %gate_test_en, %test_en : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %gate_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
-    %dut_clock, %dut_in, %dut_out, %dut_en = firrtl.instance dut sym @dut @DUTModule(in clock: !firrtl.clock, in in: !firrtl.uint<8>, out out: !firrtl.uint<8>, in en: !firrtl.uint<1>)
+    %dut_clock, %dut_in, %dut_out, %dut_test_en, %dut_en = firrtl.instance dut sym @dut @DUTModule(in clock: !firrtl.clock, in in: !firrtl.uint<8>, out out: !firrtl.uint<8>, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>)
     // CHECK: firrtl.instance gate sym @ckg2 @EICG_wrapper
     // CHECK: firrtl.instance gate sym @ckg1 @EICG_wrapper
     firrtl.connect %dut_clock, %gate_out : !firrtl.clock, !firrtl.clock
+    firrtl.connect %dut_test_en, %intf_test_en : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %dut_en, %intf_en : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %intf_out, %dut_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %dut_in, %intf_in : !firrtl.uint<8>, !firrtl.uint<8>
@@ -379,29 +388,33 @@ firrtl.circuit "ExtractClockGatesComposed" attributes {annotations = [
   hw.hierpath private @nla0 [@DUTModule::@sym, @EICG_wrapper]
   // CHECK: hw.hierpath private @nla1 [@ExtractClockGatesComposed::[[SYM1:.+]], @EICG_wrapper]
   hw.hierpath private @nla1 [@Child::@sym, @EICG_wrapper]
-  firrtl.extmodule private @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+  firrtl.extmodule private @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
   firrtl.memmodule @mem_ext() attributes {dataWidth = 8 : ui32, depth = 8 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
-  firrtl.module private @Child(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
-    %gate_in, %gate_en, %gate_out = firrtl.instance gate sym @sym @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+  firrtl.module private @Child(in %clock: !firrtl.clock, in %test_en: !firrtl.uint<1>, in %en: !firrtl.uint<1>) {
+    %gate_in, %gate_test_en, %gate_en, %gate_out = firrtl.instance gate sym @sym @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
     firrtl.connect %gate_in, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %gate_test_en, %test_en : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %gate_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  firrtl.module private @DUTModule(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+  firrtl.module private @DUTModule(in %clock: !firrtl.clock, in %test_en: !firrtl.uint<1>, in %en: !firrtl.uint<1>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     firrtl.instance mem_ext @mem_ext()
-    %gate_in, %gate_en, %gate_out = firrtl.instance gate sym @sym @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    %gate_in, %gate_test_en, %gate_en, %gate_out = firrtl.instance gate sym @sym @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
     firrtl.connect %gate_in, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %gate_test_en, %test_en : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %gate_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
-    %child_clock, %child_en = firrtl.instance child @Child(in clock: !firrtl.clock, in en: !firrtl.uint<1>)
+    %child_clock, %child_test_en, %child_en = firrtl.instance child @Child(in clock: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>)
     firrtl.connect %child_clock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %child_test_en, %test_en : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %child_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // CHECK-LABEL: firrtl.module @ExtractClockGatesComposed
-  firrtl.module @ExtractClockGatesComposed(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
+  firrtl.module @ExtractClockGatesComposed(in %clock: !firrtl.clock, in %test_en: !firrtl.uint<1>, in %en: !firrtl.uint<1>) {
     // CHECK: firrtl.instance gate sym [[SYM0]] @EICG_wrapper
     // CHECK: firrtl.instance gate sym [[SYM1]] @EICG_wrapper
     // CHECK: firrtl.instance mem_ext @mem_ext
-    %dut_clock, %dut_en = firrtl.instance dut @DUTModule(in clock: !firrtl.clock, in en: !firrtl.uint<1>)
+    %dut_clock, %dut_test_en, %dut_en = firrtl.instance dut @DUTModule(in clock: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>)
     firrtl.connect %dut_clock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %dut_test_en, %test_en : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %dut_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
@@ -526,14 +539,14 @@ firrtl.circuit "InstSymConflict" {
 firrtl.circuit "Plop_Foo" attributes {annotations = [{class = "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation", filename = "ckgates.txt", group = "ClockGates"}]} {
   // CHECK: hw.hierpath @nla_1 [@Plop_Foo::@ClockGates, @Plop_ClockGates::@ckg, @EICG_wrapper]
   hw.hierpath @nla_1 [@Plop_Foo::@core, @Plop_Bar::@ckg, @EICG_wrapper]
-  firrtl.extmodule private @EICG_wrapper() attributes {defname = "EICG_wrapper"}
+  firrtl.extmodule private @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
   firrtl.module private @Plop_Bar() {
-    firrtl.instance ckg sym @ckg @EICG_wrapper()
+    %gate_in, %gate_test_en, %gate_en, %gate_out = firrtl.instance ckg sym @ckg @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
   }
-  // CHECK: firrtl.module private @Plop_ClockGates()
+  // CHECK: firrtl.module private @Plop_ClockGates(in %clock_gate_0_in: !firrtl.clock, in %clock_gate_0_test_en: !firrtl.uint<1>, in %clock_gate_0_en: !firrtl.uint<1>, out %clock_gate_0_out: !firrtl.clock)
   // CHECK-LABEL: firrtl.module @Plop_Foo()
   firrtl.module @Plop_Foo() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation", prefix = "Plop_"}]} {
-    // CHECK: firrtl.instance ClockGates sym @ClockGates @Plop_ClockGates()
+    // CHECK: firrtl.instance ClockGates sym @ClockGates @Plop_ClockGates
     firrtl.instance core sym @core @Plop_Bar()
   }
 }
