@@ -4618,7 +4618,8 @@ void SubtagOp::print(::mlir::OpAsmPrinter &printer) {
   printer << " : " << getInput().getType();
 }
 
-template <typename OpTy> static LogicalResult verifySubfieldLike(OpTy op) {
+template <typename OpTy>
+static LogicalResult verifySubfieldLike(OpTy op) {
   if (op.getFieldIndex() >=
       firrtl::type_cast<typename OpTy::InputType>(op.getInput().getType())
           .getNumElements())
