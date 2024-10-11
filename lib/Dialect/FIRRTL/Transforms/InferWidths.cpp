@@ -1402,21 +1402,6 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // We must duplicate the invalid value for each use, since each use can
         // be inferred to a different width.
         declareVars(op.getResult(), op.getLoc(), /*isDerived=*/true);
-        if (op.use_empty())
-          return;
-
-        auto type = op.getType();
-        ImplicitLocOpBuilder builder(op->getLoc(), op);
-        for (auto &use :
-             llvm::make_early_inc_range(llvm::drop_begin(op->getUses()))) {
-          // - `make_early_inc_range` since `getUses()` is invalidated upon
-          //   `use.set(...)`.
-          // - `drop_begin` such that the first use can keep the original op.
-          auto clone = builder.create<InvalidValueOp>(type);
-          declareVars(clone.getResult(), clone.getLoc(),
-                      /*isDerived=*/true);
-          use.set(clone);
-        }
       })
       .Case<WireOp, RegOp>(
           [&](auto op) { declareVars(op.getResult(), op.getLoc()); })
