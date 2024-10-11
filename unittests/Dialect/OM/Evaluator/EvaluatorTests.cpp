@@ -245,6 +245,7 @@ TEST(EvaluatorTests, InstantiateObjectWithConstantField) {
   auto constantType = builder.getI32IntegerAttr(42);
   auto cls = builder.create<ClassOp>(
       "MyClass",
+      builder.getStrArrayAttr({"field"}),
       builder.getDictionaryAttr({
           NamedAttribute(builder.getStringAttr("field"), constantType),
 
@@ -296,6 +297,7 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
       builder.getContext(), mlir::FlatSymbolRefAttr::get(innerCls)));
   auto cls = builder.create<ClassOp>(
       "MyClass", params,
+      builder.getStrArrayAttr({"field"}),
       builder.getDictionaryAttr({
           NamedAttribute(builder.getStringAttr("field"), innerType),
 
@@ -356,6 +358,7 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
       builder.getContext(), mlir::FlatSymbolRefAttr::get(innerCls)));
   auto cls = builder.create<ClassOp>(
       "MyClass", params,
+      builder.getStrArrayAttr({"field"}),
       builder.getDictionaryAttr({
           NamedAttribute(builder.getStringAttr("field"), innerType),
 
@@ -413,11 +416,12 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
   auto innerType = TypeAttr::get(ClassType::get(
       builder.getContext(), mlir::FlatSymbolRefAttr::get(innerCls)));
   auto cls = builder.create<ClassOp>(
-      "MyClass", builder.getDictionaryAttr({
-                     NamedAttribute(builder.getStringAttr("field1"), innerType),
-                     NamedAttribute(builder.getStringAttr("field2"), innerType),
+      "MyClass", builder.getStrArrayAttr({"field1", "field2"}),
+      builder.getDictionaryAttr({
+          NamedAttribute(builder.getStringAttr("field1"), innerType),
+          NamedAttribute(builder.getStringAttr("field2"), innerType),
 
-                 }));
+      }));
   auto &body = cls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&body);
   auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
@@ -481,10 +485,11 @@ TEST(EvaluatorTests, AnyCastObject) {
   auto innerType = TypeAttr::get(ClassType::get(
       builder.getContext(), mlir::FlatSymbolRefAttr::get(innerCls)));
   auto cls = builder.create<ClassOp>(
-      "MyClass", builder.getDictionaryAttr({
-                     NamedAttribute(builder.getStringAttr("field"), innerType),
+      "MyClass", builder.getStrArrayAttr({"field"}),
+      builder.getDictionaryAttr({
+          NamedAttribute(builder.getStringAttr("field"), innerType),
 
-                 }));
+      }));
   auto &body = cls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&body);
   auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
@@ -533,6 +538,7 @@ TEST(EvaluatorTests, AnyCastParam) {
       builder.getContext(), mlir::FlatSymbolRefAttr::get(innerCls)));
   auto cls = builder.create<ClassOp>(
       "MyClass", params,
+      builder.getStrArrayAttr({"field"}),
       builder.getDictionaryAttr({
           NamedAttribute(builder.getStringAttr("field"), innerType),
 

@@ -266,13 +266,6 @@ void replaceClassLikeFieldTypes(ClassLike classLike,
                                        classLike.getFieldTypes())));
 }
 
-ArrayAttr buildFieldNames(OpBuilder &odsBuilder, DictionaryAttr fieldTypes) {
-  return odsBuilder.getArrayAttr(llvm::map_to_vector(
-      fieldTypes.getValue(), [&](NamedAttribute field) -> Attribute {
-        return cast<Attribute>(field.getName());
-      }));
-}
-
 //===----------------------------------------------------------------------===//
 // ClassOp
 //===----------------------------------------------------------------------===//
@@ -287,7 +280,9 @@ circt::om::ClassOp circt::om::ClassOp::buildSimpleClassOp(
     ArrayRef<StringRef> formalParamNames, ArrayRef<StringRef> fieldNames,
     ArrayRef<Type> fieldTypes) {
   circt::om::ClassOp classOp = odsBuilder.create<circt::om::ClassOp>(
-      loc, name, formalParamNames,
+      loc, odsBuilder.getStringAttr(name),
+      odsBuilder.getStrArrayAttr(formalParamNames),
+      odsBuilder.getStrArrayAttr(fieldNames),
       odsBuilder.getDictionaryAttr(llvm::map_to_vector(
           llvm::zip(fieldNames, fieldTypes), [&](auto field) -> NamedAttribute {
             return NamedAttribute(odsBuilder.getStringAttr(std::get<0>(field)),
@@ -303,14 +298,6 @@ circt::om::ClassOp circt::om::ClassOp::buildSimpleClassOp(
   odsBuilder.restoreInsertionPoint(prevLoc);
 
   return classOp;
-}
-
-void circt::om::ClassOp::build(OpBuilder &odsBuilder, OperationState &odsState,
-                               Twine name, ArrayRef<StringRef> formalParamNames,
-                               DictionaryAttr fieldTypes) {
-  build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
-        odsBuilder.getStrArrayAttr(formalParamNames),
-        buildFieldNames(odsBuilder, fieldTypes), fieldTypes);
 }
 
 void circt::om::ClassOp::print(OpAsmPrinter &printer) {
@@ -372,15 +359,6 @@ mlir::Location circt::om::ClassOp::getFieldLocByIndex(size_t i) {
 ParseResult circt::om::ClassExternOp::parse(OpAsmParser &parser,
                                             OperationState &state) {
   return parseClassLike(parser, state);
-}
-
-void circt::om::ClassExternOp::build(OpBuilder &odsBuilder,
-                                     OperationState &odsState, Twine name,
-                                     ArrayRef<StringRef> formalParamNames,
-                                     DictionaryAttr fieldTypes) {
-  build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
-        odsBuilder.getStrArrayAttr(formalParamNames),
-        buildFieldNames(odsBuilder, fieldTypes), fieldTypes);
 }
 
 void circt::om::ClassExternOp::print(OpAsmPrinter &printer) {

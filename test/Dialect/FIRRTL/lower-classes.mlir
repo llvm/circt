@@ -554,5 +554,7 @@ firrtl.circuit "RTLPorts" {
     firrtl.propassign %containingModule, %containingModule_in : !firrtl.path
   }
 
-  // CHECK-COUNT-1: om.class @RtlPort
+  // CHECK: om.class @RtlPort(%ref: !om.path, %direction: !om.string, %width: !om.integer)  -> (ref: !om.path, direction: !om.string, width: !om.integer)
+  // CHECK-NEXT: om.class.fields %ref, %direction, %width : !om.path, !om.string, !om.integer
+
 }

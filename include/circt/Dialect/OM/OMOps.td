@@ -52,9 +52,6 @@ class OMClassLike<string mnemonic, list<Trait> traits = []> :
   let builders = [
     OpBuilder<(ins "::mlir::Twine":$name,
                    "::mlir::ArrayRef<::mlir::StringRef>":$formalParamNames,
-                   "::mlir::DictionaryAttr":$fieldTypes)>,
-    OpBuilder<(ins "::mlir::Twine":$name,
-                   "::mlir::ArrayRef<::mlir::StringRef>":$formalParamNames,
                    "::mlir::ArrayRef<::mlir::Attribute>":$fieldNames,
                    "::mlir::ArrayRef<::mlir::NamedAttribute>":$fieldTypes), [{
       build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
@@ -71,8 +68,19 @@ class OMClassLike<string mnemonic, list<Trait> traits = []> :
       build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
             odsBuilder.getStrArrayAttr({}));
     }]>,
-    OpBuilder<(ins "::mlir::Twine":$name, "::mlir::DictionaryAttr":$fieldTypes), [{
-      build(odsBuilder, odsState, name, {}, fieldTypes);
+    OpBuilder<(ins "::mlir::Twine":$name,
+                   "::mlir::ArrayAttr":$fieldNames,
+                   "::mlir::DictionaryAttr":$fieldTypes), [{
+      build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
+            odsBuilder.getStrArrayAttr({}), fieldNames, fieldTypes);
+    }]>,
+    OpBuilder<(ins "::mlir::Twine":$name,
+                   "::mlir::ArrayRef<::mlir::StringRef>":$formalParamNames,
+                   "::mlir::ArrayAttr":$fieldNames,
+                   "::mlir::DictionaryAttr":$fieldTypes), [{
+      build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
+            odsBuilder.getStrArrayAttr(formalParamNames), fieldNames,
+            fieldTypes);
     }]>,
     OpBuilder<(ins "::mlir::StringAttr":$name,
                    "::mlir::ArrayAttr":$formalParamNames), [{
