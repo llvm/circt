@@ -1731,7 +1731,6 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         constrainTypes(op.getResult(), op.getInput(), true);
       })
       .Case<RWProbeOp>([&](auto op) {
-        declareVars(op.getResult(), op.getLoc());
         auto ist = irn.lookup(op.getTarget());
         if (!ist) {
           op->emitError("target of rwprobe could not be resolved");
