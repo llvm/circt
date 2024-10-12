@@ -142,6 +142,10 @@ private:
           static constexpr std::string_view sMemories = "memories/seq";
           return {sMemories};
         })
+        .Case<AddFNOp>([&](auto op) -> FailureOr<StringRef> {
+          static constexpr std::string_view sFloatingPoint = "float/addFN";
+          return {sFloatingPoint};
+        })
         .Default([&](auto op) {
           auto diag = op->emitOpError() << "not supported for emission";
           return diag;
@@ -277,6 +281,8 @@ struct Emitter {
   //   f = std_foo(1);
   void emitLibraryPrimTypedByFirstOutputPort(
       Operation *op, std::optional<StringRef> calyxLibName = {});
+
+  void emitLibraryFloatingPoint(Operation *op);
 
 private:
   /// Used to track which imports are required for this program.
@@ -464,6 +470,19 @@ private:
           // We currently default to the decimal representation.
           value.print(os, /*isSigned=*/false);
         })
+        .Case<calyx::ConstantOp>([&](auto op) {
+          TypedAttr attr = op.getValueAttr();
+          if (auto fltAttr = dyn_cast<FloatAttr>(attr)) {
+            APFloat value = fltAttr.getValue();
+            auto floatType = cast<FloatType>(fltAttr.getType());
+            // TODO: fix the floating point representation
+            (isIndented ? indent() : os)
+              << std::to_string(value.getSizeInBits(floatType.getFloatSemantics())) << apostrophe() << "d";
+            SmallVector<char, 16> buffer;
+            value.toString(buffer);
+            os << buffer;  
+          }
+        })
         .Case<comb::AndOp>([&](auto op) { emitCombinationalValue(op, "&"); })
         .Case<comb::OrOp>([&](auto op) { emitCombinationalValue(op, "|"); })
         .Case<comb::XorOp>([&](auto op) {
@@ -637,7 +656,8 @@ void Emitter::emitComponent(ComponentInterface op) {
           .Case<RegisterOp>([&](auto op) { emitRegister(op); })
           .Case<MemoryOp>([&](auto op) { emitMemory(op); })
           .Case<SeqMemoryOp>([&](auto op) { emitSeqMemory(op); })
-          .Case<hw::ConstantOp>([&](auto op) { /*Do nothing*/ })
+          .Case<hw::ConstantOp, calyx::ConstantOp>(
+              [&](auto op) { /*Do nothing*/ })
           .Case<SliceLibOp, PadLibOp, ExtSILibOp>(
               [&](auto op) { emitLibraryPrimTypedByAllPorts(op); })
           .Case<LtLibOp, GtLibOp, EqLibOp, NeqLibOp, GeLibOp, LeLibOp, SltLibOp,
@@ -645,6 +665,7 @@ void Emitter::emitComponent(ComponentInterface op) {
                 SubLibOp, ShruLibOp, RshLibOp, SrshLibOp, LshLibOp, AndLibOp,
                 NotLibOp, OrLibOp, XorLibOp, WireLibOp>(
               [&](auto op) { emitLibraryPrimTypedByFirstInputPort(op); })
+          .Case<AddFNOp>([&](auto op) { emitLibraryFloatingPoint(op); })
           .Case<MuxLibOp>(
               [&](auto op) { emitLibraryPrimTypedByFirstOutputPort(op); })
           .Case<MultPipeLibOp>(
@@ -936,6 +957,33 @@ void Emitter::emitLibraryPrimTypedByFirstOutputPort(
            << LParen() << bitWidth << RParen() << semicolonEndL();
 }
 
+void Emitter::emitLibraryFloatingPoint(Operation *op) {
+  auto cell = cast<CellInterface>(op);
+  unsigned bitWidth =
+      cell.getOutputPorts()[0].getType().getIntOrFloatBitWidth();
+  unsigned expWidth, sigWidth;
+  if (bitWidth == 16) {
+    expWidth = 5;
+    sigWidth = 11;
+  } else if (bitWidth == 32) {
+    expWidth = 8;
+    sigWidth = 24;
+  } else if (bitWidth == 64) {
+    expWidth = 11;
+    sigWidth = 53;
+  } else if (bitWidth == 128) {
+    expWidth = 15;
+    sigWidth = 113;
+  } else {
+    op->emitError("Unsupported floating point width");
+  }
+  StringRef opName = op->getName().getStringRef();
+  indent() << getAttributes(op, /*atFormat=*/true) << cell.instanceName()
+           << space() << equals() << space() << removeCalyxPrefix(opName)
+           << LParen() << expWidth << comma() << sigWidth << comma() << bitWidth
+           << RParen() << semicolonEndL();
+}
+
 void Emitter::emitAssignment(AssignOp op) {
 
   emitValue(op.getDest(), /*isIndented=*/true);
@@ -954,7 +1002,7 @@ void Emitter::emitWires(WiresOp op) {
       TypeSwitch<Operation *>(&bodyOp)
           .Case<GroupInterface>([&](auto op) { emitGroup(op); })
           .Case<AssignOp>([&](auto op) { emitAssignment(op); })
-          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp, CycleOp>(
+          .Case<hw::ConstantOp, calyx::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp, CycleOp>(
               [&](auto op) { /* Do nothing. */ })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside wires section");
@@ -970,7 +1018,7 @@ void Emitter::emitGroup(GroupInterface group) {
           .Case<AssignOp>([&](auto op) { emitAssignment(op); })
           .Case<GroupDoneOp>([&](auto op) { emitGroupPort(group, op, "done"); })
           .Case<GroupGoOp>([&](auto op) { emitGroupPort(group, op, "go"); })
-          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp, CycleOp>(
+          .Case<hw::ConstantOp, calyx::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp, CycleOp>(
               [&](auto op) { /* Do nothing. */ })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside group.");

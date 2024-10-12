@@ -30,6 +30,10 @@ calyx::RegisterOp createRegister(Location loc, OpBuilder &builder,
                                  ComponentOp component, size_t width,
                                  Twine prefix);
 
+calyx::RegisterOp createRegister(Location loc, OpBuilder &builder,
+                                 ComponentOp component, Type type,
+                                 Twine prefix);
+
 /// A helper function to create constants in the HW dialect.
 hw::ConstantOp createConstant(Location loc, OpBuilder &builder,
                               ComponentOp component, size_t width,

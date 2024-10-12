@@ -16,6 +16,7 @@
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -28,6 +29,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 #include <variant>
@@ -278,10 +280,10 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                              memref::AllocOp, memref::AllocaOp, memref::LoadOp,
                              memref::StoreOp,
                              /// standard arithmetic
-                             AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp,
-                             AndIOp, XOrIOp, OrIOp, ExtUIOp, ExtSIOp, TruncIOp,
-                             MulIOp, DivUIOp, DivSIOp, RemUIOp, RemSIOp,
-                             SelectOp, IndexCastOp, CallOp>(
+                             AddIOp, AddFOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp,
+                             ShRSIOp, AndIOp, XOrIOp, OrIOp, ExtUIOp, ExtSIOp,
+                             TruncIOp, MulIOp, DivUIOp, DivSIOp, RemUIOp,
+                             RemSIOp, SelectOp, IndexCastOp, CallOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
               .template Case<FuncOp, scf::ConditionOp>([&](auto) {
                 /// Skip: these special cases will be handled separately.
@@ -308,6 +310,7 @@ private:
                         arith::ConstantOp constOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter, SelectOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, AddIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, AddFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, SubIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, MulIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, DivUIOp op) const;
@@ -444,6 +447,65 @@ private:
     return success();
   }
 
+  /// buildLibraryBinaryFloatingPointOp will build a
+  /// TCalyxLibBinaryFloatingPointOp, to deal with AddFNOp
+  template <typename TOpType, typename TSrcOp>
+  LogicalResult buildLibraryBinaryFloatingPointOp(PatternRewriter &rewriter,
+                                                  TSrcOp op, TOpType opFN,
+                                                  Value out) const {
+    StringRef opName = TSrcOp::getOperationName().split(".").second;
+    Location loc = op.getLoc();
+    Type width = op.getResult().getType();
+
+    // Pass the result from the Operation to the Calyx primitive.
+    op.getResult().replaceAllUsesWith(out);
+    auto reg = createRegister(
+        op.getLoc(), rewriter, getComponent(), width,
+        getState<ComponentLoweringState>().getUniqueName(opName));
+    // Floating point number calculations are not combinational, so a GroupOp is
+    // required.
+    auto group = createGroupForOp<calyx::GroupOp>(rewriter, op);
+    OpBuilder builder(group->getRegion(0));
+    getState<ComponentLoweringState>().addBlockScheduleable(op->getBlock(),
+                                                            group);
+
+    rewriter.setInsertionPointToEnd(group.getBodyBlock());
+    rewriter.create<calyx::AssignOp>(loc, opFN.getLeft(), op.getLhs());
+    rewriter.create<calyx::AssignOp>(loc, opFN.getRight(), op.getRhs());
+    // Write the output to this register.
+    rewriter.create<calyx::AssignOp>(loc, reg.getIn(), out);
+    // The write enable port is high when the calculation is done.
+    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(), opFN.getDone());
+    // Set opFN to high as long as its done signal is not high.
+    // This prevents the opFN from executing for the cycle that we write
+    // to register. To get !(opFN.done) we do 1 xor opFN.done
+    hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
+    rewriter.create<calyx::AssignOp>(
+        loc, opFN.getGo(), c1,
+        comb::createOrFoldNot(group.getLoc(), opFN.getDone(), builder));
+    // The group is done when the register write is complete.
+    rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone());
+
+    if (isa<calyx::AddFNOp>(opFN)) {
+      hw::ConstantOp subOp;
+      if (isa<arith::AddFOp>(op)) {
+        subOp = createConstant(loc, rewriter, getComponent(), 1, 0);
+      } else {
+        subOp = createConstant(loc, rewriter, getComponent(), 1, 1);
+      }
+      rewriter.create<calyx::AssignOp>(loc, opFN.getSubOp(), subOp);
+    }
+
+    // Register the values for the calculation.
+    getState<ComponentLoweringState>().registerEvaluatingGroup(out, group);
+    getState<ComponentLoweringState>().registerEvaluatingGroup(opFN.getLeft(),
+                                                               group);
+    getState<ComponentLoweringState>().registerEvaluatingGroup(opFN.getRight(),
+                                                               group);
+
+    return success();
+  }
+
   /// Creates assignments within the provided group to the address ports of the
   /// memoryOp based on the provided addressValues.
   void assignAddressPorts(PatternRewriter &rewriter, Location loc,
@@ -522,6 +584,17 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      memoryInterface.contentEn(), oneI1);
     rewriter.create<calyx::AssignOp>(loadOp.getLoc(), memoryInterface.writeEn(),
                                      zeroI1);
+    // Writing to calyx.seq_mem even when content_en = 1 and write_en = 0. 
+    // This is because calyx.seq_mem has write_together attribute for write_en and write_data.
+    // But since the value of write_data doesn't matter, we just create bitvector with 0's.
+    if (memoryInterface.isSeqMem()) {
+      auto memOperand = llvm::cast<MemRefType>(loadOp.getOperand(0).getType());
+      auto floatType = cast<FloatType>(memOperand.getElementType());
+      auto wrZeroFlt = rewriter.getFloatAttr(memOperand.getElementType(), APFloat::getZero(floatType.getFloatSemantics()));
+      auto calyxFloat = rewriter.create<calyx::ConstantOp>(loadOp.getLoc(), wrZeroFlt);
+      rewriter.create<calyx::AssignOp>(loadOp.getLoc(), memoryInterface.writeData(), calyxFloat);
+    }
+   
     regWriteEn = memoryInterface.done();
     if (calyx::noStoresToMemory(memref) &&
         calyx::singleLoadFromMemory(memref)) {
@@ -552,15 +625,23 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     // for sequential memories will cause a read to take at least 2 cycles,
     // but it will usually be better because combinational reads on memories
     // can significantly decrease the maximum achievable frequency.
-    auto reg = createRegister(
-        loadOp.getLoc(), rewriter, getComponent(),
-        loadOp.getMemRefType().getElementTypeBitWidth(),
-        getState<ComponentLoweringState>().getUniqueName("load"));
+    calyx::RegisterOp reg;
+    if (loadOp.getMemRefType().isa<IntegerType>())
+      reg = createRegister(
+          loadOp.getLoc(), rewriter, getComponent(),
+          loadOp.getMemRefType().getElementTypeBitWidth(),
+          getState<ComponentLoweringState>().getUniqueName("load"));
+    else
+      reg = createRegister(
+          loadOp.getLoc(), rewriter, getComponent(),
+          loadOp.getMemRefType().getElementType(),
+          getState<ComponentLoweringState>().getUniqueName("load"));
     rewriter.setInsertionPointToEnd(group.getBodyBlock());
     rewriter.create<calyx::AssignOp>(loadOp.getLoc(), reg.getIn(),
                                      memoryInterface.readData());
     rewriter.create<calyx::AssignOp>(loadOp.getLoc(), reg.getWriteEn(),
                                      regWriteEn);
+    
     rewriter.create<calyx::GroupDoneOp>(loadOp.getLoc(), reg.getDone());
     loadOp.getResult().replaceAllUsesWith(reg.getOut());
     res = reg.getOut();
@@ -684,9 +765,15 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
     sizes.push_back(1);
     addrSizes.push_back(1);
   }
-  auto memoryOp = rewriter.create<calyx::SeqMemoryOp>(
-      allocOp.getLoc(), componentState.getUniqueName("mem"),
-      memtype.getElementType().getIntOrFloatBitWidth(), sizes, addrSizes);
+  calyx::SeqMemoryOp memoryOp;
+  if (memtype.getElementType().isa<IntegerType>())
+    memoryOp = rewriter.create<calyx::SeqMemoryOp>(
+        allocOp.getLoc(), componentState.getUniqueName("mem"),
+        memtype.getElementType().getIntOrFloatBitWidth(), sizes, addrSizes);
+  else
+    memoryOp = rewriter.create<calyx::SeqMemoryOp>(
+        allocOp.getLoc(), componentState.getUniqueName("mem"),
+        memtype.getElementType(), sizes, addrSizes);
   // Externalize memories by default. This makes it easier for the native
   // compiler to provide initialized memories.
   memoryOp->setAttr("external",
@@ -898,6 +985,21 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   hwConstOp->moveAfter(getComponent().getBodyBlock(),
                        getComponent().getBodyBlock()->begin());
   return success();
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     AddFOp addf) const {
+  Location loc = addf.getLoc();
+  Type width = addf.getResult().getType();
+  IntegerType one = rewriter.getI1Type(), three = rewriter.getIntegerType(3),
+              five = rewriter.getIntegerType(5);
+  auto addFN =
+      getState<ComponentLoweringState>()
+          .getNewLibraryOpInstance<calyx::AddFNOp>(
+              rewriter, loc,
+              {one, one, one, one, one, width, width, three, width, five, one});
+  return buildLibraryBinaryFloatingPointOp<calyx::AddFNOp>(
+      rewriter, addf, addFN, addFN.getOut());
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
@@ -1853,7 +1955,7 @@ public:
     // Only accept std operations which we've added lowerings for
     target.addIllegalDialect<FuncDialect>();
     target.addIllegalDialect<ArithDialect>();
-    target.addLegalOp<AddIOp, SelectOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp,
+    target.addLegalOp<AddIOp, AddFOp, SelectOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp,
                       ShRSIOp, AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp,
                       CondBranchOp, BranchOp, MulIOp, DivUIOp, DivSIOp, RemUIOp,
                       RemSIOp, ReturnOp, arith::ConstantOp, IndexCastOp, FuncOp,

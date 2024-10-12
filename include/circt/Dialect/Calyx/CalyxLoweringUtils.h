@@ -103,6 +103,7 @@ struct MemoryInterface {
   explicit MemoryInterface(calyx::SeqMemoryOp memOp);
 
   // Getter methods for each memory interface port.
+  bool isSeqMem();
   Value readData();
   Value readEn();
   Value contentEn();
