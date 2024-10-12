@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Arc/ArcCostModel.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Comb/CombOps.h"
@@ -270,6 +271,17 @@ struct KeepOneVecOp : public OpRewritePattern<VectorizeOp> {
   using OpRewritePattern::OpRewritePattern;
   LogicalResult matchAndRewrite(VectorizeOp op,
                                 PatternRewriter &rewriter) const final;
+};
+
+struct SplitVectors : public OpRewritePattern<VectorizeOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(VectorizeOp vecOp,
+                                PatternRewriter &rewriter) const final;
+
+private:
+  VectorizeOp createVectorizeOp(VectorizeOp &vecOp, PatternRewriter &rewriter,
+                                SmallVector<Value> &newOperands,
+                                unsigned resultSize) const;
 };
 
 } // namespace
@@ -736,6 +748,35 @@ struct DenseMapInfo<SmallVector<Value>> {
     return lhs == rhs;
   }
 };
+
+template<>
+struct DenseMapInfo<SmallVector<Operation*, 16>> {
+  using SmallVectorType = SmallVector<Operation*, 16>;
+
+  static inline SmallVectorType getEmptyKey() {
+    SmallVectorType Vec;
+    Vec.push_back(reinterpret_cast<Operation*>(DenseMapInfo<Operation*>::getEmptyKey()));
+    return Vec;
+  }
+
+  static inline SmallVectorType getTombstoneKey() {
+    SmallVectorType Vec;
+    Vec.push_back(reinterpret_cast<Operation*>(DenseMapInfo<Operation*>::getTombstoneKey()));
+    return Vec;
+  }
+
+  static unsigned getHashValue(const SmallVectorType &inputs) {
+    unsigned hash = hash_value(inputs.size());
+    for (auto input : inputs)
+      hash = hash_combine(hash, input);
+    return hash;
+  }
+
+  static bool isEqual(const SmallVectorType &lhs, const SmallVectorType &rhs) {
+    return lhs == rhs;
+  }
+};
+
 } // namespace llvm
 
 LogicalResult KeepOneVecOp::matchAndRewrite(VectorizeOp vecOp,
@@ -762,6 +803,118 @@ LogicalResult KeepOneVecOp::matchAndRewrite(VectorizeOp vecOp,
 
   currentBlock.eraseArguments(argsToRemove);
   return updateInputOperands(vecOp, newOperands);
+}
+
+VectorizeOp SplitVectors::createVectorizeOp(VectorizeOp &vecOp,
+                                            PatternRewriter &rewriter,
+                                            SmallVector<Value> &newOperands,
+                                            unsigned resultSize) const {
+  SmallVector<Type> resultTypes(resultSize, vecOp.getResult(0).getType());
+  auto newVecOp = rewriter.create<VectorizeOp>(vecOp.getLoc(), resultTypes,
+                                               ValueRange(newOperands));
+  auto &newBlock = newVecOp.getBody().emplaceBlock();
+  IRMapping argMapping;
+  for (auto oldVecOpArg : vecOp.getBody().front().getArguments()) {
+    auto arg = newBlock.addArgument(oldVecOpArg.getType(), vecOp.getLoc());
+    argMapping.map(oldVecOpArg, arg);
+  }
+
+  // Save the old insertion point so we get back to it
+  auto oldInsertionPoint = rewriter.getInsertionPoint();
+  auto oldBlock = rewriter.getBlock();
+
+  rewriter.setInsertionPointToStart(&newBlock);
+  for (auto &op : vecOp.getBody().front())
+    rewriter.clone(op, argMapping);
+
+  // back to the old insertion point
+  rewriter.setInsertionPoint(oldBlock, oldInsertionPoint);
+  return newVecOp;
+}
+
+LogicalResult SplitVectors::matchAndRewrite(VectorizeOp vecOp,
+                                            PatternRewriter &rewriter) const {
+  DenseMap<SmallVector<Operation*, 16>, SmallVector<unsigned>> groups;
+  auto inputVecs = vecOp.getInputs();
+  unsigned numOfElementInVec = inputVecs[0].size();
+  for (unsigned curElemIdx = 0; curElemIdx < numOfElementInVec; ++curElemIdx) {
+    SmallVector<Operation*, 16> curGroup;
+    for (auto inputVec : inputVecs)
+      if (auto defOp = inputVec[curElemIdx].getDefiningOp<VectorizeOp>())
+        curGroup.push_back(defOp);
+    if (!curGroup.empty()) {
+      std::sort(curGroup.begin(), curGroup.end());
+      groups[curGroup].push_back(curElemIdx);
+    }
+  }
+
+  // If we couldn't get any groups or we get all then end.
+  if (groups.empty() || groups.begin()->second.size() == inputVecs[0].size())
+    return failure();
+
+  ArcCostModel arcCostModel;
+  OperationCosts originalCost = arcCostModel.getCost(vecOp.getOperation());
+
+  unsigned remainingScalars = inputVecs[0].size();
+  // Create new VectorizeOps based on groups
+  DenseMap<unsigned, bool> operandsUsed;
+  DenseMap<Operation*, SmallVector<unsigned>> newCreatedOpOriginalOperandsIdx;
+  SmallVector<VectorizeOp> newVectorizeOps;
+  for (auto &group : groups) {
+    auto vecIndices = group.second;
+    SmallVector<Value> newOperands;
+    for (unsigned inputVecIdx = 0; inputVecIdx < inputVecs.size(); ++inputVecIdx) {
+      auto inputVec = inputVecs[inputVecIdx];
+      for (auto idx : vecIndices) {
+        newOperands.push_back(inputVec[idx]);
+        // If we have some input vectors (a, b, c), (e, f, g), (h, i, j)
+        // we need the index if the current element in the vector as operand
+        // e.g. when we use vecOp.getOperands() which returns
+        // (a, b, c, d, e, f, g)
+        operandsUsed[inputVecIdx * inputVec.size() + idx] = true;
+      }
+    }
+
+    auto newVecOp =
+        createVectorizeOp(vecOp, rewriter, newOperands, vecIndices.size());
+    (void)updateInputOperands(newVecOp, newOperands);
+    newVectorizeOps.push_back(newVecOp);
+    newCreatedOpOriginalOperandsIdx[newVecOp.getOperation()] = vecIndices;
+    remainingScalars -= vecIndices.size();
+  }
+
+  SmallVector<Value> vecOpNewOperands;
+  for (unsigned idx = 0; idx < vecOp.getOperands().size(); ++idx)
+    if (operandsUsed.find(idx) == operandsUsed.end())
+      vecOpNewOperands.push_back(vecOp.getOperand(idx));
+
+  auto newVecOpWithScalarOperands =
+      createVectorizeOp(vecOp, rewriter, vecOpNewOperands, remainingScalars);
+  (void)updateInputOperands(newVecOpWithScalarOperands, vecOpNewOperands);
+  newVectorizeOps.push_back(newVecOpWithScalarOperands);
+
+  // Now Calculate if the splitting is profitable
+  OperationCosts newCost;
+  for (auto newVecOp : newVectorizeOps)
+    newCost += arcCostModel.getCost(newVecOp.getOperation());
+
+  // If the new cost is smaller than or equal, replace the old operation.
+  // why equal too? because we hope this allows more merging
+  if (newCost.totalCost() <= originalCost.totalCost()) {
+    // Replace old operation results.
+    for (auto newVecOp : newVectorizeOps) {
+      auto newVecOpOperandsIndices = newCreatedOpOriginalOperandsIdx[newVecOp.getOperation()];
+      for (unsigned idx = 0; idx < newVecOpOperandsIndices.size(); ++idx)
+        if (idx < newVecOp.getResults().size())
+          vecOp.getResult(newVecOpOperandsIndices[idx])
+              .replaceAllUsesWith(newVecOp.getResult(idx));
+    }
+
+    vecOp.erase();
+    return success();
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
@@ -812,7 +965,7 @@ void ArcCanonicalizerPass::runOnOperation() {
   for (mlir::RegisteredOperationName op : ctxt.getRegisteredOperations())
     op.getCanonicalizationPatterns(patterns, &ctxt);
   patterns.add<ICMPCanonicalizer, CompRegCanonicalizer, MergeVectorizeOps,
-               KeepOneVecOp>(&getContext());
+               KeepOneVecOp, SplitVectors>(&getContext());
 
   // Don't test for convergence since it is often not reached.
   (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns),
