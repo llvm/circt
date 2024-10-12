@@ -29,6 +29,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include <fstream>
 
 #include <variant>
 
@@ -45,6 +46,8 @@ using namespace mlir::func;
 namespace circt {
 class ComponentLoweringStateInterface;
 namespace scftocalyx {
+
+using json = nlohmann::ordered_json;
 
 //===----------------------------------------------------------------------===//
 // Utility types
@@ -260,6 +263,14 @@ public:
 /// Iterate through the operations of a source function and instantiate
 /// components or primitives based on the type of the operations.
 class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
+public:
+  BuildOpGroups(MLIRContext *context, LogicalResult &resRef,
+                calyx::PatternApplicationState &patternState,
+                DenseMap<mlir::func::FuncOp, calyx::ComponentOp> &map,
+                calyx::CalyxLoweringState &state,
+                mlir::Pass::Option<bool> &writeJsonOpt)
+      : FuncOpPartialLoweringPattern(context, resRef, patternState, map, state),
+        writeJson(writeJsonOpt) {}
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
@@ -276,7 +287,7 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                              scf::YieldOp, scf::WhileOp, scf::ForOp, scf::IfOp,
                              /// memref
                              memref::AllocOp, memref::AllocaOp, memref::LoadOp,
-                             memref::StoreOp,
+                             memref::StoreOp, memref::GetGlobalOp,
                              /// standard arithmetic
                              AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp,
                              AndIOp, XOrIOp, OrIOp, ExtUIOp, ExtSIOp, TruncIOp,
@@ -296,10 +307,25 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                                  : WalkResult::interrupt();
     });
 
+    if (writeJson) {
+      if (auto fileLoc = dyn_cast<mlir::FileLineColLoc>(funcOp->getLoc())) {
+        std::filesystem::path path(fileLoc.getFilename().str());
+        auto outFileName = path.parent_path().append("data.json");
+        std::ofstream outFile(outFileName);
+
+        if (outFile.is_open()) {
+          outFile << getState<ComponentLoweringState>().getExtMemData().dump(2);
+          outFile.close();
+        } else
+          llvm::errs() << "Unable to open file for writing\n";
+      }
+    }
+
     return success(opBuiltSuccessfully);
   }
 
 private:
+  mlir::Pass::Option<bool> &writeJson;
   /// Op builder specializations.
   LogicalResult buildOp(PatternRewriter &rewriter, scf::YieldOp yieldOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter,
@@ -328,6 +354,8 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, IndexCastOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::AllocOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::AllocaOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        memref::GetGlobalOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::LoadOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::StoreOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, scf::WhileOp whileOp) const;
@@ -693,6 +721,80 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
                     IntegerAttr::get(rewriter.getI1Type(), llvm::APInt(1, 1)));
   componentState.registerMemoryInterface(allocOp.getResult(),
                                          calyx::MemoryInterface(memoryOp));
+
+  bool isFloat = !memtype.getElementType().isInteger();
+
+  auto shape = allocOp.getType().getShape();
+  std::vector<int> dimensions;
+  int totalSize = 1;
+  for (auto dim : shape) {
+    totalSize *= dim;
+    dimensions.push_back(dim);
+  }
+
+  std::vector<double> flattenedVals(totalSize, 0);
+
+  // Helper function to get the correct indices
+  auto getIndices = [&dimensions](int flatIndex) {
+    std::vector<int> indices(dimensions.size(), 0);
+    for (int i = dimensions.size() - 1; i >= 0; --i) {
+      indices[i] = flatIndex % dimensions[i];
+      flatIndex /= dimensions[i];
+    }
+    return indices;
+  };
+
+  json result = json::array();
+  if (isa<memref::GetGlobalOp>(allocOp)) {
+    auto getGlobalOp = cast<memref::GetGlobalOp>(allocOp);
+    auto *symbolTableOp =
+        getGlobalOp->template getParentWithTrait<mlir::OpTrait::SymbolTable>();
+    auto globalOp = dyn_cast_or_null<memref::GlobalOp>(
+        SymbolTable::lookupSymbolIn(symbolTableOp, getGlobalOp.getNameAttr()));
+    // Flatten the values in the attribute
+    auto cstAttr = llvm::dyn_cast_or_null<DenseElementsAttr>(
+        globalOp.getConstantInitValue());
+    int sizeCount = 0;
+    for (auto attr : cstAttr.template getValues<Attribute>()) {
+      if (auto fltAttr = dyn_cast<mlir::FloatAttr>(attr))
+        flattenedVals[sizeCount++] = fltAttr.getValueAsDouble();
+      else if (auto intAttr = dyn_cast<mlir::IntegerAttr>(attr))
+        flattenedVals[sizeCount++] = intAttr.getInt();
+    }
+
+    rewriter.eraseOp(globalOp);
+  }
+
+  // Put the flattened values in the multi-dimensional structure
+  for (size_t i = 0; i < flattenedVals.size(); ++i) {
+    std::vector<int> indices = getIndices(i);
+    json *nested = &result;
+    for (size_t j = 0; j < indices.size() - 1; ++j) {
+      while (nested->size() <= static_cast<json::size_type>(indices[j])) {
+        nested->push_back(json::array());
+      }
+      nested = &(*nested)[indices[j]];
+    }
+    if (isFloat)
+      nested->push_back(flattenedVals[i]);
+    else
+      nested->push_back(static_cast<int64_t>(flattenedVals[i]));
+  }
+
+  componentState.setDataField(memoryOp.getName(), result);
+  auto width = memtype.getElementType().getIntOrFloatBitWidth();
+
+  std::string numType;
+  bool isSigned;
+  if (memtype.getElementType().isInteger()) {
+    numType = "bitnum";
+    isSigned = false;
+  } else {
+    numType = "floating_point";
+    isSigned = true;
+  }
+  componentState.setFormat(memoryOp.getName(), numType, isSigned, width);
+
   return success();
 }
 
@@ -704,6 +806,12 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      memref::AllocaOp allocOp) const {
   return buildAllocOp(getState<ComponentLoweringState>(), rewriter, allocOp);
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     memref::GetGlobalOp getGlobalOp) const {
+  return buildAllocOp(getState<ComponentLoweringState>(), rewriter,
+                      getGlobalOp);
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
@@ -1994,7 +2102,7 @@ void SCFToCalyxPass::runOnOperation() {
   /// having a distinct group for each operation, groups are analogous to SSA
   /// values in the source program.
   addOncePattern<BuildOpGroups>(loweringPatterns, patternState, funcMap,
-                                *loweringState);
+                                *loweringState, writeJsonOpt);
 
   /// This pattern traverses the CFG of the program and generates a control
   /// schedule based on the calyx::GroupOp's which were registered for each
