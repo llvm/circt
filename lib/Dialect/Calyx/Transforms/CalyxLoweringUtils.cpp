@@ -205,6 +205,17 @@ Value MemoryInterface::done() {
   return done.value();
 }
 
+std::string MemoryInterface::memName() {
+  if (auto *memOp = std::get_if<calyx::MemoryOp>(&impl); memOp) {
+    return memOp->getName().str();
+  }
+
+  if (auto *memOp = std::get_if<calyx::SeqMemoryOp>(&impl); memOp) {
+    return memOp->getName().str();
+  }
+  return std::get<MemoryPortsImpl>(impl).memName;
+}
+
 std::optional<Value> MemoryInterface::readDataOpt() {
   if (auto *memOp = std::get_if<calyx::MemoryOp>(&impl); memOp) {
     return memOp->readData();
