@@ -156,8 +156,10 @@ mlir::Value getSmtValue(mlir::Value op, const llvm::SmallVector<std::pair<mlir::
   }
   // op can be the result of a comb operation 
   if (op.getDefiningOp()->getName().getDialect()->getNamespace() == "comb"){
+    
     auto op1 = getSmtValue(op.getDefiningOp()->getOperand(0), fsmVarVals, inputFunctions, args, time, b, loc);
     auto op2 = getSmtValue(op.getDefiningOp()->getOperand(1), fsmVarVals, inputFunctions, args, time,b, loc);
+    
     llvm::SmallVector<mlir::Value> combArgs = {op1, op2};
     return getCombValue(*op.getDefiningOp(), loc, b, combArgs);
   }
@@ -449,8 +451,16 @@ LogicalResult MachineOpConverter::dispatch(){
         for(auto [av, a] : llvm::zip(vars, guardArgs))
           avToSmt.push_back({av, a});
         for(auto &op: t1.guard->getOps())
-          if (auto retOp = dyn_cast<fsm::ReturnOp>(op))
-            return getSmtValue(retOp->getOperand(0), avToSmt, inputFunctions, args, guardArgs.back(), b, loc);
+          if (auto retOp = dyn_cast<fsm::ReturnOp>(op)){
+            auto tmp = getSmtValue(retOp->getOperand(0), avToSmt, inputFunctions, args, guardArgs.back(), b, loc);
+            // refactor tmp if necessary, if it has form (= a true) or (= a false) convert it to a or !a
+            // if (auto isEq = dyn_cast<smt::EqOp>(tmp)){
+            //   if (auto constOperand = dyn_cast<smt::BoolConstantOp>(isEq->getOperand(1))){
+            //     return isEq->getOperand(0);
+            //   }
+            // } 
+            return tmp;
+          }
       } else {
         return b.create<smt::BoolConstantOp>(loc, true);
       }
@@ -563,19 +573,36 @@ LogicalResult MachineOpConverter::dispatch(){
   // mutual exclusion of states
 
   for (auto [id1, s1] : llvm::enumerate(stateFunctions)){
-    for (auto [id2, s2] : llvm::enumerate(stateFunctions)){
-      if (id1!=id2){
-        auto forall = b.create<smt::ForallOp>(loc, varTypes, [&s1, &s2, &stateFunctions, &numArgs](OpBuilder &b, Location loc, ValueRange forallArgs) { 
+  
+    auto forall = b.create<smt::ForallOp>(loc, varTypes, [&s1, &id1, &stateFunctions, &numArgs](OpBuilder &b, Location loc, ValueRange forallArgs) { 
 
-          auto lhs = b.create<smt::ApplyFuncOp>(loc, s1, forallArgs);
-          auto t2Fun = b.create<smt::ApplyFuncOp>(loc, s2, forallArgs);
-          auto rhs = b.create<smt::NotOp>(loc, t2Fun);
-          return b.create<smt::ImpliesOp>(loc, lhs, rhs); 
-        });
+      auto lhs = b.create<smt::ApplyFuncOp>(loc, s1, forallArgs);
+      
+      llvm::SmallVector<mlir::Value> toConcat;
+      
+      for (auto [id2, s2] : llvm::enumerate(stateFunctions)){
+        
+        if (id1!=id2){
+          auto appliedFun = b.create<smt::ApplyFuncOp>(loc, s2, forallArgs);
+          auto neg = b.create<smt::NotOp>(loc, appliedFun);
+          toConcat.push_back(neg);
+        }
 
-        b.create<smt::AssertOp>(loc, forall);
       }
-    }
+
+      auto tmp = b.create<smt::AndOp>(loc, toConcat[0], toConcat[1]);
+
+      for (auto [id, ag] : llvm::enumerate(toConcat)){
+        if (id > 1){
+          auto notChain = b.create<smt::AndOp>(loc, tmp, toConcat[id]);
+          tmp = notChain; 
+        }
+      }
+
+      return b.create<smt::ImpliesOp>(loc, lhs, tmp); 
+    });
+
+    b.create<smt::AssertOp>(loc, forall);
   }
 
   b.create<smt::YieldOp>(loc, typeRange, valueRange);
