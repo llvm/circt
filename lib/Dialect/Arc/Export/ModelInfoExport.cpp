@@ -13,6 +13,7 @@
 #include "circt/Dialect/Arc/ModelInfoExport.h"
 #include "circt/Dialect/Arc/ArcDialect.h"
 #include "circt/Dialect/Arc/ModelInfo.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Tools/mlir-translate/Translation.h"
 
 using namespace llvm;
@@ -37,5 +38,6 @@ void circt::arc::registerArcModelInfoTranslation() {
       },
       [](mlir::DialectRegistry &registry) {
         registry.insert<arc::ArcDialect>();
+        registry.insert<func::FuncDialect>();
       });
 }

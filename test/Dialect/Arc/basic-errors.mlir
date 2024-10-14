@@ -527,33 +527,60 @@ func.func @InvalidStateType(%arg0: !arc.state<index>)
 
 // -----
 
-// expected-error @below {{Cannot find declaration of initializer function 'MissingInitilaizer_initial'.}}
-arc.model @MissingInitilaizer io !hw.modty<> initializer @MissingInitilaizer_initial {
-  ^bb0(%arg0: !arc.storage<42>):
+// expected-error @below {{initializer 'Bar' does not reference a valid function}}
+arc.model @Foo io !hw.modty<> initializer @Bar {
+^bb0(%arg0: !arc.storage<42>):
 }
 
 // -----
 
-// expected-note @below {{Initializer declared here:}}
-hw.module @NonFuncInitilaizer_initial() {
-}
-
-// expected-error @below {{Referenced initializer must be a 'func.func' op.}}
-arc.model @NonFuncInitilaizer io !hw.modty<> initializer @NonFuncInitilaizer_initial {
-  ^bb0(%arg0: !arc.storage<42>):
+// expected-error @below {{finalizer 'Bar' does not reference a valid function}}
+arc.model @Foo io !hw.modty<> finalizer @Bar {
+^bb0(%arg0: !arc.storage<42>):
 }
 
 // -----
 
-// expected-note @below {{Initializer declared here:}}
-func.func @IncorrectArg_initial(!arc.storage<24>) {
-  ^bb0(%arg0: !arc.storage<24>):
+// expected-error @below {{initializer 'Bar' does not reference a valid function}}
+arc.model @Foo io !hw.modty<> initializer @Bar {
+^bb0(%arg0: !arc.storage<42>):
+}
+hw.module @Bar() {
+}
+
+// -----
+
+// expected-error @below {{finalizer 'Bar' does not reference a valid function}}
+arc.model @Foo io !hw.modty<> finalizer @Bar {
+^bb0(%arg0: !arc.storage<42>):
+}
+hw.module @Bar() {
+}
+
+// -----
+
+// expected-error @below {{initializer 'Bar' arguments must match arguments of model}}
+arc.model @Foo io !hw.modty<> initializer @Bar {
+^bb0(%arg0: !arc.storage<42>):
+}
+
+// expected-note @below {{initializer declared here:}}
+func.func @Bar(!arc.storage<24>) {
+^bb0(%arg0: !arc.storage<24>):
   return
 }
 
-// expected-error @below {{Arguments of initializer function must match arguments of model body.}}
-arc.model @IncorrectArg io !hw.modty<> initializer @IncorrectArg_initial {
-  ^bb0(%arg0: !arc.storage<42>):
+// -----
+
+// expected-error @below {{finalizer 'Bar' arguments must match arguments of model}}
+arc.model @Foo io !hw.modty<> finalizer @Bar {
+^bb0(%arg0: !arc.storage<42>):
+}
+
+// expected-note @below {{finalizer declared here:}}
+func.func @Bar(!arc.storage<24>) {
+^bb0(%arg0: !arc.storage<24>):
+  return
 }
 
 // -----
