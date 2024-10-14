@@ -9,6 +9,10 @@ arc.model @BasicResetGrouping io !hw.modty<input clock : i1, input i0 : i4, inpu
   %in_i1 = arc.root_input "i1", %arg0 : (!arc.storage) -> !arc.state<i4>
   %in_reset0 = arc.root_input "reset0", %arg0 : (!arc.storage) -> !arc.state<i1>
   %in_reset1 = arc.root_input "reset1", %arg0 : (!arc.storage) -> !arc.state<i1>
+  // CHECK: [[FOO_ALLOC:%.+]] = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
+  // CHECK: [[BAR_ALLOC:%.+]] = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
+  %1 = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
+  %2 = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
   %0 = arc.state_read %in_clock : <i1>
   // Group resets:
   arc.clock_tree %0 {
@@ -16,8 +20,8 @@ arc.model @BasicResetGrouping io !hw.modty<input clock : i1, input i0 : i4, inpu
     %3 = arc.state_read %in_reset0 : <i1>
     //  CHECK-NEXT: scf.if [[IN_RESET0]] {
     scf.if %3 {
-      //   CHECK-NEXT:  arc.state_write [[FOO_ALLOC:%.+]] = %c0_i4
-      //   CHECK-NEXT:  arc.state_write [[BAR_ALLOC:%.+]] = %c0_i4
+      //   CHECK-NEXT:  arc.state_write [[FOO_ALLOC]] = %c0_i4
+      //   CHECK-NEXT:  arc.state_write [[BAR_ALLOC]] = %c0_i4
       arc.state_write %1 = %c0_i4 : <i4>
       //   CHECK-NEXT: } else {
     } else {
@@ -131,8 +135,8 @@ arc.model @BasicResetGrouping io !hw.modty<input clock : i1, input i0 : i4, inpu
     %15 = arc.state_read %in_reset0 : <i1>
     //  CHECK-NEXT: scf.if [[IN_RESET0]] {
     scf.if %15 {
-      //   CHECK-NEXT:  arc.state_write [[FOO_ALLOC:%.+]] = %c0_i4
-      //   CHECK-NEXT:  arc.state_write [[BAR_ALLOC:%.+]] = %c0_i4
+      //   CHECK-NEXT:  arc.state_write [[FOO_ALLOC]] = %c0_i4
+      //   CHECK-NEXT:  arc.state_write [[BAR_ALLOC]] = %c0_i4
       arc.state_write %1 = %c0_i4 : <i4>
       //   CHECK-NEXT: } else {
     } else {
@@ -147,10 +151,6 @@ arc.model @BasicResetGrouping io !hw.modty<input clock : i1, input i0 : i4, inpu
     }
     // CHECK-NEXT: }
   }
-  // CHECK-NEXT: [[FOO_ALLOC]] = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
-  // CHECK-NEXT: [[BAR_ALLOC]] = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
-  %1 = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
-  %2 = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
 }
 
 // CHECK-LABEL: arc.model @BasicEnableGrouping
@@ -162,13 +162,17 @@ arc.model @BasicEnableGrouping io !hw.modty<input clock : i1, input i0 : i4, inp
   %in_i1 = arc.root_input "i1", %arg0 : (!arc.storage) -> !arc.state<i4>
   %in_en0 = arc.root_input "en0", %arg0 : (!arc.storage) -> !arc.state<i1>
   %in_en1 = arc.root_input "en1", %arg0 : (!arc.storage) -> !arc.state<i1>
+  // CHECK: [[FOO_ALLOC:%.+]] = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
+  // CHECK: [[BAR_ALLOC:%.+]] = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
+  %1 = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
+  %2 = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
   %0 = arc.state_read %in_clock : <i1>
   // Group enables:
   arc.clock_tree %0 {
     //  CHECK: [[IN_EN0:%.+]] = arc.state_read %in_en0
     %3 = arc.state_read %in_en0 : <i1>
-    //   CHECK-NEXT: arc.state_write [[FOO_ALLOC:%.+]] = %c0_i4
-    //   CHECK-NEXT: arc.state_write [[BAR_ALLOC:%.+]] = %c0_i4
+    //   CHECK-NEXT: arc.state_write [[FOO_ALLOC]] = %c0_i4
+    //   CHECK-NEXT: arc.state_write [[BAR_ALLOC]] = %c0_i4
     arc.state_write %1 = %c0_i4 : <i4>
     arc.state_write %2 = %c0_i4 : <i4>
     // CHECK-NEXT:   scf.if [[IN_EN0]] {
@@ -204,10 +208,6 @@ arc.model @BasicEnableGrouping io !hw.modty<input clock : i1, input i0 : i4, inp
     arc.state_write %2 = %9 if %7 : <i4>
   // CHECK-NEXT: }
   }
-  // CHECK-NEXT: [[FOO_ALLOC]] = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
-  // CHECK-NEXT: [[BAR_ALLOC]] = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
-  %1 = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
-  %2 = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
 }
 
 // CHECK-LABEL: arc.model @GroupAssignmentsInIfTesting
@@ -218,6 +218,10 @@ arc.model @GroupAssignmentsInIfTesting io !hw.modty<input clock : i1, input i1 :
   %in_i2 = arc.root_input "i2", %arg0 : (!arc.storage) -> !arc.state<i4>
   %in_cond0 = arc.root_input "cond0", %arg0 : (!arc.storage) -> !arc.state<i1>
   %in_cond1 = arc.root_input "cond1", %arg0 : (!arc.storage) -> !arc.state<i1>
+  // CHECK: [[FOO_ALLOC:%.+]] = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
+  // CHECK: [[BAR_ALLOC:%.+]] = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
+  %1 = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
+  %2 = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
   %0 = arc.state_read %in_clock : <i1>
   // Do pull value in (1st and 2nd layer)
   arc.clock_tree %0 {
@@ -228,14 +232,14 @@ arc.model @GroupAssignmentsInIfTesting io !hw.modty<input clock : i1, input i1 :
     // CHECK-NEXT: scf.if [[IN_COND0]] {
     scf.if %3 {
       // CHECK-NEXT: [[IN_I1:%.+]] = arc.state_read %in_i1
-      // CHECK-NEXT: arc.state_write [[FOO_ALLOC:%.+]] = [[IN_I1]]
+      // CHECK-NEXT: arc.state_write [[FOO_ALLOC]] = [[IN_I1]]
       arc.state_write %1 = %4 : <i4>
       // CHECK: [[IN_COND1:%.+]] = arc.state_read %in_cond1
       %6 = arc.state_read %in_cond1 : <i1>
       // CHECK-NEXT: scf.if [[IN_COND1]] {
       scf.if %6 {
         // CHECK-NEXT: [[IN_I2:%.+]] = arc.state_read %in_i2
-        // CHECK-NEXT: arc.state_write [[BAR_ALLOC:%.+]] = [[IN_I2]]
+        // CHECK-NEXT: arc.state_write [[BAR_ALLOC]] = [[IN_I2]]
         arc.state_write %2 = %5 : <i4>
         // CHECK-NEXT: }
       }
@@ -251,11 +255,11 @@ arc.model @GroupAssignmentsInIfTesting io !hw.modty<input clock : i1, input i1 :
     %6 = arc.state_read %in_i1 : <i4>
     // CHECK-NEXT: scf.if [[IN_COND0]] {
     scf.if %5 {
-      // CHECK-NEXT: arc.state_write [[FOO_ALLOC:%.+]] = [[IN_I1]]
+      // CHECK-NEXT: arc.state_write [[FOO_ALLOC]] = [[IN_I1]]
       arc.state_write %1 = %6 : <i4>
       // CHECK-NEXT: }
     }
-    // CHECK-NEXT: arc.state_write [[BAR_ALLOC:%.+]] = [[IN_I1]]
+    // CHECK-NEXT: arc.state_write [[BAR_ALLOC]] = [[IN_I1]]
     arc.state_write %2 = %6 : <i4>
   // CHECK-NEXT: }
   }
@@ -268,12 +272,12 @@ arc.model @GroupAssignmentsInIfTesting io !hw.modty<input clock : i1, input i1 :
     // CHECK-NEXT: scf.if [[IN_COND0]] {
     scf.if %5 {
       // CHECK-NEXT: [[IN_I1:%.+]] = arc.state_read %in_i1
-      // CHECK-NEXT: arc.state_write [[FOO_ALLOC:%.+]] = [[IN_I1]]
+      // CHECK-NEXT: arc.state_write [[FOO_ALLOC]] = [[IN_I1]]
       arc.state_write %1 = %7 : <i4>
       // CHECK-NEXT: [[IN_COND1:%.+]] = arc.state_read %in_cond1
       // CHECK-NEXT: scf.if [[IN_COND1]] {
       scf.if %6 {
-        // CHECK-NEXT: arc.state_write [[BAR_ALLOC:%.+]] = [[IN_I1]]
+        // CHECK-NEXT: arc.state_write [[BAR_ALLOC]] = [[IN_I1]]
         arc.state_write %2 = %7 : <i4>
         // CHECK-NEXT: }
       }
@@ -281,10 +285,6 @@ arc.model @GroupAssignmentsInIfTesting io !hw.modty<input clock : i1, input i1 :
     }
   // CHECK-NEXT: }
   }
-  // CHECK-NEXT: [[FOO_ALLOC]] = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
-  // CHECK-NEXT: [[BAR_ALLOC]] = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
-  %1 = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
-  %2 = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
 }
 
 // CHECK-LABEL: arc.model @ResetAndEnableGrouping
@@ -297,6 +297,10 @@ arc.model @ResetAndEnableGrouping io !hw.modty<input clock : i1, input i0 : i4, 
   %in_reset = arc.root_input "reset", %arg0 : (!arc.storage) -> !arc.state<i1>
   %in_en0 = arc.root_input "en0", %arg0 : (!arc.storage) -> !arc.state<i1>
   %in_en1 = arc.root_input "en1", %arg0 : (!arc.storage) -> !arc.state<i1>
+  // CHECK: [[FOO_ALLOC:%.+]] = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
+  // CHECK: [[BAR_ALLOC:%.+]] = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
+  %1 = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
+  %2 = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
   %0 = arc.state_read %in_clock : <i1>
   // Group enables inside resets (and pull in reads):
   arc.clock_tree %0 {
@@ -304,8 +308,8 @@ arc.model @ResetAndEnableGrouping io !hw.modty<input clock : i1, input i0 : i4, 
     %3 = arc.state_read %in_reset : <i1>
     //  CHECK-NEXT: scf.if [[IN_RESET]] {
     scf.if %3 {
-      //   CHECK-NEXT: arc.state_write [[FOO_ALLOC:%.+]] = %c0_i4
-      //   CHECK-NEXT: arc.state_write [[BAR_ALLOC:%.+]] = %c0_i4
+      //   CHECK-NEXT: arc.state_write [[FOO_ALLOC]] = %c0_i4
+      //   CHECK-NEXT: arc.state_write [[BAR_ALLOC]] = %c0_i4
       arc.state_write %1 = %c0_i4 : <i4>
       arc.state_write %2 = %c0_i4 : <i4>
       //   CHECK-NEXT: } else {
@@ -389,8 +393,4 @@ arc.model @ResetAndEnableGrouping io !hw.modty<input clock : i1, input i0 : i4, 
     }
     // CHECK-NEXT: }
   }
-  // CHECK-NEXT: [[FOO_ALLOC]] = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
-  // CHECK-NEXT: [[BAR_ALLOC]] = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
-  %1 = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
-  %2 = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
 }

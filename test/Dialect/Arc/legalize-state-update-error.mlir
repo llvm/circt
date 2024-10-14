@@ -3,6 +3,9 @@
 arc.model @Memory io !hw.modty<> {
 ^bb0(%arg0: !arc.storage):
   %false = hw.constant false
+  %mem1 = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32, i1>
+  %mem2 = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32, i1>
+  %s1 = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i32>
   arc.clock_tree %false attributes {ct4} {
     %r1 = arc.state_read %s1 : <i32>
     scf.if %false {
@@ -16,7 +19,4 @@ arc.model @Memory io !hw.modty<> {
       %mr1 = arc.memory_read %mem2[%false] : <2 x i32, i1>
     }
   }
-  %mem1 = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32, i1>
-  %mem2 = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32, i1>
-  %s1 = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i32>
 }
