@@ -4,7 +4,6 @@ add_circt_dialect_library(CIRCTArcTransforms
   ArcCanonicalizer.cpp
   Dedup.cpp
   FindInitialVectors.cpp
-  GroupResetsAndEnables.cpp
   InferMemories.cpp
   InferStateProperties.cpp
   InlineArcs.cpp
@@ -17,6 +16,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   LowerState.cpp
   LowerVectorizations.cpp
   MakeTables.cpp
+  MergeIfs.cpp
   MuxToControlFlow.cpp
   PrintCostModel.cpp
   SimplifyVariadicOps.cpp
