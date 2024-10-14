@@ -450,21 +450,6 @@ class ClockTreeLikeOp<string mnemonic, list<Trait> traits = []>:
   let regions = (region SizedRegion<1>:$body);
 }
 
-def ClockTreeOp : ClockTreeLikeOp<"clock_tree"> {
-  let summary = "A clock tree";
-  let arguments = (ins I1:$clock);
-  let assemblyFormat = [{
-    $clock attr-dict-with-keyword $body
-  }];
-}
-
-def PassThroughOp : ClockTreeLikeOp<"passthrough"> {
-  let summary = "Clock-less logic that is on the pass-through path";
-  let assemblyFormat = [{
-    attr-dict-with-keyword $body
-  }];
-}
-
 def InitialOp : ClockTreeLikeOp<"initial"> {
   let summary = "Region to be executed at the start of simulation";
   let assemblyFormat = [{
