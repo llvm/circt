@@ -26,6 +26,7 @@ module {
     %true = arith.constant 1 : i1
 
     arc.sim.instantiate @shiftreg as %model {
+      arc.sim.step %model : !arc.sim.instance<@shiftreg>
       arc.sim.set_input %model, "en" = %false : i1, !arc.sim.instance<@shiftreg>
       arc.sim.set_input %model, "reset" = %false : i1, !arc.sim.instance<@shiftreg>
       arc.sim.set_input %model, "din" = %ff : i8, !arc.sim.instance<@shiftreg>

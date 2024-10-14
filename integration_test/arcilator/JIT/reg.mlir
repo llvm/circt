@@ -1,7 +1,7 @@
 // RUN: arcilator %s --run --jit-entry=main | FileCheck %s
 // REQUIRES: arcilator-jit
 
-// CHECK: o1 = 2
+// CHECK:      o1 = 2
 // CHECK-NEXT: o2 = 5
 // CHECK-NEXT: o1 = 3
 // CHECK-NEXT: o2 = 6
@@ -41,6 +41,7 @@ func.func @main() {
   %step = arith.constant 1 : index
 
   arc.sim.instantiate @counter as %model {
+    arc.sim.step %model : !arc.sim.instance<@counter>
     %init_val1 = arc.sim.get_port %model, "o1" : i8, !arc.sim.instance<@counter>
     %init_val2 = arc.sim.get_port %model, "o2" : i8, !arc.sim.instance<@counter>
 
