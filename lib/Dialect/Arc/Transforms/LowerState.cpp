@@ -943,9 +943,10 @@ LogicalResult LowerStatePass::runOnModule(HWModuleOp moduleOp,
   moduleOp.getBodyBlock()->eraseArguments(
       [&](auto arg) { return arg != lowering.storageArg; });
   ImplicitLocOpBuilder builder(moduleOp.getLoc(), moduleOp);
-  auto modelOp = builder.create<ModelOp>(
-      moduleOp.getLoc(), moduleOp.getModuleNameAttr(),
-      TypeAttr::get(moduleOp.getModuleType()), mlir::FlatSymbolRefAttr());
+  auto modelOp =
+      builder.create<ModelOp>(moduleOp.getLoc(), moduleOp.getModuleNameAttr(),
+                              TypeAttr::get(moduleOp.getModuleType()),
+                              FlatSymbolRefAttr{}, FlatSymbolRefAttr{});
   modelOp.getBody().takeBody(moduleOp.getBody());
   moduleOp->erase();
   sortTopologically(&modelOp.getBodyBlock());

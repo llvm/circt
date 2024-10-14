@@ -466,7 +466,14 @@ def PassThroughOp : ClockTreeLikeOp<"passthrough"> {
 }
 
 def InitialOp : ClockTreeLikeOp<"initial"> {
-  let summary = "Clock-less logic called at the start of simulation";
+  let summary = "Region to be executed at the start of simulation";
+  let assemblyFormat = [{
+    attr-dict-with-keyword $body
+  }];
+}
+
+def FinalOp : ClockTreeLikeOp<"final"> {
+  let summary = "Region to be executed at the end of simulation";
   let assemblyFormat = [{
     attr-dict-with-keyword $body
   }];
@@ -672,11 +679,15 @@ def ModelOp : ArcOp<"model", [
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
                        TypeAttrOf<ModuleType>:$io,
-                       OptionalAttr<FlatSymbolRefAttr>:$initialFn);
+                       OptionalAttr<FlatSymbolRefAttr>:$initialFn,
+                       OptionalAttr<FlatSymbolRefAttr>:$finalFn);
   let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = [{
-    $sym_name `io` $io (`initializer` $initialFn^)? attr-dict-with-keyword $body
+    $sym_name `io` $io
+    (`initializer` $initialFn^)?
+    (`finalizer` $finalFn^)?
+    attr-dict-with-keyword $body
   }];
 
   let extraClassDeclaration = [{

@@ -320,6 +320,7 @@ struct ModelInfoMap {
   size_t numStateBytes;
   llvm::DenseMap<StringRef, StateInfo> states;
   mlir::FlatSymbolRefAttr initialFnSymbol;
+  mlir::FlatSymbolRefAttr finalFnSymbol;
 };
 
 template <typename OpTy>
@@ -390,8 +391,19 @@ struct SimInstantiateOpLowering
                                     ValueRange{allocated});
     }
 
+    // Execute the body.
     rewriter.inlineBlockBefore(&adaptor.getBody().getBlocks().front(), op,
                                {allocated});
+
+    // Call the model's 'final' function if present.
+    if (model.finalFnSymbol) {
+      auto finalFnType = LLVM::LLVMFunctionType::get(
+          LLVM::LLVMVoidType::get(op.getContext()),
+          {LLVM::LLVMPointerType::get(op.getContext())});
+      rewriter.create<LLVM::CallOp>(loc, finalFnType, model.finalFnSymbol,
+                                    ValueRange{allocated});
+    }
+
     rewriter.create<LLVM::CallOp>(loc, freeFunc, ValueRange{allocated});
     rewriter.eraseOp(op);
 
@@ -659,9 +671,10 @@ void LowerArcToLLVMPass::runOnOperation() {
     llvm::DenseMap<StringRef, StateInfo> states(modelInfo.states.size());
     for (StateInfo &stateInfo : modelInfo.states)
       states.insert({stateInfo.name, stateInfo});
-    modelMap.insert({modelInfo.name,
-                     ModelInfoMap{modelInfo.numStateBytes, std::move(states),
-                                  modelInfo.initialFnSym}});
+    modelMap.insert(
+        {modelInfo.name,
+         ModelInfoMap{modelInfo.numStateBytes, std::move(states),
+                      modelInfo.initialFnSym, modelInfo.finalFnSym}});
   }
 
   patterns.add<SimInstantiateOpLowering, SimSetInputOpLowering,
