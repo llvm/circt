@@ -54,32 +54,90 @@ static FailureOr<APInt> getBinary(Value val) {
 }
 
 namespace {
-  class EmitRTGToElf : public RTGOpVisitor<EmitRTGToElf, LogicalResult, int> {
-    public:
-  
-    LogicalResult visitUnhandledOp(Operation *op, int ctx) {
-      op->emitError("unknown RTG operation");
-      return failure();
-    }
+class EmitRTGToElf : public RTGOpVisitor<EmitRTGToElf, LogicalResult, int> {
 
-    LogicalResult visitRenderedContextOp(RenderedContextOp op, int ctx) {
-      assert(ctx == -1);
-      for (auto [index, region] : llvm::zip(op.getSelectors(), op.getRegions())) {
-        auto &body = region->getBlocks().front();
-        for (auto &op : body.getOperations()) {
-          if (failed(dispatchOpVisitor(&op, index)))
-            return failure();
-        }
+  // TODO: This needs to be a per-context vector of streams
+  llvm::raw_ostream &os;
+
+  const EmitRTGAssemblyOptions &options;
+
+public:
+  EmitRTGToElf(llvm::raw_ostream &os, const EmitRTGAssemblyOptions &options)
+      : os(os), options(options) {}
+
+  using RTGOpVisitor<EmitRTGToElf, LogicalResult, int>::visitOp;
+
+  LogicalResult visitUnhandledOp(Operation *op, int ctx) {
+    op->emitError("emitter unknown RTG operation");
+    return failure();
+  }
+
+  LogicalResult visitOp(RenderedContextOp rendered, int ctx) {
+    assert(ctx == -1);
+    for (auto [index, region] :
+         llvm::zip(rendered.getSelectors(), rendered.getRegions())) {
+      auto &body = region->getBlocks().front();
+      for (Operation &iop : body.getOperations()) {
+        if (failed(dispatchOpVisitor(&iop, index)))
+          return failure();
       }
-      return success();
     }
+    return success();
+  }
 
-  };
-}
+  LogicalResult visitOp(SequenceOp seq, int ctx) {
+    auto &body = seq.getRegion().getBlocks().front();
+    for (Operation &iop : body.getOperations()) {
+      if (failed(dispatchOpVisitor(&iop, ctx)))
+        return failure();
+    }
+    return success();
+  }
 
-LogicalResult EmitRTGAssembly::emitRTGAssembly(Operation *module,
-                                         llvm::raw_ostream &os,
-                                         const EmitRTGAssemblyOptions &options) {
+  LogicalResult visitOp(LabelDeclOp labeldecl, int ctx) { return success(); }
+
+  LogicalResult visitOp(LabelOp label, int ctx) {
+    if (label.getGlobal()) {
+      os << ".global ";
+      printValue(label.getLabel(), os);
+      os << "\n";
+    }
+    printValue(label.getLabel(), os);
+    os << ":\n";
+    return success();
+  }
+
+  LogicalResult visitInstruction(InstructionOpInterface instr, int ctx) {
+    os << llvm::indent(4);
+    auto useBinary = llvm::is_contained(options.unsupportedInstructions,
+                                        instr->getName().getStringRef());
+    if (useBinary)
+      os << "\\\\ ";
+    instr.printAssembly(os, [&](Value value) { printValue(value, os); });
+    os << "\n";
+    if (!useBinary)
+      return success();
+    os << llvm::indent(4);
+    SmallVector<APInt> operands;
+    for (auto operand : instr->getOperands()) {
+      auto res = getBinary(operand);
+      if (failed(res))
+        return failure();
+      operands.push_back(*res);
+    }
+    SmallVector<char> str;
+    instr.getBinary(operands).toString(str, 16, false);
+    os << ".word 0x" << str << "\n";
+    return success();
+  }
+
+  LogicalResult visitExternalOp(Operation *op, int ctx) { return success(); }
+};
+} // namespace
+
+LogicalResult
+EmitRTGAssembly::emitRTGAssembly(Operation *module, llvm::raw_ostream &os,
+                                 const EmitRTGAssemblyOptions &options) {
   if (module->getNumRegions() != 1)
     return module->emitError("must have exactly one region");
   if (!module->getRegion(0).hasOneBlock())
@@ -89,14 +147,16 @@ LogicalResult EmitRTGAssembly::emitRTGAssembly(Operation *module,
   for (auto snippet : module->getRegion(0).getOps<rtg::SequenceOp>()) {
     for (auto &op : snippet.getBody()->getOperations()) {
       if (auto instr = dyn_cast<InstructionOpInterface>(&op)) {
-        os << llvm::indent(4);
-        if (llvm::is_contained(options.supportedInstructions,
-                               instr->getName().getStringRef())) {
-          instr.printAssembly(ios,
-                              [&](Value value) { printValue(value, ios); });
-          ios << "\n";
+        ios << llvm::indent(4);
+        auto useBinary = llvm::is_contained(options.unsupportedInstructions,
+                                            instr->getName().getStringRef());
+        if (useBinary)
+          ios << "\\\\ ";
+        instr.printAssembly(ios, [&](Value value) { printValue(value, ios); });
+        ios << "\n";
+        if (!useBinary)
           continue;
-        }
+        ios << llvm::indent(4);
         SmallVector<APInt> operands;
         for (auto operand : instr->getOperands()) {
           auto res = getBinary(operand);
@@ -121,6 +181,10 @@ LogicalResult EmitRTGAssembly::emitRTGAssembly(Operation *module,
     }
   }
 
+  EmitRTGToElf emitter(os, options);
+  for (auto &snippet : module->getRegion(0).getOps())
+    emitter.dispatchOpVisitor(&snippet, -1);
+
   return success();
 }
 
@@ -130,13 +194,13 @@ LogicalResult EmitRTGAssembly::emitRTGAssembly(Operation *module,
 
 void EmitRTGAssembly::registerEmitRTGAssemblyTranslation() {
   static llvm::cl::opt<std::string> allowedTextualInstructionsFile(
-      "emit-assembly-allowed-instr-file",
+      "emit-assembly-binary-instr-file",
       llvm::cl::desc("File with a comma-separated list of instructions "
-                     "supported by the assembler."),
+                     "not supported by the assembler."),
       llvm::cl::init(""));
 
   static llvm::cl::list<std::string> allowedInstructions(
-      "emit-assembly-allowed-instr",
+      "emit-assembly-binary-instr",
       llvm::cl::desc(
           "Comma-separated list of instructions supported by the assembler."),
       llvm::cl::MiscFlags::CommaSeparated);
@@ -155,7 +219,7 @@ void EmitRTGAssembly::registerEmitRTGAssemblyTranslation() {
       while (std::getline(input, token, ','))
         instrs.push_back(token);
     }
-    opts.supportedInstructions = instrs;
+    opts.unsupportedInstructions = instrs;
     return opts;
   };
 

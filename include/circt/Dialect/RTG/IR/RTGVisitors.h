@@ -27,26 +27,33 @@ public:
   ResultType dispatchOpVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<SequenceOp, SelectRandomOp, LabelOp, OnContextOp,
-                       RenderedContextOp, SelectRandomResourceOp,
+        .template Case<SequenceOp, SelectRandomOp, LabelDeclOp, LabelOp,
+                       OnContextOp, RenderedContextOp, SelectRandomResourceOp,
                        SetDifferenceResourceOp>([&](auto expr) -> ResultType {
           return thisCast->visitOp(expr, args...);
         })
+        .template Case<InstructionOpInterface>([&](auto expr) -> ResultType {
+          return thisCast->visitInstruction(expr, args...);
+        })
         .Default([&](auto expr) -> ResultType {
-          return thisCast->visitInvalidOp(op, args...);
+          if (op->getDialect() ==
+              op->getContext()->getLoadedDialect<RTGDialect>()) {
+            llvm::errs() << "Unknown RTG operation: " << op->getName() << "\n";
+            abort();
+            return failure();
+          }
+          return thisCast->visitExternalOp(op, args...);
         });
   }
 
   /// This callback is invoked on any operations that are not
   /// handled by the concrete visitor.
-  ResultType visitUnhandledOp(Operation *op, ExtraArgs... args) {
-    return ResultType();
-  }
+  ResultType visitUnhandledOp(Operation *op, ExtraArgs... args);
 
-  /// This callback is invoked on any non-expression operations.
-  ResultType visitInvalidOp(Operation *op, ExtraArgs... args) {
-    op->emitOpError("unknown RTG operation");
-    abort();
+  ResultType visitInstruction(InstructionOpInterface op, ExtraArgs... args);
+
+  ResultType visitExternalOp(Operation *op, ExtraArgs... args) {
+    return ResultType();
   }
 
 #define HANDLE(OPTYPE, OPKIND)                                                 \
@@ -56,6 +63,7 @@ public:
 
   HANDLE(SequenceOp, Unhandled);
   HANDLE(SelectRandomOp, Unhandled);
+  HANDLE(LabelDeclOp, Unhandled);
   HANDLE(LabelOp, Unhandled);
   HANDLE(OnContextOp, Unhandled);
   HANDLE(RenderedContextOp, Unhandled);

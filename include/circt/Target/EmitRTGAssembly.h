@@ -20,17 +20,17 @@
 namespace circt {
 namespace EmitRTGAssembly {
 
-/// Emission options for the EmitRTGAssembly pass. Allows controlling the emitted
-/// format and overall behavior.
+/// Emission options for the EmitRTGAssembly pass. Allows controlling the
+/// emitted format and overall behavior.
 struct EmitRTGAssemblyOptions {
   // List of operations for which the textual format is used.
-  SmallVector<std::string> supportedInstructions;
+  SmallVector<std::string> unsupportedInstructions;
 };
 
 /// Run the EmitRTGAssembly pass.
-LogicalResult
-emitRTGAssembly(Operation *module, llvm::raw_ostream &os,
-             const EmitRTGAssemblyOptions &options = EmitRTGAssemblyOptions());
+LogicalResult emitRTGAssembly(
+    Operation *module, llvm::raw_ostream &os,
+    const EmitRTGAssemblyOptions &options = EmitRTGAssemblyOptions());
 
 /// Register the EmitRTGAssembly pass.
 void registerEmitRTGAssemblyTranslation();

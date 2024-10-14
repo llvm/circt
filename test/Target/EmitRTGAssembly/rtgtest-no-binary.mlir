@@ -1,4 +1,7 @@
-// RUN: circt-translate --emit-assembly --emit-assembly-allowed-instr="rtgtest.instr_a,rtgtest.instr_b" %s | FileCheck %s
+// RUN: circt-translate --emit-assembly %s | FileCheck %s
+
+/// Labels can probably be dealt with in binary emission is you know the 
+// addressing style of the op.  This might require some effort...
 
 rtg.sequence {
   // CHECK: label0:
@@ -7,3 +10,4 @@ rtg.sequence {
   // CHECK: instr_a label0, label0
   rtgtest.instr_a %0, %0
 } -> !rtg.sequence
+
