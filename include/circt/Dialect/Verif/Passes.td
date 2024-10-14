@@ -42,4 +42,16 @@ def VerifyClockedAssertLike : Pass<"verify-clocked-assert-like", "hw::HWModuleOp
   let constructor = "circt::verif::createVerifyClockedAssertLikePass()";
 }
 
+/**
+ * Converts verif.formal ops into hw.module to prepare for export verilog.
+ */
+def PrepareVerifForExportVerilog : 
+    Pass<"prepare-verif-for-export-verilog", "mlir::ModuleOp"> {
+  let summary = "Prepare verif for verilog export by lowering to hw dialect.";
+  let description = [{
+    Converts verif.formal ops into hw.module to reuse the export verilog module
+    logic.
+  }];
+}
+
 #endif // CIRCT_DIALECT_VERIF_PASSES_TD
