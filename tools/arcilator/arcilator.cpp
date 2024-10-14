@@ -40,6 +40,7 @@
 #include "mlir/Dialect/DLTI/DLTI.h"
 #include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Index/IR/IndexDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/Transforms/InlinerInterfaceImpl.h"
 #include "mlir/Dialect/LLVMIR/Transforms/Passes.h"
@@ -596,6 +597,7 @@ static LogicalResult executeArcilator(MLIRContext &context) {
     mlir::cf::ControlFlowDialect,
     mlir::DLTIDialect,
     mlir::func::FuncDialect,
+    mlir::index::IndexDialect,
     mlir::LLVM::LLVMDialect,
     mlir::scf::SCFDialect,
     om::OMDialect,

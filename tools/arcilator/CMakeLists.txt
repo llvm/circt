@@ -24,12 +24,17 @@ set(libs
   CIRCTSimTransforms
   CIRCTSupport
   CIRCTTransforms
+  MLIRArithDialect
   MLIRBuiltinToLLVMIRTranslation
+  MLIRControlFlowDialect
   MLIRDLTIDialect
+  MLIRFuncDialect
   MLIRFuncInlinerExtension
+  MLIRIndexDialect
   MLIRLLVMIRTransforms
   MLIRLLVMToLLVMIRTranslation
   MLIRParser
+  MLIRSCFDialect
   MLIRTargetLLVMIRExport
 )
 
