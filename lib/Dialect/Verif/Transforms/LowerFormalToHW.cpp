@@ -9,6 +9,7 @@
 //
 //===----------------------------------------------------------------------===//
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
 
@@ -72,8 +73,8 @@ struct FormalOpConversionPattern : public OpConversionPattern<verif::FormalOp> {
 void LowerFormalToHW::runOnOperation() {
   auto &context = getContext();
   mlir::ConversionTarget target(context);
-  target
-      .addLegalDialect<hw::HWDialect, verif::VerifDialect, comb::CombDialect>();
+  target.addLegalDialect<hw::HWDialect, verif::VerifDialect, comb::CombDialect,
+                         seq::SeqDialect>();
   target.addIllegalOp<verif::FormalOp, verif::SymbolicValueOp>();
 
   RewritePatternSet patterns(&context);
