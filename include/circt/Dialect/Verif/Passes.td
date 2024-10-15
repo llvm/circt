@@ -45,8 +45,7 @@ def VerifyClockedAssertLike : Pass<"verify-clocked-assert-like", "hw::HWModuleOp
 /**
  * Converts verif.formal ops into hw.module.
  */
-def LowerFormalToHW : 
-    Pass<"lower-formal-to-hw", "mlir::ModuleOp"> {
+def LowerFormalToHW : Pass<"lower-formal-to-hw", "mlir::ModuleOp"> {
   let summary = "Lower verif.formal ops to hw.module ops.";
   let description = [{
     Converts verif.formal ops into hw.module ops.
