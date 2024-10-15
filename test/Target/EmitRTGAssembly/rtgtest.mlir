@@ -49,3 +49,17 @@ rtg.rendered_context [1,2,3]
   %0 = rtg.label.decl "label2" -> i32
   rtg.label %0 : i32
 }
+
+rtg.rendered_context [1,2,3]
+{
+  %0 = rtg.label.decl "labela0" -> i32
+  rtg.label %0 : i32
+},
+{
+  %0 = rtg.label.decl "labela1" -> i32
+  rtg.label %0 : i32
+},
+{
+  %0 = rtg.label.decl "labela2" -> i32
+  rtg.label %0 : i32
+}

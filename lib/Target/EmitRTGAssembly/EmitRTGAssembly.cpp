@@ -21,6 +21,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
+#include <deque>
 #include <fstream>
 
 using namespace circt;
@@ -56,14 +57,34 @@ static FailureOr<APInt> getBinary(Value val) {
 namespace {
 class EmitRTGToElf : public RTGOpVisitor<EmitRTGToElf, LogicalResult, int> {
 
-  // TODO: This needs to be a per-context vector of streams
-  llvm::raw_ostream &os;
+  //map for non-moving inserts
+  std::map<int,SmallVector<char>> buffers;
+  std::map<int,llvm::raw_svector_ostream> streams;
+  
+  llvm::raw_ostream &base_stream;
 
   const EmitRTGAssemblyOptions &options;
 
+  raw_ostream& getStream(int ctx) {
+    if (ctx == -1)
+      return base_stream;
+    auto iter = streams.find(ctx);
+    if (iter != streams.end())
+      return iter->second;
+    auto [iter2, didInsert] = streams.emplace(ctx, std::ref(buffers[ctx]));
+    assert(didInsert);
+    return iter2->second;
+  }
+
 public:
   EmitRTGToElf(llvm::raw_ostream &os, const EmitRTGAssemblyOptions &options)
-      : os(os), options(options) {}
+      : base_stream(os), options(options) {}
+
+  ~EmitRTGToElf() {
+    for (auto &[ctx, buffer] : buffers) {
+      base_stream << buffer;
+    }
+  }
 
   using RTGOpVisitor<EmitRTGToElf, LogicalResult, int>::visitOp;
 
@@ -97,6 +118,7 @@ public:
   LogicalResult visitOp(LabelDeclOp labeldecl, int ctx) { return success(); }
 
   LogicalResult visitOp(LabelOp label, int ctx) {
+    auto& os = getStream(ctx);
     if (label.getGlobal()) {
       os << ".global ";
       printValue(label.getLabel(), os);
@@ -108,6 +130,7 @@ public:
   }
 
   LogicalResult visitInstruction(InstructionOpInterface instr, int ctx) {
+    auto& os = getStream(ctx);
     os << llvm::indent(4);
     auto useBinary = llvm::is_contained(options.unsupportedInstructions,
                                         instr->getName().getStringRef());
@@ -170,12 +193,12 @@ EmitRTGAssembly::emitRTGAssembly(Operation *module, llvm::raw_ostream &os,
       }
       if (auto label = dyn_cast<LabelOp>(&op)) {
         if (label.getGlobal()) {
-          os << ".global ";
+          ios << ".global ";
           printValue(label.getLabel(), os);
-          os << "\n";
+          ios << "\n";
         }
         printValue(label.getLabel(), os);
-        os << ":\n";
+        ios << ":\n";
         continue;
       }
     }
