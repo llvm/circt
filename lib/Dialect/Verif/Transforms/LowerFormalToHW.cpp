@@ -38,8 +38,7 @@ struct FormalOpRewritePattern : public OpRewritePattern<verif::FormalOp> {
                                 PatternRewriter &rewriter) const override {
     // Create the ports for all the symbolic values
     SmallVector<hw::PortInfo> ports;
-    for (auto symOp : 
-             op.getBody().front().getOps<verif::SymbolicValueOp>()) {
+    for (auto symOp : op.getBody().front().getOps<verif::SymbolicValueOp>()) {
       ports.push_back(
           hw::PortInfo({{rewriter.getStringAttr("symbolic_value_" +
                                                 std::to_string(ports.size())),
@@ -72,7 +71,6 @@ void LowerFormalToHW::runOnOperation() {
   RewritePatternSet patterns(&getContext());
   patterns.add<FormalOpRewritePattern>(patterns.getContext());
 
-  if (failed(
-          applyPatternsAndFoldGreedily(getOperation(), std::move(patterns))))
+  if (failed(applyPatternsAndFoldGreedily(getOperation(), std::move(patterns))))
     signalPassFailure();
 }
