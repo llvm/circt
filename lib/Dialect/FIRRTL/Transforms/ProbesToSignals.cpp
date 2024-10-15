@@ -23,7 +23,7 @@
 // * Inference passes, especially width inference.  Probes infer slightly
 //   differently than non-probes do (must have same width along the chain).
 //
-// Forceable and colored probes are not supported.
+// Colored probes are not supported.
 // Specialize layers on or off to remove colored probes first.
 //
 // Debug ports on FIRRTL memories are not currently supported,
@@ -66,7 +66,7 @@ namespace {
 
 class ProbeVisitor : public FIRRTLVisitor<ProbeVisitor, LogicalResult> {
 public:
-  ProbeVisitor() = default;
+  ProbeVisitor(hw::InnerRefNamespace &irn) : irn(irn) {}
 
   /// Entrypoint.
   LogicalResult visit(FModuleLike mod);
@@ -90,9 +90,6 @@ public:
     auto refType = dyn_cast<RefType>(type);
     if (!refType)
       return Type();
-
-    if (refType.getForceable())
-      return err("rwprobe not supported");
 
     if (refType.getLayer())
       return err("layer-colored probes not supported");
@@ -141,9 +138,9 @@ public:
 
   /// Check declarations specifically before forwarding to unhandled.
   LogicalResult visitUnhandledDecl(Operation *op) {
-    // Check for and reject forceable declarations explicitly.
+    // Check for and handle active forceable declarations.
     if (auto fop = dyn_cast<Forceable>(op); fop && fop.isForceable())
-      return fop.emitError("forceable declaration not supported");
+      return visitActiveForceableDecl(fop);
     return visitUnhandledOp(op);
   }
 
@@ -151,6 +148,7 @@ public:
 
   LogicalResult visitDecl(MemOp op);
   LogicalResult visitDecl(WireOp op);
+  LogicalResult visitActiveForceableDecl(Forceable fop);
 
   LogicalResult visitInstanceLike(Operation *op);
   LogicalResult visitDecl(InstanceOp op) { return visitInstanceLike(op); }
@@ -158,9 +156,7 @@ public:
 
   // Probe operations.
 
-  LogicalResult visitExpr(RWProbeOp op) {
-    return op.emitError("rwprobe not supported");
-  }
+  LogicalResult visitExpr(RWProbeOp op);
   LogicalResult visitExpr(RefCastOp op);
   LogicalResult visitExpr(RefResolveOp op);
   LogicalResult visitExpr(RefSendOp op);
@@ -168,12 +164,32 @@ public:
 
   LogicalResult visitStmt(RefDefineOp op);
 
+  // Force and release operations: reject as unsupported.
+  LogicalResult visitStmt(RefForceOp op) {
+    return op.emitError("force not supported");
+  }
+  LogicalResult visitStmt(RefForceInitialOp op) {
+    return op.emitError("force_initial not supported");
+  }
+  LogicalResult visitStmt(RefReleaseOp op) {
+    return op.emitError("release not supported");
+  }
+  LogicalResult visitStmt(RefReleaseInitialOp op) {
+    return op.emitError("release_initial not supported");
+  }
+
 private:
   /// Map from probe-typed Value's to their non-probe equivalent.
   DenseMap<Value, Value> probeToHWMap;
 
+  /// Forceable operations to demote.
+  SmallVector<Forceable> forceables;
+
   /// Operations to delete.
   SmallVector<Operation *> toDelete;
+
+  /// Read-only copy of inner-ref namespace for resolving inner refs.
+  hw::InnerRefNamespace &irn;
 };
 
 } // end namespace
@@ -259,6 +275,10 @@ LogicalResult ProbeVisitor::visit(FModuleLike mod) {
   // Delete operations that were converted.
   for (auto *op : llvm::reverse(toDelete))
     op->erase();
+
+  // Demote forceable's.
+  for (auto fop : forceables)
+    firrtl::detail::replaceWithNewForceability(fop, false);
 
   return success();
 }
@@ -384,7 +404,7 @@ LogicalResult ProbeVisitor::visitDecl(MemOp op) {
 
 LogicalResult ProbeVisitor::visitDecl(WireOp op) {
   if (op.isForceable())
-    return op.emitError("forceable declaration not supported");
+    return visitActiveForceableDecl(op);
 
   auto conv = convertType(op.getDataRaw().getType(), op.getLoc());
   if (failed(conv))
@@ -399,6 +419,28 @@ LogicalResult ProbeVisitor::visitDecl(WireOp op) {
   cloned->getOpResults().front().setType(type);
   probeToHWMap[op.getDataRaw()] = cloned.getData();
   toDelete.push_back(op);
+  return success();
+}
+
+LogicalResult ProbeVisitor::visitActiveForceableDecl(Forceable fop) {
+  assert(fop.isForceable() && "must be called on active forceables");
+  // Map rw ref result to normal result.
+  auto data = fop.getData();
+  auto conv = mapType(fop.getDataRef().getType(), fop.getLoc());
+  if (failed(conv))
+    return failure();
+  auto newType = *conv;
+  forceables.push_back(fop);
+
+  assert(newType == data.getType().getPassiveType());
+  if (newType != data.getType()) {
+    ImplicitLocOpBuilder builder(fop.getLoc(), fop);
+    builder.setInsertionPointAfterValue(data);
+    auto wire = builder.create<WireOp>(newType);
+    emitConnect(builder, wire.getData(), data);
+    data = wire.getData();
+  }
+  probeToHWMap[fop.getDataRef()] = data;
   return success();
 }
 
@@ -458,6 +500,33 @@ LogicalResult ProbeVisitor::visitStmt(RefDefineOp op) {
   auto builder = ImplicitLocOpBuilder::atBlockEnd(op.getLoc(), destBlock);
   emitConnect(builder, newDest, newSrc);
   toDelete.push_back(op);
+  return success();
+}
+
+LogicalResult ProbeVisitor::visitExpr(RWProbeOp op) {
+  // Handle similar to ref.send but lookup the target
+  // and materialize a value for it (indexing).
+  auto conv = mapType(op.getType(), op.getLoc());
+  if (failed(conv))
+    return failure();
+  auto newType = *conv;
+  toDelete.push_back(op);
+
+  auto ist = irn.lookup(op.getTarget());
+  assert(ist);
+  auto ref = getFieldRefForTarget(ist);
+
+  ImplicitLocOpBuilder builder(op.getLoc(), op);
+  builder.setInsertionPointAfterValue(ref.getValue());
+  auto data = getValueByFieldID(builder, ref.getValue(), ref.getFieldID());
+  assert(cast<FIRRTLBaseType>(data.getType()).getPassiveType() ==
+         op.getType().getType());
+  if (newType != data.getType()) {
+    auto wire = builder.create<WireOp>(newType);
+    emitConnect(builder, wire.getData(), data);
+    data = wire.getData();
+  }
+  probeToHWMap[op.getResult()] = data;
   return success();
 }
 
@@ -546,8 +615,11 @@ void ProbesToSignalsPass::runOnOperation() {
 
   SmallVector<Operation *, 0> ops(getOperation().getOps<FModuleLike>());
 
+  hw::InnerRefNamespace irn{getAnalysis<SymbolTable>(),
+                            getAnalysis<hw::InnerSymbolTableCollection>()};
+
   auto result = failableParallelForEach(&getContext(), ops, [&](Operation *op) {
-    ProbeVisitor visitor;
+    ProbeVisitor visitor(irn);
     return visitor.visit(cast<FModuleLike>(op));
   });
 

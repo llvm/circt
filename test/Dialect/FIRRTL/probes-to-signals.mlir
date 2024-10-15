@@ -65,12 +65,23 @@ firrtl.circuit "TestP" {
 
 // -----
 
-// Extmodule
+// Extmodule using alias
 
 // CHECK-LABEL: "ExtModule"
 firrtl.circuit "ExtModule" {
   // CHECK: out p: !firrtl.alias<T, bundle<foo
   firrtl.extmodule @ExtModule(out p: !firrtl.probe<alias<T, bundle<foo: uint<1>, bar: uint<5>>>>)
+}
+
+// -----
+
+// Extmodule using rwprobe
+
+// CHECK-LABEL: "ExtModuleRW"
+firrtl.circuit "ExtModuleRW" {
+  // CHECK: out ro: !firrtl.uint<1>
+  // CHECK-SAME: out rw: !firrtl.uint<2>
+  firrtl.extmodule @ExtModuleRW(out ro: !firrtl.probe<uint<1>>, out rw: !firrtl.rwprobe<uint<2>>)
 }
 
 // -----
@@ -109,3 +120,53 @@ firrtl.circuit "DbgsMemPort" {
     // CHECK: matchingconnect %_a, %[[W]]
   }
 }
+
+// -----
+// RWProbe exported out top should be supported.
+
+// CHECK-LABEL: "ForceableRWProbeExport"
+firrtl.circuit "ForceableRWProbeExport" {
+  // CHECK: @ForceableRWProbeExport(out %p: !firrtl.uint<2>)
+  firrtl.module @ForceableRWProbeExport(out %p : !firrtl.rwprobe<uint<2>>) {
+    // CHECK-NEXT: %w = firrtl.wire : !firrtl.uint<2>
+    // CHECK-NEXT: firrtl.matchingconnect %p, %w
+    // CHECK-NEXT: }
+    %w, %w_f = firrtl.wire forceable : !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
+    firrtl.ref.define %p, %w_f : !firrtl.rwprobe<uint<2>>
+  }
+}
+
+// -----
+
+// Test use of forceable + rwprobe + read works.
+// Forceable is handled by using passive copy of data result.
+
+// CHECK-LABEL: "ForceableToRead"
+firrtl.circuit "ForceableToRead" {
+  // CHECK: @ForceableToRead(
+  firrtl.module @ForceableToRead(out %r : !firrtl.uint<2>) {
+    // CHECK-NEXT: %w = firrtl.wire : !firrtl.uint<2>
+    // CHECK-NEXT: firrtl.matchingconnect %r, %w
+    %w, %w_f = firrtl.wire forceable : !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
+    %data = firrtl.ref.resolve %w_f : !firrtl.rwprobe<uint<2>>
+    firrtl.matchingconnect %r, %data : !firrtl.uint<2>
+  }
+}
+
+// -----
+
+// Check rwprobe operation.
+
+// CHECK-LABEL: "RWProbeOp"
+firrtl.circuit "RWProbeOp" {
+  // CHECK: @RWProbeOp(out %p: !firrtl.uint<2>)
+  firrtl.module @RWProbeOp(out %p: !firrtl.rwprobe<uint<2>>) {
+    // CHECK-NEXT: %w = firrtl.wire sym @sym
+    // CHECK-NEXT: firrtl.matchingconnect %p, %w
+    // CHECK-NEXT: }
+    %w = firrtl.wire sym @sym : !firrtl.uint<2>
+    %rwprobe = firrtl.ref.rwprobe <@RWProbeOp::@sym> : !firrtl.rwprobe<uint<2>>
+    firrtl.ref.define %p, %rwprobe : !firrtl.rwprobe<uint<2>>
+  }
+}
+

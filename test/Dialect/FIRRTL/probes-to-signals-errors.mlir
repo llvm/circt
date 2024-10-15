@@ -1,14 +1,5 @@
 // RUN: circt-opt --firrtl-probes-to-signals --verify-diagnostics --split-input-file %s
 
-// CHECK-LABEL: "ProbeAndRWProbe"
-firrtl.circuit "ProbeAndRWProbe" {
-  // expected-error @below {{rwprobe not supported, cannot convert type '!firrtl.rwprobe<uint<2>>'}}
-  firrtl.extmodule private @Probes(out ro : !firrtl.probe<uint<1>>, out rw : !firrtl.rwprobe<uint<2>>)
-  firrtl.module @ProbeAndRWProbe() {}
-}
-
-// -----
-
 firrtl.circuit "InternalPath" {
   // expected-error @below {{cannot convert module with internal path}}
   firrtl.extmodule @InternalPath(
@@ -37,20 +28,13 @@ firrtl.circuit "RefProducer" {
 
 // -----
 
-firrtl.circuit "Forceable" {
-   firrtl.module @Forceable() {
-     // expected-error @below {{forceable declaration not supported}}
-     %w, %w_f = firrtl.wire forceable : !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
-   }
-}
-
-// -----
-
-firrtl.circuit "RWProbeOp" {
-  firrtl.module @RWProbeOp() {
+firrtl.circuit "RejectForce" {
+  firrtl.module @RejectForce(in %clock: !firrtl.clock, in %val : !firrtl.uint<2>, out %p : !firrtl.rwprobe<uint<2>>) {
     %w = firrtl.wire sym @sym : !firrtl.uint<2>
-    // expected-error @below {{rwprobe not supported}}
-    %rwprobe = firrtl.ref.rwprobe <@RWProbeOp::@sym> : !firrtl.rwprobe<uint<2>>
+    %rwprobe = firrtl.ref.rwprobe <@RejectForce::@sym> : !firrtl.rwprobe<uint<2>>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.const.uint<1>
+    // expected-error @below {{force not supported}}
+    firrtl.ref.force %clock, %c1_ui1, %rwprobe, %val : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.rwprobe<uint<2>>, !firrtl.uint<2>
   }
 }
 
