@@ -1233,7 +1233,8 @@ private:
   void copyAnnotations(FModuleLike toModule, AnnoTarget to,
                        FModuleLike fromModule, AnnotationSet annos,
                        SmallVectorImpl<Annotation> &newAnnotations,
-                       SmallPtrSetImpl<Attribute> &dontTouches) {
+                       SmallPtrSetImpl<Attribute> &dontTouches,
+                       SmallPtrSetImpl<Attribute> &localTrackerIds) {
     for (auto anno : annos) {
       if (anno.isClass(dontTouchAnnoClass)) {
         // Remove the nonlocal field of the annotation if it has one, since this
@@ -1254,7 +1255,10 @@ private:
       // If the annotation is a local tracker, don't make it non-local. This
       // allows trackers that refer to all instances when the user wants that.
       if (anno.isClass("circt.tracker")) {
-        newAnnotations.push_back(anno);
+        auto [it, inserted] =
+            localTrackerIds.insert(anno.getMember<DistinctAttr>("id"));
+        if (inserted)
+          newAnnotations.push_back(anno);
         continue;
       }
 
@@ -1272,16 +1276,18 @@ private:
     // This is a list of all the annotations which will be added to `to`.
     SmallVector<Annotation> newAnnotations;
 
-    // We have special case handling of DontTouch to prevent it from being
-    // turned into a non-local annotation, and to remove duplicates.
+    // We have special case handling of DontTouch and local trackers to prevent
+    // them from being turned into a non-local annotation, and to remove
+    // duplicates.
     llvm::SmallPtrSet<Attribute, 4> dontTouches;
+    llvm::SmallPtrSet<Attribute, 4> localTrackerIds;
 
     // Iterate the annotations, transforming most annotations into non-local
     // ones.
     copyAnnotations(toModule, to, toModule, toAnnos, newAnnotations,
-                    dontTouches);
+                    dontTouches, localTrackerIds);
     copyAnnotations(toModule, to, fromModule, fromAnnos, newAnnotations,
-                    dontTouches);
+                    dontTouches, localTrackerIds);
 
     // Copy over all the new annotations.
     if (!newAnnotations.empty())

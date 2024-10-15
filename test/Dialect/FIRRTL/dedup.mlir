@@ -780,6 +780,7 @@ firrtl.circuit "AllowLocalTrackers" {
   firrtl.module @AllowLocalTrackers() {
     firrtl.instance foo0 @Foo0()
     firrtl.instance foo1 @Foo1()
+    firrtl.instance foo2 @Foo2()
   }
 
   // CHECK-NOT: hw.hierpath
@@ -788,12 +789,18 @@ firrtl.circuit "AllowLocalTrackers" {
   // CHECK: firrtl.mem
   // CHECK-SAME: {class = "circt.tracker", id = distinct[0]<>}
   // CHECK-SAME: {class = "circt.tracker", id = distinct[1]<>}
+  // CHECK-NOT: {class = "circt.tracker", id = distinct[1]<>}
   firrtl.module private @Foo0() {
       %mem_RW0 = firrtl.mem Undefined {annotations = [{class = "circt.tracker", id = distinct[0]<>}], depth = 24 : i64, name = "mem", portNames = ["RW0"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, rdata flip: uint<72>, wmode: uint<1>, wdata: uint<72>, wmask: uint<1>>
   }
 
   // CHECK-NOT: @Foo1
   firrtl.module private @Foo1() {
+      %mem_RW0 = firrtl.mem Undefined {annotations = [{class = "circt.tracker", id = distinct[1]<>}], depth = 24 : i64, name = "mem", portNames = ["RW0"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, rdata flip: uint<72>, wmode: uint<1>, wdata: uint<72>, wmask: uint<1>>
+  }
+
+  // CHECK-NOT: @Foo2
+  firrtl.module private @Foo2() {
       %mem_RW0 = firrtl.mem Undefined {annotations = [{class = "circt.tracker", id = distinct[1]<>}], depth = 24 : i64, name = "mem", portNames = ["RW0"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, rdata flip: uint<72>, wmode: uint<1>, wdata: uint<72>, wmask: uint<1>>
   }
 }
