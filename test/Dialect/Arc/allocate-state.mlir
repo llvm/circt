@@ -6,8 +6,8 @@ arc.model @test io !hw.modty<input x : i1, output y : i1> {
   // CHECK-NEXT: ([[PTR:%.+]]: !arc.storage<5780>):
 
   // CHECK-NEXT: arc.alloc_storage [[PTR]][0] : (!arc.storage<5780>) -> !arc.storage<1159>
-  // CHECK-NEXT: arc.passthrough {
-  arc.passthrough {
+  // CHECK-NEXT: arc.initial {
+  arc.initial {
     // CHECK-NEXT: [[SUBPTR:%.+]] = arc.storage.get [[PTR]][0] : !arc.storage<5780> -> !arc.storage<1159>
     %0 = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i1>
     arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i8>
@@ -42,8 +42,8 @@ arc.model @test io !hw.modty<input x : i1, output y : i1> {
   // CHECK-NEXT: }
 
   // CHECK-NEXT: arc.alloc_storage [[PTR]][1168] : (!arc.storage<5780>) -> !arc.storage<4609>
-  // CHECK-NEXT: arc.passthrough {
-  arc.passthrough {
+  // CHECK-NEXT: arc.initial {
+  arc.initial {
     // CHECK-NEXT: [[SUBPTR:%.+]] = arc.storage.get [[PTR]][1168] : !arc.storage<5780> -> !arc.storage<4609>
     arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i1, i1>
     arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i8, i1>
@@ -69,8 +69,8 @@ arc.model @test io !hw.modty<input x : i1, output y : i1> {
   // CHECK-NEXT: }
 
   // CHECK-NEXT: arc.alloc_storage [[PTR]][5778] : (!arc.storage<5780>) -> !arc.storage<2>
-  // CHECK-NEXT: arc.passthrough {
-  arc.passthrough {
+  // CHECK-NEXT: arc.initial {
+  arc.initial {
     arc.root_input "x", %arg0 : (!arc.storage) -> !arc.state<i1>
     arc.root_output "y", %arg0 : (!arc.storage) -> !arc.state<i1>
     // CHECK-NEXT: [[SUBPTR:%.+]] = arc.storage.get [[PTR]][5778] : !arc.storage<5780> -> !arc.storage<2>
