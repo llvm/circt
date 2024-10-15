@@ -1,4 +1,4 @@
-// RUN: circt-opt --prepare-verif-for-export-verilog %s | FileCheck %s
+// RUN: circt-opt --lower-formal-to-hw %s | FileCheck %s
 
 hw.module @Foo(in %bar : i32, in %baz : i16) {}
 

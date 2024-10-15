@@ -43,14 +43,13 @@ def VerifyClockedAssertLike : Pass<"verify-clocked-assert-like", "hw::HWModuleOp
 }
 
 /**
- * Converts verif.formal ops into hw.module to prepare for export verilog.
+ * Converts verif.formal ops into hw.module.
  */
-def PrepareVerifForExportVerilog : 
-    Pass<"prepare-verif-for-export-verilog", "mlir::ModuleOp"> {
-  let summary = "Prepare verif for verilog export by lowering to hw dialect.";
+def LowerFormalToHW : 
+    Pass<"lower-formal-to-hw", "mlir::ModuleOp"> {
+  let summary = "Lower verif.formal ops to hw.module ops.";
   let description = [{
-    Converts verif.formal ops into hw.module to reuse the export verilog module
-    logic.
+    Converts verif.formal ops into hw.module ops.
   }];
 }
 

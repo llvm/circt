@@ -1,4 +1,4 @@
-//===- PrepareVerifForExportVerilog.cpp - Formal Preparations --*- C++ -*--===//
+//===- LowerFormalToHW.cpp - Formal Preparations --*- C++ -*---------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -17,7 +17,7 @@ using namespace circt;
 
 namespace circt {
 namespace verif {
-#define GEN_PASS_DEF_PREPAREVERIFFOREXPORTVERILOG
+#define GEN_PASS_DEF_LOWERFORMALTOHW
 #include "circt/Dialect/Verif/Passes.h.inc"
 } // namespace verif
 } // namespace circt
@@ -26,9 +26,8 @@ using namespace mlir;
 using namespace verif;
 
 namespace {
-struct PrepareVerifForExportVerilog
-    : circt::verif::impl::PrepareVerifForExportVerilogBase<
-          PrepareVerifForExportVerilog> {
+struct LowerFormalToHW
+    : circt::verif::impl::LowerFormalToHWBase<LowerFormalToHW> {
   void runOnOperation() override;
 };
 
@@ -68,7 +67,7 @@ struct FormalOpConversionPattern : public OpConversionPattern<verif::FormalOp> {
 };
 } // namespace
 
-void PrepareVerifForExportVerilog::runOnOperation() {
+void LowerFormalToHW::runOnOperation() {
   auto &context = getContext();
   mlir::ConversionTarget target(context);
   target.addLegalDialect<hw::HWDialect, verif::VerifDialect>();

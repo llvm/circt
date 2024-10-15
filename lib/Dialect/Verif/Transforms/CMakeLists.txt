@@ -1,7 +1,7 @@
 add_circt_dialect_library(CIRCTVerifTransforms
   VerifyClockedAssertLike.cpp
   PrepareForFormal.cpp
-  PrepareVerifForExportVerilog.cpp
+  LowerFormalToHW.cpp
 
   DEPENDS
   CIRCTVerifTransformsIncGen
