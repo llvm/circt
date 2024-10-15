@@ -11,7 +11,6 @@
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
 
-#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 using namespace circt;
@@ -41,30 +40,27 @@ struct FormalOpConversionPattern : public OpConversionPattern<verif::FormalOp> {
                   ConversionPatternRewriter &rewriter) const override {
     // Create the ports for all the symbolic values
     SmallVector<hw::PortInfo> ports;
-    for (auto sym : op.getBody().front().getOps<verif::SymbolicValueOp>()) {
+    for (auto symOp : op.getBody().front().getOps<verif::SymbolicValueOp>()) {
       ports.push_back(
           hw::PortInfo({{rewriter.getStringAttr("symbolic_value_" +
                                                 std::to_string(ports.size())),
-                         sym.getType(), hw::ModulePort::Input}}));
+                         symOp.getType(), hw::ModulePort::Input}}));
     }
 
     auto moduleOp =
         rewriter.create<hw::HWModuleOp>(op.getLoc(), op.getNameAttr(), ports);
 
-    // Insert before output op
-    rewriter.setInsertionPointToStart(moduleOp.getBodyBlock());
+    rewriter.inlineBlockBefore(&op.getBody().front(),
+                               &moduleOp.getBodyBlock()->front(),
+                               op.getBody().getArguments());
 
-    // Clone body except for symbolic values which we replace with module
-    // arguments
+    // Replace symbolic values with module arguments
     size_t i = 0;
-    for (auto &innerOp : op.getBody().front().getOperations()) {
-      if (dyn_cast<verif::SymbolicValueOp>(innerOp)) {
-        rewriter.replaceAllUsesWith(innerOp.getResult(0),
-                                    moduleOp.getArgumentForInput(i));
-        i++;
-      } else {
-        rewriter.clone(innerOp);
-      }
+    for (auto symOp : moduleOp.getBodyBlock()->getOps<SymbolicValueOp>()) {
+      rewriter.replaceAllUsesWith(symOp.getResult(),
+                                  moduleOp.getArgumentForInput(i));
+      i++;
+      rewriter.eraseOp(symOp);
     }
     rewriter.eraseOp(op);
     return success();
