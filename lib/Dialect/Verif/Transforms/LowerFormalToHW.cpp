@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 //
-// Prepare verif dialect for the verilog export.
+// Lower verif.formal to hw.module.
 //
 //===----------------------------------------------------------------------===//
 #include "circt/Dialect/Verif/VerifOps.h"
@@ -39,7 +39,8 @@ struct FormalOpConversionPattern : public OpConversionPattern<verif::FormalOp> {
                   ConversionPatternRewriter &rewriter) const override {
     // Create the ports for all the symbolic values
     SmallVector<hw::PortInfo> ports;
-    for (auto symOp : op.getBody().front().getOps<verif::SymbolicValueOp>()) {
+    for (auto symOp : make_early_inc_range(
+             op.getBody().front().getOps<verif::SymbolicValueOp>())) {
       ports.push_back(
           hw::PortInfo({{rewriter.getStringAttr("symbolic_value_" +
                                                 std::to_string(ports.size())),
