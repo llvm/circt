@@ -8,12 +8,10 @@
 // Lower verif.formal to hw.module.
 //
 //===----------------------------------------------------------------------===//
-#include "circt/Dialect/Comb/CombDialect.h"
-#include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
 
-#include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 using namespace circt;
 
@@ -33,16 +31,15 @@ struct LowerFormalToHW
   void runOnOperation() override;
 };
 
-struct FormalOpConversionPattern : public OpConversionPattern<verif::FormalOp> {
-  using OpConversionPattern<FormalOp>::OpConversionPattern;
+struct FormalOpRewritePattern : public OpRewritePattern<verif::FormalOp> {
+  using OpRewritePattern<FormalOp>::OpRewritePattern;
 
-  LogicalResult
-  matchAndRewrite(FormalOp op, OpAdaptor operands,
-                  ConversionPatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(FormalOp op,
+                                PatternRewriter &rewriter) const override {
     // Create the ports for all the symbolic values
     SmallVector<hw::PortInfo> ports;
-    for (auto symOp : make_early_inc_range(
-             op.getBody().front().getOps<verif::SymbolicValueOp>())) {
+    for (auto symOp : 
+             op.getBody().front().getOps<verif::SymbolicValueOp>()) {
       ports.push_back(
           hw::PortInfo({{rewriter.getStringAttr("symbolic_value_" +
                                                 std::to_string(ports.size())),
@@ -58,7 +55,8 @@ struct FormalOpConversionPattern : public OpConversionPattern<verif::FormalOp> {
 
     // Replace symbolic values with module arguments
     size_t i = 0;
-    for (auto symOp : moduleOp.getBodyBlock()->getOps<SymbolicValueOp>()) {
+    for (auto symOp : make_early_inc_range(
+             moduleOp.getBodyBlock()->getOps<SymbolicValueOp>())) {
       rewriter.replaceAllUsesWith(symOp.getResult(),
                                   moduleOp.getArgumentForInput(i));
       i++;
@@ -71,16 +69,10 @@ struct FormalOpConversionPattern : public OpConversionPattern<verif::FormalOp> {
 } // namespace
 
 void LowerFormalToHW::runOnOperation() {
-  auto &context = getContext();
-  mlir::ConversionTarget target(context);
-  target.addLegalDialect<hw::HWDialect, verif::VerifDialect, comb::CombDialect,
-                         seq::SeqDialect>();
-  target.addIllegalOp<verif::FormalOp, verif::SymbolicValueOp>();
-
-  RewritePatternSet patterns(&context);
-  patterns.add<FormalOpConversionPattern>(&context);
+  RewritePatternSet patterns(&getContext());
+  patterns.add<FormalOpRewritePattern>(patterns.getContext());
 
   if (failed(
-          applyPartialConversion(getOperation(), target, std::move(patterns))))
+          applyPatternsAndFoldGreedily(getOperation(), std::move(patterns))))
     signalPassFailure();
 }
