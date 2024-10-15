@@ -1251,6 +1251,13 @@ private:
         targetMap[nla.getAttr()].insert(to);
         continue;
       }
+      // If the annotation is a local tracker, don't make it non-local. This
+      // allows trackers that refer to all instances when the user wants that.
+      if (anno.isClass("circt.tracker")) {
+        newAnnotations.push_back(anno);
+        continue;
+      }
+
       // Otherwise make the annotation non-local and add it to the set.
       makeAnnotationNonLocal(toModule.getModuleNameAttr(), to, fromModule, anno,
                              newAnnotations);
