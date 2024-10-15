@@ -337,7 +337,7 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
     pm.addPass(createCSEPass());
   }
 
-  pm.addPass(arc::createGroupResetsAndEnablesPass());
+  pm.addPass(arc::createMergeIfsPass());
   pm.addPass(arc::createLegalizeStateUpdatePass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
