@@ -8,6 +8,7 @@
 // Lower verif.formal to hw.module.
 //
 //===----------------------------------------------------------------------===//
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
 
@@ -71,7 +72,8 @@ struct FormalOpConversionPattern : public OpConversionPattern<verif::FormalOp> {
 void LowerFormalToHW::runOnOperation() {
   auto &context = getContext();
   mlir::ConversionTarget target(context);
-  target.addLegalDialect<hw::HWDialect, verif::VerifDialect>();
+  target
+      .addLegalDialect<hw::HWDialect, verif::VerifDialect, comb::CombDialect>();
   target.addIllegalOp<verif::FormalOp, verif::SymbolicValueOp>();
 
   RewritePatternSet patterns(&context);
