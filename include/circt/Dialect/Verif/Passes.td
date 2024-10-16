@@ -42,4 +42,14 @@ def VerifyClockedAssertLike : Pass<"verify-clocked-assert-like", "hw::HWModuleOp
   let constructor = "circt::verif::createVerifyClockedAssertLikePass()";
 }
 
+/**
+ * Converts verif.formal ops into hw.module.
+ */
+def LowerFormalToHW : Pass<"lower-formal-to-hw", "mlir::ModuleOp"> {
+  let summary = "Lower verif.formal ops to hw.module ops.";
+  let description = [{
+    Converts verif.formal ops into hw.module ops.
+  }];
+}
+
 #endif // CIRCT_DIALECT_VERIF_PASSES_TD
