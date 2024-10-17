@@ -54,8 +54,17 @@ add_dependencies(CIRCTBindingsPythonExtension circt-headers)
 
 declare_mlir_python_sources(CIRCTBindingsPythonSources
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
+declare_mlir_python_sources(CIRCTBindingsPythonSources.Init
+  ADD_TO_PARENT CIRCTBindingsPythonSources
   SOURCES
     __init__.py
+)
+
+declare_mlir_python_sources(CIRCTBindingsPythonSources.Support
+  ADD_TO_PARENT CIRCTBindingsPythonSources
+  SOURCES
     support.py
 )
 

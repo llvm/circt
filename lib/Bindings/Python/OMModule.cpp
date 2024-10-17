@@ -6,9 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "CIRCTModules.h"
 #include "circt-c/Dialect/HW.h"
 #include "circt-c/Dialect/OM.h"
+#include "circt/Bindings/Python/CIRCTModules.h"
 #include "mlir-c/BuiltinAttributes.h"
 #include "mlir-c/BuiltinTypes.h"
 #include "mlir-c/IR.h"
