@@ -163,12 +163,6 @@ def LatencyRetiming : Pass<"arc-latency-retiming", "mlir::ModuleOp"> {
   ];
 }
 
-def LegalizeStateUpdate : Pass<"arc-legalize-state-update", "mlir::ModuleOp"> {
-  let summary = "Insert temporaries such that state reads don't see writes";
-  let constructor = "circt::arc::createLegalizeStateUpdatePass()";
-  let dependentDialects = ["arc::ArcDialect"];
-}
-
 def LowerArcsToFuncs : Pass<"arc-lower-arcs-to-funcs", "mlir::ModuleOp"> {
   let summary = "Lower arc definitions into functions";
   let constructor = "circt::arc::createLowerArcsToFuncsPass()";
@@ -187,12 +181,15 @@ def LowerLUT : Pass<"arc-lower-lut", "arc::DefineOp"> {
   let dependentDialects = ["hw::HWDialect", "comb::CombDialect"];
 }
 
-def LowerState : Pass<"arc-lower-state", "mlir::ModuleOp"> {
+def LowerStatePass : Pass<"arc-lower-state", "mlir::ModuleOp"> {
   let summary = "Split state into read and write ops grouped by clock tree";
-  let constructor = "circt::arc::createLowerStatePass()";
   let dependentDialects = [
-    "arc::ArcDialect", "mlir::scf::SCFDialect", "mlir::func::FuncDialect",
-    "mlir::LLVM::LLVMDialect", "comb::CombDialect", "seq::SeqDialect"
+    "arc::ArcDialect",
+    "comb::CombDialect",
+    "mlir::LLVM::LLVMDialect",
+    "mlir::func::FuncDialect",
+    "mlir::scf::SCFDialect",
+    "seq::SeqDialect",
   ];
 }
 
