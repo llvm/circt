@@ -17,6 +17,7 @@
 #include "mlir/Pass/PassRegistry.h"
 #include <memory>
 #include <optional>
+#include <string>
 
 namespace circt {
 namespace hw {
@@ -33,6 +34,7 @@ std::unique_ptr<mlir::Pass> createFlattenIOPass(bool recursiveFlag = true,
 std::unique_ptr<mlir::Pass> createVerifyInnerRefNamespacePass();
 std::unique_ptr<mlir::Pass> createFlattenModulesPass();
 std::unique_ptr<mlir::Pass> createFooWiresPass();
+std::unique_ptr<mlir::Pass> createPartitionPass(std::string moduleName);
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
