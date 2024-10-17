@@ -271,20 +271,24 @@ static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
       args.push_back(rewriter.createOrFold<ExtractOp>(inop.getLoc(), newType,
                                                       inop, range.first));
   }
-  Value newop = rewriter.createOrFold<OpTy>(op.getLoc(), newType, args);
-  newop.getDefiningOp()->setDialectAttrs(op->getDialectAttrs());
+  auto newop = rewriter.create<OpTy>(op.getLoc(), newType, args);
+  newop->setDialectAttrs(op->getDialectAttrs());
+  if (op.getTwoState())
+    newop.setTwoState(true);
+
+  Value newResult = newop.getResult();
   if (range.first)
-    newop = rewriter.createOrFold<ConcatOp>(
-        op.getLoc(), newop,
+    newResult = rewriter.createOrFold<ConcatOp>(
+        op.getLoc(), newResult,
         rewriter.create<hw::ConstantOp>(op.getLoc(),
                                         APInt::getZero(range.first)));
   if (range.second + 1 < opType.getWidth())
-    newop = rewriter.createOrFold<ConcatOp>(
+    newResult = rewriter.createOrFold<ConcatOp>(
         op.getLoc(),
         rewriter.create<hw::ConstantOp>(
             op.getLoc(), APInt::getZero(opType.getWidth() - range.second - 1)),
-        newop);
-  rewriter.replaceOp(op, newop);
+        newResult);
+  rewriter.replaceOp(op, newResult);
   return true;
 }
 
