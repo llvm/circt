@@ -103,8 +103,9 @@ static InstanceOp scheduleChainingProblemWithSimplex(InstanceOp instOp,
                                                      float cycleTime,
                                                      OpBuilder &builder) {
   auto prob = loadProblem<scheduling::ChainingProblem>(instOp);
+  prob.setTargetCycleTime(cycleTime);
   if (failed(prob.check()) ||
-      failed(scheduling::scheduleSimplex(prob, lastOp, cycleTime)) ||
+      failed(scheduling::scheduleSimplex(prob, lastOp)) ||
       failed(prob.verify()))
     return {};
   return saveProblem(prob, builder);
@@ -115,8 +116,9 @@ static InstanceOp scheduleChainingCyclicProblemWithSimplex(InstanceOp instOp,
                                                            float cycleTime,
                                                            OpBuilder &builder) {
   auto prob = loadProblem<scheduling::ChainingCyclicProblem>(instOp);
+  prob.setTargetCycleTime(cycleTime);
   if (failed(prob.check()) ||
-      failed(scheduling::scheduleSimplex(prob, lastOp, cycleTime)) ||
+      failed(scheduling::scheduleSimplex(prob, lastOp)) ||
       failed(prob.verify()))
     return {};
   return saveProblem(prob, builder);
