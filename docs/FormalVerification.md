@@ -55,7 +55,7 @@ building formal verification tools based on CIRCT. The
 [below diagram](/includes/img/smt_based_formal_verification_infra.svg) provides
 a visual overview.
 
-<p align="center"><img src="/includes/img/smt_based_formal_verification_infra.svg"/></p>
+<p align="center"><img src="https://circt.llvm.org/includes/img/smt_based_formal_verification_infra.svg"/></p>
 
 The overall flow will insert an explicit operation to specify the verification
 problem (e.g., `verif.lec`, `verif.bmc`). This operation could then be lowered
