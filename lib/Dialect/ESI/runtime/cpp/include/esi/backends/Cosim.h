@@ -54,7 +54,8 @@ public:
   /// by the AppID path). For convenience, provide the bundle type and direction
   /// of the bundle port.
   virtual std::map<std::string, ChannelPort &>
-  requestChannelsFor(AppIDPath, const BundleType *) override;
+  requestChannelsFor(AppIDPath, const BundleType *,
+                     const ServiceTable &) override;
 
   // C++ doesn't have a mechanism to forward declare a nested class and we don't
   // want to include the generated header here. So we have to wrap it in a

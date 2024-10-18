@@ -20,12 +20,7 @@
 #include <sstream>
 
 using namespace ::esi;
-
-// While building the design, keep around a std::map of active services indexed
-// by the service name. When a new service is encountered during descent, add it
-// to the table (perhaps overwriting one). Modifications to the table only apply
-// to the current branch, so copy this and update it at each level of the tree.
-using ServiceTable = std::map<std::string, services::Service *>;
+using ServiceTable = AcceleratorConnection::ServiceTable;
 
 // This is a proxy class to the manifest JSON. It is used to avoid having to
 // include the JSON parser in the header. Forward references don't work since
@@ -454,7 +449,7 @@ Manifest::Impl::getBundlePorts(AcceleratorConnection &acc, AppIDPath idPath,
 
     idPath.push_back(parseID(content.at("appID")));
     std::map<std::string, ChannelPort &> portChannels =
-        acc.requestChannelsFor(idPath, bundleType);
+        acc.requestChannelsFor(idPath, bundleType, activeServices);
 
     services::ServicePort *svcPort =
         svc->getPort(idPath, bundleType, portChannels, acc);

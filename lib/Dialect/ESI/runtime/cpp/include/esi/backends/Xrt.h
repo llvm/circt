@@ -41,7 +41,8 @@ public:
   /// by the AppID path). For convenience, provide the bundle type and direction
   /// of the bundle port.
   std::map<std::string, ChannelPort &>
-  requestChannelsFor(AppIDPath, const BundleType *) override;
+  requestChannelsFor(AppIDPath, const BundleType *,
+                     const ServiceTable &) override;
 
 protected:
   virtual Service *createService(Service::Type service, AppIDPath path,
