@@ -76,6 +76,14 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
     return StringAttr::get(ctxt, os.str());
   };
 
+  auto getAssignment = [&](StringAttr name, StringAttr channelName) {
+    DictionaryAttr assignment = b.getDictionaryAttr({
+        b.getNamedAttr("type", b.getStringAttr("cosim")),
+        b.getNamedAttr("name", channelName),
+    });
+    return b.getNamedAttr(name, assignment);
+  };
+
   llvm::DenseMap<ServiceImplementConnReqOp, unsigned> toClientResultNum;
   for (auto req : implReq.getOps<ServiceImplementConnReqOp>())
     toClientResultNum[req] = toClientResultNum.size();
@@ -97,8 +105,7 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
             loc, ch.type, clk, rst,
             toStringAttr(req.getRelativeAppIDPathAttr(), ch.name));
         toServerValues.push_back(cosim.getFromHost());
-        channelAssignments.push_back(
-            b.getNamedAttr(ch.name, cosim.getIdAttr()));
+        channelAssignments.push_back(getAssignment(ch.name, cosim.getIdAttr()));
       }
     }
 
@@ -113,16 +120,14 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
         auto cosim = b.create<CosimToHostEndpointOp>(
             loc, clk, rst, pack.getFromChannels()[chanIdx++],
             toStringAttr(req.getRelativeAppIDPathAttr(), ch.name));
-        channelAssignments.push_back(
-            b.getNamedAttr(ch.name, cosim.getIdAttr()));
+        channelAssignments.push_back(getAssignment(ch.name, cosim.getIdAttr()));
       }
     }
 
     implRecords.create<ServiceImplClientRecordOp>(
         req.getLoc(), req.getRelativeAppIDPathAttr(), req.getServicePortAttr(),
-        TypeAttr::get(bundleType),
-        b.getDictionaryAttr(b.getNamedAttr(
-            "channel_assignments", b.getDictionaryAttr(channelAssignments))));
+        TypeAttr::get(bundleType), b.getDictionaryAttr(channelAssignments),
+        DictionaryAttr());
   }
 
   // Erase the generation request.

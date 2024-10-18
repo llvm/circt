@@ -455,17 +455,15 @@ Service *CosimAccelerator::createService(Service::Type svcType,
   if (prefix.size() > 0)
     prefix.pop_back();
 
-  if (implName == "cosim") {
-    // Get the channel assignments for each client.
-    for (auto client : clients) {
-      AppIDPath fullClientPath = prefix + client.relPath;
-      std::map<std::string, std::string> channelAssignments;
-      for (auto assignment : std::any_cast<std::map<std::string, std::any>>(
-               client.implOptions.at("channel_assignments")))
-        channelAssignments[assignment.first] =
-            std::any_cast<std::string>(assignment.second);
-      clientChannelAssignments[fullClientPath] = std::move(channelAssignments);
-    }
+  // Get the channel assignments for each client.
+  for (auto client : clients) {
+    AppIDPath fullClientPath = prefix + client.relPath;
+    std::map<std::string, std::string> channelAssignments;
+    for (auto assignment : client.channelAssignments)
+      if (assignment.second.type == "cosim")
+        channelAssignments[assignment.first] = std::any_cast<std::string>(
+            assignment.second.implOptions.at("name"));
+    clientChannelAssignments[fullClientPath] = std::move(channelAssignments);
   }
 
   if (svcType == typeid(services::MMIO)) {

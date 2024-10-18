@@ -369,7 +369,17 @@ Manifest::Impl::getService(AppIDPath idPath, AcceleratorConnection &acc,
         clientDetail.relPath = parseIDPath(detail.value());
       else if (detail.key() == "servicePort")
         clientDetail.port = parseServicePort(detail.value());
-      else
+      else if (detail.key() == "channelAssignments") {
+        for (auto &chan : detail.value().items()) {
+          ChannelAssignment chanAssign;
+          for (auto &assign : chan.value().items())
+            if (assign.key() == "type")
+              chanAssign.type = assign.value();
+            else
+              chanAssign.implOptions[assign.key()] = getAny(assign.value());
+          clientDetail.channelAssignments[chan.key()] = chanAssign;
+        }
+      } else
         clientDetail.implOptions[detail.key()] = getAny(detail.value());
     }
     clientDetails.push_back(clientDetail);
