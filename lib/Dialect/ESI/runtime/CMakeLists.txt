@@ -240,7 +240,7 @@ target_link_libraries(esiquery
   PRIVATE
   ESICppRuntime
   CLI11::CLI11
- "CatapultBackend")
+)
 add_dependencies(ESIRuntime esiquery)
 install(TARGETS esiquery
   DESTINATION bin

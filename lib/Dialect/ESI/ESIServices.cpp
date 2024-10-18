@@ -76,6 +76,14 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
     return StringAttr::get(ctxt, os.str());
   };
 
+  auto getAssignment = [&](StringAttr name, StringAttr channelName) {
+    DictionaryAttr assignment = b.getDictionaryAttr({
+        b.getNamedAttr("type", b.getStringAttr("cosim")),
+        b.getNamedAttr("name", channelName),
+    });
+    return b.getNamedAttr(name, assignment);
+  };
+
   llvm::DenseMap<ServiceImplementConnReqOp, unsigned> toClientResultNum;
   for (auto req : implReq.getOps<ServiceImplementConnReqOp>())
     toClientResultNum[req] = toClientResultNum.size();
@@ -97,8 +105,7 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
             loc, ch.type, clk, rst,
             toStringAttr(req.getRelativeAppIDPathAttr(), ch.name));
         toServerValues.push_back(cosim.getFromHost());
-        channelAssignments.push_back(
-            b.getNamedAttr(ch.name, cosim.getIdAttr()));
+        channelAssignments.push_back(getAssignment(ch.name, cosim.getIdAttr()));
       }
     }
 
@@ -113,8 +120,7 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
         auto cosim = b.create<CosimToHostEndpointOp>(
             loc, clk, rst, pack.getFromChannels()[chanIdx++],
             toStringAttr(req.getRelativeAppIDPathAttr(), ch.name));
-        channelAssignments.push_back(
-            b.getNamedAttr(ch.name, cosim.getIdAttr()));
+        channelAssignments.push_back(getAssignment(ch.name, cosim.getIdAttr()));
       }
     }
 
@@ -490,13 +496,9 @@ LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
     anyServiceInst = &defaultService->second;
 
   auto sortConnReqs = [&]() {
-    printf("sortConnReqs: mod %s\n", mod.getName().str().c_str());
-    mod.dump();
     // Sort the various requests by destination.
     for (auto req : llvm::make_early_inc_range(
              mod.getBodyBlock()->getOps<ServiceImplementConnReqOp>())) {
-      req.dump();
-      printf("\n");
       auto service = req.getServicePort().getModuleRef();
       auto reqListIter = localImplReqs.find(service);
       if (reqListIter != localImplReqs.end())
@@ -506,7 +508,6 @@ LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
       else
         nonLocalReqs.insert(req);
     }
-    printf("\n\n");
   };
   sortConnReqs();
 
@@ -517,7 +518,6 @@ LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
     auto portReqs = localImplReqs[instOp.getServiceSymbolAttr()];
     if (failed(replaceInst(instOp, portReqs.getArrayRef())))
       return failure();
-    printf("replaceInst done\n");
 
     // Find any new requests which were created by a generator.
     for (RequestConnectionOp req : llvm::make_early_inc_range(
