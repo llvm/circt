@@ -131,3 +131,14 @@ print(f"resp: {resp}")
 assert resp == data + add_amt
 
 print("PASS")
+
+################################################################################
+# Const producer tests
+################################################################################
+
+producer_bundle = d.ports[esi.AppID("const_producer")]
+producer = producer_bundle.read_port("data")
+producer.connect()
+data = producer.read()
+print(f"data: {data}")
+assert data == 42

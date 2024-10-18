@@ -9,8 +9,9 @@ from .signals import (BitsSignal, BundleSignal, ChannelSignal, Signal,
                       _FromCirctValue)
 from .support import _obj_to_attribute, get_user_loc, obj_to_typed_attribute
 from .system import System
-from .types import (Bits, Bundle, BundledChannel, Channel, ChannelDirection,
-                    StructType, Type, UInt, types, _FromCirctType)
+from .types import (Any, Bits, Bundle, BundledChannel, Channel,
+                    ChannelDirection, StructType, Type, UInt, types,
+                    _FromCirctType)
 
 from .circt import ir
 from .circt.dialects import esi as raw_esi, hw, msft
@@ -139,7 +140,7 @@ class _OutputBundleSetter(AssignableSignal):
     self.port = hw.InnerRefAttr(req.servicePort).name.value
     self._bundle_to_replace: Optional[ir.OpResult] = old_value_to_replace
 
-  def add_record(self, details: Dict[str, str]):
+  def add_record(self, details: Dict[str, object]):
     """Add a record to the manifest for this client request. Generally used to
     give the runtime necessary information about how to connect to the client
     through the generated service. For instance, offsets into an MMIO space."""
@@ -157,8 +158,8 @@ class _OutputBundleSetter(AssignableSignal):
       )
 
   @property
-  def client_name(self):
-    return self.req.relativeAppIDPath
+  def client_name(self) -> List[AppID]:
+    return [AppID(x) for x in self.req.relativeAppIDPath]
 
   def assign(self, new_value: ChannelSignal):
     """Assign the generated channel to this request."""
@@ -495,6 +496,34 @@ class MMIO:
   @staticmethod
   def _op(sym_name: ir.StringAttr):
     return raw_esi.MMIOServiceDeclOp(sym_name)
+
+
+@ServiceDecl
+class _ChannelServiceDecl:
+  """Get a single channel connection."""
+
+  from_host = Bundle([BundledChannel("data", ChannelDirection.TO, Any())])
+  to_host = Bundle([BundledChannel("data", ChannelDirection.FROM, Any())])
+
+
+class _ChannelService:
+
+  def from_host(self, name: AppID, type: Type) -> ChannelSignal:
+    bundle_type = Bundle(
+        [BundledChannel("data", ChannelDirection.TO, Channel(type))])
+    from_host_bundle = _ChannelServiceDecl.from_host(name, bundle_type)
+    assert isinstance(from_host_bundle, BundleSignal)
+    return from_host_bundle.unpack()["data"]
+
+  def to_host(self, name: AppID, chan: ChannelSignal) -> None:
+    bundle_type = Bundle(
+        [BundledChannel("data", ChannelDirection.FROM, chan.type)])
+    to_host_bundle = _ChannelServiceDecl.to_host(name, bundle_type)
+    assert isinstance(to_host_bundle, BundleSignal)
+    return to_host_bundle.unpack(data=chan)
+
+
+ChannelService = _ChannelService()
 
 
 class _FuncService(ServiceDecl):

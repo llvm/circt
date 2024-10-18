@@ -95,6 +95,8 @@ class Signal:
         rst_value = types.int(self.type.bitwidth)(0)
         if not isinstance(self.type, Bits):
           rst_value = hw.BitcastOp(self.type, rst_value)
+      elif rst_value is not None and not isinstance(rst_value, Signal):
+        rst_value = self.type(rst_value)
 
       reg = self.value
       for i in range(cycles):
@@ -769,7 +771,7 @@ class BundleSignal(Signal):
         c for c in self.type.channels if c.direction == ChannelDirection.TO
     ]
 
-    operands = [None] * len(to_channels)
+    operands = [None] * len(from_channels)
     for name, value in kwargs.items():
       if name not in from_channels:
         raise ValueError(f"Unknown channel name '{name}'")
