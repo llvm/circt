@@ -857,6 +857,18 @@ def LayerSink : Pass<"firrtl-layer-sink", "firrtl::FModuleOp"> {
   ];
 }
 
+def AdvancedLayerSink : Pass<"firrtl-advanced-layer-sink", "firrtl::CircuitOp"> {
+  let summary = "Sink operations into layer blocks";
+  let description = [{
+    This pass sinks ops into layers, whenever possible, to minimize unused
+    hardware in the design.
+  }];
+  let constructor = "::circt::firrtl::createAdvancedLayerSinkPass()";
+  let statistics = [
+    Statistic<"numSunk", "num-sunk", "Number of operations sunk">,
+  ];
+}
+
 def MaterializeDebugInfo :
     Pass<"firrtl-materialize-debug-info", "firrtl::FModuleOp"> {
   let summary = "Generate debug ops to track FIRRTL values";
