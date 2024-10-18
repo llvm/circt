@@ -123,16 +123,19 @@ def ServiceImplClientRecordOp : ESI_Op<"manifest.impl_conn", [
   let summary = "Details of a service implementation client connection";
   let description = [{
     A record containing all the necessary details of how to connect to a client
-    which the parent service record is servicing.
+    which the parent service record is servicing. Emitted on a per-client bundle
+    basis. There shall be at most on of these records in the entire manifest for
+    a particular client.
   }];
 
   let arguments = (ins AppIDArrayAttr:$relAppIDPath,
                        InnerRefAttr:$servicePort,
                        TypeAttrOf<ChannelBundleType>:$typeID,
-                       DictionaryAttr:$implDetails);
+                       OptionalAttr<DictionaryAttr>:$channelAssignments,
+                       OptionalAttr<DictionaryAttr>:$implDetails);
   let assemblyFormat = [{
     $relAppIDPath `req` $servicePort `(` $typeID `)`
-      `with` $implDetails attr-dict
+      (`channels` $channelAssignments^)? (`with` $implDetails^)? attr-dict
   }];
 
   let extraClassDeclaration = [{

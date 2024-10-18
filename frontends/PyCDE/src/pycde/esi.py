@@ -7,7 +7,7 @@ from .constructs import AssignableSignal, Mux, Wire
 from .module import generator, Module, ModuleLikeBuilderBase, PortProxyBase
 from .signals import (BitsSignal, BundleSignal, ChannelSignal, Signal,
                       _FromCirctValue)
-from .support import _obj_to_attribute, get_user_loc, obj_to_typed_attribute
+from .support import optional_dict_to_dict_attr, get_user_loc
 from .system import System
 from .types import (Any, Bits, Bundle, BundledChannel, Channel,
                     ChannelDirection, StructType, Type, UInt, types,
@@ -140,21 +140,24 @@ class _OutputBundleSetter(AssignableSignal):
     self.port = hw.InnerRefAttr(req.servicePort).name.value
     self._bundle_to_replace: Optional[ir.OpResult] = old_value_to_replace
 
-  def add_record(self, details: Dict[str, object]):
+  def add_record(self,
+                 channel_assignments: Optional[Dict] = None,
+                 details: Optional[Dict[str, object]] = None):
     """Add a record to the manifest for this client request. Generally used to
     give the runtime necessary information about how to connect to the client
     through the generated service. For instance, offsets into an MMIO space."""
 
-    ir_details: Dict[str, ir.Attribute] = {}
-    for k, v in details.items():
-      ir_details[k] = _obj_to_attribute(v)
+    channel_assignments = optional_dict_to_dict_attr(channel_assignments)
+    details = optional_dict_to_dict_attr(details)
+
     with get_user_loc(), ir.InsertionPoint.at_block_begin(
         self.rec.reqDetails.blocks[0]):
       raw_esi.ServiceImplClientRecordOp(
           self.req.relativeAppIDPath,
           self.req.servicePort,
           ir.TypeAttr.get(self.req.toClient.type),
-          ir_details,
+          channelAssignments=channel_assignments,
+          implDetails=details,
       )
 
   @property

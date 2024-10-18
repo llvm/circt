@@ -100,9 +100,8 @@ private:
 };
 } // namespace
 
-std::map<std::string, ChannelPort &>
-XrtAccelerator::requestChannelsFor(AppIDPath idPath,
-                                   const BundleType *bundleType) {
+std::map<std::string, ChannelPort &> XrtAccelerator::requestChannelsFor(
+    AppIDPath idPath, const BundleType *bundleType, const ServiceTable &) {
   return impl->requestChannelsFor(idPath, bundleType);
 }
 

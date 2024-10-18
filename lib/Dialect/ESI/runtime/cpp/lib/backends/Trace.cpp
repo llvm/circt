@@ -257,9 +257,8 @@ TraceAccelerator::Impl::requestChannelsFor(AppIDPath idPath,
   return channels;
 }
 
-std::map<std::string, ChannelPort &>
-TraceAccelerator::requestChannelsFor(AppIDPath idPath,
-                                     const BundleType *bundleType) {
+std::map<std::string, ChannelPort &> TraceAccelerator::requestChannelsFor(
+    AppIDPath idPath, const BundleType *bundleType, const ServiceTable &) {
   return impl->requestChannelsFor(idPath, bundleType);
 }
 
