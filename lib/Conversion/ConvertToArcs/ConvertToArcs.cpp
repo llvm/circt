@@ -25,8 +25,9 @@ using llvm::MapVector;
 
 static bool isArcBreakingOp(Operation *op) {
   return op->hasTrait<OpTrait::ConstantLike>() ||
-         isa<hw::InstanceOp, seq::CompRegOp, MemoryOp, ClockedOpInterface,
-             seq::InitialOp, seq::ClockGateOp, sim::DPICallOp>(op) ||
+         isa<hw::InstanceOp, seq::CompRegOp, MemoryOp, MemoryReadPortOp,
+             ClockedOpInterface, seq::InitialOp, seq::ClockGateOp,
+             sim::DPICallOp>(op) ||
          op->getNumResults() > 1;
 }
 

@@ -1,296 +1,611 @@
 // RUN: circt-opt %s --arc-lower-state | FileCheck %s
 
-// CHECK-LABEL: arc.model @Empty
-// CHECK-NEXT:  ^bb0(%arg0: !arc.storage):
-// CHECK-NEXT:  }
-hw.module @Empty() {
+func.func private @VoidFunc()
+func.func private @RandomI42() -> i42
+func.func private @ConsumeI42(i42)
+func.func private @IdI42(i42) -> i42
+
+arc.define @Not(%arg0: i1) -> i1 {
+  %true = hw.constant true
+  %0 = comb.xor %arg0, %true : i1
+  arc.output %0 : i1
 }
 
-// CHECK-LABEL: arc.model @InputsAndOutputs
-hw.module @InputsAndOutputs(in %a: i42, in %b: i17, out c: i42, out d: i17) {
-  %0 = comb.add %a, %a : i42
-  %1 = comb.add %b, %b : i17
-  hw.output %0, %1 : i42, i17
-  // CHECK-NEXT: (%arg0: !arc.storage):
-  // CHECK-NEXT: [[INA:%.+]] = arc.root_input "a", %arg0 : (!arc.storage) -> !arc.state<i42>
-  // CHECK-NEXT: [[INB:%.+]] = arc.root_input "b", %arg0 : (!arc.storage) -> !arc.state<i17>
-  // CHECK-NEXT: [[OUTA:%.+]] = arc.root_output "c", %arg0 : (!arc.storage) -> !arc.state<i42>
-  // CHECK-NEXT: [[OUTB:%.+]] = arc.root_output "d", %arg0 : (!arc.storage) -> !arc.state<i17>
-
-  // CHECK-NEXT: arc.passthrough {
-  // CHECK-NEXT:   [[A:%.+]] = arc.state_read [[INA]] : <i42>
-  // CHECK-NEXT:   [[TMP:%.+]] = comb.add [[A]], [[A]] : i42
-  // CHECK-NEXT:   arc.state_write [[OUTA]] = [[TMP]] : <i42>
-  // CHECK-NEXT:   [[B:%.+]] = arc.state_read [[INB]] : <i17>
-  // CHECK-NEXT:   [[TMP:%.+]] = comb.add [[B]], [[B]] : i17
-  // CHECK-NEXT:   arc.state_write [[OUTB]] = [[TMP]] : <i17>
-  // CHECK-NEXT: }
-}
-
-// CHECK-LABEL: arc.model @State
-hw.module @State(in %clk: !seq.clock, in %en: i1, in %en2: i1) {
-  %gclk = seq.clock_gate %clk, %en, %en2
-  %3 = arc.state @DummyArc(%6) clock %clk latency 1 : (i42) -> i42
-  %4 = arc.state @DummyArc(%5) clock %gclk latency 1 : (i42) -> i42
-  %5 = comb.add %3, %3 : i42
-  %6 = comb.add %4, %4 : i42
-  // CHECK-NEXT: (%arg0: !arc.storage):
-  // CHECK-NEXT: [[INCLK:%.+]] = arc.root_input "clk", %arg0 : (!arc.storage) -> !arc.state<i1>
-  // CHECK-NEXT: [[INEN:%.+]] = arc.root_input "en", %arg0 : (!arc.storage) -> !arc.state<i1>
-  // CHECK-NEXT: [[INEN2:%.+]] = arc.root_input "en2", %arg0 : (!arc.storage) -> !arc.state<i1>
-  // CHECK-NEXT: [[CLK_OLD:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i1>
-  // CHECK-NEXT: [[S0:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
-  // CHECK-NEXT: [[S1:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
-
-  // CHECK-NEXT: [[TMP2:%.+]] = arc.state_read [[INCLK]] : <i1>
-  // CHECK-NEXT: arc.state_write [[CLK_OLD]] = [[TMP2]] : <i1>
-  // CHECK-NEXT: [[TMP1:%.+]] = arc.state_read [[CLK_OLD]] : <i1>
-  // CHECK-NEXT: [[TMP3:%.+]] = comb.icmp ne [[TMP1]], [[TMP2]] : i1
-  // CHECK-NEXT: [[TMP4:%.+]] = comb.and [[TMP3]], [[TMP2]] : i1
-
-  // CHECK-NEXT: arc.clock_tree [[TMP4]] {
-  // CHECK-NEXT:   [[TMP0:%.+]] = arc.state_read [[S1]] : <i42>
-  // CHECK-NEXT:   [[TMP1:%.+]] = comb.add [[TMP0]], [[TMP0]]
-  // CHECK-NEXT:   [[TMP2:%.+]] = arc.call @DummyArc([[TMP1]]) : (i42) -> i42
-  // CHECK-NEXT:   arc.state_write [[S0]] = [[TMP2]] : <i42>
-  // CHECK-NEXT:   [[EN:%.+]] = arc.state_read [[INEN]] : <i1>
-  // CHECK-NEXT:   [[EN2:%.+]] = arc.state_read [[INEN2]] : <i1>
-  // CHECK-NEXT:   [[TMP3:%.+]] = comb.or [[EN]], [[EN2]] : i1
-  // CHECK-NEXT:   [[TMP0:%.+]] = arc.state_read [[S0]] : <i42>
-  // CHECK-NEXT:   [[TMP1:%.+]] = comb.add [[TMP0]], [[TMP0]]
-  // CHECK-NEXT:   [[TMP2:%.+]] = arc.call @DummyArc([[TMP1]]) : (i42) -> i42
-  // CHECK-NEXT:   arc.state_write [[S1]] = [[TMP2]] if [[TMP3]] : <i42>
-  // CHECK-NEXT: }
-}
-
-// CHECK-LABEL: arc.model @State2
-hw.module @State2(in %clk: !seq.clock) {
-  %3 = arc.state @DummyArc(%3) clock %clk latency 1 : (i42) -> i42
-  %4 = arc.state @DummyArc(%4) clock %clk latency 1 : (i42) -> i42
-  // CHECK-NEXT: (%arg0: !arc.storage):
-  // CHECK-NEXT: [[INCLK:%.+]] = arc.root_input "clk", %arg0 : (!arc.storage) -> !arc.state<i1>
-  // CHECK-NEXT: [[CLK_OLD:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i1>
-  // CHECK-NEXT: [[S0]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
-  // CHECK-NEXT: [[S1]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
-
-  // CHECK-NEXT: [[TMP2:%.+]] = arc.state_read [[INCLK]] : <i1>
-  // CHECK-NEXT: arc.state_write [[CLK_OLD]] = [[TMP2]] : <i1>
-  // CHECK-NEXT: [[TMP1:%.+]] = arc.state_read [[CLK_OLD]] : <i1>
-  // CHECK-NEXT: [[TMP3:%.+]] = comb.icmp ne [[TMP1]], [[TMP2]] : i1
-  // CHECK-NEXT: [[TMP4:%.+]] = comb.and [[TMP3]], [[TMP2]] : i1
-
-  // CHECK-NEXT: arc.clock_tree [[TMP4]] {
-  // CHECK-NEXT:   [[TMP0:%.+]] = arc.state_read [[S0:%.+]] : <i42>
-  // CHECK-NEXT:   [[TMP1:%.+]] = arc.call @DummyArc([[TMP0]]) : (i42) -> i42
-  // CHECK-NEXT:   arc.state_write [[S0]] = [[TMP1]] : <i42>
-  // CHECK-NEXT:   [[TMP2:%.+]] = arc.state_read [[S1:%.+]] : <i42>
-  // CHECK-NEXT:   [[TMP3:%.+]] = arc.call @DummyArc([[TMP2]]) : (i42) -> i42
-  // CHECK-NEXT:   arc.state_write [[S1]] = [[TMP3]] : <i42>
-  // CHECK-NEXT: }
-}
-
-arc.define @DummyArc(%arg0: i42) -> i42 {
+arc.define @IdI42Arc(%arg0: i42) -> i42 {
   arc.output %arg0 : i42
 }
 
-// CHECK-LABEL: arc.model @NonMaskedMemoryWrite
-hw.module @NonMaskedMemoryWrite(in %clk0: !seq.clock) {
-  %c0_i2 = hw.constant 0 : i2
-  %c9001_i42 = hw.constant 9001 : i42
-  %mem = arc.memory <4 x i42, i2>
-  arc.memory_write_port %mem, @identity(%c0_i2, %c9001_i42) clock %clk0 latency 1 : <4 x i42, i2>, i2, i42
-
-  // CHECK-NEXT: (%arg0: !arc.storage):
-  // CHECK-NEXT: [[INCLK:%.+]] = arc.root_input "clk0", %arg0 : (!arc.storage) -> !arc.state<i1>
-  // CHECK-NEXT: [[MEM:%.+]] = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i42, i2>
-  // CHECK-NEXT: [[CLK_OLD:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i1>
-
-  // CHECK-NEXT: [[TMP2:%.+]] = arc.state_read [[INCLK]] : <i1>
-  // CHECK-NEXT: arc.state_write [[CLK_OLD]] = [[TMP2]] : <i1>
-  // CHECK-NEXT: [[TMP1:%.+]] = arc.state_read [[CLK_OLD]] : <i1>
-  // CHECK-NEXT: [[TMP3:%.+]] = comb.icmp ne [[TMP1]], [[TMP2]] : i1
-  // CHECK-NEXT: [[TMP4:%.+]] = comb.and [[TMP3]], [[TMP2]] : i1
-
-  // CHECK-NEXT: arc.clock_tree [[TMP4]] {
-  // CHECK:        [[RES:%.+]]:2 = arc.call @identity(%c0_i2, %c9001_i42) : (i2, i42) -> (i2, i42)
-  // CHECK:        arc.memory_write [[MEM]][[[RES]]#0], [[RES]]#1 : <4 x i42, i2>
-  // CHECK-NEXT: }
-}
-arc.define @identity(%arg0: i2, %arg1: i42) -> (i2, i42) {
+arc.define @IdI2AndI42Arc(%arg0: i2, %arg1: i42) -> (i2, i42) {
   arc.output %arg0, %arg1 : i2, i42
 }
 
-// CHECK-LABEL: arc.model @lowerMemoryReadPorts
-hw.module @lowerMemoryReadPorts(out out0: i42, out out1: i42) {
-  %c0_i2 = hw.constant 0 : i2
-  %mem = arc.memory <4 x i42, i2>
-  // CHECK: arc.memory_read {{%.+}}[%c0_i2] : <4 x i42, i2>
-  %0 = arc.memory_read_port %mem[%c0_i2] : <4 x i42, i2>
-  // CHECK: func.call @arcWithMemoryReadsIsLowered
-  %1 = arc.call @arcWithMemoryReadsIsLowered(%mem) : (!arc.memory<4 x i42, i2>) -> i42
-  hw.output %0, %1 : i42, i42
+arc.define @IdI2AndI42AndI1Arc(%arg0: i2, %arg1: i42, %arg2: i1) -> (i2, i42, i1) {
+  arc.output %arg0, %arg1, %arg2 : i2, i42, i1
 }
 
-// CHECK-LABEL: func.func @arcWithMemoryReadsIsLowered(%arg0: !arc.memory<4 x i42, i2>) -> i42 attributes {llvm.linkage = #llvm.linkage<internal>}
-arc.define @arcWithMemoryReadsIsLowered(%mem: !arc.memory<4 x i42, i2>) -> i42 {
-  %c0_i2 = hw.constant 0 : i2
-  // CHECK: arc.memory_read {{%.+}}[%c0_i2] : <4 x i42, i2>
-  %0 = arc.memory_read_port %mem[%c0_i2] : <4 x i42, i2>
-  // CHECK-NEXT: return
+arc.define @IdI2AndI42AndI1AndI42Arc(%arg0: i2, %arg1: i42, %arg2: i1, %arg3: i42) -> (i2, i42, i1, i42) {
+  arc.output %arg0, %arg1, %arg2, %arg3 : i2, i42, i1, i42
+}
+
+arc.define @RandomI42Arc() -> i42 {
+  %0 = hw.constant 42 : i42
   arc.output %0 : i42
 }
 
-// CHECK-LABEL:  arc.model @maskedMemoryWrite
-hw.module @maskedMemoryWrite(in %clk: !seq.clock) {
-  %true = hw.constant true
-  %c0_i2 = hw.constant 0 : i2
-  %c9001_i42 = hw.constant 9001 : i42
-  %c1010_i42 = hw.constant 1010 : i42
+arc.define @RandomI42AndI19Arc() -> (i42, i19) {
+  %0 = hw.constant 42 : i42
+  %1 = hw.constant 1337 : i19
+  arc.output %0, %1 : i42, i19
+}
+
+// CHECK-LABEL: arc.model @Empty
+// CHECK-NEXT:  ^bb0(%arg0: !arc.storage):
+// CHECK-NEXT:  }
+hw.module @Empty() {}
+
+// CHECK-LABEL: arc.model @InputToOutput
+hw.module @InputToOutput(in %a: i42, out b: i42) {
+  // CHECK:      [[TMP1:%.+]] = arc.state_read %in_a
+  // CHECK-NEXT: [[TMP2:%.+]] = comb.xor [[TMP1]]
+  // CHECK-NEXT: [[TMP3:%.+]] = func.call @IdI42([[TMP2]])
+  %2 = comb.xor %1 : i42
+  %1 = func.call @IdI42(%0) : (i42) -> i42
+  %0 = comb.xor %a : i42
+  // CHECK-NEXT: func.call @ConsumeI42([[TMP2]])
+  func.call @ConsumeI42(%0) : (i42) -> ()
+  // CHECK-NEXT: [[TMP4:%.+]] = comb.xor [[TMP3]]
+  // CHECK-NEXT: arc.state_write %out_b = [[TMP4]]
+  hw.output %2 : i42
+}
+
+// CHECK-LABEL: arc.model @ReadsBeforeUpdate
+hw.module @ReadsBeforeUpdate(in %clock: !seq.clock, in %a: i42, out b: i42) {
+  // CHECK: [[Q1:%.+]] = arc.alloc_state %arg0 {name = "q1"}
+  // CHECK: [[Q0:%.+]] = arc.alloc_state %arg0 {name = "q0"}
+  // CHECK:      scf.if {{%.+}} {
+  // CHECK-NEXT:   [[TMP1:%.+]] = arc.state_read [[Q0]]
+  // CHECK-NEXT:   [[TMP2:%.+]] = arc.call @IdI42Arc([[TMP1]])
+  // CHECK-NEXT:   arc.state_write [[Q1]] = [[TMP2]]
+  // CHECK-NEXT:   [[TMP1:%.+]] = arc.state_read %in_a
+  // CHECK-NEXT:   [[TMP2:%.+]] = arc.call @IdI42Arc([[TMP1]])
+  // CHECK-NEXT:   arc.state_write [[Q0]] = [[TMP2]]
+  // CHECK-NEXT: }
+  %q1 = arc.state @IdI42Arc(%q0) clock %clock latency 1 {names = ["q1"]} : (i42) -> i42
+  %q0 = arc.state @IdI42Arc(%a) clock %clock latency 1 {names = ["q0"]} : (i42) -> i42
+  // CHECK-NEXT: [[TMP:%.+]] = arc.state_read [[Q1]]
+  // CHECK-NEXT: arc.state_write %out_b = [[TMP]]
+  hw.output %q1 : i42
+}
+
+// CHECK-LABEL: arc.model @ReadsAfterUpdate
+hw.module @ReadsAfterUpdate(in %clock: !seq.clock, in %a: i42, out b: i42) {
+  // CHECK: [[Q0:%.+]] = arc.alloc_state %arg0 {name = "q0"}
+  // CHECK: [[Q1:%.+]] = arc.alloc_state %arg0 {name = "q1"}
+  // CHECK: [[Q0_OLD:%.+]] = arc.state_read [[Q0]]
+  // CHECK:      scf.if {{%.+}} {
+  // CHECK-NEXT:   [[TMP1:%.+]] = arc.state_read %in_a
+  // CHECK-NEXT:   [[TMP2:%.+]] = arc.call @IdI42Arc([[TMP1]])
+  // CHECK-NEXT:   arc.state_write [[Q0]] = [[TMP2]]
+  // CHECK-NEXT:   [[TMP:%.+]] = arc.call @IdI42Arc([[Q0_OLD]])
+  // CHECK-NEXT:   arc.state_write [[Q1]] = [[TMP]]
+  // CHECK-NEXT: }
+  %q0 = arc.state @IdI42Arc(%a) clock %clock latency 1 {names = ["q0"]} : (i42) -> i42
+  %q1 = arc.state @IdI42Arc(%q0) clock %clock latency 1 {names = ["q1"]} : (i42) -> i42
+  // CHECK-NEXT: [[TMP:%.+]] = arc.state_read [[Q1]]
+  // CHECK-NEXT: arc.state_write %out_b = [[TMP]]
+  hw.output %q1 : i42
+}
+
+// CHECK-LABEL: arc.model @ClockDivBy4
+hw.module @ClockDivBy4(in %clock: !seq.clock, out z: i1) {
+  // CHECK: [[Q0:%.+]] = arc.alloc_state %arg0 {name = "q0"}
+  // CHECK: [[Q1:%.+]] = arc.alloc_state %arg0 {name = "q1"}
+  // CHECK: [[TMP1:%.+]] = arc.state_read %in_clock
+  // CHECK: [[TMP2:%.+]] = seq.from_clock [[TMP1]]
+  // CHECK: [[CLOCK_EDGE:%.+]] = comb.and {{%.+}}, [[TMP2]]
+  // CHECK: scf.if [[CLOCK_EDGE]] {
+  // CHECK:   arc.state_write [[Q0]]
+  // CHECK: }
+  %q0 = arc.state @Not(%q0) clock %clock latency 1 {names = ["q0"]} : (i1) -> i1
+  // CHECK: [[TMP1:%.+]] = arc.state_read [[Q0]]
+  // CHECK: [[Q0_EDGE:%.+]] = comb.and {{%.+}}, [[TMP1]]
+  // CHECK: scf.if [[Q0_EDGE]] {
+  // CHECK:   arc.state_write [[Q1]]
+  // CHECK: }
+  %0 = seq.to_clock %q0
+  %q1 = arc.state @Not(%q1) clock %0 latency 1 {names = ["q1"]} : (i1) -> i1
+  // CHECK: [[Q1_NEW:%.+]] = arc.state_read [[Q1]]
+  // CHECK: arc.state_write %out_z = [[Q1_NEW]]
+  hw.output %q1 : i1
+}
+
+// CHECK-LABEL: arc.model @EnablePort
+hw.module @EnablePort(in %clock: !seq.clock, in %a: i42, in %en: i1) {
+  // CHECK: scf.if {{%.+}} {
+  // CHECK:   [[EN:%.+]] = arc.state_read %in_en
+  // CHECK:   scf.if [[EN]] {
+  // CHECK:     arc.state_write
+  // CHECK:     arc.state_write
+  // CHECK:   }
+  // CHECK: }
+  %q0 = arc.state @IdI42Arc(%a) clock %clock enable %en latency 1 : (i42) -> i42
+  %q1 = arc.state @IdI42Arc(%q0) clock %clock enable %en latency 1 : (i42) -> i42
+}
+
+// CHECK-LABEL: arc.model @EnableLocal
+hw.module @EnableLocal(in %clock: !seq.clock, in %a: i42) {
+  // CHECK: [[TMP1:%.+]] = hw.constant 9001
+  // CHECK: [[TMP2:%.+]] = arc.state_read %in_a
+  // CHECK: [[TMP3:%.+]] = comb.icmp ne [[TMP2]], [[TMP1]]
+  // CHECK: scf.if {{%.+}} {
+  // CHECK:   scf.if [[TMP3]] {
+  // CHECK:     arc.state_write
+  // CHECK:     arc.state_write
+  // CHECK:   }
+  // CHECK: }
+  %0 = hw.constant 9001 : i42
+  %1 = comb.icmp ne %a, %0 : i42
+  %q0 = arc.state @IdI42Arc(%a) clock %clock enable %1 latency 1 : (i42) -> i42
+  %q1 = arc.state @IdI42Arc(%q0) clock %clock enable %1 latency 1 : (i42) -> i42
+}
+
+// CHECK-LABEL: arc.model @Reset
+hw.module @Reset(in %clock: !seq.clock, in %a: i42, in %reset: i1) {
+  // CHECK: scf.if {{%.+}} {
+  // CHECK:   [[RESET:%.+]] = arc.state_read %in_reset
+  // CHECK:   scf.if [[RESET]] {
+  // CHECK:     arc.state_write
+  // CHECK:     arc.state_write
+  // CHECK:   }
+  // CHECK: }
+  %q0 = arc.state @IdI42Arc(%a) clock %clock reset %reset latency 1 : (i42) -> i42
+  %q1 = arc.state @IdI42Arc(%q0) clock %clock reset %reset latency 1 : (i42) -> i42
+}
+
+// CHECK-LABEL: arc.model @ResetLocal
+hw.module @ResetLocal(in %clock: !seq.clock, in %a: i42) {
+  // CHECK: [[TMP1:%.+]] = hw.constant 9001
+  // CHECK: [[TMP2:%.+]] = arc.state_read %in_a
+  // CHECK: [[TMP3:%.+]] = comb.icmp ne [[TMP2]], [[TMP1]]
+  // CHECK: scf.if {{%.+}} {
+  // CHECK:   scf.if [[TMP3]] {
+  // CHECK:     arc.state_write
+  // CHECK:     arc.state_write
+  // CHECK:   }
+  // CHECK: }
+  %0 = hw.constant 9001 : i42
+  %1 = comb.icmp ne %a, %0 : i42
+  %q0 = arc.state @IdI42Arc(%a) clock %clock reset %1 latency 1 : (i42) -> i42
+  %q1 = arc.state @IdI42Arc(%q0) clock %clock reset %1 latency 1 : (i42) -> i42
+}
+
+// CHECK-LABEL: arc.model @ResetAndEnable
+hw.module @ResetAndEnable(in %clock: !seq.clock, in %a: i42, in %reset: i1, in %en: i1) {
+  // CHECK: [[Q0:%.+]] = arc.alloc_state %arg0 {name = "q0"}
+  // CHECK: [[Q1:%.+]] = arc.alloc_state %arg0 {name = "q1"}
+  // CHECK: [[Q2:%.+]] = arc.alloc_state %arg0 {name = "q2"}
+  // CHECK: [[Q3:%.+]] = arc.alloc_state %arg0 {name = "q3"}
+  // CHECK: scf.if {{%.+}} {
+  // CHECK:   [[EN:%.+]] = arc.state_read %in_en
+  // CHECK:   scf.if [[EN]] {
+  // CHECK:     arc.state_write [[Q0]]
+  // CHECK:   }
+  // CHECK:   [[RESET:%.+]] = arc.state_read %in_reset
+  // CHECK:   scf.if [[RESET]] {
+  // CHECK:     [[TMP:%.+]] = hw.constant 0
+  // CHECK:     arc.state_write [[Q1]] = [[TMP]]
+  // CHECK:     [[TMP:%.+]] = hw.constant 0
+  // CHECK:     arc.state_write [[Q2]] = [[TMP]]
+  // CHECK:     [[TMP:%.+]] = hw.constant 0
+  // CHECK:     arc.state_write [[Q3]] = [[TMP]]
+  // CHECK:   } else {
+  // CHECK:     [[EN:%.+]] = arc.state_read %in_en
+  // CHECK:     scf.if [[EN]] {
+  // CHECK:       arc.state_write [[Q1]]
+  // CHECK:       arc.state_write [[Q2]]
+  // CHECK:     }
+  // CHECK:     arc.state_write [[Q3]]
+  // CHECK:   }
+  // CHECK: }
+  %q0 = arc.state @IdI42Arc(%a) clock %clock enable %en latency 1 {names = ["q0"]} : (i42) -> i42
+  %q1 = arc.state @IdI42Arc(%q0) clock %clock enable %en reset %reset latency 1 {names = ["q1"]} : (i42) -> i42
+  %q2 = arc.state @IdI42Arc(%q1) clock %clock enable %en reset %reset latency 1 {names = ["q2"]} : (i42) -> i42
+  %q3 = arc.state @IdI42Arc(%q2) clock %clock reset %reset latency 1 {names = ["q3"]} : (i42) -> i42
+}
+
+// CHECK-LABEL: arc.model @BlackBox
+hw.module @BlackBox(in %clock: !seq.clock, in %a: i42, out b: i42) {
+  // CHECK: [[Q0:%.+]] = arc.alloc_state %arg0 {name = "q0"}
+  // CHECK: [[S:%.+]] = arc.alloc_state %arg0 {name = "ext/s"}
+  // CHECK: [[P:%.+]] = arc.alloc_state %arg0 {name = "ext/p"}
+  // CHECK: [[Q:%.+]] = arc.alloc_state %arg0 {name = "ext/q"}
+  // CHECK: [[R:%.+]] = arc.alloc_state %arg0 {name = "ext/r"}
+  // CHECK: [[Q1:%.+]] = arc.alloc_state %arg0 {name = "q1"}
+  // CHECK: scf.if {{%.+}} {
+  // CHECK:   arc.state_write [[Q0]]
+  // CHECK: }
+  %0 = arc.state @IdI42Arc(%a) clock %clock latency 1 {names = ["q0"]} : (i42) -> i42
+  // CHECK: [[Q0_NEW:%.+]] = arc.state_read [[Q0]]
+  // CHECK: [[S_NEW:%.+]] = arc.state_read [[S]]
+  // CHECK: [[TMP:%.+]] = comb.and [[Q0_NEW]], [[S_NEW]]
+  // CHECK: [[Q0_NEW:%.+]] = arc.state_read [[Q0]]
+  // CHECK: arc.state_write [[P]] = [[Q0_NEW]]
+  // CHECK: arc.state_write [[Q]] = [[TMP]]
+  %1 = comb.and %0, %3 : i42
+  %2, %3 = hw.instance "ext" @BlackBoxExt(p: %0: i42, q: %1: i42) -> (r: i42, s: i42)
+  // CHECK: scf.if {{%.+}} {
+  // CHECK:   [[S_NEW:%.+]] = arc.state_read [[S]]
+  // CHECK:   [[TMP:%.+]] = arc.call @IdI42Arc([[S_NEW]])
+  // CHECK:   arc.state_write [[Q1]] = [[TMP]]
+  // CHECK: }
+  %4 = arc.state @IdI42Arc(%3) clock %clock latency 1 {names = ["q1"]} : (i42) -> i42
+  // CHECK: [[R_NEW:%.+]] = arc.state_read [[R]]
+  // CHECK: [[Q1_NEW:%.+]] = arc.state_read [[Q1]]
+  // CHECK: [[TMP:%.+]] = comb.or [[R_NEW]], [[Q1_NEW]]
+  // CHECK: arc.state_write %out_b = [[TMP]]
+  %5 = comb.or %2, %4 : i42
+  hw.output %5 : i42
+}
+
+hw.module.extern private @BlackBoxExt(in %p: i42, in %q: i42, out r: i42, out s: i42)
+
+// CHECK-LABEL: arc.model @MemoryInputToOutput
+hw.module @MemoryInputToOutput(in %clock: !seq.clock, in %a: i2, in %b: i42, out c: i42) {
+  // CHECK: [[MEM:%.+]] = arc.alloc_memory
+  // CHECK: scf.if {{%.+}} {
+  // CHECK:   [[A:%.+]] = arc.state_read %in_a
+  // CHECK:   [[B:%.+]] = arc.state_read %in_b
+  // CHECK:   [[TMP:%.+]]:2 = arc.call @IdI2AndI42Arc([[A]], [[B]])
+  // CHECK:   arc.memory_write [[MEM]][[[TMP]]#0], [[TMP]]#1
+  // CHECK: }
   %mem = arc.memory <4 x i42, i2>
-  arc.memory_write_port %mem, @identity2(%c0_i2, %c9001_i42, %true, %c1010_i42) clock %clk enable mask latency 1 : <4 x i42, i2>, i2, i42, i1, i42
-}
-arc.define @identity2(%arg0: i2, %arg1: i42, %arg2: i1, %arg3: i42) -> (i2, i42, i1, i42) {
-  arc.output %arg0, %arg1, %arg2, %arg3 : i2, i42, i1, i42
-}
-// CHECK:      %c9001_i42 = hw.constant 9001 : i42
-// CHECK:      %c1010_i42 = hw.constant 1010 : i42
-// CHECK:      [[RES:%.+]]:4 = arc.call @identity2(%c0_i2, %c9001_i42, %true, %c1010_i42) : (i2, i42, i1, i42) -> (i2, i42, i1, i42)
-// CHECK:      [[RD:%.+]] = arc.memory_read [[MEM:%.+]][[[RES]]#0] : <4 x i42, i2>
-// CHECK:      %c-1_i42 = hw.constant -1 : i42
-// CHECK:      [[NEG_MASK:%.+]] = comb.xor bin [[RES]]#3, %c-1_i42 : i42
-// CHECK:      [[OLD_MASKED:%.+]] = comb.and bin [[NEG_MASK]], [[RD]] : i42
-// CHECK:      [[NEW_MASKED:%.+]] = comb.and bin [[RES]]#3, [[RES]]#1 : i42
-// CHECK:      [[DATA:%.+]] = comb.or bin [[OLD_MASKED]], [[NEW_MASKED]] : i42
-// CHECK:      arc.memory_write [[MEM]][[[RES]]#0], [[DATA]] if [[RES]]#2 : <4 x i42, i2>
-
-// CHECK-LABEL: arc.model @Taps
-hw.module @Taps() {
-  // CHECK-NOT: arc.tap
-  // CHECK-DAG: [[VALUE:%.+]] = hw.constant 0 : i42
-  // CHECK-DAG: [[STATE:%.+]] = arc.alloc_state %arg0 tap {name = "myTap"}
-  // CHECK-DAG: arc.state_write [[STATE]] = [[VALUE]]
-  %c0_i42 = hw.constant 0 : i42
-  arc.tap %c0_i42 {name = "myTap"} : i42
-}
-
-// CHECK-LABEL: arc.model @MaterializeOpsWithRegions
-hw.module @MaterializeOpsWithRegions(in %clk0: !seq.clock, in %clk1: !seq.clock, out z: i42) {
-  %true = hw.constant true
-  %c19_i42 = hw.constant 19 : i42
-  %0 = scf.if %true -> (i42) {
-    scf.yield %c19_i42 : i42
-  } else {
-    %c42_i42 = hw.constant 42 : i42
-    scf.yield %c42_i42 : i42
-  }
-
-  // CHECK:      arc.passthrough {
-  // CHECK-NEXT:   %true = hw.constant true
-  // CHECK-NEXT:   %c19_i42 = hw.constant 19
-  // CHECK-NEXT:   [[TMP:%.+]] = scf.if %true -> (i42) {
-  // CHECK-NEXT:     scf.yield %c19_i42
-  // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     %c42_i42 = hw.constant 42
-  // CHECK-NEXT:     scf.yield %c42_i42
-  // CHECK-NEXT:   }
-  // CHECK-NEXT:   arc.state_write
-  // CHECK-NEXT: }
-
-  // CHECK:      [[CLK0:%.+]] = arc.state_read %in_clk0
-  // CHECK:      [[TMP:%.+]] = comb.and {{%.+}}, [[CLK0]]
-  // CHECK-NEXT: arc.clock_tree [[TMP]] {
-  // CHECK-NEXT:   %true = hw.constant true
-  // CHECK-NEXT:   %c19_i42 = hw.constant 19
-  // CHECK-NEXT:   [[TMP:%.+]] = scf.if %true -> (i42) {
-  // CHECK-NEXT:     scf.yield %c19_i42
-  // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     %c42_i42 = hw.constant 42
-  // CHECK-NEXT:     scf.yield %c42_i42
-  // CHECK-NEXT:   }
-  // CHECK-NEXT:   arc.call @DummyArc([[TMP]])
-  // CHECK-NEXT:   arc.state_write
-  // CHECK-NEXT: }
-
-  // CHECK:      [[CLK1:%.+]] = arc.state_read %in_clk1
-  // CHECK:      [[TMP:%.+]] = comb.and {{%.+}}, [[CLK1]]
-  // CHECK-NEXT: arc.clock_tree [[TMP]] {
-  // CHECK-NEXT:   %true = hw.constant true
-  // CHECK-NEXT:   %c19_i42 = hw.constant 19
-  // CHECK-NEXT:   [[TMP:%.+]] = scf.if %true -> (i42) {
-  // CHECK-NEXT:     scf.yield %c19_i42
-  // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     %c42_i42 = hw.constant 42
-  // CHECK-NEXT:     scf.yield %c42_i42
-  // CHECK-NEXT:   }
-  // CHECK-NEXT:   arc.call @DummyArc([[TMP]])
-  // CHECK-NEXT:   arc.state_write
-  // CHECK-NEXT: }
-
-  %1 = arc.state @DummyArc(%0) clock %clk0 latency 1 : (i42) -> i42
-  %2 = arc.state @DummyArc(%0) clock %clk1 latency 1 : (i42) -> i42
+  %0 = arc.memory_read_port %mem[%a] : <4 x i42, i2>
+  arc.memory_write_port %mem, @IdI2AndI42Arc(%a, %b) clock %clock latency 1 : <4 x i42, i2>, i2, i42
+  // CHECK: [[A:%.+]] = arc.state_read %in_a
+  // CHECK: [[TMP:%.+]] = arc.memory_read [[MEM]][[[A]]]
+  // CHECK: arc.state_write %out_c = [[TMP]]
   hw.output %0 : i42
 }
 
-arc.define @i1Identity(%arg0: i1) -> i1 {
-  arc.output %arg0 : i1
+// CHECK-LABEL: arc.model @MemoryReadBeforeUpdate
+hw.module @MemoryReadBeforeUpdate(in %clock: !seq.clock, in %a: i2, in %b: i42, in %en: i1, out c: i42) {
+  // CHECK: [[Q0:%.+]] = arc.alloc_state %arg0 {name = "q0"}
+  // CHECK: [[MEM:%.+]] = arc.alloc_memory
+  // Port ops are ignored. Writes are lowered with `arc.memory`, reads when they
+  // are used by an op.
+  %0 = arc.memory_read_port %mem[%a] : <4 x i42, i2>
+  arc.memory_write_port %mem, @IdI2AndI42Arc(%a, %b) clock %clock latency 1 : <4 x i42, i2>, i2, i42
+  // CHECK: scf.if {{%.+}} {
+  // CHECK:   [[A:%.+]] = arc.state_read %in_a
+  // CHECK:   [[TMP1:%.+]] = arc.memory_read [[MEM]][[[A]]]
+  // CHECK:   [[TMP2:%.+]] = arc.call @IdI42Arc([[TMP1]])
+  // CHECK:   arc.state_write [[Q0]] = [[TMP2]]
+  %q0 = arc.state @IdI42Arc(%0) clock %clock latency 1 {names = ["q0"]} : (i42) -> i42
+  // CHECK:   [[A:%.+]] = arc.state_read %in_a
+  // CHECK:   [[B:%.+]] = arc.state_read %in_b
+  // CHECK:   [[TMP:%.+]]:2 = arc.call @IdI2AndI42Arc([[A]], [[B]])
+  // CHECK:   arc.memory_write [[MEM]][[[TMP]]#0], [[TMP]]#1
+  %mem = arc.memory <4 x i42, i2>
+  // CHECK: }
+  // CHECK: [[Q0_NEW:%.+]] = arc.state_read [[Q0]]
+  // CHECK: arc.state_write %out_c = [[Q0_NEW]]
+  hw.output %q0 : i42
 }
 
-arc.define @DummyArc2(%arg0: i42) -> (i42, i42) {
-  arc.output %arg0, %arg0 : i42, i42
+// CHECK-LABEL: arc.model @MemoryReadAfterUpdate
+hw.module @MemoryReadAfterUpdate(in %clock: !seq.clock, in %a: i2, in %b: i42, in %en: i1, out c: i42) {
+  // CHECK: [[MEM:%.+]] = arc.alloc_memory
+  // CHECK: [[Q0:%.+]] = arc.alloc_state %arg0 {name = "q0"}
+  // Port ops are ignored. Writes are lowered with `arc.memory`, reads when they
+  // are used by an op.
+  %0 = arc.memory_read_port %mem[%a] : <4 x i42, i2>
+  arc.memory_write_port %mem, @IdI2AndI42Arc(%a, %b) clock %clock latency 1 : <4 x i42, i2>, i2, i42
+  // CHECK: [[A:%.+]] = arc.state_read %in_a
+  // CHECK: [[READ_OLD:%.+]] = arc.memory_read [[MEM]][[[A]]]
+  // CHECK: scf.if {{%.+}} {
+  // CHECK:   [[A:%.+]] = arc.state_read %in_a
+  // CHECK:   [[B:%.+]] = arc.state_read %in_b
+  // CHECK:   [[TMP:%.+]]:2 = arc.call @IdI2AndI42Arc([[A]], [[B]])
+  // CHECK:   arc.memory_write [[MEM]][[[TMP]]#0], [[TMP]]#1
+  %mem = arc.memory <4 x i42, i2>
+  // CHECK:   [[TMP:%.+]] = arc.call @IdI42Arc([[READ_OLD]])
+  // CHECK:   arc.state_write [[Q0]] = [[TMP]]
+  %q0 = arc.state @IdI42Arc(%0) clock %clock latency 1 {names = ["q0"]} : (i42) -> i42
+  // CHECK: }
+  // CHECK: [[Q0_NEW:%.+]] = arc.state_read [[Q0]]
+  // CHECK: arc.state_write %out_c = [[Q0_NEW]]
+  hw.output %q0 : i42
 }
 
-hw.module @stateReset(in %clk: !seq.clock, in %arg0: i42, in %rst: i1, out out0: i42, out out1: i42) {
-  %0 = arc.call @i1Identity(%rst) : (i1) -> (i1)
-  %1 = arc.call @i1Identity(%rst) : (i1) -> (i1)
-  %2, %3 = arc.state @DummyArc2(%arg0) clock %clk enable %0 reset %1 latency 1 : (i42) -> (i42, i42)
-  hw.output %2, %3 : i42, i42
-}
-// CHECK-LABEL: arc.model @stateReset
-// CHECK: [[ALLOC1:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
-// CHECK: [[ALLOC2:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
-// CHECK: arc.clock_tree %{{.*}} {
-// CHECK:   [[IN_RST:%.+]] = arc.state_read %in_rst : <i1>
-// CHECK:   [[EN:%.+]] = arc.call @i1Identity([[IN_RST]]) : (i1) -> i1
-// CHECK:   [[RST:%.+]] = arc.call @i1Identity([[IN_RST]]) : (i1) -> i1
-// CHECK:   scf.if [[RST]] {
-// CHECK:     arc.state_write [[ALLOC1]] = %c0_i42{{.*}} : <i42>
-// CHECK:     arc.state_write [[ALLOC2]] = %c0_i42{{.*}} : <i42>
-// CHECK:   } else {
-// CHECK:     [[ARG:%.+]] = arc.state_read %in_arg0 : <i42>
-// CHECK:     [[STATE:%.+]]:2 = arc.call @DummyArc2([[ARG]]) : (i42) -> (i42, i42)
-// CHECK:     arc.state_write [[ALLOC1]] = [[STATE]]#0 if [[EN]] : <i42>
-// CHECK:     arc.state_write [[ALLOC2]] = [[STATE]]#1 if [[EN]] : <i42>
-// CHECK:   }
-// CHECK: }
-
-hw.module @SeparateResets(in %clock: !seq.clock, in %i0: i42, in %rst1: i1, in %rst2: i1, out out1: i42, out out2: i42) {
-  %0 = arc.state @DummyArc(%i0) clock %clock reset %rst1 latency 1 {names = ["foo"]} : (i42) -> i42
-  %1 = arc.state @DummyArc(%i0) clock %clock reset %rst2 latency 1 {names = ["bar"]} : (i42) -> i42
-  hw.output %0, %1 : i42, i42
+// CHECK-LABEL: arc.model @MemoryEnable
+hw.module @MemoryEnable(in %clock: !seq.clock, in %a: i2, in %b: i42, in %en: i1) {
+  // CHECK: [[MEM:%.+]] = arc.alloc_memory
+  // CHECK: scf.if {{%.+}} {
+  // CHECK:   [[A:%.+]] = arc.state_read %in_a
+  // CHECK:   [[B:%.+]] = arc.state_read %in_b
+  // CHECK:   [[EN:%.+]] = arc.state_read %in_en
+  // CHECK:   [[TMP:%.+]]:3 = arc.call @IdI2AndI42AndI1Arc([[A]], [[B]], [[EN]])
+  // CHECK:   scf.if [[TMP]]#2 {
+  // CHECK:     arc.memory_write [[MEM]][[[TMP]]#0], [[TMP]]#1
+  // CHECK:   }
+  // CHECK: }
+  %mem = arc.memory <4 x i42, i2>
+  arc.memory_write_port %mem, @IdI2AndI42AndI1Arc(%a, %b, %en) clock %clock enable latency 1 : <4 x i42, i2>, i2, i42, i1
 }
 
-// CHECK-LABEL: arc.model @SeparateResets
-// CHECK: [[FOO_ALLOC:%.+]] = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i42>
-// CHECK: [[BAR_ALLOC:%.+]] = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i42>
-// CHECK: arc.clock_tree %{{.*}} {
-// CHECK:   [[IN_RST1:%.+]] = arc.state_read %in_rst1 : <i1>
-// CHECK:   scf.if [[IN_RST1]] {
-// CHECK:     %c0_i42{{.*}} = hw.constant 0 : i42
-// CHECK:     arc.state_write [[FOO_ALLOC]] = %c0_i42{{.*}} : <i42>
-// CHECK:   } else {
-// CHECK:     [[IN_I0:%.+]] = arc.state_read %in_i0 : <i42>
-// CHECK:     [[STATE:%.+]] = arc.call @DummyArc([[IN_I0]]) : (i42) -> i42
-// CHECK:     arc.state_write [[FOO_ALLOC]] = [[STATE]] : <i42>
-// CHECK:   }
-// CHECK:   [[IN_RST2:%.+]] = arc.state_read %in_rst2 : <i1>
-// CHECK:   scf.if [[IN_RST2]] {
-// CHECK:     %c0_i42{{.*}} = hw.constant 0 : i42
-// CHECK:     arc.state_write [[BAR_ALLOC]] = %c0_i42{{.*}} : <i42>
-// CHECK:   } else {
-// CHECK:     [[IN_I0_2:%.+]] = arc.state_read %in_i0 : <i42>
-// CHECK:     [[STATE_2:%.+]] = arc.call @DummyArc([[IN_I0_2]]) : (i42) -> i42
-// CHECK:     arc.state_write [[BAR_ALLOC]] = [[STATE_2]] : <i42>
-// CHECK:   }
+// CHECK-LABEL: arc.model @MemoryEnableAndMask
+hw.module @MemoryEnableAndMask(in %clock: !seq.clock, in %a: i2, in %b: i42, in %en: i1, in %mask: i42) {
+  // CHECK: [[MEM:%.+]] = arc.alloc_memory
+  // CHECK: scf.if {{%.+}} {
+  // CHECK:   [[A:%.+]] = arc.state_read %in_a
+  // CHECK:   [[B:%.+]] = arc.state_read %in_b
+  // CHECK:   [[EN:%.+]] = arc.state_read %in_en
+  // CHECK:   [[MASK:%.+]] = arc.state_read %in_mask
+  // CHECK:   [[TMP:%.+]]:4 = arc.call @IdI2AndI42AndI1AndI42Arc([[A]], [[B]], [[EN]], [[MASK]])
+  // CHECK:   scf.if [[TMP]]#2 {
+  // CHECK:     [[ALL_ONES:%.+]] = hw.constant -1
+  // CHECK:     [[MASK_INV:%.+]] = comb.xor bin [[TMP]]#3, [[ALL_ONES]]
+  // CHECK:     [[DATA_OLD:%.+]] = arc.memory_read [[MEM]][[[TMP]]#0]
+  // CHECK:     [[MASKED_OLD:%.+]] = comb.and bin [[MASK_INV]], [[DATA_OLD]]
+  // CHECK:     [[MASKED_NEW:%.+]] = comb.and bin [[TMP]]#3, [[TMP]]#1
+  // CHECK:     [[DATA_NEW:%.+]] = comb.or bin [[MASKED_OLD]], [[MASKED_NEW]]
+  // CHECK:     arc.memory_write [[MEM]][[[TMP]]#0], [[DATA_NEW]]
+  // CHECK:   }
+  // CHECK: }
+  %mem = arc.memory <4 x i42, i2>
+  arc.memory_write_port %mem, @IdI2AndI42AndI1AndI42Arc(%a, %b, %en, %mask) clock %clock enable mask latency 1 : <4 x i42, i2>, i2, i42, i1, i42
+}
+
+// CHECK-LABEL: arc.model @SimpleInitial
+hw.module @SimpleInitial() {
+  // CHECK: arc.initial {
+  // CHECK:   func.call @VoidFunc() {initA}
+  // CHECK:   func.call @VoidFunc() {initB}
+  // CHECK: }
+  // CHECK: func.call @VoidFunc() {body}
+  seq.initial() {
+    func.call @VoidFunc() {initA} : () -> ()
+  } : () -> ()
+  func.call @VoidFunc() {body} : () -> ()
+  seq.initial() {
+    func.call @VoidFunc() {initB} : () -> ()
+  } : () -> ()
+}
+
+// CHECK-LABEL: arc.model @InitialWithDependencies
+hw.module @InitialWithDependencies() {
+  // CHECK:      arc.initial {
+  // CHECK-NEXT:   func.call @VoidFunc() {before}
+  // CHECK-NEXT:   [[A:%.+]] = func.call @RandomI42() {initA}
+  // CHECK-NEXT:   [[B:%.+]] = func.call @RandomI42() {initB}
+  // CHECK-NEXT:   [[TMP:%.+]] = comb.add [[A]], [[B]]
+  // CHECK-NEXT:   func.call @ConsumeI42([[TMP]])
+  // CHECK-NEXT:   func.call @VoidFunc() {after}
+  // CHECK-NEXT: }
+
+  seq.initial() {
+    func.call @VoidFunc() {before} : () -> ()
+  } : () -> ()
+
+  // This pulls up %initA, %initB, %initC since it depends on their SSA values.
+  seq.initial(%initC) {
+  ^bb0(%arg0: i42):
+    func.call @ConsumeI42(%arg0) : (i42) -> ()
+  } : (!seq.immutable<i42>) -> ()
+
+  seq.initial() {
+    func.call @VoidFunc() {after} : () -> ()
+  } : () -> ()
+
+  // The following is pulled up.
+  %initA = seq.initial() {
+    %1 = func.call @RandomI42() {initA} : () -> i42
+    seq.yield %1 : i42
+  } : () -> (!seq.immutable<i42>)
+
+  %initB = seq.initial() {
+    %2 = func.call @RandomI42() {initB} : () -> i42
+    seq.yield %2 : i42
+  } : () -> (!seq.immutable<i42>)
+
+  %initC = seq.initial(%initA, %initB) {
+  ^bb0(%arg0: i42, %arg1: i42):
+    %3 = comb.add %arg0, %arg1 : i42
+    seq.yield %3 : i42
+  } : (!seq.immutable<i42>, !seq.immutable<i42>) -> (!seq.immutable<i42>)
+}
+
+// CHECK-LABEL: arc.model @FromImmutableCast
+hw.module @FromImmutableCast() {
+  // CHECK: [[STORAGE:%.+]] = arc.alloc_state
+  // CHECK: arc.initial {
+  // CHECK:   [[TMP:%.+]] = func.call @RandomI42()
+  // CHECK:   arc.state_write [[STORAGE]] = [[TMP]]
+  // CHECK: }
+  // CHECK: [[TMP:%.+]] = arc.state_read [[STORAGE]]
+  // CHECK: func.call @ConsumeI42([[TMP]])
+  func.call @ConsumeI42(%1) : (i42) -> ()
+  %1 = seq.from_immutable %0 : (!seq.immutable<i42>) -> i42
+  %0 = seq.initial() {
+    %2 = func.call @RandomI42() : () -> (i42)
+    seq.yield %2 : i42
+  } : () -> (!seq.immutable<i42>)
+}
+
+// CHECK-LABEL: arc.model @Taps
+hw.module @Taps() {
+  // CHECK: [[STORAGE:%.+]] = arc.alloc_state
+  // CHECK: [[TMP:%.+]] = func.call @RandomI42()
+  // CHECK: arc.state_write [[STORAGE]] = [[TMP]]
+  %0 = func.call @RandomI42() : () -> i42
+  arc.tap %0 {name = "myTap"} : i42
+}
+
+// CHECK-LABEL: arc.model @StateInitializerUsesOtherState
+hw.module @StateInitializerUsesOtherState(in %clock: !seq.clock, in %a: i42, in %b: i19) {
+  // CHECK: [[Q2:%.+]] = arc.alloc_state %arg0 {name = "q2"}
+  // CHECK: [[Q3:%.+]] = arc.alloc_state %arg0 {name = "q3"}
+  // CHECK: [[Q0:%.+]] = arc.alloc_state %arg0 {name = "q0"}
+  // CHECK: [[Q1:%.+]] = arc.alloc_state %arg0 {name = "q1"}
+  // CHECK:      arc.initial {
+  // CHECK-NEXT:   [[A:%.+]] = arc.state_read %in_a
+  // CHECK-NEXT:   arc.state_write [[Q0]] = [[A]]
+  // CHECK-NEXT:   [[TMP1:%.+]] = arc.state_read [[Q0]]
+  // CHECK-NEXT:   [[TMP2:%.+]] = comb.xor [[TMP1]]
+  // CHECK-NEXT:   arc.state_write [[Q1]] = [[TMP2]]
+  // CHECK-NEXT:   [[TMP:%.+]] = arc.state_read [[Q1]]
+  // CHECK-NEXT:   arc.state_write [[Q2]] = [[TMP]]
+  // CHECK-NEXT:   [[TMP:%.+]] = arc.state_read %in_b
+  // CHECK-NEXT:   arc.state_write [[Q3]] = [[TMP]]
+  // CHECK-NEXT: }
+  arc.state @RandomI42AndI19Arc() clock %clock initial (%2, %b : i42, i19) latency 1 {names = ["q2", "q3"]} : () -> (i42, i19)
+  %2 = arc.state @RandomI42Arc() clock %clock initial (%1 : i42) latency 1 {names = ["q1"]} : () -> i42
+  %1 = comb.xor %0 : i42
+  %0 = arc.state @RandomI42Arc() clock %clock initial (%a : i42) latency 1 {names = ["q0"]} : () -> i42
+}
+
+// CHECK-LABEL: arc.model @StateInitializerUsesInitial
+hw.module @StateInitializerUsesInitial(in %clock: !seq.clock) {
+  // CHECK:      [[Q0:%.+]] = arc.alloc_state %arg0 {name = "q0"}
+  // CHECK:      arc.initial {
+  // CHECK-NEXT:   [[TMP1:%.+]] = hw.constant 9001
+  // CHECK-NEXT:   [[TMP2:%.+]] = comb.xor [[TMP1]]
+  // CHECK-NEXT:   arc.state_write [[Q0]] = [[TMP2]]
+  // CHECK-NEXT: }
+  %0 = seq.initial() {
+    %4 = hw.constant 9001 : i42
+    seq.yield %4 : i42
+  } : () -> !seq.immutable<i42>
+  %1 = seq.initial(%0) {
+  ^bb0(%5: i42):
+    %6 = comb.xor %5 : i42
+    seq.yield %6 : i42
+  } : (!seq.immutable<i42>) -> !seq.immutable<i42>
+  %2 = seq.from_immutable %1 : (!seq.immutable<i42>) -> i42
+  %3 = arc.state @RandomI42Arc() clock %clock initial (%2 : i42) latency 1 {names = ["q0"]} : () -> i42
+}
+
+// CHECK-LABEL: arc.model @SimpleFinal
+hw.module @SimpleFinal() {
+  // CHECK:      arc.final {
+  // CHECK-NEXT:   func.call @VoidFunc() {finalA}
+  // CHECK-NEXT:   func.call @VoidFunc() {finalB}
+  // CHECK-NEXT: }
+  // CHECK-NEXT: func.call @VoidFunc() {body}
+  llhd.final {
+    func.call @VoidFunc() {finalA} : () -> ()
+    llhd.halt
+  }
+  func.call @VoidFunc() {body} : () -> ()
+  llhd.final {
+    func.call @VoidFunc() {finalB} : () -> ()
+    llhd.halt
+  }
+}
+
+// CHECK-LABEL: arc.model @FinalWithDependencies
+hw.module @FinalWithDependencies() {
+  // CHECK:      arc.final {
+  // CHECK-NEXT:   [[TMP:%.+]] = hw.constant 9001
+  // CHECK-NEXT:   func.call @ConsumeI42([[TMP]]) {finalA}
+  // CHECK-NEXT:   [[TMP:%.+]] = func.call @RandomI42() {sideEffect}
+  // CHECK-NEXT:   func.call @ConsumeI42([[TMP]]) {finalB}
+  // CHECK-NEXT: }
+  // CHECK-NEXT: func.call @VoidFunc() {body}
+  // CHECK-NEXT: func.call @RandomI42() {sideEffect}
+  llhd.final {
+    func.call @ConsumeI42(%0) {finalA} : (i42) -> ()
+    llhd.halt
+  }
+  func.call @VoidFunc() {body} : () -> ()
+  llhd.final {
+    func.call @ConsumeI42(%1) {finalB} : (i42) -> ()
+    llhd.halt
+  }
+  %0 = hw.constant 9001 : i42
+  %1 = func.call @RandomI42() {sideEffect} : () -> i42
+}
+
+// CHECK-LABEL: arc.model @FinalWithControlFlow
+hw.module @FinalWithControlFlow() {
+  // CHECK:      arc.final {
+  // CHECK-NEXT:   scf.execute_region {
+  // CHECK-NEXT:     [[TMP:%.+]] = func.call @RandomI42()
+  // CHECK-NEXT:     cf.br ^[[BB:.+]]([[TMP]] : i42)
+  // CHECK-NEXT:   ^[[BB]]([[TMP:%.+]]: i42)
+  // CHECK-NEXT:     func.call @ConsumeI42([[TMP]])
+  // CHECK-NEXT:     scf.yield
+  // CHECK-NEXT:   }
+  // CHECK-NEXT: }
+  llhd.final {
+    %0 = func.call @RandomI42() : () -> i42
+    cf.br ^bb0(%0 : i42)
+  ^bb0(%1: i42):
+    func.call @ConsumeI42(%1) : (i42) -> ()
+    llhd.halt
+  }
+}
+
+// CHECK-LABEL: arc.model @UnclockedDpiCall
+hw.module @UnclockedDpiCall(in %a: i42, out b: i42) {
+  // CHECK: [[TMP1:%.+]] = arc.state_read %in_a
+  // CHECK: [[TMP2:%.+]] = func.call @IdI42([[TMP1]])
+  %0 = sim.func.dpi.call @IdI42(%a) : (i42) -> i42
+  // CHECK: arc.state_write %out_b = [[TMP2]]
+  hw.output %0 : i42
+}
+
+// CHECK-LABEL: arc.model @ClockedDpiCall
+hw.module @ClockedDpiCall(in %clock: !seq.clock, in %a: i42, out b: i42) {
+  // CHECK: [[Q0:%.+]] = arc.alloc_state %arg0 {name = "q0"}
+  // CHECK: [[Q1:%.+]] = arc.alloc_state %arg0 {name = "q1"}
+  // CHECK: [[Q0_OLD:%.+]] = arc.state_read [[Q0]]
+  // CHECK:      scf.if {{%.+}} {
+  // CHECK-NEXT:   [[TMP1:%.+]] = arc.state_read %in_a
+  // CHECK-NEXT:   [[TMP2:%.+]] = func.call @IdI42([[TMP1]])
+  // CHECK-NEXT:   arc.state_write [[Q0]] = [[TMP2]]
+  // CHECK-NEXT:   [[TMP3:%.+]] = func.call @IdI42([[Q0_OLD]])
+  // CHECK-NEXT:   arc.state_write [[Q1]] = [[TMP3]]
+  // CHECK-NEXT: }
+  %0 = sim.func.dpi.call @IdI42(%a) clock %clock {names = ["q0"]} : (i42) -> i42
+  %1 = sim.func.dpi.call @IdI42(%0) clock %clock {names = ["q1"]} : (i42) -> i42
+  // CHECK-NEXT: [[TMP:%.+]] = arc.state_read [[Q1]]
+  // CHECK-NEXT: arc.state_write %out_b = [[TMP]]
+  hw.output %1 : i42
+}
+
+// CHECK-LABEL: arc.model @OpsWithRegions
+hw.module @OpsWithRegions(in %clock: !seq.clock, in %a: i42, in %b: i1, out c: i42) {
+  // CHECK: [[Q0:%.+]] = arc.alloc_state %arg0 {name = "q0"}
+  %0 = scf.if %b -> (i42) {
+    scf.yield %a : i42
+  } else {
+    scf.yield %1 : i42
+  }
+  // CHECK: [[A:%.+]] = arc.state_read %in_a
+  // CHECK: [[Q0_OLD:%.+]] = arc.state_read [[Q0]]
+  // CHECK: [[B:%.+]] = arc.state_read %in_b
+  // CHECK: [[IF_OLD:%.+]] = scf.if [[B]] -> (i42) {
+  // CHECK:   scf.yield [[A]]
+  // CHECK: } else {
+  // CHECK:   scf.yield [[Q0_OLD]]
+  // CHECK: }
+  // CHECK: scf.if {{%.+}} {
+  // CHECK:   [[TMP:%.+]] = arc.call @IdI42Arc([[IF_OLD]])
+  // CHECK:   arc.state_write [[Q0]] = [[TMP]]
+  // CHECK: }
+  %1 = arc.state @IdI42Arc(%0) clock %clock latency 1 {names = ["q0"]} : (i42) -> i42
+  // CHECK: [[A:%.+]] = arc.state_read %in_a
+  // CHECK: [[Q0_NEW:%.+]] = arc.state_read [[Q0]]
+  // CHECK: [[B:%.+]] = arc.state_read %in_b
+  // CHECK: [[IF_NEW:%.+]] = scf.if [[B]] -> (i42) {
+  // CHECK:   scf.yield [[A]]
+  // CHECK: } else {
+  // CHECK:   scf.yield [[Q0_NEW]]
+  // CHECK: }
+  // CHECK: arc.state_write %out_c = [[IF_NEW]]
+  hw.output %0 : i42
+}
 
 // Regression check on worklist producing false positive comb loop errors.
 // CHECK-LABEL: @CombLoopRegression
@@ -309,139 +624,19 @@ arc.define @CombLoopRegressionArc2(%arg0: i1) -> (i1, i1) {
 // Regression check for invalid memory port lowering errors.
 // CHECK-LABEL: arc.model @MemoryPortRegression
 hw.module private @MemoryPortRegression(in %clock: !seq.clock, in %reset: i1, in %in: i3, out x: i3) {
-  %0 = arc.memory <2 x i3, i1> {name = "ram_ext"}
+  %0 = arc.memory <2 x i3, i1>
   %1 = arc.memory_read_port %0[%3] : <2 x i3, i1>
-  arc.memory_write_port %0, @identity3(%3, %in) clock %clock latency 1 : <2 x i3, i1>, i1, i3
-  %3 = arc.state @Queue_arc_0(%reset) clock %clock latency 1 : (i1) -> i1
-  %4 = arc.call @Queue_arc_1(%1) : (i3) -> i3
+  arc.memory_write_port %0, @MemoryPortRegressionArc1(%3, %in) clock %clock latency 1 : <2 x i3, i1>, i1, i3
+  %3 = arc.state @MemoryPortRegressionArc2(%reset) clock %clock latency 1 : (i1) -> i1
+  %4 = arc.call @MemoryPortRegressionArc3(%1) : (i3) -> i3
   hw.output %4 : i3
 }
-arc.define @identity3(%arg0: i1, %arg1: i3) -> (i1, i3) {
+arc.define @MemoryPortRegressionArc1(%arg0: i1, %arg1: i3) -> (i1, i3) {
   arc.output %arg0, %arg1 : i1, i3
 }
-arc.define @Queue_arc_0(%arg0: i1) -> i1 {
+arc.define @MemoryPortRegressionArc2(%arg0: i1) -> i1 {
   arc.output %arg0 : i1
 }
-arc.define @Queue_arc_1(%arg0: i3) -> i3 {
+arc.define @MemoryPortRegressionArc3(%arg0: i3) -> i3 {
   arc.output %arg0 : i3
-}
-
-// CHECK-LABEL: arc.model @BlackBox
-hw.module @BlackBox(in %clk: !seq.clock) {
-  %0 = arc.state @DummyArc(%2) clock %clk latency 1 : (i42) -> i42
-  %1 = comb.and %0, %0 : i42
-  %ext.c, %ext.d = hw.instance "ext" @BlackBoxExt(a: %0: i42, b: %1: i42) -> (c: i42, d: i42)
-  %2 = comb.or %ext.c, %ext.d : i42
-  // CHECK-DAG: [[EXT_A:%.+]] = arc.alloc_state %arg0 {name = "ext/a"}
-  // CHECK-DAG: [[EXT_B:%.+]] = arc.alloc_state %arg0 {name = "ext/b"}
-  // CHECK-DAG: [[EXT_C:%.+]] = arc.alloc_state %arg0 {name = "ext/c"}
-  // CHECK-DAG: [[EXT_D:%.+]] = arc.alloc_state %arg0 {name = "ext/d"}
-  // CHECK-DAG: [[STATE:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
-
-  // Clock Tree
-  // CHECK-DAG: [[TMP1:%.+]] = arc.state_read [[EXT_C]]
-  // CHECK-DAG: [[TMP2:%.+]] = arc.state_read [[EXT_D]]
-  // CHECK-DAG: [[TMP3:%.+]] = comb.or [[TMP1]], [[TMP2]]
-  // CHECK-DAG: [[TMP4:%.+]] = arc.call @DummyArc([[TMP3]])
-  // CHECK-DAG: arc.state_write [[STATE]] = [[TMP4]]
-
-  // Passthrough
-  // CHECK-DAG: [[TMP1:%.+]] = arc.state_read [[STATE]]
-  // CHECK-DAG: [[TMP2:%.+]] = comb.and [[TMP1]], [[TMP1]]
-  // CHECK-DAG: arc.state_write [[EXT_A]] = [[TMP1]]
-  // CHECK-DAG: arc.state_write [[EXT_B]] = [[TMP2]]
-}
-// CHECK-NOT: hw.module.extern private @BlackBoxExt
-hw.module.extern private @BlackBoxExt(in %a: i42, in %b: i42, out c: i42, out d: i42)
-
-
-func.func private @func(%arg0: i32, %arg1: i32) -> i32
-// CHECK-LABEL: arc.model @adder
-hw.module @adder(in %clock : i1, in %a : i32, in %b : i32, out c : i32) {
-  %0 = seq.to_clock %clock
-  %1 = sim.func.dpi.call @func(%a, %b) clock %0 : (i32, i32) -> i32
-  // CHECK:      arc.clock_tree
-  // CHECK-NEXT:   %[[A:.+]] = arc.state_read %in_a : <i32>
-  // CHECK-NEXT:   %[[B:.+]] = arc.state_read %in_b : <i32>
-  // CHECK-NEXT:   %[[RESULT:.+]] = func.call @func(%6, %7) : (i32, i32) -> i32
-  hw.output %1 : i32
-}
-
-// CHECK-LABEL: arc.model @InitializedStates
-hw.module @InitializedStates(in %clk: !seq.clock, in %reset: i1, in %input: i42) {
-
-// CHECK:      [[ST1:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
-// CHECK-NEXT: [[ST2:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
-// CHECK-NEXT: [[ST3:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
-// CHECK-NEXT: [[ST4:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
-// CHECK-NEXT: [[ST5:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
-
-// CHECK: arc.initial {
-
-  %csta = hw.constant 1 : i42
-  %cstb = hw.constant 10 : i42
-  %cstc = hw.constant 100 : i42
-  %cstd = hw.constant 1000 : i42
-  %add = comb.add bin %cstb, %cstc, %csta : i42
-  %mul = comb.mul bin %add, %csta : i42
-
-  // CHECK-NEXT: [[CSTD:%.+]] = hw.constant 1000 : i42
-  // CHECK-NEXT: arc.state_write [[ST1]] = [[CSTD]] : <i42>
-  %0 = arc.state @DummyArc(%input) clock %clk initial (%cstd : i42) latency 1 : (i42) -> i42
-
-  // CHECK-DAG:  [[CSTA:%.+]] = hw.constant 1 : i42
-  // CHECK-DAG:  [[CSTB:%.+]] = hw.constant 10 : i42
-  // CHECK-DAG:  [[CSTC:%.+]] = hw.constant 100 : i42
-  // CHECK-DAG:  [[ADD:%.+]] = comb.add bin [[CSTB]], [[CSTC]], [[CSTA]] : i42
-  // CHECK-DAG:  [[MUL:%.+]] = comb.mul bin [[ADD]], [[CSTA]] : i42
-
-  // CHECK:      arc.state_write [[ST2]] = [[MUL]] : <i42>
-  %1 = arc.state @DummyArc(%0) clock %clk initial (%mul : i42) latency 1 : (i42) -> i42
-  // CHECK-NEXT: arc.state_write [[ST3]] = [[CSTB]] : <i42>
-  %2 = arc.state @DummyArc(%1) clock %clk reset %reset initial (%cstb : i42) latency 1 : (i42) -> i42
-  // CHECK-DAG: arc.state_write [[ST4]] = [[CSTB]] : <i42>
-  // CHECK-DAG: arc.state_write [[ST5]] = [[ADD]] : <i42>
-  %3, %4 = arc.state @DummyArc2(%2) clock %clk initial (%cstb, %add : i42, i42) latency 1 : (i42) -> (i42, i42)
-// CHECK: }
-}
-
-func.func private @random() -> i32
-arc.define @counter_arc(%arg0: i8) -> i8 {
-  %c1_i8 = hw.constant 1 : i8
-  %0 = comb.add %arg0, %c1_i8 : i8
-  arc.output %0 : i8
-}
-arc.define @counter_arc_0(%arg0: i1) -> !seq.clock {
-  %0 = seq.to_clock %arg0
-  arc.output %0 : !seq.clock
-}
-// CHECK-LABEL: arc.model @seqInitial
-hw.module @seqInitial(in %clk : i1, out o1 : i8, out o2 : i8) {
-  // CHECK:      %[[STATE1:.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i8>
-  // CHECK-NEXT: %[[STATE2:.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i8>
-
-  // CHECK:        arc.initial {
-  // CHECK-NEXT:     %c5_i8 = hw.constant 5 : i8
-  // CHECK-NEXT:     %[[RAND:.+]] = func.call @random() : () -> i32
-  // CHECK-NEXT:     %[[EXTRACT:.+]] = comb.extract %[[RAND]] from 0 : (i32) -> i8
-  // CHECK-NEXT:     arc.state_write %[[STATE1]] = %[[VAL1:.+]] : <i8>
-  // CHECK-NEXT:     arc.state_write %[[STATE2]] = %[[VAL2:.+]] : <i8>
-  // CHECK-NEXT:   }
-  %0 = seq.from_immutable %7 : (!seq.immutable<i8>) -> i8
-  %1 = seq.from_immutable %2#1 : (!seq.immutable<i8>) -> i8
-  %2:2 = seq.initial() {
-    %c5_i8 = hw.constant 5 : i8
-    %6 = func.call @random() : () -> i32
-    seq.yield %6, %c5_i8 : i32, i8
-  } : () -> (!seq.immutable<i32>, !seq.immutable<i8>)
-  %7 = seq.initial(%2#0) {
-    ^bb0(%arg0 : i32):
-    %ext = comb.extract %arg0 from 0 : (i32) -> i8
-    seq.yield %ext: i8
-  } : (!seq.immutable<i32>) -> (!seq.immutable<i8>)
-
-  %3 = arc.state @counter_arc(%3) clock %4 initial (%0 : i8) latency 1 : (i8) -> i8
-  %4 = arc.call @counter_arc_0(%clk) : (i1) -> !seq.clock
-  %5 = arc.state @counter_arc(%5) clock %4 initial (%1 : i8) latency 1 : (i8) -> i8
-  hw.output %3, %5 : i8, i8
 }
