@@ -23,6 +23,7 @@ target_link_libraries(circt-opt
   CIRCTBMCTransforms
   CIRCTExportChiselInterface
   CIRCTExportVerilog
+  CIRCTExportYosys
   CIRCTLECTransforms
   CIRCTTransforms
 
