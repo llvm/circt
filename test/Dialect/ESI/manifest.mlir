@@ -56,12 +56,12 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // HIER-LABEL:  esi.manifest.compressed <"{{.+}}">
 // HIER-LABEL:  esi.manifest.hier_root @top {
 // HIER-NEXT:     esi.manifest.service_impl #esi.appid<"cosim"> svc @HostComms by "cosim" with {} {
-// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_tohw">] req <@HostComms::@Recv>(!esi.bundle<[!esi.channel<i8> to "recv"]>) with {channel_assignments = {recv = "loopback_inst[0].loopback_tohw.recv"}}
-// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_fromhw">] req <@HostComms::@Send>(!esi.bundle<[!esi.channel<i8> from "send"]>) with {channel_assignments = {send = "loopback_inst[0].loopback_fromhw.send"}}
-// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_fromhw_i0">] req <@HostComms::@SendI0>(!esi.bundle<[!esi.channel<i0> from "send"]>) with {channel_assignments = {send = "loopback_inst[0].loopback_fromhw_i0.send"}}
-// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[1]>, #esi.appid<"loopback_tohw">] req <@HostComms::@Recv>(!esi.bundle<[!esi.channel<i8> to "recv"]>) with {channel_assignments = {recv = "loopback_inst[1].loopback_tohw.recv"}}
-// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[1]>, #esi.appid<"loopback_fromhw">] req <@HostComms::@Send>(!esi.bundle<[!esi.channel<i8> from "send"]>) with {channel_assignments = {send = "loopback_inst[1].loopback_fromhw.send"}}
-// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[1]>, #esi.appid<"loopback_fromhw_i0">] req <@HostComms::@SendI0>(!esi.bundle<[!esi.channel<i0> from "send"]>) with {channel_assignments = {send = "loopback_inst[1].loopback_fromhw_i0.send"}}
+// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_tohw">] req <@HostComms::@Recv>(!esi.bundle<[!esi.channel<i8> to "recv"]>) channels {recv = {name = "loopback_inst[0].loopback_tohw.recv", type = "cosim"}}
+// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_fromhw">] req <@HostComms::@Send>(!esi.bundle<[!esi.channel<i8> from "send"]>) channels {send = {name = "loopback_inst[0].loopback_fromhw.send", type = "cosim"}}
+// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_fromhw_i0">] req <@HostComms::@SendI0>(!esi.bundle<[!esi.channel<i0> from "send"]>) channels {send = {name = "loopback_inst[0].loopback_fromhw_i0.send", type = "cosim"}}
+// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[1]>, #esi.appid<"loopback_tohw">] req <@HostComms::@Recv>(!esi.bundle<[!esi.channel<i8> to "recv"]>) channels {recv = {name = "loopback_inst[1].loopback_tohw.recv", type = "cosim"}}
+// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[1]>, #esi.appid<"loopback_fromhw">] req <@HostComms::@Send>(!esi.bundle<[!esi.channel<i8> from "send"]>) channels {send = {name = "loopback_inst[1].loopback_fromhw.send", type = "cosim"}}
+// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[1]>, #esi.appid<"loopback_fromhw_i0">] req <@HostComms::@SendI0>(!esi.bundle<[!esi.channel<i0> from "send"]>) channels {send = {name = "loopback_inst[1].loopback_fromhw_i0.send", type = "cosim"}}
 // HIER-NEXT:     }
 // HIER-NEXT:     esi.manifest.hier_node #esi.appid<"loopback_inst"[0]> mod @Loopback {
 // HIER-NEXT:       esi.manifest.req #esi.appid<"loopback_tohw">, <@HostComms::@Recv>, !esi.bundle<[!esi.channel<i8> to "recv"]>
@@ -120,8 +120,11 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:          "serviceImplName": "cosim",
 // CHECK-NEXT:          "clientDetails": [
 // CHECK-NEXT:            {
-// CHECK-NEXT:              "channel_assignments": {
-// CHECK-NEXT:                "recv": "loopback_inst[0].loopback_tohw.recv"
+// CHECK-NEXT:              "channelAssignments": {
+// CHECK-NEXT:                "recv": {
+// CHECK-NEXT:                  "name": "loopback_inst[0].loopback_tohw.recv",
+// CHECK-NEXT:                  "type": "cosim"
+// CHECK-NEXT:                }
 // CHECK-NEXT:              },
 // CHECK-NEXT:              "relAppIDPath": [
 // CHECK-NEXT:                {
@@ -138,8 +141,11 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:              }
 // CHECK-NEXT:            },
 // CHECK-NEXT:            {
-// CHECK-NEXT:              "channel_assignments": {
-// CHECK-NEXT:                "send": "loopback_inst[0].loopback_fromhw.send"
+// CHECK-NEXT:              "channelAssignments": {
+// CHECK-NEXT:                "send": {
+// CHECK-NEXT:                  "name": "loopback_inst[0].loopback_fromhw.send",
+// CHECK-NEXT:                  "type": "cosim"
+// CHECK-NEXT:                }
 // CHECK-NEXT:              },
 // CHECK-NEXT:              "relAppIDPath": [
 // CHECK-NEXT:                {
@@ -156,8 +162,11 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:              }
 // CHECK-NEXT:            },
 // CHECK-NEXT:            {
-// CHECK-NEXT:              "channel_assignments": {
-// CHECK-NEXT:                "send": "loopback_inst[0].loopback_fromhw_i0.send"
+// CHECK-NEXT:              "channelAssignments": {
+// CHECK-NEXT:                "send": {
+// CHECK-NEXT:                  "name": "loopback_inst[0].loopback_fromhw_i0.send",
+// CHECK-NEXT:                  "type": "cosim"
+// CHECK-NEXT:                }
 // CHECK-NEXT:              },
 // CHECK-NEXT:              "relAppIDPath": [
 // CHECK-NEXT:                {
@@ -174,8 +183,11 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:              }
 // CHECK-NEXT:            },
 // CHECK-NEXT:            {
-// CHECK-NEXT:              "channel_assignments": {
-// CHECK-NEXT:                "recv": "loopback_inst[1].loopback_tohw.recv"
+// CHECK-NEXT:              "channelAssignments": {
+// CHECK-NEXT:                "recv": {
+// CHECK-NEXT:                  "name": "loopback_inst[1].loopback_tohw.recv",
+// CHECK-NEXT:                  "type": "cosim"
+// CHECK-NEXT:                }
 // CHECK-NEXT:              },
 // CHECK-NEXT:              "relAppIDPath": [
 // CHECK-NEXT:                {
@@ -192,8 +204,11 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:              }
 // CHECK-NEXT:            },
 // CHECK-NEXT:            {
-// CHECK-NEXT:              "channel_assignments": {
-// CHECK-NEXT:                "send": "loopback_inst[1].loopback_fromhw.send"
+// CHECK-NEXT:              "channelAssignments": {
+// CHECK-NEXT:                "send": {
+// CHECK-NEXT:                  "name": "loopback_inst[1].loopback_fromhw.send",
+// CHECK-NEXT:                  "type": "cosim"
+// CHECK-NEXT:                }
 // CHECK-NEXT:              },
 // CHECK-NEXT:              "relAppIDPath": [
 // CHECK-NEXT:                {
@@ -210,8 +225,11 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:              }
 // CHECK-NEXT:            },
 // CHECK-NEXT:            {
-// CHECK-NEXT:              "channel_assignments": {
-// CHECK-NEXT:                "send": "loopback_inst[1].loopback_fromhw_i0.send"
+// CHECK-NEXT:              "channelAssignments": {
+// CHECK-NEXT:                "send": {
+// CHECK-NEXT:                  "name": "loopback_inst[1].loopback_fromhw_i0.send",
+// CHECK-NEXT:                  "type": "cosim"
+// CHECK-NEXT:                }
 // CHECK-NEXT:              },
 // CHECK-NEXT:              "relAppIDPath": [
 // CHECK-NEXT:                {
