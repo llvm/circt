@@ -62,11 +62,11 @@ def obj_to_typed_attribute(obj: object, type: Type) -> ir.Attribute:
   raise ValueError(f"Type '{type}' conversion to attribute not supported yet.")
 
 
-def optional_dict_to_dict_attr(d: dict) -> Optional[Dict[str, ir.Attribute]]:
+def optional_dict_to_dict_attr(d: Optional[Dict]) -> ir.DictAttr:
   """Convert a dictionary to a MLIR dictionary attribute."""
   if d is None:
     return ir.DictAttr.get({})
-  return {k: _obj_to_attribute(v) for k, v in d.items()}
+  return ir.DictAttr.get({k: _obj_to_attribute(v) for k, v in d.items()})
 
 
 __dir__ = os.path.dirname(__file__)

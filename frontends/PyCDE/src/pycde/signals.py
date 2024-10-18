@@ -99,6 +99,8 @@ class Signal:
         rst_value = types.int(self.type.bitwidth)(0)
         if not isinstance(self.type, Bits):
           rst_value = hw.BitcastOp(self.type, rst_value)
+      elif rst_value is not None and not isinstance(rst_value, Signal):
+        rst_value = self.type(rst_value)
 
       reg = self.value
       for i in range(cycles):

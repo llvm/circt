@@ -2,6 +2,23 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+<<<<<<< HEAD
+=======
+from .common import (AppID, Input, Output, _PyProxy, PortError)
+from .constructs import AssignableSignal, Mux, Wire
+from .module import generator, Module, ModuleLikeBuilderBase, PortProxyBase
+from .signals import (BitsSignal, BundleSignal, ChannelSignal, Signal,
+                      _FromCirctValue)
+from .support import _obj_to_attribute, get_user_loc, obj_to_typed_attribute
+from .system import System
+from .types import (Any, Bits, Bundle, BundledChannel, Channel,
+                    ChannelDirection, StructType, Type, UInt, types,
+                    _FromCirctType)
+
+from .circt import ir
+from .circt.dialects import esi as raw_esi, hw, msft
+
+>>>>>>> main
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -175,7 +192,7 @@ class _OutputBundleSetter(AssignableSignal):
       )
 
   @property
-  def client_name(self):
+  def client_name(self) -> List[AppID]:
     return [AppID(x) for x in self.req.relativeAppIDPath]
 
   def assign(self, new_value: ChannelSignal):
@@ -554,8 +571,6 @@ class _ChannelService:
     to_host_bundle = _ChannelServiceDecl.to_host(name, bundle_type)
     assert isinstance(to_host_bundle, BundleSignal)
     return to_host_bundle.unpack(data=chan)
-
-  # to_host = Bundle([BundledChannel("data", ChannelDirection.FROM, Any)])
 
 
 ChannelService = _ChannelService()

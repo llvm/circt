@@ -8,8 +8,8 @@ import pycde
 from pycde import (AppID, Clock, Module, Reset, modparams, generator)
 from pycde.bsp import cosim
 from pycde.common import Constant
-from pycde.constructs import Reg, Wire
-from pycde.esi import FuncService, MMIO, MMIOReadWriteCmdType
+from pycde.constructs import ControlReg, Reg, Wire
+from pycde.esi import ChannelService, FuncService, MMIO, MMIOReadWriteCmdType
 from pycde.types import (Bits, Channel, UInt)
 from pycde.behavioral import If, Else, EndIf
 
@@ -93,6 +93,20 @@ class MMIOReadWriteClient(Module):
     cmd_chan_wire.assign(cmd_chan)
 
 
+class ConstProducer(Module):
+  clk = Clock()
+  rst = Reset()
+
+  @generator
+  def construct(ports):
+    const = UInt(32)(42)
+    xact = Wire(Bits(1))
+    valid = ~ControlReg(ports.clk, ports.rst, [xact], [Bits(1)(0)])
+    ch, ready = Channel(UInt(32)).wrap(const, valid)
+    xact.assign(ready & valid)
+    ChannelService.to_host(AppID("const_producer"), ch)
+
+
 class Top(Module):
   clk = Clock()
   rst = Reset()
@@ -103,6 +117,7 @@ class Top(Module):
     for i in range(4, 18, 5):
       MMIOClient(i)()
     MMIOReadWriteClient(clk=ports.clk, rst=ports.rst)
+    ConstProducer(clk=ports.clk, rst=ports.rst)
 
 
 if __name__ == "__main__":

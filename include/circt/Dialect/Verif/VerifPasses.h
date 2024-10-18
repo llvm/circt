@@ -14,17 +14,22 @@
 #ifndef CIRCT_DIALECT_VERIF_VERIFPASSES_H
 #define CIRCT_DIALECT_VERIF_VERIFPASSES_H
 
-#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 #include <memory>
-#include <optional>
+
+namespace circt {
+namespace verif {
+class FormalOp;
+} // namespace verif
+} // namespace circt
 
 namespace circt {
 namespace verif {
 
 std::unique_ptr<mlir::Pass> createVerifyClockedAssertLikePass();
 std::unique_ptr<mlir::Pass> createPrepareForFormalPass();
+std::unique_ptr<mlir::Pass> createLowerFormalToHW();
 
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/Verif/Passes.h.inc"

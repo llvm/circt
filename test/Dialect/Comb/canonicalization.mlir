@@ -569,6 +569,20 @@ hw.module @narrowAdditionToDirectAddition(in %x: i8, in %y: i8, out z1: i8) {
   hw.output %3 : i8
 }
 
+// Validates that narrowing preserves the two-state attribute.
+// CHECK-LABEL: hw.module @narrowAdditionToDirectAdditionTwoState
+hw.module @narrowAdditionToDirectAdditionTwoState(in %x: i8, in %y: i8, out z1: i8) {
+  // CHECK-NEXT: [[RESULT:%.+]] = comb.add bin %x, %y : i8
+  // CHECK-NEXT: hw.output [[RESULT]]
+
+  %false = hw.constant false
+  %0 = comb.concat %x, %x : i8, i8
+  %1 = comb.concat %y, %y : i8, i8
+  %2 = comb.add bin %0, %1 : i16
+  %3 = comb.extract %2 from 0 : (i16) -> i8
+  hw.output %3 : i8
+}
+
 // Validates that addition narrow to the widest extract
 // CHECK-LABEL: hw.module @narrowAdditionToWidestExtract
 hw.module @narrowAdditionToWidestExtract(in %x: i8, in %y: i8, out z1: i3, out z2: i4) {

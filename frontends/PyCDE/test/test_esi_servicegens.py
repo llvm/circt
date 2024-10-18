@@ -56,7 +56,7 @@ class MultiplexerService(esi.ServiceImplementation):
     assert len(
         bundles.to_client_reqs) == 1, "Only one connection request supported"
     bundle = bundles.to_client_reqs[0]
-    bundle.add_record({"foo": 5})
+    bundle.add_record(details={"foo": 5, "client_name": bundle.client_name})
     to_req_types = {}
     for bundled_chan in bundle.type.channels:
       if bundled_chan.direction == ChannelDirection.TO:
