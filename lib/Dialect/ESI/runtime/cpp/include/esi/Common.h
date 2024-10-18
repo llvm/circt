@@ -50,16 +50,6 @@ public:
   using std::vector<AppID>::vector;
 
   AppIDPath operator+(const AppIDPath &b);
-  AppIDPath operator+(const AppID &b) {
-    AppIDPath result = *this;
-    result.push_back(b);
-    return result;
-  }
-  AppIDPath pop() {
-    AppIDPath result = *this;
-    result.pop_back();
-    return result;
-  }
   std::string toStr() const;
 };
 bool operator<(const AppIDPath &a, const AppIDPath &b);
@@ -86,8 +76,12 @@ struct ServicePortDesc {
   std::string portName;
 };
 
+/// Details about how to connect to a particular channel.
 struct ChannelAssignment {
+  /// The name of the type of connection. Typically, the name of the DMA engine
+  /// or "cosim" if a cosimulation channel is being used.
   std::string type;
+  /// Implementation-specific options.
   std::map<std::string, std::any> implOptions;
 };
 using ChannelAssignments = std::map<std::string, ChannelAssignment>;

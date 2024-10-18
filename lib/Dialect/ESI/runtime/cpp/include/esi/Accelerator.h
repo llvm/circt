@@ -170,7 +170,6 @@ void registerBackend(const std::string &name, BackendCreate create);
 template <typename TAccelerator>
 struct RegisterAccelerator {
   RegisterAccelerator(const char *name) {
-    printf("Registering accelerator %s\n", name);
     registerBackend(name, &TAccelerator::connect);
   }
 };

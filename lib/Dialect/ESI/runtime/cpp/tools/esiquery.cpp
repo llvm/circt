@@ -17,8 +17,6 @@
 #include "esi/Manifest.h"
 #include "esi/Services.h"
 
-#include "CLI/CLI.hpp"
-
 #include <iostream>
 #include <map>
 #include <stdexcept>
@@ -29,8 +27,6 @@ void printInfo(std::ostream &os, AcceleratorConnection &acc);
 void printHier(std::ostream &os, AcceleratorConnection &acc);
 
 int main(int argc, const char *argv[]) {
-  CLI::App app{"ESI accelerator system query tool"};
-
   // TODO: find a command line parser library rather than doing this by hand.
   if (argc < 3) {
     std::cerr << "Expected usage: " << argv[0]
