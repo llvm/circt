@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
   from .types import Type
 
+from typing import Dict, Optional
+
 import os
 
 
@@ -40,6 +42,10 @@ def _obj_to_attribute(obj) -> ir.Attribute:
   if isinstance(obj, dict):
     attrs = {name: _obj_to_attribute(value) for name, value in obj.items()}
     return ir.DictAttr.get(attrs)
+
+  from .common import AppID
+  if isinstance(obj, AppID):
+    return obj._appid
   if hasattr(obj, "__dict__"):
     attrs = {
         name: _obj_to_attribute(value) for name, value in obj.__dict__.items()
@@ -54,6 +60,13 @@ def obj_to_typed_attribute(obj: object, type: Type) -> ir.Attribute:
   if isinstance(type, BitVectorType):
     return ir.IntegerAttr.get(type._type, obj)
   raise ValueError(f"Type '{type}' conversion to attribute not supported yet.")
+
+
+def optional_dict_to_dict_attr(d: Optional[Dict]) -> ir.DictAttr:
+  """Convert a dictionary to a MLIR dictionary attribute."""
+  if d is None:
+    return ir.DictAttr.get({})
+  return ir.DictAttr.get({k: _obj_to_attribute(v) for k, v in d.items()})
 
 
 __dir__ = os.path.dirname(__file__)
