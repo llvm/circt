@@ -509,6 +509,7 @@ LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
         nonLocalReqs.insert(req);
     }
   };
+  // Bootstrap the sorting.
   sortConnReqs();
 
   // Replace each service instance with a generation request. If a service
