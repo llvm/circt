@@ -4,22 +4,22 @@
 
 from __future__ import annotations
 
-import re
+from .support import get_user_loc, _obj_to_value_infer_type
+from .types import ChannelDirection, ChannelSignaling, Type
+
+from .circt.dialects import esi, sv
+from .circt import support
+from .circt import ir
+
 from contextvars import ContextVar
 from functools import singledispatchmethod
 from typing import Callable, Dict, List, Optional, Tuple, Union
-
+import re
 import numpy as np
-
-from .circt import ir, support
-from .circt.dialects import esi, sv
-from .support import _obj_to_value_infer_type, get_user_loc
-from .types import ChannelDirection, ChannelSignaling, Type
 
 
 def _FromCirctValue(value: ir.Value, type: Type = None) -> Signal:
   from .types import _FromCirctType
-
   assert isinstance(value, ir.Value)
   if type is None:
     type = _FromCirctType(value.type)
@@ -46,39 +46,35 @@ class Signal:
   @staticmethod
   def create(obj) -> Signal:
     """Create a Signal from any python object from which the hardware type can
-        be inferred. For instance, a list of Signals is inferred as an `Array` of
-        those signal types, assuming the types of all the `Signal` are the same."""
+    be inferred. For instance, a list of Signals is inferred as an `Array` of
+    those signal types, assuming the types of all the `Signal` are the same."""
     return _obj_to_value_infer_type(obj)
 
   def bitcast(self, new_type: Type) -> Signal:
     from .circt.dialects import hw
-
     casted_value = hw.BitcastOp(new_type._type, self.value)
     return _FromCirctValue(casted_value.result, new_type)
 
-  def reg(
-      self,
-      clk=None,
-      rst=None,
-      rst_value=None,
-      ce=None,
-      name=None,
-      cycles=1,
-      sv_attributes=None,
-      appid=None,
-  ):
+  def reg(self,
+          clk=None,
+          rst=None,
+          rst_value=None,
+          ce=None,
+          name=None,
+          cycles=1,
+          sv_attributes=None,
+          appid=None):
     """Register this value, returning the delayed value.
-        `clk`, `rst`: the clock and reset signals.
-        `name`: name this register explicitly.
-        `cycles`: number of registers to add."""
+    `clk`, `rst`: the clock and reset signals.
+    `name`: name this register explicitly.
+    `cycles`: number of registers to add."""
 
     if clk is None:
       clk = ClockSignal._get_current_clock_block()
       if clk is None:
         raise ValueError("If 'clk' not specified, must be in clock block")
-    from .dialects import hw, seq
-    from .types import Bits, types
-
+    from .dialects import seq, hw
+    from .types import types, Bits
     if name is None:
       basename = None
       if self.name is not None:
@@ -108,26 +104,22 @@ class Signal:
         if give_name is None and basename is not None:
           give_name = f"{basename}__reg{i+starting_reg}"
         if ce is None:
-          reg = seq.CompRegOp(
-              self.value.type,
-              input=reg,
-              clk=clk,
-              reset=rst,
-              reset_value=rst_value,
-              name=give_name,
-              sym_name=give_name,
-          )
+          reg = seq.CompRegOp(self.value.type,
+                              input=reg,
+                              clk=clk,
+                              reset=rst,
+                              reset_value=rst_value,
+                              name=give_name,
+                              sym_name=give_name)
         else:
-          reg = seq.CompRegClockEnabledOp(
-              self.value.type,
-              input=reg,
-              clk=clk,
-              clockEnable=ce,
-              reset=rst,
-              reset_value=rst_value,
-              name=give_name,
-              sym_name=give_name,
-          )
+          reg = seq.CompRegClockEnabledOp(self.value.type,
+                                          input=reg,
+                                          clk=clk,
+                                          clockEnable=ce,
+                                          reset=rst,
+                                          reset_value=rst_value,
+                                          name=give_name,
+                                          sym_name=give_name)
       if sv_attributes is not None:
         reg.value.owner.attributes["sv.attributes"] = ir.ArrayAttr.get(
             [sv.SVAttributeAttr.get(attr) for attr in sv_attributes])
@@ -148,7 +140,6 @@ class Signal:
                "attributes") and self._namehint_attrname in owner.attributes:
       return ir.StringAttr(owner.attributes[self._namehint_attrname]).value
     from .circt.dialects import hw
-
     if isinstance(owner, ir.Block) and isinstance(owner.owner, hw.HWModuleOp):
       block_arg = ir.BlockArgument(self.value)
       mod_type = hw.ModuleType(ir.TypeAttr(owner.owner.module_type).value)
@@ -167,7 +158,6 @@ class Signal:
   @property
   def appid(self) -> Optional[object]:  # Optional AppID.
     from .module import AppID
-
     owner = self.value.owner
     if AppID.AttributeName in owner.attributes:
       return AppID(owner.attributes[AppID.AttributeName])
@@ -178,7 +168,6 @@ class Signal:
     if "inner_sym" not in self.value.owner.attributes:
       raise ValueError("AppIDs can only be attached to ops with symbols")
     from .module import AppID
-
     self.value.owner.attributes[AppID.AttributeName] = appid._appid
 
 
@@ -209,7 +198,6 @@ class ClockSignal(Signal):
   def to_bit(self):
     from .dialects import seq
     from .types import Bits
-
     clk_i1 = seq.FromClockOp(self.value)
     return BitsSignal(clk_i1, Bits(1))
 
@@ -267,7 +255,6 @@ class BitVectorSignal(Signal):
   def _exec_cast(self, targetValueType, type_getter, width: int = None):
 
     from .dialects import hwarith
-
     if width is None:
       width = self.type.width
 
@@ -280,51 +267,48 @@ class BitVectorSignal(Signal):
 
   def as_bits(self, width: int = None):
     """
-        Returns this value as a signless integer. If 'width' is provided, this value
-        will be truncated to that width.
-        """
+    Returns this value as a signless integer. If 'width' is provided, this value
+    will be truncated to that width.
+    """
     return self._exec_cast(BitsSignal, ir.IntegerType.get_signless, width)
 
   def as_sint(self, width: int = None):
     """
-        Returns this value as a a signed integer. If 'width' is provided, this value
-        will be truncated or sign-extended to that width.
-        """
+    Returns this value as a a signed integer. If 'width' is provided, this value
+    will be truncated or sign-extended to that width.
+    """
     return self._exec_cast(SIntSignal, ir.IntegerType.get_signed, width)
 
   def as_uint(self, width: int = None):
     """
-        Returns this value as an unsigned integer. If 'width' is provided, this
-        value will be truncated or zero-padded to that width.
-        """
+    Returns this value as an unsigned integer. If 'width' is provided, this
+    value will be truncated or zero-padded to that width.
+    """
     return self._exec_cast(UIntSignal, ir.IntegerType.get_unsigned, width)
 
 
 def And(*items: List[BitVectorSignal]):
   """Compute a bitwise 'and' of the arguments."""
   from .dialects import comb
-
   return comb.AndOp(*items)
 
 
 def Or(*items: List[BitVectorSignal]):
   """Compute a bitwise 'or' of the arguments."""
   from .dialects import comb
-
   return comb.OrOp(*items)
 
 
 class BitsSignal(BitVectorSignal):
   """Operations on signless ints (bits). These will all return signless values -
-    a user is expected to reapply signedness semantics if needed."""
+  a user is expected to reapply signedness semantics if needed."""
 
   @singledispatchmethod
   def __getitem__(self, idxOrSlice: Union[int, slice]) -> BitVectorSignal:
     lo, hi = get_slice_bounds(len(self), idxOrSlice)
 
-    from .dialects import comb
     from .types import Bits, types
-
+    from .dialects import comb
     ret_type = types.int(hi - lo)
     # Corner case: empty slice. ExtractOp doesn't support this.
     if hi - lo == 0:
@@ -345,16 +329,14 @@ class BitsSignal(BitVectorSignal):
   def concat(items: List[BitVectorSignal]):
     """Concatenate a list of bitvectors into one larger bitvector."""
     from .dialects import comb
-
     return comb.ConcatOp(*items)
 
   def slice(self, low_bit: BitVectorSignal, num_bits: int):
     """Get a constant-width slice starting at `low_bit` and ending at `low_bit +
-        num_bits`."""
+    num_bits`."""
     _validate_idx(self.type.width, low_bit)
 
     from .dialects import comb
-
     # comb.extract only supports constant lowBits. Shift the bits right, then
     # extract the correct number from the 0th bit.
     with get_user_loc():
@@ -366,11 +348,10 @@ class BitsSignal(BitVectorSignal):
 
   def pad_or_truncate(self, num_bits: int):
     """Make value exactly `num_bits` width by either adding zeros to or lopping
-        off the MSB."""
+    off the MSB."""
     pad_width = num_bits - self.type.width
 
     from .dialects import comb, hw
-
     if pad_width < 0:
       return comb.ExtractOp(0, ir.IntegerType.get_signless(num_bits),
                             self.value)
@@ -384,14 +365,12 @@ class BitsSignal(BitVectorSignal):
 
   def and_reduce(self):
     from .types import types
-
     bits = [self[i] for i in range(len(self))]
     assert bits[0].type == types.i1
     return And(*bits)
 
   def or_reduce(self):
     from .types import types
-
     bits = [self[i] for i in range(len(self))]
     assert bits[0].type == types.i1
     return Or(*bits)
@@ -401,7 +380,6 @@ class BitsSignal(BitVectorSignal):
   def __exec_signless_binop_nocast__(self, other, op, op_symbol: str,
                                      op_name: str):
     from .dialects import comb
-
     if not isinstance(other, Signal):
       # Fall back to the default implementation in cases where we're not dealing
       # with PyCDE value comparison.
@@ -425,32 +403,26 @@ class BitsSignal(BitVectorSignal):
 
   def __eq__(self, other):
     from .dialects import comb
-
     return self.__exec_signless_binop_nocast__(other, comb.EqOp, "==", "eq")
 
   def __ne__(self, other):
     from .dialects import comb
-
     return self.__exec_signless_binop_nocast__(other, comb.NeOp, "!=", "neq")
 
   def __and__(self, other):
     from .dialects import comb
-
     return self.__exec_signless_binop_nocast__(other, comb.AndOp, "&", "and")
 
   def __or__(self, other):
     from .dialects import comb
-
     return self.__exec_signless_binop_nocast__(other, comb.OrOp, "|", "or")
 
   def __xor__(self, other):
     from .dialects import comb
-
     return self.__exec_signless_binop_nocast__(other, comb.XorOp, "^", "xor")
 
   def __invert__(self):
     from .types import types
-
     ret = self ^ types.int(self.type.width)(-1)
     if self.name is not None:
       ret.name = f"inv_{self.name}"
@@ -488,22 +460,18 @@ class IntSignal(BitVectorSignal):
 
   def __add__(self, other):
     from .dialects import hwarith
-
     return self.__exec_signedness_binop__(other, hwarith.AddOp, "+", "plus")
 
   def __sub__(self, other):
     from .dialects import hwarith
-
     return self.__exec_signedness_binop__(other, hwarith.SubOp, "-", "minus")
 
   def __mul__(self, other):
     from .dialects import hwarith
-
     return self.__exec_signedness_binop__(other, hwarith.MulOp, "*", "mul")
 
   def __truediv__(self, other):
     from .dialects import hwarith
-
     return self.__exec_signedness_binop__(other, hwarith.DivOp, "/", "div")
 
   # Generalized function for executing sign-aware int comparisons.
@@ -531,32 +499,26 @@ class IntSignal(BitVectorSignal):
 
   def __eq__(self, other):
     from .circt.dialects import hwarith
-
     return self.__exec_icmp__(other, hwarith.ICmpOp.PRED_EQ, "eq")
 
   def __ne__(self, other):
     from .circt.dialects import hwarith
-
     return self.__exec_icmp__(other, hwarith.ICmpOp.PRED_NE, "neq")
 
   def __lt__(self, other):
     from .circt.dialects import hwarith
-
     return self.__exec_icmp__(other, hwarith.ICmpOp.PRED_LT, "lt")
 
   def __gt__(self, other):
     from .circt.dialects import hwarith
-
     return self.__exec_icmp__(other, hwarith.ICmpOp.PRED_GT, "gt")
 
   def __le__(self, other):
     from .circt.dialects import hwarith
-
     return self.__exec_icmp__(other, hwarith.ICmpOp.PRED_LE, "le")
 
   def __ge__(self, other):
     from .circt.dialects import hwarith
-
     return self.__exec_icmp__(other, hwarith.ICmpOp.PRED_GE, "ge")
 
 
@@ -568,7 +530,6 @@ class SIntSignal(IntSignal):
 
   def __neg__(self):
     from .types import types
-
     return self * types.int(self.type.width)(-1).as_sint()
 
 
@@ -578,7 +539,6 @@ class ArraySignal(Signal):
   def __getitem__(self, idx: Union[int, BitVectorSignal]) -> Signal:
     _validate_idx(self.type.size, idx)
     from .dialects import hw
-
     with get_user_loc():
       v = hw.ArrayGetOp(self.value, idx)
       if self.name and isinstance(idx, int):
@@ -591,9 +551,8 @@ class ArraySignal(Signal):
     if idxs[2] != 1:
       raise ValueError("Array slices do not support steps")
 
-    from .dialects import hw
     from .types import types
-
+    from .dialects import hw
     ret_type = types.array(self.type.element_type, idxs[1] - idxs[0])
 
     with get_user_loc():
@@ -605,7 +564,7 @@ class ArraySignal(Signal):
   def slice(self, low_idx: Union[int, BitVectorSignal],
             num_elems: int) -> Signal:
     """Get an array slice starting at `low_idx` and ending at `low_idx +
-        num_elems`."""
+    num_elems`."""
     _validate_idx(self.type.size, low_idx)
     if num_elems > self.type.size:
       raise ValueError(
@@ -615,7 +574,6 @@ class ArraySignal(Signal):
 
     from .dialects import hw
     from .types import Array
-
     with get_user_loc():
       v = hw.ArraySliceOp(self.value, low_idx,
                           Array(self.type.element_type, num_elems))
@@ -625,14 +583,12 @@ class ArraySignal(Signal):
 
   def and_reduce(self):
     from .types import types
-
     bits = [self[i] for i in range(len(self))]
     assert bits[0].type == types.i1
     return And(*bits)
 
   def or_reduce(self):
     from .types import types
-
     bits = [self[i] for i in range(len(self))]
     assert bits[0].type == types.i1
     return Or(*bits)
@@ -651,43 +607,35 @@ class ArraySignal(Signal):
 
   def transpose(self, *args, **kwargs):
     from .ndarray import NDArray
-
     return NDArray(from_value=self).transpose(*args, **kwargs).to_circt()
 
   def reshape(self, *args, **kwargs):
     from .ndarray import NDArray
-
     return NDArray(from_value=self).reshape(*args, **kwargs).to_circt()
 
   def flatten(self, *args, **kwargs):
     from .ndarray import NDArray
-
     return NDArray(from_value=self).flatten(*args, **kwargs).to_circt()
 
   def moveaxis(self, *args, **kwargs):
     from .ndarray import NDArray
-
     return NDArray(from_value=self).moveaxis(*args, **kwargs).to_circt()
 
   def rollaxis(self, *args, **kwargs):
     from .ndarray import NDArray
-
     return NDArray(from_value=self).rollaxis(*args, **kwargs).to_circt()
 
   def swapaxes(self, *args, **kwargs):
     from .ndarray import NDArray
-
     return NDArray(from_value=self).swapaxes(*args, **kwargs).to_circt()
 
   def concatenate(self, arrays, axis=0):
     from .ndarray import NDArray
-
     return NDArray(from_value=np.concatenate(
         NDArray.to_ndarrays([self] + list(arrays)), axis=axis)).to_circt()
 
   def roll(self, shift, axis=None):
     from .ndarray import NDArray
-
     return np.roll(NDArray(from_value=self), shift=shift, axis=axis).to_circt()
 
 
@@ -697,7 +645,6 @@ class StructSignal(Signal):
     if sub not in [name for name, _ in self.type.strip.fields]:
       raise ValueError(f"Struct field '{sub}' not found in {self.type}")
     from .dialects import hw
-
     with get_user_loc():
       return hw.StructExtractOp(self.value, sub)
 
@@ -705,7 +652,6 @@ class StructSignal(Signal):
     ty = self.type.strip
     if attr in [name for name, _ in ty.fields]:
       from .dialects import hw
-
       with get_user_loc():
         v = hw.StructExtractOp(self.value, attr)
         if self.name:
@@ -718,12 +664,11 @@ class StructMetaType(type):
 
   def __new__(self, name, bases, dct):
     """Scans the class being created for type hints, creates a CIRCT struct
-        object and returns the CIRCT struct object instead of the class. Use the
-        class when a `Signal` of the struct type is instantiated."""
+    object and returns the CIRCT struct object instead of the class. Use the
+    class when a `Signal` of the struct type is instantiated."""
 
     cls = super().__new__(self, name, bases, dct)
     from .types import RegisteredStruct, Type
-
     if "__annotations__" not in dct:
       return cls
     fields: List[Tuple[str, Type]] = []
@@ -736,25 +681,24 @@ class StructMetaType(type):
 
 class Struct(StructSignal, metaclass=StructMetaType):
   """Subclassing this class creates a hardware struct which can be used in port
-    definitions and will be instantiated in generators:
+  definitions and will be instantiated in generators:
 
-    ```
-    class ExStruct(Struct):
-      a: Bits(4)
-      b: UInt(32)
+  ```
+  class ExStruct(Struct):
+    a: Bits(4)
+    b: UInt(32)
 
-      def get_b(self):
-        return self.b
+    def get_b(self):
+      return self.b
 
-    class TestStruct(Module):
-      inp1 = Input(ExStruct)
+  class TestStruct(Module):
+    inp1 = Input(ExStruct)
 
-      @generator
-      def build(self):
-        ... = self.inp1.get_b()
-    ```
-    """
-
+    @generator
+    def build(self):
+      ... = self.inp1.get_b()
+  ```
+  """
   # All the work is done in the metaclass.
 
 
@@ -766,7 +710,6 @@ class ChannelSignal(Signal):
   def unwrap(self, readyOrRden):
     from .dialects import esi
     from .types import types
-
     signaling = self.type.signaling
     if signaling == ChannelSignaling.ValidReady:
       ready = types.i1(readyOrRden)
@@ -783,10 +726,9 @@ class ChannelSignal(Signal):
   def buffer(self, clk: ClockSignal, reset: BitsSignal,
              stages: int) -> ChannelSignal:
     """Insert a channel buffer with `stages` stages on the channel. Return the
-        output of that buffer."""
+    output of that buffer."""
 
     from .dialects import esi
-
     return ChannelSignal(
         esi.ChannelBufferOp(
             self.type,
@@ -794,18 +736,15 @@ class ChannelSignal(Signal):
             reset,
             self.value,
             stages=stages,
-        ),
-        self.type,
-    )
+        ), self.type)
 
   def transform(self, transform: Callable[[Signal], Signal]) -> ChannelSignal:
     """Transform the data in the channel using the provided function. Said
-        function must be combinational so it is intended for wire and simple type
-        transformations."""
+    function must be combinational so it is intended for wire and simple type
+    transformations."""
 
     from .constructs import Wire
     from .types import Bits, Channel
-
     ready_wire = Wire(Bits(1))
     data, valid = self.unwrap(ready_wire)
     data = transform(data)
@@ -858,7 +797,6 @@ class BundleSignal(Signal):
   def connect(self, other: BundleSignal):
     """Connect two bundles together such that one drives the other."""
     from .constructs import Wire
-
     froms = [(bc.name, Wire(bc.channel))
              for bc in other.type.channels
              if bc.direction == ChannelDirection.FROM]
@@ -871,14 +809,13 @@ class BundleSignal(Signal):
       self,
       new_bundle_type: "Bundle",
       to_chan_transform: Optional[Callable[[Signal], Signal]] = None,
-      from_chan_transform: Optional[Callable[[Signal], Signal]] = None,
+      from_chan_transform: Optional[Callable[[Signal], Signal]] = None
   ) -> BundleSignal:
     """Coerce a two-channel, bidirectional bundle to a different two-channel,
-        bidirectional bundle type. Transform functions can be provided to transform
-        the individual channels for situations where the types do not match."""
+    bidirectional bundle type. Transform functions can be provided to transform
+    the individual channels for situations where the types do not match."""
 
     from .constructs import Wire
-
     sig_to_chan, sig_from_chan = self.type.get_to_from()
     ret_to_chan, ret_from_chan = new_bundle_type.get_to_from()
 
@@ -916,12 +853,10 @@ class ListSignal(Signal):
 
 def wrap_opviews_with_values(dialect, module_name, excluded=[]):
   """Wraps all of a dialect's OpView classes to have their create method return
-    a Signal instead of an OpView. The wrapped classes are inserted into
-    the provided module."""
+     a Signal instead of an OpView. The wrapped classes are inserted into
+     the provided module."""
   import sys
-
   from .types import Type
-
   module = sys.modules[module_name]
 
   for attr in dir(dialect):
@@ -958,8 +893,8 @@ def wrap_opviews_with_values(dialect, module_name, excluded=[]):
           # Return the wrapped values, if any.
           converted_results = tuple(
               _FromCirctValue(res) for res in created.results)
-          return (converted_results[0]
-                  if len(converted_results) == 1 else converted_results)
+          return converted_results[0] if len(
+              converted_results) == 1 else converted_results
 
         return create
 
