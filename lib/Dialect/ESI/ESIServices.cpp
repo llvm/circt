@@ -404,7 +404,8 @@ struct ESIConnectServicesPass
   /// For any service which is "local" (provides the requested service) in a
   /// module, replace it with a ServiceImplementOp. Said op is to be replaced
   /// with an instantiation by a generator.
-  LogicalResult replaceInst(ServiceInstanceOp, Block *portReqs);
+  LogicalResult replaceInst(ServiceInstanceOp,
+                            ArrayRef<ServiceImplementConnReqOp> portReqs);
 
   /// Figure out which requests are "local" vs need to be surfaced. Call
   /// 'surfaceReqs' and/or 'replaceInst' as appropriate.
@@ -475,36 +476,50 @@ LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
   Block &modBlock = mod->getRegion(0).front();
 
   // The non-local reqs which need to be surfaced from this module.
-  SmallVector<ServiceImplementConnReqOp, 4> nonLocalReqs;
+  SetVector<ServiceImplementConnReqOp> nonLocalReqs;
   // Index the local services and create blocks in which to put the requests.
-  DenseMap<SymbolRefAttr, Block *> localImplReqs;
-  Block *anyServiceInst = nullptr;
-  for (auto instOp : modBlock.getOps<ServiceInstanceOp>()) {
-    auto *b = new Block();
-    localImplReqs[instOp.getServiceSymbolAttr()] = b;
-    if (!instOp.getServiceSymbolAttr())
-      anyServiceInst = b;
-  }
+  llvm::MapVector<SymbolRefAttr, llvm::SetVector<ServiceImplementConnReqOp>>
+      localImplReqs;
+  for (auto instOp : modBlock.getOps<ServiceInstanceOp>())
+    localImplReqs[instOp.getServiceSymbolAttr()] = {};
+  // AFTER we assemble the local services table (and it will not change the
+  // location of the values), get the pointer to the default service instance,
+  // if any.
+  llvm::SetVector<ServiceImplementConnReqOp> *anyServiceInst = nullptr;
+  if (auto defaultService = localImplReqs.find(SymbolRefAttr());
+      defaultService != localImplReqs.end())
+    anyServiceInst = &defaultService->second;
 
-  // Sort the various requests by destination.
-  mod.walk([&](ServiceImplementConnReqOp req) {
-    auto service = req.getServicePort().getModuleRef();
-    auto implOpF = localImplReqs.find(service);
-    if (implOpF != localImplReqs.end())
-      req->moveBefore(implOpF->second, implOpF->second->end());
-    else if (anyServiceInst)
-      req->moveBefore(anyServiceInst, anyServiceInst->end());
-    else
-      nonLocalReqs.push_back(req);
-  });
+  auto sortConnReqs = [&]() {
+    // Sort the various requests by destination.
+    for (auto req : llvm::make_early_inc_range(
+             mod.getBodyBlock()->getOps<ServiceImplementConnReqOp>())) {
+      auto service = req.getServicePort().getModuleRef();
+      auto reqListIter = localImplReqs.find(service);
+      if (reqListIter != localImplReqs.end())
+        reqListIter->second.insert(req);
+      else if (anyServiceInst)
+        anyServiceInst->insert(req);
+      else
+        nonLocalReqs.insert(req);
+    }
+  };
+  // Bootstrap the sorting.
+  sortConnReqs();
 
   // Replace each service instance with a generation request. If a service
   // generator is registered, generate the server.
   for (auto instOp :
        llvm::make_early_inc_range(modBlock.getOps<ServiceInstanceOp>())) {
-    Block *portReqs = localImplReqs[instOp.getServiceSymbolAttr()];
-    if (failed(replaceInst(instOp, portReqs)))
+    auto portReqs = localImplReqs[instOp.getServiceSymbolAttr()];
+    if (failed(replaceInst(instOp, portReqs.getArrayRef())))
       return failure();
+
+    // Find any new requests which were created by a generator.
+    for (RequestConnectionOp req : llvm::make_early_inc_range(
+             mod.getBodyBlock()->getOps<RequestConnectionOp>()))
+      convertReq(req);
+    sortConnReqs();
   }
 
   // Surface all of the requests which cannot be fulfilled locally.
@@ -512,14 +527,13 @@ LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
     return success();
 
   if (auto mutableMod = dyn_cast<hw::HWMutableModuleLike>(mod.getOperation()))
-    return surfaceReqs(mutableMod, nonLocalReqs);
+    return surfaceReqs(mutableMod, nonLocalReqs.getArrayRef());
   return mod.emitOpError(
       "Cannot surface requests through module without mutable ports");
 }
 
-LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
-                                                  Block *portReqs) {
-  assert(portReqs);
+LogicalResult ESIConnectServicesPass::replaceInst(
+    ServiceInstanceOp instOp, ArrayRef<ServiceImplementConnReqOp> portReqs) {
   auto declSym = instOp.getServiceSymbolAttr();
   ServiceDeclOpInterface decl;
   if (declSym) {
@@ -534,7 +548,7 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
   // + the to_client types.
   SmallVector<Type, 8> resultTypes(instOp.getResultTypes().begin(),
                                    instOp.getResultTypes().end());
-  for (auto req : portReqs->getOps<ServiceImplementConnReqOp>())
+  for (auto req : portReqs)
     resultTypes.push_back(req.getBundleType());
 
   // Create the generation request op.
@@ -544,17 +558,21 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
       instOp.getServiceSymbolAttr(), instOp.getImplTypeAttr(),
       getStdService(declSym), instOp.getImplOptsAttr(), instOp.getOperands());
   implOp->setDialectAttrs(instOp->getDialectAttrs());
-  implOp.getPortReqs().push_back(portReqs);
+  Block &reqBlock = implOp.getPortReqs().emplaceBlock();
 
   // Update the users.
   for (auto [n, o] : llvm::zip(implOp.getResults(), instOp.getResults()))
     o.replaceAllUsesWith(n);
   unsigned instOpNumResults = instOp.getNumResults();
-  for (auto [idx, req] :
-       llvm::enumerate(portReqs->getOps<ServiceImplementConnReqOp>())) {
+  for (size_t idx = 0, e = portReqs.size(); idx < e; ++idx) {
+    ServiceImplementConnReqOp req = portReqs[idx];
     req.getToClient().replaceAllUsesWith(
         implOp.getResult(idx + instOpNumResults));
   }
+
+  for (auto req : portReqs)
+    req->moveBefore(&reqBlock, reqBlock.end());
+  implOp->dump();
 
   // Erase the instance first in case it consumes any channels or bundles. If it
   // does, the service generator will fail to verify the IR as there will be
