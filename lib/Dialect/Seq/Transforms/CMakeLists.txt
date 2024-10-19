@@ -1,5 +1,6 @@
 add_circt_dialect_library(CIRCTSeqTransforms
   ExternalizeClockGate.cpp
+  FirregRandomization.cpp
   HWMemSimImpl.cpp
   LowerSeqHLMem.cpp
   LowerSeqFIFO.cpp
@@ -16,6 +17,7 @@ add_circt_dialect_library(CIRCTSeqTransforms
   CIRCTSupport
   CIRCTSV
   MLIRIR
+  MLIRFuncDialect
   MLIRPass
   MLIRTransformUtils
 )
