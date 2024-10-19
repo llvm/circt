@@ -113,6 +113,7 @@ set(ESICppRuntimeHeaders
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Common.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Context.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Design.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Logging.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Manifest.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Ports.h
