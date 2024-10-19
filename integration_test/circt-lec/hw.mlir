@@ -76,3 +76,27 @@ hw.module @onePlusTwoNonSSA(out out: i2) {
 //  RUN: circt-lec %s -c1=onePlusTwo -c2=onePlusTwoNonSSA --shared-libs=%libz3 | FileCheck %s --check-prefix=HW_MODULE_GRAPH
 //  HW_MODULE_GRAPH: c1 == c2
 
+// array_create + array_get test
+//  RUN: circt-lec %s -c1=MultibitMux -c2=MultibitMux2 --shared-libs=%libz3 | FileCheck %s --check-prefix=ARRAY_GET
+//  ARRAY_GET: c1 == c2
+
+hw.module @MultibitMux(in %a_0 : i1, in %a_1 : i1, in %sel : i1, out b : i1) {
+  %0 = hw.array_create %a_1, %a_0 : i1
+  %1 = hw.array_get %0[%sel] : !hw.array<2xi1>, i1
+  hw.output %1 : i1
+}
+
+hw.module @MultibitMux2(in %a_0 : i1, in %a_1 : i1, in %sel : i1, out b : i1) {
+  %0 = comb.mux bin %sel, %a_1, %a_0 : i1
+  hw.output %0 : i1
+}
+
+// array_get out-of-bounds must not be equivalent
+//  RUN: circt-lec %s -c1=ArrayOOB -c2=ArrayOOB --shared-libs=%libz3 | FileCheck %s --check-prefix=ARRAY_OOB
+//  ARRAY_OOB: c1 != c2
+
+hw.module @ArrayOOB(in %a : !hw.array<3xi1>, out b : i1) {
+  %0 = hw.constant 3 : i2
+  %1 = hw.array_get %a[%0] : !hw.array<3xi1>, i2
+  hw.output %1 : i1
+}
