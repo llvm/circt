@@ -188,6 +188,20 @@ std::optional<AnnoPathValue> circt::firrtl::tryResolve(DictionaryAttr anno,
   if (target)
     return stdResolveImpl(cast<StringAttr>(target->getValue()).getValue(),
                           state);
+
+  return AnnoPathValue(state.circuit);
+}
+
+/// Resolves with target, if it exists.  If not or target unresolved, resolves
+/// to the circuit. This function suppress any failures.
+std::optional<AnnoPathValue> resolveOrCircuit(DictionaryAttr anno,
+                                              ApplyState &state) {
+  auto target = anno.getNamed("target");
+  if (target)
+    if (auto x = stdResolveImpl(cast<StringAttr>(target->getValue()).getValue(),
+                                state))
+      return x;
+
   return AnnoPathValue(state.circuit);
 }
 
@@ -490,7 +504,8 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
      {stdResolve, applyWithoutTarget<true, MemOp, CombMemOp>}},
     {sitestBlackBoxAnnoClass, NoTargetAnnotation},
     // TODO: check other operations
-    {enumComponentAnnoClass, {stdResolve, applyTywaves}},
+    {enumComponentAnnoClass,
+     {resolveOrCircuit, applyTywaves}}, // Suppress errors of failing targets
     // applyWithoutTarget<true, true, WireOp, NodeOp, RegOp, RegResetOp, MemOp,
     //                    CombMemOp, MemoryPortOp, SeqMemOp>}},
     {enumDefAnnoClass, NoTargetAnnotation},
@@ -549,7 +564,7 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
     {wiringSourceAnnoClass, {stdResolve, applyWiring}},
     {attributeAnnoClass, {stdResolve, applyAttributeAnnotation}},
 
-    {tywavesAnnoClass, {stdResolve, applyTywaves}}}};
+    {tywavesAnnoClass, {tryResolve, applyTywaves}}}};
 
 LogicalResult
 registerAnnotationRecord(StringRef annoClass, AnnoRecord annoRecord,
