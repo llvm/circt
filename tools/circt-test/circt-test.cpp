@@ -70,7 +70,7 @@ Options opts;
 //===----------------------------------------------------------------------===//
 
 bool shouldIgnore(verif::FormalOp formalOp, Options &opts) {
-  return formalOp->hasAttr("ignore") &&
+  return formalOp->hasAttrOfType<BoolAttr>("ignore") &&
          cast<BoolAttr>(formalOp->getAttr("ignore")).getValue() &&
          !opts.includeIgnored;
 }
