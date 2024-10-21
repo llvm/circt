@@ -1160,7 +1160,7 @@ printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
       // If the name wasn't printable in a way that agreed with portName, make
       // sure to print out an explicit portNames attribute.
       auto portName = cast<StringAttr>(portNames[i]).getValue();
-      if (!portName.empty() && tmpStream.str().drop_front() != portName)
+      if (tmpStream.str().drop_front() != portName)
         printedNamesDontMatch = true;
       p << tmpStream.str();
     } else {
@@ -1987,6 +1987,30 @@ void ClassOp::build(OpBuilder &builder, OperationState &result, StringAttr name,
     body->addArgument(elt.type, elt.loc);
 }
 
+void ClassOp::build(::mlir::OpBuilder &odsBuilder,
+                    ::mlir::OperationState &odsState, Twine name,
+                    mlir::ArrayRef<mlir::StringRef> fieldNames,
+                    mlir::ArrayRef<mlir::Type> fieldTypes) {
+
+  SmallVector<PortInfo, 10> ports;
+  for (auto [fieldName, fieldType] : llvm::zip(fieldNames, fieldTypes)) {
+    ports.emplace_back(odsBuilder.getStringAttr(fieldName + "_in"), fieldType,
+                       Direction::In);
+    ports.emplace_back(odsBuilder.getStringAttr(fieldName), fieldType,
+                       Direction::Out);
+  }
+  build(odsBuilder, odsState, odsBuilder.getStringAttr(name), ports);
+  // Create a region and a block for the body.
+  auto &body = odsState.regions[0]->getBlocks().front();
+  auto prevLoc = odsBuilder.saveInsertionPoint();
+  odsBuilder.setInsertionPointToEnd(&body);
+  auto args = body.getArguments();
+  auto loc = odsState.location;
+  for (unsigned i = 0, e = ports.size(); i != e; i += 2)
+    odsBuilder.create<PropAssignOp>(loc, args[i + 1], args[i]);
+
+  odsBuilder.restoreInsertionPoint(prevLoc);
+}
 void ClassOp::print(OpAsmPrinter &p) {
   printClassLike(p, cast<ClassLike>(getOperation()));
 }
@@ -5978,6 +6002,9 @@ void IntegerMulOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void IntegerShrOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void IntegerShlOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void IsTagOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

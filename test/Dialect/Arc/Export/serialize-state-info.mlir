@@ -44,3 +44,13 @@ arc.model @Bar io !hw.modty<> {
   // CHECK-NEXT: "type": "wire"
   arc.alloc_state %arg0 tap {name = "z", offset = 92} : (!arc.storage<9001>) -> !arc.state<i1337>
 }
+
+// CHECK-LABEL: "name": "Alpha"
+// CHECK: "initialFnSym": "AlphaInitialize"
+// CHECK: "finalFnSym": "AlphaFinalize"
+arc.model @Alpha io !hw.modty<> initializer @AlphaInitialize finalizer @AlphaFinalize {
+^bb0(%arg0: !arc.storage<1>):
+}
+
+func.func private @AlphaInitialize(!arc.storage<1>)
+func.func private @AlphaFinalize(!arc.storage<1>)

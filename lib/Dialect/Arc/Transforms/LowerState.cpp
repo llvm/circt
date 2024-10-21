@@ -190,6 +190,10 @@ Value ClockLowering::materializeValue(Value value) {
     return {};
   if (auto mapped = materializedValues.lookupOrNull(value))
     return mapped;
+  if (auto fromImmutable = value.getDefiningOp<seq::FromImmutableOp>())
+    // Immutable value is pre-materialized so directly lookup the input.
+    return materializedValues.lookup(fromImmutable.getInput());
+
   if (!shouldMaterialize(value))
     return value;
 
@@ -427,19 +431,27 @@ LogicalResult ModuleLowering::lowerPrimaryOutputs() {
 }
 
 LogicalResult ModuleLowering::lowerInitials() {
-  // Move all operations except for seq.yield to arc.initial op.
-  for (auto op : moduleOp.getOps<seq::InitialOp>()) {
-    auto terminator = cast<seq::YieldOp>(op.getBodyBlock()->getTerminator());
-    getInitial().builder.getBlock()->getOperations().splice(
-        getInitial().builder.getBlock()->begin(),
-        op.getBodyBlock()->getOperations());
+  // Merge all seq.initial ops into a single seq.initial op.
+  auto result = circt::seq::mergeInitialOps(moduleOp.getBodyBlock());
+  if (failed(result))
+    return moduleOp.emitError() << "initial ops cannot be topologically sorted";
 
-    // Map seq.initial results to operands of the seq.yield op.
-    for (auto [result, operand] :
-         llvm::zip(op.getResults(), terminator.getOperands()))
-      getInitial().materializedValues.map(result, operand);
-    terminator.erase();
-  }
+  auto initialOp = *result;
+  if (!initialOp) // There is no seq.initial op.
+    return success();
+
+  // Move the operations of the merged initial op into the builder's block.
+  auto terminator =
+      cast<seq::YieldOp>(initialOp.getBodyBlock()->getTerminator());
+  getInitial().builder.getBlock()->getOperations().splice(
+      getInitial().builder.getBlock()->begin(),
+      initialOp.getBodyBlock()->getOperations());
+
+  // Map seq.initial results to their corresponding operands.
+  for (auto [result, operand] :
+       llvm::zip(initialOp.getResults(), terminator.getOperands()))
+    getInitial().materializedValues.map(result, operand);
+  terminator.erase();
 
   return success();
 }
@@ -931,9 +943,10 @@ LogicalResult LowerStatePass::runOnModule(HWModuleOp moduleOp,
   moduleOp.getBodyBlock()->eraseArguments(
       [&](auto arg) { return arg != lowering.storageArg; });
   ImplicitLocOpBuilder builder(moduleOp.getLoc(), moduleOp);
-  auto modelOp = builder.create<ModelOp>(
-      moduleOp.getLoc(), moduleOp.getModuleNameAttr(),
-      TypeAttr::get(moduleOp.getModuleType()), mlir::FlatSymbolRefAttr());
+  auto modelOp =
+      builder.create<ModelOp>(moduleOp.getLoc(), moduleOp.getModuleNameAttr(),
+                              TypeAttr::get(moduleOp.getModuleType()),
+                              FlatSymbolRefAttr{}, FlatSymbolRefAttr{});
   modelOp.getBody().takeBody(moduleOp.getBody());
   moduleOp->erase();
   sortTopologically(&modelOp.getBodyBlock());

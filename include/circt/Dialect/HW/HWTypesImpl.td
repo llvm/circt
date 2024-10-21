@@ -15,6 +15,7 @@
 
 include "circt/Dialect/HW/HWDialect.td"
 include "circt/Dialect/HW/HWTypeInterfaces.td"
+include "mlir/Interfaces/MemorySlotInterfaces.td"
 include "mlir/IR/AttrTypeBase.td"
 
 // Base class for other typedefs. Provides dialact-specific defaults.
@@ -50,7 +51,10 @@ def IntTypeImpl : HWType<"Int"> {
 }
 
 // A simple fixed size array. Declares the hw::ArrayType in C++.
-def ArrayTypeImpl : HWType<"Array", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]> {
+def ArrayTypeImpl : HWType<"Array", [
+  DeclareTypeInterfaceMethods<DestructurableTypeInterface>,
+  DeclareTypeInterfaceMethods<FieldIDTypeInterface>
+]> {
   let summary = "fixed-sized array";
   let description = [{
     Fixed sized HW arrays are roughly similar to C arrays. On the wire (vs.
@@ -128,7 +132,10 @@ def InOutTypeImpl : HWType<"InOut"> {
 }
 
 // A packed struct. Declares the hw::StructType in C++.
-def StructTypeImpl : HWType<"Struct", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]> {
+def StructTypeImpl : HWType<"Struct", [
+  DeclareTypeInterfaceMethods<DestructurableTypeInterface>,
+  DeclareTypeInterfaceMethods<FieldIDTypeInterface>
+]> {
   let summary = "HW struct type";
   let description = [{
     Represents a structure of name, value pairs.

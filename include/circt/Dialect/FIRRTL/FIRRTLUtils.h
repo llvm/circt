@@ -322,6 +322,14 @@ static ResultTy transformReduce(MLIRContext *context, RangeTy &&r,
 /// Truncate `a` to the common prefix of `a` and `b`.
 void makeCommonPrefix(SmallString<64> &a, StringRef b);
 
+//===----------------------------------------------------------------------===//
+// Object related utilities
+//===----------------------------------------------------------------------===//
+
+/// Add the tracker annotation to the op and get a PathOp to the op.
+PathOp createPathRef(Operation *op, hw::HierPathOp nla,
+                     mlir::ImplicitLocOpBuilder &builderOM);
+
 } // namespace firrtl
 } // namespace circt
 

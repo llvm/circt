@@ -306,6 +306,9 @@ class Port:
     self.cpp_port.connect(buffer_size)
     return self
 
+  def disconnect(self):
+    self.cpp_port.disconnect()
+
 
 class WritePort(Port):
   """A unidirectional communication channel from the host to the accelerator."""

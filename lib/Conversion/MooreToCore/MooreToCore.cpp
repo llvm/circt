@@ -16,6 +16,8 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
+#include "circt/Dialect/Sim/SimOps.h"
+#include "circt/Dialect/Verif/VerifOps.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -492,6 +494,44 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
 
     rewriter.replaceOpWithNewOp<llhd::SignalOp>(op, resultType,
                                                 op.getNameAttr(), init);
+    return success();
+  }
+};
+
+struct NetOpConversion : public OpConversionPattern<NetOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(NetOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    if (op.getKind() != NetKind::Wire)
+      return rewriter.notifyMatchFailure(loc, "only wire nets supported");
+
+    auto resultType = typeConverter->convertType(op.getResult().getType());
+    if (!resultType)
+      return rewriter.notifyMatchFailure(loc, "invalid net type");
+
+    // TODO: Once the core dialects support four-valued integers, this code
+    // will additionally need to generate an all-X value for four-valued nets.
+    auto elementType = cast<hw::InOutType>(resultType).getElementType();
+    int64_t width = hw::getBitWidth(elementType);
+    if (width == -1)
+      return failure();
+    auto constZero = rewriter.create<hw::ConstantOp>(loc, APInt(width, 0));
+    auto init =
+        rewriter.createOrFold<hw::BitcastOp>(loc, elementType, constZero);
+
+    auto signal = rewriter.replaceOpWithNewOp<llhd::SignalOp>(
+        op, resultType, op.getNameAttr(), init);
+
+    if (auto assignedValue = adaptor.getAssignment()) {
+      auto timeAttr = llhd::TimeAttr::get(resultType.getContext(), 0U,
+                                          llvm::StringRef("ns"), 0, 1);
+      auto time = rewriter.create<llhd::ConstantTimeOp>(loc, timeAttr);
+      rewriter.create<llhd::DrvOp>(loc, signal, assignedValue, time, Value{});
+    }
+
     return success();
   }
 };
@@ -1199,6 +1239,87 @@ struct InPlaceOpConversion : public OpConversionPattern<SourceOp> {
   }
 };
 
+template <typename MooreOpTy, typename VerifOpTy>
+struct AssertLikeOpConversion : public OpConversionPattern<MooreOpTy> {
+  using OpConversionPattern<MooreOpTy>::OpConversionPattern;
+  using OpAdaptor = typename MooreOpTy::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(MooreOpTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    StringAttr label =
+        op.getLabel().has_value()
+            ? StringAttr::get(op->getContext(), op.getLabel().value())
+            : StringAttr::get(op->getContext());
+    rewriter.replaceOpWithNewOp<VerifOpTy>(op, adaptor.getCond(), mlir::Value(),
+                                           label);
+    return success();
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// Format String Conversion
+//===----------------------------------------------------------------------===//
+
+struct FormatLiteralOpConversion : public OpConversionPattern<FormatLiteralOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FormatLiteralOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::FormatLitOp>(op, adaptor.getLiteral());
+    return success();
+  }
+};
+
+struct FormatConcatOpConversion : public OpConversionPattern<FormatConcatOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FormatConcatOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::FormatStringConcatOp>(op,
+                                                           adaptor.getInputs());
+    return success();
+  }
+};
+
+struct FormatIntOpConversion : public OpConversionPattern<FormatIntOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FormatIntOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // TODO: These should honor the width, alignment, and padding.
+    switch (op.getFormat()) {
+    case IntFormat::Decimal:
+      rewriter.replaceOpWithNewOp<sim::FormatDecOp>(op, adaptor.getValue());
+      return success();
+    case IntFormat::Binary:
+      rewriter.replaceOpWithNewOp<sim::FormatBinOp>(op, adaptor.getValue());
+      return success();
+    case IntFormat::HexLower:
+    case IntFormat::HexUpper:
+      rewriter.replaceOpWithNewOp<sim::FormatHexOp>(op, adaptor.getValue());
+      return success();
+    default:
+      return rewriter.notifyMatchFailure(op, "unsupported int format");
+    }
+  }
+};
+
+struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(DisplayBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::PrintFormattedProcOp>(
+        op, adaptor.getMessage());
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -1208,10 +1329,12 @@ struct InPlaceOpConversion : public OpConversionPattern<SourceOp> {
 static void populateLegality(ConversionTarget &target,
                              const TypeConverter &converter) {
   target.addIllegalDialect<MooreDialect>();
-  target.addLegalDialect<mlir::BuiltinDialect>();
+  target.addLegalDialect<comb::CombDialect>();
   target.addLegalDialect<hw::HWDialect>();
   target.addLegalDialect<llhd::LLHDDialect>();
-  target.addLegalDialect<comb::CombDialect>();
+  target.addLegalDialect<mlir::BuiltinDialect>();
+  target.addLegalDialect<sim::SimDialect>();
+  target.addLegalDialect<verif::VerifDialect>();
 
   target.addLegalOp<debug::ScopeOp>();
 
@@ -1235,6 +1358,10 @@ static void populateLegality(ConversionTarget &target,
 static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([&](IntType type) {
     return IntegerType::get(type.getContext(), type.getWidth());
+  });
+
+  typeConverter.addConversion([&](FormatStringType type) {
+    return sim::FormatStringType::get(type.getContext());
   });
 
   typeConverter.addConversion([&](ArrayType type) -> std::optional<Type> {
@@ -1342,6 +1469,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
   patterns.add<
     // Patterns of declaration operations.
     VariableOpConversion,
+    NetOpConversion,
 
     // Patterns of miscellaneous operations.
     ConstantOpConv, ConcatOpConversion, ReplicateOpConversion,
@@ -1384,7 +1512,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
     ICmpOpConversion<WildcardNeOp, ICmpPredicate::wne>,
     CaseXZEqOpConversion<CaseZEqOp, true>,
     CaseXZEqOpConversion<CaseXZEqOp, false>,
-    
+
     // Patterns of structural operations.
     SVModuleOpConversion, InstanceOpConversion, ProcedureOpConversion, WaitEventOpConversion,
 
@@ -1405,12 +1533,23 @@ static void populateOpConversion(RewritePatternSet &patterns,
     CallOpConversion, UnrealizedConversionCastConversion,
     InPlaceOpConversion<debug::ArrayOp>,
     InPlaceOpConversion<debug::StructOp>,
-    InPlaceOpConversion<debug::VariableOp>
+    InPlaceOpConversion<debug::VariableOp>,
+
+    // Patterns of assert-like operations
+    AssertLikeOpConversion<AssertOp, verif::AssertOp>,
+    AssertLikeOpConversion<AssumeOp, verif::AssumeOp>,
+    AssertLikeOpConversion<CoverOp, verif::CoverOp>,
+
+    // Format strings.
+    FormatLiteralOpConversion,
+    FormatConcatOpConversion,
+    FormatIntOpConversion,
+    DisplayBIOpConversion
   >(typeConverter, context);
   // clang-format on
+
   mlir::populateAnyFunctionOpInterfaceTypeConversionPattern(patterns,
                                                             typeConverter);
-
   hw::populateHWModuleLikeTypeConversionPattern(
       hw::HWModuleOp::getOperationName(), patterns, typeConverter);
 }

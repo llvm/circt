@@ -136,7 +136,7 @@ valueToName(const SmallVector<mlir::Value> &values,
   SmallVector<std::pair<mlir::Value, std::string>> res;
   for (auto [i, v] : llvm::enumerate(values)) {
     auto found = false;
-    for (const auto& [key, value] : currentMap) {
+    for (const auto &[key, value] : currentMap) {
       if (v == key) {
         res.push_back({v, value});
         found = true;

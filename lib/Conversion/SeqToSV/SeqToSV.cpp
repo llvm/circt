@@ -23,6 +23,7 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/Naming.h"
+#include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -59,11 +60,10 @@ struct SeqToSVPass : public impl::LowerSeqToSVBase<SeqToSVPass> {
 namespace {
 struct ModuleLoweringState {
   ModuleLoweringState(HWModuleOp module)
-      : initalOpLowering(module), module(module) {}
+      : immutableValueLowering(module), module(module) {}
 
-  struct InitialOpLowering {
-    InitialOpLowering(hw::HWModuleOp module)
-        : builder(module.getModuleBody()), module(module) {}
+  struct ImmutableValueLowering {
+    ImmutableValueLowering(hw::HWModuleOp module) : module(module) {}
 
     // Lower initial ops.
     LogicalResult lower();
@@ -82,9 +82,8 @@ struct ModuleLoweringState {
     // defined in SV initial op.
     MapVector<mlir::TypedValue<seq::ImmutableType>, Value> mapping;
 
-    OpBuilder builder;
     hw::HWModuleOp module;
-  } initalOpLowering;
+  } immutableValueLowering;
 
   struct FragmentInfo {
     bool needsRegFragment = false;
@@ -94,21 +93,27 @@ struct ModuleLoweringState {
   HWModuleOp module;
 };
 
-LogicalResult ModuleLoweringState::InitialOpLowering::lower() {
-  auto loweringFailed = module
-                            .walk([&](seq::InitialOp initialOp) {
-                              if (failed(lower(initialOp)))
-                                return mlir::WalkResult::interrupt();
-                              return mlir::WalkResult::advance();
-                            })
-                            .wasInterrupted();
-  return LogicalResult::failure(loweringFailed);
+LogicalResult ModuleLoweringState::ImmutableValueLowering::lower() {
+  auto result = mergeInitialOps(module.getBodyBlock());
+  if (failed(result))
+    return failure();
+
+  auto initialOp = *result;
+  if (!initialOp)
+    return success();
+
+  return lower(initialOp);
 }
 
 LogicalResult
-ModuleLoweringState::InitialOpLowering::lower(seq::InitialOp initialOp) {
+ModuleLoweringState::ImmutableValueLowering::lower(seq::InitialOp initialOp) {
+  OpBuilder builder = OpBuilder::atBlockBegin(module.getBodyBlock());
   if (!svInitialOp)
     svInitialOp = builder.create<sv::InitialOp>(initialOp->getLoc());
+  // Initial ops are merged to single one and must not have operands.
+  assert(initialOp.getNumOperands() == 0 &&
+         "initial op should have no operands");
+
   auto loc = initialOp.getLoc();
   llvm::SmallVector<Value> results;
 
@@ -127,10 +132,10 @@ ModuleLoweringState::InitialOpLowering::lower(seq::InitialOp initialOp) {
   }
 
   svInitialOp.getBodyBlock()->getOperations().splice(
-      svInitialOp.begin(), initialOp.getBodyBlock()->getOperations());
+      svInitialOp.end(), initialOp.getBodyBlock()->getOperations());
 
   assert(initialOp->use_empty());
-  initialOp->erase();
+  initialOp.erase();
   yieldOp->erase();
   return success();
 }
@@ -200,7 +205,7 @@ public:
       auto module = reg->template getParentOfType<hw::HWModuleOp>();
       const auto &initial =
           moduleLoweringStates.find(module.getModuleNameAttr())
-              ->second.initalOpLowering;
+              ->second.immutableValueLowering;
 
       Value initialValue = initial.lookupImmutableValue(init);
 
@@ -247,6 +252,49 @@ void CompRegLower<CompRegClockEnabledOp>::createAssign(
   });
 }
 
+/// Lower FromImmutable to `sv.reg` and `sv.initial`.
+class FromImmutableLowering : public OpConversionPattern<FromImmutableOp> {
+public:
+  FromImmutableLowering(
+      TypeConverter &typeConverter, MLIRContext *context,
+      const MapVector<StringAttr, ModuleLoweringState> &moduleLoweringStates)
+      : OpConversionPattern<FromImmutableOp>(typeConverter, context),
+        moduleLoweringStates(moduleLoweringStates) {}
+
+  using OpAdaptor = typename OpConversionPattern<FromImmutableOp>::OpAdaptor;
+
+  LogicalResult
+  matchAndRewrite(FromImmutableOp fromImmutableOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Location loc = fromImmutableOp.getLoc();
+
+    auto regTy = ConversionPattern::getTypeConverter()->convertType(
+        fromImmutableOp.getType());
+    auto svReg = rewriter.create<sv::RegOp>(loc, regTy);
+
+    auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
+
+    // Lower initial values.
+    auto module = fromImmutableOp->template getParentOfType<hw::HWModuleOp>();
+    const auto &initial = moduleLoweringStates.find(module.getModuleNameAttr())
+                              ->second.immutableValueLowering;
+
+    Value initialValue =
+        initial.lookupImmutableValue(fromImmutableOp.getInput());
+
+    OpBuilder::InsertionGuard guard(rewriter);
+    auto in = initial.getSVInitial();
+    rewriter.setInsertionPointToEnd(in.getBodyBlock());
+    rewriter.create<sv::BPAssignOp>(fromImmutableOp->getLoc(), svReg,
+                                    initialValue);
+
+    rewriter.replaceOp(fromImmutableOp, regVal);
+    return success();
+  }
+
+private:
+  const MapVector<StringAttr, ModuleLoweringState> &moduleLoweringStates;
+};
 // Lower seq.clock_gate to a fairly standard clock gate implementation.
 //
 class ClockGateLowering : public OpConversionPattern<ClockGateOp> {
@@ -537,7 +585,7 @@ void SeqToSVPass::runOnOperation() {
     moduleLoweringStates.try_emplace(module.getModuleNameAttr(),
                                      ModuleLoweringState(module));
 
-  mlir::parallelForEach(
+  auto result = mlir::failableParallelForEach(
       &getContext(), moduleLoweringStates, [&](auto &moduleAndState) {
         auto &state = moduleAndState.second;
         auto module = state.module;
@@ -561,8 +609,11 @@ void SeqToSVPass::runOnOperation() {
           }
           needsMemRandomization = true;
         }
-        (void)state.initalOpLowering.lower();
+        return state.immutableValueLowering.lower();
       });
+
+  if (failed(result))
+    return signalPassFailure();
 
   auto randomInitFragmentName =
       FlatSymbolRefAttr::get(context, "RANDOM_INIT_FRAGMENT");
@@ -605,6 +656,8 @@ void SeqToSVPass::runOnOperation() {
                                         moduleLoweringStates);
   patterns.add<CompRegLower<CompRegClockEnabledOp>>(
       typeConverter, context, lowerToAlwaysFF, moduleLoweringStates);
+  patterns.add<FromImmutableLowering>(typeConverter, context,
+                                      moduleLoweringStates);
   patterns.add<ClockCastLowering<seq::FromClockOp>>(typeConverter, context);
   patterns.add<ClockCastLowering<seq::ToClockOp>>(typeConverter, context);
   patterns.add<ClockGateLowering>(typeConverter, context);

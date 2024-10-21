@@ -17,7 +17,6 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
-#include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/Debug.h"
 #include "circt/Support/FieldRef.h"
@@ -25,10 +24,7 @@
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/DenseSet.h"
-#include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/Hashing.h"
-#include "llvm/ADT/MapVector.h"
-#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -116,41 +112,50 @@ inline llvm::hash_code hash_value(const T &e) {
 
 namespace {
 #define EXPR_NAMES(x)                                                          \
-  Root##x, Var##x, Derived##x, Id##x, Known##x, Add##x, Pow##x, Max##x, Min##x
+  Var##x, Derived##x, Id##x, Known##x, Add##x, Pow##x, Max##x, Min##x
 #define EXPR_KINDS EXPR_NAMES()
 #define EXPR_CLASSES EXPR_NAMES(Expr)
 
 /// An expression on the right-hand side of a constraint.
 struct Expr {
-  enum class Kind { EXPR_KINDS };
-  std::optional<int32_t> solution;
-  Kind kind;
+  enum class Kind : uint8_t { EXPR_KINDS };
 
   /// Print a human-readable representation of this expr.
   void print(llvm::raw_ostream &os) const;
 
+  std::optional<int32_t> getSolution() const {
+    if (hasSolution)
+      return solution;
+    return std::nullopt;
+  }
+
+  void setSolution(int32_t solution) {
+    hasSolution = true;
+    this->solution = solution;
+  }
+
+  Kind getKind() const { return kind; }
+
 protected:
   Expr(Kind kind) : kind(kind) {}
   llvm::hash_code hash_value() const { return llvm::hash_value(kind); }
+
+private:
+  int32_t solution;
+  Kind kind;
+  bool hasSolution = false;
 };
 
 /// Helper class to CRTP-derive common functions.
 template <class DerivedT, Expr::Kind DerivedKind>
 struct ExprBase : public Expr {
   ExprBase() : Expr(DerivedKind) {}
-  static bool classof(const Expr *e) { return e->kind == DerivedKind; }
+  static bool classof(const Expr *e) { return e->getKind() == DerivedKind; }
   bool operator==(const Expr &other) const {
     if (auto otherSame = dyn_cast<DerivedT>(other))
       return *static_cast<DerivedT *>(this) == otherSame;
     return false;
   }
-};
-
-/// The root containing all expressions.
-struct RootExpr : public ExprBase<RootExpr, Expr::Kind::Root> {
-  RootExpr(std::vector<Expr *> &exprs) : exprs(exprs) {}
-  void print(llvm::raw_ostream &os) const { os << "root"; }
-  std::vector<Expr *> &exprs;
 };
 
 /// A free variable.
@@ -203,7 +208,7 @@ struct IdExpr : public ExprBase<IdExpr, Expr::Kind::Id> {
   IdExpr(Expr *arg) : arg(arg) { assert(arg); }
   void print(llvm::raw_ostream &os) const { os << "*" << *arg; }
   bool operator==(const IdExpr &other) const {
-    return kind == other.kind && arg == other.arg;
+    return getKind() == other.getKind() && arg == other.arg;
   }
   llvm::hash_code hash_value() const {
     return llvm::hash_combine(Expr::hash_value(), arg);
@@ -215,21 +220,22 @@ struct IdExpr : public ExprBase<IdExpr, Expr::Kind::Id> {
 
 /// A known constant value.
 struct KnownExpr : public ExprBase<KnownExpr, Expr::Kind::Known> {
-  KnownExpr(int32_t value) : ExprBase() { solution = value; }
-  void print(llvm::raw_ostream &os) const { os << *solution; }
+  KnownExpr(int32_t value) : ExprBase() { setSolution(value); }
+  void print(llvm::raw_ostream &os) const { os << *getSolution(); }
   bool operator==(const KnownExpr &other) const {
-    return *solution == *other.solution;
+    return *getSolution() == *other.getSolution();
   }
   llvm::hash_code hash_value() const {
-    return llvm::hash_combine(Expr::hash_value(), *solution);
+    return llvm::hash_combine(Expr::hash_value(), *getSolution());
   }
+  int32_t getValue() const { return *getSolution(); }
 };
 
 /// A unary expression. Contains the actual data. Concrete subclasses are merely
 /// there for show and ease of use.
 struct UnaryExpr : public Expr {
   bool operator==(const UnaryExpr &other) const {
-    return kind == other.kind && arg == other.arg;
+    return getKind() == other.getKind() && arg == other.arg;
   }
   llvm::hash_code hash_value() const {
     return llvm::hash_combine(Expr::hash_value(), arg);
@@ -248,7 +254,7 @@ struct UnaryExprBase : public UnaryExpr {
   template <typename... Args>
   UnaryExprBase(Args &&...args)
       : UnaryExpr(DerivedKind, std::forward<Args>(args)...) {}
-  static bool classof(const Expr *e) { return e->kind == DerivedKind; }
+  static bool classof(const Expr *e) { return e->getKind() == DerivedKind; }
 };
 
 /// A power of two.
@@ -261,7 +267,8 @@ struct PowExpr : public UnaryExprBase<PowExpr, Expr::Kind::Pow> {
 /// merely there for show and ease of use.
 struct BinaryExpr : public Expr {
   bool operator==(const BinaryExpr &other) const {
-    return kind == other.kind && lhs() == other.lhs() && rhs() == other.rhs();
+    return getKind() == other.getKind() && lhs() == other.lhs() &&
+           rhs() == other.rhs();
   }
   llvm::hash_code hash_value() const {
     return llvm::hash_combine(Expr::hash_value(), *args);
@@ -285,7 +292,7 @@ struct BinaryExprBase : public BinaryExpr {
   template <typename... Args>
   BinaryExprBase(Args &&...args)
       : BinaryExpr(DerivedKind, std::forward<Args>(args)...) {}
-  static bool classof(const Expr *e) { return e->kind == DerivedKind; }
+  static bool classof(const Expr *e) { return e->getKind() == DerivedKind; }
 };
 
 /// An addition.
@@ -325,11 +332,26 @@ void Expr::print(llvm::raw_ostream &os) const {
 
 namespace {
 
-/// An allocation slot in the `InternedAllocator`.
+// Hash slots in the interned allocator as if they were the pointed-to value
+// itself.
 template <typename T>
-struct InternedSlot {
-  T *ptr;
-  InternedSlot(T *ptr) : ptr(ptr) {}
+struct InternedSlotInfo : DenseMapInfo<T *> {
+  static T *getEmptyKey() {
+    auto *pointer = llvm::DenseMapInfo<void *>::getEmptyKey();
+    return static_cast<T *>(pointer);
+  }
+  static T *getTombstoneKey() {
+    auto *pointer = llvm::DenseMapInfo<void *>::getTombstoneKey();
+    return static_cast<T *>(pointer);
+  }
+  static unsigned getHashValue(const T *val) { return mlir::hash_value(*val); }
+  static bool isEqual(const T *lhs, const T *rhs) {
+    auto empty = getEmptyKey();
+    auto tombstone = getTombstoneKey();
+    if (lhs == empty || rhs == empty || lhs == tombstone || rhs == tombstone)
+      return lhs == rhs;
+    return *lhs == *rhs;
+  }
 };
 
 /// A simple bump allocator that ensures only ever one copy per object exists.
@@ -337,8 +359,7 @@ struct InternedSlot {
 template <typename T, typename std::enable_if_t<
                           std::is_trivially_destructible<T>::value, int> = 0>
 class InternedAllocator {
-  using Slot = InternedSlot<T>;
-  llvm::DenseSet<Slot> interned;
+  llvm::DenseSet<T *, InternedSlotInfo<T>> interned;
   llvm::BumpPtrAllocator &allocator;
 
 public:
@@ -349,14 +370,14 @@ public:
   /// derived from or be the type `T`.
   template <typename R = T, typename... Args>
   std::pair<R *, bool> alloc(Args &&...args) {
-    auto stack_value = R(std::forward<Args>(args)...);
-    auto stack_slot = Slot(&stack_value);
-    auto it = interned.find(stack_slot);
+    auto stackValue = R(std::forward<Args>(args)...);
+    auto *stackSlot = &stackValue;
+    auto it = interned.find(stackSlot);
     if (it != interned.end())
-      return std::make_pair(static_cast<R *>(it->ptr), false);
-    auto heap_value = new (allocator) R(std::move(stack_value));
-    interned.insert(Slot(heap_value));
-    return std::make_pair(heap_value, true);
+      return std::make_pair(static_cast<R *>(*it), false);
+    auto heapValue = new (allocator) R(std::move(stackValue));
+    interned.insert(heapValue);
+    return std::make_pair(heapValue, true);
   }
 };
 
@@ -405,9 +426,9 @@ namespace {
 /// a and b. The `sat` function performs this action.
 struct LinIneq {
   // x >= max(a*x+b, c) + (failed ? ∞ : 0)
-  int32_t rec_scale = 0;   // a
-  int32_t rec_bias = 0;    // b
-  int32_t nonrec_bias = 0; // c
+  int32_t recScale = 0;   // a
+  int32_t recBias = 0;    // b
+  int32_t nonrecBias = 0; // c
   bool failed = false;
 
   /// Create a new unsatisfiable inequality `x >= ∞`.
@@ -417,29 +438,29 @@ struct LinIneq {
   explicit LinIneq(bool failed = false) : failed(failed) {}
 
   /// Create a new inequality `x >= bias`.
-  explicit LinIneq(int32_t bias) : nonrec_bias(bias) {}
+  explicit LinIneq(int32_t bias) : nonrecBias(bias) {}
 
   /// Create a new inequality `x >= scale*x+bias`.
   explicit LinIneq(int32_t scale, int32_t bias) {
     if (scale != 0) {
-      rec_scale = scale;
-      rec_bias = bias;
+      recScale = scale;
+      recBias = bias;
     } else {
-      nonrec_bias = bias;
+      nonrecBias = bias;
     }
   }
 
-  /// Create a new inequality `x >= max(rec_scale*x+rec_bias, nonrec_bias) +
+  /// Create a new inequality `x >= max(recScale*x+recBias, nonrecBias) +
   /// (failed ? ∞ : 0)`.
-  explicit LinIneq(int32_t rec_scale, int32_t rec_bias, int32_t nonrec_bias,
+  explicit LinIneq(int32_t recScale, int32_t recBias, int32_t nonrecBias,
                    bool failed = false)
       : failed(failed) {
-    if (rec_scale != 0) {
-      this->rec_scale = rec_scale;
-      this->rec_bias = rec_bias;
-      this->nonrec_bias = nonrec_bias;
+    if (recScale != 0) {
+      this->recScale = recScale;
+      this->recBias = recBias;
+      this->nonrecBias = nonrecBias;
     } else {
-      this->nonrec_bias = std::max(rec_bias, nonrec_bias);
+      this->nonrecBias = std::max(recBias, nonrecBias);
     }
   }
 
@@ -451,9 +472,9 @@ struct LinIneq {
   /// a pessimistic upper bound, since e.g. `x >= 2x-10` and `x >= x-5` may both
   /// hold, but the resulting `x >= 2x-5` may pessimistically not hold.
   static LinIneq max(const LinIneq &lhs, const LinIneq &rhs) {
-    return LinIneq(std::max(lhs.rec_scale, rhs.rec_scale),
-                   std::max(lhs.rec_bias, rhs.rec_bias),
-                   std::max(lhs.nonrec_bias, rhs.nonrec_bias),
+    return LinIneq(std::max(lhs.recScale, rhs.recScale),
+                   std::max(lhs.recBias, rhs.recBias),
+                   std::max(lhs.nonrecBias, rhs.nonrecBias),
                    lhs.failed || rhs.failed);
   }
 
@@ -513,15 +534,15 @@ struct LinIneq {
   static LinIneq add(const LinIneq &lhs, const LinIneq &rhs) {
     // Determine the maximum scaling factor among the three possible recursive
     // terms.
-    auto enable1 = lhs.rec_scale > 0 && rhs.rec_scale > 0;
-    auto enable2 = lhs.rec_scale > 0;
-    auto enable3 = rhs.rec_scale > 0;
-    auto scale1 = lhs.rec_scale + rhs.rec_scale; // (a1+a2)
-    auto scale2 = lhs.rec_scale;                 // a1
-    auto scale3 = rhs.rec_scale;                 // a2
-    auto bias1 = lhs.rec_bias + rhs.rec_bias;    // (b1+b2)
-    auto bias2 = lhs.rec_bias + rhs.nonrec_bias; // (b1+c2)
-    auto bias3 = rhs.rec_bias + lhs.nonrec_bias; // (b2+c1)
+    auto enable1 = lhs.recScale > 0 && rhs.recScale > 0;
+    auto enable2 = lhs.recScale > 0;
+    auto enable3 = rhs.recScale > 0;
+    auto scale1 = lhs.recScale + rhs.recScale; // (a1+a2)
+    auto scale2 = lhs.recScale;                // a1
+    auto scale3 = rhs.recScale;                // a2
+    auto bias1 = lhs.recBias + rhs.recBias;    // (b1+b2)
+    auto bias2 = lhs.recBias + rhs.nonrecBias; // (b1+c2)
+    auto bias3 = rhs.recBias + lhs.nonrecBias; // (b2+c1)
     auto maxScale = std::max(scale1, std::max(scale2, scale3));
 
     // Among those terms that have a maximum scaling factor, determine the
@@ -536,15 +557,15 @@ struct LinIneq {
 
     // Pick from the recursive terms the one with maximum scaling factor and
     // minimum bias value.
-    auto nonrec_bias = lhs.nonrec_bias + rhs.nonrec_bias; // c1+c2
+    auto nonrecBias = lhs.nonrecBias + rhs.nonrecBias; // c1+c2
     auto failed = lhs.failed || rhs.failed;
     if (enable1 && scale1 == maxScale && bias1 == *maxBias)
-      return LinIneq(scale1, bias1, nonrec_bias, failed);
+      return LinIneq(scale1, bias1, nonrecBias, failed);
     if (enable2 && scale2 == maxScale && bias2 == *maxBias)
-      return LinIneq(scale2, bias2, nonrec_bias, failed);
+      return LinIneq(scale2, bias2, nonrecBias, failed);
     if (enable3 && scale3 == maxScale && bias3 == *maxBias)
-      return LinIneq(scale3, bias3, nonrec_bias, failed);
-    return LinIneq(0, 0, nonrec_bias, failed);
+      return LinIneq(scale3, bias3, nonrecBias, failed);
+    return LinIneq(0, 0, nonrecBias, failed);
   }
 
   /// Check if the inequality is satisfiable.
@@ -555,9 +576,9 @@ struct LinIneq {
   bool sat() const {
     if (failed)
       return false;
-    if (rec_scale > 1)
+    if (recScale > 1)
       return false;
-    if (rec_scale == 1 && rec_bias > 0)
+    if (recScale == 1 && recBias > 0)
       return false;
     return true;
   }
@@ -565,32 +586,32 @@ struct LinIneq {
   /// Dump the inequality in human-readable form.
   void print(llvm::raw_ostream &os) const {
     bool any = false;
-    bool both = (rec_scale != 0 || rec_bias != 0) && nonrec_bias != 0;
+    bool both = (recScale != 0 || recBias != 0) && nonrecBias != 0;
     os << "x >= ";
     if (both)
       os << "max(";
-    if (rec_scale != 0) {
+    if (recScale != 0) {
       any = true;
-      if (rec_scale != 1)
-        os << rec_scale << "*";
+      if (recScale != 1)
+        os << recScale << "*";
       os << "x";
     }
-    if (rec_bias != 0) {
+    if (recBias != 0) {
       if (any) {
-        if (rec_bias < 0)
-          os << " - " << -rec_bias;
+        if (recBias < 0)
+          os << " - " << -recBias;
         else
-          os << " + " << rec_bias;
+          os << " + " << recBias;
       } else {
         any = true;
-        os << rec_bias;
+        os << recBias;
       }
     }
     if (both)
       os << ", ";
-    if (nonrec_bias != 0) {
+    if (nonrecBias != 0) {
       any = true;
-      os << nonrec_bias;
+      os << nonrecBias;
     }
     if (both)
       os << ")";
@@ -610,8 +631,8 @@ public:
   ConstraintSolver() = default;
 
   VarExpr *var() {
-    auto v = vars.alloc();
-    exprs.push_back(v);
+    auto *v = vars.alloc();
+    varExprs.push_back(v);
     if (currentInfo)
       info[v].insert(currentInfo);
     if (currentLoc)
@@ -620,7 +641,7 @@ public:
   }
   DerivedExpr *derived() {
     auto *d = derivs.alloc();
-    exprs.push_back(d);
+    derivedExprs.push_back(d);
     return d;
   }
   KnownExpr *known(int32_t value) { return alloc<KnownExpr>(knowns, value); }
@@ -669,20 +690,19 @@ private:
   InternedAllocator<BinaryExpr> bins = {allocator};
 
   /// A list of expressions in the order they were created.
-  std::vector<Expr *> exprs;
-  RootExpr root = {exprs};
+  std::vector<VarExpr *> varExprs;
+  std::vector<DerivedExpr *> derivedExprs;
 
   /// Add an allocated expression to the list above.
   template <typename R, typename T, typename... Args>
   R *alloc(InternedAllocator<T> &allocator, Args &&...args) {
-    auto it = allocator.template alloc<R>(std::forward<Args>(args)...);
-    if (it.second)
-      exprs.push_back(it.first);
+    auto [expr, inserted] =
+        allocator.template alloc<R>(std::forward<Args>(args)...);
     if (currentInfo)
-      info[it.first].insert(currentInfo);
+      info[expr].insert(currentInfo);
     if (currentLoc)
-      locs[it.first].insert(*currentLoc);
-    return it.first;
+      locs[expr].insert(*currentLoc);
+    return expr;
   }
 
   /// Contextual information for each expression, indicating which values in the
@@ -711,13 +731,11 @@ private:
 
 /// Print all constraints in the solver to an output stream.
 void ConstraintSolver::dumpConstraints(llvm::raw_ostream &os) {
-  for (auto *e : exprs) {
-    if (auto *v = dyn_cast<VarExpr>(e)) {
-      if (v->constraint)
-        os << "- " << *v << " >= " << *v->constraint << "\n";
-      else
-        os << "- " << *v << " unconstrained\n";
-    }
+  for (auto *v : varExprs) {
+    if (v->constraint)
+      os << "- " << *v << " >= " << *v->constraint << "\n";
+    else
+      os << "- " << *v << " unconstrained\n";
   }
 }
 
@@ -744,7 +762,8 @@ LinIneq ConstraintSolver::checkCycles(VarExpr *var, Expr *expr,
                                       unsigned indent) {
   auto ineq =
       TypeSwitch<Expr *, LinIneq>(expr)
-          .Case<KnownExpr>([&](auto *expr) { return LinIneq(*expr->solution); })
+          .Case<KnownExpr>(
+              [&](auto *expr) { return LinIneq(expr->getValue()); })
           .Case<VarExpr>([&](auto *expr) {
             if (expr == var)
               return LinIneq(1, 0); // x >= 1*x + 0
@@ -773,10 +792,9 @@ LinIneq ConstraintSolver::checkCycles(VarExpr *var, Expr *expr,
             // representable.
             auto arg =
                 checkCycles(var, expr->arg, seenVars, reportInto, indent + 1);
-            if (arg.rec_scale != 0 || arg.nonrec_bias < 0 ||
-                arg.nonrec_bias >= 31)
+            if (arg.recScale != 0 || arg.nonrecBias < 0 || arg.nonrecBias >= 31)
               return LinIneq::unsat();
-            return LinIneq(1 << arg.nonrec_bias); // x >= 2**arg
+            return LinIneq(1 << arg.nonrecBias); // x >= 2**arg
           })
           .Case<AddExpr>([&](auto *expr) {
             return LinIneq::add(
@@ -802,15 +820,15 @@ LinIneq ConstraintSolver::checkCycles(VarExpr *var, Expr *expr,
     auto report = [&](Location loc) {
       auto &note = reportInto->attachNote(loc);
       note << "constrained width W >= ";
-      if (ineq.rec_scale == -1)
+      if (ineq.recScale == -1)
         note << "-";
-      if (ineq.rec_scale != 1)
-        note << ineq.rec_scale;
+      if (ineq.recScale != 1)
+        note << ineq.recScale;
       note << "W";
-      if (ineq.rec_bias < 0)
-        note << "-" << -ineq.rec_bias;
-      if (ineq.rec_bias > 0)
-        note << "+" << ineq.rec_bias;
+      if (ineq.recBias < 0)
+        note << "-" << -ineq.recBias;
+      if (ineq.recBias > 0)
+        note << "+" << ineq.recBias;
       note << " here:";
     };
     auto it = locs.find(expr);
@@ -847,44 +865,43 @@ computeBinary(ExprSolution lhs, ExprSolution rhs,
   return result;
 }
 
+namespace {
+struct Frame {
+  Frame(Expr *expr, unsigned indent) : expr(expr), indent(indent) {}
+  Expr *expr;
+  // Indent is only used for debug logs.
+  unsigned indent;
+};
+} // namespace
+
 /// Compute the value of a constraint `expr`. `seenVars` is used as a recursion
 /// breaker. Recursive variables are treated as zero. Returns the computed value
 /// and a boolean indicating whether a recursion was detected. This may be used
 /// to memoize the result of expressions in case they were not involved in a
 /// cycle (which may alter their value from the perspective of a variable).
 static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
-                              unsigned defaultWorklistSize) {
-
-  struct Frame {
-    Expr *expr;
-    unsigned indent;
-  };
-
-  // indent only used for debug logs.
-  unsigned indent = 1;
-  std::vector<Frame> worklist({{expr, indent}});
+                              std::vector<Frame> &worklist) {
+  worklist.clear();
+  worklist.emplace_back(expr, 1);
   llvm::DenseMap<Expr *, ExprSolution> solvedExprs;
-  // Reserving the vector size, to avoid frequent reallocs. The worklist can be
-  // quite large.
-  worklist.reserve(defaultWorklistSize);
 
   while (!worklist.empty()) {
     auto &frame = worklist.back();
+    auto indent = frame.indent;
     auto setSolution = [&](ExprSolution solution) {
       // Memoize the result.
       if (solution.first && !solution.second)
-        frame.expr->solution = *solution.first;
+        frame.expr->setSolution(*solution.first);
       solvedExprs[frame.expr] = solution;
 
       // Produce some useful debug prints.
       LLVM_DEBUG({
         if (!isa<KnownExpr>(frame.expr)) {
           if (solution.first)
-            llvm::dbgs().indent(frame.indent * 2)
+            llvm::dbgs().indent(indent * 2)
                 << "= Solved " << *frame.expr << " = " << *solution.first;
           else
-            llvm::dbgs().indent(frame.indent * 2)
-                << "= Skipped " << *frame.expr;
+            llvm::dbgs().indent(indent * 2) << "= Skipped " << *frame.expr;
           llvm::dbgs() << " (" << (solution.second ? "cycle broken" : "unique")
                        << ")\n";
         }
@@ -894,26 +911,25 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
     };
 
     // See if we have a memoized result we can return.
-    if (frame.expr->solution) {
+    if (frame.expr->getSolution()) {
       LLVM_DEBUG({
         if (!isa<KnownExpr>(frame.expr))
           llvm::dbgs().indent(indent * 2) << "- Cached " << *frame.expr << " = "
-                                          << *frame.expr->solution << "\n";
+                                          << *frame.expr->getSolution() << "\n";
       });
-      setSolution(ExprSolution{*frame.expr->solution, false});
+      setSolution(ExprSolution{*frame.expr->getSolution(), false});
       continue;
     }
 
     // Otherwise compute the value of the expression.
     LLVM_DEBUG({
       if (!isa<KnownExpr>(frame.expr))
-        llvm::dbgs().indent(frame.indent * 2)
-            << "- Solving " << *frame.expr << "\n";
+        llvm::dbgs().indent(indent * 2) << "- Solving " << *frame.expr << "\n";
     });
 
     TypeSwitch<Expr *>(frame.expr)
         .Case<KnownExpr>([&](auto *expr) {
-          setSolution(ExprSolution{*expr->solution, false});
+          setSolution(ExprSolution{expr->getValue(), false});
         })
         .Case<VarExpr>([&](auto *expr) {
           if (solvedExprs.contains(expr->constraint)) {
@@ -942,21 +958,21 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
           if (!seenVars.insert(expr).second)
             return setSolution(ExprSolution{std::nullopt, true});
 
-          worklist.push_back({expr->constraint, indent + 1});
+          worklist.emplace_back(expr->constraint, indent + 1);
           if (expr->upperBound)
-            worklist.push_back({expr->upperBound, indent + 1});
+            worklist.emplace_back(expr->upperBound, indent + 1);
         })
         .Case<IdExpr>([&](auto *expr) {
           if (solvedExprs.contains(expr->arg))
             return setSolution(solvedExprs[expr->arg]);
-          worklist.push_back({expr->arg, indent + 1});
+          worklist.emplace_back(expr->arg, indent + 1);
         })
         .Case<PowExpr>([&](auto *expr) {
           if (solvedExprs.contains(expr->arg))
             return setSolution(computeUnary(
                 solvedExprs[expr->arg], [](int32_t arg) { return 1 << arg; }));
 
-          worklist.push_back({expr->arg, indent + 1});
+          worklist.emplace_back(expr->arg, indent + 1);
         })
         .Case<AddExpr>([&](auto *expr) {
           if (solvedExprs.contains(expr->lhs()) &&
@@ -965,8 +981,8 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
                 solvedExprs[expr->lhs()], solvedExprs[expr->rhs()],
                 [](int32_t lhs, int32_t rhs) { return lhs + rhs; }));
 
-          worklist.push_back({expr->lhs(), indent + 1});
-          worklist.push_back({expr->rhs(), indent + 1});
+          worklist.emplace_back(expr->lhs(), indent + 1);
+          worklist.emplace_back(expr->rhs(), indent + 1);
         })
         .Case<MaxExpr>([&](auto *expr) {
           if (solvedExprs.contains(expr->lhs()) &&
@@ -975,8 +991,8 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
                 solvedExprs[expr->lhs()], solvedExprs[expr->rhs()],
                 [](int32_t lhs, int32_t rhs) { return std::max(lhs, rhs); }));
 
-          worklist.push_back({expr->lhs(), indent + 1});
-          worklist.push_back({expr->rhs(), indent + 1});
+          worklist.emplace_back(expr->lhs(), indent + 1);
+          worklist.emplace_back(expr->rhs(), indent + 1);
         })
         .Case<MinExpr>([&](auto *expr) {
           if (solvedExprs.contains(expr->lhs()) &&
@@ -985,8 +1001,8 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
                 solvedExprs[expr->lhs()], solvedExprs[expr->rhs()],
                 [](int32_t lhs, int32_t rhs) { return std::min(lhs, rhs); }));
 
-          worklist.push_back({expr->lhs(), indent + 1});
-          worklist.push_back({expr->rhs(), indent + 1});
+          worklist.emplace_back(expr->lhs(), indent + 1);
+          worklist.emplace_back(expr->rhs(), indent + 1);
         })
         .Default([&](auto) {
           setSolution(ExprSolution{std::nullopt, false});
@@ -1014,10 +1030,8 @@ LogicalResult ConstraintSolver::solve() {
   SmallPtrSet<Expr *, 16> seenVars;
   bool anyFailed = false;
 
-  for (auto *expr : exprs) {
-    // Only work on variables.
-    auto *var = dyn_cast<VarExpr>(expr);
-    if (!var || !var->constraint)
+  for (auto *var : varExprs) {
+    if (!var->constraint)
       continue;
     LLVM_DEBUG(llvm::dbgs()
                << "- Checking " << *var << " >= " << *var->constraint << "\n");
@@ -1050,7 +1064,7 @@ LogicalResult ConstraintSolver::solve() {
     for (auto fieldRef : info.find(var)->second) {
       // Depending on whether this value stems from an operation or not, create
       // an appropriate diagnostic identifying the value.
-      auto op = fieldRef.getDefiningOp();
+      auto *op = fieldRef.getDefiningOp();
       auto diag = op ? op->emitOpError()
                      : mlir::emitError(fieldRef.getValue().getLoc())
                            << "value ";
@@ -1073,13 +1087,8 @@ LogicalResult ConstraintSolver::solve() {
     llvm::dbgs() << "\n";
     debugHeader("Solving constraints") << "\n\n";
   });
-  unsigned defaultWorklistSize = exprs.size() / 2;
-  for (auto *expr : exprs) {
-    // Only work on variables.
-    auto *var = dyn_cast<VarExpr>(expr);
-    if (!var)
-      continue;
-
+  std::vector<Frame> worklist;
+  for (auto *var : varExprs) {
     // Complain about unconstrained variables.
     if (!var->constraint) {
       LLVM_DEBUG(llvm::dbgs() << "- Unconstrained " << *var << "\n");
@@ -1092,17 +1101,19 @@ LogicalResult ConstraintSolver::solve() {
     LLVM_DEBUG(llvm::dbgs()
                << "- Solving " << *var << " >= " << *var->constraint << "\n");
     seenVars.insert(var);
-    auto solution = solveExpr(var->constraint, seenVars, defaultWorklistSize);
+    auto solution = solveExpr(var->constraint, seenVars, worklist);
     // Compute the upperBound if there is one and haven't already.
     if (var->upperBound && !var->upperBoundSolution)
       var->upperBoundSolution =
-          solveExpr(var->upperBound, seenVars, defaultWorklistSize).first;
+          solveExpr(var->upperBound, seenVars, worklist).first;
     seenVars.clear();
 
     // Constrain variables >= 0.
-    if (solution.first && *solution.first < 0)
-      solution.first = 0;
-    var->solution = solution.first;
+    if (solution.first) {
+      if (*solution.first < 0)
+        solution.first = 0;
+      var->setSolution(*solution.first);
+    }
 
     // In case the width could not be inferred, complain to the user. This might
     // be the case if the width depends on an unconstrained variable.
@@ -1126,20 +1137,15 @@ LogicalResult ConstraintSolver::solve() {
   }
 
   // Copy over derived widths.
-  for (auto *expr : exprs) {
-    // Only work on derived values.
-    auto *derived = dyn_cast<DerivedExpr>(expr);
-    if (!derived)
-      continue;
-
+  for (auto *derived : derivedExprs) {
     auto *assigned = derived->assigned;
-    if (!assigned || !assigned->solution) {
+    if (!assigned || !assigned->getSolution()) {
       LLVM_DEBUG(llvm::dbgs() << "- Unused " << *derived << " set to 0\n");
-      derived->solution = 0;
+      derived->setSolution(0);
     } else {
       LLVM_DEBUG(llvm::dbgs() << "- Deriving " << *derived << " = "
-                              << assigned->solution << "\n");
-      derived->solution = *assigned->solution;
+                              << assigned->getSolution() << "\n");
+      derived->setSolution(*assigned->getSolution());
     }
   }
 
@@ -1157,7 +1163,7 @@ void ConstraintSolver::emitUninferredWidthError(VarExpr *var) {
   // Try to hint the user at what kind of node this is.
   if (isa<BlockArgument>(value)) {
     diag << " port";
-  } else if (auto op = value.getDefiningOp()) {
+  } else if (auto *op = value.getDefiningOp()) {
     TypeSwitch<Operation *>(op)
         .Case<WireOp>([&](auto) { diag << " wire"; })
         .Case<RegOp, RegResetOp>([&](auto) { diag << " reg"; })
@@ -1177,14 +1183,14 @@ void ConstraintSolver::emitUninferredWidthError(VarExpr *var) {
 
   if (!var->constraint) {
     diag << " is unconstrained";
-  } else if (var->solution && var->upperBoundSolution &&
-             var->solution > var->upperBoundSolution) {
+  } else if (var->getSolution() && var->upperBoundSolution &&
+             var->getSolution() > var->upperBoundSolution) {
     diag << " cannot satisfy all width requirements";
     LLVM_DEBUG(llvm::dbgs() << *var->constraint << "\n");
     LLVM_DEBUG(llvm::dbgs() << *var->upperBound << "\n");
     auto loc = locs.find(var->constraint)->second.back();
     diag.attachNote(loc) << "width is constrained to be at least "
-                         << *var->solution << " here:";
+                         << *var->getSolution() << " here:";
     loc = locs.find(var->upperBound)->second.back();
     diag.attachNote(loc) << "width is constrained to be at most "
                          << *var->upperBoundSolution << " here:";
@@ -1211,19 +1217,13 @@ public:
       : solver(solver), symtbl(symtbl), irn{symtbl, istc} {}
 
   LogicalResult map(CircuitOp op);
+  bool allWidthsKnown(Operation *op);
   LogicalResult mapOperation(Operation *op);
 
   /// Declare all the variables in the value. If the value is a ground type,
   /// there is a single variable declared.  If the value is an aggregate type,
   /// it sets up variables for each unknown width.
-  void declareVars(Value value, Location loc, bool isDerived = false);
-
-  /// Declare a variable associated with a specific field of an aggregate.
-  Expr *declareVar(FieldRef fieldRef, Location loc);
-
-  /// Declarate a variable for a type with an unknown width.  The type must be a
-  /// non-aggregate.
-  Expr *declareVar(FIRRTLType type, Location loc);
+  void declareVars(Value value, bool isDerived = false);
 
   /// Assign the constraint expressions of the fields in the `result` argument
   /// as the max of expressions in the `rhs` and `lhs` arguments. Both fields
@@ -1245,7 +1245,7 @@ public:
   void unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type);
 
   /// Get the expr associated with the value.  The value must be a non-aggregate
-  /// type.
+  /// type
   Expr *getExpr(Value value) const;
 
   /// Get the expr associated with a specific field in a value.
@@ -1307,7 +1307,7 @@ LogicalResult InferenceMapping::map(CircuitOp op) {
   for (auto module : op.getOps<FModuleOp>())
     for (auto arg : module.getArguments()) {
       solver.setCurrentContextInfo(FieldRef(arg, 0));
-      declareVars(arg, module.getLoc());
+      declareVars(arg);
     }
 
   for (auto module : op.getOps<FModuleOp>()) {
@@ -1347,32 +1347,34 @@ LogicalResult InferenceMapping::map(CircuitOp op) {
   return success();
 }
 
-LogicalResult InferenceMapping::mapOperation(Operation *op) {
-  // In case the operation result has a type without uninferred widths, don't
-  // even bother to populate the constraint problem and treat that as a known
-  // size directly. This is done in `declareVars`, which will generate
-  // `KnownExpr` nodes for all known widths -- which are the only ones in this
-  // case.
-  bool allWidthsKnown = true;
-  for (auto result : op->getResults()) {
-    if (isa<MuxPrimOp, Mux4CellIntrinsicOp, Mux2CellIntrinsicOp>(op))
-      if (hasUninferredWidth(op->getOperand(0).getType()))
-        allWidthsKnown = false;
-    // Only consider FIRRTL types for width constraints. Ignore any foreign
-    // types as they don't participate in the width inference process.
-    auto resultTy = type_dyn_cast<FIRRTLType>(result.getType());
-    if (!resultTy)
-      continue;
-    if (!hasUninferredWidth(resultTy))
-      declareVars(result, op->getLoc());
-    else
-      allWidthsKnown = false;
-  }
-  if (allWidthsKnown && !isa<FConnectLike, AttachOp>(op))
-    return success();
-
+bool InferenceMapping::allWidthsKnown(Operation *op) {
   /// Ignore property assignments, no widths to infer.
   if (isa<PropAssignOp>(op))
+    return true;
+
+  // If this is a mux, and the select signal is uninferred, we need to set an
+  // upperbound limit on it.
+  if (isa<MuxPrimOp, Mux4CellIntrinsicOp, Mux2CellIntrinsicOp>(op))
+    if (hasUninferredWidth(op->getOperand(0).getType()))
+      return false;
+
+  //  We need to propagate through connects.
+  if (isa<FConnectLike, AttachOp>(op))
+    return false;
+
+  // Check if we know the width of every result of this operation.
+  return llvm::all_of(op->getResults(), [&](auto result) {
+    // Only consider FIRRTL types for width constraints. Ignore any foreign
+    // types as they don't participate in the width inference process.
+    if (auto type = type_dyn_cast<FIRRTLType>(result.getType()))
+      if (hasUninferredWidth(type))
+        return false;
+    return true;
+  });
+}
+
+LogicalResult InferenceMapping::mapOperation(Operation *op) {
+  if (allWidthsKnown(op))
     return success();
 
   // Actually generate the necessary constraint expressions.
@@ -1384,18 +1386,12 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       .Case<ConstantOp>([&](auto op) {
         // If the constant has a known width, use that. Otherwise pick the
         // smallest number of bits necessary to represent the constant.
-        Expr *e;
-        if (auto width = op.getType().base().getWidth())
-          e = solver.known(*width);
-        else {
-          auto v = op.getValue();
-          auto w = v.getBitWidth() - (v.isNegative() ? v.countLeadingOnes()
-                                                     : v.countLeadingZeros());
-          if (v.isSigned())
-            w += 1;
-          e = solver.known(std::max(w, 1u));
-        }
-        setExpr(op.getResult(), e);
+        auto v = op.getValue();
+        auto w = v.getBitWidth() - (v.isNegative() ? v.countLeadingOnes()
+                                                   : v.countLeadingZeros());
+        if (v.isSigned())
+          w += 1;
+        setExpr(op.getResult(), solver.known(std::max(w, 1u)));
       })
       .Case<SpecialConstantOp>([&](auto op) {
         // Nothing required.
@@ -1403,33 +1399,15 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       .Case<InvalidValueOp>([&](auto op) {
         // We must duplicate the invalid value for each use, since each use can
         // be inferred to a different width.
-        if (!hasUninferredWidth(op.getType()))
-          return;
-        declareVars(op.getResult(), op.getLoc(), /*isDerived=*/true);
-        if (op.use_empty())
-          return;
-
-        auto type = op.getType();
-        ImplicitLocOpBuilder builder(op->getLoc(), op);
-        for (auto &use :
-             llvm::make_early_inc_range(llvm::drop_begin(op->getUses()))) {
-          // - `make_early_inc_range` since `getUses()` is invalidated upon
-          //   `use.set(...)`.
-          // - `drop_begin` such that the first use can keep the original op.
-          auto clone = builder.create<InvalidValueOp>(type);
-          declareVars(clone.getResult(), clone.getLoc(),
-                      /*isDerived=*/true);
-          use.set(clone);
-        }
+        declareVars(op.getResult(), /*isDerived=*/true);
       })
-      .Case<WireOp, RegOp>(
-          [&](auto op) { declareVars(op.getResult(), op.getLoc()); })
+      .Case<WireOp, RegOp>([&](auto op) { declareVars(op.getResult()); })
       .Case<RegResetOp>([&](auto op) {
         // The original Scala code also constrains the reset signal to be at
         // least 1 bit wide. We don't do this here since the MLIR FIRRTL
         // dialect enforces the reset signal to be an async reset or a
         // `uint<1>`.
-        declareVars(op.getResult(), op.getLoc());
+        declareVars(op.getResult());
         // Contrain the register to be greater than or equal to the reset
         // signal.
         constrainTypes(op.getResult(), op.getResetValue());
@@ -1605,15 +1583,6 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // (but don't solve to make this true, don't back-propagate)
         constrainTypes(op.getDest(), op.getSrc(), true);
       })
-      // MatchingConnect is an identify constraint
-      .Case<MatchingConnectOp>([&](auto op) {
-        // This back-propagates width from destination to source,
-        // causing source to sometimes be inferred wider than
-        // it should be (https://github.com/llvm/circt/issues/5391).
-        // This is needed to push the width into feeding widthCast?
-        constrainTypes(op.getDest(), op.getSrc());
-        constrainTypes(op.getSrc(), op.getDest());
-      })
       .Case<AttachOp>([&](auto op) {
         // Attach connects multiple analog signals together. All signals must
         // have the same bit width. Signals without bit width inherit from the
@@ -1666,10 +1635,10 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // module's ports, and use them for instance port wires. This way,
         // constraints imposed onto the ports of the instance will transparently
         // apply to the ports of the instantiated module.
-        for (auto it : llvm::zip(op->getResults(), module.getArguments())) {
-          unifyTypes(FieldRef(std::get<0>(it), 0), FieldRef(std::get<1>(it), 0),
-                     type_cast<FIRRTLType>(std::get<0>(it).getType()));
-        }
+        for (auto [result, arg] :
+             llvm::zip(op->getResults(), module.getArguments()))
+          unifyTypes({result, 0}, {arg, 0},
+                     type_cast<FIRRTLType>(result.getType()));
       })
 
       // Handle memories.
@@ -1677,7 +1646,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // Create constraint variables for all ports.
         unsigned nonDebugPort = 0;
         for (const auto &result : llvm::enumerate(op.getResults())) {
-          declareVars(result.value(), op.getLoc());
+          declareVars(result.value());
           if (!type_isa<RefType>(result.value().getType()))
             nonDebugPort = result.index();
         }
@@ -1732,19 +1701,18 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
 
       .Case<RefSendOp>([&](auto op) {
-        declareVars(op.getResult(), op.getLoc());
+        declareVars(op.getResult());
         constrainTypes(op.getResult(), op.getBase(), true);
       })
       .Case<RefResolveOp>([&](auto op) {
-        declareVars(op.getResult(), op.getLoc());
+        declareVars(op.getResult());
         constrainTypes(op.getResult(), op.getRef(), true);
       })
       .Case<RefCastOp>([&](auto op) {
-        declareVars(op.getResult(), op.getLoc());
+        declareVars(op.getResult());
         constrainTypes(op.getResult(), op.getInput(), true);
       })
       .Case<RWProbeOp>([&](auto op) {
-        declareVars(op.getResult(), op.getLoc());
         auto ist = irn.lookup(op.getTarget());
         if (!ist) {
           op->emitError("target of rwprobe could not be resolved");
@@ -1766,7 +1734,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         for (Value result : op.getResults()) {
           auto ty = result.getType();
           if (type_isa<FIRRTLType>(ty))
-            declareVars(result, op.getLoc());
+            declareVars(result);
         }
       })
       .Default([&](auto op) {
@@ -1784,15 +1752,13 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
 
 /// Declare free variables for the type of a value, and associate the resulting
 /// set of variables with that value.
-void InferenceMapping::declareVars(Value value, Location loc, bool isDerived) {
+void InferenceMapping::declareVars(Value value, bool isDerived) {
   // Declare a variable for every unknown width in the type. If this is a Bundle
   // type or a FVector type, we will have to potentially create many variables.
   unsigned fieldID = 0;
   std::function<void(FIRRTLBaseType)> declare = [&](FIRRTLBaseType type) {
     auto width = type.getBitWidthOrSentinel();
     if (width >= 0) {
-      // Known width integer create a known expression.
-      setExpr(FieldRef(value, fieldID), solver.known(width));
       fieldID++;
     } else if (width == -1) {
       // Unknown width integers create a variable.
@@ -1806,9 +1772,8 @@ void InferenceMapping::declareVars(Value value, Location loc, bool isDerived) {
     } else if (auto bundleType = type_dyn_cast<BundleType>(type)) {
       // Bundle types recursively declare all bundle elements.
       fieldID++;
-      for (auto &element : bundleType) {
+      for (auto &element : bundleType)
         declare(element.type);
-      }
     } else if (auto vecType = type_dyn_cast<FVectorType>(type)) {
       fieldID++;
       auto save = fieldID;
@@ -1937,7 +1902,7 @@ void InferenceMapping::constrainTypes(Expr *larger, Expr *smaller,
 
   // If the larger expr is a free variable, create a `expr >= x` constraint for
   // it that we can try to satisfy with the smallest width.
-  if (auto largerVar = dyn_cast<VarExpr>(larger)) {
+  if (auto *largerVar = dyn_cast<VarExpr>(larger)) {
     [[maybe_unused]] auto *c = solver.addGeqConstraint(largerVar, smaller);
     LLVM_DEBUG(llvm::dbgs()
                << "Constrained " << *largerVar << " >= " << *c << "\n");
@@ -2025,14 +1990,24 @@ Expr *InferenceMapping::getExpr(Value value) const {
 
 /// Get the constraint expression for a value.
 Expr *InferenceMapping::getExpr(FieldRef fieldRef) const {
-  auto expr = getExprOrNull(fieldRef);
+  auto *expr = getExprOrNull(fieldRef);
   assert(expr && "constraint expr should have been constructed for value");
   return expr;
 }
 
 Expr *InferenceMapping::getExprOrNull(FieldRef fieldRef) const {
   auto it = opExprs.find(fieldRef);
-  return it != opExprs.end() ? it->second : nullptr;
+  if (it != opExprs.end())
+    return it->second;
+  // If we don't have an expression for this fieldRef, it should have a
+  // constant width.
+  auto baseType = getBaseType(fieldRef.getValue().getType());
+  auto type =
+      hw::FieldIdImpl::getFinalTypeByFieldID(baseType, fieldRef.getFieldID());
+  auto width = cast<FIRRTLBaseType>(type).getBitWidthOrSentinel();
+  if (width < 0)
+    return nullptr;
+  return solver.known(width);
 }
 
 /// Associate a constraint expression with a value.
@@ -2204,16 +2179,16 @@ FailureOr<bool> InferenceTypeUpdate::updateValue(Value value) {
       return failure();
 
     assert(types.size() == op->getNumResults());
-    for (auto it : llvm::zip(op->getResults(), types)) {
-      LLVM_DEBUG(llvm::dbgs() << "Inferring " << std::get<0>(it) << " as "
-                              << std::get<1>(it) << "\n");
-      std::get<0>(it).setType(std::get<1>(it));
+    for (auto [result, type] : llvm::zip(op->getResults(), types)) {
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Inferring " << result << " as " << type << "\n");
+      result.setType(type);
     }
     return true;
   }
 
   // Recreate the type, substituting the solved widths.
-  auto context = type.getContext();
+  auto *context = type.getContext();
   unsigned fieldID = 0;
   std::function<FIRRTLBaseType(FIRRTLBaseType)> updateBase =
       [&](FIRRTLBaseType type) -> FIRRTLBaseType {
@@ -2222,12 +2197,14 @@ FailureOr<bool> InferenceTypeUpdate::updateValue(Value value) {
       // Known width integers return themselves.
       fieldID++;
       return type;
-    } else if (width == -1) {
+    }
+    if (width == -1) {
       // Unknown width integers return the solved type.
       auto newType = updateType(FieldRef(value, fieldID), type);
       fieldID++;
       return newType;
-    } else if (auto bundleType = type_dyn_cast<BundleType>(type)) {
+    }
+    if (auto bundleType = type_dyn_cast<BundleType>(type)) {
       // Bundle types recursively update all bundle elements.
       fieldID++;
       llvm::SmallVector<BundleType::BundleElement, 3> elements;
@@ -2238,7 +2215,8 @@ FailureOr<bool> InferenceTypeUpdate::updateValue(Value value) {
         elements.emplace_back(element.name, element.isFlip, updatedBase);
       }
       return BundleType::get(context, elements, bundleType.isConst());
-    } else if (auto vecType = type_dyn_cast<FVectorType>(type)) {
+    }
+    if (auto vecType = type_dyn_cast<FVectorType>(type)) {
       fieldID++;
       auto save = fieldID;
       // TODO: this should recurse into the element type of 0 length vectors and
@@ -2254,7 +2232,8 @@ FailureOr<bool> InferenceTypeUpdate::updateValue(Value value) {
       }
       // If this is a 0 length vector return the original type.
       return type;
-    } else if (auto enumType = type_dyn_cast<FEnumType>(type)) {
+    }
+    if (auto enumType = type_dyn_cast<FEnumType>(type)) {
       fieldID++;
       llvm::SmallVector<FEnumType::EnumElement> elements;
       for (auto &element : enumType.getElements()) {
@@ -2296,7 +2275,7 @@ FIRRTLBaseType InferenceTypeUpdate::updateType(FieldRef fieldRef,
   auto value = fieldRef.getValue();
   // Get the inferred width.
   Expr *expr = mapping.getExprOrNull(fieldRef);
-  if (!expr || !expr->solution) {
+  if (!expr || !expr->getSolution()) {
     // It should not be possible to arrive at an uninferred width at this point.
     // In case the constraints are not resolvable, checks before the calls to
     // `updateType` must have already caught the issues and aborted the pass
@@ -2304,40 +2283,10 @@ FIRRTLBaseType InferenceTypeUpdate::updateType(FieldRef fieldRef,
     mlir::emitError(value.getLoc(), "width should have been inferred");
     return {};
   }
-  int32_t solution = *expr->solution;
+  int32_t solution = *expr->getSolution();
   assert(solution >= 0); // The solver infers variables to be 0 or greater.
   return resizeType(type, solution);
 }
-
-//===----------------------------------------------------------------------===//
-// Hashing
-//===----------------------------------------------------------------------===//
-
-// Hash slots in the interned allocator as if they were the pointed-to value
-// itself.
-namespace llvm {
-template <typename T>
-struct DenseMapInfo<InternedSlot<T>> {
-  using Slot = InternedSlot<T>;
-  static Slot getEmptyKey() {
-    auto pointer = llvm::DenseMapInfo<void *>::getEmptyKey();
-    return Slot(static_cast<T *>(pointer));
-  }
-  static Slot getTombstoneKey() {
-    auto pointer = llvm::DenseMapInfo<void *>::getTombstoneKey();
-    return Slot(static_cast<T *>(pointer));
-  }
-  static unsigned getHashValue(Slot val) { return mlir::hash_value(*val.ptr); }
-  static bool isEqual(Slot LHS, Slot RHS) {
-    auto empty = getEmptyKey().ptr;
-    auto tombstone = getTombstoneKey().ptr;
-    if (LHS.ptr == empty || RHS.ptr == empty || LHS.ptr == tombstone ||
-        RHS.ptr == tombstone)
-      return LHS.ptr == RHS.ptr;
-    return *LHS.ptr == *RHS.ptr;
-  }
-};
-} // namespace llvm
 
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
@@ -2355,24 +2304,20 @@ void InferWidthsPass::runOnOperation() {
   ConstraintSolver solver;
   InferenceMapping mapping(solver, getAnalysis<SymbolTable>(),
                            getAnalysis<hw::InnerSymbolTableCollection>());
-  if (failed(mapping.map(getOperation()))) {
-    signalPassFailure();
-    return;
-  }
-  if (mapping.areAllModulesSkipped()) {
-    markAllAnalysesPreserved();
-    return; // fast path if no inferrable widths are around
-  }
+  if (failed(mapping.map(getOperation())))
+    return signalPassFailure();
+
+  // fast path if no inferrable widths are around
+  if (mapping.areAllModulesSkipped())
+    return markAllAnalysesPreserved();
 
   // Solve the constraints.
-  if (failed(solver.solve())) {
-    signalPassFailure();
-    return;
-  }
+  if (failed(solver.solve()))
+    return signalPassFailure();
 
   // Update the types with the inferred widths.
   if (failed(InferenceTypeUpdate(mapping).update(getOperation())))
-    signalPassFailure();
+    return signalPassFailure();
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createInferWidthsPass() {

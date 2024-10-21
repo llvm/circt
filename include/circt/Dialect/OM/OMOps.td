@@ -516,4 +516,18 @@ def IntegerShrOp : IntegerBinaryArithmeticOp<"integer.shr"> {
   }];
 }
 
+def IntegerShlOp : IntegerBinaryArithmeticOp<"integer.shl"> {
+  let summary = "Shift an OMIntegerType value left by an OMIntegerType value";
+  let description = [{
+    Perform arbitrary precision signed integer arithmetic shift left of the lhs
+    OMIntegerType value by the rhs OMIntegerType value. The rhs value must be
+    non-negative.
+
+    Example:
+    ```mlir
+    %2 = om.integer.shl %0, %1 : !om.integer
+    ```
+  }];
+}
+
 #endif // CIRCT_DIALECT_OM_OMOPS_TD

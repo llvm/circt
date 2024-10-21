@@ -20,12 +20,7 @@
 #include <sstream>
 
 using namespace ::esi;
-
-// While building the design, keep around a std::map of active services indexed
-// by the service name. When a new service is encountered during descent, add it
-// to the table (perhaps overwriting one). Modifications to the table only apply
-// to the current branch, so copy this and update it at each level of the tree.
-using ServiceTable = std::map<std::string, services::Service *>;
+using ServiceTable = AcceleratorConnection::ServiceTable;
 
 // This is a proxy class to the manifest JSON. It is used to avoid having to
 // include the JSON parser in the header. Forward references don't work since
@@ -121,17 +116,27 @@ private:
 // Simple JSON -> object parsers.
 //===----------------------------------------------------------------------===//
 
-static AppID parseID(const nlohmann::json &jsonID) {
+static std::optional<AppID> parseID(const nlohmann::json &jsonID) {
+  if (!jsonID.is_object())
+    return std::nullopt;
   std::optional<uint32_t> idx;
   if (jsonID.contains("index"))
     idx = jsonID.at("index").get<uint32_t>();
-  return AppID(jsonID.at("name").get<std::string>(), idx);
+  if (jsonID.contains("name") && jsonID.size() <= 2)
+    return AppID(jsonID.at("name").get<std::string>(), idx);
+  return std::nullopt;
 }
 
+static AppID parseIDChecked(const nlohmann::json &jsonID) {
+  std::optional<AppID> id = parseID(jsonID);
+  if (!id)
+    throw std::runtime_error("Malformed manifest: invalid appID");
+  return *id;
+}
 static AppIDPath parseIDPath(const nlohmann::json &jsonIDPath) {
   AppIDPath ret;
-  for (auto &id : jsonIDPath)
-    ret.push_back(parseID(id));
+  for (auto &idJson : jsonIDPath)
+    ret.push_back(parseIDChecked(idJson));
   return ret;
 }
 
@@ -193,6 +198,9 @@ std::any Manifest::Impl::getAny(const nlohmann::json &value) const {
                                innerValue.dump(2));
   };
 
+  std::optional<AppID> appid = parseID(value);
+  if (appid)
+    return *appid;
   if (!value.is_object() || !value.contains("type") || !value.contains("value"))
     return getValue(value);
   return Constant{getValue(value.at("value")), getType(value.at("type"))};
@@ -331,7 +339,7 @@ std::unique_ptr<Instance>
 Manifest::Impl::getChildInstance(AppIDPath idPath, AcceleratorConnection &acc,
                                  ServiceTable activeServices,
                                  const nlohmann::json &child) const {
-  AppID childID = parseID(child.at("appID"));
+  AppID childID = parseIDChecked(child.at("appID"));
   idPath.push_back(childID);
 
   std::vector<services::Service *> services =
@@ -339,7 +347,7 @@ Manifest::Impl::getChildInstance(AppIDPath idPath, AcceleratorConnection &acc,
 
   auto children = getChildInstances(idPath, acc, activeServices, child);
   auto ports = getBundlePorts(acc, idPath, activeServices, child);
-  return std::make_unique<Instance>(parseID(child.at("appID")),
+  return std::make_unique<Instance>(parseIDChecked(child.at("appID")),
                                     getModInfo(child), std::move(children),
                                     services, ports);
 }
@@ -349,7 +357,7 @@ Manifest::Impl::getService(AppIDPath idPath, AcceleratorConnection &acc,
                            const nlohmann::json &svcJson,
                            ServiceTable &activeServices) const {
 
-  AppID id = parseID(svcJson.at("appID"));
+  AppID id = parseIDChecked(svcJson.at("appID"));
   idPath.push_back(id);
 
   // Get all the client info, including the implementation details.
@@ -361,7 +369,17 @@ Manifest::Impl::getService(AppIDPath idPath, AcceleratorConnection &acc,
         clientDetail.relPath = parseIDPath(detail.value());
       else if (detail.key() == "servicePort")
         clientDetail.port = parseServicePort(detail.value());
-      else
+      else if (detail.key() == "channelAssignments") {
+        for (auto &chan : detail.value().items()) {
+          ChannelAssignment chanAssign;
+          for (auto &assign : chan.value().items())
+            if (assign.key() == "type")
+              chanAssign.type = assign.value();
+            else
+              chanAssign.implOptions[assign.key()] = getAny(assign.value());
+          clientDetail.channelAssignments[chan.key()] = chanAssign;
+        }
+      } else
         clientDetail.implOptions[detail.key()] = getAny(detail.value());
     }
     clientDetails.push_back(clientDetail);
@@ -452,9 +470,9 @@ Manifest::Impl::getBundlePorts(AcceleratorConnection &acc, AppIDPath idPath,
       throw std::runtime_error("Malformed manifest: type '" + typeName +
                                "' is not a bundle type");
 
-    idPath.push_back(parseID(content.at("appID")));
+    idPath.push_back(parseIDChecked(content.at("appID")));
     std::map<std::string, ChannelPort &> portChannels =
-        acc.requestChannelsFor(idPath, bundleType);
+        acc.requestChannelsFor(idPath, bundleType, activeServices);
 
     services::ServicePort *svcPort =
         svc->getPort(idPath, bundleType, portChannels, acc);

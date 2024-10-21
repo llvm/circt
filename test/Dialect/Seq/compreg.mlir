@@ -72,10 +72,10 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1, in %i: i32, in %s: !hw.struct<f
   // SV: %bar = sv.reg sym @reg1
   // SV: sv.reg sym @reg2
 
-  %rv = seq.initial {
+  %rv = seq.initial () {
     %c0_i32_0 = hw.constant 0 : i32
     seq.yield %c0_i32_0 : i32
-  } : !seq.immutable<i32>
+  } : () -> !seq.immutable<i32>
 
   %c0_i32 = hw.constant 0 : i32
 
@@ -85,10 +85,10 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1, in %i: i32, in %s: !hw.struct<f
 
 hw.module @top_ce(in %clk: !seq.clock, in %rst: i1, in %ce: i1, in %i: i32) {
   %rv = hw.constant 0 : i32
-  %init = seq.initial {
+  %init = seq.initial () {
     %c0_i32 = hw.constant 0 : i32
     seq.yield %c0_i32 : i32
-  } : !seq.immutable<i32>
+  } : () -> !seq.immutable<i32>
 
   %r0 = seq.compreg.ce %i, %clk, %ce reset %rst, %rv : i32
   // CHECK: %r0 = seq.compreg.ce %i, %clk, %ce reset %rst, %c0_i32  : i32
@@ -137,18 +137,35 @@ hw.module @reg_of_clock_type(in %clk: !seq.clock, in %rst: i1, in %i: !seq.clock
   hw.output %r1 : !seq.clock
 }
 
-hw.module @init_with_call(in %clk: !seq.clock, in %rst: i1, in %i: i32, in %s: !hw.struct<foo: i32>) {
+hw.module @init_with_call(in %clk: !seq.clock, in %rst: i1, in %i: i32, in %s: !hw.struct<foo: i32>, out o: i32) {
   // SV:     sv.initial {
   // SV-NEXT:   [[V0:%.+]] = sv.system "random"() : () -> i32
+  // SV-NEXT:   [[V1:%.+]] = comb.add [[V0]], [[V0]] : i32
   // SV-NEXT:   sv.bpassign %reg, [[V0]] : i32
+  // SV-NEXT:   sv.bpassign %reg2, [[V1]] : i32
+  // SV-NEXT:   sv.bpassign [[REG:%.+]], [[V1]] : i32
   // SV-NEXT: }
-  %init = seq.initial {
+  %init = seq.initial () {
     %rand = sv.system "random"() : () -> i32
     seq.yield %rand : i32
-  } : !seq.immutable<i32>
+  } : () -> !seq.immutable<i32>
+
+  %add = seq.initial (%init) {
+    ^bb0(%arg0 : i32):
+    %0 = comb.add %arg0, %arg0: i32
+    seq.yield %0 : i32
+  } : (!seq.immutable<i32>) -> !seq.immutable<i32>
 
   // SV: %reg = sv.reg : !hw.inout<i32>
   %c0_i32 = hw.constant 0 : i32
 
   %reg = seq.compreg %i, %clk initial %init : i32
+  %reg2 = seq.compreg %i, %clk initial %add : i32
+
+  %add_from_immut = seq.from_immutable %add: (!seq.immutable<i32>) -> i32
+  // SV:  [[REG]] = sv.reg
+  // SV-NEXT: [[RESULT:%.+]] = sv.read_inout [[REG]]
+  // SV-NEXT: hw.output [[RESULT]]
+
+  hw.output %add_from_immut: i32
 }

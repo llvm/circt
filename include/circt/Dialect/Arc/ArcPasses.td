@@ -59,7 +59,7 @@ def Dedup : Pass<"arc-dedup", "mlir::ModuleOp"> {
 }
 
 def PrintCostModel : Pass<"arc-print-cost-model", "mlir::ModuleOp"> {
-  let summary = "A dymmy pass to test analysis passes";
+  let summary = "A dummy pass to test analysis passes";
   let constructor = "circt::arc::createPrintCostModelPass()";
   let dependentDialects = ["arc::ArcDialect"];
   let statistics = [
@@ -90,13 +90,6 @@ def FindInitialVectors : Pass<"arc-find-initial-vectors", "mlir::ModuleOp"> {
     Statistic<"numOfVectorsCreated", "numOfVectorsCreated",
       "Total number of VectorizeOps the pass inserted">,
   ];
-}
-
-def GroupResetsAndEnables : Pass<"arc-group-resets-and-enables",
-                                 "mlir::ModuleOp"> {
-  let summary = "Group reset and enable conditions of lowered states";
-  let constructor = "circt::arc::createGroupResetsAndEnablesPass()";
-  let dependentDialects = ["arc::ArcDialect", "mlir::scf::SCFDialect"];
 }
 
 def InferMemories : Pass<"arc-infer-memories", "mlir::ModuleOp"> {
@@ -280,6 +273,31 @@ def MakeTables : Pass<"arc-make-tables", "mlir::ModuleOp"> {
   let summary = "Transform appropriate arc logic into lookup tables";
   let constructor = "circt::arc::createMakeTablesPass()";
   let dependentDialects = ["arc::ArcDialect"];
+}
+
+def MergeIfsPass : Pass<"arc-merge-ifs"> {
+  let summary = "Merge control flow structures";
+  let description = [{
+    This pass optimizes control flow in a few ways. It moves operations closer
+    to their earliest user, if possible sinking them into blocks if all uses are
+    nested in the same block. It merges adjacent `scf.if` operations with the
+    same condition. And it moves operations in between two `scf.if` operations
+    ahead of the first if op to allow them to be merged. The pass runs on any
+    SSACFG regions nested under the operation it is applied to.
+
+    Note that this pass assumes that `!arc.state` and `!arc.memory` values can
+    never alias. That is, different values are assumed to never point to the
+    same storage location in simulation memory.
+  }];
+  let statistics = [
+    Statistic<"numOpsSunk", "sunk", "Ops sunk into blocks">,
+    Statistic<"numOpsMovedToUser", "moved-to-user", "Ops moved to first user">,
+    Statistic<"numIfsMerged", "ifs-merged", "Adjacent scf.if ops merged">,
+    Statistic<"numOpsMovedFromBetweenIfs", "moved-from-between-ifs",
+      "Ops moved from between ifs to enable merging">,
+    Statistic<"numIterations", "iterations",
+      "Number of iterations until no more ops were sunk/merged">,
+  ];
 }
 
 def MuxToControlFlow : Pass<"arc-mux-to-control-flow", "mlir::ModuleOp"> {

@@ -17,6 +17,7 @@ add_circt_dialect_library(CIRCTLLHD
   MLIRSideEffectInterfaces
   MLIRControlFlowInterfaces
   MLIRInferTypeOpInterface
+  MLIRMemorySlotInterfaces
   MLIRCallInterfaces
   MLIRFuncDialect
 )

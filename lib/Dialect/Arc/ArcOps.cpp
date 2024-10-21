@@ -309,25 +309,21 @@ LogicalResult ModelOp::verify() {
 }
 
 LogicalResult ModelOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  if (!getInitialFn().has_value())
-    return success();
-
-  auto referencedOp =
-      symbolTable.lookupNearestSymbolFrom(*this, getInitialFnAttr());
-  if (!referencedOp)
-    return emitError("Cannot find declaration of initializer function '")
-           << *getInitialFn() << "'.";
-  auto funcOp = dyn_cast<func::FuncOp>(referencedOp);
-  if (!funcOp) {
-    auto diag = emitError("Referenced initializer must be a 'func.func' op.");
-    diag.attachNote(referencedOp->getLoc()) << "Initializer declared here:";
-    return diag;
-  }
-  if (!llvm::equal(funcOp.getArgumentTypes(), getBody().getArgumentTypes())) {
-    auto diag = emitError("Arguments of initializer function must match "
-                          "arguments of model body.");
-    diag.attachNote(referencedOp->getLoc()) << "Initializer declared here:";
-    return diag;
+  auto fnAttrs = std::array{getInitialFnAttr(), getFinalFnAttr()};
+  auto nouns = std::array{"initializer", "finalizer"};
+  for (auto [fnAttr, noun] : llvm::zip(fnAttrs, nouns)) {
+    if (!fnAttr)
+      continue;
+    auto fn = symbolTable.lookupNearestSymbolFrom<func::FuncOp>(*this, fnAttr);
+    if (!fn)
+      return emitOpError() << noun << " '" << fnAttr.getValue()
+                           << "' does not reference a valid function";
+    if (!llvm::equal(fn.getArgumentTypes(), getBody().getArgumentTypes())) {
+      auto diag = emitError() << noun << " '" << fnAttr.getValue()
+                              << "' arguments must match arguments of model";
+      diag.attachNote(fn.getLoc()) << noun << " declared here:";
+      return diag;
+    }
   }
   return success();
 }

@@ -3640,4 +3640,19 @@ firrtl.module private @Issue7562(in %sel : !firrtl.uint<1>, in %a : !firrtl.cons
   firrtl.connect %out, %res : !firrtl.uint, !firrtl.uint<1>
 }
 
+// CHECK-LABEL: firrtl.class @PropertyArithmetic
+firrtl.class @PropertyArithmetic(in %in: !firrtl.integer, out %out0: !firrtl.integer, out %out1: !firrtl.integer) {
+  // CHECK: [[C4:%.+]] = firrtl.integer 4
+  %0 = firrtl.integer 0
+  %1 = firrtl.integer 1
+  %2 = firrtl.integer 2
+
+  %3 = firrtl.integer.shl %1, %2 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  %4 = firrtl.integer.shl %in, %0 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
+  // CHECK: firrtl.propassign %out0, [[C4]]
+  // CHECK: firrtl.propassign %out1, %in
+  firrtl.propassign %out0, %3 : !firrtl.integer
+  firrtl.propassign %out1, %4 : !firrtl.integer
+}
 }

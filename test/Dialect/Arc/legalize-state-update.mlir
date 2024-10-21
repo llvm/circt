@@ -191,12 +191,17 @@ arc.model @DontLeakThroughClockTreeOrPassthrough io !hw.modty<input a : i1, outp
 arc.model @Memory io !hw.modty<> {
 ^bb0(%arg0: !arc.storage):
   %false = hw.constant false
+  // CHECK: [[MEM1:%.+]] = arc.alloc_memory %arg0 :
+  // CHECK: [[MEM2:%.+]] = arc.alloc_memory %arg0 :
+  %mem1 = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32, i1>
+  %mem2 = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32, i1>
+  %s1 = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i32>
   // CHECK: arc.clock_tree %false attributes {ct1}
   arc.clock_tree %false attributes {ct1} {
     // CHECK-NEXT: arc.state_read
-    // CHECK-NEXT: arc.memory_read [[MEM1:%.+]][%false]
+    // CHECK-NEXT: arc.memory_read [[MEM1]][%false]
     // CHECK-NEXT: arc.memory_write [[MEM1]]
-    // CHECK-NEXT: arc.memory_read [[MEM2:%.+]][%false]
+    // CHECK-NEXT: arc.memory_read [[MEM2]][%false]
     // CHECK-NEXT: arc.memory_write [[MEM2]]
     %r1 = arc.state_read %s1 : <i32>
     arc.memory_write %mem2[%false], %r1 : <2 x i32, i1>
@@ -245,9 +250,4 @@ arc.model @Memory io !hw.modty<> {
     %mr2 = arc.memory_read %mem2[%false] : <2 x i32, i1>
   // CHECK-NEXT: }
   }
-  // CHECK: [[MEM1]] = arc.alloc_memory %arg0 :
-  // CHECK: [[MEM2]] = arc.alloc_memory %arg0 :
-  %mem1 = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32, i1>
-  %mem2 = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32, i1>
-  %s1 = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i32>
 }

@@ -209,6 +209,8 @@ def PtrArraySliceOp : LLHDOp<"ptr.array_slice",
 
 def SigArrayGetOp : LLHDOp<"sig.array_get",
     [Pure,
+     DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
+     DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
      SigPtrIndexBitWidthConstraint<"index", "input">,
      SigArrayElementTypeConstraint<"result", "input">]> {
 
@@ -276,6 +278,8 @@ def PtrArrayGetOp : LLHDOp<"ptr.array_get",
 //===----------------------------------------------------------------------===//
 
 def SigStructExtractOp : LLHDOp<"sig.struct_extract", [Pure,
+  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
+  DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
   DeclareOpInterfaceMethods<InferTypeOpInterface>, InferTypeOpInterface]> {
   let summary = "Extract a field from a signal of a struct.";
   let description = [{

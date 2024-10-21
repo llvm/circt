@@ -25,6 +25,14 @@ namespace circt {
 //===----------------------------------------------------------------------===//
 
 #define GEN_PASS_DECL
+
+enum class OpCountEmissionFormat {
+  // Specify the format for op count data emission
+  Readable,
+  ReadableSorted,
+  JSON
+};
+
 #include "circt/Transforms/Passes.h.inc"
 
 std::unique_ptr<mlir::Pass> createMapArithToCombPass();
@@ -34,6 +42,7 @@ std::unique_ptr<mlir::Pass> createStripDebugInfoWithPredPass(
     const std::function<bool(mlir::Location)> &pred);
 std::unique_ptr<mlir::Pass> createMaximizeSSAPass();
 std::unique_ptr<mlir::Pass> createInsertMergeBlocksPass();
+std::unique_ptr<mlir::Pass> createPrintOpCountPass();
 
 //===----------------------------------------------------------------------===//
 // Utility functions.

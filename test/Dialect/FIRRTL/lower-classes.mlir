@@ -372,32 +372,39 @@ firrtl.circuit "DownwardReferences" {
 
 // CHECK-LABEL: firrtl.circuit "IntegerArithmetic"
 firrtl.circuit "IntegerArithmetic" {
-  firrtl.module @IntegerArithmetic() {
-    %0 = firrtl.integer 1
-    %1 = firrtl.integer 2
+  firrtl.module @IntegerArithmetic() {}
 
-    // CHECK: om.integer.add %0, %1 : !om.integer
-    %2 = firrtl.integer.add %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  firrtl.class @IntegerArithmeticClass(in %in0: !firrtl.integer, in %in1: !firrtl.integer) {
+    // CHECK: om.integer.add %in0, %in1 : !om.integer
+    %0 = firrtl.integer.add %in0, %in1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
 
-    // CHECK: om.integer.mul %0, %1 : !om.integer
-    %3 = firrtl.integer.mul %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+    // CHECK: om.integer.mul %in0, %in1 : !om.integer
+    %1 = firrtl.integer.mul %in0, %in1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
 
-    // CHECK: om.integer.shr %0, %1 : !om.integer
-    %4 = firrtl.integer.shr %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+    // CHECK: om.integer.shr %in0, %in1 : !om.integer
+    %2 = firrtl.integer.shr %in0, %in1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
+    // CHECK: om.integer.shl %in0, %in1 : !om.integer
+    %3 = firrtl.integer.shl %in0, %in1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
   }
 }
 
 // CHECK-LABEL: firrtl.circuit "AltBasePath"
 firrtl.circuit "AltBasePath" {
+  // CHECK: hw.hierpath private [[FOO_NLA:@.+]] [@AltBasePath::[[FOO_SYM:@.+]]]
+
   firrtl.class private @Node(in %path: !firrtl.path) {
   }
+
+  // CHECK: firrtl.module @AltBasePath
+  // CHECK: firrtl.instance foo sym [[FOO_SYM]]
 
   // CHECK: om.class @OMIR(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
   firrtl.class private @OMIR() {
     %node = firrtl.object @Node(in path: !firrtl.path)
     %0 = firrtl.object.subfield %node[path] : !firrtl.class<@Node(in path: !firrtl.path)>
 
-    // CHECK: om.path_create member_instance %alt_basepath_0
+    // CHECK: om.path_create member_instance %alt_basepath_0 [[FOO_NLA]]
     %1 = firrtl.path member_reference distinct[0]<>
     firrtl.propassign %0, %1 : !firrtl.path
   }
@@ -493,4 +500,54 @@ firrtl.circuit "LocalPath" {
     firrtl.instance child0 @Child()
     firrtl.instance child1 @Child()
   }
+}
+
+// CHECK-LABEL: firrtl.circuit "RTLPorts"
+firrtl.circuit "RTLPorts" {
+  // CHECK: hw.hierpath private [[INPUT_NLA:@.+]] [@SomeModule::[[INPUT_SYM:@.+]]]
+  // CHECK: hw.hierpath private [[OUTPUT_NLA:@.+]] [@SomeModule::[[OUTPUT_SYM:@.+]]]
+
+  // CHECK: firrtl.module @SomeModule
+  // CHECK-SAME: in %input: !firrtl.uint<1> sym [[INPUT_SYM]]
+  // CHECK-SAME: out %output: !firrtl.uint<8> sym [[OUTPUT_SYM]]
+  firrtl.module @SomeModule(in %input: !firrtl.uint<1>, out %output: !firrtl.uint<8>) attributes {annotations = [{class = "circt.tracker", id = distinct[0]<>}]} {
+  }
+
+  firrtl.module @RTLPorts() {
+    firrtl.instance inst @SomeModule(in input: !firrtl.uint<1>, out output: !firrtl.uint<8>)
+
+    // CHECK: [[MODULE_PATH:%.+]] = om.path_create instance %basepath {{.+}}
+    %path = firrtl.path instance distinct[0]<>
+
+    // CHECK: [[INPUT_REF:%.+]] = om.path_create dont_touch %basepath [[INPUT_NLA]]
+    // CHECK: [[INPUT_DIR:%.+]] = om.constant "Input"
+    // CHECK: [[INPUT_WIDTH:%.+]] = om.constant #om.integer<1 : i64>
+    // CHECK: [[INPUT_OBJ:%.+]] = om.object @RtlPort([[INPUT_REF]], [[INPUT_DIR]], [[INPUT_WIDTH]])
+
+    // CHECK: [[OUTPUT_REF:%.+]] = om.path_create dont_touch %basepath [[OUTPUT_NLA]]
+    // CHECK: [[OUTPUT_DIR:%.+]] = om.constant "Output"
+    // CHECK: [[OUTPUT_WIDTH:%.+]] = om.constant #om.integer<8 : i64>
+    // CHECK: [[OUTPUT_OBJ:%.+]] = om.object @RtlPort([[OUTPUT_REF]], [[OUTPUT_DIR]], [[OUTPUT_WIDTH]])
+
+    // CHECK: [[PORTS_LIST:%.+]] = om.list_create [[INPUT_OBJ]], [[OUTPUT_OBJ]]
+
+    // CHECK: om.object @NeedsRTLPorts(%basepath, [[MODULE_PATH]], [[PORTS_LIST]])
+    %object = firrtl.object @NeedsRTLPorts(in containingModule_in: !firrtl.path, out containingModule: !firrtl.path)
+    %field = firrtl.object.subfield %object[containingModule_in] : !firrtl.class<@NeedsRTLPorts(in containingModule_in: !firrtl.path, out containingModule: !firrtl.path)>
+    firrtl.propassign %field, %path : !firrtl.path
+
+    // Add a second instance to ensure the RtlPorts class is only declared once.
+    %object2 = firrtl.object @NeedsRTLPorts(in containingModule_in: !firrtl.path, out containingModule: !firrtl.path)
+    %field2 = firrtl.object.subfield %object2[containingModule_in] : !firrtl.class<@NeedsRTLPorts(in containingModule_in: !firrtl.path, out containingModule: !firrtl.path)>
+    firrtl.propassign %field2, %path : !firrtl.path
+  }
+
+  // CHECK: om.class @NeedsRTLPorts
+  // CHECK-NEXT: om.class.field @containingModule
+  // CHECK-NEXT: om.class.field @ports
+  firrtl.class @NeedsRTLPorts(in %containingModule_in: !firrtl.path, out %containingModule: !firrtl.path) {
+    firrtl.propassign %containingModule, %containingModule_in : !firrtl.path
+  }
+
+  // CHECK-COUNT-1: om.class @RtlPort
 }

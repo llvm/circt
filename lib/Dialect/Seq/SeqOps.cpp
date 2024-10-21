@@ -15,6 +15,7 @@
 #include "circt/Dialect/Sim/SimTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/FoldUtils.h"
+#include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/Matchers.h"
@@ -1020,6 +1021,7 @@ FirMemory::FirMemory(hw::HWModuleGeneratedOp op) {
 }
 
 LogicalResult InitialOp::verify() {
+  // Check outputs.
   auto *terminator = this->getBody().front().getTerminator();
   if (terminator->getOperands().size() != getNumResults())
     return emitError() << "result type doesn't match with the terminator";
@@ -1030,6 +1032,18 @@ LogicalResult InitialOp::verify() {
                          << " is expected but got " << lhs;
   }
 
+  auto blockArgs = this->getBody().front().getArguments();
+
+  if (blockArgs.size() != getNumOperands())
+    return emitError() << "operand type doesn't match with the block arg";
+
+  for (auto [blockArg, operand] : llvm::zip(blockArgs, getOperands())) {
+    if (blockArg.getType() !=
+        cast<ImmutableType>(operand.getType()).getInnerType())
+      return emitError()
+             << blockArg.getType() << " is expected but got "
+             << cast<ImmutableType>(operand.getType()).getInnerType();
+  }
   return success();
 }
 void InitialOp::build(OpBuilder &builder, OperationState &result,
@@ -1074,6 +1088,101 @@ Value circt::seq::unwrapImmutableValue(TypedValue<seq::ImmutableType> value) {
   auto initialOp = value.getDefiningOp<seq::InitialOp>();
   assert(initialOp);
   return initialOp.getBodyBlock()->getTerminator()->getOperand(resultNum);
+}
+
+FailureOr<seq::InitialOp> circt::seq::mergeInitialOps(Block *block) {
+  SmallVector<Operation *> initialOps;
+  for (auto &op : *block)
+    if (isa<seq::InitialOp>(op))
+      initialOps.push_back(&op);
+
+  if (!mlir::computeTopologicalSorting(initialOps, {}))
+    return block->getParentOp()->emitError() << "initial ops cannot be "
+                                             << "topologically sorted";
+
+  // No need to merge if there is only one initial op.
+  if (initialOps.size() <= 1)
+    return initialOps.empty() ? seq::InitialOp()
+                              : cast<seq::InitialOp>(initialOps[0]);
+
+  auto initialOp = cast<seq::InitialOp>(initialOps.front());
+  auto yieldOp = cast<seq::YieldOp>(initialOp.getBodyBlock()->getTerminator());
+
+  llvm::MapVector<Value, Value>
+      resultToYieldOperand; // seq.immutable value to operand.
+
+  for (auto [result, operand] :
+       llvm::zip(initialOp.getResults(), yieldOp->getOperands()))
+    resultToYieldOperand.insert({result, operand});
+
+  for (size_t i = 1; i < initialOps.size(); ++i) {
+    auto currentInitialOp = cast<seq::InitialOp>(initialOps[i]);
+    auto operands = currentInitialOp->getOperands();
+    for (auto [blockArg, operand] :
+         llvm::zip(currentInitialOp.getBodyBlock()->getArguments(), operands)) {
+      if (auto initOp = operand.getDefiningOp<seq::InitialOp>()) {
+        assert(resultToYieldOperand.count(operand) &&
+               "it must be visited already");
+        blockArg.replaceAllUsesWith(resultToYieldOperand.lookup(operand));
+      } else {
+        // Otherwise add the operand to the current block.
+        initialOp.getBodyBlock()->addArgument(
+            cast<seq::ImmutableType>(operand.getType()).getInnerType(),
+            operand.getLoc());
+        initialOp.getInputsMutable().append(operand);
+      }
+    }
+
+    auto currentYieldOp =
+        cast<seq::YieldOp>(currentInitialOp.getBodyBlock()->getTerminator());
+
+    for (auto [result, operand] : llvm::zip(currentInitialOp.getResults(),
+                                            currentYieldOp->getOperands()))
+      resultToYieldOperand.insert({result, operand});
+
+    // Append the operands of the current yield op to the original yield op.
+    yieldOp.getOperandsMutable().append(currentYieldOp.getOperands());
+    currentYieldOp->erase();
+
+    // Append the operations of the current initial op to the original initial
+    // op.
+    initialOp.getBodyBlock()->getOperations().splice(
+        initialOp.end(), currentInitialOp.getBodyBlock()->getOperations());
+  }
+
+  // Move the terminator to the end of the block.
+  yieldOp->moveBefore(initialOp.getBodyBlock(),
+                      initialOp.getBodyBlock()->end());
+
+  auto builder = OpBuilder::atBlockBegin(block);
+  SmallVector<Type> types;
+  for (auto [result, operand] : resultToYieldOperand)
+    types.push_back(operand.getType());
+
+  // Create a new initial op which accumulates the results of the merged initial
+  // ops.
+  auto newInitial = builder.create<seq::InitialOp>(initialOp.getLoc(), types);
+  newInitial.getInputsMutable().append(initialOp.getInputs());
+
+  for (auto [resultAndOperand, newResult] :
+       llvm::zip(resultToYieldOperand, newInitial.getResults()))
+    resultAndOperand.first.replaceAllUsesWith(newResult);
+
+  // Update the block arguments of the new initial op.
+  for (auto oldBlockArg : initialOp.getBodyBlock()->getArguments()) {
+    auto blockArg = newInitial.getBodyBlock()->addArgument(
+        oldBlockArg.getType(), oldBlockArg.getLoc());
+    oldBlockArg.replaceAllUsesWith(blockArg);
+  }
+
+  newInitial.getBodyBlock()->getOperations().splice(
+      newInitial.end(), initialOp.getBodyBlock()->getOperations());
+
+  // Clean up.
+  while (!initialOps.empty())
+    initialOps.pop_back_val()->erase();
+
+  return newInitial;
 }
 
 //===----------------------------------------------------------------------===//

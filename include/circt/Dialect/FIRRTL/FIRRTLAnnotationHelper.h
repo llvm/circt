@@ -319,6 +319,8 @@ struct HierPathCache {
     return FlatSymbolRefAttr::get(getSymFor(attr));
   }
 
+  const SymbolTable &getSymbolTable() const { return symbolTable; }
+
 private:
   OpBuilder builder;
   DenseMap<ArrayAttr, hw::HierPathOp> cache;

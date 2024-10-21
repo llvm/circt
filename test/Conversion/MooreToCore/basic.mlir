@@ -320,6 +320,25 @@ func.func @Statements(%arg0: !moore.i42) {
   return
 }
 
+// CHECK-LABEL: func @FormatStrings
+func.func @FormatStrings(%arg0: !moore.i42) {
+  // CHECK: [[TMP:%.+]] = sim.fmt.lit "hello"
+  %0 = moore.fmt.literal "hello"
+  // CHECK: sim.fmt.concat ([[TMP]], [[TMP]])
+  %1 = moore.fmt.concat (%0, %0)
+  // CHECK: sim.fmt.dec %arg0 : i42
+  moore.fmt.int decimal %arg0, width 42, align right, pad space : i42
+  // CHECK: sim.fmt.bin %arg0 : i42
+  moore.fmt.int binary %arg0, width 42, align right, pad space : i42
+  // CHECK: sim.fmt.hex %arg0 : i42
+  moore.fmt.int hex_lower %arg0, width 42, align right, pad space : i42
+  // CHECK: sim.fmt.hex %arg0 : i42
+  moore.fmt.int hex_upper %arg0, width 42, align right, pad space : i42
+  // CHECK: sim.proc.print [[TMP]]
+  moore.builtin.display %0
+  return
+}
+
 // CHECK-LABEL: hw.module @InstanceNull() {
 moore.module @InstanceNull() {
 
@@ -362,6 +381,7 @@ moore.module private @SubModule_0(in %a : !moore.l1, in %b : !moore.l1, out c : 
   moore.output %0 : !moore.l1
 }
 
+// CHECK-LABEL: hw.module @Variable
 moore.module @Variable() {
   // CHECK: [[TMP0:%.+]] = hw.constant 0 : i32
   // CHECK: %a = llhd.sig [[TMP0]] : i32
@@ -393,6 +413,28 @@ moore.module @Variable() {
 
   // CHECK: hw.output
   moore.output
+}
+
+// CHECK-LABEL: hw.module @Net
+moore.module @Net() {
+  // CHECK: [[TMP:%.+]] = hw.constant 0 : i32
+  // CHECK: %a = llhd.sig [[TMP]] : i32
+  %a = moore.net wire : <i32>
+
+  // CHECK: [[PRB:%.+]] = llhd.prb %a : !hw.inout<i32>
+  %0 = moore.read %a : <i32>
+
+  // CHECK: [[TMP:%.+]] = hw.constant 0 : i32
+  // CHECK: %b = llhd.sig [[TMP]] : i32
+  // CHECK: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK: llhd.drv %b, [[PRB]] after [[TIME]] : !hw.inout<i32>
+  %b = moore.net wire %0 : <i32>
+
+  // CHECK: [[TMP:%.+]] = hw.constant 10 : i32
+  %3 = moore.constant 10 : i32
+  // CHECK: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK: llhd.drv %a, [[TMP]] after [[TIME]] : !hw.inout<i32>
+  moore.assign %a, %3 : i32
 }
 
 // CHECK-LABEL: hw.module @Struct
@@ -813,3 +855,16 @@ dbg.variable "b", %dbg0 scope %dbg1 : !moore.l32
 dbg.array [%dbg0] : !moore.l32
 // CHECK: dbg.struct {"q": [[TMP]]} : i32
 dbg.struct {"q": %dbg0} : !moore.l32
+
+// CHECK-LABEL: hw.module @Assert
+moore.module @Assert(in %cond : !moore.l1)  {
+  moore.procedure always {
+  // CHECK: verif.assert %cond label "cond" : i1
+  moore.assert immediate %cond label "cond" : l1
+  // CHECK: verif.assume %cond label "" : i1
+  moore.assume observed %cond  : l1
+  // CHECK: verif.cover %cond label "" : i1
+  moore.cover final %cond : l1
+  moore.return
+  }
+}

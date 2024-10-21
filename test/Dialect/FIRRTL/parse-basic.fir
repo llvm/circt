@@ -1657,6 +1657,7 @@ circuit IntegerArithmetic :
     output c : Integer
     output d : Integer
     output e : Integer
+    output f : Integer
 
     ; CHECK: [[C:%.+]] = firrtl.integer.add %a, %b
     ; CHECK: firrtl.propassign %c, [[C]]
@@ -1669,6 +1670,10 @@ circuit IntegerArithmetic :
     ; CHECK: [[E:%.+]] = firrtl.integer.shr %a, %b
     ; CHECK: firrtl.propassign %e, [[E]]
     propassign e, integer_shr(a, b)
+
+    ; CHECK: [[F:%.+]] = firrtl.integer.shl %a, %b
+    ; CHECK: firrtl.propassign %f, [[F]]
+    propassign f, integer_shl(a, b)
 
 ;// -----
 FIRRTL version 4.0.0

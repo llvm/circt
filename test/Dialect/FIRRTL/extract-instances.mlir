@@ -31,7 +31,11 @@ firrtl.circuit "ExtractBlackBoxesSimple" attributes {annotations = [{class = "fi
   // CHECK-SAME: in %bb_0_out: !firrtl.uint<8>
   firrtl.module private @DUTModule(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     // CHECK-NOT: firrtl.instance bb @MyBlackBox
-    // CHECK: %mod_in, %mod_out, %mod_bb_0_in, %mod_bb_0_out = firrtl.instance mod sym [[WRAPPER_SYM:@.+]] @BBWrapper
+    // CHECK: %mod_in, %mod_out, %mod_bb_0_in, %mod_bb_0_out = firrtl.instance mod
+    // CHECK-SAME: sym [[WRAPPER_SYM:@.+]] {annotations =
+    // CHECK-SAME: circt.nonlocal
+    // CHECK-SAME: id = distinct[0]<>
+    // CHECK-SAME: @BBWrapper
     // CHECK-NEXT: firrtl.matchingconnect %bb_0_in, %mod_bb_0_in
     // CHECK-NEXT: firrtl.matchingconnect %mod_bb_0_out, %bb_0_out
     %mod_in, %mod_out = firrtl.instance mod @BBWrapper(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
@@ -39,7 +43,7 @@ firrtl.circuit "ExtractBlackBoxesSimple" attributes {annotations = [{class = "fi
     firrtl.connect %mod_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
   }
   // CHECK-LABEL: firrtl.module @ExtractBlackBoxesSimple
-  firrtl.module @ExtractBlackBoxesSimple(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+  firrtl.module @ExtractBlackBoxesSimple(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>, out %metadataObj: !firrtl.anyref) {
     // CHECK: %dut_in, %dut_out, %dut_bb_0_in, %dut_bb_0_out = firrtl.instance dut sym {{@.+}} @DUTModule
     // CHECK-NEXT: %bb_in, %bb_out = firrtl.instance bb @MyBlackBox
     // CHECK-NEXT: firrtl.matchingconnect %bb_in, %dut_bb_0_in
@@ -47,7 +51,40 @@ firrtl.circuit "ExtractBlackBoxesSimple" attributes {annotations = [{class = "fi
     %dut_in, %dut_out = firrtl.instance dut @DUTModule(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     firrtl.connect %out, %dut_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %dut_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
+    %sifive_metadata = firrtl.object @SiFive_Metadata()
+    // CHECK:  firrtl.object @SiFive_Metadata(out [[extractedInstances_field_0:.+]]: !firrtl.class<@ExtractInstancesMetadata
+    %0 = firrtl.object.anyref_cast %sifive_metadata : !firrtl.class<@SiFive_Metadata()>
+    firrtl.propassign %metadataObj, %0 : !firrtl.anyref
   }
+  firrtl.class @SiFive_Metadata() {}
+  // CHECK:  firrtl.class @SiFive_Metadata(
+  // CHECK-SAME: out %[[extractedInstances_field_0]]: !firrtl.class<@ExtractInstancesMetadata
+  // CHECK-SAME: {
+  // CHECK:    %extract_instances_metadata = firrtl.object @ExtractInstancesMetadata(out [[bb_0_field:.+]]: !firrtl.class<@ExtractInstancesSchema
+  // CHECK:    firrtl.propassign %[[extractedInstances_field_0]], %extract_instances_metadata : !firrtl.class<@ExtractInstancesMetadata
+  // CHECK:  }
+
+  // CHECK:  firrtl.class @ExtractInstancesSchema(in %name_in: !firrtl.string, out %name: !firrtl.string, in %path_in: !firrtl.path, out %path: !firrtl.path, in %filename_in: !firrtl.string, out %filename: !firrtl.string) {
+  // CHECK:    firrtl.propassign %name, %name_in : !firrtl.string
+  // CHECK:    firrtl.propassign %path, %path_in : !firrtl.path
+  // CHECK:    firrtl.propassign %filename, %filename_in : !firrtl.string
+  // CHECK:  }
+
+  // CHECK:  firrtl.class @ExtractInstancesMetadata(out %[[bb_0_field]]: !firrtl.class<@ExtractInstancesSchema 
+  // CHECK-SAME: {
+  // CHECK:    %[[V0:.+]] = firrtl.string "bb_0"
+  // CHECK:    %[[bb_0:.+]] = firrtl.object @ExtractInstancesSchema
+  // CHECK:    %[[V1:.+]] = firrtl.object.subfield %[[bb_0]][name_in]
+  // CHECK:    firrtl.propassign %[[V1]], %[[V0]] : !firrtl.string
+  // CHECK:    %[[V2:.+]] = firrtl.path instance distinct[0]<>
+  // CHECK:    %[[V3:.+]] = firrtl.object.subfield %[[bb_0]][path_in]
+  // CHECK:    firrtl.propassign %[[V3]], %[[V2]] : !firrtl.path
+  // CHECK:    %[[V4:.+]] = firrtl.object.subfield %[[bb_0]][filename_in]
+  // CHECK:    %[[V5:.+]] = firrtl.string "BlackBoxes.txt"
+  // CHECK:    firrtl.propassign %[[V4]], %[[V5]] : !firrtl.string
+  // CHECK:    firrtl.propassign %[[bb_0_field]], %[[bb_0]]
+  // CHECK:  }
+
   // CHECK:               emit.file "BlackBoxes.txt" {
   // CHECK-NEXT:            sv.verbatim "
   // CHECK-SAME{LITERAL}:     bb_0 -> {{0}}.{{1}}\0A
@@ -139,7 +176,7 @@ firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "f
     // CHECK-NEXT: %bb_in, %bb_out = firrtl.instance bb sym [[BB_SYM:@.+]] {annotations = [{class = "Old1"}, {class = "On1"}, {class = "Old2"}, {class = "On2"}]} @MyBlackBox
     // CHECK-NEXT: firrtl.matchingconnect %bb_in, %dut_prefix_1_in
     // CHECK-NEXT: firrtl.matchingconnect %dut_prefix_1_out, %bb_out
-    // CHECK-NEXT: %bb2_in, %bb2_out = firrtl.instance bb2 @MyBlackBox2
+    // CHECK-NEXT: %bb2_in, %bb2_out = firrtl.instance bb2 sym @sym @MyBlackBox2
     // CHECK-NEXT: firrtl.matchingconnect %bb2_in, %dut_prefix_0_in
     // CHECK-NEXT: firrtl.matchingconnect %dut_prefix_0_out, %bb2_out
     %dut_in, %dut_out = firrtl.instance dut sym @dut @DUTModule(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
@@ -396,14 +433,23 @@ firrtl.circuit "ExtractClockGatesComposed" attributes {annotations = [
     firrtl.connect %child_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // CHECK-LABEL: firrtl.module @ExtractClockGatesComposed
-  firrtl.module @ExtractClockGatesComposed(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
+  firrtl.module @ExtractClockGatesComposed(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, out %metadataObj: !firrtl.anyref) {
     // CHECK: firrtl.instance gate sym [[SYM0]] @EICG_wrapper
     // CHECK: firrtl.instance gate sym [[SYM1]] @EICG_wrapper
     // CHECK: firrtl.instance mem_ext @mem_ext
     %dut_clock, %dut_en = firrtl.instance dut @DUTModule(in clock: !firrtl.clock, in en: !firrtl.uint<1>)
     firrtl.connect %dut_clock, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %dut_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
+    %sifive_metadata = firrtl.object @SiFive_Metadata()
+    // CHECK:  firrtl.object @SiFive_Metadata(
+    // CHECK-SAME: out extractedInstances_field0: !firrtl.class<@ExtractInstancesMetadata
+    // CHECK-SAME: (out mem_wiring_0_field0: !firrtl.class<@ExtractInstancesSchema(in name_in: !firrtl.string, out name: !firrtl.string, in path_in: !firrtl.path, out path: !firrtl.path, in filename_in: !firrtl.string, out filename: !firrtl.string)>
+    // CHECK-SAME: out clock_gate_0_field1: !firrtl.class<@ExtractInstancesSchema(in name_in: !firrtl.string, out name: !firrtl.string, in path_in: !firrtl.path, out path: !firrtl.path, in filename_in: !firrtl.string, out filename: !firrtl.string)>
+    // CHECK-SAME: out clock_gate_1_field3: !firrtl.class<@ExtractInstancesSchema(in name_in: !firrtl.string, out name: !firrtl.string, in path_in: !firrtl.path, out path: !firrtl.path, in filename_in: !firrtl.string, out filename: !firrtl.string)>)>)
+    %0 = firrtl.object.anyref_cast %sifive_metadata : !firrtl.class<@SiFive_Metadata()>
+    firrtl.propassign %metadataObj, %0 : !firrtl.anyref
   }
+  firrtl.class @SiFive_Metadata() {}
 
   // CHECK:               emit.file "SeqMems.txt" {
   // CHECK-NEXT:            sv.verbatim "

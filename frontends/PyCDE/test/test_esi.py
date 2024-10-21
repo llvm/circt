@@ -8,6 +8,7 @@ from pycde.common import AppID, Constant, RecvBundle, SendBundle
 from pycde.constructs import Wire
 from pycde.esi import MMIO
 from pycde.module import Metadata
+from pycde.support import _obj_to_attribute, optional_dict_to_dict_attr
 from pycde.types import (Bits, Bundle, BundledChannel, Channel,
                          ChannelDirection, ChannelSignaling, UInt, ClockType)
 from pycde.testing import unittestmodule
@@ -27,6 +28,17 @@ TestBundle = Bundle([
 ])
 
 TestFromBundle = Bundle([BundledChannel("ch1", ChannelDirection.TO, Bits(32))])
+
+# CHECK: foo
+print(AppID("foo"))
+
+# CHECK: {{^}}#esi.appid<"foo">{{$}}
+print(_obj_to_attribute(AppID("foo")))
+
+# CHECK: {bar = 6 : i64, foo = 5 : i64}
+print(optional_dict_to_dict_attr({"foo": 5, "bar": 6}))
+# CHECK: {}
+print(optional_dict_to_dict_attr(None))
 
 
 @esi.ServiceDecl

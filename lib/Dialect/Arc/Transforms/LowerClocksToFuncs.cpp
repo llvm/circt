@@ -70,6 +70,7 @@ LogicalResult LowerClocksToFuncsPass::lowerModel(ModelOp modelOp) {
 
   // Find the clocks to extract.
   SmallVector<InitialOp, 1> initialOps;
+  SmallVector<FinalOp, 1> finalOps;
   SmallVector<PassThroughOp, 1> passthroughOps;
   SmallVector<Operation *> clocks;
   modelOp.walk([&](Operation *op) {
@@ -78,6 +79,10 @@ LogicalResult LowerClocksToFuncsPass::lowerModel(ModelOp modelOp) {
         .Case<InitialOp>([&](auto initOp) {
           initialOps.push_back(initOp);
           clocks.push_back(initOp);
+        })
+        .Case<FinalOp>([&](auto op) {
+          finalOps.push_back(op);
+          clocks.push_back(op);
         })
         .Case<PassThroughOp>([&](auto ptOp) {
           passthroughOps.push_back(ptOp);
@@ -99,7 +104,13 @@ LogicalResult LowerClocksToFuncsPass::lowerModel(ModelOp modelOp) {
     for (auto initOp : initialOps)
       diag.attachNote(initOp.getLoc()) << "Conflicting InitialOp:";
   }
-  if (passthroughOps.size() > 1 || initialOps.size() > 1)
+  if (finalOps.size() > 1) {
+    auto diag = modelOp.emitOpError()
+                << "containing multiple FinalOps is currently unsupported.";
+    for (auto op : finalOps)
+      diag.attachNote(op.getLoc()) << "Conflicting FinalOp:";
+  }
+  if (passthroughOps.size() > 1 || initialOps.size() > 1 || finalOps.size() > 1)
     return failure();
 
   // Perform the actual extraction.
@@ -115,7 +126,7 @@ LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
                                                  Value modelStorageArg,
                                                  OpBuilder &funcBuilder) {
   LLVM_DEBUG(llvm::dbgs() << "- Lowering clock " << clockOp->getName() << "\n");
-  assert((isa<ClockTreeOp, PassThroughOp, InitialOp>(clockOp)));
+  assert((isa<ClockTreeOp, PassThroughOp, InitialOp, FinalOp>(clockOp)));
 
   // Add a `StorageType` block argument to the clock's body block which we are
   // going to use to pass the storage pointer to the clock once it has been
@@ -141,6 +152,8 @@ LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
     funcName.append("_passthrough");
   else if (isa<InitialOp>(clockOp))
     funcName.append("_initial");
+  else if (isa<FinalOp>(clockOp))
+    funcName.append("_final");
   else
     funcName.append("_clock");
 
@@ -172,6 +185,13 @@ LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
                                 << "' will be overridden.";
         modelOp.setInitialFnAttr(
             FlatSymbolRefAttr::get(funcOp.getSymNameAttr()));
+      })
+      .Case<FinalOp>([&](auto) {
+        if (modelOp.getFinalFn().has_value())
+          modelOp.emitWarning()
+              << "Existing model finalizer '"
+              << modelOp.getFinalFnAttr().getValue() << "' will be overridden.";
+        modelOp.setFinalFnAttr(FlatSymbolRefAttr::get(funcOp.getSymNameAttr()));
       });
 
   // Move the clock's body block to the function and remove the old clock op.

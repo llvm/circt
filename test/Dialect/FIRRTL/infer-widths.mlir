@@ -35,15 +35,6 @@ firrtl.circuit "Foo" {
     firrtl.connect %out, %invalid_ui : !firrtl.uint, !firrtl.uint
     firrtl.connect %out, %c42_ui : !firrtl.uint, !firrtl.uint
 
-    // Check that the invalid values are duplicated, and a corner case where the
-    // wire won't be updated with a width until after updating the invalid value
-    // above.
-    // CHECK: %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
-    %w = firrtl.wire : !firrtl.uint
-    %c2_ui = firrtl.constant 2 : !firrtl.uint
-    firrtl.connect %w, %invalid_ui : !firrtl.uint, !firrtl.uint
-    firrtl.connect %w, %c2_ui : !firrtl.uint, !firrtl.uint
-
     // Check that invalid values are inferred to width zero if not used in a
     // connect.
     // CHECK: firrtl.invalidvalue : !firrtl.uint<0>
