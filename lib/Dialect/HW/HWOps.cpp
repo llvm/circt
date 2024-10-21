@@ -460,8 +460,12 @@ static LogicalResult checkAttributes(Operation *op, Attribute attr, Type type) {
     if (intAttr.getValue().getBitWidth() != intType.getWidth())
       return op->emitOpError("hw.constant attribute bitwidth "
                              "doesn't match return type");
+  } else if (auto typedAttr = dyn_cast<TypedAttr>(attr)) {
+    if (typedAttr.getType() != type)
+      return op->emitOpError("typed attr doesn't match the return type ")
+             << type;
   } else {
-    return op->emitOpError("unknown element type") << type;
+    return op->emitOpError("unknown element type ") << type;
   }
   return success();
 }
