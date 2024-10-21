@@ -25,6 +25,7 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Support/LogicalResult.h"
+#include "mlir/Tools/Plugins/DialectPlugin.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/InitLLVM.h"
@@ -36,6 +37,14 @@ namespace cl = llvm::cl;
 
 using namespace mlir;
 using namespace circt;
+
+// TODO: take python file as input such that you can pass it the context created
+// in this tool and the python file adds the instructions using that context
+// (maybe to the passed module op?)
+
+//===----------------------------------------------------------------------===//
+// Command-line option helpers
+//===----------------------------------------------------------------------===//
 
 inline llvm::Expected<std::optional<unsigned>> parseSeedOption(StringRef arg) {
   if (arg == "none")
@@ -103,6 +112,10 @@ static cl::list<std::string> unsupportedInstructions(
         "Comma-separated list of instructions not supported by the assembler."),
     cl::MiscFlags::CommaSeparated, cl::cat(mainCategory));
 
+static cl::list<std::string>
+    dialectPlugins("load-dialect-plugin",
+                   cl::desc("Load dialects from plugin library"));
+
 static cl::opt<bool>
     verifyPasses("verify-each",
                  cl::desc("Run the verifier after each transformation pass"),
@@ -127,6 +140,18 @@ static cl::opt<OutputFormat> outputFormat(
 //===----------------------------------------------------------------------===//
 // Tool implementation
 //===----------------------------------------------------------------------===//
+
+static void setDialectPluginsCallback(DialectRegistry &registry) {
+  dialectPlugins.setCallback([&](const std::string &pluginPath) {
+    auto plugin = DialectPlugin::load(pluginPath);
+    if (!plugin) {
+      llvm::errs() << "Failed to load dialect plugin from '" << pluginPath
+                   << "'. Request ignored.\n";
+      return;
+    };
+    plugin.get().registerDialectRegistryCallbacks(registry);
+  });
+}
 
 /// This function initializes the various components of the tool and
 /// orchestrates the work to be done.
@@ -237,8 +262,9 @@ int main(int argc, char **argv) {
   // llvm/circt and not llvm/llvm-project.
   llvm::setBugReportMsg(circt::circtBugReportMsg);
 
-  // Register the supported CIRCT dialects and create a context to work with.
   DialectRegistry registry;
+  setDialectPluginsCallback(registry);
+  // Register the supported CIRCT dialects and create a context to work with.
   registry.insert<circt::rtg::RTGDialect, circt::rtgtest::RTGTestDialect,
                   mlir::arith::ArithDialect, mlir::BuiltinDialect>();
   MLIRContext context(registry);

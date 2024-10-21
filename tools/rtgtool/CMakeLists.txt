@@ -10,6 +10,7 @@ target_link_libraries(rtgtool
   CIRCTSupport
   MLIRArithDialect
   MLIRIR
+  MLIRPluginsLib
   LLVMSupport
 )
 
