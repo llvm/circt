@@ -16,6 +16,7 @@ add_subdirectory(hlstool)
 add_subdirectory(ibistool)
 add_subdirectory(om-linker)
 add_subdirectory(py-split-input-file)
+add_subdirectory(rtgtool)
 
 if(CIRCT_SLANG_FRONTEND_ENABLED)
   add_subdirectory(circt-verilog)

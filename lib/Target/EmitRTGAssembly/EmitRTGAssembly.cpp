@@ -188,45 +188,44 @@ EmitRTGAssembly::emitRTGAssembly(Operation *module, llvm::raw_ostream &os,
   return success();
 }
 
+void EmitRTGAssembly::parseUnsupportedInstructionsFile(
+    const std::string &unsupportedInstructionsFile,
+    SmallVectorImpl<std::string> &unsupportedInstrs) {
+  if (!unsupportedInstructionsFile.empty()) {
+    std::ifstream input(unsupportedInstructionsFile);
+    std::string token;
+    while (std::getline(input, token, ','))
+      unsupportedInstrs.push_back(token);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // circt-translate registration
 //===----------------------------------------------------------------------===//
 
 void EmitRTGAssembly::registerEmitRTGAssemblyTranslation() {
-  static llvm::cl::opt<std::string> allowedTextualInstructionsFile(
+  static llvm::cl::opt<std::string> unsupportedInstructionsFile(
       "emit-assembly-binary-instr-file",
       llvm::cl::desc("File with a comma-separated list of instructions "
                      "not supported by the assembler."),
       llvm::cl::init(""));
 
-  static llvm::cl::list<std::string> allowedInstructions(
+  static llvm::cl::list<std::string> unsupportedInstructions(
       "emit-assembly-binary-instr",
       llvm::cl::desc(
           "Comma-separated list of instructions supported by the assembler."),
       llvm::cl::MiscFlags::CommaSeparated);
 
-  auto getOptions = [] {
-    EmitRTGAssemblyOptions opts;
-    SmallVector<std::string> instrs;
-    for (auto &instr : allowedInstructions) {
-      llvm::errs() << instr << "\n";
-      instrs.push_back(instr);
-    }
-
-    if (!allowedTextualInstructionsFile.empty()) {
-      std::ifstream input(allowedTextualInstructionsFile.getValue());
-      std::string token;
-      while (std::getline(input, token, ','))
-        instrs.push_back(token);
-    }
-    opts.unsupportedInstructions = instrs;
-    return opts;
-  };
-
   static mlir::TranslateFromMLIRRegistration toAssembly(
       "emit-assembly", "emit assembly",
       [=](Operation *moduleOp, raw_ostream &output) {
-        return EmitRTGAssembly::emitRTGAssembly(moduleOp, output, getOptions());
+        EmitRTGAssemblyOptions options;
+        SmallVector<std::string> unsupportedInstrs(
+            unsupportedInstructions.begin(), unsupportedInstructions.end());
+        parseUnsupportedInstructionsFile(unsupportedInstructionsFile.getValue(),
+                                         unsupportedInstrs);
+        options.unsupportedInstructions = unsupportedInstrs;
+        return EmitRTGAssembly::emitRTGAssembly(moduleOp, output, options);
       },
       [](mlir::DialectRegistry &registry) {
         registry.insert<rtgtest::RTGTestDialect, rtg::RTGDialect,

@@ -32,6 +32,11 @@ LogicalResult emitRTGAssembly(
     Operation *module, llvm::raw_ostream &os,
     const EmitRTGAssemblyOptions &options = EmitRTGAssemblyOptions());
 
+/// Parse the given file for unsupported instructions.
+void parseUnsupportedInstructionsFile(
+    const std::string &unsupportedInstructionsFile,
+    SmallVectorImpl<std::string> &unsupportedInstrs);
+
 /// Register the EmitRTGAssembly pass.
 void registerEmitRTGAssemblyTranslation();
 

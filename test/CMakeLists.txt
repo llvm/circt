@@ -34,6 +34,7 @@ set(CIRCT_TEST_DEPENDS
   hlstool
   ibistool
   om-linker
+  rtgtool
   )
 
 if (CIRCT_GTEST_AVAILABLE)
