@@ -556,6 +556,38 @@ Flow is _not_ represented as a first-class type in CIRCT.  We instead provide
 utilities for computing flow when needed, e.g., for connect statement
 verification.
 
+### Eliminating Flip Types and Flow
+
+As discussed previously, flow, flip, and port directions work together to form
+a non-local description of the behavior of connect operations.  This is annoying
+to validate and work with.   We therefor work to remove these concepts from the
+pipeline as early as possible.
+
+The key observation is that once connects are resolved to operate on passive 
+types, the effects of port direction, flip, and flow are resolved.  We therefor
+take a three-stage approach to eliminate these concepts.
+
+First, all aggregate types are decomposed to passive types.  This means 
+splitting ports apart (an existing behavior from prior FIRRTL implementations)
+until each port is passive.  This ensures that the flow of any member of an 
+aggregate port is the same as the port.  This is less invasive than "Lower 
+Types" (which exists in prior FIRRTL implementations also) as "Lower Types" 
+decomposes all aggregates into leaf fields.
+
+Second, once flow has been resolved into connect direction, but splitting 
+aggregate connects into component connects of passive sub-types, flips on 
+bundles in wires may be erased.  Because wires are naturally duplex flow and
+connects already have been lowered to encode all distinct connect directions, 
+the flip on fields on wires no longer carry any semantic meaning.
+
+At this point we convert wires, registers, modules, and instances to explicitly
+specify left-hand-side connectability in the mlir type.  Wires and registers
+acquire a read and write result with the write result being a `LHSType` wrapped
+type.  Output puts are likewise wrapped.  At this point all values are easily
+identified as to whether they are valid targets of a connection.  Flow and flip 
+are eliminated from the pipeline.
+
+
 ### Non-FIRRTL Types
 
 The FIRRTL dialect has limited support for foreign types, i.e., types that are
