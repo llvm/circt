@@ -89,7 +89,7 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
 
       // If the module is not instantiated, then set attributes and early exit.
       if (modIt->noUses()) {
-        attributes.underDut.markConstant(false);
+        attributes.underDut.markConstant(isDut);
         attributes.underLayer.markConstant(false);
         continue;
       }

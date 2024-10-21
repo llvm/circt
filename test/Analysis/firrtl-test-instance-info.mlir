@@ -142,3 +142,21 @@ firrtl.circuit "Foo" {
     )
   }
 }
+
+// -----
+
+// Test that if the top module is the DUT that it still gets marked as "under"
+// the DUT.
+firrtl.circuit "Foo" {
+  // CHECK:      @Foo
+  // CHECK-NEXT:   isDut: true
+  // CHECK-NEXT:   anyInstanceUnderDut: true
+  // CHECK-NEXT:   allInstancesUnderDut: true
+  // CHECK-NEXT:   anyInstanceUnderEffectiveDut: true
+  // CHECK-NEXT:   allInstancesUnderEffectiveDut: true
+  firrtl.module @Foo() attributes {
+    annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+    ]
+  } {}
+}
