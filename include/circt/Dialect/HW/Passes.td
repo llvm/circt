@@ -75,6 +75,17 @@ def VerifyInnerRefNamespace : Pass<"hw-verify-irn"> {
   let constructor =  "circt::hw::createVerifyInnerRefNamespacePass()";
 }
 
+def Partition : Pass<"hw-partition", "mlir::ModuleOp"> {
+  let summary = "Partition a module into multiple modules.";
+  let constructor = "circt::hw::createPartitionPass({})";
+  let description = "TODO";
+
+  let options = [
+    Option<"moduleName", "module-name", "std::string", "", "Specify the top module">,
+    Option<"parts", "parts", "size_t", "2", "Specify the number of parts in the partitioned module">,
+  ];
+}
+
 /**
  * Tutorial Pass, doesn't do anything interesting
  */
