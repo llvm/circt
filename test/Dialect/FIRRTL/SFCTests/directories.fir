@@ -135,35 +135,23 @@ circuit TestHarness:
 ; SITEST_NODUT:     FILE "testbench.sitest.json"
 ; SITEST_NODUT-NOT: FILE
 
-; MLIR_OUT:  om.class @SitestBlackBoxModulesSchema(%basepath: !om.basepath, %moduleName_in: !om.string) {
-; MLIR_OUT:    om.class.field @moduleName, %moduleName_in : !om.string
+; MLIR_OUT:  om.class @SitestBlackBoxModulesSchema(%basepath: !om.basepath, %moduleName_in: !om.string) -> (moduleName: !om.string) {
+; MLIR_OUT:    om.class.fields %moduleName_in : !om.string
 ; MLIR_OUT:  }
 
-; MLIR_OUT:  om.class @SitestBlackBoxMetadata(%basepath: !om.basepath)
+; MLIR_OUT:  om.class @SitestBlackBoxMetadata(%basepath: !om.basepath) -> [[V1:.+]]: !om.class.type<@SitestBlackBoxModulesSchema>, [[V2:.+]]: !om.class.type<@SitestBlackBoxModulesSchema>, [[V3:.+]]: !om.class.type<@SitestBlackBoxModulesSchema>
 ; MLIR_OUT:    %0 = om.constant "Foo_BlackBox" : !om.string
 ; MLIR_OUT:    %1 = om.object @SitestBlackBoxModulesSchema(%basepath, %0) : (!om.basepath, !om.string) -> !om.class.type<@SitestBlackBoxModulesSchema>
 ; MLIR_OUT:    %2 = om.constant "Bar_BlackBox" : !om.string
 ; MLIR_OUT:    %3 = om.object @SitestBlackBoxModulesSchema(%basepath, %2) : (!om.basepath, !om.string) -> !om.class.type<@SitestBlackBoxModulesSchema>
 ; MLIR_OUT:    %4 = om.constant "Baz_BlackBox" : !om.string
 ; MLIR_OUT:    %5 = om.object @SitestBlackBoxModulesSchema(%basepath, %4) : (!om.basepath, !om.string) -> !om.class.type<@SitestBlackBoxModulesSchema>
-; MLIR_OUT:    om.class.field @[[V1:.+]], %1 : !om.class.type<@SitestBlackBoxModulesSchema>
-; MLIR_OUT:    om.class.field @[[V2:.+]], %3 : !om.class.type<@SitestBlackBoxModulesSchema>
-; MLIR_OUT:    om.class.field @[[V3:.+]], %5 : !om.class.type<@SitestBlackBoxModulesSchema>
+; MLIR_OUT:    om.class.fields %1, %3, %5 : !om.class.type<@SitestBlackBoxModulesSchema>, !om.class.type<@SitestBlackBoxModulesSchema>, !om.class.type<@SitestBlackBoxModulesSchema>
 ; MLIR_OUT:  }
 
-; MLIR_OUT:  om.class @MemorySchema(%basepath: !om.basepath, %name_in: !om.string, %depth_in: !om.integer, %width_in: !om.integer, %maskBits_in: !om.integer, %readPorts_in: !om.integer, %writePorts_in: !om.integer, %readwritePorts_in: !om.integer, %writeLatency_in: !om.integer, %readLatency_in: !om.integer, %hierarchy_in: !om.list<!om.path>, %inDut_in: i1, %extraPorts_in: !om.list<!om.class.type<@ExtraPortsMemorySchema>>
-; MLIR_OUT:    om.class.field @name, %name_in : !om.string
-; MLIR_OUT:    om.class.field @depth, %depth_in : !om.integer
-; MLIR_OUT:    om.class.field @width, %width_in : !om.integer
-; MLIR_OUT:    om.class.field @maskBits, %maskBits_in : !om.integer
-; MLIR_OUT:    om.class.field @readPorts, %readPorts_in : !om.integer
-; MLIR_OUT:    om.class.field @writePorts, %writePorts_in : !om.integer
-; MLIR_OUT:    om.class.field @readwritePorts, %readwritePorts_in : !om.integer
-; MLIR_OUT:    om.class.field @writeLatency, %writeLatency_in : !om.integer
-; MLIR_OUT:    om.class.field @readLatency, %readLatency_in : !om.integer
-; MLIR_OUT:    om.class.field @hierarchy, %hierarchy_in : !om.list<!om.path>
-; MLIR_OUT:    om.class.field @extraPorts, %extraPorts_in : !om.list<!om.class.type<@ExtraPortsMemorySchema>>
-; MLIR_OUT:  om.class @MemoryMetadata(%basepath: !om.basepath)
+; MLIR_OUT:  om.class @MemorySchema(%basepath: !om.basepath, %name_in: !om.string, %depth_in: !om.integer, %width_in: !om.integer, %maskBits_in: !om.integer, %readPorts_in: !om.integer, %writePorts_in: !om.integer, %readwritePorts_in: !om.integer, %writeLatency_in: !om.integer, %readLatency_in: !om.integer, %hierarchy_in: !om.list<!om.path>, %inDut_in: i1, %extraPorts_in: !om.list<!om.class.type<@ExtraPortsMemorySchema>>, %preExtInstName_in: !om.list<!om.string>) -> (name: !om.string, depth: !om.integer, width: !om.integer, maskBits: !om.integer, readPorts: !om.integer, writePorts: !om.integer, readwritePorts: !om.integer, writeLatency: !om.integer, readLatency: !om.integer, hierarchy: !om.list<!om.path>, inDut: i1, extraPorts: !om.list<!om.class.type<@ExtraPortsMemorySchema>>, preExtInstName: !om.list<!om.string>)
+; MLIR_OUT:    om.class.fields %name_in, %depth_in, %width_in, %maskBits_in, %readPorts_in, %writePorts_in, %readwritePorts_in, %writeLatency_in, %readLatency_in, %hierarchy_in, %inDut_in, %extraPorts_in, %preExtInstName_in : !om.string, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.list<!om.path>, i1, !om.list<!om.class.type<@ExtraPortsMemorySchema>>, !om.list<!om.string> 
+; MLIR_OUT:  om.class @MemoryMetadata(%basepath: !om.basepath) -> (foo_m_ext_field: !om.class.type<@MemorySchema>, bar_m_ext_field: !om.class.type<@MemorySchema>, baz_m_ext_field: !om.class.type<@MemorySchema>)
 ; MLIR_OUT:     om.path_create instance %basepath @memNLA
 ; MLIR_OUT:     om.list_create
 ; MLIR_OUT:     om.object @MemorySchema
@@ -201,9 +189,7 @@ circuit TestHarness:
 ; MLIR_OUT:     om.constant #om.integer<0 : ui32> : !om.integer
 ; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
 ; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
-; MLIR_OUT:    om.class.field @foo_m_ext_field
-; MLIR_OUT:    om.class.field @bar_m_ext_field
-; MLIR_OUT:    om.class.field @baz_m_ext_field
+; MLIR_OUT:     om.class.fields %4, %20, %38 : !om.class.type<@MemorySchema>, !om.class.type<@MemorySchema>, !om.class.type<@MemorySchema>
 
 ; SITEST_NODUT:     FILE "design.sitest.json"
 ; SITEST_NODUT-NOT: FILE
