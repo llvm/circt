@@ -20,10 +20,16 @@
 namespace circt {
 namespace rtg {
 
+struct ElaborationOptions {
+  std::optional<unsigned> seed;
+};
+
+std::unique_ptr<mlir::Pass> createElaborationPass();
+std::unique_ptr<mlir::Pass>
+createElaborationPass(const ElaborationOptions &options);
+
 /// Generate the code for registering passes.
-#define GEN_PASS_DECL
-#define GEN_PASS_DECL_ELABORATION
-#define GEN_PASS_DECL_RTGTOELF
+#define GEN_PASS_DECL_EXPORTRTGTOELF
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h.inc"
 

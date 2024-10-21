@@ -19,7 +19,7 @@
 
 namespace circt {
 namespace rtg {
-#define GEN_PASS_DEF_ELABORATION
+#define GEN_PASS_DEF_ELABORATIONPASS
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h.inc"
 } // namespace rtg
 } // namespace circt
@@ -30,9 +30,20 @@ using namespace circt;
 #define DEBUG_TYPE "rtg-elaboration"
 
 namespace {
-struct ElaborationPass : public rtg::impl::ElaborationBase<ElaborationPass> {
-  using Base::Base;
+class ElaborationPass : public rtg::impl::ElaborationPassBase<ElaborationPass> {
+public:
+  ElaborationPass() : ElaborationPassBase() {}
+  ElaborationPass(const ElaborationPass &other) : ElaborationPassBase(other) {}
+  ElaborationPass(const rtg::ElaborationOptions &options)
+      : ElaborationPassBase() {
+    if (options.seed.has_value())
+      seed = options.seed.value();
+  }
   void runOnOperation() override;
+
+private:
+  Pass::Option<unsigned> seed{*this, "seed",
+                              llvm::cl::desc("Seed for the RNG.")};
 };
 } // end namespace
 
@@ -91,4 +102,9 @@ void ElaborationPass::runOnOperation() {
           })
           .wasInterrupted())
     signalPassFailure();
+}
+
+std::unique_ptr<Pass>
+rtg::createElaborationPass(const rtg::ElaborationOptions &options) {
+  return std::make_unique<ElaborationPass>(options);
 }

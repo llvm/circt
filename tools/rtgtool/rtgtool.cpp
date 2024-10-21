@@ -169,9 +169,8 @@ static LogicalResult executeRTGTool(MLIRContext &context) {
   pm.addPass(createSimpleCanonicalizerPass());
   if (outputFormat != OutputMLIR) {
     rtg::ElaborationOptions options;
-    if (seed.has_value())
-      options.seed = seed.value();
-    pm.addPass(rtg::createElaboration());
+    options.seed = seed;
+    pm.addPass(rtg::createElaborationPass(options));
     pm.addPass(createSimpleCanonicalizerPass());
   }
 
