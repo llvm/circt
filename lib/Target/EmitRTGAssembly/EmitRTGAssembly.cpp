@@ -206,7 +206,8 @@ EmitRTGAssembly::emitRTGAssembly(Operation *module, llvm::raw_ostream &os,
 
   EmitRTGToElf emitter(os, options);
   for (auto &snippet : module->getRegion(0).getOps())
-    emitter.dispatchOpVisitor(&snippet, -1);
+    if (failed(emitter.dispatchOpVisitor(&snippet, -1)))
+      return failure();
 
   return success();
 }
