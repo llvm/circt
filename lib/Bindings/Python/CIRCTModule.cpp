@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "CIRCTModules.h"
+#include "circt/Bindings/Python/CIRCTModules.h"
 
 #include "circt-c/Conversion.h"
 #include "circt-c/Dialect/Comb.h"
