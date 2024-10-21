@@ -57,6 +57,9 @@ struct Options {
       cl::value_desc("filename"), cl::init("-"), cl::cat(cat)};
   cl::opt<bool> json{"json", cl::desc("Emit test list as JSON array"),
                      cl::init(false), cl::cat(cat)};
+  cl::opt<bool> includeIgnored{"include-ignored",
+                               cl::desc("Include ignored test in output"),
+                               cl::init(false), cl::cat(cat)};
 };
 Options opts;
 
@@ -66,6 +69,12 @@ Options opts;
 // Tool Implementation
 //===----------------------------------------------------------------------===//
 
+bool shouldIgnore(verif::FormalOp formalOp, Options &opts) {
+  return formalOp->hasAttr("ignore") &&
+         cast<BoolAttr>(formalOp->getAttr("ignore")).getValue() &&
+         !opts.includeIgnored;
+}
+
 /// List all the tests in a given module.
 static LogicalResult listTests(ModuleOp module, llvm::raw_ostream &output) {
   // Handle JSON output.
@@ -74,6 +83,8 @@ static LogicalResult listTests(ModuleOp module, llvm::raw_ostream &output) {
     json.arrayBegin();
     auto result = module.walk([&](Operation *op) {
       if (auto formalOp = dyn_cast<verif::FormalOp>(op)) {
+        if (shouldIgnore(formalOp, opts))
+          return WalkResult::advance();
         json.objectBegin();
         auto guard = make_scope_exit([&] { json.objectEnd(); });
         json.attribute("name", formalOp.getSymName());
@@ -98,6 +109,8 @@ static LogicalResult listTests(ModuleOp module, llvm::raw_ostream &output) {
   // Handle regular text output.
   module.walk([&](Operation *op) {
     if (auto formalOp = dyn_cast<verif::FormalOp>(op)) {
+      if (shouldIgnore(formalOp, opts))
+        return;
       output << formalOp.getSymName() << "  formal"
              << "  " << formalOp->getDiscardableAttrDictionary() << "\n";
     }
