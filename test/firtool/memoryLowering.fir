@@ -1,7 +1,12 @@
-; RUN: firtool %s --annotation-file %s.anno.json -repl-seq-mem -repl-seq-mem-file="test.conf" |  FileCheck %s
+; RUN: firtool %s -repl-seq-mem -repl-seq-mem-file="test.conf" |  FileCheck %s
 
 FIRRTL version 4.0.0
-circuit test:
+circuit test: %[[
+  {
+    "class":"sifive.enterprise.firrtl.MarkDUTAnnotation",
+    "target": "test.test"
+  }
+]]
   public module test:
     input clock: Clock
     input rAddr: UInt<4>
