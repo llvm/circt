@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_OM_OMOPINTERFACES_H
 
 #include "mlir/IR/OpDefinition.h"
+#include "mlir/IR/OpImplementation.h"
 #include "llvm/ADT/APSInt.h"
 
 #include "circt/Dialect/OM/OMOpInterfaces.h.inc"

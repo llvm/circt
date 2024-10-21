@@ -20,19 +20,19 @@
 void testEvaluator(MlirContext ctx) {
   const char *testIR =
       "module {"
-      "  om.class @Test(%param: !om.integer) {"
-      "    om.class.field @field, %param : !om.integer"
+      "  om.class @Test(%param: !om.integer) -> (field: !om.integer, child: "
+      "!om.class.type<@Child>) {"
       "    %0 = om.object @Child() : () -> !om.class.type<@Child>"
-      "    om.class.field @child, %0 : !om.class.type<@Child>"
+      "    om.class.fields %param, %0 : !om.integer, !om.class.type<@Child>"
       "  }"
-      "  om.class @Child() {"
+      "  om.class @Child() -> (foo: i64, bar: !om.list<i64>, baz: "
+      "tuple<!om.list<i64>, i64>){"
       "    %0 = om.constant 14 : i64"
       "    %1 = om.constant 15 : i64"
       "    %2 = om.list_create %0, %1 : i64"
       "    %3 = om.tuple_create %2, %0 : !om.list<i64>, i64"
-      "    om.class.field @foo, %0 : i64"
-      "    om.class.field @bar, %2 : !om.list<i64>"
-      "    om.class.field @baz, %3 : tuple<!om.list<i64>, i64>"
+      "    om.class.fields %0, %2, %3 : i64, !om.list<i64>, "
+      "tuple<!om.list<i64>, i64>"
       "  }"
       "}";
 
