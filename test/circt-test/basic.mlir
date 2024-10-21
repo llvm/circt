@@ -1,6 +1,7 @@
 // RUN: circt-test %s | FileCheck %s
 // RUN: circt-test %s --json | FileCheck --check-prefix=JSON %s
 // RUN: circt-as %s -o - | circt-test | FileCheck %s
+// RUN: circt-test %s --include-ignored | FileCheck --check-prefix=CHECK-WITH-IGNORED %s
 
 // JSON: [
 
@@ -44,9 +45,10 @@ verif.formal @Attrs attributes {
 
 // CHECK-NOT: "name": "Ignore"
 // JSON-NOT: "name": "Ignore"
+// CHECK-WITH-IGNORED: Ignore formal {another = "attr", ignore = true}
 verif.formal @Ignore attributes {
     ignore = true,
-    this = "should not appear"
+    another = "attr"
 } {}
 
 // JSON: ]
