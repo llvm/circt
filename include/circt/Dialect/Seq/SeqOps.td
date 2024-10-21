@@ -378,7 +378,7 @@ def WritePortOp : SeqOp<"write", [
 //===----------------------------------------------------------------------===//
 
 def ClockGateOp : SeqOp<"clock_gate", [
-  Pure,
+  Pure, ClockTransformation,
   DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
   AllTypesMatch<["input", "output"]>
 ]> {
@@ -422,6 +422,11 @@ def ClockGateOp : SeqOp<"clock_gate", [
 
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
+
+  let extraClassDeclaration = [{
+    Value getClk() { return getInput(); }
+  }];
+
   let assemblyFormat = [{
     $input `,` $enable (`,` $test_enable^)? (`sym` $inner_sym^)? attr-dict
   }];
@@ -457,7 +462,7 @@ def ClockMuxOp : SeqOp<"clock_mux", [Pure]> {
 // Clock Dividers
 //===----------------------------------------------------------------------===//
 
-def ClockDividerOp : SeqOp<"clock_div", [Pure]> {
+def ClockDividerOp : SeqOp<"clock_div", [Pure, ClockTransformation]> {
   let summary = "Produces a clock divided by a power of two";
   let description = [{
     The output clock is phase-aligned to the input clock.
@@ -470,6 +475,10 @@ def ClockDividerOp : SeqOp<"clock_div", [Pure]> {
   let arguments = (ins ClockType:$input, I64Attr:$pow2);
   let results = (outs ClockType:$output);
 
+  let extraClassDeclaration = [{
+    Value getClk() { return getInput(); }
+  }];
+
   let assemblyFormat = [{
     $input `by` $pow2 attr-dict
   }];
@@ -479,7 +488,7 @@ def ClockDividerOp : SeqOp<"clock_div", [Pure]> {
 // Clock Inverter and Buffer
 //===----------------------------------------------------------------------===//
 
-def ClockInverterOp : SeqOp<"clock_inv", [Pure]> {
+def ClockInverterOp : SeqOp<"clock_inv", [Pure, ClockTransformation]> {
   let summary = "Inverts the clock signal";
   let description = [{
     Note that the compiler can optimize inverters away, preventing their
@@ -494,6 +503,10 @@ def ClockInverterOp : SeqOp<"clock_inv", [Pure]> {
   let results = (outs ClockType:$output);
 
   let hasFolder = 1;
+
+  let extraClassDeclaration = [{
+    Value getClk() { return getInput(); }
+  }];
 
   let assemblyFormat = [{
     $input attr-dict

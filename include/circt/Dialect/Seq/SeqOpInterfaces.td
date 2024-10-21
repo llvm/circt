@@ -24,6 +24,15 @@ def Clocked : OpInterface<"Clocked"> {
   ];
 }
 
+def ClockTransformation : OpInterface<"ClockTransformation"> {
+  let cppNamespace = "circt::seq";
+  let description = "Trait for a clock transformation operation";
+
+  let methods = [
+    InterfaceMethod<"Get the input clock signal", "Value", "getClk", (ins)>
+  ];
+}
+
 def Resettable : OpInterface<"Resettable"> {
   let cppNamespace = "circt::seq";
   let description = "Trait for Resettable elements";
