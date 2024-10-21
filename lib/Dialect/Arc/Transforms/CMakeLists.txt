@@ -9,11 +9,10 @@ add_circt_dialect_library(CIRCTArcTransforms
   InlineArcs.cpp
   IsolateClocks.cpp
   LatencyRetiming.cpp
-  LegalizeStateUpdate.cpp
   LowerArcsToFuncs.cpp
   LowerClocksToFuncs.cpp
   LowerLUT.cpp
-  LowerState.cpp
+  LowerStateRewrite.cpp
   LowerVectorizations.cpp
   MakeTables.cpp
   MergeIfs.cpp
@@ -33,6 +32,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   CIRCTComb
   CIRCTEmit
   CIRCTHW
+  CIRCTLLHD
   CIRCTOM
   CIRCTSV
   CIRCTSeq
