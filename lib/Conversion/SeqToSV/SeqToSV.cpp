@@ -468,6 +468,28 @@ public:
   }
 };
 
+class AggregateConstantPattern
+    : public OpConversionPattern<hw::AggregateConstantOp> {
+public:
+  using OpConversionPattern<hw::AggregateConstantOp>::OpConversionPattern;
+  using OpConversionPattern<hw::AggregateConstantOp>::OpAdaptor;
+
+  LogicalResult
+  matchAndRewrite(hw::AggregateConstantOp aggregateConstant, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto newType = typeConverter->convertType(aggregateConstant.getType());
+    auto newAttr = aggregateConstant.getFieldsAttr().replace(
+        [](seq::ClockConstAttr clockConst) {
+          return mlir::IntegerAttr::get(
+              mlir::IntegerType::get(clockConst.getContext(), 1),
+              APInt(1, clockConst.getValue() == ClockConst::High));
+        });
+    rewriter.replaceOpWithNewOp<hw::AggregateConstantOp>(
+        aggregateConstant, newType, cast<ArrayAttr>(newAttr));
+    return success();
+  }
+};
+
 /// Lower `seq.clock_div` to a behavioural clock divider
 ///
 class ClockDividerLowering : public OpConversionPattern<ClockDividerOp> {
@@ -546,6 +568,15 @@ static bool isLegalOp(Operation *op) {
         return false;
     return true;
   }
+
+  if (auto hwAggregateConstantOp = dyn_cast<hw::AggregateConstantOp>(op)) {
+    bool foundClockAttr = false;
+    hwAggregateConstantOp.getFieldsAttr().walk(
+        [&](seq::ClockConstAttr attr) { foundClockAttr = true; });
+    if (foundClockAttr)
+      return false;
+  }
+
   bool allOperandsLowered = llvm::all_of(
       op->getOperands(), [](auto op) { return isLegalType(op.getType()); });
   bool allResultsLowered = llvm::all_of(op->getResults(), [](auto result) {
@@ -666,6 +697,7 @@ void SeqToSVPass::runOnOperation() {
   patterns.add<ClockDividerLowering>(typeConverter, context);
   patterns.add<ClockConstLowering>(typeConverter, context);
   patterns.add<TypeConversionPattern>(typeConverter, context);
+  patterns.add<AggregateConstantPattern>(typeConverter, context);
 
   if (failed(applyPartialConversion(circuit, target, std::move(patterns))))
     signalPassFailure();
