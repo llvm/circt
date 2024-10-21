@@ -19,6 +19,7 @@
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/BuilderUtils.h"
+#include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/OpImplementation.h"
