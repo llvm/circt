@@ -76,10 +76,11 @@ void printFsmArgVals (const llvm::SmallVector<std::pair<mlir::Value, mlir::Value
 }
 
 
-int insertStates(llvm::SmallVector<std::string> &states, const std::string& st){
+int insertStates(llvm::SmallVector<std::string> &states, std::string& st){
   for(auto [id, s]: llvm::enumerate(states)){
-    if(s == st)
+    if(s == st){
       return id;
+    }
   }
   states.push_back(st);
   return states.size()-1;
@@ -168,7 +169,10 @@ mlir::Value getSmtValue(mlir::Value op, const llvm::SmallVector<std::pair<mlir::
 
 Transition parseTransition(fsm::TransitionOp t, int from, llvm::SmallVector<std::string> &states, 
     Location &loc, OpBuilder &b){
-  Transition tr = {.from = from, .to = insertStates(states, t.getNextState().str())};
+  std::string nextState = t.getNextState().str();
+  // llvm::outs()<<"\n\ntransition from "<<states[from]<<" to "<<states[insertStates(states, nextState)];
+  // t->dump();
+  Transition tr = {.from = from, .to = insertStates(states, nextState)};
   if (!t.getGuard().empty()){
     tr.hasGuard = true;
     tr.guard = &t.getGuard();
@@ -279,11 +283,17 @@ LogicalResult MachineOpConverter::dispatch(){
   // populate state functions and transitions vector
 
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
-    auto fromState = insertStates(states, stateOp.getName().str());
+    std::string stateName = stateOp.getName().str();
     mlir::StringAttr acFunName = b.getStringAttr(("F_"+stateOp.getName().str()));
     auto range = b.getType<smt::BoolType>();
     smt::DeclareFunOp acFun = b.create<smt::DeclareFunOp>(loc, b.getType<smt::SMTFuncType>(varTypes, range), acFunName);
     stateFunctions.push_back(acFun);
+    insertStates(states, stateName);
+  }
+
+  for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
+    std::string stateName = stateOp.getName().str();
+    auto fromState = insertStates(states, stateName);
     
     if (!stateOp.getTransitions().empty()){
       for (auto tr: stateOp.getTransitions().front().getOps<fsm::TransitionOp>()){
@@ -358,6 +368,7 @@ LogicalResult MachineOpConverter::dispatch(){
 
   for(auto [id1, t1] : llvm::enumerate(transitions)){
     // each implication op is in the same region
+
 
 
     auto action = [&t1, &loc, this, &vars, &numArgs, &numOut, &inputFunctions, &args](llvm::SmallVector<mlir::Value> actionArgs) -> llvm::SmallVector<mlir::Value> {
