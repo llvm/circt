@@ -87,9 +87,9 @@ static cl::opt<std::string>
                cl::desc("Specify a named module to verify properties over."),
                cl::value_desc("module name"), cl::cat(mainCategory));
 
-static cl::opt<std::string> inputFilename(cl::Positional, cl::Required,
+static cl::opt<std::string> inputFilename(cl::Positional,
                                           cl::desc("<input file>"),
-                                          cl::cat(mainCategory));
+                                          cl::init("-"), cl::cat(mainCategory));
 
 static cl::opt<std::string> outputFilename("o", cl::desc("Output filename"),
                                            cl::value_desc("filename"),
