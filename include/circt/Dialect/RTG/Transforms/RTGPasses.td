@@ -19,12 +19,8 @@ def ElaborationPass : Pass<"rtg-elaborate", "mlir::ModuleOp"> {
   let summary = "Elaborate the randomizing parts of RTG";
 }
 
-def ExportRTGToElf : Pass<"rtg-to-elf", "mlir::ModuleOp"> {
-  let summary = "Generate an elf file for a given test sequence.";
-  let options = [
-    Option<"outputFilename", "output-filename", "std::string", "",
-      "The name of the output file to generate.">,
-  ];
+def ContextPass : Pass<"rtg-context", "mlir::ModuleOp"> {
+  let summary = "Elaborate the contexts of RTG";
 }
 
 #endif // CIRCT_DIALECT_RTG_RTGPASSES_TD

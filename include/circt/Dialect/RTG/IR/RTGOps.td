@@ -13,6 +13,7 @@
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/CommonAttrConstraints.td"
 include "mlir/IR/Properties.td"
+include "mlir/IR/SymbolInterfaces.td"
 include "circt/Dialect/RTG/IR/RTGInterfaces.td"
 
 // Base class for the operation in this dialect.
@@ -130,6 +131,19 @@ def RenderedContextOp : RTGOp<"rendered_context",
   let results = (outs);
 
   let assemblyFormat = "$selectors $contextRegions attr-dict-with-keyword";
+}
+
+def InvokeSequenceOp : RTGOp<"invoke", []> {
+  let summary = "invoke a sequence of instructions";
+  let description = [{
+    Invoke a predefined sequence in place.
+  }];
+
+  let arguments = (ins SequenceType:$sequence);
+
+  let assemblyFormat = [{
+    $sequence attr-dict-with-keyword `:` type($sequence)
+  }];
 }
 
 

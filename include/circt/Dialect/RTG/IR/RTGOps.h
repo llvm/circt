@@ -18,6 +18,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/SymbolTable.h"
 
 #include "circt/Dialect/RTG/IR/RTGInterfaces.h.inc"
 

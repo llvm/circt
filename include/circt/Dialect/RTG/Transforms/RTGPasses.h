@@ -28,10 +28,12 @@ std::unique_ptr<mlir::Pass> createElaborationPass();
 std::unique_ptr<mlir::Pass>
 createElaborationPass(const ElaborationOptions &options);
 
+std::unique_ptr<mlir::Pass> createContextPass();
+
 /// Generate the code for registering passes.
-#define GEN_PASS_DECL_EXPORTRTGTOELF
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h.inc"
+#undef GEN_PASS_REGISTRATION
 
 } // namespace rtg
 } // namespace circt
