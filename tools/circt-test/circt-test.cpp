@@ -70,9 +70,11 @@ Options opts;
 //===----------------------------------------------------------------------===//
 
 bool shouldIgnore(verif::FormalOp formalOp, Options &opts) {
-  return formalOp->hasAttrOfType<BoolAttr>("ignore") &&
-         cast<BoolAttr>(formalOp->getAttr("ignore")).getValue() &&
-         !opts.includeIgnored;
+  if (opts.includeIgnored)
+    return false;
+  if (auto boolAttr = formalOp->getAttrOfType<BoolAttr>("ignore"))
+    return boolAttr.getValue();
+  return false;
 }
 
 /// List all the tests in a given module.
