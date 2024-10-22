@@ -114,7 +114,8 @@ static cl::list<std::string> unsupportedInstructions(
 
 static cl::list<std::string>
     dialectPlugins("load-dialect-plugin",
-                   cl::desc("Load dialects from plugin library"));
+                   cl::desc("Load dialects from plugin library"),
+                   cl::cat(mainCategory));
 
 static cl::opt<bool>
     verifyPasses("verify-each",
@@ -251,6 +252,11 @@ int main(int argc, char **argv) {
   cl::AddExtraVersionPrinter(
       [](llvm::raw_ostream &os) { os << circt::getCirctVersion() << '\n'; });
 
+  DialectRegistry registry;
+  // NOTE: this must be called before 'ParseCommandLineOptions' such that the
+  // callback function is invoked when the dialect plugin option is parsed.
+  setDialectPluginsCallback(registry);
+
   // Parse the command-line options provided by the user.
   cl::ParseCommandLineOptions(
       argc, argv,
@@ -262,8 +268,6 @@ int main(int argc, char **argv) {
   // llvm/circt and not llvm/llvm-project.
   llvm::setBugReportMsg(circt::circtBugReportMsg);
 
-  DialectRegistry registry;
-  setDialectPluginsCallback(registry);
   // Register the supported CIRCT dialects and create a context to work with.
   registry.insert<circt::rtg::RTGDialect, circt::rtgtest::RTGTestDialect,
                   mlir::arith::ArithDialect, mlir::BuiltinDialect>();
