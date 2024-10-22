@@ -478,9 +478,9 @@ void PrefixModulesPass::runOnOperation() {
     for (auto &node : llvm::inverse_post_order_ext(current, visited)) {
       if (auto module = dyn_cast<FModuleOp>(*node->getModule()))
         renameModule(module);
-      if (auto extModule = dyn_cast<FExtModuleOp>(*node->getModule()))
+      else if (auto extModule = dyn_cast<FExtModuleOp>(*node->getModule()))
         renameExtModule(extModule);
-      if (auto memModule = dyn_cast<FMemModuleOp>(*node->getModule()))
+      else if (auto memModule = dyn_cast<FMemModuleOp>(*node->getModule()))
         renameMemModule(memModule);
     }
   }
