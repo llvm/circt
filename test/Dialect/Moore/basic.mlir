@@ -302,6 +302,11 @@ moore.module @Expressions(
   // CHECK: moore.struct_inject [[STRUCT1]], "a", [[B]] : struct<{a: i32, b: i32}>, i32
   moore.struct_inject %struct1, "a", %b : struct<{a: i32, b: i32}>, i32
 
+  // CHECK: moore.string_constant "Test" : i128
+  moore.string_constant "Test" : i128
+  // CHECK: moore.string_constant "" : i128
+  moore.string_constant "" : i128
+
   moore.output
 }
 
