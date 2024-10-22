@@ -555,6 +555,34 @@ struct ConstantOpConv : public OpConversionPattern<ConstantOp> {
   }
 };
 
+struct StringConstantOpConv : public OpConversionPattern<StringConstantOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(moore::StringConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    const auto str = op.getValue();
+    const unsigned byteWidth = str.size() * 8;
+    const auto resultType =
+        typeConverter->convertType(op.getResult().getType());
+    if (const auto intType = mlir::dyn_cast<IntegerType>(resultType)) {
+      if (intType.getWidth() < byteWidth) {
+        return rewriter.notifyMatchFailure(op,
+                                           "invalid string constant type size");
+      }
+    } else {
+      return rewriter.notifyMatchFailure(op, "invalid string constant type");
+    }
+    APInt value(byteWidth, 0);
+    for (size_t i = 0; i < str.size(); ++i) {
+      const auto asciiChar = static_cast<uint8_t>(str[i]);
+      value |= APInt(byteWidth, asciiChar) << (8 * (str.size() - 1 - i));
+    }
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(
+        op, resultType, rewriter.getIntegerAttr(resultType, value));
+    return success();
+  }
+};
+
 struct ConcatOpConversion : public OpConversionPattern<ConcatOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -1475,7 +1503,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
     ConversionOpConversion, ReadOpConversion,
     StructExtractOpConversion, StructExtractRefOpConversion,
     ExtractRefOpConversion, StructCreateOpConversion, ConditionalOpConversion,
-    YieldOpConversion, OutputOpConversion,
+    YieldOpConversion, OutputOpConversion, StringConstantOpConv,
 
     // Patterns of unary operations.
     ReduceAndOpConversion, ReduceOrOpConversion, ReduceXorOpConversion,

@@ -868,3 +868,14 @@ moore.module @Assert(in %cond : !moore.l1)  {
   moore.return
   }
 }
+
+// CHECK-LABEL: hw.module @StringConstant
+moore.module @StringConstant() {
+  moore.procedure initial {
+    // CHECK: hw.constant 1415934836 : i32
+    %str = moore.string_constant "Test" : i32
+    // CHECK: hw.constant 0 : i0
+    %str_empty = moore.string_constant "" : i0
+    moore.return
+  }
+}
