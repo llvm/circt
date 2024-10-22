@@ -102,20 +102,20 @@ public:
 
 private:
   /// Record whether the module contains any effectful ops.
-  void update(FModuleOp module) {
-    module.getBodyBlock()->walk([&](Operation *op) {
+  void update(FModuleOp moduleOp) {
+    moduleOp.getBodyBlock()->walk([&](Operation *op) {
       if (effectful(op)) {
-        markEffectful(module);
+        markEffectful(moduleOp);
         return WalkResult::interrupt();
       }
       return WalkResult::advance();
     });
   }
 
-  void update(FModuleLike module) {
-    if (!AnnotationSet(module).canBeDeleted())
-      return markEffectful(module);
-    auto *op = module.getOperation();
+  void update(FModuleLike moduleOp) {
+    if (!AnnotationSet(moduleOp).canBeDeleted())
+      return markEffectful(moduleOp);
+    auto *op = moduleOp.getOperation();
     // Regular modules may be pure.
     if (auto m = dyn_cast<FModuleOp>(op))
       return update(m);
@@ -124,17 +124,17 @@ private:
       return;
     // All other kinds of modules are effectful.
     // intmodules, extmodules, classes.
-    return markEffectful(module);
+    return markEffectful(moduleOp);
   }
 
   void update(Operation *op) {
-    if (auto module = dyn_cast<FModuleLike>(op))
-      update(module);
+    if (auto moduleOp = dyn_cast<FModuleLike>(op))
+      update(moduleOp);
   }
 
   /// Record that the given module contains an effectful operation.
-  void markEffectful(FModuleLike module) {
-    effectfulModules.insert(module.getModuleNameAttr());
+  void markEffectful(FModuleLike moduleOp) {
+    effectfulModules.insert(moduleOp.getModuleNameAttr());
   }
 
   DenseSet<StringAttr> effectfulModules;
@@ -254,18 +254,18 @@ struct DemandInfo {
 };
 } // namespace
 
-DemandInfo::DemandInfo(const EffectInfo &effectInfo, FModuleOp module) {
+DemandInfo::DemandInfo(const EffectInfo &effectInfo, FModuleOp moduleOp) {
   WorkStack work;
-  Block *body = module.getBodyBlock();
-  ArrayRef<bool> dirs = module.getPortDirections();
-  for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i)
+  Block *body = moduleOp.getBodyBlock();
+  ArrayRef<bool> dirs = moduleOp.getPortDirections();
+  for (unsigned i = 0, e = moduleOp.getNumPorts(); i < e; ++i)
     if (direction::get(dirs[i]) == Direction::Out)
-      updateConnects(work, body->getArgument(i), module.getBodyBlock());
-  module.getBodyBlock()->walk([&](Operation *op) {
+      updateConnects(work, body->getArgument(i), moduleOp.getBodyBlock());
+  moduleOp.getBodyBlock()->walk([&](Operation *op) {
     if (effectInfo.effectful(op))
       update(work, op, op->getBlock());
   });
-  run(effectInfo, module, work);
+  run(effectInfo, moduleOp, work);
 }
 
 void DemandInfo::run(const EffectInfo &effectInfo, FModuleOp, WorkStack &work) {
@@ -337,19 +337,19 @@ void DemandInfo::updateConnects(WorkStack &work, Operation *op, Demand demand) {
 namespace {
 class ModuleLayerSink {
 public:
-  static bool run(FModuleOp module, const EffectInfo &effectInfo) {
-    return ModuleLayerSink(module, effectInfo)();
+  static bool run(FModuleOp moduleOp, const EffectInfo &effectInfo) {
+    return ModuleLayerSink(moduleOp, effectInfo)();
   }
 
 private:
-  ModuleLayerSink(FModuleOp module, const EffectInfo &effectInfo)
-      : module(module), effectInfo(effectInfo) {}
+  ModuleLayerSink(FModuleOp moduleOp, const EffectInfo &effectInfo)
+      : moduleOp(moduleOp), effectInfo(effectInfo) {}
 
   bool operator()();
   void moveLayersToBack(Operation *op);
   void moveLayersToBack(Block *block);
 
-  FModuleOp module;
+  FModuleOp moduleOp;
   const EffectInfo &effectInfo;
   bool changed;
 };
@@ -396,9 +396,9 @@ void ModuleLayerSink::moveLayersToBack(Block *block) {
 }
 
 bool ModuleLayerSink::operator()() {
-  moveLayersToBack(module.getBodyBlock());
-  DemandInfo demandInfo(effectInfo, module);
-  walkBwd(module.getBodyBlock(), [&](Operation *op) {
+  moveLayersToBack(moduleOp.getBodyBlock());
+  DemandInfo demandInfo(effectInfo, moduleOp);
+  walkBwd(moduleOp.getBodyBlock(), [&](Operation *op) {
     auto demand = demandInfo.getDemandFor(op);
     if (!demand) {
       op->erase();
@@ -438,8 +438,8 @@ void AdvancedLayerSinkPass::runOnOperation() {
 
   std::atomic<bool> changed(false);
   parallelForEach(&getContext(), circuit.getOps<FModuleOp>(),
-                  [&](FModuleOp module) {
-                    if (ModuleLayerSink::run(module, effectInfo))
+                  [&](FModuleOp moduleOp) {
+                    if (ModuleLayerSink::run(moduleOp, effectInfo))
                       changed = true;
                   });
 
