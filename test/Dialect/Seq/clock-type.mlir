@@ -101,3 +101,11 @@ hw.module @ClockCastUse() {
   hw.instance "" @ClockSink(clock : %clk : !seq.clock) -> ()
   %clk = hw.instance "clk" @ClockSource() -> (clock : !seq.clock)
 }
+
+// CHECK-LABEL: @aggregate_const
+hw.module @aggregate_const(out o : !hw.array<1x!seq.clock>) {
+  // CHECK-NEXT: %[[CLOCK:.+]] = hw.aggregate_constant [true] : !hw.array<1xi1>
+  // CHECK-NEXT: hw.output %[[CLOCK]] : !hw.array<1xi1>
+  %0 = hw.aggregate_constant [#seq<clock_constant high> : !seq.clock] : !hw.array<1x!seq.clock>
+  hw.output %0 : !hw.array<1x!seq.clock>
+}

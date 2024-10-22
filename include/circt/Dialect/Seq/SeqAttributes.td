@@ -22,7 +22,13 @@ def ClockConstAttrImpl: I32EnumAttr<"ClockConst", "clock constant",
                                 [ClockLow, ClockHigh]> {
   let genSpecializedAttr = 0;
 }
-def ClockConstAttr : EnumAttr<SeqDialect, ClockConstAttrImpl, "clock_constant">;
+
+def ClockConstAttr : EnumAttr<SeqDialect, ClockConstAttrImpl,
+                       "clock_constant",  [TypedAttrInterface]> {
+ let extraClassDeclaration = [{
+    mlir::Type getType();
+ }];
+}
 
 // Read-under-write behavior
 def RUW_Undefined : I32EnumAttrCase<"Undefined", 0, "undefined">;
