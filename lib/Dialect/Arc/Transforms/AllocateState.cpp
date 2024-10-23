@@ -63,9 +63,27 @@ void AllocateStatePass::allocateBlock(Block *block) {
   LLVM_DEBUG(llvm::dbgs() << "- Visiting block in "
                           << block->getParentOp()->getName() << "\n");
 
+  // The allocation should run in (reversed?) topo-sorted order for preexisting
+  // substorages to work correctly.
+
+  DenseSet<Value> allocated;
+  std::function<void(Value)> visit;
+  visit = [&](Value parent) {
+    if (allocated.contains(parent))
+      return;
+    for (auto childAlloc : opsByStorage[parent])
+      if (auto childStorageAlloc = dyn_cast<AllocStorageOp>(childAlloc)) {
+        auto child = childStorageAlloc.getResult();
+        if (opsByStorage.contains(child)) // Used by allocations in this block
+          visit(child);
+      }
+    allocateOps(parent, block, opsByStorage[parent]);
+    allocated.insert(parent);
+  };
+
   // Actually allocate each operation.
-  for (auto &[storage, ops] : opsByStorage)
-    allocateOps(storage, block, ops);
+  for (auto &[storage, _] : opsByStorage)
+    visit(storage);
 }
 
 void AllocateStatePass::allocateOps(Value storage, Block *block,

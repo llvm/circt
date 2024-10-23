@@ -184,6 +184,11 @@ static llvm::cl::opt<unsigned> splitFuncsThreshold(
         "Split large MLIR functions that occur above the given size threshold"),
     llvm::cl::ValueOptional, llvm::cl::cat(mainCategory));
 
+static llvm::cl::opt<unsigned> partitionChunks(
+    "partition-chunks",
+    llvm::cl::desc("Resulting number of chunks during partition"),
+    llvm::cl::ValueOptional, llvm::cl::cat(mainCategory));
+
 // Options to control early-out from pipeline.
 enum Until {
   UntilPreprocessing,
@@ -338,8 +343,12 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   // Allocate states.
   if (untilReached(UntilStateAlloc))
     return;
+  if (partitionChunks.getNumOccurrences())
+    pm.nest<arc::ModelOp>().addPass(arc::createPartition({partitionChunks}));
   pm.addPass(arc::createLowerArcsToFuncsPass());
   pm.nest<arc::ModelOp>().addPass(arc::createAllocateStatePass());
+  if (partitionChunks.getNumOccurrences())
+    pm.nest<arc::ModelOp>().addPass(arc::createPartitionClone());
   pm.addPass(arc::createLowerClocksToFuncsPass()); // no CSE between state alloc
                                                    // and clock func lowering
   if (splitFuncsThreshold.getNumOccurrences()) {
