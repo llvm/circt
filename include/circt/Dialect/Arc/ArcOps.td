@@ -465,6 +465,21 @@ def FinalOp : ClockTreeLikeOp<"final"> {
 }
 
 //===----------------------------------------------------------------------===//
+// Partition
+//===----------------------------------------------------------------------===//
+
+def TaskOp : ArcOp<"task",  [
+    RecursiveMemoryEffects, NoTerminator, NoRegionArguments, SingleBlock,
+    // ParentOneOf<["ClockTreeOp", "ModelOp"]>
+]> {
+  let summary = "A region reserved after the computation of different partitions";
+  let arguments = (ins
+    OptionalAttr<SymbolNameAttr>:$task_name
+  );
+  let regions = (region SizedRegion<1>:$body);
+}
+
+//===----------------------------------------------------------------------===//
 // Storage Allocation
 //===----------------------------------------------------------------------===//
 

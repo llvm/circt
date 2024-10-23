@@ -318,6 +318,18 @@ def SimplifyVariadicOps : Pass<"arc-simplify-variadic-ops", "mlir::ModuleOp"> {
   ];
 }
 
+def Partition: Pass<"arc-partition", "arc::ModelOp"> {
+  let summary = "Partition the entire circuit into multiple chunks";
+  let options = [
+    Option<"chunks", "chunks", "unsigned", "1",
+      "Number of resulting chunks">
+  ];
+}
+
+def PartitionClone: Pass<"arc-partition-clone", "arc::ModelOp"> {
+  let summary = "Commit the planned partition by cloning models";
+}
+
 def SplitFuncs : Pass<"arc-split-funcs", "mlir::ModuleOp"> {
   let summary = "Split large funcs into multiple smaller funcs";
   let dependentDialects = ["mlir::func::FuncDialect"];
