@@ -83,8 +83,13 @@ Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
 
   // Aggregate constants.
   if (auto arrayAttr = dyn_cast<ArrayAttr>(value)) {
-    if (isa<BundleType, FVectorType>(type))
-      return builder.create<AggregateConstantOp>(loc, type, arrayAttr);
+
+    if (false && isa<BundleType, FVectorType>(type)) {
+      bool exist = false;
+      type.walk([&](ClockType clock) { exist = true; });
+      if (!exist)
+        return builder.create<AggregateConstantOp>(loc, type, arrayAttr);
+    }
   }
 
   // String constants.

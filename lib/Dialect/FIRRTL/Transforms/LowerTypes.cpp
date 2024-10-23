@@ -155,10 +155,12 @@ static bool isPreservableAggregateType(Type type,
   if (!firrtlType)
     return false;
 
-  // We can a preserve the type iff (i) the type is not passive, (ii) the type
-  // doesn't contain analog and (iii) type don't contain zero bitwidth.
-  if (!firrtlType.isPassive() || firrtlType.containsAnalog() ||
-      hasZeroBitWidth(firrtlType))
+  bool exist = false;
+  firrtlType.walk([&](ClockType clock) { exist = true; });
+  // Don't preserve types which contain flips, analog, clock, reset or zero
+  // bitwidth integer type.
+  if (!firrtlType.isPassive() || firrtlType.containsAnalog() /*||
+      hasZeroBitWidth(firrtlType)*/)
     return false;
 
   switch (mode) {
@@ -338,11 +340,13 @@ struct AttrCache {
 struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
   TypeLoweringVisitor(
-      MLIRContext *context, PreserveAggregate::PreserveMode preserveAggregate,
+      MLIRContext *context, FModuleLike moduleOp,
+      PreserveAggregate::PreserveMode preserveAggregate,
       PreserveAggregate::PreserveMode memoryPreservationMode,
       SymbolTable &symTbl, const AttrCache &cache,
       const llvm::DenseMap<FModuleLike, Convention> &conventionTable)
-      : context(context), aggregatePreservationMode(preserveAggregate),
+      : context(context), theModule(moduleOp),
+        aggregatePreservationMode(preserveAggregate),
         memoryPreservationMode(memoryPreservationMode), symTbl(symTbl),
         cache(cache), conventionTable(conventionTable) {}
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitDecl;
@@ -439,6 +443,7 @@ private:
   }
 
   MLIRContext *context;
+  FModuleLike theModule;
 
   /// Aggregate preservation mode.
   PreserveAggregate::PreserveMode aggregatePreservationMode;
@@ -643,7 +648,7 @@ bool TypeLoweringVisitor::lowerProducer(
     return false;
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
 
-  if (!peelType(srcFType, fieldTypes, aggregatePreservationMode))
+  if (!peelType(srcFType, fieldTypes, getPreservationModeForModule(theModule)))
     return false;
 
   SmallVector<Value> lowered;
@@ -1653,8 +1658,8 @@ void LowerTypesPass::runOnOperation() {
   // This lambda, executes in parallel for each Op within the circt.
   auto lowerModules = [&](FModuleLike op) -> LogicalResult {
     auto tl =
-        TypeLoweringVisitor(&getContext(), preserveAggregate, preserveMemories,
-                            symTbl, cache, conventionTable);
+        TypeLoweringVisitor(&getContext(), op, preserveAggregate,
+                            preserveMemories, symTbl, cache, conventionTable);
     tl.lowerModule(op);
 
     return LogicalResult::failure(tl.isFailed());

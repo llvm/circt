@@ -261,6 +261,13 @@ static LogicalResult applyDUTAnno(const AnnoPathValue &target,
   // DUT has public visibility.
   moduleOp.setPublic();
   SmallVector<NamedAttribute> newAnnoAttrs;
+  for (auto *node :
+       llvm::post_order(state.instancePathCache.instanceGraph[moduleOp])) {
+    if (auto fmodule = dyn_cast_or_null<firrtl::FModuleOp>(node->getModule())) {
+      fmodule.setConvention(circt::firrtl::Convention::Scalarized);
+    }
+  }
+
   for (auto &na : anno)
     if (na.getName().getValue() != "target")
       newAnnoAttrs.push_back(na);

@@ -400,7 +400,9 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
 
 static void lowerModuleBody(FModuleOp mod,
                             const DenseMap<StringAttr, PortConversion> &ports) {
-  mod->walk([&](InstanceOp inst) -> void {
+  SmallVector<InstanceOp> insts;
+  mod->walk([&](InstanceOp inst) { insts.push_back(inst); });
+  for (auto inst : insts) {
     ImplicitLocOpBuilder theBuilder(inst.getLoc(), inst);
     const auto &modPorts = ports.at(inst.getModuleNameAttr().getAttr());
 
@@ -457,13 +459,33 @@ static void lowerModuleBody(FModuleOp mod,
     }
     // Zero Width ports may have dangling connects since they are not preserved
     // and do not have bounce wires.
-    for (auto *use : llvm::make_early_inc_range(inst->getUsers())) {
-      assert(isa<MatchingConnectOp>(use) || isa<ConnectOp>(use));
-      use->erase();
+    while (!inst->getUsers().empty()) {
+      auto *use = *inst->getUsers().begin();
+      llvm::SetVector<Operation *> users;
+      users.insert(use);
+      while (!users.empty()) {
+        auto user = users.pop_back_val();
+        bool okToRemove = isa<SubfieldOp, SubindexOp, SubaccessOp>(user);
+        if (isa<SubfieldOp, SubindexOp, SubaccessOp>(user)) {
+          for (auto &use : llvm::make_early_inc_range(user->getUses())) {
+            users.insert(use.getOwner());
+            use.drop();
+          }
+          user->erase();
+          continue;
+        }
+
+        if (!isa<MatchingConnectOp>(user) && !isa<ConnectOp>(user)) {
+          user->getParentOfType<FModuleOp>().dump();
+          inst.dump();
+          user->dump();
+          assert(false);
+        }
+        user->erase();
+      }
     }
     inst->erase();
-    return;
-  });
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -492,8 +514,8 @@ void LowerSignaturesPass::runOnOperation() {
             .failed())
       return signalPassFailure();
   }
-  parallelForEach(&getContext(), circuit.getOps<FModuleOp>(),
-                  [&portMap](FModuleOp mod) { lowerModuleBody(mod, portMap); });
+  llvm::for_each(circuit.getOps<FModuleOp>(),
+                 [&portMap](FModuleOp mod) { lowerModuleBody(mod, portMap); });
 }
 
 /// This is the pass constructor.
