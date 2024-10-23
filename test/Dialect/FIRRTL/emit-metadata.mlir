@@ -4,16 +4,17 @@ firrtl.circuit "empty" {
   firrtl.module @empty() {
   }
 }
-// CHECK-LABEL: firrtl.circuit "empty"   {
-// CHECK-NEXT:    firrtl.module @empty() {
-// CHECK-NEXT:    }
-// CHECK-NEXT:    emit.file "metadata{{/|\\\\}}seq_mems.json" {
-// CHECK-NEXT:      sv.verbatim "[]"
-// CHECK-NEXT:    }
-// CHECK-NEXT:    emit.file "dut.conf" {
-// CHECK-NEXT:      sv.verbatim ""
-// CHECK-NEXT:    }
-// CHECK-NEXT:  }
+// CHECK:      firrtl.circuit "empty"   {
+// CHECK-NEXT:   firrtl.module @empty() {
+// CHECK-NEXT:   }
+// CHECK-NEXT:   emit.file "metadata{{/|\\\\}}seq_mems.json" {
+// CHECK-NEXT:     sv.verbatim "[]"
+// CHECK-NEXT:   }
+// CHECK-NEXT:   emit.file "dut.conf" {
+// CHECK-NEXT:     sv.verbatim ""
+// CHECK-NEXT:   }
+// CHECK-NEXT: }
+
 // Memory metadata om class should not be created.
 // CHECK-NOT: om.class @MemorySchema
 
@@ -23,20 +24,31 @@ firrtl.circuit "empty" {
 // RetimeModules
 //===----------------------------------------------------------------------===//
 
-firrtl.circuit "retime0" attributes { annotations = [{
-    class = "sifive.enterprise.firrtl.RetimeModulesAnnotation",
-    filename = "retime_modules.json"
-}]} {
-
-  firrtl.module @retime0() attributes { annotations = [{
-      class = "freechips.rocketchip.util.RetimeModuleAnnotation"
-  }]} { }
+firrtl.circuit "retime0" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.RetimeModulesAnnotation",
+      filename = "retime_modules.json"
+    }
+  ]
+} {
+  firrtl.module @retime0() attributes {
+    annotations = [
+      {
+        class = "freechips.rocketchip.util.RetimeModuleAnnotation"
+      }
+    ]
+  } {}
 
   firrtl.module @retime1() { }
 
-  firrtl.module @retime2() attributes { annotations = [{
-      class = "freechips.rocketchip.util.RetimeModuleAnnotation"
-  }]} { }
+  firrtl.module @retime2() attributes {
+    annotations = [
+      {
+        class = "freechips.rocketchip.util.RetimeModuleAnnotation"
+      }
+    ]
+  } {}
 }
 // CHECK-LABEL: firrtl.circuit "retime0"   {
 // CHECK:         firrtl.module @retime0(out %metadataObj: !firrtl.any
@@ -72,10 +84,14 @@ firrtl.circuit "retime0" attributes { annotations = [{
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: firrtl.circuit "DUTBlackboxes" {
-firrtl.circuit "DUTBlackboxes" attributes { annotations = [{
-    class = "sifive.enterprise.firrtl.SitestBlackBoxAnnotation",
-    filename = "dut_blackboxes.json"
-  }]} {
+firrtl.circuit "DUTBlackboxes" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.SitestBlackBoxAnnotation",
+      filename = "dut_blackboxes.json"
+    }
+  ]
+} {
   firrtl.module @DUTBlackboxes() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
   }
@@ -89,10 +105,14 @@ firrtl.circuit "DUTBlackboxes" attributes { annotations = [{
 // -----
 
 // CHECK-LABEL: firrtl.circuit "TestBlackboxes"  {
-firrtl.circuit "TestBlackboxes" attributes { annotations = [{
-    class = "sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation",
-    filename = "test_blackboxes.json"
-  }]} {
+firrtl.circuit "TestBlackboxes" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation",
+      filename = "test_blackboxes.json"
+    }
+  ]
+} {
   firrtl.module @TestBlackboxes() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
   }
@@ -106,27 +126,71 @@ firrtl.circuit "TestBlackboxes" attributes { annotations = [{
 // -----
 
 // CHECK-LABEL: firrtl.circuit "BasicBlackboxes"   {
-firrtl.circuit "BasicBlackboxes" attributes { annotations = [{
-    class = "sifive.enterprise.firrtl.SitestBlackBoxAnnotation",
-    filename = "dut_blackboxes.json"
-  }, {
-    class = "sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation",
-    filename = "test_blackboxes.json"
-  }]} {
-
-  firrtl.module @BasicBlackboxes() attributes {annotations = [
-      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+firrtl.circuit "BasicBlackboxes" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.SitestBlackBoxAnnotation",
+      filename = "dut_blackboxes.json"
+    },
+    {
+      class = "sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation",
+      filename = "test_blackboxes.json"
+    }
+  ]
+} {
+  firrtl.module @BasicBlackboxes() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
     firrtl.instance test @DUTBlackbox_0()
     firrtl.instance test @DUTBlackbox_1()
     firrtl.instance test @DUTBlackbox_2()
   }
 
   // These should all be ignored.
-  firrtl.extmodule @ignored0() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno"}], defname = "ignored0"}
-  firrtl.extmodule @ignored1() attributes {annotations = [{class = "firrtl.transforms.BlackBoxPathAnno"}], defname = "ignored1"}
-  firrtl.extmodule @ignored2() attributes {annotations = [{class = "sifive.enterprise.grandcentral.DataTapsAnnotation.blackbox"}], defname = "ignored2"}
-  firrtl.extmodule @ignored3() attributes {annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation.blackbox", id = 4 : i64}], defname = "ignored3"}
-  firrtl.extmodule @ignored4() attributes {annotations = [{class = "firrtl.transforms.BlackBox"}], defname = "ignored4"}
+  firrtl.extmodule @ignored0() attributes {
+    annotations = [
+      {
+        class = "firrtl.transforms.BlackBoxInlineAnno"
+      }
+    ],
+    defname = "ignored0"
+  }
+  firrtl.extmodule @ignored1() attributes {
+    annotations = [
+      {
+        class = "firrtl.transforms.BlackBoxPathAnno"
+      }
+    ],
+    defname = "ignored1"
+  }
+  firrtl.extmodule @ignored2() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.DataTapsAnnotation.blackbox"
+      }
+    ],
+    defname = "ignored2"
+  }
+  firrtl.extmodule @ignored3() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.MemTapAnnotation.blackbox", id = 4 : i64
+      }
+    ],
+    defname = "ignored3"
+  }
+  firrtl.extmodule @ignored4() attributes {
+    annotations = [
+      {
+        class = "firrtl.transforms.BlackBox"
+      }
+    ],
+    defname = "ignored4"
+  }
 
 // CHECK:    firrtl.class @SitestBlackBoxModulesSchema(in %[[moduleName_in:.+]]: !firrtl.string, out %moduleName: !firrtl.string) {
 // CHECK:      firrtl.propassign %moduleName, %[[moduleName_in]]
@@ -187,10 +251,36 @@ firrtl.circuit "top"
 // CHECK-LABEL: firrtl.circuit "OneMemory"
 firrtl.circuit "OneMemory" {
   firrtl.module @OneMemory() {
-    %0:5= firrtl.instance MWrite_ext_inst sym @MWrite_ext_0  @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>, in user_input: !firrtl.uint<5>)
+    %0:5= firrtl.instance MWrite_ext_inst sym @MWrite_ext_0 @MWrite_ext(
+      in W0_addr: !firrtl.uint<4>,
+      in W0_en: !firrtl.uint<1>,
+      in W0_clk: !firrtl.clock,
+      in W0_data: !firrtl.uint<42>,
+      in user_input: !firrtl.uint<5>
+    )
   }
-  firrtl.memmodule @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>, in user_input: !firrtl.uint<5>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [{direction = "input", name = "user_input", width = 5 : ui32}], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
-
+  firrtl.memmodule @MWrite_ext(
+    in W0_addr: !firrtl.uint<4>,
+    in W0_en: !firrtl.uint<1>,
+    in W0_clk: !firrtl.clock,
+    in W0_data: !firrtl.uint<42>,
+    in user_input: !firrtl.uint<5>) attributes {
+      dataWidth = 42 : ui32,
+      depth = 12 : ui64,
+      extraPorts = [
+        {
+          direction = "input",
+          name = "user_input",
+          width = 5 : ui32
+        }
+      ],
+      maskBits = 1 : ui32,
+      numReadPorts = 0 : ui32,
+      numReadWritePorts = 0 : ui32,
+      numWritePorts = 1 : ui32,
+      readLatency = 1 : ui32,
+      writeLatency = 1 : ui32
+    }
 
   // CHECK:  firrtl.class @MemorySchema
   // CHECK:    firrtl.propassign %name, %name_in : !firrtl.string
@@ -249,13 +339,61 @@ firrtl.circuit "OneMemory" {
 // CHECK-LABEL: firrtl.circuit "DualReadsSMem"
 firrtl.circuit "DualReadsSMem" {
   firrtl.module @DualReadsSMem() {
-    %0:12 = firrtl.instance DualReads_ext {annotations = [{class = "sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation", data = {baseAddress = 2147483648 : i64, dataBits = 8 : i64, eccBits = 0 : i64, eccIndices = [], eccScheme = "none"}}]}  @DualReads_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, in R0_data: !firrtl.uint<42>, in R1_addr: !firrtl.uint<4>, in R1_en: !firrtl.uint<1>, in R1_clk: !firrtl.clock, in R1_data: !firrtl.uint<42>, in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
+    %0:12 = firrtl.instance DualReads_ext {
+      annotations = [
+        {
+          class = "sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation",
+          data = {
+            baseAddress = 2147483648 : i64,
+            dataBits = 8 : i64,
+            eccBits = 0 : i64,
+            eccIndices = [],
+            eccScheme = "none"
+          }
+        }
+      ]
+    } @DualReads_ext(
+      in R0_addr: !firrtl.uint<4>,
+      in R0_en: !firrtl.uint<1>,
+      in R0_clk: !firrtl.clock,
+      in R0_data: !firrtl.uint<42>,
+      in R1_addr: !firrtl.uint<4>,
+      in R1_en: !firrtl.uint<1>,
+      in R1_clk: !firrtl.clock,
+      in R1_data: !firrtl.uint<42>,
+      in W0_addr: !firrtl.uint<4>,
+      in W0_en: !firrtl.uint<1>,
+      in W0_clk: !firrtl.clock,
+      in W0_data: !firrtl.uint<42>
+    )
   }
-  firrtl.memmodule @DualReads_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, in R0_data: !firrtl.uint<42>, in R1_addr: !firrtl.uint<4>, in R1_en: !firrtl.uint<1>, in R1_clk: !firrtl.clock, in R1_data: !firrtl.uint<42>, in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 2 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
+  firrtl.memmodule @DualReads_ext(
+    in R0_addr: !firrtl.uint<4>,
+    in R0_en: !firrtl.uint<1>,
+    in R0_clk: !firrtl.clock,
+    in R0_data: !firrtl.uint<42>,
+    in R1_addr: !firrtl.uint<4>,
+    in R1_en: !firrtl.uint<1>,
+    in R1_clk: !firrtl.clock,
+    in R1_data: !firrtl.uint<42>,
+    in W0_addr: !firrtl.uint<4>,
+    in W0_en: !firrtl.uint<1>,
+    in W0_clk: !firrtl.clock,
+    in W0_data: !firrtl.uint<42>
+  ) attributes {
+    dataWidth = 42 : ui32,
+    depth = 12 : ui64,
+    extraPorts = [],
+    maskBits = 1 : ui32,
+    numReadPorts = 2 : ui32,
+    numReadWritePorts = 0 : ui32,
+    numWritePorts = 1 : ui32,
+    readLatency = 1 : ui32,
+    writeLatency = 1 : ui32
+  }
   // CHECK{LITERAL}: sv.verbatim "[\0A {\0A \22module_name\22: \22{{0}}\22,\0A \22depth\22: 12,\0A \22width\22: 42,\0A \22masked\22: false,\0A \22read\22: 2,\0A \22write\22: 1,\0A \22readwrite\22: 0,\0A \22extra_ports\22: [],\0A \22hierarchy\22: [\0A \22{{1}}.DualReads_ext\22\0A ]\0A }\0A]"
   // CHECK: {symbols = [@DualReads_ext, @DualReadsSMem]}
   // CHECK{LITERAL}: sv.verbatim "name {{0}} depth 12 width 42 ports write,read,read\0A" {symbols = [@DualReads_ext]}
-
 }
 
 // -----
@@ -263,9 +401,29 @@ firrtl.circuit "DualReadsSMem" {
 // CHECK-LABEL: firrtl.circuit "ReadOnlyMemory"
 firrtl.circuit "ReadOnlyMemory" {
   firrtl.module @ReadOnlyMemory() {
-    %0:4 = firrtl.instance rom_ext sym @rom_ext_0 @rom_ext(in R0_addr: !firrtl.uint<9>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<32>)
+    %0:4 = firrtl.instance rom_ext sym @rom_ext_0 @rom_ext(
+      in R0_addr: !firrtl.uint<9>,
+      in R0_en: !firrtl.uint<1>,
+      in R0_clk: !firrtl.clock,
+      out R0_data: !firrtl.uint<32>
+    )
   }
-  firrtl.memmodule @rom_ext(in R0_addr: !firrtl.uint<9>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<32>) attributes {dataWidth = 32 : ui32, depth = 512 : ui64, extraPorts = [], maskBits = 0 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
+  firrtl.memmodule @rom_ext(
+    in R0_addr: !firrtl.uint<9>,
+    in R0_en: !firrtl.uint<1>,
+    in R0_clk: !firrtl.clock,
+    out R0_data: !firrtl.uint<32>
+  ) attributes {
+    dataWidth = 32 : ui32,
+    depth = 512 : ui64,
+    extraPorts = [],
+    maskBits = 0 : ui32,
+    numReadPorts = 1 : ui32,
+    numReadWritePorts = 0 : ui32,
+    numWritePorts = 0 : ui32,
+    readLatency = 1 : ui32,
+    writeLatency = 1 : ui32
+  }
   // CHECK{LITERAL}: sv.verbatim "[\0A  {\0A \22module_name\22: \22{{0}}\22,\0A \22depth\22: 512,\0A \22width\22: 32,\0A \22masked\22: false,\0A \22read\22: 1,\0A \22write\22: 0,\0A \22readwrite\22: 0,\0A \22extra_ports\22: [],\0A \22hierarchy\22: [\0A \22{{1}}.rom_ext\22\0A ]\0A }\0A]"
   // CHECK: symbols = [@rom_ext, @ReadOnlyMemory]}
   // CHECK{LITERAL}: sv.verbatim "name {{0}} depth 512 width 32 ports read\0A" {symbols = [@rom_ext]}
@@ -284,10 +442,20 @@ firrtl.circuit "top" {
       firrtl.instance mem2 @Mem2()
     }
     firrtl.module private @Mem1() {
-      %0:4 = firrtl.instance head_ext  @head_ext(in W0_addr: !firrtl.uint<5>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<5>)
+      %0:4 = firrtl.instance head_ext @head_ext(
+        in W0_addr: !firrtl.uint<5>,
+        in W0_en: !firrtl.uint<1>,
+        in W0_clk: !firrtl.clock,
+        in W0_data: !firrtl.uint<5>
+      )
     }
     firrtl.module private @Mem2() {
-      %0:4 =  firrtl.instance head_0_ext  @head_0_ext(in W0_addr: !firrtl.uint<5>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<5>)
+      %0:4 =  firrtl.instance head_0_ext @head_0_ext(
+        in W0_addr: !firrtl.uint<5>,
+        in W0_en: !firrtl.uint<1>,
+        in W0_clk: !firrtl.clock,
+        in W0_data: !firrtl.uint<5>
+      )
     }
     // CHECK-LABEL: firrtl.module private @DUT(
     firrtl.module private @DUT() attributes {annotations = [
@@ -297,13 +465,109 @@ firrtl.circuit "top" {
       firrtl.instance mem1 @Mem()
     }
     firrtl.module private @Mem() {
-      %0:10 = firrtl.instance memory_ext {annotations = [{class = "sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation", data = {baseAddress = 2147483648 : i64, dataBits = 8 : i64, eccBits = 0 : i64, eccIndices = [], eccScheme = "none"}}]} @memory_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<8>, in RW0_addr: !firrtl.uint<4>, in RW0_en: !firrtl.uint<1>, in RW0_clk: !firrtl.clock, in RW0_wmode: !firrtl.uint<1>, in RW0_wdata: !firrtl.uint<8>, out RW0_rdata: !firrtl.uint<8>)
-      %1:8 = firrtl.instance dumm_ext @dumm_ext(in R0_addr: !firrtl.uint<5>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<5>, in W0_addr: !firrtl.uint<5>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<5>)
+      %0:10 = firrtl.instance memory_ext {
+        annotations = [
+          {
+            class = "sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation",
+            data =
+              {
+                baseAddress = 2147483648 : i64,
+                dataBits = 8 : i64,
+                eccBits = 0 : i64,
+                eccIndices = [],
+                eccScheme = "none"
+              }
+          }
+        ]
+      } @memory_ext(
+        in R0_addr: !firrtl.uint<4>,
+        in R0_en: !firrtl.uint<1>,
+        in R0_clk: !firrtl.clock,
+        out R0_data: !firrtl.uint<8>,
+        in RW0_addr: !firrtl.uint<4>,
+        in RW0_en: !firrtl.uint<1>,
+        in RW0_clk: !firrtl.clock,
+        in RW0_wmode: !firrtl.uint<1>,
+        in RW0_wdata: !firrtl.uint<8>,
+        out RW0_rdata: !firrtl.uint<8>
+      )
+      %1:8 = firrtl.instance dumm_ext @dumm_ext(
+        in R0_addr: !firrtl.uint<5>,
+        in R0_en: !firrtl.uint<1>,
+        in R0_clk: !firrtl.clock,
+        out R0_data: !firrtl.uint<5>,
+        in W0_addr: !firrtl.uint<5>,
+        in W0_en: !firrtl.uint<1>,
+        in W0_clk: !firrtl.clock,
+        in W0_data: !firrtl.uint<5>
+      )
     }
-    firrtl.memmodule private @head_ext(in W0_addr: !firrtl.uint<5>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<5>) attributes {dataWidth = 5 : ui32, depth = 20 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
-    firrtl.memmodule private @head_0_ext(in W0_addr: !firrtl.uint<5>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<5>) attributes {dataWidth = 5 : ui32, depth = 20 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
-    firrtl.memmodule private @memory_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<8>, in RW0_addr: !firrtl.uint<4>, in RW0_en: !firrtl.uint<1>, in RW0_clk: !firrtl.clock, in RW0_wmode: !firrtl.uint<1>, in RW0_wdata: !firrtl.uint<8>, out RW0_rdata: !firrtl.uint<8>) attributes {dataWidth = 8 : ui32, depth = 16 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 0 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
-    firrtl.memmodule private @dumm_ext(in R0_addr: !firrtl.uint<5>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<5>, in W0_addr: !firrtl.uint<5>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<5>) attributes {dataWidth = 5 : ui32, depth = 20 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
+    firrtl.memmodule private @head_ext(
+      in W0_addr: !firrtl.uint<5>,
+      in W0_en: !firrtl.uint<1>,
+      in W0_clk: !firrtl.clock,
+      in W0_data: !firrtl.uint<5>) attributes {dataWidth = 5 : ui32,
+      depth = 20 : ui64,
+      extraPorts = [],
+      maskBits = 1 : ui32,
+      numReadPorts = 0 : ui32,
+      numReadWritePorts = 0 : ui32,
+      numWritePorts = 1 : ui32,
+      readLatency = 1 : ui32,
+      writeLatency = 1 : ui32
+    }
+    firrtl.memmodule private @head_0_ext(
+      in W0_addr: !firrtl.uint<5>,
+      in W0_en: !firrtl.uint<1>,
+      in W0_clk: !firrtl.clock,
+      in W0_data: !firrtl.uint<5>) attributes {dataWidth = 5 : ui32,
+      depth = 20 : ui64,
+      extraPorts = [],
+      maskBits = 1 : ui32,
+      numReadPorts = 0 : ui32,
+      numReadWritePorts = 0 : ui32,
+      numWritePorts = 1 : ui32,
+      readLatency = 1 : ui32,
+      writeLatency = 1 : ui32
+    }
+    firrtl.memmodule private @memory_ext(
+      in R0_addr: !firrtl.uint<4>,
+      in R0_en: !firrtl.uint<1>,
+      in R0_clk: !firrtl.clock,
+      out R0_data: !firrtl.uint<8>,
+      in RW0_addr: !firrtl.uint<4>,
+      in RW0_en: !firrtl.uint<1>,
+      in RW0_clk: !firrtl.clock,
+      in RW0_wmode: !firrtl.uint<1>,
+      in RW0_wdata: !firrtl.uint<8>,
+      out RW0_rdata: !firrtl.uint<8>) attributes {dataWidth = 8 : ui32,
+      depth = 16 : ui64,
+      extraPorts = [],
+      maskBits = 1 : ui32,
+      numReadPorts = 1 : ui32,
+      numReadWritePorts = 1 : ui32,
+      numWritePorts = 0 : ui32,
+      readLatency = 1 : ui32,
+      writeLatency = 1 : ui32
+    }
+    firrtl.memmodule private @dumm_ext(
+      in R0_addr: !firrtl.uint<5>,
+      in R0_en: !firrtl.uint<1>,
+      in R0_clk: !firrtl.clock,
+      out R0_data: !firrtl.uint<5>,
+      in W0_addr: !firrtl.uint<5>,
+      in W0_en: !firrtl.uint<1>,
+      in W0_clk: !firrtl.clock,
+      in W0_data: !firrtl.uint<5>) attributes {dataWidth = 5 : ui32,
+      depth = 20 : ui64,
+      extraPorts = [],
+      maskBits = 1 : ui32,
+      numReadPorts = 1 : ui32,
+      numReadWritePorts = 0 : ui32,
+      numWritePorts = 1 : ui32,
+      readLatency = 1 : ui32,
+      writeLatency = 1 : ui32
+    }
 
   // CHECK-LABEL:  firrtl.class @MemoryMetadata
   // CHECK:  %[[V2:.+]] = firrtl.string "memory_ext"
