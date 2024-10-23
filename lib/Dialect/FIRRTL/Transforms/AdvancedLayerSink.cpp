@@ -351,7 +351,7 @@ private:
 
   FModuleOp moduleOp;
   const EffectInfo &effectInfo;
-  bool changed;
+  bool changed = false;
 };
 } // namespace
 
