@@ -330,7 +330,6 @@ def SymbolicValueOp : VerifOp<"symbolic_value", [
 
 def ContractOp : VerifOp<"contract", [
   SingleBlockImplicitTerminator<"verif::YieldOp">,
-  HasParent<"hw::HWModuleOp">, 
   RegionKindInterface
 ]>{
   let summary = "declare a formal contract";

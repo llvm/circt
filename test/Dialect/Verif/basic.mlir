@@ -68,6 +68,245 @@ verif.formal @FormalTestBody {
 // Contracts
 //===----------------------------------------------------------------------===//
 
+verif.formal @CheckMul9 {
+  %c3_i42 = hw.constant 3 : i42
+  %0 = verif.symbolic_value : i42
+  %1 = comb.shl %0, %c3_i42 : i42  // 8*x
+  %2 = comb.add %0, %1 : i42 // x + 8*x
+  %3 = verif.contract %2 : i42 {
+    %c9_i42 = hw.constant 9 : i42
+    %4 = comb.mul %0, %c9_i42 : i42 // 9*x
+    %5 = comb.icmp eq %2, %4 : i42 // 9*x == x + 8*x
+    verif.ensure %5
+    verif.yield %4
+  }
+}
+
+// Example module that computes `z = 9*a` using `shl` and `add`.
+hw.module @Mul9(in %a: i42, out z: i42) {
+  %c3_i42 = hw.constant 3 : i42
+  %c9_i42 = hw.constant 9 : i42
+  %0 = comb.shl %a, %c3_i42 : i42    // 8*a
+  %1 = comb.add %a, %0 : i42         // a + 8*a
+  %2 = verif.contract %1 : i42 {
+    %3 = comb.mul %a, %c9_i42 : i42  // 9*a
+    verif.ensure_equal %2, %3        // 9*a == a + 8*a
+    verif.yield %3
+  }
+  hw.output %2 : i42
+}
+
+// Using the contract by assuming it holds:
+//   ensure -> assume
+//   contract assumed to hold and yield %3 for %2
+//   contract is inlined where it is with %2 -> %3 replacement
+hw.module @Mul9WithContractApplied(in %a: i42, out z: i42) {
+  %c3_i42 = hw.constant 3 : i42
+  %c9_i42 = hw.constant 9 : i42
+  %0 = comb.shl %a, %c3_i42 : i42  // 8*a
+  %1 = comb.add %a, %0 : i42       // a + 8*a
+  %3 = comb.mul %a, %c9_i42 : i42  // 9*a
+  verif.assume_equal %3, %3 : i42  // 9*a == a + 8*a
+  // assume(%3 == %3) aka assume(true) is a no-op and can be DCE'd
+  hw.output %3 : i42
+}
+hw.module @Mul9WithContractAppliedAfterDCE(in %a: i42, out z: i42) {
+  %c9_i42 = hw.constant 9 : i42
+  %3 = comb.mul %a, %c9_i42 : i42
+  hw.output %3 : i42
+}
+
+// Proving the contract:
+//   ensure -> assert
+//   contract assumed to just forward %1 to %2
+//   contract is inlined into a formal test with %2 -> %1 replacement
+verif.formal @Mul9ContractTest {
+  %a = verif.symbolic_value : i42
+  %c3_i42 = hw.constant 3 : i42
+  %0 = comb.shl %a, %c3_i42 : i42  // 8*a
+  %1 = comb.add %a, %0 : i42       // a + 8*a
+  %3 = comb.mul %a, %c9_i42 : i42  // 9*a
+  verif.assert_equal %1, %3 : i42  // 9*a == a + 8*a
+}
+
+// A module that takes 3 input values and produces 2 output values that sum up
+// to the same value as the inputs. Instead of just using add it uses a
+// bit-parallel full adder that takes each 3-tuple of bits in the 3 inputs, runs
+// them through a full adder, and treats the resulting sum and carry as the 2
+// corresponding bits for its 2 output values.
+hw.module @CarrySaveCompress3to2(
+  in %a0: i42, in %a1: i42, in %a2: i42,
+  out z0: i42, out z1: i42
+) {
+  %c1_i42 = hw.constant 1 : i42
+  %0 = comb.xor %a0, %a1, %a2 : i42  // sum bits of FA (a0^a1^a2)
+  %1 = comb.and %a0, %a1 : i42
+  %2 = comb.or %a0, %a1 : i42
+  %3 = comb.and %2, %a2 : i42
+  %4 = comb.or %1, %3 : i42          // carry bits of FA (a0&a1 | a2&(a0|a1))
+  %5 = comb.shl %4, %c1_i42 : i42    // %5 = carry << 1
+  // At this point, %0+%5 is the same as %a0+%a1+%a2, but without creating a
+  // long ripple-carry chain.
+
+  // Contract to check that we output _some_ two numbers that sum up to the same
+  // value as the sum of the three inputs. We don't say which exact numbers.
+  %z0, %z1 = verif.contract %0, %5 {
+    // The contract promises that its outputs will sum up to the same value as
+    // the sum of the module inputs.
+    %inputSum = comb.add %a0, %a1, %a2 : i42
+    %outputSum = comb.add %z0, %z1 : i42
+    verif.ensure_equal %inputSum, %outputSum : i42
+
+    // We don't want this contract to give guarantees about what the exact
+    // values of its outputs are going to be. Instead, we only want to guarantee
+    // that they sum up to the right number. To express this, we pick two
+    // symbolic values and constrain them to sum up to that number, and yield
+    // those from the contract. This says "you'll get any two numbers that sum
+    // up to the sum of the inputs".
+    %any0 = verif.symbolic_value : i42
+    %any1 = verif.symbolic_value : i42
+    %anySum = comb.add %any0, %any1 : i42
+    verif.assume_equal %anySum, %inputSum : i42
+    verif.yield %any0, %any1 : i42
+  }
+  hw.output %z0, %z1 : i42, i42
+}
+
+// A module that takes 5 input values and sums them up using a carry save adder.
+hw.module @CarrySaveAdder5(
+  in %a0: i42, in %a1: i42, in %a2: i42, in %a3: i42, in %a4: i42,
+  out z: i42
+) {
+  // Each stage takes 3 of the terms and compresses them to 2.
+  // terms: [a0, a1, a2, a3, a4]
+  %b0, %b1 = hw.instance "comp0" @CarrySaveCompress3to2(a0: %a0: i42, a1: %a1: i42, a2: %a2: i42) -> (z0: i42, z1: i42)
+  // terms: [b0, b1, a3, a4]
+  %c0, %c1 = hw.instance "comp1" @CarrySaveCompress3to2(a0: %b1: i42, a1: %a3: i42, a2: %a4: i42) -> (z0: i42, z1: i42)
+  // terms: [b0, c0, c1]
+  %d0, %d1 = hw.instance "comp2" @CarrySaveCompress3to2(a0: %b0: i42, a1: %c0: i42, a2: %c1: i42) -> (z0: i42, z1: i42)
+  // terms: [d0, d1]
+  %e = comb.add %d0, %d1 : i42
+  // terms: [e]
+
+  // Contract to check that the output is the sum of all inputs.
+  %z = verif.contract %e {
+    %inputSum = comb.add %a0, %a1, %a2, %a3, %a4, %a5 : i42
+    verif.ensure_equal %z, %inputSum : i42
+    verif.yield %inputSum : i42
+  }
+  hw.output %z : i42
+}
+
+// with contracts lowered:
+
+hw.module @CarrySaveCompress3to2_AssumeContract(
+  in %a0: i42, in %a1: i42, in %a2: i42,
+  out z0: i42, out z1: i42
+) {
+  // Actual implementation becomes unused after contract inlining and can be
+  // removed by dead code elimination.
+
+  // Contract inlined with ensure -> assume, (%z0, %z1) -> (%any0, %any1).
+  // Redundant assumes eliminated. They can also be left in.
+  %any0 = verif.symbolic_value : i42
+  %any1 = verif.symbolic_value : i42
+  %inputSum = comb.add %a0, %a1, %a2 : i42
+  %outputSum = comb.add %any0, %any1 : i42
+  verif.assume_equal %inputSum, %outputSum : i42
+
+  hw.output %any0, %any1 : i42, i42
+}
+
+verif.formal @CarrySaveCompress3to2_AssertContract {
+  %a0 = verif.symbolic_value : i42
+  %a1 = verif.symbolic_value : i42
+  %a2 = verif.symbolic_value : i42
+
+  %c1_i42 = hw.constant 1 : i42
+  %0 = comb.xor %a0, %a1, %a2 : i42
+  %1 = comb.and %a0, %a1 : i42
+  %2 = comb.or %a0, %a1 : i42
+  %3 = comb.and %2, %a2 : i42
+  %4 = comb.or %1, %3 : i42
+  %5 = comb.shl %4, %c1_i42 : i42
+
+  // Contract inlined with ensure -> assert, (%z0, %z1) -> (%0, %5).
+  // Symbolic values omitted.
+  %inputSum = comb.add %a0, %a1, %a2 : i42
+  %outputSum = comb.add %0, %5 : i42
+  verif.assert_equal %inputSum, %outputSum : i42
+}
+
+// -----
+
+// with contracts lowered:
+
+hw.module @CarrySaveAdder5_AssumeContract(
+  in %a0: i42, in %a1: i42, in %a2: i42, in %a3: i42, in %a4: i42,
+  out z: i42
+) {
+  // Actual implementation becomes unused after contract inlining and can be
+  // removed by dead code elimination.
+
+  // Contract inlined with ensure -> assume, %z -> %inputSum.
+  // Trivial assume(a == a), which is a noop, can be removed.
+  %inputSum = comb.add %a0, %a1, %a2, %a3, %a4, %a5 : i42
+
+  hw.output %inputSum : i42
+}
+
+verif.formal @CarrySaveAdder5_AssertContract {
+  %a0 = verif.symbolic_value : i42
+  %a1 = verif.symbolic_value : i42
+  %a2 = verif.symbolic_value : i42
+  %a3 = verif.symbolic_value : i42
+  %a4 = verif.symbolic_value : i42
+
+  %b0, %b1 = hw.instance "comp0" @CarrySaveCompress3to2_AssumeContract(a0: %a0: i42, a1: %a1: i42, a2: %a2: i42) -> (z0: i42, z1: i42)
+  %c0, %c1 = hw.instance "comp1" @CarrySaveCompress3to2_AssumeContract(a0: %b1: i42, a1: %a3: i42, a2: %a4: i42) -> (z0: i42, z1: i42)
+  %d0, %d1 = hw.instance "comp2" @CarrySaveCompress3to2_AssumeContract(a0: %b0: i42, a1: %c0: i42, a2: %c1: i42) -> (z0: i42, z1: i42)
+  %e = comb.add %d0, %d1 : i42
+
+  // Contract inlined with ensure -> assert, %z -> %e.
+  %inputSum = comb.add %a0, %a1, %a2, %a3, %a4, %a5 : i42
+  verif.assert_equal %e, %inputSum : i42
+}
+
+// -----
+
+verif.formal @CarrySaveAdder5_AssertContract_Flat {
+  %a0 = verif.symbolic_value : i42
+  %a1 = verif.symbolic_value : i42
+  %a2 = verif.symbolic_value : i42
+  %a3 = verif.symbolic_value : i42
+  %a4 = verif.symbolic_value : i42
+
+  %b0 = verif.symbolic_value : i42
+  %b1 = verif.symbolic_value : i42
+  %inputSum0 = comb.add %a0, %a1, %a2 : i42
+  %outputSum0 = comb.add %b0, %b1 : i42
+  verif.assume_equal %inputSum0, %outputSum0 : i42
+
+  %c0 = verif.symbolic_value : i42
+  %c1 = verif.symbolic_value : i42
+  %inputSum1 = comb.add %b1, %a3, %a4 : i42
+  %outputSum1 = comb.add %c0, %c1 : i42
+  verif.assume_equal %inputSum1, %outputSum1 : i42
+
+  %d0 = verif.symbolic_value : i42
+  %d1 = verif.symbolic_value : i42
+  %inputSum2 = comb.add %b0, %c0, %c1 : i42
+  %outputSum2 = comb.add %d0, %d1 : i42
+  verif.assume_equal %inputSum2, %outputSum2 : i42
+
+  %e = comb.add %d0, %d1 : i42
+
+  // Contract inlined with ensure -> assert, %z -> %e.
+  %inputSum = comb.add %a0, %a1, %a2, %a3, %a4, %a5 : i42
+  verif.assert_equal %e, %inputSum : i42
+}
+
+
 // CHECK-LABEL: hw.module @Bar
 hw.module @Bar(in %foo : i8, out "" : i8, out "1" : i8) { 
   // CHECK: %[[C1:.+]] = hw.constant
