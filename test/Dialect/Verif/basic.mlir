@@ -156,13 +156,13 @@ verif.lec {verif.some_attr} first {
 // Bounded Model Checking related operations
 //===----------------------------------------------------------------------===//
 
-// CHECK: verif.bmc bound 10 num_regs 0 attributes {verif.some_attr} init {
+// CHECK: verif.bmc bound 10 num_regs 0 initial_values [] attributes {verif.some_attr} init {
 // CHECK: } loop {
 // CHECK: } circuit {
 // CHECK: ^bb0(%{{.*}}):
 // CHECK: verif.yield %{{.*}} : i32
 // CHECK: }
-verif.bmc bound 10 num_regs 0 attributes {verif.some_attr} init {
+verif.bmc bound 10 num_regs 0 initial_values [] attributes {verif.some_attr} init {
 } loop {
 } circuit {
 ^bb0(%arg0: i32):
@@ -172,7 +172,7 @@ verif.bmc bound 10 num_regs 0 attributes {verif.some_attr} init {
   verif.yield %arg0 : i32
 }
 
-//CHECK: verif.bmc bound 10 num_regs 1 attributes {verif.some_attr}
+//CHECK: verif.bmc bound 10 num_regs 1 initial_values [unit] attributes {verif.some_attr}
 //CHECK: init {
 //CHECK:   %{{.*}} = hw.constant false
 //CHECK:   %{{.*}} = seq.to_clock %{{.*}}
@@ -194,7 +194,7 @@ verif.bmc bound 10 num_regs 0 attributes {verif.some_attr} init {
 //CHECK:   %{{.*}} = comb.xor %{{.*}}, %{{.*}} : i32
 //CHECK:   verif.yield %{{.*}}, %{{.*}} : i32, i32
 //CHECK: }
-verif.bmc bound 10 num_regs 1 attributes {verif.some_attr}
+verif.bmc bound 10 num_regs 1 initial_values [unit] attributes {verif.some_attr}
 init {
   %c0_i1 = hw.constant 0 : i1
   %clk = seq.to_clock %c0_i1

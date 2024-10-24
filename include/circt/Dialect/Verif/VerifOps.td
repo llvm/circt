@@ -203,7 +203,7 @@ def BoundedModelCheckingOp : VerifOp<"bmc", [
     match the types yielded by the `init` region).
   }];
 
-  let arguments = (ins I32Attr:$bound, I32Attr:$num_regs);
+  let arguments = (ins I32Attr:$bound, I32Attr:$num_regs, ArrayAttr:$initial_values);
   let regions = (region SizedRegion<1>:$init,
                         SizedRegion<1>:$loop,
                         SizedRegion<1>:$circuit);
@@ -211,7 +211,7 @@ def BoundedModelCheckingOp : VerifOp<"bmc", [
   let results = (outs I1:$result);
 
   let assemblyFormat = [{
-    `bound` $bound `num_regs` $num_regs attr-dict-with-keyword `init` $init `loop` $loop `circuit`
+    `bound` $bound `num_regs` $num_regs `initial_values` $initial_values attr-dict-with-keyword `init` $init `loop` $loop `circuit`
     $circuit
   }];
 

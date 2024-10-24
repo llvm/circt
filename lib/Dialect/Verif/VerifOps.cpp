@@ -178,6 +178,16 @@ LogicalResult BoundedModelCheckingOp::verifyRegions() {
                 "there are clock arguments in the circuit region "
                 "before any other values";
   }
+  auto initialValues = getInitialValues();
+  if (initialValues.size() != getNumRegs()) {
+    return emitOpError()
+           << "number of initial values must match the number of registers";
+  }
+  for (auto attr : initialValues) {
+    if (!isa<IntegerAttr, UnitAttr>(attr))
+      return emitOpError()
+             << "initial values must be integer or unit attributes";
+  }
   return success();
 }
 
