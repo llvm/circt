@@ -117,6 +117,8 @@ void ExternalizeRegistersPass::runOnOperation() {
               return signalPassFailure();
             }
           } else {
+            // If there's no initial value just add a unit attribute to maintain
+            // one-to-one correspondence with module ports
             initState = mlir::UnitAttr::get(&getContext());
           }
           addedInputs[module.getSymNameAttr()].push_back(regOp.getType());
