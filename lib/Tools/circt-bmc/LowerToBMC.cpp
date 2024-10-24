@@ -87,13 +87,16 @@ void LowerToBMCPass::runOnOperation() {
   // Double the bound given to the BMC op, as a clock cycle takes 2 BMC
   // iterations
   verif::BoundedModelCheckingOp bmcOp;
-  if (auto numRegs = hwModule->getAttrOfType<IntegerAttr>("num_regs"))
+  auto numRegs = hwModule->getAttrOfType<IntegerAttr>("num_regs");
+  auto initialValues = hwModule->getAttrOfType<ArrayAttr>("initial_values");
+  if (numRegs && initialValues)
     bmcOp = builder.create<verif::BoundedModelCheckingOp>(
-        loc, 2 * bound, cast<IntegerAttr>(numRegs).getValue().getZExtValue());
+        loc, 2 * bound, cast<IntegerAttr>(numRegs).getValue().getZExtValue(),
+        initialValues);
   else {
-    hwModule->emitOpError(
-        "no num_regs attribute found - please run externalize "
-        "registers pass first");
+    hwModule->emitOpError("no num_regs or initial_values attribute found - "
+                          "please run externalize "
+                          "registers pass first");
     return signalPassFailure();
   }
 
