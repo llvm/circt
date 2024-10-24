@@ -247,7 +247,11 @@ static void printModuleInfo(igraph::ModuleOpInterface op,
                << "    anyInstanceInDesign: " << iInfo.anyInstanceInDesign(op)
                << "\n"
                << "    allInstancesInDesign: " << iInfo.allInstancesInDesign(op)
-               << "\n";
+               << "\n"
+               << "    anyInstanceInEffectiveDesign: "
+               << iInfo.anyInstanceInEffectiveDesign(op) << "\n"
+               << "    allInstancesInEffectiveDesign: "
+               << iInfo.allInstancesInEffectiveDesign(op) << "\n";
 }
 
 void FIRRTLInstanceInfoPass::runOnOperation() {

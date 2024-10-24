@@ -238,3 +238,11 @@ bool InstanceInfo::allInstancesInDesign(igraph::ModuleOpInterface op) {
   auto inDesign = getModuleAttributes(op).inDesign;
   return inDesign.isConstant() && inDesign.getConstant();
 }
+
+bool InstanceInfo::anyInstanceInEffectiveDesign(igraph::ModuleOpInterface op) {
+  return (!hasDut() && !allInstancesUnderLayer(op)) || anyInstanceInDesign(op);
+}
+
+bool InstanceInfo::allInstancesInEffectiveDesign(igraph::ModuleOpInterface op) {
+  return (!hasDut() && !anyInstanceUnderLayer(op)) || allInstancesInDesign(op);
+}

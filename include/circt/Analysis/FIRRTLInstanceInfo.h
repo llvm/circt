@@ -163,9 +163,17 @@ public:
   /// within) the design.
   bool anyInstanceInDesign(igraph::ModuleOpInterface op);
 
-  /// Return true if all instances of this module are within the design (or
-  /// transitively withiin) the design.
+  /// Return true if all instances of this module are within (or transitively
+  /// withiin) the design.
   bool allInstancesInDesign(igraph::ModuleOpInterface op);
+
+  /// Return true if any instance of this module is within (or transitively
+  /// within) the effective design
+  bool anyInstanceInEffectiveDesign(igraph::ModuleOpInterface op);
+
+  /// Return true if all instances of this module are within (or transitively
+  /// withiin) the effective design.
+  bool allInstancesInEffectiveDesign(igraph::ModuleOpInterface op);
 
 private:
   /// Stores circuit-level attributes.

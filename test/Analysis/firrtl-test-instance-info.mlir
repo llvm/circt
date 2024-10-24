@@ -178,6 +178,8 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   allInstancesUnderLayer: false
   // CHECK-NEXT:   anyInstanceInDesign: false
   // CHECK-NEXT:   allInstancesInDesign: false
+  // CHECK-NEXT:   anyInstanceInEffectiveDesign: false
+  // CHECK-NEXT:   allInstancesInEffectiveDesign: false
   firrtl.module private @Baz() {}
   // CHECK:      @Bar
   // CHECK-NEXT:   isDut: true
@@ -189,6 +191,8 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   allInstancesUnderLayer: false
   // CHECK-NEXT:   anyInstanceInDesign: true
   // CHECK-NEXT:   allInstancesInDesign: true
+  // CHECK-NEXT:   anyInstanceInEffectiveDesign: true
+  // CHECK-NEXT:   allInstancesInEffectiveDesign: true
   firrtl.module @Bar() attributes {
     annotations = [
       {
@@ -210,6 +214,40 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   allInstancesUnderLayer: false
   // CHECK-NEXT:   anyInstanceInDesign: false
   // CHECK-NEXT:   allInstancesInDesign: false
+  // CHECK-NEXT:   anyInstanceInEffectiveDesign: false
+  // CHECK-NEXT:   allInstancesInEffectiveDesign: false
+  firrtl.module @Foo() {
+    firrtl.instance dut interesting_name @Bar()
+    firrtl.instance foo interesting_name @Baz()
+  }
+}
+
+// -----
+
+// Test that "inDesing" works properly for the effective DUT.
+firrtl.circuit "Foo" {
+  firrtl.layer @A bind {}
+  // CHECK:      @Baz
+  // CHECK:        anyInstanceInDesign: false
+  // CHECK-NEXT:   allInstancesInDesign: false
+  // CHECK-NEXT:   anyInstanceInEffectiveDesign: true
+  // CHECK-NEXT:   allInstancesInEffectiveDesign: false
+  firrtl.module private @Baz() {}
+  // CHECK:      @Bar
+  // CHECK:        anyInstanceInDesign: false
+  // CHECK-NEXT:   allInstancesInDesign: false
+  // CHECK-NEXT:   anyInstanceInEffectiveDesign: true
+  // CHECK-NEXT:   allInstancesInEffectiveDesign: true
+  firrtl.module @Bar() {
+    firrtl.layerblock @A {
+      firrtl.instance baz @Baz()
+    }
+  }
+  // CHECK:      @Foo
+  // CHECK:        anyInstanceInDesign: false
+  // CHECK-NEXT:   allInstancesInDesign: false
+  // CHECK-NEXT:   anyInstanceInEffectiveDesign: true
+  // CHECK-NEXT:   allInstancesInEffectiveDesign: true
   firrtl.module @Foo() {
     firrtl.instance dut interesting_name @Bar()
     firrtl.instance foo interesting_name @Baz()
