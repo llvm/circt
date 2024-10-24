@@ -244,10 +244,10 @@ static void printModuleInfo(igraph::ModuleOpInterface op,
                << iInfo.anyInstanceUnderLayer(op) << "\n"
                << "    allInstancesUnderLayer: "
                << iInfo.allInstancesUnderLayer(op) << "\n"
-               << "    anyInstanceInDesign: "
-               << iInfo.anyInstanceInDesign(op) << "\n"
-               << "    allInstancesInDesign: "
-               << iInfo.allInstancesInDesign(op) << "\n";
+               << "    anyInstanceInDesign: " << iInfo.anyInstanceInDesign(op)
+               << "\n"
+               << "    allInstancesInDesign: " << iInfo.allInstancesInDesign(op)
+               << "\n";
 }
 
 void FIRRTLInstanceInfoPass::runOnOperation() {
