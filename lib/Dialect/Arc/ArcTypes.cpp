@@ -21,11 +21,17 @@ using namespace mlir;
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/Arc/ArcTypes.cpp.inc"
 
-unsigned StateType::getBitWidth() { return hw::getBitWidth(getType()); }
+unsigned StateType::getBitWidth() {
+  if (llvm::isa<seq::ClockType>(getType()))
+    return 1;
+  return hw::getBitWidth(getType());
+}
 
 LogicalResult
 StateType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
                   Type innerType) {
+  if (llvm::isa<seq::ClockType>(innerType))
+    return success();
   if (hw::getBitWidth(innerType) < 0)
     return emitError() << "state type must have a known bit width; got "
                        << innerType;
