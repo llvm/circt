@@ -98,6 +98,12 @@ void ExternalizeRegistersPass::runOnOperation() {
           if (auto initVal = regOp.getInitialValue()) {
             // Find the seq.initial op where the initial value is defined and
             // fetch the operation inside that defines the value
+            if (isa<BlockArgument>(initVal) ||
+                !isa<seq::InitialOp>(initVal.getDefiningOp())) {
+              regOp.emitError("registers with initial values not directly "
+                              "defined by a seq.initial op not yet supported");
+              return signalPassFailure();
+            }
             auto *initialOp = regOp.getInitialValue().getDefiningOp();
             auto index =
                 llvm::find(initialOp->getResults(), initVal).getIndex();
@@ -113,7 +119,8 @@ void ExternalizeRegistersPass::runOnOperation() {
               initState = constantOp.getValueAttr();
             } else {
               regOp.emitError("registers with initial values not directly "
-                              "defined by a hw.constant op not yet supported");
+                              "defined by a hw.constant op in a seq.initial op "
+                              "not yet supported");
               return signalPassFailure();
             }
           } else {
