@@ -67,11 +67,17 @@ public:
     /// Set this LatticeValue to a constant.
     void markConstant(bool constant);
 
+    /// Set this LatticeValue to mixed.
+    void markMixed();
+
     /// Merge attributes from another LatticeValue into this one.
     void mergeIn(LatticeValue that);
 
     /// Merge a constant value into this one.
     void mergeIn(bool value);
+
+    /// Invert the lattice value.
+    LatticeValue operator!();
   };
 
   /// Information about a circuit
@@ -90,6 +96,11 @@ public:
 
     /// Indicates if this module is instantiated under a layer.
     InstanceInfo::LatticeValue underLayer;
+
+    /// Indicates if this module is instantiated in the design.  The "design" is
+    /// defined as being under the design-under-test, excluding layers.  I.e.,
+    /// layers are not in the design.
+    InstanceInfo::LatticeValue inDesign;
   };
 
   //===--------------------------------------------------------------------===//
@@ -147,6 +158,14 @@ public:
   /// Return true if all instances of this module are under (or transitively
   /// under) layer blocks.
   bool allInstancesUnderLayer(igraph::ModuleOpInterface op);
+
+  /// Return true if any instance of this module is within (or transitively
+  /// within) the design.
+  bool anyInstanceInDesign(igraph::ModuleOpInterface op);
+
+  /// Return true if all instances of this module are within the design (or
+  /// transitively withiin) the design.
+  bool allInstancesInDesign(igraph::ModuleOpInterface op);
 
 private:
   /// Stores circuit-level attributes.

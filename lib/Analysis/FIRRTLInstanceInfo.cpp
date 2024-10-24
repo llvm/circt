@@ -46,6 +46,8 @@ void InstanceInfo::LatticeValue::markConstant(bool constant) {
   value = constant;
 }
 
+void InstanceInfo::LatticeValue::markMixed() { kind = Mixed; }
+
 void InstanceInfo::LatticeValue::mergeIn(LatticeValue that) {
   if (kind > that.kind)
     return;
@@ -66,6 +68,15 @@ void InstanceInfo::LatticeValue::mergeIn(bool value) {
   mergeIn(latticeValue);
 }
 
+InstanceInfo::LatticeValue InstanceInfo::LatticeValue::operator!() {
+  if (isUnknown() || isMixed())
+    return *this;
+
+  auto invert = LatticeValue();
+  invert.markConstant(!getConstant());
+  return invert;
+}
+
 InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
   auto &iGraph = am.getAnalysis<InstanceGraph>();
 
@@ -77,6 +88,7 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
   DenseSet<InstanceGraphNode *> visited;
   for (auto *root : iGraph) {
     for (auto *modIt : llvm::inverse_post_order_ext(root, visited)) {
+      visited.insert(modIt);
       auto moduleOp = modIt->getModule();
       ModuleAttributes &attributes = moduleAttributes[moduleOp];
 
@@ -91,6 +103,7 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
       if (modIt->noUses()) {
         attributes.underDut.markConstant(isDut);
         attributes.underLayer.markConstant(false);
+        attributes.inDesign.markConstant(isDut);
         continue;
       }
 
@@ -98,16 +111,32 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
       for (auto *useIt : modIt->uses()) {
         auto parentOp = useIt->getParent()->getModule();
         auto parentAttrs = moduleAttributes.find(parentOp)->getSecond();
-        // Merge underDut.
-        if (this->isDut(parentOp) || isDut)
-          attributes.underDut.mergeIn(true);
+
+        // Compute information about this instantiation.
+        LatticeValue underDut;
+        if (isDut)
+          underDut.markConstant(true);
         else
-          attributes.underDut.mergeIn(parentAttrs.underDut);
-        // Merge underLayer.
+          underDut.mergeIn(parentAttrs.underDut);
+
+        LatticeValue underLayer;
         if (useIt->getInstance()->getParentOfType<LayerBlockOp>())
-          attributes.underLayer.mergeIn(true);
+          underLayer.markConstant(true);
         else
-          attributes.underLayer.mergeIn(parentAttrs.underLayer);
+          underLayer.mergeIn(parentAttrs.underLayer);
+
+        LatticeValue underDesign;
+        if (underDut.isConstant() && !underDut.getConstant())
+          underDesign.markConstant(false);
+        else if (underDut.isMixed())
+          underDesign.markMixed();
+        else
+          underDesign.mergeIn(!underLayer);
+
+        // Merge information about this instantiation with other instantiations.
+        attributes.underDut.mergeIn(underDut);
+        attributes.underLayer.mergeIn(underLayer);
+        attributes.inDesign.mergeIn(underDesign);
       }
     }
   }
@@ -139,7 +168,8 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
           << "isEffectiveDue: " << (isEffectiveDut(moduleOp) ? "true" : "false")
           << "\n"
           << llvm::indent(6) << "underDut: " << attributes.underDut << "\n"
-          << llvm::indent(6) << "underLayer: " << attributes.underLayer << "\n";
+          << llvm::indent(6) << "underLayer: " << attributes.underLayer << "\n"
+          << llvm::indent(6) << "underDesign: " << attributes.inDesign << "\n";
     }
   });
 }
@@ -197,4 +227,14 @@ bool InstanceInfo::anyInstanceUnderLayer(igraph::ModuleOpInterface op) {
 bool InstanceInfo::allInstancesUnderLayer(igraph::ModuleOpInterface op) {
   auto underLayer = getModuleAttributes(op).underLayer;
   return underLayer.isConstant() && underLayer.getConstant();
+}
+
+bool InstanceInfo::anyInstanceInDesign(igraph::ModuleOpInterface op) {
+  auto inDesign = getModuleAttributes(op).inDesign;
+  return inDesign.isMixed() || allInstancesInDesign(op);
+}
+
+bool InstanceInfo::allInstancesInDesign(igraph::ModuleOpInterface op) {
+  auto inDesign = getModuleAttributes(op).inDesign;
+  return inDesign.isConstant() && inDesign.getConstant();
 }
