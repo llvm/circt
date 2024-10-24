@@ -67,8 +67,7 @@ def CompRegOp : SeqOp<"compreg",
       auto nameAttr = name.get($_builder.getContext());
       return build($_builder, $_state, input.getType(), input, clk, nameAttr,
                    /*reset*/ Value(), /*resetValue*/ Value(),
-                   /*initialValue*/ Value(),
-                   hw::InnerSymAttr::get(nameAttr));
+                   /*initialValue*/ Value(), hw::InnerSymAttr());
     }]>,
     /// Create a register with a reset and optional power-on value.
     OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$reset, "Value":$rstValue,
@@ -82,7 +81,7 @@ def CompRegOp : SeqOp<"compreg",
                    "StringAttrOrRef":$name, CArg<"Value", "{}">:$initialValue), [{
       auto nameAttr = name.get($_builder.getContext());
       return build($_builder, $_state, input.getType(), input, clk, nameAttr,
-                   reset, rstValue, initialValue, hw::InnerSymAttr::get(nameAttr));
+                   reset, rstValue, initialValue,  hw::InnerSymAttr());
     }]>,
   ];
 }
