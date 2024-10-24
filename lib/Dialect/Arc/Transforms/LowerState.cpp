@@ -111,12 +111,14 @@ struct ModuleLowering {
   DenseMap<Value, GatedClockLowering> gatedClockLowerings;
   std::unique_ptr<ClockLowering> initialLowering;
   Value storageArg;
+  Value temporaryStorageArg;
   OpBuilder clockBuilder;
   OpBuilder stateBuilder;
+  bool withTemporary;
 
-  ModuleLowering(HWModuleOp moduleOp, Statistics &stats)
+  ModuleLowering(HWModuleOp moduleOp, Statistics &stats, bool withTemporary)
       : moduleOp(moduleOp), stats(stats), context(moduleOp.getContext()),
-        clockBuilder(moduleOp), stateBuilder(moduleOp) {}
+        clockBuilder(moduleOp), stateBuilder(moduleOp), withTemporary(withTemporary) {}
 
   GatedClockLowering getOrCreateClockLowering(Value clock);
   ClockLowering &getOrCreatePassThrough();
@@ -313,12 +315,23 @@ GatedClockLowering ModuleLowering::getOrCreateClockLowering(Value clock) {
         clockBuilder.createOrFold<seq::FromClockOp>(clock.getLoc(), clock);
 
     // Detect a rising edge on the clock, as `(old != new) & new`.
+    auto clockStorage = withTemporary ? temporaryStorageArg : storageArg;
     auto oldClockStorage = stateBuilder.create<AllocStateOp>(
-        clock.getLoc(), StateType::get(stateBuilder.getI1Type()), storageArg);
+        clock.getLoc(), StateType::get(stateBuilder.getI1Type()), clockStorage);
+    oldClockStorage->setAttr("partition-role", stateBuilder.getStringAttr("old-clock"));
     auto oldClock =
         clockBuilder.create<StateReadOp>(clock.getLoc(), oldClockStorage);
+
+    SyncOp sync;
+    if(withTemporary) {
+      sync = clockBuilder.create<SyncOp>(clock.getLoc());
+      sync.getBodyRegion().emplaceBlock();
+      clockBuilder.setInsertionPointToEnd(&sync.getBody().front());
+    }
     clockBuilder.create<StateWriteOp>(clock.getLoc(), oldClockStorage, newClock,
                                       Value{});
+    if(withTemporary) clockBuilder.setInsertionPointAfter(sync);
+
     Value trigger = clockBuilder.create<comb::ICmpOp>(
         clock.getLoc(), comb::ICmpPredicate::ne, oldClock, newClock);
     trigger =
@@ -360,16 +373,19 @@ Value ModuleLowering::replaceValueWithStateRead(Value value, Value state) {
 
 /// Add the global state as an argument to the module's body block.
 void ModuleLowering::addStorageArg() {
-  assert(!storageArg);
+  assert(!storageArg && !temporaryStorageArg);
   storageArg = moduleOp.getBodyBlock()->addArgument(
       StorageType::get(context, {}), moduleOp.getLoc());
+  if (withTemporary)
+    temporaryStorageArg = moduleOp.getBodyBlock()->addArgument(
+        StorageType::get(context, {}), moduleOp.getLoc());
 }
 
 /// Lower the primary inputs of the module to dedicated ops that allocate the
 /// inputs in the model's storage.
 LogicalResult ModuleLowering::lowerPrimaryInputs() {
   for (auto blockArg : moduleOp.getBodyBlock()->getArguments()) {
-    if (blockArg == storageArg)
+    if (blockArg == storageArg || blockArg == temporaryStorageArg)
       continue;
     auto name = moduleOp.getArgName(blockArg.getArgNumber());
     auto argTy = blockArg.getType();
@@ -470,6 +486,7 @@ LogicalResult ModuleLowering::lowerStateLike(
     auto stateType = StateType::get(intType);
     auto state = stateBuilder.create<AllocStateOp>(stateOp->getLoc(), stateType,
                                                    storageArg);
+    state->setAttr("partition-role", stateBuilder.getStringAttr("state"));
     if (auto names = stateOp->getAttrOfType<ArrayAttr>("names"))
       state->setAttr("name", names[stateIdx]);
     allocatedStates.push_back(state);
@@ -646,6 +663,7 @@ LogicalResult ModuleLowering::lowerState(TapOp tapOp) {
   auto materializedValue = passThrough.materializeValue(tapValue);
   auto state = stateBuilder.create<AllocStateOp>(
       tapOp.getLoc(), StateType::get(intType), storageArg, true);
+  state->setAttr("partition-role", stateBuilder.getStringAttr("tap-output"));
   state->setAttr("name", tapOp.getNameAttr());
   passThrough.builder.create<StateWriteOp>(tapOp.getLoc(), state,
                                            materializedValue, Value{});
@@ -688,6 +706,7 @@ LogicalResult ModuleLowering::lowerExtModule(InstanceOp instOp) {
     auto &passThrough = getOrCreatePassThrough();
     auto state = stateBuilder.create<AllocStateOp>(
         instOp.getLoc(), StateType::get(intType), storageArg);
+    state->setAttr("partition-role", stateBuilder.getStringAttr("ext-module-input"));
     state->setAttr("name", stateBuilder.getStringAttr(baseName));
     passThrough.builder.create<StateWriteOp>(
         instOp.getLoc(), state, passThrough.materializeValue(operand), Value{});
@@ -709,6 +728,7 @@ LogicalResult ModuleLowering::lowerExtModule(InstanceOp instOp) {
     baseName += cast<StringAttr>(name).getValue();
     auto state = stateBuilder.create<AllocStateOp>(
         result.getLoc(), StateType::get(intType), storageArg);
+    state->setAttr("partition-role", stateBuilder.getStringAttr("ext-module-output"));
     state->setAttr("name", stateBuilder.getStringAttr(baseName));
     replaceValueWithStateRead(result, state);
   }
@@ -786,13 +806,15 @@ LogicalResult ModuleLowering::cleanup() {
 
 namespace {
 struct LowerStatePass : public arc::impl::LowerStateBase<LowerStatePass> {
-  LowerStatePass() = default;
+  LowerStatePass(const LowerStateOptions &options = {}) : opts(options) {}
   LowerStatePass(const LowerStatePass &pass) : LowerStatePass() {}
 
   void runOnOperation() override;
   LogicalResult runOnModule(HWModuleOp moduleOp, SymbolTable &symtbl);
 
   Statistics stats{this};
+
+  LowerStateOptions opts;
 };
 } // namespace
 
@@ -864,7 +886,7 @@ LogicalResult LowerStatePass::runOnModule(HWModuleOp moduleOp,
                                           SymbolTable &symtbl) {
   LLVM_DEBUG(llvm::dbgs() << "Lowering state in `" << moduleOp.getModuleName()
                           << "`\n");
-  ModuleLowering lowering(moduleOp, stats);
+  ModuleLowering lowering(moduleOp, stats, opts.withTemporary);
 
   // Add sentinel ops to separate state allocations from clock trees.
   lowering.stateBuilder.setInsertionPointToStart(moduleOp.getBodyBlock());
@@ -906,7 +928,7 @@ LogicalResult LowerStatePass::runOnModule(HWModuleOp moduleOp,
 
   // Replace the `HWModuleOp` with a `ModelOp`.
   moduleOp.getBodyBlock()->eraseArguments(
-      [&](auto arg) { return arg != lowering.storageArg; });
+      [&](auto arg) { return arg != lowering.storageArg && arg != lowering.temporaryStorageArg; });
   ImplicitLocOpBuilder builder(moduleOp.getLoc(), moduleOp);
   auto modelOp = builder.create<ModelOp>(
       moduleOp.getLoc(), moduleOp.getModuleNameAttr(),
@@ -918,6 +940,6 @@ LogicalResult LowerStatePass::runOnModule(HWModuleOp moduleOp,
   return success();
 }
 
-std::unique_ptr<Pass> arc::createLowerStatePass() {
-  return std::make_unique<LowerStatePass>();
+std::unique_ptr<Pass> arc::createLowerStatePass(const LowerStateOptions &options) {
+  return std::make_unique<LowerStatePass>(options);
 }

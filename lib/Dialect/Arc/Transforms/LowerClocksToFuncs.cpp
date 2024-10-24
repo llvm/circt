@@ -42,11 +42,10 @@ struct LowerClocksToFuncsPass
 
   void runOnOperation() override;
   LogicalResult lowerModel(ModelOp modelOp);
-  LogicalResult lowerClock(Operation *clockOp, Value modelStorageArg,
+  LogicalResult lowerClock(Operation *clockOp,
+                           SmallVector<Value> modelStorageArgs,
                            OpBuilder &funcBuilder);
-  LogicalResult isolateClock(Operation *clockOp, Value modelStorageArg,
-                             Value clockStorageArg);
-
+  LogicalResult isolateClock(Operation *clockOp, IRMapping storageArgMapping);
   SymbolTable *symbolTable;
 
   Statistic numOpsCopied{this, "ops-copied", "Ops copied into clock trees"};
@@ -105,15 +104,20 @@ LogicalResult LowerClocksToFuncsPass::lowerModel(ModelOp modelOp) {
   // Perform the actual extraction.
   OpBuilder funcBuilder(modelOp);
   for (auto *op : clocks)
-    if (failed(lowerClock(op, modelOp.getBody().getArgument(0), funcBuilder)))
+    if (failed(
+            lowerClock(op,
+                       llvm::map_to_vector(modelOp.getBody().getArguments(),
+                                           [](auto v) -> Value { return v; }),
+                       funcBuilder)))
       return failure();
 
   return success();
 }
 
-LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
-                                                 Value modelStorageArg,
-                                                 OpBuilder &funcBuilder) {
+LogicalResult
+LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
+                                   SmallVector<Value> modelStorageArgs,
+                                   OpBuilder &funcBuilder) {
   LLVM_DEBUG(llvm::dbgs() << "- Lowering clock " << clockOp->getName() << "\n");
   assert((isa<ClockTreeOp, PassThroughOp, InitialOp>(clockOp)));
 
@@ -121,11 +125,16 @@ LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
   // going to use to pass the storage pointer to the clock once it has been
   // pulled out into a separate function.
   Region &clockRegion = clockOp->getRegion(0);
-  Value clockStorageArg = clockRegion.addArgument(modelStorageArg.getType(),
-                                                  modelStorageArg.getLoc());
+
+  IRMapping mapping;
+
+  for (const auto &storage : modelStorageArgs) {
+    Value mapped = clockRegion.addArgument(storage.getType(), storage.getLoc());
+    mapping.map(storage, mapped);
+  }
 
   // Ensure the clock tree does not use any values defined outside of it.
-  if (failed(isolateClock(clockOp, modelStorageArg, clockStorageArg)))
+  if (failed(isolateClock(clockOp, mapping)))
     return failure();
 
   // Add a return op to the end of the body.
@@ -144,9 +153,11 @@ LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
   else
     funcName.append("_clock");
 
+  SmallVector<Type> fnArgTypes = llvm::map_to_vector(
+      modelStorageArgs, [](Value v) { return v.getType(); });
+
   auto funcOp = funcBuilder.create<func::FuncOp>(
-      clockOp->getLoc(), funcName,
-      builder.getFunctionType({modelStorageArg.getType()}, {}));
+      clockOp->getLoc(), funcName, builder.getFunctionType({fnArgTypes}, {}));
   symbolTable->insert(funcOp); // uniquifies the name
   LLVM_DEBUG(llvm::dbgs() << "  - Created function `" << funcOp.getSymName()
                           << "`\n");
@@ -159,11 +170,11 @@ LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
                                               treeOp.getClock(), false);
         auto builder = ifOp.getThenBodyBuilder();
         builder.template create<func::CallOp>(clockOp->getLoc(), funcOp,
-                                              ValueRange{modelStorageArg});
+                                              ValueRange{modelStorageArgs});
       })
       .Case<PassThroughOp>([&](auto) {
         builder.template create<func::CallOp>(clockOp->getLoc(), funcOp,
-                                              ValueRange{modelStorageArg});
+                                              ValueRange{modelStorageArgs});
       })
       .Case<InitialOp>([&](auto) {
         if (modelOp.getInitialFn().has_value())
@@ -195,16 +206,15 @@ LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
 /// body. Anything besides constants should no longer exist after a proper run
 /// of the pipeline.
 LogicalResult LowerClocksToFuncsPass::isolateClock(Operation *clockOp,
-                                                   Value modelStorageArg,
-                                                   Value clockStorageArg) {
+                                                   IRMapping storageMapping) {
   auto *clockRegion = &clockOp->getRegion(0);
   auto builder = OpBuilder::atBlockBegin(&clockRegion->front());
   DenseMap<Value, Value> copiedValues;
   auto result = clockRegion->walk([&](Operation *op) {
     for (auto &operand : op->getOpOperands()) {
       // Block arguments are okay, since there's nothing we can move.
-      if (operand.get() == modelStorageArg) {
-        operand.set(clockStorageArg);
+      if (storageMapping.contains(operand.get())) {
+        operand.set(storageMapping.lookup(operand.get()));
         continue;
       }
       if (isa<BlockArgument>(operand.get())) {

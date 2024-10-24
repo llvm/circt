@@ -297,10 +297,12 @@ void RootOutputOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult ModelOp::verify() {
-  if (getBodyBlock().getArguments().size() != 1)
+  if (size_t argcnt = getBodyBlock().getArguments().size(); argcnt != 1 && argcnt != 2)
     return emitOpError("must have exactly one argument");
-  if (auto type = getBodyBlock().getArgument(0).getType();
-      !isa<StorageType>(type))
+  if (llvm::any_of(getBodyBlock().getArguments(),
+                   [](BlockArgument arg) -> bool {
+                     return !isa<StorageType>(arg.getType());
+                   }))
     return emitOpError("argument must be of storage type");
   for (const hw::ModulePort &port : getIo().getPorts())
     if (port.dir == hw::ModulePort::Direction::InOut)

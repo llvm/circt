@@ -476,6 +476,21 @@ def InitialOp : ClockTreeLikeOp<"initial"> {
 }
 
 //===----------------------------------------------------------------------===//
+// Partition
+//===----------------------------------------------------------------------===//
+
+def SyncOp : ArcOp<"sync",  [
+    RecursiveMemoryEffects, NoTerminator, NoRegionArguments, SingleBlock,
+    // ParentOneOf<["ClockTreeOp", "ModelOp"]>
+]> {
+  let summary = "A region reserved after the computation of different partitions";
+  let assemblyFormat = [{
+    attr-dict-with-keyword $body
+  }];
+  let regions = (region SizedRegion<1>:$body);
+}
+
+//===----------------------------------------------------------------------===//
 // Storage Allocation
 //===----------------------------------------------------------------------===//
 

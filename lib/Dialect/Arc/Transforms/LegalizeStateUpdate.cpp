@@ -361,16 +361,23 @@ LogicalResult Legalizer::visitBlock(Block *block) {
       // HACK: This is ugly, but we need a storage reference to allocate a state
       // into. Ideally we'd materialize this later on, but the current impl of
       // the alloc op requires a storage immediately. So try to find one.
-      auto storage = TypeSwitch<Operation *, Value>(state.getDefiningOp())
+      auto origStorage = TypeSwitch<Operation *, Value>(state.getDefiningOp())
                          .Case<AllocStateOp, RootInputOp, RootOutputOp>(
                              [&](auto allocOp) { return allocOp.getStorage(); })
                          .Default([](auto) { return Value{}; });
-      if (!storage) {
+      if (!origStorage) {
         mlir::emitError(
             state.getLoc(),
             "cannot find storage pointer to allocate temporary into");
         return failure();
       }
+
+      // Check if the storage has a temporary storage
+      assert(isa<BlockArgument>(origStorage) && "Storage should be a block argument");
+      auto origStorageArg = cast<BlockArgument>(origStorage);
+      auto origStorageBlk = origStorageArg.getParentBlock();
+      auto storage = origStorageBlk->getArgument(origStorageBlk->getNumArguments() - 1);
+      assert(isa<TypedValue<StorageType>>(storage) && "Block argument in arc.model should be a storage");
 
       // Allocate a temporary state, read the current value of the state we are
       // legalizing, and write it to the temporary.
@@ -378,6 +385,12 @@ LogicalResult Legalizer::visitBlock(Block *block) {
       ImplicitLocOpBuilder builder(state.getLoc(), op);
       auto tmpState =
           builder.create<AllocStateOp>(state.getType(), storage, nullptr);
+
+      auto stateRole = cast<StringAttr>(state.getDefiningOp()->getAttr("partition-role"));
+      assert(stateRole == "state" || stateRole == "old-clock");
+      auto shadowRole = stateRole == "state" ? "shadow-state" : "shadow-old-clock";
+      tmpState->setAttr("partition-role", builder.getStringAttr(shadowRole));
+
       auto stateValue = builder.create<StateReadOp>(state);
       builder.create<StateWriteOp>(tmpState, stateValue, Value{});
       locallyLegalizedStates.push_back(state);

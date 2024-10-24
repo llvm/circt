@@ -197,6 +197,10 @@ def LowerLUT : Pass<"arc-lower-lut", "arc::DefineOp"> {
 def LowerState : Pass<"arc-lower-state", "mlir::ModuleOp"> {
   let summary = "Split state into read and write ops grouped by clock tree";
   let constructor = "circt::arc::createLowerStatePass()";
+  let options = [
+    Option<"withTemporary", "with-temporary", "bool", "false",
+      "Create temporary storage for blocks and subsequently temporaries during state update legalization">
+  ];
   let dependentDialects = [
     "arc::ArcDialect", "mlir::scf::SCFDialect", "mlir::func::FuncDialect",
     "mlir::LLVM::LLVMDialect", "comb::CombDialect", "seq::SeqDialect"
@@ -301,6 +305,18 @@ def SimplifyVariadicOps : Pass<"arc-simplify-variadic-ops", "mlir::ModuleOp"> {
     Statistic<"numOpsReordered", "reordered",
       "Ops where simplification reordered operands">,
   ];
+}
+
+def Partition: Pass<"arc-partition", "arc::ModelOp"> {
+  let summary = "Partition the entire circuit into multiple chunks";
+  let options = [
+    Option<"chunks", "chunks", "unsigned", "1",
+      "Number of resulting chunks">
+  ];
+}
+
+def PartitionClone: Pass<"arc-partition-clone"> {
+  let summary = "Commit the planned partition by cloning models";
 }
 
 def SplitFuncs : Pass<"arc-split-funcs", "mlir::ModuleOp"> {
