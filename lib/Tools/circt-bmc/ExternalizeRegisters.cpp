@@ -98,22 +98,20 @@ void ExternalizeRegistersPass::runOnOperation() {
           if (auto initVal = regOp.getInitialValue()) {
             // Find the seq.initial op where the initial value is defined and
             // fetch the operation inside that defines the value
-            if (isa<BlockArgument>(initVal) ||
-                !isa<seq::InitialOp>(initVal.getDefiningOp())) {
+            auto initialOp =
+                regOp.getInitialValue().getDefiningOp<seq::InitialOp>();
+            if (!initialOp) {
               regOp.emitError("registers with initial values not directly "
                               "defined by a seq.initial op not yet supported");
               return signalPassFailure();
             }
-            auto *initialOp = regOp.getInitialValue().getDefiningOp();
-            auto index =
-                llvm::find(initialOp->getResults(), initVal).getIndex();
+            auto index = cast<OpResult>(initVal).getResultNumber();
             auto initValDef =
                 initialOp->getRegion(0).front().getTerminator()->getOperand(
                     index);
             // If it's defined by a constant op then just fetch the constant
             // value - otherwise unsupported
-            if (auto constantOp =
-                    dyn_cast<hw::ConstantOp>(initValDef.getDefiningOp())) {
+            if (auto constantOp = initValDef.getDefiningOp<hw::ConstantOp>()) {
               // Fetch value from constant op - leave removing the dead op to
               // DCE
               initState = constantOp.getValueAttr();
