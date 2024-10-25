@@ -10,12 +10,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "Evaluator.h"
 #include "circt/Dialect/RTG/IR/RTGDialect.h"
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
 #include "circt/Dialect/RTGTest/IR/RTGTestDialect.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
 #include "circt/Target/EmitRTGAssembly.h"
+#include "mlir-c/Bindings/Python/Interop.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -127,6 +129,13 @@ static cl::opt<bool>
                           cl::desc("Log executions of toplevel module passes"),
                           cl::init(false), cl::cat(mainCategory));
 
+enum InputFormat { InputMLIR, InputPython };
+static cl::opt<InputFormat> inputFormat(
+    cl::desc("Specify input format"),
+    cl::values(clEnumValN(InputMLIR, "format-mlir", "MLIR input"),
+               clEnumValN(InputPython, "format-python", "Python input")),
+    cl::init(InputPython), cl::cat(mainCategory));
+
 enum OutputFormat { OutputMLIR, OutputRenderedMLIR, OutputASM, OutputELF };
 static cl::opt<OutputFormat> outputFormat(
     cl::desc("Specify output format"),
@@ -156,20 +165,30 @@ static void setDialectPluginsCallback(DialectRegistry &registry) {
 
 /// This function initializes the various components of the tool and
 /// orchestrates the work to be done.
-static LogicalResult executeRTGTool(MLIRContext &context) {
+static LogicalResult executeRTGTool(MLIRContext *context) {
   // Create the timing manager we use to sample execution times.
   DefaultTimingManager tm;
   applyDefaultTimingManagerCLOptions(tm);
   auto ts = tm.getRootScope();
 
+  if (StringRef(inputFilename).rsplit('.').second == "mlir")
+    inputFormat = InputMLIR;
+
   OwningOpRef<ModuleOp> module;
-  {
-    auto parserTimer = ts.nest("Parse MLIR input");
-    // Parse the provided input files.
-    module = parseSourceFile<ModuleOp>(inputFilename, &context);
+  if (inputFormat == InputMLIR) {
+    {
+      auto parserTimer = ts.nest("Parse MLIR input");
+      // Parse the provided input files.
+      module = parseSourceFile<ModuleOp>(inputFilename, context);
+    }
+    if (!module)
+      return failure();
+  } else { // InputPython
+    // module = ModuleOp::create(UnknownLoc::get(&context));
+    // rtg::evaluate(module.get(), inputFilename);
+    module = rtg::evaluate("rtg_tblgen", inputFilename);
+    context = module->getContext();
   }
-  if (!module)
-    return failure();
 
   // Create the output directory or output file depending on our mode.
   std::optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;
@@ -181,7 +200,7 @@ static LogicalResult executeRTGTool(MLIRContext &context) {
     return failure();
   }
 
-  PassManager pm(&context);
+  PassManager pm(context);
   pm.enableVerifier(verifyPasses);
   pm.enableTiming(ts);
   if (failed(applyPassManagerCLOptions(pm)))
@@ -190,7 +209,7 @@ static LogicalResult executeRTGTool(MLIRContext &context) {
   if (verbosePassExecutions)
     pm.addInstrumentation(
         std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
-            "circt-bmc"));
+            "rtgtool"));
 
   pm.addPass(createSimpleCanonicalizerPass());
   if (outputFormat != OutputMLIR) {
@@ -272,6 +291,7 @@ int main(int argc, char **argv) {
   registry.insert<circt::rtg::RTGDialect, circt::rtgtest::RTGTestDialect,
                   mlir::arith::ArithDialect, mlir::BuiltinDialect>();
   MLIRContext context(registry);
+  context.loadAllAvailableDialects();
 
   // Setup of diagnostic handling.
   llvm::SourceMgr sourceMgr;
@@ -281,5 +301,5 @@ int main(int argc, char **argv) {
 
   // Perform the logical equivalence checking; using `exit` to avoid the slow
   // teardown of the MLIR context.
-  exit(failed(executeRTGTool(context)));
+  exit(failed(executeRTGTool(&context)));
 }
