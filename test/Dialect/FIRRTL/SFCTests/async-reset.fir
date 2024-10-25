@@ -19,7 +19,7 @@ circuit Foo:
     ; CHECK: %r_1 = firrtl.regreset %clock, %reset, %c0_ui1
     ; CHECK: %r_2 = firrtl.regreset %clock, %reset, %c0_ui1
     ; CHECK: %r_3 = firrtl.regreset %clock, %reset, %c0_ui1
-    reg r : UInt<1>[4], clock with : (reset => (reset, literal))
+    regreset r : UInt<1>[4], clock, reset, literal
     connect r, x
     connect z, r
 
@@ -46,7 +46,7 @@ circuit Foo:
     ; CHECK: %r_1 = firrtl.regreset %clock, %reset, %c1_ui1
     ; CHECK: %r_2 = firrtl.regreset %clock, %reset, %c0_ui1
     ; CHECK: %r_3 = firrtl.regreset %clock, %reset, %c0_ui1
-    reg r : UInt<1>[4], clock with : (reset => (reset, complex_literal))
+    regreset r : UInt<1>[4], clock, reset, complex_literal
     connect r, x
     connect z, r
 
@@ -72,7 +72,7 @@ circuit Foo:
     ; CHECK: %r_1 = firrtl.regreset %clock, %reset, %c1_ui1
     ; CHECK: %r_2 = firrtl.regreset %clock, %reset, %c0_ui1
     ; CHECK: %r_3 = firrtl.regreset %clock, %reset, %c0_ui1
-    reg r : UInt<1>[4], clock with : (reset => (reset, complex_literal))
+    regreset r : UInt<1>[4], clock, reset, complex_literal
     connect r, x
     connect z, r
 
@@ -88,11 +88,11 @@ circuit Foo:
     output y : SInt<4>
     output z : SInt<4>
     ; CHECK: %r = firrtl.regreset %clock, %reset, %c0_si1
-    reg r : SInt<4>, clock with : (reset => (reset, asSInt(UInt(0))))
+    regreset r : SInt<4>, clock, reset, asSInt(UInt(0))
     connect r, x
     wire w : SInt<4>
     ; CHECK: %r2 = firrtl.regreset %clock, %reset, %c-1_si4
-    reg r2 : SInt<4>, clock with : (reset => (reset, w))
+    regreset r2 : SInt<4>, clock, reset, w
     connect r2, x
     node n = UInt(0hf)
     connect w, asSInt(n)
@@ -116,7 +116,7 @@ circuit Foo:
     connect complex_literal[1], literal[1]
     connect complex_literal[2], UInt<1>(0h00)
     connect complex_literal[3], UInt<1>(0h00)
-    reg r : UInt<1>[4], clock with : (reset => (reset, complex_literal))
+    regreset r : UInt<1>[4], clock, reset, complex_literal
     connect z, r
     ; CHECK: firrtl.matchingconnect %z_0, %c1_ui1
     ; CHECK: firrtl.matchingconnect %z_1, %c1_ui1
@@ -133,7 +133,7 @@ circuit Foo:
     input clock : Clock
     input reset : AsyncReset
     output z : UInt<1>
-    reg r : UInt<1>, clock with : (reset => (reset, r))
+    reg r : UInt<1>, clock
     connect r, UInt(0)
     connect z, r
     ; CHECK: firrtl.matchingconnect %z, %c0_ui1
@@ -148,7 +148,7 @@ circuit Foo:
     input clock : Clock
     input reset : AsyncReset
     output z : UInt<1>
-    reg r : UInt<1>, clock with : (reset => (reset, UInt(0)))
+    regreset r : UInt<1>, clock, reset, UInt(0)
     connect r, UInt(0)
     connect z, r
     ; CHECK: firrtl.matchingconnect %z, %c0_ui1

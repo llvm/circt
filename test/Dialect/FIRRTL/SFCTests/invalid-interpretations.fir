@@ -19,7 +19,7 @@ circuit InvalidInterpretations:
     wire _inv: UInt<8>
     invalidate _inv
 
-    reg r: UInt<8>, clock with : (reset => (reset, _inv))
+    regreset r: UInt<8>, clock, reset, _inv
     connect r, a
     connect out_reg, r
     ; Interpretation 1: Invalid is undefined if used as the initialization value
@@ -63,7 +63,7 @@ circuit InvalidInOtherModule :
     ; CHECK-NEXT:     r <= 8'h4;
     ; CHECK-NEXT:   else
     ; CHECK-NEXT:     r <= 8'h0;
-    reg r : SInt<8>, clock with: (reset => (reset, SInt<8>(4)))
+    regreset r : SInt<8>, clock, reset, SInt<8>(4)
     connect r, other.b
     connect b, r
 

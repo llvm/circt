@@ -1,14 +1,14 @@
 ; RUN: circt-translate -import-firrtl -verify-diagnostics -split-input-file %s | circt-opt | FileCheck %s
 
-FIRRTL version 2.1.0
+FIRRTL version 4.0.0
 circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
-  ; CHECK-LABEL: firrtl.module @MyModule(in %in: !firrtl.uint, out %out: !firrtl.uint<8>) {
-  module MyModule :   @[FooBar.scala 369:27]
-    input in: UInt
+  ; CHECK-LABEL: firrtl.module @MyModule(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+  public module MyModule :   @[FooBar.scala 369:27]
+    input in: UInt<8>
     output out: UInt<8>
 
-    ; CHECK: firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint
+    ; CHECK: firrtl.matchingconnect %out, %in : !firrtl.uint<8>
     out <= in
 
   ; CHECK: }
@@ -20,11 +20,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK: }
 
-  ; CHECK-LABEL: firrtl.extmodule private @MyExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
+  ; CHECK-LABEL: firrtl.extmodule private @MyExtModule(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
   ; CHECK: attributes {defname = "myextmodule"}
   ; CHECK-NOT: {
   extmodule MyExtModule :
-    input in: UInt
+    input in: UInt<8>
     output out : UInt<8>
     defname = myextmodule
 
@@ -33,42 +33,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   ; CHECK-SAME:     DEFAULT: ui32 = 0,
   ; CHECK-SAME:     WIDTH: ui32 = 32,
   ; CHECK-SAME:     DEPTH: f64 = 3.242000e+01>
-  ; CHECK-SAME:    (in in: !firrtl.uint,
+  ; CHECK-SAME:    (in in: !firrtl.uint<8>,
   ; CHECK-SAME:     out out: !firrtl.uint<8>)
   ; CHECK-SAME:    attributes {defname = "name_thing"}
   ; CHECK-NOT: {
   extmodule MyParameterizedExtModule :
-    input in: UInt
+    input in: UInt<8>
     output out: UInt<8>
     defname = name_thing
-    parameter FORMAT = "xyz_timeout=%d\n"
-    parameter DEFAULT = 0
-    parameter WIDTH = 32
-    parameter DEPTH = 32.42
-
-
-  ; CHECK-LABEL: firrtl.intmodule private @MyIntModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
-  ; CHECK: attributes {intrinsic = "testIntrinsic1"}
-  ; CHECK-NOT: {
-  intmodule MyIntModule :
-    input in: UInt
-    output out: UInt<8>
-    intrinsic = testIntrinsic1
-
-
-  ; CHECK-LABEL: firrtl.intmodule private @MyParameterizedIntModule
-  ; CHECK-SAME:    <FORMAT: none = "xyz_timeout=%d\0A",
-  ; CHECK-SAME:     DEFAULT: ui32 = 0,
-  ; CHECK-SAME:     WIDTH: ui32 = 32,
-  ; CHECK-SAME:     DEPTH: f64 = 3.242000e+01>
-  ; CHECK-SAME:    (in in: !firrtl.uint,
-  ; CHECK-SAME:     out out: !firrtl.uint<8>)
-  ; CHECK-SAME:    attributes {intrinsic = "testIntrinsic2"}
-  ; CHECK-NOT: {
-  intmodule MyParameterizedIntModule :
-    input in: UInt
-    output out: UInt<8>
-    intrinsic = testIntrinsic2
     parameter FORMAT = "xyz_timeout=%d\n"
     parameter DEFAULT = 0
     parameter WIDTH = 32
@@ -227,7 +199,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.add %c42_ui10, %c171_ui8
     ; CHECK: firrtl.constCast
     ; CHECK: firrtl.matchingconnect %auto
-    auto11 <= add(UInt<10>(42), UInt<8>("hAB"))
+    auto11 <= add(UInt<10>(42), UInt<8>(0hAB))
 
     ; CHECK: %c-85_si8 = firrtl.constant -85 : !firrtl.const.sint<8>
     sauto <= add(s8, SInt<8>(-85))
@@ -323,12 +295,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     node n8 = mux(reset, i8, UInt(4))
 
     ; CHECK: %_t_2621 = firrtl.regreset interesting_name %clock, %reset, %{{.*}} : !firrtl.clock, !firrtl.uint<1>, !firrtl.const.uint<4>, !firrtl.uint<4>
-    reg _t_2621 : UInt<4>, clock with :
-      reset => (reset, UInt<4>("h0")) @[Edges.scala 230:27]
+    regreset _t_2621 : UInt<4>, clock, reset, UInt<4>(0h0) @[Edges.scala 230:27]
 
     ; CHECK: %_t_1601 = firrtl.regreset interesting_name %clock, %reset, %{{.*}} : !firrtl.clock, !firrtl.uint<1>, !firrtl.const.uint<2>, !firrtl.uint<2>
-    reg _t_1601 : UInt<2>, clock with :
-      (reset => (reset, UInt<2>("h00"))) @[Edges.scala 230:27]
+    regreset _t_1601 : UInt<2>, clock, reset, UInt<2>(0h00) @[Edges.scala 230:27]
 
     ; CHECK: firrtl.div %i8, %{{.*}} : (!firrtl.uint<8>, !firrtl.const.uint<4>) -> !firrtl.uint<8>
     node n9 = div(i8, UInt<4>(4))
@@ -341,12 +311,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.tail %{{.*}}, 3 : (!firrtl.sint<8>) -> !firrtl.uint<5>
     node n10s = tail(asSInt(i8), 3)
 
-    ; The Scala implementation of FIRRTL prints registers without a reset value
-    ; using the register name as the reset.  Make sure we handle this for
-    ; compatibility.
     ; CHECK: %_t_2622 = firrtl.reg interesting_name %clock : !firrtl.clock, !firrtl.uint<4>
-    reg _t_2622 : UInt<4>, clock with :
-      reset => (UInt<1>("h0"), _t_2622)
+    reg _t_2622 : UInt<4>, clock
 
     ; CHECK: %xyz_in = firrtl.instance xyz interesting_name @circuit(in in: !firrtl.uint<80>)
     inst xyz of circuit
@@ -354,14 +320,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.matchingconnect %xyz_in, [[PAD]] : !firrtl.uint<80>
     xyz.in <= i8
 
-    ; CHECK: %myext_in, %myext_out = firrtl.instance myext interesting_name @MyExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
+    ; CHECK: %myext_in, %myext_out = firrtl.instance myext interesting_name @MyExtModule(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     inst myext of MyExtModule
     myext.in <= i8
     printf(clock, reset, "Something interesting! %x", myext.out)
 
     ; CHECK: firrtl.when %reset : !firrtl.uint<1> {
     when reset :
-      ; CHECK: %reset_myext_in, %reset_myext_out = firrtl.instance reset_myext interesting_name @MyExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
+      ; CHECK: %reset_myext_in, %reset_myext_out = firrtl.instance reset_myext interesting_name @MyExtModule(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
       inst reset_myext of MyExtModule
       reset_myext.in <= i8
     ; CHECK: }
@@ -418,10 +384,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
         read-under-write => undefined
     _M._T_18.addr is invalid @[Decoupled.scala 209:24]
     _M._T_18.clk is invalid @[Decoupled.scala 209:24]
-    _M._T_18.en <= UInt<1>("h0") @[Decoupled.scala 209:24]
+    _M._T_18.en <= UInt<1>(0h0) @[Decoupled.scala 209:24]
     _M._T_10.addr is invalid @[Decoupled.scala 209:24]
     _M._T_10.clk is invalid @[Decoupled.scala 209:24]
-    _M._T_10.en <= UInt<1>("h0") @[Decoupled.scala 209:24]
+    _M._T_10.en <= UInt<1>(0h0) @[Decoupled.scala 209:24]
     _M._T_10.data is invalid @[Decoupled.scala 209:24]
     _M._T_10.mask is invalid @[Decoupled.scala 209:24]
 
@@ -676,7 +642,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output rst: UInt<1>
     rst is invalid
     ; CHECK: firrtl.regreset interesting_name %clk, %rst
-    reg r: UInt<1>, clk with : (reset => (rst, UInt<1>(0)))
+    regreset r: UInt<1>, clk, rst, UInt<1>(0)
 
   ; Check that a register init sink is converted to passive
   ; CHECK-LABEL: firrtl.module private @register_init_passive
@@ -686,7 +652,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output init: UInt<1>
     init is invalid
     ; CHECK: firrtl.regreset interesting_name %clk, %rst, %init
-    reg r: UInt<1>, clk with : (reset => (rst, init))
+    regreset r: UInt<1>, clk, rst, init
 
   ; https://github.com/llvm/circt/issues/492
   ; CHECK-LABEL: firrtl.module private @WriteOnlyMemIssue492
@@ -829,7 +795,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK:  %0 = firrtl.subindex %io[0] : !firrtl.vector<uint<1>, 8>
     ; CHECK: [[VAL:%.*]] = firrtl.constCast %c0_ui1 : (!firrtl.const.uint<1>) -> !firrtl.uint<1>
     ; CHECK: firrtl.matchingconnect %0, [[VAL]] : !firrtl.uint<1>
-    io[0] <= UInt<1>("h00")
+    io[0] <= UInt<1>(0h00)
 
 
   ; https://github.com/llvm/circt/issues/782
@@ -948,7 +914,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   ; Module as identifier
   ; Test parsing of "module" as an identifier for instance and module names
   extmodule SomeModule:
-    input in: UInt
+    input in: UInt<8>
 
   module ModuleAsIdentifier:
     inst module of SomeModule
@@ -1026,7 +992,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output notrw : Probe<UInt>
     output out : UInt<1>
     output out2 : UInt<1>
-    output out3 : UInt<3>
     output outconst : const UInt<1>
     ; CHECK-SAME: out %agg_out: !firrtl.probe<bundle<a: uint<1>, b: const.uint>>
     output agg_out : Probe<{a: UInt<1>, b: const UInt}>
@@ -1078,14 +1043,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: %[[AGG3_PROBE_CAST:.+]] = firrtl.ref.cast %[[AGG3_PROBE]] : (!firrtl.probe<const.bundle<a: uint<1>, b: uint>>) -> !firrtl.probe<bundle<a: uint<1>, b: const.uint>>
     ; CHECK-NEXT: ref.define %agg_out, %[[AGG3_PROBE_CAST]]
     define agg_out = probe(agg3)
-
-    ; CHECK: %{{.+}}, %[[REM_R:.+]], %{{.+}}, %[[REM_R2:.+]] = firrtl.instance rem
-    ; CHECK-NEXT: %[[REM_R2_1:.+]] = firrtl.ref.sub %[[REM_R2]][1]
-    ; CHECK-NEXT: %[[REM_R2_1_A:.+]] = firrtl.ref.sub %[[REM_R2_1]][0]
-    ; CHECK-NEXT: %[[READ_REM_R2_1_A:.+]] = firrtl.ref.resolve %[[REM_R2_1_A]]
-    ; CHECK-NEXT: connect %out3, %[[READ_REM_R2_1_A]]
-    inst rem of RefExtMore
-    out3 <= read(rem.r2[1].a)
 
     ; CHECK: %[[PROBE_IN:.+]] = firrtl.ref.send %in
     ; CHECK-DAG: %[[READ_PROBE_IN:.+]] = firrtl.ref.resolve %[[PROBE_IN]]
@@ -1150,29 +1107,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     rc2.in <= in
     ; CHECK: firrtl.ref.release_initial %[[TRUE]], %[[RC2_RW]] : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
     release_initial(rc2.rw)
-
-  ; CHECK-LABEL: extmodule private @RefExt(
-  ; CHECK-SAME:  in in: !firrtl.uint<1>, out r: !firrtl.probe<uint<1>>
-  ; CHECK-SAME: internalPaths = [#firrtl.internalpath, #firrtl.internalpath<"in">]
-  extmodule RefExt :
-    input in : UInt<1>
-    output r : Probe<UInt<1>>
-    ref r is "in"
-
-  ; CHECK-LABEL: extmodule private @RefExtMore(
-  ; CHECK-SAME:  in in: !firrtl.uint<1>
-  ; CHECK-SAME: out r: !firrtl.probe<uint<1>>
-  ; CHECK-SAME: out data: !firrtl.uint<3>
-  ; CHECK-SAME: out r2: !firrtl.probe<vector<bundle<a: uint<3>>, 3>>
-  ; CHECK-SAME: internalPaths = [#firrtl.internalpath, #firrtl.internalpath<"path.to.internal.signal">, #firrtl.internalpath, #firrtl.internalpath<"in">]
-  extmodule RefExtMore :
-    input in : UInt<1>
-    output r : Probe<UInt<1>>
-    output data : UInt<3>
-    output r2 : Probe<{a : UInt<3>}[3]>
-    ref r2 is "in"
-    ref r is "path.to.internal.signal"
-
 
   ; CHECK-LABEL: extmodule private @RefExtABI
   ; CHECK-NOT: internalPaths
@@ -1962,3 +1896,83 @@ circuit Foo:
 
   ; CHECK: firrtl.formal @testFormal of @FooTest bound 20
   formal testFormal of FooTest, bound = 20
+
+;// -----
+FIRRTL version 3.9.0
+circuit Foo:
+
+  ; CHECK-LABEL: firrtl.extmodule private @Bar(in in: !firrtl.uint)
+  extmodule Bar:
+    input in: UInt
+
+  ; CHECK-LABEL: firrtl.intmodule private @MyIntModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
+  ; CHECK: attributes {intrinsic = "testIntrinsic1"}
+  ; CHECK-NOT: {
+  intmodule MyIntModule :
+    input in: UInt
+    output out: UInt<8>
+    intrinsic = testIntrinsic1
+
+  ; CHECK-LABEL: firrtl.intmodule private @MyParameterizedIntModule
+  ; CHECK-SAME:    <FORMAT: none = "xyz_timeout=%d\0A",
+  ; CHECK-SAME:     DEFAULT: ui32 = 0,
+  ; CHECK-SAME:     WIDTH: ui32 = 32,
+  ; CHECK-SAME:     DEPTH: f64 = 3.242000e+01>
+  ; CHECK-SAME:    (in in: !firrtl.uint,
+  ; CHECK-SAME:     out out: !firrtl.uint<8>)
+  ; CHECK-SAME:    attributes {intrinsic = "testIntrinsic2"}
+  ; CHECK-NOT: {
+  intmodule MyParameterizedIntModule :
+    input in: UInt
+    output out: UInt<8>
+    intrinsic = testIntrinsic2
+    parameter FORMAT = "xyz_timeout=%d\n"
+    parameter DEFAULT = 0
+    parameter WIDTH = 32
+    parameter DEPTH = 32.42
+
+  ; CHECK-LABEL: extmodule private @RefExt(
+  ; CHECK-SAME:  in in: !firrtl.uint<1>, out r: !firrtl.probe<uint<1>>
+  ; CHECK-SAME: internalPaths = [#firrtl.internalpath, #firrtl.internalpath<"in">]
+  extmodule RefExt :
+    input in : UInt<1>
+    output r : Probe<UInt<1>>
+    ref r is "in"
+
+  ; CHECK-LABEL: extmodule private @RefExtMore(
+  ; CHECK-SAME:  in in: !firrtl.uint<1>
+  ; CHECK-SAME: out r: !firrtl.probe<uint<1>>
+  ; CHECK-SAME: out data: !firrtl.uint<3>
+  ; CHECK-SAME: out r2: !firrtl.probe<vector<bundle<a: uint<3>>, 3>>
+  ; CHECK-SAME: internalPaths = [#firrtl.internalpath, #firrtl.internalpath<"path.to.internal.signal">, #firrtl.internalpath, #firrtl.internalpath<"in">]
+  extmodule RefExtMore :
+    input in : UInt<1>
+    output r : Probe<UInt<1>>
+    output data : UInt<3>
+    output r2 : Probe<{a : UInt<3>}[3]>
+    ref r2 is "in"
+    ref r is "path.to.internal.signal"
+
+  ; CHECK-LABEL: module @Foo(
+  ; CHECK-SAME:    out %out: !firrtl.uint,
+  module Foo:
+    output out: UInt
+    output out3 : UInt<3>
+
+    ; CHECK: %{{.+}}, %[[REM_R:.+]], %{{.+}}, %[[REM_R2:.+]] = firrtl.instance rem
+    ; CHECK-NEXT: %[[REM_R2_1:.+]] = firrtl.ref.sub %[[REM_R2]][1]
+    ; CHECK-NEXT: %[[REM_R2_1_A:.+]] = firrtl.ref.sub %[[REM_R2_1]][0]
+    ; CHECK-NEXT: %[[READ_REM_R2_1_A:.+]] = firrtl.ref.resolve %[[REM_R2_1_A]]
+    ; CHECK-NEXT: connect %out3, %[[READ_REM_R2_1_A]]
+    inst rem of RefExtMore
+    out3 <= read(rem.r2[1].a)
+
+;// -----
+FIRRTL version 2.9.0
+circuit Foo:
+  module Foo:
+
+    node binary = UInt<4>("b1010")
+    node octal = UInt<4>("o12")
+    node decimal = UInt<4>(10)
+    node hexadecimal = UInt<4>("ha")

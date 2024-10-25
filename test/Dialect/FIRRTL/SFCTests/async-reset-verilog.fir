@@ -16,11 +16,11 @@ circuit Foo:
     input asyncReset : AsyncReset
     input x : UInt<8>[5]
     output z : UInt<8>[5]
-    reg r0 : UInt<8>, clock0 with : (reset => (syncReset, UInt(123)))
-    reg r1 : UInt<8>, clock1 with : (reset => (syncReset, UInt(123)))
-    reg r2 : UInt<8>, clock0 with : (reset => (asyncReset, UInt(123)))
-    reg r3 : UInt<8>, clock0 with : (reset => (asyncReset, UInt(123)))
-    reg r4 : UInt<8>, clock1 with : (reset => (asyncReset, UInt(123)))
+    regreset r0 : UInt<8>, clock0, syncReset, UInt(123)
+    regreset r1 : UInt<8>, clock1, syncReset, UInt(123)
+    regreset r2 : UInt<8>, clock0, asyncReset, UInt(123)
+    regreset r3 : UInt<8>, clock0, asyncReset, UInt(123)
+    regreset r4 : UInt<8>, clock1, asyncReset, UInt(123)
     r0 <= x[0]
     r1 <= x[1]
     r2 <= x[2]

@@ -16,8 +16,8 @@ circuit Example :
     invalidate bar
     ; CHECK: %foo0 = firrtl.reg %clock
     ; CHECK: %foo1 = firrtl.reg %clock
-    reg foo0 : UInt<1>, clock with : (reset => (arst, bar))
-    reg foo1 : UInt<1>, clock with : (reset => (srst, bar))
+    regreset foo0 : UInt<1>, clock, arst, bar
+    regreset foo1 : UInt<1>, clock, srst, bar
     connect foo0, in
     connect foo1, in
     connect out[0], foo0
@@ -48,8 +48,8 @@ circuit Example1 :
     ; CHECK: %foo1_a_0 = firrtl.reg %clock
     ; CHECK: %foo1_a_1 = firrtl.regreset %clock, %srst,
     ; CHECK: %foo1_b = firrtl.reg %clock
-    reg foo0 : {a : UInt<1>[2], b : UInt<1>}, clock with : (reset => (arst, bar))
-    reg foo1 : {a : UInt<1>[2], b : UInt<1>}, clock with : (reset => (srst, bar))
+    regreset foo0 : {a : UInt<1>[2], b : UInt<1>}, clock, arst, bar
+    regreset foo1 : {a : UInt<1>[2], b : UInt<1>}, clock, srst, bar
     connect foo0, in
     connect foo1, in
     connect out[0], foo0
@@ -82,8 +82,8 @@ circuit Example2 :
     ; CHECK: %foo0_b = firrtl.reg %clock
     ; CHECK: %foo1_a = firrtl.regreset %clock, %srst,
     ; CHECK: %foo1_b = firrtl.reg %clock
-    reg foo0 : { a : UInt<1>, b : UInt<1> }, clock with : (reset => (arst, baz))
-    reg foo1 : { a : UInt<1>, b : UInt<1> }, clock with : (reset => (srst, baz))
+    regreset foo0 : { a : UInt<1>, b : UInt<1> }, clock, arst, baz
+    regreset foo1 : { a : UInt<1>, b : UInt<1> }, clock, srst, baz
     connect foo0, in
     connect foo1, in
     connect out[0], foo0
@@ -111,9 +111,9 @@ circuit Example3 :
     ; CHECK: %foo0 = firrtl.reg %clock
     ; CHECK: %foo1 = firrtl.reg %clock
     ; CHECK: %foo2 = firrtl.reg %clock
-    reg foo0 : UInt<2>, clock with : (reset => (rst, UInt(3)))
-    reg foo1 : UInt<2>, clock with : (reset => (arst, UInt(3)))
-    reg foo2 : UInt<2>, clock with : (reset => (srst, UInt(3)))
+    regreset foo0 : UInt<2>, clock, rst, UInt(3)
+    regreset foo1 : UInt<2>, clock, arst, UInt(3)
+    regreset foo2 : UInt<2>, clock, srst, UInt(3)
     connect foo0, in
     connect foo1, in
     connect foo2, in
