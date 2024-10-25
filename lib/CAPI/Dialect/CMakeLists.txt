@@ -10,12 +10,14 @@ set(LLVM_OPTIONAL_SOURCES
   FSM.cpp
   HW.cpp
   HWArith.cpp
+  Ibis.cpp
   Handshake.cpp
   LLHD.cpp
   LTL.cpp
   MSFT.cpp
   Moore.cpp
   OM.cpp
+  Pipeline.cpp
   SV.cpp
   Seq.cpp
   Verif.cpp
@@ -93,6 +95,15 @@ add_circt_public_c_api_library(CIRCTCAPIHW
   CIRCTHW
 )
 
+add_circt_public_c_api_library(CIRCTCAPIIbis
+  Ibis.cpp
+
+  LINK_LIBS PUBLIC
+  MLIRCAPIIR
+  CIRCTIbis
+  CIRCTIbisTransforms
+)
+
 add_circt_public_c_api_library(CIRCTCAPILLHD
   LLHD.cpp
 
@@ -116,6 +127,15 @@ add_circt_public_c_api_library(CIRCTCAPIOM
   MLIRCAPIIR
   CIRCTOM
   CIRCTOMEvaluator
+)
+
+add_circt_public_c_api_library(CIRCTCAPIPipeline
+  Pipeline.cpp
+
+  LINK_LIBS PUBLIC
+  MLIRCAPIIR
+  CIRCTPipelineOps
+  CIRCTPipelineTransforms
 )
 
 add_circt_public_c_api_library(CIRCTCAPISeq

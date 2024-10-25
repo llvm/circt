@@ -32,9 +32,11 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension
     CIRCTCAPIHW
     CIRCTCAPIHWArith
     CIRCTCAPIHandshake
+    CIRCTCAPIIbis
     CIRCTCAPILTL
     CIRCTCAPIMSFT
     CIRCTCAPIOM
+    CIRCTCAPIPipeline
     CIRCTCAPISV
     CIRCTCAPISeq
     CIRCTCAPIVerif

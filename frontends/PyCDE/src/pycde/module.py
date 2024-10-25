@@ -470,7 +470,7 @@ class ModuleBuilder(ModuleLikeBuilderBase):
       return sys._create_circt_mod(self)
     return ret
 
-  def create_op(self, sys, symbol):
+  def create_op(self, sys, symbol) -> ir.OpView:
     """Callback for creating a module op."""
 
     if hasattr(self.modcls, "metadata"):

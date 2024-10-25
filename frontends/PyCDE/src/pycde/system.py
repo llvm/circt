@@ -137,21 +137,27 @@ class System:
   #     "canonicalize",
   # ]
 
-  def import_mlir(self, module, lowering=None) -> Dict[str, Any]:
+  def import_mlir(self,
+                  module,
+                  lowering_passes: List[str] = []) -> Dict[str, Any]:
     """Import mlir asm created elsewhere into our space."""
 
     compat_mod = ir.Module.parse(str(module))
-    if lowering is not None:
-      pm = passmanager.PassManager.parse(",".join(lowering))
+    for lowering in lowering_passes:
+      pm = passmanager.PassManager.parse(lowering)
       pm.run(compat_mod.operation)
     ret: Dict[str, Any] = {}
     for op in compat_mod.body:
       # TODO: handle symbolrefs pointing to potentially renamed symbols.
       if isinstance(op, (hw.HWModuleOp, hw.HWModuleExternOp)):
         from .module import import_hw_module
-        im = import_hw_module(op)
-        self._create_circt_mod(im._builder)
-        ret[ir.StringAttr(op.name).value] = im
+        try:
+          im = import_hw_module(op)
+          self._create_circt_mod(im._builder)
+          ret[ir.StringAttr(op.name).value] = im
+        except TypeError as e:
+          print(f"Error importing module {op.name}: {e}")
+          self.body.append(op)
       elif isinstance(op, esi.RandomAccessMemoryDeclOp):
         from .esi import _import_ram_decl
         ram = _import_ram_decl(self, op)
@@ -451,7 +457,7 @@ class _OpCache:
 
     return symbol, install
 
-  def get_symbol_pyproxy(self, symbol):
+  def get_symbol_pyproxy(self, symbol) -> _PyProxy:
     """Get the _PyProxy for a symbol."""
     if isinstance(symbol, ir.Attribute):
       symbol = ir.FlatSymbolRefAttr(symbol).value

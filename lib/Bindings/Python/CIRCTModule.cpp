@@ -17,9 +17,11 @@
 #include "circt-c/Dialect/HW.h"
 #include "circt-c/Dialect/HWArith.h"
 #include "circt-c/Dialect/Handshake.h"
+#include "circt-c/Dialect/Ibis.h"
 #include "circt-c/Dialect/LTL.h"
 #include "circt-c/Dialect/MSFT.h"
 #include "circt-c/Dialect/OM.h"
+#include "circt-c/Dialect/Pipeline.h"
 #include "circt-c/Dialect/SV.h"
 #include "circt-c/Dialect/Seq.h"
 #include "circt-c/Dialect/Verif.h"
@@ -43,6 +45,8 @@ static void registerPasses() {
   registerFSMPasses();
   registerHWArithPasses();
   registerHandshakePasses();
+  registerIbisPasses();
+  registerPipelinePasses();
   mlirRegisterConversionPasses();
   mlirRegisterTransformsPasses();
 }
@@ -89,6 +93,10 @@ PYBIND11_MODULE(_circt, m) {
         mlirDialectHandleRegisterDialect(hwarith, context);
         mlirDialectHandleLoadDialect(hwarith, context);
 
+        MlirDialectHandle ibis = mlirGetDialectHandle__ibis__();
+        mlirDialectHandleRegisterDialect(ibis, context);
+        mlirDialectHandleLoadDialect(ibis, context);
+
         MlirDialectHandle om = mlirGetDialectHandle__om__();
         mlirDialectHandleRegisterDialect(om, context);
         mlirDialectHandleLoadDialect(om, context);
@@ -112,6 +120,10 @@ PYBIND11_MODULE(_circt, m) {
         MlirDialectHandle ltl = mlirGetDialectHandle__ltl__();
         mlirDialectHandleRegisterDialect(ltl, context);
         mlirDialectHandleLoadDialect(ltl, context);
+
+        MlirDialectHandle pipeline = mlirGetDialectHandle__pipeline__();
+        mlirDialectHandleRegisterDialect(pipeline, context);
+        mlirDialectHandleLoadDialect(pipeline, context);
 
         MlirDialectHandle verif = mlirGetDialectHandle__verif__();
         mlirDialectHandleRegisterDialect(verif, context);
