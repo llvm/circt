@@ -29,8 +29,10 @@ circuit TestHarness:
       write-latency => 1
       read-under-write => undefined
 
-    foo_m is invalid
-    foo_combmem is invalid
+    invalidate foo_m.r
+    invalidate foo_m.w
+    invalidate foo_combmem.r
+    invalidate foo_combmem.w
 
   extmodule Foo_BlackBox:
     defname = Foo_BlackBox
@@ -56,8 +58,10 @@ circuit TestHarness:
       write-latency => 1
       read-under-write => undefined
 
-    bar_m is invalid
-    bar_combmem is invalid
+    invalidate bar_m.r
+    invalidate bar_m.w
+    invalidate bar_combmem.r
+    invalidate bar_combmem.w
 
   extmodule Bar_BlackBox:
     defname = Bar_BlackBox
@@ -83,8 +87,10 @@ circuit TestHarness:
       write-latency => 1
       read-under-write => undefined
 
-    baz_m is invalid
-    baz_combmem is invalid
+    invalidate baz_m.r
+    invalidate baz_m.w
+    invalidate baz_combmem.r
+    invalidate baz_combmem.w
 
   extmodule Baz_BlackBox:
     defname = Baz_BlackBox
@@ -150,7 +156,7 @@ circuit TestHarness:
 ; MLIR_OUT:  }
 
 ; MLIR_OUT:  om.class @MemorySchema(%basepath: !om.basepath, %name_in: !om.string, %depth_in: !om.integer, %width_in: !om.integer, %maskBits_in: !om.integer, %readPorts_in: !om.integer, %writePorts_in: !om.integer, %readwritePorts_in: !om.integer, %writeLatency_in: !om.integer, %readLatency_in: !om.integer, %hierarchy_in: !om.list<!om.path>, %inDut_in: i1, %extraPorts_in: !om.list<!om.class.type<@ExtraPortsMemorySchema>>, %preExtInstName_in: !om.list<!om.string>) -> (name: !om.string, depth: !om.integer, width: !om.integer, maskBits: !om.integer, readPorts: !om.integer, writePorts: !om.integer, readwritePorts: !om.integer, writeLatency: !om.integer, readLatency: !om.integer, hierarchy: !om.list<!om.path>, inDut: i1, extraPorts: !om.list<!om.class.type<@ExtraPortsMemorySchema>>, preExtInstName: !om.list<!om.string>)
-; MLIR_OUT:    om.class.fields %name_in, %depth_in, %width_in, %maskBits_in, %readPorts_in, %writePorts_in, %readwritePorts_in, %writeLatency_in, %readLatency_in, %hierarchy_in, %inDut_in, %extraPorts_in, %preExtInstName_in : !om.string, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.list<!om.path>, i1, !om.list<!om.class.type<@ExtraPortsMemorySchema>>, !om.list<!om.string> 
+; MLIR_OUT:    om.class.fields %name_in, %depth_in, %width_in, %maskBits_in, %readPorts_in, %writePorts_in, %readwritePorts_in, %writeLatency_in, %readLatency_in, %hierarchy_in, %inDut_in, %extraPorts_in, %preExtInstName_in : !om.string, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.list<!om.path>, i1, !om.list<!om.class.type<@ExtraPortsMemorySchema>>, !om.list<!om.string>
 ; MLIR_OUT:  om.class @MemoryMetadata(%basepath: !om.basepath) -> (foo_m_ext_field: !om.class.type<@MemorySchema>, bar_m_ext_field: !om.class.type<@MemorySchema>, baz_m_ext_field: !om.class.type<@MemorySchema>)
 ; MLIR_OUT:     om.path_create instance %basepath @memNLA
 ; MLIR_OUT:     om.list_create
