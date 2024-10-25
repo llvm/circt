@@ -11,8 +11,7 @@ circuit top :
     output io_out : UInt<6>
     output io_out3 : UInt<3>
 
-    reg D0123456 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), D0123456) @[main.scala 16:25]
+    reg D0123456 : UInt<6>, clock @[main.scala 16:25]
     node _T = bits(D0123456, 4, 0) @[main.scala 20:30]
     node _T_1 = bits(D0123456, 5, 5) @[main.scala 20:47]
     node _T_2 = cat(_T, _T_1) @[main.scala 20:36]
@@ -23,9 +22,9 @@ circuit top :
     node _T_6 = cat(_T_4, _T_5) @[main.scala 25:26]
     node _T_7 = bits(D0123456, 5, 5) @[main.scala 25:52]
     node _T_8 = cat(_T_6, _T_7) @[main.scala 25:41]
-    io_out <= D0123456 @[main.scala 24:10]
-    io_out3 <= _T_8 @[main.scala 25:11]
-    D0123456 <= mux(reset, UInt<6>(0h1), nxt_D0123456) @[main.scala 16:25 main.scala 16:25 main.scala 22:12]
+    connect io_out, D0123456 @[main.scala 24:10]
+    connect io_out3, _T_8 @[main.scala 25:11]
+    connect D0123456, mux(reset, UInt<6>(0h1), nxt_D0123456) @[main.scala 16:25 main.scala 16:25 main.scala 22:12]
 
   public module top :
     input clk : Clock
@@ -34,522 +33,264 @@ circuit top :
     inst iLFSR of LFSR @[main.scala 31:21]
     node clock = clk
     node reset = rst
-    reg i : UInt<8>, clock with :
-      reset => (UInt<1>(0h0), i) @[main.scala 32:18]
-    reg golden_0 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_0) @[main.scala 33:23]
-    reg golden_1 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_1) @[main.scala 33:23]
-    reg golden_2 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_2) @[main.scala 33:23]
-    reg golden_3 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_3) @[main.scala 33:23]
-    reg golden_4 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_4) @[main.scala 33:23]
-    reg golden_5 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_5) @[main.scala 33:23]
-    reg golden_6 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_6) @[main.scala 33:23]
-    reg golden_7 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_7) @[main.scala 33:23]
-    reg golden_8 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_8) @[main.scala 33:23]
-    reg golden_9 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_9) @[main.scala 33:23]
-    reg golden_10 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_10) @[main.scala 33:23]
-    reg golden_11 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_11) @[main.scala 33:23]
-    reg golden_12 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_12) @[main.scala 33:23]
-    reg golden_13 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_13) @[main.scala 33:23]
-    reg golden_14 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_14) @[main.scala 33:23]
-    reg golden_15 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_15) @[main.scala 33:23]
-    reg golden_16 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_16) @[main.scala 33:23]
-    reg golden_17 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_17) @[main.scala 33:23]
-    reg golden_18 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_18) @[main.scala 33:23]
-    reg golden_19 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_19) @[main.scala 33:23]
-    reg golden_20 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_20) @[main.scala 33:23]
-    reg golden_21 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_21) @[main.scala 33:23]
-    reg golden_22 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_22) @[main.scala 33:23]
-    reg golden_23 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_23) @[main.scala 33:23]
-    reg golden_24 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_24) @[main.scala 33:23]
-    reg golden_25 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_25) @[main.scala 33:23]
-    reg golden_26 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_26) @[main.scala 33:23]
-    reg golden_27 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_27) @[main.scala 33:23]
-    reg golden_28 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_28) @[main.scala 33:23]
-    reg golden_29 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_29) @[main.scala 33:23]
-    reg golden_30 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_30) @[main.scala 33:23]
-    reg golden_31 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_31) @[main.scala 33:23]
-    reg golden_32 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_32) @[main.scala 33:23]
-    reg golden_33 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_33) @[main.scala 33:23]
-    reg golden_34 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_34) @[main.scala 33:23]
-    reg golden_35 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_35) @[main.scala 33:23]
-    reg golden_36 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_36) @[main.scala 33:23]
-    reg golden_37 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_37) @[main.scala 33:23]
-    reg golden_38 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_38) @[main.scala 33:23]
-    reg golden_39 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_39) @[main.scala 33:23]
-    reg golden_40 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_40) @[main.scala 33:23]
-    reg golden_41 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_41) @[main.scala 33:23]
-    reg golden_42 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_42) @[main.scala 33:23]
-    reg golden_43 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_43) @[main.scala 33:23]
-    reg golden_44 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_44) @[main.scala 33:23]
-    reg golden_45 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_45) @[main.scala 33:23]
-    reg golden_46 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_46) @[main.scala 33:23]
-    reg golden_47 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_47) @[main.scala 33:23]
-    reg golden_48 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_48) @[main.scala 33:23]
-    reg golden_49 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_49) @[main.scala 33:23]
-    reg golden_50 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_50) @[main.scala 33:23]
-    reg golden_51 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_51) @[main.scala 33:23]
-    reg golden_52 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_52) @[main.scala 33:23]
-    reg golden_53 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_53) @[main.scala 33:23]
-    reg golden_54 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_54) @[main.scala 33:23]
-    reg golden_55 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_55) @[main.scala 33:23]
-    reg golden_56 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_56) @[main.scala 33:23]
-    reg golden_57 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_57) @[main.scala 33:23]
-    reg golden_58 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_58) @[main.scala 33:23]
-    reg golden_59 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_59) @[main.scala 33:23]
-    reg golden_60 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_60) @[main.scala 33:23]
-    reg golden_61 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_61) @[main.scala 33:23]
-    reg golden_62 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_62) @[main.scala 33:23]
-    reg golden_63 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_63) @[main.scala 33:23]
-    reg golden_64 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_64) @[main.scala 33:23]
-    reg golden_65 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_65) @[main.scala 33:23]
-    reg golden_66 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_66) @[main.scala 33:23]
-    reg golden_67 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_67) @[main.scala 33:23]
-    reg golden_68 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_68) @[main.scala 33:23]
-    reg golden_69 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_69) @[main.scala 33:23]
-    reg golden_70 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_70) @[main.scala 33:23]
-    reg golden_71 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_71) @[main.scala 33:23]
-    reg golden_72 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_72) @[main.scala 33:23]
-    reg golden_73 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_73) @[main.scala 33:23]
-    reg golden_74 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_74) @[main.scala 33:23]
-    reg golden_75 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_75) @[main.scala 33:23]
-    reg golden_76 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_76) @[main.scala 33:23]
-    reg golden_77 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_77) @[main.scala 33:23]
-    reg golden_78 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_78) @[main.scala 33:23]
-    reg golden_79 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_79) @[main.scala 33:23]
-    reg golden_80 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_80) @[main.scala 33:23]
-    reg golden_81 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_81) @[main.scala 33:23]
-    reg golden_82 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_82) @[main.scala 33:23]
-    reg golden_83 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_83) @[main.scala 33:23]
-    reg golden_84 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_84) @[main.scala 33:23]
-    reg golden_85 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_85) @[main.scala 33:23]
-    reg golden_86 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_86) @[main.scala 33:23]
-    reg golden_87 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_87) @[main.scala 33:23]
-    reg golden_88 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_88) @[main.scala 33:23]
-    reg golden_89 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_89) @[main.scala 33:23]
-    reg golden_90 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_90) @[main.scala 33:23]
-    reg golden_91 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_91) @[main.scala 33:23]
-    reg golden_92 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_92) @[main.scala 33:23]
-    reg golden_93 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_93) @[main.scala 33:23]
-    reg golden_94 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_94) @[main.scala 33:23]
-    reg golden_95 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_95) @[main.scala 33:23]
-    reg golden_96 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_96) @[main.scala 33:23]
-    reg golden_97 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_97) @[main.scala 33:23]
-    reg golden_98 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_98) @[main.scala 33:23]
-    reg golden_99 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_99) @[main.scala 33:23]
-    reg golden_100 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_100) @[main.scala 33:23]
-    reg golden_101 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_101) @[main.scala 33:23]
-    reg golden_102 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_102) @[main.scala 33:23]
-    reg golden_103 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_103) @[main.scala 33:23]
-    reg golden_104 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_104) @[main.scala 33:23]
-    reg golden_105 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_105) @[main.scala 33:23]
-    reg golden_106 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_106) @[main.scala 33:23]
-    reg golden_107 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_107) @[main.scala 33:23]
-    reg golden_108 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_108) @[main.scala 33:23]
-    reg golden_109 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_109) @[main.scala 33:23]
-    reg golden_110 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_110) @[main.scala 33:23]
-    reg golden_111 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_111) @[main.scala 33:23]
-    reg golden_112 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_112) @[main.scala 33:23]
-    reg golden_113 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_113) @[main.scala 33:23]
-    reg golden_114 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_114) @[main.scala 33:23]
-    reg golden_115 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_115) @[main.scala 33:23]
-    reg golden_116 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_116) @[main.scala 33:23]
-    reg golden_117 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_117) @[main.scala 33:23]
-    reg golden_118 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_118) @[main.scala 33:23]
-    reg golden_119 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_119) @[main.scala 33:23]
-    reg golden_120 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_120) @[main.scala 33:23]
-    reg golden_121 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_121) @[main.scala 33:23]
-    reg golden_122 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_122) @[main.scala 33:23]
-    reg golden_123 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_123) @[main.scala 33:23]
-    reg golden_124 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_124) @[main.scala 33:23]
-    reg golden_125 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_125) @[main.scala 33:23]
-    reg golden_126 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_126) @[main.scala 33:23]
-    reg golden_127 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_127) @[main.scala 33:23]
-    reg golden_128 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_128) @[main.scala 33:23]
-    reg golden_129 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_129) @[main.scala 33:23]
-    reg golden_130 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_130) @[main.scala 33:23]
-    reg golden_131 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_131) @[main.scala 33:23]
-    reg golden_132 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_132) @[main.scala 33:23]
-    reg golden_133 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_133) @[main.scala 33:23]
-    reg golden_134 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_134) @[main.scala 33:23]
-    reg golden_135 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_135) @[main.scala 33:23]
-    reg golden_136 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_136) @[main.scala 33:23]
-    reg golden_137 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_137) @[main.scala 33:23]
-    reg golden_138 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_138) @[main.scala 33:23]
-    reg golden_139 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_139) @[main.scala 33:23]
-    reg golden_140 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_140) @[main.scala 33:23]
-    reg golden_141 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_141) @[main.scala 33:23]
-    reg golden_142 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_142) @[main.scala 33:23]
-    reg golden_143 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_143) @[main.scala 33:23]
-    reg golden_144 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_144) @[main.scala 33:23]
-    reg golden_145 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_145) @[main.scala 33:23]
-    reg golden_146 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_146) @[main.scala 33:23]
-    reg golden_147 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_147) @[main.scala 33:23]
-    reg golden_148 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_148) @[main.scala 33:23]
-    reg golden_149 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_149) @[main.scala 33:23]
-    reg golden_150 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_150) @[main.scala 33:23]
-    reg golden_151 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_151) @[main.scala 33:23]
-    reg golden_152 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_152) @[main.scala 33:23]
-    reg golden_153 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_153) @[main.scala 33:23]
-    reg golden_154 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_154) @[main.scala 33:23]
-    reg golden_155 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_155) @[main.scala 33:23]
-    reg golden_156 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_156) @[main.scala 33:23]
-    reg golden_157 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_157) @[main.scala 33:23]
-    reg golden_158 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_158) @[main.scala 33:23]
-    reg golden_159 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_159) @[main.scala 33:23]
-    reg golden_160 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_160) @[main.scala 33:23]
-    reg golden_161 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_161) @[main.scala 33:23]
-    reg golden_162 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_162) @[main.scala 33:23]
-    reg golden_163 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_163) @[main.scala 33:23]
-    reg golden_164 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_164) @[main.scala 33:23]
-    reg golden_165 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_165) @[main.scala 33:23]
-    reg golden_166 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_166) @[main.scala 33:23]
-    reg golden_167 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_167) @[main.scala 33:23]
-    reg golden_168 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_168) @[main.scala 33:23]
-    reg golden_169 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_169) @[main.scala 33:23]
-    reg golden_170 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_170) @[main.scala 33:23]
-    reg golden_171 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_171) @[main.scala 33:23]
-    reg golden_172 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_172) @[main.scala 33:23]
-    reg golden_173 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_173) @[main.scala 33:23]
-    reg golden_174 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_174) @[main.scala 33:23]
-    reg golden_175 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_175) @[main.scala 33:23]
-    reg golden_176 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_176) @[main.scala 33:23]
-    reg golden_177 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_177) @[main.scala 33:23]
-    reg golden_178 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_178) @[main.scala 33:23]
-    reg golden_179 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_179) @[main.scala 33:23]
-    reg golden_180 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_180) @[main.scala 33:23]
-    reg golden_181 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_181) @[main.scala 33:23]
-    reg golden_182 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_182) @[main.scala 33:23]
-    reg golden_183 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_183) @[main.scala 33:23]
-    reg golden_184 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_184) @[main.scala 33:23]
-    reg golden_185 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_185) @[main.scala 33:23]
-    reg golden_186 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_186) @[main.scala 33:23]
-    reg golden_187 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_187) @[main.scala 33:23]
-    reg golden_188 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_188) @[main.scala 33:23]
-    reg golden_189 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_189) @[main.scala 33:23]
-    reg golden_190 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_190) @[main.scala 33:23]
-    reg golden_191 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_191) @[main.scala 33:23]
-    reg golden_192 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_192) @[main.scala 33:23]
-    reg golden_193 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_193) @[main.scala 33:23]
-    reg golden_194 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_194) @[main.scala 33:23]
-    reg golden_195 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_195) @[main.scala 33:23]
-    reg golden_196 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_196) @[main.scala 33:23]
-    reg golden_197 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_197) @[main.scala 33:23]
-    reg golden_198 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_198) @[main.scala 33:23]
-    reg golden_199 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_199) @[main.scala 33:23]
-    reg golden_200 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_200) @[main.scala 33:23]
-    reg golden_201 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_201) @[main.scala 33:23]
-    reg golden_202 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_202) @[main.scala 33:23]
-    reg golden_203 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_203) @[main.scala 33:23]
-    reg golden_204 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_204) @[main.scala 33:23]
-    reg golden_205 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_205) @[main.scala 33:23]
-    reg golden_206 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_206) @[main.scala 33:23]
-    reg golden_207 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_207) @[main.scala 33:23]
-    reg golden_208 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_208) @[main.scala 33:23]
-    reg golden_209 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_209) @[main.scala 33:23]
-    reg golden_210 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_210) @[main.scala 33:23]
-    reg golden_211 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_211) @[main.scala 33:23]
-    reg golden_212 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_212) @[main.scala 33:23]
-    reg golden_213 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_213) @[main.scala 33:23]
-    reg golden_214 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_214) @[main.scala 33:23]
-    reg golden_215 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_215) @[main.scala 33:23]
-    reg golden_216 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_216) @[main.scala 33:23]
-    reg golden_217 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_217) @[main.scala 33:23]
-    reg golden_218 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_218) @[main.scala 33:23]
-    reg golden_219 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_219) @[main.scala 33:23]
-    reg golden_220 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_220) @[main.scala 33:23]
-    reg golden_221 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_221) @[main.scala 33:23]
-    reg golden_222 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_222) @[main.scala 33:23]
-    reg golden_223 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_223) @[main.scala 33:23]
-    reg golden_224 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_224) @[main.scala 33:23]
-    reg golden_225 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_225) @[main.scala 33:23]
-    reg golden_226 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_226) @[main.scala 33:23]
-    reg golden_227 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_227) @[main.scala 33:23]
-    reg golden_228 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_228) @[main.scala 33:23]
-    reg golden_229 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_229) @[main.scala 33:23]
-    reg golden_230 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_230) @[main.scala 33:23]
-    reg golden_231 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_231) @[main.scala 33:23]
-    reg golden_232 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_232) @[main.scala 33:23]
-    reg golden_233 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_233) @[main.scala 33:23]
-    reg golden_234 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_234) @[main.scala 33:23]
-    reg golden_235 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_235) @[main.scala 33:23]
-    reg golden_236 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_236) @[main.scala 33:23]
-    reg golden_237 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_237) @[main.scala 33:23]
-    reg golden_238 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_238) @[main.scala 33:23]
-    reg golden_239 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_239) @[main.scala 33:23]
-    reg golden_240 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_240) @[main.scala 33:23]
-    reg golden_241 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_241) @[main.scala 33:23]
-    reg golden_242 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_242) @[main.scala 33:23]
-    reg golden_243 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_243) @[main.scala 33:23]
-    reg golden_244 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_244) @[main.scala 33:23]
-    reg golden_245 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_245) @[main.scala 33:23]
-    reg golden_246 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_246) @[main.scala 33:23]
-    reg golden_247 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_247) @[main.scala 33:23]
-    reg golden_248 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_248) @[main.scala 33:23]
-    reg golden_249 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_249) @[main.scala 33:23]
-    reg golden_250 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_250) @[main.scala 33:23]
-    reg golden_251 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_251) @[main.scala 33:23]
-    reg golden_252 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_252) @[main.scala 33:23]
-    reg golden_253 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_253) @[main.scala 33:23]
-    reg golden_254 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_254) @[main.scala 33:23]
-    reg golden_255 : UInt<6>, clock with :
-      reset => (UInt<1>(0h0), golden_255) @[main.scala 33:23]
-    reg pass : UInt<1>, clock with :
-      reset => (UInt<1>(0h0), pass) @[main.scala 66:21]
+    reg i : UInt<8>, clock @[main.scala 32:18]
+    reg golden_0 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_1 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_2 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_3 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_4 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_5 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_6 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_7 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_8 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_9 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_10 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_11 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_12 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_13 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_14 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_15 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_16 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_17 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_18 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_19 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_20 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_21 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_22 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_23 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_24 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_25 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_26 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_27 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_28 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_29 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_30 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_31 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_32 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_33 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_34 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_35 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_36 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_37 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_38 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_39 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_40 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_41 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_42 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_43 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_44 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_45 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_46 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_47 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_48 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_49 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_50 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_51 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_52 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_53 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_54 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_55 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_56 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_57 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_58 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_59 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_60 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_61 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_62 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_63 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_64 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_65 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_66 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_67 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_68 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_69 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_70 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_71 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_72 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_73 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_74 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_75 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_76 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_77 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_78 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_79 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_80 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_81 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_82 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_83 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_84 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_85 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_86 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_87 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_88 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_89 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_90 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_91 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_92 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_93 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_94 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_95 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_96 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_97 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_98 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_99 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_100 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_101 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_102 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_103 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_104 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_105 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_106 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_107 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_108 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_109 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_110 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_111 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_112 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_113 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_114 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_115 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_116 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_117 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_118 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_119 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_120 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_121 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_122 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_123 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_124 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_125 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_126 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_127 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_128 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_129 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_130 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_131 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_132 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_133 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_134 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_135 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_136 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_137 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_138 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_139 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_140 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_141 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_142 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_143 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_144 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_145 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_146 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_147 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_148 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_149 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_150 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_151 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_152 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_153 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_154 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_155 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_156 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_157 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_158 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_159 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_160 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_161 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_162 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_163 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_164 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_165 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_166 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_167 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_168 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_169 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_170 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_171 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_172 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_173 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_174 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_175 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_176 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_177 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_178 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_179 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_180 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_181 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_182 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_183 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_184 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_185 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_186 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_187 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_188 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_189 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_190 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_191 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_192 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_193 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_194 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_195 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_196 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_197 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_198 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_199 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_200 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_201 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_202 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_203 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_204 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_205 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_206 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_207 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_208 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_209 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_210 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_211 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_212 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_213 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_214 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_215 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_216 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_217 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_218 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_219 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_220 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_221 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_222 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_223 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_224 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_225 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_226 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_227 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_228 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_229 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_230 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_231 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_232 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_233 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_234 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_235 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_236 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_237 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_238 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_239 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_240 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_241 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_242 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_243 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_244 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_245 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_246 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_247 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_248 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_249 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_250 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_251 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_252 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_253 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_254 : UInt<6>, clock @[main.scala 33:23]
+    reg golden_255 : UInt<6>, clock @[main.scala 33:23]
+    reg pass : UInt<1>, clock @[main.scala 66:21]
     node _T = eq(i, UInt<8>(0hff)) @[main.scala 67:11]
     node _T_1 = eq(pass, UInt<1>(0h1)) @[main.scala 68:15]
     node _T_2 = bits(reset, 0, 0) @[main.scala 69:13]
@@ -1078,266 +819,266 @@ circuit top :
     node _WIRE_253 = pad(UInt<2>(0h2), 6) @[main.scala 33:31 main.scala 33:31]
     node _WIRE_254 = pad(UInt<3>(0h4), 6) @[main.scala 33:31 main.scala 33:31]
     node _WIRE_255 = pad(UInt<4>(0h8), 6) @[main.scala 33:31 main.scala 33:31]
-    iLFSR.clock <= clock
-    iLFSR.reset <= reset
-    i <= mux(reset, UInt<8>(0h0), _T_10) @[main.scala 32:18 main.scala 32:18 main.scala 76:5]
-    golden_0 <= mux(reset, _WIRE_0, golden_0) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_1 <= mux(reset, _WIRE_1, golden_1) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_2 <= mux(reset, _WIRE_2, golden_2) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_3 <= mux(reset, _WIRE_3, golden_3) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_4 <= mux(reset, _WIRE_4, golden_4) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_5 <= mux(reset, _WIRE_5, golden_5) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_6 <= mux(reset, _WIRE_6, golden_6) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_7 <= mux(reset, _WIRE_7, golden_7) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_8 <= mux(reset, _WIRE_8, golden_8) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_9 <= mux(reset, _WIRE_9, golden_9) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_10 <= mux(reset, _WIRE_10, golden_10) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_11 <= mux(reset, _WIRE_11, golden_11) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_12 <= mux(reset, _WIRE_12, golden_12) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_13 <= mux(reset, _WIRE_13, golden_13) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_14 <= mux(reset, _WIRE_14, golden_14) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_15 <= mux(reset, _WIRE_15, golden_15) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_16 <= mux(reset, _WIRE_16, golden_16) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_17 <= mux(reset, _WIRE_17, golden_17) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_18 <= mux(reset, _WIRE_18, golden_18) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_19 <= mux(reset, _WIRE_19, golden_19) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_20 <= mux(reset, _WIRE_20, golden_20) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_21 <= mux(reset, _WIRE_21, golden_21) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_22 <= mux(reset, _WIRE_22, golden_22) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_23 <= mux(reset, _WIRE_23, golden_23) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_24 <= mux(reset, _WIRE_24, golden_24) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_25 <= mux(reset, _WIRE_25, golden_25) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_26 <= mux(reset, _WIRE_26, golden_26) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_27 <= mux(reset, _WIRE_27, golden_27) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_28 <= mux(reset, _WIRE_28, golden_28) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_29 <= mux(reset, _WIRE_29, golden_29) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_30 <= mux(reset, _WIRE_30, golden_30) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_31 <= mux(reset, _WIRE_31, golden_31) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_32 <= mux(reset, _WIRE_32, golden_32) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_33 <= mux(reset, _WIRE_33, golden_33) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_34 <= mux(reset, _WIRE_34, golden_34) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_35 <= mux(reset, _WIRE_35, golden_35) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_36 <= mux(reset, _WIRE_36, golden_36) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_37 <= mux(reset, _WIRE_37, golden_37) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_38 <= mux(reset, _WIRE_38, golden_38) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_39 <= mux(reset, _WIRE_39, golden_39) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_40 <= mux(reset, _WIRE_40, golden_40) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_41 <= mux(reset, _WIRE_41, golden_41) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_42 <= mux(reset, _WIRE_42, golden_42) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_43 <= mux(reset, _WIRE_43, golden_43) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_44 <= mux(reset, _WIRE_44, golden_44) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_45 <= mux(reset, _WIRE_45, golden_45) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_46 <= mux(reset, _WIRE_46, golden_46) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_47 <= mux(reset, _WIRE_47, golden_47) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_48 <= mux(reset, _WIRE_48, golden_48) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_49 <= mux(reset, _WIRE_49, golden_49) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_50 <= mux(reset, _WIRE_50, golden_50) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_51 <= mux(reset, _WIRE_51, golden_51) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_52 <= mux(reset, _WIRE_52, golden_52) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_53 <= mux(reset, _WIRE_53, golden_53) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_54 <= mux(reset, _WIRE_54, golden_54) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_55 <= mux(reset, _WIRE_55, golden_55) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_56 <= mux(reset, _WIRE_56, golden_56) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_57 <= mux(reset, _WIRE_57, golden_57) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_58 <= mux(reset, _WIRE_58, golden_58) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_59 <= mux(reset, _WIRE_59, golden_59) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_60 <= mux(reset, _WIRE_60, golden_60) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_61 <= mux(reset, _WIRE_61, golden_61) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_62 <= mux(reset, _WIRE_62, golden_62) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_63 <= mux(reset, _WIRE_63, golden_63) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_64 <= mux(reset, _WIRE_64, golden_64) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_65 <= mux(reset, _WIRE_65, golden_65) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_66 <= mux(reset, _WIRE_66, golden_66) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_67 <= mux(reset, _WIRE_67, golden_67) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_68 <= mux(reset, _WIRE_68, golden_68) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_69 <= mux(reset, _WIRE_69, golden_69) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_70 <= mux(reset, _WIRE_70, golden_70) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_71 <= mux(reset, _WIRE_71, golden_71) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_72 <= mux(reset, _WIRE_72, golden_72) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_73 <= mux(reset, _WIRE_73, golden_73) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_74 <= mux(reset, _WIRE_74, golden_74) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_75 <= mux(reset, _WIRE_75, golden_75) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_76 <= mux(reset, _WIRE_76, golden_76) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_77 <= mux(reset, _WIRE_77, golden_77) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_78 <= mux(reset, _WIRE_78, golden_78) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_79 <= mux(reset, _WIRE_79, golden_79) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_80 <= mux(reset, _WIRE_80, golden_80) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_81 <= mux(reset, _WIRE_81, golden_81) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_82 <= mux(reset, _WIRE_82, golden_82) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_83 <= mux(reset, _WIRE_83, golden_83) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_84 <= mux(reset, _WIRE_84, golden_84) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_85 <= mux(reset, _WIRE_85, golden_85) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_86 <= mux(reset, _WIRE_86, golden_86) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_87 <= mux(reset, _WIRE_87, golden_87) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_88 <= mux(reset, _WIRE_88, golden_88) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_89 <= mux(reset, _WIRE_89, golden_89) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_90 <= mux(reset, _WIRE_90, golden_90) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_91 <= mux(reset, _WIRE_91, golden_91) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_92 <= mux(reset, _WIRE_92, golden_92) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_93 <= mux(reset, _WIRE_93, golden_93) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_94 <= mux(reset, _WIRE_94, golden_94) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_95 <= mux(reset, _WIRE_95, golden_95) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_96 <= mux(reset, _WIRE_96, golden_96) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_97 <= mux(reset, _WIRE_97, golden_97) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_98 <= mux(reset, _WIRE_98, golden_98) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_99 <= mux(reset, _WIRE_99, golden_99) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_100 <= mux(reset, _WIRE_100, golden_100) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_101 <= mux(reset, _WIRE_101, golden_101) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_102 <= mux(reset, _WIRE_102, golden_102) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_103 <= mux(reset, _WIRE_103, golden_103) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_104 <= mux(reset, _WIRE_104, golden_104) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_105 <= mux(reset, _WIRE_105, golden_105) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_106 <= mux(reset, _WIRE_106, golden_106) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_107 <= mux(reset, _WIRE_107, golden_107) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_108 <= mux(reset, _WIRE_108, golden_108) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_109 <= mux(reset, _WIRE_109, golden_109) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_110 <= mux(reset, _WIRE_110, golden_110) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_111 <= mux(reset, _WIRE_111, golden_111) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_112 <= mux(reset, _WIRE_112, golden_112) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_113 <= mux(reset, _WIRE_113, golden_113) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_114 <= mux(reset, _WIRE_114, golden_114) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_115 <= mux(reset, _WIRE_115, golden_115) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_116 <= mux(reset, _WIRE_116, golden_116) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_117 <= mux(reset, _WIRE_117, golden_117) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_118 <= mux(reset, _WIRE_118, golden_118) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_119 <= mux(reset, _WIRE_119, golden_119) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_120 <= mux(reset, _WIRE_120, golden_120) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_121 <= mux(reset, _WIRE_121, golden_121) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_122 <= mux(reset, _WIRE_122, golden_122) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_123 <= mux(reset, _WIRE_123, golden_123) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_124 <= mux(reset, _WIRE_124, golden_124) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_125 <= mux(reset, _WIRE_125, golden_125) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_126 <= mux(reset, _WIRE_126, golden_126) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_127 <= mux(reset, _WIRE_127, golden_127) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_128 <= mux(reset, _WIRE_128, golden_128) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_129 <= mux(reset, _WIRE_129, golden_129) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_130 <= mux(reset, _WIRE_130, golden_130) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_131 <= mux(reset, _WIRE_131, golden_131) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_132 <= mux(reset, _WIRE_132, golden_132) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_133 <= mux(reset, _WIRE_133, golden_133) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_134 <= mux(reset, _WIRE_134, golden_134) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_135 <= mux(reset, _WIRE_135, golden_135) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_136 <= mux(reset, _WIRE_136, golden_136) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_137 <= mux(reset, _WIRE_137, golden_137) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_138 <= mux(reset, _WIRE_138, golden_138) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_139 <= mux(reset, _WIRE_139, golden_139) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_140 <= mux(reset, _WIRE_140, golden_140) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_141 <= mux(reset, _WIRE_141, golden_141) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_142 <= mux(reset, _WIRE_142, golden_142) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_143 <= mux(reset, _WIRE_143, golden_143) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_144 <= mux(reset, _WIRE_144, golden_144) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_145 <= mux(reset, _WIRE_145, golden_145) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_146 <= mux(reset, _WIRE_146, golden_146) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_147 <= mux(reset, _WIRE_147, golden_147) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_148 <= mux(reset, _WIRE_148, golden_148) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_149 <= mux(reset, _WIRE_149, golden_149) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_150 <= mux(reset, _WIRE_150, golden_150) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_151 <= mux(reset, _WIRE_151, golden_151) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_152 <= mux(reset, _WIRE_152, golden_152) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_153 <= mux(reset, _WIRE_153, golden_153) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_154 <= mux(reset, _WIRE_154, golden_154) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_155 <= mux(reset, _WIRE_155, golden_155) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_156 <= mux(reset, _WIRE_156, golden_156) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_157 <= mux(reset, _WIRE_157, golden_157) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_158 <= mux(reset, _WIRE_158, golden_158) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_159 <= mux(reset, _WIRE_159, golden_159) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_160 <= mux(reset, _WIRE_160, golden_160) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_161 <= mux(reset, _WIRE_161, golden_161) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_162 <= mux(reset, _WIRE_162, golden_162) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_163 <= mux(reset, _WIRE_163, golden_163) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_164 <= mux(reset, _WIRE_164, golden_164) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_165 <= mux(reset, _WIRE_165, golden_165) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_166 <= mux(reset, _WIRE_166, golden_166) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_167 <= mux(reset, _WIRE_167, golden_167) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_168 <= mux(reset, _WIRE_168, golden_168) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_169 <= mux(reset, _WIRE_169, golden_169) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_170 <= mux(reset, _WIRE_170, golden_170) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_171 <= mux(reset, _WIRE_171, golden_171) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_172 <= mux(reset, _WIRE_172, golden_172) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_173 <= mux(reset, _WIRE_173, golden_173) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_174 <= mux(reset, _WIRE_174, golden_174) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_175 <= mux(reset, _WIRE_175, golden_175) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_176 <= mux(reset, _WIRE_176, golden_176) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_177 <= mux(reset, _WIRE_177, golden_177) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_178 <= mux(reset, _WIRE_178, golden_178) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_179 <= mux(reset, _WIRE_179, golden_179) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_180 <= mux(reset, _WIRE_180, golden_180) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_181 <= mux(reset, _WIRE_181, golden_181) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_182 <= mux(reset, _WIRE_182, golden_182) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_183 <= mux(reset, _WIRE_183, golden_183) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_184 <= mux(reset, _WIRE_184, golden_184) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_185 <= mux(reset, _WIRE_185, golden_185) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_186 <= mux(reset, _WIRE_186, golden_186) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_187 <= mux(reset, _WIRE_187, golden_187) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_188 <= mux(reset, _WIRE_188, golden_188) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_189 <= mux(reset, _WIRE_189, golden_189) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_190 <= mux(reset, _WIRE_190, golden_190) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_191 <= mux(reset, _WIRE_191, golden_191) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_192 <= mux(reset, _WIRE_192, golden_192) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_193 <= mux(reset, _WIRE_193, golden_193) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_194 <= mux(reset, _WIRE_194, golden_194) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_195 <= mux(reset, _WIRE_195, golden_195) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_196 <= mux(reset, _WIRE_196, golden_196) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_197 <= mux(reset, _WIRE_197, golden_197) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_198 <= mux(reset, _WIRE_198, golden_198) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_199 <= mux(reset, _WIRE_199, golden_199) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_200 <= mux(reset, _WIRE_200, golden_200) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_201 <= mux(reset, _WIRE_201, golden_201) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_202 <= mux(reset, _WIRE_202, golden_202) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_203 <= mux(reset, _WIRE_203, golden_203) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_204 <= mux(reset, _WIRE_204, golden_204) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_205 <= mux(reset, _WIRE_205, golden_205) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_206 <= mux(reset, _WIRE_206, golden_206) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_207 <= mux(reset, _WIRE_207, golden_207) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_208 <= mux(reset, _WIRE_208, golden_208) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_209 <= mux(reset, _WIRE_209, golden_209) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_210 <= mux(reset, _WIRE_210, golden_210) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_211 <= mux(reset, _WIRE_211, golden_211) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_212 <= mux(reset, _WIRE_212, golden_212) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_213 <= mux(reset, _WIRE_213, golden_213) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_214 <= mux(reset, _WIRE_214, golden_214) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_215 <= mux(reset, _WIRE_215, golden_215) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_216 <= mux(reset, _WIRE_216, golden_216) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_217 <= mux(reset, _WIRE_217, golden_217) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_218 <= mux(reset, _WIRE_218, golden_218) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_219 <= mux(reset, _WIRE_219, golden_219) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_220 <= mux(reset, _WIRE_220, golden_220) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_221 <= mux(reset, _WIRE_221, golden_221) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_222 <= mux(reset, _WIRE_222, golden_222) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_223 <= mux(reset, _WIRE_223, golden_223) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_224 <= mux(reset, _WIRE_224, golden_224) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_225 <= mux(reset, _WIRE_225, golden_225) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_226 <= mux(reset, _WIRE_226, golden_226) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_227 <= mux(reset, _WIRE_227, golden_227) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_228 <= mux(reset, _WIRE_228, golden_228) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_229 <= mux(reset, _WIRE_229, golden_229) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_230 <= mux(reset, _WIRE_230, golden_230) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_231 <= mux(reset, _WIRE_231, golden_231) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_232 <= mux(reset, _WIRE_232, golden_232) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_233 <= mux(reset, _WIRE_233, golden_233) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_234 <= mux(reset, _WIRE_234, golden_234) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_235 <= mux(reset, _WIRE_235, golden_235) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_236 <= mux(reset, _WIRE_236, golden_236) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_237 <= mux(reset, _WIRE_237, golden_237) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_238 <= mux(reset, _WIRE_238, golden_238) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_239 <= mux(reset, _WIRE_239, golden_239) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_240 <= mux(reset, _WIRE_240, golden_240) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_241 <= mux(reset, _WIRE_241, golden_241) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_242 <= mux(reset, _WIRE_242, golden_242) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_243 <= mux(reset, _WIRE_243, golden_243) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_244 <= mux(reset, _WIRE_244, golden_244) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_245 <= mux(reset, _WIRE_245, golden_245) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_246 <= mux(reset, _WIRE_246, golden_246) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_247 <= mux(reset, _WIRE_247, golden_247) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_248 <= mux(reset, _WIRE_248, golden_248) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_249 <= mux(reset, _WIRE_249, golden_249) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_250 <= mux(reset, _WIRE_250, golden_250) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_251 <= mux(reset, _WIRE_251, golden_251) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_252 <= mux(reset, _WIRE_252, golden_252) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_253 <= mux(reset, _WIRE_253, golden_253) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_254 <= mux(reset, _WIRE_254, golden_254) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    golden_255 <= mux(reset, _WIRE_255, golden_255) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
-    pass <= mux(reset, UInt<1>(0h1), _T_12) @[main.scala 66:21 main.scala 66:21 main.scala 77:8]
+    connect iLFSR.clock, clock
+    connect iLFSR.reset, reset
+    connect i, mux(reset, UInt<8>(0h0), _T_10) @[main.scala 32:18 main.scala 32:18 main.scala 76:5]
+    connect golden_0, mux(reset, _WIRE_0, golden_0) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_1, mux(reset, _WIRE_1, golden_1) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_2, mux(reset, _WIRE_2, golden_2) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_3, mux(reset, _WIRE_3, golden_3) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_4, mux(reset, _WIRE_4, golden_4) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_5, mux(reset, _WIRE_5, golden_5) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_6, mux(reset, _WIRE_6, golden_6) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_7, mux(reset, _WIRE_7, golden_7) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_8, mux(reset, _WIRE_8, golden_8) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_9, mux(reset, _WIRE_9, golden_9) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_10, mux(reset, _WIRE_10, golden_10) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_11, mux(reset, _WIRE_11, golden_11) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_12, mux(reset, _WIRE_12, golden_12) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_13, mux(reset, _WIRE_13, golden_13) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_14, mux(reset, _WIRE_14, golden_14) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_15, mux(reset, _WIRE_15, golden_15) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_16, mux(reset, _WIRE_16, golden_16) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_17, mux(reset, _WIRE_17, golden_17) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_18, mux(reset, _WIRE_18, golden_18) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_19, mux(reset, _WIRE_19, golden_19) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_20, mux(reset, _WIRE_20, golden_20) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_21, mux(reset, _WIRE_21, golden_21) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_22, mux(reset, _WIRE_22, golden_22) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_23, mux(reset, _WIRE_23, golden_23) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_24, mux(reset, _WIRE_24, golden_24) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_25, mux(reset, _WIRE_25, golden_25) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_26, mux(reset, _WIRE_26, golden_26) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_27, mux(reset, _WIRE_27, golden_27) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_28, mux(reset, _WIRE_28, golden_28) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_29, mux(reset, _WIRE_29, golden_29) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_30, mux(reset, _WIRE_30, golden_30) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_31, mux(reset, _WIRE_31, golden_31) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_32, mux(reset, _WIRE_32, golden_32) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_33, mux(reset, _WIRE_33, golden_33) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_34, mux(reset, _WIRE_34, golden_34) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_35, mux(reset, _WIRE_35, golden_35) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_36, mux(reset, _WIRE_36, golden_36) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_37, mux(reset, _WIRE_37, golden_37) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_38, mux(reset, _WIRE_38, golden_38) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_39, mux(reset, _WIRE_39, golden_39) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_40, mux(reset, _WIRE_40, golden_40) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_41, mux(reset, _WIRE_41, golden_41) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_42, mux(reset, _WIRE_42, golden_42) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_43, mux(reset, _WIRE_43, golden_43) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_44, mux(reset, _WIRE_44, golden_44) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_45, mux(reset, _WIRE_45, golden_45) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_46, mux(reset, _WIRE_46, golden_46) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_47, mux(reset, _WIRE_47, golden_47) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_48, mux(reset, _WIRE_48, golden_48) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_49, mux(reset, _WIRE_49, golden_49) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_50, mux(reset, _WIRE_50, golden_50) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_51, mux(reset, _WIRE_51, golden_51) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_52, mux(reset, _WIRE_52, golden_52) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_53, mux(reset, _WIRE_53, golden_53) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_54, mux(reset, _WIRE_54, golden_54) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_55, mux(reset, _WIRE_55, golden_55) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_56, mux(reset, _WIRE_56, golden_56) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_57, mux(reset, _WIRE_57, golden_57) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_58, mux(reset, _WIRE_58, golden_58) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_59, mux(reset, _WIRE_59, golden_59) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_60, mux(reset, _WIRE_60, golden_60) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_61, mux(reset, _WIRE_61, golden_61) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_62, mux(reset, _WIRE_62, golden_62) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_63, mux(reset, _WIRE_63, golden_63) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_64, mux(reset, _WIRE_64, golden_64) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_65, mux(reset, _WIRE_65, golden_65) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_66, mux(reset, _WIRE_66, golden_66) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_67, mux(reset, _WIRE_67, golden_67) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_68, mux(reset, _WIRE_68, golden_68) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_69, mux(reset, _WIRE_69, golden_69) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_70, mux(reset, _WIRE_70, golden_70) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_71, mux(reset, _WIRE_71, golden_71) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_72, mux(reset, _WIRE_72, golden_72) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_73, mux(reset, _WIRE_73, golden_73) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_74, mux(reset, _WIRE_74, golden_74) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_75, mux(reset, _WIRE_75, golden_75) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_76, mux(reset, _WIRE_76, golden_76) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_77, mux(reset, _WIRE_77, golden_77) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_78, mux(reset, _WIRE_78, golden_78) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_79, mux(reset, _WIRE_79, golden_79) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_80, mux(reset, _WIRE_80, golden_80) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_81, mux(reset, _WIRE_81, golden_81) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_82, mux(reset, _WIRE_82, golden_82) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_83, mux(reset, _WIRE_83, golden_83) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_84, mux(reset, _WIRE_84, golden_84) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_85, mux(reset, _WIRE_85, golden_85) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_86, mux(reset, _WIRE_86, golden_86) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_87, mux(reset, _WIRE_87, golden_87) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_88, mux(reset, _WIRE_88, golden_88) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_89, mux(reset, _WIRE_89, golden_89) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_90, mux(reset, _WIRE_90, golden_90) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_91, mux(reset, _WIRE_91, golden_91) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_92, mux(reset, _WIRE_92, golden_92) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_93, mux(reset, _WIRE_93, golden_93) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_94, mux(reset, _WIRE_94, golden_94) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_95, mux(reset, _WIRE_95, golden_95) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_96, mux(reset, _WIRE_96, golden_96) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_97, mux(reset, _WIRE_97, golden_97) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_98, mux(reset, _WIRE_98, golden_98) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_99, mux(reset, _WIRE_99, golden_99) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_100, mux(reset, _WIRE_100, golden_100) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_101, mux(reset, _WIRE_101, golden_101) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_102, mux(reset, _WIRE_102, golden_102) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_103, mux(reset, _WIRE_103, golden_103) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_104, mux(reset, _WIRE_104, golden_104) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_105, mux(reset, _WIRE_105, golden_105) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_106, mux(reset, _WIRE_106, golden_106) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_107, mux(reset, _WIRE_107, golden_107) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_108, mux(reset, _WIRE_108, golden_108) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_109, mux(reset, _WIRE_109, golden_109) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_110, mux(reset, _WIRE_110, golden_110) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_111, mux(reset, _WIRE_111, golden_111) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_112, mux(reset, _WIRE_112, golden_112) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_113, mux(reset, _WIRE_113, golden_113) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_114, mux(reset, _WIRE_114, golden_114) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_115, mux(reset, _WIRE_115, golden_115) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_116, mux(reset, _WIRE_116, golden_116) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_117, mux(reset, _WIRE_117, golden_117) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_118, mux(reset, _WIRE_118, golden_118) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_119, mux(reset, _WIRE_119, golden_119) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_120, mux(reset, _WIRE_120, golden_120) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_121, mux(reset, _WIRE_121, golden_121) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_122, mux(reset, _WIRE_122, golden_122) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_123, mux(reset, _WIRE_123, golden_123) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_124, mux(reset, _WIRE_124, golden_124) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_125, mux(reset, _WIRE_125, golden_125) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_126, mux(reset, _WIRE_126, golden_126) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_127, mux(reset, _WIRE_127, golden_127) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_128, mux(reset, _WIRE_128, golden_128) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_129, mux(reset, _WIRE_129, golden_129) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_130, mux(reset, _WIRE_130, golden_130) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_131, mux(reset, _WIRE_131, golden_131) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_132, mux(reset, _WIRE_132, golden_132) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_133, mux(reset, _WIRE_133, golden_133) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_134, mux(reset, _WIRE_134, golden_134) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_135, mux(reset, _WIRE_135, golden_135) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_136, mux(reset, _WIRE_136, golden_136) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_137, mux(reset, _WIRE_137, golden_137) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_138, mux(reset, _WIRE_138, golden_138) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_139, mux(reset, _WIRE_139, golden_139) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_140, mux(reset, _WIRE_140, golden_140) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_141, mux(reset, _WIRE_141, golden_141) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_142, mux(reset, _WIRE_142, golden_142) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_143, mux(reset, _WIRE_143, golden_143) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_144, mux(reset, _WIRE_144, golden_144) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_145, mux(reset, _WIRE_145, golden_145) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_146, mux(reset, _WIRE_146, golden_146) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_147, mux(reset, _WIRE_147, golden_147) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_148, mux(reset, _WIRE_148, golden_148) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_149, mux(reset, _WIRE_149, golden_149) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_150, mux(reset, _WIRE_150, golden_150) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_151, mux(reset, _WIRE_151, golden_151) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_152, mux(reset, _WIRE_152, golden_152) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_153, mux(reset, _WIRE_153, golden_153) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_154, mux(reset, _WIRE_154, golden_154) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_155, mux(reset, _WIRE_155, golden_155) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_156, mux(reset, _WIRE_156, golden_156) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_157, mux(reset, _WIRE_157, golden_157) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_158, mux(reset, _WIRE_158, golden_158) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_159, mux(reset, _WIRE_159, golden_159) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_160, mux(reset, _WIRE_160, golden_160) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_161, mux(reset, _WIRE_161, golden_161) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_162, mux(reset, _WIRE_162, golden_162) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_163, mux(reset, _WIRE_163, golden_163) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_164, mux(reset, _WIRE_164, golden_164) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_165, mux(reset, _WIRE_165, golden_165) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_166, mux(reset, _WIRE_166, golden_166) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_167, mux(reset, _WIRE_167, golden_167) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_168, mux(reset, _WIRE_168, golden_168) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_169, mux(reset, _WIRE_169, golden_169) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_170, mux(reset, _WIRE_170, golden_170) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_171, mux(reset, _WIRE_171, golden_171) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_172, mux(reset, _WIRE_172, golden_172) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_173, mux(reset, _WIRE_173, golden_173) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_174, mux(reset, _WIRE_174, golden_174) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_175, mux(reset, _WIRE_175, golden_175) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_176, mux(reset, _WIRE_176, golden_176) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_177, mux(reset, _WIRE_177, golden_177) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_178, mux(reset, _WIRE_178, golden_178) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_179, mux(reset, _WIRE_179, golden_179) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_180, mux(reset, _WIRE_180, golden_180) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_181, mux(reset, _WIRE_181, golden_181) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_182, mux(reset, _WIRE_182, golden_182) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_183, mux(reset, _WIRE_183, golden_183) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_184, mux(reset, _WIRE_184, golden_184) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_185, mux(reset, _WIRE_185, golden_185) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_186, mux(reset, _WIRE_186, golden_186) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_187, mux(reset, _WIRE_187, golden_187) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_188, mux(reset, _WIRE_188, golden_188) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_189, mux(reset, _WIRE_189, golden_189) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_190, mux(reset, _WIRE_190, golden_190) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_191, mux(reset, _WIRE_191, golden_191) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_192, mux(reset, _WIRE_192, golden_192) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_193, mux(reset, _WIRE_193, golden_193) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_194, mux(reset, _WIRE_194, golden_194) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_195, mux(reset, _WIRE_195, golden_195) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_196, mux(reset, _WIRE_196, golden_196) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_197, mux(reset, _WIRE_197, golden_197) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_198, mux(reset, _WIRE_198, golden_198) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_199, mux(reset, _WIRE_199, golden_199) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_200, mux(reset, _WIRE_200, golden_200) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_201, mux(reset, _WIRE_201, golden_201) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_202, mux(reset, _WIRE_202, golden_202) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_203, mux(reset, _WIRE_203, golden_203) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_204, mux(reset, _WIRE_204, golden_204) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_205, mux(reset, _WIRE_205, golden_205) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_206, mux(reset, _WIRE_206, golden_206) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_207, mux(reset, _WIRE_207, golden_207) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_208, mux(reset, _WIRE_208, golden_208) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_209, mux(reset, _WIRE_209, golden_209) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_210, mux(reset, _WIRE_210, golden_210) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_211, mux(reset, _WIRE_211, golden_211) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_212, mux(reset, _WIRE_212, golden_212) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_213, mux(reset, _WIRE_213, golden_213) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_214, mux(reset, _WIRE_214, golden_214) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_215, mux(reset, _WIRE_215, golden_215) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_216, mux(reset, _WIRE_216, golden_216) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_217, mux(reset, _WIRE_217, golden_217) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_218, mux(reset, _WIRE_218, golden_218) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_219, mux(reset, _WIRE_219, golden_219) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_220, mux(reset, _WIRE_220, golden_220) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_221, mux(reset, _WIRE_221, golden_221) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_222, mux(reset, _WIRE_222, golden_222) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_223, mux(reset, _WIRE_223, golden_223) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_224, mux(reset, _WIRE_224, golden_224) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_225, mux(reset, _WIRE_225, golden_225) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_226, mux(reset, _WIRE_226, golden_226) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_227, mux(reset, _WIRE_227, golden_227) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_228, mux(reset, _WIRE_228, golden_228) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_229, mux(reset, _WIRE_229, golden_229) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_230, mux(reset, _WIRE_230, golden_230) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_231, mux(reset, _WIRE_231, golden_231) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_232, mux(reset, _WIRE_232, golden_232) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_233, mux(reset, _WIRE_233, golden_233) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_234, mux(reset, _WIRE_234, golden_234) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_235, mux(reset, _WIRE_235, golden_235) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_236, mux(reset, _WIRE_236, golden_236) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_237, mux(reset, _WIRE_237, golden_237) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_238, mux(reset, _WIRE_238, golden_238) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_239, mux(reset, _WIRE_239, golden_239) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_240, mux(reset, _WIRE_240, golden_240) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_241, mux(reset, _WIRE_241, golden_241) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_242, mux(reset, _WIRE_242, golden_242) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_243, mux(reset, _WIRE_243, golden_243) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_244, mux(reset, _WIRE_244, golden_244) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_245, mux(reset, _WIRE_245, golden_245) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_246, mux(reset, _WIRE_246, golden_246) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_247, mux(reset, _WIRE_247, golden_247) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_248, mux(reset, _WIRE_248, golden_248) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_249, mux(reset, _WIRE_249, golden_249) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_250, mux(reset, _WIRE_250, golden_250) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_251, mux(reset, _WIRE_251, golden_251) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_252, mux(reset, _WIRE_252, golden_252) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_253, mux(reset, _WIRE_253, golden_253) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_254, mux(reset, _WIRE_254, golden_254) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect golden_255, mux(reset, _WIRE_255, golden_255) @[main.scala 33:23 main.scala 33:23 main.scala 33:23]
+    connect pass, mux(reset, UInt<1>(0h1), _T_12) @[main.scala 66:21 main.scala 66:21 main.scala 77:8]
     printf(clock, and(and(and(and(UInt<1>(0h1), _T), _T_1), _T_3), UInt<1>(0h1)), "PASS\n") @[main.scala 69:13]
     printf(clock, and(and(and(and(UInt<1>(0h1), _T), _T_4), _T_6), UInt<1>(0h1)), "FAIL\n") @[main.scala 72:13]
     stop(clock, and(and(and(UInt<1>(0h1), _T), _T_8), UInt<1>(0h1)), 0) @[main.scala 74:9]
