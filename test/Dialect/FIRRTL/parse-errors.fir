@@ -1643,3 +1643,13 @@ circuit IsInvalid:
 
     ; expected-error @below {{'is invalid' statements were removed in FIRRTL 3.0.0}}
     a is invalid
+
+;// -----
+FIRRTL version 3.0.0
+circuit IsInvalid:
+  module IsInvalid:
+    input a: UInt<1>
+    output b: UInt<1>
+
+    ; expected-error @below {{'<=' connections were removed in FIRRTL 3.0.0}}
+    b <= a

@@ -4028,6 +4028,9 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
   if (parseToken(FIRToken::less_equal, "expected '<=' in statement"))
     return failure();
 
+  if (removedFeature({3, 0, 0}, "'<=' connections", loc))
+    return failure();
+
   Value rhs;
   if (parseExp(rhs, "unexpected token in statement") || parseOptionalInfo())
     return failure();
