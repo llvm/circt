@@ -4017,6 +4017,9 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
         parseOptionalInfo())
       return failure();
 
+    if (removedFeature({3, 0, 0}, "'is invalid' statements", loc))
+      return failure();
+
     locationProcessor.setLoc(loc);
     emitInvalidate(lhs);
     return success();

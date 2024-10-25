@@ -1634,3 +1634,12 @@ circuit RegWith:
     ; expected-error @below {{'reg with' registers were removed in FIRRTL 3.0.0}}
     reg r_0 : UInt<5>, clock with :
       reset => (UInt<1>(0h0), r_0)
+
+;// -----
+FIRRTL version 3.0.0
+circuit IsInvalid:
+  module IsInvalid:
+    output a: UInt<1>
+
+    ; expected-error @below {{'is invalid' statements were removed in FIRRTL 3.0.0}}
+    a is invalid
