@@ -25,9 +25,7 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
     // Parameters
     //===------------------------------------------------------------------===//
 
-    InterfaceMethod<"Get the parameters",
-    "ArrayAttr", "getParameters", (ins),
-    /*methodBody=*/[{ return $_op.getParameters(); }]>,
+    InterfaceMethod<"Get the parameters", "ArrayAttr", "getParameters">,
 
     //===------------------------------------------------------------------===//
     // Instantiation Convention
@@ -54,17 +52,10 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
     //===------------------------------------------------------------------===//
 
     InterfaceMethod<"Get the port directions attribute",
-    "mlir::DenseBoolArrayAttr", "getPortDirectionsAttr", (ins), [{}],
-    /*defaultImplementation=*/[{
-      return $_op->template
-        getAttrOfType<mlir::DenseBoolArrayAttr>(FModuleLike::getPortDirectionsAttrName());
-    }]>,
+    "mlir::DenseBoolArrayAttr", "getPortDirectionsAttr">,
 
     InterfaceMethod<"Get the port directions",
-    "ArrayRef<bool>", "getPortDirections", (ins), [{}],
-    /*defaultImplementation=*/[{
-      return $_op.getPortDirectionsAttr().getValue();
-    }]>,
+    "ArrayRef<bool>", "getPortDirections">,
 
     InterfaceMethod<"Get a port direction",
     "Direction", "getPortDirection", (ins "size_t":$portIndex), [{}],
@@ -77,17 +68,10 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
     //===------------------------------------------------------------------===//
 
     InterfaceMethod<"Get the port names attribute",
-    "ArrayAttr", "getPortNamesAttr", (ins), [{}],
-    /*defaultImplementation=*/[{
-      return $_op->template
-        getAttrOfType<ArrayAttr>(FModuleLike::getPortNamesAttrName());
-    }]>,
+    "ArrayAttr", "getPortNamesAttr">,
 
     InterfaceMethod<"Get the port names",
-    "ArrayRef<Attribute>", "getPortNames", (ins), [{}],
-    /*defaultImplementation=*/[{
-      return $_op.getPortNamesAttr().getValue();
-    }]>,
+    "ArrayRef<Attribute>", "getPortNames">,
 
     InterfaceMethod<"Get a port name",
     "StringAttr", "getPortNameAttr", (ins "size_t":$portIndex), [{}],
@@ -106,17 +90,13 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
     //===------------------------------------------------------------------===//
 
     InterfaceMethod<"Get the port types attribute",
-    "ArrayAttr", "getPortTypesAttr", (ins), [{}],
-    /*defaultImplementation=*/[{
-      return $_op->template
-        getAttrOfType<ArrayAttr>(FModuleLike::getPortTypesAttrName());
-    }]>,
+    "ArrayAttr", "getPortTypesAttr">,
 
     InterfaceMethod<"Get the port types",
-    "ArrayRef<Attribute>", "getPortTypes", (ins), [{}],
-    /*defaultImplementation=*/[{
-      return $_op.getPortTypesAttr().getValue();
-    }]>,
+    "ArrayRef<Attribute>", "getPortTypes">,
+
+    InterfaceMethod<"Set the types of all ports", "void",
+    "setPortTypesAttr", (ins "::mlir::ArrayAttr":$portTypes)>,
 
     InterfaceMethod<"Get a port type",
     "TypeAttr", "getPortTypeAttr", (ins "size_t":$portIndex), [{}],
@@ -127,8 +107,7 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
     InterfaceMethod<"Get a port type",
     "Type", "getPortType", (ins "size_t":$portIndex), [{}],
     /*defaultImplementation=*/[{
-      auto typeAttr = $_op.getPortTypeAttr(portIndex);
-      return typeAttr.getValue();
+      return $_op.getPortTypeAttr(portIndex).getValue();
     }]>,
 
     //===------------------------------------------------------------------===//
@@ -136,23 +115,13 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
     //===------------------------------------------------------------------===//
 
     InterfaceMethod<"Get the port annotations attribute",
-    "ArrayAttr", "getPortAnnotationsAttr", (ins), [{}],
-    /*defaultImplementation=*/[{
-      return $_op->template
-        getAttrOfType<ArrayAttr>(FModuleLike::getPortAnnotationsAttrName());
-    }]>,
+    "ArrayAttr", "getPortAnnotationsAttr">,
+    InterfaceMethod<"Get the port annotations attribute",
+    "ArrayRef<Attribute>", "getPortAnnotations">,
 
     InterfaceMethod<"Set the port annotations attribute",
-    "void", "setPortAnnotationsAttr", (ins "ArrayAttr":$annotations), [{}],
-    /*defaultImplementation=*/[{
-      return $_op->setAttr(FModuleLike::getPortAnnotationsAttrName(), annotations);
-    }]>,
+    "void", "setPortAnnotationsAttr", (ins "::mlir::ArrayAttr":$annotations)>,
 
-    InterfaceMethod<"Get the port annotations attribute",
-    "ArrayRef<Attribute>", "getPortAnnotations", (ins), [{}],
-    /*defaultImplementation=*/[{
-      return $_op.getPortAnnotationsAttr().getValue();
-    }]>,
 
     InterfaceMethod<"Get a port's annotations attribute",
     "ArrayAttr", "getAnnotationsAttrForPort", (ins "size_t":$portIndex), [{}],
@@ -174,32 +143,16 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
     // Port Symbols
     //===------------------------------------------------------------------===//
     // Symbol conventions:
-    // 1. Every element of the ArrayAttr(portSyms) must be NON-NULL.
+    // 1. Every element of the ArrayAttr(portSymbols) must be NON-NULL.
     // 2. An empty array represents no symbol.
-    //    a. TODO: Update the representation to avoid storing it.
     // 3. The Getters return null if a port sym is invalid.
-    // 4. The fixupPortSymsArray, is a utility to update a portSyms
-    //    Vector, by replacing each null entry with empty array and
-    //    clearing the array if all the elements are empty.
 
     // Getters
     InterfaceMethod<"Get the port symbols attribute",
-    "ArrayAttr", "getPortSymbolsAttr", (ins), [{}], [{
-      return $_op->template
-        getAttrOfType<ArrayAttr>(FModuleLike::getPortSymbolsAttrName());
-    }]>,
+    "ArrayAttr", "getPortSymbolsAttr">,
 
     InterfaceMethod<"Get the port symbols",
-    "ArrayRef<Attribute>", "getPortSymbols", (ins), [{}], [{
-      return $_op.getPortSymbolsAttr().getValue();
-    }]>,
-
-    InterfaceMethod<"Check if port has symbol attribute",
-    "bool", "hasPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
-      auto syms = $_op.getPortSymbols();
-        return  (!syms.empty() &&
-        !llvm::cast<hw::InnerSymAttr>(syms[portIndex]).empty());
-    }]>,
+    "ArrayRef<Attribute>", "getPortSymbols">,
 
     InterfaceMethod<"Get the port symbol attribute",
     "circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
@@ -212,35 +165,13 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
 
     // Setters
     InterfaceMethod<"Set the symbols of all ports and their fields", "void",
-    "setPortSymbols", (ins "ArrayRef<Attribute>":$symbols), [{}], [{
-      assert(symbols.empty() || symbols.size() == $_op.getNumPorts());
-      SmallVector<Attribute> newSyms(symbols.begin(), symbols.end());
-      FModuleLike::fixupPortSymsArray(newSyms, $_op.getContext());
-      assert(newSyms.empty() || newSyms.size() == $_op.getNumPorts());
-      $_op->setAttr(FModuleLike::getPortSymbolsAttrName(),
-                    ArrayAttr::get($_op.getContext(), newSyms));
-    }]>,
+    "setPortSymbolsAttr", (ins "::mlir::ArrayAttr":$symbols)>,
 
-    InterfaceMethod<"Set a port's top-level symbol to the specified string, dropping any symbols on its fields", "void",
-    "setPortSymbolAttr", (ins "size_t":$portIndex, "StringAttr":$symbol), [{}],
-    [{
-      SmallVector<Attribute> symbols($_op.getPortSymbols().begin(),
-                                     $_op.getPortSymbols().end());
-      if (symbols.empty()) {
-        symbols.resize($_op.getNumPorts(),
-                      hw::InnerSymAttr::get($_op.getContext()));
-      }
-      assert(symbols.size() == $_op.getNumPorts());
-      symbols[portIndex] = hw::InnerSymAttr::get(symbol);
-
-      FModuleLike::fixupPortSymsArray(symbols, $_op.getContext());
-      assert(symbols.empty() || symbols.size() == $_op.getNumPorts());
-      $_op->setAttr(FModuleLike::getPortSymbolsAttrName(),
-                    ArrayAttr::get($_op.getContext(), symbols));
-    }]>,
+    InterfaceMethod<"Set the symbols of all ports and their fields", "void",
+    "setPortSymbols", (ins "::llvm::ArrayRef<Attribute>":$symbols)>,
 
     InterfaceMethod<"Set the symbols for a port including its fields", "void",
-    "setPortSymbolsAttr", (ins "size_t":$portIndex, "circt::hw::InnerSymAttr":$symbol), [{}],
+    "setPortSymbolAttr", (ins "size_t":$portIndex, "circt::hw::InnerSymAttr":$symbol), [{}],
     [{
       SmallVector<Attribute> symbols($_op.getPortSymbols().begin(),
                                      $_op.getPortSymbols().end());
@@ -255,14 +186,7 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
 
       FModuleLike::fixupPortSymsArray(symbols, $_op.getContext());
       assert(symbols.empty() || symbols.size() == $_op.getNumPorts());
-      $_op->setAttr(FModuleLike::getPortSymbolsAttrName(),
-                    ArrayAttr::get($_op.getContext(), symbols));
-    }]>,
-
-    InterfaceMethod<"Set a port's top-level symbol to the specified string, dropping any symbols on its fields", "void",
-    "setPortSymbol", (ins "size_t":$portIndex, "StringRef":$symbol), [{}], [{
-      $_op.setPortSymbolAttr(portIndex, StringAttr::get($_op.getContext(),
-        symbol));
+      $_op.setPortSymbolsAttr(ArrayAttr::get($_op.getContext(), symbols));
     }]>,
 
     //===------------------------------------------------------------------===//
@@ -270,17 +194,10 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
     //===------------------------------------------------------------------===//
 
     InterfaceMethod<"Get the port locations attribute",
-    "ArrayAttr", "getPortLocationsAttr", (ins), [{}],
-    /*defaultImplementation=*/[{
-      return $_op->template
-        getAttrOfType<ArrayAttr>(FModuleLike::getPortLocationsAttrName());
-    }]>,
+    "ArrayAttr", "getPortLocationsAttr">,
 
     InterfaceMethod<"Get the port locations attribute",
-    "ArrayRef<Attribute>", "getPortLocations", (ins), [{}],
-    /*defaultImplementation=*/[{
-      return $_op.getPortLocationsAttr().getValue();
-    }]>,
+    "ArrayRef<Attribute>", "getPortLocations">,
 
     InterfaceMethod<"Get a port's location attribute",
     "LocationAttr", "getPortLocationAttr", (ins "size_t":$portIndex), [{}],
@@ -311,41 +228,12 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
   ];
 
   let extraClassDeclaration = [{
-    /// Get the attribute name for port directions.
-    static StringRef getPortDirectionsAttrName() {
-      return "portDirections";
-    }
 
-    /// Get the attribute name for port names",
-    static StringRef getPortNamesAttrName() {
-      return "portNames";
-    }
-
-    /// Get the attribute name for port types.
-    static StringRef getPortTypesAttrName() {
-      return "portTypes";
-    }
-
-    /// Get the attribute name for port annotations.
-    static StringRef getPortAnnotationsAttrName() {
-      return "portAnnotations";
-    }
-
-    /// Get the attribute name for port symbols.
-    static StringRef getPortSymbolsAttrName() {
-      return "portSyms";
-    }
-
-    /// Get the attribute name for port locations.
-    static StringRef getPortLocationsAttrName() {
-      return "portLocations";
-    }
-
-    /// Replace NULL entries with invalid sym and clear array if all elements
-    /// are invalid.
+    /// Replace NULL entries with an empty InnerSymbol. If all elements of the
+    /// array are empty, then it will clear the array.
     static void fixupPortSymsArray(SmallVectorImpl<Attribute> &syms,
                                    MLIRContext *context) {
-      // The lack of *any* port symbol is represented by an empty `portSyms`
+      // The lack of *any* port symbol is represented by an empty `portSymbols`
       // array as a shorthand.
       if (llvm::none_of(syms, [&](auto &sym) {
             return sym && !cast<hw::InnerSymAttr>(sym).empty();

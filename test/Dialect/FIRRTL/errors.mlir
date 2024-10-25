@@ -73,7 +73,7 @@ firrtl.circuit "foo" {
 "firrtl.module"() ( { }, { })
    {sym_name = "foo", convention = #firrtl<convention internal>,
     portTypes = [!firrtl.uint], portDirections = array<i1: true>,
-    portNames = ["in0"], portAnnotations = [], portSyms = []} : () -> ()
+    portNames = ["in0"], portAnnotations = [], portSymbols = []} : () -> ()
 }
 
 // -----
@@ -84,7 +84,7 @@ firrtl.circuit "foo" {
   ^entry:
 }) { sym_name = "foo", convention = #firrtl<convention internal>,
     portTypes = [!firrtl.uint], portDirections = array<i1: true>,
-    portNames = ["in0"], portAnnotations = [], portSyms = []} : () -> ()
+    portNames = ["in0"], portAnnotations = [], portSymbols = []} : () -> ()
 }
 
 // -----
@@ -95,7 +95,7 @@ firrtl.circuit "foo" {
   ^entry:
 }) {sym_name = "foo", convention = #firrtl<convention internal>,
     portTypes = [!firrtl.uint], portDirections = array<i1: true>,
-    portNames = ["in0"], portAnnotations = [], portSyms = [],
+    portNames = ["in0"], portAnnotations = [], portSymbols = [],
     portLocations = []} : () -> ()
 }
 
@@ -110,7 +110,7 @@ firrtl.circuit "foo" {
   ^entry:
 }) {sym_name = "foo", convention = #firrtl<convention internal>,
     portTypes = [!firrtl.uint], portDirections = array<i1: true>,
-    portNames = ["in0"], portAnnotations = [], portSyms = [],
+    portNames = ["in0"], portAnnotations = [], portSymbols = [],
     portLocations = [loc("loc")]} : () -> ()
 }
 
@@ -122,7 +122,7 @@ firrtl.circuit "foo" {
   ^entry(%a: i1):
 }) {sym_name = "foo", convention = #firrtl<convention internal>,
     portTypes = [!firrtl.uint], portDirections = array<i1: true>,
-    portNames = ["in0"], portAnnotations = [], portSyms = [],
+    portNames = ["in0"], portAnnotations = [], portSymbols = [],
     portLocations = [loc("foo")]} : () -> ()
 }
 
