@@ -10,7 +10,6 @@ add_circt_dialect_library(CIRCTAIG
   CIRCTHW
 
   DEPENDS
-  CIRCTHW
   MLIRAIGIncGen
 )
 

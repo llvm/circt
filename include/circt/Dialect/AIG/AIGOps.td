@@ -27,7 +27,7 @@ def AndInverterOp : AIGOp<"and_inv", [SameOperandsAndResultType, Pure]> {
   let summary = "AIG dialect AND operation";
   let description = [{
     The `aig.and_inv` operation represents an And-Inverter in the AIG dialect.
-    Unlike comb.and, operands can be inverted respectively.
+    Unlike `comb.and`, operands can be inverted respectively.
 
     Example:
     ```mlir
@@ -81,27 +81,30 @@ def CutOp : AIGOp<"cut", [IsolatedFromAbove, SingleBlock]> {
     ^bb0(%arg0: i1, %arg1: i1, %arg2: i1, %arg3: i1):
       %0 = aig.and_inv not %arg0, %arg1 : i1
       %1 = aig.and_inv %arg1, %arg3 : i1
-      aig.output %0, %1 : i1
-    }
+      aig.output %0, %1 : i1 }
     ```
 
   }];
+
+  // TODO: Restrict to HWIntegerType.
   let arguments = (ins Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>:$results);
-  let regions = (region SizedRegion<1>:$body);
+  let regions = (region SizedRegion<1>:$bodyRegion);
   let assemblyFormat = [{
-    $inputs attr-dict `:` functional-type($inputs, $results) $body
+    $inputs attr-dict `:` functional-type($inputs, $results) $bodyRegion
   }];
 
   let builders = [
     OpBuilder<(ins
           CArg<"TypeRange", "{}">:$resultTypes,
           CArg<"ValueRange", "{}">:$inputs,
-          CArg<"std::function<void()>", "{}">:$ctor)>
+          CArg<"std::function<void(mlir::Block::BlockArgListType)>", "{}">:$ctor)>
   ];
 
+  let hasVerifier = 1;
+
   let extraClassDeclaration = [{
-    Block *getBodyBlock() { return &getBody().front(); }
+    Block *getBodyBlock() { return getBody(); }
   }];
 }
 

@@ -1,4 +1,4 @@
-//===- LowerVariadic.cpp ---------------------------------------------===//
+//===- LowerVariadic.cpp --------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -13,9 +13,7 @@
 
 #include "circt/Dialect/AIG/AIGOps.h"
 #include "circt/Dialect/AIG/AIGPasses.h"
-#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 #define DEBUG_TYPE "aig-lower-variadic"
@@ -38,7 +36,6 @@ namespace {
 static Value lowerFullyAssociativeOp(AndInverterOp op, OperandRange operands,
                                      ArrayRef<bool> inverts,
                                      PatternRewriter &rewriter) {
-  Value lhs, rhs;
   switch (operands.size()) {
   case 0:
     assert(0 && "cannot be called with empty operand range");
@@ -49,16 +46,14 @@ static Value lowerFullyAssociativeOp(AndInverterOp op, OperandRange operands,
     else
       return operands[0];
   case 2:
-    lhs = operands[0];
-    rhs = operands[1];
-    return rewriter.create<AndInverterOp>(op.getLoc(), lhs, rhs, inverts[0],
-                                          inverts[1]);
+    return rewriter.create<AndInverterOp>(op.getLoc(), operands[0], operands[1],
+                                          inverts[0], inverts[1]);
   default:
     auto firstHalf = operands.size() / 2;
-    lhs = lowerFullyAssociativeOp(op, operands.take_front(firstHalf),
-                                  inverts.take_front(firstHalf), rewriter);
-    rhs = lowerFullyAssociativeOp(op, operands.drop_front(firstHalf),
-                                  inverts.drop_front(firstHalf), rewriter);
+    auto lhs = lowerFullyAssociativeOp(op, operands.take_front(firstHalf),
+                                       inverts.take_front(firstHalf), rewriter);
+    auto rhs = lowerFullyAssociativeOp(op, operands.drop_front(firstHalf),
+                                       inverts.drop_front(firstHalf), rewriter);
     return rewriter.create<AndInverterOp>(op.getLoc(), lhs, rhs);
   }
 }
@@ -105,8 +100,4 @@ void LowerVariadicPass::runOnOperation() {
   if (failed(
           mlir::applyPatternsAndFoldGreedily(getOperation(), frozen, config)))
     return signalPassFailure();
-}
-
-std::unique_ptr<mlir::Pass> aig::createLowerVariadicPass() {
-  return std::make_unique<LowerVariadicPass>();
 }

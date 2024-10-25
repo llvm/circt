@@ -55,9 +55,9 @@ CutToLUTPattern::matchAndRewrite(CutOp cutOp, PatternRewriter &rewriter) const {
   uint32_t tableSize = 1 << lutWidth;
   DenseMap<Value, APInt> mapping;
   auto &body = cutOp.getBodyRegion().front();
-  for (uint32_t i = 0; i < lutWidth; i++) {
+  for (uint32_t i = 0; i < lutWidth; ++i) {
     APInt value(tableSize, 0);
-    for (uint32_t j = 0; j < tableSize; j++) {
+    for (uint32_t j = 0; j < tableSize; ++j) {
       // Make sure the order of the bits is correct.
       value.setBitVal(j, (j >> i) & 1);
     }
@@ -69,12 +69,12 @@ CutToLUTPattern::matchAndRewrite(CutOp cutOp, PatternRewriter &rewriter) const {
     if (auto constOp = dyn_cast<hw::ConstantOp>(&op)) {
       mapping[constOp.getResult()] =
           APInt(tableSize, constOp.getValue().getZExtValue());
-    } else if (auto AndInverterOp = dyn_cast<aig::AndInverterOp>(&op)) {
+    } else if (auto andInverterOp = dyn_cast<aig::AndInverterOp>(&op)) {
       // TODO: Avoid this copy.
       SmallVector<APInt> inputs;
-      for (auto input : AndInverterOp.getInputs())
+      for (auto input : andInverterOp.getInputs())
         inputs.push_back(mapping[input]);
-      mapping[AndInverterOp.getResult()] = AndInverterOp.evaluate(inputs);
+      mapping[andInverterOp.getResult()] = andInverterOp.evaluate(inputs);
     } else if (auto outputOp = dyn_cast<aig::OutputOp>(&op)) {
       assert(outputOp.getOutputs().size() == 1 && "expected single output");
       auto value = mapping.at(outputOp.getOutputs().front());
@@ -127,10 +127,8 @@ void LowerCutToLUTPass::runOnOperation() {
         return cutOp.emitError("expected i1 type");
     }
 
-    for (auto result : cutOp.getResults()) {
-      if (result.getType() != i1Type)
-        return cutOp.emitError("expected i1 type");
-    }
+    if (cutOp.getResult(0).getType() != i1Type)
+      return cutOp.emitError("expected i1 type");
 
     uint32_t lutWidth = cutOp.getNumOperands();
     if (lutWidth >= 32)
@@ -152,8 +150,4 @@ void LowerCutToLUTPass::runOnOperation() {
   if (failed(mlir::applyPartialConversion(getOperation(), target,
                                           std::move(patterns))))
     return signalPassFailure();
-}
-
-std::unique_ptr<mlir::Pass> aig::createLowerCutToLUTPass() {
-  return std::make_unique<LowerCutToLUTPass>();
 }

@@ -1,4 +1,4 @@
-//===- LoopScheduleOps.cpp - LoopSchedule CIRCT Operations ------*- C++ -*-===//
+//===- AIGOps.cpp - AIG Dialect Operations ----------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -101,11 +101,7 @@ mlir::ParseResult AndInverterOp::parse(mlir::OpAsmParser &parser,
   auto loc = parser.getCurrentLocation();
 
   while (true) {
-    if (succeeded(parser.parseOptionalKeyword("not"))) {
-      inverts.push_back(true);
-    } else {
-      inverts.push_back(false);
-    }
+    inverts.push_back(succeeded(parser.parseOptionalKeyword("not")));
     operands.push_back(OpAsmParser::UnresolvedOperand());
 
     if (parser.parseOperand(operands.back()))
@@ -114,28 +110,17 @@ mlir::ParseResult AndInverterOp::parse(mlir::OpAsmParser &parser,
       break;
   }
 
-  if (parser.parseOptionalAttrDict(result.attributes))
-    return mlir::failure();
+  mlir::Type type;
+  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseCustomTypeWithFallback(type))
+    return failure();
 
-  if (parser.parseColon())
-    return mlir::failure();
-
-  mlir::Type resultRawType{};
-  llvm::ArrayRef<mlir::Type> resultTypes(&resultRawType, 1);
-
-  {
-    mlir::Type type;
-    if (parser.parseCustomTypeWithFallback(type))
-      return mlir::failure();
-    resultRawType = type;
-  }
-
-  result.addTypes(resultTypes);
+  result.addTypes({type});
   result.addAttribute("inverted",
                       parser.getBuilder().getDenseBoolArrayAttr(inverts));
-  if (parser.resolveOperands(operands, resultTypes[0], loc, result.operands))
-    return mlir::failure();
-  return mlir::success();
+  if (parser.resolveOperands(operands, type, loc, result.operands))
+    return failure();
+  return success();
 }
 
 void AndInverterOp::print(mlir::OpAsmPrinter &odsPrinter) {
@@ -148,18 +133,9 @@ void AndInverterOp::print(mlir::OpAsmPrinter &odsPrinter) {
                           }
                           odsPrinter << input;
                         });
-  llvm::SmallVector<llvm::StringRef, 2> elidedAttrs;
-  elidedAttrs.push_back("inverted");
+  llvm::SmallVector<llvm::StringRef, 2> elidedAttrs{"inverted"};
   odsPrinter.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
-  odsPrinter << ' ' << ":";
-  odsPrinter << ' ';
-  {
-    auto type = getResult().getType();
-    if (auto validType = llvm::dyn_cast<mlir::Type>(type))
-      odsPrinter.printStrippedAttrOrType(validType);
-    else
-      odsPrinter << type;
-  }
+  odsPrinter << " : " << getResult().getType();
 }
 
 APInt AndInverterOp::evaluate(ArrayRef<APInt> inputs) {
@@ -178,7 +154,7 @@ APInt AndInverterOp::evaluate(ArrayRef<APInt> inputs) {
 
 void CutOp::build(OpBuilder &builder, OperationState &result,
                   TypeRange resultTypes, ValueRange inputs,
-                  std::function<void()> ctor) {
+                  std::function<void(mlir::Block::BlockArgListType)> ctor) {
   OpBuilder::InsertionGuard guard(builder);
 
   auto *block = builder.createBlock(result.addRegion());
@@ -188,5 +164,19 @@ void CutOp::build(OpBuilder &builder, OperationState &result,
     block->addArgument(input.getType(), input.getLoc());
 
   if (ctor)
-    ctor();
+    ctor(block->getArguments());
+}
+
+LogicalResult CutOp::verify() {
+  if (getInputs().size() != getBodyBlock()->getNumArguments())
+    return emitOpError("the number of inputs and the number of block arguments "
+                       "do not match. Expected ")
+           << getInputs().size() << " but got "
+           << getBodyBlock()->getNumArguments();
+  if (getNumResults() != getBodyBlock()->getTerminator()->getNumOperands())
+    return emitOpError("the number of results and the number of terminator "
+                       "operands do not match. Expected ")
+           << getNumResults() << " but got "
+           << getBodyBlock()->getTerminator()->getNumOperands();
+  return success();
 }

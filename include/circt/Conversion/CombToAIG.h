@@ -1,4 +1,4 @@
-//===- CombToAIG.h - Comb to AIG dialect conversion ---------*- C++ -*-===//
+//===- CombToAIG.h - Comb to AIG dialect conversion --------------- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -22,4 +22,4 @@ class HWModuleOp;
 
 } // namespace circt
 
-#endif // CIRCT_CONVERSION_COMBTOARITH_H
+#endif // CIRCT_CONVERSION_COMBTOAIG_H

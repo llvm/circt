@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 ///
-/// This file initiliazes the 'circt-synth' tool, which performs logic
+/// This file initializes the 'circt-synth' tool, which performs logic
 /// synthesis. Currently, it only performs backend-agnostic FPGA synthesis,
 /// mapping core dialects into FPGA-specific primitives, such as LUTs.
 ///
@@ -44,7 +44,7 @@ using namespace circt;
 
 static cl::OptionCategory mainCategory("circt-synth Options");
 
-static cl::opt<std::string> inputFilename(cl::Positional, cl::Required,
+static cl::opt<std::string> inputFilename(cl::Positional, cl::init("-"),
                                           cl::desc("Specify an input file"),
                                           cl::value_desc("filename"),
                                           cl::cat(mainCategory));
@@ -80,8 +80,8 @@ static llvm::cl::opt<Until> runUntilAfter(
     "until-after", llvm::cl::desc("Stop pipeline after a specified point"),
     runUntilValues, llvm::cl::init(UntilEnd), llvm::cl::cat(mainCategory));
 
-// LUT-k parameter. This needs to be unifined to a more fine-grained target
-// architecture information.
+// LUT-k parameter. This needs to be extended to provide more fine-grained
+// target architecture information.
 static cl::opt<int> lutSize("lut-size",
                             cl::desc("Size of LUT to use for mapping"),
                             cl::init(6), cl::cat(mainCategory));
@@ -96,7 +96,7 @@ static bool untilReached(Until until) {
 
 //===----------------------------------------------------------------------===//
 // Tool implementation
-//===-----------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 
 static void populateSynthesisPipeline(PassManager &pm) {
   auto &mpm = pm.nest<hw::HWModuleOp>();
@@ -112,8 +112,8 @@ static void populateSynthesisPipeline(PassManager &pm) {
   if (untilReached(UntilAIGOpt))
     return;
 
-  mpm.addPass(aig::createLowerVariadicPass());
-  mpm.addPass(aig::createLowerWordToBitsPass());
+  mpm.addPass(aig::createLowerVariadic());
+  mpm.addPass(aig::createLowerWordToBits());
   mpm.addPass(createCSEPass());
   mpm.addPass(createSimpleCanonicalizerPass());
 
@@ -124,11 +124,11 @@ static void populateSynthesisPipeline(PassManager &pm) {
   mpm.addPass(createCSEPass());
   aig::GreedyCutDecompOptions options;
   options.cutSizes = lutSize;
-  mpm.addPass(aig::createGreedyCutDecompPass(options));
-  mpm.addPass(aig::createLowerCutToLUTPass());
+  mpm.addPass(aig::createGreedyCutDecomp(options));
+  mpm.addPass(aig::createLowerCutToLUT());
 }
 
-/// This functions initializes the various components of the tool and
+/// This function initializes the various components of the tool and
 /// orchestrates the work to be done.
 static LogicalResult executeSynthesis(MLIRContext &context) {
   // Create the timing manager we use to sample execution times.

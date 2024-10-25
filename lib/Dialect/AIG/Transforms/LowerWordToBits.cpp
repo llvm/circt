@@ -1,4 +1,4 @@
-//===- LowerWordToBits.cpp ---------------------------------------------===//
+//===- LowerWordToBits.cpp ------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -55,8 +55,7 @@ struct WordRewritePattern : public OpRewritePattern<AndInverterOp> {
       result.push_back(andInverter);
     }
 
-    auto concat = rewriter.create<comb::ConcatOp>(op.getLoc(), result);
-    rewriter.replaceOp(op, concat);
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, result);
     return success();
   }
 };
@@ -84,8 +83,4 @@ void LowerWordToBitsPass::runOnOperation() {
   if (failed(mlir::applyPatternsAndFoldGreedily(getOperation(), frozenPatterns,
                                                 config)))
     return signalPassFailure();
-}
-
-std::unique_ptr<mlir::Pass> aig::createLowerWordToBitsPass() {
-  return std::make_unique<LowerWordToBitsPass>();
 }

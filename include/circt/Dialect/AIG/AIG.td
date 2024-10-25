@@ -1,4 +1,4 @@
-//===- AIG.td - AIG Definitions ----------*- tablegen -*-===//
+//===- AIG.td - AIG Definitions ----------------------------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,14 +10,11 @@
 #define CIRCT_AIG_DIALECT_TD
 
 include "mlir/IR/DialectBase.td"
-include "mlir/IR/OpBase.td"
 
 def AIG_Dialect : Dialect {
   let name = "aig";
   let cppNamespace = "::circt::aig";
   let summary = "Representation of AIGs";
-
-  let usePropertiesForAttributes = 0;
 }
 
 include "circt/Dialect/AIG/AIGOps.td"

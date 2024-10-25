@@ -25,12 +25,6 @@ namespace aig {
 #define GEN_PASS_DECL
 #include "circt/Dialect/AIG/AIGPasses.h.inc"
 
-std::unique_ptr<mlir::Pass> createLowerCutToLUTPass();
-std::unique_ptr<mlir::Pass> createLowerVariadicPass();
-std::unique_ptr<mlir::Pass> createLowerWordToBitsPass();
-std::unique_ptr<mlir::Pass>
-createGreedyCutDecompPass(const GreedyCutDecompOptions &options = {});
-
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/AIG/AIGPasses.h.inc"
 

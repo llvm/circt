@@ -1,4 +1,4 @@
-//===- GreedyCutDecomp.cpp ---------------------------------------------===//
+//===- GreedyCutDecomp.cpp ------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // This pass performs cut decomposition on AIGs based on a naive greedy
-// algorithm. We first convert all `aig.and_inv` to `aig.cut` that has a single
+// algorithm. We first convert all `aig.and_inv` to `aig.cut` that have a single
 // operation and then try to merge cut operations on inputs.
 //
 //===----------------------------------------------------------------------===//
@@ -19,6 +19,7 @@
 #include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+
 #define DEBUG_TYPE "aig-greedy-cut-decomp"
 
 namespace circt {
@@ -42,14 +43,15 @@ struct AndInverterOpToCutPattern : public OpRewritePattern<aig::AndInverterOp> {
 
   LogicalResult matchAndRewrite(aig::AndInverterOp op,
                                 PatternRewriter &rewriter) const override {
-    if (isa<aig::CutOp>(op->getParentOp()))
+    if (op->getParentOfType<aig::CutOp>())
       return failure();
 
     auto cutOp = rewriter.create<aig::CutOp>(
-        op.getLoc(), op.getResult().getType(), op.getInputs(), [&]() {
+        op.getLoc(), op.getResult().getType(), op.getInputs(),
+        [&](Block::BlockArgListType args) {
           auto result = rewriter.create<aig::AndInverterOp>(
-              op.getLoc(), op.getResult().getType(),
-              rewriter.getBlock()->getArguments(), op.getInvertedAttr());
+              op.getLoc(), op.getResult().getType(), args,
+              op.getInvertedAttr());
           rewriter.create<aig::OutputOp>(op.getLoc(), ValueRange{result});
         });
 
@@ -67,10 +69,10 @@ static aig::CutOp mergeCuts(Location loc, MutableArrayRef<Operation *> cuts,
   assert(cuts.size() >= 2);
 
   DenseMap<Value, Value> valueToNewValue, inputsToBlockArg;
-  auto cutOp =
-      rewriter.create<aig::CutOp>(loc, output.getType(), inputs, [&]() {
+  auto cutOp = rewriter.create<aig::CutOp>(
+      loc, output.getType(), inputs, [&](Block::BlockArgListType args) {
         for (auto [i, input] : llvm::enumerate(inputs))
-          inputsToBlockArg[input] = rewriter.getBlock()->getArgument(i);
+          inputsToBlockArg[input] = args[i];
 
         for (auto [i, cut] : llvm::enumerate(cuts)) {
           auto cutOp = cast<aig::CutOp>(cut);
@@ -103,7 +105,7 @@ static aig::CutOp mergeCuts(Location loc, MutableArrayRef<Operation *> cuts,
   for (auto oldCut : llvm::reverse(cuts)) {
     auto *oldCutBlock = cast<aig::CutOp>(oldCut).getBodyBlock();
     auto oldCutOutput = oldCutBlock->getTerminator();
-    oldCutOutput->erase();
+    rewriter.eraseOp(oldCutOutput);
     // Erase arguments before inlining. Arguments are already replaced.
     oldCutBlock->eraseArguments([](BlockArgument block) { return true; });
     rewriter.inlineBlockBefore(oldCutBlock, cutOp.getBodyBlock(),
@@ -241,18 +243,8 @@ struct SinkConstantPattern : public mlir::OpRewritePattern<aig::CutOp> {
       block->eraseArguments(eraseArgs);
     }
 
-    auto newCut = rewriter.create<aig::CutOp>(op.getLoc(), op.getResultTypes(),
-                                              oldInputs, [&]() {});
-
-    for (auto [newArg, oldArg] :
-         llvm::zip(newCut.getBodyBlock()->getArguments(), oldArgs))
-      rewriter.replaceAllUsesWith(oldArg, newArg);
-
-    // Erase arguments before inlining. Arguments are already replaced.
-    block->eraseArguments([](BlockArgument arg) { return true; });
-    rewriter.inlineBlockBefore(block, newCut.getBodyBlock(),
-                               newCut.getBodyBlock()->begin());
-    rewriter.replaceOp(op, newCut);
+    rewriter.modifyOpInPlace(
+        op, [&]() { op.getInputsMutable().assign(oldInputs); });
     return success();
   }
 };
@@ -284,9 +276,4 @@ void GreedyCutDecompPass::runOnOperation() {
   if (failed(
           mlir::applyPatternsAndFoldGreedily(getOperation(), frozen, config)))
     return signalPassFailure();
-}
-
-std::unique_ptr<mlir::Pass>
-aig::createGreedyCutDecompPass(const GreedyCutDecompOptions &options) {
-  return std::make_unique<GreedyCutDecompPass>(options);
 }

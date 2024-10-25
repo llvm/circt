@@ -65,7 +65,10 @@ struct CombXorOpConversion : OpConversionPattern<XorOp> {
   LogicalResult
   matchAndRewrite(XorOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    if (op.getNumOperands() != 2)
+      return failure();
     // Xor using And with invert flags: a ^ b = (a | b) & (~a | ~b)
+
     // (a | b) = ~(~a & ~b)
     // (~a | ~b) = ~(a & b)
     auto inputs = adaptor.getInputs();
