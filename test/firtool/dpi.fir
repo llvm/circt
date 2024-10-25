@@ -63,5 +63,5 @@ circuit DPI:
     intrinsic(circt_dpi_call<isClocked = 1, functionName="clocked_void">, clock, enable, in[0], in[1], in)
     node result2 = intrinsic(circt_dpi_call<isClocked = 0, functionName="unclocked_result"> : UInt<8>,  enable, in[0], in[1])
 
-    out[0] <= result1
-    out[1] <= result2
+    connect out[0], result1
+    connect out[1], result2

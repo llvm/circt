@@ -1295,7 +1295,7 @@ circuit Foo_v3p0p0:
     ; CHECK-NEXT: %0 = firrtl.subfield %_0["1"] : !firrtl.bundle<"1": uint<1>>
     ; CHECK-NEXT: %1 = firrtl.subfield %_2["3"] : !firrtl.bundle<"3": uint<1>>
     ; CHECK-NEXT: firrtl.matchingconnect %1, %0 : !firrtl.uint<1>
-    `2`.`3` <= `0`.`1`
+    connect `2`.`3`, `0`.`1`
 
     ; Ensure that `a` is equivalent to a.
     ; CHECK-NEXT: %a = firrtl.node {{.+}}%_0
@@ -1330,12 +1330,12 @@ circuit Probes_refexprs:
     ; Keyword as leading part of static ref expression:
     node d = read(ref.`0`.`1`.`2`)
 
-    out <= and(and(a, b), and(c, d))
+    connect out, and(and(a, b), and(c, d))
 
     ; CHECK: %[[TEST:.+]] = firrtl.wire sym @[[TEST_SYM:[^ ]+]]
     wire `test`: {`0`: UInt<1>, `b`: UInt<1>}
-    `test`.`0` <= a
-    `test`.`b` <= b
+    connect `test`.`0`, a
+    connect `test`.`b`, b
     ; CHECK: %[[TEST_REF:.+]] = firrtl.ref.rwprobe <@Probes_refexprs::@[[TEST_SYM]]>
     ; CHECK: force_initial %{{.+}}, %[[TEST_REF]], %[[TEST]]
     force_initial(rwprobe(`test`), `test`)
@@ -1436,7 +1436,7 @@ circuit Top:
     output out: ProbeComplex
     output out_valid: ValidType
     wire c: Complex_id
-    out_valid <= in_data.valid
+    connect out_valid, in_data.valid
 
   ; CHECK-LABEL: firrtl.module private @Const
   ; CHECK-SAME: (in %a: !firrtl.const.alias<ConstI1, const.uint<1>>)
@@ -1940,9 +1940,9 @@ circuit Foo:
 
     when c:
       node add1 = add(data, UInt<32>(1))
-      out <= add1
+      connect out, add1
     else:
-      out <= data
+      connect out, data
 
   ; CHECK-LABEL: firrtl.module @FooTest(in %s_foo_c: !firrtl.uint<1>, in %s_foo_data: !firrtl.uint<32>)
   public module FooTest:
@@ -1962,5 +1962,3 @@ circuit Foo:
 
   ; CHECK: firrtl.formal @testFormal of @FooTest bound 20
   formal testFormal of FooTest, bound = 20
-
-

@@ -26,13 +26,13 @@ circuit Foo: %[[
 ]]
   module XFoo:
     wire w : UInt<8>
-    w is invalid
+    invalidate w
   module XBar:
     wire w : UInt<8>
-    w is invalid
+    invalidate w
   module XBaz:
     wire w : UInt<8>
-    w is invalid
+    invalidate w
   public module Foo:
     inst x of XFoo
   public module Bar:

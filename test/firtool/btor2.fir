@@ -7,14 +7,13 @@ circuit Counter :
     input reset : UInt<1>
     input en : UInt<1>
 
-    reg count : UInt<32>, clock with :
-      reset => (reset, UInt<32>(0h0))
+    regreset count : UInt<32>, clock, reset, UInt<32>(0h0)
 
     when and(eq(count, UInt<32>(22)), en) :
-      count <= UInt<1>(0h0)
+      connect count, UInt<1>(0h0)
 
     when and(neq(count, UInt<32>(22)), en) :
-      count <= tail(add(count, UInt<1>(0h1)), 1)
+      connect count, tail(add(count, UInt<1>(0h1)), 1)
 
     assert(clock, neq(count, UInt<4>(0ha)), en, "Counter reached 10!")
 
@@ -40,4 +39,3 @@ circuit Counter :
 ; CHECK:  20 bad 19
 ; CHECK:  21 ite 4 2 9 16
 ; CHECK:  22 next 4 5 21
-

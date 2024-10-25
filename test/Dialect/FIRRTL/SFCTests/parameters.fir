@@ -12,7 +12,7 @@ circuit NegativeParameter:
     output a: UInt<1>
 
     inst foo of Foo
-    a <= foo.a
+    connect a, foo.a
 
 ; CHECK-LABEL: module NegativeParameter
 ; CHECK:         Foo #(

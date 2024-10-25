@@ -54,11 +54,11 @@ circuit Foo : %[[
     input a_in: UInt<1>
 
     wire a: UInt<1>
-    a <= a_in
+    connect a, a_in
 
     inst companion of Companion
-    companion.clock <= clock
-    companion.a <= a
+    connect companion.clock, clock
+    connect companion.a, a
 
     ; INST:     module Foo
     ; INST-NOT: endmodule

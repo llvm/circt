@@ -62,10 +62,9 @@ circuit Top : %[[
   module Child :
 
     inst localparam of BlackBox
-    localparam is invalid
 
     wire tap : UInt<1>
-    tap is invalid
+    invalidate tap
 
   module ChildWrapper :
 
@@ -74,7 +73,7 @@ circuit Top : %[[
   module Bar :
 
     wire inv : UInt<2>
-    inv is invalid
+    invalidate inv
 
   module Foo :
 
@@ -85,13 +84,13 @@ circuit Top : %[[
     inst foo of Foo
 
     wire tap : UInt<2>
-    tap is invalid
+    invalidate tap
 
     wire tap2 : UInt<4>
-    tap2 is invalid
+    invalidate tap2
 
     wire tap3 : UInt<5>
-    tap3 is invalid
+    invalidate tap3
 
     inst unsigned of ChildWrapper
 
@@ -146,18 +145,18 @@ circuit Top : %[[
 
     when c:
       wire val : UInt<3>
-      val <= UInt(2)
+      connect val, UInt(2)
 
       ; Tap Top's val
       wire tap : UInt<4>
-      tap is invalid
+      invalidate tap
 
   module Middle :
     input c: UInt<1>
-    
+
     when c:
       inst leaf of Leaf
-      leaf.c <= c
+      connect leaf.c, c
 
   ; CHECK-LABEL: module Top(
   ; CHECK-NEXT:    input c
@@ -171,15 +170,15 @@ circuit Top : %[[
     output o: UInt<3>
 
     wire val : UInt<3>
-    val <= UInt(1)
+    connect val, UInt(1)
 
     inst mid of Middle
-    mid.c <= c
+    connect mid.c, c
 
-    o is invalid
+    invalidate o
 
     ; Tap Leaf's val
     when c:
       wire tap : UInt
-      tap is invalid
-      o <= tap
+      invalidate tap
+      connect o, tap

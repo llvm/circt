@@ -27,16 +27,16 @@ circuit test: %[[{
     node _T_0 = addr1
     when p:
       read mport testport0 = testmem[_T_0], clock
-    out0 <= testport0
+    connect out0, testport0
 
     ; CHECK: .R1_en (1'h1),
     wire _T_1: UInt<4>
-    _T_1 <= addr2
+    connect _T_1, addr2
     when p:
       read mport testport1 = testmem[_T_1], clock
-    out1 <= testport1
+    connect out1, testport1
 
     node writeAddr = addr3
     when p:
       write mport testport2 = testmem[writeAddr], clock
-    testport2 <= data
+    connect testport2, data

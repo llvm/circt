@@ -25,17 +25,17 @@ circuit test: %[[
       read-under-write => undefined
 
     ; All of these are unified together
-    memory.r.clk <= clock
-    memory.r.en <= rEn
-    memory.r.addr <= rAddr
-    rData <= memory.r.data
+    connect memory.r.clk, clock
+    connect memory.r.en, rEn
+    connect memory.r.addr, rAddr
+    connect rData, memory.r.data
 
-    memory.w.clk <= clock
-    memory.w.en <= rEn
-    memory.w.addr <= rAddr
+    connect memory.w.clk, clock
+    connect memory.w.en, rEn
+    connect memory.w.addr, rAddr
     ; These two are split
-    memory.w.mask <= wMask
-    memory.w.data <= wData
+    connect memory.w.mask, wMask
+    connect memory.w.data, wData
 
 ; CHECK-NOT: module memory_ext
 

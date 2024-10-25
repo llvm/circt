@@ -17,15 +17,15 @@ circuit Foo:
     ; NONE-NOT:  _r = {{.*}};
     ; LOCAL:     _r <= d;
     reg _r: UInt<33>, clock
-    _r <= d
+    connect _r, d
 
     reg r: UInt<33>, clock
-    r <= d
+    connect r, d
 
     reg s: UInt<33>, clock
-    s <= d
+    connect s, d
 
-    q <= r
+    connect q, r
 
     ; ALL:        automatic logic [31:0] _RANDOM[0:3];
     ; ALL:        for (logic [2:0] i = 3'h0; i < 3'h4; i += 3'h1) begin

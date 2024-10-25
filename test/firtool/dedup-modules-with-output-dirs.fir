@@ -19,13 +19,13 @@ circuit Top: %[[
   ; CHECK: module A
   public module A:
     wire w : UInt<1>
-    w is invalid
+    invalidate w
 
   ; CHECK: FILE "YYY{{/|\\}}B.sv"
   ; CHECK: module B
   public module B:
     wire w : UInt<1>
-    w is invalid
+    invalidate w
 
   public module Top:
     inst a of A
@@ -49,13 +49,13 @@ circuit Top: %[[
   ; CHECK: module A
   public module A:
     wire w : UInt<1>
-    w is invalid
+    invalidate w
 
   ; CHECK: FILE "YYY{{/|\\}}B.sv"
   ; CHECK: module B
   public module B:
     wire w : UInt<1>
-    w is invalid
+    invalidate w
 
   public module Top:
     inst a of A
@@ -85,13 +85,13 @@ circuit Top: %[[
   ; CHECK: module CA
   module CA:
     wire w : UInt<1>
-    w is invalid
+    invalidate w
 
   ; CHECK-NOT: module CB
   module CB:
     wire w : UInt<1>
-    w is invalid
-  
+    invalidate w
+
   ; CHECK: FILE "ZZZ{{/|\\}}XXX{{/|\\}}A.sv"
   ; CHECK: module A
   public module A:

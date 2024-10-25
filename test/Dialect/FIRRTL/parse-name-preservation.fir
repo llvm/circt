@@ -10,7 +10,7 @@ circuit Bar :
     ; CHECK: %a = firrtl.wire interesting_name : !firrtl.uint<1>
 
     ; Should use the non-tap wire in expressions.
-    a <= in
+    connect a, in
     ; CHECK: firrtl.matchingconnect %a, %in
 
     ; When the type is not passive, the tap should be a wire with the passive

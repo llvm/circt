@@ -10,10 +10,10 @@ circuit test_cse :
     output c: UInt<5>
     output d: UInt<5>
     output e: UInt<5>
-    b <= add(a1, a2)
-    c <= add(a1, a2)
-    d <= and(a1, UInt<4>(0))
-    e <= and(UInt<4>(3), UInt<4>(1))
+    connect b, add(a1, a2)
+    connect c, add(a1, a2)
+    connect d, and(a1, UInt<4>(0))
+    connect e, and(UInt<4>(3), UInt<4>(1))
 
 ; OPT-DAG: %c0_ui5 = firrtl.constant 0 : !firrtl.uint<5>
 ; OPT-DAG: %c1_ui5 = firrtl.constant 1 : !firrtl.uint<5>

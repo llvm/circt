@@ -37,18 +37,18 @@ circuit Bundle :
 
     inst c1 of Child
     inst c2 of Child
-    c1.in <= in
-    c2.in <= in
+    connect c1.in, in
+    connect c2.in, in
 
     define r.a = c1.r
     define r.b = c2.r
 
-    mixed.a <= read(c1.r.a)
-    mixed.b <= read(c1.r.b)
+    connect mixed.a, read(c1.r.a)
+    connect mixed.b, read(c1.r.b)
     define mixed.x[0].p = c1.r
     define mixed.x[1].p = c2.r
-    mixed.x[0].data <= read(c1.r.a)
-    mixed.x[1].data <= read(c2.r.a)
+    connect mixed.x[0].data, read(c1.r.a)
+    connect mixed.x[1].data, read(c2.r.a)
     define nohw.x[0].p = c1.r
     define nohw.x[1].p = c2.r
 
@@ -66,14 +66,14 @@ circuit Bundle :
     output out7 : {a : UInt<1>, b : UInt<1>[2]}
 
     inst p of Probe
-    p.in <= in
+    connect p.in, in
 
    ; Resolve probes
-   out1 <= read(p.r.a)
-   out2 <= read(p.r.b)
-   out3 <= read(p.mixed.x[0].p)
-   out4 <= read(p.mixed.x[1].p)
-   out5 <= read(p.nohw.x[0].p)
-   out6 <= read(p.nohw.x[1].p)
-   out7.a <= p.mixed.a
-   out7.b <= p.mixed.b
+   connect out1, read(p.r.a)
+   connect out2, read(p.r.b)
+   connect out3, read(p.mixed.x[0].p)
+   connect out4, read(p.mixed.x[1].p)
+   connect out5, read(p.nohw.x[0].p)
+   connect out6, read(p.nohw.x[1].p)
+   connect out7.a, p.mixed.a
+   connect out7.b, p.mixed.b

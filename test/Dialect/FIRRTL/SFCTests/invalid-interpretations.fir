@@ -17,24 +17,24 @@ circuit InvalidInterpretations:
     output out_add: UInt<9>
 
     wire _inv: UInt<8>
-    _inv is invalid
+    invalidate _inv
 
     reg r: UInt<8>, clock with : (reset => (reset, _inv))
-    r <= a
-    out_reg <= r
+    connect r, a
+    connect out_reg, r
     ; Interpretation 1: Invalid is undefined if used as the initialization value
     ; of a register in a module-scoped analysis that looks through connects.
     ; CHECK:       always @(posedge clock)
     ; CHECK-NOT:     if (reset)
 
-    out_when is invalid
+    invalidate out_when
     when cond:
-      out_when <= a
+      connect out_when, a
     ; Interpretation 2: Invalid is undefined when used as a default value.
     ; CHECK:       assign out_when = a;
 
-    out_mux <= mux(cond, a, _inv)
-    out_add <= add(a, _inv)
+    connect out_mux, mux(cond, a, _inv)
+    connect out_add, add(a, _inv)
     ; Interpretation 4: Invalid is zero otherwise.
     ; CHECK:       assign out_mux = cond ? a : 8'h0;
     ; CHECK-NEXT:  assign out_add = {1'h0, a};
@@ -64,9 +64,9 @@ circuit InvalidInOtherModule :
     ; CHECK-NEXT:   else
     ; CHECK-NEXT:     r <= 8'h0;
     reg r : SInt<8>, clock with: (reset => (reset, SInt<8>(4)))
-    r <= other.b
-    b <= r
+    connect r, other.b
+    connect b, r
 
   module OtherModule :
     output b: SInt<8>
-    b is invalid
+    invalidate b

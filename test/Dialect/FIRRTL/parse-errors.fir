@@ -90,7 +90,7 @@ FIRRTL version 4.0.0
 circuit invalid_name :
   public module invalid_name :
     input c: UInt<4>
-    out <= c         ; expected-error {{use of unknown declaration 'out'}}
+    connect out, c   ; expected-error {{use of unknown declaration 'out'}}
 
 ;// -----
 
@@ -98,7 +98,7 @@ FIRRTL version 4.0.0
 circuit invalid_name :
   public module invalid_name :
     output out: UInt<4>
-    out <= c         ; expected-error {{use of unknown declaration 'c'}}
+    connect out, c   ; expected-error {{use of unknown declaration 'c'}}
 
 ;// -----
 
@@ -108,7 +108,7 @@ circuit subfield_of_ground_type :
     input a: UInt<1>
     output b: UInt<1>
     ; expected-error @+1 {{subfield requires bundle or object operand}}
-    b <= a.a
+    connect b, a.a
 
 ;// -----
 
@@ -227,7 +227,7 @@ circuit invalid_bits :
      input a: UInt<8>
      output b: UInt<4>
      ; expected-error @+1 {{high must be equal or greater than low, but got high = 4, low = 7}}
-     b <= bits(a, 4, 7)
+     connect b, bits(a, 4, 7)
 
 ;// -----
 
@@ -267,7 +267,7 @@ circuit Issue418:
     output b: UInt<1>
 
     ; expected-error @+1 {{operation requires one operand}}
-    b <= not(a, a)
+    connect b, not(a, a)
 
 ;// -----
 
@@ -275,10 +275,10 @@ FIRRTL version 4.0.0
 circuit Issue3799:
   public module Issue3799:
     output a: UInt<0>
-    a <= UInt<0>(0) ; ok
-    a <= UInt<0>(-0) ; ok
+    connect a, UInt<0>(0) ; ok
+    connect a, UInt<0>(-0) ; ok
     ; expected-error @below {{zero bit constant must be zero}}
-    a <= UInt<0>(1)
+    connect a, UInt<0>(1)
 
 ;// -----
 
@@ -286,10 +286,10 @@ FIRRTL version 4.0.0
 circuit Issue3799:
   public module Issue3799:
     output a: SInt<0>
-    a <= SInt<0>(0) ; ok
-    a <= SInt<0>(-0) ; ok
+    connect a, SInt<0>(0) ; ok
+    connect a, SInt<0>(-0) ; ok
     ; expected-error @below {{zero bit constant must be zero}}
-    a <= SInt<0>(1)
+    connect a, SInt<0>(1)
 
 
 ;// -----
@@ -299,7 +299,7 @@ circuit Issue426:
   public module Issue426:
     output a: UInt<1>
     ; expected-error @+1 {{initializer too wide for declared width}}
-    a <= UInt<1>(2)
+    connect a, UInt<1>(2)
 
 ;// -----
 
@@ -307,10 +307,10 @@ FIRRTL version 4.0.0
 circuit Issue426:
   public module Issue426:
     output a: SInt<1>
-    a <= SInt<1>(0) ; ok
-    a <= SInt<1>(-1) ; ok
+    connect a, SInt<1>(0) ; ok
+    connect a, SInt<1>(-1) ; ok
     ; expected-error @+1 {{initializer too wide for declared width}}
-    a <= SInt<1>(1)
+    connect a, SInt<1>(1)
 ;// -----
 
 FIRRTL version 4.0.0
@@ -318,7 +318,7 @@ circuit Issue426:
   public module Issue426:
     output a: SInt<1>
     ; expected-error @+1 {{initializer too wide for declared width}}
-    a <= SInt<1>(-2)
+    connect a, SInt<1>(-2)
 
 ;// -----
 
@@ -359,9 +359,9 @@ circuit UnicodeEscape:
 
 ;// -----
 
-FIRRTL version 4.0.0
+FIRRTL version 2.0.0
 circuit PrintfExpr:
-  public module PrintfExpr:
+  module PrintfExpr:
     input clk: Clock
     input enable: UInt<1>
     output out : UInt<1>
@@ -418,7 +418,7 @@ circuit RefSubaccess:
     input sel : UInt<2>
     output out : UInt<1>
 
-    out <= read(probe(in)[sel]) ; expected-error {{expected ')' in 'read'}}
+    connect out, read(probe(in)[sel]) ; expected-error {{expected ')' in 'read'}}
 
 ;// -----
 
@@ -432,7 +432,7 @@ circuit ProbeBase:
     output out : UInt<1>
 
     inst pg of ProbeGen
-    out <= probe(pg.p) ; expected-error {{expected base-type expression in 'probe', got}}
+    connect out, probe(pg.p) ; expected-error {{expected base-type expression in 'probe', got}}
 
 ;// -----
 
@@ -442,7 +442,7 @@ circuit ProbeProbe:
     input in : UInt<1>
     output out : UInt<1>
 
-    out <= probe(probe(in)) ; expected-error {{expected static reference expression in 'probe'}}
+    connect out, probe(probe(in)) ; expected-error {{expected static reference expression in 'probe'}}
 
 ;// -----
 
@@ -452,7 +452,7 @@ circuit ReadBase:
     input in : UInt<1>
     output out : UInt<1>
 
-    out <= read(in) ; expected-error {{expected reference-type expression in 'read', got}}
+    connect out, read(in) ; expected-error {{expected reference-type expression in 'read', got}}
 
 ;// -----
 
@@ -483,7 +483,7 @@ circuit RefSubaccess:
     input sel : UInt<2>
     output out : UInt<1>
 
-    out <= read(probe(in[sel])) ; expected-error {{subaccess not allowed here}}
+    connect out, read(probe(in[sel])) ; expected-error {{subaccess not allowed here}}
 
 ;// -----
 
@@ -582,7 +582,7 @@ circuit ConnectWrongType:
     input a: UInt<1>
     output b: SInt<1>
 
-    b <= a ; expected-error {{cannot connect non-equivalent type}}
+    connect b, a ; expected-error {{cannot connect non-equivalent type}}
 
 ;// -----
 FIRRTL version 4.0.0
@@ -610,7 +610,7 @@ circuit ProbeConnect:
     input in : UInt<1>
     output p : Probe<UInt<1>>
 
-    p <= probe(in) ; expected-error {{cannot connect reference or property types}}
+    connect p, probe(in) ; expected-error {{cannot connect reference or property types}}
 
 ;// -----
 
@@ -638,8 +638,8 @@ circuit ProbeMem:
       write-latency => 1
       read-under-write => undefined
 
-    memory.r is invalid
-    memory.w is invalid
+    invalidate memory.r
+    invalidate memory.w
     define out = probe(memory.r) ; expected-error {{cannot probe memories or their ports}}
 
 
@@ -655,7 +655,7 @@ circuit ProbeSMem:
 
     smem mem : UInt<8> [8]
     infer mport read = mem[io.addr], clock
-    io.dataOut <= read
+    connect io.dataOut, read
     define out = probe(read) ; expected-error {{cannot probe memories or their ports}}
 ;// -----
 
@@ -668,7 +668,7 @@ circuit SmemNoRuwInfo:
 
     smem mem : UInt<8> [8] @[foo.fir 1:1]
     infer mport read = mem[io.addr], clock
-    io.dataOut <= read
+    connect io.dataOut, read
 
 
 ;// -----
@@ -1380,13 +1380,13 @@ circuit RWProbeExprOOB :
   public module RWProbeExprOOB :
     output p : RWProbe<UInt<1>>
     wire x : UInt<1>[2]
-    x is invalid
+    invalidate x
 
     ; expected-error @below {{out of range index '100' for vector type '!firrtl.vector<uint<1>, 2>'}}
     define p = rwprobe(x[100])
 
    input out_0 : SInt<8>[5]
-   out_0[4] <= out_0[5]
+   connect out_0[4], out_0[5]
 
 ;// -----
 
@@ -1624,4 +1624,3 @@ circuit IntrinsicModule:
   ; expected-error @below {{intrinsic modules were removed in FIRRTL 4.0.0}}
   intmodule MyIntModule :
     intrinsic = testIntrinsic1
-

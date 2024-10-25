@@ -37,10 +37,10 @@ circuit TestHarness : %[[
 
     smem mem : UInt<8> [8]
     infer mport read = mem[io.addr], clock
-    io.dataOut <= read
+    connect io.dataOut, read
     when io.wen :
       infer mport write = mem[io.addr], clock
-      write <= io.dataIn
+      connect write, io.dataIn
 
   ; TESTHARNESS: module TestHarness
   ; TESTHARNESS: DUTModule dut
@@ -51,12 +51,12 @@ circuit TestHarness : %[[
     output io : { flip addr : UInt<3>, flip dataIn : UInt<8>, flip wen : UInt<1>, dataOut : UInt<8>}
 
     inst dut of DUTModule
-    dut.clock <= clock
-    dut.reset <= reset
-    io.dataOut <= dut.io.dataOut
-    dut.io.wen <= io.wen
-    dut.io.dataIn <= io.dataIn
-    dut.io.addr <= io.addr
+    connect dut.clock, clock
+    connect dut.reset, reset
+    connect io.dataOut, dut.io.dataOut
+    connect dut.io.wen, io.wen
+    connect dut.io.dataIn, io.dataIn
+    connect dut.io.addr, io.addr
 
   ; MEM: module mem
   ; MEM-NOT: mem_ext mem_ext
