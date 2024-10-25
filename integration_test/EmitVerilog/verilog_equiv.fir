@@ -14,7 +14,7 @@ circuit test_mod :
   public module test_mod :
     input a: UInt<1>
     output b: UInt<1>
-    b <= a
+    connect b, a
 
 ;--- test_mod.v
 
@@ -56,31 +56,31 @@ circuit test_unary :
     output out_tail_s: UInt<2>
     output out_neg_s: SInt<5>
     output out_neg_u: SInt<5>
-    out_xorr_u <= xorr(uin4)
-    out_xorr_s <= xorr(sin4)
-    out_andr_u <= andr(uin4)
-    out_andr_s <= andr(sin4)
-    out_orr_u <= orr(uin4)
-    out_orr_s <= orr(sin4)
-    out_not_u <= not(uin4)
-    out_not_s <= not(sin4)
-    out_pad_u <= pad(uin4, 6)
-    out_pad_s <= pad(sin4, 6)
-    out_shl_u <= shl(uin4, 2)
-    out_shl_s <= shl(sin4, 2)
-    out_shr_u <= shr(uin4, 2)
-    out_shr_s <= shr(sin4, 2)
-    out_cvt_u <= cvt(uin4)
-    out_cvt_s <= cvt(sin4)
-    out_bits_u <= bits(uin4, 3,1)
-    out_bits_s <= bits(sin4, 3,1)
-    out_head_u <= head(uin4, 2)
-    out_head_s <= head(sin4, 2)
-    out_tail_u <= tail(uin4, 2)
-    out_tail_s <= tail(sin4, 2)
-    out_neg_s <= neg(sin4)
-    out_neg_u <= neg(uin4)
-    
+    connect out_xorr_u, xorr(uin4)
+    connect out_xorr_s, xorr(sin4)
+    connect out_andr_u, andr(uin4)
+    connect out_andr_s, andr(sin4)
+    connect out_orr_u, orr(uin4)
+    connect out_orr_s, orr(sin4)
+    connect out_not_u, not(uin4)
+    connect out_not_s, not(sin4)
+    connect out_pad_u, pad(uin4, 6)
+    connect out_pad_s, pad(sin4, 6)
+    connect out_shl_u, shl(uin4, 2)
+    connect out_shl_s, shl(sin4, 2)
+    connect out_shr_u, shr(uin4, 2)
+    connect out_shr_s, shr(sin4, 2)
+    connect out_cvt_u, cvt(uin4)
+    connect out_cvt_s, cvt(sin4)
+    connect out_bits_u, bits(uin4, 3,1)
+    connect out_bits_s, bits(sin4, 3,1)
+    connect out_head_u, head(uin4, 2)
+    connect out_head_s, head(sin4, 2)
+    connect out_tail_u, tail(uin4, 2)
+    connect out_tail_s, tail(sin4, 2)
+    connect out_neg_s, neg(sin4)
+    connect out_neg_u, neg(uin4)
+
 ;--- test_unary.v
 
 module test_unary(
@@ -133,7 +133,7 @@ module test_unary(
   assign out_head_s = sin4[3:2];
   assign out_tail_u = uin4[1:0];
   assign out_tail_s = sin4[1:0];
-  assign out_neg_s = 4'sh0 - $signed(sin4); 
+  assign out_neg_s = 4'sh0 - $signed(sin4);
   assign out_neg_u = 4'h0 - uin4;
 endmodule
 
@@ -180,41 +180,41 @@ circuit test_prim :
     output out_xor_s: UInt<4>
     output out_cat_u: UInt<8>
     output out_cat_s: UInt<8>
-    out_add_u <= add(uina4, uinb4)
-    out_add_s <= add(sina4, sinb4)
-    out_sub_u <= sub(uina4, uinb4)
-    out_sub_s <= sub(sina4, sinb4)
-    out_mul_u <= mul(uina4, uinb4)
-    out_mul_s <= mul(sina4, sinb4)
-    out_div_u <= div(uina4, uinb4)
-    out_div_s <= div(sina4, sinb4)
-    out_rem_u <= rem(uina4, uinb4)
-    out_rem_s <= rem(sina4, sinb4)
-    out_lt_u <= lt(uina4, uinb4)
-    out_lt_s <= lt(sina4, sinb4)
-    out_leq_u <= leq(uina4, uinb4)
-    out_leq_s <= leq(sina4, sinb4)
-    out_gt_u <= gt(uina4, uinb4)
-    out_gt_s <= gt(sina4, sinb4)
-    out_geq_u <= geq(uina4, uinb4)
-    out_geq_s <= geq(sina4, sinb4)
-    out_eq_u <= eq(uina4, uinb4)
-    out_eq_s <= eq(sina4, sinb4)
-    out_neq_u <= neq(uina4, uinb4)
-    out_neq_s <= neq(sina4, sinb4)
-    out_dshl_u <= dshl(uina4, uinb4)
-    out_dshl_s <= dshl(sina4, uinb4)
-    out_dshr_u <= dshr(uina4, uinb4)
-    out_dshr_s <= dshr(sina4, uinb4)
-    out_and_u <= and(uina4, uinb4)
-    out_and_s <= and(sina4, sinb4)
-    out_or_u <= or(uina4, uinb4)
-    out_or_s <= or(sina4, sinb4)
-    out_xor_u <= xor(uina4, uinb4)
-    out_xor_s <= xor(sina4, sinb4)
-    out_cat_u <= cat(uina4, uinb4)
-    out_cat_s <= cat(sina4, sinb4)
-    
+    connect out_add_u, add(uina4, uinb4)
+    connect out_add_s, add(sina4, sinb4)
+    connect out_sub_u, sub(uina4, uinb4)
+    connect out_sub_s, sub(sina4, sinb4)
+    connect out_mul_u, mul(uina4, uinb4)
+    connect out_mul_s, mul(sina4, sinb4)
+    connect out_div_u, div(uina4, uinb4)
+    connect out_div_s, div(sina4, sinb4)
+    connect out_rem_u, rem(uina4, uinb4)
+    connect out_rem_s, rem(sina4, sinb4)
+    connect out_lt_u, lt(uina4, uinb4)
+    connect out_lt_s, lt(sina4, sinb4)
+    connect out_leq_u, leq(uina4, uinb4)
+    connect out_leq_s, leq(sina4, sinb4)
+    connect out_gt_u, gt(uina4, uinb4)
+    connect out_gt_s, gt(sina4, sinb4)
+    connect out_geq_u, geq(uina4, uinb4)
+    connect out_geq_s, geq(sina4, sinb4)
+    connect out_eq_u, eq(uina4, uinb4)
+    connect out_eq_s, eq(sina4, sinb4)
+    connect out_neq_u, neq(uina4, uinb4)
+    connect out_neq_s, neq(sina4, sinb4)
+    connect out_dshl_u, dshl(uina4, uinb4)
+    connect out_dshl_s, dshl(sina4, uinb4)
+    connect out_dshr_u, dshr(uina4, uinb4)
+    connect out_dshr_s, dshr(sina4, uinb4)
+    connect out_and_u, and(uina4, uinb4)
+    connect out_and_s, and(sina4, sinb4)
+    connect out_or_u, or(uina4, uinb4)
+    connect out_or_s, or(sina4, sinb4)
+    connect out_xor_u, xor(uina4, uinb4)
+    connect out_xor_s, xor(sina4, sinb4)
+    connect out_cat_u, cat(uina4, uinb4)
+    connect out_cat_s, cat(sina4, sinb4)
+
 ;--- test_prim.v
 
 module test_prim(

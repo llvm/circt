@@ -11,5 +11,4 @@ FIRRTL version 4.0.0
 circuit Test:
   public module Test:
     output o : UInt<1>
-    o <= UInt<1>(0)
-    
+    connect o, UInt<1>(0)

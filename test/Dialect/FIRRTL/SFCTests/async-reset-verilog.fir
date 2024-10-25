@@ -21,16 +21,16 @@ circuit Foo:
     regreset r2 : UInt<8>, clock0, asyncReset, UInt(123)
     regreset r3 : UInt<8>, clock0, asyncReset, UInt(123)
     regreset r4 : UInt<8>, clock1, asyncReset, UInt(123)
-    r0 <= x[0]
-    r1 <= x[1]
-    r2 <= x[2]
-    r3 <= x[3]
-    r4 <= x[4]
-    z[0] <= r0
-    z[1] <= r1
-    z[2] <= r2
-    z[3] <= r3
-    z[4] <= r4
+    connect r0, x[0]
+    connect r1, x[1]
+    connect r2, x[2]
+    connect r3, x[3]
+    connect r4, x[4]
+    connect z[0], r0
+    connect z[1], r1
+    connect z[2], r2
+    connect z[3], r3
+    connect z[4], r4
 
 ; CHECK:      always @(posedge clock0) begin
 ; CHECK:      if (syncReset)
