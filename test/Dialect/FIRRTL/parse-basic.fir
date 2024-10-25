@@ -776,8 +776,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.matchingconnect %U0_in0, [[INV]]
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue : !firrtl.bundle<a: uint<5>>
     ; CHECK: firrtl.matchingconnect %U0_in1, [[INV]]
-    invalidate U0.in0
-    invalidate U0.in1
+    invalidate U0
 
   ; This reference is declared after its first use.
   ; https://github.com/llvm/circt/issues/163

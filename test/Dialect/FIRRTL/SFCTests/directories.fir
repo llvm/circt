@@ -29,10 +29,8 @@ circuit TestHarness:
       write-latency => 1
       read-under-write => undefined
 
-    invalidate foo_m.r
-    invalidate foo_m.w
-    invalidate foo_combmem.r
-    invalidate foo_combmem.w
+    invalidate foo_m
+    invalidate foo_combmem
 
   extmodule Foo_BlackBox:
     defname = Foo_BlackBox
@@ -58,10 +56,8 @@ circuit TestHarness:
       write-latency => 1
       read-under-write => undefined
 
-    invalidate bar_m.r
-    invalidate bar_m.w
-    invalidate bar_combmem.r
-    invalidate bar_combmem.w
+    invalidate bar_m
+    invalidate bar_combmem
 
   extmodule Bar_BlackBox:
     defname = Bar_BlackBox
@@ -87,10 +83,8 @@ circuit TestHarness:
       write-latency => 1
       read-under-write => undefined
 
-    invalidate baz_m.r
-    invalidate baz_m.w
-    invalidate baz_combmem.r
-    invalidate baz_combmem.w
+    invalidate baz_m
+    invalidate baz_combmem
 
   extmodule Baz_BlackBox:
     defname = Baz_BlackBox

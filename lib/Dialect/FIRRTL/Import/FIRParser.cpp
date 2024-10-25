@@ -3960,7 +3960,52 @@ ParseResult FIRStmtParser::parseInvalidate() {
   auto startTok = consumeToken(FIRToken::kw_invalidate);
 
   Value lhs;
-  if (parseExp(lhs, "expected connect expression") || parseOptionalInfo())
+
+  StringRef id;
+  auto loc = getToken().getLoc();
+  SymbolValueEntry symtabEntry;
+  if (parseId(id, "expected static reference expression") ||
+      moduleContext.lookupSymbolEntry(symtabEntry, id, loc))
+    return failure();
+
+  // If we looked up a normal value (e.g., wire, register, or port), then we
+  // just need to get any optional trailing expression.  Invalidate this.
+  if (!moduleContext.resolveSymbolEntry(lhs, symtabEntry, loc, false)) {
+    if (parseOptionalExpPostscript(lhs, /*allowDynamic=*/false) ||
+        parseOptionalInfo())
+      return failure();
+
+    locationProcessor.setLoc(startTok.getLoc());
+    emitInvalidate(lhs);
+    return success();
+  }
+
+  // We're dealing with an instance.  This instance may or may not have a
+  // trailing expression.  Handle the special case of no trailing expression
+  // first by invalidating all of its results.
+  assert(symtabEntry.is<UnbundledID>() && "should be an instance");
+
+  if (getToken().isNot(FIRToken::period)) {
+    locationProcessor.setLoc(loc);
+    // Invalidate all of the results of the bundled value.
+    unsigned unbundledId = symtabEntry.get<UnbundledID>() - 1;
+    UnbundledValueEntry &ubEntry = moduleContext.getUnbundledEntry(unbundledId);
+    for (auto elt : ubEntry)
+      emitInvalidate(elt.second);
+    return success();
+  }
+
+  // Handle the case of an instance with a trailing expression.  This must begin
+  // with a '.' (until we add instance arrays).
+  StringRef fieldName;
+  if (parseToken(FIRToken::period, "expected '.' in field reference") ||
+      parseFieldId(fieldName, "expected field name") ||
+      moduleContext.resolveSymbolEntry(lhs, symtabEntry, fieldName, loc))
+    return failure();
+
+  // Update with any trailing expression and invalidate it.
+  if (parseOptionalExpPostscript(lhs, /*allowDynamic=*/false) ||
+      parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
