@@ -340,7 +340,7 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
     // handled differently below.
     if (attr.getName() != "portNames" && attr.getName() != "portDirections" &&
         attr.getName() != "portTypes" && attr.getName() != "portAnnotations" &&
-        attr.getName() != "portSyms" && attr.getName() != "portLocations" &&
+        attr.getName() != "portSymbols" && attr.getName() != "portLocations" &&
         attr.getName() != "internalPaths")
       newModuleAttrs.push_back(attr);
 
@@ -394,6 +394,7 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
 
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
+  FModuleLike::fixupPortSymsArray(newPortSyms, theBuilder.getContext());
   module.setPortSymbols(newPortSyms);
   return success();
 }

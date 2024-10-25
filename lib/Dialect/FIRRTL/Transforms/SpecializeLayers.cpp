@@ -527,8 +527,8 @@ struct SpecializeLayers {
     moduleLike.erasePorts(disabledPorts);
 
     // Update the rest of the port types.
-    moduleLike->setAttr(FModuleLike::getPortTypesAttrName(),
-                        ArrayAttr::get(moduleLike.getContext(), newTypeAttrs));
+    moduleLike.setPortTypesAttr(
+        ArrayAttr::get(moduleLike.getContext(), newTypeAttrs));
 
     // We may also need to update the types on the block arguments.
     if (auto moduleOp = dyn_cast<FModuleOp>(moduleLike.getOperation()))

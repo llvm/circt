@@ -44,7 +44,7 @@ static void dropSymbol(const InnerSymTarget &target) {
     auto mod = cast<FModuleLike>(target.getOp());
     assert(target.getPort() < mod.getNumPorts());
     auto base = mod.getPortSymbolAttr(target.getPort());
-    cast<firrtl::FModuleLike>(*mod).setPortSymbolsAttr(
+    cast<firrtl::FModuleLike>(*mod).setPortSymbolAttr(
         target.getPort(), base.erase(target.getField()));
     return;
   }

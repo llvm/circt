@@ -847,6 +847,7 @@ static void insertPorts(FModuleLike op,
   op->setAttr("portNames", ArrayAttr::get(op.getContext(), newNames));
   op->setAttr("portTypes", ArrayAttr::get(op.getContext(), newTypes));
   op->setAttr("portAnnotations", ArrayAttr::get(op.getContext(), newAnnos));
+  FModuleLike::fixupPortSymsArray(newSyms, op.getContext());
   op.setPortSymbols(newSyms);
   op->setAttr("portLocations", ArrayAttr::get(op.getContext(), newLocs));
   if (supportsInternalPaths) {
@@ -898,7 +899,7 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   op->setAttr("portAnnotations", ArrayAttr::get(op.getContext(), newPortAnnos));
   op->setAttr("portTypes", ArrayAttr::get(op.getContext(), newPortTypes));
   FModuleLike::fixupPortSymsArray(newPortSyms, op.getContext());
-  op->setAttr("portSyms", ArrayAttr::get(op.getContext(), newPortSyms));
+  op->setAttr("portSymbols", ArrayAttr::get(op.getContext(), newPortSyms));
   op->setAttr("portLocations", ArrayAttr::get(op.getContext(), newPortLocs));
 }
 
@@ -1011,7 +1012,7 @@ static void buildModuleLike(OpBuilder &builder, OperationState &result,
       direction::packAttribute(builder.getContext(), portDirections));
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute("portTypes", builder.getArrayAttr(portTypes));
-  result.addAttribute("portSyms", builder.getArrayAttr(portSyms));
+  result.addAttribute("portSymbols", builder.getArrayAttr(portSyms));
   result.addAttribute("portLocations", builder.getArrayAttr(portLocs));
 
   if (withAnnotations) {
@@ -1347,8 +1348,8 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
       op.getPortAnnotations(), op.getPortSymbols(), op.getPortLocations());
 
   SmallVector<StringRef, 12> omittedAttrs = {
-      "sym_name", "portDirections", "portTypes",  "portAnnotations",
-      "portSyms", "portLocations",  "parameters", visibilityAttrName};
+      "sym_name",    "portDirections", "portTypes",  "portAnnotations",
+      "portSymbols", "portLocations",  "parameters", visibilityAttrName};
 
   if (op.getConvention() == Convention::Internal)
     omittedAttrs.push_back("convention");
@@ -1500,9 +1501,9 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   }
 
   // Add port symbols.
-  if (!result.attributes.get("portSyms")) {
+  if (!result.attributes.get("portSymbols")) {
     FModuleLike::fixupPortSymsArray(portSyms, builder.getContext());
-    result.addAttribute("portSyms", builder.getArrayAttr(portSyms));
+    result.addAttribute("portSymbols", builder.getArrayAttr(portSyms));
   }
 
   // Add port locations.
@@ -1896,9 +1897,9 @@ static ParseResult parseClassLike(OpAsmParser &parser, OperationState &result,
     result.addAttribute("portTypes", builder.getArrayAttr(portTypes));
 
   // Add the port symbols.
-  if (!result.attributes.get("portSyms")) {
+  if (!result.attributes.get("portSymbols")) {
     FModuleLike::fixupPortSymsArray(portSyms, builder.getContext());
-    result.addAttribute("portSyms", builder.getArrayAttr(portSyms));
+    result.addAttribute("portSymbols", builder.getArrayAttr(portSyms));
   }
 
   // Add port locations.
@@ -1945,8 +1946,8 @@ static void printClassLike(OpAsmPrinter &p, ClassLike op) {
 
   // Print the attr-dict.
   SmallVector<StringRef, 8> omittedAttrs = {
-      "sym_name", "portNames",     "portTypes",       "portDirections",
-      "portSyms", "portLocations", visibilityAttrName};
+      "sym_name",    "portNames",     "portTypes",       "portDirections",
+      "portSymbols", "portLocations", visibilityAttrName};
 
   // We can omit the portNames if they were able to be printed as properly as
   // block arguments.
@@ -2067,6 +2068,12 @@ ArrayAttr ClassOp::getPortAnnotationsAttr() {
   return ArrayAttr::get(getContext(), {});
 }
 
+ArrayRef<Attribute> ClassOp::getPortAnnotations() { return {}; }
+
+void ClassOp::setPortAnnotationsAttr(ArrayAttr annotations) {
+  llvm_unreachable("classes do not support annotations");
+}
+
 ArrayAttr ClassOp::getLayersAttr() { return ArrayAttr::get(getContext(), {}); }
 
 ArrayRef<Attribute> ClassOp::getLayers() { return getLayersAttr(); }
@@ -2151,6 +2158,12 @@ ArrayAttr ExtClassOp::getParameters() { return {}; }
 
 ArrayAttr ExtClassOp::getPortAnnotationsAttr() {
   return ArrayAttr::get(getContext(), {});
+}
+
+ArrayRef<Attribute> ExtClassOp::getPortAnnotations() { return {}; }
+
+void ExtClassOp::setPortAnnotationsAttr(ArrayAttr annotations) {
+  llvm_unreachable("classes do not support annotations");
 }
 
 SmallVector<::circt::hw::PortInfo> ExtClassOp::getPortList() {

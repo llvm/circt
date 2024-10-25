@@ -321,7 +321,7 @@ struct AttrCache {
     sPortDirections = StringAttr::get(context, "portDirections");
     sPortNames = StringAttr::get(context, "portNames");
     sPortTypes = StringAttr::get(context, "portTypes");
-    sPortSyms = StringAttr::get(context, "portSyms");
+    sPortSymbols = StringAttr::get(context, "portSymbols");
     sPortLocations = StringAttr::get(context, "portLocations");
     sPortAnnotations = StringAttr::get(context, "portAnnotations");
     sEmpty = StringAttr::get(context, "");
@@ -330,7 +330,7 @@ struct AttrCache {
 
   Type i64ty;
   StringAttr nameAttr, nameKindAttr, sPortDirections, sPortNames, sPortTypes,
-      sPortSyms, sPortLocations, sPortAnnotations, sEmpty;
+      sPortSymbols, sPortLocations, sPortAnnotations, sEmpty;
 };
 
 // The visitors all return true if the operation should be deleted, false if
@@ -1083,7 +1083,7 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     // handled differently below.
     if (attr.getName() != "portDirections" && attr.getName() != "portNames" &&
         attr.getName() != "portTypes" && attr.getName() != "portAnnotations" &&
-        attr.getName() != "portSyms" && attr.getName() != "portLocations")
+        attr.getName() != "portSymbols" && attr.getName() != "portLocations")
       newModuleAttrs.push_back(attr);
 
   SmallVector<Direction> newArgDirections;
@@ -1124,6 +1124,7 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 
   // Update the module's attributes.
   extModule->setAttrs(newModuleAttrs);
+  FModuleLike::fixupPortSymsArray(newArgSyms, context);
   extModule.setPortSymbols(newArgSyms);
   if (internalPaths)
     extModule.setInternalPathsAttr(builder.getArrayAttr(newInternalPaths));
@@ -1172,7 +1173,7 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
     // handled differently below.
     if (attr.getName() != "portNames" && attr.getName() != "portDirections" &&
         attr.getName() != "portTypes" && attr.getName() != "portAnnotations" &&
-        attr.getName() != "portSyms" && attr.getName() != "portLocations")
+        attr.getName() != "portSymbols" && attr.getName() != "portLocations")
       newModuleAttrs.push_back(attr);
 
   SmallVector<Direction> newArgDirections;
@@ -1208,6 +1209,7 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
+  FModuleLike::fixupPortSymsArray(newArgSyms, context);
   module.setPortSymbols(newArgSyms);
   return false;
 }

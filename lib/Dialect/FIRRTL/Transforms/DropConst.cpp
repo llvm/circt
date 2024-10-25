@@ -70,8 +70,7 @@ class DropConstPass : public circt::firrtl::impl::DropConstBase<DropConstPass> {
                         return type;
                       });
       if (convertedAny)
-        mod->setAttr(FModuleLike::getPortTypesAttrName(),
-                     ArrayAttr::get(mod.getContext(), portTypes));
+        mod.setPortTypesAttr(ArrayAttr::get(mod.getContext(), portTypes));
     };
 
     // Rewrite module bodies in parallel.

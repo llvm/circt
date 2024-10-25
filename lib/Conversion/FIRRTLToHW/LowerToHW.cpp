@@ -1098,7 +1098,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   SmallVector<StringRef, 12> attrNames = {
       "annotations",   "convention",      "layers",
       "portNames",     "sym_name",        "portDirections",
-      "portTypes",     "portAnnotations", "portSyms",
+      "portTypes",     "portAnnotations", "portSymbols",
       "portLocations", "parameters",      SymbolTable::getVisibilityAttrName()};
 
   DenseSet<StringRef> attrSet(attrNames.begin(), attrNames.end());

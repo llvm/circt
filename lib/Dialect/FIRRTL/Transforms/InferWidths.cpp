@@ -2131,8 +2131,7 @@ FailureOr<bool> InferenceTypeUpdate::updateOperation(Operation *op) {
 
     // Update the module function type if needed.
     if (argsChanged) {
-      module->setAttr(FModuleLike::getPortTypesAttrName(),
-                      ArrayAttr::get(module.getContext(), argTypes));
+      module.setPortTypesAttr(ArrayAttr::get(module.getContext(), argTypes));
       anyChanged = true;
     }
   }

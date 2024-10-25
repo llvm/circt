@@ -254,8 +254,7 @@ LogicalResult ProbeVisitor::visit(FModuleLike mod) {
 
   // Update signature and argument types.
   if (portsToChange) {
-    mod->setAttr(mod.getPortTypesAttrName(),
-                 ArrayAttr::get(mod->getContext(), newPortTypes));
+    mod.setPortTypesAttr(ArrayAttr::get(mod->getContext(), newPortTypes));
 
     if (block) {
       // We may also need to update the types on the block arguments.
