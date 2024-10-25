@@ -1624,3 +1624,13 @@ circuit IntrinsicModule:
   ; expected-error @below {{intrinsic modules were removed in FIRRTL 4.0.0}}
   intmodule MyIntModule :
     intrinsic = testIntrinsic1
+
+;// -----
+FIRRTL version 3.0.0
+circuit RegWith:
+  module RegWith:
+    input clock: Clock
+
+    ; expected-error @below {{'reg with' registers were removed in FIRRTL 3.0.0}}
+    reg r_0 : UInt<5>, clock with :
+      reset => (UInt<1>(0h0), r_0)

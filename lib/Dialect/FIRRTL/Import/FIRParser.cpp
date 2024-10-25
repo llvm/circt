@@ -4574,6 +4574,9 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   // Parse the 'with' specifier if present.
   Value resetSignal, resetValue;
   if (consumeIf(FIRToken::kw_with)) {
+    if (removedFeature({3, 0, 0}, "'reg with' registers"))
+      return failure();
+
     if (parseToken(FIRToken::colon, "expected ':' in reg"))
       return failure();
 
