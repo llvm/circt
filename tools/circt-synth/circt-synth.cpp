@@ -1,0 +1,159 @@
+//===- circt-synth.cpp - The circt-synth driver -----------------*- C++ -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+///
+/// This file initializes the 'circt-synth' tool, which performs logic
+/// synthesis.
+///
+//===----------------------------------------------------------------------===//
+
+#include "circt/Dialect/AIG/AIGDialect.h"
+#include "circt/Dialect/AIG/AIGPasses.h"
+#include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Support/Passes.h"
+#include "circt/Support/Version.h"
+#include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/OwningOpRef.h"
+#include "mlir/Parser/Parser.h"
+#include "mlir/Pass/PassManager.h"
+#include "mlir/Support/FileUtilities.h"
+#include "mlir/Support/LogicalResult.h"
+#include "mlir/Transforms/Passes.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/PrettyStackTrace.h"
+#include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/ToolOutputFile.h"
+
+namespace cl = llvm::cl;
+
+using namespace mlir;
+using namespace circt;
+
+//===----------------------------------------------------------------------===//
+// Command-line options declaration
+//===----------------------------------------------------------------------===//
+
+static cl::OptionCategory mainCategory("circt-synth Options");
+
+static cl::opt<std::string> inputFilename(cl::Positional, cl::init("-"),
+                                          cl::desc("Specify an input file"),
+                                          cl::value_desc("filename"),
+                                          cl::cat(mainCategory));
+
+static cl::opt<std::string> outputFilename("o", cl::desc("Output filename"),
+                                           cl::value_desc("filename"),
+                                           cl::init("-"),
+                                           cl::cat(mainCategory));
+
+static cl::opt<bool>
+    verifyPasses("verify-each",
+                 cl::desc("Run the verifier after each transformation pass"),
+                 cl::init(true), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    verbosePassExecutions("verbose-pass-executions",
+                          cl::desc("Log executions of toplevel module passes"),
+                          cl::init(false), cl::cat(mainCategory));
+
+//===----------------------------------------------------------------------===//
+// Tool implementation
+//===----------------------------------------------------------------------===//
+
+static void populateSynthesisPipeline(PassManager &pm) {}
+
+/// This function initializes the various components of the tool and
+/// orchestrates the work to be done.
+static LogicalResult executeSynthesis(MLIRContext &context) {
+  // Create the timing manager we use to sample execution times.
+  DefaultTimingManager tm;
+  applyDefaultTimingManagerCLOptions(tm);
+  auto ts = tm.getRootScope();
+
+  OwningOpRef<ModuleOp> module;
+  {
+    auto parserTimer = ts.nest("Parse MLIR input");
+    // Parse the provided input files.
+    module = parseSourceFile<ModuleOp>(inputFilename, &context);
+  }
+  if (!module)
+    return failure();
+  // Create the output directory or output file depending on our mode.
+  std::optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;
+  std::string errorMessage;
+  // Create an output file.
+  outputFile.emplace(openOutputFile(outputFilename, &errorMessage));
+  if (!outputFile.value()) {
+    llvm::errs() << errorMessage << "\n";
+    return failure();
+  }
+
+  PassManager pm(&context);
+  pm.enableVerifier(verifyPasses);
+  pm.enableTiming(ts);
+  if (failed(applyPassManagerCLOptions(pm)))
+    return failure();
+
+  if (verbosePassExecutions)
+    pm.addInstrumentation(
+        std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
+            "circt-synth"));
+  populateSynthesisPipeline(pm);
+  if (failed(pm.run(module.get())))
+    return failure();
+
+  auto timer = ts.nest("Print MLIR output");
+  OpPrintingFlags printingFlags;
+  module->print(outputFile.value()->os(), printingFlags);
+  outputFile.value()->keep();
+  return success();
+}
+
+/// The entry point for the `circt-synth` tool:
+/// configures and parses the command-line options,
+/// registers all dialects within a MLIR context,
+/// and calls the `executeSynthesis` function to do the actual work.
+int main(int argc, char **argv) {
+  llvm::InitLLVM y(argc, argv);
+
+  // Hide default LLVM options, other than for this tool.
+  // MLIR options are added below.
+  cl::HideUnrelatedOptions(mainCategory);
+
+  // Register any pass manager command line options.
+  registerMLIRContextCLOptions();
+  registerPassManagerCLOptions();
+  registerDefaultTimingManagerCLOptions();
+  registerAsmPrinterCLOptions();
+  cl::AddExtraVersionPrinter(
+      [](llvm::raw_ostream &os) { os << circt::getCirctVersion() << '\n'; });
+
+  // Parse the command-line options provided by the user.
+  cl::ParseCommandLineOptions(argc, argv, "Logic synthesis tool\n\n");
+
+  // Set the bug report message to indicate users should file issues on
+  // llvm/circt and not llvm/llvm-project.
+  llvm::setBugReportMsg(circt::circtBugReportMsg);
+
+  // Register the supported CIRCT dialects and create a context to work with.
+  DialectRegistry registry;
+  registry.insert<circt::aig::AIGDialect, circt::comb::CombDialect,
+                  circt::hw::HWDialect>();
+  MLIRContext context(registry);
+
+  // Setup of diagnostic handling.
+  llvm::SourceMgr sourceMgr;
+  SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
+  // Avoid printing a superfluous note on diagnostic emission.
+  context.printOpOnDiagnostic(false);
+
+  // Perform the synthesis; using `exit` to avoid the slow
+  // teardown of the MLIR context.
+  exit(failed(executeSynthesis(context)));
+}
