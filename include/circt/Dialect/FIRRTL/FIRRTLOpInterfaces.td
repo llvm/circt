@@ -446,41 +446,31 @@ def FConnectLike : OpInterface<"FConnectLike"> {
 }
 
 def FNamableOp : OpInterface<"FNamableOp"> {
-  let cppNamespace = "circt::firrtl";
-  let description = [{The interface provides common methods for namable operations
-    related to name preservation semantics. }];
+  let cppNamespace = "::circt::firrtl";
+  let description = [{
+    This interface provides common methods for namable operations.
+  }];
 
   let methods = [
+    InterfaceMethod<"Return the name.", "::mlir::StringAttr", "getNameAttr">,
+    InterfaceMethod<"Return the name.", "::llvm::StringRef", "getName">,
+    InterfaceMethod<"Set the name.", "void", "setNameAttr",
+      (ins "::mlir::StringAttr":$name)>,
+    InterfaceMethod<"Set the name.", "void", "setName",
+      (ins "::llvm::StringRef":$name)>,
+
+    InterfaceMethod<"Get the namekind", "::circt::firrtl::NameKindEnumAttr",
+      "getNameKindAttr">,
+    InterfaceMethod<"Get the namekind", "::circt::firrtl::NameKindEnum",
+      "getNameKind">,
+    InterfaceMethod<"Set a namekind.", "void", "setNameKindAttr",
+      (ins "::circt::firrtl::NameKindEnumAttr":$nameKind)>,
+    InterfaceMethod<"Set a namekind.", "void", "setNameKind",
+      (ins "::circt::firrtl::NameKindEnum":$nameKind)>,
+
     InterfaceMethod<"Return true if the name is droppable.",
     "bool", "hasDroppableName", (ins), [{}], /*defaultImplementation=*/[{
-      return this->getOperation()->template
-             getAttrOfType<NameKindEnumAttr>("nameKind").getValue()
-             == NameKindEnum::DroppableName;
-    }]>,
-    InterfaceMethod<"Completely drop a name.",
-    "void", "dropName", (ins), [{}], /*defaultImplementation=*/[{
-      auto* op = this->getOperation();
-      auto* ctx = op->getContext();
-      op->setAttr("nameKind",
-        NameKindEnumAttr::get(ctx,
-                              NameKindEnum::DroppableName));
-      op->setAttr("name", StringAttr::get(ctx, ""));
-    }]>,
-    InterfaceMethod<"Set a namekind.",
-    "void", "setNameKindAttr", (ins "firrtl::NameKindEnumAttr":$nameKind),
-                                       [{}], /*defaultImplementation=*/[{
-      this->getOperation()->setAttr("nameKind", nameKind);
-    }]>,
-    InterfaceMethod<"Return the name.",
-    "mlir::StringAttr", "getNameAttr", (ins), [{}],
-    /*defaultImplementation=*/[{
-      return this->getOperation()->template
-             getAttrOfType<mlir::StringAttr>("name");
-    }]>,
-    InterfaceMethod<"Return the name.",
-    "llvm::StringRef", "getName", (ins), [{}],
-    /*defaultImplementation=*/[{
-      return getNameAttr();
+      return $_op.getNameKind() == NameKindEnum::DroppableName;
     }]>
   ];
 }
