@@ -796,4 +796,16 @@ def LowerSimToSV: Pass<"lower-sim-to-sv",  "mlir::ModuleOp"> {
   ];
 }
 
+//===----------------------------------------------------------------------===//
+// ConvertCombToAIG
+//===----------------------------------------------------------------------===//
+
+def ConvertCombToAIG: Pass<"convert-comb-to-aig",  "hw::HWModuleOp"> {
+  let summary = "Lower Comb ops to AIG ops.";
+  let dependentDialects = [
+    "circt::comb::CombDialect",
+    "circt::aig::AIGDialect",
+  ];
+}
+
 #endif // CIRCT_CONVERSION_PASSES_TD
