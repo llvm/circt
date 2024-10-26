@@ -282,16 +282,16 @@ LogicalResult SigArrayGetOp::ensureOnlySafeAccesses(
 // SigStructExtractOp and PtrStructExtractOp
 //===----------------------------------------------------------------------===//
 
-template <class SigPtrType>
+template <class OpType, class SigPtrType>
 static LogicalResult inferReturnTypesOfStructExtractOp(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  typename OpType::Adaptor adaptor(operands, attrs, properties, regions);
   Type type =
       cast<hw::StructType>(
-          cast<SigPtrType>(operands[0].getType()).getElementType())
-          .getFieldType(
-              cast<StringAttr>(attrs.getNamed("field")->getValue()).getValue());
+          cast<SigPtrType>(adaptor.getInput().getType()).getElementType())
+          .getFieldType(adaptor.getField());
   if (!type) {
     context->getDiagEngine().emit(loc.value_or(UnknownLoc()),
                                   DiagnosticSeverity::Error)
@@ -306,7 +306,8 @@ LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  return inferReturnTypesOfStructExtractOp<hw::InOutType>(
+  return inferReturnTypesOfStructExtractOp<llhd::SigStructExtractOp,
+                                           hw::InOutType>(
       context, loc, operands, attrs, properties, regions, results);
 }
 
@@ -314,7 +315,8 @@ LogicalResult llhd::PtrStructExtractOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  return inferReturnTypesOfStructExtractOp<llhd::PtrType>(
+  return inferReturnTypesOfStructExtractOp<llhd::PtrStructExtractOp,
+                                           llhd::PtrType>(
       context, loc, operands, attrs, properties, regions, results);
 }
 

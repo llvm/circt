@@ -22,9 +22,6 @@ def ArcDialect : Dialect {
   let hasConstantMaterializer = 1;
   let useDefaultTypePrinterParser = 1;
 
-  // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
-  let usePropertiesForAttributes = 0;
-
   let extraClassDeclaration = [{
     void registerTypes();
   }];

@@ -35,9 +35,6 @@ def Handshake_Dialect : Dialect {
 
   let useDefaultAttributePrinterParser = 1;
 
-  // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
-  let usePropertiesForAttributes = 0;
-
   let dependentDialects = [
     "circt::esi::ESIDialect",
     "circt::seq::SeqDialect"

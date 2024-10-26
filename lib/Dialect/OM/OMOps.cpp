@@ -510,13 +510,14 @@ LogicalResult TupleCreateOp::inferReturnTypes(
 
 LogicalResult TupleGetOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> location, ValueRange operands,
-    DictionaryAttr attributes, OpaqueProperties, RegionRange regions,
+    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
     llvm::SmallVectorImpl<Type> &inferredReturnTypes) {
-  auto idx = attributes.getAs<mlir::IntegerAttr>("index");
+  Adaptor adaptor(operands, attributes, properties, regions);
+  auto idx = adaptor.getIndexAttr();
   if (operands.empty() || !idx)
     return failure();
 
-  auto tupleTypes = cast<TupleType>(operands[0].getType()).getTypes();
+  auto tupleTypes = cast<TupleType>(adaptor.getInput().getType()).getTypes();
   if (tupleTypes.size() <= idx.getValue().getLimitedValue()) {
     if (location)
       mlir::emitError(*location,
