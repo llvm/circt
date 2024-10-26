@@ -225,6 +225,10 @@ if config.slang_frontend_enabled:
   config.available_features.add('slang')
   tools.append('circt-verilog')
 
+# Add yosys-integration if the yosys_integration_enabled is enabled.
+if config.yosys_integration_enabled:
+  config.available_features.add('yosys-integration')
+
 # Add arcilator JIT if MLIR's execution engine is enabled.
 if config.arcilator_jit_enabled:
   config.available_features.add('arcilator-jit')

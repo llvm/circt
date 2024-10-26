@@ -39,6 +39,7 @@ config.verilator_path = "@VERILATOR_PATH@"
 config.zlib = "@HAVE_ZLIB@"
 config.scheduling_or_tools = "@SCHEDULING_OR_TOOLS@"
 config.slang_frontend_enabled = @CIRCT_SLANG_FRONTEND_ENABLED@
+config.yosys_integration_enabled = @CIRCT_YOSYS_INTEGRATION_ENABLED@
 
 # Support substitution of the tools_dir with user parameters. This is
 # used when we can't determine the tool dir at configuration time.
