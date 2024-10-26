@@ -1,5 +1,6 @@
 add_circt_dialect_library(CIRCTAIGTransforms
   LowerVariadic.cpp
+  LowerWordToBits.cpp
 
   DEPENDS
   CIRCTAIGPassesIncGen
