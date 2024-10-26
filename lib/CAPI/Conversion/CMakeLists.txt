@@ -7,6 +7,7 @@ add_circt_public_c_api_library(CIRCTCAPIConversion
   CIRCTCalyxToFSM
   CIRCTCalyxToHW
   CIRCTCalyxNative
+  CIRCTCombToAIG
   CIRCTCombToArith
   CIRCTCombToLLVM
   CIRCTCombToSMT
