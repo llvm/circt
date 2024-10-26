@@ -13,4 +13,5 @@ add_circt_dialect_library(CIRCTAIG
   MLIRAIGIncGen
 )
 
+add_subdirectory(Analysis)
 add_subdirectory(Transforms)

@@ -64,9 +64,9 @@ struct WordRewritePattern : public OpRewritePattern<AndInverterOp> {
         }
         // Otherwise, we need to extract the bit.
         operands.push_back(
-            rewriter.create<comb::ExtractOp>(op.getLoc(), operand, i, 1));
+            rewriter.createOrFold<comb::ExtractOp>(op.getLoc(), operand, i, 1));
       }
-      results.push_back(rewriter.create<AndInverterOp>(op.getLoc(), operands,
+      results.push_back(rewriter.createOrFold<AndInverterOp>(op.getLoc(), operands,
                                                        op.getInvertedAttr()));
     }
 
@@ -89,15 +89,65 @@ struct LowerWordToBitsPass
 } // namespace
 
 void LowerWordToBitsPass::runOnOperation() {
-  RewritePatternSet patterns(&getContext());
+  if (!getOperation().getModuleName().starts_with("SiFive_") ||
+      getOperation().getNumOutputPorts() == 0)
+    return markAllAnalysesPreserved();
+  auto context = &getContext();
+  RewritePatternSet patterns(context);
+  for (auto *dialect : context->getLoadedDialects())
+    dialect->getCanonicalizationPatterns(patterns);
+  for (mlir::RegisteredOperationName op : context->getRegisteredOperations())
+    op.getCanonicalizationPatterns(patterns, context);
+
+  // RewritePatternSet patterns(&getContext());
   patterns.add<WordRewritePattern>(&getContext());
+  llvm::errs() << getOperation().getModuleName() << " LW start\n";
 
   mlir::FrozenRewritePatternSet frozenPatterns(std::move(patterns));
   mlir::GreedyRewriteConfig config;
   // Use top-down traversal to reuse bits from `comb.concat`.
   config.useTopDownTraversal = true;
+  // getOperation().walk([&](AndInverterOp op) {
+  //   mlir::ImplicitLocOpBuilder builder(op->getLoc(), op);
+  //   auto width = op.getType().getIntOrFloatBitWidth();
+  //   if (width <= 1)
+  //     return;
+
+  //   SmallVector<Value> results;
+  //   // We iterate over the width in reverse order to match the endianness of
+  //   // `comb.concat`.
+  //   for (int64_t i = width - 1; i >= 0; --i) {
+  //     SmallVector<Value> operands;
+  //     for (auto operand : op.getOperands()) {
+  //       // Reuse bits if we can extract from `comb.concat` operands.
+  //       if (auto concat = operand.getDefiningOp<comb::ConcatOp>()) {
+  //         // For the simplicity, we only handle the case where all the
+  //         // `comb.concat` operands are single-bit.
+  //         if (concat.getNumOperands() == width &&
+  //             llvm::all_of(concat.getOperandTypes(), [](Type type) {
+  //               return type.getIntOrFloatBitWidth() == 1;
+  //             })) {
+  //           // Be careful with the endianness here.
+  //           operands.push_back(concat.getOperand(width - i - 1));
+  //           continue;
+  //         }
+  //       }
+  //       // Otherwise, we need to extract the bit.
+  //       operands.push_back(
+  //           builder.createOrFold<comb::ExtractOp>(op.getLoc(), operand, i, 1));
+  //     }
+  //     results.push_back(builder.createOrFold<AndInverterOp>(
+  //         op.getLoc(), operands, op.getInvertedAttr()));
+  //   }
+
+  //   auto concat = builder.create<comb::ConcatOp>(results);
+  //   op->replaceAllUsesWith(concat);
+  //   op->erase();
+  // });
 
   if (failed(mlir::applyPatternsAndFoldGreedily(getOperation(), frozenPatterns,
                                                 config)))
     return signalPassFailure();
+
+  llvm::errs() << getOperation().getModuleName() << " LW finish\n";
 }

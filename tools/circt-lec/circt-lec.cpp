@@ -19,6 +19,7 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/SMT/SMTDialect.h"
+#include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
 #include "circt/Tools/circt-lec/Passes.h"
@@ -353,8 +354,8 @@ int main(int argc, char **argv) {
   DialectRegistry registry;
   registry.insert<circt::comb::CombDialect, circt::hw::HWDialect,
                   circt::smt::SMTDialect, mlir::func::FuncDialect,
-                  mlir::LLVM::LLVMDialect, mlir::arith::ArithDialect,
-                  mlir::BuiltinDialect>();
+                  circt::verif::VerifDialect, mlir::LLVM::LLVMDialect,
+                  mlir::arith::ArithDialect, mlir::BuiltinDialect>();
   mlir::func::registerInlinerExtension(registry);
   mlir::registerBuiltinDialectTranslation(registry);
   mlir::registerLLVMDialectTranslation(registry);

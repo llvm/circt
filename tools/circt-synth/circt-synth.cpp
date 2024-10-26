@@ -11,11 +11,21 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include "circt/Conversion/AIGToComb.h"
+#include "circt/Conversion/CombToAIG.h"
 #include "circt/Dialect/AIG/AIGDialect.h"
 #include "circt/Dialect/AIG/AIGPasses.h"
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Debug/DebugDialect.h"
+#include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/LTL/LTLDialect.h"
+#include "circt/Dialect/OM/OMOps.h"
+#include "circt/Dialect/SV/SVDialect.h"
+#include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Sim/SimDialect.h"
+#include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
 #include "mlir/IR/Diagnostics.h"
@@ -61,12 +71,42 @@ static cl::opt<bool>
     verbosePassExecutions("verbose-pass-executions",
                           cl::desc("Log executions of toplevel module passes"),
                           cl::init(false), cl::cat(mainCategory));
+static cl::opt<bool>
+    convertToComb("convert-to-comb",
+                  cl::desc("Convert AIG to Comb at the end of the pipeline"),
+                  cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    enableWordToBits("enable-word-to-bits",
+                     cl::desc("Perform bit-blasting in the pipeline"),
+                     cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    allowUnregisteredDialects("allow-unregistered-dialects",
+                              cl::desc("Allow unregistered dialects in the "
+                                       "input file"),
+                              cl::init(false), cl::cat(mainCategory));
 
 //===----------------------------------------------------------------------===//
 // Tool implementation
 //===----------------------------------------------------------------------===//
 
-static void populateSynthesisPipeline(PassManager &pm) {}
+static void populateSynthesisPipeline(PassManager &pm) {
+  auto &mpm = pm.nest<hw::HWModuleOp>();
+  mpm.addPass(circt::createConvertCombToAIG());
+  mpm.addPass(createCSEPass());
+  mpm.addPass(createCanonicalizerPass());
+  // mpm.addPass(circt::aig::createLowerVariadic());
+  // mpm.addPass(createCSEPass());
+  // mpm.addPass(createCanonicalizerPass());
+  if (enableWordToBits)
+    mpm.addPass(circt::aig::createLowerWordToBits());
+
+  if (convertToComb) {
+    mpm.addPass(circt::createConvertAIGToComb());
+    mpm.addPass(createCSEPass());
+  }
+}
 
 /// This function initializes the various components of the tool and
 /// orchestrates the work to be done.
@@ -144,8 +184,13 @@ int main(int argc, char **argv) {
   // Register the supported CIRCT dialects and create a context to work with.
   DialectRegistry registry;
   registry.insert<circt::aig::AIGDialect, circt::comb::CombDialect,
-                  circt::hw::HWDialect>();
+                  circt::hw::HWDialect, circt::verif::VerifDialect,
+                  circt::sv::SVDialect, emit::EmitDialect, seq::SeqDialect,
+                  om::OMDialect, sv::SVDialect, verif::VerifDialect,
+                  ltl::LTLDialect, debug::DebugDialect, sim::SimDialect>();
   MLIRContext context(registry);
+  if (allowUnregisteredDialects)
+    context.allowUnregisteredDialects(true);
 
   // Setup of diagnostic handling.
   llvm::SourceMgr sourceMgr;
