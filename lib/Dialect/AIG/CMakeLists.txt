@@ -10,6 +10,7 @@ add_circt_dialect_library(CIRCTAIG
   CIRCTHW
 
   DEPENDS
-  CIRCTAIGPassesIncGen
   MLIRAIGIncGen
 )
+
+add_subdirectory(Transforms)

@@ -11,4 +11,8 @@
 
 include "mlir/Pass/PassBase.td"
 
+def LowerVariadic : Pass<"aig-lower-variadic", "hw::HWModuleOp"> {
+  let summary = "Lower variadic AndInverter operations to binary AndInverter";
+}
+
 #endif // CIRCT_DIALECT_AIG_AIGPASSES_TD
