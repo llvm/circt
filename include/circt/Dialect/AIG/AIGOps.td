@@ -15,7 +15,6 @@
 
 include "circt/Dialect/AIG/AIG.td"
 include "mlir/IR/OpBase.td"
-include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
