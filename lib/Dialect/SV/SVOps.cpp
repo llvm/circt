@@ -1703,13 +1703,13 @@ LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  auto width = attrs.get("width");
+  Adaptor adaptor(operands, attrs, properties, regions);
+  auto width = adaptor.getWidthAttr();
   if (!width)
     return failure();
 
-  auto typ =
-      getElementTypeOfWidth(operands[0].getType(),
-                            cast<IntegerAttr>(width).getValue().getZExtValue());
+  auto typ = getElementTypeOfWidth(operands[0].getType(),
+                                   width.getValue().getZExtValue());
   if (!typ)
     return failure();
   results.push_back(typ);
@@ -1756,12 +1756,12 @@ LogicalResult IndexedPartSelectOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  auto width = attrs.get("width");
+  Adaptor adaptor(operands, attrs, properties, regions);
+  auto width = adaptor.getWidthAttr();
   if (!width)
     return failure();
 
-  results.push_back(
-      IntegerType::get(context, cast<IntegerAttr>(width).getInt()));
+  results.push_back(IntegerType::get(context, width.getInt()));
   return success();
 }
 
@@ -1786,12 +1786,13 @@ LogicalResult StructFieldInOutOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  auto field = attrs.get("field");
+  Adaptor adaptor(operands, attrs, properties, regions);
+  auto field = adaptor.getFieldAttr();
   if (!field)
     return failure();
   auto structType =
       hw::type_cast<hw::StructType>(getInOutElementType(operands[0].getType()));
-  auto resultType = structType.getFieldType(cast<StringAttr>(field));
+  auto resultType = structType.getFieldType(field);
   if (!resultType)
     return failure();
 

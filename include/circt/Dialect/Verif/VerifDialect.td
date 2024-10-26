@@ -18,9 +18,6 @@ def VerifDialect : Dialect {
   let cppNamespace = "circt::verif";
   let hasConstantMaterializer = 1;
 
-  // This will be the default after next LLVM bump.
-  let usePropertiesForAttributes = 1;
-
   let dependentDialects = [
     "circt::seq::SeqDialect", "circt::hw::HWDialect"
   ];
