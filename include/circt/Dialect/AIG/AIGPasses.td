@@ -15,4 +15,9 @@ def LowerVariadic : Pass<"aig-lower-variadic", "hw::HWModuleOp"> {
   let summary = "Lower variadic AndInverter operations to binary AndInverter";
 }
 
+def LowerWordToBits : Pass<"aig-lower-word-to-bits", "hw::HWModuleOp"> {
+  let summary = "Lower multi-bit AndInverter to single-bit ones";
+  let dependentDialects = ["comb::CombDialect"];
+}
+
 #endif // CIRCT_DIALECT_AIG_AIGPASSES_TD
