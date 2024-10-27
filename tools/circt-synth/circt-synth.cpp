@@ -11,6 +11,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include "circt/Conversion/AIGToComb.h"
 #include "circt/Conversion/CombToAIG.h"
 #include "circt/Dialect/AIG/AIGDialect.h"
 #include "circt/Dialect/AIG/AIGPasses.h"
@@ -26,6 +27,7 @@
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/Passes.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/PrettyStackTrace.h"
@@ -77,6 +79,11 @@ static llvm::cl::opt<Until> runUntilAfter(
     "until-after", llvm::cl::desc("Stop pipeline after a specified point"),
     runUntilValues, llvm::cl::init(UntilEnd), llvm::cl::cat(mainCategory));
 
+static cl::opt<bool>
+    convertToComb("convert-to-comb",
+                  cl::desc("Convert AIG to Comb at the end of the pipeline"),
+                  cl::init(false), cl::cat(mainCategory));
+
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -90,6 +97,15 @@ static bool untilReached(Until until) {
 //===----------------------------------------------------------------------===//
 
 static void populateSynthesisPipeline(PassManager &pm) {
+  // Add the AIG to Comb at the scope exit if requested.
+  auto addAIGToComb = llvm::make_scope_exit([&]() {
+    if (convertToComb) {
+      auto &mpm = pm.nest<hw::HWModuleOp>();
+      mpm.addPass(circt::createConvertAIGToComb());
+      mpm.addPass(createCSEPass());
+    }
+  });
+
   auto &mpm = pm.nest<hw::HWModuleOp>();
   mpm.addPass(circt::createConvertCombToAIG());
   mpm.addPass(createCSEPass());
