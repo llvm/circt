@@ -564,7 +564,7 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
     {wiringSourceAnnoClass, {stdResolve, applyWiring}},
     {attributeAnnoClass, {stdResolve, applyAttributeAnnotation}},
 
-    {tywavesAnnoClass, {tryResolve, applyTywaves}}}};
+    {tywavesAnnoClass, {stdResolve, applyTywaves}}}};
 
 LogicalResult
 registerAnnotationRecord(StringRef annoClass, AnnoRecord annoRecord,

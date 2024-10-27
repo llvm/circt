@@ -527,7 +527,7 @@ MaterializeDebugInfoPass::convertToDebugAggregates(
   auto generateResult = [&builder, &typeName, &params, &enumDef](
                             bool buildSubFieldOp, const Value &result,
                             const Location &loc, const StringAttr &name) {
-    if (buildSubFieldOp) {
+    if (buildSubFieldOp && result) {
       Value x = builder.create<debug::SubFieldOp>(loc, name, result,
                                                   /*typeName=*/typeName,
                                                   /*params=*/params,
@@ -564,6 +564,7 @@ MaterializeDebugInfoPass::convertToDebugAggregates(
         return builder.getArrayAttr(_filteredAnnoList);
       };
 
+  LLVM_DEBUG(llvm::dbgs() << "- TYPE: " << value.getType() << "\n");
   auto result =
       FIRRTLTypeSwitch<Type, Value>(value.getType())
           .Case<BundleType>([&](auto type) {
@@ -627,6 +628,8 @@ MaterializeDebugInfoPass::convertToDebugAggregates(
 
               auto completeName =
                   name.getValue() + "[" + std::to_string(index) + "]";
+              LLVM_DEBUG(llvm::dbgs() << " Call converttoDebugAggregate\n");
+
               if (auto dbgValue =
                       convertToDebugAggregates(
                           builder, subOp, builder.getStringAttr(completeName),
@@ -634,6 +637,9 @@ MaterializeDebugInfoPass::convertToDebugAggregates(
                           .first)
                 elements.push_back(dbgValue);
             }
+
+            LLVM_DEBUG(llvm::dbgs() << "- VECTOR OF SIZE: "
+                                    << type.getNumElements() << "\n");
 
             Value result;
             if (!elements.empty() && elements.size() == type.getNumElements())
