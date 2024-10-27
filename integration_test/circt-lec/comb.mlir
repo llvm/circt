@@ -80,8 +80,10 @@ hw.module @divs(in %in1: i32, in %in2: i32, out out: i32) {
 // comb.divu
 // RUN: circt-lec %s -c1=divu_unsafe -c2=divu_unsafe --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_DIVU_UNSAFE
 // RUN: circt-lec %s -c1=divu -c2=divu --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_DIVU
+// RUN: circt-lec %s -c1=divu_assume -c2=divu_assume --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_DIVU_ASSUME
 // COMB_DIVU_UNSAFE: c1 != c2
 // COMB_DIVU: c1 == c2
+// COMB_DIVU_ASSUME: c1 == c2
 
 hw.module @divu_unsafe(in %in1: i32, in %in2: i32, out out: i32) {
   %0 = comb.divu %in1, %in2 : i32
@@ -94,6 +96,14 @@ hw.module @divu(in %in1: i32, in %in2: i32, out out: i32) {
   %2 = comb.divu %in1, %in2 : i32
   %3 = comb.mux %1, %0, %2 : i32
   hw.output %3 : i32
+}
+
+hw.module @divu_assume(in %in1: i32, in %in2: i32, out out: i32) {
+  %0 = hw.constant 0 : i32
+  %1 = comb.icmp ne %in2, %0 : i32
+  verif.assume %1 : i1
+  %2 = comb.divu %in1, %in2 : i32
+  hw.output %2 : i32
 }
 
 // comb.extract

@@ -21,6 +21,7 @@ target_link_libraries(circt-lec
   CIRCTHW
   CIRCTSMT
   CIRCTSupport
+  CIRCTVerif
   MLIRIR
   MLIRFuncDialect
   MLIRArithDialect
