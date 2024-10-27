@@ -11,6 +11,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include "circt/Conversion/CombToAIG.h"
 #include "circt/Dialect/AIG/AIGDialect.h"
 #include "circt/Dialect/AIG/AIGPasses.h"
 #include "circt/Dialect/Comb/CombDialect.h"
@@ -62,11 +63,53 @@ static cl::opt<bool>
                           cl::desc("Log executions of toplevel module passes"),
                           cl::init(false), cl::cat(mainCategory));
 
+// Options to control early-out from pipeline.
+enum Until { UntilAIGLowering, UntilEnd };
+
+static auto runUntilValues = llvm::cl::values(
+    clEnumValN(UntilAIGLowering, "aig-lowering", "Lowering of AIG"),
+    clEnumValN(UntilEnd, "all", "Run entire pipeline (default)"));
+
+static llvm::cl::opt<Until> runUntilBefore(
+    "until-before", llvm::cl::desc("Stop pipeline before a specified point"),
+    runUntilValues, llvm::cl::init(UntilEnd), llvm::cl::cat(mainCategory));
+static llvm::cl::opt<Until> runUntilAfter(
+    "until-after", llvm::cl::desc("Stop pipeline after a specified point"),
+    runUntilValues, llvm::cl::init(UntilEnd), llvm::cl::cat(mainCategory));
+
+//===----------------------------------------------------------------------===//
+// Main Tool Logic
+//===----------------------------------------------------------------------===//
+
+static bool untilReached(Until until) {
+  return until >= runUntilBefore || until > runUntilAfter;
+}
+
 //===----------------------------------------------------------------------===//
 // Tool implementation
 //===----------------------------------------------------------------------===//
 
-static void populateSynthesisPipeline(PassManager &pm) {}
+static void populateSynthesisPipeline(PassManager &pm) {
+  auto &mpm = pm.nest<hw::HWModuleOp>();
+  mpm.addPass(circt::createConvertCombToAIG());
+  mpm.addPass(createCSEPass());
+  if (untilReached(UntilAIGLowering))
+    return;
+  mpm.addPass(createSimpleCanonicalizerPass());
+  mpm.addPass(createCSEPass());
+  mpm.addPass(aig::createLowerVariadic());
+  // TODO: LowerWordToBits is not scalable for large designs. Change to
+  // conditionally enable the pass once the rest of the pipeline was able to
+  // handle multibit operands properly.
+  mpm.addPass(aig::createLowerWordToBits());
+  mpm.addPass(createCSEPass());
+  mpm.addPass(createSimpleCanonicalizerPass());
+  // TODO: Add balancing, rewriting, FRAIG conversion, etc.
+  if (untilReached(UntilEnd))
+    return;
+
+  // TODO: Add LUT mapping, etc.
+}
 
 /// This function initializes the various components of the tool and
 /// orchestrates the work to be done.
