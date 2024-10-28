@@ -158,7 +158,7 @@ def ClassFieldsOp : OMOp<"class.fields", [Terminator, ReturnLike, Pure,
 def ClassExternOp : OMClassLike<"class.extern", [NoTerminator]> {
   let extraClassDeclaration = [{
     mlir::Block *getBodyBlock() { return &getBody().front(); }
-    
+
     // Implement RegionKindInterface.
     static mlir::RegionKind getRegionKind(unsigned index) {
       return mlir::RegionKind::Graph;
@@ -354,7 +354,7 @@ def MapCreateOp : OMOp<"map_create", [Pure, SameTypeOperands]> {
   let hasCustomAssemblyFormat = true;
 }
 
-def BasePathCreateOp : OMOp<"basepath_create", [Pure, 
+def BasePathCreateOp : OMOp<"basepath_create", [Pure,
       DeclareOpInterfaceMethods<SymbolUserOpInterface>
     ]> {
   let summary = "Produce a base path value";
