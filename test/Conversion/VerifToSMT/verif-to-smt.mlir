@@ -147,7 +147,7 @@ func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
 // CHECK:  }
 
 func.func @test_bmc() -> (i1) {
-  %bmc = verif.bmc bound 10 num_regs 1
+  %bmc = verif.bmc bound 10 num_regs 1 initial_values [unit]
   init {
     %c0_i1 = hw.constant 0 : i1
     %clk = seq.to_clock %c0_i1
