@@ -76,8 +76,24 @@ public:
       : base_stream(os), options(options) {}
 
   ~EmitRTGToElf() {
-    for (auto &[ctx, buffer] : buffers) {
-      base_stream << buffer;
+    int maxCTX = 0;
+    for (auto &[ctx, buffer] : buffers)
+      maxCTX = std::max(maxCTX, ctx);
+
+    base_stream << ".section rodata\n";
+    base_stream << "__rtg_num_threads:\n";
+    base_stream << "\t.word " << (maxCTX + 1) << "\n";
+    base_stream << "__rtg_entrypoint:\n";
+    for (int i = 0; i <= maxCTX; i++)
+      base_stream << "\t.dword __rtg_entrypoint_" << i << "\n";
+    base_stream << "\n\n.section text\n";
+    for (int i = 0; i <= maxCTX; i++) {
+      base_stream << "\\\\ Begin context " << i << "\n";
+      base_stream << "__rtg_entrypoint_" << i << ":\n";
+      if (buffers.count(i))
+        base_stream << buffers[i];
+      base_stream << "\tj __rtg_return \\\\ Return to framework\n";
+      base_stream << "\\\\ End context " << i << "\n";
     }
   }
 
