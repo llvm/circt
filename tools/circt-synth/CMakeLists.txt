@@ -2,6 +2,7 @@ add_circt_tool(circt-synth circt-synth.cpp)
 target_link_libraries(circt-synth
   PRIVATE
   CIRCTAIG
+  CIRCTAIGAnalysis
   CIRCTAIGToComb
   CIRCTAIGTransforms
   CIRCTComb

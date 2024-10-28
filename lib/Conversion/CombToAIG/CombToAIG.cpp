@@ -662,6 +662,9 @@ static void populateCombToAIGConversionPatterns(RewritePatternSet &patterns) {
 }
 
 void ConvertCombToAIGPass::runOnOperation() {
+  if (/*!getOperation().getModuleName().starts_with("SiFive_") ||*/
+      getOperation().getNumOutputPorts() == 0)
+    return markAllAnalysesPreserved();
   ConversionTarget target(getContext());
   target.addIllegalDialect<comb::CombDialect>();
   // Extract, Concat and Replicate just pass through so we can keep them.

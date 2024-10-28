@@ -120,7 +120,7 @@ struct LowerVariadicPass : public impl::LowerVariadicBase<LowerVariadicPass> {
 } // namespace
 
 void LowerVariadicPass::runOnOperation() {
-  if (!getOperation().getModuleName().starts_with("SiFive_") ||
+  if (/*!getOperation().getModuleName().starts_with("SiFive_") ||*/
       getOperation().getNumOutputPorts() == 0)
     return markAllAnalysesPreserved();
   RewritePatternSet patterns(&getContext());

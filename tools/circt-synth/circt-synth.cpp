@@ -87,6 +87,19 @@ static cl::opt<bool>
                                        "input file"),
                               cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool>
+    printResourceUsage("print-resource-usage",
+                       cl::desc("Print resource usage of AIG operations"),
+                       cl::init(false), cl::cat(mainCategory));
+static cl::opt<std::string>
+    resourceUsageOutputFile("resource-usage-output",
+                            cl::desc("Output file for resource usage"),
+                            cl::init("-"), cl::cat(mainCategory));
+
+static cl::opt<std::string> topModuleName("top-module",
+                                          cl::desc("Top module name"),
+                                          cl::init(""), cl::cat(mainCategory));
+
 //===----------------------------------------------------------------------===//
 // Tool implementation
 //===----------------------------------------------------------------------===//
@@ -96,11 +109,20 @@ static void populateSynthesisPipeline(PassManager &pm) {
   mpm.addPass(circt::createConvertCombToAIG());
   mpm.addPass(createCSEPass());
   mpm.addPass(createCanonicalizerPass());
-  // mpm.addPass(circt::aig::createLowerVariadic());
-  // mpm.addPass(createCSEPass());
-  // mpm.addPass(createCanonicalizerPass());
+  mpm.addPass(circt::aig::createLowerVariadic());
   if (enableWordToBits)
     mpm.addPass(circt::aig::createLowerWordToBits());
+
+  mpm.addPass(createCSEPass());
+  mpm.addPass(createCanonicalizerPass());
+
+  if (printResourceUsage) {
+    circt::aig::PrintResourceUsageAnalysisOptions options;
+    options.topModuleName = topModuleName;
+    options.outputJSONFile = resourceUsageOutputFile;
+    options.printSummary = true;
+    pm.addPass(circt::aig::createPrintResourceUsageAnalysis(options));
+  }
 
   if (convertToComb) {
     mpm.addPass(circt::createConvertAIGToComb());
