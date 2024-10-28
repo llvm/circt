@@ -181,10 +181,12 @@ def BoundedModelCheckingOp : VerifOp<"bmc", [
     This operation represents a bounded model checking problem explicitly in
     the IR. The `bound` attribute indicates how many times the `circuit` region
     should be executed, and `num_regs` indicates the number of registers in the
-    design that have been externalised and appended to the region's
+    design that have been externalized and appended to the region's
     inputs/outputs (these values are fed from each `circuit` region execution
     to the next, as they represent register state, rather than being
-    overwritten with fresh variables like other inputs). The `circuit` region
+    overwritten with fresh variables like other inputs). `initial_values` is an
+    array containing the initial value of each register - where the register
+    has no initial value, a unit attribute is given. The `circuit` region
     contains the circuit (alongside the `verif` property checking operations)
     to be checked.
 
