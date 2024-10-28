@@ -12,6 +12,7 @@
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Support/LLVM.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Tools/circt-bmc/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -89,11 +90,18 @@ void LowerToBMCPass::runOnOperation() {
   verif::BoundedModelCheckingOp bmcOp;
   auto numRegs = hwModule->getAttrOfType<IntegerAttr>("num_regs");
   auto initialValues = hwModule->getAttrOfType<ArrayAttr>("initial_values");
-  if (numRegs && initialValues)
+  if (numRegs && initialValues) {
+    for (auto value : initialValues) {
+      if (!isa<IntegerAttr, UnitAttr>(value)) {
+        hwModule->emitError("initial_values attribute must contain only "
+                            "integer or unit attributes");
+        return signalPassFailure();
+      }
+    }
     bmcOp = builder.create<verif::BoundedModelCheckingOp>(
         loc, 2 * bound, cast<IntegerAttr>(numRegs).getValue().getZExtValue(),
         initialValues);
-  else {
+  } else {
     hwModule->emitOpError("no num_regs or initial_values attribute found - "
                           "please run externalize "
                           "registers pass first");

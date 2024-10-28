@@ -203,6 +203,7 @@ def BoundedModelCheckingOp : VerifOp<"bmc", [
     match the types yielded by the `init` region).
   }];
 
+  // TODO: initial values should eventually be handled by init region
   let arguments = (ins I32Attr:$bound, I32Attr:$num_regs, ArrayAttr:$initial_values);
   let regions = (region SizedRegion<1>:$init,
                         SizedRegion<1>:$loop,
