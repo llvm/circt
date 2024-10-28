@@ -68,40 +68,48 @@ verif.formal @FormalTestBody {
 // Contracts
 //===----------------------------------------------------------------------===//
 
-// CHECK-LABEL: hw.module @Bar
-hw.module @Bar(in %foo : i8, out "" : i8, out "1" : i8) { 
-  // CHECK: %[[C1:.+]] = hw.constant
-  %c1_8 = hw.constant 1 : i8
-  // CHECK: %[[O1:.+]] = comb.add
-  %to0 = comb.add bin %foo, %c1_8 : i8
-  // CHECK: %[[O2:.+]] = comb.sub
-  %to1 = comb.sub bin %foo, %c1_8 : i8
+// CHECK: [[A:%.+]] = unrealized_conversion_cast to i42
+%a = unrealized_conversion_cast to i42
+// CHECK: [[B:%.+]] = unrealized_conversion_cast to i1337
+%b = unrealized_conversion_cast to i1337
+// CHECK: [[C:%.+]] = unrealized_conversion_cast to i9001
+%c = unrealized_conversion_cast to i9001
+// CHECK: [[CLOCK:%.+]] = unrealized_conversion_cast to !seq.clock
+%d = unrealized_conversion_cast to !seq.clock
 
-  // CHECK: %[[OUT:.+]]:2 = verif.contract(%[[O1]], %[[O2]]) : (i8, i8) -> (i8, i8) {
-  %o0, %o1 = verif.contract (%to0, %to1) : (i8, i8) -> (i8, i8) {
-    // CHECK: ^bb0(%[[BAR0:.+]]: i8, %[[BAR1:.+]]: i8):
-    ^bb0(%bar.0 : i8, %bar.1 : i8): 
-      // CHECK: %[[C0:.+]] = hw.constant 0 : i8
-      %c0_8 = hw.constant 0 : i8 
-      // CHECK: %[[PREC:.+]] = comb.icmp bin ugt %foo, %[[C0]] : i8
-      %prec = comb.icmp bin ugt %foo, %c0_8 : i8
-      // CHECK: verif.require %[[PREC]] : i1
-      verif.require %prec : i1
+// CHECK: verif.contract {
+verif.contract {}
+// CHECK: {{%.+}} = verif.contract [[A]] : i42 {
+%q0 = verif.contract %a : i42 {}
+// CHECK: {{%.+}}:3 = verif.contract [[A]], [[B]], [[C]] : i42, i1337, i9001 {
+%q1:3 = verif.contract %a, %b, %c : i42, i1337, i9001 {}
 
-      // CHECK: %[[P0:.+]] = comb.icmp bin ugt %[[BAR0]], %foo : i8
-      %post = comb.icmp bin ugt %bar.0, %foo : i8
-      // CHECK: %[[P1:.+]] = comb.icmp bin ult %[[BAR1]], %foo : i8
-      %post1 = comb.icmp bin ult %bar.1, %foo : i8
-      // CHECK: verif.ensure %[[P0]] : i1
-      verif.ensure %post : i1
-      // CHECK: verif.ensure %[[P1]] : i1
-      verif.ensure %post1 : i1
-      // CHECK: verif.yield %[[BAR0]], %[[BAR1]] : i8, i8
-      verif.yield %bar.0, %bar.1 : i8, i8
-  } 
-  
-  // CHECK-LABEL: hw.output
-  hw.output %o0, %o1 : i8, i8
+verif.contract {
+  // CHECK: verif.require {{%.+}} : i1
+  // CHECK: verif.require {{%.+}} if {{%.+}} : i1
+  // CHECK: verif.require {{%.+}} clock {{%.+}} : i1
+  // CHECK: verif.require {{%.+}} label "foo" : i1
+  // CHECK: verif.require {{%.+}} : !ltl.sequence
+  // CHECK: verif.require {{%.+}} : !ltl.property
+  verif.require %true : i1
+  verif.require %true if %true : i1
+  verif.require %true clock %d : i1
+  verif.require %true label "foo" : i1
+  verif.require %s : !ltl.sequence
+  verif.require %p : !ltl.property
+
+  // CHECK: verif.ensure {{%.+}} : i1
+  // CHECK: verif.ensure {{%.+}} if {{%.+}} : i1
+  // CHECK: verif.ensure {{%.+}} clock {{%.+}} : i1
+  // CHECK: verif.ensure {{%.+}} label "foo" : i1
+  // CHECK: verif.ensure {{%.+}} : !ltl.sequence
+  // CHECK: verif.ensure {{%.+}} : !ltl.property
+  verif.ensure %true : i1
+  verif.ensure %true if %true : i1
+  verif.ensure %true clock %d : i1
+  verif.ensure %true label "foo" : i1
+  verif.ensure %s : !ltl.sequence
+  verif.ensure %p : !ltl.property
 }
 
 //===----------------------------------------------------------------------===//
