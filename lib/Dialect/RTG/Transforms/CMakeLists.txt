@@ -1,7 +1,7 @@
 add_circt_dialect_library(CIRCTRTGTransforms
+  ContextPass.cpp
   ElaborationPass.cpp
-  ExportElf.cpp
-
+  
   DEPENDS
   CIRCTRTGTransformsIncGen
   

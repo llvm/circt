@@ -1,5 +1,6 @@
 // RUN: circt-translate --emit-assembly %s | FileCheck %s --check-prefix=CHECK-ALLOWED
 // RUN: circt-translate --emit-assembly --emit-assembly-binary-instr="rtgtest.instr_a,rtgtest.instr_b" %s | FileCheck %s 
+// RUN: circt-opt --rtg-context %s | FileCheck %s  --check-prefix=CHECK-TRANS
 
 rtg.sequence {
   // CHECK: .word 0x710000000400000004 
@@ -25,6 +26,7 @@ rtg.sequence {
   rtgtest.instr_b %reg5, %reg2
 } -> !rtg.sequence
 
+// CHECK-TRANS: [1, 2, 3, 4]
 rtg.rendered_context [1, 2]
 {
   %c = arith.constant 4 : i32
@@ -50,16 +52,16 @@ rtg.rendered_context [1,2,3]
   rtg.label %0 : i32
 }
 
-rtg.rendered_context [1,2,3]
+rtg.rendered_context [2,3,4]
 {
-  %0 = rtg.label.decl "labela0" -> i32
+  %0 = rtg.label.decl "labela3" -> i32
   rtg.label %0 : i32
 },
 {
-  %0 = rtg.label.decl "labela1" -> i32
+  %0 = rtg.label.decl "labela4" -> i32
   rtg.label %0 : i32
 },
 {
-  %0 = rtg.label.decl "labela2" -> i32
+  %0 = rtg.label.decl "labela5" -> i32
   rtg.label %0 : i32
 }
