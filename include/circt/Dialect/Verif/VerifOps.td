@@ -13,6 +13,7 @@ include "circt/Dialect/Verif/VerifDialect.td"
 include "circt/Dialect/LTL/LTLDialect.td"
 include "circt/Dialect/LTL/LTLTypes.td"
 include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/Seq/SeqTypes.td"
 include "circt/Dialect/HW/HWAttributes.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
@@ -328,123 +329,89 @@ def SymbolicValueOp : VerifOp<"symbolic_value", [
 }
 
 //===----------------------------------------------------------------------===//
-// Formal Contract Ops
+// Formal Contracts
 //===----------------------------------------------------------------------===//
 
 def ContractOp : VerifOp<"contract", [
-  SingleBlockImplicitTerminator<"verif::YieldOp">,
-  HasParent<"hw::HWModuleOp">, 
-  RegionKindInterface
+  AllTypesMatch<["inputs", "outputs"]>,
+  NoRegionArguments,
+  NoTerminator,
+  RegionKindInterface,
+  SingleBlock,
 ]>{
-  let summary = "declare a formal contract";
+  let summary = "A formal contract";
   let description = [{
-    This operation declares a formal contract that is used to create precondition 
-    and postconditions on a parent module. These are used as an abstraction to 
-    better modularize formal verification such that each module containing a contract 
-    is checked exactly once. The contract contains a single block where the block arguments 
-    represent the results of the code block that the contract is abstracting over. The 
-    operands represent the SSA values that this contract's results will replace.
-          
-    e.g. 
-    ```
-    hw.module @Bar(in %foo : i8, out "" : i8, out "1" : i8) { 
-      %o0, %o1 = verif.contract (%to0, %to1) : (i8, i8) -> (i8, i8) {
-        ^bb0(%bar.0 : i8, %bar.1 : i8): 
-          %c0_8 = hw.constant 0 : i8 
-          %prec = comb.icmp bin ugt %foo, %c0_8 : i8
-          verif.require %prec : i1
+    This operation creates a new formal contract which can be used to locally
+    verify a part of the IR and provide simplifying substitutions. Contracts
+    contain `verif.require` ops to establish conditions that must hold for a
+    piece of IR to work properly, and `verif.ensure` ops to describe the
+    properties that the piece of IR must guarantees when the requirements hold.
+    Outside of formal verification, operands are simply passed through to the
+    results.
 
-          %post = comb.icmp bin ugt %bar.0, %foo : i8
-          %post1 = comb.icmp bin ult %bar.1, %foo : i8
-          verif.ensure %post : i1
-          verif.ensure %post1 : i1
-          verif.yield %bar.0, %bar.1 : i8, i8
-      } 
-      /* ... Module definition ... */
-    }
-    ```
+    Contracts are checked by extracting them into their own `verif.formal` test
+    and replacing `require` with `assume` and `ensure` with `assert`. The
+    results of the contract are replaced with the operands of the contract.
 
-    This later is used to replace any instance of Bar during verification:  
-    ```
-    %bar.0, %bar.1 = hw.instance "bar" @Bar("foo" : %c42_8 : i8)  -> ("" : i8, "1" : i8)
+    Contracts are used as simplifications for other verification tasks by
+    inlining them and replacing `require` with `assert` and `ensure` with
+    `assume`. The results of the contract are replaced with symbolic values.
 
-    /* ... After PrepareForFormal Pass becomes ... */
-
-    %bar.0, %bar.1 = verif.contract (%c42_8) : (i8) -> (i8, i8) {
-      ^bb0(%arg1: i8):
-        %c0_8 = hw.constant 0 : i8
-        %prec = comb.icmp bin ugt %arg1, %c0_8 : i8
-        verif.assert %prec : i1
-
-        %bar.0 = verif.symbolic_value : i8
-        %bar.1 = verif.symbolic_value : i8
-        %post = comb.icmp bin ugt %bar.0, %arg1 : i8
-        %post1 = comb.icmp bin ult %bar.1, %arg1 : i8
-        verif.assume %post : i1
-        verif.assume %post1 : i1
-        verif.yield %bar.0, %bar.1 : i8, i8
-    }
-    
-    ```
+    See the documentation of the Verif dialect for more details.
   }];
-
   let arguments = (ins Variadic<AnyType>:$inputs);
-  let results = (outs Variadic<AnyType>:$results);
+  let results = (outs Variadic<AnyType>:$outputs);
   let regions = (region SizedRegion<1>:$body);
-
   let assemblyFormat = [{
-    `(` $inputs `)` attr-dict `:` `(` type($inputs) `)` `->` `(` type($results) `)` $body
+    ($inputs^ `:` type($inputs))? attr-dict-with-keyword $body
   }];
-
   let extraClassDeclaration = [{
-    /// Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { 
       return RegionKind::Graph;
     }
-
-    /// Retrieves the region block arguments
-    BlockArgument getRegionArg(unsigned index) {
-      return getBody().front().getArguments()[index];
-    }
-
-    /// Retrieves the number of block arguments
-    unsigned getNumRegionArgs() {
-      return getBody().front().getNumArguments();
-    }
   }];
-
-  let hasRegionVerifier = 1;
 }
 
-class RequireLikeOp<string mnemonic, list<Trait> traits = [
-  HasParent<"verif::ContractOp">, AttrSizedOperandSegments
-]> : VerifOp<mnemonic, traits> {
-  let arguments = (ins LTLAnyPropertyType:$property,
-                      OptionalAttr<ClockEdgeAttr>:$edge, Optional<I1>:$clock,
-                      Optional<I1>:$enable,
-                      OptionalAttr<StrAttr>:$label);
+class RequireLikeOp<string mnemonic> : VerifOp<mnemonic, [
+  AttrSizedOperandSegments,
+  HasParent<"verif::ContractOp">,
+]> {
+  let arguments = (ins
+    LTLAnyPropertyType:$property,
+    Optional<ClockType>:$clock,
+    Optional<I1>:$enable,
+    OptionalAttr<StrAttr>:$label
+  );
   let assemblyFormat = [{
-    $property (`if` $enable^)? (`,` $edge^ $clock)? 
-    (`label` $label^)? attr-dict `:` type($property)
+    $property
+    (`if` $enable^)?
+    (`clock` $clock^)?
+    (`label` $label^)?
+    attr-dict `:` type($property)
   }];
 }
 
 def RequireOp : RequireLikeOp<"require"> {
-  let summary = "define a precondition for the given contract";
+  let summary = "A precondition of a contract";
   let description = [{
-    This operation defines a precondition for the parent contract. 
-    Preconditions are assumed during the verification of a module and 
-    asserted during the verification of an instance of a module.
+    This operation specifies a condition that is assumed when checking against
+    the contract, and asserted when applying the contract as a simplification.
+
+    The `verif.require` op is commonly used to specify the conditions that input
+    values into a part of the IR must fulfill in order for the IR to work as
+    expected, i.e., as outlined in the contract.
   }];
 }
 
-
 def EnsureOp : RequireLikeOp<"ensure">{
-  let summary = "define a postcondition for the given contract";
+  let summary = "A postcondition of a contract";
   let description = [{
-    This operation defines a postcondition for the parent contract. 
-    Postconditions are asserted during the verification of a module and 
-    assumed during the verification of an instance of a module.
+    This operation specifies a condition that is asserted when checking a
+    contract, and assumed when applying the contract as a simplification.
+
+    The `verif.ensure` op is commonly used to specify the conditions that output
+    values from a part of the IR are guaranteed to fulfill, under the condition
+    that all requirements are fulfilled.
   }];
 }
 
