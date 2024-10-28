@@ -37,11 +37,14 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension
     CIRCTCAPIMSFT
     CIRCTCAPIOM
     CIRCTCAPIRTG
+    CIRCTCAPIRTGTest
     CIRCTCAPISV
     CIRCTCAPISeq
     CIRCTCAPIVerif
     CIRCTCAPIConversion
+    CIRCTCAPIRTGPipeline
     MLIRCAPITransforms
+    MLIRCAPIArith
   PRIVATE_LINK_LIBS
     LLVMSupport
 )

@@ -1,4 +1,5 @@
-// RUN: rtgtool %s --seed=0 --unsupported-instructions=rtgtest.instr_a --emit-asm | FileCheck %s
+// REQUIRES: rtgtool
+// RUN: %rtgtool% %s --seed=0 --unsupported-instructions=rtgtest.instr_a --output-format=asm | FileCheck %s
 
 // CHECK: \\ rtgtest.instr_a
 // CHECK: .word 0x

@@ -1,6 +1,7 @@
-// RUN: rtgtool %s --seed=0 --emit-mlir | FileCheck %s --check-prefix=MLIR
-// RUN: rtgtool %s --seed=0 --emit-rendered-mlir | FileCheck %s --check-prefix=RENDERED
-// RUN: rtgtool %s --seed=0 --emit-asm | FileCheck %s --check-prefix=ASM
+// REQUIRES: rtgtool
+// RUN: %rtgtool% %s --seed=0 --output-format=mlir | FileCheck %s --check-prefix=MLIR
+// RUN: %rtgtool% %s --seed=0 --output-format=rendered | FileCheck %s --check-prefix=RENDERED
+// RUN: %rtgtool% %s --seed=0 --output-format=asm | FileCheck %s --check-prefix=ASM
 
 // MLIR: rtg.label
 // RENDERED: rtg.label

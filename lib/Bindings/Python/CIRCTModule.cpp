@@ -21,11 +21,14 @@
 #include "circt-c/Dialect/MSFT.h"
 #include "circt-c/Dialect/OM.h"
 #include "circt-c/Dialect/RTG.h"
+#include "circt-c/Dialect/RTGTest.h"
 #include "circt-c/Dialect/SV.h"
 #include "circt-c/Dialect/Seq.h"
 #include "circt-c/Dialect/Verif.h"
 #include "circt-c/ExportVerilog.h"
+#include "circt-c/RTGPipeline.h"
 #include "mlir-c/Bindings/Python/Interop.h"
+#include "mlir-c/Dialect/Arith.h"
 #include "mlir-c/IR.h"
 #include "mlir-c/Transforms.h"
 #include "mlir/Bindings/Python/PybindAdaptors.h"
@@ -98,6 +101,10 @@ PYBIND11_MODULE(_circt, m) {
         mlirDialectHandleRegisterDialect(rtg, context);
         mlirDialectHandleLoadDialect(rtg, context);
 
+        MlirDialectHandle rtgtest = mlirGetDialectHandle__rtgtest__();
+        mlirDialectHandleRegisterDialect(rtgtest, context);
+        mlirDialectHandleLoadDialect(rtgtest, context);
+
         MlirDialectHandle seq = mlirGetDialectHandle__seq__();
         mlirDialectHandleRegisterDialect(seq, context);
         mlirDialectHandleLoadDialect(seq, context);
@@ -121,6 +128,10 @@ PYBIND11_MODULE(_circt, m) {
         MlirDialectHandle verif = mlirGetDialectHandle__verif__();
         mlirDialectHandleRegisterDialect(verif, context);
         mlirDialectHandleLoadDialect(verif, context);
+
+        MlirDialectHandle arith = mlirGetDialectHandle__arith__();
+        mlirDialectHandleRegisterDialect(arith, context);
+        mlirDialectHandleLoadDialect(arith, context);
       },
       "Register CIRCT dialects on a PyMlirContext.");
 
@@ -134,6 +145,50 @@ PYBIND11_MODULE(_circt, m) {
     auto cDirectory = mlirStringRefCreateFromCString(directory.c_str());
     mlirExportSplitVerilog(mod, cDirectory);
   });
+
+  m.def("generate_random_tests",
+        [](MlirModule mod, bool verifyPasses, bool verbosePassExecution,
+           bool hasSeed, unsigned seed, py::list unsupportedInstructions,
+           std::string unsupportedInstructionsFile, std::string outputFormat,
+           py::object fileObject) {
+          circt::python::PyFileAccumulator accum(fileObject, false);
+          py::gil_scoped_release();
+
+          char **c_array = new char *[unsupportedInstructions.size() + 1];
+
+          for (size_t i = 0; i < unsupportedInstructions.size(); ++i)
+            c_array[i] = strdup(unsupportedInstructions[i]
+                                    .cast<std::string>()
+                                    .c_str()); // strdup allocates and copies
+
+          c_array[unsupportedInstructions.size()] = nullptr;
+
+          auto stringToOutputFormat = [](std::string s) {
+            if (s == "mlir")
+              return CirctRTGOutputMLIR;
+            if (s == "rendered")
+              return CirctRTGOutputRenderedMLIR;
+            if (s == "asm")
+              return CirctRTGOutputASM;
+            if (s == "elf")
+              return CirctRTGOutputELF;
+
+            // Set ASM as default
+            return CirctRTGOutputASM;
+          };
+
+          circtGenerateRandomTests(mod, verifyPasses, verbosePassExecution,
+                                   hasSeed, seed,
+                                   unsupportedInstructions.size(), c_array,
+                                   unsupportedInstructionsFile.c_str(),
+                                   stringToOutputFormat(outputFormat),
+                                   accum.getCallback(), accum.getUserData());
+
+          for (size_t i = 0; c_array[i] != nullptr; ++i)
+            free(c_array[i]);
+
+          delete[] c_array;
+        });
 
   py::module esi = m.def_submodule("_esi", "ESI API");
   circt::python::populateDialectESISubmodule(esi);

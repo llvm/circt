@@ -17,6 +17,7 @@ set(LLVM_OPTIONAL_SOURCES
   Moore.cpp
   OM.cpp
   RTG.cpp
+  RTGTest.cpp
   SV.cpp
   Seq.cpp
   Verif.cpp
@@ -125,6 +126,14 @@ add_circt_public_c_api_library(CIRCTCAPIRTG
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTRTGDialect
+)
+
+add_circt_public_c_api_library(CIRCTCAPIRTGTest
+  RTGTest.cpp
+
+  LINK_LIBS PUBLIC
+  MLIRCAPIIR
+  CIRCTRTGTestDialect
 )
 
 add_circt_public_c_api_library(CIRCTCAPISeq

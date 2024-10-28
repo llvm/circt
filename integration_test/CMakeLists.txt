@@ -14,6 +14,7 @@ set(CIRCT_INTEGRATION_TEST_DEPENDS
   hlstool
   ibistool
   handshake-runner
+  rtgtool
   )
 
 if (MLIR_ENABLE_EXECUTION_ENGINE)

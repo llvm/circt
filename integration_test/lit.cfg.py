@@ -89,6 +89,11 @@ if config.python_executable != "":
   config.available_features.add('python')
   config.substitutions.append(('%PYTHON%', f'"{config.python_executable}"'))
 
+# rtgtool
+if config.python_executable != "" and config.bindings_python_enabled:
+  config.available_features.add('rtgtool')
+  config.substitutions.append(('%rtgtool%', f'{config.python_executable} {os.path.join(config.llvm_tools_dir, 'rtgtool.py')} --libname=circt')) #  FIXME: we'd want to use circt_tools_dir, but that evaluates to '.' for some reason
+
 # Enable yosys if it has been detected.
 if config.yosys_path != "":
   tool_dirs.append(os.path.dirname(config.yosys_path))
