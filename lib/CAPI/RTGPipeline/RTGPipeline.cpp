@@ -43,7 +43,8 @@ MlirLogicalResult circtGenerateRandomTests(
   pm.addPass(createSimpleCanonicalizerPass());
   if (outputFormat != CirctRTGOutputMLIR) {
     rtg::ElaborationOptions options;
-    options.seed = seed;
+    if (hasSeed)
+      options.seed = seed;
     pm.addPass(rtg::createElaborationPass(options));
     pm.addPass(createSimpleCanonicalizerPass());
   }
