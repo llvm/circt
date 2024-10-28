@@ -14,14 +14,9 @@
 #include "circt/Dialect/RTG/IR/RTGVisitors.h"
 #include "circt/Dialect/RTGTest/IR/RTGTestDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/IR/BuiltinOps.h"
-#include "mlir/Support/IndentedOstream.h"
 #include "mlir/Tools/mlir-translate/Translation.h"
-#include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
-#include <deque>
 #include <fstream>
 
 using namespace circt;
@@ -165,44 +160,6 @@ EmitRTGAssembly::emitRTGAssembly(Operation *module, llvm::raw_ostream &os,
     return module->emitError("must have exactly one region");
   if (!module->getRegion(0).hasOneBlock())
     return module->emitError("op region must have exactly one block");
-
-  mlir::raw_indented_ostream ios(os);
-  for (auto snippet : module->getRegion(0).getOps<rtg::SequenceOp>()) {
-    for (auto &op : snippet.getBody()->getOperations()) {
-      if (auto instr = dyn_cast<InstructionOpInterface>(&op)) {
-        ios << llvm::indent(4);
-        auto useBinary = llvm::is_contained(options.unsupportedInstructions,
-                                            instr->getName().getStringRef());
-        if (useBinary)
-          ios << "\\\\ ";
-        instr.printAssembly(ios, [&](Value value) { printValue(value, ios); });
-        ios << "\n";
-        if (!useBinary)
-          continue;
-        ios << llvm::indent(4);
-        SmallVector<APInt> operands;
-        for (auto operand : instr->getOperands()) {
-          auto res = getBinary(operand);
-          if (failed(res))
-            return failure();
-          operands.push_back(*res);
-        }
-        SmallVector<char> str;
-        instr.getBinary(operands).toString(str, 16, false);
-        ios << ".word 0x" << str << "\n";
-      }
-      if (auto label = dyn_cast<LabelOp>(&op)) {
-        if (label.getGlobal()) {
-          ios << ".global ";
-          printValue(label.getLabel(), os);
-          ios << "\n";
-        }
-        printValue(label.getLabel(), os);
-        ios << ":\n";
-        continue;
-      }
-    }
-  }
 
   EmitRTGToElf emitter(os, options);
   for (auto &snippet : module->getRegion(0).getOps())
