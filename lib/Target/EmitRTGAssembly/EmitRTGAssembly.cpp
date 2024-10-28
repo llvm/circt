@@ -80,21 +80,80 @@ public:
     for (auto &[ctx, buffer] : buffers)
       maxCTX = std::max(maxCTX, ctx);
 
-    base_stream << ".section rodata\n";
+    // Ugly rsicv hack
+    base_stream << ".global __rtg_num_threads\n";
+    base_stream << ".section .sdata,\"aw\"\n";
+    base_stream << ".align 2\n";
+    base_stream << ".type __rtg_num_threads, @object\n";
+    base_stream << ".size __rtg_num_threads, 4\n";
     base_stream << "__rtg_num_threads:\n";
-    base_stream << "\t.word " << (maxCTX + 1) << "\n";
+    base_stream << "\t.word " << (maxCTX + 1) << "\n\n";
+
+    base_stream << ".local __rtg_sp_save\n";
+    base_stream << ".bss\n";
+    base_stream << ".align 3\n";
+    base_stream << ".type __rtg_sp_save, @object\n";
+    base_stream << ".size __rtg_sp_save, " << (maxCTX + 1) * 8 << "\n";
+    base_stream << "__rtg_sp_save:\n";
+    base_stream << ".zero " << (maxCTX + 1) * 8 << "\n\n";
+
+
+    base_stream << "\n\n.text\n";
+    base_stream << ".align 1\n";
+    base_stream << ".globl __rtg_entrypoint\n";
+    base_stream << ".type __rtg_entrypoint, @function\n";
     base_stream << "__rtg_entrypoint:\n";
-    for (int i = 0; i <= maxCTX; i++)
-      base_stream << "\t.dword __rtg_entrypoint_" << i << "\n";
-    base_stream << "\n\n.section text\n";
+    base_stream << "\taddi sp, sp, -104  # allocate space on stack\n";
+    base_stream << "\tsd   ra,   96(sp)\n";
+    base_stream << "\tsd   s0,   88(sp)\n";
+    base_stream << "\tsd   s1,   80(sp)\n";
+    base_stream << "\tsd   s2,   72(sp)\n";
+    base_stream << "\tsd   s3,   64(sp)\n";
+    base_stream << "\tsd   s4,   56(sp)\n";
+    base_stream << "\tsd   s5,   48(sp)\n";
+    base_stream << "\tsd   s6,   40(sp)\n";
+    base_stream << "\tsd   s7,   32(sp)\n";
+    base_stream << "\tsd   s8,   24(sp)\n";
+    base_stream << "\tsd   s9,   16(sp)\n";
+    base_stream << "\tsd   s10,   8(sp)\n";
+    base_stream << "\tsd   s11,   0(sp)\n";
+    base_stream << "\tla   t0,  __rtg_sp_save\n";
+    base_stream << "\tslli t1, a0, 3\n";
+    base_stream << "\tadd  t0, t0, t1\n";
+    base_stream << "\tsd   sp,    0(t0) # stash the stack pointer\n";
+
     for (int i = 0; i <= maxCTX; i++) {
-      base_stream << "\\\\ Begin context " << i << "\n";
+      base_stream << "\tli t0, " << i << "\n";
+      base_stream << "\tbne t0, a0, __rtg_exitpoint_" << i << "\n";
+      base_stream << "# Begin context " << i << "\n";
       base_stream << "__rtg_entrypoint_" << i << ":\n";
       if (buffers.count(i))
         base_stream << buffers[i];
-      base_stream << "\tj __rtg_return \\\\ Return to framework\n";
-      base_stream << "\\\\ End context " << i << "\n";
+      base_stream << "\tli a0, " << i << " # restore context id\n";
+     base_stream << "\tla   t0,  __rtg_sp_save\n";
+    base_stream << "\tslli t1, a0, 3\n";
+    base_stream << "\tadd  t0, t0, t1\n";
+    base_stream << "\tld   sp,    0(t0) # restore the stack pointer\n";
+     base_stream << "# End context " << i << "\n";
+      base_stream << "__rtg_exitpoint_" << i << ":\n";
     }
+
+    base_stream << "\tld   ra,   96(sp)\n";
+    base_stream << "\tld   s0,   88(sp)\n";
+    base_stream << "\tld   s1,   80(sp)\n";
+    base_stream << "\tld   s2,   72(sp)\n";
+    base_stream << "\tld   s3,   64(sp)\n";
+    base_stream << "\tld   s4,   56(sp)\n";
+    base_stream << "\tld   s5,   48(sp)\n";
+    base_stream << "\tld   s6,   40(sp)\n";
+    base_stream << "\tld   s7,   32(sp)\n";
+    base_stream << "\tld   s8,   24(sp)\n";
+    base_stream << "\tld   s9,   16(sp)\n";
+    base_stream << "\tld   s10,   8(sp)\n";
+    base_stream << "\tld   s11,   0(sp)\n";
+    base_stream << "\taddi sp, sp, 104\n";
+    base_stream << "\tret\n";
+
   }
 
   using RTGOpVisitor<EmitRTGToElf, LogicalResult, int>::visitOp;
