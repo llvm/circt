@@ -161,3 +161,20 @@ om.class @UnknownClass(%arg: !om.class.type<@Unknwon>) {
   om.object.field %arg, [@unknown]: (!om.class.type<@Unknwon>) -> i1
   om.class.fields
 }
+
+// -----
+
+// expected-error @+1 {{returns '0' fields, but its terminator returned '1' fields}}
+om.class @A(%arg: i1) {
+  // expected-note @+1 {{see terminator:}}
+  om.class.fields %arg : i1
+}
+
+
+// -----
+
+// expected-error @+1 {{returns different field types than its terminator}}
+om.class @A(%arg: i1) -> (a: i2) {
+  // expected-note @+1 {{see terminator:}}
+  om.class.fields %arg : i1
+}

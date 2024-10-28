@@ -306,6 +306,35 @@ void circt::om::ClassOp::print(OpAsmPrinter &printer) {
 
 LogicalResult circt::om::ClassOp::verify() { return verifyClassLike(*this); }
 
+LogicalResult circt::om::ClassOp::verifyRegions() {
+  auto fieldsOp = cast<ClassFieldsOp>(this->getBodyBlock()->getTerminator());
+
+  // The number of results matches the number of terminator operands.
+  if (fieldsOp.getNumOperands() != this->getFieldNames().size()) {
+    auto diag = this->emitOpError()
+                << "returns '" << this->getFieldNames().size()
+                << "' fields, but its terminator returned '"
+                << fieldsOp.getNumOperands() << "' fields";
+    return diag.attachNote(fieldsOp.getLoc()) << "see terminator:";
+  }
+
+  // The type of each result matches the corresponding terminator operand type.
+  auto types = this->getFieldTypes();
+  for (auto [fieldName, terminatorOperandType] :
+       llvm::zip(this->getFieldNames(), fieldsOp.getOperandTypes())) {
+
+    if (terminatorOperandType ==
+        cast<TypeAttr>(types.get(cast<StringAttr>(fieldName))).getValue())
+      continue;
+
+    auto diag = this->emitOpError()
+                << "returns different field types than its terminator";
+    return diag.attachNote(fieldsOp.getLoc()) << "see terminator:";
+  }
+
+  return success();
+}
+
 void circt::om::ClassOp::getAsmBlockArgumentNames(
     Region &region, OpAsmSetValueNameFn setNameFn) {
   getClassLikeAsmBlockArgumentNames(*this, region, setNameFn);

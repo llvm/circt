@@ -143,6 +143,8 @@ def ClassOp : OMClassLike<"class", [
     // assertion error
     mlir::Location getFieldLocByIndex(size_t i);
   }];
+
+  let hasRegionVerifier = 1;
 }
 
 def ClassFieldsOp : OMOp<"class.fields", [Terminator, ReturnLike, Pure,
