@@ -42,20 +42,6 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
                                       std::optional<Location> loc);
   }];
 
-  // The operation-specific validator for a parsed list of operands and
-  // constants. Operations can override this with an inline declaration for the
-  // class header, or just leave it as is and implement the function in a cpp
-  // file.
-  code parseValidator = "";
-  code parseValidatorDecl = [{
-    /// Check that the parser has consumed the correct number of operands and
-    /// constants.
-    static LogicalResult validateArguments(ValueRange operands,
-                                           ArrayRef<NamedAttribute> attrs,
-                                           Location loc)
-  }] # !if(!empty(parseValidator), ";", !subst("$_impl", parseValidator, [{ {
-    return $_impl(operands, attrs, loc);
-  } }]));
 
   // Additional class declarations to emit alongside the type inference.
   code firrtlExtraClassDeclaration = "";
@@ -80,17 +66,7 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
   }];
 
   let extraClassDeclaration = firrtlExtraClassDeclaration # inferTypeDecl #
-      parseValidatorDecl # inferReturnTypesDecl # [{
-    /// Check that the parser has consumed the correct number of operands and
-    /// constants, and infer the appropriate return type for the operation.
-    static FIRRTLType validateAndInferReturnType(ValueRange operands,
-                                                 ArrayRef<NamedAttribute> attrs,
-                                                 Location loc) {
-      if (failed(validateArguments(operands, attrs, loc)))
-        return {};
-      return inferReturnType(operands, attrs, loc);
-    }
-
+      inferReturnTypesDecl # [{
     // Returns when two result types are compatible for this op; method used by
     // InferTypeOpInterface.
     static bool isCompatibleReturnTypes(TypeRange l, TypeRange r) {
@@ -565,7 +541,6 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
                      loc);
     }
   }]);
-  let parseValidator = "impl::validateBinaryOpArguments";
 }
 
 // A binary operation on two integer-typed arguments of the same kind.
@@ -681,7 +656,6 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
     }
   }]);
 
-  let parseValidator = "impl::validateUnaryOpArguments";
 }
 
 def SizeOfIntrinsicOp : UnaryPrimOp<"int.sizeof", FIRRTLBaseType, UInt32Type>;
@@ -753,7 +727,6 @@ def HeadPrimOp : PrimOp<"head"> {
     "$input `,` $amount attr-dict `:` functional-type($input, $result)";
 
   let hasCanonicalizeMethod = true;
-  let parseValidator = "impl::validateOneOperandOneConst";
 }
 
 def MuxPrimOp : PrimOp<"mux"> {
@@ -780,7 +753,6 @@ def PadPrimOp : PrimOp<"pad"> {
     width of `input`, then input is unmodified.
   }];
 
-  let parseValidator = "impl::validateOneOperandOneConst";
 }
 
 class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
@@ -790,7 +762,6 @@ class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
   let assemblyFormat =
     "$input `,` $amount attr-dict `:` functional-type($input, $result)";
 
-  let parseValidator = "impl::validateOneOperandOneConst";
 }
 
 def ShlPrimOp : ShiftPrimOp<"shl"> {
@@ -825,7 +796,6 @@ def TailPrimOp : PrimOp<"tail"> {
   }];
 
   let hasCanonicalizeMethod = true;
-  let parseValidator = "impl::validateOneOperandOneConst";
 }
 
 //===----------------------------------------------------------------------===//

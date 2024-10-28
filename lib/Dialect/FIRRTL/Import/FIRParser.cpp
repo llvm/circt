@@ -2417,8 +2417,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
     auto resultTy = CLASS::inferReturnType(operands, attrs, {});               \
     if (!resultTy) {                                                           \
       /* only call translateLocation on an error case, it is expensive. */     \
-      (void)CLASS::validateAndInferReturnType(operands, attrs,                 \
-                                              translateLocation(loc));         \
+      CLASS::inferReturnType(operands, attrs, translateLocation(loc));         \
       return failure();                                                        \
     }                                                                          \
     result = builder.create<CLASS>(resultTy, operands, attrs);                 \

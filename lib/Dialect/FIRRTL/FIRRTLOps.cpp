@@ -4992,16 +4992,6 @@ LogicalResult impl::verifySameOperandsIntTypeKind(Operation *op) {
                                    rhsWidth, isConstResult, op->getLoc()));
 }
 
-LogicalResult impl::validateBinaryOpArguments(ValueRange operands,
-                                              ArrayRef<NamedAttribute> attrs,
-                                              Location loc) {
-  if (operands.size() != 2 || !attrs.empty()) {
-    mlir::emitError(loc, "operation requires two operands and no constants");
-    return failure();
-  }
-  return success();
-}
-
 FIRRTLType impl::inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
                                    std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
@@ -5170,16 +5160,6 @@ FIRRTLType DShrPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
 // Unary Primitives
 //===----------------------------------------------------------------------===//
 
-LogicalResult impl::validateUnaryOpArguments(ValueRange operands,
-                                             ArrayRef<NamedAttribute> attrs,
-                                             Location loc) {
-  if (operands.size() != 1 || !attrs.empty()) {
-    mlir::emitError(loc, "operation requires one operand and no constants");
-    return failure();
-  }
-  return success();
-}
-
 FIRRTLType
 SizeOfIntrinsicOp::inferUnaryReturnType(FIRRTLType input,
                                         std::optional<Location> loc) {
@@ -5272,16 +5252,6 @@ FIRRTLType impl::inferReductionResult(FIRRTLType input,
 // Other Operations
 //===----------------------------------------------------------------------===//
 
-LogicalResult BitsPrimOp::validateArguments(ValueRange operands,
-                                            ArrayRef<NamedAttribute> attrs,
-                                            Location loc) {
-  if (operands.size() != 1 || attrs.size() != 2) {
-    mlir::emitError(loc, "operation requires one operand and two constants");
-    return failure();
-  }
-  return success();
-}
-
 FIRRTLType BitsPrimOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
                                        std::optional<Location> loc) {
@@ -5315,16 +5285,6 @@ FIRRTLType BitsPrimOp::inferReturnType(ValueRange operands,
   return UIntType::get(input.getContext(), high - low + 1, inputi.isConst());
 }
 
-LogicalResult impl::validateOneOperandOneConst(ValueRange operands,
-                                               ArrayRef<NamedAttribute> attrs,
-                                               Location loc) {
-  if (operands.size() != 1 || attrs.size() != 1) {
-    mlir::emitError(loc, "operation requires one operand and one constant");
-    return failure();
-  }
-  return success();
-}
-
 FIRRTLType HeadPrimOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
                                        std::optional<Location> loc) {
@@ -5341,16 +5301,6 @@ FIRRTLType HeadPrimOp::inferReturnType(ValueRange operands,
     return emitInferRetTypeError(loc, "amount larger than input width");
 
   return UIntType::get(input.getContext(), amount, inputi.isConst());
-}
-
-LogicalResult MuxPrimOp::validateArguments(ValueRange operands,
-                                           ArrayRef<NamedAttribute> attrs,
-                                           Location loc) {
-  if (operands.size() != 3 || attrs.size() != 0) {
-    mlir::emitError(loc, "operation requires three operands and no constants");
-    return failure();
-  }
-  return success();
 }
 
 /// Infer the result type for a multiplexer given its two operand types, which
