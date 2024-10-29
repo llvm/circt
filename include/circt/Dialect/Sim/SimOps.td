@@ -21,6 +21,7 @@ include "circt/Dialect/Sim/SimTypes.td"
 include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/IR/OpAsmInterface.td"
 
 class SimOp<string mnemonic, list<Trait> traits = []> :
     Op<SimDialect, mnemonic, traits>;
