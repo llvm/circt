@@ -1201,7 +1201,7 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
     fieldValues.push_back(argumentValue);
   }
 
-  classOp.addFields(builder, fieldLocs, fieldValues);
+  classOp.addNewFieldsOp(builder, fieldLocs, fieldValues);
 
   // If the module-like is a Class, it will be completely erased later.
   // Otherwise, erase just the property ports and ops.
