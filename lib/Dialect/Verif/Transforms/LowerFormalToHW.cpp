@@ -17,7 +17,7 @@ using namespace circt;
 
 namespace circt {
 namespace verif {
-#define GEN_PASS_DEF_LOWERFORMALTOHW
+#define GEN_PASS_DEF_LOWERFORMALTOHWPASS
 #include "circt/Dialect/Verif/Passes.h.inc"
 } // namespace verif
 } // namespace circt
@@ -26,8 +26,8 @@ using namespace mlir;
 using namespace verif;
 
 namespace {
-struct LowerFormalToHW
-    : circt::verif::impl::LowerFormalToHWBase<LowerFormalToHW> {
+struct LowerFormalToHWPass
+    : verif::impl::LowerFormalToHWPassBase<LowerFormalToHWPass> {
   void runOnOperation() override;
 };
 
@@ -67,7 +67,7 @@ struct FormalOpRewritePattern : public OpRewritePattern<verif::FormalOp> {
 };
 } // namespace
 
-void LowerFormalToHW::runOnOperation() {
+void LowerFormalToHWPass::runOnOperation() {
   RewritePatternSet patterns(&getContext());
   patterns.add<FormalOpRewritePattern>(patterns.getContext());
 
