@@ -4499,8 +4499,7 @@ ParseResult parseSubfieldLikeOp(OpAsmParser &parser, OperationState &result) {
                             "unknown field " + fieldName + " in bundle type ")
            << bundleType;
 
-  result.addAttribute(
-      "fieldIndex",
+  result.getOrAddProperties<typename OpTy::Properties>().setFieldIndex(
       IntegerAttr::get(IntegerType::get(context, 32), *fieldIndex));
 
   SmallVector<Type> inferredReturnTypes;
@@ -4540,8 +4539,7 @@ ParseResult SubtagOp::parse(OpAsmParser &parser, OperationState &result) {
                             "unknown field " + fieldName + " in enum type ")
            << enumType;
 
-  result.addAttribute(
-      "fieldIndex",
+  result.getOrAddProperties<Properties>().setFieldIndex(
       IntegerAttr::get(IntegerType::get(context, 32), *fieldIndex));
 
   SmallVector<Type> inferredReturnTypes;
@@ -4869,8 +4867,8 @@ ParseResult ObjectSubfieldOp::parse(OpAsmParser &parser,
     return parser.emitError(parser.getNameLoc(),
                             "unknown field " + fieldName + " in class type ")
            << inputType;
-  result.addAttribute("index",
-                      IntegerAttr::get(IntegerType::get(context, 32), *index));
+  result.getOrAddProperties<Properties>().setIndex(
+      IntegerAttr::get(IntegerType::get(context, 32), *index));
 
   SmallVector<Type> inferredReturnTypes;
   if (failed(inferReturnTypes(context, result.location, result.operands,
