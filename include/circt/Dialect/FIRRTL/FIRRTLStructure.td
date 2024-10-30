@@ -134,7 +134,8 @@ def FModuleOp : FIRRTLModuleLike<"module", [SingleBlock, NoTerminator]> {
     the module.
   }];
   let arguments =
-      (ins ConventionAttr:$convention,
+      (ins SymbolNameAttr:$sym_name,
+           ConventionAttr:$convention,
            DenseBoolArrayAttr:$portDirections,
            ArrayRefAttr:$portLocations,
            ArrayRefAttr:$portAnnotations,
@@ -196,7 +197,8 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
     port must be removed by LowerXMR pass.
   }];
   let arguments = 
-      (ins OptionalAttr<StrAttr>:$defname,
+      (ins SymbolNameAttr:$sym_name,
+           OptionalAttr<StrAttr>:$defname,
            ParamDeclArrayAttr:$parameters,
            ConventionAttr:$convention,
            DenseBoolArrayAttr:$portDirections,
@@ -239,7 +241,8 @@ def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
     The "firrtl.intmodule" operation represents a compiler intrinsic.
   }];
   let arguments = 
-      (ins StrAttr:$intrinsic,
+      (ins SymbolNameAttr:$sym_name,
+           StrAttr:$intrinsic,
            ParamDeclArrayAttr:$parameters,
            DenseBoolArrayAttr:$portDirections,
            ArrayRefAttr:$portLocations,
@@ -285,7 +288,8 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
     are not directly lowered to registers by the compiler.
   }];
   let arguments =
-      (ins UI32Attr:$numReadPorts, UI32Attr:$numWritePorts,
+      (ins SymbolNameAttr:$sym_name,
+           UI32Attr:$numReadPorts, UI32Attr:$numWritePorts,
            UI32Attr:$numReadWritePorts, UI32Attr:$dataWidth, UI32Attr:$maskBits,
            UI32Attr:$readLatency, UI32Attr:$writeLatency, UI64Attr:$depth,
            ArrayAttr:$extraPorts,
