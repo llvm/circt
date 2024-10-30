@@ -15,12 +15,12 @@ firrtl.circuit "Foo" attributes {rawAnnotations = [
 
 // CHECK-LABEL: "firrtl.extmodule"() <
 // CHECK-SAME: portAnnotations = {{['[']['[']}}{class = "circt.test", data = "a"}]]
-// CHECK-SAME: > ({
-// CHECK: }) {
 // CHECK-SAME: sym_name = "Bar"
+// CHECK-SAME: > ({
+// CHECK: })
 
 // CHECK-LABEL: "firrtl.module"() <
 // CHECK-SAME: portAnnotations = {{['[']['[']}}{class = "circt.test", data = "b"}]]
-// CHECK-SAME: > ({
-// CHECK: }) {
 // CHECK-SAME: sym_name = "Foo"
+// CHECK-SAME: > ({
+// CHECK: })
