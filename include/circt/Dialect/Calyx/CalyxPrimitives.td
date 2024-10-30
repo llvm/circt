@@ -20,10 +20,10 @@ class CalyxPrimitive<string mnemonic, list<Trait> traits = []> :
     let skipDefaultBuilders = 1;
 }
 
-def ConstantOp: CalyxOp<"constant",
-    [Pure, ConstantLike, FirstAttrDerivedResultType,
+def ConstantOp: CalyxPrimitive<"constant",
+    [ConstantLike, FirstAttrDerivedResultType,
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-    AllTypesMatch<["value", "result"]>
+    AllTypesMatch<["value", "out"]>
     ]> {
   let summary = "integer or floating point constant";
   let description = [{
@@ -42,13 +42,11 @@ def ConstantOp: CalyxOp<"constant",
   }];
   let arguments = (ins TypedAttrInterface:$value);
 
-  let results = (outs SignlessIntegerOrFloatLike:$result);
+  let results = (outs SignlessIntegerOrFloatLike:$out);
 
   let builders = [
     /// Build a ConstantOp from a prebuilt attribute.
-    OpBuilder <(ins "IntegerAttr":$attr)>,
-
-    OpBuilder <(ins "FloatAttr":$attr)>
+    OpBuilder <(ins "StringRef":$sym_name, "TypedAttr":$attr)>,
   ];
 
   let hasFolder = 1;

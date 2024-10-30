@@ -2002,12 +2002,24 @@ OpFoldResult calyx::ConstantOp::fold(FoldAdaptor adaptor) {
 }
 
 void calyx::ConstantOp::build(OpBuilder &builder, OperationState &state,
-                              FloatAttr attr) {
+                              StringRef symName, TypedAttr attr) {
+  state.addAttribute(SymbolTable::getSymbolAttrName(),
+                     builder.getStringAttr(symName));
   state.addAttribute("value", attr);
   SmallVector<Type> types;
   types.push_back(attr.getType()); // Out
   state.addTypes(types);
 }
+
+SmallVector<StringRef> ConstantOp::portNames() { return {"out"}; }
+
+SmallVector<Direction> ConstantOp::portDirections() { return {Output}; }
+
+SmallVector<DictionaryAttr> ConstantOp::portAttributes() {
+  return {DictionaryAttr::get(getContext())};
+}
+
+bool ConstantOp::isCombinational() { return true; }
 
 //===----------------------------------------------------------------------===//
 // RegisterOp

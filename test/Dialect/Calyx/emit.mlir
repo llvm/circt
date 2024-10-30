@@ -246,8 +246,9 @@ module attributes {calyx.entrypoint = "main"} {
 
 module attributes {calyx.entrypoint = "main"} {
   calyx.component @main(%clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %out1: f32, %done: i1 {done}) {
+    // CHECK: cst_0 = std_float_const(0, 32, 4.200000);
     %c42_i32 = hw.constant 42 : i32
-    %cst = calyx.constant 4.200000e+00 : f32
+    %cst = calyx.constant {sym_name = "cst_0"} 4.200000e+00 : f32
     %true = hw.constant true
     %ret_arg1_reg.in, %ret_arg1_reg.write_en, %ret_arg1_reg.clk, %ret_arg1_reg.reset, %ret_arg1_reg.out, %ret_arg1_reg.done = calyx.register @ret_arg1_reg : f32, i1, i1, i1, f32, i1
     %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
@@ -256,12 +257,12 @@ module attributes {calyx.entrypoint = "main"} {
       calyx.assign %out0 = %ret_arg0_reg.out : i32
 
       // CHECK-LABEL: group ret_assign_0 {
-      // CHECK-NEXT:   ret_arg0_reg.in = 32'd42;
-      // CHECK-NEXT:   ret_arg0_reg.write_en = 1'd1;
-      // CHECK-NEXT:   ret_arg1_reg.in = 32'd01000000100001100110011001100110;
-      // CHECK-NEXT:   ret_arg1_reg.write_en = 1'd1;
-      // CHECK-NEXT:   ret_assign_0[done] = (ret_arg1_reg.done & ret_arg0_reg.done) ? 1'd1;
-      // CHECK-NEXT: }
+      // CHECK-NEXT:    ret_arg0_reg.in = 32'd42;
+      // CHECK-NEXT:    ret_arg0_reg.write_en = 1'd1;
+      // CHECK-NEXT:    ret_arg1_reg.in = cst_0.out;
+      // CHECK-NEXT:    ret_arg1_reg.write_en = 1'd1;
+      // CHECK-NEXT:    ret_assign_0[done] = (ret_arg1_reg.done & ret_arg0_reg.done) ? 1'd1;
+      // CHECK-NEXT:  }
       calyx.group @ret_assign_0 {
         calyx.assign %ret_arg0_reg.in = %c42_i32 : i32
         calyx.assign %ret_arg0_reg.write_en = %true : i1
@@ -278,3 +279,4 @@ module attributes {calyx.entrypoint = "main"} {
     }
   } {toplevel}
 }
+

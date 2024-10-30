@@ -144,6 +144,10 @@ private:
           static constexpr std::string_view sMemories = "memories/seq";
           return {sMemories};
         })
+        .Case<ConstantOp>([&](auto op) -> FailureOr<StringRef> {
+          static constexpr std::string_view sFloat = "float";
+          return {sFloat};
+        })
         .Default([&](auto op) {
           auto diag = op->emitOpError() << "not supported for emission";
           return diag;
@@ -254,6 +258,9 @@ struct Emitter {
 
   // Invoke emission
   void emitInvoke(InvokeOp invoke);
+
+  // Floating point Constant emission
+  void emitConstant(ConstantOp constant);
 
   // Emits a library primitive with template parameters based on all in- and
   // output ports.
@@ -481,19 +488,6 @@ private:
           emitValue(op.getInputs()[0], /*isIndented=*/false);
         })
         .Case<CycleOp>([&](auto op) { emitCycleValue(op); })
-        .Case<calyx::ConstantOp>([&](auto op) {
-          TypedAttr attr = op.getValueAttr();
-          if (auto fltAttr = dyn_cast<FloatAttr>(attr)) {
-            APFloat value = fltAttr.getValue();
-            auto type = cast<FloatType>(fltAttr.getType());
-            double floatValue = value.convertToFloat();
-            uint32_t bitPattern = floatToIEEE754(floatValue);
-            std::bitset<sizeof(float) * CHAR_BIT> bits(bitPattern);
-            (isIndented ? indent() : os)
-                << std::to_string(value.getSizeInBits(type.getFloatSemantics()))
-                << apostrophe() << "d" << bits.to_string();
-          }
-        })
         .Default(
             [&](auto op) { emitOpError(op, "not supported for emission"); });
   }
@@ -609,15 +603,6 @@ private:
   /// Current level of indentation. See `indent()` and
   /// `addIndent()`/`reduceIndent()`.
   unsigned currentIndent = 0;
-
-  uint32_t floatToIEEE754(float f) {
-    union {
-      float input;
-      uint32_t output;
-    } data;
-    data.input = f;
-    return data.output;
-  }
 };
 
 } // end anonymous namespace
@@ -661,8 +646,8 @@ void Emitter::emitComponent(ComponentInterface op) {
           .Case<RegisterOp>([&](auto op) { emitRegister(op); })
           .Case<MemoryOp>([&](auto op) { emitMemory(op); })
           .Case<SeqMemoryOp>([&](auto op) { emitSeqMemory(op); })
-          .Case<hw::ConstantOp, calyx::ConstantOp>(
-              [&](auto op) { /*Do nothing*/ })
+          .Case<hw::ConstantOp>([&](auto op) { /*Do nothing*/ })
+          .Case<calyx::ConstantOp>([&](auto op) { emitConstant(op); })
           .Case<SliceLibOp, PadLibOp, ExtSILibOp>(
               [&](auto op) { emitLibraryPrimTypedByAllPorts(op); })
           .Case<LtLibOp, GtLibOp, EqLibOp, NeqLibOp, GeLibOp, LeLibOp, SltLibOp,
@@ -922,6 +907,20 @@ void Emitter::emitInvoke(InvokeOp invoke) {
     os << iter.getKey() << " = " << iter.getValue();
   });
   os << RParen() << semicolonEndL();
+}
+
+void Emitter::emitConstant(ConstantOp constantOp) {
+  TypedAttr attr = constantOp.getValueAttr();
+  assert(isa<FloatAttr>(attr) && "must be a floating point constant");
+  auto fltAttr = cast<FloatAttr>(attr);
+  APFloat value = fltAttr.getValue();
+  auto type = cast<FloatType>(fltAttr.getType());
+  double doubleValue = value.convertToDouble();
+  auto floatBits = value.getSizeInBits(type.getFloatSemantics());
+  indent() << constantOp.getName().str() << space() << equals() << space()
+           << "std_float_const";
+  os << LParen() << "0" /* IEEE754 */ << comma() << floatBits << comma()
+     << std::to_string(doubleValue) << RParen() << semicolonEndL();
 }
 
 /// Calling getName() on a calyx operation will return "calyx.${opname}". This

@@ -900,10 +900,12 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     hwConstOp->moveAfter(getComponent().getBodyBlock(),
                          getComponent().getBodyBlock()->begin());
   } else {
-    auto calyxConstOp = rewriter.replaceOpWithNewOp<calyx::ConstantOp>(
-        constOp, constOp.getType(), constOp.getValueAttr());
+    std::string name = getState<ComponentLoweringState>().getUniqueName("cst");
+    auto calyxConstOp = rewriter.create<calyx::ConstantOp>(
+        constOp.getLoc(), name, constOp.getValueAttr());
     calyxConstOp->moveAfter(getComponent().getBodyBlock(),
                             getComponent().getBodyBlock()->begin());
+    rewriter.replaceAllUsesWith(constOp, calyxConstOp.getOut());
   }
 
   return success();
