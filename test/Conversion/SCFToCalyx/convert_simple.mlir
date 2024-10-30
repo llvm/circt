@@ -209,3 +209,27 @@ module {
     return %0, %1 : i8, i8
   }
 }
+
+// -----
+
+// Test integer and floating point constant
+
+// CHECK:     calyx.group @ret_assign_0 {
+// CHECK-DAG:   calyx.assign %ret_arg0_reg.in = %in0 : f32
+// CHECK-DAG:   calyx.assign %ret_arg0_reg.write_en = %true : i1
+// CHECK-DAG:   calyx.assign %ret_arg1_reg.in = %c42_i32 : i32
+// CHECK-DAG:   calyx.assign %ret_arg1_reg.write_en = %true : i1
+// CHECK-DAG:   calyx.assign %ret_arg2_reg.in = %cst : f32
+// CHECK-DAG:   calyx.assign %ret_arg2_reg.write_en = %true : i1
+// CHECK-DAG:   %0 = comb.and %ret_arg2_reg.done, %ret_arg1_reg.done, %ret_arg0_reg.done : i1
+// CHECK-DAG:   calyx.group_done %0 ? %true : i1
+// CHECK-DAG: }
+
+module {
+  func.func @main(%arg0 : f32) -> (f32, i32, f32) {
+    %0 = arith.constant 42 : i32
+    %1 = arith.constant 4.2e+1 : f32
+
+    return %arg0, %0, %1 : f32, i32, f32
+  }
+}
