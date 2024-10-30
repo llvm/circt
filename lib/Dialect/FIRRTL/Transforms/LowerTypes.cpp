@@ -1359,8 +1359,13 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
       // Take the first field, or else Cat the previous fields with this field.
       if (uptoBits == 0)
         srcLoweredVal = src;
-      else
-        srcLoweredVal = builder->create<CatPrimOp>(src, srcLoweredVal);
+      else {
+        if (type_isa<BundleType>(op.getInput().getType())) {
+          srcLoweredVal = builder->create<CatPrimOp>(srcLoweredVal, src);
+        } else {
+          srcLoweredVal = builder->create<CatPrimOp>(src, srcLoweredVal);
+        }
+      }
       // Record the total bits already accumulated.
       uptoBits += fieldBitwidth;
     }
@@ -1372,6 +1377,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
   if (type_isa<BundleType, FVectorType>(op.getResult().getType())) {
     // uptoBits is used to keep track of the bits that have been extracted.
     size_t uptoBits = 0;
+    auto aggregateBits = *getBitWidth(op.getResult().getType());
     auto clone = [&](const FlatBundleFieldEntry &field,
                      ArrayAttr attrs) -> Value {
       // All the fields must have valid bitwidth, a requirement for BitCastOp.
@@ -1383,8 +1389,15 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
 
       // Assign the field to the corresponding bits from the input.
       // Bitcast the field, incase its an aggregate type.
-      auto extractBits = builder->create<BitsPrimOp>(
-          srcLoweredVal, uptoBits + fieldBits - 1, uptoBits);
+      BitsPrimOp extractBits;
+      if (type_isa<BundleType>(op.getResult().getType())) {
+        extractBits = builder->create<BitsPrimOp>(
+            srcLoweredVal, aggregateBits - uptoBits - 1,
+            aggregateBits - uptoBits - fieldBits);
+      } else {
+        extractBits = builder->create<BitsPrimOp>(
+            srcLoweredVal, uptoBits + fieldBits - 1, uptoBits);
+      }
       uptoBits += fieldBits;
       return builder->create<BitCastOp>(field.type, extractBits);
     };

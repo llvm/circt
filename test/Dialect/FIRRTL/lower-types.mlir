@@ -1002,9 +1002,9 @@ firrtl.module private @is1436_FOO() {
     // CHECK-NEXT:  %[[v1:.+]] = firrtl.bits %a1 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
     // CHECK-NEXT:  %[[v2:.+]] = firrtl.cat %[[v1]], %[[v0]] : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
     %c = firrtl.bitcast %b : (!firrtl.vector<uint<2>, 2>) -> (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<2>>)
-    // CHECK-NEXT:  %[[v3:.+]] = firrtl.bits %[[v2]] 0 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<1>
-    // CHECK-NEXT:  %[[v4:.+]] = firrtl.bits %[[v2]] 1 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<1>
-    // CHECK-NEXT:  %[[v5:.+]] = firrtl.bits %[[v2]] 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+    // CHECK-NEXT:  %[[v3:.+]] = firrtl.bits %[[v2]] 3 to 3 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+    // CHECK-NEXT:  %[[v4:.+]] = firrtl.bits %[[v2]] 2 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+    // CHECK-NEXT:  %[[v5:.+]] = firrtl.bits %[[v2]] 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
     %d = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<2>>
     // CHECK-NEXT:  %d_valid = firrtl.wire  : !firrtl.uint<1>
     // CHECK-NEXT:  %d_ready = firrtl.wire  : !firrtl.uint<1>
@@ -1014,10 +1014,10 @@ firrtl.module private @is1436_FOO() {
     // CHECK-NEXT:  firrtl.matchingconnect %d_ready, %[[v4]] : !firrtl.uint<1>
     // CHECK-NEXT:  firrtl.matchingconnect %d_data, %[[v5]] : !firrtl.uint<2>
     %e = firrtl.bitcast %d : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<2>>) -> (!firrtl.bundle<addr: uint<2>, data : vector<uint<1>, 2>>)
-    // CHECK-NEXT:  %[[v6:.+]] = firrtl.cat %d_ready, %d_valid : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
-    // CHECK-NEXT:  %[[v7:.+]] = firrtl.cat %d_data, %[[v6]] : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
-    // CHECK-NEXT:  %[[v8:.+]] = firrtl.bits %[[v7]] 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
-    // CHECK-NEXT:  %[[v9:.+]] = firrtl.bits %[[v7]] 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+    // CHECK-NEXT:  %[[v6:.+]] = firrtl.cat %d_valid, %d_ready : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+    // CHECK-NEXT:  %[[v7:.+]] = firrtl.cat %[[v6]], %d_data : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
+    // CHECK-NEXT:  %[[v8:.+]] = firrtl.bits %[[v7]] 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+    // CHECK-NEXT:  %[[v9:.+]] = firrtl.bits %[[v7]] 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
   %o1 = firrtl.subfield %e[data] : !firrtl.bundle<addr: uint<2>, data : vector<uint<1>, 2>>
    %c2 = firrtl.bitcast %a1 : (!firrtl.uint<4>) -> (!firrtl.bundle<valid: bundle<re: bundle<a: uint<1>>, aa: uint<1>>, ready: uint<1>, data: uint<1>>)
     %d2 = firrtl.wire : !firrtl.bundle<valid: bundle<re: bundle<a: uint<1>>, aa: uint<1>>, ready: uint<1>, data: uint<1>>
@@ -1025,12 +1025,12 @@ firrtl.module private @is1436_FOO() {
     uint<1>>, !firrtl.bundle<valid: bundle<re: bundle<a: uint<1>>, aa: uint<1>>, ready: uint<1>, data: uint<1>>
    //CHECK: %[[v10:.+]] = firrtl.bits %[[v9]] 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
    //CHECK: %[[v11:.+]] = firrtl.bits %[[v9]] 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-   //CHECK: %[[v12:.+]] = firrtl.bits %a1 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
-   //CHECK: %[[v13:.+]] = firrtl.bits %[[v12]] 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+   //CHECK: %[[v12:.+]] = firrtl.bits %a1 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+   //CHECK: %[[v13:.+]] = firrtl.bits %[[v12]] 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
    //CHECK: %[[v14:.+]] = firrtl.bits %[[v13]] 0 to 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-   //CHECK: %[[v15:.+]] = firrtl.bits %[[v12]] 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-   //CHECK: %[[v16:.+]] = firrtl.bits %a1 2 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<1>
-   //CHECK: %[[v17:.+]] = firrtl.bits %a1 3 to 3 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+   //CHECK: %[[v15:.+]] = firrtl.bits %[[v12]] 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+   //CHECK: %[[v16:.+]] = firrtl.bits %a1 1 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+   //CHECK: %[[v17:.+]] = firrtl.bits %a1 0 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<1>
    //CHECK: %[[d2_valid_re_a:.+]] = firrtl.wire  : !firrtl.uint<1>
    //CHECK: %[[d2_valid_aa:.+]] = firrtl.wire  : !firrtl.uint<1>
    //CHECK: %[[d2_ready:.+]] = firrtl.wire  : !firrtl.uint<1>
