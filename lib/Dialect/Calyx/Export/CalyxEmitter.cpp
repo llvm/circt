@@ -25,6 +25,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/FormatVariadic.h"
 #include <bitset>
+#include <string>
 
 using namespace circt;
 using namespace calyx;
@@ -919,7 +920,10 @@ void Emitter::emitConstant(ConstantOp constantOp) {
   auto floatBits = value.getSizeInBits(type.getFloatSemantics());
   indent() << constantOp.getName().str() << space() << equals() << space()
            << "std_float_const";
-  os << LParen() << "0" /* IEEE754 */ << comma() << floatBits << comma()
+  // Currently defaults to IEEE-754 representation [1].
+  // [1]: https://github.com/calyxir/calyx/blob/main/primitives/float.futil
+  static constexpr int32_t IEEE754 = 0;
+  os << LParen() << std::to_string(IEEE754) << comma() << floatBits << comma()
      << std::to_string(doubleValue) << RParen() << semicolonEndL();
 }
 
