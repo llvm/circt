@@ -42,6 +42,7 @@
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 #include <memory>
+#include <utility>
 
 using namespace circt;
 using namespace firrtl;
@@ -1772,10 +1773,66 @@ private:
   ParseResult parsePostFixFieldId(Value &result);
   ParseResult parsePostFixIntSubscript(Value &result);
   ParseResult parsePostFixDynamicSubscript(Value &result);
-  ParseResult parsePrimExp(Value &result);
   ParseResult parseIntegerLiteralExp(Value &result);
   ParseResult parseListExp(Value &result);
   ParseResult parseListConcatExp(Value &result);
+
+  template <typename T, size_t M, size_t N, size_t... Ms, size_t... Ns>
+  ParseResult parsePrim(std::index_sequence<Ms...>, std::index_sequence<Ns...>,
+                        Value &result) {
+    auto loc = getToken().getLoc();
+    locationProcessor.setLoc(loc);
+    consumeToken();
+
+    auto vals = std::array<Value, M>();
+    auto ints = std::array<int64_t, N>();
+
+    // Parse all the values.
+    bool first = true;
+    for (size_t i = 0; i < M; ++i) {
+      if (!first)
+        if (parseToken(FIRToken::comma, "expected ','"))
+          return failure();
+      if (parseExp(vals[i], "expected expression in primitive operand"))
+        return failure();
+      first = false;
+    }
+
+    // Parse all the attributes.
+    for (size_t i = 0; i < N; ++i) {
+      if (!first)
+        if (parseToken(FIRToken::comma, "expected ','"))
+          return failure();
+      if (parseIntLit(ints[i], "expected integer in primitive operand"))
+        return failure();
+      first = false;
+    }
+
+    if (parseToken(FIRToken::r_paren, "expected ')'"))
+      return failure();
+
+    // Infer the type.
+    auto type = T::inferReturnType(cast<FIRRTLType>(vals[Ms].getType())...,
+                                   ints[Ns]..., {});
+    if (!type) {
+      // Only call translateLocation on an error case, it is expensive.
+      T::inferReturnType(cast<FIRRTLType>(vals[Ms].getType())..., ints[Ns]...,
+                         translateLocation(loc));
+      return failure();
+    }
+
+    // Create the operation.
+    auto op = builder.create<T>(type, vals[Ms]..., ints[Ns]...);
+    result = op.getResult();
+    return success();
+  }
+
+  template <typename T, unsigned M, unsigned N>
+  ParseResult parsePrimExp(Value &result) {
+    auto ms = std::make_index_sequence<M>();
+    auto ns = std::make_index_sequence<N>();
+    return parsePrim<T, M, N>(ms, ns, result);
+  }
 
   std::optional<ParseResult> parseExpWithLeadingKeyword(FIRToken keyword);
 
@@ -1917,15 +1974,28 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
 // NOLINTNEXTLINE(misc-no-recursion)
 ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
                                         bool isLeadingStmt) {
-  switch (getToken().getKind()) {
-
-    // Handle all primitive's.
-#define TOK_LPKEYWORD_PRIM(SPELLING, CLASS, NUMOPERANDS)                       \
-  case FIRToken::lp_##SPELLING:
-#include "FIRTokenKinds.def"
-    if (parsePrimExp(result))
+  auto token = getToken();
+  auto kind = token.getKind();
+  switch (kind) {
+  case FIRToken::lp_integer_add:
+  case FIRToken::lp_integer_mul:
+  case FIRToken::lp_integer_shr:
+  case FIRToken::lp_integer_shl:
+    if (requireFeature({4, 0, 0}, "Integer arithmetic expressions"))
       return failure();
     break;
+  default:
+    break;
+  }
+
+  switch (kind) {
+    // Handle all primitive's.
+#define TOK_LPKEYWORD_PRIM(SPELLING, CLASS, NUMOPERANDS, NUMATTRIBUTES)        \
+  case FIRToken::lp_##SPELLING:                                                \
+    if (parsePrimExp<CLASS, NUMOPERANDS, NUMATTRIBUTES>(result))               \
+      return failure();                                                        \
+    break;
+#include "FIRTokenKinds.def"
 
   case FIRToken::l_brace_bar:
     if (isLeadingStmt)
@@ -2113,6 +2183,18 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     break;
   }
   }
+  // Don't add code here, the common cases of these switch statements will be
+  // merged. This allows for fixing up primops after they have been created.
+  switch (kind) {
+  case FIRToken::lp_shr:
+    // For FIRRTL versions earlier than 4.0.0, insert pad(_, 1) around any
+    // unsigned shr This ensures the minimum width is 1 (but can be greater)
+    if (version < FIRVersion(4, 0, 0) && type_isa<UIntType>(result.getType()))
+      result = builder.create<PadPrimOp>(result, 1);
+    break;
+  default:
+    break;
+  }
 
   return parseOptionalExpPostscript(result);
 }
@@ -2162,10 +2244,11 @@ FIRStmtParser::emitCachedSubAccess(Value base, ArrayRef<NamedAttribute> attrs,
                                    unsigned indexNo, SMLoc loc) {
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
-  auto resultType = subop::inferReturnType({base}, attrs, {});
+  auto baseType = cast<FIRRTLType>(base.getType());
+  auto resultType = subop::inferReturnType(baseType, indexNo, {});
   if (!resultType) {
     // Emit the error at the right location.  translateLocation is expensive.
-    (void)subop::inferReturnType({base}, attrs, translateLocation(loc));
+    (void)subop::inferReturnType(baseType, indexNo, translateLocation(loc));
     return failure();
   }
 
@@ -2296,10 +2379,11 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result) {
 
   // Make sure the index expression is valid and compute the result type for the
   // expression.
-  auto resultType = SubaccessOp::inferReturnType({result, index}, {}, {});
+  auto resultType =
+      SubaccessOp::inferReturnType(result.getType(), index.getType(), {});
   if (!resultType) {
     // Emit the error at the right location.  translateLocation is expensive.
-    (void)SubaccessOp::inferReturnType({result, index}, {},
+    (void)SubaccessOp::inferReturnType(result.getType(), index.getType(),
                                        translateLocation(loc));
     return failure();
   }
@@ -2307,136 +2391,6 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result) {
   // Create the result operation.
   auto op = builder.create<SubaccessOp>(resultType, result, index);
   result = op.getResult();
-  return success();
-}
-
-/// prim ::= primop exp* intLit*  ')'
-ParseResult FIRStmtParser::parsePrimExp(Value &result) {
-  auto kind = getToken().getKind();
-  auto loc = getToken().getLoc();
-  consumeToken();
-
-  // Parse the operands and constant integer arguments.
-  SmallVector<Value, 3> operands;
-  SmallVector<int64_t, 3> integers;
-
-  if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
-        // Handle the integer constant case if present.
-        if (getToken().isAny(FIRToken::integer, FIRToken::signed_integer,
-                             FIRToken::string)) {
-          integers.push_back(0);
-          return parseIntLit(integers.back(), "expected integer");
-        }
-
-        // Otherwise it must be a value operand.  These must all come before the
-        // integers.
-        if (!integers.empty())
-          return emitError("expected more integer constants"), failure();
-
-        Value operand;
-        if (parseExp(operand, "expected expression in primitive operand"))
-          return failure();
-
-        locationProcessor.setLoc(loc);
-
-        operands.push_back(operand);
-
-        return success();
-      }))
-    return failure();
-
-  locationProcessor.setLoc(loc);
-
-  SmallVector<FIRRTLType, 3> opTypes;
-  for (auto v : operands)
-    opTypes.push_back(type_cast<FIRRTLType>(v.getType()));
-
-  unsigned numOperandsExpected;
-  SmallVector<StringAttr, 2> attrNames;
-
-  // Get information about the primitive in question.
-  switch (kind) {
-  default:
-    emitError(loc, "primitive not supported yet");
-    return failure();
-#define TOK_LPKEYWORD_PRIM(SPELLING, CLASS, NUMOPERANDS)                       \
-  case FIRToken::lp_##SPELLING:                                                \
-    numOperandsExpected = NUMOPERANDS;                                         \
-    break;
-#include "FIRTokenKinds.def"
-  }
-  // Don't add code here, we want these two switch statements to be fused by
-  // the compiler.
-  switch (kind) {
-  default:
-    break;
-  case FIRToken::lp_bits:
-    attrNames.push_back(getConstants().hiIdentifier); // "hi"
-    attrNames.push_back(getConstants().loIdentifier); // "lo"
-    break;
-  case FIRToken::lp_head:
-  case FIRToken::lp_pad:
-  case FIRToken::lp_shl:
-  case FIRToken::lp_shr:
-  case FIRToken::lp_tail:
-    attrNames.push_back(getConstants().amountIdentifier);
-    break;
-  case FIRToken::lp_integer_add:
-  case FIRToken::lp_integer_mul:
-  case FIRToken::lp_integer_shr:
-  case FIRToken::lp_integer_shl:
-    if (requireFeature({4, 0, 0}, "Integer arithmetic expressions", loc))
-      return failure();
-    break;
-  }
-
-  if (operands.size() != numOperandsExpected) {
-    assert(numOperandsExpected <= 3);
-    static const char *numberName[] = {"zero", "one", "two", "three"};
-    const char *optionalS = &"s"[numOperandsExpected == 1];
-    return emitError(loc, "operation requires ")
-           << numberName[numOperandsExpected] << " operand" << optionalS;
-  }
-
-  if (integers.size() != attrNames.size()) {
-    emitError(loc, "expected ") << attrNames.size() << " constant arguments";
-    return failure();
-  }
-
-  NamedAttrList attrs;
-  for (size_t i = 0, e = attrNames.size(); i != e; ++i)
-    attrs.append(attrNames[i], builder.getI32IntegerAttr(integers[i]));
-
-  switch (kind) {
-  default:
-    emitError(loc, "primitive not supported yet");
-    return failure();
-
-#define TOK_LPKEYWORD_PRIM(SPELLING, CLASS, NUMOPERANDS)                       \
-  case FIRToken::lp_##SPELLING: {                                              \
-    auto resultTy = CLASS::inferReturnType(operands, attrs, {});               \
-    if (!resultTy) {                                                           \
-      /* only call translateLocation on an error case, it is expensive. */     \
-      CLASS::inferReturnType(operands, attrs, translateLocation(loc));         \
-      return failure();                                                        \
-    }                                                                          \
-    result = builder.create<CLASS>(resultTy, operands, attrs);                 \
-    break;                                                                     \
-  }
-#include "FIRTokenKinds.def"
-  }
-  // Don't add code here, the common cases of these switch statements will be
-  // merged. This allows for fixing up primops after they have been created.
-  switch (kind) {
-  default:
-    break;
-  case FIRToken::lp_shr:
-    // For FIRRTL versions earlier than 4.0.0, insert pad(_, 1) around any
-    // unsigned shr This ensures the minimum width is 1 (but can be greater)
-    if (version < FIRVersion(4, 0, 0) && type_isa<UIntType>(result.getType()))
-      result = builder.create<PadPrimOp>(result, 1);
-    break;
-  }
   return success();
 }
 

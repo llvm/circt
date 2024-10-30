@@ -144,7 +144,7 @@ circuit trailing_comma :
   public module trailing_comma :
    input in0 : SInt<8>
    input in1 : SInt<8>
-   ; expected-error @+1 {{expected expression in primitive operand}}
+   ; expected-error @+1 {{expected ')'}}
    node n = add(in0, in1,)
 
 ;// -----
@@ -164,7 +164,7 @@ circuit invalid_add :
   public module invalid_add :
    input in : SInt<8>
    input c : Clock
-   ; expected-error @+1 {{operation requires two operands}}
+   ; expected-error @+1 {{expected ')'}}
    node n = add(in, in, in)
 
 ;// -----
@@ -266,7 +266,7 @@ circuit Issue418:
     input a: UInt<1>
     output b: UInt<1>
 
-    ; expected-error @+1 {{operation requires one operand}}
+    ; expected-error @+1 {{expected ')'}}
     connect b, not(a, a)
 
 ;// -----
