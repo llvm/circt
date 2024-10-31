@@ -657,10 +657,10 @@ void InlineCombGroups::recurseInlineCombGroups(
     //   LateSSAReplacement)
     if (isa<BlockArgument>(src) ||
         isa<calyx::RegisterOp, calyx::MemoryOp, calyx::SeqMemoryOp,
-            calyx::ConstantOp, hw::ConstantOp, mlir::arith::ConstantOp,
-            calyx::MultPipeLibOp, calyx::DivUPipeLibOp, calyx::DivSPipeLibOp,
-            calyx::RemSPipeLibOp, calyx::RemUPipeLibOp, mlir::scf::WhileOp,
-            calyx::InstanceOp>(src.getDefiningOp()))
+            hw::ConstantOp, mlir::arith::ConstantOp, calyx::MultPipeLibOp,
+            calyx::DivUPipeLibOp, calyx::DivSPipeLibOp, calyx::RemSPipeLibOp,
+            calyx::RemUPipeLibOp, mlir::scf::WhileOp, calyx::InstanceOp,
+            calyx::ConstantOp, calyx::AddFNOp>(src.getDefiningOp()))
       continue;
 
     auto srcCombGroup = dyn_cast<calyx::CombGroupOp>(

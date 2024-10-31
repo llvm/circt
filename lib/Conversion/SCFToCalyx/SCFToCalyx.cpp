@@ -29,6 +29,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Casting.h"
 
 #include <variant>
 
@@ -281,6 +282,9 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                              AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp,
                              AndIOp, XOrIOp, OrIOp, ExtUIOp, ExtSIOp, TruncIOp,
                              MulIOp, DivUIOp, DivSIOp, RemUIOp, RemSIOp,
+                             /// floating point
+                             AddFOp,
+                             /// others
                              SelectOp, IndexCastOp, CallOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
               .template Case<FuncOp, scf::ConditionOp>([&](auto) {
@@ -314,6 +318,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, DivSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, RemUIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, RemSIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, AddFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRUIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShLIOp op) const;
@@ -409,7 +414,7 @@ private:
     // Pass the result from the Operation to the Calyx primitive.
     op.getResult().replaceAllUsesWith(out);
     auto reg = createRegister(
-        op.getLoc(), rewriter, getComponent(), width.getIntOrFloatBitWidth(),
+        op.getLoc(), rewriter, getComponent(), width,
         getState<ComponentLoweringState>().getUniqueName(opName));
     // Operation pipelines are not combinational, so a GroupOp is required.
     auto group = createGroupForOp<calyx::GroupOp>(rewriter, op);
@@ -433,6 +438,19 @@ private:
         comb::createOrFoldNot(group.getLoc(), opPipe.getDone(), builder));
     // The group is done when the register write is complete.
     rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone());
+
+    if (isa<calyx::AddFNOp>(opPipe)) {
+      auto opFN = cast<calyx::AddFNOp>(opPipe);
+      hw::ConstantOp subOp;
+      if (isa<arith::AddFOp>(op)) {
+        subOp = createConstant(loc, rewriter, getComponent(), /*width=*/1,
+                               /*subtract=*/0);
+      } else {
+        subOp = createConstant(loc, rewriter, getComponent(), /*width=*/1,
+                               /*subtract=*/1);
+      }
+      rewriter.create<calyx::AssignOp>(loc, opFN.getSubOp(), subOp);
+    }
 
     // Register the values for the pipeline.
     getState<ComponentLoweringState>().registerEvaluatingGroup(out, group);
@@ -664,6 +682,21 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   return buildLibraryBinaryPipeOp<calyx::RemSPipeLibOp>(
       rewriter, rem, remPipe,
       /*out=*/remPipe.getOut());
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     AddFOp addf) const {
+  Location loc = addf.getLoc();
+  Type width = addf.getResult().getType();
+  IntegerType one = rewriter.getI1Type(), three = rewriter.getIntegerType(3),
+              five = rewriter.getIntegerType(5);
+  auto addFN =
+      getState<ComponentLoweringState>()
+          .getNewLibraryOpInstance<calyx::AddFNOp>(
+              rewriter, loc,
+              {one, one, one, one, one, width, width, three, width, five, one});
+  return buildLibraryBinaryPipeOp<calyx::AddFNOp>(rewriter, addf, addFN,
+                                                  addFN.getOut());
 }
 
 template <typename TAllocOp>
@@ -1868,7 +1901,7 @@ public:
                       ShRSIOp, AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp,
                       CondBranchOp, BranchOp, MulIOp, DivUIOp, DivSIOp, RemUIOp,
                       RemSIOp, ReturnOp, arith::ConstantOp, IndexCastOp, FuncOp,
-                      ExtSIOp, CallOp>();
+                      ExtSIOp, CallOp, AddFOp>();
 
     RewritePatternSet legalizePatterns(&getContext());
     legalizePatterns.add<DummyPattern>(&getContext());
