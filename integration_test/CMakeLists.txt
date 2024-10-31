@@ -10,6 +10,8 @@ set(CIRCT_INTEGRATION_TEST_DEPENDS
   circt-rtl-sim
   circt-lec
   circt-bmc
+  circt-test
+  circt-test-runner-sby
   firtool
   hlstool
   ibistool
