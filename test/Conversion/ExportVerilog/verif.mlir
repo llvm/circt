@@ -94,14 +94,14 @@ hw.module @Sequences(in %clk: i1, in %a: i1, in %b: i1) {
   %c3 = ltl.concat %d1, %d2, %d3 : !ltl.sequence, !ltl.sequence, !ltl.sequence
   sv.assert_property %c3 : !ltl.sequence
 
-  // CHECK: assert property (a and b);
-  %g0 = ltl.and %a, %b : i1, i1
+  // CHECK: assert property (a and ##0 a);
+  %g0 = ltl.and %a, %d0 : i1, !ltl.sequence
   sv.assert_property %g0 : !ltl.sequence
   // CHECK: assert property (a ##0 a and a ##4 a);
   %g1 = ltl.and %c0, %c1 : !ltl.sequence, !ltl.sequence
   sv.assert_property %g1 : !ltl.sequence
-  // CHECK: assert property (a or b);
-  %g2 = ltl.or %a, %b : i1, i1
+  // CHECK: assert property (a or ##0 a);
+  %g2 = ltl.or %a, %d0 : i1, !ltl.sequence
   sv.assert_property %g2 : !ltl.sequence
   // CHECK: assert property (a ##0 a or a ##4 a);
   %g3 = ltl.or %c0, %c1 : !ltl.sequence, !ltl.sequence
@@ -207,17 +207,18 @@ hw.module @Properties(in %clk: i1, in %a: i1, in %b: i1) {
 
 // CHECK-LABEL: module Precedence
 hw.module @Precedence(in %a: i1, in %b: i1) {
-  // CHECK: assert property ((a or b) and b);
-  %a0 = ltl.or %a, %b : i1, i1
-  %a1 = ltl.and %a0, %b : !ltl.sequence, i1
-  sv.assert_property %a1 : !ltl.sequence
+  // CHECK: assert property ((a or ##0 b) and b);
+  %a0 = ltl.delay %b, 0, 0 : i1
+  %a1 = ltl.or %a, %a0 : i1, !ltl.sequence
+  %a2 = ltl.and %a1, %b : !ltl.sequence, i1
+  sv.assert_property %a2 : !ltl.sequence
 
-  // CHECK: assert property (##1 (a or b));
-  %d0 = ltl.delay %a0, 1, 0 : !ltl.sequence
+  // CHECK: assert property (##1 (a or ##0 b));
+  %d0 = ltl.delay %a1, 1, 0 : !ltl.sequence
   sv.assert_property %d0 : !ltl.sequence
 
-  // CHECK: assert property (not (a or b));
-  %n0 = ltl.not %a0 : !ltl.sequence
+  // CHECK: assert property (not (a or ##0 b));
+  %n0 = ltl.not %a1 : !ltl.sequence
   sv.assert_property %n0 : !ltl.property
 
   // CHECK: assert property (a and (a |-> b));

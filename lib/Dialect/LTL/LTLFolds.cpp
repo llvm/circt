@@ -47,6 +47,35 @@ namespace patterns {
 } // namespace patterns
 
 //===----------------------------------------------------------------------===//
+// AndOp / OrOp / IntersectOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
+  if (op.getType() == rewriter.getI1Type()) {
+    rewriter.replaceOpWithNewOp<comb::AndOp>(op, op.getInputs(), true);
+    return success();
+  }
+  return failure();
+}
+
+LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
+  if (op.getType() == rewriter.getI1Type()) {
+    rewriter.replaceOpWithNewOp<comb::OrOp>(op, op.getInputs(), true);
+    return success();
+  }
+  return failure();
+}
+
+LogicalResult IntersectOp::canonicalize(IntersectOp op,
+                                        PatternRewriter &rewriter) {
+  if (op.getType() == rewriter.getI1Type()) {
+    rewriter.replaceOpWithNewOp<comb::AndOp>(op, op.getInputs(), true);
+    return success();
+  }
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
 // DelayOp
 //===----------------------------------------------------------------------===//
 

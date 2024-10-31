@@ -38,7 +38,7 @@ ltl.or %p, %p : !ltl.property, !ltl.property
 %p1 = ltl.and %p, %true : !ltl.property, i1
 %p2 = ltl.and %s, %p : !ltl.sequence, !ltl.property
 %p3 = ltl.and %p, %s : !ltl.property, !ltl.sequence
-unrealized_conversion_cast %s0 : !ltl.sequence to index
+unrealized_conversion_cast %s0 : i1 to index
 unrealized_conversion_cast %s1 : !ltl.sequence to index
 unrealized_conversion_cast %s2 : !ltl.sequence to index
 unrealized_conversion_cast %p0 : !ltl.property to index
