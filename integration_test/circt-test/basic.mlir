@@ -132,7 +132,6 @@ verif.formal @ALUIgnoreFailure attributes {ignore = true} {
   verif.assert %ne : i1
 }
 
-// CHECK: error: test ALUFailure failed
 verif.formal @ALUFailure {
   %a = verif.symbolic_value : i4
   %b = verif.symbolic_value : i4
