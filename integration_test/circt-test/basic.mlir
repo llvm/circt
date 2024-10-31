@@ -127,7 +127,7 @@ verif.formal @ALUIgnoreFailure attributes {ignore = true} {
   %ref_sub = comb.sub %a, %b : i4
   %z1 = comb.mux %sub, %ref_sub, %ref_add : i4
 
-  // Check the two don't match (should fail)
+  // Check the two don't match (failure will be ignored)
   %ne = comb.icmp ne %z0, %z1 : i4
   verif.assert %ne : i1
 }
