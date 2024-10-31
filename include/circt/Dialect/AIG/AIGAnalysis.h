@@ -57,6 +57,43 @@ private:
   DenseMap<OperationName, size_t> opCounts;
   DenseMap<OperationName, DenseMap<size_t, size_t>> operandCounts;
 };*/
+class LongestPathAnalysis {
+public:
+  LongestPathAnalysis(Operation *moduleOp, mlir::AnalysisManager &am);
+
+  struct InNode {
+    OpOperand to;
+    size_t bitPos;
+  };
+  struct OutNode {
+    Value from;
+    size_t bitPos;
+  };
+
+  struct Edge {
+    OutNode from;
+    InNode to;
+    uint64_t weight;
+  };
+
+  struct Path {
+    SmallVector<Edge> edges;
+    uint64_t getWegithSum() const;
+  };
+
+  struct ModuleInfo {
+    DenseMap<OutNode, SmallVector<InNode>> inEdges;
+    SmallVector<OutNode> inputs;
+    DenseMap<InNode, SmallVector<OutNode>> outEdges;
+    SmallVector<Path> internalPaths; // Paths closed under this hierarchy.
+  };
+
+  ModuleInfo *getModuleInfo(hw::HWModuleOp module);
+
+private:
+  DenseMap<StringAttr, std::unique_ptr<ModuleInfo>> moduleInfoCache;
+  igraph::InstanceGraph *instanceGraph;
+};
 
 class ResourceUsageAnalysis {
 public:
@@ -102,7 +139,7 @@ public:
   ModuleResourceUsage *getResourceUsage(hw::HWModuleOp top);
 
   // A map from the top-level module to the resource usage of the design.
-  DenseMap<StringAttr, std::shared_ptr<ModuleResourceUsage>> designUsageCache;
+  DenseMap<StringAttr, std::unique_ptr<ModuleResourceUsage>> designUsageCache;
   igraph::InstanceGraph *instanceGraph;
 };
 
