@@ -551,24 +551,82 @@ private:
 
   /// Concurrent and of a property with the current condition.  If we are in
   /// the outer scope, i.e. not in a WhenOp region, then there is no condition.
-  Value ltlAndWithCondition(Operation *op, Value value) {
-    // 'ltl.and' the value with the current condition.
-    return OpBuilder(op).createOrFold<LTLAndIntrinsicOp>(
-        condition.getLoc(), condition.getType(), condition, value);
+  Value ltlAndWithCondition(Operation *op, Value property) {
+    // Look through nodes.
+    while (auto nodeOp = property.getDefiningOp<NodeOp>())
+      property = nodeOp.getInput();
+
+    // Look through `ltl.clock` ops.
+    if (auto clockOp = property.getDefiningOp<LTLClockIntrinsicOp>()) {
+      auto input = ltlAndWithCondition(op, clockOp.getInput());
+      auto &newClockOp = createdLTLClockOps[{clockOp, input}];
+      if (!newClockOp) {
+        newClockOp = OpBuilder(op).cloneWithoutRegions(clockOp);
+        newClockOp.getInputMutable().assign(input);
+      }
+      return newClockOp;
+    }
+
+    // Otherwise create a new `ltl.and` with the condition.
+    auto &newOp = createdLTLAndOps[{condition, property}];
+    if (!newOp)
+      newOp = OpBuilder(op).createOrFold<LTLAndIntrinsicOp>(
+          condition.getLoc(), property.getType(), condition, property);
+    return newOp;
   }
 
   /// Overlapping implication with the condition as its antecedent and a given
   /// property as the consequent.  If we are in the outer scope, i.e. not in a
   /// WhenOp region, then there is no condition.
-  Value ltlImplicationWithCondition(Operation *op, Value value) {
-    // 'and' the value with the current condition.
-    return OpBuilder(op).createOrFold<LTLImplicationIntrinsicOp>(
-        condition.getLoc(), condition.getType(), condition, value);
+  Value ltlImplicationWithCondition(Operation *op, Value property) {
+    // Look through nodes.
+    while (auto nodeOp = property.getDefiningOp<NodeOp>())
+      property = nodeOp.getInput();
+
+    // Look through `ltl.clock` ops.
+    if (auto clockOp = property.getDefiningOp<LTLClockIntrinsicOp>()) {
+      auto input = ltlImplicationWithCondition(op, clockOp.getInput());
+      auto &newClockOp = createdLTLClockOps[{clockOp, input}];
+      if (!newClockOp) {
+        newClockOp = OpBuilder(op).cloneWithoutRegions(clockOp);
+        newClockOp.getInputMutable().assign(input);
+      }
+      return newClockOp;
+    }
+
+    // Merge condition into `ltl.implication` left-hand side.
+    if (auto implOp = property.getDefiningOp<LTLImplicationIntrinsicOp>()) {
+      auto lhs = ltlAndWithCondition(op, implOp.getLhs());
+      auto &newImplOp = createdLTLImplicationOps[{lhs, implOp.getRhs()}];
+      if (!newImplOp) {
+        auto clonedOp = OpBuilder(op).cloneWithoutRegions(implOp);
+        clonedOp.getLhsMutable().assign(lhs);
+        newImplOp = clonedOp;
+      }
+      return newImplOp;
+    }
+
+    // Otherwise create a new `ltl.implication` with the condition on the LHS.
+    auto &newImplOp = createdLTLImplicationOps[{condition, property}];
+    if (!newImplOp)
+      newImplOp = OpBuilder(op).createOrFold<LTLImplicationIntrinsicOp>(
+          condition.getLoc(), property.getType(), condition, property);
+    return newImplOp;
   }
 
 private:
   /// The current wrapping condition. If null, we are in the outer scope.
   Value condition;
+
+  /// The `ltl.and` operations that have been created.
+  SmallDenseMap<std::pair<Value, Value>, Value> createdLTLAndOps;
+
+  /// The `ltl.implication` operations that have been created.
+  SmallDenseMap<std::pair<Value, Value>, Value> createdLTLImplicationOps;
+
+  /// The `ltl.clock` operations that have been created.
+  SmallDenseMap<std::pair<LTLClockIntrinsicOp, Value>, LTLClockIntrinsicOp>
+      createdLTLClockOps;
 };
 } // namespace
 
