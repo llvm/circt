@@ -233,3 +233,27 @@ module {
     return %arg0, %0, %1 : f32, i32, f32
   }
 }
+
+// -----
+
+// Test floating point add
+
+// CHECK:             calyx.group @bb0_0 {
+// CHECK-DAG:               calyx.assign %std_addFN_0.left = %in0 : f32
+// CHECK-DAG:               calyx.assign %std_addFN_0.right = %cst : f32
+// CHECK-DAG:               calyx.assign %addf_0_reg.in = %std_addFN_0.out : f32
+// CHECK-DAG:               calyx.assign %addf_0_reg.write_en = %std_addFN_0.done : i1
+// CHECK-DAG:               %0 = comb.xor %std_addFN_0.done, %true : i1
+// CHECK-DAG:               calyx.assign %std_addFN_0.go = %0 ? %true : i1
+// CHECK-DAG:               calyx.assign %std_addFN_0.subOp = %false : i1
+// CHECK-DAG:               calyx.group_done %addf_0_reg.done : i1
+// CHECK-DAG:             }
+
+module {
+  func.func @main(%arg0 : f32) -> f32 {
+    %0 = arith.constant 4.2 : f32
+    %1 = arith.addf %arg0, %0 : f32
+
+    return %1 : f32
+  }
+}

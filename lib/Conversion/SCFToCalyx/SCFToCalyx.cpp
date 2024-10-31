@@ -284,6 +284,7 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                              MulIOp, DivUIOp, DivSIOp, RemUIOp, RemSIOp,
                              /// floating point
                              AddFOp,
+                             /// others
                              SelectOp, IndexCastOp, CallOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
               .template Case<FuncOp, scf::ConditionOp>([&](auto) {

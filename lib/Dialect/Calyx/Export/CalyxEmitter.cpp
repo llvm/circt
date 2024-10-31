@@ -981,21 +981,28 @@ void Emitter::emitLibraryFloatingPoint(Operation *op) {
   // sigWidth. See
   // http://www.jhauser.us/arithmetic/HardFloat-1/doc/HardFloat-Verilog.html
   unsigned expWidth, sigWidth;
-  if (bitWidth == 16) {
+  switch (bitWidth) {
+  case 16:
     expWidth = 5;
     sigWidth = 11;
-  } else if (bitWidth == 32) {
+    break;
+  case 32:
     expWidth = 8;
     sigWidth = 24;
-  } else if (bitWidth == 64) {
+    break;
+  case 64:
     expWidth = 11;
     sigWidth = 53;
-  } else if (bitWidth == 128) {
+    break;
+  case 128:
     expWidth = 15;
     sigWidth = 113;
-  } else {
-    op->emitError("Unsupported floating point width");
+    break;
+  default:
+    op->emitError("The supported bitwidths are 16, 32, 64, and 128");
+    return;
   }
+
   StringRef opName = op->getName().getStringRef();
   indent() << getAttributes(op, /*atFormat=*/true) << cell.instanceName()
            << space() << equals() << space() << removeCalyxPrefix(opName)
