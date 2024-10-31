@@ -400,38 +400,6 @@ class HWInstanceOpBase<string mnemonic, list<Trait> traits = []> :
   code extraInstanceClassDeclaration = [{}];
 
   let extraClassDeclaration = extraInstanceClassDeclaration # [{
-    /// Return the name of the specified input port or null if it cannot be
-    /// determined.
-    StringAttr getArgumentName(size_t idx) {
-      return instance_like_impl::getName(getArgNames(), idx);
-    }
-
-    /// Return the name of the specified result or null if it cannot be
-    /// determined.
-    StringAttr getResultName(size_t idx) {
-      return instance_like_impl::getName(getResultNames(), idx);
-    }
-
-    /// Change the name of the specified input port.
-    void setArgumentName(size_t i, StringAttr name) {
-      setInputNames(instance_like_impl::updateName(getArgNames(), i, name));
-    }
-
-    /// Change the name of the specified output port.
-    void setResultName(size_t i, StringAttr name) {
-      setOutputNames(instance_like_impl::updateName(getResultNames(), i, name));
-    }
-
-    /// Change the names of all the input ports.
-    void setInputNames(ArrayAttr names) {
-      setArgNamesAttr(names);
-    }
-
-    /// Change the names of all the result ports.
-    void setOutputNames(ArrayAttr names) {
-      setResultNamesAttr(names);
-    }
-
     /// Return the values for the port in port order.
     /// Note: The module ports may not be input, output ordered. This computes
     /// the port index to instance result/input Value mapping.
@@ -467,7 +435,7 @@ class HWInstanceOpBase<string mnemonic, list<Trait> traits = []> :
     /// attribute.
     void $cppClass::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
       ::circt::hw::instance_like_impl::getAsmResultNames(
-          setNameFn, getInstanceName(), getResultNames(), getResults());
+          setNameFn, getInstanceName(), getOutputNames(), getResults());
     }
 
     void $cppClass::getValues(SmallVectorImpl<Value> &values,
@@ -488,7 +456,7 @@ class HWInstanceOpBase<string mnemonic, list<Trait> traits = []> :
 def InstanceOp : HWInstanceOpBase<"instance", [HWInstanceLike]> {
   let summary = "Create an instance of a module";
   let description = [{
-    This represents an instance of a module. The inputs and results are
+    This represents an instance of a module. The inputs and outputs are
     the referenced module's inputs and outputs.  The `argNames` and
     `resultNames` attributes must match the referenced module.
 

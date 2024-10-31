@@ -165,7 +165,7 @@ static StringAttr getNameForPort(Value val,
       auto index = cast<mlir::OpResult>(val).getResultNumber();
       SmallString<64> portName = inst.getInstanceName();
       portName += ".";
-      auto resultName = inst.getResultName(index);
+      auto resultName = inst.getOutputName(index);
       if (resultName && !resultName.getValue().empty())
         portName += resultName.getValue();
       else
