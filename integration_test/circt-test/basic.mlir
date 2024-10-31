@@ -109,7 +109,7 @@ verif.formal @ALUWorks {
   %ref_sub = comb.sub %a, %b : i4
   %z1 = comb.mux %sub, %ref_sub, %ref_add : i4
 
-  // Check the two don't match (should fail)
+  // Check the two match.
   %eq = comb.icmp eq %z0, %z1 : i4
   verif.assert %eq : i1
 }
@@ -127,7 +127,7 @@ verif.formal @ALUIgnoreFailure attributes {ignore = true} {
   %ref_sub = comb.sub %a, %b : i4
   %z1 = comb.mux %sub, %ref_sub, %ref_add : i4
 
-  // Check the two don't match (failure will be ignored)
+  // Check the two don't match (failure will be ignored).
   %ne = comb.icmp ne %z0, %z1 : i4
   verif.assert %ne : i1
 }
@@ -145,7 +145,7 @@ verif.formal @ALUFailure {
   %ref_sub = comb.sub %a, %b : i4
   %z1 = comb.mux %sub, %ref_sub, %ref_add : i4
 
-  // Check the two don't match (should fail)
+  // Check the two don't match (should fail).
   %ne = comb.icmp ne %z0, %z1 : i4
   verif.assert %ne : i1
 }
