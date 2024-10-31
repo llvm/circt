@@ -418,7 +418,7 @@ def HWInstanceLike : OpInterface<"HWInstanceLike", [
   let cppNamespace = "circt::hw";
   let description = "Provide common instance information.";
 
-  // Note that the single-elemetn getters and setters could be implemented as
+  // Note that the single-element getters and setters could be implemented as
   // shared declarations using the interface methods that operate on the entire
   // array or vice versa.  However, depending on how the names are stored in the
   // instance operation, they can be implemented more efficiently by giving the
