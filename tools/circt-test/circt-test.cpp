@@ -50,11 +50,17 @@ namespace {
 /// The tool's command line options.
 struct Options {
   cl::OptionCategory cat{"circt-test Options"};
+
   cl::opt<std::string> inputFilename{cl::Positional, cl::desc("<input file>"),
                                      cl::init("-"), cl::cat(cat)};
+
   cl::opt<std::string> outputFilename{
       "o", cl::desc("Output filename (`-` for stdout)"),
       cl::value_desc("filename"), cl::init("-"), cl::cat(cat)};
+
+  cl::opt<bool> listTests{"l", cl::desc("List tests in the input and exit"),
+                          cl::init(false), cl::cat(cat)};
+
   cl::opt<bool> json{"json", cl::desc("Emit test list as JSON array"),
                      cl::init(false), cl::cat(cat)};
 };
@@ -63,45 +69,103 @@ Options opts;
 } // namespace
 
 //===----------------------------------------------------------------------===//
+// Test Discovery
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// The various kinds of test that can be executed.
+enum class TestKind { Formal };
+
+/// A single discovered test.
+class Test {
+public:
+  /// The name of the test. This is also the name of the top-level module passed
+  /// to the formal or simulation tool to be run.
+  StringAttr name;
+  /// The kind of test, such as "formal" or "simulation".
+  TestKind kind;
+  /// An optional location indicating where this test was discovered. This can
+  /// be the location of an MLIR op, or a line in some other source file.
+  LocationAttr loc;
+  /// The user-defined attributes of this test.
+  DictionaryAttr attrs;
+};
+
+/// A collection of tests discovered in some MLIR input.
+class TestSuite {
+public:
+  /// The MLIR context that is used to intern attributes and where any MLIR
+  /// tests were discovered.
+  MLIRContext *context;
+  /// The tests discovered in the input.
+  std::vector<Test> tests;
+
+  TestSuite(MLIRContext *context) : context(context) {}
+  void discoverInModule(ModuleOp module);
+};
+} // namespace
+
+/// Convert a `TestKind` to a string representation.
+static StringRef toString(TestKind kind) {
+  switch (kind) {
+  case TestKind::Formal:
+    return "formal";
+  }
+  return "unknown";
+}
+
+/// Discover all tests in an MLIR module.
+void TestSuite::discoverInModule(ModuleOp module) {
+  module.walk([&](verif::FormalOp op) {
+    Test test;
+    test.name = op.getSymNameAttr();
+    test.kind = TestKind::Formal;
+    test.loc = op.getLoc();
+    test.attrs = op->getDiscardableAttrDictionary();
+    tests.push_back(std::move(test));
+  });
+}
+
+//===----------------------------------------------------------------------===//
 // Tool Implementation
 //===----------------------------------------------------------------------===//
 
 /// List all the tests in a given module.
-static LogicalResult listTests(ModuleOp module, llvm::raw_ostream &output) {
+static LogicalResult listTests(TestSuite &suite) {
+  // Open the output file for writing.
+  std::string errorMessage;
+  auto output = openOutputFile(opts.outputFilename, &errorMessage);
+  if (!output)
+    return emitError(UnknownLoc::get(suite.context)) << errorMessage;
+
   // Handle JSON output.
   if (opts.json) {
-    json::OStream json(output, 2);
+    json::OStream json(output->os(), 2);
     json.arrayBegin();
-    auto result = module.walk([&](Operation *op) {
-      if (auto formalOp = dyn_cast<verif::FormalOp>(op)) {
-        json.objectBegin();
-        auto guard = make_scope_exit([&] { json.objectEnd(); });
-        json.attribute("name", formalOp.getSymName());
-        json.attribute("kind", "formal");
-        auto attrs = formalOp->getDiscardableAttrDictionary();
-        if (!attrs.empty()) {
-          json.attributeBegin("attrs");
-          auto guard = make_scope_exit([&] { json.attributeEnd(); });
-          if (failed(convertAttributeToJSON(json, attrs))) {
-            op->emitError() << "unsupported attributes: `" << attrs
-                            << "` cannot be converted to JSON";
-            return WalkResult::interrupt();
-          }
-        }
+    auto guard = make_scope_exit([&] { json.arrayEnd(); });
+    for (auto &test : suite.tests) {
+      json.objectBegin();
+      auto guard = make_scope_exit([&] { json.objectEnd(); });
+      json.attribute("name", test.name.getValue());
+      json.attribute("kind", toString(test.kind));
+      if (!test.attrs.empty()) {
+        json.attributeBegin("attrs");
+        auto guard = make_scope_exit([&] { json.attributeEnd(); });
+        if (failed(convertAttributeToJSON(json, test.attrs)))
+          return mlir::emitError(test.loc)
+                 << "unsupported attributes: `" << test.attrs
+                 << "` cannot be converted to JSON";
       }
-      return WalkResult::advance();
-    });
-    json.arrayEnd();
-    return failure(result.wasInterrupted());
+    }
+    output->keep();
+    return success();
   }
 
   // Handle regular text output.
-  module.walk([&](Operation *op) {
-    if (auto formalOp = dyn_cast<verif::FormalOp>(op)) {
-      output << formalOp.getSymName() << "  formal"
-             << "  " << formalOp->getDiscardableAttrDictionary() << "\n";
-    }
-  });
+  for (auto &test : suite.tests)
+    output->os() << test.name.getValue() << "  " << toString(test.kind) << "  "
+                 << test.attrs << "\n";
+  output->keep();
   return success();
 }
 
@@ -112,22 +176,23 @@ static LogicalResult execute(MLIRContext *context) {
   SourceMgr srcMgr;
   SourceMgrDiagnosticHandler handler(srcMgr, context);
 
-  // Open the output file for writing.
-  std::string errorMessage;
-  auto output = openOutputFile(opts.outputFilename, &errorMessage);
-  if (!output)
-    return emitError(UnknownLoc::get(context)) << errorMessage;
-
   // Parse the input file.
   auto module = parseSourceFile<ModuleOp>(opts.inputFilename, srcMgr, context);
   if (!module)
     return failure();
 
-  // List all tests in the input.
-  if (failed(listTests(*module, output->os())))
-    return failure();
+  // Discover all tests in the input.
+  TestSuite suite(context);
+  suite.discoverInModule(*module);
+  if (suite.tests.empty()) {
+    llvm::errs() << "no tests discovered\n";
+    return success();
+  }
 
-  output->keep();
+  // List all tests in the input and exit if requested.
+  if (opts.listTests)
+    return listTests(suite);
+
   return success();
 }
 

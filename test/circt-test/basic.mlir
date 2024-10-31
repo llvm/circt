@@ -1,6 +1,6 @@
-// RUN: circt-test %s | FileCheck %s
-// RUN: circt-test %s --json | FileCheck --check-prefix=JSON %s
-// RUN: circt-as %s -o - | circt-test | FileCheck %s
+// RUN: circt-test -l %s | FileCheck %s
+// RUN: circt-test -l --json %s | FileCheck --check-prefix=JSON %s
+// RUN: circt-as %s -o - | circt-test -l | FileCheck %s
 
 // JSON: [
 
