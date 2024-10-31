@@ -44,7 +44,7 @@ public:
 private:
   LogicalResult proceduralizePrintOps(Value clock,
                                       ArrayRef<PrintFormattedOp> printOps);
-  SmallVector<Operation *> getPrintTokens(PrintFormattedOp op);
+  SmallVector<Operation *> getPrintFragments(PrintFormattedOp op);
   void cleanup();
 
   // Mapping Clock -> List of printf ops
@@ -60,8 +60,8 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
 
   // List of uniqued values to become arguments of the TriggeredOp.
   SmallSetVector<Value, 4> arguments;
-  // Map printf ops -> flattened list of tokens
-  SmallDenseMap<PrintFormattedOp, SmallVector<Operation *>, 4> tokenMap;
+  // Map printf ops -> flattened list of fragments
+  SmallDenseMap<PrintFormattedOp, SmallVector<Operation *>, 4> fragmentMap;
   SmallVector<Location> locs;
   SmallDenseSet<Value, 1> alwaysEnabledConditions;
 
@@ -82,7 +82,7 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
     // Accumulate locations
     locs.push_back(printOp.getLoc());
 
-    // Get the flat list of formatting tokens and collect leaf tokens
+    // Get the flat list of formatting fragments and collect leaf fragments
     SmallVector<Value> flatString;
     if (auto concatInput =
             printOp.getInput().getDefiningOp<FormatStringConcatOp>()) {
@@ -96,22 +96,22 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
       flatString.push_back(printOp.getInput());
     }
 
-    auto &tokenList = tokenMap[printOp];
-    assert(tokenList.empty() && "printf operation visited twice.");
+    auto &fragmentList = fragmentMap[printOp];
+    assert(fragmentList.empty() && "printf operation visited twice.");
 
-    for (auto &token : flatString) {
-      auto *fmtOp = token.getDefiningOp();
+    for (auto &fragment : flatString) {
+      auto *fmtOp = fragment.getDefiningOp();
       if (!fmtOp) {
         printOp.emitError("Proceduralization of format strings passed as block "
                           "argument is unsupported.");
         return failure();
       }
-      tokenList.push_back(fmtOp);
-      // For non-literal tokens, the value to be formatted has to become an
+      fragmentList.push_back(fmtOp);
+      // For non-literal fragments, the value to be formatted has to become an
       // argument.
       if (!llvm::isa<FormatLitOp>(fmtOp)) {
         auto fmtVal = getFormattedValue(fmtOp);
-        assert(!!fmtVal && "Unexpected foramtting token op.");
+        assert(!!fmtVal && "Unexpected foramtting fragment op.");
         arguments.insert(fmtVal);
       }
     }
@@ -161,18 +161,18 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
       }
     }
 
-    // Create a copy of the required token operations within the TriggeredOp's
-    // body.
-    auto tokens = tokenMap[printOp];
+    // Create a copy of the required fragment operations within the
+    // TriggeredOp's body.
+    auto fragments = fragmentMap[printOp];
     SmallVector<Value> clonedOperands;
     builder.setInsertionPointToStart(trigOp.getBodyBlock());
-    for (auto *token : tokens) {
-      auto &fmtCloned = cloneMap[token];
+    for (auto *fragment : fragments) {
+      auto &fmtCloned = cloneMap[fragment];
       if (!fmtCloned)
-        fmtCloned = builder.clone(*token, argumentMapper);
+        fmtCloned = builder.clone(*fragment, argumentMapper);
       clonedOperands.push_back(fmtCloned->getResult(0));
     }
-    // Concatenate tokens to a single value if necessary.
+    // Concatenate fragments to a single value if necessary.
     Value procPrintInput;
     if (clonedOperands.size() != 1)
       procPrintInput = builder.createOrFold<FormatStringConcatOp>(
@@ -208,7 +208,7 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
   return success();
 }
 
-// Prune the DAGs of formatting tokens left outside of the newly created
+// Prune the DAGs of formatting fragments left outside of the newly created
 // TriggeredOps.
 void ProceduralizeSimPass::cleanup() {
   SmallVector<Operation *> cleanupNextList;
