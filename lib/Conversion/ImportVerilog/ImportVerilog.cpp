@@ -23,7 +23,7 @@
 #include "slang/driver/Driver.h"
 #include "slang/parsing/Preprocessor.h"
 #include "slang/syntax/SyntaxPrinter.h"
-#include "slang/util/Version.h"
+#include "slang/util/VersionInfo.h"
 
 using namespace mlir;
 using namespace circt;
@@ -202,15 +202,29 @@ LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
     const llvm::MemoryBuffer *mlirBuffer = sourceMgr.getMemoryBuffer(i + 1);
     auto slangBuffer = driver.sourceManager.assignText(
         mlirBuffer->getBufferIdentifier(), mlirBuffer->getBuffer());
-    driver.buffers.push_back(slangBuffer);
+    driver.sourceLoader.addBuffer(slangBuffer);
     bufferFilePaths.insert({slangBuffer.id, mlirBuffer->getBufferIdentifier()});
   }
 
+  for (const auto &libDir : options.libDirs)
+    driver.sourceLoader.addSearchDirectories(libDir);
+
+  for (const auto &libExt : options.libExts)
+    driver.sourceLoader.addSearchExtension(libExt);
+
+  for (const auto &includeDir : options.includeDirs) {
+    if (driver.sourceManager.addUserDirectories(includeDir)) {
+      return failure();
+    }
+  }
+
+  for (const auto &includeDir : options.includeSystemDirs) {
+    if (driver.sourceManager.addSystemDirectories(includeDir)) {
+      return failure();
+    }
+  }
+
   // Populate the driver options.
-  driver.options.includeDirs = options.includeDirs;
-  driver.options.includeSystemDirs = options.includeSystemDirs;
-  driver.options.libDirs = options.libDirs;
-  driver.options.libExts = options.libExts;
   driver.options.excludeExts.insert(options.excludeExts.begin(),
                                     options.excludeExts.end());
   driver.options.ignoreDirectives = options.ignoreDirectives;
@@ -221,22 +235,22 @@ LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
   driver.options.librariesInheritMacros = options.librariesInheritMacros;
 
   driver.options.timeScale = options.timeScale;
-  driver.options.allowUseBeforeDeclare = options.allowUseBeforeDeclare;
-  driver.options.ignoreUnknownModules = options.ignoreUnknownModules;
-  driver.options.onlyLint =
-      options.mode == ImportVerilogOptions::Mode::OnlyLint;
+  driver.options.compilationFlags.emplace(
+      slang::ast::CompilationFlags::AllowUseBeforeDeclare,
+      options.allowUseBeforeDeclare);
+  driver.options.compilationFlags.emplace(
+      slang::ast::CompilationFlags::IgnoreUnknownModules,
+      options.ignoreUnknownModules);
+  driver.options.compilationFlags.emplace(
+      slang::ast::CompilationFlags::LintMode,
+      options.mode == ImportVerilogOptions::Mode::OnlyLint);
   driver.options.topModules = options.topModules;
   driver.options.paramOverrides = options.paramOverrides;
 
   driver.options.errorLimit = options.errorLimit;
   driver.options.warningOptions = options.warningOptions;
-  driver.options.suppressWarningsPaths = options.suppressWarningsPaths;
 
   driver.options.singleUnit = options.singleUnit;
-  driver.options.libraryFiles = options.libraryFiles;
-
-  for (auto &dir : sourceMgr.getIncludeDirs())
-    driver.options.includeDirs.push_back(dir);
 
   return success(driver.processOptions());
 }
@@ -318,12 +332,12 @@ LogicalResult ImportDriver::preprocessVerilog(llvm::raw_ostream &os) {
                                               diagnostics, optionBag);
     // Sources have to be pushed in reverse, as they form a stack in the
     // preprocessor. Last pushed source is processed first.
-    for (auto &buffer : slang::make_reverse_range(driver.buffers))
+    for (auto &buffer : std::views::reverse(driver.sourceLoader.loadSources()))
       preprocessor.pushSource(buffer);
     if (failed(preprocessAndPrint(preprocessor)))
       return failure();
   } else {
-    for (auto &buffer : driver.buffers) {
+    for (auto &buffer : driver.sourceLoader.loadSources()) {
       slang::BumpAllocator alloc;
       slang::Diagnostics diagnostics;
       slang::parsing::Preprocessor preprocessor(driver.sourceManager, alloc,
