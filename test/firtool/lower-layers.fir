@@ -19,7 +19,7 @@ circuit Foo: %[[
   ; should be output in the testbench directory too.
   module VerificationHelper:
     wire w : UInt<1>
-    w is invalid
+    invalidate w
 
   ; Although the Component Bar is only instantiated by testbench Foo, since Bar
   ; is public, it remains in the default build directory.

@@ -891,12 +891,23 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      arith::ConstantOp constOp) const {
-  /// Move constant operations to the compOp body as hw::ConstantOp's.
-  APInt value;
-  calyx::matchConstantOp(constOp, value);
-  auto hwConstOp = rewriter.replaceOpWithNewOp<hw::ConstantOp>(constOp, value);
-  hwConstOp->moveAfter(getComponent().getBodyBlock(),
-                       getComponent().getBodyBlock()->begin());
+  if (isa<IntegerType>(constOp.getType())) {
+    /// Move constant operations to the compOp body as hw::ConstantOp's.
+    APInt value;
+    calyx::matchConstantOp(constOp, value);
+    auto hwConstOp =
+        rewriter.replaceOpWithNewOp<hw::ConstantOp>(constOp, value);
+    hwConstOp->moveAfter(getComponent().getBodyBlock(),
+                         getComponent().getBodyBlock()->begin());
+  } else {
+    std::string name = getState<ComponentLoweringState>().getUniqueName("cst");
+    auto calyxConstOp = rewriter.create<calyx::ConstantOp>(
+        constOp.getLoc(), name, constOp.getValueAttr());
+    calyxConstOp->moveAfter(getComponent().getBodyBlock(),
+                            getComponent().getBodyBlock()->begin());
+    rewriter.replaceAllUsesWith(constOp, calyxConstOp.getOut());
+  }
+
   return success();
 }
 

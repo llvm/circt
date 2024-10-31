@@ -13,10 +13,8 @@ circuit OpenAgg : %[[
                   p : Probe<UInt<1>>,
                   b : UInt<1>}
 
-    out.a <= UInt<1>(1)
-    out.b <= UInt<1>(0)
+    connect out.a, UInt<1>(1)
+    connect out.b, UInt<1>(0)
 
     node n = out.a
     define out.p = probe(n)
-
-

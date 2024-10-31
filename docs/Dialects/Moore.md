@@ -1,4 +1,4 @@
-# 'moore' Dialect
+# Moore Dialect
 
 This dialect provides operations and types to capture a SystemVerilog design after parsing, type checking, and elaboration.
 

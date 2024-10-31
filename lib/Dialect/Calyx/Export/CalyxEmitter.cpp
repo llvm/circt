@@ -22,7 +22,10 @@
 #include "mlir/Tools/mlir-translate/Translation.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/FormatVariadic.h"
+#include <bitset>
+#include <string>
 
 using namespace circt;
 using namespace calyx;
@@ -142,6 +145,10 @@ private:
           static constexpr std::string_view sMemories = "memories/seq";
           return {sMemories};
         })
+        .Case<ConstantOp>([&](auto op) -> FailureOr<StringRef> {
+          static constexpr std::string_view sFloat = "float";
+          return {sFloat};
+        })
         .Default([&](auto op) {
           auto diag = op->emitOpError() << "not supported for emission";
           return diag;
@@ -252,6 +259,9 @@ struct Emitter {
 
   // Invoke emission
   void emitInvoke(InvokeOp invoke);
+
+  // Floating point Constant emission
+  void emitConstant(ConstantOp constant);
 
   // Emits a library primitive with template parameters based on all in- and
   // output ports.
@@ -445,7 +455,7 @@ private:
       return;
     }
 
-    auto definingOp = value.getDefiningOp();
+    auto *definingOp = value.getDefiningOp();
     assert(definingOp && "Value does not have a defining operation.");
 
     TypeSwitch<Operation *>(definingOp)
@@ -638,6 +648,7 @@ void Emitter::emitComponent(ComponentInterface op) {
           .Case<MemoryOp>([&](auto op) { emitMemory(op); })
           .Case<SeqMemoryOp>([&](auto op) { emitSeqMemory(op); })
           .Case<hw::ConstantOp>([&](auto op) { /*Do nothing*/ })
+          .Case<calyx::ConstantOp>([&](auto op) { emitConstant(op); })
           .Case<SliceLibOp, PadLibOp, ExtSILibOp>(
               [&](auto op) { emitLibraryPrimTypedByAllPorts(op); })
           .Case<LtLibOp, GtLibOp, EqLibOp, NeqLibOp, GeLibOp, LeLibOp, SltLibOp,
@@ -899,6 +910,23 @@ void Emitter::emitInvoke(InvokeOp invoke) {
   os << RParen() << semicolonEndL();
 }
 
+void Emitter::emitConstant(ConstantOp constantOp) {
+  TypedAttr attr = constantOp.getValueAttr();
+  assert(isa<FloatAttr>(attr) && "must be a floating point constant");
+  auto fltAttr = cast<FloatAttr>(attr);
+  APFloat value = fltAttr.getValue();
+  auto type = cast<FloatType>(fltAttr.getType());
+  double doubleValue = value.convertToDouble();
+  auto floatBits = value.getSizeInBits(type.getFloatSemantics());
+  indent() << constantOp.getName().str() << space() << equals() << space()
+           << "std_float_const";
+  // Currently defaults to IEEE-754 representation [1].
+  // [1]: https://github.com/calyxir/calyx/blob/main/primitives/float.futil
+  static constexpr int32_t IEEE754 = 0;
+  os << LParen() << std::to_string(IEEE754) << comma() << floatBits << comma()
+     << std::to_string(doubleValue) << RParen() << semicolonEndL();
+}
+
 /// Calling getName() on a calyx operation will return "calyx.${opname}". This
 /// function returns whatever is left after the first '.' in the string,
 /// removing the 'calyx' prefix.
@@ -954,8 +982,8 @@ void Emitter::emitWires(WiresOp op) {
       TypeSwitch<Operation *>(&bodyOp)
           .Case<GroupInterface>([&](auto op) { emitGroup(op); })
           .Case<AssignOp>([&](auto op) { emitAssignment(op); })
-          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp, CycleOp>(
-              [&](auto op) { /* Do nothing. */ })
+          .Case<hw::ConstantOp, calyx::ConstantOp, comb::AndOp, comb::OrOp,
+                comb::XorOp, CycleOp>([&](auto op) { /* Do nothing. */ })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside wires section");
           });

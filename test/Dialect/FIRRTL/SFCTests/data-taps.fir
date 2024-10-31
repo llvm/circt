@@ -67,15 +67,15 @@ circuit Top : %[[
     output io : { flip in : UInt<1>, out : UInt<1>}
 
     inst localparam of BlackBox
-    localparam.out is invalid
-    localparam.in is invalid
-    localparam.in <= io.in
-    io.out <= localparam.out
+    invalidate localparam.out
+    invalidate localparam.in
+    connect localparam.in, io.in
+    connect io.out, localparam.out
 
     cmem always : UInt<1>[2]
 
     infer mport w = always[io.in], clock
-    w <= io.in
+    connect w, io.in
 
     ; mem always :
     ;   data-type => UInt<1>
@@ -84,11 +84,11 @@ circuit Top : %[[
     ;   write-latency => 1
     ;   writer => w
     ;   read-under-write => undefined
-    ; always.w.clk <= clock
-    ; always.w.en <= UInt<1>(1)
-    ; always.w.addr <= io.in
-    ; always.w.data <= io.in
-    ; always.w.mask <= UInt<1>(1)
+    ; connect always.w.clk, clock
+    ; connect always.w.en, UInt<1>(1)
+    ; connect always.w.addr, io.in
+    ; connect always.w.data, io.in
+    ; connect always.w.mask, UInt<1>(1)
 
   module ChildWrapper :
     input clock : Clock
@@ -96,10 +96,10 @@ circuit Top : %[[
     output io : { flip in : UInt<1>, out : UInt<1>}
 
     inst signed of Child
-    signed.clock <= clock
-    signed.reset <= reset
-    signed.io.in <= io.in
-    io.out <= signed.io.out
+    connect signed.clock, clock
+    connect signed.reset, reset
+    connect signed.io.in, io.in
+    connect io.out, signed.io.out
 
   public module Top :
     input clock : Clock
@@ -107,26 +107,26 @@ circuit Top : %[[
     output io : { flip in : UInt<1>, out : UInt<1>}
 
     inst unsigned of ChildWrapper
-    unsigned.clock <= clock
-    unsigned.reset <= reset
+    connect unsigned.clock, clock
+    connect unsigned.reset, reset
     wire in : UInt<1>
     wire out : UInt<1>
     node _child_io_in_T = and(io.in, in)
-    unsigned.io.in <= _child_io_in_T
+    connect unsigned.io.in, _child_io_in_T
     node _io_out_T = and(unsigned.io.out, out)
-    io.out <= _io_out_T
+    connect io.out, _io_out_T
 
     wire tap_0: UInt<1>
-    tap_0 is invalid
+    invalidate tap_0
 
     wire tap_1: UInt<1>
-    tap_1 is invalid
+    invalidate tap_1
 
     wire tap_2: UInt<1>[2]
-    tap_2 is invalid
+    invalidate tap_2
 
-    in <= or(tap_0, tap_2[0])
-    out <= or(tap_1, tap_2[1])
+    connect in, or(tap_0, tap_2[0])
+    connect out, or(tap_1, tap_2[1])
 
 ; CHECK:      module Top
 ; CHECK:        tap_0 = Top.unsigned_0.signed_0.localparam_0.foo.bar.in;
@@ -174,32 +174,32 @@ circuit Top : %[[
   module Foo :
     output g : UInt<1>
     wire inv: UInt<1>
-    inv is invalid
+    invalidate inv
     wire f : UInt<1>
-    g <= inv
-    f <= inv
+    connect g, inv
+    connect f, inv
 
   public module Top:
     output io : { b : UInt<1>, c : UInt<1>, d: UInt<1> }
 
     inst foo of Foo
     wire inv: UInt<1>
-    inv is invalid
+    invalidate inv
     wire k : UInt<1>
-    k <= inv
+    connect k, inv
 
     wire b: UInt<1>
-    b is invalid
+    invalidate b
 
     wire c: UInt<1>
-    c is invalid
+    invalidate c
 
     wire d: UInt<1>
-    d is invalid
+    invalidate d
 
-    io.b <= b
-    io.c <= c
-    io.d <= d
+    connect io.b, b
+    connect io.c, c
+    connect io.d, d
 
     ; CHECK:      module Top
     ; TODO: fix having constants carry names
@@ -230,23 +230,23 @@ circuit TestHarness : %[[
   public module TestHarness :
     output io : UInt<1>
     inst system of Top
-    io <= system.io
+    connect io, system.io
   module Top :
     output io : UInt<1>
     inst test of Test
     inst Companion of Companion
-    io <= Companion.io
+    connect io, Companion.io
   module Companion :
     output io : UInt<1>
     wire tap_0: UInt<8>
-    tap_0 is invalid
+    invalidate tap_0
 
-    io <= tap_0
+    connect io, tap_0
   module Test :
     wire inv: UInt<1>
-    inv is invalid
+    invalidate inv
     wire signal : UInt<8>
-    signal <= inv
+    connect signal, inv
 
 ; CHECK:       module Top(
 ; CHECK-NOT:   endmodule
@@ -438,13 +438,13 @@ circuit Top : %[[
 ]]
   module Submodule :
     output port_Submodule: UInt<1>
-    port_Submodule is invalid
+    invalidate port_Submodule
 
     wire inv: UInt<1>
-    inv is invalid
+    invalidate inv
 
     wire wire_Submodule: UInt<1>
-    wire_Submodule <= inv
+    connect wire_Submodule, inv
 
     wire tap_0 : UInt<1>
     wire tap_1 : UInt<1>
@@ -452,22 +452,22 @@ circuit Top : %[[
     wire tap_3 : UInt<1>
     wire tap_4 : UInt<1>
     wire tap_5 : UInt<1>
-    tap_0 is invalid
-    tap_1 is invalid
-    tap_2 is invalid
-    tap_3 is invalid
-    tap_4 is invalid
-    tap_5 is invalid
+    invalidate tap_0
+    invalidate tap_1
+    invalidate tap_2
+    invalidate tap_3
+    invalidate tap_4
+    invalidate tap_5
 
   module DUT :
     output port_DUT: UInt<1>
-    port_DUT is invalid
+    invalidate port_DUT
 
     wire inv: UInt<1>
-    inv is invalid
+    invalidate inv
 
     wire wire_DUT: UInt<1>
-    wire_DUT <= inv
+    connect wire_DUT, inv
 
     inst submodule of Submodule
 
@@ -477,26 +477,26 @@ circuit Top : %[[
     wire tap_9 : UInt<1>
     wire tap_10 : UInt<1>
     wire tap_11 : UInt<1>
-    tap_6 is invalid
-    tap_7 is invalid
-    tap_8 is invalid
-    tap_9 is invalid
-    tap_10 is invalid
-    tap_11 is invalid
+    invalidate tap_6
+    invalidate tap_7
+    invalidate tap_8
+    invalidate tap_9
+    invalidate tap_10
+    invalidate tap_11
 
   public module Top :
     output port_Top : UInt<1>
-    port_Top is invalid
+    invalidate port_Top
 
     wire inv: UInt<1>
-    inv is invalid
+    invalidate inv
 
     wire wire_Top: UInt<1>
-    wire_Top <= inv
+    connect wire_Top, inv
 
     inst dut of DUT
     wire tap_12 : UInt<1>[6]
-    tap_12 is invalid
+    invalidate tap_12
 
 ; CHECK-LABEL: module Submodule
 ; CHECK-NEXT:    input [[Submodule_tap_1_port:[a-zA-Z0-9_]+]]
@@ -574,20 +574,20 @@ circuit Top : %[[
 
     node sum = tail(add(io.in, UInt<1>(1)), 1)
 
-    io.out <= sum
+    connect io.out, sum
 
   public module Top :
     output io : { flip in : UInt<8>, out : UInt<8>}
     output taps : UInt<8>[2]
 
     inst child of Child
-    io <= child.io
+    connect io, child.io
 
     wire dt: {_0: UInt<8>, _1: UInt<8>}
-    dt is invalid
+    invalidate dt
 
-    taps[0] <= dt._0
-    taps[1] <= dt._1
+    connect taps[0], dt._0
+    connect taps[1], dt._1
 
 ; CHECK:     module Top(
 ; CHECK-NOT: endmodule

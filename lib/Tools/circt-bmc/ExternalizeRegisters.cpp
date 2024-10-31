@@ -52,6 +52,7 @@ void ExternalizeRegistersPass::runOnOperation() {
   DenseMap<StringAttr, SmallVector<StringAttr>> addedInputNames;
   DenseMap<StringAttr, SmallVector<Type>> addedOutputs;
   DenseMap<StringAttr, SmallVector<StringAttr>> addedOutputNames;
+  DenseMap<StringAttr, SmallVector<Attribute>> initialValues;
 
   // Iterate over all instances in the instance graph. This ensures we visit
   // every module, even private top modules (private and never instantiated).
@@ -93,9 +94,37 @@ void ExternalizeRegistersPass::runOnOperation() {
             regOp.emitError("registers with reset signals not yet supported");
             return signalPassFailure();
           }
-          if (regOp.getInitialValue()) {
-            regOp.emitError("registers with initial values not yet supported");
-            return signalPassFailure();
+          mlir::Attribute initState;
+          if (auto initVal = regOp.getInitialValue()) {
+            // Find the seq.initial op where the initial value is defined and
+            // fetch the operation inside that defines the value
+            auto initialOp =
+                regOp.getInitialValue().getDefiningOp<seq::InitialOp>();
+            if (!initialOp) {
+              regOp.emitError("registers with initial values not directly "
+                              "defined by a seq.initial op not yet supported");
+              return signalPassFailure();
+            }
+            auto index = cast<OpResult>(initVal).getResultNumber();
+            auto initValDef =
+                initialOp->getRegion(0).front().getTerminator()->getOperand(
+                    index);
+            // If it's defined by a constant op then just fetch the constant
+            // value - otherwise unsupported
+            if (auto constantOp = initValDef.getDefiningOp<hw::ConstantOp>()) {
+              // Fetch value from constant op - leave removing the dead op to
+              // DCE
+              initState = constantOp.getValueAttr();
+            } else {
+              regOp.emitError("registers with initial values not directly "
+                              "defined by a hw.constant op in a seq.initial op "
+                              "not yet supported");
+              return signalPassFailure();
+            }
+          } else {
+            // If there's no initial value just add a unit attribute to maintain
+            // one-to-one correspondence with module ports
+            initState = mlir::UnitAttr::get(&getContext());
           }
           addedInputs[module.getSymNameAttr()].push_back(regOp.getType());
           addedOutputs[module.getSymNameAttr()].push_back(
@@ -114,6 +143,7 @@ void ExternalizeRegistersPass::runOnOperation() {
           }
           addedInputNames[module.getSymNameAttr()].push_back(newInputName);
           addedOutputNames[module.getSymNameAttr()].push_back(newOutputName);
+          initialValues[module.getSymNameAttr()].push_back(initState);
 
           regOp.getResult().replaceAllUsesWith(
               module.appendInput(newInputName, regOp.getType()).second);
@@ -136,6 +166,8 @@ void ExternalizeRegistersPass::runOnOperation() {
           addedInputNames[module.getSymNameAttr()].append(newInputNames);
           addedOutputs[module.getSymNameAttr()].append(newOutputs);
           addedOutputNames[module.getSymNameAttr()].append(newOutputNames);
+          initialValues[module.getSymNameAttr()].append(
+              initialValues[instanceOp.getModuleNameAttr().getAttr()]);
           SmallVector<Attribute> argNames(instanceOp.getArgNamesAttr().begin(),
                                           instanceOp.getArgNamesAttr().end());
           SmallVector<Attribute> resultNames(
@@ -173,6 +205,10 @@ void ExternalizeRegistersPass::runOnOperation() {
       module->setAttr(
           "num_regs",
           IntegerAttr::get(IntegerType::get(&getContext(), 32), numRegs));
+
+      module->setAttr("initial_values",
+                      ArrayAttr::get(&getContext(),
+                                     initialValues[module.getSymNameAttr()]));
     }
   }
 }

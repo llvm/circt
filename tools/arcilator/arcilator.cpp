@@ -321,8 +321,6 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   if (untilReached(UntilStateLowering))
     return;
   pm.addPass(arc::createLowerStatePass());
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
 
   // TODO: LowerClocksToFuncsPass might not properly consider scf.if operations
   // (or nested regions in general) and thus errors out when muxes are also
@@ -330,15 +328,10 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   // TODO: InlineArcs seems to not properly handle scf.if operations, thus the
   // following is commented out
   // pm.addPass(arc::createMuxToControlFlowPass());
-
-  if (shouldInline) {
+  if (shouldInline)
     pm.addPass(arc::createInlineArcsPass());
-    pm.addPass(arc::createArcCanonicalizerPass());
-    pm.addPass(createCSEPass());
-  }
 
   pm.addPass(arc::createMergeIfsPass());
-  pm.addPass(arc::createLegalizeStateUpdatePass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
 

@@ -113,7 +113,7 @@ struct StructuralHasherSharedConstants {
     portTypesAttr = StringAttr::get(context, "portTypes");
     moduleNameAttr = StringAttr::get(context, "moduleName");
     innerSymAttr = StringAttr::get(context, "inner_sym");
-    portSymsAttr = StringAttr::get(context, "portSyms");
+    portSymbolsAttr = StringAttr::get(context, "portSymbols");
     portNamesAttr = StringAttr::get(context, "portNames");
     nonessentialAttributes.insert(StringAttr::get(context, "annotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "name"));
@@ -132,8 +132,8 @@ struct StructuralHasherSharedConstants {
   // This is a cached "inner_sym" string attr.
   StringAttr innerSymAttr;
 
-  // This is a cached "portSyms" string attr.
-  StringAttr portSymsAttr;
+  // This is a cached "portSymbols" string attr.
+  StringAttr portSymbolsAttr;
 
   // This is a cached "portNames" string attr.
   StringAttr portNamesAttr;
@@ -263,7 +263,7 @@ private:
       }
 
       // Special case the InnerSymbols to ignore the symbol names.
-      if (name == constants.portSymsAttr) {
+      if (name == constants.portSymbolsAttr) {
         if (op->getNumRegions() != 1)
           continue;
         auto &region = op->getRegion(0);
@@ -386,7 +386,7 @@ struct Equivalence {
     nonessentialAttributes.insert(StringAttr::get(context, "portAnnotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "portNames"));
     nonessentialAttributes.insert(StringAttr::get(context, "portTypes"));
-    nonessentialAttributes.insert(StringAttr::get(context, "portSyms"));
+    nonessentialAttributes.insert(StringAttr::get(context, "portSymbols"));
     nonessentialAttributes.insert(StringAttr::get(context, "portLocations"));
     nonessentialAttributes.insert(StringAttr::get(context, "sym_name"));
     nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
@@ -1324,14 +1324,14 @@ private:
     }
 
     // If there are no port symbols on the "from" operation, we are done here.
-    auto fromPortSyms = from->getAttrOfType<ArrayAttr>("portSyms");
+    auto fromPortSyms = from->getAttrOfType<ArrayAttr>("portSymbols");
     if (!fromPortSyms || fromPortSyms.empty())
       return;
     // We have to map each "fromPort" to each "toPort".
     auto &moduleNamespace = getNamespace(toModule);
     auto portCount = fromPortSyms.size();
     auto portNames = to->getAttrOfType<ArrayAttr>("portNames");
-    auto toPortSyms = to->getAttrOfType<ArrayAttr>("portSyms");
+    auto toPortSyms = to->getAttrOfType<ArrayAttr>("portSymbols");
 
     // Create an array of new port symbols for the "to" operation, copy in the
     // old symbols if it has any, create an empty symbol array if it doesn't.
@@ -1366,6 +1366,7 @@ private:
     }
 
     // Commit the new symbol attribute.
+    FModuleLike::fixupPortSymsArray(newPortSyms, toModule.getContext());
     cast<FModuleLike>(to).setPortSymbols(newPortSyms);
   }
 

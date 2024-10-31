@@ -822,7 +822,7 @@ StringAttr circt::firrtl::getOrAddInnerSym(
       auto [attr, sym] =
           getOrAddInnerSym(mod.getContext(), mod.getPortSymbolAttr(portIdx),
                            target.getField(), getNamespace);
-      mod.setPortSymbolsAttr(portIdx, attr);
+      mod.setPortSymbolAttr(portIdx, attr);
       return sym;
     }
   } else {

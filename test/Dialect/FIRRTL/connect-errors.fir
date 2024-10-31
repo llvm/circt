@@ -7,7 +7,7 @@ circuit Foo:
     output b: { a: UInt<1> }
 
 ; expected-error @+1 {{cannot connect non-equivalent}}
-    b <= a
+    connect b, a
 
 ;// -----
 
@@ -19,4 +19,4 @@ circuit Bar:
     input b: { flip a: UInt<1> }
 
 ; expected-error @+1 {{invalid flow}}
-    b <= a
+    connect b, a

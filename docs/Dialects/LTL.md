@@ -1,4 +1,4 @@
-# 'ltl' Dialect
+# LTL Dialect
 
 This dialect provides operations and types to model [Linear Temporal Logic](https://en.wikipedia.org/wiki/Linear_temporal_logic), sequences, and properties, which are useful for hardware verification.
 

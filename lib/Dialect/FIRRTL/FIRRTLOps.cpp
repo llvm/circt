@@ -847,6 +847,7 @@ static void insertPorts(FModuleLike op,
   op->setAttr("portNames", ArrayAttr::get(op.getContext(), newNames));
   op->setAttr("portTypes", ArrayAttr::get(op.getContext(), newTypes));
   op->setAttr("portAnnotations", ArrayAttr::get(op.getContext(), newAnnos));
+  FModuleLike::fixupPortSymsArray(newSyms, op.getContext());
   op.setPortSymbols(newSyms);
   op->setAttr("portLocations", ArrayAttr::get(op.getContext(), newLocs));
   if (supportsInternalPaths) {
@@ -898,7 +899,7 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   op->setAttr("portAnnotations", ArrayAttr::get(op.getContext(), newPortAnnos));
   op->setAttr("portTypes", ArrayAttr::get(op.getContext(), newPortTypes));
   FModuleLike::fixupPortSymsArray(newPortSyms, op.getContext());
-  op->setAttr("portSyms", ArrayAttr::get(op.getContext(), newPortSyms));
+  op->setAttr("portSymbols", ArrayAttr::get(op.getContext(), newPortSyms));
   op->setAttr("portLocations", ArrayAttr::get(op.getContext(), newPortLocs));
 }
 
@@ -1011,7 +1012,7 @@ static void buildModuleLike(OpBuilder &builder, OperationState &result,
       direction::packAttribute(builder.getContext(), portDirections));
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute("portTypes", builder.getArrayAttr(portTypes));
-  result.addAttribute("portSyms", builder.getArrayAttr(portSyms));
+  result.addAttribute("portSymbols", builder.getArrayAttr(portSyms));
   result.addAttribute("portLocations", builder.getArrayAttr(portLocs));
 
   if (withAnnotations) {
@@ -1347,8 +1348,8 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
       op.getPortAnnotations(), op.getPortSymbols(), op.getPortLocations());
 
   SmallVector<StringRef, 12> omittedAttrs = {
-      "sym_name", "portDirections", "portTypes",  "portAnnotations",
-      "portSyms", "portLocations",  "parameters", visibilityAttrName};
+      "sym_name",    "portDirections", "portTypes",  "portAnnotations",
+      "portSymbols", "portLocations",  "parameters", visibilityAttrName};
 
   if (op.getConvention() == Convention::Internal)
     omittedAttrs.push_back("convention");
@@ -1500,9 +1501,9 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   }
 
   // Add port symbols.
-  if (!result.attributes.get("portSyms")) {
+  if (!result.attributes.get("portSymbols")) {
     FModuleLike::fixupPortSymsArray(portSyms, builder.getContext());
-    result.addAttribute("portSyms", builder.getArrayAttr(portSyms));
+    result.addAttribute("portSymbols", builder.getArrayAttr(portSyms));
   }
 
   // Add port locations.
@@ -1896,9 +1897,9 @@ static ParseResult parseClassLike(OpAsmParser &parser, OperationState &result,
     result.addAttribute("portTypes", builder.getArrayAttr(portTypes));
 
   // Add the port symbols.
-  if (!result.attributes.get("portSyms")) {
+  if (!result.attributes.get("portSymbols")) {
     FModuleLike::fixupPortSymsArray(portSyms, builder.getContext());
-    result.addAttribute("portSyms", builder.getArrayAttr(portSyms));
+    result.addAttribute("portSymbols", builder.getArrayAttr(portSyms));
   }
 
   // Add port locations.
@@ -1945,8 +1946,8 @@ static void printClassLike(OpAsmPrinter &p, ClassLike op) {
 
   // Print the attr-dict.
   SmallVector<StringRef, 8> omittedAttrs = {
-      "sym_name", "portNames",     "portTypes",       "portDirections",
-      "portSyms", "portLocations", visibilityAttrName};
+      "sym_name",    "portNames",     "portTypes",       "portDirections",
+      "portSymbols", "portLocations", visibilityAttrName};
 
   // We can omit the portNames if they were able to be printed as properly as
   // block arguments.
@@ -2067,6 +2068,12 @@ ArrayAttr ClassOp::getPortAnnotationsAttr() {
   return ArrayAttr::get(getContext(), {});
 }
 
+ArrayRef<Attribute> ClassOp::getPortAnnotations() { return {}; }
+
+void ClassOp::setPortAnnotationsAttr(ArrayAttr annotations) {
+  llvm_unreachable("classes do not support annotations");
+}
+
 ArrayAttr ClassOp::getLayersAttr() { return ArrayAttr::get(getContext(), {}); }
 
 ArrayRef<Attribute> ClassOp::getLayers() { return getLayersAttr(); }
@@ -2151,6 +2158,12 @@ ArrayAttr ExtClassOp::getParameters() { return {}; }
 
 ArrayAttr ExtClassOp::getPortAnnotationsAttr() {
   return ArrayAttr::get(getContext(), {});
+}
+
+ArrayRef<Attribute> ExtClassOp::getPortAnnotations() { return {}; }
+
+void ExtClassOp::setPortAnnotationsAttr(ArrayAttr annotations) {
+  llvm_unreachable("classes do not support annotations");
 }
 
 SmallVector<::circt::hw::PortInfo> ExtClassOp::getPortList() {
@@ -3355,19 +3368,19 @@ LogicalResult NodeOp::inferReturnTypes(
     ::llvm::SmallVectorImpl<::mlir::Type> &inferredReturnTypes) {
   if (operands.empty())
     return failure();
-  inferredReturnTypes.push_back(operands[0].getType());
-  for (auto &attr : attributes)
-    if (attr.getName() == Forceable::getForceableAttrName()) {
-      auto forceableType =
-          firrtl::detail::getForceableResultType(true, operands[0].getType());
-      if (!forceableType) {
-        if (location)
-          ::mlir::emitError(*location, "cannot force a node of type ")
-              << operands[0].getType();
-        return failure();
-      }
-      inferredReturnTypes.push_back(forceableType);
+  Adaptor adaptor(operands, attributes, properties, regions);
+  inferredReturnTypes.push_back(adaptor.getInput().getType());
+  if (adaptor.getForceable()) {
+    auto forceableType = firrtl::detail::getForceableResultType(
+        true, adaptor.getInput().getType());
+    if (!forceableType) {
+      if (location)
+        ::mlir::emitError(*location, "cannot force a node of type ")
+            << operands[0].getType();
+      return failure();
     }
+    inferredReturnTypes.push_back(forceableType);
+  }
   return success();
 }
 
@@ -3970,50 +3983,6 @@ void MatchOp::build(OpBuilder &builder, OperationState &result, Value input,
 // Expressions
 //===----------------------------------------------------------------------===//
 
-/// Type inference adaptor that narrows from the very generic MLIR
-/// `InferTypeOpInterface` to what we need in the FIRRTL dialect: just operands
-/// and attributes, no context or regions. Also, we only ever produce a single
-/// result value, so the FIRRTL-specific type inference ops directly return the
-/// inferred type rather than pushing into the `results` vector.
-LogicalResult impl::inferReturnTypes(
-    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
-    RegionRange regions, SmallVectorImpl<Type> &results,
-    llvm::function_ref<FIRRTLType(ValueRange, ArrayRef<NamedAttribute>,
-                                  std::optional<Location>)>
-        callback) {
-  auto type = callback(
-      operands, attrs ? attrs.getValue() : ArrayRef<NamedAttribute>{}, loc);
-  if (type) {
-    results.push_back(type);
-    return success();
-  }
-  return failure();
-}
-
-/// Get an attribute by name from a list of named attributes.  Return null if no
-/// attribute is found with that name.
-static Attribute maybeGetAttr(ArrayRef<NamedAttribute> attrs, StringRef name) {
-  for (auto attr : attrs)
-    if (attr.getName() == name)
-      return attr.getValue();
-  return {};
-}
-
-/// Get an attribute by name from a list of named attributes. Aborts if the
-/// attribute does not exist.
-static Attribute getAttr(ArrayRef<NamedAttribute> attrs, StringRef name) {
-  if (auto attr = maybeGetAttr(attrs, name))
-    return attr;
-  llvm::report_fatal_error("attribute '" + name + "' not found");
-}
-
-/// Same as above, but casts the attribute to a specific type.
-template <typename AttrClass>
-AttrClass getAttr(ArrayRef<NamedAttribute> attrs, StringRef name) {
-  return cast<AttrClass>(getAttr(attrs, name));
-}
-
 /// Return true if the specified operation is a firrtl expression.
 bool firrtl::isExpression(Operation *op) {
   struct IsExprClassifier : public ExprVisitor<IsExprClassifier, bool> {
@@ -4494,11 +4463,13 @@ ParseResult IsTagOp::parse(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-FIRRTLType IsTagOp::inferReturnType(ValueRange operands,
-                                    ArrayRef<NamedAttribute> attrs,
+FIRRTLType IsTagOp::inferReturnType(ValueRange operands, DictionaryAttr attrs,
+                                    OpaqueProperties properties,
+                                    mlir::RegionRange regions,
                                     std::optional<Location> loc) {
-  return UIntType::get(operands[0].getContext(), 1,
-                       isConst(operands[0].getType()));
+  Adaptor adaptor(operands, attrs, properties, regions);
+  return UIntType::get(attrs.getContext(), 1,
+                       isConst(adaptor.getInput().getType()));
 }
 
 template <typename OpTy>
@@ -4528,8 +4499,7 @@ ParseResult parseSubfieldLikeOp(OpAsmParser &parser, OperationState &result) {
                             "unknown field " + fieldName + " in bundle type ")
            << bundleType;
 
-  result.addAttribute(
-      "fieldIndex",
+  result.getOrAddProperties<typename OpTy::Properties>().setFieldIndex(
       IntegerAttr::get(IntegerType::get(context, 32), *fieldIndex));
 
   SmallVector<Type> inferredReturnTypes;
@@ -4569,8 +4539,7 @@ ParseResult SubtagOp::parse(OpAsmParser &parser, OperationState &result) {
                             "unknown field " + fieldName + " in enum type ")
            << enumType;
 
-  result.addAttribute(
-      "fieldIndex",
+  result.getOrAddProperties<Properties>().setFieldIndex(
       IntegerAttr::get(IntegerType::get(context, 32), *fieldIndex));
 
   SmallVector<Type> inferredReturnTypes;
@@ -4691,12 +4660,9 @@ LogicalResult ConstCastOp::verify() {
   return success();
 }
 
-FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
-                                       ArrayRef<NamedAttribute> attrs,
+FIRRTLType SubfieldOp::inferReturnType(Type type, uint32_t fieldIndex,
                                        std::optional<Location> loc) {
-  auto inType = type_cast<BundleType>(operands[0].getType());
-  auto fieldIndex =
-      getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
+  auto inType = type_cast<BundleType>(type);
 
   if (fieldIndex >= inType.getNumElements())
     return emitInferRetTypeError(loc,
@@ -4708,12 +4674,9 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
   return inType.getElementTypePreservingConst(fieldIndex);
 }
 
-FIRRTLType OpenSubfieldOp::inferReturnType(ValueRange operands,
-                                           ArrayRef<NamedAttribute> attrs,
+FIRRTLType OpenSubfieldOp::inferReturnType(Type type, uint32_t fieldIndex,
                                            std::optional<Location> loc) {
-  auto inType = type_cast<OpenBundleType>(operands[0].getType());
-  auto fieldIndex =
-      getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
+  auto inType = type_cast<OpenBundleType>(type);
 
   if (fieldIndex >= inType.getNumElements())
     return emitInferRetTypeError(loc,
@@ -4734,46 +4697,36 @@ bool OpenSubfieldOp::isFieldFlipped() {
   return bundle.getElement(getFieldIndex()).isFlip;
 }
 
-FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
-                                       ArrayRef<NamedAttribute> attrs,
+FIRRTLType SubindexOp::inferReturnType(Type type, uint32_t fieldIndex,
                                        std::optional<Location> loc) {
-  Type inType = operands[0].getType();
-  auto fieldIdx =
-      getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
-
-  if (auto vectorType = type_dyn_cast<FVectorType>(inType)) {
-    if (fieldIdx < vectorType.getNumElements())
+  if (auto vectorType = type_dyn_cast<FVectorType>(type)) {
+    if (fieldIndex < vectorType.getNumElements())
       return vectorType.getElementTypePreservingConst();
-    return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
-                                 "' in vector type ", inType);
+    return emitInferRetTypeError(loc, "out of range index '", fieldIndex,
+                                 "' in vector type ", type);
   }
-
   return emitInferRetTypeError(loc, "subindex requires vector operand");
 }
 
-FIRRTLType OpenSubindexOp::inferReturnType(ValueRange operands,
-                                           ArrayRef<NamedAttribute> attrs,
+FIRRTLType OpenSubindexOp::inferReturnType(Type type, uint32_t fieldIndex,
                                            std::optional<Location> loc) {
-  Type inType = operands[0].getType();
-  auto fieldIdx =
-      getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
-
-  if (auto vectorType = type_dyn_cast<OpenVectorType>(inType)) {
-    if (fieldIdx < vectorType.getNumElements())
+  if (auto vectorType = type_dyn_cast<OpenVectorType>(type)) {
+    if (fieldIndex < vectorType.getNumElements())
       return vectorType.getElementTypePreservingConst();
-    return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
-                                 "' in vector type ", inType);
+    return emitInferRetTypeError(loc, "out of range index '", fieldIndex,
+                                 "' in vector type ", type);
   }
 
   return emitInferRetTypeError(loc, "subindex requires vector operand");
 }
 
-FIRRTLType SubtagOp::inferReturnType(ValueRange operands,
-                                     ArrayRef<NamedAttribute> attrs,
+FIRRTLType SubtagOp::inferReturnType(ValueRange operands, DictionaryAttr attrs,
+                                     OpaqueProperties properties,
+                                     mlir::RegionRange regions,
                                      std::optional<Location> loc) {
-  auto inType = type_cast<FEnumType>(operands[0].getType());
-  auto fieldIndex =
-      getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
+  Adaptor adaptor(operands, attrs, properties, regions);
+  auto inType = type_cast<FEnumType>(adaptor.getInput().getType());
+  auto fieldIndex = adaptor.getFieldIndex();
 
   if (fieldIndex >= inType.getNumElements())
     return emitInferRetTypeError(loc,
@@ -4786,12 +4739,8 @@ FIRRTLType SubtagOp::inferReturnType(ValueRange operands,
   return elementType.getConstType(elementType.isConst() || inType.isConst());
 }
 
-FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
-                                        ArrayRef<NamedAttribute> attrs,
+FIRRTLType SubaccessOp::inferReturnType(Type inType, Type indexType,
                                         std::optional<Location> loc) {
-  auto inType = operands[0].getType();
-  auto indexType = operands[1].getType();
-
   if (!type_isa<UIntType>(indexType))
     return emitInferRetTypeError(loc, "subaccess index must be UInt type, not ",
                                  indexType);
@@ -4807,9 +4756,12 @@ FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
 }
 
 FIRRTLType TagExtractOp::inferReturnType(ValueRange operands,
-                                         ArrayRef<NamedAttribute> attrs,
+                                         DictionaryAttr attrs,
+                                         OpaqueProperties properties,
+                                         mlir::RegionRange regions,
                                          std::optional<Location> loc) {
-  auto inType = type_cast<FEnumType>(operands[0].getType());
+  Adaptor adaptor(operands, attrs, properties, regions);
+  auto inType = type_cast<FEnumType>(adaptor.getInput().getType());
   auto i = llvm::Log2_32_Ceil(inType.getNumElements());
   return UIntType::get(inType.getContext(), i);
 }
@@ -4842,7 +4794,9 @@ void MultibitMuxOp::print(OpAsmPrinter &p) {
 }
 
 FIRRTLType MultibitMuxOp::inferReturnType(ValueRange operands,
-                                          ArrayRef<NamedAttribute> attrs,
+                                          DictionaryAttr attrs,
+                                          OpaqueProperties properties,
+                                          mlir::RegionRange regions,
                                           std::optional<Location> loc) {
   if (operands.size() < 2)
     return emitInferRetTypeError(loc, "at least one input is required");
@@ -4864,26 +4818,24 @@ LogicalResult ObjectSubfieldOp::inferReturnTypes(
     MLIRContext *context, std::optional<mlir::Location> location,
     ValueRange operands, DictionaryAttr attributes, OpaqueProperties properties,
     RegionRange regions, llvm::SmallVectorImpl<Type> &inferredReturnTypes) {
-  auto type = inferReturnType(operands, attributes.getValue(), location);
+  auto type =
+      inferReturnType(operands, attributes, properties, regions, location);
   if (!type)
     return failure();
   inferredReturnTypes.push_back(type);
   return success();
 }
 
-Type ObjectSubfieldOp::inferReturnType(ValueRange operands,
-                                       ArrayRef<NamedAttribute> attrs,
+Type ObjectSubfieldOp::inferReturnType(Type inType, uint32_t fieldIndex,
                                        std::optional<Location> loc) {
-  auto classType = dyn_cast<ClassType>(operands[0].getType());
+  auto classType = dyn_cast<ClassType>(inType);
   if (!classType)
     return emitInferRetTypeError(loc, "base object is not a class");
 
-  auto index = getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
-  if (classType.getNumElements() <= index)
+  if (classType.getNumElements() <= fieldIndex)
     return emitInferRetTypeError(loc, "element index is greater than the "
                                       "number of fields in the object");
-
-  return classType.getElement(index).type;
+  return classType.getElement(fieldIndex).type;
 }
 
 void ObjectSubfieldOp::print(OpAsmPrinter &p) {
@@ -4915,8 +4867,8 @@ ParseResult ObjectSubfieldOp::parse(OpAsmParser &parser,
     return parser.emitError(parser.getNameLoc(),
                             "unknown field " + fieldName + " in class type ")
            << inputType;
-  result.addAttribute("index",
-                      IntegerAttr::get(IntegerType::get(context, 32), *index));
+  result.getOrAddProperties<Properties>().setIndex(
+      IntegerAttr::get(IntegerType::get(context, 32), *index));
 
   SmallVector<Type> inferredReturnTypes;
   if (failed(inferReturnTypes(context, result.location, result.operands,
@@ -4979,16 +4931,6 @@ LogicalResult impl::verifySameOperandsIntTypeKind(Operation *op) {
                                    rhsWidth, isConstResult, op->getLoc()));
 }
 
-LogicalResult impl::validateBinaryOpArguments(ValueRange operands,
-                                              ArrayRef<NamedAttribute> attrs,
-                                              Location loc) {
-  if (operands.size() != 2 || !attrs.empty()) {
-    mlir::emitError(loc, "operation requires two operands and no constants");
-    return failure();
-  }
-  return success();
-}
-
 FIRRTLType impl::inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
                                    std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
@@ -5002,8 +4944,8 @@ FIRRTLType impl::inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
                       isConstResult);
 }
 
-FIRRTLType MulPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                            std::optional<Location> loc) {
+FIRRTLType MulPrimOp::inferReturnType(FIRRTLType lhs, FIRRTLType rhs,
+                                      std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
   bool isConstResult = false;
   if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, isConstResult, loc))
@@ -5016,8 +4958,8 @@ FIRRTLType MulPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
                       isConstResult);
 }
 
-FIRRTLType DivPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                            std::optional<Location> loc) {
+FIRRTLType DivPrimOp::inferReturnType(FIRRTLType lhs, FIRRTLType rhs,
+                                      std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth;
   bool isConstResult = false;
   if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, isConstResult, loc))
@@ -5032,8 +4974,8 @@ FIRRTLType DivPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
   return SIntType::get(lhs.getContext(), resultWidth, isConstResult);
 }
 
-FIRRTLType RemPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                            std::optional<Location> loc) {
+FIRRTLType RemPrimOp::inferReturnType(FIRRTLType lhs, FIRRTLType rhs,
+                                      std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
   bool isConstResult = false;
   if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, isConstResult, loc))
@@ -5091,8 +5033,8 @@ FIRRTLType impl::inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
   return UIntType::get(lhs.getContext(), 1, isConst(lhs) && isConst(rhs));
 }
 
-FIRRTLType CatPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                            std::optional<Location> loc) {
+FIRRTLType CatPrimOp::inferReturnType(FIRRTLType lhs, FIRRTLType rhs,
+                                      std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
   bool isConstResult = false;
   if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, isConstResult, loc))
@@ -5103,8 +5045,8 @@ FIRRTLType CatPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
   return UIntType::get(lhs.getContext(), resultWidth, isConstResult);
 }
 
-FIRRTLType DShlPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                             std::optional<Location> loc) {
+FIRRTLType DShlPrimOp::inferReturnType(FIRRTLType lhs, FIRRTLType rhs,
+                                       std::optional<Location> loc) {
   auto lhsi = type_dyn_cast<IntType>(lhs);
   auto rhsui = type_dyn_cast<UIntType>(rhs);
   if (!rhsui || !lhsi)
@@ -5133,8 +5075,8 @@ FIRRTLType DShlPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
                       lhsi.isConst() && rhsui.isConst());
 }
 
-FIRRTLType DShlwPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                              std::optional<Location> loc) {
+FIRRTLType DShlwPrimOp::inferReturnType(FIRRTLType lhs, FIRRTLType rhs,
+                                        std::optional<Location> loc) {
   auto lhsi = type_dyn_cast<IntType>(lhs);
   auto rhsu = type_dyn_cast<UIntType>(rhs);
   if (!lhsi || !rhsu)
@@ -5143,8 +5085,8 @@ FIRRTLType DShlwPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
   return lhsi.getConstType(lhsi.isConst() && rhsu.isConst());
 }
 
-FIRRTLType DShrPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                             std::optional<Location> loc) {
+FIRRTLType DShrPrimOp::inferReturnType(FIRRTLType lhs, FIRRTLType rhs,
+                                       std::optional<Location> loc) {
   auto lhsi = type_dyn_cast<IntType>(lhs);
   auto rhsu = type_dyn_cast<UIntType>(rhs);
   if (!lhsi || !rhsu)
@@ -5157,24 +5099,13 @@ FIRRTLType DShrPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
 // Unary Primitives
 //===----------------------------------------------------------------------===//
 
-LogicalResult impl::validateUnaryOpArguments(ValueRange operands,
-                                             ArrayRef<NamedAttribute> attrs,
-                                             Location loc) {
-  if (operands.size() != 1 || !attrs.empty()) {
-    mlir::emitError(loc, "operation requires one operand and no constants");
-    return failure();
-  }
-  return success();
-}
-
-FIRRTLType
-SizeOfIntrinsicOp::inferUnaryReturnType(FIRRTLType input,
-                                        std::optional<Location> loc) {
+FIRRTLType SizeOfIntrinsicOp::inferReturnType(FIRRTLType input,
+                                              std::optional<Location> loc) {
   return UIntType::get(input.getContext(), 32);
 }
 
-FIRRTLType AsSIntPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                              std::optional<Location> loc) {
+FIRRTLType AsSIntPrimOp::inferReturnType(FIRRTLType input,
+                                         std::optional<Location> loc) {
   auto base = type_dyn_cast<FIRRTLBaseType>(input);
   if (!base)
     return emitInferRetTypeError(loc, "operand must be a scalar base type");
@@ -5184,8 +5115,8 @@ FIRRTLType AsSIntPrimOp::inferUnaryReturnType(FIRRTLType input,
   return SIntType::get(input.getContext(), width, base.isConst());
 }
 
-FIRRTLType AsUIntPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                              std::optional<Location> loc) {
+FIRRTLType AsUIntPrimOp::inferReturnType(FIRRTLType input,
+                                         std::optional<Location> loc) {
   auto base = type_dyn_cast<FIRRTLBaseType>(input);
   if (!base)
     return emitInferRetTypeError(loc, "operand must be a scalar base type");
@@ -5195,9 +5126,8 @@ FIRRTLType AsUIntPrimOp::inferUnaryReturnType(FIRRTLType input,
   return UIntType::get(input.getContext(), width, base.isConst());
 }
 
-FIRRTLType
-AsAsyncResetPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                         std::optional<Location> loc) {
+FIRRTLType AsAsyncResetPrimOp::inferReturnType(FIRRTLType input,
+                                               std::optional<Location> loc) {
   auto base = type_dyn_cast<FIRRTLBaseType>(input);
   if (!base)
     return emitInferRetTypeError(loc,
@@ -5208,13 +5138,13 @@ AsAsyncResetPrimOp::inferUnaryReturnType(FIRRTLType input,
   return AsyncResetType::get(input.getContext(), base.isConst());
 }
 
-FIRRTLType AsClockPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                               std::optional<Location> loc) {
+FIRRTLType AsClockPrimOp::inferReturnType(FIRRTLType input,
+                                          std::optional<Location> loc) {
   return ClockType::get(input.getContext(), isConst(input));
 }
 
-FIRRTLType CvtPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                           std::optional<Location> loc) {
+FIRRTLType CvtPrimOp::inferReturnType(FIRRTLType input,
+                                      std::optional<Location> loc) {
   if (auto uiType = type_dyn_cast<UIntType>(input)) {
     auto width = uiType.getWidthOrSentinel();
     if (width != -1)
@@ -5228,8 +5158,8 @@ FIRRTLType CvtPrimOp::inferUnaryReturnType(FIRRTLType input,
   return emitInferRetTypeError(loc, "operand must have integer type");
 }
 
-FIRRTLType NegPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                           std::optional<Location> loc) {
+FIRRTLType NegPrimOp::inferReturnType(FIRRTLType input,
+                                      std::optional<Location> loc) {
   auto inputi = type_dyn_cast<IntType>(input);
   if (!inputi)
     return emitInferRetTypeError(loc, "operand must have integer type");
@@ -5239,8 +5169,8 @@ FIRRTLType NegPrimOp::inferUnaryReturnType(FIRRTLType input,
   return SIntType::get(input.getContext(), width, inputi.isConst());
 }
 
-FIRRTLType NotPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                           std::optional<Location> loc) {
+FIRRTLType NotPrimOp::inferReturnType(FIRRTLType input,
+                                      std::optional<Location> loc) {
   auto inputi = type_dyn_cast<IntType>(input);
   if (!inputi)
     return emitInferRetTypeError(loc, "operand must have integer type");
@@ -5259,23 +5189,9 @@ FIRRTLType impl::inferReductionResult(FIRRTLType input,
 // Other Operations
 //===----------------------------------------------------------------------===//
 
-LogicalResult BitsPrimOp::validateArguments(ValueRange operands,
-                                            ArrayRef<NamedAttribute> attrs,
-                                            Location loc) {
-  if (operands.size() != 1 || attrs.size() != 2) {
-    mlir::emitError(loc, "operation requires one operand and two constants");
-    return failure();
-  }
-  return success();
-}
-
-FIRRTLType BitsPrimOp::inferReturnType(ValueRange operands,
-                                       ArrayRef<NamedAttribute> attrs,
+FIRRTLType BitsPrimOp::inferReturnType(FIRRTLType input, int64_t high,
+                                       int64_t low,
                                        std::optional<Location> loc) {
-  auto input = operands[0].getType();
-  auto high = getAttr<IntegerAttr>(attrs, "hi").getValue().getSExtValue();
-  auto low = getAttr<IntegerAttr>(attrs, "lo").getValue().getSExtValue();
-
   auto inputi = type_dyn_cast<IntType>(input);
   if (!inputi)
     return emitInferRetTypeError(
@@ -5302,21 +5218,8 @@ FIRRTLType BitsPrimOp::inferReturnType(ValueRange operands,
   return UIntType::get(input.getContext(), high - low + 1, inputi.isConst());
 }
 
-LogicalResult impl::validateOneOperandOneConst(ValueRange operands,
-                                               ArrayRef<NamedAttribute> attrs,
-                                               Location loc) {
-  if (operands.size() != 1 || attrs.size() != 1) {
-    mlir::emitError(loc, "operation requires one operand and one constant");
-    return failure();
-  }
-  return success();
-}
-
-FIRRTLType HeadPrimOp::inferReturnType(ValueRange operands,
-                                       ArrayRef<NamedAttribute> attrs,
+FIRRTLType HeadPrimOp::inferReturnType(FIRRTLType input, int64_t amount,
                                        std::optional<Location> loc) {
-  auto input = operands[0].getType();
-  auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
   auto inputi = type_dyn_cast<IntType>(input);
   if (amount < 0 || !inputi)
@@ -5328,16 +5231,6 @@ FIRRTLType HeadPrimOp::inferReturnType(ValueRange operands,
     return emitInferRetTypeError(loc, "amount larger than input width");
 
   return UIntType::get(input.getContext(), amount, inputi.isConst());
-}
-
-LogicalResult MuxPrimOp::validateArguments(ValueRange operands,
-                                           ArrayRef<NamedAttribute> attrs,
-                                           Location loc) {
-  if (operands.size() != 3 || attrs.size() != 0) {
-    mlir::emitError(loc, "operation requires three operands and no constants");
-    return failure();
-  }
-  return success();
 }
 
 /// Infer the result type for a multiplexer given its two operand types, which
@@ -5433,19 +5326,20 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
       ", false value type: ", low);
 }
 
-FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
-                                      ArrayRef<NamedAttribute> attrs,
+FIRRTLType MuxPrimOp::inferReturnType(FIRRTLType sel, FIRRTLType high,
+                                      FIRRTLType low,
                                       std::optional<Location> loc) {
-  auto highType = type_dyn_cast<FIRRTLBaseType>(operands[1].getType());
-  auto lowType = type_dyn_cast<FIRRTLBaseType>(operands[2].getType());
+  auto highType = type_dyn_cast<FIRRTLBaseType>(high);
+  auto lowType = type_dyn_cast<FIRRTLBaseType>(low);
   if (!highType || !lowType)
     return emitInferRetTypeError(loc, "operands must be base type");
-  return inferMuxReturnType(highType, lowType, isConst(operands[0].getType()),
-                            loc);
+  return inferMuxReturnType(highType, lowType, isConst(sel), loc);
 }
 
 FIRRTLType Mux2CellIntrinsicOp::inferReturnType(ValueRange operands,
-                                                ArrayRef<NamedAttribute> attrs,
+                                                DictionaryAttr attrs,
+                                                OpaqueProperties properties,
+                                                mlir::RegionRange regions,
                                                 std::optional<Location> loc) {
   auto highType = type_dyn_cast<FIRRTLBaseType>(operands[1].getType());
   auto lowType = type_dyn_cast<FIRRTLBaseType>(operands[2].getType());
@@ -5456,7 +5350,9 @@ FIRRTLType Mux2CellIntrinsicOp::inferReturnType(ValueRange operands,
 }
 
 FIRRTLType Mux4CellIntrinsicOp::inferReturnType(ValueRange operands,
-                                                ArrayRef<NamedAttribute> attrs,
+                                                DictionaryAttr attrs,
+                                                OpaqueProperties properties,
+                                                mlir::RegionRange regions,
                                                 std::optional<Location> loc) {
   SmallVector<FIRRTLBaseType> types;
   FIRRTLBaseType result;
@@ -5476,12 +5372,8 @@ FIRRTLType Mux4CellIntrinsicOp::inferReturnType(ValueRange operands,
   return result;
 }
 
-FIRRTLType PadPrimOp::inferReturnType(ValueRange operands,
-                                      ArrayRef<NamedAttribute> attrs,
+FIRRTLType PadPrimOp::inferReturnType(FIRRTLType input, int64_t amount,
                                       std::optional<Location> loc) {
-  auto input = operands[0].getType();
-  auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
-
   auto inputi = type_dyn_cast<IntType>(input);
   if (amount < 0 || !inputi)
     return emitInferRetTypeError(
@@ -5496,12 +5388,8 @@ FIRRTLType PadPrimOp::inferReturnType(ValueRange operands,
                       inputi.isConst());
 }
 
-FIRRTLType ShlPrimOp::inferReturnType(ValueRange operands,
-                                      ArrayRef<NamedAttribute> attrs,
+FIRRTLType ShlPrimOp::inferReturnType(FIRRTLType input, int64_t amount,
                                       std::optional<Location> loc) {
-  auto input = operands[0].getType();
-  auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
-
   auto inputi = type_dyn_cast<IntType>(input);
   if (amount < 0 || !inputi)
     return emitInferRetTypeError(
@@ -5515,12 +5403,8 @@ FIRRTLType ShlPrimOp::inferReturnType(ValueRange operands,
                       inputi.isConst());
 }
 
-FIRRTLType ShrPrimOp::inferReturnType(ValueRange operands,
-                                      ArrayRef<NamedAttribute> attrs,
+FIRRTLType ShrPrimOp::inferReturnType(FIRRTLType input, int64_t amount,
                                       std::optional<Location> loc) {
-  auto input = operands[0].getType();
-  auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
-
   auto inputi = type_dyn_cast<IntType>(input);
   if (amount < 0 || !inputi)
     return emitInferRetTypeError(
@@ -5537,11 +5421,8 @@ FIRRTLType ShrPrimOp::inferReturnType(ValueRange operands,
                       inputi.isConst());
 }
 
-FIRRTLType TailPrimOp::inferReturnType(ValueRange operands,
-                                       ArrayRef<NamedAttribute> attrs,
+FIRRTLType TailPrimOp::inferReturnType(FIRRTLType input, int64_t amount,
                                        std::optional<Location> loc) {
-  auto input = operands[0].getType();
-  auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
   auto inputi = type_dyn_cast<IntType>(input);
   if (amount < 0 || !inputi)
@@ -6158,7 +6039,9 @@ void RWProbeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
-                                         ArrayRef<NamedAttribute> attrs,
+                                         DictionaryAttr attrs,
+                                         OpaqueProperties properties,
+                                         mlir::RegionRange regions,
                                          std::optional<Location> loc) {
   Type inType = operands[0].getType();
   auto inRefType = type_dyn_cast<RefType>(inType);
@@ -6168,8 +6051,9 @@ FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
   return inRefType.getType();
 }
 
-FIRRTLType RefSendOp::inferReturnType(ValueRange operands,
-                                      ArrayRef<NamedAttribute> attrs,
+FIRRTLType RefSendOp::inferReturnType(ValueRange operands, DictionaryAttr attrs,
+                                      OpaqueProperties properties,
+                                      mlir::RegionRange regions,
                                       std::optional<Location> loc) {
   Type inType = operands[0].getType();
   auto inBaseType = type_dyn_cast<FIRRTLBaseType>(inType);
@@ -6179,39 +6063,38 @@ FIRRTLType RefSendOp::inferReturnType(ValueRange operands,
   return RefType::get(inBaseType.getPassiveType());
 }
 
-FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
-                                     ArrayRef<NamedAttribute> attrs,
+FIRRTLType RefSubOp::inferReturnType(Type type, uint32_t fieldIndex,
                                      std::optional<Location> loc) {
-  auto refType = type_dyn_cast<RefType>(operands[0].getType());
+  auto refType = type_dyn_cast<RefType>(type);
   if (!refType)
     return emitInferRetTypeError(loc, "input must be of reference type");
   auto inType = refType.getType();
-  auto fieldIdx =
-      getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
 
   // TODO: Determine ref.sub + rwprobe behavior, test.
   // Probably best to demote to non-rw, but that has implications
   // for any LowerTypes behavior being relied on.
   // Allow for now, as need to LowerTypes things generally.
   if (auto vectorType = type_dyn_cast<FVectorType>(inType)) {
-    if (fieldIdx < vectorType.getNumElements())
+    if (fieldIndex < vectorType.getNumElements())
       return RefType::get(
           vectorType.getElementType().getConstType(
               vectorType.isConst() || vectorType.getElementType().isConst()),
           refType.getForceable(), refType.getLayer());
-    return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
+    return emitInferRetTypeError(loc, "out of range index '", fieldIndex,
                                  "' in RefType of vector type ", refType);
   }
   if (auto bundleType = type_dyn_cast<BundleType>(inType)) {
-    if (fieldIdx >= bundleType.getNumElements()) {
+    if (fieldIndex >= bundleType.getNumElements()) {
       return emitInferRetTypeError(loc,
                                    "subfield element index is greater than "
                                    "the number of fields in the bundle type");
     }
-    return RefType::get(bundleType.getElement(fieldIdx).type.getConstType(
-                            bundleType.isConst() ||
-                            bundleType.getElement(fieldIdx).type.isConst()),
-                        refType.getForceable(), refType.getLayer());
+    return RefType::get(
+        bundleType.getElement(fieldIndex)
+            .type.getConstType(
+                bundleType.isConst() ||
+                bundleType.getElement(fieldIndex).type.isConst()),
+        refType.getForceable(), refType.getLayer());
   }
 
   return emitInferRetTypeError(

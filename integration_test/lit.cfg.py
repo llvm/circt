@@ -80,7 +80,7 @@ tool_dirs = [
 tools = [
     'arcilator', 'circt-opt', 'circt-translate', 'firtool', 'circt-rtl-sim.py',
     'equiv-rtl.sh', 'handshake-runner', 'hlstool', 'ibistool', 'circt-lec',
-    'circt-bmc'
+    'circt-bmc', 'circt-test', 'circt-test-runner-sby.py'
 ]
 
 # Enable python if its path was configured

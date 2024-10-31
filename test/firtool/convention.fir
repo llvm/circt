@@ -23,8 +23,8 @@ circuit Top :
   ; SCALARIZE_TTT:     attributes {convention = #firrtl<convention scalarized>}
   public module Top :
     output port: UInt<8>[2]
-    port[0] <= UInt<8>(0)
-    port[1] <= UInt<8>(0)
+    connect port[0], UInt<8>(0)
+    connect port[1], UInt<8>(0)
 
   ; SCALARIZE_FFF-NOT: attributes {convention = #firrtl<convention scalarized>}
   ; SCALARIZE_TFF-NOT: attributes {convention = #firrtl<convention scalarized>}
@@ -47,5 +47,5 @@ circuit Top :
   ; SCALARIZE_TTT:     attributes {convention = #firrtl<convention scalarized>}
   module Internal :
     output port: UInt<8>[2]
-    port[0] <= UInt<8>(0)
-    port[1] <= UInt<8>(0)
+    connect port[0], UInt<8>(0)
+    connect port[1], UInt<8>(0)

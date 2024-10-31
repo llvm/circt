@@ -21,6 +21,7 @@ include "circt/Dialect/Sim/SimTypes.td"
 include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/IR/OpAsmInterface.td"
 
 class SimOp<string mnemonic, list<Trait> traits = []> :
     Op<SimDialect, mnemonic, traits>;
@@ -149,7 +150,7 @@ def DPICallOp : SimOp<"func.dpi.call",
 }
 
 def FormatLitOp : SimOp<"fmt.lit", [Pure, ConstantLike]> {
-  let summary = "Literal string token";
+  let summary = "Literal string fragment";
   let description = [{
     Creates a constant, raw ASCII string literal for formatted printing.
     The given string attribute will be outputted as is,
@@ -299,7 +300,7 @@ def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
 
   let extraClassDeclaration = [{
     /// Returns true iff all of the input strings are primitive
-    /// (i.e. non-concatenated) tokens or block arguments.
+    /// (i.e. non-concatenated) fragments or block arguments.
     bool isFlat() {
       return llvm::none_of(getInputs(), [](Value operand) {
         return !!operand.getDefiningOp<circt::sim::FormatStringConcatOp>();

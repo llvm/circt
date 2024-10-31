@@ -20,15 +20,15 @@ circuit test:
       write-latency => 1
       read-under-write => undefined
 
-    tbMemoryKind1.r.clk <= clock
-    tbMemoryKind1.r.en <= rEn
-    tbMemoryKind1.r.addr <= rAddr
-    rData <= tbMemoryKind1.r.data
-    tbMemoryKind1.w.clk <= clock
-    tbMemoryKind1.w.en <= rEn
-    tbMemoryKind1.w.addr <= rAddr
-    tbMemoryKind1.w.mask <= wMask
-    tbMemoryKind1.w.data <= wData
+    connect tbMemoryKind1.r.clk, clock
+    connect tbMemoryKind1.r.en, rEn
+    connect tbMemoryKind1.r.addr, rAddr
+    connect rData, tbMemoryKind1.r.data
+    connect tbMemoryKind1.w.clk, clock
+    connect tbMemoryKind1.w.en, rEn
+    connect tbMemoryKind1.w.addr, rAddr
+    connect tbMemoryKind1.w.mask, wMask
+    connect tbMemoryKind1.w.data, wData
 
 ; CHECK-LABEL: module tbMemModule1
 ; CHECK:         tbMemoryKind1 tbMemoryKind1
@@ -51,15 +51,15 @@ circuit test:
       write-latency => 1
       read-under-write => undefined
 
-    dutMemory.r.clk <= clock
-    dutMemory.r.en <= rEn
-    dutMemory.r.addr <= rAddr
-    rData <= dutMemory.r.data
-    dutMemory.w.clk <= clock
-    dutMemory.w.en <= rEn
-    dutMemory.w.addr <= rAddr
-    dutMemory.w.mask <= wMask
-    dutMemory.w.data <= wData
+    connect dutMemory.r.clk, clock
+    connect dutMemory.r.en, rEn
+    connect dutMemory.r.addr, rAddr
+    connect rData, dutMemory.r.data
+    connect dutMemory.w.clk, clock
+    connect dutMemory.w.en, rEn
+    connect dutMemory.w.addr, rAddr
+    connect dutMemory.w.mask, wMask
+    connect dutMemory.w.data, wData
 
 ; CHECK-LABEL: module dutModule2
 ; CHECK:  dutMemory dutMemory
@@ -81,15 +81,15 @@ circuit test:
       write-latency => 1
       read-under-write => undefined
 
-    tbMemoryKind1.r.clk <= clock
-    tbMemoryKind1.r.en <= rEn
-    tbMemoryKind1.r.addr <= rAddr
-    rData <= tbMemoryKind1.r.data
-    tbMemoryKind1.w.clk <= clock
-    tbMemoryKind1.w.en <= rEn
-    tbMemoryKind1.w.addr <= rAddr
-    tbMemoryKind1.w.mask <= wMask
-    tbMemoryKind1.w.data <= wData
+    connect tbMemoryKind1.r.clk, clock
+    connect tbMemoryKind1.r.en, rEn
+    connect tbMemoryKind1.r.addr, rAddr
+    connect rData, tbMemoryKind1.r.data
+    connect tbMemoryKind1.w.clk, clock
+    connect tbMemoryKind1.w.en, rEn
+    connect tbMemoryKind1.w.addr, rAddr
+    connect tbMemoryKind1.w.mask, wMask
+    connect tbMemoryKind1.w.data, wData
 
 ; CHECK-LABEL: module hier1
 ; CHECK:  tbMemoryKind1_0 tbMemoryKind1
@@ -105,12 +105,12 @@ circuit test:
 
 
     inst m of tbMemModule1
-    m.clock <= clock
-    m.rAddr <= rAddr
-    m.rEn <= rEn
-    rData <= m.rData
-    m.wMask <= wMask
-    m.wData <= wData
+    connect m.clock, clock
+    connect m.rAddr, rAddr
+    connect m.rEn, rEn
+    connect rData, m.rData
+    connect m.wMask, wMask
+    connect m.wData, wData
 
   public module test:
     input clock: Clock
@@ -122,28 +122,28 @@ circuit test:
 
 
     inst h1 of hier1
-    h1.clock <= clock
-    h1.rAddr <= rAddr
-    h1.rEn <= rEn
-    rData[0] <= h1.rData
-    h1.wMask <= wMask
-    h1.wData <= wData
+    connect h1.clock, clock
+    connect h1.rAddr, rAddr
+    connect h1.rEn, rEn
+    connect rData[0], h1.rData
+    connect h1.wMask, wMask
+    connect h1.wData, wData
 
     inst h2 of hier2
-    h2.clock <= clock
-    h2.rAddr <= rAddr
-    h2.rEn <= rEn
-    rData[1] <= h2.rData
-    h2.wMask <= wMask
-    h2.wData <= wData
+    connect h2.clock, clock
+    connect h2.rAddr, rAddr
+    connect h2.rEn, rEn
+    connect rData[1], h2.rData
+    connect h2.wMask, wMask
+    connect h2.wData, wData
 
     inst m2 of dutModule
-    m2.clock <= clock
-    m2.rAddr <= rAddr
-    m2.rEn <= rEn
-    rData[2] <= m2.rData
-    m2.wMask <= wMask
-    m2.wData <= wData
+    connect m2.clock, clock
+    connect m2.rAddr, rAddr
+    connect m2.rEn, rEn
+    connect rData[2], m2.rData
+    connect m2.wMask, wMask
+    connect m2.wData, wData
 
 ; CHECK-LABEL: module test
 ; CHECK: hier1 [[h1:.+]] (
@@ -160,12 +160,12 @@ circuit test:
 
 
     inst m of dutModule2
-    m.clock <= clock
-    m.rAddr <= rAddr
-    m.rEn <= rEn
-    rData <= m.rData
-    m.wMask <= wMask
-    m.wData <= wData
+    connect m.clock, clock
+    connect m.rAddr, rAddr
+    connect m.rEn, rEn
+    connect rData, m.rData
+    connect m.wMask, wMask
+    connect m.wData, wData
 
 ; CHECK-LABEL: module dutModule
 ; CHECK: dutModule2 [[m:.+]] (

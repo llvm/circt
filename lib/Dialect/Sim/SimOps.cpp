@@ -220,7 +220,7 @@ LogicalResult FormatStringConcatOp::getFlattenedInputs(
   bool isCyclic = false;
 
   // Perform a DFS on this operation's concatenated operands,
-  // collect the leaf format string tokens.
+  // collect the leaf format string fragments.
   concatStack.insert({*this, 0});
   while (!concatStack.empty()) {
     auto &top = concatStack.back();

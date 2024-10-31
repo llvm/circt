@@ -11,13 +11,13 @@ circuit Foo :
     output write : { flip en : UInt<1>, flip data : UInt<8>, flip addr : UInt<5>}
 
     smem m : UInt<8> [32]
-    read.data is invalid
+    invalidate read.data
     when read.en :
       read mport read_data_MPORT = m[read.addr], clock
-      read.data <= read_data_MPORT
+      connect read.data, read_data_MPORT
     when write.en :
       write mport MPORT = m[write.addr], clock
-      MPORT <= write.data
+      connect MPORT, write.data
 
       ; CHECK:             module [[memoryModule:[a-zA-Z0-9_]+]](
       ; CHECK:               reg [7:0] [[memory:[a-zA-Z0-9_]+]][0:31];

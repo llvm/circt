@@ -24,10 +24,10 @@ circuit Top0 :
     inst a2 of A_
   module A :
     output x: UInt<1>
-    x <= UInt(1)
+    connect x, UInt(1)
   module A_ :
     output x: UInt<1>
-    x <= UInt(1)
+    connect x, UInt(1)
 
 ; CHECK-NOT: firrtl.module private @A_
 
@@ -47,17 +47,17 @@ circuit Top1 :
     output x: UInt<1>
     ; CHECK: firrtl.instance b @B(
     inst b of B
-    x <= b.x
+    connect x, b.x
   module A_ :
     output x: UInt<1>
     inst b of B_
-    x <= b.x
+    connect x, b.x
   module B :
     output x: UInt<1>
-    x <= UInt(1)
+    connect x, UInt(1)
   module B_ :
     output x: UInt<1>
-    x <= UInt(1)
+    connect x, UInt(1)
 
 ; CHECK-NOT: firrtl.module private @A_
 ; CHECK-NOT: firrtl.module private @B_
@@ -77,17 +77,17 @@ circuit Top2 :
   module A : @[yy 2:2]
     output x: UInt<1> @[yy 2:2]
     inst b of B @[yy 2:2]
-    x <= b.x @[yy 2:2]
+    connect x, b.x @[yy 2:2]
   module A_ : @[xx 1:1]
     output x: UInt<1> @[xx 1:1]
     inst b of B_ @[xx 1:1]
-    x <= b.x @[xx 1:1]
+    connect x, b.x @[xx 1:1]
   module B :
     output x: UInt<1>
-    x <= UInt(1)
+    connect x, UInt(1)
   module B_ :
     output x: UInt<1>
-    x <= UInt(1)
+    connect x, UInt(1)
 
 ; CHECK-NOT: firrtl.module private @A_
 ; CHECK-NOT: firrtl.module private @B_
@@ -105,10 +105,10 @@ circuit Top3 :
     inst a2 of A_
   module A : @[yy 2:2]
     output x: UInt<1> @[yy 2:2]
-    x <= UInt(1)
+    connect x, UInt(1)
   module A_ : @[xx 1:1]
     output x: UInt<1> @[xx 1:1]
-    x <= UInt(1)
+    connect x, UInt(1)
 
 ; CHECK-NOT: firrtl.module private @A_
 
@@ -124,17 +124,17 @@ circuit Top4 :
     ; CHECK-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
-    out <= and(a1.x, a2.y)
+    connect out, and(a1.x, a2.y)
   ; CHECK: firrtl.module private @A
   module A : @[yy 2:2]
     output x: UInt<1> @[yy 2:2]
     ; CHECK-NEXT: firrtl.instance b @B(
     inst b of B
-    x <= b.u
+    connect x, b.u
   module A_ : @[xx 1:1]
     output y: UInt<1> @[xx 1:1]
     inst c of C
-    y <= c.u
+    connect y, c.u
   extmodule B : @[aa 3:3]
     output u : UInt<1> @[aa 4:4]
     defname = BB
@@ -160,16 +160,16 @@ circuit Top5 :
     ; CHECK-NEXT: firrtl.instance a2 @A_(
     inst a1 of A
     inst a2 of A_
-    out <= and(a1.x, a2.y)
+    connect out, and(a1.x, a2.y)
   module A : @[yy 2:2]
     output x: UInt<1> @[yy 2:2]
     inst b of B
-    x <= b.u
+    connect x, b.u
   ; CHECK: firrtl.module private @A_
   module A_ : @[xx 1:1]
     output y: UInt<1> @[xx 1:1]
     inst c of C
-    y <= c.u
+    connect y, c.u
   ; CHECK: firrtl.extmodule private @B
   extmodule B : @[aa 3:3]
     output u : UInt<1> @[aa 4:4]
@@ -194,16 +194,16 @@ circuit Top6 :
     ; CHECK-NEXT: firrtl.instance a2 @A_(
     inst a1 of A
     inst a2 of A_
-    out <= and(a1.x, a2.y)
+    connect out, and(a1.x, a2.y)
   module A : @[yy 2:2]
     output x: UInt<1> @[yy 2:2]
     inst b of B
-    x <= b.u
+    connect x, b.u
   ; CHECK: firrtl.module private @A_
   module A_ : @[xx 1:1]
     output y: UInt<1> @[xx 1:1]
     inst c of C
-    y <= c.u
+    connect y, c.u
   ; CHECK: firrtl.extmodule private @B
   extmodule B : @[aa 3:3]
     output u : UInt<1> @[aa 4:4]
@@ -228,11 +228,11 @@ circuit FooAndBarModule0 :
   ; CHECK: firrtl.module private @FooModule
   module FooModule :
     output io : {flip foo : UInt<1>, fuzz : UInt<1>}
-    io.fuzz <= io.foo
+    connect io.fuzz, io.foo
   ; CHECK-NOT: firrtl.module private @BarModule
   module BarModule :
     output io : {flip bar : UInt<1>, buzz : UInt<1>}
-    io.buzz <= io.bar
+    connect io.buzz, io.bar
   ; CHECK: firrtl.module @FooAndBarModule0
   public module FooAndBarModule0 :
     output io : {foo : {flip foo : UInt<1>, fuzz : UInt<1>}, bar : {flip bar : UInt<1>, buzz : UInt<1>}}
@@ -240,8 +240,8 @@ circuit FooAndBarModule0 :
     ; CHECK: firrtl.instance bar @FooModule
     inst foo of FooModule
     inst bar of BarModule
-    io.foo <= foo.io
-    io.bar <= bar.io
+    connect io.foo, foo.io
+    connect io.bar, bar.io
 
 ; // -----
 ; "Modules with aggregate ports that are connected should dedup if their port
@@ -253,19 +253,19 @@ circuit FooAndBarModule1 :
   ; CHECK: firrtl.module private @FooModule
   module FooModule :
     output io : {flip foo : UInt<1>, fuzz : UInt<1>}
-    io.fuzz <= io.foo
+    connect io.fuzz, io.foo
   ; CHECK-NOT: firrtl.module private @BarModule
   module BarModule :
     output io : {flip foo : UInt<1>, fuzz : UInt<1>}
-    io.fuzz <= io.foo
+    connect io.fuzz, io.foo
   ; CHECK: firrtl.module @FooAndBarModule1
   public module FooAndBarModule1 :
     output io : {foo : {flip foo : UInt<1>, fuzz : UInt<1>}, bar : {flip foo : UInt<1>, fuzz : UInt<1>}}
     ; CHECK-COUNT-2: firrtl.instance {{(foo|bar)}} @FooModule
     inst foo of FooModule
     inst bar of BarModule
-    io.foo <= foo.io
-    io.bar <= bar.io
+    connect io.foo, foo.io
+    connect io.bar, bar.io
 
 ; // -----
 ; "The module A and B should be deduped with the first module in order".
@@ -281,17 +281,17 @@ circuit Top7 :
   module A :
     output x: UInt<1>
     inst b of B
-    x <= b.x
+    connect x, b.x
   module A_ :
     output x: UInt<1>
     inst b of B_
-    x <= b.x
+    connect x, b.x
   module B :
     output x: UInt<1>
-    x <= UInt(1)
+    connect x, UInt(1)
   module B_ :
     output x: UInt<1>
-    x <= UInt(1)
+    connect x, UInt(1)
 
 ; CHECK-NOT: firrtl.module private @A_
 ; CHECK-NOT: firrtl.module private @B_
@@ -310,13 +310,13 @@ circuit Top8 :
   module A :
     output x: UInt<1>
     wire b: {c: UInt<1>}
-    b is invalid
-    x <= b.c
+    invalidate b
+    connect x, b.c
   module A_ :
     output x: UInt<1>
     wire b: {b: UInt<1>}
-    b is invalid
-    x <= b.b
+    invalidate b
+    connect x, b.b
 
 ; CHECK-NOT: firrtl.module private @A_
 
@@ -343,13 +343,13 @@ circuit Top9 : %[[
     output x: UInt<1>
     ; CHECK-NEXT: firrtl.wire {annotations = [{circt.nonlocal = @[[nlaSym]], class = "circt.test"}]}
     wire b: UInt<1>
-    b is invalid
-    x <= b
+    invalidate b
+    connect x, b
   module A_ :
     output x: UInt<1>
     wire b: UInt<1>
-    b is invalid
-    x <= b
+    invalidate b
+    connect x, b
 
 ; CHECK-NOT: firrtl.module private @A_
 
@@ -383,13 +383,13 @@ circuit Top10 : %[[
     output x: UInt<1>
     ; CHECK-NEXT: firrtl.wire {annotations = [{circt.nonlocal = @[[nlaSym1]], class = "circt.test", data = "hello"}, {circt.nonlocal = @[[nlaSym2]], class = "circt.test", data = "world"}]}
     wire b: UInt<1>
-    b is invalid
-    x <= b
+    invalidate b
+    connect x, b
   module A_ :
     output x: UInt<1>
     wire b: UInt<1>
-    b is invalid
-    x <= b
+    invalidate b
+    connect x, b
 
 ; CHECK-NOT: firrtl.module private @A_
 
@@ -416,21 +416,21 @@ circuit Top11 : %[[
   ; CHECK: hw.hierpath private @[[nlaSym1:[_a-zA-Z0-9]+]] [@Top11::@[[a1Sym]], @A]
   public module Top11 :
     inst a1 of A
-    a1 is invalid
+    invalidate a1.x
     inst a2 of A_
-    a2 is invalid
+    invalidate a2.x
   ; CHECK: firrtl.module private @A(
   module A :
     input x: UInt<1>
     output y: UInt<1>
     ; CHECK: firrtl.node {{.+}} {annotations = [{circt.nonlocal = @[[nlaSym1]], class = "circt.test", data = "hello"}, {circt.nonlocal = @[[nlaSym2]], class = "circt.test", data = "hello"}]}
     node a = add(x, UInt(1))
-    y <= add(a, a)
+    connect y, add(a, a)
   module A_ :
     input x: UInt<1>
     output y: UInt<1>
     node b = add(x, UInt(1))
-    y <= add(b, b)
+    connect y, add(b, b)
 
 ; CHECK-NOT: firrtl.module private @A_(
 
@@ -443,12 +443,12 @@ circuit main:
   module dupe:
     input in: UInt<8>
     output out: UInt<8>
-    out <= in
+    connect out, in
   ; CHECK: firrtl.module @main
   public module main:
     input in:  UInt<8>
     output out: UInt<8>
-    out <= in
+    connect out, in
 
 ; // -----
 ; "The deduping module A and A_ should rename instances and signals that have different names"
@@ -797,21 +797,21 @@ circuit Top15 : %[[
     output ob: {a: {b: {c: UInt<1>}}, z: UInt<1>, un: UInt<2>}
     ; CHECK:      firrtl.instance a sym @[[topaSym]]
     inst a of a
-    a.i.z.y.x <= ia.z.y.x
-    a.i.a <= ia.a
-    a.i.un <= ia.un
-    oa.z.y.x <= a.o.z.y.x
-    oa.a <= a.o.a
-    oa.un <= a.o.un
+    connect a.i.z.y.x, ia.z.y.x
+    connect a.i.a, ia.a
+    connect a.i.un, ia.un
+    connect oa.z.y.x, a.o.z.y.x
+    connect oa.a, a.o.a
+    connect oa.un, a.o.un
 
     ; CHECK:      firrtl.instance b sym @[[topbSym]]
     inst b of b
-    b.q.un.b.c <= ib.a.b.c
-    b.q.z <= ib.z
-    b.q.a <= ib.un
-    ob.a.b.c <= b.r.un.b.c
-    ob.z <= b.r.z
-    ob.un <= b.r.a
+    connect b.q.un.b.c, ib.a.b.c
+    connect b.q.z, ib.z
+    connect b.q.a, ib.un
+    connect ob.a.b.c, b.r.un.b.c
+    connect ob.z, b.r.z
+    connect ob.un, b.r.a
 
   ; CHECK:      firrtl.module private @a(
   ; CHECK-SAME:   in %i:
@@ -821,13 +821,13 @@ circuit Top15 : %[[
   module a:
     input i: {z: {y: {x: UInt<1>}}, a: UInt<1>, un: UInt<2>}
     output o: {z: {y: {x: UInt<1>}}, a: UInt<1>, un: UInt<2>}
-    o <= i
+    connect o, i
 
   ; CHECK-NOT:  firrtl.module private @b(
   module b:
     input  q: {un: {b: {c: UInt<1>}}, z: UInt<1>, a: UInt<2>}
     output r: {un: {b: {c: UInt<1>}}, z: UInt<1>, a: UInt<2>}
-    r <= q
+    connect r, q
 
 ; // -----
 ; "The module A and A_ should be deduped even with different port names and info,
@@ -850,15 +850,15 @@ circuit Top16 : %[[
     ; CHECK: instance a2 {{.+}} @A(
     inst a1 of A
     inst a2 of A_
-    out <= and(a1.x, a2.y)
+    connect out, and(a1.x, a2.y)
   ; CHECK: module private @A
   ; CHECK-SAME: [{circt.nonlocal = {{[^,]+}}, class = "circt.test", pin = "pin"}]
   module A : @[yy 2:2]
     output x: UInt<1> @[yy 2:2]
-    x <= UInt(1)
+    connect x, UInt(1)
   module A_ : @[xx 1:1]
     output y: UInt<1> @[xx 1:1]
-    y <= UInt(1)
+    connect y, UInt(1)
 
 ; CHECK-NOT: firrtl.module private @A_
 
@@ -888,13 +888,13 @@ circuit Top17 : %[[
     output x: UInt<1>
     ; CHECK-NEXT: firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     wire b: UInt<1>
-    b is invalid
-    x <= b
+    invalidate b
+    connect x, b
   module A_ :
     output x: UInt<1>
     wire b: UInt<1>
-    b is invalid
-    x <= b
+    invalidate b
+    connect x, b
 
 ; CHECK-NOT: firrtl.module private @A_
 
@@ -930,12 +930,12 @@ circuit Top18 : %[[
     ; CHECK: firrtl.wire
     ; CHECK-SAME: [{class = "firrtl.transforms.DontTouchAnnotation"}]
     wire b: UInt<1>
-    b is invalid
-    x <= b
+    invalidate b
+    connect x, b
   module A_ :
     output x: UInt<1>
     wire b: UInt<1>
-    b is invalid
-    x <= b
+    invalidate b
+    connect x, b
 
 ; CHECK-NOT: firrtl.module private @A_

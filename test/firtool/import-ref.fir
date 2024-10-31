@@ -14,7 +14,7 @@ circuit TestHarness:
     input clock: Clock
 
     inst dut of DUT
-    dut.clock <= clock
+    connect dut.clock, clock
 
     ; CHECK: fwrite
     ; CHECK-SAME: "%x", TestHarness.dut.`ref_DUT_read)
@@ -45,7 +45,7 @@ circuit DUT:
     output write: RWProbe<UInt<32>>
 
     inst i of NotTheRealName
-    i.clock <= clock
+    connect i.clock, clock
     define read = i.read
     define write = i.write
 

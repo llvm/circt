@@ -75,9 +75,9 @@ circuit Foo : %[[
     input zeroW : UInt<0>
     output signed : UInt<31>
     inst parameter of Bar
-    parameter.b.signed <= unsigned
-    parameter.b.qux <= unsigned
-    signed <= unsigned
+    connect parameter.b.signed, unsigned
+    connect parameter.b.qux, unsigned
+    connect signed, unsigned
   module Bar :
     input b: {signed: UInt<1>, qux: UInt<1>}
     inst longint of MySRAM
@@ -88,7 +88,7 @@ circuit Foo : %[[
         write-latency => 1
         writer => port
         read-under-write => undefined
-    shortint.port is invalid
+    invalidate shortint.port
 
 ; CHECK-LABEL: FILE "omir.json"
 

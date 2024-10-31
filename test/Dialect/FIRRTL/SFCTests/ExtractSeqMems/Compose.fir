@@ -73,10 +73,10 @@ circuit TestHarness : %[[
 
     smem mem : UInt<8> [8]
     infer mport read = mem[io.addr], clock
-    io.dataOut <= read
+    connect io.dataOut, read
     when io.wen :
       infer mport write = mem[io.addr], clock
-      write <= io.dataIn
+      connect write, io.dataIn
 
   module SomeModule_1 :
     input clock : Clock
@@ -85,10 +85,10 @@ circuit TestHarness : %[[
 
     smem mem : UInt<8> [8]
     infer mport read = mem[io.addr], clock
-    io.dataOut <= read
+    connect io.dataOut, read
     when io.wen :
       infer mport write = mem[io.addr], clock
-      write <= io.dataIn
+      connect write, io.dataIn
 
   ; DUTMODULE: module Prefix_DUTModule
   ; DUTMODULE: SeqMemsGroup SeqMemsGroup
@@ -102,19 +102,19 @@ circuit TestHarness : %[[
     output io : { foo : { flip addr : UInt<3>, flip dataIn : UInt<8>, flip wen : UInt<1>, dataOut : UInt<8>}, bar : { flip addr : UInt<3>, flip dataIn : UInt<8>, flip wen : UInt<1>, dataOut : UInt<8>}}
 
     inst inst0 of SomeModule
-    inst0.clock <= clock
-    inst0.reset <= reset
-    io.foo.dataOut <= inst0.io.dataOut
-    inst0.io.wen <= io.foo.wen
-    inst0.io.dataIn <= io.foo.dataIn
-    inst0.io.addr <= io.foo.addr
+    connect inst0.clock, clock
+    connect inst0.reset, reset
+    connect io.foo.dataOut, inst0.io.dataOut
+    connect inst0.io.wen, io.foo.wen
+    connect inst0.io.dataIn, io.foo.dataIn
+    connect inst0.io.addr, io.foo.addr
     inst inst1 of SomeModule_1
-    inst1.clock <= clock
-    inst1.reset <= reset
-    io.bar.dataOut <= inst1.io.dataOut
-    inst1.io.wen <= io.bar.wen
-    inst1.io.dataIn <= io.bar.dataIn
-    inst1.io.addr <= io.bar.addr
+    connect inst1.clock, clock
+    connect inst1.reset, reset
+    connect io.bar.dataOut, inst1.io.dataOut
+    connect inst1.io.wen, io.bar.wen
+    connect inst1.io.dataIn, io.bar.dataIn
+    connect inst1.io.addr, io.bar.addr
 
   ; TESTHARNESS: module TestHarness
   ; TESTHARNESS: Prefix_DUTModule dut
@@ -126,16 +126,16 @@ circuit TestHarness : %[[
     output io : { foo : { flip addr : UInt<3>, flip dataIn : UInt<8>, flip wen : UInt<1>, dataOut : UInt<8>}, bar : { flip addr : UInt<3>, flip dataIn : UInt<8>, flip wen : UInt<1>, dataOut : UInt<8>}}
 
     inst dut of DUTModule
-    dut.clock <= clock
-    dut.reset <= reset
-    io.bar.dataOut <= dut.io.bar.dataOut
-    dut.io.bar.wen <= io.bar.wen
-    dut.io.bar.dataIn <= io.bar.dataIn
-    dut.io.bar.addr <= io.bar.addr
-    io.foo.dataOut <= dut.io.foo.dataOut
-    dut.io.foo.wen <= io.foo.wen
-    dut.io.foo.dataIn <= io.foo.dataIn
-    dut.io.foo.addr <= io.foo.addr
+    connect dut.clock, clock
+    connect dut.reset, reset
+    connect io.bar.dataOut, dut.io.bar.dataOut
+    connect dut.io.bar.wen, io.bar.wen
+    connect dut.io.bar.dataIn, io.bar.dataIn
+    connect dut.io.bar.addr, io.bar.addr
+    connect io.foo.dataOut, dut.io.foo.dataOut
+    connect dut.io.foo.wen, io.foo.wen
+    connect dut.io.foo.dataIn, io.foo.dataIn
+    connect dut.io.foo.addr, io.foo.addr
 
   ; INJECTEDSUBMODULE: module Prefix_InjectedSubmodule
   ; INJECTEDSUBMODULE: Prefix_SomeModule inst0

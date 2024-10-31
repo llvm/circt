@@ -68,45 +68,45 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     output out_mux2cell: V2
 
     inst cat of Cat
-    cat.a <= b
-    cat.b <= b
-    cat.c <= b
+    connect cat.a, b
+    connect cat.b, b
+    connect cat.c, b
 
     inst implicitTrunc of ImplicitTrunc
-    implicitTrunc.inp_1 <= a
-    implicitTrunc.inp_2 <= asSInt(cat.d)
+    connect implicitTrunc.inp_1, a
+    connect implicitTrunc.inp_2, asSInt(cat.d)
 
     inst prettifyExample of PrettifyExample
-    prettifyExample.inp_1 <= cat.d
-    prettifyExample.inp_2 <= cat.d
-    prettifyExample.inp_3 <= cat.d
+    connect prettifyExample.inp_1, cat.d
+    connect prettifyExample.inp_2, cat.d
+    connect prettifyExample.inp_3, cat.d
 
     inst flipFlop of FlipFlop
-    flipFlop.clock <= clock
-    flipFlop.a_d <= a
+    connect flipFlop.clock, clock
+    connect flipFlop.a_d, a
 
-    c <= flipFlop.a_q
+    connect c, flipFlop.a_q
 
     inst multibitMux of MultibitMux
-    multibitMux.a <= vec
-    multibitMux.sel <= b
+    connect multibitMux.a, vec
+    connect multibitMux.sel, b
 
     inst unusedPortsMod of UnusedPortsMod
-    unusedPortsMod.in <= a
+    connect unusedPortsMod.in, a
 
     inst mux2cell of Mux2Cell
-    mux2cell.cond <= a
-    mux2cell.low <= a
-    out_mux2cell <= mux2cell.out
+    connect mux2cell.cond, a
+    connect mux2cell.low, a
+    connect out_mux2cell, mux2cell.out
 
     ; These outputs exist to work around the aggressive removal of unused module
     ; ports.
     ;
     ; TODO: This test should be rewritten to not be so brittle around module
     ; port removal.
-    out_implicitTrunc <= or(orr(implicitTrunc.out1), orr(implicitTrunc.out2))
-    out_prettifyExample <= or(orr(prettifyExample.out1), orr(prettifyExample.out2))
-    out_multibitMux <= multibitMux.b
+    connect out_implicitTrunc, or(orr(implicitTrunc.out1), orr(implicitTrunc.out2))
+    connect out_prettifyExample, or(orr(prettifyExample.out1), orr(prettifyExample.out2))
+    connect out_multibitMux, multibitMux.b
 
 
 ; MLIR-LABEL: firrtl.module @test_mod(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %c: !firrtl.uint<1>, in %vec_0: !firrtl.uint<1>, in %vec_1: !firrtl.uint<1>, in %vec_2: !firrtl.uint<1>, out %out_implicitTrunc: !firrtl.uint<1>, out %out_prettifyExample: !firrtl.uint<1>, out %out_multibitMux: !firrtl.uint<1>, out %out_mux2cell_0: !firrtl.uint<1>, out %out_mux2cell_1: !firrtl.uint<1>) {{.*}}{
@@ -201,7 +201,7 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     input b: UInt<2>
     input c: UInt<2>
     output d: UInt<6>
-    d <= cat(cat(a, b), c)
+    connect d, cat(cat(a, b), c)
 
 ; MLIRLOWER-LABEL: hw.module private @Cat(in %a : i2, in %b : i2, in %c : i2, out d : i6) {
 ; MLIRLOWER-NEXT:    %0 = comb.concat %a, %b, %c : i2, i2, i2
@@ -216,8 +216,8 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     input inp_2: SInt<5>
     output out1: SInt<3>
     output out2: SInt<3>
-    out1 <= dshl(inp_2, inp_1)
-    out2 <= inp_2
+    connect out1, dshl(inp_2, inp_1)
+    connect out2, inp_2
 
 ; MLIRLOWER-LABEL: hw.module private @ImplicitTrunc(in %inp_1 : i1, in %inp_2 : i5, out out1 : i3, out out2 : i3) {
 ; MLIRLOWER-NEXT:    %c0_i5 = hw.constant 0 : i5
@@ -251,8 +251,8 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     input inp_3: UInt<5>
     output out1: UInt<10>
     output out2: UInt<10>
-    out1 <= cat(not(inp_1), inp_2)
-    out2 <= cat(not(inp_1), inp_3)
+    connect out1, cat(not(inp_1), inp_2)
+    connect out2, cat(not(inp_1), inp_3)
 
 ; VERILOG-LABEL: module PrettifyExample(
 ; VERILOG:         assign out1 = {~inp_1, inp_2};
@@ -268,8 +268,8 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 
     reg r: UInt<1>, clock
 
-    r <= a_d
-    a_q <= r
+    connect r, a_d
+    connect a_q, r
 
 ; VERILOG-LABEL: module FlipFlop(
 ; VERILOG-NEXT:    input  clock,
@@ -284,7 +284,7 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     input a : UInt<1>[3]
     input sel : UInt<2>
     output b : UInt<1>
-    b <= a[sel]
+    connect b, a[sel]
 ; VERILOG-LABEL: module MultibitMux(
 ; VERILOG:  wire [3:0] [[T2:.*]] =
 ; VERILOG-SAME{LITERAL}: {{a_0}, {a_2}, {a_1}, {a_0}};
@@ -293,7 +293,7 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
   module UnusedPortsMod :
     input in : UInt<1>
     output out : UInt<1>
-    out is invalid
+    invalidate out
 
   extmodule Val:
      output v: UInt<1>
@@ -313,6 +313,6 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     output out: UInt<1>[2]
     wire w: UInt<1>
     inst ext of Val
-    w <= ext.v
-    out[0] <= intrinsic(circt_mux2cell : UInt, xor(cond, UInt<1>(1)), w, low)
-    out[1] <= intrinsic(circt_mux2cell : UInt, xor(cond, UInt<1>(1)), ext.v, low)
+    connect w, ext.v
+    connect out[0], intrinsic(circt_mux2cell : UInt, xor(cond, UInt<1>(1)), w, low)
+    connect out[1], intrinsic(circt_mux2cell : UInt, xor(cond, UInt<1>(1)), ext.v, low)

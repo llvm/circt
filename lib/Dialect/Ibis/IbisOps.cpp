@@ -410,7 +410,8 @@ LogicalResult PathOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  auto path = cast<ArrayAttr>(attrs.get("path"));
+  Adaptor adaptor(operands, attrs, properties, regions);
+  auto path = adaptor.getPathAttr();
   if (path.empty())
     return failure();
 

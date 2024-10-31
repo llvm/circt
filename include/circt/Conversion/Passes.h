@@ -13,12 +13,14 @@
 #ifndef CIRCT_CONVERSION_PASSES_H
 #define CIRCT_CONVERSION_PASSES_H
 
+#include "circt/Conversion/AIGToComb.h"
 #include "circt/Conversion/AffineToLoopSchedule.h"
 #include "circt/Conversion/ArcToLLVM.h"
 #include "circt/Conversion/CFToHandshake.h"
 #include "circt/Conversion/CalyxNative.h"
 #include "circt/Conversion/CalyxToFSM.h"
 #include "circt/Conversion/CalyxToHW.h"
+#include "circt/Conversion/CombToAIG.h"
 #include "circt/Conversion/CombToArith.h"
 #include "circt/Conversion/CombToSMT.h"
 #include "circt/Conversion/ConvertToArcs.h"

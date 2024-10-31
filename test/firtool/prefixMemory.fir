@@ -54,24 +54,24 @@ circuit Foo : %[[
       write-latency => 1
       reader => readData_MPORT
       writer => MPORT
-    mem.readData_MPORT.addr is invalid
-    mem.readData_MPORT.clk is invalid
-    mem.readData_MPORT.en <= UInt<1>(0h0)
-    mem.MPORT.addr is invalid
-    mem.MPORT.clk is invalid
-    mem.MPORT.en <= UInt<1>(0h0)
-    mem.MPORT.data is invalid
-    mem.MPORT.mask is invalid
-    mem.readData_MPORT.addr <= readAddr
-    mem.readData_MPORT.clk <= clock
-    readData <= mem.readData_MPORT.data
+    invalidate mem.readData_MPORT.addr
+    invalidate mem.readData_MPORT.clk
+    connect mem.readData_MPORT.en, UInt<1>(0h0)
+    invalidate mem.MPORT.addr
+    invalidate mem.MPORT.clk
+    connect mem.MPORT.en, UInt<1>(0h0)
+    invalidate mem.MPORT.data
+    invalidate mem.MPORT.mask
+    connect mem.readData_MPORT.addr, readAddr
+    connect mem.readData_MPORT.clk, clock
+    connect readData, mem.readData_MPORT.data
     when writeEn :
-      mem.MPORT.addr <= writeAddr
-      mem.MPORT.clk <= clock
-      mem.MPORT.en <= UInt<1>(0h1)
-      mem.MPORT.mask <= UInt<1>(0h0)
-      mem.MPORT.data <= writeData
-      mem.MPORT.mask <= UInt<1>(0h1)
+      connect mem.MPORT.addr, writeAddr
+      connect mem.MPORT.clk, clock
+      connect mem.MPORT.en, UInt<1>(0h1)
+      connect mem.MPORT.mask, UInt<1>(0h0)
+      connect mem.MPORT.data, writeData
+      connect mem.MPORT.mask, UInt<1>(0h1)
 
   ; REPL-FIR: firrtl.memmodule private @prefix2_mem
   ; REPL-HW: hw.module.extern @prefix2_mem
@@ -100,24 +100,24 @@ circuit Foo : %[[
       write-latency => 1
       reader => readData_MPORT
       writer => MPORT
-    mem.readData_MPORT.addr is invalid
-    mem.readData_MPORT.clk is invalid
-    mem.readData_MPORT.en <= UInt<1>(0h0)
-    mem.MPORT.addr is invalid
-    mem.MPORT.clk is invalid
-    mem.MPORT.en <= UInt<1>(0h0)
-    mem.MPORT.data is invalid
-    mem.MPORT.mask is invalid
-    mem.readData_MPORT.addr <= readAddr
-    mem.readData_MPORT.clk <= clock
-    readData <= mem.readData_MPORT.data
+    invalidate mem.readData_MPORT.addr
+    invalidate mem.readData_MPORT.clk
+    connect mem.readData_MPORT.en, UInt<1>(0h0)
+    invalidate mem.MPORT.addr
+    invalidate mem.MPORT.clk
+    connect mem.MPORT.en, UInt<1>(0h0)
+    invalidate mem.MPORT.data
+    invalidate mem.MPORT.mask
+    connect mem.readData_MPORT.addr, readAddr
+    connect mem.readData_MPORT.clk, clock
+    connect readData, mem.readData_MPORT.data
     when writeEn :
-      mem.MPORT.addr <= writeAddr
-      mem.MPORT.clk <= clock
-      mem.MPORT.en <= UInt<1>(0h1)
-      mem.MPORT.mask <= UInt<1>(0h0)
-      mem.MPORT.data <= writeData
-      mem.MPORT.mask <= UInt<1>(0h1)
+      connect mem.MPORT.addr, writeAddr
+      connect mem.MPORT.clk, clock
+      connect mem.MPORT.en, UInt<1>(0h1)
+      connect mem.MPORT.mask, UInt<1>(0h0)
+      connect mem.MPORT.data, writeData
+      connect mem.MPORT.mask, UInt<1>(0h1)
 
   public module Foo :
     input clock : Clock
@@ -129,18 +129,18 @@ circuit Foo : %[[
     input writeData : UInt<32>
 
     inst bar of Bar
-    bar.clock <= clock
-    bar.reset <= reset
-    bar.readAddr <= readAddr
-    bar.writeEn <= writeEn
-    bar.writeAddr <= writeAddr
-    bar.writeData <= writeData
+    connect bar.clock, clock
+    connect bar.reset, reset
+    connect bar.readAddr, readAddr
+    connect bar.writeEn, writeEn
+    connect bar.writeAddr, writeAddr
+    connect bar.writeData, writeData
     inst baz of Baz
-    baz.clock <= clock
-    baz.reset <= reset
-    baz.readAddr <= readAddr
-    baz.writeEn <= writeEn
-    baz.writeAddr <= writeAddr
-    baz.writeData <= writeData
+    connect baz.clock, clock
+    connect baz.reset, reset
+    connect baz.readAddr, readAddr
+    connect baz.writeEn, writeEn
+    connect baz.writeAddr, writeAddr
+    connect baz.writeData, writeData
     node _readData_T = xor(bar.readData, baz.readData)
-    readData <= _readData_T
+    connect readData, _readData_T

@@ -19,10 +19,10 @@ def FormatStringType : SimTypeDef<"FormatString"> {
 
   let summary = "Format string type";
   let description = [{
-    A format string type represents either a single formatting token or the
-    concatenation of an arbitrary but finite number of tokens.
-    A formatting token is either a static string literal or the association of
-    a dynamic hardware value with a format specifier.
+    A format string type represents either a single formatting fragment or the
+    concatenation of an arbitrary but finite number of fragments.
+    A formatting fragment is either a static string literal or the association
+    of a dynamic hardware value with a format specifier.
   }];
 }
 

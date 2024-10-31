@@ -11,8 +11,8 @@ circuit Foo:
     wire resetWire1 : Reset
     wire resetWire2 : Reset
 
-    resetWire1 <= reset1
-    resetWire2 <= reset2
+    connect resetWire1, reset1
+    connect resetWire2, reset2
 
     connect hbr[0], intrinsic(circt_has_been_reset : UInt<1>, clock, resetWire1)
     connect hbr[1], intrinsic(circt_has_been_reset : UInt<1>, clock, resetWire2)

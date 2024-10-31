@@ -30,6 +30,4 @@ circuit Foo:
       FPGA => FPGATarget
       ASIC => ASICTarget
 
-    inst.clock <= clock
-
-
+    connect inst.clock, clock

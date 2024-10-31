@@ -24,7 +24,7 @@ using namespace circt;
 
 namespace circt {
 namespace verif {
-#define GEN_PASS_DEF_PREPAREFORFORMAL
+#define GEN_PASS_DEF_PREPAREFORFORMALPASS
 #include "circt/Dialect/Verif/Passes.h.inc"
 } // namespace verif
 } // namespace circt
@@ -51,7 +51,7 @@ struct WireOpConversionPattern : OpConversionPattern<hw::WireOp> {
 
 // Eagerly replace all wires with their inputs
 struct PrepareForFormalPass
-    : circt::verif::impl::PrepareForFormalBase<PrepareForFormalPass> {
+    : verif::impl::PrepareForFormalPassBase<PrepareForFormalPass> {
   void runOnOperation() override;
 };
 } // namespace
@@ -70,8 +70,4 @@ void PrepareForFormalPass::runOnOperation() {
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
     return signalPassFailure();
-}
-
-std::unique_ptr<mlir::Pass> circt::verif::createPrepareForFormalPass() {
-  return std::make_unique<PrepareForFormalPass>();
 }

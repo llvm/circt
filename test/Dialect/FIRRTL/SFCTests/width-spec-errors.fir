@@ -60,12 +60,11 @@ circuit Unit :
     input clock: Clock
     input reset: UInt<1>
     ; expected-error @+1 {{'firrtl.regreset' op is constrained to be wider than itself}}
-    reg r : UInt, clock with :
-      reset => (reset, UInt(3))
+    regreset r : UInt, clock, reset, UInt(3)
     ; expected-note @+1 {{constrained width W >= W+1 here:}}
     node T_7 = add(r, r)
     ; expected-note @+1 {{constrained width W >= W+1 here:}}
-    r <= T_7
+    connect r, T_7
 
 // -----
 
@@ -101,4 +100,4 @@ circuit Foo :
   module Bar :
     ; expected-error @+1 {{uninferred width: wire "a.c.e" is unconstrained}}
     wire a: { b : UInt<1>, c : { d : UInt<1>, e : UInt } }
-    a is invalid
+    invalidate a

@@ -139,15 +139,6 @@ MatchingConnectOp getSingleConnectUserOf(Value value);
 namespace impl {
 LogicalResult verifySameOperandsIntTypeKind(Operation *op);
 
-// Type inference adaptor for FIRRTL operations.
-LogicalResult inferReturnTypes(
-    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
-    mlir::RegionRange regions, SmallVectorImpl<Type> &results,
-    llvm::function_ref<FIRRTLType(ValueRange, ArrayRef<NamedAttribute>,
-                                  std::optional<Location>)>
-        callback);
-
 // Common type inference functions.
 FIRRTLType inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
                              std::optional<Location> loc);
@@ -158,17 +149,6 @@ FIRRTLType inferElementwiseResult(FIRRTLType lhs, FIRRTLType rhs,
 FIRRTLType inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
                                  std::optional<Location> loc);
 FIRRTLType inferReductionResult(FIRRTLType arg, std::optional<Location> loc);
-
-// Common parsed argument validation functions.
-LogicalResult validateBinaryOpArguments(ValueRange operands,
-                                        ArrayRef<NamedAttribute> attrs,
-                                        Location loc);
-LogicalResult validateUnaryOpArguments(ValueRange operands,
-                                       ArrayRef<NamedAttribute> attrs,
-                                       Location loc);
-LogicalResult validateOneOperandOneConst(ValueRange operands,
-                                         ArrayRef<NamedAttribute> attrs,
-                                         Location loc);
 } // namespace impl
 
 /// A binary operation where the operands have the same integer kind.

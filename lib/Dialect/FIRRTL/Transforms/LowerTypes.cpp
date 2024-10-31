@@ -321,7 +321,7 @@ struct AttrCache {
     sPortDirections = StringAttr::get(context, "portDirections");
     sPortNames = StringAttr::get(context, "portNames");
     sPortTypes = StringAttr::get(context, "portTypes");
-    sPortSyms = StringAttr::get(context, "portSyms");
+    sPortSymbols = StringAttr::get(context, "portSymbols");
     sPortLocations = StringAttr::get(context, "portLocations");
     sPortAnnotations = StringAttr::get(context, "portAnnotations");
     sEmpty = StringAttr::get(context, "");
@@ -330,7 +330,7 @@ struct AttrCache {
 
   Type i64ty;
   StringAttr nameAttr, nameKindAttr, sPortDirections, sPortNames, sPortTypes,
-      sPortSyms, sPortLocations, sPortAnnotations, sEmpty;
+      sPortSymbols, sPortLocations, sPortAnnotations, sEmpty;
 };
 
 // The visitors all return true if the operation should be deleted, false if
@@ -1083,7 +1083,7 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     // handled differently below.
     if (attr.getName() != "portDirections" && attr.getName() != "portNames" &&
         attr.getName() != "portTypes" && attr.getName() != "portAnnotations" &&
-        attr.getName() != "portSyms" && attr.getName() != "portLocations")
+        attr.getName() != "portSymbols" && attr.getName() != "portLocations")
       newModuleAttrs.push_back(attr);
 
   SmallVector<Direction> newArgDirections;
@@ -1124,6 +1124,7 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 
   // Update the module's attributes.
   extModule->setAttrs(newModuleAttrs);
+  FModuleLike::fixupPortSymsArray(newArgSyms, context);
   extModule.setPortSymbols(newArgSyms);
   if (internalPaths)
     extModule.setInternalPathsAttr(builder.getArrayAttr(newInternalPaths));
@@ -1172,7 +1173,7 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
     // handled differently below.
     if (attr.getName() != "portNames" && attr.getName() != "portDirections" &&
         attr.getName() != "portTypes" && attr.getName() != "portAnnotations" &&
-        attr.getName() != "portSyms" && attr.getName() != "portLocations")
+        attr.getName() != "portSymbols" && attr.getName() != "portLocations")
       newModuleAttrs.push_back(attr);
 
   SmallVector<Direction> newArgDirections;
@@ -1208,6 +1209,7 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
+  FModuleLike::fixupPortSymsArray(newArgSyms, context);
   module.setPortSymbols(newArgSyms);
   return false;
 }
@@ -1357,8 +1359,13 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
       // Take the first field, or else Cat the previous fields with this field.
       if (uptoBits == 0)
         srcLoweredVal = src;
-      else
-        srcLoweredVal = builder->create<CatPrimOp>(src, srcLoweredVal);
+      else {
+        if (type_isa<BundleType>(op.getInput().getType())) {
+          srcLoweredVal = builder->create<CatPrimOp>(srcLoweredVal, src);
+        } else {
+          srcLoweredVal = builder->create<CatPrimOp>(src, srcLoweredVal);
+        }
+      }
       // Record the total bits already accumulated.
       uptoBits += fieldBitwidth;
     }
@@ -1370,6 +1377,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
   if (type_isa<BundleType, FVectorType>(op.getResult().getType())) {
     // uptoBits is used to keep track of the bits that have been extracted.
     size_t uptoBits = 0;
+    auto aggregateBits = *getBitWidth(op.getResult().getType());
     auto clone = [&](const FlatBundleFieldEntry &field,
                      ArrayAttr attrs) -> Value {
       // All the fields must have valid bitwidth, a requirement for BitCastOp.
@@ -1381,8 +1389,15 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
 
       // Assign the field to the corresponding bits from the input.
       // Bitcast the field, incase its an aggregate type.
-      auto extractBits = builder->create<BitsPrimOp>(
-          srcLoweredVal, uptoBits + fieldBits - 1, uptoBits);
+      BitsPrimOp extractBits;
+      if (type_isa<BundleType>(op.getResult().getType())) {
+        extractBits = builder->create<BitsPrimOp>(
+            srcLoweredVal, aggregateBits - uptoBits - 1,
+            aggregateBits - uptoBits - fieldBits);
+      } else {
+        extractBits = builder->create<BitsPrimOp>(
+            srcLoweredVal, uptoBits + fieldBits - 1, uptoBits);
+      }
       uptoBits += fieldBits;
       return builder->create<BitCastOp>(field.type, extractBits);
     };

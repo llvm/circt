@@ -10,7 +10,7 @@ circuit regularConnect :
  public module regularConnect :
    output a: UInt<5>
    input b: UInt<3>
-   a <= b
+   connect a, b
 
 ; // -----
 
@@ -22,7 +22,7 @@ circuit truncatingIntegerConnect :
  public module truncatingIntegerConnect :
    output a: UInt<3>
    input b: UInt<5>
-   a <= b
+   connect a, b
 
 ; // -----
 
@@ -40,7 +40,7 @@ circuit regularBundleConnect :
  public module regularBundleConnect :
    output a: { a: UInt<5>, b: UInt<3> }
    input b: { a: UInt<3>, b: UInt<2> }
-   a <= b
+   connect a, b
 
 ; // -----
 
@@ -58,4 +58,4 @@ circuit truncatingBundleConnect :
  public module truncatingBundleConnect :
    output a: { a: UInt<5>, b: UInt<3> }
    input b: { a: UInt<6>, b: UInt<1> }
-   a <= b
+   connect a, b

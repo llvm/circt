@@ -46,21 +46,21 @@ circuit PortDelete : %[[
   module MyView_companion :
 
     wire _WIRE : UInt<1>
-    _WIRE <= UInt<1>(0h0)
+    connect _WIRE, UInt<1>(0h0)
 
   module DUT :
     output out : UInt<1>
 
     wire w : UInt<1>
-    w <= UInt<1>(0h1)
-    out <= w
+    connect w, UInt<1>(0h1)
+    connect out, w
     inst MyView_companion of MyView_companion
 
   public module PortDelete :
     output out : UInt<1>
 
     inst dut of DUT
-    out <= dut.out
+    connect out, dut.out
 
 ; Assert that the DUT has no ports in Verilog.  This ensures that even though
 ; wire "w" is part of a Grand Central View, it does not block optimizations.

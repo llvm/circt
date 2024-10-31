@@ -261,8 +261,8 @@ void LowerLayersPass::removeLayersFromPorts(FModuleLike moduleLike) {
   if (!changed)
     return;
 
-  moduleLike->setAttr(FModuleLike::getPortTypesAttrName(),
-                      ArrayAttr::get(moduleLike.getContext(), newTypeAttrs));
+  moduleLike.setPortTypesAttr(
+      ArrayAttr::get(moduleLike.getContext(), newTypeAttrs));
 
   if (auto moduleOp = dyn_cast<FModuleOp>(moduleLike.getOperation())) {
     for (auto arg : moduleOp.getBodyBlock()->getArguments())

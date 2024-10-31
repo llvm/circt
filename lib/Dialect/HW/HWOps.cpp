@@ -460,8 +460,12 @@ static LogicalResult checkAttributes(Operation *op, Attribute attr, Type type) {
     if (intAttr.getValue().getBitWidth() != intType.getWidth())
       return op->emitOpError("hw.constant attribute bitwidth "
                              "doesn't match return type");
+  } else if (auto typedAttr = dyn_cast<TypedAttr>(attr)) {
+    if (typedAttr.getType() != type)
+      return op->emitOpError("typed attr doesn't match the return type ")
+             << type;
   } else {
-    return op->emitOpError("unknown element type") << type;
+    return op->emitOpError("unknown element type ") << type;
   }
   return success();
 }
@@ -2776,10 +2780,10 @@ LogicalResult UnionExtractOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  Adaptor adaptor(operands, attrs, properties, regions);
   auto unionElements =
-      hw::type_cast<UnionType>((operands[0].getType())).getElements();
-  unsigned fieldIndex =
-      attrs.getAs<IntegerAttr>("fieldIndex").getValue().getZExtValue();
+      hw::type_cast<UnionType>((adaptor.getInput().getType())).getElements();
+  unsigned fieldIndex = adaptor.getFieldIndexAttr().getValue().getZExtValue();
   if (fieldIndex >= unionElements.size()) {
     if (loc)
       mlir::emitError(*loc, "field index " + Twine(fieldIndex) +

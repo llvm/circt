@@ -74,12 +74,14 @@ private:
   size_t dropNamesIf(size_t &namesChanged, size_t &namesDropped,
                      llvm::function_ref<ModAction(FNamableOp)> pred) {
     size_t changedNames = 0;
+    auto emptyNameAttr = StringAttr::get(&getContext(), "");
     auto droppableNameAttr =
         NameKindEnumAttr::get(&getContext(), NameKindEnum::DroppableName);
     getOperation()->walk([&](FNamableOp op) {
       switch (pred(op)) {
       case ModAction::Drop:
-        op.dropName();
+        op.setNameAttr(emptyNameAttr);
+        op.setNameKindAttr(droppableNameAttr);
         ++namesDropped;
         break;
       case ModAction::Demote:

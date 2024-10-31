@@ -195,6 +195,8 @@ std::unique_ptr<mlir::Pass> createLayerMergePass();
 
 std::unique_ptr<mlir::Pass> createLayerSinkPass();
 
+std::unique_ptr<mlir::Pass> createAdvancedLayerSinkPass();
+
 std::unique_ptr<mlir::Pass> createMaterializeDebugInfoPass();
 
 std::unique_ptr<mlir::Pass> createLintingPass();

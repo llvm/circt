@@ -24,7 +24,7 @@
 
 namespace circt {
 namespace verif {
-#define GEN_PASS_DEF_VERIFYCLOCKEDASSERTLIKE
+#define GEN_PASS_DEF_VERIFYCLOCKEDASSERTLIKEPASS
 #include "circt/Dialect/Verif/Passes.h.inc"
 } // namespace verif
 } // namespace circt
@@ -38,7 +38,7 @@ namespace {
 // Clocked assertlike ops are a simple form of assertions that only
 // contain one clock and one disable condition.
 struct VerifyClockedAssertLikePass
-    : circt::verif::impl::VerifyClockedAssertLikeBase<
+    : verif::impl::VerifyClockedAssertLikePassBase<
           VerifyClockedAssertLikePass> {
 private:
   // Used to perform a DFS search through the module to visit all operands
@@ -106,8 +106,4 @@ void VerifyClockedAssertLikePass::runOnOperation() {
               verif::ClockedCoverOp>([&](auto clockedOp) { verify(clockedOp); })
         .Default([&](auto) {});
   });
-}
-
-std::unique_ptr<mlir::Pass> circt::verif::createVerifyClockedAssertLikePass() {
-  return std::make_unique<VerifyClockedAssertLikePass>();
 }

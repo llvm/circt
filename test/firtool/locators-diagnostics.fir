@@ -24,11 +24,11 @@ circuit Error:
     wire y : { boop: { foo: { a: UInt<1>, b: UInt<2>}, bar: { a: UInt<1> }}} ; (no locator)
 
     ; invalidate all but .boop.foo.a
-    x.boop.bar is invalid
-    x.boop.foo.b is invalid
-    y.boop.bar is invalid
-    y.boop.foo.b is invalid
+    invalidate x.boop.bar
+    invalidate x.boop.foo.b
+    invalidate y.boop.bar
+    invalidate y.boop.foo.b
 
     ; Connects
-    xa <= x.boop.foo.a
-    ya <= y.boop.foo.a
+    connect xa, x.boop.foo.a
+    connect ya, y.boop.foo.a

@@ -24,4 +24,4 @@ circuit Foo:
   public module Foo:
     input in: UInt<4>
     output out: UInt<4>
-    out <= in
+    connect out, in

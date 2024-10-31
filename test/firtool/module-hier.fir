@@ -35,7 +35,7 @@ circuit Foo: %[[
 ]]
   module Baz:
     wire a: UInt<1>
-    a is invalid
+    invalidate a
   module Bar:
     inst baz of Baz
   public module Foo:

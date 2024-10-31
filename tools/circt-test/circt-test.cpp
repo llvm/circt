@@ -11,14 +11,18 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Conversion/ExportVerilog.h"
+#include "circt/Conversion/VerifToSV.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
+#include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Dialect/Verif/VerifPasses.h"
 #include "circt/Support/JSON.h"
 #include "circt/Support/Version.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -26,16 +30,19 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/Threading.h"
 #include "mlir/Parser/Parser.h"
+#include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/Path.h"
+#include "llvm/Support/Program.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/WithColor.h"
-
-#include <string>
 
 using namespace llvm;
 using namespace mlir;
@@ -50,74 +57,165 @@ namespace {
 /// The tool's command line options.
 struct Options {
   cl::OptionCategory cat{"circt-test Options"};
+
   cl::opt<std::string> inputFilename{cl::Positional, cl::desc("<input file>"),
                                      cl::init("-"), cl::cat(cat)};
+
   cl::opt<std::string> outputFilename{
       "o", cl::desc("Output filename (`-` for stdout)"),
       cl::value_desc("filename"), cl::init("-"), cl::cat(cat)};
+
+  cl::opt<bool> listTests{"l", cl::desc("List tests in the input and exit"),
+                          cl::init(false), cl::cat(cat)};
+
   cl::opt<bool> json{"json", cl::desc("Emit test list as JSON array"),
                      cl::init(false), cl::cat(cat)};
-  cl::opt<bool> includeIgnored{"include-ignored",
-                               cl::desc("Include ignored test in output"),
-                               cl::init(false), cl::cat(cat)};
+
+  cl::opt<bool> listIgnored{"list-ignored",
+                            cl::desc("List ignored tests"),
+                            cl::init(false), cl::cat(cat)};
+
+  cl::opt<std::string> resultDir{
+      "d", cl::desc("Result directory (default `.circt-test`)"),
+      cl::value_desc("dir"), cl::init(".circt-test"), cl::cat(cat)};
+
+  cl::opt<bool> verifyPasses{
+      "verify-each",
+      cl::desc("Run the verifier after each transformation pass"),
+      cl::init(true), cl::cat(cat)};
+
+  cl::opt<std::string> runner{
+      "r", cl::desc("Program to run individual tests"), cl::value_desc("bin"),
+      cl::init("circt-test-runner-sby.py"), cl::cat(cat)};
 };
 Options opts;
 
 } // namespace
 
 //===----------------------------------------------------------------------===//
+// Test Discovery
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// The various kinds of test that can be executed.
+enum class TestKind { Formal };
+
+/// A single discovered test.
+class Test {
+public:
+  /// The name of the test. This is also the name of the top-level module passed
+  /// to the formal or simulation tool to be run.
+  StringAttr name;
+  /// The kind of test, such as "formal" or "simulation".
+  TestKind kind;
+  /// An optional location indicating where this test was discovered. This can
+  /// be the location of an MLIR op, or a line in some other source file.
+  LocationAttr loc;
+  /// Whether or not the test should be ignored
+  bool ignore;
+  /// The user-defined attributes of this test.
+  DictionaryAttr attrs;
+};
+
+/// A collection of tests discovered in some MLIR input.
+class TestSuite {
+public:
+  /// The MLIR context that is used to intern attributes and where any MLIR
+  /// tests were discovered.
+  MLIRContext *context;
+  /// The tests discovered in the input.
+  std::vector<Test> tests;
+
+  bool listIgnored;
+
+  TestSuite(MLIRContext *context, bool listIgnored)
+      : context(context), listIgnored(listIgnored) {}
+  void discoverInModule(ModuleOp module);
+};
+} // namespace
+
+/// Convert a `TestKind` to a string representation.
+static StringRef toString(TestKind kind) {
+  switch (kind) {
+  case TestKind::Formal:
+    return "formal";
+  }
+  return "unknown";
+}
+
+/// Discover all tests in an MLIR module.
+void TestSuite::discoverInModule(ModuleOp module) {
+  module.walk([&](verif::FormalOp op) {
+    Test test;
+    test.name = op.getSymNameAttr();
+    test.kind = TestKind::Formal;
+    test.loc = op.getLoc();
+    if (auto boolAttr = op->getAttrOfType<BoolAttr>("ignore"))
+      test.ignore = boolAttr.getValue();
+    else
+      test.ignore = false;
+    test.attrs = op->getDiscardableAttrDictionary();
+    tests.push_back(std::move(test));
+  });
+}
+
+//===----------------------------------------------------------------------===//
 // Tool Implementation
 //===----------------------------------------------------------------------===//
 
-bool shouldIgnore(verif::FormalOp formalOp, Options &opts) {
-  if (opts.includeIgnored)
-    return false;
-  if (auto boolAttr = formalOp->getAttrOfType<BoolAttr>("ignore"))
-    return boolAttr.getValue();
-  return false;
+// Check if test should be included in output listing
+bool ignoreTestListing(Test &test, TestSuite &suite) {
+  return !suite.listIgnored && test.ignore;
 }
 
 /// List all the tests in a given module.
-static LogicalResult listTests(ModuleOp module, llvm::raw_ostream &output) {
+static LogicalResult listTests(TestSuite &suite) {
+  // Open the output file for writing.
+  std::string errorMessage;
+  auto output = openOutputFile(opts.outputFilename, &errorMessage);
+  if (!output)
+    return emitError(UnknownLoc::get(suite.context)) << errorMessage;
+
   // Handle JSON output.
   if (opts.json) {
-    json::OStream json(output, 2);
+    json::OStream json(output->os(), 2);
     json.arrayBegin();
-    auto result = module.walk([&](Operation *op) {
-      if (auto formalOp = dyn_cast<verif::FormalOp>(op)) {
-        if (shouldIgnore(formalOp, opts))
-          return WalkResult::advance();
-        json.objectBegin();
-        auto guard = make_scope_exit([&] { json.objectEnd(); });
-        json.attribute("name", formalOp.getSymName());
-        json.attribute("kind", "formal");
-        auto attrs = formalOp->getDiscardableAttrDictionary();
-        if (!attrs.empty()) {
-          json.attributeBegin("attrs");
-          auto guard = make_scope_exit([&] { json.attributeEnd(); });
-          if (failed(convertAttributeToJSON(json, attrs))) {
-            op->emitError() << "unsupported attributes: `" << attrs
-                            << "` cannot be converted to JSON";
-            return WalkResult::interrupt();
-          }
-        }
+    auto guard = make_scope_exit([&] { json.arrayEnd(); });
+    for (auto &test : suite.tests) {
+      if (ignoreTestListing(test, suite)) 
+        continue;
+      json.objectBegin();
+      auto guard = make_scope_exit([&] { json.objectEnd(); });
+      json.attribute("name", test.name.getValue());
+      json.attribute("kind", toString(test.kind));
+      if (!test.attrs.empty()) {
+        json.attributeBegin("attrs");
+        auto guard = make_scope_exit([&] { json.attributeEnd(); });
+        if (failed(convertAttributeToJSON(json, test.attrs)))
+          return mlir::emitError(test.loc)
+                 << "unsupported attributes: `" << test.attrs
+                 << "` cannot be converted to JSON";
       }
-      return WalkResult::advance();
-    });
-    json.arrayEnd();
-    return failure(result.wasInterrupted());
+    }
+    output->keep();
+    return success();
   }
 
   // Handle regular text output.
-  module.walk([&](Operation *op) {
-    if (auto formalOp = dyn_cast<verif::FormalOp>(op)) {
-      if (shouldIgnore(formalOp, opts))
-        return;
-      output << formalOp.getSymName() << "  formal"
-             << "  " << formalOp->getDiscardableAttrDictionary() << "\n";
-    }
-  });
+  for (auto &test : suite.tests) {
+    if (ignoreTestListing(test, suite))
+      continue;
+    output->os() << test.name.getValue() << "  " << toString(test.kind) << "  "
+                 << test.attrs << "\n";
+  }
+  output->keep();
   return success();
+}
+
+void reportIgnored(unsigned numIgnored) {
+  if (numIgnored > 0)
+    WithColor(llvm::errs(), raw_ostream::SAVEDCOLOR, true).get()
+        << ", " << numIgnored << " ignored";
 }
 
 /// Entry point for the circt-test tool. At this point an MLIRContext is
@@ -127,22 +225,133 @@ static LogicalResult execute(MLIRContext *context) {
   SourceMgr srcMgr;
   SourceMgrDiagnosticHandler handler(srcMgr, context);
 
-  // Open the output file for writing.
-  std::string errorMessage;
-  auto output = openOutputFile(opts.outputFilename, &errorMessage);
-  if (!output)
-    return emitError(UnknownLoc::get(context)) << errorMessage;
-
   // Parse the input file.
   auto module = parseSourceFile<ModuleOp>(opts.inputFilename, srcMgr, context);
   if (!module)
     return failure();
 
-  // List all tests in the input.
-  if (failed(listTests(*module, output->os())))
-    return failure();
+  // Discover all tests in the input.
+  TestSuite suite(context, opts.listIgnored);
+  suite.discoverInModule(*module);
+  if (suite.tests.empty()) {
+    llvm::errs() << "no tests discovered\n";
+    return success();
+  }
 
-  output->keep();
+  // List all tests in the input and exit if requested.
+  if (opts.listTests)
+    return listTests(suite);
+
+  // Create the output directory where we keep all the run data.
+  if (auto error = llvm::sys::fs::create_directory(opts.resultDir)) {
+    WithColor::error() << "cannot create result directory `" << opts.resultDir
+                       << "`: " << error.message() << "\n";
+    return failure();
+  }
+
+  // Open the Verilog file for writing.
+  SmallString<128> verilogPath(opts.resultDir);
+  llvm::sys::path::append(verilogPath, "design.sv");
+  std::string errorMessage;
+  auto verilogFile = openOutputFile(verilogPath, &errorMessage);
+  if (!verilogFile) {
+    WithColor::error() << errorMessage;
+    return failure();
+  }
+
+  // Generate Verilog output.
+  PassManager pm(context);
+  pm.enableVerifier(opts.verifyPasses);
+  pm.addPass(verif::createLowerFormalToHWPass());
+  pm.addNestedPass<hw::HWModuleOp>(createLowerVerifToSVPass());
+  pm.addNestedPass<hw::HWModuleOp>(sv::createHWLegalizeModulesPass());
+  pm.addNestedPass<hw::HWModuleOp>(sv::createPrettifyVerilogPass());
+  pm.addPass(createExportVerilogPass(verilogFile->os()));
+  if (failed(pm.run(*module)))
+    return failure();
+  verilogFile->keep();
+
+  // Find the runner binary in the search path. Otherwise assume it is a binary
+  // we can run as is.
+  auto findResult = llvm::sys::findProgramByName(opts.runner);
+  if (!findResult) {
+    WithColor::error() << "cannot find runner `" << opts.runner
+                       << "`: " << findResult.getError().message() << "\n";
+    return failure();
+  }
+  auto &runner = findResult.get();
+
+  // Run the tests.
+  std::atomic<unsigned> numPassed(0);
+  std::atomic<unsigned> numIgnored(0);
+  mlir::parallelForEach(context, suite.tests, [&](auto &test) {
+    if (test.ignore) {
+      ++numIgnored;
+      return;
+    }
+    // Create the directory in which we are going to run the test.
+    SmallString<128> testDir(opts.resultDir);
+    llvm::sys::path::append(testDir, test.name.getValue());
+    if (auto error = llvm::sys::fs::create_directory(testDir)) {
+      mlir::emitError(UnknownLoc::get(context))
+          << "cannot create test directory `" << testDir
+          << "`: " << error.message() << "\n";
+      return;
+    }
+
+    // Assemble a path for the test runner log file and truncate it.
+    SmallString<128> logPath(testDir);
+    llvm::sys::path::append(logPath, "run.log");
+    {
+      std::error_code ec;
+      raw_fd_ostream trunc(logPath, ec);
+    }
+
+    // Assemble the runner arguments.
+    SmallVector<StringRef> args;
+    args.push_back(runner);
+    args.push_back(verilogPath);
+    args.push_back("-t");
+    args.push_back(test.name.getValue());
+    args.push_back("-d");
+    args.push_back(testDir);
+
+    // Execute the test runner.
+    std::string errorMessage;
+    auto result =
+        llvm::sys::ExecuteAndWait(runner, args, /*Env=*/std::nullopt,
+                                  /*Redirects=*/{"", logPath, logPath},
+                                  /*SecondsToWait=*/0,
+                                  /*MemoryLimit=*/0, &errorMessage);
+    if (result < 0) {
+      mlir::emitError(UnknownLoc::get(context))
+          << "cannot execute runner: " << errorMessage;
+    } else if (result > 0) {
+      auto d = mlir::emitError(test.loc)
+               << "test " << test.name.getValue() << " failed";
+      d.attachNote() << "see `" << logPath << "`";
+    } else {
+      ++numPassed;
+    }
+  });
+
+  // Print statistics about how many tests passed and failed.
+  assert((numPassed + numIgnored) <= suite.tests.size());
+  unsigned numFailed = suite.tests.size() - numPassed - numIgnored;
+  if (numFailed > 0) {
+    WithColor(llvm::errs(), raw_ostream::SAVEDCOLOR, true).get()
+        << numFailed << " tests ";
+    WithColor(llvm::errs(), raw_ostream::RED, true).get() << "FAILED";
+    llvm::errs() << ", " << numPassed << " passed";
+    reportIgnored(numIgnored);
+    llvm::errs() << "\n";
+    return failure();
+  }
+  WithColor(llvm::errs(), raw_ostream::SAVEDCOLOR, true).get()
+      << numPassed << " tests ";
+  WithColor(llvm::errs(), raw_ostream::GREEN, true).get() << "passed";
+  reportIgnored(numIgnored);
+  llvm::errs() << "\n";
   return success();
 }
 

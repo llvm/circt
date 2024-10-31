@@ -19,13 +19,14 @@ func.func @add_mlir_impl(%arg0: i32, %arg1: i32, %arg2: !llvm.ptr) {
   llvm.store %0, %arg2 : i32, !llvm.ptr
   return
 }
+
 hw.module @arith(in %clock : i1, in %a : i32, in %b : i32, out c : i32, out d : i32) {
   %seq_clk = seq.to_clock %clock
-
   %0 = sim.func.dpi.call @add_mlir(%a, %b) clock %seq_clk : (i32, i32) -> i32
   %1 = sim.func.dpi.call @mul_shared(%a, %b) clock %seq_clk : (i32, i32) -> i32
   hw.output %0, %1 : i32, i32
 }
+
 func.func @main() {
   %c2_i32 = arith.constant 2 : i32
   %c3_i32 = arith.constant 3 : i32
@@ -34,18 +35,16 @@ func.func @main() {
   arc.sim.instantiate @arith as %arg0 {
     arc.sim.set_input %arg0, "a" = %c2_i32 : i32, !arc.sim.instance<@arith>
     arc.sim.set_input %arg0, "b" = %c3_i32 : i32, !arc.sim.instance<@arith>
-    arc.sim.set_input %arg0, "clock" = %one : i1, !arc.sim.instance<@arith>
 
-    arc.sim.step %arg0 : !arc.sim.instance<@arith>
     arc.sim.set_input %arg0, "clock" = %zero : i1, !arc.sim.instance<@arith>
+    arc.sim.step %arg0 : !arc.sim.instance<@arith>
     %0 = arc.sim.get_port %arg0, "c" : i32, !arc.sim.instance<@arith>
     %1 = arc.sim.get_port %arg0, "d" : i32, !arc.sim.instance<@arith>
-
     arc.sim.emit "c", %0 : i32
     arc.sim.emit "d", %1 : i32
 
-    arc.sim.step %arg0 : !arc.sim.instance<@arith>
     arc.sim.set_input %arg0, "clock" = %one : i1, !arc.sim.instance<@arith>
+    arc.sim.step %arg0 : !arc.sim.instance<@arith>
     %2 = arc.sim.get_port %arg0, "c" : i32, !arc.sim.instance<@arith>
     %3 = arc.sim.get_port %arg0, "d" : i32, !arc.sim.instance<@arith>
     arc.sim.emit "c", %2 : i32

@@ -761,9 +761,9 @@ class PortLikeOp<string mnemonic, list<Trait> traits = []> :
                                           mlir::OpaqueProperties properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results) {
-      results.push_back(PortRefType::get(context,
-        llvm::cast<TypeAttr>(attrs.get("type")).getValue(),
-        getPortDirection()));
+      Adaptor adaptor(operands, attrs, properties, regions);
+      results.push_back(PortRefType::get(context, adaptor.getType(),
+                        getPortDirection()));
       return success();
     }
 

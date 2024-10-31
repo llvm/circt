@@ -6,12 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This contains the SimDialect definition to be included in other files.
+// This contains the Sim dialect definition to be included in other files.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef CIRCT_DIALECT_SIM_SIMDIALECT
 #define CIRCT_DIALECT_SIM_SIMDIALECT
+
+include "mlir/IR/DialectBase.td"
 
 def SimDialect : Dialect {
   let name = "sim";

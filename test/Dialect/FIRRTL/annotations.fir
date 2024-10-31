@@ -75,7 +75,7 @@ circuit Top : %[[
 ]]
   public module Top :
     wire a: UInt<1>
-    a is invalid
+    invalidate a
 
 ; CHECK-LABEL: firrtl.circuit "Top"
 

@@ -8,11 +8,11 @@ FIRRTL version 4.0.0
 circuit Qux: %[[{
     "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
     "target":"~Qux|Qux"
-  }, 
+  },
   {
     "class": "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"
   }]]
-  public module Qux: 
+  public module Qux:
     input clock: Clock
     input rAddr: UInt<2>
     input rEn: UInt<1>
@@ -39,29 +39,29 @@ circuit Qux: %[[{
       read-under-write => undefined
 
     ; All of these are unified together
-    memory.r.clk <= clock
-    memory.r.en <= rEn
-    memory.r.addr <= rAddr
+    connect memory.r.clk, clock
+    connect memory.r.en, rEn
+    connect memory.r.addr, rAddr
     ; This is split
-    rData <= memory.r.data
+    connect rData, memory.r.data
 
     ; All of these are unified together
-    memory.w.clk <= clock
-    memory.w.en <= wEn
-    memory.w.addr <= wAddr
+    connect memory.w.clk, clock
+    connect memory.w.en, wEn
+    connect memory.w.addr, wAddr
     ; These two are split
-    memory.w.mask <= wMask
-    memory.w.data <= wData
+    connect memory.w.mask, wMask
+    connect memory.w.data, wData
 
     ; All of these are unified together
-    memory.rw.clk <= clock
-    memory.rw.en <= rwEn
-    memory.rw.addr <= rwAddr
-    memory.rw.wmode <= rwMode
+    connect memory.rw.clk, clock
+    connect memory.rw.en, rwEn
+    connect memory.rw.addr, rwAddr
+    connect memory.rw.wmode, rwMode
     ; All of these are split
-    memory.rw.wmask <= rwMask
-    memory.rw.wdata <= rwDataIn
-    rwDataOut <= memory.rw.rdata
+    connect memory.rw.wmask, rwMask
+    connect memory.rw.wdata, rwDataIn
+    connect rwDataOut, memory.rw.rdata
 
 
 

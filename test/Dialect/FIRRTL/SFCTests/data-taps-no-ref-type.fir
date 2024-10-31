@@ -24,11 +24,11 @@ circuit Foo: %[[
 ]]
   module Bar:
     wire a: UInt<1>
-    a is invalid
+    invalidate a
 
   module Baz:
     wire a: UInt<1>
-    a is invalid
+    invalidate a
 
   public module Foo:
 

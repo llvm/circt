@@ -35,6 +35,9 @@ struct HWConstantOpConversion : OpConversionPattern<ConstantOp> {
   LogicalResult
   matchAndRewrite(ConstantOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    if (adaptor.getValue().getBitWidth() < 1)
+      return rewriter.notifyMatchFailure(op.getLoc(),
+                                         "0-bit constants not supported");
     rewriter.replaceOpWithNewOp<smt::BVConstantOp>(op, adaptor.getValue());
     return success();
   }
