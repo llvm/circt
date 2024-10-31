@@ -341,12 +341,12 @@ class ArithBinaryFloatingPointLibraryOp<string mnemonic> : ArithBinaryLibraryOp<
 def AddFNOp : ArithBinaryFloatingPointLibraryOp<"addFN"> {
   let results = (outs I1:$clk, I1:$reset, I1:$go, I1:$control, I1:$subOp,
     AnyFloat:$left, AnyFloat:$right, AnySignlessInteger:$roundingMode, AnyFloat:$out,
-    AnySignlessInteger:$execptionalFlags, I1:$done);
+    AnySignlessInteger:$exceptionalFlags, I1:$done);
 
   let extraClassDefinition = [{
     SmallVector<StringRef> $cppClass::portNames() {
       return {clkPort, resetPort, goPort, "control", "subOp",
-              "left", "right", "roundingMode", "out", "execptionalFlags", donePort
+              "left", "right", "roundingMode", "out", "exceptionalFlags", donePort
       };
     }
 

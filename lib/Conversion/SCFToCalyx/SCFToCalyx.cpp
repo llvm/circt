@@ -443,9 +443,11 @@ private:
       auto opFN = cast<calyx::AddFNOp>(opPipe);
       hw::ConstantOp subOp;
       if (isa<arith::AddFOp>(op)) {
-        subOp = createConstant(loc, rewriter, getComponent(), 1, 0);
+        subOp = createConstant(loc, rewriter, getComponent(), /*width=*/1,
+                               /*subtract=*/0);
       } else {
-        subOp = createConstant(loc, rewriter, getComponent(), 1, 1);
+        subOp = createConstant(loc, rewriter, getComponent(), /*width=*/1,
+                               /*subtract=*/1);
       }
       rewriter.create<calyx::AssignOp>(loc, opFN.getSubOp(), subOp);
     }

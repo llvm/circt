@@ -284,14 +284,14 @@ module attributes {calyx.entrypoint = "main"} {
 // -----
 
 module attributes {calyx.entrypoint = "main"} {
-  // CHECKL: import "primitives/float/addFN.futil";
+  // CHECK: import "primitives/float/addFN.futil";
   calyx.component @main(%in0: f32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: f32, %done: i1 {done}) {
     // CHECK:           std_addFN_0 = std_addFN(8, 24, 32);
     %cst = calyx.constant {sym_name = "cst_0"} 4.200000e+00 : f32
     %true = hw.constant true
     %false = hw.constant false
     %addf_0_reg.in, %addf_0_reg.write_en, %addf_0_reg.clk, %addf_0_reg.reset, %addf_0_reg.out, %addf_0_reg.done = calyx.register @addf_0_reg : f32, i1, i1, i1, f32, i1
-    %std_addFN_0.clk, %std_addFN_0.reset, %std_addFN_0.go, %std_addFN_0.control, %std_addFN_0.subOp, %std_addFN_0.left, %std_addFN_0.right, %std_addFN_0.roundingMode, %std_addFN_0.out, %std_addFN_0.execptionalFlags, %std_addFN_0.done = calyx.std_addFN @std_addFN_0 : i1, i1, i1, i1, i1, f32, f32, i3, f32, i5, i1
+    %std_addFN_0.clk, %std_addFN_0.reset, %std_addFN_0.go, %std_addFN_0.control, %std_addFN_0.subOp, %std_addFN_0.left, %std_addFN_0.right, %std_addFN_0.roundingMode, %std_addFN_0.out, %std_addFN_0.exceptionalFlags, %std_addFN_0.done = calyx.std_addFN @std_addFN_0 : i1, i1, i1, i1, i1, f32, f32, i3, f32, i5, i1
     %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : f32, i1, i1, i1, f32, i1
     calyx.wires {
       calyx.assign %out0 = %ret_arg0_reg.out : f32
