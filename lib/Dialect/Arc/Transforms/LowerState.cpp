@@ -333,7 +333,7 @@ Value ModuleLowering::getAllocatedState(OpResult result) {
     alloc->setAttr(
         "name", builder.getStringAttr(
                     instOp.getInstanceName() + "/" +
-                    instOp.getResultName(result.getResultNumber()).getValue()));
+                    instOp.getOutputName(result.getResultNumber()).getValue()));
 
   // HACK: If the result comes from an op that has a "names" attribute, use that
   // as a name for the allocation. This should no longer be necessary once we

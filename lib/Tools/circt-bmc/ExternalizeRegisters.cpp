@@ -168,11 +168,10 @@ void ExternalizeRegistersPass::runOnOperation() {
           addedOutputNames[module.getSymNameAttr()].append(newOutputNames);
           initialValues[module.getSymNameAttr()].append(
               initialValues[instanceOp.getModuleNameAttr().getAttr()]);
-          SmallVector<Attribute> argNames(instanceOp.getArgNamesAttr().begin(),
-                                          instanceOp.getArgNamesAttr().end());
+          SmallVector<Attribute> argNames(
+              instanceOp.getInputNames().getValue());
           SmallVector<Attribute> resultNames(
-              instanceOp.getResultNamesAttr().begin(),
-              instanceOp.getResultNamesAttr().end());
+              instanceOp.getOutputNames().getValue());
 
           for (auto [input, name] : zip_equal(newInputs, newInputNames)) {
             instanceOp.getInputsMutable().append(

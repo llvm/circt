@@ -416,7 +416,93 @@ def HWEmittableModuleLike : OpInterface<"HWEmittableModuleLike", [HWModuleLike,
 def HWInstanceLike : OpInterface<"HWInstanceLike", [
     InstanceGraphInstanceOpInterface]> {
   let cppNamespace = "circt::hw";
-  let description = "Provide common  module information.";
+  let description = "Provide common instance information.";
+
+  // Note that the single-element getters and setters could be implemented as
+  // shared declarations using the interface methods that operate on the entire
+  // array or vice versa.  However, depending on how the names are stored in the
+  // instance operation, they can be implemented more efficiently by giving the
+  // operation the freedom to define all those methods (e.g., by avoiding
+  // construction of unnecessary intermedate array attributes).
+  let methods = [
+    InterfaceMethod<[{
+      Return the name of the specified input port or null if it cannot be
+      determined.
+    }], "::mlir::StringAttr", "getInputName", (ins "size_t":$idx),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return ::circt::hw::instance_like_impl::getName(
+        $_op.getArgNames(), idx);
+    }]>,
+
+    InterfaceMethod<[{
+      Return the name of the specified result or null if it cannot be
+      determined.
+    }], "::mlir::StringAttr", "getOutputName", (ins "size_t":$idx),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return ::circt::hw::instance_like_impl::getName(
+        $_op.getResultNames(), idx);
+    }]>,
+
+    InterfaceMethod<[{
+      Change the name of the specified input port.
+    }], "void", "setInputName",
+    (ins "size_t":$idx, "::mlir::StringAttr":$name),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      $_op.setArgNamesAttr(::circt::hw::instance_like_impl::updateName(
+        $_op.getArgNames(), idx, name));
+    }]>,
+
+    InterfaceMethod<[{
+      Change the name of the specified output port.
+    }], "void", "setOutputName",
+    (ins "size_t":$idx, "::mlir::StringAttr":$name),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      $_op.setResultNamesAttr(::circt::hw::instance_like_impl::updateName(
+        $_op.getResultNames(), idx, name));
+    }]>,
+
+    InterfaceMethod<[{
+      Return the names of all input ports. If the instance operation stores the
+      names in an ArrayAttr this can avoid attribute constructions.
+    }],
+    "::mlir::ArrayAttr", "getInputNames", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return $_op.getArgNamesAttr();
+    }]>,
+
+    InterfaceMethod<[{
+      Return the name of all ouput ports. If the instance operation stores the
+      names in an ArrayAttr this can avoid attribute constructions.
+    }],
+    "::mlir::ArrayAttr", "getOutputNames", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return $_op.getResultNamesAttr();
+    }]>,
+
+    InterfaceMethod<[{
+      Change the names of all input ports. If all names have to be changed, this
+      can avoid repeated intermediate attribute constructions.
+    }], "void", "setInputNames", (ins "::mlir::ArrayAttr":$names),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      $_op.setArgNamesAttr(names);
+    }]>,
+
+    InterfaceMethod<[{
+      Change the names of all output ports. If all names have to be changed, this
+      can avoid repeated intermediate attribute constructions.
+    }], "void", "setOutputNames", (ins "::mlir::ArrayAttr":$names),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      $_op.setResultNamesAttr(names);
+    }]>,
+  ];
 }
 
 def InnerRefNamespace : NativeOpTrait<"InnerRefNamespace">;
