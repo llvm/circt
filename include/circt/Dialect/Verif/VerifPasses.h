@@ -27,10 +27,7 @@ class FormalOp;
 namespace circt {
 namespace verif {
 
-std::unique_ptr<mlir::Pass> createVerifyClockedAssertLikePass();
-std::unique_ptr<mlir::Pass> createPrepareForFormalPass();
-std::unique_ptr<mlir::Pass> createLowerFormalToHW();
-
+#define GEN_PASS_DECL
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/Verif/Passes.h.inc"
 
