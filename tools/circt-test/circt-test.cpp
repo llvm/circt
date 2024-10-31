@@ -11,14 +11,18 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Conversion/ExportVerilog.h"
+#include "circt/Conversion/VerifToSV.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
+#include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Dialect/Verif/VerifPasses.h"
 #include "circt/Support/JSON.h"
 #include "circt/Support/Version.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -26,16 +30,19 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/Threading.h"
 #include "mlir/Parser/Parser.h"
+#include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/Path.h"
+#include "llvm/Support/Program.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/WithColor.h"
-
-#include <string>
 
 using namespace llvm;
 using namespace mlir;
@@ -63,6 +70,19 @@ struct Options {
 
   cl::opt<bool> json{"json", cl::desc("Emit test list as JSON array"),
                      cl::init(false), cl::cat(cat)};
+
+  cl::opt<std::string> resultDir{
+      "d", cl::desc("Result directory (default `.circt-test`)"),
+      cl::value_desc("dir"), cl::init(".circt-test"), cl::cat(cat)};
+
+  cl::opt<bool> verifyPasses{
+      "verify-each",
+      cl::desc("Run the verifier after each transformation pass"),
+      cl::init(true), cl::cat(cat)};
+
+  cl::opt<std::string> runner{
+      "r", cl::desc("Program to run individual tests"), cl::value_desc("bin"),
+      cl::init("circt-test-runner-sby.py"), cl::cat(cat)};
 };
 Options opts;
 
@@ -193,6 +213,108 @@ static LogicalResult execute(MLIRContext *context) {
   if (opts.listTests)
     return listTests(suite);
 
+  // Create the output directory where we keep all the run data.
+  if (auto error = llvm::sys::fs::create_directory(opts.resultDir)) {
+    WithColor::error() << "cannot create result directory `" << opts.resultDir
+                       << "`: " << error.message() << "\n";
+    return failure();
+  }
+
+  // Open the Verilog file for writing.
+  SmallString<128> verilogPath(opts.resultDir);
+  llvm::sys::path::append(verilogPath, "design.sv");
+  std::string errorMessage;
+  auto verilogFile = openOutputFile(verilogPath, &errorMessage);
+  if (!verilogFile) {
+    WithColor::error() << errorMessage;
+    return failure();
+  }
+
+  // Generate Verilog output.
+  PassManager pm(context);
+  pm.enableVerifier(opts.verifyPasses);
+  pm.addPass(verif::createLowerFormalToHWPass());
+  pm.addNestedPass<hw::HWModuleOp>(createLowerVerifToSVPass());
+  pm.addNestedPass<hw::HWModuleOp>(sv::createHWLegalizeModulesPass());
+  pm.addNestedPass<hw::HWModuleOp>(sv::createPrettifyVerilogPass());
+  pm.addPass(createExportVerilogPass(verilogFile->os()));
+  if (failed(pm.run(*module)))
+    return failure();
+  verilogFile->keep();
+
+  // Find the runner binary in the search path. Otherwise assume it is a binary
+  // we can run as is.
+  auto findResult = llvm::sys::findProgramByName(opts.runner);
+  if (!findResult) {
+    WithColor::error() << "cannot find runner `" << opts.runner
+                       << "`: " << findResult.getError().message() << "\n";
+    return failure();
+  }
+  auto &runner = findResult.get();
+
+  // Run the tests.
+  std::atomic<unsigned> numPassed(0);
+  mlir::parallelForEach(context, suite.tests, [&](auto &test) {
+    // Create the directory in which we are going to run the test.
+    SmallString<128> testDir(opts.resultDir);
+    llvm::sys::path::append(testDir, test.name.getValue());
+    if (auto error = llvm::sys::fs::create_directory(testDir)) {
+      mlir::emitError(UnknownLoc::get(context))
+          << "cannot create test directory `" << testDir
+          << "`: " << error.message() << "\n";
+      return;
+    }
+
+    // Assemble a path for the test runner log file and truncate it.
+    SmallString<128> logPath(testDir);
+    llvm::sys::path::append(logPath, "run.log");
+    {
+      std::error_code ec;
+      raw_fd_ostream trunc(logPath, ec);
+    }
+
+    // Assemble the runner arguments.
+    SmallVector<StringRef> args;
+    args.push_back(runner);
+    args.push_back(verilogPath);
+    args.push_back("-t");
+    args.push_back(test.name.getValue());
+    args.push_back("-d");
+    args.push_back(testDir);
+
+    // Execute the test runner.
+    std::string errorMessage;
+    auto result =
+        llvm::sys::ExecuteAndWait(runner, args, /*Env=*/std::nullopt,
+                                  /*Redirects=*/{"", logPath, logPath},
+                                  /*SecondsToWait=*/0,
+                                  /*MemoryLimit=*/0, &errorMessage);
+    if (result < 0) {
+      mlir::emitError(UnknownLoc::get(context))
+          << "cannot execute runner: " << errorMessage;
+    } else if (result > 0) {
+      auto d = mlir::emitError(test.loc)
+               << "test " << test.name.getValue() << " failed";
+      d.attachNote() << "see `" << logPath << "`";
+    } else {
+      ++numPassed;
+    }
+  });
+
+  // Print statistics about how many tests passed and failed.
+  assert(numPassed <= suite.tests.size());
+  unsigned numFailed = suite.tests.size() - numPassed;
+  if (numFailed > 0) {
+    WithColor(llvm::errs(), raw_ostream::SAVEDCOLOR, true).get()
+        << numFailed << " tests ";
+    WithColor(llvm::errs(), raw_ostream::RED, true).get() << "FAILED";
+    llvm::errs() << ", " << numPassed << " passed\n";
+    return failure();
+  }
+  WithColor(llvm::errs(), raw_ostream::SAVEDCOLOR, true).get()
+      << "all " << numPassed << " tests ";
+  WithColor(llvm::errs(), raw_ostream::GREEN, true).get() << "passed";
+  llvm::errs() << "\n";
   return success();
 }
 
