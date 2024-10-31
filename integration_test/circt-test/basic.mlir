@@ -1,7 +1,7 @@
 // RUN: circt-test %s -r circt-test-runner-sby.py | FileCheck %s
 // REQUIRES: sby
 
-// CHECK: all 6 tests passed
+// CHECK: 1 tests FAILED, 6 passed, 1 ignored
 
 hw.module @FullAdder(in %a: i1, in %b: i1, in %ci: i1, out s: i1, out co: i1) {
   %0 = comb.xor %a, %b : i1
@@ -112,4 +112,40 @@ verif.formal @ALUWorks {
   // Check the two match.
   %eq = comb.icmp eq %z0, %z1 : i4
   verif.assert %eq : i1
+}
+
+verif.formal @ALUIgnoreFailure attributes {ignore = true} {
+  %a = verif.symbolic_value : i4
+  %b = verif.symbolic_value : i4
+  %sub = verif.symbolic_value : i1
+
+  // Custom ALU implementation.
+  %z0 = hw.instance "dut" @ALU(a: %a: i4, b: %b: i4, sub: %sub: i1) -> (z: i4)
+
+  // Reference add/sub function.
+  %ref_add = comb.add %a, %b : i4
+  %ref_sub = comb.sub %a, %b : i4
+  %z1 = comb.mux %sub, %ref_sub, %ref_add : i4
+
+  // Check the two don't match (failure will be ignored).
+  %ne = comb.icmp ne %z0, %z1 : i4
+  verif.assert %ne : i1
+}
+
+verif.formal @ALUFailure {
+  %a = verif.symbolic_value : i4
+  %b = verif.symbolic_value : i4
+  %sub = verif.symbolic_value : i1
+
+  // Custom ALU implementation.
+  %z0 = hw.instance "dut" @ALU(a: %a: i4, b: %b: i4, sub: %sub: i1) -> (z: i4)
+
+  // Reference add/sub function.
+  %ref_add = comb.add %a, %b : i4
+  %ref_sub = comb.sub %a, %b : i4
+  %z1 = comb.mux %sub, %ref_sub, %ref_add : i4
+
+  // Check the two don't match (should fail).
+  %ne = comb.icmp ne %z0, %z1 : i4
+  verif.assert %ne : i1
 }

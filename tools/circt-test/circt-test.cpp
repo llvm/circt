@@ -71,6 +71,9 @@ struct Options {
   cl::opt<bool> json{"json", cl::desc("Emit test list as JSON array"),
                      cl::init(false), cl::cat(cat)};
 
+  cl::opt<bool> listIgnored{"list-ignored", cl::desc("List ignored tests"),
+                            cl::init(false), cl::cat(cat)};
+
   cl::opt<std::string> resultDir{
       "d", cl::desc("Result directory (default `.circt-test`)"),
       cl::value_desc("dir"), cl::init(".circt-test"), cl::cat(cat)};
@@ -107,6 +110,8 @@ public:
   /// An optional location indicating where this test was discovered. This can
   /// be the location of an MLIR op, or a line in some other source file.
   LocationAttr loc;
+  /// Whether or not the test should be ignored
+  bool ignore;
   /// The user-defined attributes of this test.
   DictionaryAttr attrs;
 };
@@ -120,7 +125,10 @@ public:
   /// The tests discovered in the input.
   std::vector<Test> tests;
 
-  TestSuite(MLIRContext *context) : context(context) {}
+  bool listIgnored;
+
+  TestSuite(MLIRContext *context, bool listIgnored)
+      : context(context), listIgnored(listIgnored) {}
   void discoverInModule(ModuleOp module);
 };
 } // namespace
@@ -141,6 +149,10 @@ void TestSuite::discoverInModule(ModuleOp module) {
     test.name = op.getSymNameAttr();
     test.kind = TestKind::Formal;
     test.loc = op.getLoc();
+    if (auto boolAttr = op->getAttrOfType<BoolAttr>("ignore"))
+      test.ignore = boolAttr.getValue();
+    else
+      test.ignore = false;
     test.attrs = op->getDiscardableAttrDictionary();
     tests.push_back(std::move(test));
   });
@@ -149,6 +161,11 @@ void TestSuite::discoverInModule(ModuleOp module) {
 //===----------------------------------------------------------------------===//
 // Tool Implementation
 //===----------------------------------------------------------------------===//
+
+// Check if test should be included in output listing
+bool ignoreTestListing(Test &test, TestSuite &suite) {
+  return !suite.listIgnored && test.ignore;
+}
 
 /// List all the tests in a given module.
 static LogicalResult listTests(TestSuite &suite) {
@@ -164,6 +181,8 @@ static LogicalResult listTests(TestSuite &suite) {
     json.arrayBegin();
     auto guard = make_scope_exit([&] { json.arrayEnd(); });
     for (auto &test : suite.tests) {
+      if (ignoreTestListing(test, suite))
+        continue;
       json.objectBegin();
       auto guard = make_scope_exit([&] { json.objectEnd(); });
       json.attribute("name", test.name.getValue());
@@ -182,11 +201,20 @@ static LogicalResult listTests(TestSuite &suite) {
   }
 
   // Handle regular text output.
-  for (auto &test : suite.tests)
+  for (auto &test : suite.tests) {
+    if (ignoreTestListing(test, suite))
+      continue;
     output->os() << test.name.getValue() << "  " << toString(test.kind) << "  "
                  << test.attrs << "\n";
+  }
   output->keep();
   return success();
+}
+
+void reportIgnored(unsigned numIgnored) {
+  if (numIgnored > 0)
+    WithColor(llvm::errs(), raw_ostream::SAVEDCOLOR, true).get()
+        << ", " << numIgnored << " ignored";
 }
 
 /// Entry point for the circt-test tool. At this point an MLIRContext is
@@ -202,7 +230,7 @@ static LogicalResult execute(MLIRContext *context) {
     return failure();
 
   // Discover all tests in the input.
-  TestSuite suite(context);
+  TestSuite suite(context, opts.listIgnored);
   suite.discoverInModule(*module);
   if (suite.tests.empty()) {
     llvm::errs() << "no tests discovered\n";
@@ -254,7 +282,12 @@ static LogicalResult execute(MLIRContext *context) {
 
   // Run the tests.
   std::atomic<unsigned> numPassed(0);
+  std::atomic<unsigned> numIgnored(0);
   mlir::parallelForEach(context, suite.tests, [&](auto &test) {
+    if (test.ignore) {
+      ++numIgnored;
+      return;
+    }
     // Create the directory in which we are going to run the test.
     SmallString<128> testDir(opts.resultDir);
     llvm::sys::path::append(testDir, test.name.getValue());
@@ -302,18 +335,21 @@ static LogicalResult execute(MLIRContext *context) {
   });
 
   // Print statistics about how many tests passed and failed.
-  assert(numPassed <= suite.tests.size());
-  unsigned numFailed = suite.tests.size() - numPassed;
+  assert((numPassed + numIgnored) <= suite.tests.size());
+  unsigned numFailed = suite.tests.size() - numPassed - numIgnored;
   if (numFailed > 0) {
     WithColor(llvm::errs(), raw_ostream::SAVEDCOLOR, true).get()
         << numFailed << " tests ";
     WithColor(llvm::errs(), raw_ostream::RED, true).get() << "FAILED";
-    llvm::errs() << ", " << numPassed << " passed\n";
+    llvm::errs() << ", " << numPassed << " passed";
+    reportIgnored(numIgnored);
+    llvm::errs() << "\n";
     return failure();
   }
   WithColor(llvm::errs(), raw_ostream::SAVEDCOLOR, true).get()
-      << "all " << numPassed << " tests ";
+      << numPassed << " tests ";
   WithColor(llvm::errs(), raw_ostream::GREEN, true).get() << "passed";
+  reportIgnored(numIgnored);
   llvm::errs() << "\n";
   return success();
 }
