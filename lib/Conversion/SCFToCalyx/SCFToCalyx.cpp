@@ -1595,8 +1595,13 @@ private:
             rewriter.create<calyx::SeqOp>(ifOp.getThenRegion().getLoc());
         auto *thenSeqOpBlock = thenSeqOp.getBodyBlock();
 
-        rewriter.setInsertionPointToEnd(thenSeqOpBlock);
+        auto *thenBlock = &ifOp.getThenRegion().front();
+        LogicalResult res = buildCFGControl(path, rewriter, thenSeqOpBlock,
+                                            /*preBlock=*/block, thenBlock);
+        if (res.failed())
+          return res;
 
+        rewriter.setInsertionPointToEnd(thenSeqOpBlock);
         calyx::GroupOp thenGroup =
             getState<ComponentLoweringState>().getThenGroup(ifOp);
         rewriter.create<calyx::EnableOp>(thenGroup.getLoc(),
@@ -1609,8 +1614,13 @@ private:
               rewriter.create<calyx::SeqOp>(ifOp.getElseRegion().getLoc());
           auto *elseSeqOpBlock = elseSeqOp.getBodyBlock();
 
-          rewriter.setInsertionPointToEnd(elseSeqOpBlock);
+          auto *elseBlock = &ifOp.getElseRegion().front();
+          res = buildCFGControl(path, rewriter, elseSeqOpBlock,
+                                /*preBlock=*/block, elseBlock);
+          if (res.failed())
+            return res;
 
+          rewriter.setInsertionPointToEnd(elseSeqOpBlock);
           calyx::GroupOp elseGroup =
               getState<ComponentLoweringState>().getElseGroup(ifOp);
           rewriter.create<calyx::EnableOp>(elseGroup.getLoc(),
