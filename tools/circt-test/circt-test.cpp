@@ -71,8 +71,7 @@ struct Options {
   cl::opt<bool> json{"json", cl::desc("Emit test list as JSON array"),
                      cl::init(false), cl::cat(cat)};
 
-  cl::opt<bool> listIgnored{"list-ignored",
-                            cl::desc("List ignored tests"),
+  cl::opt<bool> listIgnored{"list-ignored", cl::desc("List ignored tests"),
                             cl::init(false), cl::cat(cat)};
 
   cl::opt<std::string> resultDir{
@@ -182,7 +181,7 @@ static LogicalResult listTests(TestSuite &suite) {
     json.arrayBegin();
     auto guard = make_scope_exit([&] { json.arrayEnd(); });
     for (auto &test : suite.tests) {
-      if (ignoreTestListing(test, suite)) 
+      if (ignoreTestListing(test, suite))
         continue;
       json.objectBegin();
       auto guard = make_scope_exit([&] { json.objectEnd(); });
