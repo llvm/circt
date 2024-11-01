@@ -355,28 +355,15 @@ LogicalResult ImportDriver::preprocessVerilog(llvm::raw_ostream &os) {
 // Entry Points
 //===----------------------------------------------------------------------===//
 
-/// Execute a callback and report any thrown exceptions as "internal slang
-/// error" MLIR diagnostics.
-static LogicalResult
-catchExceptions(llvm::function_ref<LogicalResult()> callback) {
-  try {
-    return callback();
-  } catch (const std::exception &e) {
-    return emitError(UnknownLoc(), "internal slang error: ") << e.what();
-  }
-}
-
 /// Parse the specified Verilog inputs into the specified MLIR context.
 LogicalResult circt::importVerilog(SourceMgr &sourceMgr,
                                    MLIRContext *mlirContext, TimingScope &ts,
                                    ModuleOp module,
                                    const ImportVerilogOptions *options) {
-  return catchExceptions([&] {
-    ImportDriver importDriver(mlirContext, ts, options);
-    if (failed(importDriver.prepareDriver(sourceMgr)))
-      return failure();
-    return importDriver.importVerilog(module);
-  });
+  ImportDriver importDriver(mlirContext, ts, options);
+  if (failed(importDriver.prepareDriver(sourceMgr)))
+    return failure();
+  return importDriver.importVerilog(module);
 }
 
 /// Run the files in a source manager through Slang's Verilog preprocessor and
@@ -385,12 +372,10 @@ LogicalResult circt::preprocessVerilog(SourceMgr &sourceMgr,
                                        MLIRContext *mlirContext,
                                        TimingScope &ts, llvm::raw_ostream &os,
                                        const ImportVerilogOptions *options) {
-  return catchExceptions([&] {
-    ImportDriver importDriver(mlirContext, ts, options);
-    if (failed(importDriver.prepareDriver(sourceMgr)))
-      return failure();
-    return importDriver.preprocessVerilog(os);
-  });
+  ImportDriver importDriver(mlirContext, ts, options);
+  if (failed(importDriver.prepareDriver(sourceMgr)))
+    return failure();
+  return importDriver.preprocessVerilog(os);
 }
 
 /// Entry point as an MLIR translation.
