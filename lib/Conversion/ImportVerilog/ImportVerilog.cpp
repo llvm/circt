@@ -91,11 +91,10 @@ public:
       mlirDiag << " [-W" << optionName << "]";
 
     // Write out macro expansions, if we have any, in reverse order.
-    for (auto it = diag.expansionLocs.rbegin(); it != diag.expansionLocs.rend();
-         it++) {
+    for (auto loc : std::views::reverse(diag.expansionLocs)) {
       auto &note = mlirDiag.attachNote(
-          convertLocation(sourceManager->getFullyOriginalLoc(*it)));
-      auto macroName = sourceManager->getMacroName(*it);
+          convertLocation(sourceManager->getFullyOriginalLoc(loc)));
+      auto macroName = sourceManager->getMacroName(loc);
       if (macroName.empty())
         note << "expanded from here";
       else
