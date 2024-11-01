@@ -3015,11 +3015,11 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
                                            op.getNameAttr(), innerSym);
 
   // Pass along the start and end random initialization bits for this register.
-  if (auto randomRegister = op->getAttr("firrtl.random_init_register"))
+  if (auto randomRegister = op->getDiscardableAttr("firrtl.random_init_register"))
     reg->setAttr("firrtl.random_init_register", randomRegister);
-  if (auto randomStart = op->getAttr("firrtl.random_init_start"))
+  if (auto randomStart = op->getDiscardableAttr("firrtl.random_init_start"))
     reg->setAttr("firrtl.random_init_start", randomStart);
-  if (auto randomEnd = op->getAttr("firrtl.random_init_end"))
+  if (auto randomEnd = op->getDiscardableAttr("firrtl.random_init_end"))
     reg->setAttr("firrtl.random_init_end", randomEnd);
 
   // Move SV attributes.
@@ -3056,11 +3056,11 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
                                     resetSignal, resetValue, innerSym, isAsync);
 
   // Pass along the start and end random initialization bits for this register.
-  if (auto randomRegister = op->getAttr("firrtl.random_init_register"))
+  if (auto randomRegister = op->getDiscardableAttr("firrtl.random_init_register"))
     reg->setAttr("firrtl.random_init_register", randomRegister);
-  if (auto randomStart = op->getAttr("firrtl.random_init_start"))
+  if (auto randomStart = op->getDiscardableAttr("firrtl.random_init_start"))
     reg->setAttr("firrtl.random_init_start", randomStart);
-  if (auto randomEnd = op->getAttr("firrtl.random_init_end"))
+  if (auto randomEnd = op->getDiscardableAttr("firrtl.random_init_end"))
     reg->setAttr("firrtl.random_init_end", randomEnd);
 
   // Move SV attributes.
@@ -3296,7 +3296,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
                                              innerSym.getSymName());
     // If the lowered op already had output file information, then use that.
     // Otherwise, generate some default bind information.
-    if (auto outputFile = oldInstance->getAttr("output_file"))
+    if (auto outputFile = oldInstance->getDiscardableAttr("output_file"))
       bindOp->setAttr("output_file", outputFile);
     // Add the bind to the circuit state.  This will be moved outside of the
     // encapsulating module after all modules have been processed in parallel.

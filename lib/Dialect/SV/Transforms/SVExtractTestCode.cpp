@@ -545,7 +545,7 @@ static bool isAssertOp(hw::HWSymbolCache &symCache, Operation *op) {
   // phase and are not instances that could possibly have extract flags on them.
   if (auto inst = dyn_cast<hw::InstanceOp>(op))
     if (auto *mod = symCache.getDefinition(inst.getModuleNameAttr()))
-      if (mod->getAttr("firrtl.extract.assert.extra"))
+      if (mod->getDiscardableAttr("firrtl.extract.assert.extra"))
         return true;
 
   // If the format of assert is "ifElseFatal", PrintOp is lowered into
@@ -570,7 +570,7 @@ static bool isCoverOp(hw::HWSymbolCache &symCache, Operation *op) {
   // phase and are not instances that could possibly have extract flags on them.
   if (auto inst = dyn_cast<hw::InstanceOp>(op))
     if (auto *mod = symCache.getDefinition(inst.getModuleNameAttr()))
-      if (mod->getAttr("firrtl.extract.cover.extra"))
+      if (mod->getDiscardableAttr("firrtl.extract.cover.extra"))
         return true;
   return isa<CoverOp, CoverConcurrentOp, verif::CoverOp, verif::ClockedCoverOp>(
       op);
@@ -581,7 +581,7 @@ static bool isAssumeOp(hw::HWSymbolCache &symCache, Operation *op) {
   // phase and are not instances that could possibly have extract flags on them.
   if (auto inst = dyn_cast<hw::InstanceOp>(op))
     if (auto *mod = symCache.getDefinition(inst.getModuleNameAttr()))
-      if (mod->getAttr("firrtl.extract.assume.extra"))
+      if (mod->getDiscardableAttr("firrtl.extract.assume.extra"))
         return true;
 
   return isa<AssumeOp, AssumeConcurrentOp, verif::AssumeOp,
@@ -787,8 +787,8 @@ void SVExtractTestCodeImplPass::runOnOperation() {
         continue;
 
       // In the module is in test harness, we don't have to extract from it.
-      if (rtlmod->hasAttr("firrtl.extract.do_not_extract")) {
-        rtlmod->removeAttr("firrtl.extract.do_not_extract");
+      if (rtlmod->getDiscardableAttr("firrtl.extract.do_not_extract")) {
+        rtlmod->removeDiscardableAttr("firrtl.extract.do_not_extract");
         continue;
       }
 
