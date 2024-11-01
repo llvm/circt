@@ -33,7 +33,7 @@ def InstructionOpInterface : OpInterface<"InstructionOpInterface"> {
       "void", "printAssembly",
       (ins "llvm::raw_ostream &":$stream,
            "llvm::function_ref<void(mlir::Value)>":$print), [{}], [{
-        stream << $_op->getName().getStringRef() << " ";
+        stream << $_op->getName().stripDialect() << " ";
         llvm::interleaveComma($_op->getOperands(), stream, [&](Value val){
           print(val);
         });
