@@ -29,7 +29,9 @@
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
-#include "llvm/Support/LogicalResult.h"
+#include "llvm/Support/raw_os_ostream.h"
+#include <filesystem>
+#include <fstream>
 
 #include <variant>
 
@@ -46,8 +48,6 @@ using namespace mlir::func;
 namespace circt {
 class ComponentLoweringStateInterface;
 namespace scftocalyx {
-
-using json = nlohmann::ordered_json;
 
 //===----------------------------------------------------------------------===//
 // Utility types
@@ -307,6 +307,22 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
       return opBuiltSuccessfully ? WalkResult::advance()
                                  : WalkResult::interrupt();
     });
+
+    if (writeJson) {
+      if (auto fileLoc = dyn_cast<mlir::FileLineColLoc>(funcOp->getLoc())) {
+        std::filesystem::path path(fileLoc.getFilename().str());
+        auto outFileName = path.parent_path().append("data.json");
+        std::ofstream outFile(outFileName);
+
+        if (outFile.is_open()) {
+          llvm::raw_os_ostream llvmOut(outFile);
+          llvm::json::OStream JOS(llvmOut, 2);
+          JOS.value(getState<ComponentLoweringState>().getExtMemData());
+          outFile.close();
+        } else
+          llvm::errs() << "Unable to open file for writing\n";
+      }
+    }
 
     return success(opBuiltSuccessfully);
   }
@@ -938,6 +954,29 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   return success();
 }
 
+void insertNestedArrayValue(llvm::json::Array &array,
+                            const std::vector<int> &indices, size_t index,
+                            llvm::json::Value value) {
+  if (index == indices.size() - 1) {
+    // ensure the array is big enough
+    while (array.size() <= static_cast<size_t>(indices[index])) {
+      array.emplace_back(nullptr);
+    }
+    array[indices[index]] = std::move(value);
+    return;
+  }
+  // ensure the array is big enough
+  while (array.size() <= static_cast<size_t>(indices[index])) {
+    array.emplace_back(llvm::json::Array{});
+  }
+  llvm::json::Value &val = array[indices[index]];
+  if (!val.getAsArray()) {
+    val = llvm::json::Array{};
+  }
+  insertNestedArrayValue(*val.getAsArray(), indices, index + 1,
+                         std::move(value));
+}
+
 template <typename TAllocOp>
 static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
                                   PatternRewriter &rewriter, TAllocOp allocOp) {
@@ -989,7 +1028,7 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
     return indices;
   };
 
-  json result = json::array();
+  llvm::json::Array result;
   if (isa<memref::GetGlobalOp>(allocOp)) {
     auto getGlobalOp = cast<memref::GetGlobalOp>(allocOp);
     auto *symbolTableOp =
@@ -1013,17 +1052,11 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   // Put the flattened values in the multi-dimensional structure
   for (size_t i = 0; i < flattenedVals.size(); ++i) {
     std::vector<int> indices = getIndices(i);
-    json *nested = &result;
-    for (size_t j = 0; j < indices.size() - 1; ++j) {
-      while (nested->size() <= static_cast<json::size_type>(indices[j])) {
-        nested->push_back(json::array());
-      }
-      nested = &(*nested)[indices[j]];
-    }
-    if (isFloat)
-      nested->push_back(flattenedVals[i]);
-    else
-      nested->push_back(static_cast<int64_t>(flattenedVals[i]));
+    llvm::json::Value value =
+        isFloat ? llvm::json::Value(flattenedVals[i])
+                : llvm::json::Value(static_cast<int64_t>(flattenedVals[i]));
+
+    insertNestedArrayValue(result, indices, 0, std::move(value));
   }
 
   componentState.setDataField(memoryOp.getName(), result);
