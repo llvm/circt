@@ -723,3 +723,40 @@ module {
   }
 }
 
+// -----
+
+module {
+// CHECK-LABEL:   calyx.component @main(
+// CHECK-SAME:                          %[[VAL_0:.*]]: i1 {clk},
+// CHECK-SAME:                          %[[VAL_1:.*]]: i1 {reset},
+// CHECK-SAME:                          %[[VAL_2:.*]]: i1 {go}) -> (
+// CHECK-SAME:                          %[[VAL_3:.*]]: i1 {done}) {
+// CHECK:           %[[VAL_4:.*]] = hw.constant true
+// CHECK:           %[[VAL_5:.*]] = hw.constant 1 : i32
+// CHECK:           %[[VAL_6:.*]] = calyx.constant {sym_name = "cst_0"} 1.200000e+00 : f32
+// CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = calyx.std_slice @std_slice_0 : i32, i3
+// CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]], %[[VAL_11:.*]], %[[VAL_12:.*]], %[[VAL_13:.*]], %[[VAL_14:.*]], %[[VAL_15:.*]], %[[VAL_16:.*]] = calyx.seq_mem @mem_0 <[5] x 32> [3] {external = true} : i3, i1, i1, i1, i1, f32, f32, i1
+// CHECK:           calyx.wires {
+// CHECK:             calyx.group @bb0_0 {
+// CHECK:               calyx.assign %[[VAL_7]] = %[[VAL_5]] : i32
+// CHECK:               calyx.assign %[[VAL_9]] = %[[VAL_8]] : i3
+// CHECK:               calyx.assign %[[VAL_14]] = %[[VAL_6]] : f32
+// CHECK:               calyx.assign %[[VAL_13]] = %[[VAL_4]] : i1
+// CHECK:               calyx.assign %[[VAL_12]] = %[[VAL_4]] : i1
+// CHECK:               calyx.group_done %[[VAL_16]] : i1
+// CHECK:             }
+// CHECK:           }
+// CHECK:           calyx.control {
+// CHECK:             calyx.seq {
+// CHECK:               calyx.enable @bb0_0
+// CHECK:             }
+// CHECK:           }
+// CHECK:         } {toplevel}
+  func.func @main() {
+    %c1 = arith.constant 1 : index
+    %0 = memref.alloc() : memref<5xf32>
+    %1 = arith.constant 1.2 : f32
+    memref.store %1, %0[%c1] : memref<5xf32>
+    return
+  }
+}

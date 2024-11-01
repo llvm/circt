@@ -570,10 +570,17 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     // for sequential memories will cause a read to take at least 2 cycles,
     // but it will usually be better because combinational reads on memories
     // can significantly decrease the maximum achievable frequency.
-    auto reg = createRegister(
-        loadOp.getLoc(), rewriter, getComponent(),
-        loadOp.getMemRefType().getElementTypeBitWidth(),
-        getState<ComponentLoweringState>().getUniqueName("load"));
+    calyx::RegisterOp reg;
+    if (isa<IntegerType>(loadOp.getMemRefType()))
+      reg = createRegister(
+          loadOp.getLoc(), rewriter, getComponent(),
+          loadOp.getMemRefType().getElementTypeBitWidth(),
+          getState<ComponentLoweringState>().getUniqueName("load"));
+    else
+      reg = createRegister(
+          loadOp.getLoc(), rewriter, getComponent(),
+          loadOp.getMemRefType().getElementType(),
+          getState<ComponentLoweringState>().getUniqueName("load"));
     rewriter.setInsertionPointToEnd(group.getBodyBlock());
     rewriter.create<calyx::AssignOp>(loadOp.getLoc(), reg.getIn(),
                                      memoryInterface.readData());
@@ -717,9 +724,15 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
     sizes.push_back(1);
     addrSizes.push_back(1);
   }
-  auto memoryOp = rewriter.create<calyx::SeqMemoryOp>(
-      allocOp.getLoc(), componentState.getUniqueName("mem"),
-      memtype.getElementType().getIntOrFloatBitWidth(), sizes, addrSizes);
+  calyx::SeqMemoryOp memoryOp;
+  if (isa<IntegerType>(memtype.getElementType()))
+    memoryOp = rewriter.create<calyx::SeqMemoryOp>(
+        allocOp.getLoc(), componentState.getUniqueName("mem"),
+        memtype.getElementType().getIntOrFloatBitWidth(), sizes, addrSizes);
+  else
+    memoryOp = rewriter.create<calyx::SeqMemoryOp>(
+        allocOp.getLoc(), componentState.getUniqueName("mem"),
+        memtype.getElementType(), sizes, addrSizes);
   // Externalize memories by default. This makes it easier for the native
   // compiler to provide initialized memories.
   memoryOp->setAttr("external",
