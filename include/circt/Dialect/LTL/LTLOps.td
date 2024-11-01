@@ -39,6 +39,7 @@ def AndOp : AssocLTLOp<"and"> {
     If any of the `$inputs` is of type `!ltl.property`, the result of the op is
     an `!ltl.property`. Otherwise it is an `!ltl.sequence`.
   }];
+  let hasCanonicalizeMethod = 1;
 }
 
 def OrOp : AssocLTLOp<"or"> {
@@ -47,6 +48,7 @@ def OrOp : AssocLTLOp<"or"> {
     If any of the `$inputs` is of type `!ltl.property`, the result of the op is
     an `!ltl.property`. Otherwise it is an `!ltl.sequence`.
   }];
+  let hasCanonicalizeMethod = 1;
 }
 
 def IntersectOp : AssocLTLOp<"intersect"> {
@@ -56,6 +58,7 @@ def IntersectOp : AssocLTLOp<"intersect"> {
     and have the same start and end times. This differs from `ltl.and` which doesn't 
     consider the timings of each operand, only their results. 
   }];
+  let hasCanonicalizeMethod = 1;
 }
 
 //===----------------------------------------------------------------------===//

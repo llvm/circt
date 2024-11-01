@@ -33,9 +33,12 @@ static LogicalResult inferAndLikeReturnTypes(MLIRContext *context,
         return isa<PropertyType>(operand.getType());
       })) {
     results.push_back(PropertyType::get(context));
-  } else {
-
+  } else if (llvm::any_of(operands, [](auto operand) {
+               return isa<SequenceType>(operand.getType());
+             })) {
     results.push_back(SequenceType::get(context));
+  } else {
+    results.push_back(IntegerType::get(context, 1));
   }
   return success();
 }
