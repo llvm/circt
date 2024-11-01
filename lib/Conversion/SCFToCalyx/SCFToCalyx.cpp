@@ -2014,24 +2014,34 @@ private:
 
   /// Creates a new new top-level function based on `baseName`.
   FuncOp createNewTopLevelFn(ModuleOp moduleOp, std::string &baseName) {
-    std::string newName = baseName;
-    unsigned counter = 0;
-    while (SymbolTable::lookupSymbolIn(moduleOp, newName)) {
-      newName = llvm::join_items("_", baseName, std::to_string(++counter));
+    std::string newName = "main";
+
+    if (auto *existingMainOp = SymbolTable::lookupSymbolIn(moduleOp, newName)) {
+      if (auto existingMainFunc = dyn_cast<FuncOp>(existingMainOp)) {
+
+        unsigned counter = 0;
+        std::string newOldName = baseName;
+        while (SymbolTable::lookupSymbolIn(moduleOp, newOldName))
+          newOldName = baseName + "_" + std::to_string(++counter);
+
+        existingMainFunc.setName(newOldName);
+        if (baseName == "main")
+          baseName = newOldName;
+      } else {
+        moduleOp.emitError() << "Symbol 'main' exists but is not a function";
+        return nullptr;
+      }
     }
 
+    // Create the new "main" function
     OpBuilder builder(moduleOp.getContext());
     builder.setInsertionPointToStart(moduleOp.getBody());
 
     FunctionType funcType = builder.getFunctionType({}, {});
 
     if (auto newFunc =
-            builder.create<FuncOp>(moduleOp.getLoc(), newName, funcType)) {
-      baseName = newName;
+            builder.create<FuncOp>(moduleOp.getLoc(), newName, funcType))
       return newFunc;
-    }
-
-    moduleOp.emitError("Cannot create new top-level function.");
 
     return nullptr;
   }
@@ -2086,6 +2096,7 @@ private:
     // corresponding operations in the new top-level.
     builder.setInsertionPointToEnd(callerEntryBlock);
     for (auto *op : opsToModify) {
+      // TODO: copy attributes as well
       Value newOpRes;
       if (auto allocaOp = dyn_cast<memref::AllocaOp>(op)) {
         newOpRes = builder.create<memref::AllocaOp>(callee.getLoc(),
@@ -2162,19 +2173,21 @@ private:
                  hasMemrefArguments(funcOp);
         });
 
-    std::string oldName = topLevelFunction;
     if (hasMemrefArgsInTopLevel) {
       auto newTopLevelFunc = createNewTopLevelFn(moduleOp, topLevelFunction);
+      if (!newTopLevelFunc)
+        return failure();
 
       OpBuilder builder(moduleOp.getContext());
       Operation *oldTopLevelFuncOp =
-          SymbolTable::lookupSymbolIn(moduleOp, oldName);
+          SymbolTable::lookupSymbolIn(moduleOp, topLevelFunction);
       if (auto oldTopLevelFunc = dyn_cast<FuncOp>(oldTopLevelFuncOp))
         insertCallFromNewTopLevel(builder, newTopLevelFunc, oldTopLevelFunc);
       else {
         moduleOp.emitOpError("Original top-level function not found!");
         return failure();
       }
+      topLevelFunction = "main";
     }
 
     return success();
