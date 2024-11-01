@@ -259,6 +259,9 @@ void EmitRTGAssembly::parseUnsupportedInstructionsFile(
 // circt-translate registration
 //===----------------------------------------------------------------------===//
 
+// MASSIVE HACK
+void (*extraRTGDialects)(mlir::DialectRegistry&) = nullptr;
+
 void EmitRTGAssembly::registerEmitRTGAssemblyTranslation() {
   static llvm::cl::opt<std::string> unsupportedInstructionsFile(
       "emit-assembly-binary-instr-file",
@@ -286,5 +289,7 @@ void EmitRTGAssembly::registerEmitRTGAssemblyTranslation() {
       [](mlir::DialectRegistry &registry) {
         registry.insert<rtgtest::RTGTestDialect, rtg::RTGDialect,
                         mlir::arith::ArithDialect>();
+        if (extraRTGDialects)
+          extraRTGDialects(registry);
       });
 }
