@@ -647,8 +647,8 @@ inline FVInt operator-(uint64_t a, const FVInt &b) {
 
 inline FVInt operator-(const APInt &a, const FVInt &b) { return FVInt(a) - b; }
 
-inline bool operator==(uint64_t a, const FVInt &b) { return b == a; }
-inline bool operator!=(uint64_t a, const FVInt &b) { return b != a; }
+inline bool operator==(uint64_t a, const FVInt &b) { return b.operator==(a); }
+inline bool operator!=(uint64_t a, const FVInt &b) { return b.operator!=(a); }
 
 inline raw_ostream &operator<<(raw_ostream &os, const FVInt &value) {
   value.print(os);
