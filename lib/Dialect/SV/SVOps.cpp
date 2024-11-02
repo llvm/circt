@@ -1456,14 +1456,18 @@ void InterfaceInstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 LogicalResult InterfaceInstanceOp::verify() {
   if (getName().empty())
     return emitOpError("requires non-empty name");
+  return success();
+}
 
+LogicalResult
+InterfaceInstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto *symtable = SymbolTable::getNearestSymbolTable(*this);
   if (!symtable)
     return emitError("sv.interface.instance must exist within a region "
                      "which has a symbol table.");
   auto ifaceTy = getType();
-  auto referencedOp =
-      SymbolTable::lookupSymbolIn(symtable, ifaceTy.getInterface());
+  auto *referencedOp =
+      symbolTable.lookupSymbolIn(symtable, ifaceTy.getInterface());
   if (!referencedOp)
     return emitError("Symbol not found: ") << ifaceTy.getInterface() << ".";
   if (!isa<InterfaceOp>(referencedOp))
@@ -1474,14 +1478,16 @@ LogicalResult InterfaceInstanceOp::verify() {
 
 /// Ensure that the symbol being instantiated exists and is an
 /// InterfaceModportOp.
-LogicalResult GetModportOp::verify() {
+LogicalResult
+GetModportOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto *symtable = SymbolTable::getNearestSymbolTable(*this);
   if (!symtable)
     return emitError("sv.interface.instance must exist within a region "
                      "which has a symbol table.");
+
   auto ifaceTy = getType();
-  auto referencedOp =
-      SymbolTable::lookupSymbolIn(symtable, ifaceTy.getModport());
+  auto *referencedOp =
+      symbolTable.lookupSymbolIn(symtable, ifaceTy.getModport());
   if (!referencedOp)
     return emitError("Symbol not found: ") << ifaceTy.getModport() << ".";
   if (!isa<InterfaceModportOp>(referencedOp))
