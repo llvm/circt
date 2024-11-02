@@ -78,6 +78,15 @@ LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
     return success();
   };
 
+  // Check for ports
+  if (auto mod = dyn_cast<PortList>(op)) {
+    for (auto [i, port] : llvm::enumerate(mod.getPortList())) {
+      if (auto symAttr = port.getSym())
+        if (failed(walkSyms(symAttr, InnerSymTarget(i, mod))))
+          return failure();
+    }
+  }
+
   // Walk the operation and add InnerSymbolTarget's to the table.
   return success(
       !op->walk<mlir::WalkOrder::PreOrder>([&](Operation *curOp) -> WalkResult {
@@ -86,14 +95,6 @@ LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
                if (failed(walkSyms(symAttr, InnerSymTarget(symOp))))
                  return WalkResult::interrupt();
 
-           // Check for ports
-           if (auto mod = dyn_cast<PortList>(curOp)) {
-             for (auto [i, port] : llvm::enumerate(mod.getPortList())) {
-               if (auto symAttr = port.getSym())
-                 if (failed(walkSyms(symAttr, InnerSymTarget(i, curOp))))
-                   return WalkResult::interrupt();
-             }
-           }
            return WalkResult::advance();
          }).wasInterrupted());
 }
