@@ -478,11 +478,11 @@ static bool isLayerSetCompatibleWith(const LayerSet &src, const LayerSet &dst,
 void CircuitOp::build(OpBuilder &builder, OperationState &result,
                       StringAttr name, ArrayAttr annotations) {
   // Add an attribute for the name.
-  result.addAttribute(builder.getStringAttr("name"), name);
+  result.getOrAddProperties<Properties>().setName(name);
 
   if (!annotations)
     annotations = builder.getArrayAttr({});
-  result.addAttribute("annotations", annotations);
+  result.getOrAddProperties<Properties>().setAnnotations(annotations);
 
   // Create a region and a block for the body.
   Region *bodyRegion = result.addRegion();
@@ -975,83 +975,81 @@ void FMemModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   ::insertPorts(cast<FModuleLike>((Operation *)*this), ports);
 }
 
-static void buildModuleLike(OpBuilder &builder, OperationState &result,
-                            StringAttr name, ArrayRef<PortInfo> ports,
-                            ArrayAttr annotations, ArrayAttr layers,
-                            bool withAnnotations, bool withLayers) {
+template <typename OpTy>
+void buildModuleLike(OpBuilder &builder, OperationState &result,
+                     StringAttr name, ArrayRef<PortInfo> ports) {
   // Add an attribute for the name.
-  result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
+  auto &properties = result.getOrAddProperties<typename OpTy::Properties>();
+  properties.setSymName(name);
 
   // Record the names of the arguments if present.
   SmallVector<Direction, 4> portDirections;
   SmallVector<Attribute, 4> portNames;
   SmallVector<Attribute, 4> portTypes;
-  SmallVector<Attribute, 4> portAnnotations;
   SmallVector<Attribute, 4> portSyms;
   SmallVector<Attribute, 4> portLocs;
   for (const auto &port : ports) {
     portDirections.push_back(port.direction);
     portNames.push_back(port.name);
     portTypes.push_back(TypeAttr::get(port.type));
-    portAnnotations.push_back(port.annotations.getArrayAttr());
     portSyms.push_back(port.sym);
     portLocs.push_back(port.loc);
   }
 
-  // The lack of *any* port annotations is represented by an empty
-  // `portAnnotations` array as a shorthand.
-  if (llvm::all_of(portAnnotations, [](Attribute attr) {
-        return cast<ArrayAttr>(attr).empty();
-      }))
-    portAnnotations.clear();
-
   FModuleLike::fixupPortSymsArray(portSyms, builder.getContext());
+
   // Both attributes are added, even if the module has no ports.
-  result.addAttribute(
-      "portDirections",
+  properties.setPortDirections(
       direction::packAttribute(builder.getContext(), portDirections));
-  result.addAttribute("portNames", builder.getArrayAttr(portNames));
-  result.addAttribute("portTypes", builder.getArrayAttr(portTypes));
-  result.addAttribute("portSymbols", builder.getArrayAttr(portSyms));
-  result.addAttribute("portLocations", builder.getArrayAttr(portLocs));
-
-  if (withAnnotations) {
-    if (!annotations)
-      annotations = builder.getArrayAttr({});
-    result.addAttribute("annotations", annotations);
-    result.addAttribute("portAnnotations",
-                        builder.getArrayAttr(portAnnotations));
-  }
-
-  if (withLayers) {
-    if (!layers)
-      layers = builder.getArrayAttr({});
-    result.addAttribute("layers", layers);
-  }
+  properties.setPortNames(builder.getArrayAttr(portNames));
+  properties.setPortTypes(builder.getArrayAttr(portTypes));
+  properties.setPortSymbols(builder.getArrayAttr(portSyms));
+  properties.setPortLocations(builder.getArrayAttr(portLocs));
 
   result.addRegion();
 }
 
+template <typename OpTy>
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<PortInfo> ports,
                         ArrayAttr annotations, ArrayAttr layers) {
-  buildModuleLike(builder, result, name, ports, annotations, layers,
-                  /*withAnnotations=*/true, /*withLayers=*/true);
+  buildModuleLike<OpTy>(builder, result, name, ports);
+  auto &properties = result.getOrAddProperties<typename OpTy::Properties>();
+  // Annotations.
+  if (!annotations)
+    annotations = builder.getArrayAttr({});
+  properties.setAnnotations(annotations);
+
+  // Port annotations. lack of *any* port annotations is represented by an empty
+  // `portAnnotations` array as a shorthand.
+  SmallVector<Attribute, 4> portAnnotations;
+  for (const auto &port : ports)
+    portAnnotations.push_back(port.annotations.getArrayAttr());
+  if (llvm::all_of(portAnnotations, [](Attribute attr) {
+        return cast<ArrayAttr>(attr).empty();
+      }))
+    portAnnotations.clear();
+  properties.setPortAnnotations(builder.getArrayAttr(portAnnotations));
+
+  // Layers.
+  if (!layers)
+    layers = builder.getArrayAttr({});
+  properties.setLayers(layers);
 }
 
+template <typename OpTy>
 static void buildClass(OpBuilder &builder, OperationState &result,
                        StringAttr name, ArrayRef<PortInfo> ports) {
-  return buildModuleLike(builder, result, name, ports, {}, {},
-                         /*withAnnotations=*/false,
-                         /*withLayers=*/false);
+  return buildModuleLike<OpTy>(builder, result, name, ports);
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
                       StringAttr name, ConventionAttr convention,
                       ArrayRef<PortInfo> ports, ArrayAttr annotations,
                       ArrayAttr layers) {
-  buildModule(builder, result, name, ports, annotations, layers);
-  result.addAttribute("convention", convention);
+  buildModule<FModuleOp>(builder, result, name, ports, annotations, layers);
+  auto &properties = result.getOrAddProperties<Properties>();
+  properties.setConvention(convention);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -1068,15 +1066,16 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
                          ArrayRef<PortInfo> ports, StringRef defnameAttr,
                          ArrayAttr annotations, ArrayAttr parameters,
                          ArrayAttr internalPaths, ArrayAttr layers) {
-  buildModule(builder, result, name, ports, annotations, layers);
-  result.addAttribute("convention", convention);
+  buildModule<FExtModuleOp>(builder, result, name, ports, annotations, layers);
+  auto &properties = result.getOrAddProperties<Properties>();
+  properties.setConvention(convention);
   if (!defnameAttr.empty())
-    result.addAttribute("defname", builder.getStringAttr(defnameAttr));
+    properties.setDefname(builder.getStringAttr(defnameAttr));
   if (!parameters)
     parameters = builder.getArrayAttr({});
-  result.addAttribute(getParametersAttrName(result.name), parameters);
+  properties.setParameters(parameters);
   if (internalPaths && !internalPaths.empty())
-    result.addAttribute(getInternalPathsAttrName(result.name), internalPaths);
+    properties.setInternalPaths(internalPaths);
 }
 
 void FIntModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -1084,13 +1083,14 @@ void FIntModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringRef intrinsicNameStr, ArrayAttr annotations,
                          ArrayAttr parameters, ArrayAttr internalPaths,
                          ArrayAttr layers) {
-  buildModule(builder, result, name, ports, annotations, layers);
-  result.addAttribute("intrinsic", builder.getStringAttr(intrinsicNameStr));
+  buildModule<FIntModuleOp>(builder, result, name, ports, annotations, layers);
+  auto &properties = result.getOrAddProperties<Properties>();
+  properties.setIntrinsic(builder.getStringAttr(intrinsicNameStr));
   if (!parameters)
     parameters = builder.getArrayAttr({});
-  result.addAttribute(getParametersAttrName(result.name), parameters);
+  properties.setParameters(parameters);
   if (internalPaths && !internalPaths.empty())
-    result.addAttribute(getInternalPathsAttrName(result.name), internalPaths);
+    properties.setInternalPaths(internalPaths);
 }
 
 void FMemModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -1101,20 +1101,20 @@ void FMemModuleOp::build(OpBuilder &builder, OperationState &result,
                          uint32_t writeLatency, uint64_t depth,
                          ArrayAttr annotations, ArrayAttr layers) {
   auto *context = builder.getContext();
-  buildModule(builder, result, name, ports, annotations, layers);
+  buildModule<FMemModuleOp>(builder, result, name, ports, annotations, layers);
   auto ui32Type = IntegerType::get(context, 32, IntegerType::Unsigned);
   auto ui64Type = IntegerType::get(context, 64, IntegerType::Unsigned);
-  result.addAttribute("numReadPorts", IntegerAttr::get(ui32Type, numReadPorts));
-  result.addAttribute("numWritePorts",
-                      IntegerAttr::get(ui32Type, numWritePorts));
-  result.addAttribute("numReadWritePorts",
-                      IntegerAttr::get(ui32Type, numReadWritePorts));
-  result.addAttribute("dataWidth", IntegerAttr::get(ui32Type, dataWidth));
-  result.addAttribute("maskBits", IntegerAttr::get(ui32Type, maskBits));
-  result.addAttribute("readLatency", IntegerAttr::get(ui32Type, readLatency));
-  result.addAttribute("writeLatency", IntegerAttr::get(ui32Type, writeLatency));
-  result.addAttribute("depth", IntegerAttr::get(ui64Type, depth));
-  result.addAttribute("extraPorts", ArrayAttr::get(context, {}));
+  auto &properties = result.getOrAddProperties<Properties>();
+  properties.setNumReadPorts(IntegerAttr::get(ui32Type, numReadPorts));
+  properties.setNumWritePorts(IntegerAttr::get(ui32Type, numWritePorts));
+  properties.setNumReadWritePorts(
+      IntegerAttr::get(ui32Type, numReadWritePorts));
+  properties.setDataWidth(IntegerAttr::get(ui32Type, dataWidth));
+  properties.setMaskBits(IntegerAttr::get(ui32Type, maskBits));
+  properties.setReadLatency(IntegerAttr::get(ui32Type, readLatency));
+  properties.setWriteLatency(IntegerAttr::get(ui32Type, writeLatency));
+  properties.setDepth(IntegerAttr::get(ui64Type, depth));
+  properties.setExtraPorts(ArrayAttr::get(context, {}));
 }
 
 /// Print a list of module ports in the following form:
@@ -1434,26 +1434,40 @@ static ParseResult parseParameterList(OpAsmParser &parser,
   return success();
 }
 
+template <typename Properties, typename = void>
+struct HasParameters : std::false_type {};
+
+template <typename Properties>
+struct HasParameters<
+    Properties, std::void_t<decltype(std::declval<Properties>().parameters)>>
+    : std::true_type {};
+
+template <typename OpTy>
 static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
                                       OperationState &result,
                                       bool hasSSAIdentifiers) {
   auto *context = result.getContext();
   auto &builder = parser.getBuilder();
+  using Properties = typename OpTy::Properties;
+  auto &properties = result.getOrAddProperties<Properties>();
 
+  // TODO: this should be using properties.
   // Parse the visibility attribute.
   (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
 
   // Parse the name as a symbol.
   StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, ::mlir::SymbolTable::getSymbolAttrName(),
-                             result.attributes))
+  if (parser.parseSymbolName(nameAttr))
     return failure();
+  properties.setSymName(nameAttr);
 
   // Parse optional parameters.
-  SmallVector<Attribute, 4> parameters;
-  if (parseOptionalParameters(parser, parameters))
-    return failure();
-  result.addAttribute("parameters", builder.getArrayAttr(parameters));
+  if constexpr (HasParameters<Properties>::value) {
+    SmallVector<Attribute, 4> parameters;
+    if (parseOptionalParameters(parser, parameters))
+      return failure();
+    properties.setParameters(builder.getArrayAttr(parameters));
+  }
 
   // Parse the module ports.
   SmallVector<OpAsmParser::Argument> entryArgs;
@@ -1478,46 +1492,33 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   // for external modules.
 
   // Add port directions.
-  if (!result.attributes.get("portDirections"))
-    result.addAttribute("portDirections",
-                        direction::packAttribute(context, portDirections));
+  properties.setPortDirections(
+      direction::packAttribute(context, portDirections));
 
   // Add port names.
-  if (!result.attributes.get("portNames"))
-    result.addAttribute("portNames", builder.getArrayAttr(portNames));
+  properties.setPortNames(builder.getArrayAttr(portNames));
 
   // Add the port types.
-  if (!result.attributes.get("portTypes"))
-    result.addAttribute("portTypes", ArrayAttr::get(context, portTypes));
+  properties.setPortTypes(ArrayAttr::get(context, portTypes));
 
   // Add the port annotations.
-  if (!result.attributes.get("portAnnotations")) {
-    // If there are no portAnnotations, don't add the attribute.
-    if (llvm::any_of(portAnnotations, [&](Attribute anno) {
-          return !cast<ArrayAttr>(anno).empty();
-        }))
-      result.addAttribute("portAnnotations",
-                          ArrayAttr::get(context, portAnnotations));
-  }
+  // If there are no portAnnotations, don't add the attribute.
+  if (llvm::any_of(portAnnotations, [&](Attribute anno) {
+        return !cast<ArrayAttr>(anno).empty();
+      }))
+    properties.setPortAnnotations(ArrayAttr::get(context, portAnnotations));
+  else
+    properties.setPortAnnotations(builder.getArrayAttr({}));
 
   // Add port symbols.
-  if (!result.attributes.get("portSymbols")) {
-    FModuleLike::fixupPortSymsArray(portSyms, builder.getContext());
-    result.addAttribute("portSymbols", builder.getArrayAttr(portSyms));
-  }
+  FModuleLike::fixupPortSymsArray(portSyms, builder.getContext());
+  properties.setPortSymbols(builder.getArrayAttr(portSyms));
 
   // Add port locations.
-  if (!result.attributes.get("portLocations"))
-    result.addAttribute("portLocations", ArrayAttr::get(context, portLocs));
+  properties.setPortLocations(ArrayAttr::get(context, portLocs));
 
   // The annotations attribute is always present, but not printed when empty.
-  if (!result.attributes.get("annotations"))
-    result.addAttribute("annotations", builder.getArrayAttr({}));
-
-  // The portAnnotations attribute is always present, but not printed when
-  // empty.
-  if (!result.attributes.get("portAnnotations"))
-    result.addAttribute("portAnnotations", builder.getArrayAttr({}));
+  properties.setAnnotations(builder.getArrayAttr({}));
 
   // Parse the optional function body.
   auto *body = result.addRegion();
@@ -1532,33 +1533,34 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
 }
 
 ParseResult FModuleOp::parse(OpAsmParser &parser, OperationState &result) {
-  if (parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/true))
+  if (parseFModuleLikeOp<FModuleOp>(parser, result,
+                                    /*hasSSAIdentifiers=*/true))
     return failure();
-  if (!result.attributes.get("convention"))
-    result.addAttribute(
-        "convention",
-        ConventionAttr::get(result.getContext(), Convention::Internal));
-  if (!result.attributes.get("layers"))
-    result.addAttribute("layers", ArrayAttr::get(parser.getContext(), {}));
+  auto &properties = result.getOrAddProperties<Properties>();
+  properties.setConvention(
+      ConventionAttr::get(result.getContext(), Convention::Internal));
+  properties.setLayers(ArrayAttr::get(parser.getContext(), {}));
   return success();
 }
 
 ParseResult FExtModuleOp::parse(OpAsmParser &parser, OperationState &result) {
-  if (parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false))
+  if (parseFModuleLikeOp<FExtModuleOp>(parser, result,
+                                       /*hasSSAIdentifiers=*/false))
     return failure();
-  if (!result.attributes.get("convention"))
-    result.addAttribute(
-        "convention",
-        ConventionAttr::get(result.getContext(), Convention::Internal));
+  auto &properties = result.getOrAddProperties<Properties>();
+  properties.setConvention(
+      ConventionAttr::get(result.getContext(), Convention::Internal));
   return success();
 }
 
 ParseResult FIntModuleOp::parse(OpAsmParser &parser, OperationState &result) {
-  return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false);
+  return parseFModuleLikeOp<FIntModuleOp>(parser, result,
+                                          /*hasSSAIdentifiers=*/false);
 }
 
 ParseResult FMemModuleOp::parse(OpAsmParser &parser, OperationState &result) {
-  return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false);
+  return parseFModuleLikeOp<FMemModuleOp>(parser, result,
+                                          /*hasSSAIdentifiers=*/false);
 }
 
 LogicalResult FModuleOp::verify() {
@@ -1841,19 +1843,22 @@ ClassType firrtl::detail::getInstanceTypeForClassLike(ClassLike classOp) {
   return ClassType::get(name, elements);
 }
 
-static ParseResult parseClassLike(OpAsmParser &parser, OperationState &result,
-                                  bool hasSSAIdentifiers) {
+template <typename OpTy>
+ParseResult parseClassLike(OpAsmParser &parser, OperationState &result,
+                           bool hasSSAIdentifiers) {
   auto *context = result.getContext();
   auto &builder = parser.getBuilder();
+  auto &properties = result.getOrAddProperties<typename OpTy::Properties>();
 
+  // TODO: this should use properties.
   // Parse the visibility attribute.
   (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
 
   // Parse the name as a symbol.
   StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, ::mlir::SymbolTable::getSymbolAttrName(),
-                             result.attributes))
+  if (parser.parseSymbolName(nameAttr))
     return failure();
+  properties.setSymName(nameAttr);
 
   // Parse the module ports.
   SmallVector<OpAsmParser::Argument> entryArgs;
@@ -1884,27 +1889,21 @@ static ParseResult parseClassLike(OpAsmParser &parser, OperationState &result,
   // for external modules.
 
   // Add port directions.
-  if (!result.attributes.get("portDirections"))
-    result.addAttribute("portDirections",
-                        direction::packAttribute(context, portDirections));
+  properties.setPortDirections(
+      direction::packAttribute(context, portDirections));
 
   // Add port names.
-  if (!result.attributes.get("portNames"))
-    result.addAttribute("portNames", builder.getArrayAttr(portNames));
+  properties.setPortNames(builder.getArrayAttr(portNames));
 
   // Add the port types.
-  if (!result.attributes.get("portTypes"))
-    result.addAttribute("portTypes", builder.getArrayAttr(portTypes));
+  properties.setPortTypes(builder.getArrayAttr(portTypes));
 
   // Add the port symbols.
-  if (!result.attributes.get("portSymbols")) {
-    FModuleLike::fixupPortSymsArray(portSyms, builder.getContext());
-    result.addAttribute("portSymbols", builder.getArrayAttr(portSyms));
-  }
+  FModuleLike::fixupPortSymsArray(portSyms, builder.getContext());
+  properties.setPortSymbols(builder.getArrayAttr(portSyms));
 
   // Add port locations.
-  if (!result.attributes.get("portLocations"))
-    result.addAttribute("portLocations", ArrayAttr::get(context, portLocs));
+  properties.setPortLocations(ArrayAttr::get(context, portLocs));
 
   // Notably missing compared to other FModuleLike, we do not track port
   // annotations, nor port symbols, on classes.
@@ -1976,7 +1975,7 @@ void ClassOp::build(OpBuilder &builder, OperationState &result, StringAttr name,
                    [](const auto &port) { return port.annotations.empty(); }) &&
       "class ports may not have annotations");
 
-  buildClass(builder, result, name, ports);
+  buildClass<ClassOp>(builder, result, name, ports);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -2018,7 +2017,7 @@ void ClassOp::print(OpAsmPrinter &p) {
 
 ParseResult ClassOp::parse(OpAsmParser &parser, OperationState &result) {
   auto hasSSAIdentifiers = true;
-  return parseClassLike(parser, result, hasSSAIdentifiers);
+  return parseClassLike<ClassOp>(parser, result, hasSSAIdentifiers);
 }
 
 LogicalResult ClassOp::verify() {
@@ -2107,8 +2106,7 @@ void ExtClassOp::build(OpBuilder &builder, OperationState &result,
       llvm::all_of(ports,
                    [](const auto &port) { return port.annotations.empty(); }) &&
       "class ports may not have annotations");
-
-  buildClass(builder, result, name, ports);
+  buildClass<ClassOp>(builder, result, name, ports);
 }
 
 void ExtClassOp::print(OpAsmPrinter &p) {
@@ -2117,7 +2115,7 @@ void ExtClassOp::print(OpAsmPrinter &p) {
 
 ParseResult ExtClassOp::parse(OpAsmParser &parser, OperationState &result) {
   auto hasSSAIdentifiers = false;
-  return parseClassLike(parser, result, hasSSAIdentifiers);
+  return parseClassLike<ExtClassOp>(parser, result, hasSSAIdentifiers);
 }
 
 LogicalResult
@@ -2204,31 +2202,35 @@ void InstanceOp::build(
     ArrayRef<Attribute> annotations, ArrayRef<Attribute> portAnnotations,
     ArrayRef<Attribute> layers, bool lowerToBind, hw::InnerSymAttr innerSym) {
   result.addTypes(resultTypes);
-  result.addAttribute("moduleName",
-                      SymbolRefAttr::get(builder.getContext(), moduleName));
-  result.addAttribute("name", builder.getStringAttr(name));
-  result.addAttribute(
-      "portDirections",
+  result.getOrAddProperties<Properties>().setModuleName(
+      SymbolRefAttr::get(builder.getContext(), moduleName));
+  result.getOrAddProperties<Properties>().setName(builder.getStringAttr(name));
+  result.getOrAddProperties<Properties>().setPortDirections(
       direction::packAttribute(builder.getContext(), portDirections));
-  result.addAttribute("portNames", builder.getArrayAttr(portNames));
-  result.addAttribute("annotations", builder.getArrayAttr(annotations));
-  result.addAttribute("layers", builder.getArrayAttr(layers));
+  result.getOrAddProperties<Properties>().setPortNames(
+      builder.getArrayAttr(portNames));
+  result.getOrAddProperties<Properties>().setAnnotations(
+      builder.getArrayAttr(annotations));
+  result.getOrAddProperties<Properties>().setLayers(
+      builder.getArrayAttr(layers));
   if (lowerToBind)
-    result.addAttribute("lowerToBind", builder.getUnitAttr());
+    result.getOrAddProperties<Properties>().setLowerToBind(
+        builder.getUnitAttr());
   if (innerSym)
-    result.addAttribute("inner_sym", innerSym);
-  result.addAttribute("nameKind",
-                      NameKindEnumAttr::get(builder.getContext(), nameKind));
+    result.getOrAddProperties<Properties>().setInnerSym(innerSym);
+
+  result.getOrAddProperties<Properties>().setNameKind(
+      NameKindEnumAttr::get(builder.getContext(), nameKind));
 
   if (portAnnotations.empty()) {
     SmallVector<Attribute, 16> portAnnotationsVec(resultTypes.size(),
                                                   builder.getArrayAttr({}));
-    result.addAttribute("portAnnotations",
-                        builder.getArrayAttr(portAnnotationsVec));
+    result.getOrAddProperties<Properties>().setPortAnnotations(
+        builder.getArrayAttr(portAnnotationsVec));
   } else {
     assert(portAnnotations.size() == resultTypes.size());
-    result.addAttribute("portAnnotations",
-                        builder.getArrayAttr(portAnnotations));
+    result.getOrAddProperties<Properties>().setPortAnnotations(
+        builder.getArrayAttr(portAnnotations));
   }
 }
 
@@ -2452,7 +2454,7 @@ void InstanceOp::print(OpAsmPrinter &p) {
 
 ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   auto *context = parser.getContext();
-  auto &resultAttrs = result.attributes;
+  auto &properties = result.getOrAddProperties<Properties>();
 
   std::string name;
   hw::InnerSymAttr innerSymAttr;
@@ -2478,7 +2480,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   }
   if (parseNameKind(parser, nameKind) ||
       parser.parseOptionalAttrDict(result.attributes) ||
-      parser.parseAttribute(moduleName, "moduleName", resultAttrs) ||
+      parser.parseAttribute(moduleName) ||
       parseModulePorts(parser, /*hasSSAIdentifiers=*/false,
                        /*supportsSymbols=*/false, entryArgs, portDirections,
                        portNames, portTypes, portAnnotations, portSyms,
@@ -2487,26 +2489,19 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // Add the attributes. We let attributes defined in the attr-dict override
   // attributes parsed out of the module signature.
-  if (!resultAttrs.get("moduleName"))
-    result.addAttribute("moduleName", moduleName);
-  if (!resultAttrs.get("name"))
-    result.addAttribute("name", StringAttr::get(context, name));
-  result.addAttribute("nameKind", nameKind);
-  if (!resultAttrs.get("portDirections"))
-    result.addAttribute("portDirections",
-                        direction::packAttribute(context, portDirections));
-  if (!resultAttrs.get("portNames"))
-    result.addAttribute("portNames", ArrayAttr::get(context, portNames));
-  if (!resultAttrs.get("portAnnotations"))
-    result.addAttribute("portAnnotations",
-                        ArrayAttr::get(context, portAnnotations));
+
+  properties.setModuleName(moduleName);
+  properties.setName(StringAttr::get(context, name));
+  properties.setNameKind(nameKind);
+  properties.setPortDirections(
+      direction::packAttribute(context, portDirections));
+  properties.setPortNames(ArrayAttr::get(context, portNames));
+  properties.setPortAnnotations(ArrayAttr::get(context, portAnnotations));
 
   // Annotations, layers, and LowerToBind are omitted in the printed format
   // if they are empty, empty, and false (respectively).
-  if (!resultAttrs.get("annotations"))
-    resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
-  if (!resultAttrs.get("layers"))
-    resultAttrs.append("layers", parser.getBuilder().getArrayAttr({}));
+  properties.setAnnotations(parser.getBuilder().getArrayAttr({}));
+  properties.setLayers(parser.getBuilder().getArrayAttr({}));
 
   // Add result types.
   result.types.reserve(portTypes.size());
@@ -2638,7 +2633,7 @@ void InstanceChoiceOp::print(OpAsmPrinter &p) {
 ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
                                     OperationState &result) {
   auto *context = parser.getContext();
-  auto &resultAttrs = result.attributes;
+  auto &properties = result.getOrAddProperties<Properties>();
 
   std::string name;
   hw::InnerSymAttr innerSymAttr;
@@ -2702,28 +2697,19 @@ ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
 
   // Add the attributes. We let attributes defined in the attr-dict override
   // attributes parsed out of the module signature.
-  if (!resultAttrs.get("moduleNames"))
-    result.addAttribute("moduleNames", ArrayAttr::get(context, moduleNames));
-  if (!resultAttrs.get("caseNames"))
-    result.addAttribute("caseNames", ArrayAttr::get(context, caseNames));
-  if (!resultAttrs.get("name"))
-    result.addAttribute("name", StringAttr::get(context, name));
-  result.addAttribute("nameKind", nameKind);
-  if (!resultAttrs.get("portDirections"))
-    result.addAttribute("portDirections",
-                        direction::packAttribute(context, portDirections));
-  if (!resultAttrs.get("portNames"))
-    result.addAttribute("portNames", ArrayAttr::get(context, portNames));
-  if (!resultAttrs.get("portAnnotations"))
-    result.addAttribute("portAnnotations",
-                        ArrayAttr::get(context, portAnnotations));
+  properties.setModuleNames(ArrayAttr::get(context, moduleNames));
+  properties.setCaseNames(ArrayAttr::get(context, caseNames));
+  properties.setName(StringAttr::get(context, name));
+  properties.setNameKind(nameKind);
+  properties.setPortDirections(
+      direction::packAttribute(context, portDirections));
+  properties.setPortNames(ArrayAttr::get(context, portNames));
+  properties.setPortAnnotations(ArrayAttr::get(context, portAnnotations));
 
   // Annotations, layers, and LowerToBind are omitted in the printed format if
   // they are empty, empty, and false (respectively).
-  if (!resultAttrs.get("annotations"))
-    resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
-  if (!resultAttrs.get("layers"))
-    resultAttrs.append("layers", parser.getBuilder().getArrayAttr({}));
+  properties.setAnnotations(parser.getBuilder().getArrayAttr({}));
+  properties.setLayers(parser.getBuilder().getArrayAttr({}));
 
   // Add result types.
   result.types.reserve(portTypes.size());
@@ -2875,33 +2861,29 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
                   NameKindEnum nameKind, ArrayRef<Attribute> annotations,
                   ArrayRef<Attribute> portAnnotations,
                   hw::InnerSymAttr innerSym) {
-  result.addAttribute(
-      "readLatency",
+  auto &properties = result.getOrAddProperties<Properties>();
+  properties.setReadLatency(
       builder.getIntegerAttr(builder.getIntegerType(32), readLatency));
-  result.addAttribute(
-      "writeLatency",
+  properties.setWriteLatency(
       builder.getIntegerAttr(builder.getIntegerType(32), writeLatency));
-  result.addAttribute(
-      "depth", builder.getIntegerAttr(builder.getIntegerType(64), depth));
-  result.addAttribute("ruw", ::RUWAttrAttr::get(builder.getContext(), ruw));
-  result.addAttribute("portNames", builder.getArrayAttr(portNames));
-  result.addAttribute("name", builder.getStringAttr(name));
-  result.addAttribute("nameKind",
-                      NameKindEnumAttr::get(builder.getContext(), nameKind));
-  result.addAttribute("annotations", builder.getArrayAttr(annotations));
+  properties.setDepth(
+      builder.getIntegerAttr(builder.getIntegerType(64), depth));
+  properties.setRuw(::RUWAttrAttr::get(builder.getContext(), ruw));
+  properties.setPortNames(builder.getArrayAttr(portNames));
+  properties.setName(builder.getStringAttr(name));
+  properties.setNameKind(NameKindEnumAttr::get(builder.getContext(), nameKind));
+  properties.setAnnotations(builder.getArrayAttr(annotations));
   if (innerSym)
-    result.addAttribute("inner_sym", innerSym);
+    properties.setInnerSym(innerSym);
   result.addTypes(resultTypes);
 
   if (portAnnotations.empty()) {
     SmallVector<Attribute, 16> portAnnotationsVec(resultTypes.size(),
                                                   builder.getArrayAttr({}));
-    result.addAttribute("portAnnotations",
-                        builder.getArrayAttr(portAnnotationsVec));
+    properties.setPortAnnotations(builder.getArrayAttr(portAnnotationsVec));
   } else {
     assert(portAnnotations.size() == resultTypes.size());
-    result.addAttribute("portAnnotations",
-                        builder.getArrayAttr(portAnnotations));
+    properties.setPortAnnotations(builder.getArrayAttr(portAnnotations));
   }
 }
 
@@ -3921,6 +3903,7 @@ void MatchOp::print(OpAsmPrinter &p) {
 
 ParseResult MatchOp::parse(OpAsmParser &parser, OperationState &result) {
   auto *context = parser.getContext();
+  auto &properties = result.getOrAddProperties<Properties>();
   OpAsmParser::UnresolvedOperand input;
   if (parser.parseOperand(input) || parser.parseColon())
     return failure();
@@ -3966,7 +3949,7 @@ ParseResult MatchOp::parse(OpAsmParser &parser, OperationState &result) {
     if (parser.parseRegion(*region, arg))
       return failure();
   }
-  result.addAttribute("tags", ArrayAttr::get(context, tags));
+  properties.setTags(ArrayAttr::get(context, tags));
 
   return parser.parseRBrace();
 }
@@ -3974,8 +3957,9 @@ ParseResult MatchOp::parse(OpAsmParser &parser, OperationState &result) {
 void MatchOp::build(OpBuilder &builder, OperationState &result, Value input,
                     ArrayAttr tags,
                     MutableArrayRef<std::unique_ptr<Region>> regions) {
+  auto &properties = result.getOrAddProperties<Properties>();
   result.addOperands(input);
-  result.addAttribute("tags", tags);
+  properties.setTags(tags);
   result.addRegions(regions);
 }
 
@@ -4030,6 +4014,7 @@ void ConstantOp::print(OpAsmPrinter &p) {
 }
 
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto &properties = result.getOrAddProperties<Properties>();
   // Parse the constant value, without knowing its width.
   APInt value;
   auto loc = parser.getCurrentLocation();
@@ -4068,7 +4053,7 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   auto intType = parser.getBuilder().getIntegerType(value.getBitWidth(),
                                                     resultType.isSigned());
   auto valueAttr = parser.getBuilder().getIntegerAttr(intType, value);
-  result.addAttribute("value", valueAttr);
+  properties.setValue(valueAttr);
   return success();
 }
 
@@ -4142,6 +4127,7 @@ void SpecialConstantOp::print(OpAsmPrinter &p) {
 
 ParseResult SpecialConstantOp::parse(OpAsmParser &parser,
                                      OperationState &result) {
+  auto &properties = result.getOrAddProperties<Properties>();
   // Parse the constant value.  SpecialConstant uses bool attributes, but it
   // prints as an integer.
   APInt value;
@@ -4163,7 +4149,7 @@ ParseResult SpecialConstantOp::parse(OpAsmParser &parser,
 
   // Create the attribute.
   auto valueAttr = parser.getBuilder().getBoolAttr(value == 1);
-  result.addAttribute("value", valueAttr);
+  properties.setValue(valueAttr);
   return success();
 }
 
@@ -4266,6 +4252,7 @@ void FIntegerConstantOp::print(OpAsmPrinter &p) {
 ParseResult FIntegerConstantOp::parse(OpAsmParser &parser,
                                       OperationState &result) {
   auto *context = parser.getContext();
+  auto &properties = result.getOrAddProperties<Properties>();
   APInt value;
   if (parser.parseInteger(value) ||
       parser.parseOptionalAttrDict(result.attributes))
@@ -4274,7 +4261,7 @@ ParseResult FIntegerConstantOp::parse(OpAsmParser &parser,
   auto intType =
       IntegerType::get(context, value.getBitWidth(), IntegerType::Signed);
   auto valueAttr = parser.getBuilder().getIntegerAttr(intType, value);
-  result.addAttribute("value", valueAttr);
+  properties.setValue(valueAttr);
   return success();
 }
 
@@ -4370,6 +4357,7 @@ void FEnumCreateOp::print(OpAsmPrinter &printer) {
 
 ParseResult FEnumCreateOp::parse(OpAsmParser &parser, OperationState &result) {
   auto *context = parser.getContext();
+  auto &properties = result.getOrAddProperties<Properties>();
 
   OpAsmParser::UnresolvedOperand input;
   std::string fieldName;
@@ -4401,8 +4389,7 @@ ParseResult FEnumCreateOp::parse(OpAsmParser &parser, OperationState &result) {
                             "unknown field " + fieldName + " in enum type ")
            << enumType;
 
-  result.addAttribute(
-      "fieldIndex",
+  properties.setFieldIndex(
       IntegerAttr::get(IntegerType::get(context, 32), *fieldIndex));
 
   result.addTypes(enumType);
@@ -4431,6 +4418,7 @@ void IsTagOp::print(::mlir::OpAsmPrinter &printer) {
 
 ParseResult IsTagOp::parse(OpAsmParser &parser, OperationState &result) {
   auto *context = parser.getContext();
+  auto &properties = result.getOrAddProperties<Properties>();
 
   OpAsmParser::UnresolvedOperand input;
   std::string fieldName;
@@ -4454,8 +4442,7 @@ ParseResult IsTagOp::parse(OpAsmParser &parser, OperationState &result) {
                             "unknown field " + fieldName + " in enum type ")
            << enumType;
 
-  result.addAttribute(
-      "fieldIndex",
+  properties.setFieldIndex(
       IntegerAttr::get(IntegerType::get(context, 32), *fieldIndex));
 
   result.addTypes(UIntType::get(context, 1, /*isConst=*/false));
@@ -4502,13 +4489,10 @@ ParseResult parseSubfieldLikeOp(OpAsmParser &parser, OperationState &result) {
   result.getOrAddProperties<typename OpTy::Properties>().setFieldIndex(
       IntegerAttr::get(IntegerType::get(context, 32), *fieldIndex));
 
-  SmallVector<Type> inferredReturnTypes;
-  if (failed(OpTy::inferReturnTypes(context, result.location, result.operands,
-                                    result.attributes.getDictionary(context),
-                                    result.getRawProperties(), result.regions,
-                                    inferredReturnTypes)))
+  auto type = OpTy::inferReturnType(inputType, *fieldIndex, {});
+  if (!type)
     return failure();
-  result.addTypes(inferredReturnTypes);
+  result.addTypes(type);
 
   return success();
 }
