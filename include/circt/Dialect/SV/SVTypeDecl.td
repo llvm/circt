@@ -212,7 +212,8 @@ def ModportType : SVType<"Modport"> {
 
 def InterfaceInstanceOp : SVOp<"interface.instance", [
       HasCustomSSAName,
-      DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>
+      DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>
     ]> {
   let summary = "Instantiate an interface";
   let description = [{
@@ -259,7 +260,9 @@ def InterfaceInstanceOp : SVOp<"interface.instance", [
   }];
 }
 
-def GetModportOp: SVOp<"modport.get", [Pure]> {
+def GetModportOp: SVOp<"modport.get", [Pure,
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>
+    ]> {
   let summary = "Get a modport out of an interface instance";
   let description = [{
     Use this to extract a modport view to an instantiated interface. For
@@ -277,8 +280,6 @@ def GetModportOp: SVOp<"modport.get", [Pure]> {
 
   let assemblyFormat =
     "$iface $field attr-dict `:` qualified(type($iface)) `->` qualified(type($result))";
-
-  let hasVerifier = 1;
 
   let builders = [
     OpBuilder<(ins "Value":$value, "::llvm::StringRef":$field)>
