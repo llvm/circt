@@ -2017,20 +2017,19 @@ private:
     std::string newName = "main";
 
     if (auto *existingMainOp = SymbolTable::lookupSymbolIn(moduleOp, newName)) {
-      if (auto existingMainFunc = dyn_cast<FuncOp>(existingMainOp)) {
-
-        unsigned counter = 0;
-        std::string newOldName = baseName;
-        while (SymbolTable::lookupSymbolIn(moduleOp, newOldName))
-          newOldName = baseName + "_" + std::to_string(++counter);
-
-        existingMainFunc.setName(newOldName);
-        if (baseName == "main")
-          baseName = newOldName;
-      } else {
+      auto existingMainFunc = dyn_cast<FuncOp>(existingMainOp);
+      if (existingMainFunc == nullptr) {
         moduleOp.emitError() << "Symbol 'main' exists but is not a function";
         return nullptr;
       }
+        unsigned counter = 0;
+        std::string newOldName = baseName;
+        while (SymbolTable::lookupSymbolIn(moduleOp, newOldName))
+          newOldName =
+              llvm::join_items("_", baseName, std::to_string(++counter));
+        existingMainFunc.setName(newOldName);
+        if (baseName == "main")
+          baseName = newOldName;
     }
 
     // Create the new "main" function
@@ -2096,18 +2095,24 @@ private:
     // corresponding operations in the new top-level.
     builder.setInsertionPointToEnd(callerEntryBlock);
     for (auto *op : opsToModify) {
-      // TODO: copy attributes as well
+      // TODO (https://github.com/llvm/circt/issues/7764)
       Value newOpRes;
-      if (auto allocaOp = dyn_cast<memref::AllocaOp>(op)) {
-        newOpRes = builder.create<memref::AllocaOp>(callee.getLoc(),
-                                                    allocaOp.getType());
-      } else if (auto allocOp = dyn_cast<memref::AllocOp>(op)) {
-        newOpRes =
-            builder.create<memref::AllocOp>(callee.getLoc(), allocOp.getType());
-      } else if (auto getGlobalOp = dyn_cast<memref::GetGlobalOp>(op)) {
-        newOpRes = builder.create<memref::GetGlobalOp>(
-            caller.getLoc(), getGlobalOp.getType(), getGlobalOp.getName());
-      }
+      TypeSwitch<Operation *>(op)
+          .Case<memref::AllocaOp>([&](memref::AllocaOp allocaOp) {
+            newOpRes = builder.create<memref::AllocaOp>(callee.getLoc(),
+                                                        allocaOp.getType());
+          })
+          .Case<memref::AllocOp>([&](memref::AllocOp allocOp) {
+            newOpRes = builder.create<memref::AllocOp>(callee.getLoc(),
+                                                       allocOp.getType());
+          })
+          .Case<memref::GetGlobalOp>([&](memref::GetGlobalOp getGlobalOp) {
+            newOpRes = builder.create<memref::GetGlobalOp>(
+                caller.getLoc(), getGlobalOp.getType(), getGlobalOp.getName());
+          })
+          .Default([&](Operation *defaultOp) {
+            llvm::report_fatal_error("Unsupported operation in TypeSwitch");
+          });
       extraMemRefOperands.push_back(newOpRes);
 
       calleeFnBody->addArgument(newOpRes.getType(), callee.getLoc());

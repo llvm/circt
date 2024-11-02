@@ -2864,8 +2864,8 @@ LogicalResult InvokeOp::verify() {
   // The argument list of invoke is empty.
   if (getInputs().empty() && getRefCellsMap().empty()) {
     return emitOpError() << "'@" << callee
-                         << "' has zero input and output port connections; "
-                            " and has not passing-by-reference cells; "
+                         << "' has zero input and output port connections and "
+                            "has no passing-by-reference cells; "
                             "expected at least one.";
   }
   size_t goPortNum = 0, donePortNum = 0;
