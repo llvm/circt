@@ -2022,14 +2022,13 @@ private:
         moduleOp.emitError() << "Symbol 'main' exists but is not a function";
         return nullptr;
       }
-        unsigned counter = 0;
-        std::string newOldName = baseName;
-        while (SymbolTable::lookupSymbolIn(moduleOp, newOldName))
-          newOldName =
-              llvm::join_items("_", baseName, std::to_string(++counter));
-        existingMainFunc.setName(newOldName);
-        if (baseName == "main")
-          baseName = newOldName;
+      unsigned counter = 0;
+      std::string newOldName = baseName;
+      while (SymbolTable::lookupSymbolIn(moduleOp, newOldName))
+        newOldName = llvm::join_items("_", baseName, std::to_string(++counter));
+      existingMainFunc.setName(newOldName);
+      if (baseName == "main")
+        baseName = newOldName;
     }
 
     // Create the new "main" function
