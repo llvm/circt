@@ -86,46 +86,47 @@ int insertStates(llvm::SmallVector<std::string> &states, std::string& st){
   return states.size()-1;
 }
 
-circt::smt::IntPredicate getSmtPred(circt::comb::ICmpPredicate cmpPredicate){
+circt::smt::BVCmpPredicate getSmtPred(circt::comb::ICmpPredicate cmpPredicate){
   switch (cmpPredicate) {
       case comb::ICmpPredicate::slt:
-          return smt::IntPredicate::lt;
+          return smt::BVCmpPredicate::slt;
       case comb::ICmpPredicate::sle:
-          return smt::IntPredicate::le;
+          return smt::BVCmpPredicate::sle;
       case comb::ICmpPredicate::sgt:
-          return smt::IntPredicate::gt;
+          return smt::BVCmpPredicate::sgt;
       case comb::ICmpPredicate::sge:
-          return smt::IntPredicate::ge;
+          return smt::BVCmpPredicate::sge;
       case comb::ICmpPredicate::ult:
-          return smt::IntPredicate::lt;
+          return smt::BVCmpPredicate::ult;
       case comb::ICmpPredicate::ule:
-          return smt::IntPredicate::le;
+          return smt::BVCmpPredicate::ule;
       case comb::ICmpPredicate::ugt:
-          return smt::IntPredicate::gt;
+          return smt::BVCmpPredicate::ugt;
       case comb::ICmpPredicate::uge:
-          return smt::IntPredicate::ge;
+          return smt::BVCmpPredicate::uge;
   }
 }
 
 mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b, llvm::SmallVector<mlir::Value> args){
+  llvm::outs()<<"\n\n"<<op;
   auto a = llvm::dyn_cast<smt::BitVectorType>(args[0].getType());
   if (auto addOp = llvm::dyn_cast<comb::AddOp>(op))
-    return b.create<smt::BVAddOp>(loc, b.getType<smt::BitVectorType>(a.getWidth()), args);
+    return b.create<smt::BVAddOp>(loc, args[0], args[1]);
   if (auto andOp = llvm::dyn_cast<comb::AndOp>(op))
-    return b.create<smt::BVAndOp>(loc, b.getType<smt::BitVectorType>(a.getWidth()), args);
+    return b.create<smt::BVAndOp>(loc, args[0], args[1]);
   if (auto xorOp = llvm::dyn_cast<comb::XorOp>(op))
-    return b.create<smt::BVXOrOp>(loc, b.getType<smt::BitVectorType>(a.getWidth()), args);
+    return b.create<smt::BVXOrOp>(loc, args[0], args[1]);
   if (auto orOp = llvm::dyn_cast<comb::OrOp>(op))
-    return b.create<smt::BVOrOp>(loc, b.getType<smt::BitVectorType>(a.getWidth()), args);
+    return b.create<smt::BVOrOp>(loc, args[0], args[1]);
   if (auto mulOp = llvm::dyn_cast<comb::MulOp>(op))
-    return b.create<smt::BVMulOp>(loc, b.getType<smt::BitVectorType>(a.getWidth()), args);
+    return b.create<smt::BVMulOp>(loc, args[0], args[1]);
   if (auto icmp = llvm::dyn_cast<comb::ICmpOp>(op)){
     if(icmp.getPredicate() == circt::comb::ICmpPredicate::eq)
-      return b.create<smt::EqOp>(loc, b.getType<smt::BoolType>(), args);
+      return b.create<smt::EqOp>(loc, b.getType<smt::BitVectorType>(1), args);
     if(icmp.getPredicate() == circt::comb::ICmpPredicate::ne){
-      return b.create<smt::DistinctOp>(loc,  b.getType<smt::BoolType>(), args);
-    // auto predicate = getSmtPred(icmp.getPredicate());
-    // return b.create<smt::BVCmpOp>(loc, predicate, args[0], args[1]);
+      return b.create<smt::DistinctOp>(loc,  b.getType<smt::BitVectorType>(1), args);
+    smt::BVCmpPredicate predicate = getSmtPred(icmp.getPredicate());
+    return b.create<smt::BVCmpOp>(loc, b.getType<smt::BitVectorType>(1), predicate, args[0], args[1]);
     }
   }
 }
@@ -205,6 +206,7 @@ LogicalResult MachineOpConverter::dispatch(){
     auto intVal = b.getType<smt::BitVectorType>(a.getType().getIntOrFloatBitWidth());
     argVarTypes.push_back(intVal);
     argVars.push_back(a);
+    numArgs++;
   }
 
   // fsm outputs
@@ -280,18 +282,18 @@ LogicalResult MachineOpConverter::dispatch(){
 auto forall = b.create<smt::ForallOp>(loc, argVarTypes, [&varInitValues, &stateFunctions, &numOut, &argVars, &numArgs, &inputFunctions](OpBuilder &b, Location loc, ValueRange forallArgs) -> mlir::Value { 
     llvm::SmallVector<mlir::Value> initArgs;
     // nb. args also has the time 
+    int j = 0;
+
     for(auto [i, a]: llvm::enumerate(forallArgs)){
-      if (i != forallArgs.size()-1){
-        if (int(i) >= numOut + numArgs){
+        if (int(i) >= numOut + numArgs && int(i) < forallArgs.size()-1){
           auto castA = llvm::dyn_cast<smt::BitVectorType>(a.getType());
-          auto initVarVal = b.create<smt::BVConstantOp>(loc, varInitValues[int(i)-numOut], castA.getWidth());
+          auto initVarVal = b.create<smt::BVConstantOp>(loc, varInitValues[j], castA.getWidth());
+          j = j + 1;
           initArgs.push_back(initVarVal);
         } else {
           initArgs.push_back(a);
         }
-      }
     }
-    initArgs.push_back(forallArgs.back());
     auto initTime = b.create<smt::BVConstantOp>(loc, 0, 32);
     auto lhs = b.create<smt::EqOp>(loc, forallArgs.back(), initTime);
     auto rhs = b.create<smt::ApplyFuncOp>(loc, stateFunctions[0], initArgs);
