@@ -132,7 +132,6 @@ mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b, llvm::Small
 
 mlir::Value getSmtValue(mlir::Value op, const llvm::SmallVector<std::pair<mlir::Value, mlir::Value>>& fsmVarVals, 
     mlir::Value time, OpBuilder &b, Location &loc){
-    llvm::outs()<<"\nlooking for "<< op;
   // op can be an input or var of the fsm
   for (auto fv: fsmVarVals)
     if (op == fv.first){
@@ -314,22 +313,14 @@ auto forall = b.create<smt::ForallOp>(loc, argVarTypes, [&varInitValues, &stateF
         llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> avToSmt;
         for(auto [id, av] : llvm::enumerate(actionArgs))
           avToSmt.push_back({av, actionArgs[id]});
-        for (auto [j, uv]: llvm::enumerate(avToSmt)){
-          if(int(j) >=  numArgs && int(j) < numArgs+numOut){ // only output variables are updated at this stage 
-            // look for updates in the region
-            bool found = false;
-            for(auto &op: t1.output->getOps()){
-              // todo: check that updates requiring inputs for operations work
-              if (auto outputOp = dyn_cast<fsm::OutputOp>(op)){
-                for (auto outs : outputOp->getResults()){
-                  if (outs==uv.first){
-                    auto toRet = getSmtValue(outs, avToSmt, actionArgs.back(), b, loc);
-                    llvm::outs()<<"\n\noutput: "<<toRet;
-                    outputSmtValues.push_back(toRet);
-                    found = true;
-                  }
-                }
-              }
+        for(auto &op: t1.output->getOps()){
+          llvm::outs()<<'\n\nciao\n\n';
+          // todo: check that updates requiring inputs for operations work
+          if (auto outputOp = dyn_cast<fsm::OutputOp>(op)){
+            for (auto outs : outputOp->getResults()){
+              auto toRet = getSmtValue(outs, avToSmt, actionArgs.back(), b, loc);
+              llvm::outs()<<"\n\noutput: "<<toRet;
+              outputSmtValues.push_back(toRet);
             }
           }
         }
@@ -358,17 +349,17 @@ auto forall = b.create<smt::ForallOp>(loc, argVarTypes, [&varInitValues, &stateF
           if(!found) // the value is not updated in the region 
             updatedSmtValues.push_back(uv.second);
         }
-        // push output values
-        // for (auto [i, u] : llvm::enumerate(updatedSmtValues)){
-        //   if (i >= numArgs && i < numArgs+numOut)
-        //     llvm::outs()<<"updating"
-        //     updatedSmtValues[i]=outputSmtValues[i - numArgs];
-        // }
+        
         // update time 
         auto c1 = b.create<smt::BVConstantOp>(loc, 1, 32);
         llvm::SmallVector<mlir::Value> timeArgs = {actionArgs.back(), c1};
         auto newTime = b.create<smt::BVAddOp>(loc, b.getType<smt::BitVectorType>(32), timeArgs);
         updatedSmtValues.push_back(newTime);
+        // push output values
+        for (auto [i, outputVal] : llvm::enumerate(outputSmtValues)){
+          llvm::outs()<<"updating"<<outputVal;
+          updatedSmtValues[numArgs+i]=outputVal;
+        }
         return updatedSmtValues;
       } 
       llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> avToSmt;
@@ -384,6 +375,11 @@ auto forall = b.create<smt::ForallOp>(loc, argVarTypes, [&varInitValues, &stateF
       llvm::SmallVector<mlir::Value> timeArgs = {actionArgs.back(), c1};
       auto newTime = b.create<smt::BVAddOp>(loc, b.getType<smt::BitVectorType>(32), timeArgs);
       updatedSmtValues.push_back(newTime);
+      // push output values
+      for (auto [i, outputVal] : llvm::enumerate(outputSmtValues)){
+        llvm::outs()<<"updating"<<outputVal;
+        updatedSmtValues[numArgs+i]=outputVal;
+      }
       return updatedSmtValues;
     };
 
