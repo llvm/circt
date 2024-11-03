@@ -232,12 +232,6 @@ def SeqMemoryOp : CalyxPrimitive<"seq_mem", []> {
   let builders = [
     OpBuilder<(ins
       "StringRef":$sym_name,
-      "int64_t":$width,
-      "ArrayRef<int64_t>":$sizes,
-      "ArrayRef<int64_t>":$addrSizes
-    )>,
-    OpBuilder<(ins
-      "StringRef":$sym_name,
       "Type":$type,
       "ArrayRef<int64_t>":$sizes,
       "ArrayRef<int64_t>":$addrSizes
