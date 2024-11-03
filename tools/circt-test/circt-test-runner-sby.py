@@ -18,9 +18,9 @@ source_path = Path(args.verilog)
 script_path = directory / "script.sby"
 
 if args.mode is not None:
-    tasks = args.mode.split(",")
+  tasks = args.mode.split(",")
 else:
-    tasks = ["cover", "bmc", "induction"]
+  tasks = ["cover", "bmc", "induction"]
 
 depth = f"depth {args.depth}" if args.depth is not None else ""
 
@@ -28,16 +28,13 @@ options = """
   [options]
 """
 for task in tasks:
-    mode = {
-        "induction": "prove"
-    }.get(task, task)
-    options += f"""
+  mode = {"induction": "prove"}.get(task, task)
+  options += f"""
   {task}:
   mode {mode}
   {depth}
   --
 """
-
 
 # Generate the SymbiYosys script.
 script = f"""
