@@ -262,13 +262,16 @@ module {
 
 // Test floating point mul
 
+// CHECK:    %mulf_0_reg.in, %mulf_0_reg.write_en, %mulf_0_reg.clk, %mulf_0_reg.reset, %mulf_0_reg.out, %mulf_0_reg.done = calyx.register @mulf_0_reg : f32, i1, i1, i1, f32, i1
+// CHECK-DAG:    %std_ieee754.mul_0.clk, %std_ieee754.mul_0.reset, %std_ieee754.mul_0.go, %std_ieee754.mul_0.control, %std_ieee754.mul_0.left, %std_ieee754.mul_0.right, %std_ieee754.mul_0.roundingMode, %std_ieee754.mul_0.out, %std_ieee754.mul_0.exceptionalFlags, %std_ieee754.mul_0.done = calyx.std_ieee754.mul @std_ieee754.mul_0 : i1, i1, i1, i1, f32, f32, i3, f32, i5, i1
+// CHECK-DAG:    %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : f32, i1, i1, i1, f32, i1
 // CHECK:      calyx.group @bb0_0 {
-// CHECK-DAG:        calyx.assign %std_mulFN_0.left = %in0 : f32
-// CHECK-DAG:        calyx.assign %std_mulFN_0.right = %cst : f32
-// CHECK-DAG:        calyx.assign %mulf_0_reg.in = %std_mulFN_0.out : f32
-// CHECK-DAG:        calyx.assign %mulf_0_reg.write_en = %std_mulFN_0.done : i1
-// CHECK-DAG:        %0 = comb.xor %std_mulFN_0.done, %true : i1
-// CHECK-DAG:        calyx.assign %std_mulFN_0.go = %0 ? %true : i1
+// CHECK-DAG:        calyx.assign %std_ieee754.mul_0.left = %in0 : f32
+// CHECK-DAG:        calyx.assign %std_ieee754.mul_0.right = %cst : f32
+// CHECK-DAG:        calyx.assign %mulf_0_reg.in = %std_ieee754.mul_0.out : f32
+// CHECK-DAG:        calyx.assign %mulf_0_reg.write_en = %std_ieee754.mul_0.done : i1
+// CHECK-DAG:        %0 = comb.xor %std_ieee754.mul_0.done, %true : i1
+// CHECK-DAG:        calyx.assign %std_ieee754.mul_0.go = %0 ? %true : i1
 // CHECK-DAG:        calyx.group_done %mulf_0_reg.done : i1
 // CHECK-DAG:      }
 module {

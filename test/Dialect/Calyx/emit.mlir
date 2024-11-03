@@ -338,33 +338,33 @@ module attributes {calyx.entrypoint = "main"} {
 module attributes {calyx.entrypoint = "main"} {
   // CHECK: import "primitives/float/mulFN.futil";
   calyx.component @main(%in0: f32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: f32, %done: i1 {done}) {
-    // CHECK:           std_mulFN_0 = std_mulFN(8, 24, 32);
+    // CHECK: std_ieee754.mul_0 = std_ieee754.mul(8, 24, 32);
     %cst = calyx.constant {sym_name = "cst_0"} 4.200000e+00 : f32
     %true = hw.constant true
     %mulf_0_reg.in, %mulf_0_reg.write_en, %mulf_0_reg.clk, %mulf_0_reg.reset, %mulf_0_reg.out, %mulf_0_reg.done = calyx.register @mulf_0_reg : f32, i1, i1, i1, f32, i1
-    %std_mulFN_0.clk, %std_mulFN_0.reset, %std_mulFN_0.go, %std_mulFN_0.control, %std_mulFN_0.left, %std_mulFN_0.right, %std_mulFN_0.roundingMode, %std_mulFN_0.out, %std_mulFN_0.exceptionalFlags, %std_mulFN_0.done = calyx.std_mulFN @std_mulFN_0 : i1, i1, i1, i1, f32, f32, i3, f32, i5, i1
+    %std_ieee754.mul_0.clk, %std_ieee754.mul_0.reset, %std_ieee754.mul_0.go, %std_ieee754.mul_0.control, %std_ieee754.mul_0.left, %std_ieee754.mul_0.right, %std_ieee754.mul_0.roundingMode, %std_ieee754.mul_0.out, %std_ieee754.mul_0.exceptionalFlags, %std_ieee754.mul_0.done = calyx.std_ieee754.mul @std_ieee754.mul_0 : i1, i1, i1, i1, f32, f32, i3, f32, i5, i1
     %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : f32, i1, i1, i1, f32, i1
     calyx.wires {
       calyx.assign %out0 = %ret_arg0_reg.out : f32
-      // CHECK-LABEL: group bb0_0 {
-      // CHECK-NEXT:    std_mulFN_0.left = in0;
-      // CHECK-NEXT:    std_mulFN_0.right = cst_0.out;
-      // CHECK-NEXT:    mulf_0_reg.in = std_mulFN_0.out;
-      // CHECK-NEXT:    mulf_0_reg.write_en = std_mulFN_0.done;
-      // CHECK-NEXT:    std_mulFN_0.go = !std_mulFN_0.done ? 1'd1;
-      // CHECK-NEXT:    bb0_0[done] = mulf_0_reg.done;
-      // CHECK-NEXT:  }
+      // CHECK-LABEL:    group bb0_0 {
+      // CHECK-NEXT:      std_ieee754.mul_0.left = in0;
+      // CHECK-NEXT:      std_ieee754.mul_0.right = cst_0.out;
+      // CHECK-NEXT:      mulf_0_reg.in = std_ieee754.mul_0.out;
+      // CHECK-NEXT:      mulf_0_reg.write_en = std_ieee754.mul_0.done;
+      // CHECK-NEXT:      std_ieee754.mul_0.go = !std_ieee754.mul_0.done ? 1'd1;
+      // CHECK-NEXT:      bb0_0[done] = mulf_0_reg.done;
+      // CHECK-NEXT:     }
       calyx.group @bb0_0 {
-        calyx.assign %std_mulFN_0.left = %in0 : f32
-        calyx.assign %std_mulFN_0.right = %cst : f32
-        calyx.assign %mulf_0_reg.in = %std_mulFN_0.out : f32
-        calyx.assign %mulf_0_reg.write_en = %std_mulFN_0.done : i1
-        %0 = comb.xor %std_mulFN_0.done, %true : i1
-        calyx.assign %std_mulFN_0.go = %0 ? %true : i1
+        calyx.assign %std_ieee754.mul_0.left = %in0 : f32
+        calyx.assign %std_ieee754.mul_0.right = %cst : f32
+        calyx.assign %mulf_0_reg.in = %std_ieee754.mul_0.out : f32
+        calyx.assign %mulf_0_reg.write_en = %std_ieee754.mul_0.done : i1
+        %0 = comb.xor %std_ieee754.mul_0.done, %true : i1
+        calyx.assign %std_ieee754.mul_0.go = %0 ? %true : i1
         calyx.group_done %mulf_0_reg.done : i1
       }
       calyx.group @ret_assign_0 {
-        calyx.assign %ret_arg0_reg.in = %std_mulFN_0.out : f32
+        calyx.assign %ret_arg0_reg.in = %std_ieee754.mul_0.out : f32
         calyx.assign %ret_arg0_reg.write_en = %true : i1
         calyx.group_done %ret_arg0_reg.done : i1
       }
@@ -379,3 +379,4 @@ module attributes {calyx.entrypoint = "main"} {
     }
   } {toplevel}
 }
+

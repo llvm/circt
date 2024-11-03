@@ -375,7 +375,7 @@ def AddFNOp : ArithBinaryFloatingPointLibraryOp<"addFN"> {
   }];
 }
 
-def MulFNOp : ArithBinaryFloatingPointLibraryOp<"mulFN"> {
+def MulFNOp : ArithBinaryFloatingPointLibraryOp<"ieee754.mul"> {
   let results = (outs I1:$clk, I1:$reset, I1:$go, I1:$control,
     AnyFloat:$left, AnyFloat:$right, AnySignlessInteger:$roundingMode, AnyFloat:$out,
     AnySignlessInteger:$exceptionalFlags, I1:$done);
