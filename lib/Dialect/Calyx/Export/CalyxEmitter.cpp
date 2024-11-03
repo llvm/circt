@@ -153,6 +153,10 @@ private:
           static constexpr std::string_view sFloatingPoint = "float/addFN";
           return {sFloatingPoint};
         })
+        .Case<MulFNOp>([&](auto op) -> FailureOr<StringRef> {
+          static constexpr std::string_view sFloatingPoint = "float/mulFN";
+          return {sFloatingPoint};
+        })
         .Default([&](auto op) {
           auto diag = op->emitOpError() << "not supported for emission";
           return diag;
@@ -675,7 +679,8 @@ void Emitter::emitComponent(ComponentInterface op) {
             emitLibraryPrimTypedByFirstOutputPort(
                 op, /*calyxLibName=*/{"std_sdiv_pipe"});
           })
-          .Case<AddFNOp>([&](auto op) { emitLibraryFloatingPoint(op); })
+          .Case<AddFNOp, MulFNOp>(
+              [&](auto op) { emitLibraryFloatingPoint(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside component");
           });

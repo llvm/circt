@@ -289,7 +289,7 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                              AndIOp, XOrIOp, OrIOp, ExtUIOp, ExtSIOp, TruncIOp,
                              MulIOp, DivUIOp, DivSIOp, RemUIOp, RemSIOp,
                              /// floating point
-                             AddFOp,
+                             AddFOp, MulFOp,
                              /// others
                              SelectOp, IndexCastOp, CallOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
@@ -325,6 +325,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, RemUIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, RemSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, AddFOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, MulFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRUIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShLIOp op) const;
@@ -708,6 +709,21 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
               {one, one, one, one, one, width, width, three, width, five, one});
   return buildLibraryBinaryPipeOp<calyx::AddFNOp>(rewriter, addf, addFN,
                                                   addFN.getOut());
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     MulFOp mulf) const {
+  Location loc = mulf.getLoc();
+  Type width = mulf.getResult().getType();
+  IntegerType one = rewriter.getI1Type(), three = rewriter.getIntegerType(3),
+              five = rewriter.getIntegerType(5);
+  auto mulFN =
+      getState<ComponentLoweringState>()
+          .getNewLibraryOpInstance<calyx::MulFNOp>(
+              rewriter, loc,
+              {one, one, one, one, width, width, three, width, five, one});
+  return buildLibraryBinaryPipeOp<calyx::MulFNOp>(rewriter, mulf, mulFN,
+                                                  mulFN.getOut());
 }
 
 template <typename TAllocOp>
@@ -2094,7 +2110,7 @@ public:
                       ShRSIOp, AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp,
                       CondBranchOp, BranchOp, MulIOp, DivUIOp, DivSIOp, RemUIOp,
                       RemSIOp, ReturnOp, arith::ConstantOp, IndexCastOp, FuncOp,
-                      ExtSIOp, CallOp, AddFOp>();
+                      ExtSIOp, CallOp, AddFOp, MulFOp>();
 
     RewritePatternSet legalizePatterns(&getContext());
     legalizePatterns.add<DummyPattern>(&getContext());

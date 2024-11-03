@@ -260,6 +260,28 @@ module {
 
 // -----
 
+// Test floating point mul
+
+// CHECK:      calyx.group @bb0_0 {
+// CHECK-DAG:        calyx.assign %std_mulFN_0.left = %in0 : f32
+// CHECK-DAG:        calyx.assign %std_mulFN_0.right = %cst : f32
+// CHECK-DAG:        calyx.assign %mulf_0_reg.in = %std_mulFN_0.out : f32
+// CHECK-DAG:        calyx.assign %mulf_0_reg.write_en = %std_mulFN_0.done : i1
+// CHECK-DAG:        %0 = comb.xor %std_mulFN_0.done, %true : i1
+// CHECK-DAG:        calyx.assign %std_mulFN_0.go = %0 ? %true : i1
+// CHECK-DAG:        calyx.group_done %mulf_0_reg.done : i1
+// CHECK-DAG:      }
+module {
+  func.func @main(%arg0 : f32) -> f32 {
+    %0 = arith.constant 4.2 : f32
+    %1 = arith.mulf %arg0, %0 : f32
+
+    return %1 : f32
+  }
+}
+
+// -----
+
 // Test parallel op lowering
 
 // CHECK:    calyx.wires {
