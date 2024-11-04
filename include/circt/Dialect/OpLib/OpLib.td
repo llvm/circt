@@ -16,6 +16,8 @@ def OpLib_Dialect : Dialect {
   let cppNamespace = "::circt::oplib";
   let summary = "Operator library dialect";
 
+  let useDefaultAttributePrinterParser = true;
+
   let extraClassDeclaration = [{
     /// Register all SSP attributes.
     void registerAttributes();
