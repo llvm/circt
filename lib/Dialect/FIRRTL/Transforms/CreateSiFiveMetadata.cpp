@@ -577,13 +577,19 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
         }
       });
       // Record all the hierarchy names.
-      SmallVector<std::string> hierNames;
       jsonStream.attributeArray("hierarchy", [&] {
         // Get the absolute path for the parent memory, to create the
         // hierarchy names.
         auto paths = omir.instancePathCache.getAbsolutePaths(mem);
         for (auto p : paths) {
           if (p.empty())
+            continue;
+
+          // Only include the memory paths that are under the effective DUT.
+          auto dutMod = instanceInfo->getEffectiveDut();
+          if (llvm::none_of(p, [&](circt::igraph::InstanceOpInterface inst) {
+                return dutMod == inst->getParentOfType<FModuleOp>();
+              }))
             continue;
 
           auto top = p.top();
@@ -603,13 +609,7 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
           }
           hierName += ("." + finalInst.getInstanceName()).str();
 
-          hierNames.push_back(hierName);
-          // Only include the memory paths that are under the effective DUT.
-          auto dutMod = instanceInfo->getEffectiveDut();
-          if (llvm::any_of(p, [&](circt::igraph::InstanceOpInterface inst) {
-                return dutMod == inst->getParentOfType<FModuleOp>();
-              }))
-            jsonStream.value(hierName);
+          jsonStream.value(hierName);
         }
       });
     });
