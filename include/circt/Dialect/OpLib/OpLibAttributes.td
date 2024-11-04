@@ -1,4 +1,4 @@
-//===- CalyxLibAttributes.td - CalyxLib attributes ---------*- tablegen -*-===//
+//===- OpLibAttributes.td - OpLib attributes ---------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the CalyxLib dialect attributes.
+// This file defines the OpLib dialect attributes.
 //
 //===----------------------------------------------------------------------===//
 
@@ -31,29 +31,29 @@ class OperatorProperty<Dialect dialect,
   // store it in this attribute's `$value` parameter.
   // code wrapValue = [{ value }];
 
-  let summary = "Models the `" # propertyName # "` property for a CalyxLib operator.";
+  let summary = "Models the `" # propertyName # "` property for a OpLib operator.";
 
   let parameters = (ins propertyType:$value);
   let mnemonic = propertyName;
   let assemblyFormat = [{ `<` $value `>` }];
 }
 
-def IncomingDelayProp : OperatorProperty<CalyxLib_Dialect,
+def IncomingDelayProp : OperatorProperty<OpLib_Dialect,
   "IncomingDelay", "::mlir::FloatAttr"> {
   let mnemonic = "incDelay";
 }
 
-def OutgoingDelayProp : OperatorProperty<CalyxLib_Dialect,
+def OutgoingDelayProp : OperatorProperty<OpLib_Dialect,
   "OutgoingDelay", "::mlir::FloatAttr"> {
   let mnemonic = "outDelay";
 }
 
-def LimitProp : OperatorProperty<CalyxLib_Dialect,
+def LimitProp : OperatorProperty<OpLib_Dialect,
   "Limit", "unsigned"> {
   let mnemonic = "limit";
 }
 
-def LatencyProp : OperatorProperty<CalyxLib_Dialect,
+def LatencyProp : OperatorProperty<OpLib_Dialect,
   "Latency", "unsigned"> {
   let mnemonic = "latency";
 }

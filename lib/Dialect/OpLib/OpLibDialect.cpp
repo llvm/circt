@@ -1,4 +1,4 @@
-//===- CalyxLibDialect.cpp - Implement the CalyxLib dialect ---------------===//
+//===- OpLibDialect.cpp - Implement the OpLib dialect ---------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,30 +6,30 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements the CalyxLib dialect.
+// This file implements the OpLib dialect.
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/CalyxLib/CalyxLibDialect.h"
-#include "circt/Dialect/CalyxLib/CalyxLibOps.h"
+#include "circt/Dialect/OpLib/OpLibDialect.h"
+#include "circt/Dialect/OpLib/OpLibOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
 
 using namespace circt;
-using namespace calyxlib;
+using namespace oplib;
 
 //===----------------------------------------------------------------------===//
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-void CalyxLibDialect::initialize() {
+void OpLibDialect::initialize() {
   // Register operations.
   addOperations<
 #define GET_OP_LIST
-#include "circt/Dialect/CalyxLib/CalyxLib.cpp.inc"
+#include "circt/Dialect/OpLib/OpLib.cpp.inc"
       >();
   registerAttributes();
 }
 
-#include "circt/Dialect/CalyxLib/CalyxLibDialect.cpp.inc"
+#include "circt/Dialect/OpLib/OpLibDialect.cpp.inc"

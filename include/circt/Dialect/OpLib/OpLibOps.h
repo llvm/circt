@@ -1,4 +1,4 @@
-//===- CalyxLibOps.h - CalyxLib Op Definitions ------------------*- C++ -*-===//
+//===- OpLibOps.h - OpLib Op Definitions ------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_CALYXLIB_CALYXLIBOPS_H
-#define CIRCT_DIALECT_CALYXLIB_CALYXLIBOPS_H
+#ifndef CIRCT_DIALECT_OPLIB_OPLIBOPS_H
+#define CIRCT_DIALECT_OPLIB_OPLIBOPS_H
 
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Attributes.h"
@@ -23,9 +23,9 @@
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
-#include "circt/Dialect/CalyxLib/CalyxLibDialect.h"
+#include "circt/Dialect/OpLib/OpLibDialect.h"
 
 #define GET_OP_CLASSES
-#include "circt/Dialect/CalyxLib/CalyxLib.h.inc"
+#include "circt/Dialect/OpLib/OpLib.h.inc"
 
-#endif // CIRCT_DIALECT_CALYXLIB_CALYXLIBOPS_H
+#endif // CIRCT_DIALECT_OPLIB_OPLIBOPS_H

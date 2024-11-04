@@ -1,4 +1,4 @@
-//===- CalyxLibAttributes.cpp - CalyxLib attribute implementation -------------------===//
+//===- OpLibAttributes.cpp - OpLib attribute implementation -------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,12 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements the CalyxLib (static scheduling problem) dialect attributes.
+// This file implements the OpLib (static scheduling problem) dialect attributes.
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/CalyxLib/CalyxLibAttributes.h"
-#include "circt/Dialect/CalyxLib/CalyxLibDialect.h"
+#include "circt/Dialect/OpLib/OpLibAttributes.h"
+#include "circt/Dialect/OpLib/OpLibDialect.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -20,20 +20,20 @@
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
-using namespace calyxlib;
+using namespace oplib;
 
 #define GET_ATTRDEF_CLASSES
-#include "circt/Dialect/CalyxLib/CalyxLibAttributes.cpp.inc"
+#include "circt/Dialect/OpLib/OpLibAttributes.cpp.inc"
 
-void CalyxLibDialect::registerAttributes() {
+void OpLibDialect::registerAttributes() {
   addAttributes<
 #define GET_ATTRDEF_LIST
-#include "circt/Dialect/CalyxLib/CalyxLibAttributes.cpp.inc"
+#include "circt/Dialect/OpLib/OpLibAttributes.cpp.inc"
       >();
 }
 
 mlir::OptionalParseResult
-calyxlib::parseOptionalPropertyArray(ArrayAttr &attr, AsmParser &parser,
+oplib::parseOptionalPropertyArray(ArrayAttr &attr, AsmParser &parser,
                                      ArrayRef<Attribute> alreadyParsed) {
   auto &builder = parser.getBuilder();
 
@@ -61,7 +61,7 @@ calyxlib::parseOptionalPropertyArray(ArrayAttr &attr, AsmParser &parser,
       return success();
     }
 
-    // Try to parse one of the built-in CalyxLib property attributes.
+    // Try to parse one of the built-in OpLib property attributes.
     StringRef mnemonic;
     auto parseShortformAttrResult =
         generatedAttributeParser(parser, &mnemonic, Type(), elem);
@@ -86,7 +86,7 @@ calyxlib::parseOptionalPropertyArray(ArrayAttr &attr, AsmParser &parser,
   return success();
 }
 
-void calyxlib::printPropertyArray(ArrayAttr attr, AsmPrinter &p,
+void oplib::printPropertyArray(ArrayAttr attr, AsmPrinter &p,
                                   ArrayRef<Attribute> alreadyPrinted) {
   auto elementsToPrint =
       llvm::make_filter_range(attr.getAsRange<Attribute>(), [&](Attribute a) {
@@ -97,7 +97,7 @@ void calyxlib::printPropertyArray(ArrayAttr attr, AsmPrinter &p,
 
   p << '[';
   llvm::interleaveComma(elementsToPrint, p, [&](Attribute elem) {
-    // Try to emit the shortform for the built-in CalyxLib property attributes, and
+    // Try to emit the shortform for the built-in OpLib property attributes, and
     // if that fails, fall back to the generic form.
     if (failed(generatedAttributePrinter(elem, p)))
       p.printAttribute(attr);

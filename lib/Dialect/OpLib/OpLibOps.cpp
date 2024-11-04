@@ -1,4 +1,4 @@
-//===- CalyxLibOps.cpp - CalyxLib Dialect Operations ------------*- C++ -*-===//
+//===- OpLibOps.cpp - OpLib Dialect Operations ------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,12 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implement the CalyxLib ops.
+// This file implement the OpLib ops.
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/CalyxLib/CalyxLibOps.h"
-#include "circt/Dialect/CalyxLib/CalyxLibAttributes.h"
+#include "circt/Dialect/OpLib/OpLibOps.h"
+#include "circt/Dialect/OpLib/OpLibAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/OpImplementation.h"
@@ -20,7 +20,7 @@
 
 using namespace mlir;
 using namespace circt;
-using namespace circt::calyxlib;
+using namespace circt::oplib;
 
 //===----------------------------------------------------------------------===//
 // TargetOp
@@ -45,17 +45,39 @@ void TargetOp::print(OpAsmPrinter &p) {
 }
 
 //===----------------------------------------------------------------------===//
+// CalyxMatchOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult CalyxMatchOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  StringRef targetName = getTarget();
+  Type type = getTargetType();
+
+  // Try to find the referenced target.
+  auto fn = symbolTable.lookupSymbolIn<TargetOp>(
+      this->getParentOp<OperatorOp>(), StringAttr::get(getContext(), targetName));
+  if (!fn)
+    return emitOpError() << "reference to undefined target '" << targetName
+                         << "'";
+
+  // Check that the referenced function has the correct type.
+  if (fn.getFunctionType() != type)
+    return emitOpError("reference to target with mismatched type");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Wrappers for the `custom<Properties>` ODS directive.
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseCalyxLibProperties(OpAsmParser &parser, ArrayAttr &attr) {
+static ParseResult parseOpLibProperties(OpAsmParser &parser, ArrayAttr &attr) {
   auto result = parseOptionalPropertyArray(attr, parser);
   if (!result.has_value() || succeeded(*result))
     return success();
   return failure();
 }
 
-static void printCalyxLibProperties(OpAsmPrinter &p, Operation *op, ArrayAttr attr) {
+static void printOpLibProperties(OpAsmPrinter &p, Operation *op, ArrayAttr attr) {
   if (!attr)
     return;
   printPropertyArray(attr, p);
@@ -137,4 +159,4 @@ static void printTargetTypes(OpAsmPrinter &p, Operation *op, TypeAttr attr) {
 //===----------------------------------------------------------------------===//
 
 #define GET_OP_CLASSES
-#include "circt/Dialect/CalyxLib/CalyxLib.cpp.inc"
+#include "circt/Dialect/OpLib/OpLib.cpp.inc"
