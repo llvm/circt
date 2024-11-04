@@ -5,7 +5,12 @@
 from ._rtg_ops_gen import *
 from .._mlir_libs._circt._rtg import *
 from ..ir import *
-from .hw import ConstantOp
+from .arith import *
+
+# def value_add(self, other: Value):
+#   return addi(self, other)
+
+Value.__add__ = addi
 
 def sequence(cpu):
   def decorator(fn):

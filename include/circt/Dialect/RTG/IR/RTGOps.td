@@ -14,6 +14,7 @@ include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/CommonAttrConstraints.td"
 include "mlir/IR/Properties.td"
 include "mlir/IR/SymbolInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "circt/Dialect/RTG/IR/RTGInterfaces.td"
 
 // Base class for the operation in this dialect.
@@ -146,8 +147,32 @@ def InvokeSequenceOp : RTGOp<"invoke", []> {
   }];
 }
 
+//===- Set Operations -----------------------------------------------------===//
+
+def SetCreateOp : RTGOp<"set_create", [
+  SameOperandsAndResultType
+]> {
+  let summary = "constructs a mode set";
+
+  let arguments = (ins Variadic<Type>:$modes);
+  // TODO: verify element type
+  let results = (outs SetType:$output);
+
+  let assemblyFormat = "$modes attr-dict";
+}
 
 //===- Resource Set Operations --------------------------------------------===//
+
+def ResourceSetOp : RTGOp<"resource_set", [
+  SameOperandsAndResultType
+]> {
+  let summary = "constructs a resource set";
+
+  let arguments = (ins Variadic<ResourceTypeInterface>:$resources);
+  let results = (outs ResourceTypeInterface:$output);
+
+  let assemblyFormat = "$resources `:` type($output) attr-dict";
+}
 
 def SelectRandomResourceOp : RTGOp<"select_random_resource", [
   AllTypesMatch<["resources", "output"]>

@@ -30,21 +30,12 @@ def SequenceType : RTGTypeDef<"Sequence"> {
   let assemblyFormat = "(`<` $argTypes^ `>`)?";
 }
 
-def ResourceType : RTGTypeDef<"Resource"> {
+def ModeType : RTGTypeDef<"Mode"> {
   let summary = "";
   let description = [{
   }];
 
-  let mnemonic = "resource";
-  let assemblyFormat = "";
-}
-
-def ResourceSetType : RTGTypeDef<"ResourceSet"> {
-  let summary = "";
-  let description = [{
-  }];
-
-  let mnemonic = "resource_set";
+  let mnemonic = "mode";
   let assemblyFormat = "";
 }
 
@@ -57,15 +48,15 @@ def ContextResourceType : RTGTypeDef<"ContextResource"> {
   let assemblyFormat = "";
 }
 
-def ContextResourceSetType : RTGTypeDef<"ContextResourceSet"> {
+def SetType : RTGTypeDef<"Set"> {
   let summary = "";
   let description = [{
   }];
 
-  let mnemonic = "context_resource_set";
-  let parameters = (ins 
-    "::circt::rtg::ResourceTypeInterface":$contextResourceType);
-  let assemblyFormat = "`<` $contextResourceType `>`";
+  let parameters = (ins "::mlir::Type":$elementType);
+
+  let mnemonic = "set";
+  let assemblyFormat = "`<` $elementType `>`";
 }
 
 #endif // CIRCT_DIALECT_RTG_IR_RTGTYPES_TD
