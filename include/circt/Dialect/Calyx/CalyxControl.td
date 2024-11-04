@@ -426,26 +426,31 @@ def InvokeOp : CalyxOp<"invoke", [
     call, which invokes a given component.
 
     The 'callee' attribute is the name of the component,
-    the 'ports' attribute The ports attribute specifies 
-    the input port of the component when it is invoked, 
-    and the 'inputs' attribute specifies the assignment on 
-    the corresponding port.
+    the 'ports' attribute specifies the input port of the component when it is invoked,
+    the 'inputs' attribute specifies the assignment on the corresponding port,
+    and the 'refCellsMap' attribute maps the reference cells in the `callee` with
+    the original cells in the caller.
 
     ```mlir
+      calyx.component @identity {
+        %mem.addr0, %mem.clk, ... = calyx.seq_mem @mem <[1] x 32> [1] {external = false}
+      }
       %id.in, %id.out, ... = calyx.instance @id of @identity : i32, i32, ...
       %r.in, ... = calyx.register @r : i32, ...
+      %mem_1.addr0, %mem_1.clk, ... = calyx.seq_mem @mem_1 <[1] x 32> [1] {external = true}
       ...
       calyx.control {
         calyx.seq {
-          calyx.invoke @id(%id.in = %c1_10, %r.in = %id.out) -> (i32, i32)
+          calyx.invoke @id[mem = mem_1](%id.in = %c1_10, %r.in = %id.out) -> (i32, i32)
         }
       }
     ```
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$callee, 
+  let arguments = (ins FlatSymbolRefAttr:$callee,
                    Variadic<AnyType>:$ports,
                    Variadic<AnyType>:$inputs,
+                   ArrayAttr:$refCellsMap,
                    ArrayAttr:$portNames,
                    ArrayAttr:$inputNames);
   let results = (outs);

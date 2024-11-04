@@ -845,10 +845,13 @@ void Emitter::emitSeqMemory(SeqMemoryOp memory) {
                         "supported by the native Calyx compiler.");
     return;
   }
-  indent() << getAttributes(memory, /*atFormat=*/true) << memory.instanceName()
-           << space() << equals() << space() << "seq_mem_d"
-           << std::to_string(dimension) << LParen() << memory.getWidth()
-           << comma();
+  bool isRef = !memory->hasAttr("external");
+  indent();
+  if (isRef)
+    os << "ref ";
+  os << getAttributes(memory, /*atFormat=*/true) << memory.instanceName()
+     << space() << equals() << space() << "seq_mem_d"
+     << std::to_string(dimension) << LParen() << memory.getWidth() << comma();
   for (Attribute size : memory.getSizes()) {
     APInt memSize = cast<IntegerAttr>(size).getValue();
     memSize.print(os, /*isSigned=*/false);
@@ -869,6 +872,20 @@ void Emitter::emitSeqMemory(SeqMemoryOp memory) {
 void Emitter::emitInvoke(InvokeOp invoke) {
   StringRef callee = invoke.getCallee();
   indent() << "invoke " << callee;
+  auto refCellsMap = invoke.getRefCellsMap();
+  if (!refCellsMap.empty()) {
+    os << "[";
+    llvm::interleaveComma(refCellsMap, os, [&](Attribute attr) {
+      auto dictAttr = cast<DictionaryAttr>(attr);
+      llvm::interleaveComma(dictAttr, os, [&](NamedAttribute namedAttr) {
+        auto refCellName = namedAttr.getName().str();
+        auto externalMem =
+            cast<FlatSymbolRefAttr>(namedAttr.getValue()).getValue();
+        os << refCellName << " = " << externalMem;
+      });
+    });
+    os << "]";
+  }
   ArrayAttr portNames = invoke.getPortNames();
   ArrayAttr inputNames = invoke.getInputNames();
   /// Because the ports of all components of calyx.invoke are inside a (),

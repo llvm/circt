@@ -1108,7 +1108,7 @@ module attributes {calyx.entrypoint = "main"} {
 
     }
     calyx.control {
-      // expected-error @+1 {{'calyx.invoke' op '@r' has zero input and output port connections; expected at least one.}}
+      // expected-error @+1 {{'calyx.invoke' op '@r' has zero input and output port connections and has no passing-by-reference cells; expected at least one.}}
       calyx.invoke @r() -> ()
     }
   }
