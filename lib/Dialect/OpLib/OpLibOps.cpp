@@ -11,8 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/OpLib/OpLibOps.h"
-#include "circt/Dialect/OpLib/OpLibAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/OpLib/OpLibAttributes.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
@@ -48,13 +48,15 @@ void TargetOp::print(OpAsmPrinter &p) {
 // CalyxMatchOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult CalyxMatchOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+LogicalResult
+CalyxMatchOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   StringRef targetName = getTarget();
   Type type = getTargetType();
 
   // Try to find the referenced target.
   auto fn = symbolTable.lookupSymbolIn<TargetOp>(
-      this->getParentOp<OperatorOp>(), StringAttr::get(getContext(), targetName));
+      this->getParentOp<OperatorOp>(),
+      StringAttr::get(getContext(), targetName));
   if (!fn)
     return emitOpError() << "reference to undefined target '" << targetName
                          << "'";
@@ -77,7 +79,8 @@ static ParseResult parseOpLibProperties(OpAsmParser &parser, ArrayAttr &attr) {
   return failure();
 }
 
-static void printOpLibProperties(OpAsmPrinter &p, Operation *op, ArrayAttr attr) {
+static void printOpLibProperties(OpAsmPrinter &p, Operation *op,
+                                 ArrayAttr attr) {
   if (!attr)
     return;
   printPropertyArray(attr, p);

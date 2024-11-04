@@ -25,8 +25,8 @@
 namespace circt {
 namespace oplib {
 
-/// Parse an array of attributes while recognizing the properties of the 
-/// OpLib dialect even without a `#oplib.` prefix. Any attributes 
+/// Parse an array of attributes while recognizing the properties of the
+/// OpLib dialect even without a `#oplib.` prefix. Any attributes
 /// supplied in \p alreadyParsed are prepended to the parsed ones.
 mlir::OptionalParseResult
 parseOptionalPropertyArray(ArrayAttr &attr, AsmParser &parser,

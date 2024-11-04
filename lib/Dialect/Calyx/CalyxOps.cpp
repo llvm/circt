@@ -1676,8 +1676,8 @@ verifyPrimitiveOpType(PrimitiveOp instance,
         module->getAttrOfType<StringAttr>("calyx.entrypoint");
     if (instance.getPrimitiveName() == entryPointName)
       return instance.emitOpError()
-             << "cannot reference the entry-point component: '" << entryPointName
-             << "'.";
+             << "cannot reference the entry-point component: '"
+             << entryPointName << "'.";
   }
 
   // Verify the instance result ports with those of its referenced component.

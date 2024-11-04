@@ -1,4 +1,5 @@
-//===- OpLibAttributes.cpp - OpLib attribute implementation -------------------===//
+//===- OpLibAttributes.cpp - OpLib attribute implementation
+//-------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements the OpLib (static scheduling problem) dialect attributes.
+// This file implements the OpLib (static scheduling problem) dialect
+// attributes.
 //
 //===----------------------------------------------------------------------===//
 
@@ -34,7 +36,7 @@ void OpLibDialect::registerAttributes() {
 
 mlir::OptionalParseResult
 oplib::parseOptionalPropertyArray(ArrayAttr &attr, AsmParser &parser,
-                                     ArrayRef<Attribute> alreadyParsed) {
+                                  ArrayRef<Attribute> alreadyParsed) {
   auto &builder = parser.getBuilder();
 
   if (parser.parseOptionalLSquare()) {
@@ -87,7 +89,7 @@ oplib::parseOptionalPropertyArray(ArrayAttr &attr, AsmParser &parser,
 }
 
 void oplib::printPropertyArray(ArrayAttr attr, AsmPrinter &p,
-                                  ArrayRef<Attribute> alreadyPrinted) {
+                               ArrayRef<Attribute> alreadyPrinted) {
   auto elementsToPrint =
       llvm::make_filter_range(attr.getAsRange<Attribute>(), [&](Attribute a) {
         return !llvm::is_contained(alreadyPrinted, a);
