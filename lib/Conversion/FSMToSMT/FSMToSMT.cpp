@@ -299,7 +299,7 @@ auto forall = b.create<smt::ForallOp>(loc, argVarTypes, [&varInitValues, &stateF
     }
     auto initTime = b.create<smt::BVConstantOp>(loc, 0, 32);
     auto lhs = b.create<smt::EqOp>(loc, forallArgs.back(), initTime);
-    auto rhs = b.create<smt::ApplyFuncOp>(loc, stateFunctions[0], initArgs);
+    auto rhs = b.create<smt::EqOp>(loc, b.create<smt::ApplyFuncOp>(loc, stateFunctions[0], initArgs), b.create<smt::BVConstantOp>(loc, 1, 1));
     auto boolLhs = b.create<smt::IteOp>(loc, lhs, b.create<smt::BoolConstantOp>(loc, true), b.create<smt::BoolConstantOp>(loc, false));
     auto boolRhs = b.create<smt::IteOp>(loc, rhs, b.create<smt::BoolConstantOp>(loc, true), b.create<smt::BoolConstantOp>(loc, false));
 
@@ -398,7 +398,7 @@ auto forall = b.create<smt::ForallOp>(loc, argVarTypes, [&varInitValues, &stateF
             return tmp;
           }
       } else {
-        return b.create<smt::BoolConstantOp>(loc, true);
+        return b.create<smt::BVConstantOp>(loc, 1, 1);
       }
     };
 
@@ -407,8 +407,8 @@ auto forall = b.create<smt::ForallOp>(loc, argVarTypes, [&varInitValues, &stateF
       // split new and old arguments
       auto t1ac = b.create<smt::ApplyFuncOp>(loc, stateFunctions[t1.from], forallArgs);
       auto actionedArgs = action(forallArgs);
-      auto rhs = b.create<smt::ApplyFuncOp>(loc, stateFunctions[t1.to], actionedArgs);
-      auto lhs = b.create<smt::BVAndOp>(loc, t1ac, guard1(forallArgs));
+      auto rhs =  b.create<smt::EqOp>(loc, b.create<smt::ApplyFuncOp>(loc, stateFunctions[t1.to], actionedArgs), b.create<smt::BVConstantOp>(loc, 1, 1));
+      auto lhs = b.create<smt::EqOp>(loc, b.create<smt::BVAndOp>(loc, t1ac, guard1(forallArgs)), b.create<smt::BVConstantOp>(loc, 1, 1));
       auto boolLhs = b.create<smt::IteOp>(loc, lhs, b.create<smt::BoolConstantOp>(loc, true), b.create<smt::BoolConstantOp>(loc, false));
       auto boolRhs = b.create<smt::IteOp>(loc, rhs, b.create<smt::BoolConstantOp>(loc, true), b.create<smt::BoolConstantOp>(loc, false));
       
