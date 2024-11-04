@@ -1,4 +1,4 @@
-// RUN: circt-opt --convert-moore-to-core --split-input-file --verify-diagnostics
+// RUN: circt-opt %s --convert-moore-to-core --split-input-file --verify-diagnostics
 
 func.func @invalidType() {
   // expected-error @below {{failed to legalize operation 'moore.variable'}}
