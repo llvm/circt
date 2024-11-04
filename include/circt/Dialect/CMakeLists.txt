@@ -9,6 +9,7 @@
 add_subdirectory(AIG)
 add_subdirectory(Arc)
 add_subdirectory(Calyx)
+add_subdirectory(CalyxLib)
 add_subdirectory(Comb)
 add_subdirectory(DC)
 add_subdirectory(Debug)
