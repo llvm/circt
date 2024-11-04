@@ -318,6 +318,42 @@ static LogicalResult applyConventionAnno(const AnnoPathValue &target,
   return error() << "can only target to a module or extmodule";
 }
 
+static LogicalResult applyModulePrefixAnno(const AnnoPathValue &target,
+                                           DictionaryAttr anno,
+                                           ApplyState &state) {
+  auto *op = target.ref.getOp();
+  auto loc = op->getLoc();
+  auto error = [&]() {
+    auto diag = mlir::emitError(loc);
+    diag << modulePrefixAnnoClass << " ";
+    return diag;
+  };
+
+  auto opTarget = dyn_cast<OpAnnoTarget>(target.ref);
+  if (!opTarget)
+    return error() << "must target an operation";
+
+  if (!isa<SeqMemOp, CombMemOp, MemOp>(opTarget.getOp()))
+    return error() << "must target a memory operation";
+
+  if (!target.isLocal())
+    return error() << "must be local";
+
+  auto prefixStrAttr =
+      tryGetAs<StringAttr>(anno, anno, "prefix", loc, modulePrefixAnnoClass);
+  if (!prefixStrAttr)
+    return failure();
+
+  if (auto mem = dyn_cast<SeqMemOp>(op))
+    mem.setPrefixAttr(prefixStrAttr);
+  else if (auto mem = dyn_cast<CombMemOp>(op))
+    mem.setPrefixAttr(prefixStrAttr);
+  else if (auto mem = dyn_cast<MemOp>(op))
+    mem.setPrefixAttr(prefixStrAttr);
+
+  return success();
+}
+
 static LogicalResult applyAttributeAnnotation(const AnnoPathValue &target,
                                               DictionaryAttr anno,
                                               ApplyState &state) {
@@ -535,6 +571,7 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
     {prefixModulesAnnoClass,
      {stdResolve,
       applyWithoutTarget<true, FModuleOp, FExtModuleOp, InstanceOp>}},
+    {modulePrefixAnnoClass, {stdResolve, applyModulePrefixAnno}},
     {dutAnnoClass, {stdResolve, applyDUTAnno}},
     {extractSeqMemsAnnoClass, NoTargetAnnotation},
     {injectDUTHierarchyAnnoClass, NoTargetAnnotation},
