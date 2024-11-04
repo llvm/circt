@@ -196,3 +196,121 @@ def SetDifferenceResourceOp : RTGOp<"set_difference_resource", [
 
   let assemblyFormat = "$resourcesSrc `,` $resourcesDiff `:` type($output) attr-dict";
 }
+
+def TestOp : RTGOp<"test", [IsolatedFromAbove, Symbol, SingleBlock, NoTerminator, HasParent<"mlir::ModuleOp">]> {
+  let summary = "root of a test";
+
+  let arguments = (ins SymbolNameAttr:$sym_name);
+  let regions = (region SizedRegion<1>:$bodyRegion);
+
+  let assemblyFormat = "$sym_name attr-dict-with-keyword $bodyRegion";
+
+  let hasRegionVerifier = 1;
+}
+
+def TargetOp : RTGOp<"target", [IsolatedFromAbove, Symbol, SingleBlock, NoTerminator, HasParent<"mlir::ModuleOp">]> {
+  let summary = "collection of target information";
+  let description = [{
+    Users must add the `HasParent<"rtg::TargetInfo">` trait on all operations
+    that can create `!rtg.context_resource` or `!rtg.mode` values.
+    If users do not agree to this contract, the RTG framework behavior is
+    undefined.
+
+
+    ```mlir
+    rtg.target.info @machine0 {
+      %core_0 = my_target.coreid 0 : !rtg.context_resource
+      %core_1 = my_target.coreid 1 : !rtg.context_resource
+      %0 = rtg.set_create %core_0, %core_1 : !rtg.set<!rtg.context_resource>
+      %user_mode = my_target.user_mode : !rtg.mode
+      %machine_mode = my_target.machine_mode : !rtg.mode
+      %supervisor_mode = my_target.supervisor_mode : !rtg.mode
+      %1 = rtg.set_create %user_mode, %machine_mode, %supervisor_mode : !rtg.set<!rtg.mode>
+      rtg.target.yield %0, %1 : !rtg.target<cpus: !rtg.set<!rtg.context_resource>, modes: !rtg.set<!rtg.mode>, machine_mode: !rtg.mode>
+    }
+
+    rtg.test @test0 {
+    ^bb0(%target: !rtg.target<cpus: !rtg.set<!rtg.context_resource>, modes: !rtg.set<!rtg.mode>>, machine_mode: !rtg.mode):
+      %0 = rtg.target.get %target["cpus"] : !rtg.target<cpus: !rtg.set<!rtg.context_resource>, modes: !rtg.set<!rtg.mode>, machine_mode: !rtg.mode>
+      %1 = rtg.target.get %target["modes"] : !rtg.target<cpus: !rtg.set<!rtg.context_resource>, modes: !rtg.set<!rtg.mode>, machine_mode: !rtg.mode>
+      rtg.on_context %0 mode %1 {
+
+      }
+    }
+
+    // Alternative:
+
+    rtg.target @machine0 {
+      %core_0 = my_target.coreid 0 : !rtg.context_resource
+      %core_1 = my_target.coreid 1 : !rtg.context_resource
+      %0 = rtg.set_create %core_0, %core_1 : !rtg.set<!rtg.context_resource>
+      %user_mode = my_target.user_mode : !rtg.mode
+      %machine_mode = my_target.machine_mode : !rtg.mode
+      %supervisor_mode = my_target.supervisor_mode : !rtg.mode
+      %1 = rtg.set_create %user_mode, %machine_mode, %supervisor_mode : !rtg.set<!rtg.mode>
+      rtg.yield %0, %1 : !rtg.set<!rtg.context_resource>, !rtg.set<!rtg.mode>, !rtg.mode
+    }
+
+    %seq = rtg.sequence @sequence_name {
+    
+    }
+
+    rtg.mode_transition @transition_name {
+    ^bb0(%from: !rtg.mode, %to: !rtg.mode):
+      // Need to create mode here and compare against block argument
+      %success = arith.constant true
+      rtg.yield %success : i1
+    }
+
+    rtg.test @test0 {
+    ^bb0(%cpus: !rtg.set<!rtg.context_resource>, $modes: !rtg.set<!rtg.mode>>, %machine_mode: !rtg.mode):
+      rtg.on_context %cpus mode %modes { // region is instantiated once for every core-mode pair
+       
+      }
+    }
+
+    // Alternative:
+
+    rtg.target @machine0 : !rtg.target<cpus: !rtg.set<!rtg.context_resource>, modes: !rtg.set<!rtg.mode>, machine_mode: !rtg.mode> {
+      %core_0 = my_target.coreid 0 : !rtg.context_resource
+      %core_1 = my_target.coreid 1 : !rtg.context_resource
+      %0 = rtg.set_create %core_0, %core_1 : !rtg.set<!rtg.context_resource>
+      // NOTE: users can also create their own mode creating operations, it
+      // doesn't need to be an attribute for 'rtg.mode'. However, automatic
+      // transitions are only supported when the mode can be specified using a
+      // mode typed attribute. We could support such transitions by generalizing
+      // the mode transition operation to accept two block arguments of mode
+      // type and allowing creation and comparison of modes inside of it.
+      // However, we'd need to make sure this cannot be abused to create new
+      // modes on the fly.
+      %user_mode = rtg.mode #my_target.user_mode : !rtg.mode
+      %machine_mode = rtg.mode #my_target.machine_mode : !rtg.mode
+      %supervisor_mode = rtg.mode #my_target.supervisor_mode : !rtg.mode
+      %1 = rtg.set_create %user_mode, %machine_mode, %supervisor_mode : !rtg.set<!rtg.mode>
+      rtg.yield %0, %1 : !rtg.set<!rtg.context_resource>, !rtg.set<!rtg.mode>, !rtg.mode
+    }
+
+    %seq = rtg.sequence @sequence_name {
+    
+    }
+
+    rtg.mode_transition @transition_name from #my_target.user_mode to #my_target.machine_mode {
+      // instruction sequence to transition here 
+    }
+
+    rtg.test @test0 : !rtg.target<cpus: !rtg.set<!rtg.context_resource>, modes: !rtg.set<!rtg.mode>, machine_mode: !rtg.mode> {
+    ^bb0(%cpus: !rtg.set<!rtg.context_resource>, $modes: !rtg.set<!rtg.mode>>, %machine_mode: !rtg.mode):
+      rtg.on_context %cpus mode %modes { // region is instantiated once for every core-mode pair
+       
+      }
+    }
+    ```
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name);
+  let regions = (region SizedRegion<1>:$bodyRegion);
+
+  let assemblyFormat = "$sym_name attr-dict-with-keyword $bodyRegion";
+
+  let hasRegionVerifier = 1;
+}

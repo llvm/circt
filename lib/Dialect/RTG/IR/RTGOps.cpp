@@ -64,6 +64,19 @@ LogicalResult SelectRandomOp::verify() {
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// TestOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult TestOp::verifyRegions() {
+  if (getBody()->getNumArguments() != 1)
+    return emitOpError("must have exactly one argument");
+
+  if (!isa<TargetType>(getBody()->getArgumentTypes()[0]))
+    return emitOpError("argument type must be of 'target' type");
+
+  return success();
+}
 
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.

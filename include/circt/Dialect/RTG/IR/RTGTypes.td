@@ -59,4 +59,13 @@ def SetType : RTGTypeDef<"Set"> {
   let assemblyFormat = "`<` $elementType `>`";
 }
 
+def TargetType : RTGTypeDef<"Target"> {
+  let summary = "";
+  let description = [{
+  }];
+
+  let mnemonic = "target";
+  let assemblyFormat = "";
+}
+
 #endif // CIRCT_DIALECT_RTG_IR_RTGTYPES_TD
