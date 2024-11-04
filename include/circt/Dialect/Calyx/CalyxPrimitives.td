@@ -22,27 +22,26 @@ class CalyxPrimitive<string mnemonic, list<Trait> traits = []> :
 
 def ConstantOp: CalyxPrimitive<"constant",
     [ConstantLike, FirstAttrDerivedResultType,
-    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-    AllTypesMatch<["value", "out"]>
+    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
     ]> {
-  let summary = "integer or floating point constant";
+  let summary = "constant capable of representing an integer or floating point value";
   let description = [{
-    The `constant` operation produces an SSA value equal to some integer or
-    floating-point constant specified by an attribute.
+    The `constant` operation is a wrapper around bit vectors with fixed-size number of bits.
+    Specific value and intended type should be specified via attribute only.
 
     Example:
 
     ```
     // Integer constant
-    %1 = calyx.constant 42 : i32
+    %1 = calyx.constant {value = 42 : i32} : i32
 
     // Floating point constant
-    %1 = calyx.constant 42.00+e00 : f32
+    %1 = calyx.constant {value = 4.2 : f32} : i32
     ```
   }];
   let arguments = (ins TypedAttrInterface:$value);
 
-  let results = (outs SignlessIntegerOrFloatLike:$out);
+  let results = (outs AnySignlessInteger:$out);
 
   let builders = [
     /// Build a ConstantOp from a prebuilt attribute.
@@ -50,7 +49,7 @@ def ConstantOp: CalyxPrimitive<"constant",
   ];
 
   let hasFolder = 1;
-  let assemblyFormat = "attr-dict $value";
+  let assemblyFormat = "attr-dict $value type($out)";
   let hasVerifier = 1;
 }
 
