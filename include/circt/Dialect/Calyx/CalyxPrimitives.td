@@ -21,8 +21,7 @@ class CalyxPrimitive<string mnemonic, list<Trait> traits = []> :
 }
 
 def ConstantOp: CalyxPrimitive<"constant",
-    [ConstantLike, FirstAttrDerivedResultType,
-    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
+    [ConstantLike, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
     ]> {
   let summary = "constant capable of representing an integer or floating point value";
   let description = [{
@@ -33,23 +32,22 @@ def ConstantOp: CalyxPrimitive<"constant",
 
     ```
     // Integer constant
-    %1 = calyx.constant {value = 42 : i32} : i32
+    %1 = calyx.constant <value = 42 : i32> : i32
 
     // Floating point constant
-    %1 = calyx.constant {value = 4.2 : f32} : i32
+    %1 = calyx.constant <value = 4.2 : f32> : i32
     ```
   }];
-  let arguments = (ins TypedAttrInterface:$value);
+  let arguments = (ins SymbolNameAttr:$sym_name, TypedAttrInterface:$value);
 
   let results = (outs AnySignlessInteger:$out);
 
   let builders = [
-    /// Build a ConstantOp from a prebuilt attribute.
     OpBuilder <(ins "StringRef":$sym_name, "TypedAttr":$attr)>,
   ];
 
   let hasFolder = 1;
-  let assemblyFormat = "attr-dict $value type($out)";
+  let assemblyFormat = "$sym_name ` ` `<` $value `>` attr-dict `:` qualified(type($out))";
   let hasVerifier = 1;
 }
 
