@@ -32,10 +32,10 @@ def ConstantOp: CalyxPrimitive<"constant",
 
     ```
     // Integer constant
-    %1 = calyx.constant <value = 42 : i32> : i32
+    %1 = calyx.constant <42 : i32> : i32
 
     // Floating point constant
-    %1 = calyx.constant <value = 4.2 : f32> : i32
+    %1 = calyx.constant <4.2 : f32> : i32
     ```
   }];
   let arguments = (ins SymbolNameAttr:$sym_name, TypedAttrInterface:$value);
@@ -43,7 +43,7 @@ def ConstantOp: CalyxPrimitive<"constant",
   let results = (outs AnySignlessInteger:$out);
 
   let builders = [
-    OpBuilder <(ins "StringRef":$sym_name, "TypedAttr":$attr)>,
+    OpBuilder <(ins "StringRef":$sym_name, "Attribute":$attr, "Type":$type)>,
   ];
 
   let hasFolder = 1;
@@ -337,7 +337,7 @@ class ArithBinaryFloatingPointLibraryOp<string mnemonic> : ArithBinaryLibraryOp<
 
 def AddFNOp : ArithBinaryFloatingPointLibraryOp<"addFN"> {
   let results = (outs I1:$clk, I1:$reset, I1:$go, I1:$control, I1:$subOp,
-    AnyFloat:$left, AnyFloat:$right, AnySignlessInteger:$roundingMode, AnyFloat:$out,
+    AnySignlessInteger:$left, AnySignlessInteger:$right, AnySignlessInteger:$roundingMode, AnySignlessInteger:$out,
     AnySignlessInteger:$exceptionalFlags, I1:$done);
 
   let extraClassDefinition = [{
@@ -349,11 +349,11 @@ def AddFNOp : ArithBinaryFloatingPointLibraryOp<"addFN"> {
 
     SmallVector<Direction> $cppClass::portDirections() {
       return {Input, Input, Input, Input, Input, Input, Input, Input, Output, Output, Output};
-      }
+    }
 
     void $cppClass::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
       getCellAsmResultNames(setNameFn, *this, this->portNames());
-      }
+    }
 
     bool $cppClass::isCombinational() { return false; }
 
