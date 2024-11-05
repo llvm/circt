@@ -315,6 +315,28 @@ static LogicalResult execute(MLIRContext *context) {
     args.push_back("-d");
     args.push_back(testDir);
 
+    if (auto mode = test.attrs.get("mode")) {
+      args.push_back("-m");
+      auto modeStr = dyn_cast<StringAttr>(mode);
+      if (!modeStr) {
+        mlir::emitError(test.loc) << "invalid mode for test " << test.name;
+        return;
+      }
+      args.push_back(cast<StringAttr>(mode).getValue());
+    }
+
+    if (auto depth = test.attrs.get("depth")) {
+      args.push_back("-k");
+      auto depthInt = dyn_cast<IntegerAttr>(depth);
+      if (!depthInt) {
+        mlir::emitError(test.loc) << "invalid depth for test " << test.name;
+        return;
+      }
+      SmallVector<char> str;
+      depthInt.getValue().toStringUnsigned(str);
+      args.push_back(std::string(str.begin(), str.end()));
+    }
+
     // Execute the test runner.
     std::string errorMessage;
     auto result =

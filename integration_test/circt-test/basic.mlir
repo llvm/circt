@@ -86,7 +86,7 @@ verif.formal @ALUCanAdd {
   verif.assert %eq : i1
 }
 
-verif.formal @ALUCanSub {
+verif.formal @ALUCanSub attributes {mode = "cover,induction"} {
   %a = verif.symbolic_value : i4
   %b = verif.symbolic_value : i4
   %true = hw.constant true
@@ -96,7 +96,7 @@ verif.formal @ALUCanSub {
   verif.assert %eq : i1
 }
 
-verif.formal @ALUWorks {
+verif.formal @ALUWorks attributes {mode = "cover,bmc", depth = 5} {
   %a = verif.symbolic_value : i4
   %b = verif.symbolic_value : i4
   %sub = verif.symbolic_value : i1
@@ -132,7 +132,7 @@ verif.formal @ALUIgnoreFailure attributes {ignore = true} {
   verif.assert %ne : i1
 }
 
-verif.formal @ALUFailure {
+verif.formal @ALUFailure attributes {depth = 3} {
   %a = verif.symbolic_value : i4
   %b = verif.symbolic_value : i4
   %sub = verif.symbolic_value : i1
