@@ -252,9 +252,9 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
   auto memModule = getOrCreateMemModule(mem, summary, ports, shouldDedup);
   b.setInsertionPointToStart(wrapper.getBodyBlock());
 
-  auto memInst =
-      b.create<InstanceOp>(mem->getLoc(), memModule, memModule.getModuleName(),
-                           mem.getNameKind(), mem.getAnnotations().getValue());
+  auto memInst = b.create<InstanceOp>(
+      mem->getLoc(), memModule, (mem.getName() + "_ext").str(),
+      mem.getNameKind(), mem.getAnnotations().getValue());
 
   // Wire all the ports together.
   for (auto [dst, src] : llvm::zip(wrapper.getBodyBlock()->getArguments(),
