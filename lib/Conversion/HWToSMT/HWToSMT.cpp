@@ -144,7 +144,7 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
   // types, e.g., at the boundary of an inlined child block.
   converter.addTargetMaterialization([&](OpBuilder &builder, Type resultType,
                                          ValueRange inputs,
-                                         Location loc) -> std::optional<Value> {
+                                         Location loc) -> Value {
     return builder
         .create<mlir::UnrealizedConversionCastOp>(loc, resultType, inputs)
         ->getResult(0);
@@ -153,12 +153,12 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
   // Convert a 'smt.bool'-typed value to a 'smt.bv<N>'-typed value
   converter.addTargetMaterialization(
       [&](OpBuilder &builder, smt::BitVectorType resultType, ValueRange inputs,
-          Location loc) -> std::optional<Value> {
+          Location loc) -> Value {
         if (inputs.size() != 1)
-          return std::nullopt;
+          return Value();
 
         if (!isa<smt::BoolType>(inputs[0].getType()))
-          return std::nullopt;
+          return Value();
 
         unsigned width = resultType.getWidth();
         Value constZero = builder.create<smt::BVConstantOp>(loc, 0, width);
@@ -170,21 +170,21 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
   // into a direct conversion from 'smt.bool' to 'smt.bv<1>'.
   converter.addTargetMaterialization(
       [&](OpBuilder &builder, smt::BitVectorType resultType, ValueRange inputs,
-          Location loc) -> std::optional<Value> {
+          Location loc) -> Value {
         if (inputs.size() != 1 || resultType.getWidth() != 1)
-          return std::nullopt;
+          return Value();
 
         auto intType = dyn_cast<IntegerType>(inputs[0].getType());
         if (!intType || intType.getWidth() != 1)
-          return std::nullopt;
+          return Value();
 
         auto castOp =
             inputs[0].getDefiningOp<mlir::UnrealizedConversionCastOp>();
         if (!castOp || castOp.getInputs().size() != 1)
-          return std::nullopt;
+          return Value();
 
         if (!isa<smt::BoolType>(castOp.getInputs()[0].getType()))
-          return std::nullopt;
+          return Value();
 
         Value constZero = builder.create<smt::BVConstantOp>(loc, 0, 1);
         Value constOne = builder.create<smt::BVConstantOp>(loc, 1, 1);
@@ -195,13 +195,13 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
   // Convert a 'smt.bv<1>'-typed value to a 'smt.bool'-typed value
   converter.addTargetMaterialization(
       [&](OpBuilder &builder, smt::BoolType resultType, ValueRange inputs,
-          Location loc) -> std::optional<Value> {
+          Location loc) -> Value {
         if (inputs.size() != 1)
-          return std::nullopt;
+          return Value();
 
         auto bvType = dyn_cast<smt::BitVectorType>(inputs[0].getType());
         if (!bvType || bvType.getWidth() != 1)
-          return std::nullopt;
+          return Value();
 
         Value constOne = builder.create<smt::BVConstantOp>(loc, 1, 1);
         return builder.create<smt::EqOp>(loc, inputs[0], constOne);
@@ -211,7 +211,7 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
   // types, e.g., at the boundary of an inlined child block.
   converter.addSourceMaterialization([&](OpBuilder &builder, Type resultType,
                                          ValueRange inputs,
-                                         Location loc) -> std::optional<Value> {
+                                         Location loc) -> Value {
     return builder
         .create<mlir::UnrealizedConversionCastOp>(loc, resultType, inputs)
         ->getResult(0);

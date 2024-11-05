@@ -1441,10 +1441,9 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
 
   typeConverter.addTargetMaterialization(
       [&](mlir::OpBuilder &builder, mlir::Type resultType,
-          mlir::ValueRange inputs,
-          mlir::Location loc) -> std::optional<mlir::Value> {
+          mlir::ValueRange inputs, mlir::Location loc) -> mlir::Value {
         if (inputs.size() != 1 || !inputs[0])
-          return std::nullopt;
+          return Value();
         return builder
             .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
             .getResult(0);
@@ -1452,10 +1451,9 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
 
   typeConverter.addSourceMaterialization(
       [&](mlir::OpBuilder &builder, mlir::Type resultType,
-          mlir::ValueRange inputs,
-          mlir::Location loc) -> std::optional<mlir::Value> {
+          mlir::ValueRange inputs, mlir::Location loc) -> mlir::Value {
         if (inputs.size() != 1)
-          return std::nullopt;
+          return Value();
         return builder
             .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
             ->getResult(0);

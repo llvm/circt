@@ -65,27 +65,25 @@ public:
   ESITypeConverter() {
     addConversion([](Type type) -> Type { return esiWrapper(type); });
 
-    addTargetMaterialization(
-        [&](mlir::OpBuilder &builder, mlir::Type resultType,
-            mlir::ValueRange inputs,
-            mlir::Location loc) -> std::optional<mlir::Value> {
-          if (inputs.size() != 1)
-            return std::nullopt;
-          return builder
-              .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
-              ->getResult(0);
-        });
+    addTargetMaterialization([&](mlir::OpBuilder &builder,
+                                 mlir::Type resultType, mlir::ValueRange inputs,
+                                 mlir::Location loc) -> mlir::Value {
+      if (inputs.size() != 1)
+        return Value();
+      return builder
+          .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
+          ->getResult(0);
+    });
 
-    addSourceMaterialization(
-        [&](mlir::OpBuilder &builder, mlir::Type resultType,
-            mlir::ValueRange inputs,
-            mlir::Location loc) -> std::optional<mlir::Value> {
-          if (inputs.size() != 1)
-            return std::nullopt;
-          return builder
-              .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
-              ->getResult(0);
-        });
+    addSourceMaterialization([&](mlir::OpBuilder &builder,
+                                 mlir::Type resultType, mlir::ValueRange inputs,
+                                 mlir::Location loc) -> mlir::Value {
+      if (inputs.size() != 1)
+        return Value();
+      return builder
+          .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
+          ->getResult(0);
+    });
   }
 };
 
