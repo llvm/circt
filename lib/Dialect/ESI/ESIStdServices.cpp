@@ -131,3 +131,33 @@ void MMIOServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
                           ChannelType::get(ctxt, IntegerType::get(ctxt, 64))}},
           /*resettable=*/UnitAttr())});
 }
+
+ServicePortInfo HostMemServiceDeclOp::writePortInfo() {
+  auto *ctxt = getContext();
+  auto addressType =
+      IntegerType::get(ctxt, 64, IntegerType::SignednessSemantics::Unsigned);
+
+  // Write port
+  hw::StructType writeType = hw::StructType::get(
+      ctxt,
+      {hw::StructType::FieldInfo{StringAttr::get(ctxt, "address"), addressType},
+       hw::StructType::FieldInfo{StringAttr::get(ctxt, "data"),
+                                 AnyType::get(ctxt)}});
+  return createReqResp(getSymNameAttr(), "write", "req", writeType, "ack",
+                       IntegerType::get(ctxt, 0));
+}
+
+ServicePortInfo HostMemServiceDeclOp::readPortInfo() {
+  auto *ctxt = getContext();
+  auto addressType =
+      IntegerType::get(ctxt, 64, IntegerType::SignednessSemantics::Unsigned);
+
+  return createReqResp(getSymNameAttr(), "read", "address", addressType, "data",
+                       AnyType::get(ctxt));
+}
+
+void HostMemServiceDeclOp::getPortList(
+    SmallVectorImpl<ServicePortInfo> &ports) {
+  ports.push_back(writePortInfo());
+  ports.push_back(readPortInfo());
+}

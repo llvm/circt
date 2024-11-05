@@ -227,3 +227,17 @@ hw.module @MMIOManifest(in %clk: !seq.clock, in %rst: i1) {
   %dataChannel, %dataChannelReady = esi.wrap.vr %data, %valid: i64
   %cmdChannel = esi.bundle.unpack %dataChannel from %reqRW : !mmioRWReq
 }
+
+esi.service.std.hostmem @hostmem
+!hostmemReadReq = !esi.bundle<[!esi.channel<ui64> from "address", !esi.channel<i64> to "data"]>
+!hostmemWriteReq = !esi.bundle<[!esi.channel<!hw.struct<address: ui64, data: i128>> from "req", !esi.channel<i0> to "ack"]>
+
+hw.module @HostmemRW(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channel<!hw.struct<address: ui64, data: i128>>, in %readAddress : !esi.channel<ui64>, out readData : !esi.channel<i64>, out writeDone : !esi.channel<i0>) {
+  %writeBundle = esi.service.req <@hostmem::@write> (#esi.appid<"hostmemWrite">) : !hostmemWriteReq
+  %done = esi.bundle.unpack %write from %writeBundle : !hostmemWriteReq
+
+  %readBundle = esi.service.req <@hostmem::@read> (#esi.appid<"hostmemRead">) : !hostmemReadReq
+  %readData = esi.bundle.unpack %readAddress from %readBundle : !hostmemReadReq
+
+  hw.output %readData, %done : !esi.channel<i64>, !esi.channel<i0>
+}
