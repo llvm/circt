@@ -43,7 +43,7 @@ The FIRRTL dialect and FIR parser is a generally complete implementation of the
 FIRRTL specification and is actively maintained, tracking new enhancements. The
 FIRRTL dialect supports some undocumented features and the "CHIRRTL" flavor of
 FIRRTL IR that is produced from Chisel.  The FIRRTL dialect has support for
-parsing an SFC Annotation file and converting this to operation or argument 
+parsing an SFC Annotation file and converting this to operation or argument
 attributes.
 
 ## ABI
@@ -1053,3 +1053,46 @@ extend the system with functionality without changing the language.  They form
 an implementation-specific built-in library.  Unlike traditional libraries,
 implementations of intrinsics have access to internals of the compiler, allowing
 them to implement features not possible in the language.
+
+## Split of Design and Verification
+
+The compilation of FIRRTL circuits inherited many undocumented semantics from
+custom SiFive annotations and transforms.  One such semantic is a partitioning
+of the circuit into _design_ and _design verification_.  Practically, this means
+that parts of the circuit are intended for FPGA or ASIC synthesis and,
+ultimately, fabrication.  Other parts of the circuit are only used for
+verification of the design.
+
+This split was historically handled with an optional
+`sifive.enterprise.firrtl.MarkDUTAnnotation` on exactly one module in the
+design.  The module with this annotation is then the design-under-test (DUT).
+Other modules can then be said to be "in" or "under" the DUT if that module is
+ever reachable, by instantiation, from the DUT.
+
+For circuits which have no `sifive.enterprise.firrtl.MarkDUTAnnotation`, then a
+problem arises about what to do.  In this situation, transforms typically treat
+the main module as the DUT.  To differentiate between a DUT which may or may not
+exist, the notion of an _effective DUT_ was added.  This is the DUT if the
+annotation is present or the main module if the annotation is absent.
+
+The `InstanceInfo` analysis centralizes the determination of DUT and effective
+DUT as well as queries of if a module is partially (has any instance) or fully
+(has all instances) under these definitions of the DUT.  This is centralized to
+avoid having per-pass interpretations of these semantics which may be subtly
+different.  These semantics are _not_ made first-class in FIRRTL dialect because
+they are viewed as something that should be replaced.  E.g., a pass like
+`CreateSiFiveMetadata` which adds metadata based on whether or not something is
+under the effective DUT should be removed in favor of directly encoding the
+metadata the user wants in the FIRRTL.
+
+As the FIRRTL language has been expanded with verification features, this has
+created friction with the notion of this partitioning.  One such language
+feature is layers.  Layers allow for optional code, which does not affect
+anything outside it (except through forces), to be included in modules via a
+Verilog elaboration-time mechanism (either via SystemVerilog's `bind` directive
+or by setting certain `` `define `` textual macros).  Due to both the usage of
+these features for verification and the fact that they were added after these
+legacy transforms, layers are viewed as being _not_ in the design.  To
+accommodate this, the `InstanceInfo` pass additionally defines a semantic of a
+module being "in" or "under" the design which is separately tracked from whether
+or not something is "in" or "under" the DUT.
