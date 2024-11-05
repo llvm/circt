@@ -1,5 +1,5 @@
-add_circt_conversion_library(CIRCTFSMToSMT
-    FSMToSMT.cpp
+add_circt_conversion_library(CIRCTFSMToSMTSafety
+    FSMToSMTSafety.cpp
 
     DEPENDS
     CIRCTConversionPassIncGen

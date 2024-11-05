@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-#include "circt/Conversion/FSMToSMT.h"
+#include "circt/Conversion/FSMToSMTSafety.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/FSM/FSMOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -32,7 +32,7 @@
 #include <utility>
 
 namespace circt {
-#define GEN_PASS_DEF_CONVERTFSMTOSMT
+#define GEN_PASS_DEF_CONVERTFSMTOSMTSAFETY
 #include "circt/Conversion/Passes.h.inc"
 } // namespace circt
 
@@ -544,11 +544,11 @@ LogicalResult MachineOpConverter::dispatch() {
 }
 
 namespace {
-struct FSMToSMTPass : public circt::impl::ConvertFSMToSMTBase<FSMToSMTPass> {
+struct FSMToSMTSafetyPass : public circt::impl::ConvertFSMToSMTSafetyBase<FSMToSMTSafetyPass> {
   void runOnOperation() override;
 };
 
-void FSMToSMTPass::runOnOperation() {
+void FSMToSMTSafetyPass::runOnOperation() {
 
   auto module = getOperation();
   auto b = OpBuilder(module);
@@ -572,6 +572,6 @@ void FSMToSMTPass::runOnOperation() {
 }
 } // namespace
 
-std::unique_ptr<mlir::Pass> circt::createConvertFSMToSMTPass() {
-  return std::make_unique<FSMToSMTPass>();
+std::unique_ptr<mlir::Pass> circt::createConvertFSMToSMTSafetyPass() {
+  return std::make_unique<FSMToSMTSafetyPass>();
 }

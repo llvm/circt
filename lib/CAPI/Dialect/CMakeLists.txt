@@ -147,7 +147,8 @@ add_circt_public_c_api_library(CIRCTCAPIFSM
   CIRCTFSM
   CIRCTFSMTransforms
   CIRCTFSMToSV
-  CIRCTFSMToSMT
+  CIRCTFSMToSMTLiveness
+  CIRCTFSMToSMTSafety
 )
 
 add_circt_public_c_api_library(CIRCTCAPIHandshake

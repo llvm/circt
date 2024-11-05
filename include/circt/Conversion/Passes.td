@@ -791,16 +791,30 @@ def LowerSimToSV: Pass<"lower-sim-to-sv",  "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
-// FSMToSMT
+// FSMToSMTLiveness
 //===----------------------------------------------------------------------===//
 
-def ConvertFSMToSMT : Pass<"convert-fsm-to-smt", "mlir::ModuleOp"> {
-  let summary = "Convert FSM to SMT";
-  let constructor = "circt::createConvertFSMToSMTPass()";
+def ConvertFSMToSMTLiveness : Pass<"convert-fsm-to-smt-liveness", "mlir::ModuleOp"> {
+  let summary = "Convert FSM to SMT - Liveness Properties";
+  let constructor = "circt::createConvertFSMToSMTLivenessPass()";
   let dependentDialects = [
       "circt::comb::CombDialect",
       "circt::smt::SMTDialect"
   ];
 }
+
+//===----------------------------------------------------------------------===//
+// FSMToSMTSafety
+//===----------------------------------------------------------------------===//
+
+def ConvertFSMToSMTSafety : Pass<"convert-fsm-to-smt-safety", "mlir::ModuleOp"> {
+  let summary = "Convert FSM to SMT - Safety Properties";
+  let constructor = "circt::createConvertFSMToSMTSafetyPass()";
+  let dependentDialects = [
+      "circt::comb::CombDialect",
+      "circt::smt::SMTDialect"
+  ];
+}
+
 
 #endif // CIRCT_CONVERSION_PASSES_TD

@@ -15,7 +15,8 @@ add_circt_public_c_api_library(CIRCTCAPIConversion
   CIRCTExportChiselInterface
   CIRCTExportVerilog
   CIRCTFIRRTLToHW
-  CIRCTFSMToSMT
+  CIRCTFSMToSMTSafety
+  CIRCTFSMToSMTLiveness
   CIRCTFSMToSV
   CIRCTHandshakeToDC
   CIRCTHandshakeToHW
