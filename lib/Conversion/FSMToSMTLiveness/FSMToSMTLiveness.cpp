@@ -86,49 +86,65 @@ int insertStates(llvm::SmallVector<std::string> &states, std::string& st){
   return states.size()-1;
 }
 
-circt::smt::BVCmpPredicate getSmtPred(circt::comb::ICmpPredicate cmpPredicate){
+circt::smt::IntPredicate getSmtPred(circt::comb::ICmpPredicate cmpPredicate) {
   switch (cmpPredicate) {
-      case comb::ICmpPredicate::slt:
-          return smt::BVCmpPredicate::slt;
-      case comb::ICmpPredicate::sle:
-          return smt::BVCmpPredicate::sle;
-      case comb::ICmpPredicate::sgt:
-          return smt::BVCmpPredicate::sgt;
-      case comb::ICmpPredicate::sge:
-          return smt::BVCmpPredicate::sge;
-      case comb::ICmpPredicate::ult:
-          return smt::BVCmpPredicate::ult;
-      case comb::ICmpPredicate::ule:
-          return smt::BVCmpPredicate::ule;
-      case comb::ICmpPredicate::ugt:
-          return smt::BVCmpPredicate::ugt;
-      case comb::ICmpPredicate::uge:
-          return smt::BVCmpPredicate::uge;
+  case comb::ICmpPredicate::slt:
+    return smt::IntPredicate::lt;
+  case comb::ICmpPredicate::sle:
+    return smt::IntPredicate::le;
+  case comb::ICmpPredicate::sgt:
+    return smt::IntPredicate::gt;
+  case comb::ICmpPredicate::sge:
+    return smt::IntPredicate::ge;
+  case comb::ICmpPredicate::ult:
+    return smt::IntPredicate::lt;
+  case comb::ICmpPredicate::ule:
+    return smt::IntPredicate::le;
+  case comb::ICmpPredicate::ugt:
+    return smt::IntPredicate::gt;
+  case comb::ICmpPredicate::uge:
+    return smt::IntPredicate::ge;
   }
 }
 
-mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b, llvm::SmallVector<mlir::Value> args){
-  auto a = llvm::dyn_cast<smt::BitVectorType>(args[0].getType());
+mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b,
+                         llvm::SmallVector<mlir::Value> args) {
+  mlir::Value a1, a2;
+  // bitvecs need to be converted to bools 
+  if (isa<smt::BoolType>(args[0].getType())){
+    a1 = args[0];
+  } else {
+    mlir::Value cmpVal = b.create<smt::BVConstantOp>(loc, 1, (dyn_cast<smt::BitVectorType>(args[0].getType())).getWidth());
+    a1 = b.create<smt::EqOp>(loc, args[0], cmpVal);
+  }
+  if (isa<smt::BoolType>(args[1].getType())){
+    a2 = args[1];
+  } else {
+    mlir::Value cmpVal = b.create<smt::BVConstantOp>(loc, 1, (dyn_cast<smt::BitVectorType>(args[1].getType())).getWidth());
+    a1 = b.create<smt::EqOp>(loc, args[1], cmpVal);
+  }
   if (auto addOp = llvm::dyn_cast<comb::AddOp>(op))
-    return b.create<smt::BVAddOp>(loc, b.getType<smt::BitVectorType>(a.getWidth()), args);
+    return b.create<smt::BVAddOp>(loc, args[0], args[1]);
   if (auto andOp = llvm::dyn_cast<comb::AndOp>(op))
-    return b.create<smt::BVAndOp>(loc, b.getType<smt::BitVectorType>(a.getWidth()), args);
+    return b.create<smt::AndOp>(loc, a1, a2);
   if (auto xorOp = llvm::dyn_cast<comb::XorOp>(op))
-    return b.create<smt::BVXOrOp>(loc, b.getType<smt::BitVectorType>(a.getWidth()), args);
+    return b.create<smt::XOrOp>(loc, a1, a2);
   if (auto orOp = llvm::dyn_cast<comb::OrOp>(op))
-    return b.create<smt::BVOrOp>(loc, b.getType<smt::BitVectorType>(a.getWidth()), args);
+    return b.create<smt::OrOp>(loc, a1, a2);
   if (auto mulOp = llvm::dyn_cast<comb::MulOp>(op))
-    return b.create<smt::BVMulOp>(loc, b.getType<smt::BitVectorType>(a.getWidth()), args);
-  if (auto icmp = llvm::dyn_cast<comb::ICmpOp>(op)){
-    if(icmp.getPredicate() == circt::comb::ICmpPredicate::eq)
+    return b.create<smt::BVMulOp>(loc, args[0], args[0]);
+  if (auto icmp = llvm::dyn_cast<comb::ICmpOp>(op)) {
+    if (icmp.getPredicate() == circt::comb::ICmpPredicate::eq) {
       return b.create<smt::EqOp>(loc, b.getType<smt::BoolType>(), args);
-    if(icmp.getPredicate() == circt::comb::ICmpPredicate::ne){
-      return b.create<smt::DistinctOp>(loc,  b.getType<smt::BoolType>(), args);
-    auto predicate = getSmtPred(icmp.getPredicate());
-    return b.create<smt::BVCmpOp>(loc, predicate, args[0], args[1]);
     }
+    if (icmp.getPredicate() == circt::comb::ICmpPredicate::ne) {
+      return b.create<smt::DistinctOp>(loc, b.getType<smt::BoolType>(), args);
+    }
+    smt::IntPredicate predicate = getSmtPred(icmp.getPredicate());
+    return b.create<smt::IntCmpOp>(loc, predicate, args[0], args[1]);
   }
 }
+
 
 mlir::Value getSmtValue(mlir::Value op, const llvm::SmallVector<std::pair<mlir::Value, mlir::Value>>& fsmVarVals, const llvm::SmallVector<mlir::Value>& inputFunctions, 
     const llvm::SmallVector<mlir::Value>& args, mlir::Value time, OpBuilder &b, Location &loc){
