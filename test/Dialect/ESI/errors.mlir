@@ -51,7 +51,8 @@ esi.service.decl @HostComms {
 }
 
 hw.module @Loopback (in %clk: i1) {
-  // expected-error @+1 {{Request channel type does not match service port bundle channel type}}
+  // expected-error @+2 {{Request channel type does not match service port bundle channel type}}
+  // expected-note @+1 {{Service port 'send' type: '!esi.channel<i16>'}}
   %dataIn = esi.service.req <@HostComms::@Send> (#esi.appid<"loopback_fromhw">) : !esi.bundle<[!esi.channel<i8> from "send"]>
 }
 
