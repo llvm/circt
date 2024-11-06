@@ -25,13 +25,41 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(RTG, rtg);
 // Type API.
 //===----------------------------------------------------------------------===//
 
-/// If the type is an RTG snippet.
+/// If the type is an RTG sequence.
 MLIR_CAPI_EXPORTED bool rtgTypeIsASequence(MlirType type);
 
-/// Creates an RTG snippet type in the context.
+/// Creates an RTG sequence type in the context.
 MLIR_CAPI_EXPORTED MlirType rtgSequenceTypeGet(MlirContext ctxt,
                                                intptr_t numArgs,
                                                MlirType const *argTypes);
+
+/// If the type is an RTG mode.
+MLIR_CAPI_EXPORTED bool rtgTypeIsAMode(MlirType type);
+
+/// Creates an RTG mode type in the context.
+MLIR_CAPI_EXPORTED MlirType rtgModeTypeGet(MlirContext ctxt);
+
+/// If the type is an RTG context resource.
+MLIR_CAPI_EXPORTED bool rtgTypeIsAContextResource(MlirType type);
+
+/// Creates an RTG context resource type in the context.
+MLIR_CAPI_EXPORTED MlirType rtgContextResourceTypeGet(MlirContext ctxt);
+
+/// If the type is an RTG set.
+MLIR_CAPI_EXPORTED bool rtgTypeIsASet(MlirType type);
+
+/// Creates an RTG set type in the context.
+MLIR_CAPI_EXPORTED MlirType rtgSetTypeGet(MlirContext ctxt,
+                                          MlirType elementType);
+
+/// If the type is an RTG target.
+MLIR_CAPI_EXPORTED bool rtgTypeIsATarget(MlirType type);
+
+/// Creates an RTG target type in the context.
+MLIR_CAPI_EXPORTED MlirType rtgTargetTypeGet(MlirContext ctxt,
+                                             intptr_t numEntries,
+                                             MlirAttribute const *entryNames,
+                                             MlirType const *entryTypes);
 
 #ifdef __cplusplus
 }

@@ -15,9 +15,14 @@ def codegen(rtg, path):
   file = import_module_from_path(Path(path))
 
   module = rtg.ir.Module.create()
-  for name, obj in inspect.getmembers(file, inspect.isclass):
-    if hasattr(obj, '_is_scope') and obj._is_scope:
-      obj(module)
+  with rtg.ir.InsertionPoint(module.body):
+    for _, obj in inspect.getmembers(file):
+      if hasattr(obj, '_is_scope') and obj._is_scope:
+        obj(module)
+      if hasattr(obj, '_is_target') and obj._is_target:
+        obj(module.context)
+      if hasattr(obj, '_is_test') and obj._is_test:
+        obj(module.context)
   return module
 
 def import_module_from_path(module_path):

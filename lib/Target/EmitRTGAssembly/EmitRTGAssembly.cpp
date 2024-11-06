@@ -163,6 +163,10 @@ public:
     return failure();
   }
 
+  LogicalResult visitResourceOp(ResourceOpInterface op, int ctx) {
+    return success();
+  }
+
   LogicalResult visitOp(RenderedContextOp rendered, int ctx) {
     assert(ctx == -1);
     for (auto [index, region] :
@@ -182,6 +186,14 @@ public:
       if (failed(dispatchOpVisitor(&iop, ctx)))
         return failure();
     }
+    return success();
+  }
+
+  LogicalResult visitOp(TestOp test, int ctx) {
+    for (Operation &iop : *test.getBody())
+      if (failed(dispatchOpVisitor(&iop, ctx)))
+        return failure();
+
     return success();
   }
 
@@ -237,8 +249,8 @@ EmitRTGAssembly::emitRTGAssembly(Operation *module, llvm::raw_ostream &os,
     return module->emitError("op region must have exactly one block");
 
   EmitRTGToElf emitter(os, options);
-  for (auto &snippet : module->getRegion(0).getOps())
-    if (failed(emitter.dispatchOpVisitor(&snippet, -1)))
+  for (auto test : module->getRegion(0).getOps<TestOp>())
+    if (failed(emitter.dispatchOpVisitor(test, -1)))
       return failure();
 
   return success();

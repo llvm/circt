@@ -15,6 +15,7 @@ include "mlir/IR/CommonAttrConstraints.td"
 include "mlir/IR/Properties.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
 include "circt/Dialect/RTG/IR/RTGInterfaces.td"
 
 // Base class for the operation in this dialect.
@@ -110,10 +111,10 @@ def LabelOp : RTGOp<"label", []> {
 // order.  This means a sequence can start adding operations to a context not
 // in the current set of active contexts.
 
-def OnContextOp : RTGOp<"on_context", [NoTerminator]> {
+def OnContextOp : RTGOp<"on_context", [NoTerminator, SingleBlock]> {
   let summary = "places a sequence on a context";
 
-  let arguments = (ins ContextResourceSetType:$contexts);
+  let arguments = (ins AnyTypeOf<[SetTypeOf<ContextResourceType>, ContextResourceType]>:$contexts);
   let regions = (region SizedRegion<1>:$bodyRegion);
 
   let assemblyFormat = [{
@@ -149,66 +150,53 @@ def InvokeSequenceOp : RTGOp<"invoke", []> {
 
 //===- Set Operations -----------------------------------------------------===//
 
-def SetCreateOp : RTGOp<"set_create", [
-  SameOperandsAndResultType
-]> {
+def SetCreateOp : RTGOp<"set_create", [Pure, SameTypeOperands]> {
   let summary = "constructs a mode set";
 
-  let arguments = (ins Variadic<Type>:$modes);
-  // TODO: verify element type
+  let arguments = (ins Variadic<AnyType>:$elements);
+  let results = (outs SetType:$set);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
+def SetSelectRandomOp : RTGOp<"set_select_random", [
+  Pure,
+  TypesMatchWith<"output must be element type of input set", "set", "output", "llvm::cast<rtg::SetType>($_self).getElementType()">
+]> {
+  let summary = "places a random resource in an instruction sequence";
+
+  let arguments = (ins SetType:$set);
+  let results = (outs AnyType:$output);
+
+  let assemblyFormat = "$set `:` type($set) attr-dict";
+}
+
+def SetDifferenceOp : RTGOp<"set_difference", [
+  Pure,
+  AllTypesMatch<["original", "diff", "output"]>
+]> {
+  let summary = "computes the difference of two sets";
+
+  let arguments = (ins SetType:$original,
+                       SetType:$diff);
   let results = (outs SetType:$output);
 
-  let assemblyFormat = "$modes attr-dict";
-}
-
-//===- Resource Set Operations --------------------------------------------===//
-
-def ResourceSetOp : RTGOp<"resource_set", [
-  SameOperandsAndResultType
-]> {
-  let summary = "constructs a resource set";
-
-  let arguments = (ins Variadic<ResourceTypeInterface>:$resources);
-  let results = (outs ResourceTypeInterface:$output);
-
-  let assemblyFormat = "$resources `:` type($output) attr-dict";
-}
-
-def SelectRandomResourceOp : RTGOp<"select_random_resource", [
-  AllTypesMatch<["resources", "output"]>
-]> {
-  let summary = "places a random resource in an instruction sequence";
-
-  let arguments = (ins ContextResourceSetType:$resources);
-  let results = (outs ContextResourceSetType:$output);
-
-  let assemblyFormat = "$resources `:` type($resources) attr-dict";
-}
-
-def SetDifferenceResourceOp : RTGOp<"set_difference_resource", [
-  AllTypesMatch<["resourcesSrc", "resourcesDiff", "output"]>
-]> {
-  let summary = "places a random resource in an instruction sequence";
-
-  let arguments = (ins ContextResourceSetType:$resourcesSrc,
-                       ContextResourceSetType:$resourcesDiff);
-  let results = (outs ContextResourceSetType:$output);
-
-  let assemblyFormat = "$resourcesSrc `,` $resourcesDiff `:` type($output) attr-dict";
+  let assemblyFormat = "$original `,` $diff `:` type($output) attr-dict";
 }
 
 def TestOp : RTGOp<"test", [IsolatedFromAbove, Symbol, SingleBlock, NoTerminator, HasParent<"mlir::ModuleOp">]> {
   let summary = "root of a test";
 
-  let arguments = (ins SymbolNameAttr:$sym_name);
+  let arguments = (ins SymbolNameAttr:$sym_name, TypeAttrOf<TargetType>:$targetType);
   let regions = (region SizedRegion<1>:$bodyRegion);
 
-  let assemblyFormat = "$sym_name attr-dict-with-keyword $bodyRegion";
+  let assemblyFormat = "$sym_name `:` $targetType attr-dict-with-keyword $bodyRegion";
 
   let hasRegionVerifier = 1;
 }
 
-def TargetOp : RTGOp<"target", [IsolatedFromAbove, Symbol, SingleBlock, NoTerminator, HasParent<"mlir::ModuleOp">]> {
+def TargetOp : RTGOp<"target", [IsolatedFromAbove, Symbol, NoRegionArguments, SingleBlockImplicitTerminator<"rtg::YieldOp">, HasParent<"mlir::ModuleOp">]> {
   let summary = "collection of target information";
   let description = [{
     Users must add the `HasParent<"rtg::TargetInfo">` trait on all operations
@@ -307,10 +295,19 @@ def TargetOp : RTGOp<"target", [IsolatedFromAbove, Symbol, SingleBlock, NoTermin
     ```
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name);
+  let arguments = (ins SymbolNameAttr:$sym_name, TypeAttrOf<TargetType>:$targetType);
   let regions = (region SizedRegion<1>:$bodyRegion);
 
-  let assemblyFormat = "$sym_name attr-dict-with-keyword $bodyRegion";
+  let assemblyFormat = "$sym_name `:` $targetType attr-dict-with-keyword $bodyRegion";
 
   let hasRegionVerifier = 1;
+}
+
+def YieldOp : RTGOp<"yield", [Pure, Terminator]> {
+  let summary = "terminates RTG operation regions";
+
+  let arguments = (ins Variadic<AnyType>:$operands);
+  let assemblyFormat = "($operands^ `:` type($operands))? attr-dict";
+
+  let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
 }

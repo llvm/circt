@@ -28,13 +28,21 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<SequenceOp, SelectRandomOp, LabelDeclOp, LabelOp,
-                       OnContextOp, RenderedContextOp, SelectRandomResourceOp,
-                       SetDifferenceResourceOp>([&](auto expr) -> ResultType {
+                       OnContextOp, RenderedContextOp, SetCreateOp,
+                       SetSelectRandomOp, SetDifferenceOp, TestOp, TargetOp,
+                       YieldOp>([&](auto expr) -> ResultType {
           return thisCast->visitOp(expr, args...);
         })
         .template Case<InstructionOpInterface>([&](auto expr) -> ResultType {
           return thisCast->visitInstruction(expr, args...);
         })
+        .template Case<ResourceOpInterface>([&](auto expr) -> ResultType {
+          return thisCast->visitResourceOp(expr, args...);
+        })
+        .template Case<ContextResourceOpInterface>(
+            [&](auto expr) -> ResultType {
+              return thisCast->visitContextResourceOp(expr, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           if (op->getDialect() ==
               op->getContext()->getLoadedDialect<RTGDialect>()) {
@@ -50,7 +58,18 @@ public:
   /// handled by the concrete visitor.
   ResultType visitUnhandledOp(Operation *op, ExtraArgs... args);
 
-  ResultType visitInstruction(InstructionOpInterface op, ExtraArgs... args);
+  ResultType visitInstruction(InstructionOpInterface op, ExtraArgs... args) {
+    return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);
+  }
+
+  ResultType visitResourceOp(ResourceOpInterface op, ExtraArgs... args) {
+    return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);
+  }
+
+  ResultType visitContextResourceOp(ContextResourceOpInterface op,
+                                    ExtraArgs... args) {
+    return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);
+  }
 
   ResultType visitExternalOp(Operation *op, ExtraArgs... args) {
     return ResultType();
@@ -67,8 +86,12 @@ public:
   HANDLE(LabelOp, Unhandled);
   HANDLE(OnContextOp, Unhandled);
   HANDLE(RenderedContextOp, Unhandled);
-  HANDLE(SelectRandomResourceOp, Unhandled);
-  HANDLE(SetDifferenceResourceOp, Unhandled);
+  HANDLE(SetCreateOp, Unhandled);
+  HANDLE(SetSelectRandomOp, Unhandled);
+  HANDLE(SetDifferenceOp, Unhandled);
+  HANDLE(TestOp, Unhandled);
+  HANDLE(TargetOp, Unhandled);
+  HANDLE(YieldOp, Unhandled);
 #undef HANDLE
 };
 

@@ -17,9 +17,11 @@
 #include "circt/Dialect/RTG/IR/RTGTypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Bytecode/BytecodeOpInterface.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 
 #include "circt/Dialect/RTG/IR/RTGInterfaces.h.inc"
 

@@ -5,12 +5,10 @@
 from ._rtg_ops_gen import *
 from .._mlir_libs._circt._rtg import *
 from ..ir import *
-from .arith import *
+from .arith import ConstantOp
 
 # def value_add(self, other: Value):
 #   return addi(self, other)
-
-Value.__add__ = addi
 
 def sequence(cpu):
   def decorator(fn):
@@ -91,3 +89,120 @@ def scope(cls):
 def resource(cls):
   cls._is_resource = True
   return cls
+
+def target(entries):
+  def decorator(fn):
+    def wrapper(ctx):
+      names = []
+      types = []
+      for (name, (_, t)) in entries:
+        names.append(StringAttr.get(name, ctx))
+        types.append(t(ctx))
+      tgt = TargetOp(fn.__name__, TypeAttr.get(TargetType.get(ctx, names, types)))
+      block = Block.create_at_start(tgt.bodyRegion, [])
+      with InsertionPoint(block):
+        els = fn()
+        operands = []
+        for e in els:
+          if isinstance(e, Set):
+            operands.append(e.set)
+          else:
+            operands.append(e)
+        YieldOp(operands)
+      return tgt
+      
+    wrapper._is_target = True
+    return wrapper
+  return decorator
+
+def test(entries):
+  def decorator(fn):
+    def wrapper(ctx):
+      names = []
+      types = []
+      wrappers = []
+      for (name, (w, t)) in entries:
+        names.append(StringAttr.get(name, ctx))
+        types.append(t(ctx))
+        wrappers.append(w)
+      tst = TestOp(fn.__name__, TypeAttr.get(TargetType.get(ctx, names, types)))
+      block = Block.create_at_start(tst.bodyRegion, types)
+      with InsertionPoint(block):
+        args = []
+        for wrap, arg in zip(wrappers, block.arguments):
+            args.append(wrap(arg))
+        fn(*args)
+      return tst
+      
+    wrapper._is_test = True
+    return wrapper
+  return decorator
+
+class ContextResource:
+  def __init__(self, resource):
+    self.resource = resource
+
+  def __enter__(self):
+    res = self.resource
+    if isinstance(res, Set):
+      res = res.set
+    c = OnContextOp(res)
+    body = Block.create_at_start(c.bodyRegion, [])
+    self.ip = InsertionPoint(body)
+    self.ip.__enter__()
+  
+  def __exit__(self, exc_type, exc_value, traceback):
+    self.ip.__exit__(exc_type, exc_value, traceback)
+
+def context(resource):
+  return ContextResource(resource)
+
+def label(name, args=[]):
+  decl = LabelDeclOp(IntegerType.get_signless(32), name, args)
+  LabelOp(decl.label)
+
+
+def context_resource():
+  def _context_resource(ctx):
+    return ContextResourceType.get(ctx)
+
+  return _context_resource
+
+def set_of(elementTypeFn):
+  def _set_of(ctx):
+    return SetType.get(ctx, elementTypeFn(ctx))
+  def _wrap(val):
+    set = Set()
+    set.set = val
+    return set
+
+  return _wrap, _set_of
+
+
+class Set:
+  def create(elements, elementType=None):
+    set = Set()
+    if elementType == None:
+      elementType = elements[0].type
+    set.elementType = elementType
+    set.set = set_create(SetType.get(None, elementType), elements)
+    return set
+  
+  def __sub__(self, other):
+    if isinstance(other, Set):
+      s = Set()
+      s.set = set_difference(self.set, other.set)
+      return s
+
+    other_set = Set.create([other])
+    s = Set()
+    s.set = set_difference(self.set, other_set.set)
+    return s
+
+  def get_random(self):
+    return set_select_random(self.set)
+  
+  def get_random_and_exclude(self):
+    r = self.get_random()
+    self = self - r
+    return r

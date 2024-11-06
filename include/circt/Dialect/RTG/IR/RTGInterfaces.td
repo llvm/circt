@@ -62,6 +62,18 @@ def ResourceOpInterface : OpInterface<"ResourceOpInterface"> {
   ];
 }
 
+def ContextResourceOpInterface : OpInterface<"ContextResourceOpInterface"> {
+  let description = [{
+    This interface should be implemented by operations that represent
+    context resources.
+  }];
+  let cppNamespace = "::circt::rtg";
+
+  let methods = [
+    InterfaceMethod<"", "size_t", "getResourceId">,
+  ];
+}
+
 def ResourceTypeInterface : TypeInterface<"ResourceTypeInterface"> {
   let description = [{
     This interface should be implemented by types that represent resources.

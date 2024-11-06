@@ -59,13 +59,21 @@ def SetType : RTGTypeDef<"Set"> {
   let assemblyFormat = "`<` $elementType `>`";
 }
 
+class SetTypeOf<Type elementType> : ContainerType<elementType, SetType.predicate, "llvm::cast<rtg::SetType>($_self).getElementType()", "">;
+
 def TargetType : RTGTypeDef<"Target"> {
   let summary = "";
   let description = [{
   }];
 
+  let parameters = (ins
+    ArrayRefParameter<"mlir::StringAttr", "target entry names">:$entryNames,
+    ArrayRefParameter<"mlir::Type", "target entry types">:$entryTypes);
+
   let mnemonic = "target";
-  let assemblyFormat = "";
+
+  let hasCustomAssemblyFormat = 1;
+  let genVerifyDecl = 1;
 }
 
 #endif // CIRCT_DIALECT_RTG_IR_RTGTYPES_TD
