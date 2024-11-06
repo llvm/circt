@@ -257,8 +257,8 @@ def SeqMemoryOp : CalyxPrimitive<"seq_mem", []> {
   }];
 }
 
-class CalyxLibraryOp<string mnemonic, list<Trait> traits = []> :
-  CalyxPrimitive<"std_" # mnemonic, traits> {
+class CalyxLibraryOp<string mnemonic, string prefix = "std_", list<Trait> traits = []> :
+  CalyxPrimitive<prefix # mnemonic, traits> {
 
   let summary = "Defines an operation which maps to a Calyx library primitive";
   let description = [{
@@ -289,7 +289,7 @@ class CalyxLibraryOp<string mnemonic, list<Trait> traits = []> :
   ];
 }
 
-class BoolBinaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
+class BoolBinaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, "std_", [
     Combinational,
     SameTypeConstraint<"left", "right">
   ]> {
@@ -309,13 +309,13 @@ def SneqLibOp : BoolBinaryLibraryOp<"sneq"> {}
 def SgeLibOp  : BoolBinaryLibraryOp<"sge"> {}
 def SleLibOp  : BoolBinaryLibraryOp<"sle"> {}
 
-class ArithBinaryLibraryOp<string mnemonic, list<Trait> traits = []> :
-  CalyxLibraryOp<mnemonic, !listconcat(traits, [
+class ArithBinaryLibraryOp<string mnemonic, string prefix, list<Trait> traits = []> :
+  CalyxLibraryOp<mnemonic, prefix, !listconcat(traits, [
     SameTypeConstraint<"left", "right">
   ])> {}
 
 class CombinationalArithBinaryLibraryOp<string mnemonic> :
-  ArithBinaryLibraryOp<mnemonic, [
+  ArithBinaryLibraryOp<mnemonic, "std_", [
     Combinational,
     SameTypeConstraint<"left", "out">
   ]> {
@@ -332,7 +332,7 @@ def AndLibOp  : CombinationalArithBinaryLibraryOp<"and"> {}
 def OrLibOp   : CombinationalArithBinaryLibraryOp<"or"> {}
 def XorLibOp  : CombinationalArithBinaryLibraryOp<"xor"> {}
 
-class ArithBinaryFloatingPointLibraryOp<string mnemonic> : ArithBinaryLibraryOp<mnemonic, [
+class ArithBinaryFloatingPointLibraryOp<string mnemonic> : ArithBinaryLibraryOp<mnemonic, "", [
   SameTypeConstraint<"left", "out">]> {}
 
 def AddFNOp : ArithBinaryFloatingPointLibraryOp<"ieee754.add"> {
@@ -410,7 +410,7 @@ def MulFNOp : ArithBinaryFloatingPointLibraryOp<"ieee754.mul"> {
   }];
 }
 
-def MuxLibOp : CalyxLibraryOp<"mux", [
+def MuxLibOp : CalyxLibraryOp<"mux", "std_", [
   Combinational, SameTypeConstraint<"tru", "fal">, SameTypeConstraint<"tru", "out">
   ]> {
   let results = (outs I1:$cond, AnyType:$tru, AnyType:$fal, AnyType:$out);
@@ -432,7 +432,7 @@ def MuxLibOp : CalyxLibraryOp<"mux", [
   }];
 }
 
-class ArithBinaryPipeLibraryOp<string mnemonic> : ArithBinaryLibraryOp<mnemonic # "_pipe", [
+class ArithBinaryPipeLibraryOp<string mnemonic> : ArithBinaryLibraryOp<mnemonic # "_pipe", "std_", [
     SameTypeConstraint<"left", "out">
   ]> {
   let results = (outs I1:$clk, I1:$reset, I1:$go, AnyType:$left, AnyType:$right, AnyType:$out, I1:$done);
@@ -445,7 +445,7 @@ def RemUPipeLibOp : ArithBinaryPipeLibraryOp<"remu"> {}
 def RemSPipeLibOp : ArithBinaryPipeLibraryOp<"rems"> {}
 
 class UnaryLibraryOp<string mnemonic, list<Trait> traits = []> :
-    CalyxLibraryOp<mnemonic, !listconcat(traits, [Combinational])> {
+    CalyxLibraryOp<mnemonic, "std_", !listconcat(traits, [Combinational])> {
   let results = (outs AnyInteger:$in, AnyInteger:$out);
 }
 
