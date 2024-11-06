@@ -158,8 +158,11 @@ def context(resource):
   return ContextResource(resource)
 
 def label(name, args=[]):
-  decl = LabelDeclOp(IntegerType.get_signless(32), name, args)
-  LabelOp(decl.label)
+  if isinstance(name, Value):
+    LabelOp(name)
+  else:
+    decl = LabelDeclOp(IntegerType.get_signless(32), name, args)
+    LabelOp(decl.label)
 
 
 def context_resource():
