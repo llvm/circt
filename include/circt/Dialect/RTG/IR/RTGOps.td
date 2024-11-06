@@ -22,6 +22,7 @@ include "circt/Dialect/RTG/IR/RTGInterfaces.td"
 class RTGOp<string mnemonic, list<Trait> traits = []> :
     Op<RTGDialect, mnemonic, traits>;
 
+//===- Sequence Handling Operations ---------------------------------------===//
 
 def SequenceOp : RTGOp<"sequence", [
   SingleBlock,
@@ -35,14 +36,14 @@ def SequenceOp : RTGOp<"sequence", [
   let regions = (region SizedRegion<1>:$bodyRegion);
 
   let assemblyFormat = [{
-    attr-dict-with-keyword $bodyRegion `->` type($sequence)
+    attr-dict-with-keyword $bodyRegion `->` qualified(type($sequence))
   }];
 
   let hasRegionVerifier = true;
 }
 
 def SelectRandomOp : RTGOp<"select_random", [AttrSizedOperandSegments]> {
-  let summary = "places a random sequence in anohter sequence";
+  let summary = "places a random sequence in another sequence or test";
 
   let arguments = (ins
     Variadic<SequenceType>:$sequences,
@@ -59,6 +60,21 @@ def SelectRandomOp : RTGOp<"select_random", [AttrSizedOperandSegments]> {
 
   let hasVerifier = true;
 }
+
+def InvokeSequenceOp : RTGOp<"invoke", []> {
+  let summary = "invoke a sequence of instructions";
+  let description = [{
+    Invoke a predefined sequence in place.
+  }];
+
+  let arguments = (ins SequenceType:$sequence);
+
+  let assemblyFormat = [{
+    $sequence attr-dict-with-keyword `:` type($sequence)
+  }];
+}
+
+//===- Label Operations ---------------------------------------------------===//
 
 def LabelDeclOp : RTGOp<"label.decl", [
   DeclareOpInterfaceMethods<ResourceOpInterface>,
@@ -99,10 +115,7 @@ def LabelOp : RTGOp<"label", []> {
   let assemblyFormat = "(`global` $global^)? $label attr-dict `:` type($label)";
 }
 
-
-//===----------------------------------------------------------------------===//
-
-
+//===- Context Operations -------------------------------------------------===//
 
 // Theory of structure:
 // A sequence/snippet is expanded to all contexts for the current set of active 
@@ -114,7 +127,8 @@ def LabelOp : RTGOp<"label", []> {
 def OnContextOp : RTGOp<"on_context", [NoTerminator, SingleBlock]> {
   let summary = "places a sequence on a context";
 
-  let arguments = (ins AnyTypeOf<[SetTypeOf<ContextResourceType>, ContextResourceType]>:$contexts);
+  let arguments = (ins AnyTypeOf<[SetTypeOf<ContextResourceType>,
+                                  ContextResourceType]>:$contexts);
   let regions = (region SizedRegion<1>:$bodyRegion);
 
   let assemblyFormat = [{
@@ -135,23 +149,10 @@ def RenderedContextOp : RTGOp<"rendered_context",
   let assemblyFormat = "$selectors $contextRegions attr-dict-with-keyword";
 }
 
-def InvokeSequenceOp : RTGOp<"invoke", []> {
-  let summary = "invoke a sequence of instructions";
-  let description = [{
-    Invoke a predefined sequence in place.
-  }];
-
-  let arguments = (ins SequenceType:$sequence);
-
-  let assemblyFormat = [{
-    $sequence attr-dict-with-keyword `:` type($sequence)
-  }];
-}
-
 //===- Set Operations -----------------------------------------------------===//
 
 def SetCreateOp : RTGOp<"set_create", [Pure, SameTypeOperands]> {
-  let summary = "constructs a mode set";
+  let summary = "constructs a set";
 
   let arguments = (ins Variadic<AnyType>:$elements);
   let results = (outs SetType:$set);
@@ -162,14 +163,15 @@ def SetCreateOp : RTGOp<"set_create", [Pure, SameTypeOperands]> {
 
 def SetSelectRandomOp : RTGOp<"set_select_random", [
   Pure,
-  TypesMatchWith<"output must be element type of input set", "set", "output", "llvm::cast<rtg::SetType>($_self).getElementType()">
+  TypesMatchWith<"output must be element type of input set", "set", "output",
+                 "llvm::cast<rtg::SetType>($_self).getElementType()">
 ]> {
   let summary = "places a random resource in an instruction sequence";
 
   let arguments = (ins SetType:$set);
   let results = (outs AnyType:$output);
 
-  let assemblyFormat = "$set `:` type($set) attr-dict";
+  let assemblyFormat = "$set `:` qualified(type($set)) attr-dict";
 }
 
 def SetDifferenceOp : RTGOp<"set_difference", [
@@ -182,21 +184,40 @@ def SetDifferenceOp : RTGOp<"set_difference", [
                        SetType:$diff);
   let results = (outs SetType:$output);
 
-  let assemblyFormat = "$original `,` $diff `:` type($output) attr-dict";
+  let assemblyFormat = [{
+    $original `,` $diff `:` qualified(type($output)) attr-dict
+  }];
 }
 
-def TestOp : RTGOp<"test", [IsolatedFromAbove, Symbol, SingleBlock, NoTerminator, HasParent<"mlir::ModuleOp">]> {
+//===- Test Specification Operations --------------------------------------===//
+
+def TestOp : RTGOp<"test", [
+  IsolatedFromAbove,
+  Symbol,
+  SingleBlock,
+  NoTerminator,
+  HasParent<"mlir::ModuleOp">
+]> {
   let summary = "root of a test";
 
-  let arguments = (ins SymbolNameAttr:$sym_name, TypeAttrOf<TargetType>:$targetType);
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       TypeAttrOf<TargetType>:$targetType);
   let regions = (region SizedRegion<1>:$bodyRegion);
 
-  let assemblyFormat = "$sym_name `:` $targetType attr-dict-with-keyword $bodyRegion";
+  let assemblyFormat = [{
+    $sym_name `:` $targetType attr-dict-with-keyword $bodyRegion
+  }];
 
   let hasRegionVerifier = 1;
 }
 
-def TargetOp : RTGOp<"target", [IsolatedFromAbove, Symbol, NoRegionArguments, SingleBlockImplicitTerminator<"rtg::YieldOp">, HasParent<"mlir::ModuleOp">]> {
+def TargetOp : RTGOp<"target", [
+  IsolatedFromAbove,
+  Symbol,
+  NoRegionArguments,
+  SingleBlockImplicitTerminator<"rtg::YieldOp">,
+  HasParent<"mlir::ModuleOp">
+]> {
   let summary = "collection of target information";
   let description = [{
     Users must add the `HasParent<"rtg::TargetInfo">` trait on all operations
@@ -295,10 +316,13 @@ def TargetOp : RTGOp<"target", [IsolatedFromAbove, Symbol, NoRegionArguments, Si
     ```
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name, TypeAttrOf<TargetType>:$targetType);
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       TypeAttrOf<TargetType>:$targetType);
   let regions = (region SizedRegion<1>:$bodyRegion);
 
-  let assemblyFormat = "$sym_name `:` $targetType attr-dict-with-keyword $bodyRegion";
+  let assemblyFormat = [{
+    $sym_name `:` $targetType attr-dict-with-keyword $bodyRegion
+  }];
 
   let hasRegionVerifier = 1;
 }
