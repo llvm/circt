@@ -1,7 +1,8 @@
 add_circt_dialect_library(CIRCTRTGTransforms
   ContextPass.cpp
   ElaborationPass.cpp
-  
+  SimpleRegAlloc.cpp
+
   DEPENDS
   CIRCTRTGTransformsIncGen
   

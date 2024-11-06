@@ -76,4 +76,40 @@ def ResourceTypeInterface : TypeInterface<"ResourceTypeInterface"> {
   ];
 }
 
+def RegisterOpInterface : OpInterface<"RegisterOpInterface"> {
+  let description = [{
+    This interface should be implemented by operations that represent
+    register.
+
+    Virtual registers are indicated by a register and index of ~0.
+  }];
+  let cppNamespace = "::circt::rtg";
+
+  let methods = [
+    InterfaceMethod<[{
+        Returns the bitvector of the Dialect's canonical register indexes for
+        which this operation allows.
+      }],
+      "::llvm::BitVector", "getAllowedRegs">,
+    InterfaceMethod<[{
+        Returns if this selects a specirfic register.
+      }],
+      "unsigned", "getFixedReg">,
+    InterfaceMethod<[{
+        Sets this operation to use a specirfic register.
+      }],
+      "void", "setFixedReg", (ins "unsigned":$reg)>,
+    InterfaceMethod<[{
+        Returns the class specific index of the register.  This translates from
+        the flat internal representation to the architectural representation.
+      }],
+      "APInt", "getClassIndex">,
+    InterfaceMethod<[{
+        Returns a suitable string for use in assembly format.
+      }],
+      "std::string", "getRegisterAssembly">,
+  ];
+}
+
+
 #endif // CIRCT_DIALECT_RTG_RTGINTERFACES_TD

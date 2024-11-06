@@ -33,17 +33,111 @@ APInt TestInstrBOp::getBinary(ArrayRef<APInt> operands) {
   return APInt(7, 0b1110000)
       .concat(operands[0])
       .concat(operands[1])
+      .concat(operands[2])
       .concat(APInt(9, 0));
 }
 
 //===----------------------------------------------------------------------===//
-// TestRegisterAOp
+// IntegerRegisterOp
+//===----------------------------------------------------------------------===//
+APInt IntegerRegisterOp::getClassIndex() { return APInt(2, getNumber()); }
+
+std::string IntegerRegisterOp::getRegisterAssembly() {
+  return "i" + std::to_string(getClassIndex().getZExtValue());
+}
+
+llvm::BitVector IntegerRegisterOp::getAllowedRegs() {
+  llvm::BitVector allowed(static_cast<unsigned>(RTGTestRegisters::MAX));
+  if (getNumber() < 0)
+    return allowed.set(0,4);
+  return allowed.set(getNumber());
+}
+
+unsigned IntegerRegisterOp::getFixedReg() {
+  if (getNumber() < 0)
+    return ~0U;
+  return getNumber();
+}
+
+void IntegerRegisterOp::setFixedReg(unsigned reg) {
+  setNumber(reg);
+}
+
+LogicalResult IntegerRegisterOp::verify() {
+  if (getNumber() > static_cast<unsigned>(RTGTestRegisters::i_3))
+    return emitOpError("'number' must be smaller than 4");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// FloatRegisterOp
 //===----------------------------------------------------------------------===//
 
-APInt TestRegisterAOp::getBinary() { return APInt(8, getNumber()); }
+APInt FloatRegisterOp::getClassIndex() { return APInt(2, getNumber() - static_cast<unsigned>(RTGTestRegisters::f_0)); }
 
-void TestRegisterAOp::printAssembly(llvm::raw_ostream &stream) {
-  stream << "x" << std::to_string(getNumber());
+std::string FloatRegisterOp::getRegisterAssembly() {
+  return "f" + std::to_string(getClassIndex().getZExtValue());
+}
+
+llvm::BitVector FloatRegisterOp::getAllowedRegs() {
+  llvm::BitVector allowed(static_cast<unsigned>(RTGTestRegisters::MAX));
+  if (getNumber() < 0)
+    return allowed.set(4,10);
+  return allowed.set(getNumber());
+}
+
+unsigned FloatRegisterOp::getFixedReg() {
+  if (getNumber() < 0)
+    return ~0U;
+  return getNumber();
+}
+
+void FloatRegisterOp::setFixedReg(unsigned reg) {
+  setNumber(reg);
+}
+
+LogicalResult FloatRegisterOp::verify() {
+  if (getNumber() > static_cast<unsigned>(RTGTestRegisters::f_5) ||
+      getNumber() < static_cast<unsigned>(RTGTestRegisters::f_0))
+    return emitOpError("'number' must be smaller than 10 and greater than 3");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// VectorRegisterOp
+//===----------------------------------------------------------------------===//
+
+APInt VectorRegisterOp::getClassIndex() { return APInt(1, getNumber() - static_cast<unsigned>(RTGTestRegisters::v_0)); }
+
+std::string VectorRegisterOp::getRegisterAssembly() {
+  return "v" + std::to_string(getClassIndex().getZExtValue());
+}
+
+llvm::BitVector VectorRegisterOp::getAllowedRegs() {
+  llvm::BitVector allowed(static_cast<unsigned>(RTGTestRegisters::MAX));
+  if (getNumber() < 0)
+    return allowed.set(getNumber());
+  return allowed.set(10,12);
+}
+
+unsigned VectorRegisterOp::getFixedReg() {
+  if (getNumber() < 0)
+    return ~0U;
+  return getNumber();
+}
+
+void VectorRegisterOp::setFixedReg(unsigned reg) {
+  setNumber(reg);
+}
+
+LogicalResult VectorRegisterOp::verify() {
+  if (getNumber() > static_cast<unsigned>(RTGTestRegisters::v_1) ||
+      getNumber() < static_cast<unsigned>(RTGTestRegisters::v_0))
+    return emitOpError("'number' must be smaller than 12 and greater than 9");
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

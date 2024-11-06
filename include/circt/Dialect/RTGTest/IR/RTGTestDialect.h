@@ -20,5 +20,6 @@
 
 // Pull in the Dialect definition.
 #include "circt/Dialect/RTGTest/IR/RTGTestDialect.h.inc"
+#include "circt/Dialect/RTGTest/IR/RTGTestEnums.h.inc"
 
 #endif // CIRCT_DIALECT_RTGTEST_IR_RTGTESTDIALECT_H

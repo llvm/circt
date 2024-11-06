@@ -30,8 +30,11 @@ static void printValue(Value val, raw_ostream &stream) {
     if (auto integerAttr = dyn_cast<IntegerAttr>(constOp.getValue()))
       stream << integerAttr.getValue().getZExtValue();
 
+  // FIXME: Don't look back through the IR for this.
   if (auto resourceOp = val.getDefiningOp<ResourceOpInterface>())
     resourceOp.printAssembly(stream);
+  if (auto registerOp = val.getDefiningOp<RegisterOpInterface>())
+    stream << registerOp.getRegisterAssembly();
 }
 
 static FailureOr<APInt> getBinary(Value val) {
@@ -45,6 +48,8 @@ static FailureOr<APInt> getBinary(Value val) {
 
   if (auto resourceOp = val.getDefiningOp<ResourceOpInterface>())
     return resourceOp.getBinary();
+  if (auto registerOp = val.getDefiningOp<RegisterOpInterface>())
+    return registerOp.getClassIndex();
 
   return failure();
 }

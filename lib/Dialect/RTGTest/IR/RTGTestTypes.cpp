@@ -16,8 +16,16 @@ using namespace circt;
 using namespace rtgtest;
 
 
-std::string BogusRegType::getName() const {
-    return "bogus registers of test dialect";
+std::string IntegerRegisterType::getName() const {
+    return "ireg";
+}
+
+std::string FloatRegisterType::getName() const {
+    return "freg";
+}
+
+std::string VectorRegisterType::getName() const {
+    return "vreg";
 }
 
 

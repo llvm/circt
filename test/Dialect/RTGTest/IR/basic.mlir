@@ -10,13 +10,14 @@ rtgtest.instr_a %imm1, %imm2
 // CHECK: [[REG0:%.+]] = rtgtest.reg_a 5
 // CHECK: [[REG1:%.+]] = rtgtest.reg_a 2
 // CHECK: rtgtest.instr_b [[REG0]], [[REG1]]
-%reg5 = rtgtest.reg_a 5
-%reg2 = rtgtest.reg_a 2
-rtgtest.instr_b %reg5, %reg2
+%reg5 = rtgtest.ireg 5
+%reg2 = rtgtest.freg 2
+%reg3 = rtgtest.vreg 3
+rtgtest.instr_b %reg5, %reg2, %reg3
 
 
 func.func @checkOnContext(
-    %arg1 : !rtg.context_resource_set<!rtgtest.bogus_reg>
+    %arg1 : !rtg.context_resource_set<!rtgtest.dummyCPUs>
   ) {
   %la = rtg.label.decl "a" -> i32
   %lb = rtg.label.decl "b" -> i32
@@ -24,10 +25,10 @@ func.func @checkOnContext(
   %ld = rtg.label.decl "d" -> i32
   %le = rtg.label.decl "e" -> i32
   rtg.label %la : i32
-  %arg2 = rtg.select_random_resource %arg1 : !rtg.context_resource_set<!rtgtest.bogus_reg>
-  rtg.on_context %arg1 : !rtg.context_resource_set<!rtgtest.bogus_reg> {
+  %arg2 = rtg.select_random_resource %arg1 : !rtg.context_resource_set<!rtgtest.dummyCPUs>
+  rtg.on_context %arg1 : !rtg.context_resource_set<!rtgtest.dummyCPUs> {
     rtg.label %lb : i32
-    rtg.on_context %arg2 : !rtg.context_resource_set<!rtgtest.bogus_reg> {
+    rtg.on_context %arg2 : !rtg.context_resource_set<!rtgtest.dummyCPUs> {
       rtg.label %lc : i32
     }
     rtg.label %ld : i32

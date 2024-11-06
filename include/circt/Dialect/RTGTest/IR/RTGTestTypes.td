@@ -20,14 +20,5 @@ include "mlir/IR/AttrTypeBase.td"
 class RTGTestTypeDef<string name, list<Trait> traits = []> 
   : TypeDef<RTGTestDialect, name, traits> { }
 
-def BogusRegType : RTGTestTypeDef<"BogusReg",
-    [DeclareTypeInterfaceMethods<ResourceTypeInterface>]> {
-  let summary = "";
-  let description = [{
-  }];
-
-  let mnemonic = "bogus_reg";
-  let assemblyFormat = "";
-}
 
 #endif // CIRCT_DIALECT_RTGTEST_IR_RTGTESTTYPES_TD

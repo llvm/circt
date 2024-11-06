@@ -19,11 +19,12 @@ rtg.sequence {
   // CHECK: label0:
   // CHECK-ALLOWED: label0:
   rtg.label global %0 : i32
-  // CHECK: .word 0xE00A0400 
-  // CHECK-ALLOWED: instr_b x5, x2
-  %reg5 = rtgtest.reg_a 5
-  %reg2 = rtgtest.reg_a 2
-  rtgtest.instr_b %reg5, %reg2
+  // CHECK: .word 0x1C3400
+  // CHECK-ALLOWED: instr_b i3, f1, v0
+  %regi = rtgtest.ireg 3
+  %regf = rtgtest.freg 5
+  %regv = rtgtest.vreg 10
+  rtgtest.instr_b %regi, %regf, %regv
 } -> !rtg.sequence
 
 // CHECK-TRANS: [1, 2, 3, 4]

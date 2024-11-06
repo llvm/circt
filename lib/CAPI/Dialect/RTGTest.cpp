@@ -25,10 +25,26 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(RTGTest, rtgtest, RTGTestDialect)
 // Type API.
 //===----------------------------------------------------------------------===//
 
-bool rtgTypeIsABogusReg(MlirType type) {
-  return isa<BogusRegType>(unwrap(type));
+bool rtgTypeIsIntegerReg(MlirType type) {
+  return isa<IntegerRegisterType>(unwrap(type));
 }
 
-MlirType rtgBogusRegTypeGet(MlirContext ctxt) {
-  return wrap(BogusRegType::get(unwrap(ctxt)));
+MlirType rtgIntegerRegTypeGet(MlirContext ctxt) {
+  return wrap(IntegerRegisterType::get(unwrap(ctxt)));
+}
+
+bool rtgTypeIsFloatReg(MlirType type) {
+  return isa<FloatRegisterType>(unwrap(type));
+}
+
+MlirType rtgFloatRegTypeGet(MlirContext ctxt) {
+  return wrap(FloatRegisterType::get(unwrap(ctxt)));
+}
+
+bool rtgTypeIsVectorReg(MlirType type) {
+  return isa<VectorRegisterType>(unwrap(type));
+}
+
+MlirType rtgVectorRegTypeGet(MlirContext ctxt) {
+  return wrap(VectorRegisterType::get(unwrap(ctxt)));
 }

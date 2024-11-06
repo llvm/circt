@@ -24,17 +24,9 @@ def TestInstrAOp : RTGTestOp<"instr_a", [
   let assemblyFormat = "$imm1 `,` $imm2 attr-dict";
 }
 
-def TestRegisterAOp : RTGTestOp<"reg_a", [
-  DeclareOpInterfaceMethods<ResourceOpInterface>,
-]> {
-  let arguments = (ins I8Attr:$number);
-  let results = (outs BogusRegType:$result);
-  let assemblyFormat = "$number attr-dict";
-}
-
 def TestInstrBOp : RTGTestOp<"instr_b", [
   DeclareOpInterfaceMethods<InstructionOpInterface>,
 ]> {
-  let arguments = (ins BogusRegType:$reg1, BogusRegType:$reg2);
-  let assemblyFormat = "$reg1 `,` $reg2 attr-dict";
+  let arguments = (ins IntegerRegisterType:$reg1, FloatRegisterType:$reg2, VectorRegisterType:$reg3);
+  let assemblyFormat = "$reg1 `,` $reg2 `,` $reg3 attr-dict";
 }

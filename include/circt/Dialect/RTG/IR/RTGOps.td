@@ -33,7 +33,7 @@ def SequenceOp : RTGOp<"sequence", [
   let regions = (region SizedRegion<1>:$bodyRegion);
 
   let assemblyFormat = [{
-    attr-dict-with-keyword $bodyRegion `->` type($sequence)
+    attr-dict-with-keyword $bodyRegion `->` qualified(type($sequence))
   }];
 
   let hasRegionVerifier = true;

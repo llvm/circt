@@ -23,4 +23,8 @@ def ContextPass : Pass<"rtg-context", "mlir::ModuleOp"> {
   let summary = "Elaborate the contexts of RTG";
 }
 
+def SimpleRegAllocPass : Pass<"rtg-reg-alloc", "mlir::ModuleOp"> {
+  let summary = "Simple register allocation for RTG";
+}
+
 #endif // CIRCT_DIALECT_RTG_RTGPASSES_TD

@@ -9,7 +9,8 @@ add_circt_dialect_library(CIRCTRTGDialect
   DEPENDS
   MLIRRTGIncGen
   CIRCTRTGInterfacesIncGen
-  
+  RTGRV64EnumsIncGen
+    
   LINK_LIBS PUBLIC
   MLIRIR
   MLIRBytecodeOpInterface

@@ -1,5 +1,4 @@
-// RUN: circt-opt --rtg-elaborate=seed=0 %s | FileCheck %s --check-prefixes=CHECK-SEED0,CHECK
-// RUN: circt-opt --rtg-elaborate=seed=2 %s | FileCheck %s --check-prefixes=CHECK-SEED1,CHECK
+// RUN: circt-opt --rtg-reg-alloc %s | FileCheck %s
 
 // CHECK-LABEL: rtg.sequence
 %0 = rtg.sequence {
