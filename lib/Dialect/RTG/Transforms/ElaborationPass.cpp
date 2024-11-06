@@ -18,6 +18,7 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include <mlir/IR/IRMapping.h>
 #include <random>
+#include <variant>
 
 namespace circt {
 namespace rtg {
