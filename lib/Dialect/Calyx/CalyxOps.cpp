@@ -1980,10 +1980,13 @@ void ConstantOp::getAsmResultNames(
 
 LogicalResult ConstantOp::verify() {
   auto type = getType();
-  // The value's type must match the return type.
-  if (auto valType = getValue().getType(); valType != type) {
-    return emitOpError() << "value type " << valType
-                         << " must match return type: " << type;
+  assert(isa<IntegerType>(type) && "must be an IntegerType");
+  // The value's bit width must match the return type bitwidth.
+  if (auto valTyBitWidth = getValue().getType().getIntOrFloatBitWidth();
+      valTyBitWidth != type.getIntOrFloatBitWidth()) {
+    return emitOpError() << "value type bit width" << valTyBitWidth
+                         << " must match return type: "
+                         << type.getIntOrFloatBitWidth();
   }
   // Integer values must be signless.
   if (llvm::isa<IntegerType>(type) &&
@@ -2002,12 +2005,12 @@ OpFoldResult calyx::ConstantOp::fold(FoldAdaptor adaptor) {
 }
 
 void calyx::ConstantOp::build(OpBuilder &builder, OperationState &state,
-                              StringRef symName, TypedAttr attr) {
+                              StringRef symName, Attribute attr, Type type) {
   state.addAttribute(SymbolTable::getSymbolAttrName(),
                      builder.getStringAttr(symName));
   state.addAttribute("value", attr);
   SmallVector<Type> types;
-  types.push_back(attr.getType()); // Out
+  types.push_back(type); // Out
   state.addTypes(types);
 }
 

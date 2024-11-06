@@ -215,11 +215,11 @@ module {
 // Test integer and floating point constant
 
 // CHECK:     calyx.group @ret_assign_0 {
-// CHECK-DAG:   calyx.assign %ret_arg0_reg.in = %in0 : f32
+// CHECK-DAG:   calyx.assign %ret_arg0_reg.in = %in0 : i32
 // CHECK-DAG:   calyx.assign %ret_arg0_reg.write_en = %true : i1
 // CHECK-DAG:   calyx.assign %ret_arg1_reg.in = %c42_i32 : i32
 // CHECK-DAG:   calyx.assign %ret_arg1_reg.write_en = %true : i1
-// CHECK-DAG:   calyx.assign %ret_arg2_reg.in = %cst : f32
+// CHECK-DAG:   calyx.assign %ret_arg2_reg.in = %cst : i32
 // CHECK-DAG:   calyx.assign %ret_arg2_reg.write_en = %true : i1
 // CHECK-DAG:   %0 = comb.and %ret_arg2_reg.done, %ret_arg1_reg.done, %ret_arg0_reg.done : i1
 // CHECK-DAG:   calyx.group_done %0 ? %true : i1
@@ -239,9 +239,9 @@ module {
 // Test floating point add
 
 // CHECK:             calyx.group @bb0_0 {
-// CHECK-DAG:               calyx.assign %std_addFN_0.left = %in0 : f32
-// CHECK-DAG:               calyx.assign %std_addFN_0.right = %cst : f32
-// CHECK-DAG:               calyx.assign %addf_0_reg.in = %std_addFN_0.out : f32
+// CHECK-DAG:               calyx.assign %std_addFN_0.left = %in0 : i32
+// CHECK-DAG:               calyx.assign %std_addFN_0.right = %cst : i32
+// CHECK-DAG:               calyx.assign %addf_0_reg.in = %std_addFN_0.out : i32
 // CHECK-DAG:               calyx.assign %addf_0_reg.write_en = %std_addFN_0.done : i1
 // CHECK-DAG:               %0 = comb.xor %std_addFN_0.done, %true : i1
 // CHECK-DAG:               calyx.assign %std_addFN_0.go = %0 ? %true : i1

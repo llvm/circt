@@ -245,15 +245,15 @@ module attributes {calyx.entrypoint = "main"} {
 // -----
 
 module attributes {calyx.entrypoint = "main"} {
-  calyx.component @main(%clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %out1: f32, %done: i1 {done}) {
+  calyx.component @main(%clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %out1: i32, %done: i1 {done}) {
     // CHECK: cst_0 = std_float_const(0, 32, 4.200000);
     %c42_i32 = hw.constant 42 : i32
-    %cst = calyx.constant {sym_name = "cst_0"} 4.200000e+00 : f32
+    %cst = calyx.constant @cst_0 <4.200000e+00 : f32> : i32
     %true = hw.constant true
-    %ret_arg1_reg.in, %ret_arg1_reg.write_en, %ret_arg1_reg.clk, %ret_arg1_reg.reset, %ret_arg1_reg.out, %ret_arg1_reg.done = calyx.register @ret_arg1_reg : f32, i1, i1, i1, f32, i1
+    %ret_arg1_reg.in, %ret_arg1_reg.write_en, %ret_arg1_reg.clk, %ret_arg1_reg.reset, %ret_arg1_reg.out, %ret_arg1_reg.done = calyx.register @ret_arg1_reg : i32, i1, i1, i1, i32, i1
     %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
     calyx.wires {
-      calyx.assign %out1 = %ret_arg1_reg.out : f32
+      calyx.assign %out1 = %ret_arg1_reg.out : i32
       calyx.assign %out0 = %ret_arg0_reg.out : i32
 
       // CHECK-LABEL: group ret_assign_0 {
@@ -266,7 +266,7 @@ module attributes {calyx.entrypoint = "main"} {
       calyx.group @ret_assign_0 {
         calyx.assign %ret_arg0_reg.in = %c42_i32 : i32
         calyx.assign %ret_arg0_reg.write_en = %true : i1
-        calyx.assign %ret_arg1_reg.in = %cst : f32
+        calyx.assign %ret_arg1_reg.in = %cst : i32
         calyx.assign %ret_arg1_reg.write_en = %true : i1
         %0 = comb.and %ret_arg1_reg.done, %ret_arg0_reg.done : i1
         calyx.group_done %0 ? %true : i1
@@ -285,16 +285,16 @@ module attributes {calyx.entrypoint = "main"} {
 
 module attributes {calyx.entrypoint = "main"} {
   // CHECK: import "primitives/float/addFN.futil";
-  calyx.component @main(%in0: f32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: f32, %done: i1 {done}) {
+  calyx.component @main(%in0: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
     // CHECK:           std_addFN_0 = std_addFN(8, 24, 32);
-    %cst = calyx.constant {sym_name = "cst_0"} 4.200000e+00 : f32
+    %cst = calyx.constant @cst_0 <4.200000e+00 : f32> : i32
     %true = hw.constant true
     %false = hw.constant false
-    %addf_0_reg.in, %addf_0_reg.write_en, %addf_0_reg.clk, %addf_0_reg.reset, %addf_0_reg.out, %addf_0_reg.done = calyx.register @addf_0_reg : f32, i1, i1, i1, f32, i1
-    %std_addFN_0.clk, %std_addFN_0.reset, %std_addFN_0.go, %std_addFN_0.control, %std_addFN_0.subOp, %std_addFN_0.left, %std_addFN_0.right, %std_addFN_0.roundingMode, %std_addFN_0.out, %std_addFN_0.exceptionalFlags, %std_addFN_0.done = calyx.std_addFN @std_addFN_0 : i1, i1, i1, i1, i1, f32, f32, i3, f32, i5, i1
-    %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : f32, i1, i1, i1, f32, i1
+    %addf_0_reg.in, %addf_0_reg.write_en, %addf_0_reg.clk, %addf_0_reg.reset, %addf_0_reg.out, %addf_0_reg.done = calyx.register @addf_0_reg : i32, i1, i1, i1, i32, i1
+    %std_addFN_0.clk, %std_addFN_0.reset, %std_addFN_0.go, %std_addFN_0.control, %std_addFN_0.subOp, %std_addFN_0.left, %std_addFN_0.right, %std_addFN_0.roundingMode, %std_addFN_0.out, %std_addFN_0.exceptionalFlags, %std_addFN_0.done = calyx.std_addFN @std_addFN_0 : i1, i1, i1, i1, i1, i32, i32, i3, i32, i5, i1
+    %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
     calyx.wires {
-      calyx.assign %out0 = %ret_arg0_reg.out : f32
+      calyx.assign %out0 = %ret_arg0_reg.out : i32
 
       // CHECK-LABEL: group bb0_0 {
       // CHECK-NEXT:    std_addFN_0.left = in0;
@@ -306,9 +306,9 @@ module attributes {calyx.entrypoint = "main"} {
       // CHECK-NEXT:    bb0_0[done] = addf_0_reg.done;
       // CHECK-NEXT:  }
       calyx.group @bb0_0 {
-        calyx.assign %std_addFN_0.left = %in0 : f32
-        calyx.assign %std_addFN_0.right = %cst : f32
-        calyx.assign %addf_0_reg.in = %std_addFN_0.out : f32
+        calyx.assign %std_addFN_0.left = %in0 : i32
+        calyx.assign %std_addFN_0.right = %cst : i32
+        calyx.assign %addf_0_reg.in = %std_addFN_0.out : i32
         calyx.assign %addf_0_reg.write_en = %std_addFN_0.done : i1
         %0 = comb.xor %std_addFN_0.done, %true : i1
         calyx.assign %std_addFN_0.go = %0 ? %true : i1
@@ -316,7 +316,7 @@ module attributes {calyx.entrypoint = "main"} {
         calyx.group_done %addf_0_reg.done : i1
       }
       calyx.group @ret_assign_0 {
-        calyx.assign %ret_arg0_reg.in = %std_addFN_0.out : f32
+        calyx.assign %ret_arg0_reg.in = %std_addFN_0.out : i32
         calyx.assign %ret_arg0_reg.write_en = %true : i1
         calyx.group_done %ret_arg0_reg.done : i1
       }
