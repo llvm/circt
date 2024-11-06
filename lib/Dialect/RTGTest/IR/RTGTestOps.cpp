@@ -40,10 +40,11 @@ APInt TestInstrBOp::getBinary(ArrayRef<APInt> operands) {
 //===----------------------------------------------------------------------===//
 // IntegerRegisterOp
 //===----------------------------------------------------------------------===//
-APInt IntegerRegisterOp::getClassIndex() { return APInt(2, getNumber()); }
+unsigned IntegerRegisterOp::getClassIndex() { return getNumber(); }
+APInt IntegerRegisterOp::getClassIndexBinary() { return APInt(2, getClassIndex()); }
 
 std::string IntegerRegisterOp::getRegisterAssembly() {
-  return "i" + std::to_string(getClassIndex().getZExtValue());
+  return "i" + std::to_string(getClassIndex());
 }
 
 llvm::BitVector IntegerRegisterOp::getAllowedRegs() {
@@ -74,10 +75,11 @@ LogicalResult IntegerRegisterOp::verify() {
 // FloatRegisterOp
 //===----------------------------------------------------------------------===//
 
-APInt FloatRegisterOp::getClassIndex() { return APInt(2, getNumber() - static_cast<unsigned>(RTGTestRegisters::f_0)); }
+unsigned FloatRegisterOp::getClassIndex() { return getNumber() - static_cast<unsigned>(RTGTestRegisters::f_0); }
+APInt FloatRegisterOp::getClassIndexBinary() { return APInt(2, getClassIndex()); }
 
 std::string FloatRegisterOp::getRegisterAssembly() {
-  return "f" + std::to_string(getClassIndex().getZExtValue());
+  return "f" + std::to_string(getClassIndex());
 }
 
 llvm::BitVector FloatRegisterOp::getAllowedRegs() {
@@ -109,10 +111,11 @@ LogicalResult FloatRegisterOp::verify() {
 // VectorRegisterOp
 //===----------------------------------------------------------------------===//
 
-APInt VectorRegisterOp::getClassIndex() { return APInt(1, getNumber() - static_cast<unsigned>(RTGTestRegisters::v_0)); }
+unsigned VectorRegisterOp::getClassIndex() { return getNumber() - static_cast<unsigned>(RTGTestRegisters::v_0); }
+APInt VectorRegisterOp::getClassIndexBinary() { return APInt(1, getClassIndex()); }
 
 std::string VectorRegisterOp::getRegisterAssembly() {
-  return "v" + std::to_string(getClassIndex().getZExtValue());
+  return "v" + std::to_string(getClassIndex());
 }
 
 llvm::BitVector VectorRegisterOp::getAllowedRegs() {

@@ -115,7 +115,13 @@ def RegisterOpInterface : OpInterface<"RegisterOpInterface"> {
         Returns the class specific index of the register.  This translates from
         the flat internal representation to the architectural representation.
       }],
-      "APInt", "getClassIndex">,
+      "unsigned", "getClassIndex">,
+    InterfaceMethod<[{
+        Returns the class specific index of the register.  This translates from
+        the flat internal representation to the architectural representation.
+        This returns an APInt for the common binnary encoding.
+      }],
+      "llvm::APInt", "getClassIndexBinary">,
     InterfaceMethod<[{
         Returns a suitable string for use in assembly format.
       }],

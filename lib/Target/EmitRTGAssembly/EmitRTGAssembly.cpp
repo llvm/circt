@@ -49,7 +49,7 @@ static FailureOr<APInt> getBinary(Value val) {
   if (auto resourceOp = val.getDefiningOp<ResourceOpInterface>())
     return resourceOp.getBinary();
   if (auto registerOp = val.getDefiningOp<RegisterOpInterface>())
-    return registerOp.getClassIndex();
+    return registerOp.getClassIndexBinary();
 
   return failure();
 }
