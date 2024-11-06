@@ -37,4 +37,34 @@ void circt::python::populateDialectRTGSubmodule(py::module &m) {
               types.push_back(type.cast<MlirType>());
             return cls(rtgSequenceTypeGet(ctxt, types.size(), types.data()));
           });
+
+  mlir_type_subclass(m, "ModeType", rtgTypeIsAMode)
+      .def_classmethod("get", [](py::object cls, MlirContext ctxt) {
+        return cls(rtgModeTypeGet(ctxt));
+      });
+
+  mlir_type_subclass(m, "ContextResourceType", rtgTypeIsAContextResource)
+      .def_classmethod("get", [](py::object cls, MlirContext ctxt) {
+        return cls(rtgContextResourceTypeGet(ctxt));
+      });
+
+  mlir_type_subclass(m, "SetType", rtgTypeIsASet)
+      .def_classmethod(
+          "get", [](py::object cls, MlirContext ctxt, MlirType elementType) {
+            return cls(rtgSetTypeGet(ctxt, elementType));
+          });
+
+  mlir_type_subclass(m, "TargetType", rtgTypeIsATarget)
+      .def_classmethod("get", [](py::object cls, MlirContext ctxt,
+                                 py::list entryNames, py::list entryTypes) {
+        std::vector<MlirAttribute> names;
+        std::vector<MlirType> types;
+        for (auto type : entryNames)
+          names.push_back(type.cast<MlirAttribute>());
+        for (auto type : entryTypes)
+          types.push_back(type.cast<MlirType>());
+        assert(names.size() == types.size());
+        return cls(
+            rtgTargetTypeGet(ctxt, types.size(), names.data(), types.data()));
+      });
 }
