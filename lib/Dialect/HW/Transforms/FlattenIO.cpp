@@ -123,7 +123,7 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
         loc, newResultTypes, op.getInstanceNameAttr(),
         FlatSymbolRefAttr::get(referencedMod), convOperands,
         op.getArgNamesAttr(), op.getResultNamesAttr(), op.getParametersAttr(),
-        op.getInnerSymAttr());
+        op.getInnerSymAttr(), op.getDoNotPrintAttr());
 
     // re-create any structs in the result.
     llvm::SmallVector<Value> convResults;

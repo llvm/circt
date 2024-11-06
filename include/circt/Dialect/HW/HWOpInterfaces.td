@@ -502,6 +502,10 @@ def HWInstanceLike : OpInterface<"HWInstanceLike", [
     /*defaultImplementation=*/[{
       $_op.setResultNamesAttr(names);
     }]>,
+
+    InterfaceMethod<"True if this instance is a phony placeholder",
+      "bool", "getDoNotPrint", (ins)
+    >
   ];
 }
 
