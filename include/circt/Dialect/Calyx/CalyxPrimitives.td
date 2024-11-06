@@ -335,7 +335,7 @@ def XorLibOp  : CombinationalArithBinaryLibraryOp<"xor"> {}
 class ArithBinaryFloatingPointLibraryOp<string mnemonic> : ArithBinaryLibraryOp<mnemonic, [
   SameTypeConstraint<"left", "out">]> {}
 
-def AddFNOp : ArithBinaryFloatingPointLibraryOp<"addFN"> {
+def AddFNOp : ArithBinaryFloatingPointLibraryOp<"ieee754.add"> {
   let results = (outs I1:$clk, I1:$reset, I1:$go, I1:$control, I1:$subOp,
     AnySignlessInteger:$left, AnySignlessInteger:$right, AnySignlessInteger:$roundingMode, AnySignlessInteger:$out,
     AnySignlessInteger:$exceptionalFlags, I1:$done);
@@ -377,8 +377,9 @@ def AddFNOp : ArithBinaryFloatingPointLibraryOp<"addFN"> {
 
 def MulFNOp : ArithBinaryFloatingPointLibraryOp<"ieee754.mul"> {
   let results = (outs I1:$clk, I1:$reset, I1:$go, I1:$control,
-    AnyFloat:$left, AnyFloat:$right, AnySignlessInteger:$roundingMode, AnyFloat:$out,
+    AnySignlessInteger:$left, AnySignlessInteger:$right, AnySignlessInteger:$roundingMode, AnySignlessInteger:$out,
     AnySignlessInteger:$exceptionalFlags, I1:$done);
+  let assemblyFormat = "$sym_name attr-dict `:` qualified(type(results))";
   let extraClassDefinition = [{
     SmallVector<StringRef> $cppClass::portNames() {
       return {clkPort, resetPort, goPort, "control", "left", "right",
@@ -387,10 +388,10 @@ def MulFNOp : ArithBinaryFloatingPointLibraryOp<"ieee754.mul"> {
     }
     SmallVector<Direction> $cppClass::portDirections() {
       return {Input, Input, Input, Input, Input, Input, Input, Output, Output, Output};
-      }
+    }
     void $cppClass::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
       getCellAsmResultNames(setNameFn, *this, this->portNames());
-      }
+    }
     bool $cppClass::isCombinational() { return false; }
     SmallVector<DictionaryAttr> $cppClass::portAttributes() {
       IntegerAttr isSet = IntegerAttr::get(IntegerType::get(getContext(), 1), 1);

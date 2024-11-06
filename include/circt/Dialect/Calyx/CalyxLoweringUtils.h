@@ -424,6 +424,10 @@ public:
     Block *body = component.getBodyBlock();
     builder.setInsertionPoint(body, body->begin());
     auto name = TLibraryOp::getOperationName().split(".").second;
+    if (std::is_same<calyx::AddFNOp, TLibraryOp>::value)
+      name = "std_addFN";
+    else if (std::is_same<calyx::MulFNOp, TLibraryOp>::value)
+      name = "std_mulFN";
     return builder.create<TLibraryOp>(loc, getUniqueName(name), resTypes);
   }
 

@@ -714,9 +714,10 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      MulFOp mulf) const {
   Location loc = mulf.getLoc();
-  Type width = mulf.getResult().getType();
   IntegerType one = rewriter.getI1Type(), three = rewriter.getIntegerType(3),
-              five = rewriter.getIntegerType(5);
+              five = rewriter.getIntegerType(5),
+              width = rewriter.getIntegerType(
+                  mulf.getType().getIntOrFloatBitWidth());
   auto mulFN =
       getState<ComponentLoweringState>()
           .getNewLibraryOpInstance<calyx::MulFNOp>(
