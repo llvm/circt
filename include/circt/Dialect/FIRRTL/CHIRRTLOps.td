@@ -40,7 +40,8 @@ def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName, DeclareOpInterfaceMethod
   let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym,
-                       OptionalAttr<MemoryInitAttr>:$init);
+                       OptionalAttr<MemoryInitAttr>:$init,
+                       OptionalAttr<StrAttr>:$prefix);
   let results = (outs CMemoryType:$result);
   let assemblyFormat = [{(`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
                          `` custom<CombMemOp>(attr-dict) `:` qualified(type($result))}];
@@ -62,7 +63,8 @@ def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName, DeclareOpInterfaceMethods<
   let arguments = (ins RUWAttr:$ruw, StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym,
-                       OptionalAttr<MemoryInitAttr>:$init);
+                       OptionalAttr<MemoryInitAttr>:$init,
+                       OptionalAttr<StrAttr>:$prefix);
   let results = (outs CMemoryType:$result);
   let assemblyFormat = [{(`sym` $inner_sym^)? `` custom<NameKind>($nameKind) $ruw
                          custom<SeqMemOp>(attr-dict) `:` qualified(type($result))}];

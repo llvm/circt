@@ -193,7 +193,11 @@ FMemModuleOp
 LowerMemoryPass::emitMemoryModule(MemOp op, const FirMemory &mem,
                                   const SmallVectorImpl<PortInfo> &ports) {
   // Get a non-colliding name for the memory module, and update the summary.
-  auto newName = circuitNamespace.newName(mem.modName.getValue(), "ext");
+  StringRef prefix = "";
+  if (mem.prefix)
+    prefix = mem.prefix.getValue();
+  auto newName =
+      circuitNamespace.newName(prefix + mem.modName.getValue(), "ext");
   auto moduleName = StringAttr::get(&getContext(), newName);
 
   // Insert the memory module just above the current module.
@@ -237,7 +241,11 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
   auto ports = getMemoryModulePorts(summary);
 
   // Get a non-colliding name for the memory module, and update the summary.
-  auto newName = circuitNamespace.newName(mem.getName());
+  StringRef prefix = "";
+  if (summary.prefix)
+    prefix = summary.prefix.getValue();
+  auto newName = circuitNamespace.newName(prefix + mem.getName());
+
   auto wrapperName = StringAttr::get(&getContext(), newName);
 
   // Create the wrapper module, inserting it just before the current module.
@@ -251,7 +259,6 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
   // same name as the target module.
   auto memModule = getOrCreateMemModule(mem, summary, ports, shouldDedup);
   b.setInsertionPointToStart(wrapper.getBodyBlock());
-
   auto memInst = b.create<InstanceOp>(
       mem->getLoc(), memModule, (mem.getName() + "_ext").str(),
       mem.getNameKind(), mem.getAnnotations().getValue());

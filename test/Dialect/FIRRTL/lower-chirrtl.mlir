@@ -200,8 +200,8 @@ firrtl.module @SortedPorts(in %clock: !firrtl.clock, in %addr : !firrtl.uint<8>)
   chirrtl.memoryport.access %b_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
 }
 
-// Check that annotations are preserved.
-firrtl.module @Annotations(in %clock: !firrtl.clock, in %addr : !firrtl.uint<8>) {
+// Check that important attributes are preserved.
+firrtl.module @Attributes(in %clock: !firrtl.clock, in %addr : !firrtl.uint<8>) {
   // CHECK: firrtl.mem Undefined
   // CHECK-SAME: annotations = [{a = "a"}]
   // CHECK-SAME: portAnnotations = [
@@ -209,7 +209,8 @@ firrtl.module @Annotations(in %clock: !firrtl.clock, in %addr : !firrtl.uint<8>)
   // CHECK-SAME:   [{c = "c"}]
   // CHECK-SAME: ]
   // CHECK-SAME: portNames = ["port0", "port1"]
-  %ram = chirrtl.combmem {annotations = [{a = "a"}]} : !chirrtl.cmemory<vector<uint<1>, 2>, 256>
+  // CHECK-SAME: prefix = "Prefix_"
+  %ram = chirrtl.combmem {annotations = [{a = "a"}], prefix = "Prefix_"} : !chirrtl.cmemory<vector<uint<1>, 2>, 256>
   %port0_data, %port0_port = chirrtl.memoryport Read %ram  {annotations = [{b = "b"}], name = "port0"} : (!chirrtl.cmemory<vector<uint<1>, 2>, 256>) -> (!firrtl.vector<uint<1>, 2>, !chirrtl.cmemoryport)
   chirrtl.memoryport.access %port0_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
   %port1_data, %port1_port = chirrtl.memoryport Read %ram {annotations = [{c = "c"}], name = "port1"} : (!chirrtl.cmemory<vector<uint<1>, 2>, 256>) -> (!firrtl.vector<uint<1>, 2>, !chirrtl.cmemoryport)

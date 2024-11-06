@@ -256,7 +256,8 @@ void CombMemOp::build(OpBuilder &builder, OperationState &result,
   build(builder, result,
         CMemoryType::get(builder.getContext(), elementType, numElements), name,
         nameKind, annotations,
-        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(), init);
+        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(), init,
+        {});
 }
 
 void CombMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -290,7 +291,8 @@ void SeqMemOp::build(OpBuilder &builder, OperationState &result,
   build(builder, result,
         CMemoryType::get(builder.getContext(), elementType, numElements), ruw,
         name, nameKind, annotations,
-        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(), init);
+        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(), init,
+        {});
 }
 
 void SeqMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
