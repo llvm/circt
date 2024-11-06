@@ -82,12 +82,12 @@ firrtl.module @Dedup() {
 // CHECK-LABEL: firrtl.circuit "Prefix"
 firrtl.circuit "Prefix" {
 // CHECK: firrtl.module private @A_mem0
-// CHECK-NEXT: firrtl.instance A_mem0_ext  @A_mem0_ext
+// CHECK-NEXT: firrtl.instance mem0_ext  @A_mem0_ext
 
 // CHECK: firrtl.memmodule private @A_mem0_ext
 
 // CHECK: firrtl.module private @B_mem1
-// CHECK-NEXT: firrtl.instance B_mem1_ext @B_mem1_ext
+// CHECK-NEXT: firrtl.instance mem1_ext @B_mem1_ext
 firrtl.module @Prefix() {
   %mem0_write = firrtl.mem Undefined {depth = 12 : i64, name = "mem0", portNames = ["write"], prefix = "A_", readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
   %mem1_write = firrtl.mem Undefined {depth = 12 : i64, name = "mem1", portNames = ["write"], prefix = "B_", readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
