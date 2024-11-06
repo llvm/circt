@@ -166,14 +166,14 @@ LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
       // If this is our inner ref pair: [Foo::bar]
       // if "bar" is an instance, modules = [Foo::bar], bottomModule = Bar.
       // if "bar" is a wire, modules = [], bottomModule = Foo, component = bar.
-      if (isa<hw::HWInstanceLike>(op)) {
+      if (auto inst = dyn_cast<hw::HWInstanceLike>(op)) {
         // TODO: add support for instance choices.
-        auto inst = dyn_cast<hw::InstanceOp>(op);
-        if (!inst)
+        auto mods = inst.getReferencedModuleNamesAttr();
+        if (mods.size() > 1)
           return op->emitError("unsupported instance operation");
         // We are targeting an instance.
         modules.emplace_back(currentModule, verilogName);
-        bottomModule = inst.getReferencedModuleNameAttr();
+        bottomModule = cast<StringAttr>(mods[0]);
         component = StringAttr::get(context, "");
         field = StringAttr::get(context, "");
       } else {
