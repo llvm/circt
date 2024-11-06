@@ -429,17 +429,49 @@ LogicalResult MachineOpConverter::dispatch() {
       }
     };
 
+
+    llvm::SmallVector<mlir::Type> forallArgVarTypes;
+    for (auto [id, avt] : llvm::enumerate(argVarTypes)){
+      if (id < numArgs){
+        forallArgVarTypes.push_back(avt);
+        forallArgVarTypes.push_back(avt);
+      } else {
+        forallArgVarTypes.push_back(avt);
+      }
+    }
+
     auto forall = b.create<smt::ForallOp>(
-        loc, argVarTypes,
+        loc, forallArgVarTypes,
         [&guard1, &action, &t1, &stateFunctions, &numArgs,
-         &numOut](OpBuilder &b, Location loc, ValueRange forallArgs) {
+         &numOut](OpBuilder &b, Location loc, ValueRange forallDoubleInputs) {
           // split new and old arguments
+
+          llvm::SmallVector<mlir::Value> startingStateArgs;
+          llvm::SmallVector<mlir::Value> arrivingStateArgs;
+          for (auto [idx, fdi] : llvm::enumerate(forallDoubleInputs)){
+            if (idx < numArgs*2){
+              if (idx % 2 == 1){
+                startingStateArgs.push_back(fdi);
+              }else{ 
+                arrivingStateArgs.push_back(fdi);
+              }
+            } else {
+              startingStateArgs.push_back(fdi);
+              arrivingStateArgs.push_back(fdi);
+            }
+          }
+
+
           auto t1ac = b.create<smt::ApplyFuncOp>(loc, stateFunctions[t1.from],
-                                                 forallArgs);
-          auto actionedArgs = action(forallArgs);
+                                                 startingStateArgs);
+          auto actionedArgs = action(startingStateArgs);
+          for(auto [ida, aa] : llvm::enumerate(actionedArgs))
+            if (ida < numArgs)
+              actionedArgs[ida] = arrivingStateArgs[ida];
+
           auto rhs = b.create<smt::ApplyFuncOp>(loc, stateFunctions[t1.to],
                                                 actionedArgs);
-          auto guard = guard1(forallArgs);
+          auto guard = guard1(startingStateArgs);
           if (dyn_cast<smt::BoolType>(guard.getType())) {
             
             auto lhs = b.create<smt::AndOp>(loc, t1ac, guard);
