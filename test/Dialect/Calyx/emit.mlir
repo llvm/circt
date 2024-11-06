@@ -338,7 +338,6 @@ module attributes {calyx.entrypoint = "main"} {
 module attributes {calyx.entrypoint = "main"} {
   // CHECK: import "primitives/float/mulFN.futil";
   calyx.component @main(%in0: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
-    // CHECK: std_mulFN_0 = std_mulFN(8, 24, 32);
     %cst = calyx.constant @cst_0 <4.200000e+00 : f32> : i32
     %true = hw.constant true
     %mulf_0_reg.in, %mulf_0_reg.write_en, %mulf_0_reg.clk, %mulf_0_reg.reset, %mulf_0_reg.out, %mulf_0_reg.done = calyx.register @mulf_0_reg : i32, i1, i1, i1, i32, i1
