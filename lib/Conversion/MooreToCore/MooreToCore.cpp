@@ -166,7 +166,8 @@ struct InstanceOpConversion : public OpConversionPattern<InstanceOp> {
     auto instOp = rewriter.create<hw::InstanceOp>(
         op.getLoc(), op.getResultTypes(), instName, moduleName, op.getInputs(),
         op.getInputNamesAttr(), op.getOutputNamesAttr(),
-        /*Parameter*/ rewriter.getArrayAttr({}), /*InnerSymbol*/ nullptr);
+        /*Parameter*/ rewriter.getArrayAttr({}), /*InnerSymbol*/ nullptr,
+        /*doNotPrint*/ nullptr);
 
     // Replace uses chain and erase the original op.
     op.replaceAllUsesWith(instOp.getResults());

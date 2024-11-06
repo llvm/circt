@@ -1882,7 +1882,7 @@ LogicalResult BindOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (!inst)
     return emitError("Referenced instance doesn't exist ")
            << getInstance().getModule() << "::" << getInstance().getName();
-  if (!inst->getAttr("doNotPrint"))
+  if (!inst.getDoNotPrint())
     return emitError("Referenced instance isn't marked as doNotPrint");
   return success();
 }
@@ -1933,7 +1933,7 @@ BindInterfaceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (!inst)
     return emitError("Referenced interface doesn't exist ")
            << getInstance().getModule() << "::" << getInstance().getName();
-  if (!inst->getAttr("doNotPrint"))
+  if (!inst.getDoNotPrint())
     return emitError("Referenced interface isn't marked as doNotPrint");
   return success();
 }
