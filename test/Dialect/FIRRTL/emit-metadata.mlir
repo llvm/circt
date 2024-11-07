@@ -357,20 +357,7 @@ firrtl.circuit "OneMemory" {
 // CHECK-LABEL: firrtl.circuit "DualReadsSMem"
 firrtl.circuit "DualReadsSMem" {
   firrtl.module @DualReadsSMem() {
-    %0:12 = firrtl.instance DualReads_ext {
-      annotations = [
-        {
-          class = "sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation",
-          data = {
-            baseAddress = 2147483648 : i64,
-            dataBits = 8 : i64,
-            eccBits = 0 : i64,
-            eccIndices = [],
-            eccScheme = "none"
-          }
-        }
-      ]
-    } @DualReads_ext(
+    %0:12 = firrtl.instance DualReads_ext @DualReads_ext(
       in R0_addr: !firrtl.uint<4>,
       in R0_en: !firrtl.uint<1>,
       in R0_clk: !firrtl.clock,
@@ -483,21 +470,7 @@ firrtl.circuit "top" {
       firrtl.instance mem1 @Mem()
     }
     firrtl.module private @Mem() {
-      %0:10 = firrtl.instance memory_ext {
-        annotations = [
-          {
-            class = "sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation",
-            data =
-              {
-                baseAddress = 2147483648 : i64,
-                dataBits = 8 : i64,
-                eccBits = 0 : i64,
-                eccIndices = [],
-                eccScheme = "none"
-              }
-          }
-        ]
-      } @memory_ext(
+      %0:10 = firrtl.instance memory_ext @memory_ext(
         in R0_addr: !firrtl.uint<4>,
         in R0_en: !firrtl.uint<1>,
         in R0_clk: !firrtl.clock,
