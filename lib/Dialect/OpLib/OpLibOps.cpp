@@ -17,10 +17,48 @@
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
+#include "llvm/Support/LogicalResult.h"
 
 using namespace mlir;
 using namespace circt;
 using namespace circt::oplib;
+
+//===----------------------------------------------------------------------===//
+// LibraryOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult LibraryOp::verify() {
+  for (auto &op : this->getBodyRegion().getOps()) {
+    if (!isa<OperatorOp>(op))
+      return emitOpError("can only contain OperatorOps");
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// OperatorOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult OperatorOp::verify() {
+  auto *term = getBodyRegion().front().getTerminator();
+  if (!isa<CalyxMatchOp>(term)) {
+    return emitOpError("region terminator must be supported match op");
+  }
+
+  if (getIncDelay().has_value() != getOutDelay().has_value()) {
+    return emitOpError("must have either both incDelay and outDelay or neither");
+  }
+
+  if (getLatency() == 0 && (getIncDelay().has_value()
+        || getOutDelay().has_value())) {
+    if (getIncDelay() != getOutDelay()) {
+      return emitError("incDelay and outDelay of combinational operators must be the same");
+    }
+  }
+
+  return success();
+}
 
 //===----------------------------------------------------------------------===//
 // TargetOp

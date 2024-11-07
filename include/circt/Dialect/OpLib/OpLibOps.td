@@ -23,9 +23,9 @@ class OpLibOp<string mnemonic, list<Trait> traits = []> :
   Op<OpLib_Dialect, mnemonic, traits>;
 
 def LibraryOp : OpLibOp<"library", [IsolatedFromAbove, SingleBlock,
-                                       Symbol, SymbolTable, NoTerminator,
-                                       NoRegionArguments,
-                                       HasParent<"mlir::ModuleOp">]> {
+                                    Symbol, SymbolTable, NoTerminator,
+                                    NoRegionArguments,
+                                    HasParent<"mlir::ModuleOp">]> {
   let summary = "OpLib dialect Library operation";
   let description = [{
     The `oplib.library` operation represents an operator library to be
@@ -41,7 +41,7 @@ def LibraryOp : OpLibOp<"library", [IsolatedFromAbove, SingleBlock,
     $sym_name attr-dict-with-keyword $bodyRegion
   }];
 
-  // let hasVerifier = 1;
+  let hasVerifier = 1;
 }
 
 def OperatorOp : OpLibOp<"operator", [IsolatedFromAbove, 
@@ -56,14 +56,17 @@ def OperatorOp : OpLibOp<"operator", [IsolatedFromAbove,
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name, 
-                       OptionalAttr<ArrayAttr>:$opLibProperties);
+                       I32Attr:$latency,
+                       OptionalAttr<F64Attr>:$incDelay,
+                       OptionalAttr<F64Attr>:$outDelay);
   let results = (outs);
   let regions = (region SizedRegion<1>:$bodyRegion);
   let assemblyFormat = [{
-    $sym_name attr-dict-with-keyword custom<OpLibProperties>($opLibProperties) $bodyRegion
+    $sym_name `latency` `<` $latency `>` (`,` `incDelay` `<` $incDelay^ `>`)? 
+    (`,` `outDelay` `<` $outDelay^ `>`)? attr-dict-with-keyword $bodyRegion
   }];
 
-  // let hasVerifier = 1;
+  let hasVerifier = 1;
 }
 
 def TargetOp : OpLibOp<"target", [Symbol, 
@@ -119,10 +122,12 @@ def OperationOp : OpLibOp<"operation", [HasParent<"TargetOp">]> {
   }];
   let arguments = (ins Variadic<AnyType>:$operands,
                        StrAttr:$opName,
-                       StrAttr:$dialectName);
+                       StrAttr:$dialectName,
+                       OptionalAttr<DictionaryAttr>:$opDict);
   let results = (outs Variadic<AnyType>:$results);
   let assemblyFormat = [{
-    $opName `in` $dialectName `(` ($operands^ `:` qualified(type($operands)))? `)` attr-dict (`:` qualified(type($results))^)?
+    $opName `in` $dialectName (`with` $opDict^)? `(` ($operands^ `:` qualified(type($operands)))? `)`  
+    attr-dict (`:` qualified(type($results))^)?
   }];
 }
 
