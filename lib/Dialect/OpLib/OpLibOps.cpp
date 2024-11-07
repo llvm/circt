@@ -47,13 +47,15 @@ LogicalResult OperatorOp::verify() {
   }
 
   if (getIncDelay().has_value() != getOutDelay().has_value()) {
-    return emitOpError("must have either both incDelay and outDelay or neither");
+    return emitOpError(
+        "must have either both incDelay and outDelay or neither");
   }
 
-  if (getLatency() == 0 && (getIncDelay().has_value()
-        || getOutDelay().has_value())) {
+  if (getLatency() == 0 &&
+      (getIncDelay().has_value() || getOutDelay().has_value())) {
     if (getIncDelay() != getOutDelay()) {
-      return emitError("incDelay and outDelay of combinational operators must be the same");
+      return emitError(
+          "incDelay and outDelay of combinational operators must be the same");
     }
   }
 
