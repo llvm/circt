@@ -141,10 +141,15 @@ ServicePortInfo HostMemServiceDeclOp::writePortInfo() {
   hw::StructType writeType = hw::StructType::get(
       ctxt,
       {hw::StructType::FieldInfo{StringAttr::get(ctxt, "address"), addressType},
+       hw::StructType::FieldInfo{
+           StringAttr::get(ctxt, "tag"),
+           IntegerType::get(ctxt, 8,
+                            IntegerType::SignednessSemantics::Unsigned)},
        hw::StructType::FieldInfo{StringAttr::get(ctxt, "data"),
                                  AnyType::get(ctxt)}});
-  return createReqResp(getSymNameAttr(), "write", "req", writeType, "ack",
-                       IntegerType::get(ctxt, 0));
+  return createReqResp(
+      getSymNameAttr(), "write", "req", writeType, "ackTag",
+      IntegerType::get(ctxt, 8, IntegerType::SignednessSemantics::Unsigned));
 }
 
 ServicePortInfo HostMemServiceDeclOp::readPortInfo() {
@@ -152,8 +157,26 @@ ServicePortInfo HostMemServiceDeclOp::readPortInfo() {
   auto addressType =
       IntegerType::get(ctxt, 64, IntegerType::SignednessSemantics::Unsigned);
 
-  return createReqResp(getSymNameAttr(), "read", "address", addressType, "data",
-                       AnyType::get(ctxt));
+  hw::StructType readReqType = hw::StructType::get(
+      ctxt, {
+                hw::StructType::FieldInfo{StringAttr::get(ctxt, "address"),
+                                          addressType},
+                hw::StructType::FieldInfo{
+                    StringAttr::get(ctxt, "tag"),
+                    IntegerType::get(
+                        ctxt, 8, IntegerType::SignednessSemantics::Unsigned)},
+            });
+  hw::StructType readRespType = hw::StructType::get(
+      ctxt, {
+                hw::StructType::FieldInfo{
+                    StringAttr::get(ctxt, "tag"),
+                    IntegerType::get(
+                        ctxt, 8, IntegerType::SignednessSemantics::Unsigned)},
+                hw::StructType::FieldInfo{StringAttr::get(ctxt, "data"),
+                                          AnyType::get(ctxt)},
+            });
+  return createReqResp(getSymNameAttr(), "read", "req", readReqType, "resp",
+                       readRespType);
 }
 
 void HostMemServiceDeclOp::getPortList(
