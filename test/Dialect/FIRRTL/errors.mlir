@@ -393,9 +393,8 @@ firrtl.circuit "NoSymsSym" {
 firrtl.circuit "X" {
 
 firrtl.module @X(in %a : !firrtl.uint<4>) {
-  // expected-error @below {{failed to infer returned types}}
   // expected-error @+1 {{high must be equal or greater than low, but got high = 3, low = 4}}
-  %0 = firrtl.bits %a 3 to 4 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+  %0 = firrtl.bits %a 3 to 4 : !firrtl.uint<4>
 }
 
 }
@@ -405,21 +404,8 @@ firrtl.module @X(in %a : !firrtl.uint<4>) {
 firrtl.circuit "X" {
 
 firrtl.module @X(in %a : !firrtl.uint<4>) {
-  // expected-error @below {{failed to infer returned types}}
   // expected-error @+1 {{high must be smaller than the width of input, but got high = 4, width = 4}}
-  %0 = firrtl.bits %a 4 to 3 : (!firrtl.uint<4>) -> !firrtl.uint<2>
-}
-
-}
-
-// -----
-
-firrtl.circuit "X" {
-
-firrtl.module @X(in %a : !firrtl.uint<4>) {
-  // expected-error @below {{failed to infer returned types}}
-  // expected-error @+1 {{'firrtl.bits' op inferred type(s) '!firrtl.uint<3>' are incompatible with return type(s) of operation '!firrtl.uint<2>'}}
-  %0 = firrtl.bits %a 3 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+  %0 = firrtl.bits %a 4 to 3 : !firrtl.uint<4>
 }
 
 }
@@ -430,16 +416,6 @@ firrtl.circuit "BadPort" {
   firrtl.module @BadPort(in %a : !firrtl.uint<1>) {
     // expected-error @+1 {{'firrtl.attach' op operand #0 must be variadic of analog type, but got '!firrtl.uint<1>'}}
     firrtl.attach %a, %a : !firrtl.uint<1>, !firrtl.uint<1>
-  }
-}
-
-// -----
-
-firrtl.circuit "BadAdd" {
-  firrtl.module @BadAdd(in %a : !firrtl.uint<1>) {
-    // expected-error @below {{failed to infer returned types}}
-    // expected-error @+1 {{'firrtl.add' op inferred type(s) '!firrtl.uint<2>' are incompatible with return type(s) of operation '!firrtl.uint<1>'}}
-    firrtl.add %a, %a : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   }
 }
 
@@ -478,9 +454,9 @@ firrtl.circuit "StructCast3" {
 firrtl.circuit "OutOfOrder" {
   firrtl.module @OutOfOrder(in %a: !firrtl.uint<32>) {
     // expected-error @+1 {{operand #0 does not dominate this use}}
-    %0 = firrtl.add %1, %1 : (!firrtl.uint<33>, !firrtl.uint<33>) -> !firrtl.uint<34>
+    %0 = firrtl.add %1, %1 : !firrtl.uint<33>, !firrtl.uint<33>
     // expected-note @+1 {{operand defined here}}
-    %1 = firrtl.add %a, %a : (!firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<33>
+    %1 = firrtl.add %a, %a : !firrtl.uint<32>, !firrtl.uint<32>
   }
 }
 
@@ -1126,8 +1102,8 @@ firrtl.circuit "MuxRef" {
     %a, %b, %cond = firrtl.instance vals @MuxRefPrivate(out a: !firrtl.probe<uint<1>>,
                                                         out b: !firrtl.probe<uint<1>>,
                                                         out cond: !firrtl.uint<1>)
-    // expected-error @+1 {{'firrtl.mux' op operand #1 must be a passive base type (contain no flips), but got '!firrtl.probe<uint<1>>'}}
-    %a_or_b = firrtl.mux(%cond, %a, %b) : (!firrtl.uint<1>, !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>>
+    // expected-error @below {{operands must be base type}}
+    %a_or_b = firrtl.mux(%cond, %a, %b) : !firrtl.uint<1>, !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
 }
 
@@ -1698,28 +1674,6 @@ firrtl.circuit "UninferredWidthCastNonConstToConst" {
     // expected-error @+1 {{operand constness must match}}
     %b = firrtl.resetCast %a : (!firrtl.reset) -> !firrtl.const.asyncreset
   }
-}
-
-// -----
-
-// Primitive ops with all 'const' operands must have a 'const' result type
-firrtl.circuit "PrimOpConstOperandsNonConstResult" {
-firrtl.module @PrimOpConstOperandsNonConstResult(in %a: !firrtl.const.uint<4>, in %b: !firrtl.const.uint<4>) {
-  // expected-error @below {{failed to infer returned types}}
-  // expected-error @+1 {{'firrtl.and' op inferred type(s) '!firrtl.const.uint<4>' are incompatible with return type(s) of operation '!firrtl.uint<4>'}}
-  %0 = firrtl.and %a, %b : (!firrtl.const.uint<4>, !firrtl.const.uint<4>) -> !firrtl.uint<4>
-}
-}
-
-// -----
-
-// Primitive ops with mixed 'const' operands must have a non-'const' result type
-firrtl.circuit "PrimOpMixedConstOperandsConstResult" {
-firrtl.module @PrimOpMixedConstOperandsConstResult(in %a: !firrtl.const.uint<4>, in %b: !firrtl.uint<4>) {
-  // expected-error @below {{failed to infer returned types}}
-  // expected-error @+1 {{'firrtl.and' op inferred type(s) '!firrtl.uint<4>' are incompatible with return type(s) of operation '!firrtl.const.uint<4>'}}
-  %0 = firrtl.and %a, %b : (!firrtl.const.uint<4>, !firrtl.uint<4>) -> !firrtl.const.uint<4>
-}
 }
 
 // -----

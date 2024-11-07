@@ -86,7 +86,7 @@ firrtl.circuit "invalidReg"   {
     // CHECK: firrtl.regreset
     %c0_ui3 = firrtl.constant 0 : !firrtl.uint<3>
     %r = firrtl.regreset %clock, %reset, %c0_ui3 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<2>
-    %0 = firrtl.cat %r, %r : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
+    %0 = firrtl.cat %r, %r : !firrtl.uint<2>, !firrtl.uint<2>
     firrtl.matchingconnect %r, %r : !firrtl.uint<2>
     firrtl.matchingconnect %out, %0 : !firrtl.uint<4>
   }

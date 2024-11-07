@@ -17,7 +17,7 @@ firrtl.circuit "top" {
     %dead_reg_reset = firrtl.regreset %clock, %reset, %dead_reg  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.matchingconnect %dead_reg_reset, %dead_reg : !firrtl.uint<1>
 
-    %not = firrtl.not %dead_reg_reset : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    %not = firrtl.not %dead_reg_reset : !firrtl.uint<1>
     firrtl.matchingconnect %dest, %not : !firrtl.uint<1>
   }
 
@@ -115,7 +115,7 @@ firrtl.circuit "UnusedOutput"  {
     // CHECK-NEXT: firrtl.matchingconnect %b, %[[c_wire]]
     firrtl.matchingconnect %b, %c : !firrtl.uint<1>
     // CHECK-NEXT: %[[not_a:.+]] = firrtl.not %a
-    %0 = firrtl.not %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    %0 = firrtl.not %a : !firrtl.uint<1>
     // CHECK-NEXT: firrtl.matchingconnect %[[c_wire]], %[[not_a]]
     firrtl.matchingconnect %c, %0 : !firrtl.uint<1>
   }

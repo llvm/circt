@@ -26,27 +26,27 @@ firrtl.circuit "TLRAM" {
       firrtl.connect %7, %data_0 : !firrtl.uint<8>, !firrtl.uint<8>
       %8 = firrtl.subfield %mem_0_MPORT_1[mask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
       firrtl.connect %8, %_T_29 : !firrtl.uint<1>, !firrtl.uint<1>
-      %9 = firrtl.not %wen : (!firrtl.uint<1>) -> !firrtl.uint<1>
+      %9 = firrtl.not %wen : !firrtl.uint<1>
       firrtl.connect %mem_MPORT_en, %9 : !firrtl.uint<1>, !firrtl.uint<1>
       %REG = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
       firrtl.connect %REG, %9 : !firrtl.uint<1>, !firrtl.uint<1>
       %r_0 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<8>
-      %10 = firrtl.mux(%REG, %mem_MPORT_data_0, %r_0) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+      %10 = firrtl.mux(%REG, %mem_MPORT_data_0, %r_0) : !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
       firrtl.connect %r_0, %10 : !firrtl.uint<8>, !firrtl.uint<8>
-      %11 = firrtl.mux(%REG, %mem_MPORT_data_0, %r_0) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+      %11 = firrtl.mux(%REG, %mem_MPORT_data_0, %r_0) : !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
       firrtl.connect %auto_0, %11 : !firrtl.uint<8>, !firrtl.uint<8>
 
 // CHECK: %mem_0_dbgs, %mem_0_rw = firrtl.mem  Undefined  {depth = 16 : i64, name = "mem_0", portNames = ["dbgs", "rw"], prefix = "foo_", readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.probe<vector<uint<8>, 16>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<1>>
-// CHECK:  %[[v7:.+]] = firrtl.mux(%[[writeEnable:.+]], %[[writeAddr:.+]], %[[readAddr:.+]]) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+// CHECK:  %[[v7:.+]] = firrtl.mux(%[[writeEnable:.+]], %[[writeAddr:.+]], %[[readAddr:.+]]) : !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>
 // CHECK:  firrtl.matchingconnect %[[v0:.+]], %[[v7]] : !firrtl.uint<4>
-// CHECK:  %[[v8:.+]] = firrtl.or %[[readEnable:.+]], %[[writeEnable]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:  %[[v8:.+]] = firrtl.or %[[readEnable:.+]], %[[writeEnable]] : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:  firrtl.matchingconnect %[[v1:.+]], %[[v8]] : !firrtl.uint<1>
 // CHECK:  firrtl.ref.define %dbg_0, %mem_0_dbgs : !firrtl.probe<vector<uint<8>, 16>>
 // CHECK:  firrtl.connect %[[readAddr]], %[[index2:.+]] : !firrtl.uint<4>
 // CHECK:  firrtl.connect %[[readEnable]], %mem_MPORT_en : !firrtl.uint<1>
 // CHECK:  firrtl.connect %[[writeAddr]], %index : !firrtl.uint<4>
 // CHECK:  firrtl.connect %[[writeEnable]], %wen : !firrtl.uint<1>
-// CHECK:  %[[v10:.+]] = firrtl.not %wen : (!firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:  %[[v10:.+]] = firrtl.not %wen : !firrtl.uint<1>
 // CHECK:  firrtl.connect %mem_MPORT_en, %[[v10]] : !firrtl.uint<1>
 // CHECK:  firrtl.matchingconnect %[[v4:.+]], %wen : !firrtl.uint<1>
     }
@@ -72,8 +72,8 @@ firrtl.circuit "TLRAM" {
     firrtl.connect %2, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %4, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %3, %io_dataIn : !firrtl.uint<32>, !firrtl.uint<32>
-    %9 = firrtl.not %io_wen : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    %10 = firrtl.mux(%9, %io_ren, %c0_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %9 = firrtl.not %io_wen : !firrtl.uint<1>
+    %10 = firrtl.mux(%9, %io_ren, %c0_ui1) : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %6, %10 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %5, %io_addr : !firrtl.uint<11>, !firrtl.uint<11>
     firrtl.connect %7, %clock : !firrtl.clock, !firrtl.clock
@@ -88,9 +88,9 @@ firrtl.circuit "TLRAM" {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %mem__T_14, %mem__T_22 = firrtl.mem Undefined  {depth = 2048 : i64, name = "mem", portNames = ["_T_14", "_T_22"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<11>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>, !firrtl.bundle<addr: uint<11>, en: uint<1>, clk: clock, data flip: uint<32>>
 // CHECK: %mem_rw = firrtl.mem Undefined  {depth = 2048 : i64, name = "mem", portNames = ["rw"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<11>, en: uint<1>, clk: clock, rdata flip: uint<32>, wmode: uint<1>, wdata: uint<32>, wmask: uint<1>>
-// CHECK:   %[[v7:.+]] = firrtl.mux(%writeEnable, %writeAddr, %readAddr) : (!firrtl.uint<1>, !firrtl.uint<11>, !firrtl.uint<11>) -> !firrtl.uint<11>
+// CHECK:   %[[v7:.+]] = firrtl.mux(%writeEnable, %writeAddr, %readAddr) : !firrtl.uint<1>, !firrtl.uint<11>, !firrtl.uint<11>
 // CHECK:   firrtl.matchingconnect %[[v0:.+]], %[[v7]]
-// CHECK:   %[[v8:.+]] = firrtl.or %readEnable, %writeEnable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %[[v8:.+]] = firrtl.or %readEnable, %writeEnable : !firrtl.uint<1>, !firrtl.uint<1>
     %0 = firrtl.subfield %mem__T_14[addr] : !firrtl.bundle<addr: uint<11>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>
     %1 = firrtl.subfield %mem__T_14[en] : !firrtl.bundle<addr: uint<11>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>
     %2 = firrtl.subfield %mem__T_14[clk] : !firrtl.bundle<addr: uint<11>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>
@@ -100,16 +100,16 @@ firrtl.circuit "TLRAM" {
     %6 = firrtl.subfield %mem__T_22[en] : !firrtl.bundle<addr: uint<11>, en: uint<1>, clk: clock, data flip: uint<32>>
     %7 = firrtl.subfield %mem__T_22[clk] : !firrtl.bundle<addr: uint<11>, en: uint<1>, clk: clock, data flip: uint<32>>
     %8 = firrtl.subfield %mem__T_22[data] : !firrtl.bundle<addr: uint<11>, en: uint<1>, clk: clock, data flip: uint<32>>
-    %9 = firrtl.and %io_valid, %io_write : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    %10 = firrtl.not %io_write : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    %11 = firrtl.and %io_valid, %10 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %9 = firrtl.and %io_valid, %io_write : !firrtl.uint<1>, !firrtl.uint<1>
+    %10 = firrtl.not %io_write : !firrtl.uint<1>
+    %11 = firrtl.and %io_valid, %10 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %0, %io_addr : !firrtl.uint<11>, !firrtl.uint<11>
     firrtl.connect %1, %9 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %2, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %4, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %3, %io_dataIn : !firrtl.uint<32>, !firrtl.uint<32>
-    %12 = firrtl.not %9 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    %13 = firrtl.mux(%12, %11, %c0_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %12 = firrtl.not %9 : !firrtl.uint<1>
+    %13 = firrtl.mux(%12, %11, %c0_ui1) : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %6, %13 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %5, %io_addr : !firrtl.uint<11>, !firrtl.uint<11>
     firrtl.connect %7, %clock : !firrtl.clock, !firrtl.clock
@@ -133,16 +133,16 @@ firrtl.circuit "TLRAM" {
     %6 = firrtl.subfield %mem__T_22[en] : !firrtl.bundle<addr: uint<11>, en: uint<1>, clk: clock, data flip: uint<32>>
     %7 = firrtl.subfield %mem__T_22[clk] : !firrtl.bundle<addr: uint<11>, en: uint<1>, clk: clock, data flip: uint<32>>
     %8 = firrtl.subfield %mem__T_22[data] : !firrtl.bundle<addr: uint<11>, en: uint<1>, clk: clock, data flip: uint<32>>
-    %9 = firrtl.and %io_valid, %io_write : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    %10 = firrtl.not %io_write : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    %11 = firrtl.and %io_valid, %10 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %9 = firrtl.and %io_valid, %io_write : !firrtl.uint<1>, !firrtl.uint<1>
+    %10 = firrtl.not %io_write : !firrtl.uint<1>
+    %11 = firrtl.and %io_valid, %10 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %0, %io_addr : !firrtl.uint<11>, !firrtl.uint<11>
     firrtl.connect %1, %9 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %2, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %4, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %3, %io_dataIn : !firrtl.uint<32>, !firrtl.uint<32>
-    %12 = firrtl.not %9 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    %13 = firrtl.mux(%12, %11, %c1_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %12 = firrtl.not %9 : !firrtl.uint<1>
+    %13 = firrtl.mux(%12, %11, %c1_ui1) : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %6, %13 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %5, %io_addr : !firrtl.uint<11>, !firrtl.uint<11>
     firrtl.connect %7, %clock : !firrtl.clock, !firrtl.clock
@@ -164,15 +164,15 @@ firrtl.circuit "TLRAM" {
     %6 = firrtl.subfield %mem_T_5[clk] : !firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>
     %7 = firrtl.subfield %mem_T_5[data] : !firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>
     %8 = firrtl.subfield %mem_T_5[mask] : !firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>
-    %9 = firrtl.not %io_wen : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    %10 = firrtl.and %io_en, %9 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %9 = firrtl.not %io_wen : !firrtl.uint<1>
+    %10 = firrtl.and %io_en, %9 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %1, %10 : !firrtl.uint<1>, !firrtl.uint<1>
-    %11 = firrtl.bits %io_raddr 6 to 0 : (!firrtl.uint<8>) -> !firrtl.uint<7>
+    %11 = firrtl.bits %io_raddr 6 to 0 : !firrtl.uint<8>
     firrtl.connect %0, %11 : !firrtl.uint<7>, !firrtl.uint<7>
     firrtl.connect %2, %clk1 : !firrtl.clock, !firrtl.clock
     firrtl.connect %io_rdata, %3 : !firrtl.uint<32>, !firrtl.uint<32>
-    %12 = firrtl.and %io_en, %io_wen : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    %13 = firrtl.bits %io_waddr 6 to 0 : (!firrtl.uint<8>) -> !firrtl.uint<7>
+    %12 = firrtl.and %io_en, %io_wen : !firrtl.uint<1>, !firrtl.uint<1>
+    %13 = firrtl.bits %io_waddr 6 to 0 : !firrtl.uint<8>
     firrtl.connect %4, %13 : !firrtl.uint<7>, !firrtl.uint<7>
     firrtl.connect %5, %12 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %6, %clk2 : !firrtl.clock, !firrtl.clock
@@ -195,15 +195,15 @@ firrtl.circuit "TLRAM" {
     %6 = firrtl.subfield %mem_T_5[clk] : !firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>
     %7 = firrtl.subfield %mem_T_5[data] : !firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>
     %8 = firrtl.subfield %mem_T_5[mask] : !firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>
-    %9 = firrtl.not %io_wen : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    %10 = firrtl.and %io_en, %9 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %9 = firrtl.not %io_wen : !firrtl.uint<1>
+    %10 = firrtl.and %io_en, %9 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %1, %10 : !firrtl.uint<1>, !firrtl.uint<1>
-    %11 = firrtl.bits %io_raddr 6 to 0 : (!firrtl.uint<8>) -> !firrtl.uint<7>
+    %11 = firrtl.bits %io_raddr 6 to 0 : !firrtl.uint<8>
     firrtl.connect %0, %11 : !firrtl.uint<7>, !firrtl.uint<7>
     firrtl.connect %2, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %io_rdata, %3 : !firrtl.uint<32>, !firrtl.uint<32>
-    %12 = firrtl.and %io_en, %io_wen : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    %13 = firrtl.bits %io_waddr 6 to 0 : (!firrtl.uint<8>) -> !firrtl.uint<7>
+    %12 = firrtl.and %io_en, %io_wen : !firrtl.uint<1>, !firrtl.uint<1>
+    %13 = firrtl.bits %io_waddr 6 to 0 : !firrtl.uint<8>
     firrtl.connect %4, %13 : !firrtl.uint<7>, !firrtl.uint<7>
     firrtl.connect %5, %12 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %6, %clock : !firrtl.clock, !firrtl.clock
@@ -235,8 +235,8 @@ firrtl.circuit "TLRAM" {
     firrtl.connect %xc, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %4, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %3, %io_dataIn : !firrtl.uint<32>, !firrtl.uint<32>
-    %9 = firrtl.not %io_wen : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    %10 = firrtl.mux(%9, %io_ren, %c0_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %9 = firrtl.not %io_wen : !firrtl.uint<1>
+    %10 = firrtl.mux(%9, %io_ren, %c0_ui1) : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %6, %10 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %5, %io_addr : !firrtl.uint<11>, !firrtl.uint<11>
     firrtl.connect %7, %clock : !firrtl.clock, !firrtl.clock
@@ -271,14 +271,14 @@ firrtl.circuit "TLRAM" {
       %8 = firrtl.subfield %mem_0_MPORT_1[mask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<2>>
       %c1 = firrtl.constant 3 : !firrtl.uint<2>
       firrtl.connect %8, %c1 : !firrtl.uint<2>, !firrtl.uint<2>
-      %9 = firrtl.not %wen : (!firrtl.uint<1>) -> !firrtl.uint<1>
+      %9 = firrtl.not %wen : !firrtl.uint<1>
       firrtl.connect %mem_MPORT_en, %9 : !firrtl.uint<1>, !firrtl.uint<1>
       %REG = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
       firrtl.connect %REG, %9 : !firrtl.uint<1>, !firrtl.uint<1>
       %r_0 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<8>
-      %10 = firrtl.mux(%REG, %mem_MPORT_data_0, %r_0) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+      %10 = firrtl.mux(%REG, %mem_MPORT_data_0, %r_0) : !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
       firrtl.connect %r_0, %10 : !firrtl.uint<8>, !firrtl.uint<8>
-      %11 = firrtl.mux(%REG, %mem_MPORT_data_0, %r_0) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+      %11 = firrtl.mux(%REG, %mem_MPORT_data_0, %r_0) : !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
       firrtl.connect %auto_0, %11 : !firrtl.uint<8>, !firrtl.uint<8>
 
     }
@@ -286,7 +286,7 @@ firrtl.circuit "TLRAM" {
     // CHECK-LABEL: firrtl.module @SimplifyWMODE
     firrtl.module @SimplifyWMODE(in %rwPort_enable: !firrtl.uint<1>, in %rwPort_isWrite: !firrtl.uint<1>) attributes {} {
       %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-      %18 = firrtl.mux(%rwPort_enable, %rwPort_isWrite, %c0_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+      %18 = firrtl.mux(%rwPort_enable, %rwPort_isWrite, %c0_ui1) : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
       // CHECK: %[[c1_ui1:.+]] = firrtl.constant 1 : !firrtl.uint<1>
       // CHECK: %[[v7:.+]] = firrtl.mux(%[[c1_ui1]], %rwPort_isWrite, %c0_ui1)
       %mem_rwPort_readData_rw = firrtl.mem Undefined {depth = 64 : i64, name = "t", portNames = ["rw"], prefix = "", readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<6>, en: uint<1>, clk: clock, rdata flip: uint<10>, wmode: uint<1>, wdata: uint<10>, wmask: uint<5>>
@@ -311,13 +311,13 @@ firrtl.circuit "TLRAM" {
     %syncreadmem_singleport_readwritePortA_readData_rw_wmask_x = firrtl.wire : !firrtl.uint<1>
     %syncreadmem_singleport_readwritePortA_readData_rw_wmask_y = firrtl.wire : !firrtl.uint<1>
     %9 = firrtl.subfield %syncreadmem_singleport_readwritePortA_readData_rw[wmask] : !firrtl.bundle<addr: uint<6>, en: uint<1>, clk: clock, rdata flip: uint<10>, wmode: uint<1>, wdata: uint<10>, wmask: uint<5>>
-    %10 = firrtl.cat %syncreadmem_singleport_readwritePortA_readData_rw_wmask_y, %syncreadmem_singleport_readwritePortA_readData_rw_wmask_x : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
-    %11 = firrtl.bits %10 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-    %12 = firrtl.cat %11, %11 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
-    %13 = firrtl.cat %11, %12 : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<3>
-    %14 = firrtl.bits %10 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-    %15 = firrtl.cat %14, %13 : (!firrtl.uint<1>, !firrtl.uint<3>) -> !firrtl.uint<4>
-    %16 = firrtl.cat %14, %15 : (!firrtl.uint<1>, !firrtl.uint<4>) -> !firrtl.uint<5>
+    %10 = firrtl.cat %syncreadmem_singleport_readwritePortA_readData_rw_wmask_y, %syncreadmem_singleport_readwritePortA_readData_rw_wmask_x : !firrtl.uint<1>, !firrtl.uint<1>
+    %11 = firrtl.bits %10 0 to 0 : !firrtl.uint<2>
+    %12 = firrtl.cat %11, %11 : !firrtl.uint<1>, !firrtl.uint<1>
+    %13 = firrtl.cat %11, %12 : !firrtl.uint<1>, !firrtl.uint<2>
+    %14 = firrtl.bits %10 1 to 1 : !firrtl.uint<2>
+    %15 = firrtl.cat %14, %13 : !firrtl.uint<1>, !firrtl.uint<3>
+    %16 = firrtl.cat %14, %15 : !firrtl.uint<1>, !firrtl.uint<4>
     firrtl.matchingconnect %9, %16 : !firrtl.uint<5>
     firrtl.connect %syncreadmem_singleport_readwritePortA_readData_rw_wmask_x, %readwritePortA_isWrite_2 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %syncreadmem_singleport_readwritePortA_readData_rw_wmask_y, %readwritePortA_isWrite_2 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -339,7 +339,7 @@ firrtl.circuit "TLRAM" {
       // CHECK-SAME:   mask: uint<1>
       %0 = firrtl.subfield %mem_w[mask] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<2>, mask: uint<2>>
       %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-      %1 = firrtl.cat %c1_ui1, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+      %1 = firrtl.cat %c1_ui1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
       firrtl.matchingconnect %0, %1 : !firrtl.uint<2>
     }
   }

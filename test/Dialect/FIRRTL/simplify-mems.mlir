@@ -238,19 +238,19 @@ firrtl.circuit "UnusedBits" {
     %read_clk = firrtl.subfield %Memory_read[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     firrtl.connect %read_clk, %clock : !firrtl.clock, !firrtl.clock
     %read_data = firrtl.subfield %Memory_read[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
-    %read_data_slice = firrtl.bits %read_data 7 to 3 : (!firrtl.uint<42>) -> !firrtl.uint<5>
+    %read_data_slice = firrtl.bits %read_data 7 to 3 : !firrtl.uint<42>
     firrtl.connect %result_read, %read_data_slice : !firrtl.uint<5>, !firrtl.uint<5>
 
     // CHECK-DAG: [[RW_FIELD:%.+]] = firrtl.subfield %Memory_rw[wdata] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<10>, wmode: uint<1>, wdata: uint<10>, wmask: uint<1>>
-    // CHECK-DAG: [[RW_SLICE_LO:%.+]] = firrtl.bits %in_data 7 to 3 : (!firrtl.uint<42>) -> !firrtl.uint<5>
-    // CHECK-DAG: [[RW_SLICE_HI:%.+]] = firrtl.bits %in_data 24 to 20 : (!firrtl.uint<42>) -> !firrtl.uint<5>
-    // CHECK-DAG: [[RW_SLICE_JOIN:%.+]] = firrtl.cat [[RW_SLICE_HI]], [[RW_SLICE_LO]] : (!firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<10>
+    // CHECK-DAG: [[RW_SLICE_LO:%.+]] = firrtl.bits %in_data 7 to 3 : !firrtl.uint<42>
+    // CHECK-DAG: [[RW_SLICE_HI:%.+]] = firrtl.bits %in_data 24 to 20 : !firrtl.uint<42>
+    // CHECK-DAG: [[RW_SLICE_JOIN:%.+]] = firrtl.cat [[RW_SLICE_HI]], [[RW_SLICE_LO]] : !firrtl.uint<5>, !firrtl.uint<5>
     // CHECK-DAG: firrtl.matchingconnect [[RW_FIELD]], [[RW_SLICE_JOIN]] : !firrtl.uint<10>
 
     // CHECK-DAG: [[W_FIELD:%.+]] = firrtl.subfield %Memory_write[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<10>, mask: uint<1>>
-    // CHECK-DAG: [[W_SLICE_LO:%.+]] = firrtl.bits %in_data 7 to 3 : (!firrtl.uint<42>) -> !firrtl.uint<5>
-    // CHECK-DAG: [[W_SLICE_HI:%.+]] = firrtl.bits %in_data 24 to 20 : (!firrtl.uint<42>) -> !firrtl.uint<5>
-    // CHECK-DAG: [[W_SLICE_JOIN:%.+]] = firrtl.cat [[W_SLICE_HI]], [[W_SLICE_LO]] : (!firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<10>
+    // CHECK-DAG: [[W_SLICE_LO:%.+]] = firrtl.bits %in_data 7 to 3 : !firrtl.uint<42>
+    // CHECK-DAG: [[W_SLICE_HI:%.+]] = firrtl.bits %in_data 24 to 20 : !firrtl.uint<42>
+    // CHECK-DAG: [[W_SLICE_JOIN:%.+]] = firrtl.cat [[W_SLICE_HI]], [[W_SLICE_LO]] : !firrtl.uint<5>, !firrtl.uint<5>
     // CHECK-DAG: firrtl.matchingconnect [[W_FIELD]], [[W_SLICE_JOIN]] : !firrtl.uint<10>
 
     %rw_addr = firrtl.subfield %Memory_rw[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
@@ -260,7 +260,7 @@ firrtl.circuit "UnusedBits" {
     %rw_clk = firrtl.subfield %Memory_rw[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
     firrtl.connect %rw_clk, %clock : !firrtl.clock, !firrtl.clock
     %rw_rdata = firrtl.subfield %Memory_rw[rdata] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
-    %rw_rdata_slice = firrtl.bits %rw_rdata 24 to 20 : (!firrtl.uint<42>) -> !firrtl.uint<5>
+    %rw_rdata_slice = firrtl.bits %rw_rdata 24 to 20 : !firrtl.uint<42>
     firrtl.connect %result_rw, %rw_rdata_slice : !firrtl.uint<5>, !firrtl.uint<5>
     %rw_wmode = firrtl.subfield %Memory_rw[wmode] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
     firrtl.connect %rw_wmode, %wmode_rw : !firrtl.uint<1>, !firrtl.uint<1>
@@ -317,10 +317,10 @@ firrtl.circuit "UnusedBitsAtEnd" {
     %read_clk = firrtl.subfield %Memory_read[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     firrtl.connect %read_clk, %clock : !firrtl.clock, !firrtl.clock
     %read_data = firrtl.subfield %Memory_read[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
-    %read_data_slice = firrtl.bits %read_data 41 to 37 : (!firrtl.uint<42>) -> !firrtl.uint<5>
+    %read_data_slice = firrtl.bits %read_data 41 to 37 : !firrtl.uint<42>
     firrtl.connect %result_read, %read_data_slice : !firrtl.uint<5>, !firrtl.uint<5>
 
-    // CHECK: firrtl.bits %in_data 41 to 37 : (!firrtl.uint<42>) -> !firrtl.uint<5>
+    // CHECK: firrtl.bits %in_data 41 to 37 : !firrtl.uint<42>
     %write_addr = firrtl.subfield %Memory_write[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
     firrtl.connect %write_addr, %addr : !firrtl.uint<4>, !firrtl.uint<4>
     %write_en = firrtl.subfield %Memory_write[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
@@ -371,16 +371,16 @@ firrtl.circuit "OneAddressMasked" {
     %read_data = firrtl.subfield %Memory_read[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
     firrtl.connect %result_read, %read_data : !firrtl.uint<32>, !firrtl.uint<32>
 
-    // CHECK: [[DATA_0:%.+]] = firrtl.bits %in_data 15 to 0 : (!firrtl.uint<32>) -> !firrtl.uint<16>
-    // CHECK: [[NEXT_0:%.+]] = firrtl.bits %Memory 15 to 0 : (!firrtl.uint<32>) -> !firrtl.uint<16>
-    // CHECK: [[MASK_0:%.+]] = firrtl.bits %in_mask 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-    // CHECK: [[CHUNK_0:%.+]] = firrtl.mux([[MASK_0]], [[DATA_0]], [[NEXT_0]]) : (!firrtl.uint<1>, !firrtl.uint<16>, !firrtl.uint<16>) -> !firrtl.uint<16>
-    // CHECK: [[DATA_1:%.+]] = firrtl.bits %in_data 31 to 16 : (!firrtl.uint<32>) -> !firrtl.uint<16>
-    // CHECK: [[NEXT_1:%.+]] = firrtl.bits %Memory 31 to 16 : (!firrtl.uint<32>) -> !firrtl.uint<16>
-    // CHECK: [[MASK_1:%.+]] = firrtl.bits %in_mask 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-    // CHECK: [[CHUNK_1:%.+]] = firrtl.mux([[MASK_1]], [[DATA_1]], [[NEXT_1]]) : (!firrtl.uint<1>, !firrtl.uint<16>, !firrtl.uint<16>) -> !firrtl.uint<16>
-    // CHECK: [[NEXT:%.+]] = firrtl.cat [[CHUNK_1]], [[CHUNK_0]] : (!firrtl.uint<16>, !firrtl.uint<16>) -> !firrtl.uint<32>
-    // CHECK: [[NEXT_EN:%.+]] = firrtl.mux(%in_wen, [[NEXT]], %Memory) : (!firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<32>
+    // CHECK: [[DATA_0:%.+]] = firrtl.bits %in_data 15 to 0 : !firrtl.uint<32>
+    // CHECK: [[NEXT_0:%.+]] = firrtl.bits %Memory 15 to 0 : !firrtl.uint<32>
+    // CHECK: [[MASK_0:%.+]] = firrtl.bits %in_mask 0 to 0 : !firrtl.uint<2>
+    // CHECK: [[CHUNK_0:%.+]] = firrtl.mux([[MASK_0]], [[DATA_0]], [[NEXT_0]]) : !firrtl.uint<1>, !firrtl.uint<16>, !firrtl.uint<16>
+    // CHECK: [[DATA_1:%.+]] = firrtl.bits %in_data 31 to 16 : !firrtl.uint<32>
+    // CHECK: [[NEXT_1:%.+]] = firrtl.bits %Memory 31 to 16 : !firrtl.uint<32>
+    // CHECK: [[MASK_1:%.+]] = firrtl.bits %in_mask 1 to 1 : !firrtl.uint<2>
+    // CHECK: [[CHUNK_1:%.+]] = firrtl.mux([[MASK_1]], [[DATA_1]], [[NEXT_1]]) : !firrtl.uint<1>, !firrtl.uint<16>, !firrtl.uint<16>
+    // CHECK: [[NEXT:%.+]] = firrtl.cat [[CHUNK_1]], [[CHUNK_0]] : !firrtl.uint<16>, !firrtl.uint<16>
+    // CHECK: [[NEXT_EN:%.+]] = firrtl.mux(%in_wen, [[NEXT]], %Memory) : !firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>
     // CHECK: firrtl.matchingconnect %Memory, [[NEXT_EN]] : !firrtl.uint<32>
 
     %write_addr = firrtl.subfield %Memory_write[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<2>>
@@ -475,15 +475,15 @@ firrtl.circuit "OneAddressNoMask" {
     %rw_wmask = firrtl.subfield %Memory_rw[wmask] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, rdata flip: uint<32>, wmode: uint<1>, wdata: uint<32>, wmask: uint<1>>
     firrtl.connect %rw_wmask, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 
-    // CHECK: [[WRITING:%.+]] = firrtl.and %in_rwen, %wmode_rw : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK: [[WRITING:%.+]] = firrtl.and %in_rwen, %wmode_rw : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: %Memory_rw_wen_0 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
     // CHECK: firrtl.matchingconnect %Memory_rw_wen_0, [[WRITING]] : !firrtl.uint<1>
     // CHECK: %Memory_rw_wen_1 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
     // CHECK: firrtl.matchingconnect %Memory_rw_wen_1, %Memory_rw_wen_0 : !firrtl.uint<1>
     // CHECK: %Memory_rw_wen_2 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
     // CHECK: firrtl.matchingconnect %Memory_rw_wen_2, %Memory_rw_wen_1 : !firrtl.uint<1>
-    // CHECK: [[WRITE_RW:%.+]] = firrtl.mux(%Memory_rw_wen_2, %Memory_rw_wdata_2, %Memory) : (!firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<32>
-    // CHECK: [[WRITE_W:%.+]] = firrtl.mux(%Memory_write_en_2, %Memory_write_data_2, [[WRITE_RW]]) : (!firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<32>
+    // CHECK: [[WRITE_RW:%.+]] = firrtl.mux(%Memory_rw_wen_2, %Memory_rw_wdata_2, %Memory) : !firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>
+    // CHECK: [[WRITE_W:%.+]] = firrtl.mux(%Memory_write_en_2, %Memory_write_data_2, [[WRITE_RW]]) : !firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>
     // CHECK: firrtl.matchingconnect %Memory, [[WRITE_W]] : !firrtl.uint<32>
     %write_addr = firrtl.subfield %Memory_write[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>
     firrtl.connect %write_addr, %addr : !firrtl.uint<1>, !firrtl.uint<1>

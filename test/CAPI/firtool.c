@@ -32,8 +32,8 @@ void exportVerilog(MlirContext ctx, bool disableOptimization) {
     "  firrtl.module @ExportTestSimpleModule(in %in_1: !firrtl.uint<32>,\n"
     "                                        in %in_2: !firrtl.uint<32>,\n"
     "                                        out %out: !firrtl.uint<32>) {\n"
-    "    %0 = firrtl.and %in_1, %in_2 : (!firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<32>\n"
-    "    %1 = firrtl.and %0, %in_2 : (!firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<32>\n"
+    "    %0 = firrtl.and %in_1, %in_2 : !firrtl.uint<32>, !firrtl.uint<32>\n"
+    "    %1 = firrtl.and %0, %in_2 : !firrtl.uint<32>, !firrtl.uint<32>\n"
     "    firrtl.connect %out, %1 : !firrtl.uint<32>, !firrtl.uint<32>\n"
     "  }\n"
     "}\n";

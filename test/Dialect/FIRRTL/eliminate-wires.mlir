@@ -8,7 +8,7 @@ firrtl.circuit "TopLevel" {
     // CHECK-NOT: firrtl.wire
     %w = firrtl.wire : !firrtl.uint<1>
     firrtl.matchingconnect %w, %source : !firrtl.uint<1>
-    %wn = firrtl.not %w : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    %wn = firrtl.not %w : !firrtl.uint<1>
     %x = firrtl.wire : !firrtl.uint<1>
     firrtl.matchingconnect %x, %wn : !firrtl.uint<1>
     firrtl.matchingconnect %sink, %x : !firrtl.uint<1>

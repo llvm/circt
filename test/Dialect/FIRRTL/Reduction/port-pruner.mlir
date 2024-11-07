@@ -12,8 +12,8 @@ firrtl.circuit "Foo" {
     %bar_a, %bar_b, %bar_c, %bar_d, %bar_e = firrtl.instance bar @Bar (in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, out c: !firrtl.uint<1>, out d: !firrtl.uint<1>, out e: !firrtl.uint<1>)
     firrtl.connect %bar_a, %x : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %bar_b, %x : !firrtl.uint<1>, !firrtl.uint<1>
-    %0 = firrtl.add %bar_c, %bar_d : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
-    %1 = firrtl.add %0, %bar_e : (!firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<3>
+    %0 = firrtl.add %bar_c, %bar_d : !firrtl.uint<1>, !firrtl.uint<1>
+    %1 = firrtl.add %0, %bar_e : !firrtl.uint<2>, !firrtl.uint<1>
     firrtl.connect %y, %1 : !firrtl.uint<3>, !firrtl.uint<3>
   }
 
@@ -32,7 +32,7 @@ firrtl.circuit "Foo" {
     out %e: !firrtl.uint<1>
   ) {
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
-    %0 = firrtl.not %b : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    %0 = firrtl.not %b : !firrtl.uint<1>
     firrtl.connect %c, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %d, %0 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %e, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>

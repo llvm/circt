@@ -64,7 +64,7 @@ def FormalOp : FIRRTLOp<"formal", [
       %c42_8 = firrtl.constant 42 : !firrtl.uint<8>
       firrtl.connect %bar, %c42_8: !firrtl.uint<8>, !firrtl.uint<8>
       %c69_8 = firrtl.constant 69 : !firrtl.uint<8>
-      %cond = firrtl.eq %c69_8, %out : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<1>
+      %cond = firrtl.eq %c69_8, %out : !firrtl.uint<8>, !firrtl.uint<8>
       firrtl.assert %cond
     }
 

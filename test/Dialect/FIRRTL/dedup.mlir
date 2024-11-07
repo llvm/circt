@@ -44,7 +44,7 @@ firrtl.circuit "PrimOps" {
     %a_a = firrtl.subfield %a[a] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
     %a_b = firrtl.subfield %a[b] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
     %a_c = firrtl.subfield %a[c] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
-    %0 = firrtl.xor %a_a, %a_b: (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+    %0 = firrtl.xor %a_a, %a_b : !firrtl.uint<2>, !firrtl.uint<2>
     firrtl.connect %a_c, %a_b: !firrtl.uint<2>, !firrtl.uint<2>
   }
   // CHECK-NOT: firrtl.module private @PrimOps1
@@ -52,8 +52,8 @@ firrtl.circuit "PrimOps" {
     %b_a = firrtl.subfield %b[a] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
     %b_b = firrtl.subfield %b[b] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
     %b_c = firrtl.subfield %b[c] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
-    %0 = firrtl.xor %b_a, %b_b: (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-    firrtl.connect %b_c, %b_b: !firrtl.uint<2>, !firrtl.uint<2>
+    %0 = firrtl.xor %b_a, %b_b : !firrtl.uint<2>, !firrtl.uint<2>
+    firrtl.connect %b_c, %b_b : !firrtl.uint<2>, !firrtl.uint<2>
   }
   firrtl.module @PrimOps() {
     // CHECK: firrtl.instance primops0 @PrimOps0
@@ -539,7 +539,7 @@ firrtl.circuit "MuxBundle" {
 
     // CHECK: %2 = firrtl.mux(%p, [[WIRE]], %l)
     // CHECK: firrtl.matchingconnect %o, %2 : !firrtl.bundle<b: uint<1>>
-    %0 = firrtl.mux(%p, %bar1_o, %l) : (!firrtl.uint<1>, !firrtl.bundle<b: uint<1>>, !firrtl.bundle<b: uint<1>>) -> !firrtl.bundle<b: uint<1>>
+    %0 = firrtl.mux(%p, %bar1_o, %l) : !firrtl.uint<1>, !firrtl.bundle<b: uint<1>>, !firrtl.bundle<b: uint<1>>
     firrtl.matchingconnect %o, %0 : !firrtl.bundle<b: uint<1>>
   }
 }

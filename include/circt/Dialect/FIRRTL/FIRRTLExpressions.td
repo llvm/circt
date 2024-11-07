@@ -419,7 +419,7 @@ def SubaccessOp : FIRRTLExprOp<"subaccess"> {
   let results = (outs FIRRTLBaseType:$result);
 
   let assemblyFormat =
-     "$input `[` $index `]` attr-dict `:` qualified(type($input)) `,` qualified(type($index))";
+     "$input `[` $index `]` attr-dict `:` qualified(type(operands))";
 
   let hasCanonicalizer = true;
   let inferTypeDecl = [{
@@ -582,10 +582,7 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
   let arguments = (ins lhsType:$lhs, rhsType:$rhs);
   let results = (outs resultType:$result);
 
-  let assemblyFormat = [{
-    $lhs `,` $rhs  attr-dict `:`
-       `(` qualified(type($lhs)) `,` qualified(type($rhs)) `)` `->` qualified(type($result))
-  }];
+  let assemblyFormat = "$lhs `,` $rhs  attr-dict `:` qualified(type(operands))";
 
   // Give concrete operations a chance to set a type inference callback. If left
   // empty, a declaration for `inferReturnType` will be emitted that the
@@ -709,8 +706,7 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
   let arguments = (ins srcType:$input);
   let results = (outs resultType:$result);
 
-  let assemblyFormat =
-    "$input attr-dict `:` functional-type($input, $result)";
+  let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
 
   // Give concrete operations a chance to set a type inference callback. If left
   // empty, a declaration for `inferReturnType` will be emitted that the
@@ -791,7 +787,7 @@ def BitsPrimOp : PrimOp<"bits"> {
   let results = (outs UIntType:$result);
 
   let assemblyFormat =
-    "$input $hi `to` $lo attr-dict `:` functional-type($input, $result)";
+    "$input $hi `to` $lo attr-dict `:` qualified(type($input))";
 
   let description = [{
     The `bits` operation extracts the bits between `hi` (inclusive) and `lo`
@@ -824,7 +820,7 @@ def HeadPrimOp : PrimOp<"head"> {
   let results = (outs UIntType:$result);
 
   let assemblyFormat =
-    "$input `,` $amount attr-dict `:` functional-type($input, $result)";
+    "$input `,` $amount attr-dict `:` qualified(type($input))";
 
   let inferTypeDecl = [{
     static FIRRTLType inferReturnType(FIRRTLType input, int64_t amount,
@@ -851,7 +847,7 @@ def MuxPrimOp : PrimOp<"mux"> {
   let results = (outs PassiveType:$result);
 
   let assemblyFormat =
-    "`(` operands `)` attr-dict `:` functional-type(operands, $result)";
+    "`(` $sel `,` $high `,` $low `)` attr-dict `:` qualified(type(operands))";
 
   let inferTypeDecl = [{
     static FIRRTLType inferReturnType(FIRRTLType sel, FIRRTLType high,
@@ -878,7 +874,7 @@ def PadPrimOp : PrimOp<"pad"> {
   let results = (outs IntType:$result);
 
   let assemblyFormat =
-    "$input `,` $amount attr-dict `:` functional-type($input, $result)";
+    "$input `,` $amount attr-dict `:` qualified(type($input))";
 
   let description = [{
     Pad the input out to an `amount` wide integer, sign extending or zero
@@ -908,7 +904,7 @@ class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
   let results = (outs IntType:$result);
 
   let assemblyFormat =
-    "$input `,` $amount attr-dict `:` functional-type($input, $result)";
+    "$input `,` $amount attr-dict `:` qualified(type($input))";
 
   let inferTypeDecl = [{
     static FIRRTLType inferReturnType(FIRRTLType input, int64_t amount,
@@ -950,7 +946,7 @@ def TailPrimOp : PrimOp<"tail"> {
   let results = (outs UIntType:$result);
 
   let assemblyFormat =
-    "$input `,` $amount attr-dict `:` functional-type($input, $result)";
+    "$input `,` $amount attr-dict `:` qualified(type($input))";
 
   let description = [{
     The `tail` operation truncates the `amount` most significant bits from
@@ -999,7 +995,7 @@ def Mux2CellIntrinsicOp : PrimOp<"int.mux2cell"> {
   let hasCanonicalizer = true;
 
   let assemblyFormat =
-    "`(` operands `)` attr-dict `:` functional-type(operands, $result)";
+    "`(` operands `)` attr-dict `:` qualified(type(operands))";
 }
 
 def Mux4CellIntrinsicOp : PrimOp<"int.mux4cell"> {
@@ -1021,7 +1017,7 @@ def Mux4CellIntrinsicOp : PrimOp<"int.mux4cell"> {
   let hasCanonicalizer = true;
 
   let assemblyFormat =
-    "`(` operands `)` attr-dict `:` functional-type(operands, $result)";
+    "`(` operands `)` attr-dict `:` qualified(type(operands))";
 }
 
 //===----------------------------------------------------------------------===//
@@ -1226,8 +1222,7 @@ def ObjectAnyRefCastOp : FIRRTLOp<"object.anyref_cast", [Pure]> {
   let arguments = (ins ClassType:$input);
   let results = (outs AnyRefType:$result);
 
-  let assemblyFormat =
-     "$input attr-dict `:` type($input)";
+  let assemblyFormat = "$input attr-dict `:` type($input)";
 }
 
 def StringConstantOp : FIRRTLOp<"string", [Pure, ConstantLike]> {
@@ -1485,8 +1480,7 @@ def RefCastOp : FIRRTLOp<"ref.cast",
   let hasFolder = 1;
   let hasVerifier = 1;
 
-  let assemblyFormat =
-     "$input attr-dict `:` functional-type($input, $result)";
+  let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";
 }
 
 def RefResolveOp: FIRRTLExprOp<"ref.resolve",

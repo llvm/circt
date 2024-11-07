@@ -198,14 +198,14 @@ firrtl.circuit "Top" {
   // CHECK: firrtl.module @Top() {
   // CHECK:   firrtl.layerblock @A {
   // CHECK:     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-  // CHECK:     %0 = firrtl.not %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:     %0 = firrtl.not %c0_ui1 : !firrtl.uint<1>
   // CHECK:     %node = firrtl.node %0 : !firrtl.uint<1>
   // CHECK:     "unknown"(%node) : (!firrtl.uint<1>) -> ()
   // CHECK:   }
   // CHECK: }
   firrtl.module @Top() {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %0 = firrtl.not %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    %0 = firrtl.not %c0_ui1 : !firrtl.uint<1>
     %node = firrtl.node %0 : !firrtl.uint<1>
     firrtl.layerblock @A {
       "unknown"(%node) : (!firrtl.uint<1>) -> ()
@@ -218,13 +218,13 @@ firrtl.circuit "Top" {
   firrtl.layer @A bind {}
   // CHECK: firrtl.module @Top(in %port: !firrtl.uint<1>) { 
   // CHECK:   firrtl.layerblock @A {
-  // CHECK:     %0 = firrtl.not %port : (!firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:     %0 = firrtl.not %port : !firrtl.uint<1>
   // CHECK:     %node = firrtl.node %0 : !firrtl.uint<1>
   // CHECK:     "unknown"(%node) : (!firrtl.uint<1>) -> ()
   // CHECK:   }
   // CHECK: }
   firrtl.module @Top(in %port : !firrtl.uint<1>) {
-    %0 = firrtl.not %port : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    %0 = firrtl.not %port : !firrtl.uint<1>
     %node = firrtl.node %0 : !firrtl.uint<1>
     firrtl.layerblock @A {
       "unknown"(%node) : (!firrtl.uint<1>) -> ()
@@ -269,7 +269,7 @@ firrtl.circuit "Top" {
  firrtl.layer @A bind {}
  firrtl.module @Top(out %port: !firrtl.uint<1>) {
    %c = firrtl.constant 0 : !firrtl.uint<1>
-   %0 = firrtl.not %port : (!firrtl.uint<1>) -> !firrtl.uint<1>
+   %0 = firrtl.not %port : !firrtl.uint<1>
    %node = firrtl.node %c : !firrtl.uint<1>
    firrtl.connect %port, %node : !firrtl.uint<1>, !firrtl.uint<1>
    firrtl.layerblock @A {

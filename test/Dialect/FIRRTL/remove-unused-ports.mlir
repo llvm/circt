@@ -168,7 +168,7 @@ firrtl.circuit "UnusedOutput"  {
     // CHECK-NEXT: firrtl.matchingconnect %b, %[[c_wire]]
     firrtl.matchingconnect %b, %c : !firrtl.uint<1>
     // CHECK-NEXT: %[[not_a:.+]] = firrtl.not %a
-    %0 = firrtl.not %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    %0 = firrtl.not %a : !firrtl.uint<1>
     // CHECK-NEXT: firrtl.matchingconnect %[[c_wire]], %[[not_a]]
     firrtl.matchingconnect %c, %0 : !firrtl.uint<1>
   }

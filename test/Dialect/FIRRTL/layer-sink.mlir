@@ -13,7 +13,7 @@ firrtl.circuit "SimpleSink" {
  firrtl.module @SimpleSink(in %a: !firrtl.uint<1>) {
    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
    %node = firrtl.node %a : !firrtl.uint<1>
-   %0 = firrtl.not %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
+   %0 = firrtl.not %a : !firrtl.uint<1>
    // CHECK-NEXT: firrtl.layerblock @A
    firrtl.layerblock @A {
      // CHECK: %c0_ui1 = firrtl.constant

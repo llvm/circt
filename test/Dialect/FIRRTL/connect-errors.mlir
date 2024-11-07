@@ -276,7 +276,7 @@ firrtl.module @test(in %a : !firrtl.bundle<f1: uint<1>>, out %b : !firrtl.bundle
 firrtl.circuit "test" {
 firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.uint<1>) {
   // expected-note @below {{the destination was defined here}}
-  %0 = firrtl.and %a, %a: (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  %0 = firrtl.and %a, %a : !firrtl.uint<1>, !firrtl.uint<1>
   // expected-error @below {{connect has invalid flow: the destination expression has source flow, expected sink or duplex flow}}
   firrtl.connect %0, %b : !firrtl.uint<1>, !firrtl.uint<1>
 }

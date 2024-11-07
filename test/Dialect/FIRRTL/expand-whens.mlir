@@ -53,30 +53,30 @@ firrtl.module @simulation(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, in
   }
 }
 // CHECK-LABEL: firrtl.module @simulation(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>, in %enable: !firrtl.uint<1>, in %reset: !firrtl.uint<1>) {
-// CHECK-NEXT:   %0 = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   %0 = firrtl.and %p, %enable : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.printf %clock, %0, "CIRCT Rocks!"  : !firrtl.clock, !firrtl.uint<1>
-// CHECK-NEXT:   %1 = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   %1 = firrtl.and %p, %enable : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.stop %clock, %1, 0 : !firrtl.clock, !firrtl.uint<1>
-// CHECK-NEXT:   %2 = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   %2 = firrtl.and %p, %enable : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.assert %clock, %p, %2, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
-// CHECK-NEXT:   %3 = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   %3 = firrtl.and %p, %enable : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.assume %clock, %p, %3, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
-// CHECK-NEXT:   %4 = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   %4 = firrtl.and %p, %enable : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.cover %clock, %p, %4, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
-// CHECK-NEXT:   %5 = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   %5 = firrtl.and %p, %enable : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.int.unclocked_assume %p, %5, "" : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK-NEXT:   %6 = firrtl.not %p : (!firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   %7 = firrtl.and %6, %reset : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   %6 = firrtl.not %p : !firrtl.uint<1>
+// CHECK-NEXT:   %7 = firrtl.and %6, %reset : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.printf %clock, %7, "CIRCT Rocks!"  : !firrtl.clock, !firrtl.uint<1>
-// CHECK-NEXT:   %8 = firrtl.and %6, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   %8 = firrtl.and %6, %enable : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.stop %clock, %8, 1 : !firrtl.clock, !firrtl.uint<1>
-// CHECK-NEXT:   %9 = firrtl.and %6, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   %9 = firrtl.and %6, %enable : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.assert %clock, %p, %9, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
-// CHECK-NEXT:   %10 = firrtl.and %6, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   %10 = firrtl.and %6, %enable : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.assume %clock, %p, %10, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
-// CHECK-NEXT:   %11 = firrtl.and %6, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   %11 = firrtl.and %6, %enable : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.cover %clock, %p, %11, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
-// CHECK-NEXT:   %12 = firrtl.and %6, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   %12 = firrtl.and %6, %enable : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.int.unclocked_assume %p, %12, "" : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:   }
 
@@ -90,8 +90,8 @@ firrtl.module @nested_whens(in %clock : !firrtl.clock, in %p0 : !firrtl.uint<1>,
   }
 }
 // CHECK-LABEL: firrtl.module @nested_whens(in %clock: !firrtl.clock, in %p0: !firrtl.uint<1>, in %p1: !firrtl.uint<1>, in %enable: !firrtl.uint<1>, in %reset: !firrtl.uint<1>) {
-// CHECK-NEXT:   %0 = firrtl.and %p0, %p1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   %1 = firrtl.and %0, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   %0 = firrtl.and %p0, %p1 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK-NEXT:   %1 = firrtl.and %0, %enable : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.printf %clock, %1, "CIRCT Rocks!" : !firrtl.clock, !firrtl.uint<1>
 // CHECK-NEXT: }
 
@@ -109,9 +109,9 @@ firrtl.module @set_in_both(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, o
 }
 // CHECK-LABEL: firrtl.module @set_in_both(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>, out %out: !firrtl.uint<2>) {
 // CHECK-NEXT:   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
-// CHECK-NEXT:   %0 = firrtl.not %p : (!firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   %0 = firrtl.not %p : !firrtl.uint<1>
 // CHECK-NEXT:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
-// CHECK-NEXT:   %1 = firrtl.mux(%p, %c0_ui2, %c1_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+// CHECK-NEXT:   %1 = firrtl.mux(%p, %c0_ui2, %c1_ui2) : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT:   firrtl.connect %out, %1 : !firrtl.uint<2>
 // CHECK-NEXT: }
 
@@ -133,8 +133,8 @@ firrtl.module @set_before_and_in_both(in %clock : !firrtl.clock, in %p : !firrtl
 // CHECK-NEXT:   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
 // CHECK-NEXT:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
 // CHECK-NEXT:   %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
-// CHECK-NEXT:   %0 = firrtl.not %p : (!firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   %1 = firrtl.mux(%p, %c0_ui2, %c1_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+// CHECK-NEXT:   %0 = firrtl.not %p : !firrtl.uint<1>
+// CHECK-NEXT:   %1 = firrtl.mux(%p, %c0_ui2, %c1_ui2) : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT:   firrtl.connect %out, %1 : !firrtl.uint<2>
 // CHECK-NEXT: }
 
@@ -155,8 +155,8 @@ firrtl.module @set_after(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, out
 // CHECK-NEXT:   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
 // CHECK-NEXT:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
 // CHECK-NEXT:   %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
-// CHECK-NEXT:   %0 = firrtl.not %p : (!firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   %1 = firrtl.mux(%p, %c0_ui2, %c1_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+// CHECK-NEXT:   %0 = firrtl.not %p : !firrtl.uint<1>
+// CHECK-NEXT:   %1 = firrtl.mux(%p, %c0_ui2, %c1_ui2) : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT:   firrtl.connect %out, %c2_ui2 : !firrtl.uint<2>
 // CHECK-NEXT: }
 
@@ -173,7 +173,7 @@ firrtl.module @set_in_then0(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, 
 // CHECK-LABEL: firrtl.module @set_in_then0(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>, out %out: !firrtl.uint<2>) {
 // CHECK-NEXT:   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
 // CHECK-NEXT:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
-// CHECK-NEXT:   %0 = firrtl.mux(%p, %c1_ui2, %c0_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+// CHECK-NEXT:   %0 = firrtl.mux(%p, %c1_ui2, %c0_ui2) : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT:   firrtl.connect %out, %0 : !firrtl.uint<2>
 // CHECK-NEXT: }
 
@@ -207,8 +207,8 @@ firrtl.module @set_in_else0(in %p : !firrtl.uint<1>, out %out : !firrtl.uint<2>)
 // CHECK-LABEL: firrtl.module @set_in_else0(in %p: !firrtl.uint<1>, out %out: !firrtl.uint<2>) {
 // CHECK-NEXT:   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
 // CHECK-NEXT:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
-// CHECK-NEXT:   %0 = firrtl.not %p : (!firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   %1 = firrtl.mux(%p, %c0_ui2, %c1_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+// CHECK-NEXT:   %0 = firrtl.not %p : !firrtl.uint<1>
+// CHECK-NEXT:   %1 = firrtl.mux(%p, %c0_ui2, %c1_ui2) : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT:   firrtl.connect %out, %1 : !firrtl.uint<2>
 // CHECK-NEXT: }
 
@@ -222,7 +222,7 @@ firrtl.module @check_mux_return_type(in %p : !firrtl.uint<1>, out %out : !firrtl
   } else {
     firrtl.connect %out, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   }
-  // CHECK: firrtl.mux(%p, %c0_ui1, %c1_ui2) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK: firrtl.mux(%p, %c0_ui1, %c1_ui2) : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<2>
 }
 
 // Test that wire written to in only the else block is resolved.
@@ -238,7 +238,7 @@ firrtl.module @set_in_else1(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, 
 // CHECK-LABEL: firrtl.module @set_in_else1(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>, out %out: !firrtl.uint<2>) {
 // CHECK-NEXT:   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
 // CHECK-NEXT:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
-// CHECK-NEXT:   %0 = firrtl.not %p : (!firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   %0 = firrtl.not %p : !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.connect %out, %c0_ui2 : !firrtl.uint<2>
 // CHECK-NEXT: }
 
@@ -259,9 +259,9 @@ firrtl.module @nested(in %clock : !firrtl.clock, in %p0 : !firrtl.uint<1>, in %p
 // CHECK-NEXT:   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
 // CHECK-NEXT:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
 // CHECK-NEXT:   %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
-// CHECK-NEXT:   %0 = firrtl.and %p0, %p1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   %1 = firrtl.mux(%p1, %c1_ui2, %c0_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:   %2 = firrtl.mux(%p0, %1, %c0_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+// CHECK-NEXT:   %0 = firrtl.and %p0, %p1 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK-NEXT:   %1 = firrtl.mux(%p1, %c1_ui2, %c0_ui2) : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK-NEXT:   %2 = firrtl.mux(%p0, %1, %c0_ui2) : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT:   firrtl.connect %out, %2 : !firrtl.uint<2>
 // CHECK-NEXT: }
 
@@ -292,16 +292,16 @@ firrtl.module @nested2(in %clock : !firrtl.clock, in %p0 : !firrtl.uint<1>, in %
 //CHECK-NEXT:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
 //CHECK-NEXT:   %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
 //CHECK-NEXT:   %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
-//CHECK-NEXT:   %0 = firrtl.and %p0, %p1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-//CHECK-NEXT:   %1 = firrtl.not %p1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-//CHECK-NEXT:   %2 = firrtl.and %p0, %1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-//CHECK-NEXT:   %3 = firrtl.mux(%p1, %c0_ui2, %c1_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-//CHECK-NEXT:   %4 = firrtl.not %p0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-//CHECK-NEXT:   %5 = firrtl.and %4, %p1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-//CHECK-NEXT:   %6 = firrtl.not %p1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-//CHECK-NEXT:   %7 = firrtl.and %4, %6 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-//CHECK-NEXT:   %8 = firrtl.mux(%p1, %c2_ui2, %c3_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-//CHECK-NEXT:   %9 = firrtl.mux(%p0, %3, %8) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+//CHECK-NEXT:   %0 = firrtl.and %p0, %p1 : !firrtl.uint<1>, !firrtl.uint<1>
+//CHECK-NEXT:   %1 = firrtl.not %p1 : !firrtl.uint<1>
+//CHECK-NEXT:   %2 = firrtl.and %p0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+//CHECK-NEXT:   %3 = firrtl.mux(%p1, %c0_ui2, %c1_ui2) : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
+//CHECK-NEXT:   %4 = firrtl.not %p0 : !firrtl.uint<1>
+//CHECK-NEXT:   %5 = firrtl.and %4, %p1 : !firrtl.uint<1>, !firrtl.uint<1>
+//CHECK-NEXT:   %6 = firrtl.not %p1 : !firrtl.uint<1>
+//CHECK-NEXT:   %7 = firrtl.and %4, %6 : !firrtl.uint<1>, !firrtl.uint<1>
+//CHECK-NEXT:   %8 = firrtl.mux(%p1, %c2_ui2, %c3_ui2) : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
+//CHECK-NEXT:   %9 = firrtl.mux(%p0, %3, %8) : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
 //CHECK-NEXT:   firrtl.connect %out, %9 : !firrtl.uint<2>
 //CHECK-NEXT: }
 
@@ -444,7 +444,7 @@ firrtl.module @as_passive(in %p : !firrtl.uint<1>) {
   } else {
     firrtl.connect %simple1_in, %c3_ui3 : !firrtl.uint<3>, !firrtl.uint<3>
   }
-  // CHECK: [[MUX:%.*]] = firrtl.mux(%p, %test0_in, %c3_ui3) : (!firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
+  // CHECK: [[MUX:%.*]] = firrtl.mux(%p, %test0_in, %c3_ui3) : !firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>
   // CHECK: firrtl.connect %test0_in_0, [[MUX]] : !firrtl.uint<3>
 }
 
@@ -501,9 +501,9 @@ firrtl.module @multi_dim_vector(in %p : !firrtl.uint<1>) {
     firrtl.connect %1, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
     firrtl.connect %2, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   }
-  // CHECK:      [[MUX1:%.*]] = firrtl.mux(%p, %c0_ui2, %c1_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK:      [[MUX1:%.*]] = firrtl.mux(%p, %c0_ui2, %c1_ui2) : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
   // CHECK-NEXT: firrtl.connect %1, [[MUX1]] : !firrtl.uint<2>
-  // CHECK-NEXT: [[MUX2:%.*]] = firrtl.mux(%p, %c1_ui2, %c0_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK-NEXT: [[MUX2:%.*]] = firrtl.mux(%p, %c1_ui2, %c0_ui2) : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
   // CHECK-NEXT: firrtl.connect %2, [[MUX2]] : !firrtl.uint<2>
 }
 

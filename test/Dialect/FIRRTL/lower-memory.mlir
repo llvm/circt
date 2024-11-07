@@ -233,7 +233,7 @@ firrtl.circuit "inferUnmaskedMemory" {
     firrtl.connect %rw_mask, %wMask : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK:  %[[MReadWrite_RW0_addr:.+]], %[[MReadWrite_RW0_en:.+]], %[[MReadWrite_RW0_clk:.+]], %[[MReadWrite_RW0_wmode:.+]], %[[MReadWrite_RW0_wdata:.+]], %[[MReadWrite_RW0_rdata:.+]] = firrtl.instance MReadWrite  @MReadWrite
     // CHECK:   firrtl.connect %[[MReadWrite_RW0_en]], %rEn : !firrtl.uint<1>
-    // CHECK:   %1 = firrtl.and %wMask, %wMode : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   %1 = firrtl.and %wMask, %wMode : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK:   firrtl.connect %[[MReadWrite_RW0_wmode]], %1 : !firrtl.uint<1>
   }
 }

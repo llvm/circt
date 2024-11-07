@@ -332,9 +332,9 @@ firrtl.circuit "ExtractClockGatesSimple" attributes {annotations = [{class = "si
 firrtl.circuit "ExtractClockGatesTestHarnessOnly" attributes {annotations = [{class = "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation", filename = "ClockGates.txt"}]} {
   firrtl.extmodule private @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
   firrtl.module private @DUTModule(in %clock: !firrtl.clock, in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>, in %en: !firrtl.uint<1>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
-    %0 = firrtl.add %in, %en : (!firrtl.uint<8>, !firrtl.uint<1>) -> !firrtl.uint<9>
+    %0 = firrtl.add %in, %en : !firrtl.uint<8>, !firrtl.uint<1>
     %_io_out_T = firrtl.node %0 : !firrtl.uint<9>
-    %1 = firrtl.tail %_io_out_T, 1 : (!firrtl.uint<9>) -> !firrtl.uint<8>
+    %1 = firrtl.tail %_io_out_T, 1 : !firrtl.uint<9>
     %_io_out_T_1 = firrtl.node %1 : !firrtl.uint<8>
     firrtl.connect %out, %_io_out_T_1 : !firrtl.uint<8>, !firrtl.uint<8>
   }
