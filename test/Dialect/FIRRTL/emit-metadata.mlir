@@ -266,91 +266,163 @@ firrtl.circuit "top"
 
 // -----
 
-// CHECK-LABEL: firrtl.circuit "OneMemory"
-firrtl.circuit "OneMemory" {
-  firrtl.module @OneMemory() {
-    %0:5= firrtl.instance MWrite_ext_inst sym @MWrite_ext_0 @MWrite_ext(
-      in W0_addr: !firrtl.uint<4>,
-      in W0_en: !firrtl.uint<1>,
-      in W0_clk: !firrtl.clock,
-      in W0_data: !firrtl.uint<42>,
-      in user_input: !firrtl.uint<5>
-    )
+// Test that a single memory in the DUT is lowered corectly.  This tests all the
+// various features of metadata emission for a single memory that is
+// instantiated under the design-under-test (DUT):
+//
+//   1. The MemorySchema and MemoryMetadata classes are created and populated
+//      with the correct information.
+//   2. The memory JSON file is created with the same information as (1).
+//   3. A configuration file that contains the shape of the memory.
+//
+// This does _not_ check anything related to the design-under-test (DUT) which,
+// due to the fact that this test has a `MarkDUTAnnotation`, will also generate
+// that metadata.  DUT metadata is checked with an earlier test.
+
+firrtl.circuit "Foo" {
+  firrtl.module private @m() {
+    firrtl.instance m_ext @m_ext()
   }
-  firrtl.memmodule @MWrite_ext(
-    in W0_addr: !firrtl.uint<4>,
-    in W0_en: !firrtl.uint<1>,
-    in W0_clk: !firrtl.clock,
-    in W0_data: !firrtl.uint<42>,
-    in user_input: !firrtl.uint<5>) attributes {
-      dataWidth = 42 : ui32,
-      depth = 12 : ui64,
-      extraPorts = [
-        {
-          direction = "input",
-          name = "user_input",
-          width = 5 : ui32
-        }
-      ],
-      maskBits = 1 : ui32,
-      numReadPorts = 0 : ui32,
-      numReadWritePorts = 0 : ui32,
-      numWritePorts = 1 : ui32,
-      readLatency = 1 : ui32,
-      writeLatency = 1 : ui32
-    }
-
-  // CHECK:  firrtl.class @MemorySchema
-  // CHECK:    firrtl.propassign %name, %name_in : !firrtl.string
-  // CHECK:    firrtl.propassign %depth, %depth_in : !firrtl.integer
-  // CHECK:    firrtl.propassign %width, %width_in : !firrtl.integer
-  // CHECK:    firrtl.propassign %maskBits, %maskBits_in : !firrtl.integer
-  // CHECK:    firrtl.propassign %readPorts, %readPorts_in : !firrtl.integer
-  // CHECK:    firrtl.propassign %writePorts, %writePorts_in : !firrtl.integer
-  // CHECK:    firrtl.propassign %readwritePorts, %readwritePorts_in : !firrtl.integer
-  // CHECK:    firrtl.propassign %writeLatency, %writeLatency_in : !firrtl.integer
-  // CHECK:    firrtl.propassign %readLatency, %readLatency_in : !firrtl.integer
-  // CHECK:    firrtl.propassign %hierarchy, %hierarchy_in : !firrtl.list<path>
-  // CHECK:    firrtl.propassign %preExtInstName, %preExtInstName_in : !firrtl.list<string>
-  // CHECK: firrtl.class @MemoryMetadata
-  // CHECK:   %[[V0:.+]] = firrtl.string "MWrite_ext_inst"
-  // CHECK:   %[[V1:.+]] = firrtl.path reference distinct[0]<>
-  // CHECK:   %[[V2:.+]] = firrtl.list.create %[[V0]] : !firrtl.list<string>
-  // CHECK:   %MWrite_ext = firrtl.object @MemorySchema
-  // CHECK:   firrtl.string "MWrite_ext"
-  // CHECK:   firrtl.object.subfield %MWrite_ext[name_in]
-  // CHECK:   firrtl.integer 12
-  // CHECK:   firrtl.object.subfield %MWrite_ext[depth_in]
-  // CHECK:   firrtl.integer 42
-  // CHECK:   firrtl.object.subfield %MWrite_ext[width_in]
-  // CHECK:   firrtl.integer 1
-  // CHECK:   firrtl.object.subfield %MWrite_ext[maskBits_in]
-  // CHECK:   firrtl.integer 0
-  // CHECK:   firrtl.object.subfield %MWrite_ext[readPorts_in]
-  // CHECK:   firrtl.integer 1
-  // CHECK:   firrtl.object.subfield %MWrite_ext[writePorts_in]
-  // CHECK:   firrtl.integer 0
-  // CHECK:   firrtl.object.subfield %MWrite_ext[readwritePorts_in]
-  // CHECK:   firrtl.integer 1
-  // CHECK:   firrtl.object.subfield %MWrite_ext[writeLatency_in]
-  // CHECK:   firrtl.integer 1
-  // CHECK:   firrtl.object.subfield %MWrite_ext[readLatency_in]
-  // CHECK:   firrtl.object.subfield %MWrite_ext[hierarchy_in]
-  // CHECK:   %[[V33:.+]] = firrtl.object.subfield %MWrite_ext[preExtInstName_in]
-  // CHECK:   firrtl.propassign %[[V33]], %[[V2]] : !firrtl.list<string>
-  // CHECK:   firrtl.propassign %MWrite_ext_field, %MWrite_ext
-  // CHECK: }
-
-  // CHECK:               emit.file "metadata{{/|\\\\}}seq_mems.json" {
-  // CHECK-NEXT{LITERAL}:   sv.verbatim  "[\0A {\0A \22module_name\22: \22{{0}}\22,\0A \22depth\22: 12,\0A \22width\22: 42,\0A \22masked\22: false,\0A \22read\22: 0,\0A \22write\22: 1,\0A \22readwrite\22: 0,\0A \22extra_ports\22: [\0A {\0A \22name\22: \22user_input\22,\0A \22direction\22: \22input\22,\0A \22width\22: 5\0A }\0A ],\0A \22hierarchy\22: [\0A \22{{1}}.MWrite_ext_inst\22\0A ]\0A }\0A]"
-  // CHECK-SAME:              {symbols = [@MWrite_ext, @OneMemory]}
-  // CHECK-NEXT:          }
-
-  // CHECK:               emit.file "mems.conf" {
-  // CHECK-NEXT{LITERAL}:   sv.verbatim "name {{0}} depth 12 width 42 ports write\0A"
-  // CHECK-SAME:              {symbols = [@MWrite_ext]}
-  // CHECK-NEXT:          }
+  firrtl.memmodule private @m_ext() attributes {
+    dataWidth = 8 : ui32,
+    depth = 16 : ui64,
+    extraPorts = [
+      {
+        direction = "input",
+        name = "user_input",
+        width = 5 : ui32
+      }
+    ],
+    maskBits = 1 : ui32,
+    numReadPorts = 2 : ui32,
+    numWritePorts = 3 : ui32,
+    numReadWritePorts = 4 : ui32,
+    readLatency = 1 : ui32,
+    writeLatency = 1 : ui32
+  }
+  firrtl.module @Baz() {
+    firrtl.instance m sym @m @m()
+  }
+  firrtl.module @Bar() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+    firrtl.instance baz sym @baz @Baz()
+  }
+  firrtl.module @Foo() {
+    firrtl.instance bar sym @bar @Bar()
+  }
 }
+
+// (1) OM Info -----------------------------------------------------------------
+// CHECK-LABEL:         firrtl.circuit "Foo"
+// CHECK:                 hw.hierpath @[[memPathSym:.+]] [@Bar::@baz, @Baz::@m]
+
+// CHECK-LABEL:         firrtl.module @Baz()
+// CHECK-NEXT:            firrtl.instance m
+// CHECK-SAME:              id = distinct[[[#memId:]]]<>
+
+// CHECK-LABEL:         firrtl.class @MemorySchema(
+// CHECK-NEXT:            firrtl.propassign %name, %name_in
+// CHECK-NEXT:            firrtl.propassign %depth, %depth_in
+// CHECK-NEXT:            firrtl.propassign %width, %width_in
+// CHECK-NEXT:            firrtl.propassign %maskBits, %maskBits_in
+// CHECK-NEXT:            firrtl.propassign %readPorts, %readPorts_in
+// CHECK-NEXT:            firrtl.propassign %writePorts, %writePorts_in
+// CHECK-NEXT:            firrtl.propassign %readwritePorts, %readwritePorts_in
+// CHECK-NEXT:            firrtl.propassign %writeLatency, %writeLatency_in
+// CHECK-NEXT:            firrtl.propassign %readLatency, %readLatency_in
+// CHECK-NEXT:            firrtl.propassign %hierarchy, %hierarchy_in
+// CHECK-NEXT:            firrtl.propassign %inDut, %inDut_in
+// CHECK-NEXT:            firrtl.propassign %extraPorts, %extraPorts_in
+// CHECK-NEXT:            firrtl.propassign %preExtInstName, %preExtInstName_in
+
+// CHECK-LABEL:         firrtl.class @MemoryMetadata({{.*$}}
+// CHECK-NEXT:            %0 = firrtl.string "m_ext"
+// CHECK-NEXT:            %1 = firrtl.path instance distinct[[[#memId]]]<>
+// CHECK-NEXT:            %2 = firrtl.list.create %0
+// CHECK-NEXT:            %3 = firrtl.list.create %1
+// CHECK-NEXT:            %[[memoryObject:.+]] = firrtl.object @MemorySchema
+// CHECK-NEXT:            %4 = firrtl.string "user_input"
+// CHECK-NEXT:            %5 = firrtl.string "input"
+// CHECK-NEXT:            %6 = firrtl.integer 5
+// CHECK-NEXT:            %[[extraPortsObject:.+]] = firrtl.object @ExtraPortsMemorySchema
+// CHECK-NEXT:            %7 = firrtl.object.subfield %[[extraPortsObject]][name_in]
+// CHECK-NEXT:            firrtl.propassign %7, %4
+// CHECK-NEXT:            %8 = firrtl.object.subfield %[[extraPortsObject]][direction_in]
+// CHECK-NEXT:            firrtl.propassign %8, %5
+// CHECK-NEXT:            %9 = firrtl.object.subfield %[[extraPortsObject]][width_in]
+// CHECK-NEXT:            firrtl.propassign %9, %6
+// CHECK-NEXT:            %10 = firrtl.list.create %[[extraPortsObject]]
+// CHECK-NEXT:            %11 = firrtl.string "m_ext"
+// CHECK-NEXT:            %12 = firrtl.object.subfield %[[memoryObject]][name_in]
+// CHECK-NEXT:            firrtl.propassign %12, %11
+// CHECK-NEXT:            %13 = firrtl.integer 16
+// CHECK-NEXT:            %14 = firrtl.object.subfield %[[memoryObject]][depth_in]
+// CHECK-NEXT:            firrtl.propassign %14, %13
+// CHECK-NEXT:            %15 = firrtl.integer 8
+// CHECK-NEXT:            %16 = firrtl.object.subfield %[[memoryObject]][width_in]
+// CHECK-NEXT:            firrtl.propassign %16, %15
+// CHECK-NEXT:            %17 = firrtl.integer 1
+// CHECK-NEXT:            %18 = firrtl.object.subfield %[[memoryObject]][maskBits_in]
+// CHECK-NEXT:            firrtl.propassign %18, %17
+// CHECK-NEXT:            %19 = firrtl.integer 2
+// CHECK-NEXT:            %20 = firrtl.object.subfield %[[memoryObject]][readPorts_in]
+// CHECK-NEXT:            firrtl.propassign %20, %19
+// CHECK-NEXT:            %21 = firrtl.integer 3
+// CHECK-NEXT:            %22 = firrtl.object.subfield %[[memoryObject]][writePorts_in]
+// CHECK-NEXT:            firrtl.propassign %22, %21
+// CHECK-NEXT:            %23 = firrtl.integer 4
+// CHECK-NEXT:            %24 = firrtl.object.subfield %[[memoryObject]][readwritePorts_in]
+// CHECK-NEXT:            firrtl.propassign %24, %23
+// CHECK-NEXT:            %25 = firrtl.integer 1
+// CHECK-NEXT:            %26 = firrtl.object.subfield %[[memoryObject]][writeLatency_in]
+// CHECK-NEXT:            firrtl.propassign %26, %25
+// CHECK-NEXT:            %27 = firrtl.integer 1
+// CHECK-NEXT:            %28 = firrtl.object.subfield %[[memoryObject]][readLatency_in]
+// CHECK-NEXT:            firrtl.propassign %28, %27
+// CHECK-NEXT:            %29 = firrtl.object.subfield %[[memoryObject]][hierarchy_in]
+// CHECK-NEXT:            firrtl.propassign %29, %3
+// CHECK-NEXT:            %30 = firrtl.bool true
+// CHECK-NEXT:            %31 = firrtl.object.subfield %[[memoryObject]][inDut_in]
+// CHECK-NEXT:            firrtl.propassign %31, %30
+// CHECK-NEXT:            %32 = firrtl.object.subfield %[[memoryObject]][extraPorts_in]
+// CHECK-NEXT:            firrtl.propassign %32, %10
+// CHECK-NEXT:            %33 = firrtl.object.subfield %[[memoryObject]][preExtInstName_in]
+// CHECK-NEXT:            firrtl.propassign %33, %2
+// CHECK-NEXT:            firrtl.propassign %[[memoryObject]]_field, %[[memoryObject]]
+
+// (2) Memory JSON -------------------------------------------------------------
+
+// CHECK-LABEL:         emit.file "metadata{{/|\\\\}}seq_mems.json"
+// CHECK-NEXT:            sv.verbatim
+// CHECK-SAME{LITERAL}:     \22module_name\22: \22{{0}}\22
+// CHECK-SAME:              \22depth\22: 16
+// CHECK-SAME:              \22width\22: 8
+// CHECK-SAME:              \22masked\22: false
+// CHECK-SAME:              \22read\22: 2
+// CHECK-SAME:              \22write\22: 3
+// CHECK-SAME:              \22readwrite\22: 4
+// CHECK-SAME:              \22extra_ports\22: [
+// CHECK-SAME:                {
+// CHECK-SAME:                  \22name\22: \22user_input\22
+// CHECK-SAME:                  \22direction\22: \22input\22
+// CHECK-SAME:                  \22width\22: 5
+// CHECK-SAME:                }
+// CHECK-SAME:              ]
+// CHECK-SAME:              \22hierarchy\22: [
+// CHECK-SAME{LITERAL}:       \22{{3}}.{{4}}.{{5}}.m_ext\22
+// CHECK-SAME:              ]
+// CHECK-SAME:              symbols = [@m_ext, @Foo, #hw.innerNameRef<@Foo::@bar>, @Bar, #hw.innerNameRef<@Bar::@baz>, #hw.innerNameRef<@Baz::@m>]
+
+// (3) Configuration File ------------------------------------------------------
+
+// CHECK-LABEL:         emit.file "mems.conf"
+// CHECK-NEXT{LITERAL}:   sv.verbatim "name {{0}} depth 16 width 8 ports write,write,write,read,read,rw,rw,rw,rw\0A"
+// CHECK-SAME:            symbols = [@m_ext]
 
 // -----
 
