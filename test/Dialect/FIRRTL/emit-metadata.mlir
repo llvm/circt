@@ -275,6 +275,9 @@ firrtl.circuit "top"
 //   2. The memory JSON file is created with the same information as (1).
 //   3. A configuration file that contains the shape of the memory.
 //
+// Checks are broken up to test each of these files individually.  Later tests,
+// that need to check all three files use the same check structure.
+//
 // This does _not_ check anything related to the design-under-test (DUT) which,
 // due to the fact that this test has a `MarkDUTAnnotation`, will also generate
 // that metadata.  DUT metadata is checked with an earlier test.
@@ -426,85 +429,124 @@ firrtl.circuit "Foo" {
 
 // -----
 
-// CHECK-LABEL: firrtl.circuit "DualReadsSMem"
-firrtl.circuit "DualReadsSMem" {
-  firrtl.module @DualReadsSMem() {
-    %0:12 = firrtl.instance DualReads_ext @DualReads_ext(
-      in R0_addr: !firrtl.uint<4>,
-      in R0_en: !firrtl.uint<1>,
-      in R0_clk: !firrtl.clock,
-      in R0_data: !firrtl.uint<42>,
-      in R1_addr: !firrtl.uint<4>,
-      in R1_en: !firrtl.uint<1>,
-      in R1_clk: !firrtl.clock,
-      in R1_data: !firrtl.uint<42>,
-      in W0_addr: !firrtl.uint<4>,
-      in W0_en: !firrtl.uint<1>,
-      in W0_clk: !firrtl.clock,
-      in W0_data: !firrtl.uint<42>
-    )
+// Test that zero read, write, and read-write ports produce sane output.
+
+firrtl.circuit "Foo" {
+  firrtl.module private @m() {
+    firrtl.instance m_ext @m_ext()
   }
-  firrtl.memmodule @DualReads_ext(
-    in R0_addr: !firrtl.uint<4>,
-    in R0_en: !firrtl.uint<1>,
-    in R0_clk: !firrtl.clock,
-    in R0_data: !firrtl.uint<42>,
-    in R1_addr: !firrtl.uint<4>,
-    in R1_en: !firrtl.uint<1>,
-    in R1_clk: !firrtl.clock,
-    in R1_data: !firrtl.uint<42>,
-    in W0_addr: !firrtl.uint<4>,
-    in W0_en: !firrtl.uint<1>,
-    in W0_clk: !firrtl.clock,
-    in W0_data: !firrtl.uint<42>
-  ) attributes {
-    dataWidth = 42 : ui32,
-    depth = 12 : ui64,
+  firrtl.memmodule private @m_ext() attributes {
+    dataWidth = 8 : ui32,
+    depth = 16 : ui64,
     extraPorts = [],
     maskBits = 1 : ui32,
-    numReadPorts = 2 : ui32,
+    numReadPorts = 0 : ui32,
+    numWritePorts = 0 : ui32,
     numReadWritePorts = 0 : ui32,
-    numWritePorts = 1 : ui32,
     readLatency = 1 : ui32,
     writeLatency = 1 : ui32
   }
-  // CHECK{LITERAL}: sv.verbatim "[\0A {\0A \22module_name\22: \22{{0}}\22,\0A \22depth\22: 12,\0A \22width\22: 42,\0A \22masked\22: false,\0A \22read\22: 2,\0A \22write\22: 1,\0A \22readwrite\22: 0,\0A \22extra_ports\22: [],\0A \22hierarchy\22: [\0A \22{{1}}.DualReads_ext\22\0A ]\0A }\0A]"
-  // CHECK: {symbols = [@DualReads_ext, @DualReadsSMem]}
-  // CHECK{LITERAL}: sv.verbatim "name {{0}} depth 12 width 42 ports write,read,read\0A" {symbols = [@DualReads_ext]}
+  firrtl.module @Baz() {
+    firrtl.instance m sym @m @m()
+  }
+  firrtl.module @Bar() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+    firrtl.instance baz sym @baz @Baz()
+  }
+  firrtl.module @Foo() {
+    firrtl.instance bar sym @bar @Bar()
+  }
 }
+
+//------------------------------------------------------------------ (1) OM Info
+// CHECK-LABEL:         firrtl.class @MemoryMetadata({{.*$}}
+// CHECK:                 %[[memoryObject:.+]] = firrtl.object @MemorySchema
+// CHECK:                 %[[#zero:]] = firrtl.integer 0
+// CHECK-NEXT:            %[[#r:]] = firrtl.object.subfield %[[memoryObject]][readPorts_in]
+// CHECK-NEXT:            firrtl.propassign %[[#r]], %[[#zero]]
+// CHECK-NEXT:            %[[#zero:]] = firrtl.integer 0
+// CHECK-NEXT:            %[[#w:]] = firrtl.object.subfield %[[memoryObject]][writePorts_in]
+// CHECK-NEXT:            firrtl.propassign %[[#w]], %[[#zero]]
+// CHECK-NEXT:            %[[#zero:]] = firrtl.integer 0
+// CHECK-NEXT:            %[[#rw:]] = firrtl.object.subfield %[[memoryObject]][readwritePorts_in]
+// CHECK-NEXT:            firrtl.propassign %[[#rw]], %[[#zero]]
+
+//-------------------------------------------------------------- (2) Memory JSON
+// CHECK-LABEL:         emit.file "metadata{{/|\\\\}}seq_mems.json"
+// CHECK-NEXT:            sv.verbatim
+// CHECK-SAME:              \22read\22: 0
+// CHECK-SAME:              \22write\22: 0
+// CHECK-SAME:              \22readwrite\22: 0
+
+//------------------------------------------------------- (3) Configuration File
+// CHECK-LABEL:         emit.file "mems.conf"
+// CHECK-NEXT{LITERAL}:   sv.verbatim "name {{0}} depth 16 width 8 ports \0A"
 
 // -----
 
-// CHECK-LABEL: firrtl.circuit "ReadOnlyMemory"
-firrtl.circuit "ReadOnlyMemory" {
-  firrtl.module @ReadOnlyMemory() {
-    %0:4 = firrtl.instance rom_ext sym @rom_ext_0 @rom_ext(
-      in R0_addr: !firrtl.uint<9>,
-      in R0_en: !firrtl.uint<1>,
-      in R0_clk: !firrtl.clock,
-      out R0_data: !firrtl.uint<32>
-    )
+// Test that a read-only memory produces metadata.
+
+firrtl.circuit "Foo" {
+  firrtl.module private @m() {
+    firrtl.instance m_ext @m_ext()
   }
-  firrtl.memmodule @rom_ext(
-    in R0_addr: !firrtl.uint<9>,
-    in R0_en: !firrtl.uint<1>,
-    in R0_clk: !firrtl.clock,
-    out R0_data: !firrtl.uint<32>
-  ) attributes {
-    dataWidth = 32 : ui32,
-    depth = 512 : ui64,
+  firrtl.memmodule private @m_ext() attributes {
+    dataWidth = 8 : ui32,
+    depth = 16 : ui64,
     extraPorts = [],
-    maskBits = 0 : ui32,
+    maskBits = 1 : ui32,
     numReadPorts = 1 : ui32,
-    numReadWritePorts = 0 : ui32,
     numWritePorts = 0 : ui32,
+    numReadWritePorts = 0 : ui32,
     readLatency = 1 : ui32,
     writeLatency = 1 : ui32
   }
-  // CHECK{LITERAL}: sv.verbatim "[\0A  {\0A \22module_name\22: \22{{0}}\22,\0A \22depth\22: 512,\0A \22width\22: 32,\0A \22masked\22: false,\0A \22read\22: 1,\0A \22write\22: 0,\0A \22readwrite\22: 0,\0A \22extra_ports\22: [],\0A \22hierarchy\22: [\0A \22{{1}}.rom_ext\22\0A ]\0A }\0A]"
-  // CHECK: symbols = [@rom_ext, @ReadOnlyMemory]}
-  // CHECK{LITERAL}: sv.verbatim "name {{0}} depth 512 width 32 ports read\0A" {symbols = [@rom_ext]}
+  firrtl.module @Baz() {
+    firrtl.instance m sym @m @m()
+  }
+  firrtl.module @Bar() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+    firrtl.instance baz sym @baz @Baz()
+  }
+  firrtl.module @Foo() {
+    firrtl.instance bar sym @bar @Bar()
+  }
 }
+
+//------------------------------------------------------------------ (1) OM Info
+// CHECK-LABEL:         firrtl.class @MemoryMetadata({{.*$}}
+// CHECK:                 %[[memoryObject:.+]] = firrtl.object @MemorySchema
+// CHECK:                 firrtl.object.subfield %[[memoryObject]][maskBits_in]
+// CHECK:                 %[[#one:]] = firrtl.integer 1
+// CHECK-NEXT:            %[[#r:]] = firrtl.object.subfield %[[memoryObject]][readPorts_in]
+// CHECK-NEXT:            firrtl.propassign %[[#r]], %[[#one]]
+// CHECK-NEXT:            %[[#zero:]] = firrtl.integer 0
+// CHECK-NEXT:            %[[#w:]] = firrtl.object.subfield %[[memoryObject]][writePorts_in]
+// CHECK-NEXT:            firrtl.propassign %[[#w]], %[[#zero]]
+// CHECK-NEXT:            %[[#zero:]] = firrtl.integer 0
+// CHECK-NEXT:            %[[#rw:]] = firrtl.object.subfield %[[memoryObject]][readwritePorts_in]
+// CHECK-NEXT:            firrtl.propassign %[[#rw]], %[[#zero]]
+
+//-------------------------------------------------------------- (2) Memory JSON
+// CHECK-LABEL:         emit.file "metadata{{/|\\\\}}seq_mems.json"
+// CHECK-NEXT:            sv.verbatim
+// CHECK-SAME:              \22read\22: 1
+// CHECK-SAME:              \22write\22: 0
+// CHECK-SAME:              \22readwrite\22: 0
+
+//------------------------------------------------------- (3) Configuration File
+// CHECK-LABEL:         emit.file "mems.conf"
+// CHECK-NEXT{LITERAL}:   sv.verbatim "name {{0}} depth 16 width 8 ports read\0A"
 
 // -----
 
