@@ -228,6 +228,39 @@ firrtl.circuit "BasicBlackboxes" attributes {
 // -----
 
 //===----------------------------------------------------------------------===//
+// Design-under-test (DUT) Metadata
+//===----------------------------------------------------------------------===//
+
+firrtl.circuit "Foo" {
+  firrtl.module @Bar() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+  }
+  firrtl.module @Foo() {
+    firrtl.instance bar sym @bar @Bar()
+  }
+}
+
+// CHECK-LABEL:         firrtl.circuit "Foo"
+// CHECK:                 hw.hierpath @[[dutPathSym:.+]] [@Foo::@bar]
+
+// CHECK-LABEL:         firrtl.module @Foo(
+// CHECK-NEXT:            firrtl.instance bar
+// CHECK-SAME:              id = distinct[[[dutId:[0-9]+]]]<>
+
+// CHECK-LABEL:         firrtl.class @SiFive_Metadata(
+// CHECK-SAME:            out %[[dutModulePath:dutModulePath.*]]: !firrtl.list<path>
+// CHECK:                 %[[a:.+]] = firrtl.path instance distinct[[[dutId]]]<>
+// CHECK-NEXT:            %[[b:.+]] = firrtl.list.create %[[a]] : !firrtl.list<path>
+// CHECK-NEXT:            firrtl.propassign %[[dutModulePath]], %[[b]] : !firrtl.list<path>
+
+// -----
+
+//===----------------------------------------------------------------------===//
 // MemoryMetadata
 //===----------------------------------------------------------------------===//
 

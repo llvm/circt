@@ -339,7 +339,7 @@ struct ObjectModelIR {
 
   ObjectOp instantiateSifiveMetadata(FModuleOp topMod) {
     if (!blackBoxMetadataClass && !memoryMetadataClass &&
-        !retimeModulesMetadataClass)
+        !retimeModulesMetadataClass && !instanceInfo.hasDut())
       return {};
     auto builder = mlir::ImplicitLocOpBuilder::atBlockEnd(
         mlir::UnknownLoc::get(circtOp->getContext()), circtOp.getBodyBlock());
