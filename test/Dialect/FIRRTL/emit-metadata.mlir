@@ -1,25 +1,5 @@
 // RUN: circt-opt --firrtl-emit-metadata="repl-seq-mem=true repl-seq-mem-file=dut.conf" -split-input-file %s | FileCheck %s
 
-firrtl.circuit "empty" {
-  firrtl.module @empty() {
-  }
-}
-// CHECK:      firrtl.circuit "empty"   {
-// CHECK-NEXT:   firrtl.module @empty() {
-// CHECK-NEXT:   }
-// CHECK-NEXT:   emit.file "metadata{{/|\\\\}}seq_mems.json" {
-// CHECK-NEXT:     sv.verbatim "[]"
-// CHECK-NEXT:   }
-// CHECK-NEXT:   emit.file "dut.conf" {
-// CHECK-NEXT:     sv.verbatim ""
-// CHECK-NEXT:   }
-// CHECK-NEXT: }
-
-// Memory metadata om class should not be created.
-// CHECK-NOT: om.class @MemorySchema
-
-// -----
-
 //===----------------------------------------------------------------------===//
 // RetimeModules
 //===----------------------------------------------------------------------===//
@@ -264,12 +244,15 @@ firrtl.circuit "Foo" {
 // MemoryMetadata
 //===----------------------------------------------------------------------===//
 
+// Test behavior when no memories are present:
+//
+//   1. Empty JSON metadata is emitted
+//   2. No OM classes are created
+
 // CHECK-LABEL: firrtl.circuit "top"
 firrtl.circuit "top"
 {
   firrtl.module @top() { }
-  // When there are no memories, we still need to emit the memory metadata.
-
   // CHECK:      emit.file "metadata{{/|\\\\}}seq_mems.json" {
   // CHECK-NEXT:   sv.verbatim "[]"
   // CHECK-NEXT: }
@@ -278,6 +261,8 @@ firrtl.circuit "top"
   // CHECK-NEXT:   sv.verbatim ""
   // CHECK-NEXT: }
 }
+
+// CHECK-NOT: om.class @MemorySchema
 
 // -----
 
