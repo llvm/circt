@@ -1,4 +1,4 @@
-// RUN: circt-opt --firrtl-emit-metadata="repl-seq-mem=true repl-seq-mem-file=dut.conf" -split-input-file %s | FileCheck %s
+// RUN: circt-opt --firrtl-emit-metadata="repl-seq-mem=true repl-seq-mem-file=mems.conf" -split-input-file %s | FileCheck %s
 
 //===----------------------------------------------------------------------===//
 // RetimeModules
@@ -257,7 +257,7 @@ firrtl.circuit "top"
   // CHECK-NEXT:   sv.verbatim "[]"
   // CHECK-NEXT: }
 
-  // CHECK:      emit.file "dut.conf" {
+  // CHECK:      emit.file "mems.conf" {
   // CHECK-NEXT:   sv.verbatim ""
   // CHECK-NEXT: }
 }
@@ -346,7 +346,7 @@ firrtl.circuit "OneMemory" {
   // CHECK-SAME:              {symbols = [@MWrite_ext, @OneMemory]}
   // CHECK-NEXT:          }
 
-  // CHECK:               emit.file "dut.conf" {
+  // CHECK:               emit.file "mems.conf" {
   // CHECK-NEXT{LITERAL}:   sv.verbatim "name {{0}} depth 12 width 42 ports write\0A"
   // CHECK-SAME:              {symbols = [@MWrite_ext]}
   // CHECK-NEXT:          }
@@ -598,7 +598,7 @@ firrtl.circuit "top" {
   // CHECK-SAME:              {symbols = [@memory_ext, @top, #hw.innerNameRef<@top::@[[DUT_SYM]]>, @DUT, #hw.innerNameRef<@DUT::@[[MEM1_SYM]]>, @dumm_ext]}
   // CHECK-NEXT:          }
 
-  // CHECK:               emit.file "dut.conf" {
+  // CHECK:               emit.file "mems.conf" {
   // CHECK-NEXT{LITERAL}:   sv.verbatim "name {{0}} depth 20 width 5 ports write\0Aname {{1}} depth 20 width 5 ports write\0Aname {{2}} depth 16 width 8 ports read,rw\0Aname {{3}} depth 20 width 5 ports write,read\0A"
   // CHECK-SAME:              {symbols = [@head_ext, @head_0_ext, @memory_ext, @dumm_ext]}
   // CHECK-NEXT:          }
