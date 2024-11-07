@@ -1556,4 +1556,3 @@ modules' bind file. This attribute has type `OutputFileAttr`.
 
 Used by SVExtractTestCode.  Indicates a module whose instances should be
 extracted from the circuit in the indicated extraction type.
-
