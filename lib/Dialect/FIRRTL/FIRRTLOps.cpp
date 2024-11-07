@@ -2076,7 +2076,7 @@ void ClassOp::setPortAnnotationsAttr(ArrayAttr annotations) {
 
 ArrayAttr ClassOp::getLayersAttr() { return ArrayAttr::get(getContext(), {}); }
 
-ArrayRef<Attribute> ClassOp::getLayers() { return getLayersAttr(); }
+ArrayRef<Attribute> ClassOp::getLayers() { return {}; }
 
 SmallVector<::circt::hw::PortInfo> ClassOp::getPortList() {
   return ::getPortListImpl(*this);
@@ -2152,7 +2152,7 @@ ArrayAttr ExtClassOp::getLayersAttr() {
   return ArrayAttr::get(getContext(), {});
 }
 
-ArrayRef<Attribute> ExtClassOp::getLayers() { return getLayersAttr(); }
+ArrayRef<Attribute> ExtClassOp::getLayers() { return {}; }
 
 ArrayAttr ExtClassOp::getParameters() { return {}; }
 
