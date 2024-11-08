@@ -611,8 +611,8 @@ firrtl.circuit "Foo" {
 
 // -----
 
-// Test that a memory that is not readLatency=1 and writeLatency=1 produces OM
-// metadata and Configuration File metadata, but no Memory JSON.
+// Test that a memory that is instantiated in the design produces OM and
+// Configuration File metadata, but no Memory JSON.
 
 firrtl.circuit "Foo" {
   firrtl.module private @m() {
@@ -672,10 +672,10 @@ firrtl.circuit "Foo" {
 // CHECK-LABEL:         emit.file "mems.conf"
 // CHECK-NEXT{LITERAL}:   sv.verbatim "name {{0}} depth 16 width 8 ports read\0A"
 
+// -----
+
 // Test that a memory that is instantiated both in the design and not in the
 // design produces the correct metadata.
-
-// -----
 
 firrtl.circuit "Foo" {
   firrtl.module private @m() {
