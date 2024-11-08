@@ -17,7 +17,7 @@ from .circt import ir
 from .circt.dialects import esi as raw_esi, hw, msft
 
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, cast
 
 __dir__ = Path(__file__).parent
 
@@ -483,7 +483,7 @@ MMIOReadWriteCmdType = StructType([
 @ServiceDecl
 class MMIO:
   """ESI standard service to request access to an MMIO region.
-  
+
   For now, each client request gets a 1KB region of memory."""
 
   read = Bundle([
@@ -499,6 +499,62 @@ class MMIO:
   @staticmethod
   def _op(sym_name: ir.StringAttr):
     return raw_esi.MMIOServiceDeclOp(sym_name)
+
+
+class _HostMem(ServiceDecl):
+  """ESI standard service to request read or write access to host memory."""
+
+  WriteReqType = StructType([
+      ("address", UInt(64)),
+      ("tag", UInt(8)),
+      ("data", Any()),
+  ])
+
+  ReadReqType = StructType([
+      ("address", UInt(64)),
+      ("tag", UInt(8)),
+  ])
+
+  def __init__(self):
+    super().__init__(self.__class__)
+
+  # read = Bundle([
+  #     BundledChannel("req", ChannelDirection.FROM, HostMemReadReqType),
+  #     BundledChannel("resp", ChannelDirection.TO, HostMemReadRespType)
+  # ])
+
+  # write = Bundle([
+  #     BundledChannel("req", ChannelDirection.FROM, HostMemWriteReqType),
+  #     BundledChannel("ackTag", ChannelDirection.TO, UInt(8))
+  # ])
+
+  def read(self, appid: AppID, req: ChannelSignal,
+           data_type: Type) -> ChannelSignal:
+    resp_type = StructType([
+        ("tag", UInt(8)),
+        ("data", data_type),
+    ])
+    read_bundle_type = Bundle([
+        BundledChannel("req", ChannelDirection.FROM, _HostMem.ReadReqType),
+        BundledChannel("resp", ChannelDirection.TO, resp_type)
+    ])
+
+    bundle = cast(
+        BundleSignal,
+        _FromCirctValue(
+            raw_esi.RequestConnectionOp(
+                read_bundle_type._type,
+                hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("read")),
+                appid._appid).toClient))
+    resp = bundle.unpack(req=req)['resp']
+    return resp
+
+  @staticmethod
+  def _op(sym_name: ir.StringAttr):
+    return raw_esi.HostMemServiceDeclOp(sym_name)
+
+
+HostMem = _HostMem()
 
 
 @ServiceDecl
