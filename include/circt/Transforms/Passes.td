@@ -133,4 +133,11 @@ def MemoryBanking : Pass<"memory-banking", "::mlir::func::FuncOp"> {
   let dependentDialects = ["mlir::memref::MemRefDialect, mlir::scf::SCFDialect, mlir::affine::AffineDialect"];
 }
 
+def IndexSwitchToIf : Pass<"switch-to-if", "::mlir::ModuleOp"> {
+  let summary = "Index switch to if";
+  let description = [{ SCF index switch to if-else. }];
+  let constructor = "circt::createIndexSwitchToIfPass()";
+  let dependentDialects = ["mlir::scf::SCFDialect"];
+}
+
 #endif // CIRCT_TRANSFORMS_PASSES
