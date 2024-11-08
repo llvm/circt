@@ -611,7 +611,7 @@ firrtl.circuit "Foo" {
 
 // -----
 
-// Test that a memory that is instantiated in the design produces OM and
+// Test that a memory that is instantiated outside the design produces OM and
 // Configuration File metadata, but no Memory JSON.
 
 firrtl.circuit "Foo" {
