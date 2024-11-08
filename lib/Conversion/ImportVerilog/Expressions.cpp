@@ -610,20 +610,16 @@ struct RvalueExprVisitor {
 
     // Handle left expression.
     builder.setInsertionPointToStart(&trueBlock);
-    auto trueValue = context.convertRvalueExpression(expr.left());
+    auto trueValue = context.convertRvalueExpression(expr.left(), type);
     if (!trueValue)
       return {};
-    if (trueValue.getType() != type)
-      trueValue = builder.create<moore::ConversionOp>(loc, type, trueValue);
     builder.create<moore::YieldOp>(loc, trueValue);
 
     // Handle right expression.
     builder.setInsertionPointToStart(&falseBlock);
-    auto falseValue = context.convertRvalueExpression(expr.right());
+    auto falseValue = context.convertRvalueExpression(expr.right(), type);
     if (!falseValue)
       return {};
-    if (falseValue.getType() != type)
-      falseValue = builder.create<moore::ConversionOp>(loc, type, falseValue);
     builder.create<moore::YieldOp>(loc, falseValue);
 
     return conditionalOp.getResult();
@@ -967,8 +963,9 @@ Value Context::convertRvalueExpression(const slang::ast::Expression &expr,
                                        Type requiredType) {
   auto loc = convertLocation(expr.sourceRange);
   auto value = expr.visit(RvalueExprVisitor(*this, loc));
-  if (value && requiredType && value.getType() != requiredType)
-    value = builder.create<moore::ConversionOp>(loc, requiredType, value);
+  if (value && requiredType)
+    value =
+        materializeConversion(requiredType, value, expr.type->isSigned(), loc);
   return value;
 }
 
@@ -1063,4 +1060,44 @@ Value Context::convertToSimpleBitVector(Value value) {
   mlir::emitError(value.getLoc()) << "expression of type " << value.getType()
                                   << " cannot be cast to a simple bit vector";
   return {};
+}
+
+Value Context::materializeConversion(Type type, Value value, bool isSigned,
+                                     Location loc) {
+  if (type == value.getType())
+    return value;
+  auto dstPacked = dyn_cast<moore::PackedType>(type);
+  auto srcPacked = dyn_cast<moore::PackedType>(value.getType());
+
+  // Resize the value if needed.
+  if (dstPacked && srcPacked && dstPacked.getBitSize() &&
+      srcPacked.getBitSize() &&
+      *dstPacked.getBitSize() != *srcPacked.getBitSize()) {
+    auto dstWidth = *dstPacked.getBitSize();
+    auto srcWidth = *srcPacked.getBitSize();
+
+    // Convert the value to a simple bit vector which we can extend or truncate.
+    auto srcWidthType = moore::IntType::get(value.getContext(), srcWidth,
+                                            srcPacked.getDomain());
+    if (value.getType() != srcWidthType)
+      value = builder.create<moore::ConversionOp>(value.getLoc(), srcWidthType,
+                                                  value);
+
+    // Create truncation or sign/zero extension ops depending on the source and
+    // destination width.
+    auto dstWidthType = moore::IntType::get(value.getContext(), dstWidth,
+                                            srcPacked.getDomain());
+    if (dstWidth < srcWidth) {
+      value = builder.create<moore::TruncOp>(loc, dstWidthType, value);
+    } else if (dstWidth > srcWidth) {
+      if (isSigned)
+        value = builder.create<moore::SExtOp>(loc, dstWidthType, value);
+      else
+        value = builder.create<moore::ZExtOp>(loc, dstWidthType, value);
+    }
+  }
+
+  if (value.getType() != type)
+    value = builder.create<moore::ConversionOp>(loc, type, value);
+  return value;
 }

@@ -36,6 +36,11 @@ class ResultIsSingleBitMatchingInputDomain<string result, string input> :
       llvm::cast<UnpackedType>($_self).getDomain())
   }]>;
 
+class TypeDomainsMatch<list<string> values> :
+  AllMatchSameOperatorTrait<values, [{
+    cast<moore::UnpackedType>($_self.getType()).getDomain()
+  }], "domain">;
+
 //===----------------------------------------------------------------------===//
 // Structure
 //===----------------------------------------------------------------------===//
@@ -504,7 +509,7 @@ def StringConstantOp : MooreOp<"string_constant", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
-// Expressions
+// Casting and Resizing
 //===----------------------------------------------------------------------===//
 
 def ConversionOp : MooreOp<"conversion", [Pure]> {
@@ -537,6 +542,61 @@ def ConversionOp : MooreOp<"conversion", [Pure]> {
   }];
   let hasFolder = 1;
 }
+
+def TruncOp : MooreOp<"trunc", [
+  Pure,
+  TypeDomainsMatch<["input", "result"]>,
+  PredOpTrait<"result width must be smaller than input width", CPred<[{
+    cast<moore::IntType>($result.getType()).getBitSize() <
+      cast<moore::IntType>($input.getType()).getBitSize()
+  }]>>,
+]> {
+  let summary = "Truncate a value";
+  let description = [{
+    Reduce the bit width of a value by removing some of its most significant
+    bits. This can only change the bit width of an integer type.
+  }];
+  let arguments = (ins IntType:$input);
+  let results = (outs IntType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($result)
+  }];
+}
+
+class ExtOpBase<string mnemonic> : MooreOp<mnemonic, [
+  Pure,
+  TypeDomainsMatch<["input", "result"]>,
+  PredOpTrait<"result width must be larger than input width", CPred<[{
+    cast<moore::IntType>($result.getType()).getBitSize() >
+      cast<moore::IntType>($input.getType()).getBitSize()
+  }]>>,
+]> {
+  let arguments = (ins IntType:$input);
+  let results = (outs IntType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($result)
+  }];
+}
+
+def ZExtOp : ExtOpBase<"zext"> {
+  let summary = "Zero-extend a value";
+  let description = [{
+    Increase the bit width of a value by inserting additional zero most
+    significant bits. This keeps the unsigned value constant.
+  }];
+}
+
+def SExtOp : ExtOpBase<"sext"> {
+  let summary = "Sign-extend a value";
+  let description = [{
+    Increase the bit width of a value by replicating its most significant bit.
+    This keeps the signed value constant.
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Expressions
+//===----------------------------------------------------------------------===//
 
 def NegOp : MooreOp<"neg", [Pure, SameOperandsAndResultType]> {
   let summary = "Arithmetic negation";
