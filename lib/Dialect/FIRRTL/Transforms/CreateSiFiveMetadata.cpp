@@ -254,6 +254,7 @@ struct ObjectModelIR {
               mem->getLoc(),
               nlaBuilder.getStringAttr(circtNamespace.newName("memNLA")),
               nlaBuilder.getArrayAttr(namepath));
+          nla.setVisibility(SymbolTable::Visibility::Private);
           pathRef = createPathRef(preExtractedLeafInstance, nla, builderOM);
         } else {
           pathRef = createPathRef({}, {}, builderOM);
@@ -404,6 +405,7 @@ struct ObjectModelIR {
             dutMod->getLoc(),
             nlaBuilder.getStringAttr(circtNamespace.newName("dutNLA")),
             nlaBuilder.getArrayAttr(namepath));
+        nla.setVisibility(SymbolTable::Visibility::Private);
         // Create the path ref op and record it.
         pathOpsToDut.emplace_back(createPathRef(leafInst, nla, builder));
       }

@@ -226,7 +226,7 @@ firrtl.circuit "Foo" {
 }
 
 // CHECK-LABEL:         firrtl.circuit "Foo"
-// CHECK:                 hw.hierpath @[[dutPathSym:.+]] [@Foo::@bar]
+// CHECK:                 hw.hierpath private @[[dutPathSym:.+]] [@Foo::@bar]
 
 // CHECK-LABEL:         firrtl.module @Foo(
 // CHECK-NEXT:            firrtl.instance bar
@@ -322,7 +322,7 @@ firrtl.circuit "Foo" {
 
 // (1) OM Info -----------------------------------------------------------------
 // CHECK-LABEL:         firrtl.circuit "Foo"
-// CHECK:                 hw.hierpath @[[memPathSym:.+]] [@Bar::@baz, @Baz::@m]
+// CHECK:                 hw.hierpath private @[[memPathSym:.+]] [@Bar::@baz, @Baz::@m]
 
 // CHECK-LABEL:         firrtl.module @Baz()
 // CHECK-NEXT:            firrtl.instance m
@@ -712,7 +712,7 @@ firrtl.circuit "Foo" {
 
 // (1) OM Info -----------------------------------------------------------------
 // CHECK-LABEL:         firrtl.circuit "Foo"
-// CHECK:                 hw.hierpath @memNLA [@Bar::@baz, @Baz::@m]
+// CHECK:                 hw.hierpath private @memNLA [@Bar::@baz, @Baz::@m]
 //
 // There should be only one tracker on the instance.
 //
