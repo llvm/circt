@@ -371,15 +371,107 @@ getServicePortInfo(Operation *op, SymbolTableCollection &symbolTable,
   return portInfo;
 }
 
+namespace circt {
+namespace esi {
+// Check that the channels on two bundles match allowing for AnyType.
+// NOLINTNEXTLINE(misc-no-recursion)
+LogicalResult checkInnerTypeMatch(Type expected, Type actual) {
+  if (expected == actual)
+    return success();
+
+  // Check all of the 'container' or special case types.
+  return TypeSwitch<Type, LogicalResult>(expected)
+      // For 'any' types, we can match anything.
+      .Case<AnyType>([&](Type) { return success(); })
+      // If they're both channels, check the inner types.
+      .Case<ChannelType>([&](ChannelType expectedChannel) {
+        auto actualChannel = dyn_cast<ChannelType>(actual);
+        if (!actualChannel)
+          return failure();
+        return checkInnerTypeMatch(expectedChannel.getInner(),
+                                   actualChannel.getInner());
+      })
+      // For structs, check each field.
+      .Case<hw::StructType>([&](hw::StructType expectedStruct) {
+        auto actualStruct = dyn_cast<hw::StructType>(actual);
+        if (!actualStruct)
+          return failure();
+        auto expectedFields = expectedStruct.getElements();
+        auto actualFields = actualStruct.getElements();
+        if (expectedFields.size() != actualFields.size())
+          return failure();
+        for (auto [efield, afield] : llvm::zip(expectedFields, actualFields)) {
+          if (efield.name != afield.name)
+            return failure();
+          if (failed(checkInnerTypeMatch(efield.type, afield.type)))
+            return failure();
+        }
+        return success();
+      })
+      // For arrays, check the element type and size.
+      .Case<hw::ArrayType>([&](hw::ArrayType expectedArray) {
+        auto actualArray = dyn_cast<hw::ArrayType>(actual);
+        if (!actualArray)
+          return failure();
+        if (expectedArray.getNumElements() != actualArray.getNumElements())
+          return failure();
+        return checkInnerTypeMatch(expectedArray.getElementType(),
+                                   actualArray.getElementType());
+      })
+      // For unions, check the element types and names.
+      .Case<hw::UnionType>([&](hw::UnionType expectedUnion) {
+        auto actualUnion = dyn_cast<hw::UnionType>(actual);
+        if (!actualUnion)
+          return failure();
+        auto expectedElements = expectedUnion.getElements();
+        auto actualElements = actualUnion.getElements();
+        if (expectedElements.size() != actualElements.size())
+          return failure();
+        for (auto [efield, afield] :
+             llvm::zip(expectedElements, actualElements)) {
+          if (efield.name != afield.name)
+            return failure();
+          if (efield.offset != afield.offset)
+            return failure();
+          if (failed(checkInnerTypeMatch(efield.type, afield.type)))
+            return failure();
+        }
+        return success();
+      })
+      // For ESI lists, check the element type.
+      .Case<ListType>([&](ListType expectedList) {
+        auto actualList = dyn_cast<ListType>(actual);
+        if (!actualList)
+          return failure();
+        return checkInnerTypeMatch(expectedList.getElementType(),
+                                   actualList.getElementType());
+      })
+      // For ESI windows, unwrap and check the inner type.
+      .Case<WindowType>([&](WindowType expectedWindow) {
+        auto actualWindow = dyn_cast<WindowType>(actual);
+        if (!actualWindow)
+          return checkInnerTypeMatch(expectedWindow.getInto(), actual);
+        return checkInnerTypeMatch(expectedWindow.getInto(),
+                                   actualWindow.getInto());
+      })
+      // For type aliases, unwrap and check the aliased type.
+      .Case<hw::TypeAliasType>([&](hw::TypeAliasType expectedAlias) {
+        auto actualAlias = dyn_cast<hw::TypeAliasType>(actual);
+        if (!actualAlias)
+          return checkInnerTypeMatch(expectedAlias.getCanonicalType(), actual);
+        return checkInnerTypeMatch(expectedAlias.getCanonicalType(),
+                                   actualAlias.getCanonicalType());
+      })
+      // TODO: other container types.
+      .Default([&](Type) { return failure(); });
+}
+
 /// Check that the channels on two bundles match allowing for AnyType in the
 /// 'svc' bundle.
-static LogicalResult checkTypeMatch(Operation *req,
-                                    ChannelBundleType svcBundleType,
-                                    ChannelBundleType reqBundleType,
-                                    bool skipDirectionCheck) {
-  auto *ctxt = svcBundleType.getContext();
-  auto anyChannelType = ChannelType::get(ctxt, AnyType::get(ctxt));
-
+LogicalResult checkBundleTypeMatch(Operation *req,
+                                   ChannelBundleType svcBundleType,
+                                   ChannelBundleType reqBundleType,
+                                   bool skipDirectionCheck) {
   if (svcBundleType.getChannels().size() != reqBundleType.getChannels().size())
     return req->emitOpError(
         "Request port bundle channel count does not match service "
@@ -401,20 +493,27 @@ static LogicalResult checkTypeMatch(Operation *req,
           "Request channel direction does not match service "
           "port bundle channel direction");
 
-    if (f->second.type != bc.type && f->second.type != anyChannelType)
+    if (failed(checkInnerTypeMatch(f->second.type, bc.type)))
       return req->emitOpError(
-          "Request channel type does not match service port "
-          "bundle channel type");
+                    "Request channel type does not match service port "
+                    "bundle channel type")
+                 .attachNote()
+             << "Service port '" << bc.name.getValue()
+             << "' type: " << f->second.type;
   }
   return success();
 }
+
+} // namespace esi
+} // namespace circt
 
 LogicalResult
 RequestConnectionOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto svcPort = getServicePortInfo(*this, symbolTable, getServicePortAttr());
   if (failed(svcPort))
     return failure();
-  return checkTypeMatch(*this, svcPort->type, getToClient().getType(), false);
+  return checkBundleTypeMatch(*this, svcPort->type, getToClient().getType(),
+                              false);
 }
 
 LogicalResult ServiceImplementConnReqOp::verifySymbolUses(
@@ -422,7 +521,8 @@ LogicalResult ServiceImplementConnReqOp::verifySymbolUses(
   auto svcPort = getServicePortInfo(*this, symbolTable, getServicePortAttr());
   if (failed(svcPort))
     return failure();
-  return checkTypeMatch(*this, svcPort->type, getToClient().getType(), true);
+  return checkBundleTypeMatch(*this, svcPort->type, getToClient().getType(),
+                              true);
 }
 
 void CustomServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {

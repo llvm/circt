@@ -1,12 +1,13 @@
 // RUN: circt-opt --esi-connect-services --canonicalize %s | circt-opt | FileCheck %s --check-prefix=CONN
 // RUN: circt-opt --esi-connect-services --lower-esi-bundles %s
 
+!sendAny = !esi.bundle<[!esi.channel<!esi.any> from "send"]>
 !sendI8 = !esi.bundle<[!esi.channel<i8> from "send"]>
 !recvI8 = !esi.bundle<[!esi.channel<i8> to "recv"]>
 !reqResp = !esi.bundle<[!esi.channel<i16> to "req", !esi.channel<i8> from "resp"]>
 
 esi.service.decl @HostComms {
-  esi.service.port @Send : !sendI8
+  esi.service.port @Send : !sendAny
   esi.service.port @Recv : !recvI8
   esi.service.port @ReqResp : !reqResp
 }

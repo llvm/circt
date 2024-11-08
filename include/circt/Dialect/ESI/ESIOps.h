@@ -33,6 +33,16 @@ struct ServicePortInfo {
   ChannelBundleType type;
 };
 
+// Check that the channels on two bundles match allowing for AnyType.
+// NOLINTNEXTLINE(misc-no-recursion)
+LogicalResult checkInnerTypeMatch(Type expected, Type actual);
+/// Check that the channels on two bundles match allowing for AnyType in the
+/// 'svc' bundle.
+LogicalResult checkBundleTypeMatch(Operation *req,
+                                   ChannelBundleType svcBundleType,
+                                   ChannelBundleType reqBundleType,
+                                   bool skipDirectionCheck);
+
 } // namespace esi
 } // namespace circt
 
