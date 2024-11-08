@@ -804,10 +804,10 @@ hw.module.extern @ExternDestMod(in %a: i1, in %b: i2, out c: i3, out d: i4)
 hw.module @InternalDestMod(in %a: i1, in %b: i3, in %c: i1) {}
 // CHECK-LABEL: module ABC
 hw.module @ABC(in %a: i1, in %b: i2, out c: i4) {
-  %0,%1 = hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> (c: i3, d: i4) {doNotPrint=1}
+  %0,%1 = hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> (c: i3, d: i4) {doNotPrint}
   %2 = sv.xmr "whatever", "a" : !hw.inout<i1>
   %3 = sv.read_inout %2: !hw.inout<i1>
-  hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %0: i3, c: %3: i1) -> () {doNotPrint=1}
+  hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %0: i3, c: %3: i1) -> () {doNotPrint}
   hw.output %1 : i4
 }
 

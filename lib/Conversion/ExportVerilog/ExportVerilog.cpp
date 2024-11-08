@@ -4216,7 +4216,7 @@ LogicalResult StmtEmitter::visitSV(AliasOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(InterfaceInstanceOp op) {
-  auto doNotPrint = op->hasAttr("doNotPrint");
+  auto doNotPrint = op.getDoNotPrint();
   if (doNotPrint && !state.options.emitBindComments)
     return success();
 
@@ -5334,7 +5334,7 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
 }
 
 LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
-  bool doNotPrint = op->hasAttr("doNotPrint");
+  bool doNotPrint = op.getDoNotPrint();
   if (doNotPrint && !state.options.emitBindComments)
     return success();
 

@@ -205,6 +205,9 @@ constexpr const char *wiringSourceAnnoClass =
 // Attribute annotations.
 constexpr const char *attributeAnnoClass = "firrtl.AttributeAnnotation";
 
+// Module Prefix Annotations.
+constexpr const char *modulePrefixAnnoClass = "chisel3.ModulePrefixAnnotation";
+
 } // namespace firrtl
 } // namespace circt
 

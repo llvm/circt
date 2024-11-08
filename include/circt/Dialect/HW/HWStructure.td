@@ -469,7 +469,8 @@ def InstanceOp : HWInstanceOpBase<"instance", [HWInstanceLike]> {
                        Variadic<AnyType>:$inputs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
-                       OptionalAttr<InnerSymAttr>:$inner_sym);
+                       OptionalAttr<InnerSymAttr>:$inner_sym,
+                       UnitAttr:$doNotPrint);
   let results = (outs Variadic<AnyType>:$results);
 
   let builders = [
@@ -541,7 +542,8 @@ def InstanceChoiceOp : HWInstanceOpBase<"instance_choice", [
                        Variadic<AnyType>:$inputs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
-                       OptionalAttr<InnerSymAttr>:$inner_sym);
+                       OptionalAttr<InnerSymAttr>:$inner_sym,
+                       UnitAttr:$doNotPrint);
   let results = (outs Variadic<AnyType>:$results);
 
   let hasCustomAssemblyFormat = 1;

@@ -3308,7 +3308,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
       newModule, oldInstance.getNameAttr(), operands, parameters, innerSym);
 
   if (oldInstance.getLowerToBind())
-    newInstance->setAttr("doNotPrint", builder.getBoolAttr(true));
+    newInstance.setDoNotPrintAttr(builder.getUnitAttr());
 
   if (newInstance.getInnerSymAttr())
     if (auto forceName = circuitState.instanceForceNames.lookup(

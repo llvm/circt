@@ -224,7 +224,8 @@ def InterfaceInstanceOp : SVOp<"interface.instance", [
   }];
 
   let arguments = (ins StrAttr:$name,
-                       OptionalAttr<InnerSymAttr>:$inner_sym);
+                       OptionalAttr<InnerSymAttr>:$inner_sym,
+                       UnitAttr:$doNotPrint);
   let results = (outs InterfaceType : $result);
 
   let assemblyFormat = [{

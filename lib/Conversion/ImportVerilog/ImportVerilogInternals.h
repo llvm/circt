@@ -121,6 +121,11 @@ struct Context {
   /// if the given value is null.
   Value convertToSimpleBitVector(Value value);
 
+  /// Helper function to insert the necessary operations to cast a value from
+  /// one type to another.
+  Value materializeConversion(Type type, Value value, bool isSigned,
+                              Location loc);
+
   /// Helper function to materialize an `SVInt` as an SSA value.
   Value materializeSVInt(const slang::SVInt &svint,
                          const slang::ast::Type &type, Location loc);

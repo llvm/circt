@@ -166,7 +166,8 @@ struct InstanceOpConversion : public OpConversionPattern<InstanceOp> {
     auto instOp = rewriter.create<hw::InstanceOp>(
         op.getLoc(), op.getResultTypes(), instName, moduleName, op.getInputs(),
         op.getInputNamesAttr(), op.getOutputNamesAttr(),
-        /*Parameter*/ rewriter.getArrayAttr({}), /*InnerSymbol*/ nullptr);
+        /*Parameter*/ rewriter.getArrayAttr({}), /*InnerSymbol*/ nullptr,
+        /*doNotPrint*/ nullptr);
 
     // Replace uses chain and erase the original op.
     op.replaceAllUsesWith(instOp.getResults());
@@ -555,6 +556,34 @@ struct ConstantOpConv : public OpConversionPattern<ConstantOp> {
   }
 };
 
+struct StringConstantOpConv : public OpConversionPattern<StringConstantOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(moore::StringConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    const auto str = op.getValue();
+    const unsigned byteWidth = str.size() * 8;
+    const auto resultType =
+        typeConverter->convertType(op.getResult().getType());
+    if (const auto intType = mlir::dyn_cast<IntegerType>(resultType)) {
+      if (intType.getWidth() < byteWidth) {
+        return rewriter.notifyMatchFailure(op,
+                                           "invalid string constant type size");
+      }
+    } else {
+      return rewriter.notifyMatchFailure(op, "invalid string constant type");
+    }
+    APInt value(byteWidth, 0);
+    for (size_t i = 0; i < str.size(); ++i) {
+      const auto asciiChar = static_cast<uint8_t>(str[i]);
+      value |= APInt(byteWidth, asciiChar) << (8 * (str.size() - 1 - i));
+    }
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(
+        op, resultType, rewriter.getIntegerAttr(resultType, value));
+    return success();
+  }
+};
+
 struct ConcatOpConversion : public OpConversionPattern<ConcatOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -938,6 +967,10 @@ struct CaseXZEqOpConversion : public OpConversionPattern<SourceOp> {
   }
 };
 
+//===----------------------------------------------------------------------===//
+// Conversions
+//===----------------------------------------------------------------------===//
+
 struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -958,6 +991,50 @@ struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
     Value result =
         rewriter.createOrFold<hw::BitcastOp>(loc, resultType, amount);
     rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
+struct TruncOpConversion : public OpConversionPattern<TruncOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(TruncOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<comb::ExtractOp>(op, adaptor.getInput(), 0,
+                                                 op.getType().getWidth());
+    return success();
+  }
+};
+
+struct ZExtOpConversion : public OpConversionPattern<ZExtOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ZExtOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto targetWidth = op.getType().getWidth();
+    auto inputWidth = op.getInput().getType().getWidth();
+
+    auto zeroExt = rewriter.create<hw::ConstantOp>(
+        op.getLoc(), rewriter.getIntegerType(targetWidth - inputWidth), 0);
+
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(
+        op, ValueRange{zeroExt, adaptor.getInput()});
+    return success();
+  }
+};
+
+struct SExtOpConversion : public OpConversionPattern<SExtOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(SExtOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto type = typeConverter->convertType(op.getType());
+    auto value =
+        comb::createOrFoldSExt(op.getLoc(), adaptor.getInput(), type, rewriter);
+    rewriter.replaceOp(op, value);
     return success();
   }
 };
@@ -1441,10 +1518,9 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
 
   typeConverter.addTargetMaterialization(
       [&](mlir::OpBuilder &builder, mlir::Type resultType,
-          mlir::ValueRange inputs,
-          mlir::Location loc) -> std::optional<mlir::Value> {
+          mlir::ValueRange inputs, mlir::Location loc) -> mlir::Value {
         if (inputs.size() != 1 || !inputs[0])
-          return std::nullopt;
+          return Value();
         return builder
             .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
             .getResult(0);
@@ -1452,10 +1528,9 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
 
   typeConverter.addSourceMaterialization(
       [&](mlir::OpBuilder &builder, mlir::Type resultType,
-          mlir::ValueRange inputs,
-          mlir::Location loc) -> std::optional<mlir::Value> {
+          mlir::ValueRange inputs, mlir::Location loc) -> mlir::Value {
         if (inputs.size() != 1)
-          return std::nullopt;
+          return Value();
         return builder
             .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
             ->getResult(0);
@@ -1471,13 +1546,19 @@ static void populateOpConversion(RewritePatternSet &patterns,
     VariableOpConversion,
     NetOpConversion,
 
+    // Patterns for conversion operations.
+    ConversionOpConversion,
+    TruncOpConversion,
+    ZExtOpConversion,
+    SExtOpConversion,
+
     // Patterns of miscellaneous operations.
     ConstantOpConv, ConcatOpConversion, ReplicateOpConversion,
     ExtractOpConversion, DynExtractOpConversion, DynExtractRefOpConversion,
-    ConversionOpConversion, ReadOpConversion,
+    ReadOpConversion,
     StructExtractOpConversion, StructExtractRefOpConversion,
     ExtractRefOpConversion, StructCreateOpConversion, ConditionalOpConversion,
-    YieldOpConversion, OutputOpConversion,
+    YieldOpConversion, OutputOpConversion, StringConstantOpConv,
 
     // Patterns of unary operations.
     ReduceAndOpConversion, ReduceOrOpConversion, ReduceXorOpConversion,
