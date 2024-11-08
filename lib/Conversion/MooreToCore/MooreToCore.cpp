@@ -967,6 +967,10 @@ struct CaseXZEqOpConversion : public OpConversionPattern<SourceOp> {
   }
 };
 
+//===----------------------------------------------------------------------===//
+// Conversions
+//===----------------------------------------------------------------------===//
+
 struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -987,6 +991,50 @@ struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
     Value result =
         rewriter.createOrFold<hw::BitcastOp>(loc, resultType, amount);
     rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
+struct TruncOpConversion : public OpConversionPattern<TruncOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(TruncOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<comb::ExtractOp>(op, adaptor.getInput(), 0,
+                                                 op.getType().getWidth());
+    return success();
+  }
+};
+
+struct ZExtOpConversion : public OpConversionPattern<ZExtOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ZExtOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto targetWidth = op.getType().getWidth();
+    auto inputWidth = op.getInput().getType().getWidth();
+
+    auto zeroExt = rewriter.create<hw::ConstantOp>(
+        op.getLoc(), rewriter.getIntegerType(targetWidth - inputWidth), 0);
+
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(
+        op, ValueRange{zeroExt, adaptor.getInput()});
+    return success();
+  }
+};
+
+struct SExtOpConversion : public OpConversionPattern<SExtOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(SExtOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto type = typeConverter->convertType(op.getType());
+    auto value =
+        comb::createOrFoldSExt(op.getLoc(), adaptor.getInput(), type, rewriter);
+    rewriter.replaceOp(op, value);
     return success();
   }
 };
@@ -1498,10 +1546,16 @@ static void populateOpConversion(RewritePatternSet &patterns,
     VariableOpConversion,
     NetOpConversion,
 
+    // Patterns for conversion operations.
+    ConversionOpConversion,
+    TruncOpConversion,
+    ZExtOpConversion,
+    SExtOpConversion,
+
     // Patterns of miscellaneous operations.
     ConstantOpConv, ConcatOpConversion, ReplicateOpConversion,
     ExtractOpConversion, DynExtractOpConversion, DynExtractRefOpConversion,
-    ConversionOpConversion, ReadOpConversion,
+    ReadOpConversion,
     StructExtractOpConversion, StructExtractRefOpConversion,
     ExtractRefOpConversion, StructCreateOpConversion, ConditionalOpConversion,
     YieldOpConversion, OutputOpConversion, StringConstantOpConv,
