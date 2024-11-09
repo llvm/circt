@@ -9,6 +9,7 @@
 #include "CIRCTModules.h"
 
 #include "circt-c/Conversion.h"
+#include "circt-c/Dialect/Arc.h"
 #include "circt-c/Dialect/Comb.h"
 #include "circt-c/Dialect/Debug.h"
 #include "circt-c/Dialect/ESI.h"
@@ -37,6 +38,7 @@
 namespace py = pybind11;
 
 static void registerPasses() {
+  registerArcPasses();
   registerCombPasses();
   registerSeqPasses();
   registerSVPasses();
