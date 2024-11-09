@@ -12,6 +12,7 @@
 
 #include "circt/Target/EmitRTGAssembly.h"
 #include "circt/Dialect/RTG/IR/RTGVisitors.h"
+#include "circt/Dialect/RTG/UserElf.h"
 #include "circt/Dialect/RTGTest/IR/RTGTestDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Tools/mlir-translate/Translation.h"
@@ -57,15 +58,16 @@ static FailureOr<APInt> getBinary(Value val) {
 namespace {
 class EmitRTGToElf : public RTGOpVisitor<EmitRTGToElf, LogicalResult, int> {
 
-  //map for non-moving inserts
-  std::map<int,SmallVector<char>> buffers;
-  std::map<int,llvm::raw_svector_ostream> streams;
-  
+  // map for non-moving inserts
+  std::map<int, SmallVector<char>> buffers;
+  std::map<int, llvm::raw_svector_ostream> streams;
+
   llvm::raw_ostream &base_stream;
+  UserElfInterface *target;
 
   const EmitRTGAssemblyOptions &options;
 
-  raw_ostream& getStream(int ctx) {
+  raw_ostream &getStream(int ctx) {
     if (ctx == -1)
       return base_stream;
     auto iter = streams.find(ctx);
@@ -78,87 +80,24 @@ class EmitRTGToElf : public RTGOpVisitor<EmitRTGToElf, LogicalResult, int> {
 
 public:
   EmitRTGToElf(llvm::raw_ostream &os, const EmitRTGAssemblyOptions &options)
-      : base_stream(os), options(options) {}
+      : base_stream(os), target(nullptr), options(options) {}
 
   ~EmitRTGToElf() {
+    if (!target)
+      return;
+
     int maxCTX = 0;
     for (auto &[ctx, buffer] : buffers)
       maxCTX = std::max(maxCTX, ctx);
 
-    // Ugly rsicv hack
-    base_stream << ".global __rtg_num_threads\n";
-    base_stream << ".section .sdata,\"aw\"\n";
-    base_stream << ".align 2\n";
-    base_stream << ".type __rtg_num_threads, @object\n";
-    base_stream << ".size __rtg_num_threads, 4\n";
-    base_stream << "__rtg_num_threads:\n";
-    base_stream << "\t.word " << (maxCTX + 1) << "\n\n";
-
-    base_stream << ".local __rtg_sp_save\n";
-    base_stream << ".bss\n";
-    base_stream << ".align 3\n";
-    base_stream << ".type __rtg_sp_save, @object\n";
-    base_stream << ".size __rtg_sp_save, " << (maxCTX + 1) * 8 << "\n";
-    base_stream << "__rtg_sp_save:\n";
-    base_stream << ".zero " << (maxCTX + 1) * 8 << "\n\n";
-
-
-    base_stream << "\n\n.text\n";
-    base_stream << ".align 1\n";
-    base_stream << ".globl __rtg_entrypoint\n";
-    base_stream << ".type __rtg_entrypoint, @function\n";
-    base_stream << "__rtg_entrypoint:\n";
-    base_stream << "\taddi sp, sp, -104  # allocate space on stack\n";
-    base_stream << "\tsd   ra,   96(sp)\n";
-    base_stream << "\tsd   s0,   88(sp)\n";
-    base_stream << "\tsd   s1,   80(sp)\n";
-    base_stream << "\tsd   s2,   72(sp)\n";
-    base_stream << "\tsd   s3,   64(sp)\n";
-    base_stream << "\tsd   s4,   56(sp)\n";
-    base_stream << "\tsd   s5,   48(sp)\n";
-    base_stream << "\tsd   s6,   40(sp)\n";
-    base_stream << "\tsd   s7,   32(sp)\n";
-    base_stream << "\tsd   s8,   24(sp)\n";
-    base_stream << "\tsd   s9,   16(sp)\n";
-    base_stream << "\tsd   s10,   8(sp)\n";
-    base_stream << "\tsd   s11,   0(sp)\n";
-    base_stream << "\tla   t0,  __rtg_sp_save\n";
-    base_stream << "\tslli t1, a0, 3\n";
-    base_stream << "\tadd  t0, t0, t1\n";
-    base_stream << "\tsd   sp,    0(t0) # stash the stack pointer\n";
-
+    target->emitElfHeader(base_stream, maxCTX + 1);
     for (int i = 0; i <= maxCTX; i++) {
-      base_stream << "\tli t0, " << i << "\n";
-      base_stream << "\tbne t0, a0, __rtg_exitpoint_" << i << "\n";
-      base_stream << "# Begin context " << i << "\n";
-      base_stream << "__rtg_entrypoint_" << i << ":\n";
+      target->emitElfContextHeader(base_stream, i);
       if (buffers.count(i))
         base_stream << buffers[i];
-      base_stream << "\tli a0, " << i << " # restore context id\n";
-     base_stream << "\tla   t0,  __rtg_sp_save\n";
-    base_stream << "\tslli t1, a0, 3\n";
-    base_stream << "\tadd  t0, t0, t1\n";
-    base_stream << "\tld   sp,    0(t0) # restore the stack pointer\n";
-     base_stream << "# End context " << i << "\n";
-      base_stream << "__rtg_exitpoint_" << i << ":\n";
+      target->emitElfContextFooter(base_stream, i);
     }
-
-    base_stream << "\tld   ra,   96(sp)\n";
-    base_stream << "\tld   s0,   88(sp)\n";
-    base_stream << "\tld   s1,   80(sp)\n";
-    base_stream << "\tld   s2,   72(sp)\n";
-    base_stream << "\tld   s3,   64(sp)\n";
-    base_stream << "\tld   s4,   56(sp)\n";
-    base_stream << "\tld   s5,   48(sp)\n";
-    base_stream << "\tld   s6,   40(sp)\n";
-    base_stream << "\tld   s7,   32(sp)\n";
-    base_stream << "\tld   s8,   24(sp)\n";
-    base_stream << "\tld   s9,   16(sp)\n";
-    base_stream << "\tld   s10,   8(sp)\n";
-    base_stream << "\tld   s11,   0(sp)\n";
-    base_stream << "\taddi sp, sp, 104\n";
-    base_stream << "\tret\n";
-
+    target->emitElfFooter(base_stream);
   }
 
   using RTGOpVisitor<EmitRTGToElf, LogicalResult, int>::visitOp;
@@ -205,7 +144,7 @@ public:
   LogicalResult visitOp(LabelDeclOp labeldecl, int ctx) { return success(); }
 
   LogicalResult visitOp(LabelOp label, int ctx) {
-    auto& os = getStream(ctx);
+    auto &os = getStream(ctx);
     if (label.getGlobal()) {
       os << ".global ";
       printValue(label.getLabel(), os);
@@ -217,7 +156,13 @@ public:
   }
 
   LogicalResult visitInstruction(InstructionOpInterface instr, int ctx) {
-    auto& os = getStream(ctx);
+    // Ensure only one target
+    assert(!target || !dyn_cast<UserElfInterface>(instr->getDialect()) ||
+           target == dyn_cast<UserElfInterface>(instr->getDialect()));
+    if (!target && dyn_cast<UserElfInterface>(instr->getDialect()))
+      target = dyn_cast<UserElfInterface>(instr->getDialect());
+
+    auto &os = getStream(ctx);
     os << llvm::indent(4);
     auto useBinary = llvm::is_contained(options.unsupportedInstructions,
                                         instr->getName().getStringRef());
@@ -277,7 +222,7 @@ void EmitRTGAssembly::parseUnsupportedInstructionsFile(
 //===----------------------------------------------------------------------===//
 
 // MASSIVE HACK
-void (*extraRTGDialects)(mlir::DialectRegistry&) = nullptr;
+void (*extraRTGDialects)(mlir::DialectRegistry &) = nullptr;
 
 void EmitRTGAssembly::registerEmitRTGAssemblyTranslation() {
   static llvm::cl::opt<std::string> unsupportedInstructionsFile(
