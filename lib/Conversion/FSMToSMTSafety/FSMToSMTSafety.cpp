@@ -475,7 +475,7 @@ LogicalResult MachineOpConverter::dispatch() {
 
     b.create<smt::AssertOp>(loc, forall);
   }
-  b.getBlock()->dump();
+  // b.getBlock()->dump();
 
   // llvm::SmallVector<int> visitedTransitions;;
   // add self-loops in case no guard is satisfied
