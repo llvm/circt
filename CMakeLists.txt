@@ -556,6 +556,10 @@ llvm_canonicalize_cmake_booleans(CIRCT_SLANG_BUILD_FROM_SOURCE)
 if(CIRCT_SLANG_FRONTEND_ENABLED)
   message(STATUS "slang Verilog frontend is enabled")
   if(CIRCT_SLANG_BUILD_FROM_SOURCE)
+    # slang requires C++20
+    set(CMAKE_CXX_STANDARD 20)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
     # Build slang as part of CIRCT (see https://sv-lang.com/building.html)
     message(STATUS "Building slang from source")
     include(FetchContent)
@@ -580,8 +584,6 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     set(SLANG_USE_MIMALLOC OFF)
     FetchContent_MakeAvailable(slang)
 
-    set(CMAKE_CXX_STANDARD 20)
-    set(CMAKE_CXX_STANDARD_REQUIRED ON)
     set(CMAKE_CXX_FLAGS ${ORIGINAL_CMAKE_CXX_FLAGS})
     set(BUILD_SHARED_LIBS ${ORIGINAL_BUILD_SHARED_LIBS})
 
