@@ -666,6 +666,26 @@ struct AssertOpLowering : public SMTLoweringPattern<AssertOp> {
   }
 };
 
+/// Lower `smt.reset` operations to Z3 API calls of the form:
+/// ```
+/// void Z3_API Z3_solver_reset(Z3_context c, Z3_solver s);
+/// ```
+struct ResetOpLowering : public SMTLoweringPattern<ResetOp> {
+  using SMTLoweringPattern::SMTLoweringPattern;
+
+  LogicalResult
+  matchAndRewrite(ResetOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Location loc = op.getLoc();
+    buildAPICallWithContext(rewriter, loc, "Z3_solver_reset",
+                            LLVM::LLVMVoidType::get(getContext()),
+                            {buildSolverPtr(rewriter, loc)});
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 /// Lower `smt.yield` operations to `scf.yield` operations. This not necessary
 /// for the yield in `smt.solver` or in quantifiers since they are deleted
 /// directly by the parent operation, but makes the lowering of the `smt.check`

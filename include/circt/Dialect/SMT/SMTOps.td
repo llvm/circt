@@ -153,6 +153,11 @@ def AssertOp : SMTOp<"assert", []> {
   let assemblyFormat = "$input attr-dict";
 }
 
+def ResetOp : SMTOp<"reset", []> {
+  let summary = "reset the solver";
+  let assemblyFormat = "attr-dict";
+}
+
 def CheckOp : SMTOp<"check", [
   NoRegionArguments,
   SingleBlockImplicitTerminator<"smt::YieldOp">,
