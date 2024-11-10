@@ -138,6 +138,9 @@ func.func @test(%arg0: i32) {
     // CHECK: llvm.call @Z3_solver_assert([[CTX]], [[S]], [[AND]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> ()
     smt.assert %7
 
+      // CHECK: llvm.call @Z3_solver_reset([[CTX]], [[S]]) : (!llvm.ptr, !llvm.ptr) -> ()
+    smt.reset
+
     // CHECK-DEBUG: [[SOLVER_STR:%.+]] = llvm.call @Z3_solver_to_string({{.*}}, {{.*}}) : (!llvm.ptr, !llvm.ptr) -> !llvm.ptr
     // CHECK-DEBUG: [[FMT_STR:%.+]] = llvm.mlir.addressof @str{{.*}} : !llvm.ptr
     // CHECK-DEBUG: llvm.call @printf([[FMT_STR]], [[SOLVER_STR]]) vararg(!llvm.func<i32 (ptr, ...)>) : (!llvm.ptr, !llvm.ptr) -> i32

@@ -1395,9 +1395,9 @@ void circt::populateSMTToZ3LLVMConversionPatterns(
   // Other lowering patterns. Refer to their implementation directly for more
   // information.
   patterns.add<BVConstantOpLowering, DeclareFunOpLowering, AssertOpLowering,
-               CheckOpLowering, SolverOpLowering, ApplyFuncOpLowering,
-               YieldOpLowering, RepeatOpLowering, ExtractOpLowering,
-               BoolConstantOpLowering, IntConstantOpLowering,
+               ResetOpLowering, CheckOpLowering, SolverOpLowering,
+               ApplyFuncOpLowering, YieldOpLowering, RepeatOpLowering,
+               ExtractOpLowering, BoolConstantOpLowering, IntConstantOpLowering,
                ArrayBroadcastOpLowering, BVCmpOpLowering, IntCmpOpLowering,
                IntAbsOpLowering, QuantifierLowering<ForallOp>,
                QuantifierLowering<ExistsOp>>(converter, patterns.getContext(),
