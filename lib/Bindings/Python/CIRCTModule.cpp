@@ -44,6 +44,7 @@ static void registerPasses() {
   registerSVPasses();
   registerFSMPasses();
   registerHWArithPasses();
+  registerHWPasses();
   registerHandshakePasses();
   mlirRegisterConversionPasses();
   mlirRegisterTransformsPasses();

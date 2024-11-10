@@ -91,6 +91,7 @@ add_circt_public_c_api_library(CIRCTCAPIHW
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTHW
+  CIRCTHWTransforms
 )
 
 add_circt_public_c_api_library(CIRCTCAPILLHD
