@@ -562,8 +562,7 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     FetchContent_Declare(
       slang
       GIT_REPOSITORY https://github.com/MikePopoloski/slang.git
-      GIT_TAG bad0d6ba3dec20355b0156c535bbddf2f926ab37
-      GIT_SHALLOW ON)
+      GIT_TAG bad0d6ba3dec20355b0156c535bbddf2f926ab37)
     set(FETCHCONTENT_TRY_FIND_PACKAGE_MODE "NEVER")
 
     # Force Slang to be built as a static library to avoid messing around with
