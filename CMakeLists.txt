@@ -604,6 +604,14 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     set_target_properties(fmt PROPERTIES PUBLIC_HEADER "")
 
     install(TARGETS slang_slang fmt EXPORT CIRCTTargets)
+
+    # Match the behavior of slang_slang, which installs its own vendored
+    # boost_unordered if it does not a system-wide boost installation.
+    find_package(Boost 1.82.0 QUIET)
+    if(NOT Boost_FOUND)
+      set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS boost_unordered)
+      install(TARGETS boost_unordered EXPORT CIRCTTargets)
+    endif()
   else()
     find_package(slang 7.0 REQUIRED)
   endif()
