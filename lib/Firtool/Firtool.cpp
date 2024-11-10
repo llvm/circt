@@ -135,6 +135,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   if (opt.shouldConvertProbesToSignals())
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createProbesToSignalsPass());
 
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
+
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createLayerMergePass());
 
@@ -143,8 +145,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   else
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createLayerSinkPass());
-
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
   // Preset the random initialization parameters for each module. The current
   // implementation assumes it can run at a time where every register is

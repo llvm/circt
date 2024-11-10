@@ -364,7 +364,8 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
       cmem->getAttrOfType<firrtl::NameKindEnumAttr>("nameKind").getValue(),
       annotations, memBuilder.getArrayAttr(portAnnotations),
       symOp.getInnerSymAttr(),
-      cmem->getAttrOfType<firrtl::MemoryInitAttr>("init"), StringAttr());
+      cmem->getAttrOfType<firrtl::MemoryInitAttr>("init"),
+      cmem->getAttrOfType<StringAttr>("prefix"));
   ++numCreatedMems;
 
   // Process each memory port, initializing the memory port and inferring when

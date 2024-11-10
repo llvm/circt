@@ -546,7 +546,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
           "inner_sym",
           hw::InnerSymAttr::get(b.getStringAttr(
               moduleNamespace.newName(boundInstance.getInstanceName()))));
-      boundInstance->setAttr("doNotPrint", b.getBoolAttr(true));
+      boundInstance.setDoNotPrintAttr(b.getUnitAttr());
 
       // Build the file container and reference the module from it.
       b.setInsertionPointAfter(op);

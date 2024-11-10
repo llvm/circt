@@ -1476,7 +1476,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   FunctionType funcType = resolvedModType->getFuncType();
   build(builder, result, funcType.getResults(), name,
         FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), inputs,
-        argNames, resultNames, parameters, innerSym);
+        argNames, resultNames, parameters, innerSym, /*doNotPrint=*/{});
 }
 
 std::optional<size_t> InstanceOp::getTargetResultIndex() {

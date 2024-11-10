@@ -75,49 +75,47 @@ public:
     addConversion([](ValueType type) { return type; });
     addConversion([](TokenType type) { return type; });
 
-    addTargetMaterialization(
-        [](mlir::OpBuilder &builder, mlir::Type resultType,
-           mlir::ValueRange inputs,
-           mlir::Location loc) -> std::optional<mlir::Value> {
-          if (inputs.size() != 1)
-            return std::nullopt;
+    addTargetMaterialization([](mlir::OpBuilder &builder, mlir::Type resultType,
+                                mlir::ValueRange inputs,
+                                mlir::Location loc) -> mlir::Value {
+      if (inputs.size() != 1)
+        return Value();
 
-          // Materialize !dc.value<> -> !dc.token
-          if (isa<dc::TokenType>(resultType) &&
-              isa<dc::ValueType>(inputs.front().getType()))
-            return unpack(builder, inputs.front()).token;
+      // Materialize !dc.value<> -> !dc.token
+      if (isa<dc::TokenType>(resultType) &&
+          isa<dc::ValueType>(inputs.front().getType()))
+        return unpack(builder, inputs.front()).token;
 
-          // Materialize !dc.token -> !dc.value<>
-          auto vt = dyn_cast<dc::ValueType>(resultType);
-          if (vt && !vt.getInnerType())
-            return pack(builder, inputs.front());
+      // Materialize !dc.token -> !dc.value<>
+      auto vt = dyn_cast<dc::ValueType>(resultType);
+      if (vt && !vt.getInnerType())
+        return pack(builder, inputs.front());
 
-          return builder
-              .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
-              ->getResult(0);
-        });
+      return builder
+          .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
+          ->getResult(0);
+    });
 
-    addSourceMaterialization(
-        [](mlir::OpBuilder &builder, mlir::Type resultType,
-           mlir::ValueRange inputs,
-           mlir::Location loc) -> std::optional<mlir::Value> {
-          if (inputs.size() != 1)
-            return std::nullopt;
+    addSourceMaterialization([](mlir::OpBuilder &builder, mlir::Type resultType,
+                                mlir::ValueRange inputs,
+                                mlir::Location loc) -> mlir::Value {
+      if (inputs.size() != 1)
+        return Value();
 
-          // Materialize !dc.value<> -> !dc.token
-          if (isa<dc::TokenType>(resultType) &&
-              isa<dc::ValueType>(inputs.front().getType()))
-            return unpack(builder, inputs.front()).token;
+      // Materialize !dc.value<> -> !dc.token
+      if (isa<dc::TokenType>(resultType) &&
+          isa<dc::ValueType>(inputs.front().getType()))
+        return unpack(builder, inputs.front()).token;
 
-          // Materialize !dc.token -> !dc.value<>
-          auto vt = dyn_cast<dc::ValueType>(resultType);
-          if (vt && !vt.getInnerType())
-            return pack(builder, inputs.front());
+      // Materialize !dc.token -> !dc.value<>
+      auto vt = dyn_cast<dc::ValueType>(resultType);
+      if (vt && !vt.getInnerType())
+        return pack(builder, inputs.front());
 
-          return builder
-              .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
-              ->getResult(0);
-        });
+      return builder
+          .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
+          ->getResult(0);
+    });
   }
 };
 

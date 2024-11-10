@@ -414,7 +414,7 @@ private:
     // Pass the result from the Operation to the Calyx primitive.
     op.getResult().replaceAllUsesWith(out);
     auto reg = createRegister(
-        op.getLoc(), rewriter, getComponent(), width,
+        op.getLoc(), rewriter, getComponent(), width.getIntOrFloatBitWidth(),
         getState<ComponentLoweringState>().getUniqueName(opName));
     // Operation pipelines are not combinational, so a GroupOp is required.
     auto group = createGroupForOp<calyx::GroupOp>(rewriter, op);
@@ -687,9 +687,10 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      AddFOp addf) const {
   Location loc = addf.getLoc();
-  Type width = addf.getResult().getType();
   IntegerType one = rewriter.getI1Type(), three = rewriter.getIntegerType(3),
-              five = rewriter.getIntegerType(5);
+              five = rewriter.getIntegerType(5),
+              width = rewriter.getIntegerType(
+                  addf.getType().getIntOrFloatBitWidth());
   auto addFN =
       getState<ComponentLoweringState>()
           .getNewLibraryOpInstance<calyx::AddFNOp>(
@@ -935,8 +936,11 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                          getComponent().getBodyBlock()->begin());
   } else {
     std::string name = getState<ComponentLoweringState>().getUniqueName("cst");
+    auto floatAttr = cast<FloatAttr>(constOp.getValueAttr());
+    auto intType =
+        rewriter.getIntegerType(floatAttr.getType().getIntOrFloatBitWidth());
     auto calyxConstOp = rewriter.create<calyx::ConstantOp>(
-        constOp.getLoc(), name, constOp.getValueAttr());
+        constOp.getLoc(), name, floatAttr, intType);
     calyxConstOp->moveAfter(getComponent().getBodyBlock(),
                             getComponent().getBodyBlock()->begin());
     rewriter.replaceAllUsesWith(constOp, calyxConstOp.getOut());
@@ -1215,6 +1219,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
       else
         resName = "out" + std::to_string(res.index());
       funcOpResultMapping[res.index()] = outPorts.size();
+
       outPorts.push_back(calyx::PortInfo{
           rewriter.getStringAttr(resName),
           calyx::convIndexType(rewriter, res.value()), calyx::Direction::Output,

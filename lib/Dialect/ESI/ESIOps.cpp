@@ -400,11 +400,10 @@ LogicalResult checkInnerTypeMatch(Type expected, Type actual) {
         auto actualFields = actualStruct.getElements();
         if (expectedFields.size() != actualFields.size())
           return failure();
-        for (size_t i = 0, e = expectedFields.size(); i != e; ++i) {
-          if (expectedFields[i].name != actualFields[i].name)
+        for (auto [efield, afield] : llvm::zip(expectedFields, actualFields)) {
+          if (efield.name != afield.name)
             return failure();
-          if (failed(checkInnerTypeMatch(expectedFields[i].type,
-                                         actualFields[i].type)))
+          if (failed(checkInnerTypeMatch(efield.type, afield.type)))
             return failure();
         }
         return success();
@@ -428,13 +427,13 @@ LogicalResult checkInnerTypeMatch(Type expected, Type actual) {
         auto actualElements = actualUnion.getElements();
         if (expectedElements.size() != actualElements.size())
           return failure();
-        for (size_t i = 0, e = expectedElements.size(); i != e; ++i) {
-          if (expectedElements[i].name != actualElements[i].name)
+        for (auto [efield, afield] :
+             llvm::zip(expectedElements, actualElements)) {
+          if (efield.name != afield.name)
             return failure();
-          if (expectedElements[i].offset != actualElements[i].offset)
+          if (efield.offset != afield.offset)
             return failure();
-          if (failed(checkInnerTypeMatch(expectedElements[i].type,
-                                         actualElements[i].type)))
+          if (failed(checkInnerTypeMatch(efield.type, afield.type)))
             return failure();
         }
         return success();

@@ -698,7 +698,7 @@ hw.module @BindEmission() {
   // CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
   // CHECK-NEXT:    BindEmissionInstance BindEmissionInstance ();
   // CHECK-NEXT: */
-  hw.instance "BindEmissionInstance" sym @__BindEmissionInstance__ @BindEmissionInstance() -> ()  {doNotPrint = true}
+  hw.instance "BindEmissionInstance" sym @__BindEmissionInstance__ @BindEmissionInstance() -> ()  {doNotPrint}
   hw.output
 }
 
@@ -709,7 +709,7 @@ hw.module @BindEmission2() {
   // CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
   // CHECK-NEXT:    BindEmissionInstance BindEmissionInstance ();
   // CHECK-NEXT: */
-  hw.instance "BindEmissionInstance" sym @BindEmissionInstance @BindEmissionInstance() -> ()  {doNotPrint = true}
+  hw.instance "BindEmissionInstance" sym @BindEmissionInstance @BindEmissionInstance() -> ()  {doNotPrint}
   hw.output
 }
 
@@ -732,7 +732,7 @@ hw.module @bind_rename_port(in %.io_req_ready.output: i1, in %reset: i1 { hw.ver
 // CHECK-LABEL: module SiFive_MulDiv
 hw.module @SiFive_MulDiv(in %clock: i1, in %reset: i1, out io_req_ready: i1) {
   %false = hw.constant false
-  hw.instance "InvisibleBind_assert" sym @__ETC_SiFive_MulDiv_assert @bind_rename_port(".io_req_ready.output": %false: i1, reset: %reset: i1, clock: %clock: i1) -> () {doNotPrint = true}
+  hw.instance "InvisibleBind_assert" sym @__ETC_SiFive_MulDiv_assert @bind_rename_port(".io_req_ready.output": %false: i1, reset: %reset: i1, clock: %clock: i1) -> () {doNotPrint}
   hw.output %false : i1
   //      CHECK: bind_rename_port InvisibleBind_assert (
   // CHECK-NEXT:   ._io_req_ready_output (1'h0),
@@ -772,7 +772,7 @@ hw.module @W422_Foo() {
 }
 
 hw.module @BindInterface() {
-  %bar = sv.interface.instance sym @__Interface__ {doNotPrint = true} : !sv.interface<@Interface>
+  %bar = sv.interface.instance sym @__Interface__ {doNotPrint} : !sv.interface<@Interface>
   hw.output
 }
 

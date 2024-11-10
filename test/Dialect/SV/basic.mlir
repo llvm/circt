@@ -296,12 +296,12 @@ sv.bind <@AB::@b1>
 hw.module.extern @ExternDestMod(in %a: i1, in %b: i2)
 hw.module @InternalDestMod(in %a: i1, in %b: i2) {}
 //CHECK-LABEL: hw.module @AB(in %a : i1, in %b : i2) {
-//CHECK-NEXT:   hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint = 1 : i64}
-//CHECK-NEXT:   hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint = 1 : i64}
+//CHECK-NEXT:   hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint}
+//CHECK-NEXT:   hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint}
 
 hw.module @AB(in %a: i1, in %b: i2) {
-  hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint=1}
-  hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint=1}
+  hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint}
+  hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint}
 }
 
 //CHECK-LABEL: hw.module @XMR_src

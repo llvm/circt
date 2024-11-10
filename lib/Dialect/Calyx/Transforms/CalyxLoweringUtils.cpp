@@ -139,6 +139,8 @@ Value getComponentOutput(calyx::ComponentOp compOp, unsigned outPortIdx) {
 Type convIndexType(OpBuilder &builder, Type type) {
   if (type.isIndex())
     return builder.getI32Type();
+  if (type.isIntOrFloat() && !type.isInteger())
+    return builder.getIntegerType(type.getIntOrFloatBitWidth());
   return type;
 }
 
@@ -768,7 +770,7 @@ BuildReturnRegs::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
            "unsupported return type");
     std::string name = "ret_arg" + std::to_string(argType.index());
     auto reg = createRegister(funcOp.getLoc(), rewriter, getComponent(),
-                              convArgType, name);
+                              convArgType.getIntOrFloatBitWidth(), name);
     getState().addReturnReg(reg, argType.index());
 
     rewriter.setInsertionPointToStart(

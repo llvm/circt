@@ -52,7 +52,7 @@ firrtl.circuit "Collision1" {
 // @test_ext collides with the name of the external memory module.
 firrtl.extmodule @test_ext()
 // CHECK: firrtl.module private @test
-// CHECK-NEXT: firrtl.instance test_0_ext @test_0_ext
+// CHECK-NEXT: firrtl.instance test_ext @test_0_ext
 // CHECK: firrtl.memmodule private @test_0_ext
 firrtl.module @Collision1() {
   %MWrite_write = firrtl.mem Undefined {depth = 12 : i64, name = "test", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
@@ -69,12 +69,30 @@ firrtl.circuit "Dedup" {
 // CHECK: firrtl.memmodule private @mem0_ext
 
 // CHECK: firrtl.module private @mem1
-// CHECK-NEXT: firrtl.instance mem0_ext @mem0_ext
+// CHECK-NEXT: firrtl.instance mem1_ext @mem0_ext
 firrtl.module @Dedup() {
   %mem0_write = firrtl.mem Undefined {depth = 12 : i64, name = "mem0", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
   %mem1_write = firrtl.mem Undefined {depth = 12 : i64, name = "mem1", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
   // CHECK: firrtl.instance mem0  @mem0(
   // CHECK: firrtl.instance mem1  @mem1(
+}
+}
+
+// Test that the memory modules with different prefixes are not deduplicated.
+// CHECK-LABEL: firrtl.circuit "Prefix"
+firrtl.circuit "Prefix" {
+// CHECK: firrtl.module private @A_mem0
+// CHECK-NEXT: firrtl.instance mem0_ext  @A_mem0_ext
+
+// CHECK: firrtl.memmodule private @A_mem0_ext
+
+// CHECK: firrtl.module private @B_mem1
+// CHECK-NEXT: firrtl.instance mem1_ext @B_mem1_ext
+firrtl.module @Prefix() {
+  %mem0_write = firrtl.mem Undefined {depth = 12 : i64, name = "mem0", portNames = ["write"], prefix = "A_", readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
+  %mem1_write = firrtl.mem Undefined {depth = 12 : i64, name = "mem1", portNames = ["write"], prefix = "B_", readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
+  // CHECK: firrtl.instance mem0  @A_mem0(
+  // CHECK: firrtl.instance mem1  @B_mem1(
 }
 }
 
@@ -252,7 +270,7 @@ firrtl.module @NonLocalAnnotation()  {
 // CHECK: }
 
 // CHECK: firrtl.module private @mem1
-// CHECK:   firrtl.instance mem0_ext sym @mem0_ext
+// CHECK:   firrtl.instance mem1_ext sym @mem0_ext
 // CHECK-SAME:  {annotations = [{circt.nonlocal = @[[nla_1]], class = "test1"}]}
 // CHECK-SAME:  @mem0_ext(
 

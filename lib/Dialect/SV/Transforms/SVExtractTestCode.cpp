@@ -252,7 +252,7 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
       hw::InnerSymAttr::get(b.getStringAttr(
           ("__ETC_" + getVerilogModuleNameAttr(op).getValue() + suffix)
               .str())));
-  inst->setAttr("doNotPrint", b.getBoolAttr(true));
+  inst.setDoNotPrintAttr(b.getUnitAttr());
   b = OpBuilder::atBlockEnd(
       &op->getParentOfType<mlir::ModuleOp>()->getRegion(0).front());
 
@@ -338,10 +338,11 @@ static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
 static bool isBound(hw::HWModuleLike op, hw::InstanceGraph &instanceGraph) {
   auto *node = instanceGraph.lookup(op);
   return llvm::any_of(node->uses(), [](igraph::InstanceRecord *a) {
-    auto inst = a->getInstance();
+    auto inst = a->getInstance<hw::HWInstanceLike>();
     if (!inst)
       return false;
-    return inst->hasAttr("doNotPrint");
+
+    return inst.getDoNotPrint();
   });
 }
 

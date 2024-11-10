@@ -759,8 +759,9 @@ module Expressions;
     // CHECK: moore.neg [[TMP1]] : i32
     c = -a;
     // CHECK: [[TMP1:%.+]] = moore.read %v
-    // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.array<2 x i4> -> !moore.i32
-    // CHECK: moore.neg [[TMP2]] : i32
+    // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.array<2 x i4> -> !moore.i8
+    // CHECK: [[TMP3:%.+]] = moore.zext [[TMP2]] : i8 -> i32
+    // CHECK: moore.neg [[TMP3]] : i32
     c = -v;
     // CHECK: [[TMP1:%.+]] = moore.read %a
     // CHECK: moore.not [[TMP1]] : i32
@@ -831,8 +832,9 @@ module Expressions;
     c = a + b;
     // CHECK: [[TMP1:%.+]] = moore.read %a
     // CHECK: [[TMP2:%.+]] = moore.read %v
-    // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.array<2 x i4> -> !moore.i32
-    // CHECK: moore.add [[TMP1]], [[TMP3]] : i32
+    // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.array<2 x i4> -> !moore.i8
+    // CHECK: [[TMP4:%.+]] = moore.zext [[TMP3]] : i8 -> i32
+    // CHECK: moore.add [[TMP1]], [[TMP4]] : i32
     c = a + v;
     // CHECK: [[TMP1:%.+]] = moore.read %a
     // CHECK: [[TMP2:%.+]] = moore.read %b
@@ -1305,15 +1307,15 @@ module Conversion;
   // Implicit conversion.
   // CHECK: %a = moore.variable
   // CHECK: [[TMP1:%.+]] = moore.read %a
-  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i16 -> !moore.i32
+  // CHECK: [[TMP2:%.+]] = moore.sext [[TMP1]] : i16 -> i32
   // CHECK: %b = moore.variable [[TMP2]]
   shortint a;
   int b = a;
 
   // Explicit conversion.
   // CHECK: [[TMP1:%.+]] = moore.read %a
-  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i16 -> !moore.i8
-  // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.i8 -> !moore.i32
+  // CHECK: [[TMP2:%.+]] = moore.trunc [[TMP1]] : i16 -> i8
+  // CHECK: [[TMP3:%.+]] = moore.sext [[TMP2]] : i8 -> i32
   // CHECK: %c = moore.variable [[TMP3]]
   int c = byte'(a);
 
@@ -1327,7 +1329,7 @@ module Conversion;
 
   // Width conversion.
   // CHECK: [[TMP1:%.+]] = moore.read %b
-  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.i19
+  // CHECK: [[TMP2:%.+]] = moore.trunc [[TMP1]] : i32 -> i19
   // CHECK: %e = moore.variable [[TMP2]]
   bit signed [18:0] e = 19'(b);
 
@@ -2049,3 +2051,24 @@ endmodule
 module PortCastB (input bit [0:0][31:0] a, output bit [0:0][31:0] b);
   assign b = a;
 endmodule
+
+// CHECK-LABEL: func.func private @SignCastsA(
+// CHECK-SAME: %arg0: !moore.l16
+function void SignCastsA(logic [15:0] value);
+  // CHECK: [[TMP:%.+]] = moore.zext %arg0 : l16 -> l32
+  // CHECK: call @SignCastsB([[TMP]])
+  SignCastsB($unsigned(value));
+  // CHECK: [[TMP:%.+]] = moore.sext %arg0 : l16 -> l32
+  // CHECK: call @SignCastsB([[TMP]])
+  SignCastsB($signed(value));
+
+  // CHECK: [[TMP:%.+]] = moore.zext %arg0 : l16 -> l32
+  // CHECK: call @SignCastsB([[TMP]])
+  SignCastsB(unsigned'(value));
+  // CHECK: [[TMP:%.+]] = moore.sext %arg0 : l16 -> l32
+  // CHECK: call @SignCastsB([[TMP]])
+  SignCastsB(signed'(value));
+endfunction
+
+function void SignCastsB(logic [31:0] value);
+endfunction

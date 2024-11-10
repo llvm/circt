@@ -21,36 +21,33 @@ class CalyxPrimitive<string mnemonic, list<Trait> traits = []> :
 }
 
 def ConstantOp: CalyxPrimitive<"constant",
-    [ConstantLike, FirstAttrDerivedResultType,
-    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-    AllTypesMatch<["value", "out"]>
+    [ConstantLike, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
     ]> {
-  let summary = "integer or floating point constant";
+  let summary = "constant capable of representing an integer or floating point value";
   let description = [{
-    The `constant` operation produces an SSA value equal to some integer or
-    floating-point constant specified by an attribute.
+    The `constant` operation is a wrapper around bit vectors with fixed-size number of bits.
+    Specific value and intended type should be specified via attribute only.
 
     Example:
 
     ```
     // Integer constant
-    %1 = calyx.constant 42 : i32
+    %1 = calyx.constant <42 : i32> : i32
 
     // Floating point constant
-    %1 = calyx.constant 42.00+e00 : f32
+    %1 = calyx.constant <4.2 : f32> : i32
     ```
   }];
-  let arguments = (ins TypedAttrInterface:$value);
+  let arguments = (ins SymbolNameAttr:$sym_name, TypedAttrInterface:$value);
 
-  let results = (outs SignlessIntegerOrFloatLike:$out);
+  let results = (outs AnySignlessInteger:$out);
 
   let builders = [
-    /// Build a ConstantOp from a prebuilt attribute.
-    OpBuilder <(ins "StringRef":$sym_name, "TypedAttr":$attr)>,
+    OpBuilder <(ins "StringRef":$sym_name, "Attribute":$attr, "Type":$type)>,
   ];
 
   let hasFolder = 1;
-  let assemblyFormat = "attr-dict $value";
+  let assemblyFormat = "$sym_name ` ` `<` $value `>` attr-dict `:` qualified(type($out))";
   let hasVerifier = 1;
 }
 
@@ -340,7 +337,7 @@ class ArithBinaryFloatingPointLibraryOp<string mnemonic> : ArithBinaryLibraryOp<
 
 def AddFNOp : ArithBinaryFloatingPointLibraryOp<"addFN"> {
   let results = (outs I1:$clk, I1:$reset, I1:$go, I1:$control, I1:$subOp,
-    AnyFloat:$left, AnyFloat:$right, AnySignlessInteger:$roundingMode, AnyFloat:$out,
+    AnySignlessInteger:$left, AnySignlessInteger:$right, AnySignlessInteger:$roundingMode, AnySignlessInteger:$out,
     AnySignlessInteger:$exceptionalFlags, I1:$done);
 
   let extraClassDefinition = [{
@@ -352,11 +349,11 @@ def AddFNOp : ArithBinaryFloatingPointLibraryOp<"addFN"> {
 
     SmallVector<Direction> $cppClass::portDirections() {
       return {Input, Input, Input, Input, Input, Input, Input, Input, Output, Output, Output};
-      }
+    }
 
     void $cppClass::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
       getCellAsmResultNames(setNameFn, *this, this->portNames());
-      }
+    }
 
     bool $cppClass::isCombinational() { return false; }
 

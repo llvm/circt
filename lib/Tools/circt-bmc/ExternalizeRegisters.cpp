@@ -187,7 +187,8 @@ void ExternalizeRegistersPass::runOnOperation() {
               instanceOp.getLoc(), resTypes, instanceOp.getInstanceNameAttr(),
               instanceOp.getModuleNameAttr(), instanceOp.getInputs(),
               builder.getArrayAttr(argNames), builder.getArrayAttr(resultNames),
-              instanceOp.getParametersAttr(), instanceOp.getInnerSymAttr());
+              instanceOp.getParametersAttr(), instanceOp.getInnerSymAttr(),
+              instanceOp.getDoNotPrintAttr());
           for (auto [output, name] :
                zip(newInst->getResults().take_back(newOutputs.size()),
                    newOutputNames))
