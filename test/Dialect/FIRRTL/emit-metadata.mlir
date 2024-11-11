@@ -611,14 +611,18 @@ firrtl.circuit "Foo" {
 
 // -----
 
-// Test that a memory that is instantiated outside the design produces OM and
-// Configuration File metadata, but no Memory JSON.
+// Memories that are outside the design should have empty OM hierarchies, empty
+// JSON files, and populated configuration files.
+//
+// This test is checking three "outside the design" situations:
+//
+//   1. @m1 is instantiated in the test-harness
+//   2. @m2 is instantiated under a layer in the test harness
+//   3. @m3 is instantiated under a layer in the design
 
 firrtl.circuit "Foo" {
-  firrtl.module private @m() {
-    firrtl.instance m_ext @m_ext()
-  }
-  firrtl.memmodule private @m_ext() attributes {
+  firrtl.layer @A bind {}
+  firrtl.memmodule private @m1() attributes {
     dataWidth = 8 : ui32,
     depth = 16 : ui64,
     extraPorts = [],
@@ -629,8 +633,34 @@ firrtl.circuit "Foo" {
     readLatency = 1 : ui32,
     writeLatency = 1 : ui32
   }
-  firrtl.module @Baz() {
-    firrtl.instance m sym @m @m()
+  firrtl.memmodule private @m2() attributes {
+    dataWidth = 8 : ui32,
+    depth = 32 : ui64,
+    extraPorts = [],
+    maskBits = 1 : ui32,
+    numReadPorts = 1 : ui32,
+    numWritePorts = 0 : ui32,
+    numReadWritePorts = 0 : ui32,
+    readLatency = 1 : ui32,
+    writeLatency = 1 : ui32
+  }
+  firrtl.memmodule private @m3() attributes {
+    dataWidth = 8 : ui32,
+    depth = 64 : ui64,
+    extraPorts = [],
+    maskBits = 1 : ui32,
+    numReadPorts = 1 : ui32,
+    numWritePorts = 0 : ui32,
+    numReadWritePorts = 0 : ui32,
+    readLatency = 1 : ui32,
+    writeLatency = 1 : ui32
+  }
+  firrtl.module @Foo() {
+    firrtl.instance m1 @m1()
+    firrtl.layerblock @A {
+      firrtl.instance m2 @m2()
+    }
+    firrtl.instance bar sym @bar @Bar()
   }
   firrtl.module @Bar() attributes {
     annotations = [
@@ -639,26 +669,43 @@ firrtl.circuit "Foo" {
       }
     ]
   } {
-  }
-  firrtl.module @Foo() {
-    firrtl.instance bar sym @bar @Bar()
-    firrtl.instance baz sym @baz @Baz()
+    firrtl.layerblock @A {
+      firrtl.instance m3 @m3()
+    }
   }
 }
 
 // (1) OM Info -----------------------------------------------------------------
-// No distinct annotation is added to the memory instance.
+// No distinct annotations are added to memory instances.
 //
-// CHECK-LABEL:         firrtl.module @Baz()
-// CHECK-NEXT:            firrtl.instance m
+// CHECK-LABEL:         firrtl.module @Foo(
+// CHECK-NEXT:            firrtl.instance m1
 // CHECK-NOT:               id = distinct
-// CHECK-SAME:              @m()
+// CHECK-SAME:              @m1()
+// CHECK-NEXT:            firrtl.layerblock @A {
+// CHECK-NEXT:              firrtl.instance m2
+// CHECK-NOT:                 id = distinct
+// CHECK-SAME:                @m2()
+//
+// CHECK-LABEL:         firrtl.module @Bar()
+// CHECK-NEXT:            firrtl.layerblock @A {
+// CHECK-NEXT:              firrtl.instance m3
+// CHECK-NOT:                 id = distinct
+// CHECK-SAME:                @m3()
+//
+// Use empty paths for the memories.
 //
 // CHECK-LABEL:         firrtl.class @MemoryMetadata({{.*$}}
+// CHECK:                 %[[#pathList:]] = firrtl.list.create : !firrtl.list<path>
+// CHECK:                 %[[memoryObject:.+]] = firrtl.object @MemorySchema(
+// CHECK:                 %[[#memPaths:]] = firrtl.object.subfield %[[memoryObject]][hierarchy_in]
+// CHECK-NEXT:            firrtl.propassign %[[#memPaths]], %[[#pathList]]
 //
-// The path for this memory should be empty.
+// CHECK:                 %[[#pathList:]] = firrtl.list.create : !firrtl.list<path>
+// CHECK:                 %[[memoryObject:.+]] = firrtl.object @MemorySchema(
+// CHECK:                 %[[#memPaths:]] = firrtl.object.subfield %[[memoryObject]][hierarchy_in]
+// CHECK-NEXT:            firrtl.propassign %[[#memPaths]], %[[#pathList]]
 //
-// CHECK-NOT:             firrtl.path instance distinct
 // CHECK:                 %[[#pathList:]] = firrtl.list.create : !firrtl.list<path>
 // CHECK:                 %[[memoryObject:.+]] = firrtl.object @MemorySchema(
 // CHECK:                 %[[#memPaths:]] = firrtl.object.subfield %[[memoryObject]][hierarchy_in]
@@ -670,18 +717,24 @@ firrtl.circuit "Foo" {
 
 // (3) Configuration File ------------------------------------------------------
 // CHECK-LABEL:         emit.file "mems.conf"
-// CHECK-NEXT{LITERAL}:   sv.verbatim "name {{0}} depth 16 width 8 ports read\0A"
+// CHECK-NEXT:            sv.verbatim
+// CHECK-SAME{LITERAL}:    name {{0}} depth 16 width 8 ports read\0A
+// CHECK-SAME{LITERAL}:    name {{1}} depth 32 width 8 ports read\0A
+// CHECK-SAME{LITERAL}:    name {{2}} depth 64 width 8 ports read\0A
+// CHECK-SAME:             symbols = [@m1, @m2, @m3]
 
 // -----
 
 // Test that a memory that is instantiated both in the design and not in the
-// design produces the correct metadata.
+// design produces the correct metadata.  Test the following combiations of in
+// and out of the design:
+//
+//   1. @m1 is testharness and design
+//   2. @m2 is layer and design
 
 firrtl.circuit "Foo" {
-  firrtl.module private @m() {
-    firrtl.instance m_ext @m_ext()
-  }
-  firrtl.memmodule private @m_ext() attributes {
+  firrtl.layer @A bind {}
+  firrtl.memmodule private @m1() attributes {
     dataWidth = 8 : ui32,
     depth = 16 : ui64,
     extraPorts = [],
@@ -692,8 +745,26 @@ firrtl.circuit "Foo" {
     readLatency = 1 : ui32,
     writeLatency = 1 : ui32
   }
-  firrtl.module @Baz() {
-    firrtl.instance m sym @m @m()
+  firrtl.module private @m1_ext() {
+    firrtl.instance m @m1()
+  }
+  firrtl.memmodule private @m2() attributes {
+    dataWidth = 8 : ui32,
+    depth = 32 : ui64,
+    extraPorts = [],
+    maskBits = 1 : ui32,
+    numReadPorts = 1 : ui32,
+    numWritePorts = 0 : ui32,
+    numReadWritePorts = 0 : ui32,
+    readLatency = 1 : ui32,
+    writeLatency = 1 : ui32
+  }
+  firrtl.module private @m2_ext() {
+    firrtl.instance m @m2()
+  }
+  firrtl.module @Foo() {
+    firrtl.instance m1 @m1_ext()
+    firrtl.instance bar sym @bar @Bar()
   }
   firrtl.module @Bar() attributes {
     annotations = [
@@ -702,33 +773,59 @@ firrtl.circuit "Foo" {
       }
     ]
   } {
-    firrtl.instance baz sym @baz @Baz()
-  }
-  firrtl.module @Foo() {
-    firrtl.instance bar sym @bar @Bar()
-    firrtl.instance baz sym @baz @Baz()
+    firrtl.instance m1 sym @m1 @m1_ext()
+    firrtl.instance m2_1 sym @m2_1 @m2_ext()
+    firrtl.layerblock @A {
+      firrtl.instance m2_2 sym @m2_2 @m2_ext()
+    }
   }
 }
 
 // (1) OM Info -----------------------------------------------------------------
+//
+// Hierarchical paths are added for the two paths in the design.
+//
 // CHECK-LABEL:         firrtl.circuit "Foo"
-// CHECK:                 hw.hierpath private @memNLA [@Bar::@baz, @Baz::@m]
+// CHECK-DAG:             hw.hierpath private @[[hierPath_m1:.+]] [@Bar::@m1]
+// CHECK-DAG:             hw.hierpath private @[[hierPath_m2_1:.+]] [@Bar::@m2_1]
 //
-// There should be only one tracker on the instance.
+// Trackers are added only for instances in the design.
 //
-// CHECK-LABEL:         firrtl.module @Baz()
-// CHECK-NEXT:            firrtl.instance m
-// CHECK-SAME:              annotations = [{circt.nonlocal = @memNLA, class = "circt.tracker", id = distinct[[[#memId:]]]<>}]
+// CHECK-LABEL:         firrtl.module @Foo(
+// CHECK-NEXT:            firrtl.instance m1
+// CHECK-NOT:               id = distinct
+// CHECK-SAME:              @m1
 //
-// This uses an unresolvable path, i.e., one that references a distinct ID which
-// is not defined elsewhere in the circuit.  This relies on later passes to
-// interpret this as "optimized away" and not emit it.  This is admittedly janky
-// and should be cleaned up---there's no point in generating this only to delete
-// it later.
+// CHECK-LABEL:         firrtl.module @Bar()
+// CHECK-NEXT:            firrtl.instance m1
+// CHECK-SAME:              {circt.nonlocal = @[[hierPath_m1]], class = "circt.tracker", id = distinct[[[#m1Id:]]]<>}
+// CHECK-SAME:              @m1_ext()
+// CHECK-NEXT:            firrtl.instance m2_1
+// CHECK-SAME:              {circt.nonlocal = @[[hierPath_m2_1]], class = "circt.tracker", id = distinct[[[#m2_1Id:]]]<>}
+// CHECK-SAME:              @m2_ext()
+// CHECK-NEXT:            firrtl.layerblock @A {
+// CHECK-NEXT:              firrtl.instance m2_2
+// CHECK-NOT:                 id = distinct
+// CHECK-SAME:                @m2_ext()
+//
+// This uses an unresolvable path for the memory that is not in the design.  An
+// unresolvable path is one which references a tracker with an ID that does not
+// exist.  This relies on later passes to interpret this as "optimized away" and
+// not emit it.  This is admittedly janky and should be cleaned up---there's no
+// point in generating this and putting it in the path list if the path is
+// definitely unresolvable.
 //
 // CHECK-LABEL:         firrtl.class @MemoryMetadata({{.*$}}
+//
+// CHECK:                 %[[#memIdPath:]] = firrtl.path instance distinct[[[#m1Id]]]<>
 // CHECK:                 %[[#unresolvablePath:]] = firrtl.path reference distinct[[[#]]]<>
-// CHECK:                 %[[#memIdPath:]] = firrtl.path instance distinct[[[#memId]]]<>
+// CHECK:                 %[[#pathList:]] = firrtl.list.create %[[#memIdPath]], %[[#unresolvablePath]] : !firrtl.list<path>
+// CHECK:                 %[[memoryObject:.+]] = firrtl.object @MemorySchema(
+// CHECK:                 %[[#memPaths:]] = firrtl.object.subfield %[[memoryObject]][hierarchy_in]
+// CHECK-NEXT:            firrtl.propassign %[[#memPaths]], %[[#pathList]]
+//
+// CHECK:                 %[[#unresolvablePath:]] = firrtl.path reference distinct[[[#]]]<>
+// CHECK:                 %[[#memIdPath:]] = firrtl.path instance distinct[[[#m2_1Id]]]<>
 // CHECK:                 %[[#pathList:]] = firrtl.list.create %[[#unresolvablePath]], %[[#memIdPath]] : !firrtl.list<path>
 // CHECK:                 %[[memoryObject:.+]] = firrtl.object @MemorySchema(
 // CHECK:                 %[[#memPaths:]] = firrtl.object.subfield %[[memoryObject]][hierarchy_in]
@@ -738,13 +835,18 @@ firrtl.circuit "Foo" {
 // CHECK-LABEL:         emit.file "metadata{{/|\\\\}}seq_mems.json"
 // CHECK-NEXT:            sv.verbatim "[
 // CHECK-SAME:              \22hierarchy\22: [
-// CHECK-SAME{LITERAL}:       \22{{3}}.{{4}}.{{5}}.m_ext\22
+// CHECK-SAME{LITERAL}:       \22{{3}}.{{4}}.m\22
+// CHECK-SAME{LITERAL}:       \22{{3}}.{{6}}.m\22
 // CHECK-SAME:              ]
-// CHECK-SAME:              symbols = [@m_ext, @Foo, #hw.innerNameRef<@Foo::@bar>, @Bar, #hw.innerNameRef<@Bar::@baz>, #hw.innerNameRef<@Baz::@m>]
+// The regex `{{(@|\#)[^,]+,}}` is matching a symbol or inner name ref.
+// CHECK-SAME:              symbols = [{{(@|\#)[^,]+,}} {{(@|\#)[^,]+,}} {{(@|\#)[^,]+,}} @Bar, #hw.innerNameRef<@Bar::@m1>, {{(@|\#)[^,]+,}} #hw.innerNameRef<@Bar::@m2_1>
 
 // (3) Configuration File ------------------------------------------------------
 // CHECK-LABEL:         emit.file "mems.conf"
-// CHECK-NEXT{LITERAL}:   sv.verbatim "name {{0}} depth 16 width 8 ports read\0A"
+// CHECK-NEXT:            sv.verbatim
+// CHECK-SAME{LITERAL}:     name {{0}} depth 16 width 8 ports read\0
+// CHECK-SAME{LITERAL}:     name {{1}} depth 32 width 8 ports read\0
+// CHECK-SAME:              symbols = [@m1, @m2]
 
 // -----
 
