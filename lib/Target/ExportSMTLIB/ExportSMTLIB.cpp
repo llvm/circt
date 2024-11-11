@@ -560,8 +560,6 @@ struct StatementVisitor
 
   LogicalResult visitSMTOp(ResetOp op, mlir::raw_indented_ostream &stream,
                            ValueMap &valueMap) {
-    if (op->getNumResults() != 0)
-      return op.emitError() << "must not have any result values";
     stream << "(reset)\n";
     return success();
   }
