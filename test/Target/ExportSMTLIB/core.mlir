@@ -118,4 +118,8 @@ smt.solver () : () -> () {
 
   // CHECK: (reset)
   // CHECK-INLINED: (reset)
+  smt.reset
+
+  // CHECK: (reset)
+  // CHECK-INLINED: (reset)
 }
