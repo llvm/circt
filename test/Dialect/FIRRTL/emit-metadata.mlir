@@ -72,9 +72,13 @@ firrtl.circuit "DUTBlackboxes" attributes {
     }
   ]
 } {
-  firrtl.module @DUTBlackboxes() attributes {annotations = [
-      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
-  }
+  firrtl.module @DUTBlackboxes() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {}
 // CHECK-NOT:  emit.file ""
 // CHECK:      emit.file "dut_blackboxes.json" {
 // CHECK-NEXT:   emit.verbatim "[]"
@@ -93,9 +97,13 @@ firrtl.circuit "TestBlackboxes" attributes {
     }
   ]
 } {
-  firrtl.module @TestBlackboxes() attributes {annotations = [
-      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
-  }
+  firrtl.module @TestBlackboxes() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {}
 // CHECK-NOT:  emit.file ""
 // CHECK:      emit.file "test_blackboxes.json" {
 // CHECK-NEXT:   emit.verbatim "[]"
