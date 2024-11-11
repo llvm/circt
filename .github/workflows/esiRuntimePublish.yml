@@ -17,7 +17,7 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - os: ubuntu-20.04
+          - os: ubuntu-20.04:20241006.1.0
             cibw_build: cp38-manylinux_x86_64
           - os: ubuntu-20.04
             cibw_build: cp39-manylinux_x86_64
