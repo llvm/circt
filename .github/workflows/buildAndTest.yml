@@ -148,8 +148,8 @@ jobs:
             mode: Debug
             assert: ON
             shared: ON
-          - cc: gcc
-            cxx: g++
+          - cc: gcc-11
+            cxx: g++-11
             mode: Release
             assert: OFF
             shared: OFF
