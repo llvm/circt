@@ -54,10 +54,10 @@ if(ESI_STATIC_RUNTIME)
 endif()
 
 # We need zlib to uncompress the manifest.
-find_package(ZLIB)
-if(ZLIB_FOUND)
-  set(ZLIB_LIBRARY ZLIB::ZLIB)
-else()
+# find_package(ZLIB)
+# if(ZLIB_FOUND)
+#   set(ZLIB_LIBRARY ZLIB::ZLIB)
+# else()
   message("-- zlib not found, pulling down zlib from git")
   set(ZLIB_BUILD_EXAMPLES OFF)
   FetchContent_Declare(
@@ -72,7 +72,7 @@ else()
   else()
     set(ZLIB_LIBRARY zlib)
   endif()
-endif()
+# endif()
 
 # In a Python wheel build, we need to install libraries to different places.
 option(WHEEL_BUILD "Set up the build for a Python wheel." OFF)
