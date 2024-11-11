@@ -556,11 +556,11 @@ private:
 
       // Copy everything from old memory, except the result type.
       auto newMem = builder.create<MemOp>(
-          resultTypes, memOp.getReadLatency(), memOp.getWriteLatency(),
-          memOp.getDepth(), memOp.getRuw(), memOp.getPortNames().getValue(),
-          memOp.getNameAttr(), memOp.getNameKind(),
-          memOp.getAnnotations().getValue(),
-          memOp.getPortAnnotations().getValue(), memOp.getInnerSymAttr());
+          resultTypes, memOp.getReadLatencyAttr(), memOp.getWriteLatencyAttr(),
+          memOp.getDepthAttr(), memOp.getRuwAttr(), memOp.getPortNamesAttr(),
+          memOp.getNameAttr(), memOp.getNameKindAttr(),
+          memOp.getAnnotationsAttr(), memOp.getPortAnnotationsAttr(),
+          memOp.getInnerSymAttr(), memOp.getInitAttr(), memOp.getPrefixAttr());
       // Now replace the result of old memory with the new one.
       for (const auto &portIt : llvm::enumerate(memOp.getResults())) {
         // Old result.
