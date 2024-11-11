@@ -54,10 +54,10 @@ if(ESI_STATIC_RUNTIME)
 endif()
 
 # We need zlib to uncompress the manifest.
-# find_package(ZLIB)
-# if(ZLIB_FOUND)
-#   set(ZLIB_LIBRARY ZLIB::ZLIB)
-# else()
+find_package(ZLIB)
+if(ZLIB_FOUND)
+  set(ZLIB_LIBRARY ZLIB::ZLIB)
+else()
   message("-- zlib not found, pulling down zlib from git")
   set(ZLIB_BUILD_EXAMPLES OFF)
   FetchContent_Declare(
@@ -72,7 +72,7 @@ endif()
   else()
     set(ZLIB_LIBRARY zlib)
   endif()
-# endif()
+endif()
 
 # In a Python wheel build, we need to install libraries to different places.
 option(WHEEL_BUILD "Set up the build for a Python wheel." OFF)
@@ -189,18 +189,18 @@ install(TARGETS ESICppRuntime
   COMPONENT ESIRuntime
 )
 
-if(NOT ESI_STATIC_RUNTIME)
-  install(IMPORTED_RUNTIME_ARTIFACTS ESICppRuntime
-    RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
-    COMPONENT ESIRuntime
-  )
-endif()
-install(RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
-  DESTINATION ${LIB_DIR}
-  PRE_EXCLUDE_REGEXES .*
-  PRE_INCLUDE_REGEXES zlibd zlib
-  COMPONENT ESIRuntime
-)
+# if(NOT ESI_STATIC_RUNTIME)
+#   install(IMPORTED_RUNTIME_ARTIFACTS ESICppRuntime
+#     RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
+#     COMPONENT ESIRuntime
+#   )
+# endif()
+# install(RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
+#   DESTINATION ${LIB_DIR}
+#   PRE_EXCLUDE_REGEXES .*
+#   PRE_INCLUDE_REGEXES zlibd zlib
+#   COMPONENT ESIRuntime
+# )
 install(FILES ${ESICppRuntimeHeaders}
   DESTINATION include/esi
   COMPONENT ESIRuntime
