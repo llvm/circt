@@ -558,6 +558,12 @@ struct StatementVisitor
     return success();
   }
 
+  LogicalResult visitSMTOp(ResetOp op, mlir::raw_indented_ostream &stream,
+                           ValueMap &valueMap) {
+    stream << "(reset)\n";
+    return success();
+  }
+
   LogicalResult visitSMTOp(CheckOp op, mlir::raw_indented_ostream &stream,
                            ValueMap &valueMap) {
     if (op->getNumResults() != 0)

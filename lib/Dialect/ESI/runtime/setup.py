@@ -107,6 +107,7 @@ class CMakeBuild(build_py):
 
     # Finally run the cmake configure.
     subprocess.check_call(["cmake", src_dir] + cmake_args, cwd=cmake_build_dir)
+    print(" ".join(["cmake", src_dir] + cmake_args))
 
     # Run the build.
     subprocess.check_call([

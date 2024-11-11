@@ -219,8 +219,17 @@ struct ObjectModelIR {
     auto memPaths = instancePathCache.getAbsolutePaths(mem);
     SmallVector<Value> memoryHierPaths;
     SmallVector<Value> finalInstanceNames;
-    // Memory hierarchy is relevant only for memories under DUT.
-    bool inDut = instanceInfo.anyInstanceUnderEffectiveDut(mem);
+    // Add metadata for memory paths that are in the design.  There are two
+    // slightly different code paths here.  If no instance is in the design,
+    // then just skip the memory.  If some instances are in the designs and some
+    // are not, then add paths for memories in the design.  For memories which
+    // are then _not_ in the design, give them unresolvable distinct attribute
+    // paths.  The LowerClasses pass will later treat these as "optimized away"
+    // and create an empty path.
+    //
+    // TODO: This incongruity seems bad.  Can we instead not generate metadata
+    // for any path not in the design?
+    bool inDut = instanceInfo.anyInstanceInEffectiveDesign(mem);
     if (inDut) {
       for (auto memPath : memPaths) {
         {
@@ -242,6 +251,12 @@ struct ObjectModelIR {
             foundDut = true;
           }
 
+          // This path is not in the design.  Do not record it.
+          if (inst->getParentOfType<LayerBlockOp>()) {
+            namepath.clear();
+            break;
+          }
+
           namepath.emplace_back(firrtl::getInnerRefTo(
               inst, [&](auto mod) -> hw::InnerSymbolNamespace & {
                 return getModuleNamespace(mod);
@@ -250,6 +265,7 @@ struct ObjectModelIR {
         }
         PathOp pathRef;
         if (!namepath.empty()) {
+          // This is a path that is in the design.
           auto nla = nlaBuilder.create<hw::HierPathOp>(
               mem->getLoc(),
               nlaBuilder.getStringAttr(circtNamespace.newName("memNLA")),
@@ -257,6 +273,9 @@ struct ObjectModelIR {
           nla.setVisibility(SymbolTable::Visibility::Private);
           pathRef = createPathRef(preExtractedLeafInstance, nla, builderOM);
         } else {
+          // This is a path _not_ in the design.
+          //
+          // TODO: This unresolvable distinct seems sketchy.
           pathRef = createPathRef({}, {}, builderOM);
         }
 
@@ -551,7 +570,7 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
                         .str();
 
     // Do not emit any JSON for memories which are not in the DUT.
-    if (!instanceInfo->anyInstanceUnderEffectiveDut(mem))
+    if (!instanceInfo->anyInstanceInEffectiveDesign(mem))
       return;
     // This adds a Json array element entry corresponding to this memory.
     jsonStream.object([&] {
@@ -587,11 +606,18 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
           if (p.empty())
             continue;
 
-          // Only include the memory paths that are under the effective DUT.
+          // Only include the memory paths that are in the design.  This means
+          // that the path has to both include the design and not be under a
+          // layer.
           auto dutMod = instanceInfo->getEffectiveDut();
-          if (llvm::none_of(p, [&](circt::igraph::InstanceOpInterface inst) {
-                return dutMod == inst->getParentOfType<FModuleOp>();
-              }))
+          bool inDut = false, underLayer = false;
+          for (auto inst : p) {
+            auto parent = inst->getParentOfType<FModuleOp>();
+            inDut |= parent == dutMod;
+            if (inst->getParentOfType<LayerBlockOp>())
+              underLayer = true;
+          }
+          if (!inDut || underLayer)
             continue;
 
           auto top = p.top();
