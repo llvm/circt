@@ -1,4 +1,5 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-dedup))' %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-dedup{disable-local-annotations=true}))' %s | FileCheck --check-prefix=DISABLE-LOCAL %s
 
 // CHECK-LABEL: firrtl.circuit "Empty"
 firrtl.circuit "Empty" {
@@ -784,6 +785,8 @@ firrtl.circuit "AllowLocalTrackers" {
   }
 
   // CHECK-NOT: hw.hierpath
+
+  // DISABLE-LOCAL-COUNT-3: hw.hierpath
 
   // CHECK: firrtl.module private @Foo0
   // CHECK: firrtl.mem

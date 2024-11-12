@@ -916,12 +916,13 @@ struct Deduper {
   using RenameMap = DenseMap<StringAttr, StringAttr>;
 
   Deduper(InstanceGraph &instanceGraph, SymbolTable &symbolTable,
-          NLATable *nlaTable, CircuitOp circuit)
+          NLATable *nlaTable, CircuitOp circuit, bool disableLocalAnnotations)
       : context(circuit->getContext()), instanceGraph(instanceGraph),
         symbolTable(symbolTable), nlaTable(nlaTable),
         nlaBlock(circuit.getBodyBlock()),
         nonLocalString(StringAttr::get(context, "circt.nonlocal")),
-        classString(StringAttr::get(context, "class")) {
+        classString(StringAttr::get(context, "class")),
+        disableLocalAnnotations(disableLocalAnnotations) {
     // Populate the NLA cache.
     for (auto nla : circuit.getOps<hw::HierPathOp>())
       nlaCache[nla.getNamepathAttr()] = nla.getSymNameAttr();
@@ -1254,12 +1255,15 @@ private:
       }
       // If the annotation is a local tracker, don't make it non-local. This
       // allows trackers that refer to all instances when the user wants that.
-      if (anno.isClass("circt.tracker")) {
-        auto [it, inserted] =
-            localTrackerIds.insert(anno.getMember<DistinctAttr>("id"));
-        if (inserted)
-          newAnnotations.push_back(anno);
-        continue;
+      // Check the flag to revert to the previous behavior if necessary.
+      if (!disableLocalAnnotations) {
+        if (anno.isClass("circt.tracker")) {
+          auto [it, inserted] =
+              localTrackerIds.insert(anno.getMember<DistinctAttr>("id"));
+          if (inserted)
+            newAnnotations.push_back(anno);
+          continue;
+        }
       }
 
       // Otherwise make the annotation non-local and add it to the set.
@@ -1449,6 +1453,10 @@ private:
 
   /// A module namespace cache.
   DenseMap<Operation *, hw::InnerSymbolNamespace> moduleNamespaces;
+
+  // Disable local annotations and revert to legacy behavior of making
+  // annotations non-local.
+  bool disableLocalAnnotations;
 };
 
 //===----------------------------------------------------------------------===//
@@ -1646,7 +1654,8 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
     auto &instanceGraph = getAnalysis<InstanceGraph>();
     auto *nlaTable = &getAnalysis<NLATable>();
     auto &symbolTable = getAnalysis<SymbolTable>();
-    Deduper deduper(instanceGraph, symbolTable, nlaTable, circuit);
+    Deduper deduper(instanceGraph, symbolTable, nlaTable, circuit,
+                    disableLocalAnnotations);
     Equivalence equiv(context, instanceGraph);
     auto anythingChanged = false;
 
@@ -1851,9 +1860,15 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
     if (!anythingChanged)
       markAllAnalysesPreserved();
   }
+
+public:
+  DedupPass(bool disableLocalAnnotations) {
+    this->disableLocalAnnotations = disableLocalAnnotations;
+  }
 };
 } // end anonymous namespace
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createDedupPass() {
-  return std::make_unique<DedupPass>();
+std::unique_ptr<mlir::Pass>
+circt::firrtl::createDedupPass(bool disableLocalAnnotations) {
+  return std::make_unique<DedupPass>(disableLocalAnnotations);
 }
