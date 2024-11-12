@@ -109,13 +109,15 @@ mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b, llvm::Small
   if (auto mulOp = llvm::dyn_cast<comb::MulOp>(op))
     return b.create<smt::IntMulOp>(loc, b.getType<smt::IntType>(), args);
   if (auto icmp = llvm::dyn_cast<comb::ICmpOp>(op)){
-    if(icmp.getPredicate() == circt::comb::ICmpPredicate::eq)
+    if(icmp.getPredicate() == circt::comb::ICmpPredicate::eq){
       return b.create<smt::EqOp>(loc, args);
+    }
     if(icmp.getPredicate() == circt::comb::ICmpPredicate::ne){
       return b.create<smt::DistinctOp>(loc, args);
-    auto predicate = getSmtPred(icmp.getPredicate());
-    return b.create<smt::IntCmpOp>(loc, predicate, args[0], args[1]);
     }
+    auto predicate = getSmtPred(icmp.getPredicate());
+    llvm::outs()<<"\npredicate: "<<predicate;
+    return b.create<smt::IntCmpOp>(loc, predicate, args[0], args[1]);
   }
 }
 
