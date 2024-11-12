@@ -193,7 +193,6 @@ LogicalResult MachineOpConverter::dispatch(){
   auto machineArgs = machineOp.getArguments();
 
   llvm::SmallVector<mlir::Type> varTypes;
-  llvm::SmallVector<mlir::Type> argTypes;
 
   llvm::SmallVector<mlir::Value> vars;
   llvm::SmallVector<mlir::Value> args;
@@ -208,14 +207,19 @@ LogicalResult MachineOpConverter::dispatch(){
 
   solver.getBodyRegion().emplaceBlock();
 
+  llvm::SmallVector<mlir::Type> argTypes;
+
   b.setInsertionPointToStart(solver.getBody());
   // fsm arguments
   for (auto a : machineArgs){
     if (a.getType().getIntOrFloatBitWidth()==1){
       args.push_back(a);
+      argTypes.push_back(b.getType<smt::BoolType>());
       numArgs++;
     } else {
-      abort();
+      args.push_back(a);
+      argTypes.push_back(b.getType<smt::IntType>());
+      numArgs++;
     }
   }
 
@@ -313,7 +317,7 @@ LogicalResult MachineOpConverter::dispatch(){
 
   for (auto [idx, a]: llvm::enumerate(args)){
     mlir::StringAttr funName = b.getStringAttr(("In_"+std::to_string(idx)));
-    auto range = b.getType<smt::BoolType>();
+    auto range = argTypes[idx];
     smt::DeclareFunOp inFun = b.create<smt::DeclareFunOp>(loc, b.getType<smt::SMTFuncType>(varTypes.back(), range), funName);
     inputFunctions.push_back(inFun);
   }

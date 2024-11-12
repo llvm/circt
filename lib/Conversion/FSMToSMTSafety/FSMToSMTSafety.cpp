@@ -197,7 +197,9 @@ LogicalResult MachineOpConverter::dispatch() {
       argVars.push_back(a);
       numArgs++;
     } else {
-      abort();
+      argVarTypes.push_back(b.getType<smt::IntType>());
+      argVars.push_back(a);
+      numArgs++;
     }
   }
   // fsm outputs
