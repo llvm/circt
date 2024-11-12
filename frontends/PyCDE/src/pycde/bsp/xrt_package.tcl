@@ -50,7 +50,7 @@ set_property range 0x100000 $addr_block
 set_property range_resolve_type "immediate" $addr_block
 set_property range_minimum 0x100000 $addr_block
 
-set reg      [::ipx::add_register "EsiMagicNumberLow" $addr_block]
+set reg      [::ipx::add_register "EsiMagicNumber" $addr_block]
   set_property address_offset 16  $reg
   set_property size           32 $reg
 
