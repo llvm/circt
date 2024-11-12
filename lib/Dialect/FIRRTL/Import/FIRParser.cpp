@@ -2236,6 +2236,11 @@ ParseResult FIRStmtParser::parseOptionalExpPostscript(Value &result,
 template <typename subop>
 FailureOr<Value>
 FIRStmtParser::emitCachedSubAccess(Value base, unsigned indexNo, SMLoc loc) {
+  // Check if we already have created this Subindex op.
+  auto &value = moduleContext.getCachedSubaccess(base, indexNo);
+  if (value)
+    return value;
+
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
   auto baseType = cast<FIRRTLType>(base.getType());
@@ -2245,11 +2250,6 @@ FIRStmtParser::emitCachedSubAccess(Value base, unsigned indexNo, SMLoc loc) {
     (void)subop::inferReturnType(baseType, indexNo, translateLocation(loc));
     return failure();
   }
-
-  // Check if we already have created this Subindex op.
-  auto &value = moduleContext.getCachedSubaccess(base, indexNo);
-  if (value)
-    return value;
 
   // Create the result operation, inserting at the location of the declaration.
   // This will cache the subfield operation for further uses.
