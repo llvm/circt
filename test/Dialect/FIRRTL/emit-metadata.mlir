@@ -82,36 +82,42 @@ firrtl.circuit "TestHarness" attributes {
 }
 
 // (1) Class-based metadata ----------------------------------------------------
+//
 // CHECK:               firrtl.class @RetimeModulesSchema(
 // CHECK-SAME:            in %[[moduleName_in:.+]]: !firrtl.string,
 // CHECK-SAME:            out %moduleName: !firrtl.string
 // CHECK-SAME:          ) {
 // CHECK-NEXT:            firrtl.propassign %moduleName, %[[moduleName_in]]
 // CHECK-NEXT:          }
-
+//
 // CHECK-LABEL:         firrtl.class @RetimeModulesMetadata(
 // CHECK-SAME:            out %Foo_field: !firrtl.class<@RetimeModulesSchema
 // CHECK-SAME:            out %Bar_field: !firrtl.class<@RetimeModulesSchema
 // CHECK-SAME:            out %Quz_field: !firrtl.class<@RetimeModulesSchema
 // CHECK-SAME:          ) {{.*}} {
+//
 // CHECK-NEXT:            %[[#name:]] = firrtl.string "Foo"
 // CHECK-NEXT:            %[[schema:.+]] = firrtl.object @RetimeModulesSchema(
 // CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[schema]][moduleName_in]
 // CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#name]]
 // CHECK-NEXT:            firrtl.propassign %Foo_field, %[[schema]]
+//
 // CHECK-NEXT:            %[[#name:]] = firrtl.string "Bar"
 // CHECK-NEXT:            %[[schema:.+]] = firrtl.object @RetimeModulesSchema(
 // CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[schema]][moduleName_in]
 // CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#name]]
 // CHECK-NEXT:            firrtl.propassign %Bar_field, %[[schema]]
+//
 // CHECK-NEXT:            %[[#name:]] = firrtl.string "Quz"
 // CHECK-NEXT:            %[[schema:.+]] = firrtl.object @RetimeModulesSchema(
 // CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[schema]][moduleName_in]
 // CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#name]]
 // CHECK-NEXT:            firrtl.propassign %Quz_field, %[[schema]]
+//
 // CHECK-NEXT:          }
 
 // (2) JSON file-based metadata ------------------------------------------------
+//
 // CHECK-LABEL:         emit.file "retime_modules.json"
 // CHECK-NEXT:            sv.verbatim "[
 // CHECK-SAME{LITERAL}:     \22{{0}}\22,\0A
