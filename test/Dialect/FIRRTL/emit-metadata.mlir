@@ -128,6 +128,39 @@ firrtl.circuit "TestHarness" attributes {
 
 // -----
 
+// Test that retime information is always emited if there is no
+// design-under-test (DUT) specified.
+
+firrtl.circuit "Foo" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.RetimeModulesAnnotation",
+      filename = "retime_modules.json"
+    }
+  ]
+} {
+  firrtl.module @Bar() attributes {
+    annotations = [
+      {
+        class = "freechips.rocketchip.util.RetimeModuleAnnotation"
+      }
+    ]
+  } {}
+  firrtl.module @Foo() {
+  }
+}
+
+// CHECK-LABEL:         firrtl.class @RetimeModulesMetadata(
+// CHECK-SAME:            out %Bar_field: !firrtl.class<@RetimeModulesSchema
+
+// CHECK-LABEL:         emit.file "retime_modules.json"
+// CHECK-NEXT:            sv.verbatim "[
+// CHECK-SAME{LITERAL}:     \22{{0}}\22
+// CHECK-SAME:            ]"
+// CHECK-SAME:            symbols = [@Bar]
+
+// -----
+
 //===----------------------------------------------------------------------===//
 // SitestBlackbox
 //===----------------------------------------------------------------------===//
