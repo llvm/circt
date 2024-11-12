@@ -86,6 +86,13 @@ int insertStates(llvm::SmallVector<std::string> &states, std::string& st){
   return states.size()-1;
 }
 
+Region* getOutputRegion(llvm::SmallVector<std::pair<mlir::Region*, int>> outputOfStateId, int stateId){
+  for (auto oid: outputOfStateId)
+    if (stateId == oid.second)
+      return oid.first;
+  abort();
+}
+
 circt::smt::IntPredicate getSmtPred(circt::comb::ICmpPredicate cmpPredicate){
   switch (cmpPredicate) {
       case comb::ICmpPredicate::slt:
@@ -281,6 +288,7 @@ LogicalResult MachineOpConverter::dispatch(){
   llvm::SmallVector<mlir::Value> inputFunctions;
 
   llvm::SmallVector<std::string> states;
+  llvm::SmallVector<std::pair<mlir::Region*, int>> outputOfStateId;
 
   // populate states vector, each state has its unique index that is used to populate transitions, too
   
@@ -309,13 +317,21 @@ LogicalResult MachineOpConverter::dispatch(){
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
     std::string stateName = stateOp.getName().str();
     auto fromState = insertStates(states, stateName);
-    
-    if (!stateOp.getTransitions().empty()){
-      for (auto tr: stateOp.getTransitions().front().getOps<fsm::TransitionOp>()){
+    if (!stateOp.getOutput().empty()) {
+      outputOfStateId.push_back({&stateOp.getOutput(), fromState});
+    }
+  }
+
+  for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
+    std::string stateName = stateOp.getName().str();
+    auto fromState = insertStates(states, stateName);
+    if (!stateOp.getTransitions().empty()) {
+      for (auto tr :
+           stateOp.getTransitions().front().getOps<fsm::TransitionOp>()) {
         auto t = parseTransition(tr, fromState, states, loc, b);
-        if (!stateOp.getOutput().empty()){
+        if (!stateOp.getOutput().empty()) {
           t.hasOutput = true;
-          t.output = &stateOp.getOutput();
+          t.output = getOutputRegion(outputOfStateId, t.to); // now look for it! &stateOp.getOutput();
         } else {
           t.hasOutput = false;
         }
