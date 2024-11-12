@@ -212,6 +212,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     // Re-run IMConstProp to propagate constants produced by register
     // optimizations.
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        createSimpleCanonicalizerPass());
     pm.addPass(firrtl::createIMDeadCodeElimPass());
   }
 
