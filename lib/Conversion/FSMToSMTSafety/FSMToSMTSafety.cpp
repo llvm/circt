@@ -75,6 +75,7 @@ int insertStates(llvm::SmallVector<std::string> &states, std::string &st) {
   return states.size() - 1;
 }
 
+
 circt::smt::IntPredicate getSmtPred(circt::comb::ICmpPredicate cmpPredicate) {
   switch (cmpPredicate) {
   case comb::ICmpPredicate::slt:
@@ -97,9 +98,14 @@ circt::smt::IntPredicate getSmtPred(circt::comb::ICmpPredicate cmpPredicate) {
 }
 
 mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b, llvm::SmallVector<mlir::Value> args){
+  // we need to modulo all the operations considering the width of the mlir value!
+  if (auto addOp = llvm::dyn_cast<comb::AddOp>(op)){
+    auto tmp = b.create<smt::IntAddOp>(loc, b.getType<smt::IntType>(), args);
+    auto attr = b.getI32IntegerAttr(op.getOperand(0).getType().getIntOrFloatBitWidth());
+    auto mod = b.create<smt::IntConstantOp>(loc, attr);
+    return b.create<smt::IntModOp>(loc, tmp, mod);
+  }
 
-  if (auto addOp = llvm::dyn_cast<comb::AddOp>(op))
-    return b.create<smt::IntAddOp>(loc, b.getType<smt::IntType>(), args);
   if (auto andOp = llvm::dyn_cast<comb::AndOp>(op))
     return b.create<smt::AndOp>(loc, b.getType<smt::BoolType>(), args);
   if (auto xorOp = llvm::dyn_cast<comb::XorOp>(op))
@@ -107,7 +113,12 @@ mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b, llvm::Small
   if (auto orOp = llvm::dyn_cast<comb::OrOp>(op))
     return b.create<smt::OrOp>(loc, b.getType<smt::BoolType>(), args);
   if (auto mulOp = llvm::dyn_cast<comb::MulOp>(op))
-    return b.create<smt::IntMulOp>(loc, b.getType<smt::IntType>(), args);
+  {
+    auto tmp = b.create<smt::IntMulOp>(loc, b.getType<smt::IntType>(), args);
+    auto attr = b.getI32IntegerAttr(op.getOperand(0).getType().getIntOrFloatBitWidth());
+    auto mod = b.create<smt::IntConstantOp>(loc, attr);
+    return b.create<smt::IntModOp>(loc, tmp, mod);
+  }
   if (auto icmp = llvm::dyn_cast<comb::ICmpOp>(op)){
     if(icmp.getPredicate() == circt::comb::ICmpPredicate::eq){
       return b.create<smt::EqOp>(loc, args);
@@ -116,7 +127,6 @@ mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b, llvm::Small
       return b.create<smt::DistinctOp>(loc, args);
     }
     auto predicate = getSmtPred(icmp.getPredicate());
-    llvm::outs()<<"\npredicate: "<<predicate;
     return b.create<smt::IntCmpOp>(loc, predicate, args[0], args[1]);
   }
 }
@@ -125,11 +135,11 @@ mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b, llvm::Small
 
 mlir::Value getSmtValue(mlir::Value op, const llvm::SmallVector<std::pair<mlir::Value, mlir::Value>>& fsmArgVals, OpBuilder &b, Location &loc){
   // op can be an arg/var of the fsm
-  for (auto fav: fsmArgVals)
+  for (auto fav: fsmArgVals){
     if (op == fav.first){
       return fav.second;
     } 
-  // llvm::outs()<<"\n\nop: "<<op;
+  }
   if (op.getDefiningOp()->getName().getDialect()->getNamespace() == "comb"){
     // op can be the result of a comb operation 
     auto op1 = getSmtValue(op.getDefiningOp()->getOperand(0), fsmArgVals, b, loc);
@@ -169,6 +179,13 @@ Transition parseTransition(fsm::TransitionOp t, int from,
   }
   // todo: output
   return tr;
+}
+
+Region* getOutputRegion(llvm::SmallVector<std::pair<mlir::Region*, int>> outputOfStateId, int stateId){
+  for (auto oid: outputOfStateId)
+    if (stateId == oid.second)
+      return oid.first;
+  abort();
 }
 
 LogicalResult MachineOpConverter::dispatch() {
@@ -248,6 +265,7 @@ LogicalResult MachineOpConverter::dispatch() {
   llvm::SmallVector<mlir::Value> stateFunctions;
 
   llvm::SmallVector<std::string> states;
+  llvm::SmallVector<std::pair<mlir::Region*, int>> outputOfStateId;
 
   // populate states vector, each state has its unique index that is used to
   // populate transitions, too
@@ -256,7 +274,7 @@ LogicalResult MachineOpConverter::dispatch() {
   // initial transition activated as initial condition of the fsm
   std::string initialState = machineOp.getInitialState().str();
 
-  insertStates(states, initialState);
+  auto tmp = insertStates(states, initialState);
 
   // time is an int
   argVarTypes.push_back(b.getType<smt::IntType>());
@@ -277,13 +295,21 @@ LogicalResult MachineOpConverter::dispatch() {
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
     std::string stateName = stateOp.getName().str();
     auto fromState = insertStates(states, stateName);
+    if (!stateOp.getOutput().empty()) {
+      outputOfStateId.push_back({&stateOp.getOutput(), fromState});
+    }
+  }
+
+  for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
+    std::string stateName = stateOp.getName().str();
+    auto fromState = insertStates(states, stateName);
     if (!stateOp.getTransitions().empty()) {
       for (auto tr :
            stateOp.getTransitions().front().getOps<fsm::TransitionOp>()) {
         auto t = parseTransition(tr, fromState, states, loc, b);
         if (!stateOp.getOutput().empty()) {
           t.hasOutput = true;
-          t.output = &stateOp.getOutput();
+          t.output = getOutputRegion(outputOfStateId, t.to); // now look for it! &stateOp.getOutput();
         } else {
           t.hasOutput = false;
         }
@@ -325,6 +351,7 @@ LogicalResult MachineOpConverter::dispatch() {
 
   // // create solver region
 
+
   for (auto [id1, t1] : llvm::enumerate(transitions)) {
     //   // each implication op is in the same region
     auto action = [&t1, &loc, this, &numOut, &argVars,
@@ -336,12 +363,12 @@ LogicalResult MachineOpConverter::dispatch() {
 
       if (t1.hasOutput) {
         llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> avToSmt;
-        for (auto [id, av] : llvm::enumerate(actionArgs))
+        for (auto [id, av] : llvm::enumerate(argVars))
           avToSmt.push_back({av, actionArgs[id]});
         for (auto &op : t1.output->getOps()) {
           // todo: check that updates requiring inputs for operations work
           if (auto outputOp = dyn_cast<fsm::OutputOp>(op)) {
-            for (auto outs : outputOp->getResults()) {
+            for (auto outs : outputOp->getOperands()) {
               auto toRet =
                   getSmtValue(outs, avToSmt, b, loc);
               outputSmtValues.push_back(toRet);
