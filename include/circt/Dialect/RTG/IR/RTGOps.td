@@ -130,15 +130,15 @@ def LabelOp : RTGOp<"label", []> {
 // order.  This means a sequence can start adding operations to a context not
 // in the current set of active contexts.
 
-def OnContextOp : RTGOp<"on_context", [NoTerminator, SingleBlock]> {
+def OnContextOp : RTGOp<"on_context", []> {
   let summary = "places a sequence on a context";
 
   let arguments = (ins AnyTypeOf<[SetTypeOf<ContextResourceType>,
-                                  ContextResourceType]>:$contexts);
-  let regions = (region SizedRegion<1>:$bodyRegion);
+                                  ContextResourceType]>:$contexts,
+                       SequenceType:$sequence);
 
   let assemblyFormat = [{
-    $contexts `:` type($contexts) attr-dict-with-keyword $bodyRegion
+    $contexts `,` $sequence`:` type($contexts) `,` type($sequence) attr-dict
   }];
 }
 

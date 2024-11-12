@@ -253,12 +253,22 @@ public:
           std::get<LeafEvalValue>(*results[op.getContexts()])));
     }
 
-    OpBuilder builder(op);
-    auto renderedContextOp = builder.create<RenderedContextOp>(
+    IRRewriter rewriter(op);
+    auto renderedContextOp = rewriter.create<RenderedContextOp>(
         op.getLoc(), selectors, selectors.size());
     IRMapping mapper;
-    for (unsigned i = 0; i < selectors.size(); ++i)
-      op.getBodyRegion().cloneInto(&renderedContextOp->getRegion(i), mapper);
+    auto sequenceClosure = std::get<SequenceClosure>(
+        std::get<LeafEvalValue>(*results[op.getSequence()]));
+    for (unsigned i = 0; i < selectors.size(); ++i) {
+      auto sequence = symTable.lookupNearestSymbolFrom<SequenceOp>(
+          op->getParentOfType<ModuleOp>(), sequenceClosure.symbol);
+      auto *clone = sequence->clone();
+      rewriter.inlineBlockBefore(&clone->getRegion(0).front(),
+                                 &renderedContextOp->getRegion(i).front(),
+                                 renderedContextOp->getRegion(i).front().end(),
+                                 sequenceClosure.args);
+      clone->erase();
+    }
 
     op->erase();
     return success();

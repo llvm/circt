@@ -58,19 +58,11 @@ func.func @bags(%arg0: i32, %arg1: i32) {
 
 // CHECK-LABEL: @contexts
 func.func @contexts(%arg0: !rtg.context_resource, %arg1: !rtg.set<!rtg.context_resource>) {
-  // CHECK: rtg.on_context %arg0 : !rtg.context_resource {
-  // CHECK:   rtg.invoke %{{.*}} : !rtg.sequence
-  // CHECK: }
-  // CHECK: rtg.on_context %arg1 : !rtg.set<!rtg.context_resource> {
-  // CHECK:   rtg.invoke %{{.*}} : !rtg.sequence
-  // CHECK: }
+  // CHECK: rtg.on_context %arg0, {{%.+}} : !rtg.context_resource, !rtg.sequence
+  // CHECK: rtg.on_context %arg1, {{%.+}} : !rtg.set<!rtg.context_resource>, !rtg.sequence
   %seq = rtg.sequence_closure @seq0
-  rtg.on_context %arg0 : !rtg.context_resource {
-    rtg.invoke %seq : !rtg.sequence
-  }
-  rtg.on_context %arg1 : !rtg.set<!rtg.context_resource> {
-    rtg.invoke %seq : !rtg.sequence
-  }
+  rtg.on_context %arg0, %seq : !rtg.context_resource, !rtg.sequence
+  rtg.on_context %arg1, %seq : !rtg.set<!rtg.context_resource>, !rtg.sequence
 
   // CHECK: rtg.rendered_context [0, 1] {
   // CHECK:   rtg.invoke %{{.*}} : !rtg.sequence
