@@ -269,6 +269,11 @@ def Dedup : Pass<"firrtl-dedup", "firrtl::CircuitOp"> {
     Statistic<"erasedModules", "num-erased-modules",
       "Number of modules which were erased by deduplication">
   ];
+  let options = [
+    Option<"disableLocalAnnotations", "disable-local-annotations", "bool",
+           "false", "Disable local annotations and revert to legacy behavior " #
+	            "of making annotations non-local">
+  ];
   let constructor = "circt::firrtl::createDedupPass()";
 }
 
