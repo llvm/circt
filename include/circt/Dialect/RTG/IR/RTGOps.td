@@ -214,6 +214,50 @@ def SetDifferenceOp : RTGOp<"set_difference", [
   }];
 }
 
+//===- Bag Operations ------------------------------------------------------===//
+
+def BagCreateOp : RTGOp<"bag_create", [
+  Pure,
+  AttrSizedOperandSegments,
+]> {
+  let summary = "constructs a set";
+
+  let arguments = (ins Variadic<AnyType>:$elements,
+                       Variadic<Index>:$weights);
+  let results = (outs BagType:$bag);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
+def BagSelectRandomOp : RTGOp<"bag_select_random", [
+  Pure,
+  TypesMatchWith<"output must be element type of input bag", "bag", "output",
+                 "llvm::cast<rtg::BagType>($_self).getElementType()">
+]> {
+  let summary = "select a random element from the bag";
+
+  let arguments = (ins BagType:$bag);
+  let results = (outs AnyType:$output);
+
+  let assemblyFormat = "$bag `:` qualified(type($bag)) attr-dict";
+}
+
+def BagDifferenceOp : RTGOp<"bag_difference", [
+  Pure,
+  AllTypesMatch<["original", "diff", "output"]>
+]> {
+  let summary = "computes the difference of two bags";
+
+  let arguments = (ins BagType:$original,
+                       BagType:$diff);
+  let results = (outs BagType:$output);
+
+  let assemblyFormat = [{
+    $original `,` $diff `:` qualified(type($output)) attr-dict
+  }];
+}
+
 //===- Test Specification Operations --------------------------------------===//
 
 def TestOp : RTGOp<"test", [

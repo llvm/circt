@@ -61,6 +61,19 @@ def SetType : RTGTypeDef<"Set"> {
 
 class SetTypeOf<Type elementType> : ContainerType<elementType, SetType.predicate, "llvm::cast<rtg::SetType>($_self).getElementType()", "">;
 
+def BagType : RTGTypeDef<"Bag"> {
+  let summary = "";
+  let description = [{
+  }];
+
+  let parameters = (ins "::mlir::Type":$elementType);
+
+  let mnemonic = "bag";
+  let assemblyFormat = "`<` $elementType `>`";
+}
+
+class BagTypeOf<Type elementType> : ContainerType<elementType, BagType.predicate, "llvm::cast<rtg::BagType>($_self).getElementType()", "">;
+
 def TargetType : RTGTypeDef<"Target"> {
   let summary = "";
   let description = [{

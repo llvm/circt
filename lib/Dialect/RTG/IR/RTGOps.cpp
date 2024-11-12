@@ -110,6 +110,85 @@ LogicalResult SetCreateOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// BagCreateOp
+//===----------------------------------------------------------------------===//
+
+ParseResult BagCreateOp::parse(OpAsmParser &parser, OperationState &result) {
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 16> elementOperands,
+      weightOperands;
+  Type elemType;
+
+  if (!parser.parseOptionalLParen()) {
+    while (true) {
+      OpAsmParser::UnresolvedOperand elementOperand, weightOperand;
+      if (parser.parseOperand(elementOperand) || parser.parseColon() ||
+          parser.parseOperand(weightOperand))
+        return failure();
+      elementOperands.push_back(elementOperand);
+      weightOperands.push_back(weightOperand);
+      if (parser.parseOptionalComma()) {
+        if (parser.parseRParen())
+          return failure();
+        break;
+      }
+    }
+  }
+
+  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(elemType))
+    return failure();
+
+  result.addTypes({BagType::get(result.getContext(), elemType)});
+
+  for (auto operand : elementOperands)
+    if (parser.resolveOperand(operand, elemType, result.operands))
+      return failure();
+
+  for (auto operand : weightOperands)
+    if (parser.resolveOperand(operand, IndexType::get(result.getContext()),
+                              result.operands))
+      return failure();
+
+  SmallVector<int32_t> segmentSizes(2, elementOperands.size());
+  result.addAttribute(
+      getOperandSegmentSizesAttrName(result.name),
+      DenseI32ArrayAttr::get(result.getContext(), segmentSizes));
+
+  return success();
+}
+
+void BagCreateOp::print(OpAsmPrinter &p) {
+  p << " ";
+  if (!getElements().empty())
+    p << "(";
+  llvm::interleaveComma(llvm::zip(getElements(), getWeights()), p,
+                        [&](auto elAndWeight) {
+                          auto [el, weight] = elAndWeight;
+                          p << el << " : " << weight;
+                        });
+  if (!getElements().empty())
+    p << ")";
+
+  p.printOptionalAttrDict((*this)->getAttrs(),
+                          {getOperandSegmentSizesAttrName()});
+  p << " : " << getBag().getType().getElementType();
+}
+
+LogicalResult BagCreateOp::verify() {
+  if (getElements().size() != getWeights().size())
+    return emitOpError() << "number of elements and weights must match";
+
+  if (!llvm::all_equal(getElements().getTypes()))
+    return emitOpError() << "types of all elements must match";
+
+  if (getElements().size() > 0)
+    if (getElements()[0].getType() != getBag().getType().getElementType())
+      return emitOpError() << "operand types must match bag element type";
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TestOp
 //===----------------------------------------------------------------------===//
 
