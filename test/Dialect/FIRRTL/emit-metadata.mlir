@@ -113,7 +113,6 @@ firrtl.circuit "TestBlackboxes" attributes {
 
 // -----
 
-// CHECK-LABEL: firrtl.circuit "BasicBlackboxes"   {
 firrtl.circuit "BasicBlackboxes" attributes {
   annotations = [
     {
@@ -180,38 +179,65 @@ firrtl.circuit "BasicBlackboxes" attributes {
     defname = "ignored4"
   }
 
-// CHECK:    firrtl.class @SitestBlackBoxModulesSchema(in %[[moduleName_in:.+]]: !firrtl.string, out %moduleName: !firrtl.string) {
-// CHECK:      firrtl.propassign %moduleName, %[[moduleName_in]]
-// CHECK:    }
-
-// CHECK:    firrtl.class @SitestBlackBoxMetadata(out %TestBlackbox_field: !firrtl.class<@SitestBlackBoxModulesSchema(in moduleName_in: !firrtl.string, out moduleName: !firrtl.string)>, out %DUTBlackbox_0_field: !firrtl.class<@SitestBlackBoxModulesSchema(in moduleName_in: !firrtl.string, out moduleName: !firrtl.string)>, out %DUTBlackbox_1_field: !firrtl.class<@SitestBlackBoxModulesSchema(in moduleName_in: !firrtl.string, out moduleName: !firrtl.string)>) attributes {portAnnotations = []} {
-// CHECK:      firrtl.string "TestBlackbox"
-// CHECK:      %TestBlackbox = firrtl.object @SitestBlackBoxModulesSchema
-// CHECK:      firrtl.propassign %TestBlackbox_field, %TestBlackbox
-// CHECK:      firrtl.string "DUTBlackbox2"
-// CHECK:      %DUTBlackbox_0 = firrtl.object @SitestBlackBoxModulesSchema
-// CHECK:      firrtl.propassign %DUTBlackbox_0_field, %DUTBlackbox_0
-// CHECK:      firrtl.string "DUTBlackbox1"
-// CHECK:      %DUTBlackbox_1 = firrtl.object @SitestBlackBoxModulesSchema
-// CHECK:      firrtl.propassign %DUTBlackbox_1_field, %DUTBlackbox_1
-// CHECK:    }
   // Gracefully handle missing defnames.
   firrtl.extmodule @NoDefName()
 
   firrtl.extmodule @TestBlackbox() attributes {defname = "TestBlackbox"}
 
-  // CHECK:               emit.file "test_blackboxes.json" {
-  // CHECK-NEXT{LITERAL}:   emit.verbatim "[\0A \22TestBlackbox\22\0A]"
-  // CHECK-NEXT:          }
-
   // Should be de-duplicated and sorted.
   firrtl.extmodule @DUTBlackbox_0() attributes {defname = "DUTBlackbox2"}
   firrtl.extmodule @DUTBlackbox_1() attributes {defname = "DUTBlackbox1"}
   firrtl.extmodule @DUTBlackbox_2() attributes {defname = "DUTBlackbox1"}
-  // CHECK:               emit.file "dut_blackboxes.json" {
-  // CHECK-NEXT{LITERAL}:   emit.verbatim "[\0A \22DUTBlackbox1\22,\0A \22DUTBlackbox2\22\0A]"
-  // CHECK-NEXT:          }
 }
+
+// (1) Class-based metadata ----------------------------------------------------
+//
+// CHECK:               firrtl.class @SitestBlackBoxModulesSchema(
+// CHECK-SAME:            in %[[moduleName_in:.+]]: !firrtl.string,
+// CHECK-SAME:            out %moduleName: !firrtl.string
+// CHECK-SAME:          ) {
+// CHECK-NEXT:            firrtl.propassign %moduleName, %[[moduleName_in]]
+// CHECK:               }
+//
+// CHECK:               firrtl.class @SitestBlackBoxMetadata(
+// CHECK-SAME:            out %TestBlackbox_field: !firrtl.class<@SitestBlackBoxModulesSchema(
+// CHECK-SAME:            out %DUTBlackbox_0_field: !firrtl.class<@SitestBlackBoxModulesSchema(
+// CHECK-SAME:            out %DUTBlackbox_1_field: !firrtl.class<@SitestBlackBoxModulesSchema(
+//
+// CHECK-NEXT:            %[[#defname:]] = firrtl.string "TestBlackbox"
+// CHECK-NEXT:            %[[object:.+]] = firrtl.object @SitestBlackBoxModulesSchema
+// CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[object]][moduleName_in]
+// CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#defname:]] : !firrtl.string
+// CHECK-NEXT:            firrtl.propassign %TestBlackbox_field, %[[object]]
+//
+// CHECK-NEXT:            %[[#defname:]] = firrtl.string "DUTBlackbox2"
+// CHECK-NEXT:            %[[object:.+]] = firrtl.object @SitestBlackBoxModulesSchema
+// CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[object]][moduleName_in]
+// CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#defname:]] : !firrtl.string
+// CHECK-NEXT:            firrtl.propassign %DUTBlackbox_0_field, %[[object]]
+//
+// CHECK-NEXT:            %[[#defname:]] = firrtl.string "DUTBlackbox1"
+// CHECK-NEXT:            %[[object:.+]] = firrtl.object @SitestBlackBoxModulesSchema
+// CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[object]][moduleName_in]
+// CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#defname:]] : !firrtl.string
+// CHECK-NEXT:            firrtl.propassign %DUTBlackbox_1_field, %[[object]]
+//
+// CHECK-NOT:             firrtl.object
+
+// (2) JSON file-based metadata ------------------------------------------------
+//
+// CHECK:               emit.file "test_blackboxes.json" {
+// CHECK-NEXT{LITERAL}:   emit.verbatim "[\0A
+// CHECK-SAME:              \22TestBlackbox\22\0A
+// CHECK-SAME:            ]"
+// CHECK-NEXT:          }
+//
+// CHECK:               emit.file "dut_blackboxes.json" {
+// CHECK-NEXT{LITERAL}:   emit.verbatim "[\0A
+// CHECK-SAME:              \22DUTBlackbox1\22,\0A
+// CHECK-SAME:              \22DUTBlackbox2\22\0A
+// CHECK-SAME:            ]"
+// CHECK-NEXT:          }
 
 // -----
 
