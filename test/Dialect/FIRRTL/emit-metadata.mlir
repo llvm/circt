@@ -125,6 +125,7 @@ firrtl.circuit "BasicBlackboxes" attributes {
     }
   ]
 } {
+  firrtl.layer @A bind {}
   firrtl.module @BasicBlackboxes() attributes {
     annotations = [
       {
@@ -135,6 +136,11 @@ firrtl.circuit "BasicBlackboxes" attributes {
     firrtl.instance test @DUTBlackbox_0()
     firrtl.instance test @DUTBlackbox_1()
     firrtl.instance test @DUTBlackbox_2()
+    firrtl.instance layerBlackboxInDesign1 @LayerBlackboxInDesign()
+    firrtl.layerblock @A {
+      firrtl.instance layerBlackboxInDesign2 @LayerBlackboxInDesign()
+      firrtl.instance layerBlackbox @LayerBlackbox()
+    }
   }
 
   // These should all be ignored.
@@ -188,6 +194,8 @@ firrtl.circuit "BasicBlackboxes" attributes {
   firrtl.extmodule @DUTBlackbox_0() attributes {defname = "DUTBlackbox2"}
   firrtl.extmodule @DUTBlackbox_1() attributes {defname = "DUTBlackbox1"}
   firrtl.extmodule @DUTBlackbox_2() attributes {defname = "DUTBlackbox1"}
+  firrtl.extmodule @LayerBlackboxInDesign() attributes {defname = "LayerBlackboxInDesign"}
+  firrtl.extmodule @LayerBlackbox() attributes {defname = "LayerBlackbox"}
 }
 
 // (1) Class-based metadata ----------------------------------------------------
@@ -203,6 +211,9 @@ firrtl.circuit "BasicBlackboxes" attributes {
 // CHECK-SAME:            out %TestBlackbox_field: !firrtl.class<@SitestBlackBoxModulesSchema(
 // CHECK-SAME:            out %DUTBlackbox_0_field: !firrtl.class<@SitestBlackBoxModulesSchema(
 // CHECK-SAME:            out %DUTBlackbox_1_field: !firrtl.class<@SitestBlackBoxModulesSchema(
+// CHECK-SAME:            out %LayerBlackboxInDesign_field: !firrtl.class<@SitestBlackBoxModulesSchema(
+// CHECK-SAME:            out %LayerBlackbox_field: !firrtl.class<@SitestBlackBoxModulesSchema(
+// CHECK-NOT:             !firrtl.class<@SitestBlackBoxModulesSchema(
 //
 // CHECK-NEXT:            %[[#defname:]] = firrtl.string "TestBlackbox"
 // CHECK-NEXT:            %[[object:.+]] = firrtl.object @SitestBlackBoxModulesSchema
@@ -222,12 +233,25 @@ firrtl.circuit "BasicBlackboxes" attributes {
 // CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#defname:]] : !firrtl.string
 // CHECK-NEXT:            firrtl.propassign %DUTBlackbox_1_field, %[[object]]
 //
+// CHECK-NEXT:            %[[#defname:]] = firrtl.string "LayerBlackboxInDesign"
+// CHECK-NEXT:            %[[object:.+]] = firrtl.object @SitestBlackBoxModulesSchema
+// CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[object]][moduleName_in]
+// CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#defname:]] : !firrtl.string
+// CHECK-NEXT:            firrtl.propassign %LayerBlackboxInDesign_field, %[[object]]
+//
+// CHECK-NEXT:            %[[#defname:]] = firrtl.string "LayerBlackbox"
+// CHECK-NEXT:            %[[object:.+]] = firrtl.object @SitestBlackBoxModulesSchema
+// CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[object]][moduleName_in]
+// CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#defname:]] : !firrtl.string
+// CHECK-NEXT:            firrtl.propassign %LayerBlackbox_field, %[[object]]
+//
 // CHECK-NOT:             firrtl.object
 
 // (2) JSON file-based metadata ------------------------------------------------
 //
 // CHECK:               emit.file "test_blackboxes.json" {
 // CHECK-NEXT{LITERAL}:   emit.verbatim "[\0A
+// CHECK-SAME:              \22LayerBlackbox\22,\0A
 // CHECK-SAME:              \22TestBlackbox\22\0A
 // CHECK-SAME:            ]"
 // CHECK-NEXT:          }
@@ -235,7 +259,8 @@ firrtl.circuit "BasicBlackboxes" attributes {
 // CHECK:               emit.file "dut_blackboxes.json" {
 // CHECK-NEXT{LITERAL}:   emit.verbatim "[\0A
 // CHECK-SAME:              \22DUTBlackbox1\22,\0A
-// CHECK-SAME:              \22DUTBlackbox2\22\0A
+// CHECK-SAME:              \22DUTBlackbox2\22,\0A
+// CHECK-SAME:              \22LayerBlackboxInDesign\22\0A
 // CHECK-SAME:            ]"
 // CHECK-NEXT:          }
 
