@@ -101,7 +101,6 @@ public:
   bool shouldAdvancedLayerSink() const { return advancedLayerSink; }
   bool shouldLowerMemories() const { return lowerMemories; }
   bool shouldDedup() const { return !noDedup; }
-  bool shouldDisableLocalAnnotations() const { return disableLocalAnnotations; }
   bool shouldEnableDebugInfo() const { return enableDebugInfo; }
   bool shouldIgnoreReadEnableMemories() const { return ignoreReadEnableMem; }
   bool shouldEmitOMIR() const { return emitOMIR; }
@@ -210,11 +209,6 @@ public:
 
   FirtoolOptions &setNoDedup(bool value) {
     noDedup = value;
-    return *this;
-  }
-
-  FirtoolOptions &setDisableLocalAnnotations(bool value) {
-    disableLocalAnnotations = value;
     return *this;
   }
 
@@ -390,7 +384,6 @@ private:
   std::string chiselInterfaceOutDirectory;
   bool vbToBV;
   bool noDedup;
-  bool disableLocalAnnotations;
   firrtl::CompanionMode companionMode;
   bool disableAggressiveMergeConnections;
   bool emitOMIR;

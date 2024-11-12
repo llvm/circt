@@ -540,12 +540,6 @@ struct FirtoolCmdOptions {
       llvm::cl::desc("Disable deduplication of structurally identical modules"),
       llvm::cl::init(false)};
 
-  llvm::cl::opt<bool> disableLocalAnnotations{
-      "disable-local-annotations",
-      llvm::cl::desc("Disable local annotations and revert to legacy behavior "
-                     "of making annotations non-local in internal passes"),
-      llvm::cl::init(false)};
-
   llvm::cl::opt<firrtl::CompanionMode> companionMode{
       "grand-central-companion-mode",
       llvm::cl::desc("Specifies the handling of Grand Central companions"),
@@ -761,8 +755,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       preserveMode(firrtl::PreserveValues::None), enableDebugInfo(false),
       buildMode(BuildModeRelease), disableOptimization(false),
       exportChiselInterface(false), chiselInterfaceOutDirectory(""),
-      vbToBV(false), noDedup(false), disableLocalAnnotations(false),
-      companionMode(firrtl::CompanionMode::Bind),
+      vbToBV(false), noDedup(false), companionMode(firrtl::CompanionMode::Bind),
       disableAggressiveMergeConnections(false), emitOMIR(true), omirOutFile(""),
       advancedLayerSink(false), lowerMemories(false), blackBoxRootPath(""),
       replSeqMem(false), replSeqMemFile(""), extractTestCode(false),
@@ -795,7 +788,6 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   chiselInterfaceOutDirectory = clOptions->chiselInterfaceOutDirectory;
   vbToBV = clOptions->vbToBV;
   noDedup = clOptions->noDedup;
-  disableLocalAnnotations = clOptions->disableLocalAnnotations;
   companionMode = clOptions->companionMode;
   disableAggressiveMergeConnections =
       clOptions->disableAggressiveMergeConnections;
