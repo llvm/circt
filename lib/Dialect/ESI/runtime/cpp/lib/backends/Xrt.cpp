@@ -65,7 +65,9 @@ struct esi::backends::xrt::XrtAccelerator::Impl {
 
   std::map<std::string, ChannelPort &> requestChannelsFor(AppIDPath,
                                                           const BundleType *) {
-    throw std::runtime_error("XRT does not support channel communication yet");
+    // throw std::runtime_error("XRT does not support channel communication
+    // yet");
+    return {};
   }
 
   ::xrt::device device;

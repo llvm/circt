@@ -121,7 +121,7 @@ class ChannelMMIO(esi.ServiceImplementation):
   clk = Clock()
   rst = Input(Bits(1))
 
-  cmd = Input(esi.MMIOReadWriteCmdType)
+  cmd = Input(esi.MMIO.read_write.type)
 
   # Amount of register space each client gets. This is a GIANT HACK and needs to
   # be replaced by parameterizable services.
@@ -154,6 +154,7 @@ class ChannelMMIO(esi.ServiceImplementation):
     offset = ChannelMMIO.initial_offset
     table: Dict[int, AssignableSignal] = {}
     for bundle in bundles.to_client_reqs:
+      print(f"{bundle.client_name}: {offset}")
       if bundle.port == 'read':
         table[offset] = bundle
         bundle.add_record(details={

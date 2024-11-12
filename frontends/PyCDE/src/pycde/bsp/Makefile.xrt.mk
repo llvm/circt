@@ -16,6 +16,15 @@ SRC := hw
 BUILD := build_$(TARGET)
 TEMP := $(BUILD)/temp
 
+# Limit number of Vivado jobs to avoid running out of memory. 0 is unlimited.
+JOBS := 0
+
+# Frequency of the kernel in MHz
+FREQ := 150
+
+# Optimization level (set to 0-3, s, or quick)
+OPT := 1
+
 # Toggle to automatically set custom options for running in Azure NP-series VMs
 AZURE := true
 
@@ -24,7 +33,8 @@ LINK_OUT := $(BUILD)/$(NAME).link.xclbin
 XCL_OUT := $(NAME).$(TARGET).xclbin
 HOST_APP := $(BUILD)/host_app
 
-VPPFLAGS = --save-temps
+VPPFLAGS = --save-temps --kernel_frequency $(FREQ) -O $(OPT)
+VPPFLAGS += --remote_ip_cache cache
 
 # Platform must match the device + shell you're using
 # For Azure NP-series, use the official Azure Shell
@@ -32,7 +42,7 @@ VPPFLAGS = --save-temps
 
 ifeq ($(AZURE), true)
 PLATFORM := xilinx_u250_gen3x16_xdma_2_1_202010_1
-# For Azure NP-series, output the routed netlist as a DCP instead of a bitsream!
+# For Azure NP-series, output the routed netlist as a DCP instead of a bitstream!
 VPPFLAGS += --advanced.param compiler.acceleratorBinaryContent=dcp
 else
 PLATFORM := xilinx_u250_gen3x16_xdma_4_1_202210_1
@@ -43,6 +53,10 @@ PACKAGE := $(BUILD)/package
 
 ifneq ($(TARGET), hw)
 VPPFLAGS += -g
+endif
+
+ifneq ($(JOBS), 0)
+	VPPFLAGS += --jobs $(JOBS)
 endif
 
 device2xsa = $(strip $(patsubst %.xpfm, % , $(shell basename $(PLATFORM))))
