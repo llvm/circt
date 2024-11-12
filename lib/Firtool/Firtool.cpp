@@ -177,13 +177,13 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   if (!opt.shouldDisableOptimization())
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerLayersPass());
-
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
 
   pm.addPass(firrtl::createCreateSiFiveMetadataPass(
       opt.shouldReplaceSequentialMemories(),
       opt.getReplaceSequentialMemoriesFile()));
+
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerLayersPass());
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createExtractInstancesPass());
 
