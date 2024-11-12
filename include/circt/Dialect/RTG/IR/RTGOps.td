@@ -25,21 +25,46 @@ class RTGOp<string mnemonic, list<Trait> traits = []> :
 //===- Sequence Handling Operations ---------------------------------------===//
 
 def SequenceOp : RTGOp<"sequence", [
+  IsolatedFromAbove,
+  Symbol,
   SingleBlock,
-  NoTerminator
+  NoTerminator,
+  HasParent<"mlir::ModuleOp">,
 ]> {
   let summary = "a sequence of instructions";
   let description = [{
+    This operation can be invoked by `select_random`, `invoke`, and `on_context`
+    to be placed at their position.
+
+    This operation is referred to by symbol and isolated from above to ease
+    multi-threading and allows the `rtg.test` operation to be
+    isolated-from-above to provide stronger top-level isolation guarantees.
   }];
 
-  let results = (outs SequenceType:$sequence);
+  let arguments = (ins SymbolNameAttr:$sym_name);
   let regions = (region SizedRegion<1>:$bodyRegion);
 
   let assemblyFormat = [{
-    attr-dict-with-keyword $bodyRegion `->` qualified(type($sequence))
+    $sym_name attr-dict-with-keyword $bodyRegion
+  }];
+}
+
+def SequenceClosureOp : RTGOp<"sequence_closure", [
+  Pure,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+  TypesMatchWith<"sequence types always has all args resolved", "args", "ref", "SequenceType::get($_ctxt, {})">,
+]> {
+  let summary = "create a closure to a sequence with the provided arguments";
+  let description = [{
+    This allows sequences to be passed around as an SSA value. For example, to
+    put them in a set and select them randomly or to pass them to other
+    sequences via argument.
   }];
 
-  let hasRegionVerifier = true;
+  let arguments = (ins SymbolNameAttr:$sequence, Variadic<AnyType>:$args);
+  let results = (outs SequenceType:$ref);
+
+  let assemblyFormat = "$sequence (`(` $args^ `:` qualified(type($args)) `)`)? attr-dict";
 }
 
 def SelectRandomOp : RTGOp<"select_random", [AttrSizedOperandSegments]> {
@@ -149,7 +174,7 @@ def RenderedContextOp : RTGOp<"rendered_context",
   let assemblyFormat = "$selectors $contextRegions attr-dict-with-keyword";
 }
 
-//===- Set Operations -----------------------------------------------------===//
+//===- Set Operations ------------------------------------------------------===//
 
 def SetCreateOp : RTGOp<"set_create", [Pure, SameTypeOperands]> {
   let summary = "constructs a set";
@@ -199,6 +224,26 @@ def TestOp : RTGOp<"test", [
   HasParent<"mlir::ModuleOp">
 ]> {
   let summary = "root of a test";
+  let description = [{
+    This operation declares the root of a randomized or directed test. The body
+    shall be processed exactly the same way as a `rtg.sequence`'s body with the
+    exception of the block arguments. These are the differences compared to the
+    `rtg.sequence` operation:
+      * The arguments of the test operation must match the fields of the RTG
+        target. It must not have any additional arguments.
+      * It must not be selected by a `select_random` operation.
+      * It must not be invoked by an `invoke` operation.
+      * It must not be placed on a context by the `on_context` operation.
+    
+    *Design alternative:*
+
+    Make the target type attribute optional and let its absence indicate the
+    op being treated as the `rtg.sequence` op currently.
+    This complicates pattern matching in some lowering passes, but also
+    complicates some other passes because they need to match on both.
+    Having them separate also simplifies the verifiers of the operations placing
+    sequences.
+  }];
 
   let arguments = (ins SymbolNameAttr:$sym_name,
                        TypeAttrOf<TargetType>:$targetType);

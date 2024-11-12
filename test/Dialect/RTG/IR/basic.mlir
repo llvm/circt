@@ -1,7 +1,8 @@
 // RUN: circt-opt %s | FileCheck %s
 
-// CHECK: [[SEQ:%.+]] = rtg.sequence attributes {rtg.some_attr} {
-%sequence = rtg.sequence attributes {rtg.some_attr} {
+// CHECK-LABEL: rtg.sequence @seq
+// CHECK-SAME: attributes {rtg.some_attr} {
+rtg.sequence @seq0 attributes {rtg.some_attr} {
   %arg = arith.constant 1 : i32
   // CHECK: [[LBL:%.*]] = rtg.label.decl "label_string_{0}_{1}", %{{.*}}, %{{.*}} : i32, i32 -> i32
   %0 = rtg.label.decl "label_string_{0}_{1}", %arg, %arg : i32, i32 -> i32
@@ -9,24 +10,25 @@
   %1 = rtg.label.decl "label_string" -> i32
   // CHECK: rtg.label [[LBL]] : i32
   rtg.label %0 : i32
-} -> !rtg.sequence
+}
 
-// CHECK: rtg.sequence
-rtg.sequence {
+// CHECK-LABEL: rtg.sequence @seq1
+rtg.sequence @seq1 {
+  // CHECK: [[SEQ:%.+]] = rtg.sequence_closure @seq0{{$}}
+  %sequence = rtg.sequence_closure @seq0
   // CHECK: [[RATIO:%.+]] = arith.constant 1 : i32
   %ratio = arith.constant 1 : i32
   // CHECK: rtg.select_random [[[SEQ]]] (() : ()), [[[RATIO]]] : !rtg.sequence
   rtg.select_random [%sequence](() : ()), [%ratio] : !rtg.sequence
   // CHECK: rtg.select_random [[[SEQ]], [[SEQ]]] ((), () : (), ()), [[[RATIO]], [[RATIO]]] : !rtg.sequence, !rtg.sequence
   rtg.select_random [%sequence, %sequence]((), () : (), ()), [%ratio, %ratio] : !rtg.sequence, !rtg.sequence
-} -> !rtg.sequence
+}
 
-// CHECK: rtg.sequence
+// CHECK-LABEL: rtg.sequence @seq2
 // CHECK: ^bb0(%arg0: i32, %arg1: i64):
-// CHECK: -> !rtg.sequence<i32, i64>
-%0 = rtg.sequence {
+rtg.sequence @seq2 {
 ^bb0(%arg0: i32, %arg1: i64):
-} -> !rtg.sequence<i32, i64>
+}
 
 // CHECK-LABEL: @types
 // CHECK-SAME: !rtg.sequence
@@ -58,7 +60,7 @@ func.func @contexts(%arg0: !rtg.context_resource, %arg1: !rtg.set<!rtg.context_r
   // CHECK: rtg.on_context %arg1 : !rtg.set<!rtg.context_resource> {
   // CHECK:   rtg.invoke %{{.*}} : !rtg.sequence
   // CHECK: }
-  %seq = rtg.sequence { } -> !rtg.sequence
+  %seq = rtg.sequence_closure @seq0
   rtg.on_context %arg0 : !rtg.context_resource {
     rtg.invoke %seq : !rtg.sequence
   }

@@ -27,10 +27,10 @@ public:
   ResultType dispatchOpVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<SequenceOp, SelectRandomOp, LabelDeclOp, LabelOp,
-                       OnContextOp, RenderedContextOp, SetCreateOp,
-                       SetSelectRandomOp, SetDifferenceOp, TestOp, TargetOp,
-                       YieldOp>([&](auto expr) -> ResultType {
+        .template Case<SequenceOp, SequenceClosureOp, SelectRandomOp,
+                       LabelDeclOp, LabelOp, OnContextOp, RenderedContextOp,
+                       SetCreateOp, SetSelectRandomOp, SetDifferenceOp, TestOp,
+                       TargetOp, YieldOp>([&](auto expr) -> ResultType {
           return thisCast->visitOp(expr, args...);
         })
         .template Case<InstructionOpInterface>([&](auto expr) -> ResultType {
@@ -81,6 +81,7 @@ public:
   }
 
   HANDLE(SequenceOp, Unhandled);
+  HANDLE(SequenceClosureOp, Unhandled);
   HANDLE(SelectRandomOp, Unhandled);
   HANDLE(LabelDeclOp, Unhandled);
   HANDLE(LabelOp, Unhandled);

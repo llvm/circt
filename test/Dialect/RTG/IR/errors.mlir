@@ -1,44 +1,18 @@
 // RUN: circt-opt %s --split-input-file --verify-diagnostics
 
 
-// expected-error @below {{argument types must match sequence type}}
-rtg.sequence {
-^bb0(%arg0: i32):
-} -> !rtg.sequence
+func.func @seq0() {
+  return
+}
+
+// expected-error @below {{'seq0' does not reference a valid 'rtg.sequence' operation}}
+rtg.sequence_closure @seq0
 
 // -----
 
-%0 = rtg.sequence {
+rtg.sequence @seq0 {
 ^bb0(%arg0: i32):
-} -> !rtg.sequence<i32>
+}
 
-rtg.sequence {
-  %1 = arith.constant 0 : i32
-  // expected-error @below {{sequences and ratios must match}}
-  rtg.select_random [%0]((%1) : (i32)), [] : !rtg.sequence<i32>
-} -> !rtg.sequence
-
-// -----
-
-%0 = rtg.sequence {
-^bb0(%arg0: i32):
-} -> !rtg.sequence<i32>
-
-rtg.sequence {
-  %1 = arith.constant 0 : i32
-  // expected-error @below {{sequences and sequence arg lists must match}}
-  rtg.select_random [%0](:), [%1] : !rtg.sequence<i32>
-} -> !rtg.sequence
-
-// -----
-
-%0 = rtg.sequence {
-^bb0(%arg0: i32):
-} -> !rtg.sequence<i32>
-
-rtg.sequence {
-  %1 = arith.constant 0 : i64
-  %2 = arith.constant 0 : i32
-  // expected-error @below {{sequence argument types do not match sequence requirements}}
-  rtg.select_random [%0]((%1) : (i64)), [%2] : !rtg.sequence<i32>
-} -> !rtg.sequence
+// expected-error @below {{referenced 'rtg.sequence' op's argument types must match 'args' types}}
+rtg.sequence_closure @seq0

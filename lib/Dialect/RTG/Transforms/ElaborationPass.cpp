@@ -15,7 +15,6 @@
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/PatternMatch.h"
-#include "llvm/ADT/TypeSwitch.h"
 #include <mlir/IR/IRMapping.h>
 #include <random>
 #include <variant>
@@ -61,7 +60,8 @@ public:
   using Base = RTGOpVisitor<Elaborator, LogicalResult>;
   using Base::visitOp;
 
-  Elaborator(const ElaborationOptions &options) {
+  Elaborator(SymbolTable &table, const ElaborationOptions &options)
+      : symTable(table) {
     std::random_device dev;
     unsigned s = dev();
     if (options.seed.has_value())
@@ -81,6 +81,11 @@ public:
     return success();
   }
 
+  LogicalResult visitOp(SequenceClosureOp op) {
+    // TODO: ignored for now because it's handled by SelectRandomOp
+    return success();
+  }
+
   LogicalResult visitOp(SelectRandomOp op) {
     std::vector<float> idx;
     std::vector<float> prob;
@@ -96,15 +101,19 @@ public:
 
     unsigned selected = dist(rng);
 
-    auto sequence =
-        op.getSequences()[selected].getDefiningOp<rtg::SequenceOp>();
-    if (!sequence)
-      return failure();
+    // TODO: keep track of the closure instead of trying to walk the def-use
+    // chain backwards.
+    auto sequenceClosure =
+        op.getSequences()[selected].getDefiningOp<rtg::SequenceClosureOp>();
+    if (!sequenceClosure)
+      return op->emitError("could not resolve sequence");
 
     IRRewriter rewriter(op);
+    auto *sequence = symTable.lookupNearestSymbolFrom(
+        sequenceClosure, sequenceClosure.getSequenceAttr());
     auto *clone = sequence->clone();
     rewriter.inlineBlockBefore(&clone->getRegion(0).front(), op,
-                               op.getSequenceArgs()[selected]);
+                               sequenceClosure.getArgs());
     clone->erase();
 
     op->erase();
@@ -210,21 +219,24 @@ public:
       //   continue;
       // }
 
-      bool addedSomething = false;
-      for (auto val : curr->getOperands()) {
-        if (results.contains(val))
-          continue;
+      // FIXME: don't hardcode this op here.
+      if (!isa<SelectRandomOp>(curr)) {
+        bool addedSomething = false;
+        for (auto val : curr->getOperands()) {
+          if (results.contains(val))
+            continue;
 
-        auto *defOp = val.getDefiningOp();
-        if (!visited.contains(defOp)) {
-          visited.insert(defOp);
-          worklist.push_back(defOp);
-          addedSomething = true;
+          auto *defOp = val.getDefiningOp();
+          if (!visited.contains(defOp)) {
+            visited.insert(defOp);
+            worklist.push_back(defOp);
+            addedSomething = true;
+          }
         }
-      }
 
-      if (addedSomething)
-        continue;
+        if (addedSomething)
+          continue;
+      }
 
       if (failed(dispatchOpVisitor(curr)))
         return failure();
@@ -238,10 +250,14 @@ public:
 private:
   std::mt19937 rng;
   DenseMap<Value, EvalValue> results;
+  SymbolTable symTable;
 };
 } // end namespace
 
 void ElaborationPass::runOnOperation() {
+  if (seed.hasValue())
+    options.seed = seed;
+
   cloneTargetsIntoTests();
 
   auto moduleOp = getOperation();
@@ -279,7 +295,8 @@ void ElaborationPass::cloneTargetsIntoTests() {
 }
 
 LogicalResult ElaborationPass::runOnTest(TestOp testOp) {
-  return Elaborator(options).elaborate(testOp);
+  SymbolTable table(getOperation());
+  return Elaborator(table, options).elaborate(testOp);
 }
 
 std::unique_ptr<Pass>

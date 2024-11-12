@@ -17,7 +17,7 @@ rtgtest.instr_b %reg5, %reg2, %reg3
 
 
 func.func @checkOnContext(
-    %arg1 : !rtg.context_resource_set<!rtgtest.dummyCPUs>
+    %arg1 : !rtg.set<!rtgtest.dummyCPUs>
   ) {
   %la = rtg.label.decl "a" -> i32
   %lb = rtg.label.decl "b" -> i32
@@ -25,16 +25,16 @@ func.func @checkOnContext(
   %ld = rtg.label.decl "d" -> i32
   %le = rtg.label.decl "e" -> i32
   rtg.label %la : i32
-  %arg2 = rtg.select_random_resource %arg1 : !rtg.context_resource_set<!rtgtest.dummyCPUs>
-  rtg.on_context %arg1 : !rtg.context_resource_set<!rtgtest.dummyCPUs> {
+  %arg2 = rtg.set_select_random %arg1 : !rtg.set<!rtgtest.dummyCPUs>
+  rtg.on_context %arg1 : !rtg.set<!rtgtest.dummyCPUs> {
     rtg.label %lb : i32
-    rtg.on_context %arg2 : !rtg.context_resource_set<!rtgtest.dummyCPUs> {
+    rtg.on_context %arg2 : !rtg.set<!rtgtest.dummyCPUs> {
       rtg.label %lc : i32
     }
     rtg.label %ld : i32
   }
-  %arg3 = rtg.set_difference_resource %arg1, %arg2 : !rtg.context_resource_set<!rtgtest.bogus_reg>
-  rtg.on_context %arg3 : !rtg.context_resource_set<!rtgtest.bogus_reg> {
+  %arg3 = rtg.set_difference %arg1, %arg2 : !rtg.set<!rtgtest.bogus_reg>
+  rtg.on_context %arg3 : !rtg.set<!rtgtest.bogus_reg> {
     rtg.label %le : i32
   }
   return
