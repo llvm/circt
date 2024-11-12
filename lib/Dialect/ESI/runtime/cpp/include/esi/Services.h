@@ -295,6 +295,14 @@ public:
     void connect(std::function<MessageData(const MessageData &)> callback,
                  bool quick = false);
 
+    virtual std::optional<std::string> toString() const override {
+      const esi::Type *argType =
+          dynamic_cast<const ChannelType *>(arg.getType())->getInner();
+      const esi::Type *resultType =
+          dynamic_cast<const ChannelType *>(result.getType())->getInner();
+      return "callback " + resultType->getID() + "(" + argType->getID() + ")";
+    }
+
   private:
     ReadChannelPort &arg;
     WriteChannelPort &result;

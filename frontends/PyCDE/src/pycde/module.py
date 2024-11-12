@@ -5,6 +5,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, List, Optional, Set, Tuple, Dict
+import typing
 
 from .common import (AppID, Clock, Constant, Input, ModuleDecl, Output,
                      PortError, _PyProxy, Reset)
@@ -684,7 +685,7 @@ class modparams:
   #   The result is cached in _MODULE_CACHE.
   #   - A simple (non-parameterized) module has been wrapped and the user wants
   #   to construct one. Just forward to the module class' constructor.
-  def __call__(self, *args, **kwargs):
+  def __call__(self, *args, **kwargs) -> typing.Type[Module]:
     assert self.func is not None
     param_values = self.sig.bind(*args, **kwargs)
     param_values.apply_defaults()

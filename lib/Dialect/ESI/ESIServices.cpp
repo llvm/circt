@@ -577,7 +577,6 @@ LogicalResult ESIConnectServicesPass::replaceInst(
 
   for (auto req : portReqs)
     req->moveBefore(&reqBlock, reqBlock.end());
-  implOp->dump();
 
   // Erase the instance first in case it consumes any channels or bundles. If it
   // does, the service generator will fail to verify the IR as there will be
