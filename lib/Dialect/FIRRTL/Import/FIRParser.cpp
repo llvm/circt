@@ -70,8 +70,6 @@ struct SharedParserConstants {
         loIdentifier(StringAttr::get(context, "lo")),
         hiIdentifier(StringAttr::get(context, "hi")),
         amountIdentifier(StringAttr::get(context, "amount")),
-        fieldIndexIdentifier(StringAttr::get(context, "fieldIndex")),
-        indexIdentifier(StringAttr::get(context, "index")),
         placeholderInnerRef(
             hw::InnerRefAttr::get(StringAttr::get(context, "module"),
                                   StringAttr::get(context, "placeholder"))) {}
@@ -93,7 +91,6 @@ struct SharedParserConstants {
 
   /// Cached identifiers used in primitives.
   const StringAttr loIdentifier, hiIdentifier, amountIdentifier;
-  const StringAttr fieldIndexIdentifier, indexIdentifier;
 
   /// Cached placeholder inner-ref used until fixed up.
   const hw::InnerRefAttr placeholderInnerRef;
@@ -1765,9 +1762,7 @@ private:
   ParseResult parseOptionalParams(ArrayAttr &resultParameters);
 
   template <typename subop>
-  FailureOr<Value> emitCachedSubAccess(Value base,
-                                       ArrayRef<NamedAttribute> attrs,
-                                       unsigned indexNo, SMLoc loc);
+  FailureOr<Value> emitCachedSubAccess(Value base, unsigned indexNo, SMLoc loc);
   ParseResult parseOptionalExpPostscript(Value &result,
                                          bool allowDynamic = true);
   ParseResult parsePostFixFieldId(Value &result);
@@ -2240,8 +2235,7 @@ ParseResult FIRStmtParser::parseOptionalExpPostscript(Value &result,
 
 template <typename subop>
 FailureOr<Value>
-FIRStmtParser::emitCachedSubAccess(Value base, ArrayRef<NamedAttribute> attrs,
-                                   unsigned indexNo, SMLoc loc) {
+FIRStmtParser::emitCachedSubAccess(Value base, unsigned indexNo, SMLoc loc) {
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
   auto baseType = cast<FIRRTLType>(base.getType());
@@ -2262,7 +2256,7 @@ FIRStmtParser::emitCachedSubAccess(Value base, ArrayRef<NamedAttribute> attrs,
   locationProcessor.setLoc(loc);
   OpBuilder::InsertionGuard guard(builder);
   builder.setInsertionPointAfterValue(base);
-  auto op = builder.create<subop>(resultType, base, attrs);
+  auto op = builder.create<subop>(resultType, base, indexNo);
 
   // Insert the newly created operation into the cache.
   return value = op.getResult();
@@ -2296,25 +2290,14 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
     auto indexNo = *indexV;
 
     FailureOr<Value> subResult;
-    if (type_isa<RefType>(result.getType())) {
-      NamedAttribute attrs = {getConstants().indexIdentifier,
-                              builder.getI32IntegerAttr(indexNo)};
-      subResult = emitCachedSubAccess<RefSubOp>(result, attrs, indexNo, loc);
-    } else if (type_isa<ClassType>(type)) {
-      NamedAttribute attrs = {getConstants().indexIdentifier,
-                              builder.getI32IntegerAttr(indexNo)};
-      subResult =
-          emitCachedSubAccess<ObjectSubfieldOp>(result, attrs, indexNo, loc);
-    } else {
-      NamedAttribute attrs = {getConstants().fieldIndexIdentifier,
-                              builder.getI32IntegerAttr(indexNo)};
-      if (type_isa<BundleType>(type))
-        subResult =
-            emitCachedSubAccess<SubfieldOp>(result, attrs, indexNo, loc);
-      else
-        subResult =
-            emitCachedSubAccess<OpenSubfieldOp>(result, attrs, indexNo, loc);
-    }
+    if (type_isa<RefType>(result.getType()))
+      subResult = emitCachedSubAccess<RefSubOp>(result, indexNo, loc);
+    else if (type_isa<ClassType>(type))
+      subResult = emitCachedSubAccess<ObjectSubfieldOp>(result, indexNo, loc);
+    else if (type_isa<BundleType>(type))
+      subResult = emitCachedSubAccess<SubfieldOp>(result, indexNo, loc);
+    else
+      subResult = emitCachedSubAccess<OpenSubfieldOp>(result, indexNo, loc);
 
     if (failed(subResult))
       return failure();
@@ -2337,21 +2320,13 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result) {
   if (indexNo < 0)
     return emitError(loc, "invalid index specifier"), failure();
 
-  // Make sure the index expression is valid and compute the result type for the
-  // expression.
-  // TODO: This should ideally be folded into a `tryCreate` method on the
-  // builder (https://llvm.discourse.group/t/3504).
-  NamedAttribute attrs = {getConstants().indexIdentifier,
-                          builder.getI32IntegerAttr(indexNo)};
-
   FailureOr<Value> subResult;
   if (type_isa<RefType>(result.getType()))
-    subResult = emitCachedSubAccess<RefSubOp>(result, attrs, indexNo, loc);
+    subResult = emitCachedSubAccess<RefSubOp>(result, indexNo, loc);
   else if (type_isa<FVectorType>(result.getType()))
-    subResult = emitCachedSubAccess<SubindexOp>(result, attrs, indexNo, loc);
+    subResult = emitCachedSubAccess<SubindexOp>(result, indexNo, loc);
   else
-    subResult =
-        emitCachedSubAccess<OpenSubindexOp>(result, attrs, indexNo, loc);
+    subResult = emitCachedSubAccess<OpenSubindexOp>(result, indexNo, loc);
 
   if (failed(subResult))
     return failure();
