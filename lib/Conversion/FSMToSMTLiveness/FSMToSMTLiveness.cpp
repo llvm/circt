@@ -108,9 +108,14 @@ circt::smt::IntPredicate getSmtPred(circt::comb::ICmpPredicate cmpPredicate){
 }
 
 mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b, llvm::SmallVector<mlir::Value> args){
+  // we need to modulo all the operations considering the width of the mlir value!
+  if (auto addOp = llvm::dyn_cast<comb::AddOp>(op)){
+    auto tmp = b.create<smt::IntAddOp>(loc, b.getType<smt::IntType>(), args);
+    auto attr = b.getI32IntegerAttr(op.getOperand(0).getType().getIntOrFloatBitWidth());
+    auto mod = b.create<smt::IntConstantOp>(loc, attr);
+    return b.create<smt::IntModOp>(loc, tmp, mod);
+  }
 
-  if (auto addOp = llvm::dyn_cast<comb::AddOp>(op))
-    return b.create<smt::IntAddOp>(loc, b.getType<smt::IntType>(), args);
   if (auto andOp = llvm::dyn_cast<comb::AndOp>(op))
     return b.create<smt::AndOp>(loc, b.getType<smt::BoolType>(), args);
   if (auto xorOp = llvm::dyn_cast<comb::XorOp>(op))
@@ -118,15 +123,21 @@ mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b, llvm::Small
   if (auto orOp = llvm::dyn_cast<comb::OrOp>(op))
     return b.create<smt::OrOp>(loc, b.getType<smt::BoolType>(), args);
   if (auto mulOp = llvm::dyn_cast<comb::MulOp>(op))
-    return b.create<smt::IntMulOp>(loc, b.getType<smt::IntType>(), args);
+  {
+    auto tmp = b.create<smt::IntMulOp>(loc, b.getType<smt::IntType>(), args);
+    auto attr = b.getI32IntegerAttr(op.getOperand(0).getType().getIntOrFloatBitWidth());
+    auto mod = b.create<smt::IntConstantOp>(loc, attr);
+    return b.create<smt::IntModOp>(loc, tmp, mod);
+  }
   if (auto icmp = llvm::dyn_cast<comb::ICmpOp>(op)){
-    if(icmp.getPredicate() == circt::comb::ICmpPredicate::eq)
+    if(icmp.getPredicate() == circt::comb::ICmpPredicate::eq){
       return b.create<smt::EqOp>(loc, args);
+    }
     if(icmp.getPredicate() == circt::comb::ICmpPredicate::ne){
       return b.create<smt::DistinctOp>(loc, args);
+    }
     auto predicate = getSmtPred(icmp.getPredicate());
     return b.create<smt::IntCmpOp>(loc, predicate, args[0], args[1]);
-    }
   }
 }
 
