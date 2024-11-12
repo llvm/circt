@@ -767,7 +767,8 @@ CreateSiFiveMetadataPass::emitRetimeModulesMetadata(ObjectModelIR &omir) {
   j.array([&] {
     for (auto module : circuitOp.getBodyBlock()->getOps<FModuleLike>()) {
       // The annotation has no supplemental information, just remove it.
-      if (!AnnotationSet::removeAnnotations(module, retimeModuleAnnoClass))
+      if (!AnnotationSet::removeAnnotations(module, retimeModuleAnnoClass) ||
+          !instanceInfo->anyInstanceInEffectiveDesign(module))
         continue;
 
       // We use symbol substitution to make sure we output the correct thing

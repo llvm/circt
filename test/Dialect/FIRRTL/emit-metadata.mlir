@@ -4,7 +4,18 @@
 // RetimeModules
 //===----------------------------------------------------------------------===//
 
-firrtl.circuit "retime0" attributes {
+// Test that both flavors of retiming metadata are generated:
+//
+//   1. Class-based metadata
+//   2. JSON file-based metadata
+//
+// This retiming information should only be generated for things in the
+// "design".  This test works by instantiating modules that are wholly in the
+// design, wholly _not_ in the design, or in a mixture of both.  It then expects
+// that only modules which have at least one instance in the design will get
+// metadata.
+
+firrtl.circuit "TestHarness" attributes {
   annotations = [
     {
       class = "sifive.enterprise.firrtl.RetimeModulesAnnotation",
@@ -12,50 +23,141 @@ firrtl.circuit "retime0" attributes {
     }
   ]
 } {
-  firrtl.module @retime0() attributes {
+  firrtl.layer @A bind {}
+  firrtl.module @Foo() attributes {
     annotations = [
       {
         class = "freechips.rocketchip.util.RetimeModuleAnnotation"
       }
     ]
   } {}
-
-  firrtl.module @retime1() { }
-
-  firrtl.module @retime2() attributes {
+  firrtl.module @Bar() attributes {
     annotations = [
       {
         class = "freechips.rocketchip.util.RetimeModuleAnnotation"
       }
     ]
   } {}
+  firrtl.module @Baz() attributes {
+    annotations = [
+      {
+        class = "freechips.rocketchip.util.RetimeModuleAnnotation"
+      }
+    ]
+  } {}
+  firrtl.module @Qux() attributes {
+    annotations = [
+      {
+        class = "freechips.rocketchip.util.RetimeModuleAnnotation"
+      }
+    ]
+  } {}
+  firrtl.module @Quz() attributes {
+    annotations = [
+      {
+        class = "freechips.rocketchip.util.RetimeModuleAnnotation"
+      }
+    ]
+  } {}
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+    firrtl.instance baz @Foo()
+    firrtl.instance bar @Bar()
+    firrtl.instance quz1 @Quz()
+    firrtl.layerblock @A {
+      firrtl.instance qux @Qux()
+      firrtl.instance quz2 @Quz()
+    }
+  }
+  firrtl.module @TestHarness() {
+    firrtl.instance dut @DUT()
+    firrtl.instance bar @Bar()
+    firrtl.instance baz @Baz()
+  }
 }
-// CHECK-LABEL: firrtl.circuit "retime0"   {
-// CHECK:         firrtl.module @retime0(out %metadataObj: !firrtl.any
-// CHECK:           [[SIFIVE_METADATA:%.+]] = firrtl.object @SiFive_Metadata
-// CHECK:           [[METADATA_OBJ:%.+]] = firrtl.object.anyref_cast [[SIFIVE_METADATA]]
-// CHECK:           propassign %metadataObj, [[METADATA_OBJ]]
-// CHECK:         firrtl.module @retime1() {
-// CHECK:         firrtl.module @retime2()
 
-// CHECK:    firrtl.class @RetimeModulesSchema(in %[[moduleName_in:.+]]: !firrtl.string, out %moduleName: !firrtl.string) {
-// CHECK:    firrtl.propassign %moduleName, %[[moduleName_in]]
-
-// CHECK:  firrtl.class @RetimeModulesMetadata
-// CHECK-SAME: (out %[[retime0_field:[a-zA-Z][a-zA-Z0-9_]*]]: !firrtl.class<@RetimeModulesSchema
-// CHECK:    %[[v0:.+]] = firrtl.string "retime0"
-// CHECK:    %retime0 = firrtl.object @RetimeModulesSchema
-// CHECK-NEXT:    %[[v1:.+]] = firrtl.object.subfield %retime0
-// CHECK-NEXT:    firrtl.propassign %[[v1]], %[[v0]] : !firrtl.string
-// CHECK-NEXT:    firrtl.propassign %[[retime0_field]], %retime0
-// CHECK:    %2 = firrtl.string "retime2"
-// CHECK:    %retime2 = firrtl.object @RetimeModulesSchema
-// CHECK:    firrtl.object.subfield %retime2
-// CHECK:    firrtl.propassign %[[retime2field:.+]], %retime2
-
-// CHECK:               emit.file "retime_modules.json" {
-// CHECK-NEXT{LITERAL}:   sv.verbatim "[\0A \22{{0}}\22,\0A \22{{1}}\22\0A]" {symbols = [@retime0, @retime2]}
+// (1) Class-based metadata ----------------------------------------------------
+//
+// CHECK:               firrtl.class @RetimeModulesSchema(
+// CHECK-SAME:            in %[[moduleName_in:.+]]: !firrtl.string,
+// CHECK-SAME:            out %moduleName: !firrtl.string
+// CHECK-SAME:          ) {
+// CHECK-NEXT:            firrtl.propassign %moduleName, %[[moduleName_in]]
 // CHECK-NEXT:          }
+//
+// CHECK-LABEL:         firrtl.class @RetimeModulesMetadata(
+// CHECK-SAME:            out %Foo_field: !firrtl.class<@RetimeModulesSchema
+// CHECK-SAME:            out %Bar_field: !firrtl.class<@RetimeModulesSchema
+// CHECK-SAME:            out %Quz_field: !firrtl.class<@RetimeModulesSchema
+// CHECK-SAME:          ) {{.*}} {
+//
+// CHECK-NEXT:            %[[#name:]] = firrtl.string "Foo"
+// CHECK-NEXT:            %[[schema:.+]] = firrtl.object @RetimeModulesSchema(
+// CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[schema]][moduleName_in]
+// CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#name]]
+// CHECK-NEXT:            firrtl.propassign %Foo_field, %[[schema]]
+//
+// CHECK-NEXT:            %[[#name:]] = firrtl.string "Bar"
+// CHECK-NEXT:            %[[schema:.+]] = firrtl.object @RetimeModulesSchema(
+// CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[schema]][moduleName_in]
+// CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#name]]
+// CHECK-NEXT:            firrtl.propassign %Bar_field, %[[schema]]
+//
+// CHECK-NEXT:            %[[#name:]] = firrtl.string "Quz"
+// CHECK-NEXT:            %[[schema:.+]] = firrtl.object @RetimeModulesSchema(
+// CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[schema]][moduleName_in]
+// CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#name]]
+// CHECK-NEXT:            firrtl.propassign %Quz_field, %[[schema]]
+//
+// CHECK-NEXT:          }
+
+// (2) JSON file-based metadata ------------------------------------------------
+//
+// CHECK-LABEL:         emit.file "retime_modules.json"
+// CHECK-NEXT:            sv.verbatim "[
+// CHECK-SAME{LITERAL}:     \22{{0}}\22,\0A
+// CHECK-SAME{LITERAL}:     \22{{1}}\22,\0A
+// CHECK-SAME{LITERAL}:     \22{{2}}\22
+// CHECK-SAME:            ]"
+// CHECK-SAME:            symbols = [@Foo, @Bar, @Quz]
+
+// -----
+
+// Test that retime information is always emited if there is no
+// design-under-test (DUT) specified.
+
+firrtl.circuit "Foo" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.RetimeModulesAnnotation",
+      filename = "retime_modules.json"
+    }
+  ]
+} {
+  firrtl.module @Bar() attributes {
+    annotations = [
+      {
+        class = "freechips.rocketchip.util.RetimeModuleAnnotation"
+      }
+    ]
+  } {}
+  firrtl.module @Foo() {
+  }
+}
+
+// CHECK-LABEL:         firrtl.class @RetimeModulesMetadata(
+// CHECK-SAME:            out %Bar_field: !firrtl.class<@RetimeModulesSchema
+
+// CHECK-LABEL:         emit.file "retime_modules.json"
+// CHECK-NEXT:            sv.verbatim "[
+// CHECK-SAME{LITERAL}:     \22{{0}}\22
+// CHECK-SAME:            ]"
+// CHECK-SAME:            symbols = [@Bar]
 
 // -----
 
