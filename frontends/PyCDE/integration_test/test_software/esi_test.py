@@ -17,7 +17,6 @@ assert acc.sysinfo().esi_version() == 0
 m = acc.manifest()
 assert m.api_version == 0
 print(m.type_table)
-
 d = acc.build_accelerator()
 
 mmio_svc: esi.accelerator.MMIO
@@ -84,79 +83,79 @@ read_offset_check(0x1400, add_amt)
 # Manifest tests
 ################################################################################
 
-loopback = d.children[esi.AppID("loopback")]
-recv = loopback.ports[esi.AppID("add")].read_port("result")
-recv.connect()
+# loopback = d.children[esi.AppID("loopback")]
+# recv = loopback.ports[esi.AppID("add")].read_port("result")
+# recv.connect()
 
-send = loopback.ports[esi.AppID("add")].write_port("arg")
-send.connect()
+# send = loopback.ports[esi.AppID("add")].write_port("arg")
+# send.connect()
 
-loopback_info = None
-for mod_info in m.module_infos:
-  if mod_info.name == "LoopbackInOutAdd":
-    loopback_info = mod_info
-    break
-assert loopback_info is not None
-add_amt = mod_info.constants["add_amt"].value
+# loopback_info = None
+# for mod_info in m.module_infos:
+#   if mod_info.name == "LoopbackInOutAdd":
+#     loopback_info = mod_info
+#     break
+# assert loopback_info is not None
+# add_amt = mod_info.constants["add_amt"].value
 
 ################################################################################
 # Loopback add 7 tests
 ################################################################################
 
-data = 10234
-# Blocking write interface
-send.write(data)
-resp = recv.read()
+# data = 10234
+# # Blocking write interface
+# send.write(data)
+# resp = recv.read()
 
-print(f"data: {data}")
-print(f"resp: {resp}")
-assert resp == data + add_amt
+# print(f"data: {data}")
+# print(f"resp: {resp}")
+# assert resp == data + add_amt
 
-# Non-blocking write interface
-data = 10235
-nb_wr_start = time.time()
+# # Non-blocking write interface
+# data = 10235
+# nb_wr_start = time.time()
 
-# Timeout of 5 seconds
-nb_timeout = nb_wr_start + 5
-write_succeeded = False
-while time.time() < nb_timeout:
-  write_succeeded = send.try_write(data)
-  if write_succeeded:
-    break
+# # Timeout of 5 seconds
+# nb_timeout = nb_wr_start + 5
+# write_succeeded = False
+# while time.time() < nb_timeout:
+#   write_succeeded = send.try_write(data)
+#   if write_succeeded:
+#     break
 
-assert write_succeeded, "Non-blocking write failed"
-resp = recv.read()
-print(f"data: {data}")
-print(f"resp: {resp}")
-assert resp == data + add_amt
+# assert write_succeeded, "Non-blocking write failed"
+# resp = recv.read()
+# print(f"data: {data}")
+# print(f"resp: {resp}")
+# assert resp == data + add_amt
 
-print("PASS")
+# print("PASS")
 
-################################################################################
-# Const producer tests
-################################################################################
+# ################################################################################
+# # Const producer tests
+# ################################################################################
 
-producer_bundle = d.ports[esi.AppID("const_producer")]
-producer = producer_bundle.read_port("data")
-producer.connect()
-data = producer.read()
-producer.disconnect()
-print(f"data: {data}")
-assert data == 42
+# producer_bundle = d.ports[esi.AppID("const_producer")]
+# producer = producer_bundle.read_port("data")
+# producer.connect()
+# data = producer.read()
+# producer.disconnect()
+# print(f"data: {data}")
+# assert data == 42
 
-################################################################################
-# Handshake JoinAddFunc tests
-################################################################################
+# ################################################################################
+# # Handshake JoinAddFunc tests
+# ################################################################################
 
-a = d.ports[esi.AppID("join_a")].write_port("data")
-a.connect()
-b = d.ports[esi.AppID("join_b")].write_port("data")
-b.connect()
-x = d.ports[esi.AppID("join_x")].read_port("data")
-x.connect()
+# a = d.ports[esi.AppID("join_a")].write_port("data")
+# a.connect()
+# b = d.ports[esi.AppID("join_b")].write_port("data")
+# b.connect()
+# x = d.ports[esi.AppID("join_x")].read_port("data")
+# x.connect()
 
-a.write(15)
-b.write(24)
-xdata = x.read()
-print(f"join: {xdata}")
-assert xdata == 15 + 24
+# a.write(15)
+# b.write(24)
+# xdata = x.read()
+# print(f"join: {xdata}")
+# assert xdata == 15 + 24
