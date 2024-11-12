@@ -102,12 +102,15 @@ Operation *HWDialect::materializeConstant(OpBuilder &builder, Attribute value,
   }
 
   // Parameter expressions materialize into hw.param.value.
-  auto parentOp = builder.getBlock()->getParentOp();
-  auto curModule = dyn_cast<HWModuleOp>(parentOp);
-  if (!curModule)
-    curModule = parentOp->getParentOfType<HWModuleOp>();
-  if (curModule && isValidParameterExpression(value, curModule))
-    return builder.create<ParamValueOp>(loc, type, value);
+  Block *parentBlock = builder.getBlock();
+  if (parentBlock) {
+    auto parentOp = parentBlock->getParentOp();
+    auto curModule = dyn_cast<HWModuleOp>(parentOp);
+    if (!curModule)
+      curModule = parentOp->getParentOfType<HWModuleOp>();
+    if (curModule && isValidParameterExpression(value, curModule))
+      return builder.create<ParamValueOp>(loc, type, value);
+  }
 
   return nullptr;
 }

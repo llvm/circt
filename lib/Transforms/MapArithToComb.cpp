@@ -178,10 +178,11 @@ public:
                     OneToOnePattern<arith::ShRSIOp, comb::ShrSOp>,
                     OneToOnePattern<arith::ShRUIOp, comb::ShrUOp>,
                     OneToOnePattern<arith::ConstantOp, hw::ConstantOp, true>,
-                    OneToOnePattern<arith::SelectOp, comb::MuxOp>,
                     ExtSConversionPattern, ExtZConversionPattern,
                     TruncateConversionPattern, CompConversionPattern>(
         typeConverter, ctx);
+
+    patterns.insert<OneToOnePattern<arith::SelectOp, comb::MuxOp>>(ctx);
 
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns))))

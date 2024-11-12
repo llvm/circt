@@ -37,10 +37,6 @@ public:
   // semantics to a signless counterpart.
   mlir::Type removeSignedness(mlir::Type type);
 
-  // Returns true if any subtype in 'type' has signedness semantics.
-  bool hasSignednessSemantics(mlir::Type type);
-  bool hasSignednessSemantics(mlir::TypeRange types);
-
 private:
   // Memoizations for signedness info and conversions.
   struct ConvertedType {

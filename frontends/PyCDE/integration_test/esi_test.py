@@ -6,7 +6,7 @@
 
 import pycde
 from pycde import (AppID, Clock, Module, Reset, modparams, generator)
-from pycde.bsp import cosim
+from pycde.bsp import get_bsp
 from pycde.common import Constant, Input, Output
 from pycde.constructs import ControlReg, Reg, Wire
 from pycde.esi import ChannelService, FuncService, MMIO, MMIOReadWriteCmdType
@@ -145,9 +145,8 @@ class Top(Module):
 
 
 if __name__ == "__main__":
-  s = pycde.System(cosim.CosimBSP(Top),
-                   name="ESILoopback",
-                   output_directory=sys.argv[1])
+  bsp = get_bsp(sys.argv[2] if len(sys.argv) > 2 else None)
+  s = pycde.System(bsp(Top), name="ESILoopback", output_directory=sys.argv[1])
   s.compile()
   s.package()
 

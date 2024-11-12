@@ -10,9 +10,13 @@
 #include "circt/Conversion/Passes.h"
 #include "circt/Dialect/DC/DCDialect.h"
 #include "circt/Dialect/DC/DCPasses.h"
+#include "circt/Transforms/Passes.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Support.h"
 
-void registerDCPasses() { circt::dc::registerPasses(); }
+void registerDCPasses() {
+  circt::registerMapArithToCombPass();
+  circt::dc::registerPasses();
+}
 MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(DC, dc, circt::dc::DCDialect)

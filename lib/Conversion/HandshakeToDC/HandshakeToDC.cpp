@@ -21,6 +21,7 @@
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Dialect/Handshake/Visitor.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
@@ -451,10 +452,12 @@ public:
 
     Value outToken;
     if (operands.empty()) {
-      if (!op->hasTrait<OpTrait::ConstantLike>())
+      if (isa<sv::WireOp>(op)) {
+      } else if (!op->hasTrait<OpTrait::ConstantLike>()) {
         return op->emitOpError(
             "no-operand operation which isn't constant-like. Too dangerous "
             "to assume semantics - won't convert");
+      }
 
       // Constant-like operation; assume the token can be represented as a
       // constant `dc.source`.
