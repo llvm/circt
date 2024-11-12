@@ -507,14 +507,6 @@ def HWInstanceLike : OpInterface<"HWInstanceLike", [
       "bool", "getDoNotPrint", (ins)
     >
   ];
-
-  let verify = [{
-    if (cast<circt::hw::HWInstanceLike>(op)
-            .getReferencedModuleNamesAttr()
-            .size())
-      return success();
-    return op->emitOpError("has empty list of referenced modules");
-  }];
 }
 
 def InnerRefNamespace : NativeOpTrait<"InnerRefNamespace">;
