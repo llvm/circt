@@ -833,7 +833,7 @@ CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
       continue;
 
     // Record the defname of the module.
-    if (instanceInfo->anyInstanceUnderEffectiveDut(extModule)) {
+    if (instanceInfo->anyInstanceInEffectiveDesign(extModule)) {
       dutModules.push_back(*extModule.getDefname());
     } else {
       testModules.push_back(*extModule.getDefname());
