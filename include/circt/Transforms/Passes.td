@@ -123,4 +123,14 @@ def PrintOpCount : Pass<"print-op-count", "::mlir::ModuleOp"> {
   ];
 }
 
+def MemoryBanking : Pass<"memory-banking", "::mlir::func::FuncOp"> {
+  let summary = "Partition the memories used in affine parallel loops into banks";
+  let constructor = "circt::createMemoryBankingPass()";
+  let options = [
+    Option<"bankingFactor", "banking-factor", "unsigned", /*default=*/"1",
+           "Use this banking factor for all memories being partitioned">
+  ];
+  let dependentDialects = ["mlir::memref::MemRefDialect, mlir::scf::SCFDialect, mlir::affine::AffineDialect"];
+}
+
 #endif // CIRCT_TRANSFORMS_PASSES
