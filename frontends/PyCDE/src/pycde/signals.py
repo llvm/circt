@@ -303,6 +303,12 @@ class BitsSignal(BitVectorSignal):
   """Operations on signless ints (bits). These will all return signless values -
   a user is expected to reapply signedness semantics if needed."""
 
+  def _exec_cast(self, targetValueType, type_getter, width: int = None):
+    if width is not None and width != self.type.width:
+      return self.pad_or_truncate(width)._exec_cast(targetValueType,
+                                                    type_getter)
+    return super()._exec_cast(targetValueType, type_getter)
+
   @singledispatchmethod
   def __getitem__(self, idxOrSlice: Union[int, slice]) -> BitVectorSignal:
     lo, hi = get_slice_bounds(len(self), idxOrSlice)
