@@ -61,7 +61,7 @@ void LowerIntmodulesPass::runOnOperation() {
   auto &ig = getAnalysis<InstanceGraph>();
 
   bool changed = false;
-  bool warningEmittedOnce = false;
+  bool warnEICGwrapperDropsDedupAnno = false;
 
   // Convert to int ops.
   for (auto op :
@@ -159,10 +159,10 @@ void LowerIntmodulesPass::runOnOperation() {
       //        it causes an error with `fixupEICGWrapper`. For now drop the
       //        annotation until we fully migrate into EICG intrinsic.
       if (AnnotationSet::removeAnnotations(op, firrtl::dedupGroupAnnoClass))
-        if (!warningEmittedOnce) {
+        if (!warnEICGwrapperDropsDedupAnno) {
           op.emitWarning() << "Annotation " << firrtl::dedupGroupAnnoClass
                            << " on EICG_wrapper is dropped";
-          warningEmittedOnce = true;
+          warnEICGwrapperDropsDedupAnno = true;
         }
 
       if (failed(checkModForAnnotations(op, eicgName)))
