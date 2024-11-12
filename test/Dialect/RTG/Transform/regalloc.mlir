@@ -18,14 +18,17 @@ rtg.sequence @seq1 {
 // CHECK-LABEL: rtg.sequence @seq2
 rtg.sequence @seq2 {
   // CHECK-SEED0: [[C50:%.+]] = arith.constant 50 : i32
-  %c50 = arith.constant 50 : i32
-  // CHECK-NOT: rtg.select-random
+  %c50 = arith.constant 50 : index
+  %c50_i32 = arith.constant 50 : i32
+  // CHECK-NOT: rtg.bag_select_random
   // CHECK-SEED0: rtgtest.instr_a %{{.*}}, [[C50]]
   // CHECK-SEED1: rtg.label.decl
   // CHECK: rtg.sequence_closure @seq0
   // CHECK: rtg.sequence_closure @seq1
   %0 = rtg.sequence_closure @seq0
-  %1 = rtg.sequence_closure @seq1(%c50 : i32)
-  // CHECK-NOT: rtg.select-random
-  rtg.select_random [%0, %1]((), () : (), ()), [%c50, %c50] : !rtg.sequence, !rtg.sequence
+  %1 = rtg.sequence_closure @seq1(%c50_i32 : i32)
+  // CHECK-NOT: rtg.bag_select_random
+  %bag = rtg.bag_create (%0 : %c50, %1 : %c50) : !rtg.sequence
+  %seq = rtg.bag_select_random %bag : !rtg.bag<!rtg.sequence>
+  rtg.invoke %seq : !rtg.sequence
 }

@@ -12,18 +12,6 @@ rtg.sequence @seq0 attributes {rtg.some_attr} {
   rtg.label %0 : i32
 }
 
-// CHECK-LABEL: rtg.sequence @seq1
-rtg.sequence @seq1 {
-  // CHECK: [[SEQ:%.+]] = rtg.sequence_closure @seq0{{$}}
-  %sequence = rtg.sequence_closure @seq0
-  // CHECK: [[RATIO:%.+]] = arith.constant 1 : i32
-  %ratio = arith.constant 1 : i32
-  // CHECK: rtg.select_random [[[SEQ]]] (() : ()), [[[RATIO]]] : !rtg.sequence
-  rtg.select_random [%sequence](() : ()), [%ratio] : !rtg.sequence
-  // CHECK: rtg.select_random [[[SEQ]], [[SEQ]]] ((), () : (), ()), [[[RATIO]], [[RATIO]]] : !rtg.sequence, !rtg.sequence
-  rtg.select_random [%sequence, %sequence]((), () : (), ()), [%ratio, %ratio] : !rtg.sequence, !rtg.sequence
-}
-
 // CHECK-LABEL: rtg.sequence @seq2
 // CHECK: ^bb0(%arg0: i32, %arg1: i64):
 rtg.sequence @seq2 {

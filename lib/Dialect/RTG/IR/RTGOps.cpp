@@ -54,26 +54,6 @@ SequenceClosureOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
-// SelectRandomOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult SelectRandomOp::verify() {
-  if (getSequences().size() != getSequenceArgs().size())
-    return emitOpError("number of sequences and sequence arg lists must match");
-
-  if (getSequences().size() != getRatios().size())
-    return emitOpError("number of sequences and ratios must match");
-
-  for (auto [seq, args] : llvm::zip(getSequences(), getSequenceArgs()))
-    if (TypeRange(cast<SequenceType>(seq.getType()).getArgTypes()) !=
-        args.getTypes())
-      return emitOpError(
-          "sequence argument types do not match sequence requirements");
-
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // SetCreateOp
 //===----------------------------------------------------------------------===//
 

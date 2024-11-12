@@ -67,25 +67,6 @@ def SequenceClosureOp : RTGOp<"sequence_closure", [
   let assemblyFormat = "$sequence (`(` $args^ `:` qualified(type($args)) `)`)? attr-dict";
 }
 
-def SelectRandomOp : RTGOp<"select_random", [AttrSizedOperandSegments]> {
-  let summary = "places a random sequence in another sequence or test";
-
-  let arguments = (ins
-    Variadic<SequenceType>:$sequences,
-    Variadic<I32>:$ratios,
-    VariadicOfVariadic<AnyType,
-                       "sequence_args_operand_segments">:$sequence_args,
-    DenseI32ArrayAttr:$sequence_args_operand_segments);
-
-  // TODO: write a nice custom assembly
-  let assemblyFormat = [{
-    ` ` `[` $sequences `]` `(` $sequence_args `:` type($sequence_args) `)`
-    `,` `[` $ratios `]` attr-dict `:` type($sequences)
-  }];
-
-  let hasVerifier = true;
-}
-
 def InvokeSequenceOp : RTGOp<"invoke", []> {
   let summary = "invoke a sequence of instructions";
   let description = [{

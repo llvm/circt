@@ -27,9 +27,10 @@ public:
   ResultType dispatchOpVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<SequenceOp, SequenceClosureOp, SelectRandomOp,
-                       LabelDeclOp, LabelOp, OnContextOp, RenderedContextOp,
-                       SetCreateOp, SetSelectRandomOp, SetDifferenceOp, TestOp,
+        .template Case<SequenceOp, SequenceClosureOp, LabelDeclOp, LabelOp,
+                       OnContextOp, RenderedContextOp, SetCreateOp,
+                       SetSelectRandomOp, SetDifferenceOp, TestOp, BagCreateOp,
+                       BagSelectRandomOp, BagDifferenceOp, InvokeSequenceOp,
                        TargetOp, YieldOp>([&](auto expr) -> ResultType {
           return thisCast->visitOp(expr, args...);
         })
@@ -82,7 +83,7 @@ public:
 
   HANDLE(SequenceOp, Unhandled);
   HANDLE(SequenceClosureOp, Unhandled);
-  HANDLE(SelectRandomOp, Unhandled);
+  HANDLE(InvokeSequenceOp, Unhandled);
   HANDLE(LabelDeclOp, Unhandled);
   HANDLE(LabelOp, Unhandled);
   HANDLE(OnContextOp, Unhandled);
@@ -90,6 +91,9 @@ public:
   HANDLE(SetCreateOp, Unhandled);
   HANDLE(SetSelectRandomOp, Unhandled);
   HANDLE(SetDifferenceOp, Unhandled);
+  HANDLE(BagCreateOp, Unhandled);
+  HANDLE(BagSelectRandomOp, Unhandled);
+  HANDLE(BagDifferenceOp, Unhandled);
   HANDLE(TestOp, Unhandled);
   HANDLE(TargetOp, Unhandled);
   HANDLE(YieldOp, Unhandled);

@@ -1,5 +1,6 @@
-// RUN: circt-opt --rtg-elaborate=seed=0 %s | FileCheck %s --check-prefixes=CHECK-SEED0,CHECK
-// RUN: circt-opt --rtg-elaborate=seed=1 %s | FileCheck %s --check-prefixes=CHECK-SEED1,CHECK
+// RUN: circt-opt --rtg-elaborate=seed=0 -canonicalize %s | FileCheck %s --check-prefixes=CHECK-SEED0,CHECK
+// RUN: circt-opt --rtg-elaborate=seed=2 -canonicalize %s | FileCheck %s --check-prefixes=CHECK-SEED1,CHECK
+// TODO: remove the canonicalizer invokation as soon as the pass does DCE
 
 // CHECK-LABEL: rtg.sequence @seq0
 rtg.sequence @seq0 {
@@ -19,12 +20,15 @@ rtg.sequence @seq1 {
 // CHECK-LABEL: rtg.test @seq2
 rtg.test @seq2 : !rtg.target<> {
   // CHECK-SEED0: [[C50:%.+]] = arith.constant 50 : i32
-  %c50 = arith.constant 50 : i32
-  // CHECK-NOT: rtg.select_random
+  %c50_i32 = arith.constant 50 : i32
+  %c50 = arith.constant 50 : index
+  // CHECK-NOT: rtg.bag_select_random
   // CHECK-SEED0: rtgtest.instr_a %{{.*}}, [[C50]]
   // CHECK-SEED1: rtg.label.decl
   %0 = rtg.sequence_closure @seq0
-  %1 = rtg.sequence_closure @seq1(%c50 : i32)
-  // CHECK-NOT: rtg.select_random
-  rtg.select_random [%0, %1]((), () : (), ()), [%c50, %c50] : !rtg.sequence, !rtg.sequence
+  %1 = rtg.sequence_closure @seq1(%c50_i32 : i32)
+  // CHECK-NOT: rtg.bag_select_random
+  %bag = rtg.bag_create (%0 : %c50, %1 : %c50) : !rtg.sequence
+  %seq = rtg.bag_select_random %bag : !rtg.bag<!rtg.sequence>
+  rtg.invoke %seq : !rtg.sequence
 }
