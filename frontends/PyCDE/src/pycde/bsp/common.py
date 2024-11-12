@@ -302,6 +302,7 @@ def ChannelHostMem(read_width: int,
         read_bundle, _ = ChannelHostMemImpl.read.type.pack(req=req)
         return read_bundle
 
+      # TODO: mux together multiple read clients.
       assert len(reqs) == 1, "Only one read client supported for now."
 
       req = Wire(Channel(ChannelHostMemImpl.UpstreamReq))
@@ -313,19 +314,18 @@ def ChannelHostMem(read_width: int,
             c.channel for c in client.type.channels if c.name == 'resp'
         ][0]
         client_read_type = resp_type.inner_type.data
-        gearbox = GearBoxUpstream(read_width, client_read_type)(
-            clk=ports.clk,
-            rst=ports.rst,
-            in_data=resp_data.data,
-            in_valid=resp_valid,
-        )
+        # TODO: support gearboxing up to the correct width.
+        assert client_read_type.width == read_width, \
+          "Gearboxing not yet supported."
         client_tag = resp_data.tag
-        client_resp_valid = gearbox.out_valid
+        client_resp_valid = resp_valid
         client_resp, client_resp_ready = Channel(resp_type).wrap(
             {
+                # TODO: tag re-writing to deal with tag aliasing.
                 "tag": client_tag,
-                "data": gearbox.out_data
-            }, client_resp_valid)
+                "data": resp_data.data.bitcast(client_read_type),
+            },
+            client_resp_valid)
         # TODO: mux this properly.
         resp_chan_ready.assign(client_resp_ready)
 
@@ -333,58 +333,14 @@ def ChannelHostMem(read_width: int,
         client_req = froms["req"]
         client.assign(client_bundle)
 
+        # Assign the multiplexed read request to the upstream request.
         req.assign(
             client_req.transform(lambda r: ChannelHostMemImpl.UpstreamReq({
                 "address": r.address,
-                "length": gearbox.NumFlits,
+                "length": 1,
                 "tag": r.tag
             })))
 
       return read_bundle
 
   return ChannelHostMemImpl
-
-
-@modparams
-def GearBoxDownstream(width: int, type: Type):
-
-  class GearBoxDownstream(Module):
-    clk = Clock()
-    rst = Reset()
-
-    in_data = Input(type)
-    in_valid = Input(Bits(1))
-    in_next = Input(Bits(1))
-
-    out_data = Output(
-        StructType([
-            ("data", Bits(width)),
-            ("byte_enable", Bits((width + 7) // 8)),
-        ]))
-    out_last = Output(Bits(1))
-
-  return GearBoxDownstream
-
-
-@modparams
-def GearBoxUpstream(width: int, type: Type):
-
-  class GearBoxUpstream(Module):
-    clk = Clock()
-    rst = Reset()
-
-    in_data = Input(Bits(width))
-    in_valid = Input(Bits(1))
-
-    out_data = Output(type)
-    out_valid = Output(Bits(1))
-
-    NumFlits = (type.bitwidth + width - 1) // width
-
-    @generator
-    def construct(ports):
-      assert width == type.bitwidth, "Actual gearboxing not implemented."
-      ports.out_data = ports.in_data.bitcast(type)
-      ports.out_valid = ports.in_valid
-
-  return GearBoxUpstream

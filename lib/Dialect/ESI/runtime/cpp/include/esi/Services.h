@@ -211,6 +211,9 @@ public:
     bool useLargePages = false;
   };
 
+  /// In cases where necessary, enable host memory services.
+  virtual void start() {}
+
   /// Allocate a region of host memory in accelerator accessible address space.
   virtual std::unique_ptr<HostMemRegion> allocate(std::size_t size,
                                                   Options opts) const = 0;

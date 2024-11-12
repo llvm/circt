@@ -256,6 +256,8 @@ def SystolicArray(row_inputs: ArraySignal, col_inputs: ArraySignal, pe_builder):
 
 @modparams
 def Counter(width: int):
+  """Construct a counter with the specified width. Increment the counter on the
+  if the increment signal is asserted."""
 
   class Counter(Module):
     clk = Clock()

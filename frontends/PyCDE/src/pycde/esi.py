@@ -504,12 +504,6 @@ class MMIO:
 class _HostMem(ServiceDecl):
   """ESI standard service to request read or write access to host memory."""
 
-  WriteReqType = StructType([
-      ("address", UInt(64)),
-      ("tag", UInt(8)),
-      ("data", Any()),
-  ])
-
   ReadReqType = StructType([
       ("address", UInt(64)),
       ("tag", UInt(8)),
@@ -518,18 +512,12 @@ class _HostMem(ServiceDecl):
   def __init__(self):
     super().__init__(self.__class__)
 
-  # read = Bundle([
-  #     BundledChannel("req", ChannelDirection.FROM, HostMemReadReqType),
-  #     BundledChannel("resp", ChannelDirection.TO, HostMemReadRespType)
-  # ])
-
-  # write = Bundle([
-  #     BundledChannel("req", ChannelDirection.FROM, HostMemWriteReqType),
-  #     BundledChannel("ackTag", ChannelDirection.TO, UInt(8))
-  # ])
-
+  # Create a read request to the host memory out of a request channel and return
+  # the response channel with the specified data type.
   def read(self, appid: AppID, req: ChannelSignal,
            data_type: Type) -> ChannelSignal:
+    self._materialize_service_decl()
+
     resp_type = StructType([
         ("tag", UInt(8)),
         ("data", data_type),

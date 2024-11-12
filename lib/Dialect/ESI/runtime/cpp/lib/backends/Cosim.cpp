@@ -432,7 +432,9 @@ class CosimHostMem : public HostMem {
 public:
   CosimHostMem(AcceleratorConnection &acc, Context &ctxt,
                StubContainer *rpcClient)
-      : acc(acc) {
+      : acc(acc), ctxt(ctxt), rpcClient(rpcClient) {}
+
+  void start() override {
     // We have to locate the channels ourselves since this service might be used
     // to retrieve the manifest.
 
@@ -440,7 +442,7 @@ public:
     ChannelDesc readArg, readResp;
     if (!rpcClient->getChannelDesc("__cosim_hostmem_read.arg", readArg) ||
         !rpcClient->getChannelDesc("__cosim_hostmem_read.result", readResp))
-      throw std::runtime_error("Could not find MMIO channels");
+      throw std::runtime_error("Could not find HostMem channels");
 
     const esi::Type *readRespType =
         getType(ctxt, new StructType(readResp.type(),
@@ -465,12 +467,14 @@ public:
                   true);
   }
 
+  // Service the read request as a callback. Simply reads the data from the
+  // location specified. TODO: check that the memory has been mapped.
   MessageData serviceRead(const MessageData &reqBytes) {
     const HostMemReadReq *req = reqBytes.as<HostMemReadReq>();
     acc.getLogger().debug(
         [&](std::string &subsystem, std::string &msg,
             std::unique_ptr<std::map<std::string, std::any>> &details) {
-          subsystem = "HOSTMEM";
+          subsystem = "HostMem";
           msg = "Read request: addr=0x" + toHex(req->address) +
                 " len=" + std::to_string(req->length) +
                 " tag=" + std::to_string(req->tag);
@@ -480,7 +484,7 @@ public:
     acc.getLogger().debug(
         [&](std::string &subsystem, std::string &msg,
             std::unique_ptr<std::map<std::string, std::any>> &details) {
-          subsystem = "HOSTMEM";
+          subsystem = "HostMem";
           msg = "Read result: data=0x" + toHex(resp.data) +
                 " tag=" + std::to_string(resp.tag);
         });
@@ -521,6 +525,8 @@ private:
     return type;
   }
   AcceleratorConnection &acc;
+  Context &ctxt;
+  StubContainer *rpcClient;
   std::unique_ptr<WriteCosimChannelPort> readRespPort;
   std::unique_ptr<ReadCosimChannelPort> readReqPort;
   std::unique_ptr<CallService::Callback> read;

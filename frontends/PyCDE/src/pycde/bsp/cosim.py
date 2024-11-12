@@ -51,6 +51,9 @@ def CosimBSP(user_module: Type[Module]) -> Module:
                   rst=ports.rst,
                   cmd=mmio_read_write)
 
+      # Instantiate a hostmem service generator which multiplexes requests to a
+      # either a single read or write channel. Get those channels and transform
+      # them into callbacks.
       hostmem = ChannelHostMem(
           read_width=ESI_Cosim_UserTopWrapper.HostMemWidth,
           write_width=ESI_Cosim_UserTopWrapper.HostMemWidth)(
@@ -58,7 +61,6 @@ def CosimBSP(user_module: Type[Module]) -> Module:
               appid=esi.AppID("__cosim_hostmem"),
               clk=ports.clk,
               rst=ports.rst)
-
       resp_wire = Wire(
           Channel(
               StructType([

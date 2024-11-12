@@ -59,6 +59,9 @@ class PrintfExample(Module):
 
 
 class ReadMem(Module):
+  """Module which reads host memory at a certain address as given by writes to
+  MMIO register 0x8. Stores the read value and responds to all MMIO reads with
+  the stored value."""
 
   clk = Clock()
   rst = Reset()

@@ -100,13 +100,19 @@ void registerCallbacks(AcceleratorConnection *conn, Accelerator *accel) {
 }
 
 void dmaTest(AcceleratorConnection *conn, Accelerator *acc) {
-  conn->getService<services::HostMem>();
+  // Enable the host memory service.
+  auto hostmem = conn->getService<services::HostMem>();
+  hostmem->start();
+
+  // Initiate a test read.
   auto *readMem =
       acc->getPorts().at(AppID("ReadMem")).getAs<services::MMIO::MMIORegion>();
   uint64_t *dataPtr = new uint64_t;
   *dataPtr = 0x12345678;
   readMem->write(8, (uint64_t)dataPtr);
 
+  // Wait for the accelerator to read the correct value. Timeout and fail after
+  // 10ms.
   uint64_t val = 0;
   for (int i = 0; i < 100; ++i) {
     val = readMem->read(0);
@@ -114,7 +120,6 @@ void dmaTest(AcceleratorConnection *conn, Accelerator *acc) {
       break;
     std::this_thread::sleep_for(std::chrono::microseconds(100));
   }
-
   if (val != *dataPtr)
     throw std::runtime_error("DMA test failed");
 }

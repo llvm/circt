@@ -299,12 +299,12 @@ class MMIOReq(Module):
 # CHECK-LABEL:  hw.module @HostMemReq()
 # CHECK-NEXT:     [[R0:%.+]] = hwarith.constant 0 : ui64
 # CHECK-NEXT:     %false = hw.constant false
-# CHECK-NEXT:     [[R1:%.+]] = esi.service.req <@HostMem::@read>(#esi.appid<"host_mem_req">) : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from "req", !esi.channel<!hw.struct<tag: ui8, data: ui256>> to "resp"]>
 # CHECK-NEXT:     [[R2:%.+]] = hwarith.constant 0 : ui8
 # CHECK-NEXT:     [[R3:%.+]] = hw.struct_create ([[R0]], [[R2]]) : !hw.struct<address: ui64, tag: ui8>
 # CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R3]], %false : !hw.struct<address: ui64, tag: ui8>
-# CHECK-NEXT:     %resp = esi.bundle.unpack %chanOutput from %1 : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from "req", !esi.channel<!hw.struct<tag: ui8, data: ui256>> to "resp"]>
-# CHECK:        esi.service.std.hostmem @HostMem
+# CHECK-NEXT:     [[R1:%.+]] = esi.service.req <@_HostMem::@read>(#esi.appid<"host_mem_req">) : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from "req", !esi.channel<!hw.struct<tag: ui8, data: ui256>> to "resp"]>
+# CHECK-NEXT:     %resp = esi.bundle.unpack %chanOutput from [[R1]] : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from "req", !esi.channel<!hw.struct<tag: ui8, data: ui256>> to "resp"]>
+# CHECK:        esi.service.std.hostmem @_HostMem
 @unittestmodule(esi_sys=True)
 class HostMemReq(Module):
 
@@ -312,21 +312,13 @@ class HostMemReq(Module):
   def build(ports):
     u64 = UInt(64)(0)
     c1 = Bits(1)(0)
-    resp_type = StructType([
-        ("tag", UInt(8)),
-        ("data", UInt(256)),
-    ])
-    read_bundle = HostMem.read(
-        AppID("host_mem_req"),
-        Bundle([
-            BundledChannel("req", ChannelDirection.FROM,
-                           esi.HostMemReadReqType),
-            BundledChannel("resp", ChannelDirection.TO, resp_type)
-        ]))
 
-    address, _ = Channel(esi.HostMemReadReqType).wrap(
-        esi.HostMemReadReqType({
+    address, _ = Channel(esi.HostMem.ReadReqType).wrap(
+        esi.HostMem.ReadReqType({
             "tag": 0,
             "address": u64
         }), c1)
-    _ = read_bundle.unpack(req=address)
+
+    _ = HostMem.read(appid=AppID("host_mem_req"),
+                     req=address,
+                     data_type=UInt(256))
