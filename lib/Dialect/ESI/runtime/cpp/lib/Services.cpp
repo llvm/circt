@@ -261,6 +261,13 @@ CallService::Callback::Callback(
     throw std::runtime_error("CallService must have exactly two channels");
 }
 
+CallService::Callback *CallService::Callback::get(AcceleratorConnection &acc,
+                                                  AppID id,
+                                                  WriteChannelPort &result,
+                                                  ReadChannelPort &arg) {
+  return new Callback(acc, id, {{"arg", arg}, {"result", result}});
+}
+
 void CallService::Callback::connect(
     std::function<MessageData(const MessageData &)> callback, bool quick) {
   result.connect();

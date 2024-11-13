@@ -2,15 +2,19 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+from __future__ import annotations
+
 from ..common import Clock, Input, Output, Reset
-from ..constructs import AssignableSignal, NamedWire, Wire
+from ..constructs import AssignableSignal, ControlReg, NamedWire, Wire
 from .. import esi
 from ..module import Module, generator, modparams
-from ..signals import BitsSignal, ChannelSignal
+from ..signals import BitsSignal, BundleSignal, ChannelSignal
 from ..support import clog2
-from ..types import Array, Bits, Channel, UInt
+from ..types import (Array, Bits, Bundle, BundledChannel, Channel,
+                     ChannelDirection, StructType, Type, UInt)
 
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
+import typing
 
 MagicNumber = 0x207D98E5_E5100E51  # random + ESI__ESI
 VersionNumber = 0  # Version 0: format subject to change
@@ -249,3 +253,94 @@ class ChannelMMIO(esi.ServiceImplementation):
         esi.MMIOReadWriteCmdType).wrap(client_cmd, cmd_valid)
     cmd_ready_wire.assign(client_addr_ready)
     return sel_bits, client_addr_chan
+
+
+@modparams
+def ChannelHostMem(read_width: int,
+                   write_width: int) -> typing.Type['ChannelHostMemImpl']:
+
+  class ChannelHostMemImpl(esi.ServiceImplementation):
+    """Builds a HostMem service which multiplexes multiple HostMem clients into
+    two (read and write) bundles of the given data width."""
+
+    clk = Clock()
+    rst = Reset()
+
+    UpstreamReq = StructType([
+        ("address", UInt(64)),
+        ("length", UInt(32)),
+        ("tag", UInt(8)),
+    ])
+    read = Output(
+        Bundle([
+            BundledChannel("req", ChannelDirection.TO, UpstreamReq),
+            BundledChannel(
+                "resp", ChannelDirection.FROM,
+                StructType([
+                    ("tag", UInt(8)),
+                    ("data", Bits(read_width)),
+                ])),
+        ]))
+
+    @generator
+    def generate(ports, bundles: esi._ServiceGeneratorBundles):
+      read_reqs = [req for req in bundles.to_client_reqs if req.port == 'read']
+      ports.read = ChannelHostMemImpl.build_tagged_read_mux(ports, read_reqs)
+
+    @staticmethod
+    def build_tagged_read_mux(
+        ports, reqs: List[esi._OutputBundleSetter]) -> BundleSignal:
+      """Build the read side of the HostMem service."""
+
+      if len(reqs) == 0:
+        req, req_ready = Channel(ChannelHostMemImpl.UpstreamReq).wrap(
+            {
+                "tag": 0,
+                "length": 0,
+                "address": 0
+            }, 0)
+        read_bundle, _ = ChannelHostMemImpl.read.type.pack(req=req)
+        return read_bundle
+
+      # TODO: mux together multiple read clients.
+      assert len(reqs) == 1, "Only one read client supported for now."
+
+      req = Wire(Channel(ChannelHostMemImpl.UpstreamReq))
+      read_bundle, froms = ChannelHostMemImpl.read.type.pack(req=req)
+      resp_chan_ready = Wire(Bits(1))
+      resp_data, resp_valid = froms["resp"].unwrap(resp_chan_ready)
+      for client in reqs:
+        resp_type = [
+            c.channel for c in client.type.channels if c.name == 'resp'
+        ][0]
+        client_read_type = resp_type.inner_type.data
+        # TODO: support gearboxing up to the correct width.
+        assert client_read_type.width == read_width, \
+          "Gearboxing not yet supported."
+        client_tag = resp_data.tag
+        client_resp_valid = resp_valid
+        client_resp, client_resp_ready = Channel(resp_type).wrap(
+            {
+                # TODO: tag re-writing to deal with tag aliasing.
+                "tag": client_tag,
+                "data": resp_data.data.bitcast(client_read_type),
+            },
+            client_resp_valid)
+        # TODO: mux this properly.
+        resp_chan_ready.assign(client_resp_ready)
+
+        client_bundle, froms = client.type.pack(resp=client_resp)
+        client_req = froms["req"]
+        client.assign(client_bundle)
+
+        # Assign the multiplexed read request to the upstream request.
+        req.assign(
+            client_req.transform(lambda r: ChannelHostMemImpl.UpstreamReq({
+                "address": r.address,
+                "length": 1,
+                "tag": r.tag
+            })))
+
+      return read_bundle
+
+  return ChannelHostMemImpl

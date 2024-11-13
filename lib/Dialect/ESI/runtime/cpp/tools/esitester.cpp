@@ -30,6 +30,7 @@
 using namespace esi;
 
 static void registerCallbacks(AcceleratorConnection *, Accelerator *);
+static void dmaTest(AcceleratorConnection *, Accelerator *);
 
 int main(int argc, const char *argv[]) {
   // TODO: find a command line parser library rather than doing this by hand.
@@ -61,6 +62,8 @@ int main(int argc, const char *argv[]) {
       }
     } else if (cmd == "wait") {
       std::this_thread::sleep_for(std::chrono::seconds(1));
+    } else if (cmd == "dmatest") {
+      dmaTest(acc.get(), accel);
     }
 
     acc->disconnect();
@@ -94,4 +97,29 @@ void registerCallbacks(AcceleratorConnection *conn, Accelerator *accel) {
           },
           true);
   }
+}
+
+void dmaTest(AcceleratorConnection *conn, Accelerator *acc) {
+  // Enable the host memory service.
+  auto hostmem = conn->getService<services::HostMem>();
+  hostmem->start();
+
+  // Initiate a test read.
+  auto *readMem =
+      acc->getPorts().at(AppID("ReadMem")).getAs<services::MMIO::MMIORegion>();
+  uint64_t *dataPtr = new uint64_t;
+  *dataPtr = 0x12345678;
+  readMem->write(8, (uint64_t)dataPtr);
+
+  // Wait for the accelerator to read the correct value. Timeout and fail after
+  // 10ms.
+  uint64_t val = 0;
+  for (int i = 0; i < 100; ++i) {
+    val = readMem->read(0);
+    if (val == *dataPtr)
+      break;
+    std::this_thread::sleep_for(std::chrono::microseconds(100));
+  }
+  if (val != *dataPtr)
+    throw std::runtime_error("DMA test failed");
 }
