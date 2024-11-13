@@ -183,9 +183,9 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
       opt.shouldReplaceSequentialMemories(),
       opt.getReplaceSequentialMemoriesFile()));
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerLayersPass());
-
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createExtractInstancesPass());
+
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerLayersPass());
 
   // Run passes to resolve Grand Central features.  This should run before
   // BlackBoxReader because Grand Central needs to inform BlackBoxReader where
