@@ -49,6 +49,14 @@ def InstanceGraphInstanceOpInterface : OpInterface<"InstanceOpInterface"> {
       return ::mlir::ArrayAttr::get(attr.getContext(), {attr});
     }]>,
   ];
+
+  let verify = [{
+    if (mlir::cast<ConcreteOp>($_op)
+            .getReferencedModuleNamesAttr()
+            .size())
+      return success();
+    return $_op->emitOpError("expected a non-empty list of referenced modules");
+  }];
 }
 
 def InstanceGraphModuleOpInterface : OpInterface<"ModuleOpInterface"> {
