@@ -1449,9 +1449,9 @@ circuit Layers:
 
 ;// -----
 ; CHECK-LABEL: firrtl.circuit "BasicProps"
-FIRRTL version 3.3.0
+FIRRTL version 4.0.0
 circuit BasicProps :
-  module BasicProps :
+  public module BasicProps :
   ; CHECK-LABEL: module private @Integer
   module Integer :
     ; CHECK-SAME: out %a: !firrtl.integer
@@ -1655,13 +1655,13 @@ circuit WireOfProbesAndNames:
     wire probe : Probe<UInt<1>>
 
 ;// -----
-FIRRTL version 3.3.0
+FIRRTL version 4.0.0
 
 ; CHECK-LABEL: circuit "AnyRef"
 circuit AnyRef:
   class Foo:
     skip
-  module AnyRef:
+  public module AnyRef:
     input x : AnyRef
     ; CHECK: !firrtl.anyref
     output y : AnyRef
