@@ -70,7 +70,7 @@ firrtl.circuit "ExtractBlackBoxesSimple" attributes {annotations = [{class = "fi
   // CHECK:    firrtl.propassign %filename, %filename_in : !firrtl.string
   // CHECK:  }
 
-  // CHECK:  firrtl.class @ExtractInstancesMetadata(out %[[bb_0_field]]: !firrtl.class<@ExtractInstancesSchema 
+  // CHECK:  firrtl.class @ExtractInstancesMetadata(out %[[bb_0_field]]: !firrtl.class<@ExtractInstancesSchema
   // CHECK-SAME: {
   // CHECK:    %[[V0:.+]] = firrtl.string "bb_0"
   // CHECK:    %[[bb_0:.+]] = firrtl.object @ExtractInstancesSchema
