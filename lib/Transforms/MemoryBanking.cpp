@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Support/LLVM.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Affine/LoopUtils.h"
@@ -23,6 +24,7 @@
 #include "mlir/IR/AffineMap.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -211,7 +213,7 @@ struct BankAffineStorePattern
   LogicalResult matchAndRewrite(mlir::affine::AffineStoreOp storeOp,
                                 PatternRewriter &rewriter) const override {
     if (processedOps.contains(storeOp)) {
-      return success();
+      return failure();
     }
     Location loc = storeOp.getLoc();
     auto banks = memoryToBanks[storeOp.getMemref()];
@@ -330,7 +332,6 @@ LogicalResult cleanUpOldMemRefs(DenseSet<Value> &oldMemRefVals,
   }
   // Erase values safely.
   for (auto &memrefVal : valuesToErase) {
-    // oldMemRefVals.erase(memrefVal); // Ensure DenseSet is updated.
     assert(memrefVal.use_empty() && "use must be empty");
     if (auto blockArg = dyn_cast<BlockArgument>(memrefVal)) {
       blockArg.getOwner()->eraseArgument(blockArg.getArgNumber());
@@ -355,9 +356,8 @@ LogicalResult cleanUpOldMemRefs(DenseSet<Value> &oldMemRefVals,
 }
 
 void MemoryBankingPass::runOnOperation() {
-  if (getOperation().isExternal() || bankingFactor == 1) {
+  if (bankingFactor == 1)
     return;
-  }
 
   if (bankingFactor == 0) {
     getOperation().emitError("banking factor must be greater than 1");
@@ -396,9 +396,6 @@ void MemoryBankingPass::runOnOperation() {
   if (failed(cleanUpOldMemRefs(oldMemRefVals, opsToErase))) {
     signalPassFailure();
   }
-
-  llvm::errs() << "ran everything\n";
-  getOperation()->dump();
 }
 
 namespace circt {
