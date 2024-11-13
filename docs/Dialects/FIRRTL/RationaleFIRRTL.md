@@ -37,7 +37,9 @@ This document generally assumes that you've read and have a basic grasp of the
 FIRRTL IR spec, and it can be occasionally helpful to refer to the ANTLR
 grammar.
 
-## Status
+## Specification
+
+### Status
 
 The FIRRTL dialect and FIR parser is a generally complete implementation of the
 FIRRTL specification and is actively maintained, tracking new enhancements. The
@@ -46,12 +48,41 @@ FIRRTL IR that is produced from Chisel.  The FIRRTL dialect has support for
 parsing an SFC Annotation file and converting this to operation or argument
 attributes.
 
-## ABI
+### ABI
 
-An auxillary spec has been written, shipped with the firrtl spec, which is the
-firrtl ABI spec.  This spec was co-developed with the CIRCT implementation and
+An auxillary spec has been written, shipped with the FIRRTL spec, which is the
+FIRRTL ABI spec.  This spec was co-developed with the CIRCT implementation and
 the CIRCT implementation conforms to that spec.  That spec covers the effects
 of several annotations, naming, verilog structure, and other issues.
+
+### Adding Features
+
+The FIRRTL parser uses the specification version declared in the FIR file to
+enable or disable certain features. To avoid having to develop the specification
+and parser in lock-step, the parser uses the `nextFIRVersion` and
+`missingSpecFIRVersion` constants to gate new language features. The `next*`
+marker is used for features that are in the spec's main branch, but haven't been
+released yet. The `missingSpec*` marker is used for features that have not
+landed in the spec yet. When a new spec version is released, the `next*` marker
+in the FIRRTL parser is replaced with a concrete `{x,y,z}` version tag.
+
+To add new features to the FIRRTL parser and specification, use this procedure:
+
+1.  Implement the feature in the FIRRTL parser and feature gate it behind the
+    `missingSpecFIRVersion` constant.
+2.  Iterate on the feature and experiment and debug it.
+3.  Create a PR in the FIRRTL specficiation repository describing the stable
+    version of the new feature.
+4.  Once the spec PR lands, change the parser to use the `nextFIRVersion`
+    constant for your feature instead, which will include it in the next
+    release.
+
+### Handling Specification Releases
+
+When a new version of the FIRRTL spec is released, all features using the
+`nextFIRVersion` constant in the parser are part of that release. Search and
+replace that constant with a concrete `{x,y,z}` version tag. Bump the
+`nextFIRVersion` constant to the next assumed release.
 
 ## Naming
 
