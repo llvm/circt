@@ -2,6 +2,8 @@
 // RUN: circt-opt %s -split-input-file -memory-banking="banking-factor=1" | FileCheck %s --check-prefix UNROLL-BY-1
 // RUN: circt-opt %s -split-input-file -memory-banking="banking-factor=8" | FileCheck %s --check-prefix UNROLL-BY-8
 
+// -----
+
 // UNROLL-BY-2: #[[$ATTR_0:.+]] = affine_map<(d0) -> (d0 mod 2)>
 // UNROLL-BY-2: #[[$ATTR_1:.+]] = affine_map<(d0) -> (d0 floordiv 2)>
 
@@ -71,6 +73,8 @@ func.func @bank_one_dim_unroll2(%arg0: memref<8xf32>, %arg1: memref<8xf32>) -> (
   return %mem : memref<8xf32>
 }
 
+// -----
+
 // UNROLL-BY-1-LABEL:   func.func @bank_one_dim_unroll1(
 // UNROLL-BY-1-SAME:                                    %[[VAL_0:.*]]: memref<8xf32>,
 // UNROLL-BY-1-SAME:                                    %[[VAL_1:.*]]: memref<8xf32>) -> memref<8xf32> {
@@ -94,6 +98,8 @@ func.func @bank_one_dim_unroll1(%arg0: memref<8xf32>, %arg1: memref<8xf32>) -> (
   }
   return %mem : memref<8xf32>
 }
+
+// -----
 
 // UNROLL-BY-8: #[[$ATTR_0:.+]] = affine_map<(d0) -> (d0 mod 8)>
 // UNROLL-BY-8: #[[$ATTR_1:.+]] = affine_map<(d0) -> (d0 floordiv 8)>
