@@ -356,7 +356,7 @@ LogicalResult cleanUpOldMemRefs(DenseSet<Value> &oldMemRefVals,
 }
 
 void MemoryBankingPass::runOnOperation() {
-  if (bankingFactor == 1)
+  if (getOperation().isExternal() || bankingFactor == 1)
     return;
 
   if (bankingFactor == 0) {

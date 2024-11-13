@@ -123,7 +123,7 @@ def PrintOpCount : Pass<"print-op-count", "::mlir::ModuleOp"> {
   ];
 }
 
-def MemoryBanking : Pass<"memory-banking", "::mlir::ModuleOp"> {
+def MemoryBanking : Pass<"memory-banking", "::mlir::func::FuncOp"> {
   let summary = "Partition the memories used in affine parallel loops into banks";
   let constructor = "circt::createMemoryBankingPass()";
   let options = [
