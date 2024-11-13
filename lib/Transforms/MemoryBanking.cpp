@@ -26,6 +26,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace circt {
 #define GEN_PASS_DEF_MEMORYBANKING
@@ -56,6 +57,7 @@ struct MemoryBankingPass
 private:
   // map from original memory definition to newly allocated banks
   DenseMap<Value, SmallVector<Value>> memoryToBanks;
+  DenseSet<Operation *> opsToErase;
 };
 } // namespace
 
@@ -185,9 +187,8 @@ struct BankAffineLoadPattern
     auto defaultValue = rewriter.create<arith::ConstantOp>(loc, zeroAttr);
     rewriter.create<scf::YieldOp>(loc, defaultValue.getResult());
 
-    loadOp.getResult().replaceAllUsesWith(switchOp.getResult(0));
+    rewriter.replaceOp(loadOp, switchOp.getResult(0));
 
-    rewriter.eraseOp(loadOp);
     return success();
   }
 
@@ -200,12 +201,18 @@ private:
 struct BankAffineStorePattern
     : public OpRewritePattern<mlir::affine::AffineStoreOp> {
   BankAffineStorePattern(MLIRContext *context, uint64_t bankingFactor,
-                         DenseMap<Value, SmallVector<Value>> &memoryToBanks)
+                         DenseMap<Value, SmallVector<Value>> &memoryToBanks,
+                         DenseSet<Operation *> &opsToErase,
+                         DenseSet<Operation *> &processedOps)
       : OpRewritePattern<mlir::affine::AffineStoreOp>(context),
-        bankingFactor(bankingFactor), memoryToBanks(memoryToBanks) {}
+        bankingFactor(bankingFactor), memoryToBanks(memoryToBanks),
+        opsToErase(opsToErase), processedOps(processedOps) {}
 
   LogicalResult matchAndRewrite(mlir::affine::AffineStoreOp storeOp,
                                 PatternRewriter &rewriter) const override {
+    if (processedOps.contains(storeOp)) {
+      return success();
+    }
     Location loc = storeOp.getLoc();
     auto banks = memoryToBanks[storeOp.getMemref()];
     Value storeIndex = storeOp.getIndices().front();
@@ -245,13 +252,17 @@ struct BankAffineStorePattern
 
     rewriter.create<scf::YieldOp>(loc);
 
-    rewriter.eraseOp(storeOp);
+    processedOps.insert(storeOp);
+    opsToErase.insert(storeOp);
+
     return success();
   }
 
 private:
   uint64_t bankingFactor;
   DenseMap<Value, SmallVector<Value>> &memoryToBanks;
+  DenseSet<Operation *> &opsToErase;
+  DenseSet<Operation *> &processedOps;
 };
 
 // Replace the original return operation with newly created memory banks
@@ -301,18 +312,31 @@ private:
 // operation or replace the block arguments with new ones that corresponds to
 // the newly created banks. Change the function signature if the old memory
 // values are used as function arguments and/or return values.
-LogicalResult cleanUpOldMemRefs(DenseSet<Value> &oldMemRefVals) {
+LogicalResult cleanUpOldMemRefs(DenseSet<Value> &oldMemRefVals,
+                                DenseSet<Operation *> &opsToErase) {
   DenseSet<func::FuncOp> funcsToModify;
+  SmallVector<Value, 4> valuesToErase;
   for (auto &memrefVal : oldMemRefVals) {
-    if (!memrefVal.use_empty())
-      continue;
+    valuesToErase.push_back(memrefVal);
     if (auto blockArg = dyn_cast<BlockArgument>(memrefVal)) {
-      Block *block = blockArg.getOwner();
-      block->eraseArgument(blockArg.getArgNumber());
-      if (auto funcOp = dyn_cast<func::FuncOp>(block->getParentOp()))
+      if (auto funcOp =
+              dyn_cast<func::FuncOp>(blockArg.getOwner()->getParentOp()))
         funcsToModify.insert(funcOp);
-    } else
-      memrefVal.getDefiningOp()->erase();
+    }
+  }
+
+  for (auto *op : opsToErase) {
+    op->erase();
+  }
+  // Erase values safely.
+  for (auto &memrefVal : valuesToErase) {
+    // oldMemRefVals.erase(memrefVal); // Ensure DenseSet is updated.
+    assert(memrefVal.use_empty() && "use must be empty");
+    if (auto blockArg = dyn_cast<BlockArgument>(memrefVal)) {
+      blockArg.getOwner()->eraseArgument(blockArg.getArgNumber());
+    } else if (auto *op = memrefVal.getDefiningOp()) {
+      op->erase();
+    }
   }
 
   // Modify the function type accordingly
@@ -326,6 +350,7 @@ LogicalResult cleanUpOldMemRefs(DenseSet<Value> &oldMemRefVals) {
                           funcOp.getFunctionType().getResults());
     funcOp.setType(newFuncType);
   }
+
   return success();
 }
 
@@ -350,8 +375,10 @@ void MemoryBankingPass::runOnOperation() {
   auto *ctx = &getContext();
   RewritePatternSet patterns(ctx);
 
+  DenseSet<Operation *> processedOps;
   patterns.add<BankAffineLoadPattern>(ctx, bankingFactor, memoryToBanks);
-  patterns.add<BankAffineStorePattern>(ctx, bankingFactor, memoryToBanks);
+  patterns.add<BankAffineStorePattern>(ctx, bankingFactor, memoryToBanks,
+                                       opsToErase, processedOps);
   patterns.add<BankReturnPattern>(ctx, memoryToBanks);
 
   GreedyRewriteConfig config;
@@ -366,9 +393,12 @@ void MemoryBankingPass::runOnOperation() {
   for (const auto &[memory, _] : memoryToBanks)
     oldMemRefVals.insert(memory);
 
-  if (failed(cleanUpOldMemRefs(oldMemRefVals))) {
+  if (failed(cleanUpOldMemRefs(oldMemRefVals, opsToErase))) {
     signalPassFailure();
   }
+
+  llvm::errs() << "ran everything\n";
+  getOperation()->dump();
 }
 
 namespace circt {
