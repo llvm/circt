@@ -65,12 +65,12 @@ static Value pack(OpBuilder &b, Value token, Value data = {}) {
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
-static Type tupleToStruct(TupleType tuple) {
+static StructType tupleToStruct(TupleType tuple) {
   auto *ctx = tuple.getContext();
   mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
   for (auto [i, innerType] : llvm::enumerate(tuple)) {
     Type convertedInnerType = innerType;
-    if (auto tupleInnerType = innerType.dyn_cast<TupleType>())
+    if (auto tupleInnerType = dyn_cast<TupleType>(innerType))
       convertedInnerType = tupleToStruct(tupleInnerType);
     hwfields.push_back(
         {StringAttr::get(ctx, "field" + Twine(i)), convertedInnerType});
@@ -89,7 +89,7 @@ public:
       // For pragmatic reasons, we use a struct type to represent tuples in the
       // DC lowering; upstream MLIR doesn't have builtin type-modifying ops,
       // so the next best thing is our "local" struct type in CIRCT.
-      if (auto tupleType = type.dyn_cast<TupleType>())
+      if (auto tupleType = dyn_cast<TupleType>(type))
         return dc::ValueType::get(type.getContext(), tupleToStruct(tupleType));
       return dc::ValueType::get(type.getContext(), type);
     });
@@ -283,14 +283,15 @@ public:
     // for doing so, sigh...)
     llvm::SmallVector<Value, 4> inputTokens, inputData;
     for (auto input : adaptor.getOperands()) {
-      auto dct = unpack(rewriter, input);
+      DCTuple dct = unpack(rewriter, input);
       inputTokens.push_back(dct.token);
       if (dct.data)
         inputData.push_back(dct.data);
     }
 
     auto join = rewriter.create<dc::JoinOp>(op.getLoc(), inputTokens);
-    auto structType = tupleToStruct(op.getResult().getType().cast<TupleType>());
+    StructType structType =
+        tupleToStruct(cast<TupleType>(op.getResult().getType()));
     auto packedData =
         rewriter.create<hw::StructCreateOp>(op.getLoc(), structType, inputData);
     convertedOps->insert(packedData);
