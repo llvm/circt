@@ -32,6 +32,7 @@ declare_mlir_python_sources(PyCDESources
   pycde/system.py
   pycde/devicedb.py
   pycde/instance.py
+  pycde/seq.py
   pycde/signals.py
   pycde/ndarray.py
   pycde/esi.py
