@@ -10,6 +10,15 @@
 // `ExtractBlackBoxes`, `ExtractClockGates`, and `ExtractSeqMems` passes in the
 // Scala FIRRTL implementation.
 //
+// This pass will make no modifications if the circuit does not contain no
+// design-under-test (DUT).  I.e., this pass does not use the "effecctive" DUT.
+// If a DUT exists, then anything in the design is extracted.  Using the
+// standard interpretation of passes like this, layers are not in the design.
+// If a situation arise where a module is instantiated inside and outside the
+// design that needs to be extracted, then it will be extracted in both up to
+// the point where it no longer needs to be further extracted.  See the tests
+// for examples of this.
+//
 //===----------------------------------------------------------------------===//
 
 #include "circt/Analysis/FIRRTLInstanceInfo.h"
@@ -359,7 +368,7 @@ void ExtractInstancesPass::collectAnnos() {
         continue;
       LLVM_DEBUG(llvm::dbgs()
                  << "Clock gate `" << module.getModuleName() << "`\n");
-      if (!instanceInfo->anyInstanceUnderDut(module)) {
+      if (!instanceInfo->anyInstanceInDesign(module)) {
         LLVM_DEBUG(llvm::dbgs() << "- Ignored (outside DUT)\n");
         continue;
       }
@@ -392,7 +401,7 @@ void ExtractInstancesPass::collectAnnos() {
 
     for (auto module : circuit.getOps<FMemModuleOp>()) {
       LLVM_DEBUG(llvm::dbgs() << "Memory `" << module.getModuleName() << "`\n");
-      if (!instanceInfo->anyInstanceUnderDut(module)) {
+      if (!instanceInfo->anyInstanceInDesign(module)) {
         LLVM_DEBUG(llvm::dbgs() << "- Ignored (outside DUT)\n");
         continue;
       }
@@ -492,6 +501,14 @@ void ExtractInstancesPass::extractInstances() {
     InstanceOp inst;
     ExtractionInfo info;
     std::tie(inst, info) = extractionWorklist.pop_back_val();
+
+    // Stop extraction if the instance is inside a layer.  This has the effect
+    // of bubbling up instances to just inside a layer block.  However, this
+    // will only happen if the module is instantiated inside and outside a
+    // layer.
+    if (inst->getParentOfType<LayerBlockOp>())
+      continue;
+
     auto parent = inst->getParentOfType<FModuleOp>();
 
     // Figure out the wiring prefix to use for this instance. If we are supposed
@@ -514,7 +531,7 @@ void ExtractInstancesPass::extractInstances() {
     // in the root module), there's nothing left for us to do. Otherwise we
     // proceed to bubble it up one level in the hierarchy and add the resulting
     // instances back to the worklist.
-    if (!instanceInfo->anyInstanceUnderDut(parent) ||
+    if (!instanceInfo->anyInstanceInDesign(parent) ||
         instanceGraph->lookup(parent)->noUses() ||
         (info.stopAtDUT && instanceInfo->isDut(parent))) {
       LLVM_DEBUG(llvm::dbgs() << "\nNo need to further move " << inst << "\n");
@@ -1101,7 +1118,7 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
       // from the path and make the path look like it's rooted at the first DUT
       // module (so `TestHarness.dut.foo.bar` becomes `DUTModule.foo.bar`).
       while (!path.empty() &&
-             !instanceInfo->anyInstanceUnderDut(cast<igraph::ModuleOpInterface>(
+             !instanceInfo->anyInstanceInDesign(cast<igraph::ModuleOpInterface>(
                  symbolTable->lookup(path.back().getModule())))) {
         LLVM_DEBUG(llvm::dbgs()
                    << "    - Dropping non-DUT segment " << path.back() << "\n");
