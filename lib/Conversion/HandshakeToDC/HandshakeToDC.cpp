@@ -64,12 +64,33 @@ static Value pack(OpBuilder &b, Value token, Value data = {}) {
   return b.create<dc::PackOp>(token.getLoc(), token, data);
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
+static StructType tupleToStruct(TupleType tuple) {
+  auto *ctx = tuple.getContext();
+  mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
+  for (auto [i, innerType] : llvm::enumerate(tuple)) {
+    Type convertedInnerType = innerType;
+    if (auto tupleInnerType = dyn_cast<TupleType>(innerType))
+      convertedInnerType = tupleToStruct(tupleInnerType);
+    hwfields.push_back(
+        {StringAttr::get(ctx, "field" + Twine(i)), convertedInnerType});
+  }
+
+  return hw::StructType::get(ctx, hwfields);
+}
+
 class DCTypeConverter : public TypeConverter {
 public:
   DCTypeConverter() {
     addConversion([](Type type) -> Type {
       if (isa<NoneType>(type))
         return dc::TokenType::get(type.getContext());
+
+      // For pragmatic reasons, we use a struct type to represent tuples in the
+      // DC lowering; upstream MLIR doesn't have builtin type-modifying ops,
+      // so the next best thing is our "local" struct type in CIRCT.
+      if (auto tupleType = dyn_cast<TupleType>(type))
+        return dc::ValueType::get(type.getContext(), tupleToStruct(tupleType));
       return dc::ValueType::get(type.getContext(), type);
     });
     addConversion([](ValueType type) { return type; });
@@ -245,6 +266,60 @@ public:
     }
 
     rewriter.replaceOp(op, mergeOutput);
+    return success();
+  }
+};
+
+class PackOpConversion : public DCOpConversionPattern<handshake::PackOp> {
+public:
+  using DCOpConversionPattern<handshake::PackOp>::DCOpConversionPattern;
+  using OpAdaptor = typename handshake::PackOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(handshake::PackOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Like the join conversion, but also emits a dc.pack_tuple operation to
+    // handle the data side of the operation (since there's no upstream support
+    // for doing so, sigh...)
+    llvm::SmallVector<Value, 4> inputTokens, inputData;
+    for (auto input : adaptor.getOperands()) {
+      DCTuple dct = unpack(rewriter, input);
+      inputTokens.push_back(dct.token);
+      if (dct.data)
+        inputData.push_back(dct.data);
+    }
+
+    auto join = rewriter.create<dc::JoinOp>(op.getLoc(), inputTokens);
+    StructType structType =
+        tupleToStruct(cast<TupleType>(op.getResult().getType()));
+    auto packedData =
+        rewriter.create<hw::StructCreateOp>(op.getLoc(), structType, inputData);
+    convertedOps->insert(packedData);
+    rewriter.replaceOp(op, pack(rewriter, join, packedData));
+    return success();
+  }
+};
+
+class UnpackOpConversion : public DCOpConversionPattern<handshake::UnpackOp> {
+public:
+  using DCOpConversionPattern<handshake::UnpackOp>::DCOpConversionPattern;
+  using OpAdaptor = typename handshake::UnpackOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(handshake::UnpackOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Unpack the !dc.value<tuple<...>> into the !dc.token and tuple<...>
+    // values.
+    DCTuple unpackedInput = unpack(rewriter, adaptor.getInput());
+    auto unpackedData =
+        rewriter.create<hw::StructExplodeOp>(op.getLoc(), unpackedInput.data);
+    convertedOps->insert(unpackedData);
+    // Re-pack each of the tuple elements with the token.
+    llvm::SmallVector<Value, 4> repackedInputs;
+    for (auto outputData : unpackedData.getResults())
+      repackedInputs.push_back(pack(rewriter, unpackedInput.token, outputData));
+
+    rewriter.replaceOp(op, repackedInputs);
     return success();
   }
 };
@@ -584,9 +659,9 @@ public:
   // Replaces a handshake.func with a hw.module, converting the argument and
   // result types using the provided type converter.
   // @mortbopet: Not a fan of converting to hw here seeing as we don't
-  // necessarily have hardware semantics here. But, DC doesn't define a function
-  // operation, and there is no "func.graph_func" or any other generic function
-  // operation which is a graph region...
+  // necessarily have hardware semantics here. But, DC doesn't define a
+  // function operation, and there is no "func.graph_func" or any other
+  // generic function operation which is a graph region...
   LogicalResult
   matchAndRewrite(handshake::FuncOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
@@ -685,12 +760,13 @@ LogicalResult circt::handshaketodc::runHandshakeToDC(
   // Add handshake conversion patterns.
   // Note: merge/control merge are not supported - these are non-deterministic
   // operators and we do not care for them.
-  patterns.add<BufferOpConversion, CondBranchConversionPattern,
-               SinkOpConversionPattern, SourceOpConversionPattern,
-               MuxOpConversionPattern, ForkOpConversionPattern,
-               JoinOpConversion, MergeOpConversion, ControlMergeOpConversion,
-               ConstantOpConversion, SyncOpConversion>(ctx, typeConverter,
-                                                       &convertedOps);
+  patterns
+      .add<BufferOpConversion, CondBranchConversionPattern,
+           SinkOpConversionPattern, SourceOpConversionPattern,
+           MuxOpConversionPattern, ForkOpConversionPattern, JoinOpConversion,
+           PackOpConversion, UnpackOpConversion, MergeOpConversion,
+           ControlMergeOpConversion, ConstantOpConversion, SyncOpConversion>(
+          ctx, typeConverter, &convertedOps);
 
   // ALL other single-result operations are converted via the
   // UnitRateConversionPattern.
