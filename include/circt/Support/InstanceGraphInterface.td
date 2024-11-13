@@ -55,7 +55,7 @@ def InstanceGraphInstanceOpInterface : OpInterface<"InstanceOpInterface"> {
             .getReferencedModuleNamesAttr()
             .size())
       return success();
-    return $_op->emitOpError("has empty list of referenced modules");
+    return $_op->emitOpError("expected a non-empty list of referenced modules");
   }];
 }
 
