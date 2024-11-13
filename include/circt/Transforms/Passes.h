@@ -45,7 +45,7 @@ std::unique_ptr<mlir::Pass> createMaximizeSSAPass();
 std::unique_ptr<mlir::Pass> createInsertMergeBlocksPass();
 std::unique_ptr<mlir::Pass> createPrintOpCountPass();
 std::unique_ptr<mlir::Pass> createMemoryBankingPass(
-    int bankingFactor = -1,
+    std::optional<unsigned> bankingFactor = std::nullopt,
     const std::function<unsigned(mlir::affine::AffineParallelOp)>
         &getBankingFactor = nullptr);
 

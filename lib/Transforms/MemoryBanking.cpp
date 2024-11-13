@@ -49,14 +49,9 @@ struct MemoryBankingPass
       std::optional<unsigned> bankingFactor = std::nullopt,
       const std::function<unsigned(mlir::affine::AffineParallelOp)>
           &getBankingFactor = nullptr)
-      : getBankingFactor(getBankingFactor) {
-    if (bankingFactor)
-      this->bankingFactor = *bankingFactor;
-  }
+      : getBankingFactor(getBankingFactor) {}
 
   void runOnOperation() override;
-  LogicalResult parallelBankingByFactor(mlir::affine::AffineParallelOp parOp,
-                                        uint64_t bankingFactor);
 
 private:
   // map from original memory definition to newly allocated banks
@@ -85,7 +80,7 @@ MemRefType computeBankedMemRefType(MemRefType originalType,
          "currently only support one dimension memories");
   SmallVector<int64_t, 4> newShape(originalShape.begin(), originalShape.end());
   assert(newShape.front() % bankingFactor == 0 &&
-         "memref shape must be divided by the banking factor");
+         "memref shape must be evenly divided by the banking factor");
   newShape.front() /= bankingFactor;
   MemRefType newMemRefType =
       MemRefType::get(newShape, originalType.getElementType(),
@@ -119,14 +114,14 @@ SmallVector<Value, 4> createBanks(Value originalMem, uint64_t bankingFactor) {
     builder.setInsertionPointAfter(originalDef);
     TypeSwitch<Operation *>(originalDef)
         .Case<memref::AllocOp>([&](memref::AllocOp allocOp) {
-          for (uint bankCnt = 0; bankCnt < bankingFactor; bankCnt++) {
+          for (uint bankCnt = 0; bankCnt < bankingFactor; ++bankCnt) {
             auto bankAllocOp =
                 builder.create<memref::AllocOp>(loc, newMemRefType);
             banks.push_back(bankAllocOp);
           }
         })
         .Case<memref::AllocaOp>([&](memref::AllocaOp allocaOp) {
-          for (uint bankCnt = 0; bankCnt < bankingFactor; bankCnt++) {
+          for (uint bankCnt = 0; bankCnt < bankingFactor; ++bankCnt) {
             auto bankAllocaOp =
                 builder.create<memref::AllocaOp>(loc, newMemRefType);
             banks.push_back(bankAllocaOp);
@@ -139,6 +134,7 @@ SmallVector<Value, 4> createBanks(Value originalMem, uint64_t bankingFactor) {
   return banks;
 }
 
+// Replace the original load operations with newly created memory banks
 struct BankAffineLoadPattern
     : public OpRewritePattern<mlir::affine::AffineLoadOp> {
   BankAffineLoadPattern(MLIRContext *context, uint64_t bankingFactor,
@@ -200,6 +196,7 @@ private:
   DenseMap<Value, SmallVector<Value>> &memoryToBanks;
 };
 
+// Replace the original store operations with newly created memory banks
 struct BankAffineStorePattern
     : public OpRewritePattern<mlir::affine::AffineStoreOp> {
   BankAffineStorePattern(MLIRContext *context, uint64_t bankingFactor,
@@ -257,6 +254,7 @@ private:
   DenseMap<Value, SmallVector<Value>> &memoryToBanks;
 };
 
+// Replace the original return operation with newly created memory banks
 struct BankReturnPattern : public OpRewritePattern<func::ReturnOp> {
   BankReturnPattern(MLIRContext *context,
                     DenseMap<Value, SmallVector<Value>> &memoryToBanks)
@@ -299,6 +297,10 @@ private:
   DenseMap<Value, SmallVector<Value>> &memoryToBanks;
 };
 
+// Clean up the empty uses old memory values by either erasing the defining
+// operation or replace the block arguments with new ones that corresponds to
+// the newly created banks. Change the function signature if the old memory
+// values are used as function arguments and/or return values.
 LogicalResult cleanUpOldMemRefs(DenseSet<Value> &oldMemRefVals) {
   DenseSet<func::FuncOp> funcsToModify;
   for (auto &memrefVal : oldMemRefVals) {
@@ -328,17 +330,21 @@ LogicalResult cleanUpOldMemRefs(DenseSet<Value> &oldMemRefVals) {
 }
 
 void MemoryBankingPass::runOnOperation() {
-  if (getOperation().isExternal()) {
+  if (getOperation().isExternal() || bankingFactor == 1) {
+    return;
+  }
+
+  if (bankingFactor == 0) {
+    getOperation().emitError("banking factor must be greater than 1");
+    signalPassFailure();
     return;
   }
 
   getOperation().walk([&](mlir::affine::AffineParallelOp parOp) {
     DenseSet<Value> memrefsInPar = collectMemRefs(parOp);
 
-    for (auto memrefVal : memrefsInPar) {
-      SmallVector<Value> banks = createBanks(memrefVal, bankingFactor);
-      memoryToBanks[memrefVal] = banks;
-    }
+    for (auto memrefVal : memrefsInPar)
+      memoryToBanks[memrefVal] = createBanks(memrefVal, bankingFactor);
   });
 
   auto *ctx = &getContext();
@@ -350,7 +356,6 @@ void MemoryBankingPass::runOnOperation() {
 
   GreedyRewriteConfig config;
   config.strictMode = GreedyRewriteStrictness::ExistingOps;
-
   if (failed(applyPatternsAndFoldGreedily(getOperation(), std::move(patterns),
                                           config))) {
     signalPassFailure();
@@ -358,8 +363,8 @@ void MemoryBankingPass::runOnOperation() {
 
   // Clean up the old memref values
   DenseSet<Value> oldMemRefVals;
-  for (const auto &pair : memoryToBanks)
-    oldMemRefVals.insert(pair.first);
+  for (const auto &[memory, _] : memoryToBanks)
+    oldMemRefVals.insert(memory);
 
   if (failed(cleanUpOldMemRefs(oldMemRefVals))) {
     signalPassFailure();
@@ -368,12 +373,9 @@ void MemoryBankingPass::runOnOperation() {
 
 namespace circt {
 std::unique_ptr<mlir::Pass> createMemoryBankingPass(
-    int bankingFactor,
+    std::optional<unsigned> bankingFactor,
     const std::function<unsigned(mlir::affine::AffineParallelOp)>
         &getBankingFactor) {
-  return std::make_unique<MemoryBankingPass>(
-      bankingFactor == -1 ? std::nullopt
-                          : std::optional<unsigned>(bankingFactor),
-      getBankingFactor);
+  return std::make_unique<MemoryBankingPass>(bankingFactor, getBankingFactor);
 }
 } // namespace circt
