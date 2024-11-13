@@ -10,7 +10,7 @@
 // `ExtractBlackBoxes`, `ExtractClockGates`, and `ExtractSeqMems` passes in the
 // Scala FIRRTL implementation.
 //
-// This pass will make no modifications if the circuit does not contain no
+// This pass will make no modifications if the circuit does not contain a
 // design-under-test (DUT).  I.e., this pass does not use the "effecctive" DUT.
 // If a DUT exists, then anything in the design is extracted.  Using the
 // standard interpretation of passes like this, layers are not in the design.
