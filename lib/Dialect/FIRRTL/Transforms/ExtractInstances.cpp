@@ -502,13 +502,6 @@ void ExtractInstancesPass::extractInstances() {
     ExtractionInfo info;
     std::tie(inst, info) = extractionWorklist.pop_back_val();
 
-    // Stop extraction if the instance is inside a layer.  This has the effect
-    // of bubbling up instances to just inside a layer block.  However, this
-    // will only happen if the module is instantiated inside and outside a
-    // layer.
-    if (inst->getParentOfType<LayerBlockOp>())
-      continue;
-
     auto parent = inst->getParentOfType<FModuleOp>();
 
     // Figure out the wiring prefix to use for this instance. If we are supposed
@@ -527,11 +520,12 @@ void ExtractInstancesPass::extractInstances() {
       prefix = prefixSlot;
     }
 
-    // If the instance is already in the right place (outside the DUT or already
-    // in the root module), there's nothing left for us to do. Otherwise we
-    // proceed to bubble it up one level in the hierarchy and add the resulting
-    // instances back to the worklist.
-    if (!instanceInfo->anyInstanceInDesign(parent) ||
+    // If the instance is already in the right place (outside the DUT, already
+    // in the root module, or has hit a layer), there's nothing left for us to
+    // do.  Otherwise we proceed to bubble it up one level in the hierarchy and
+    // add the resulting instances back to the worklist.
+    if (inst->getParentOfType<LayerBlockOp>() ||
+        !instanceInfo->anyInstanceInDesign(parent) ||
         instanceGraph->lookup(parent)->noUses() ||
         (info.stopAtDUT && instanceInfo->isDut(parent))) {
       LLVM_DEBUG(llvm::dbgs() << "\nNo need to further move " << inst << "\n");
