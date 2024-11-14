@@ -143,8 +143,8 @@ jobs:
           # Our PR builds are trying to test the two corners of the build matrix:
           # clang + release + noassert + static
           # gcc   + debug   + assert   + shared
-          - cc: clang
-            cxx: clang++
+          - cc: clang-17
+            cxx: clang++-17
             mode: Debug
             assert: ON
             shared: ON
