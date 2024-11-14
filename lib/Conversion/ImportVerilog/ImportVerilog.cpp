@@ -330,7 +330,8 @@ LogicalResult ImportDriver::preprocessVerilog(llvm::raw_ostream &os) {
                                               diagnostics, optionBag);
     // Sources have to be pushed in reverse, as they form a stack in the
     // preprocessor. Last pushed source is processed first.
-    for (auto &buffer : std::views::reverse(driver.sourceLoader.loadSources()))
+    auto sources = driver.sourceLoader.loadSources();
+    for (auto &buffer : std::views::reverse(sources))
       preprocessor.pushSource(buffer);
     if (failed(preprocessAndPrint(preprocessor)))
       return failure();
