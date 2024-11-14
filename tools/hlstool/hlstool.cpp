@@ -46,6 +46,7 @@
 #include "circt/Conversion/SCFToCalyx.h"
 #include "circt/Dialect/Calyx/CalyxDialect.h"
 #include "circt/Dialect/Calyx/CalyxPasses.h"
+#include "circt/Dialect/DC/DCPasses.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/ESI/ESIPasses.h"
 #include "circt/Dialect/SV/SVDialect.h"
@@ -218,6 +219,9 @@ static cl::opt<bool> withESI("with-esi",
                              cl::desc("Create ESI compatible modules"),
                              cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool> withDC("dc", cl::desc("Use the DC flow"), cl::init(false),
+                            cl::cat(mainCategory));
+
 static LoweringOptionsOption loweringOptions(mainCategory);
 
 // --------------------------------------------------------------------------
@@ -332,7 +336,14 @@ static LogicalResult doHLSFlowDynamic(
 
   addIRLevel(IRLevel::RTL, [&]() {
     pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
-    pm.addPass(circt::createHandshakeToHWPass());
+    if (withDC) {
+      pm.addPass(circt::createHandshakeToDCPass());
+      pm.addPass(circt::dc::createDCMaterializeForksSinksPass());
+      pm.addPass(createSimpleCanonicalizerPass());
+      pm.addPass(circt::createDCToHWPass());
+    } else {
+      pm.addPass(circt::createHandshakeToHWPass());
+    }
     pm.addPass(createSimpleCanonicalizerPass());
     loadESILoweringPipeline(pm);
   });
