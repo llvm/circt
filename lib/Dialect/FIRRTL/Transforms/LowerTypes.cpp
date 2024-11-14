@@ -339,12 +339,17 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
   TypeLoweringVisitor(
       MLIRContext *context, PreserveAggregate::PreserveMode preserveAggregate,
+      Convention bodyConvention,
       PreserveAggregate::PreserveMode memoryPreservationMode,
       SymbolTable &symTbl, const AttrCache &cache,
       const llvm::DenseMap<FModuleLike, Convention> &conventionTable)
-      : context(context), aggregatePreservationMode(preserveAggregate),
+      : context(context), defaultAggregatePreservationMode(preserveAggregate),
         memoryPreservationMode(memoryPreservationMode), symTbl(symTbl),
-        cache(cache), conventionTable(conventionTable) {}
+        cache(cache), conventionTable(conventionTable) {
+    bodyAggregatePreservationMode = bodyConvention == Convention::Scalarized
+                                        ? PreserveAggregate::None
+                                        : defaultAggregatePreservationMode;
+  }
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitDecl;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitStmt;
@@ -429,7 +434,7 @@ private:
                                  Location errorLoc);
 
   PreserveAggregate::PreserveMode
-  getPreservationModeForModule(FModuleLike moduleLike);
+  getPreservationModeForPorts(FModuleLike moduleLike);
   Value getSubWhatever(Value val, size_t index);
 
   size_t uniqueIdx = 0;
@@ -441,7 +446,8 @@ private:
   MLIRContext *context;
 
   /// Aggregate preservation mode.
-  PreserveAggregate::PreserveMode aggregatePreservationMode;
+  PreserveAggregate::PreserveMode defaultAggregatePreservationMode;
+  PreserveAggregate::PreserveMode bodyAggregatePreservationMode;
   PreserveAggregate::PreserveMode memoryPreservationMode;
 
   /// The builder is set and maintained in the main loop.
@@ -460,21 +466,21 @@ private:
 };
 } // namespace
 
-/// Return aggregate preservation mode for the module. If the module has a
+/// Return aggregate preservation mode for the module ports. If the module has a
 /// scalarized linkage, then we may not preserve it's aggregate ports.
 PreserveAggregate::PreserveMode
-TypeLoweringVisitor::getPreservationModeForModule(FModuleLike module) {
+TypeLoweringVisitor::getPreservationModeForPorts(FModuleLike module) {
   auto lookup = conventionTable.find(module);
   if (lookup == conventionTable.end())
-    return aggregatePreservationMode;
+    return defaultAggregatePreservationMode;
   switch (lookup->second) {
   case Convention::Scalarized:
     return PreserveAggregate::None;
   case Convention::Internal:
-    return aggregatePreservationMode;
+    return defaultAggregatePreservationMode;
   }
   llvm_unreachable("Unknown convention");
-  return aggregatePreservationMode;
+  return defaultAggregatePreservationMode;
 }
 
 Value TypeLoweringVisitor::getSubWhatever(Value val, size_t index) {
@@ -643,7 +649,7 @@ bool TypeLoweringVisitor::lowerProducer(
     return false;
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
 
-  if (!peelType(srcFType, fieldTypes, aggregatePreservationMode))
+  if (!peelType(srcFType, fieldTypes, bodyAggregatePreservationMode))
     return false;
 
   SmallVector<Value> lowered;
@@ -809,7 +815,7 @@ bool TypeLoweringVisitor::lowerArg(FModuleLike module, size_t argIndex,
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry> fieldTypes;
   auto srcType = type_cast<FIRRTLType>(newArgs[argIndex].pi.type);
-  if (!peelType(srcType, fieldTypes, getPreservationModeForModule(module)))
+  if (!peelType(srcType, fieldTypes, getPreservationModeForPorts(module)))
     return false;
 
   // Ports with internalPath set cannot be lowered.
@@ -929,7 +935,7 @@ bool TypeLoweringVisitor::visitStmt(RefDefineOp op) {
   // Attempt to get the bundle types.
   SmallVector<FlatBundleFieldEntry> fields;
 
-  if (!peelType(op.getDest().getType(), fields, aggregatePreservationMode))
+  if (!peelType(op.getDest().getType(), fields, bodyAggregatePreservationMode))
     return false;
 
   // Loop over the leaf aggregates.
@@ -1454,7 +1460,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<Direction> newDirs;
   SmallVector<Attribute> newNames;
   SmallVector<Attribute> newPortAnno;
-  PreserveAggregate::PreserveMode mode = getPreservationModeForModule(
+  PreserveAggregate::PreserveMode mode = getPreservationModeForPorts(
       cast<FModuleLike>(op.getReferencedOperation(symTbl)));
 
   endFields.push_back(0);
@@ -1667,9 +1673,15 @@ void LowerTypesPass::runOnOperation() {
 
   // This lambda, executes in parallel for each Op within the circt.
   auto lowerModules = [&](FModuleLike op) -> LogicalResult {
+    // Use body type lowering attribute if it exists, otherwise use internal.
+    Convention convention = Convention::Internal;
+    if (auto conventionAttr = dyn_cast_or_null<ConventionAttr>(
+            op->getDiscardableAttr("body_type_lowering")))
+      convention = conventionAttr.getValue();
+
     auto tl =
-        TypeLoweringVisitor(&getContext(), preserveAggregate, preserveMemories,
-                            symTbl, cache, conventionTable);
+        TypeLoweringVisitor(&getContext(), preserveAggregate, convention,
+                            preserveMemories, symTbl, cache, conventionTable);
     tl.lowerModule(op);
 
     return LogicalResult::failure(tl.isFailed());

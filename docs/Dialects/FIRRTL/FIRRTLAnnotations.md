@@ -323,11 +323,12 @@ Example:
 
 ### Convention
 
-| Property   | Type   | Description                             |
-| ---------- | ------ | --------------------------------------- |
-| class      | string | `circt.ConventionAnnotation`            |
-| convention | string | `scalarized`                            |
-| target     | string | Reference target                        |
+| Property         | Type   | Description                                          |
+| ---------------- | ------ | ---------------------------------------------------- |
+| class            | string | `circt.ConventionAnnotation`                         |
+| convention       | string | `scalarized`                                         |
+| target           | string | Reference target                                     |
+| includeHierarchy | bool   | Apply the convention to all modules in the hierarchy |
 
 Specify the port convention for a module. The port convention controls how a
 module's ports are transformed, and how that module can be instantiated, in the
@@ -341,7 +342,31 @@ The options are:
 {
   "class": "circt.ConventionAnnotation",
   "convention": "scalarized",
-  "target": "~Foo|Bar/d:Baz"
+  "target": "~Foo|Bar",
+  "includeHierarchy": true
+}
+```
+
+### BodyTypeLoweringAnnotation
+
+| Property         | Type   | Description                        |
+| ---------------- | ------ | ---------------------------------- |
+| class            | string | `circt.BodyTypeLoweringAnnotation` |
+| convention       | string | See `Convention` annotation        |
+| target           | string | See `Convention` annotation        |
+| includeHierarchy | bool   | See `Convention` annotation        |
+
+Specify the type lowering option for module internal signals.
+This is similar to the `Convention` annotation, but for internal signals
+rather than module ports. Refer to the `Convention` annotation for each
+property description.
+
+```json
+{
+  "class": "circt.BodyTypeLoweringAnnotation",
+  "convention": "scalarized",
+  "target": "~Foo|Bar",
+  "includeHierarchy": true
 }
 ```
 

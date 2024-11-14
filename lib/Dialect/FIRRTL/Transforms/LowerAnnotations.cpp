@@ -275,14 +275,17 @@ static std::optional<Convention> parseConvention(llvm::StringRef str) {
       .Default(std::nullopt);
 }
 
-static LogicalResult applyConventionAnno(const AnnoPathValue &target,
-                                         DictionaryAttr anno,
-                                         ApplyState &state) {
+template <bool IsConventionAnno>
+static LogicalResult
+applyConventionOrTypeLoweringAnno(const AnnoPathValue &target,
+                                  DictionaryAttr anno, ApplyState &state) {
   auto *op = target.ref.getOp();
   auto loc = op->getLoc();
   auto error = [&]() {
     auto diag = mlir::emitError(loc);
-    diag << "circuit.ConventionAnnotation ";
+    diag << (IsConventionAnno ? "circuit.ConventionAnnotation "
+                              : "circuit.TypeLoweringAnnotation ")
+         << " ";
     return diag;
   };
 
@@ -305,13 +308,41 @@ static LogicalResult applyConventionAnno(const AnnoPathValue &target,
 
   auto convention = *conventionOpt;
 
+  if (convention == Convention::Internal)
+    // Convention is internal by default so there is nothing to change
+    return success();
+
+  auto includeHierarchy = anno.getAs<BoolAttr>("includeHierarchy");
+  auto conventionAttr = ConventionAttr::get(op->getContext(), convention);
+  auto setConvention = [&](Operation *moduleOp) {
+    TypeSwitch<Operation *>(moduleOp)
+        .Case<FModuleOp, FExtModuleOp>([&](auto moduleOp) {
+          if (IsConventionAnno)
+            moduleOp.setConventionAttr(conventionAttr);
+          else
+            moduleOp->setDiscardableAttr("body_type_lowering", conventionAttr);
+        })
+        .Default([](auto) {});
+  };
+
   if (auto moduleOp = dyn_cast<FModuleOp>(op)) {
-    moduleOp.setConvention(convention);
+    if (includeHierarchy && includeHierarchy.getValue()) {
+      // If includeHierarchy is true, update the convention for all modules in
+      // the hierarchy.
+      for (auto *node :
+           llvm::post_order(state.instancePathCache.instanceGraph[moduleOp])) {
+        if (node && isa<FModuleOp, FExtModuleOp>(*node->getModule()))
+          setConvention(node->getModule());
+      }
+    } else {
+      // Update the convention.
+      setConvention(moduleOp);
+    }
     return success();
   }
 
   if (auto extModuleOp = dyn_cast<FExtModuleOp>(op)) {
-    extModuleOp.setConvention(convention);
+    setConvention(extModuleOp);
     return success();
   }
 
@@ -563,7 +594,10 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
     {omirTrackerAnnoClass, {stdResolve, applyWithoutTarget<true>}},
     {omirFileAnnoClass, NoTargetAnnotation},
     // Miscellaneous Annotations
-    {conventionAnnoClass, {stdResolve, applyConventionAnno}},
+    {conventionAnnoClass,
+     {stdResolve, applyConventionOrTypeLoweringAnno<true>}},
+    {typeLoweringAnnoClass,
+     {stdResolve, applyConventionOrTypeLoweringAnno<false>}},
     {dontTouchAnnoClass,
      {stdResolve, applyWithoutTarget<true, true, WireOp, NodeOp, RegOp,
                                      RegResetOp, InstanceOp, MemOp, CombMemOp,
