@@ -112,14 +112,14 @@ SmallVector<Value, 4> createBanks(Value originalMem, uint64_t bankingFactor) {
     builder.setInsertionPointAfter(originalDef);
     TypeSwitch<Operation *>(originalDef)
         .Case<memref::AllocOp>([&](memref::AllocOp allocOp) {
-          for (uint bankCnt = 0; bankCnt < bankingFactor; ++bankCnt) {
+          for (uint64_t bankCnt = 0; bankCnt < bankingFactor; ++bankCnt) {
             auto bankAllocOp =
                 builder.create<memref::AllocOp>(loc, newMemRefType);
             banks.push_back(bankAllocOp);
           }
         })
         .Case<memref::AllocaOp>([&](memref::AllocaOp allocaOp) {
-          for (uint bankCnt = 0; bankCnt < bankingFactor; ++bankCnt) {
+          for (uint64_t bankCnt = 0; bankCnt < bankingFactor; ++bankCnt) {
             auto bankAllocaOp =
                 builder.create<memref::AllocaOp>(loc, newMemRefType);
             banks.push_back(bankAllocaOp);
