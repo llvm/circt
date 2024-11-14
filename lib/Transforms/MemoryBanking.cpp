@@ -44,15 +44,9 @@ namespace {
 /// `bankingFactor` throughout the program.
 struct MemoryBankingPass
     : public circt::impl::MemoryBankingBase<MemoryBankingPass> {
-  const std::function<unsigned(mlir::affine::AffineParallelOp)>
-      getBankingFactor;
-  MemoryBankingPass() : getBankingFactor(nullptr) {}
   MemoryBankingPass(const MemoryBankingPass &other) = default;
   explicit MemoryBankingPass(
-      std::optional<unsigned> bankingFactor = std::nullopt,
-      const std::function<unsigned(mlir::affine::AffineParallelOp)>
-          &getBankingFactor = nullptr)
-      : getBankingFactor(getBankingFactor) {}
+      std::optional<unsigned> bankingFactor = std::nullopt) {}
 
   void runOnOperation() override;
 
@@ -399,10 +393,8 @@ void MemoryBankingPass::runOnOperation() {
 }
 
 namespace circt {
-std::unique_ptr<mlir::Pass> createMemoryBankingPass(
-    std::optional<unsigned> bankingFactor,
-    const std::function<unsigned(mlir::affine::AffineParallelOp)>
-        &getBankingFactor) {
-  return std::make_unique<MemoryBankingPass>(bankingFactor, getBankingFactor);
+std::unique_ptr<mlir::Pass>
+createMemoryBankingPass(std::optional<unsigned> bankingFactor) {
+  return std::make_unique<MemoryBankingPass>(bankingFactor);
 }
 } // namespace circt

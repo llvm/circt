@@ -44,10 +44,8 @@ std::unique_ptr<mlir::Pass> createStripDebugInfoWithPredPass(
 std::unique_ptr<mlir::Pass> createMaximizeSSAPass();
 std::unique_ptr<mlir::Pass> createInsertMergeBlocksPass();
 std::unique_ptr<mlir::Pass> createPrintOpCountPass();
-std::unique_ptr<mlir::Pass> createMemoryBankingPass(
-    std::optional<unsigned> bankingFactor = std::nullopt,
-    const std::function<unsigned(mlir::affine::AffineParallelOp)>
-        &getBankingFactor = nullptr);
+std::unique_ptr<mlir::Pass>
+createMemoryBankingPass(std::optional<unsigned> bankingFactor = std::nullopt);
 
 //===----------------------------------------------------------------------===//
 // Utility functions.
