@@ -14,6 +14,7 @@
 #define CIRCT_TRANSFORMS_PASSES_H
 
 #include "circt/Dialect/HW/HWOpInterfaces.h"
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 #include <limits>
@@ -43,6 +44,8 @@ std::unique_ptr<mlir::Pass> createStripDebugInfoWithPredPass(
 std::unique_ptr<mlir::Pass> createMaximizeSSAPass();
 std::unique_ptr<mlir::Pass> createInsertMergeBlocksPass();
 std::unique_ptr<mlir::Pass> createPrintOpCountPass();
+std::unique_ptr<mlir::Pass>
+createMemoryBankingPass(std::optional<unsigned> bankingFactor = std::nullopt);
 
 //===----------------------------------------------------------------------===//
 // Utility functions.
