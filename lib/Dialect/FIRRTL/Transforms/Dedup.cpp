@@ -320,7 +320,13 @@ private:
 
   // NOLINTNEXTLINE(misc-no-recursion)
   void update(Operation *op) {
-    record(op);
+    if (op->getNumResults())
+      record(op);
+    else if (auto innerSym = dyn_cast<hw::InnerSymbolOpInterface>(op))
+      if (auto attr = innerSym.getInnerSymAttr())
+        if (!attr.empty())
+          record(op);
+
     update(op->getName());
 
     // Hash the operands.
