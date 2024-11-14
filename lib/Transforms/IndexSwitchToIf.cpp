@@ -61,7 +61,7 @@ struct SwitchToIfConversion : public OpConversionPattern<scf::IndexSwitchOp> {
       emptyThenBlock.erase();
       caseRegion.cloneInto(&ifOp.getThenRegion(), mapping);
 
-      if (i == switchCases.size() - 1) {
+      if (i + 1 == switchCases.size()) {
         rewriter.setInsertionPointToEnd(&ifOp.getElseRegion().front());
         Block &elseBlock = ifOp.getElseRegion().front();
         elseBlock.erase();
