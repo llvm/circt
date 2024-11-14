@@ -27,8 +27,9 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
   // CHECK: localparam [41:0]{{ *}} param_y = param1;
   %param_y = sv.localparam { value = #hw.param.decl.ref<"param1"> : i42 } : i42
 
-  // CHECK:        logic{{ *}} [7:0]{{ *}} logic_op = val;
+  // CHECK:        logic{{ *}} [7:0]{{ *}} logic_op;
   // CHECK-NEXT: struct packed {logic b; } logic_op_struct;
+  // CHECK-NEXT: assign logic_op = val;
   %logic_op = sv.logic : !hw.inout<i8>
   %logic_op_struct = sv.logic : !hw.inout<struct<b: i1>>
   sv.assign %logic_op, %val: i8
@@ -1271,6 +1272,22 @@ hw.module @InlineAutomaticLogicInit(in %a : i42, in %b: i42, in %really_really_l
       }
     }
   }
+}
+
+// CHECK-LABEL:  module InlineNonProceduralContinuousNetAssignment(
+hw.module @InlineNonProceduralContinuousNetAssignment(in %a: i1) {
+  // CHECK:     wire  someWire = a;
+  // CHECK-NOT: assign
+  %someWire = sv.wire {hw.verilogName = "someWire"} : !hw.inout<i1>
+  sv.assign %someWire, %a : i1
+  // CHECK:      logic  someLogic;
+  // CHECK-NEXT: assign someLogic = a;
+  %someLogic = sv.logic {hw.verilogName = "someLogic"} : !hw.inout<i1>
+  sv.assign %someLogic, %a : i1
+  // CHECK:      reg  someReg;
+  // CHECK-NEXT: assign someReg = a;
+  %someReg = sv.reg {hw.verilogName = "someReg"} : !hw.inout<i1>
+  sv.assign %someReg, %a : i1
 }
 
 // Issue #2335: https://github.com/llvm/circt/issues/2335
