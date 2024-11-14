@@ -29,6 +29,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/DepthFirstIterator.h"
+#include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -89,8 +90,13 @@ struct ModuleInfo {
   // SHA256 hash.
   std::array<uint8_t, 32> structuralHash;
   // Module names referred by instance op in the module.
-  mlir::ArrayAttr referredModuleNames;
+  std::vector<StringAttr> referredModuleNames;
 };
+
+static bool operator==(const ModuleInfo &lhs, const ModuleInfo &rhs) {
+  return lhs.structuralHash == rhs.structuralHash &&
+         lhs.referredModuleNames == rhs.referredModuleNames;
+}
 
 /// Unique identifier for a value.  All value sources are numbered by apperance,
 /// and values are identified using this numbering (`index`) and an `offset`.
@@ -146,11 +152,9 @@ struct StructuralHasher {
   explicit StructuralHasher(const StructuralHasherSharedConstants &constants)
       : constants(constants){};
 
-  std::pair<std::array<uint8_t, 32>, SmallVector<StringAttr>>
-  getHashAndModuleNames(FModuleLike module) {
+  ModuleInfo getModuleInfo(FModuleLike module) {
     update(&(*module));
-    auto hash = sha.final();
-    return {hash, referredModuleNames};
+    return {sha.final(), std::move(referredModuleNames)};
   }
 
 private:
@@ -359,7 +363,7 @@ private:
   DenseMap<StringAttr, SymbolTarget> innerSymTargets;
 
   // This keeps track of module names in the order of the appearance.
-  SmallVector<mlir::StringAttr> referredModuleNames;
+  std::vector<StringAttr> referredModuleNames;
 
   // String constants.
   const StructuralHasherSharedConstants &constants;
@@ -1595,13 +1599,13 @@ struct DenseMapInfo<ModuleInfo> {
   static inline ModuleInfo getEmptyKey() {
     std::array<uint8_t, 32> key;
     std::fill(key.begin(), key.end(), ~0);
-    return {key, DenseMapInfo<mlir::ArrayAttr>::getEmptyKey()};
+    return {key, {}};
   }
 
   static inline ModuleInfo getTombstoneKey() {
     std::array<uint8_t, 32> key;
     std::fill(key.begin(), key.end(), ~0 - 1);
-    return {key, DenseMapInfo<mlir::ArrayAttr>::getTombstoneKey()};
+    return {key, {}};
   }
 
   static unsigned getHashValue(const ModuleInfo &val) {
@@ -1611,12 +1615,13 @@ struct DenseMapInfo<ModuleInfo> {
     std::memcpy(&hash, val.structuralHash.data(), sizeof(unsigned));
 
     // Combine module names.
-    return llvm::hash_combine(hash, val.referredModuleNames);
+    return llvm::hash_combine(
+        hash, llvm::hash_combine_range(val.referredModuleNames.begin(),
+                                       val.referredModuleNames.end()));
   }
 
   static bool isEqual(const ModuleInfo &lhs, const ModuleInfo &rhs) {
-    return lhs.structuralHash == rhs.structuralHash &&
-           lhs.referredModuleNames == rhs.referredModuleNames;
+    return lhs == rhs;
   }
 };
 } // namespace llvm
@@ -1659,9 +1664,7 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
           return cast<FModuleLike>(*node->getModule());
         }));
 
-    SmallVector<std::optional<
-        std::pair<std::array<uint8_t, 32>, SmallVector<StringAttr>>>>
-        hashesAndModuleNames(modules.size());
+    SmallVector<std::optional<ModuleInfo>> moduleInfos(modules.size());
     StructuralHasherSharedConstants hasherConstants(&getContext());
 
     // Attribute name used to store dedup_group for this pass.
@@ -1708,7 +1711,7 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
 
           StructuralHasher hasher(hasherConstants);
           // Calculate the hash of the module and referred module names.
-          hashesAndModuleNames[idx] = hasher.getHashAndModuleNames(module);
+          moduleInfos[idx] = hasher.getModuleInfo(module);
           return success();
         });
 
@@ -1717,9 +1720,9 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
 
     for (auto [i, module] : llvm::enumerate(modules)) {
       auto moduleName = module.getModuleNameAttr();
-      auto &hashAndModuleNamesOpt = hashesAndModuleNames[i];
+      auto &maybeModuleInfo = moduleInfos[i];
       // If the hash was not calculated, we need to skip it.
-      if (!hashAndModuleNamesOpt) {
+      if (!maybeModuleInfo) {
         // We record it in the dedup map to help detect errors when the user
         // marks the module as both NoDedup and MustDedup. We do not record this
         // module in the hasher to make sure no other module dedups "into" this
@@ -1728,16 +1731,11 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
         continue;
       }
 
-      // Replace module names referred in the module with new names.
-      SmallVector<mlir::Attribute> names;
-      for (auto oldModuleName : hashAndModuleNamesOpt->second) {
-        auto newModuleName = dedupMap[oldModuleName];
-        names.push_back(newModuleName);
-      }
+      auto &moduleInfo = maybeModuleInfo.value();
 
-      // Create a module info to use it as a key.
-      ModuleInfo moduleInfo{hashAndModuleNamesOpt->first,
-                            mlir::ArrayAttr::get(module.getContext(), names)};
+      // Replace module names referred in the module with new names.
+      for (auto &referredModule : moduleInfo.referredModuleNames)
+        referredModule = dedupMap[referredModule];
 
       // Check if there a module with the same hash.
       auto it = moduleInfoToModule.find(moduleInfo);
@@ -1755,7 +1753,7 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
       // Add the module to a new dedup group.
       dedupMap[moduleName] = moduleName;
       // Record the module info.
-      moduleInfoToModule[moduleInfo] = module;
+      moduleInfoToModule[std::move(moduleInfo)] = module;
     }
 
     // This part verifies that all modules marked by "MustDedup" have been
