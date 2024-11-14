@@ -41,42 +41,38 @@ class HardwareDeclOp<string mnemonic, list <Trait> traits = []> :
       "firrtl::WhenOp", "firrtl::MatchOp", "sv::IfDefOp"]>]> {}
 
 def FormalOp : FIRRTLOp<"formal", [
-    HasParent<"firrtl::CircuitOp">,
-    DeclareOpInterfaceMethods<Symbol>,
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+  HasParent<"firrtl::CircuitOp">,
+  DeclareOpInterfaceMethods<Symbol>,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
-  let summary = "A formal test definition.";
+  let summary = "Define a formal unit test";
   let description = [{
-    The `firrtl.formal` operation defines a formal verification problem in the same 
-    context as the rest of the design. This problem is solved using bounded model 
-    checking and should be given a bound k, which represents the number of cycles considered 
-    during model checking. This definition marks a test harness defined as an internal module to 
-    be verified using bounded model checking.
+    The `firrtl.formal` operation defines a formal verification unit test. The
+    defines a unique symbol name that can be used to refer to it. The design to
+    be tested and any necessary test harness is defined by the separate
+    `firrtl.module` op referenced by `moduleName`. Additional parameters may be
+    specified for the unit test. Input ports of the target module are considered
+    to be symbolic values during the test; output ports are ignored.
+
+    This operation may be used to mark unit tests in a FIRRTL design, which
+    other tools may later pick up and run automatically. It is intended to lower
+    to the `verif.formal` operation. See `verif.formal` for more details.
 
     Example:
     ```mlir
-    // DUT
-    firrtl.module @Foo(in %bar: !firrtl.uint<8>, out %out: !firrtl.uint<8>) { ... }
-
-    // Test harness
-    firrtl.module @FooTest(in %bar_s: !firrtl.uint<8>) {
-      %bar, %out = firrtl.instance foo @Foo(in bar: %bar_s: !firrtl.uint<8>, out out: !firrtl.uint<8>) 
-      %c42_8 = firrtl.constant 42 : !firrtl.uint<8>
-      firrtl.connect %bar, %c42_8: !firrtl.uint<8>, !firrtl.uint<8>
-      %c69_8 = firrtl.constant 69 : !firrtl.uint<8>
-      %cond = firrtl.eq %c69_8, %out : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<1>
-      firrtl.assert %cond
-    }
-
-    // Mark test harness as formal test
-    firrtl.formal @formal1 of @FooTest bound 20
+    firrtl.module @MyTest(in %a: !firrtl.uint<42>) {}
+    firrtl.formal @myTestA, @MyTest {bound = 42}
+    firrtl.formal @myTestB, @MyTest {mode = "induction", userAttr = 9001}
     ```
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name, FlatSymbolRefAttr:$moduleName, UI64Attr:$bound);
-  let results = (outs);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    FlatSymbolRefAttr:$moduleName,
+    DictionaryAttr:$parameters
+  );
   let assemblyFormat = [{
-    $sym_name `of` $moduleName `bound` $bound attr-dict
+    $sym_name `,` $moduleName $parameters attr-dict-with-keyword
   }];
 }
 

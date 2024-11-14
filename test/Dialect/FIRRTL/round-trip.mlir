@@ -126,4 +126,11 @@ firrtl.module @PropertyListOps() {
   %concat = firrtl.list.concat %l0, %l1 : !firrtl.list<integer>
 }
 
+// CHECK: firrtl.formal @myTestA, @Top {}
+firrtl.formal @myTestA, @Top {}
+// CHECK: firrtl.formal @myTestB, @Top {bound = 42 : i19}
+firrtl.formal @myTestB, @Top {bound = 42 : i19}
+// CHECK: firrtl.formal @myTestC, @Top {} attributes {foo}
+firrtl.formal @myTestC, @Top {} attributes {foo}
+
 }
