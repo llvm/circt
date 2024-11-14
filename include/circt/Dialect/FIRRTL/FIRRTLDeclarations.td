@@ -87,7 +87,7 @@ def InstanceOp : HardwareDeclOp<"instance", [
       "getModuleName"
     ]>,
   ]> {
-  let summary = "Instantiate an instance of a module";
+  let summary = "Instantiate a module";
   let description = [{
     This represents an instance of a module.  The results are the modules inputs
     and outputs.  The inputs have flip type, the outputs do not.
