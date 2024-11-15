@@ -288,8 +288,10 @@ struct FIRParser {
   ParseResult parseRUW(RUWAttr &result);
   ParseResult parseOptionalRUW(RUWAttr &result);
 
-  ParseResult parseParameter(StringAttr &resultName, TypedAttr &resultValue,
-                             SMLoc &resultLoc);
+  ParseResult parseParameter(StringAttr &resultName, Attribute &resultValue,
+                             SMLoc &resultLoc, bool allowAggregates = false);
+  ParseResult parseParameterValue(Attribute &resultValue,
+                                  bool allowAggregates = false);
 
   /// The version of FIRRTL to use for this parser.
   FIRVersion version;
@@ -1193,26 +1195,41 @@ ParseResult FIRParser::parseOptionalRUW(RUWAttr &result) {
   return success();
 }
 
-/// param ::= id '=' intLit
-///       ::= id '=' StringLit
-///       ::= id '=' floatingpoint
-///       ::= id '=' VerbatimStringLit
+/// param ::= id '=' param-value
 ParseResult FIRParser::parseParameter(StringAttr &resultName,
-                                      TypedAttr &resultValue,
-                                      SMLoc &resultLoc) {
-  mlir::Builder builder(getContext());
-
+                                      Attribute &resultValue, SMLoc &resultLoc,
+                                      bool allowAggregates) {
   auto loc = getToken().getLoc();
 
+  // Parse the name of the parameter.
   StringRef name;
   if (parseId(name, "expected parameter name") ||
       parseToken(FIRToken::equal, "expected '=' in parameter"))
     return failure();
 
-  TypedAttr value;
+  // Parse the value of the parameter.
+  Attribute value;
+  if (parseParameterValue(value, allowAggregates))
+    return failure();
+
+  resultName = StringAttr::get(getContext(), name);
+  resultValue = value;
+  resultLoc = loc;
+  return success();
+}
+
+/// param-value ::= intLit
+///             ::= StringLit
+///             ::= floatingpoint
+///             ::= VerbatimStringLit
+///             ::= '[' (param-value)','* ']'   (if allowAggregates)
+///             ::= '{' (id '=' param)','* '}'  (if allowAggregates)
+ParseResult FIRParser::parseParameterValue(Attribute &value,
+                                           bool allowAggregates) {
+  mlir::Builder builder(getContext());
   switch (getToken().getKind()) {
-  default:
-    return emitError("expected parameter value"), failure();
+
+  // param-value ::= intLit
   case FIRToken::integer:
   case FIRToken::signed_integer: {
     APInt result;
@@ -1228,35 +1245,84 @@ ParseResult FIRParser::parseParameter(StringAttr &resultName,
     value = builder.getIntegerAttr(
         builder.getIntegerType(result.getBitWidth(), result.isSignBitSet()),
         result);
-    break;
+    return success();
   }
+
+  // param-value ::= StringLit
   case FIRToken::string: {
     // Drop the double quotes and unescape.
     value = builder.getStringAttr(getToken().getStringValue());
     consumeToken(FIRToken::string);
-    break;
+    return success();
   }
+
+  // param-value ::= VerbatimStringLit
   case FIRToken::verbatim_string: {
     // Drop the single quotes and unescape the ones inside.
     auto text = builder.getStringAttr(getToken().getVerbatimStringValue());
     value = hw::ParamVerbatimAttr::get(text);
     consumeToken(FIRToken::verbatim_string);
-    break;
+    return success();
   }
-  case FIRToken::floatingpoint:
+
+  // param-value ::= floatingpoint
+  case FIRToken::floatingpoint: {
     double v;
     if (!llvm::to_float(getTokenSpelling(), v))
       return emitError("invalid float parameter syntax"), failure();
 
     value = builder.getF64FloatAttr(v);
     consumeToken(FIRToken::floatingpoint);
-    break;
+    return success();
   }
 
-  resultName = builder.getStringAttr(name);
-  resultValue = value;
-  resultLoc = loc;
-  return success();
+  // param-value ::= '[' (param)','* ']'
+  case FIRToken::l_square: {
+    if (!allowAggregates)
+      return emitError("expected non-aggregate parameter value");
+    consumeToken();
+
+    SmallVector<Attribute> elements;
+    auto parseElement = [&] {
+      return parseParameterValue(elements.emplace_back(),
+                                 /*allowAggregates=*/true);
+    };
+    if (parseListUntil(FIRToken::r_square, parseElement))
+      return failure();
+
+    value = builder.getArrayAttr(elements);
+    return success();
+  }
+
+  // param-value ::= '{' (id '=' param)','* '}'
+  case FIRToken::l_brace: {
+    if (!allowAggregates)
+      return emitError("expected non-aggregate parameter value");
+    consumeToken();
+
+    NamedAttrList fields;
+    auto parseField = [&]() -> ParseResult {
+      StringAttr fieldName;
+      Attribute fieldValue;
+      SMLoc fieldLoc;
+      if (parseParameter(fieldName, fieldValue, fieldLoc,
+                         /*allowAggregates=*/true))
+        return failure();
+      if (fields.set(fieldName, fieldValue))
+        return emitError(fieldLoc)
+               << "redefinition of parameter '" << fieldName.getValue() << "'";
+      return success();
+    };
+    if (parseListUntil(FIRToken::r_brace, parseField))
+      return failure();
+
+    value = fields.getDictionary(getContext());
+    return success();
+  }
+
+  default:
+    return emitError("expected parameter value");
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -3474,7 +3540,7 @@ ParseResult FIRStmtParser::parseIntrinsic(Value &result, bool isStatement) {
   return success();
 }
 
-/// params ::= '<' param* '>'
+/// params ::= '<' param','* '>'
 ParseResult FIRStmtParser::parseOptionalParams(ArrayAttr &resultParameters) {
   if (!consumeIf(FIRToken::less))
     return success();
@@ -3483,14 +3549,18 @@ ParseResult FIRStmtParser::parseOptionalParams(ArrayAttr &resultParameters) {
   SmallPtrSet<StringAttr, 8> seen;
   if (parseListUntil(FIRToken::greater, [&]() -> ParseResult {
         StringAttr name;
-        TypedAttr value;
+        Attribute value;
         SMLoc loc;
         if (parseParameter(name, value, loc))
           return failure();
+        auto typedValue = dyn_cast<TypedAttr>(value);
+        if (!typedValue)
+          return emitError(loc)
+                 << "invalid value for parameter '" << name.getValue() << "'";
         if (!seen.insert(name).second)
           return emitError(loc, "redefinition of parameter '" +
                                     name.getValue() + "'");
-        parameters.push_back(ParamDeclAttr::get(name, value));
+        parameters.push_back(ParamDeclAttr::get(name, typedValue));
         return success();
       }))
     return failure();
@@ -5035,14 +5105,18 @@ ParseResult FIRCircuitParser::parseParameterList(ArrayAttr &resultParameters) {
   SmallPtrSet<StringAttr, 8> seen;
   while (consumeIf(FIRToken::kw_parameter)) {
     StringAttr name;
-    TypedAttr value;
+    Attribute value;
     SMLoc loc;
     if (parseParameter(name, value, loc))
       return failure();
+    auto typedValue = dyn_cast<TypedAttr>(value);
+    if (!typedValue)
+      return emitError(loc)
+             << "invalid value for parameter '" << name.getValue() << "'";
     if (!seen.insert(name).second)
       return emitError(loc,
                        "redefinition of parameter '" + name.getValue() + "'");
-    parameters.push_back(ParamDeclAttr::get(name, value));
+    parameters.push_back(ParamDeclAttr::get(name, typedValue));
   }
   resultParameters = ArrayAttr::get(getContext(), parameters);
   return success();
@@ -5274,36 +5348,57 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
   return success();
 }
 
+/// formal-old ::= 'formal' id 'of' id ',' 'bound' '=' int info?
+/// formal-new ::= 'formal' id 'of' id ':' info? INDENT (param NEWLINE)* DEDENT
 ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
   consumeToken(FIRToken::kw_formal);
-  StringRef id, moduleName, boundSpelling;
-  int64_t bound = -1;
+  StringRef id, moduleName;
+  int64_t bound = 0;
   LocWithInfo info(getToken().getLoc(), this);
+  auto builder = circuit.getBodyBuilder();
 
-  // Parse the formal operation
-  if (parseId(id, "expected a formal test name") ||
-      parseToken(FIRToken::kw_of,
-                 "expected keyword 'of' after formal test name") ||
-      parseId(moduleName, "expected the name of a module") ||
-      parseToken(FIRToken::comma, "expected ','") ||
-      parseGetSpelling(boundSpelling) ||
-      parseToken(FIRToken::identifier,
-                 "expected parameter 'bound' after ','") ||
-      parseToken(FIRToken::equal, "expected '=' after 'bound'") ||
-      parseIntLit(bound, "expected integer in bound specification") ||
-      info.parseOptionalInfo())
+  // Parse the name and target module of the formal test.
+  // `formal`
+  if (parseId(id, "expected formal test name") ||
+      parseToken(FIRToken::kw_of, "expected 'of' in formal test") ||
+      parseId(moduleName, "expected module name"))
     return failure();
 
-  // Check that the parameter is valid
-  if (boundSpelling != "bound" || bound <= 0)
-    return emitError("Invalid parameter given to formal test: ")
-               << boundSpelling << " = " << bound,
-           failure();
+  // TODO: Remove the old `, bound = N` variant in favor of the new parameters.
+  NamedAttrList params;
+  if (consumeIf(FIRToken::comma)) {
+    // Parse the old style declaration with a `, bound = N` suffix.
+    if (getToken().isNot(FIRToken::identifier) || getTokenSpelling() != "bound")
+      return emitError("expected 'bound' after ','");
+    consumeToken();
+    if (parseToken(FIRToken::equal, "expected '=' after 'bound'") ||
+        parseIntLit(bound, "expected integer bound after '='"))
+      return failure();
+    if (bound <= 0)
+      return emitError("bound must be a positive integer");
+    if (info.parseOptionalInfo())
+      return failure();
+    params.set("bound", builder.getIntegerAttr(builder.getI32Type(), bound));
+  } else {
+    // Parse the new style declaration with a `:` and parameter list.
+    if (parseToken(FIRToken::colon, "expected ':' in formal test") ||
+        info.parseOptionalInfo())
+      return failure();
+    while (getIndentation() > indent) {
+      StringAttr paramName;
+      Attribute paramValue;
+      SMLoc paramLoc;
+      if (parseParameter(paramName, paramValue, paramLoc,
+                         /*allowAggregates=*/true))
+        return failure();
+      if (params.set(paramName, paramValue))
+        return emitError(paramLoc, "redefinition of parameter '" +
+                                       paramName.getValue() + "'");
+    }
+  }
 
-  // Build out the firrtl mlir op
-  auto builder = circuit.getBodyBuilder();
-  builder.create<firrtl::FormalOp>(info.getLoc(), id, moduleName, bound);
-
+  builder.create<firrtl::FormalOp>(info.getLoc(), id, moduleName,
+                                   params.getDictionary(getContext()));
   return success();
 }
 
