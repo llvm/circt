@@ -338,6 +338,12 @@ The options are:
 - `scalarized`: Convert aggregate ports (i.e. vector or bundles) into multiple
   ground-typed ports.
 
+`includeHierarchy` is optional and defaults to `false`, meaning that the
+convention is applied only to the specified module. If `includeHierarchy` is
+`true`, the convention is applied to all modules in the hierarchy. If there are
+multiple annotation instances that specify conventions, the `scalarized` convention
+takes precedence over the `internal` convention.
+
 ```json
 {
   "class": "circt.ConventionAnnotation",
