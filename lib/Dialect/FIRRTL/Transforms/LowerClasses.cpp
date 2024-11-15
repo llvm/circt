@@ -1021,6 +1021,7 @@ static om::ClassLike convertClass(FModuleLike moduleLike, OpBuilder builder,
     fieldTypes.push_back(
         NamedAttribute(name, TypeAttr::get(op.getSrc().getType())));
   }
+
   checkAddContainingModulePorts(hasContainingModule, builder, fieldNames,
                                 fieldTypes);
   return builder.create<om::ClassOp>(moduleLike.getLoc(), name,
@@ -1143,21 +1144,16 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
   for (size_t i = 0; i < nAltBasePaths; ++i)
     classBody->addArgument(basePathType, unknownLoc);
 
+  // Mapping from block arguments or instance results to new values.
+  DenseMap<Value, Value> valueMapping;
   for (auto inputProperty : inputProperties) {
     BlockArgument parameterValue =
         classBody->addArgument(inputProperty.type, inputProperty.loc);
     BlockArgument inputValue =
         moduleLike->getRegion(0).getArgument(inputProperty.index);
-    mapping.map(inputValue, parameterValue);
-  }
 
-  // Clone over the body block from the module like to the OM class. This
-  // actually lands the body into the OM class as a second block, which we then
-  // manually splice into the entry block and remove later.
-  moduleLike->getRegion(0).cloneInto(&classOp->getRegion(0),
-                                     classOp->getRegion(0).end(), mapping);
-  classBody->getOperations().splice(
-      classBody->end(), classOp->getRegion(0).back().getOperations());
+    valueMapping[inputValue] = parameterValue;
+  }
 
   // Helper to check if an op is a property op, which should be removed in the
   // module like, or kept in the OM class.
@@ -1177,18 +1173,52 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
     return needsClone || propertyOperands || propertyResults;
   };
 
+  // Move operations from the module like to the OM class.
+  // We need to clone only instances and register their results to the value
+  // mapping. Operands must be remapped using the value mapping.
+  for (auto &op : llvm::make_early_inc_range(
+           moduleLike->getRegion(0).front().getOperations())) {
+    if (!isPropertyOp(op))
+      continue;
+
+    Operation *newOp = &op;
+
+    bool needsMove = true;
+
+    // Clone instances and register their results to the value mapping.
+    if (isa<InstanceOp>(op)) {
+      newOp = op.clone();
+      for (auto [oldResult, newResult] :
+           llvm::zip(op.getResults(), newOp->getResults()))
+        valueMapping[oldResult] = newResult;
+      classBody->getOperations().insert(classBody->end(), newOp);
+      needsMove = false;
+    }
+
+    // Remap operands using the value mapping.
+    for (size_t i = 0; i < newOp->getNumOperands(); ++i) {
+      auto operand = newOp->getOperand(i);
+      auto it = valueMapping.find(operand);
+      if (it != valueMapping.end())
+        newOp->setOperand(i, it->second);
+    }
+
+    // Move the op into the OM class body.
+    if (needsMove)
+      newOp->moveBefore(classBody, classBody->end());
+  }
+
   llvm::SmallVector<mlir::Location> fieldLocs;
   llvm::SmallVector<mlir::Value> fieldValues;
   for (Operation &op :
        llvm::make_early_inc_range(classOp.getBodyBlock()->getOperations())) {
-    if (!isPropertyOp(op))
-      op.erase();
+    assert(isPropertyOp(op));
 
     if (auto propAssign = dyn_cast<PropAssignOp>(op)) {
-      if (isa<BlockArgument>(propAssign.getDest())) {
+      if (auto blockArg = dyn_cast<BlockArgument>(propAssign.getDest())) {
         // Store any output property assignments into fields op inputs.
         fieldLocs.push_back(op.getLoc());
-        fieldValues.push_back(mapping.lookupOrDefault(propAssign.getSrc()));
+        fieldValues.push_back(propAssign.getSrc());
         propAssign.erase();
       }
     }
@@ -1204,10 +1234,6 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
 
   OpBuilder builder = OpBuilder::atBlockEnd(classOp.getBodyBlock());
   classOp.addNewFieldsOp(builder, fieldLocs, fieldValues);
-
-  // Now that we've finished the Class body block, clean out the block where the
-  // module like region was landed.
-  classOp->getRegion(0).back().erase();
 
   // If the module-like is a Class, it will be completely erased later.
   // Otherwise, erase just the property ports and ops.
