@@ -1021,6 +1021,7 @@ static om::ClassLike convertClass(FModuleLike moduleLike, OpBuilder builder,
     fieldTypes.push_back(
         NamedAttribute(name, TypeAttr::get(op.getSrc().getType())));
   }
+
   checkAddContainingModulePorts(hasContainingModule, builder, fieldNames,
                                 fieldTypes);
   return builder.create<om::ClassOp>(moduleLike.getLoc(), name,
@@ -1143,20 +1144,20 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
   for (size_t i = 0; i < nAltBasePaths; ++i)
     classBody->addArgument(basePathType, unknownLoc);
 
+  // Mapping from block arguments or instance results to new values.
+  DenseMap<Value, Value> valueMapping;
   for (auto inputProperty : inputProperties) {
     BlockArgument parameterValue =
         classBody->addArgument(inputProperty.type, inputProperty.loc);
     BlockArgument inputValue =
         moduleLike->getRegion(0).getArgument(inputProperty.index);
-    mapping.map(inputValue, parameterValue);
+
+    valueMapping[inputValue] = parameterValue;
   }
 
-  // Clone the property ops from the FIRRTL Class or Module to the OM Class.
-  SmallVector<Operation *> opsToErase;
-  OpBuilder builder = OpBuilder::atBlockBegin(classOp.getBodyBlock());
-  llvm::SmallVector<mlir::Location> fieldLocs;
-  llvm::SmallVector<mlir::Value> fieldValues;
-  for (auto &op : moduleLike->getRegion(0).getOps()) {
+  // Helper to check if an op is a property op, which should be removed in the
+  // module like, or kept in the OM class.
+  auto isPropertyOp = [&](Operation &op) {
     // Check if any operand is a property.
     auto propertyOperands = llvm::any_of(op.getOperandTypes(), [](Type type) {
       return isa<PropertyType>(type);
@@ -1169,28 +1170,58 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
     auto propertyResults = llvm::any_of(
         op.getResultTypes(), [](Type type) { return isa<PropertyType>(type); });
 
-    // If there are no properties here, move along.
-    if (!needsClone && !propertyOperands && !propertyResults)
+    return needsClone || propertyOperands || propertyResults;
+  };
+
+  // Move operations from the module like to the OM class.
+  // We need to clone only instances and register their results to the value
+  // mapping. Operands must be remapped using the value mapping.
+  for (auto &op : llvm::make_early_inc_range(
+           moduleLike->getRegion(0).front().getOperations())) {
+    if (!isPropertyOp(op))
       continue;
 
-    bool isField = false;
-    if (auto propAssign = dyn_cast<PropAssignOp>(op)) {
-      if (isa<BlockArgument>(propAssign.getDest())) {
-        // Store any output property assignments into fields op inputs.
-        fieldLocs.push_back(op.getLoc());
-        fieldValues.push_back(mapping.lookup(propAssign.getSrc()));
-        isField = true;
-      }
+    Operation *newOp = &op;
+
+    bool needsMove = true;
+
+    // Clone instances and register their results to the value mapping.
+    if (isa<InstanceOp>(op)) {
+      newOp = op.clone();
+      for (auto [oldResult, newResult] :
+           llvm::zip(op.getResults(), newOp->getResults()))
+        valueMapping[oldResult] = newResult;
+      classBody->getOperations().insert(classBody->end(), newOp);
+      needsMove = false;
     }
 
-    if (!isField)
-      // Clone the op over to the OM Class.
-      builder.clone(op, mapping);
+    // Remap operands using the value mapping.
+    for (size_t i = 0; i < newOp->getNumOperands(); ++i) {
+      auto operand = newOp->getOperand(i);
+      auto it = valueMapping.find(operand);
+      if (it != valueMapping.end())
+        newOp->setOperand(i, it->second);
+    }
 
-    // In case this is a Module, remember to erase this op, unless it is an
-    // instance. Instances are handled later in updateInstances.
-    if (!isa<InstanceOp>(op))
-      opsToErase.push_back(&op);
+    // Move the op into the OM class body.
+    if (needsMove)
+      newOp->moveBefore(classBody, classBody->end());
+  }
+
+  llvm::SmallVector<mlir::Location> fieldLocs;
+  llvm::SmallVector<mlir::Value> fieldValues;
+  for (Operation &op :
+       llvm::make_early_inc_range(classOp.getBodyBlock()->getOperations())) {
+    assert(isPropertyOp(op));
+
+    if (auto propAssign = dyn_cast<PropAssignOp>(op)) {
+      if (auto blockArg = dyn_cast<BlockArgument>(propAssign.getDest())) {
+        // Store any output property assignments into fields op inputs.
+        fieldLocs.push_back(op.getLoc());
+        fieldValues.push_back(propAssign.getSrc());
+        propAssign.erase();
+      }
+    }
   }
 
   // If there is a 'containingModule', add an argument for 'ports', and a field.
@@ -1201,14 +1232,21 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
     fieldValues.push_back(argumentValue);
   }
 
+  OpBuilder builder = OpBuilder::atBlockEnd(classOp.getBodyBlock());
   classOp.addNewFieldsOp(builder, fieldLocs, fieldValues);
 
   // If the module-like is a Class, it will be completely erased later.
   // Otherwise, erase just the property ports and ops.
   if (!isa<firrtl::ClassLike>(moduleLike.getOperation())) {
     // Erase ops in use before def order, thanks to FIRRTL's SSA regions.
-    for (auto *op : llvm::reverse(opsToErase))
-      op->erase();
+    for (auto &op :
+         llvm::make_early_inc_range(llvm::reverse(moduleLike.getOperation()
+                                                      ->getRegion(0)
+                                                      .getBlocks()
+                                                      .front()
+                                                      .getOperations())))
+      if (isPropertyOp(op) && !isa<InstanceOp>(op))
+        op.erase();
 
     // Erase property typed ports.
     moduleLike.erasePorts(portsToErase);
