@@ -1,5 +1,4 @@
-//===- MemoryBanking.cpp - Code to perform memory bnaking in parallel loops
-//--------------------===//
+//===- MemoryBanking.cpp - memory bank parallel loops -----------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -14,9 +13,6 @@
 #include "circt/Support/LLVM.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
-#include "mlir/Dialect/Affine/LoopUtils.h"
-#include "mlir/Dialect/Affine/Passes.h"
-#include "mlir/Dialect/Affine/Utils.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
