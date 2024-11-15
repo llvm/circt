@@ -16,6 +16,9 @@ include "mlir/IR/BuiltinTypes.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 
+include "circt/Dialect/ESI/ESITypes.td"
+include "circt/Dialect/Seq/SeqTypes.td"
+
 // @mortbopet: some kind of support for interfaces as parent ops is currently
 // being tracked here: https://github.com/llvm/llvm-project/pull/66196
 class HasParentInterface<string interface>
@@ -136,6 +139,54 @@ def FuncOp : Op<Handshake_Dialect, "func", [
 
   let hasVerifier = 1;
   let hasCustomAssemblyFormat = 1;
+}
+
+def ESIInstanceOp : Op<Handshake_Dialect, "esi_instance", [
+    CallOpInterface,
+    HasClock,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Instantiate a Handshake circuit";
+  let description = [{
+    Instantiate (call) a Handshake function in a non-Handshake design using ESI
+    channels as the outside connections.
+  }];
+  let arguments = (ins FlatSymbolRefAttr:$module, StrAttr:$instName,
+                       ClockType:$clk, I1:$rst,
+                       Variadic<ChannelType>:$opOperands);
+  let results = (outs Variadic<ChannelType>);
+
+  let assemblyFormat = [{
+    $module $instName `clk` $clk `rst` $rst
+      `(` $opOperands `)` attr-dict `:` functional-type($opOperands, results)
+  }];
+
+  let extraClassDeclaration = [{
+    // Account for `clk` and `rst` operands vs call arguments.
+    static constexpr int NumFixedOperands = 2;
+
+    /// Get the argument operands to the called function.
+    operand_range getArgOperands() {
+      return {arg_operand_begin(), arg_operand_end()};
+    }
+
+    operand_iterator arg_operand_begin() { return operand_begin(); }
+    operand_iterator arg_operand_end() { return operand_end(); }
+
+    /// Return the module of this operation.
+    CallInterfaceCallable getCallableForCallee() {
+      return (*this)->getAttrOfType<SymbolRefAttr>("module");
+    }
+
+    /// Set the callee for this operation.
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      (*this)->setAttr(getModuleAttrName(), callee.get<mlir::SymbolRefAttr>());
+    }
+
+    MutableOperandRange getArgOperandsMutable() {
+      return getOpOperandsMutable();
+    }
+  }];
 }
 
 // InstanceOp
