@@ -48,10 +48,10 @@ firrtl.module @MergeNetsTop(in %reset: !firrtl.asyncreset) {
 firrtl.module @CastingToOtherTypes(in %a: !firrtl.uint<1>, out %v: !firrtl.uint<1>, out %w: !firrtl.sint<1>, out %x: !firrtl.clock, out %y: !firrtl.asyncreset) {
   // CHECK: %r = firrtl.wire : !firrtl.uint<1>
   %r = firrtl.wire : !firrtl.reset
-  %0 = firrtl.asUInt %r : (!firrtl.reset) -> !firrtl.uint<1>
-  %1 = firrtl.asSInt %r : (!firrtl.reset) -> !firrtl.sint<1>
-  %2 = firrtl.asClock %r : (!firrtl.reset) -> !firrtl.clock
-  %3 = firrtl.asAsyncReset %r : (!firrtl.reset) -> !firrtl.asyncreset
+  %0 = firrtl.asUInt %r : !firrtl.reset
+  %1 = firrtl.asSInt %r : !firrtl.reset
+  %2 = firrtl.asClock %r : !firrtl.reset
+  %3 = firrtl.asAsyncReset %r : !firrtl.reset
   %4 = firrtl.resetCast %a : (!firrtl.uint<1>) -> !firrtl.reset
   firrtl.matchingconnect %r, %4 : !firrtl.reset
   firrtl.matchingconnect %v, %0 : !firrtl.uint<1>
@@ -267,7 +267,7 @@ firrtl.module @DontPropagateUpstreamAcrossCast(in %in0: !firrtl.asyncreset, in %
   %w = firrtl.wire : !firrtl.reset
   %invalid_reset = firrtl.invalidvalue : !firrtl.reset
   firrtl.matchingconnect %w, %invalid_reset : !firrtl.reset
-  %0 = firrtl.asAsyncReset %w : (!firrtl.reset) -> !firrtl.asyncreset
+  %0 = firrtl.asAsyncReset %w : !firrtl.reset
   firrtl.connect %out0, %0 : !firrtl.reset, !firrtl.asyncreset
   firrtl.matchingconnect %out1, %w : !firrtl.reset
   firrtl.connect %out0, %in0 : !firrtl.reset, !firrtl.asyncreset
@@ -602,8 +602,8 @@ firrtl.circuit "FullAsyncNested" {
     // CHECK: %io_out_REG_NO = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8>
     %io_out_REG_NO = firrtl.reg %clock {annotations = [{class = "sifive.enterprise.firrtl.ExcludeMemFromMemToRegOfVec"}]}: !firrtl.clock, !firrtl.uint<8>
     firrtl.matchingconnect %io_out_REG, %io_in : !firrtl.uint<8>
-    %0 = firrtl.add %io_out_REG, %inst_io_out : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<9>
-    %1 = firrtl.bits %0 7 to 0 : (!firrtl.uint<9>) -> !firrtl.uint<8>
+    %0 = firrtl.add %io_out_REG, %inst_io_out : !firrtl.uint<8>, !firrtl.uint<8>
+    %1 = firrtl.bits %0 7 to 0 : !firrtl.uint<9>
     firrtl.matchingconnect %io_out, %1 : !firrtl.uint<8>
   }
   // CHECK-LABEL: firrtl.module @FullAsyncNested
@@ -664,7 +664,7 @@ firrtl.circuit "WireShouldDominate" {
 firrtl.circuit "MovableNodeShouldDominate" {
   // CHECK-LABEL: firrtl.module @MovableNodeShouldDominate
   firrtl.module @MovableNodeShouldDominate(in %clock: !firrtl.clock, in %ui1: !firrtl.uint<1>) {
-    %0 = firrtl.asAsyncReset %ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset // does not block move of node
+    %0 = firrtl.asAsyncReset %ui1 : !firrtl.uint<1>
     %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8> // gets wired to localReset
     %localReset = firrtl.node sym @theReset %0 {annotations = [{class = "circt.FullResetAnnotation", resetType = "async"}]} : !firrtl.asyncreset
     // CHECK-NEXT: %0 = firrtl.asAsyncReset %ui1
@@ -683,7 +683,7 @@ firrtl.circuit "UnmovableNodeShouldDominate" {
   // CHECK-LABEL: firrtl.module @UnmovableNodeShouldDominate
   firrtl.module @UnmovableNodeShouldDominate(in %clock: !firrtl.clock, in %ui1: !firrtl.uint<1>) {
     %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8> // gets wired to localReset
-    %0 = firrtl.asAsyncReset %ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset // blocks move of node
+    %0 = firrtl.asAsyncReset %ui1 : !firrtl.uint<1>
     %localReset = firrtl.node sym @theReset %0 {annotations = [{class = "circt.FullResetAnnotation", resetType = "async"}]} : !firrtl.asyncreset
     // CHECK-NEXT: %localReset = firrtl.wire sym @theReset
     // CHECK-NEXT: [[RV:%.+]] = firrtl.constant 0
@@ -701,7 +701,7 @@ firrtl.circuit "UnmovableForceableNodeShouldDominate" {
   // CHECK-LABEL: firrtl.module @UnmovableForceableNodeShouldDominate
   firrtl.module @UnmovableForceableNodeShouldDominate(in %clock: !firrtl.clock, in %ui1: !firrtl.uint<1>) {
     %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8> // gets wired to localReset
-    %0 = firrtl.asAsyncReset %ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset // blocks move of node
+    %0 = firrtl.asAsyncReset %ui1 : !firrtl.uint<1>
     %localReset, %ref = firrtl.node sym @theReset %0 forceable {annotations = [{class = "circt.FullResetAnnotation", resetType = "async"}]} : !firrtl.asyncreset
     // CHECK-NEXT: %localReset, %{{.+}} = firrtl.wire sym @theReset
     // CHECK-NEXT: [[RV:%.+]] = firrtl.constant 0
@@ -723,7 +723,7 @@ firrtl.circuit "MoveAcrossBlocks1" {
       %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8> // gets wired to localReset
     }
     firrtl.when %ui1 : !firrtl.uint<1> {
-      %0 = firrtl.asAsyncReset %ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset // blocks move of node
+      %0 = firrtl.asAsyncReset %ui1 : !firrtl.uint<1>
       %localReset = firrtl.node sym @theReset %0 {annotations = [{class = "circt.FullResetAnnotation", resetType = "async"}]} : !firrtl.asyncreset
     }
     // CHECK-NEXT: %localReset = firrtl.wire
@@ -746,7 +746,7 @@ firrtl.circuit "MoveAcrossBlocks2" {
   firrtl.module @MoveAcrossBlocks2(in %clock: !firrtl.clock, in %ui1: !firrtl.uint<1>) {
     // <-- should move reset here
     firrtl.when %ui1 : !firrtl.uint<1> {
-      %0 = firrtl.asAsyncReset %ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset // blocks move of node
+      %0 = firrtl.asAsyncReset %ui1 : !firrtl.uint<1>
       %localReset = firrtl.node sym @theReset %0 {annotations = [{class = "circt.FullResetAnnotation", resetType = "async"}]} : !firrtl.asyncreset
     }
     firrtl.when %ui1 : !firrtl.uint<1> {
@@ -773,7 +773,7 @@ firrtl.circuit "MoveAcrossBlocks3" {
     // <-- should move reset here
     %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8> // gets wired to localReset
     firrtl.when %ui1 : !firrtl.uint<1> {
-      %0 = firrtl.asAsyncReset %ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset // blocks move of node
+      %0 = firrtl.asAsyncReset %ui1 : !firrtl.uint<1>
       %localReset = firrtl.node sym @theReset %0 {annotations = [{class = "circt.FullResetAnnotation", resetType = "async"}]} : !firrtl.asyncreset
     }
     // CHECK-NEXT: %localReset = firrtl.wire
@@ -796,7 +796,7 @@ firrtl.circuit "MoveAcrossBlocks4" {
     firrtl.when %ui1 : !firrtl.uint<1> {
       %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8> // gets wired to localReset
     }
-    %0 = firrtl.asAsyncReset %ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset // blocks move of node
+    %0 = firrtl.asAsyncReset %ui1 : !firrtl.uint<1>
     %localReset = firrtl.node sym @theReset %0 {annotations = [{class = "circt.FullResetAnnotation", resetType = "async"}]} : !firrtl.asyncreset
     // CHECK-NEXT: %localReset = firrtl.wire
     // CHECK-NEXT: firrtl.when %ui1 : !firrtl.uint<1> {
@@ -1233,7 +1233,7 @@ firrtl.circuit "MovableNodeShouldDominateInstance" {
     %child_clock = firrtl.instance child @Child(in clock: !firrtl.clock)
     firrtl.connect %child_clock, %clock : !firrtl.clock
     %ui1 = firrtl.constant 1 : !firrtl.uint<1>
-    %0 = firrtl.asAsyncReset %ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+    %0 = firrtl.asAsyncReset %ui1 : !firrtl.uint<1>
     %localReset = firrtl.node %0 {annotations = [{class = "circt.FullResetAnnotation", resetType = "async"}]} : !firrtl.asyncreset
     // CHECK:       %localReset = firrtl.wire {annotations = [{class = "circt.FullResetAnnotation", resetType = "async"}]} : !firrtl.asyncreset
     // CHECK:       %child_localReset, %child_clock = firrtl.instance child @Child(in localReset: !firrtl.asyncreset, in clock: !firrtl.clock

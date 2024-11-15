@@ -27,20 +27,20 @@ firrtl.circuit "Simple" {
                          in %in3: !firrtl.sint<8>,
                          out %out4: !firrtl.uint<4>) {
 
-    %1 = firrtl.asUInt %in1 : (!firrtl.uint<4>) -> !firrtl.uint<4>
+    %1 = firrtl.asUInt %in1 : !firrtl.uint<4>
 
     // CHECK: comb.concat %false, %in1
     // CHECK: comb.concat %false, %in1
 
     // CHECK: comb.sub
-    %2 = firrtl.sub %1, %1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
+    %2 = firrtl.sub %1, %1 : !firrtl.uint<4>, !firrtl.uint<4>
 
     // CHECK: %3 = comb.concat %false, %in2 : i1, i2
-    %3 = firrtl.pad %in2, 3 : (!firrtl.uint<2>) -> !firrtl.uint<3>
+    %3 = firrtl.pad %in2, 3 : !firrtl.uint<2>
     // CHECK: comb.concat %false, %3 : i1, i3
-    %4 = firrtl.pad %3, 4 : (!firrtl.uint<3>) -> !firrtl.uint<4>
+    %4 = firrtl.pad %3, 4 : !firrtl.uint<3>
     // CHECK: [[RESULT:%.+]] = comb.xor
-    %5 = firrtl.xor %in2, %4 : (!firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
+    %5 = firrtl.xor %in2, %4 : !firrtl.uint<2>, !firrtl.uint<4>
 
     firrtl.connect %out4, %5 : !firrtl.uint<4>, !firrtl.uint<4>
     // CHECK-NEXT: hw.output [[RESULT]] : i4
@@ -115,7 +115,7 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: [[T0:%.+]] = comb.concat %false, %inA
     // CHECK-NEXT: [[T1:%.+]] = comb.concat %false, [[OUTC]]
     // CHECK-NEXT: comb.sub bin [[T0]], [[T1]]
-    %0 = firrtl.sub %inA, %outC : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
+    %0 = firrtl.sub %inA, %outC : !firrtl.uint<4>, !firrtl.uint<4>
 
     // No connections to outD.
 
@@ -142,7 +142,7 @@ firrtl.circuit "Simple" {
   firrtl.module private @Analog(in %a1: !firrtl.analog<1>,
                         out %outClock: !firrtl.clock) {
 
-    %clock = firrtl.asClock %a1 : (!firrtl.analog<1>) -> !firrtl.clock
+    %clock = firrtl.asClock %a1 : !firrtl.analog<1>
     firrtl.connect %outClock, %clock : !firrtl.clock, !firrtl.clock
   }
 
@@ -160,10 +160,10 @@ firrtl.circuit "Simple" {
 
     // Calculation of input (the firrtl.add + firrtl.eq) happens after the
     // instance.
-    %0 = firrtl.add %arg0, %arg0 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<3>
+    %0 = firrtl.add %arg0, %arg0 : !firrtl.uint<2>, !firrtl.uint<2>
 
     // Multiple uses of the add.
-    %a = firrtl.eq %0, %arg2 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<1>
+    %a = firrtl.eq %0, %arg2 : !firrtl.uint<3>, !firrtl.uint<3>
     // CHECK-NEXT: [[ARG]] = comb.icmp bin eq [[ADD]], %arg2 : i3
     firrtl.connect %myext#0, %a : !firrtl.uint<1>, !firrtl.uint<1>
 
@@ -178,7 +178,7 @@ firrtl.circuit "Simple" {
     %myext:2 = firrtl.instance myext @MyParameterizedExtModule(in in: !firrtl.uint<1>, out out: !firrtl.uint<8>)
 
     // Output of the instance is fed into the input!
-    %11 = firrtl.bits %myext#1 2 to 2 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+    %11 = firrtl.bits %myext#1 2 to 2 : !firrtl.uint<8>
     // CHECK: %0 = comb.extract %myext.out from 2 : (i8) -> i1
 
     firrtl.connect %myext#0, %11 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -190,10 +190,10 @@ firrtl.circuit "Simple" {
                                 in %inC: !firrtl.analog<0>,
                                 out %outa: !firrtl.uint<4>,
                                 out %outb: !firrtl.uint<0>) {
-     %0 = firrtl.mul %inA, %inB : (!firrtl.uint<4>, !firrtl.uint<0>) -> !firrtl.uint<4>
+     %0 = firrtl.mul %inA, %inB : !firrtl.uint<4>, !firrtl.uint<0>
     firrtl.connect %outa, %0 : !firrtl.uint<4>, !firrtl.uint<4>
 
-    %1 = firrtl.mul %inB, %inB : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<0>
+    %1 = firrtl.mul %inB, %inB : !firrtl.uint<0>, !firrtl.uint<0>
     firrtl.connect %outb, %1 : !firrtl.uint<0>, !firrtl.uint<0>
 
     firrtl.attach %inC, %inC : !firrtl.analog<0>, !firrtl.analog<0>

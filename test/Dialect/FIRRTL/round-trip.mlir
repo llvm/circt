@@ -14,8 +14,8 @@ firrtl.module @Top(in %arg0: !firrtl.uint<1>) attributes {portNames = [""]} {}
 
 // CHECK-LABEL: firrtl.module @Intrinsics
 firrtl.module @Intrinsics(in %ui : !firrtl.uint, in %clock: !firrtl.clock, in %ui1: !firrtl.uint<1>) {
-  // CHECK-NEXT: firrtl.int.sizeof %ui : (!firrtl.uint) -> !firrtl.uint<32>
-  %size = firrtl.int.sizeof %ui : (!firrtl.uint) -> !firrtl.uint<32>
+  // CHECK-NEXT: firrtl.int.sizeof %ui : !firrtl.uint
+  %size = firrtl.int.sizeof %ui : !firrtl.uint
 
   // CHECK-NEXT: firrtl.int.isX %ui : !firrtl.uint
   %isx = firrtl.int.isX %ui : !firrtl.uint
@@ -97,17 +97,17 @@ firrtl.module @PropertyArithmetic() {
   %0 = firrtl.integer 1
   %1 = firrtl.integer 2
 
-  // CHECK: firrtl.integer.add %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
-  %2 = firrtl.integer.add %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  // CHECK: firrtl.integer.add %0, %1 : !firrtl.integer, !firrtl.integer
+  %2 = firrtl.integer.add %0, %1 : !firrtl.integer, !firrtl.integer
 
-  // CHECK: firrtl.integer.mul %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
-  %3 = firrtl.integer.mul %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  // CHECK: firrtl.integer.mul %0, %1 : !firrtl.integer, !firrtl.integer
+  %3 = firrtl.integer.mul %0, %1 : !firrtl.integer, !firrtl.integer
 
-  // CHECK: firrtl.integer.shr %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
-  %4 = firrtl.integer.shr %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  // CHECK: firrtl.integer.shr %0, %1 : !firrtl.integer, !firrtl.integer
+  %4 = firrtl.integer.shr %0, %1 : !firrtl.integer, !firrtl.integer
 
-  // CHECK: firrtl.integer.shl %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
-  %5 = firrtl.integer.shl %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  // CHECK: firrtl.integer.shl %0, %1 : !firrtl.integer, !firrtl.integer
+  %5 = firrtl.integer.shl %0, %1 : !firrtl.integer, !firrtl.integer
 }
 
 // CHECK-LABEL: firrtl.module @PropertyListOps

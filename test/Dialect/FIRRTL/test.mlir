@@ -62,11 +62,11 @@ firrtl.circuit "Top" {
                      in %b: !firrtl.uint<32>,
                      in %c: !firrtl.analog<13>,
                      in %d: !firrtl.uint<16>) {
-    %3 = firrtl.add %b, %d : (!firrtl.uint<32>, !firrtl.uint<16>) -> !firrtl.uint<33>
+    %3 = firrtl.add %b, %d : !firrtl.uint<32>, !firrtl.uint<16>
 
     %4 = firrtl.invalidvalue : !firrtl.analog<13>
     firrtl.attach %c, %4 : !firrtl.analog<13>, !firrtl.analog<13>
-    %5 = firrtl.add %3, %d : (!firrtl.uint<33>, !firrtl.uint<16>) -> !firrtl.uint<34>
+    %5 = firrtl.add %3, %d : !firrtl.uint<33>, !firrtl.uint<16>
 
     firrtl.connect %out, %5 : !firrtl.uint, !firrtl.uint<34>
   }
@@ -75,10 +75,10 @@ firrtl.circuit "Top" {
 // CHECK-LABEL: firrtl.circuit "Top" {
 // CHECK-NEXT:    firrtl.module @Top(out %out: !firrtl.uint,
 // CHECK:                            in %b: !firrtl.uint<32>, in %c: !firrtl.analog<13>, in %d: !firrtl.uint<16>) {
-// CHECK-NEXT:      %0 = firrtl.add %b, %d : (!firrtl.uint<32>, !firrtl.uint<16>) -> !firrtl.uint<33>
+// CHECK-NEXT:      %0 = firrtl.add %b, %d : !firrtl.uint<32>, !firrtl.uint<16>
 // CHECK-NEXT:      %invalid_analog13 = firrtl.invalidvalue : !firrtl.analog<13>
 // CHECK-NEXT:      firrtl.attach %c, %invalid_analog13 : !firrtl.analog<13>, !firrtl.analog<13>
-// CHECK-NEXT:      %1 = firrtl.add %0, %d : (!firrtl.uint<33>, !firrtl.uint<16>) -> !firrtl.uint<34>
+// CHECK-NEXT:      %1 = firrtl.add %0, %d : !firrtl.uint<33>, !firrtl.uint<16>
 // CHECK-NEXT:      firrtl.connect %out, %1 : !firrtl.uint, !firrtl.uint<34>
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
@@ -117,14 +117,14 @@ firrtl.module @ClockCast(in %clock: !firrtl.clock) {
 
 // CHECK-LABEL: @TestDshRL
 firrtl.module @TestDshRL(in %in1 : !firrtl.uint<2>, in %in2: !firrtl.uint<3>) {
-  // CHECK: %0 = firrtl.dshl %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<9>
-  %0 = firrtl.dshl %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<9>
+  // CHECK: %0 = firrtl.dshl %in1, %in2 : !firrtl.uint<2>, !firrtl.uint<3>
+  %0 = firrtl.dshl %in1, %in2 : !firrtl.uint<2>, !firrtl.uint<3>
 
-  // CHECK: %1 = firrtl.dshr %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<2>
-  %1 = firrtl.dshr %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<2>
+  // CHECK: %1 = firrtl.dshr %in1, %in2 : !firrtl.uint<2>, !firrtl.uint<3>
+  %1 = firrtl.dshr %in1, %in2 : !firrtl.uint<2>, !firrtl.uint<3>
 
-  // CHECK: %2 = firrtl.dshlw %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<2>
-  %2 = firrtl.dshlw %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<2>
+  // CHECK: %2 = firrtl.dshlw %in1, %in2 : !firrtl.uint<2>, !firrtl.uint<3>
+  %2 = firrtl.dshlw %in1, %in2 : !firrtl.uint<2>, !firrtl.uint<3>
 }
 
 // We allow implicit truncation of a register's reset value.
@@ -163,10 +163,10 @@ firrtl.module @Parent() {
 firrtl.module @VerbatimExpr() {
   // CHECK: %[[TMP:.+]] = firrtl.verbatim.expr "FOO" : () -> !firrtl.uint<42>
   // CHECK: %[[TMP2:.+]] = firrtl.verbatim.expr "$bits({{[{][{]0[}][}]}})"(%[[TMP]]) : (!firrtl.uint<42>) -> !firrtl.uint<32>
-  // CHECK: firrtl.add %[[TMP]], %[[TMP2]] : (!firrtl.uint<42>, !firrtl.uint<32>) -> !firrtl.uint<43>
+  // CHECK: firrtl.add %[[TMP]], %[[TMP2]] : !firrtl.uint<42>, !firrtl.uint<32>
   %0 = firrtl.verbatim.expr "FOO" : () -> !firrtl.uint<42>
   %1 = firrtl.verbatim.expr "$bits({{0}})"(%0) : (!firrtl.uint<42>) -> !firrtl.uint<32>
-  %2 = firrtl.add %0, %1 : (!firrtl.uint<42>, !firrtl.uint<32>) -> !firrtl.uint<43>
+  %2 = firrtl.add %0, %1 : !firrtl.uint<42>, !firrtl.uint<32>
 }
 
 // CHECK-LABEL: @LowerToBind

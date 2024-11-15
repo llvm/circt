@@ -386,16 +386,16 @@ firrtl.circuit "IntegerArithmetic" {
 
   firrtl.class @IntegerArithmeticClass(in %in0: !firrtl.integer, in %in1: !firrtl.integer) {
     // CHECK: om.integer.add %in0, %in1 : !om.integer
-    %0 = firrtl.integer.add %in0, %in1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+    %0 = firrtl.integer.add %in0, %in1 : !firrtl.integer, !firrtl.integer
 
     // CHECK: om.integer.mul %in0, %in1 : !om.integer
-    %1 = firrtl.integer.mul %in0, %in1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+    %1 = firrtl.integer.mul %in0, %in1 : !firrtl.integer, !firrtl.integer
 
     // CHECK: om.integer.shr %in0, %in1 : !om.integer
-    %2 = firrtl.integer.shr %in0, %in1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+    %2 = firrtl.integer.shr %in0, %in1 : !firrtl.integer, !firrtl.integer
 
     // CHECK: om.integer.shl %in0, %in1 : !om.integer
-    %3 = firrtl.integer.shl %in0, %in1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+    %3 = firrtl.integer.shl %in0, %in1 : !firrtl.integer, !firrtl.integer
   }
 }
 

@@ -10,7 +10,7 @@ firrtl.circuit "VectorPropagation1" {
     %tmp = firrtl.wire : !firrtl.vector<uint<1>, 2>
     %0 = firrtl.subindex %tmp[0] : !firrtl.vector<uint<1>, 2>
     %1 = firrtl.subindex %tmp[1] : !firrtl.vector<uint<1>, 2>
-    %2 = firrtl.xor %0, %1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %2 = firrtl.xor %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.matchingconnect %0, %c1_ui1 : !firrtl.uint<1>
     firrtl.matchingconnect %1, %c1_ui1 : !firrtl.uint<1>
     // CHECK: firrtl.matchingconnect %b, %c0_ui1 : !firrtl.uint<1>
@@ -57,11 +57,11 @@ firrtl.circuit "VectorPropagation2" {
     firrtl.matchingconnect %7, %c16_ui6 : !firrtl.uint<6>
     %8 = firrtl.subindex %6[1] : !firrtl.vector<uint<6>, 2>
     firrtl.matchingconnect %8, %c32_ui6 : !firrtl.uint<6>
-    %9 = firrtl.xor %1, %4 : (!firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<6>
+    %9 = firrtl.xor %1, %4 : !firrtl.uint<6>, !firrtl.uint<6>
     firrtl.matchingconnect %b1, %9 : !firrtl.uint<6>
-    %10 = firrtl.xor %8, %2 : (!firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<6>
+    %10 = firrtl.xor %8, %2 : !firrtl.uint<6>, !firrtl.uint<6>
     firrtl.matchingconnect %b2, %10 : !firrtl.uint<6>
-    %11 = firrtl.xor %7, %5 : (!firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<6>
+    %11 = firrtl.xor %7, %5 : !firrtl.uint<6>, !firrtl.uint<6>
     firrtl.matchingconnect %b3, %11 : !firrtl.uint<6>
     // CHECK:      firrtl.matchingconnect %b1, %c5_ui6 : !firrtl.uint<6>
     // CHECK-NEXT: firrtl.matchingconnect %b2, %c34_ui6 : !firrtl.uint<6>
@@ -84,8 +84,8 @@ firrtl.circuit "BundlePropagation1"   {
     firrtl.matchingconnect %0, %c1_ui3 : !firrtl.uint<3>
     firrtl.matchingconnect %1, %c2_ui3 : !firrtl.uint<3>
     firrtl.matchingconnect %2, %c4_ui3 : !firrtl.uint<3>
-    %3 = firrtl.xor %0, %1 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
-    %4 = firrtl.xor %3, %2 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
+    %3 = firrtl.xor %0, %1 : !firrtl.uint<3>, !firrtl.uint<3>
+    %4 = firrtl.xor %3, %2 : !firrtl.uint<3>, !firrtl.uint<3>
     firrtl.matchingconnect %result, %4 : !firrtl.uint<3>
     // CHECK:  firrtl.matchingconnect %result, %c7_ui3 : !firrtl.uint<3>
   }
@@ -141,7 +141,7 @@ firrtl.circuit "InputPortTop"  {
     %0 = firrtl.subfield %in1[v] : !firrtl.bundle<v: uint<1>>
     %1 = firrtl.subfield %in0[v] : !firrtl.bundle<v: uint<1>>
     %2 = firrtl.subfield %out[v] : !firrtl.bundle<v: uint<1>>
-    %3 = firrtl.and %1, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %3 = firrtl.and %1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.matchingconnect %2, %3 : !firrtl.uint<1>
   }
   // CHECK-LABEL: firrtl.module private @InputPortChild
@@ -153,7 +153,7 @@ firrtl.circuit "InputPortTop"  {
     %0 = firrtl.subfield %in1[v] : !firrtl.bundle<v: uint<1>>
     %1 = firrtl.subfield %in0[v] : !firrtl.bundle<v: uint<1>>
     %2 = firrtl.subfield %out[v] : !firrtl.bundle<v: uint<1>>
-    %3 = firrtl.and %1, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %3 = firrtl.and %1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.matchingconnect %2, %3 : !firrtl.uint<1>
   }
 
@@ -198,7 +198,7 @@ firrtl.circuit "rhs_sink_output_used_as_wire" {
     firrtl.matchingconnect %3, %2 : !firrtl.uint<1>
     %_c = firrtl.wire  : !firrtl.bundle<v: uint<1>>
     %4 = firrtl.subfield %_c[v] : !firrtl.bundle<v: uint<1>>
-    %5 = firrtl.xor %1, %3 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %5 = firrtl.xor %1, %3 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.matchingconnect %4, %5 : !firrtl.uint<1>
     firrtl.matchingconnect %0, %4 : !firrtl.uint<1>
   }
@@ -231,7 +231,7 @@ firrtl.circuit "dntOutput"  {
     %0 = firrtl.subfield %b[v] : !firrtl.bundle<v: uint<3>>
     %int_b = firrtl.instance int  @foo(out b: !firrtl.bundle<v: uint<3>>)
     %1 = firrtl.subfield %int_b[v] : !firrtl.bundle<v: uint<3>>
-    %2 = firrtl.mux(%c, %1, %c2_ui3) : (!firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
+    %2 = firrtl.mux(%c, %1, %c2_ui3) : !firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>
     firrtl.matchingconnect %0, %2 : !firrtl.uint<3>
   }
   firrtl.module private @foo(out %b: !firrtl.bundle<v: uint<3>> sym @dntSym1){

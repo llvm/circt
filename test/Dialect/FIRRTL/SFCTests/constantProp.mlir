@@ -12,7 +12,7 @@ firrtl.circuit "ConstInput"   {
   }
   // CHECK-LABEL: firrtl.module private @Child
   firrtl.module private @Child(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
-    %0 = firrtl.and %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %0 = firrtl.and %in0, %in1 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: firrtl.matchingconnect %out, %in0 :
     firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -43,8 +43,8 @@ firrtl.circuit "InstanceInput"   {
     firrtl.connect %b0_in, %c1_ui : !firrtl.uint<1>, !firrtl.uint
     %b1_in, %b1_out = firrtl.instance b1  @Bottom1(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
     firrtl.connect %b1_in, %c1_ui : !firrtl.uint<1>, !firrtl.uint
-    %0 = firrtl.and %b0_out, %b1_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    %1 = firrtl.and %0, %c_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %0 = firrtl.and %b0_out, %b1_out : !firrtl.uint<1>, !firrtl.uint<1>
+    %1 = firrtl.and %0, %c_out : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: %[[C0:.+]] = firrtl.constant 1 : !firrtl.uint<1>
     // CHECK: firrtl.matchingconnect %z, %[[C0]] : !firrtl.uint<1>
     firrtl.connect %z, %1 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -74,8 +74,8 @@ firrtl.circuit "InstanceInput2"   {
     firrtl.connect %b0_in, %x : !firrtl.uint<1>, !firrtl.uint<1>
     %b1_in, %b1_out = firrtl.instance b1 @Bottom2(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
     firrtl.connect %b1_in, %c1_ui : !firrtl.uint<1>, !firrtl.uint
-    %0 = firrtl.and %b0_out, %b1_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    %1 = firrtl.and %0, %c_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %0 = firrtl.and %b0_out, %b1_out : !firrtl.uint<1>, !firrtl.uint<1>
+    %1 = firrtl.and %0, %c_out : !firrtl.uint<1>, !firrtl.uint<1>
    // CHECK:  firrtl.matchingconnect %z, %1
     firrtl.connect %z, %1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -88,7 +88,7 @@ firrtl.circuit "acrossWire"   {
     %_z = firrtl.wire droppable_name : !firrtl.uint<1>
     firrtl.connect %y, %_z : !firrtl.uint<1>, !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %0 = firrtl.mux(%x, %c0_ui1, %c0_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %0 = firrtl.mux(%x, %c0_ui1, %c0_ui1) : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %_z, %0 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: %[[C2:.+]] = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK-NEXT: firrtl.matchingconnect %y, %[[C2]] : !firrtl.uint<1>
@@ -103,7 +103,7 @@ firrtl.circuit "constOutput"   {
   }
   firrtl.module @constOutput(in %x: !firrtl.uint<1>, out %z: !firrtl.uint<1>) {
     %c_out = firrtl.instance c @constOutChild(out out: !firrtl.uint<1>)
-    %0 = firrtl.and %x, %c_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %0 = firrtl.and %x, %c_out : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %z, %0 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: %[[C3_0:.+]] = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK: %[[C3:.+]] = firrtl.constant 0 : !firrtl.uint<1>
@@ -120,7 +120,7 @@ firrtl.circuit "optiMux"   {
     %c1_ui = firrtl.constant 1 : !firrtl.uint
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
-    %0 = firrtl.mux(%c1_ui, %c0_ui2, %c0_ui4) : (!firrtl.uint, !firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
+    %0 = firrtl.mux(%c1_ui, %c0_ui2, %c0_ui4) : !firrtl.uint, !firrtl.uint<2>, !firrtl.uint<4>
     // CHECK: %[[C4:.+]] = firrtl.constant 0 :
     // CHECK: firrtl.matchingconnect %z, %[[C4]]
     firrtl.connect %z, %0 : !firrtl.uint<4>, !firrtl.uint<4>
@@ -130,7 +130,7 @@ firrtl.circuit "optiMux"   {
 firrtl.circuit "divFold"   {
   // CHECK-LABEL: firrtl.module @divFold
   firrtl.module @divFold(in %a: !firrtl.uint<8>, out %b: !firrtl.uint<8>) {
-    %0 = firrtl.div %a, %a : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+    %0 = firrtl.div %a, %a : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %b, %0 : !firrtl.uint<8>, !firrtl.uint<8>
     // CHECK: %[[C5:.+]] = firrtl.constant 1 : !firrtl.uint<8>
     // CHECK: firrtl.matchingconnect %b, %[[C5]] : !firrtl.uint<8>
@@ -146,7 +146,7 @@ firrtl.circuit "padConstWire"   {
     %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
     firrtl.connect %_w_a, %c3_ui2 : !firrtl.uint<8>, !firrtl.uint<2>
     firrtl.connect %_w_b, %c3_ui2 : !firrtl.uint<8>, !firrtl.uint<2>
-    %0 = firrtl.cat %_w_a, %_w_b : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<16>
+    %0 = firrtl.cat %_w_a, %_w_b : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %z, %0 : !firrtl.uint<16>, !firrtl.uint<16>
     // CHECK: %[[C6:.+]] = firrtl.constant 771 : !firrtl.uint<16>
     // CHECK-NEXT: firrtl.matchingconnect %z, %[[C6]] : !firrtl.uint<16>
@@ -162,7 +162,7 @@ firrtl.circuit "padConstReg"   {
     %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
     firrtl.connect %r_a, %c3_ui2 : !firrtl.uint<8>, !firrtl.uint<2>
     firrtl.connect %r_b, %c3_ui2 : !firrtl.uint<8>, !firrtl.uint<2>
-    %0 = firrtl.cat %r_a, %r_b : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<16>
+    %0 = firrtl.cat %r_a, %r_b : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %z, %0 : !firrtl.uint<16>, !firrtl.uint<16>
     // CHECK: %[[C6:.+]] = firrtl.constant 771 : !firrtl.uint<16>
     // CHECK-NEXT: firrtl.matchingconnect %z, %[[C6]] : !firrtl.uint<16>
@@ -179,7 +179,7 @@ firrtl.circuit "padConstOut"   {
   firrtl.module @padConstOut(out %z: !firrtl.uint<16>) {
     %c_x = firrtl.instance c @padConstOutChild(out x: !firrtl.uint<8>)
     %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
-    %0 = firrtl.cat %c3_ui2, %c_x : (!firrtl.uint<2>, !firrtl.uint<8>) -> !firrtl.uint<10>
+    %0 = firrtl.cat %c3_ui2, %c_x : !firrtl.uint<2>, !firrtl.uint<8>
     // CHECK: %[[C8:.+]] = firrtl.constant 771 : !firrtl.uint<16>
     // CHECK: firrtl.matchingconnect %z, %[[C8]] : !firrtl.uint<16>
     firrtl.connect %z, %0 : !firrtl.uint<16>, !firrtl.uint<10>
@@ -191,7 +191,7 @@ firrtl.circuit "padConstIn"   {
   // CHECK-LABEL: firrtl.module private @padConstInChild
   firrtl.module private @padConstInChild(in %x: !firrtl.uint<8>, out %y: !firrtl.uint<16>) {
     %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
-    %0 = firrtl.cat %c3_ui2, %x : (!firrtl.uint<2>, !firrtl.uint<8>) -> !firrtl.uint<10>
+    %0 = firrtl.cat %c3_ui2, %x : !firrtl.uint<2>, !firrtl.uint<8>
     // CHECK: %[[C9:.+]] = firrtl.constant 771 : !firrtl.uint<16>
     // CHECK: firrtl.matchingconnect %y, %[[C9]] : !firrtl.uint<16>
     firrtl.connect %y, %0 : !firrtl.uint<16>, !firrtl.uint<10>
@@ -211,7 +211,7 @@ firrtl.circuit "padConstIn"   {
 firrtl.circuit "removePad"   {
   // CHECK-LABEL: firrtl.module @removePad
   firrtl.module @removePad(in %x: !firrtl.uint<8>, out %z: !firrtl.uint<8>) {
-    %0 = firrtl.pad %x, 6 : (!firrtl.uint<8>) -> !firrtl.uint<8>
+    %0 = firrtl.pad %x, 6 : !firrtl.uint<8>
     // CHECK: firrtl.matchingconnect %z, %x : !firrtl.uint<8>
     firrtl.connect %z, %0 : !firrtl.uint<8>, !firrtl.uint<8>
   }
@@ -224,7 +224,7 @@ firrtl.circuit "asyncReset"   {
     %c11_ui4 = firrtl.constant 11 : !firrtl.uint<4>
     %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<4>, !firrtl.uint<8>
     %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
-    %0 = firrtl.mux(%en, %c0_ui4, %r) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<8>) -> !firrtl.uint<8>
+    %0 = firrtl.mux(%en, %c0_ui4, %r) : !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<8>
     firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
     // CHECK: firrtl.matchingconnect %r, %0 : !firrtl.uint<8>
@@ -252,8 +252,8 @@ firrtl.circuit "SignTester"   {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c0_si3 = firrtl.constant 0 : !firrtl.sint<3>
     %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
-    %0 = firrtl.neg %c3_ui2 : (!firrtl.uint<2>) -> !firrtl.sint<3>
-    %1 = firrtl.mux(%c0_ui1, %c0_si3, %0) : (!firrtl.uint<1>, !firrtl.sint<3>, !firrtl.sint<3>) -> !firrtl.sint<3>
+    %0 = firrtl.neg %c3_ui2 : !firrtl.uint<2>
+    %1 = firrtl.mux(%c0_ui1, %c0_si3, %0) : !firrtl.uint<1>, !firrtl.sint<3>, !firrtl.sint<3>
     firrtl.connect %ref, %1 : !firrtl.sint<3>, !firrtl.sint<3>
     // CHECK:  %[[C14:.+]] = firrtl.constant -3 : !firrtl.sint<3>
     // CHECK:  firrtl.matchingconnect %ref, %[[C14]] : !firrtl.sint<3>
@@ -265,7 +265,7 @@ firrtl.circuit "AddTester"   {
   // CHECK-LABEL: firrtl.module @AddTester
   firrtl.module @AddTester(out %ref: !firrtl.sint<2>) {
     %c-1_si1 = firrtl.constant -1 : !firrtl.sint<1>
-    %0 = firrtl.add %c-1_si1, %c-1_si1 : (!firrtl.sint<1>, !firrtl.sint<1>) -> !firrtl.sint<2>
+    %0 = firrtl.add %c-1_si1, %c-1_si1 : !firrtl.sint<1>, !firrtl.sint<1>
     firrtl.connect %ref, %0 : !firrtl.sint<2>, !firrtl.sint<2>
     // CHECK:  %[[C15:.+]] = firrtl.constant -2 : !firrtl.sint<2>
     // CHECK:  firrtl.matchingconnect %ref, %[[C15]]
@@ -277,11 +277,11 @@ firrtl.circuit "ConstPropReductionTester"   {
   // CHECK-LABEL: firrtl.module @ConstPropReductionTester
   firrtl.module @ConstPropReductionTester(out %out1: !firrtl.uint<1>, out %out2: !firrtl.uint<1>, out %out3: !firrtl.uint<1>) {
     %c-1_si2 = firrtl.constant -1 : !firrtl.sint<2>
-    %0 = firrtl.xorr %c-1_si2 : (!firrtl.sint<2>) -> !firrtl.uint<1>
+    %0 = firrtl.xorr %c-1_si2 : !firrtl.sint<2>
     firrtl.connect %out1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
-    %1 = firrtl.andr %c-1_si2 : (!firrtl.sint<2>) -> !firrtl.uint<1>
+    %1 = firrtl.andr %c-1_si2 : !firrtl.sint<2>
     firrtl.connect %out2, %1 : !firrtl.uint<1>, !firrtl.uint<1>
-    %2 = firrtl.orr %c-1_si2 : (!firrtl.sint<2>) -> !firrtl.uint<1>
+    %2 = firrtl.orr %c-1_si2 : !firrtl.sint<2>
     firrtl.connect %out3, %2 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK-DAG:  %[[C16:.+]] = firrtl.constant 0
     // CHECK-DAG:  %[[C17:.+]] = firrtl.constant 1
@@ -296,11 +296,11 @@ firrtl.circuit "TailTester"   {
   firrtl.module @TailTester(out %out: !firrtl.uint<1>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c23_ui5 = firrtl.constant 23 : !firrtl.uint<5>
-    %0 = firrtl.add %c0_ui1, %c23_ui5 : (!firrtl.uint<1>, !firrtl.uint<5>) -> !firrtl.uint<6>
+    %0 = firrtl.add %c0_ui1, %c23_ui5 : !firrtl.uint<1>, !firrtl.uint<5>
     %_temp = firrtl.node droppable_name %0  : !firrtl.uint<6>
-    %1 = firrtl.head %_temp, 3 : (!firrtl.uint<6>) -> !firrtl.uint<3>
+    %1 = firrtl.head %_temp, 3 : !firrtl.uint<6>
     %_head_temp = firrtl.node droppable_name %1  : !firrtl.uint<3>
-    %2 = firrtl.tail %_head_temp, 2 : (!firrtl.uint<3>) -> !firrtl.uint<1>
+    %2 = firrtl.tail %_head_temp, 2 : !firrtl.uint<3>
     firrtl.connect %out, %2 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK:  %[[C18:.+]] = firrtl.constant 0
     // CHECK:  firrtl.matchingconnect %out, %[[C18]]
@@ -313,11 +313,11 @@ firrtl.circuit "TailTester2"   {
   firrtl.module @TailTester2(out %out: !firrtl.uint<1>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c23_ui5 = firrtl.constant 23 : !firrtl.uint<5>
-    %0 = firrtl.add %c0_ui1, %c23_ui5 : (!firrtl.uint<1>, !firrtl.uint<5>) -> !firrtl.uint<6>
+    %0 = firrtl.add %c0_ui1, %c23_ui5 : !firrtl.uint<1>, !firrtl.uint<5>
     %_temp = firrtl.node droppable_name %0  : !firrtl.uint<6>
-    %1 = firrtl.tail %_temp, 1 : (!firrtl.uint<6>) -> !firrtl.uint<5>
+    %1 = firrtl.tail %_temp, 1 : !firrtl.uint<6>
     %_tail_temp = firrtl.node droppable_name %1  : !firrtl.uint<5>
-    %2 = firrtl.tail %_tail_temp, 4 : (!firrtl.uint<5>) -> !firrtl.uint<1>
+    %2 = firrtl.tail %_tail_temp, 4 : !firrtl.uint<5>
     firrtl.connect %out, %2 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK:  %[[C21:.+]] = firrtl.constant 1
     // CHECK:  firrtl.matchingconnect %out, %[[C21]]
@@ -329,10 +329,10 @@ firrtl.circuit "ZeroWidthAdd"   {
   // CHECK-LABEL: firrtl.module @ZeroWidthAdd
   firrtl.module @ZeroWidthAdd(in %x: !firrtl.uint<0>, out %y: !firrtl.uint<7>) {
     %c0_ui9 = firrtl.constant 0 : !firrtl.uint<9>
-    %0 = firrtl.add %x, %c0_ui9 : (!firrtl.uint<0>, !firrtl.uint<9>) -> !firrtl.uint<10>
+    %0 = firrtl.add %x, %c0_ui9 : !firrtl.uint<0>, !firrtl.uint<9>
     %_temp = firrtl.node droppable_name %0  : !firrtl.uint<10>
-    %1 = firrtl.cat %_temp, %_temp : (!firrtl.uint<10>, !firrtl.uint<10>) -> !firrtl.uint<20>
-    %2 = firrtl.tail %1, 13 : (!firrtl.uint<20>) -> !firrtl.uint<7>
+    %1 = firrtl.cat %_temp, %_temp : !firrtl.uint<10>, !firrtl.uint<10>
+    %2 = firrtl.tail %1, 13 : !firrtl.uint<20>
     firrtl.connect %y, %2 : !firrtl.uint<7>, !firrtl.uint<7>
     // CHECK:  %[[C20:.+]] = firrtl.constant 0
     // CHECK:  firrtl.matchingconnect %y, %[[C20]]
@@ -345,7 +345,7 @@ firrtl.circuit "regConstReset"   {
   firrtl.module @regConstReset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
     %c11_ui8 = firrtl.constant 11 : !firrtl.uint<8>
     %r = firrtl.regreset %clock, %reset, %c11_ui8  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
-    %0 = firrtl.mux(%cond, %c11_ui8, %r) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+    %0 = firrtl.mux(%cond, %c11_ui8, %r) : !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
     // CHECK: %[[C22:.+]] = firrtl.constant 11 
@@ -360,12 +360,12 @@ firrtl.circuit "constPropRegMux"   {
   %r1 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
   %r2 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-  %0 = firrtl.mux(%en, %c1_ui1, %r1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  %0 = firrtl.mux(%en, %c1_ui1, %r1) : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %r1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-  %1 = firrtl.mux(%en, %r2, %c0_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  %1 = firrtl.mux(%en, %r2, %c0_ui1) : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %r2, %1 : !firrtl.uint<1>, !firrtl.uint<1>
-  %2 = firrtl.xor %r1, %r2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  %2 = firrtl.xor %r1, %r2 : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %out, %2 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: %[[C23:.+]] = firrtl.constant 1
     // CHECK: firrtl.matchingconnect %out, %[[C23]]

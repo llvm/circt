@@ -98,7 +98,7 @@ firrtl.circuit "SFCCompatTests" {
   // A primitive operation should block invalid propagation.
   firrtl.module @InvalidPrimop(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %d: !firrtl.uint<1>, out %q: !firrtl.uint<1>) {
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
-    %0 = firrtl.not %invalid_ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    %0 = firrtl.not %invalid_ui1 : !firrtl.uint<1>
     // CHECK: firrtl.regreset %clock
     %r = firrtl.regreset %clock, %reset, %0  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %r, %d : !firrtl.uint<1>, !firrtl.uint<1>
@@ -150,10 +150,10 @@ firrtl.circuit "SFCCompatTests" {
     firrtl.matchingconnect %r2_init, %inv_ui1 : !firrtl.uint<1>
     %r2 = firrtl.regreset %clock, %reset, %r2_init : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
 
-    %c0_si1 = firrtl.asSInt %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.sint<1>
-    %c0_clock = firrtl.asClock %c0_si1 : (!firrtl.sint<1>) -> !firrtl.clock
-    %c0_asyncreset = firrtl.asAsyncReset %c0_clock : (!firrtl.clock) -> !firrtl.asyncreset
-    %r3_init = firrtl.asUInt %c0_asyncreset : (!firrtl.asyncreset) -> !firrtl.uint<1>
+    %c0_si1 = firrtl.asSInt %c0_ui1 : !firrtl.uint<1>
+    %c0_clock = firrtl.asClock %c0_si1 : !firrtl.sint<1>
+    %c0_asyncreset = firrtl.asAsyncReset %c0_clock : !firrtl.clock
+    %r3_init = firrtl.asUInt %c0_asyncreset : !firrtl.asyncreset
     %r3 = firrtl.regreset %clock, %reset, %r3_init : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
 
     %agg_const = firrtl.aggregateconstant [1, 2, 1] : !firrtl.bundle<a: uint<8>, b: uint<5>, c: uint<1>>
@@ -164,8 +164,8 @@ firrtl.circuit "SFCCompatTests" {
   // CHECK-LABEL: firrtl.module @TailPrimOp
   firrtl.module @TailPrimOp(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %0 = firrtl.pad %c0_ui1, 3 : (!firrtl.uint<1>) -> !firrtl.uint<3>
-    %1 = firrtl.tail %0, 2 : (!firrtl.uint<3>) -> !firrtl.uint<1>
+    %0 = firrtl.pad %c0_ui1, 3 : !firrtl.uint<1>
+    %1 = firrtl.tail %0, 2 : !firrtl.uint<3>
     %r0_init = firrtl.wire sym @r0_init : !firrtl.uint<1>
     firrtl.matchingconnect %r0_init, %1: !firrtl.uint<1>
     %r0 = firrtl.regreset %clock, %reset, %r0_init : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
@@ -188,7 +188,7 @@ firrtl.circuit "NonConstantAsyncReset_PrimOp" {
   firrtl.module @NonConstantAsyncReset_PrimOp(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // expected-note @+1 {{reset driver is here}}
-    %c1_ui1 = firrtl.not %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    %c1_ui1 = firrtl.not %c0_ui1 : !firrtl.uint<1>
     // expected-error @below {{register "r0" has an async reset, but its reset value is not driven with a constant value through wires, nodes, or connects}}
     %r0 = firrtl.regreset %clock, %reset, %c1_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
   }

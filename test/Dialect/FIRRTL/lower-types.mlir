@@ -285,17 +285,17 @@ firrtl.circuit "TopLevel" {
 // Check that a non-bundled mux ops are untouched.
     // COMMON-LABEL: firrtl.module private @Mux
     firrtl.module private @Mux(in %p: !firrtl.uint<1>, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>) {
-      // CHECK-NEXT: %0 = firrtl.mux(%p, %a, %b) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+      // CHECK-NEXT: %0 = firrtl.mux(%p, %a, %b) : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
       // CHECK-NEXT: firrtl.connect %c, %0 : !firrtl.uint<1>
-      %0 = firrtl.mux(%p, %a, %b) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+      %0 = firrtl.mux(%p, %a, %b) : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
       firrtl.connect %c, %0 : !firrtl.uint<1>, !firrtl.uint<1>
     }
     // COMMON-LABEL: firrtl.module private @MuxBundle
     firrtl.module private @MuxBundle(in %p: !firrtl.uint<1>, in %a: !firrtl.bundle<a: uint<1>>, in %b: !firrtl.bundle<a: uint<1>>, out %c: !firrtl.bundle<a: uint<1>>) {
-      // CHECK-NEXT: %0 = firrtl.mux(%p, %a_a, %b_a) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+      // CHECK-NEXT: %0 = firrtl.mux(%p, %a_a, %b_a) : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
       // CHECK-NEXT: firrtl.matchingconnect %c_a, %0 : !firrtl.uint<1>
-      // SIG:        firrtl.mux(%p, %a, %b) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>) -> !firrtl.bundle<a: uint<1>>
-      %0 = firrtl.mux(%p, %a, %b) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>) -> !firrtl.bundle<a: uint<1>>
+      // SIG:        firrtl.mux(%p, %a, %b) : !firrtl.uint<1>, !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
+      %0 = firrtl.mux(%p, %a, %b) : !firrtl.uint<1>, !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
       firrtl.connect %c, %0 : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
     }
 
@@ -791,12 +791,12 @@ firrtl.circuit "TopLevel" {
 // CHECK-NEXT:      firrtl.matchingconnect %a_0, %default_0 : !firrtl.uint<1>
 // CHECK-NEXT:      firrtl.matchingconnect %a_1, %default_1 : !firrtl.uint<1>
 // CHECK-NEXT:      %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-// CHECK-NEXT:      %0 = firrtl.eq %sel, %c0_ui1 : (!firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:      %0 = firrtl.eq %sel, %c0_ui1 : !firrtl.uint<2>, !firrtl.uint<1>
 // CHECK-NEXT:      firrtl.when %0 : !firrtl.uint<1> {
 // CHECK-NEXT:        firrtl.matchingconnect %a_0, %b : !firrtl.uint<1>
 // CHECK-NEXT:      }
 // CHECK-NEXT:      %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK-NEXT:      %1 = firrtl.eq %sel, %c1_ui1 : (!firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:      %1 = firrtl.eq %sel, %c1_ui1 : !firrtl.uint<2>, !firrtl.uint<1>
 // CHECK-NEXT:      firrtl.when %1 : !firrtl.uint<1> {
 // CHECK-NEXT:        firrtl.matchingconnect %a_1, %b : !firrtl.uint<1>
 // CHECK-NEXT:      }
@@ -818,29 +818,29 @@ firrtl.circuit "TopLevel" {
   }
 // CHECK-LABEL:    firrtl.module private @multidimWrite(in %sel: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %a_0_0: !firrtl.uint<2>, out %a_0_1: !firrtl.uint<2>, out %a_1_0: !firrtl.uint<2>, out %a_1_1: !firrtl.uint<2>) {
 // CHECK-NEXT:      %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-// CHECK-NEXT:      %0 = firrtl.eq %sel, %c0_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:      %0 = firrtl.eq %sel, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:      firrtl.when %0 : !firrtl.uint<1> {
 // CHECK-NEXT:        %c0_ui1_0 = firrtl.constant 0 : !firrtl.uint<1>
-// CHECK-NEXT:        %2 = firrtl.eq %sel, %c0_ui1_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:        %2 = firrtl.eq %sel, %c0_ui1_0 : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:        firrtl.when %2 : !firrtl.uint<1> {
 // CHECK-NEXT:          firrtl.matchingconnect %a_0_0, %b : !firrtl.uint<2>
 // CHECK-NEXT:        }
 // CHECK-NEXT:        %c1_ui1_1 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK-NEXT:        %3 = firrtl.eq %sel, %c1_ui1_1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:        %3 = firrtl.eq %sel, %c1_ui1_1 : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:        firrtl.when %3 : !firrtl.uint<1> {
 // CHECK-NEXT:          firrtl.matchingconnect %a_0_1, %b : !firrtl.uint<2>
 // CHECK-NEXT:        }
 // CHECK-NEXT:      }
 // CHECK-NEXT:      %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK-NEXT:      %1 = firrtl.eq %sel, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:      %1 = firrtl.eq %sel, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:      firrtl.when %1 : !firrtl.uint<1> {
 // CHECK-NEXT:        %c0_ui1_0 = firrtl.constant 0 : !firrtl.uint<1>
-// CHECK-NEXT:        %2 = firrtl.eq %sel, %c0_ui1_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:        %2 = firrtl.eq %sel, %c0_ui1_0 : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:        firrtl.when %2 : !firrtl.uint<1> {
 // CHECK-NEXT:          firrtl.matchingconnect %a_1_0, %b : !firrtl.uint<2>
 // CHECK-NEXT:        }
 // CHECK-NEXT:        %c1_ui1_1 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK-NEXT:        %3 = firrtl.eq %sel, %c1_ui1_1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:        %3 = firrtl.eq %sel, %c1_ui1_1 : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:        firrtl.when %3 : !firrtl.uint<1> {
 // CHECK-NEXT:          firrtl.matchingconnect %a_1_1, %b : !firrtl.uint<2>
 // CHECK-NEXT:        }
@@ -870,12 +870,12 @@ firrtl.circuit "TopLevel" {
 // CHECK-NEXT:      firrtl.matchingconnect %b_1_wo, %def_1_wo : !firrtl.uint<1>
 // CHECK-NEXT:      firrtl.matchingconnect %b_1_valid, %def_1_valid : !firrtl.uint<2>
 // CHECK-NEXT:      %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-// CHECK-NEXT:      %0 = firrtl.eq %sel, %c0_ui1 : (!firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:      %0 = firrtl.eq %sel, %c0_ui1 : !firrtl.uint<2>, !firrtl.uint<1>
 // CHECK-NEXT:      firrtl.when %0 : !firrtl.uint<1> {
 // CHECK-NEXT:        firrtl.matchingconnect %b_0_wo, %a_wo : !firrtl.uint<1>
 // CHECK-NEXT:      }
 // CHECK-NEXT:      %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK-NEXT:      %1 = firrtl.eq %sel, %c1_ui1 : (!firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:      %1 = firrtl.eq %sel, %c1_ui1 : !firrtl.uint<2>, !firrtl.uint<1>
 // CHECK-NEXT:      firrtl.when %1 : !firrtl.uint<1> {
 // CHECK-NEXT:        firrtl.matchingconnect %b_1_wo, %a_wo : !firrtl.uint<1>
 // CHECK-NEXT:      }
@@ -998,13 +998,13 @@ firrtl.module private @is1436_FOO() {
   firrtl.module private @BitCast1(out %o_0: !firrtl.uint<1>, out %o_1: !firrtl.uint<1>) {
     %a1 = firrtl.wire : !firrtl.uint<4>
     %b = firrtl.bitcast %a1 : (!firrtl.uint<4>) -> (!firrtl.vector<uint<2>, 2>)
-    // CHECK:  %[[v0:.+]] = firrtl.bits %a1 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
-    // CHECK-NEXT:  %[[v1:.+]] = firrtl.bits %a1 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
-    // CHECK-NEXT:  %[[v2:.+]] = firrtl.cat %[[v1]], %[[v0]] : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
+    // CHECK:  %[[v0:.+]] = firrtl.bits %a1 1 to 0 : !firrtl.uint<4>
+    // CHECK-NEXT:  %[[v1:.+]] = firrtl.bits %a1 3 to 2 : !firrtl.uint<4>
+    // CHECK-NEXT:  %[[v2:.+]] = firrtl.cat %[[v1]], %[[v0]] : !firrtl.uint<2>, !firrtl.uint<2>
     %c = firrtl.bitcast %b : (!firrtl.vector<uint<2>, 2>) -> (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<2>>)
-    // CHECK-NEXT:  %[[v3:.+]] = firrtl.bits %[[v2]] 3 to 3 : (!firrtl.uint<4>) -> !firrtl.uint<1>
-    // CHECK-NEXT:  %[[v4:.+]] = firrtl.bits %[[v2]] 2 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<1>
-    // CHECK-NEXT:  %[[v5:.+]] = firrtl.bits %[[v2]] 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+    // CHECK-NEXT:  %[[v3:.+]] = firrtl.bits %[[v2]] 3 to 3 : !firrtl.uint<4>
+    // CHECK-NEXT:  %[[v4:.+]] = firrtl.bits %[[v2]] 2 to 2 : !firrtl.uint<4>
+    // CHECK-NEXT:  %[[v5:.+]] = firrtl.bits %[[v2]] 1 to 0 : !firrtl.uint<4>
     %d = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<2>>
     // CHECK-NEXT:  %d_valid = firrtl.wire  : !firrtl.uint<1>
     // CHECK-NEXT:  %d_ready = firrtl.wire  : !firrtl.uint<1>
@@ -1014,23 +1014,23 @@ firrtl.module private @is1436_FOO() {
     // CHECK-NEXT:  firrtl.matchingconnect %d_ready, %[[v4]] : !firrtl.uint<1>
     // CHECK-NEXT:  firrtl.matchingconnect %d_data, %[[v5]] : !firrtl.uint<2>
     %e = firrtl.bitcast %d : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<2>>) -> (!firrtl.bundle<addr: uint<2>, data : vector<uint<1>, 2>>)
-    // CHECK-NEXT:  %[[v6:.+]] = firrtl.cat %d_valid, %d_ready : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
-    // CHECK-NEXT:  %[[v7:.+]] = firrtl.cat %[[v6]], %d_data : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
-    // CHECK-NEXT:  %[[v8:.+]] = firrtl.bits %[[v7]] 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
-    // CHECK-NEXT:  %[[v9:.+]] = firrtl.bits %[[v7]] 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+    // CHECK-NEXT:  %[[v6:.+]] = firrtl.cat %d_valid, %d_ready : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK-NEXT:  %[[v7:.+]] = firrtl.cat %[[v6]], %d_data : !firrtl.uint<2>, !firrtl.uint<2>
+    // CHECK-NEXT:  %[[v8:.+]] = firrtl.bits %[[v7]] 3 to 2 : !firrtl.uint<4>
+    // CHECK-NEXT:  %[[v9:.+]] = firrtl.bits %[[v7]] 1 to 0 : !firrtl.uint<4>
   %o1 = firrtl.subfield %e[data] : !firrtl.bundle<addr: uint<2>, data : vector<uint<1>, 2>>
    %c2 = firrtl.bitcast %a1 : (!firrtl.uint<4>) -> (!firrtl.bundle<valid: bundle<re: bundle<a: uint<1>>, aa: uint<1>>, ready: uint<1>, data: uint<1>>)
     %d2 = firrtl.wire : !firrtl.bundle<valid: bundle<re: bundle<a: uint<1>>, aa: uint<1>>, ready: uint<1>, data: uint<1>>
     firrtl.connect %d2 , %c2: !firrtl.bundle<valid: bundle<re: bundle<a: uint<1>>, aa: uint<1>>, ready: uint<1>, data:
     uint<1>>, !firrtl.bundle<valid: bundle<re: bundle<a: uint<1>>, aa: uint<1>>, ready: uint<1>, data: uint<1>>
-   //CHECK: %[[v10:.+]] = firrtl.bits %[[v9]] 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-   //CHECK: %[[v11:.+]] = firrtl.bits %[[v9]] 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-   //CHECK: %[[v12:.+]] = firrtl.bits %a1 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
-   //CHECK: %[[v13:.+]] = firrtl.bits %[[v12]] 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-   //CHECK: %[[v14:.+]] = firrtl.bits %[[v13]] 0 to 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-   //CHECK: %[[v15:.+]] = firrtl.bits %[[v12]] 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-   //CHECK: %[[v16:.+]] = firrtl.bits %a1 1 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<1>
-   //CHECK: %[[v17:.+]] = firrtl.bits %a1 0 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+   //CHECK: %[[v10:.+]] = firrtl.bits %[[v9]] 0 to 0 : !firrtl.uint<2>
+   //CHECK: %[[v11:.+]] = firrtl.bits %[[v9]] 1 to 1 : !firrtl.uint<2>
+   //CHECK: %[[v12:.+]] = firrtl.bits %a1 3 to 2 : !firrtl.uint<4>
+   //CHECK: %[[v13:.+]] = firrtl.bits %[[v12]] 1 to 1 : !firrtl.uint<2>
+   //CHECK: %[[v14:.+]] = firrtl.bits %[[v13]] 0 to 0 : !firrtl.uint<1>
+   //CHECK: %[[v15:.+]] = firrtl.bits %[[v12]] 0 to 0 : !firrtl.uint<2>
+   //CHECK: %[[v16:.+]] = firrtl.bits %a1 1 to 1 : !firrtl.uint<4>
+   //CHECK: %[[v17:.+]] = firrtl.bits %a1 0 to 0 : !firrtl.uint<4>
    //CHECK: %[[d2_valid_re_a:.+]] = firrtl.wire  : !firrtl.uint<1>
    //CHECK: %[[d2_valid_aa:.+]] = firrtl.wire  : !firrtl.uint<1>
    //CHECK: %[[d2_ready:.+]] = firrtl.wire  : !firrtl.uint<1>
@@ -1272,11 +1272,11 @@ firrtl.module private @is1436_FOO() {
 
   // COMMON-LABEL: firrtl.module @ElementWise
   firrtl.module @ElementWise(in %a: !firrtl.vector<uint<1>, 1>, in %b: !firrtl.vector<uint<1>, 1>, out %c_0: !firrtl.vector<uint<1>, 1>, out %c_1: !firrtl.vector<uint<1>, 1>, out %c_2: !firrtl.vector<uint<1>, 1>) {
-    // CHECK-NEXT: %0 = firrtl.or %a_0, %b_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: %0 = firrtl.or %a_0, %b_0 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK-NEXT: firrtl.matchingconnect %c_0_0, %0 : !firrtl.uint<1>
-    // CHECK-NEXT: %1 = firrtl.and %a_0, %b_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: %1 = firrtl.and %a_0, %b_0 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK-NEXT: firrtl.matchingconnect %c_1_0, %1 : !firrtl.uint<1>
-    // CHECK-NEXT: %2 = firrtl.xor %a_0, %b_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: %2 = firrtl.xor %a_0, %b_0 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK-NEXT: firrtl.matchingconnect %c_2_0, %2 : !firrtl.uint<1>
     // Check that elementwise_* are preserved.
     // AGGREGATE: firrtl.elementwise_or
@@ -1285,24 +1285,24 @@ firrtl.module private @is1436_FOO() {
     // SIG: firrtl.elementwise_or
     // SIG: firrtl.elementwise_and
     // SIG: firrtl.elementwise_xor
-    %0 = firrtl.elementwise_or %a, %b : (!firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
+    %0 = firrtl.elementwise_or %a, %b : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
     firrtl.matchingconnect %c_0, %0 : !firrtl.vector<uint<1>, 1>
-    %1 = firrtl.elementwise_and %a, %b : (!firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
+    %1 = firrtl.elementwise_and %a, %b : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
     firrtl.matchingconnect %c_1, %1 : !firrtl.vector<uint<1>, 1>
-    %2 = firrtl.elementwise_xor %a, %b : (!firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
+    %2 = firrtl.elementwise_xor %a, %b : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
     firrtl.matchingconnect %c_2, %2 : !firrtl.vector<uint<1>, 1>
   }
 
   // COMMON-LABEL: firrtl.module @MuxInt
   firrtl.module @MuxInt(in %sel1: !firrtl.uint<1>, in %sel2: !firrtl.uint<2>, in %v1: !firrtl.bundle<a: uint<5>>, in %v0: !firrtl.bundle<a: uint<5>>, out %out1: !firrtl.bundle<a: uint<5>>, out %out2: !firrtl.bundle<a: uint<5>>) {
-    // CHECK: firrtl.int.mux4cell(%sel2, %v1_a, %v0_a, %v1_a, %v0_a) : (!firrtl.uint<2>, !firrtl.uint<5>, !firrtl.uint<5>, !firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<5>
-    %0 = firrtl.int.mux4cell(%sel2, %v1, %v0, %v1, %v0) : (!firrtl.uint<2>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>) -> !firrtl.bundle<a: uint<5>>
+    // CHECK: firrtl.int.mux4cell(%sel2, %v1_a, %v0_a, %v1_a, %v0_a) : !firrtl.uint<2>, !firrtl.uint<5>, !firrtl.uint<5>, !firrtl.uint<5>, !firrtl.uint<5>
+    %0 = firrtl.int.mux4cell(%sel2, %v1, %v0, %v1, %v0) : !firrtl.uint<2>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>
     firrtl.matchingconnect %out1, %0 : !firrtl.bundle<a: uint<5>>
-    // CHECK: firrtl.int.mux2cell(%sel1, %v1_a, %v0_a) : (!firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<5>
-    %1 = firrtl.int.mux2cell(%sel1, %v1, %v0) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>) -> !firrtl.bundle<a: uint<5>>
+    // CHECK: firrtl.int.mux2cell(%sel1, %v1_a, %v0_a) : !firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<5>
+    %1 = firrtl.int.mux2cell(%sel1, %v1, %v0) : !firrtl.uint<1>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>
     firrtl.matchingconnect %out2, %0 : !firrtl.bundle<a: uint<5>>
-    // SIG: firrtl.int.mux4cell(%sel2, %v1, %v0, %v1, %v0) : (!firrtl.uint<2>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>) -> !firrtl.bundle<a: uint<5>>
-    // SIG: firrtl.int.mux2cell(%sel1, %v1, %v0) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>) -> !firrtl.bundle<a: uint<5>>
+    // SIG: firrtl.int.mux4cell(%sel2, %v1, %v0, %v1, %v0) : !firrtl.uint<2>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>
+    // SIG: firrtl.int.mux2cell(%sel1, %v1, %v0) : !firrtl.uint<1>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>
   }
 
   // COMMON-LABEL: firrtl.module @Groups

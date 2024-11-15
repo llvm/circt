@@ -7,7 +7,7 @@ firrtl.circuit "Foo" {
     %a = firrtl.wire : !firrtl.uint<1>
     %b = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
     %c = firrtl.regreset %clock, %reset, %reset : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
-    %0 = firrtl.bits %val 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+    %0 = firrtl.bits %val 0 to 0 : !firrtl.uint<2>
     firrtl.connect %a, %0 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %b, %0 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %c, %0 : !firrtl.uint<1>, !firrtl.uint<1>

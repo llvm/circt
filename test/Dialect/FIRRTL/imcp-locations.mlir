@@ -18,9 +18,9 @@ firrtl.circuit "Test" {
     %w_or = firrtl.wire : !firrtl.uint<3> loc("test.txt":4:2)
     %w_add = firrtl.wire : !firrtl.uint<3> loc("test.txt":5:2)
 
-    %or = firrtl.or %c2, %c4: (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
-    %add = firrtl.add %c2, %c4: (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<4>
-    %addtrunc = firrtl.bits %add 2 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<3>
+    %or = firrtl.or %c2, %c4 : !firrtl.uint<3>, !firrtl.uint<3>
+    %add = firrtl.add %c2, %c4 : !firrtl.uint<3>, !firrtl.uint<3>
+    %addtrunc = firrtl.bits %add 2 to 0 : !firrtl.uint<4>
 
     firrtl.matchingconnect %w_or, %or : !firrtl.uint<3>
     firrtl.matchingconnect %w_add, %addtrunc : !firrtl.uint<3>

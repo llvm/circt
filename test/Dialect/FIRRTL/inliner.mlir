@@ -182,9 +182,9 @@ firrtl.circuit "TestConnections" {
 firrtl.module @InlineMe0(in %in0: !firrtl.uint<4>, in %in1: !firrtl.uint<4>,
                          out %out0: !firrtl.uint<4>, out %out1: !firrtl.uint<4>)
         attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
-  %0 = firrtl.and %in0, %in1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  %0 = firrtl.and %in0, %in1 : !firrtl.uint<4>, !firrtl.uint<4>
   firrtl.connect %out0, %0 : !firrtl.uint<4>, !firrtl.uint<4>
-  %1 = firrtl.and %in0, %in1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  %1 = firrtl.and %in0, %in1 : !firrtl.uint<4>, !firrtl.uint<4>
   firrtl.connect %out1, %1 : !firrtl.uint<4>, !firrtl.uint<4>
 }
 firrtl.module @InlineMe1(in %in0: !firrtl.uint<4>, in %in1: !firrtl.uint<4>,
@@ -214,9 +214,9 @@ firrtl.module @TestConnections(in %in0: !firrtl.uint<4>, in %in1: !firrtl.uint<4
 // CHECK-NEXT:   %b_a_in1 = firrtl.wire  : !firrtl.uint<4>
 // CHECK-NEXT:   %b_a_out0 = firrtl.wire  : !firrtl.uint<4>
 // CHECK-NEXT:   %b_a_out1 = firrtl.wire  : !firrtl.uint<4>
-// CHECK-NEXT:   %0 = firrtl.and %b_a_in0, %b_a_in1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+// CHECK-NEXT:   %0 = firrtl.and %b_a_in0, %b_a_in1 : !firrtl.uint<4>, !firrtl.uint<4>
 // CHECK-NEXT:   firrtl.connect %b_a_out0, %0 : !firrtl.uint<4>
-// CHECK-NEXT:   %1 = firrtl.and %b_a_in0, %b_a_in1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+// CHECK-NEXT:   %1 = firrtl.and %b_a_in0, %b_a_in1 : !firrtl.uint<4>, !firrtl.uint<4>
 // CHECK-NEXT:   firrtl.connect %b_a_out1, %1 : !firrtl.uint<4>
 // CHECK-NEXT:   firrtl.connect %b_a_in0, %b_in0 : !firrtl.uint<4>
 // CHECK-NEXT:   firrtl.connect %b_a_in1, %b_in1 : !firrtl.uint<4>
@@ -1327,7 +1327,7 @@ firrtl.circuit "MatchInline" attributes {enable_layers = [@I]} {
   firrtl.module private @MatchAgain(in %i: !firrtl.enum<Some: uint<8>, None: uint<0>>, out %o: !firrtl.uint<8>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
     firrtl.match %i : !firrtl.enum<Some: uint<8>, None: uint<0>> {
       case Some(%arg0) {
-        %not = firrtl.not %arg0 : (!firrtl.uint<8>) -> !firrtl.uint<8>
+        %not = firrtl.not %arg0 : !firrtl.uint<8>
         firrtl.matchingconnect %o, %not : !firrtl.uint<8>
       }
       case None(%arg0) {

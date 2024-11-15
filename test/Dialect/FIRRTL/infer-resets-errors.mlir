@@ -209,9 +209,9 @@ firrtl.circuit "top" {
     // expected-error @+1 {{ExcludeFromFullResetAnnotation' cannot target port/wire/node; must target module instead}}
     %1 = firrtl.node %0 {annotations = [{class = "circt.ExcludeFromFullResetAnnotation"}]} : !firrtl.asyncreset
     // expected-error @+1 {{reset annotations must target module, port, or wire/node}}
-    %2 = firrtl.asUInt %0 {annotations = [{class = "circt.FullResetAnnotation", resetType = "async"}]} : (!firrtl.asyncreset) -> !firrtl.uint<1>
+    %2 = firrtl.asUInt %0 {annotations = [{class = "circt.FullResetAnnotation", resetType = "async"}]} : !firrtl.asyncreset
     // expected-error @+1 {{reset annotations must target module, port, or wire/node}}
-    %3 = firrtl.asUInt %0 {annotations = [{class = "circt.ExcludeFromFullResetAnnotation"}]} : (!firrtl.asyncreset) -> !firrtl.uint<1>
+    %3 = firrtl.asUInt %0 {annotations = [{class = "circt.ExcludeFromFullResetAnnotation"}]} : !firrtl.asyncreset
   }
 }
 

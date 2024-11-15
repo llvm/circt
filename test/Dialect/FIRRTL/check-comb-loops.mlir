@@ -56,7 +56,7 @@ firrtl.circuit "hasloops"   {
   firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
     %y = firrtl.wire  : !firrtl.uint<1>
     firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
-    %t = firrtl.and %c, %y : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %t = firrtl.and %c, %y : !firrtl.uint<1>, !firrtl.uint<1>
     %z = firrtl.node %t  : !firrtl.uint<1>
     firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
@@ -122,12 +122,12 @@ firrtl.circuit "hasloops"   {
     %c = firrtl.wire  : !firrtl.uint<1>
     %d = firrtl.wire  : !firrtl.uint<1>
     %e = firrtl.wire  : !firrtl.uint<1>
-    %0 = firrtl.and %c, %i : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %0 = firrtl.and %c, %i : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %a, %0 : !firrtl.uint<1>, !firrtl.uint<1>
-    %1 = firrtl.and %a, %d : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %1 = firrtl.and %a, %d : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %b, %1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
-    %2 = firrtl.and %c, %e : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %2 = firrtl.and %c, %e : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %d, %2 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %e, %b : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %o, %e : !firrtl.uint<1>, !firrtl.uint<1>
@@ -239,7 +239,7 @@ firrtl.circuit "hasloops"   {
     %w = firrtl.wire  : !firrtl.vector<uint<1>,10>
     %y = firrtl.subindex %w[3]  : !firrtl.vector<uint<1>,10>
     firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
-    %0 = firrtl.and %c, %y : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %0 = firrtl.and %c, %y : !firrtl.uint<1>, !firrtl.uint<1>
     %z = firrtl.node %0  : !firrtl.uint<1>
     firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
@@ -523,7 +523,7 @@ firrtl.circuit "subaccess"   {
 // CHECK-NOT: firrtl.circuit "revisitOps"
 firrtl.circuit "revisitOps"   {
   firrtl.module @thru(in %in1: !firrtl.uint<1>,in %in2: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
-    %1 = firrtl.mux(%in1, %in1, %in2)  : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %1 = firrtl.mux(%in1, %in1, %in2) : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %out, %1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // expected-error @below {{revisitOps.{inner2.in2 <- x <- inner2.out <- inner2.in2}}}
@@ -545,7 +545,7 @@ firrtl.circuit "revisitOps"   {
     %in1_0 = firrtl.subindex %in1[0] : !firrtl.vector<uint<1>,2>
     %in2_1 = firrtl.subindex %in2[1] : !firrtl.vector<uint<1>,3>
     %out_1 = firrtl.subindex %out[1] : !firrtl.vector<uint<1>,2>
-    %1 = firrtl.mux(%w, %in1_0, %in2_1)  : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %1 = firrtl.mux(%w, %in1_0, %in2_1) : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %out_1, %1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // expected-error @below {{revisitOps.{inner2.in2[1] <- x <- inner2.out[1] <- inner2.in2[1]}}}
@@ -571,8 +571,8 @@ firrtl.circuit "revisitOps"   {
     %in1_0 = firrtl.subindex %in1[0] : !firrtl.vector<uint<1>,2>
     %in2_1 = firrtl.subindex %in2[1] : !firrtl.vector<uint<1>,3>
     %out_1 = firrtl.subindex %out[1] : !firrtl.vector<uint<1>,2>
-    %1 = firrtl.mux(%w, %in1_0, %in2_1)  : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    %2 = firrtl.mux(%w, %in0_0, %1)  : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %1 = firrtl.mux(%w, %in1_0, %in2_1) : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %2 = firrtl.mux(%w, %in0_0, %1) : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %out_1, %2 : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // expected-error @below {{revisitOps.{inner2.in2[1] <- x <- inner2.out[1] <- inner2.in2[1]}}}
@@ -983,7 +983,7 @@ firrtl.circuit "Issue5462" {
     %w = firrtl.wire : !firrtl.bundle<a: uint<8>>
     %n = firrtl.node %w : !firrtl.bundle<a: uint<8>>
     %0 = firrtl.bundlecreate %in_a : (!firrtl.uint<8>) -> !firrtl.bundle<a: uint<8>>
-    %1 = firrtl.mux(%c, %n, %0) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint<8>>) -> !firrtl.bundle<a: uint<8>>
+    %1 = firrtl.mux(%c, %n, %0) : !firrtl.uint<1>, !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint<8>>
     %2 = firrtl.subfield %1[a] : !firrtl.bundle<a: uint<8>>
     %3 = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<8>>
     firrtl.matchingconnect %3, %2 : !firrtl.uint<8>
@@ -1049,7 +1049,7 @@ firrtl.circuit "Issue6820" {
     firrtl.ref.define %clockProbe, %foo_clockProbe_bore : !firrtl.rwprobe<clock>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %0 = firrtl.asClock %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.clock
+    %0 = firrtl.asClock %c0_ui1 : !firrtl.uint<1>
     firrtl.ref.force %clock, %c1_ui1, %clockProbe, %0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<clock>, !firrtl.clock
   }
 }

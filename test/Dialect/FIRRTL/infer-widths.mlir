@@ -80,46 +80,34 @@ firrtl.circuit "Foo" {
 
   // CHECK-LABEL: @AddSubOp
   firrtl.module @AddSubOp() {
-    // CHECK: %0 = firrtl.wire : !firrtl.uint<2>
-    // CHECK: %1 = firrtl.wire : !firrtl.uint<3>
-    // CHECK: %2 = firrtl.add {{.*}} -> !firrtl.uint<4>
-    // CHECK: %3 = firrtl.sub {{.*}} -> !firrtl.uint<5>
-    %0 = firrtl.wire : !firrtl.uint
-    %1 = firrtl.wire : !firrtl.uint
-    %2 = firrtl.add %0, %1 : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %3 = firrtl.sub %0, %2 : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
-    %c2_ui3 = firrtl.constant 2 : !firrtl.uint<3>
-    firrtl.connect %0, %c1_ui2 : !firrtl.uint, !firrtl.uint<2>
-    firrtl.connect %1, %c2_ui3 : !firrtl.uint, !firrtl.uint<3>
+    %c1_ui2 = firrtl.constant 1 : !firrtl.uint
+    %c2_ui3 = firrtl.constant 2 : !firrtl.uint
+    %0 = firrtl.add %c1_ui2, %c2_ui3 : !firrtl.uint, !firrtl.uint
+    // CHECK: %1 = firrtl.node %0 : !firrtl.uint<4>
+    %1 = firrtl.node %0 : !firrtl.uint
+    %2 = firrtl.sub %c1_ui1, %2 : !firrtl.uint, !firrtl.uint
+    // CHECK: %3 = firrtl.node %2 : !firrtl.uint<5>
+    %3 = firrtl.node %2 : !firrtl.uint
   }
 
   // CHECK-LABEL: @MulDivRemOp
   firrtl.module @MulDivRemOp() {
-    // CHECK: %0 = firrtl.wire : !firrtl.uint<2>
-    // CHECK: %1 = firrtl.wire : !firrtl.uint<3>
-    // CHECK: %2 = firrtl.wire : !firrtl.sint<2>
-    // CHECK: %3 = firrtl.wire : !firrtl.sint<3>
-    // CHECK: %4 = firrtl.mul {{.*}} -> !firrtl.uint<5>
-    // CHECK: %5 = firrtl.div {{.*}} -> !firrtl.uint<3>
-    // CHECK: %6 = firrtl.div {{.*}} -> !firrtl.sint<4>
-    // CHECK: %7 = firrtl.rem {{.*}} -> !firrtl.uint<2>
-    %0 = firrtl.wire : !firrtl.uint
-    %1 = firrtl.wire : !firrtl.uint
-    %2 = firrtl.wire : !firrtl.sint
-    %3 = firrtl.wire : !firrtl.sint
-    %4 = firrtl.mul %1, %0 : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %5 = firrtl.div %1, %0 : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %6 = firrtl.div %3, %2 : (!firrtl.sint, !firrtl.sint) -> !firrtl.sint
-    %7 = firrtl.rem %1, %0 : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
-    %c2_ui3 = firrtl.constant 2 : !firrtl.uint<3>
-    %c1_si2 = firrtl.constant 1 : !firrtl.sint<2>
-    %c2_si3 = firrtl.constant 2 : !firrtl.sint<3>
-    firrtl.connect %0, %c1_ui2 : !firrtl.uint, !firrtl.uint<2>
-    firrtl.connect %1, %c2_ui3 : !firrtl.uint, !firrtl.uint<3>
-    firrtl.connect %2, %c1_si2 : !firrtl.sint, !firrtl.sint<2>
-    firrtl.connect %3, %c2_si3 : !firrtl.sint, !firrtl.sint<3>
+    %c1_ui2 = firrtl.constant 1 : !firrtl.uint
+    %c2_ui3 = firrtl.constant 2 : !firrtl.uint
+    %c1_si2 = firrtl.constant 1 : !firrtl.sint
+    %c2_si3 = firrtl.constant 2 : !firrtl.sint
+    %0 = firrtl.mul %c2_ui3, %c1_ui2 : !firrtl.uint, !firrtl.uint
+    // CHECK: %1 = firrtl.node %0 : !firrtl.uint<5>
+    %1 = firrtl.node %0 : !firrtl.uint 
+    %2 = firrtl.div %c2_ui3, %c1_ui2 : !firrtl.uint, !firrtl.uint
+    // CHECK: %3 = firrtl.node %0 : !firrtl.uint<3>
+    %3 = firrtl.node %0 : !firrtl.uint 
+    %4 = firrtl.div %c2_si3, %c1_si2 : !firrtl.sint, !firrtl.sint
+    // CHECK: 5 = firrtl.node %0 : !firrtl.uint<4>
+    %5 = firrtl.node %0 : !firrtl.uint 
+    %6 = firrtl.rem %c2_ui3, %c1_ui2 : !firrtl.uint, !firrtl.uint
+    // CHECK: 7 = firrtl.node %0 : !firrtl.uint <2>
+    %7 = firrtl.node %0 : !firrtl.uint 
   }
 
   // CHECK-LABEL: @AndOrXorOp
@@ -131,9 +119,9 @@ firrtl.circuit "Foo" {
     // CHECK: %4 = firrtl.xor {{.*}} -> !firrtl.uint<3>
     %0 = firrtl.wire : !firrtl.uint
     %1 = firrtl.wire : !firrtl.uint
-    %2 = firrtl.and %0, %1 : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %3 = firrtl.or %0, %1 : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %4 = firrtl.xor %0, %1 : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
+    %2 = firrtl.and %0, %1 : !firrtl.uint, !firrtl.uint
+    %3 = firrtl.or %0, %1 : !firrtl.uint, !firrtl.uint
+    %4 = firrtl.xor %0, %1 : !firrtl.uint, !firrtl.uint
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     %c2_ui3 = firrtl.constant 2 : !firrtl.uint<3>
     firrtl.connect %0, %c1_ui2 : !firrtl.uint, !firrtl.uint<2>
@@ -148,12 +136,12 @@ firrtl.circuit "Foo" {
     // CHECK: %9 = firrtl.wire : !firrtl.uint<1>
     // CHECK: %10 = firrtl.wire : !firrtl.uint<1>
     // CHECK: %11 = firrtl.wire : !firrtl.uint<1>
-    %0 = firrtl.leq %a, %b : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<1>
-    %1 = firrtl.lt %a, %b : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<1>
-    %2 = firrtl.geq %a, %b : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<1>
-    %3 = firrtl.gt %a, %b : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<1>
-    %4 = firrtl.eq %a, %b : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<1>
-    %5 = firrtl.neq %a, %b : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<1>
+    %0 = firrtl.leq %a, %b : !firrtl.uint<2>, !firrtl.uint<3>
+    %1 = firrtl.lt %a, %b : !firrtl.uint<2>, !firrtl.uint<3>
+    %2 = firrtl.geq %a, %b : !firrtl.uint<2>, !firrtl.uint<3>
+    %3 = firrtl.gt %a, %b : !firrtl.uint<2>, !firrtl.uint<3>
+    %4 = firrtl.eq %a, %b : !firrtl.uint<2>, !firrtl.uint<3>
+    %5 = firrtl.neq %a, %b : !firrtl.uint<2>, !firrtl.uint<3>
     %6 = firrtl.wire : !firrtl.uint
     %7 = firrtl.wire : !firrtl.uint
     %8 = firrtl.wire : !firrtl.uint
@@ -174,26 +162,18 @@ firrtl.circuit "Foo" {
     // CHECK: %1 = firrtl.wire : !firrtl.uint<3>
     // CHECK: %2 = firrtl.wire : !firrtl.sint<2>
     // CHECK: %3 = firrtl.wire : !firrtl.sint<3>
-    // CHECK: %4 = firrtl.cat {{.*}} -> !firrtl.uint<5>
-    // CHECK: %5 = firrtl.cat {{.*}} -> !firrtl.uint<5>
-    // CHECK: %6 = firrtl.dshl {{.*}} -> !firrtl.uint<10>
-    // CHECK: %7 = firrtl.dshl {{.*}} -> !firrtl.sint<10>
-    // CHECK: %8 = firrtl.dshlw {{.*}} -> !firrtl.uint<3>
-    // CHECK: %9 = firrtl.dshlw {{.*}} -> !firrtl.sint<3>
-    // CHECK: %10 = firrtl.dshr {{.*}} -> !firrtl.uint<3>
-    // CHECK: %11 = firrtl.dshr {{.*}} -> !firrtl.sint<3>
     %0 = firrtl.wire : !firrtl.uint
     %1 = firrtl.wire : !firrtl.uint
     %2 = firrtl.wire : !firrtl.sint
     %3 = firrtl.wire : !firrtl.sint
-    %4 = firrtl.cat %0, %1 : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %5 = firrtl.cat %2, %3 : (!firrtl.sint, !firrtl.sint) -> !firrtl.uint
-    %6 = firrtl.dshl %1, %1 : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %7 = firrtl.dshl %3, %1 : (!firrtl.sint, !firrtl.uint) -> !firrtl.sint
-    %8 = firrtl.dshlw %1, %1 : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %9 = firrtl.dshlw %3, %1 : (!firrtl.sint, !firrtl.uint) -> !firrtl.sint
-    %10 = firrtl.dshr %1, %1 : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %11 = firrtl.dshr %3, %1 : (!firrtl.sint, !firrtl.uint) -> !firrtl.sint
+    %4 = firrtl.cat %0, %1 : !firrtl.uint, !firrtl.uint
+    %5 = firrtl.cat %2, %3 : !firrtl.sint, !firrtl.sint
+    %6 = firrtl.dshl %1, %1 : !firrtl.uint, !firrtl.uint
+    %7 = firrtl.dshl %3, %1 : !firrtl.sint, !firrtl.uint
+    %8 = firrtl.dshlw %1, %1 : !firrtl.uint, !firrtl.uint
+    %9 = firrtl.dshlw %3, %1 : !firrtl.sint, !firrtl.uint
+    %10 = firrtl.dshr %1, %1 : !firrtl.uint, !firrtl.uint
+    %11 = firrtl.dshr %3, %1 : !firrtl.sint, !firrtl.uint
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     %c2_ui3 = firrtl.constant 2 : !firrtl.uint<3>
     %c1_si2 = firrtl.constant 1 : !firrtl.sint<2>
@@ -209,18 +189,18 @@ firrtl.circuit "Foo" {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK: %0 = firrtl.wire : !firrtl.uint<2>
     // CHECK: %1 = firrtl.wire : !firrtl.sint<3>
-    // CHECK: %4 = firrtl.asSInt {{.*}} -> !firrtl.sint<2>
-    // CHECK: %5 = firrtl.asUInt {{.*}} -> !firrtl.uint<3>
+    // CHECK: %4 = firrtl.asSInt {{.*}}
+    // CHECK: %5 = firrtl.asUInt {{.*}}
     %0 = firrtl.wire : !firrtl.uint
     %1 = firrtl.wire : !firrtl.sint
     %2 = firrtl.wire : !firrtl.clock
     %3 = firrtl.wire : !firrtl.asyncreset
-    %4 = firrtl.asSInt %0 : (!firrtl.uint) -> !firrtl.sint
-    %5 = firrtl.asUInt %1 : (!firrtl.sint) -> !firrtl.uint
-    %6 = firrtl.asUInt %2 : (!firrtl.clock) -> !firrtl.uint<1>
-    %7 = firrtl.asUInt %3 : (!firrtl.asyncreset) -> !firrtl.uint<1>
-    %8 = firrtl.asClock %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.clock
-    %9 = firrtl.asAsyncReset %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+    %4 = firrtl.asSInt %0 : !firrtl.uint
+    %5 = firrtl.asUInt %1 : !firrtl.sint
+    %6 = firrtl.asUInt %2 : !firrtl.clock
+    %7 = firrtl.asUInt %3 : !firrtl.asyncreset
+    %8 = firrtl.asClock %c0_ui1 : !firrtl.uint<1>
+    %9 = firrtl.asAsyncReset %c0_ui1 : !firrtl.uint<1>
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     %c2_si3 = firrtl.constant 2 : !firrtl.sint<3>
     firrtl.connect %0, %c1_ui2 : !firrtl.uint, !firrtl.uint<2>
@@ -250,8 +230,8 @@ firrtl.circuit "Foo" {
     // CHECK: %3 = firrtl.cvt {{.*}} -> !firrtl.sint<3>
     %0 = firrtl.wire : !firrtl.uint
     %1 = firrtl.wire : !firrtl.sint
-    %2 = firrtl.cvt %0 : (!firrtl.uint) -> !firrtl.sint
-    %3 = firrtl.cvt %1 : (!firrtl.sint) -> !firrtl.sint
+    %2 = firrtl.cvt %0 : !firrtl.uint
+    %3 = firrtl.cvt %1 : !firrtl.sint
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     %c2_si3 = firrtl.constant 2 : !firrtl.sint<3>
     firrtl.connect %0, %c1_ui2 : !firrtl.uint, !firrtl.uint<2>
@@ -266,8 +246,8 @@ firrtl.circuit "Foo" {
     // CHECK: %3 = firrtl.neg {{.*}} -> !firrtl.sint<4>
     %0 = firrtl.wire : !firrtl.uint
     %1 = firrtl.wire : !firrtl.sint
-    %2 = firrtl.neg %0 : (!firrtl.uint) -> !firrtl.sint
-    %3 = firrtl.neg %1 : (!firrtl.sint) -> !firrtl.sint
+    %2 = firrtl.neg %0 : !firrtl.uint
+    %3 = firrtl.neg %1 : !firrtl.sint
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     %c2_si3 = firrtl.constant 2 : !firrtl.sint<3>
     firrtl.connect %0, %c1_ui2 : !firrtl.uint, !firrtl.uint<2>
@@ -278,12 +258,10 @@ firrtl.circuit "Foo" {
   firrtl.module @NotOp() {
     // CHECK: %0 = firrtl.wire : !firrtl.uint<2>
     // CHECK: %1 = firrtl.wire : !firrtl.sint<3>
-    // CHECK: %2 = firrtl.not {{.*}} -> !firrtl.uint<2>
-    // CHECK: %3 = firrtl.not {{.*}} -> !firrtl.uint<3>
     %0 = firrtl.wire : !firrtl.uint
     %1 = firrtl.wire : !firrtl.sint
-    %2 = firrtl.not %0 : (!firrtl.uint) -> !firrtl.uint
-    %3 = firrtl.not %1 : (!firrtl.sint) -> !firrtl.uint
+    %2 = firrtl.not %0 : !firrtl.uint
+    %3 = firrtl.not %1 : !firrtl.sint
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     %c2_si3 = firrtl.constant 2 : !firrtl.sint<3>
     firrtl.connect %0, %c1_ui2 : !firrtl.uint, !firrtl.uint<2>
@@ -295,16 +273,13 @@ firrtl.circuit "Foo" {
     // CHECK: %0 = firrtl.wire : !firrtl.uint<1>
     // CHECK: %1 = firrtl.wire : !firrtl.uint<1>
     // CHECK: %2 = firrtl.wire : !firrtl.uint<1>
-    // CHECK: %3 = firrtl.andr {{.*}} -> !firrtl.uint<1>
-    // CHECK: %4 = firrtl.orr {{.*}} -> !firrtl.uint<1>
-    // CHECK: %5 = firrtl.xorr {{.*}} -> !firrtl.uint<1>
     %c0_ui16 = firrtl.constant 0 : !firrtl.uint<16>
     %0 = firrtl.wire : !firrtl.uint
     %1 = firrtl.wire : !firrtl.uint
     %2 = firrtl.wire : !firrtl.uint
-    %3 = firrtl.andr %c0_ui16 : (!firrtl.uint<16>) -> !firrtl.uint<1>
-    %4 = firrtl.orr %c0_ui16 : (!firrtl.uint<16>) -> !firrtl.uint<1>
-    %5 = firrtl.xorr %c0_ui16 : (!firrtl.uint<16>) -> !firrtl.uint<1>
+    %3 = firrtl.andr %c0_ui16 : !firrtl.uint<16>
+    %4 = firrtl.orr %c0_ui16 : !firrtl.uint<16>
+    %5 = firrtl.xorr %c0_ui16 : !firrtl.uint<16>
     firrtl.connect %0, %3 : !firrtl.uint, !firrtl.uint<1>
     firrtl.connect %1, %4 : !firrtl.uint, !firrtl.uint<1>
     firrtl.connect %2, %5 : !firrtl.uint, !firrtl.uint<1>
@@ -316,12 +291,6 @@ firrtl.circuit "Foo" {
     // CHECK: %1 = firrtl.wire : !firrtl.uint<3>
     // CHECK: %2 = firrtl.wire : !firrtl.uint<5>
     // CHECK: %3 = firrtl.wire : !firrtl.uint<5>
-    // CHECK: %8 = firrtl.tail {{.*}} -> !firrtl.uint<12>
-    // CHECK: %9 = firrtl.tail {{.*}} -> !firrtl.uint<12>
-    // CHECK: %10 = firrtl.pad {{.*}} -> !firrtl.uint<42>
-    // CHECK: %11 = firrtl.pad {{.*}} -> !firrtl.sint<42>
-    // CHECK: %12 = firrtl.pad {{.*}} -> !firrtl.uint<99>
-    // CHECK: %13 = firrtl.pad {{.*}} -> !firrtl.sint<99>
     %ui = firrtl.wire : !firrtl.uint
     %si = firrtl.wire : !firrtl.sint
     %0 = firrtl.wire : !firrtl.uint
@@ -329,16 +298,16 @@ firrtl.circuit "Foo" {
     %2 = firrtl.wire : !firrtl.uint
     %3 = firrtl.wire : !firrtl.uint
 
-    %4 = firrtl.bits %ui 3 to 1 : (!firrtl.uint) -> !firrtl.uint<3>
-    %5 = firrtl.bits %si 3 to 1 : (!firrtl.sint) -> !firrtl.uint<3>
-    %6 = firrtl.head %ui, 5 : (!firrtl.uint) -> !firrtl.uint<5>
-    %7 = firrtl.head %si, 5 : (!firrtl.sint) -> !firrtl.uint<5>
-    %8 = firrtl.tail %ui, 30 : (!firrtl.uint) -> !firrtl.uint
-    %9 = firrtl.tail %si, 30 : (!firrtl.sint) -> !firrtl.uint
-    %10 = firrtl.pad %ui, 13 : (!firrtl.uint) -> !firrtl.uint
-    %11 = firrtl.pad %si, 13 : (!firrtl.sint) -> !firrtl.sint
-    %12 = firrtl.pad %ui, 99 : (!firrtl.uint) -> !firrtl.uint
-    %13 = firrtl.pad %si, 99 : (!firrtl.sint) -> !firrtl.sint
+    %4 = firrtl.bits %ui 3 to 1 : !firrtl.uint
+    %5 = firrtl.bits %si 3 to 1 : !firrtl.sint
+    %6 = firrtl.head %ui, 5 : !firrtl.uint
+    %7 = firrtl.head %si, 5 : !firrtl.sint
+    %8 = firrtl.tail %ui, 30 : !firrtl.uint
+    %9 = firrtl.tail %si, 30 : !firrtl.sint
+    %10 = firrtl.pad %ui, 13 : !firrtl.uint
+    %11 = firrtl.pad %si, 13 : !firrtl.sint
+    %12 = firrtl.pad %ui, 99 : !firrtl.uint
+    %13 = firrtl.pad %si, 99 : !firrtl.sint
 
     firrtl.connect %0, %4 : !firrtl.uint, !firrtl.uint<3>
     firrtl.connect %1, %5 : !firrtl.uint, !firrtl.uint<3>
@@ -356,11 +325,10 @@ firrtl.circuit "Foo" {
     // CHECK: %0 = firrtl.wire : !firrtl.uint<2>
     // CHECK: %1 = firrtl.wire : !firrtl.uint<3>
     // CHECK: %2 = firrtl.wire : !firrtl.uint<0>
-    // CHECK: %3 = firrtl.mux{{.*}} -> !firrtl.uint<3>
     %0 = firrtl.wire : !firrtl.uint
     %1 = firrtl.wire : !firrtl.uint
     %2 = firrtl.wire : !firrtl.uint
-    %3 = firrtl.mux(%2, %0, %1) : (!firrtl.uint, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
+    %3 = firrtl.mux(%2, %0, %1) : !firrtl.uint, !firrtl.uint, !firrtl.uint
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     %c2_ui3 = firrtl.constant 2 : !firrtl.uint<3>
     %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
@@ -377,8 +345,8 @@ firrtl.circuit "Foo" {
     %0 = firrtl.subfield %w[a] : !firrtl.bundle<a: uint>
     %1 = firrtl.subfield %a[a] : !firrtl.bundle<a: uint<8>>
     firrtl.connect %0, %1 : !firrtl.uint, !firrtl.uint<8>
-    // CHECK: %2 = firrtl.mux(%p, %a, %w) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint<8>>) -> !firrtl.bundle<a: uint<8>>
-    %2 = firrtl.mux(%p, %a, %w) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint>) -> !firrtl.bundle<a: uint>
+    // CHECK: %2 = firrtl.mux(%p, %a, %w) : !firrtl.uint<1>, !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint<8>>
+    %2 = firrtl.mux(%p, %a, %w) : !firrtl.uint<1>, !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint>
     firrtl.connect %c, %2 : !firrtl.bundle<a: uint>, !firrtl.bundle<a: uint>
   }
 
@@ -393,12 +361,12 @@ firrtl.circuit "Foo" {
     %ui = firrtl.wire : !firrtl.uint
     %si = firrtl.wire : !firrtl.sint
 
-    %0 = firrtl.shl %ui, 3 : (!firrtl.uint) -> !firrtl.uint
-    %1 = firrtl.shl %si, 3 : (!firrtl.sint) -> !firrtl.sint
-    %2 = firrtl.shr %ui, 3 : (!firrtl.uint) -> !firrtl.uint
-    %3 = firrtl.shr %si, 3 : (!firrtl.sint) -> !firrtl.sint
-    %4 = firrtl.shr %ui, 9 : (!firrtl.uint) -> !firrtl.uint
-    %5 = firrtl.shr %si, 9 : (!firrtl.sint) -> !firrtl.sint
+    %0 = firrtl.shl %ui, 3 : !firrtl.uint
+    %1 = firrtl.shl %si, 3 : !firrtl.sint
+    %2 = firrtl.shr %ui, 3 : !firrtl.uint
+    %3 = firrtl.shr %si, 3 : !firrtl.sint
+    %4 = firrtl.shr %ui, 9 : !firrtl.uint
+    %5 = firrtl.shr %si, 9 : !firrtl.sint
 
     %c0_ui5 = firrtl.constant 0 : !firrtl.uint<5>
     %c0_si5 = firrtl.constant 0 : !firrtl.sint<5>
@@ -466,8 +434,8 @@ firrtl.circuit "Foo" {
   firrtl.module @Issue1088(out %y: !firrtl.sint<4>) {
     // CHECK: %x = firrtl.wire : !firrtl.sint<9>
     // CHECK: %c200_si9 = firrtl.constant 200 : !firrtl.sint<9>
-    // CHECK: %0 = firrtl.tail %x, 5 : (!firrtl.sint<9>) -> !firrtl.uint<4>
-    // CHECK: %1 = firrtl.asSInt %0 : (!firrtl.uint<4>) -> !firrtl.sint<4>
+    // CHECK: %0 = firrtl.tail %x, 5 : !firrtl.sint<9>
+    // CHECK: %1 = firrtl.asSInt %0 : !firrtl.uint<4>
     // CHECK: firrtl.connect %y, %1 : !firrtl.sint<4>
     // CHECK: firrtl.connect %x, %c200_si9 : !firrtl.sint<9>
     %x = firrtl.wire : !firrtl.sint
@@ -483,7 +451,7 @@ firrtl.circuit "Foo" {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     firrtl.connect %w, %c1_ui1 : !firrtl.uint, !firrtl.uint<1>
     %w1 = firrtl.wire  : !firrtl.uint<0>
-    // CHECK: %0 = firrtl.tail %w, 1 : (!firrtl.uint<1>) -> !firrtl.uint<0>
+    // CHECK: %0 = firrtl.tail %w, 1 : !firrtl.uint<1>
     // CHECK: firrtl.connect %w1, %0 : !firrtl.uint<0>
     firrtl.connect %w1, %w : !firrtl.uint<0>, !firrtl.uint
   }
@@ -500,7 +468,7 @@ firrtl.circuit "Foo" {
   // CHECK-SAME: out %x: !firrtl.sint<13>
   firrtl.module @Issue1118(out %x: !firrtl.sint) {
     %c4232_ui = firrtl.constant 4232 : !firrtl.uint
-    %0 = firrtl.asSInt %c4232_ui : (!firrtl.uint) -> !firrtl.sint
+    %0 = firrtl.asSInt %c4232_ui : !firrtl.uint
     firrtl.connect %x, %0 : !firrtl.sint, !firrtl.sint
   }
 
@@ -511,7 +479,7 @@ firrtl.circuit "Foo" {
     %0 = firrtl.reg %clk : !firrtl.clock, !firrtl.uint
     %1 = firrtl.reg %clk : !firrtl.clock, !firrtl.uint
     %2 = firrtl.wire : !firrtl.uint
-    %3 = firrtl.xor %1, %2 : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
+    %3 = firrtl.xor %1, %2 : !firrtl.uint, !firrtl.uint
     firrtl.connect %0, %x : !firrtl.uint, !firrtl.uint<6>
     firrtl.connect %1, %3 : !firrtl.uint, !firrtl.uint
     firrtl.connect %2, %x : !firrtl.uint, !firrtl.uint<6>
@@ -523,8 +491,8 @@ firrtl.circuit "Foo" {
     // CHECK: %1 = firrtl.reg %clk : !firrtl.clock, !firrtl.uint<6>
     %0 = firrtl.reg %clk : !firrtl.clock, !firrtl.uint
     %1 = firrtl.reg %clk : !firrtl.clock, !firrtl.uint
-    %2 = firrtl.shr %0, 0 : (!firrtl.uint) -> !firrtl.uint
-    %3 = firrtl.shr %1, 3 : (!firrtl.uint) -> !firrtl.uint
+    %2 = firrtl.shr %0, 0 : !firrtl.uint
+    %3 = firrtl.shr %1, 3 : !firrtl.uint
     firrtl.connect %0, %x : !firrtl.uint, !firrtl.uint<6>
     firrtl.connect %1, %x : !firrtl.uint, !firrtl.uint<6>
     firrtl.connect %0, %2 : !firrtl.uint, !firrtl.uint
@@ -537,11 +505,11 @@ firrtl.circuit "Foo" {
     %0 = firrtl.reg %clk : !firrtl.clock, !firrtl.uint
     %1 = firrtl.reg %clk : !firrtl.clock, !firrtl.uint
     %2 = firrtl.reg %clk : !firrtl.clock, !firrtl.uint
-    %3 = firrtl.shl %0, 0 : (!firrtl.uint) -> !firrtl.uint
-    %4 = firrtl.shl %1, 3 : (!firrtl.uint) -> !firrtl.uint
-    %5 = firrtl.shr %4, 3 : (!firrtl.uint) -> !firrtl.uint
-    %6 = firrtl.shr %1, 3 : (!firrtl.uint) -> !firrtl.uint
-    %7 = firrtl.shl %6, 3 : (!firrtl.uint) -> !firrtl.uint
+    %3 = firrtl.shl %0, 0 : !firrtl.uint
+    %4 = firrtl.shl %1, 3 : !firrtl.uint
+    %5 = firrtl.shr %4, 3 : !firrtl.uint
+    %6 = firrtl.shr %1, 3 : !firrtl.uint
+    %7 = firrtl.shl %6, 3 : !firrtl.uint
     firrtl.connect %0, %x : !firrtl.uint, !firrtl.uint<6>
     firrtl.connect %1, %x : !firrtl.uint, !firrtl.uint<6>
     firrtl.connect %2, %x : !firrtl.uint, !firrtl.uint<6>
@@ -567,7 +535,7 @@ firrtl.circuit "Foo" {
     %2:2 = firrtl.regreset %clk, %rst, %c0_ui17 forceable : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<17>, !firrtl.uint, !firrtl.rwprobe<uint>
     %3 = firrtl.regreset %clk, %rst, %c0_ui17 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<17>, !firrtl.uint
     %4 = firrtl.wire : !firrtl.uint
-    %5 = firrtl.xor %1, %4 : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
+    %5 = firrtl.xor %1, %4 : !firrtl.uint, !firrtl.uint
     firrtl.connect %0, %x : !firrtl.uint, !firrtl.uint<6>
     firrtl.connect %1, %5 : !firrtl.uint, !firrtl.uint
     firrtl.connect %2, %x : !firrtl.uint, !firrtl.uint<6>
@@ -583,12 +551,12 @@ firrtl.circuit "Foo" {
   // CHECK-SAME: in %in: !firrtl.uint<42>
   // CHECK-SAME: out %out: !firrtl.uint<44>
   firrtl.module @InterModuleSimpleFoo(in %in: !firrtl.uint, out %out: !firrtl.uint) {
-    %0 = firrtl.add %in, %in : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
+    %0 = firrtl.add %in, %in : !firrtl.uint, !firrtl.uint
     firrtl.connect %out, %0 : !firrtl.uint, !firrtl.uint
   }
   firrtl.module @InterModuleSimpleBar(in %in: !firrtl.uint<42>, out %out: !firrtl.uint) {
     %inst_in, %inst_out = firrtl.instance inst @InterModuleSimpleFoo(in in: !firrtl.uint, out out: !firrtl.uint)
-    %0 = firrtl.add %inst_out, %inst_out : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
+    %0 = firrtl.add %inst_out, %inst_out : !firrtl.uint, !firrtl.uint
     firrtl.connect %inst_in, %in : !firrtl.uint, !firrtl.uint<42>
     firrtl.connect %out, %0 : !firrtl.uint, !firrtl.uint
   }
@@ -602,13 +570,13 @@ firrtl.circuit "Foo" {
   // CHECK-SAME: in %in2: !firrtl.uint<42>
   // CHECK-SAME: out %out: !firrtl.uint<43>
   firrtl.module @InterModuleMultipleFoo(in %in: !firrtl.uint, out %out: !firrtl.uint) {
-    %0 = firrtl.add %in, %in : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
+    %0 = firrtl.add %in, %in : !firrtl.uint, !firrtl.uint
     firrtl.connect %out, %0 : !firrtl.uint, !firrtl.uint
   }
   firrtl.module @InterModuleMultipleBar(in %in1: !firrtl.uint<17>, in %in2: !firrtl.uint<42>, out %out: !firrtl.uint) {
     %inst1_in, %inst1_out = firrtl.instance inst1 @InterModuleMultipleFoo(in in: !firrtl.uint, out out: !firrtl.uint)
     %inst2_in, %inst2_out = firrtl.instance inst2 @InterModuleMultipleFoo(in in: !firrtl.uint, out out: !firrtl.uint)
-    %0 = firrtl.xor %inst1_out, %inst2_out : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
+    %0 = firrtl.xor %inst1_out, %inst2_out : !firrtl.uint, !firrtl.uint
     firrtl.connect %inst1_in, %in1 : !firrtl.uint, !firrtl.uint<17>
     firrtl.connect %inst2_in, %in2 : !firrtl.uint, !firrtl.uint<42>
     firrtl.connect %out, %0 : !firrtl.uint, !firrtl.uint
@@ -821,7 +789,7 @@ firrtl.circuit "Foo" {
   // CHECK-SAME: in %in: !firrtl.uint<42>
   // CHECK-SAME: out %out: !firrtl.uint<39>
   firrtl.module @InterModuleGoodCycleFoo(in %in: !firrtl.uint, out %out: !firrtl.uint) {
-    %0 = firrtl.shr %in, 3 : (!firrtl.uint) -> !firrtl.uint
+    %0 = firrtl.shr %in, 3 : !firrtl.uint
     firrtl.connect %out, %0 : !firrtl.uint, !firrtl.uint
   }
   // CHECK-LABEL: @InterModuleGoodCycleBar
@@ -840,12 +808,12 @@ firrtl.circuit "Foo" {
     // CHECK: %c = firrtl.node %1  : !firrtl.uint<2>
     %a = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %0 = firrtl.add %a, %c0_ui1 : (!firrtl.uint, !firrtl.uint<1>) -> !firrtl.uint
+    %0 = firrtl.add %a, %c0_ui1 : !firrtl.uint, !firrtl.uint<1>
     %b = firrtl.node %0  : !firrtl.uint
-    %1 = firrtl.tail %b, 1 : (!firrtl.uint) -> !firrtl.uint
+    %1 = firrtl.tail %b, 1 : !firrtl.uint
     %c = firrtl.node %1  : !firrtl.uint
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
-    %2 = firrtl.mux(%cond, %c0_ui2, %c) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint) -> !firrtl.uint
+    %2 = firrtl.mux(%cond, %c0_ui2, %c) : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint
     firrtl.connect %a, %2 : !firrtl.uint, !firrtl.uint
   }
 
@@ -958,13 +926,13 @@ firrtl.circuit "Foo" {
     firrtl.connect %sel, %sel_0w : !firrtl.uint, !firrtl.uint<0>
     // CHECK: firrtl.int.mux2cell
     // CHECK-SAME: (!firrtl.uint<0>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    %0 = firrtl.int.mux2cell(%sel, %c0_ui1, %c1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint) -> !firrtl.uint
+    %0 = firrtl.int.mux2cell(%sel, %c0_ui1, %c1) : !firrtl.uint, !firrtl.uint<1>, !firrtl.uint
     firrtl.connect %out1, %0: !firrtl.uint, !firrtl.uint
     %sel2 = firrtl.wire : !firrtl.uint
     firrtl.connect %sel2, %sel_1w : !firrtl.uint, !firrtl.uint<1>
     // CHECK: firrtl.int.mux4cell
     // CHECK-SAME: (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<1>) -> !firrtl.uint<3>
-    %1 = firrtl.int.mux4cell(%sel2, %c1_ui1, %c2_ui2, %c3_ui3, %c1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint) -> !firrtl.uint
+    %1 = firrtl.int.mux4cell(%sel2, %c1_ui1, %c2_ui2, %c3_ui3, %c1) : !firrtl.uint, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint
     firrtl.connect %out2, %1: !firrtl.uint, !firrtl.uint
   }
 

@@ -133,62 +133,62 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %n1 = firrtl.node interesting_name %i8 : !firrtl.uint<8>
     node n1 = i8
 
-    ; CHECK: firrtl.add %reset, %reset : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+    ; CHECK: firrtl.add %reset, %reset : !firrtl.uint<1>, !firrtl.uint<1>
     node n2 = add(reset, reset)
 
-    ; CHECK: firrtl.asClock %reset : (!firrtl.uint<1>) -> !firrtl.clock
+    ; CHECK: firrtl.asClock %reset : !firrtl.uint<1>
     node n3 = asClock(reset)
 
-    ; CHECK: firrtl.asUInt %clock : (!firrtl.clock) -> !firrtl.uint<1>
+    ; CHECK: firrtl.asUInt %clock : !firrtl.clock
     node check_u0 = asUInt(clock)
-    ; CHECK: firrtl.asUInt %i8 : (!firrtl.uint<8>) -> !firrtl.uint<8>
+    ; CHECK: firrtl.asUInt %i8 : !firrtl.uint<8>
     node check_u1 = asUInt(i8)
-    ; CHECK: firrtl.asUInt %s8 : (!firrtl.sint<8>) -> !firrtl.uint<8>
+    ; CHECK: firrtl.asUInt %s8 : !firrtl.sint<8>
     node check_u2 = asUInt(s8)
-    ; CHECK: firrtl.asUInt %a8 : (!firrtl.analog<8>) -> !firrtl.uint<8>
+    ; CHECK: firrtl.asUInt %a8 : !firrtl.analog<8>
     node check_u3 = asUInt(a8)
-    ; CHECK: firrtl.asUInt %reset_abstract : (!firrtl.reset) -> !firrtl.uint<1>
+    ; CHECK: firrtl.asUInt %reset_abstract : !firrtl.reset
     node check_u5 = asUInt(reset_abstract)
-    ; CHECK: firrtl.asUInt %reset_async : (!firrtl.asyncreset) -> !firrtl.uint<1>
+    ; CHECK: firrtl.asUInt %reset_async : !firrtl.asyncreset
     node check_u6 = asUInt(reset_async)
 
-    ; CHECK: firrtl.asSInt %clock : (!firrtl.clock) -> !firrtl.sint<1>
+    ; CHECK: firrtl.asSInt %clock : !firrtl.clock
     node check_s0 = asSInt(clock)
-    ; CHECK: firrtl.asSInt %i8 : (!firrtl.uint<8>) -> !firrtl.sint<8>
+    ; CHECK: firrtl.asSInt %i8 : !firrtl.uint<8>
     node check_s1 = asSInt(i8)
-    ; CHECK: firrtl.asSInt %s8 : (!firrtl.sint<8>) -> !firrtl.sint<8>
+    ; CHECK: firrtl.asSInt %s8 : !firrtl.sint<8>
     node check_s2 = asSInt(s8)
-    ; CHECK: firrtl.asSInt %a8 : (!firrtl.analog<8>) -> !firrtl.sint<8>
+    ; CHECK: firrtl.asSInt %a8 : !firrtl.analog<8>
     node check_s3 = asSInt(a8)
-    ; CHECK: firrtl.asSInt %reset_abstract : (!firrtl.reset) -> !firrtl.sint<1>
+    ; CHECK: firrtl.asSInt %reset_abstract : !firrtl.reset
     node check_s5 = asSInt(reset_abstract)
-    ; CHECK: firrtl.asSInt %reset_async : (!firrtl.asyncreset) -> !firrtl.sint<1>
+    ; CHECK: firrtl.asSInt %reset_async : !firrtl.asyncreset
     node check_s6 = asSInt(reset_async)
 
-    ; CHECK: firrtl.asAsyncReset %clock : (!firrtl.clock) -> !firrtl.asyncreset
+    ; CHECK: firrtl.asAsyncReset %clock : !firrtl.clock
     node check_ar0 = asAsyncReset(clock)
-    ; CHECK: firrtl.asAsyncReset %reset : (!firrtl.uint<1>) -> !firrtl.asyncreset
+    ; CHECK: firrtl.asAsyncReset %reset : !firrtl.uint<1>
     node check_ar1 = asAsyncReset(reset)
-    ; CHECK: firrtl.asAsyncReset %s1 : (!firrtl.sint<1>) -> !firrtl.asyncreset
+    ; CHECK: firrtl.asAsyncReset %s1 : !firrtl.sint<1>
     node check_ar2 = asAsyncReset(s1)
-    ; CHECK: firrtl.asAsyncReset %a1 : (!firrtl.analog<1>) -> !firrtl.asyncreset
+    ; CHECK: firrtl.asAsyncReset %a1 : !firrtl.analog<1>
     node check_ar3 = asAsyncReset(a1)
-    ; CHECK: firrtl.asAsyncReset %reset_abstract : (!firrtl.reset) -> !firrtl.asyncreset
+    ; CHECK: firrtl.asAsyncReset %reset_abstract : !firrtl.reset
     node check_ar4 = asAsyncReset(reset_abstract)
-    ; CHECK: firrtl.asAsyncReset %reset_async : (!firrtl.asyncreset) -> !firrtl.asyncreset
+    ; CHECK: firrtl.asAsyncReset %reset_async : !firrtl.asyncreset
     node check_ar5 = asAsyncReset(reset_async)
 
-    ; CHECK: firrtl.asClock %clock : (!firrtl.clock) -> !firrtl.clock
+    ; CHECK: firrtl.asClock %clock : !firrtl.clock
     node check_c0 = asClock(clock)
-    ; CHECK: firrtl.asClock %reset : (!firrtl.uint<1>) -> !firrtl.clock
+    ; CHECK: firrtl.asClock %reset : !firrtl.uint<1>
     node check_c1 = asClock(reset)
-    ; CHECK: firrtl.asClock %s1 : (!firrtl.sint<1>) -> !firrtl.clock
+    ; CHECK: firrtl.asClock %s1 : !firrtl.sint<1>
     node check_c2 = asClock(s1)
-    ; CHECK: firrtl.asClock %a1 : (!firrtl.analog<1>) -> !firrtl.clock
+    ; CHECK: firrtl.asClock %a1 : !firrtl.analog<1>
     node check_c3 = asClock(a1)
-    ; CHECK: firrtl.asClock %reset_abstract : (!firrtl.reset) -> !firrtl.clock
+    ; CHECK: firrtl.asClock %reset_abstract : !firrtl.reset
     node check_c4 = asClock(reset_abstract)
-    ; CHECK: firrtl.asClock %reset_async : (!firrtl.asyncreset) -> !firrtl.clock
+    ; CHECK: firrtl.asClock %reset_async : !firrtl.asyncreset
     node check_c5 = asClock(reset_async)
 
     ; CHECK: firrtl.node interesting_name %auto : !firrtl.uint<1>
@@ -276,22 +276,22 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.stop %clock, %reset, 42 {name = "stop_0"} : !firrtl.clock, !firrtl.uint<1>
     stop(clock, reset, 42) : stop_0
 
-    ; CHECK: firrtl.bits %i8 4 to 2 : (!firrtl.uint<8>) -> !firrtl.uint<3>
+    ; CHECK: firrtl.bits %i8 4 to 2 : !firrtl.uint<8>
     node n4 = bits(i8, 4, 2)
 
-    ; CHECK: firrtl.shl %i8, 4 : (!firrtl.uint<8>) -> !firrtl.uint<12>
-    ; CHECK: firrtl.shr %i8, 8 : (!firrtl.uint<8>) -> !firrtl.uint<0>
+    ; CHECK: firrtl.shl %i8, 4 : !firrtl.uint<8>
+    ; CHECK: firrtl.shr %i8, 8 : !firrtl.uint<8>
     node n5 = or(shl(i8, 4), shr(i8, 8))
 
-    ; CHECK: firrtl.dshl %i8, %{{.*}} : (!firrtl.uint<8>, !firrtl.const.uint<4>) -> !firrtl.uint<23>
+    ; CHECK: firrtl.dshl %i8, %{{.*}} : !firrtl.uint<8>, !firrtl.const.uint<4>
     node n6 = dshl(i8, UInt<4>(7))
-    ; CHECK: firrtl.dshlw %i8, %{{.*}} : (!firrtl.uint<8>, !firrtl.const.uint<4>) -> !firrtl.uint<8>
+    ; CHECK: firrtl.dshlw %i8, %{{.*}} : !firrtl.uint<8>, !firrtl.const.uint<4>
     node n6s = dshlw(i8, UInt<4>(7))
 
-    ; CHECK: firrtl.cat %{{.*}}, %{{.*}} : (!firrtl.uint<12>, !firrtl.uint<23>) -> !firrtl.uint<35>
+    ; CHECK: firrtl.cat %{{.*}}, %{{.*}} : !firrtl.uint<12>, !firrtl.uint<23>
     node n7 = cat(n5, n6)
 
-    ; CHECK: firrtl.mux(%reset, %i8, %{{.*}}) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.const.uint) -> !firrtl.uint
+    ; CHECK: firrtl.mux(%reset, %i8, %{{.*}}) : !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.const.uint
     node n8 = mux(reset, i8, UInt(4))
 
     ; CHECK: %_t_2621 = firrtl.regreset interesting_name %clock, %reset, %{{.*}} : !firrtl.clock, !firrtl.uint<1>, !firrtl.const.uint<4>, !firrtl.uint<4>
@@ -300,15 +300,15 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %_t_1601 = firrtl.regreset interesting_name %clock, %reset, %{{.*}} : !firrtl.clock, !firrtl.uint<1>, !firrtl.const.uint<2>, !firrtl.uint<2>
     regreset _t_1601 : UInt<2>, clock, reset, UInt<2>(0h00) @[Edges.scala 230:27]
 
-    ; CHECK: firrtl.div %i8, %{{.*}} : (!firrtl.uint<8>, !firrtl.const.uint<4>) -> !firrtl.uint<8>
+    ; CHECK: firrtl.div %i8, %{{.*}} : !firrtl.uint<8>, !firrtl.const.uint<4>
     node n9 = div(i8, UInt<4>(4))
 
-    ; CHECK: firrtl.tail %i8, 7 : (!firrtl.uint<8>) -> !firrtl.uint<1>
-    ; CHECK: firrtl.tail %i8, 0 : (!firrtl.uint<8>) -> !firrtl.uint<8>
-    ; CHECK: firrtl.head %i8, 4 : (!firrtl.uint<8>) -> !firrtl.uint<4>
+    ; CHECK: firrtl.tail %i8, 7 : !firrtl.uint<8>
+    ; CHECK: firrtl.tail %i8, 0 : !firrtl.uint<8>
+    ; CHECK: firrtl.head %i8, 4 : !firrtl.uint<8>
     node n10 = add(add(tail(i8, 7), tail(i8, 0)), head(i8, 4))
 
-    ; CHECK: firrtl.tail %{{.*}}, 3 : (!firrtl.sint<8>) -> !firrtl.uint<5>
+    ; CHECK: firrtl.tail %{{.*}}, 3 : !firrtl.sint<8>
     node n10s = tail(asSInt(i8), 3)
 
     ; CHECK: %_t_2622 = firrtl.reg interesting_name %clock : !firrtl.clock, !firrtl.uint<4>
@@ -316,7 +316,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: %xyz_in = firrtl.instance xyz interesting_name @circuit(in in: !firrtl.uint<80>)
     inst xyz of circuit
-    ; CHECK: [[PAD:%.*]] = firrtl.pad %i8, 80 : (!firrtl.uint<8>) -> !firrtl.uint<80>
+    ; CHECK: [[PAD:%.*]] = firrtl.pad %i8, 80 : !firrtl.uint<8>
     ; CHECK: firrtl.matchingconnect %xyz_in, [[PAD]] : !firrtl.uint<80>
     connect xyz.in, i8
 
@@ -359,13 +359,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %testharness = chirrtl.seqmem interesting_name Undefined : !chirrtl.cmemory<vector<uint<8>, 16>, 2147483648>
     smem testharness : UInt<8>[16][2147483648], undefined
 
-    ; CHECK: firrtl.pad %i8, 10 : (!firrtl.uint<8>) -> !firrtl.uint<10>
+    ; CHECK: firrtl.pad %i8, 10 : !firrtl.uint<8>
     node n11 = pad(i8, 10)
 
-    ; CHECK: firrtl.andr %n11 : (!firrtl.uint<10>) -> !firrtl.uint<1>
+    ; CHECK: firrtl.andr %n11 : !firrtl.uint<10>
     node n12 = andr(n11)
 
-    ; CHECK: = firrtl.not %auto : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    ; CHECK: = firrtl.not %auto : !firrtl.uint<1>
     node n13 = not(auto)
 
 
@@ -453,7 +453,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   ; CHECK-LABEL: firrtl.module private @oversize_shift(
   module oversize_shift :
     wire value : UInt<2>
-    ; CHECK: firrtl.shr %value, 5 : (!firrtl.uint<2>) -> !firrtl.uint<0>
+    ; CHECK: firrtl.shr %value, 5 : !firrtl.uint<2>
     node n = shr(value, 5)
 
   ; CHECK-LABEL: firrtl.module private @when_else_ambiguity(
@@ -863,9 +863,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output c: UInt[1]
     output z: {u: UInt, v: UInt}
     ; CHECK: firrtl.mux(%sel, %a, %b)
-    ; CHECK-SAME: -> !firrtl.vector<uint<32>, 1>
     ; CHECK: firrtl.mux(%sel, %x, %y)
-    ; CHECK-SAME: -> !firrtl.bundle<u: uint<32>, v: uint<2>>
     connect c, mux(sel, a, b)
     connect z, mux(sel, x, y)
 
@@ -1889,7 +1887,7 @@ circuit Foo:
     connect foo.c, s_foo_c
     ; CHECK-NEXT: firrtl.matchingconnect %foo_data, %s_foo_data : !firrtl.uint<32>
     connect foo.data, s_foo_data
-    ; CHECK-NEXT: %0 = firrtl.eq %foo_out, %s_foo_data : (!firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<1>
+    ; CHECK-NEXT: %0 = firrtl.eq %foo_out, %s_foo_data : !firrtl.uint<32>, !firrtl.uint<32>
     ; CHECK-NEXT: %1 = firrtl.int.generic "circt_ltl_implication"  %s_foo_c, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     ; CHECK-NEXT: firrtl.int.generic "circt_verif_assert"  %1 : (!firrtl.uint<1>) -> ()
     intrinsic(circt_verif_assert, intrinsic(circt_ltl_implication : UInt<1>, s_foo_c, eq(foo.out, s_foo_data)))

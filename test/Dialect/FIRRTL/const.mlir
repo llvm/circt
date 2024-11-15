@@ -169,57 +169,51 @@ firrtl.module @ConstRefBundleSub(in %a: !firrtl.const.bundle<a: uint<1>, b: sint
 
 // Primitive ops with all 'const' operands infer a 'const' result type.
 firrtl.module @PrimOpConstOperandsConstResult(in %a: !firrtl.const.uint<4>, in %b: !firrtl.const.uint<4>) {
-  %0 = firrtl.and %a, %b : (!firrtl.const.uint<4>, !firrtl.const.uint<4>) -> !firrtl.const.uint<4>
+  %0 = firrtl.and %a, %b : !firrtl.const.uint<4>, !firrtl.const.uint<4>
 }
 
 // Primitive ops with mixed 'const' operands infer a non-'const' result type.
 firrtl.module @PrimOpMixedConstOperandsNonConstResult(in %a: !firrtl.const.uint<4>, in %b: !firrtl.uint<4>) {
-  %0 = firrtl.and %a, %b : (!firrtl.const.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  %0 = firrtl.and %a, %b : !firrtl.const.uint<4>, !firrtl.uint<4>
 }
 
 // Elementwise ops with 'const' operands infer 'const' result types, with 'const' propogating to the outer type when
 // both operand outer types are 'const'.
 firrtl.module @ElementwiseConstOperandsConstResult(in %a: !firrtl.const.vector<uint<1>, 2>, 
                                                    in %b: !firrtl.vector<const.uint<1>, 2>) {
-  %0 = firrtl.elementwise_or %a, %a : (!firrtl.const.vector<uint<1>, 2>, 
-                                       !firrtl.const.vector<uint<1>, 2>) 
-                                        -> !firrtl.const.vector<const.uint<1>, 2>
+  %0 = firrtl.elementwise_or %a, %a : !firrtl.const.vector<uint<1>, 2>,
+                                      !firrtl.const.vector<uint<1>, 2>
 
-  %1 = firrtl.elementwise_and %b, %b : (!firrtl.vector<const.uint<1>, 2>, 
-                                        !firrtl.vector<const.uint<1>, 2>) 
-                                         -> !firrtl.vector<const.uint<1>, 2>
+  %1 = firrtl.elementwise_and %b, %b : !firrtl.vector<const.uint<1>, 2>,
+                                       !firrtl.vector<const.uint<1>, 2>
 
-  %2 = firrtl.elementwise_xor %a, %b : (!firrtl.const.vector<uint<1>, 2>, 
-                                        !firrtl.vector<const.uint<1>, 2>) 
-                                         -> !firrtl.vector<const.uint<1>, 2>
+  %2 = firrtl.elementwise_xor %a, %b : !firrtl.const.vector<uint<1>, 2>,
+                                       !firrtl.vector<const.uint<1>, 2>
 }
 
 // Elementwise ops with mixed 'const' operands infer a non-'const' result type.
 firrtl.module @ElementwiseMixedConstOperandsNonConstResult(in %a: !firrtl.const.vector<uint<1>, 2>, 
                                                            in %b: !firrtl.vector<uint<1>, 2>) {
-  %0 = firrtl.elementwise_or %a, %b : (!firrtl.const.vector<uint<1>, 2>, 
-                                       !firrtl.vector<uint<1>, 2>) 
-                                        -> !firrtl.vector<uint<1>, 2>
+  %0 = firrtl.elementwise_or %a, %b : !firrtl.const.vector<uint<1>, 2>,
+                                      !firrtl.vector<uint<1>, 2>
 }
 
 // Mux result is const when all inputs are const.
 firrtl.module @MuxConstConditionConstBundlesConstResult(in %p: !firrtl.const.uint<1>, 
                                                         in %a: !firrtl.const.bundle<a: uint<1>>, 
                                                         in %b: !firrtl.const.bundle<a: uint<1>>) {
-  %0 = firrtl.mux(%p, %a, %b) : (!firrtl.const.uint<1>, 
-                                 !firrtl.const.bundle<a: uint<1>>, 
-                                 !firrtl.const.bundle<a: uint<1>>) 
-                                  -> !firrtl.const.bundle<a: uint<1>>
+  %0 = firrtl.mux(%p, %a, %b) : !firrtl.const.uint<1>,
+                                !firrtl.const.bundle<a: uint<1>>,
+                                !firrtl.const.bundle<a: uint<1>>
 }
 
 // Mux result in non-const when the condition is not const.
 firrtl.module @MuxNonConstConditionConstBundlesNonConstResult(in %p: !firrtl.uint<1>, 
                                                               in %a: !firrtl.const.bundle<a: const.uint<1>>, 
                                                               in %b: !firrtl.const.bundle<a: const.uint<1>>) {
-  %0 = firrtl.mux(%p, %a, %b) : (!firrtl.uint<1>, 
-                                 !firrtl.const.bundle<a: const.uint<1>>, 
-                                 !firrtl.const.bundle<a: const.uint<1>>) 
-                                  -> !firrtl.bundle<a: uint<1>>
+  %0 = firrtl.mux(%p, %a, %b) : !firrtl.uint<1>,
+                                !firrtl.const.bundle<a: const.uint<1>>,
+                                !firrtl.const.bundle<a: const.uint<1>>
 }
 
 // Mux result takes on the commonly const elements of a bundle when the condition is const.
@@ -227,30 +221,27 @@ firrtl.module @MuxConstConditionMixedConstElementBundlesConstElementResult(
     in %p: !firrtl.const.uint<1>, 
     in %a: !firrtl.const.bundle<a: uint<1>>, 
     in %b: !firrtl.bundle<a: const.uint<1>>) {
-  %0 = firrtl.mux(%p, %a, %b) : (!firrtl.const.uint<1>, 
-                                 !firrtl.const.bundle<a: uint<1>>, 
-                                 !firrtl.bundle<a: const.uint<1>>) 
-                                  -> !firrtl.bundle<a: const.uint<1>>
+  %0 = firrtl.mux(%p, %a, %b) : !firrtl.const.uint<1>,
+                                !firrtl.const.bundle<a: uint<1>>,
+                                !firrtl.bundle<a: const.uint<1>>
 }
 
 // Mux result is const when all inputs are const.
 firrtl.module @MuxConstConditionConstVectorsConstResult(in %p: !firrtl.const.uint<1>, 
                                                         in %a: !firrtl.const.vector<uint<1>, 2>, 
                                                         in %b: !firrtl.const.vector<uint<1>, 2>) {
-  %0 = firrtl.mux(%p, %a, %b) : (!firrtl.const.uint<1>, 
-                                 !firrtl.const.vector<uint<1>, 2>, 
-                                 !firrtl.const.vector<uint<1>, 2>) 
-                                  -> !firrtl.const.vector<uint<1>, 2>
+  %0 = firrtl.mux(%p, %a, %b) : !firrtl.const.uint<1>,
+                                !firrtl.const.vector<uint<1>, 2>,
+                                !firrtl.const.vector<uint<1>, 2>
 }
 
 // Mux result in non-const when the condition is not const.
 firrtl.module @MuxNonConstConditionConstVectorsNonConstResult(in %p: !firrtl.uint<1>, 
                                                               in %a: !firrtl.const.vector<const.uint<1>, 2>, 
                                                               in %b: !firrtl.const.vector<const.uint<1>, 2>) {
-  %0 = firrtl.mux(%p, %a, %b) : (!firrtl.uint<1>, 
-                                 !firrtl.const.vector<const.uint<1>, 2>, 
-                                 !firrtl.const.vector<const.uint<1>, 2>) 
-                                  -> !firrtl.vector<uint<1>, 2>
+  %0 = firrtl.mux(%p, %a, %b) : !firrtl.uint<1>,
+                                !firrtl.const.vector<const.uint<1>, 2>,
+                                !firrtl.const.vector<const.uint<1>, 2>
 }
 
 // Mux result takes on the commonly const elements of a vector when the condition is const.
@@ -258,10 +249,9 @@ firrtl.module @MuxConstConditionMixedConstElementVectorsConstElementResult(
     in %p: !firrtl.const.uint<1>, 
     in %a: !firrtl.const.vector<uint<1>, 2>, 
     in %b: !firrtl.vector<const.uint<1>, 2>) {
-  %0 = firrtl.mux(%p, %a, %b) : (!firrtl.const.uint<1>, 
-                                 !firrtl.const.vector<uint<1>, 2>, 
-                                 !firrtl.vector<const.uint<1>, 2>) 
-                                  -> !firrtl.vector<const.uint<1>, 2>
+  %0 = firrtl.mux(%p, %a, %b) : !firrtl.const.uint<1>,
+                                !firrtl.const.vector<uint<1>, 2>,
+                                !firrtl.vector<const.uint<1>, 2>
 }
 
 firrtl.module @NonConstBundleCreateConstOperands(in %a: !firrtl.const.uint<1>) {

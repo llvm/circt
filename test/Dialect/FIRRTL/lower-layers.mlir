@@ -83,7 +83,7 @@ firrtl.circuit "Test" {
   //===--------------------------------------------------------------------===//
 
   // CHECK: firrtl.module private @[[A:.+]](in %[[x:.+]]: !firrtl.uint<1>, in %[[y:.+]]: !firrtl.uint<1>)
-  // CHECK:   %0 = firrtl.add %[[x]], %[[y]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+  // CHECK:   %0 = firrtl.add %[[x]], %[[y]] : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK: }
   // CHECK: firrtl.module @CaptureHardware() {
   // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
@@ -96,7 +96,7 @@ firrtl.circuit "Test" {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     firrtl.layerblock @A {
-      %0 = firrtl.add %c0_ui1, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+      %0 = firrtl.add %c0_ui1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     }
   }
 
@@ -152,7 +152,7 @@ firrtl.circuit "Test" {
   }
 
   // CHECK: firrtl.module private @[[B:.+]](in %[[p:.+]]: !firrtl.uint<1>, in %[[q:.+]]: !firrtl.uint<1>)
-  // CHECK:   %0 = firrtl.add %[[p]], %[[q]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+  // CHECK:   %0 = firrtl.add %[[p]], %[[q]] : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK: }
   // CHECK: firrtl.module private @[[A:.+]](out %[[p:.+]]: !firrtl.probe<uint<1>>, out %[[q:.+]]: !firrtl.probe<uint<1>>) attributes {
   // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
@@ -175,7 +175,7 @@ firrtl.circuit "Test" {
       %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
       %c1_ui1 = firrtl.constant 0 : !firrtl.uint<1>
       firrtl.layerblock @A::@B {
-        %0 = firrtl.add %c0_ui1, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+        %0 = firrtl.add %c0_ui1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
       }
     }
   }
@@ -183,7 +183,7 @@ firrtl.circuit "Test" {
   // CHECK: firrtl.module private @[[A:.+]](in %[[p:.+]]: !firrtl.uint<1>)
   // CHECK:   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   // CHECK:   firrtl.when %[[p]] : !firrtl.uint<1> {
-  // CHECK:     %0 = firrtl.add %[[p]], %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+  // CHECK:     %0 = firrtl.add %[[p]], %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:   }
   // CHECK: }
   // CHECK: firrtl.module @WhenUnderLayer() {
@@ -196,7 +196,7 @@ firrtl.circuit "Test" {
     firrtl.layerblock @A {
       %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
       firrtl.when %c0_ui1 : !firrtl.uint<1> {
-        %0 = firrtl.add %c0_ui1, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+        %0 = firrtl.add %c0_ui1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
       }
     }
   }
@@ -576,7 +576,7 @@ firrtl.circuit "CaptureHardwareMultipleTimes" {
   firrtl.extmodule @CaptureHardwareMultipleTimes ()
 
   // CHECK: firrtl.module private @[[A:.+]](in %[[p:.+]]: !firrtl.uint<1>)
-  // CHECK:   %0 = firrtl.add %[[p]], %[[p]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+  // CHECK:   %0 = firrtl.add %[[p]], %[[p]] : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK: }
   // CHECK: firrtl.module @CaptureSrcTwice() {
   // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
@@ -586,7 +586,7 @@ firrtl.circuit "CaptureHardwareMultipleTimes" {
   firrtl.module @CaptureSrcTwice() {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     firrtl.layerblock @A {
-      %0 = firrtl.add %c0_ui1, %c0_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+      %0 = firrtl.add %c0_ui1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     }
   }
 

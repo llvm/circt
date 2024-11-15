@@ -209,24 +209,24 @@ firrtl.circuit "Foo" {
     // CHECK: node dShlPrimOp = dshl(x, y)
     // CHECK: node dShlwPrimOp = dshlw(x, y)
     // CHECK: node dShrPrimOp = dshr(x, y)
-    %addPrimOp_tmp = firrtl.add %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %subPrimOp_tmp = firrtl.sub %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %mulPrimOp_tmp = firrtl.mul %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %divPrimOp_tmp = firrtl.div %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %remPrimOp_tmp = firrtl.rem %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %andPrimOp_tmp = firrtl.and %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %orPrimOp_tmp = firrtl.or %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %xorPrimOp_tmp = firrtl.xor %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %leqPrimOp_tmp = firrtl.leq %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
-    %ltPrimOp_tmp = firrtl.lt %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
-    %geqPrimOp_tmp = firrtl.geq %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
-    %gtPrimOp_tmp = firrtl.gt %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
-    %eqPrimOp_tmp = firrtl.eq %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
-    %neqPrimOp_tmp = firrtl.neq %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
-    %catPrimOp_tmp = firrtl.cat %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %dShlPrimOp_tmp = firrtl.dshl %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %dShlwPrimOp_tmp = firrtl.dshlw %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %dShrPrimOp_tmp = firrtl.dshr %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
+    %addPrimOp_tmp = firrtl.add %x, %y : !firrtl.uint, !firrtl.uint
+    %subPrimOp_tmp = firrtl.sub %x, %y : !firrtl.uint, !firrtl.uint
+    %mulPrimOp_tmp = firrtl.mul %x, %y : !firrtl.uint, !firrtl.uint
+    %divPrimOp_tmp = firrtl.div %x, %y : !firrtl.uint, !firrtl.uint
+    %remPrimOp_tmp = firrtl.rem %x, %y : !firrtl.uint, !firrtl.uint
+    %andPrimOp_tmp = firrtl.and %x, %y : !firrtl.uint, !firrtl.uint
+    %orPrimOp_tmp = firrtl.or %x, %y : !firrtl.uint, !firrtl.uint
+    %xorPrimOp_tmp = firrtl.xor %x, %y : !firrtl.uint, !firrtl.uint
+    %leqPrimOp_tmp = firrtl.leq %x, %y : !firrtl.uint, !firrtl.uint
+    %ltPrimOp_tmp = firrtl.lt %x, %y : !firrtl.uint, !firrtl.uint
+    %geqPrimOp_tmp = firrtl.geq %x, %y : !firrtl.uint, !firrtl.uint
+    %gtPrimOp_tmp = firrtl.gt %x, %y : !firrtl.uint, !firrtl.uint
+    %eqPrimOp_tmp = firrtl.eq %x, %y : !firrtl.uint, !firrtl.uint
+    %neqPrimOp_tmp = firrtl.neq %x, %y : !firrtl.uint, !firrtl.uint
+    %catPrimOp_tmp = firrtl.cat %x, %y : !firrtl.uint, !firrtl.uint
+    %dShlPrimOp_tmp = firrtl.dshl %x, %y : !firrtl.uint, !firrtl.uint
+    %dShlwPrimOp_tmp = firrtl.dshlw %x, %y : !firrtl.uint, !firrtl.uint
+    %dShrPrimOp_tmp = firrtl.dshr %x, %y : !firrtl.uint, !firrtl.uint
     %addPrimOp = firrtl.node %addPrimOp_tmp : !firrtl.uint
     %subPrimOp = firrtl.node %subPrimOp_tmp : !firrtl.uint
     %mulPrimOp = firrtl.node %mulPrimOp_tmp : !firrtl.uint
@@ -256,16 +256,16 @@ firrtl.circuit "Foo" {
     // CHECK: node andRPrimOp = andr(x)
     // CHECK: node orRPrimOp = orr(x)
     // CHECK: node xorRPrimOp = xorr(x)
-    %asSIntPrimOp_tmp = firrtl.asSInt %x : (!firrtl.uint) -> !firrtl.sint
-    %asUIntPrimOp_tmp = firrtl.asUInt %x : (!firrtl.uint) -> !firrtl.uint
-    %asAsyncResetPrimOp_tmp = firrtl.asAsyncReset %x : (!firrtl.uint) -> !firrtl.asyncreset
-    %asClockPrimOp_tmp = firrtl.asClock %x : (!firrtl.uint) -> !firrtl.clock
-    %cvtPrimOp_tmp = firrtl.cvt %x : (!firrtl.uint) -> !firrtl.sint
-    %negPrimOp_tmp = firrtl.neg %x : (!firrtl.uint) -> !firrtl.sint
-    %notPrimOp_tmp = firrtl.not %x : (!firrtl.uint) -> !firrtl.uint
-    %andRPrimOp_tmp = firrtl.andr %x : (!firrtl.uint) -> !firrtl.uint<1>
-    %orRPrimOp_tmp = firrtl.orr %x : (!firrtl.uint) -> !firrtl.uint<1>
-    %xorRPrimOp_tmp = firrtl.xorr %x : (!firrtl.uint) -> !firrtl.uint<1>
+    %asSIntPrimOp_tmp = firrtl.asSInt %x : !firrtl.uint
+    %asUIntPrimOp_tmp = firrtl.asUInt %x : !firrtl.uint
+    %asAsyncResetPrimOp_tmp = firrtl.asAsyncReset %x : !firrtl.uint
+    %asClockPrimOp_tmp = firrtl.asClock %x : !firrtl.uint
+    %cvtPrimOp_tmp = firrtl.cvt %x : !firrtl.uint
+    %negPrimOp_tmp = firrtl.neg %x : !firrtl.uint
+    %notPrimOp_tmp = firrtl.not %x : !firrtl.uint
+    %andRPrimOp_tmp = firrtl.andr %x : !firrtl.uint
+    %orRPrimOp_tmp = firrtl.orr %x : !firrtl.uint
+    %xorRPrimOp_tmp = firrtl.xorr %x : !firrtl.uint
     %asSIntPrimOp = firrtl.node %asSIntPrimOp_tmp : !firrtl.sint
     %asUIntPrimOp = firrtl.node %asUIntPrimOp_tmp : !firrtl.uint
     %asAsyncResetPrimOp = firrtl.node %asAsyncResetPrimOp_tmp : !firrtl.asyncreset
@@ -284,13 +284,13 @@ firrtl.circuit "Foo" {
     // CHECK: node muxPrimOp = mux(ui1, x, y)
     // CHECK: node shlPrimOp = shl(x, 4)
     // CHECK: node shrPrimOp = shr(x, 4)
-    %bitsPrimOp_tmp = firrtl.bits %x 4 to 2 : (!firrtl.uint) -> !firrtl.uint<3>
-    %headPrimOp_tmp = firrtl.head %x, 4 : (!firrtl.uint) -> !firrtl.uint<4>
-    %tailPrimOp_tmp = firrtl.tail %x, 4 : (!firrtl.uint) -> !firrtl.uint
-    %padPrimOp_tmp = firrtl.pad %x, 16 : (!firrtl.uint) -> !firrtl.uint
-    %muxPrimOp_tmp = firrtl.mux(%ui1, %x, %y) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    %shlPrimOp_tmp = firrtl.shl %x, 4 : (!firrtl.uint) -> !firrtl.uint
-    %shrPrimOp_tmp = firrtl.shr %x, 4 : (!firrtl.uint) -> !firrtl.uint
+    %bitsPrimOp_tmp = firrtl.bits %x 4 to 2 : !firrtl.uint
+    %headPrimOp_tmp = firrtl.head %x, 4 : !firrtl.uint
+    %tailPrimOp_tmp = firrtl.tail %x, 4 : !firrtl.uint
+    %padPrimOp_tmp = firrtl.pad %x, 16 : !firrtl.uint
+    %muxPrimOp_tmp = firrtl.mux(%ui1, %x, %y) : !firrtl.uint<1>, !firrtl.uint, !firrtl.uint
+    %shlPrimOp_tmp = firrtl.shl %x, 4 : !firrtl.uint
+    %shrPrimOp_tmp = firrtl.shr %x, 4 : !firrtl.uint
     %bitsPrimOp = firrtl.node %bitsPrimOp_tmp : !firrtl.uint<3>
     %headPrimOp = firrtl.node %headPrimOp_tmp : !firrtl.uint<4>
     %tailPrimOp = firrtl.node %tailPrimOp_tmp : !firrtl.uint
@@ -594,14 +594,14 @@ firrtl.circuit "Foo" {
 
     firrtl.matchingconnect %11, %_0 : !firrtl.clock
     firrtl.matchingconnect %10, %_3 : !firrtl.uint<1>
-    %12 = firrtl.pad %_3, 5 : (!firrtl.uint<1>) -> !firrtl.uint<5>
+    %12 = firrtl.pad %_3, 5 : !firrtl.uint<1>
     firrtl.matchingconnect %9, %12 : !firrtl.uint<5>
     firrtl.connect %_11, %8 : !firrtl.uint, !firrtl.uint<8>
     firrtl.matchingconnect %7, %_0 : !firrtl.clock
     firrtl.matchingconnect %6, %_3 : !firrtl.uint<1>
-    %14 = firrtl.pad %_3, 8 : (!firrtl.uint<1>) -> !firrtl.uint<8>
+    %14 = firrtl.pad %_3, 8 : !firrtl.uint<1>
     firrtl.matchingconnect %5, %14 : !firrtl.uint<8>
-    %15 = firrtl.pad %_3, 5 : (!firrtl.uint<1>) -> !firrtl.uint<5>
+    %15 = firrtl.pad %_3, 5 : !firrtl.uint<1>
     firrtl.matchingconnect %4, %15 : !firrtl.uint<5>
     firrtl.matchingconnect %3, %_3 : !firrtl.uint<1>
 
