@@ -904,14 +904,14 @@ circuit UnsupportedVersionDeclGroups:
 
 FIRRTL version 4.0.0
 circuit RemovedDeclGroups:
-  ; expected-error @below {{optional groups were removed in FIRRTL 4.0.0, but the specified FIRRTL version was 4.0.0}}
+  ; expected-error @below {{optional groups were removed in FIRRTL 3.3.0, but the specified FIRRTL version was 4.0.0}}
   declgroup A, bind:
 
 ;// -----
 
-FIRRTL version 3.9.0
+FIRRTL version 3.2.0
 circuit UnsupportedVersionLayer:
-  ; expected-error @below {{layers are a FIRRTL 4.0.0+ feature, but the specified FIRRTL version was 3.9.0}}
+  ; expected-error @below {{layers are a FIRRTL 3.3.0+ feature, but the specified FIRRTL version was 3.2.0}}
   layer A, bind:
 
 ;// -----
@@ -924,18 +924,18 @@ circuit UnsupportedVersionGroups:
 
 ;// -----
 
-FIRRTL version 4.1.0
+FIRRTL version 4.0.0
 circuit RemovedGroups:
   public module RemovedGroups:
-    ; expected-error @below {{optional groups were removed in FIRRTL 4.0.0, but the specified FIRRTL version was 4.1.0}}
+    ; expected-error @below {{optional groups were removed in FIRRTL 3.3.0, but the specified FIRRTL version was 4.0.0}}
     group A:
 
 ;// -----
 
-FIRRTL version 3.9.0
+FIRRTL version 3.2.0
 circuit UnsupportedLayerBlock:
   module UnsupportedLayerBlock:
-    ; expected-error @below {{layers are a FIRRTL 4.0.0+ feature, but the specified FIRRTL version was 3.9.0}}
+    ; expected-error @below {{layers are a FIRRTL 3.3.0+ feature, but the specified FIRRTL version was 3.2.0}}
     layerblock A:
 
 ;// -----
@@ -1362,9 +1362,9 @@ circuit DoubleRadix:
     propassign d, Double(0hABC)
 
 ;// -----
-FIRRTL version 3.9.0
+FIRRTL version 3.2.0
 circuit PublicModuleUnsupported:
-  ; expected-error @below {{public modules are a FIRRTL 4.0.0+ feature}}
+  ; expected-error @below {{public modules are a FIRRTL 3.3.0+ feature}}
   public module PublicModuleUnsupported:
 
 ;// -----
@@ -1485,7 +1485,7 @@ FIRRTL version 3.1.0
 circuit Foo:
 
   module Foo:
-    ; expected-error @below {{colored probes are a FIRRTL 3.2.0+ feature, but the specified FIRRTL version was 3.1.0}}
+    ; expected-error @below {{colored probes are a FIRRTL 4.0.0+ feature, but the specified FIRRTL version was 3.1.0}}
     output a: Probe<UInt<1>, A>
 
 ;// -----

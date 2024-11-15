@@ -974,7 +974,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
 
     SmallVector<StringRef> layers;
     if (consumeIf(FIRToken::comma)) {
-      if (requireFeature({3, 2, 0}, "colored probes"))
+      if (requireFeature({4, 0, 0}, "colored probes"))
         return failure();
       // Probe Color
       do {
@@ -1123,7 +1123,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     result = PathType::get(getContext());
     break;
   case FIRToken::kw_List:
-    if (requireFeature(nextFIRVersion, "Lists") || parseListType(result))
+    if (requireFeature({4, 0, 0}, "Lists") || parseListType(result))
       return failure();
     break;
   }
@@ -2042,7 +2042,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
   case FIRToken::lp_integer_mul:
   case FIRToken::lp_integer_shr:
   case FIRToken::lp_integer_shl:
-    if (requireFeature(nextFIRVersion, "Integer arithmetic expressions"))
+    if (requireFeature({4, 0, 0}, "Integer arithmetic expressions"))
       return failure();
     break;
   default:
@@ -2165,7 +2165,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     break;
   }
   case FIRToken::kw_List: {
-    if (requireFeature(nextFIRVersion, "Lists"))
+    if (requireFeature({4, 0, 0}, "Lists"))
       return failure();
     if (isLeadingStmt)
       return emitError("unexpected List<>() as start of statement");
@@ -2177,8 +2177,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
   case FIRToken::lp_list_concat: {
     if (isLeadingStmt)
       return emitError("unexpected list_create() as start of statement");
-    if (requireFeature(nextFIRVersion, "List concat") ||
-        parseListConcatExp(result))
+    if (requireFeature({4, 0, 0}, "List concat") || parseListConcatExp(result))
       return failure();
     break;
   }
@@ -2191,7 +2190,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     break;
 
   case FIRToken::lp_intrinsic:
-    if (requireFeature(nextFIRVersion, "generic intrinsics") ||
+    if (requireFeature({4, 0, 0}, "generic intrinsics") ||
         parseIntrinsicExp(result))
       return failure();
     break;
@@ -2732,15 +2731,15 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseRefReleaseInitial();
   case FIRToken::kw_group:
     if (requireFeature({3, 2, 0}, "optional groups") ||
-        removedFeature(nextFIRVersion, "optional groups"))
+        removedFeature({3, 3, 0}, "optional groups"))
       return failure();
     return parseLayerBlockOrGroup(stmtIndent);
   case FIRToken::kw_layerblock:
-    if (requireFeature(nextFIRVersion, "layers"))
+    if (requireFeature({3, 3, 0}, "layers"))
       return failure();
     return parseLayerBlockOrGroup(stmtIndent);
   case FIRToken::lp_intrinsic:
-    if (requireFeature(nextFIRVersion, "generic intrinsics"))
+    if (requireFeature({4, 0, 0}, "generic intrinsics"))
       return failure();
     return parseIntrinsicStmt();
   default: {
@@ -4156,7 +4155,7 @@ ParseResult FIRStmtParser::parseInstanceChoice() {
   if (auto isExpr = parseExpWithLeadingKeyword(startTok))
     return *isExpr;
 
-  if (requireFeature(nextFIRVersion, "option groups/instance choices"))
+  if (requireFeature(missingSpecFIRVersion, "option groups/instance choices"))
     return failure();
 
   StringRef id;
@@ -4888,7 +4887,7 @@ ParseResult FIRCircuitParser::parseOptionalEnabledLayers(ArrayAttr &result) {
     return success();
   }
 
-  if (requireFeature(nextFIRVersion, "modules with layers enabled"))
+  if (requireFeature({4, 0, 0}, "modules with layers enabled"))
     return failure();
 
   SmallVector<Attribute> layers;
@@ -4982,9 +4981,10 @@ ParseResult FIRCircuitParser::parseRefList(ArrayRef<PortInfo> portList,
   SmallPtrSet<StringAttr, 8> seenNames;
   SmallPtrSet<StringAttr, 8> seenRefs;
 
-  // Ref statements were removed in 4.0.0, check.
+  // Ref statements were added in 2.0.0 and removed in 4.0.0.
   if (getToken().is(FIRToken::kw_ref) &&
-      removedFeature(nextFIRVersion, "ref statements"))
+      (requireFeature({2, 0, 0}, "ref statements") ||
+       removedFeature({4, 0, 0}, "ref statements")))
     return failure();
 
   // Parse the ref statements.
@@ -5224,7 +5224,7 @@ ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
   if (parseParameterList(parameters) || parseRefList(portList, internalPaths))
     return failure();
 
-  if (version >= nextFIRVersion) {
+  if (version >= FIRVersion({4, 0, 0})) {
     for (auto [pi, loc] : llvm::zip_equal(portList, portLocs)) {
       if (auto ftype = type_dyn_cast<FIRRTLType>(pi.type)) {
         if (ftype.hasUninferredWidth())
@@ -5305,13 +5305,12 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
 
   // The main module is implicitly public.
   if (name == circuit.getName()) {
-    if (!isPublic &&
-        removedFeature(nextFIRVersion, "private main modules", modLoc))
+    if (!isPublic && removedFeature({4, 0, 0}, "private main modules", modLoc))
       return failure();
     isPublic = true;
   }
 
-  if (isPublic && version >= nextFIRVersion) {
+  if (isPublic && version >= FIRVersion({4, 0, 0})) {
     for (auto [pi, loc] : llvm::zip_equal(portList, portLocs)) {
       if (auto ftype = type_dyn_cast<FIRRTLType>(pi.type)) {
         if (ftype.hasUninferredWidth())
@@ -5409,7 +5408,7 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
     return parseClass(circuit, indent);
   case FIRToken::kw_declgroup:
     if (requireFeature({3, 2, 0}, "optional groups") ||
-        removedFeature(nextFIRVersion, "optional groups"))
+        removedFeature({3, 3, 0}, "optional groups"))
       return failure();
     return parseLayer(circuit);
   case FIRToken::kw_extclass:
@@ -5417,21 +5416,22 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
   case FIRToken::kw_extmodule:
     return parseExtModule(circuit, indent);
   case FIRToken::kw_formal:
-    if (requireFeature(nextFIRVersion, "inline formal tests"))
+    if (requireFeature({4, 0, 0}, "inline formal tests"))
       return failure();
     return parseFormal(circuit, indent);
   case FIRToken::kw_intmodule:
-    if (removedFeature(nextFIRVersion, "intrinsic modules"))
+    if (requireFeature({1, 2, 0}, "inline formal tests") ||
+        removedFeature({4, 0, 0}, "intrinsic modules"))
       return failure();
     return parseIntModule(circuit, indent);
   case FIRToken::kw_layer:
-    if (requireFeature(nextFIRVersion, "layers"))
+    if (requireFeature({3, 3, 0}, "layers"))
       return failure();
     return parseLayer(circuit);
   case FIRToken::kw_module:
     return parseModule(circuit, /*isPublic=*/false, indent);
   case FIRToken::kw_public:
-    if (requireFeature(nextFIRVersion, "public modules"))
+    if (requireFeature({3, 3, 0}, "public modules"))
       return failure();
     consumeToken();
     if (getToken().getKind() == FIRToken::kw_module)
@@ -5440,7 +5440,7 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
   case FIRToken::kw_type:
     return parseTypeDecl();
   case FIRToken::kw_option:
-    if (requireFeature(nextFIRVersion, "option groups/instance choices"))
+    if (requireFeature(missingSpecFIRVersion, "option groups/instance choices"))
       return failure();
     return parseOptionDecl(circuit);
   default:
