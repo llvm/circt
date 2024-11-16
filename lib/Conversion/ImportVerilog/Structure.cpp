@@ -900,7 +900,19 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
                  lowering->op.getFunctionType().getInputs())) {
     auto loc = convertLocation(astArg->location);
     auto blockArg = block.addArgument(type, loc);
-    valueSymbols.insert(astArg, blockArg);
+
+    if (isa<moore::RefType>(type)) {
+      valueSymbols.insert(astArg, blockArg);
+    } else {
+      // Convert the body of the function.
+      OpBuilder::InsertionGuard g(builder);
+      builder.setInsertionPointToEnd(&block);
+
+      Value shadowArg = builder.create<moore::VariableOp>(
+          loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
+          StringAttr{}, blockArg);
+      valueSymbols.insert(astArg, shadowArg);
+    }
   }
 
   // Convert the body of the function.
