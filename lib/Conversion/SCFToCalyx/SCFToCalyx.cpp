@@ -119,10 +119,15 @@ struct CallScheduleable {
   func::CallOp callOp;
 };
 
+struct ParScheduleable {
+  /// Parallel operation to schedule.
+  scf::ParallelOp parOp;
+};
+
 /// A variant of types representing scheduleable operations.
 using Scheduleable =
     std::variant<calyx::GroupOp, WhileScheduleable, ForScheduleable,
-                 IfScheduleable, CallScheduleable>;
+                 IfScheduleable, CallScheduleable, ParScheduleable>;
 
 class IfLoweringStateInterface {
 public:
@@ -275,6 +280,7 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
               .template Case<arith::ConstantOp, ReturnOp, BranchOpInterface,
                              /// SCF
                              scf::YieldOp, scf::WhileOp, scf::ForOp, scf::IfOp,
+                             scf::ParallelOp, scf::ReduceOp,
                              /// memref
                              memref::AllocOp, memref::AllocaOp, memref::LoadOp,
                              memref::StoreOp,
@@ -338,6 +344,10 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, scf::WhileOp whileOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter, scf::ForOp forOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter, scf::IfOp ifOp) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        scf::ReduceOp reduceOp) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        scf::ParallelOp parallelOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter, CallOp callOp) const;
 
   /// buildLibraryOp will build a TCalyxLibOp inside a TGroupOp based on the
@@ -1094,6 +1104,19 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     scf::ReduceOp reduceOp) const {
+  if (!reduceOp.getOperands().empty())
+    return failure();
+  return success();
+}
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     scf::ParallelOp parOp) const {
+  getState<ComponentLoweringState>().addBlockScheduleable(
+      parOp.getOperation()->getBlock(), ParScheduleable{parOp});
+  return success();
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      CallOp callOp) const {
   std::string instanceName = calyx::getInstanceName(callOp);
   calyx::InstanceOp instanceOp =
@@ -1481,6 +1504,75 @@ class BuildIfGroups : public calyx::FuncOpPartialLoweringPattern {
   }
 };
 
+class BuildParGroups : public calyx::FuncOpPartialLoweringPattern {
+  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
+
+  LogicalResult
+  partiallyLowerFuncToComp(FuncOp funcOp,
+                           PatternRewriter &rewriter) const override {
+    LogicalResult res = success();
+    funcOp.walk([&](Operation *op) {
+      if (auto scfParOp = dyn_cast<scf::ParallelOp>(op))
+        if (failed(partialEval(rewriter, scfParOp))) {
+          res = failure();
+          return WalkResult::interrupt();
+        }
+      return WalkResult::advance();
+    });
+
+    return res;
+  }
+
+private:
+  LogicalResult partialEval(PatternRewriter &rewriter,
+                            scf::ParallelOp scfParOp) const {
+    assert(scfParOp.getLoopSteps() && "Parallel loop must have steps");
+    auto *body = scfParOp.getBody();
+    auto parOpIVs = scfParOp.getInductionVars();
+    auto steps = scfParOp.getStep();
+    auto lowerBounds = scfParOp.getLowerBound();
+    auto upperBounds = scfParOp.getUpperBound();
+    rewriter.setInsertionPointAfter(scfParOp);
+    scf::ParallelOp newParOp = scfParOp.cloneWithoutRegions();
+    auto loc = newParOp.getLoc();
+    rewriter.insert(newParOp);
+    OpBuilder insideBuilder(newParOp);
+    Block *currBlock = nullptr;
+    auto &region = newParOp.getRegion();
+    IRMapping operandMap;
+    std::function<void(SmallVector<int64_t, 4> &, unsigned)> genIVCombinations;
+    genIVCombinations = [&](SmallVector<int64_t, 4> &indices, unsigned dim) {
+      if (dim == lowerBounds.size()) {
+        currBlock = &region.emplaceBlock();
+        insideBuilder.setInsertionPointToEnd(currBlock);
+        for (unsigned i = 0; i < indices.size(); ++i) {
+          Value ivConstant =
+              insideBuilder.create<arith::ConstantIndexOp>(loc, indices[i]);
+          operandMap.map(parOpIVs[i], ivConstant);
+        }
+        for (auto it = body->begin(); it != std::prev(body->end()); ++it)
+          insideBuilder.clone(*it, operandMap);
+        return;
+      }
+      auto lb = lowerBounds[dim].getDefiningOp<arith::ConstantIndexOp>();
+      auto ub = upperBounds[dim].getDefiningOp<arith::ConstantIndexOp>();
+      auto stepOp = steps[dim].getDefiningOp<arith::ConstantIndexOp>();
+      assert(lb && ub && stepOp && "Bounds and steps must be constants");
+      int64_t lbVal = lb.value();
+      int64_t ubVal = ub.value();
+      int64_t stepVal = stepOp.value();
+      for (int64_t iv = lbVal; iv < ubVal; iv += stepVal) {
+        indices[dim] = iv;
+        genIVCombinations(indices, dim + 1);
+      }
+    };
+    SmallVector<int64_t, 4> indices(lowerBounds.size());
+    genIVCombinations(indices, 0);
+    rewriter.replaceOp(scfParOp, newParOp);
+    return success();
+  }
+};
+
 /// Builds a control schedule by traversing the CFG of the function and
 /// associating this with the previously created groups.
 /// For simplicity, the generated control flow is expanded for all possible
@@ -1512,7 +1604,8 @@ private:
         getState<ComponentLoweringState>().getBlockScheduleables(block);
     auto loc = block->front().getLoc();
 
-    if (compBlockScheduleables.size() > 1) {
+    if (compBlockScheduleables.size() > 1 &&
+        !isa<scf::ParallelOp>(block->getParentOp())) {
       auto seqOp = rewriter.create<calyx::SeqOp>(loc);
       parentCtrlBlock = seqOp.getBodyBlock();
     }
@@ -1547,6 +1640,19 @@ private:
         rewriter.create<calyx::EnableOp>(whileLatchGroup.getLoc(),
                                          whileLatchGroup.getName());
 
+        if (res.failed())
+          return res;
+      } else if (auto *parSchedPtr = std::get_if<ParScheduleable>(&group)) {
+        auto parOp = parSchedPtr->parOp;
+        auto calyxParOp = rewriter.create<calyx::ParOp>(parOp.getLoc());
+        LogicalResult res = LogicalResult::success();
+        for (auto &innerBlock : parOp.getRegion().getBlocks()) {
+          rewriter.setInsertionPointToEnd(calyxParOp.getBodyBlock());
+          auto seqOp = rewriter.create<calyx::SeqOp>(parOp.getLoc());
+          rewriter.setInsertionPointToEnd(seqOp.getBodyBlock());
+          res = scheduleBasicBlock(rewriter, path, seqOp.getBodyBlock(),
+                                   &innerBlock);
+        }
         if (res.failed())
           return res;
       } else if (auto *forSchedPtr = std::get_if<ForScheduleable>(&group);
@@ -2241,6 +2347,9 @@ void SCFToCalyxPass::runOnOperation() {
   /// This pass inlines scf.ExecuteRegionOp's by adding control-flow.
   addGreedyPattern<InlineExecuteRegionOpPattern>(loweringPatterns);
 
+  addOncePattern<BuildParGroups>(loweringPatterns, patternState, funcMap,
+                                 *loweringState);
+
   /// This pattern converts all index typed values to an i32 integer.
   addOncePattern<calyx::ConvertIndexTypes>(loweringPatterns, patternState,
                                            funcMap, *loweringState);
@@ -2270,6 +2379,7 @@ void SCFToCalyxPass::runOnOperation() {
 
   addOncePattern<BuildIfGroups>(loweringPatterns, patternState, funcMap,
                                 *loweringState);
+
   /// This pattern converts operations within basic blocks to Calyx library
   /// operators. Combinational operations are assigned inside a
   /// calyx::CombGroupOp, and sequential inside calyx::GroupOps.
