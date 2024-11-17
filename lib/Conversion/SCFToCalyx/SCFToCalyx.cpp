@@ -316,8 +316,9 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
 
         if (outFile.is_open()) {
           llvm::raw_os_ostream llvmOut(outFile);
-          llvm::json::OStream JOS(llvmOut, 2);
-          JOS.value(getState<ComponentLoweringState>().getExtMemData());
+          llvm::json::OStream jsonOS(llvmOut, 2);
+          jsonOS.value(getState<ComponentLoweringState>().getExtMemData());
+          jsonOS.flush();
           outFile.close();
         } else
           llvm::errs() << "Unable to open file for writing\n";
