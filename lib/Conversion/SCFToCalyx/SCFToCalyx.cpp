@@ -328,8 +328,10 @@ public:
           jsonOS.value(getState<ComponentLoweringState>().getExtMemData());
           jsonOS.flush();
           outFile.close();
-        } else
+        } else {
           llvm::errs() << "Unable to open file for writing\n";
+          return failure();
+        }
       }
     }
 
@@ -967,6 +969,11 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 void insertNestedArrayValue(llvm::json::Array &array,
                             const std::vector<int> &indices, size_t index,
                             llvm::json::Value value) {
+  if (indices.empty()) {
+    array.emplace_back(std::move(value));
+    return;
+  }
+
   if (index == indices.size() - 1) {
     // ensure the array is big enough
     while (array.size() <= static_cast<size_t>(indices[index])) {
