@@ -1078,7 +1078,7 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
     numType = "bitnum";
     isSigned = false;
   } else {
-    numType = "floating_point";
+    numType = "ieee754_float";
     isSigned = true;
   }
   componentState.setFormat(memoryOp.getName(), numType, isSigned, width);
