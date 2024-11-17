@@ -1595,7 +1595,6 @@ private:
           // All combinations have been generated
           done = true;
       }
-
       if (done)
         break;
     }
@@ -1662,8 +1661,11 @@ private:
 
         /// Only schedule the 'after' block. The 'before' block is
         /// implicitly scheduled when evaluating the while condition.
-        LogicalResult res = buildCFGControl(path, rewriter, whileBodyOpBlock,
-                                            block, whileOp.getBodyBlock());
+        if (LogicalResult result =
+                buildCFGControl(path, rewriter, whileBodyOpBlock, block,
+                                whileOp.getBodyBlock());
+            result.failed())
+          return result;
 
         // Insert loop-latch at the end of the while group
         rewriter.setInsertionPointToEnd(whileBodyOpBlock);
@@ -1671,9 +1673,6 @@ private:
             getState<ComponentLoweringState>().getWhileLoopLatchGroup(whileOp);
         rewriter.create<calyx::EnableOp>(whileLatchGroup.getLoc(),
                                          whileLatchGroup.getName());
-
-        if (res.failed())
-          return res;
       } else if (auto *parSchedPtr = std::get_if<ParScheduleable>(&group)) {
         auto parOp = parSchedPtr->parOp;
         auto calyxParOp = rewriter.create<calyx::ParOp>(parOp.getLoc());
@@ -1682,11 +1681,11 @@ private:
           rewriter.setInsertionPointToEnd(calyxParOp.getBodyBlock());
           auto seqOp = rewriter.create<calyx::SeqOp>(parOp.getLoc());
           rewriter.setInsertionPointToEnd(seqOp.getBodyBlock());
-          res = scheduleBasicBlock(rewriter, path, seqOp.getBodyBlock(),
-                                   &innerBlock);
+          if (res = scheduleBasicBlock(rewriter, path, seqOp.getBodyBlock(),
+                                       &innerBlock);
+              res.failed())
+            return res;
         }
-        if (res.failed())
-          return res;
       } else if (auto *forSchedPtr = std::get_if<ForScheduleable>(&group);
                  forSchedPtr) {
         auto forOp = forSchedPtr->forOp;
@@ -1701,8 +1700,10 @@ private:
         auto *forBodyOpBlock = forBodyOp.getBodyBlock();
 
         // Schedule the body of the for loop.
-        LogicalResult res = buildCFGControl(path, rewriter, forBodyOpBlock,
-                                            block, forOp.getBodyBlock());
+        if (LogicalResult res = buildCFGControl(path, rewriter, forBodyOpBlock,
+                                                block, forOp.getBodyBlock());
+            res.failed())
+          return res;
 
         // Insert loop-latch at the end of the while group.
         rewriter.setInsertionPointToEnd(forBodyOpBlock);
@@ -1710,8 +1711,6 @@ private:
             getState<ComponentLoweringState>().getForLoopLatchGroup(forOp);
         rewriter.create<calyx::EnableOp>(forLatchGroup.getLoc(),
                                          forLatchGroup.getName());
-        if (res.failed())
-          return res;
       } else if (auto *ifSchedPtr = std::get_if<IfScheduleable>(&group);
                  ifSchedPtr) {
         auto ifOp = ifSchedPtr->ifOp;
