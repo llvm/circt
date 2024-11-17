@@ -1545,35 +1545,61 @@ private:
     Block *currBlock = nullptr;
     auto &region = newParOp.getRegion();
     IRMapping operandMap;
-    std::function<void(SmallVector<int64_t, 4> &, unsigned)> genIVCombinations;
-    genIVCombinations = [&](SmallVector<int64_t, 4> &indices, unsigned dim) {
-      if (dim == lowerBounds.size()) {
-        currBlock = &region.emplaceBlock();
-        insideBuilder.setInsertionPointToEnd(currBlock);
-        for (unsigned i = 0; i < indices.size(); ++i) {
-          Value ivConstant =
-              insideBuilder.create<arith::ConstantIndexOp>(loc, indices[i]);
-          operandMap.map(parOpIVs[i], ivConstant);
-        }
-        for (auto it = body->begin(); it != std::prev(body->end()); ++it)
-          insideBuilder.clone(*it, operandMap);
-        return;
+
+    // extract lower bounds, upper bounds, and steps as integer index values
+    SmallVector<int64_t> lbVals, ubVals, stepVals;
+    for (auto lb : lowerBounds) {
+      auto lbOp = lb.getDefiningOp<arith::ConstantIndexOp>();
+      assert(lbOp &&
+             "Lower bound must be a statically computable constant index");
+      lbVals.push_back(lbOp.value());
+    }
+    for (auto ub : upperBounds) {
+      auto ubOp = ub.getDefiningOp<arith::ConstantIndexOp>();
+      assert(ubOp &&
+             "Upper bound must be a statically computable constant index");
+      ubVals.push_back(ubOp.value());
+    }
+    for (auto step : steps) {
+      auto stepOp = step.getDefiningOp<arith::ConstantIndexOp>();
+      assert(stepOp && "Step must be a statically computable constant index");
+      stepVals.push_back(stepOp.value());
+    }
+
+    // Initialize indices with lower bounds
+    SmallVector<int64_t> indices = lbVals;
+
+    while (true) {
+      // Create a new block in the region for the current combination of indices
+      currBlock = &region.emplaceBlock();
+      insideBuilder.setInsertionPointToEnd(currBlock);
+
+      // Map induction variables to constant indices
+      for (unsigned i = 0; i < indices.size(); ++i) {
+        Value ivConstant =
+            insideBuilder.create<arith::ConstantIndexOp>(loc, indices[i]);
+        operandMap.map(parOpIVs[i], ivConstant);
       }
-      auto lb = lowerBounds[dim].getDefiningOp<arith::ConstantIndexOp>();
-      auto ub = upperBounds[dim].getDefiningOp<arith::ConstantIndexOp>();
-      auto stepOp = steps[dim].getDefiningOp<arith::ConstantIndexOp>();
-      assert(lb && ub && stepOp &&
-             "Bounds and steps must be statically computable index constants");
-      int64_t lbVal = lb.value();
-      int64_t ubVal = ub.value();
-      int64_t stepVal = stepOp.value();
-      for (int64_t iv = lbVal; iv < ubVal; iv += stepVal) {
-        indices[dim] = iv;
-        genIVCombinations(indices, dim + 1);
+
+      for (auto it = body->begin(); it != std::prev(body->end()); ++it)
+        insideBuilder.clone(*it, operandMap);
+
+      // Increment indices using `step`
+      bool done = false;
+      for (int dim = indices.size() - 1; dim >= 0; --dim) {
+        indices[dim] += stepVals[dim];
+        if (indices[dim] < ubVals[dim])
+          break;
+        indices[dim] = lbVals[dim];
+        if (dim == 0)
+          // All combinations have been generated
+          done = true;
       }
-    };
-    SmallVector<int64_t, 4> indices(lowerBounds.size());
-    genIVCombinations(indices, 0);
+
+      if (done)
+        break;
+    }
+
     rewriter.replaceOp(scfParOp, newParOp);
     return success();
   }
