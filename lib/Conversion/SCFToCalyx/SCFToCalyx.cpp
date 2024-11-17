@@ -1105,10 +1105,12 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      scf::ReduceOp reduceOp) const {
-  if (!reduceOp.getOperands().empty())
-    return failure();
+  // we don't handle reduce operation and simply return success for now since
+  // because BuildParGroups would have already emitted an error and exited early
+  // if a reduce operation was encountered.
   return success();
 }
+
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      scf::ParallelOp parOp) const {
   getState<ComponentLoweringState>().addBlockScheduleable(
@@ -1510,20 +1512,23 @@ class BuildParGroups : public calyx::FuncOpPartialLoweringPattern {
   LogicalResult
   partiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
-    LogicalResult res = success();
-    funcOp.walk([&](Operation *op) {
-      if (auto scfParOp = dyn_cast<scf::ParallelOp>(op))
-        if (failed(partialEval(rewriter, scfParOp))) {
-          res = failure();
-          return WalkResult::interrupt();
-        }
+    WalkResult walkResult = funcOp.walk([&](scf::ParallelOp scfParOp) {
+      if (!scfParOp.getResults().empty())
+        return scfParOp.emitError("Currently don't support reduce operation"),
+               WalkResult::interrupt();
+
+      if (failed(partialEval(rewriter, scfParOp)))
+        return WalkResult::interrupt();
+
       return WalkResult::advance();
     });
 
-    return res;
+    return walkResult.wasInterrupted() ? failure() : success();
   }
 
 private:
+  // Partially evaluate/pre-compute all blocks being executed in parall by
+  // statically generate loop indices combinations
   LogicalResult partialEval(PatternRewriter &rewriter,
                             scf::ParallelOp scfParOp) const {
     assert(scfParOp.getLoopSteps() && "Parallel loop must have steps");
@@ -1557,7 +1562,8 @@ private:
       auto lb = lowerBounds[dim].getDefiningOp<arith::ConstantIndexOp>();
       auto ub = upperBounds[dim].getDefiningOp<arith::ConstantIndexOp>();
       auto stepOp = steps[dim].getDefiningOp<arith::ConstantIndexOp>();
-      assert(lb && ub && stepOp && "Bounds and steps must be constants");
+      assert(lb && ub && stepOp &&
+             "Bounds and steps must be statically computable index constants");
       int64_t lbVal = lb.value();
       int64_t ubVal = ub.value();
       int64_t stepVal = stepOp.value();
