@@ -1106,7 +1106,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      scf::ReduceOp reduceOp) const {
   // we don't handle reduce operation and simply return success for now since
-  // because BuildParGroups would have already emitted an error and exited early
+  // BuildParGroups would have already emitted an error and exited early
   // if a reduce operation was encountered.
   return success();
 }
@@ -1513,9 +1513,11 @@ class BuildParGroups : public calyx::FuncOpPartialLoweringPattern {
   partiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
     WalkResult walkResult = funcOp.walk([&](scf::ParallelOp scfParOp) {
-      if (!scfParOp.getResults().empty())
-        return scfParOp.emitError("Currently don't support reduce operation"),
-               WalkResult::interrupt();
+      if (!scfParOp.getResults().empty()) {
+        scfParOp.emitError(
+            "Reduce operations in scf.parallel is not supported yet");
+        return WalkResult::interrupt();
+      }
 
       if (failed(partialEval(rewriter, scfParOp)))
         return WalkResult::interrupt();
@@ -1676,13 +1678,12 @@ private:
       } else if (auto *parSchedPtr = std::get_if<ParScheduleable>(&group)) {
         auto parOp = parSchedPtr->parOp;
         auto calyxParOp = rewriter.create<calyx::ParOp>(parOp.getLoc());
-        LogicalResult res = LogicalResult::success();
         for (auto &innerBlock : parOp.getRegion().getBlocks()) {
           rewriter.setInsertionPointToEnd(calyxParOp.getBodyBlock());
           auto seqOp = rewriter.create<calyx::SeqOp>(parOp.getLoc());
           rewriter.setInsertionPointToEnd(seqOp.getBodyBlock());
-          if (res = scheduleBasicBlock(rewriter, path, seqOp.getBodyBlock(),
-                                       &innerBlock);
+          if (LogicalResult res = scheduleBasicBlock(
+                  rewriter, path, seqOp.getBodyBlock(), &innerBlock);
               res.failed())
             return res;
         }
