@@ -2177,3 +2177,4 @@ function int AssignFuncArgs2(int x, int y);
   // CHECK: [[ADD:%.+]] = moore.add [[READ_X]], [[READ_Y]] : i32
   return x+y;
 endfunction
+
