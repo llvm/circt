@@ -1529,7 +1529,7 @@ class BuildParGroups : public calyx::FuncOpPartialLoweringPattern {
   }
 
 private:
-  // Partially evaluate/pre-compute all blocks being executed in parall by
+  // Partially evaluate/pre-compute all blocks being executed in parallel by
   // statically generate loop indices combinations
   LogicalResult partialEval(PatternRewriter &rewriter,
                             scf::ParallelOp scfParOp) const {
