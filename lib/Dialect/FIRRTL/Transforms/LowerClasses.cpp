@@ -21,7 +21,6 @@
 #include "circt/Dialect/OM/OMAttributes.h"
 #include "circt/Dialect/OM/OMOps.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
@@ -1105,9 +1104,6 @@ void LowerClassesPass::lowerClassLike(FModuleLike moduleLike,
 
 void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
                                   const PathInfoTable &pathInfoTable) {
-  // Map from Values in the FIRRTL Class to Values in the OM Class.
-  IRMapping mapping;
-
   // Collect information about property ports.
   SmallVector<Property> inputProperties;
   BitVector portsToErase(moduleLike.getNumPorts());
@@ -1132,6 +1128,7 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
 
   // Construct the OM Class body with block arguments for each input property,
   // updating the mapping to map from the input property to the block argument.
+  Block *moduleBody = &moduleLike->getRegion(0).front();
   Block *classBody = &classOp->getRegion(0).emplaceBlock();
   // Every class created from a module gets a base path as its first parameter.
   auto basePathType = BasePathType::get(&getContext());
@@ -1144,76 +1141,35 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
   for (size_t i = 0; i < nAltBasePaths; ++i)
     classBody->addArgument(basePathType, unknownLoc);
 
-  // Mapping from block arguments or instance results to new values.
-  DenseMap<Value, Value> valueMapping;
-  for (auto inputProperty : inputProperties) {
-    BlockArgument parameterValue =
-        classBody->addArgument(inputProperty.type, inputProperty.loc);
-    BlockArgument inputValue =
-        moduleLike->getRegion(0).getArgument(inputProperty.index);
+  // Move operations from the modulelike to the OM class.
+  for (auto &op : llvm::make_early_inc_range(llvm::reverse(*moduleBody))) {
+    if (auto instance = dyn_cast<InstanceOp>(op)) {
+      if (!shouldCreateClass(instance.getReferencedModuleNameAttr()))
+        continue;
+      auto *clone = OpBuilder::atBlockBegin(classBody).clone(op);
+      for (auto result : instance.getResults()) {
+        if (isa<PropertyType>(result.getType()))
+          result.replaceAllUsesWith(clone->getResult(result.getResultNumber()));
+      }
+      continue;
+    }
 
-    valueMapping[inputValue] = parameterValue;
+    auto isProperty = [](auto x) { return isa<PropertyType>(x.getType()); };
+    if (llvm::any_of(op.getOperands(), isProperty) ||
+        llvm::any_of(op.getResults(), isProperty))
+      op.moveBefore(classBody, classBody->begin());
   }
 
-  // Helper to check if an op is a property op, which should be removed in the
-  // module like, or kept in the OM class.
-  auto isPropertyOp = [&](Operation &op) {
-    // Check if any operand is a property.
-    auto propertyOperands = llvm::any_of(op.getOperandTypes(), [](Type type) {
-      return isa<PropertyType>(type);
-    });
-    bool needsClone = false;
-    if (auto instance = dyn_cast<InstanceOp>(op))
-      needsClone = shouldCreateClass(instance.getReferencedModuleNameAttr());
-
-    // Check if any result is a property.
-    auto propertyResults = llvm::any_of(
-        op.getResultTypes(), [](Type type) { return isa<PropertyType>(type); });
-
-    return needsClone || propertyOperands || propertyResults;
-  };
-
-  // Move operations from the module like to the OM class.
-  // We need to clone only instances and register their results to the value
-  // mapping. Operands must be remapped using the value mapping.
-  for (auto &op : llvm::make_early_inc_range(
-           moduleLike->getRegion(0).front().getOperations())) {
-    if (!isPropertyOp(op))
-      continue;
-
-    Operation *newOp = &op;
-
-    bool needsMove = true;
-
-    // Clone instances and register their results to the value mapping.
-    if (isa<InstanceOp>(op)) {
-      newOp = op.clone();
-      for (auto [oldResult, newResult] :
-           llvm::zip(op.getResults(), newOp->getResults()))
-        valueMapping[oldResult] = newResult;
-      classBody->getOperations().insert(classBody->end(), newOp);
-      needsMove = false;
-    }
-
-    // Remap operands using the value mapping.
-    for (size_t i = 0; i < newOp->getNumOperands(); ++i) {
-      auto operand = newOp->getOperand(i);
-      auto it = valueMapping.find(operand);
-      if (it != valueMapping.end())
-        newOp->setOperand(i, it->second);
-    }
-
-    // Move the op into the OM class body.
-    if (needsMove)
-      newOp->moveBefore(classBody, classBody->end());
+  // Move property ports from the module to the class.
+  for (auto input : inputProperties) {
+    auto arg = classBody->addArgument(input.type, input.loc);
+    moduleBody->getArgument(input.index).replaceAllUsesWith(arg);
   }
 
   llvm::SmallVector<mlir::Location> fieldLocs;
   llvm::SmallVector<mlir::Value> fieldValues;
   for (Operation &op :
        llvm::make_early_inc_range(classOp.getBodyBlock()->getOperations())) {
-    assert(isPropertyOp(op));
-
     if (auto propAssign = dyn_cast<PropAssignOp>(op)) {
       if (auto blockArg = dyn_cast<BlockArgument>(propAssign.getDest())) {
         // Store any output property assignments into fields op inputs.
@@ -1238,16 +1194,6 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
   // If the module-like is a Class, it will be completely erased later.
   // Otherwise, erase just the property ports and ops.
   if (!isa<firrtl::ClassLike>(moduleLike.getOperation())) {
-    // Erase ops in use before def order, thanks to FIRRTL's SSA regions.
-    for (auto &op :
-         llvm::make_early_inc_range(llvm::reverse(moduleLike.getOperation()
-                                                      ->getRegion(0)
-                                                      .getBlocks()
-                                                      .front()
-                                                      .getOperations())))
-      if (isPropertyOp(op) && !isa<InstanceOp>(op))
-        op.erase();
-
     // Erase property typed ports.
     moduleLike.erasePorts(portsToErase);
   }
