@@ -119,6 +119,127 @@ Main IR constructs to introduce randomness:
   occur multiple times and thus make it more likely to be picked (i.e., models
   non-uniform distributions)
 
+## Example
+
+This section provides an (almost) E2E walkthrough of a simple example starting
+at a Python implmentation using the library wrapping around the python bindings,
+showing the generated RTG IR, and the fully elaborated IR. This compilation
+process can be performed in one go using the `rtgtool.py` driver script.
+
+```py
+# Define a test target (essentially a design/machine with 4 CPUs)
+@rtg.target([('cpus', rtg.set_of(rtg.context_resource()))])
+def example_target():
+  # return a set containing 4 CPUs which the test can schedule instruction
+  # sequences on
+  return [rtg.Set.create([rv64.core(0), rv64.core(1), rv64.core(2), rv64.core(3)])]
+
+# Define a sequence (for simplicity it only contains one instruction)
+# Note: not adding the sequence decorator is also valid in this example  but
+# means the function is fully inlined at python execution time. It is not valid,
+# however, if the sequence is added to a set or bag to be selected at random.
+@rtg.sequence
+def seq(register):
+  # ADD Immediate instruction adding 4 to to the given register
+  rtgtest.addi(register, rtgtest.imm(4, 12))
+
+# Define a test that requires a target with CPUs to schedule instruction
+# sequences on
+@rtg.test([('cpus', rtg.set_of(rtg.context_resource()))])
+def example(cpus):
+  # Pick a random CPU and schedule the ADD operation on it
+  with rtg.context(cpus.get_random_and_exclude()):
+    rtg.label('label0')
+    seq(rtgtest.sp())
+
+  # Pick a random CPU that was not already picked above and zero out the stack
+  # pointer register on it
+  with rtg.context(cpus.get_random()):
+    ra = rtgtest.sp()
+    rtgtest.xor(ra, ra)
+```
+
+The driver script will elaborate this python file and produce the following RTG
+IR as an intermediate step:
+
+```mlir
+rtg.target @example_target : !rtg.target<cpus: !rtg.set<!rtg.context_resource>> {
+  %0 = rtgtest.coreid 0
+  %1 = rtgtest.coreid 1
+  %2 = rtgtest.coreid 2
+  %3 = rtgtest.coreid 3
+  %4 = rtg.set_create %0, %1, %2, %3 : !rtg.context_resource
+  rtg.yield %4 : !rtg.set<!rtg.context_resource>
+}
+rtg.sequence @seq {
+^bb0(%reg: !rtgtest.reg):
+  %c4_i12 = arith.constant 4 : i12
+  rtgtest.addi %reg, %c4_i12
+}
+rtg.sequence @context0 {
+  // Labels are declared before being placed in the instruction stream such that
+  // we can insert jump instructions before the jump target.
+  %0 = rtg.label.decl "label0" -> index
+  rtg.label %0 : index
+  %sp = rtgtest.sp
+  // Construct a closure such that it can be easily passed around, e.g.,
+  // inserted into a set with other sequence closures to be selected at random.
+  %1 = rtg.sequence_closure @seq(%sp) : !rtgtest.reg
+  // Place the sequence here (i.e., inline it here with the arguments passed to
+  // the closure).
+  // This is essentially the same as an `rtg.on_context` with the context
+  // operand matching the one of the parent `on_context`.
+  rtg.sequence_invoke %1
+}
+rtg.sequence @context1 {
+  %0 = rtgtest.sp
+  rtgtest.xor %sp, %sp
+}
+rtg.test @example : !rtg.target<cpus: !rtg.set<!rtg.context_resource>> {
+^bb0(%arg0: !rtg.set<!rtg.context_resource>):
+  // Select an element from the set uniformly at random
+  %0 = rtg.set_select_random %arg0 : !rtg.set<!rtg.context_resource>
+  %3 = rtg.sequence_closure @context0
+  // Place the sequence closure on the given context. In this example, there
+  // will be guards inserted that make sure the inlined sequence is only
+  // executed by the CPU specified by the selected coreid.
+  rtg.on_context %0, %3 : !rtg.context_resource
+  // Construct a new set that doesn't contain the selected element (RTG sets are
+  // immutable) and select another element randomly from this new set.
+  %1 = rtg.set_create %0 : !rtg.context_resource
+  %2 = rtg.set_difference %arg0, %1 : !rtg.set<!rtg.context_resource>
+  %7 = rtg.set_select_random %2 : !rtg.set<!rtg.context_resource>
+  %8 = rtg.sequence_closure @context1
+  rtg.on_context %7, %8 : !rtg.context_resource
+}
+```
+
+Once all the RTG randomization passes were performed, the example looks like
+this:
+
+```mlir
+// Two regions, the first one to be executed on CPU with coreid 0 and the second
+// one on CPU with coreid 2
+rtg.rendered_context [0,2] {
+  %0 = rtg.label.decl "label0" -> index
+  rtg.label %0 : index
+  %reg = rtgtest.sp
+  %c4 = arith.constant 4 : i12
+  rtgtest.addi %sp, %c4
+  // Is emitted to assembly looking something like:
+  // label0:
+  // addi sp, 4
+}, {
+  %sp = rtgtest.sp
+  rtgtest.xor %sp, %sp
+}
+```
+
+The last step to run this test is to print it in assembly format and invoke the
+assembler. This also includes the insertion of a considerable amount of
+boilerplate setup code to run the above instructions on the right CPUs which is
+omitted in this example for clarity.
+
 ## Use-case-specific constructs
 
 This section provides an overview of operations/types/interfaces added with the
