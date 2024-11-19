@@ -89,4 +89,38 @@ def TargetType : RTGTypeDef<"Target"> {
   let genVerifyDecl = 1;
 }
 
+def DictType : RTGTypeDef<"Dict"> {
+  let summary = "";
+  let description = [{
+  }];
+
+  let parameters = (ins
+    ArrayRefParameter<"mlir::StringAttr", "dict entry names">:$entryNames,
+    ArrayRefParameter<"mlir::Type", "dict entry types">:$entryTypes);
+
+  let mnemonic = "dict";
+
+  let hasCustomAssemblyFormat = 1;
+  let genVerifyDecl = 1;
+}
+
+def MemoryType : RTGTypeDef<"Memory"> {
+  let summary = "";
+  let description = [{
+    A memory is a resource provided by the target. The test can only declare a
+    memory that is a subset or an alias to a memory provided by the target.
+    Each memory has its size, adress bitwidth, and alignment specified as an
+    attribute. Additionally, memories have an implicit field storing the base
+    address.
+    Further information about the memory cannot be specified in the memory type
+    or its runtime value directly, but it can be wrapped inside a dictionary.
+    TODO: what about the memory slot bitwidth?
+  }];
+
+  let parameters = (ins "uint64_t":$size, "uint64_t":$addr_bitwidth, "uint64_t":$alignment);
+
+  let mnemonic = "memory";
+  let assemblyFormat = "`<` `size` $size `,` `addr_width` $addr_bitwidth `,` `align` $alignment `>`";
+}
+
 #endif // CIRCT_DIALECT_RTG_IR_RTGTYPES_TD

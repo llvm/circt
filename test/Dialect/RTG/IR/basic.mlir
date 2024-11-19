@@ -102,6 +102,18 @@ rtg.test @test : !rtg.target<num_cpus: i32, num_modes: i32> {
 ^bb0(%arg0: i32, %arg1: i32):
 }
 
+// CHECK-LABEL: rtg.test @memories
+rtg.test @memories : !rtg.target<mem: !rtg.memory<size 32, addr_width 5, align 4>> {
+^bb0(%mem: !rtg.memory<size 32, addr_width 5, align 4>):
+  // CHECK: rtg.memory.get_base_addr %{{.*}} : !rtg.memory<size 32, addr_width 5, align 4>
+  %0 = rtg.memory.get_base_addr %mem : !rtg.memory<size 32, addr_width 5, align 4>
+}
+
+// CHECK-LABEL: rtg.sequence @dicts
+rtg.sequence @dicts {
+// CHECK: !rtg.dict<a: i32, b: i16>
+^bb0(%arg0: !rtg.dict<a: i32, b: i16>):
+}
 
 // A requirement for the sequence/sequence to run
 //rtg.requires()

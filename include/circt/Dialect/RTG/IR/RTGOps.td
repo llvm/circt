@@ -239,6 +239,24 @@ def BagDifferenceOp : RTGOp<"bag_difference", [
   }];
 }
 
+//===- Memory Handling Operations -----------------------------------------===//
+
+def MemoryGetBaseAddrOp : RTGOp<"memory.get_base_addr", [
+  Pure,
+  TypesMatchWith<
+  "immediate bitwidth must match addr bitwidth of memory", "memory", "addr",
+  "IntegerType::get($_ctxt, llvm::cast<MemoryType>($_self).getAddrBitwidth())">,
+]> {
+  let summary = "return the base address of the memory as an immediate";
+
+  let arguments = (ins MemoryType:$memory);
+  let results = (outs AnySignlessInteger:$addr);
+
+  let assemblyFormat = [{
+    $memory attr-dict `:` qualified(type($memory))
+  }];
+}
+
 //===- Test Specification Operations --------------------------------------===//
 
 def TestOp : RTGOp<"test", [
@@ -378,10 +396,12 @@ def TargetOp : RTGOp<"target", [
     }
 
     rtg.test @test0 : !rtg.target<cpus: !rtg.set<!rtg.context_resource>, modes: !rtg.set<!rtg.mode>, machine_mode: !rtg.mode> {
-    ^bb0(%cpus: !rtg.set<!rtg.context_resource>, $modes: !rtg.set<!rtg.mode>>, %machine_mode: !rtg.mode):
+    ^bb0(%cpus: !rtg.set<!rtg.context_resource>, $modes: !rtg.set<!rtg.mode>>, %machine_mode: !rtg.mode, %memory: !rtg.memory<size: 32, align: 8>):
       rtg.on_context %cpus mode %modes { // region is instantiated once for every core-mode pair
        
       }
+
+      %0 = rtgtest.base_addr %memory : !rtg.memory<size: 32, addr_bw: 32, align: 8> -> i32
     }
     ```
   }];
