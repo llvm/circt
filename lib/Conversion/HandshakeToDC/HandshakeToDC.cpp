@@ -651,9 +651,9 @@ static hw::ModulePortInfo getModulePortInfoHS(const TypeConverter &tc,
   return hw::ModulePortInfo{inputs, outputs};
 }
 
-class FuncOpConversion : public OpConversionPattern<handshake::FuncOp> {
+class FuncOpConversion : public DCOpConversionPattern<handshake::FuncOp> {
 public:
-  using OpConversionPattern<handshake::FuncOp>::OpConversionPattern;
+  using DCOpConversionPattern<handshake::FuncOp>::DCOpConversionPattern;
   using OpAdaptor = typename handshake::FuncOp::Adaptor;
 
   // Replaces a handshake.func with a hw.module, converting the argument and
@@ -668,8 +668,9 @@ public:
     ModulePortInfo ports = getModulePortInfoHS(*getTypeConverter(), op);
 
     if (op.isExternal()) {
-      rewriter.create<hw::HWModuleExternOp>(
+      auto mod = rewriter.create<hw::HWModuleExternOp>(
           op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
+      convertedOps->insert(mod);
     } else {
       auto hwModule = rewriter.create<hw::HWModuleOp>(
           op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
@@ -683,12 +684,39 @@ public:
       (void)getTypeConverter()->convertSignatureArgs(
           TypeRange(moduleRegion.getArgumentTypes()), result);
       rewriter.applySignatureConversion(hwModule.getBodyBlock(), result);
+      convertedOps->insert(hwModule);
     }
 
     rewriter.eraseOp(op);
     return success();
   }
 };
+
+/// Add DC clock and reset ports to the module.
+static void addClkRst(hw::HWModuleOp mod) {
+  auto *ctx = mod.getContext();
+
+  size_t numInputs = mod.getNumInputPorts();
+  mod.insertInput(numInputs, "clk", seq::ClockType::get(ctx));
+  mod.setPortAttrs(
+      numInputs,
+      DictionaryAttr::get(ctx, {NamedAttribute(StringAttr::get(ctx, "dc.clock"),
+                                               UnitAttr::get(ctx))}));
+  mod.insertInput(numInputs + 1, "rst", IntegerType::get(ctx, 1));
+  mod.setPortAttrs(
+      numInputs + 1,
+      DictionaryAttr::get(ctx, {NamedAttribute(StringAttr::get(ctx, "dc.reset"),
+                                               UnitAttr::get(ctx))}));
+
+  // We must initialize any port attributes that are not set otherwise the
+  // verifier will fail.
+  for (size_t portNum = 0, e = mod.getNumPorts(); portNum < e; ++portNum) {
+    auto attrs = dyn_cast_or_null<DictionaryAttr>(mod.getPortAttrs(portNum));
+    if (attrs)
+      continue;
+    mod.setPortAttrs(portNum, DictionaryAttr::get(ctx, {}));
+  }
+}
 
 class HandshakeToDCPass
     : public circt::impl::HandshakeToDCBase<HandshakeToDCPass> {
@@ -702,8 +730,9 @@ public:
     auto patternBuilder = [&](TypeConverter &typeConverter,
                               handshaketodc::ConvertedOps &convertedOps,
                               RewritePatternSet &patterns) {
-      patterns.add<FuncOpConversion, ReturnOpConversion>(typeConverter,
-                                                         mod.getContext());
+      patterns.add<FuncOpConversion>(mod.getContext(), typeConverter,
+                                     &convertedOps);
+      patterns.add<ReturnOpConversion>(typeConverter, mod.getContext());
     };
 
     LogicalResult res = runHandshakeToDC(mod, patternBuilder, targetModifier);
@@ -774,5 +803,13 @@ LogicalResult circt::handshaketodc::runHandshakeToDC(
 
   // Build any user-specified patterns
   patternBuilder(typeConverter, convertedOps, patterns);
-  return applyPartialConversion(op, target, std::move(patterns));
+  if (failed(applyPartialConversion(op, target, std::move(patterns))))
+    return failure();
+
+  // Add clock and reset ports to each converted module.
+  for (auto &op : convertedOps)
+    if (auto mod = dyn_cast<hw::HWModuleOp>(op); mod)
+      addClkRst(mod);
+
+  return success();
 }
