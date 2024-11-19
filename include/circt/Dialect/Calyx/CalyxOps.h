@@ -26,8 +26,6 @@
 namespace circt {
 namespace calyx {
 
-class AddFNOp;
-class MulFNOp;
 // the goPort, donePort, resetPort and clkPort identify the attributes of the
 // go, done, reset and clk port of the circuit.
 static constexpr std::string_view goPort = "go";
@@ -72,11 +70,6 @@ public:
 enum class FloatingPointStandard {
   IEEE754,
 };
-
-/// Signals that the following operation operates on floating point values.
-template <typename ConcreteType>
-class FloatingPoint
-    : public mlir::OpTrait::TraitBase<ConcreteType, FloatingPoint> {};
 
 /// The direction of a Component or Cell port. this is similar to the
 /// implementation found in the FIRRTL dialect.
