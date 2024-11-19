@@ -884,7 +884,7 @@ public:
       auto initialConstant = circt::seq::unwrapImmutableValue(init)
                                  .getDefiningOp<hw::ConstantOp>();
       if (!initialConstant)
-        reg->emitError("Initial value must be constant!!");
+        reg->emitError("initial value must be constant");
 
       // Visit the initial Value to generate the constant
       dispatchTypeOpVisitor(initialConstant);
