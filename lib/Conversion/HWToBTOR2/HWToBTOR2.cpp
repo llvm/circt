@@ -304,8 +304,8 @@ private:
     // Build and return the slice instruction
     os << opLID << " "
        << "slice"
-       << " " << sid << " " << op0LID << " " << (width - 1) << " " << lowbit
-       << "\n";
+       << " " << sid << " " << op0LID << " " << (lowbit + width - 1) << " "
+       << lowbit << "\n";
   }
 
   // Generates a constant declaration given a value, a width and a name
