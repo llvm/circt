@@ -253,9 +253,10 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
   // It's easier to duplicate the old annotations, then fix and filter them.
   auto newMem = b->create<MemOp>(
       ports, op.getReadLatency(), op.getWriteLatency(), op.getDepth(),
-      op.getRuw(), portNames, (op.getName() + field.suffix).str(),
-      op.getNameKind(), op.getAnnotations().getValue(),
-      op.getPortAnnotations().getValue(), op.getInnerSymAttr());
+      op.getRuw(), b->getArrayAttr(portNames),
+      (op.getName() + field.suffix).str(), op.getNameKind(),
+      op.getAnnotations(), op.getPortAnnotations(), op.getInnerSymAttr(),
+      op.getInitAttr(), op.getPrefixAttr());
 
   if (op.getInnerSym()) {
     op.emitError("cannot split memory with symbol present");

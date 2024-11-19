@@ -1404,3 +1404,21 @@ firrtl.circuit "UnrealizedConversion" {
     firrtl.matchingconnect %w, %b : !firrtl.bundle<data: uint<64>, tag: uint<1>>
   }
 }
+
+// Test that memories have their prefixes copied when lowering.
+// See: https://github.com/llvm/circt/issues/7835
+firrtl.circuit "MemoryPrefixCopying" {
+  // COMMON-LABEL: firrtl.module @MemoryPrefixCopying
+  firrtl.module @MemoryPrefixCopying() {
+    // COMMON:      firrtl.mem
+    // COMMON-SAME:   prefix = "Foo_"
+    %mem_r = firrtl.mem Undefined {
+      depth = 64 : i64,
+      name = "ram",
+      portNames = ["r"],
+      prefix = "Foo_",
+      readLatency = 1 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.bundle<addr: uint<6>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 1>>
+  }
+}
