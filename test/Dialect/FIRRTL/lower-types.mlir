@@ -43,8 +43,8 @@ firrtl.circuit "TopLevel" {
   // COMMON-SAME: out %sink_data: [[SINK_DATA_TYPE:!firrtl.uint<64>]]
   firrtl.module @TopLevel(in %source: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>,
                           out %sink: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) {
-    // SIG: %source = firrtl.wire interesting_name : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>> 
-    // SIG: %sink = firrtl.wire interesting_name : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>> 
+    // SIG: %source = firrtl.wire interesting_name : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+    // SIG: %sink = firrtl.wire interesting_name : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
     // COMMON: %inst_source_valid, %inst_source_ready, %inst_source_data, %inst_sink_valid, %inst_sink_ready, %inst_sink_data
     // COMMON-SAME: = firrtl.instance "" @Simple(
     // COMMON-SAME: in source_valid: !firrtl.uint<1>, out source_ready: !firrtl.uint<1>, in source_data: !firrtl.uint<64>, out sink_valid: !firrtl.uint<1>, in sink_ready: !firrtl.uint<1>, out sink_data: !firrtl.uint<64>
@@ -758,8 +758,8 @@ firrtl.circuit "TopLevel" {
 //     b <= a[sel][sel]
 
   firrtl.module private @multidimRead(
-    in %a: !firrtl.vector<vector<uint<2>, 2>, 2>, 
-    in %sel: !firrtl.uint<2>, 
+    in %a: !firrtl.vector<vector<uint<2>, 2>, 2>,
+    in %sel: !firrtl.uint<2>,
     out %b: !firrtl.uint<2>) {
     %0 = firrtl.subaccess %a[%sel] : !firrtl.vector<vector<uint<2>, 2>, 2>, !firrtl.uint<2>
     %1 = firrtl.subaccess %0[%sel] : !firrtl.vector<uint<2>, 2>, !firrtl.uint<2>
@@ -915,9 +915,9 @@ firrtl.circuit "TopLevel" {
 // Handle zero-length vector subaccess
   // CHECK-LABEL: zvec
   firrtl.module private @zvec(
-      in %i: !firrtl.vector<bundle<a: uint<8>, b: uint<4>>, 0>, 
-      in %sel: !firrtl.uint<1>, 
-      out %foo: !firrtl.vector<uint<1>, 0>, 
+      in %i: !firrtl.vector<bundle<a: uint<8>, b: uint<4>>, 0>,
+      in %sel: !firrtl.uint<1>,
+      out %foo: !firrtl.vector<uint<1>, 0>,
       out %o: !firrtl.uint<8>)
     {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
