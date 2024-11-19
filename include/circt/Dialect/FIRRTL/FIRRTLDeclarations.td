@@ -258,24 +258,6 @@ def MemOp : HardwareDeclOp<"mem", [DeclareOpInterfaceMethods<CombDataflow>]> {
     $ruw `` custom<MemOp>(attr-dict) `:` qualified(type($results))
   }];
 
-  let builders = [
-    OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
-                   "uint32_t":$readLatency, "uint32_t":$writeLatency,
-                   "uint64_t":$depth, "RUWAttr":$ruw,
-                   "ArrayRef<Attribute>":$portNames,
-                   CArg<"StringRef", "{}">:$name,
-                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
-                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
-                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"StringAttr", "StringAttr()">:$innerSym)>,
-    OpBuilder<(ins "::mlir::TypeRange":$resultTypes, "uint32_t":$readLatency,
-                   "uint32_t":$writeLatency, "uint64_t":$depth, "RUWAttr":$ruw,
-                   "ArrayRef<Attribute>":$portNames, "StringRef":$name,
-                   "NameKindEnum":$nameKind, "ArrayRef<Attribute>":$annotations,
-                   "ArrayRef<Attribute>":$portAnnotations,
-                   "hw::InnerSymAttr":$innerSym)>
-  ];
-
   let hasVerifier = 1;
 
   let hasCanonicalizer = true;
