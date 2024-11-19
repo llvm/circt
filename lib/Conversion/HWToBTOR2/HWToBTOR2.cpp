@@ -254,7 +254,7 @@ private:
     return constlid;
   }
 
-  // Generates an init statement, which allows for the use of powerOnValue
+  // Generates an init statement, which allows for the use of initial values
   // operands in compreg registers
   void genInit(Operation *reg, Value initVal, int64_t width) {
     // Retrieve the various identifiers we require for this
@@ -884,9 +884,9 @@ public:
       auto initialConstant = circt::seq::unwrapImmutableValue(init)
                                  .getDefiningOp<hw::ConstantOp>();
       if (!initialConstant)
-        reg->emitError("PowerOn Value must be constant!!");
+        reg->emitError("initial value must be constant");
 
-      // Visit the powerOn Value to generate the constant
+      // Visit the initial Value to generate the constant
       dispatchTypeOpVisitor(initialConstant);
 
       // Add it to the list of visited operations
