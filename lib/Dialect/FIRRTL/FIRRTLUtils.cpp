@@ -188,7 +188,8 @@ IntegerAttr circt::firrtl::getIntZerosAttr(Type type) {
 /// type. This handles both the known width and unknown width case.
 IntegerAttr circt::firrtl::getIntOnesAttr(Type type) {
   int32_t width = abs(type_cast<IntType>(type).getWidthOrSentinel());
-  return getIntAttr(type, APInt(width, -1));
+  return getIntAttr(
+      type, APInt(width, -1, /*isSigned=*/false, /*implicitTrunc=*/true));
 }
 
 /// Return the single assignment to a Property value. It is assumed that the

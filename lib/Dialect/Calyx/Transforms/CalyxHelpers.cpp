@@ -32,8 +32,8 @@ hw::ConstantOp createConstant(Location loc, OpBuilder &builder,
                               size_t value) {
   OpBuilder::InsertionGuard g(builder);
   builder.setInsertionPointToStart(component.getBodyBlock());
-  return builder.create<hw::ConstantOp>(loc,
-                                        APInt(width, value, /*unsigned=*/true));
+  return builder.create<hw::ConstantOp>(
+      loc, APInt(width, value, /*isSigned=*/false));
 }
 
 calyx::InstanceOp createInstance(Location loc, OpBuilder &builder,
