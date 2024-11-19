@@ -1199,6 +1199,21 @@ uint32_t CycleOp::getGroupLatency() {
 }
 
 //===----------------------------------------------------------------------===//
+// Floating Point Op
+//===----------------------------------------------------------------------===//
+FloatingPointStandard AddFNOp::getFloatingPointStandard() {
+  return FloatingPointStandard::IEEE754;
+}
+
+FloatingPointStandard MulFNOp::getFloatingPointStandard() {
+  return FloatingPointStandard::IEEE754;
+}
+
+std::string AddFNOp::getCalyxLibraryName() { return "std_addFN"; }
+
+std::string MulFNOp::getCalyxLibraryName() { return "std_mulFN"; }
+
+//===----------------------------------------------------------------------===//
 // GroupInterface
 //===----------------------------------------------------------------------===//
 

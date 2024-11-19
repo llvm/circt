@@ -1025,10 +1025,9 @@ void Emitter::emitLibraryFloatingPoint(Operation *op) {
   }
 
   std::string opName;
-  if (isa<calyx::AddFNOp>(op))
-    opName = "std_addFN";
-  else
-    opName = "std_mulFN";
+  if (auto fpOp = dyn_cast<calyx::FloatingPointOpInterface>(op)) {
+    opName = fpOp.getCalyxLibraryName();
+  }
   indent() << getAttributes(op, /*atFormat=*/true) << cell.instanceName()
            << space() << equals() << space() << opName << LParen() << expWidth
            << comma() << sigWidth << comma() << bitWidth << RParen()

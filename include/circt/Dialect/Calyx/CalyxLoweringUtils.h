@@ -417,20 +417,35 @@ public:
     }
   }
 
+  template <typename T, typename = void>
+  struct HasGetFloatingPointStandard : std::false_type {};
+
+  template <typename T>
+  struct HasGetFloatingPointStandard<
+      T, std::void_t<decltype(std::declval<T>().getFloatingPointStandard())>>
+      : std::is_same<decltype(std::declval<T>().getFloatingPointStandard()),
+                     FloatingPointStandard> {};
+
   template <typename TLibraryOp>
   TLibraryOp getNewLibraryOpInstance(OpBuilder &builder, Location loc,
                                      TypeRange resTypes) {
     mlir::IRRewriter::InsertionGuard guard(builder);
     Block *body = component.getBodyBlock();
     builder.setInsertionPoint(body, body->begin());
-    auto name = TLibraryOp::getOperationName().split(".").second;
-    if constexpr (TLibraryOp::template hasTrait<FloatingPoint>()) {
-      auto standard = TLibraryOp::getFloatingPointStandard();
-      if (standard == FloatingPointStandard::IEEE754) {
-        assert(name.consume_front("ieee754.") &&
+    std::string name = TLibraryOp::getOperationName().split(".").second.str();
+    if constexpr (HasGetFloatingPointStandard<TLibraryOp>::value) {
+      switch (TLibraryOp::getFloatingPointStandard()) {
+      case FloatingPointStandard::IEEE754: {
+        std::string prefix = "ieee754.";
+        assert(name.find(prefix) == 0 &&
                "IEEE754 type operation's name must begin with 'ieee754'");
-        std::string modified = llvm::join_items("", "std_", name, "FN");
-        name = modified;
+        name.erase(0, prefix.length());
+        name = llvm::join_items(/*separator=*/"", "std_", name, "FN");
+        break;
+      }
+
+      default:
+        llvm_unreachable("Unhandled floating point standard.");
       }
     }
     return builder.create<TLibraryOp>(loc, getUniqueName(name), resTypes);

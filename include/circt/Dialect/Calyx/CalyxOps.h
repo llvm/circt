@@ -76,16 +76,7 @@ enum class FloatingPointStandard {
 /// Signals that the following operation operates on floating point values.
 template <typename ConcreteType>
 class FloatingPoint
-    : public mlir::OpTrait::TraitBase<ConcreteType, FloatingPoint> {
-public:
-  static constexpr FloatingPointStandard getFloatingPointStandard() {
-    if constexpr (std::is_same<calyx::AddFNOp, ConcreteType>::value ||
-                  std::is_same<calyx::MulFNOp, ConcreteType>::value) {
-      return FloatingPointStandard::IEEE754;
-    }
-    return FloatingPointStandard::IEEE754;
-  }
-};
+    : public mlir::OpTrait::TraitBase<ConcreteType, FloatingPoint> {};
 
 /// The direction of a Component or Cell port. this is similar to the
 /// implementation found in the FIRRTL dialect.
