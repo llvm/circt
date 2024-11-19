@@ -578,6 +578,8 @@ private:
                               CircuitLoweringState &loweringState);
   LogicalResult lowerModuleOperations(hw::HWModuleOp module,
                                       CircuitLoweringState &loweringState);
+  LogicalResult lowerFormalBody(verif::FormalOp formalOp,
+                                CircuitLoweringState &loweringState);
 };
 
 } // end anonymous namespace
@@ -620,6 +622,7 @@ void FIRRTLModuleLowering::runOnOperation() {
                              &getAnalysis<NLATable>());
 
   SmallVector<hw::HWModuleOp, 32> modulesToProcess;
+  SmallVector<verif::FormalOp> formalOpsToProcess;
 
   AnnotationSet circuitAnno(circuit);
   moveVerifAnno(getOperation(), circuitAnno, extractAssertAnnoClass,
@@ -668,6 +671,16 @@ void FIRRTLModuleLowering::runOnOperation() {
               if (!loweredMod)
                 return failure();
               state.recordModuleMapping(&op, loweredMod);
+              return success();
+            })
+            .Case<FormalOp>([&](auto oldFormalOp) {
+              auto builder = OpBuilder::atBlockEnd(topLevelModule);
+              auto newFormalOp = builder.create<verif::FormalOp>(
+                  oldFormalOp.getLoc(), oldFormalOp.getNameAttr());
+              newFormalOp->setDiscardableAttrs(oldFormalOp.getParametersAttr());
+              newFormalOp.getBody().emplaceBlock();
+              state.recordModuleMapping(oldFormalOp, newFormalOp);
+              formalOpsToProcess.push_back(newFormalOp);
               return success();
             })
             .Default([&](Operation *op) {
@@ -725,13 +738,18 @@ void FIRRTLModuleLowering::runOnOperation() {
         ->setAttr(moduleHierarchyFileAttrName,
                   ArrayAttr::get(&getContext(), testHarnessHierarchyFiles));
 
-  // Finally, lower all operations.
+  // Lower all module bodies.
   auto result = mlir::failableParallelForEachN(
       &getContext(), 0, modulesToProcess.size(), [&](auto index) {
         return lowerModuleOperations(modulesToProcess[index], state);
       });
+  if (failed(result))
+    return signalPassFailure();
 
-  // If any module bodies failed to lower, return early.
+  // Lower all formal op bodies.
+  result = mlir::failableParallelForEach(
+      &getContext(), formalOpsToProcess,
+      [&](auto op) { return lowerFormalBody(op, state); });
   if (failed(result))
     return signalPassFailure();
 
@@ -1387,6 +1405,38 @@ LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
   // We are done with our cursor op.
   cursor.erase();
 
+  return success();
+}
+
+/// Run on each `verif.formal` to populate its body based on the original
+/// `firrtl.formal` operation.
+LogicalResult
+FIRRTLModuleLowering::lowerFormalBody(verif::FormalOp formalOp,
+                                      CircuitLoweringState &loweringState) {
+  auto builder = OpBuilder::atBlockEnd(&formalOp.getBody().front());
+
+  // Find the module targeted by the `firrtl.formal` operation. The `FormalOp`
+  // verifier guarantees the module exists and that it is an `FModuleOp`. This
+  // we can then translate to the corresponding `HWModuleOp`.
+  auto oldFormalOp = cast<FormalOp>(loweringState.getOldModule(formalOp));
+  auto moduleName = oldFormalOp.getModuleNameAttr().getAttr();
+  auto oldModule = cast<FModuleOp>(
+      loweringState.getInstanceGraph().lookup(moduleName)->getModule());
+  auto newModule =
+      dyn_cast_or_null<hw::HWModuleOp>(loweringState.getNewModule(oldModule));
+  if (!newModule)
+    return oldFormalOp->emitOpError()
+           << "could not find module " << oldModule.getSymNameAttr();
+
+  // Create a symbolic input for every input of the lowered module.
+  SmallVector<Value> symbolicInputs;
+  for (auto arg : newModule.getBody().getArguments())
+    symbolicInputs.push_back(
+        builder.create<verif::SymbolicValueOp>(arg.getLoc(), arg.getType()));
+
+  // Instantiate the module with the given symbolic inputs.
+  builder.create<hw::InstanceOp>(formalOp.getLoc(), newModule,
+                                 newModule.getNameAttr(), symbolicInputs);
   return success();
 }
 
