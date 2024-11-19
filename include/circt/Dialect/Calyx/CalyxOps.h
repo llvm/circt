@@ -26,6 +26,8 @@
 namespace circt {
 namespace calyx {
 
+class AddFNOp;
+class MulFNOp;
 // the goPort, donePort, resetPort and clkPort identify the attributes of the
 // go, done, reset and clk port of the circuit.
 static constexpr std::string_view goPort = "go";
@@ -64,6 +66,24 @@ public:
     assert(staticValue == 0 && "If combinational, it should take 0 cycles.");
 
     return success();
+  }
+};
+
+enum class FloatingPointStandard {
+  IEEE754,
+};
+
+/// Signals that the following operation operates on floating point values.
+template <typename ConcreteType>
+class FloatingPoint
+    : public mlir::OpTrait::TraitBase<ConcreteType, FloatingPoint> {
+public:
+  static constexpr FloatingPointStandard getFloatingPointStandard() {
+    if constexpr (std::is_same<calyx::AddFNOp, ConcreteType>::value ||
+                  std::is_same<calyx::MulFNOp, ConcreteType>::value) {
+      return FloatingPointStandard::IEEE754;
+    }
+    return FloatingPointStandard::IEEE754;
   }
 };
 

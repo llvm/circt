@@ -424,10 +424,15 @@ public:
     Block *body = component.getBodyBlock();
     builder.setInsertionPoint(body, body->begin());
     auto name = TLibraryOp::getOperationName().split(".").second;
-    if (std::is_same<calyx::AddFNOp, TLibraryOp>::value)
-      name = "std_addFN";
-    else if (std::is_same<calyx::MulFNOp, TLibraryOp>::value)
-      name = "std_mulFN";
+    if constexpr (TLibraryOp::template hasTrait<FloatingPoint>()) {
+      auto standard = TLibraryOp::getFloatingPointStandard();
+      if (standard == FloatingPointStandard::IEEE754) {
+        assert(name.consume_front("ieee754.") &&
+               "IEEE754 type operation's name must begin with 'ieee754'");
+        std::string modified = llvm::join_items("", "std_", name, "FN");
+        name = modified;
+      }
+    }
     return builder.create<TLibraryOp>(loc, getUniqueName(name), resTypes);
   }
 

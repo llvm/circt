@@ -332,8 +332,15 @@ def AndLibOp  : CombinationalArithBinaryLibraryOp<"and"> {}
 def OrLibOp   : CombinationalArithBinaryLibraryOp<"or"> {}
 def XorLibOp  : CombinationalArithBinaryLibraryOp<"xor"> {}
 
-class ArithBinaryFloatingPointLibraryOp<string mnemonic> : ArithBinaryLibraryOp<mnemonic, "", [
-  SameTypeConstraint<"left", "out">]> {}
+def FloatingPoint : NativeOpTrait<"FloatingPoint"> {
+  let cppNamespace = "::circt::calyx";
+}
+
+class ArithBinaryFloatingPointLibraryOp<string mnemonic> :
+  ArithBinaryLibraryOp<mnemonic, "", [
+    FloatingPoint,
+    SameTypeConstraint<"left", "out">
+  ]> {}
 
 def AddFNOp : ArithBinaryFloatingPointLibraryOp<"ieee754.add"> {
   let results = (outs I1:$clk, I1:$reset, I1:$go, I1:$control, I1:$subOp,
