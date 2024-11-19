@@ -16,6 +16,7 @@ include "mlir/IR/Properties.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "circt/Dialect/RTG/IR/RTGInterfaces.td"
 
 // Base class for the operation in this dialect.
 class RTGOp<string mnemonic, list<Trait> traits = []> :
