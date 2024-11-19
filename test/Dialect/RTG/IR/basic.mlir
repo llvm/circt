@@ -113,6 +113,8 @@ rtg.test @memories : !rtg.target<mem: !rtg.memory<size 32, addr_width 5, align 4
 rtg.sequence @dicts {
 // CHECK: !rtg.dict<a: i32, b: i16>
 ^bb0(%arg0: !rtg.dict<a: i32, b: i16>):
+  // CHECK: rtg.dict_get %arg0["a"] : !rtg.dict<a: i32, b: i16>
+  %0 = rtg.dict_get %arg0["a"] : !rtg.dict<a: i32, b: i16>
 }
 
 // A requirement for the sequence/sequence to run

@@ -193,6 +193,34 @@ LogicalResult TargetOp::verifyRegions() {
 }
 
 //===----------------------------------------------------------------------===//
+// DictGetOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult DictGetOp::verify() {
+  if (!cast<DictType>(getDict().getType()).getTypeOfEntry(getEntryNameAttr()))
+    return emitOpError(
+        "entry with the specified name must be present in the dictionary");
+
+  return success();
+}
+
+LogicalResult DictGetOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> location, ValueRange operands,
+    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    SmallVectorImpl<Type> &inferredReturnTypes) {
+  auto dictType = cast<DictType>(operands[0].getType());
+  StringAttr entryName =
+      properties.as<DictGetOp::Properties *>()->getEntryName();
+  Type entryType = dictType.getTypeOfEntry(entryName);
+  Location loc = location ? *location : UnknownLoc::get(context);
+  if (!entryType)
+    return mlir::emitError(loc, "dict entry ")
+           << entryName << " does not exist in " << dictType;
+  inferredReturnTypes.emplace_back(entryType);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

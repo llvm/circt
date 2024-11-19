@@ -239,6 +239,24 @@ def BagDifferenceOp : RTGOp<"bag_difference", [
   }];
 }
 
+//===- Dictionary Handling Operations -------------------------------------===//
+
+def DictGetOp : RTGOp<"dict_get", [
+  Pure,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "computes the difference of two bags";
+
+  let arguments = (ins DictType:$dict, StrAttr:$entryName);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    $dict `[` $entryName `]` attr-dict `:` qualified(type($dict))
+  }];
+
+  let hasVerifier = 1;
+}
+
 //===- Memory Handling Operations -----------------------------------------===//
 
 def MemoryGetBaseAddrOp : RTGOp<"memory.get_base_addr", [

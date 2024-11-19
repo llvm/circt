@@ -159,6 +159,14 @@ void DictType::print(AsmPrinter &p) const {
   p << ">";
 }
 
+Type DictType::getTypeOfEntry(StringAttr entryName) {
+  for (auto [name, type] : llvm::zip(getEntryNames(), getEntryTypes()))
+    if (name == entryName)
+      return type;
+
+  return Type();
+}
+
 void circt::rtg::RTGDialect::registerTypes() {
   addTypes<
 #define GET_TYPEDEF_LIST

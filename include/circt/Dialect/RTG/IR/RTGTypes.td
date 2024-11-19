@@ -102,6 +102,10 @@ def DictType : RTGTypeDef<"Dict"> {
 
   let hasCustomAssemblyFormat = 1;
   let genVerifyDecl = 1;
+
+  let extraClassDeclaration = [{
+    mlir::Type getTypeOfEntry(StringAttr entryName);
+  }];
 }
 
 def MemoryType : RTGTypeDef<"Memory"> {
