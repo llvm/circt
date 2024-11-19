@@ -1147,8 +1147,9 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   auto newArgs = llvm::map_to_vector(module.getPorts(), [](auto pi) {
     return PortInfoWithIP{pi, std::nullopt};
   });
-  for (size_t argIndex = 0, argsRemoved = 0; argIndex < newArgs.size();
-       ++argIndex) {
+
+  size_t argsRemoved = 0;
+  for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
     SmallVector<Value> lowerings;
     if (lowerArg(module, argIndex, argsRemoved, newArgs, lowerings)) {
       auto arg = module.getArgument(argIndex);
@@ -1161,10 +1162,17 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   }
 
   // Remove block args that have been lowered.
-  body->eraseArguments(argsToRemove);
-  for (auto deadArg = argsToRemove.find_last(); deadArg != -1;
-       deadArg = argsToRemove.find_prev(deadArg))
-    newArgs.erase(newArgs.begin() + deadArg);
+  if (argsRemoved != 0) {
+    body->eraseArguments(argsToRemove);
+    size_t size = newArgs.size();
+    for (size_t src = 0, dst = 0; src < size; ++src) {
+      if (argsToRemove[src])
+        continue;
+      newArgs[dst] = newArgs[src];
+      ++dst;
+    }
+    newArgs.erase(newArgs.end() - argsRemoved, newArgs.end());
+  }
 
   SmallVector<NamedAttribute, 8> newModuleAttrs;
 
