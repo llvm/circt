@@ -53,3 +53,44 @@ def SequenceOp : RTGOp<"sequence", [
     $sym_name attr-dict-with-keyword $bodyRegion
   }];
 }
+
+def SequenceClosureOp : RTGOp<"sequence_closure", [
+  Pure,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "create a sequence closure with the provided arguments";
+  let description = [{
+    This operation creates a closure object for the provided sequence and
+    arguments. This allows sequences to be passed around as an SSA value.
+    For example, it can be inserted into a set and selected at random which
+    is one of the main ways to do randomization. Not having to deal with
+    sequence arguments after randomly selecting a sequence simplifies the
+    problem of coming up with values to pass as arguments, but also provides a
+    way for the user to constrain the arguments at the location where they are
+    added to the set. In the future, it can also be possible to add sequence
+    handles directly to a set and randomly pick arguments at the invokation
+    site.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sequence, Variadic<AnyType>:$args);
+  let results = (outs SequenceType:$ref);
+
+  let assemblyFormat = [{
+    $sequence (`(` $args^ `:` qualified(type($args)) `)`)? attr-dict
+  }];
+}
+
+def InvokeSequenceOp : RTGOp<"invoke_sequence", []> {
+  let summary = "invoke a sequence of instructions";
+  let description = [{
+    This operation takes a sequence closure as operand and acts as a placeholder
+    for that sequence instantiated with the arguments in the closure in place.
+    In particular, this is not any kind of function call, it doesn't set up a
+    stack frame, etc. It behaves as if the sequence of instructions it refers to
+    were directly inlined relacing this operation.
+  }];
+
+  let arguments = (ins SequenceType:$sequence);
+
+  let assemblyFormat = "$sequence attr-dict";
+}

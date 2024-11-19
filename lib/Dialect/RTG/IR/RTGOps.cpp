@@ -19,6 +19,26 @@ using namespace circt;
 using namespace rtg;
 
 //===----------------------------------------------------------------------===//
+// SequenceClosureOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+SequenceClosureOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  SequenceOp seq =
+      symbolTable.lookupNearestSymbolFrom<SequenceOp>(*this, getSequenceAttr());
+  if (!seq)
+    return emitOpError()
+           << "'" << getSequence()
+           << "' does not reference a valid 'rtg.sequence' operation";
+
+  if (seq.getBodyRegion().getArgumentTypes() != getArgs().getTypes())
+    return emitOpError("referenced 'rtg.sequence' op's argument types must "
+                       "match 'args' types");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
