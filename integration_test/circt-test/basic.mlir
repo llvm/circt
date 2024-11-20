@@ -1,5 +1,5 @@
-// RUN: circt-test %s -r circt-test-runner-sby.py | FileCheck %s
-// REQUIRES: sby
+// See other `basic-*.mlir` files for run lines.
+// RUN: true
 
 // CHECK: 1 tests FAILED, 6 passed, 1 ignored
 
@@ -66,7 +66,7 @@ verif.formal @CustomAdderWorks {} {
   %0 = comb.icmp eq %z0, %c5_i4 : i4
   %1 = comb.icmp ne %a, %b : i4
   %2 = comb.and %0, %1 : i1
-  verif.cover %2 : i1
+  // verif.cover %2 : i1  // not supported in circt-bmc currently
 }
 
 hw.module @ALU(in %a: i4, in %b: i4, in %sub: i1, out z: i4) {

@@ -86,6 +86,11 @@ struct Options {
   cl::opt<std::string> runner{
       "r", cl::desc("Program to run individual tests"), cl::value_desc("bin"),
       cl::init("circt-test-runner-sby.py"), cl::cat(cat)};
+
+  cl::opt<bool> runnerReadsMLIR{
+      "mlir-runner",
+      cl::desc("Pass the MLIR file to the runner instead of Verilog"),
+      cl::init(false), cl::cat(cat)};
 };
 Options opts;
 
@@ -309,7 +314,10 @@ static LogicalResult execute(MLIRContext *context) {
     // Assemble the runner arguments.
     SmallVector<StringRef> args;
     args.push_back(runner);
-    args.push_back(verilogPath);
+    if (opts.runnerReadsMLIR)
+      args.push_back(opts.inputFilename);
+    else
+      args.push_back(verilogPath);
     args.push_back("-t");
     args.push_back(test.name.getValue());
     args.push_back("-d");
