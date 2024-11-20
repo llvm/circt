@@ -260,6 +260,33 @@ module {
 
 // -----
 
+// Test floating point mul
+
+// CHECK:        %cst = calyx.constant @cst_0 <4.200000e+00 : f32> : i32
+// CHECK-DAG:    %true = hw.constant true
+// CHECK-DAG:    %mulf_0_reg.in, %mulf_0_reg.write_en, %mulf_0_reg.clk, %mulf_0_reg.reset, %mulf_0_reg.out, %mulf_0_reg.done = calyx.register @mulf_0_reg : i32, i1, i1, i1, i32, i1
+// CHECK-DAG:    %std_mulFN_0.clk, %std_mulFN_0.reset, %std_mulFN_0.go, %std_mulFN_0.control, %std_mulFN_0.left, %std_mulFN_0.right, %std_mulFN_0.roundingMode, %std_mulFN_0.out, %std_mulFN_0.exceptionalFlags, %std_mulFN_0.done = calyx.ieee754.mul @std_mulFN_0 : i1, i1, i1, i1, i32, i32, i3, i32, i5, i1
+// CHECK-DAG:    %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
+// CHECK:      calyx.group @bb0_0 {
+// CHECK-DAG:        calyx.assign %std_mulFN_0.left = %in0 : i32
+// CHECK-DAG:        calyx.assign %std_mulFN_0.right = %cst : i32
+// CHECK-DAG:        calyx.assign %mulf_0_reg.in = %std_mulFN_0.out : i32
+// CHECK-DAG:        calyx.assign %mulf_0_reg.write_en = %std_mulFN_0.done : i1
+// CHECK-DAG:        %0 = comb.xor %std_mulFN_0.done, %true : i1
+// CHECK-DAG:        calyx.assign %std_mulFN_0.go = %0 ? %true : i1
+// CHECK-DAG:        calyx.group_done %mulf_0_reg.done : i1
+// CHECK-DAG:      }
+module {
+  func.func @main(%arg0 : f32) -> f32 {
+    %0 = arith.constant 4.2 : f32
+    %1 = arith.mulf %arg0, %0 : f32
+
+    return %1 : f32
+  }
+}
+
+// -----
+
 // Test parallel op lowering
 
 // CHECK:    calyx.wires {
