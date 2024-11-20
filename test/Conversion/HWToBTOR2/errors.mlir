@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --convert-hw-to-btor2 --verify-diagnostics --split-input-file -o %t
+// RUN: circt-opt %s --convert-hw-to-btor2 --verify-diagnostics --split-input-file -o /dev/null
 
 hw.module @init_emitter(out out: !seq.immutable<i32>) {
   %init = seq.initial () {
