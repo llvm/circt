@@ -322,6 +322,76 @@ module {
 
 // -----
 
+// Test floating point OEQ
+
+// CHECK:   module attributes {calyx.entrypoint = "main"} {
+// CHECK-LABEL:     calyx.component @main(%in0: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i1, %done: i1 {done}) {
+// CHECK-DAG:       %cst = calyx.constant @cst_0 <4.200000e+00 : f32> : i32
+// CHECK-DAG:       %true = hw.constant true
+// CHECK-DAG:       %cmpf_0_reg.in, %cmpf_0_reg.write_en, %cmpf_0_reg.clk, %cmpf_0_reg.reset, %cmpf_0_reg.out, %cmpf_0_reg.done = calyx.register @cmpf_0_reg : i1, i1, i1, i1, i1, i1
+// CHECK-DAG:       %0 = arith.xori %std_compareFN_0.unordered, %true : i1
+// CHECK-DAG:       %1 = arith.andi %0, %std_compareFN_0.eq : i1
+// CHECK-DAG:       %std_compareFN_0.clk, %std_compareFN_0.reset, %std_compareFN_0.go, %std_compareFN_0.left, %std_compareFN_0.right, %std_compareFN_0.signaling, %std_compareFN_0.lt, %std_compareFN_0.eq, %std_compareFN_0.gt, %std_compareFN_0.unordered, %std_compareFN_0.exceptionalFlags, %std_compareFN_0.done = calyx.ieee754.compare @std_compareFN_0 : i1, i1, i1, i32, i32, i1, i1, i1, i1, i1, i5, i1
+// CHECK:           calyx.wires {
+// CHECK-DAG:         calyx.assign %out0 = %ret_arg0_reg.out : i1
+// CHECK-DAG:         calyx.group @bb0_0 {
+// CHECK-DAG:           calyx.assign %std_compareFN_0.left = %in0 : i32
+// CHECK-DAG:           calyx.assign %std_compareFN_0.right = %cst : i32
+// CHECK-DAG:           calyx.assign %cmpf_0_reg.in = %1 : i1
+// CHECK-DAG:           calyx.assign %cmpf_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:           %2 = comb.xor %std_compareFN_0.done, %true : i1
+// CHECK-DAG:           calyx.assign %std_compareFN_0.go = %2 ? %true : i1
+// CHECK-DAG:           calyx.group_done %cmpf_0_reg.done : i1
+// CHECK-DAG:         }
+// CHECK-DAG:     } {toplevel}
+// CHECK-DAG:   }
+
+module {
+  func.func @main(%arg0 : f32) -> i1 {
+    %0 = arith.constant 4.2 : f32
+    %1 = arith.cmpf oeq, %arg0, %0 : f32
+
+    return %1 : i1
+  }
+}
+
+// -----
+
+// Test floating point UGE
+
+// CHECK:   module attributes {calyx.entrypoint = "main"} {
+// CHECK-LABEL:     calyx.component @main(%in0: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i1, %done: i1 {done}) {
+// CHECK-DAG:       %cst = calyx.constant @cst_0 <4.200000e+00 : f32> : i32
+// CHECK-DAG:       %true = hw.constant true
+// CHECK-DAG:       %cmpf_0_reg.in, %cmpf_0_reg.write_en, %cmpf_0_reg.clk, %cmpf_0_reg.reset, %cmpf_0_reg.out, %cmpf_0_reg.done = calyx.register @cmpf_0_reg : i1, i1, i1, i1, i1, i1
+// CHECK-DAG:       %0 = arith.xori %std_compareFN_0.lt, %true : i1
+// CHECK-DAG:       %1 = arith.ori %std_compareFN_0.unordered, %0 : i1
+// CHECK-DAG:       %std_compareFN_0.clk, %std_compareFN_0.reset, %std_compareFN_0.go, %std_compareFN_0.left, %std_compareFN_0.right, %std_compareFN_0.signaling, %std_compareFN_0.lt, %std_compareFN_0.eq, %std_compareFN_0.gt, %std_compareFN_0.unordered, %std_compareFN_0.exceptionalFlags, %std_compareFN_0.done = calyx.ieee754.compare @std_compareFN_0 : i1, i1, i1, i32, i32, i1, i1, i1, i1, i1, i5, i1
+// CHECK:       calyx.wires {
+// CHECK-CHECK:         calyx.assign %out0 = %ret_arg0_reg.out : i1
+// CHECK-CHECK:         calyx.group @bb0_0 {
+// CHECK-CHECK:           calyx.assign %std_compareFN_0.left = %in0 : i32
+// CHECK-CHECK:           calyx.assign %std_compareFN_0.right = %cst : i32
+// CHECK-CHECK:           calyx.assign %cmpf_0_reg.in = %1 : i1
+// CHECK-CHECK:           calyx.assign %cmpf_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-CHECK:           %2 = comb.xor %std_compareFN_0.done, %true : i1
+// CHECK-CHECK:           calyx.assign %std_compareFN_0.go = %2 ? %true : i1
+// CHECK-CHECK:           calyx.group_done %cmpf_0_reg.done : i1
+// CHECK-CHECK:         }
+// CHECK-CHECK:     } {toplevel}
+// CHECK-CHECK:   }
+
+module {
+  func.func @main(%arg0 : f32) -> i1 {
+    %0 = arith.constant 4.2 : f32
+    %1 = arith.cmpf uge, %arg0, %0 : f32
+
+    return %1 : i1
+  }
+}
+
+// -----
+
 // Test parallel op lowering
 
 // CHECK:    calyx.wires {

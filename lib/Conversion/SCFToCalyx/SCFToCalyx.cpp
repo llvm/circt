@@ -289,7 +289,7 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                              AndIOp, XOrIOp, OrIOp, ExtUIOp, ExtSIOp, TruncIOp,
                              MulIOp, DivUIOp, DivSIOp, RemUIOp, RemSIOp,
                              /// floating point
-                             AddFOp, MulFOp,
+                             AddFOp, MulFOp, CmpFOp,
                              /// others
                              SelectOp, IndexCastOp, CallOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
@@ -326,6 +326,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, RemSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, AddFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, MulFOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, CmpFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRUIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShLIOp op) const;
@@ -727,6 +728,124 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
               {one, one, one, one, width, width, three, width, five, one});
   return buildLibraryBinaryPipeOp<calyx::MulFOpIEEE754>(rewriter, mulf, mulFOp,
                                                         mulFOp.getOut());
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     CmpFOp cmpf) const {
+  Location loc = cmpf.getLoc();
+  IntegerType one = rewriter.getI1Type(), five = rewriter.getIntegerType(5),
+              width = rewriter.getIntegerType(
+                  cmpf.getLhs().getType().getIntOrFloatBitWidth());
+  auto cmpFOp = getState<ComponentLoweringState>()
+                    .getNewLibraryOpInstance<calyx::CompareFOpIEEE754>(
+                        rewriter, loc,
+                        {one, one, one, width, width, one, one, one, one, one,
+                         five, one});
+  hw::ConstantOp constantOne =
+      createConstant(loc, rewriter, getComponent(), 1, 1);
+  Value unordered = cmpFOp.getUnordered();
+  rewriter.setInsertionPointToStart(getComponent().getBodyBlock());
+  switch (cmpf.getPredicate()) {
+  case CmpFPredicate::OEQ: {
+    Value ordered = rewriter.create<arith::XOrIOp>(loc, unordered, constantOne);
+    Value out = rewriter.create<arith::AndIOp>(loc, ordered, cmpFOp.getEq());
+    return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
+                                                              cmpFOp, out);
+  }
+  case CmpFPredicate::OGT: {
+    Value ordered = rewriter.create<arith::XOrIOp>(loc, unordered, constantOne);
+    Value out = rewriter.create<arith::AndIOp>(loc, ordered, cmpFOp.getGt());
+    return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
+                                                              cmpFOp, out);
+  }
+  case CmpFPredicate::OGE: {
+    Value ordered = rewriter.create<arith::XOrIOp>(loc, unordered, constantOne);
+    Value geValue =
+        rewriter.create<arith::XOrIOp>(loc, cmpFOp.getLt(), constantOne);
+    Value out = rewriter.create<arith::AndIOp>(loc, geValue, ordered);
+    return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
+                                                              cmpFOp, out);
+  }
+  case CmpFPredicate::OLT: {
+    Value ordered = rewriter.create<arith::XOrIOp>(loc, unordered, constantOne);
+    Value out = rewriter.create<arith::AndIOp>(loc, cmpFOp.getLt(), ordered);
+    return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
+                                                              cmpFOp, out);
+  }
+  case CmpFPredicate::OLE: {
+    Value ordered = rewriter.create<arith::XOrIOp>(loc, unordered, constantOne);
+    Value leValue =
+        rewriter.create<arith::XOrIOp>(loc, cmpFOp.getGt(), constantOne);
+    Value out = rewriter.create<arith::AndIOp>(loc, leValue, ordered);
+    return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
+                                                              cmpFOp, out);
+  }
+  case CmpFPredicate::ONE: {
+    Value ordered = rewriter.create<arith::XOrIOp>(loc, unordered, constantOne);
+    Value neValue =
+        rewriter.create<arith::XOrIOp>(loc, cmpFOp.getEq(), constantOne);
+    Value out = rewriter.create<arith::AndIOp>(loc, neValue, ordered);
+    return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
+                                                              cmpFOp, out);
+  }
+  case CmpFPredicate::ORD: {
+    Value out = rewriter.create<arith::XOrIOp>(loc, unordered, constantOne);
+    return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
+                                                              cmpFOp, out);
+  }
+  case CmpFPredicate::UEQ: {
+    Value out = rewriter.create<arith::OrIOp>(loc, unordered, cmpFOp.getEq());
+    return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
+                                                              cmpFOp, out);
+  }
+  case CmpFPredicate::UGT: {
+    Value out = rewriter.create<arith::OrIOp>(loc, unordered, cmpFOp.getGt());
+    return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
+                                                              cmpFOp, out);
+  }
+  case CmpFPredicate::UGE: {
+    Value geValue =
+        rewriter.create<arith::XOrIOp>(loc, cmpFOp.getLt(), constantOne);
+    Value out = rewriter.create<arith::OrIOp>(loc, unordered, geValue);
+    return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
+                                                              cmpFOp, out);
+  }
+  case CmpFPredicate::ULT: {
+    Value out = rewriter.create<arith::OrIOp>(loc, unordered, cmpFOp.getLt());
+    return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
+                                                              cmpFOp, out);
+  }
+  case CmpFPredicate::ULE: {
+    Value leValue =
+        rewriter.create<arith::XOrIOp>(loc, cmpFOp.getGt(), constantOne);
+    Value out = rewriter.create<arith::OrIOp>(loc, unordered, leValue);
+    return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
+                                                              cmpFOp, out);
+  }
+  case CmpFPredicate::UNE: {
+    Value neValue =
+        rewriter.create<arith::XOrIOp>(loc, cmpFOp.getEq(), constantOne);
+    Value out = rewriter.create<arith::OrIOp>(loc, unordered, neValue);
+    return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
+                                                              cmpFOp, out);
+  }
+  case CmpFPredicate::UNO: {
+    Value out = unordered;
+    return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
+                                                              cmpFOp, out);
+  }
+  case CmpFPredicate::AlwaysTrue: {
+    Value out = constantOne;
+    return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
+                                                              cmpFOp, out);
+  }
+  case CmpFPredicate::AlwaysFalse: {
+    Value out = createConstant(loc, rewriter, getComponent(), 1, 0);
+    return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
+                                                              cmpFOp, out);
+  }
+  }
+  return failure();
 }
 
 template <typename TAllocOp>
@@ -2113,7 +2232,7 @@ public:
                       ShRSIOp, AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp,
                       CondBranchOp, BranchOp, MulIOp, DivUIOp, DivSIOp, RemUIOp,
                       RemSIOp, ReturnOp, arith::ConstantOp, IndexCastOp, FuncOp,
-                      ExtSIOp, CallOp, AddFOp, MulFOp>();
+                      ExtSIOp, CallOp, AddFOp, MulFOp, CmpFOp>();
 
     RewritePatternSet legalizePatterns(&getContext());
     legalizePatterns.add<DummyPattern>(&getContext());
