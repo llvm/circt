@@ -273,10 +273,7 @@ endmodule
 // CHECK-SAME: %arg0: !moore.i1
 // CHECK-SAME: %arg1: !moore.i1
 function void ConditionalStatements(bit x, bit y);
-  // CHECK: [[ARG0:%.+]] = moore.variable %arg0 : <i1>
-  // CHECK: [[ARG1:%.+]] = moore.variable %arg1 : <i1>
-  // CHECK: [[READ0:%.+]] = moore.read [[ARG0]] : <i1>
-  // CHECK: [[COND:%.+]] = moore.conversion [[READ0]] : !moore.i1 -> i1
+  // CHECK: [[COND:%.+]] = moore.conversion %arg0 : !moore.i1 -> i1
   // CHECK: cf.cond_br [[COND]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
   // CHECK: call @dummyA()
@@ -284,9 +281,7 @@ function void ConditionalStatements(bit x, bit y);
   // CHECK: ^[[BB2]]:
   if (x) dummyA();
 
-  // CHECK: [[READ0:%.+]] = moore.read [[ARG0]] : <i1>
-  // CHECK: [[READ1:%.+]] = moore.read [[ARG1]] : <i1>
-  // CHECK: [[COND1:%.+]] = moore.and [[READ0]], [[READ1]]
+  // CHECK: [[COND1:%.+]] = moore.and %arg0, %arg1
   // CHECK: [[COND2:%.+]] = moore.conversion [[COND1]] : !moore.i1 -> i1
   // CHECK: cf.cond_br [[COND2]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
@@ -295,8 +290,7 @@ function void ConditionalStatements(bit x, bit y);
   // CHECK: ^[[BB2]]:
   if (x &&& y) dummyA();
 
-  // CHECK: [[READ0:%.+]] = moore.read [[ARG0]] : <i1>
-  // CHECK: [[COND:%.+]] = moore.conversion [[READ0]] : !moore.i1 -> i1
+  // CHECK: [[COND:%.+]] = moore.conversion %arg0 : !moore.i1 -> i1
   // CHECK: cf.cond_br [[COND]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
   // CHECK: call @dummyA()
@@ -310,15 +304,13 @@ function void ConditionalStatements(bit x, bit y);
   else
     dummyB();
 
-  // CHECK: [[READ0:%.+]] = moore.read [[ARG0]] : <i1>
-  // CHECK: [[COND:%.+]] = moore.conversion [[READ0]] : !moore.i1 -> i1
+  // CHECK: [[COND:%.+]] = moore.conversion %arg0 : !moore.i1 -> i1
   // CHECK: cf.cond_br [[COND]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
   // CHECK: call @dummyA()
   // CHECK: cf.br ^[[BB6:.+]]
   // CHECK: ^[[BB2]]:
-  // CHECK: [[READ1:%.+]] = moore.read [[ARG1]] : <i1>
-  // CHECK: [[COND:%.+]] = moore.conversion [[READ1]] : !moore.i1 -> i1
+  // CHECK: [[COND:%.+]] = moore.conversion %arg1 : !moore.i1 -> i1
   // CHECK: cf.cond_br [[COND]], ^[[BB3:.+]], ^[[BB4:.+]]
   // CHECK: ^[[BB3]]:
   // CHECK: call @dummyB()
@@ -336,8 +328,7 @@ function void ConditionalStatements(bit x, bit y);
   else
     dummyC();
 
-  // CHECK: [[READ0:%.+]] = moore.read [[ARG0]] : <i1>
-  // CHECK: [[COND:%.+]] = moore.conversion [[READ0]] : !moore.i1 -> i1
+  // CHECK: [[COND:%.+]] = moore.conversion %arg0 : !moore.i1 -> i1
   // CHECK: cf.cond_br [[COND]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
   // CHECK: return
@@ -351,16 +342,9 @@ endfunction
 // CHECK-SAME: %arg2: !moore.i32
 // CHECK-SAME: %arg3: !moore.i32
 function void CaseStatements(int x, int a, int b, int c);
-  // CHECK: [[ARG0:%.+]] = moore.variable %arg0 : <i32>
-  // CHECK: [[ARG1:%.+]] = moore.variable %arg1 : <i32>
-  // CHECK: [[ARG2:%.+]] = moore.variable %arg2 : <i32>
-  // CHECK: [[ARG3:%.+]] = moore.variable %arg3 : <i32>
-  // CHECK: [[READ00:%.+]] = moore.read [[ARG0]] : <i32>
-  // CHECK: [[READ01:%.+]] = moore.read [[ARG0]] : <i32>
-  // CHECK: [[FLAG:%.+]] = moore.add [[READ00]], [[READ01]]
+  // CHECK: [[FLAG:%.+]] = moore.add %arg0, %arg0
   case (x + x)
-    // CHECK: [[READ1:%.+]] = moore.read [[ARG1]] : <i32>
-    // CHECK: [[COND1:%.+]] = moore.case_eq [[FLAG]], [[READ1]]
+    // CHECK: [[COND1:%.+]] = moore.case_eq [[FLAG]], %arg1
     // CHECK: [[COND2:%.+]] = moore.conversion [[COND1]] : !moore.i1 -> i1
     // CHECK: cf.cond_br [[COND2]], ^[[BB1:.+]], ^[[BB2:.+]]
     // CHECK: ^[[BB1]]:
@@ -374,16 +358,12 @@ function void CaseStatements(int x, int a, int b, int c);
     // CHECK: ^[[BB3]]:
   endcase
 
-  // CHECK: [[READ0:%.+]] = moore.read [[ARG0]] : <i32>
-  // CHECK: [[READ1:%.+]] = moore.read [[ARG1]] : <i32>
-  // CHECK: [[COND1:%.+]] = moore.case_eq [[READ0]], [[READ1]]
+  // CHECK: [[COND1:%.+]] = moore.case_eq %arg0, %arg1
   // CHECK: [[COND2:%.+]] = moore.conversion [[COND1]] : !moore.i1 -> i1
   // CHECK: cf.cond_br [[COND2]], ^[[BB_MATCH:.+]], ^[[BB1:.+]]
   // CHECK: ^[[BB1]]:
-  // CHECK: [[READ2:%.+]] = moore.read [[ARG2]] : <i32>
-  // CHECK: [[READ3:%.+]] = moore.read [[ARG3]] : <i32>
-  // CHECK: [[TMP:%.+]] = moore.add [[READ2]], [[READ3]]
-  // CHECK: [[COND1:%.+]] = moore.case_eq [[READ0]], [[TMP]]
+  // CHECK: [[TMP:%.+]] = moore.add %arg2, %arg3
+  // CHECK: [[COND1:%.+]] = moore.case_eq %arg0, [[TMP]]
   // CHECK: [[COND2:%.+]] = moore.conversion [[COND1]] : !moore.i1 -> i1
   // CHECK: cf.cond_br [[COND2]], ^[[BB_MATCH:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB_MATCH]]:
@@ -398,9 +378,7 @@ function void CaseStatements(int x, int a, int b, int c);
     default: dummyB();
   endcase
 
-  // CHECK: [[READ0:%.+]] = moore.read [[ARG0]] : <i32>
-  // CHECK: [[READ1:%.+]] = moore.read [[ARG1]] : <i32>
-  // CHECK: [[COND1:%.+]] = moore.casez_eq [[READ0]], [[READ1]]
+  // CHECK: [[COND1:%.+]] = moore.casez_eq %arg0, %arg1
   // CHECK: [[COND2:%.+]] = moore.conversion [[COND1]] : !moore.i1 -> i1
   // CHECK: cf.cond_br [[COND2]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
@@ -413,9 +391,7 @@ function void CaseStatements(int x, int a, int b, int c);
     a: dummyA();
   endcase
 
-  // CHECK: [[READ0:%.+]] = moore.read [[ARG0]] : <i32>
-  // CHECK: [[READ1:%.+]] = moore.read [[ARG1]] : <i32>
-  // CHECK: [[COND1:%.+]] = moore.casexz_eq [[READ0]], [[READ1]]
+  // CHECK: [[COND1:%.+]] = moore.casexz_eq %arg0, %arg1
   // CHECK: [[COND2:%.+]] = moore.conversion [[COND1]] : !moore.i1 -> i1
   // CHECK: cf.cond_br [[COND2]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
@@ -436,16 +412,11 @@ endfunction
 function void ForLoopStatements(int a, int b, bit c);
   int x;
 
-  // CHECK: [[ARG0:%.+]] = moore.variable %arg0 : <i32>
-  // CHECK: [[ARG1:%.+]] = moore.variable %arg1 : <i32>
-  // CHECK: [[ARG2:%.+]] = moore.variable %arg2 : <i1>
-  // CHECK: [[READ0:%.+]] = moore.read [[ARG0]] : <i32>
-  // CHECK: moore.blocking_assign %x, [[READ0]]
+  // CHECK: moore.blocking_assign %x, %arg0
   // CHECK: cf.br ^[[BB_CHECK:.+]]
   // CHECK: ^[[BB_CHECK]]:
   // CHECK: [[TMP1:%.+]] = moore.read %x
-  // CHECK: [[READ1:%.+]] = moore.read [[ARG1]] : <i32>
-  // CHECK: [[TMP2:%.+]] = moore.slt [[TMP1]], [[READ1]]
+  // CHECK: [[TMP2:%.+]] = moore.slt [[TMP1]], %arg1
   // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.i1 -> i1
   // CHECK: cf.cond_br [[TMP3]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB_BODY]]:
@@ -457,13 +428,11 @@ function void ForLoopStatements(int a, int b, bit c);
   // CHECK: ^[[BB_EXIT]]:
   for (x = a; x < b; dummyB()) dummyA();
 
-  // CHECK: [[READ0:%.+]] = moore.read [[ARG0]] : <i32>
-  // CHECK: %y = moore.variable [[READ0]] : <i32>
+  // CHECK: %y = moore.variable %arg0 : <i32>
   // CHECK: cf.br ^[[BB_CHECK:.+]]
   // CHECK: ^[[BB_CHECK]]:
   // CHECK: [[TMP1:%.+]] = moore.read %y
-  // CHECK: [[READ1:%.+]] = moore.read [[ARG1]] : <i32>
-  // CHECK: [[TMP2:%.+]] = moore.slt [[TMP1]], [[READ1]]
+  // CHECK: [[TMP2:%.+]] = moore.slt [[TMP1]], %arg1
   // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.i1 -> i1
   // CHECK: cf.cond_br [[TMP3]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB_BODY]]:
@@ -477,12 +446,10 @@ function void ForLoopStatements(int a, int b, bit c);
 
   // CHECK: cf.br ^[[BB_CHECK:.+]]
   // CHECK: ^[[BB_CHECK]]:
-  // CHECK: [[READ2:%.+]] = moore.read [[ARG2]] : <i1>
-  // CHECK: [[TMP:%.+]] = moore.conversion [[READ2]] : !moore.i1 -> i1
+  // CHECK: [[TMP:%.+]] = moore.conversion %arg2 : !moore.i1 -> i1
   // CHECK: cf.cond_br [[TMP]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB_BODY]]:
-  // CHECK: [[READ2:%.+]] = moore.read [[ARG2]] : <i1>
-  // CHECK: [[TMP:%.+]] = moore.conversion [[READ2]] : !moore.i1 -> i1
+  // CHECK: [[TMP:%.+]] = moore.conversion %arg2 : !moore.i1 -> i1
   // CHECK: cf.cond_br [[TMP]], ^[[BB_TRUE:.+]], ^[[BB_FALSE:.+]]
   // CHECK: ^[[BB_TRUE]]:
   // CHECK: cf.br ^[[BB_STEP:.+]]
@@ -531,12 +498,9 @@ endfunction
 // CHECK-SAME: %arg0: !moore.i1
 // CHECK-SAME: %arg1: !moore.i1
 function void WhileLoopStatements(bit x, bit y);
-  // CHECK: [[ARG0:%.+]] = moore.variable %arg0 : <i1>
-  // CHECK: [[ARG1:%.+]] = moore.variable %arg1 : <i1>
   // CHECK: cf.br ^[[BB_CHECK:.+]]
   // CHECK: ^[[BB_CHECK]]:
-  // CHECK: [[READ0:%.+]] = moore.read [[ARG0]] : <i1>
-  // CHECK: [[TMP:%.+]] = moore.conversion [[READ0]] : !moore.i1 -> i1
+  // CHECK: [[TMP:%.+]] = moore.conversion %arg0 : !moore.i1 -> i1
   // CHECK: cf.cond_br [[TMP]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB_BODY]]:
   // CHECK: call @dummyA()
@@ -549,16 +513,14 @@ function void WhileLoopStatements(bit x, bit y);
   // CHECK: call @dummyA()
   // CHECK: cf.br ^[[BB_CHECK:.+]]
   // CHECK: ^[[BB_CHECK]]:
-  // CHECK: [[READ0:%.+]] = moore.read [[ARG0]] : <i1>
-  // CHECK: [[TMP:%.+]] = moore.conversion [[READ0]] : !moore.i1 -> i1
+  // CHECK: [[TMP:%.+]] = moore.conversion %arg0 : !moore.i1 -> i1
   // CHECK: cf.cond_br [[TMP]], ^[[BB_BODY]], ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB_EXIT]]:
   do dummyA(); while (x);
 
   // CHECK: cf.br ^[[BB_CHECK:.+]]
   // CHECK: ^[[BB_CHECK]]:
-  // CHECK: [[READ0:%.+]] = moore.read [[ARG0]] : <i1>
-  // CHECK: [[TMP:%.+]] = moore.conversion [[READ0]] : !moore.i1 -> i1
+  // CHECK: [[TMP:%.+]] = moore.conversion %arg0 : !moore.i1 -> i1
   // CHECK: cf.cond_br [[TMP]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB_BODY]]:
   while (x) begin
@@ -581,10 +543,7 @@ endfunction
 // CHECK-SAME: %arg0: !moore.i32
 // CHECK-SAME: %arg1: !moore.i1
 function void RepeatLoopStatements(int x, bit y);
-  // CHECK: [[ARG0:%.+]] = moore.variable %arg0 : <i32>
-  // CHECK: [[ARG1:%.+]] = moore.variable %arg1 : <i1>
-  // CHECK: [[READ0:%.+]] = moore.read [[ARG0]] : <i32>
-  // CHECK: cf.br ^[[BB_CHECK:.+]]([[READ0]] : !moore.i32)
+  // CHECK: cf.br ^[[BB_CHECK:.+]](%arg0 : !moore.i32)
   repeat (x) begin
     // CHECK: ^[[BB_CHECK]]([[COUNT:%.+]]: !moore.i32):
     // CHECK: [[TMP1:%.+]] = moore.bool_cast [[COUNT]] : i32 -> i1
@@ -1656,12 +1615,8 @@ endpackage
 // CHECK-SAME:    %arg1: !moore.i32
 // CHECK-SAME:  ) -> !moore.i32
 function int simpleFunc1(int a, b);
-  // CHECK: [[ARG0:%.+]] = moore.variable %arg0 : <i32>
-  // CHECK: [[ARG1:%.+]] = moore.variable %arg1 : <i32>
   // CHECK: [[RETVAR:%.+]] = moore.variable : <i32>
-  // CHECK: [[READ0:%.+]] = moore.read [[ARG0]] : <i32>
-  // CHECK: [[READ1:%.+]] = moore.read [[ARG1]] : <i32>
-  // CHECK: [[TMP:%.+]] = moore.add [[READ0]], [[READ1]]
+  // CHECK: [[TMP:%.+]] = moore.add %arg0, %arg1
   // CHECK: moore.blocking_assign [[RETVAR]], [[TMP]]
   simpleFunc1 = a + b;
   // CHECK: [[TMP:%.+]] = moore.read [[RETVAR]]
@@ -1673,11 +1628,7 @@ endfunction
 // CHECK-SAME:    %arg1: !moore.i32
 // CHECK-SAME:  ) -> !moore.i32
 function int simpleFunc2(int a, b);
-  // CHECK: [[ARG0:%.+]] = moore.variable %arg0 : <i32>
-  // CHECK: [[ARG1:%.+]] = moore.variable %arg1 : <i32>
-  // CHECK: [[READ0:%.+]] = moore.read [[ARG0]] : <i32>
-  // CHECK: [[READ1:%.+]] = moore.read [[ARG1]] : <i32>
-  // CHECK: [[TMP:%.+]] = moore.add [[READ0]], [[READ1]]
+  // CHECK: [[TMP:%.+]] = moore.add %arg0, %arg1
   // CHECK: return [[TMP]]
   return a + b;
 endfunction
@@ -1688,11 +1639,7 @@ package FuncPackage;
   // CHECK-SAME:    %arg1: !moore.i32
   // CHECK-SAME:  ) -> !moore.i32
   function int simpleFunc3(int a, b);
-    // CHECK: [[ARG0:%.+]] = moore.variable %arg0 : <i32>
-    // CHECK: [[ARG1:%.+]] = moore.variable %arg1 : <i32>
-    // CHECK: [[READ0:%.+]] = moore.read [[ARG0]] : <i32>
-    // CHECK: [[READ1:%.+]] = moore.read [[ARG1]] : <i32>
-    // CHECK: [[TMP:%.+]] = moore.mul [[READ0]], [[READ1]]
+    // CHECK: [[TMP:%.+]] = moore.mul %arg0, %arg1
     // CHECK: return [[TMP]]
     return a * b;
   endfunction
@@ -1703,14 +1650,8 @@ endpackage
 // CHECK-SAME:    %arg1: !moore.i32
 // CHECK-SAME:  )
 function void simpleFunc4(int a, b);
-  // CHECK: [[ARG0:%.+]] = moore.variable %arg0 : <i32>
-  // CHECK: [[ARG1:%.+]] = moore.variable %arg1 : <i32>
-  // CHECK: [[READ0:%.+]] = moore.read [[ARG0]] : <i32>
-  // CHECK: [[READ1:%.+]] = moore.read [[ARG1]] : <i32>
-  // CHECK: [[TMP1:%.+]] = call @simpleFunc1([[READ0]], [[READ1]])
-  // CHECK: [[READ0:%.+]] = moore.read [[ARG0]] : <i32>
-  // CHECK: [[READ1:%.+]] = moore.read [[ARG1]] : <i32>
-  // CHECK: [[TMP2:%.+]] = call @simpleFunc2([[READ0]], [[READ1]])
+  // CHECK: [[TMP1:%.+]] = call @simpleFunc1(%arg0, %arg1)
+  // CHECK: [[TMP2:%.+]] = call @simpleFunc2(%arg0, %arg1)
   // CHECK: {{%.+}} = call @"FuncPackage::simpleFunc3"([[TMP1]], [[TMP2]])
   FuncPackage::simpleFunc3(
     simpleFunc1(a, b),
@@ -1742,13 +1683,10 @@ function automatic void funcArgs1(
   ref int d,
   const ref int e
 );
-  // CHECK: [[ARG0:%.+]] = moore.variable %arg0 : <i32>
-  // CHECK: [[READ0:%.+]] = moore.read [[ARG0]] : <i32>
-  // CHECK: moore.blocking_assign %arg1, [[READ0]]
+  // CHECK: moore.blocking_assign %arg1, %arg0
   b = a;
   // CHECK: [[TMP1:%.+]] = moore.read %arg2
-  // CHECK: [[READ0:%.+]] = moore.read [[ARG0]] : <i32>
-  // CHECK: [[TMP2:%.+]] = moore.add [[TMP1]], [[READ0]]
+  // CHECK: [[TMP2:%.+]] = moore.add [[TMP1]], %arg0
   // CHECK: moore.blocking_assign %arg2, [[TMP2]]
   c += a;
   // CHECK: [[TMP:%.+]] = moore.read %arg4
@@ -1773,27 +1711,18 @@ endfunction
 // CHECK-LABEL: func.func private @ConvertConditionalExprsToResultType(
 function void ConvertConditionalExprsToResultType(bit [15:0] x, struct packed { bit [15:0] a; } y, bit z);
   bit [15:0] r;
-  // CHECK: [[ARG0:%.+]] = moore.variable %arg0 : <i16>
-  // CHECK: [[ARG1:%.+]] = moore.variable %arg1 : <struct<{a: i16}>>
-  // CHECK: [[ARG2:%.+]] = moore.variable %arg2 : <i1>
-  // CHECK: [[READ2:%.+]] = moore.read [[ARG2]] : <i1>
-  // CHECK: moore.conditional [[READ2]] : i1 -> i16 {
-  // CHECK:   [[READ0:%.+]] = moore.read [[ARG0]] : <i16>
-  // CHECK:   moore.yield [[READ0]]
+  // CHECK: moore.conditional %arg2 : i1 -> i16 {
+  // CHECK:   moore.yield %arg0
   // CHECK: } {
-  // CHECK:   [[READ1:%.+]] = moore.read [[ARG1]] : <struct<{a: i16}>>
-  // CHECK:   [[TMP:%.+]] = moore.conversion [[READ1]]
+  // CHECK:   [[TMP:%.+]] = moore.conversion %arg1
   // CHECK:   moore.yield [[TMP]]
   // CHECK: }
   r = z ? x : y;
-  // CHECK: [[READ2:%.+]] = moore.read [[ARG2]] : <i1>
-  // CHECK: moore.conditional [[READ2]] : i1 -> i16 {
-  // CHECK:   [[READ1:%.+]] = moore.read [[ARG1]] : <struct<{a: i16}>>
-  // CHECK:   [[TMP:%.+]] = moore.conversion [[READ1]]
+  // CHECK: moore.conditional %arg2 : i1 -> i16 {
+  // CHECK:   [[TMP:%.+]] = moore.conversion %arg1
   // CHECK:   moore.yield [[TMP]]
   // CHECK: } {
-  // CHECK:   [[READ0:%.+]] = moore.read [[ARG0]] : <i16>
-  // CHECK:   moore.yield [[READ0]]
+  // CHECK:   moore.yield %arg0
   // CHECK: }
   r = z ? y : x;
 endfunction
@@ -2126,23 +2055,17 @@ endmodule
 // CHECK-LABEL: func.func private @SignCastsA(
 // CHECK-SAME: %arg0: !moore.l16
 function void SignCastsA(logic [15:0] value);
-  // CHECK: [[ARG:%.+]] = moore.variable %arg0 : <l16>
-  // CHECK: [[READ:%.+]] = moore.read [[ARG]] : <l16>
-  // CHECK: [[TMP:%.+]] = moore.zext [[READ]] : l16 -> l32
+  // CHECK: [[TMP:%.+]] = moore.zext %arg0 : l16 -> l32
   // CHECK: call @SignCastsB([[TMP]])
   SignCastsB($unsigned(value));
-
-  // CHECK: [[READ:%.+]] = moore.read [[ARG]] : <l16>
-  // CHECK: [[TMP:%.+]] = moore.sext [[READ]] : l16 -> l32
+  // CHECK: [[TMP:%.+]] = moore.sext %arg0 : l16 -> l32
   // CHECK: call @SignCastsB([[TMP]])
   SignCastsB($signed(value));
 
-  // CHECK: [[READ:%.+]] = moore.read [[ARG]] : <l16>
-  // CHECK: [[TMP:%.+]] = moore.zext [[READ]] : l16 -> l32
+  // CHECK: [[TMP:%.+]] = moore.zext %arg0 : l16 -> l32
   // CHECK: call @SignCastsB([[TMP]])
   SignCastsB(unsigned'(value));
-  // CHECK: [[READ:%.+]] = moore.read [[ARG]] : <l16>
-  // CHECK: [[TMP:%.+]] = moore.sext [[READ]] : l16 -> l32
+  // CHECK: [[TMP:%.+]] = moore.sext %arg0 : l16 -> l32
   // CHECK: call @SignCastsB([[TMP]])
   SignCastsB(signed'(value));
 endfunction
@@ -2177,4 +2100,3 @@ function int AssignFuncArgs2(int x, int y);
   // CHECK: [[ADD:%.+]] = moore.add [[READ_X]], [[READ_Y]] : i32
   return x+y;
 endfunction
-
