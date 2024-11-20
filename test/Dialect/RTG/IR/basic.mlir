@@ -38,3 +38,27 @@ func.func @sets(%arg0: i32, %arg1: i32) {
 
   return
 }
+
+// CHECK-LABEL: rtg.target @empty_target : !rtg.dict<> {
+// CHECK-NOT: rtg.yield
+rtg.target @empty_target : !rtg.dict<> {
+  rtg.yield
+}
+
+// CHECK-LABEL: rtg.test @empty_test : !rtg.dict<> {
+rtg.test @empty_test : !rtg.dict<> { }
+
+// CHECK-LABEL: rtg.target @target : !rtg.dict<num_cpus: i32, num_modes: i32> {
+// CHECK:   rtg.yield %{{.*}}, %{{.*}} : i32, i32
+// CHECK: }
+rtg.target @target : !rtg.dict<num_cpus: i32, num_modes: i32> {
+  %1 = arith.constant 4 : i32
+  rtg.yield %1, %1 : i32, i32
+}
+
+// CHECK-LABEL: rtg.test @test : !rtg.dict<num_cpus: i32, num_modes: i32> {
+// CHECK: ^bb0(%arg0: i32, %arg1: i32):
+// CHECK: }
+rtg.test @test : !rtg.dict<num_cpus: i32, num_modes: i32> {
+^bb0(%arg0: i32, %arg1: i32):
+}

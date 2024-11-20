@@ -140,3 +140,83 @@ def SetDifferenceOp : RTGOp<"set_difference", [
     $original `,` $diff `:` qualified(type($output)) attr-dict
   }];
 }
+
+//===- Test Specification Operations --------------------------------------===//
+
+def TestOp : RTGOp<"test", [
+  IsolatedFromAbove,
+  Symbol,
+  SingleBlock,
+  NoTerminator,
+  HasParent<"mlir::ModuleOp">
+]> {
+  let summary = "the root of a test";
+  let description = [{
+    This operation declares the root of a randomized or directed test.
+    The target attribute specifies requirements of this test. These can be
+    refined by `rtg.require` operations inside this operation's body. A test
+    can only be matched with a target if the target fulfills all the test's
+    requirements. However, the target may provide more than the test requires.
+    For example, if the target allows execution in a user and privileged mode,
+    but the test only requires and runs in user mode, it can still be matched
+    with that target.
+
+    By default each test can be matched with all targets that fulfill its
+    requirements, but the user should be able to specify more constraints on the
+    matching procedure.
+
+    The body of this operation shall be processed the same way as an
+    `rtg.sequence`'s body with the exception of the block arguments.
+    The arguments must match the fields of the dict type in the target attribute
+    exactly. The test must not have any additional arguments and cannot be
+    referenced by an `rtg.sequence_closure` operation.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       TypeAttrOf<DictType>:$target);
+  let regions = (region SizedRegion<1>:$bodyRegion);
+
+  let assemblyFormat = [{
+    $sym_name `:` $target attr-dict-with-keyword $bodyRegion
+  }];
+
+  let hasRegionVerifier = 1;
+}
+
+def TargetOp : RTGOp<"target", [
+  IsolatedFromAbove,
+  Symbol,
+  NoRegionArguments,
+  SingleBlockImplicitTerminator<"rtg::YieldOp">,
+  HasParent<"mlir::ModuleOp">
+]> {
+  let summary = "defines a test target";
+  let description = [{
+    This operation specifies capabilities of a specific test target and can
+    provide additional information about it. These are added as operands to the
+    `yield` terminator and implicitly packed up into an `!rtg.dict` type which
+    is passed to tests that are matched with this target.
+
+    These capabilities can, for example, consist of the number of CPUs, supported
+    priviledge modes, available memories, etc.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       TypeAttrOf<DictType>:$target);
+  let regions = (region SizedRegion<1>:$bodyRegion);
+
+  let assemblyFormat = [{
+    $sym_name `:` $target attr-dict-with-keyword $bodyRegion
+  }];
+
+  let hasRegionVerifier = 1;
+}
+
+def YieldOp : RTGOp<"yield", [Pure, Terminator]> {
+  let summary = "terminates RTG operation regions";
+
+  let arguments = (ins Variadic<AnyType>:$operands);
+  let assemblyFormat = "($operands^ `:` type($operands))? attr-dict";
+
+  let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
+}

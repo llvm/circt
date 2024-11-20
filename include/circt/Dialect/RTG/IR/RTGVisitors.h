@@ -31,10 +31,10 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<SequenceOp, SequenceClosureOp, SetCreateOp,
-                       SetSelectRandomOp, SetDifferenceOp, InvokeSequenceOp>(
-            [&](auto expr) -> ResultType {
-              return thisCast->visitOp(expr, args...);
-            })
+                       SetSelectRandomOp, SetDifferenceOp, InvokeSequenceOp,
+                       TestOp, TargetOp, YieldOp>([&](auto expr) -> ResultType {
+          return thisCast->visitOp(expr, args...);
+        })
         .template Case<ContextResourceOpInterface>(
             [&](auto expr) -> ResultType {
               return thisCast->visitContextResourceOp(expr, args...);
@@ -79,6 +79,9 @@ public:
   HANDLE(SetCreateOp, Unhandled);
   HANDLE(SetSelectRandomOp, Unhandled);
   HANDLE(SetDifferenceOp, Unhandled);
+  HANDLE(TestOp, Unhandled);
+  HANDLE(TargetOp, Unhandled);
+  HANDLE(YieldOp, Unhandled);
 #undef HANDLE
 };
 
@@ -90,9 +93,10 @@ public:
   ResultType dispatchTypeVisitor(Type type, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Type, ResultType>(type)
-        .template Case<SequenceType, SetType>([&](auto expr) -> ResultType {
-          return thisCast->visitType(expr, args...);
-        })
+        .template Case<SequenceType, SetType, DictType>(
+            [&](auto expr) -> ResultType {
+              return thisCast->visitType(expr, args...);
+            })
         .template Case<ContextResourceTypeInterface>(
             [&](auto expr) -> ResultType {
               return thisCast->visitContextResourceType(expr, args...);
@@ -134,6 +138,7 @@ public:
 
   HANDLE(SequenceType, Unhandled);
   HANDLE(SetType, Unhandled);
+  HANDLE(DictType, Unhandled);
 #undef HANDLE
 };
 
