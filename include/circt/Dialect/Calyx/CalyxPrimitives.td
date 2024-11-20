@@ -338,7 +338,7 @@ class ArithBinaryFloatingPointLibraryOp<string mnemonic> :
     SameTypeConstraint<"left", "out">
   ]> {}
 
-def AddFNOp : ArithBinaryFloatingPointLibraryOp<"ieee754.add"> {
+def AddFOpIEEE754 : ArithBinaryFloatingPointLibraryOp<"ieee754.add"> {
   let results = (outs I1:$clk, I1:$reset, I1:$go, I1:$control, I1:$subOp,
     AnySignlessInteger:$left, AnySignlessInteger:$right, AnySignlessInteger:$roundingMode, AnySignlessInteger:$out,
     AnySignlessInteger:$exceptionalFlags, I1:$done);
@@ -378,7 +378,7 @@ def AddFNOp : ArithBinaryFloatingPointLibraryOp<"ieee754.add"> {
   }];
 }
 
-def MulFNOp : ArithBinaryFloatingPointLibraryOp<"ieee754.mul"> {
+def MulFOpIEEE754 : ArithBinaryFloatingPointLibraryOp<"ieee754.mul"> {
   let results = (outs I1:$clk, I1:$reset, I1:$go, I1:$control,
     AnySignlessInteger:$left, AnySignlessInteger:$right, AnySignlessInteger:$roundingMode, AnySignlessInteger:$out,
     AnySignlessInteger:$exceptionalFlags, I1:$done);

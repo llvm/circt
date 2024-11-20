@@ -450,8 +450,8 @@ private:
     // The group is done when the register write is complete.
     rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone());
 
-    if (isa<calyx::AddFNOp>(opPipe)) {
-      auto opFN = cast<calyx::AddFNOp>(opPipe);
+    if (isa<calyx::AddFOpIEEE754>(opPipe)) {
+      auto opFOp = cast<calyx::AddFOpIEEE754>(opPipe);
       hw::ConstantOp subOp;
       if (isa<arith::AddFOp>(op)) {
         subOp = createConstant(loc, rewriter, getComponent(), /*width=*/1,
@@ -460,7 +460,7 @@ private:
         subOp = createConstant(loc, rewriter, getComponent(), /*width=*/1,
                                /*subtract=*/1);
       }
-      rewriter.create<calyx::AssignOp>(loc, opFN.getSubOp(), subOp);
+      rewriter.create<calyx::AssignOp>(loc, opFOp.getSubOp(), subOp);
     }
 
     // Register the values for the pipeline.
@@ -702,13 +702,13 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
               five = rewriter.getIntegerType(5),
               width = rewriter.getIntegerType(
                   addf.getType().getIntOrFloatBitWidth());
-  auto addFN =
+  auto addFOp =
       getState<ComponentLoweringState>()
-          .getNewLibraryOpInstance<calyx::AddFNOp>(
+          .getNewLibraryOpInstance<calyx::AddFOpIEEE754>(
               rewriter, loc,
               {one, one, one, one, one, width, width, three, width, five, one});
-  return buildLibraryBinaryPipeOp<calyx::AddFNOp>(rewriter, addf, addFN,
-                                                  addFN.getOut());
+  return buildLibraryBinaryPipeOp<calyx::AddFOpIEEE754>(rewriter, addf, addFOp,
+                                                  addFOp.getOut());
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
@@ -718,13 +718,13 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
               five = rewriter.getIntegerType(5),
               width = rewriter.getIntegerType(
                   mulf.getType().getIntOrFloatBitWidth());
-  auto mulFN =
+  auto mulFOp =
       getState<ComponentLoweringState>()
-          .getNewLibraryOpInstance<calyx::MulFNOp>(
+          .getNewLibraryOpInstance<calyx::MulFOpIEEE754>(
               rewriter, loc,
               {one, one, one, one, width, width, three, width, five, one});
-  return buildLibraryBinaryPipeOp<calyx::MulFNOp>(rewriter, mulf, mulFN,
-                                                  mulFN.getOut());
+  return buildLibraryBinaryPipeOp<calyx::MulFOpIEEE754>(rewriter, mulf, mulFOp,
+                                                  mulFOp.getOut());
 }
 
 template <typename TAllocOp>
