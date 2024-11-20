@@ -98,8 +98,7 @@ void ExternalizeRegistersPass::runOnOperation() {
           if (auto initVal = regOp.getInitialValue()) {
             // Find the constant op that defines the reset value in an initial
             // block (if it exists)
-            if (isa<BlockArgument>(initVal) ||
-                !isa<seq::InitialOp>(initVal.getDefiningOp())) {
+            if (!initVal.getDefiningOp<seq::InitialOp>()) {
               regOp.emitError("registers with initial values not directly "
                               "defined by a seq.initial op not yet supported");
               return signalPassFailure();
