@@ -47,4 +47,24 @@ class SetTypeOf<Type elementType> : ContainerType<
   elementType, SetType.predicate, 
   "llvm::cast<rtg::SetType>($_self).getElementType()", "set">;
 
+def DictType : RTGTypeDef<"Dict"> {
+  let summary = "a dictionary";
+  let description = [{
+    This type is a dictionary with a static set of entries. This datatype does
+    not make any assumptions about how the values are stored (could be a struct,
+    a map, etc.). Furthermore, two values of this type should be considered
+    equivalent if they have the same set of entry names and types and the values
+    match for each entry, independent of the order.
+  }];
+
+  let parameters = (ins
+    ArrayRefParameter<"mlir::StringAttr", "dict entry names">:$entryNames,
+    ArrayRefParameter<"mlir::Type", "dict entry types">:$entryTypes);
+
+  let mnemonic = "dict";
+
+  let hasCustomAssemblyFormat = 1;
+  let genVerifyDecl = 1;
+}
+
 #endif // CIRCT_DIALECT_RTG_IR_RTGTYPES_TD

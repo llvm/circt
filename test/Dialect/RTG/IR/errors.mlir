@@ -16,3 +16,23 @@ rtg.sequence @seq0 {
 
 // expected-error @below {{referenced 'rtg.sequence' op's argument types must match 'args' types}}
 rtg.sequence_closure @seq0
+
+// -----
+
+// expected-error @below {{terminator operand types must match dict entry types}}
+rtg.target @target : !rtg.dict<a: i32> {
+  rtg.yield
+}
+
+// -----
+
+// expected-error @below {{argument types must match dict entry types}}
+rtg.test @test : !rtg.dict<a: i32> {
+}
+
+// -----
+
+// expected-error @below {{duplicate entry name 'a}}
+rtg.test @test : !rtg.dict<a: i32, a: i32> {
+^bb0(%arg0: i32, %arg1: i32):
+}
