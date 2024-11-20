@@ -24,3 +24,17 @@ rtg.sequence @invocations {
   rtg.invoke_sequence %0
   rtg.invoke_sequence %1
 }
+
+// CHECK-LABEL: @sets
+func.func @sets(%arg0: i32, %arg1: i32) {
+  // CHECK: [[SET:%.+]] = rtg.set_create %arg0, %arg1 : i32
+  // CHECK: [[R:%.+]] = rtg.set_select_random [[SET]] : !rtg.set<i32>
+  // CHECK: [[EMPTY:%.+]] = rtg.set_create : i32
+  // CHECK: rtg.set_difference [[SET]], [[EMPTY]] : !rtg.set<i32>
+  %set = rtg.set_create %arg0, %arg1 : i32
+  %r = rtg.set_select_random %set : !rtg.set<i32>
+  %empty = rtg.set_create : i32
+  %diff = rtg.set_difference %set, %empty : !rtg.set<i32>
+
+  return
+}
