@@ -594,8 +594,8 @@ public:
   void visit(hw::PortInfo &port) {
     // Separate the inputs from outputs and generate the first btor2 lines for
     // input declaration We only consider ports with an explicit bit-width (so
-    // ignore clocks)
-    if (port.isInput() && !isa<seq::ClockType>(port.type)) {
+    // ignore clocks and immutables)
+    if (port.isInput() && !isa<seq::ClockType, seq::ImmutableType>(port.type)) {
       // Generate the associated btor declaration for the inputs
       StringRef iName = port.getName();
 
@@ -880,6 +880,11 @@ public:
     genState(reg, w, regName);
 
     if (init) {
+      if (!init.getDefiningOp<seq::InitialOp>()) {
+        reg->emitError(
+            "Initial value must be emitted directly by a seq.initial op");
+        return;
+      }
       // Check that the initial value is a non-null constant
       auto initialConstant = circt::seq::unwrapImmutableValue(init)
                                  .getDefiningOp<hw::ConstantOp>();
