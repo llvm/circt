@@ -418,10 +418,10 @@ public:
   }
 
   template <typename T, typename = void>
-  struct HasGetFloatingPointStandard : std::false_type {};
+  struct IsFloatingPoint : std::false_type {};
 
   template <typename T>
-  struct HasGetFloatingPointStandard<
+  struct IsFloatingPoint<
       T, std::void_t<decltype(std::declval<T>().getFloatingPointStandard())>>
       : std::is_same<decltype(std::declval<T>().getFloatingPointStandard()),
                      FloatingPointStandard> {};
@@ -433,13 +433,15 @@ public:
     Block *body = component.getBodyBlock();
     builder.setInsertionPoint(body, body->begin());
     std::string name = TLibraryOp::getOperationName().split(".").second.str();
-    if constexpr (HasGetFloatingPointStandard<TLibraryOp>::value) {
+    if constexpr (IsFloatingPoint<TLibraryOp>::value) {
       switch (TLibraryOp::getFloatingPointStandard()) {
       case FloatingPointStandard::IEEE754: {
-        std::string prefix = "ieee754.";
+        constexpr char prefix[] = "ieee754.";
         assert(name.find(prefix) == 0 &&
-               "IEEE754 type operation's name must begin with 'ieee754'");
-        name.erase(0, prefix.length());
+               ("IEEE754 type operation's name must begin with '" +
+                std::string(prefix) + "'")
+                   .c_str());
+        name.erase(0, sizeof(prefix) - 1);
         name = llvm::join_items(/*separator=*/"", "std_", name, "FN");
         break;
       }
