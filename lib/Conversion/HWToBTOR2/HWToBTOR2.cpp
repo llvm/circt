@@ -621,6 +621,10 @@ public:
   // simplicity, we will only emit `constd` in order to avoid bit-string
   // conversions
   void visitTypeOp(hw::ConstantOp op) {
+    // Make sure the constant hasn't already been created
+    if (handledOps.contains(op))
+      return;
+
     // Make sure that a sort has been created for our operation
     int64_t w = requireSort(op.getType());
 
