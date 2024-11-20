@@ -200,9 +200,9 @@ handshake.func @test_control_fixed_index_type(%arg0 : i4, %arg1 : i4) -> (i4, i3
 // CHECK:           %[[VAL_3]], %[[VAL_4]] = dc.branch %[[VAL_14]]
 // CHECK:           hw.output %[[VAL_5]], %[[VAL_10]] : !dc.token, !dc.value<index>
 // CHECK:         }
-handshake.func @branch_and_merge(%0 : i1, %1 : none) -> (none, index) {
+handshake.func @branch_and_merge(%arg0 : i1, %arg1 : none) -> (none, index) {
   %out, %idx = control_merge %true, %false : none, index
-  %true, %false = cond_br %0, %1 : none
+  %true, %false = cond_br %arg0, %arg1 : none
   return %out, %idx : none, index
 }
 
