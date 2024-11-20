@@ -708,7 +708,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
               rewriter, loc,
               {one, one, one, one, one, width, width, three, width, five, one});
   return buildLibraryBinaryPipeOp<calyx::AddFOpIEEE754>(rewriter, addf, addFOp,
-                                                  addFOp.getOut());
+                                                        addFOp.getOut());
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
@@ -724,7 +724,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
               rewriter, loc,
               {one, one, one, one, width, width, three, width, five, one});
   return buildLibraryBinaryPipeOp<calyx::MulFOpIEEE754>(rewriter, mulf, mulFOp,
-                                                  mulFOp.getOut());
+                                                        mulFOp.getOut());
 }
 
 template <typename TAllocOp>
