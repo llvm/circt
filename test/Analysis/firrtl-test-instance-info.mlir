@@ -163,7 +163,7 @@ firrtl.circuit "Foo" {
 
 // -----
 
-// Test that "inDesing" works properly.  This test instantiates Baz twice.  Once
+// Test that "inDesign" works properly.  This test instantiates Baz twice.  Once
 // under the testbench, Foo, and once under a layer in the design-under-test
 // (DUT), Bar.  Baz is under the DUT, but not in the design.
 firrtl.circuit "Foo" {
@@ -224,7 +224,7 @@ firrtl.circuit "Foo" {
 
 // -----
 
-// Test that "inDesing" works properly for the effective DUT.
+// Test that "inDesign" works properly for the effective DUT.
 firrtl.circuit "Foo" {
   firrtl.layer @A bind {}
   // CHECK:      @Baz
