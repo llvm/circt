@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --test-apply-lowering-options='options=emittedLineLength=100,emitBindComments' -export-verilog -split-input-file -o %t.mlir | FileCheck %s
+// RUN: circt-opt %s --test-apply-lowering-options='options=emittedLineLength=100,emitBindComments' -export-verilog -split-input-file -o /dev/null | FileCheck %s
 
 // CHECK: typedef enum bit [0:0] {enum0_T} enum0;
 // CHECK: // typedef enum bit [0:0] {} enum1;
