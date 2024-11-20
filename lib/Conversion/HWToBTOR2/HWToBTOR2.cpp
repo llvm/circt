@@ -221,7 +221,7 @@ private:
   }
 
   // Generates a constant declaration given a value, a width and a name.
-  void genConst(int64_t value, size_t width, Operation *op) {
+  void genConst(APInt value, size_t width, Operation *op) {
     // For now we're going to assume that the name isn't taken, given that hw
     // is already in SSA form
     size_t opLID = getOpLID(op);
@@ -626,8 +626,7 @@ public:
 
     // Prepare for for const generation by extracting the const value and
     // generting the btor2 string
-    int64_t value = op.getValue().getSExtValue();
-    genConst(value, w, op);
+    genConst(op.getValue(), w, op);
   }
 
   // Wires should have been removed in PrepareForFormal

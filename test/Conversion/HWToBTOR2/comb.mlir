@@ -6,6 +6,10 @@ module {
   hw.module @inc(in %a : i32, in %clk : !seq.clock, out pred : i1) {
     %0 = seq.from_clock %clk
 
+    // CHECK:   [[BIGSORT:[0-9]+]] sort bitvec 100
+    // CHECK:   [[BIGCONST:[0-9]+]] constd [[BIGSORT]] 111111111111111111111111111
+    %bigConst = hw.constant 111111111111111111111111111 : i100
+
     // CHECK:   [[NID2:[0-9]+]] constd [[NID0]] 0
     %c0_i32 = hw.constant 0 : i32
 
