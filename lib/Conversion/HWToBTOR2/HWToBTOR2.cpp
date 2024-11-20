@@ -880,8 +880,7 @@ public:
     genState(reg, w, regName);
 
     if (init) {
-      if (init && (isa<BlockArgument>(init) ||
-                   !isa<seq::InitialOp>(init.getDefiningOp()))) {
+      if (!init.getDefiningOp<seq::InitialOp>()) {
         reg->emitError(
             "Initial value must be emitted directly by a seq.initial op");
         return;
