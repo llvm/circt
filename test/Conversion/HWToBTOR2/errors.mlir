@@ -23,3 +23,10 @@ hw.module @reg_with_argument_initial(in %clk: !seq.clock, in %in: i32, in %init:
   %1 = seq.compreg %in, %clk initial %init : i32
   hw.output %1 : i32
 }
+
+// -----
+
+hw.module @variadic_op(in %input: i32) {
+  // expected-error @below {{variadic operations not are not currently supported}}
+  %and = comb.and %input, %input, %input : i32
+}
