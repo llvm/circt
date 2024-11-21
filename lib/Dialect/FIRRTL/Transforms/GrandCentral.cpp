@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Analysis/FIRRTLInstanceInfo.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
@@ -683,6 +684,10 @@ private:
   /// TODO: Investigate a way to not use a pointer here like how `getNamespace`
   /// works below.
   InstancePathCache *instancePaths = nullptr;
+
+  /// An instance info analysis that is used to query if modules are in the
+  /// design or not.
+  InstanceInfo *instanceInfo = nullptr;
 
   /// The namespace associated with the circuit.  This is lazily constructed
   /// using `getNamespace`.
@@ -1673,14 +1678,8 @@ void GrandCentralPass::runOnOperation() {
   /// TODO: Handle this differently to allow construction of an options
   auto instancePathCache = InstancePathCache(getAnalysis<InstanceGraph>());
   instancePaths = &instancePathCache;
+  instanceInfo = &getAnalysis<InstanceInfo>();
 
-  /// Contains the set of modules which are instantiated by the DUT, but not a
-  /// companion, instantiated by a companion, or instantiated under a bind.  If
-  /// no DUT exists, treat the top module as if it were the DUT.  This works by
-  /// doing a depth-first walk of the instance graph, starting from the
-  /// "effective" DUT and stopping the search at any modules which are known
-  /// companions or any instances which are marked "lowerToBind".
-  DenseSet<InstanceGraphNode *> dutModules;
   InstanceGraphNode *effectiveDUT;
   if (dut)
     effectiveDUT = instancePaths->instanceGraph.lookup(dut);
@@ -1703,14 +1702,7 @@ void GrandCentralPass::runOnOperation() {
               << "the '" << block.getOperationName() << "' op is here";
           removalError = true;
         }
-        auto instOp = dyn_cast<InstanceOp>(*a->getInstance());
-        if (dutModules.contains(mod) ||
-            AnnotationSet::hasAnnotation(mod->getModule(),
-                                         companionAnnoClass) ||
-            (instOp && instOp.getLowerToBind()))
-          continue;
         modules.push_back(mod);
-        dutModules.insert(mod);
       }
     }
   }
@@ -1933,7 +1925,9 @@ void GrandCentralPass::runOnOperation() {
                 //   2) The module is NOT instantiated by the effective DUT or
                 //      is under a bind.
                 auto *modNode = instancePaths->instanceGraph.lookup(mod);
-                if (modNode != companionNode && dutModules.count(modNode))
+                if (modNode != companionNode &&
+                    instanceInfo->anyInstanceInEffectiveDesign(
+                        modNode->getModule()))
                   continue;
 
                 LLVM_DEBUG({
