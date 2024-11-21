@@ -60,25 +60,18 @@ struct HWOpRewritePattern : public OpRewritePattern<HWModuleOp> {
     for (auto contractOp :
          llvm::make_early_inc_range(bodyBlock->getOps<verif::ContractOp>())) {
       rewriter.setInsertionPointToEnd(&contractOp.getBody().front());
-      // TODO: assumes terminator is a yield
-      YieldOp yieldOp = dyn_cast<verif::YieldOp>(contractOp.getBody().front().getTerminator());
-      // TODO: assumes one input/output
-      auto cmpOp = rewriter.create<comb::ICmpOp>(contractOp.getLoc(), comb::ICmpPredicate::eq,
-                                    contractOp.getInputs().front(),
-                                    yieldOp.getInputs().front());
-      rewriter.create<verif::AssertOp>(contractOp.getLoc(), cmpOp.getResult(),
-                                       nullptr, nullptr);
-      rewriter.eraseOp(yieldOp);
       for (auto ensureOp : llvm::make_early_inc_range(
                contractOp.getBody().front().getOps<EnsureOp>())) {
+        rewriter.create<verif::AssertOp>(contractOp.getLoc(), ensureOp.getProperty(),
+                                         nullptr, nullptr);
         rewriter.eraseOp(ensureOp);
       }
       rewriter.inlineBlockBefore(&contractOp.getBody().front(),
                                  &formalOp.getBody().front(),
                                  formalOp.getBody().front().end());
-      // TODO: Assumes one result/input
-      rewriter.replaceAllUsesWith(contractOp.getResults().front(),
-                                  contractOp.getInputs().front());
+      for (auto [input, result] : llvm::zip(contractOp.getResults(), contractOp.getInputs())) {
+        rewriter.replaceAllUsesWith(input, result);
+      }
       rewriter.eraseOp(contractOp);
     }
 
