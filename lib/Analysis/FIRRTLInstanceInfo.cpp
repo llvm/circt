@@ -116,11 +116,17 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
 
       AnnotationSet annotations(moduleOp);
       auto isDut = annotations.hasAnnotation(dutAnnoClass);
+      auto isGCCompanion = annotations.hasAnnotation(companionAnnoClass);
 
       if (isDut) {
         attributes.underDut.markConstant(true);
         attributes.inDesign.markConstant(true);
         attributes.inEffectiveDesign.markConstant(true);
+      }
+
+      if (isGCCompanion) {
+        attributes.inDesign.mergeIn(false);
+        attributes.inEffectiveDesign.mergeIn(false);
       }
 
       // Merge in values based on the instantiations of this module.
@@ -143,7 +149,7 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
         if (underLayer) {
           attributes.inDesign.mergeIn(false);
           attributes.inEffectiveDesign.mergeIn(false);
-        } else if (!isDut) {
+        } else if (!isDut && !isGCCompanion) {
           attributes.inDesign.mergeIn(parentAttrs.inDesign);
           attributes.inEffectiveDesign.mergeIn(parentAttrs.inEffectiveDesign);
         }
