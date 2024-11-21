@@ -41,15 +41,17 @@ struct HWOpRewritePattern : public OpRewritePattern<HWModuleOp> {
     auto formalOp =
         rewriter.create<verif::FormalOp>(op.getLoc(), op.getNameAttr());
 
+    // Clone module body into fomal op body
     rewriter.cloneRegionBefore(op.getRegion(), formalOp.getBody(),
                                formalOp.getBody().end());
 
     auto *bodyBlock = &formalOp.getBody().front();
+
     // Erase hw.output
     rewriter.eraseOp(bodyBlock->getTerminator());
 
     // Convert block args to symbolic values
-    rewriter.setInsertionPointToStart(&formalOp.getBody().front());
+    rewriter.setInsertionPointToStart(bodyBlock);
     for (auto arg : llvm::make_early_inc_range(bodyBlock->getArguments())) {
       auto sym =
           rewriter.create<verif::SymbolicValueOp>(arg.getLoc(), arg.getType());
@@ -57,8 +59,10 @@ struct HWOpRewritePattern : public OpRewritePattern<HWModuleOp> {
     }
     bodyBlock->eraseArguments(0, bodyBlock->getNumArguments());
 
+    // Inline contract ops
     for (auto contractOp :
          llvm::make_early_inc_range(bodyBlock->getOps<verif::ContractOp>())) {
+      // Convert ensure to assert
       rewriter.setInsertionPointToEnd(&contractOp.getBody().front());
       for (auto ensureOp : llvm::make_early_inc_range(
                contractOp.getBody().front().getOps<EnsureOp>())) {
@@ -66,9 +70,13 @@ struct HWOpRewritePattern : public OpRewritePattern<HWModuleOp> {
             contractOp.getLoc(), ensureOp.getProperty(), nullptr, nullptr);
         rewriter.eraseOp(ensureOp);
       }
+
+      // Inline body
       rewriter.inlineBlockBefore(&contractOp.getBody().front(),
                                  &formalOp.getBody().front(),
                                  formalOp.getBody().front().end());
+
+      // Replace results with inputs and erase
       for (auto [input, result] :
            llvm::zip(contractOp.getResults(), contractOp.getInputs())) {
         rewriter.replaceAllUsesWith(input, result);

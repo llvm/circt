@@ -25,3 +25,39 @@ hw.module @Mul9(in %a: i42, out z: i42) {
   hw.output %2 : i42
 }
 
+// CHECK: verif.formal @CarrySaveCompress3to2 {
+// CHECK:   %c1_i42 = hw.constant 1 : i42
+// CHECK:   %0 = verif.symbolic_value : i42
+// CHECK:   %1 = verif.symbolic_value : i42
+// CHECK:   %2 = verif.symbolic_value : i42
+// CHECK:   %3 = comb.xor %0, %1, %2 : i42
+// CHECK:   %4 = comb.and %0, %1 : i42
+// CHECK:   %5 = comb.or %0, %1 : i42
+// CHECK:   %6 = comb.and %5, %2 : i42
+// CHECK:   %7 = comb.or %4, %6 : i42
+// CHECK:   %8 = comb.shl %7, %c1_i42 : i42
+// CHECK:   %9 = comb.add %0, %1, %2 : i42
+// CHECK:   %10 = comb.add %3, %8 : i42
+// CHECK:   %11 = comb.icmp eq %9, %10 : i42
+// CHECK:   verif.assert %11 : i1
+// CHECK: }
+
+hw.module @CarrySaveCompress3to2(
+  in %a0: i42, in %a1: i42, in %a2: i42,
+  out z0: i42, out z1: i42
+) {
+  %c1_i42 = hw.constant 1 : i42
+  %0 = comb.xor %a0, %a1, %a2 : i42  // sum bits of FA (a0^a1^a2)
+  %1 = comb.and %a0, %a1 : i42
+  %2 = comb.or %a0, %a1 : i42
+  %3 = comb.and %2, %a2 : i42
+  %4 = comb.or %1, %3 : i42          // carry bits of FA (a0&a1 | a2&(a0|a1))
+  %5 = comb.shl %4, %c1_i42 : i42    // %5 = carry << 1
+  %z0, %z1 = verif.contract %0, %5 : i42, i42 {
+    %inputSum = comb.add %a0, %a1, %a2 : i42
+    %outputSum = comb.add %z0, %z1 : i42
+    %6 = comb.icmp eq %inputSum, %outputSum : i42
+    verif.ensure %6 : i1
+  }
+  hw.output %z0, %z1 : i42, i42
+}
