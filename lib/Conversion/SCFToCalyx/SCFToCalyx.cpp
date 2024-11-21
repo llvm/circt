@@ -422,8 +422,6 @@ private:
     StringRef opName = TSrcOp::getOperationName().split(".").second;
     Location loc = op.getLoc();
     Type width = op.getResult().getType();
-    // Pass the result from the Operation to the Calyx primitive.
-    op.getResult().replaceAllUsesWith(out);
     auto reg = createRegister(
         op.getLoc(), rewriter, getComponent(), width.getIntOrFloatBitWidth(),
         getState<ComponentLoweringState>().getUniqueName(opName));
@@ -449,6 +447,10 @@ private:
         comb::createOrFoldNot(group.getLoc(), opPipe.getDone(), builder));
     // The group is done when the register write is complete.
     rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone());
+
+    // Pass the result from the source operation to register holding the resullt
+    // from the Calyx primitive.
+    op.getResult().replaceAllUsesWith(reg.getOut());
 
     if (isa<calyx::AddFOpIEEE754>(opPipe)) {
       auto opFOp = cast<calyx::AddFOpIEEE754>(opPipe);
