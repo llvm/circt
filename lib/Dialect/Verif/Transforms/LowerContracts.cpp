@@ -8,8 +8,8 @@
 // Lower verif.formal to hw.module.
 //
 //===----------------------------------------------------------------------===//
-#include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
 
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -62,14 +62,15 @@ struct HWOpRewritePattern : public OpRewritePattern<HWModuleOp> {
       rewriter.setInsertionPointToEnd(&contractOp.getBody().front());
       for (auto ensureOp : llvm::make_early_inc_range(
                contractOp.getBody().front().getOps<EnsureOp>())) {
-        rewriter.create<verif::AssertOp>(contractOp.getLoc(), ensureOp.getProperty(),
-                                         nullptr, nullptr);
+        rewriter.create<verif::AssertOp>(
+            contractOp.getLoc(), ensureOp.getProperty(), nullptr, nullptr);
         rewriter.eraseOp(ensureOp);
       }
       rewriter.inlineBlockBefore(&contractOp.getBody().front(),
                                  &formalOp.getBody().front(),
                                  formalOp.getBody().front().end());
-      for (auto [input, result] : llvm::zip(contractOp.getResults(), contractOp.getInputs())) {
+      for (auto [input, result] :
+           llvm::zip(contractOp.getResults(), contractOp.getInputs())) {
         rewriter.replaceAllUsesWith(input, result);
       }
       rewriter.eraseOp(contractOp);
