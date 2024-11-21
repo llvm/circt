@@ -157,19 +157,23 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
     llvm::dbgs() << "\n" << llvm::indent(4) << "effectiveDut: ";
     circuitAttributes.effectiveDut->print(llvm::dbgs(), flags);
     llvm::dbgs() << "\n" << llvm::indent(2) << "module attributes:\n";
-    for (auto *node : llvm::depth_first(iGraph.getTopLevelNode())) {
-      auto moduleOp = node->getModule();
-      auto attributes = moduleAttributes[moduleOp];
-      llvm::dbgs().indent(4)
-          << "- module: " << moduleOp.getModuleName() << "\n"
-          << llvm::indent(6)
-          << "isDut: " << (isDut(moduleOp) ? "true" : "false") << "\n"
-          << llvm::indent(6)
-          << "isEffectiveDue: " << (isEffectiveDut(moduleOp) ? "true" : "false")
-          << "\n"
-          << llvm::indent(6) << "underDut: " << attributes.underDut << "\n"
-          << llvm::indent(6) << "underLayer: " << attributes.underLayer << "\n"
-          << llvm::indent(6) << "underDesign: " << attributes.inDesign << "\n";
+    visited.clear();
+    for (auto *root : iGraph) {
+      for (auto *modIt : llvm::inverse_post_order_ext(root, visited)) {
+        visited.insert(modIt);
+        auto moduleOp = modIt->getModule();
+        auto attributes = moduleAttributes[moduleOp];
+        llvm::dbgs().indent(4)
+            << "- module: " << moduleOp.getModuleName() << "\n"
+            << llvm::indent(6)
+            << "isDut: " << (isDut(moduleOp) ? "true" : "false") << "\n"
+            << llvm::indent(6) << "isEffectiveDue: "
+            << (isEffectiveDut(moduleOp) ? "true" : "false") << "\n"
+            << llvm::indent(6) << "underDut: " << attributes.underDut << "\n"
+            << llvm::indent(6) << "underLayer: " << attributes.underLayer
+            << "\n"
+            << llvm::indent(6) << "inDesign: " << attributes.inDesign << "\n";
+      }
     }
   });
 }
