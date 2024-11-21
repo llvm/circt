@@ -268,7 +268,9 @@ firrtl.circuit "Foo" {
 
 // -----
 
-firrtl.circuit "Testharness" {
+// A circuit with a testharness, a DUT, and a Grand Central companion.  Test
+// that all instance combinations are correct.
+firrtl.circuit "TestharnessHasDUT" {
 
   // Each of these modules is instantiated in a different location.  The
   // instantiation location is indicated by three binary bits with an "_"
@@ -354,7 +356,102 @@ firrtl.circuit "Testharness" {
   }
 
   // The Top module that instantiates the DUT
-  firrtl.module @Testharness() {
+  firrtl.module @TestharnessHasDUT() {
+    firrtl.instance dut @DUT()
+
+    firrtl.instance mt__ @T__()
+    firrtl.instance mtd_ @TD_()
+    firrtl.instance mt_c @T_C()
+    firrtl.instance mtdc @TDC()
+  }
+}
+
+// -----
+
+// This is the same as the previous circuit excpet there is no DUT specified.
+// This tests that the differences between "design" and "effective design" are
+// correctly captured.
+firrtl.circuit "TestharnessNoDUT" {
+
+  // Each of these modules is instantiated in a different location.  The
+  // instantiation location is indicated by three binary bits with an "_"
+  // indicating the absence of instantiation:
+  //   1) "T" indicates this is instantiated in the "Testharness"
+  //   2) "D" indicates this is instantiated in the "DUT"
+  //   3) "C" indicates this is instantiated in the "Companion"
+  // E.g., "T_C" is an module instantiated above the DUT and in the Companion.
+
+  // CHECK:      @T__
+  // CHECK:        anyInstanceInDesign: false
+  // CHECK-NEXT:   allInstancesInDesign: false
+  // CHECK-NEXT:   anyInstanceInEffectiveDesign: true
+  // CHECK-NEXT:   allInstancesInEffectiveDesign: true
+  firrtl.module @T__() {}
+  // CHECK:      @_D_
+  // CHECK:        anyInstanceInDesign: false
+  // CHECK-NEXT:   allInstancesInDesign: false
+  // CHECK-NEXT:   anyInstanceInEffectiveDesign: true
+  // CHECK-NEXT:   allInstancesInEffectiveDesign: true
+  firrtl.module @_D_() {}
+  // CHECK:      @__C
+  // CHECK:        anyInstanceInDesign: false
+  // CHECK-NEXT:   allInstancesInDesign: false
+  // CHECK-NEXT:   anyInstanceInEffectiveDesign: false
+  // CHECK-NEXT:   allInstancesInEffectiveDesign: false
+  firrtl.module @__C() {}
+  // CHECK:      @TD_
+  // CHECK:        anyInstanceInDesign: false
+  // CHECK-NEXT:   allInstancesInDesign: false
+  // CHECK-NEXT:   anyInstanceInEffectiveDesign: true
+  // CHECK-NEXT:   allInstancesInEffectiveDesign: true
+  firrtl.module @TD_() {}
+  // CHECK:      @_DC
+  // CHECK:        anyInstanceInDesign: false
+  // CHECK-NEXT:   allInstancesInDesign: false
+  // CHECK-NEXT:   anyInstanceInEffectiveDesign: true
+  // CHECK-NEXT:   allInstancesInEffectiveDesign: false
+  firrtl.module @_DC() {}
+  // CHECK:      @T_C
+  // CHECK:        anyInstanceInDesign: false
+  // CHECK-NEXT:   allInstancesInDesign: false
+  // CHECK-NEXT:   anyInstanceInEffectiveDesign: true
+  // CHECK-NEXT:   allInstancesInEffectiveDesign: false
+  firrtl.module @T_C() {}
+  // CHECK:      @TDC
+  // CHECK:        anyInstanceInDesign: false
+  // CHECK-NEXT:   allInstancesInDesign: false
+  // CHECK-NEXT:   anyInstanceInEffectiveDesign: true
+  // CHECK-NEXT:   allInstancesInEffectiveDesign: false
+  firrtl.module @TDC() {}
+
+  firrtl.module private @Companion() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+        defName = "Foo",
+        id = 0 : i64,
+        name = "View"
+      }
+    ]
+  } {
+
+    firrtl.instance m__c @__C()
+    firrtl.instance m_dc @_DC()
+    firrtl.instance mt_c @T_C()
+    firrtl.instance mtdc @TDC()
+  }
+
+  firrtl.module private @DUT() {
+    firrtl.instance companion @Companion()
+
+    firrtl.instance m_d_ @_D_()
+    firrtl.instance mtd_ @TD_()
+    firrtl.instance m_dc @_DC()
+    firrtl.instance mtdc @TDC()
+  }
+
+  // The Top module that instantiates the DUT
+  firrtl.module @TestharnessNoDUT() {
     firrtl.instance dut @DUT()
 
     firrtl.instance mt__ @T__()
