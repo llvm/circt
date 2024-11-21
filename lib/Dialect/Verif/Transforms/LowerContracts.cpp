@@ -5,10 +5,9 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 //
-// Lower verif.formal to hw.module.
+// Lower contracts into verif.formal tests.
 //
 //===----------------------------------------------------------------------===//
-#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
 
