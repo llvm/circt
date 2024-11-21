@@ -676,8 +676,8 @@ void FIRRTLModuleLowering::runOnOperation() {
             .Case<FormalOp>([&](auto oldFormalOp) {
               auto builder = OpBuilder::atBlockEnd(topLevelModule);
               auto newFormalOp = builder.create<verif::FormalOp>(
-                  oldFormalOp.getLoc(), oldFormalOp.getNameAttr());
-              newFormalOp->setDiscardableAttrs(oldFormalOp.getParametersAttr());
+                  oldFormalOp.getLoc(), oldFormalOp.getNameAttr(),
+                  oldFormalOp.getParametersAttr());
               newFormalOp.getBody().emplaceBlock();
               state.recordModuleMapping(oldFormalOp, newFormalOp);
               formalOpsToProcess.push_back(newFormalOp);
