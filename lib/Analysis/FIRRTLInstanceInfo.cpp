@@ -144,7 +144,7 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
                            cast<InstanceOp>(instanceOp).getLowerToBind()) ||
                           instanceOp->getParentOfType<LayerBlockOp>();
         if (underLayer)
-          attributes.underLayer.mergeIn(underLayer);
+          attributes.underLayer.mergeIn(true);
         else
           attributes.underLayer.mergeIn(parentAttrs.underLayer);
 
