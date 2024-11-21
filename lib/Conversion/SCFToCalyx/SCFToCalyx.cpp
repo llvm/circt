@@ -306,7 +306,6 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                                  : WalkResult::interrupt();
     });
 
-    getState<ComponentLoweringState>().getComponentOp().dump();
     return success(opBuiltSuccessfully);
   }
 
@@ -737,145 +736,275 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   IntegerType one = rewriter.getI1Type(), five = rewriter.getIntegerType(5),
               width = rewriter.getIntegerType(
                   cmpf.getLhs().getType().getIntOrFloatBitWidth());
-  auto cmpFOp = getState<ComponentLoweringState>()
-                    .getNewLibraryOpInstance<calyx::CompareFOpIEEE754>(
-                        rewriter, loc,
-                        {one, one, one, width, width, one, one, one, one, one,
-                         five, one});
+  auto calyxCmpFOp = getState<ComponentLoweringState>()
+                         .getNewLibraryOpInstance<calyx::CompareFOpIEEE754>(
+                             rewriter, loc,
+                             {one, one, one, width, width, one, one, one, one,
+                              one, five, one});
   hw::ConstantOp constantOne =
       createConstant(loc, rewriter, getComponent(), 1, 1);
-  Value unordered = cmpFOp.getUnordered();
+  Value unordered = calyxCmpFOp.getUnordered();
   rewriter.setInsertionPointToStart(getComponent().getBodyBlock());
+
   switch (cmpf.getPredicate()) {
   case CmpFPredicate::OEQ: {
     Value ordered = rewriter.create<arith::XOrIOp>(loc, unordered, constantOne);
-    Value out = rewriter.create<arith::AndIOp>(loc, ordered, cmpFOp.getEq());
+    Value out =
+        rewriter.create<arith::AndIOp>(loc, ordered, calyxCmpFOp.getEq());
     return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
-                                                              cmpFOp, out);
+                                                              calyxCmpFOp, out);
   }
   case CmpFPredicate::OGT: {
     Value ordered = rewriter.create<arith::XOrIOp>(loc, unordered, constantOne);
-    Value out = rewriter.create<arith::AndIOp>(loc, ordered, cmpFOp.getGt());
+    Value out =
+        rewriter.create<arith::AndIOp>(loc, ordered, calyxCmpFOp.getGt());
     return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
-                                                              cmpFOp, out);
+                                                              calyxCmpFOp, out);
   }
   case CmpFPredicate::OGE: {
-    Value ordered = rewriter.create<arith::XOrIOp>(loc, unordered, constantOne);
-    Value geValue =
-        rewriter.create<arith::XOrIOp>(loc, cmpFOp.getLt(), constantOne);
-    Value out = rewriter.create<arith::AndIOp>(loc, geValue, ordered);
-    return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
-                                                              cmpFOp, out);
+    StringRef opName = cmpf.getOperationName().split(".").second;
+    auto reg = createRegister(
+        loc, rewriter, getComponent(), 1,
+        getState<ComponentLoweringState>().getUniqueName(opName));
+
+    // Operation pipelines are not combinational, so a GroupOp is required.
+    auto group = createGroupForOp<calyx::GroupOp>(rewriter, cmpf);
+    OpBuilder builder(group->getRegion(0));
+    getState<ComponentLoweringState>().addBlockScheduleable(cmpf->getBlock(),
+                                                            group);
+
+    rewriter.setInsertionPointToEnd(group.getBodyBlock());
+    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getLeft(), cmpf.getLhs());
+    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getRight(),
+                                     cmpf.getRhs());
+
+    hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
+    SmallVector<StringRef, 4> cmpPortIdentifier = {"compare", opName, "port"};
+    auto geReg =
+        createRegister(loc, rewriter, getComponent(), 1,
+                       getState<ComponentLoweringState>().getUniqueName(
+                           llvm::join(cmpPortIdentifier, "_")));
+    rewriter.create<calyx::AssignOp>(loc, geReg.getWriteEn(),
+                                     calyxCmpFOp.getDone());
+    rewriter.create<calyx::AssignOp>(
+        loc, geReg.getIn(), c1,
+        comb::createOrFoldNot(loc, calyxCmpFOp.getLt(), builder));
+
+    SmallVector<StringRef, 4> unorderedPortIdentifier = {"unordered", opName,
+                                                         "port"};
+    auto unorderedReg =
+        createRegister(loc, rewriter, getComponent(), 1,
+                       getState<ComponentLoweringState>().getUniqueName(
+                           llvm::join(unorderedPortIdentifier, "_")));
+    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getWriteEn(),
+                                     calyxCmpFOp.getDone());
+    rewriter.create<calyx::AssignOp>(
+        loc, unorderedReg.getIn(), c1,
+        comb::createOrFoldNot(loc, unordered, builder));
+
+    SmallVector<Type> outputAndLibOpTypes{one, one, one};
+    auto outputAndLibOp = getState<ComponentLoweringState>()
+                              .getNewLibraryOpInstance<calyx::AndLibOp>(
+                                  rewriter, loc, outputAndLibOpTypes);
+    rewriter.create<calyx::AssignOp>(loc, outputAndLibOp.getLeft(),
+                                     geReg.getOut());
+    rewriter.create<calyx::AssignOp>(loc, outputAndLibOp.getRight(),
+                                     unorderedReg.getOut());
+
+    // Write the output to this register.
+    rewriter.create<calyx::AssignOp>(loc, reg.getIn(), outputAndLibOp.getOut());
+    // The write enable port is high when the pipeline is done.
+    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(),
+                                     calyxCmpFOp.getDone());
+    // Set pipelineOp to high as long as its done signal is not high.
+    // This prevents the pipelineOP from executing for the cycle that we write
+    // to register. To get !(pipelineOp.done) we do 1 xor pipelineOp.done
+    rewriter.create<calyx::AssignOp>(
+        loc, calyxCmpFOp.getGo(), c1,
+        comb::createOrFoldNot(group.getLoc(), calyxCmpFOp.getDone(), builder));
+    // The group is done when the register write is complete.
+    SmallVector<Type> doneAndLibOpTypes{one, one, one};
+    auto doneAndLibOp = getState<ComponentLoweringState>()
+                            .getNewLibraryOpInstance<calyx::AndLibOp>(
+                                rewriter, loc, doneAndLibOpTypes);
+    rewriter.create<calyx::AssignOp>(loc, doneAndLibOp.getLeft(),
+                                     geReg.getDone());
+    rewriter.create<calyx::AssignOp>(loc, doneAndLibOp.getRight(),
+                                     unorderedReg.getDone());
+
+    rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone(),
+                                        doneAndLibOp.getOut());
+
+    // Pass the result from the source operation to register holding the resullt
+    // from the Calyx primitive.
+    cmpf.getResult().replaceAllUsesWith(reg.getOut());
+
+    // Register the values for the pipeline.
+    getState<ComponentLoweringState>().registerEvaluatingGroup(
+        outputAndLibOp.getOut(), group);
+    getState<ComponentLoweringState>().registerEvaluatingGroup(
+        calyxCmpFOp.getLeft(), group);
+    getState<ComponentLoweringState>().registerEvaluatingGroup(
+        calyxCmpFOp.getRight(), group);
+
+    return success();
   }
   case CmpFPredicate::OLT: {
     Value ordered = rewriter.create<arith::XOrIOp>(loc, unordered, constantOne);
-    Value out = rewriter.create<arith::AndIOp>(loc, cmpFOp.getLt(), ordered);
+    Value out =
+        rewriter.create<arith::AndIOp>(loc, calyxCmpFOp.getLt(), ordered);
     return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
-                                                              cmpFOp, out);
+                                                              calyxCmpFOp, out);
   }
   case CmpFPredicate::OLE: {
     Value ordered = rewriter.create<arith::XOrIOp>(loc, unordered, constantOne);
     Value leValue =
-        rewriter.create<arith::XOrIOp>(loc, cmpFOp.getGt(), constantOne);
+        rewriter.create<arith::XOrIOp>(loc, calyxCmpFOp.getGt(), constantOne);
     Value out = rewriter.create<arith::AndIOp>(loc, leValue, ordered);
     return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
-                                                              cmpFOp, out);
+                                                              calyxCmpFOp, out);
   }
   case CmpFPredicate::ONE: {
     Value ordered = rewriter.create<arith::XOrIOp>(loc, unordered, constantOne);
     Value neValue =
-        rewriter.create<arith::XOrIOp>(loc, cmpFOp.getEq(), constantOne);
+        rewriter.create<arith::XOrIOp>(loc, calyxCmpFOp.getEq(), constantOne);
     Value out = rewriter.create<arith::AndIOp>(loc, neValue, ordered);
     return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
-                                                              cmpFOp, out);
+                                                              calyxCmpFOp, out);
   }
   case CmpFPredicate::ORD: {
     Value out = rewriter.create<arith::XOrIOp>(loc, unordered, constantOne);
     return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
-                                                              cmpFOp, out);
+                                                              calyxCmpFOp, out);
   }
   case CmpFPredicate::UEQ: {
-    Value out = rewriter.create<arith::OrIOp>(loc, unordered, cmpFOp.getEq());
+    Value out =
+        rewriter.create<arith::OrIOp>(loc, unordered, calyxCmpFOp.getEq());
     return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
-                                                              cmpFOp, out);
+                                                              calyxCmpFOp, out);
   }
   case CmpFPredicate::UGT: {
-    Value out = rewriter.create<arith::OrIOp>(loc, unordered, cmpFOp.getGt());
+    Value out =
+        rewriter.create<arith::OrIOp>(loc, unordered, calyxCmpFOp.getGt());
     return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
-                                                              cmpFOp, out);
+                                                              calyxCmpFOp, out);
   }
   case CmpFPredicate::UGE: {
     Value geValue =
-        rewriter.create<arith::XOrIOp>(loc, cmpFOp.getLt(), constantOne);
+        rewriter.create<arith::XOrIOp>(loc, calyxCmpFOp.getLt(), constantOne);
     Value out = rewriter.create<arith::OrIOp>(loc, unordered, geValue);
     return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
-                                                              cmpFOp, out);
+                                                              calyxCmpFOp, out);
   }
   case CmpFPredicate::ULT: {
-    SmallVector<Type> types{one, one, one};
+    StringRef opName = cmpf.getOperationName().split(".").second;
+    auto reg = createRegister(
+        loc, rewriter, getComponent(), 1,
+        getState<ComponentLoweringState>().getUniqueName(opName));
 
-    calyx::ComponentOp componentOp =
-        getState<ComponentLoweringState>().getComponentOp();
-    SmallVector<StringRef, 4> groupIdentifier = {
-        "compute", getState<ComponentLoweringState>().getUniqueName("compare"),
-        "out"};
-    auto groupOp = calyx::createGroup<calyx::CombGroupOp>(
-        rewriter, componentOp, loc, llvm::join(groupIdentifier, "_"));
-    rewriter.setInsertionPointToEnd(groupOp.getBodyBlock());
+    // Operation pipelines are not combinational, so a GroupOp is required.
+    auto group = createGroupForOp<calyx::GroupOp>(rewriter, cmpf);
+    OpBuilder builder(group->getRegion(0));
+    getState<ComponentLoweringState>().addBlockScheduleable(cmpf->getBlock(),
+                                                            group);
 
-    auto calyxOp =
-        getState<ComponentLoweringState>()
-            .getNewLibraryOpInstance<calyx::OrLibOp>(rewriter, loc, types);
-    rewriter.create<calyx::AssignOp>(loc, calyxOp.getLeft(), unordered);
-    rewriter.create<calyx::AssignOp>(loc, calyxOp.getRight(), cmpFOp.getLt());
+    rewriter.setInsertionPointToEnd(group.getBodyBlock());
+    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getLeft(), cmpf.getLhs());
+    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getRight(),
+                                     cmpf.getRhs());
 
-    auto directions = calyxOp.portDirections();
-    SmallVector<Value, 3> opInputPorts;
-    Value opOutputPort;
-    for (auto dir : enumerate(directions)) {
-      switch (dir.value()) {
-      case calyx::Direction::Input: {
-        opInputPorts.push_back(calyxOp.getResult(dir.index()));
-        break;
-      }
-      case calyx::Direction::Output: {
-        opOutputPort = calyxOp.getResult(dir.index());
-        break;
-      }
-      }
-    }
+    SmallVector<StringRef, 4> cmpPortIdentifier = {"compare", opName, "port"};
+    auto ltReg =
+        createRegister(loc, rewriter, getComponent(), 1,
+                       getState<ComponentLoweringState>().getUniqueName(
+                           llvm::join(cmpPortIdentifier, "_")));
+    rewriter.create<calyx::AssignOp>(loc, ltReg.getWriteEn(),
+                                     calyxCmpFOp.getDone());
+    rewriter.create<calyx::AssignOp>(loc, ltReg.getIn(), calyxCmpFOp.getLt());
 
-    return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(
-        rewriter, cmpf, cmpFOp, opOutputPort);
+    SmallVector<StringRef, 4> unorderedPortIdentifier = {"unordered", opName,
+                                                         "port"};
+    auto unorderedReg =
+        createRegister(loc, rewriter, getComponent(), 1,
+                       getState<ComponentLoweringState>().getUniqueName(
+                           llvm::join(unorderedPortIdentifier, "_")));
+    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getWriteEn(),
+                                     calyxCmpFOp.getDone());
+    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getIn(), unordered);
+
+    SmallVector<Type> orLibOpTypes{one, one, one};
+    auto orLibOp = getState<ComponentLoweringState>()
+                       .getNewLibraryOpInstance<calyx::OrLibOp>(rewriter, loc,
+                                                                orLibOpTypes);
+    rewriter.create<calyx::AssignOp>(loc, orLibOp.getLeft(), ltReg.getOut());
+    rewriter.create<calyx::AssignOp>(loc, orLibOp.getRight(),
+                                     unorderedReg.getOut());
+
+    // Write the output to this register.
+    rewriter.create<calyx::AssignOp>(loc, reg.getIn(), orLibOp.getOut());
+    // The write enable port is high when the pipeline is done.
+    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(),
+                                     calyxCmpFOp.getDone());
+    // Set pipelineOp to high as long as its done signal is not high.
+    // This prevents the pipelineOP from executing for the cycle that we write
+    // to register. To get !(pipelineOp.done) we do 1 xor pipelineOp.done
+    hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
+    rewriter.create<calyx::AssignOp>(
+        loc, calyxCmpFOp.getGo(), c1,
+        comb::createOrFoldNot(group.getLoc(), calyxCmpFOp.getDone(), builder));
+    // The group is done when the register write is complete.
+    SmallVector<Type> andLibOpTypes{one, one, one};
+    auto andLibOp = getState<ComponentLoweringState>()
+                        .getNewLibraryOpInstance<calyx::AndLibOp>(
+                            rewriter, loc, andLibOpTypes);
+    rewriter.create<calyx::AssignOp>(loc, andLibOp.getLeft(), ltReg.getDone());
+    rewriter.create<calyx::AssignOp>(loc, andLibOp.getRight(),
+                                     unorderedReg.getDone());
+
+    rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone(), andLibOp.getOut());
+
+    // Pass the result from the source operation to register holding the resullt
+    // from the Calyx primitive.
+    cmpf.getResult().replaceAllUsesWith(reg.getOut());
+
+    // Register the values for the pipeline.
+    getState<ComponentLoweringState>().registerEvaluatingGroup(orLibOp.getOut(),
+                                                               group);
+    getState<ComponentLoweringState>().registerEvaluatingGroup(
+        calyxCmpFOp.getLeft(), group);
+    getState<ComponentLoweringState>().registerEvaluatingGroup(
+        calyxCmpFOp.getRight(), group);
+
+    return success();
   }
   case CmpFPredicate::ULE: {
     Value leValue =
-        rewriter.create<arith::XOrIOp>(loc, cmpFOp.getGt(), constantOne);
+        rewriter.create<arith::XOrIOp>(loc, calyxCmpFOp.getGt(), constantOne);
     Value out = rewriter.create<arith::OrIOp>(loc, unordered, leValue);
     return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
-                                                              cmpFOp, out);
+                                                              calyxCmpFOp, out);
   }
   case CmpFPredicate::UNE: {
     Value neValue =
-        rewriter.create<arith::XOrIOp>(loc, cmpFOp.getEq(), constantOne);
+        rewriter.create<arith::XOrIOp>(loc, calyxCmpFOp.getEq(), constantOne);
     Value out = rewriter.create<arith::OrIOp>(loc, unordered, neValue);
     return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
-                                                              cmpFOp, out);
+                                                              calyxCmpFOp, out);
   }
   case CmpFPredicate::UNO: {
     Value out = unordered;
     return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
-                                                              cmpFOp, out);
+                                                              calyxCmpFOp, out);
   }
   case CmpFPredicate::AlwaysTrue: {
     Value out = constantOne;
     return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
-                                                              cmpFOp, out);
+                                                              calyxCmpFOp, out);
   }
   case CmpFPredicate::AlwaysFalse: {
     Value out = createConstant(loc, rewriter, getComponent(), 1, 0);
     return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
-                                                              cmpFOp, out);
+                                                              calyxCmpFOp, out);
   }
   }
   return failure();
