@@ -1680,33 +1680,6 @@ void GrandCentralPass::runOnOperation() {
   instancePaths = &instancePathCache;
   instanceInfo = &getAnalysis<InstanceInfo>();
 
-  InstanceGraphNode *effectiveDUT;
-  if (dut)
-    effectiveDUT = instancePaths->instanceGraph.lookup(dut);
-  else
-    effectiveDUT = instancePaths->instanceGraph.getTopLevelNode();
-  {
-    SmallVector<InstanceGraphNode *> modules({effectiveDUT});
-    while (!modules.empty()) {
-      auto *m = modules.pop_back_val();
-      for (InstanceRecord *a : *m) {
-        auto *mod = a->getTarget();
-        // Skip modules that we've visited, that are are under the companion
-        // module, or are bound/under a layer block.
-        if (auto block = a->getInstance()->getParentOfType<LayerBlockOp>()) {
-          auto diag = a->getInstance().emitOpError()
-                      << "is instantiated under a '" << block.getOperationName()
-                      << "' op which is unexpected by GrandCentral (did you "
-                         "forget to run the LowerLayers pass?)";
-          diag.attachNote(block.getLoc())
-              << "the '" << block.getOperationName() << "' op is here";
-          removalError = true;
-        }
-        modules.push_back(mod);
-      }
-    }
-  }
-
   // Maybe return the lone instance of a module.  Generate errors on the op if
   // the module is not instantiated or is multiply instantiated.
   auto exactlyOneInstance = [&](FModuleOp op,
