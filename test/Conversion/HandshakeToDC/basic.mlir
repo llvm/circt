@@ -261,3 +261,6 @@ hw.module @esi_outer(in %clk: !seq.clock, in %rst: i1, in %arg0: !esi.channel<i3
   %ret0, %ret1 = handshake.esi_instance @pack_unpack "pack_unpack_inst" clk %clk rst %rst (%arg0, %arg1) : (!esi.channel<i32>, !esi.channel<i1>) -> (!esi.channel<i32>, !esi.channel<i1>)
   hw.output %ret0 : !esi.channel<i32>
 }
+
+// CHECK: sv.verbatim "// Blah"
+sv.verbatim "// Blah"

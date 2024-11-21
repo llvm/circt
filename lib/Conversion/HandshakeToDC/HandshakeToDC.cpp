@@ -819,8 +819,11 @@ LogicalResult circt::handshaketodc::runHandshakeToDC(
   // same type as the newly inserted operations). To do this, we mark all
   // operations which have been converted as legal, and all other operations
   // as illegal.
-  target.markUnknownOpDynamicallyLegal(
-      [&](Operation *op) { return convertedOps.contains(op); });
+  target.markUnknownOpDynamicallyLegal([&](Operation *op) {
+    return convertedOps.contains(op) ||
+           // Allow any ops which weren't in a `handshake.func` to pass through.
+           !convertedOps.contains(op->getParentOfType<hw::HWModuleOp>());
+  });
 
   DCTypeConverter typeConverter;
   RewritePatternSet patterns(ctx);
