@@ -253,3 +253,15 @@ firrtl.circuit "Foo" {
     firrtl.instance foo interesting_name @Baz()
   }
 }
+
+// -----
+
+// Test that modules that are not instantiated are put in the effective design.
+firrtl.circuit "Foo" {
+  // CHECK:      @Bar
+  // CHECK:        anyInstanceInEffectiveDesign: true
+  // CHECK-NEXT:   allInstancesInEffectiveDesign: true
+  firrtl.module @Bar() {}
+  // CHECK: @Foo
+  firrtl.module @Foo() {}
+}
