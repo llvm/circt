@@ -19,7 +19,7 @@ hw.module @Mul9(in %a: i42, out z: i42) {
   %1 = comb.add %a, %0 : i42         // a + 8*a
   %2 = verif.contract %1 : i42 {
     %3 = comb.mul %a, %c9_i42 : i42  // 9*a
-    %4 = comb.icmp eq %2, %3 : i42  // 9*a == a + 8*a
+    %4 = comb.icmp eq %2, %3 : i42   // 9*a == a + 8*a
     verif.ensure %4 : i1
   }
   hw.output %2 : i42
