@@ -306,6 +306,7 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                                  : WalkResult::interrupt();
     });
 
+    getState<ComponentLoweringState>().getComponentOp().dump();
     return success(opBuiltSuccessfully);
   }
 
@@ -811,9 +812,41 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                                               cmpFOp, out);
   }
   case CmpFPredicate::ULT: {
-    Value out = rewriter.create<arith::OrIOp>(loc, unordered, cmpFOp.getLt());
-    return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(rewriter, cmpf,
-                                                              cmpFOp, out);
+    SmallVector<Type> types{one, one, one};
+
+    calyx::ComponentOp componentOp =
+        getState<ComponentLoweringState>().getComponentOp();
+    SmallVector<StringRef, 4> groupIdentifier = {
+        "compute", getState<ComponentLoweringState>().getUniqueName("compare"),
+        "out"};
+    auto groupOp = calyx::createGroup<calyx::CombGroupOp>(
+        rewriter, componentOp, loc, llvm::join(groupIdentifier, "_"));
+    rewriter.setInsertionPointToEnd(groupOp.getBodyBlock());
+
+    auto calyxOp =
+        getState<ComponentLoweringState>()
+            .getNewLibraryOpInstance<calyx::OrLibOp>(rewriter, loc, types);
+    rewriter.create<calyx::AssignOp>(loc, calyxOp.getLeft(), unordered);
+    rewriter.create<calyx::AssignOp>(loc, calyxOp.getRight(), cmpFOp.getLt());
+
+    auto directions = calyxOp.portDirections();
+    SmallVector<Value, 3> opInputPorts;
+    Value opOutputPort;
+    for (auto dir : enumerate(directions)) {
+      switch (dir.value()) {
+      case calyx::Direction::Input: {
+        opInputPorts.push_back(calyxOp.getResult(dir.index()));
+        break;
+      }
+      case calyx::Direction::Output: {
+        opOutputPort = calyxOp.getResult(dir.index());
+        break;
+      }
+      }
+    }
+
+    return buildLibraryBinaryPipeOp<calyx::CompareFOpIEEE754>(
+        rewriter, cmpf, cmpFOp, opOutputPort);
   }
   case CmpFPredicate::ULE: {
     Value leValue =
