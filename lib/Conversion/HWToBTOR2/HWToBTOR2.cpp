@@ -831,12 +831,12 @@ public:
 
   // Cover is not supported in btor2
   void visitVerif(verif::CoverOp op) {
-    op->emitError("Cover is not supprted in btor2!");
+    op->emitError("Cover is not supported in btor2!");
     return signalPassFailure();
   }
 
   void visitVerif(verif::ClockedCoverOp op) {
-    op->emitError("Cover is not supprted in btor2!");
+    op->emitError("Cover is not supported in btor2!");
     return signalPassFailure();
   }
 
