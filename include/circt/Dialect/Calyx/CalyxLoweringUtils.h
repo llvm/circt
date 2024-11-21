@@ -445,9 +445,6 @@ public:
         name = llvm::join_items(/*separator=*/"", "std_", name, "FN");
         break;
       }
-
-      default:
-        llvm_unreachable("Unhandled floating point standard.");
       }
     }
     return builder.create<TLibraryOp>(loc, getUniqueName(name), resTypes);
