@@ -159,8 +159,9 @@ struct ExtractInstancesPass
   /// hierarchy, but before being grouped into an optional submodule.
   SmallVector<std::pair<InstanceOp, ExtractionInfo>> extractedInstances;
 
-  // The uniquified wiring prefix for each instance.
-  DenseMap<Operation *, SmallString<16>> instPrefices;
+  // The uniquified wiring prefix and original name for each instance.
+  DenseMap<Operation *, std::pair<SmallString<16>, StringAttr>>
+      instPrefixNamesPair;
 
   /// The current circuit namespace valid within the call to `runOnOperation`.
   CircuitNamespace circuitNamespace;
@@ -168,7 +169,8 @@ struct ExtractInstancesPass
   DenseMap<Operation *, hw::InnerSymbolNamespace> moduleNamespaces;
   /// The metadata class ops.
   ClassOp extractMetadataClass, schemaClass;
-  const unsigned prefixNameFieldId = 0, pathFieldId = 2, fileNameFieldId = 4;
+  const unsigned prefixNameFieldId = 0, pathFieldId = 2, fileNameFieldId = 4,
+                 instNameFieldId = 6;
   /// Cache of the inner ref to the new instances created. Will be used to
   /// create a path to the instance
   DenseMap<InnerRefAttr, InstanceOp> innerRefToInstances;
@@ -187,7 +189,7 @@ void ExtractInstancesPass::runOnOperation() {
   extractionPaths.clear();
   originalInstanceParents.clear();
   extractedInstances.clear();
-  instPrefices.clear();
+  instPrefixNamesPair.clear();
   moduleNamespaces.clear();
   circuitNamespace.clear();
   circuitNamespace.add(circuitOp);
@@ -511,8 +513,10 @@ void ExtractInstancesPass::extractInstances() {
     // of the pass does, which would group instances to be extracted by prefix
     // and then iterate over them with the index in the group being used as `N`.
     StringRef prefix;
+    auto &instPrefixEntry = instPrefixNamesPair[inst];
+    instPrefixEntry.second = inst.getInstanceNameAttr();
     if (!info.prefix.empty()) {
-      auto &prefixSlot = instPrefices[inst];
+      auto &prefixSlot = instPrefixEntry.first;
       if (prefixSlot.empty()) {
         auto idx = prefixUniqueIDs[info.prefix]++;
         (Twine(info.prefix) + "_" + Twine(idx)).toVector(prefixSlot);
@@ -651,13 +655,13 @@ void ExtractInstancesPass::extractInstances() {
       // new instance we create inherit the wiring prefix, and all additional
       // new instances (e.g. through multiple instantiation of the parent) will
       // pick a new prefix.
-      auto oldPrefix = instPrefices.find(inst);
-      if (oldPrefix != instPrefices.end()) {
-        LLVM_DEBUG(llvm::dbgs()
-                   << "  - Reusing prefix `" << oldPrefix->second << "`\n");
+      auto oldPrefix = instPrefixNamesPair.find(inst);
+      if (oldPrefix != instPrefixNamesPair.end()) {
+        LLVM_DEBUG(llvm::dbgs() << "  - Reusing prefix `"
+                                << oldPrefix->second.first << "`\n");
         auto newPrefix = std::move(oldPrefix->second);
-        instPrefices.erase(oldPrefix);
-        instPrefices.insert({newInst, newPrefix});
+        instPrefixNamesPair.erase(oldPrefix);
+        instPrefixNamesPair.insert({newInst, newPrefix});
       }
 
       // Inherit the old instance's extraction path.
@@ -901,7 +905,7 @@ void ExtractInstancesPass::groupInstances() {
     ports.clear();
     for (auto inst : insts) {
       // Determine the ports for the wrapper.
-      StringRef prefix(instPrefices[inst]);
+      StringRef prefix(instPrefixNamesPair[inst].first);
       unsigned portNum = inst.getNumResults();
       for (unsigned portIdx = 0; portIdx < portNum; ++portIdx) {
         auto name = inst.getPortNameStr(portIdx);
@@ -1065,7 +1069,8 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
     auto file = getOrCreateFile(fileName);
     auto builder = OpBuilder::atBlockEnd(file.getBody());
     for (auto inst : insts) {
-      StringRef prefix(instPrefices[inst]);
+      StringRef prefix(instPrefixNamesPair[inst].first);
+      StringAttr origInstName(instPrefixNamesPair[inst].second);
       if (prefix.empty()) {
         LLVM_DEBUG(llvm::dbgs() << "  - Skipping `" << inst.getName()
                                 << "` since it has no extraction prefix\n");
@@ -1105,6 +1110,11 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
             builderOM.create<StringConstantOp>(builder.getStringAttr(fileName));
         builderOM.create<PropAssignOp>(fFile, fileNameOp);
 
+        auto finstName =
+            builderOM.create<ObjectSubfieldOp>(object, instNameFieldId);
+        auto instNameOp = builderOM.create<StringConstantOp>(origInstName);
+        builderOM.create<PropAssignOp>(finstName, instNameOp);
+
         // Now add this to the output field of the class.
         classFields.emplace_back(object, prefix + "_field");
       }
@@ -1128,6 +1138,7 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
         os << ".";
         addSymbol(sym);
       }
+      os << "." << origInstName.getValue();
       // The final instance name is excluded as this does not provide useful
       // additional information and could conflict with a name inside the final
       // module.
@@ -1175,9 +1186,10 @@ void ExtractInstancesPass::createSchema() {
   mlir::Type portsType[] = {
       StringType::get(context), // name
       PathType::get(context),   // extracted instance path
-      StringType::get(context)  // filename
+      StringType::get(context), // filename
+      StringType::get(context)  // instance name
   };
-  StringRef portFields[] = {"name", "path", "filename"};
+  StringRef portFields[] = {"name", "path", "filename", "inst_name"};
 
   schemaClass = builderOM.create<ClassOp>("ExtractInstancesSchema", portFields,
                                           portsType);
