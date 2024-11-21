@@ -28,7 +28,7 @@ class TestFunc(Func):
 BarType = types.struct({"foo": types.i12}, "bar")
 
 
-@unittestmodule()
+@unittestmodule(print=True, run_passes=True, print_after_passes=True)
 class Top(Module):
   clk = Clock()
   rst = Input(Bits(1))
