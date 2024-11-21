@@ -15,6 +15,15 @@ from pycde.types import Bits, Channel
 # CHECK:    return %0 : i8
 # CHECK:  }
 
+# CHECK:  hw.module @Top(in %clk : i1, in %rst : i1, in %a : i8, in %a_valid : i1, in %x_ready : i1, out a_ready : i1, out x : i8, out x_valid : i1)
+# CHECK:    %TestFunc.in0_ready, %TestFunc.out0, %TestFunc.out0_valid = hw.instance "TestFunc" @TestFunc(in0: %a: i8, in0_valid: %a_valid: i1, clk: %clk: i1, rst: %rst: i1, out0_ready: %x_ready: i1) -> (in0_ready: i1, out0: i8, out0_valid: i1)
+# CHECK:    hw.output %TestFunc.in0_ready, %TestFunc.out0, %TestFunc.out0_valid : i1, i8, i1
+# CHECK:  hw.module @TestFunc(in %in0 : i8, in %in0_valid : i1, in %clk : i1, in %rst : i1, in %out0_ready : i1, out in0_ready : i1, out out0 : i8, out out0_valid : i1)
+# CHECK:    %c15_i8 = hw.constant 15 : i8
+# CHECK:    [[R0:%.+]] = comb.and %out0_ready, %in0_valid : i1
+# CHECK:    [[R1:%.+]] = comb.and bin %in0, %c15_i8 : i8
+# CHECK:    hw.output [[R0]], [[R1]], %in0_valid : i1, i8, i1
+
 
 class TestFunc(Func):
   a = Input(Bits(8))
@@ -28,10 +37,7 @@ class TestFunc(Func):
 BarType = types.struct({"foo": types.i12}, "bar")
 
 
-@unittestmodule(print=True,
-                run_passes=True,
-                print_after_passes=True,
-                debug=True)
+@unittestmodule(print=True, run_passes=True, print_after_passes=True)
 class Top(Module):
   clk = Clock()
   rst = Input(Bits(1))

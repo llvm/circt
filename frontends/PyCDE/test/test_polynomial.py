@@ -122,7 +122,7 @@ poly = pycde.System([PolynomialSystem],
 
 print("Generating rest...")
 poly.generate()
-poly.run_passes()
+poly.run_passes(debug=True)
 
 print("=== Final IR...")
 poly.print()
