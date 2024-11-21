@@ -139,7 +139,10 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
           attributes.underDut.mergeIn(parentAttrs.underDut);
 
         // Update underLayer.
-        bool underLayer = useIt->getInstance()->getParentOfType<LayerBlockOp>();
+        auto instanceOp = useIt->getInstance();
+        bool underLayer = (isa<InstanceOp>(instanceOp) &&
+                           cast<InstanceOp>(instanceOp).getLowerToBind()) ||
+                          instanceOp->getParentOfType<LayerBlockOp>();
         if (underLayer)
           attributes.underLayer.mergeIn(underLayer);
         else

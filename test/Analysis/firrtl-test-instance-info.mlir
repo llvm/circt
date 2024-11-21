@@ -460,3 +460,30 @@ firrtl.circuit "TestharnessNoDUT" {
     firrtl.instance mtdc @TDC()
   }
 }
+
+// -----
+
+// Test that `lowerToBind` is treated the same as a layer.  This is important
+// because it ensures that the InstanceInfo analysis behaves the same before or
+// after the `LowerLayers` pass is run.
+firrtl.circuit "Foo" {
+  // CHECK:      @Bar
+  // CHECK:        anyInstanceUnderLayer: true
+  // CHECK-NEXT:   allInstancesUnderLayer: true
+  // CHECK:        anyInstanceInEffectiveDesign: false
+  // CHECK-NEXT:   allInstancesInEffectiveDesign: false
+  firrtl.module @Bar() {
+  }
+  // CHECK:      @Foo_A
+  // CHECK:        anyInstanceUnderLayer: true
+  // CHECK-NEXT:   allInstancesUnderLayer: true
+  // CHECK:        anyInstanceInEffectiveDesign: false
+  // CHECK-NEXT:   allInstancesInEffectiveDesign: false
+  firrtl.module @Foo_A() {
+    firrtl.instance bar @Bar()
+  }
+  // CHECK:      @Foo
+  firrtl.module @Foo() {
+    firrtl.instance a {lowerToBind} @Foo_A()
+  }
+}
