@@ -16,6 +16,7 @@
 #include "circt/Dialect/DC/DCOps.h"
 #include "circt/Dialect/DC/DCTypes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
@@ -692,6 +693,44 @@ public:
   }
 };
 
+/// Lower the ESIInstanceOp to `hw.instance` with `dc.from_esi` and `dc.to_esi`
+/// to convert the args/results.
+class ESIInstanceConversionPattern
+    : public OpConversionPattern<handshake::ESIInstanceOp> {
+public:
+  ESIInstanceConversionPattern(MLIRContext *context,
+                               const HWSymbolCache &symCache)
+      : OpConversionPattern(context), symCache(symCache) {}
+
+  LogicalResult
+  matchAndRewrite(ESIInstanceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    SmallVector<Value> operands;
+    for (size_t i = ESIInstanceOp::NumFixedOperands, e = op.getNumOperands();
+         i < e; ++i)
+      operands.push_back(
+          rewriter.create<dc::FromESIOp>(loc, adaptor.getOperands()[i]));
+    operands.push_back(adaptor.getClk());
+    operands.push_back(adaptor.getRst());
+    // Locate the lowered module so the instance builder can get all the
+    // metadata.
+    Operation *targetModule = symCache.getDefinition(op.getModuleAttr());
+    // And replace the op with an instance of the target module.
+    auto inst = rewriter.create<hw::InstanceOp>(loc, targetModule,
+                                                op.getInstNameAttr(), operands);
+    SmallVector<Value> esiResults(
+        llvm::map_range(inst.getResults(), [&](Value v) {
+          return rewriter.create<dc::ToESIOp>(loc, v);
+        }));
+    rewriter.replaceOp(op, esiResults);
+    return success();
+  }
+
+private:
+  const HWSymbolCache &symCache;
+};
+
 /// Add DC clock and reset ports to the module.
 static void addClkRst(hw::HWModuleOp mod) {
   auto *ctx = mod.getContext();
@@ -768,7 +807,7 @@ LogicalResult circt::handshaketodc::runHandshakeToDC(
   ConversionTarget target(*ctx);
   target.addIllegalDialect<handshake::HandshakeDialect>();
   target.addLegalDialect<dc::DCDialect>();
-  target.addLegalOp<mlir::ModuleOp>();
+  target.addLegalOp<mlir::ModuleOp, handshake::ESIInstanceOp>();
 
   // And any user-specified target adjustments
   if (configureTarget)
@@ -810,6 +849,19 @@ LogicalResult circt::handshaketodc::runHandshakeToDC(
   for (auto &op : convertedOps)
     if (auto mod = dyn_cast<hw::HWModuleOp>(op); mod)
       addClkRst(mod);
+
+  // Run conversions which need see everything.
+  HWSymbolCache symbolCache;
+  symbolCache.addDefinitions(op);
+  symbolCache.freeze();
+  ConversionTarget globalLoweringTarget(*ctx);
+  globalLoweringTarget.addIllegalDialect<handshake::HandshakeDialect>();
+  globalLoweringTarget.addLegalDialect<dc::DCDialect, hw::HWDialect>();
+  RewritePatternSet globalPatterns(ctx);
+  globalPatterns.add<ESIInstanceConversionPattern>(ctx, symbolCache);
+  if (failed(applyPartialConversion(op, globalLoweringTarget,
+                                    std::move(globalPatterns))))
+    return op->emitOpError() << "error during conversion";
 
   return success();
 }
