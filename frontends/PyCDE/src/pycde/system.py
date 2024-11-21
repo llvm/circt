@@ -314,6 +314,7 @@ class System:
                                 tcl_file=tcl_file,
                                 platform=self.platform).strip()
           if aplog is not None:
+            print(f"Running phase #{idx}: {phase}")
             aplog.write(f"// passes ran: {passes}\n")
             aplog.flush()
           pm = passmanager.PassManager.parse(passes)

@@ -24,7 +24,7 @@ class WireNames(Module):
 
 sys = System([WireNames], output_directory=sys.argv[1])
 sys.generate()
-sys.run_passes()
+sys.run_passes(debug=True)
 sys.print()
 # CHECK-LABEL:  hw.module @WireNames(in %clk : i1, in %data_in : !hw.array<3xi32>, in %sel : i2, out a : i32, out b : i32)
 # CHECK:    %foo__reg1 = sv.reg sym @foo__reg1 : !hw.inout<i32>

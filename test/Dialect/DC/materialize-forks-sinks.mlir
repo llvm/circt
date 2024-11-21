@@ -55,3 +55,11 @@ func.func @testUnusedArg(%t: !dc.token, %v : !dc.value<i1>) -> () {
 func.func @testForkOfValue(%v : !dc.value<i1>) -> (!dc.value<i1>, !dc.value<i1>) {
     return %v, %v : !dc.value<i1>, !dc.value<i1>
 }
+
+// CHECK-LABEL: hw.module @shouldNotChange(in %clk : !seq.clock, in %d : i32) {
+// CHECK-NEXT:    seq.compreg %d, %clk : i32
+// CHECK-NEXT:    seq.compreg %d, %clk : i32
+hw.module @shouldNotChange(in %clk: !seq.clock, in %d: i32) {
+  seq.compreg %d, %clk : i32
+  seq.compreg %d, %clk : i32
+}
