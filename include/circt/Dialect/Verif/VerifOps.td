@@ -295,7 +295,7 @@ def FormalOp : VerifOp<"formal", [
 
     ### Example
     ```
-    verif.formal @AdderTest {
+    verif.formal @AdderTest {myParam = 42, myTag = "hello"} {
       %0 = verif.symbolic_value : i42
       %1 = verif.symbolic_value : i42
       %2 = hw.instance "dut" @Adder(a: %0: i42, b: %1: i42) -> (c: i42)
@@ -305,9 +305,12 @@ def FormalOp : VerifOp<"formal", [
     }
     ```
   }];
-  let arguments = (ins SymbolNameAttr:$sym_name);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    DictionaryAttr:$parameters
+  );
   let regions = (region SizedRegion<1>:$body);
-  let assemblyFormat = "$sym_name attr-dict-with-keyword $body";
+  let assemblyFormat = "$sym_name $parameters attr-dict-with-keyword $body";
   let extraClassDeclaration = [{
     static RegionKind getRegionKind(unsigned index) { 
       return RegionKind::Graph;

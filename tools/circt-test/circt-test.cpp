@@ -149,11 +149,11 @@ void TestSuite::discoverInModule(ModuleOp module) {
     test.name = op.getSymNameAttr();
     test.kind = TestKind::Formal;
     test.loc = op.getLoc();
-    if (auto boolAttr = op->getAttrOfType<BoolAttr>("ignore"))
+    test.attrs = op.getParametersAttr();
+    if (auto boolAttr = test.attrs.getAs<BoolAttr>("ignore"))
       test.ignore = boolAttr.getValue();
     else
       test.ignore = false;
-    test.attrs = op->getDiscardableAttrDictionary();
     tests.push_back(std::move(test));
   });
 }

@@ -35,7 +35,7 @@ hw.module @CustomAdder(in %a: i4, in %b: i4, out z: i4) {
   hw.output %z : i4
 }
 
-verif.formal @ZeroLhs {
+verif.formal @ZeroLhs {} {
   %c0_i4 = hw.constant 0 : i4
   %x = verif.symbolic_value : i4
   %z = hw.instance "dut" @CustomAdder(a: %c0_i4: i4, b: %x: i4) -> (z: i4)
@@ -43,7 +43,7 @@ verif.formal @ZeroLhs {
   verif.assert %eq : i1
 }
 
-verif.formal @ZeroRhs {
+verif.formal @ZeroRhs {} {
   %c0_i4 = hw.constant 0 : i4
   %x = verif.symbolic_value : i4
   %z = hw.instance "dut" @CustomAdder(a: %x: i4, b: %c0_i4: i4) -> (z: i4)
@@ -51,7 +51,7 @@ verif.formal @ZeroRhs {
   verif.assert %eq : i1
 }
 
-verif.formal @CustomAdderWorks {
+verif.formal @CustomAdderWorks {} {
   %a = verif.symbolic_value : i4
   %b = verif.symbolic_value : i4
 
@@ -76,7 +76,7 @@ hw.module @ALU(in %a: i4, in %b: i4, in %sub: i1, out z: i4) {
   hw.output %z : i4
 }
 
-verif.formal @ALUCanAdd {
+verif.formal @ALUCanAdd {} {
   %a = verif.symbolic_value : i4
   %b = verif.symbolic_value : i4
   %false = hw.constant false
@@ -86,7 +86,7 @@ verif.formal @ALUCanAdd {
   verif.assert %eq : i1
 }
 
-verif.formal @ALUCanSub attributes {mode = "cover,induction"} {
+verif.formal @ALUCanSub {mode = "cover,induction"} {
   %a = verif.symbolic_value : i4
   %b = verif.symbolic_value : i4
   %true = hw.constant true
@@ -96,7 +96,7 @@ verif.formal @ALUCanSub attributes {mode = "cover,induction"} {
   verif.assert %eq : i1
 }
 
-verif.formal @ALUWorks attributes {mode = "cover,bmc", depth = 5} {
+verif.formal @ALUWorks {mode = "cover,bmc", depth = 5} {
   %a = verif.symbolic_value : i4
   %b = verif.symbolic_value : i4
   %sub = verif.symbolic_value : i1
@@ -114,7 +114,7 @@ verif.formal @ALUWorks attributes {mode = "cover,bmc", depth = 5} {
   verif.assert %eq : i1
 }
 
-verif.formal @ALUIgnoreFailure attributes {ignore = true} {
+verif.formal @ALUIgnoreFailure {ignore = true} {
   %a = verif.symbolic_value : i4
   %b = verif.symbolic_value : i4
   %sub = verif.symbolic_value : i1
@@ -132,7 +132,7 @@ verif.formal @ALUIgnoreFailure attributes {ignore = true} {
   verif.assert %ne : i1
 }
 
-verif.formal @ALUFailure attributes {depth = 3} {
+verif.formal @ALUFailure {depth = 3} {
   %a = verif.symbolic_value : i4
   %b = verif.symbolic_value : i4
   %sub = verif.symbolic_value : i1

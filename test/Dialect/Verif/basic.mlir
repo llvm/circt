@@ -40,11 +40,11 @@ verif.cover %p : !ltl.property
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: verif.formal @EmptyFormalTest
-verif.formal @EmptyFormalTest {
+verif.formal @EmptyFormalTest {} {
 }
 
 // CHECK-LABEL: verif.formal @FormalTestWithAttrs
-verif.formal @FormalTestWithAttrs attributes {
+verif.formal @FormalTestWithAttrs {
   // CHECK-SAME: a,
   a,
   // CHECK-SAME: b = "hello"
@@ -59,7 +59,7 @@ verif.formal @FormalTestWithAttrs attributes {
 }
 
 // CHECK-LABEL: verif.formal @FormalTestBody
-verif.formal @FormalTestBody {
+verif.formal @FormalTestBody {} {
   // CHECK: {{%.+}} = verif.symbolic_value : i42
   %0 = verif.symbolic_value : i42
 }
