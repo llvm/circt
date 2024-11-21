@@ -61,3 +61,58 @@ hw.module @CarrySaveCompress3to2(
   }
   hw.output %z0, %z1 : i42, i42
 }
+
+// CHECK: verif.formal @ShiftLeft {
+// CHECK:   %c1_i8 = hw.constant 1 : i8
+// CHECK:   %c2_i8 = hw.constant 2 : i8
+// CHECK:   %c4_i8 = hw.constant 4 : i8
+// CHECK:   %c8_i8 = hw.constant 8 : i8
+// CHECK:   %0 = verif.symbolic_value : i8
+// CHECK:   %1 = verif.symbolic_value : i8
+// CHECK:   %2 = comb.extract %1 from 2 : (i8) -> i1
+// CHECK:   %3 = comb.extract %1 from 1 : (i8) -> i1
+// CHECK:   %4 = comb.extract %1 from 0 : (i8) -> i1
+// CHECK:   %5 = comb.shl %0, %c4_i8 : i8
+// CHECK:   %6 = comb.mux %2, %5, %0 : i8
+// CHECK:   %7 = comb.shl %6, %c2_i8 : i8
+// CHECK:   %8 = comb.mux %3, %7, %6 : i8
+// CHECK:   %9 = comb.shl %8, %c1_i8 : i8
+// CHECK:   %10 = comb.mux %4, %9, %8 : i8
+// CHECK:   %11 = comb.icmp ult %1, %c8_i8 : i8
+// CHECK:   %12 = comb.shl %0, %1 : i8
+// CHECK:   %13 = comb.icmp eq %10, %12 : i8
+// CHECK:   verif.assert %13 : i1
+// CHECK:   verif.assume %11 : i1
+// CHECK: }
+
+hw.module @ShiftLeft(in %a: i8, in %b: i8, out z: i8) {
+  %c4_i8 = hw.constant 4 : i8
+  %c2_i8 = hw.constant 2 : i8
+  %c1_i8 = hw.constant 1 : i8
+  %b2 = comb.extract %b from 2 : (i8) -> i1
+  %b1 = comb.extract %b from 1 : (i8) -> i1
+  %b0 = comb.extract %b from 0 : (i8) -> i1
+  %0 = comb.shl %a, %c4_i8 : i8
+  %1 = comb.mux %b2, %0, %a : i8
+  %2 = comb.shl %1, %c2_i8 : i8
+  %3 = comb.mux %b1, %2, %1 : i8
+  %4 = comb.shl %3, %c1_i8 : i8
+  %5 = comb.mux %b0, %4, %3 : i8
+
+  // Contract to check that the multiplexers and constant shifts above indeed
+  // produce the correct shift by 0 to 7 places, assuming the shift amount is
+  // less than 8 (we can't shift a number out).
+  %z = verif.contract %5 : i8 {
+    // Shift amount must be less than 8.
+    %c8_i8 = hw.constant 8 : i8
+    %blt8 = comb.icmp ult %b, %c8_i8 : i8
+    verif.require %blt8 : i1
+
+    // In that case the mux tree computes the correct left-shift.
+    %ashl = comb.shl %a, %b : i8
+    %eq = comb.icmp eq %z, %ashl : i8
+    verif.ensure %eq : i1
+  }
+
+  hw.output %z : i8
+}
