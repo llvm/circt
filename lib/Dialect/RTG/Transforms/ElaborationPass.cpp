@@ -20,7 +20,7 @@
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/Support/Debug.h"
-#include <deque>
+#include <queue>
 #include <random>
 
 namespace circt {
@@ -299,16 +299,17 @@ namespace {
 /// Construct an SSA value from a given elaborated value.
 class Materializer {
 public:
-  Value materialize(ElaboratorValue *val, Block *block, Location loc,
+  Value materialize(ElaboratorValue *val, Location loc,
                     function_ref<InFlightDiagnostic()> emitError) {
-    auto iter = materializedValues.find({val, block});
+    assert(block && "must call reset before calling this function");
+
+    auto iter = materializedValues.find(val);
     if (iter != materializedValues.end())
       return iter->second;
 
-    auto [builderIter, _] =
-        builderPerBlock.insert({block, OpBuilder::atBlockBegin(block)});
-    OpBuilder builder = builderIter->second;
+    LLVM_DEBUG(llvm::dbgs() << "Materializing " << *val << "\n\n");
 
+    OpBuilder builder(block, insertionPoint);
     return TypeSwitch<ElaboratorValue *, Value>(val)
         .Case<AttributeValue, SetValue, BagValue>(
             [&](auto val) { return visit(val, builder, loc, emitError); })
@@ -316,6 +317,14 @@ public:
           assert(false && "all cases must be covered above");
           return Value();
         });
+  }
+
+  Materializer &reset(Block *block) {
+    materializedValues.clear();
+    integerValues.clear();
+    this->block = block;
+    insertionPoint = block->begin();
+    return *this;
   }
 
 private:
@@ -330,7 +339,7 @@ private:
                       ->getLoadedDialect<arith::ArithDialect>()
                       ->materializeConstant(builder, attr, attr.getType(), loc)
                       ->getResult(0);
-      materializedValues[{val, builder.getBlock()}] = res;
+      materializedValues[val] = res;
       return res;
     }
 
@@ -347,7 +356,7 @@ private:
     }
 
     Value res = op->getResult(0);
-    materializedValues[{val, builder.getBlock()}] = res;
+    materializedValues[val] = res;
     return res;
   }
 
@@ -356,7 +365,7 @@ private:
     SmallVector<Value> elements;
     elements.reserve(val->getSet().size());
     for (auto *el : val->getSet()) {
-      auto materialized = materialize(el, builder.getBlock(), loc, emitError);
+      auto materialized = materialize(el, loc, emitError);
       if (!materialized)
         return Value();
 
@@ -364,7 +373,7 @@ private:
     }
 
     auto res = builder.create<SetCreateOp>(loc, val->getType(), elements);
-    materializedValues[{val, builder.getBlock()}] = res;
+    materializedValues[val] = res;
     return res;
   }
 
@@ -374,19 +383,18 @@ private:
     values.reserve(val->getBag().size());
     weights.reserve(val->getBag().size());
     for (auto [val, weight] : val->getBag()) {
-      auto materializedVal =
-          materialize(val, builder.getBlock(), loc, emitError);
+      auto materializedVal = materialize(val, loc, emitError);
       if (!materializedVal)
         return Value();
 
-      auto iter = integerValues.find({weight, builder.getBlock()});
+      auto iter = integerValues.find(weight);
       Value materializedWeight;
       if (iter != integerValues.end()) {
         materializedWeight = iter->second;
       } else {
         materializedWeight = builder.create<arith::ConstantOp>(
             loc, builder.getIndexAttr(weight));
-        integerValues[{weight, builder.getBlock()}] = materializedWeight;
+        integerValues[weight] = materializedWeight;
       }
 
       values.push_back(materializedVal);
@@ -395,7 +403,7 @@ private:
 
     auto res =
         builder.create<BagCreateOp>(loc, val->getType(), values, weights);
-    materializedValues[{val, builder.getBlock()}] = res;
+    materializedValues[val] = res;
     return res;
   }
 
@@ -405,12 +413,13 @@ private:
   /// insertion point such that future materializations can also reuse previous
   /// materializations without running into dominance issues (or requiring
   /// additional checks to avoid them).
-  DenseMap<std::pair<ElaboratorValue *, Block *>, Value> materializedValues;
-  DenseMap<std::pair<uint64_t, Block *>, Value> integerValues;
+  DenseMap<ElaboratorValue *, Value> materializedValues;
+  DenseMap<uint64_t, Value> integerValues;
 
   /// Cache the builders to continue insertions at their current insertion point
   /// for the reason stated above.
-  DenseMap<Block *, OpBuilder> builderPerBlock;
+  Block *block;
+  Block::iterator insertionPoint;
 };
 
 /// Used to signal to the elaboration driver whether the operation should be
@@ -418,15 +427,13 @@ private:
 enum class DeletionKind { Keep, Delete };
 
 /// Interprets the IR to perform and lower the represented randomizations.
-class Elaborator : public RTGOpVisitor<Elaborator, FailureOr<DeletionKind>,
-                                       function_ref<void(Operation *)>> {
+class Elaborator : public RTGOpVisitor<Elaborator, FailureOr<DeletionKind>> {
 public:
-  using RTGBase = RTGOpVisitor<Elaborator, FailureOr<DeletionKind>,
-                               function_ref<void(Operation *)>>;
+  using RTGBase = RTGOpVisitor<Elaborator, FailureOr<DeletionKind>>;
   using RTGBase::visitOp;
   using RTGBase::visitRegisterOp;
 
-  Elaborator(SymbolTable &table, std::mt19937 &rng) : rng(rng) {}
+  Elaborator(SymbolTable &table, std::mt19937 &rng) : rng(rng), table(table) {}
 
   /// Helper to perform internalization and keep track of interpreted value for
   /// the given SSA value.
@@ -440,15 +447,11 @@ public:
   }
 
   /// Print a nice error message for operations we don't support yet.
-  FailureOr<DeletionKind>
-  visitUnhandledOp(Operation *op,
-                   function_ref<void(Operation *)> addToWorklist) {
+  FailureOr<DeletionKind> visitUnhandledOp(Operation *op) {
     return op->emitOpError("elaboration not supported");
   }
 
-  FailureOr<DeletionKind>
-  visitExternalOp(Operation *op,
-                  function_ref<void(Operation *)> addToWorklist) {
+  FailureOr<DeletionKind> visitExternalOp(Operation *op) {
     // TODO: we only have this to be able to write tests for this pass without
     // having to add support for more operations for now, so it should be
     // removed once it is not necessary anymore for writing tests
@@ -461,8 +464,8 @@ public:
               << operand.getOperandNumber();
           return diag;
         };
-        Value val = materializer.materialize(
-            state.at(operand.get()), op->getBlock(), op->getLoc(), emitError);
+        Value val = materializer.materialize(state.at(operand.get()),
+                                             op->getLoc(), emitError);
         if (!val)
           return failure();
         operand.set(val);
@@ -470,11 +473,52 @@ public:
       return DeletionKind::Keep;
     }
 
-    return visitUnhandledOp(op, addToWorklist);
+    return visitUnhandledOp(op);
   }
 
-  FailureOr<DeletionKind>
-  visitOp(SetCreateOp op, function_ref<void(Operation *)> addToWorklist) {
+  FailureOr<DeletionKind> visitOp(SequenceClosureOp op) {
+    auto originalSeqOp = table.lookup<SequenceOp>(op.getSequenceAttr());
+    // TODO: don't clone if only user
+    auto seqOp = cast<SequenceOp>(originalSeqOp->clone());
+    auto nameAttr = table.insert(seqOp);
+
+    for (auto [val, arg] :
+         llvm::zip(op.getArgs(), seqOp.getBody()->getArguments())) {
+      unsigned operandNumber = arg.getArgNumber();
+      auto emitError = [&]() {
+        auto diag = op->emitError();
+        diag.attachNote(op->getLoc())
+            << "while materializing value for operand#" << operandNumber;
+        return diag;
+      };
+
+      Value repl = Materializer()
+                       .reset(seqOp.getBody())
+                       .materialize(state.at(val), seqOp.getLoc(), emitError);
+      if (!repl)
+        return failure();
+
+      arg.replaceAllUsesWith(repl);
+    }
+
+    seqOp.getBody()->eraseArguments(0, seqOp.getBody()->getNumArguments());
+
+    worklist.push(seqOp);
+
+    internalizeResult<AttributeValue>(op.getResult(), nameAttr);
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(InvokeSequenceOp op) {
+    auto *sequence = cast<AttributeValue>(state.at(op.getSequence()));
+    OpBuilder builder(op);
+    Value seqVal = builder.create<SequenceClosureOp>(
+        op.getLoc(), cast<StringAttr>(sequence->getAttr()), ValueRange());
+    op.getSequenceMutable().set(seqVal);
+    return DeletionKind::Keep;
+  }
+
+  FailureOr<DeletionKind> visitOp(SetCreateOp op) {
     SetVector<ElaboratorValue *> set;
     for (auto val : op.getElements())
       set.insert(state.at(val));
@@ -484,8 +528,7 @@ public:
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind>
-  visitOp(SetSelectRandomOp op, function_ref<void(Operation *)> addToWorklist) {
+  FailureOr<DeletionKind> visitOp(SetSelectRandomOp op) {
     auto *set = cast<SetValue>(state.at(op.getSet()));
 
     size_t selected;
@@ -501,8 +544,7 @@ public:
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind>
-  visitOp(SetDifferenceOp op, function_ref<void(Operation *)> addToWorklist) {
+  FailureOr<DeletionKind> visitOp(SetDifferenceOp op) {
     auto original = cast<SetValue>(state.at(op.getOriginal()))->getSet();
     auto diff = cast<SetValue>(state.at(op.getDiff()))->getSet();
 
@@ -514,8 +556,7 @@ public:
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind>
-  visitOp(SetUnionOp op, function_ref<void(Operation *)> addToWorklist) {
+  FailureOr<DeletionKind> visitOp(SetUnionOp op) {
     SetVector<ElaboratorValue *> result;
     for (auto set : op.getSets())
       result.set_union(cast<SetValue>(state.at(set))->getSet());
@@ -525,16 +566,14 @@ public:
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind>
-  visitOp(SetSizeOp op, function_ref<void(Operation *)> addToWorklist) {
+  FailureOr<DeletionKind> visitOp(SetSizeOp op) {
     auto size = cast<SetValue>(state.at(op.getSet()))->getSet().size();
     auto sizeAttr = IntegerAttr::get(IndexType::get(op->getContext()), size);
     internalizeResult<AttributeValue>(op.getResult(), sizeAttr);
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind>
-  visitOp(BagCreateOp op, function_ref<void(Operation *)> addToWorklist) {
+  FailureOr<DeletionKind> visitOp(BagCreateOp op) {
     MapVector<ElaboratorValue *, uint64_t> bag;
     for (auto [val, multiple] :
          llvm::zip(op.getElements(), op.getMultiples())) {
@@ -551,8 +590,7 @@ public:
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind>
-  visitOp(BagSelectRandomOp op, function_ref<void(Operation *)> addToWorklist) {
+  FailureOr<DeletionKind> visitOp(BagSelectRandomOp op) {
     auto *bag = cast<BagValue>(state.at(op.getBag()));
 
     SmallVector<std::pair<ElaboratorValue *, uint32_t>> prefixSum;
@@ -579,8 +617,7 @@ public:
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind>
-  visitOp(BagDifferenceOp op, function_ref<void(Operation *)> addToWorklist) {
+  FailureOr<DeletionKind> visitOp(BagDifferenceOp op) {
     auto *original = cast<BagValue>(state.at(op.getOriginal()));
     auto *diff = cast<BagValue>(state.at(op.getDiff()));
 
@@ -606,8 +643,7 @@ public:
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind>
-  visitOp(BagUnionOp op, function_ref<void(Operation *)> addToWorklist) {
+  FailureOr<DeletionKind> visitOp(BagUnionOp op) {
     MapVector<ElaboratorValue *, uint64_t> result;
     for (auto bag : op.getBags()) {
       auto *val = cast<BagValue>(state.at(bag));
@@ -620,17 +656,14 @@ public:
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind>
-  visitOp(BagUniqueSizeOp op, function_ref<void(Operation *)> addToWorklist) {
+  FailureOr<DeletionKind> visitOp(BagUniqueSizeOp op) {
     auto size = cast<BagValue>(state.at(op.getBag()))->getBag().size();
     auto sizeAttr = IntegerAttr::get(IndexType::get(op->getContext()), size);
     internalizeResult<AttributeValue>(op.getResult(), sizeAttr);
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind>
-  dispatchOpVisitor(Operation *op,
-                    function_ref<void(Operation *)> addToWorklist) {
+  FailureOr<DeletionKind> dispatchOpVisitor(Operation *op) {
     if (op->hasTrait<OpTrait::ConstantLike>()) {
       SmallVector<OpFoldResult, 1> result;
       auto foldResult = op->fold(result);
@@ -646,58 +679,35 @@ public:
       return DeletionKind::Delete;
     }
 
-    return RTGBase::dispatchOpVisitor(op, addToWorklist);
+    return RTGBase::dispatchOpVisitor(op);
   }
 
-  LogicalResult elaborate(TestOp testOp) {
-    LLVM_DEBUG(llvm::dbgs()
-               << "\n=== Elaborating Test @" << testOp.getSymName() << "\n\n");
+  LogicalResult elaborate(Operation *op) {
+    LLVM_DEBUG({
+      if (auto testOp = dyn_cast<TestOp>(op))
+        llvm::dbgs() << "\n=== Elaborating Test @" << testOp.getSymName()
+                     << "\n\n";
+      else if (auto seqOp = dyn_cast<SequenceOp>(op))
+        llvm::dbgs() << "\n=== Elaborating Sequence @" << seqOp.getSymName()
+                     << "\n\n";
+    });
 
-    DenseSet<Operation *> visited;
-    std::deque<Operation *> worklist;
-    DenseSet<Operation *> toDelete;
-    for (auto &op : *testOp.getBody())
-      if (op.use_empty())
-        worklist.push_back(&op);
+    Block *block = &op->getRegion(0).front();
+    materializer.reset(block);
 
-    while (!worklist.empty()) {
-      auto *curr = worklist.back();
-      if (visited.contains(curr)) {
-        worklist.pop_back();
-        continue;
-      }
+    SmallVector<Operation *> toDelete;
+    for (auto &op : *block) {
+      if (op.getNumRegions() != 0)
+        return op.emitOpError("nested regions not supported");
 
-      if (curr->getNumRegions() != 0)
-        return curr->emitOpError("nested regions not supported");
-
-      bool addedSomething = false;
-      for (auto val : curr->getOperands()) {
-        if (state.contains(val))
-          continue;
-
-        auto *defOp = val.getDefiningOp();
-        assert(defOp && "cannot be a BlockArgument here");
-        if (!visited.contains(defOp)) {
-          worklist.push_back(defOp);
-          addedSomething = true;
-        }
-      }
-
-      if (addedSomething)
-        continue;
-
-      auto addToWorklist = [&](Operation *op) {
-        if (op->use_empty())
-          worklist.push_front(op);
-      };
-      auto result = dispatchOpVisitor(curr, addToWorklist);
+      auto result = dispatchOpVisitor(&op);
       if (failed(result))
         return failure();
 
       LLVM_DEBUG({
-        llvm::dbgs() << "Elaborating " << *curr << " to\n[";
+        llvm::dbgs() << "Elaborating " << op << " to\n[";
 
-        llvm::interleaveComma(curr->getResults(), llvm::dbgs(), [&](auto res) {
+        llvm::interleaveComma(op.getResults(), llvm::dbgs(), [&](auto res) {
           if (state.contains(res))
             llvm::dbgs() << *state.at(res);
           else
@@ -708,29 +718,91 @@ public:
       });
 
       if (*result == DeletionKind::Delete)
-        toDelete.insert(curr);
-
-      visited.insert(curr);
-      worklist.pop_back();
+        toDelete.push_back(&op);
     }
 
-    // FIXME: this assumes that we didn't query the opaque value from an
-    // interpreted elaborator value in a way that it can remain used in the IR.
-    for (auto *op : toDelete) {
-      op->dropAllUses();
+    for (auto *op : llvm::reverse(toDelete))
       op->erase();
-    }
 
     // Reduce max memory consumption and make sure the values cannot be accessed
-    // anymore because we deleted the ops above.
+    // anymore because we deleted the ops above. Clearing should lead to better
+    // performance than having them as a local here and pass via function
+    // argument.
     state.clear();
     interned.clear();
 
     return success();
   }
 
+  LogicalResult inlineSequences(TestOp testOp) {
+    OpBuilder builder(testOp);
+    for (auto iter = testOp.getBody()->begin();
+         iter != testOp.getBody()->end();) {
+      auto invokeOp = dyn_cast<InvokeSequenceOp>(&*iter);
+      if (!invokeOp) {
+        ++iter;
+        continue;
+      }
+
+      auto seqClosureOp =
+          invokeOp.getSequence().getDefiningOp<SequenceClosureOp>();
+      if (!seqClosureOp)
+        return invokeOp->emitError(
+            "sequence operand not directly defined by sequence_closure op");
+
+      auto seqOp = table.lookup<SequenceOp>(seqClosureOp.getSequenceAttr());
+
+      builder.setInsertionPointAfter(invokeOp);
+      IRMapping mapping;
+      for (auto &op : *seqOp.getBody())
+        builder.clone(op, mapping);
+
+      (iter++)->erase();
+
+      if (seqClosureOp->use_empty())
+        seqClosureOp->erase();
+    }
+
+    return success();
+  }
+
+  LogicalResult elaborateModule(ModuleOp moduleOp) {
+    // Initialize the worklist with the test ops since they cannot be placed by
+    // other ops.
+    for (auto testOp : moduleOp.getOps<TestOp>())
+      worklist.push(testOp);
+
+    // Do top-down BFS traversal such that elaborating a sequence further down
+    // does not fix the outcome for multiple placements.
+    while (!worklist.empty()) {
+      auto *curr = worklist.front();
+      worklist.pop();
+
+      auto result = elaborate(curr);
+      if (failed(result))
+        return failure();
+    }
+
+    // Inline all sequences and remove the operations that place the sequences.
+    for (auto testOp : moduleOp.getOps<TestOp>())
+      if (failed(inlineSequences(testOp)))
+        return failure();
+
+    // Remove all sequences since they are not accessible from the outside and
+    // are not needed anymore since we fully inlined them.
+    for (auto seqOp : llvm::make_early_inc_range(moduleOp.getOps<SequenceOp>()))
+      seqOp->erase();
+
+    return success();
+  }
+
 private:
   std::mt19937 rng;
+  SymbolTable &table;
+
+  /// The worklist used to keep track of the test and sequence operations to
+  /// make sure they are processed top-down (BFS traversal).
+  std::queue<Operation *> worklist;
 
   // A map used to intern elaborator values. We do this such that we can
   // compare pointers when, e.g., computing set differences, uniquing the
@@ -774,9 +846,8 @@ void ElaborationPass::runOnOperation() {
 
   std::mt19937 rng(seed);
   Elaborator elaborator(table, rng);
-  for (auto testOp : moduleOp.getOps<TestOp>())
-    if (failed(elaborator.elaborate(testOp)))
-      return signalPassFailure();
+  if (failed(elaborator.elaborateModule(moduleOp)))
+    return signalPassFailure();
 }
 
 void ElaborationPass::cloneTargetsIntoTests(SymbolTable &table) {
