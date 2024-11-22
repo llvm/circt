@@ -30,6 +30,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/LogicalResult.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include <variant>
 
@@ -732,7 +733,6 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      CmpFOp cmpf) const {
-
   Location loc = cmpf.getLoc();
   IntegerType one = rewriter.getI1Type(), five = rewriter.getIntegerType(5),
               width = rewriter.getIntegerType(
@@ -742,1156 +742,151 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                              rewriter, loc,
                              {one, one, one, width, width, one, one, one, one,
                               one, five, one});
-  hw::ConstantOp constantOne =
-      createConstant(loc, rewriter, getComponent(), 1, 1);
-  Value unordered = calyxCmpFOp.getUnordered();
+  hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
   rewriter.setInsertionPointToStart(getComponent().getBodyBlock());
 
-  switch (cmpf.getPredicate()) {
-  case CmpFPredicate::OEQ: {
-    StringRef opName = cmpf.getOperationName().split(".").second;
+  auto createSignalRegister =
+      [&](Value signal, bool invert, StringRef nameSuffix, Location loc,
+          PatternRewriter &rewriter, calyx::ComponentOp component,
+          calyx::CompareFOpIEEE754 calyxCmpFOp, calyx::GroupOp group,
+          OpBuilder &builder) -> calyx::RegisterOp {
     auto reg = createRegister(
-        loc, rewriter, getComponent(), 1,
-        getState<ComponentLoweringState>().getUniqueName(opName));
-
-    // Operation pipelines are not combinational, so a GroupOp is required.
-    auto group = createGroupForOp<calyx::GroupOp>(rewriter, cmpf);
-    OpBuilder builder(group->getRegion(0));
-    getState<ComponentLoweringState>().addBlockScheduleable(cmpf->getBlock(),
-                                                            group);
-
-    rewriter.setInsertionPointToEnd(group.getBodyBlock());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getLeft(), cmpf.getLhs());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getRight(),
-                                     cmpf.getRhs());
-
-    hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
-    SmallVector<StringRef, 2> cmpPortIdentifier = {"compare", "port"};
-    auto compareReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(cmpPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, compareReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(loc, compareReg.getIn(), c1,
-                                     calyxCmpFOp.getEq());
-
-    SmallVector<StringRef, 2> unorderedPortIdentifier = {"unordered", "port"};
-    auto unorderedReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(unorderedPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(
-        loc, unorderedReg.getIn(), c1,
-        comb::createOrFoldNot(loc, unordered, builder));
-
-    SmallVector<Type> outputLibOpTypes{one, one, one};
-    auto outputLibOp = getState<ComponentLoweringState>()
-                           .getNewLibraryOpInstance<calyx::AndLibOp>(
-                               rewriter, loc, outputLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
-                                     compareReg.getOut());
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
-                                     unorderedReg.getOut());
-
-    // Write the output to this register.
-    rewriter.create<calyx::AssignOp>(loc, reg.getIn(), outputLibOp.getOut());
-    // The write enable port is high when the pipeline is done.
+        loc, rewriter, component, 1,
+        getState<ComponentLoweringState>().getUniqueName(nameSuffix));
     rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(),
                                      calyxCmpFOp.getDone());
-    // Set pipelineOp to high as long as its done signal is not high.
-    // This prevents the pipelineOP from executing for the cycle that we write
-    // to register. To get !(pipelineOp.done) we do 1 xor pipelineOp.done
-    rewriter.create<calyx::AssignOp>(
-        loc, calyxCmpFOp.getGo(), c1,
-        comb::createOrFoldNot(group.getLoc(), calyxCmpFOp.getDone(), builder));
-    // The group is done when the register write is complete.
-    SmallVector<Type> doneLibOpTypes{one, one, one};
+    if (invert)
+      rewriter.create<calyx::AssignOp>(
+          loc, reg.getIn(), c1, comb::createOrFoldNot(loc, signal, builder));
+    else
+      rewriter.create<calyx::AssignOp>(loc, reg.getIn(), signal);
+    return reg;
+  };
+
+  using calyx::PredicateInfo;
+  PredicateInfo info = calyx::getPredicateInfo(cmpf.getPredicate());
+  if (info.logic == PredicateInfo::SPECIAL) {
+    if (cmpf.getPredicate() == CmpFPredicate::AlwaysTrue) {
+      cmpf.getResult().replaceAllUsesWith(c1);
+      return success();
+    }
+
+    if (cmpf.getPredicate() == CmpFPredicate::AlwaysFalse) {
+      Value constantZero = createConstant(loc, rewriter, getComponent(), 1, 0);
+      cmpf.getResult().replaceAllUsesWith(constantZero);
+      return success();
+    }
+  }
+
+  // General case
+  StringRef opName = cmpf.getOperationName().split(".").second;
+  auto reg =
+      createRegister(loc, rewriter, getComponent(), 1,
+                     getState<ComponentLoweringState>().getUniqueName(opName));
+
+  // Operation pipelines are not combinational, so a GroupOp is required.
+  auto group = createGroupForOp<calyx::GroupOp>(rewriter, cmpf);
+  OpBuilder builder(group->getRegion(0));
+  getState<ComponentLoweringState>().addBlockScheduleable(cmpf->getBlock(),
+                                                          group);
+
+  rewriter.setInsertionPointToEnd(group.getBodyBlock());
+  rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getLeft(), cmpf.getLhs());
+  rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getRight(), cmpf.getRhs());
+
+  // Prepare signals and create registers
+  SmallVector<calyx::RegisterOp> inputRegs;
+  for (const auto &input : info.inputPorts) {
+    Value signal;
+    switch (input.port) {
+    case PredicateInfo::InputPorts::Port::EQ: {
+      signal = calyxCmpFOp.getEq();
+      break;
+    }
+    case PredicateInfo::InputPorts::Port::GT: {
+      signal = calyxCmpFOp.getGt();
+      break;
+    }
+    case PredicateInfo::InputPorts::Port::LT: {
+      signal = calyxCmpFOp.getLt();
+      break;
+    }
+    case PredicateInfo::InputPorts::Port::UNORDERED: {
+      signal = calyxCmpFOp.getUnordered();
+      break;
+    }
+    }
+    std::string nameSuffix =
+        (input.port == PredicateInfo::InputPorts::Port::UNORDERED)
+            ? "unordered_port"
+            : "compare_port";
+    auto signalReg =
+        createSignalRegister(signal, input.invert, nameSuffix, loc, rewriter,
+                             getComponent(), calyxCmpFOp, group, builder);
+    inputRegs.push_back(signalReg);
+  }
+
+  // Create the output logical operation
+  Value outputValue, doneValue;
+  if (info.logic == PredicateInfo::SPECIAL) {
+    // it's guaranteed to be either ORD or UNO
+    outputValue = inputRegs[0].getOut();
+    doneValue = inputRegs[0].getOut();
+  } else {
+    if (info.logic == PredicateInfo::AND) {
+      auto outputLibOp = getState<ComponentLoweringState>()
+                             .getNewLibraryOpInstance<calyx::AndLibOp>(
+                                 rewriter, loc, {one, one, one});
+      rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
+                                       inputRegs[0].getOut());
+      rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
+                                       inputRegs[1].getOut());
+
+      outputValue = outputLibOp.getOut();
+    } else /*info.op == PredicateInfo::OR*/ {
+      auto outputLibOp = getState<ComponentLoweringState>()
+                             .getNewLibraryOpInstance<calyx::OrLibOp>(
+                                 rewriter, loc, {one, one, one});
+      rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
+                                       inputRegs[0].getOut());
+      rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
+                                       inputRegs[1].getOut());
+
+      outputValue = outputLibOp.getOut();
+    }
+
     auto doneLibOp = getState<ComponentLoweringState>()
                          .getNewLibraryOpInstance<calyx::AndLibOp>(
-                             rewriter, loc, doneLibOpTypes);
+                             rewriter, loc, {one, one, one});
     rewriter.create<calyx::AssignOp>(loc, doneLibOp.getLeft(),
-                                     compareReg.getDone());
+                                     inputRegs[0].getDone());
     rewriter.create<calyx::AssignOp>(loc, doneLibOp.getRight(),
-                                     unorderedReg.getDone());
-
-    rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone(), doneLibOp.getOut());
-
-    // Pass the result from the source operation to register holding the resullt
-    // from the Calyx primitive.
-    cmpf.getResult().replaceAllUsesWith(reg.getOut());
-
-    // Register the values for the pipeline.
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        outputLibOp.getOut(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getLeft(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getRight(), group);
-
-    return success();
+                                     inputRegs[1].getDone());
+    doneValue = doneLibOp.getOut();
   }
-  case CmpFPredicate::OGT: {
-    StringRef opName = cmpf.getOperationName().split(".").second;
-    auto reg = createRegister(
-        loc, rewriter, getComponent(), 1,
-        getState<ComponentLoweringState>().getUniqueName(opName));
 
-    // Operation pipelines are not combinational, so a GroupOp is required.
-    auto group = createGroupForOp<calyx::GroupOp>(rewriter, cmpf);
-    OpBuilder builder(group->getRegion(0));
-    getState<ComponentLoweringState>().addBlockScheduleable(cmpf->getBlock(),
-                                                            group);
-
-    rewriter.setInsertionPointToEnd(group.getBodyBlock());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getLeft(), cmpf.getLhs());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getRight(),
-                                     cmpf.getRhs());
-
-    hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
-    SmallVector<StringRef, 2> cmpPortIdentifier = {"compare", "port"};
-    auto compareReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(cmpPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, compareReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(loc, compareReg.getIn(), c1,
-                                     calyxCmpFOp.getGt());
-
-    SmallVector<StringRef, 2> unorderedPortIdentifier = {"unordered", "port"};
-    auto unorderedReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(unorderedPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(
-        loc, unorderedReg.getIn(), c1,
-        comb::createOrFoldNot(loc, unordered, builder));
-
-    SmallVector<Type> outputLibOpTypes{one, one, one};
-    auto outputLibOp = getState<ComponentLoweringState>()
-                           .getNewLibraryOpInstance<calyx::AndLibOp>(
-                               rewriter, loc, outputLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
-                                     compareReg.getOut());
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
-                                     unorderedReg.getOut());
-
-    // Write the output to this register.
-    rewriter.create<calyx::AssignOp>(loc, reg.getIn(), outputLibOp.getOut());
-    // The write enable port is high when the pipeline is done.
-    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    // Set pipelineOp to high as long as its done signal is not high.
-    // This prevents the pipelineOP from executing for the cycle that we write
-    // to register. To get !(pipelineOp.done) we do 1 xor pipelineOp.done
-    rewriter.create<calyx::AssignOp>(
-        loc, calyxCmpFOp.getGo(), c1,
-        comb::createOrFoldNot(group.getLoc(), calyxCmpFOp.getDone(), builder));
-    // The group is done when the register write is complete.
-    SmallVector<Type> doneLibOpTypes{one, one, one};
-    auto doneLibOp = getState<ComponentLoweringState>()
-                         .getNewLibraryOpInstance<calyx::AndLibOp>(
-                             rewriter, loc, doneLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getLeft(),
-                                     compareReg.getDone());
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getRight(),
-                                     unorderedReg.getDone());
-
-    rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone(), doneLibOp.getOut());
-
-    // Pass the result from the source operation to register holding the resullt
-    // from the Calyx primitive.
-    cmpf.getResult().replaceAllUsesWith(reg.getOut());
-
-    // Register the values for the pipeline.
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        outputLibOp.getOut(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getLeft(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getRight(), group);
-
-    return success();
-  }
-  case CmpFPredicate::OGE: {
-    StringRef opName = cmpf.getOperationName().split(".").second;
-    auto reg = createRegister(
-        loc, rewriter, getComponent(), 1,
-        getState<ComponentLoweringState>().getUniqueName(opName));
-
-    // Operation pipelines are not combinational, so a GroupOp is required.
-    auto group = createGroupForOp<calyx::GroupOp>(rewriter, cmpf);
-    OpBuilder builder(group->getRegion(0));
-    getState<ComponentLoweringState>().addBlockScheduleable(cmpf->getBlock(),
-                                                            group);
-
-    rewriter.setInsertionPointToEnd(group.getBodyBlock());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getLeft(), cmpf.getLhs());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getRight(),
-                                     cmpf.getRhs());
-
-    hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
-    SmallVector<StringRef, 2> cmpPortIdentifier = {"compare", "port"};
-    auto compareReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(cmpPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, compareReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(
-        loc, compareReg.getIn(), c1,
-        comb::createOrFoldNot(loc, calyxCmpFOp.getLt(), builder));
-
-    SmallVector<StringRef, 2> unorderedPortIdentifier = {"unordered", "port"};
-    auto unorderedReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(unorderedPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(
-        loc, unorderedReg.getIn(), c1,
-        comb::createOrFoldNot(loc, unordered, builder));
-
-    SmallVector<Type> outputLibOpTypes{one, one, one};
-    auto outputLibOp = getState<ComponentLoweringState>()
-                           .getNewLibraryOpInstance<calyx::AndLibOp>(
-                               rewriter, loc, outputLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
-                                     compareReg.getOut());
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
-                                     unorderedReg.getOut());
-
-    // Write the output to this register.
-    rewriter.create<calyx::AssignOp>(loc, reg.getIn(), outputLibOp.getOut());
-    // The write enable port is high when the pipeline is done.
-    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    // Set pipelineOp to high as long as its done signal is not high.
-    // This prevents the pipelineOP from executing for the cycle that we write
-    // to register. To get !(pipelineOp.done) we do 1 xor pipelineOp.done
-    rewriter.create<calyx::AssignOp>(
-        loc, calyxCmpFOp.getGo(), c1,
-        comb::createOrFoldNot(group.getLoc(), calyxCmpFOp.getDone(), builder));
-    // The group is done when the register write is complete.
-    SmallVector<Type> doneLibOpTypes{one, one, one};
-    auto doneLibOp = getState<ComponentLoweringState>()
-                         .getNewLibraryOpInstance<calyx::AndLibOp>(
-                             rewriter, loc, doneLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getLeft(),
-                                     compareReg.getDone());
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getRight(),
-                                     unorderedReg.getDone());
-
-    rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone(), doneLibOp.getOut());
-
-    // Pass the result from the source operation to register holding the resullt
-    // from the Calyx primitive.
-    cmpf.getResult().replaceAllUsesWith(reg.getOut());
-
-    // Register the values for the pipeline.
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        outputLibOp.getOut(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getLeft(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getRight(), group);
-
-    return success();
-  }
-  case CmpFPredicate::OLT: {
-    StringRef opName = cmpf.getOperationName().split(".").second;
-    auto reg = createRegister(
-        loc, rewriter, getComponent(), 1,
-        getState<ComponentLoweringState>().getUniqueName(opName));
-
-    // Operation pipelines are not combinational, so a GroupOp is required.
-    auto group = createGroupForOp<calyx::GroupOp>(rewriter, cmpf);
-    OpBuilder builder(group->getRegion(0));
-    getState<ComponentLoweringState>().addBlockScheduleable(cmpf->getBlock(),
-                                                            group);
-
-    rewriter.setInsertionPointToEnd(group.getBodyBlock());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getLeft(), cmpf.getLhs());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getRight(),
-                                     cmpf.getRhs());
-
-    hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
-    SmallVector<StringRef, 2> cmpPortIdentifier = {"compare", "port"};
-    auto compareReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(cmpPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, compareReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(loc, compareReg.getIn(), c1,
-                                     calyxCmpFOp.getLt());
-
-    SmallVector<StringRef, 2> unorderedPortIdentifier = {"unordered", "port"};
-    auto unorderedReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(unorderedPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(
-        loc, unorderedReg.getIn(), c1,
-        comb::createOrFoldNot(loc, unordered, builder));
-
-    SmallVector<Type> outputLibOpTypes{one, one, one};
-    auto outputLibOp = getState<ComponentLoweringState>()
-                           .getNewLibraryOpInstance<calyx::AndLibOp>(
-                               rewriter, loc, outputLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
-                                     compareReg.getOut());
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
-                                     unorderedReg.getOut());
-
-    // Write the output to this register.
-    rewriter.create<calyx::AssignOp>(loc, reg.getIn(), outputLibOp.getOut());
-    // The write enable port is high when the pipeline is done.
-    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    // Set pipelineOp to high as long as its done signal is not high.
-    // This prevents the pipelineOP from executing for the cycle that we write
-    // to register. To get !(pipelineOp.done) we do 1 xor pipelineOp.done
-    rewriter.create<calyx::AssignOp>(
-        loc, calyxCmpFOp.getGo(), c1,
-        comb::createOrFoldNot(group.getLoc(), calyxCmpFOp.getDone(), builder));
-    // The group is done when the register write is complete.
-    SmallVector<Type> doneLibOpTypes{one, one, one};
-    auto doneLibOp = getState<ComponentLoweringState>()
-                         .getNewLibraryOpInstance<calyx::AndLibOp>(
-                             rewriter, loc, doneLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getLeft(),
-                                     compareReg.getDone());
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getRight(),
-                                     unorderedReg.getDone());
-
-    rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone(), doneLibOp.getOut());
-
-    // Pass the result from the source operation to register holding the resullt
-    // from the Calyx primitive.
-    cmpf.getResult().replaceAllUsesWith(reg.getOut());
-
-    // Register the values for the pipeline.
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        outputLibOp.getOut(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getLeft(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getRight(), group);
-
-    return success();
-  }
-  case CmpFPredicate::OLE: {
-    StringRef opName = cmpf.getOperationName().split(".").second;
-    auto reg = createRegister(
-        loc, rewriter, getComponent(), 1,
-        getState<ComponentLoweringState>().getUniqueName(opName));
-
-    // Operation pipelines are not combinational, so a GroupOp is required.
-    auto group = createGroupForOp<calyx::GroupOp>(rewriter, cmpf);
-    OpBuilder builder(group->getRegion(0));
-    getState<ComponentLoweringState>().addBlockScheduleable(cmpf->getBlock(),
-                                                            group);
-
-    rewriter.setInsertionPointToEnd(group.getBodyBlock());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getLeft(), cmpf.getLhs());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getRight(),
-                                     cmpf.getRhs());
-
-    hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
-    SmallVector<StringRef, 2> cmpPortIdentifier = {"compare", "port"};
-    auto compareReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(cmpPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, compareReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(
-        loc, compareReg.getIn(), c1,
-        comb::createOrFoldNot(loc, calyxCmpFOp.getGt(), builder));
-
-    SmallVector<StringRef, 2> unorderedPortIdentifier = {"unordered", "port"};
-    auto unorderedReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(unorderedPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(
-        loc, unorderedReg.getIn(), c1,
-        comb::createOrFoldNot(loc, unordered, builder));
-
-    SmallVector<Type> outputLibOpTypes{one, one, one};
-    auto outputLibOp = getState<ComponentLoweringState>()
-                           .getNewLibraryOpInstance<calyx::AndLibOp>(
-                               rewriter, loc, outputLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
-                                     compareReg.getOut());
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
-                                     unorderedReg.getOut());
-
-    // Write the output to this register.
-    rewriter.create<calyx::AssignOp>(loc, reg.getIn(), outputLibOp.getOut());
-    // The write enable port is high when the pipeline is done.
-    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    // Set pipelineOp to high as long as its done signal is not high.
-    // This prevents the pipelineOP from executing for the cycle that we write
-    // to register. To get !(pipelineOp.done) we do 1 xor pipelineOp.done
-    rewriter.create<calyx::AssignOp>(
-        loc, calyxCmpFOp.getGo(), c1,
-        comb::createOrFoldNot(group.getLoc(), calyxCmpFOp.getDone(), builder));
-    // The group is done when the register write is complete.
-    SmallVector<Type> doneLibOpTypes{one, one, one};
-    auto doneLibOp = getState<ComponentLoweringState>()
-                         .getNewLibraryOpInstance<calyx::AndLibOp>(
-                             rewriter, loc, doneLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getLeft(),
-                                     compareReg.getDone());
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getRight(),
-                                     unorderedReg.getDone());
-
-    rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone(), doneLibOp.getOut());
-
-    // Pass the result from the source operation to register holding the resullt
-    // from the Calyx primitive.
-    cmpf.getResult().replaceAllUsesWith(reg.getOut());
-
-    // Register the values for the pipeline.
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        outputLibOp.getOut(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getLeft(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getRight(), group);
-
-    return success();
-  }
-  case CmpFPredicate::ONE: {
-    StringRef opName = cmpf.getOperationName().split(".").second;
-    auto reg = createRegister(
-        loc, rewriter, getComponent(), 1,
-        getState<ComponentLoweringState>().getUniqueName(opName));
-
-    // Operation pipelines are not combinational, so a GroupOp is required.
-    auto group = createGroupForOp<calyx::GroupOp>(rewriter, cmpf);
-    OpBuilder builder(group->getRegion(0));
-    getState<ComponentLoweringState>().addBlockScheduleable(cmpf->getBlock(),
-                                                            group);
-
-    rewriter.setInsertionPointToEnd(group.getBodyBlock());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getLeft(), cmpf.getLhs());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getRight(),
-                                     cmpf.getRhs());
-
-    hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
-    SmallVector<StringRef, 2> cmpPortIdentifier = {"compare", "port"};
-    auto compareReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(cmpPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, compareReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(
-        loc, compareReg.getIn(), c1,
-        comb::createOrFoldNot(loc, calyxCmpFOp.getEq(), builder));
-
-    SmallVector<StringRef, 2> unorderedPortIdentifier = {"unordered", "port"};
-    auto unorderedReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(unorderedPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(
-        loc, unorderedReg.getIn(), c1,
-        comb::createOrFoldNot(loc, unordered, builder));
-
-    SmallVector<Type> outputLibOpTypes{one, one, one};
-    auto outputLibOp = getState<ComponentLoweringState>()
-                           .getNewLibraryOpInstance<calyx::AndLibOp>(
-                               rewriter, loc, outputLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
-                                     compareReg.getOut());
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
-                                     unorderedReg.getOut());
-
-    // Write the output to this register.
-    rewriter.create<calyx::AssignOp>(loc, reg.getIn(), outputLibOp.getOut());
-    // The write enable port is high when the pipeline is done.
-    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    // Set pipelineOp to high as long as its done signal is not high.
-    // This prevents the pipelineOP from executing for the cycle that we write
-    // to register. To get !(pipelineOp.done) we do 1 xor pipelineOp.done
-    rewriter.create<calyx::AssignOp>(
-        loc, calyxCmpFOp.getGo(), c1,
-        comb::createOrFoldNot(group.getLoc(), calyxCmpFOp.getDone(), builder));
-    // The group is done when the register write is complete.
-    SmallVector<Type> doneLibOpTypes{one, one, one};
-    auto doneLibOp = getState<ComponentLoweringState>()
-                         .getNewLibraryOpInstance<calyx::AndLibOp>(
-                             rewriter, loc, doneLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getLeft(),
-                                     compareReg.getDone());
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getRight(),
-                                     unorderedReg.getDone());
-
-    rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone(), doneLibOp.getOut());
-
-    // Pass the result from the source operation to register holding the resullt
-    // from the Calyx primitive.
-    cmpf.getResult().replaceAllUsesWith(reg.getOut());
-
-    // Register the values for the pipeline.
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        outputLibOp.getOut(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getLeft(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getRight(), group);
-
-    return success();
-  }
-  case CmpFPredicate::ORD: {
-    StringRef opName = cmpf.getOperationName().split(".").second;
-    auto reg = createRegister(
-        loc, rewriter, getComponent(), 1,
-        getState<ComponentLoweringState>().getUniqueName(opName));
-
-    // Operation pipelines are not combinational, so a GroupOp is required.
-    auto group = createGroupForOp<calyx::GroupOp>(rewriter, cmpf);
-    OpBuilder builder(group->getRegion(0));
-    getState<ComponentLoweringState>().addBlockScheduleable(cmpf->getBlock(),
-                                                            group);
-
-    rewriter.setInsertionPointToEnd(group.getBodyBlock());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getLeft(), cmpf.getLhs());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getRight(),
-                                     cmpf.getRhs());
-
-    hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
-
-    SmallVector<StringRef, 2> unorderedPortIdentifier = {"unordered", "port"};
-    auto unorderedReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(unorderedPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(
-        loc, unorderedReg.getIn(), c1,
-        comb::createOrFoldNot(loc, unordered, builder));
-
-    // Write the output to this register.
-    rewriter.create<calyx::AssignOp>(loc, reg.getIn(), unorderedReg.getOut());
-    // The write enable port is high when the pipeline is done.
-    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    // Set pipelineOp to high as long as its done signal is not high.
-    // This prevents the pipelineOP from executing for the cycle that we write
-    // to register. To get !(pipelineOp.done) we do 1 xor pipelineOp.done
-    rewriter.create<calyx::AssignOp>(
-        loc, calyxCmpFOp.getGo(), c1,
-        comb::createOrFoldNot(group.getLoc(), calyxCmpFOp.getDone(), builder));
-    // The group is done when the register write is complete.
-    rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone(),
-                                        unorderedReg.getOut());
-
-    // Pass the result from the source operation to register holding the resullt
-    // from the Calyx primitive.
-    cmpf.getResult().replaceAllUsesWith(reg.getOut());
-
-    // Register the values for the pipeline.
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        unorderedReg.getOut(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getLeft(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getRight(), group);
-
-    return success();
-  }
-  case CmpFPredicate::UEQ: {
-    StringRef opName = cmpf.getOperationName().split(".").second;
-    auto reg = createRegister(
-        loc, rewriter, getComponent(), 1,
-        getState<ComponentLoweringState>().getUniqueName(opName));
-
-    // Operation pipelines are not combinational, so a GroupOp is required.
-    auto group = createGroupForOp<calyx::GroupOp>(rewriter, cmpf);
-    OpBuilder builder(group->getRegion(0));
-    getState<ComponentLoweringState>().addBlockScheduleable(cmpf->getBlock(),
-                                                            group);
-
-    rewriter.setInsertionPointToEnd(group.getBodyBlock());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getLeft(), cmpf.getLhs());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getRight(),
-                                     cmpf.getRhs());
-
-    hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
-    SmallVector<StringRef, 2> cmpPortIdentifier = {"compare", "port"};
-    auto compareReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(cmpPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, compareReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(
-        loc, compareReg.getIn(), c1,
-        comb::createOrFoldNot(loc, calyxCmpFOp.getEq(), builder));
-
-    SmallVector<StringRef, 2> unorderedPortIdentifier = {"unordered", "port"};
-    auto unorderedReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(unorderedPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(
-        loc, unorderedReg.getIn(), c1,
-        comb::createOrFoldNot(loc, unordered, builder));
-
-    SmallVector<Type> outputLibOpTypes{one, one, one};
-    auto outputLibOp = getState<ComponentLoweringState>()
-                           .getNewLibraryOpInstance<calyx::AndLibOp>(
-                               rewriter, loc, outputLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
-                                     compareReg.getOut());
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
-                                     unorderedReg.getOut());
-
-    // Write the output to this register.
-    rewriter.create<calyx::AssignOp>(loc, reg.getIn(), outputLibOp.getOut());
-    // The write enable port is high when the pipeline is done.
-    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    // Set pipelineOp to high as long as its done signal is not high.
-    // This prevents the pipelineOP from executing for the cycle that we write
-    // to register. To get !(pipelineOp.done) we do 1 xor pipelineOp.done
-    rewriter.create<calyx::AssignOp>(
-        loc, calyxCmpFOp.getGo(), c1,
-        comb::createOrFoldNot(group.getLoc(), calyxCmpFOp.getDone(), builder));
-    // The group is done when the register write is complete.
-    SmallVector<Type> doneLibOpTypes{one, one, one};
-    auto doneLibOp = getState<ComponentLoweringState>()
-                         .getNewLibraryOpInstance<calyx::AndLibOp>(
-                             rewriter, loc, doneLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getLeft(),
-                                     compareReg.getDone());
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getRight(),
-                                     unorderedReg.getDone());
-
-    rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone(), doneLibOp.getOut());
-
-    // Pass the result from the source operation to register holding the resullt
-    // from the Calyx primitive.
-    cmpf.getResult().replaceAllUsesWith(reg.getOut());
-
-    // Register the values for the pipeline.
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        outputLibOp.getOut(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getLeft(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getRight(), group);
-
-    return success();
-  }
-  case CmpFPredicate::UGT: {
-    StringRef opName = cmpf.getOperationName().split(".").second;
-    auto reg = createRegister(
-        loc, rewriter, getComponent(), 1,
-        getState<ComponentLoweringState>().getUniqueName(opName));
-
-    // Operation pipelines are not combinational, so a GroupOp is required.
-    auto group = createGroupForOp<calyx::GroupOp>(rewriter, cmpf);
-    OpBuilder builder(group->getRegion(0));
-    getState<ComponentLoweringState>().addBlockScheduleable(cmpf->getBlock(),
-                                                            group);
-
-    rewriter.setInsertionPointToEnd(group.getBodyBlock());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getLeft(), cmpf.getLhs());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getRight(),
-                                     cmpf.getRhs());
-
-    SmallVector<StringRef, 2> cmpPortIdentifier = {"compare", "port"};
-    auto compareReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(cmpPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, compareReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(loc, compareReg.getIn(),
-                                     calyxCmpFOp.getGt());
-
-    SmallVector<StringRef, 2> unorderedPortIdentifier = {"unordered", "port"};
-    auto unorderedReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(unorderedPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getIn(), unordered);
-
-    SmallVector<Type> outputLibOpTypes{one, one, one};
-    auto outputLibOp = getState<ComponentLoweringState>()
-                           .getNewLibraryOpInstance<calyx::OrLibOp>(
-                               rewriter, loc, outputLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
-                                     compareReg.getOut());
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
-                                     unorderedReg.getOut());
-
-    // Write the output to this register.
-    rewriter.create<calyx::AssignOp>(loc, reg.getIn(), outputLibOp.getOut());
-    // The write enable port is high when the pipeline is done.
-    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    // Set pipelineOp to high as long as its done signal is not high.
-    // This prevents the pipelineOP from executing for the cycle that we write
-    // to register. To get !(pipelineOp.done) we do 1 xor pipelineOp.done
-    hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
-    rewriter.create<calyx::AssignOp>(
-        loc, calyxCmpFOp.getGo(), c1,
-        comb::createOrFoldNot(group.getLoc(), calyxCmpFOp.getDone(), builder));
-    // The group is done when the register write is complete.
-    SmallVector<Type> doneLibOpTypes{one, one, one};
-    auto doneLibOp = getState<ComponentLoweringState>()
-                         .getNewLibraryOpInstance<calyx::AndLibOp>(
-                             rewriter, loc, doneLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getLeft(),
-                                     compareReg.getDone());
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getRight(),
-                                     unorderedReg.getDone());
-
-    rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone(), doneLibOp.getOut());
-
-    // Pass the result from the source operation to register holding the resullt
-    // from the Calyx primitive.
-    cmpf.getResult().replaceAllUsesWith(reg.getOut());
-
-    // Register the values for the pipeline.
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        outputLibOp.getOut(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getLeft(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getRight(), group);
-
-    return success();
-  }
-  case CmpFPredicate::UGE: {
-    StringRef opName = cmpf.getOperationName().split(".").second;
-    auto reg = createRegister(
-        loc, rewriter, getComponent(), 1,
-        getState<ComponentLoweringState>().getUniqueName(opName));
-
-    // Operation pipelines are not combinational, so a GroupOp is required.
-    auto group = createGroupForOp<calyx::GroupOp>(rewriter, cmpf);
-    OpBuilder builder(group->getRegion(0));
-    getState<ComponentLoweringState>().addBlockScheduleable(cmpf->getBlock(),
-                                                            group);
-
-    rewriter.setInsertionPointToEnd(group.getBodyBlock());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getLeft(), cmpf.getLhs());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getRight(),
-                                     cmpf.getRhs());
-
-    hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
-    SmallVector<StringRef, 2> cmpPortIdentifier = {"compare", "port"};
-    auto compareReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(cmpPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, compareReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(
-        loc, compareReg.getIn(), c1,
-        comb::createOrFoldNot(loc, calyxCmpFOp.getLt(), builder));
-
-    SmallVector<StringRef, 2> unorderedPortIdentifier = {"unordered", "port"};
-    auto unorderedReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(unorderedPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getIn(), unordered);
-
-    SmallVector<Type> outputLibOpTypes{one, one, one};
-    auto outputLibOp = getState<ComponentLoweringState>()
-                           .getNewLibraryOpInstance<calyx::OrLibOp>(
-                               rewriter, loc, outputLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
-                                     compareReg.getOut());
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
-                                     unorderedReg.getOut());
-
-    // Write the output to this register.
-    rewriter.create<calyx::AssignOp>(loc, reg.getIn(), outputLibOp.getOut());
-    // The write enable port is high when the pipeline is done.
-    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    // Set pipelineOp to high as long as its done signal is not high.
-    // This prevents the pipelineOP from executing for the cycle that we write
-    // to register. To get !(pipelineOp.done) we do 1 xor pipelineOp.done
-    rewriter.create<calyx::AssignOp>(
-        loc, calyxCmpFOp.getGo(), c1,
-        comb::createOrFoldNot(group.getLoc(), calyxCmpFOp.getDone(), builder));
-    // The group is done when the register write is complete.
-    SmallVector<Type> doneLibOpTypes{one, one, one};
-    auto doneLibOp = getState<ComponentLoweringState>()
-                         .getNewLibraryOpInstance<calyx::AndLibOp>(
-                             rewriter, loc, doneLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getLeft(),
-                                     compareReg.getDone());
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getRight(),
-                                     unorderedReg.getDone());
-
-    rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone(), doneLibOp.getOut());
-
-    // Pass the result from the source operation to register holding the resullt
-    // from the Calyx primitive.
-    cmpf.getResult().replaceAllUsesWith(reg.getOut());
-
-    // Register the values for the pipeline.
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        outputLibOp.getOut(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getLeft(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getRight(), group);
-
-    return success();
-  }
-  case CmpFPredicate::ULT: {
-    StringRef opName = cmpf.getOperationName().split(".").second;
-    auto reg = createRegister(
-        loc, rewriter, getComponent(), 1,
-        getState<ComponentLoweringState>().getUniqueName(opName));
-
-    // Operation pipelines are not combinational, so a GroupOp is required.
-    auto group = createGroupForOp<calyx::GroupOp>(rewriter, cmpf);
-    OpBuilder builder(group->getRegion(0));
-    getState<ComponentLoweringState>().addBlockScheduleable(cmpf->getBlock(),
-                                                            group);
-
-    rewriter.setInsertionPointToEnd(group.getBodyBlock());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getLeft(), cmpf.getLhs());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getRight(),
-                                     cmpf.getRhs());
-
-    SmallVector<StringRef, 2> cmpPortIdentifier = {"compare", "port"};
-    auto compareReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(cmpPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, compareReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(loc, compareReg.getIn(),
-                                     calyxCmpFOp.getLt());
-
-    SmallVector<StringRef, 2> unorderedPortIdentifier = {"unordered", "port"};
-    auto unorderedReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(unorderedPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getIn(), unordered);
-
-    SmallVector<Type> outputLibOpTypes{one, one, one};
-    auto outputLibOp = getState<ComponentLoweringState>()
-                           .getNewLibraryOpInstance<calyx::OrLibOp>(
-                               rewriter, loc, outputLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
-                                     compareReg.getOut());
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
-                                     unorderedReg.getOut());
-
-    // Write the output to this register.
-    rewriter.create<calyx::AssignOp>(loc, reg.getIn(), outputLibOp.getOut());
-    // The write enable port is high when the pipeline is done.
-    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    // Set pipelineOp to high as long as its done signal is not high.
-    // This prevents the pipelineOP from executing for the cycle that we write
-    // to register. To get !(pipelineOp.done) we do 1 xor pipelineOp.done
-    hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
-    rewriter.create<calyx::AssignOp>(
-        loc, calyxCmpFOp.getGo(), c1,
-        comb::createOrFoldNot(group.getLoc(), calyxCmpFOp.getDone(), builder));
-    // The group is done when the register write is complete.
-    SmallVector<Type> doneLibOpTypes{one, one, one};
-    auto doneLibOp = getState<ComponentLoweringState>()
-                         .getNewLibraryOpInstance<calyx::AndLibOp>(
-                             rewriter, loc, doneLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getLeft(),
-                                     compareReg.getDone());
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getRight(),
-                                     unorderedReg.getDone());
-
-    rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone(), doneLibOp.getOut());
-
-    // Pass the result from the source operation to register holding the resullt
-    // from the Calyx primitive.
-    cmpf.getResult().replaceAllUsesWith(reg.getOut());
-
-    // Register the values for the pipeline.
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        outputLibOp.getOut(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getLeft(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getRight(), group);
-
-    return success();
-  }
-  case CmpFPredicate::ULE: {
-    StringRef opName = cmpf.getOperationName().split(".").second;
-    auto reg = createRegister(
-        loc, rewriter, getComponent(), 1,
-        getState<ComponentLoweringState>().getUniqueName(opName));
-
-    // Operation pipelines are not combinational, so a GroupOp is required.
-    auto group = createGroupForOp<calyx::GroupOp>(rewriter, cmpf);
-    OpBuilder builder(group->getRegion(0));
-    getState<ComponentLoweringState>().addBlockScheduleable(cmpf->getBlock(),
-                                                            group);
-
-    rewriter.setInsertionPointToEnd(group.getBodyBlock());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getLeft(), cmpf.getLhs());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getRight(),
-                                     cmpf.getRhs());
-
-    hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
-    SmallVector<StringRef, 2> cmpPortIdentifier = {"compare", "port"};
-    auto compareReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(cmpPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, compareReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(
-        loc, compareReg.getIn(), c1,
-        comb::createOrFoldNot(loc, calyxCmpFOp.getGt(), builder));
-
-    SmallVector<StringRef, 2> unorderedPortIdentifier = {"unordered", "port"};
-    auto unorderedReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(unorderedPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getIn(), unordered);
-
-    SmallVector<Type> outputLibOpTypes{one, one, one};
-    auto outputLibOp = getState<ComponentLoweringState>()
-                           .getNewLibraryOpInstance<calyx::OrLibOp>(
-                               rewriter, loc, outputLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
-                                     compareReg.getOut());
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
-                                     unorderedReg.getOut());
-
-    // Write the output to this register.
-    rewriter.create<calyx::AssignOp>(loc, reg.getIn(), outputLibOp.getOut());
-    // The write enable port is high when the pipeline is done.
-    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    // Set pipelineOp to high as long as its done signal is not high.
-    // This prevents the pipelineOP from executing for the cycle that we write
-    // to register. To get !(pipelineOp.done) we do 1 xor pipelineOp.done
-    rewriter.create<calyx::AssignOp>(
-        loc, calyxCmpFOp.getGo(), c1,
-        comb::createOrFoldNot(group.getLoc(), calyxCmpFOp.getDone(), builder));
-    // The group is done when the register write is complete.
-    SmallVector<Type> doneLibOpTypes{one, one, one};
-    auto doneLibOp = getState<ComponentLoweringState>()
-                         .getNewLibraryOpInstance<calyx::AndLibOp>(
-                             rewriter, loc, doneLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getLeft(),
-                                     compareReg.getDone());
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getRight(),
-                                     unorderedReg.getDone());
-
-    rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone(), doneLibOp.getOut());
-
-    // Pass the result from the source operation to register holding the resullt
-    // from the Calyx primitive.
-    cmpf.getResult().replaceAllUsesWith(reg.getOut());
-
-    // Register the values for the pipeline.
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        outputLibOp.getOut(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getLeft(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getRight(), group);
-
-    return success();
-  }
-  case CmpFPredicate::UNE: {
-    StringRef opName = cmpf.getOperationName().split(".").second;
-    auto reg = createRegister(
-        loc, rewriter, getComponent(), 1,
-        getState<ComponentLoweringState>().getUniqueName(opName));
-
-    // Operation pipelines are not combinational, so a GroupOp is required.
-    auto group = createGroupForOp<calyx::GroupOp>(rewriter, cmpf);
-    OpBuilder builder(group->getRegion(0));
-    getState<ComponentLoweringState>().addBlockScheduleable(cmpf->getBlock(),
-                                                            group);
-
-    rewriter.setInsertionPointToEnd(group.getBodyBlock());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getLeft(), cmpf.getLhs());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getRight(),
-                                     cmpf.getRhs());
-
-    hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
-    SmallVector<StringRef, 2> cmpPortIdentifier = {"compare", "port"};
-    auto compareReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(cmpPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, compareReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(
-        loc, compareReg.getIn(), c1,
-        comb::createOrFoldNot(loc, calyxCmpFOp.getEq(), builder));
-
-    SmallVector<StringRef, 2> unorderedPortIdentifier = {"unordered", "port"};
-    auto unorderedReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(unorderedPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getIn(), unordered);
-
-    SmallVector<Type> outputLibOpTypes{one, one, one};
-    auto outputLibOp = getState<ComponentLoweringState>()
-                           .getNewLibraryOpInstance<calyx::OrLibOp>(
-                               rewriter, loc, outputLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
-                                     compareReg.getOut());
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
-                                     unorderedReg.getOut());
-
-    // Write the output to this register.
-    rewriter.create<calyx::AssignOp>(loc, reg.getIn(), outputLibOp.getOut());
-    // The write enable port is high when the pipeline is done.
-    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    // Set pipelineOp to high as long as its done signal is not high.
-    // This prevents the pipelineOP from executing for the cycle that we write
-    // to register. To get !(pipelineOp.done) we do 1 xor pipelineOp.done
-    rewriter.create<calyx::AssignOp>(
-        loc, calyxCmpFOp.getGo(), c1,
-        comb::createOrFoldNot(group.getLoc(), calyxCmpFOp.getDone(), builder));
-    // The group is done when the register write is complete.
-    SmallVector<Type> doneLibOpTypes{one, one, one};
-    auto doneLibOp = getState<ComponentLoweringState>()
-                         .getNewLibraryOpInstance<calyx::AndLibOp>(
-                             rewriter, loc, doneLibOpTypes);
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getLeft(),
-                                     compareReg.getDone());
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getRight(),
-                                     unorderedReg.getDone());
-
-    rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone(), doneLibOp.getOut());
-
-    // Pass the result from the source operation to register holding the resullt
-    // from the Calyx primitive.
-    cmpf.getResult().replaceAllUsesWith(reg.getOut());
-
-    // Register the values for the pipeline.
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        outputLibOp.getOut(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getLeft(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getRight(), group);
-
-    return success();
-  }
-  case CmpFPredicate::UNO: {
-    StringRef opName = cmpf.getOperationName().split(".").second;
-    auto reg = createRegister(
-        loc, rewriter, getComponent(), 1,
-        getState<ComponentLoweringState>().getUniqueName(opName));
-
-    // Operation pipelines are not combinational, so a GroupOp is required.
-    auto group = createGroupForOp<calyx::GroupOp>(rewriter, cmpf);
-    OpBuilder builder(group->getRegion(0));
-    getState<ComponentLoweringState>().addBlockScheduleable(cmpf->getBlock(),
-                                                            group);
-
-    rewriter.setInsertionPointToEnd(group.getBodyBlock());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getLeft(), cmpf.getLhs());
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getRight(),
-                                     cmpf.getRhs());
-
-    hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
-
-    SmallVector<StringRef, 2> unorderedPortIdentifier = {"unordered", "port"};
-    auto unorderedReg =
-        createRegister(loc, rewriter, getComponent(), 1,
-                       getState<ComponentLoweringState>().getUniqueName(
-                           llvm::join(unorderedPortIdentifier, "_")));
-    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    rewriter.create<calyx::AssignOp>(loc, unorderedReg.getIn(), c1, unordered);
-
-    // Write the output to this register.
-    rewriter.create<calyx::AssignOp>(loc, reg.getIn(), unorderedReg.getOut());
-    // The write enable port is high when the pipeline is done.
-    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    // Set pipelineOp to high as long as its done signal is not high.
-    // This prevents the pipelineOP from executing for the cycle that we write
-    // to register. To get !(pipelineOp.done) we do 1 xor pipelineOp.done
-    rewriter.create<calyx::AssignOp>(
-        loc, calyxCmpFOp.getGo(), c1,
-        comb::createOrFoldNot(group.getLoc(), calyxCmpFOp.getDone(), builder));
-    // The group is done when the register write is complete.
-    rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone(),
-                                        unorderedReg.getOut());
-
-    // Pass the result from the source operation to register holding the resullt
-    // from the Calyx primitive.
-    cmpf.getResult().replaceAllUsesWith(reg.getOut());
-
-    // Register the values for the pipeline.
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        unorderedReg.getOut(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getLeft(), group);
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        calyxCmpFOp.getRight(), group);
-
-    return success();
-  }
-  case CmpFPredicate::AlwaysTrue: {
-    cmpf.getResult().replaceAllUsesWith(constantOne);
-    return success();
-  }
-  case CmpFPredicate::AlwaysFalse: {
-    Value constantZero = createConstant(loc, rewriter, getComponent(), 1, 0);
-    cmpf.getResult().replaceAllUsesWith(constantZero);
-    return success();
-  }
-  }
-  return failure();
+  // Write to the output register
+  rewriter.create<calyx::AssignOp>(loc, reg.getIn(), outputValue);
+  rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(), doneValue);
+
+  // Set the go and done signal
+  rewriter.create<calyx::AssignOp>(
+      loc, calyxCmpFOp.getGo(), c1,
+      comb::createOrFoldNot(loc, calyxCmpFOp.getDone(), builder));
+  rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone());
+
+  cmpf.getResult().replaceAllUsesWith(reg.getOut());
+
+  // Register evaluating groups
+  getState<ComponentLoweringState>().registerEvaluatingGroup(outputValue,
+                                                             group);
+  getState<ComponentLoweringState>().registerEvaluatingGroup(doneValue, group);
+  getState<ComponentLoweringState>().registerEvaluatingGroup(
+      calyxCmpFOp.getLeft(), group);
+  getState<ComponentLoweringState>().registerEvaluatingGroup(
+      calyxCmpFOp.getRight(), group);
+
+  return success();
 }
 
 template <typename TAllocOp>

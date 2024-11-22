@@ -455,24 +455,24 @@ module {
 // CHECK-DAG:       %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i1, i1, i1, i1, i1, i1
 // CHECK:       calyx.wires {
 // CHECK-DAG:         calyx.assign %out0 = %ret_arg0_reg.out : i1
-// CHECK:         calyx.group @bb0_0 {
-// CHECK-DAG:           calyx.assign %std_compareFN_0.left = %in0 : i32
-// CHECK-DAG:           calyx.assign %std_compareFN_0.right = %cst : i32
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.in = %std_compareFN_0.eq ? %true : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %0 = comb.xor %std_compareFN_0.unordered, %true : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.in = %0 ? %true : i1
-// CHECK-DAG:           calyx.assign %std_and_0.left = %compare_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %std_and_0.right = %unordered_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.in = %std_and_0.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %1 = comb.xor %std_compareFN_0.done, %true : i1
-// CHECK-DAG:           calyx.assign %std_compareFN_0.go = %1 ? %true : i1
-// CHECK-DAG:           calyx.assign %std_and_1.left = %compare_port_0_reg.done : i1
-// CHECK-DAG:           calyx.assign %std_and_1.right = %unordered_port_0_reg.done : i1
-// CHECK-DAG:           calyx.group_done %std_and_1.out ? %cmpf_0_reg.done : i1
-// CHECK-DAG:         }
+// CHECK:      calyx.group @bb0_0 {
+// CHECK-DAG:        calyx.assign %std_compareFN_0.left = %in0 : i32
+// CHECK-DAG:        calyx.assign %std_compareFN_0.right = %cst : i32
+// CHECK-DAG:        calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:        calyx.assign %compare_port_0_reg.in = %std_compareFN_0.eq : i1
+// CHECK-DAG:        calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:        %0 = comb.xor %std_compareFN_0.unordered, %true : i1
+// CHECK-DAG:        calyx.assign %unordered_port_0_reg.in = %0 ? %true : i1
+// CHECK-DAG:        calyx.assign %std_and_0.left = %compare_port_0_reg.out : i1
+// CHECK-DAG:        calyx.assign %std_and_0.right = %unordered_port_0_reg.out : i1
+// CHECK-DAG:        calyx.assign %std_and_1.left = %compare_port_0_reg.done : i1
+// CHECK-DAG:        calyx.assign %std_and_1.right = %unordered_port_0_reg.done : i1
+// CHECK-DAG:        calyx.assign %cmpf_0_reg.in = %std_and_0.out : i1
+// CHECK-DAG:        calyx.assign %cmpf_0_reg.write_en = %std_and_1.out : i1
+// CHECK-DAG:        %1 = comb.xor %std_compareFN_0.done, %true : i1
+// CHECK-DAG:        calyx.assign %std_compareFN_0.go = %1 ? %true : i1
+// CHECK-DAG:        calyx.group_done %cmpf_0_reg.done : i1
+// CHECK-DAG:      }
 // CHECK:         calyx.group @ret_assign_0 {
 // CHECK-DAG:           calyx.assign %ret_arg0_reg.in = %cmpf_0_reg.out : i1
 // CHECK-DAG:           calyx.assign %ret_arg0_reg.write_en = %true : i1
@@ -505,24 +505,24 @@ module {
 // CHECK-DAG:       %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i1, i1, i1, i1, i1, i1
 // CHECK:       calyx.wires {
 // CHECK-DAG:         calyx.assign %out0 = %ret_arg0_reg.out : i1
-// CHECK:         calyx.group @bb0_0 {
-// CHECK-DAG:           calyx.assign %std_compareFN_0.left = %in0 : i32
-// CHECK-DAG:           calyx.assign %std_compareFN_0.right = %cst : i32
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.in = %std_compareFN_0.gt ? %true : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %0 = comb.xor %std_compareFN_0.unordered, %true : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.in = %0 ? %true : i1
-// CHECK-DAG:           calyx.assign %std_and_0.left = %compare_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %std_and_0.right = %unordered_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.in = %std_and_0.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %1 = comb.xor %std_compareFN_0.done, %true : i1
-// CHECK-DAG:           calyx.assign %std_compareFN_0.go = %1 ? %true : i1
-// CHECK-DAG:           calyx.assign %std_and_1.left = %compare_port_0_reg.done : i1
-// CHECK-DAG:           calyx.assign %std_and_1.right = %unordered_port_0_reg.done : i1
-// CHECK-DAG:           calyx.group_done %std_and_1.out ? %cmpf_0_reg.done : i1
-// CHECK-DAG:         }
+// CHECK:       calyx.group @bb0_0 {
+// CHECK-DAG:         calyx.assign %std_compareFN_0.left = %in0 : i32
+// CHECK-DAG:         calyx.assign %std_compareFN_0.right = %cst : i32
+// CHECK-DAG:         calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:         calyx.assign %compare_port_0_reg.in = %std_compareFN_0.gt : i1
+// CHECK-DAG:         calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:         %0 = comb.xor %std_compareFN_0.unordered, %true : i1
+// CHECK-DAG:         calyx.assign %unordered_port_0_reg.in = %0 ? %true : i1
+// CHECK-DAG:         calyx.assign %std_and_0.left = %compare_port_0_reg.out : i1
+// CHECK-DAG:         calyx.assign %std_and_0.right = %unordered_port_0_reg.out : i1
+// CHECK-DAG:         calyx.assign %std_and_1.left = %compare_port_0_reg.done : i1
+// CHECK-DAG:         calyx.assign %std_and_1.right = %unordered_port_0_reg.done : i1
+// CHECK-DAG:         calyx.assign %cmpf_0_reg.in = %std_and_0.out : i1
+// CHECK-DAG:         calyx.assign %cmpf_0_reg.write_en = %std_and_1.out : i1
+// CHECK-DAG:         %1 = comb.xor %std_compareFN_0.done, %true : i1
+// CHECK-DAG:         calyx.assign %std_compareFN_0.go = %1 ? %true : i1
+// CHECK-DAG:         calyx.group_done %cmpf_0_reg.done : i1
+// CHECK-DAG:       }
 // CHECK:         calyx.group @ret_assign_0 {
 // CHECK-DAG:           calyx.assign %ret_arg0_reg.in = %cmpf_0_reg.out : i1
 // CHECK-DAG:           calyx.assign %ret_arg0_reg.write_en = %true : i1
@@ -556,25 +556,25 @@ module {
 // CHECK-DAG:       %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i1, i1, i1, i1, i1, i1
 // CHECK:       calyx.wires {
 // CHECK-DAG:         calyx.assign %out0 = %ret_arg0_reg.out : i1
-// CHECK:         calyx.group @bb0_0 {
-// CHECK-DAG:           calyx.assign %std_compareFN_0.left = %in0 : i32
-// CHECK-DAG:           calyx.assign %std_compareFN_0.right = %cst : i32
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %0 = comb.xor %std_compareFN_0.lt, %true : i1
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.in = %0 ? %true : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %1 = comb.xor %std_compareFN_0.unordered, %true : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.in = %1 ? %true : i1
-// CHECK-DAG:           calyx.assign %std_and_0.left = %compare_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %std_and_0.right = %unordered_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.in = %std_and_0.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %2 = comb.xor %std_compareFN_0.done, %true : i1
-// CHECK-DAG:           calyx.assign %std_compareFN_0.go = %2 ? %true : i1
-// CHECK-DAG:           calyx.assign %std_and_1.left = %compare_port_0_reg.done : i1
-// CHECK-DAG:           calyx.assign %std_and_1.right = %unordered_port_0_reg.done : i1
-// CHECK-DAG:           calyx.group_done %std_and_1.out ? %cmpf_0_reg.done : i1
-// CHECK-DAG:         }
+// CHECK:       calyx.group @bb0_0 {
+// CHECK-DAG:         calyx.assign %std_compareFN_0.left = %in0 : i32
+// CHECK-DAG:         calyx.assign %std_compareFN_0.right = %cst : i32
+// CHECK-DAG:         calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:         %0 = comb.xor %std_compareFN_0.lt, %true : i1
+// CHECK-DAG:         calyx.assign %compare_port_0_reg.in = %0 ? %true : i1
+// CHECK-DAG:         calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:         %1 = comb.xor %std_compareFN_0.unordered, %true : i1
+// CHECK-DAG:         calyx.assign %unordered_port_0_reg.in = %1 ? %true : i1
+// CHECK-DAG:         calyx.assign %std_and_0.left = %compare_port_0_reg.out : i1
+// CHECK-DAG:         calyx.assign %std_and_0.right = %unordered_port_0_reg.out : i1
+// CHECK-DAG:         calyx.assign %std_and_1.left = %compare_port_0_reg.done : i1
+// CHECK-DAG:         calyx.assign %std_and_1.right = %unordered_port_0_reg.done : i1
+// CHECK-DAG:         calyx.assign %cmpf_0_reg.in = %std_and_0.out : i1
+// CHECK-DAG:         calyx.assign %cmpf_0_reg.write_en = %std_and_1.out : i1
+// CHECK-DAG:         %2 = comb.xor %std_compareFN_0.done, %true : i1
+// CHECK-DAG:         calyx.assign %std_compareFN_0.go = %2 ? %true : i1
+// CHECK-DAG:         calyx.group_done %cmpf_0_reg.done : i1
+// CHECK-DAG:       }
 // CHECK:         calyx.group @ret_assign_0 {
 // CHECK-DAG:           calyx.assign %ret_arg0_reg.in = %cmpf_0_reg.out : i1
 // CHECK-DAG:           calyx.assign %ret_arg0_reg.write_en = %true : i1
@@ -608,24 +608,24 @@ module {
 // CHECK-DAG:       %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i1, i1, i1, i1, i1, i1
 // CHECK:       calyx.wires {
 // CHECK-DAG:         calyx.assign %out0 = %ret_arg0_reg.out : i1
-// CHECK:         calyx.group @bb0_0 {
-// CHECK-DAG:           calyx.assign %std_compareFN_0.left = %in0 : i32
-// CHECK-DAG:           calyx.assign %std_compareFN_0.right = %cst : i32
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.in = %std_compareFN_0.lt ? %true : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %0 = comb.xor %std_compareFN_0.unordered, %true : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.in = %0 ? %true : i1
-// CHECK-DAG:           calyx.assign %std_and_0.left = %compare_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %std_and_0.right = %unordered_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.in = %std_and_0.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %1 = comb.xor %std_compareFN_0.done, %true : i1
-// CHECK-DAG:           calyx.assign %std_compareFN_0.go = %1 ? %true : i1
-// CHECK-DAG:           calyx.assign %std_and_1.left = %compare_port_0_reg.done : i1
-// CHECK-DAG:           calyx.assign %std_and_1.right = %unordered_port_0_reg.done : i1
-// CHECK-DAG:           calyx.group_done %std_and_1.out ? %cmpf_0_reg.done : i1
-// CHECK-DAG:         }
+// CHECK:       calyx.group @bb0_0 {
+// CHECK-DAG:         calyx.assign %std_compareFN_0.left = %in0 : i32
+// CHECK-DAG:         calyx.assign %std_compareFN_0.right = %cst : i32
+// CHECK-DAG:         calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:         calyx.assign %compare_port_0_reg.in = %std_compareFN_0.lt : i1
+// CHECK-DAG:         calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:         %0 = comb.xor %std_compareFN_0.unordered, %true : i1
+// CHECK-DAG:         calyx.assign %unordered_port_0_reg.in = %0 ? %true : i1
+// CHECK-DAG:         calyx.assign %std_and_0.left = %compare_port_0_reg.out : i1
+// CHECK-DAG:         calyx.assign %std_and_0.right = %unordered_port_0_reg.out : i1
+// CHECK-DAG:         calyx.assign %std_and_1.left = %compare_port_0_reg.done : i1
+// CHECK-DAG:         calyx.assign %std_and_1.right = %unordered_port_0_reg.done : i1
+// CHECK-DAG:         calyx.assign %cmpf_0_reg.in = %std_and_0.out : i1
+// CHECK-DAG:         calyx.assign %cmpf_0_reg.write_en = %std_and_1.out : i1
+// CHECK-DAG:         %1 = comb.xor %std_compareFN_0.done, %true : i1
+// CHECK-DAG:         calyx.assign %std_compareFN_0.go = %1 ? %true : i1
+// CHECK-DAG:         calyx.group_done %cmpf_0_reg.done : i1
+// CHECK-DAG:       }
 // CHECK:         calyx.group @ret_assign_0 {
 // CHECK-DAG:           calyx.assign %ret_arg0_reg.in = %cmpf_0_reg.out : i1
 // CHECK-DAG:           calyx.assign %ret_arg0_reg.write_en = %true : i1
@@ -659,25 +659,25 @@ module {
 // CHECK-DAG:       %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i1, i1, i1, i1, i1, i1
 // CHECK:       calyx.wires {
 // CHECK-DAG:         calyx.assign %out0 = %ret_arg0_reg.out : i1
-// CHECK:         calyx.group @bb0_0 {
-// CHECK-DAG:           calyx.assign %std_compareFN_0.left = %in0 : i32
-// CHECK-DAG:           calyx.assign %std_compareFN_0.right = %cst : i32
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %0 = comb.xor %std_compareFN_0.gt, %true : i1
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.in = %0 ? %true : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %1 = comb.xor %std_compareFN_0.unordered, %true : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.in = %1 ? %true : i1
-// CHECK-DAG:           calyx.assign %std_and_0.left = %compare_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %std_and_0.right = %unordered_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.in = %std_and_0.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %2 = comb.xor %std_compareFN_0.done, %true : i1
-// CHECK-DAG:           calyx.assign %std_compareFN_0.go = %2 ? %true : i1
-// CHECK-DAG:           calyx.assign %std_and_1.left = %compare_port_0_reg.done : i1
-// CHECK-DAG:           calyx.assign %std_and_1.right = %unordered_port_0_reg.done : i1
-// CHECK-DAG:           calyx.group_done %std_and_1.out ? %cmpf_0_reg.done : i1
-// CHECK-DAG:         }
+// CHECK:        calyx.group @bb0_0 {
+// CHECK-DAG:          calyx.assign %std_compareFN_0.left = %in0 : i32
+// CHECK-DAG:          calyx.assign %std_compareFN_0.right = %cst : i32
+// CHECK-DAG:          calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:          %0 = comb.xor %std_compareFN_0.gt, %true : i1
+// CHECK-DAG:          calyx.assign %compare_port_0_reg.in = %0 ? %true : i1
+// CHECK-DAG:          calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:          %1 = comb.xor %std_compareFN_0.unordered, %true : i1
+// CHECK-DAG:          calyx.assign %unordered_port_0_reg.in = %1 ? %true : i1
+// CHECK-DAG:          calyx.assign %std_and_0.left = %compare_port_0_reg.out : i1
+// CHECK-DAG:          calyx.assign %std_and_0.right = %unordered_port_0_reg.out : i1
+// CHECK-DAG:          calyx.assign %std_and_1.left = %compare_port_0_reg.done : i1
+// CHECK-DAG:          calyx.assign %std_and_1.right = %unordered_port_0_reg.done : i1
+// CHECK-DAG:          calyx.assign %cmpf_0_reg.in = %std_and_0.out : i1
+// CHECK-DAG:          calyx.assign %cmpf_0_reg.write_en = %std_and_1.out : i1
+// CHECK-DAG:          %2 = comb.xor %std_compareFN_0.done, %true : i1
+// CHECK-DAG:          calyx.assign %std_compareFN_0.go = %2 ? %true : i1
+// CHECK-DAG:          calyx.group_done %cmpf_0_reg.done : i1
+// CHECK-DAG:        }
 // CHECK:         calyx.group @ret_assign_0 {
 // CHECK-DAG:           calyx.assign %ret_arg0_reg.in = %cmpf_0_reg.out : i1
 // CHECK-DAG:           calyx.assign %ret_arg0_reg.write_en = %true : i1
@@ -711,25 +711,25 @@ module {
 // CHECK-DAG:       %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i1, i1, i1, i1, i1, i1
 // CHECK:       calyx.wires {
 // CHECK-DAG:         calyx.assign %out0 = %ret_arg0_reg.out : i1
-// CHECK:         calyx.group @bb0_0 {
-// CHECK-DAG:           calyx.assign %std_compareFN_0.left = %in0 : i32
-// CHECK-DAG:           calyx.assign %std_compareFN_0.right = %cst : i32
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %0 = comb.xor %std_compareFN_0.eq, %true : i1
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.in = %0 ? %true : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %1 = comb.xor %std_compareFN_0.unordered, %true : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.in = %1 ? %true : i1
-// CHECK-DAG:           calyx.assign %std_and_0.left = %compare_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %std_and_0.right = %unordered_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.in = %std_and_0.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %2 = comb.xor %std_compareFN_0.done, %true : i1
-// CHECK-DAG:           calyx.assign %std_compareFN_0.go = %2 ? %true : i1
-// CHECK-DAG:           calyx.assign %std_and_1.left = %compare_port_0_reg.done : i1
-// CHECK-DAG:           calyx.assign %std_and_1.right = %unordered_port_0_reg.done : i1
-// CHECK-DAG:           calyx.group_done %std_and_1.out ? %cmpf_0_reg.done : i1
-// CHECK-DAG:         }
+// CHECK:       calyx.group @bb0_0 {
+// CHECK-DAG:         calyx.assign %std_compareFN_0.left = %in0 : i32
+// CHECK-DAG:         calyx.assign %std_compareFN_0.right = %cst : i32
+// CHECK-DAG:         calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:         %0 = comb.xor %std_compareFN_0.eq, %true : i1
+// CHECK-DAG:         calyx.assign %compare_port_0_reg.in = %0 ? %true : i1
+// CHECK-DAG:         calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:         %1 = comb.xor %std_compareFN_0.unordered, %true : i1
+// CHECK-DAG:         calyx.assign %unordered_port_0_reg.in = %1 ? %true : i1
+// CHECK-DAG:         calyx.assign %std_and_0.left = %compare_port_0_reg.out : i1
+// CHECK-DAG:         calyx.assign %std_and_0.right = %unordered_port_0_reg.out : i1
+// CHECK-DAG:         calyx.assign %std_and_1.left = %compare_port_0_reg.done : i1
+// CHECK-DAG:         calyx.assign %std_and_1.right = %unordered_port_0_reg.done : i1
+// CHECK-DAG:         calyx.assign %cmpf_0_reg.in = %std_and_0.out : i1
+// CHECK-DAG:         calyx.assign %cmpf_0_reg.write_en = %std_and_1.out : i1
+// CHECK-DAG:         %2 = comb.xor %std_compareFN_0.done, %true : i1
+// CHECK-DAG:         calyx.assign %std_compareFN_0.go = %2 ? %true : i1
+// CHECK-DAG:         calyx.group_done %cmpf_0_reg.done : i1
+// CHECK-DAG:       }
 // CHECK:         calyx.group @ret_assign_0 {
 // CHECK-DAG:           calyx.assign %ret_arg0_reg.in = %cmpf_0_reg.out : i1
 // CHECK-DAG:           calyx.assign %ret_arg0_reg.write_en = %true : i1
@@ -760,18 +760,18 @@ module {
 // CHECK-DAG:       %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i1, i1, i1, i1, i1, i1
 // CHECK:       calyx.wires {
 // CHECK-DAG:         calyx.assign %out0 = %ret_arg0_reg.out : i1
-// CHECK:         calyx.group @bb0_0 {
-// CHECK-DAG:           calyx.assign %std_compareFN_0.left = %in0 : i32
-// CHECK-DAG:           calyx.assign %std_compareFN_0.right = %cst : i32
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %0 = comb.xor %std_compareFN_0.unordered, %true : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.in = %0 ? %true : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.in = %unordered_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %1 = comb.xor %std_compareFN_0.done, %true : i1
-// CHECK-DAG:           calyx.assign %std_compareFN_0.go = %1 ? %true : i1
-// CHECK-DAG:           calyx.group_done %unordered_port_0_reg.out ? %cmpf_0_reg.done : i1
-// CHECK-DAG:         }
+// CHECK:       calyx.group @bb0_0 {
+// CHECK-DAG:         calyx.assign %std_compareFN_0.left = %in0 : i32
+// CHECK-DAG:         calyx.assign %std_compareFN_0.right = %cst : i32
+// CHECK-DAG:         calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:         %0 = comb.xor %std_compareFN_0.unordered, %true : i1
+// CHECK-DAG:         calyx.assign %unordered_port_0_reg.in = %0 ? %true : i1
+// CHECK-DAG:         calyx.assign %cmpf_0_reg.in = %unordered_port_0_reg.out : i1
+// CHECK-DAG:         calyx.assign %cmpf_0_reg.write_en = %unordered_port_0_reg.out : i1
+// CHECK-DAG:         %1 = comb.xor %std_compareFN_0.done, %true : i1
+// CHECK-DAG:         calyx.assign %std_compareFN_0.go = %1 ? %true : i1
+// CHECK-DAG:         calyx.group_done %cmpf_0_reg.done : i1
+// CHECK-DAG:       }
 
 module {
   func.func @main(%arg0 : f32) -> i1 {
@@ -790,8 +790,8 @@ module {
 // CHECK-LABEL:     calyx.component @main(%in0: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i1, %done: i1 {done}) {
 // CHECK-DAG:       %cst = calyx.constant @cst_0 <4.200000e+00 : f32> : i32
 // CHECK-DAG:       %true = hw.constant true
-// CHECK-DAG:       %std_and_1.left, %std_and_1.right, %std_and_1.out = calyx.std_and @std_and_1 : i1, i1, i1
 // CHECK-DAG:       %std_and_0.left, %std_and_0.right, %std_and_0.out = calyx.std_and @std_and_0 : i1, i1, i1
+// CHECK-DAG:       %std_or_0.left, %std_or_0.right, %std_or_0.out = calyx.std_or @std_or_0 : i1, i1, i1
 // CHECK-DAG:       %unordered_port_0_reg.in, %unordered_port_0_reg.write_en, %unordered_port_0_reg.clk, %unordered_port_0_reg.reset, %unordered_port_0_reg.out, %unordered_port_0_reg.done = calyx.register @unordered_port_0_reg : i1, i1, i1, i1, i1, i1
 // CHECK-DAG:       %compare_port_0_reg.in, %compare_port_0_reg.write_en, %compare_port_0_reg.clk, %compare_port_0_reg.reset, %compare_port_0_reg.out, %compare_port_0_reg.done = calyx.register @compare_port_0_reg : i1, i1, i1, i1, i1, i1
 // CHECK-DAG:       %cmpf_0_reg.in, %cmpf_0_reg.write_en, %cmpf_0_reg.clk, %cmpf_0_reg.reset, %cmpf_0_reg.out, %cmpf_0_reg.done = calyx.register @cmpf_0_reg : i1, i1, i1, i1, i1, i1
@@ -799,25 +799,23 @@ module {
 // CHECK-DAG:       %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i1, i1, i1, i1, i1, i1
 // CHECK:       calyx.wires {
 // CHECK-DAG:         calyx.assign %out0 = %ret_arg0_reg.out : i1
-// CHECK:         calyx.group @bb0_0 {
-// CHECK-DAG:           calyx.assign %std_compareFN_0.left = %in0 : i32
-// CHECK-DAG:           calyx.assign %std_compareFN_0.right = %cst : i32
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %0 = comb.xor %std_compareFN_0.eq, %true : i1
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.in = %0 ? %true : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %1 = comb.xor %std_compareFN_0.unordered, %true : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.in = %1 ? %true : i1
-// CHECK-DAG:           calyx.assign %std_and_0.left = %compare_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %std_and_0.right = %unordered_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.in = %std_and_0.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %2 = comb.xor %std_compareFN_0.done, %true : i1
-// CHECK-DAG:           calyx.assign %std_compareFN_0.go = %2 ? %true : i1
-// CHECK-DAG:           calyx.assign %std_and_1.left = %compare_port_0_reg.done : i1
-// CHECK-DAG:           calyx.assign %std_and_1.right = %unordered_port_0_reg.done : i1
-// CHECK-DAG:           calyx.group_done %std_and_1.out ? %cmpf_0_reg.done : i1
-// CHECK-DAG:         }
+// CHECK:      calyx.group @bb0_0 {
+// CHECK-DAG:        calyx.assign %std_compareFN_0.left = %in0 : i32
+// CHECK-DAG:        calyx.assign %std_compareFN_0.right = %cst : i32
+// CHECK-DAG:        calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:        calyx.assign %compare_port_0_reg.in = %std_compareFN_0.eq : i1
+// CHECK-DAG:        calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:        calyx.assign %unordered_port_0_reg.in = %std_compareFN_0.unordered : i1
+// CHECK-DAG:        calyx.assign %std_or_0.left = %compare_port_0_reg.out : i1
+// CHECK-DAG:        calyx.assign %std_or_0.right = %unordered_port_0_reg.out : i1
+// CHECK-DAG:        calyx.assign %std_and_0.left = %compare_port_0_reg.done : i1
+// CHECK-DAG:        calyx.assign %std_and_0.right = %unordered_port_0_reg.done : i1
+// CHECK-DAG:        calyx.assign %cmpf_0_reg.in = %std_or_0.out : i1
+// CHECK-DAG:        calyx.assign %cmpf_0_reg.write_en = %std_and_0.out : i1
+// CHECK-DAG:        %0 = comb.xor %std_compareFN_0.done, %true : i1
+// CHECK-DAG:        calyx.assign %std_compareFN_0.go = %0 ? %true : i1
+// CHECK-DAG:        calyx.group_done %cmpf_0_reg.done : i1
+// CHECK-DAG:      }
 
 module {
   func.func @main(%arg0 : f32) -> i1 {
@@ -845,23 +843,23 @@ module {
 // CHECK-DAG:       %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i1, i1, i1, i1, i1, i1
 // CHECK:       calyx.wires {
 // CHECK-DAG:         calyx.assign %out0 = %ret_arg0_reg.out : i1
-// CHECK:         calyx.group @bb0_0 {
-// CHECK-DAG:           calyx.assign %std_compareFN_0.left = %in0 : i32
-// CHECK-DAG:           calyx.assign %std_compareFN_0.right = %cst : i32
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.in = %std_compareFN_0.gt : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.in = %std_compareFN_0.unordered : i1
-// CHECK-DAG:           calyx.assign %std_or_0.left = %compare_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %std_or_0.right = %unordered_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.in = %std_or_0.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %0 = comb.xor %std_compareFN_0.done, %true : i1
-// CHECK-DAG:           calyx.assign %std_compareFN_0.go = %0 ? %true : i1
-// CHECK-DAG:           calyx.assign %std_and_0.left = %compare_port_0_reg.done : i1
-// CHECK-DAG:           calyx.assign %std_and_0.right = %unordered_port_0_reg.done : i1
-// CHECK-DAG:           calyx.group_done %std_and_0.out ? %cmpf_0_reg.done : i1
-// CHECK-DAG:         }
+// CHECK:       calyx.group @bb0_0 {
+// CHECK-DAG:         calyx.assign %std_compareFN_0.left = %in0 : i32
+// CHECK-DAG:         calyx.assign %std_compareFN_0.right = %cst : i32
+// CHECK-DAG:         calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:         calyx.assign %compare_port_0_reg.in = %std_compareFN_0.gt : i1
+// CHECK-DAG:         calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:         calyx.assign %unordered_port_0_reg.in = %std_compareFN_0.unordered : i1
+// CHECK-DAG:         calyx.assign %std_or_0.left = %compare_port_0_reg.out : i1
+// CHECK-DAG:         calyx.assign %std_or_0.right = %unordered_port_0_reg.out : i1
+// CHECK-DAG:         calyx.assign %std_and_0.left = %compare_port_0_reg.done : i1
+// CHECK-DAG:         calyx.assign %std_and_0.right = %unordered_port_0_reg.done : i1
+// CHECK-DAG:         calyx.assign %cmpf_0_reg.in = %std_or_0.out : i1
+// CHECK-DAG:         calyx.assign %cmpf_0_reg.write_en = %std_and_0.out : i1
+// CHECK-DAG:         %0 = comb.xor %std_compareFN_0.done, %true : i1
+// CHECK-DAG:         calyx.assign %std_compareFN_0.go = %0 ? %true : i1
+// CHECK-DAG:         calyx.group_done %cmpf_0_reg.done : i1
+// CHECK-DAG:       }
 
 module {
   func.func @main(%arg0 : f32) -> i1 {
@@ -889,24 +887,24 @@ module {
 // CHECK-DAG:       %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i1, i1, i1, i1, i1, i1
 // CHECK:       calyx.wires {
 // CHECK-DAG:         calyx.assign %out0 = %ret_arg0_reg.out : i1
-// CHECK:         calyx.group @bb0_0 {
-// CHECK-DAG:           calyx.assign %std_compareFN_0.left = %in0 : i32
-// CHECK-DAG:           calyx.assign %std_compareFN_0.right = %cst : i32
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %0 = comb.xor %std_compareFN_0.lt, %true : i1
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.in = %0 ? %true : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.in = %std_compareFN_0.unordered : i1
-// CHECK-DAG:           calyx.assign %std_or_0.left = %compare_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %std_or_0.right = %unordered_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.in = %std_or_0.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %1 = comb.xor %std_compareFN_0.done, %true : i1
-// CHECK-DAG:           calyx.assign %std_compareFN_0.go = %1 ? %true : i1
-// CHECK-DAG:           calyx.assign %std_and_0.left = %compare_port_0_reg.done : i1
-// CHECK-DAG:           calyx.assign %std_and_0.right = %unordered_port_0_reg.done : i1
-// CHECK-DAG:           calyx.group_done %std_and_0.out ? %cmpf_0_reg.done : i1
-// CHECK-DAG:         }
+// CHECK:       calyx.group @bb0_0 {
+// CHECK-DAG:         calyx.assign %std_compareFN_0.left = %in0 : i32
+// CHECK-DAG:         calyx.assign %std_compareFN_0.right = %cst : i32
+// CHECK-DAG:         calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:         %0 = comb.xor %std_compareFN_0.lt, %true : i1
+// CHECK-DAG:         calyx.assign %compare_port_0_reg.in = %0 ? %true : i1
+// CHECK-DAG:         calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:         calyx.assign %unordered_port_0_reg.in = %std_compareFN_0.unordered : i1
+// CHECK-DAG:         calyx.assign %std_or_0.left = %compare_port_0_reg.out : i1
+// CHECK-DAG:         calyx.assign %std_or_0.right = %unordered_port_0_reg.out : i1
+// CHECK-DAG:         calyx.assign %std_and_0.left = %compare_port_0_reg.done : i1
+// CHECK-DAG:         calyx.assign %std_and_0.right = %unordered_port_0_reg.done : i1
+// CHECK-DAG:         calyx.assign %cmpf_0_reg.in = %std_or_0.out : i1
+// CHECK-DAG:         calyx.assign %cmpf_0_reg.write_en = %std_and_0.out : i1
+// CHECK-DAG:         %1 = comb.xor %std_compareFN_0.done, %true : i1
+// CHECK-DAG:         calyx.assign %std_compareFN_0.go = %1 ? %true : i1
+// CHECK-DAG:         calyx.group_done %cmpf_0_reg.done : i1
+// CHECK-DAG:       }
 
 module {
   func.func @main(%arg0 : f32) -> i1 {
@@ -934,23 +932,23 @@ module {
 // CHECK-DAG:       %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i1, i1, i1, i1, i1, i1
 // CHECK:       calyx.wires {
 // CHECK-DAG:         calyx.assign %out0 = %ret_arg0_reg.out : i1
-// CHECK:         calyx.group @bb0_0 {
-// CHECK-DAG:           calyx.assign %std_compareFN_0.left = %in0 : i32
-// CHECK-DAG:           calyx.assign %std_compareFN_0.right = %cst : i32
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.in = %std_compareFN_0.lt : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.in = %std_compareFN_0.unordered : i1
-// CHECK-DAG:           calyx.assign %std_or_0.left = %compare_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %std_or_0.right = %unordered_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.in = %std_or_0.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %0 = comb.xor %std_compareFN_0.done, %true : i1
-// CHECK-DAG:           calyx.assign %std_compareFN_0.go = %0 ? %true : i1
-// CHECK-DAG:           calyx.assign %std_and_0.left = %compare_port_0_reg.done : i1
-// CHECK-DAG:           calyx.assign %std_and_0.right = %unordered_port_0_reg.done : i1
-// CHECK-DAG:           calyx.group_done %std_and_0.out ? %cmpf_0_reg.done : i1
-// CHECK-DAG:         }
+// CHECK:      calyx.group @bb0_0 {
+// CHECK-DAG:        calyx.assign %std_compareFN_0.left = %in0 : i32
+// CHECK-DAG:        calyx.assign %std_compareFN_0.right = %cst : i32
+// CHECK-DAG:        calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:        calyx.assign %compare_port_0_reg.in = %std_compareFN_0.lt : i1
+// CHECK-DAG:        calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:        calyx.assign %unordered_port_0_reg.in = %std_compareFN_0.unordered : i1
+// CHECK-DAG:        calyx.assign %std_or_0.left = %compare_port_0_reg.out : i1
+// CHECK-DAG:        calyx.assign %std_or_0.right = %unordered_port_0_reg.out : i1
+// CHECK-DAG:        calyx.assign %std_and_0.left = %compare_port_0_reg.done : i1
+// CHECK-DAG:        calyx.assign %std_and_0.right = %unordered_port_0_reg.done : i1
+// CHECK-DAG:        calyx.assign %cmpf_0_reg.in = %std_or_0.out : i1
+// CHECK-DAG:        calyx.assign %cmpf_0_reg.write_en = %std_and_0.out : i1
+// CHECK-DAG:        %0 = comb.xor %std_compareFN_0.done, %true : i1
+// CHECK-DAG:        calyx.assign %std_compareFN_0.go = %0 ? %true : i1
+// CHECK-DAG:        calyx.group_done %cmpf_0_reg.done : i1
+// CHECK-DAG:      }
 
 module {
   func.func @main(%arg0 : f32) -> i1 {
@@ -978,24 +976,24 @@ module {
 // CHECK-DAG:       %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i1, i1, i1, i1, i1, i1
 // CHECK:       calyx.wires {
 // CHECK-DAG:         calyx.assign %out0 = %ret_arg0_reg.out : i1
-// CHECK:         calyx.group @bb0_0 {
-// CHECK-DAG:           calyx.assign %std_compareFN_0.left = %in0 : i32
-// CHECK-DAG:           calyx.assign %std_compareFN_0.right = %cst : i32
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %0 = comb.xor %std_compareFN_0.gt, %true : i1
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.in = %0 ? %true : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.in = %std_compareFN_0.unordered : i1
-// CHECK-DAG:           calyx.assign %std_or_0.left = %compare_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %std_or_0.right = %unordered_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.in = %std_or_0.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %1 = comb.xor %std_compareFN_0.done, %true : i1
-// CHECK-DAG:           calyx.assign %std_compareFN_0.go = %1 ? %true : i1
-// CHECK-DAG:           calyx.assign %std_and_0.left = %compare_port_0_reg.done : i1
-// CHECK-DAG:           calyx.assign %std_and_0.right = %unordered_port_0_reg.done : i1
-// CHECK-DAG:           calyx.group_done %std_and_0.out ? %cmpf_0_reg.done : i1
-// CHECK-DAG:         }
+// CHECK:       calyx.group @bb0_0 {
+// CHECK-DAG:         calyx.assign %std_compareFN_0.left = %in0 : i32
+// CHECK-DAG:         calyx.assign %std_compareFN_0.right = %cst : i32
+// CHECK-DAG:         calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:         %0 = comb.xor %std_compareFN_0.gt, %true : i1
+// CHECK-DAG:         calyx.assign %compare_port_0_reg.in = %0 ? %true : i1
+// CHECK-DAG:         calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:         calyx.assign %unordered_port_0_reg.in = %std_compareFN_0.unordered : i1
+// CHECK-DAG:         calyx.assign %std_or_0.left = %compare_port_0_reg.out : i1
+// CHECK-DAG:         calyx.assign %std_or_0.right = %unordered_port_0_reg.out : i1
+// CHECK-DAG:         calyx.assign %std_and_0.left = %compare_port_0_reg.done : i1
+// CHECK-DAG:         calyx.assign %std_and_0.right = %unordered_port_0_reg.done : i1
+// CHECK-DAG:         calyx.assign %cmpf_0_reg.in = %std_or_0.out : i1
+// CHECK-DAG:         calyx.assign %cmpf_0_reg.write_en = %std_and_0.out : i1
+// CHECK-DAG:         %1 = comb.xor %std_compareFN_0.done, %true : i1
+// CHECK-DAG:         calyx.assign %std_compareFN_0.go = %1 ? %true : i1
+// CHECK-DAG:         calyx.group_done %cmpf_0_reg.done : i1
+// CHECK-DAG:       }
 
 module {
   func.func @main(%arg0 : f32) -> i1 {
@@ -1023,24 +1021,24 @@ module {
 // CHECK-DAG:       %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i1, i1, i1, i1, i1, i1
 // CHECK:       calyx.wires {
 // CHECK-DAG:         calyx.assign %out0 = %ret_arg0_reg.out : i1
-// CHECK:         calyx.group @bb0_0 {
-// CHECK-DAG:           calyx.assign %std_compareFN_0.left = %in0 : i32
-// CHECK-DAG:           calyx.assign %std_compareFN_0.right = %cst : i32
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %0 = comb.xor %std_compareFN_0.eq, %true : i1
-// CHECK-DAG:           calyx.assign %compare_port_0_reg.in = %0 ? %true : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.in = %std_compareFN_0.unordered : i1
-// CHECK-DAG:           calyx.assign %std_or_0.left = %compare_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %std_or_0.right = %unordered_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.in = %std_or_0.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %1 = comb.xor %std_compareFN_0.done, %true : i1
-// CHECK-DAG:           calyx.assign %std_compareFN_0.go = %1 ? %true : i1
-// CHECK-DAG:           calyx.assign %std_and_0.left = %compare_port_0_reg.done : i1
-// CHECK-DAG:           calyx.assign %std_and_0.right = %unordered_port_0_reg.done : i1
-// CHECK-DAG:           calyx.group_done %std_and_0.out ? %cmpf_0_reg.done : i1
-// CHECK-DAG:         }
+// CHECK:       calyx.group @bb0_0 {
+// CHECK-DAG:         calyx.assign %std_compareFN_0.left = %in0 : i32
+// CHECK-DAG:         calyx.assign %std_compareFN_0.right = %cst : i32
+// CHECK-DAG:         calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:         %0 = comb.xor %std_compareFN_0.eq, %true : i1
+// CHECK-DAG:         calyx.assign %compare_port_0_reg.in = %0 ? %true : i1
+// CHECK-DAG:         calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:         calyx.assign %unordered_port_0_reg.in = %std_compareFN_0.unordered : i1
+// CHECK-DAG:         calyx.assign %std_or_0.left = %compare_port_0_reg.out : i1
+// CHECK-DAG:         calyx.assign %std_or_0.right = %unordered_port_0_reg.out : i1
+// CHECK-DAG:         calyx.assign %std_and_0.left = %compare_port_0_reg.done : i1
+// CHECK-DAG:         calyx.assign %std_and_0.right = %unordered_port_0_reg.done : i1
+// CHECK-DAG:         calyx.assign %cmpf_0_reg.in = %std_or_0.out : i1
+// CHECK-DAG:         calyx.assign %cmpf_0_reg.write_en = %std_and_0.out : i1
+// CHECK-DAG:         %1 = comb.xor %std_compareFN_0.done, %true : i1
+// CHECK-DAG:         calyx.assign %std_compareFN_0.go = %1 ? %true : i1
+// CHECK-DAG:         calyx.group_done %cmpf_0_reg.done : i1
+// CHECK-DAG:       }
 
 module {
   func.func @main(%arg0 : f32) -> i1 {
@@ -1065,17 +1063,17 @@ module {
 // CHECK-DAG:       %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i1, i1, i1, i1, i1, i1
 // CHECK:       calyx.wires {
 // CHECK-DAG:         calyx.assign %out0 = %ret_arg0_reg.out : i1
-// CHECK:         calyx.group @bb0_0 {
-// CHECK-DAG:           calyx.assign %std_compareFN_0.left = %in0 : i32
-// CHECK-DAG:           calyx.assign %std_compareFN_0.right = %cst : i32
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           calyx.assign %unordered_port_0_reg.in = %std_compareFN_0.unordered ? %true : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.in = %unordered_port_0_reg.out : i1
-// CHECK-DAG:           calyx.assign %cmpf_0_reg.write_en = %std_compareFN_0.done : i1
-// CHECK-DAG:           %0 = comb.xor %std_compareFN_0.done, %true : i1
-// CHECK-DAG:           calyx.assign %std_compareFN_0.go = %0 ? %true : i1
-// CHECK-DAG:           calyx.group_done %unordered_port_0_reg.out ? %cmpf_0_reg.done : i1
-// CHECK-DAG:         }
+// CHECK:       calyx.group @bb0_0 {
+// CHECK-DAG:         calyx.assign %std_compareFN_0.left = %in0 : i32
+// CHECK-DAG:         calyx.assign %std_compareFN_0.right = %cst : i32
+// CHECK-DAG:         calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:         calyx.assign %unordered_port_0_reg.in = %std_compareFN_0.unordered : i1
+// CHECK-DAG:         calyx.assign %cmpf_0_reg.in = %unordered_port_0_reg.out : i1
+// CHECK-DAG:         calyx.assign %cmpf_0_reg.write_en = %unordered_port_0_reg.out : i1
+// CHECK-DAG:         %0 = comb.xor %std_compareFN_0.done, %true : i1
+// CHECK-DAG:         calyx.assign %std_compareFN_0.go = %0 ? %true : i1
+// CHECK-DAG:         calyx.group_done %cmpf_0_reg.done : i1
+// CHECK-DAG:       }
 
 module {
   func.func @main(%arg0 : f32) -> i1 {

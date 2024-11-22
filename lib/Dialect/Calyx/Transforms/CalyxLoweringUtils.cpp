@@ -843,5 +843,113 @@ BuildCallInstance::getCallComponent(mlir::func::CallOp callOp) const {
   return nullptr;
 }
 
+PredicateInfo getPredicateInfo(CmpFPredicate pred) {
+  PredicateInfo info;
+  switch (pred) {
+  case CmpFPredicate::OEQ: {
+    info.logic = PredicateInfo::AND;
+    info.inputPorts = {{PredicateInfo::InputPorts::EQ, false},
+                       {PredicateInfo::InputPorts::UNORDERED, true}};
+    break;
+  }
+
+  case CmpFPredicate::OGT: {
+    info.logic = PredicateInfo::AND;
+    info.inputPorts = {{PredicateInfo::InputPorts::GT, false},
+                       {PredicateInfo::InputPorts::UNORDERED, true}};
+    break;
+  }
+
+  case CmpFPredicate::OGE: {
+    info.logic = PredicateInfo::AND;
+    info.inputPorts = {{PredicateInfo::InputPorts::LT, true},
+                       {PredicateInfo::InputPorts::UNORDERED, true}};
+    break;
+  }
+
+  case CmpFPredicate::OLT: {
+    info.logic = PredicateInfo::AND;
+    info.inputPorts = {{PredicateInfo::InputPorts::LT, false},
+                       {PredicateInfo::InputPorts::UNORDERED, true}};
+    break;
+  }
+
+  case CmpFPredicate::OLE: {
+    info.logic = PredicateInfo::AND;
+    info.inputPorts = {{PredicateInfo::InputPorts::GT, true},
+                       {PredicateInfo::InputPorts::UNORDERED, true}};
+    break;
+  }
+
+  case CmpFPredicate::ONE: {
+    info.logic = PredicateInfo::AND;
+    info.inputPorts = {{PredicateInfo::InputPorts::EQ, true},
+                       {PredicateInfo::InputPorts::UNORDERED, true}};
+    break;
+  }
+
+  case CmpFPredicate::ORD: {
+    info.logic = PredicateInfo::SPECIAL;
+    info.inputPorts = {{PredicateInfo::InputPorts::UNORDERED, true}};
+    break;
+  }
+
+  case CmpFPredicate::UEQ: {
+    info.logic = PredicateInfo::OR;
+    info.inputPorts = {{PredicateInfo::InputPorts::EQ, false},
+                       {PredicateInfo::InputPorts::UNORDERED, false}};
+    break;
+  }
+
+  case CmpFPredicate::UGT: {
+    info.logic = PredicateInfo::OR;
+    info.inputPorts = {{PredicateInfo::InputPorts::GT, false},
+                       {PredicateInfo::InputPorts::UNORDERED, false}};
+    break;
+  }
+
+  case CmpFPredicate::UGE: {
+    info.logic = PredicateInfo::OR;
+    info.inputPorts = {{PredicateInfo::InputPorts::LT, true},
+                       {PredicateInfo::InputPorts::UNORDERED, false}};
+    break;
+  }
+
+  case CmpFPredicate::ULT: {
+    info.logic = PredicateInfo::OR;
+    info.inputPorts = {{PredicateInfo::InputPorts::LT, false},
+                       {PredicateInfo::InputPorts::UNORDERED, false}};
+    break;
+  }
+
+  case CmpFPredicate::ULE: {
+    info.logic = PredicateInfo::OR;
+    info.inputPorts = {{PredicateInfo::InputPorts::GT, true},
+                       {PredicateInfo::InputPorts::UNORDERED, false}};
+    break;
+  }
+
+  case CmpFPredicate::UNE: {
+    info.logic = PredicateInfo::OR;
+    info.inputPorts = {{PredicateInfo::InputPorts::EQ, true},
+                       {PredicateInfo::InputPorts::UNORDERED, false}};
+    break;
+  }
+
+  case CmpFPredicate::UNO: {
+    info.logic = PredicateInfo::SPECIAL;
+    info.inputPorts = {{PredicateInfo::InputPorts::UNORDERED, false}};
+    break;
+  }
+
+  case CmpFPredicate::AlwaysTrue:
+  case CmpFPredicate::AlwaysFalse:
+    info.logic = PredicateInfo::SPECIAL;
+    break;
+  }
+
+  return info;
+}
+
 } // namespace calyx
 } // namespace circt
