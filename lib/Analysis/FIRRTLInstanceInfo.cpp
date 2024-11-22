@@ -127,6 +127,7 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
       if (isGCCompanion) {
         attributes.inDesign.mergeIn(false);
         attributes.inEffectiveDesign.mergeIn(false);
+        attributes.underLayer.mergeIn(true);
       }
 
       // Merge in values based on the instantiations of this module.
@@ -143,10 +144,12 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
         bool underLayer = (isa<InstanceOp>(instanceOp) &&
                            cast<InstanceOp>(instanceOp).getLowerToBind()) ||
                           instanceOp->getParentOfType<LayerBlockOp>();
-        if (underLayer)
-          attributes.underLayer.mergeIn(true);
-        else
-          attributes.underLayer.mergeIn(parentAttrs.underLayer);
+        if (!isGCCompanion) {
+          if (underLayer)
+            attributes.underLayer.mergeIn(true);
+          else
+            attributes.underLayer.mergeIn(parentAttrs.underLayer);
+        }
 
         // Update inDesign and inEffectiveDesign.
         if (underLayer) {
