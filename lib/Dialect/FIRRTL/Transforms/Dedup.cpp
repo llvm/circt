@@ -52,7 +52,7 @@ using hw::InnerRefAttr;
 //===----------------------------------------------------------------------===//
 
 /// Returns true if the module can be removed.
-static bool checkVisibility(mlir::SymbolOpInterface symbol) {
+static bool canRemoveModule(mlir::SymbolOpInterface symbol) {
   // If the symbol is not private, it cannot be removed.
   if (!symbol.isPrivate())
     return false;
@@ -818,13 +818,13 @@ struct Equivalence {
     }
     auto aSymbol = cast<mlir::SymbolOpInterface>(a);
     auto bSymbol = cast<mlir::SymbolOpInterface>(b);
-    if (!checkVisibility(aSymbol)) {
+    if (!canRemoveModule(aSymbol)) {
       diag.attachNote(a->getLoc())
           << "module is "
           << (aSymbol.isPrivate() ? "private but not discardable" : "public");
       return;
     }
-    if (!checkVisibility(bSymbol)) {
+    if (!canRemoveModule(bSymbol)) {
       diag.attachNote(b->getLoc())
           << "module is "
           << (bSymbol.isPrivate() ? "private but not discardable" : "public");
@@ -1752,9 +1752,9 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
 
         // If the current module is public, and the original is private, we
         // want to dedup the private module into the public one.
-        if (!checkVisibility(module)) {
+        if (!canRemoveModule(module)) {
           // If both modules are public, then we can't dedup anything.
-          if (!checkVisibility(original))
+          if (!canRemoveModule(original))
             continue;
           // Swap the canonical module in the dedup map.
           for (auto &[originalName, dedupedName] : dedupMap)
