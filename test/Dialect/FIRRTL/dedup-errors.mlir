@@ -656,30 +656,3 @@ firrtl.circuit "InstOfEquivPublic" attributes {annotations = [{
     firrtl.instance test1p @Test1Parent()
   }
 }
-
-// -----
-
-// Modules instantiating mixed public/private do not dedup.
-// Check diagnostic.
-// expected-error @below {{module "Test1Parent" not deduplicated with "Test0Parent"}}
-// expected-note @below {{in instance "test0" of "Test0", and instance "test1" of "Test1"}}
-firrtl.circuit "InstOfPublicPrivate" attributes {annotations = [{
-      class = "firrtl.transforms.MustDeduplicateAnnotation",
-      modules = ["~InstOfPublicPrivate|Test0Parent", "~InstOfPublicPrivate|Test1Parent"]
-    }]} {
-  firrtl.module private @Test0() { }
-  // expected-note @below {{module is public}}
-  firrtl.module public @Test1() { }
-
-  firrtl.module private @Test0Parent() {
-    firrtl.instance test0 @Test0()
-  }
-  firrtl.module private @Test1Parent() {
-    firrtl.instance test1 @Test1()
-  }
-
-  firrtl.module @InstOfPublicPrivate() {
-    firrtl.instance test0p @Test0Parent()
-    firrtl.instance test1p @Test1Parent()
-  }
-}

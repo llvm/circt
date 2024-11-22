@@ -51,14 +51,23 @@ using hw::InnerRefAttr;
 // Utility function for classifying a Symbol's dedup-ability.
 //===----------------------------------------------------------------------===//
 
+/// Returns true if the module can be removed.
 static bool checkVisibility(mlir::SymbolOpInterface symbol) {
-  // If module has symbol (name) that must be preserved even if unused,
-  // skip it. All symbol uses must be supported, which is not true if
-  // non-private.
-  // Special handling for class-like's and if symbol reports cannot be
-  // discarded.
-  return symbol.isPrivate() &&
-         (symbol.canDiscardOnUseEmpty() || isa<ClassLike>(*symbol));
+  // If the symbol is not private, it cannot be removed.
+  if (!symbol.isPrivate())
+    return false;
+  // Classes may be referenced in object types, so can not normally be removed
+  // if we can't find any symbol uses. Since we know that dedup will update the
+  // types of instances appropriately, we can ignore that and return true here.
+  if (isa<ClassLike>(*symbol))
+    return true;
+  // If module can not be removed even if no uses can be found, we can not
+  // delete it. The implication is that there are hidden symbol uses that dedup
+  // will not properly update.
+  if (!symbol.canDiscardOnUseEmpty())
+    return false;
+  // The module can be deleted.
+  return true;
 }
 
 //===----------------------------------------------------------------------===//
@@ -108,11 +117,13 @@ struct StructuralHasherSharedConstants {
     portSymbolsAttr = StringAttr::get(context, "portSymbols");
     portNamesAttr = StringAttr::get(context, "portNames");
     nonessentialAttributes.insert(StringAttr::get(context, "annotations"));
+    nonessentialAttributes.insert(StringAttr::get(context, "convention"));
     nonessentialAttributes.insert(StringAttr::get(context, "name"));
     nonessentialAttributes.insert(StringAttr::get(context, "portAnnotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "portNames"));
     nonessentialAttributes.insert(StringAttr::get(context, "portLocations"));
     nonessentialAttributes.insert(StringAttr::get(context, "sym_name"));
+    nonessentialAttributes.insert(StringAttr::get(context, "sym_visibility"));
   };
 
   // This is a cached "portTypes" string attr.
@@ -1741,9 +1752,9 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
 
         // If the current module is public, and the original is private, we
         // want to dedup the private module into the public one.
-        if (module.isPublic()) {
+        if (!checkVisibility(module)) {
           // If both modules are public, then we can't dedup anything.
-          if (original.isPublic())
+          if (!checkVisibility(original))
             continue;
           // Swap the canonical module in the dedup map.
           for (auto &[originalName, dedupedName] : dedupMap)
