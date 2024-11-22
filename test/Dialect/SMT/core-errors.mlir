@@ -471,3 +471,19 @@ func.func @func_range_no_smt_type(%arg0: !smt.func<(!smt.bool) !smt.bool>) {
 func.func @sort_type_no_smt_type(%arg0: !smt.sort<"sortname"[i32]>) {
   return
 }
+
+// -----
+
+func.func @negative_push() {
+  // expected-error @below {{smt.push' op attribute 'count' failed to satisfy constraint: 32-bit signless integer attribute whose value is non-negative}}
+  smt.push -1
+  return
+}
+
+// -----
+
+func.func @negative_pop() {
+  // expected-error @below {{smt.pop' op attribute 'count' failed to satisfy constraint: 32-bit signless integer attribute whose value is non-negative}}
+  smt.pop -1
+  return
+}

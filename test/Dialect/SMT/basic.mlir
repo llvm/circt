@@ -29,6 +29,12 @@ func.func @core(%in: i8) {
   // CHECK: smt.reset {smt.some_attr}
   smt.reset {smt.some_attr}
 
+  // CHECK: smt.push 1 {smt.some_attr}
+  smt.push 1 {smt.some_attr}
+
+  // CHECK: smt.pop 1 {smt.some_attr}
+  smt.pop 1 {smt.some_attr}
+
   // CHECK: %{{.*}} = smt.solver(%{{.*}}) {smt.some_attr} : (i8) -> (i8, i32) {
   // CHECK: ^bb0(%{{.*}}: i8)
   // CHECK:   %{{.*}} = smt.check {smt.some_attr} sat {
