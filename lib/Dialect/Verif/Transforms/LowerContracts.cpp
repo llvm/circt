@@ -50,8 +50,8 @@ struct HWOpRewritePattern : public OpRewritePattern<HWModuleOp> {
 
   LogicalResult matchAndRewrite(HWModuleOp op,
                                 PatternRewriter &rewriter) const override {
-    auto formalOp =
-        rewriter.create<verif::FormalOp>(op.getLoc(), op.getNameAttr());
+    auto formalOp = rewriter.create<verif::FormalOp>(
+        op.getLoc(), op.getNameAttr(), rewriter.getDictionaryAttr({}));
 
     // Clone module body into fomal op body
     rewriter.cloneRegionBefore(op.getRegion(), formalOp.getBody(),
