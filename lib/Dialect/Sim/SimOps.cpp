@@ -514,21 +514,29 @@ LogicalResult TriggerSequenceOp::canonicalize(TriggerSequenceOp op,
     return success();
   }
 
-  // Check if there are unused results (which can be removed) or
-  // non-concurrent sub-sequences (which can be inlined).
+  // If the current op can be inlined into the parent,
+  // leave it to the parent's canonicalization.
+  if (auto parentSeq = op.getParent().getDefiningOp<TriggerSequenceOp>()) {
+    if (parentSeq == op) {
+      op.emitWarning("Recursive trigger sequence.");
+      return failure();
+    }
+    if (op.getParent().hasOneUse())
+      return failure();
+  }
+
   auto getSingleSequenceUser = [](Value trigger) -> TriggerSequenceOp {
     if (!trigger.hasOneUse())
       return {};
     return dyn_cast<TriggerSequenceOp>(trigger.use_begin()->getOwner());
   };
 
+  // Check if there are unused results (which can be removed) or
+  // non-concurrent sub-sequences (which can be inlined).
+
   bool canBeChanged = false;
   for (auto res : op.getResults()) {
     auto singleSeqUser = getSingleSequenceUser(res);
-    if (singleSeqUser == op) {
-      op.emitWarning("Recursive trigger sequence.");
-      return failure();
-    }
     if (res.use_empty() || !!singleSeqUser) {
       canBeChanged = true;
       break;
@@ -538,43 +546,70 @@ LogicalResult TriggerSequenceOp::canonicalize(TriggerSequenceOp op,
   if (!canBeChanged)
     return failure();
 
-  // Build a list of new result values.
-  SmallVector<Value> resultValues;
-  SmallVector<Location> locs;
-  SmallVector<TriggerSequenceOp> childSeqs;
-  locs.emplace_back(op.getLoc());
-  resultValues.reserve(op.getNumResults());
-  for (auto res : op.getResults()) {
-    if (res.use_empty())
-      continue;
+  // DFS for inlinable values.
+  SmallVector<Value> newResultValues;
+  SmallVector<TriggerSequenceOp> inlinedSequences;
+  llvm::SmallVector<std::pair<TriggerSequenceOp, unsigned>> sequenceOpStack;
 
-    if (auto seqUser = getSingleSequenceUser(res)) {
-      resultValues.append(seqUser.getResults().begin(),
-                          seqUser.getResults().end());
-      locs.emplace_back(seqUser.getLoc());
-      childSeqs.emplace_back(seqUser);
-    } else {
-      resultValues.emplace_back(res);
+  sequenceOpStack.push_back({op, 0});
+  while (!sequenceOpStack.empty()) {
+    auto &top = sequenceOpStack.back();
+    auto currentSequence = top.first;
+    unsigned resultIndex = top.second;
+
+    while (resultIndex < currentSequence.getNumResults()) {
+      auto currentResult = currentSequence.getResult(resultIndex);
+      // Check we do not walk in a cycle.
+      if (currentResult == op.getParent()) {
+        op.emitWarning("Recursive trigger sequence.");
+        return failure();
+      }
+
+      if (auto inlinableChildSequence = getSingleSequenceUser(currentResult)) {
+        // Save the next result index to visit on the
+        // stack and put the new sequence on top.
+        top.second = resultIndex + 1;
+        sequenceOpStack.push_back({inlinableChildSequence, 0});
+        inlinedSequences.push_back(inlinableChildSequence);
+        inlinableChildSequence->dropAllReferences();
+        break;
+      }
+
+      if (!currentResult.use_empty())
+        newResultValues.push_back(currentResult);
+      resultIndex++;
     }
+    // Pop the sequence off of the stack if we have visited all results.
+    if (resultIndex >= currentSequence.getNumResults())
+      sequenceOpStack.pop_back();
   }
 
-  // Remove empty sequences.
-  if (resultValues.empty()) {
+  // Remove dead sequences.
+  if (newResultValues.empty()) {
+    for (auto deadSubSequence : inlinedSequences)
+      rewriter.eraseOp(deadSubSequence);
     rewriter.eraseOp(op);
     return success();
   }
 
   // Replace the current operation with a new sequence.
   rewriter.setInsertionPoint(op);
-  auto fusedLoc = FusedLoc::get(rewriter.getContext(), locs);
-  auto newOp = rewriter.create<TriggerSequenceOp>(fusedLoc, op.getParent(),
-                                                  resultValues.size());
-  for (auto [rval, newRes] : llvm::zip(resultValues, newOp.getResults()))
-    rewriter.replaceAllUsesWith(rval, newRes);
-  // Remove sequences that have been inlined
-  for (auto child : childSeqs)
-    rewriter.eraseOp(child);
 
+  SmallVector<Location> inlinedLocs;
+  inlinedLocs.reserve(inlinedSequences.size() + 1);
+  inlinedLocs.push_back(op.getLoc());
+  for (auto subSequence : inlinedSequences)
+    inlinedLocs.push_back(subSequence.getLoc());
+  auto fusedLoc = FusedLoc::get(op.getContext(), inlinedLocs);
+  inlinedLocs.clear();
+
+  auto newOp = rewriter.create<TriggerSequenceOp>(fusedLoc, op.getParent(),
+                                                  newResultValues.size());
+  for (auto [rval, newRes] : llvm::zip(newResultValues, newOp.getResults()))
+    rewriter.replaceAllUsesWith(rval, newRes);
+
+  for (auto deadSubSequence : inlinedSequences)
+    rewriter.eraseOp(deadSubSequence);
   rewriter.eraseOp(op);
   return success();
 }

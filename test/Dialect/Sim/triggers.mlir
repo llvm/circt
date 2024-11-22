@@ -138,3 +138,27 @@ hw.module @nested_sequence_2(in %trig : !sim.trigger.edge<negedge>, out o0: !sim
   %e:3 = sim.trigger_sequence %a#3, 3 : !sim.trigger.edge<negedge>
   hw.output %b#0, %b#1, %b#2, %c#1, %d#0, %d#2, %e#1, %e#2  : !sim.trigger.edge<negedge>, !sim.trigger.edge<negedge>, !sim.trigger.edge<negedge>, !sim.trigger.edge<negedge>, !sim.trigger.edge<negedge>, !sim.trigger.edge<negedge>, !sim.trigger.edge<negedge>, !sim.trigger.edge<negedge>
 }
+
+// CHECK-LABEL: hw.module @skewed_binary_tree
+// CHECK:       [[R0:%.*]]:7 = sim.trigger_sequence %trig, 7
+// CHECK-NEXT:  hw.output [[R0]]#0, [[R0]]#1, [[R0]]#2, [[R0]]#3, [[R0]]#4, [[R0]]#5, [[R0]]#6
+hw.module @skewed_binary_tree(in %trig : !sim.trigger.edge<posedge>, out o0: !sim.trigger.edge<posedge>, out o1: !sim.trigger.edge<posedge>, out o2: !sim.trigger.edge<posedge>, out o3: !sim.trigger.edge<posedge>, out o4: !sim.trigger.edge<posedge>, out o5: !sim.trigger.edge<posedge>,  out o6: !sim.trigger.edge<posedge>) {
+  %h:2 = sim.trigger_sequence %g#1, 2 : !sim.trigger.edge<posedge>
+  %g:2 = sim.trigger_sequence %f#1, 2 : !sim.trigger.edge<posedge>
+  %f:2 = sim.trigger_sequence %e#1, 2 : !sim.trigger.edge<posedge>
+  %e:2 = sim.trigger_sequence %d#1, 2 : !sim.trigger.edge<posedge>
+  %d:2 = sim.trigger_sequence %c#1, 2 : !sim.trigger.edge<posedge>
+  %c:2 = sim.trigger_sequence %b#1, 2 : !sim.trigger.edge<posedge>
+  %b:2 = sim.trigger_sequence %a#1, 2 : !sim.trigger.edge<posedge>
+  %a:2 = sim.trigger_sequence %trig, 2 : !sim.trigger.edge<posedge>
+  hw.output %a#0, %b#0, %c#0, %d#0, %f#0, %g#0, %h#0  : !sim.trigger.edge<posedge>, !sim.trigger.edge<posedge>, !sim.trigger.edge<posedge>, !sim.trigger.edge<posedge>, !sim.trigger.edge<posedge>, !sim.trigger.edge<posedge>, !sim.trigger.edge<posedge>
+}
+
+// CHECK-LABEL: hw.module @dead_skewed_binary_tree
+// CHECK-NOT:   sim.trigger_sequence %trig,
+hw.module @dead_skewed_binary_tree(in %trig : !sim.trigger.edge<posedge>) {
+  %a:2 = sim.trigger_sequence %trig, 2 : !sim.trigger.edge<posedge>
+  %b:2 = sim.trigger_sequence %a#1, 2 : !sim.trigger.edge<posedge>
+  %c:2 = sim.trigger_sequence %b#1, 2 : !sim.trigger.edge<posedge>
+  %d:2 = sim.trigger_sequence %c#1, 2 : !sim.trigger.edge<posedge>
+}
