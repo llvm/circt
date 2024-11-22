@@ -1699,3 +1699,24 @@ firrtl.circuit "Directories" attributes {
     firrtl.instance dut_A @Directories_A()
   }
 }
+
+// -----
+
+firrtl.circuit "Foo" {
+  // CHECK-LABEL: hw.module @Foo
+  // CHECK-SAME:    in %a : i42
+  // CHECK-SAME:    out z : i42
+  firrtl.module @Foo(in %a: !firrtl.uint<42>, out %z: !firrtl.uint<42>) {
+    firrtl.connect %z, %a : !firrtl.uint<42>
+  }
+  // CHECK: verif.formal @MyTest1
+  // CHECK-SAME: {hello = 42 : i64} {
+  // CHECK-NEXT: [[A:%.+]] = verif.symbolic_value : i42
+  // CHECK-NEXT: hw.instance "Foo" @Foo(a: [[A]]: i42) -> (z: i42)
+  firrtl.formal @MyTest1, @Foo {hello = 42 : i64}
+  // CHECK: verif.formal @MyTest2
+  // CHECK-SAME: {world = "abc"} {
+  // CHECK-NEXT: [[A:%.+]] = verif.symbolic_value : i42
+  // CHECK-NEXT: hw.instance "Foo" @Foo(a: [[A]]: i42) -> (z: i42)
+  firrtl.formal @MyTest2, @Foo {world = "abc"}
+}

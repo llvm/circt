@@ -221,7 +221,7 @@ private:
   }
 
   // Generates a constant declaration given a value, a width and a name.
-  void genConst(int64_t value, size_t width, Operation *op) {
+  void genConst(APInt value, size_t width, Operation *op) {
     // For now we're going to assume that the name isn't taken, given that hw
     // is already in SSA form
     size_t opLID = getOpLID(op);
@@ -273,6 +273,12 @@ private:
   // and a result width.
   void genBinOp(StringRef inst, Operation *binop, Value op1, Value op2,
                 size_t width) {
+    // TODO: adding support for most variadic ops shouldn't be too hard
+    if (binop->getNumOperands() != 2) {
+      binop->emitError("variadic operations not are not currently supported");
+      return;
+    }
+
     // Set the LID for this operation
     size_t opLID = getOpLID(binop);
 
@@ -621,13 +627,16 @@ public:
   // simplicity, we will only emit `constd` in order to avoid bit-string
   // conversions
   void visitTypeOp(hw::ConstantOp op) {
+    // Make sure the constant hasn't already been created
+    if (handledOps.contains(op))
+      return;
+
     // Make sure that a sort has been created for our operation
     int64_t w = requireSort(op.getType());
 
     // Prepare for for const generation by extracting the const value and
     // generting the btor2 string
-    int64_t value = op.getValue().getSExtValue();
-    genConst(value, w, op);
+    genConst(op.getValue(), w, op);
   }
 
   // Wires should have been removed in PrepareForFormal
@@ -828,12 +837,12 @@ public:
 
   // Cover is not supported in btor2
   void visitVerif(verif::CoverOp op) {
-    op->emitError("Cover is not supprted in btor2!");
+    op->emitError("Cover is not supported in btor2!");
     return signalPassFailure();
   }
 
   void visitVerif(verif::ClockedCoverOp op) {
-    op->emitError("Cover is not supprted in btor2!");
+    op->emitError("Cover is not supported in btor2!");
     return signalPassFailure();
   }
 

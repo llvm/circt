@@ -96,6 +96,14 @@ declare_mlir_dialect_python_bindings(
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/HandshakeOps.td
+  SOURCES
+    dialects/handshake.py
+  DIALECT_NAME handshake)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   TD_FILE dialects/HWOps.td
   SOURCES
     dialects/hw.py

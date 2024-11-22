@@ -2072,3 +2072,31 @@ endfunction
 
 function void SignCastsB(logic [31:0] value);
 endfunction
+
+// CHECK-LABEL: func.func private @AssignFuncArgs(
+// CHECK-SAME: %arg0: !moore.i32
+function void AssignFuncArgs(int x);
+  // CHECK: [[ARG:%.+]] = moore.variable %arg0 : <i32>
+  // CHECK: [[READ:%.+]] = moore.constant 1 : i32
+  // CHECK: moore.blocking_assign [[ARG]], [[READ]] : i32
+  x = 1;
+endfunction
+
+// CHECK-LABEL: func.func private @AssignFuncArgs2(
+// CHECK-SAME: %arg0: !moore.i32, %arg1: !moore.i32
+function int AssignFuncArgs2(int x, int y);
+  // CHECK: [[X:%.+]] = moore.variable %arg0 : <i32>
+  // CHECK: [[Y:%.+]] = moore.variable %arg1 : <i32>
+  // CHECK: [[C1:%.+]] = moore.constant 1 : i32
+  // CHECK: moore.blocking_assign [[X]], [[C1]] : i32
+  x = 1;
+  
+  // CHECK: [[C2:%.+]] = moore.constant 2 : i32
+  // CHECK: moore.blocking_assign [[Y]], [[C2]] : i32
+  y = 2;
+
+  // CHECK: [[READ_X:%.+]] = moore.read [[X]] : <i32>
+  // CHECK: [[READ_Y:%.+]] = moore.read [[Y]] : <i32>
+  // CHECK: [[ADD:%.+]] = moore.add [[READ_X]], [[READ_Y]] : i32
+  return x+y;
+endfunction

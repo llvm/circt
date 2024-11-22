@@ -237,7 +237,8 @@ struct RTLBuilder {
   }
 
   Value constant(unsigned width, int64_t value, StringRef name = {}) {
-    return constant(APInt(width, value));
+    return constant(
+        APInt(width, value, /*isSigned=*/false, /*implicitTrunc=*/true));
   }
   std::pair<Value, Value> wrap(Value data, Value valid, StringRef name = {}) {
     auto wrapOp = b.create<esi::WrapValidReadyOp>(loc, data, valid);

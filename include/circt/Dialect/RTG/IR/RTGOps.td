@@ -95,3 +95,48 @@ def InvokeSequenceOp : RTGOp<"invoke_sequence", []> {
 
   let assemblyFormat = "$sequence attr-dict";
 }
+
+//===- Set Operations ------------------------------------------------------===//
+
+def SetCreateOp : RTGOp<"set_create", [Pure, SameTypeOperands]> {
+  let summary = "constructs a set of the given values";
+
+  let arguments = (ins Variadic<AnyType>:$elements);
+  let results = (outs SetType:$set);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
+def SetSelectRandomOp : RTGOp<"set_select_random", [
+  Pure,
+  TypesMatchWith<"output must be of the element type of input set", 
+                 "set", "output",
+                 "llvm::cast<rtg::SetType>($_self).getElementType()">
+]> {
+  let summary = "selects an element uniformly at random from a set";
+  let description = [{
+    This operation returns an element from the given set uniformly at random.
+    Applying this operation to an empty set is undefined behavior.
+  }];
+
+  let arguments = (ins SetType:$set);
+  let results = (outs AnyType:$output);
+
+  let assemblyFormat = "$set `:` qualified(type($set)) attr-dict";
+}
+
+def SetDifferenceOp : RTGOp<"set_difference", [
+  Pure,
+  AllTypesMatch<["original", "diff", "output"]>
+]> {
+  let summary = "computes the difference of two sets";
+
+  let arguments = (ins SetType:$original,
+                       SetType:$diff);
+  let results = (outs SetType:$output);
+
+  let assemblyFormat = [{
+    $original `,` $diff `:` qualified(type($output)) attr-dict
+  }];
+}
