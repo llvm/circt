@@ -37,6 +37,36 @@ firrtl.circuit "Simple" {
   }
 }
 
+// CHECK-LABEL: "PrivateModulesDifferentConventionsDedup"
+firrtl.circuit "PrivateModulesDifferentConventionsDedup" {
+  firrtl.module private @A() attributes {convention = #firrtl<convention scalarized>} { }
+  firrtl.module private @B() attributes { } { }
+  firrtl.module @PrivateModulesDifferentConventionsDedup() {
+    // CHECK: firrtl.instance a @A()
+    // CHECK: firrtl.instance b @A()
+    firrtl.instance a @A()
+    firrtl.instance b @B()
+  }
+}
+
+
+firrtl.circuit "PublicAndPrivateModulesDedup" {
+  // CHECK-NOT: @A
+  firrtl.module private @A() { }
+  // CHECK:     @B()
+  firrtl.module @B() { }
+  // CHECK-NOT: @C
+  firrtl.module private @C() { }
+  firrtl.module @PublicAndPrivateModulesDedup() {
+    // CHECK: firrtl.instance a @B()
+    // CHECK: firrtl.instance b @B()
+    // CHECK: firrtl.instance c @B()
+    firrtl.instance a @A()
+    firrtl.instance b @B()
+    firrtl.instance c @C()
+  }
+}
+
 // CHECK-LABEL: firrtl.circuit "PrimOps"
 firrtl.circuit "PrimOps" {
   // CHECK: firrtl.module private @PrimOps0
