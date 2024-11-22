@@ -37,11 +37,9 @@ LogicalResult AndInverterOp::canonicalize(AndInverterOp op,
       APInt::getAllOnes(op.getResult().getType().getIntOrFloatBitWidth());
 
   bool invertedConstFound = false;
-  size_t numConstInputs = 0;
 
   for (auto [value, inverted] : llvm::zip(op.getInputs(), op.getInverted())) {
     if (auto constOp = value.getDefiningOp<hw::ConstantOp>()) {
-      numConstInputs++;
       if (inverted) {
         constValue &= ~constOp.getValue();
         invertedConstFound = true;
@@ -83,7 +81,7 @@ LogicalResult AndInverterOp::canonicalize(AndInverterOp op,
   }
 
   // It means the input is reduced to all ones.
-  if (uniqueValues.size() == 0) {
+  if (uniqueValues.empty()) {
     rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, constValue);
     return success();
   }
@@ -139,7 +137,7 @@ void AndInverterOp::print(OpAsmPrinter &odsPrinter) {
 APInt AndInverterOp::evaluate(ArrayRef<APInt> inputs) {
   assert(inputs.size() == getNumOperands() &&
          "Expected as many inputs as operands");
-  assert(inputs.size() != 0 && "Expected non-empty input list");
+  assert(!inputs.empty() && "Expected non-empty input list");
   APInt result = APInt::getAllOnes(inputs.front().getBitWidth());
   for (auto [idx, input] : llvm::enumerate(inputs)) {
     if (isInverted(idx))
