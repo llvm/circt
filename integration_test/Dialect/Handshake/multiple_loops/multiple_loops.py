@@ -29,8 +29,8 @@ async def sendMultiple(dut):
   res0 = [i * (i + 1) / 2 for i in range(N)]
   res1 = [math.factorial(i) for i in range(N)]
 
-  out0Check = cocotb.start_soon(out0.checkOutputs(res0))
-  out1Check = cocotb.start_soon(out1.checkOutputs(res1))
+  out0Check = cocotb.start_soon(out0.checkOutputs(res0, converter=float))
+  out1Check = cocotb.start_soon(out1.checkOutputs(res1, converter=float))
 
   for i in range(N):
     in0Send = cocotb.start_soon(in0.send(i))

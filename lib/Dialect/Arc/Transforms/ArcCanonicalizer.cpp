@@ -446,7 +446,8 @@ ICMPCanonicalizer::matchAndRewrite(comb::ICmpOp op,
           }
           rewriter.replaceOpWithNewOp<comb::ICmpOp>(
               op, op.getPredicate(), andOp,
-              getConstant(APInt(*optionalWidth, rhs.getZExtValue())),
+              getConstant(APInt(*optionalWidth, rhs.getZExtValue(),
+                                /*isSigned=*/false, /*implicitTrunc=*/true)),
               op.getTwoState());
           return success();
         }
@@ -464,7 +465,8 @@ ICMPCanonicalizer::matchAndRewrite(comb::ICmpOp op,
           }
           rewriter.replaceOpWithNewOp<comb::ICmpOp>(
               op, op.getPredicate(), orOp,
-              getConstant(APInt(*optionalWidth, rhs.getZExtValue())),
+              getConstant(APInt(*optionalWidth, rhs.getZExtValue(),
+                                /*isSigned=*/false, /*implicitTrunc=*/true)),
               op.getTwoState());
           return success();
         }

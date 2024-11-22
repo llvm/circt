@@ -140,7 +140,7 @@ struct RemoveCombGroupsPattern : public OpRewritePattern<calyx::CombGroupOp> {
 
     rewriter.setInsertionPointToStart(group.getBodyBlock());
     auto oneConstant = rewriter.create<hw::ConstantOp>(
-        group.getLoc(), APInt(1, 1, /*isSigned=*/true));
+        group.getLoc(), APInt(1, 1, /*isSigned=*/true, /*implicitTrunc=*/true));
 
     // Maintain the set of cell results which have already been assigned to
     // its register within this group.
