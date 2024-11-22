@@ -1705,9 +1705,6 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
               ext && !ext.getDefname().has_value())
             return success();
 
-          if (!checkVisibility(module))
-            return success();
-
           StructuralHasher hasher(hasherConstants);
           // Calculate the hash of the module and referred module names.
           moduleInfos[idx] = hasher.getModuleInfo(module);
@@ -1740,8 +1737,28 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
       auto it = moduleInfoToModule.find(moduleInfo);
       if (it != moduleInfoToModule.end()) {
         auto original = cast<FModuleLike>(it->second);
+        auto originalName = original.getModuleNameAttr();
+
+        // If the current module is public, and the original is private, we
+        // want to dedup the private module into the public one.
+        if (module.isPublic()) {
+          // If both modules are public, then we can't dedup anything.
+          if (original.isPublic())
+            continue;
+          // Swap the canonical module in the dedup map.
+          for (auto &[originalName, dedupedName] : dedupMap)
+            if (dedupedName == originalName)
+              dedupedName = moduleName;
+          // Update the module hash table to point to the new original, so all
+          // future modules dedup with the new canonical module.
+          it->second = module;
+          // Swap the locals.
+          std::swap(originalName, moduleName);
+          std::swap(original, module);
+        }
+
         // Record the group ID of the other module.
-        dedupMap[moduleName] = original.getModuleNameAttr();
+        dedupMap[moduleName] = originalName;
         deduper.dedup(original, module);
         ++erasedModules;
         anythingChanged = true;
