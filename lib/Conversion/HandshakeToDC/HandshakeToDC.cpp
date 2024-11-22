@@ -762,10 +762,6 @@ class HandshakeToDCPass
 public:
   void runOnOperation() override {
     mlir::ModuleOp mod = getOperation();
-    auto targetModifier = [](mlir::ConversionTarget &target) {
-      // target.addLegalDialect<hw::HWDialect, func::FuncDialect>();
-    };
-
     auto patternBuilder = [&](TypeConverter &typeConverter,
                               handshaketodc::ConvertedOps &convertedOps,
                               RewritePatternSet &patterns) {
@@ -774,7 +770,7 @@ public:
       patterns.add<ReturnOpConversion>(typeConverter, mod.getContext());
     };
 
-    LogicalResult res = runHandshakeToDC(mod, patternBuilder, targetModifier);
+    LogicalResult res = runHandshakeToDC(mod, patternBuilder, nullptr);
     if (failed(res))
       signalPassFailure();
   }
