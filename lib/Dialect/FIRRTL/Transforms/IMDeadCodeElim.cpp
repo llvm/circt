@@ -14,6 +14,7 @@
 #include "circt/Dialect/HW/InnerSymbolTable.h"
 #include "circt/Support/Debug.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Iterators.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
@@ -240,15 +241,16 @@ void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
   if (!executableBlocks.insert(block).second)
     return; // Already executable.
 
-  auto fmodule = cast<FModuleOp>(block->getParentOp());
-  if (fmodule.isPublic())
+  auto fmodule = dyn_cast<FModuleOp>(block->getParentOp());
+  if (fmodule && fmodule.isPublic())
     markAlive(fmodule);
 
   // Mark ports with don't touch as alive.
   for (auto blockArg : block->getArguments())
     if (hasDontTouch(blockArg)) {
       markAlive(blockArg);
-      markAlive(fmodule);
+      if (fmodule)
+        markAlive(fmodule);
     }
 
   for (auto &op : *block) {
@@ -261,8 +263,14 @@ void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
     else if (isa<FConnectLike>(op))
       // Skip connect op.
       continue;
-    else if (hasUnknownSideEffect(&op))
+    else if (hasUnknownSideEffect(&op)) {
       markUnknownSideEffectOp(&op);
+      // Recursively mark any blocks contained within these operations as
+      // executable.
+      for (auto &region : op.getRegions())
+        for (auto &block : region.getBlocks())
+          markBlockExecutable(&block);
+    }
 
     // TODO: Handle attach etc.
   }
@@ -561,33 +569,35 @@ void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
       std::bind(removeDeadNonLocalAnnotations, -1, std::placeholders::_1));
 
   // Walk the IR bottom-up when deleting operations.
-  for (auto &op : llvm::make_early_inc_range(llvm::reverse(*body))) {
-    // Connects to values that we found to be dead can be dropped.
-    if (auto connect = dyn_cast<FConnectLike>(op)) {
-      if (isAssumedDead(connect.getDest())) {
-        LLVM_DEBUG(llvm::dbgs() << "DEAD: " << connect << "\n";);
-        connect.erase();
-        ++numErasedOps;
-      }
-      continue;
-    }
+  module.walk<mlir::WalkOrder::PostOrder, mlir::ReverseIterator>(
+      [&](Operation *op) {
+        // Connects to values that we found to be dead can be dropped.
+        LLVM_DEBUG(llvm::dbgs() << "Visit: " << *op << "\n");
+        if (auto connect = dyn_cast<FConnectLike>(op)) {
+          if (isAssumedDead(connect.getDest())) {
+            LLVM_DEBUG(llvm::dbgs() << "DEAD: " << connect << "\n";);
+            connect.erase();
+            ++numErasedOps;
+          }
+          return;
+        }
 
-    // Delete dead wires, regs, nodes and alloc/read ops.
-    if ((isDeclaration(&op) || !hasUnknownSideEffect(&op)) &&
-        isAssumedDead(&op)) {
-      LLVM_DEBUG(llvm::dbgs() << "DEAD: " << op << "\n";);
-      assert(op.use_empty() && "users should be already removed");
-      op.erase();
-      ++numErasedOps;
-      continue;
-    }
+        // Delete dead wires, regs, nodes and alloc/read ops.
+        if ((isDeclaration(op) || !hasUnknownSideEffect(op)) &&
+            isAssumedDead(op)) {
+          LLVM_DEBUG(llvm::dbgs() << "DEAD: " << *op << "\n";);
+          assert(op->use_empty() && "users should be already removed");
+          op->erase();
+          ++numErasedOps;
+          return;
+        }
 
-    // Remove non-sideeffect op using `isOpTriviallyDead`.
-    if (mlir::isOpTriviallyDead(&op)) {
-      op.erase();
-      ++numErasedOps;
-    }
-  }
+        // Remove non-sideeffect op using `isOpTriviallyDead`.
+        if (mlir::isOpTriviallyDead(op)) {
+          op->erase();
+          ++numErasedOps;
+        }
+      });
 }
 
 void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {

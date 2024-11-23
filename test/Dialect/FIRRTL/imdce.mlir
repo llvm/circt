@@ -617,3 +617,58 @@ firrtl.circuit "OMIRRemoval" {
       ]} : !firrtl.uint<4>
   }
 }
+
+// -----
+
+// Test that an operation with a nested block user will be removed (and not
+// crash).  This should work for both FIRRTL operations and non-FIRRTL
+// operations.
+//
+// CHECK-LAEBL: "Foo"
+firrtl.circuit "Foo" {
+  firrtl.layer @A bind {}
+  sv.macro.decl @B["B"]
+  // CHECK-NOT: @Bar
+  firrtl.module private @Bar() {}
+  firrtl.module @Foo() {
+    // CHECK-LABEL: firrtl.layerblock @A
+    firrtl.layerblock @A {
+      // CHECK-NOT: firrtl.instance
+      firrtl.instance bar @Bar()
+      // CHECK-LABEL: sv.ifdef @B
+      sv.ifdef @B {
+        // CHECK-NOT: firrtl.instance
+        firrtl.instance bar2 @Bar()
+      }
+    }
+  }
+}
+
+// -----
+
+// CHECK-LABEL: "Foo"
+firrtl.circuit "Foo" {
+  firrtl.layer @A bind {}
+  // CHECK-LABEL: @Bar
+  // CHECK-NOT:     out %probe
+  firrtl.module private @Bar(
+    in %a: !firrtl.uint<1>,
+    out %b: !firrtl.uint<1>,
+    out %probe: !firrtl.probe<uint<1>, @A>
+  ) {
+    // CHECK-NOT: firrtl.layerblock
+    firrtl.layerblock @A {
+      %1 = firrtl.not %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
+      %a_not = firrtl.node %1 : !firrtl.uint<1>
+      %2 = firrtl.ref.send %a_not : !firrtl.uint<1>
+      %3 = firrtl.ref.cast %2 : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>, @A>
+      firrtl.ref.define %probe, %3 : !firrtl.probe<uint<1>, @A>
+    }
+    firrtl.matchingconnect %b, %a : !firrtl.uint<1>
+  }
+  firrtl.module @Foo(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+    %bar_a, %bar_b, %bar_probe = firrtl.instance bar @Bar(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>, out probe: !firrtl.probe<uint<1>, @A>)
+    firrtl.matchingconnect %bar_a, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %bar_b : !firrtl.uint<1>
+  }
+}
