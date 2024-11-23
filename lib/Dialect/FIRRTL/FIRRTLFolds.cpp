@@ -2870,7 +2870,7 @@ struct FoldRegMems : public mlir::RewritePattern {
     if (hasDontTouch(mem) || info.depth != 1)
       return failure();
 
-    auto *block = mem->getBlock();
+    auto memModule = mem->getParentOfType<FModuleOp>();
 
     // Find the clock of the register-to-be, all write ports should share it.
     Value clock;
@@ -2926,16 +2926,10 @@ struct FoldRegMems : public mlir::RewritePattern {
     }
 
     // Create a new register to store the data.
-    auto clockWire = rewriter.create<WireOp>(mem.getLoc(), clock.getType());
     auto ty = mem.getDataType();
-    auto reg = rewriter
-                   .create<RegOp>(mem.getLoc(), ty, clockWire.getResult(),
-                                  mem.getName())
+    rewriter.setInsertionPointAfterValue(clock);
+    auto reg = rewriter.create<RegOp>(mem.getLoc(), ty, clock, mem.getName())
                    .getResult();
-
-    rewriter.setInsertionPointToEnd(block);
-    rewriter.create<MatchingConnectOp>(mem.getLoc(), clockWire.getResult(),
-                                       clock);
 
     // Helper to insert a given number of pipeline stages through registers.
     auto pipeline = [&](Value value, Value clock, const Twine &name,
@@ -2970,7 +2964,7 @@ struct FoldRegMems : public mlir::RewritePattern {
       auto portPipeline = [&, port = port](StringRef field, unsigned stages) {
         Value value = getPortFieldValue(port, field);
         assert(value);
-        rewriter.setInsertionPointAfterValue(reg);
+        rewriter.setInsertionPointAfterValue(value);
         return pipeline(value, portClock, name + "_" + field, stages);
       };
 
@@ -3004,7 +2998,7 @@ struct FoldRegMems : public mlir::RewritePattern {
 
         Value en = getPortFieldValue(port, "en");
         Value wmode = getPortFieldValue(port, "wmode");
-        rewriter.setInsertionPointToEnd(block);
+        rewriter.setInsertionPointToEnd(memModule.getBodyBlock());
 
         auto wen = rewriter.create<AndPrimOp>(port.getLoc(), en, wmode);
         auto wenPipelined =
@@ -3016,7 +3010,7 @@ struct FoldRegMems : public mlir::RewritePattern {
     }
 
     // Regardless of `writeUnderWrite`, always implement PortOrder.
-    rewriter.setInsertionPointToEnd(block);
+    rewriter.setInsertionPointToEnd(memModule.getBodyBlock());
     Value next = reg;
     for (auto &[data, en, mask] : writes) {
       Value masked;
