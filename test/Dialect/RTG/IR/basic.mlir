@@ -39,6 +39,21 @@ func.func @sets(%arg0: i32, %arg1: i32) {
   return
 }
 
+// CHECK-LABEL: @bags
+rtg.sequence @bags {
+^bb0(%arg0: i32, %arg1: i32, %arg2: index):
+  // CHECK: [[BAG:%.+]] = rtg.bag_create (%arg2 x %arg0, %arg2 x %arg1) : i32 {rtg.some_attr}
+  // CHECK: [[R:%.+]] = rtg.bag_select_random [[BAG]] : !rtg.bag<i32> {rtg.some_attr}
+  // CHECK: [[EMPTY:%.+]] = rtg.bag_create : i32
+  // CHECK: rtg.bag_difference [[BAG]], [[EMPTY]] : !rtg.bag<i32> {rtg.some_attr}
+  // CHECK: rtg.bag_difference [[BAG]], [[EMPTY]] inf : !rtg.bag<i32>
+  %bag = rtg.bag_create (%arg2 x %arg0, %arg2 x %arg1) : i32 {rtg.some_attr}
+  %r = rtg.bag_select_random %bag : !rtg.bag<i32> {rtg.some_attr}
+  %empty = rtg.bag_create : i32
+  %diff = rtg.bag_difference %bag, %empty : !rtg.bag<i32> {rtg.some_attr}
+  %diff2 = rtg.bag_difference %bag, %empty inf : !rtg.bag<i32>
+}
+
 // CHECK-LABEL: rtg.target @empty_target : !rtg.dict<> {
 // CHECK-NOT: rtg.yield
 rtg.target @empty_target : !rtg.dict<> {
