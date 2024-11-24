@@ -22,6 +22,10 @@
 #include "circt-c/Dialect/LTL.h"
 #include "circt-c/Dialect/MSFT.h"
 #include "circt-c/Dialect/OM.h"
+#include "circt-c/Dialect/RTG.h"
+#ifdef CIRCT_INCLUDE_TESTS
+#include "circt-c/Dialect/RTGTest.h"
+#endif
 #include "circt-c/Dialect/SV.h"
 #include "circt-c/Dialect/Seq.h"
 #include "circt-c/Dialect/Verif.h"
@@ -98,6 +102,16 @@ PYBIND11_MODULE(_circt, m) {
         mlirDialectHandleRegisterDialect(om, context);
         mlirDialectHandleLoadDialect(om, context);
 
+        MlirDialectHandle rtg = mlirGetDialectHandle__rtg__();
+        mlirDialectHandleRegisterDialect(rtg, context);
+        mlirDialectHandleLoadDialect(rtg, context);
+
+#ifdef CIRCT_INCLUDE_TESTS
+        MlirDialectHandle rtgtest = mlirGetDialectHandle__rtgtest__();
+        mlirDialectHandleRegisterDialect(rtgtest, context);
+        mlirDialectHandleLoadDialect(rtgtest, context);
+#endif
+
         MlirDialectHandle seq = mlirGetDialectHandle__seq__();
         mlirDialectHandleRegisterDialect(seq, context);
         mlirDialectHandleLoadDialect(seq, context);
@@ -145,6 +159,14 @@ PYBIND11_MODULE(_circt, m) {
   circt::python::populateDialectSeqSubmodule(seq);
   py::module om = m.def_submodule("_om", "OM API");
   circt::python::populateDialectOMSubmodule(om);
+  py::module rtg = m.def_submodule("_rtg", "RTG API");
+  circt::python::populateDialectRTGSubmodule(rtg);
+  py::module rtgtool = m.def_submodule("_rtgtool", "RTGTool API");
+  circt::python::populateDialectRTGToolSubmodule(rtgtool);
+#ifdef CIRCT_INCLUDE_TESTS
+  py::module rtgtest = m.def_submodule("_rtgtest", "RTGTest API");
+  circt::python::populateDialectRTGTestSubmodule(rtgtest);
+#endif
   py::module sv = m.def_submodule("_sv", "SV API");
   circt::python::populateDialectSVSubmodule(sv);
   py::module support = m.def_submodule("_support", "CIRCT support");
