@@ -9,10 +9,12 @@
 #include "ImportVerilogInternals.h"
 #include "slang/ast/SystemSubroutine.h"
 #include "llvm/ADT/ScopeExit.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 
 using namespace mlir;
 using namespace circt;
 using namespace ImportVerilog;
+using namespace mlir::arith;
 
 // NOLINTBEGIN(misc-no-recursion)
 namespace {
@@ -208,8 +210,32 @@ struct StmtVisitor {
           cond = builder.create<moore::CaseZEqOp>(itemLoc, caseExpr, value);
           break;
         case CaseStatementCondition::Inside:
-          mlir::emitError(loc, "unsupported set membership case statement");
-          return failure();
+          std::vector<Value> values;
+          values.reserve(item.expressions.size());
+          for (const auto *expr : item.expressions) {
+              auto value = context.convertRvalueExpression(*expr);
+              if (!value)
+                  return failure();
+              values.push_back(value);
+          }
+
+          if (values.empty()) {
+              mlir::emitError(loc, "empty set in inside case statement");
+              return failure();
+          }
+
+          if (values.size() == 1) {
+              cond = builder.create<moore::CaseEqOp>(
+                  loc, caseExpr, values.front());
+          } else {
+              cond = builder.create<moore::CaseEqOp>(loc, caseExpr, values[0]);
+              for (size_t i = 1; i < values.size(); ++i) {
+                  auto nextCond = builder.create<moore::CaseEqOp>(
+                      loc, caseExpr, values[i]);
+                  cond = builder.create<mlir::arith::OrIOp>(loc, builder.getI1Type(), cond,
+                                                    nextCond);
+              }
+          }
         }
         cond = builder.create<moore::ConversionOp>(itemLoc, builder.getI1Type(),
                                                    cond);
