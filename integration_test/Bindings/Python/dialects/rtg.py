@@ -4,7 +4,7 @@
 import circt
 
 from circt.dialects import rtg, rtgtest
-from circt.ir import Context, Location, Module, InsertionPoint, Block, StringAttr, TypeAttr
+from circt.ir import Context, Location, Module, InsertionPoint, Block, StringAttr, TypeAttr, IndexType
 from circt.passmanager import PassManager
 from circt import rtgtool_support as rtgtool
 
@@ -66,4 +66,19 @@ with Context() as ctx, Location.unknown():
 
   # CHECK: rtg.test @test_name : !rtg.dict<> {
   # CHECK-NEXT: }
+  print(m)
+
+with Context() as ctx, Location.unknown():
+  circt.register_dialects(ctx)
+  m = Module.create()
+  with InsertionPoint(m.body):
+    indexTy = IndexType.get()
+    sequenceTy = rtg.SequenceType.get()
+    setTy = rtg.SetType.get(indexTy)
+    bagTy = rtg.BagType.get(indexTy)
+    seq = rtg.SequenceOp('seq')
+    Block.create_at_start(seq.bodyRegion, [sequenceTy, setTy, bagTy])
+
+  # CHECK: rtg.sequence @seq
+  # CHECK: (%{{.*}}: !rtg.sequence, %{{.*}}: !rtg.set<index>, %{{.*}}: !rtg.bag<index>):
   print(m)

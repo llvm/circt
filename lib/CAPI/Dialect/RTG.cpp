@@ -48,6 +48,16 @@ MlirType rtgSetTypeGet(MlirType elementType) {
   return wrap(SetType::get(ty.getContext(), ty));
 }
 
+// BagType
+//===----------------------------------------------------------------------===//
+
+bool rtgTypeIsABag(MlirType type) { return isa<BagType>(unwrap(type)); }
+
+MlirType rtgBagTypeGet(MlirType elementType) {
+  auto ty = unwrap(elementType);
+  return wrap(BagType::get(ty.getContext(), ty));
+}
+
 // DictType
 //===----------------------------------------------------------------------===//
 
