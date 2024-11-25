@@ -23,6 +23,7 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension
     SupportModule.cpp
     SVModule.cpp
   EMBED_CAPI_LINK_LIBS
+    CIRCTCAPIArc
     CIRCTCAPIComb
     CIRCTCAPIDebug
     CIRCTCAPIEmit
@@ -91,6 +92,14 @@ declare_mlir_dialect_python_bindings(
   SOURCES
     dialects/esi.py
   DIALECT_NAME esi)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/HandshakeOps.td
+  SOURCES
+    dialects/handshake.py
+  DIALECT_NAME handshake)
 
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects

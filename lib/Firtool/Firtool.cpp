@@ -421,7 +421,7 @@ LogicalResult firtool::populateHWToBTOR2(mlir::PassManager &pm,
   pm.addNestedPass<hw::HWModuleOp>(circt::createLowerLTLToCorePass());
   pm.addNestedPass<hw::HWModuleOp>(circt::verif::createPrepareForFormalPass());
   pm.addPass(circt::hw::createFlattenModulesPass());
-  pm.addNestedPass<hw::HWModuleOp>(circt::createConvertHWToBTOR2Pass(os));
+  pm.addPass(circt::createConvertHWToBTOR2Pass(os));
   return success();
 }
 

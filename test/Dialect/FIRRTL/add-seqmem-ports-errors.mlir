@@ -167,7 +167,7 @@ firrtl.circuit "LayerBlock" attributes {
   }
 
   firrtl.module @Bar() {
-    // expected-note @below {{this instance is inside a module that is instantiated under a layer block}}
+    // expected-note @below {{this instance is inside a module that is instantiated outside the design}}
     %0:4 = firrtl.instance mem @mem(
       in W0_addr: !firrtl.uint<1>,
       in W0_en: !firrtl.uint<1>,
@@ -226,7 +226,6 @@ firrtl.circuit "Foo" attributes {
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
     ]
   } {
-    // expected-note @below {{this instance is under the DUT}}
     %0:4 = firrtl.instance mem @mem(
       in waddr: !firrtl.uint<1>,
       in wen: !firrtl.uint<1>,
@@ -237,7 +236,7 @@ firrtl.circuit "Foo" attributes {
 
   firrtl.module @Foo() {
     firrtl.instance bar @Bar()
-    // expected-note @below {{this instance is not under the DUT}}
+    // expected-note @below {{this instance is inside a module that is instantiated outside the design}}
     %0:4 = firrtl.instance mem @mem(
       in waddr: !firrtl.uint<1>,
       in wen: !firrtl.uint<1>,

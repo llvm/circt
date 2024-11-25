@@ -2854,50 +2854,6 @@ InstanceChoiceOp::erasePorts(OpBuilder &builder,
 // MemOp
 //===----------------------------------------------------------------------===//
 
-void MemOp::build(OpBuilder &builder, OperationState &result,
-                  TypeRange resultTypes, uint32_t readLatency,
-                  uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
-                  ArrayRef<Attribute> portNames, StringRef name,
-                  NameKindEnum nameKind, ArrayRef<Attribute> annotations,
-                  ArrayRef<Attribute> portAnnotations,
-                  hw::InnerSymAttr innerSym) {
-  auto &properties = result.getOrAddProperties<Properties>();
-  properties.setReadLatency(
-      builder.getIntegerAttr(builder.getIntegerType(32), readLatency));
-  properties.setWriteLatency(
-      builder.getIntegerAttr(builder.getIntegerType(32), writeLatency));
-  properties.setDepth(
-      builder.getIntegerAttr(builder.getIntegerType(64), depth));
-  properties.setRuw(::RUWAttrAttr::get(builder.getContext(), ruw));
-  properties.setPortNames(builder.getArrayAttr(portNames));
-  properties.setName(builder.getStringAttr(name));
-  properties.setNameKind(NameKindEnumAttr::get(builder.getContext(), nameKind));
-  properties.setAnnotations(builder.getArrayAttr(annotations));
-  if (innerSym)
-    properties.setInnerSym(innerSym);
-  result.addTypes(resultTypes);
-
-  if (portAnnotations.empty()) {
-    SmallVector<Attribute, 16> portAnnotationsVec(resultTypes.size(),
-                                                  builder.getArrayAttr({}));
-    properties.setPortAnnotations(builder.getArrayAttr(portAnnotationsVec));
-  } else {
-    assert(portAnnotations.size() == resultTypes.size());
-    properties.setPortAnnotations(builder.getArrayAttr(portAnnotations));
-  }
-}
-
-void MemOp::build(OpBuilder &builder, OperationState &result,
-                  TypeRange resultTypes, uint32_t readLatency,
-                  uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
-                  ArrayRef<Attribute> portNames, StringRef name,
-                  NameKindEnum nameKind, ArrayRef<Attribute> annotations,
-                  ArrayRef<Attribute> portAnnotations, StringAttr innerSym) {
-  build(builder, result, resultTypes, readLatency, writeLatency, depth, ruw,
-        portNames, name, nameKind, annotations, portAnnotations,
-        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
-}
-
 ArrayAttr MemOp::getPortAnnotation(unsigned portIdx) {
   assert(portIdx < getNumResults() &&
          "index should be smaller than result number");

@@ -117,3 +117,58 @@ smt.solver () : () -> () {
 // CHECK-NOT: error
 // CHECK-NOT: unsat
 // CHECK: sat
+
+// Push and pop
+smt.solver () : () -> () {
+  %three = smt.int.constant 3
+  %four = smt.int.constant 4
+  %unsat_eq = smt.eq %three, %four : !smt.int
+  %sat_eq = smt.eq %three, %three : !smt.int
+
+  smt.push 1
+  smt.assert %unsat_eq
+  smt.check sat {} unknown {} unsat {}
+  smt.pop 1
+  smt.assert %sat_eq
+  smt.check sat {} unknown {} unsat {}
+}
+
+// CHECK-NOT: WARNING
+// CHECK-NOT: warning
+// CHECK-NOT: ERROR
+// CHECK-NOT: error
+// CHECK-NOT: sat
+// CHECK: unsat
+// CHECK-NOT: WARNING
+// CHECK-NOT: warning
+// CHECK-NOT: ERROR
+// CHECK-NOT: error
+// CHECK-NOT: unsat
+// CHECK: sat
+
+// Reset
+smt.solver () : () -> () {
+  %three = smt.int.constant 3
+  %four = smt.int.constant 4
+  %unsat_eq = smt.eq %three, %four : !smt.int
+  %sat_eq = smt.eq %three, %three : !smt.int
+
+  smt.assert %unsat_eq
+  smt.check sat {} unknown {} unsat {}
+  smt.reset
+  smt.assert %sat_eq
+  smt.check sat {} unknown {} unsat {}
+}
+
+// CHECK-NOT: WARNING
+// CHECK-NOT: warning
+// CHECK-NOT: ERROR
+// CHECK-NOT: error
+// CHECK-NOT: sat
+// CHECK: unsat
+// CHECK-NOT: WARNING
+// CHECK-NOT: warning
+// CHECK-NOT: ERROR
+// CHECK-NOT: error
+// CHECK-NOT: unsat
+// CHECK: sat

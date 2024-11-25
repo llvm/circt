@@ -1092,7 +1092,7 @@ custom SiFive annotations and transforms.  One such semantic is a partitioning
 of the circuit into _design_ and _design verification_.  Practically, this means
 that parts of the circuit are intended for FPGA or ASIC synthesis and,
 ultimately, fabrication.  Other parts of the circuit are only used for
-verification of the design.
+verification, debugging, or other _non-design_ reasons.
 
 This split was historically handled with an optional
 `sifive.enterprise.firrtl.MarkDUTAnnotation` on exactly one module in the
@@ -1116,14 +1116,16 @@ they are viewed as something that should be replaced.  E.g., a pass like
 under the effective DUT should be removed in favor of directly encoding the
 metadata the user wants in the FIRRTL.
 
-As the FIRRTL language has been expanded with verification features, this has
-created friction with the notion of this partitioning.  One such language
-feature is layers.  Layers allow for optional code, which does not affect
-anything outside it (except through forces), to be included in modules via a
-Verilog elaboration-time mechanism (either via SystemVerilog's `bind` directive
-or by setting certain `` `define `` textual macros).  Due to both the usage of
-these features for verification and the fact that they were added after these
-legacy transforms, layers are viewed as being _not_ in the design.  To
-accommodate this, the `InstanceInfo` pass additionally defines a semantic of a
-module being "in" or "under" the design which is separately tracked from whether
-or not something is "in" or "under" the DUT.
+As the FIRRTL language has been extended with new features, this has created
+friction with legacy passes which roughly assumed this partitioning.  A number
+of language features and non-standard extensions (annotations) have been added.
+All features or extensions listed below are deemed as non-design features and
+are treated the same by the `InstanceInfo` analysis:
+
+1. Layers -- a FIRRTL language feature to create Verilog that can be
+   elaboration-time configured (either via SystemVerilog's `bind` directive or
+   by setting certain `` `define `` textual macros).
+
+2. Grand Central Views -- an annotation-based way to create debug-only
+   SystemVerilog intrinsics.  Grand Central Views are intended to be replaced
+   with layers.

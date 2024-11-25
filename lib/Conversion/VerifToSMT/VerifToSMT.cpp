@@ -342,8 +342,35 @@ struct VerifBoundedModelCheckingOpConversion
             else
               newDecls.push_back(builder.create<smt::DeclareFunOp>(loc, newTy));
           }
-          newDecls.append(
-              SmallVector<Value>(circuitCallOuts.take_back(numRegs)));
+
+          // Only update the registers on a clock posedge
+          // TODO: this will also need changing with multiple clocks - currently
+          // it only accounts for the one clock case.
+          if (clockIndexes.size() == 1) {
+            auto clockIndex = clockIndexes[0];
+            auto oldClock = iterArgs[clockIndex];
+            auto newClock = loopVals[clockIndex];
+            auto oldClockLow = builder.create<smt::BVNotOp>(loc, oldClock);
+            auto isPosedgeBV =
+                builder.create<smt::BVAndOp>(loc, oldClockLow, newClock);
+            // Convert posedge bv<1> to bool
+            auto trueBV = builder.create<smt::BVConstantOp>(loc, 1, 1);
+            auto isPosedge =
+                builder.create<smt::EqOp>(loc, isPosedgeBV, trueBV);
+            auto regStates =
+                iterArgs.take_front(circuitFuncOp.getNumArguments())
+                    .take_back(numRegs);
+            auto regInputs = circuitCallOuts.take_back(numRegs);
+            SmallVector<Value> nextRegStates;
+            for (auto [regState, regInput] : llvm::zip(regStates, regInputs)) {
+              // Create an ITE to calculate the next reg state
+              // TODO: we create a lot of ITEs here that will slow things down -
+              // these could be avoided by making init/loop regions concrete
+              nextRegStates.push_back(builder.create<smt::IteOp>(
+                  loc, isPosedge, regInput, regState));
+            }
+            newDecls.append(nextRegStates);
+          }
 
           // Add the rest of the loop state args
           for (; loopIndex < loopVals.size(); ++loopIndex)
@@ -398,8 +425,20 @@ void ConvertVerifToSMTPass::runOnOperation() {
   // issues with whether assertions are/aren't lowered yet)
   SymbolTable symbolTable(getOperation());
   WalkResult assertionCheck = getOperation().walk(
-      [&](Operation *op) { // Check there is exactly one assertion
-        if (isa<verif::BoundedModelCheckingOp>(op)) {
+      [&](Operation *op) { // Check there is exactly one assertion and clock
+        if (auto bmcOp = dyn_cast<verif::BoundedModelCheckingOp>(op)) {
+          // Check only one clock is present in the circuit inputs
+          auto numClockArgs = 0;
+          for (auto argType : bmcOp.getCircuit().getArgumentTypes())
+            if (isa<seq::ClockType>(argType))
+              numClockArgs++;
+          // TODO: this can be removed once we have a way to associate reg
+          // ins/outs with clocks
+          if (numClockArgs > 1) {
+            op->emitError(
+                "only modules with one or zero clocks are currently supported");
+            signalPassFailure();
+          }
           SmallVector<mlir::Operation *> worklist;
           int numAssertions = 0;
           op->walk([&](Operation *curOp) {

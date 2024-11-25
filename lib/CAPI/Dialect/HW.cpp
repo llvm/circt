@@ -10,6 +10,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/CAPI/IR.h"
@@ -28,6 +29,7 @@ DEFINE_C_API_PTR_METHODS(HWInstanceGraphNode, igraph::InstanceGraphNode)
 //===----------------------------------------------------------------------===//
 
 MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(HW, hw, HWDialect)
+void registerHWPasses() { registerPasses(); }
 
 //===----------------------------------------------------------------------===//
 // Type API.

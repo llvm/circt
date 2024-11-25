@@ -309,7 +309,9 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
 void ConstantOp::build(OpBuilder &builder, OperationState &result, Type type,
                        int64_t value) {
   auto numBits = cast<IntegerType>(type).getWidth();
-  build(builder, result, APInt(numBits, (uint64_t)value, /*isSigned=*/true));
+  build(builder, result,
+        APInt(numBits, (uint64_t)value, /*isSigned=*/true,
+              /*implicitTrunc=*/true));
 }
 
 void ConstantOp::getAsmResultNames(

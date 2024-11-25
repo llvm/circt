@@ -36,45 +36,9 @@ class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
 /// located in a hardware-creating context, such as the body of a module.
 class HardwareDeclOp<string mnemonic, list <Trait> traits = []> :
   ReferableDeclOp<mnemonic, traits # [
-    ParentOneOf<[ 
+    ParentOneOf<[
       "firrtl::FModuleOp", "firrtl::LayerBlockOp",
       "firrtl::WhenOp", "firrtl::MatchOp", "sv::IfDefOp"]>]> {}
-
-def FormalOp : FIRRTLOp<"formal", [
-  HasParent<"firrtl::CircuitOp">,
-  DeclareOpInterfaceMethods<Symbol>,
-  DeclareOpInterfaceMethods<SymbolUserOpInterface>
-]> {
-  let summary = "Define a formal unit test";
-  let description = [{
-    The `firrtl.formal` operation defines a formal verification unit test. The
-    defines a unique symbol name that can be used to refer to it. The design to
-    be tested and any necessary test harness is defined by the separate
-    `firrtl.module` op referenced by `moduleName`. Additional parameters may be
-    specified for the unit test. Input ports of the target module are considered
-    to be symbolic values during the test; output ports are ignored.
-
-    This operation may be used to mark unit tests in a FIRRTL design, which
-    other tools may later pick up and run automatically. It is intended to lower
-    to the `verif.formal` operation. See `verif.formal` for more details.
-
-    Example:
-    ```mlir
-    firrtl.module @MyTest(in %a: !firrtl.uint<42>) {}
-    firrtl.formal @myTestA, @MyTest {bound = 42}
-    firrtl.formal @myTestB, @MyTest {mode = "induction", userAttr = 9001}
-    ```
-  }];
-
-  let arguments = (ins
-    SymbolNameAttr:$sym_name,
-    FlatSymbolRefAttr:$moduleName,
-    DictionaryAttr:$parameters
-  );
-  let assemblyFormat = [{
-    $sym_name `,` $moduleName $parameters attr-dict-with-keyword
-  }];
-}
 
 def InstanceOp : HardwareDeclOp<"instance", [
     DeclareOpInterfaceMethods<FInstanceLike>,
@@ -293,24 +257,6 @@ def MemOp : HardwareDeclOp<"mem", [DeclareOpInterfaceMethods<CombDataflow>]> {
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
     $ruw `` custom<MemOp>(attr-dict) `:` qualified(type($results))
   }];
-
-  let builders = [
-    OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
-                   "uint32_t":$readLatency, "uint32_t":$writeLatency,
-                   "uint64_t":$depth, "RUWAttr":$ruw,
-                   "ArrayRef<Attribute>":$portNames,
-                   CArg<"StringRef", "{}">:$name,
-                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
-                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
-                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"StringAttr", "StringAttr()">:$innerSym)>,
-    OpBuilder<(ins "::mlir::TypeRange":$resultTypes, "uint32_t":$readLatency,
-                   "uint32_t":$writeLatency, "uint64_t":$depth, "RUWAttr":$ruw,
-                   "ArrayRef<Attribute>":$portNames, "StringRef":$name,
-                   "NameKindEnum":$nameKind, "ArrayRef<Attribute>":$annotations,
-                   "ArrayRef<Attribute>":$portAnnotations,
-                   "hw::InnerSymAttr":$innerSym)>
-  ];
 
   let hasVerifier = 1;
 

@@ -286,12 +286,14 @@ module attributes {calyx.entrypoint = "main"} {
 module attributes {calyx.entrypoint = "main"} {
   // CHECK: import "primitives/float/addFN.futil";
   calyx.component @main(%in0: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
-    // CHECK:           std_addFN_0 = std_addFN(8, 24, 32);
+    // CHECK-DAG: cst_0 = std_float_const(0, 32, 4.200000);
     %cst = calyx.constant @cst_0 <4.200000e+00 : f32> : i32
     %true = hw.constant true
     %false = hw.constant false
+    // CHECK-DAG: addf_0_reg = std_reg(32);
     %addf_0_reg.in, %addf_0_reg.write_en, %addf_0_reg.clk, %addf_0_reg.reset, %addf_0_reg.out, %addf_0_reg.done = calyx.register @addf_0_reg : i32, i1, i1, i1, i32, i1
-    %std_addFN_0.clk, %std_addFN_0.reset, %std_addFN_0.go, %std_addFN_0.control, %std_addFN_0.subOp, %std_addFN_0.left, %std_addFN_0.right, %std_addFN_0.roundingMode, %std_addFN_0.out, %std_addFN_0.exceptionalFlags, %std_addFN_0.done = calyx.std_addFN @std_addFN_0 : i1, i1, i1, i1, i1, i32, i32, i3, i32, i5, i1
+    // CHECK-DAG: std_addFN_0 = std_addFN(8, 24, 32);
+    %std_addFN_0.clk, %std_addFN_0.reset, %std_addFN_0.go, %std_addFN_0.control, %std_addFN_0.subOp, %std_addFN_0.left, %std_addFN_0.right, %std_addFN_0.roundingMode, %std_addFN_0.out, %std_addFN_0.exceptionalFlags, %std_addFN_0.done = calyx.ieee754.add @std_addFN_0 : i1, i1, i1, i1, i1, i32, i32, i3, i32, i5, i1
     %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
     calyx.wires {
       calyx.assign %out0 = %ret_arg0_reg.out : i32
@@ -331,3 +333,54 @@ module attributes {calyx.entrypoint = "main"} {
     }
   } {toplevel}
 }
+
+
+// -----
+
+module attributes {calyx.entrypoint = "main"} {
+  // CHECK: import "primitives/float/mulFN.futil";
+  calyx.component @main(%in0: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
+    // CHECK-DAG: cst_0 = std_float_const(0, 32, 4.200000);
+    %cst = calyx.constant @cst_0 <4.200000e+00 : f32> : i32
+    %true = hw.constant true
+    // CHECK-DAG: mulf_0_reg = std_reg(32);
+    %mulf_0_reg.in, %mulf_0_reg.write_en, %mulf_0_reg.clk, %mulf_0_reg.reset, %mulf_0_reg.out, %mulf_0_reg.done = calyx.register @mulf_0_reg : i32, i1, i1, i1, i32, i1
+    // CHECK-DAG: std_mulFN_0 = std_mulFN(8, 24, 32);
+    %std_mulFN_0.clk, %std_mulFN_0.reset, %std_mulFN_0.go, %std_mulFN_0.control, %std_mulFN_0.left, %std_mulFN_0.right, %std_mulFN_0.roundingMode, %std_mulFN_0.out, %std_mulFN_0.exceptionalFlags, %std_mulFN_0.done = calyx.ieee754.mul @std_mulFN_0 : i1, i1, i1, i1, i32, i32, i3, i32, i5, i1
+    %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
+    calyx.wires {
+      calyx.assign %out0 = %ret_arg0_reg.out : i32
+      // CHECK-LABEL:    group bb0_0 {
+      // CHECK-NEXT:      std_mulFN_0.left = in0;
+      // CHECK-NEXT:      std_mulFN_0.right = cst_0.out;
+      // CHECK-NEXT:      mulf_0_reg.in = std_mulFN_0.out;
+      // CHECK-NEXT:      mulf_0_reg.write_en = std_mulFN_0.done;
+      // CHECK-NEXT:      std_mulFN_0.go = !std_mulFN_0.done ? 1'd1;
+      // CHECK-NEXT:      bb0_0[done] = mulf_0_reg.done;
+      // CHECK-NEXT:     }
+      calyx.group @bb0_0 {
+        calyx.assign %std_mulFN_0.left = %in0 : i32
+        calyx.assign %std_mulFN_0.right = %cst : i32
+        calyx.assign %mulf_0_reg.in = %std_mulFN_0.out : i32
+        calyx.assign %mulf_0_reg.write_en = %std_mulFN_0.done : i1
+        %0 = comb.xor %std_mulFN_0.done, %true : i1
+        calyx.assign %std_mulFN_0.go = %0 ? %true : i1
+        calyx.group_done %mulf_0_reg.done : i1
+      }
+      calyx.group @ret_assign_0 {
+        calyx.assign %ret_arg0_reg.in = %std_mulFN_0.out : i32
+        calyx.assign %ret_arg0_reg.write_en = %true : i1
+        calyx.group_done %ret_arg0_reg.done : i1
+      }
+    }
+    calyx.control {
+      calyx.seq {
+        calyx.seq {
+          calyx.enable @bb0_0
+          calyx.enable @ret_assign_0
+        }
+      }
+    }
+  } {toplevel}
+}
+

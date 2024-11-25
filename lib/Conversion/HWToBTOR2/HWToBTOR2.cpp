@@ -221,7 +221,7 @@ private:
   }
 
   // Generates a constant declaration given a value, a width and a name.
-  void genConst(int64_t value, size_t width, Operation *op) {
+  void genConst(APInt value, size_t width, Operation *op) {
     // For now we're going to assume that the name isn't taken, given that hw
     // is already in SSA form
     size_t opLID = getOpLID(op);
@@ -254,7 +254,7 @@ private:
     return constlid;
   }
 
-  // Generates an init statement, which allows for the use of powerOnValue
+  // Generates an init statement, which allows for the use of initial values
   // operands in compreg registers
   void genInit(Operation *reg, Value initVal, int64_t width) {
     // Retrieve the various identifiers we require for this
@@ -273,6 +273,12 @@ private:
   // and a result width.
   void genBinOp(StringRef inst, Operation *binop, Value op1, Value op2,
                 size_t width) {
+    // TODO: adding support for most variadic ops shouldn't be too hard
+    if (binop->getNumOperands() != 2) {
+      binop->emitError("variadic operations not are not currently supported");
+      return;
+    }
+
     // Set the LID for this operation
     size_t opLID = getOpLID(binop);
 
@@ -304,8 +310,8 @@ private:
     // Build and return the slice instruction
     os << opLID << " "
        << "slice"
-       << " " << sid << " " << op0LID << " " << (width - 1) << " " << lowbit
-       << "\n";
+       << " " << sid << " " << op0LID << " " << (lowbit + width - 1) << " "
+       << lowbit << "\n";
   }
 
   // Generates a constant declaration given a value, a width and a name
@@ -594,8 +600,8 @@ public:
   void visit(hw::PortInfo &port) {
     // Separate the inputs from outputs and generate the first btor2 lines for
     // input declaration We only consider ports with an explicit bit-width (so
-    // ignore clocks)
-    if (port.isInput() && !isa<seq::ClockType>(port.type)) {
+    // ignore clocks and immutables)
+    if (port.isInput() && !isa<seq::ClockType, seq::ImmutableType>(port.type)) {
       // Generate the associated btor declaration for the inputs
       StringRef iName = port.getName();
 
@@ -621,13 +627,16 @@ public:
   // simplicity, we will only emit `constd` in order to avoid bit-string
   // conversions
   void visitTypeOp(hw::ConstantOp op) {
+    // Make sure the constant hasn't already been created
+    if (handledOps.contains(op))
+      return;
+
     // Make sure that a sort has been created for our operation
     int64_t w = requireSort(op.getType());
 
     // Prepare for for const generation by extracting the const value and
     // generting the btor2 string
-    int64_t value = op.getValue().getSExtValue();
-    genConst(value, w, op);
+    genConst(op.getValue(), w, op);
   }
 
   // Wires should have been removed in PrepareForFormal
@@ -828,12 +837,12 @@ public:
 
   // Cover is not supported in btor2
   void visitVerif(verif::CoverOp op) {
-    op->emitError("Cover is not supprted in btor2!");
+    op->emitError("Cover is not supported in btor2!");
     return signalPassFailure();
   }
 
   void visitVerif(verif::ClockedCoverOp op) {
-    op->emitError("Cover is not supprted in btor2!");
+    op->emitError("Cover is not supported in btor2!");
     return signalPassFailure();
   }
 
@@ -880,13 +889,18 @@ public:
     genState(reg, w, regName);
 
     if (init) {
+      if (!init.getDefiningOp<seq::InitialOp>()) {
+        reg->emitError(
+            "Initial value must be emitted directly by a seq.initial op");
+        return;
+      }
       // Check that the initial value is a non-null constant
       auto initialConstant = circt::seq::unwrapImmutableValue(init)
                                  .getDefiningOp<hw::ConstantOp>();
       if (!initialConstant)
-        reg->emitError("PowerOn Value must be constant!!");
+        reg->emitError("initial value must be constant");
 
-      // Visit the powerOn Value to generate the constant
+      // Visit the initial Value to generate the constant
       dispatchTypeOpVisitor(initialConstant);
 
       // Add it to the list of visited operations

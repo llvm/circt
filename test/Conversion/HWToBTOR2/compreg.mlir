@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --convert-hw-to-btor2 -o tmp.mlir | FileCheck %s  
+// RUN: circt-opt %s --convert-hw-to-btor2 -o %t | FileCheck %s  
 
 module {
     //CHECK:    [[NID0:[0-9]+]] sort bitvec 1
@@ -9,6 +9,11 @@ module {
     // Registers are all emitted before any other operation
     //CHECK:    [[NID6:[0-9]+]] sort bitvec 32
     //CHECK:    [[NID12:[0-9]+]] state [[NID6]] count
+    //CHECK:    [[INITCONST:[0-9]+]] constd [[NID6]] 0
+    //CHECK:    [[INIT:[0-9]+]] init [[NID6]] [[NID12]] [[INITCONST]]
+    //CHECK:    [[REG2NID:[0-9]+]] state [[NID6]] count2
+    //CHECK-NOT: [[INITCONST]] constd [[NID6]] 0
+    //CHECK:    [[INIT:[0-9]+]] init [[NID6]] [[REG2NID]] [[INITCONST]]
 
     //CHECK:    [[NID3:[0-9]+]] sort bitvec 28
     //CHECK:    [[NID4:[0-9]+]] constd [[NID3]] 0 
@@ -30,7 +35,13 @@ module {
     //CHECK:    [[NID11:[0-9]+]] constd [[NID6]] 0
     %c0_i32 = hw.constant 0 : i32
     
-    %count = seq.compreg %9, %clock reset %reset, %c0_i32 : i32
+    %init = seq.initial () {
+        %c0_i8 = hw.constant 0 : i32
+        seq.yield %c0_i8 : i32
+    } : () -> !seq.immutable<i32>
+
+    %count = seq.compreg %9, %clock reset %reset, %c0_i32 initial %init : i32
+    %count2 = seq.compreg %9, %clock reset %reset, %c0_i32 initial %init : i32
 
     //CHECK:    [[NID13:[0-9]+]] eq [[NID0]] [[NID12]] [[NID7]]
     %1 = comb.icmp bin eq %count, %c22_i32 : i32
