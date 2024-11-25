@@ -2,7 +2,7 @@
 
 // CHECK-LABEL: rtg.sequence @seq0
 rtg.sequence @seq0 {
-  %2 = arith.constant 2 : i32
+  %2 = hw.constant 2 : i32
 }
 
 // CHECK-LABEL: rtg.sequence @seq2
@@ -19,8 +19,8 @@ rtg.sequence @seq2 {
 // Test the set operations and passing a sequence ot another one via argument
 // CHECK-LABEL: rtg.test @setOperations
 rtg.test @setOperations : !rtg.dict<> {
-  // CHECK-NEXT: arith.constant 2 : i32
-  // CHECK-NEXT: arith.constant 2 : i32
+  // CHECK-NEXT: hw.constant 2 : i32
+  // CHECK-NEXT: hw.constant 2 : i32
   // CHECK-NEXT: }
   %0 = rtg.sequence_closure @seq0
   %1 = rtg.sequence_closure @seq2(%0 : !rtg.sequence)
@@ -41,8 +41,8 @@ rtg.sequence @seq3 {
 
 // CHECK-LABEL: rtg.test @setArguments
 rtg.test @setArguments : !rtg.dict<> {
-  // CHECK-NEXT: arith.constant 2 : i32
-  // CHECK-NEXT: arith.constant 2 : i32
+  // CHECK-NEXT: hw.constant 2 : i32
+  // CHECK-NEXT: hw.constant 2 : i32
   // CHECK-NEXT: }
   %0 = rtg.sequence_closure @seq0
   %1 = rtg.sequence_closure @seq2(%0 : !rtg.sequence)
@@ -70,37 +70,44 @@ rtg.test @noNullOperands : !rtg.dict<> {
 }
 
 rtg.target @target0 : !rtg.dict<num_cpus: i32> {
-  %0 = arith.constant 0 : i32
+  %0 = hw.constant 0 : i32
   rtg.yield %0 : i32
 }
 
 rtg.target @target1 : !rtg.dict<num_cpus: i32> {
-  %0 = arith.constant 1 : i32
+  %0 = hw.constant 1 : i32
   rtg.yield %0 : i32
 }
 
 // CHECK-LABEL: @targetTest_target0
-// CHECK: [[V0:%.+]] = arith.constant 0
-// CHECK: arith.addi [[V0]], [[V0]]
+// CHECK: [[V0:%.+]] = hw.constant 0
+// CHECK: comb.add [[V0]], [[V0]]
 
 // CHECK-LABEL: @targetTest_target1
-// CHECK: [[V0:%.+]] = arith.constant 1
-// CHECK: arith.addi [[V0]], [[V0]]
+// CHECK: [[V0:%.+]] = hw.constant 1
+// CHECK: comb.add [[V0]], [[V0]]
 rtg.test @targetTest : !rtg.dict<num_cpus: i32> {
 ^bb0(%arg0: i32):
-  arith.addi %arg0, %arg0 : i32
+  comb.add %arg0, %arg0 : i32
 }
 
 // CHECK-NOT: @unmatchedTest
 rtg.test @unmatchedTest : !rtg.dict<num_cpus: i64> {
 ^bb0(%arg0: i64):
-  arith.addi %arg0, %arg0 : i64
+  comb.add %arg0, %arg0 : i64
+}
+
+// CHECK-LABEL: rtg.test @arithConstant
+rtg.test @arithConstant : !rtg.dict<> {
+  %0 = arith.constant 2 : index
+  %1 = arith.constant 2 : i32
+  // CHECK-NEXT: }
 }
 
 // -----
 
 rtg.test @opaqueValuesAndSets : !rtg.dict<> {
-  %0 = arith.constant 2 : i32
+  %0 = hw.constant 2 : i32
   // expected-error @below {{cannot create a set of opaque values because they cannot be reliably uniqued}}
   %1 = rtg.set_create %0 : i32
 }
@@ -108,7 +115,7 @@ rtg.test @opaqueValuesAndSets : !rtg.dict<> {
 // -----
 
 rtg.sequence @seq0 {
-  %2 = arith.constant 2 : i32
+  %2 = hw.constant 2 : i32
 }
 
 // Test that the elaborator value interning works as intended and exercise 'set_select_random' error messages.
