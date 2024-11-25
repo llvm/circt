@@ -28,8 +28,8 @@
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HWArith/HWArithDialect.h"
 #include "circt/Dialect/Handshake/HandshakeDialect.h"
-#include "circt/Dialect/Ibis/IbisDialect.h"
 #include "circt/Dialect/Interop/InteropDialect.h"
+#include "circt/Dialect/Kanagawa/KanagawaDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/LoopSchedule/LoopScheduleDialect.h"
@@ -71,7 +71,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     hw::HWDialect,
     hwarith::HWArithDialect,
     interop::InteropDialect,
-    ibis::IbisDialect,
+    kanagawa::KanagawaDialect,
     llhd::LLHDDialect,
     loopschedule::LoopScheduleDialect,
     ltl::LTLDialect,

@@ -14,7 +14,7 @@ set(CIRCT_INTEGRATION_TEST_DEPENDS
   circt-test-runners
   firtool
   hlstool
-  ibistool
+  kanagawatool
   handshake-runner
   )
 

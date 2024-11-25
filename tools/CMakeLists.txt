@@ -14,7 +14,7 @@ add_subdirectory(circt-translate)
 add_subdirectory(firtool)
 add_subdirectory(handshake-runner)
 add_subdirectory(hlstool)
-add_subdirectory(ibistool)
+add_subdirectory(kanagawatool)
 add_subdirectory(om-linker)
 add_subdirectory(py-split-input-file)
 
