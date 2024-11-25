@@ -17,6 +17,7 @@
 #include "circt/Dialect/RTG/IR/RTGVisitors.h"
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/Support/Debug.h"
 #include <deque>
 #include <random>
 
@@ -73,6 +74,15 @@ public:
     return isOpaque == other.isOpaque && value == other.value;
   }
 
+  virtual std::string toString() const {
+    std::string out;
+    llvm::raw_string_ostream stream(out);
+    stream << "<opaque ";
+    value.print(stream);
+    stream << " at " << this << ">";
+    return out;
+  }
+
 protected:
   ElaboratorValue(Value value, bool isOpaque)
       : isOpaque(isOpaque), value(value) {}
@@ -85,15 +95,21 @@ private:
 /// Holds an evaluated value of a `SetType`'d value.
 class SetValue : public ElaboratorValue {
 public:
-  SetValue(Value value, SmallVector<ElaboratorValue *> &&set,
-           bool debug = false)
-      : ElaboratorValue(value, false), originalSize(set.size()), debug(debug),
-        set(set) {
+  SetValue(Value value, SmallVector<ElaboratorValue *> &&set)
+      : ElaboratorValue(value, false), debug(false), set(set) {
     assert(isa<SetType>(value.getType()));
 
-    if (debug)
-      for (auto [i, val] : llvm::enumerate(set))
-        debugMap[i] = val;
+    // Make sure the vector is sorted and has no duplicates.
+    llvm::sort(this->set);
+    this->set.erase(std::unique(this->set.begin(), this->set.end()),
+                    this->set.end());
+  }
+
+  SetValue(Value value, SmallVector<ElaboratorValue *> &&set,
+           SmallVector<ElaboratorValue *> &&debugMap)
+      : ElaboratorValue(value, false), debug(true), set(set),
+        debugMap(debugMap) {
+    assert(isa<SetType>(value.getType()));
 
     // Make sure the vector is sorted and has no duplicates.
     llvm::sort(this->set);
@@ -121,14 +137,31 @@ public:
     return set == otherSet->set;
   }
 
-  ArrayRef<ElaboratorValue *> getAsArrayRef() const { return set; }
+  std::string toString() const override {
+    assert(debug && "must be in debug mode");
 
-  ElaboratorValue *getAtIndexForDebug(size_t idx) const {
-    assert(debug && "must have been constructed in debug mode");
-    return debugMap.lookup(idx);
+    std::string out;
+    llvm::raw_string_ostream stream(out);
+    stream << "<set {";
+    DenseSet<ElaboratorValue *> visited;
+    for (auto *val : debugMap) {
+      if (visited.contains(val))
+        continue;
+      if (!visited.empty())
+        stream << ", ";
+      visited.insert(val);
+      stream << val->toString();
+    }
+    stream << "} at " << this << ">";
+    return out;
   }
 
-  const size_t originalSize;
+  ArrayRef<ElaboratorValue *> getAsArrayRef() const { return set; }
+
+  ArrayRef<ElaboratorValue *> getDebugMap() const {
+    assert(debug && "must be in debug mode");
+    return debugMap;
+  }
 
 private:
   // Whether this set was constructed in debug mode.
@@ -142,7 +175,7 @@ private:
 
   // A map to guarantee deterministic behavior when the 'rtg.elaboration'
   // attribute is used in debug mode.
-  DenseMap<size_t, ElaboratorValue *> debugMap;
+  SmallVector<ElaboratorValue *> debugMap;
 };
 
 /// Holds an evaluated value of a `SequenceType`'d value.
@@ -175,6 +208,16 @@ public:
       return false;
 
     return sequence == seq->sequence && args == seq->args;
+  }
+
+  std::string toString() const override {
+    std::string out;
+    llvm::raw_string_ostream stream(out);
+    stream << "<sequence @" << sequence.getValue() << "(";
+    llvm::interleaveComma(args, stream,
+                          [&](auto *val) { stream << val->toString(); });
+    stream << ") at " << this << ">";
+    return out;
   }
 
   StringAttr getSequence() const { return sequence; }
@@ -323,7 +366,14 @@ public:
       set.emplace_back(interpValue);
     }
 
-    internalizeResult<SetValue>(op.getSet(), std::move(set), options.debugMode);
+    if (options.debugMode) {
+      SmallVector<ElaboratorValue *> debugMap(set);
+      internalizeResult<SetValue>(op.getSet(), std::move(set),
+                                  std::move(debugMap));
+      return DeletionKind::Delete;
+    }
+
+    internalizeResult<SetValue>(op.getSet(), std::move(set));
     return DeletionKind::Delete;
   }
 
@@ -334,16 +384,17 @@ public:
     ElaboratorValue *selected;
     if (options.debugMode) {
       auto intAttr = op->getAttrOfType<IntegerAttr>("rtg.elaboration");
-      if (set->originalSize != set->getAsArrayRef().size())
+      size_t originalSize = set->getDebugMap().size();
+      if (originalSize != set->getAsArrayRef().size())
         op->emitWarning("set contained ")
-            << (set->originalSize - set->getAsArrayRef().size())
+            << (originalSize - set->getAsArrayRef().size())
             << " duplicate value(s), the value at index " << intAttr.getInt()
             << " might not be the intended one";
-      selected = set->getAtIndexForDebug(intAttr.getInt());
-      if (!selected)
+      if (originalSize <= intAttr.getValue().getZExtValue())
         return op->emitError("'rtg.elaboration' attribute value out of bounds, "
                              "must be between 0 (incl.) and ")
-               << set->originalSize << " (excl.)";
+               << originalSize << " (excl.)";
+      selected = set->getDebugMap()[intAttr.getInt()];
     } else {
       std::uniform_int_distribution<size_t> dist(
           0, set->getAsArrayRef().size() - 1);
@@ -356,19 +407,34 @@ public:
 
   FailureOr<DeletionKind>
   visitOp(SetDifferenceOp op, function_ref<void(Operation *)> addToWorklist) {
-    auto original = cast<SetValue>(state.at(op.getOriginal()))->getAsArrayRef();
+    auto *originalElaboratorValue = cast<SetValue>(state.at(op.getOriginal()));
+    auto original = originalElaboratorValue->getAsArrayRef();
     auto diff = cast<SetValue>(state.at(op.getDiff()))->getAsArrayRef();
 
     SmallVector<ElaboratorValue *> result;
     std::set_difference(original.begin(), original.end(), diff.begin(),
                         diff.end(), std::inserter(result, result.end()));
 
-    internalizeResult<SetValue>(op.getResult(), std::move(result),
-                                options.debugMode);
+    if (options.debugMode) {
+      DenseSet<ElaboratorValue *> diffSet(diff.begin(), diff.end());
+      SmallVector<ElaboratorValue *> debugMap;
+      for (auto *el : originalElaboratorValue->getDebugMap())
+        if (!diffSet.contains(el))
+          debugMap.push_back(el);
+
+      internalizeResult<SetValue>(op.getResult(), std::move(result),
+                                  std::move(debugMap));
+      return DeletionKind::Delete;
+    }
+
+    internalizeResult<SetValue>(op.getResult(), std::move(result));
     return DeletionKind::Delete;
   }
 
   LogicalResult elaborate(TestOp testOp) {
+    LLVM_DEBUG(llvm::dbgs()
+               << "\n=== Elaborating Test @" << testOp.getSymName() << "\n\n");
+
     DenseSet<Operation *> visited;
     std::deque<Operation *> worklist;
     DenseSet<Operation *> toDelete;
@@ -409,6 +475,22 @@ public:
       auto result = dispatchOpVisitor(curr, addToWorklist);
       if (failed(result))
         return failure();
+
+      LLVM_DEBUG({
+        if (options.debugMode) {
+          llvm::dbgs() << "Elaborating " << *curr << " to\n[";
+
+          llvm::interleaveComma(curr->getResults(), llvm::dbgs(),
+                                [&](auto res) {
+                                  if (state.contains(res))
+                                    llvm::dbgs() << state.at(res)->toString();
+                                  else
+                                    llvm::dbgs() << "unknown";
+                                });
+
+          llvm::dbgs() << "]\n\n";
+        }
+      });
 
       if (*result == DeletionKind::Delete)
         toDelete.insert(curr);
