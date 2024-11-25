@@ -1,16 +1,22 @@
 // RUN: circt-opt --rtg-elaborate=debug=true --split-input-file --verify-diagnostics %s | FileCheck %s
+// Just check that there are no crashes when run with randomness on 
+// RUN: circt-opt --rtg-elaborate=debug=false --split-input-file --verify-diagnostics %s
 
 // CHECK-LABEL: rtg.sequence @seq0
 rtg.sequence @seq0 {
   %2 = hw.constant 2 : i32
 }
 
+// CHECK-LABEL: rtg.sequence @seq1
+rtg.sequence @seq1 {
+  %2 = hw.constant 3 : i32
+}
+
 // CHECK-LABEL: rtg.sequence @seq2
 rtg.sequence @seq2 {
 ^bb0(%arg0: !rtg.sequence):
-  %0 = rtg.sequence_closure @seq0
+  %0 = rtg.sequence_closure @seq1
   %set = rtg.set_create %arg0, %0 : !rtg.sequence
-  // expected-warning @below {{set contained 1 duplicate value(s), the value at index 0 might not be the intended one}}
   %seq = rtg.set_select_random %set : !rtg.set<!rtg.sequence> {rtg.elaboration = 0}
   rtg.invoke_sequence %seq
   rtg.invoke_sequence %seq
@@ -30,6 +36,26 @@ rtg.test @setOperations : !rtg.dict<> {
   %diff = rtg.set_difference %set, %new_set : !rtg.set<!rtg.sequence>
   %seq1 = rtg.set_select_random %diff : !rtg.set<!rtg.sequence> {rtg.elaboration = 0}
   rtg.invoke_sequence %seq1
+}
+
+// CHECK-LABEL: rtg.test @bagOperations
+rtg.test @bagOperations : !rtg.dict<> {
+  // CHECK-NEXT: hw.constant 3 : i32
+  // CHECK-NEXT: hw.constant 3 : i32
+  // CHECK-NEXT: }
+  %multiple = arith.constant 8 : index
+  %one = arith.constant 1 : index
+  %0 = rtg.sequence_closure @seq0
+  %1 = rtg.sequence_closure @seq1
+  %bag = rtg.bag_create (%multiple x %0, %multiple x %1) : !rtg.sequence
+  %seq = rtg.bag_select_random %bag : !rtg.bag<!rtg.sequence> {rtg.elaboration = 0}
+  %new_bag = rtg.bag_create (%one x %seq) : !rtg.sequence
+  %diff = rtg.bag_difference %bag, %new_bag : !rtg.bag<!rtg.sequence>
+  %seq1 = rtg.bag_select_random %diff : !rtg.bag<!rtg.sequence> {rtg.elaboration = 1}
+  %diff2 = rtg.bag_difference %bag, %new_bag inf : !rtg.bag<!rtg.sequence>
+  %seq2 = rtg.bag_select_random %diff2 : !rtg.bag<!rtg.sequence> {rtg.elaboration = 0}
+  rtg.invoke_sequence %seq1
+  rtg.invoke_sequence %seq2
 }
 
 // CHECK-LABEL: rtg.sequence @seq3
@@ -110,21 +136,4 @@ rtg.test @opaqueValuesAndSets : !rtg.dict<> {
   %0 = hw.constant 2 : i32
   // expected-error @below {{cannot create a set of opaque values because they cannot be reliably uniqued}}
   %1 = rtg.set_create %0 : i32
-}
-
-// -----
-
-rtg.sequence @seq0 {
-  %2 = hw.constant 2 : i32
-}
-
-// Test that the elaborator value interning works as intended and exercise 'set_select_random' error messages.
-rtg.test @setOperations : !rtg.dict<> {
-  %0 = rtg.sequence_closure @seq0
-  %1 = rtg.sequence_closure @seq0
-  %set = rtg.set_create %0, %1 : !rtg.sequence
-  // expected-warning @below {{set contained 1 duplicate value(s), the value at index 2 might not be the intended one}}
-  // expected-error @below {{'rtg.elaboration' attribute value out of bounds, must be between 0 (incl.) and 2 (excl.)}}
-  %seq = rtg.set_select_random %set : !rtg.set<!rtg.sequence> {rtg.elaboration = 2}
-  rtg.invoke_sequence %seq
 }

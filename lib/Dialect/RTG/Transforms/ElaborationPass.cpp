@@ -18,6 +18,7 @@
 #include "circt/Dialect/RTG/IR/RTGVisitors.h"
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/SetOperations.h"
 #include "llvm/Support/Debug.h"
 #include <deque>
 #include <random>
@@ -173,6 +174,86 @@ private:
   // We probably want to do some profiling in the future to see if a DenseSet or
   // other representation is better suited.
   SmallVector<ElaboratorValue *> set;
+
+  // A map to guarantee deterministic behavior when the 'rtg.elaboration'
+  // attribute is used in debug mode.
+  SmallVector<ElaboratorValue *> debugMap;
+};
+
+/// Holds an evaluated value of a `BagType`'d value.
+class BagValue : public ElaboratorValue {
+public:
+  BagValue(Value value, DenseMap<ElaboratorValue *, uint64_t> &&bag)
+      : ElaboratorValue(value, false), debug(false), bag(bag) {
+    assert(isa<BagType>(value.getType()));
+  }
+
+  BagValue(Value value, DenseMap<ElaboratorValue *, uint64_t> &&bag,
+           SmallVector<ElaboratorValue *> &&debugMap)
+      : ElaboratorValue(value, false), debug(true), bag(bag),
+        debugMap(debugMap) {
+    assert(isa<BagType>(value.getType()));
+  }
+
+  // Implement LLVMs RTTI
+  static bool classof(const ElaboratorValue *val) {
+    return !val->isOpaqueValue() && BagType::classof(val->getType());
+  }
+
+  bool containsOpaqueValue() const override {
+    return llvm::any_of(
+        bag, [](auto el) { return el.first->containsOpaqueValue(); });
+  }
+
+  llvm::hash_code getHashValue() const override {
+    // TODO: is the sorting really necessay or could we pass the
+    // non-deterministically ordered range directly? If not, would it be more
+    // efficient to use a MapVector to represent the bag?
+    SmallVector<std::pair<ElaboratorValue *, unsigned>> sorted(bag.begin(),
+                                                               bag.end());
+    llvm::sort(sorted, [](auto a, auto b) { return a.first < b.first; });
+    return llvm::hash_combine_range(sorted.begin(), sorted.end());
+  }
+
+  bool isEqual(const ElaboratorValue &other) const override {
+    auto *otherBag = dyn_cast<BagValue>(&other);
+    if (!otherBag)
+      return false;
+    return bag == otherBag->bag;
+  }
+
+  std::string toString() const override {
+    assert(debug && "must be in debug mode");
+
+    std::string out;
+    llvm::raw_string_ostream stream(out);
+    stream << "<bag {";
+    DenseSet<ElaboratorValue *> visited;
+    for (auto *val : debugMap) {
+      if (visited.contains(val))
+        continue;
+      if (!visited.empty())
+        stream << ", ";
+      visited.insert(val);
+      stream << val->toString() << " -> " << bag.at(val);
+    }
+    stream << "} at " << this << ">";
+    return out;
+  }
+
+  const DenseMap<ElaboratorValue *, uint64_t> &getBag() const { return bag; }
+
+  ArrayRef<ElaboratorValue *> getDebugMap() const {
+    assert(debug && "must be in debug mode");
+    return debugMap;
+  }
+
+private:
+  // Whether this set was constructed in debug mode.
+  const bool debug;
+
+  // Stores the elaborated values of the bag.
+  DenseMap<ElaboratorValue *, uint64_t> bag;
 
   // A map to guarantee deterministic behavior when the 'rtg.elaboration'
   // attribute is used in debug mode.
@@ -498,6 +579,124 @@ public:
     }
 
     internalizeResult<SetValue>(op.getResult(), std::move(result));
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind>
+  visitOp(BagCreateOp op, function_ref<void(Operation *)> addToWorklist) {
+    DenseMap<ElaboratorValue *, uint64_t> bag;
+    SmallVector<ElaboratorValue *> debugMap;
+    for (auto [val, multiple] :
+         llvm::zip(op.getElements(), op.getMultiples())) {
+      auto *interpValue = state.at(val);
+      auto *interpMultiple = dyn_cast<IntegerValue>(state.at(multiple));
+      if (interpValue->containsOpaqueValue())
+        return op->emitError("cannot create a set of opaque values because "
+                             "they cannot be reliably uniqued");
+      if (!interpMultiple)
+        return op.emitError("multiple could not be interpreted")
+                   .attachNote(multiple.getLoc())
+               << "multiple defined here";
+
+      bag.insert({interpValue, interpMultiple->getInt()});
+
+      if (options.debugMode)
+        debugMap.push_back(interpValue);
+    }
+
+    if (options.debugMode) {
+      internalizeResult<BagValue>(op.getBag(), std::move(bag),
+                                  std::move(debugMap));
+      return DeletionKind::Delete;
+    }
+
+    internalizeResult<BagValue>(op.getBag(), std::move(bag));
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind>
+  visitOp(BagSelectRandomOp op, function_ref<void(Operation *)> addToWorklist) {
+    auto *bag = cast<BagValue>(state.at(op.getBag()));
+
+    ElaboratorValue *selected;
+    if (options.debugMode) {
+      auto intAttr = op->getAttrOfType<IntegerAttr>("rtg.elaboration");
+      size_t originalSize = bag->getDebugMap().size();
+      if (originalSize != bag->getBag().size())
+        op->emitWarning("set contained ")
+            << (originalSize - bag->getBag().size())
+            << " duplicate value(s), the value at index " << intAttr.getInt()
+            << " might not be the intended one";
+      if (originalSize <= intAttr.getValue().getZExtValue())
+        return op->emitError("'rtg.elaboration' attribute value out of bounds, "
+                             "must be between 0 (incl.) and ")
+               << originalSize << " (excl.)";
+      selected = bag->getDebugMap()[intAttr.getInt()];
+    } else {
+      SmallVector<double> weights, idx;
+      SmallVector<ElaboratorValue *> bagVec;
+      for (auto [i, elAndWeight] : llvm::enumerate(bag->getBag())) {
+        auto [el, weight] = elAndWeight;
+        bagVec.push_back(el);
+        weights.push_back(weight);
+        idx.push_back(i);
+      }
+
+      std::piecewise_constant_distribution<double> dist(idx.begin(), idx.end(),
+                                                        weights.begin());
+      selected = bagVec[dist(rng)];
+    }
+
+    state[op.getResult()] = selected;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind>
+  visitOp(BagDifferenceOp op, function_ref<void(Operation *)> addToWorklist) {
+    auto *original = cast<BagValue>(state.at(op.getOriginal()));
+    auto *diff = cast<BagValue>(state.at(op.getDiff()));
+
+    DenseMap<ElaboratorValue *, uint64_t> result;
+    for (const auto &el : original->getBag()) {
+      if (!diff->getBag().contains(el.first)) {
+        result.insert(el);
+        continue;
+      }
+
+      if (op.getInf())
+        continue;
+
+      auto toDiff = diff->getBag().at(el.first);
+      if (el.second <= toDiff)
+        continue;
+
+      result.insert({el.first, el.second - toDiff});
+    }
+
+    if (options.debugMode) {
+      SmallVector<ElaboratorValue *> debugMap;
+      for (auto *val : original->getDebugMap()) {
+        if (!diff->getBag().contains(val)) {
+          debugMap.push_back(val);
+          continue;
+        }
+
+        if (op.getInf())
+          continue;
+
+        auto toDiff = diff->getBag().at(val);
+        if (original->getBag().at(val) <= toDiff)
+          continue;
+
+        debugMap.push_back(val);
+      }
+
+      internalizeResult<BagValue>(op.getResult(), std::move(result),
+                                  std::move(debugMap));
+      return DeletionKind::Delete;
+    }
+
+    internalizeResult<BagValue>(op.getResult(), std::move(result));
     return DeletionKind::Delete;
   }
 
