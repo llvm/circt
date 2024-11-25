@@ -4,7 +4,9 @@
 // modules.
 
 // CHECK: module Foo()
-// CHECK: module Bar()
+verif.formal @Foo {} {
+}
 
-verif.formal @Foo {}
-verif.formal @Bar {}
+// CHECK: module Bar()
+verif.formal @Bar {} {
+}
