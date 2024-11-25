@@ -13,6 +13,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/RTG/IR/ArithVisitors.h"
 #include "circt/Dialect/RTG/IR/RTGOps.h"
 #include "circt/Dialect/RTG/IR/RTGVisitors.h"
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
@@ -228,6 +229,53 @@ private:
   SmallVector<ElaboratorValue *> args;
 };
 
+/// Holds an evaluated value of an `IndexType` or `IntegerType`'d value.
+/// TODO: support integers with more than 64 bits
+class IntegerValue : public ElaboratorValue {
+public:
+  IntegerValue(Value value, uint64_t integer)
+      : ElaboratorValue(value, false), integer(integer) {
+    assert((isa<IntegerType>(value.getType()) &&
+            value.getType().getIntOrFloatBitWidth() <= 64) ||
+           isa<IndexType>(value.getType()));
+  }
+
+  // Implement LLVMs RTTI
+  static bool classof(const ElaboratorValue *val) {
+    return !val->isOpaqueValue() &&
+           (IndexType::classof(val->getType()) ||
+            (IntegerType::classof(val->getType()) &&
+             val->getType().getIntOrFloatBitWidth() <= 64));
+  }
+
+  bool containsOpaqueValue() const override { return false; }
+
+  llvm::hash_code getHashValue() const override {
+    return llvm::hash_combine(integer, getType());
+  }
+
+  bool isEqual(const ElaboratorValue &other) const override {
+    auto *intVal = dyn_cast<IntegerValue>(&other);
+    if (!intVal)
+      return false;
+
+    return integer == intVal->integer && getType() == intVal->getType();
+  }
+
+  std::string toString() const override {
+    std::string out;
+    llvm::raw_string_ostream stream(out);
+    stream << "<const-integer " << integer << " of type " << getType() << " at "
+           << this << ">";
+    return out;
+  }
+
+  uint64_t getInt() const { return integer; }
+
+private:
+  uint64_t integer;
+};
+
 //===----------------------------------------------------------------------===//
 // Hash Map Helpers
 //===----------------------------------------------------------------------===//
@@ -269,11 +317,19 @@ struct InternMapInfo : public DenseMapInfo<ElaboratorValue *> {
 enum class DeletionKind { Keep, Delete };
 
 /// Interprets the IR to perform and lower the represented randomizations.
-class Elaborator : public RTGOpVisitor<Elaborator, FailureOr<DeletionKind>,
-                                       function_ref<void(Operation *)>> {
+class Elaborator
+    : public RTGOpVisitor<Elaborator, FailureOr<DeletionKind>,
+                          function_ref<void(Operation *)>>,
+      public mlir::arith::ArithOpVisitor<Elaborator, FailureOr<DeletionKind>,
+                                         function_ref<void(Operation *)>> {
 public:
-  using RTGOpVisitor<Elaborator, FailureOr<DeletionKind>,
-                     function_ref<void(Operation *)>>::visitOp;
+  using RTGBase = RTGOpVisitor<Elaborator, FailureOr<DeletionKind>,
+                               function_ref<void(Operation *)>>;
+  using ArithBase = ArithOpVisitor<Elaborator, FailureOr<DeletionKind>,
+                                   function_ref<void(Operation *)>>;
+
+  using ArithBase::visitOp;
+  using RTGBase::visitOp;
 
   Elaborator(SymbolTable &table, const ElaborationOptions &options)
       : options(options), symTable(table) {
@@ -311,6 +367,20 @@ public:
       internalizeResult<ElaboratorValue>(res);
 
     return DeletionKind::Keep;
+  }
+
+  FailureOr<DeletionKind>
+  visitOp(arith::ConstantOp op, function_ref<void(Operation *)> addToWorklist) {
+    if (auto val = dyn_cast<IntegerAttr>(op.getValue())) {
+      if (val.getValue().getBitWidth() <= 64 &&
+          !val.getType().isSignedInteger()) {
+        internalizeResult<IntegerValue>(op.getResult(),
+                                        val.getValue().getZExtValue());
+        return DeletionKind::Delete;
+      }
+    }
+
+    return visitExternalOp(op, addToWorklist);
   }
 
   FailureOr<DeletionKind>
@@ -429,6 +499,15 @@ public:
 
     internalizeResult<SetValue>(op.getResult(), std::move(result));
     return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind>
+  dispatchOpVisitor(Operation *op,
+                    function_ref<void(Operation *)> addToWorklist) {
+    if (op->getDialect() == op->getContext()->getLoadedDialect<RTGDialect>())
+      return RTGBase::dispatchOpVisitor(op, addToWorklist);
+
+    return ArithBase::dispatchOpVisitor(op, addToWorklist);
   }
 
   LogicalResult elaborate(TestOp testOp) {
