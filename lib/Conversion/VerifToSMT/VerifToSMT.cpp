@@ -371,8 +371,6 @@ struct VerifBoundedModelCheckingOpConversion
             }
             newDecls.append(nextRegStates);
           }
-          // We don't need to worry about the else case as we asserted above
-          // that it means num_regs is 0
 
           // Add the rest of the loop state args
           for (; loopIndex < loopVals.size(); ++loopIndex)
