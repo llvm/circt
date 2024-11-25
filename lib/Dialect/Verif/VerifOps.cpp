@@ -143,6 +143,9 @@ LogicalResult BoundedModelCheckingOp::verifyRegions() {
                 "there are clock arguments in the circuit region "
                 "before any other values";
   }
+  if (getNumRegs() > 0 && totalClocks == 0)
+    return emitOpError("num_regs is non-zero, but the circuit region has no "
+                       "clock inputs to clock the registers");
   auto initialValues = getInitialValues();
   if (initialValues.size() != getNumRegs()) {
     return emitOpError()
