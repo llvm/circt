@@ -3,6 +3,7 @@
 func.func @dummy1(%arg0: i32, %arg1: i32, %arg2: !rtg.set<i32>) -> () {return}
 func.func @dummy2(%arg0: i32) -> () {return}
 func.func @dummy3(%arg0: i64) -> () {return}
+func.func @dummy4(%arg0: i32, %arg1: i32, %arg2: !rtg.bag<i32>, %arg3: !rtg.bag<i32>) -> () {return}
 
 // Test the set operations and passing a sequence to another one via argument
 // CHECK-LABEL: rtg.test @setOperations
@@ -23,6 +24,29 @@ rtg.test @setOperations : !rtg.dict<> {
   %diff = rtg.set_difference %set, %new_set : !rtg.set<i32>
   %5 = rtg.set_select_random %diff : !rtg.set<i32> {rtg.elaboration_custom_seed = 2}
   func.call @dummy1(%4, %5, %diff) : (i32, i32, !rtg.set<i32>) -> ()
+}
+
+// CHECK-LABEL: rtg.test @bagOperations
+rtg.test @bagOperations : !rtg.dict<> {
+  // CHECK-NEXT: [[V0:%.+]] = arith.constant 2 : i32
+  // CHECK-NEXT: [[V1:%.+]] = arith.constant 8 : index
+  // CHECK-NEXT: [[V2:%.+]] = arith.constant 3 : i32
+  // CHECK-NEXT: [[V3:%.+]] = arith.constant 7 : index
+  // CHECK-NEXT: [[V4:%.+]] = rtg.bag_create ([[V1]] x [[V0]], [[V3]] x [[V2]]) : i32
+  // CHECK-NEXT: [[V5:%.+]] = rtg.bag_create ([[V1]] x [[V0]]) : i32
+  // CHECK-NEXT: func.call @dummy4([[V0]], [[V0]], [[V4]], [[V5]]) :
+  %multiple = arith.constant 8 : index
+  %one = arith.constant 1 : index
+  %0 = arith.constant 2 : i32
+  %1 = arith.constant 3 : i32
+  %bag = rtg.bag_create (%multiple x %0, %multiple x %1) : i32
+  %2 = rtg.bag_select_random %bag : !rtg.bag<i32> {rtg.elaboration_custom_seed = 3}
+  %new_bag = rtg.bag_create (%one x %2) : i32
+  %diff = rtg.bag_difference %bag, %new_bag : !rtg.bag<i32>
+  %3 = rtg.bag_select_random %diff : !rtg.bag<i32> {rtg.elaboration_custom_seed = 4}
+  %diff2 = rtg.bag_difference %bag, %new_bag inf : !rtg.bag<i32>
+  %4 = rtg.bag_select_random %diff2 : !rtg.bag<i32> {rtg.elaboration_custom_seed = 5}
+  func.call @dummy4(%3, %4, %diff, %diff2) : (i32, i32, !rtg.bag<i32>, !rtg.bag<i32>) -> ()
 }
 
 // CHECK-LABEL: @targetTest_target0
