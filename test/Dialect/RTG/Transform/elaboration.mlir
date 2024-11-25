@@ -38,10 +38,13 @@ rtg.test @bagOperations : !rtg.dict<> {
   // CHECK-NEXT: [[V5:%.+]] = rtg.bag_create ([[V1]] x [[V0]]) : i32
   // CHECK-NEXT: func.call @dummy4([[V0]], [[V0]], [[V4]], [[V5]]) :
   %multiple = arith.constant 8 : index
+  %seven = arith.constant 7 : index
   %one = arith.constant 1 : index
   %0 = arith.constant 2 : i32
   %1 = arith.constant 3 : i32
-  %bag = rtg.bag_create (%multiple x %0, %multiple x %1) : i32
+  %bag0 = rtg.bag_create (%seven x %0, %multiple x %1) : i32
+  %bag1 = rtg.bag_create (%one x %0) : i32
+  %bag = rtg.bag_union %bag0, %bag1 : !rtg.bag<i32>
   %2 = rtg.bag_select_random %bag : !rtg.bag<i32> {rtg.elaboration_custom_seed = 3}
   %new_bag = rtg.bag_create (%one x %2) : i32
   %diff = rtg.bag_difference %bag, %new_bag : !rtg.bag<i32>

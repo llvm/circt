@@ -47,13 +47,15 @@ rtg.sequence @bags {
   // CHECK: [[BAG:%.+]] = rtg.bag_create (%arg2 x %arg0, %arg2 x %arg1) : i32 {rtg.some_attr}
   // CHECK: [[R:%.+]] = rtg.bag_select_random [[BAG]] : !rtg.bag<i32> {rtg.some_attr}
   // CHECK: [[EMPTY:%.+]] = rtg.bag_create : i32
-  // CHECK: rtg.bag_difference [[BAG]], [[EMPTY]] : !rtg.bag<i32> {rtg.some_attr}
+  // CHECK: [[DIFF:%.+]] = rtg.bag_difference [[BAG]], [[EMPTY]] : !rtg.bag<i32> {rtg.some_attr}
   // CHECK: rtg.bag_difference [[BAG]], [[EMPTY]] inf : !rtg.bag<i32>
+  // CHECK: rtg.bag_union [[BAG]], [[EMPTY]], [[DIFF]] : !rtg.bag<i32>
   %bag = rtg.bag_create (%arg2 x %arg0, %arg2 x %arg1) : i32 {rtg.some_attr}
   %r = rtg.bag_select_random %bag : !rtg.bag<i32> {rtg.some_attr}
   %empty = rtg.bag_create : i32
   %diff = rtg.bag_difference %bag, %empty : !rtg.bag<i32> {rtg.some_attr}
   %diff2 = rtg.bag_difference %bag, %empty inf : !rtg.bag<i32>
+  %union = rtg.bag_union %bag, %empty, %diff : !rtg.bag<i32>
 }
 
 // CHECK-LABEL: rtg.target @empty_target : !rtg.dict<> {
