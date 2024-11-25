@@ -274,16 +274,6 @@ struct VerifBoundedModelCheckingOpConversion
       }
     }
 
-    // TODO: this can be removed once we have a way to associate reg ins/outs
-    // with clocks
-    if (clockIndexes.size() > 1)
-      return op->emitError(
-          "only modules with one clock are currently supported");
-
-    // If we have no clocks then num_regs has to be 0
-    if (clockIndexes.size() == 0 && numRegs != 0)
-      return op->emitError("num_regs is non-zero but found no clock");
-
     auto numStateArgs = initVals.size() - initIndex;
     // Add the rest of the init vals (state args)
     for (; initIndex < initVals.size(); ++initIndex)
@@ -437,8 +427,20 @@ void ConvertVerifToSMTPass::runOnOperation() {
   // issues with whether assertions are/aren't lowered yet)
   SymbolTable symbolTable(getOperation());
   WalkResult assertionCheck = getOperation().walk(
-      [&](Operation *op) { // Check there is exactly one assertion
-        if (isa<verif::BoundedModelCheckingOp>(op)) {
+      [&](Operation *op) { // Check there is exactly one assertion and clock
+        if (auto bmcOp = dyn_cast<verif::BoundedModelCheckingOp>(op)) {
+          // Check only one clock is present in the circuit inputs
+          auto numClockArgs = 0;
+          for (auto argType : bmcOp.getCircuit().getArgumentTypes())
+            if (isa<seq::ClockType>(argType))
+              numClockArgs++;
+          // TODO: this can be removed once we have a way to associate reg
+          // ins/outs with clocks
+          if (numClockArgs > 1) {
+            op->emitError(
+                "only modules with one or zero clocks are currently supported");
+            signalPassFailure();
+          }
           SmallVector<mlir::Operation *> worklist;
           int numAssertions = 0;
           op->walk([&](Operation *curOp) {

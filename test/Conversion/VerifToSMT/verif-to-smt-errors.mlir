@@ -102,8 +102,7 @@ hw.module @TwoAssertions(in %x: i1, in %y: i1) {
 // -----
 
 func.func @multiple_clocks() -> (i1) {
-  // expected-error @below {{only modules with one clock are currently supported}}
-  // expected-error @below {{failed to legalize operation 'verif.bmc' that was explicitly marked illegal}}
+  // expected-error @below {{only modules with one or zero clocks are currently supported}}
   %bmc = verif.bmc bound 10 num_regs 1 initial_values [unit]
   init {
     %c0_i1 = hw.constant 0 : i1
@@ -116,24 +115,6 @@ func.func @multiple_clocks() -> (i1) {
   }
   circuit {
   ^bb0(%clock0: !seq.clock, %clock1: !seq.clock, %arg0: i32):
-    %c1_i32 = hw.constant 1 : i32
-    %cond1 = comb.icmp ugt %arg0, %c1_i32 : i32
-    verif.assert %cond1 : i1
-    verif.yield %arg0 : i32
-  }
-  func.return %bmc : i1
-}
-
-// -----
-
-func.func @regs_but_no_blocks() -> (i1) {
-  // expected-error @below {{num_regs is non-zero but found no clock}}
-  // expected-error @below {{failed to legalize operation 'verif.bmc' that was explicitly marked illegal}}
-  %bmc = verif.bmc bound 10 num_regs 1 initial_values [unit]
-  init {}
-  loop {}
-  circuit {
-  ^bb0(%arg0: i32):
     %c1_i32 = hw.constant 1 : i32
     %cond1 = comb.icmp ugt %arg0, %c1_i32 : i32
     verif.assert %cond1 : i1

@@ -109,7 +109,7 @@ func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
 // CHECK:        [[ORI:%.+]] = arith.ori [[SMTCHECK]], [[ARG5]]
 // CHECK:        [[LOOP:%.+]]:2 = func.call @bmc_loop([[ARG1]], [[ARG4]])
 // CHECK:        [[F2:%.+]] = smt.declare_fun : !smt.bv<32>
-// CHECK:        [[OLDCLOCKLOW:%.+]] = smt.bv.not %arg1
+// CHECK:        [[OLDCLOCKLOW:%.+]] = smt.bv.not [[ARG1]]
 // CHECK:        [[BVPOSEDGE:%.+]] = smt.bv.and [[OLDCLOCKLOW]], [[LOOP]]#0
 // CHECK:        [[BVTRUE:%.+]] = smt.bv.constant #smt.bv<-1> : !smt.bv<1>
 // CHECK:        [[BOOLPOSEDGE:%.+]] = smt.eq [[BVPOSEDGE]], [[BVTRUE]]
