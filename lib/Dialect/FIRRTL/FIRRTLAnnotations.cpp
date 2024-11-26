@@ -581,18 +581,6 @@ FIRRTLType PortAnnoTarget::getType() const {
 }
 
 //===----------------------------------------------------------------------===//
-// Annotation Details
-//===----------------------------------------------------------------------===//
-
-/// Check if an OMIR type is a string-encoded value that the FIRRTL dialect
-/// simply passes through as a string without any decoding.
-bool circt::firrtl::isOMIRStringEncodedPassthrough(StringRef type) {
-  return type == "OMID" || type == "OMReference" || type == "OMBigInt" ||
-         type == "OMLong" || type == "OMString" || type == "OMDouble" ||
-         type == "OMBigDecimal" || type == "OMDeleted";
-}
-
-//===----------------------------------------------------------------------===//
 // Utilities for Specific Annotations
 //
 // TODO: Remove these in favor of first-class annotations.

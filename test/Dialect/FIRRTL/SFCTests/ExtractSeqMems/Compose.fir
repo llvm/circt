@@ -1,7 +1,7 @@
 ; UNSUPPORTED: system-windows
 ;   See https://github.com/llvm/circt/issues/4128
 ; RUN: rm -rf %t
-; RUN: firtool --repl-seq-mem --repl-seq-mem-file=mems.conf --split-verilog --emit-omir -o=%t %s
+; RUN: firtool --repl-seq-mem --repl-seq-mem-file=mems.conf --split-verilog -o=%t %s
 ; RUN: FileCheck %s --check-prefix=TESTHARNESS < %t/TestHarness.sv
 ; RUN: FileCheck %s --check-prefix=DUTMODULE < %t/Prefix_DUTModule.sv
 ; RUN: FileCheck %s --check-prefix=SEQMEMSGROUP < %t/Prefix_SeqMemsGroup.sv
@@ -10,12 +10,10 @@
 ; RUN: FileCheck %s --check-prefix=MEM < %t/Prefix_mem.sv
 ; RUN: FileCheck %s --check-prefix=MEMS-CONF < %t/mems.conf
 ; RUN: FileCheck %s --check-prefix=SEQMEMS-TXT < %t/SeqMems.txt
-; RUN: FileCheck %s --check-prefix=OMIR < %t/omir.json
 
 ; Extracted from test/scala/firrtl/ExtractSeqMems.scala
 ; Checks that instance extraction composes with:
 ; - Dedup
-; - OMIR emission and SRAM path setting
 ; - Inject DUT Hierarchy
 ; - Prefixing
 
@@ -39,31 +37,6 @@ circuit TestHarness : %[[
   {
     "class":"sifive.enterprise.firrtl.MarkDUTAnnotation",
     "target":"TestHarness.DUTModule"
-  },
-  {
-    "class": "freechips.rocketchip.objectmodel.OMIRFileAnnotation",
-    "filename": "omir.json"
-  },
-  {
-    "class": "freechips.rocketchip.objectmodel.OMIRAnnotation",
-    "nodes": [
-      {
-        "info": "",
-        "id": "OMID:0",
-        "fields": [
-          {"info": "", "name": "omType", "value": ["OMString:OMLazyModule", "OMString:OMSRAM"]},
-          {"info": "", "name": "finalPath", "value": "OMMemberInstanceTarget:~TestHarness|SomeModule>mem"}
-        ]
-      },
-      {
-        "info": "",
-        "id": "OMID:1",
-        "fields": [
-          {"info": "", "name": "omType", "value": ["OMString:OMLazyModule", "OMString:OMSRAM"]},
-          {"info": "", "name": "finalPath", "value": "OMMemberReferenceTarget:~TestHarness|SomeModule_1>mem"}
-        ]
-      }
-    ]
   }
 ]]
   module SomeModule :
@@ -157,10 +130,3 @@ circuit TestHarness : %[[
   ; MEMS-CONF: name Prefix_mem_ext depth 8 width 8 ports write,read
   ; SEQMEMS-TXT: mem_wiring_1 -> Prefix_DUTModule.InjectedSubmodule.inst0.mem
   ; SEQMEMS-TXT: mem_wiring_0 -> Prefix_DUTModule.InjectedSubmodule.inst1.mem
-
-  ; OMIR:      "id": "OMID:0"
-  ; OMIR:      "name": "finalPath"
-  ; OMIR-NEXT: "value": "OMMemberInstanceTarget:~Prefix_DUTModule|Prefix_DUTModule/SeqMemsGroup:Prefix_SeqMemsGroup/mem_ext{{[^:]*}}:Prefix_mem_ext"
-  ; OMIR:      "id": "OMID:1"
-  ; OMIR:      "name": "finalPath"
-  ; OMIR-NEXT: "value": "OMMemberInstanceTarget:~Prefix_DUTModule|Prefix_DUTModule/SeqMemsGroup:Prefix_SeqMemsGroup/mem_ext{{[^:]*}}:Prefix_mem_ext"
