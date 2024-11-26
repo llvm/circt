@@ -22,7 +22,6 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PostOrderIterator.h"
-#include "llvm/ADT/StringMap.h"
 
 namespace circt {
 namespace firrtl {
