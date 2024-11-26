@@ -21,8 +21,6 @@
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/Hashing.h"
-#include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
 namespace firrtl {

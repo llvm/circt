@@ -9,7 +9,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
@@ -20,7 +19,6 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Mutex.h"
-#include "llvm/Support/RWMutex.h"
 
 #define DEBUG_TYPE "firrtl-lower-layers"
 
@@ -387,8 +385,8 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         type = refType.getType();
 
       ports.push_back({builder.getStringAttr(portName), type, Direction::In,
-                       /*sym=*/{},
-                       /*loc=*/loc});
+                       /*symName=*/{},
+                       /*location=*/loc});
       // Update the layer block's body with arguments as we will swap this body
       // into the module when we create it.  If this is a ref type, then add a
       // refsend to convert from the non-ref type input port.
@@ -444,7 +442,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
             /*forceable=*/false);
 
       ports.push_back({builder.getStringAttr(portName), refType, Direction::Out,
-                       /*sym=*/{}, /*loc=*/loc});
+                       /*symName=*/{}, /*location=*/loc});
       Value replacement = body->addArgument(refType, loc);
       if (isa<RefType>(dest.getType())) {
         dest.replaceUsesWithIf(replacement, [&](OpOperand &use) {

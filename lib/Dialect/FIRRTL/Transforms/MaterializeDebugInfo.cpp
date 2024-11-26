@@ -14,8 +14,6 @@
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
-#include "llvm/ADT/StringExtras.h"
-#include "llvm/Support/Parallel.h"
 
 namespace circt {
 namespace firrtl {
