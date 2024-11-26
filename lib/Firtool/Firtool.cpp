@@ -139,12 +139,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createLayerMergePass());
 
-  if (opt.shouldAdvancedLayerSink())
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createAdvancedLayerSinkPass());
-  else
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        firrtl::createLayerSinkPass());
-
   // Preset the random initialization parameters for each module. The current
   // implementation assumes it can run at a time where every register is
   // currently in the final module it will be emitted in, all registers have
@@ -184,8 +178,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createExtractInstancesPass());
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerLayersPass());
-
   // Run passes to resolve Grand Central features.  This should run before
   // BlackBoxReader because Grand Central needs to inform BlackBoxReader where
   // certain black boxes should be placed.  Note: all Grand Central Taps related
@@ -215,6 +207,22 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
         createSimpleCanonicalizerPass());
     pm.addPass(firrtl::createIMDeadCodeElimPass());
   }
+
+  // Layer lowering passes.  Move operations into layers when possible and
+  // remove layers by converting them to other constructs.  This lowering
+  // process can create a few optimization opportunities.
+  //
+  // TODO: Improve LowerLayers to avoid the need for canonicalization. See:
+  //   https://github.com/llvm/circt/issues/7896
+  if (opt.shouldAdvancedLayerSink())
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createAdvancedLayerSinkPass());
+  else
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createLayerSinkPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerLayersPass());
+  if (!opt.shouldDisableOptimization())
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        createSimpleCanonicalizerPass());
 
   if (opt.shouldEmitOMIR())
     pm.nest<firrtl::CircuitOp>().addPass(
