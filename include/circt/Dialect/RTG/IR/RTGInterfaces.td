@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_RTG_RTGINTERFACES_TD
-#define CIRCT_DIALECT_RTG_RTGINTERFACES_TD
+#ifndef CIRCT_DIALECT_RTG_IR_RTGINTERFACES_TD
+#define CIRCT_DIALECT_RTG_IR_RTGINTERFACES_TD
 
 include "mlir/IR/Interfaces.td"
 
@@ -43,4 +43,4 @@ def ContextResourceTypeInterface : TypeInterface<
   let cppNamespace = "::circt::rtg";
 }
 
-#endif // CIRCT_DIALECT_RTG_RTGINTERFACES_TD
+#endif // CIRCT_DIALECT_RTG_IR_RTGINTERFACES_TD
