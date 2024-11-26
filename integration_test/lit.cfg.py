@@ -79,8 +79,9 @@ tool_dirs = [
 ]
 tools = [
     'arcilator', 'circt-opt', 'circt-translate', 'firtool', 'circt-rtl-sim.py',
-    'equiv-rtl.sh', 'handshake-runner', 'hlstool', 'kanagawatool', 'circt-lec',
-    'circt-bmc', 'circt-test', 'circt-test-runner-sby.py'
+    'equiv-rtl.sh', 'handshake-runner', 'hlstool', 'ibistool', 'circt-lec',
+    'circt-bmc', 'circt-test', 'circt-test-runner-sby.py',
+    'circt-test-runner-circt-bmc.py'
 ]
 
 # Enable python if its path was configured
@@ -230,6 +231,7 @@ if config.arcilator_jit_enabled:
   config.available_features.add('arcilator-jit')
 
 config.substitutions.append(('%driver', f'{config.driver}'))
+config.substitutions.append(('%circt-tools-dir', f'{config.circt_tools_dir}'))
 llvm_config.add_tool_substitutions(tools, tool_dirs)
 
 # cocotb availability
