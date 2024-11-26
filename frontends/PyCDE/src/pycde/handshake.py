@@ -3,14 +3,12 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from typing import Any, List, Optional, Set, Tuple, Dict
-import typing
+from typing import List, Optional, Dict
 
 from .module import Module, ModuleLikeBuilderBase, PortError
 from .signals import BitsSignal, ChannelSignal, ClockSignal, Signal
 from .system import System
-from .support import (get_user_loc, _obj_to_attribute, obj_to_typed_attribute,
-                      create_const_zero)
+from .support import get_user_loc, obj_to_typed_attribute
 from .types import Channel
 
 from .circt.dialects import handshake as raw_handshake
@@ -18,33 +16,12 @@ from .circt import ir
 
 
 class FuncBuilder(ModuleLikeBuilderBase):
-  """Defines how an ESI `PureModule` gets built."""
-
-  @property
-  def circt_mod(self):
-    sys: System = System.current()
-    ret = sys._op_cache.get_circt_mod(self)
-    if ret is None:
-      return sys._create_circt_mod(self)
-    return ret
+  """Defines how a handshake function gets built."""
 
   def create_op(self, sys: System, symbol):
-    if hasattr(self.modcls, "metadata"):
-      meta = self.modcls.metadata
-      self.add_metadata(sys, symbol, meta)
-    else:
-      self.add_metadata(sys, symbol, None)
+    """Callback for creating a handshake.func op."""
 
-    # If there are associated constants, add them to the manifest.
-    if len(self.constants) > 0:
-      constants_dict: Dict[str, ir.Attribute] = {}
-      for name, constant in self.constants.items():
-        constant_attr = obj_to_typed_attribute(constant.value, constant.type)
-        constants_dict[name] = constant_attr
-      with ir.InsertionPoint(sys.mod.body):
-        from .dialects.esi import esi
-        esi.SymbolConstantsOp(symbolRef=ir.FlatSymbolRefAttr.get(symbol),
-                              constants=ir.DictAttr.get(constants_dict))
+    self.create_op_common(sys, symbol)
 
     assert len(self.generators) > 0
 
@@ -138,9 +115,12 @@ class FuncBuilder(ModuleLikeBuilderBase):
 
 
 class Func(Module):
-  """A pure ESI module has no ports and contains only instances of modules with
-  only ESI ports and connections between said instances. Use ESI services for
-  external communication."""
+  """A Handshake function is intended to implicitly model dataflow. If can
+  contain any combinational operation and offers a software-like (HLS) approach
+  to hardware design.
+
+  The PyCDE interface to it (this class) is considered experimental. Use at your
+  own risk and test the resulting RTL thoroughly."""
 
   BuilderType: type[ModuleLikeBuilderBase] = FuncBuilder
   _builder: FuncBuilder
