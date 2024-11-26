@@ -30,7 +30,6 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/LogicalResult.h"
-#include "llvm/Support/raw_ostream.h"
 
 #include <variant>
 
@@ -764,8 +763,10 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   };
 
   using calyx::PredicateInfo;
+  using CombLogic = PredicateInfo::CombLogic;
+  using Port = PredicateInfo::InputPorts::Port;
   PredicateInfo info = calyx::getPredicateInfo(cmpf.getPredicate());
-  if (info.logic == PredicateInfo::SPECIAL) {
+  if (info.logic == CombLogic::noComb) {
     if (cmpf.getPredicate() == CmpFPredicate::AlwaysTrue) {
       cmpf.getResult().replaceAllUsesWith(c1);
       return success();
@@ -799,25 +800,25 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   for (const auto &input : info.inputPorts) {
     Value signal;
     switch (input.port) {
-    case PredicateInfo::InputPorts::Port::EQ: {
+    case Port::eq: {
       signal = calyxCmpFOp.getEq();
       break;
     }
-    case PredicateInfo::InputPorts::Port::GT: {
+    case Port::gt: {
       signal = calyxCmpFOp.getGt();
       break;
     }
-    case PredicateInfo::InputPorts::Port::LT: {
+    case Port::lt: {
       signal = calyxCmpFOp.getLt();
       break;
     }
-    case PredicateInfo::InputPorts::Port::UNORDERED: {
+    case Port::unordered: {
       signal = calyxCmpFOp.getUnordered();
       break;
     }
     }
     std::string nameSuffix =
-        (input.port == PredicateInfo::InputPorts::Port::UNORDERED)
+        (input.port == PredicateInfo::InputPorts::Port::unordered)
             ? "unordered_port"
             : "compare_port";
     auto signalReg =
@@ -828,33 +829,39 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
   // Create the output logical operation
   Value outputValue, doneValue;
-  if (info.logic == PredicateInfo::SPECIAL) {
+  switch (info.logic) {
+  case CombLogic::noComb: {
     // it's guaranteed to be either ORD or UNO
     outputValue = inputRegs[0].getOut();
     doneValue = inputRegs[0].getOut();
-  } else {
-    if (info.logic == PredicateInfo::AND) {
-      auto outputLibOp = getState<ComponentLoweringState>()
-                             .getNewLibraryOpInstance<calyx::AndLibOp>(
-                                 rewriter, loc, {one, one, one});
-      rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
-                                       inputRegs[0].getOut());
-      rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
-                                       inputRegs[1].getOut());
+    break;
+  }
+  case CombLogic::logicAnd: {
+    auto outputLibOp = getState<ComponentLoweringState>()
+                           .getNewLibraryOpInstance<calyx::AndLibOp>(
+                               rewriter, loc, {one, one, one});
+    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
+                                     inputRegs[0].getOut());
+    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
+                                     inputRegs[1].getOut());
 
-      outputValue = outputLibOp.getOut();
-    } else /*info.op == PredicateInfo::OR*/ {
-      auto outputLibOp = getState<ComponentLoweringState>()
-                             .getNewLibraryOpInstance<calyx::OrLibOp>(
-                                 rewriter, loc, {one, one, one});
-      rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
-                                       inputRegs[0].getOut());
-      rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
-                                       inputRegs[1].getOut());
+    outputValue = outputLibOp.getOut();
+    break;
+  }
+  case CombLogic::logicOr: {
+    auto outputLibOp = getState<ComponentLoweringState>()
+                           .getNewLibraryOpInstance<calyx::OrLibOp>(
+                               rewriter, loc, {one, one, one});
+    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
+                                     inputRegs[0].getOut());
+    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
+                                     inputRegs[1].getOut());
 
-      outputValue = outputLibOp.getOut();
-    }
+    outputValue = outputLibOp.getOut();
+  }
+  }
 
+  if (info.logic != CombLogic::noComb) {
     auto doneLibOp = getState<ComponentLoweringState>()
                          .getNewLibraryOpInstance<calyx::AndLibOp>(
                              rewriter, loc, {one, one, one});

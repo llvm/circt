@@ -784,7 +784,8 @@ struct PredicateInfo {
   struct InputPorts {
     // Relevant ports to extract from the `std_compareFN`. For example, we
     // extract the `lt` and the `unordered` ports when the predicate is `oge`.
-    enum Port { EQ, GT, LT, UNORDERED } port;
+    enum class Port { eq, gt, lt, unordered };
+    Port port;
     // Whether we should invert the port before passing as inputs to the `op`
     // field. For example, we should invert both the `lt` and the `unordered`
     // port just extracted for predicate `oge`.
@@ -792,8 +793,9 @@ struct PredicateInfo {
   };
 
   // The combinational logic to apply to the input ports. For example, we should
-  // apply `AND` logic to the two input ports for predicate `oge`.
-  enum CombLogic { AND, OR, SPECIAL } logic;
+  // apply `logicAnd` to the two input ports for predicate `oge`.
+  enum class CombLogic { logicAnd, logicOr, noComb };
+  CombLogic logic;
   SmallVector<InputPorts> inputPorts;
 };
 

@@ -417,6 +417,7 @@ def MulFOpIEEE754 : ArithBinaryFloatingPointLibraryOp<"ieee754.mul", [
   }];
 }
 
+// This models the compare operation interface in Berkeley HardFloat implementation.
 def CompareFOpIEEE754 : ArithBinaryFloatingPointLibraryOp<"ieee754.compare", []> {
   let results = (outs I1:$clk, I1:$reset, I1:$go,
     AnySignlessInteger:$left, AnySignlessInteger:$right, I1:$signaling,
