@@ -63,8 +63,9 @@ config.test_source_root = os.path.dirname(__file__)
 # test_exec_root: The root path where tests should be run.
 config.test_exec_root = os.path.join(config.circt_obj_root, 'integration_test')
 
-# Tweak the PATH to include the tools dir.
+# Tweak the PATH to include the LLVM and CIRCT tools dir.
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
+llvm_config.with_environment('PATH', config.circt_tools_dir, append_path=True)
 
 # Tweak the PYTHONPATH to include the binary dir.
 if config.bindings_python_enabled:
