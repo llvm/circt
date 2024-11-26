@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_RTG_IR_RTGVISITORS_H
 #define CIRCT_DIALECT_RTG_IR_RTGVISITORS_H
 
+#include "circt/Dialect/RTG/IR/RTGISAAssemblyOpInterfaces.h"
 #include "circt/Dialect/RTG/IR/RTGOpInterfaces.h"
 #include "circt/Dialect/RTG/IR/RTGOps.h"
 #include "circt/Dialect/RTG/IR/RTGTypeInterfaces.h"
@@ -37,6 +38,9 @@ public:
             [&](auto expr) -> ResultType {
               return thisCast->visitOp(expr, args...);
             })
+        .template Case<RegisterOpInterface>([&](auto expr) -> ResultType {
+          return thisCast->visitRegisterOp(expr, args...);
+        })
         .template Case<ContextResourceOpInterface>(
             [&](auto expr) -> ResultType {
               return thisCast->visitContextResourceOp(expr, args...);
@@ -60,6 +64,10 @@ public:
   /// This callback is invoked on any operations that are not
   /// handled by the concrete visitor.
   ResultType visitUnhandledOp(Operation *op, ExtraArgs... args);
+
+  ResultType visitRegisterOp(RegisterOpInterface op, ExtraArgs... args) {
+    return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);
+  }
 
   ResultType visitContextResourceOp(ContextResourceOpInterface op,
                                     ExtraArgs... args) {

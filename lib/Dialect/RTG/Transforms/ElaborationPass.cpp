@@ -411,6 +411,7 @@ public:
 
   using ArithBase::visitOp;
   using RTGBase::visitOp;
+  using RTGBase::visitRegisterOp;
 
   Elaborator(SymbolTable &table, const ElaborationOptions &options)
       : options(options), symTable(table) {
