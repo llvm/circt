@@ -6,7 +6,6 @@ add_circt_library(CIRCTTransforms
   InsertMergeBlocks.cpp
   PrintOpCount.cpp
   MemoryBanking.cpp
-  IndexSwitchToIf.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Transforms
@@ -20,7 +19,6 @@ add_circt_library(CIRCTTransforms
   MLIRFuncDialect
   MLIRIR
   MLIRMemRefDialect
-  MLIRSCFDialect
   MLIRSupport
   MLIRTransforms
   MLIRAffineDialect

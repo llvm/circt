@@ -133,35 +133,4 @@ def MemoryBanking : Pass<"memory-banking", "::mlir::func::FuncOp"> {
   let dependentDialects = ["mlir::memref::MemRefDialect, mlir::scf::SCFDialect, mlir::affine::AffineDialect"];
 }
 
-def IndexSwitchToIf : Pass<"switch-to-if", "::mlir::ModuleOp"> {
-  let summary = "Index switch to if";
-  let description = [{
-      Transform `scf.index_switch` to a series of `scf.if` operations.
-      This is necessary for dialects that don't support switch statements, e.g., Calyx.
-      An example:
-      ```
-        %0 = scf.index_switch %cond -> i32
-          case 0 { ... }
-          case 1 { ... }
-          ...
-
-        =>
-
-        %c0 = arith.cmpi eq %0, 0
-        %c1 = arith.cmpi eq %0, 1
-        %0 = scf.if %c0 {
-         ...
-        } else {
-          %1 = scf.if %c1 {
-            ...
-          } else {
-            ...
-          }
-        }
-      ```
-  }];
-  let constructor = "circt::createIndexSwitchToIfPass()";
-  let dependentDialects = ["mlir::scf::SCFDialect"];
-}
-
 #endif // CIRCT_TRANSFORMS_PASSES
