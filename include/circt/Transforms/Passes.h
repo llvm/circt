@@ -46,6 +46,7 @@ std::unique_ptr<mlir::Pass> createInsertMergeBlocksPass();
 std::unique_ptr<mlir::Pass> createPrintOpCountPass();
 std::unique_ptr<mlir::Pass>
 createMemoryBankingPass(std::optional<unsigned> bankingFactor = std::nullopt);
+std::unique_ptr<mlir::Pass> createIndexSwitchToIfPass();
 
 //===----------------------------------------------------------------------===//
 // Utility functions.
