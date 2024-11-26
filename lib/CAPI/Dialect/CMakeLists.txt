@@ -46,6 +46,7 @@ add_circt_public_c_api_library(CIRCTCAPIDC
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTDC
+  CIRCTDCTransforms
 )
 
 add_circt_public_c_api_library(CIRCTCAPIDebug
