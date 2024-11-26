@@ -52,7 +52,6 @@ public:
   }
 
   StringRef getOutputFilename() const { return outputFilename; }
-  StringRef getOmirOutputFile() const { return omirOutFile; }
   StringRef getBlackBoxRootPath() const { return blackBoxRootPath; }
   StringRef getChiselInterfaceOutputDirectory() const {
     return chiselInterfaceOutDirectory;
@@ -103,7 +102,6 @@ public:
   bool shouldDedup() const { return !noDedup; }
   bool shouldEnableDebugInfo() const { return enableDebugInfo; }
   bool shouldIgnoreReadEnableMemories() const { return ignoreReadEnableMem; }
-  bool shouldEmitOMIR() const { return emitOMIR; }
   bool shouldExportChiselInterface() const { return exportChiselInterface; }
   bool shouldConvertVecOfBundle() const { return vbToBV; }
   bool shouldEtcDisableInstanceExtraction() const {
@@ -219,16 +217,6 @@ public:
 
   FirtoolOptions &setDisableAggressiveMergeConnections(bool value) {
     disableAggressiveMergeConnections = value;
-    return *this;
-  }
-
-  FirtoolOptions &setEmitOMIR(bool value) {
-    emitOMIR = value;
-    return *this;
-  }
-
-  FirtoolOptions &setOmirOutFile(StringRef value) {
-    omirOutFile = value;
     return *this;
   }
 
@@ -386,8 +374,6 @@ private:
   bool noDedup;
   firrtl::CompanionMode companionMode;
   bool disableAggressiveMergeConnections;
-  bool emitOMIR;
-  std::string omirOutFile;
   bool advancedLayerSink;
   bool lowerMemories;
   std::string blackBoxRootPath;

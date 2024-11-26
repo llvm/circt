@@ -129,13 +129,6 @@ MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetDisableAggressiveMergeConnections(
     CirctFirtoolFirtoolOptions options, bool value);
 
 MLIR_CAPI_EXPORTED void
-circtFirtoolOptionsSetEmitOmir(CirctFirtoolFirtoolOptions options, bool value);
-
-MLIR_CAPI_EXPORTED void
-circtFirtoolOptionsSetOmirOutFile(CirctFirtoolFirtoolOptions options,
-                                  MlirStringRef value);
-
-MLIR_CAPI_EXPORTED void
 circtFirtoolOptionsSetLowerMemories(CirctFirtoolFirtoolOptions options,
                                     bool value);
 

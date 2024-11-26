@@ -206,10 +206,6 @@ static cl::list<std::string> inputAnnotationFilenames(
     "annotation-file", cl::desc("Optional input annotation file"),
     cl::CommaSeparated, cl::value_desc("filename"), cl::cat(mainCategory));
 
-static cl::list<std::string> inputOMIRFilenames(
-    "omir-file", cl::desc("Optional input object model 2.0 file"),
-    cl::CommaSeparated, cl::value_desc("filename"), cl::cat(mainCategory));
-
 static cl::opt<std::string>
     mlirOutFile("output-final-mlir",
                 cl::desc("Optional file name to output the final MLIR into, in "
@@ -351,15 +347,6 @@ static LogicalResult processBuffer(
       return failure();
     }
     ++numAnnotationFiles;
-  }
-
-  for (const auto &file : inputOMIRFilenames) {
-    std::string filename;
-    if (!sourceMgr.AddIncludeFile(file, llvm::SMLoc(), filename)) {
-      llvm::errs() << "cannot open input annotation file '" << file
-                   << "': No such file or directory\n";
-      return failure();
-    }
   }
 
   // Parse the input.
