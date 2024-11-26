@@ -838,10 +838,8 @@ static bool isDCType(Type type) { return isa<TokenType, ValueType>(type); }
 ///  Returns true if the given `op` is considered as legal - i.e. it does not
 ///  contain any dc-typed values.
 static bool isLegalOp(Operation *op) {
-  if (auto funcOp = dyn_cast<HWModuleLike>(op)) {
-    return llvm::none_of(funcOp.getPortTypes(), isDCType) &&
-           llvm::none_of(funcOp.getBodyBlock()->getArgumentTypes(), isDCType);
-  }
+  if (auto funcOp = dyn_cast<HWModuleLike>(op))
+    return llvm::none_of(funcOp.getPortTypes(), isDCType);
 
   bool operandsOK = llvm::none_of(op->getOperandTypes(), isDCType);
   bool resultsOK = llvm::none_of(op->getResultTypes(), isDCType);
