@@ -136,4 +136,3 @@ firrtl.circuit "Test"   {
     firrtl.matchingconnect %3, %2 : !firrtl.uint<1>
   }
 }
-
