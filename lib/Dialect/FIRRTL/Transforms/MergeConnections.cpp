@@ -25,6 +25,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/Debug.h"
+#include "mlir/IR/Iterators.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
@@ -253,30 +254,67 @@ bool MergeConnection::peelConnect(MatchingConnectOp connect) {
 bool MergeConnection::run() {
   ImplicitLocOpBuilder theBuilder(moduleOp.getLoc(), moduleOp.getContext());
   builder = &theBuilder;
+
+  // Block worklist that tracks the current position within a block.
+  SmallVector<std::pair<Block::iterator, Block::iterator>> worklist;
+
+  // Walk the IR in order, top-to-bottom, stepping into blocks as they are
+  // found.  This is basically the same as `moduleOp.walk`, however, it allows
+  // for visiting operations that are inserted _after_ the current operation.
+  // Using the existing `walk` does not do this.
   auto *body = moduleOp.getBodyBlock();
-  // Merge connections by forward iterations.
-  for (auto it = body->begin(), e = body->end(); it != e;) {
-    auto connectOp = dyn_cast<MatchingConnectOp>(*it);
-    if (!connectOp) {
-      it++;
-      continue;
+  worklist.push_back({body->begin(), body->end()});
+  while (!worklist.empty()) {
+    auto &[it, e] = worklist.back();
+
+    // Merge connections by forward iterations.
+    bool opWithBlocks = false;
+    while (it != e) {
+      // Add blocks to the stack such that they will be pulled off in-order.
+      for (auto &region : llvm::reverse(it->getRegions()))
+        for (auto &block : llvm::reverse(region.getBlocks())) {
+          worklist.push_back({block.begin(), block.end()});
+          opWithBlocks = true;
+        }
+
+      // We found one or more blocks.  Stop and go process these blocks.
+      if (opWithBlocks) {
+        ++it;
+        break;
+      }
+
+      // This operation does not have blocks.  Process it normally.
+      auto connectOp = dyn_cast<MatchingConnectOp>(*it);
+      if (!connectOp) {
+        ++it;
+        continue;
+      }
+      builder->setInsertionPointAfter(connectOp);
+      builder->setLoc(connectOp.getLoc());
+      bool removeOp = peelConnect(connectOp);
+      ++it;
+      if (removeOp)
+        connectOp.erase();
     }
-    builder->setInsertionPointAfter(connectOp);
-    builder->setLoc(connectOp.getLoc());
-    bool removeOp = peelConnect(connectOp);
-    ++it;
-    if (removeOp)
-      connectOp.erase();
+
+    // We found a block and added to the worklist.
+    if (opWithBlocks)
+      continue;
+
+    // We finished processing a block.
+    worklist.pop_back();
   }
 
   // Clean up dead operations introduced by this pass.
-  for (auto &op : llvm::make_early_inc_range(llvm::reverse(*body)))
-    if (isa<SubfieldOp, SubindexOp, InvalidValueOp, ConstantOp, BitCastOp,
-            CatPrimOp>(op))
-      if (op.use_empty()) {
-        changed = true;
-        op.erase();
-      }
+  moduleOp.walk<mlir::WalkOrder::PostOrder, mlir::ReverseIterator>(
+      [&](Operation *op) {
+        if (isa<SubfieldOp, SubindexOp, InvalidValueOp, ConstantOp, BitCastOp,
+                CatPrimOp>(op))
+          if (op->use_empty()) {
+            changed = true;
+            op->erase();
+          }
+      });
 
   return changed;
 }
