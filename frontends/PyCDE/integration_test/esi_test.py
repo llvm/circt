@@ -7,11 +7,12 @@
 import pycde
 from pycde import (AppID, Clock, Module, Reset, modparams, generator)
 from pycde.bsp import cosim
-from pycde.common import Constant
+from pycde.common import Constant, Input, Output
 from pycde.constructs import ControlReg, Reg, Wire
 from pycde.esi import ChannelService, FuncService, MMIO, MMIOReadWriteCmdType
 from pycde.types import (Bits, Channel, UInt)
 from pycde.behavioral import If, Else, EndIf
+from pycde.handshake import Func
 
 import sys
 
@@ -107,6 +108,28 @@ class ConstProducer(Module):
     ChannelService.to_host(AppID("const_producer"), ch)
 
 
+class JoinAddFunc(Func):
+  a = Input(UInt(32))
+  b = Input(UInt(32))
+  x = Output(UInt(32))
+
+  @generator
+  def construct(ports):
+    ports.x = (ports.a + ports.b).as_uint(32)
+
+
+class Join(Module):
+  clk = Clock()
+  rst = Reset()
+
+  @generator
+  def construct(ports):
+    a = ChannelService.from_host(AppID("join_a"), UInt(32))
+    b = ChannelService.from_host(AppID("join_b"), UInt(32))
+    f = JoinAddFunc(clk=ports.clk, rst=ports.rst, a=a, b=b)
+    ChannelService.to_host(AppID("join_x"), f.x)
+
+
 class Top(Module):
   clk = Clock()
   rst = Reset()
@@ -118,6 +141,7 @@ class Top(Module):
       MMIOClient(i)()
     MMIOReadWriteClient(clk=ports.clk, rst=ports.rst)
     ConstProducer(clk=ports.clk, rst=ports.rst)
+    Join(clk=ports.clk, rst=ports.rst)
 
 
 if __name__ == "__main__":
