@@ -10,21 +10,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "FIRAnnotations.h"
-
-#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
-#include "circt/Dialect/FIRRTL/FIRParser.h"
-#include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/Import/FIRAnnotations.h"
 #include "circt/Support/JSON.h"
 #include "mlir/IR/BuiltinAttributes.h"
-#include "mlir/IR/BuiltinTypes.h"
-#include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/OperationSupport.h"
 
 namespace json = llvm::json;
-
-using namespace circt;
-using namespace firrtl;
 
 /// Deserialize a JSON value into FIRRTL Annotations.  Annotations are
 /// represented as a Target-keyed arrays of attributes.  The input JSON value is
@@ -36,7 +27,7 @@ bool circt::firrtl::importAnnotationsFromJSONRaw(
 
   // The JSON value must be an array of objects.  Anything else is reported as
   // invalid.
-  auto array = value.getAsArray();
+  auto *array = value.getAsArray();
   if (!array) {
     path.report(
         "Expected annotations to be an array, but found something else.");
@@ -45,7 +36,7 @@ bool circt::firrtl::importAnnotationsFromJSONRaw(
 
   // Build an array of annotations.
   for (size_t i = 0, e = (*array).size(); i != e; ++i) {
-    auto object = (*array)[i].getAsObject();
+    auto *object = (*array)[i].getAsObject();
     auto p = path.index(i);
     if (!object) {
       p.report("Expected annotations to be an array of objects, but found an "

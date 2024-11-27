@@ -14,7 +14,6 @@
 #define CIRCT_DIALECT_FIRRTL_IMPORT_FIRANNOTATIONS_H
 
 #include "circt/Support/LLVM.h"
-#include "llvm/ADT/SmallVector.h"
 
 namespace llvm {
 namespace json {
