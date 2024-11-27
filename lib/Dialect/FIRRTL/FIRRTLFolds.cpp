@@ -2832,9 +2832,13 @@ struct FoldUnusedBits : public mlir::RewritePattern {
       rewriter.setInsertionPointAfter(readOp);
       auto it = mapping.find(readOp.getLo());
       assert(it != mapping.end() && "bit op mapping not found");
-      rewriter.replaceOpWithNewOp<BitsPrimOp>(
-          readOp, readOp.getInput(),
+      // Create a new bit selection from the compressed memory. The new op may
+      // be folded if we are selecting the entire compressed memory.
+      auto newReadValue = rewriter.createOrFold<BitsPrimOp>(
+          readOp.getLoc(), readOp.getInput(),
           readOp.getHi() - readOp.getLo() + it->second, it->second);
+      rewriter.replaceAllUsesWith(readOp, newReadValue);
+      rewriter.eraseOp(readOp);
     }
 
     // Rewrite the writes into a concatenation of slices.
@@ -2844,11 +2848,11 @@ struct FoldUnusedBits : public mlir::RewritePattern {
 
       Value catOfSlices;
       for (auto &[start, end] : ranges) {
-        Value slice =
-            rewriter.create<BitsPrimOp>(writeOp.getLoc(), source, end, start);
+        Value slice = rewriter.createOrFold<BitsPrimOp>(writeOp.getLoc(),
+                                                        source, end, start);
         if (catOfSlices) {
-          catOfSlices =
-              rewriter.create<CatPrimOp>(writeOp.getLoc(), slice, catOfSlices);
+          catOfSlices = rewriter.createOrFold<CatPrimOp>(writeOp.getLoc(),
+                                                         slice, catOfSlices);
         } else {
           catOfSlices = slice;
         }
