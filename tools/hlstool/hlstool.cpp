@@ -337,10 +337,17 @@ static LogicalResult doHLSFlowDynamic(
   addIRLevel(IRLevel::RTL, [&]() {
     pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
     if (withDC) {
-      pm.addPass(circt::createHandshakeToDCPass());
-      pm.addPass(circt::dc::createDCMaterializeForksSinksPass());
+      pm.addPass(circt::createHandshakeToDC({"clock", "reset"}));
+      // This pass sometimes resolves an error in the
+      pm.addPass(createSimpleCanonicalizerPass());
+      pm.nest<hw::HWModuleOp>().addPass(
+          circt::dc::createDCMaterializeForksSinksPass());
+      // TODO: We assert without a canonicalizer pass here. Debug.
       pm.addPass(createSimpleCanonicalizerPass());
       pm.addPass(circt::createDCToHWPass());
+      pm.addPass(createSimpleCanonicalizerPass());
+      pm.addPass(circt::createMapArithToCombPass());
+      pm.addPass(createSimpleCanonicalizerPass());
     } else {
       pm.addPass(circt::createHandshakeToHWPass());
     }

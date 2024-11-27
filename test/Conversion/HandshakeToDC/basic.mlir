@@ -200,9 +200,9 @@ handshake.func @test_control_fixed_index_type(%arg0 : i4, %arg1 : i4) -> (i4, i3
 // CHECK:           %[[VAL_3]], %[[VAL_4]] = dc.branch %[[VAL_14]]
 // CHECK:           hw.output %[[VAL_5]], %[[VAL_10]] : !dc.token, !dc.value<index>
 // CHECK:         }
-handshake.func @branch_and_merge(%0 : i1, %1 : none) -> (none, index) {
+handshake.func @branch_and_merge(%arg0 : i1, %arg1 : none) -> (none, index) {
   %out, %idx = control_merge %true, %false : none, index
-  %true, %false = cond_br %0, %1 : none
+  %true, %false = cond_br %arg0, %arg1 : none
   return %out, %idx : none, index
 }
 
@@ -252,7 +252,7 @@ handshake.func @pack_unpack(%arg0 : i32, %arg1 : i1) -> (i32, i1) {
 // CHECK-LABEL:  hw.module @esi_outer(in %clk : !seq.clock, in %rst : i1, in %arg0 : !esi.channel<i32>, in %arg1 : !esi.channel<i1>, out out : !esi.channel<i32>) {
 // CHECK-NEXT:     [[R0:%.+]] = dc.from_esi %arg0 : <i32>
 // CHECK-NEXT:     [[R1:%.+]] = dc.from_esi %arg1 : <i1>
-// CHECK-NEXT:     %pack_unpack_inst.out0, %pack_unpack_inst.out1 = hw.instance "pack_unpack_inst" @pack_unpack(in0: [[R0]]: !dc.value<i32>, in1: [[R1]]: !dc.value<i1>, clk: %clk: !seq.clock, rst: %rst: i1) -> (out0: !dc.value<i32>, out1: !dc.value<i1>)
+// CHECK-NEXT:     %pack_unpack_inst.out0, %pack_unpack_inst.out1 = hw.instance "pack_unpack_inst" @pack_unpack(arg0: [[R0]]: !dc.value<i32>, arg1: [[R1]]: !dc.value<i1>, clk: %clk: !seq.clock, rst: %rst: i1) -> (out0: !dc.value<i32>, out1: !dc.value<i1>)
 // CHECK-NEXT:     [[R2:%.+]] = dc.to_esi %pack_unpack_inst.out0 : !dc.value<i32>
 // CHECK-NEXT:     [[R3:%.+]] = dc.to_esi %pack_unpack_inst.out1 : !dc.value<i1>
 // CHECK-NEXT:     hw.output [[R2]] : !esi.channel<i32>

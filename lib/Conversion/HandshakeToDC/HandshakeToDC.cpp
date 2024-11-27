@@ -629,25 +629,22 @@ public:
 static hw::ModulePortInfo getModulePortInfoHS(const TypeConverter &tc,
                                               handshake::FuncOp funcOp) {
   SmallVector<hw::PortInfo> inputs, outputs;
-  auto *ctx = funcOp->getContext();
   auto ft = funcOp.getFunctionType();
+  funcOp.resolveArgAndResNames();
 
   // Add all inputs of funcOp.
-  for (auto [index, type] : llvm::enumerate(ft.getInputs())) {
-    inputs.push_back({{StringAttr::get(ctx, "in" + std::to_string(index)),
-                       tc.convertType(type), hw::ModulePort::Direction::Input},
+  for (auto [index, type] : llvm::enumerate(ft.getInputs()))
+    inputs.push_back({{funcOp.getArgName(index), tc.convertType(type),
+                       hw::ModulePort::Direction::Input},
                       index,
                       {}});
-  }
 
   // Add all outputs of funcOp.
-  for (auto [index, type] : llvm::enumerate(ft.getResults())) {
-    outputs.push_back(
-        {{StringAttr::get(ctx, "out" + std::to_string(index)),
-          tc.convertType(type), hw::ModulePort::Direction::Output},
-         index,
-         {}});
-  }
+  for (auto [index, type] : llvm::enumerate(ft.getResults()))
+    outputs.push_back({{funcOp.getResName(index), tc.convertType(type),
+                        hw::ModulePort::Direction::Output},
+                       index,
+                       {}});
 
   return hw::ModulePortInfo{inputs, outputs};
 }
@@ -732,16 +729,16 @@ private:
 };
 
 /// Add DC clock and reset ports to the module.
-static void addClkRst(hw::HWModuleOp mod) {
+void addClkRst(hw::HWModuleOp mod, StringRef clkName, StringRef rstName) {
   auto *ctx = mod.getContext();
 
   size_t numInputs = mod.getNumInputPorts();
-  mod.insertInput(numInputs, "clk", seq::ClockType::get(ctx));
+  mod.insertInput(numInputs, clkName, seq::ClockType::get(ctx));
   mod.setPortAttrs(
       numInputs,
       DictionaryAttr::get(ctx, {NamedAttribute(StringAttr::get(ctx, "dc.clock"),
                                                UnitAttr::get(ctx))}));
-  mod.insertInput(numInputs + 1, "rst", IntegerType::get(ctx, 1));
+  mod.insertInput(numInputs + 1, rstName, IntegerType::get(ctx, 1));
   mod.setPortAttrs(
       numInputs + 1,
       DictionaryAttr::get(ctx, {NamedAttribute(StringAttr::get(ctx, "dc.reset"),
@@ -760,6 +757,7 @@ static void addClkRst(hw::HWModuleOp mod) {
 class HandshakeToDCPass
     : public circt::impl::HandshakeToDCBase<HandshakeToDCPass> {
 public:
+  using Base::Base;
   void runOnOperation() override {
     mlir::ModuleOp mod = getOperation();
     auto patternBuilder = [&](TypeConverter &typeConverter,
@@ -770,19 +768,17 @@ public:
       patterns.add<ReturnOpConversion>(typeConverter, mod.getContext());
     };
 
-    LogicalResult res = runHandshakeToDC(mod, patternBuilder, nullptr);
+    LogicalResult res =
+        runHandshakeToDC(mod, circt::HandshakeToDCOptions{clkName, rstName},
+                         patternBuilder, nullptr);
     if (failed(res))
       signalPassFailure();
   }
 };
 } // namespace
 
-std::unique_ptr<mlir::Pass> circt::createHandshakeToDCPass() {
-  return std::make_unique<HandshakeToDCPass>();
-}
-
 LogicalResult circt::handshaketodc::runHandshakeToDC(
-    mlir::Operation *op,
+    mlir::Operation *op, circt::HandshakeToDCOptions options,
     llvm::function_ref<void(TypeConverter &typeConverter,
                             handshaketodc::ConvertedOps &convertedOps,
                             RewritePatternSet &patterns)>
@@ -848,7 +844,7 @@ LogicalResult circt::handshaketodc::runHandshakeToDC(
   // Add clock and reset ports to each converted module.
   for (auto &op : convertedOps)
     if (auto mod = dyn_cast<hw::HWModuleOp>(op); mod)
-      addClkRst(mod);
+      addClkRst(mod, options.clkName, options.rstName);
 
   // Run conversions which need see everything.
   HWSymbolCache symbolCache;

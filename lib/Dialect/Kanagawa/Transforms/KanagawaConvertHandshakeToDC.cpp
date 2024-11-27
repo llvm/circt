@@ -114,8 +114,8 @@ void ConvertHandshakeToDCPass::runOnOperation() {
             typeConverter, classOp.getContext());
   };
 
-  LogicalResult res =
-      handshaketodc::runHandshakeToDC(classOp, patternBuilder, targetModifier);
+  LogicalResult res = handshaketodc::runHandshakeToDC(
+      classOp, {"clk", "rst"}, patternBuilder, targetModifier);
   if (failed(res))
     signalPassFailure();
 }
