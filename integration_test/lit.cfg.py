@@ -169,6 +169,8 @@ if len(ieee_sims) > 1:
 if ieee_sims and ieee_sims[-1][1] == config.iverilog_path:
   config.available_features.add('ieee-sim-iverilog')
 
+config.substitutions.append(("%esi_prims", config.esi_prims))
+
 # Enable ESI runtime tests.
 if config.esi_runtime == "1":
   config.available_features.add('esi-runtime')
