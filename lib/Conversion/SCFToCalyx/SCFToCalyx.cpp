@@ -1625,70 +1625,6 @@ private:
   }
 };
 
-class BuildSwitchGroups : public calyx::FuncOpPartialLoweringPattern {
-  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
-
-  LogicalResult
-  partiallyLowerFuncToComp(FuncOp funcOp,
-                           PatternRewriter &rewriter) const override {
-    LogicalResult res = success();
-    funcOp.walk([&](Operation *op) {
-      if (!isa<scf::IndexSwitchOp>(op))
-        return WalkResult::advance();
-
-      auto switchOp = cast<scf::IndexSwitchOp>(op);
-      auto loc = switchOp.getLoc();
-
-      Region &defaultRegion = switchOp.getDefaultRegion();
-      Operation *yieldOp = defaultRegion.front().getTerminator();
-      Value defaultResult = yieldOp->getOperand(0);
-
-      Value finalResult = defaultResult;
-      scf::IfOp prevIfOp = nullptr;
-
-      rewriter.setInsertionPointAfter(switchOp);
-      for (size_t i = 0; i < switchOp.getCases().size(); i++) {
-        auto caseValueInt = switchOp.getCases()[i];
-        if (prevIfOp)
-          rewriter.setInsertionPointToStart(&prevIfOp.getElseRegion().front());
-
-        Value caseValue = rewriter.create<ConstantIndexOp>(loc, caseValueInt);
-        Value cond = rewriter.create<CmpIOp>(
-            loc, CmpIPredicate::eq, *switchOp.getODSOperands(0).begin(),
-            caseValue);
-
-        auto ifOp = rewriter.create<scf::IfOp>(loc, switchOp.getResultTypes(),
-                                               cond, /*hasElseRegion=*/true);
-
-        Region &caseRegion = switchOp.getCaseRegions()[i];
-        IRMapping mapping;
-        Block &emptyThenBlock = ifOp.getThenRegion().front();
-        emptyThenBlock.erase();
-        caseRegion.cloneInto(&ifOp.getThenRegion(), mapping);
-
-        if (i == switchOp.getCases().size() - 1) {
-          rewriter.setInsertionPointToEnd(&ifOp.getElseRegion().front());
-          rewriter.create<scf::YieldOp>(loc, defaultResult);
-        }
-
-        if (prevIfOp) {
-          rewriter.setInsertionPointToEnd(&prevIfOp.getElseRegion().front());
-          rewriter.create<scf::YieldOp>(loc, ifOp.getResult(0));
-        }
-
-        if (i == 0)
-          finalResult = ifOp.getResult(0);
-        prevIfOp = ifOp;
-      }
-
-      rewriter.replaceOp(switchOp, finalResult);
-
-      return WalkResult::advance();
-    });
-    return res;
-  }
-};
-
 /// Builds a control schedule by traversing the CFG of the function and
 /// associating this with the previously created groups.
 /// For simplicity, the generated control flow is expanded for all possible
@@ -2464,10 +2400,6 @@ void SCFToCalyxPass::runOnOperation() {
 
   addOncePattern<BuildParGroups>(loweringPatterns, patternState, funcMap,
                                  *loweringState);
-
-  /// This pattern converts all scf.IndexSwitchOps to nested if-elses.
-  addOncePattern<BuildSwitchGroups>(loweringPatterns, patternState, funcMap,
-                                    *loweringState);
 
   /// This pattern converts all index typed values to an i32 integer.
   addOncePattern<calyx::ConvertIndexTypes>(loweringPatterns, patternState,
