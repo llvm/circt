@@ -766,7 +766,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   using CombLogic = PredicateInfo::CombLogic;
   using Port = PredicateInfo::InputPorts::Port;
   PredicateInfo info = calyx::getPredicateInfo(cmpf.getPredicate());
-  if (info.logic == CombLogic::noComb) {
+  if (info.logic == CombLogic::none) {
     if (cmpf.getPredicate() == CmpFPredicate::AlwaysTrue) {
       cmpf.getResult().replaceAllUsesWith(c1);
       return success();
@@ -830,7 +830,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   // Create the output logical operation
   Value outputValue, doneValue;
   switch (info.logic) {
-  case CombLogic::noComb: {
+  case CombLogic::none: {
     // it's guaranteed to be either ORD or UNO
     outputValue = inputRegs[0].getOut();
     doneValue = inputRegs[0].getOut();
@@ -858,10 +858,11 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      inputRegs[1].getOut());
 
     outputValue = outputLibOp.getOut();
+    break;
   }
   }
 
-  if (info.logic != CombLogic::noComb) {
+  if (info.logic != CombLogic::none) {
     auto doneLibOp = getState<ComponentLoweringState>()
                          .getNewLibraryOpInstance<calyx::AndLibOp>(
                              rewriter, loc, {one, one, one});

@@ -885,7 +885,7 @@ PredicateInfo getPredicateInfo(CmpFPredicate pred) {
   }
 
   case CmpFPredicate::ORD: {
-    return PredicateInfo{.logic = PredicateInfo::CombLogic::noComb,
+    return PredicateInfo{.logic = PredicateInfo::CombLogic::none,
                          .inputPorts = {{Port::unordered, /*inverted=*/true}}};
   }
 
@@ -927,13 +927,13 @@ PredicateInfo getPredicateInfo(CmpFPredicate pred) {
   }
 
   case CmpFPredicate::UNO: {
-    return PredicateInfo{.logic = PredicateInfo::CombLogic::noComb,
+    return PredicateInfo{.logic = PredicateInfo::CombLogic::none,
                          .inputPorts = {{Port::unordered, /*inverted=*/false}}};
   }
 
   case CmpFPredicate::AlwaysTrue:
   case CmpFPredicate::AlwaysFalse:
-    return PredicateInfo{.logic = PredicateInfo::CombLogic::noComb};
+    return PredicateInfo{.logic = PredicateInfo::CombLogic::none};
     break;
   }
 

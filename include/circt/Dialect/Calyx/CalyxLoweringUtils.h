@@ -794,7 +794,7 @@ struct PredicateInfo {
 
   // The combinational logic to apply to the input ports. For example, we should
   // apply `logicAnd` to the two input ports for predicate `oge`.
-  enum class CombLogic { logicAnd, logicOr, noComb };
+  enum class CombLogic { none, logicAnd, logicOr };
   CombLogic logic;
   SmallVector<InputPorts> inputPorts;
 };
