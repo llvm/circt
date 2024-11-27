@@ -415,8 +415,8 @@ class ModuleLikeBuilderBase(_PyProxy):
           meta_op.attributes[k] = _obj_to_attribute(v)
 
   def create_op_common(self, sys, symbol):
-    """Do common work for creating a module op. This includes adding metadata
-    and adding parameters to the attbutes."""
+    """Do common work for creating a module-like op. This includes adding
+    metadata and adding parameters to the attributes."""
 
     if hasattr(self.modcls, "metadata"):
       meta = self.modcls.metadata

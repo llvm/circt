@@ -108,7 +108,7 @@ class ConstProducer(Module):
     ChannelService.to_host(AppID("const_producer"), ch)
 
 
-class JoinFunc(Func):
+class JoinAddFunc(Func):
   a = Input(UInt(32))
   b = Input(UInt(32))
   x = Output(UInt(32))
@@ -126,7 +126,7 @@ class Join(Module):
   def construct(ports):
     a = ChannelService.from_host(AppID("join_a"), UInt(32))
     b = ChannelService.from_host(AppID("join_b"), UInt(32))
-    f = JoinFunc(clk=ports.clk, rst=ports.rst, a=a, b=b)
+    f = JoinAddFunc(clk=ports.clk, rst=ports.rst, a=a, b=b)
     ChannelService.to_host(AppID("join_x"), f.x)
 
 

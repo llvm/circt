@@ -145,7 +145,7 @@ print(f"data: {data}")
 assert data == 42
 
 ################################################################################
-# Handshake Join
+# Handshake JoinAddFunc tests
 ################################################################################
 
 a = d.ports[esi.AppID("join_a")].write_port("data")
