@@ -83,7 +83,7 @@ public:
 
   /// True if the given operation is NOT moveable due to some effect.
   bool effectful(Operation *op) const {
-    if (!AnnotationSet(op).canBeDeleted() || hasDontTouch(op))
+    if (!AnnotationSet(op).empty() || hasDontTouch(op))
       return true;
     if (auto name = dyn_cast<FNamableOp>(op))
       if (!name.hasDroppableName())
@@ -112,7 +112,7 @@ private:
   }
 
   void update(FModuleLike moduleOp) {
-    if (!AnnotationSet(moduleOp).canBeDeleted())
+    if (!AnnotationSet(moduleOp).empty())
       return markEffectful(moduleOp);
     auto *op = moduleOp.getOperation();
     // Regular modules may be pure.
