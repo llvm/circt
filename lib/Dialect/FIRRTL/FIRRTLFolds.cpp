@@ -3035,7 +3035,8 @@ struct FoldRegMems : public mlir::RewritePattern {
 
       next = rewriter.create<MuxPrimOp>(next.getLoc(), en, masked, next);
     }
-    rewriter.create<MatchingConnectOp>(reg.getLoc(), reg, next);
+    Value typedNext = rewriter.create<BitCastOp>(next.getLoc(), ty, next);
+    rewriter.create<MatchingConnectOp>(reg.getLoc(), reg, typedNext);
 
     // Delete the fields and their associated connects.
     for (Operation *conn : connects)
