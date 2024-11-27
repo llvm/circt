@@ -50,7 +50,7 @@ static bool isDeletableDeclaration(Operation *op) {
   if (auto name = dyn_cast<FNamableOp>(op))
     if (!name.hasDroppableName())
       return false;
-  return !hasDontTouch(op) && AnnotationSet(op).canBeDeleted();
+  return !hasDontTouch(op) && AnnotationSet(op).empty();
 }
 
 namespace {
@@ -403,11 +403,6 @@ void IMDeadCodeElimPass::runOnOperation() {
         hierPathOp =
             symbolTable->template lookup<hw::HierPathOp>(hierPathSym.getAttr());
 
-      if (anno.canBeDeleted()) {
-        if (hierPathOp && portId >= 0)
-          hierPathToElements[hierPathOp].insert(module.getArgument(portId));
-        return false;
-      }
       if (hierPathOp)
         markAlive(hierPathOp);
       if (portId >= 0)
@@ -551,9 +546,7 @@ void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
 
   auto removeDeadNonLocalAnnotations = [&](int _, Annotation anno) -> bool {
     auto hierPathSym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
-    // We only clean up non-local annotations here as local annotations will
-    // be deleted afterwards.
-    if (!anno.canBeDeleted() || !hierPathSym)
+    if (!hierPathSym)
       return false;
     auto hierPathOp =
         symbolTable->template lookup<hw::HierPathOp>(hierPathSym.getAttr());

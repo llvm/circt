@@ -1,6 +1,5 @@
 // REQUIRES: ieee-sim
-// UNSUPPORTED: ieee-sim-iverilog
-// RUN: circt-rtl-sim.py --sim %ieee-sim %CIRCT_SOURCE%/lib/Dialect/ESI/ESIPrimitives.sv %s
+// RUN: circt-rtl-sim.py --sim %ieee-sim %esi_prims %s
 
 //===- primitive_tb.sv - tests for ESI primitives -----------*- verilog -*-===//
 //
@@ -9,6 +8,10 @@
 // a way to run them as part of our PR gate. They're here for posterity.
 //
 //===----------------------------------------------------------------------===//
+
+`define assert_fatal(pred) \
+  if (!(pred)) \
+    $fatal();
 
 module top (
   input logic clk,
@@ -25,13 +28,21 @@ module top (
 
 
   ESI_PipelineStage s1 (
-      .*
+    .clk(clk),
+    .rst(rst),
+    .a_valid(a_valid),
+    .a(a),
+    .a_ready(a_ready),
+    .x_valid(x_valid),
+    .x(x),
+    .x_ready(x_ready)
   );
 
   // Increment the input every cycle.
   always begin
     @(posedge clk) #1;
-    a++;
+    if (~rst)
+      a++;
   end
 
   // Track the number of tokens currently in the stage for debugging.
@@ -44,98 +55,97 @@ module top (
   end
 
   initial begin
-    // Wait until rstn is deasserted.
-    while (rst) begin
-      @(posedge clk);
-    end
+    // Wait until rst is deasserted.
+    @(negedge rst);
+    @(posedge clk);
 
     a_valid = 1;
-    assert (a_ready);
+    `assert_fatal (a_ready);
     @(posedge clk) #1;
-    assert (x_valid);
-    assert (x == 8'h05);
-    assert (a_ready);
+    `assert_fatal (x_valid);
+    `assert_fatal (x == 8'h02);
+    `assert_fatal (a_ready);
 
     a_valid = 1;
     @(posedge clk) #1;
-    assert (x_valid);
-    assert (x == 8'h05);
-    assert (~a_ready);
+    `assert_fatal (x_valid);
+    `assert_fatal (x == 8'h02);
+    `assert_fatal (~a_ready);
     a_valid = 1;
 
     @(posedge clk) #1;
-    assert (x_valid);
-    assert (x == 8'h05);
-    assert (~a_ready);
+    `assert_fatal (x_valid);
+    `assert_fatal (x == 8'h02);
+    `assert_fatal (~a_ready);
     x_ready = 1;
 
     @(posedge clk) #1;
-    assert (x_valid);
-    assert (x == 8'h06);
-    assert (a_ready);
+    `assert_fatal (x_valid);
+    `assert_fatal (x == 8'h03);
+    `assert_fatal (a_ready);
     x_ready = 1;
 
     @(posedge clk) #1;
-    assert (x_valid);
-    assert (x == 8'h09);
-    assert (a_ready);
+    `assert_fatal (x_valid);
+    `assert_fatal (x == 8'h06);
+    `assert_fatal (a_ready);
     x_ready = 0;
 
     @(posedge clk) #1;
-    assert (x_valid);
-    assert (x == 8'h09);
-    assert (~a_ready);
+    `assert_fatal (x_valid);
+    `assert_fatal (x == 8'h06);
+    `assert_fatal (~a_ready);
     x_ready = 1;
 
     @(posedge clk) #1;
-    assert (x_valid);
-    assert (x == 8'h0A);
-    assert (a_ready);
-    x_ready = 1;
-    a_valid = 0;
-
-    @(posedge clk) #1;
-    assert (~x_valid);
-    assert (a_ready);
+    `assert_fatal (x_valid);
+    `assert_fatal (x == 8'h07);
+    `assert_fatal (a_ready);
     x_ready = 1;
     a_valid = 0;
 
     @(posedge clk) #1;
-    assert (~x_valid);
-    assert (a_ready);
+    `assert_fatal (~x_valid);
+    `assert_fatal (a_ready);
     x_ready = 1;
     a_valid = 0;
 
     @(posedge clk) #1;
-    assert (~x_valid);
-    assert (a_ready);
+    `assert_fatal (~x_valid);
+    `assert_fatal (a_ready);
     x_ready = 1;
     a_valid = 0;
 
     @(posedge clk) #1;
-    assert (~x_valid);
-    assert (a_ready);
+    `assert_fatal (~x_valid);
+    `assert_fatal (a_ready);
+    x_ready = 1;
+    a_valid = 0;
+
+    @(posedge clk) #1;
+    `assert_fatal (~x_valid);
+    `assert_fatal (a_ready);
     x_ready = 1;
     a_valid = 1;
 
     @(posedge clk) #1;
-    assert (x_valid);
-    assert (x == 8'h10);
-    assert (a_ready);
+    `assert_fatal (x_valid);
+    `assert_fatal (x == 8'h0D);
+    `assert_fatal (a_ready);
     x_ready = 1;
     a_valid = 1;
 
     @(posedge clk) #1;
-    assert (x_valid);
-    assert (x == 8'h11);
-    assert (a_ready);
+    `assert_fatal (x_valid);
+    `assert_fatal (x == 8'h0E);
+    `assert_fatal (a_ready);
     x_ready = 1;
     a_valid = 1;
 
     @(posedge clk) #1;
-    assert (x_valid);
-    assert (x == 8'h12);
-    assert (a_ready);
+    `assert_fatal (x_valid);
+    `assert_fatal (x == 8'h0F);
+    `assert_fatal (a_ready);
     x_ready = 1;
     a_valid = 1;
 
@@ -145,7 +155,7 @@ module top (
     @(posedge clk) #1;
     @(posedge clk) #1;
     @(posedge clk) #1;
-    $stop();
+    $finish();
   end
 
 endmodule
