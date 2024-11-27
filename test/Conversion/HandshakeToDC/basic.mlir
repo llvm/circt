@@ -264,3 +264,13 @@ hw.module @esi_outer(in %clk: !seq.clock, in %rst: i1, in %arg0: !esi.channel<i3
 
 // CHECK: sv.verbatim "// Blah"
 sv.verbatim "// Blah"
+
+// CHECK-LABEL:  hw.module @TestFunc(in %clk : !seq.clock {dc.clock}, in %rst : i1 {dc.reset}, out out0 : !dc.value<i8>) {
+// CHECK-NEXT:     [[R0:%.+]] = dc.source
+// CHECK-NEXT:     %c15_i8 = hw.constant 15 : i8
+// CHECK-NEXT:     [[R1:%.+]] = dc.pack [[R0]], %c15_i8 : i8
+// CHECK-NEXT:     hw.output [[R1]] : !dc.value<i8>
+handshake.func @TestFunc() -> i8 {
+  %c15_i8 = hw.constant 15 : i8
+  return %c15_i8 : i8
+}
