@@ -6,8 +6,7 @@ requires = [
     "cmake>=3.12",
     # MLIR build depends.
     "numpy",
-    # Pybind11 2.10 has a bug relating to binding enums.
-    "pybind11>=2.9,!=2.10",
+    "pybind11>=2.11,<=2.12",
     "PyYAML",
 ]
 build-backend = "setuptools.build_meta"

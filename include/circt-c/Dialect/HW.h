@@ -47,6 +47,7 @@ typedef struct HWModulePort HWModulePort;
 //===----------------------------------------------------------------------===//
 
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(HW, hw);
+MLIR_CAPI_EXPORTED void registerHWPasses(void);
 
 //===----------------------------------------------------------------------===//
 // Type API.

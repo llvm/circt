@@ -9,7 +9,6 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/Pass/Pass.h"
-#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SCCIterator.h"
 
 namespace circt {

@@ -186,6 +186,9 @@ option(CIRCT_BUILD_TOOLS "Build the CIRCT tools. If OFF, just generate build tar
 set(CIRCT_TOOLS_INSTALL_DIR "${CMAKE_INSTALL_BINDIR}" CACHE PATH
     "Path for binary subdirectory (defaults to '${CMAKE_INSTALL_BINDIR}')")
 
+option(CIRCT_INCLUDE_TESTS
+       "Generate build targets for the CIRCT unit tests." ON)
+
 list(APPEND CMAKE_MODULE_PATH "${MLIR_MAIN_SRC_DIR}/cmake/modules")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 include(AddCIRCT)
@@ -618,16 +621,19 @@ endif()
 # Directory setup
 #-------------------------------------------------------------------------------
 
+if (CIRCT_INCLUDE_TESTS)
+  add_definitions(-DCIRCT_INCLUDE_TESTS)
+  if (CIRCT_GTEST_AVAILABLE)
+    add_subdirectory(unittests)
+  endif()
+  add_subdirectory(test)
+  add_subdirectory(integration_test)
+endif()
 add_subdirectory(include/circt)
 add_subdirectory(lib)
 if(CIRCT_INCLUDE_TOOLS)
   add_subdirectory(tools)
 endif()
-if (CIRCT_GTEST_AVAILABLE)
-  add_subdirectory(unittests)
-endif()
-add_subdirectory(test)
-add_subdirectory(integration_test)
 add_subdirectory(frontends)
 
 option(CIRCT_INCLUDE_DOCS "Generate build targets for the CIRCT docs.")

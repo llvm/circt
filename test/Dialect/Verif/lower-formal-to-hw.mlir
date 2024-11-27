@@ -3,7 +3,7 @@
 hw.module @Foo(in %bar : i32, in %baz : i16, in %clk : !seq.clock) {}
 
 // CHECK-LABEL: hw.module @FormalTop(in %symbolic_value_0 : i32, in %symbolic_value_1 : i16)
-verif.formal @FormalTop {
+verif.formal @FormalTop {} {
   %0 = verif.symbolic_value : i32
   %1 = verif.symbolic_value : i16
   // CHECK: [[CLK:%[0-9]+]] = seq.const_clock high

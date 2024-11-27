@@ -484,7 +484,8 @@ struct RTLBuilder {
 
   Value constant(unsigned width, int64_t value,
                  std::optional<StringRef> name = {}) {
-    return constant(APInt(width, value));
+    return constant(
+        APInt(width, value, /*isSigned=*/false, /*implicitTrunc=*/true));
   }
   std::pair<Value, Value> wrap(Value data, Value valid,
                                std::optional<StringRef> name = {}) {

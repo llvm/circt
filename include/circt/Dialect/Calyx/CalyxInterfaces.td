@@ -337,3 +337,22 @@ def IfOpInterface : OpInterface<"IfInterface"> {
 
   let verify = [{ return verifyIf(op); }];
 }
+
+def FloatingPointOpInterface: OpInterface<"FloatingPointOpInterface"> {
+  let cppNamespace = "::circt::calyx";
+
+  let description = [{
+    This is an op interface for Calyx floating point ops.
+  }];
+
+  let methods = [
+    StaticInterfaceMethod<
+      "This returns the floating point standard.",
+      "FloatingPointStandard",
+      "getFloatingPointStandard">,
+    StaticInterfaceMethod<
+      "This returns the Calyx native library name.",
+      "std::string",
+      "getCalyxLibraryName">
+  ];
+}

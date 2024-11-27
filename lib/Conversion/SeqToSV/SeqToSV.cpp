@@ -177,8 +177,13 @@ public:
       rewriter.create<sv::PAssignOp>(loc, svReg, adaptor.getResetValue());
     };
 
+    // Registers written in an `always_ff` process may not have any assignments
+    // outside of that process.
+    // For some tools this also prohibits inititalization.
+    bool mayLowerToAlwaysFF = lowerToAlwaysFF && !reg.getInitialValue();
+
     if (adaptor.getReset() && adaptor.getResetValue()) {
-      if (lowerToAlwaysFF) {
+      if (mayLowerToAlwaysFF) {
         rewriter.create<sv::AlwaysFFOp>(
             loc, sv::EventControl::AtPosEdge, adaptor.getClk(),
             sv::ResetType::SyncReset, sv::EventControl::AtPosEdge,
@@ -191,7 +196,7 @@ public:
             });
       }
     } else {
-      if (lowerToAlwaysFF) {
+      if (mayLowerToAlwaysFF) {
         rewriter.create<sv::AlwaysFFOp>(loc, sv::EventControl::AtPosEdge,
                                         adaptor.getClk(), assignValue);
       } else {

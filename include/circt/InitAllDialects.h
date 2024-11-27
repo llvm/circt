@@ -28,8 +28,8 @@
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HWArith/HWArithDialect.h"
 #include "circt/Dialect/Handshake/HandshakeDialect.h"
-#include "circt/Dialect/Ibis/IbisDialect.h"
 #include "circt/Dialect/Interop/InteropDialect.h"
+#include "circt/Dialect/Kanagawa/KanagawaDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/LoopSchedule/LoopScheduleDialect.h"
@@ -37,6 +37,10 @@
 #include "circt/Dialect/Moore/MooreDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/Pipeline/PipelineDialect.h"
+#include "circt/Dialect/RTG/IR/RTGDialect.h"
+#ifdef CIRCT_INCLUDE_TESTS
+#include "circt/Dialect/RTGTest/IR/RTGTestDialect.h"
+#endif
 #include "circt/Dialect/SMT/SMTDialect.h"
 #include "circt/Dialect/SSP/SSPDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
@@ -67,7 +71,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     hw::HWDialect,
     hwarith::HWArithDialect,
     interop::InteropDialect,
-    ibis::IbisDialect,
+    kanagawa::KanagawaDialect,
     llhd::LLHDDialect,
     loopschedule::LoopScheduleDialect,
     ltl::LTLDialect,
@@ -75,6 +79,10 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     msft::MSFTDialect,
     om::OMDialect,
     pipeline::PipelineDialect,
+    rtg::RTGDialect,
+#ifdef CIRCT_INCLUDE_TESTS
+    rtgtest::RTGTestDialect,
+#endif
     seq::SeqDialect,
     sim::SimDialect,
     smt::SMTDialect,

@@ -11,10 +11,10 @@ set(CIRCT_INTEGRATION_TEST_DEPENDS
   circt-lec
   circt-bmc
   circt-test
-  circt-test-runner-sby
+  circt-test-runners
   firtool
   hlstool
-  ibistool
+  kanagawatool
   handshake-runner
   )
 

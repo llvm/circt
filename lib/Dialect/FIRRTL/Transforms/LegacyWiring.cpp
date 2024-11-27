@@ -14,8 +14,6 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "mlir/Support/LogicalResult.h"
 
 using namespace circt;
 using namespace firrtl;

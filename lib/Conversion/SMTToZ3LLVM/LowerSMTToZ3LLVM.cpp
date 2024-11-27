@@ -686,6 +686,48 @@ struct ResetOpLowering : public SMTLoweringPattern<ResetOp> {
   }
 };
 
+/// Lower `smt.push` operations to (repeated) Z3 API calls of the form:
+/// ```
+/// void Z3_API Z3_solver_push(Z3_context c, Z3_solver s);
+/// ```
+struct PushOpLowering : public SMTLoweringPattern<PushOp> {
+  using SMTLoweringPattern::SMTLoweringPattern;
+  LogicalResult
+  matchAndRewrite(PushOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Location loc = op.getLoc();
+    // SMTLIB allows multiple levels to be pushed with one push command, but the
+    // Z3 C API doesn't let you provide a number of levels for push calls so
+    // multiple calls have to be created.
+    for (uint32_t i = 0; i < op.getCount(); i++)
+      buildAPICallWithContext(rewriter, loc, "Z3_solver_push",
+                              LLVM::LLVMVoidType::get(getContext()),
+                              {buildSolverPtr(rewriter, loc)});
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+/// Lower `smt.pop` operations to Z3 API calls of the form:
+/// ```
+/// void Z3_API Z3_solver_pop(Z3_context c, Z3_solver s, unsigned n);
+/// ```
+struct PopOpLowering : public SMTLoweringPattern<PopOp> {
+  using SMTLoweringPattern::SMTLoweringPattern;
+  LogicalResult
+  matchAndRewrite(PopOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Location loc = op.getLoc();
+    Value constVal = rewriter.create<LLVM::ConstantOp>(
+        loc, rewriter.getI32Type(), op.getCount());
+    buildAPICallWithContext(rewriter, loc, "Z3_solver_pop",
+                            LLVM::LLVMVoidType::get(getContext()),
+                            {buildSolverPtr(rewriter, loc), constVal});
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 /// Lower `smt.yield` operations to `scf.yield` operations. This not necessary
 /// for the yield in `smt.solver` or in quantifiers since they are deleted
 /// directly by the parent operation, but makes the lowering of the `smt.check`
@@ -1395,11 +1437,11 @@ void circt::populateSMTToZ3LLVMConversionPatterns(
   // Other lowering patterns. Refer to their implementation directly for more
   // information.
   patterns.add<BVConstantOpLowering, DeclareFunOpLowering, AssertOpLowering,
-               ResetOpLowering, CheckOpLowering, SolverOpLowering,
-               ApplyFuncOpLowering, YieldOpLowering, RepeatOpLowering,
-               ExtractOpLowering, BoolConstantOpLowering, IntConstantOpLowering,
-               ArrayBroadcastOpLowering, BVCmpOpLowering, IntCmpOpLowering,
-               IntAbsOpLowering, QuantifierLowering<ForallOp>,
+               ResetOpLowering, PushOpLowering, PopOpLowering, CheckOpLowering,
+               SolverOpLowering, ApplyFuncOpLowering, YieldOpLowering,
+               RepeatOpLowering, ExtractOpLowering, BoolConstantOpLowering,
+               IntConstantOpLowering, ArrayBroadcastOpLowering, BVCmpOpLowering,
+               IntCmpOpLowering, IntAbsOpLowering, QuantifierLowering<ForallOp>,
                QuantifierLowering<ExistsOp>>(converter, patterns.getContext(),
                                              globals, options);
 }

@@ -48,10 +48,6 @@ constexpr const char *traceNameAnnoClass =
 constexpr const char *traceAnnoClass =
     "chisel3.experimental.Trace$TraceAnnotation";
 
-constexpr const char *omirAnnoClass =
-    "freechips.rocketchip.objectmodel.OMIRAnnotation";
-constexpr const char *omirFileAnnoClass =
-    "freechips.rocketchip.objectmodel.OMIRFileAnnotation";
 constexpr const char *omirTrackerAnnoClass =
     "freechips.rocketchip.objectmodel.OMIRTracker";
 

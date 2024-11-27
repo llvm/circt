@@ -564,6 +564,18 @@ struct StatementVisitor
     return success();
   }
 
+  LogicalResult visitSMTOp(PushOp op, mlir::raw_indented_ostream &stream,
+                           ValueMap &valueMap) {
+    stream << "(push " << op.getCount() << ")\n";
+    return success();
+  }
+
+  LogicalResult visitSMTOp(PopOp op, mlir::raw_indented_ostream &stream,
+                           ValueMap &valueMap) {
+    stream << "(pop " << op.getCount() << ")\n";
+    return success();
+  }
+
   LogicalResult visitSMTOp(CheckOp op, mlir::raw_indented_ostream &stream,
                            ValueMap &valueMap) {
     if (op->getNumResults() != 0)

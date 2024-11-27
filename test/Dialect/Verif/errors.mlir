@@ -138,9 +138,14 @@ verif.bmc bound 10 num_regs 0 initial_values [unit] attributes {verif.some_attr}
 
 // expected-error @below {{number of initial values must match the number of registers}}
 verif.bmc bound 10 num_regs 1 initial_values [] attributes {verif.some_attr} init {
+  %clkInit = hw.constant false
+  %toClk = seq.to_clock %clkInit
+  verif.yield %toClk : !seq.clock
 } loop {
+^bb0(%clk1: !seq.clock):
+  verif.yield %clk1 : !seq.clock
 } circuit {
-^bb0(%arg0: i32):
+^bb0(%clk: !seq.clock, %arg0: i32):
   %false = hw.constant false
   // Arbitrary assertion so op verifies
   verif.assert %false : i1
@@ -151,11 +156,28 @@ verif.bmc bound 10 num_regs 1 initial_values [] attributes {verif.some_attr} ini
 
 // expected-error @below {{initial values must be integer or unit attributes}}
 verif.bmc bound 10 num_regs 1 initial_values ["foo"] attributes {verif.some_attr} init {
+  %clkInit = hw.constant false
+  %toClk = seq.to_clock %clkInit
+  verif.yield %toClk : !seq.clock
 } loop {
+^bb0(%clk1: !seq.clock):
+  verif.yield %clk1 : !seq.clock
 } circuit {
-^bb0(%arg0: i32):
+^bb0(%clk: !seq.clock, %arg0: i32):
   %false = hw.constant false
   // Arbitrary assertion so op verifies
   verif.assert %false : i1
+  verif.yield %arg0 : i32
+}
+
+// -----
+
+// expected-error @below {{num_regs is non-zero, but the circuit region has no clock inputs to clock the registers}}
+verif.bmc bound 10 num_regs 1 initial_values [unit] attributes {verif.some_attr} init {
+} loop {
+} circuit {
+^bb0(%arg0: i32):
+  %true = hw.constant true
+  verif.assert %true : i1
   verif.yield %arg0 : i32
 }

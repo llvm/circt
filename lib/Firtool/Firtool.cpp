@@ -139,12 +139,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createLayerMergePass());
 
-  if (opt.shouldAdvancedLayerSink())
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createAdvancedLayerSinkPass());
-  else
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        firrtl::createLayerSinkPass());
-
   // Preset the random initialization parameters for each module. The current
   // implementation assumes it can run at a time where every register is
   // currently in the final module it will be emitted in, all registers have
@@ -184,8 +178,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createExtractInstancesPass());
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerLayersPass());
-
   // Run passes to resolve Grand Central features.  This should run before
   // BlackBoxReader because Grand Central needs to inform BlackBoxReader where
   // certain black boxes should be placed.  Note: all Grand Central Taps related
@@ -216,9 +208,21 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     pm.addPass(firrtl::createIMDeadCodeElimPass());
   }
 
-  if (opt.shouldEmitOMIR())
-    pm.nest<firrtl::CircuitOp>().addPass(
-        firrtl::createEmitOMIRPass(opt.getOmirOutputFile()));
+  // Layer lowering passes.  Move operations into layers when possible and
+  // remove layers by converting them to other constructs.  This lowering
+  // process can create a few optimization opportunities.
+  //
+  // TODO: Improve LowerLayers to avoid the need for canonicalization. See:
+  //   https://github.com/llvm/circt/issues/7896
+  if (opt.shouldAdvancedLayerSink())
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createAdvancedLayerSinkPass());
+  else
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createLayerSinkPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerLayersPass());
+  if (!opt.shouldDisableOptimization())
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        createSimpleCanonicalizerPass());
 
   // Always run this, required for legalization.
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
@@ -288,6 +292,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
 
 LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
                                       const FirtoolOptions &opt) {
+  pm.addPass(verif::createLowerFormalToHWPass());
 
   if (opt.shouldExtractTestCode())
     pm.addPass(sv::createSVExtractTestCodePass(
@@ -421,7 +426,7 @@ LogicalResult firtool::populateHWToBTOR2(mlir::PassManager &pm,
   pm.addNestedPass<hw::HWModuleOp>(circt::createLowerLTLToCorePass());
   pm.addNestedPass<hw::HWModuleOp>(circt::verif::createPrepareForFormalPass());
   pm.addPass(circt::hw::createFlattenModulesPass());
-  pm.addNestedPass<hw::HWModuleOp>(circt::createConvertHWToBTOR2Pass(os));
+  pm.addPass(circt::createConvertHWToBTOR2Pass(os));
   return success();
 }
 
@@ -559,14 +564,6 @@ struct FirtoolCmdOptions {
           "Disable aggressive merge connections (i.e. merge all field-level "
           "connections into bulk connections)"),
       llvm::cl::init(false)};
-
-  llvm::cl::opt<bool> emitOMIR{
-      "emit-omir", llvm::cl::desc("Emit OMIR annotations to a JSON file"),
-      llvm::cl::init(true)};
-
-  llvm::cl::opt<std::string> omirOutFile{
-      "output-omir", llvm::cl::desc("File name for the output omir"),
-      llvm::cl::init("")};
 
   llvm::cl::opt<bool> advancedLayerSink{
       "advanced-layer-sink",
@@ -755,12 +752,11 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       buildMode(BuildModeRelease), disableOptimization(false),
       exportChiselInterface(false), chiselInterfaceOutDirectory(""),
       vbToBV(false), noDedup(false), companionMode(firrtl::CompanionMode::Bind),
-      disableAggressiveMergeConnections(false), emitOMIR(true), omirOutFile(""),
-      advancedLayerSink(false), lowerMemories(false), blackBoxRootPath(""),
-      replSeqMem(false), replSeqMemFile(""), extractTestCode(false),
-      ignoreReadEnableMem(false), disableRandom(RandomKind::None),
-      outputAnnotationFilename(""), enableAnnotationWarning(false),
-      addMuxPragmas(false),
+      disableAggressiveMergeConnections(false), advancedLayerSink(false),
+      lowerMemories(false), blackBoxRootPath(""), replSeqMem(false),
+      replSeqMemFile(""), extractTestCode(false), ignoreReadEnableMem(false),
+      disableRandom(RandomKind::None), outputAnnotationFilename(""),
+      enableAnnotationWarning(false), addMuxPragmas(false),
       verificationFlavor(firrtl::VerificationFlavor::None),
       emitSeparateAlwaysBlocks(false), etcDisableInstanceExtraction(false),
       etcDisableRegisterExtraction(false), etcDisableModuleInlining(false),
@@ -790,8 +786,6 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   companionMode = clOptions->companionMode;
   disableAggressiveMergeConnections =
       clOptions->disableAggressiveMergeConnections;
-  emitOMIR = clOptions->emitOMIR;
-  omirOutFile = clOptions->omirOutFile;
   advancedLayerSink = clOptions->advancedLayerSink;
   lowerMemories = clOptions->lowerMemories;
   blackBoxRootPath = clOptions->blackBoxRootPath;
