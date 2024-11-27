@@ -12,12 +12,10 @@
 
 #include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
-#include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
-#include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -29,9 +27,6 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/SetOperations.h"
-#include "llvm/ADT/SetVector.h"
-#include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FormatVariadic.h"
 

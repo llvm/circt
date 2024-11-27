@@ -56,16 +56,14 @@ struct SwitchToIfConversion : public OpConversionPattern<scf::IndexSwitchOp> {
                                              cond, /*hasElseRegion=*/true);
 
       Region &caseRegion = switchOp.getCaseRegions()[i];
-      IRMapping mapping;
-      Block &emptyThenBlock = ifOp.getThenRegion().front();
-      emptyThenBlock.erase();
-      caseRegion.cloneInto(&ifOp.getThenRegion(), mapping);
+      rewriter.eraseBlock(&ifOp.getThenRegion().front());
+      rewriter.inlineRegionBefore(caseRegion, ifOp.getThenRegion(),
+                                  ifOp.getThenRegion().end());
 
       if (i + 1 == switchCases.size()) {
-        rewriter.setInsertionPointToEnd(&ifOp.getElseRegion().front());
-        Block &elseBlock = ifOp.getElseRegion().front();
-        elseBlock.erase();
-        defaultRegion.cloneInto(&ifOp.getElseRegion(), mapping);
+        rewriter.eraseBlock(&ifOp.getElseRegion().front());
+        rewriter.inlineRegionBefore(defaultRegion, ifOp.getElseRegion(),
+                                    ifOp.getElseRegion().end());
       }
 
       if (prevIfOp) {

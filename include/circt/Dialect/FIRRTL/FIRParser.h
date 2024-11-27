@@ -47,8 +47,7 @@ struct FIRParserOptions {
   InfoLocHandling infoLocatorHandling = InfoLocHandling::PreferInfo;
 
   /// The number of annotation files that were specified on the command line.
-  /// This, along with numOMIRFiles provides structure to the buffers in the
-  /// source manager.
+  /// This, provides structure to the buffers in the source manager.
   unsigned numAnnotationFiles;
   bool scalarizePublicModules = false;
   bool scalarizeInternalModules = false;

@@ -6,14 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
 #include "circt/Support/Debug.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Iterators.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
@@ -21,7 +19,6 @@
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMapInfoVariant.h"
 #include "llvm/ADT/PostOrderIterator.h"
-#include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-imdeadcodeelim"

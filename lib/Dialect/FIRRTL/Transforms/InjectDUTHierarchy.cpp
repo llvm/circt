@@ -11,11 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
-#include "circt/Dialect/FIRRTL/Passes.h"
-#include "mlir/Pass/Pass.h"
-
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
@@ -24,6 +21,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Support/Debug.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-inject-dut-hier"

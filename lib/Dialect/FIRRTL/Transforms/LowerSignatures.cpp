@@ -12,29 +12,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
-#include "circt/Dialect/FIRRTL/Passes.h"
-#include "mlir/Pass/Pass.h"
-
-#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
-#include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
-#include "circt/Dialect/FIRRTL/NLATable.h"
-#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
-#include "circt/Dialect/HW/HWOpInterfaces.h"
-#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/Debug.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
-#include "llvm/ADT/APSInt.h"
-#include "llvm/ADT/BitVector.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/Parallel.h"
 
 #define DEBUG_TYPE "firrtl-lower-signatures"
 

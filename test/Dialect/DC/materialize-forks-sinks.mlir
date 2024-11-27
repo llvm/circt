@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline="builtin.module(func.func(dc-materialize-forks-sinks))" %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline="builtin.module(dc-materialize-forks-sinks)" %s | FileCheck %s
 
 // CHECK-LABEL:   func.func @testFork(
 // CHECK-SAME:                        %[[VAL_0:.*]]: !dc.token) -> (!dc.token, !dc.token, !dc.token) {

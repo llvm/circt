@@ -224,10 +224,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
 
-  if (opt.shouldEmitOMIR())
-    pm.nest<firrtl::CircuitOp>().addPass(
-        firrtl::createEmitOMIRPass(opt.getOmirOutputFile()));
-
   // Always run this, required for legalization.
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createMergeConnectionsPass(
@@ -569,14 +565,6 @@ struct FirtoolCmdOptions {
           "connections into bulk connections)"),
       llvm::cl::init(false)};
 
-  llvm::cl::opt<bool> emitOMIR{
-      "emit-omir", llvm::cl::desc("Emit OMIR annotations to a JSON file"),
-      llvm::cl::init(true)};
-
-  llvm::cl::opt<std::string> omirOutFile{
-      "output-omir", llvm::cl::desc("File name for the output omir"),
-      llvm::cl::init("")};
-
   llvm::cl::opt<bool> advancedLayerSink{
       "advanced-layer-sink",
       llvm::cl::desc("Sink logic into layer blocks (advanced)"),
@@ -764,12 +752,11 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       buildMode(BuildModeRelease), disableOptimization(false),
       exportChiselInterface(false), chiselInterfaceOutDirectory(""),
       vbToBV(false), noDedup(false), companionMode(firrtl::CompanionMode::Bind),
-      disableAggressiveMergeConnections(false), emitOMIR(true), omirOutFile(""),
-      advancedLayerSink(false), lowerMemories(false), blackBoxRootPath(""),
-      replSeqMem(false), replSeqMemFile(""), extractTestCode(false),
-      ignoreReadEnableMem(false), disableRandom(RandomKind::None),
-      outputAnnotationFilename(""), enableAnnotationWarning(false),
-      addMuxPragmas(false),
+      disableAggressiveMergeConnections(false), advancedLayerSink(false),
+      lowerMemories(false), blackBoxRootPath(""), replSeqMem(false),
+      replSeqMemFile(""), extractTestCode(false), ignoreReadEnableMem(false),
+      disableRandom(RandomKind::None), outputAnnotationFilename(""),
+      enableAnnotationWarning(false), addMuxPragmas(false),
       verificationFlavor(firrtl::VerificationFlavor::None),
       emitSeparateAlwaysBlocks(false), etcDisableInstanceExtraction(false),
       etcDisableRegisterExtraction(false), etcDisableModuleInlining(false),
@@ -799,8 +786,6 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   companionMode = clOptions->companionMode;
   disableAggressiveMergeConnections =
       clOptions->disableAggressiveMergeConnections;
-  emitOMIR = clOptions->emitOMIR;
-  omirOutFile = clOptions->omirOutFile;
   advancedLayerSink = clOptions->advancedLayerSink;
   lowerMemories = clOptions->lowerMemories;
   blackBoxRootPath = clOptions->blackBoxRootPath;

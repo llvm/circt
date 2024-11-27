@@ -90,6 +90,7 @@ func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
 // CHECK-LABEL:  func.func @test_bmc() -> i1 {
 // CHECK:    [[BMC:%.+]] = smt.solver
 // CHECK:      [[INIT:%.+]]:2 = func.call @bmc_init()
+// CHECK:      smt.push 1
 // CHECK:      [[F0:%.+]] = smt.declare_fun : !smt.bv<32>
 // CHECK:      [[F1:%.+]] = smt.declare_fun : !smt.bv<32>
 // CHECK:      [[C0_I32:%.+]] = arith.constant 0 : i32
@@ -98,6 +99,8 @@ func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
 // CHECK:      [[FALSE:%.+]] = arith.constant false
 // CHECK:      [[TRUE:%.+]] = arith.constant true
 // CHECK:      [[FOR:%.+]]:5 = scf.for [[ARG0:%.+]] = [[C0_I32]] to [[C10_I32]] step [[C1_I32]] iter_args([[ARG1:%.+]] = [[INIT]]#0, [[ARG2:%.+]] = [[F0]], [[ARG3:%.+]] = [[F1]], [[ARG4:%.+]] = [[INIT]]#1, [[ARG5:%.+]] = [[FALSE]])
+// CHECK:        smt.pop 1
+// CHECK:        smt.push 1
 // CHECK:        [[CIRCUIT:%.+]]:2 = func.call @bmc_circuit([[ARG1]], [[ARG2]], [[ARG3]])
 // CHECK:        [[SMTCHECK:%.+]] = smt.check sat {
 // CHECK:          smt.yield [[TRUE]]

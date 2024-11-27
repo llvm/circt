@@ -26,7 +26,6 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/ADT/SetVector.h"
-#include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
@@ -48,7 +47,6 @@ using llvm::SmallDenseSet;
 using llvm::SmallSetVector;
 using mlir::FailureOr;
 using mlir::InferTypeOpInterface;
-using mlir::WalkOrder;
 
 using namespace circt;
 using namespace firrtl;

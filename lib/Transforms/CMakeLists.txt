@@ -20,7 +20,6 @@ add_circt_library(CIRCTTransforms
   MLIRFuncDialect
   MLIRIR
   MLIRMemRefDialect
-  MLIRSCFDialect
   MLIRSupport
   MLIRTransforms
   MLIRAffineDialect

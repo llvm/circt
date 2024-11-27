@@ -13,7 +13,6 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/Pass/Pass.h"
-#include "llvm/Support/DOTGraphTraits.h"
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/Support/raw_ostream.h"
 

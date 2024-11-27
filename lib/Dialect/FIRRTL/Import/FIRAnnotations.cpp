@@ -26,30 +26,6 @@ namespace json = llvm::json;
 using namespace circt;
 using namespace firrtl;
 
-/// Convert a JSON value containing OMIR JSON (an array of OMNodes), convert
-/// this to an OMIRAnnotation, and add it to a mutable `annotationMap` argument.
-bool circt::firrtl::fromOMIRJSON(json::Value &value,
-                                 SmallVectorImpl<Attribute> &annotations,
-                                 json::Path path, MLIRContext *context) {
-  // The JSON value must be an array of objects.  Anything else is reported as
-  // invalid.
-  auto *array = value.getAsArray();
-  if (!array) {
-    path.report(
-        "Expected OMIR to be an array of nodes, but found something else.");
-    return false;
-  }
-
-  NamedAttrList omirAnnoFields;
-  omirAnnoFields.append("class", StringAttr::get(context, omirAnnoClass));
-  omirAnnoFields.append("nodes", convertJSONToAttribute(context, value, path));
-
-  DictionaryAttr omirAnno = DictionaryAttr::get(context, omirAnnoFields);
-  annotations.push_back(omirAnno);
-
-  return true;
-}
-
 /// Deserialize a JSON value into FIRRTL Annotations.  Annotations are
 /// represented as a Target-keyed arrays of attributes.  The input JSON value is
 /// checked, at runtime, to be an array of objects.  Returns true if successful,

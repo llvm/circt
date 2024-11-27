@@ -18,7 +18,6 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
-#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/BitVector.h"

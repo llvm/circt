@@ -11,17 +11,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
-#include "circt/Dialect/FIRRTL/Passes.h"
-#include "mlir/Pass/Pass.h"
-
-#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/Debug.h"
 #include "circt/Support/FieldRef.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/Hashing.h"

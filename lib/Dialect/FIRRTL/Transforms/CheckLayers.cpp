@@ -12,8 +12,6 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/InstanceGraphInterface.h"
-#include "mlir/Pass/Pass.h"
-#include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/PostOrderIterator.h"
 
 namespace circt {

@@ -4745,7 +4745,6 @@ struct FIRCircuitParser : public FIRParser {
 
   ParseResult
   parseCircuit(SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBuf,
-               SmallVectorImpl<const llvm::MemoryBuffer *> &omirBuf,
                mlir::TimingScope &ts);
 
 private:
@@ -4753,11 +4752,6 @@ private:
   /// them to a vector of attributes.
   ParseResult importAnnotationsRaw(SMLoc loc, StringRef annotationsStr,
                                    SmallVectorImpl<Attribute> &attrs);
-  /// Generate OMIR-derived annotations.  Report errors if the OMIR is malformed
-  /// in any way.  This also performs scattering of the OMIR to introduce
-  /// tracking annotations in the circuit.
-  ParseResult importOMIR(CircuitOp circuit, SMLoc loc, StringRef annotationStr,
-                         SmallVectorImpl<Attribute> &attrs);
 
   ParseResult parseToplevelDefinition(CircuitOp circuit, unsigned indent);
 
@@ -4824,33 +4818,6 @@ FIRCircuitParser::importAnnotationsRaw(SMLoc loc, StringRef annotationsStr,
   if (!importAnnotationsFromJSONRaw(annotations.get(), attrs, root,
                                     getContext())) {
     auto diag = emitError(loc, "Invalid/unsupported annotation format");
-    std::string jsonErrorMessage =
-        "See inline comments for problem area in JSON:\n";
-    llvm::raw_string_ostream s(jsonErrorMessage);
-    root.printErrorContext(annotations.get(), s);
-    diag.attachNote() << jsonErrorMessage;
-    return failure();
-  }
-
-  return success();
-}
-
-ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
-                                         StringRef annotationsStr,
-                                         SmallVectorImpl<Attribute> &annos) {
-
-  auto annotations = json::parse(annotationsStr);
-  if (auto err = annotations.takeError()) {
-    handleAllErrors(std::move(err), [&](const json::ParseError &a) {
-      auto diag = emitError(loc, "Failed to parse OMIR file");
-      diag.attachNote() << a.message();
-    });
-    return failure();
-  }
-
-  json::Path::Root root;
-  if (!fromOMIRJSON(annotations.get(), annos, root, circuit.getContext())) {
-    auto diag = emitError(loc, "Invalid/unsupported OMIR format");
     std::string jsonErrorMessage =
         "See inline comments for problem area in JSON:\n";
     llvm::raw_string_ostream s(jsonErrorMessage);
@@ -5665,12 +5632,9 @@ FIRCircuitParser::parseModuleBody(const SymbolTable &circuitSymTbl,
 /// circuit ::= versionHeader? 'circuit' id ':' info? INDENT module* DEDENT EOF
 ///
 /// If non-null, annotationsBuf is a memory buffer containing JSON annotations.
-/// If non-null, omirBufs is a vector of memory buffers containing SiFive Object
-/// Model IR (which is JSON).
 ///
 ParseResult FIRCircuitParser::parseCircuit(
     SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBufs,
-    SmallVectorImpl<const llvm::MemoryBuffer *> &omirBufs,
     mlir::TimingScope &ts) {
 
   auto indent = getIndentation();
@@ -5724,15 +5688,6 @@ ParseResult FIRCircuitParser::parseCircuit(
       return failure();
 
   parseAnnotationTimer.stop();
-  auto parseOMIRTimer = ts.nest("Parse OMIR");
-
-  // Process OMIR files as annotations with a class of
-  // "freechips.rocketchip.objectmodel.OMNode"
-  for (auto *omirBuf : omirBufs)
-    if (importOMIR(circuit, info.getFIRLoc(), omirBuf->getBuffer(), annos))
-      return failure();
-
-  parseOMIRTimer.stop();
 
   // Get annotations that are supposed to be specially handled by the
   // LowerAnnotations pass.
@@ -5895,11 +5850,6 @@ circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
     annotationsBufs.push_back(
         sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + fileID));
 
-  SmallVector<const llvm::MemoryBuffer *> omirBufs;
-  for (unsigned e = sourceMgr.getNumBuffers(); fileID < e; ++fileID)
-    omirBufs.push_back(
-        sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + fileID));
-
   context->loadDialect<CHIRRTLDialect>();
   context->loadDialect<FIRRTLDialect, hw::HWDialect>();
 
@@ -5911,7 +5861,7 @@ circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
   SharedParserConstants state(context, options);
   FIRLexer lexer(sourceMgr, context);
   if (FIRCircuitParser(state, lexer, *module, minimumFIRVersion)
-          .parseCircuit(annotationsBufs, omirBufs, ts))
+          .parseCircuit(annotationsBufs, ts))
     return nullptr;
 
   // Make sure the parse module has no other structural problems detected by
