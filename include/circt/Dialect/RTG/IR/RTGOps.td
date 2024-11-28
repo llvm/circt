@@ -16,6 +16,7 @@ include "mlir/IR/Properties.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "circt/Dialect/RTG/IR/RTGInterfaces.td"
 
 // Base class for the operation in this dialect.
@@ -138,6 +139,23 @@ def SetDifferenceOp : RTGOp<"set_difference", [
 
   let assemblyFormat = [{
     $original `,` $diff `:` qualified(type($output)) attr-dict
+  }];
+}
+
+def SetUnionOp : RTGOp<"set_union", [
+  Pure, SameOperandsAndResultType, Commutative
+]> {
+  let summary = "computes the union of sets";
+  let description = [{
+    Computes the union of the given sets. The list of sets must contain at
+    least one element.
+  }];
+
+  let arguments = (ins Variadic<SetType>:$sets);
+  let results = (outs SetType:$result);
+
+  let assemblyFormat = [{
+    $sets `:` qualified(type($result)) attr-dict
   }];
 }
 
