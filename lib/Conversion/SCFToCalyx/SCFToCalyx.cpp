@@ -766,7 +766,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   using CombLogic = PredicateInfo::CombLogic;
   using Port = PredicateInfo::InputPorts::Port;
   PredicateInfo info = calyx::getPredicateInfo(cmpf.getPredicate());
-  if (info.logic == CombLogic::none) {
+  if (info.logic == CombLogic::None) {
     if (cmpf.getPredicate() == CmpFPredicate::AlwaysTrue) {
       cmpf.getResult().replaceAllUsesWith(c1);
       return success();
@@ -800,25 +800,25 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   for (const auto &input : info.inputPorts) {
     Value signal;
     switch (input.port) {
-    case Port::eq: {
+    case Port::Eq: {
       signal = calyxCmpFOp.getEq();
       break;
     }
-    case Port::gt: {
+    case Port::Gt: {
       signal = calyxCmpFOp.getGt();
       break;
     }
-    case Port::lt: {
+    case Port::Lt: {
       signal = calyxCmpFOp.getLt();
       break;
     }
-    case Port::unordered: {
+    case Port::Unordered: {
       signal = calyxCmpFOp.getUnordered();
       break;
     }
     }
     std::string nameSuffix =
-        (input.port == PredicateInfo::InputPorts::Port::unordered)
+        (input.port == PredicateInfo::InputPorts::Port::Unordered)
             ? "unordered_port"
             : "compare_port";
     auto signalReg =
@@ -830,13 +830,13 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   // Create the output logical operation
   Value outputValue, doneValue;
   switch (info.logic) {
-  case CombLogic::none: {
+  case CombLogic::None: {
     // it's guaranteed to be either ORD or UNO
     outputValue = inputRegs[0].getOut();
     doneValue = inputRegs[0].getOut();
     break;
   }
-  case CombLogic::logicAnd: {
+  case CombLogic::And: {
     auto outputLibOp = getState<ComponentLoweringState>()
                            .getNewLibraryOpInstance<calyx::AndLibOp>(
                                rewriter, loc, {one, one, one});
@@ -848,7 +848,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     outputValue = outputLibOp.getOut();
     break;
   }
-  case CombLogic::logicOr: {
+  case CombLogic::Or: {
     auto outputLibOp = getState<ComponentLoweringState>()
                            .getNewLibraryOpInstance<calyx::OrLibOp>(
                                rewriter, loc, {one, one, one});
@@ -862,7 +862,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   }
   }
 
-  if (info.logic != CombLogic::none) {
+  if (info.logic != CombLogic::None) {
     auto doneLibOp = getState<ComponentLoweringState>()
                          .getNewLibraryOpInstance<calyx::AndLibOp>(
                              rewriter, loc, {one, one, one});
