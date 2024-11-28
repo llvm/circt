@@ -1209,9 +1209,15 @@ FloatingPointStandard MulFOpIEEE754::getFloatingPointStandard() {
   return FloatingPointStandard::IEEE754;
 }
 
+FloatingPointStandard CompareFOpIEEE754::getFloatingPointStandard() {
+  return FloatingPointStandard::IEEE754;
+}
+
 std::string AddFOpIEEE754::getCalyxLibraryName() { return "std_addFN"; }
 
 std::string MulFOpIEEE754::getCalyxLibraryName() { return "std_mulFN"; }
+
+std::string CompareFOpIEEE754::getCalyxLibraryName() { return "std_compareFN"; }
 
 //===----------------------------------------------------------------------===//
 // GroupInterface
