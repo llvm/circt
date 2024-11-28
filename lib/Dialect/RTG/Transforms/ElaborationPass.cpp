@@ -584,6 +584,30 @@ public:
   }
 
   FailureOr<DeletionKind>
+  visitOp(SetUnionOp op, function_ref<void(Operation *)> addToWorklist) {
+    SmallVector<ElaboratorValue *> result;
+    SmallVector<ElaboratorValue *> debugMap;
+    for (auto set : op.getSets()) {
+      auto *val = cast<SetValue>(state.at(set));
+      for (auto *el : val->getAsArrayRef())
+        result.push_back(el);
+
+      if (options.debugMode)
+        for (auto *el : val->getDebugMap())
+          debugMap.push_back(el);
+    }
+
+    if (options.debugMode) {
+      internalizeResult<SetValue>(op.getResult(), std::move(result),
+                                  std::move(debugMap));
+      return DeletionKind::Delete;
+    }
+
+    internalizeResult<SetValue>(op.getResult(), std::move(result));
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind>
   visitOp(BagCreateOp op, function_ref<void(Operation *)> addToWorklist) {
     DenseMap<ElaboratorValue *, uint64_t> bag;
     SmallVector<ElaboratorValue *> debugMap;

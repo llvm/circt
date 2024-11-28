@@ -30,7 +30,9 @@ rtg.test @setOperations : !rtg.dict<> {
   // CHECK-NEXT: }
   %0 = rtg.sequence_closure @seq0
   %1 = rtg.sequence_closure @seq2(%0 : !rtg.sequence)
-  %set = rtg.set_create %0, %1 : !rtg.sequence
+  %set0 = rtg.set_create %0 : !rtg.sequence
+  %set1 = rtg.set_create %1 : !rtg.sequence
+  %set = rtg.set_union %set0, %set1 : !rtg.set<!rtg.sequence>
   %seq = rtg.set_select_random %set : !rtg.set<!rtg.sequence> {rtg.elaboration = 0}
   %new_set = rtg.set_create %seq : !rtg.sequence
   %diff = rtg.set_difference %set, %new_set : !rtg.set<!rtg.sequence>
