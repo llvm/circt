@@ -83,7 +83,8 @@ void HWExportModuleHierarchyPass::printHierarchy(
           symbolTable.lookup(inst.getModuleNameAttr().getValue());
       if (auto module = dyn_cast<hw::HWModuleOp>(nextModuleOp)) {
         for (auto op : module.getOps<hw::InstanceOp>()) {
-          printHierarchy(op, symbolTable, j, symbols, id);
+          if (!op.getDoNotPrint())
+            printHierarchy(op, symbolTable, j, symbols, id);
         }
       }
     });
