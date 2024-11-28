@@ -503,6 +503,33 @@ private:
                                          address.value());
     }
   }
+
+  calyx::RegisterOp createSignalRegister(PatternRewriter &rewriter,
+                                         Value signal, bool invert,
+                                         StringRef nameSuffix,
+                                         calyx::CompareFOpIEEE754 calyxCmpFOp,
+                                         calyx::GroupOp group) const {
+    Location loc = calyxCmpFOp.getLoc();
+    IntegerType one = rewriter.getI1Type();
+    auto component = getComponent();
+    OpBuilder builder(group->getRegion(0));
+    auto reg = createRegister(
+        loc, rewriter, component, 1,
+        getState<ComponentLoweringState>().getUniqueName(nameSuffix));
+    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(),
+                                     calyxCmpFOp.getDone());
+    if (invert) {
+      auto notLibOp = getState<ComponentLoweringState>()
+                          .getNewLibraryOpInstance<calyx::NotLibOp>(
+                              rewriter, loc, {one, one});
+      rewriter.create<calyx::AssignOp>(loc, notLibOp.getIn(), signal);
+      rewriter.create<calyx::AssignOp>(loc, reg.getIn(), notLibOp.getOut());
+      getState<ComponentLoweringState>().registerEvaluatingGroup(
+          notLibOp.getOut(), group);
+    } else
+      rewriter.create<calyx::AssignOp>(loc, reg.getIn(), signal);
+    return reg;
+  };
 };
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
@@ -745,29 +772,6 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
   rewriter.setInsertionPointToStart(getComponent().getBodyBlock());
 
-  auto createSignalRegister =
-      [&](Value signal, bool invert, StringRef nameSuffix, Location loc,
-          PatternRewriter &rewriter, calyx::ComponentOp component,
-          calyx::CompareFOpIEEE754 calyxCmpFOp, calyx::GroupOp group,
-          OpBuilder &builder) -> calyx::RegisterOp {
-    auto reg = createRegister(
-        loc, rewriter, component, 1,
-        getState<ComponentLoweringState>().getUniqueName(nameSuffix));
-    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
-    if (invert) {
-      auto notLibOp = getState<ComponentLoweringState>()
-                          .getNewLibraryOpInstance<calyx::NotLibOp>(
-                              rewriter, loc, {one, one});
-      rewriter.create<calyx::AssignOp>(loc, notLibOp.getIn(), signal);
-      rewriter.create<calyx::AssignOp>(loc, reg.getIn(), notLibOp.getOut());
-      getState<ComponentLoweringState>().registerEvaluatingGroup(
-          notLibOp.getOut(), group);
-    } else
-      rewriter.create<calyx::AssignOp>(loc, reg.getIn(), signal);
-    return reg;
-  };
-
   using calyx::PredicateInfo;
   using CombLogic = PredicateInfo::CombLogic;
   using Port = PredicateInfo::InputPorts::Port;
@@ -812,16 +816,22 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   case CmpFPredicate::OLE:
     signalingFlag = true;
     break;
-  default:
+  case CmpFPredicate::UEQ:
+  case CmpFPredicate::UNE:
+  case CmpFPredicate::OEQ:
+  case CmpFPredicate::ONE:
+  case CmpFPredicate::UNO:
+  case CmpFPredicate::ORD:
+  case CmpFPredicate::AlwaysTrue:
+  case CmpFPredicate::AlwaysFalse:
+    signalingFlag = false;
     break;
   }
 
   // The IEEE Standard mandates that equality comparisons ordinarily are quiet,
   // while inequality comparisons ordinarily are signaling.
-  if (signalingFlag)
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getSignaling(), c1);
-  else
-    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getSignaling(), c0);
+  rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getSignaling(),
+                                   signalingFlag ? c1 : c0);
 
   // Prepare signals and create registers
   SmallVector<calyx::RegisterOp> inputRegs;
@@ -849,9 +859,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
         (input.port == PredicateInfo::InputPorts::Port::Unordered)
             ? "unordered_port"
             : "compare_port";
-    auto signalReg =
-        createSignalRegister(signal, input.invert, nameSuffix, loc, rewriter,
-                             getComponent(), calyxCmpFOp, group, builder);
+    auto signalReg = createSignalRegister(rewriter, signal, input.invert,
+                                          nameSuffix, calyxCmpFOp, group);
     inputRegs.push_back(signalReg);
   }
 
