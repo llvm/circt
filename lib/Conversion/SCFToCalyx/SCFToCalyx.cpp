@@ -741,6 +741,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                              rewriter, loc,
                              {one, one, one, width, width, one, one, one, one,
                               one, five, one});
+  hw::ConstantOp c0 = createConstant(loc, rewriter, getComponent(), 1, 0);
   hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
   rewriter.setInsertionPointToStart(getComponent().getBodyBlock());
 
@@ -778,8 +779,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     }
 
     if (cmpf.getPredicate() == CmpFPredicate::AlwaysFalse) {
-      Value constantZero = createConstant(loc, rewriter, getComponent(), 1, 0);
-      cmpf.getResult().replaceAllUsesWith(constantZero);
+      cmpf.getResult().replaceAllUsesWith(c0);
       return success();
     }
   }
@@ -799,6 +799,29 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   rewriter.setInsertionPointToEnd(group.getBodyBlock());
   rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getLeft(), cmpf.getLhs());
   rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getRight(), cmpf.getRhs());
+
+  bool signalingFlag = false;
+  switch (cmpf.getPredicate()) {
+  case CmpFPredicate::UGT:
+  case CmpFPredicate::UGE:
+  case CmpFPredicate::ULT:
+  case CmpFPredicate::ULE:
+  case CmpFPredicate::OGT:
+  case CmpFPredicate::OGE:
+  case CmpFPredicate::OLT:
+  case CmpFPredicate::OLE:
+    signalingFlag = true;
+    break;
+  default:
+    break;
+  }
+
+  // The IEEE Standard mandates that equality comparisons ordinarily are quiet,
+  // while inequality comparisons ordinarily are signaling.
+  if (signalingFlag)
+    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getSignaling(), c1);
+  else
+    rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getSignaling(), c0);
 
   // Prepare signals and create registers
   SmallVector<calyx::RegisterOp> inputRegs;
