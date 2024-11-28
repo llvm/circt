@@ -754,10 +754,15 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
         getState<ComponentLoweringState>().getUniqueName(nameSuffix));
     rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(),
                                      calyxCmpFOp.getDone());
-    if (invert)
-      rewriter.create<calyx::AssignOp>(
-          loc, reg.getIn(), c1, comb::createOrFoldNot(loc, signal, builder));
-    else
+    if (invert) {
+      auto notLibOp = getState<ComponentLoweringState>()
+                          .getNewLibraryOpInstance<calyx::NotLibOp>(
+                              rewriter, loc, {one, one});
+      rewriter.create<calyx::AssignOp>(loc, notLibOp.getIn(), signal);
+      rewriter.create<calyx::AssignOp>(loc, reg.getIn(), notLibOp.getOut());
+      getState<ComponentLoweringState>().registerEvaluatingGroup(
+          notLibOp.getOut(), group);
+    } else
       rewriter.create<calyx::AssignOp>(loc, reg.getIn(), signal);
     return reg;
   };
