@@ -34,7 +34,7 @@ public:
         .template Case<SequenceOp, SequenceClosureOp, SetCreateOp,
                        SetSelectRandomOp, SetDifferenceOp, SetUnionOp, TestOp,
                        InvokeSequenceOp, BagCreateOp, BagSelectRandomOp,
-                       BagDifferenceOp, TargetOp, YieldOp>(
+                       BagDifferenceOp, BagUnionOp, TargetOp, YieldOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitOp(expr, args...);
             })
@@ -93,6 +93,7 @@ public:
   HANDLE(BagCreateOp, Unhandled);
   HANDLE(BagSelectRandomOp, Unhandled);
   HANDLE(BagDifferenceOp, Unhandled);
+  HANDLE(BagUnionOp, Unhandled);
   HANDLE(TestOp, Unhandled);
   HANDLE(TargetOp, Unhandled);
   HANDLE(YieldOp, Unhandled);

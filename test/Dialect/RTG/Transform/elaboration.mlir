@@ -49,7 +49,9 @@ rtg.test @bagOperations : !rtg.dict<> {
   %one = arith.constant 1 : index
   %0 = rtg.sequence_closure @seq0
   %1 = rtg.sequence_closure @seq1
-  %bag = rtg.bag_create (%multiple x %0, %multiple x %1) : !rtg.sequence
+  %bag0 = rtg.bag_create (%multiple x %0) : !rtg.sequence
+  %bag1 = rtg.bag_create (%multiple x %1) : !rtg.sequence
+  %bag = rtg.bag_union %bag0, %bag1 : !rtg.bag<!rtg.sequence>
   %seq = rtg.bag_select_random %bag : !rtg.bag<!rtg.sequence> {rtg.elaboration = 0}
   %new_bag = rtg.bag_create (%one x %seq) : !rtg.sequence
   %diff = rtg.bag_difference %bag, %new_bag : !rtg.bag<!rtg.sequence>

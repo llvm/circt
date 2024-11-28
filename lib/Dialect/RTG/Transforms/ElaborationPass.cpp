@@ -726,6 +726,30 @@ public:
   }
 
   FailureOr<DeletionKind>
+  visitOp(BagUnionOp op, function_ref<void(Operation *)> addToWorklist) {
+    DenseMap<ElaboratorValue *, uint64_t> result;
+    SmallVector<ElaboratorValue *> debugMap;
+    for (auto bag : op.getBags()) {
+      auto *val = cast<BagValue>(state.at(bag));
+      for (auto [el, multiple] : val->getBag())
+        result[el] += multiple;
+
+      if (options.debugMode)
+        for (auto *el : val->getDebugMap())
+          debugMap.push_back(el);
+    }
+
+    if (options.debugMode) {
+      internalizeResult<BagValue>(op.getResult(), std::move(result),
+                                  std::move(debugMap));
+      return DeletionKind::Delete;
+    }
+
+    internalizeResult<BagValue>(op.getResult(), std::move(result));
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind>
   dispatchOpVisitor(Operation *op,
                     function_ref<void(Operation *)> addToWorklist) {
     if (op->getDialect() == op->getContext()->getLoadedDialect<RTGDialect>())
