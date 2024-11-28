@@ -336,6 +336,36 @@ firrtl.circuit "UnusedBitsAtEnd" {
 
 // -----
 
+firrtl.circuit "UnusedBitsOfSignedInteger" {
+  firrtl.module public @UnusedBitsOfSignedInteger(
+      in %in_data: !firrtl.sint<42>,
+      out %result_read: !firrtl.sint<5>) {
+    // CHECK: %Memory_read, %Memory_write = firrtl.mem Undefined
+    // CHECK-SAME: !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<5>>
+    // CHECK-SAME: !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<5>, mask: uint<1>>
+    %Memory_read, %Memory_write = firrtl.mem Undefined
+      {
+        depth = 12 : i64,
+        name = "Memory",
+        portNames = ["read", "write"],
+        readLatency = 0 : i32,
+        writeLatency = 1 : i32
+      } :
+        !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>,
+        !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
+
+    %read_data = firrtl.subfield %Memory_read[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
+    %read_data_slice = firrtl.bits %read_data 7 to 3 : (!firrtl.sint<42>) -> !firrtl.uint<5>
+    %read_data_slice_sint = firrtl.asSInt %read_data_slice : (!firrtl.uint<5>) -> !firrtl.sint<5>
+    firrtl.connect %result_read, %read_data_slice_sint : !firrtl.sint<5>, !firrtl.sint<5>
+
+    %write_data = firrtl.subfield %Memory_write[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
+    firrtl.connect %write_data, %in_data : !firrtl.sint<42>, !firrtl.sint<42>
+  }
+}
+
+// -----
+
 firrtl.circuit "OneAddressMasked" {
   firrtl.module public @OneAddressMasked(
       in %clock: !firrtl.clock,

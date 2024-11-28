@@ -2849,6 +2849,15 @@ struct FoldUnusedBits : public mlir::RewritePattern {
           catOfSlices = slice;
         }
       }
+
+      // If the original memory held a signed integer, then the compressed
+      // memory will be signed too. Since the catOfSlices is always unsigned,
+      // cast the data to a signed integer if needed before connecting back to
+      // the memory.
+      if (type.isSigned())
+        catOfSlices =
+            rewriter.createOrFold<AsSIntPrimOp>(writeOp.getLoc(), catOfSlices);
+
       rewriter.replaceOpWithNewOp<MatchingConnectOp>(writeOp, writeOp.getDest(),
                                                      catOfSlices);
     }
