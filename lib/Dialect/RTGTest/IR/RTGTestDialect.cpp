@@ -33,4 +33,6 @@ void RTGTestDialect::initialize() {
       >();
 }
 
+#include "circt/Dialect/RTGTest/IR/RTGTestEnums.cpp.inc"
+
 #include "circt/Dialect/RTGTest/IR/RTGTestDialect.cpp.inc"
