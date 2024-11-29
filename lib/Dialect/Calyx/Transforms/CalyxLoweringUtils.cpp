@@ -852,73 +852,88 @@ PredicateInfo getPredicateInfo(CmpFPredicate pred) {
     info.logic = CombLogic::And;
     info.inputPorts = {{Port::Eq, /*inverted=*/false},
                        {Port::Unordered, /*inverted=*/true}};
+    break;
   }
   case CmpFPredicate::OGT: {
     info.logic = PredicateInfo::CombLogic::And;
     info.inputPorts = {{Port::Gt, /*inverted=*/false},
                        {Port::Unordered, /*inverted=*/true}};
+    break;
   }
   case CmpFPredicate::OGE: {
     info.logic = PredicateInfo::CombLogic::And;
     info.inputPorts = {{Port::Lt, /*inverted=*/true},
                        {Port::Unordered, /*inverted=*/true}};
+    break;
   }
   case CmpFPredicate::OLT: {
     info.logic = PredicateInfo::CombLogic::And;
     info.inputPorts = {{Port::Lt, /*inverted=*/false},
                        {Port::Unordered, /*inverted=*/true}};
+    break;
   }
   case CmpFPredicate::OLE: {
     info.logic = PredicateInfo::CombLogic::And;
     info.inputPorts = {{Port::Gt, /*inverted=*/true},
                        {Port::Unordered, /*inverted=*/true}};
+    break;
   }
   case CmpFPredicate::ONE: {
     info.logic = PredicateInfo::CombLogic::And;
     info.inputPorts = {{Port::Eq, /*inverted=*/true},
                        {Port::Unordered, /*inverted=*/true}};
+    break;
   }
   case CmpFPredicate::ORD: {
     info.logic = PredicateInfo::CombLogic::None;
     info.inputPorts = {{Port::Unordered, /*inverted=*/true}};
+    break;
   }
   case CmpFPredicate::UEQ: {
     info.logic = PredicateInfo::CombLogic::Or;
     info.inputPorts = {{Port::Eq, /*inverted=*/false},
                        {Port::Unordered, /*inverted=*/false}};
+    break;
   }
   case CmpFPredicate::UGT: {
     info.logic = PredicateInfo::CombLogic::Or;
     info.inputPorts = {{Port::Gt, /*inverted=*/false},
                        {Port::Unordered, /*inverted=*/false}};
+    break;
   }
   case CmpFPredicate::UGE: {
     info.logic = PredicateInfo::CombLogic::Or;
     info.inputPorts = {{Port::Lt, /*inverted=*/true},
                        {Port::Unordered, /*inverted=*/false}};
+    break;
   }
   case CmpFPredicate::ULT: {
     info.logic = PredicateInfo::CombLogic::Or;
     info.inputPorts = {{Port::Lt, /*inverted=*/false},
                        {Port::Unordered, /*inverted=*/false}};
+    break;
   }
   case CmpFPredicate::ULE: {
     info.logic = PredicateInfo::CombLogic::Or;
     info.inputPorts = {{Port::Gt, /*inverted=*/true},
                        {Port::Unordered, /*inverted=*/false}};
+    break;
   }
   case CmpFPredicate::UNE: {
     info.logic = PredicateInfo::CombLogic::Or;
     info.inputPorts = {{Port::Eq, /*inverted=*/true},
                        {Port::Unordered, /*inverted=*/false}};
+    break;
   }
   case CmpFPredicate::UNO: {
     info.logic = PredicateInfo::CombLogic::None;
     info.inputPorts = {{Port::Unordered, /*inverted=*/false}};
+    break;
   }
   case CmpFPredicate::AlwaysTrue:
   case CmpFPredicate::AlwaysFalse:
     info.logic = PredicateInfo::CombLogic::None;
+    break;
   }
 
   return info;
