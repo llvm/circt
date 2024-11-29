@@ -159,6 +159,17 @@ def SetUnionOp : RTGOp<"set_union", [
   }];
 }
 
+def SetSizeOp : RTGOp<"set_size", [Pure]> {
+  let summary = "returns the number of elements in the set";
+
+  let arguments = (ins SetType:$set);
+  let results = (outs Index:$result);
+
+  let assemblyFormat = [{
+    $set `:` qualified(type($set)) attr-dict
+  }];
+}
+
 //===- Bag Operations ------------------------------------------------------===//
 
 def BagCreateOp : RTGOp<"bag_create", [Pure, SameVariadicOperandSize]> {
@@ -238,6 +249,21 @@ def BagUnionOp : RTGOp<"bag_union", [
 
   let assemblyFormat = [{
     $bags `:` qualified(type($result)) attr-dict
+  }];
+}
+
+def BagUniqueSizeOp : RTGOp<"bag_unique_size", [Pure]> {
+  let summary = "returns the number of unique elements in the bag";
+  let description = [{
+    This operation returns the number of unique elements in the bag, i.e., for
+    the bag `{a, a, b, c, c}` it returns 3.
+  }];
+
+  let arguments = (ins BagType:$bag);
+  let results = (outs Index:$result);
+
+  let assemblyFormat = [{
+    $bag `:` qualified(type($bag)) attr-dict
   }];
 }
 
