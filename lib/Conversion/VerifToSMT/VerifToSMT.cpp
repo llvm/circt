@@ -9,6 +9,7 @@
 #include "circt/Conversion/VerifToSMT.h"
 #include "circt/Conversion/HWToSMT.h"
 #include "circt/Dialect/SMT/SMTOps.h"
+#include "circt/Dialect/SMT/SMTTypes.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/Namespace.h"
@@ -206,8 +207,8 @@ struct VerifBoundedModelCheckingOpConversion
     if (failed(rewriter.convertRegionTypes(&op.getCircuit(), *typeConverter)))
       return failure();
 
-    unsigned numRegs =
-        cast<IntegerAttr>(op->getAttr("num_regs")).getValue().getZExtValue();
+    unsigned numRegs = op.getNumRegs();
+    auto initialValues = op.getInitialValues();
 
     auto initFuncTy = rewriter.getFunctionType({}, initOutputTy);
     // Loop and init output types are necessarily the same, so just use init
@@ -272,9 +273,19 @@ struct VerifBoundedModelCheckingOpConversion
       if (isa<seq::ClockType>(oldTy)) {
         inputDecls.push_back(initVals[initIndex++]);
         clockIndexes.push_back(curIndex);
-      } else {
-        inputDecls.push_back(rewriter.create<smt::DeclareFunOp>(loc, newTy));
+        continue;
       }
+      if (curIndex >= oldCircuitInputTy.size() - numRegs) {
+        auto initVal =
+            initialValues[curIndex - oldCircuitInputTy.size() + numRegs];
+        if (auto initIntAttr = dyn_cast<IntegerAttr>(initVal)) {
+          inputDecls.push_back(rewriter.create<smt::BVConstantOp>(
+              loc, initIntAttr.getValue().getSExtValue(),
+              cast<smt::BitVectorType>(newTy).getWidth()));
+          continue;
+        }
+      }
+      inputDecls.push_back(rewriter.create<smt::DeclareFunOp>(loc, newTy));
     }
 
     auto numStateArgs = initVals.size() - initIndex;
@@ -434,6 +445,19 @@ void ConvertVerifToSMTPass::runOnOperation() {
   WalkResult assertionCheck = getOperation().walk(
       [&](Operation *op) { // Check there is exactly one assertion and clock
         if (auto bmcOp = dyn_cast<verif::BoundedModelCheckingOp>(op)) {
+          // We also currently don't support initial values on registers that
+          // don't have integer inputs.
+          auto regTypes = TypeRange(bmcOp.getCircuit().getArgumentTypes())
+                              .take_back(bmcOp.getNumRegs());
+          for (auto [regType, initVal] :
+               llvm::zip(regTypes, bmcOp.getInitialValues())) {
+            if (!isa<IntegerType>(regType) && !isa<UnitAttr>(initVal)) {
+              op->emitError("initial values are currently only supported for "
+                            "registers with integer types");
+              signalPassFailure();
+              return WalkResult::interrupt();
+            }
+          }
           // Check only one clock is present in the circuit inputs
           auto numClockArgs = 0;
           for (auto argType : bmcOp.getCircuit().getArgumentTypes())
