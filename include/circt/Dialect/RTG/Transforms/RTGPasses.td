@@ -27,6 +27,7 @@ def ElaborationPass : Pass<"rtg-elaborate", "mlir::ModuleOp"> {
   // Define a custom constructor to have more control over the pass options
   // (e.g., std::optional options are not handled very well).
   let constructor = "::circt::rtg::createElaborationPass()";
+  let dependentDialects = ["mlir::arith::ArithDialect"];
 }
 
 #endif // CIRCT_DIALECT_RTG_RTGPASSES_TD
