@@ -62,6 +62,29 @@ rtg.test @bagOperations : !rtg.dict<> {
   rtg.invoke_sequence %seq2
 }
 
+// CHECK-LABEL: rtg.test @setSize
+rtg.test @setSize : !rtg.dict<> {
+  // CHECK-NEXT: [[C:%.+]] = arith.constant 1 : index
+  // CHECK-NEXT: index.add [[C]], [[C]]
+  // CHECK-NEXT: }
+  %c5_i32 = arith.constant 5 : i32
+  %set = rtg.set_create %c5_i32 : i32
+  %size = rtg.set_get_size %set : !rtg.set<i32>
+  index.add %size, %size
+}
+
+// CHECK-LABEL: rtg.test @bagSize
+rtg.test @bagSize : !rtg.dict<> {
+  // CHECK-NEXT: [[C:%.+]] = arith.constant 1 : index
+  // CHECK-NEXT: index.add [[C]], [[C]]
+  // CHECK-NEXT: }
+  %c8 = arith.constant 8 : index
+  %c5_i32 = arith.constant 5 : i32
+  %bag = rtg.bag_create (%c8 x %c5_i32) : i32
+  %size = rtg.bag_get_size %bag : !rtg.bag<i32>
+  index.add %size, %size
+}
+
 // CHECK-LABEL: rtg.sequence @seq3
 rtg.sequence @seq3 {
 ^bb0(%arg0: !rtg.set<!rtg.sequence>):

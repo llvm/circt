@@ -393,6 +393,43 @@ struct InternMapInfo : public DenseMapInfo<ElaboratorValue *> {
 // Main Elaborator Implementation
 //===----------------------------------------------------------------------===//
 
+/// Construct an SSA value from a given elaborated value.
+class Materializer : public RTGTypeVisitor<Materializer, Value, OpBuilder &,
+                                           Location, ElaboratorValue *> {
+public:
+  using Base = RTGTypeVisitor<Materializer, Value, OpBuilder &, Location,
+                              ElaboratorValue *>;
+  using Base::visitType;
+
+  Value visitUnhandledType(Type type, OpBuilder &builder, Location loc,
+                           ElaboratorValue *val) {
+    return Value();
+  }
+
+  Value visitType(IndexType type, OpBuilder &builder, Location loc,
+                  ElaboratorValue *val) {
+    auto res = builder.create<arith::ConstantOp>(
+        loc, IntegerAttr::get(type, cast<IntegerValue>(val)->getInt()));
+    materializedValues[{val, builder.getBlock()}] = res;
+    return res;
+  }
+
+  Value materialize(Block *block, Location loc, ElaboratorValue *val) {
+    if (val->isOpaqueValue())
+      return val->getOpaqueValue();
+
+    auto iter = materializedValues.find({val, block});
+    if (iter != materializedValues.end())
+      return iter->second;
+
+    OpBuilder builder = OpBuilder::atBlockBegin(block);
+    return dispatchTypeVisitor(val->getType(), builder, loc, val);
+  }
+
+private:
+  DenseMap<std::pair<ElaboratorValue *, Block *>, Value> materializedValues;
+};
+
 /// Used to signal to the elaboration driver whether the operation should be
 /// removed.
 enum class DeletionKind { Keep, Delete };
@@ -444,6 +481,15 @@ public:
   FailureOr<DeletionKind>
   visitExternalOp(Operation *op,
                   function_ref<void(Operation *)> addToWorklist) {
+    for (auto &operand : op->getOpOperands()) {
+      auto val = materializer.materialize(op->getBlock(), op->getLoc(),
+                                          state.at(operand.get()));
+      if (!val)
+        return op->emitError("failed to materialize value for operand #")
+               << operand.getOperandNumber();
+      operand.set(val);
+    }
+
     // Treat values defined by external ops as opaque, non-elaborated values.
     for (auto res : op->getResults())
       internalizeResult<ElaboratorValue>(res);
@@ -608,6 +654,13 @@ public:
   }
 
   FailureOr<DeletionKind>
+  visitOp(SetGetSizeOp op, function_ref<void(Operation *)> addToWorklist) {
+    auto size = cast<SetValue>(state.at(op.getSet()))->getAsArrayRef().size();
+    internalizeResult<IntegerValue>(op.getResult(), size);
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind>
   visitOp(BagCreateOp op, function_ref<void(Operation *)> addToWorklist) {
     DenseMap<ElaboratorValue *, uint64_t> bag;
     SmallVector<ElaboratorValue *> debugMap;
@@ -750,6 +803,13 @@ public:
   }
 
   FailureOr<DeletionKind>
+  visitOp(BagGetSizeOp op, function_ref<void(Operation *)> addToWorklist) {
+    auto size = cast<BagValue>(state.at(op.getBag()))->getBag().size();
+    internalizeResult<IntegerValue>(op.getResult(), size);
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind>
   dispatchOpVisitor(Operation *op,
                     function_ref<void(Operation *)> addToWorklist) {
     if (op->getDialect() == op->getContext()->getLoadedDialect<RTGDialect>())
@@ -858,6 +918,7 @@ private:
 
   // A map from SSA values to a pointer of an interned elaborator value.
   DenseMap<Value, ElaboratorValue *> state;
+  Materializer materializer;
 
   SymbolTable symTable;
 };
