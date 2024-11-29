@@ -592,6 +592,12 @@ struct StatementVisitor
     return success();
   }
 
+  LogicalResult visitSMTOp(SetLogicOp op, mlir::raw_indented_ostream &stream,
+                           ValueMap &valueMap) {
+    stream << "(set-logic " << op.getLogic() << ")\n";
+    return success();
+  }
+
   LogicalResult visitUnhandledSMTOp(Operation *op,
                                     mlir::raw_indented_ostream &stream,
                                     ValueMap &valueMap) {
