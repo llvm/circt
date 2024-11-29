@@ -445,6 +445,7 @@ void ConvertVerifToSMTPass::runOnOperation() {
             op->emitError(
                 "only modules with one or zero clocks are currently supported");
             signalPassFailure();
+            return WalkResult::interrupt();
           }
           SmallVector<mlir::Operation *> worklist;
           int numAssertions = 0;
