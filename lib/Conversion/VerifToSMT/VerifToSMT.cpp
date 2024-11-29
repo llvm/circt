@@ -281,7 +281,7 @@ struct VerifBoundedModelCheckingOpConversion
         if (auto initIntAttr = dyn_cast<IntegerAttr>(initVal)) {
           inputDecls.push_back(rewriter.create<smt::BVConstantOp>(
               loc, initIntAttr.getValue().getSExtValue(),
-              dyn_cast<smt::BitVectorType>(newTy).getWidth()));
+              cast<smt::BitVectorType>(newTy).getWidth()));
           continue;
         }
       }
