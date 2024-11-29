@@ -122,3 +122,26 @@ func.func @multiple_clocks() -> (i1) {
   }
   func.return %bmc : i1
 }
+
+// -----
+
+func.func @multiple_clocks() -> (i1) {
+  // expected-error @below {{initial values are currently only supported for registers with integer types}}
+  %bmc = verif.bmc bound 10 num_regs 1 initial_values [0]
+  init {
+    %c0_i1 = hw.constant 0 : i1
+    %clk = seq.to_clock %c0_i1
+    verif.yield %clk : !seq.clock
+  }
+  loop {
+    ^bb0(%clk: !seq.clock):
+    verif.yield %clk: !seq.clock
+  }
+  circuit {
+  ^bb0(%clk: !seq.clock, %arg0: !hw.array<2xi32>):
+    %true = hw.constant true
+    verif.assert %true : i1
+    verif.yield %arg0 : !hw.array<2xi32>
+  }
+  func.return %bmc : i1
+}

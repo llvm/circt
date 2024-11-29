@@ -207,9 +207,8 @@ struct VerifBoundedModelCheckingOpConversion
     if (failed(rewriter.convertRegionTypes(&op.getCircuit(), *typeConverter)))
       return failure();
 
-    unsigned numRegs =
-        cast<IntegerAttr>(op->getAttr("num_regs")).getValue().getZExtValue();
-    auto initialValues = cast<ArrayAttr>(op->getAttr("initial_values"));
+    unsigned numRegs = op.getNumRegs();
+    auto initialValues = op.getInitialValues();
 
     auto initFuncTy = rewriter.getFunctionType({}, initOutputTy);
     // Loop and init output types are necessarily the same, so just use init
@@ -446,6 +445,19 @@ void ConvertVerifToSMTPass::runOnOperation() {
   WalkResult assertionCheck = getOperation().walk(
       [&](Operation *op) { // Check there is exactly one assertion and clock
         if (auto bmcOp = dyn_cast<verif::BoundedModelCheckingOp>(op)) {
+          // We also currently don't support initial values on registers that
+          // don't have integer inputs.
+          auto regTypes = TypeRange(bmcOp.getCircuit().getArgumentTypes())
+                              .take_back(bmcOp.getNumRegs());
+          for (auto [regType, initVal] :
+               llvm::zip(regTypes, bmcOp.getInitialValues())) {
+            if (!isa<IntegerType>(regType) && !isa<UnitAttr>(initVal)) {
+              op->emitError("initial values are currently only supported for "
+                            "registers with integer types");
+              signalPassFailure();
+              return WalkResult::interrupt();
+            }
+          }
           // Check only one clock is present in the circuit inputs
           auto numClockArgs = 0;
           for (auto argType : bmcOp.getCircuit().getArgumentTypes())
