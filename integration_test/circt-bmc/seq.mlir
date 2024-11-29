@@ -17,3 +17,17 @@ hw.module @StateProp(in %clk: !seq.clock, in %i0: i1) {
   %imp = comb.or bin %nclk, %eq : i1
   verif.assert %imp : i1
 }
+
+// RUN: circt-bmc %s -b 10 --module aggregateReg --shared-libs=%libz3 | FileCheck %s --check-prefix=AGGREGATEREG
+// Can be violated because the register does not have an initial value specified.
+// TODO: add support for aggregate initial values and adjust this test accordingly.
+// AGGREGATEREG: Assertion can be violated!
+hw.module @aggregateReg(in %clk: !seq.clock) {
+  %c0 = hw.constant 0 : i32
+  %arr = hw.array_create %c0, %c0 : i32
+  %res = seq.compreg %arr, %clk : !hw.array<2xi32>
+  %idx = hw.constant 0 : i1
+  %get = hw.array_get %res[%idx] : !hw.array<2xi32>, i1
+  %eq = comb.icmp bin eq %c0, %get : i32
+  verif.assert %eq : i1
+}
