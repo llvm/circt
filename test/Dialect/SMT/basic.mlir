@@ -65,6 +65,13 @@ func.func @core(%in: i8) {
   // CHECK-NEXT: }
   smt.solver() : () -> () { }
 
+  // CHECK: smt.solver() : () -> () {
+  // CHECK-NEXT: smt.set_logic "AUFLIA"
+  // CHECK-NEXT: }
+  smt.solver() : () -> () {
+    smt.set_logic "AUFLIA"
+  }
+
   //      CHECK: smt.check sat {
   // CHECK-NEXT: } unknown {
   // CHECK-NEXT: } unsat {

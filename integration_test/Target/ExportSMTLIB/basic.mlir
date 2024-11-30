@@ -172,3 +172,20 @@ smt.solver () : () -> () {
 // CHECK-NOT: error
 // CHECK-NOT: unsat
 // CHECK: sat
+
+smt.solver () : () -> () {
+  smt.set_logic "HORN"
+  %c = smt.declare_fun : !smt.int
+  %c4 = smt.int.constant 4
+  %eq = smt.eq %c, %c4 : !smt.int
+  smt.assert %eq
+  smt.check sat {} unknown {} unsat {}
+}
+
+// CHECK-NOT: WARNING
+// CHECK-NOT: warning
+// CHECK-NOT: ERROR
+// CHECK-NOT: error
+// CHECK-NOT: unsat
+// CHECK-NOT: sat
+// CHECK: unknown
