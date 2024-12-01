@@ -2,6 +2,7 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(merge-connections{aggressive-merging=true})))' %s | FileCheck %s --check-prefixes=AGGRESSIVE,COMMON
 
 firrtl.circuit "Test"   {
+  firrtl.layer @A bind {}
   // circuit Test :
   //   module Test :
   //     input a : {c: {clock: Clock, valid:UInt<1>}[2]}
@@ -27,6 +28,36 @@ firrtl.circuit "Test"   {
      %10 = firrtl.subfield %6[valid] : !firrtl.bundle<clock: clock, valid: uint<1>>
      %11 = firrtl.subfield %7[valid] : !firrtl.bundle<clock: clock, valid: uint<1>>
      firrtl.matchingconnect %11, %10 : !firrtl.uint<1>
+  }
+
+  // This is the same as @Test except it puts the destination into a layer.
+  //
+  // COMMON-LABEL: firrtl.module @Layers(
+  // COMMON-NEXT:    firrtl.layerblock @A {
+  // COMMON-NEXT:      %b = firrtl.wire
+  // COMMON-NEXT:      firrtl.matchingconnect %b, %a
+  // COMMON-NEXT:    }
+  // COMMON-NEXT:  }
+  firrtl.module @Layers(in %a: !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>) {
+    firrtl.layerblock @A {
+      %b = firrtl.wire : !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>
+      %0 = firrtl.subindex %a[0] : !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>
+      %1 = firrtl.subindex %b[0] : !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>
+      %2 = firrtl.subfield %0[clock] : !firrtl.bundle<clock: clock, valid: uint<1>>
+      %3 = firrtl.subfield %1[clock] : !firrtl.bundle<clock: clock, valid: uint<1>>
+      firrtl.matchingconnect %3, %2 : !firrtl.clock
+      %4 = firrtl.subfield %0[valid] : !firrtl.bundle<clock: clock, valid: uint<1>>
+      %5 = firrtl.subfield %1[valid] : !firrtl.bundle<clock: clock, valid: uint<1>>
+      firrtl.matchingconnect %5, %4 : !firrtl.uint<1>
+      %6 = firrtl.subindex %a[1] : !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>
+      %7 = firrtl.subindex %b[1] : !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>
+      %8 = firrtl.subfield %6[clock] : !firrtl.bundle<clock: clock, valid: uint<1>>
+      %9 = firrtl.subfield %7[clock] : !firrtl.bundle<clock: clock, valid: uint<1>>
+      firrtl.matchingconnect %9, %8 : !firrtl.clock
+      %10 = firrtl.subfield %6[valid] : !firrtl.bundle<clock: clock, valid: uint<1>>
+      %11 = firrtl.subfield %7[valid] : !firrtl.bundle<clock: clock, valid: uint<1>>
+      firrtl.matchingconnect %11, %10 : !firrtl.uint<1>
+    }
   }
 
   // circuit Bar :
