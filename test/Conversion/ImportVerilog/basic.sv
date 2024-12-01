@@ -2232,3 +2232,21 @@ function int AssignFuncArgs2(int x, int y);
   // CHECK: [[ADD:%.+]] = moore.add [[READ_X]], [[READ_Y]] : i32
   return x+y;
 endfunction
+
+// CHECK-LABEL: moore.module @CaseStatementTest()
+module CaseStatementTest;
+  bit [31:0] caseExpr, result;
+  // CHECK: [[CASE_EXPR:%.+]] = moore.read %caseExpr : <i32>
+  // CHECK: [[COND1:%.+]] = moore.caseeq [[CASE_EXPR]], {{.*}} : !moore.i32
+  // CHECK: [[COND2:%.+]] = moore.caseeq [[CASE_EXPR]], {{.*}} : !moore.i32
+  // CHECK: [[COND3:%.+]] = moore.caseeq [[CASE_EXPR]], {{.*}} : !moore.i32
+  // CHECK: [[OR1:%.+]] = arith.or [[COND1]], [[COND2]] : i1
+  // CHECK: [[FINAL_COND:%.+]] = arith.or [[OR1]], [[COND3]] : i1
+  // CHECK: moore.assign %result, [[FINAL_COND]] : i1
+  always_comb begin
+    case (caseExpr)
+      32'h1, 32'h2, 32'h3: result = 1;
+      default: result = 0;
+    endcase
+  end
+endmodule
