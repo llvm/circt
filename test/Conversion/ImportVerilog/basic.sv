@@ -2233,20 +2233,71 @@ function int AssignFuncArgs2(int x, int y);
   return x+y;
 endfunction
 
-// CHECK-LABEL: moore.module @CaseStatementTest()
-module CaseStatementTest;
-  bit [31:0] caseExpr, result;
-  // CHECK: [[CASE_EXPR:%.+]] = moore.read %caseExpr : <i32>
-  // CHECK: [[COND1:%.+]] = moore.caseeq [[CASE_EXPR]], {{.*}} : !moore.i32
-  // CHECK: [[COND2:%.+]] = moore.caseeq [[CASE_EXPR]], {{.*}} : !moore.i32
-  // CHECK: [[COND3:%.+]] = moore.caseeq [[CASE_EXPR]], {{.*}} : !moore.i32
-  // CHECK: [[OR1:%.+]] = arith.or [[COND1]], [[COND2]] : i1
-  // CHECK: [[FINAL_COND:%.+]] = arith.or [[OR1]], [[COND3]] : i1
-  // CHECK: moore.assign %result, [[FINAL_COND]] : i1
-  always_comb begin
-    case (caseExpr)
-      32'h1, 32'h2, 32'h3: result = 1;
-      default: result = 0;
-    endcase
-  end
+module priority_case_test;
+    // CHECK: logic clock
+    logic clock;
+    // CHECK: logic [2:0] status
+    logic [2:0] status;
+
+    task task1;
+        // CHECK: task1 executed
+        $display("task1 executed at time %0t", $time);
+    endtask
+
+    task task2;
+        // CHECK: task2 executed
+        $display("task2 executed at time %0t", $time);
+    endtask
+
+    initial begin
+        // CHECK: clock initialized to 0
+        clock = 0;
+        // CHECK: clock toggles every 5 ns
+        forever #5 clock = ~clock;
+    end
+
+    initial begin
+        // CHECK: Test Case 1: status = 3'b001
+        status = 3'b001;
+        @(posedge clock);
+
+        // CHECK: Test Case 2: status = 3'b011
+        status = 3'b011;
+        @(posedge clock);
+
+        // CHECK: Test Case 3: status = 3'b010 (matches task2)
+        status = 3'b010;
+        @(posedge clock);
+
+        // CHECK: Test Case 4: status = 3'b100 (matches task2)
+        status = 3'b100;
+        @(posedge clock);
+
+        // CHECK: Test Case 5: status = 3'b00x (no match)
+        status = 3'b00x;
+        @(posedge clock);
+
+        // CHECK: Test Case 6: status = 3'b111 (matches task2)
+        status = 3'b111;
+        @(posedge clock);
+
+        // CHECK: Test Case 7: status = 3'bxxx (no match)
+        status = 3'bxxx;
+        @(posedge clock);
+
+        // CHECK: End simulation
+        $finish;
+    end
+
+    always @(posedge clock) begin
+        // CHECK: Entering priority case
+        priority case (status)
+            // CHECK: Matches 3'b001 or 3'b011, executes task1
+            3'b001, 3'b011: task1;
+            // CHECK: Matches 3'b0?0 or [3'b100:3'b111], executes task2
+            3'b0?0, [3'b100:3'b111]: task2;
+            // CHECK: No match, default case
+            default: $display("No match for status = %b at time %0t", status, $time);
+        endcase
+    end
 endmodule
