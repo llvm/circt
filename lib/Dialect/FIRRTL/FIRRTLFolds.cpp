@@ -3410,3 +3410,19 @@ LogicalResult FPGAProbeIntrinsicOp::canonicalize(FPGAProbeIntrinsicOp op,
   rewriter.eraseOp(op);
   return success();
 }
+
+//===----------------------------------------------------------------------===//
+// Layer Block Op
+//===----------------------------------------------------------------------===//
+
+LogicalResult LayerBlockOp::canonicalize(LayerBlockOp op,
+                                         PatternRewriter &rewriter) {
+
+  // If the layerblock is empty, erase it.
+  if (op.getBody()->empty()) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  return failure();
+}
