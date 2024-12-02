@@ -791,8 +791,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 
   // Helper function to emit #ifndef guard.
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
-    b.create<sv::IfDefOp>(
-        guard, []() {}, body);
+    b.create<sv::IfDefOp>(guard, []() {}, body);
   };
 
   if (state.usedPrintfCond) {
@@ -860,18 +859,37 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
     hwPort.setSym(firrtlPort.sym, moduleOp->getContext());
     bool hadDontTouch = firrtlPort.annotations.removeDontTouch();
     if (hadDontTouch && !hwPort.getSym()) {
-      hwPort.setSym(
-          hw::InnerSymAttr::get(StringAttr::get(
-              moduleOp->getContext(),
-              Twine("__") + moduleName + Twine("__DONTTOUCH__") +
-                  Twine(portNo) + Twine("__") + firrtlPort.name.strref())),
-          moduleOp->getContext());
+      if (hwPort.type.isInteger(0)) {
+        if (enableAnnotationWarning) {
+          mlir::emitWarning(firrtlPort.loc)
+              << "zero width port " << hwPort.name
+              << " has dontTouch annotation, removing anyway";
+        }
+      } else {
+        hwPort.setSym(
+            hw::InnerSymAttr::get(StringAttr::get(
+                moduleOp->getContext(),
+                Twine("__") + moduleName + Twine("__DONTTOUCH__") +
+                    Twine(portNo) + Twine("__") + firrtlPort.name.strref())),
+            moduleOp->getContext());
+      }
     }
 
     // We can't lower all types, so make sure to cleanly reject them.
     if (!hwPort.type) {
       moduleOp->emitError("cannot lower this port type to HW");
       return failure();
+    }
+    // If this is a zero bit port, just drop it.  It doesn't matter if it is
+    // input, output, or inout.  We don't want these at the HW level.
+    if (hwPort.type.isInteger(0)) {
+      auto sym = hwPort.getSym();
+      if (sym && !sym.empty()) {
+        return mlir::emitError(firrtlPort.loc)
+               << "zero width port " << hwPort.name
+               << " is referenced by name [" << sym
+               << "] (e.g. in an XMR) but must be removed";
+      }
     }
 
     // Figure out the direction of the port.
@@ -1789,14 +1807,21 @@ LogicalResult FIRRTLLowering::run() {
   // safely replace a backedge.
   for (auto &[backedge, value] : backedges) {
     SmallVector<Location> driverLocs;
+    if (value.getType().isInteger(0)) {
+      backedge.replaceAllUsesWith(
+          getOrCreateIntConstant(llvm::APInt::getZero(0)));
+      continue;
+    }
     // In the case where we have backedges connected to other backedges, we have
     // to find the value that actually drives the group.
     while (true) {
       // If we find the original backedge we have some undriven logic or
       // a combinatorial loop. Bail out and provide information on the nodes.
       if (backedge == value) {
+
         Location edgeLoc = backedge.getLoc();
-        if (driverLocs.empty()) {
+        if (driverLocs.empty() && value.getType().isInteger(0)) {
+          llvm::errs() << value << "\n";
           mlir::emitError(edgeLoc, "sink does not have a driver");
         } else {
           auto diag = mlir::emitError(edgeLoc, "sink in combinational loop");
@@ -2448,8 +2473,7 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
       auto createIfOp = [&]() {
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
-        insideIfOp = builder.create<sv::IfOp>(
-            reset, []() {}, []() {});
+        insideIfOp = builder.create<sv::IfOp>(reset, []() {}, []() {});
       };
       if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};
@@ -2832,15 +2856,16 @@ LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
 
 LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   auto operand = getLoweredValue(op.getInput());
-  // if (!operand)
-  //   return handleZeroBit(op.getInput(), [&]() -> LogicalResult {
-  //     if (op.getInnerSym())
-  //       return op.emitError("zero width node is referenced by name [")
-  //              << *op.getInnerSym()
-  //              << "] (e.g. in an XMR) but must be "
-  //                 "removed";
-  //     return setLowering(op.getResult(), Value());
-  //   });
+  if (operand.getType().isInteger(0))
+    return handleZeroBit(op.getInput(), [&]() -> LogicalResult {
+      if (op.getInnerSym())
+        return op.emitError("zero width node is referenced by name [")
+               << *op.getInnerSym()
+               << "] (e.g. in an XMR) but must be "
+                  "removed";
+      return setLowering(op.getResult(),
+                         getOrCreateIntConstant(APInt::getZero(0)));
+    });
 
   // Node operations are logical noops, but may carry annotations or be
   // referred to through an inner name. If a don't touch is present, ensure
@@ -2974,21 +2999,13 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
     auto addOutput = [&](StringRef field, size_t width, Value value) {
       for (auto &a : getAllFieldAccesses(op.getResult(i), field)) {
-        if (width > 0)
-          (void)setLowering(a, value);
-        else
-          a->eraseOperand(0);
+        (void)setLowering(a, value);
       }
     };
 
     auto addInput = [&](StringRef field, Value backedge) {
       for (auto a : getAllFieldAccesses(op.getResult(i), field)) {
-        if (cast<FIRRTLBaseType>(a.getType())
-                .getPassiveType()
-                .getBitWidthOrSentinel() > 0)
-          (void)setLowering(a, backedge);
-        else
-          a->eraseOperand(0);
+        (void)setLowering(a, backedge);
       }
     };
 
@@ -2998,7 +3015,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       // a dummy x value to provide it with.
       Value backedge, portValue;
       if (width == 0) {
-        portValue = getOrCreateXConstant(1);
+        backedge = portValue = getOrCreateXConstant(0);
       } else {
         auto portType = IntegerType::get(op.getContext(), width);
         backedge = portValue = createBackedge(builder.getLoc(), portType);
@@ -3749,6 +3766,7 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValueOp op) {
 
   // Invalid for bundles isn't supported.
   op.emitOpError("unsupported type");
+  op->dump();
   return failure();
 }
 

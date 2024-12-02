@@ -1795,8 +1795,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
             os << " struct packed {";
             if (element.offset) {
               os << (emitAsTwoStateType ? "bit" : "logic") << " ["
-                 << element.offset - 1 << ":0] "
-                 << "__pre_padding_" << element.name.getValue() << "; ";
+                 << element.offset - 1 << ":0] " << "__pre_padding_"
+                 << element.name.getValue() << "; ";
             }
           }
 
@@ -2290,8 +2290,7 @@ private:
 
   /// Emit braced list of values surrounded by `{` and `}`.
   void emitBracedList(ValueRange ops) {
-    return emitBracedList(
-        ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
+    return emitBracedList(ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
   }
 
   /// Print an APInt constant.
@@ -2956,9 +2955,14 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
   // the various operations that may come across them. If we reached this point
   // in the emitter, the value should be considered illegal to emit.
   if (value.getBitWidth() == 0) {
-    emitOpError(op, "will not emit zero width constants in the general case");
+    auto diag = emitOpError(
+        op, "will not emit zero width constants in the general case");
     ps << "<<unsupported zero width constant: "
        << PPExtString(op->getName().getStringRef()) << ">>";
+
+    for (auto* user : op->getUsers())
+      diag.attachNote(user->getLoc()) << "used by " << user->getName();
+
     return {Unary, IsUnsigned};
   }
 

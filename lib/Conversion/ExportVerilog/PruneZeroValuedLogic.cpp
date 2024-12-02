@@ -257,7 +257,7 @@ void ExportVerilog::pruneZeroValuedLogic(HWEmittableModuleLike module) {
 
   addNoI0ResultPruningPattern<
       // SV ops
-      sv::WireOp, sv::RegOp, sv::ReadInOutOp,
+      sv::WireOp, sv::RegOp, sv::ReadInOutOp, hw::WireOp,
       // Prune all zero-width combinational logic.
       comb::AddOp, comb::AndOp, comb::DivSOp, comb::DivUOp, comb::ExtractOp,
       comb::ModSOp, comb::ModUOp, comb::MulOp, comb::MuxOp, comb::OrOp,

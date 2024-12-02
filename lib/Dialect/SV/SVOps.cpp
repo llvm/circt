@@ -216,8 +216,8 @@ void ConstantXOp::getAsmResultNames(
 
 LogicalResult ConstantXOp::verify() {
   // We don't allow zero width constant or unknown width.
-  if (getWidth() <= 0)
-    return emitError("unsupported type");
+  if (getWidth() < 0)
+    return emitOpError("unsupported type");
   return success();
 }
 
@@ -231,8 +231,8 @@ void ConstantZOp::getAsmResultNames(
 
 LogicalResult ConstantZOp::verify() {
   // We don't allow zero width constant or unknown type.
-  if (getWidth() <= 0)
-    return emitError("unsupported type");
+  if (getWidth() < 0)
+    return emitOpError("unsupported type");
   return success();
 }
 
