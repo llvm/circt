@@ -1,13 +1,15 @@
-//===- LowerContracts.cpp - Formal Preparations --*- C++ -*----------------===//
+//===- LowerContracts.cpp - Formal Preparations -----------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
 //===----------------------------------------------------------------------===//
 //
 // Lower contracts into verif.formal tests.
 //
 //===----------------------------------------------------------------------===//
+
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
 
@@ -35,11 +37,10 @@ struct LowerContractsPass
 template <typename FROM, typename TO>
 void replaceContractOp(PatternRewriter &rewriter, Block *body) {
   for (auto op : llvm::make_early_inc_range(body->getOps<FROM>())) {
-    auto label = op.getLabel();
     StringAttr labelAttr;
-    if (label) {
+    if (auto label = op.getLabel())
       labelAttr = rewriter.getStringAttr(label.value());
-    }
+
     rewriter.replaceOpWithNewOp<TO>(op, op.getProperty(), op.getEnable(),
                                     labelAttr);
   }
@@ -53,7 +54,7 @@ struct HWOpRewritePattern : public OpRewritePattern<HWModuleOp> {
     auto formalOp = rewriter.create<verif::FormalOp>(
         op.getLoc(), op.getNameAttr(), rewriter.getDictionaryAttr({}));
 
-    // Clone module body into fomal op body
+    // Clone module body into formal op body
     rewriter.cloneRegionBefore(op.getRegion(), formalOp.getBody(),
                                formalOp.getBody().end());
 
@@ -76,15 +77,15 @@ struct HWOpRewritePattern : public OpRewritePattern<HWModuleOp> {
          llvm::make_early_inc_range(bodyBlock->getOps<verif::ContractOp>())) {
 
       // Convert ensure to assert, require to assume
-      rewriter.setInsertionPointToEnd(&contractOp.getBody().front());
       Block *contractBlock = &contractOp.getBody().front();
+      rewriter.setInsertionPointToEnd(contractBlock);
       replaceContractOp<EnsureOp, AssertOp>(rewriter, contractBlock);
       replaceContractOp<RequireOp, AssumeOp>(rewriter, contractBlock);
 
       // Inline body
-      rewriter.inlineBlockBefore(&contractOp.getBody().front(),
-                                 &formalOp.getBody().front(),
-                                 formalOp.getBody().front().end());
+      rewriter.inlineBlockBefore(contractBlock,
+                                 bodyBlock,
+                                 bodyBlock->end());
 
       // Replace results with inputs and erase
       for (auto [input, result] :
