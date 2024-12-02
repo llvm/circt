@@ -311,6 +311,12 @@ void circtFirtoolOptionsSetStripDebugInfo(CirctFirtoolFirtoolOptions options,
   unwrap(options)->setStripDebugInfo(value);
 }
 
+void circtFirtoolOptionsSetDisableCSEinClasses(
+    CirctFirtoolFirtoolOptions options, bool value) {
+
+  unwrap(options)->setDisableCSEinClasses(value);
+}
+
 //===----------------------------------------------------------------------===//
 // Populate API.
 //===----------------------------------------------------------------------===//

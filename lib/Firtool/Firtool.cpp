@@ -59,8 +59,13 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInjectDUTHierarchyPass());
 
-  if (!opt.shouldDisableOptimization())
-    pm.nest<firrtl::CircuitOp>().nestAny().addPass(mlir::createCSEPass());
+  if (!opt.shouldDisableOptimization()) {
+    if (opt.shouldDisableCSEinClasses())
+      pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+          mlir::createCSEPass());
+    else
+      pm.nest<firrtl::CircuitOp>().nestAny().addPass(mlir::createCSEPass());
+  }
 
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createPassiveWiresPass());
@@ -764,8 +769,8 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       ckgModuleName("EICG_wrapper"), ckgInputName("in"), ckgOutputName("out"),
       ckgEnableName("en"), ckgTestEnableName("test_en"), ckgInstName("ckg"),
       exportModuleHierarchy(false), stripFirDebugInfo(true),
-      stripDebugInfo(false), fixupEICGWrapper(false),
-      addCompanionAssume(false) {
+      stripDebugInfo(false), fixupEICGWrapper(false), addCompanionAssume(false),
+      disableCSEinClasses(false) {
   if (!clOptions.isConstructed())
     return;
   outputFilename = clOptions->outputFilename;
