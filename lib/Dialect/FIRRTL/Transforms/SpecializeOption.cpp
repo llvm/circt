@@ -31,10 +31,6 @@ struct SpecializeOptionPass
 
   void runOnOperation() override {
     auto circuit = getOperation();
-    if (select.empty()) {
-      markAllAnalysesPreserved();
-      return;
-    }
 
     DenseMap<StringAttr, OptionCaseOp> selected;
     for (const auto &optionAndCase : select) {
@@ -68,20 +64,21 @@ struct SpecializeOptionPass
         &getContext(), circuit.getOps<FModuleOp>(), [&](auto module) {
           module.walk([&](firrtl::InstanceChoiceOp inst) {
             auto it = selected.find(inst.getOptionNameAttr());
+            FlatSymbolRefAttr target;
             if (it == selected.end()) {
-              inst.emitError("missing specialization for option ")
+              target = inst.getDefaultTargetAttr();
+              inst->emitWarning("missing specialization for option ")
                   << inst.getOptionNameAttr();
-              failed = true;
-              return;
-            }
+            } else
+              target = inst.getTargetOrDefaultAttr(it->second);
 
             ImplicitLocOpBuilder builder(inst.getLoc(), inst);
             auto newInst = builder.create<InstanceOp>(
-                inst->getResultTypes(), inst.getTargetOrDefaultAttr(it->second),
-                inst.getNameAttr(), inst.getNameKindAttr(),
-                inst.getPortDirectionsAttr(), inst.getPortNamesAttr(),
-                inst.getAnnotationsAttr(), inst.getPortAnnotationsAttr(),
-                builder.getArrayAttr({}), UnitAttr{}, inst.getInnerSymAttr());
+                inst->getResultTypes(), target, inst.getNameAttr(),
+                inst.getNameKindAttr(), inst.getPortDirectionsAttr(),
+                inst.getPortNamesAttr(), inst.getAnnotationsAttr(),
+                inst.getPortAnnotationsAttr(), builder.getArrayAttr({}),
+                UnitAttr{}, inst.getInnerSymAttr());
             inst.replaceAllUsesWith(newInst);
             inst.erase();
 
@@ -89,12 +86,24 @@ struct SpecializeOptionPass
           });
         });
 
+    bool analysisPreserved = numInstances == 0;
+    circuit->walk([&](OptionOp optionOp) {
+      optionOp->erase();
+      analysisPreserved = false;
+    });
+    if (analysisPreserved)
+      markAllAnalysesPreserved();
+
     if (failed)
       signalPassFailure();
   }
 };
 } // namespace
 
-std::unique_ptr<Pass> firrtl::createSpecializeOptionPass() {
-  return std::make_unique<SpecializeOptionPass>();
+std::unique_ptr<Pass> firrtl::createSpecializeOptionPass(
+    std::optional<mlir::ArrayRef<std::string>> selectOption) {
+  auto pass = std::make_unique<SpecializeOptionPass>();
+  if (selectOption)
+    pass->select = *selectOption;
+  return pass;
 }

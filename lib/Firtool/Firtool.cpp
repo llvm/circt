@@ -55,6 +55,9 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
 LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
                                                   const FirtoolOptions &opt,
                                                   StringRef inputFilename) {
+
+  pm.nest<firrtl::CircuitOp>().addPass(
+      firrtl::createSpecializeOptionPass(opt.getSelectInstanceChoice()));
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerSignaturesPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInjectDUTHierarchyPass());
@@ -732,6 +735,11 @@ struct FirtoolCmdOptions {
       "add-companion-assume",
       llvm::cl::desc("Add companion assumes to assertions"),
       llvm::cl::init(false)};
+
+  cl::list<std::string> selectInstanceChoice{
+      "select-instance-choice",
+      cl::desc("Options to specialize instance choice, in option=case format"),
+      cl::MiscFlags::CommaSeparated};
 };
 } // namespace
 
@@ -817,4 +825,5 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   stripDebugInfo = clOptions->stripDebugInfo;
   fixupEICGWrapper = clOptions->fixupEICGWrapper;
   addCompanionAssume = clOptions->addCompanionAssume;
+  selectInstanceChoice = clOptions->selectInstanceChoice;
 }
