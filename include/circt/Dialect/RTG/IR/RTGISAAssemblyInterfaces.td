@@ -49,9 +49,42 @@ def RegisterOpInterface : OpInterface<"RegisterOpInterface"> {
       }],
       "llvm::APInt", "getClassIndexBinary">,
     InterfaceMethod<[{
-        Returns a suitable string for use in assembly format.
+        Prints a suitable string for use in the ISA assembly format.
       }],
-      "std::string", "getRegisterAssembly">,
+      "void", "printRegisterAssembly", (ins "llvm::raw_ostream &":$os)>,
+  ];
+}
+
+def InstructionOpInterface : OpInterface<"InstructionOpInterface"> {
+  let description = [{
+    This interface should be implemented by operations that represent
+    ISA instructions.
+  }];
+  let cppNamespace = "::circt::rtg";
+
+  let methods = [
+    InterfaceMethod<[{
+        Returns a binary representation of the instruction compatible with the
+        ISA specification as an APInt. 
+      }],
+      "::llvm::APInt", "getInstructionBinary",
+      (ins "llvm::ArrayRef<llvm::APInt>":$operands)>,
+    InterfaceMethod<[{
+        Emits the ISA assembly representation of the instruction to the provided
+        stream. The format should be the one understood by common assembler
+        tools.
+      }],
+      "void", "printInstructionAssembly",
+      (ins "llvm::raw_ostream &":$os,
+           "llvm::ArrayRef<llvm::function_ref<void(llvm::raw_ostream &)>>":
+             $operandPrinters),
+           /*methodBody=*/[{}],
+           /*defaultImplementation=*/[{
+        os << $_op->getName().stripDialect() << " ";
+        llvm::interleaveComma(operandPrinters, os, [&](auto printer) {
+          printer(os);
+        });
+      }]>,
   ];
 }
 
