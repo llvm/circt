@@ -208,6 +208,15 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     pm.addPass(firrtl::createIMDeadCodeElimPass());
   }
 
+  // Always run this, required for legalization.
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+      firrtl::createMergeConnectionsPass(
+          !opt.shouldDisableAggressiveMergeConnections()));
+
+  if (!opt.shouldDisableOptimization())
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createVectorizationPass());
+
   // Layer lowering passes.  Move operations into layers when possible and
   // remove layers by converting them to other constructs.  This lowering
   // process can create a few optimization opportunities.
@@ -223,15 +232,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   if (!opt.shouldDisableOptimization())
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
-
-  // Always run this, required for legalization.
-  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-      firrtl::createMergeConnectionsPass(
-          !opt.shouldDisableAggressiveMergeConnections()));
-
-  if (!opt.shouldDisableOptimization())
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        firrtl::createVectorizationPass());
 
   auto outputFilename = opt.getOutputFilename();
   if (outputFilename == "-")
