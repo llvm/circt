@@ -1761,8 +1761,7 @@ static LogicalResult canonicalizeSingleSetConnect(MatchingConnectOp op,
   // Only support wire and reg for now.
   if (!isa<WireOp>(connectedDecl) && !isa<RegOp>(connectedDecl))
     return failure();
-  if (hasDontTouch(connectedDecl) ||
-      !AnnotationSet(connectedDecl).canBeDeleted() ||
+  if (hasDontTouch(connectedDecl) || !AnnotationSet(connectedDecl).empty() ||
       !hasDroppableName(connectedDecl) ||
       cast<Forceable>(connectedDecl).isForceable())
     return failure();
@@ -1940,7 +1939,7 @@ struct FoldNodeName : public mlir::RewritePattern {
     auto node = cast<NodeOp>(op);
     auto name = node.getNameAttr();
     if (!node.hasDroppableName() || node.getInnerSym() ||
-        !AnnotationSet(node).canBeDeleted() || node.isForceable())
+        !AnnotationSet(node).empty() || node.isForceable())
       return failure();
     auto *newOp = node.getInput().getDefiningOp();
     // Best effort, do not rename InstanceOp
@@ -1958,7 +1957,7 @@ struct NodeBypass : public mlir::RewritePattern {
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
     auto node = cast<NodeOp>(op);
-    if (node.getInnerSym() || !AnnotationSet(node).canBeDeleted() ||
+    if (node.getInnerSym() || !AnnotationSet(node).empty() ||
         node.use_empty() || node.isForceable())
       return failure();
     rewriter.replaceAllUsesWith(node.getResult(), node.getInput());
@@ -1985,8 +1984,7 @@ LogicalResult NodeOp::fold(FoldAdaptor adaptor,
     return failure();
   if (hasDontTouch(getResult())) // handles inner symbols
     return failure();
-  if (getAnnotationsAttr() &&
-      !AnnotationSet(getAnnotationsAttr()).canBeDeleted())
+  if (getAnnotationsAttr() && !AnnotationSet(getAnnotationsAttr()).empty())
     return failure();
   if (isForceable())
     return failure();
@@ -2213,7 +2211,7 @@ struct FoldResetMux : public mlir::RewritePattern {
     auto reset =
         dyn_cast_or_null<ConstantOp>(reg.getResetValue().getDefiningOp());
     if (!reset || hasDontTouch(reg.getOperation()) ||
-        !AnnotationSet(reg).canBeDeleted() || reg.isForceable())
+        !AnnotationSet(reg).empty() || reg.isForceable())
       return failure();
     // Find the one true connect, or bail
     auto con = getSingleConnectUserOf(reg.getResult());
@@ -2681,7 +2679,7 @@ struct FoldUnusedBits : public mlir::RewritePattern {
     // ports whose data/rdata field is used only through bit select ops. The
     // bit selects are then used to build a bit-mask. The ops are collected.
     SmallVector<BitsPrimOp> readOps;
-    auto findReadUsers = [&](Value port, StringRef field) {
+    auto findReadUsers = [&](Value port, StringRef field) -> LogicalResult {
       auto portTy = type_cast<BundleType>(port.getType());
       auto fieldIndex = portTy.getElementIndex(field);
       assert(fieldIndex && "missing data port");
@@ -2693,16 +2691,19 @@ struct FoldUnusedBits : public mlir::RewritePattern {
 
         for (auto *user : op->getUsers()) {
           auto bits = dyn_cast<BitsPrimOp>(user);
-          if (!bits) {
-            usedBits.set();
-            continue;
-          }
+          if (!bits)
+            return failure();
 
           usedBits.set(bits.getLo(), bits.getHi() + 1);
+          if (usedBits.all())
+            return failure();
+
           mapping[bits.getLo()] = 0;
           readOps.push_back(bits);
         }
       }
+
+      return success();
     };
 
     // Finds the users of write ports. This expects all the data/wdata fields
@@ -2743,20 +2744,21 @@ struct FoldUnusedBits : public mlir::RewritePattern {
           return failure();
         continue;
       case MemOp::PortKind::Read:
-        findReadUsers(port, "data");
+        if (failed(findReadUsers(port, "data")))
+          return failure();
         continue;
       case MemOp::PortKind::ReadWrite:
         if (failed(findWriteUsers(port, "wdata")))
           return failure();
-        findReadUsers(port, "rdata");
+        if (failed(findReadUsers(port, "rdata")))
+          return failure();
         continue;
       }
       llvm_unreachable("unknown port kind");
     }
 
-    // Perform the transformation is there are some bits missing. Unused
-    // memories are handled in a different canonicalizer.
-    if (usedBits.all() || usedBits.none())
+    // Unused memories are handled in a different canonicalizer.
+    if (usedBits.none())
       return failure();
 
     // Build a mapping of existing indices to compacted ones.
@@ -2830,9 +2832,13 @@ struct FoldUnusedBits : public mlir::RewritePattern {
       rewriter.setInsertionPointAfter(readOp);
       auto it = mapping.find(readOp.getLo());
       assert(it != mapping.end() && "bit op mapping not found");
-      rewriter.replaceOpWithNewOp<BitsPrimOp>(
-          readOp, readOp.getInput(),
+      // Create a new bit selection from the compressed memory. The new op may
+      // be folded if we are selecting the entire compressed memory.
+      auto newReadValue = rewriter.createOrFold<BitsPrimOp>(
+          readOp.getLoc(), readOp.getInput(),
           readOp.getHi() - readOp.getLo() + it->second, it->second);
+      rewriter.replaceAllUsesWith(readOp, newReadValue);
+      rewriter.eraseOp(readOp);
     }
 
     // Rewrite the writes into a concatenation of slices.
@@ -2842,15 +2848,24 @@ struct FoldUnusedBits : public mlir::RewritePattern {
 
       Value catOfSlices;
       for (auto &[start, end] : ranges) {
-        Value slice =
-            rewriter.create<BitsPrimOp>(writeOp.getLoc(), source, end, start);
+        Value slice = rewriter.createOrFold<BitsPrimOp>(writeOp.getLoc(),
+                                                        source, end, start);
         if (catOfSlices) {
-          catOfSlices =
-              rewriter.create<CatPrimOp>(writeOp.getLoc(), slice, catOfSlices);
+          catOfSlices = rewriter.createOrFold<CatPrimOp>(writeOp.getLoc(),
+                                                         slice, catOfSlices);
         } else {
           catOfSlices = slice;
         }
       }
+
+      // If the original memory held a signed integer, then the compressed
+      // memory will be signed too. Since the catOfSlices is always unsigned,
+      // cast the data to a signed integer if needed before connecting back to
+      // the memory.
+      if (type.isSigned())
+        catOfSlices =
+            rewriter.createOrFold<AsSIntPrimOp>(writeOp.getLoc(), catOfSlices);
+
       rewriter.replaceOpWithNewOp<MatchingConnectOp>(writeOp, writeOp.getDest(),
                                                      catOfSlices);
     }
@@ -2870,7 +2885,9 @@ struct FoldRegMems : public mlir::RewritePattern {
     if (hasDontTouch(mem) || info.depth != 1)
       return failure();
 
-    auto memModule = mem->getParentOfType<FModuleOp>();
+    auto ty = mem.getDataType();
+    auto loc = mem.getLoc();
+    auto *block = mem->getBlock();
 
     // Find the clock of the register-to-be, all write ports should share it.
     Value clock;
@@ -2924,14 +2941,24 @@ struct FoldRegMems : public mlir::RewritePattern {
         return failure();
       clock = portClock;
     }
+    // Create a new wire where the memory used to be. This wire will dominate
+    // all readers of the memory. Reads should be made through this wire.
+    rewriter.setInsertionPointAfter(mem);
+    auto memWire = rewriter.create<WireOp>(loc, ty).getResult();
 
-    // Create a new register to store the data.
-    auto ty = mem.getDataType();
-    rewriter.setInsertionPointAfterValue(clock);
-    auto reg = rewriter.create<RegOp>(mem.getLoc(), ty, clock, mem.getName())
-                   .getResult();
+    // The memory is replaced by a register, which we place at the end of the
+    // block, so that any value driven to the original memory will dominate the
+    // new register (including the clock). All other ops will be placed
+    // after the register.
+    rewriter.setInsertionPointToEnd(block);
+    auto memReg =
+        rewriter.create<RegOp>(loc, ty, clock, mem.getName()).getResult();
+
+    // Connect the output of the register to the wire.
+    rewriter.create<MatchingConnectOp>(loc, memWire, memReg);
 
     // Helper to insert a given number of pipeline stages through registers.
+    // The pipelines are placed at the end of the block.
     auto pipeline = [&](Value value, Value clock, const Twine &name,
                         unsigned latency) {
       for (unsigned i = 0; i < latency; ++i) {
@@ -2940,7 +2967,6 @@ struct FoldRegMems : public mlir::RewritePattern {
           llvm::raw_string_ostream os(regName);
           os << mem.getName() << "_" << name << "_" << i;
         }
-
         auto reg = rewriter
                        .create<RegOp>(mem.getLoc(), value.getType(), clock,
                                       rewriter.getStringAttr(regName))
@@ -2964,7 +2990,6 @@ struct FoldRegMems : public mlir::RewritePattern {
       auto portPipeline = [&, port = port](StringRef field, unsigned stages) {
         Value value = getPortFieldValue(port, field);
         assert(value);
-        rewriter.setInsertionPointAfterValue(value);
         return pipeline(value, portClock, name + "_" + field, stages);
       };
 
@@ -2976,8 +3001,7 @@ struct FoldRegMems : public mlir::RewritePattern {
         // address must be 0 for single-address memories and the enable signal
         // is ignored, always reading out the register. Under these constraints,
         // the read port can be replaced with the value from the register.
-        rewriter.setInsertionPointAfterValue(reg);
-        replacePortField(rewriter, port, "data", reg);
+        replacePortField(rewriter, port, "data", memWire);
         break;
       }
       case MemOp::PortKind::Write: {
@@ -2989,8 +3013,7 @@ struct FoldRegMems : public mlir::RewritePattern {
       }
       case MemOp::PortKind::ReadWrite: {
         // Always read the register into the read end.
-        rewriter.setInsertionPointAfterValue(reg);
-        replacePortField(rewriter, port, "rdata", reg);
+        replacePortField(rewriter, port, "rdata", memWire);
 
         // Create a write enable and pipeline stages.
         auto wdata = portPipeline("wdata", writeStages);
@@ -2998,7 +3021,6 @@ struct FoldRegMems : public mlir::RewritePattern {
 
         Value en = getPortFieldValue(port, "en");
         Value wmode = getPortFieldValue(port, "wmode");
-        rewriter.setInsertionPointToEnd(memModule.getBodyBlock());
 
         auto wen = rewriter.create<AndPrimOp>(port.getLoc(), en, wmode);
         auto wenPipelined =
@@ -3010,8 +3032,7 @@ struct FoldRegMems : public mlir::RewritePattern {
     }
 
     // Regardless of `writeUnderWrite`, always implement PortOrder.
-    rewriter.setInsertionPointToEnd(memModule.getBodyBlock());
-    Value next = reg;
+    Value next = memReg;
     for (auto &[data, en, mask] : writes) {
       Value masked;
 
@@ -3037,7 +3058,7 @@ struct FoldRegMems : public mlir::RewritePattern {
 
       next = rewriter.create<MuxPrimOp>(next.getLoc(), en, masked, next);
     }
-    rewriter.create<MatchingConnectOp>(reg.getLoc(), reg, next);
+    rewriter.create<MatchingConnectOp>(memReg.getLoc(), memReg, next);
 
     // Delete the fields and their associated connects.
     for (Operation *conn : connects)

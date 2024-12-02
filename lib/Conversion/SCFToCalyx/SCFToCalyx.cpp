@@ -289,7 +289,7 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                              AndIOp, XOrIOp, OrIOp, ExtUIOp, ExtSIOp, TruncIOp,
                              MulIOp, DivUIOp, DivSIOp, RemUIOp, RemSIOp,
                              /// floating point
-                             AddFOp, MulFOp,
+                             AddFOp, MulFOp, CmpFOp,
                              /// others
                              SelectOp, IndexCastOp, CallOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
@@ -326,6 +326,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, RemSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, AddFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, MulFOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, CmpFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRUIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShLIOp op) const;
@@ -502,6 +503,33 @@ private:
                                          address.value());
     }
   }
+
+  calyx::RegisterOp createSignalRegister(PatternRewriter &rewriter,
+                                         Value signal, bool invert,
+                                         StringRef nameSuffix,
+                                         calyx::CompareFOpIEEE754 calyxCmpFOp,
+                                         calyx::GroupOp group) const {
+    Location loc = calyxCmpFOp.getLoc();
+    IntegerType one = rewriter.getI1Type();
+    auto component = getComponent();
+    OpBuilder builder(group->getRegion(0));
+    auto reg = createRegister(
+        loc, rewriter, component, 1,
+        getState<ComponentLoweringState>().getUniqueName(nameSuffix));
+    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(),
+                                     calyxCmpFOp.getDone());
+    if (invert) {
+      auto notLibOp = getState<ComponentLoweringState>()
+                          .getNewLibraryOpInstance<calyx::NotLibOp>(
+                              rewriter, loc, {one, one});
+      rewriter.create<calyx::AssignOp>(loc, notLibOp.getIn(), signal);
+      rewriter.create<calyx::AssignOp>(loc, reg.getIn(), notLibOp.getOut());
+      getState<ComponentLoweringState>().registerEvaluatingGroup(
+          notLibOp.getOut(), group);
+    } else
+      rewriter.create<calyx::AssignOp>(loc, reg.getIn(), signal);
+    return reg;
+  };
 };
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
@@ -727,6 +755,183 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
               {one, one, one, one, width, width, three, width, five, one});
   return buildLibraryBinaryPipeOp<calyx::MulFOpIEEE754>(rewriter, mulf, mulFOp,
                                                         mulFOp.getOut());
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     CmpFOp cmpf) const {
+  Location loc = cmpf.getLoc();
+  IntegerType one = rewriter.getI1Type(), five = rewriter.getIntegerType(5),
+              width = rewriter.getIntegerType(
+                  cmpf.getLhs().getType().getIntOrFloatBitWidth());
+  auto calyxCmpFOp = getState<ComponentLoweringState>()
+                         .getNewLibraryOpInstance<calyx::CompareFOpIEEE754>(
+                             rewriter, loc,
+                             {one, one, one, width, width, one, one, one, one,
+                              one, five, one});
+  hw::ConstantOp c0 = createConstant(loc, rewriter, getComponent(), 1, 0);
+  hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
+  rewriter.setInsertionPointToStart(getComponent().getBodyBlock());
+
+  using calyx::PredicateInfo;
+  using CombLogic = PredicateInfo::CombLogic;
+  using Port = PredicateInfo::InputPorts::Port;
+  PredicateInfo info = calyx::getPredicateInfo(cmpf.getPredicate());
+  if (info.logic == CombLogic::None) {
+    if (cmpf.getPredicate() == CmpFPredicate::AlwaysTrue) {
+      cmpf.getResult().replaceAllUsesWith(c1);
+      return success();
+    }
+
+    if (cmpf.getPredicate() == CmpFPredicate::AlwaysFalse) {
+      cmpf.getResult().replaceAllUsesWith(c0);
+      return success();
+    }
+  }
+
+  // General case
+  StringRef opName = cmpf.getOperationName().split(".").second;
+  auto reg =
+      createRegister(loc, rewriter, getComponent(), 1,
+                     getState<ComponentLoweringState>().getUniqueName(opName));
+
+  // Operation pipelines are not combinational, so a GroupOp is required.
+  auto group = createGroupForOp<calyx::GroupOp>(rewriter, cmpf);
+  OpBuilder builder(group->getRegion(0));
+  getState<ComponentLoweringState>().addBlockScheduleable(cmpf->getBlock(),
+                                                          group);
+
+  rewriter.setInsertionPointToEnd(group.getBodyBlock());
+  rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getLeft(), cmpf.getLhs());
+  rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getRight(), cmpf.getRhs());
+
+  bool signalingFlag = false;
+  switch (cmpf.getPredicate()) {
+  case CmpFPredicate::UGT:
+  case CmpFPredicate::UGE:
+  case CmpFPredicate::ULT:
+  case CmpFPredicate::ULE:
+  case CmpFPredicate::OGT:
+  case CmpFPredicate::OGE:
+  case CmpFPredicate::OLT:
+  case CmpFPredicate::OLE:
+    signalingFlag = true;
+    break;
+  case CmpFPredicate::UEQ:
+  case CmpFPredicate::UNE:
+  case CmpFPredicate::OEQ:
+  case CmpFPredicate::ONE:
+  case CmpFPredicate::UNO:
+  case CmpFPredicate::ORD:
+  case CmpFPredicate::AlwaysTrue:
+  case CmpFPredicate::AlwaysFalse:
+    signalingFlag = false;
+    break;
+  }
+
+  // The IEEE Standard mandates that equality comparisons ordinarily are quiet,
+  // while inequality comparisons ordinarily are signaling.
+  rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getSignaling(),
+                                   signalingFlag ? c1 : c0);
+
+  // Prepare signals and create registers
+  SmallVector<calyx::RegisterOp> inputRegs;
+  for (const auto &input : info.inputPorts) {
+    Value signal;
+    switch (input.port) {
+    case Port::Eq: {
+      signal = calyxCmpFOp.getEq();
+      break;
+    }
+    case Port::Gt: {
+      signal = calyxCmpFOp.getGt();
+      break;
+    }
+    case Port::Lt: {
+      signal = calyxCmpFOp.getLt();
+      break;
+    }
+    case Port::Unordered: {
+      signal = calyxCmpFOp.getUnordered();
+      break;
+    }
+    }
+    std::string nameSuffix =
+        (input.port == PredicateInfo::InputPorts::Port::Unordered)
+            ? "unordered_port"
+            : "compare_port";
+    auto signalReg = createSignalRegister(rewriter, signal, input.invert,
+                                          nameSuffix, calyxCmpFOp, group);
+    inputRegs.push_back(signalReg);
+  }
+
+  // Create the output logical operation
+  Value outputValue, doneValue;
+  switch (info.logic) {
+  case CombLogic::None: {
+    // it's guaranteed to be either ORD or UNO
+    outputValue = inputRegs[0].getOut();
+    doneValue = inputRegs[0].getOut();
+    break;
+  }
+  case CombLogic::And: {
+    auto outputLibOp = getState<ComponentLoweringState>()
+                           .getNewLibraryOpInstance<calyx::AndLibOp>(
+                               rewriter, loc, {one, one, one});
+    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
+                                     inputRegs[0].getOut());
+    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
+                                     inputRegs[1].getOut());
+
+    outputValue = outputLibOp.getOut();
+    break;
+  }
+  case CombLogic::Or: {
+    auto outputLibOp = getState<ComponentLoweringState>()
+                           .getNewLibraryOpInstance<calyx::OrLibOp>(
+                               rewriter, loc, {one, one, one});
+    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
+                                     inputRegs[0].getOut());
+    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
+                                     inputRegs[1].getOut());
+
+    outputValue = outputLibOp.getOut();
+    break;
+  }
+  }
+
+  if (info.logic != CombLogic::None) {
+    auto doneLibOp = getState<ComponentLoweringState>()
+                         .getNewLibraryOpInstance<calyx::AndLibOp>(
+                             rewriter, loc, {one, one, one});
+    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getLeft(),
+                                     inputRegs[0].getDone());
+    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getRight(),
+                                     inputRegs[1].getDone());
+    doneValue = doneLibOp.getOut();
+  }
+
+  // Write to the output register
+  rewriter.create<calyx::AssignOp>(loc, reg.getIn(), outputValue);
+  rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(), doneValue);
+
+  // Set the go and done signal
+  rewriter.create<calyx::AssignOp>(
+      loc, calyxCmpFOp.getGo(), c1,
+      comb::createOrFoldNot(loc, calyxCmpFOp.getDone(), builder));
+  rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone());
+
+  cmpf.getResult().replaceAllUsesWith(reg.getOut());
+
+  // Register evaluating groups
+  getState<ComponentLoweringState>().registerEvaluatingGroup(outputValue,
+                                                             group);
+  getState<ComponentLoweringState>().registerEvaluatingGroup(doneValue, group);
+  getState<ComponentLoweringState>().registerEvaluatingGroup(
+      calyxCmpFOp.getLeft(), group);
+  getState<ComponentLoweringState>().registerEvaluatingGroup(
+      calyxCmpFOp.getRight(), group);
+
+  return success();
 }
 
 template <typename TAllocOp>
@@ -2113,7 +2318,7 @@ public:
                       ShRSIOp, AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp,
                       CondBranchOp, BranchOp, MulIOp, DivUIOp, DivSIOp, RemUIOp,
                       RemSIOp, ReturnOp, arith::ConstantOp, IndexCastOp, FuncOp,
-                      ExtSIOp, CallOp, AddFOp, MulFOp>();
+                      ExtSIOp, CallOp, AddFOp, MulFOp, CmpFOp>();
 
     RewritePatternSet legalizePatterns(&getContext());
     legalizePatterns.add<DummyPattern>(&getContext());

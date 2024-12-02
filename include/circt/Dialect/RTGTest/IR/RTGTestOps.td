@@ -21,7 +21,7 @@ class RTGTestOp<string mnemonic, list<Trait> traits = []> :
 def CPUDeclOp : RTGTestOp<"cpu_decl", [
   Pure,
   ConstantLike,
-  DeclareOpInterfaceMethods<ContextResourceOpInterface>,
+  ContextResourceDefining,
 ]> {
   let summary = "declare a CPU";
   let description = [{

@@ -291,23 +291,6 @@ def EliminateWires : Pass<"firrtl-eliminate-wires", "firrtl::FModuleOp"> {
   let constructor = "circt::firrtl::createEliminateWiresPass()";
 }
 
-def EmitOMIR : Pass<"firrtl-emit-omir", "firrtl::CircuitOp"> {
-  let summary = "Emit OMIR annotations";
-  let description = [{
-    This pass gathers the `OMIRAnnotation`s in the design, updates the contained
-    targets with the trackers that were scattered throughout the design upon
-    reading the OMIR, and serializes the resulting data into a JSON file.
-  }];
-  let constructor = "circt::firrtl::createEmitOMIRPass()";
-  let options = [Option<"outputFilename", "file", "std::string", "",
-      "Output file for the JSON-serialized OMIR data">];
-  let dependentDialects = [
-      "emit::EmitDialect",
-      "sv::SVDialect",
-      "hw::HWDialect"
-  ];
-}
-
 def LowerMatches : Pass<"firrtl-lower-matches", "firrtl::FModuleOp"> {
   let summary = "Remove all matchs conditional blocks";
   let description = [{

@@ -43,10 +43,6 @@ inline ArrayAttr getAnnotationsIfPresent(Operation *op) {
   return op->getAttrOfType<ArrayAttr>(getAnnotationAttrName());
 }
 
-/// Check if an OMIR type is a string-encoded value that the FIRRTL dialect
-/// simply passes through as a string without any decoding.
-bool isOMIRStringEncodedPassthrough(StringRef type);
-
 /// This class provides a read-only projection of an annotation.
 class Annotation {
 public:
@@ -108,10 +104,6 @@ public:
   /// Remove a member of the annotation.
   void removeMember(StringAttr name);
   void removeMember(StringRef name);
-
-  /// Returns true if this is an annotation which can be safely deleted without
-  /// consequence.
-  bool canBeDeleted();
 
   using iterator = llvm::ArrayRef<NamedAttribute>::iterator;
   iterator begin() const { return getDict().begin(); }
@@ -250,10 +242,6 @@ public:
   static bool setDontTouch(Operation *op, bool dontTouch);
   static bool addDontTouch(Operation *op);
   static bool removeDontTouch(Operation *op);
-
-  /// Check if every annotation can be deleted.
-  bool canBeDeleted() const;
-  static bool canBeDeleted(Operation *op);
 
   bool operator==(const AnnotationSet &other) const {
     return annotations == other.annotations;

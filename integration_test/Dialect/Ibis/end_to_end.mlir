@@ -1,51 +1,51 @@
 // XFAIL: *
 // See https://github.com/llvm/circt/issues/6658
-// RUN: ibistool -lo %s
+// RUN: kanagawatool -lo %s
 
-ibis.design @foo {
+kanagawa.design @foo {
 
 // A class hierarchy with a shared parent, and accessing between the children
 
-ibis.class sym @C1 {
-  %this = ibis.this <@foo::@C1>
-  %out = ibis.port.output "out" sym @out : i32
+kanagawa.class sym @C1 {
+  %this = kanagawa.this <@foo::@C1>
+  %out = kanagawa.port.output "out" sym @out : i32
   %c0 = hw.constant 42 : i32
-  ibis.port.write %out, %c0 : !ibis.portref<out i32>
+  kanagawa.port.write %out, %c0 : !kanagawa.portref<out i32>
 }
 
-ibis.class sym @C2 {
-  %this = ibis.this <@foo::@C2>
+kanagawa.class sym @C2 {
+  %this = kanagawa.this <@foo::@C2>
 
-  %go_port = ibis.port.input "go" sym @go : i1
-  %clk_port = ibis.port.input "clk" sym @clk : !seq.clock
-  %rst_port = ibis.port.input "rst" sym @rst : i1
-  %done_port = ibis.port.output "done" sym @done : i1
-  %out_port = ibis.port.output "out" sym @out : i32
+  %go_port = kanagawa.port.input "go" sym @go : i1
+  %clk_port = kanagawa.port.input "clk" sym @clk : !seq.clock
+  %rst_port = kanagawa.port.input "rst" sym @rst : i1
+  %done_port = kanagawa.port.output "done" sym @done : i1
+  %out_port = kanagawa.port.output "out" sym @out : i32
 
-  ibis.container sym @MyMethod {
-    %t = ibis.this <@foo::@MyMethod>
+  kanagawa.container sym @MyMethod {
+    %t = kanagawa.this <@foo::@MyMethod>
 
     // Grab parent go, clk, reset inputs - note that the requested direction of
     // these are flipped wrt. the defined direction of the ports. The semantics
     // are now that get_port defines the intended usage of the port (in => i'll write to the port, out => i'll read from the port).
-    %parent = ibis.path [
-      #ibis.step<parent : !ibis.scoperef<@foo::@C2>>
+    %parent = kanagawa.path [
+      #kanagawa.step<parent : !kanagawa.scoperef<@foo::@C2>>
     ]
-    %go_ref = ibis.get_port %parent, @go : !ibis.scoperef<@foo::@C2> -> !ibis.portref<out i1>
-    %go = ibis.port.read %go_ref : !ibis.portref<out i1>
-    %clk_ref = ibis.get_port %parent, @clk : !ibis.scoperef<@foo::@C2> -> !ibis.portref<out !seq.clock>
-    %clk = ibis.port.read %clk_ref : !ibis.portref<out !seq.clock>
-    %rst_ref = ibis.get_port %parent, @rst : !ibis.scoperef<@foo::@C2> -> !ibis.portref<out i1>
-    %rst = ibis.port.read %rst_ref : !ibis.portref<out i1>
+    %go_ref = kanagawa.get_port %parent, @go : !kanagawa.scoperef<@foo::@C2> -> !kanagawa.portref<out i1>
+    %go = kanagawa.port.read %go_ref : !kanagawa.portref<out i1>
+    %clk_ref = kanagawa.get_port %parent, @clk : !kanagawa.scoperef<@foo::@C2> -> !kanagawa.portref<out !seq.clock>
+    %clk = kanagawa.port.read %clk_ref : !kanagawa.portref<out !seq.clock>
+    %rst_ref = kanagawa.get_port %parent, @rst : !kanagawa.scoperef<@foo::@C2> -> !kanagawa.portref<out i1>
+    %rst = kanagawa.port.read %rst_ref : !kanagawa.portref<out i1>
 
     // Grab sibling c1's output
-    %sibling = ibis.path [
-      #ibis.step<parent : !ibis.scoperef>,
-      #ibis.step<parent : !ibis.scoperef>,
-      #ibis.step<child , @c1 : !ibis.scoperef<@foo::@C1>>
+    %sibling = kanagawa.path [
+      #kanagawa.step<parent : !kanagawa.scoperef>,
+      #kanagawa.step<parent : !kanagawa.scoperef>,
+      #kanagawa.step<child , @c1 : !kanagawa.scoperef<@foo::@C1>>
     ]
-    %sibling_out_ref = ibis.get_port %sibling, @out : !ibis.scoperef<@foo::@C1> -> !ibis.portref<out i32>
-    %sibling_out = ibis.port.read %sibling_out_ref : !ibis.portref<out i32>
+    %sibling_out_ref = kanagawa.get_port %sibling, @out : !kanagawa.scoperef<@foo::@C1> -> !kanagawa.portref<out i32>
+    %sibling_out = kanagawa.port.read %sibling_out_ref : !kanagawa.portref<out i32>
 
     %res, %done = pipeline.scheduled(%a0 : i32 = %sibling_out) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out : i32) {
         %0 = comb.mul %a0, %a0 : i32
@@ -61,45 +61,45 @@ ibis.class sym @C2 {
     }
 
     // Assign parent done port and output
-    %parent_done_ref = ibis.get_port %parent, @done : !ibis.scoperef<@foo::@C2> -> !ibis.portref<in i1>
-    ibis.port.write %parent_done_ref, %done : !ibis.portref<in i1>
-    %parent_out_ref = ibis.get_port %parent, @out : !ibis.scoperef<@foo::@C2> -> !ibis.portref<in i32>
-    ibis.port.write %parent_out_ref, %res : !ibis.portref<in i32>
+    %parent_done_ref = kanagawa.get_port %parent, @done : !kanagawa.scoperef<@foo::@C2> -> !kanagawa.portref<in i1>
+    kanagawa.port.write %parent_done_ref, %done : !kanagawa.portref<in i1>
+    %parent_out_ref = kanagawa.get_port %parent, @out : !kanagawa.scoperef<@foo::@C2> -> !kanagawa.portref<in i32>
+    kanagawa.port.write %parent_out_ref, %res : !kanagawa.portref<in i32>
   }
 }
 
-ibis.class sym @Parent {
-  %this = ibis.this <@foo::@Parent>
-  %c1 = ibis.instance @c1, <@foo::@C1>
-  %c2 = ibis.instance @c2, <@foo::@C2>
+kanagawa.class sym @Parent {
+  %this = kanagawa.this <@foo::@Parent>
+  %c1 = kanagawa.instance @c1, <@foo::@C1>
+  %c2 = kanagawa.instance @c2, <@foo::@C2>
 
-  %go = ibis.port.input "go" sym @go : i1
-  %clk = ibis.port.input "clk" sym @clk : !seq.clock
-  %rst = ibis.port.input "rst" sym @rst : i1
+  %go = kanagawa.port.input "go" sym @go : i1
+  %clk = kanagawa.port.input "clk" sym @clk : !seq.clock
+  %rst = kanagawa.port.input "rst" sym @rst : i1
 
-  %done = ibis.port.output "done" sym @done : i1
-  %out = ibis.port.output "out" sym @out : i32
+  %done = kanagawa.port.output "done" sym @done : i1
+  %out = kanagawa.port.output "out" sym @out : i32
 
   // Wire up to c2
-  %go_ref = ibis.get_port %c2, @go : !ibis.scoperef<@foo::@C2> -> !ibis.portref<in i1>
-  %go_val = ibis.port.read %go : !ibis.portref<in i1>
-  ibis.port.write %go_ref, %go_val : !ibis.portref<in i1>
+  %go_ref = kanagawa.get_port %c2, @go : !kanagawa.scoperef<@foo::@C2> -> !kanagawa.portref<in i1>
+  %go_val = kanagawa.port.read %go : !kanagawa.portref<in i1>
+  kanagawa.port.write %go_ref, %go_val : !kanagawa.portref<in i1>
 
-  %clk_ref = ibis.get_port %c2, @clk : !ibis.scoperef<@foo::@C2> -> !ibis.portref<in !seq.clock>
-  %clk_val = ibis.port.read %clk : !ibis.portref<in !seq.clock>
-  ibis.port.write %clk_ref, %clk_val : !ibis.portref<in !seq.clock>
+  %clk_ref = kanagawa.get_port %c2, @clk : !kanagawa.scoperef<@foo::@C2> -> !kanagawa.portref<in !seq.clock>
+  %clk_val = kanagawa.port.read %clk : !kanagawa.portref<in !seq.clock>
+  kanagawa.port.write %clk_ref, %clk_val : !kanagawa.portref<in !seq.clock>
 
-  %rst_ref = ibis.get_port %c2, @rst : !ibis.scoperef<@foo::@C2> -> !ibis.portref<in i1>
-  %rst_val = ibis.port.read %rst : !ibis.portref<in i1>
-  ibis.port.write %rst_ref, %rst_val : !ibis.portref<in i1>
+  %rst_ref = kanagawa.get_port %c2, @rst : !kanagawa.scoperef<@foo::@C2> -> !kanagawa.portref<in i1>
+  %rst_val = kanagawa.port.read %rst : !kanagawa.portref<in i1>
+  kanagawa.port.write %rst_ref, %rst_val : !kanagawa.portref<in i1>
 
-  %done_ref = ibis.get_port %c2, @done : !ibis.scoperef<@foo::@C2> -> !ibis.portref<out i1>
-  %done_val = ibis.port.read %done_ref : !ibis.portref<out i1>
-  ibis.port.write %done, %done_val : !ibis.portref<out i1>
+  %done_ref = kanagawa.get_port %c2, @done : !kanagawa.scoperef<@foo::@C2> -> !kanagawa.portref<out i1>
+  %done_val = kanagawa.port.read %done_ref : !kanagawa.portref<out i1>
+  kanagawa.port.write %done, %done_val : !kanagawa.portref<out i1>
 
-  %out_ref = ibis.get_port %c2, @out : !ibis.scoperef<@foo::@C2> -> !ibis.portref<out i32>
-  %out_val = ibis.port.read %out_ref : !ibis.portref<out i32>
-  ibis.port.write %out, %out_val : !ibis.portref<out i32>
+  %out_ref = kanagawa.get_port %c2, @out : !kanagawa.scoperef<@foo::@C2> -> !kanagawa.portref<out i32>
+  %out_val = kanagawa.port.read %out_ref : !kanagawa.portref<out i32>
+  kanagawa.port.write %out, %out_val : !kanagawa.portref<out i32>
 }
 
 }

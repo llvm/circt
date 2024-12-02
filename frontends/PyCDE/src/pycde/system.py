@@ -256,12 +256,23 @@ class System:
       "builtin.module(verify-esi-connections)",
       lambda sys: sys.generate(),
       "builtin.module(verify-esi-connections)",
+
       # After all of the pycde code has been executed, we have all the types
       # defined so we can go through and output the typedefs delcarations.
       lambda sys: TypeAlias.declare_aliases(sys.mod),
+
+      # Then run all the passes to lower dialects which produce `hw.module`s.
+      "builtin.module(lower-handshake-to-dc)",
+      "builtin.module(dc-materialize-forks-sinks)",
+      "builtin.module(canonicalize)",
+      "builtin.module(lower-dc-to-hw)",
+
+      # Run ESI manifest passes.
       "builtin.module(esi-appid-hier{{top={tops} }}, esi-build-manifest{{top={tops} }})",
       "builtin.module(msft-lower-constructs, msft-lower-instances)",
       "builtin.module(esi-clean-metadata)",
+
+      # Instaniate hlmems, which could produce new esi connections.
       "builtin.module(hw.module(lower-seq-hlmem))",
       "builtin.module(lower-esi-to-physical)",
       # TODO: support more than just cosim.

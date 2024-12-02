@@ -1,10 +1,20 @@
 // REQUIRES: iverilog,cocotb
 
+// Test the original HandshakeToHW flow.
+
 // RUN: hlstool %s --dynamic-hw --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables > %t.sv && \
 // RUN: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=buffer_initial_values --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
 // RUN: hlstool %s --dynamic-hw --buffering-strategy=all --verilog --lowering-options=disallowLocalVariables > %t.sv && \
 // RUN: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=buffer_initial_values --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
+
+// Test the DC lowering flow.
+// TODO: This test does not pass with DC. Debug.
+// RUNx: hlstool %s --dynamic-hw --dc --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables > %t.sv && \
+// RUNx: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=buffer_initial_values --pythonFolder="%S,%S/.." %t.sv %esi_prims 2>&1 | FileCheck %s
+
+// RUNx: hlstool %s --dynamic-hw --dc --buffering-strategy=all --verilog --lowering-options=disallowLocalVariables > %t.sv && \
+// RUNx: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=buffer_initial_values --pythonFolder="%S,%S/.." %t.sv %esi_prims 2>&1 | FileCheck %s
 
 // CHECK: ** TEST
 // CHECK: ** TESTS=[[N:.*]] PASS=[[N]] FAIL=0 SKIP=0

@@ -222,6 +222,20 @@ class ModuleLikeBuilderBase(_PyProxy):
   def outputs(self) -> List[Output]:
     return [p for p in self.ports if isinstance(p, Output)]
 
+  @property
+  def circt_mod(self):
+    """Get the raw CIRCT operation for the module definition. DO NOT store the
+    returned value!!! It needs to get reaped after the current action (e.g.
+    instantiation, generation). Memory safety when interacting with native code
+    can be painful."""
+
+    from .system import System
+    sys: System = System.current()
+    ret = sys._op_cache.get_circt_mod(self)
+    if ret is None:
+      return sys._create_circt_mod(self)
+    return ret
+
   def go(self):
     """Execute the analysis and mutation to make a `ModuleLike` class operate
     as such."""
@@ -400,6 +414,30 @@ class ModuleLikeBuilderBase(_PyProxy):
         for k, v in meta.misc.items():
           meta_op.attributes[k] = _obj_to_attribute(v)
 
+  def create_op_common(self, sys, symbol):
+    """Do common work for creating a module-like op. This includes adding
+    metadata and adding parameters to the attributes."""
+
+    if hasattr(self.modcls, "metadata"):
+      meta = self.modcls.metadata
+      self.add_metadata(sys, symbol, meta)
+    else:
+      self.add_metadata(sys, symbol, None)
+
+    # If there are associated constants, add them to the manifest.
+    if len(self.constants) > 0:
+      constants_dict: Dict[str, ir.Attribute] = {}
+      for name, constant in self.constants.items():
+        constant_attr = obj_to_typed_attribute(constant.value, constant.type)
+        constants_dict[name] = constant_attr
+      with ir.InsertionPoint(sys.mod.body):
+        from .dialects.esi import esi
+        esi.SymbolConstantsOp(symbolRef=ir.FlatSymbolRefAttr.get(symbol),
+                              constants=ir.DictAttr.get(constants_dict))
+
+    if hasattr(self, "parameters") and self.parameters is not None:
+      self.attributes["pycde.parameters"] = self.parameters
+
   class GeneratorCtxt:
     """Provides an context which most genertors need."""
 
@@ -457,43 +495,12 @@ class ModuleLikeType(type):
 class ModuleBuilder(ModuleLikeBuilderBase):
   """Defines how a `Module` gets built. Extend the base class and customize."""
 
-  @property
-  def circt_mod(self):
-    """Get the raw CIRCT operation for the module definition. DO NOT store the
-    returned value!!! It needs to get reaped after the current action (e.g.
-    instantiation, generation). Memory safety when interacting with native code
-    can be painful."""
-
-    from .system import System
-    sys: System = System.current()
-    ret = sys._op_cache.get_circt_mod(self)
-    if ret is None:
-      return sys._create_circt_mod(self)
-    return ret
-
   def create_op(self, sys, symbol):
     """Callback for creating a module op."""
 
-    if hasattr(self.modcls, "metadata"):
-      meta = self.modcls.metadata
-      self.add_metadata(sys, symbol, meta)
-    else:
-      self.add_metadata(sys, symbol, None)
-
-    # If there are associated constants, add them to the manifest.
-    if len(self.constants) > 0:
-      constants_dict: Dict[str, ir.Attribute] = {}
-      for name, constant in self.constants.items():
-        constant_attr = obj_to_typed_attribute(constant.value, constant.type)
-        constants_dict[name] = constant_attr
-      with ir.InsertionPoint(sys.mod.body):
-        from .dialects.esi import esi
-        esi.SymbolConstantsOp(symbolRef=ir.FlatSymbolRefAttr.get(symbol),
-                              constants=ir.DictAttr.get(constants_dict))
+    self.create_op_common(sys, symbol)
 
     if len(self.generators) > 0:
-      if hasattr(self, "parameters") and self.parameters is not None:
-        self.attributes["pycde.parameters"] = self.parameters
       # If this Module has a generator, it's a real module.
       return hw.HWModuleOp(
           symbol,

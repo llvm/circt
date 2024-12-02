@@ -31,22 +31,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "firrtl-probes-to-signals"
-
 #include "circt/Dialect/FIRRTL/Passes.h"
-
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Support/Debug.h"
-
-#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Transforms/DialectConversion.h"
-
 #include "llvm/ADT/STLExtras.h"
+
+#define DEBUG_TYPE "firrtl-probes-to-signals"
 
 namespace circt {
 namespace firrtl {

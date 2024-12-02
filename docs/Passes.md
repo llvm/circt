@@ -44,9 +44,9 @@ This document describes the available CIRCT passes and their contracts.
 
 [include "HWPasses.md"]
 
-## Ibis Dialect Passes
+## Kanagawa Dialect Passes
 
-[include "IbisPasses.md"]
+[include "KanagawaPasses.md"]
 
 ## LLHD Dialect Passes
 

@@ -107,7 +107,8 @@ static LogicalResult addForkOps(Block &block, OpBuilder &rewriter) {
 
   for (auto barg : block.getArguments())
     if (!barg.use_empty() && !barg.hasOneUse())
-      insertFork(barg, rewriter);
+      if (isDCTyped(barg))
+        insertFork(barg, rewriter);
 
   return success();
 }

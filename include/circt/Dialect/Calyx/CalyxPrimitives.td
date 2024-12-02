@@ -332,13 +332,15 @@ def AndLibOp  : CombinationalArithBinaryLibraryOp<"and"> {}
 def OrLibOp   : CombinationalArithBinaryLibraryOp<"or"> {}
 def XorLibOp  : CombinationalArithBinaryLibraryOp<"xor"> {}
 
-class ArithBinaryFloatingPointLibraryOp<string mnemonic> :
-  ArithBinaryLibraryOp<mnemonic, "", [
+class ArithBinaryFloatingPointLibraryOp<string mnemonic, list<Trait> traits = []> :
+  ArithBinaryLibraryOp<mnemonic, "", !listconcat(traits, [
     DeclareOpInterfaceMethods<FloatingPointOpInterface>,
-    SameTypeConstraint<"left", "out">
-  ]> {}
+    SameTypeConstraint<"left", "right">
+  ])> {}
 
-def AddFOpIEEE754 : ArithBinaryFloatingPointLibraryOp<"ieee754.add"> {
+def AddFOpIEEE754 : ArithBinaryFloatingPointLibraryOp<"ieee754.add", [
+  SameTypeConstraint<"left", "out">
+  ]> {
   let results = (outs I1:$clk, I1:$reset, I1:$go, I1:$control, I1:$subOp,
     AnySignlessInteger:$left, AnySignlessInteger:$right, AnySignlessInteger:$roundingMode, AnySignlessInteger:$out,
     AnySignlessInteger:$exceptionalFlags, I1:$done);
@@ -378,7 +380,9 @@ def AddFOpIEEE754 : ArithBinaryFloatingPointLibraryOp<"ieee754.add"> {
   }];
 }
 
-def MulFOpIEEE754 : ArithBinaryFloatingPointLibraryOp<"ieee754.mul"> {
+def MulFOpIEEE754 : ArithBinaryFloatingPointLibraryOp<"ieee754.mul", [
+    SameTypeConstraint<"left", "out">
+  ]> {
   let results = (outs I1:$clk, I1:$reset, I1:$go, I1:$control,
     AnySignlessInteger:$left, AnySignlessInteger:$right, AnySignlessInteger:$roundingMode, AnySignlessInteger:$out,
     AnySignlessInteger:$exceptionalFlags, I1:$done);
@@ -408,6 +412,43 @@ def MulFOpIEEE754 : ArithBinaryFloatingPointLibraryOp<"ieee754.mul"> {
               DictionaryAttr::get(getContext()), DictionaryAttr::get(getContext()),
               DictionaryAttr::get(getContext()), DictionaryAttr::get(getContext()),
               done.getDictionary(getContext()), DictionaryAttr::get(getContext())
+      };
+    }
+  }];
+}
+
+// This models the compare operation interface in Berkeley HardFloat implementation.
+def CompareFOpIEEE754 : ArithBinaryFloatingPointLibraryOp<"ieee754.compare", []> {
+  let results = (outs I1:$clk, I1:$reset, I1:$go,
+    AnySignlessInteger:$left, AnySignlessInteger:$right, I1:$signaling,
+    I1:$lt, I1: $eq, I1: $gt, I1: $unordered, AnySignlessInteger: $exceptionalFlags, I1: $done);
+  let assemblyFormat = "$sym_name attr-dict `:` qualified(type(results))";
+  let extraClassDefinition = [{
+    SmallVector<StringRef> $cppClass::portNames() {
+      return {clkPort, resetPort, goPort, "left", "right", "signaling",
+              "lt", "eq", "gt", "unordered", "exceptionalFlags", donePort
+      };
+    }
+    SmallVector<Direction> $cppClass::portDirections() {
+      return {Input, Input, Input, Input, Input, Input, Output, Output, Output, Output, Output, Output};
+    }
+    void $cppClass::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+      getCellAsmResultNames(setNameFn, *this, this->portNames());
+    }
+    bool $cppClass::isCombinational() { return false; }
+    SmallVector<DictionaryAttr> $cppClass::portAttributes() {
+      IntegerAttr isSet = IntegerAttr::get(IntegerType::get(getContext(), 1), 1);
+      NamedAttrList go, clk, reset, done;
+      go.append(goPort, isSet);
+      clk.append(clkPort, isSet);
+      reset.append(resetPort, isSet);
+      done.append(donePort, isSet);
+      return {clk.getDictionary(getContext()), reset.getDictionary(getContext()),
+              go.getDictionary(getContext()), DictionaryAttr::get(getContext()),
+              DictionaryAttr::get(getContext()), DictionaryAttr::get(getContext()),
+              DictionaryAttr::get(getContext()), DictionaryAttr::get(getContext()),
+              DictionaryAttr::get(getContext()), DictionaryAttr::get(getContext()),
+              DictionaryAttr::get(getContext()), done.getDictionary(getContext())
       };
     }
   }];

@@ -1,4 +1,4 @@
-// RUN: firtool --split-verilog --emit-omir -o=%t%{fs-sep} %s
+// RUN: firtool --split-verilog -o=%t%{fs-sep} %s
 // RUN: cat %t%{fs-sep}some-filelist.f  | FileCheck %s --check-prefix=FILELIST
 // RUN: cat %t%{fs-sep}some-file.sv  | FileCheck %s --check-prefix=FILE
 

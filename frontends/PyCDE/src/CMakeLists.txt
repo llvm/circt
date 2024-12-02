@@ -31,6 +31,7 @@ declare_mlir_python_sources(PyCDESources
   pycde/common.py
   pycde/system.py
   pycde/devicedb.py
+  pycde/handshake.py
   pycde/instance.py
   pycde/seq.py
   pycde/signals.py

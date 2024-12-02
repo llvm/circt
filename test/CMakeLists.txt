@@ -33,7 +33,7 @@ set(CIRCT_TEST_DEPENDS
   handshake-runner
   firtool
   hlstool
-  ibistool
+  kanagawatool
   om-linker
   )
 

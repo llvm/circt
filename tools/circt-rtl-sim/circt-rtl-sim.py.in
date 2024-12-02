@@ -326,7 +326,7 @@ def __main__(args):
   if not args.no_compile:
     rc = sim.compile(args.sources, args.compileargs)
     if rc.returncode != 0:
-      return rc
+      return rc.returncode
   if not args.no_run:
     try:
       rc = sim.run(args.cycles, args.simargs)

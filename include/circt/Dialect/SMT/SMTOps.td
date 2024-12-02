@@ -147,6 +147,12 @@ def SolverOp : SMTOp<"solver", [
   let hasRegionVerifier = true;
 }
 
+def SetLogicOp : SMTOp<"set_logic", []> {
+  let summary = "set the logic for the SMT solver";
+  let arguments = (ins StrAttr:$logic);
+  let assemblyFormat = "$logic attr-dict";
+}
+
 def AssertOp : SMTOp<"assert", []> {
   let summary = "assert that a boolean expression holds";
   let arguments = (ins BoolType:$input);
