@@ -83,9 +83,7 @@ struct HWOpRewritePattern : public OpRewritePattern<HWModuleOp> {
       replaceContractOp<RequireOp, AssumeOp>(rewriter, contractBlock);
 
       // Inline body
-      rewriter.inlineBlockBefore(contractBlock,
-                                 bodyBlock,
-                                 bodyBlock->end());
+      rewriter.inlineBlockBefore(contractBlock, bodyBlock, bodyBlock->end());
 
       // Replace results with inputs and erase
       for (auto [input, result] :
