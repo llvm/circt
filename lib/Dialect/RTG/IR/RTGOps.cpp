@@ -79,6 +79,29 @@ LogicalResult SetCreateOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// TestOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult TestOp::verifyRegions() {
+  if (!getTarget().entryTypesMatch(getBody()->getArgumentTypes()))
+    return emitOpError("argument types must match dict entry types");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// TargetOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult TargetOp::verifyRegions() {
+  if (!getTarget().entryTypesMatch(
+          getBody()->getTerminator()->getOperandTypes()))
+    return emitOpError("terminator operand types must match dict entry types");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
