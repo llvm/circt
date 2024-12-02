@@ -379,8 +379,7 @@ def LayerBlockOp : FIRRTLOp<
    ParentOneOf<[
      "firrtl::FModuleOp", "firrtl::LayerBlockOp",
      "firrtl::WhenOp", "firrtl::MatchOp"]>,
-   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-   RecursiveMemoryEffects, RecursivelySpeculatable]
+   DeclareOpInterfaceMethods<SymbolUserOpInterface>]
 > {
   let summary = "A definition of a layer block";
   let description = [{

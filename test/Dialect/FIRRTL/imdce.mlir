@@ -565,7 +565,8 @@ firrtl.circuit "Foo" {
     out %b: !firrtl.uint<1>,
     out %probe: !firrtl.probe<uint<1>, @A>
   ) {
-    // CHECK-NOT: firrtl.layerblock
+    // CHECK:      firrtl.layerblock @A {
+    // CHECK-NEXT: }
     firrtl.layerblock @A {
       %1 = firrtl.not %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
       %a_not = firrtl.node %1 : !firrtl.uint<1>
@@ -573,6 +574,7 @@ firrtl.circuit "Foo" {
       %3 = firrtl.ref.cast %2 : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>, @A>
       firrtl.ref.define %probe, %3 : !firrtl.probe<uint<1>, @A>
     }
+    // CHECK-NEXT: firrtl.matchingconnect %b, %a
     firrtl.matchingconnect %b, %a : !firrtl.uint<1>
   }
   firrtl.module @Foo(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
