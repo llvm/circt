@@ -180,10 +180,38 @@ public:
   }
 };
 
+struct EliminateUnusedForkResultsPattern : mlir::OpRewritePattern<ForkOp> {
+  using mlir::OpRewritePattern<ForkOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(ForkOp op,
+                                PatternRewriter &rewriter) const override {
+    std::set<unsigned> unusedIndexes;
+
+    for (auto res : llvm::enumerate(op.getResults()))
+      if (res.value().getUses().empty())
+        unusedIndexes.insert(res.index());
+
+    if (unusedIndexes.empty())
+      return failure();
+
+    // Create a new fork op, dropping the unused results.
+    rewriter.setInsertionPoint(op);
+    auto operand = op.getOperand();
+    auto newFork = rewriter.create<ForkOp>(
+        op.getLoc(), operand, op.getNumResults() - unusedIndexes.size());
+    unsigned i = 0;
+    for (auto oldRes : llvm::enumerate(op.getResults()))
+      if (unusedIndexes.count(oldRes.index()) == 0)
+        rewriter.replaceAllUsesWith(oldRes.value(), newFork.getResults()[i++]);
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 void ForkOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
-  results.insert<EliminateForkToForkPattern, EliminateForkOfSourcePattern>(
-      context);
+  results.insert<EliminateForkToForkPattern, EliminateForkOfSourcePattern,
+                 EliminateUnusedForkResultsPattern>(context);
 }
 
 LogicalResult ForkOp::fold(FoldAdaptor adaptor,
