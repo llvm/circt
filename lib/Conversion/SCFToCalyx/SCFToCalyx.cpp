@@ -273,7 +273,7 @@ public:
                 calyx::PatternApplicationState &patternState,
                 DenseMap<mlir::func::FuncOp, calyx::ComponentOp> &map,
                 calyx::CalyxLoweringState &state,
-                mlir::Pass::Option<bool> &writeJsonOpt)
+                mlir::Pass::Option<std::string> &writeJsonOpt)
       : FuncOpPartialLoweringPattern(context, resRef, patternState, map, state),
         writeJson(writeJsonOpt) {}
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
@@ -316,10 +316,15 @@ public:
                                  : WalkResult::interrupt();
     });
 
-    if (writeJson) {
+    if (!writeJson.empty()) {
       if (auto fileLoc = dyn_cast<mlir::FileLineColLoc>(funcOp->getLoc())) {
-        std::filesystem::path path(fileLoc.getFilename().str());
-        auto outFileName = path.parent_path().append("data.json");
+        std::string filename = fileLoc.getFilename().str();
+        // Hack: remove unwanted prefixes during testing
+        if (filename.rfind("within split at", 0) == 0)
+          filename = filename.substr(strlen("within split at "));
+        std::filesystem::path path(filename);
+        std::string jsonFileName = writeJson.append(".json");
+        auto outFileName = path.parent_path().append(jsonFileName);
         std::ofstream outFile(outFileName);
 
         if (outFile.is_open()) {
@@ -339,7 +344,7 @@ public:
   }
 
 private:
-  mlir::Pass::Option<bool> &writeJson;
+  mlir::Pass::Option<std::string> &writeJson;
   /// Op builder specializations.
   LogicalResult buildOp(PatternRewriter &rewriter, scf::YieldOp yieldOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter,

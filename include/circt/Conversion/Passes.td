@@ -183,7 +183,7 @@ def SCFToCalyx : Pass<"lower-scf-to-calyx", "mlir::ModuleOp"> {
             " of the Calyx program.">,
     Option<"ciderSourceLocationMetadata", "cider-source-location-metadata", "bool", "",
             "Whether to track source location for the Cider debugger.">,
-    Option<"writeJsonOpt", "write-json", "bool", "",
+    Option<"writeJsonOpt", "write-json", "std::string", "",
             "Whether to write memory contents to the json file.">
   ];
 }
