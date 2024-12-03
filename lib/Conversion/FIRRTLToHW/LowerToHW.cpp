@@ -1846,7 +1846,7 @@ LogicalResult FIRRTLLowering::run() {
 
   // Iterate through each operation in the module body, attempting to lower
   // each of them.  We maintain 'builder' for each invocation.
-  auto result = theModule.walk([&](Operation *op){
+  auto result = theModule.walk([&](Operation *op) {
     builder.setInsertionPoint(op);
     builder.setLoc(op->getLoc());
     auto done = succeeded(dispatchVisitor(op));
