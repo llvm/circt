@@ -520,7 +520,8 @@ private:
   /// A mapping between the callee and the instance.
   llvm::StringMap<calyx::InstanceOp> instanceMap;
 
-  /// A json file to store external global memory data
+  /// A json file to store external global memory data. See
+  /// https://docs.calyxir.org/lang/data-format.html?highlight=json#the-data-format
   llvm::json::Value extMemData;
 };
 

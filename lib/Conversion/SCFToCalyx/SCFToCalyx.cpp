@@ -29,6 +29,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include <filesystem>
 #include <fstream>
@@ -320,24 +321,20 @@ public:
     if (!writeJson.empty()) {
       if (auto fileLoc = dyn_cast<mlir::FileLineColLoc>(funcOp->getLoc())) {
         std::string filename = fileLoc.getFilename().str();
-        // Hack: remove unwanted prefixes during testing
-        if (filename.rfind("within split at", 0) == 0)
-          filename = filename.substr(strlen("within split at "));
         std::filesystem::path path(filename);
         std::string jsonFileName = writeJson.append(".json");
         auto outFileName = path.parent_path().append(jsonFileName);
         std::ofstream outFile(outFileName);
 
-        if (outFile.is_open()) {
-          llvm::raw_os_ostream llvmOut(outFile);
-          llvm::json::OStream jsonOS(llvmOut, 2);
-          jsonOS.value(getState<ComponentLoweringState>().getExtMemData());
-          jsonOS.flush();
-          outFile.close();
-        } else {
+        if (!outFile.is_open()) {
           llvm::errs() << "Unable to open file for writing\n";
           return failure();
         }
+        llvm::raw_os_ostream llvmOut(outFile);
+        llvm::json::OStream jsonOS(llvmOut, 2);
+        jsonOS.value(getState<ComponentLoweringState>().getExtMemData());
+        jsonOS.flush();
+        outFile.close();
       }
     }
 
@@ -1001,6 +998,8 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   componentState.registerMemoryInterface(allocOp.getResult(),
                                          calyx::MemoryInterface(memoryOp));
 
+  assert(memtype.getElementTypeBitWidth() <= 64 &&
+         "element bitwidth should not exceed 64");
   bool isFloat = !memtype.getElementType().isInteger();
 
   auto shape = allocOp.getType().getShape();
@@ -1010,8 +1009,10 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   // https://github.com/llvm/circt/pull/2661 We should instead never pass
   // multi-dimensional memories to Calyx, as discussed in:
   // https://github.com/calyxir/calyx/issues/907
-  assert((shape.size() <= 1 || totalSize <= 1) &&
-         "dimension must be empty or one.");
+  if (!(shape.size() <= 1 || totalSize <= 1)) {
+    allocOp.emitError("input memory dimension must be empty or one.");
+    return failure();
+  }
 
   std::vector<uint64_t> flattenedVals(totalSize, 0);
 
@@ -1026,10 +1027,13 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
         globalOp.getConstantInitValue());
     int sizeCount = 0;
     for (auto attr : cstAttr.template getValues<Attribute>()) {
+      assert((isa<mlir::FloatAttr>(attr) || isa<mlir::IntegerAttr>(attr)) &&
+             "memory attributes must be float or int");
       if (auto fltAttr = dyn_cast<mlir::FloatAttr>(attr)) {
         double value = fltAttr.getValueAsDouble();
         std::memcpy(&flattenedVals[sizeCount++], &value, sizeof(double));
-      } else if (auto intAttr = dyn_cast<mlir::IntegerAttr>(attr)) {
+      } else {
+        auto intAttr = dyn_cast<mlir::IntegerAttr>(attr);
         int64_t value = intAttr.getInt();
         flattenedVals[sizeCount++] = static_cast<uint64_t>(value);
       }
@@ -1048,9 +1052,13 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
     }
   }
 
+  bool isSigned = false;
   // Put the flattened values in the multi-dimensional structure
   for (size_t i = 0; i < flattenedVals.size(); ++i) {
     uint64_t bitValue = flattenedVals[i];
+    // checks whether the MSB of the `uint64_t` type `bitValue` is set
+    if (bitValue & (1ULL << 63))
+      isSigned = true;
     llvm::json::Value value = 0;
     if (isFloat) {
       double floatValue;
@@ -1064,17 +1072,11 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   }
 
   componentState.setDataField(memoryOp.getName(), result);
-  auto width = memtype.getElementType().getIntOrFloatBitWidth();
 
-  std::string numType;
-  bool isSigned;
-  if (memtype.getElementType().isInteger()) {
-    numType = "bitnum";
-    isSigned = false;
-  } else {
-    numType = "ieee754_float";
-    isSigned = true;
-  }
+  auto width = memtype.getElementType().getIntOrFloatBitWidth();
+  std::string numType =
+      memtype.getElementType().isInteger() ? "bitnum" : "ieee754_float";
+
   componentState.setFormat(memoryOp.getName(), numType, isSigned, width);
 
   return success();
