@@ -50,3 +50,19 @@ rtg.test @test : !rtg.dict<b: i32, a: i32> {
 rtg.test @test : !rtg.dict<"": i32> {
 ^bb0(%arg0: i32):
 }
+
+// -----
+
+rtg.sequence @seq {
+^bb0(%arg0: i32, %arg1: i64, %arg2: index):
+  // expected-error @below {{types of all elements must match}}
+  "rtg.bag_create"(%arg0, %arg1, %arg2, %arg2){} : (i32, i64, index, index) -> !rtg.bag<i32>
+}
+
+// -----
+
+rtg.sequence @seq {
+^bb0(%arg0: i64, %arg1: i64, %arg2: index):
+  // expected-error @below {{operand types must match bag element type}}
+  "rtg.bag_create"(%arg0, %arg1, %arg2, %arg2){} : (i64, i64, index, index) -> !rtg.bag<i32>
+}
