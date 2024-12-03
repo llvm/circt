@@ -33,6 +33,7 @@
 #include <filesystem>
 #include <fstream>
 
+#include <numeric>
 #include <variant>
 
 namespace circt {
@@ -971,34 +972,6 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   return success();
 }
 
-void insertNestedArrayValue(llvm::json::Array &array,
-                            const std::vector<int> &indices, size_t index,
-                            llvm::json::Value value) {
-  if (indices.empty()) {
-    array.emplace_back(std::move(value));
-    return;
-  }
-
-  if (index == indices.size() - 1) {
-    // ensure the array is big enough
-    while (array.size() <= static_cast<size_t>(indices[index])) {
-      array.emplace_back(nullptr);
-    }
-    array[indices[index]] = std::move(value);
-    return;
-  }
-  // ensure the array is big enough
-  while (array.size() <= static_cast<size_t>(indices[index])) {
-    array.emplace_back(llvm::json::Array{});
-  }
-  llvm::json::Value &val = array[indices[index]];
-  if (!val.getAsArray()) {
-    val = llvm::json::Array{};
-  }
-  insertNestedArrayValue(*val.getAsArray(), indices, index + 1,
-                         std::move(value));
-}
-
 template <typename TAllocOp>
 static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
                                   PatternRewriter &rewriter, TAllocOp allocOp) {
@@ -1031,26 +1004,17 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   bool isFloat = !memtype.getElementType().isInteger();
 
   auto shape = allocOp.getType().getShape();
-  std::vector<int> dimensions;
-  int totalSize = 1;
-  for (auto dim : shape) {
-    totalSize *= dim;
-    dimensions.push_back(dim);
-  }
+  int totalSize =
+      std::reduce(shape.begin(), shape.end(), 1, std::multiplies<int>());
+  // The `totalSize <= 1` check is a hack to:
+  // https://github.com/llvm/circt/pull/2661 We should instead never pass
+  // multi-dimensional memories to Calyx, as discussed in:
+  // https://github.com/calyxir/calyx/issues/907
+  assert((shape.size() <= 1 || totalSize <= 1) &&
+         "dimension must be empty or one.");
 
-  std::vector<double> flattenedVals(totalSize, 0);
+  std::vector<uint64_t> flattenedVals(totalSize, 0);
 
-  // Helper function to get the correct indices
-  auto getIndices = [&dimensions](int flatIndex) {
-    std::vector<int> indices(dimensions.size(), 0);
-    for (int i = dimensions.size() - 1; i >= 0; --i) {
-      indices[i] = flatIndex % dimensions[i];
-      flatIndex /= dimensions[i];
-    }
-    return indices;
-  };
-
-  llvm::json::Array result;
   if (isa<memref::GetGlobalOp>(allocOp)) {
     auto getGlobalOp = cast<memref::GetGlobalOp>(allocOp);
     auto *symbolTableOp =
@@ -1062,23 +1026,41 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
         globalOp.getConstantInitValue());
     int sizeCount = 0;
     for (auto attr : cstAttr.template getValues<Attribute>()) {
-      if (auto fltAttr = dyn_cast<mlir::FloatAttr>(attr))
-        flattenedVals[sizeCount++] = fltAttr.getValueAsDouble();
-      else if (auto intAttr = dyn_cast<mlir::IntegerAttr>(attr))
-        flattenedVals[sizeCount++] = intAttr.getInt();
+      if (auto fltAttr = dyn_cast<mlir::FloatAttr>(attr)) {
+        double value = fltAttr.getValueAsDouble();
+        std::memcpy(&flattenedVals[sizeCount++], &value, sizeof(double));
+      } else if (auto intAttr = dyn_cast<mlir::IntegerAttr>(attr)) {
+        int64_t value = intAttr.getInt();
+        flattenedVals[sizeCount++] = static_cast<uint64_t>(value);
+      }
     }
 
     rewriter.eraseOp(globalOp);
   }
 
+  llvm::json::Array result;
+  if (shape.empty()) {
+    llvm::json::Value value = flattenedVals[0];
+    result.emplace_back(std::move(value));
+  } else {
+    for (int i = 0; i < shape[0]; ++i) {
+      result.emplace_back(nullptr);
+    }
+  }
+
   // Put the flattened values in the multi-dimensional structure
   for (size_t i = 0; i < flattenedVals.size(); ++i) {
-    std::vector<int> indices = getIndices(i);
-    llvm::json::Value value =
-        isFloat ? llvm::json::Value(flattenedVals[i])
-                : llvm::json::Value(static_cast<int64_t>(flattenedVals[i]));
-
-    insertNestedArrayValue(result, indices, 0, std::move(value));
+    uint64_t bitValue = flattenedVals[i];
+    llvm::json::Value value = 0;
+    if (isFloat) {
+      double floatValue;
+      std::memcpy(&floatValue, &bitValue, sizeof(double));
+      value = floatValue;
+    } else {
+      int64_t intValue = static_cast<int64_t>(bitValue);
+      value = intValue;
+    }
+    result[i] = std::move(value);
   }
 
   componentState.setDataField(memoryOp.getName(), result);
