@@ -885,9 +885,9 @@ public:
     // btor2
     auto init = reg.getInitialValue();
 
-    // Generate state instruction (represents the register declaration)
-    genState(reg, w, regName);
-
+    // If there's an initial value, we need to generate a constant for the
+    // initial value, then declare the state, then generate the init statement
+    // (BTOR2 parsers are picky about it being in this order)
     if (init) {
       if (!init.getDefiningOp<seq::InitialOp>()) {
         reg->emitError(
@@ -906,8 +906,14 @@ public:
       // Add it to the list of visited operations
       handledOps.insert(initialConstant);
 
+      // Now we can declare the state
+      genState(reg, w, regName);
+
       // Finally generate the init statement
       genInit(reg, initialConstant, w);
+    } else {
+      // Just generate state instruction (represents the register declaration)
+      genState(reg, w, regName);
     }
 
     // Record the operation for future `next` instruction generation
