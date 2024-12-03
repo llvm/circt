@@ -224,6 +224,24 @@ firrtl.circuit "Test" {
     }
   }
 
+  // CHECK:      firrtl.module private @CaptureInWhen_A(
+  // CHECK-SAME:   in %a: !firrtl.uint<1>
+  // CHECK-SAME:   in %cond: !firrtl.uint<1>
+  // CHECK-SAME: )
+
+  // CHECK:      firrtl.module @CaptureInWhen(
+  // CHECK:        %a_a, %a_cond = firrtl.instance a
+  // CHECK-NEXT:   firrtl.matchingconnect %a_cond, %cond :
+  // CHECK-NEXT:   firrtl.matchingconnect %a_a, %a :
+  firrtl.module @CaptureInWhen(in %cond: !firrtl.uint<1>) {
+    %a = firrtl.wire : !firrtl.uint<1>
+    firrtl.layerblock @A {
+      firrtl.when %cond : !firrtl.uint<1> {
+        %b = firrtl.node %a : !firrtl.uint<1>
+      }
+    }
+  }
+
   //===--------------------------------------------------------------------===//
   // Connecting/Defining Refs
   //===--------------------------------------------------------------------===//
