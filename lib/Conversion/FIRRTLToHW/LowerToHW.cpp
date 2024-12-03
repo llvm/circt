@@ -1846,26 +1846,30 @@ LogicalResult FIRRTLLowering::run() {
 
   // Iterate through each operation in the module body, attempting to lower
   // each of them.  We maintain 'builder' for each invocation.
-  for (auto &op : body.front().getOperations()) {
-    builder.setInsertionPoint(&op);
-    builder.setLoc(op.getLoc());
-    auto done = succeeded(dispatchVisitor(&op));
-    circuitState.processRemainingAnnotations(&op, AnnotationSet(&op));
+  auto result = theModule.walk([&](Operation *op){
+    builder.setInsertionPoint(op);
+    builder.setLoc(op->getLoc());
+    auto done = succeeded(dispatchVisitor(op));
+    circuitState.processRemainingAnnotations(op, AnnotationSet(op));
     if (done)
-      opsToRemove.push_back(&op);
+      opsToRemove.push_back(op);
     else {
-      switch (handleUnloweredOp(&op)) {
+      switch (handleUnloweredOp(op)) {
       case AlreadyLowered:
         break;         // Something like hw.output, which is already lowered.
       case NowLowered: // Something handleUnloweredOp removed.
-        opsToRemove.push_back(&op);
+        opsToRemove.push_back(op);
         break;
       case LoweringFailure:
         backedgeBuilder.abandon();
-        return failure();
+        return WalkResult::interrupt();
       }
     }
-  }
+    return WalkResult::advance();
+  });
+
+  if (result.wasInterrupted())
+    return failure();
 
   // Replace all backedges with uses of their regular values.  We process them
   // after the module body since the lowering table is too hard to keep up to

@@ -1480,6 +1480,17 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %6 = sv.read_inout %5 : !hw.inout<i32>
     // CHECK-NEXT: hw.output %2, %6 : i32, i32
   }
+
+  sv.macro.decl @IfDef_MacroDecl
+  // CHECK-LABEL: @IfDef
+  firrtl.module @IfDef() {
+    // CHECK: sv.ifdef
+    sv.ifdef @IfDef_MacroDecl {
+      // CHECK-NEXT: %a = hw.wire
+      %a = firrtl.wire : !firrtl.uint<1>
+    }
+  }
+
 }
 
 // -----
