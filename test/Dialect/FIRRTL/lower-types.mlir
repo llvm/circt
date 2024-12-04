@@ -1427,10 +1427,10 @@ firrtl.circuit "MemoryPrefixCopying" {
 firrtl.circuit "DiscardableAttributes" {
   // COMMON-LABEL: firrtl.module @DiscardableAttributes
   firrtl.module @DiscardableAttributes(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %a: !firrtl.bundle<a: uint<1>>) {
-    // CHECK-NEXT: %node_a = firrtl.node %a_a {foo} : !firrtl.uint<1>
-    // CHECK-NEXT: %wire_a = firrtl.wire {foo = "bar"} : !firrtl.uint<1>
-    // CHECK-NEXT: %reg_a = firrtl.reg %clock {foo} : !firrtl.clock, !firrtl.uint<1>
-    // CHECK-NEXT: %regreset_a = firrtl.regreset %clock, %reset, %a_a {foo} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK-NEXT: %node_a = firrtl.node %a_a {foo}
+    // CHECK-NEXT: %wire_a = firrtl.wire {foo = "bar"}
+    // CHECK-NEXT: %reg_a = firrtl.reg %clock {foo}
+    // CHECK-NEXT: %regreset_a = firrtl.regreset %clock, %reset, %a_a {foo}
     %node = firrtl.node %a {foo}: !firrtl.bundle<a: uint<1>>
     %wire = firrtl.wire {foo = "bar"} : !firrtl.bundle<a: uint<1>>
     %reg = firrtl.reg %clock {foo}: !firrtl.clock, !firrtl.bundle<a: uint<1>>
