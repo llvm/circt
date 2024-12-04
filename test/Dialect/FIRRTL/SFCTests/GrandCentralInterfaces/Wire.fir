@@ -189,8 +189,8 @@ circuit Top :
     connect out.multivec[1][2], dut.out.multivec[1][2]
     connect out.uint, dut.out.uint
 
-    ; PREFIX:         module FOO_BAR_MyView_companion(
-    ; PREFIX:         FOO_BAR_BAZ_MyInterface MyView(
+    ; PREFIX:         module MyView_companion(
+    ; PREFIX:         BAZ_MyInterface MyView(
 
     ; NOEXTRACT:      module MyView_companion(
     ; NOEXTRACT:      );
@@ -347,7 +347,7 @@ circuit Top :
 
     ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}MyInterface.sv"
     ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}MyInterface.sv
-    ; PREFIX:         interface FOO_BAR_BAZ_MyInterface;
+    ; PREFIX:         interface BAZ_MyInterface;
     ; CHECK:          interface MyInterface;
     ; CHECK-NEXT:       // a wire called 'uint'
     ; CHECK-NEXT:       logic uint;
@@ -372,7 +372,7 @@ circuit Top :
 
     ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}VecOfBundle.sv"
     ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}VecOfBundle.sv
-    ; PREFIX:         interface FOO_BAR_BAZ_VecOfBundle;
+    ; PREFIX:         interface BAZ_VecOfBundle;
     ; CHECK:          interface VecOfBundle;
     ; CHECK-NEXT:       logic [1:0] sint;
     ; CHECK-NEXT:       logic [3:0] uint;
@@ -380,14 +380,14 @@ circuit Top :
 
     ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}OtherOther.sv"
     ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}OtherOther.sv
-    ; PREFIX:         interface FOO_BAR_BAZ_OtherOther;
+    ; PREFIX:         interface BAZ_OtherOther;
     ; CHECK:          interface OtherOther;
     ; CHECK-NEXT:       Other other();
     ; CHECK:          endinterface
 
     ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}Other.sv"
     ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}Other.sv
-    ; PREFIX:         interface FOO_BAR_BAZ_Other;
+    ; PREFIX:         interface BAZ_Other;
     ; CHECK:          interface Other;
     ; CHECK-NEXT:       logic [1:0] sint;
     ; CHECK-NEXT:       logic [3:0] uint;
@@ -395,7 +395,7 @@ circuit Top :
 
     ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}Sub_vecOfBundle.sv"
     ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}Sub_vecOfBundle.sv
-    ; PREFIX:         interface FOO_BAR_BAZ_Sub_vecOfBundle;
+    ; PREFIX:         interface BAZ_Sub_vecOfBundle;
     ; CHECK:          interface Sub_vecOfBundle;
     ; CHECK-NEXT:       logic [1:0] sint;
     ; CHECK-NEXT:       logic [3:0] uint;
