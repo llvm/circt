@@ -137,7 +137,7 @@ https://github.com/llvm/circt/commit/e9f443be475e0ef796c0c6af1ce09d6e783fcd5a
 # Clock Gates and Enables Not Recognized For Registers
 
 Clock gates in some rtl-based power estimation tools are unable to recognize
-clock games and enables if they are not generated as if statements in always
+clock gates and enables if they are not generated as if statements in always
 blocks.  This is a very narrow pattern match with significant implications for
 the tools lint results and quality of analysis results.
 
