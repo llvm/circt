@@ -1,6 +1,9 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-specialize-option{select=Platform=FPGA}))' --verify-diagnostics %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-specialize-option))' --verify-diagnostics %s
 
-firrtl.circuit "Foo" {
+firrtl.circuit "Foo" attributes {
+  select_inst_choice = ["Platform=FPGA"]
+}
+{
 firrtl.option @Platform {
   firrtl.option_case @FPGA
   firrtl.option_case @ASIC

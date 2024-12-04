@@ -200,8 +200,7 @@ std::unique_ptr<mlir::Pass> createProbesToSignalsPass();
 
 std::unique_ptr<mlir::Pass> createSpecializeLayersPass();
 
-std::unique_ptr<mlir::Pass>
-createSpecializeOptionPass(mlir::ArrayRef<std::string> selectOption = {});
+std::unique_ptr<mlir::Pass> createSpecializeOptionPass();
 
 std::unique_ptr<mlir::Pass> createCreateCompanionAssume();
 

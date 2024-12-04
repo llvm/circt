@@ -1,7 +1,10 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-specialize-option{select=Platform=FPGA,Performance=Fast}))' %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-specialize-option))' %s | FileCheck %s
 
 
-firrtl.circuit "Foo" {
+firrtl.circuit "Foo" attributes {
+  select_inst_choice = ["Platform=FPGA" ,"Performance=Fast"]
+}
+{
 
 // CHECK-NOT: firrtl.option @Platform 
 firrtl.option @Platform {

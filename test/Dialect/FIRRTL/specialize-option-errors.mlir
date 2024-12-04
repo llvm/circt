@@ -1,9 +1,11 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-specialize-option{select=Platform=SuperDuperSystem,Bad=Dummy,worst}))' --verify-diagnostics %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-specialize-option))' --verify-diagnostics %s
 
 // expected-warning @below {{invalid option case "SuperDuperSystem"}}
 // expected-warning @below {{unknown option "Bad"}}
-// expected-error @below {{invalid option format: "worst"}}
-firrtl.circuit "Foo" {
+firrtl.circuit "Foo"  attributes {
+  select_inst_choice = ["Platform=SuperDuperSystem" ,"Bad=Dummy,worst"]
+}
+{
 
 firrtl.extmodule @Foo ()
 
