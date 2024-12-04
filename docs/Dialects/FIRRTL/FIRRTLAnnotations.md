@@ -862,9 +862,9 @@ Example:
 | group       | string | Name of an optional wrapper module under which to group extracted instances |
 
 This annotation causes the `ExtractInstances` pass to move instances of
-extmodules with defname `EICG_wrapper` upwards in the hierarchy, either out of
-the DUT if `group` is omitted or empty, or into a submodule of the DUT with the
-name given in `group`. The wiring prefix is hard-coded to `clock_gate`.
+extmodules whose defnames end in `EICG_wrapper` upwards in the hierarchy, either
+out of the DUT if `group` is omitted or empty, or into a submodule of the DUT
+with the name given in `group`. The wiring prefix is hard-coded to `clock_gate`.
 
 Applies to the circuit.
 

@@ -751,3 +751,46 @@ firrtl.circuit "Plop_Foo" attributes {annotations = [{class = "sifive.enterprise
     firrtl.instance core sym @core @Plop_Bar()
   }
 }
+
+// Test that clock gate extraction composes with Chisel-time module prefixing.
+// Chisel may add any number of prefixes to the clock gates.  Ensure that this
+// will not block extraction.  Additionally, test that suffixes will block
+// extraction.
+//
+// CHECK-LABEL: firrtl.circuit "PrefixedClockGate"
+firrtl.circuit "PrefixedClockGate" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation",
+      filename = "ckgates.txt",
+      group = "ClockGates"
+    }
+  ]
+} {
+  firrtl.extmodule private @Prefix_EICG_wrapper() attributes {
+    defname = "Prefix_EICG_wrapper"
+  }
+  firrtl.extmodule private @Prefix_EICG_wrapper_Suffix() attributes {
+    defname = "Prefix_EICG_wrapper_Suffix"
+  }
+  // CHECK:      firrtl.module private @ClockGates() {
+  // CHECK-NEXT:   firrtl.instance clockGate_0 @Prefix_EICG_wrapper()
+  // CHECK-NOT:    firrtl.instance clockGate_1 @Prefix_EICG_wrapper_Suffix()
+  //
+  // CHECK:      firrtl.module @Foo
+  // CHECK-NEXT:   firrtl.instance ClockGates {{.*}} @ClockGates()
+  // CHECK-NEXT:   firrtl.instance clockGate_1 @Prefix_EICG_wrapper_Suffix()
+  firrtl.module @Foo() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+    firrtl.instance clockGate_0 @Prefix_EICG_wrapper()
+    firrtl.instance clockGate_1 @Prefix_EICG_wrapper_Suffix()
+  }
+  firrtl.module @PrefixedClockGate() {
+    firrtl.instance foo @Foo()
+  }
+}

@@ -352,14 +352,15 @@ void ExtractInstancesPass::collectAnnos() {
     collectAnno(inst, instAnnos[0]);
   });
 
-  // If clock gate extraction is requested, find instances of extmodules with
-  // the corresponding `defname` and mark them as to be extracted.
-  // TODO: This defname really shouldn't be hardcoded here. Make this at least
-  // somewhat configurable.
+  // If clock gate extraction is requested, find instances of extmodules which
+  // have a defname that ends with "EICG_wrapper".  This also allows this to
+  // compose with Chisel-time module prefixing.
+  //
+  // TODO: This defname matching is a terrible hack and should be replaced with
+  // something better.
   if (!clkgateFileName.empty()) {
-    auto clkgateDefNameAttr = StringAttr::get(&getContext(), "EICG_wrapper");
     for (auto module : circuit.getOps<FExtModuleOp>()) {
-      if (module.getDefnameAttr() != clkgateDefNameAttr)
+      if (!module.getDefnameAttr().getValue().ends_with("EICG_wrapper"))
         continue;
       LLVM_DEBUG(llvm::dbgs()
                  << "Clock gate `" << module.getModuleName() << "`\n");
