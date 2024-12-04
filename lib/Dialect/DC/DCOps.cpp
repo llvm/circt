@@ -138,7 +138,7 @@ public:
 
         // We have a fork feeding into another fork. Replace the output fork by
         // adding more outputs to the current fork.
-        size_t totalForks = fork.getNumResults() + userFork.getNumResults() - 1;
+        size_t totalForks = fork.getNumResults() + userFork.getNumResults();
 
         auto newFork = rewriter.create<dc::ForkOp>(fork.getLoc(),
                                                    fork.getToken(), totalForks);

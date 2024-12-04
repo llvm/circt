@@ -80,12 +80,11 @@ func.func @csePack(%a: !dc.token, %b : i32) -> (!dc.value<i32>, !dc.value<i32>) 
 }
 
 
-// TODO: I'm 90% sure this canonicalizer and test are broken. Investigate.
 // CHECK-LABEL:   func.func @forkToFork(
 // CHECK-SAME:                          %[[VAL_0:.*]]: !dc.token) -> (!dc.token, !dc.token, !dc.token) {
-// CHECKx:           %[[VAL_1:.*]]:3 = dc.fork [3] %[[VAL_0]]
-// CHECKx:           return %[[VAL_1]]#1, %[[VAL_1]]#1, %[[VAL_1]]#2 : !dc.token, !dc.token, !dc.token
-// CHECKx:         }
+// CHECK:           %[[VAL_1:.*]]:3 = dc.fork [3] %[[VAL_0]]
+// CHECK:           return %[[VAL_1]]#0, %[[VAL_1]]#1, %[[VAL_1]]#2 : !dc.token, !dc.token, !dc.token
+// CHECK:         }
 func.func @forkToFork(%a: !dc.token) -> (!dc.token, !dc.token, !dc.token) {
     %0, %1 = dc.fork [2] %a
     %2, %3 = dc.fork [2] %0
