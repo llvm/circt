@@ -21,12 +21,9 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
-#include "circt/Support/Namespace.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
-#include "llvm/Support/FileSystem.h"
-#include "llvm/Support/Parallel.h"
 #include "llvm/Support/Path.h"
 
 namespace circt {
@@ -176,36 +173,10 @@ LogicalResult AddSeqMemPortsPass::processAnnos(CircuitOp circuit) {
 
 LogicalResult AddSeqMemPortsPass::processMemModule(FMemModuleOp mem) {
   // Error if all instances are not under the effective DUT.
-  if (!instanceInfo->allInstancesUnderEffectiveDut(mem)) {
+  if (!instanceInfo->allInstancesInEffectiveDesign(mem)) {
     auto diag = mem->emitOpError()
                 << "cannot have ports added to it because it is instantiated "
                    "both under and not under the design-under-test (DUT)";
-    for (auto *instNode : instanceGraph->lookup(mem)->uses()) {
-      auto instanceOp = instNode->getInstance();
-      if (instanceInfo->anyInstanceUnderDut(
-              instNode->getParent()->getModule())) {
-        diag.attachNote(instanceOp.getLoc())
-            << "this instance is under the DUT";
-        continue;
-      }
-      diag.attachNote(instanceOp.getLoc())
-          << "this instance is not under the DUT";
-    }
-    return failure();
-  }
-
-  // Error if the memory is partially under a layer.
-  //
-  // TODO: There are several ways to handle a memory being under a layer:
-  // duplication or tie-off.  However, it is unclear if either if these is
-  // intended or correct.  Additionally, this can be handled with pass order by
-  // preventing deduplication of memories that have this property in
-  // `LowerMemories`.
-  if (instanceInfo->anyInstanceUnderLayer(mem)) {
-    auto diag = mem->emitOpError()
-                << "cannot have ports added to it because it is "
-                   "instantiated under "
-                   "both the design-under-test and layer blocks";
     for (auto *instNode : instanceGraph->lookup(mem)->uses()) {
       auto instanceOp = instNode->getInstance();
       if (auto layerBlockOp = instanceOp->getParentOfType<LayerBlockOp>()) {
@@ -215,11 +186,11 @@ LogicalResult AddSeqMemPortsPass::processMemModule(FMemModuleOp mem) {
             << "the innermost layer block is here";
         continue;
       }
-      if (instanceInfo->anyInstanceUnderLayer(
+      if (!instanceInfo->allInstancesInEffectiveDesign(
               instNode->getParent()->getModule())) {
         diag.attachNote(instanceOp.getLoc())
-            << "this instance is inside a module that is instantiated "
-               "under a layer block";
+            << "this instance is inside a module that is instantiated outside "
+               "the design";
       }
     }
     return failure();
@@ -485,15 +456,14 @@ void AddSeqMemPortsPass::runOnOperation() {
     numAddedPorts += userPorts.size();
 
     // Visit the modules in post-order starting from the effective
-    // design-under-test. Skip any modules that are wholly instantiated under
-    // layers.  If any memories are partially instantiated under a layer then
-    // error.
+    // design-under-test. Skip any modules that are wholly outside the design.
+    // If any memories are partially inside and outside the design then error.
     for (auto *node : llvm::post_order(
              instanceGraph->lookup(instanceInfo->getEffectiveDut()))) {
       auto op = node->getModule();
 
-      // Skip anything wholly under a layer.
-      if (instanceInfo->allInstancesUnderLayer(op))
+      // Skip anything wholly _not_ in the design.
+      if (!instanceInfo->anyInstanceInEffectiveDesign(op))
         continue;
 
       // Process the module or memory.

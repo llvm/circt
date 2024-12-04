@@ -21,7 +21,6 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
-#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -38,12 +37,8 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
-#include "llvm/ADT/StringSet.h"
-#include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/Mutex.h"
-#include "llvm/Support/Parallel.h"
 
 #define DEBUG_TYPE "lower-to-hw"
 
@@ -169,7 +164,7 @@ static Value castFromFIRRTLType(Value val, Type type,
 static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
                           StringRef annoClass, StringRef attrBase) {
   auto anno = annos.getAnnotation(annoClass);
-  auto ctx = top.getContext();
+  auto *ctx = top.getContext();
   if (!anno)
     return;
   if (auto dir = anno.getMember<StringAttr>("directory")) {
@@ -578,6 +573,8 @@ private:
                               CircuitLoweringState &loweringState);
   LogicalResult lowerModuleOperations(hw::HWModuleOp module,
                                       CircuitLoweringState &loweringState);
+  LogicalResult lowerFormalBody(verif::FormalOp formalOp,
+                                CircuitLoweringState &loweringState);
 };
 
 } // end anonymous namespace
@@ -620,6 +617,7 @@ void FIRRTLModuleLowering::runOnOperation() {
                              &getAnalysis<NLATable>());
 
   SmallVector<hw::HWModuleOp, 32> modulesToProcess;
+  SmallVector<verif::FormalOp> formalOpsToProcess;
 
   AnnotationSet circuitAnno(circuit);
   moveVerifAnno(getOperation(), circuitAnno, extractAssertAnnoClass,
@@ -668,6 +666,16 @@ void FIRRTLModuleLowering::runOnOperation() {
               if (!loweredMod)
                 return failure();
               state.recordModuleMapping(&op, loweredMod);
+              return success();
+            })
+            .Case<FormalOp>([&](auto oldFormalOp) {
+              auto builder = OpBuilder::atBlockEnd(topLevelModule);
+              auto newFormalOp = builder.create<verif::FormalOp>(
+                  oldFormalOp.getLoc(), oldFormalOp.getNameAttr(),
+                  oldFormalOp.getParametersAttr());
+              newFormalOp.getBody().emplaceBlock();
+              state.recordModuleMapping(oldFormalOp, newFormalOp);
+              formalOpsToProcess.push_back(newFormalOp);
               return success();
             })
             .Default([&](Operation *op) {
@@ -725,13 +733,18 @@ void FIRRTLModuleLowering::runOnOperation() {
         ->setAttr(moduleHierarchyFileAttrName,
                   ArrayAttr::get(&getContext(), testHarnessHierarchyFiles));
 
-  // Finally, lower all operations.
+  // Lower all module bodies.
   auto result = mlir::failableParallelForEachN(
       &getContext(), 0, modulesToProcess.size(), [&](auto index) {
         return lowerModuleOperations(modulesToProcess[index], state);
       });
+  if (failed(result))
+    return signalPassFailure();
 
-  // If any module bodies failed to lower, return early.
+  // Lower all formal op bodies.
+  result = mlir::failableParallelForEach(
+      &getContext(), formalOpsToProcess,
+      [&](auto op) { return lowerFormalBody(op, state); });
   if (failed(result))
     return signalPassFailure();
 
@@ -1304,7 +1317,7 @@ LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
   SmallVector<Value, 4> outputs;
 
   // This is the terminator in the new module.
-  auto outputOp = newModule.getBodyBlock()->getTerminator();
+  auto *outputOp = newModule.getBodyBlock()->getTerminator();
   ImplicitLocOpBuilder outputBuilder(oldModule.getLoc(), outputOp);
 
   unsigned nextHWInputArg = 0;
@@ -1390,6 +1403,38 @@ LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
   return success();
 }
 
+/// Run on each `verif.formal` to populate its body based on the original
+/// `firrtl.formal` operation.
+LogicalResult
+FIRRTLModuleLowering::lowerFormalBody(verif::FormalOp formalOp,
+                                      CircuitLoweringState &loweringState) {
+  auto builder = OpBuilder::atBlockEnd(&formalOp.getBody().front());
+
+  // Find the module targeted by the `firrtl.formal` operation. The `FormalOp`
+  // verifier guarantees the module exists and that it is an `FModuleOp`. This
+  // we can then translate to the corresponding `HWModuleOp`.
+  auto oldFormalOp = cast<FormalOp>(loweringState.getOldModule(formalOp));
+  auto moduleName = oldFormalOp.getModuleNameAttr().getAttr();
+  auto oldModule = cast<FModuleOp>(
+      loweringState.getInstanceGraph().lookup(moduleName)->getModule());
+  auto newModule =
+      dyn_cast_or_null<hw::HWModuleOp>(loweringState.getNewModule(oldModule));
+  if (!newModule)
+    return oldFormalOp->emitOpError()
+           << "could not find module " << oldModule.getSymNameAttr();
+
+  // Create a symbolic input for every input of the lowered module.
+  SmallVector<Value> symbolicInputs;
+  for (auto arg : newModule.getBody().getArguments())
+    symbolicInputs.push_back(
+        builder.create<verif::SymbolicValueOp>(arg.getLoc(), arg.getType()));
+
+  // Instantiate the module with the given symbolic inputs.
+  builder.create<hw::InstanceOp>(formalOp.getLoc(), newModule,
+                                 newModule.getNameAttr(), symbolicInputs);
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Module Body Lowering Pass
 //===----------------------------------------------------------------------===//
@@ -1458,7 +1503,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
     return attr;
   }
 
-  void runWithInsertionPointAtEndOfBlock(std::function<void(void)> fn,
+  void runWithInsertionPointAtEndOfBlock(const std::function<void(void)> &fn,
                                          Region &region);
 
   /// Return a read value for the specified inout value, auto-uniquing them.
@@ -1468,9 +1513,10 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   void addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
                         sv::ResetType resetStyle, sv::EventControl resetEdge,
-                        Value reset, std::function<void(void)> body = {},
-                        std::function<void(void)> resetBody = {});
-  void addToAlwaysBlock(Value clock, std::function<void(void)> body = {}) {
+                        Value reset, const std::function<void(void)> &body = {},
+                        const std::function<void(void)> &resetBody = {});
+  void addToAlwaysBlock(Value clock,
+                        const std::function<void(void)> &body = {}) {
     addToAlwaysBlock(sv::EventControl::AtPosEdge, clock, sv::ResetType(),
                      sv::EventControl(), Value(), body,
                      std::function<void(void)>());
@@ -1520,7 +1566,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitDecl(RegOp op);
   LogicalResult visitDecl(RegResetOp op);
   LogicalResult visitDecl(MemOp op);
-  LogicalResult visitDecl(InstanceOp op);
+  LogicalResult visitDecl(InstanceOp oldInstance);
   LogicalResult visitDecl(VerbatimWireOp op);
 
   // Unary Ops.
@@ -1796,26 +1842,30 @@ LogicalResult FIRRTLLowering::run() {
 
   // Iterate through each operation in the module body, attempting to lower
   // each of them.  We maintain 'builder' for each invocation.
-  for (auto &op : body.front().getOperations()) {
-    builder.setInsertionPoint(&op);
-    builder.setLoc(op.getLoc());
-    auto done = succeeded(dispatchVisitor(&op));
-    circuitState.processRemainingAnnotations(&op, AnnotationSet(&op));
+  auto result = theModule.walk([&](Operation *op) {
+    builder.setInsertionPoint(op);
+    builder.setLoc(op->getLoc());
+    auto done = succeeded(dispatchVisitor(op));
+    circuitState.processRemainingAnnotations(op, AnnotationSet(op));
     if (done)
-      opsToRemove.push_back(&op);
+      opsToRemove.push_back(op);
     else {
-      switch (handleUnloweredOp(&op)) {
+      switch (handleUnloweredOp(op)) {
       case AlreadyLowered:
         break;         // Something like hw.output, which is already lowered.
       case NowLowered: // Something handleUnloweredOp removed.
-        opsToRemove.push_back(&op);
+        opsToRemove.push_back(op);
         break;
       case LoweringFailure:
         backedgeBuilder.abandon();
-        return failure();
+        return WalkResult::interrupt();
       }
     }
-  }
+    return WalkResult::advance();
+  });
+
+  if (result.wasInterrupted())
+    return failure();
 
   // Replace all backedges with uses of their regular values.  We process them
   // after the module body since the lowering table is too hard to keep up to
@@ -1842,7 +1892,7 @@ LogicalResult FIRRTLLowering::run() {
         return failure();
       }
       // If the value is not another backedge, we have found the driver.
-      auto it = backedges.find(value);
+      auto *it = backedges.find(value);
       if (it == backedges.end())
         break;
       // Find what is driving the next backedge.
@@ -1983,7 +2033,7 @@ Attribute FIRRTLLowering::getOrCreateAggregateConstantAttribute(Attribute value,
 /// helper function invokes the closure specified if the operand was actually
 /// zero bit, or returns failure() if it was some other kind of failure.
 static LogicalResult handleZeroBit(Value failedOperand,
-                                   std::function<LogicalResult()> fn) {
+                                   const std::function<LogicalResult()> &fn) {
   assert(failedOperand && "Should be called on the failed operand");
   if (!isZeroBitFIRRTLType(failedOperand.getType()))
     return failure();
@@ -2457,7 +2507,7 @@ bool FIRRTLLowering::updateIfBackedge(Value dest, Value src) {
 /// where the closure is null, but the caller needs to make sure the block
 /// exists.
 void FIRRTLLowering::runWithInsertionPointAtEndOfBlock(
-    std::function<void(void)> fn, Region &region) {
+    const std::function<void(void)> &fn, Region &region) {
   if (!fn)
     return;
 
@@ -2510,11 +2560,11 @@ Value FIRRTLLowering::getNonClockValue(Value v) {
   return it.first->second;
 }
 
-void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
-                                      sv::ResetType resetStyle,
-                                      sv::EventControl resetEdge, Value reset,
-                                      std::function<void(void)> body,
-                                      std::function<void(void)> resetBody) {
+void FIRRTLLowering::addToAlwaysBlock(
+    sv::EventControl clockEdge, Value clock, sv::ResetType resetStyle,
+    sv::EventControl resetEdge, Value reset,
+    const std::function<void(void)> &body,
+    const std::function<void(void)> &resetBody) {
   AlwaysKeyType key{builder.getBlock(), clockEdge, clock,
                     resetStyle,         resetEdge, reset};
   sv::AlwaysOp alwaysOp;
@@ -3204,7 +3254,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   Operation *oldModule =
       oldInstance.getReferencedModule(circuitState.getInstanceGraph());
 
-  auto newModule = circuitState.getNewModule(oldModule);
+  auto *newModule = circuitState.getNewModule(oldModule);
   if (!newModule) {
     oldInstance->emitOpError("could not find module [")
         << oldInstance.getModuleName() << "] referenced by instance";
@@ -3389,8 +3439,8 @@ LogicalResult FIRRTLLowering::visitUnrealizedConversionCast(
 
   // FIRRTL -> other
   // Otherwise must be a conversion from FIRRTL type to standard type.
-  auto lowered_result = getLoweredValue(operand);
-  if (!lowered_result) {
+  auto loweredResult = getLoweredValue(operand);
+  if (!loweredResult) {
     // If this is a conversion from a zero bit HW type to firrtl value, then
     // we want to successfully lower this to a null Value.
     if (operand.getType().isSignlessInteger(0)) {
@@ -3401,7 +3451,7 @@ LogicalResult FIRRTLLowering::visitUnrealizedConversionCast(
 
   // We lower builtin.unrealized_conversion_cast converting from a firrtl type
   // to a standard type into the lowered operand.
-  result.replaceAllUsesWith(lowered_result);
+  result.replaceAllUsesWith(loweredResult);
   return success();
 }
 
@@ -4739,8 +4789,8 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
       // If we're doing synthesis, we emit an all-pairs assign complex.
       [&]() {
         SmallVector<Value, 4> values;
-        for (size_t i = 0, e = inoutValues.size(); i != e; ++i)
-          values.push_back(getReadValue(inoutValues[i]));
+        for (auto inoutValue : inoutValues)
+          values.push_back(getReadValue(inoutValue));
 
         for (size_t i1 = 0, e = inoutValues.size(); i1 != e; ++i1) {
           for (size_t i2 = 0; i2 != e; ++i2)

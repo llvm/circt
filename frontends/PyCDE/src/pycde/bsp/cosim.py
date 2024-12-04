@@ -2,17 +2,19 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from typing import Dict, Tuple
+from os import write
+from typing import Dict, Tuple, Type
 
 from ..signals import BundleSignal
 from ..common import AppID, Clock, Input, Output
 from ..module import Module, generator
 from ..system import System
-from ..types import Bits, Bundle, BundledChannel, ChannelDirection
+from ..types import (Bits, Bundle, BundledChannel, Channel, ChannelDirection,
+                     StructType, UInt)
 from ..constructs import ControlReg, NamedWire, Reg, Wire
 from .. import esi
 
-from .common import ChannelMMIO
+from .common import ChannelHostMem, ChannelMMIO
 
 from ..circt import ir
 from ..circt.dialects import esi as raw_esi
@@ -22,7 +24,7 @@ from pathlib import Path
 __root_dir__ = Path(__file__).parent.parent
 
 
-def CosimBSP(user_module: Module) -> Module:
+def CosimBSP(user_module: Type[Module]) -> Module:
   """Wrap and return a cosimulation 'board support package' containing
   'user_module'"""
 
@@ -33,6 +35,9 @@ def CosimBSP(user_module: Module) -> Module:
 
     clk = Clock()
     rst = Input(Bits(1))
+
+    # If this gets changed, update 'Cosim.cpp' in the runtime.
+    HostMemWidth = 64
 
     @generator
     def build(ports):
@@ -45,6 +50,27 @@ def CosimBSP(user_module: Module) -> Module:
                   clk=ports.clk,
                   rst=ports.rst,
                   cmd=mmio_read_write)
+
+      # Instantiate a hostmem service generator which multiplexes requests to a
+      # either a single read or write channel. Get those channels and transform
+      # them into callbacks.
+      hostmem = ChannelHostMem(
+          read_width=ESI_Cosim_UserTopWrapper.HostMemWidth,
+          write_width=ESI_Cosim_UserTopWrapper.HostMemWidth)(
+              decl=esi.HostMem,
+              appid=esi.AppID("__cosim_hostmem"),
+              clk=ports.clk,
+              rst=ports.rst)
+      resp_wire = Wire(
+          Channel(
+              StructType([
+                  ("tag", UInt(8)),
+                  ("data", Bits(ESI_Cosim_UserTopWrapper.HostMemWidth)),
+              ])))
+      req = hostmem.read.unpack(resp=resp_wire)['req']
+      data = esi.CallService.call(esi.AppID("__cosim_hostmem_read"), req,
+                                  resp_wire.type)
+      resp_wire.assign(data)
 
   class ESI_Cosim_Top(Module):
     clk = Clock()

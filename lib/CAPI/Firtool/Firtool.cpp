@@ -174,16 +174,6 @@ void circtFirtoolOptionsSetDisableAggressiveMergeConnections(
   unwrap(options)->setDisableAggressiveMergeConnections(value);
 }
 
-void circtFirtoolOptionsSetEmitOmir(CirctFirtoolFirtoolOptions options,
-                                    bool value) {
-  unwrap(options)->setEmitOMIR(value);
-}
-
-void circtFirtoolOptionsSetOmirOutFile(CirctFirtoolFirtoolOptions options,
-                                       MlirStringRef value) {
-  unwrap(options)->setOmirOutFile(unwrap(value));
-}
-
 void circtFirtoolOptionsSetLowerMemories(CirctFirtoolFirtoolOptions options,
                                          bool value) {
   unwrap(options)->setLowerMemories(value);
@@ -319,6 +309,12 @@ void circtFirtoolOptionsSetStripFirDebugInfo(CirctFirtoolFirtoolOptions options,
 void circtFirtoolOptionsSetStripDebugInfo(CirctFirtoolFirtoolOptions options,
                                           bool value) {
   unwrap(options)->setStripDebugInfo(value);
+}
+
+void circtFirtoolOptionsSetDisableCSEinClasses(
+    CirctFirtoolFirtoolOptions options, bool value) {
+
+  unwrap(options)->setDisableCSEinClasses(value);
 }
 
 //===----------------------------------------------------------------------===//

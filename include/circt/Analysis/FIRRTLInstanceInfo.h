@@ -98,9 +98,17 @@ public:
     InstanceInfo::LatticeValue underLayer;
 
     /// Indicates if this module is instantiated in the design.  The "design" is
-    /// defined as being under the design-under-test, excluding layers.  I.e.,
-    /// layers are not in the design.
+    /// defined as being under the design-under-test, excluding verification
+    /// code (e.g., layers).
     InstanceInfo::LatticeValue inDesign;
+
+    /// Indicates if this modules is instantiated in the effective design.  The
+    /// "effective design" is defined as the design-under-test (DUT), excluding
+    /// verification code (e.g., layers).  If a DUT is specified, then this is
+    /// the same as `inDesign`.  However, if there is no DUT, then every module
+    /// is deemed to be in the design except those which are explicitly
+    /// verification code.
+    InstanceInfo::LatticeValue inEffectiveDesign;
   };
 
   //===--------------------------------------------------------------------===//

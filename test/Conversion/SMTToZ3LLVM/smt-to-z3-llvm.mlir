@@ -141,6 +141,22 @@ func.func @test(%arg0: i32) {
     // CHECK: llvm.call @Z3_solver_reset([[CTX]], [[S]]) : (!llvm.ptr, !llvm.ptr) -> ()
     smt.reset
 
+    // CHECK: llvm.call @Z3_solver_push([[CTX]], [[S]]) : (!llvm.ptr, !llvm.ptr) -> ()
+    smt.push 1
+
+    // CHECK: llvm.call @Z3_solver_push([[CTX]], [[S]]) : (!llvm.ptr, !llvm.ptr) -> ()
+    // CHECK: llvm.call @Z3_solver_push([[CTX]], [[S]]) : (!llvm.ptr, !llvm.ptr) -> ()
+    // CHECK: llvm.call @Z3_solver_push([[CTX]], [[S]]) : (!llvm.ptr, !llvm.ptr) -> ()
+    smt.push 3
+
+    // CHECK: [[CONST1:%.+]] = llvm.mlir.constant(1 : i32)
+    // CHECK: llvm.call @Z3_solver_pop([[CTX]], [[S]], [[CONST1]]) : (!llvm.ptr, !llvm.ptr, i32) -> ()
+    smt.pop 1
+
+    // CHECK: [[CONST5:%.+]] = llvm.mlir.constant(5 : i32)
+    // CHECK: llvm.call @Z3_solver_pop([[CTX]], [[S]], [[CONST5]]) : (!llvm.ptr, !llvm.ptr, i32) -> ()
+    smt.pop 5
+
     // CHECK-DEBUG: [[SOLVER_STR:%.+]] = llvm.call @Z3_solver_to_string({{.*}}, {{.*}}) : (!llvm.ptr, !llvm.ptr) -> !llvm.ptr
     // CHECK-DEBUG: [[FMT_STR:%.+]] = llvm.mlir.addressof @str{{.*}} : !llvm.ptr
     // CHECK-DEBUG: llvm.call @printf([[FMT_STR]], [[SOLVER_STR]]) vararg(!llvm.func<i32 (ptr, ...)>) : (!llvm.ptr, !llvm.ptr) -> i32

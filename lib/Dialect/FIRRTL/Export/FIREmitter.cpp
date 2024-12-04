@@ -65,6 +65,8 @@ struct Emitter {
 
   void emitParamAssign(ParamDeclAttr param, Operation *op,
                        std::optional<PPExtString> wordBeforeLHS = std::nullopt);
+  void emitParamValue(Attribute value, Operation *op);
+
   void emitGenericIntrinsic(GenericIntrinsicOp op);
 
   // Statement emission
@@ -370,7 +372,7 @@ private:
     SymbolTable symbolTable;
     hw::InnerSymbolTableCollection istc;
     hw::InnerRefNamespace irn{symbolTable, istc};
-    SymInfos(Operation *op) : symbolTable(op), istc(op){};
+    SymInfos(Operation *op) : symbolTable(op), istc(op) {};
   };
   std::optional<std::reference_wrapper<SymInfos>> symInfos;
 
@@ -433,7 +435,11 @@ void Emitter::emitParamAssign(ParamDeclAttr param, Operation *op,
     ps << *wordBeforeLHS << PP::nbsp;
   }
   ps << PPExtString(param.getName().strref()) << PP::nbsp << "=" << PP::nbsp;
-  TypeSwitch<Attribute>(param.getValue())
+  emitParamValue(param.getValue(), op);
+}
+
+void Emitter::emitParamValue(Attribute value, Operation *op) {
+  TypeSwitch<Attribute>(value)
       .Case<IntegerAttr>([&](auto attr) { ps.addAsString(attr.getValue()); })
       .Case<FloatAttr>([&](auto attr) {
         SmallString<16> str;
@@ -442,6 +448,24 @@ void Emitter::emitParamAssign(ParamDeclAttr param, Operation *op,
       })
       .Case<StringAttr>(
           [&](auto attr) { ps.writeQuotedEscaped(attr.getValue()); })
+      .Case<ArrayAttr>([&](auto attr) {
+        ps.scopedBox(PP::bbox2, [&]() {
+          ps << "[";
+          interleaveComma(attr.getValue(),
+                          [&](auto element) { emitParamValue(element, op); });
+          ps << "]";
+        });
+      })
+      .Case<DictionaryAttr>([&](auto attr) {
+        ps.scopedBox(PP::bbox2, [&]() {
+          ps << "{";
+          interleaveComma(attr.getValue(), [&](auto field) {
+            ps << PPExtString(field.getName()) << PP::nbsp << "=" << PP::nbsp;
+            emitParamValue(field.getValue(), op);
+          });
+          ps << "}";
+        });
+      })
       .Default([&](auto attr) {
         emitOpError(op, "with unsupported parameter attribute: ") << attr;
         ps << "<unsupported-attr ";
@@ -628,16 +652,21 @@ void Emitter::emitDeclaration(OptionOp op) {
 /// Emit a formal test definition.
 void Emitter::emitDeclaration(FormalOp op) {
   startStatement();
-  ps << "formal " << PPExtString(op.getSymName()) << " of "
-     << PPExtString(op.getModuleName()) << ", bound = ";
-  ps.addAsString(op.getBound());
+  ps.cbox(4, IndentStyle::Block);
+  ps << "formal " << PPExtString(legalize(op.getSymNameAttr()));
+  ps << " of " << PPExtString(legalize(op.getModuleNameAttr().getAttr()));
+  ps << PP::nbsp << ":" << PP::end;
+  emitLocation(op);
 
-  if (auto outputFile = op->getAttrOfType<hw::OutputFileAttr>("output_file")) {
-    ps << ", ";
-    ps.writeQuotedEscaped(outputFile.getFilename().getValue());
-  }
-
-  emitLocationAndNewLine(op);
+  ps.scopedBox(PP::bbox2, [&]() {
+    setPendingNewline();
+    for (auto param : op.getParameters()) {
+      startStatement();
+      ps << PPExtString(param.getName()) << PP::nbsp << "=" << PP::nbsp;
+      emitParamValue(param.getValue(), op);
+      setPendingNewline();
+    }
+  });
 }
 
 /// Check if an operation is inlined into the emission of their users. For
@@ -855,8 +884,7 @@ void Emitter::emitStatement(ConnectOp op) {
   } else {
     auto emitLHS = [&]() { emitExpression(op.getDest()); };
     if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
-      emitAssignLike(
-          emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
+      emitAssignLike(emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
     } else {
       emitAssignLike(
           emitLHS, [&]() { emitExpression(op.getSrc()); }, PPExtString("<="));
@@ -882,8 +910,7 @@ void Emitter::emitStatement(MatchingConnectOp op) {
   } else {
     auto emitLHS = [&]() { emitExpression(op.getDest()); };
     if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
-      emitAssignLike(
-          emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
+      emitAssignLike(emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
     } else {
       emitAssignLike(
           emitLHS, [&]() { emitExpression(op.getSrc()); }, PPExtString("<="));

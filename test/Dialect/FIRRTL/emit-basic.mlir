@@ -12,7 +12,7 @@
 // Check if printing with very short line length, removing info locators (@[...]), no line is longer than 5x line length.
 // RUN: circt-translate --export-firrtl %s --target-line-length=10 | sed -e 's/ @\[.*\]//' | FileCheck %s --implicit-check-not "{{^(.{50})}}" --check-prefix PRETTY
 
-// CHECK-LABEL: FIRRTL version 4.0.0
+// CHECK-LABEL: FIRRTL version 4.1.0
 // CHECK-LABEL: circuit Foo :
 // PRETTY-LABEL: circuit Foo :
 firrtl.circuit "Foo" {
@@ -867,5 +867,17 @@ firrtl.circuit "Foo" {
     %7 = firrtl.int.generic "circt_isX"  %c : (!firrtl.uint<1>) -> !firrtl.uint<1>
     %8 = firrtl.int.generic "circt_isX"  %7 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.int.generic "circt_verif_assert"  %8 : (!firrtl.uint<1>) -> ()
+  }
+
+  // CHECK-LABEL: formal someTestName of Foo :
+  // CHECK-NEXT: a_int = 42
+  // CHECK-NEXT: b_string = "hello"
+  // CHECK-NEXT: c_array = [42, "hello", [9001], {foo = 1337}]
+  // CHECK-NEXT: d_map = {a = 42, b = "hello", c = [9001], d = {foo = 1337}}
+  firrtl.formal @someTestName, @Foo {
+    a_int = 42,
+    b_string = "hello",
+    c_array = [42, "hello", [9001], {foo = 1337}],
+    d_map = {a = 42, b = "hello", c = [9001], d = {foo = 1337}}
   }
 }

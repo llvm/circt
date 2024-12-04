@@ -1449,9 +1449,9 @@ circuit Layers:
 
 ;// -----
 ; CHECK-LABEL: firrtl.circuit "BasicProps"
-FIRRTL version 3.3.0
+FIRRTL version 4.1.0
 circuit BasicProps :
-  module BasicProps :
+  public module BasicProps :
   ; CHECK-LABEL: module private @Integer
   module Integer :
     ; CHECK-SAME: out %a: !firrtl.integer
@@ -1655,13 +1655,13 @@ circuit WireOfProbesAndNames:
     wire probe : Probe<UInt<1>>
 
 ;// -----
-FIRRTL version 3.3.0
+FIRRTL version 4.1.0
 
 ; CHECK-LABEL: circuit "AnyRef"
 circuit AnyRef:
   class Foo:
     skip
-  module AnyRef:
+  public module AnyRef:
     input x : AnyRef
     ; CHECK: !firrtl.anyref
     output y : AnyRef
@@ -1866,36 +1866,28 @@ FIRRTL version 4.0.0
 ; CHECK-LABEL: circuit "Foo"
 circuit Foo:
 
-  ; CHECK-LABEL: firrtl.module @Foo(in %data: !firrtl.uint<32>, in %c: !firrtl.uint<1>, out %out: !firrtl.uint<32>)
+  ; CHECK-LABEL: firrtl.module @Foo()
   public module Foo:
-    input data : UInt<32>
-    input c : UInt<1>
-    output out : UInt<32>
+    skip
 
-    when c:
-      node add1 = add(data, UInt<32>(1))
-      connect out, add1
-    else:
-      connect out, data
+  ; CHECK-LABEL: firrtl.module @Bar(in %a: !firrtl.uint<42>)
+  public module Bar:
+    input a: UInt<42>
 
-  ; CHECK-LABEL: firrtl.module @FooTest(in %s_foo_c: !firrtl.uint<1>, in %s_foo_data: !firrtl.uint<32>)
-  public module FooTest:
-    input s_foo_c : UInt<1>
-    input s_foo_data : UInt<32>
+  ; CHECK: firrtl.formal @someNameA, @Foo {bound = 20 : i32}
+  formal someNameA of Foo, bound = 20
 
-    ; CHECK-NEXT: %foo_data, %foo_c, %foo_out = firrtl.instance foo interesting_name @Foo(in data: !firrtl.uint<32>, in c: !firrtl.uint<1>, out out: !firrtl.uint<32>)
-    inst foo of Foo
-    ; CHECK-NEXT: firrtl.matchingconnect %foo_c, %s_foo_c : !firrtl.uint<1>
-    connect foo.c, s_foo_c
-    ; CHECK-NEXT: firrtl.matchingconnect %foo_data, %s_foo_data : !firrtl.uint<32>
-    connect foo.data, s_foo_data
-    ; CHECK-NEXT: %0 = firrtl.eq %foo_out, %s_foo_data : (!firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<1>
-    ; CHECK-NEXT: %1 = firrtl.int.generic "circt_ltl_implication"  %s_foo_c, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    ; CHECK-NEXT: firrtl.int.generic "circt_verif_assert"  %1 : (!firrtl.uint<1>) -> ()
-    intrinsic(circt_verif_assert, intrinsic(circt_ltl_implication : UInt<1>, s_foo_c, eq(foo.out, s_foo_data)))
-
-  ; CHECK: firrtl.formal @testFormal of @FooTest bound 20
-  formal testFormal of FooTest, bound = 20
+  ; CHECK: firrtl.formal @someNameB, @Bar {
+  ; CHECK-SAME: a_int = 42
+  ; CHECK-SAME: b_string = "hello"
+  ; CHECK-SAME: c_array = [42 : ui32, "hello", [9001 : ui32], {foo = 1337 : ui32}]
+  ; CHECK-SAME: d_map = {a = 42 : ui32, b = "hello", c = [9001 : ui32], d = {foo = 1337 : ui32}}
+  ; CHECK-SAME: }
+  formal someNameB of Bar:
+    a_int = 42
+    b_string = "hello"
+    c_array = [42, "hello", [9001], {foo = 1337}]
+    d_map = {a = 42, b = "hello", c = [9001], d = {foo = 1337}}
 
 ;// -----
 FIRRTL version 3.9.0

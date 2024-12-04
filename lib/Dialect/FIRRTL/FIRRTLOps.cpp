@@ -2180,6 +2180,38 @@ bool ExtClassOp::canDiscardOnUseEmpty() {
 }
 
 //===----------------------------------------------------------------------===//
+// LayerOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult LayerOp::verify() {
+
+  // A Bind Convention layer may not exist under an Inline Convention layer
+  // because we haven't implemented a lowering for it.  A lowering should be
+  // possible, but it gets weird.  This also transitively disallows a Bind
+  // Convention under an Inline Convention under a Bind Convention.  We don't
+  // have a lowering for this either.  Consequently, just reject this for now as
+  // it's a niche use case.
+  //
+  // TODO: Remove this restriction by defining a lowering for bind-under-inline
+  // and bind-under-inline-under-bind.
+  if (getConvention() == LayerConvention::Bind) {
+    Operation *parentOp = (*this)->getParentOp();
+    while (auto parentLayer = dyn_cast<LayerOp>(parentOp)) {
+      if (parentLayer.getConvention() == LayerConvention::Inline) {
+        auto diag = emitOpError() << "has bind convention and cannot be nested "
+                                     "under a layer with inline convention";
+        diag.attachNote(parentLayer.getLoc())
+            << "layer with inline convention here";
+        return failure();
+      }
+      parentOp = parentOp->getParentOp();
+    }
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // InstanceOp
 //===----------------------------------------------------------------------===//
 
@@ -2853,50 +2885,6 @@ InstanceChoiceOp::erasePorts(OpBuilder &builder,
 //===----------------------------------------------------------------------===//
 // MemOp
 //===----------------------------------------------------------------------===//
-
-void MemOp::build(OpBuilder &builder, OperationState &result,
-                  TypeRange resultTypes, uint32_t readLatency,
-                  uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
-                  ArrayRef<Attribute> portNames, StringRef name,
-                  NameKindEnum nameKind, ArrayRef<Attribute> annotations,
-                  ArrayRef<Attribute> portAnnotations,
-                  hw::InnerSymAttr innerSym) {
-  auto &properties = result.getOrAddProperties<Properties>();
-  properties.setReadLatency(
-      builder.getIntegerAttr(builder.getIntegerType(32), readLatency));
-  properties.setWriteLatency(
-      builder.getIntegerAttr(builder.getIntegerType(32), writeLatency));
-  properties.setDepth(
-      builder.getIntegerAttr(builder.getIntegerType(64), depth));
-  properties.setRuw(::RUWAttrAttr::get(builder.getContext(), ruw));
-  properties.setPortNames(builder.getArrayAttr(portNames));
-  properties.setName(builder.getStringAttr(name));
-  properties.setNameKind(NameKindEnumAttr::get(builder.getContext(), nameKind));
-  properties.setAnnotations(builder.getArrayAttr(annotations));
-  if (innerSym)
-    properties.setInnerSym(innerSym);
-  result.addTypes(resultTypes);
-
-  if (portAnnotations.empty()) {
-    SmallVector<Attribute, 16> portAnnotationsVec(resultTypes.size(),
-                                                  builder.getArrayAttr({}));
-    properties.setPortAnnotations(builder.getArrayAttr(portAnnotationsVec));
-  } else {
-    assert(portAnnotations.size() == resultTypes.size());
-    properties.setPortAnnotations(builder.getArrayAttr(portAnnotations));
-  }
-}
-
-void MemOp::build(OpBuilder &builder, OperationState &result,
-                  TypeRange resultTypes, uint32_t readLatency,
-                  uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
-                  ArrayRef<Attribute> portNames, StringRef name,
-                  NameKindEnum nameKind, ArrayRef<Attribute> annotations,
-                  ArrayRef<Attribute> portAnnotations, StringAttr innerSym) {
-  build(builder, result, resultTypes, readLatency, writeLatency, depth, ruw,
-        portNames, name, nameKind, annotations, portAnnotations,
-        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
-}
 
 ArrayAttr MemOp::getPortAnnotation(unsigned portIdx) {
   assert(portIdx < getNumResults() &&

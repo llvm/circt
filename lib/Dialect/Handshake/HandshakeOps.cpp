@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Handshake/HandshakeOps.h"
+#include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -1333,6 +1334,56 @@ void JoinOp::print(OpAsmPrinter &p) {
   p << " " << getData();
   p.printOptionalAttrDict((*this)->getAttrs(), {"control"});
   p << " : " << getData().getTypes();
+}
+
+LogicalResult
+ESIInstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Check that the module attribute was specified.
+  auto fnAttr = this->getModuleAttr();
+  assert(fnAttr && "requires a 'module' symbol reference attribute");
+
+  FuncOp fn = symbolTable.lookupNearestSymbolFrom<FuncOp>(*this, fnAttr);
+  if (!fn)
+    return emitOpError() << "'" << fnAttr.getValue()
+                         << "' does not reference a valid handshake function";
+
+  // Verify that the operand and result types match the callee.
+  auto fnType = fn.getFunctionType();
+  if (fnType.getNumInputs() != getNumOperands() - NumFixedOperands)
+    return emitOpError(
+        "incorrect number of operands for the referenced handshake function");
+
+  for (unsigned i = 0, e = fnType.getNumInputs(); i != e; ++i) {
+    Type operandType = getOperand(i + NumFixedOperands).getType();
+    auto channelType = dyn_cast<esi::ChannelType>(operandType);
+    if (!channelType)
+      return emitOpError("operand type mismatch: expected channel type, but "
+                         "provided ")
+             << operandType << " for operand number " << i;
+    if (channelType.getInner() != fnType.getInput(i))
+      return emitOpError("operand type mismatch: expected operand type ")
+             << fnType.getInput(i) << ", but provided "
+             << getOperand(i).getType() << " for operand number " << i;
+  }
+
+  if (fnType.getNumResults() != getNumResults())
+    return emitOpError(
+        "incorrect number of results for the referenced handshake function");
+
+  for (unsigned i = 0, e = fnType.getNumResults(); i != e; ++i) {
+    Type resultType = getResult(i).getType();
+    auto channelType = dyn_cast<esi::ChannelType>(resultType);
+    if (!channelType)
+      return emitOpError("result type mismatch: expected channel type, but "
+                         "provided ")
+             << resultType << " for result number " << i;
+    if (channelType.getInner() != fnType.getResult(i))
+      return emitOpError("result type mismatch: expected result type ")
+             << fnType.getResult(i) << ", but provided "
+             << getResult(i).getType() << " for result number " << i;
+  }
+
+  return success();
 }
 
 /// Based on mlir::func::CallOp::verifySymbolUses

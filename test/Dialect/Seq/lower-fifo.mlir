@@ -47,7 +47,7 @@ hw.module @fifo1(in %clk : !seq.clock, in %rst : i1, in %in : i32, in %rdEn : i1
 }
 
 
-// CHECK:   hw.module @fifo2(in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_1:.*]] : i1, in %[[VAL_2:.*]] : i32, in %[[VAL_3:.*]] : i1, in %[[VAL_4:.*]] : i1, out out : i32, out empty : i1, out full : i1, out almost_empty : i1, out almost_full : i1) {
+// CHECK:   hw.module @fifo2(in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_1:.*]] : i1, in %[[VAL_2:.*]] : [[TY:.+]], in %[[VAL_3:.*]] : i1, in %[[VAL_4:.*]] : i1, out out : [[TY]], out empty : i1, out full : i1, out almost_empty : i1, out almost_full : i1) {
 // CHECK:           %[[VAL_5:.*]] = hw.constant 2 : i3
 // CHECK:           %[[VAL_8:.*]] = hw.constant -1 : i3
 // CHECK:           %[[VAL_7:.*]] = hw.constant true
@@ -57,11 +57,11 @@ hw.module @fifo1(in %clk : !seq.clock, in %rst : i1, in %in : i32, in %rdEn : i1
 // CHECK:           %[[VAL_11:.*]] = hw.constant 0 : i3
 // CHECK:           %[[VAL_12:.*]] = hw.constant 1 : i2
 // CHECK:           %[[VAL_13:.*]] = seq.compreg sym @fifo_count  %[[VAL_14:.*]], %[[CLOCK]] reset %[[VAL_1]], %[[VAL_11]]  : i3
-// CHECK:           %[[VAL_15:.*]] = seq.hlmem @fifo_mem %[[CLOCK]], %[[VAL_1]] : <4xi32>
+// CHECK:           %[[VAL_15:.*]] = seq.hlmem @fifo_mem %[[CLOCK]], %[[VAL_1]] : <4x[[TY]]>
 // CHECK:           %[[VAL_16:.*]] = seq.compreg sym @fifo_rd_addr  %[[VAL_17:.*]], %[[CLOCK]] reset %[[VAL_1]], %[[VAL_6]]  : i2
 // CHECK:           %[[VAL_18:.*]] = seq.compreg sym @fifo_wr_addr  %[[VAL_19:.*]], %[[CLOCK]] reset %[[VAL_1]], %[[VAL_6]]  : i2
-// CHECK:           %[[VAL_20:.*]] = seq.read %[[VAL_15]]{{\[}}%[[VAL_16]]] rden %[[VAL_3]] {latency = 0 : i64} : !seq.hlmem<4xi32>
-// CHECK:           seq.write %[[VAL_15]]{{\[}}%[[VAL_18]]] %[[VAL_2]] wren %[[VAL_4]] {latency = 1 : i64} : !seq.hlmem<4xi32>
+// CHECK:           %[[VAL_20:.*]] = seq.read %[[VAL_15]]{{\[}}%[[VAL_16]]] rden %[[VAL_3]] {latency = 1 : i64} : !seq.hlmem<4x[[TY]]>
+// CHECK:           seq.write %[[VAL_15]]{{\[}}%[[VAL_18]]] %[[VAL_2]] wren %[[VAL_4]] {latency = 1 : i64} : !seq.hlmem<4x[[TY]]>
 // CHECK:           %[[VAL_21:.*]] = comb.icmp eq %[[VAL_13]], %[[VAL_9]] {sv.namehint = "fifo_full"} : i3
 // CHECK:           %[[VAL_22:.*]] = comb.icmp eq %[[VAL_13]], %[[VAL_11]] {sv.namehint = "fifo_empty"} : i3
 // CHECK:           %[[VAL_23:.*]] = comb.xor %[[VAL_3]], %[[VAL_7]] : i1
@@ -90,9 +90,10 @@ hw.module @fifo1(in %clk : !seq.clock, in %rst : i1, in %in : i32, in %rdEn : i1
 // CHECK:           %[[VAL_43:.*]] = comb.extract %[[VAL_13]] from 1 : (i3) -> i2
 // CHECK:           %[[VAL_44:.*]] = comb.icmp ne %[[VAL_43]], %[[VAL_6]] {sv.namehint = "fifo_almost_full"} : i2
 // CHECK:           %[[VAL_45:.*]] = comb.icmp ult %[[VAL_13]], %[[VAL_5]] {sv.namehint = "fifo_almost_empty"} : i3
-// CHECK:           hw.output %[[VAL_20]], %[[VAL_22]], %[[VAL_21]], %[[VAL_45]], %[[VAL_44]] : i32, i1, i1, i1, i1
+  // CHECK:           hw.output %[[VAL_20]], %[[VAL_22]], %[[VAL_21]], %[[VAL_45]], %[[VAL_44]] : [[TY]], i1, i1, i1, i1
 // CHECK:         }
-hw.module @fifo2(in %clk : !seq.clock, in %rst : i1, in %in : i32, in %rdEn : i1, in %wrEn : i1, out out: i32, out empty: i1, out full: i1, out almost_empty : i1, out almost_full : i1) {
-  %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 4 almost_full 2 almost_empty 1 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
-  hw.output %out, %empty, %full, %almostEmpty, %almostFull : i32, i1, i1, i1, i1
+!testType = !hw.array<2xi32>
+hw.module @fifo2(in %clk : !seq.clock, in %rst : i1, in %in : !testType, in %rdEn : i1, in %wrEn : i1, out out: !testType, out empty: i1, out full: i1, out almost_empty : i1, out almost_full : i1) {
+  %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 4 rd_latency 1 almost_full 2 almost_empty 1 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : !testType
+  hw.output %out, %empty, %full, %almostEmpty, %almostFull : !testType, i1, i1, i1, i1
 }

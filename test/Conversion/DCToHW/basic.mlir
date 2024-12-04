@@ -196,3 +196,9 @@ hw.module @merge(in %first : !dc.token, in %second : !dc.token, out token : !dc.
     %selected = dc.merge %first, %second
     hw.output %selected : !dc.value<i1>
 }
+
+// CHECK:  hw.module.extern @ext(in %a : i32, out b : i32)
+hw.module.extern @ext(in %a : i32, out b : i32)
+
+// CHECK:  hw.module.extern @extDC(in %a : !esi.channel<i32>, out b : i32)
+hw.module.extern @extDC(in %a : !dc.value<i32>, out b : i32)

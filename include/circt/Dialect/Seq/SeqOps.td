@@ -277,7 +277,9 @@ def FIFOOp : SeqOp<"fifo", [
     operations.
     The fifo operation is configurable with the following parameters:
     1. Depth (cycles)
-    2. Almost full/empty thresholds (optional). If not provided, these will
+    2. Read latency (cycles) is the number of cycles it takes for a read to
+       return data after the read enable signal is asserted.
+    3. Almost full/empty thresholds (optional). If not provided, these will
        be asserted when the FIFO is full/empty.
 
     Like `seq.hlmem` there are no guarantees that all possible fifo configuration
@@ -286,18 +288,21 @@ def FIFOOp : SeqOp<"fifo", [
   }];
 
   let arguments = (ins
-    HWIntegerType:$input, I1:$rdEn, I1:$wrEn, ClockType:$clk, I1:$rst,
+    AnyType:$input, I1:$rdEn, I1:$wrEn, ClockType:$clk, I1:$rst,
     ConfinedAttr<I64Attr, [IntMinValue<1>]>:$depth,
+    DefaultValuedOptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<0>]>, "0">
+      :$rdLatency,
     OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<0>]>>:$almostFullThreshold,
     OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<0>]>>:$almostEmptyThreshold
   );
 
   let results = (outs
-    HWIntegerType:$output, I1:$full, I1:$empty, Optional<I1>:$almostFull,
+    AnyType:$output, I1:$full, I1:$empty, Optional<I1>:$almostFull,
     Optional<I1>:$almostEmpty);
 
   let assemblyFormat = [{
     `depth` $depth
+    (`rd_latency` $rdLatency^)?
     custom<FIFOAFThreshold>($almostFullThreshold, type($almostFull))
     custom<FIFOAEThreshold>($almostEmptyThreshold, type($almostEmpty))
     `in` $input `rdEn` $rdEn `wrEn` $wrEn `clk` $clk `rst` $rst attr-dict `:` type($input)

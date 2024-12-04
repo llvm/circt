@@ -152,6 +152,37 @@ func.func @entry() {
     smt.yield
   }
 
+  // CHECK: unsat
+  // CHECK: Res: -1
+  // CHECK: sat
+  // CHECK: Res: 1
+  smt.solver () : () -> () {
+    %c3 = smt.int.constant 3
+    %c4 = smt.int.constant 4
+    %unsat_eq = smt.eq %c3, %c4 : !smt.int
+    smt.push 1
+    func.call @check(%unsat_eq) : (!smt.bool) -> ()
+    smt.pop 1
+    %sat_eq = smt.eq %c3, %c3 : !smt.int
+    func.call @check(%sat_eq) : (!smt.bool) -> ()
+    smt.yield
+  }
+
+  // CHECK: unsat
+  // CHECK: Res: -1
+  // CHECK: sat
+  // CHECK: Res: 1
+  smt.solver () : () -> () {
+    %c3 = smt.int.constant 3
+    %c4 = smt.int.constant 4
+    %unsat_eq = smt.eq %c3, %c4 : !smt.int
+    func.call @check(%unsat_eq) : (!smt.bool) -> ()
+    smt.reset
+    %sat_eq = smt.eq %c3, %c3 : !smt.int
+    func.call @check(%sat_eq) : (!smt.bool) -> ()
+    smt.yield
+  }
+
   return
 }
 

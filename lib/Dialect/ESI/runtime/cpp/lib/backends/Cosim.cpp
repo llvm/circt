@@ -415,9 +415,81 @@ private:
   std::unique_ptr<FuncService::Function> cmdMMIO;
 };
 
+#pragma pack(push, 1)
+struct HostMemReadReq {
+  uint8_t tag;
+  uint32_t length;
+  uint64_t address;
+};
+
+struct HostMemReadResp {
+  uint64_t data;
+  uint8_t tag;
+};
+#pragma pack(pop)
+
 class CosimHostMem : public HostMem {
 public:
-  CosimHostMem() {}
+  CosimHostMem(AcceleratorConnection &acc, Context &ctxt,
+               StubContainer *rpcClient)
+      : acc(acc), ctxt(ctxt), rpcClient(rpcClient) {}
+
+  void start() override {
+    // We have to locate the channels ourselves since this service might be used
+    // to retrieve the manifest.
+
+    // Setup the read side callback.
+    ChannelDesc readArg, readResp;
+    if (!rpcClient->getChannelDesc("__cosim_hostmem_read.arg", readArg) ||
+        !rpcClient->getChannelDesc("__cosim_hostmem_read.result", readResp))
+      throw std::runtime_error("Could not find HostMem channels");
+
+    const esi::Type *readRespType =
+        getType(ctxt, new StructType(readResp.type(),
+                                     {{"tag", new UIntType("ui8", 8)},
+                                      {"data", new BitsType("i64", 64)}}));
+    const esi::Type *readReqType =
+        getType(ctxt, new StructType(readArg.type(),
+                                     {{"address", new UIntType("ui64", 64)},
+                                      {"length", new UIntType("ui32", 32)},
+                                      {"tag", new UIntType("ui8", 8)}}));
+
+    // Get ports, create the function, then connect to it.
+    readRespPort = std::make_unique<WriteCosimChannelPort>(
+        rpcClient->stub.get(), readResp, readRespType,
+        "__cosim_hostmem_read.result");
+    readReqPort = std::make_unique<ReadCosimChannelPort>(
+        rpcClient->stub.get(), readArg, readReqType,
+        "__cosim_hostmem_read.arg");
+    read.reset(CallService::Callback::get(acc, AppID("__cosim_hostmem_read"),
+                                          *readRespPort, *readReqPort));
+    read->connect([this](const MessageData &req) { return serviceRead(req); },
+                  true);
+  }
+
+  // Service the read request as a callback. Simply reads the data from the
+  // location specified. TODO: check that the memory has been mapped.
+  MessageData serviceRead(const MessageData &reqBytes) {
+    const HostMemReadReq *req = reqBytes.as<HostMemReadReq>();
+    acc.getLogger().debug(
+        [&](std::string &subsystem, std::string &msg,
+            std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "HostMem";
+          msg = "Read request: addr=0x" + toHex(req->address) +
+                " len=" + std::to_string(req->length) +
+                " tag=" + std::to_string(req->tag);
+        });
+    uint64_t *dataPtr = reinterpret_cast<uint64_t *>(req->address);
+    HostMemReadResp resp{.data = *dataPtr, .tag = req->tag};
+    acc.getLogger().debug(
+        [&](std::string &subsystem, std::string &msg,
+            std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "HostMem";
+          msg = "Read result: data=0x" + toHex(resp.data) +
+                " tag=" + std::to_string(resp.tag);
+        });
+    return MessageData::from(resp);
+  }
 
   struct CosimHostMemRegion : public HostMemRegion {
     CosimHostMemRegion(std::size_t size) {
@@ -442,6 +514,22 @@ public:
     return true;
   }
   virtual void unmapMemory(void *ptr) const override {}
+
+private:
+  const esi::Type *getType(Context &ctxt, esi::Type *type) {
+    if (auto t = ctxt.getType(type->getID())) {
+      delete type;
+      return *t;
+    }
+    ctxt.registerType(type);
+    return type;
+  }
+  AcceleratorConnection &acc;
+  Context &ctxt;
+  StubContainer *rpcClient;
+  std::unique_ptr<WriteCosimChannelPort> readRespPort;
+  std::unique_ptr<ReadCosimChannelPort> readReqPort;
+  std::unique_ptr<CallService::Callback> read;
 };
 
 } // namespace
@@ -469,7 +557,7 @@ Service *CosimAccelerator::createService(Service::Type svcType,
   if (svcType == typeid(services::MMIO)) {
     return new CosimMMIO(getCtxt(), rpcClient);
   } else if (svcType == typeid(services::HostMem)) {
-    return new CosimHostMem();
+    return new CosimHostMem(*this, getCtxt(), rpcClient);
   } else if (svcType == typeid(SysInfo)) {
     switch (manifestMethod) {
     case ManifestMethod::Cosim:

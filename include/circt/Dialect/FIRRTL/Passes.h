@@ -118,9 +118,6 @@ std::unique_ptr<mlir::Pass> createDedupPass();
 
 std::unique_ptr<mlir::Pass> createEliminateWiresPass();
 
-std::unique_ptr<mlir::Pass>
-createEmitOMIRPass(mlir::StringRef outputFilename = "");
-
 std::unique_ptr<mlir::Pass> createLowerMatchesPass();
 
 std::unique_ptr<mlir::Pass> createLowerSignaturesPass();
@@ -139,8 +136,6 @@ std::unique_ptr<mlir::Pass> createLowerMemoryPass();
 
 std::unique_ptr<mlir::Pass>
 createMemToRegOfVecPass(bool replSeqMem = false, bool ignoreReadEnable = false);
-
-std::unique_ptr<mlir::Pass> createPrefixModulesPass();
 
 std::unique_ptr<mlir::Pass> createFIRRTLFieldSourcePass();
 

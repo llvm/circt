@@ -147,6 +147,12 @@ def SolverOp : SMTOp<"solver", [
   let hasRegionVerifier = true;
 }
 
+def SetLogicOp : SMTOp<"set_logic", []> {
+  let summary = "set the logic for the SMT solver";
+  let arguments = (ins StrAttr:$logic);
+  let assemblyFormat = "$logic attr-dict";
+}
+
 def AssertOp : SMTOp<"assert", []> {
   let summary = "assert that a boolean expression holds";
   let arguments = (ins BoolType:$input);
@@ -156,6 +162,18 @@ def AssertOp : SMTOp<"assert", []> {
 def ResetOp : SMTOp<"reset", []> {
   let summary = "reset the solver";
   let assemblyFormat = "attr-dict";
+}
+
+def PushOp : SMTOp<"push", []> {
+  let summary = "push a given number of levels onto the assertion stack";
+  let arguments = (ins ConfinedAttr<I32Attr, [IntNonNegative]>:$count);
+  let assemblyFormat = "$count attr-dict";
+}
+
+def PopOp : SMTOp<"pop", []> {
+  let summary = "pop a given number of levels from the assertion stack";
+  let arguments = (ins ConfinedAttr<I32Attr, [IntNonNegative]>:$count);
+  let assemblyFormat = "$count attr-dict";
 }
 
 def CheckOp : SMTOp<"check", [

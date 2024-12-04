@@ -96,6 +96,61 @@ struct InstanceOpConversion : OpConversionPattern<InstanceOp> {
   }
 };
 
+/// Lower a hw::ArrayCreateOp operation to smt::DeclareFun and an
+/// smt::ArrayStoreOp for each operand.
+struct ArrayCreateOpConversion : OpConversionPattern<ArrayCreateOp> {
+  using OpConversionPattern<ArrayCreateOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ArrayCreateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    Type arrTy = typeConverter->convertType(op.getType());
+    if (!arrTy)
+      return rewriter.notifyMatchFailure(op.getLoc(), "unsupported array type");
+
+    unsigned width = adaptor.getInputs().size();
+
+    Value arr = rewriter.create<smt::DeclareFunOp>(loc, arrTy);
+    for (auto [i, el] : llvm::enumerate(adaptor.getInputs())) {
+      Value idx = rewriter.create<smt::BVConstantOp>(loc, width - i - 1,
+                                                     llvm::Log2_64_Ceil(width));
+      arr = rewriter.create<smt::ArrayStoreOp>(loc, arr, idx, el);
+    }
+
+    rewriter.replaceOp(op, arr);
+    return success();
+  }
+};
+
+/// Lower a hw::ArrayGetOp operation to smt::ArraySelectOp
+struct ArrayGetOpConversion : OpConversionPattern<ArrayGetOp> {
+  using OpConversionPattern<ArrayGetOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ArrayGetOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    unsigned numElements =
+        cast<hw::ArrayType>(op.getInput().getType()).getNumElements();
+
+    Type type = typeConverter->convertType(op.getType());
+    if (!type)
+      return rewriter.notifyMatchFailure(op.getLoc(),
+                                         "unsupported array element type");
+
+    Value oobVal = rewriter.create<smt::DeclareFunOp>(loc, type);
+    Value numElementsVal = rewriter.create<smt::BVConstantOp>(
+        loc, numElements - 1, llvm::Log2_64_Ceil(numElements));
+    Value inBounds = rewriter.create<smt::BVCmpOp>(
+        loc, smt::BVCmpPredicate::ule, adaptor.getIndex(), numElementsVal);
+    Value indexed = rewriter.create<smt::ArraySelectOp>(loc, adaptor.getInput(),
+                                                        adaptor.getIndex());
+    rewriter.replaceOpWithNewOp<smt::IteOp>(op, inBounds, indexed, oobVal);
+    return success();
+  }
+};
+
 /// Remove redundant (seq::FromClock and seq::ToClock) ops.
 template <typename OpTy>
 struct ReplaceWithInput : OpConversionPattern<OpTy> {
@@ -138,6 +193,14 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
   });
   converter.addConversion([](seq::ClockType type) -> std::optional<Type> {
     return smt::BitVectorType::get(type.getContext(), 1);
+  });
+  converter.addConversion([&](ArrayType type) -> std::optional<Type> {
+    auto rangeType = converter.convertType(type.getElementType());
+    if (!rangeType)
+      return {};
+    auto domainType = smt::BitVectorType::get(
+        type.getContext(), llvm::Log2_64_Ceil(type.getNumElements()));
+    return smt::ArrayType::get(type.getContext(), domainType, rangeType);
   });
 
   // Default target materialization to convert from illegal types to legal
@@ -222,8 +285,8 @@ void circt::populateHWToSMTConversionPatterns(TypeConverter &converter,
                                               RewritePatternSet &patterns) {
   patterns.add<HWConstantOpConversion, HWModuleOpConversion, OutputOpConversion,
                InstanceOpConversion, ReplaceWithInput<seq::ToClockOp>,
-               ReplaceWithInput<seq::FromClockOp>>(converter,
-                                                   patterns.getContext());
+               ReplaceWithInput<seq::FromClockOp>, ArrayCreateOpConversion,
+               ArrayGetOpConversion>(converter, patterns.getContext());
 }
 
 void ConvertHWToSMTPass::runOnOperation() {

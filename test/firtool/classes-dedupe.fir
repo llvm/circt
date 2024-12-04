@@ -1,6 +1,6 @@
 ; RUN: firtool %s -ir-verilog | FileCheck %s
 
-FIRRTL version 3.3.0
+FIRRTL version 4.1.0
 
 circuit Test : %[[
 {
@@ -10,7 +10,7 @@ circuit Test : %[[
 ]]
   ; CHECK: hw.hierpath private [[NLA1:@.+]] [@CPU_1::[[SYM1:@.+]]]
   ; CHECK: hw.hierpath private [[NLA2:@.+]] [@CPU_1::[[SYM2:@.+]], @Fetch_1::[[SYM3:@.+]]]
-  module Test :
+  public module Test :
     input in : UInt<1>
     output out_1 : UInt<1>
     output out_2 : UInt<1>

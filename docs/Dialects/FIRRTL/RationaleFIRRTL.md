@@ -37,7 +37,9 @@ This document generally assumes that you've read and have a basic grasp of the
 FIRRTL IR spec, and it can be occasionally helpful to refer to the ANTLR
 grammar.
 
-## Status
+## Specification
+
+### Status
 
 The FIRRTL dialect and FIR parser is a generally complete implementation of the
 FIRRTL specification and is actively maintained, tracking new enhancements. The
@@ -46,12 +48,41 @@ FIRRTL IR that is produced from Chisel.  The FIRRTL dialect has support for
 parsing an SFC Annotation file and converting this to operation or argument
 attributes.
 
-## ABI
+### ABI
 
-An auxillary spec has been written, shipped with the firrtl spec, which is the
-firrtl ABI spec.  This spec was co-developed with the CIRCT implementation and
+An auxillary spec has been written, shipped with the FIRRTL spec, which is the
+FIRRTL ABI spec.  This spec was co-developed with the CIRCT implementation and
 the CIRCT implementation conforms to that spec.  That spec covers the effects
 of several annotations, naming, verilog structure, and other issues.
+
+### Adding Features
+
+The FIRRTL parser uses the specification version declared in the FIR file to
+enable or disable certain features. To avoid having to develop the specification
+and parser in lock-step, the parser uses the `nextFIRVersion` and
+`missingSpecFIRVersion` constants to gate new language features. The `next*`
+marker is used for features that are in the spec's main branch, but haven't been
+released yet. The `missingSpec*` marker is used for features that have not
+landed in the spec yet. When a new spec version is released, the `next*` marker
+in the FIRRTL parser is replaced with a concrete `{x,y,z}` version tag.
+
+To add new features to the FIRRTL parser and specification, use this procedure:
+
+1.  Implement the feature in the FIRRTL parser and feature gate it behind the
+    `missingSpecFIRVersion` constant.
+2.  Iterate on the feature and experiment and debug it.
+3.  Create a PR in the FIRRTL specficiation repository describing the stable
+    version of the new feature.
+4.  Once the spec PR lands, change the parser to use the `nextFIRVersion`
+    constant for your feature instead, which will include it in the next
+    release.
+
+### Handling Specification Releases
+
+When a new version of the FIRRTL spec is released, all features using the
+`nextFIRVersion` constant in the parser are part of that release. Search and
+replace that constant with a concrete `{x,y,z}` version tag. Bump the
+`nextFIRVersion` constant to the next assumed release.
 
 ## Naming
 
@@ -1061,7 +1092,7 @@ custom SiFive annotations and transforms.  One such semantic is a partitioning
 of the circuit into _design_ and _design verification_.  Practically, this means
 that parts of the circuit are intended for FPGA or ASIC synthesis and,
 ultimately, fabrication.  Other parts of the circuit are only used for
-verification of the design.
+verification, debugging, or other _non-design_ reasons.
 
 This split was historically handled with an optional
 `sifive.enterprise.firrtl.MarkDUTAnnotation` on exactly one module in the
@@ -1085,14 +1116,16 @@ they are viewed as something that should be replaced.  E.g., a pass like
 under the effective DUT should be removed in favor of directly encoding the
 metadata the user wants in the FIRRTL.
 
-As the FIRRTL language has been expanded with verification features, this has
-created friction with the notion of this partitioning.  One such language
-feature is layers.  Layers allow for optional code, which does not affect
-anything outside it (except through forces), to be included in modules via a
-Verilog elaboration-time mechanism (either via SystemVerilog's `bind` directive
-or by setting certain `` `define `` textual macros).  Due to both the usage of
-these features for verification and the fact that they were added after these
-legacy transforms, layers are viewed as being _not_ in the design.  To
-accommodate this, the `InstanceInfo` pass additionally defines a semantic of a
-module being "in" or "under" the design which is separately tracked from whether
-or not something is "in" or "under" the DUT.
+As the FIRRTL language has been extended with new features, this has created
+friction with legacy passes which roughly assumed this partitioning.  A number
+of language features and non-standard extensions (annotations) have been added.
+All features or extensions listed below are deemed as non-design features and
+are treated the same by the `InstanceInfo` analysis:
+
+1. Layers -- a FIRRTL language feature to create Verilog that can be
+   elaboration-time configured (either via SystemVerilog's `bind` directive or
+   by setting certain `` `define `` textual macros).
+
+2. Grand Central Views -- an annotation-based way to create debug-only
+   SystemVerilog intrinsics.  Grand Central Views are intended to be replaced
+   with layers.

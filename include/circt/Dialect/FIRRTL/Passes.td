@@ -291,23 +291,6 @@ def EliminateWires : Pass<"firrtl-eliminate-wires", "firrtl::FModuleOp"> {
   let constructor = "circt::firrtl::createEliminateWiresPass()";
 }
 
-def EmitOMIR : Pass<"firrtl-emit-omir", "firrtl::CircuitOp"> {
-  let summary = "Emit OMIR annotations";
-  let description = [{
-    This pass gathers the `OMIRAnnotation`s in the design, updates the contained
-    targets with the trackers that were scattered throughout the design upon
-    reading the OMIR, and serializes the resulting data into a JSON file.
-  }];
-  let constructor = "circt::firrtl::createEmitOMIRPass()";
-  let options = [Option<"outputFilename", "file", "std::string", "",
-      "Output file for the JSON-serialized OMIR data">];
-  let dependentDialects = [
-      "emit::EmitDialect",
-      "sv::SVDialect",
-      "hw::HWDialect"
-  ];
-}
-
 def LowerMatches : Pass<"firrtl-lower-matches", "firrtl::FModuleOp"> {
   let summary = "Remove all matchs conditional blocks";
   let description = [{
@@ -459,29 +442,6 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
       "hw::HWDialect",
       "sv::SVDialect"
   ];
-}
-
-def PrefixModules : Pass<"firrtl-prefix-modules", "firrtl::CircuitOp"> {
-  let summary = "Prefixes names of modules and mems in a hierarchy";
-  let description = [{
-    This pass looks for modules annotated with the
-    `NestedPrefixModulesAnnotation` and prefixes the names of all modules
-    instantiated underneath it.  If `inclusive` is true, it includes the target
-    module in the renaming.  If `inclusive` is false, it will only rename
-    modules instantiated underneath the target module.  If a module is required
-    to have two different prefixes, it will be cloned.
-
-    The supported annotation is:
-    ```
-      {
-        class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
-        prefix = "MyPrefix_",
-        inclusive = true
-      }
-    ```
-
-  }];
-  let constructor = "circt::firrtl::createPrefixModulesPass()";
 }
 
 def PrintFIRRTLFieldSourcePass
@@ -709,10 +669,10 @@ def LowerXMR : Pass<"firrtl-lower-xmr", "firrtl::CircuitOp"> {
 def LowerIntmodules : Pass<"firrtl-lower-intmodules", "firrtl::CircuitOp"> {
   let summary = "Lower instances instances of intrinsic modules to ops.";
   let description = [{
-    This pass replaces instances of intrinsic modules (intmodule) with 
+    This pass replaces instances of intrinsic modules (intmodule) with
     `firrtl.int.generic` operations, and removes the intmodule's from
     the circuit.
- 
+
     Use this before running LowerIntrinsics.
   }];
   let constructor = "circt::firrtl::createLowerIntmodulesPass()";
@@ -985,7 +945,7 @@ def CheckRecursiveInstantiation : Pass<"firrtl-check-recursive-instantiation",
   let description = [{
     This pass checks for illegal recursive module instantion.  Recursive
     instantiation is when a module instantiates itself, either directly or
-    indirectly through other modules it instantiates.  Recursive module 
+    indirectly through other modules it instantiates.  Recursive module
     instantiation is illegal because it would require infinite hardware to
     synthesize. Recursive class instantiation is illegal as it would create an
     infinite loop.

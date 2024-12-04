@@ -3,14 +3,14 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from re import T
 
 from .common import Clock, Input, Output, Reset
 from .dialects import comb, msft, sv
 from .module import generator, modparams, Module, _BlockContext
 from .signals import ArraySignal, BitsSignal, BitVectorSignal, Signal
 from .signals import get_slice_bounds, _FromCirctValue
-from .types import dim, types, Array, Bits, InOut, Type
+from .support import get_user_loc
+from .types import dim, types, Array, Bits, InOut, Type, UInt
 
 from .circt import ir
 from .circt.support import BackedgeBuilder
@@ -82,7 +82,8 @@ def Wire(type: Type, name: str = None):
     def __init__(self):
       self._backedge = BackedgeBuilder.create(type._type,
                                               "wire" if name is None else name,
-                                              None)
+                                              None,
+                                              loc=get_user_loc())
       super().__init__(self._backedge.result, type)
       if name is not None:
         self.name = name
@@ -251,3 +252,27 @@ def SystolicArray(row_inputs: ArraySignal, col_inputs: ArraySignal, pe_builder):
   dummy_op.operation.erase()
 
   return _FromCirctValue(array.peOutputs)
+
+
+@modparams
+def Counter(width: int):
+  """Construct a counter with the specified width. Increment the counter on the
+  if the increment signal is asserted."""
+
+  class Counter(Module):
+    clk = Clock()
+    rst = Reset()
+    increment = Input(Bits(1))
+    out = Output(UInt(width))
+
+    @generator
+    def construct(ports):
+      count = Reg(UInt(width),
+                  clk=ports.clk,
+                  rst=ports.rst,
+                  rst_value=0,
+                  ce=ports.increment)
+      count.assign((count + 1).as_uint(width))
+      ports.out = count
+
+  return Counter

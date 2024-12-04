@@ -54,3 +54,25 @@ module {
   }
 }
 
+// -----
+
+module {
+  func.func @main() -> i32 {
+    %c1 = arith.constant 1 : index
+    %c3 = arith.constant 3 : index
+    %c0 = arith.constant 0 : index
+    %cinit = arith.constant 0 : i32
+    %alloc = memref.alloc() : memref<6xi32>
+    // expected-error @+1 {{Reduce operations in scf.parallel is not supported yet}}
+    %r:1 = scf.parallel (%arg2) = (%c0) to (%c3) step (%c1) init (%cinit) -> i32 {
+      %6 = memref.load %alloc[%arg2] : memref<6xi32>
+      scf.reduce(%6 : i32) {
+        ^bb0(%lhs : i32, %rhs: i32):
+          %res = arith.addi %lhs, %rhs : i32
+          scf.reduce.return %res : i32
+      }
+    }
+    return %r : i32
+  }
+}
+

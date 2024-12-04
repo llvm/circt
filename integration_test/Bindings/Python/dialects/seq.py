@@ -87,7 +87,7 @@ with Context() as ctx, Location.unknown():
 
   pm = PassManager.parse("builtin.module(lower-seq-to-sv,canonicalize)")
   pm.run(m.operation)
-  # CHECK: always_ff @(posedge clk)
+  # CHECK: always @(posedge clk)
   # CHECK: my_reg <= {{.+}}
   # CHECK: (* no_merge *)
   # CHECK: reg [31:0] reg1;

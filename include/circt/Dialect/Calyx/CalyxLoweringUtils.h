@@ -417,13 +417,36 @@ public:
     }
   }
 
+  template <typename T, typename = void>
+  struct IsFloatingPoint : std::false_type {};
+
+  template <typename T>
+  struct IsFloatingPoint<
+      T, std::void_t<decltype(std::declval<T>().getFloatingPointStandard())>>
+      : std::is_same<decltype(std::declval<T>().getFloatingPointStandard()),
+                     FloatingPointStandard> {};
+
   template <typename TLibraryOp>
   TLibraryOp getNewLibraryOpInstance(OpBuilder &builder, Location loc,
                                      TypeRange resTypes) {
     mlir::IRRewriter::InsertionGuard guard(builder);
     Block *body = component.getBodyBlock();
     builder.setInsertionPoint(body, body->begin());
-    auto name = TLibraryOp::getOperationName().split(".").second;
+    std::string name = TLibraryOp::getOperationName().split(".").second.str();
+    if constexpr (IsFloatingPoint<TLibraryOp>::value) {
+      switch (TLibraryOp::getFloatingPointStandard()) {
+      case FloatingPointStandard::IEEE754: {
+        constexpr char prefix[] = "ieee754.";
+        assert(name.find(prefix) == 0 &&
+               ("IEEE754 type operation's name must begin with '" +
+                std::string(prefix) + "'")
+                   .c_str());
+        name.erase(0, sizeof(prefix) - 1);
+        name = llvm::join_items(/*separator=*/"", "std_", name, "FN");
+        break;
+      }
+      }
+    }
     return builder.create<TLibraryOp>(loc, getUniqueName(name), resTypes);
   }
 
@@ -755,6 +778,28 @@ class BuildCallInstance : public calyx::FuncOpPartialLoweringPattern {
                            PatternRewriter &rewriter) const override;
   ComponentOp getCallComponent(mlir::func::CallOp callOp) const;
 };
+
+/// Predicate information for the floating point comparisons
+struct PredicateInfo {
+  struct InputPorts {
+    // Relevant ports to extract from the `std_compareFN`. For example, we
+    // extract the `lt` and the `unordered` ports when the predicate is `oge`.
+    enum class Port { Eq, Gt, Lt, Unordered };
+    Port port;
+    // Whether we should invert the port before passing as inputs to the `op`
+    // field. For example, we should invert both the `lt` and the `unordered`
+    // port just extracted for predicate `oge`.
+    bool invert;
+  };
+
+  // The combinational logic to apply to the input ports. For example, we should
+  // apply `And` to the two input ports for predicate `oge`.
+  enum class CombLogic { None, And, Or };
+  CombLogic logic;
+  SmallVector<InputPorts> inputPorts;
+};
+
+PredicateInfo getPredicateInfo(mlir::arith::CmpFPredicate pred);
 
 } // namespace calyx
 } // namespace circt

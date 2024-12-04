@@ -10,6 +10,15 @@
 // `ExtractBlackBoxes`, `ExtractClockGates`, and `ExtractSeqMems` passes in the
 // Scala FIRRTL implementation.
 //
+// This pass will make no modifications if the circuit does not contain a
+// design-under-test (DUT).  I.e., this pass does not use the "effecctive" DUT.
+// If a DUT exists, then anything in the design is extracted.  Using the
+// standard interpretation of passes like this, layers are not in the design.
+// If a situation arise where a module is instantiated inside and outside the
+// design that needs to be extracted, then it will be extracted in both up to
+// the point where it no longer needs to be further extracted.  See the tests
+// for examples of this.
+//
 //===----------------------------------------------------------------------===//
 
 #include "circt/Analysis/FIRRTLInstanceInfo.h"
@@ -24,18 +33,13 @@
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
-#include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
-#include "circt/Support/Path.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/FileUtilities.h"
-#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/Path.h"
 
 #define DEBUG_TYPE "firrtl-extract-instances"
 
@@ -126,10 +130,6 @@ struct ExtractInstancesPass
   /// relevant for instance extraction.
   DenseMap<Operation *, SmallVector<Annotation, 1>> annotatedModules;
 
-  /// The prefix of the DUT module.  This is used when creating new modules
-  /// under the DUT.
-  StringRef dutPrefix = "";
-
   /// A worklist of instances that need to be moved.
   SmallVector<std::pair<InstanceOp, ExtractionInfo>> extractionWorklist;
 
@@ -172,7 +172,6 @@ void ExtractInstancesPass::runOnOperation() {
   anythingChanged = false;
   anyFailures = false;
   annotatedModules.clear();
-  dutPrefix = "";
   extractionWorklist.clear();
   files.clear();
   extractionPaths.clear();
@@ -295,8 +294,6 @@ void ExtractInstancesPass::collectAnnos() {
       if (anno.isClass(dutAnnoClass)) {
         LLVM_DEBUG(llvm::dbgs()
                    << "Marking DUT `" << module.getModuleName() << "`\n");
-        if (auto prefix = anno.getMember<StringAttr>("prefix"))
-          dutPrefix = prefix;
         return false; // other passes may rely on this anno; keep it
       }
       if (!isAnnoInteresting(anno))
@@ -348,18 +345,19 @@ void ExtractInstancesPass::collectAnnos() {
     collectAnno(inst, instAnnos[0]);
   });
 
-  // If clock gate extraction is requested, find instances of extmodules with
-  // the corresponding `defname` and mark them as to be extracted.
-  // TODO: This defname really shouldn't be hardcoded here. Make this at least
-  // somewhat configurable.
+  // If clock gate extraction is requested, find instances of extmodules which
+  // have a defname that ends with "EICG_wrapper".  This also allows this to
+  // compose with Chisel-time module prefixing.
+  //
+  // TODO: This defname matching is a terrible hack and should be replaced with
+  // something better.
   if (!clkgateFileName.empty()) {
-    auto clkgateDefNameAttr = StringAttr::get(&getContext(), "EICG_wrapper");
     for (auto module : circuit.getOps<FExtModuleOp>()) {
-      if (module.getDefnameAttr() != clkgateDefNameAttr)
+      if (!module.getDefnameAttr().getValue().ends_with("EICG_wrapper"))
         continue;
       LLVM_DEBUG(llvm::dbgs()
                  << "Clock gate `" << module.getModuleName() << "`\n");
-      if (!instanceInfo->anyInstanceUnderDut(module)) {
+      if (!instanceInfo->anyInstanceInDesign(module)) {
         LLVM_DEBUG(llvm::dbgs() << "- Ignored (outside DUT)\n");
         continue;
       }
@@ -392,7 +390,7 @@ void ExtractInstancesPass::collectAnnos() {
 
     for (auto module : circuit.getOps<FMemModuleOp>()) {
       LLVM_DEBUG(llvm::dbgs() << "Memory `" << module.getModuleName() << "`\n");
-      if (!instanceInfo->anyInstanceUnderDut(module)) {
+      if (!instanceInfo->anyInstanceInDesign(module)) {
         LLVM_DEBUG(llvm::dbgs() << "- Ignored (outside DUT)\n");
         continue;
       }
@@ -492,6 +490,7 @@ void ExtractInstancesPass::extractInstances() {
     InstanceOp inst;
     ExtractionInfo info;
     std::tie(inst, info) = extractionWorklist.pop_back_val();
+
     auto parent = inst->getParentOfType<FModuleOp>();
 
     // Figure out the wiring prefix to use for this instance. If we are supposed
@@ -510,11 +509,12 @@ void ExtractInstancesPass::extractInstances() {
       prefix = prefixSlot;
     }
 
-    // If the instance is already in the right place (outside the DUT or already
-    // in the root module), there's nothing left for us to do. Otherwise we
-    // proceed to bubble it up one level in the hierarchy and add the resulting
-    // instances back to the worklist.
-    if (!instanceInfo->anyInstanceUnderDut(parent) ||
+    // If the instance is already in the right place (outside the DUT, already
+    // in the root module, or has hit a layer), there's nothing left for us to
+    // do.  Otherwise we proceed to bubble it up one level in the hierarchy and
+    // add the resulting instances back to the worklist.
+    if (inst->getParentOfType<LayerBlockOp>() ||
+        !instanceInfo->anyInstanceInDesign(parent) ||
         instanceGraph->lookup(parent)->noUses() ||
         (info.stopAtDUT && instanceInfo->isDut(parent))) {
       LLVM_DEBUG(llvm::dbgs() << "\nNo need to further move " << inst << "\n");
@@ -878,8 +878,8 @@ void ExtractInstancesPass::groupInstances() {
     OpBuilder builder(parentOp);
 
     // Uniquify the wrapper name.
-    auto wrapperModuleName = builder.getStringAttr(
-        circuitNamespace.newName(dutPrefix + wrapperName));
+    auto wrapperModuleName =
+        builder.getStringAttr(circuitNamespace.newName(wrapperName));
     auto wrapperInstName =
         builder.getStringAttr(getModuleNamespace(parent).newName(wrapperName));
 
@@ -1101,7 +1101,7 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
       // from the path and make the path look like it's rooted at the first DUT
       // module (so `TestHarness.dut.foo.bar` becomes `DUTModule.foo.bar`).
       while (!path.empty() &&
-             !instanceInfo->anyInstanceUnderDut(cast<igraph::ModuleOpInterface>(
+             !instanceInfo->anyInstanceInDesign(cast<igraph::ModuleOpInterface>(
                  symbolTable->lookup(path.back().getModule())))) {
         LLVM_DEBUG(llvm::dbgs()
                    << "    - Dropping non-DUT segment " << path.back() << "\n");

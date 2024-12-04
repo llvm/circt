@@ -36,7 +36,7 @@
 /// | --- | ----- | --------- | ------- | ------ | ------------------ |
 ///
 module ESI_PipelineStage # (
-  int WIDTH = 8
+  parameter WIDTH = 8
 ) (
   input logic clk,
   input logic rst,
@@ -80,7 +80,7 @@ module ESI_PipelineStage # (
   // Did we accept a token this cycle?
   wire a_rcv = a_ready && a_valid;
 
-  always_ff @(posedge clk) begin
+  always @(posedge clk) begin
     if (rst) begin
       l_valid <= 1'b0;
       x_valid_reg <= 1'b0;

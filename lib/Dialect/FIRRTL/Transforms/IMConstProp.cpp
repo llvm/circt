@@ -13,7 +13,6 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
-#include "circt/Dialect/FIRRTL/FIRRTLFieldSource.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
@@ -66,7 +65,7 @@ static bool isDeletableWireOrRegOrNode(Operation *op) {
     return true;
 
   // Otherwise, don't delete if has anything keeping it around or unknown.
-  return AnnotationSet(op).canBeDeleted() && !hasDontTouch(op) &&
+  return AnnotationSet(op).empty() && !hasDontTouch(op) &&
          hasDroppableName(op) && !cast<Forceable>(op).isForceable();
 }
 

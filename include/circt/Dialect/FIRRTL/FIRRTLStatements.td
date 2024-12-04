@@ -403,6 +403,7 @@ def LayerBlockOp : FIRRTLOp<
     $layerName $region attr-dict
   }];
   let hasVerifier = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLSTATEMENTS_TD

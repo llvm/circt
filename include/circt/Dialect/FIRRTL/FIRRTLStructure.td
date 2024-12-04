@@ -459,6 +459,7 @@ def LayerOp : FIRRTLOp<
   let assemblyFormat = [{
     $sym_name `` $convention attr-dict-with-keyword $body
   }];
+  let hasVerifier = 1;
 }
 
 def OptionOp : FIRRTLOp<"option", [
@@ -510,6 +511,42 @@ def OptionCaseOp : FIRRTLOp<
   let results = (outs);
   let assemblyFormat = [{
     $sym_name attr-dict
+  }];
+}
+
+def FormalOp : FIRRTLOp<"formal", [
+  HasParent<"firrtl::CircuitOp">,
+  DeclareOpInterfaceMethods<Symbol>,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Define a formal unit test";
+  let description = [{
+    The `firrtl.formal` operation defines a formal verification unit test. The
+    defines a unique symbol name that can be used to refer to it. The design to
+    be tested and any necessary test harness is defined by the separate
+    `firrtl.module` op referenced by `moduleName`. Additional parameters may be
+    specified for the unit test. Input ports of the target module are considered
+    to be symbolic values during the test; output ports are ignored.
+
+    This operation may be used to mark unit tests in a FIRRTL design, which
+    other tools may later pick up and run automatically. It is intended to lower
+    to the `verif.formal` operation. See `verif.formal` for more details.
+
+    Example:
+    ```mlir
+    firrtl.module @MyTest(in %a: !firrtl.uint<42>) {}
+    firrtl.formal @myTestA, @MyTest {bound = 42}
+    firrtl.formal @myTestB, @MyTest {mode = "induction", userAttr = 9001}
+    ```
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    FlatSymbolRefAttr:$moduleName,
+    DictionaryAttr:$parameters
+  );
+  let assemblyFormat = [{
+    $sym_name `,` $moduleName $parameters attr-dict-with-keyword
   }];
 }
 

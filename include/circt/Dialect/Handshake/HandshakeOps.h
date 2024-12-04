@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/Handshake/HandshakeDialect.h"
 #include "circt/Dialect/Handshake/HandshakeInterfaces.h"
+#include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"

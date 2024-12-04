@@ -50,7 +50,7 @@ void testExport(MlirContext ctx) {
   MlirLogicalResult result = mlirExportFIRRTL(module, dumpCallback, NULL);
   assert(mlirLogicalResultIsSuccess(result));
 
-  // CHECK: FIRRTL version 4.0.0
+  // CHECK: FIRRTL version 4.1.0
   // CHECK-NEXT: circuit ExportTestSimpleModule :
   // CHECK-NEXT:   module ExportTestSimpleModule : @[- 2:3]
   // CHECK-NEXT:     input in_1 : UInt<32> @[- 2:44]

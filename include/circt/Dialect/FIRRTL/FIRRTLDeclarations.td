@@ -36,49 +36,9 @@ class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
 /// located in a hardware-creating context, such as the body of a module.
 class HardwareDeclOp<string mnemonic, list <Trait> traits = []> :
   ReferableDeclOp<mnemonic, traits # [
-    ParentOneOf<[ 
+    ParentOneOf<[
       "firrtl::FModuleOp", "firrtl::LayerBlockOp",
       "firrtl::WhenOp", "firrtl::MatchOp", "sv::IfDefOp"]>]> {}
-
-def FormalOp : FIRRTLOp<"formal", [
-    HasParent<"firrtl::CircuitOp">,
-    DeclareOpInterfaceMethods<Symbol>,
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>
-]> {
-  let summary = "A formal test definition.";
-  let description = [{
-    The `firrtl.formal` operation defines a formal verification problem in the same 
-    context as the rest of the design. This problem is solved using bounded model 
-    checking and should be given a bound k, which represents the number of cycles considered 
-    during model checking. This definition marks a test harness defined as an internal module to 
-    be verified using bounded model checking.
-
-    Example:
-    ```mlir
-    // DUT
-    firrtl.module @Foo(in %bar: !firrtl.uint<8>, out %out: !firrtl.uint<8>) { ... }
-
-    // Test harness
-    firrtl.module @FooTest(in %bar_s: !firrtl.uint<8>) {
-      %bar, %out = firrtl.instance foo @Foo(in bar: %bar_s: !firrtl.uint<8>, out out: !firrtl.uint<8>) 
-      %c42_8 = firrtl.constant 42 : !firrtl.uint<8>
-      firrtl.connect %bar, %c42_8: !firrtl.uint<8>, !firrtl.uint<8>
-      %c69_8 = firrtl.constant 69 : !firrtl.uint<8>
-      %cond = firrtl.eq %c69_8, %out : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<1>
-      firrtl.assert %cond
-    }
-
-    // Mark test harness as formal test
-    firrtl.formal @formal1 of @FooTest bound 20
-    ```
-  }];
-
-  let arguments = (ins SymbolNameAttr:$sym_name, FlatSymbolRefAttr:$moduleName, UI64Attr:$bound);
-  let results = (outs);
-  let assemblyFormat = [{
-    $sym_name `of` $moduleName `bound` $bound attr-dict
-  }];
-}
 
 def InstanceOp : HardwareDeclOp<"instance", [
     DeclareOpInterfaceMethods<FInstanceLike>,
@@ -87,7 +47,7 @@ def InstanceOp : HardwareDeclOp<"instance", [
       "getModuleName"
     ]>,
   ]> {
-  let summary = "Instantiate an instance of a module";
+  let summary = "Instantiate a module";
   let description = [{
     This represents an instance of a module.  The results are the modules inputs
     and outputs.  The inputs have flip type, the outputs do not.
@@ -297,24 +257,6 @@ def MemOp : HardwareDeclOp<"mem", [DeclareOpInterfaceMethods<CombDataflow>]> {
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
     $ruw `` custom<MemOp>(attr-dict) `:` qualified(type($results))
   }];
-
-  let builders = [
-    OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
-                   "uint32_t":$readLatency, "uint32_t":$writeLatency,
-                   "uint64_t":$depth, "RUWAttr":$ruw,
-                   "ArrayRef<Attribute>":$portNames,
-                   CArg<"StringRef", "{}">:$name,
-                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
-                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
-                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"StringAttr", "StringAttr()">:$innerSym)>,
-    OpBuilder<(ins "::mlir::TypeRange":$resultTypes, "uint32_t":$readLatency,
-                   "uint32_t":$writeLatency, "uint64_t":$depth, "RUWAttr":$ruw,
-                   "ArrayRef<Attribute>":$portNames, "StringRef":$name,
-                   "NameKindEnum":$nameKind, "ArrayRef<Attribute>":$annotations,
-                   "ArrayRef<Attribute>":$portAnnotations,
-                   "hw::InnerSymAttr":$innerSym)>
-  ];
 
   let hasVerifier = 1;
 

@@ -149,8 +149,16 @@ private:
           static constexpr std::string_view sFloat = "float";
           return {sFloat};
         })
-        .Case<AddFNOp>([&](auto op) -> FailureOr<StringRef> {
+        .Case<AddFOpIEEE754>([&](auto op) -> FailureOr<StringRef> {
           static constexpr std::string_view sFloatingPoint = "float/addFN";
+          return {sFloatingPoint};
+        })
+        .Case<MulFOpIEEE754>([&](auto op) -> FailureOr<StringRef> {
+          static constexpr std::string_view sFloatingPoint = "float/mulFN";
+          return {sFloatingPoint};
+        })
+        .Case<CompareFOpIEEE754>([&](auto op) -> FailureOr<StringRef> {
+          static constexpr std::string_view sFloatingPoint = "float/compareFN";
           return {sFloatingPoint};
         })
         .Default([&](auto op) {
@@ -675,7 +683,8 @@ void Emitter::emitComponent(ComponentInterface op) {
             emitLibraryPrimTypedByFirstOutputPort(
                 op, /*calyxLibName=*/{"std_sdiv_pipe"});
           })
-          .Case<AddFNOp>([&](auto op) { emitLibraryFloatingPoint(op); })
+          .Case<AddFOpIEEE754, MulFOpIEEE754, CompareFOpIEEE754>(
+              [&](auto op) { emitLibraryFloatingPoint(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside component");
           });
@@ -991,8 +1000,10 @@ void Emitter::emitLibraryPrimTypedByFirstOutputPort(
 
 void Emitter::emitLibraryFloatingPoint(Operation *op) {
   auto cell = cast<CellInterface>(op);
+  // magic number for the index of `left/right` input port
+  size_t inputPortIndex = cell.getInputPorts().size() - 3;
   unsigned bitWidth =
-      cell.getOutputPorts()[0].getType().getIntOrFloatBitWidth();
+      cell.getInputPorts()[inputPortIndex].getType().getIntOrFloatBitWidth();
   // Since Calyx interacts with HardFloat, we'll also only be using expWidth and
   // sigWidth. See
   // http://www.jhauser.us/arithmetic/HardFloat-1/doc/HardFloat-Verilog.html
@@ -1019,11 +1030,14 @@ void Emitter::emitLibraryFloatingPoint(Operation *op) {
     return;
   }
 
-  StringRef opName = op->getName().getStringRef();
+  std::string opName;
+  if (auto fpOp = dyn_cast<calyx::FloatingPointOpInterface>(op)) {
+    opName = fpOp.getCalyxLibraryName();
+  }
   indent() << getAttributes(op, /*atFormat=*/true) << cell.instanceName()
-           << space() << equals() << space() << removeCalyxPrefix(opName)
-           << LParen() << expWidth << comma() << sigWidth << comma() << bitWidth
-           << RParen() << semicolonEndL();
+           << space() << equals() << space() << opName << LParen() << expWidth
+           << comma() << sigWidth << comma() << bitWidth << RParen()
+           << semicolonEndL();
 }
 
 void Emitter::emitAssignment(AssignOp op) {

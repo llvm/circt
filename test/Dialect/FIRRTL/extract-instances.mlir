@@ -298,6 +298,174 @@ firrtl.circuit "ExtractBlackBoxesIntoDUTSubmodule"  {
 }
 
 //===----------------------------------------------------------------------===//
+// ExtractBlackBoxes Custom Tests
+//
+// These are tests that were not derived from legacy custom SFC tests.
+//===----------------------------------------------------------------------===//
+
+// Test all possible combinations of extraction for modules that are: (1)
+// exclusively under the design, (2) exclusively not under the design, and (3)
+// both under and not under the design.  Modules can be not under the design if
+// they are outside the design or if they are under a layer.
+//
+// Note: this pass does not do any deduplication, so a module that is of type
+// (3) needs to cause extraction outside the design up to the point that it is
+// no longer necessary to do more extraction.
+firrtl.circuit "CombinationsTest" {
+  firrtl.layer @A bind {}
+  firrtl.extmodule @bbox_Foo() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.ExtractBlackBoxAnnotation",
+        filename = "BlackBoxes.txt",
+        prefix = ""
+      }
+    ],
+    defname = "bbox_Foo"
+  }
+  firrtl.module @Foo() {
+    firrtl.instance bbox_Foo @bbox_Foo()
+  }
+  firrtl.extmodule @bbox_Bar() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.ExtractBlackBoxAnnotation",
+        filename = "BlackBoxes.txt",
+        prefix = ""
+      }
+    ],
+    defname = "bbox_Bar"
+  }
+  firrtl.module @Bar() {
+    firrtl.instance bbox_Bar @bbox_Bar()
+  }
+  firrtl.extmodule @bbox_Baz() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.ExtractBlackBoxAnnotation",
+        filename = "BlackBoxes.txt",
+        prefix = ""
+      }
+    ],
+    defname = "bbox_Baz"
+  }
+  firrtl.module @Baz() {
+    firrtl.instance bbox_Baz @bbox_Baz()
+  }
+  firrtl.extmodule @bbox_Qux() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.ExtractBlackBoxAnnotation",
+        filename = "BlackBoxes.txt",
+        prefix = ""
+      }
+    ],
+    defname = "bbox_Qux"
+  }
+  firrtl.module @Qux() {
+    firrtl.instance bbox_Qux @bbox_Qux()
+  }
+  firrtl.extmodule @bbox_Quz() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.ExtractBlackBoxAnnotation",
+        filename = "BlackBoxes.txt",
+        prefix = ""
+      }
+    ],
+    defname = "bbox_Quz"
+  }
+  firrtl.module @Quz() {
+    firrtl.instance bbox_Quz @bbox_Quz()
+  }
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+    firrtl.instance foo @Foo()
+    firrtl.instance baz @Baz()
+    firrtl.instance quz1 @Quz()
+    firrtl.layerblock @A {
+      firrtl.instance qux @Qux()
+      firrtl.instance quz2 @Quz()
+    }
+  }
+  firrtl.module @Wrapper() {
+    firrtl.instance dut @DUT()
+    firrtl.instance bar @Bar()
+    firrtl.instance baz @Baz()
+  }
+  firrtl.module @CombinationsTest() {
+    firrtl.instance wrapper @Wrapper()
+    // %sifive_metadata = firrtl.object @SiFive_Metadata()
+  }
+  // firrtl.class @SiFive_Metadata() {}
+}
+
+// CHECK-LABEL: firrtl.circuit "CombinationsTest"
+
+// CHECK-LABEL: firrtl.module @Foo()
+// CHECK-NOT:     firrtl.instance bbox_Foo @bbox_Foo
+
+// CHECK-LABEL: firrtl.module @Bar()
+// CHECK-NEXT:    firrtl.instance bbox_Bar @bbox_Bar
+
+// CHECK-LABEL: firrtl.module @Baz()
+// CHECK-NOT:     firrtl.instance bbox_Baz @bbox_Baz
+
+// CHECK-LABEL: firrtl.module @Qux()
+// CHECK:         firrtl.instance bbox_Qux @bbox_Qux
+
+// CHECK-LABEL: firrtl.module @Quz()
+// CHECK-NOT:     firrtl.instance bbox_Quz @bbox_Quz
+
+// CHECK-LABEL: firrtl.module @DUT()
+//
+// CHECK:         firrtl.layerblock @A {
+// CHECK-NEXT:      firrtl.instance qux @Qux()
+// CHECK-NEXT:      firrtl.instance quz2 {{.*}}@Quz()
+// CHECK-NEXT:      firrtl.instance bbox_Quz {{.*}}@bbox_Quz()
+
+// CHECK-LABEL: firrtl.module @Wrapper()
+// CHECK-NEXT:    firrtl.instance dut {{.*}}@DUT()
+// CHECK-NEXT:    firrtl.instance bbox_Foo {{.*}}@bbox_Foo()
+// CHECK-NEXT:    firrtl.instance bbox_Baz {{.*}}@bbox_Baz()
+// CHECK-NEXT:    firrtl.instance bbox_Quz {{.*}}@bbox_Quz()
+//
+// CHECK-NEXT:    firrtl.instance bar @Bar()
+//
+// CHECK-NEXT:    firrtl.instance baz {{.*}}@Baz()
+// CHECK-NEXT:    firrtl.instance bbox_Baz {{.*}}@bbox_Baz()
+
+// Test that a circuit without a design-under-test has no extraction.
+firrtl.circuit "NoDutBehavior" {
+
+  firrtl.extmodule @bbox_Foo() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.ExtractBlackBoxAnnotation",
+        filename = "BlackBoxes.txt",
+        prefix = ""
+      }
+    ],
+    defname = "bbox_Foo"
+  }
+  firrtl.module @Foo() {
+    firrtl.instance bbox_Foo @bbox_Foo()
+  }
+
+  firrtl.module @NoDutBehavior() {
+    firrtl.instance foo @Foo()
+  }
+}
+
+// CHECK-LABEL: firrtl.module @Foo
+// CHECK-NEXT:    firrtl.instance bbox_Foo @bbox_Foo()
+
+//===----------------------------------------------------------------------===//
 // ExtractClockGates Simple
 //===----------------------------------------------------------------------===//
 
@@ -566,20 +734,45 @@ firrtl.circuit "InstSymConflict" {
   // CHECK-SAME:              ]
 }
 
-// Module prefixing should not break extraction.
-// https://github.com/llvm/circt/issues/5961
-// CHECK-LABEL: firrtl.circuit "Plop_Foo"
-firrtl.circuit "Plop_Foo" attributes {annotations = [{class = "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation", filename = "ckgates.txt", group = "ClockGates"}]} {
-  // CHECK: hw.hierpath @nla_1 [@Plop_Foo::@ClockGates, @Plop_ClockGates::@ckg, @EICG_wrapper]
-  hw.hierpath @nla_1 [@Plop_Foo::@core, @Plop_Bar::@ckg, @EICG_wrapper]
-  firrtl.extmodule private @EICG_wrapper() attributes {defname = "EICG_wrapper"}
-  firrtl.module private @Plop_Bar() {
-    firrtl.instance ckg sym @ckg @EICG_wrapper()
+// Test that clock gate extraction composes with Chisel-time module prefixing.
+// Chisel may add any number of prefixes to the clock gates.  Ensure that this
+// will not block extraction.  Additionally, test that suffixes will block
+// extraction.
+//
+// CHECK-LABEL: firrtl.circuit "PrefixedClockGate"
+firrtl.circuit "PrefixedClockGate" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation",
+      filename = "ckgates.txt",
+      group = "ClockGates"
+    }
+  ]
+} {
+  firrtl.extmodule private @Prefix_EICG_wrapper() attributes {
+    defname = "Prefix_EICG_wrapper"
   }
-  // CHECK: firrtl.module private @Plop_ClockGates()
-  // CHECK-LABEL: firrtl.module @Plop_Foo()
-  firrtl.module @Plop_Foo() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation", prefix = "Plop_"}]} {
-    // CHECK: firrtl.instance ClockGates sym @ClockGates @Plop_ClockGates()
-    firrtl.instance core sym @core @Plop_Bar()
+  firrtl.extmodule private @Prefix_EICG_wrapper_Suffix() attributes {
+    defname = "Prefix_EICG_wrapper_Suffix"
+  }
+  // CHECK:      firrtl.module private @ClockGates() {
+  // CHECK-NEXT:   firrtl.instance clockGate_0 @Prefix_EICG_wrapper()
+  // CHECK-NOT:    firrtl.instance clockGate_1 @Prefix_EICG_wrapper_Suffix()
+  //
+  // CHECK:      firrtl.module @Foo
+  // CHECK-NEXT:   firrtl.instance ClockGates {{.*}} @ClockGates()
+  // CHECK-NEXT:   firrtl.instance clockGate_1 @Prefix_EICG_wrapper_Suffix()
+  firrtl.module @Foo() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+    firrtl.instance clockGate_0 @Prefix_EICG_wrapper()
+    firrtl.instance clockGate_1 @Prefix_EICG_wrapper_Suffix()
+  }
+  firrtl.module @PrefixedClockGate() {
+    firrtl.instance foo @Foo()
   }
 }

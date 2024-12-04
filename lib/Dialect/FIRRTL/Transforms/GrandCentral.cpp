@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Analysis/FIRRTLInstanceInfo.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
@@ -24,7 +25,6 @@
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/Debug.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -608,10 +608,6 @@ private:
   /// Mapping of ID to companion module.
   DenseMap<Attribute, CompanionInfo> companionIDMap;
 
-  /// An optional prefix applied to all interfaces in the design.  This is set
-  /// based on a PrefixInterfacesAnnotation.
-  StringRef interfacePrefix;
-
   NLATable *nlaTable;
 
   /// The design-under-test (DUT) as determined by the presence of a
@@ -623,16 +619,9 @@ private:
   /// "TestBenchDirAnnotation" is found.
   StringAttr testbenchDir;
 
-  /// Return a string containing the name of an interface.  Apply correct
-  /// prefixing from the interfacePrefix and module-level prefix parameter.
-  std::string getInterfaceName(StringAttr prefix,
-                               AugmentedBundleTypeAttr bundleType) {
-
-    if (prefix)
-      return (prefix.getValue() + interfacePrefix +
-              bundleType.getDefName().getValue())
-          .str();
-    return (interfacePrefix + bundleType.getDefName().getValue()).str();
+  /// Return a string containing the name of an interface.
+  std::string getInterfaceName(AugmentedBundleTypeAttr bundleType) {
+    return (bundleType.getDefName().getValue()).str();
   }
 
   /// Recursively examine an AugmentedType to populate the "mappings" file
@@ -645,8 +634,8 @@ private:
   /// populate a "mappings" file (generate XMRs) using `traverseField`.  Return
   /// the type of the field examined.
   std::optional<TypeSum>
-  computeField(Attribute field, IntegerAttr id, StringAttr prefix,
-               VerbatimBuilder &path, SmallVector<VerbatimXMRbuilder> &xmrElems,
+  computeField(Attribute field, IntegerAttr id, VerbatimBuilder &path,
+               SmallVector<VerbatimXMRbuilder> &xmrElems,
                SmallVector<InterfaceElemsBuilder> &interfaceBuilder);
 
   /// Recursively examine an AugmentedBundleType to both build new interfaces
@@ -654,7 +643,7 @@ private:
   /// interface is invalid.
   std::optional<StringAttr>
   traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
-                 StringAttr prefix, VerbatimBuilder &path,
+                 VerbatimBuilder &path,
                  SmallVector<VerbatimXMRbuilder> &xmrElems,
                  SmallVector<InterfaceElemsBuilder> &interfaceBuilder);
 
@@ -683,6 +672,10 @@ private:
   /// TODO: Investigate a way to not use a pointer here like how `getNamespace`
   /// works below.
   InstancePathCache *instancePaths = nullptr;
+
+  /// An instance info analysis that is used to query if modules are in the
+  /// design or not.
+  InstanceInfo *instanceInfo = nullptr;
 
   /// The namespace associated with the circuit.  This is lazily constructed
   /// using `getNamespace`.
@@ -1376,7 +1369,7 @@ bool GrandCentralPass::traverseField(
 }
 
 std::optional<TypeSum> GrandCentralPass::computeField(
-    Attribute field, IntegerAttr id, StringAttr prefix, VerbatimBuilder &path,
+    Attribute field, IntegerAttr id, VerbatimBuilder &path,
     SmallVector<VerbatimXMRbuilder> &xmrElems,
     SmallVector<InterfaceElemsBuilder> &interfaceBuilder) {
   return TypeSwitch<Attribute, std::optional<TypeSum>>(field)
@@ -1410,10 +1403,9 @@ std::optional<TypeSum> GrandCentralPass::computeField(
             auto firstElement = fromAttr(elements[0]);
             if (!firstElement)
               return std::nullopt;
-            auto elementType =
-                computeField(*firstElement, id, prefix,
-                             path.snapshot().append("[" + Twine(0) + "]"),
-                             xmrElems, interfaceBuilder);
+            auto elementType = computeField(
+                *firstElement, id, path.snapshot().append("[" + Twine(0) + "]"),
+                xmrElems, interfaceBuilder);
             if (!elementType)
               return std::nullopt;
 
@@ -1435,8 +1427,8 @@ std::optional<TypeSum> GrandCentralPass::computeField(
           })
       .Case<AugmentedBundleTypeAttr>(
           [&](AugmentedBundleTypeAttr bundle) -> TypeSum {
-            auto ifaceName = traverseBundle(bundle, id, prefix, path, xmrElems,
-                                            interfaceBuilder);
+            auto ifaceName =
+                traverseBundle(bundle, id, path, xmrElems, interfaceBuilder);
             assert(ifaceName && *ifaceName);
             return VerbatimType({ifaceName->str(), true});
           });
@@ -1449,13 +1441,13 @@ std::optional<TypeSum> GrandCentralPass::computeField(
 /// stringy-typed SystemVerilog hierarchical references to drive the
 /// interface. Returns false on any failure and true on success.
 std::optional<StringAttr> GrandCentralPass::traverseBundle(
-    AugmentedBundleTypeAttr bundle, IntegerAttr id, StringAttr prefix,
-    VerbatimBuilder &path, SmallVector<VerbatimXMRbuilder> &xmrElems,
+    AugmentedBundleTypeAttr bundle, IntegerAttr id, VerbatimBuilder &path,
+    SmallVector<VerbatimXMRbuilder> &xmrElems,
     SmallVector<InterfaceElemsBuilder> &interfaceBuilder) {
 
   unsigned lastIndex = interfaceBuilder.size();
   auto iFaceName = StringAttr::get(
-      &getContext(), getNamespace().newName(getInterfaceName(prefix, bundle)));
+      &getContext(), getNamespace().newName(getInterfaceName(bundle)));
   interfaceBuilder.emplace_back(iFaceName, id);
 
   for (auto element : bundle.getElements()) {
@@ -1474,7 +1466,7 @@ std::optional<StringAttr> GrandCentralPass::traverseBundle(
     // if the interface field requires renaming in the output (e.g. due to
     // naming conflicts).
     auto elementType = computeField(
-        *field, id, prefix, path.snapshot().append(".").append(name.getValue()),
+        *field, id, path.snapshot().append(".").append(name.getValue()),
         xmrElems, interfaceBuilder);
     if (!elementType)
       return std::nullopt;
@@ -1576,28 +1568,6 @@ void GrandCentralPass::runOnOperation() {
       ++numAnnosRemoved;
       return true;
     }
-    if (anno.isClass(prefixInterfacesAnnoClass)) {
-      if (!interfacePrefix.empty()) {
-        emitCircuitError("more than one 'PrefixInterfacesAnnotation' was "
-                         "found, but zero or one may be provided");
-        removalError = true;
-        return false;
-      }
-
-      auto prefix = anno.getMember<StringAttr>("prefix");
-      if (!prefix) {
-        emitCircuitError()
-            << "contained an invalid 'PrefixInterfacesAnnotation' that does "
-               "not contain a 'prefix' field: "
-            << anno.getDict();
-        removalError = true;
-        return false;
-      }
-
-      interfacePrefix = prefix.getValue();
-      ++numAnnosRemoved;
-      return true;
-    }
     if (anno.isClass(testBenchDirAnnoClass)) {
       testbenchDir = anno.getMember<StringAttr>("dirname");
       return false;
@@ -1628,8 +1598,6 @@ void GrandCentralPass::runOnOperation() {
     else
       llvm::dbgs() << "<none>\n";
     llvm::dbgs()
-        << "Prefix Info (from PrefixInterfacesAnnotation):\n"
-        << "  prefix: " << interfacePrefix << "\n"
         << "Hierarchy File Info (from GrandCentralHierarchyFileAnnotation):\n"
         << "  filename: ";
     if (maybeHierarchyFileYAML)
@@ -1673,47 +1641,7 @@ void GrandCentralPass::runOnOperation() {
   /// TODO: Handle this differently to allow construction of an options
   auto instancePathCache = InstancePathCache(getAnalysis<InstanceGraph>());
   instancePaths = &instancePathCache;
-
-  /// Contains the set of modules which are instantiated by the DUT, but not a
-  /// companion, instantiated by a companion, or instantiated under a bind.  If
-  /// no DUT exists, treat the top module as if it were the DUT.  This works by
-  /// doing a depth-first walk of the instance graph, starting from the
-  /// "effective" DUT and stopping the search at any modules which are known
-  /// companions or any instances which are marked "lowerToBind".
-  DenseSet<InstanceGraphNode *> dutModules;
-  InstanceGraphNode *effectiveDUT;
-  if (dut)
-    effectiveDUT = instancePaths->instanceGraph.lookup(dut);
-  else
-    effectiveDUT = instancePaths->instanceGraph.getTopLevelNode();
-  {
-    SmallVector<InstanceGraphNode *> modules({effectiveDUT});
-    while (!modules.empty()) {
-      auto *m = modules.pop_back_val();
-      for (InstanceRecord *a : *m) {
-        auto *mod = a->getTarget();
-        // Skip modules that we've visited, that are are under the companion
-        // module, or are bound/under a layer block.
-        if (auto block = a->getInstance()->getParentOfType<LayerBlockOp>()) {
-          auto diag = a->getInstance().emitOpError()
-                      << "is instantiated under a '" << block.getOperationName()
-                      << "' op which is unexpected by GrandCentral (did you "
-                         "forget to run the LowerLayers pass?)";
-          diag.attachNote(block.getLoc())
-              << "the '" << block.getOperationName() << "' op is here";
-          removalError = true;
-        }
-        auto instOp = dyn_cast<InstanceOp>(*a->getInstance());
-        if (dutModules.contains(mod) ||
-            AnnotationSet::hasAnnotation(mod->getModule(),
-                                         companionAnnoClass) ||
-            (instOp && instOp.getLowerToBind()))
-          continue;
-        modules.push_back(mod);
-        dutModules.insert(mod);
-      }
-    }
-  }
+  instanceInfo = &getAnalysis<InstanceInfo>();
 
   // Maybe return the lone instance of a module.  Generate errors on the op if
   // the module is not instantiated or is multiply instantiated.
@@ -1933,8 +1861,9 @@ void GrandCentralPass::runOnOperation() {
                 //   2) The module is NOT instantiated by the effective DUT or
                 //      is under a bind.
                 auto *modNode = instancePaths->instanceGraph.lookup(mod);
-                SmallVector<InstanceRecord *> instances(modNode->uses());
-                if (modNode != companionNode && dutModules.count(modNode))
+                if (modNode != companionNode &&
+                    instanceInfo->anyInstanceInEffectiveDesign(
+                        modNode->getModule()))
                   continue;
 
                 LLVM_DEBUG({
@@ -2114,7 +2043,7 @@ void GrandCentralPass::runOnOperation() {
     auto companionModule = companionIter.companion;
     auto symbolName = getNamespace().newName(
         "__" + companionIDMap.lookup(bundle.getID()).name + "_" +
-        getInterfaceName(bundle.getPrefix(), bundle) + "__");
+        getInterfaceName(bundle) + "__");
 
     // Recursively walk the AugmentedBundleType to generate interfaces and XMRs.
     // Error out if this returns None (indicating that the annotation is
@@ -2131,8 +2060,8 @@ void GrandCentralPass::runOnOperation() {
     SmallVector<VerbatimXMRbuilder> xmrElems;
     SmallVector<InterfaceElemsBuilder> interfaceBuilder;
 
-    auto ifaceName = traverseBundle(bundle, bundle.getID(), bundle.getPrefix(),
-                                    verbatim, xmrElems, interfaceBuilder);
+    auto ifaceName = traverseBundle(bundle, bundle.getID(), verbatim, xmrElems,
+                                    interfaceBuilder);
     if (!ifaceName) {
       removalError = true;
       continue;

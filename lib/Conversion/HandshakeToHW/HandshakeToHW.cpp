@@ -14,6 +14,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
@@ -483,7 +484,8 @@ struct RTLBuilder {
 
   Value constant(unsigned width, int64_t value,
                  std::optional<StringRef> name = {}) {
-    return constant(APInt(width, value));
+    return constant(
+        APInt(width, value, /*isSigned=*/false, /*implicitTrunc=*/true));
   }
   std::pair<Value, Value> wrap(Value data, Value valid,
                                std::optional<StringRef> name = {}) {
@@ -1052,6 +1054,40 @@ public:
            "should never be called. The base HandshakeConversionPattern logic "
            "will instantiate the external module.");
   }
+};
+
+class ESIInstanceConversionPattern
+    : public OpConversionPattern<handshake::ESIInstanceOp> {
+public:
+  ESIInstanceConversionPattern(MLIRContext *context,
+                               const HWSymbolCache &symCache)
+      : OpConversionPattern(context), symCache(symCache) {}
+
+  LogicalResult
+  matchAndRewrite(ESIInstanceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // The operand signature of this op is very similar to the lowered
+    // `handshake.func`s (especially since handshake uses ESI channels
+    // internally). Whereas ESIInstance ops have 'clk' and 'rst' at the
+    // beginning, lowered `handshake.func`s have them at the end. So we've just
+    // got to re-arrange them.
+    SmallVector<Value> operands;
+    for (size_t i = ESIInstanceOp::NumFixedOperands, e = op.getNumOperands();
+         i < e; ++i)
+      operands.push_back(adaptor.getOperands()[i]);
+    operands.push_back(adaptor.getClk());
+    operands.push_back(adaptor.getRst());
+    // Locate the lowered module so the instance builder can get all the
+    // metadata.
+    Operation *targetModule = symCache.getDefinition(op.getModuleAttr());
+    // And replace the op with an instance of the target module.
+    rewriter.replaceOpWithNewOp<hw::InstanceOp>(op, targetModule,
+                                                op.getInstNameAttr(), operands);
+    return success();
+  }
+
+private:
+  const HWSymbolCache &symCache;
 };
 
 class ReturnConversionPattern
@@ -1976,6 +2012,18 @@ public:
     for (auto hwModule : mod.getOps<hw::HWModuleOp>())
       if (failed(convertExtMemoryOps(hwModule)))
         return signalPassFailure();
+
+    // Run conversions which need see everything.
+    HWSymbolCache symbolCache;
+    symbolCache.addDefinitions(mod);
+    symbolCache.freeze();
+    RewritePatternSet patterns(mod.getContext());
+    patterns.insert<ESIInstanceConversionPattern>(mod.getContext(),
+                                                  symbolCache);
+    if (failed(applyPartialConversion(mod, target, std::move(patterns)))) {
+      mod->emitOpError() << "error during conversion";
+      signalPassFailure();
+    }
   }
 };
 } // end anonymous namespace

@@ -50,8 +50,8 @@ lib/Target/ExportSMTLIB @maerhart
 # SV
 **/Dialect/SV @darthscsi
 
-# Ibis
-**/Dialect/Ibis @teqdruid @mortbopet @blakep-msft
+# Kanagawa
+**/Dialect/Kanagawa @teqdruid @mortbopet @blakep-msft
 
 
 ## Infra

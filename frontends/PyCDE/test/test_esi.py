@@ -1,16 +1,18 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
 
+import unittest
 from pycde import (Clock, Input, InputChannel, Output, OutputChannel, Module,
                    Reset, generator, types)
 from pycde import esi
 from pycde.common import AppID, Constant, RecvBundle, SendBundle
 from pycde.constructs import Wire
-from pycde.esi import MMIO
+from pycde.esi import HostMem, MMIO
 from pycde.module import Metadata
 from pycde.support import _obj_to_attribute, optional_dict_to_dict_attr
 from pycde.types import (Bits, Bundle, BundledChannel, Channel,
-                         ChannelDirection, ChannelSignaling, UInt, ClockType)
+                         ChannelDirection, ChannelSignaling, UInt, StructType,
+                         ClockType)
 from pycde.testing import unittestmodule
 
 # CHECK: Channel<UInt<4>, ValidReady>
@@ -292,3 +294,31 @@ class MMIOReq(Module):
 
     data, _ = Channel(Bits(64)).wrap(c64, c1)
     _ = read_bundle.unpack(data=data)
+
+
+# CHECK-LABEL:  hw.module @HostMemReq()
+# CHECK-NEXT:     [[R0:%.+]] = hwarith.constant 0 : ui64
+# CHECK-NEXT:     %false = hw.constant false
+# CHECK-NEXT:     [[R2:%.+]] = hwarith.constant 0 : ui8
+# CHECK-NEXT:     [[R3:%.+]] = hw.struct_create ([[R0]], [[R2]]) : !hw.struct<address: ui64, tag: ui8>
+# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R3]], %false : !hw.struct<address: ui64, tag: ui8>
+# CHECK-NEXT:     [[R1:%.+]] = esi.service.req <@_HostMem::@read>(#esi.appid<"host_mem_req">) : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from "req", !esi.channel<!hw.struct<tag: ui8, data: ui256>> to "resp"]>
+# CHECK-NEXT:     %resp = esi.bundle.unpack %chanOutput from [[R1]] : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from "req", !esi.channel<!hw.struct<tag: ui8, data: ui256>> to "resp"]>
+# CHECK:        esi.service.std.hostmem @_HostMem
+@unittestmodule(esi_sys=True)
+class HostMemReq(Module):
+
+  @generator
+  def build(ports):
+    u64 = UInt(64)(0)
+    c1 = Bits(1)(0)
+
+    address, _ = Channel(esi.HostMem.ReadReqType).wrap(
+        esi.HostMem.ReadReqType({
+            "tag": 0,
+            "address": u64
+        }), c1)
+
+    _ = HostMem.read(appid=AppID("host_mem_req"),
+                     req=address,
+                     data_type=UInt(256))

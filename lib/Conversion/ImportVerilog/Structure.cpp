@@ -894,13 +894,27 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
   ValueSymbolScope scope(valueSymbols);
 
   // Create a function body block and populate it with block arguments.
+  SmallVector<moore::VariableOp> argVariables;
   auto &block = lowering->op.getBody().emplaceBlock();
   for (auto [astArg, type] :
        llvm::zip(subroutine.getArguments(),
                  lowering->op.getFunctionType().getInputs())) {
     auto loc = convertLocation(astArg->location);
     auto blockArg = block.addArgument(type, loc);
-    valueSymbols.insert(astArg, blockArg);
+
+    if (isa<moore::RefType>(type)) {
+      valueSymbols.insert(astArg, blockArg);
+    } else {
+      // Convert the body of the function.
+      OpBuilder::InsertionGuard g(builder);
+      builder.setInsertionPointToEnd(&block);
+
+      auto shadowArg = builder.create<moore::VariableOp>(
+          loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
+          StringAttr{}, blockArg);
+      valueSymbols.insert(astArg, shadowArg);
+      argVariables.push_back(shadowArg);
+    }
   }
 
   // Convert the body of the function.
@@ -934,5 +948,16 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
   }
   if (returnVar && returnVar.use_empty())
     returnVar.getDefiningOp()->erase();
+
+  for (auto var : argVariables) {
+    if (llvm::all_of(var->getUsers(),
+                     [](auto *user) { return isa<moore::ReadOp>(user); })) {
+      for (auto *user : llvm::make_early_inc_range(var->getUsers())) {
+        user->getResult(0).replaceAllUsesWith(var.getInitial());
+        user->erase();
+      }
+      var->erase();
+    }
+  }
   return success();
 }

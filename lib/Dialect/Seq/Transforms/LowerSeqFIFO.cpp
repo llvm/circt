@@ -69,7 +69,7 @@ public:
 
     Value readData = rewriter.create<seq::ReadPortOp>(
         loc, hlmem, llvm::SmallVector<Value>{rdAddr}, adaptor.getRdEn(),
-        /*latency*/ 0);
+        mem.getRdLatency());
     rewriter.create<seq::WritePortOp>(loc, hlmem,
                                       llvm::SmallVector<Value>{wrAddr},
                                       adaptor.getInput(), adaptor.getWrEn(),

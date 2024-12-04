@@ -336,6 +336,36 @@ firrtl.circuit "UnusedBitsAtEnd" {
 
 // -----
 
+firrtl.circuit "UnusedBitsOfSignedInteger" {
+  firrtl.module public @UnusedBitsOfSignedInteger(
+      in %in_data: !firrtl.sint<42>,
+      out %result_read: !firrtl.sint<5>) {
+    // CHECK: %Memory_read, %Memory_write = firrtl.mem Undefined
+    // CHECK-SAME: !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<5>>
+    // CHECK-SAME: !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<5>, mask: uint<1>>
+    %Memory_read, %Memory_write = firrtl.mem Undefined
+      {
+        depth = 12 : i64,
+        name = "Memory",
+        portNames = ["read", "write"],
+        readLatency = 0 : i32,
+        writeLatency = 1 : i32
+      } :
+        !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>,
+        !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
+
+    %read_data = firrtl.subfield %Memory_read[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
+    %read_data_slice = firrtl.bits %read_data 7 to 3 : (!firrtl.sint<42>) -> !firrtl.uint<5>
+    %read_data_slice_sint = firrtl.asSInt %read_data_slice : (!firrtl.uint<5>) -> !firrtl.sint<5>
+    firrtl.connect %result_read, %read_data_slice_sint : !firrtl.sint<5>, !firrtl.sint<5>
+
+    %write_data = firrtl.subfield %Memory_write[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
+    firrtl.connect %write_data, %in_data : !firrtl.sint<42>, !firrtl.sint<42>
+  }
+}
+
+// -----
+
 firrtl.circuit "OneAddressMasked" {
   firrtl.module public @OneAddressMasked(
       in %clock: !firrtl.clock,
@@ -358,9 +388,11 @@ firrtl.circuit "OneAddressMasked" {
       } :
         !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>,
         !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<2>>
-    // CHECK: %Memory = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<32>
 
-    // CHECK: firrtl.matchingconnect %result_read, %Memory : !firrtl.uint<32>
+    // CHECK: [[MemoryWire:%.+]] = firrtl.wire : !firrtl.uint<32>
+    // CHECK: firrtl.matchingconnect %result_read, [[MemoryWire]] : !firrtl.uint<32>
+    // CHECK: %Memory = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<32>
+    // CHECK: firrtl.matchingconnect [[MemoryWire]], %Memory : !firrtl.uint<32>
 
     %read_addr = firrtl.subfield %Memory_read[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
     firrtl.connect %read_addr, %addr : !firrtl.uint<1>, !firrtl.uint<1>
@@ -408,31 +440,6 @@ firrtl.circuit "OneAddressNoMask" {
       in %in_rwen: !firrtl.uint<1>,
       out %result_read: !firrtl.uint<32>,
       out %result_rw: !firrtl.uint<32>) {
-
-    // Pipeline the inputs.
-    // TODO: It would be good to de-duplicate these either in the pass or in a canonicalizer.
-
-    // CHECK: %Memory_write_en_0 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: firrtl.matchingconnect %Memory_write_en_0, %in_wen : !firrtl.uint<1>
-    // CHECK: %Memory_write_en_1 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: firrtl.matchingconnect %Memory_write_en_1, %Memory_write_en_0 : !firrtl.uint<1>
-    // CHECK: %Memory_write_en_2 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: firrtl.matchingconnect %Memory_write_en_2, %Memory_write_en_1 : !firrtl.uint<1>
-
-    // CHECK: %Memory_write_data_0 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<32>
-    // CHECK: firrtl.matchingconnect %Memory_write_data_0, %in_data : !firrtl.uint<32>
-    // CHECK: %Memory_write_data_1 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<32>
-    // CHECK: firrtl.matchingconnect %Memory_write_data_1, %Memory_write_data_0 : !firrtl.uint<32>
-    // CHECK: %Memory_write_data_2 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<32>
-    // CHECK: firrtl.matchingconnect %Memory_write_data_2, %Memory_write_data_1 : !firrtl.uint<32>
-
-    // CHECK: %Memory_rw_wdata_0 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<32>
-    // CHECK: firrtl.matchingconnect %Memory_rw_wdata_0, %in_data : !firrtl.uint<32>
-    // CHECK: %Memory_rw_wdata_1 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<32>
-    // CHECK: firrtl.matchingconnect %Memory_rw_wdata_1, %Memory_rw_wdata_0 : !firrtl.uint<32>
-    // CHECK: %Memory_rw_wdata_2 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<32>
-    // CHECK: firrtl.matchingconnect %Memory_rw_wdata_2, %Memory_rw_wdata_1 : !firrtl.uint<32>
-
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 
     %Memory_read, %Memory_rw, %Memory_write = firrtl.mem Undefined
@@ -447,9 +454,56 @@ firrtl.circuit "OneAddressNoMask" {
         !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, rdata flip: uint<32>, wmode: uint<1>, wdata: uint<32>, wmask: uint<1>>,
         !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>
 
+    // A wire, holding the value of the memory, goes to the front of the block.
+    // CHECK: [[MemoryWire:%.+]] = firrtl.wire : !firrtl.uint<32>
+  
+    // The original uses of the memory are replaced with uses of the wire.
+    // CHECK: firrtl.matchingconnect %result_read, [[MemoryWire]] : !firrtl.uint<32>
+    // CHECK: firrtl.matchingconnect %result_rw, [[MemoryWire]] : !firrtl.uint<32>
+
+    // The memory is replaced by a register at the end of the block
     // CHECK: %Memory = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<32>
 
-    // CHECK: firrtl.matchingconnect %result_read, %Memory : !firrtl.uint<32>
+    // The register's data is written to the MemoryWire
+    // CHECK: firrtl.matchingconnect [[MemoryWire]], %Memory : !firrtl.uint<32>
+
+    // Following the register, we pipeline the inputs.
+    // TODO: It would be good to de-duplicate these either in the pass or in a canonicalizer.
+
+    // CHECK: %Memory_rw_wdata_0 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<32>
+    // CHECK: firrtl.matchingconnect %Memory_rw_wdata_0, %in_data : !firrtl.uint<32>
+    // CHECK: %Memory_rw_wdata_1 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<32>
+    // CHECK: firrtl.matchingconnect %Memory_rw_wdata_1, %Memory_rw_wdata_0 : !firrtl.uint<32>
+    // CHECK: %Memory_rw_wdata_2 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<32>
+    // CHECK: firrtl.matchingconnect %Memory_rw_wdata_2, %Memory_rw_wdata_1 : !firrtl.uint<32>
+
+    // CHECK: [[WRITING:%.+]] = firrtl.and %in_rwen, %wmode_rw : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK: %Memory_rw_wen_0 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %Memory_rw_wen_0, [[WRITING]] : !firrtl.uint<1>
+    // CHECK: %Memory_rw_wen_1 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %Memory_rw_wen_1, %Memory_rw_wen_0 : !firrtl.uint<1>
+    // CHECK: %Memory_rw_wen_2 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %Memory_rw_wen_2, %Memory_rw_wen_1 : !firrtl.uint<1>
+
+    // CHECK: %Memory_write_data_0 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<32>
+    // CHECK: firrtl.matchingconnect %Memory_write_data_0, %in_data : !firrtl.uint<32>
+    // CHECK: %Memory_write_data_1 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<32>
+    // CHECK: firrtl.matchingconnect %Memory_write_data_1, %Memory_write_data_0 : !firrtl.uint<32>
+    // CHECK: %Memory_write_data_2 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<32>
+    // CHECK: firrtl.matchingconnect %Memory_write_data_2, %Memory_write_data_1 : !firrtl.uint<32>
+
+    // CHECK: %Memory_write_en_0 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %Memory_write_en_0, %in_wen : !firrtl.uint<1>
+    // CHECK: %Memory_write_en_1 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %Memory_write_en_1, %Memory_write_en_0 : !firrtl.uint<1>
+    // CHECK: %Memory_write_en_2 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %Memory_write_en_2, %Memory_write_en_1 : !firrtl.uint<1>
+
+    // Finally, the pipelined inputs are driven to the register.
+    // CHECK: [[WRITE_RW:%.+]] = firrtl.mux(%Memory_rw_wen_2, %Memory_rw_wdata_2, %Memory) : (!firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<32>
+    // CHECK: [[WRITE_W:%.+]] = firrtl.mux(%Memory_write_en_2, %Memory_write_data_2, [[WRITE_RW]]) : (!firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<32>
+    // CHECK: firrtl.matchingconnect %Memory, [[WRITE_W]] : !firrtl.uint<32>
+  
     %read_addr = firrtl.subfield %Memory_read[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
     firrtl.connect %read_addr, %addr : !firrtl.uint<1>, !firrtl.uint<1>
     %read_en = firrtl.subfield %Memory_read[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
@@ -459,7 +513,6 @@ firrtl.circuit "OneAddressNoMask" {
     %read_data = firrtl.subfield %Memory_read[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
     firrtl.connect %result_read, %read_data : !firrtl.uint<32>, !firrtl.uint<32>
 
-    // CHECK: firrtl.matchingconnect %result_rw, %Memory : !firrtl.uint<32>
     %rw_addr = firrtl.subfield %Memory_rw[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, rdata flip: uint<32>, wmode: uint<1>, wdata: uint<32>, wmask: uint<1>>
     firrtl.connect %rw_addr, %addr : !firrtl.uint<1>, !firrtl.uint<1>
     %rw_en = firrtl.subfield %Memory_rw[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, rdata flip: uint<32>, wmode: uint<1>, wdata: uint<32>, wmask: uint<1>>
@@ -475,16 +528,7 @@ firrtl.circuit "OneAddressNoMask" {
     %rw_wmask = firrtl.subfield %Memory_rw[wmask] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, rdata flip: uint<32>, wmode: uint<1>, wdata: uint<32>, wmask: uint<1>>
     firrtl.connect %rw_wmask, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 
-    // CHECK: [[WRITING:%.+]] = firrtl.and %in_rwen, %wmode_rw : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    // CHECK: %Memory_rw_wen_0 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: firrtl.matchingconnect %Memory_rw_wen_0, [[WRITING]] : !firrtl.uint<1>
-    // CHECK: %Memory_rw_wen_1 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: firrtl.matchingconnect %Memory_rw_wen_1, %Memory_rw_wen_0 : !firrtl.uint<1>
-    // CHECK: %Memory_rw_wen_2 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: firrtl.matchingconnect %Memory_rw_wen_2, %Memory_rw_wen_1 : !firrtl.uint<1>
-    // CHECK: [[WRITE_RW:%.+]] = firrtl.mux(%Memory_rw_wen_2, %Memory_rw_wdata_2, %Memory) : (!firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<32>
-    // CHECK: [[WRITE_W:%.+]] = firrtl.mux(%Memory_write_en_2, %Memory_write_data_2, [[WRITE_RW]]) : (!firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<32>
-    // CHECK: firrtl.matchingconnect %Memory, [[WRITE_W]] : !firrtl.uint<32>
+
     %write_addr = firrtl.subfield %Memory_write[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>
     firrtl.connect %write_addr, %addr : !firrtl.uint<1>, !firrtl.uint<1>
     %write_en = firrtl.subfield %Memory_write[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>
@@ -495,5 +539,107 @@ firrtl.circuit "OneAddressNoMask" {
     firrtl.connect %write_data, %in_data : !firrtl.uint<32>, !firrtl.uint<32>
     %write_mask = firrtl.subfield %Memory_write[mask] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>
     firrtl.connect %write_mask, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// This test ensures that the FoldRegMems canonicalization correctly
+// folds memories under layerblocks.
+firrtl.circuit "Rewrite1ElementMemoryToRegisterUnderLayerblock" {
+  firrtl.layer @A bind {}
+
+  firrtl.module public @Rewrite1ElementMemoryToRegisterUnderLayerblock(
+      in %clock: !firrtl.clock,
+      in %addr: !firrtl.uint<1>,
+      in %in_data: !firrtl.uint<32>,
+      in %wmode_rw: !firrtl.uint<1>,
+      in %in_wen: !firrtl.uint<1>,
+      in %in_rwen: !firrtl.uint<1>) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  
+    // CHECK firrtl.layerblock @A
+    firrtl.layerblock @A {
+      // CHECK: %result_read = firrtl.wire : !firrtl.uint<32>
+      // CHECK: %result_rw = firrtl.wire : !firrtl.uint<32>
+      %result_read = firrtl.wire : !firrtl.uint<32>
+      %result_rw   = firrtl.wire : !firrtl.uint<32>
+    
+      // CHECK: [[MemoryWire:%.+]] = firrtl.wire : !firrtl.uint<32>
+      %Memory_rw = firrtl.mem Undefined
+        {
+          depth = 1 : i64,
+          name = "Memory",
+          portNames = ["rw"],
+          readLatency = 2 : i32,
+          writeLatency = 2 : i32
+        } : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, rdata flip: uint<32>, wmode: uint<1>, wdata: uint<32>, wmask: uint<1>>
+
+      %rw_addr = firrtl.subfield %Memory_rw[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, rdata flip: uint<32>, wmode: uint<1>, wdata: uint<32>, wmask: uint<1>>
+      firrtl.connect %rw_addr, %addr : !firrtl.uint<1>, !firrtl.uint<1>
+      %rw_en = firrtl.subfield %Memory_rw[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, rdata flip: uint<32>, wmode: uint<1>, wdata: uint<32>, wmask: uint<1>>
+      firrtl.connect %rw_en, %in_rwen : !firrtl.uint<1>, !firrtl.uint<1>
+      %rw_clk = firrtl.subfield %Memory_rw[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, rdata flip: uint<32>, wmode: uint<1>, wdata: uint<32>, wmask: uint<1>>
+      firrtl.connect %rw_clk, %clock : !firrtl.clock, !firrtl.clock
+      %rw_rdata = firrtl.subfield %Memory_rw[rdata] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, rdata flip: uint<32>, wmode: uint<1>, wdata: uint<32>, wmask: uint<1>>
+
+      %rw_wmode = firrtl.subfield %Memory_rw[wmode] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, rdata flip: uint<32>, wmode: uint<1>, wdata: uint<32>, wmask: uint<1>>
+      firrtl.connect %rw_wmode, %wmode_rw : !firrtl.uint<1>, !firrtl.uint<1>
+      %rw_wdata = firrtl.subfield %Memory_rw[wdata] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, rdata flip: uint<32>, wmode: uint<1>, wdata: uint<32>, wmask: uint<1>>
+      firrtl.connect %rw_wdata, %in_data : !firrtl.uint<32>, !firrtl.uint<32>
+      %rw_wmask = firrtl.subfield %Memory_rw[wmask] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, rdata flip: uint<32>, wmode: uint<1>, wdata: uint<32>, wmask: uint<1>>
+      firrtl.connect %rw_wmask, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+
+      // CHECK: firrtl.matchingconnect %result_rw, [[MemoryWire]] : !firrtl.uint<32>
+      firrtl.connect %result_rw, %rw_rdata : !firrtl.uint<32>, !firrtl.uint<32>
+      
+      // CHECK: %Memory = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<32>
+      // CHECK: firrtl.matchingconnect [[MemoryWire]], %Memory
+      // CHECK: firrtl.matchingconnect %Memory, {{%.+}} : !firrtl.uint<32>
+    }
+  }
+}
+
+// -----
+
+firrtl.circuit "SIntOneAddress" {
+  firrtl.module @SIntOneAddress(
+      in %clock: !firrtl.clock,
+      in %reset: !firrtl.uint<1>,
+      in %io_dataIn: !firrtl.sint<32>,
+      out %io_dataOut: !firrtl.sint<32>) {
+
+    // CHECK: %mem = firrtl.reg %clock : !firrtl.clock, !firrtl.sint<32>
+    // CHECK: firrtl.matchingconnect %mem, {{%.+}} : !firrtl.sint<32>
+
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %io_dataIn_0 = firrtl.wire {name = "io_dataIn"} : !firrtl.sint<32>
+    %io_dataOut_1 = firrtl.wire {name = "io_dataOut"} : !firrtl.sint<32>
+    firrtl.matchingconnect %io_dataIn_0, %io_dataIn : !firrtl.sint<32>
+    firrtl.matchingconnect %io_dataOut, %io_dataOut_1 : !firrtl.sint<32>
+    %mem_MPORT, %mem_io_dataOut_MPORT = firrtl.mem Undefined {depth = 1 : i64, name = "mem", portNames = ["MPORT", "io_dataOut_MPORT"], prefix = "", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<32>, mask: uint<1>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: sint<32>>
+    %0 = firrtl.subfield %mem_MPORT[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<32>, mask: uint<1>>
+    %1 = firrtl.subfield %mem_MPORT[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<32>, mask: uint<1>>
+    %2 = firrtl.subfield %mem_MPORT[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<32>, mask: uint<1>>
+    %3 = firrtl.subfield %mem_MPORT[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<32>, mask: uint<1>>
+    %4 = firrtl.subfield %mem_MPORT[mask] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<32>, mask: uint<1>>
+    %5 = firrtl.subfield %mem_io_dataOut_MPORT[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: sint<32>>
+    %6 = firrtl.subfield %mem_io_dataOut_MPORT[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: sint<32>>
+    %7 = firrtl.subfield %mem_io_dataOut_MPORT[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: sint<32>>
+    %8 = firrtl.subfield %mem_io_dataOut_MPORT[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: sint<32>>
+    %_io_dataOut_WIRE = firrtl.wire : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.connect %_io_dataOut_WIRE, %c0_ui1 : !firrtl.uint<1>
+    firrtl.connect %5, %_io_dataOut_WIRE : !firrtl.uint<1>
+    firrtl.matchingconnect %6, %c1_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %7, %clock : !firrtl.clock
+    firrtl.matchingconnect %io_dataOut_1, %8 : !firrtl.sint<32>
+    %9 = firrtl.wire : !firrtl.uint<1>
+    firrtl.connect %9, %c0_ui1 : !firrtl.uint<1>
+    firrtl.connect %0, %9 : !firrtl.uint<1>
+    firrtl.matchingconnect %1, %c1_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %2, %clock : !firrtl.clock
+    firrtl.matchingconnect %4, %c1_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %3, %io_dataIn_0 : !firrtl.sint<32>
   }
 }

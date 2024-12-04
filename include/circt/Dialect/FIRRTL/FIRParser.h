@@ -47,8 +47,7 @@ struct FIRParserOptions {
   InfoLocHandling infoLocatorHandling = InfoLocHandling::PreferInfo;
 
   /// The number of annotation files that were specified on the command line.
-  /// This, along with numOMIRFiles provides structure to the buffers in the
-  /// source manager.
+  /// This, provides structure to the buffers in the source manager.
   unsigned numAnnotationFiles;
   bool scalarizePublicModules = false;
   bool scalarizeInternalModules = false;
@@ -114,9 +113,29 @@ struct FIRVersion {
   uint16_t patch;
 };
 
+/// The current minimum version of FIRRTL that the parser supports.
 constexpr FIRVersion minimumFIRVersion(2, 0, 0);
-constexpr FIRVersion nextFIRVersion(3, 3, 0);
-constexpr FIRVersion exportFIRVersion(4, 0, 0);
+
+/// The next version of FIRRTL that is not yet released.
+///
+/// Features use this version if they have been landed on the main branch of
+/// `chipsalliance/firrtl-spec`, but have not been part of a release yet. Once a
+/// new version of the spec is released, all uses of `nextFIRVersion` in the
+/// parser are replaced with the concrete version `{x, y, z}`, and this
+/// declaration here is bumped to the next probable version number.
+constexpr FIRVersion nextFIRVersion(4, 1, 0);
+
+/// A marker for parser features that are currently missing from the spec.
+///
+/// Features use this version if they have _not_ been added to the documentation
+/// in the `chipsalliance/firrtl-spec` repository. This allows us to distinguish
+/// features that are released in the next version of the spec and features that
+/// are still missing from the spec.
+constexpr FIRVersion missingSpecFIRVersion = nextFIRVersion;
+
+/// The version of FIRRTL that the exporter produces. This is always the next
+/// version, since it contains any new developments.
+constexpr FIRVersion exportFIRVersion = nextFIRVersion;
 
 template <typename T>
 T &operator<<(T &os, FIRVersion version) {
