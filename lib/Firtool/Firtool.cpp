@@ -56,7 +56,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
                                                   const FirtoolOptions &opt,
                                                   StringRef inputFilename) {
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createSpecializeOptionPass());
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerSignaturesPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInjectDUTHierarchyPass());
@@ -135,6 +134,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   // Must run this pass after all diagnostic passes have run, otherwise it can
   // hide errors.
+  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeOptionPass());
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeLayersPass());
 
   // Run after inference, layer specialization.
