@@ -137,8 +137,6 @@ std::unique_ptr<mlir::Pass> createLowerMemoryPass();
 std::unique_ptr<mlir::Pass>
 createMemToRegOfVecPass(bool replSeqMem = false, bool ignoreReadEnable = false);
 
-std::unique_ptr<mlir::Pass> createPrefixModulesPass();
-
 std::unique_ptr<mlir::Pass> createFIRRTLFieldSourcePass();
 
 std::unique_ptr<mlir::Pass> createPrintInstanceGraphPass();
