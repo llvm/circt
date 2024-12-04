@@ -1442,6 +1442,7 @@ firrtl.circuit "Conventions1" {
     firrtl.matchingconnect %r, %input : !firrtl.vector<uint<8>, 1>
     firrtl.matchingconnect %port, %r : !firrtl.vector<uint<8>, 1>
   }
+}
 
 // Test that memories have their prefixes copied when lowering.
 // See: https://github.com/llvm/circt/issues/7835
