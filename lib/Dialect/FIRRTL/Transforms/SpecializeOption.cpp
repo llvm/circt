@@ -32,7 +32,7 @@ struct SpecializeOptionPass
     auto circuit = getOperation();
 
     DenseMap<StringAttr, OptionCaseOp> selected;
-    if (auto choiceAttr = circuit.getSelectInstChoiceAttr())
+    if (auto choiceAttr = circuit.getSelectInstChoiceAttr()) {
       for (auto attr : choiceAttr.getAsRange<StringAttr>()) {
         const auto &optionAndCase = attr.getValue().str();
         size_t eq = optionAndCase.find("=");
@@ -59,6 +59,7 @@ struct SpecializeOptionPass
         }
         selected[StringAttr::get(&getContext(), optionName)] = caseOp;
       }
+    }
 
     bool failed = false;
     mlir::parallelForEach(

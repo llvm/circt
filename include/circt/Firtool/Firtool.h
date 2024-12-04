@@ -71,10 +71,6 @@ public:
             ckgEnableName, ckgTestEnableName, ckgInstName};
   }
 
-  ArrayRef<std::string> getSelectInstanceChoice() const {
-    return selectInstanceChoice;
-  }
-
   FirtoolOptions &setClockGateOptions(seq::ExternalizeClockGateOptions &opts) {
     ckgModuleName = opts.moduleName;
     ckgInputName = opts.inputName;
@@ -366,11 +362,6 @@ public:
     return *this;
   }
 
-  FirtoolOptions &setSelectInstanceChoice(ArrayRef<std::string> value) {
-    selectInstanceChoice = value;
-    return *this;
-  }
-
 private:
   std::string outputFilename;
   bool disableAnnotationsUnknown;
@@ -418,7 +409,6 @@ private:
   bool fixupEICGWrapper;
   bool addCompanionAssume;
   bool disableCSEinClasses;
-  ArrayRef<std::string> selectInstanceChoice;
 };
 
 void registerFirtoolCLOptions();
