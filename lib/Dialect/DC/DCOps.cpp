@@ -188,7 +188,7 @@ struct EliminateUnusedForkResultsPattern : mlir::OpRewritePattern<ForkOp> {
     std::set<unsigned> unusedIndexes;
 
     for (auto res : llvm::enumerate(op.getResults()))
-      if (res.value().getUses().empty())
+      if (res.value().use_empty())
         unusedIndexes.insert(res.index());
 
     if (unusedIndexes.empty())
