@@ -1147,28 +1147,6 @@ Example:
 }
 ```
 
-#### PrefixInterfacesAnnotation
-
-| Property | Type   | Description                                               |
-|----------|--------|-----------------------------------------------------------|
-| class    | string | sifive.enterprise.grandcentral.PrefixInterfacesAnnotation |
-| prefix   | string | A prefix to apply to all interface names                  |
-
-This annotation can be used to set a global prefix for all interfaces generated
-by Grand Central, including nested interfaces.
-
-This annotation may only exist zero or one times.  This differs from the SFC
-implementation which will choose the first instance of this annotation.
-
-Example:
-
-``` json
-{
-  "class": "sifive.enterprise.grandcentral.PrefixInterfacesAnnotation",
-  "prefix": "PREFIX_"
-}
-```
-
 #### GrandCentralHierarchyFileAnnotation
 
 | Property | Type   | Description                                                              |

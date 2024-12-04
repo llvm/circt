@@ -608,10 +608,6 @@ private:
   /// Mapping of ID to companion module.
   DenseMap<Attribute, CompanionInfo> companionIDMap;
 
-  /// An optional prefix applied to all interfaces in the design.  This is set
-  /// based on a PrefixInterfacesAnnotation.
-  StringRef interfacePrefix;
-
   NLATable *nlaTable;
 
   /// The design-under-test (DUT) as determined by the presence of a
@@ -624,15 +620,13 @@ private:
   StringAttr testbenchDir;
 
   /// Return a string containing the name of an interface.  Apply correct
-  /// prefixing from the interfacePrefix and module-level prefix parameter.
+  /// prefixing from the module-level prefix parameter.
   std::string getInterfaceName(StringAttr prefix,
                                AugmentedBundleTypeAttr bundleType) {
 
     if (prefix)
-      return (prefix.getValue() + interfacePrefix +
-              bundleType.getDefName().getValue())
-          .str();
-    return (interfacePrefix + bundleType.getDefName().getValue()).str();
+      return (prefix.getValue() + bundleType.getDefName().getValue()).str();
+    return (bundleType.getDefName().getValue()).str();
   }
 
   /// Recursively examine an AugmentedType to populate the "mappings" file
@@ -1580,28 +1574,6 @@ void GrandCentralPass::runOnOperation() {
       ++numAnnosRemoved;
       return true;
     }
-    if (anno.isClass(prefixInterfacesAnnoClass)) {
-      if (!interfacePrefix.empty()) {
-        emitCircuitError("more than one 'PrefixInterfacesAnnotation' was "
-                         "found, but zero or one may be provided");
-        removalError = true;
-        return false;
-      }
-
-      auto prefix = anno.getMember<StringAttr>("prefix");
-      if (!prefix) {
-        emitCircuitError()
-            << "contained an invalid 'PrefixInterfacesAnnotation' that does "
-               "not contain a 'prefix' field: "
-            << anno.getDict();
-        removalError = true;
-        return false;
-      }
-
-      interfacePrefix = prefix.getValue();
-      ++numAnnosRemoved;
-      return true;
-    }
     if (anno.isClass(testBenchDirAnnoClass)) {
       testbenchDir = anno.getMember<StringAttr>("dirname");
       return false;
@@ -1632,8 +1604,6 @@ void GrandCentralPass::runOnOperation() {
     else
       llvm::dbgs() << "<none>\n";
     llvm::dbgs()
-        << "Prefix Info (from PrefixInterfacesAnnotation):\n"
-        << "  prefix: " << interfacePrefix << "\n"
         << "Hierarchy File Info (from GrandCentralHierarchyFileAnnotation):\n"
         << "  filename: ";
     if (maybeHierarchyFileYAML)

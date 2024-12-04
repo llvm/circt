@@ -94,8 +94,6 @@ constexpr const char *viewAnnoClass =
     "sifive.enterprise.grandcentral.ViewAnnotation";
 constexpr const char *companionAnnoClass =
     "sifive.enterprise.grandcentral.ViewAnnotation.companion"; // not in SFC
-constexpr const char *prefixInterfacesAnnoClass =
-    "sifive.enterprise.grandcentral.PrefixInterfacesAnnotation";
 constexpr const char *augmentedGroundTypeClass =
     "sifive.enterprise.grandcentral.AugmentedGroundType"; // not an annotation
 constexpr const char *augmentedBundleTypeClass =
