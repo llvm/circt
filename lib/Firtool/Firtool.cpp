@@ -735,11 +735,6 @@ struct FirtoolCmdOptions {
       "add-companion-assume",
       llvm::cl::desc("Add companion assumes to assertions"),
       llvm::cl::init(false)};
-
-  cl::list<std::string> selectInstanceChoice{
-      "select-instance-choice",
-      cl::desc("Options to specialize instance choice, in option=case format"),
-      cl::MiscFlags::CommaSeparated};
 };
 } // namespace
 
@@ -825,5 +820,4 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   stripDebugInfo = clOptions->stripDebugInfo;
   fixupEICGWrapper = clOptions->fixupEICGWrapper;
   addCompanionAssume = clOptions->addCompanionAssume;
-  selectInstanceChoice = clOptions->selectInstanceChoice;
 }

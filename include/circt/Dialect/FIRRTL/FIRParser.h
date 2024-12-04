@@ -138,8 +138,7 @@ constexpr FIRVersion missingSpecFIRVersion = nextFIRVersion;
 /// version, since it contains any new developments.
 constexpr FIRVersion exportFIRVersion = nextFIRVersion;
 
-template <typename T>
-T &operator<<(T &os, FIRVersion version) {
+template <typename T> T &operator<<(T &os, FIRVersion version) {
   return os << version.major << "." << version.minor << "." << version.patch;
 }
 
