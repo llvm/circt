@@ -34,6 +34,16 @@ static void testSetType(MlirContext ctx) {
   mlirTypeDump(setTy);
 }
 
+static void testBagType(MlirContext ctx) {
+  MlirType elTy = mlirIntegerTypeGet(ctx, 32);
+  MlirType bagTy = rtgBagTypeGet(elTy);
+
+  // CHECK: is_bag
+  fprintf(stderr, rtgTypeIsABag(bagTy) ? "is_bag\n" : "isnot_bag\n");
+  // CHECK: !rtg.bag<i32>
+  mlirTypeDump(bagTy);
+}
+
 static void testDictType(MlirContext ctx) {
   MlirType elTy = mlirIntegerTypeGet(ctx, 32);
   MlirAttribute name0 =
@@ -62,6 +72,7 @@ int main(int argc, char **argv) {
 
   testSequenceType(ctx);
   testSetType(ctx);
+  testBagType(ctx);
   testDictType(ctx);
 
   mlirContextDestroy(ctx);

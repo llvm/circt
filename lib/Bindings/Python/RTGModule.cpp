@@ -40,6 +40,14 @@ void circt::python::populateDialectRTGSubmodule(py::module &m) {
           },
           py::arg("self"), py::arg("element_type"));
 
+  mlir_type_subclass(m, "BagType", rtgTypeIsABag)
+      .def_classmethod(
+          "get",
+          [](py::object cls, MlirType elementType) {
+            return cls(rtgBagTypeGet(elementType));
+          },
+          py::arg("self"), py::arg("element_type"));
+
   mlir_type_subclass(m, "DictType", rtgTypeIsADict)
       .def_classmethod(
           "get",
