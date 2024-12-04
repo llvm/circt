@@ -22,6 +22,11 @@ void populateDialectESISubmodule(pybind11::module &m);
 void populateDialectHWSubmodule(pybind11::module &m);
 void populateDialectMSFTSubmodule(pybind11::module &m);
 void populateDialectOMSubmodule(pybind11::module &m);
+void populateDialectRTGSubmodule(pybind11::module &m);
+void populateDialectRTGToolSubmodule(pybind11::module &m);
+#ifdef CIRCT_INCLUDE_TESTS
+void populateDialectRTGTestSubmodule(pybind11::module &m);
+#endif
 void populateDialectSeqSubmodule(pybind11::module &m);
 void populateDialectSVSubmodule(pybind11::module &m);
 void populateSupportSubmodule(pybind11::module &m);
