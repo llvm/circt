@@ -734,24 +734,6 @@ firrtl.circuit "InstSymConflict" {
   // CHECK-SAME:              ]
 }
 
-// Module prefixing should not break extraction.
-// https://github.com/llvm/circt/issues/5961
-// CHECK-LABEL: firrtl.circuit "Plop_Foo"
-firrtl.circuit "Plop_Foo" attributes {annotations = [{class = "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation", filename = "ckgates.txt", group = "ClockGates"}]} {
-  // CHECK: hw.hierpath @nla_1 [@Plop_Foo::@ClockGates, @Plop_ClockGates::@ckg, @EICG_wrapper]
-  hw.hierpath @nla_1 [@Plop_Foo::@core, @Plop_Bar::@ckg, @EICG_wrapper]
-  firrtl.extmodule private @EICG_wrapper() attributes {defname = "EICG_wrapper"}
-  firrtl.module private @Plop_Bar() {
-    firrtl.instance ckg sym @ckg @EICG_wrapper()
-  }
-  // CHECK: firrtl.module private @Plop_ClockGates()
-  // CHECK-LABEL: firrtl.module @Plop_Foo()
-  firrtl.module @Plop_Foo() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation", prefix = "Plop_"}]} {
-    // CHECK: firrtl.instance ClockGates sym @ClockGates @Plop_ClockGates()
-    firrtl.instance core sym @core @Plop_Bar()
-  }
-}
-
 // Test that clock gate extraction composes with Chisel-time module prefixing.
 // Chisel may add any number of prefixes to the clock gates.  Ensure that this
 // will not block extraction.  Additionally, test that suffixes will block
