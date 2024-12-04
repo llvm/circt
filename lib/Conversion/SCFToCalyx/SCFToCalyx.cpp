@@ -1006,8 +1006,10 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   int totalSize =
       std::reduce(shape.begin(), shape.end(), 1, std::multiplies<int>());
   // The `totalSize <= 1` check is a hack to:
-  // https://github.com/llvm/circt/pull/2661 We should instead never pass
-  // multi-dimensional memories to Calyx, as discussed in:
+  // https://github.com/llvm/circt/pull/2661, where a multi-dim memory whose
+  // size in some dimension equals 1, e.g. memref<1x1x1x1xi32>, will be
+  // collapsed to `memref<1xi32>`, whose `totalSize` equals 1. We should instead
+  // never pass multi-dimensional memories to Calyx, as discussed in:
   // https://github.com/calyxir/calyx/issues/907
   if (!(shape.size() <= 1 || totalSize <= 1)) {
     allocOp.emitError("input memory dimension must be empty or one.");
@@ -1015,7 +1017,6 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   }
 
   std::vector<uint64_t> flattenedVals(totalSize, 0);
-
   if (isa<memref::GetGlobalOp>(allocOp)) {
     auto getGlobalOp = cast<memref::GetGlobalOp>(allocOp);
     auto *symbolTableOp =
@@ -1027,7 +1028,7 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
         globalOp.getConstantInitValue());
     int sizeCount = 0;
     for (auto attr : cstAttr.template getValues<Attribute>()) {
-      assert((isa<mlir::FloatAttr>(attr) || isa<mlir::IntegerAttr>(attr)) &&
+      assert((isa<mlir::FloatAttr, mlir::IntegerAttr>(attr)) &&
              "memory attributes must be float or int");
       if (auto fltAttr = dyn_cast<mlir::FloatAttr>(attr)) {
         double value = fltAttr.getValueAsDouble();
@@ -1053,7 +1054,6 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   }
 
   bool isSigned = false;
-  // Put the flattened values in the multi-dimensional structure
   for (size_t i = 0; i < flattenedVals.size(); ++i) {
     uint64_t bitValue = flattenedVals[i];
     // checks whether the MSB of the `uint64_t` type `bitValue` is set
