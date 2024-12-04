@@ -64,21 +64,20 @@ struct SpecializeOptionPass
         &getContext(), circuit.getOps<FModuleOp>(), [&](auto module) {
           module.walk([&](firrtl::InstanceChoiceOp inst) {
             auto it = selected.find(inst.getOptionNameAttr());
-            FlatSymbolRefAttr target;
             if (it == selected.end()) {
-              target = inst.getDefaultTargetAttr();
-              inst->emitWarning("missing specialization for option ")
+              inst.emitError("missing specialization for option ")
                   << inst.getOptionNameAttr();
-            } else
-              target = inst.getTargetOrDefaultAttr(it->second);
+              failed = true;
+              return;
+            }
 
             ImplicitLocOpBuilder builder(inst.getLoc(), inst);
             auto newInst = builder.create<InstanceOp>(
-                inst->getResultTypes(), target, inst.getNameAttr(),
-                inst.getNameKindAttr(), inst.getPortDirectionsAttr(),
-                inst.getPortNamesAttr(), inst.getAnnotationsAttr(),
-                inst.getPortAnnotationsAttr(), builder.getArrayAttr({}),
-                UnitAttr{}, inst.getInnerSymAttr());
+                inst->getResultTypes(), inst.getTargetOrDefaultAttr(it->second),
+                inst.getNameAttr(), inst.getNameKindAttr(),
+                inst.getPortDirectionsAttr(), inst.getPortNamesAttr(),
+                inst.getAnnotationsAttr(), inst.getPortAnnotationsAttr(),
+                builder.getArrayAttr({}), UnitAttr{}, inst.getInnerSymAttr());
             inst.replaceAllUsesWith(newInst);
             inst.erase();
 
@@ -100,10 +99,10 @@ struct SpecializeOptionPass
 };
 } // namespace
 
-std::unique_ptr<Pass> firrtl::createSpecializeOptionPass(
-    std::optional<mlir::ArrayRef<std::string>> selectOption) {
+std::unique_ptr<Pass>
+firrtl::createSpecializeOptionPass(mlir::ArrayRef<std::string> selectOption) {
   auto pass = std::make_unique<SpecializeOptionPass>();
-  if (selectOption)
-    pass->select = *selectOption;
+  if (!selectOption.empty())
+    pass->select = selectOption;
   return pass;
 }

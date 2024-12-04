@@ -22,8 +22,7 @@ firrtl.module @Foo() {
   firrtl.instance_choice inst_default @DefaultTarget alternatives @Platform
     { @ASIC -> @ASICTarget } ()
 
-  // CHECK: firrtl.instance inst_perf @DefaultTarget()
-  // expected-warning @below {{missing specialization for option "Performance"}}
+  // expected-error @below {{missing specialization for option "Performance"}}
   firrtl.instance_choice inst_perf @DefaultTarget alternatives @Performance
     { @Fast -> @FastTarget } ()
 }
