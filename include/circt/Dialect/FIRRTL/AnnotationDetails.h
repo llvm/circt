@@ -29,6 +29,8 @@ constexpr const char *rawAnnotations = "rawAnnotations";
 //===----------------------------------------------------------------------===//
 
 constexpr const char *conventionAnnoClass = "circt.ConventionAnnotation";
+constexpr const char *typeLoweringAnnoClass =
+    "circt.BodyTypeLoweringAnnotation";
 constexpr const char *dontTouchAnnoClass =
     "firrtl.transforms.DontTouchAnnotation";
 constexpr const char *enumComponentAnnoClass =
