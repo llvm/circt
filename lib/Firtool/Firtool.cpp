@@ -133,7 +133,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   // Must run the specialize instance-choice and layers passes after all
   // diagnostic passes have run, otherwise it can hide errors.
-  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeOptionPass());
+  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeOptionPass(
+      opt.shouldSelectDefaultInstanceChoice()));
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeLayersPass());
 
   // Run after inference, layer specialization.
@@ -733,6 +734,12 @@ struct FirtoolCmdOptions {
       "add-companion-assume",
       llvm::cl::desc("Add companion assumes to assertions"),
       llvm::cl::init(false)};
+
+  llvm::cl::opt<bool> selectDefaultInstanceChoice{
+      "select-default-for-unspecified-instance-choice",
+      llvm::cl::desc(
+          "Specialize instance choice to default, if no option selected"),
+      llvm::cl::init(false)};
 };
 } // namespace
 
@@ -769,7 +776,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       ckgEnableName("en"), ckgTestEnableName("test_en"), ckgInstName("ckg"),
       exportModuleHierarchy(false), stripFirDebugInfo(true),
       stripDebugInfo(false), fixupEICGWrapper(false), addCompanionAssume(false),
-      disableCSEinClasses(false) {
+      disableCSEinClasses(false), selectDefaultInstanceChoice(false) {
   if (!clOptions.isConstructed())
     return;
   outputFilename = clOptions->outputFilename;
@@ -818,4 +825,5 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   stripDebugInfo = clOptions->stripDebugInfo;
   fixupEICGWrapper = clOptions->fixupEICGWrapper;
   addCompanionAssume = clOptions->addCompanionAssume;
+  selectDefaultInstanceChoice = clOptions->selectDefaultInstanceChoice;
 }

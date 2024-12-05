@@ -1,5 +1,6 @@
 ; RUN: firtool %s --parse-only --select-instance-choice=Platform=ASIC | FileCheck %s
 ; RUN: firtool %s --ir-hw --disable-opt --select-instance-choice=Platform=ASIC | FileCheck %s --check-prefix=ASIC
+; RUN: firtool %s --ir-hw --disable-opt --select-default-for-unspecified-instance-choice | FileCheck %s --check-prefixes=DEFAULT
 
 FIRRTL version 4.1.0
 ; CHECK: firrtl.circuit "Foo" attributes {select_inst_choice = ["Platform=ASIC"]} {
@@ -28,7 +29,8 @@ circuit Foo:
     ; CHECK-SAME:   @FPGA -> @FPGATarget,
     ; CHECK-SAME:   @ASIC -> @ASICTarget
     ; CHECK-SAME: } (in clock: !firrtl.clock)
-    ; ASIC: hw.instance "inst" @ASICTarget(clock: %clock: !seq.clock) -> ()
+    ; ASIC: hw.instance "inst" @ASICTarget
+    ; DEFAULT: hw.instance "inst" @DefaultTarget
     instchoice inst of DefaultTarget, Platform :
       FPGA => FPGATarget
       ASIC => ASICTarget

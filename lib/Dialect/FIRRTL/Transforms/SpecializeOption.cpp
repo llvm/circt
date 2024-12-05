@@ -27,6 +27,7 @@ namespace {
 struct SpecializeOptionPass
     : public circt::firrtl::impl::SpecializeOptionBase<SpecializeOptionPass> {
   using SpecializeOptionBase::numInstances;
+  using SpecializeOptionBase::selectDefaultInstanceChoice;
 
   void runOnOperation() override {
     auto circuit = getOperation();
@@ -66,20 +67,25 @@ struct SpecializeOptionPass
         &getContext(), circuit.getOps<FModuleOp>(), [&](auto module) {
           module.walk([&](firrtl::InstanceChoiceOp inst) {
             auto it = selected.find(inst.getOptionNameAttr());
+            FlatSymbolRefAttr target;
             if (it == selected.end()) {
-              inst.emitError("missing specialization for option ")
-                  << inst.getOptionNameAttr();
-              failed = true;
-              return;
-            }
+              if (!selectDefaultInstanceChoice) {
+                inst.emitError("missing specialization for option ")
+                    << inst.getOptionNameAttr();
+                failed = true;
+                return;
+              }
+              target = inst.getDefaultTargetAttr();
+            } else
+              target = inst.getTargetOrDefaultAttr(it->second);
 
             ImplicitLocOpBuilder builder(inst.getLoc(), inst);
             auto newInst = builder.create<InstanceOp>(
-                inst->getResultTypes(), inst.getTargetOrDefaultAttr(it->second),
-                inst.getNameAttr(), inst.getNameKindAttr(),
-                inst.getPortDirectionsAttr(), inst.getPortNamesAttr(),
-                inst.getAnnotationsAttr(), inst.getPortAnnotationsAttr(),
-                builder.getArrayAttr({}), UnitAttr{}, inst.getInnerSymAttr());
+                inst->getResultTypes(), target, inst.getNameAttr(),
+                inst.getNameKindAttr(), inst.getPortDirectionsAttr(),
+                inst.getPortNamesAttr(), inst.getAnnotationsAttr(),
+                inst.getPortAnnotationsAttr(), builder.getArrayAttr({}),
+                UnitAttr{}, inst.getInnerSymAttr());
             inst.replaceAllUsesWith(newInst);
             inst.erase();
 
@@ -101,6 +107,9 @@ struct SpecializeOptionPass
 };
 } // namespace
 
-std::unique_ptr<Pass> firrtl::createSpecializeOptionPass() {
-  return std::make_unique<SpecializeOptionPass>();
+std::unique_ptr<Pass>
+firrtl::createSpecializeOptionPass(bool selectDefaultInstanceChoice) {
+  auto pass = std::make_unique<SpecializeOptionPass>();
+  pass->selectDefaultInstanceChoice = selectDefaultInstanceChoice;
+  return pass;
 }
