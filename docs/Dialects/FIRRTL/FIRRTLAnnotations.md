@@ -323,12 +323,11 @@ Example:
 
 ### Convention
 
-| Property         | Type   | Description                                          |
-| ---------------- | ------ | ---------------------------------------------------- |
-| class            | string | `circt.ConventionAnnotation`                         |
-| convention       | string | `scalarized`                                         |
-| target           | string | Reference target                                     |
-| includeHierarchy | bool   | Apply the convention to all modules in the hierarchy |
+| Property   | Type   | Description                             |
+| ---------- | ------ | --------------------------------------- |
+| class      | string | `circt.ConventionAnnotation`            |
+| convention | string | `scalarized`                            |
+| target     | string | Reference target                        |
 
 Specify the port convention for a module. The port convention controls how a
 module's ports are transformed, and how that module can be instantiated, in the
@@ -338,34 +337,32 @@ The options are:
 - `scalarized`: Convert aggregate ports (i.e. vector or bundles) into multiple
   ground-typed ports.
 
-`includeHierarchy` is optional and defaults to `false`, meaning that the
-convention is applied only to the specified module. If `includeHierarchy` is
-`true`, the convention is applied to all modules in the hierarchy. If there are
-multiple annotation instances that specify conventions, the `scalarized` convention
-takes precedence over the `internal` convention.
-
 ```json
 {
   "class": "circt.ConventionAnnotation",
   "convention": "scalarized",
-  "target": "~Foo|Bar",
-  "includeHierarchy": true
+  "target": "~Foo|Bar/d:Baz"
 }
 ```
 
 ### BodyTypeLoweringAnnotation
 
-| Property         | Type   | Description                        |
-| ---------------- | ------ | ---------------------------------- |
-| class            | string | `circt.BodyTypeLoweringAnnotation` |
-| convention       | string | See `Convention` annotation        |
-| target           | string | See `Convention` annotation        |
-| includeHierarchy | bool   | See `Convention` annotation        |
+| Property            | Type   | Description                                          |
+| ------------------- | ------ | ---------------------------------------------------- |
+| class               | string | `circt.BodyTypeLoweringAnnotation`                   |
+| convention          | string | See `Convention` annotation                          |
+| target              | string | See `Convention` annotation                          |
+| includeHierarchy    | bool   | Apply the convention to all modules in the hierarchy |
 
 Specify the type lowering option for module internal signals.
 This is similar to the `Convention` annotation, but for internal signals
 rather than module ports. Refer to the `Convention` annotation for each
 property description.
+
+When `includeHierarchy` is `false`, it indicates the convention is applied only to
+the specified module. If `includeHierarchy` is `true`, the convention is applied to
+all modules in the hierarchy. If there are multiple annotation instances that specify
+conventions, the `scalarized` convention takes precedence over the `internal` convention.
 
 ```json
 {
