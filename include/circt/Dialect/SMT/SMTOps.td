@@ -147,7 +147,9 @@ def SolverOp : SMTOp<"solver", [
   let hasRegionVerifier = true;
 }
 
-def SetLogicOp : SMTOp<"set_logic", []> {
+def SetLogicOp : SMTOp<"set_logic", [
+  HasParent<"smt::SolverOp">,
+]> {
   let summary = "set the logic for the SMT solver";
   let arguments = (ins StrAttr:$logic);
   let assemblyFormat = "$logic attr-dict";
