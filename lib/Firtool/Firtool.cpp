@@ -131,8 +131,9 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createCheckCombLoopsPass());
 
-  // Must run this pass after all diagnostic passes have run, otherwise it can
-  // hide errors.
+  // Must run the specialize instance-choice and layers passes after all
+  // diagnostic passes have run, otherwise it can hide errors.
+  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeOptionPass());
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeLayersPass());
 
   // Run after inference, layer specialization.

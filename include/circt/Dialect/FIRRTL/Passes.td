@@ -876,10 +876,6 @@ def SpecializeOption : Pass<"firrtl-specialize-option", "firrtl::CircuitOp"> {
   }];
   let constructor = "circt::firrtl::createSpecializeOptionPass()";
 
-  let options = [
-    ListOption<"select", "select", "std::string",
-               "Options to specialize, in option=case format">,
-  ];
   let statistics = [
     Statistic<"numInstances", "num-instances",
       "Number of instances specialized">
