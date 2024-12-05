@@ -48,6 +48,10 @@ struct ConnectInfo {
   ConnectKind kind;
 };
 
+/// The delimiters that should be used for a given generated name.  These vary
+/// for modules and files, as well as by convention.
+enum class Delimiter { BindModule = '_', BindFile = '-' };
+
 } // namespace
 
 // A mapping of an old InnerRefAttr to the new inner symbol and module name that
@@ -61,15 +65,12 @@ using InnerRefMap =
 //===----------------------------------------------------------------------===//
 
 static void appendName(StringRef name, SmallString<32> &output,
-                       bool toLower = false, bool verilogSafe = false) {
+                       bool toLower = false,
+                       Delimiter delimiter = Delimiter::BindFile) {
   if (name.empty())
     return;
-  if (!output.empty()) {
-    if (verilogSafe)
-      output.append("_");
-    else
-      output.append("-");
-  }
+  if (!output.empty())
+    output.push_back(static_cast<char>(delimiter));
   output.append(name);
   if (!toLower)
     return;
@@ -78,10 +79,11 @@ static void appendName(StringRef name, SmallString<32> &output,
 }
 
 static void appendName(SymbolRefAttr name, SmallString<32> &output,
-                       bool toLower = false, bool verilogSafe = false) {
-  appendName(name.getRootReference(), output, toLower, verilogSafe);
+                       bool toLower = false,
+                       Delimiter delimiter = Delimiter::BindFile) {
+  appendName(name.getRootReference(), output, toLower, delimiter);
   for (auto nested : name.getNestedReferences())
-    appendName(nested.getValue(), output, toLower, verilogSafe);
+    appendName(nested.getValue(), output, toLower, delimiter);
 }
 
 /// For a layer `@A::@B::@C` in module Module,
@@ -89,8 +91,10 @@ static void appendName(SymbolRefAttr name, SmallString<32> &output,
 static SmallString<32> moduleNameForLayer(StringRef moduleName,
                                           SymbolRefAttr layerName) {
   SmallString<32> result;
-  appendName(moduleName, result, /*toLower=*/false, /*verilogSafe=*/true);
-  appendName(layerName, result, /*toLower=*/false, /*verilogSafe=*/true);
+  appendName(moduleName, result, /*toLower=*/false,
+             /*delimiter=*/Delimiter::BindModule);
+  appendName(layerName, result, /*toLower=*/false,
+             /*delimiter=*/Delimiter::BindModule);
   return result;
 }
 
@@ -98,7 +102,8 @@ static SmallString<32> moduleNameForLayer(StringRef moduleName,
 /// the generated instance is called `a_b_c`.
 static SmallString<32> instanceNameForLayer(SymbolRefAttr layerName) {
   SmallString<32> result;
-  appendName(layerName, result, /*toLower=*/true, /*verilogSafe=*/true);
+  appendName(layerName, result, /*toLower=*/true,
+             /*delimiter=*/Delimiter::BindModule);
   return result;
 }
 
@@ -119,7 +124,8 @@ static SmallString<32>
 macroNameForLayer(ArrayRef<FlatSymbolRefAttr> layerName) {
   SmallString<32> result;
   for (auto part : layerName)
-    appendName(part, result, /*toLower=*/false, /*verilogSafe=*/true);
+    appendName(part, result, /*toLower=*/false,
+               /*delimiter=*/Delimiter::BindModule);
   return result;
 }
 
