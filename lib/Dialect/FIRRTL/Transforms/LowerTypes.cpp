@@ -687,6 +687,9 @@ bool TypeLoweringVisitor::lowerProducer(
         newOp->setAttr(cache.nameAttr, StringAttr::get(context, loweredName));
       if (nameKindAttr)
         newOp->setAttr(cache.nameKindAttr, nameKindAttr);
+
+      // Clone discardable attributes as well.
+      newOp->setDiscardableAttrs(op->getDiscardableAttrDictionary());
     }
     lowered.push_back(newVal);
   }
@@ -1502,16 +1505,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       op.getLowerToBindAttr(),
       sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
 
-  // Copy over any attributes which have not already been copied over by
-  // arguments to the builder.
-  auto attrNames = InstanceOp::getAttributeNames();
-  DenseSet<StringRef> attrSet(attrNames.begin(), attrNames.end());
-  SmallVector<NamedAttribute> newAttrs(newInstance->getAttrs());
-  for (auto i : llvm::make_filter_range(op->getAttrs(), [&](auto namedAttr) {
-         return !attrSet.count(namedAttr.getName());
-       }))
-    newAttrs.push_back(i);
-  newInstance->setAttrs(newAttrs);
+  newInstance->setDiscardableAttrs(op->getDiscardableAttrDictionary());
 
   SmallVector<Value> lowered;
   for (size_t aggIndex = 0, eAgg = op.getNumResults(); aggIndex != eAgg;
