@@ -34,7 +34,7 @@ struct SpecializeOptionPass
     DenseMap<StringAttr, OptionCaseOp> selected;
     if (auto choiceAttr = circuit.getSelectInstChoiceAttr()) {
       for (auto attr : choiceAttr.getAsRange<StringAttr>()) {
-        const auto &optionAndCase = attr.getValue().str();
+        const auto optionAndCase = attr.getValue().str();
         size_t eq = optionAndCase.find("=");
         if (eq == std::string::npos) {
           mlir::emitError(circuit.getLoc(),
@@ -45,17 +45,17 @@ struct SpecializeOptionPass
         std::string optionName = optionAndCase.substr(0, eq);
         auto optionOp = circuit.lookupSymbol<OptionOp>(optionName);
         if (!optionOp) {
-          mlir::emitWarning(circuit.getLoc(), "unknown option \"")
+          mlir::emitError(circuit.getLoc(), "unknown option \"")
               << optionName << '"';
-          continue;
+          return signalPassFailure();
         }
 
         std::string caseName = optionAndCase.substr(eq + 1);
         auto caseOp = optionOp.lookupSymbol<OptionCaseOp>(caseName);
         if (!caseOp) {
-          mlir::emitWarning(circuit.getLoc(), "invalid option case \"")
+          mlir::emitError(circuit.getLoc(), "invalid option case \"")
               << caseName << '"';
-          continue;
+          return signalPassFailure();
         }
         selected[StringAttr::get(&getContext(), optionName)] = caseOp;
       }
