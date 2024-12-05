@@ -50,7 +50,7 @@ struct ConnectInfo {
 
 /// The delimiters that should be used for a given generated name.  These vary
 /// for modules and files, as well as by convention.
-enum class Delimiter { BindModule = '_', BindFile = '-' };
+enum class Delimiter { BindModule = '_', BindFile = '-', InlineMacro = '$' };
 
 } // namespace
 
@@ -125,7 +125,7 @@ macroNameForLayer(ArrayRef<FlatSymbolRefAttr> layerName) {
   SmallString<32> result;
   for (auto part : layerName)
     appendName(part, result, /*toLower=*/false,
-               /*delimiter=*/Delimiter::BindModule);
+               /*delimiter=*/Delimiter::InlineMacro);
   return result;
 }
 
