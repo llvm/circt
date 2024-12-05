@@ -5804,7 +5804,7 @@ DoneParsing:
 
   // Helper to transform a layer name specification of the form `A::B::C` into
   // a SymbolRefAttr.
-  auto parseLayerName = [&](StringRef name) {
+  auto parseLayerName = [&](StringRef name) -> Attribute {
     // Parse the layer name into a SymbolRefAttr.
     auto [head, rest] = name.split(".");
     SmallVector<FlatSymbolRefAttr> nestedRefs;
@@ -5816,19 +5816,31 @@ DoneParsing:
     return SymbolRefAttr::get(getContext(), head, nestedRefs);
   };
 
-  auto parseLayers = [&](const auto &layers) {
-    SmallVector<Attribute> layersAttr;
-    for (const auto &layer : layers)
-      layersAttr.push_back(parseLayerName(layer));
-    if (layersAttr.empty())
+  auto getArrayAttr = [&](ArrayRef<std::string> strArray, auto getAttr) {
+    SmallVector<Attribute> attrArray;
+    auto *context = getContext();
+    for (const auto &str : strArray)
+      attrArray.push_back(getAttr(str));
+    if (attrArray.empty())
       return ArrayAttr();
-    return ArrayAttr::get(getContext(), layersAttr);
+    return ArrayAttr::get(context, attrArray);
   };
 
-  if (auto enableLayers = parseLayers(getConstants().options.enableLayers))
+  if (auto enableLayers =
+          getArrayAttr(getConstants().options.enableLayers, parseLayerName))
     circuit.setEnableLayersAttr(enableLayers);
-  if (auto disableLayers = parseLayers(getConstants().options.disableLayers))
+  if (auto disableLayers =
+          getArrayAttr(getConstants().options.disableLayers, parseLayerName))
     circuit.setDisableLayersAttr(disableLayers);
+
+  auto getStrAttr = [&](StringRef str) -> Attribute {
+    return StringAttr::get(getContext(), str);
+  };
+
+  if (auto selectInstChoice =
+          getArrayAttr(getConstants().options.selectInstanceChoice, getStrAttr))
+    circuit.setSelectInstChoiceAttr(selectInstChoice);
+
   circuit.setDefaultLayerSpecialization(
       getConstants().options.defaultLayerSpecialization);
 

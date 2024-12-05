@@ -55,6 +55,7 @@ struct FIRParserOptions {
   std::vector<std::string> enableLayers;
   std::vector<std::string> disableLayers;
   std::optional<LayerSpecialization> defaultLayerSpecialization;
+  std::vector<std::string> selectInstanceChoice;
 };
 
 mlir::OwningOpRef<mlir::ModuleOp> importFIRFile(llvm::SourceMgr &sourceMgr,
