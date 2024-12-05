@@ -1472,32 +1472,28 @@ void LowerSMTToZ3LLVMPass::runOnOperation() {
 
   // Check that the lowering is possible
   // Specifically, check that the use of set-logic ops is valid for z3
-  auto setLogicCheck = getOperation().walk([&](Operation *op) {
+  auto setLogicCheck = getOperation().walk([&](SolverOp solverOp)
+                                               -> WalkResult {
     // Check that solver ops only contain one set-logic op and that they're at
     // the start of the body
-    if (auto solverOp = dyn_cast<smt::SolverOp>(op)) {
-      auto setLogicOps = solverOp.getBodyRegion().getOps<smt::SetLogicOp>();
-      auto numSetLogicOps =
-          std::distance(setLogicOps.begin(), setLogicOps.end());
-      if (numSetLogicOps > 1) {
-        solverOp.emitError(
-            "multiple set-logic operations found in one solver operation - Z3 "
-            "only supports setting the logic once");
-        return WalkResult::interrupt();
-      }
-      if (numSetLogicOps == 1)
-        // Check the only ops before the set-logic op are ConstantLike
-        for (auto &blockOp : solverOp.getBodyRegion().getOps()) {
-          if (isa<smt::SetLogicOp>(blockOp))
-            break;
-          if (!blockOp.hasTrait<OpTrait::ConstantLike>()) {
-            solverOp.emitError("set-logic operation must be the first "
-                               "non-constant operation in a solver "
-                               "operation");
-            return WalkResult::interrupt();
-          }
-        }
+    auto setLogicOps = solverOp.getBodyRegion().getOps<smt::SetLogicOp>();
+    auto numSetLogicOps = std::distance(setLogicOps.begin(), setLogicOps.end());
+    if (numSetLogicOps > 1) {
+      return solverOp.emitError(
+          "multiple set-logic operations found in one solver operation - Z3 "
+          "only supports setting the logic once");
     }
+    if (numSetLogicOps == 1)
+      // Check the only ops before the set-logic op are ConstantLike
+      for (auto &blockOp : solverOp.getBodyRegion().getOps()) {
+        if (isa<smt::SetLogicOp>(blockOp))
+          break;
+        if (!blockOp.hasTrait<OpTrait::ConstantLike>()) {
+          return solverOp.emitError("set-logic operation must be the first "
+                                    "non-constant operation in a solver "
+                                    "operation");
+        }
+      }
     return WalkResult::advance();
   });
   if (setLogicCheck.wasInterrupted())
