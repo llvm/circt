@@ -31,9 +31,12 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/raw_os_ostream.h"
+#include "llvm/Support/raw_ostream.h"
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 
+#include <locale>
 #include <numeric>
 #include <variant>
 
@@ -327,7 +330,8 @@ public:
         std::ofstream outFile(outFileName);
 
         if (!outFile.is_open()) {
-          llvm::errs() << "Unable to open file for writing\n";
+          llvm::errs() << "Unable to open file: " << outFileName
+                       << " for writing\n";
           return failure();
         }
         llvm::raw_os_ostream llvmOut(outFile);
@@ -1006,10 +1010,10 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   int totalSize =
       std::reduce(shape.begin(), shape.end(), 1, std::multiplies<int>());
   // The `totalSize <= 1` check is a hack to:
-  // https://github.com/llvm/circt/pull/2661, where a multi-dim memory whose
-  // size in some dimension equals 1, e.g. memref<1x1x1x1xi32>, will be
-  // collapsed to `memref<1xi32>`, whose `totalSize` equals 1. We should instead
-  // never pass multi-dimensional memories to Calyx, as discussed in:
+  // https://github.com/llvm/circt/pull/2661, where a multi-dimensional memory
+  // whose size in some dimension equals 1, e.g. memref<1x1x1x1xi32>, will be
+  // collapsed to `memref<1xi32>` with `totalSize == 1`. While the above case is
+  // a trivial fix, Calyx expects 1-dimensional memories in general:
   // https://github.com/calyxir/calyx/issues/907
   if (!(shape.size() <= 1 || totalSize <= 1)) {
     allocOp.emitError("input memory dimension must be empty or one.");
@@ -1035,8 +1039,8 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
             bit_cast<uint64_t>(fltAttr.getValueAsDouble());
       } else {
         auto intAttr = dyn_cast<mlir::IntegerAttr>(attr);
-        int64_t value = intAttr.getInt();
-        flattenedVals[sizeCount++] = bit_cast<uint64_t>(value);
+        APInt value = intAttr.getValue();
+        flattenedVals[sizeCount++] = *value.getRawData();
       }
     }
 
@@ -1044,40 +1048,35 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   }
 
   llvm::json::Array result;
-  if (shape.empty()) {
-    llvm::json::Value value = flattenedVals[0];
-    result.emplace_back(std::move(value));
-  } else {
-    for (int i = 0; i < shape[0]; ++i) {
-      result.emplace_back(nullptr);
-    }
-  }
+  result.reserve(std::max(static_cast<int>(shape.size()), 1));
 
   bool isSignlessOrUnsigned = memtype.getElementType().isSignlessInteger() ||
                               memtype.getElementType().isUnsignedInteger();
-  for (size_t i = 0; i < flattenedVals.size(); ++i) {
-    uint64_t bitValue = flattenedVals[i];
+  for (uint64_t bitValue : flattenedVals) {
     llvm::json::Value value = 0;
     if (isFloat) {
       // we cast to `double` and let downstream calyx to deal with the actual
       // value's precision handling
       value = bit_cast<double>(bitValue);
     } else {
-      APInt apInt(/*numBits=*/elmTyBitWidth, bitValue);
-      value =
-          isSignlessOrUnsigned ? apInt.getZExtValue() : apInt.getSExtValue();
+      APInt apInt(/*numBits=*/elmTyBitWidth, bitValue,
+                  /*isSigned=*/!isSignlessOrUnsigned);
+      if (!isSignlessOrUnsigned) {
+        // need to explicitly assign it to an int variable before storing to a
+        // json Value, otherwise it will interpret the raw data
+        int64_t signedValue = apInt.getSExtValue();
+        value = signedValue;
+      } else
+        value = apInt.getZExtValue();
     }
-    result[i] = std::move(value);
+    result.push_back(value);
   }
 
   componentState.setDataField(memoryOp.getName(), result);
-
-  auto width = memtype.getElementType().getIntOrFloatBitWidth();
   std::string numType =
       memtype.getElementType().isInteger() ? "bitnum" : "ieee754_float";
-
   componentState.setFormat(memoryOp.getName(), numType,
-                           /*isSigned=*/!isSignlessOrUnsigned, width);
+                           /*isSigned=*/!isSignlessOrUnsigned, elmTyBitWidth);
 
   return success();
 }
