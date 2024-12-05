@@ -583,10 +583,10 @@ struct SolverOpLowering : public SMTLoweringPattern<SolverOp> {
     // Check if the logic is set anywhere within the solver
     std::optional<StringRef> logic = std::nullopt;
     auto setLogicOps = op.getBodyRegion().getOps<smt::SetLogicOp>();
-    if (setLogicOps.begin() != setLogicOps.end()) {
+    if (!setLogicOps.empty()) {
       // We know from before patterns were applied that there is only one
       // set_logic op
-      auto setLogicOp = *(setLogicOps.begin());
+      auto setLogicOp = *setLogicOps.begin();
       logic = setLogicOp.getLogic();
       rewriter.eraseOp(setLogicOp);
     }

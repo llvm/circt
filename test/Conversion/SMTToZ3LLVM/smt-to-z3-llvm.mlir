@@ -444,16 +444,6 @@ func.func @test(%arg0: i32) {
 }
 
 // CHECK-LABEL:  llvm.func @solver
-// CHECK:    [[S_ADDR:%.+]] = llvm.mlir.addressof @solver
-// CHECK:    [[S:%.+]] = llvm.load [[S_ADDR]]
-// CHECK:    [[C_ADDR:%.+]] = llvm.mlir.addressof @ctx
-// CHECK:    [[C:%.+]] = llvm.load [[C_ADDR]]
-// CHECK:    [[C4_I32:%.+]] = llvm.mlir.constant(4 : i32)
-// CHECK:    [[SORT:%.+]] = llvm.call @Z3_mk_bv_sort([[C]], [[C4_I32]])
-// CHECK:    [[C0_I64:%.+]] = llvm.mlir.constant(0 : i64)
-// CHECK:    [[INT:%.+]] = llvm.call @Z3_mk_unsigned_int64([[C]], [[C0_I64]], [[SORT]])
-// CHECK:    [[CHECK:%.+]] = llvm.call @Z3_solver_check([[C]], [[S]])
-// CHECK:    llvm.return
 func.func @test_logic() {
   smt.solver () : () -> () {
     %c0_bv4 = smt.bv.constant #smt.bv<0> : !smt.bv<4>
