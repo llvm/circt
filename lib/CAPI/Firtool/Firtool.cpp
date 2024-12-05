@@ -317,6 +317,11 @@ void circtFirtoolOptionsSetDisableCSEinClasses(
   unwrap(options)->setDisableCSEinClasses(value);
 }
 
+void circtFirtoolOptionsSetSelectDefaultInstanceChoice(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setSelectDefaultInstanceChoice(value);
+}
+
 //===----------------------------------------------------------------------===//
 // Populate API.
 //===----------------------------------------------------------------------===//

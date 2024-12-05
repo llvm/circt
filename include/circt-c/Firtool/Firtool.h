@@ -222,6 +222,9 @@ MLIR_CAPI_EXPORTED void
 circtFirtoolOptionsSetDisableCSEinClasses(CirctFirtoolFirtoolOptions options,
                                           bool value);
 
+MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetSelectDefaultInstanceChoice(
+    CirctFirtoolFirtoolOptions options, bool value);
+
 //===----------------------------------------------------------------------===//
 // Populate API.
 //===----------------------------------------------------------------------===//
