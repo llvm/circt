@@ -330,7 +330,7 @@ public:
         std::ofstream outFile(outFileName);
 
         if (!outFile.is_open()) {
-          llvm::errs() << "Unable to open file: " << outFileName
+          llvm::errs() << "Unable to open file: " << outFileName.string()
                        << " for writing\n";
           return failure();
         }
