@@ -1050,33 +1050,32 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   llvm::json::Array result;
   result.reserve(std::max(static_cast<int>(shape.size()), 1));
 
-  bool isSignlessOrUnsigned = memtype.getElementType().isSignlessInteger() ||
-                              memtype.getElementType().isUnsignedInteger();
+  Type elemType = memtype.getElementType();
+  bool isSigned =
+      !elemType.isSignlessInteger() && !elemType.isUnsignedInteger();
   for (uint64_t bitValue : flattenedVals) {
     llvm::json::Value value = 0;
     if (isFloat) {
-      // we cast to `double` and let downstream calyx to deal with the actual
-      // value's precision handling
+      // We cast to `double` and let downstream calyx to deal with the actual
+      // value's precision handling.
       value = bit_cast<double>(bitValue);
     } else {
-      APInt apInt(/*numBits=*/elmTyBitWidth, bitValue,
-                  /*isSigned=*/!isSignlessOrUnsigned);
-      if (!isSignlessOrUnsigned) {
-        // need to explicitly assign it to an int variable before storing to a
-        // json Value, otherwise it will interpret the raw data
-        int64_t signedValue = apInt.getSExtValue();
-        value = signedValue;
-      } else
+      APInt apInt(/*numBits=*/elmTyBitWidth, bitValue, isSigned);
+      // The conditional ternary operation will cause the `value` to interpret
+      // the underlying data as unsigned regardless `isSigned` or not.
+      if (isSigned)
+        value = static_cast<int64_t>(apInt.getSExtValue());
+      else
         value = apInt.getZExtValue();
     }
-    result.push_back(value);
+    result.push_back(std::move(value));
   }
 
   componentState.setDataField(memoryOp.getName(), result);
   std::string numType =
       memtype.getElementType().isInteger() ? "bitnum" : "ieee754_float";
-  componentState.setFormat(memoryOp.getName(), numType,
-                           /*isSigned=*/!isSignlessOrUnsigned, elmTyBitWidth);
+  componentState.setFormat(memoryOp.getName(), numType, isSigned,
+                           elmTyBitWidth);
 
   return success();
 }
