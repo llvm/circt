@@ -998,8 +998,8 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   componentState.registerMemoryInterface(allocOp.getResult(),
                                          calyx::MemoryInterface(memoryOp));
 
-  assert(memtype.getElementTypeBitWidth() <= 64 &&
-         "element bitwidth should not exceed 64");
+  unsigned elmTyBitWidth = memtype.getElementTypeBitWidth();
+  assert(elmTyBitWidth <= 64 && "element bitwidth should not exceed 64");
   bool isFloat = !memtype.getElementType().isInteger();
 
   auto shape = allocOp.getType().getShape();
@@ -1031,12 +1031,12 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
       assert((isa<mlir::FloatAttr, mlir::IntegerAttr>(attr)) &&
              "memory attributes must be float or int");
       if (auto fltAttr = dyn_cast<mlir::FloatAttr>(attr)) {
-        double value = fltAttr.getValueAsDouble();
-        std::memcpy(&flattenedVals[sizeCount++], &value, sizeof(double));
+        flattenedVals[sizeCount++] =
+            bit_cast<uint64_t>(fltAttr.getValueAsDouble());
       } else {
         auto intAttr = dyn_cast<mlir::IntegerAttr>(attr);
         int64_t value = intAttr.getInt();
-        flattenedVals[sizeCount++] = static_cast<uint64_t>(value);
+        flattenedVals[sizeCount++] = bit_cast<uint64_t>(value);
       }
     }
 
@@ -1053,20 +1053,19 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
     }
   }
 
-  bool isSigned = false;
+  bool isSignlessOrUnsigned = memtype.getElementType().isSignlessInteger() ||
+                              memtype.getElementType().isUnsignedInteger();
   for (size_t i = 0; i < flattenedVals.size(); ++i) {
     uint64_t bitValue = flattenedVals[i];
-    // checks whether the MSB of the `uint64_t` type `bitValue` is set
-    if (bitValue & (1ULL << 63))
-      isSigned = true;
     llvm::json::Value value = 0;
     if (isFloat) {
-      double floatValue;
-      std::memcpy(&floatValue, &bitValue, sizeof(double));
-      value = floatValue;
+      // we cast to `double` and let downstream calyx to deal with the actual
+      // value's precision handling
+      value = bit_cast<double>(bitValue);
     } else {
-      int64_t intValue = static_cast<int64_t>(bitValue);
-      value = intValue;
+      APInt apInt(/*numBits=*/elmTyBitWidth, bitValue);
+      value =
+          isSignlessOrUnsigned ? apInt.getZExtValue() : apInt.getSExtValue();
     }
     result[i] = std::move(value);
   }
@@ -1077,7 +1076,8 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   std::string numType =
       memtype.getElementType().isInteger() ? "bitnum" : "ieee754_float";
 
-  componentState.setFormat(memoryOp.getName(), numType, isSigned, width);
+  componentState.setFormat(memoryOp.getName(), numType,
+                           /*isSigned=*/!isSignlessOrUnsigned, width);
 
   return success();
 }

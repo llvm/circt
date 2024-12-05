@@ -8,7 +8,7 @@
 // CHECK:             0
 // CHECK:           ],
 // CHECK:           "format": {
-// CHECK:             "is_signed": false,
+// CHECK:             "is_signed": true,
 // CHECK:             "numeric_type": "ieee754_float",
 // CHECK:             "width": 32
 // CHECK:           }
@@ -19,7 +19,7 @@
 // CHECK:             0
 // CHECK:           ],
 // CHECK:           "format": {
-// CHECK:             "is_signed": false,
+// CHECK:             "is_signed": true,
 // CHECK:             "numeric_type": "ieee754_float",
 // CHECK:             "width": 32
 // CHECK:           }
@@ -29,17 +29,17 @@
 // CHECK:           "data": [
 // CHECK:             43,
 // CHECK:             8,
-// CHECK:             -39,
-// CHECK:             -19,
+// CHECK:             4294967257,
+// CHECK:             4294967277,
 // CHECK:             70,
-// CHECK:             -64,
-// CHECK:             -7,
-// CHECK:             -27,
-// CHECK:             -57,
+// CHECK:             4294967232,
+// CHECK:             4294967289,
+// CHECK:             4294967269,
+// CHECK:             4294967239,
 // CHECK:             5
 // CHECK:           ],
 // CHECK:           "format": {
-// CHECK:             "is_signed": true,
+// CHECK:             "is_signed": false,
 // CHECK:             "numeric_type": "bitnum",
 // CHECK:             "width": 32
 // CHECK:           }
