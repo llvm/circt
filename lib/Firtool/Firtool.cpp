@@ -736,7 +736,7 @@ struct FirtoolCmdOptions {
       llvm::cl::init(false)};
 
   llvm::cl::opt<bool> selectDefaultInstanceChoice{
-      "specialize-to-default-if-no-override",
+      "select-default-for-unspecified-instance-choice",
       llvm::cl::desc(
           "Specialize instance choice to default, if no option selected"),
       llvm::cl::init(false)};

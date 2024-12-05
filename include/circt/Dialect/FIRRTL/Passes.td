@@ -877,7 +877,7 @@ def SpecializeOption : Pass<"firrtl-specialize-option", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createSpecializeOptionPass()";
 
   let options = [
-    Option<"selectDefault", "specialize-to-default-if-no-override", "bool", "false",
+    Option<"selectDefaultInstanceChoice", "select-default-for-unspecified-instance-choice", "bool", "false",
       "Specialize instance choice to default, if no option selected.">,
   ];
   let statistics = [

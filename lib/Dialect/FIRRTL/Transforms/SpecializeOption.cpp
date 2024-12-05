@@ -27,7 +27,7 @@ namespace {
 struct SpecializeOptionPass
     : public circt::firrtl::impl::SpecializeOptionBase<SpecializeOptionPass> {
   using SpecializeOptionBase::numInstances;
-  using SpecializeOptionBase::selectDefault;
+  using SpecializeOptionBase::selectDefaultInstanceChoice;
 
   void runOnOperation() override {
     auto circuit = getOperation();
@@ -69,7 +69,7 @@ struct SpecializeOptionPass
             auto it = selected.find(inst.getOptionNameAttr());
             FlatSymbolRefAttr target;
             if (it == selected.end()) {
-              if (!selectDefault) {
+              if (!selectDefaultInstanceChoice) {
                 inst.emitError("missing specialization for option ")
                     << inst.getOptionNameAttr();
                 failed = true;
@@ -107,8 +107,9 @@ struct SpecializeOptionPass
 };
 } // namespace
 
-std::unique_ptr<Pass> firrtl::createSpecializeOptionPass(bool selectDefault) {
+std::unique_ptr<Pass>
+firrtl::createSpecializeOptionPass(bool selectDefaultInstanceChoice) {
   auto pass = std::make_unique<SpecializeOptionPass>();
-  pass->selectDefault = selectDefault;
+  pass->selectDefaultInstanceChoice = selectDefaultInstanceChoice;
   return pass;
 }
