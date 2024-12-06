@@ -11,7 +11,9 @@ on:
           - ubuntu-24.04
           - ubuntu-22.04
           - ubuntu-20.04
+          - macos-15-large
           - macos-15
+          - macos-14-large
           - macos-14
           - macos-13
           - windows-2022
