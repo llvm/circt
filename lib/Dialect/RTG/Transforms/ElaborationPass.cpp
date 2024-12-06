@@ -33,6 +33,7 @@ namespace rtg {
 using namespace mlir;
 using namespace circt;
 using namespace circt::rtg;
+using llvm::MapVector;
 
 #define DEBUG_TYPE "rtg-elaboration"
 
@@ -83,7 +84,7 @@ namespace {
 /// The abstract base class for elaborated values.
 struct ElaboratorValue {
 public:
-  enum class ValueKind { Attribute, Set };
+  enum class ValueKind { Attribute, Set, Bag };
 
   ElaboratorValue(ValueKind kind) : kind(kind) {}
   virtual ~ElaboratorValue() {}
@@ -197,6 +198,60 @@ private:
 };
 } // namespace
 
+/// Holds an evaluated value of a `BagType`'d value.
+class BagValue : public ElaboratorValue {
+public:
+  BagValue(MapVector<ElaboratorValue *, uint64_t> &&bag, Type type)
+      : ElaboratorValue(ValueKind::Bag), bag(std::move(bag)), type(type),
+        cachedHash(llvm::hash_combine(
+            llvm::hash_combine_range(bag.begin(), bag.end()), type)) {}
+
+  // Implement LLVMs RTTI
+  static bool classof(const ElaboratorValue *val) {
+    return val->getKind() == ValueKind::Bag;
+  }
+
+  llvm::hash_code getHashValue() const override { return cachedHash; }
+
+  bool isEqual(const ElaboratorValue &other) const override {
+    auto *otherBag = dyn_cast<BagValue>(&other);
+    if (!otherBag)
+      return false;
+
+    if (cachedHash != otherBag->cachedHash)
+      return false;
+
+    return llvm::equal(bag, otherBag->bag) && type == otherBag->type;
+  }
+
+#ifndef NDEBUG
+  void print(llvm::raw_ostream &os) const override {
+    os << "<bag {";
+    llvm::interleaveComma(bag, os,
+                          [&](std::pair<ElaboratorValue *, uint64_t> el) {
+                            el.first->print(os);
+                            os << " -> " << el.second;
+                          });
+    os << "} at " << this << ">";
+  }
+#endif
+
+  const MapVector<ElaboratorValue *, uint64_t> &getBag() const { return bag; }
+
+  Type getType() const { return type; }
+
+private:
+  // Stores the elaborated values of the bag.
+  const MapVector<ElaboratorValue *, uint64_t> bag;
+
+  // Store the type of the bag such that we can materialize this evaluated value
+  // also in the case where the bag is empty.
+  const Type type;
+
+  // Compute the hash only once at constructor time.
+  const llvm::hash_code cachedHash;
+};
+
 #ifndef NDEBUG
 static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
                                      const ElaboratorValue &value) {
@@ -255,7 +310,7 @@ public:
     OpBuilder builder = builderIter->second;
 
     return TypeSwitch<ElaboratorValue *, Value>(val)
-        .Case<AttributeValue, SetValue>(
+        .Case<AttributeValue, SetValue, BagValue>(
             [&](auto val) { return visit(val, builder, loc, emitError); })
         .Default([](auto val) {
           assert(false && "all cases must be covered above");
@@ -313,6 +368,37 @@ private:
     return res;
   }
 
+  Value visit(BagValue *val, OpBuilder &builder, Location loc,
+              function_ref<InFlightDiagnostic()> emitError) {
+    SmallVector<Value> values, weights;
+    values.reserve(val->getBag().size());
+    weights.reserve(val->getBag().size());
+    for (auto [val, weight] : val->getBag()) {
+      auto materializedVal =
+          materialize(val, builder.getBlock(), loc, emitError);
+      if (!materializedVal)
+        return Value();
+
+      auto iter = integerValues.find({weight, builder.getBlock()});
+      Value materializedWeight;
+      if (iter != integerValues.end()) {
+        materializedWeight = iter->second;
+      } else {
+        materializedWeight = builder.create<arith::ConstantOp>(
+            loc, builder.getIndexAttr(weight));
+        integerValues[{weight, builder.getBlock()}] = materializedWeight;
+      }
+
+      values.push_back(materializedVal);
+      weights.push_back(materializedWeight);
+    }
+
+    auto res =
+        builder.create<BagCreateOp>(loc, val->getType(), values, weights);
+    materializedValues[{val, builder.getBlock()}] = res;
+    return res;
+  }
+
 private:
   /// Cache values we have already materialized to reuse them later. We start
   /// with an insertion point at the start of the block and cache the (updated)
@@ -320,6 +406,7 @@ private:
   /// materializations without running into dominance issues (or requiring
   /// additional checks to avoid them).
   DenseMap<std::pair<ElaboratorValue *, Block *>, Value> materializedValues;
+  DenseMap<std::pair<uint64_t, Block *>, Value> integerValues;
 
   /// Cache the builders to continue insertions at their current insertion point
   /// for the reason stated above.
@@ -424,6 +511,79 @@ public:
 
     internalizeResult<SetValue>(op.getResult(), std::move(result),
                                 op.getResult().getType());
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind>
+  visitOp(BagCreateOp op, function_ref<void(Operation *)> addToWorklist) {
+    MapVector<ElaboratorValue *, uint64_t> bag;
+    for (auto [val, multiple] :
+         llvm::zip(op.getElements(), op.getMultiples())) {
+      auto *interpValue = state.at(val);
+      // If the multiple is not stored as an AttributeValue, the elaboration
+      // must have already failed earlier (since we don't have
+      // unevaluated/opaque values).
+      auto *interpMultiple = cast<AttributeValue>(state.at(multiple));
+      uint64_t m = cast<IntegerAttr>(interpMultiple->getAttr()).getInt();
+      bag[interpValue] += m;
+    }
+
+    internalizeResult<BagValue>(op.getBag(), std::move(bag), op.getType());
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind>
+  visitOp(BagSelectRandomOp op, function_ref<void(Operation *)> addToWorklist) {
+    auto *bag = cast<BagValue>(state.at(op.getBag()));
+
+    SmallVector<std::pair<ElaboratorValue *, uint32_t>> prefixSum;
+    prefixSum.reserve(bag->getBag().size());
+    uint32_t accumulator = 0;
+    for (auto [val, weight] : bag->getBag()) {
+      accumulator += weight;
+      prefixSum.push_back({val, accumulator});
+    }
+
+    auto customRng = rng;
+    if (auto intAttr =
+            op->getAttrOfType<IntegerAttr>("rtg.elaboration_custom_seed")) {
+      customRng = std::mt19937(intAttr.getInt());
+    }
+
+    auto idx = getUniformlyInRange(customRng, 0, accumulator - 1);
+    auto *iter = llvm::upper_bound(
+        prefixSum, idx,
+        [](uint32_t a, const std::pair<ElaboratorValue *, uint32_t> &b) {
+          return a < b.second;
+        });
+    state[op.getResult()] = iter->first;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind>
+  visitOp(BagDifferenceOp op, function_ref<void(Operation *)> addToWorklist) {
+    auto *original = cast<BagValue>(state.at(op.getOriginal()));
+    auto *diff = cast<BagValue>(state.at(op.getDiff()));
+
+    MapVector<ElaboratorValue *, uint64_t> result;
+    for (const auto &el : original->getBag()) {
+      if (!diff->getBag().contains(el.first)) {
+        result.insert(el);
+        continue;
+      }
+
+      if (op.getInf())
+        continue;
+
+      auto toDiff = diff->getBag().lookup(el.first);
+      if (el.second <= toDiff)
+        continue;
+
+      result.insert({el.first, el.second - toDiff});
+    }
+
+    internalizeResult<BagValue>(op.getResult(), std::move(result),
+                                op.getType());
     return DeletionKind::Delete;
   }
 
