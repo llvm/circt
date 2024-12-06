@@ -2,6 +2,9 @@
 // RUN: circt-verilog --ir-moore %s
 // REQUIRES: slang
 
+// Internal issue in Slang v3 about jump depending on uninitialised value.
+// UNSUPPORTED: valgrind
+
 // CHECK-LABEL: moore.module @Foo()
 module Foo;
   int r;
