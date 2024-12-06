@@ -88,38 +88,43 @@ getBranchDecisionsFromDominatorToTarget(OpBuilder &builder, Block *driveBlock,
   return mem[driveBlock];
 }
 
-/// Try to move all operations related to $value. This function makes lookup
-/// only in drvOp block. I hope that other dependencies are moveBefore
-/// dominators. It's almost true due to hw.constant and llhd.sig ops are
-/// placed before llhd.process.
+/// Move 'llhd.drv' op '$value' definition (if it present) and it's dependencies
+/// by lookup in current block. It's expected that other dependencies are placed
+/// before 'moveBefore'. It's almost 'true' due to 'hw.constant' and 'llhd.sig'
+/// ops are placed before 'llhd.process'.
 static void moveValueDependencies(llhd::DrvOp drvOp, Operation *moveBefore) {
   auto *drvBlock = drvOp->getBlock();
   auto value = drvOp.getValue();
   if (value.getParentBlock() != drvBlock || !value.getDefiningOp())
     return;
+
   llvm::SmallVector<Operation *> moveSet;
   moveSet.push_back(value.getDefiningOp());
 
   // Algorithm is finite due to recursive dependencies can't exist
-  // in one linear block
+  // in single linear block
   for (unsigned currOp = 0; currOp != moveSet.size(); currOp++) {
     for (auto arg : moveSet[currOp]->getOperands()) {
       if (arg.getParentBlock() == drvBlock) {
         auto *op = arg.getDefiningOp();
         assert(op && "Using block argument as llhd.drv value is unexpected");
 
-        // Prevent more than one move, it can broke dependencies
-        if (auto *otherOpUse = std::find(moveSet.begin(), moveSet.end(), op);
-            otherOpUse != moveSet.end())
-          *otherOpUse = nullptr;
+        // Perform a search and removal of previously found dependencies
+        // on the same reference is performed for later placement.
+        // Later placement in the set leads to earlier placement in
+        // the resulting code, which will help eliminate conflicts.
+        if (auto *olderOpUse = std::find(moveSet.begin(), moveSet.end(), op);
+            olderOpUse != moveSet.end())
+          *olderOpUse = nullptr;
         moveSet.push_back(op);
       }
     }
   }
 
-  for (auto op = moveSet.rbegin(); op != moveSet.rend(); op++)
-    if (*op != nullptr)
-      (*op)->moveBefore(moveBefore);
+  auto reversedRange = llvm::reverse(moveSet);
+  for (auto *op :
+       llvm::make_filter_range(reversedRange, [](Operation *op) { return op; }))
+    op->moveBefore(moveBefore);
 }
 
 /// More a 'llhd.drv' operation before the 'moveBefore' operation by adjusting
