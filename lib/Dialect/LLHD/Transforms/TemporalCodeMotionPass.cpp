@@ -88,6 +88,40 @@ getBranchDecisionsFromDominatorToTarget(OpBuilder &builder, Block *driveBlock,
   return mem[driveBlock];
 }
 
+/// Try to move all operations related to $value. This function makes lookup
+/// only in drvOp block. I hope that other dependencies are moveBefore
+/// dominators. It's almost true due to hw.constant and llhd.sig ops are
+/// placed before llhd.process.
+static void moveValueDependencies(llhd::DrvOp drvOp, Operation *moveBefore) {
+  auto *drvBlock = drvOp->getBlock();
+  auto value = drvOp.getValue();
+  if (value.getParentBlock() != drvBlock || !value.getDefiningOp())
+    return;
+  llvm::SmallVector<Operation *> moveSet;
+  moveSet.push_back(value.getDefiningOp());
+
+  // Algorithm is finite due to recursive dependencies can't exist
+  // in one linear block
+  for (unsigned currOp = 0; currOp != moveSet.size(); currOp++) {
+    for (auto arg : moveSet[currOp]->getOperands()) {
+      if (arg.getParentBlock() == drvBlock) {
+        auto *op = arg.getDefiningOp();
+        assert(op && "Using block argument as llhd.drv value is unexpected");
+
+        // Prevent more than one move, it can broke dependencies
+        if (auto *otherOpUse = std::find(moveSet.begin(), moveSet.end(), op);
+            otherOpUse != moveSet.end())
+          *otherOpUse = nullptr;
+        moveSet.push_back(op);
+      }
+    }
+  }
+
+  for (auto op = moveSet.rbegin(); op != moveSet.rend(); op++)
+    if (*op != nullptr)
+      (*op)->moveBefore(moveBefore);
+}
+
 /// More a 'llhd.drv' operation before the 'moveBefore' operation by adjusting
 /// the 'enable' operand.
 static void moveDriveOpBefore(llhd::DrvOp drvOp, Block *dominator,
@@ -107,6 +141,7 @@ static void moveDriveOpBefore(llhd::DrvOp drvOp, Block *dominator,
                                              finalValue);
 
   drvOp.getEnableMutable().assign(finalValue);
+  moveValueDependencies(drvOp, moveBefore);
   drvOp->moveBefore(moveBefore);
 }
 

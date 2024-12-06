@@ -52,21 +52,21 @@ hw.module @basic(in %cond: i1) {
     llhd.wait (%prb_k, %prb_c, %prb_e, %prb_h, %prb_d, %prb_f, %prb_g : i5, i1, i1, i4, i1, i1, i4), ^bb2
   // CHECK: ^[[BB2]]:
   ^bb2:
-    // CHECK: [[V14:%.+]] = llhd.prb %k
-    // CHECK: [[V15:%.+]] = llhd.prb %c
-    // CHECK: [[V16:%.+]] = llhd.prb %e
-    // CHECK: [[V17:%.+]] = llhd.prb %h
-    // CHECK: [[V18:%.+]] = comb.concat %false{{.*}}, [[V17]] : i1, i4
-    // CHECK: [[V19:%.+]] = llhd.prb %d
-    // CHECK: [[V20:%.+]] = llhd.prb %f
-    // CHECK: [[V21:%.+]] = llhd.prb %k
-    // CHECK: [[V22:%.+]] = llhd.prb %g
-    // CHECK: [[V23:%.+]] = comb.concat %false{{.*}}, [[V22]] : i1, i4
-    // CHECK: [[V24:%.+]] = comb.sub [[V21]], [[V23]] : i5
-    // CHECK: [[V25:%.+]] = llhd.prb %k
-    // CHECK: [[V26:%.+]] = llhd.prb %g
-    // CHECK: [[V27:%.+]] = comb.concat %false{{.*}}, [[V26]] : i1, i4
-    // CHECK: [[V28:%.+]] = comb.add [[V25]], [[V27]] : i5
+    // CHECK: [[V14:%.+]] = llhd.prb %c
+    // CHECK: [[V15:%.+]] = llhd.prb %e
+    // CHECK: [[V16:%.+]] = llhd.prb %h
+    // CHECK: [[V17:%.+]] = comb.concat %false{{.*}}, [[V16]] : i1, i4
+    // CHECK: [[V18:%.+]] = llhd.prb %d
+    // CHECK: [[V19:%.+]] = llhd.prb %f
+    // CHECK: [[V20:%.+]] = llhd.prb %k
+    // CHECK: [[V21:%.+]] = llhd.prb %g
+    // CHECK: [[V22:%.+]] = comb.concat %false{{.*}}, [[V21]] : i1, i4
+    // CHECK: [[V23:%.+]] = comb.sub [[V20]], [[V22]] : i5
+    // CHECK: [[V24:%.+]] = llhd.prb %k
+    // CHECK: [[V25:%.+]] = llhd.prb %g
+    // CHECK: [[V26:%.+]] = comb.concat %false{{.*}}, [[V25]] : i1, i4
+    // CHECK: [[V27:%.+]] = comb.add [[V24]], [[V26]] : i5
+    // CHECK: [[V28:%.+]] = llhd.prb %k
     %25 = llhd.prb %k : !hw.inout<i5>
     llhd.drv %k, %25 after %1 : !hw.inout<i5>
     %26 = llhd.prb %c : !hw.inout<i1>
@@ -102,33 +102,33 @@ hw.module @basic(in %cond: i1) {
   ^bb9:
     llhd.drv %o, %39 after %1 : !hw.inout<i5>
     cf.br ^bb1
-    // CHECK: llhd.drv %k, [[V14]] after [[V1]] if %true{{.*}} : !hw.inout<i5>
+    // CHECK: llhd.drv %k, [[V28]] after [[V1]] if %true{{.*}} : !hw.inout<i5>
 
-    // CHECK: [[V29:%.+]] = comb.and %true{{.*}}, [[V15]] : i1
+    // CHECK: [[V29:%.+]] = comb.and %true{{.*}}, [[V14]] : i1
     // CHECK: [[V30:%.+]] = comb.or %false{{.*}}, [[V29]] : i1
     // CHECK: [[V31:%.+]] = comb.and %cond, [[V30]] : i1
     // CHECK: llhd.drv %l, %c0_i5 after [[V1]] if [[V31]] : !hw.inout<i5>
 
-    // CHECK: [[V33:%.+]] = comb.xor [[V15]], %true{{.*}} : i1
+    // CHECK: [[V33:%.+]] = comb.xor [[V14]], %true{{.*}} : i1
     // CHECK: [[V34:%.+]] = comb.and %true{{.*}}, [[V33]] : i1
     // CHECK: [[V35:%.+]] = comb.or %false{{.*}}, [[V34]] : i1
-    // CHECK: [[V36:%.+]] = comb.and [[V35]], [[V16]] : i1
+    // CHECK: [[V36:%.+]] = comb.and [[V35]], [[V15]] : i1
     // CHECK: [[V37:%.+]] = comb.or %false{{.*}}, [[V36]] : i1
-    // CHECK: llhd.drv %m, [[V18]] after [[V1]] if [[V37]] : !hw.inout<i5>
+    // CHECK: llhd.drv %m, [[V17]] after [[V1]] if [[V37]] : !hw.inout<i5>
 
-    // CHECK: [[V40:%.+]] = comb.xor [[V16]], %true{{.*}} : i1
+    // CHECK: [[V40:%.+]] = comb.xor [[V15]], %true{{.*}} : i1
     // CHECK: [[V41:%.+]] = comb.and [[V35]], [[V40]] : i1
     // CHECK: [[V42:%.+]] = comb.or %false{{.*}}, [[V41]] : i1
-    // CHECK: [[V43:%.+]] = comb.and [[V42]], [[V19]] : i1
+    // CHECK: [[V43:%.+]] = comb.and [[V42]], [[V18]] : i1
     // CHECK: [[V44:%.+]] = comb.or %false{{.*}}, [[V43]] : i1
-    // CHECK: [[V45:%.+]] = comb.and [[V44]], [[V20]] : i1
+    // CHECK: [[V45:%.+]] = comb.and [[V44]], [[V19]] : i1
     // CHECK: [[V46:%.+]] = comb.or %false{{.*}}, [[V45]] : i1
-    // CHECK: llhd.drv %n, [[V24]] after [[V1]] if [[V46]] : !hw.inout<i5>
+    // CHECK: llhd.drv %n, [[V23]] after [[V1]] if [[V46]] : !hw.inout<i5>
 
-    // CHECK: [[V49:%.+]] = comb.xor [[V20]], %true{{.*}} : i1
+    // CHECK: [[V49:%.+]] = comb.xor [[V19]], %true{{.*}} : i1
     // CHECK: [[V50:%.+]] = comb.and [[V44]], [[V49]] : i1
     // CHECK: [[V51:%.+]] = comb.or %false{{.*}}, [[V50]] : i1
-    // CHECK: llhd.drv %o, [[V28]] after [[V1]] if [[V51]] : !hw.inout<i5>
+    // CHECK: llhd.drv %o, [[V27]] after [[V1]] if [[V51]] : !hw.inout<i5>
     // CHECK: cf.br ^[[BB1]]
   }
 
@@ -163,6 +163,68 @@ hw.module @basic(in %cond: i1) {
     // CHECK-NEXT: cf.br
     cf.br ^bb1
   }
+}
+
+hw.module @value_motion(in %a_in : i1, in %clk_in : i1, out b : i1) {
+  %true = hw.constant true
+  %false = hw.constant false
+
+  // CHECK: [[V0:%.+]] = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK: [[V1:%.+]] = llhd.constant_time <0ns, 1d, 0e>
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %1 = llhd.constant_time <0ns, 1d, 0e>
+
+  // CHECK: %a = llhd.sig
+  // CHECK: %clk = llhd.sig
+  // CHECK: %b = llhd.sig
+  %a = llhd.sig name "a" %false : i1
+  %clk = llhd.sig name "clk" %false : i1
+  %b = llhd.sig %false : i1
+
+  // CHECK: [[V2:%.+]] = llhd.prb %clk
+  %2 = llhd.prb %clk : !hw.inout<i1>
+
+  // CHECK: llhd.process
+  llhd.process {
+  // CHECK: cf.br ^[[BB1:.+]]
+    cf.br ^bb1
+  // CHECK: ^[[BB1]]:
+  ^bb1:
+    // CHECK: [[V3:%.+]] = llhd.prb %clk
+    // CHECK: llhd.wait ([[V2]] : i1), ^[[BB2:.+]]
+    %4 = llhd.prb %clk : !hw.inout<i1>
+    llhd.wait (%2 : i1), ^bb2
+  // CHECK: ^[[BB2]]:
+  ^bb2:
+    // CHECK: [[V4:%.+]] = llhd.prb %clk
+    // CHECK: [[V5:%.+]] = comb.xor bin [[V3]], %true{{.*}}
+    // CHECK: [[V6:%.+]] = comb.and bin [[V5]], [[V4]]
+    %5 = llhd.prb %clk : !hw.inout<i1>
+    %6 = comb.xor bin %4, %true : i1
+    %7 = comb.and bin %6, %5 : i1
+    cf.cond_br %7, ^bb3, ^bb1
+  ^bb3:
+    %8 = llhd.prb %a : !hw.inout<i1>
+    %9 = comb.xor %8, %true : i1
+    llhd.drv %b, %9 after %1 : !hw.inout<i1>
+    cf.br ^bb1
+    // CHECK: [[V7:%.+]] = comb.and %true{{.*}}, [[V6]]
+    // CHECK: [[V8:%.+]] = comb.or %false{{.*}}, [[V7]]
+    // CHECK: [[V9:%.+]] = llhd.prb %a
+    // CHECK: [[V10:%.+]] = comb.xor [[V9]], %true{{.*}}
+    // CHECK: llhd.drv %b, [[V10]] after [[V1]] if [[V8]] : !hw.inout<i1>
+    // CHECK-NEXT: cf.br ^[[BB1:.+]]
+  }
+
+  // Unused in pass, just check that it stay unmodified
+  // CHECK: llhd.drv %a, %a_in after [[V0]]
+  // CHECK: llhd.drv %clk, %clk_in after [[V0]]
+  // CHECK: [[V11:%.+]] = llhd.prb %b
+  // CHECK: hw.output [[V11]]
+  llhd.drv %a, %a_in after %0 : !hw.inout<i1>
+  llhd.drv %clk, %clk_in after %0 : !hw.inout<i1>
+  %3 = llhd.prb %b : !hw.inout<i1>
+  hw.output %3 : i1
 }
 
 // The following processes should stay unmodified, just make sure the pass doesn't crash on them
