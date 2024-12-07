@@ -33,3 +33,13 @@ def CPUDeclOp : RTGTestOp<"cpu_decl", [
 
   let assemblyFormat = "$id attr-dict";
 }
+
+def ConstantTestOp : RTGTestOp<"constant_test", [
+  Pure, ConstantLike,
+]> {
+  let arguments = (ins AnyAttr:$value);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = "type($result) attr-dict";
+  let hasFolder = 1;
+}

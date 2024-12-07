@@ -273,3 +273,7 @@ companion dialect to define any backends.
 ## Types
 
 [include "Dialects/RTGTypes.md"]
+
+## Passes
+
+[include "RTGPasses.md"]
