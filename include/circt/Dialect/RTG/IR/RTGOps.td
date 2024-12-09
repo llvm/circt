@@ -224,6 +224,23 @@ def BagDifferenceOp : RTGOp<"bag_difference", [
   }];
 }
 
+def BagUnionOp : RTGOp<"bag_union", [
+  Pure, SameOperandsAndResultType, Commutative
+]> {
+  let summary = "computes the union of bags";
+  let description = [{
+    Computes the union of the given bags. The list of sets must contain at
+    least one element.
+  }];
+
+  let arguments = (ins Variadic<BagType>:$bags);
+  let results = (outs BagType:$result);
+
+  let assemblyFormat = [{
+    $bags `:` qualified(type($result)) attr-dict
+  }];
+}
+
 //===- Test Specification Operations --------------------------------------===//
 
 def TestOp : RTGOp<"test", [

@@ -599,6 +599,20 @@ public:
   }
 
   FailureOr<DeletionKind>
+  visitOp(BagUnionOp op, function_ref<void(Operation *)> addToWorklist) {
+    MapVector<ElaboratorValue *, uint64_t> result;
+    for (auto bag : op.getBags()) {
+      auto *val = cast<BagValue>(state.at(bag));
+      for (auto [el, multiple] : val->getBag())
+        result[el] += multiple;
+    }
+
+    internalizeResult<BagValue>(op.getResult(), std::move(result),
+                                op.getType());
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind>
   dispatchOpVisitor(Operation *op,
                     function_ref<void(Operation *)> addToWorklist) {
     if (op->hasTrait<OpTrait::ConstantLike>()) {
