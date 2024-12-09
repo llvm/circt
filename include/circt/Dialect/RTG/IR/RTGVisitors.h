@@ -32,9 +32,10 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<SequenceOp, SequenceClosureOp, SetCreateOp,
-                       SetSelectRandomOp, SetDifferenceOp, SetUnionOp, TestOp,
-                       InvokeSequenceOp, BagCreateOp, BagSelectRandomOp,
-                       BagDifferenceOp, BagUnionOp, TargetOp, YieldOp>(
+                       SetSelectRandomOp, SetDifferenceOp, SetUnionOp,
+                       SetSizeOp, TestOp, InvokeSequenceOp, BagCreateOp,
+                       BagSelectRandomOp, BagDifferenceOp, BagUnionOp,
+                       BagUniqueSizeOp, TargetOp, YieldOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitOp(expr, args...);
             })
@@ -90,10 +91,12 @@ public:
   HANDLE(SetSelectRandomOp, Unhandled);
   HANDLE(SetDifferenceOp, Unhandled);
   HANDLE(SetUnionOp, Unhandled);
+  HANDLE(SetSizeOp, Unhandled);
   HANDLE(BagCreateOp, Unhandled);
   HANDLE(BagSelectRandomOp, Unhandled);
   HANDLE(BagDifferenceOp, Unhandled);
   HANDLE(BagUnionOp, Unhandled);
+  HANDLE(BagUniqueSizeOp, Unhandled);
   HANDLE(TestOp, Unhandled);
   HANDLE(TargetOp, Unhandled);
   HANDLE(YieldOp, Unhandled);
