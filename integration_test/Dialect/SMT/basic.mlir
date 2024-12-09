@@ -183,6 +183,17 @@ func.func @entry() {
     smt.yield
   }
 
+  // CHECK: unknown
+  // CHECK: Res: 0
+  smt.solver () : () -> () {
+    smt.set_logic "HORN"
+    %c = smt.declare_fun : !smt.int
+    %c4 = smt.int.constant 4
+    %eq = smt.eq %c, %c4 : !smt.int
+    func.call @check(%eq) : (!smt.bool) -> ()
+    smt.yield
+  }
+
   return
 }
 

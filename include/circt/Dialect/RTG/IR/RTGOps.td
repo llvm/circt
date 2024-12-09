@@ -16,6 +16,7 @@ include "mlir/IR/Properties.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "circt/Dialect/RTG/IR/RTGInterfaces.td"
 
 // Base class for the operation in this dialect.
@@ -138,6 +139,131 @@ def SetDifferenceOp : RTGOp<"set_difference", [
 
   let assemblyFormat = [{
     $original `,` $diff `:` qualified(type($output)) attr-dict
+  }];
+}
+
+def SetUnionOp : RTGOp<"set_union", [
+  Pure, SameOperandsAndResultType, Commutative
+]> {
+  let summary = "computes the union of sets";
+  let description = [{
+    Computes the union of the given sets. The list of sets must contain at
+    least one element.
+  }];
+
+  let arguments = (ins Variadic<SetType>:$sets);
+  let results = (outs SetType:$result);
+
+  let assemblyFormat = [{
+    $sets `:` qualified(type($result)) attr-dict
+  }];
+}
+
+def SetSizeOp : RTGOp<"set_size", [Pure]> {
+  let summary = "returns the number of elements in the set";
+
+  let arguments = (ins SetType:$set);
+  let results = (outs Index:$result);
+
+  let assemblyFormat = [{
+    $set `:` qualified(type($set)) attr-dict
+  }];
+}
+
+//===- Bag Operations ------------------------------------------------------===//
+
+def BagCreateOp : RTGOp<"bag_create", [Pure, SameVariadicOperandSize]> {
+  let summary = "constructs a bag";
+  let description = [{
+    This operation constructs a bag with the provided values and associated
+    multiples. This means the bag constructed in the following example contains
+    two of each `%arg0` and `%arg0` (`{%arg0, %arg0, %arg1, %arg1}`).
+
+    ```mlir
+    %0 = arith.constant 2 : index
+    %1 = rtg.bag_create (%0 x %arg0, %0 x %arg1) : i32
+    ```
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$elements,
+                       Variadic<Index>:$multiples);
+  let results = (outs BagType:$bag);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
+def BagSelectRandomOp : RTGOp<"bag_select_random", [
+  Pure,
+  TypesMatchWith<"output must be element type of input bag", "bag", "output",
+                 "llvm::cast<rtg::BagType>($_self).getElementType()">
+]> {
+  let summary = "select a random element from the bag";
+  let description = [{
+    This operation returns an element from the bag selected uniformely at
+    random. Therefore, the number of duplicates of each element can be used to
+    bias the distribution.
+    If the bag does not contain any elements, the behavior of this operation is
+    undefined.
+  }];
+
+  let arguments = (ins BagType:$bag);
+  let results = (outs AnyType:$output);
+
+  let assemblyFormat = "$bag `:` qualified(type($bag)) attr-dict";
+}
+
+def BagDifferenceOp : RTGOp<"bag_difference", [
+  Pure,
+  AllTypesMatch<["original", "diff", "output"]>
+]> {
+  let summary = "computes the difference of two bags";
+  let description = [{
+    For each element the resulting bag will have as many fewer than the
+    'original' bag as there are in the 'diff' bag. However, if the 'inf'
+    attribute is attached, all elements of that kind will be removed (i.e., it
+    is assumed the 'diff' bag has infinitely many copies of each element).
+  }];
+
+  let arguments = (ins BagType:$original,
+                       BagType:$diff,
+                       UnitAttr:$inf);
+  let results = (outs BagType:$output);
+
+  let assemblyFormat = [{
+    $original `,` $diff (`inf` $inf^)? `:` qualified(type($output)) attr-dict
+  }];
+}
+
+def BagUnionOp : RTGOp<"bag_union", [
+  Pure, SameOperandsAndResultType, Commutative
+]> {
+  let summary = "computes the union of bags";
+  let description = [{
+    Computes the union of the given bags. The list of sets must contain at
+    least one element.
+  }];
+
+  let arguments = (ins Variadic<BagType>:$bags);
+  let results = (outs BagType:$result);
+
+  let assemblyFormat = [{
+    $bags `:` qualified(type($result)) attr-dict
+  }];
+}
+
+def BagUniqueSizeOp : RTGOp<"bag_unique_size", [Pure]> {
+  let summary = "returns the number of unique elements in the bag";
+  let description = [{
+    This operation returns the number of unique elements in the bag, i.e., for
+    the bag `{a, a, b, c, c}` it returns 3.
+  }];
+
+  let arguments = (ins BagType:$bag);
+  let results = (outs Index:$result);
+
+  let assemblyFormat = [{
+    $bag `:` qualified(type($bag)) attr-dict
   }];
 }
 

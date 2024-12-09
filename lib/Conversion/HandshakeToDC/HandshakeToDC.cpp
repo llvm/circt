@@ -395,15 +395,19 @@ public:
   matchAndRewrite(handshake::SyncOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     llvm::SmallVector<Value, 4> inputTokens;
-    for (auto input : adaptor.getOperands())
-      inputTokens.push_back(unpack(rewriter, input).token);
+    llvm::SmallVector<Value, 4> inputData;
+    for (auto input : adaptor.getOperands()) {
+      auto unpacked = unpack(rewriter, input);
+      inputTokens.push_back(unpacked.token);
+      inputData.push_back(unpacked.data);
+    }
 
     auto syncToken = rewriter.create<dc::JoinOp>(op.getLoc(), inputTokens);
 
     // Wrap all outputs with the synchronization token
     llvm::SmallVector<Value, 4> wrappedInputs;
-    for (auto input : adaptor.getOperands())
-      wrappedInputs.push_back(pack(rewriter, syncToken, input));
+    for (auto inputData : inputData)
+      wrappedInputs.push_back(pack(rewriter, syncToken, inputData));
 
     rewriter.replaceOp(op, wrappedInputs);
 
@@ -534,7 +538,8 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.getI32IntegerAttr(1);
     rewriter.replaceOpWithNewOp<dc::BufferOp>(
-        op, adaptor.getOperand(), static_cast<size_t>(op.getNumSlots()));
+        op, adaptor.getOperand(), static_cast<size_t>(op.getNumSlots()),
+        op.getInitValuesAttr());
     return success();
   }
 };

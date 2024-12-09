@@ -599,3 +599,47 @@ firrtl.circuit "Rewrite1ElementMemoryToRegisterUnderLayerblock" {
     }
   }
 }
+
+// -----
+
+firrtl.circuit "SIntOneAddress" {
+  firrtl.module @SIntOneAddress(
+      in %clock: !firrtl.clock,
+      in %reset: !firrtl.uint<1>,
+      in %io_dataIn: !firrtl.sint<32>,
+      out %io_dataOut: !firrtl.sint<32>) {
+
+    // CHECK: %mem = firrtl.reg %clock : !firrtl.clock, !firrtl.sint<32>
+    // CHECK: firrtl.matchingconnect %mem, {{%.+}} : !firrtl.sint<32>
+
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %io_dataIn_0 = firrtl.wire {name = "io_dataIn"} : !firrtl.sint<32>
+    %io_dataOut_1 = firrtl.wire {name = "io_dataOut"} : !firrtl.sint<32>
+    firrtl.matchingconnect %io_dataIn_0, %io_dataIn : !firrtl.sint<32>
+    firrtl.matchingconnect %io_dataOut, %io_dataOut_1 : !firrtl.sint<32>
+    %mem_MPORT, %mem_io_dataOut_MPORT = firrtl.mem Undefined {depth = 1 : i64, name = "mem", portNames = ["MPORT", "io_dataOut_MPORT"], prefix = "", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<32>, mask: uint<1>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: sint<32>>
+    %0 = firrtl.subfield %mem_MPORT[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<32>, mask: uint<1>>
+    %1 = firrtl.subfield %mem_MPORT[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<32>, mask: uint<1>>
+    %2 = firrtl.subfield %mem_MPORT[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<32>, mask: uint<1>>
+    %3 = firrtl.subfield %mem_MPORT[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<32>, mask: uint<1>>
+    %4 = firrtl.subfield %mem_MPORT[mask] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<32>, mask: uint<1>>
+    %5 = firrtl.subfield %mem_io_dataOut_MPORT[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: sint<32>>
+    %6 = firrtl.subfield %mem_io_dataOut_MPORT[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: sint<32>>
+    %7 = firrtl.subfield %mem_io_dataOut_MPORT[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: sint<32>>
+    %8 = firrtl.subfield %mem_io_dataOut_MPORT[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: sint<32>>
+    %_io_dataOut_WIRE = firrtl.wire : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.connect %_io_dataOut_WIRE, %c0_ui1 : !firrtl.uint<1>
+    firrtl.connect %5, %_io_dataOut_WIRE : !firrtl.uint<1>
+    firrtl.matchingconnect %6, %c1_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %7, %clock : !firrtl.clock
+    firrtl.matchingconnect %io_dataOut_1, %8 : !firrtl.sint<32>
+    %9 = firrtl.wire : !firrtl.uint<1>
+    firrtl.connect %9, %c0_ui1 : !firrtl.uint<1>
+    firrtl.connect %0, %9 : !firrtl.uint<1>
+    firrtl.matchingconnect %1, %c1_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %2, %clock : !firrtl.clock
+    firrtl.matchingconnect %4, %c1_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %3, %io_dataIn_0 : !firrtl.sint<32>
+  }
+}

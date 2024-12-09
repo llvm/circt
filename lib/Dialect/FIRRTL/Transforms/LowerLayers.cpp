@@ -48,6 +48,10 @@ struct ConnectInfo {
   ConnectKind kind;
 };
 
+/// The delimiters that should be used for a given generated name.  These vary
+/// for modules and files, as well as by convention.
+enum class Delimiter { BindModule = '_', BindFile = '-', InlineMacro = '$' };
+
 } // namespace
 
 // A mapping of an old InnerRefAttr to the new inner symbol and module name that
@@ -61,15 +65,12 @@ using InnerRefMap =
 //===----------------------------------------------------------------------===//
 
 static void appendName(StringRef name, SmallString<32> &output,
-                       bool toLower = false, bool verilogSafe = false) {
+                       bool toLower = false,
+                       Delimiter delimiter = Delimiter::BindFile) {
   if (name.empty())
     return;
-  if (!output.empty()) {
-    if (verilogSafe)
-      output.append("_");
-    else
-      output.append("-");
-  }
+  if (!output.empty())
+    output.push_back(static_cast<char>(delimiter));
   output.append(name);
   if (!toLower)
     return;
@@ -78,10 +79,11 @@ static void appendName(StringRef name, SmallString<32> &output,
 }
 
 static void appendName(SymbolRefAttr name, SmallString<32> &output,
-                       bool toLower = false, bool verilogSafe = false) {
-  appendName(name.getRootReference(), output, toLower, verilogSafe);
+                       bool toLower = false,
+                       Delimiter delimiter = Delimiter::BindFile) {
+  appendName(name.getRootReference(), output, toLower, delimiter);
   for (auto nested : name.getNestedReferences())
-    appendName(nested.getValue(), output, toLower, verilogSafe);
+    appendName(nested.getValue(), output, toLower, delimiter);
 }
 
 /// For a layer `@A::@B::@C` in module Module,
@@ -89,8 +91,10 @@ static void appendName(SymbolRefAttr name, SmallString<32> &output,
 static SmallString<32> moduleNameForLayer(StringRef moduleName,
                                           SymbolRefAttr layerName) {
   SmallString<32> result;
-  appendName(moduleName, result, /*toLower=*/false, /*verilogSafe=*/true);
-  appendName(layerName, result, /*toLower=*/false, /*verilogSafe=*/true);
+  appendName(moduleName, result, /*toLower=*/false,
+             /*delimiter=*/Delimiter::BindModule);
+  appendName(layerName, result, /*toLower=*/false,
+             /*delimiter=*/Delimiter::BindModule);
   return result;
 }
 
@@ -98,7 +102,8 @@ static SmallString<32> moduleNameForLayer(StringRef moduleName,
 /// the generated instance is called `a_b_c`.
 static SmallString<32> instanceNameForLayer(SymbolRefAttr layerName) {
   SmallString<32> result;
-  appendName(layerName, result, /*toLower=*/true, /*verilogSafe=*/true);
+  appendName(layerName, result, /*toLower=*/true,
+             /*delimiter=*/Delimiter::BindModule);
   return result;
 }
 
@@ -116,10 +121,13 @@ static SmallString<32> fileNameForLayer(StringRef circuitName,
 
 /// For a layerblock `@A::@B::@C`, the verilog macro is `A_B_C`.
 static SmallString<32>
-macroNameForLayer(ArrayRef<FlatSymbolRefAttr> layerName) {
-  SmallString<32> result;
+macroNameForLayer(StringRef circuitName,
+                  ArrayRef<FlatSymbolRefAttr> layerName) {
+  SmallString<32> result("layer_");
+  result.append(circuitName);
   for (auto part : layerName)
-    appendName(part, result, /*toLower=*/false, /*verilogSafe=*/true);
+    appendName(part, result, /*toLower=*/false,
+               /*delimiter=*/Delimiter::InlineMacro);
   return result;
 }
 
@@ -176,8 +184,10 @@ class LowerLayersPass
   /// Preprocess layers to build macro declarations and cache information about
   /// the layers so that this can be quired later.
   void preprocessLayers(CircuitNamespace &ns, OpBuilder &b, LayerOp layer,
+                        StringRef circuitName,
                         SmallVector<FlatSymbolRefAttr> &stack);
-  void preprocessLayers(CircuitNamespace &ns, LayerOp layer);
+  void preprocessLayers(CircuitNamespace &ns, LayerOp layer,
+                        StringRef circuitName);
 
   /// Entry point for the function.
   void runOnOperation() override;
@@ -468,7 +478,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
 
     SmallVector<hw::InnerSymAttr> innerSyms;
     SmallVector<RWProbeOp> rwprobes;
-    for (auto &op : llvm::make_early_inc_range(*body)) {
+    auto layerBlockWalkResult = layerBlock.walk([&](Operation *op) {
       // Record any operations inside the layer block which have inner symbols.
       // Theses may have symbol users which need to be updated.
       if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op))
@@ -488,7 +498,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       if (auto instOp = dyn_cast<InstanceOp>(op)) {
         // Ignore instances which this pass did not create.
         if (!createdInstances.contains(instOp))
-          continue;
+          return WalkResult::advance();
 
         LLVM_DEBUG({
           llvm::dbgs()
@@ -497,7 +507,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
               << "        instance: " << instOp.getName() << "\n";
         });
         instOp->moveBefore(layerBlock);
-        continue;
+        return WalkResult::advance();
       }
 
       // Handle subfields, subindexes, and subaccesses which are indexing into
@@ -510,24 +520,24 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       // is exceedingly rare given that subaccesses are almost always unexepcted
       // when this pass runs.)
       if (isa<SubfieldOp, SubindexOp>(op)) {
-        auto input = op.getOperand(0);
+        auto input = op->getOperand(0);
         if (!firrtl::type_cast<FIRRTLBaseType>(input.getType()).isPassive() &&
             !isAncestorOfValueOwner(layerBlock, input))
-          op.moveBefore(layerBlock);
-        continue;
+          op->moveBefore(layerBlock);
+        return WalkResult::advance();
       }
 
       if (auto subOp = dyn_cast<SubaccessOp>(op)) {
         auto input = subOp.getInput();
         if (firrtl::type_cast<FIRRTLBaseType>(input.getType()).isPassive())
-          continue;
+          return WalkResult::advance();
 
         if (!isAncestorOfValueOwner(layerBlock, input) &&
             !isAncestorOfValueOwner(layerBlock, subOp.getIndex())) {
           subOp->moveBefore(layerBlock);
-          continue;
+          return WalkResult::advance();
         }
-        auto diag = op.emitOpError()
+        auto diag = op->emitOpError()
                     << "has a non-passive operand and captures a value defined "
                        "outside its enclosing bind-convention layerblock.  The "
                        "'LowerLayers' pass cannot lower this as it would "
@@ -539,7 +549,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
 
       if (auto rwprobe = dyn_cast<RWProbeOp>(op)) {
         rwprobes.push_back(rwprobe);
-        continue;
+        return WalkResult::advance();
       }
 
       if (auto connect = dyn_cast<FConnectLike>(op)) {
@@ -549,22 +559,22 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         auto dstInLayerBlock = isAncestorOfValueOwner(layerBlock, dst);
         if (!srcInLayerBlock && !dstInLayerBlock) {
           connect->moveBefore(layerBlock);
-          continue;
+          return WalkResult::advance();
         }
         // Create an input port.
         if (!srcInLayerBlock) {
-          createInputPort(src, op.getLoc());
-          continue;
+          createInputPort(src, op->getLoc());
+          return WalkResult::advance();
         }
         // Create an output port.
         if (!dstInLayerBlock) {
           createOutputPort(dst, src);
           if (!isa<RefType>(dst.getType()))
             connect.erase();
-          continue;
+          return WalkResult::advance();
         }
         // Source and destination in layer block.  Nothing to do.
-        continue;
+        return WalkResult::advance();
       }
 
       // Pre-emptively de-squiggle connections that we are creating.  This will
@@ -587,15 +597,20 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
                   *refResolve.getResult().getUsers().begin()))
             if (connect.getDest().getParentBlock() != body) {
               refResolve->moveBefore(layerBlock);
-              continue;
+              return WalkResult::advance();
             }
 
       // For any other ops, create input ports for any captured operands.
-      for (auto operand : op.getOperands()) {
+      for (auto operand : op->getOperands()) {
         if (!isAncestorOfValueOwner(layerBlock, operand))
-          createInputPort(operand, op.getLoc());
+          createInputPort(operand, op->getLoc());
       }
-    }
+
+      return WalkResult::advance();
+    });
+
+    if (layerBlockWalkResult.wasInterrupted())
+      return WalkResult::interrupt();
 
     // Create the new module.  This grabs a lock to modify the circuit.
     FModuleOp newModule = buildNewModule(builder, layerBlock, ports);
@@ -720,7 +735,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
 }
 
 void LowerLayersPass::preprocessLayers(CircuitNamespace &ns, OpBuilder &b,
-                                       LayerOp layer,
+                                       LayerOp layer, StringRef circuitName,
                                        SmallVector<FlatSymbolRefAttr> &stack) {
   stack.emplace_back(FlatSymbolRefAttr::get(layer.getSymNameAttr()));
   ArrayRef stackRef(stack);
@@ -729,7 +744,7 @@ void LowerLayersPass::preprocessLayers(CircuitNamespace &ns, OpBuilder &b,
        layer});
   if (layer.getConvention() == LayerConvention::Inline) {
     auto *ctx = &getContext();
-    auto macName = macroNameForLayer(stack);
+    auto macName = macroNameForLayer(circuitName, stack);
     auto symName = ns.newName(macName);
 
     auto symNameAttr = StringAttr::get(ctx, symName);
@@ -742,14 +757,15 @@ void LowerLayersPass::preprocessLayers(CircuitNamespace &ns, OpBuilder &b,
     macroNames[layer] = FlatSymbolRefAttr::get(&getContext(), symNameAttr);
   }
   for (auto child : layer.getOps<LayerOp>())
-    preprocessLayers(ns, b, child, stack);
+    preprocessLayers(ns, b, child, circuitName, stack);
   stack.pop_back();
 }
 
-void LowerLayersPass::preprocessLayers(CircuitNamespace &ns, LayerOp layer) {
+void LowerLayersPass::preprocessLayers(CircuitNamespace &ns, LayerOp layer,
+                                       StringRef circuitName) {
   OpBuilder b(layer);
   SmallVector<FlatSymbolRefAttr> stack;
-  preprocessLayers(ns, b, layer, stack);
+  preprocessLayers(ns, b, layer, circuitName, stack);
 }
 
 /// Process a circuit to remove all layer blocks in each module and top-level
@@ -759,6 +775,7 @@ void LowerLayersPass::runOnOperation() {
       llvm::dbgs() << "==----- Running LowerLayers "
                       "-------------------------------------------------===\n");
   CircuitOp circuitOp = getOperation();
+  StringRef circuitName = circuitOp.getName();
 
   // Initialize members which cannot be initialized automatically.
   llvm::sys::SmartMutex<true> mutex;
@@ -779,7 +796,7 @@ void LowerLayersPass::runOnOperation() {
     // Build verilog macro declarations for each inline layer declarations.
     // Cache layer symbol refs for lookup later.
     if (auto layerOp = dyn_cast<LayerOp>(op)) {
-      preprocessLayers(ns, layerOp);
+      preprocessLayers(ns, layerOp, circuitName);
       continue;
     }
   }
@@ -854,7 +871,6 @@ void LowerLayersPass::runOnOperation() {
   // TODO: This would be better handled without the use of verbatim ops.
   OpBuilder builder(circuitOp);
   SmallVector<std::pair<LayerOp, StringAttr>> layers;
-  StringRef circuitName = circuitOp.getName();
   circuitOp.walk<mlir::WalkOrder::PreOrder>([&](LayerOp layerOp) {
     auto parentOp = layerOp->getParentOfType<LayerOp>();
     while (!layers.empty() && parentOp != layers.back().first)

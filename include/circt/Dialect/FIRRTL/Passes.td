@@ -444,29 +444,6 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
   ];
 }
 
-def PrefixModules : Pass<"firrtl-prefix-modules", "firrtl::CircuitOp"> {
-  let summary = "Prefixes names of modules and mems in a hierarchy";
-  let description = [{
-    This pass looks for modules annotated with the
-    `NestedPrefixModulesAnnotation` and prefixes the names of all modules
-    instantiated underneath it.  If `inclusive` is true, it includes the target
-    module in the renaming.  If `inclusive` is false, it will only rename
-    modules instantiated underneath the target module.  If a module is required
-    to have two different prefixes, it will be cloned.
-
-    The supported annotation is:
-    ```
-      {
-        class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
-        prefix = "MyPrefix_",
-        inclusive = true
-      }
-    ```
-
-  }];
-  let constructor = "circt::firrtl::createPrefixModulesPass()";
-}
-
 def PrintFIRRTLFieldSourcePass
     : Pass<"firrtl-print-field-source", "firrtl::FModuleOp"> {
   let summary = "Print field source information.";
@@ -692,10 +669,10 @@ def LowerXMR : Pass<"firrtl-lower-xmr", "firrtl::CircuitOp"> {
 def LowerIntmodules : Pass<"firrtl-lower-intmodules", "firrtl::CircuitOp"> {
   let summary = "Lower instances instances of intrinsic modules to ops.";
   let description = [{
-    This pass replaces instances of intrinsic modules (intmodule) with 
+    This pass replaces instances of intrinsic modules (intmodule) with
     `firrtl.int.generic` operations, and removes the intmodule's from
     the circuit.
- 
+
     Use this before running LowerIntrinsics.
   }];
   let constructor = "circt::firrtl::createLowerIntmodulesPass()";
@@ -900,8 +877,8 @@ def SpecializeOption : Pass<"firrtl-specialize-option", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createSpecializeOptionPass()";
 
   let options = [
-    ListOption<"select", "select", "std::string",
-               "Options to specialize, in option=case format">,
+    Option<"selectDefaultInstanceChoice", "select-default-for-unspecified-instance-choice", "bool", "false",
+      "Specialize instance choice to default, if no option selected.">,
   ];
   let statistics = [
     Statistic<"numInstances", "num-instances",
@@ -968,7 +945,7 @@ def CheckRecursiveInstantiation : Pass<"firrtl-check-recursive-instantiation",
   let description = [{
     This pass checks for illegal recursive module instantion.  Recursive
     instantiation is when a module instantiates itself, either directly or
-    indirectly through other modules it instantiates.  Recursive module 
+    indirectly through other modules it instantiates.  Recursive module
     instantiation is illegal because it would require infinite hardware to
     synthesize. Recursive class instantiation is illegal as it would create an
     infinite loop.

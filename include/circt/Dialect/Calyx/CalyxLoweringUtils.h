@@ -27,6 +27,7 @@
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/JSON.h"
 
 #include <variant>
 
@@ -450,6 +451,38 @@ public:
     return builder.create<TLibraryOp>(loc, getUniqueName(name), resTypes);
   }
 
+  llvm::json::Value &getExtMemData() { return extMemData; }
+
+  const llvm::json::Value &getExtMemData() const { return extMemData; }
+
+  void setDataField(StringRef name, llvm::json::Array data) {
+    auto *extMemDataObj = extMemData.getAsObject();
+    assert(extMemDataObj && "extMemData should be an object");
+
+    auto &value = (*extMemDataObj)[name.str()];
+    llvm::json::Object *obj = value.getAsObject();
+    if (!obj) {
+      value = llvm::json::Object{};
+      obj = value.getAsObject();
+    }
+    (*obj)["data"] = llvm::json::Value(std::move(data));
+  }
+
+  void setFormat(StringRef name, std::string numType, bool isSigned,
+                 unsigned width) {
+    auto *extMemDataObj = extMemData.getAsObject();
+    assert(extMemDataObj && "extMemData should be an object");
+
+    auto &value = (*extMemDataObj)[name.str()];
+    llvm::json::Object *obj = value.getAsObject();
+    if (!obj) {
+      value = llvm::json::Object{};
+      obj = value.getAsObject();
+    }
+    (*obj)["format"] = llvm::json::Object{
+        {"numeric_type", numType}, {"is_signed", isSigned}, {"width", width}};
+  }
+
 private:
   /// The component which this lowering state is associated to.
   calyx::ComponentOp component;
@@ -486,6 +519,10 @@ private:
 
   /// A mapping between the callee and the instance.
   llvm::StringMap<calyx::InstanceOp> instanceMap;
+
+  /// A json file to store external global memory data. See
+  /// https://docs.calyxir.org/lang/data-format.html?highlight=json#the-data-format
+  llvm::json::Value extMemData;
 };
 
 /// An interface for conversion passes that lower Calyx programs. This handles

@@ -8,8 +8,8 @@ module {
     %0 = seq.from_clock %clock
     // Registers are all emitted before any other operation
     //CHECK:    [[NID6:[0-9]+]] sort bitvec 32
-    //CHECK:    [[NID12:[0-9]+]] state [[NID6]] count
     //CHECK:    [[INITCONST:[0-9]+]] constd [[NID6]] 0
+    //CHECK:    [[NID12:[0-9]+]] state [[NID6]] count
     //CHECK:    [[INIT:[0-9]+]] init [[NID6]] [[NID12]] [[INITCONST]]
     //CHECK:    [[REG2NID:[0-9]+]] state [[NID6]] count2
     //CHECK-NOT: [[INITCONST]] constd [[NID6]] 0

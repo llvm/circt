@@ -43,9 +43,26 @@ def SetType : RTGTypeDef<"Set"> {
   let assemblyFormat = "`<` $elementType `>`";
 }
 
+def BagType : RTGTypeDef<"Bag"> {
+  let summary = "a bag of values";
+  let description = [{
+    This type represents a standard bag/multiset datastructure. It does not make
+    any assumptions about the underlying implementation.
+  }];
+
+  let parameters = (ins "::mlir::Type":$elementType);
+
+  let mnemonic = "bag";
+  let assemblyFormat = "`<` $elementType `>`";
+}
+
 class SetTypeOf<Type elementType> : ContainerType<
   elementType, SetType.predicate, 
   "llvm::cast<rtg::SetType>($_self).getElementType()", "set">;
+
+class BagTypeOf<Type elementType> : ContainerType<
+  elementType, BagType.predicate,
+  "llvm::cast<rtg::BagType>($_self).getElementType()", "bag">;
 
 def DictType : RTGTypeDef<"Dict"> {
   let summary = "a dictionary";
