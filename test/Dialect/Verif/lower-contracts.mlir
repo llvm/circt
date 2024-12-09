@@ -81,8 +81,8 @@ hw.module @CarrySaveCompress3to2(
 // CHECK:   %11 = comb.icmp ult %1, %c8_i8 : i8
 // CHECK:   %12 = comb.shl %0, %1 : i8
 // CHECK:   %13 = comb.icmp eq %10, %12 : i8
-// CHECK:   verif.assert %13 : i1
 // CHECK:   verif.assume %11 : i1
+// CHECK:   verif.assert %13 : i1
 // CHECK: }
 
 hw.module @ShiftLeft(in %a: i8, in %b: i8, out z: i8) {

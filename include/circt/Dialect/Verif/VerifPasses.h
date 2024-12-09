@@ -21,6 +21,7 @@
 namespace circt {
 namespace verif {
 class FormalOp;
+class RequireLike;
 } // namespace verif
 } // namespace circt
 

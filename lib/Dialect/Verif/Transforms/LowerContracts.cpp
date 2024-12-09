@@ -34,16 +34,14 @@ struct LowerContractsPass
   void runOnOperation() override;
 };
 
-template <typename FROM, typename TO>
-void replaceContractOp(PatternRewriter &rewriter, Block *body) {
-  for (auto op : llvm::make_early_inc_range(body->getOps<FROM>())) {
-    StringAttr labelAttr;
-    if (auto label = op.getLabel())
-      labelAttr = rewriter.getStringAttr(label.value());
+template <typename TO>
+void replaceContractOp(PatternRewriter &rewriter, RequireLike &op) {
+  StringAttr labelAttr;
+  if (auto label = op.getLabel())
+    labelAttr = rewriter.getStringAttr(label.value());
 
-    rewriter.replaceOpWithNewOp<TO>(op, op.getProperty(), op.getEnable(),
-                                    labelAttr);
-  }
+  rewriter.replaceOpWithNewOp<TO>(op, op.getProperty(), op.getEnable(),
+                                  labelAttr);
 }
 
 struct HWOpRewritePattern : public OpRewritePattern<HWModuleOp> {
@@ -79,8 +77,21 @@ struct HWOpRewritePattern : public OpRewritePattern<HWModuleOp> {
       // Convert ensure to assert, require to assume
       Block *contractBlock = &contractOp.getBody().front();
       rewriter.setInsertionPointToEnd(contractBlock);
-      replaceContractOp<EnsureOp, AssertOp>(rewriter, contractBlock);
-      replaceContractOp<RequireOp, AssumeOp>(rewriter, contractBlock);
+
+      WalkResult result = contractBlock->walk([&](RequireLike op) {
+        if (isa<EnsureOp>(op)) {
+          replaceContractOp<AssertOp>(rewriter, op);
+        } else if (isa<RequireOp>(op)) {
+          replaceContractOp<AssumeOp>(rewriter, op);
+        } else {
+          return WalkResult::interrupt();
+        }
+        return WalkResult::advance();
+      });
+
+      if (result.wasInterrupted()) {
+        return failure();
+      }
 
       // Inline body
       rewriter.inlineBlockBefore(contractBlock, bodyBlock, bodyBlock->end());

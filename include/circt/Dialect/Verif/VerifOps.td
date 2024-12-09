@@ -10,6 +10,7 @@
 #define CIRCT_DIALECT_VERIF_VERIFOPS_TD
 
 include "circt/Dialect/Verif/VerifDialect.td"
+include "circt/Dialect/Verif/VerifOpInterfaces.td"
 include "circt/Dialect/LTL/LTLDialect.td"
 include "circt/Dialect/LTL/LTLTypes.td"
 include "circt/Dialect/HW/HWTypes.td"
@@ -378,6 +379,7 @@ def ContractOp : VerifOp<"contract", [
 class RequireLikeOp<string mnemonic> : VerifOp<mnemonic, [
   AttrSizedOperandSegments,
   HasParent<"verif::ContractOp">,
+  DeclareOpInterfaceMethods<RequireLike>
 ]> {
   let arguments = (ins
     LTLAnyPropertyType:$property,
