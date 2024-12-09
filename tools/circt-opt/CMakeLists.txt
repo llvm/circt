@@ -38,6 +38,7 @@ target_link_libraries(circt-opt
   MLIREmitCDialect
   MLIRFuncInlinerExtension
   MLIRVectorDialect
+  MLIRIndexDialect
 )
 
 export_executable_symbols_for_plugins(circt-opt)

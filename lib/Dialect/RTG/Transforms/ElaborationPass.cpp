@@ -526,6 +526,14 @@ public:
   }
 
   FailureOr<DeletionKind>
+  visitOp(SetSizeOp op, function_ref<void(Operation *)> addToWorklist) {
+    auto size = cast<SetValue>(state.at(op.getSet()))->getSet().size();
+    auto sizeAttr = IntegerAttr::get(IndexType::get(op->getContext()), size);
+    internalizeResult<AttributeValue>(op.getResult(), sizeAttr);
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind>
   visitOp(BagCreateOp op, function_ref<void(Operation *)> addToWorklist) {
     MapVector<ElaboratorValue *, uint64_t> bag;
     for (auto [val, multiple] :
@@ -609,6 +617,14 @@ public:
 
     internalizeResult<BagValue>(op.getResult(), std::move(result),
                                 op.getType());
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind>
+  visitOp(BagUniqueSizeOp op, function_ref<void(Operation *)> addToWorklist) {
+    auto size = cast<BagValue>(state.at(op.getBag()))->getBag().size();
+    auto sizeAttr = IntegerAttr::get(IndexType::get(op->getContext()), size);
+    internalizeResult<AttributeValue>(op.getResult(), sizeAttr);
     return DeletionKind::Delete;
   }
 

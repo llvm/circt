@@ -111,10 +111,10 @@ public:
   ResultType dispatchTypeVisitor(Type type, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Type, ResultType>(type)
-        .template Case<SequenceType, SetType, BagType, DictType>(
-            [&](auto expr) -> ResultType {
-              return thisCast->visitType(expr, args...);
-            })
+        .template Case<SequenceType, SetType, BagType, DictType, IndexType,
+                       IntegerType>([&](auto expr) -> ResultType {
+          return thisCast->visitType(expr, args...);
+        })
         .template Case<ContextResourceTypeInterface>(
             [&](auto expr) -> ResultType {
               return thisCast->visitContextResourceType(expr, args...);
@@ -158,6 +158,8 @@ public:
   HANDLE(SetType, Unhandled);
   HANDLE(BagType, Unhandled);
   HANDLE(DictType, Unhandled);
+  HANDLE(IndexType, Unhandled);
+  HANDLE(IntegerType, Unhandled);
 #undef HANDLE
 };
 
