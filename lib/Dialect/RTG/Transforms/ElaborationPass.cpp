@@ -515,6 +515,17 @@ public:
   }
 
   FailureOr<DeletionKind>
+  visitOp(SetUnionOp op, function_ref<void(Operation *)> addToWorklist) {
+    SetVector<ElaboratorValue *> result;
+    for (auto set : op.getSets())
+      result.set_union(cast<SetValue>(state.at(set))->getSet());
+
+    internalizeResult<SetValue>(op.getResult(), std::move(result),
+                                op.getType());
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind>
   visitOp(BagCreateOp op, function_ref<void(Operation *)> addToWorklist) {
     MapVector<ElaboratorValue *, uint64_t> bag;
     for (auto [val, multiple] :

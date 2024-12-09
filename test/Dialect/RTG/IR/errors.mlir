@@ -66,3 +66,10 @@ rtg.sequence @seq {
   // expected-error @below {{operand types must match bag element type}}
   "rtg.bag_create"(%arg0, %arg1, %arg2, %arg2){} : (i64, i64, index, index) -> !rtg.bag<i32>
 }
+
+// -----
+
+rtg.sequence @seq {
+  // expected-error @below {{expected 1 or more operands, but found 0}}
+  rtg.set_union : !rtg.set<i32>
+}

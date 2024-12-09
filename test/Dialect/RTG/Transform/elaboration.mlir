@@ -18,7 +18,9 @@ rtg.test @setOperations : !rtg.dict<> {
   %1 = arith.constant 3 : i32
   %2 = arith.constant 4 : i32
   %3 = arith.constant 5 : i32
-  %set = rtg.set_create %0, %1, %2, %0 : i32
+  %set0 = rtg.set_create %0, %1, %0 : i32
+  %set1 = rtg.set_create %2, %0 : i32
+  %set = rtg.set_union %set0, %set1 : !rtg.set<i32>
   %4 = rtg.set_select_random %set : !rtg.set<i32> {rtg.elaboration_custom_seed = 1}
   %new_set = rtg.set_create %3, %4 : i32
   %diff = rtg.set_difference %set, %new_set : !rtg.set<i32>
