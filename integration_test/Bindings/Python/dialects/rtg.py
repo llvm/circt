@@ -84,11 +84,12 @@ with Context() as ctx, Location.unknown():
   with InsertionPoint(m.body):
     indexTy = IndexType.get()
     sequenceTy = rtg.SequenceType.get()
+    labelTy = rtg.LabelType.get()
     setTy = rtg.SetType.get(indexTy)
     bagTy = rtg.BagType.get(indexTy)
     seq = rtg.SequenceOp('seq')
-    Block.create_at_start(seq.bodyRegion, [sequenceTy, setTy, bagTy])
+    Block.create_at_start(seq.bodyRegion, [sequenceTy, labelTy, setTy, bagTy])
 
   # CHECK: rtg.sequence @seq
-  # CHECK: (%{{.*}}: !rtg.sequence, %{{.*}}: !rtg.set<index>, %{{.*}}: !rtg.bag<index>):
+  # CHECK: (%{{.*}}: !rtg.sequence, %{{.*}}: !rtg.label, %{{.*}}: !rtg.set<index>, %{{.*}}: !rtg.bag<index>):
   print(m)

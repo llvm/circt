@@ -31,6 +31,12 @@ MLIR_CAPI_EXPORTED bool rtgTypeIsASequence(MlirType type);
 /// Creates an RTG sequence type in the context.
 MLIR_CAPI_EXPORTED MlirType rtgSequenceTypeGet(MlirContext ctxt);
 
+/// If the type is an RTG label.
+MLIR_CAPI_EXPORTED bool rtgTypeIsALabel(MlirType type);
+
+/// Creates an RTG mode type in the context.
+MLIR_CAPI_EXPORTED MlirType rtgLabelTypeGet(MlirContext ctxt);
+
 /// If the type is an RTG set.
 MLIR_CAPI_EXPORTED bool rtgTypeIsASet(MlirType type);
 

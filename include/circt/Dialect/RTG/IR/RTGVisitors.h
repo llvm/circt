@@ -35,10 +35,10 @@ public:
                        SetSelectRandomOp, SetDifferenceOp, SetUnionOp,
                        SetSizeOp, TestOp, InvokeSequenceOp, BagCreateOp,
                        BagSelectRandomOp, BagDifferenceOp, BagUnionOp,
-                       BagUniqueSizeOp, TargetOp, YieldOp>(
-            [&](auto expr) -> ResultType {
-              return thisCast->visitOp(expr, args...);
-            })
+                       BagUniqueSizeOp, LabelDeclOp, LabelUniqueDeclOp, LabelOp,
+                       TargetOp, YieldOp>([&](auto expr) -> ResultType {
+          return thisCast->visitOp(expr, args...);
+        })
         .template Case<RegisterOpInterface>([&](auto expr) -> ResultType {
           return thisCast->visitRegisterOp(expr, args...);
         })
@@ -97,6 +97,9 @@ public:
   HANDLE(BagDifferenceOp, Unhandled);
   HANDLE(BagUnionOp, Unhandled);
   HANDLE(BagUniqueSizeOp, Unhandled);
+  HANDLE(LabelDeclOp, Unhandled);
+  HANDLE(LabelUniqueDeclOp, Unhandled);
+  HANDLE(LabelOp, Unhandled);
   HANDLE(TestOp, Unhandled);
   HANDLE(TargetOp, Unhandled);
   HANDLE(YieldOp, Unhandled);
@@ -111,8 +114,8 @@ public:
   ResultType dispatchTypeVisitor(Type type, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Type, ResultType>(type)
-        .template Case<SequenceType, SetType, BagType, DictType, IndexType,
-                       IntegerType>([&](auto expr) -> ResultType {
+        .template Case<SequenceType, SetType, BagType, DictType, LabelType,
+                       IndexType, IntegerType>([&](auto expr) -> ResultType {
           return thisCast->visitType(expr, args...);
         })
         .template Case<ContextResourceTypeInterface>(
@@ -160,6 +163,7 @@ public:
   HANDLE(DictType, Unhandled);
   HANDLE(IndexType, Unhandled);
   HANDLE(IntegerType, Unhandled);
+  HANDLE(LabelType, Unhandled);
 #undef HANDLE
 };
 

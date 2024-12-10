@@ -33,4 +33,6 @@ void RTGDialect::initialize() {
       >();
 }
 
+#include "circt/Dialect/RTG/IR/RTGEnums.cpp.inc"
+
 #include "circt/Dialect/RTG/IR/RTGDialect.cpp.inc"
