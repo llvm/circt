@@ -26,9 +26,11 @@ def RTGTestDialect : Dialect {
   }];
 
   let useDefaultTypePrinterParser = 1;
+  let useDefaultAttributePrinterParser = 1;
   let cppNamespace = "::circt::rtgtest";
 
   let extraClassDeclaration = [{
+    void registerAttributes();
     void registerTypes();
   }];
 }

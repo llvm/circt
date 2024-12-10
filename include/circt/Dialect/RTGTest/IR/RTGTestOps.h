@@ -16,6 +16,7 @@
 #include "circt/Dialect/RTG/IR/RTGISAAssemblyOpInterfaces.h"
 #include "circt/Dialect/RTG/IR/RTGOpInterfaces.h"
 #include "circt/Dialect/RTG/IR/RTGOps.h"
+#include "circt/Dialect/RTGTest/IR/RTGTestAttributes.h"
 #include "circt/Dialect/RTGTest/IR/RTGTestDialect.h"
 #include "circt/Dialect/RTGTest/IR/RTGTestTypes.h"
 #include "circt/Support/LLVM.h"
