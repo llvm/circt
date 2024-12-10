@@ -41,7 +41,7 @@ struct PathVisitor {
   LogicalResult process(BasePathCreateOp pathOp);
   LogicalResult process(PathCreateOp pathOp);
   LogicalResult process(EmptyPathOp pathOp);
-  LogicalResult process(ListCreateOp listCreateOp);
+  LogicalResult processListCreator(Operation *listCreateOp);
   LogicalResult process(ObjectFieldOp objectFieldOp);
   LogicalResult run(ModuleOp module);
   hw::InstanceGraph &instanceGraph;
@@ -257,8 +257,8 @@ LogicalResult PathVisitor::process(EmptyPathOp path) {
 }
 
 /// Replace a ListCreateOp of path types with frozen path types.
-LogicalResult PathVisitor::process(ListCreateOp listCreateOp) {
-  ListType listType = listCreateOp.getResult().getType();
+LogicalResult PathVisitor::processListCreator(Operation *listCreateOp) {
+  ListType listType = cast<ListType>(listCreateOp->getResult(0).getType());
 
   // Check if there are any path types in the list(s).
   if (!hasPathType(listType))
@@ -269,9 +269,10 @@ LogicalResult PathVisitor::process(ListCreateOp listCreateOp) {
 
   // Create a new op with the result type updated to replace path types.
   OpBuilder builder(listCreateOp);
-  auto newListCreateOp = builder.create<ListCreateOp>(
-      listCreateOp.getLoc(), newListType, listCreateOp.getOperands());
-  listCreateOp.replaceAllUsesWith(newListCreateOp.getResult());
+  auto *newListCreateOp = builder.create(
+      listCreateOp->getLoc(), listCreateOp->getName().getIdentifier(),
+      listCreateOp->getOperands(), {newListType});
+  listCreateOp->getResult(0).replaceAllUsesWith(newListCreateOp->getResult(0));
   listCreateOp->erase();
   return success();
 }
@@ -316,8 +317,8 @@ LogicalResult PathVisitor::run(ModuleOp module) {
       } else if (auto path = dyn_cast<EmptyPathOp>(op)) {
         if (failed(process(path)))
           return WalkResult::interrupt();
-      } else if (auto listCreate = dyn_cast<ListCreateOp>(op)) {
-        if (failed(process(listCreate)))
+      } else if (isa<ListCreateOp, ListConcatOp>(op)) {
+        if (failed(processListCreator(op)))
           return WalkResult::interrupt();
       } else if (auto objectField = dyn_cast<ObjectFieldOp>(op)) {
         if (failed(process(objectField)))
