@@ -36,6 +36,15 @@ MlirType rtgSequenceTypeGet(MlirContext ctxt) {
   return wrap(SequenceType::get(unwrap(ctxt)));
 }
 
+// LabelType
+//===----------------------------------------------------------------------===//
+
+bool rtgTypeIsALabel(MlirType type) { return isa<LabelType>(unwrap(type)); }
+
+MlirType rtgLabelTypeGet(MlirContext ctxt) {
+  return wrap(LabelType::get(unwrap(ctxt)));
+}
+
 // SetType
 //===----------------------------------------------------------------------===//
 

@@ -24,6 +24,15 @@ static void testSequenceType(MlirContext ctx) {
   mlirTypeDump(sequenceTy);
 }
 
+static void testLabelType(MlirContext ctx) {
+  MlirType labelTy = rtgLabelTypeGet(ctx);
+
+  // CHECK: is_label
+  fprintf(stderr, rtgTypeIsALabel(labelTy) ? "is_label\n" : "isnot_label\n");
+  // CHECK: !rtg.label
+  mlirTypeDump(labelTy);
+}
+
 static void testSetType(MlirContext ctx) {
   MlirType elTy = mlirIntegerTypeGet(ctx, 32);
   MlirType setTy = rtgSetTypeGet(elTy);
@@ -71,6 +80,7 @@ int main(int argc, char **argv) {
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__rtg__(), ctx);
 
   testSequenceType(ctx);
+  testLabelType(ctx);
   testSetType(ctx);
   testBagType(ctx);
   testDictType(ctx);

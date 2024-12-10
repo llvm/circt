@@ -16,6 +16,9 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Dialect.h"
 
+// Pull in all enum type definitions and utility function declarations.
+#include "circt/Dialect/RTG/IR/RTGEnums.h.inc"
+
 // Pull in the Dialect definition.
 #include "circt/Dialect/RTG/IR/RTGDialect.h.inc"
 
