@@ -49,6 +49,11 @@ struct HWOpRewritePattern : public OpRewritePattern<HWModuleOp> {
 
   LogicalResult matchAndRewrite(HWModuleOp op,
                                 PatternRewriter &rewriter) const override {
+    auto contracts = op.getBody().front().getOps<ContractOp>();
+    if (contracts.empty()) {
+      return failure();
+    }
+
     auto formalOp = rewriter.create<verif::FormalOp>(
         op.getLoc(), op.getNameAttr(), rewriter.getDictionaryAttr({}));
 
@@ -72,7 +77,7 @@ struct HWOpRewritePattern : public OpRewritePattern<HWModuleOp> {
 
     // Inline contract ops
     for (auto contractOp :
-         llvm::make_early_inc_range(bodyBlock->getOps<verif::ContractOp>())) {
+         llvm::make_early_inc_range(bodyBlock->getOps<ContractOp>())) {
 
       // Convert ensure to assert, require to assume
       Block *contractBlock = &contractOp.getBody().front();

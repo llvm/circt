@@ -116,3 +116,17 @@ hw.module @ShiftLeft(in %a: i8, in %b: i8, out z: i8) {
 
   hw.output %z : i8
 }
+
+// CHECK: hw.module @NoContract(in %a : i42, out z : i42) {
+// CHECK:   %c3_i42 = hw.constant 3 : i42
+// CHECK:   %0 = comb.shl %a, %c3_i42 : i42
+// CHECK:   %1 = comb.add %a, %0 : i42
+// CHECK:   hw.output %1 : i42
+// CHECK: }
+
+hw.module @NoContract(in %a: i42, out z: i42) {
+  %c3_i42 = hw.constant 3 : i42
+  %0 = comb.shl %a, %c3_i42 : i42
+  %1 = comb.add %a, %0 : i42
+  hw.output %1 : i42
+}
