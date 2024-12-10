@@ -1060,7 +1060,8 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
       // value's precision handling.
       value = bit_cast<double>(bitValue);
     } else {
-      APInt apInt(/*numBits=*/elmTyBitWidth, bitValue, isSigned);
+      APInt apInt(/*numBits=*/elmTyBitWidth, bitValue, isSigned,
+                  /*implicitTrunc=*/true);
       // The conditional ternary operation will cause the `value` to interpret
       // the underlying data as unsigned regardless `isSigned` or not.
       if (isSigned)
