@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "slang/ast/EvalContext.h"
 #include "slang/ast/SystemSubroutine.h"
 #include "slang/syntax/AllSyntax.h"
 
@@ -548,7 +549,7 @@ struct RvalueExprVisitor {
       // The open range list on the right-hand side of the inside operator is a
       // comma-separated list of expressions or ranges.
       if (const auto *openRange =
-              listExpr->as_if<slang::ast::OpenRangeExpression>()) {
+              listExpr->as_if<slang::ast::ValueRangeExpression>()) {
         // Handle ranges.
         auto lowBound = context.convertToSimpleBitVector(
             context.convertRvalueExpression(openRange->left()));
@@ -1197,7 +1198,9 @@ slang::ConstantValue
 Context::evaluateConstant(const slang::ast::Expression &expr) {
   using slang::ast::EvalFlags;
   slang::ast::EvalContext evalContext(
-      compilation, EvalFlags::CacheResults | EvalFlags::SpecparamsAllowed);
+      slang::ast::ASTContext(compilation.getRoot(),
+                             slang::ast::LookupLocation::max),
+      EvalFlags::CacheResults | EvalFlags::SpecparamsAllowed);
   return expr.eval(evalContext);
 }
 

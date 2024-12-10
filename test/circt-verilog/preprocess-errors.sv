@@ -1,5 +1,5 @@
 // RUN: circt-verilog %s -E --verify-diagnostics
 // REQUIRES: slang
 
-// expected-error @below {{could not find or open include file}}
+// expected-error @below {{'unknown.sv': No such file or directory}}
 `include "unknown.sv"
