@@ -217,7 +217,7 @@ def SeqMemoryOp : CalyxPrimitive<"seq_mem", []> {
   );
 
   let results = (outs
-    Variadic<AnySignlessInteger>:$results
+    Variadic<AnyType>:$results
   );
 
   let assemblyFormat = [{
