@@ -28,3 +28,18 @@ hw.module @pass(in %arg0: i32, in %arg1: i1, out out: i2) {
   %3 = comb.and %0, %1, %2 : i2
   hw.output %3 : i2
 }
+
+// CHECK-LABEL: @mux
+hw.module @mux(in %cond: i1, in %high: !hw.array<2xi4>, in %low: !hw.array<2xi4>, out out: !hw.array<2xi4>) {
+  // CHECK-NEXT: %[[HIGH:.+]] = hw.bitcast %high : (!hw.array<2xi4>) -> i8
+  // CHECK-NEXT: %[[LOW:.+]] = hw.bitcast %low : (!hw.array<2xi4>) -> i8
+  // CHECK-NEXT: %[[COND:.+]] = comb.replicate %cond : (i1) -> i8
+  // CHECK-NEXT: %[[LHS:.+]] = aig.and_inv %[[COND]], %[[HIGH]] : i8
+  // CHECK-NEXT: %[[RHS:.+]] = aig.and_inv not %[[COND]], %[[LOW]] : i8
+  // CHECK-NEXT: %[[NAND:.+]] = aig.and_inv not %[[LHS]], not %[[RHS]] : i8
+  // CHECK-NEXT: %[[NOT:.+]] = aig.and_inv not %[[NAND]] : i8
+  // CHECK-NEXT: %[[RESULT:.+]] = hw.bitcast %[[NOT]] : (i8) -> !hw.array<2xi4>
+  // CHECK-NEXT: hw.output %[[RESULT]] : !hw.array<2xi4>
+  %0 = comb.mux %cond, %high, %low : !hw.array<2xi4>
+  hw.output %0 : !hw.array<2xi4>
+}
