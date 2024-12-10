@@ -20,6 +20,7 @@ include "mlir/IR/OpAsmInterface.td"
 include "circt/Dialect/RTG/IR/RTGInterfaces.td"
 
 include "circt/Dialect/RTGTest/IR/RTGTestDialect.td"
+include "circt/Dialect/RTGTest/IR/RTGTestAttributes.td"
 include "circt/Dialect/RTGTest/IR/RTGTestTypes.td"
 include "circt/Dialect/RTGTest/IR/RTGTestOps.td"
 
