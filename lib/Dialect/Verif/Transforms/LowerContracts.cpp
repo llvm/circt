@@ -54,8 +54,10 @@ struct HWOpRewritePattern : public OpRewritePattern<HWModuleOp> {
       return failure();
     }
 
+    auto name =
+        rewriter.getStringAttr(op.getNameAttr().getValue() + "_CheckContract");
     auto formalOp = rewriter.create<verif::FormalOp>(
-        op.getLoc(), op.getNameAttr(), rewriter.getDictionaryAttr({}));
+        op.getLoc(), name, rewriter.getDictionaryAttr({}));
 
     // Clone module body into formal op body
     rewriter.cloneRegionBefore(op.getRegion(), formalOp.getBody(),
@@ -109,8 +111,7 @@ struct HWOpRewritePattern : public OpRewritePattern<HWModuleOp> {
       rewriter.eraseOp(contractOp);
     }
 
-    rewriter.eraseOp(op);
-    return success();
+    return failure();
   }
 };
 } // namespace
