@@ -32,10 +32,10 @@ jobs:
         build-shared: [ON, OFF]
         build-type: [Debug, Release]
         compiler:
-          - cc: clang
-            cxx: clang++
-          - cc: gcc
-            cxx: g++
+          - cc: clang-17
+            cxx: clang++-17
+          - cc: gcc-11
+            cxx: g++-11
         lit-flags: ['', '--vg']
         exclude:
           - build-type: Debug
@@ -48,7 +48,7 @@ jobs:
             build-shared: ON
           # TODO: This corner is failing and has been for some time. #5253.
           - build-type: Release
-            compiler: {cc: gcc, cxx: g++}
+            compiler: {cc: gcc-11, cxx: g++-11}
             lit-flags: --vg
 
     steps:
