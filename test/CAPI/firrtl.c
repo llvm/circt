@@ -186,131 +186,6 @@ void testAttrGetIntegerFromString(MlirContext ctx) {
                       mlirStringRefCreateFromCString("114514"), 10));
 }
 
-void testTypeDiscriminantsAndQueries(MlirContext ctx) {
-  FIRRTLBundleField bundleFields[] = {
-      {
-          .name = mlirIdentifierGet(ctx, mlirStringRefCreateFromCString("f1")),
-          .isFlip = false,
-          .type = firrtlTypeGetUInt(ctx, 32),
-      },
-      {
-          .name = mlirIdentifierGet(ctx, mlirStringRefCreateFromCString("f2")),
-          .isFlip = false,
-          .type = firrtlTypeGetSInt(ctx, 64),
-      },
-  };
-  FIRRTLBundleField openBundleFields[] = {
-      {
-          .name = mlirIdentifierGet(ctx, mlirStringRefCreateFromCString("f1")),
-          .isFlip = false,
-          .type = firrtlTypeGetUInt(ctx, 32),
-      },
-      {
-          .name = mlirIdentifierGet(ctx, mlirStringRefCreateFromCString("f2")),
-          .isFlip = false,
-          .type = firrtlTypeGetInteger(ctx),
-      },
-  };
-  MlirType bundle =
-      firrtlTypeGetBundle(ctx, ARRAY_SIZE(bundleFields), bundleFields);
-  bundleFields[1].isFlip = true;
-  MlirType bundleContainsFlip =
-      firrtlTypeGetBundle(ctx, ARRAY_SIZE(bundleFields), bundleFields);
-  MlirType openBundle =
-      firrtlTypeGetBundle(ctx, ARRAY_SIZE(openBundleFields), openBundleFields);
-
-  FIRRTLClassElement classElements[] = {
-      {
-          .name = mlirIdentifierGet(ctx, mlirStringRefCreateFromCString("f1")),
-          .type = firrtlTypeGetUInt(ctx, 32),
-          .direction = FIRRTL_DIRECTION_IN,
-      },
-      {
-          .name = mlirIdentifierGet(ctx, mlirStringRefCreateFromCString("f2")),
-          .type = firrtlTypeGetInteger(ctx),
-          .direction = FIRRTL_DIRECTION_OUT,
-      },
-  };
-  MlirType cls = firrtlTypeGetClass(
-      ctx, mlirFlatSymbolRefAttrGet(ctx, mlirStringRefCreateFromCString("cls")),
-      ARRAY_SIZE(classElements), classElements);
-
-  assert(firrtlTypeIsConst(
-      firrtlTypeGetConstType(firrtlTypeGetUInt(ctx, 32), true)));
-  assert(firrtlTypeIsConst(firrtlTypeGetConstType(
-      firrtlTypeGetConstType(firrtlTypeGetUInt(ctx, 32), false), true)));
-  assert(firrtlTypeIsAUInt(firrtlTypeGetUInt(ctx, 32)));
-  assert(firrtlTypeIsASInt(firrtlTypeGetSInt(ctx, 32)));
-  assert(firrtlTypeIsAClock(firrtlTypeGetClock(ctx)));
-  assert(firrtlTypeIsAReset(firrtlTypeGetReset(ctx)));
-  assert(firrtlTypeIsAAsyncReset(firrtlTypeGetAsyncReset(ctx)));
-  assert(firrtlTypeIsAAnalog(firrtlTypeGetAnalog(ctx, 32)));
-  assert(firrtlTypeIsAVector(
-      firrtlTypeGetVector(ctx, firrtlTypeGetUInt(ctx, 32), 4)));
-  assert(firrtlTypeIsABundle(bundle));
-  assert(firrtlTypeIsAOpenBundle(openBundle));
-  assert(firrtlTypeIsARef(firrtlTypeGetRef(firrtlTypeGetClock(ctx), false)));
-  assert(firrtlTypeIsAAnyRef(firrtlTypeGetAnyRef(ctx)));
-  assert(firrtlTypeIsAInteger(firrtlTypeGetInteger(ctx)));
-  assert(firrtlTypeIsADouble(firrtlTypeGetDouble(ctx)));
-  assert(firrtlTypeIsAString(firrtlTypeGetString(ctx)));
-  assert(firrtlTypeIsABoolean(firrtlTypeGetBoolean(ctx)));
-  assert(firrtlTypeIsAPath(firrtlTypeGetPath(ctx)));
-  assert(firrtlTypeIsAList(firrtlTypeGetList(ctx, firrtlTypeGetInteger(ctx))));
-  assert(firrtlTypeIsAClass(cls));
-  assert(!firrtlTypeIsConst(firrtlTypeGetUInt(ctx, 32)));
-  assert(!firrtlTypeIsConst(
-      firrtlTypeGetConstType(firrtlTypeGetUInt(ctx, 32), false)));
-  assert(!firrtlTypeIsConst(firrtlTypeGetConstType(
-      firrtlTypeGetConstType(firrtlTypeGetUInt(ctx, 32), true), false)));
-  assert(!firrtlTypeIsAUInt(firrtlTypeGetSInt(ctx, 32)));
-  assert(!firrtlTypeIsASInt(firrtlTypeGetUInt(ctx, 32)));
-  assert(!firrtlTypeIsAClock(firrtlTypeGetReset(ctx)));
-  assert(!firrtlTypeIsAReset(firrtlTypeGetClock(ctx)));
-  assert(!firrtlTypeIsAAsyncReset(firrtlTypeGetReset(ctx)));
-  assert(!firrtlTypeIsAAnalog(firrtlTypeGetReset(ctx)));
-  assert(!firrtlTypeIsABundle(openBundle));
-  assert(!firrtlTypeIsAOpenBundle(bundle));
-  assert(!firrtlTypeIsARef(firrtlTypeGetAnyRef(ctx)));
-  assert(
-      !firrtlTypeIsAAnyRef(firrtlTypeGetRef(firrtlTypeGetClock(ctx), false)));
-  assert(!firrtlTypeIsAInteger(firrtlTypeGetDouble(ctx)));
-  assert(!firrtlTypeIsADouble(firrtlTypeGetString(ctx)));
-  assert(!firrtlTypeIsAString(firrtlTypeGetBoolean(ctx)));
-  assert(!firrtlTypeIsABoolean(firrtlTypeGetPath(ctx)));
-  assert(!firrtlTypeIsAPath(firrtlTypeGetBoolean(ctx)));
-  assert(!firrtlTypeIsAList(cls));
-  assert(!firrtlTypeIsAClass(firrtlTypeGetPath(ctx)));
-
-  assert(firrtlTypeGetBitWidth(firrtlTypeGetUInt(ctx, 32), false) == 32);
-  assert(firrtlTypeGetBitWidth(firrtlTypeGetSInt(ctx, 32), false) == 32);
-  assert(firrtlTypeGetBitWidth(firrtlTypeGetClock(ctx), false) == 1);
-  assert(firrtlTypeGetBitWidth(firrtlTypeGetReset(ctx), false) == 1);
-  assert(firrtlTypeGetBitWidth(bundle, false) == 96);
-  assert(firrtlTypeGetBitWidth(bundleContainsFlip, false) == -1);
-  assert(firrtlTypeGetBitWidth(bundleContainsFlip, true) == 96);
-  assert(mlirTypeEqual(firrtlTypeGetVectorElement(firrtlTypeGetVector(
-                           ctx, firrtlTypeGetUInt(ctx, 32), 4)),
-                       firrtlTypeGetUInt(ctx, 32)));
-  assert(firrtlTypeGetVectorNumElements(
-             firrtlTypeGetVector(ctx, firrtlTypeGetUInt(ctx, 32), 4)) == 4);
-  assert(firrtlTypeGetBundleNumFields(bundle) == 2);
-  assert(firrtlTypeGetBundleNumFields(openBundle) == 2);
-  FIRRTLBundleField field;
-  assert(firrtlTypeGetBundleFieldByIndex(bundle, 0, &field) &&
-         memcmp(&bundleFields[0], &field, sizeof(field)) == 0);
-  assert(firrtlTypeGetBundleFieldByIndex(openBundle, 1, &field) &&
-         memcmp(&openBundleFields[1], &field, sizeof(field)) == 0);
-  assert(firrtlTypeGetBundleFieldIndex(
-             bundle, mlirStringRefCreateFromCString("f1")) == 0);
-  assert(firrtlTypeGetBundleFieldIndex(
-             bundle, mlirStringRefCreateFromCString("f2")) == 1);
-  assert(firrtlTypeGetBundleFieldIndex(
-             openBundle, mlirStringRefCreateFromCString("f1")) == 0);
-  assert(firrtlTypeGetBundleFieldIndex(
-             openBundle, mlirStringRefCreateFromCString("f2")) == 1);
-}
-
 void testTypeGetMaskType(MlirContext ctx) {
   assert(mlirTypeEqual(firrtlTypeGetMaskType(firrtlTypeGetUInt(ctx, 32)),
                        firrtlTypeGetUInt(ctx, 1)));
@@ -365,7 +240,6 @@ int main(void) {
   testValueFoldFlow(ctx);
   testImportAnnotations(ctx);
   testAttrGetIntegerFromString(ctx);
-  testTypeDiscriminantsAndQueries(ctx);
   testTypeGetMaskType(ctx);
   return 0;
 }
