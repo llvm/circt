@@ -68,8 +68,8 @@ endmodule
 
 // -----
 module Foo;
-  int a, b[3];
-  // expected-error @below {{unpacked arrays in 'inside' expressions not supported}}
+  int a, b[];
+  // expected-error @below {{unsized unpacked arrays in 'inside' expressions not supported}}
   int c = a inside { b };
 endmodule
 

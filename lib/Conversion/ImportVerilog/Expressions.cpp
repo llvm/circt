@@ -611,19 +611,35 @@ struct RvalueExprVisitor {
         // Handle expressions.
         if (!listExpr->type->isSimpleBitVector()) {
           if (listExpr->type->isUnpackedArray()) {
+            if (listExpr->type->isFixedSize()) {
+              const auto &uaType =
+                  listExpr->type->as<slang::ast::FixedSizeUnpackedArrayType>();
+              auto value = context.convertRvalueExpression(*listExpr);
+              if (!value)
+                return {};
+              context.collectConditionsForUnpackedArray(uaType, value,
+                                                        conditions, lhs, loc);
+              cond = conditions.back();
+              conditions
+                  .pop_back(); // avoiding repetition of cond in the vector
+            } else {
+              mlir::emitError(loc, "unsized unpacked arrays in 'inside' "
+                                   "expressions not supported");
+              return {};
+            }
+          } else {
             mlir::emitError(
-                loc, "unpacked arrays in 'inside' expressions not supported");
+                loc,
+                "only simple bit vectors supported in 'inside' expressions");
             return {};
           }
-          mlir::emitError(
-              loc, "only simple bit vectors supported in 'inside' expressions");
-          return {};
+        } else {
+          auto value = context.convertToSimpleBitVector(
+              context.convertRvalueExpression(*listExpr));
+          if (!value)
+            return {};
+          cond = builder.create<moore::WildcardEqOp>(loc, lhs, value);
         }
-        auto value = context.convertToSimpleBitVector(
-            context.convertRvalueExpression(*listExpr));
-        if (!value)
-          return {};
-        cond = builder.create<moore::WildcardEqOp>(loc, lhs, value);
       }
       conditions.push_back(cond);
     }
@@ -1409,4 +1425,40 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                 })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
+}
+
+void Context::collectConditionsForUnpackedArray(
+    const slang::ast::FixedSizeUnpackedArrayType &slangType,
+    Value upackedArrayValue, SmallVector<Value> &conditions, Value lhs,
+    Location loc) {
+  Value cond;
+  auto type = convertType(slangType);
+  if (!type) {
+    mlir::emitError(loc, "can't convert slang::ast::FixedSizeUnpackedArrayType "
+                         "to moore::UnpackedArrayType");
+  }
+  auto mooreType = dyn_cast<moore::UnpackedArrayType>(type);
+  const auto &elementType = slangType.elementType;
+  for (slang::int32_t i = slangType.getFixedRange().lower();
+       i <= slangType.getFixedRange().upper(); i++) {
+    auto elemValue = builder.create<moore::ExtractOp>(
+        loc, mooreType.getElementType(), upackedArrayValue, i);
+    if (elementType.isUnpackedArray()) {
+      collectConditionsForUnpackedArray(
+          elementType.as<slang::ast::FixedSizeUnpackedArrayType>(), elemValue,
+          conditions, lhs, loc);
+    } else if (elementType.isSingular()) {
+      if (elementType.isIntegral()) {
+        cond = builder.create<moore::WildcardEqOp>(loc, lhs, elemValue);
+      } else {
+        cond = builder.create<moore::EqOp>(loc, lhs, elemValue);
+      }
+      conditions.push_back(cond);
+    } else {
+      mlir::emitError(loc,
+                      "only singular values and fixed-size unpacked arrays "
+                      "allowed as elements of unpacked arrays in 'inside' "
+                      "expressions");
+    }
+  }
 }

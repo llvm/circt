@@ -154,6 +154,13 @@ struct Context {
   Value materializeConstant(const slang::ConstantValue &constant,
                             const slang::ast::Type &type, Location loc);
 
+  /// Helper function to construct conditions for a fixed-size unpacked array in
+  /// an `inside` expression.
+  void collectConditionsForUnpackedArray(
+      const slang::ast::FixedSizeUnpackedArrayType &slangType,
+      Value upackedArrayValue, SmallVector<Value> &conditions, Value lhs,
+      Location loc);
+
   /// Convert a list of string literal arguments with formatting specifiers and
   /// arguments to be interpolated into a `!moore.format_string` value. Returns
   /// failure if an error occurs. Returns a null value if the formatted string

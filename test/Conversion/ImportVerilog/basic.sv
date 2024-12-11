@@ -711,6 +711,10 @@ module Expressions;
   bit [31:0] uarrayInt [2];
   // CHECK: %m = moore.variable : <l4>
   logic [3:0] m;
+  // CHECK: %ua = moore.variable : <uarray<3 x i32>>
+  int ua[3];
+  // CHECK: %ua2d = moore.variable : <uarray<2 x uarray<2 x i32>>>
+  int ua2d[2][2];
 
   initial begin
     // CHECK: moore.constant 0 : i32
@@ -1288,6 +1292,35 @@ module Expressions;
     // CHECK: [[TMP11:%.+]] = moore.or [[TMP5]], [[TMP10]] : i1
     // CHECK: moore.or [[TMP3]], [[TMP11]] : i1
     c = a inside { a, b, [a:b] };
+
+    // CHECK: [[TMP1:%.+]] = moore.read %a : <i32>
+    // CHECK: [[TMP2:%.+]] = moore.read %ua : <uarray<3 x i32>>
+    // CHECK: [[TMP3:%.+]] = moore.extract [[TMP2]] from 0 : uarray<3 x i32> -> i32
+    // CHECK: [[TMP4:%.+]] = moore.wildcard_eq [[TMP1]], [[TMP3]] : i32 -> i1
+    // CHECK: [[TMP5:%.+]] = moore.extract [[TMP2]] from 1 : uarray<3 x i32> -> i32
+    // CHECK: [[TMP6:%.+]] = moore.wildcard_eq [[TMP1]], [[TMP5]] : i32 -> i1
+    // CHECK: [[TMP7:%.+]] = moore.extract [[TMP2]] from 2 : uarray<3 x i32> -> i32
+    // CHECK: [[TMP8:%.+]] = moore.wildcard_eq [[TMP1]], [[TMP7]] : i32 -> i1
+    // CHECK: [[TMP9:%.+]] = moore.or [[TMP6]], [[TMP8]] : i1
+    // CHECK: [[TMP10:%.+]] = moore.or [[TMP4]], [[TMP9]] : i1
+    c = a inside { ua };
+
+    // CHECK: [[TMP1:%.+]] = moore.read %a : <i32>
+    // CHECK: [[TMP2:%.+]] = moore.read %ua2d : <uarray<2 x uarray<2 x i32>>>
+    // CHECK: [[TMP3:%.+]] = moore.extract [[TMP2]] from 0 : uarray<2 x uarray<2 x i32>> -> uarray<2 x i32>
+    // CHECK: [[TMP4:%.+]] = moore.extract [[TMP3]] from 0 : uarray<2 x i32> -> i32
+    // CHECK: [[TMP5:%.+]] = moore.wildcard_eq [[TMP1]], [[TMP4]] : i32 -> i1
+    // CHECK: [[TMP6:%.+]] = moore.extract [[TMP3]] from 1 : uarray<2 x i32> -> i32
+    // CHECK: [[TMP7:%.+]] = moore.wildcard_eq [[TMP1]], [[TMP6]] : i32 -> i1
+    // CHECK: [[TMP8:%.+]] = moore.extract [[TMP2]] from 1 : uarray<2 x uarray<2 x i32>> -> uarray<2 x i32>
+    // CHECK: [[TMP9:%.+]] = moore.extract [[TMP8]] from 0 : uarray<2 x i32> -> i32
+    // CHECK: [[TMP10:%.+]] = moore.wildcard_eq [[TMP1]], [[TMP9]] : i32 -> i1
+    // CHECK: [[TMP11:%.+]] = moore.extract [[TMP8]] from 1 : uarray<2 x i32> -> i32
+    // CHECK: [[TMP12:%.+]] = moore.wildcard_eq [[TMP1]], [[TMP11]] : i32 -> i1
+    // CHECK: [[TMP13:%.+]] = moore.or [[TMP10]], [[TMP12]] : i1
+    // CHECK: [[TMP14:%.+]] = moore.or [[TMP7]], [[TMP13]] : i1
+    // CHECK: [[TMP15:%.+]] = moore.or [[TMP5]], [[TMP14]] : i1
+    c = a inside { ua2d };
 
     //===------------------------------------------------------------------===//
     // Conditional operator
