@@ -91,6 +91,42 @@ struct CombXorOpConversion : OpConversionPattern<XorOp> {
   }
 };
 
+template <typename OpTy>
+struct CombLowerVariadicOp : OpConversionPattern<OpTy> {
+  using OpConversionPattern<OpTy>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<OpTy>::OpAdaptor;
+  LogicalResult
+  matchAndRewrite(OpTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto result = lowerFullyAssociativeOp(op, op.getOperands(), rewriter);
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+
+  static Value lowerFullyAssociativeOp(OpTy op, OperandRange operands,
+                                       ConversionPatternRewriter &rewriter) {
+    Value lhs, rhs;
+    switch (operands.size()) {
+    case 0:
+      assert(false && "cannot be called with empty operand range");
+      break;
+    case 1:
+      return operands[0];
+    case 2:
+      lhs = operands[0];
+      rhs = operands[1];
+      return rewriter.create<OpTy>(op.getLoc(), ValueRange{lhs, rhs}, true);
+    default:
+      auto firstHalf = operands.size() / 2;
+      lhs =
+          lowerFullyAssociativeOp(op, operands.take_front(firstHalf), rewriter);
+      rhs =
+          lowerFullyAssociativeOp(op, operands.drop_front(firstHalf), rewriter);
+      return rewriter.create<OpTy>(op.getLoc(), ValueRange{lhs, rhs}, true);
+    }
+  }
+};
+
 // Lower comb::MuxOp to AIG operations.
 struct CombMuxOpConversion : OpConversionPattern<MuxOp> {
   using OpConversionPattern<MuxOp>::OpConversionPattern;
@@ -150,7 +186,9 @@ static void populateCombToAIGConversionPatterns(RewritePatternSet &patterns) {
   patterns.add<
       // Bitwise Logical Ops
       CombAndOpConversion, CombOrOpConversion, CombXorOpConversion,
-      CombMuxOpConversion>(patterns.getContext());
+      CombMuxOpConversion,
+      // Variadic ops that must be lowered to binary operations
+      CombLowerVariadicOp<XorOp>>(patterns.getContext());
 }
 
 void ConvertCombToAIGPass::runOnOperation() {
