@@ -13,3 +13,17 @@ hw.module @bit_logical(in %arg0: i32, in %arg1: i32, in %arg2: i32, in %arg3: i3
 
   hw.output %0, %1, %2, %3 : i32, i32, i32, i32
 }
+
+// RUN: circt-lec %t.mlir %s -c1=add -c2=add --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_ADD
+// COMB_ADD: c1 == c2
+hw.module @add(in %arg0: i4, in %arg1: i4, in %arg2: i4,  out add: i4) {
+  %0 = comb.add %arg0, %arg1, %arg2 : i4
+  hw.output %0 : i4
+}
+
+// RUN: circt-lec %t.mlir %s -c1=sub -c2=sub --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_SUB
+// COMB_SUB: c1 == c2
+hw.module @sub(in %lhs: i4, in %rhs: i4, out out: i4) {
+  %0 = comb.sub %lhs, %rhs : i4
+  hw.output %0 : i4
+}
