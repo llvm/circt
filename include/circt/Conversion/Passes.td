@@ -813,6 +813,11 @@ def ConvertCombToAIG: Pass<"convert-comb-to-aig",  "hw::HWModuleOp"> {
     "circt::comb::CombDialect",
     "circt::aig::AIGDialect",
   ];
+
+  let options = [
+    Option<"keepBitwiseLogicalOps", "keep-bitwise-logical-ops", "bool", "false",
+           "Keep bitwise logic in the output. This option is only used for testing">
+  ];
 }
 
 //===----------------------------------------------------------------------===//
