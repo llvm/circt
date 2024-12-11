@@ -42,4 +42,12 @@ def LowerFormalToHWPass : Pass<"lower-formal-to-hw", "mlir::ModuleOp"> {
   }];
 }
 
+def LowerContractsPass : Pass<"lower-contracts", "mlir::ModuleOp"> {
+  let summary = "Lower contracts into formal tests";
+  let description = [{
+    Converts `hw.module` ops containing a `verif.contract` into a
+    `verif.formal` op.
+  }];
+}
+
 #endif // CIRCT_DIALECT_VERIF_PASSES_TD
