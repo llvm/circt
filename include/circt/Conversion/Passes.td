@@ -813,6 +813,11 @@ def ConvertCombToAIG: Pass<"convert-comb-to-aig",  "hw::HWModuleOp"> {
     "circt::comb::CombDialect",
     "circt::aig::AIGDialect",
   ];
+
+  let options = [
+    ListOption<"additionalLegalOps", "additional-legal-ops", "std::string",
+               "Sepify additional legal ops for testing">,
+  ];
 }
 
 //===----------------------------------------------------------------------===//
