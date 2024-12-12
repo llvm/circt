@@ -432,7 +432,6 @@ def YieldSeqOp : SimOp<"yield_seq",[
 }
 
 def TriggeredOp : SimOp<"triggered", [
-  AttrSizedOperandSegments,
   IsolatedFromAbove,
   RegionKindInterface,
   RecursiveMemoryEffects,
@@ -445,9 +444,6 @@ def TriggeredOp : SimOp<"triggered", [
   }];
   let description = [{
     Creates a procedural region which is invoked on a given trigger.
-    The optional condition allows the execution of the body to be skipped, if
-    the condition evaluates to `false` at the time when the trigger's
-    root event occurs.
     The body region must complete without 'consuming' simulation time. It
     may not run indefinitely or wait for any simulation event. It is allowed to
     have side-effects and produce results.
@@ -456,10 +452,9 @@ def TriggeredOp : SimOp<"triggered", [
     For non-simulation flows the results are replaced by their tie-off values.
   }];
   let arguments = (ins AnyTriggerType:$trigger,
-                       Optional<I1>:$condition,
                        Variadic<AnyType>:$inputs,
                        OptionalAttr<TypedArrayAttrBase<
-                        TypedAttrInterface, "Tie-off constants">>:$tieoffs
+                         TypedAttrInterface, "Tie-off constants">>:$tieoffs
                   );
   let results = (outs Variadic<AnyType>);
   let regions = (region SizedRegion<1>:$body);
@@ -467,7 +462,6 @@ def TriggeredOp : SimOp<"triggered", [
   let assemblyFormat = [{
     ` ` `(` $inputs `)`
     `on` ` ` `(` $trigger `:` qualified(type($trigger)) `)`
-    (`if` $condition^)?
     (`tieoff` $tieoffs^)? attr-dict-with-keyword
     $body
     `:` functional-type($inputs, results)
@@ -481,7 +475,6 @@ def TriggeredOp : SimOp<"triggered", [
   }];
 
   let hasVerifier = true;
-  let hasFolder = true;
   let hasCanonicalizeMethod = true;
 }
 
