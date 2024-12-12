@@ -29,7 +29,7 @@ def ElaborationPass : Pass<"rtg-elaborate", "mlir::ModuleOp"> {
       "The seed for any RNG constructs used in the pass.">,
   ];
 
-  let dependentDialects = ["mlir::arith::ArithDialect"];
+  let dependentDialects = ["mlir::index::IndexDialect"];
 }
 
 #endif // CIRCT_DIALECT_RTG_TRANSFORMS_RTGPASSES_TD
