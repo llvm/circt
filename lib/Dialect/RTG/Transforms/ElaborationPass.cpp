@@ -16,6 +16,7 @@
 #include "circt/Dialect/RTG/IR/RTGOps.h"
 #include "circt/Dialect/RTG/IR/RTGVisitors.h"
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
+#include "circt/Support/Namespace.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
@@ -84,7 +85,7 @@ namespace {
 /// The abstract base class for elaborated values.
 struct ElaboratorValue {
 public:
-  enum class ValueKind { Attribute, Set, Bag };
+  enum class ValueKind { Attribute, Set, Bag, Sequence };
 
   ElaboratorValue(ValueKind kind) : kind(kind) {}
   virtual ~ElaboratorValue() {}
@@ -196,7 +197,6 @@ private:
   // Compute the hash only once at constructor time.
   const llvm::hash_code cachedHash;
 };
-} // namespace
 
 /// Holds an evaluated value of a `BagType`'d value.
 class BagValue : public ElaboratorValue {
@@ -252,6 +252,60 @@ private:
   const llvm::hash_code cachedHash;
 };
 
+/// Holds an evaluated value of a `SequenceType`'d value.
+class SequenceValue : public ElaboratorValue {
+public:
+  SequenceValue(StringRef name, StringAttr familyName,
+                SmallVector<ElaboratorValue *> &&args)
+      : ElaboratorValue(ValueKind::Sequence), name(name),
+        familyName(familyName), args(std::move(args)),
+        cachedHash(llvm::hash_combine(
+            llvm::hash_combine_range(this->args.begin(), this->args.end()),
+            name, familyName)) {}
+
+  // Implement LLVMs RTTI
+  static bool classof(const ElaboratorValue *val) {
+    return val->getKind() == ValueKind::Sequence;
+  }
+
+  llvm::hash_code getHashValue() const override { return cachedHash; }
+
+  bool isEqual(const ElaboratorValue &other) const override {
+    auto *otherSeq = dyn_cast<SequenceValue>(&other);
+    if (!otherSeq)
+      return false;
+
+    if (cachedHash != otherSeq->cachedHash)
+      return false;
+
+    return name == otherSeq->name && familyName == otherSeq->familyName &&
+           args == otherSeq->args;
+  }
+
+#ifndef NDEBUG
+  void print(llvm::raw_ostream &os) const override {
+    os << "<sequence @" << name << " derived from @" << familyName.getValue()
+       << "(";
+    llvm::interleaveComma(args, os,
+                          [&](ElaboratorValue *val) { val->print(os); });
+    os << ") at " << this << ">";
+  }
+#endif
+
+  StringRef getName() const { return name; }
+  StringAttr getFamilyName() const { return familyName; }
+  ArrayRef<ElaboratorValue *> getArgs() const { return args; }
+
+private:
+  const StringRef name;
+  const StringAttr familyName;
+  const SmallVector<ElaboratorValue *> args;
+
+  // Compute the hash only once at constructor time.
+  const llvm::hash_code cachedHash;
+};
+} // namespace
+
 #ifndef NDEBUG
 static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
                                      const ElaboratorValue &value) {
@@ -300,6 +354,7 @@ namespace {
 class Materializer {
 public:
   Value materialize(ElaboratorValue *val, Location loc,
+                    std::queue<SequenceValue *> &elabRequests,
                     function_ref<InFlightDiagnostic()> emitError) {
     assert(block && "must call reset before calling this function");
 
@@ -311,8 +366,9 @@ public:
 
     OpBuilder builder(block, insertionPoint);
     return TypeSwitch<ElaboratorValue *, Value>(val)
-        .Case<AttributeValue, SetValue, BagValue>(
-            [&](auto val) { return visit(val, builder, loc, emitError); })
+        .Case<AttributeValue, SetValue, BagValue, SequenceValue>([&](auto val) {
+          return visit(val, builder, loc, elabRequests, emitError);
+        })
         .Default([](auto val) {
           assert(false && "all cases must be covered above");
           return Value();
@@ -329,6 +385,7 @@ public:
 
 private:
   Value visit(AttributeValue *val, OpBuilder &builder, Location loc,
+              std::queue<SequenceValue *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     auto attr = val->getAttr();
 
@@ -361,11 +418,12 @@ private:
   }
 
   Value visit(SetValue *val, OpBuilder &builder, Location loc,
+              std::queue<SequenceValue *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     SmallVector<Value> elements;
     elements.reserve(val->getSet().size());
     for (auto *el : val->getSet()) {
-      auto materialized = materialize(el, loc, emitError);
+      auto materialized = materialize(el, loc, elabRequests, emitError);
       if (!materialized)
         return Value();
 
@@ -378,12 +436,13 @@ private:
   }
 
   Value visit(BagValue *val, OpBuilder &builder, Location loc,
+              std::queue<SequenceValue *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     SmallVector<Value> values, weights;
     values.reserve(val->getBag().size());
     weights.reserve(val->getBag().size());
     for (auto [val, weight] : val->getBag()) {
-      auto materializedVal = materialize(val, loc, emitError);
+      auto materializedVal = materialize(val, loc, elabRequests, emitError);
       if (!materializedVal)
         return Value();
 
@@ -405,6 +464,13 @@ private:
         builder.create<BagCreateOp>(loc, val->getType(), values, weights);
     materializedValues[val] = res;
     return res;
+  }
+
+  Value visit(SequenceValue *val, OpBuilder &builder, Location loc,
+              std::queue<SequenceValue *> &elabRequests,
+              function_ref<InFlightDiagnostic()> emitError) {
+    elabRequests.push(val);
+    return builder.create<SequenceClosureOp>(loc, val->getName(), ValueRange());
   }
 
 private:
@@ -455,66 +521,25 @@ public:
     // TODO: we only have this to be able to write tests for this pass without
     // having to add support for more operations for now, so it should be
     // removed once it is not necessary anymore for writing tests
-    if (op->use_empty()) {
-      for (auto &operand : op->getOpOperands()) {
-        auto emitError = [&]() {
-          auto diag = op->emitError();
-          diag.attachNote(op->getLoc())
-              << "while materializing value for operand#"
-              << operand.getOperandNumber();
-          return diag;
-        };
-        Value val = materializer.materialize(state.at(operand.get()),
-                                             op->getLoc(), emitError);
-        if (!val)
-          return failure();
-        operand.set(val);
-      }
+    if (op->use_empty())
       return DeletionKind::Keep;
-    }
 
     return visitUnhandledOp(op);
   }
 
   FailureOr<DeletionKind> visitOp(SequenceClosureOp op) {
-    auto originalSeqOp = table.lookup<SequenceOp>(op.getSequenceAttr());
-    // TODO: don't clone if only user
-    auto seqOp = cast<SequenceOp>(originalSeqOp->clone());
-    auto nameAttr = table.insert(seqOp);
+    SmallVector<ElaboratorValue *> args;
+    for (auto arg : op.getArgs())
+      args.push_back(state.at(arg));
 
-    for (auto [val, arg] :
-         llvm::zip(op.getArgs(), seqOp.getBody()->getArguments())) {
-      unsigned operandNumber = arg.getArgNumber();
-      auto emitError = [&]() {
-        auto diag = op->emitError();
-        diag.attachNote(op->getLoc())
-            << "while materializing value for operand#" << operandNumber;
-        return diag;
-      };
-
-      Value repl = Materializer()
-                       .reset(seqOp.getBody())
-                       .materialize(state.at(val), seqOp.getLoc(), emitError);
-      if (!repl)
-        return failure();
-
-      arg.replaceAllUsesWith(repl);
-    }
-
-    seqOp.getBody()->eraseArguments(0, seqOp.getBody()->getNumArguments());
-
-    worklist.push(seqOp);
-
-    internalizeResult<AttributeValue>(op.getResult(), nameAttr);
+    auto familyName = op.getSequenceAttr();
+    auto name = names.newName(familyName.getValue());
+    internalizeResult<SequenceValue>(op.getResult(), name, familyName,
+                                     std::move(args));
     return DeletionKind::Delete;
   }
 
   FailureOr<DeletionKind> visitOp(InvokeSequenceOp op) {
-    auto *sequence = cast<AttributeValue>(state.at(op.getSequence()));
-    OpBuilder builder(op);
-    Value seqVal = builder.create<SequenceClosureOp>(
-        op.getLoc(), cast<StringAttr>(sequence->getAttr()), ValueRange());
-    op.getSequenceMutable().set(seqVal);
     return DeletionKind::Keep;
   }
 
@@ -682,27 +707,55 @@ public:
     return RTGBase::dispatchOpVisitor(op);
   }
 
-  LogicalResult elaborate(Operation *op) {
-    LLVM_DEBUG({
-      if (auto testOp = dyn_cast<TestOp>(op))
-        llvm::dbgs() << "\n=== Elaborating Test @" << testOp.getSymName()
-                     << "\n\n";
-      else if (auto seqOp = dyn_cast<SequenceOp>(op))
-        llvm::dbgs() << "\n=== Elaborating Sequence @" << seqOp.getSymName()
-                     << "\n\n";
-    });
+  LogicalResult elaborate(SequenceOp family, SequenceOp dest,
+                          ArrayRef<ElaboratorValue *> args) {
+    LLVM_DEBUG(llvm::dbgs() << "\n=== Elaborating " << family.getOperationName()
+                            << " @" << family.getSymName() << " into @"
+                            << dest.getSymName() << "\n\n");
 
-    Block *block = &op->getRegion(0).front();
-    materializer.reset(block);
+    // Reduce max memory consumption and make sure the values cannot be accessed
+    // anymore because we deleted the ops above. Clearing should lead to better
+    // performance than having them as a local here and pass via function
+    // argument.
+    state.clear();
+    materializer.reset(dest.getBody());
+    IRMapping mapping;
 
-    SmallVector<Operation *> toDelete;
-    for (auto &op : *block) {
+    for (auto [arg, elabArg] :
+         llvm::zip(family.getBody()->getArguments(), args))
+      state[arg] = elabArg;
+
+    for (auto &op : *family.getBody()) {
       if (op.getNumRegions() != 0)
         return op.emitOpError("nested regions not supported");
 
       auto result = dispatchOpVisitor(&op);
       if (failed(result))
         return failure();
+
+      if (*result == DeletionKind::Keep) {
+        for (auto &operand : op.getOpOperands()) {
+          if (mapping.contains(operand.get()))
+            continue;
+
+          auto emitError = [&]() {
+            auto diag = op.emitError();
+            diag.attachNote(op.getLoc())
+                << "while materializing value for operand#"
+                << operand.getOperandNumber();
+            return diag;
+          };
+          Value val = materializer.materialize(
+              state.at(operand.get()), op.getLoc(), worklist, emitError);
+          if (!val)
+            return failure();
+
+          mapping.map(operand.get(), val);
+        }
+
+        OpBuilder builder = OpBuilder::atBlockEnd(dest.getBody());
+        builder.clone(op, mapping);
+      }
 
       LLVM_DEBUG({
         llvm::dbgs() << "Elaborating " << op << " to\n[";
@@ -716,20 +769,68 @@ public:
 
         llvm::dbgs() << "]\n\n";
       });
-
-      if (*result == DeletionKind::Delete)
-        toDelete.push_back(&op);
     }
 
-    for (auto *op : llvm::reverse(toDelete))
-      op->erase();
+    return success();
+  }
+
+  template <typename OpTy>
+  LogicalResult elaborateInPlace(OpTy op) {
+    LLVM_DEBUG(llvm::dbgs()
+               << "\n=== Elaborating (in place) " << op.getOperationName()
+               << " @" << op.getSymName() << "\n\n");
 
     // Reduce max memory consumption and make sure the values cannot be accessed
     // anymore because we deleted the ops above. Clearing should lead to better
     // performance than having them as a local here and pass via function
     // argument.
     state.clear();
-    interned.clear();
+    materializer.reset(op.getBody());
+
+    SmallVector<Operation *> toDelete;
+    for (auto &op : *op.getBody()) {
+      if (op.getNumRegions() != 0)
+        return op.emitOpError("nested regions not supported");
+
+      auto result = dispatchOpVisitor(&op);
+      if (failed(result))
+        return failure();
+
+      if (*result == DeletionKind::Keep) {
+        for (auto &operand : op.getOpOperands()) {
+          auto emitError = [&]() {
+            auto diag = op.emitError();
+            diag.attachNote(op.getLoc())
+                << "while materializing value for operand#"
+                << operand.getOperandNumber();
+            return diag;
+          };
+          Value val = materializer.materialize(
+              state.at(operand.get()), op.getLoc(), worklist, emitError);
+          if (!val)
+            return failure();
+          operand.set(val);
+        }
+      } else { // DeletionKind::Delete
+        toDelete.push_back(&op);
+      }
+
+      LLVM_DEBUG({
+        llvm::dbgs() << "Elaborating " << op << " to\n[";
+
+        llvm::interleaveComma(op.getResults(), llvm::dbgs(), [&](auto res) {
+          if (state.contains(res))
+            llvm::dbgs() << *state.at(res);
+          else
+            llvm::dbgs() << "unknown";
+        });
+
+        llvm::dbgs() << "]\n\n";
+      });
+    }
+
+    for (auto *op : llvm::reverse(toDelete))
+      op->erase();
 
     return success();
   }
@@ -767,10 +868,15 @@ public:
   }
 
   LogicalResult elaborateModule(ModuleOp moduleOp) {
+    // Update the name cache
+    names.clear();
+    names.add(moduleOp);
+
     // Initialize the worklist with the test ops since they cannot be placed by
     // other ops.
     for (auto testOp : moduleOp.getOps<TestOp>())
-      worklist.push(testOp);
+      if (failed(elaborateInPlace(testOp)))
+        return failure();
 
     // Do top-down BFS traversal such that elaborating a sequence further down
     // does not fix the outcome for multiple placements.
@@ -778,8 +884,21 @@ public:
       auto *curr = worklist.front();
       worklist.pop();
 
-      auto result = elaborate(curr);
-      if (failed(result))
+      if (table.lookup<SequenceOp>(curr->getName()))
+        continue;
+
+      auto familyOp = table.lookup<SequenceOp>(curr->getFamilyName());
+      // TODO: use 'elaborateInPlace' and don't clone if this is the only
+      // remaining reference to this sequence
+      OpBuilder builder(familyOp);
+      auto seqOp = builder.cloneWithoutRegions(familyOp);
+      seqOp.getBodyRegion().emplaceBlock();
+      seqOp.setSymName(curr->getName());
+      table.insert(seqOp);
+      assert(seqOp.getSymName() == curr->getName() &&
+             "should not have been renamed");
+
+      if (failed(elaborate(familyOp, seqOp, curr->getArgs())))
         return failure();
     }
 
@@ -799,10 +918,11 @@ public:
 private:
   std::mt19937 rng;
   SymbolTable &table;
+  Namespace names;
 
   /// The worklist used to keep track of the test and sequence operations to
   /// make sure they are processed top-down (BFS traversal).
-  std::queue<Operation *> worklist;
+  std::queue<SequenceValue *> worklist;
 
   // A map used to intern elaborator values. We do this such that we can
   // compare pointers when, e.g., computing set differences, uniquing the
