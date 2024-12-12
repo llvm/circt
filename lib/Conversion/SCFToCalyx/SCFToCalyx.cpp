@@ -396,9 +396,19 @@ private:
   template <typename TGroupOp, typename TCalyxLibOp, typename TSrcOp>
   LogicalResult buildLibraryOp(PatternRewriter &rewriter, TSrcOp op,
                                TypeRange srcTypes, TypeRange dstTypes) const {
+    auto castToInteger = [](Type type) -> Type {
+      if (isa<FloatType>(type)) {
+        unsigned bitWidth = cast<FloatType>(type).getWidth();
+        return IntegerType::get(type.getContext(), bitWidth);
+      }
+      return type;
+    };
+
     SmallVector<Type> types;
-    llvm::append_range(types, srcTypes);
-    llvm::append_range(types, dstTypes);
+    for (Type srcType : srcTypes)
+      types.push_back(castToInteger(srcType));
+    for (Type dstType : dstTypes)
+      types.push_back(castToInteger(dstType));
 
     auto calyxOp =
         getState<ComponentLoweringState>().getNewLibraryOpInstance<TCalyxLibOp>(
