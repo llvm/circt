@@ -95,4 +95,3 @@ hw.module @too_many_tieoffs(in %trig : !sim.trigger.edge<posedge>) {
     sim.yield_seq %cst : i2
   } : () -> i2
 }
-
