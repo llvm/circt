@@ -48,6 +48,7 @@ void testExport(MlirContext ctx) {
       mlirModuleCreateParse(ctx, mlirStringRefCreateFromCString(testFIR));
 
   MlirLogicalResult result = mlirExportFIRRTL(module, dumpCallback, NULL);
+  (void)result;
   assert(mlirLogicalResultIsSuccess(result));
 
   // CHECK: FIRRTL version 4.1.0
@@ -78,12 +79,11 @@ void testValueFoldFlow(MlirContext ctx) {
   MlirBlock firModule = mlirRegionGetFirstBlock(
       mlirOperationGetRegion(mlirBlockGetFirstOperation(firCircuit), 0));
 
-  MlirValue in = mlirBlockGetArgument(firModule, 0);
-  MlirValue out = mlirBlockGetArgument(firModule, 1);
-
-  assert(firrtlValueFoldFlow(in, FIRRTL_VALUE_FLOW_SOURCE) ==
+  assert(firrtlValueFoldFlow(mlirBlockGetArgument(firModule, 0),
+                             FIRRTL_VALUE_FLOW_SOURCE) ==
          FIRRTL_VALUE_FLOW_SOURCE);
-  assert(firrtlValueFoldFlow(out, FIRRTL_VALUE_FLOW_SOURCE) ==
+  assert(firrtlValueFoldFlow(mlirBlockGetArgument(firModule, 1),
+                             FIRRTL_VALUE_FLOW_SOURCE) ==
          FIRRTL_VALUE_FLOW_SINK);
 }
 
@@ -107,6 +107,7 @@ void testImportAnnotations(MlirContext ctx) {
   bool succeeded = firrtlImportAnnotationsFromJSONRaw(
       ctx, mlirStringRefCreateFromCString(rawAnnotationsJSON),
       &rawAnnotationsAttr);
+  (void)succeeded;
   assert(succeeded);
   mlirOperationSetAttributeByName(
       firCircuit, mlirStringRefCreateFromCString("rawAnnotations"),
@@ -226,11 +227,10 @@ void testTypeGetMaskType(MlirContext ctx) {
           .type = firrtlTypeGetUInt(ctx, 1),
       },
   };
-  MlirType lhsBundle =
-      firrtlTypeGetBundle(ctx, ARRAY_SIZE(lhsFields), lhsFields);
-  MlirType rhsBundle =
-      firrtlTypeGetBundle(ctx, ARRAY_SIZE(rhsFields), rhsFields);
-  assert(mlirTypeEqual(firrtlTypeGetMaskType(lhsBundle), rhsBundle));
+  assert(mlirTypeEqual(
+      firrtlTypeGetMaskType(
+          firrtlTypeGetBundle(ctx, ARRAY_SIZE(lhsFields), lhsFields)),
+      firrtlTypeGetBundle(ctx, ARRAY_SIZE(rhsFields), rhsFields)));
 }
 
 int main(void) {
