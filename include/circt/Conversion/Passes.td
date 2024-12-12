@@ -816,7 +816,7 @@ def ConvertCombToAIG: Pass<"convert-comb-to-aig",  "hw::HWModuleOp"> {
 
   let options = [
     ListOption<"additionalLegalOps", "additional-legal-ops", "std::string",
-               "Sepify additional legal ops for testing">,
+               "Specify additional legal ops for testing">,
   ];
 }
 

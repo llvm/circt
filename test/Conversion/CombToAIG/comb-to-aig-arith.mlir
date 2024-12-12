@@ -19,7 +19,7 @@ hw.module @add(in %lhs: i2, in %rhs: i2, out out: i2) {
 
 // CHECK-LABEL: @sub
 // ALLOW_ADD-LABEL: @sub
-// ALLOW_ADD-NEXT: %[[NOT_RHS:.+]] = aig.and_inv not %rhs 
+// ALLOW_ADD-NEXT: %[[NOT_RHS:.+]] = aig.and_inv not %rhs
 // ALLOW_ADD-NEXT: %[[CONST:.+]] = hw.constant 1 : i4
 // ALLOW_ADD-NEXT: %[[ADD:.+]] = comb.add bin %lhs, %[[NOT_RHS]], %[[CONST]]
 // ALLOW_ADD-NEXT: hw.output %[[ADD]]
