@@ -27,3 +27,10 @@ hw.module @sub(in %lhs: i4, in %rhs: i4, out out: i4) {
   %0 = comb.sub %lhs, %rhs : i4
   hw.output %0 : i4
 }
+
+// RUN: circt-lec %t.mlir %s -c1=mul -c2=mul --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_MUL
+// COMB_MUL: c1 == c2
+hw.module @mul(in %arg0: i3, in %arg1: i3, in %arg2: i3, out add: i3) {
+  %0 = comb.mul %arg0, %arg1, %arg2 : i3
+  hw.output %0 : i3
+}
