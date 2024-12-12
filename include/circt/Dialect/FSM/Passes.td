@@ -16,7 +16,7 @@
 include "mlir/Pass/PassBase.td"
 
 def PrintFSMGraph : Pass<"fsm-print-graph", "mlir::ModuleOp"> {
-  let summary = "Print a DOT graph of the module hierarchy.";
+  let summary = "Print a DOT graph of an FSM's structure.";
   let constructor =  "circt::fsm::createPrintFSMGraphPass()";
 }
 
