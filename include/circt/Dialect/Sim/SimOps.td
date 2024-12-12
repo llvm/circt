@@ -393,14 +393,15 @@ def OnEdgeOp : SimOp<"on_edge", [
   Pure,
   DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>
 ]> {
-  let summary = "Invoke a trigger on a clock edge event.";
+  let summary = "Create a trigger that gets invoked on a clock edge event.";
   let arguments = (ins ClockType:$clock, EventControlAttr:$event);
   let results = (outs EdgeTriggerType:$result);
   let assemblyFormat = "$event $clock attr-dict";
 }
 
 def OnInitOp : SimOp<"on_init", [Pure]> {
-  let summary = "Invoke a trigger at the start of simulation.";
+  let summary =
+    "Create a trigger that gets invoked at the start of simulation.";
   let results = (outs InitTriggerType:$result);
   let assemblyFormat = "attr-dict";
 }
@@ -428,7 +429,7 @@ def TriggerSequenceOp : SimOp<"trigger_sequence", [
 def YieldSeqOp : SimOp<"yield_seq",[
   Terminator, HasParent<"circt::sim::TriggeredOp">
 ]> {
-  let summary = [{Yield results form a triggerd region with 'seq'
+  let summary = [{Yield results from a triggerd region with 'seq'
    (i.e. register-like) semantics."}];
   let description = [{
     Terminates a triggered region and produces the given list of values.
