@@ -434,43 +434,18 @@ LogicalResult TriggeredOp::verify() {
   return success(!failed);
 }
 
-LogicalResult TriggeredOp::fold(FoldAdaptor adaptor,
-                                SmallVectorImpl<OpFoldResult> &results) {
-  if (auto constCond = dyn_cast_or_null<IntegerAttr>(adaptor.getCondition())) {
-    if (constCond.getValue().isAllOnes()) {
-      // Strip constant true condition.
-      getConditionMutable().clear();
-      return success();
-    }
-    // Never enabled, fold to tie-offs.
-    if (getNumResults() > 0) {
-      results.append(adaptor.getTieoffsAttr().begin(),
-                     adaptor.getTieoffsAttr().end());
-      return success();
-    }
-  }
-  return failure();
-}
-
 LogicalResult TriggeredOp::canonicalize(TriggeredOp op,
                                         PatternRewriter &rewriter) {
   if (op.getNumResults() > 0)
     return failure();
 
-  bool isDeadOrEmpty = false;
-
   auto *bodyBlock = &op.getBodyRegion().front();
-  isDeadOrEmpty = bodyBlock->without_terminator().empty();
+  if (bodyBlock->without_terminator().empty()) {
+    rewriter.eraseOp(op);
+    return success();
+  }
 
-  if (!isDeadOrEmpty && !!op.getCondition())
-    if (auto cstCond = op.getCondition().getDefiningOp<hw::ConstantOp>())
-      isDeadOrEmpty = cstCond.getValue().isZero();
-
-  if (!isDeadOrEmpty)
-    return failure();
-
-  rewriter.eraseOp(op);
-  return success();
+  return failure();
 }
 
 // --- TriggerSequenceOp ---

@@ -16,30 +16,20 @@ hw.module @root_triggers(in %clock : !seq.clock, out o0 : !sim.trigger.edge<pose
 }
 
 // CHECK-LABEL: hw.module @fold_triggered
-hw.module @fold_triggered(in %a : i8, in %en : i1, in %trig : !sim.trigger.edge<posedge>, out o0 : i8, out o1 : i9, out o2 : i8) {
-  // CHECK: %[[CST12:.*]] = hw.constant 12 : i8
-  %true = hw.constant true
-  %false = hw.constant false
-
+hw.module @fold_triggered(in %a : i8, in %en : i1, in %trig : !sim.trigger.edge<posedge>, out o0 : i8, out o1 : i9) {
   // CHECK: sim.triggered () on (%trig : !sim.trigger.edge<posedge>) {
-  sim.triggered () on (%trig : !sim.trigger.edge<posedge>) if %true {
-    %0 = sim.fmt.lit "Remove constant true condition"
-    sim.proc.print %0
-  } : () -> ()
-
-  // CHECK: sim.triggered () on (%trig : !sim.trigger.edge<posedge>) if %en {
   // CHECK-NEXT:  "Don't touch live process"
-  sim.triggered () on (%trig : !sim.trigger.edge<posedge>) if %en {
+  sim.triggered () on (%trig : !sim.trigger.edge<posedge>) {
     %0 = sim.fmt.lit "Don't touch live process"
     sim.proc.print %0
   } : () -> ()
 
-  // CHECK: %[[RES:.*]]:2 = sim.triggered (%a) on (%trig : !sim.trigger.edge<posedge>) if %en tieoff [12 : i8, 33 : i9]  {
+  // CHECK: %[[RES:.*]]:2 = sim.triggered (%a) on (%trig : !sim.trigger.edge<posedge>) tieoff [12 : i8, 33 : i9]  {
   // CHECK: "Don't touch live process with results"
   // CHECK: arith.extui %{{.+}} : i8 to i9
   // CHECK: (i8) -> (i8, i9)
 
-  %res:2 = sim.triggered (%a) on (%trig : !sim.trigger.edge<posedge>) if %en tieoff [12 : i8, 33 : i9] {
+  %res:2 = sim.triggered (%a) on (%trig : !sim.trigger.edge<posedge>) tieoff [12 : i8, 33 : i9] {
   ^bb0(%arg: i8):
     %0 = sim.fmt.lit "Don't touch live process with results"
     sim.proc.print %0
@@ -49,23 +39,11 @@ hw.module @fold_triggered(in %a : i8, in %en : i1, in %trig : !sim.trigger.edge<
 
   // CHECK-NOT: sim.triggered
 
-  %fold = sim.triggered () on (%trig : !sim.trigger.edge<posedge>) if %false tieoff [12 : i8] {
-    %cst0_i8 = hw.constant 0 : i8
-    %0 = sim.fmt.lit "Fold dead process with result"
-    sim.proc.print %0
-    sim.yield_seq %cst0_i8 : i8
-  } : () -> (i8)
-
-  sim.triggered () on (%trig : !sim.trigger.edge<posedge>) if %false {
-    %0 = sim.fmt.lit "Remove dead process"
-    sim.proc.print %0
+  sim.triggered () on (%trig : !sim.trigger.edge<posedge>) {
   } : () -> ()
 
-  sim.triggered () on (%trig : !sim.trigger.edge<posedge>) if %en {
-  } : () -> ()
-
-   // CHECK: hw.output %[[RES]]#0, %[[RES]]#1, %[[CST12]] : i8, i9, i8
-  hw.output %res#0, %res#1, %fold : i8, i9, i8
+   // CHECK: hw.output %[[RES]]#0, %[[RES]]#1 : i8, i9
+  hw.output %res#0, %res#1 : i8, i9
 }
 
 // CHECK-LABEL: hw.module @empty_sequence
