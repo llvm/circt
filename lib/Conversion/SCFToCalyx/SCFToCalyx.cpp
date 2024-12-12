@@ -325,7 +325,7 @@ public:
       if (auto fileLoc = dyn_cast<mlir::FileLineColLoc>(funcOp->getLoc())) {
         std::string filename = fileLoc.getFilename().str();
         std::filesystem::path path(filename);
-        std::string jsonFileName = writeJson.append(".json");
+        std::string jsonFileName = writeJson.getValue() + ".json";
         auto outFileName = path.parent_path().append(jsonFileName);
         std::ofstream outFile(outFileName);
 
