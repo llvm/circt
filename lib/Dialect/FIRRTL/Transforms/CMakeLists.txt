@@ -47,7 +47,6 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   ModuleInliner.cpp
   ModuleSummary.cpp
   PassiveWires.cpp
-  PrefixModules.cpp
   PrintFIRRTLFieldSource.cpp
   PrintInstanceGraph.cpp
   PrintNLATable.cpp

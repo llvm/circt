@@ -58,6 +58,19 @@ struct LoopFrame {
   Block *breakBlock;
 };
 
+/// Hierarchical path information.
+/// The "hierName" means a different hierarchical name at different module
+/// levels.
+/// The "idx" means where the current hierarchical name is on the portlists.
+/// The "direction" means hierarchical names whether downward(In) or
+/// upward(Out).
+struct HierPathInfo {
+  mlir::StringAttr hierName;
+  std::optional<unsigned int> idx;
+  slang::ast::ArgumentDirection direction;
+  const slang::ast::ValueSymbol *valueSym;
+};
+
 /// A helper class to facilitate the conversion from a Slang AST to MLIR
 /// operations. Keeps track of the destination MLIR module, builders, and
 /// various worklists and utilities needed for conversion.
@@ -104,6 +117,12 @@ struct Context {
   Value convertRvalueExpression(const slang::ast::Expression &expr,
                                 Type requiredType = {});
   Value convertLvalueExpression(const slang::ast::Expression &expr);
+
+  // Traverse the whole AST to collect hierarchical names.
+  LogicalResult
+  collectHierarchicalValues(const slang::ast::Expression &expr,
+                            const slang::ast::Symbol &outermostModule);
+  LogicalResult traverseInstanceBody(const slang::ast::Symbol &symbol);
 
   // Convert a slang timing control into an MLIR timing control.
   LogicalResult convertTimingControl(const slang::ast::TimingControl &ctrl,
@@ -182,6 +201,16 @@ struct Context {
       llvm::ScopedHashTable<const slang::ast::ValueSymbol *, Value>;
   using ValueSymbolScope = ValueSymbols::ScopeTy;
   ValueSymbols valueSymbols;
+
+  /// Collect all hierarchical names used for the per module/instance.
+  DenseMap<const slang::ast::InstanceBodySymbol *, SmallVector<HierPathInfo>>
+      hierPaths;
+
+  /// It's used to collect the repeat hierarchical names on the same path.
+  /// Such as `Top.sub.a` and `sub.a`, they are equivalent. The variable "a"
+  /// will be added to the port list. But we only record once. If we don't do
+  /// that. We will view the strange IR, such as `module @Sub(out y, out y)`;
+  DenseSet<StringAttr> sameHierPaths;
 
   /// A stack of assignment left-hand side values. Each assignment will push its
   /// lowered left-hand side onto this stack before lowering its right-hand

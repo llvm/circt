@@ -405,6 +405,67 @@ function void CaseStatements(int x, int a, int b, int c);
   endcase
 endfunction
 
+// CHECK-LABEL: func.func private @InsideStatements(
+// CHECK-SAME: %arg0: !moore.i32
+// CHECK-SAME: %arg1: !moore.i32
+// CHECK-SAME: %arg2: !moore.i1
+function void InsideStatements(int a, int b, bit c);
+  int x;
+
+  // CHECK: moore.blocking_assign %x, %arg0
+  // CHECK: cf.br ^[[BB_CHECK:.+]]
+  // CHECK: ^[[BB_CHECK]]:
+  // CHECK: [[TMP1:%.+]] = moore.read %x
+  // CHECK: [[TMP2:%.+]] = moore.slt [[TMP1]], %arg1
+  // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[TMP3]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
+  // CHECK: ^[[BB_BODY]]:
+  // CHECK: call @dummyA()
+  // CHECK: cf.br ^[[BB_STEP:.+]]
+  // CHECK: ^[[BB_STEP]]:
+  // CHECK: call @dummyB()
+  // CHECK: cf.br ^[[BB_CHECK]]
+  // CHECK: ^[[BB_EXIT]]:
+  for (x = a; x < b; dummyB()) dummyA();
+
+  // CHECK: %y = moore.variable %arg0 : <i32>
+  // CHECK: cf.br ^[[BB_CHECK:.+]]
+  // CHECK: ^[[BB_CHECK]]:
+  // CHECK: [[TMP1:%.+]] = moore.read %y
+  // CHECK: [[TMP2:%.+]] = moore.slt [[TMP1]], %arg1
+  // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[TMP3]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
+  // CHECK: ^[[BB_BODY]]:
+  // CHECK: call @dummyA()
+  // CHECK: cf.br ^[[BB_STEP:.+]]
+  // CHECK: ^[[BB_STEP]]:
+  // CHECK: call @dummyB()
+  // CHECK: cf.br ^[[BB_CHECK]]
+  // CHECK: ^[[BB_EXIT]]:
+  for (int y = a; y < b; dummyB()) dummyA();
+
+  // CHECK: cf.br ^[[BB_CHECK:.+]]
+  // CHECK: ^[[BB_CHECK]]:
+  // CHECK: [[TMP:%.+]] = moore.conversion %arg2 : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[TMP]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
+  // CHECK: ^[[BB_BODY]]:
+  // CHECK: [[TMP:%.+]] = moore.conversion %arg2 : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[TMP]], ^[[BB_TRUE:.+]], ^[[BB_FALSE:.+]]
+  // CHECK: ^[[BB_TRUE]]:
+  // CHECK: cf.br ^[[BB_STEP:.+]]
+  // CHECK: ^[[BB_FALSE]]:
+  // CHECK: cf.br ^[[BB_EXIT]]
+  // CHECK: ^[[BB_STEP]]:
+  // CHECK: call @dummyB()
+  // CHECK: cf.br ^[[BB_CHECK]]
+  // CHECK: ^[[BB_EXIT]]:
+  for (; c; dummyB())
+    if (c)
+      continue;
+    else
+      break;
+endfunction
+
 // CHECK-LABEL: func.func private @ForLoopStatements(
 // CHECK-SAME: %arg0: !moore.i32
 // CHECK-SAME: %arg1: !moore.i32
@@ -2232,72 +2293,3 @@ function int AssignFuncArgs2(int x, int y);
   // CHECK: [[ADD:%.+]] = moore.add [[READ_X]], [[READ_Y]] : i32
   return x+y;
 endfunction
-
-module priority_case_test;
-    // CHECK: logic clock
-    logic clock;
-    // CHECK: logic [2:0] status
-    logic [2:0] status;
-
-    task task1;
-        // CHECK: task1 executed
-        $display("task1 executed at time %0t", $time);
-    endtask
-
-    task task2;
-        // CHECK: task2 executed
-        $display("task2 executed at time %0t", $time);
-    endtask
-
-    initial begin
-        // CHECK: clock initialized to 0
-        clock = 0;
-        // CHECK: clock toggles every 5 ns
-        forever #5 clock = ~clock;
-    end
-
-    initial begin
-        // CHECK: Test Case 1: status = 3'b001
-        status = 3'b001;
-        @(posedge clock);
-
-        // CHECK: Test Case 2: status = 3'b011
-        status = 3'b011;
-        @(posedge clock);
-
-        // CHECK: Test Case 3: status = 3'b010 (matches task2)
-        status = 3'b010;
-        @(posedge clock);
-
-        // CHECK: Test Case 4: status = 3'b100 (matches task2)
-        status = 3'b100;
-        @(posedge clock);
-
-        // CHECK: Test Case 5: status = 3'b00x (no match)
-        status = 3'b00x;
-        @(posedge clock);
-
-        // CHECK: Test Case 6: status = 3'b111 (matches task2)
-        status = 3'b111;
-        @(posedge clock);
-
-        // CHECK: Test Case 7: status = 3'bxxx (no match)
-        status = 3'bxxx;
-        @(posedge clock);
-
-        // CHECK: End simulation
-        $finish;
-    end
-
-    always @(posedge clock) begin
-        // CHECK: Entering priority case
-        priority case (status)
-            // CHECK: Matches 3'b001 or 3'b011, executes task1
-            3'b001, 3'b011: task1;
-            // CHECK: Matches 3'b0?0 or [3'b100:3'b111], executes task2
-            3'b0?0, [3'b100:3'b111]: task2;
-            // CHECK: No match, default case
-            default: $display("No match for status = %b at time %0t", status, $time);
-        endcase
-    end
-endmodule

@@ -608,10 +608,6 @@ private:
   /// Mapping of ID to companion module.
   DenseMap<Attribute, CompanionInfo> companionIDMap;
 
-  /// An optional prefix applied to all interfaces in the design.  This is set
-  /// based on a PrefixInterfacesAnnotation.
-  StringRef interfacePrefix;
-
   NLATable *nlaTable;
 
   /// The design-under-test (DUT) as determined by the presence of a
@@ -623,16 +619,9 @@ private:
   /// "TestBenchDirAnnotation" is found.
   StringAttr testbenchDir;
 
-  /// Return a string containing the name of an interface.  Apply correct
-  /// prefixing from the interfacePrefix and module-level prefix parameter.
-  std::string getInterfaceName(StringAttr prefix,
-                               AugmentedBundleTypeAttr bundleType) {
-
-    if (prefix)
-      return (prefix.getValue() + interfacePrefix +
-              bundleType.getDefName().getValue())
-          .str();
-    return (interfacePrefix + bundleType.getDefName().getValue()).str();
+  /// Return a string containing the name of an interface.
+  std::string getInterfaceName(AugmentedBundleTypeAttr bundleType) {
+    return (bundleType.getDefName().getValue()).str();
   }
 
   /// Recursively examine an AugmentedType to populate the "mappings" file
@@ -645,8 +634,8 @@ private:
   /// populate a "mappings" file (generate XMRs) using `traverseField`.  Return
   /// the type of the field examined.
   std::optional<TypeSum>
-  computeField(Attribute field, IntegerAttr id, StringAttr prefix,
-               VerbatimBuilder &path, SmallVector<VerbatimXMRbuilder> &xmrElems,
+  computeField(Attribute field, IntegerAttr id, VerbatimBuilder &path,
+               SmallVector<VerbatimXMRbuilder> &xmrElems,
                SmallVector<InterfaceElemsBuilder> &interfaceBuilder);
 
   /// Recursively examine an AugmentedBundleType to both build new interfaces
@@ -654,7 +643,7 @@ private:
   /// interface is invalid.
   std::optional<StringAttr>
   traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
-                 StringAttr prefix, VerbatimBuilder &path,
+                 VerbatimBuilder &path,
                  SmallVector<VerbatimXMRbuilder> &xmrElems,
                  SmallVector<InterfaceElemsBuilder> &interfaceBuilder);
 
@@ -1380,7 +1369,7 @@ bool GrandCentralPass::traverseField(
 }
 
 std::optional<TypeSum> GrandCentralPass::computeField(
-    Attribute field, IntegerAttr id, StringAttr prefix, VerbatimBuilder &path,
+    Attribute field, IntegerAttr id, VerbatimBuilder &path,
     SmallVector<VerbatimXMRbuilder> &xmrElems,
     SmallVector<InterfaceElemsBuilder> &interfaceBuilder) {
   return TypeSwitch<Attribute, std::optional<TypeSum>>(field)
@@ -1414,10 +1403,9 @@ std::optional<TypeSum> GrandCentralPass::computeField(
             auto firstElement = fromAttr(elements[0]);
             if (!firstElement)
               return std::nullopt;
-            auto elementType =
-                computeField(*firstElement, id, prefix,
-                             path.snapshot().append("[" + Twine(0) + "]"),
-                             xmrElems, interfaceBuilder);
+            auto elementType = computeField(
+                *firstElement, id, path.snapshot().append("[" + Twine(0) + "]"),
+                xmrElems, interfaceBuilder);
             if (!elementType)
               return std::nullopt;
 
@@ -1439,8 +1427,8 @@ std::optional<TypeSum> GrandCentralPass::computeField(
           })
       .Case<AugmentedBundleTypeAttr>(
           [&](AugmentedBundleTypeAttr bundle) -> TypeSum {
-            auto ifaceName = traverseBundle(bundle, id, prefix, path, xmrElems,
-                                            interfaceBuilder);
+            auto ifaceName =
+                traverseBundle(bundle, id, path, xmrElems, interfaceBuilder);
             assert(ifaceName && *ifaceName);
             return VerbatimType({ifaceName->str(), true});
           });
@@ -1453,13 +1441,13 @@ std::optional<TypeSum> GrandCentralPass::computeField(
 /// stringy-typed SystemVerilog hierarchical references to drive the
 /// interface. Returns false on any failure and true on success.
 std::optional<StringAttr> GrandCentralPass::traverseBundle(
-    AugmentedBundleTypeAttr bundle, IntegerAttr id, StringAttr prefix,
-    VerbatimBuilder &path, SmallVector<VerbatimXMRbuilder> &xmrElems,
+    AugmentedBundleTypeAttr bundle, IntegerAttr id, VerbatimBuilder &path,
+    SmallVector<VerbatimXMRbuilder> &xmrElems,
     SmallVector<InterfaceElemsBuilder> &interfaceBuilder) {
 
   unsigned lastIndex = interfaceBuilder.size();
   auto iFaceName = StringAttr::get(
-      &getContext(), getNamespace().newName(getInterfaceName(prefix, bundle)));
+      &getContext(), getNamespace().newName(getInterfaceName(bundle)));
   interfaceBuilder.emplace_back(iFaceName, id);
 
   for (auto element : bundle.getElements()) {
@@ -1478,7 +1466,7 @@ std::optional<StringAttr> GrandCentralPass::traverseBundle(
     // if the interface field requires renaming in the output (e.g. due to
     // naming conflicts).
     auto elementType = computeField(
-        *field, id, prefix, path.snapshot().append(".").append(name.getValue()),
+        *field, id, path.snapshot().append(".").append(name.getValue()),
         xmrElems, interfaceBuilder);
     if (!elementType)
       return std::nullopt;
@@ -1580,28 +1568,6 @@ void GrandCentralPass::runOnOperation() {
       ++numAnnosRemoved;
       return true;
     }
-    if (anno.isClass(prefixInterfacesAnnoClass)) {
-      if (!interfacePrefix.empty()) {
-        emitCircuitError("more than one 'PrefixInterfacesAnnotation' was "
-                         "found, but zero or one may be provided");
-        removalError = true;
-        return false;
-      }
-
-      auto prefix = anno.getMember<StringAttr>("prefix");
-      if (!prefix) {
-        emitCircuitError()
-            << "contained an invalid 'PrefixInterfacesAnnotation' that does "
-               "not contain a 'prefix' field: "
-            << anno.getDict();
-        removalError = true;
-        return false;
-      }
-
-      interfacePrefix = prefix.getValue();
-      ++numAnnosRemoved;
-      return true;
-    }
     if (anno.isClass(testBenchDirAnnoClass)) {
       testbenchDir = anno.getMember<StringAttr>("dirname");
       return false;
@@ -1632,8 +1598,6 @@ void GrandCentralPass::runOnOperation() {
     else
       llvm::dbgs() << "<none>\n";
     llvm::dbgs()
-        << "Prefix Info (from PrefixInterfacesAnnotation):\n"
-        << "  prefix: " << interfacePrefix << "\n"
         << "Hierarchy File Info (from GrandCentralHierarchyFileAnnotation):\n"
         << "  filename: ";
     if (maybeHierarchyFileYAML)
@@ -2079,7 +2043,7 @@ void GrandCentralPass::runOnOperation() {
     auto companionModule = companionIter.companion;
     auto symbolName = getNamespace().newName(
         "__" + companionIDMap.lookup(bundle.getID()).name + "_" +
-        getInterfaceName(bundle.getPrefix(), bundle) + "__");
+        getInterfaceName(bundle) + "__");
 
     // Recursively walk the AugmentedBundleType to generate interfaces and XMRs.
     // Error out if this returns None (indicating that the annotation is
@@ -2096,8 +2060,8 @@ void GrandCentralPass::runOnOperation() {
     SmallVector<VerbatimXMRbuilder> xmrElems;
     SmallVector<InterfaceElemsBuilder> interfaceBuilder;
 
-    auto ifaceName = traverseBundle(bundle, bundle.getID(), bundle.getPrefix(),
-                                    verbatim, xmrElems, interfaceBuilder);
+    auto ifaceName = traverseBundle(bundle, bundle.getID(), verbatim, xmrElems,
+                                    interfaceBuilder);
     if (!ifaceName) {
       removalError = true;
       continue;

@@ -203,6 +203,14 @@ LogicalResult MacroRefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
+// MacroDeclOp
+//===----------------------------------------------------------------------===//
+
+StringRef MacroDeclOp::getMacroIdentifier() {
+  return getVerilogName().value_or(getSymName());
+}
+
+//===----------------------------------------------------------------------===//
 // ConstantXOp / ConstantZOp
 //===----------------------------------------------------------------------===//
 

@@ -133,3 +133,28 @@ cause the bug to manifest (since they are version dependent), thus there isn't
 a universal fix that can be applied in the generated verilog.
 
 https://github.com/llvm/circt/commit/e9f443be475e0ef796c0c6af1ce09d6e783fcd5a
+
+# Clock Gates and Enables Not Recognized For Registers
+
+Clock gates in some rtl-based power estimation tools are unable to recognize
+clock gates and enables if they are not generated as if statements in always
+blocks.  This is a very narrow pattern match with significant implications for
+the tools lint results and quality of analysis results.
+
+## Example
+```
+  %count = seq.firreg %2 clock %clock sym @count : i2
+￼  %1 = comb.mux %cond, %value, %count : i2		￼  %1 = comb.mux bin %cond, %value, %count : i2
+￼  %2 = comb.mux %reset, %c0_i2, %1 : i2		￼  %2 = comb.mux bin %reset, %c0_i2, %1 : i2￼
+```
+
+The mux on `cond` must become an `if` in the output since it forms a self-loop
+on the register `count`.
+
+## Workaround
+
+Effort at several points in lowering make effort to find self-loops through 
+register read and write ports and muxes.  These are generated as `if` statements 
+in the always block that updates the register.
+
+https://github.com/llvm/circt/pull/3815

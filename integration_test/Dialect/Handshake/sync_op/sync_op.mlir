@@ -10,11 +10,11 @@
 
 // Test the DC lowering flow.
 // TODO: This test does not pass with DC. Debug.
-// RUNx: hlstool %s --dynamic-hw --dc --input-level core --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables > %t.sv && \
-// RUNx: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=sync_op --pythonFolder="%S,%S/.." %t.sv %esi_prims 2>&1 | FileCheck %s
+// RUN: hlstool %s --dynamic-hw --dc --input-level core --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables > %t.sv
+// RUN: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=sync_op --pythonFolder="%S,%S/.." %t.sv %esi_prims 2>&1 | FileCheck %s
 
-// RUNx: hlstool %s --dynamic-hw --dc --input-level core --buffering-strategy=all --verilog --lowering-options=disallowLocalVariables > %t.sv && \
-// RUNx: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=sync_op --pythonFolder="%S,%S/.." %t.sv %esi_prims 2>&1 | FileCheck %s
+// RUN: hlstool %s --dynamic-hw --dc --input-level core --buffering-strategy=all --verilog --lowering-options=disallowLocalVariables > %t.sv
+// RUN: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=sync_op --pythonFolder="%S,%S/.." %t.sv %esi_prims 2>&1 | FileCheck %s
 
 
 // CHECK: ** TEST

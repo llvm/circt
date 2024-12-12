@@ -30,11 +30,58 @@ func.func @sets(%arg0: i32, %arg1: i32) {
   // CHECK: [[SET:%.+]] = rtg.set_create %arg0, %arg1 : i32
   // CHECK: [[R:%.+]] = rtg.set_select_random [[SET]] : !rtg.set<i32>
   // CHECK: [[EMPTY:%.+]] = rtg.set_create : i32
-  // CHECK: rtg.set_difference [[SET]], [[EMPTY]] : !rtg.set<i32>
+  // CHECK: [[DIFF:%.+]] = rtg.set_difference [[SET]], [[EMPTY]] : !rtg.set<i32>
+  // CHECK: rtg.set_union [[SET]], [[DIFF]] : !rtg.set<i32>
+  // CHECK: rtg.set_size [[SET]] : !rtg.set<i32>
   %set = rtg.set_create %arg0, %arg1 : i32
   %r = rtg.set_select_random %set : !rtg.set<i32>
   %empty = rtg.set_create : i32
   %diff = rtg.set_difference %set, %empty : !rtg.set<i32>
+  %union = rtg.set_union %set, %diff : !rtg.set<i32>
+  %size = rtg.set_size %set : !rtg.set<i32>
 
   return
+}
+
+// CHECK-LABEL: @bags
+rtg.sequence @bags {
+^bb0(%arg0: i32, %arg1: i32, %arg2: index):
+  // CHECK: [[BAG:%.+]] = rtg.bag_create (%arg2 x %arg0, %arg2 x %arg1) : i32 {rtg.some_attr}
+  // CHECK: [[R:%.+]] = rtg.bag_select_random [[BAG]] : !rtg.bag<i32> {rtg.some_attr}
+  // CHECK: [[EMPTY:%.+]] = rtg.bag_create : i32
+  // CHECK: [[DIFF:%.+]] = rtg.bag_difference [[BAG]], [[EMPTY]] : !rtg.bag<i32> {rtg.some_attr}
+  // CHECK: rtg.bag_difference [[BAG]], [[EMPTY]] inf : !rtg.bag<i32>
+  // CHECK: rtg.bag_union [[BAG]], [[EMPTY]], [[DIFF]] : !rtg.bag<i32>
+  // CHECK: rtg.bag_unique_size [[BAG]] : !rtg.bag<i32>
+  %bag = rtg.bag_create (%arg2 x %arg0, %arg2 x %arg1) : i32 {rtg.some_attr}
+  %r = rtg.bag_select_random %bag : !rtg.bag<i32> {rtg.some_attr}
+  %empty = rtg.bag_create : i32
+  %diff = rtg.bag_difference %bag, %empty : !rtg.bag<i32> {rtg.some_attr}
+  %diff2 = rtg.bag_difference %bag, %empty inf : !rtg.bag<i32>
+  %union = rtg.bag_union %bag, %empty, %diff : !rtg.bag<i32>
+  %size = rtg.bag_unique_size %bag : !rtg.bag<i32>
+}
+
+// CHECK-LABEL: rtg.target @empty_target : !rtg.dict<> {
+// CHECK-NOT: rtg.yield
+rtg.target @empty_target : !rtg.dict<> {
+  rtg.yield
+}
+
+// CHECK-LABEL: rtg.test @empty_test : !rtg.dict<> {
+rtg.test @empty_test : !rtg.dict<> { }
+
+// CHECK-LABEL: rtg.target @target : !rtg.dict<num_cpus: i32, num_modes: i32> {
+// CHECK:   rtg.yield %{{.*}}, %{{.*}} : i32, i32
+// CHECK: }
+rtg.target @target : !rtg.dict<num_cpus: i32, num_modes: i32> {
+  %1 = arith.constant 4 : i32
+  rtg.yield %1, %1 : i32, i32
+}
+
+// CHECK-LABEL: rtg.test @test : !rtg.dict<num_cpus: i32, num_modes: i32> {
+// CHECK: ^bb0(%arg0: i32, %arg1: i32):
+// CHECK: }
+rtg.test @test : !rtg.dict<num_cpus: i32, num_modes: i32> {
+^bb0(%arg0: i32, %arg1: i32):
 }

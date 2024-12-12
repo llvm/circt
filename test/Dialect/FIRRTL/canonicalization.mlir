@@ -2,6 +2,8 @@
 
 firrtl.circuit "Casts" {
 
+firrtl.layer @A bind {}
+
 // CHECK-LABEL: firrtl.module @Casts
 firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
     in %clock : !firrtl.clock, in %asyncreset : !firrtl.asyncreset,
@@ -3587,5 +3589,11 @@ firrtl.class @PropertyArithmetic(in %in: !firrtl.integer, out %out0: !firrtl.int
   // CHECK: firrtl.propassign %out1, %in
   firrtl.propassign %out0, %3 : !firrtl.integer
   firrtl.propassign %out1, %4 : !firrtl.integer
+}
+
+// CHECK-LABEL: firrtl.module private @LayerBlocks
+firrtl.module private @LayerBlocks() {
+  // CHECK-NOT: firrtl.layerblock @A
+  firrtl.layerblock @A {}
 }
 }

@@ -101,7 +101,7 @@ jobs:
         if: github.event_name == 'release' || ( github.event_name == 'workflow_dispatch' && inputs.os == 'macos' )
         env:
           os: macos
-          runner: macos-12
+          runner: macos-13
           arch: x64
           tar: gtar czf
           archive: tar.gz

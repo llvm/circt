@@ -771,6 +771,20 @@ hw.module @W422_Foo() {
   hw.output
 }
 
+sv.macro.decl @MacroWithoutVerilogName
+sv.macro.decl @MacroWithVerilogName["A"]
+// CHECK-LABEL: module ModuleUsingMacroWithVerilogName(
+hw.module @ModuleUsingMacroWithVerilogName(in %a : i1) {
+  // CHECK: `ifdef MacroWithoutVerilogName
+  sv.ifdef @MacroWithoutVerilogName {
+    %b = hw.wire %a : i1
+  }
+  // CHECK: `ifdef A
+  sv.ifdef @MacroWithVerilogName {
+    %b = hw.wire %a : i1
+  }
+}
+
 hw.module @BindInterface() {
   %bar = sv.interface.instance sym @__Interface__ {doNotPrint} : !sv.interface<@Interface>
   hw.output

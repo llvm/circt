@@ -224,6 +224,24 @@ firrtl.circuit "Test" {
     }
   }
 
+  // CHECK:      firrtl.module private @CaptureInWhen_A(
+  // CHECK-SAME:   in %a: !firrtl.uint<1>
+  // CHECK-SAME:   in %cond: !firrtl.uint<1>
+  // CHECK-SAME: )
+
+  // CHECK:      firrtl.module @CaptureInWhen(
+  // CHECK:        %a_a, %a_cond = firrtl.instance a
+  // CHECK-NEXT:   firrtl.matchingconnect %a_cond, %cond :
+  // CHECK-NEXT:   firrtl.matchingconnect %a_a, %a :
+  firrtl.module @CaptureInWhen(in %cond: !firrtl.uint<1>) {
+    %a = firrtl.wire : !firrtl.uint<1>
+    firrtl.layerblock @A {
+      firrtl.when %cond : !firrtl.uint<1> {
+        %b = firrtl.node %a : !firrtl.uint<1>
+      }
+    }
+  }
+
   //===--------------------------------------------------------------------===//
   // Connecting/Defining Refs
   //===--------------------------------------------------------------------===//
@@ -378,70 +396,48 @@ firrtl.circuit "Test" {
   // Inline Layers
   //===--------------------------------------------------------------------===//
 
-  // CHECK: sv.macro.decl @[[INLINE:.*]]["Inline"]
+  // CHECK:      sv.macro.decl @layer_Test$Inline
+  // CHECK-NEXT: sv.macro.decl @layer_Test$Inline$Inline
+  // CHECK-NEXT: sv.macro.decl @layer_Test$Bound$Inline
   firrtl.layer @Inline inline {
-    // CHECK: sv.macro.decl @Inline_Inline
     firrtl.layer @Inline inline {}
-    firrtl.layer @Bound bind {
-      // CHECK: sv.macro.decl @Inline_Bound_Inline
-      firrtl.layer @Inline inline {}
-      firrtl.layer @Bound bind {
-        // CHECK: sv.macro.decl @Inline_Bound_Bound_Inline
-        firrtl.layer @Inline inline {}
-      }
-    }
   }
 
   firrtl.layer @Bound bind {
-    // CHECK: sv.macro.decl @Bound_Inline
     firrtl.layer @Inline inline {}
   }
 
-  // CHECK: firrtl.module private @ModuleWithInlineLayerBlocks_Inline_Bound() {
-  // CHECK:   %w3 = firrtl.wire : !firrtl.uint<3>
-  // CHECK:   sv.ifdef  @Inline_Bound_Inline {
-  // CHECK:     %w4 = firrtl.wire : !firrtl.uint<4>
-  // CHECK:   }
-  // CHECK: }
+  // CHECK:      firrtl.module private @ModuleWithInlineLayerBlocks_Bound() {
+  // CHECK-NEXT:   %w3 = firrtl.wire
+  // CHECK-NEXT:   sv.ifdef @layer_Test$Bound$Inline {
+  // CHECK-NEXT:     %w4 = firrtl.wire
+  // CHECK-NEXT:   }
+  // CHECK-NEXT: }
 
-  // CHECK: firrtl.module private @ModuleWithInlineLayerBlocks_Bound() {
-  // CHECK:   %w5 = firrtl.wire : !firrtl.uint<5>
-  // CHECK:   sv.ifdef @Bound_Inline {
-  // CHECK:     %w6 = firrtl.wire : !firrtl.uint<6>
-  // CHECK:   }
-  // CHECK: }
-
-  // CHECK: firrtl.module @ModuleWithInlineLayerBlocks() {
-  // CHECK:   sv.ifdef @[[INLINE]] {
-  // CHECK:     %w1 = firrtl.wire : !firrtl.uint<1>
-  // CHECK:     sv.ifdef  @Inline_Inline {
-  // CHECK:       %w2 = firrtl.wire : !firrtl.uint<2>
-  // CHECK:     }
-  // CHECK:     firrtl.instance inline_bound {lowerToBind, output_file = #hw.output_file<"layers-Test-Inline-Bound.sv", excludeFromFileList>} @ModuleWithInlineLayerBlocks_Inline_Bound()
-  // CHECK:   }
-  // CHECK:   firrtl.instance bound {lowerToBind, output_file = #hw.output_file<"layers-Test-Bound.sv", excludeFromFileList>} @ModuleWithInlineLayerBlocks_Bound()
-  // CHECK: }
+  // CHECK-NEXT: firrtl.module @ModuleWithInlineLayerBlocks() {
+  // CHECK-NEXT:   sv.ifdef @layer_Test$Inline {
+  // CHECK-NEXT:     %w1 = firrtl.wire
+  // CHECK-NEXT:     sv.ifdef @layer_Test$Inline$Inline {
+  // CHECK-NEXT:       %w2 = firrtl.wire
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:   }
+  // CHECK-NEXT: }
   firrtl.module @ModuleWithInlineLayerBlocks() {
     firrtl.layerblock @Inline {
       %w1 = firrtl.wire : !firrtl.uint<1>
       firrtl.layerblock @Inline::@Inline {
         %w2 = firrtl.wire : !firrtl.uint<2>
       }
-      firrtl.layerblock @Inline::@Bound {
-        %w3 = firrtl.wire : !firrtl.uint<3>
-        firrtl.layerblock @Inline::@Bound::@Inline {
-          %w4 = firrtl.wire : !firrtl.uint<4>
-        }
-      }
     }
 
     firrtl.layerblock @Bound {
-      %w5 = firrtl.wire : !firrtl.uint<5>
+      %w3 = firrtl.wire : !firrtl.uint<3>
       firrtl.layerblock @Bound::@Inline {
-        %w6 = firrtl.wire : !firrtl.uint<6>
+        %w4 = firrtl.wire : !firrtl.uint<4>
       }
     }
   }
+
 }
 
 // -----

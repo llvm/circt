@@ -577,46 +577,6 @@ firrtl.circuit "InterfaceGroundType" attributes {
 
 // -----
 
-firrtl.circuit "PrefixInterfacesAnnotation"
-  attributes {annotations = [
-    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
-     defName = "Foo",
-     elements = [
-       {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
-        defName = "Bar",
-        elements = [],
-        name = "bar"}],
-     id = 0 : i64,
-     name = "MyView"},
-    {class = "sifive.enterprise.grandcentral.PrefixInterfacesAnnotation",
-     prefix = "PREFIX_"}]}  {
-  firrtl.module private @MyView_companion()
-    attributes {annotations = [{
-      class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
-      id = 0 : i64,
-      name = "MyView"}]} {}
-  firrtl.module private @DUT() {
-    firrtl.instance MyView_companion  @MyView_companion()
-  }
-  firrtl.module @PrefixInterfacesAnnotation() {
-    firrtl.instance dut @DUT()
-  }
-}
-
-// CHECK-LABEL: firrtl.circuit "PrefixInterfacesAnnotation"
-// The PrefixInterfacesAnnotation was removed from the circuit.
-// CHECK-NOT:     sifive.enterprise.grandcentral.PrefixInterfacesAnnotation
-
-// Interface "Foo" is prefixed.
-// CHECK:       sv.interface @PREFIX_Foo
-// Interface "Bar" is prefixed, but not its name.
-// CHECK-NEXT:    PREFIX_Bar bar()
-
-// Interface "Bar" is prefixed.
-// CHECK:       sv.interface @PREFIX_Bar
-
-// -----
-
 firrtl.circuit "DirectoryBehaviorWithDUT" attributes {
   annotations = [
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType",

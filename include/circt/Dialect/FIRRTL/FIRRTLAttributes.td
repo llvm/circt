@@ -67,10 +67,6 @@ class AugmentedType<string name> : AttrDef<FIRRTLDialect, name> {
     ArrayAttr getElements() { return getUnderlying().getAs<ArrayAttr>("elements"); }
   }];
 
-  code hasPrefix = [{
-    StringAttr getPrefix() { return getUnderlying().getAs<StringAttr>("prefix"); }
-  }];
-
 }
 
 def AugmentedBundleType : AugmentedType<"AugmentedBundleType"> {
@@ -79,8 +75,7 @@ def AugmentedBundleType : AugmentedType<"AugmentedBundleType"> {
     defaultClassDeclaration #
     hasID #
     hasElements #
-    hasDefName #
-    hasPrefix # [{
+    hasDefName # [{
       bool isRoot() { return getID() != nullptr; }
     }];
   let mnemonic = "augmentedBundle";

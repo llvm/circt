@@ -336,7 +336,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                        in %c: !firrtl.sint<4>, in %d: !firrtl.sint<4>) {
     // CHECK: [[CLOCK:%.+]] = seq.from_clock %clock
     // CHECK: [[ADD:%.+]] = comb.add
-    
+
     // CHECK: [[ADDSIGNED:%.+]] = comb.add
     // CHECK: [[SUMSIGNED:%.+]] = sv.system "signed"([[ADDSIGNED]])
     // CHECK: [[DSIGNED:%.+]] = sv.system "signed"(%d)
@@ -585,7 +585,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %cond, [[TRUE]]
     // CHECK-NEXT: [[TMP2:%.+]] = comb.and bin %enable, [[TMP1]]
-    // CHECK-NEXT: [[SIGNEDVAL:%.+]] = sv.system "signed"(%value2) : (i24) -> i24 
+    // CHECK-NEXT: [[SIGNEDVAL:%.+]] = sv.system "signed"(%value2) : (i24) -> i24
     // CHECK-NEXT: [[TRUE2:%.+]] = hw.constant true
     // CHECK-NEXT: [[TMP3:%.+]] = comb.xor bin %cond, [[TRUE2]]
     // CHECK-NEXT: [[TMP4:%.+]] = comb.and bin %enable, [[TMP3]]
@@ -1480,6 +1480,17 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %6 = sv.read_inout %5 : !hw.inout<i32>
     // CHECK-NEXT: hw.output %2, %6 : i32, i32
   }
+
+  sv.macro.decl @IfDef_MacroDecl
+  // CHECK-LABEL: @IfDef
+  firrtl.module @IfDef() {
+    // CHECK: sv.ifdef
+    sv.ifdef @IfDef_MacroDecl {
+      // CHECK-NEXT: %a = hw.wire
+      %a = firrtl.wire : !firrtl.uint<1>
+    }
+  }
+
 }
 
 // -----

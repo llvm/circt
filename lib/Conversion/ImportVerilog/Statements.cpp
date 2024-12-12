@@ -207,7 +207,8 @@ struct StmtVisitor {
         case CaseStatementCondition::WildcardJustZ:
           cond = builder.create<moore::CaseZEqOp>(itemLoc, caseExpr, value);
           break;
-          std::vector<Value> values;
+        case CaseStatementCondition::Inside:
+          SmallVector<Value> values;
           values.reserve(item.expressions.size());
           for (const auto *expr : item.expressions) {
               auto value = context.convertRvalueExpression(*expr);
@@ -221,18 +222,12 @@ struct StmtVisitor {
               return failure();
           }
 
-          if (values.size() == 1) {
-            cond = builder.create<moore::WildcardEqOp>(loc, caseExpr,
-                                                       values.front());
-          } else {
-            cond =
-                builder.create<moore::WildcardEqOp>(loc, caseExpr, values[0]);
-            for (size_t i = 1; i < values.size(); ++i) {
-              auto nextCond =
-                  builder.create<moore::WildcardEqOp>(loc, caseExpr, values[i]);
-              cond = builder.create<moore::OrOp>(loc, cond, nextCond);
+          cond = builder.create<moore::WildcardEqOp>(loc, caseExpr, values[0]);
+          for (size_t i = 1; i < values.size(); ++i) {
+            auto nextCond =
+                builder.create<moore::WildcardEqOp>(loc, caseExpr, values[i]);
+            cond = builder.create<moore::OrOp>(loc, cond, nextCond);
               }
-          }
         }
         cond = builder.create<moore::ConversionOp>(itemLoc, builder.getI1Type(),
                                                    cond);

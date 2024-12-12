@@ -79,6 +79,101 @@ LogicalResult SetCreateOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// BagCreateOp
+//===----------------------------------------------------------------------===//
+
+ParseResult BagCreateOp::parse(OpAsmParser &parser, OperationState &result) {
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 16> elementOperands,
+      multipleOperands;
+  Type elemType;
+
+  if (!parser.parseOptionalLParen()) {
+    while (true) {
+      OpAsmParser::UnresolvedOperand elementOperand, multipleOperand;
+      if (parser.parseOperand(multipleOperand) || parser.parseKeyword("x") ||
+          parser.parseOperand(elementOperand))
+        return failure();
+
+      elementOperands.push_back(elementOperand);
+      multipleOperands.push_back(multipleOperand);
+
+      if (parser.parseOptionalComma()) {
+        if (parser.parseRParen())
+          return failure();
+        break;
+      }
+    }
+  }
+
+  if (parser.parseColon() || parser.parseType(elemType) ||
+      parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  result.addTypes({BagType::get(result.getContext(), elemType)});
+
+  for (auto operand : elementOperands)
+    if (parser.resolveOperand(operand, elemType, result.operands))
+      return failure();
+
+  for (auto operand : multipleOperands)
+    if (parser.resolveOperand(operand, IndexType::get(result.getContext()),
+                              result.operands))
+      return failure();
+
+  return success();
+}
+
+void BagCreateOp::print(OpAsmPrinter &p) {
+  p << " ";
+  if (!getElements().empty())
+    p << "(";
+  llvm::interleaveComma(llvm::zip(getElements(), getMultiples()), p,
+                        [&](auto elAndMultiple) {
+                          auto [el, multiple] = elAndMultiple;
+                          p << multiple << " x " << el;
+                        });
+  if (!getElements().empty())
+    p << ")";
+
+  p << " : " << getBag().getType().getElementType();
+  p.printOptionalAttrDict((*this)->getAttrs());
+}
+
+LogicalResult BagCreateOp::verify() {
+  if (!llvm::all_equal(getElements().getTypes()))
+    return emitOpError() << "types of all elements must match";
+
+  if (getElements().size() > 0)
+    if (getElements()[0].getType() != getBag().getType().getElementType())
+      return emitOpError() << "operand types must match bag element type";
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// TestOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult TestOp::verifyRegions() {
+  if (!getTarget().entryTypesMatch(getBody()->getArgumentTypes()))
+    return emitOpError("argument types must match dict entry types");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// TargetOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult TargetOp::verifyRegions() {
+  if (!getTarget().entryTypesMatch(
+          getBody()->getTerminator()->getOperandTypes()))
+    return emitOpError("terminator operand types must match dict entry types");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

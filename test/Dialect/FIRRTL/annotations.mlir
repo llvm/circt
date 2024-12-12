@@ -734,10 +734,29 @@ firrtl.circuit "Test" attributes {rawAnnotations = [
 // -----
 
 firrtl.circuit "Test" attributes {rawAnnotations =[
-  {class = "circt.ConventionAnnotation", target = "~Test|Test", convention = "scalarized"}
+  {class = "circt.ConventionAnnotation", target = "~Test|Test", convention = "scalarized"},
+  {class = "circt.BodyTypeLoweringAnnotation", target = "~Test|Test", convention = "scalarized", includeHierarchy = false}
   ]} {
-  // CHECK: attributes {convention = #firrtl<convention scalarized>}
+  // CHECK: attributes {body_type_lowering = #firrtl<convention scalarized>, convention = #firrtl<convention scalarized>}
   firrtl.module @Test() attributes {convention = #firrtl<convention internal>} {}
+}
+
+// -----
+
+firrtl.circuit "Test" attributes {rawAnnotations = [
+    {class = "circt.ConventionAnnotation", target = "~Test|Test", convention = "scalarized"},
+    {class = "circt.BodyTypeLoweringAnnotation", target = "~Test|Test", convention = "scalarized", includeHierarchy = true}
+  ]} {
+  // CHECK: @Test() attributes {body_type_lowering = #firrtl<convention scalarized>, convention = #firrtl<convention scalarized>}
+  firrtl.module @Test() attributes {convention = #firrtl<convention internal>} {
+    firrtl.instance child @Child()
+  }
+
+  // CHECK: @Child() attributes {body_type_lowering = #firrtl<convention scalarized>}
+  firrtl.module @Child() attributes {convention = #firrtl<convention internal>} {}
+
+  // CHECK: @Child2() {
+  firrtl.module @Child2() attributes {convention = #firrtl<convention internal>} {}
 }
 
 // -----

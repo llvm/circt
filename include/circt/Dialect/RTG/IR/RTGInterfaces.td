@@ -10,6 +10,7 @@
 #define CIRCT_DIALECT_RTG_IR_RTGINTERFACES_TD
 
 include "mlir/IR/Interfaces.td"
+include "mlir/IR/OpBase.td"
 
 def ContextResourceOpInterface : OpInterface<"ContextResourceOpInterface"> {
   let description = [{
@@ -29,6 +30,12 @@ def ContextResourceOpInterface : OpInterface<"ContextResourceOpInterface"> {
       "size_t", "getIdentifier", (ins "size_t":$idx)>,
   ];
 }
+
+/// Context resources can only be defined inside the `rtg.target` operation.
+def ContextResourceDefining : TraitList<[
+  DeclareOpInterfaceMethods<ContextResourceOpInterface>,
+  HasParent<"::circt::rtg::TargetOp">,
+]>;
 
 def ContextResourceTypeInterface : TypeInterface<
     "ContextResourceTypeInterface"> {

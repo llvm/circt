@@ -146,8 +146,13 @@ void WrapValidReadyOp::build(OpBuilder &b, OperationState &state, Value data,
 }
 
 LogicalResult WrapValidReadyOp::verify() {
-  if (getChanOutput().getType().getSignaling() != ChannelSignaling::ValidReady)
+  mlir::TypedValue<ChannelType> chanOut = getChanOutput();
+  if (chanOut.getType().getSignaling() != ChannelSignaling::ValidReady)
     return emitOpError("only supports valid-ready signaling");
+  if (!chanOut.hasOneUse() && !chanOut.getUses().empty()) {
+    llvm::errs() << "chanOut: " << chanOut.getLoc() << "\n";
+    return emitOpError("only supports zero or one use");
+  }
   return success();
 }
 

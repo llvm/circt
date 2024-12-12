@@ -36,7 +36,8 @@ def CircuitOp : FIRRTLOp<"circuit",
     DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
     OptionalAttr<SymbolRefArrayAttr>:$enable_layers,
     OptionalAttr<SymbolRefArrayAttr>:$disable_layers,
-    OptionalAttr<LayerSpecializationAttr>:$default_layer_specialization
+    OptionalAttr<LayerSpecializationAttr>:$default_layer_specialization,
+    OptionalAttr<ArrayAttr>:$select_inst_choice
   );
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
@@ -459,6 +460,7 @@ def LayerOp : FIRRTLOp<
   let assemblyFormat = [{
     $sym_name `` $convention attr-dict-with-keyword $body
   }];
+  let hasVerifier = 1;
 }
 
 def OptionOp : FIRRTLOp<"option", [
