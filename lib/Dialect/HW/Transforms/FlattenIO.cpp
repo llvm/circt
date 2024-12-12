@@ -46,6 +46,14 @@ static llvm::SmallVector<Type> getInnerTypes(hw::StructType t) {
 
 namespace {
 
+/// Flatten the given value ranges into a single vector of values.
+static SmallVector<Value> flattenValues(ArrayRef<ValueRange> values) {
+  SmallVector<Value> result;
+  for (const auto &vals : values)
+    llvm::append_range(result, vals);
+  return result;
+}
+
 // Replaces an output op with a new output with flattened (exploded) structs.
 struct OutputOpConversion : public OpConversionPattern<hw::OutputOp> {
   OutputOpConversion(TypeConverter &typeConverter, MLIRContext *context,
@@ -59,6 +67,29 @@ struct OutputOpConversion : public OpConversionPattern<hw::OutputOp> {
 
     // Flatten the operands.
     for (auto operand : adaptor.getOperands()) {
+      if (auto structType = getStructType(operand.getType())) {
+        auto explodedStruct = rewriter.create<hw::StructExplodeOp>(
+            op.getLoc(), getInnerTypes(structType), operand);
+        llvm::copy(explodedStruct.getResults(),
+                   std::back_inserter(convOperands));
+      } else {
+        convOperands.push_back(operand);
+      }
+    }
+
+    // And replace.
+    opVisited->insert(op->getParentOp());
+    rewriter.replaceOpWithNewOp<hw::OutputOp>(op, convOperands);
+    return success();
+  }
+
+  LogicalResult
+  matchAndRewrite(hw::OutputOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    llvm::SmallVector<Value> convOperands;
+
+    // Flatten the operands.
+    for (auto operand : flattenValues(adaptor.getOperands())) {
       if (auto structType = getStructType(operand.getType())) {
         auto explodedStruct = rewriter.create<hw::StructExplodeOp>(
             op.getLoc(), getInnerTypes(structType), operand);
@@ -97,6 +128,70 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
     // Flatten the operands.
     llvm::SmallVector<Value> convOperands;
     for (auto operand : adaptor.getOperands()) {
+      if (auto structType = getStructType(operand.getType())) {
+        auto explodedStruct = rewriter.create<hw::StructExplodeOp>(
+            loc, getInnerTypes(structType), operand);
+        llvm::copy(explodedStruct.getResults(),
+                   std::back_inserter(convOperands));
+      } else {
+        convOperands.push_back(operand);
+      }
+    }
+
+    // Get the new module return type.
+    llvm::SmallVector<Type> newResultTypes;
+    for (auto oldResultType : op.getResultTypes()) {
+      if (auto structType = getStructType(oldResultType))
+        for (auto t : structType.getElements())
+          newResultTypes.push_back(t.type);
+      else
+        newResultTypes.push_back(oldResultType);
+    }
+
+    // Create the new instance with the flattened module, attributes will be
+    // adjusted later.
+    auto newInstance = rewriter.create<hw::InstanceOp>(
+        loc, newResultTypes, op.getInstanceNameAttr(),
+        FlatSymbolRefAttr::get(referencedMod), convOperands,
+        op.getArgNamesAttr(), op.getResultNamesAttr(), op.getParametersAttr(),
+        op.getInnerSymAttr(), op.getDoNotPrintAttr());
+
+    // re-create any structs in the result.
+    llvm::SmallVector<Value> convResults;
+    size_t oldResultCntr = 0;
+    for (size_t resIndex = 0; resIndex < newInstance.getNumResults();
+         ++resIndex) {
+      Type oldResultType = op.getResultTypes()[oldResultCntr];
+      if (auto structType = getStructType(oldResultType)) {
+        size_t nElements = structType.getElements().size();
+        auto implodedStruct = rewriter.create<hw::StructCreateOp>(
+            loc, structType,
+            newInstance.getResults().slice(resIndex, nElements));
+        convResults.push_back(implodedStruct.getResult());
+        resIndex += nElements - 1;
+      } else
+        convResults.push_back(newInstance.getResult(resIndex));
+
+      ++oldResultCntr;
+    }
+    rewriter.replaceOp(op, convResults);
+    convertedOps->insert(newInstance);
+    return success();
+  }
+
+  LogicalResult
+  matchAndRewrite(hw::InstanceOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto referencedMod = op.getReferencedModuleNameAttr();
+    // If externModules is populated and this is an extern module instance,
+    // donot flatten it.
+    if (externModules->contains(referencedMod.getValue()))
+      return success();
+
+    auto loc = op.getLoc();
+    // Flatten the operands.
+    llvm::SmallVector<Value> convOperands;
+    for (auto operand : flattenValues(adaptor.getOperands())) {
       if (auto structType = getStructType(operand.getType())) {
         auto explodedStruct = rewriter.create<hw::StructExplodeOp>(
             loc, getInnerTypes(structType), operand);

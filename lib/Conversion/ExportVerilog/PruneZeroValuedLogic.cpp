@@ -33,6 +33,14 @@ static bool noI0TypedValue(ValueRange values) {
   return noI0Type(values.getTypes());
 }
 
+/// Flatten the given value ranges into a single vector of values.
+static SmallVector<Value> flattenValues(ArrayRef<ValueRange> values) {
+  SmallVector<Value> result;
+  for (const auto &vals : values)
+    llvm::append_range(result, vals);
+  return result;
+}
+
 namespace {
 
 class PruneTypeConverter : public mlir::TypeConverter {
@@ -51,11 +59,23 @@ struct NoI0OperandsConversionPattern : public OpConversionPattern<TOp> {
 public:
   using OpConversionPattern<TOp>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<TOp>::OpAdaptor;
+  using OneToNOpAdaptor = typename OpConversionPattern<TOp>::OneToNOpAdaptor;
 
   LogicalResult
   matchAndRewrite(TOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     if (noI0TypedValue(adaptor.getOperands()))
+      return failure();
+
+    // Part of i0-typed logic - prune it!
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  LogicalResult
+  matchAndRewrite(TOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (noI0TypedValue(flattenValues(adaptor.getOperands())))
       return failure();
 
     // Part of i0-typed logic - prune it!
@@ -76,6 +96,8 @@ struct NoI0OperandsConversionPattern<comb::ICmpOp>
 public:
   using OpConversionPattern<comb::ICmpOp>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<comb::ICmpOp>::OpAdaptor;
+  using OneToNOpAdaptor =
+      typename OpConversionPattern<comb::ICmpOp>::OneToNOpAdaptor;
 
   // Returns the result of applying the predicate when the LHS and RHS are the
   // exact same value.
@@ -115,6 +137,20 @@ public:
         op, APInt(1, result, /*isSigned=*/false));
     return success();
   }
+
+  LogicalResult
+  matchAndRewrite(comb::ICmpOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (noI0TypedValue(flattenValues(adaptor.getOperands())))
+      return failure();
+
+    // Caluculate the result of i0 value comparison.
+    bool result = applyCmpPredicateToEqualOperands(op.getPredicate());
+
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(
+        op, APInt(1, result, /*isSigned=*/false));
+    return success();
+  }
 };
 
 template <>
@@ -123,11 +159,25 @@ struct NoI0OperandsConversionPattern<comb::ParityOp>
 public:
   using OpConversionPattern<comb::ParityOp>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<comb::ParityOp>::OpAdaptor;
+  using OneToNOpAdaptor =
+      typename OpConversionPattern<comb::ParityOp>::OneToNOpAdaptor;
 
   LogicalResult
   matchAndRewrite(comb::ParityOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     if (noI0TypedValue(adaptor.getOperands()))
+      return failure();
+
+    // The value of "comb.parity i0" is 0.
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(
+        op, APInt(1, 0, /*isSigned=*/false));
+    return success();
+  }
+
+  LogicalResult
+  matchAndRewrite(comb::ParityOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (noI0TypedValue(flattenValues(adaptor.getOperands())))
       return failure();
 
     // The value of "comb.parity i0" is 0.
@@ -143,6 +193,8 @@ struct NoI0OperandsConversionPattern<comb::ConcatOp>
 public:
   using OpConversionPattern<comb::ConcatOp>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<comb::ConcatOp>::OpAdaptor;
+  using OneToNOpAdaptor =
+      typename OpConversionPattern<comb::ConcatOp>::OneToNOpAdaptor;
 
   LogicalResult
   matchAndRewrite(comb::ConcatOp op, OpAdaptor adaptor,
@@ -160,6 +212,28 @@ public:
     // Filter i0 operands and create a new concat op.
     SmallVector<Value> newOperands;
     llvm::copy_if(op.getOperands(), std::back_inserter(newOperands),
+                  [](auto op) { return !op.getType().isInteger(0); });
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, newOperands);
+    return success();
+  }
+
+  LogicalResult
+  matchAndRewrite(comb::ConcatOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Replace an i0 value with i0 constant.
+    if (op.getType().isInteger(0)) {
+      rewriter.replaceOpWithNewOp<hw::ConstantOp>(
+          op, APInt(1, 0, /*isSigned=*/false));
+      return success();
+    }
+
+    SmallVector<Value> oldOperands = flattenValues(adaptor.getOperands());
+    if (noI0TypedValue(oldOperands))
+      return failure();
+
+    // Filter i0 operands and create a new concat op.
+    SmallVector<Value> newOperands;
+    llvm::copy_if(oldOperands, std::back_inserter(newOperands),
                   [](auto op) { return !op.getType().isInteger(0); });
     rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, newOperands);
     return success();
@@ -185,9 +259,24 @@ struct NoI0ResultsConversionPattern : public OpConversionPattern<TOp> {
 public:
   using OpConversionPattern<TOp>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<TOp>::OpAdaptor;
+  using OneToNOpAdaptor = typename OpConversionPattern<TOp>::OneToNOpAdaptor;
 
   LogicalResult
   matchAndRewrite(TOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (noI0TypedValue(op->getResults()))
+      return failure();
+
+    // Part of i0-typed logic - prune!
+    assert(op->getNumResults() == 1 &&
+           "expected single result if using rewriter.replaceOpWith");
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(
+        op, APInt(0, 0, /*isSigned=*/false));
+    return success();
+  }
+
+  LogicalResult
+  matchAndRewrite(TOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     if (noI0TypedValue(op->getResults()))
       return failure();
