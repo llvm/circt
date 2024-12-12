@@ -69,6 +69,28 @@ struct RvalueExprVisitor {
     return {};
   }
 
+  // Handle hierarchical values, such as `x = Top.sub.var`.
+  Value visit(const slang::ast::HierarchicalValueExpression &expr) {
+    auto hierLoc = context.convertLocation(expr.symbol.location);
+    if (auto value = context.valueSymbols.lookup(&expr.symbol)) {
+      if (isa<moore::RefType>(value.getType())) {
+        auto readOp = builder.create<moore::ReadOp>(hierLoc, value);
+        if (context.rvalueReadCallback)
+          context.rvalueReadCallback(readOp);
+        value = readOp.getResult();
+      }
+      return value;
+    }
+
+    // Emit an error for those hierarchical values not recorded in the
+    // `valueSymbols`.
+    auto d = mlir::emitError(loc, "unknown hierarchical name `")
+             << expr.symbol.name << "`";
+    d.attachNote(hierLoc) << "no rvalue generated for "
+                          << slang::ast::toString(expr.symbol.kind);
+    return {};
+  }
+
   // Handle type conversions (explicit and implicit).
   Value visit(const slang::ast::ConversionExpression &expr) {
     auto type = context.convertType(*expr.type);
@@ -803,7 +825,7 @@ struct RvalueExprVisitor {
         auto type = cast<moore::UnpackedType>(value.getType());
         auto intType = moore::IntType::get(
             context.getContext(), type.getBitSize().value(), type.getDomain());
-        // do not care if it's signed, because we will not do expansion
+        // Do not care if it's signed, because we will not do expansion.
         value = context.materializeConversion(intType, value, false, loc);
       } else {
         value = context.convertRvalueExpression(*stream.operand);
@@ -821,7 +843,7 @@ struct RvalueExprVisitor {
 
     if (operands.size() == 1) {
       // There must be at least one element, otherwise slang will report an
-      // error
+      // error.
       value = operands.front();
     } else {
       value = builder.create<moore::ConcatOp>(loc, operands).getResult();
@@ -886,6 +908,20 @@ struct LvalueExprVisitor {
     if (auto value = context.valueSymbols.lookup(&expr.symbol))
       return value;
     auto d = mlir::emitError(loc, "unknown name `") << expr.symbol.name << "`";
+    d.attachNote(context.convertLocation(expr.symbol.location))
+        << "no lvalue generated for " << slang::ast::toString(expr.symbol.kind);
+    return {};
+  }
+
+  // Handle hierarchical values, such as `Top.sub.var = x`.
+  Value visit(const slang::ast::HierarchicalValueExpression &expr) {
+    if (auto value = context.valueSymbols.lookup(&expr.symbol))
+      return value;
+
+    // Emit an error for those hierarchical values not recorded in the
+    // `valueSymbols`.
+    auto d = mlir::emitError(loc, "unknown hierarchical name `")
+             << expr.symbol.name << "`";
     d.attachNote(context.convertLocation(expr.symbol.location))
         << "no lvalue generated for " << slang::ast::toString(expr.symbol.kind);
     return {};
@@ -1012,7 +1048,7 @@ struct LvalueExprVisitor {
             cast<moore::RefType>(value.getType()).getNestedType());
         auto intType = moore::RefType::get(moore::IntType::get(
             context.getContext(), type.getBitSize().value(), type.getDomain()));
-        // do not care if it's signed, because we will not do expansion
+        // Do not care if it's signed, because we will not do expansion.
         value = context.materializeConversion(intType, value, false, loc);
       } else {
         value = context.convertLvalueExpression(*stream.operand);
@@ -1025,7 +1061,7 @@ struct LvalueExprVisitor {
     Value value;
     if (operands.size() == 1) {
       // There must be at least one element, otherwise slang will report an
-      // error
+      // error.
       value = operands.front();
     } else {
       value = builder.create<moore::ConcatRefOp>(loc, operands).getResult();

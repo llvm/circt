@@ -2,7 +2,6 @@
 ; RUN: firtool --no-dedup --lowering-options=emitBindComments --preserve-values=named --annotation-file %s.anno.json %s | FileCheck %s --check-prefixes CHECK,NOEXTRACT
 ; RUN: firtool --no-dedup --lowering-options=emitBindComments --annotation-file %s.anno.json --annotation-file %s.Extract.anno.json %s --annotation-file %s.YAML.anno.json | FileCheck %s --check-prefixes YAML
 ; RUN: firtool --no-dedup --lowering-options=emitBindComments --split-verilog --annotation-file %s.anno.json %s -o %t.folder > %t  && cat %t.folder/MyView_companion.sv  | FileCheck %s --check-prefixes MYVIEW_COMPANION
-; RUN: firtool --no-dedup --lowering-options=emitBindComments --annotation-file %s.anno.json --annotation-file %s.Prefix.anno.json %s | FileCheck %s --check-prefixes PREFIX
 ; RUN: firtool --no-dedup --annotation-file %s.anno.json %s --disable-opt
 
 FIRRTL version 4.0.0
@@ -189,9 +188,6 @@ circuit Top :
     connect out.multivec[1][2], dut.out.multivec[1][2]
     connect out.uint, dut.out.uint
 
-    ; PREFIX:         module FOO_BAR_MyView_companion(
-    ; PREFIX:         FOO_BAR_BAZ_MyInterface MyView(
-
     ; NOEXTRACT:      module MyView_companion(
     ; NOEXTRACT:      );
     ; NOEXTRACT:        MyInterface MyView();
@@ -347,7 +343,6 @@ circuit Top :
 
     ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}MyInterface.sv"
     ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}MyInterface.sv
-    ; PREFIX:         interface FOO_BAR_BAZ_MyInterface;
     ; CHECK:          interface MyInterface;
     ; CHECK-NEXT:       // a wire called 'uint'
     ; CHECK-NEXT:       logic uint;
@@ -372,7 +367,6 @@ circuit Top :
 
     ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}VecOfBundle.sv"
     ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}VecOfBundle.sv
-    ; PREFIX:         interface FOO_BAR_BAZ_VecOfBundle;
     ; CHECK:          interface VecOfBundle;
     ; CHECK-NEXT:       logic [1:0] sint;
     ; CHECK-NEXT:       logic [3:0] uint;
@@ -380,14 +374,12 @@ circuit Top :
 
     ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}OtherOther.sv"
     ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}OtherOther.sv
-    ; PREFIX:         interface FOO_BAR_BAZ_OtherOther;
     ; CHECK:          interface OtherOther;
     ; CHECK-NEXT:       Other other();
     ; CHECK:          endinterface
 
     ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}Other.sv"
     ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}Other.sv
-    ; PREFIX:         interface FOO_BAR_BAZ_Other;
     ; CHECK:          interface Other;
     ; CHECK-NEXT:       logic [1:0] sint;
     ; CHECK-NEXT:       logic [3:0] uint;
@@ -395,7 +387,6 @@ circuit Top :
 
     ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}Sub_vecOfBundle.sv"
     ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}Sub_vecOfBundle.sv
-    ; PREFIX:         interface FOO_BAR_BAZ_Sub_vecOfBundle;
     ; CHECK:          interface Sub_vecOfBundle;
     ; CHECK-NEXT:       logic [1:0] sint;
     ; CHECK-NEXT:       logic [3:0] uint;

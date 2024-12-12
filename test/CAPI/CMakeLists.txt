@@ -69,3 +69,43 @@ target_link_libraries(circt-capi-arc-test
   MLIRCAPIIR
   CIRCTCAPIArc
 )
+
+add_llvm_executable(circt-capi-rtg-pipelines-test
+  PARTIAL_SOURCES_INTENDED
+  rtg-pipelines.c
+)
+llvm_update_compile_flags(circt-capi-rtg-pipelines-test)
+
+target_link_libraries(circt-capi-rtg-pipelines-test
+  PRIVATE
+
+  MLIRCAPIIR
+  CIRCTCAPIRTG
+  CIRCTCAPIRtgTool
+)
+
+add_llvm_executable(circt-capi-rtg-test
+  PARTIAL_SOURCES_INTENDED
+  rtg.c
+)
+llvm_update_compile_flags(circt-capi-rtg-test)
+
+target_link_libraries(circt-capi-rtg-test
+  PRIVATE
+
+  MLIRCAPIIR
+  CIRCTCAPIRTG
+)
+
+add_llvm_executable(circt-capi-rtgtest-test
+  PARTIAL_SOURCES_INTENDED
+  rtgtest.c
+)
+llvm_update_compile_flags(circt-capi-rtgtest-test)
+
+target_link_libraries(circt-capi-rtgtest-test
+  PRIVATE
+
+  MLIRCAPIIR
+  CIRCTCAPIRTGTest
+)

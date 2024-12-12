@@ -5007,7 +5007,9 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  auto ident = PPExtString(cond.getName());
+  auto ident = PPExtString(
+      cast<MacroDeclOp>(state.symbolCache.getDefinition(cond.getIdent()))
+          .getMacroIdentifier());
 
   startStatement();
   bool hasEmptyThen = op->getRegion(0).front().empty();

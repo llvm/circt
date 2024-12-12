@@ -5,6 +5,10 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+//
+// This file implements the C-API for FIRRTL dialect.
+//
+//===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/FIRRTL.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"

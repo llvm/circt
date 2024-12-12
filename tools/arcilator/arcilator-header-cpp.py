@@ -1,11 +1,86 @@
 #!/usr/bin/env python3
 import argparse
-import sys
 import json
 import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import *
+from jinja2 import Environment, DictLoader, select_autoescape
+
+header_cpp_template = """#include "arcilator-runtime.h"
+{% for model in models %}
+extern "C" {
+{% if model.initialFnSym %}
+void {{ model.name }}_initial(void* state);
+{% endif %}
+void {{ model.name }}_eval(void* state);
+}
+
+class {{ model.name }}Layout {
+public:
+  static const char *name;
+  static const unsigned numStates;
+  static const unsigned numStateBytes;
+  static const std::array<Signal, {{ model.io|length }}> io;
+  static const Hierarchy hierarchy;
+};
+
+const char *{{ model.name }}Layout::name = "{{ model.name }}";
+const unsigned {{ model.name }}Layout::numStates = {{ model.states|length }};
+const unsigned {{ model.name }}Layout::numStateBytes = {{ model.numStateBytes }};
+const std::array<Signal, {{ model.io|length }}> {{ model.name }}Layout::io = {
+{% for io in model.io %}
+  {{ format_signal(io) }},
+{% endfor %}
+};
+
+const Hierarchy {{ model.name }}Layout::hierarchy = {{ indent(format_hierarchy(model.hierarchy[0])) }};
+
+class {{ model.name }}View {
+public:
+{% for io in model.io %}
+  {{ state_cpp_type(io) }} &{{ io.name }};
+{% endfor %}
+  {{ indent(format_view_hierarchy(model.hierarchy[0], view_depth)) }} {{ model.hierarchy[0].name }};
+  uint8_t *state;
+
+  {{ model.name }}View(uint8_t *state) :
+{% for io in model.io %}
+    {{ io.name }}({{ state_cpp_ref(io) }}),
+{% endfor %}
+    {{ model.hierarchy[0].name }}({{ indent(format_view_constructor(model.hierarchy[0], view_depth), 2) }}),
+    state(state) {}
+};
+
+class {{ model.name }} {
+public:
+  std::vector<uint8_t> storage;
+  {{ model.name }}View view;
+
+  {{ model.name }}() : storage({{ model.name }}Layout::numStateBytes, 0), view(&storage[0]) {
+{% if model.initialFnSym %}
+    {{ model.initialFnSym }}(&storage[0]);
+{% endif %}
+  }
+  void eval() { {{ model.name }}_eval(&storage[0]); }
+  ValueChangeDump<{{ model.name }}Layout> vcd(std::basic_ostream<char> &os) {
+    ValueChangeDump<{{ model.name }}Layout> vcd(os, &storage[0]);
+    vcd.writeHeader();
+    vcd.writeDumpvars();
+    return vcd;
+  }
+};
+
+#define {{ model.name.upper() }}_PORTS \\
+{% for io in model.io %}
+{% if loop.last %}
+  PORT({{io.name}})
+{%- else %}
+  PORT({{io.name}}) \\
+{% endif %}
+{% endfor %}
+{% endfor %}
+"""
 
 
 # needed to support python3 older than 3.9
@@ -13,20 +88,6 @@ def removeprefix(text, prefix):
   if text.startswith(prefix):
     return text[len(prefix):]
   return text
-
-
-# Parse command line arguments.
-parser = argparse.ArgumentParser(
-    description="Generate a C++ header for an Arc model")
-parser.add_argument("state_json",
-                    metavar="STATE_JSON",
-                    help="state description file to process")
-parser.add_argument("--view-depth",
-                    metavar="DEPTH",
-                    type=int,
-                    default=-1,
-                    help="hierarchy levels to expose as C++ structs")
-args = parser.parse_args()
 
 
 # Read the JSON descriptor.
@@ -73,10 +134,6 @@ class ModelInfo:
                      [StateInfo.decode(d) for d in d["states"]], list(), list())
 
 
-with open(args.state_json, "r") as f:
-  models = [ModelInfo.decode(d) for d in json.load(f)]
-
-
 # Organize the state by hierarchy.
 def group_state_by_hierarchy(
     states: List[StateInfo]) -> Tuple[List[StateInfo], List[StateHierarchy]]:
@@ -119,18 +176,6 @@ def group_state_by_hierarchy(
   return local_state, hierarchies
 
 
-for model in models:
-  internal = list()
-  for state in model.states:
-    if state.typ != StateType.INPUT and state.typ != StateType.OUTPUT:
-      internal.append(state)
-    else:
-      model.io.append(state)
-  model.hierarchy = [
-      StateHierarchy("internal", *group_state_by_hierarchy(internal))
-  ]
-
-
 # Process each model separately.
 def format_signal(state: StateInfo) -> str:
   fields = [
@@ -161,7 +206,7 @@ def state_cpp_type_nonmemory(state: StateInfo) -> str:
                    (64, "uint64_t")]:
     if state.numBits <= bits:
       return ty
-  return f"Bytes<{(state.numBits+7)//8}>"
+  return f"Bytes<{(state.numBits + 7) // 8}>"
 
 
 def state_cpp_type(state: StateInfo) -> str:
@@ -198,7 +243,7 @@ def format_view_hierarchy(hierarchy: StateHierarchy, depth: int) -> str:
   if depth != 0:
     for child in hierarchy.children:
       lines.append(
-          f"{indent(format_view_hierarchy(child, depth-1))} {clean_name(child.name)};"
+          f"{indent(format_view_hierarchy(child, depth - 1))} {clean_name(child.name)};"
       )
   lines = "\n  ".join(lines)
   if lines:
@@ -217,7 +262,7 @@ def format_view_constructor(hierarchy: StateHierarchy, depth: int) -> str:
   if depth != 0:
     for child in hierarchy.children:
       lines.append(
-          f".{clean_name(child.name)} = {indent(format_view_constructor(child, depth-1))}"
+          f".{clean_name(child.name)} = {indent(format_view_constructor(child, depth - 1))}"
       )
   lines = ",\n  ".join(lines)
   if lines:
@@ -229,94 +274,64 @@ def indent(s: str, amount: int = 1):
   return s.replace("\n", "\n" + "  " * amount)
 
 
-print("#include \"arcilator-runtime.h\"")
+def load_models(state_json):
+  with open(state_json, "r") as f:
+    ret = [ModelInfo.decode(d) for d in json.load(f)]
 
-for model in models:
-  sys.stderr.write(f"Generating `{model.name}` model\n")
+  for mdl in ret:
+    internal = list()
+    for state in mdl.states:
+      if state.typ != StateType.INPUT and state.typ != StateType.OUTPUT:
+        internal.append(state)
+      else:
+        mdl.io.append(state)
+    mdl.hierarchy = [
+        StateHierarchy("internal", *group_state_by_hierarchy(internal))
+    ]
 
-  reserved = {"state"}
+  return ret
 
-  for io in model.io:
-    if io.name in reserved:
-      io.name = io.name + "_"
 
-  print('extern "C" {')
-  if model.initialFnSym:
-    print(f"void {model.name}_initial(void* state);")
-  print(f"void {model.name}_eval(void* state);")
-  print('}')
+def render_header_cpp(models, view_depth):
+  for model in models:
+    reserved = {"state"}
+    for io in model.io:
+      if io.name in reserved:
+        io.name = io.name + "_"
 
-  # Generate the model layout.
-  print()
-  print(f"class {model.name}Layout {{")
-  print("public:")
-  print(f"  static const char *name;")
-  print(f"  static const unsigned numStates;")
-  print(f"  static const unsigned numStateBytes;")
-  print(f"  static const std::array<Signal, {len(model.io)}> io;")
-  print(f"  static const Hierarchy hierarchy;")
-  print("};")
-  print()
-  print(f"const char *{model.name}Layout::name = \"{model.name}\";")
-  print(f"const unsigned {model.name}Layout::numStates = {len(model.states)};")
-  print(
-      f"const unsigned {model.name}Layout::numStateBytes = {model.numStateBytes};"
+  env = Environment(loader=DictLoader(
+      {"header-cpp.template": header_cpp_template}),
+                    autoescape=select_autoescape(),
+                    trim_blocks=True)
+
+  template = env.get_template("header-cpp.template")
+
+  return template.render(
+      models=models,
+      indent=indent,
+      format_hierarchy=format_hierarchy,
+      format_view_hierarchy=format_view_hierarchy,
+      state_cpp_type=state_cpp_type,
+      state_cpp_ref=state_cpp_ref,
+      format_view_constructor=format_view_constructor,
+      format_signal=format_signal,
+      view_depth=view_depth,
   )
-  print(
-      f"const std::array<Signal, {len(model.io)}> {model.name}Layout::io = {{")
-  for io in model.io:
-    print(f"  {format_signal(io)},")
-  print("};")
-  print()
-  print(
-      f"const Hierarchy {model.name}Layout::hierarchy = {indent(format_hierarchy(model.hierarchy[0]))};"
-  )
 
-  # Generate the model view.
-  print()
-  print(f"class {model.name}View {{")
-  print("public:")
-  for io in model.io:
-    print(f"  {state_cpp_type(io)} &{io.name};")
-  print(
-      f"  {indent(format_view_hierarchy(model.hierarchy[0], args.view_depth))} {model.hierarchy[0].name};"
-  )
-  print("  uint8_t *state;")
-  print()
-  print(f"  {model.name}View(uint8_t *state) :")
-  for io in model.io:
-    print(f"    {io.name}({state_cpp_ref(io)}),")
-  print(
-      f"    {model.hierarchy[0].name}({indent(format_view_constructor(model.hierarchy[0], args.view_depth), 2)}),"
-  )
-  print("    state(state) {}")
-  print("};")
 
-  # Generate the convenience wrapper that also allocates storage.
-  print()
-  print(f"class {model.name} {{")
-  print("public:")
-  print(f"  std::vector<uint8_t> storage;")
-  print(f"  {model.name}View view;")
-  print()
-  print(
-      f"  {model.name}() : storage({model.name}Layout::numStateBytes, 0), view(&storage[0]) {{"
-  )
-  if model.initialFnSym:
-    print(f"    {model.initialFnSym}(&storage[0]);")
-  print("  }")
-  print(f"  void eval() {{ {model.name}_eval(&storage[0]); }}")
-  print(
-      f"  ValueChangeDump<{model.name}Layout> vcd(std::basic_ostream<char> &os) {{"
-  )
-  print(f"    ValueChangeDump<{model.name}Layout> vcd(os, &storage[0]);")
-  print("    vcd.writeHeader();")
-  print("    vcd.writeDumpvars();")
-  print("    return vcd;")
-  print("  }")
-  print("};")
+if __name__ == "__main__":
+  # Parse command line arguments.
+  parser = argparse.ArgumentParser(
+      description="Generate a C++ header for an Arc model")
+  parser.add_argument("state_json",
+                      metavar="STATE_JSON",
+                      help="state description file to process")
+  parser.add_argument("--view-depth",
+                      metavar="DEPTH",
+                      type=int,
+                      default=-1,
+                      help="hierarchy levels to expose as C++ structs")
+  args = parser.parse_args()
 
-  # Generate a port name macro.
-  print()
-  print(" \\\n  ".join([f"#define {model.name.upper()}_PORTS"] +
-                       [f"PORT({io.name})" for io in model.io]))
+  models_data = load_models(args.state_json)
+  print(render_header_cpp(models_data, args.view_depth))

@@ -24,6 +24,14 @@ using namespace rtgtest;
 size_t CPUDeclOp::getIdentifier(size_t idx) { return getId().getZExtValue(); }
 
 //===----------------------------------------------------------------------===//
+// ConstantTestOp
+//===----------------------------------------------------------------------===//
+
+mlir::OpFoldResult ConstantTestOp::fold(FoldAdaptor adaptor) {
+  return getValueAttr();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

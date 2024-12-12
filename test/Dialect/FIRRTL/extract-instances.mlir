@@ -734,20 +734,45 @@ firrtl.circuit "InstSymConflict" {
   // CHECK-SAME:              ]
 }
 
-// Module prefixing should not break extraction.
-// https://github.com/llvm/circt/issues/5961
-// CHECK-LABEL: firrtl.circuit "Plop_Foo"
-firrtl.circuit "Plop_Foo" attributes {annotations = [{class = "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation", filename = "ckgates.txt", group = "ClockGates"}]} {
-  // CHECK: hw.hierpath @nla_1 [@Plop_Foo::@ClockGates, @Plop_ClockGates::@ckg, @EICG_wrapper]
-  hw.hierpath @nla_1 [@Plop_Foo::@core, @Plop_Bar::@ckg, @EICG_wrapper]
-  firrtl.extmodule private @EICG_wrapper() attributes {defname = "EICG_wrapper"}
-  firrtl.module private @Plop_Bar() {
-    firrtl.instance ckg sym @ckg @EICG_wrapper()
+// Test that clock gate extraction composes with Chisel-time module prefixing.
+// Chisel may add any number of prefixes to the clock gates.  Ensure that this
+// will not block extraction.  Additionally, test that suffixes will block
+// extraction.
+//
+// CHECK-LABEL: firrtl.circuit "PrefixedClockGate"
+firrtl.circuit "PrefixedClockGate" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation",
+      filename = "ckgates.txt",
+      group = "ClockGates"
+    }
+  ]
+} {
+  firrtl.extmodule private @Prefix_EICG_wrapper() attributes {
+    defname = "Prefix_EICG_wrapper"
   }
-  // CHECK: firrtl.module private @Plop_ClockGates()
-  // CHECK-LABEL: firrtl.module @Plop_Foo()
-  firrtl.module @Plop_Foo() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation", prefix = "Plop_"}]} {
-    // CHECK: firrtl.instance ClockGates sym @ClockGates @Plop_ClockGates()
-    firrtl.instance core sym @core @Plop_Bar()
+  firrtl.extmodule private @Prefix_EICG_wrapper_Suffix() attributes {
+    defname = "Prefix_EICG_wrapper_Suffix"
+  }
+  // CHECK:      firrtl.module private @ClockGates() {
+  // CHECK-NEXT:   firrtl.instance clockGate_0 @Prefix_EICG_wrapper()
+  // CHECK-NOT:    firrtl.instance clockGate_1 @Prefix_EICG_wrapper_Suffix()
+  //
+  // CHECK:      firrtl.module @Foo
+  // CHECK-NEXT:   firrtl.instance ClockGates {{.*}} @ClockGates()
+  // CHECK-NEXT:   firrtl.instance clockGate_1 @Prefix_EICG_wrapper_Suffix()
+  firrtl.module @Foo() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+    firrtl.instance clockGate_0 @Prefix_EICG_wrapper()
+    firrtl.instance clockGate_1 @Prefix_EICG_wrapper_Suffix()
+  }
+  firrtl.module @PrefixedClockGate() {
+    firrtl.instance foo @Foo()
   }
 }

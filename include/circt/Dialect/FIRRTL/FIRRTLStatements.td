@@ -379,8 +379,7 @@ def LayerBlockOp : FIRRTLOp<
    ParentOneOf<[
      "firrtl::FModuleOp", "firrtl::LayerBlockOp",
      "firrtl::WhenOp", "firrtl::MatchOp"]>,
-   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-   RecursiveMemoryEffects, RecursivelySpeculatable]
+   DeclareOpInterfaceMethods<SymbolUserOpInterface>]
 > {
   let summary = "A definition of a layer block";
   let description = [{
@@ -404,6 +403,7 @@ def LayerBlockOp : FIRRTLOp<
     $layerName $region attr-dict
   }];
   let hasVerifier = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLSTATEMENTS_TD

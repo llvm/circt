@@ -3058,7 +3058,8 @@ struct FoldRegMems : public mlir::RewritePattern {
 
       next = rewriter.create<MuxPrimOp>(next.getLoc(), en, masked, next);
     }
-    rewriter.create<MatchingConnectOp>(memReg.getLoc(), memReg, next);
+    Value typedNext = rewriter.createOrFold<BitCastOp>(next.getLoc(), ty, next);
+    rewriter.create<MatchingConnectOp>(memReg.getLoc(), memReg, typedNext);
 
     // Delete the fields and their associated connects.
     for (Operation *conn : connects)
@@ -3409,4 +3410,20 @@ LogicalResult FPGAProbeIntrinsicOp::canonicalize(FPGAProbeIntrinsicOp op,
 
   rewriter.eraseOp(op);
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Layer Block Op
+//===----------------------------------------------------------------------===//
+
+LogicalResult LayerBlockOp::canonicalize(LayerBlockOp op,
+                                         PatternRewriter &rewriter) {
+
+  // If the layerblock is empty, erase it.
+  if (op.getBody()->empty()) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  return failure();
 }

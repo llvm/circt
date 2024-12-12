@@ -112,6 +112,8 @@ static void populateCombToAIGConversionPatterns(RewritePatternSet &patterns) {
 void ConvertCombToAIGPass::runOnOperation() {
   ConversionTarget target(getContext());
   target.addIllegalDialect<comb::CombDialect>();
+  // Keep data movement operations like Extract, Concat and Replicate.
+  target.addLegalOp<comb::ExtractOp, comb::ConcatOp, comb::ReplicateOp>();
   target.addLegalDialect<aig::AIGDialect>();
 
   RewritePatternSet patterns(&getContext());

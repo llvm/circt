@@ -20,7 +20,7 @@ include "mlir/IR/AttrTypeBase.td"
 class RTGTestTypeDef<string name, list<Trait> traits = []> 
   : TypeDef<RTGTestDialect, name, traits>;
 
-def CPUType : RTGTestTypeDef<"cpu", [ContextResourceTypeInterface]> {
+def CPUType : RTGTestTypeDef<"CPU", [ContextResourceTypeInterface]> {
   let summary = "handle to a specific CPU";
   let description = [{
     This type implements a specific context resource to test RTG operations

@@ -9,7 +9,7 @@
 // RUN: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=buffer_init_none --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
 // Test the DC lowering flow.
-// TODO: This test does not pass with DC. Debug.
+// TODO: This test does not pass with DC as DC to HW does not support buffer initValues.
 // RUNx: hlstool %s --dynamic-hw --dc --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables > %t.sv && \
 // RUNx: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=buffer_init_none --pythonFolder="%S,%S/.." %t.sv %esi_prims 2>&1 | FileCheck %s
 

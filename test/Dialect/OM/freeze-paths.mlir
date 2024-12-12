@@ -73,8 +73,8 @@ om.class @PathTest(%basepath : !om.basepath, %path : !om.path) {
 }
 
 // CHECK-LABEL: om.class @ListCreateTest
-// CHECK-SAME: -> (notpath: !om.list<i1>, basepath: !om.list<!om.frozenbasepath>, path: !om.list<!om.frozenpath>, nestedpath: !om.list<!om.list<!om.frozenpath>>)
-om.class @ListCreateTest(%notpath: i1, %basepath : !om.basepath, %path : !om.path) -> (notpath: !om.list<i1>, basepath: !om.list<!om.basepath>, path: !om.list<!om.path>, nestedpath: !om.list<!om.list<!om.path>>) {
+// CHECK-SAME: -> (notpath: !om.list<i1>, basepath: !om.list<!om.frozenbasepath>, path: !om.list<!om.frozenpath>, nestedpath: !om.list<!om.list<!om.frozenpath>>, concatpath: !om.list<!om.list<!om.frozenpath>>)
+om.class @ListCreateTest(%notpath: i1, %basepath : !om.basepath, %path : !om.path) -> (notpath: !om.list<i1>, basepath: !om.list<!om.basepath>, path: !om.list<!om.path>, nestedpath: !om.list<!om.list<!om.path>>, concatpath: !om.list<!om.list<!om.path>>) {
   // CHECK: [[NOT_PATH_LIST:%.+]] = om.list_create %notpath : i1
   %0 = om.list_create %notpath : i1
 
@@ -87,8 +87,11 @@ om.class @ListCreateTest(%notpath: i1, %basepath : !om.basepath, %path : !om.pat
   // CHECK: [[NESTED_PATH_LIST:%.+]] = om.list_create [[PATH_LIST]] : !om.list<!om.frozenpath>
   %3 = om.list_create %2 : !om.list<!om.path>
 
-  // CHECK: om.class.fields [[NOT_PATH_LIST]], [[BASE_PATH_LIST]], [[PATH_LIST]], [[NESTED_PATH_LIST]] : !om.list<i1>, !om.list<!om.frozenbasepath>, !om.list<!om.frozenpath>, !om.list<!om.list<!om.frozenpath>>
-  om.class.fields %0, %1, %2, %3 : !om.list<i1>, !om.list<!om.basepath>, !om.list<!om.path>, !om.list<!om.list<!om.path>>
+  // CHECK: [[CONCAT_PATH_LIST:%.+]] = om.list_concat [[NESTED_PATH_LIST]] : <!om.list<!om.frozenpath>>
+  %4 = om.list_concat %3 : !om.list<!om.list<!om.path>>
+
+  // CHECK: om.class.fields [[NOT_PATH_LIST]], [[BASE_PATH_LIST]], [[PATH_LIST]], [[NESTED_PATH_LIST]], [[CONCAT_PATH_LIST]] : !om.list<i1>, !om.list<!om.frozenbasepath>, !om.list<!om.frozenpath>, !om.list<!om.list<!om.frozenpath>>
+  om.class.fields %0, %1, %2, %3, %4 : !om.list<i1>, !om.list<!om.basepath>, !om.list<!om.path>, !om.list<!om.list<!om.path>>, !om.list<!om.list<!om.path>>
 }
 
 // CHECK-LABEL om.class @PathListClass(%pathList: !om.list<!om.frozenpath>) -> (pathList: !om.list<!om.path>

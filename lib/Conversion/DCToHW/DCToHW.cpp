@@ -816,6 +816,10 @@ public:
   LogicalResult
   matchAndRewrite(BufferOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
+    if (op.getInitValuesAttr())
+      return rewriter.notifyMatchFailure(
+          op, "BufferOp with initial values not supported");
+
     auto crRes = getClockAndReset(op);
     if (failed(crRes))
       return failure();

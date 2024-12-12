@@ -275,6 +275,13 @@ static llvm::cl::opt<LayerSpecializationOpt> defaultLayerSpecialization{
                    "Layers are enabled")),
     cl::init(LayerSpecializationOpt::None), cl::cat(mainCategory)};
 
+/// Specify the select option for specializing instance choice. Currently
+/// firtool does not support partially specified instance choice.
+static cl::list<std::string> selectInstanceChoice(
+    "select-instance-choice",
+    cl::desc("Options to specialize instance choice, in option=case format"),
+    cl::MiscFlags::CommaSeparated, cl::cat(mainCategory));
+
 /// Check output stream before writing bytecode to it.
 /// Warn and return true if output is known to be displayed.
 static bool checkBytecodeOutputToConsole(raw_ostream &os) {
@@ -370,6 +377,7 @@ static LogicalResult processBuffer(
     options.scalarizeExtModules = scalarizeExtModules;
     options.enableLayers = enableLayers;
     options.disableLayers = disableLayers;
+    options.selectInstanceChoice = selectInstanceChoice;
 
     switch (defaultLayerSpecialization) {
     case LayerSpecializationOpt::None:

@@ -268,8 +268,12 @@ companion dialect to define any backends.
 
 ## Operations
 
-[include "Dialects/RTGOps.md]
+[include "Dialects/RTGOps.md"]
 
 ## Types
 
-[include "Dialects/RTGTypes.md]
+[include "Dialects/RTGTypes.md"]
+
+## Passes
+
+[include "RTGPasses.md"]

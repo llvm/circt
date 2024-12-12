@@ -166,8 +166,11 @@ public:
         return success();
       }
 
-      if (!wrap.getChanOutput().hasOneUse() ||
-          !(unwrap = dyn_cast<UnwrapValidReadyOp>(
+      if (!wrap.getChanOutput().hasOneUse())
+        return rewriter.notifyMatchFailure(
+            wrap, "This conversion only supports wrap-unwrap back-to-back. "
+                  "Wrap didn't have exactly one use.");
+      if (!(unwrap = dyn_cast<UnwrapValidReadyOp>(
                 wrap.getChanOutput().use_begin()->getOwner())))
         return rewriter.notifyMatchFailure(
             wrap, "This conversion only supports wrap-unwrap back-to-back. "

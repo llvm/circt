@@ -1,5 +1,4 @@
 // RUN: circt-opt %s --canonicalize --cse --canonicalize | FileCheck %s
-// XFAIL: *
 // Waiting on: https://github.com/llvm/llvm-project/issues/64280
 
 // CHECK-LABEL:   func.func @staggeredJoin1(
@@ -83,7 +82,7 @@ func.func @csePack(%a: !dc.token, %b : i32) -> (!dc.value<i32>, !dc.value<i32>) 
 // CHECK-LABEL:   func.func @forkToFork(
 // CHECK-SAME:                          %[[VAL_0:.*]]: !dc.token) -> (!dc.token, !dc.token, !dc.token) {
 // CHECK:           %[[VAL_1:.*]]:3 = dc.fork [3] %[[VAL_0]]
-// CHECK:           return %[[VAL_1]]#1, %[[VAL_1]]#1, %[[VAL_1]]#2 : !dc.token, !dc.token, !dc.token
+// CHECK:           return %[[VAL_1]]#0, %[[VAL_1]]#1, %[[VAL_1]]#2 : !dc.token, !dc.token, !dc.token
 // CHECK:         }
 func.func @forkToFork(%a: !dc.token) -> (!dc.token, !dc.token, !dc.token) {
     %0, %1 = dc.fork [2] %a
@@ -127,6 +126,23 @@ func.func @joinOnSource(%a : !dc.token, %b : !dc.token) -> (!dc.token) {
     return %out : !dc.token
 }
 
+
+// Join on branch, where all branch results are used in the join is a no-op,
+// and the join can use the token of the input value to the branch.
+// CHECK-LABEL:   func.func @joinOnBranch(
+// CHECK-SAME:                            %[[VAL_0:.*]]: !dc.value<i1>, %[[VAL_1:.*]]: !dc.value<i1>, %[[VAL_2:.*]]: !dc.token) -> (!dc.token, !dc.token) {
+// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = dc.branch %[[VAL_1]]
+// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = dc.unpack %[[VAL_0]] : !dc.value<i1>
+// CHECK:           %[[VAL_7:.*]] = dc.join %[[VAL_2]], %[[VAL_3]], %[[VAL_5]]
+// CHECK:           return %[[VAL_7]], %[[VAL_4]] : !dc.token, !dc.token
+// CHECK:         }
+func.func @joinOnBranch(%sel : !dc.value<i1>, %sel2 : !dc.value<i1>, %other : !dc.token) -> (!dc.token, !dc.token) {
+    %true, %false = dc.branch %sel
+    %true2, %false2 = dc.branch %sel2
+    %out = dc.join %true, %false, %other, %true2
+    return %out, %false2 : !dc.token, !dc.token
+}
+
 // CHECK-LABEL:   func.func @forkOfSource() -> (!dc.token, !dc.token) {
 // CHECK:           %[[VAL_0:.*]] = dc.source
 // CHECK:           return %[[VAL_0]], %[[VAL_0]] : !dc.token, !dc.token
@@ -135,4 +151,18 @@ func.func @forkOfSource() -> (!dc.token, !dc.token) {
     %0 = dc.source
     %1:2 = dc.fork [2] %0
     return %1#0, %1#1 : !dc.token, !dc.token
+}
+
+// CHECK-LABEL:  hw.module @TestForkCanonicalization(in %arg0 : !dc.token, out out0 : !dc.token, out out1 : !dc.token) {
+// CHECK-NEXT:       [[R0:%.+]]:2 = dc.fork [2] %arg0
+// CHECK-NEXT:       [[R1:%.+]] = dc.buffer[4] [[R0]]#0 : !dc.token
+// CHECK-NEXT:       [[R2:%.+]] = dc.buffer[4] [[R0]]#1 : !dc.token
+// CHECK-NEXT:       hw.output [[R1]], [[R2]] : !dc.token, !dc.token
+
+hw.module @TestForkCanonicalization(in %arg0: !dc.token, out out0: !dc.token, out out1: !dc.token) {
+  %0:3 = dc.fork [3] %arg0
+  %1 = dc.buffer [4] %0#1 : !dc.token
+  %2 = dc.buffer [4] %0#2 : !dc.token
+  dc.sink %0#2
+  hw.output %1, %2 : !dc.token, !dc.token
 }

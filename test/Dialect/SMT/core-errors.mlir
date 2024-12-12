@@ -487,3 +487,11 @@ func.func @negative_pop() {
   smt.pop -1
   return
 }
+
+// -----
+
+func.func @set_logic_outside_solver() {
+  // expected-error @below {{'smt.set_logic' op expects parent op 'smt.solver'}}
+  smt.set_logic "AUFLIA"
+  return
+}

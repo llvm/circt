@@ -274,3 +274,13 @@ handshake.func @TestFunc() -> i8 {
   %c15_i8 = hw.constant 15 : i8
   return %c15_i8 : i8
 }
+
+// CHECK-LABEL:  hw.module @TestSync(in %in0 : !dc.value<i64>, in %clk : !seq.clock {dc.clock}, in %rst : i1 {dc.reset}, out out0 : !dc.value<i64>) {
+// CHECK-NEXT:     %token, %output = dc.unpack %in0 : !dc.value<i64>
+// CHECK-NEXT:     [[R0:%.+]] = dc.join %token
+// CHECK-NEXT:     [[R1:%.+]] = dc.pack [[R0]], %output : i64
+// CHECK-NEXT:     hw.output [[R1]] : !dc.value<i64>
+handshake.func @TestSync(%arg0: i64) -> (i64) attributes {argNames = ["in0"], resNames = ["out0"]} {
+  %1 = sync %arg0 : i64
+  return %1 : i64
+}

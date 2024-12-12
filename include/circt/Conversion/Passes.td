@@ -182,7 +182,9 @@ def SCFToCalyx : Pass<"lower-scf-to-calyx", "mlir::ModuleOp"> {
             "Identifier of top-level function to be the entry-point component"
             " of the Calyx program.">,
     Option<"ciderSourceLocationMetadata", "cider-source-location-metadata", "bool", "",
-            "Whether to track source location for the Cider debugger.">
+            "Whether to track source location for the Cider debugger.">,
+    Option<"writeJsonOpt", "write-json", "std::string", "",
+            "Whether to write memory contents to the json file.">
   ];
 }
 

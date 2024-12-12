@@ -26,9 +26,9 @@ jobs:
             cibw_build: cp38-manylinux_x86_64
           - os: ubuntu-20.04
             cibw_build: cp310-manylinux_x86_64
-          - os: macos-12
+          - os: macos-13
             cibw_build: cp38-macosx_x86_64
-          - os: macos-12
+          - os: macos-13
             cibw_build: cp310-macosx_x86_64
 
     steps:

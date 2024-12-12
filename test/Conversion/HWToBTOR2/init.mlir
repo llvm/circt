@@ -4,10 +4,10 @@ module {
   //CHECK:    [[NID0:[0-9]+]] sort bitvec 1
   //CHECK:    [[NID1:[0-9]+]] input [[NID0]] reset
   hw.module @test(in %clock : !seq.clock, in %reset : i1) {
-    // Register states get pregenerated
-    //CHECK:    [[NID2:[0-9]+]] state [[NID0]] reg
     %0 = seq.from_clock %clock 
     //CHECK:    [[NID3:[0-9]+]] constd [[NID0]] 0
+    // Register states get pregenerated
+    //CHECK:    [[NID2:[0-9]+]] state [[NID0]] reg
     %false = hw.constant false
     //CHECK:    [[INIT:[0-9]+]] init [[NID0]] [[NID2]] [[NID3]]
     %init = seq.initial() {

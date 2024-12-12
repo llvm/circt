@@ -130,10 +130,6 @@ struct ExtractInstancesPass
   /// relevant for instance extraction.
   DenseMap<Operation *, SmallVector<Annotation, 1>> annotatedModules;
 
-  /// The prefix of the DUT module.  This is used when creating new modules
-  /// under the DUT.
-  StringRef dutPrefix = "";
-
   /// A worklist of instances that need to be moved.
   SmallVector<std::pair<InstanceOp, ExtractionInfo>> extractionWorklist;
 
@@ -176,7 +172,6 @@ void ExtractInstancesPass::runOnOperation() {
   anythingChanged = false;
   anyFailures = false;
   annotatedModules.clear();
-  dutPrefix = "";
   extractionWorklist.clear();
   files.clear();
   extractionPaths.clear();
@@ -299,8 +294,6 @@ void ExtractInstancesPass::collectAnnos() {
       if (anno.isClass(dutAnnoClass)) {
         LLVM_DEBUG(llvm::dbgs()
                    << "Marking DUT `" << module.getModuleName() << "`\n");
-        if (auto prefix = anno.getMember<StringAttr>("prefix"))
-          dutPrefix = prefix;
         return false; // other passes may rely on this anno; keep it
       }
       if (!isAnnoInteresting(anno))
@@ -352,14 +345,15 @@ void ExtractInstancesPass::collectAnnos() {
     collectAnno(inst, instAnnos[0]);
   });
 
-  // If clock gate extraction is requested, find instances of extmodules with
-  // the corresponding `defname` and mark them as to be extracted.
-  // TODO: This defname really shouldn't be hardcoded here. Make this at least
-  // somewhat configurable.
+  // If clock gate extraction is requested, find instances of extmodules which
+  // have a defname that ends with "EICG_wrapper".  This also allows this to
+  // compose with Chisel-time module prefixing.
+  //
+  // TODO: This defname matching is a terrible hack and should be replaced with
+  // something better.
   if (!clkgateFileName.empty()) {
-    auto clkgateDefNameAttr = StringAttr::get(&getContext(), "EICG_wrapper");
     for (auto module : circuit.getOps<FExtModuleOp>()) {
-      if (module.getDefnameAttr() != clkgateDefNameAttr)
+      if (!module.getDefnameAttr().getValue().ends_with("EICG_wrapper"))
         continue;
       LLVM_DEBUG(llvm::dbgs()
                  << "Clock gate `" << module.getModuleName() << "`\n");
@@ -884,8 +878,8 @@ void ExtractInstancesPass::groupInstances() {
     OpBuilder builder(parentOp);
 
     // Uniquify the wrapper name.
-    auto wrapperModuleName = builder.getStringAttr(
-        circuitNamespace.newName(dutPrefix + wrapperName));
+    auto wrapperModuleName =
+        builder.getStringAttr(circuitNamespace.newName(wrapperName));
     auto wrapperInstName =
         builder.getStringAttr(getModuleNamespace(parent).newName(wrapperName));
 

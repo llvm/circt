@@ -131,6 +131,10 @@ public:
   bool shouldExtractTestCode() const { return extractTestCode; }
   bool shouldFixupEICGWrapper() const { return fixupEICGWrapper; }
   bool shouldAddCompanionAssume() const { return addCompanionAssume; }
+  bool shouldDisableCSEinClasses() const { return disableCSEinClasses; }
+  bool shouldSelectDefaultInstanceChoice() const {
+    return selectDefaultInstanceChoice;
+  }
 
   // Setters, used by the CAPI
   FirtoolOptions &setOutputFilename(StringRef name) {
@@ -356,6 +360,16 @@ public:
     return *this;
   }
 
+  FirtoolOptions &setDisableCSEinClasses(bool value) {
+    disableCSEinClasses = value;
+    return *this;
+  }
+
+  FirtoolOptions &setSelectDefaultInstanceChoice(bool value) {
+    selectDefaultInstanceChoice = value;
+    return *this;
+  }
+
 private:
   std::string outputFilename;
   bool disableAnnotationsUnknown;
@@ -402,6 +416,8 @@ private:
   bool stripDebugInfo;
   bool fixupEICGWrapper;
   bool addCompanionAssume;
+  bool disableCSEinClasses;
+  bool selectDefaultInstanceChoice;
 };
 
 void registerFirtoolCLOptions();

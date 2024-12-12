@@ -561,6 +561,7 @@ struct SolverOpLowering : public SMTLoweringPattern<SolverOp> {
     auto ptrTy = LLVM::LLVMPointerType::get(getContext());
     auto voidTy = LLVM::LLVMVoidType::get(getContext());
     auto ptrToPtrFunc = LLVM::LLVMFunctionType::get(ptrTy, ptrTy);
+    auto ptrPtrToPtrFunc = LLVM::LLVMFunctionType::get(ptrTy, {ptrTy, ptrTy});
     auto ptrToVoidFunc = LLVM::LLVMFunctionType::get(voidTy, ptrTy);
     auto ptrPtrToVoidFunc = LLVM::LLVMFunctionType::get(voidTy, {ptrTy, ptrTy});
 
@@ -579,6 +580,17 @@ struct SolverOpLowering : public SMTLoweringPattern<SolverOp> {
                 {config, paramKey, paramValue});
     }
 
+    // Check if the logic is set anywhere within the solver
+    std::optional<StringRef> logic = std::nullopt;
+    auto setLogicOps = op.getBodyRegion().getOps<smt::SetLogicOp>();
+    if (!setLogicOps.empty()) {
+      // We know from before patterns were applied that there is only one
+      // set_logic op
+      auto setLogicOp = *setLogicOps.begin();
+      logic = setLogicOp.getLogic();
+      rewriter.eraseOp(setLogicOp);
+    }
+
     // Create the context and store a pointer to it in the global variable.
     Value ctx = buildCall(rewriter, loc, "Z3_mk_context", ptrToPtrFunc, config)
                     .getResult();
@@ -591,8 +603,16 @@ struct SolverOpLowering : public SMTLoweringPattern<SolverOp> {
 
     // Create a solver instance, increase its reference counter, and store a
     // pointer to it in the global variable.
-    Value solver = buildCall(rewriter, loc, "Z3_mk_solver", ptrToPtrFunc, ctx)
-                       ->getResult(0);
+    Value solver;
+    if (logic) {
+      auto logicStr = buildString(rewriter, loc, logic.value());
+      solver = buildCall(rewriter, loc, "Z3_mk_solver_for_logic",
+                         ptrPtrToPtrFunc, {ctx, logicStr})
+                   ->getResult(0);
+    } else {
+      solver = buildCall(rewriter, loc, "Z3_mk_solver", ptrToPtrFunc, ctx)
+                   ->getResult(0);
+    }
     buildCall(rewriter, loc, "Z3_solver_inc_ref", ptrPtrToVoidFunc,
               {ctx, solver});
     Value solverAddr =
@@ -1449,6 +1469,35 @@ void circt::populateSMTToZ3LLVMConversionPatterns(
 void LowerSMTToZ3LLVMPass::runOnOperation() {
   LowerSMTToZ3LLVMOptions options;
   options.debug = debug;
+
+  // Check that the lowering is possible
+  // Specifically, check that the use of set-logic ops is valid for z3
+  auto setLogicCheck = getOperation().walk([&](SolverOp solverOp)
+                                               -> WalkResult {
+    // Check that solver ops only contain one set-logic op and that they're at
+    // the start of the body
+    auto setLogicOps = solverOp.getBodyRegion().getOps<smt::SetLogicOp>();
+    auto numSetLogicOps = std::distance(setLogicOps.begin(), setLogicOps.end());
+    if (numSetLogicOps > 1) {
+      return solverOp.emitError(
+          "multiple set-logic operations found in one solver operation - Z3 "
+          "only supports setting the logic once");
+    }
+    if (numSetLogicOps == 1)
+      // Check the only ops before the set-logic op are ConstantLike
+      for (auto &blockOp : solverOp.getBodyRegion().getOps()) {
+        if (isa<smt::SetLogicOp>(blockOp))
+          break;
+        if (!blockOp.hasTrait<OpTrait::ConstantLike>()) {
+          return solverOp.emitError("set-logic operation must be the first "
+                                    "non-constant operation in a solver "
+                                    "operation");
+        }
+      }
+    return WalkResult::advance();
+  });
+  if (setLogicCheck.wasInterrupted())
+    return signalPassFailure();
 
   // Set up the type converter
   LLVMTypeConverter converter(&getContext());

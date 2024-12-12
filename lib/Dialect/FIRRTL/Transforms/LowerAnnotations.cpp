@@ -311,6 +311,72 @@ static LogicalResult applyConventionAnno(const AnnoPathValue &target,
   return error() << "can only target to a module or extmodule";
 }
 
+static LogicalResult applyBodyTypeLoweringAnno(const AnnoPathValue &target,
+                                               DictionaryAttr anno,
+                                               ApplyState &state) {
+  auto *op = target.ref.getOp();
+  auto loc = op->getLoc();
+  auto error = [&]() {
+    auto diag = mlir::emitError(loc);
+    diag << typeLoweringAnnoClass;
+    return diag;
+  };
+
+  auto opTarget = dyn_cast<OpAnnoTarget>(target.ref);
+  if (!opTarget)
+    return error() << "must target a module object";
+
+  if (!target.isLocal())
+    return error() << "must be local";
+
+  auto moduleOp = dyn_cast<FModuleOp>(op);
+
+  if (!moduleOp)
+    return error() << "can only target to a module";
+
+  auto conventionStrAttr =
+      tryGetAs<StringAttr>(anno, anno, "convention", loc, conventionAnnoClass);
+
+  if (!conventionStrAttr)
+    return failure();
+
+  auto conventionStr = conventionStrAttr.getValue();
+  auto conventionOpt = parseConvention(conventionStr);
+  if (!conventionOpt)
+    return error() << "unknown convention " << conventionStr;
+
+  auto convention = *conventionOpt;
+
+  if (convention == Convention::Internal)
+    // Convention is internal by default so there is nothing to change
+    return success();
+
+  auto conventionAttr = ConventionAttr::get(op->getContext(), convention);
+
+  // `includeHierarchy` only valid in BodyTypeLowering.
+  bool includeHierarchy = false;
+  if (auto includeHierarchyAttr = tryGetAs<BoolAttr>(
+          anno, anno, "includeHierarchy", loc, conventionAnnoClass))
+    includeHierarchy = includeHierarchyAttr.getValue();
+
+  if (includeHierarchy) {
+    // If includeHierarchy is true, update the convention for all modules in
+    // the hierarchy.
+    for (auto *node :
+         llvm::post_order(state.instancePathCache.instanceGraph[moduleOp])) {
+      if (!node)
+        continue;
+      if (auto fmodule = dyn_cast<FModuleOp>(*node->getModule()))
+        fmodule->setAttr("body_type_lowering", conventionAttr);
+    }
+  } else {
+    // Update the convention.
+    moduleOp->setAttr("body_type_lowering", conventionAttr);
+  }
+
+  return success();
+}
+
 static LogicalResult applyModulePrefixAnno(const AnnoPathValue &target,
                                            DictionaryAttr anno,
                                            ApplyState &state) {
@@ -553,13 +619,11 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
     {memTapBlackboxClass, {stdResolve, applyWithoutTarget<true>}},
     // Miscellaneous Annotations
     {conventionAnnoClass, {stdResolve, applyConventionAnno}},
+    {typeLoweringAnnoClass, {stdResolve, applyBodyTypeLoweringAnno}},
     {dontTouchAnnoClass,
      {stdResolve, applyWithoutTarget<true, true, WireOp, NodeOp, RegOp,
                                      RegResetOp, InstanceOp, MemOp, CombMemOp,
                                      MemoryPortOp, SeqMemOp>}},
-    {prefixModulesAnnoClass,
-     {stdResolve,
-      applyWithoutTarget<true, FModuleOp, FExtModuleOp, InstanceOp>}},
     {modulePrefixAnnoClass, {stdResolve, applyModulePrefixAnno}},
     {dutAnnoClass, {stdResolve, applyDUTAnno}},
     {extractSeqMemsAnnoClass, NoTargetAnnotation},
@@ -598,7 +662,6 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
     {testBenchDirAnnoClass, NoTargetAnnotation},
     {testHarnessHierAnnoClass, NoTargetAnnotation},
     {testHarnessPathAnnoClass, NoTargetAnnotation},
-    {prefixInterfacesAnnoClass, NoTargetAnnotation},
     {extractAssertAnnoClass, NoTargetAnnotation},
     {extractAssumeAnnoClass, NoTargetAnnotation},
     {extractCoverageAnnoClass, NoTargetAnnotation},

@@ -30,7 +30,14 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/LogicalResult.h"
+#include "llvm/Support/raw_os_ostream.h"
+#include "llvm/Support/raw_ostream.h"
+#include <algorithm>
+#include <filesystem>
+#include <fstream>
 
+#include <locale>
+#include <numeric>
 #include <variant>
 
 namespace circt {
@@ -266,6 +273,14 @@ public:
 /// Iterate through the operations of a source function and instantiate
 /// components or primitives based on the type of the operations.
 class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
+public:
+  BuildOpGroups(MLIRContext *context, LogicalResult &resRef,
+                calyx::PatternApplicationState &patternState,
+                DenseMap<mlir::func::FuncOp, calyx::ComponentOp> &map,
+                calyx::CalyxLoweringState &state,
+                mlir::Pass::Option<std::string> &writeJsonOpt)
+      : FuncOpPartialLoweringPattern(context, resRef, patternState, map, state),
+        writeJson(writeJsonOpt) {}
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
@@ -283,7 +298,7 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                              scf::ParallelOp, scf::ReduceOp,
                              /// memref
                              memref::AllocOp, memref::AllocaOp, memref::LoadOp,
-                             memref::StoreOp,
+                             memref::StoreOp, memref::GetGlobalOp,
                              /// standard arithmetic
                              AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp,
                              AndIOp, XOrIOp, OrIOp, ExtUIOp, ExtSIOp, TruncIOp,
@@ -306,10 +321,32 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                                  : WalkResult::interrupt();
     });
 
+    if (!writeJson.empty()) {
+      if (auto fileLoc = dyn_cast<mlir::FileLineColLoc>(funcOp->getLoc())) {
+        std::string filename = fileLoc.getFilename().str();
+        std::filesystem::path path(filename);
+        std::string jsonFileName = writeJson.append(".json");
+        auto outFileName = path.parent_path().append(jsonFileName);
+        std::ofstream outFile(outFileName);
+
+        if (!outFile.is_open()) {
+          llvm::errs() << "Unable to open file: " << outFileName.string()
+                       << " for writing\n";
+          return failure();
+        }
+        llvm::raw_os_ostream llvmOut(outFile);
+        llvm::json::OStream jsonOS(llvmOut, 2);
+        jsonOS.value(getState<ComponentLoweringState>().getExtMemData());
+        jsonOS.flush();
+        outFile.close();
+      }
+    }
+
     return success(opBuiltSuccessfully);
   }
 
 private:
+  mlir::Pass::Option<std::string> &writeJson;
   /// Op builder specializations.
   LogicalResult buildOp(PatternRewriter &rewriter, scf::YieldOp yieldOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter,
@@ -341,6 +378,8 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, IndexCastOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::AllocOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::AllocaOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        memref::GetGlobalOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::LoadOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::StoreOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, scf::WhileOp whileOp) const;
@@ -962,6 +1001,83 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
                     IntegerAttr::get(rewriter.getI1Type(), llvm::APInt(1, 1)));
   componentState.registerMemoryInterface(allocOp.getResult(),
                                          calyx::MemoryInterface(memoryOp));
+
+  unsigned elmTyBitWidth = memtype.getElementTypeBitWidth();
+  assert(elmTyBitWidth <= 64 && "element bitwidth should not exceed 64");
+  bool isFloat = !memtype.getElementType().isInteger();
+
+  auto shape = allocOp.getType().getShape();
+  int totalSize =
+      std::reduce(shape.begin(), shape.end(), 1, std::multiplies<int>());
+  // The `totalSize <= 1` check is a hack to:
+  // https://github.com/llvm/circt/pull/2661, where a multi-dimensional memory
+  // whose size in some dimension equals 1, e.g. memref<1x1x1x1xi32>, will be
+  // collapsed to `memref<1xi32>` with `totalSize == 1`. While the above case is
+  // a trivial fix, Calyx expects 1-dimensional memories in general:
+  // https://github.com/calyxir/calyx/issues/907
+  if (!(shape.size() <= 1 || totalSize <= 1)) {
+    allocOp.emitError("input memory dimension must be empty or one.");
+    return failure();
+  }
+
+  std::vector<uint64_t> flattenedVals(totalSize, 0);
+  if (isa<memref::GetGlobalOp>(allocOp)) {
+    auto getGlobalOp = cast<memref::GetGlobalOp>(allocOp);
+    auto *symbolTableOp =
+        getGlobalOp->template getParentWithTrait<mlir::OpTrait::SymbolTable>();
+    auto globalOp = dyn_cast_or_null<memref::GlobalOp>(
+        SymbolTable::lookupSymbolIn(symbolTableOp, getGlobalOp.getNameAttr()));
+    // Flatten the values in the attribute
+    auto cstAttr = llvm::dyn_cast_or_null<DenseElementsAttr>(
+        globalOp.getConstantInitValue());
+    int sizeCount = 0;
+    for (auto attr : cstAttr.template getValues<Attribute>()) {
+      assert((isa<mlir::FloatAttr, mlir::IntegerAttr>(attr)) &&
+             "memory attributes must be float or int");
+      if (auto fltAttr = dyn_cast<mlir::FloatAttr>(attr)) {
+        flattenedVals[sizeCount++] =
+            bit_cast<uint64_t>(fltAttr.getValueAsDouble());
+      } else {
+        auto intAttr = dyn_cast<mlir::IntegerAttr>(attr);
+        APInt value = intAttr.getValue();
+        flattenedVals[sizeCount++] = *value.getRawData();
+      }
+    }
+
+    rewriter.eraseOp(globalOp);
+  }
+
+  llvm::json::Array result;
+  result.reserve(std::max(static_cast<int>(shape.size()), 1));
+
+  Type elemType = memtype.getElementType();
+  bool isSigned =
+      !elemType.isSignlessInteger() && !elemType.isUnsignedInteger();
+  for (uint64_t bitValue : flattenedVals) {
+    llvm::json::Value value = 0;
+    if (isFloat) {
+      // We cast to `double` and let downstream calyx to deal with the actual
+      // value's precision handling.
+      value = bit_cast<double>(bitValue);
+    } else {
+      APInt apInt(/*numBits=*/elmTyBitWidth, bitValue, isSigned,
+                  /*implicitTrunc=*/true);
+      // The conditional ternary operation will cause the `value` to interpret
+      // the underlying data as unsigned regardless `isSigned` or not.
+      if (isSigned)
+        value = static_cast<int64_t>(apInt.getSExtValue());
+      else
+        value = apInt.getZExtValue();
+    }
+    result.push_back(std::move(value));
+  }
+
+  componentState.setDataField(memoryOp.getName(), result);
+  std::string numType =
+      memtype.getElementType().isInteger() ? "bitnum" : "ieee754_float";
+  componentState.setFormat(memoryOp.getName(), numType, isSigned,
+                           elmTyBitWidth);
+
   return success();
 }
 
@@ -973,6 +1089,12 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      memref::AllocaOp allocOp) const {
   return buildAllocOp(getState<ComponentLoweringState>(), rewriter, allocOp);
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     memref::GetGlobalOp getGlobalOp) const {
+  return buildAllocOp(getState<ComponentLoweringState>(), rewriter,
+                      getGlobalOp);
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
@@ -2644,7 +2766,7 @@ void SCFToCalyxPass::runOnOperation() {
   /// having a distinct group for each operation, groups are analogous to SSA
   /// values in the source program.
   addOncePattern<BuildOpGroups>(loweringPatterns, patternState, funcMap,
-                                *loweringState);
+                                *loweringState, writeJsonOpt);
 
   /// This pattern traverses the CFG of the program and generates a control
   /// schedule based on the calyx::GroupOp's which were registered for each

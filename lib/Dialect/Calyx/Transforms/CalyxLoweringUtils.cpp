@@ -318,7 +318,7 @@ BasicLoopInterface::~BasicLoopInterface() = default;
 
 ComponentLoweringStateInterface::ComponentLoweringStateInterface(
     calyx::ComponentOp component)
-    : component(component) {}
+    : component(component), extMemData(llvm::json::Object{}) {}
 
 ComponentLoweringStateInterface::~ComponentLoweringStateInterface() = default;
 

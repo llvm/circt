@@ -191,3 +191,14 @@ hw.module @Top() {
   // expected-error @+1 {{bundles must have exactly one use}}
   %a = hw.instance "src" @Source() -> (a: !bundleType)
 }
+
+// -----
+
+hw.module @wrap_multi_unwrap(in %a_data: i8, in %a_valid: i1, out a_ready: i1) {
+  // expected-error @+1 {{'esi.wrap.vr' op only supports zero or one use}}
+  %a_chan, %a_ready = esi.wrap.vr %a_data, %a_valid : i8
+  %true = hw.constant true
+  %ap_data, %ap_valid = esi.unwrap.vr %a_chan, %true : i8
+  %ab_data, %ab_valid = esi.unwrap.vr %a_chan, %true : i8
+  hw.output %a_ready : i1
+}
