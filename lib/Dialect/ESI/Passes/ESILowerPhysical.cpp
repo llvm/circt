@@ -12,8 +12,10 @@
 
 #include "../PassDetails.h"
 
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
 
@@ -75,6 +77,64 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
 
   // Replace the buffer.
   rewriter.replaceOp(buffer, input);
+  return success();
+}
+
+namespace {
+/// Lower `ChannelBufferOp`s, breaking out the various options. For now, just
+/// replace with the specified number of pipeline stages (since that's the only
+/// option).
+struct FIFOLowering : public OpConversionPattern<FIFOOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FIFOOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final;
+};
+} // anonymous namespace
+
+LogicalResult
+FIFOLowering::matchAndRewrite(FIFOOp op, OpAdaptor adaptor,
+                              ConversionPatternRewriter &rewriter) const {
+  auto loc = op.getLoc();
+  auto outputType = op.getType();
+  BackedgeBuilder bb(rewriter, loc);
+  auto i1 = rewriter.getI1Type();
+  auto c1 = rewriter.create<hw::ConstantOp>(loc, rewriter.getI1Type(),
+                                            rewriter.getBoolAttr(true));
+  if (op.getInput().getType().getDataDelay() != 0)
+    return op.emitOpError(
+        "currently only supports input channels with zero data delay");
+
+  Backedge inputEn = bb.get(i1);
+  auto unwrapPull = rewriter.create<UnwrapFIFOOp>(loc, op.getInput(), inputEn);
+
+  Backedge outputRdEn = bb.get(i1);
+  auto seqFifo = rewriter.create<seq::FIFOOp>(
+      loc, outputType.getInner(), i1, i1, Type(), Type(), unwrapPull.getData(),
+      outputRdEn, inputEn, op.getClk(), op.getRst(), op.getDepthAttr(),
+      rewriter.getI64IntegerAttr(outputType.getDataDelay()), IntegerAttr(),
+      IntegerAttr());
+  auto inputNotEmpty =
+      rewriter.create<comb::XorOp>(loc, unwrapPull.getEmpty(), c1);
+  inputNotEmpty->setAttr("sv.namehint",
+                         rewriter.getStringAttr("inputNotEmpty"));
+  auto seqFifoNotFull =
+      rewriter.create<comb::XorOp>(loc, seqFifo.getFull(), c1);
+  seqFifoNotFull->setAttr("sv.namehint",
+                          rewriter.getStringAttr("seqFifoNotFull"));
+  inputEn.setValue(
+      rewriter.create<comb::AndOp>(loc, inputNotEmpty, seqFifoNotFull));
+  static_cast<Value>(inputEn).getDefiningOp()->setAttr(
+      "sv.namehint", rewriter.getStringAttr("inputEn"));
+
+  auto output =
+      rewriter.create<WrapFIFOOp>(loc, mlir::TypeRange{outputType, i1},
+                                  seqFifo.getOutput(), seqFifo.getEmpty());
+  outputRdEn.setValue(output.getRden());
+
+  rewriter.replaceOp(op, output.getChanOutput());
   return success();
 }
 
@@ -186,13 +246,12 @@ void ESIToPhysicalPass::runOnOperation() {
   // Set up a conversion and give it a set of laws.
   ConversionTarget target(getContext());
   target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
-  target.addIllegalOp<ChannelBufferOp>();
-  target.addIllegalOp<ESIPureModuleOp>();
+  target.addIllegalOp<ChannelBufferOp, ESIPureModuleOp, FIFOOp>();
 
   // Add all the conversion patterns.
   RewritePatternSet patterns(&getContext());
-  patterns.insert<ChannelBufferLowering>(&getContext());
-  patterns.insert<PureModuleLowering>(&getContext());
+  patterns.insert<ChannelBufferLowering, PureModuleLowering, FIFOLowering>(
+      &getContext());
 
   // Run the conversion.
   if (failed(
