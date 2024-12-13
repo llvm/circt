@@ -19,6 +19,7 @@
 #include "circt/Support/Namespace.h"
 #include "mlir/Dialect/Index/IR/IndexDialect.h"
 #include "mlir/Dialect/Index/IR/IndexOps.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/Support/Debug.h"
@@ -576,10 +577,20 @@ private:
 /// removed.
 enum class DeletionKind { Keep, Delete };
 
+/// A collection of things to be passed to the visitor functions
+struct VisitorInfo {
+  /// The visitor function can set this to a block that it wants elaborated.
+  /// Once it is fully elaborated, the visitor function is called again. This
+  /// can occur repeatedly until this field is set to 'nullptr'.
+  Block *toElaborate = nullptr;
+};
+
 /// Interprets the IR to perform and lower the represented randomizations.
-class Elaborator : public RTGOpVisitor<Elaborator, FailureOr<DeletionKind>> {
+class Elaborator
+    : public RTGOpVisitor<Elaborator, FailureOr<DeletionKind>, VisitorInfo &> {
 public:
-  using RTGBase = RTGOpVisitor<Elaborator, FailureOr<DeletionKind>>;
+  using RTGBase =
+      RTGOpVisitor<Elaborator, FailureOr<DeletionKind>, VisitorInfo &>;
   using RTGBase::visitOp;
   using RTGBase::visitRegisterOp;
 
@@ -597,21 +608,21 @@ public:
   }
 
   /// Print a nice error message for operations we don't support yet.
-  FailureOr<DeletionKind> visitUnhandledOp(Operation *op) {
+  FailureOr<DeletionKind> visitUnhandledOp(Operation *op, VisitorInfo &info) {
     return op->emitOpError("elaboration not supported");
   }
 
-  FailureOr<DeletionKind> visitExternalOp(Operation *op) {
+  FailureOr<DeletionKind> visitExternalOp(Operation *op, VisitorInfo &info) {
     // TODO: we only have this to be able to write tests for this pass without
     // having to add support for more operations for now, so it should be
     // removed once it is not necessary anymore for writing tests
     if (op->use_empty())
       return DeletionKind::Keep;
 
-    return visitUnhandledOp(op);
+    return visitUnhandledOp(op, info);
   }
 
-  FailureOr<DeletionKind> visitOp(SequenceClosureOp op) {
+  FailureOr<DeletionKind> visitOp(SequenceClosureOp op, VisitorInfo &info) {
     SmallVector<ElaboratorValue *> args;
     for (auto arg : op.getArgs())
       args.push_back(state.at(arg));
@@ -623,11 +634,11 @@ public:
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind> visitOp(InvokeSequenceOp op) {
+  FailureOr<DeletionKind> visitOp(InvokeSequenceOp op, VisitorInfo &info) {
     return DeletionKind::Keep;
   }
 
-  FailureOr<DeletionKind> visitOp(SetCreateOp op) {
+  FailureOr<DeletionKind> visitOp(SetCreateOp op, VisitorInfo &info) {
     SetVector<ElaboratorValue *> set;
     for (auto val : op.getElements())
       set.insert(state.at(val));
@@ -637,7 +648,7 @@ public:
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind> visitOp(SetSelectRandomOp op) {
+  FailureOr<DeletionKind> visitOp(SetSelectRandomOp op, VisitorInfo &info) {
     auto *set = cast<SetValue>(state.at(op.getSet()));
 
     size_t selected;
@@ -653,7 +664,7 @@ public:
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind> visitOp(SetDifferenceOp op) {
+  FailureOr<DeletionKind> visitOp(SetDifferenceOp op, VisitorInfo &info) {
     auto original = cast<SetValue>(state.at(op.getOriginal()))->getSet();
     auto diff = cast<SetValue>(state.at(op.getDiff()))->getSet();
 
@@ -665,7 +676,7 @@ public:
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind> visitOp(SetUnionOp op) {
+  FailureOr<DeletionKind> visitOp(SetUnionOp op, VisitorInfo &info) {
     SetVector<ElaboratorValue *> result;
     for (auto set : op.getSets())
       result.set_union(cast<SetValue>(state.at(set))->getSet());
@@ -675,14 +686,14 @@ public:
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind> visitOp(SetSizeOp op) {
+  FailureOr<DeletionKind> visitOp(SetSizeOp op, VisitorInfo &info) {
     auto size = cast<SetValue>(state.at(op.getSet()))->getSet().size();
     auto sizeAttr = IntegerAttr::get(IndexType::get(op->getContext()), size);
     internalizeResult<AttributeValue>(op.getResult(), sizeAttr);
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind> visitOp(BagCreateOp op) {
+  FailureOr<DeletionKind> visitOp(BagCreateOp op, VisitorInfo &info) {
     MapVector<ElaboratorValue *, uint64_t> bag;
     for (auto [val, multiple] :
          llvm::zip(op.getElements(), op.getMultiples())) {
@@ -698,7 +709,7 @@ public:
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind> visitOp(BagSelectRandomOp op) {
+  FailureOr<DeletionKind> visitOp(BagSelectRandomOp op, VisitorInfo &info) {
     auto *bag = cast<BagValue>(state.at(op.getBag()));
 
     SmallVector<std::pair<ElaboratorValue *, uint32_t>> prefixSum;
@@ -725,7 +736,7 @@ public:
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind> visitOp(BagDifferenceOp op) {
+  FailureOr<DeletionKind> visitOp(BagDifferenceOp op, VisitorInfo &info) {
     auto *original = cast<BagValue>(state.at(op.getOriginal()));
     auto *diff = cast<BagValue>(state.at(op.getDiff()));
 
@@ -751,7 +762,7 @@ public:
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind> visitOp(BagUnionOp op) {
+  FailureOr<DeletionKind> visitOp(BagUnionOp op, VisitorInfo &info) {
     MapVector<ElaboratorValue *, uint64_t> result;
     for (auto bag : op.getBags()) {
       auto *val = cast<BagValue>(state.at(bag));
@@ -764,21 +775,87 @@ public:
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind> visitOp(BagUniqueSizeOp op) {
+  FailureOr<DeletionKind> visitOp(BagUniqueSizeOp op, VisitorInfo &info) {
     auto size = cast<BagValue>(state.at(op.getBag()))->getBag().size();
     auto sizeAttr = IntegerAttr::get(IndexType::get(op->getContext()), size);
     internalizeResult<AttributeValue>(op.getResult(), sizeAttr);
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind> visitOp(index::AddOp op) {
+  FailureOr<DeletionKind> visitOp(scf::IfOp op, VisitorInfo &info) {
+    bool cond = cast<BoolValue>(state.at(op.getCondition()))->getBool();
+    if (!info.toElaborate) {
+      info.toElaborate = cond ? op.thenBlock() : op.elseBlock();
+      return info.toElaborate ? DeletionKind::Keep : DeletionKind::Delete;
+    }
+
+    for (auto [res, out] : llvm::zip(
+             op.getResults(), info.toElaborate->getTerminator()->getOperands()))
+      state[res] = state.at(out);
+
+    info.toElaborate = nullptr;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(scf::ForOp op, VisitorInfo &info) {
+    auto *lowerBound = dyn_cast<IndexValue>(state.at(op.getLowerBound()));
+    auto *step = dyn_cast<IndexValue>(state.at(op.getStep()));
+    auto *upperBound = dyn_cast<IndexValue>(state.at(op.getUpperBound()));
+
+    if (!lowerBound || !step || !upperBound)
+      return op->emitOpError("can only elaborate index type iterator");
+
+    // The loop never executes the body
+    if (lowerBound->getIndex() >= upperBound->getIndex()) {
+      for (auto [res, iterArg] : llvm::zip(op->getResults(), op.getInitArgs()))
+        state[res] = state.at(iterArg);
+      return DeletionKind::Delete;
+    }
+
+    // First iteration
+    if (!info.toElaborate) {
+      state[op.getInductionVar()] = lowerBound;
+      for (auto [iterArg, initArg] :
+           llvm::zip(op.getRegionIterArgs(), op.getInitArgs()))
+        state[iterArg] = state.at(initArg);
+      info.toElaborate = op.getBody();
+      return DeletionKind::Keep;
+    }
+
+    // Last time was the last execution
+    size_t idx = cast<IndexValue>(state.at(op.getInductionVar()))->getIndex();
+    if (idx + step->getIndex() >= upperBound->getIndex()) {
+      for (auto [res, iterArg] : llvm::zip(
+               op->getResults(), op.getBody()->getTerminator()->getOperands()))
+        state[res] = state.at(iterArg);
+
+      info.toElaborate = nullptr;
+      return DeletionKind::Delete;
+    }
+
+    // We are doing a regular iteration
+    internalizeResult<IndexValue>(op.getInductionVar(), idx + step->getIndex());
+    for (auto [iterArg, prevIterArg] :
+         llvm::zip(op.getRegionIterArgs(),
+                   info.toElaborate->getTerminator()->getOperands()))
+      state[iterArg] = state.at(prevIterArg);
+
+    info.toElaborate = op.getBody();
+    return DeletionKind::Keep;
+  }
+
+  FailureOr<DeletionKind> visitOp(scf::YieldOp op, VisitorInfo &info) {
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(index::AddOp op, VisitorInfo &info) {
     size_t lhs = cast<IndexValue>(state.at(op.getLhs()))->getIndex();
     size_t rhs = cast<IndexValue>(state.at(op.getRhs()))->getIndex();
     internalizeResult<IndexValue>(op.getResult(), lhs + rhs);
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind> visitOp(index::CmpOp op) {
+  FailureOr<DeletionKind> visitOp(index::CmpOp op, VisitorInfo &info) {
     size_t lhs = cast<IndexValue>(state.at(op.getLhs()))->getIndex();
     size_t rhs = cast<IndexValue>(state.at(op.getRhs()))->getIndex();
     bool result;
@@ -808,7 +885,7 @@ public:
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind> dispatchOpVisitor(Operation *op) {
+  FailureOr<DeletionKind> dispatchOpVisitor(Operation *op, VisitorInfo &info) {
     if (op->hasTrait<OpTrait::ConstantLike>()) {
       SmallVector<OpFoldResult, 1> result;
       auto foldResult = op->fold(result);
@@ -832,35 +909,41 @@ public:
     }
 
     return TypeSwitch<Operation *, FailureOr<DeletionKind>>(op)
-        .Case<index::AddOp, index::CmpOp>([&](auto op) { return visitOp(op); })
-        .Default([&](Operation *op) { return RTGBase::dispatchOpVisitor(op); });
+        .Case<
+            // Index ops
+            index::AddOp, index::CmpOp,
+            // SCF ops
+            scf::IfOp, scf::ForOp, scf::YieldOp>(
+            [&](auto op) { return visitOp(op, info); })
+        .Default([&](Operation *op) {
+          return RTGBase::dispatchOpVisitor(op, info);
+        });
   }
 
-  LogicalResult elaborate(SequenceOp family, SequenceOp dest,
-                          ArrayRef<ElaboratorValue *> args) {
-    LLVM_DEBUG(llvm::dbgs() << "\n=== Elaborating " << family.getOperationName()
-                            << " @" << family.getSymName() << " into @"
-                            << dest.getSymName() << "\n\n");
+  // NOLINTNEXTLINE(misc-no-recursion)
+  LogicalResult elaborateBlock(Block *block, OpBuilder &builder,
+                               IRMapping &mapping) {
+    for (auto &op : *block) {
+      VisitorInfo info;
+      FailureOr<DeletionKind> result;
+      do {
+        result = dispatchOpVisitor(&op, info);
+        if (failed(result))
+          return failure();
 
-    // Reduce max memory consumption and make sure the values cannot be accessed
-    // anymore because we deleted the ops above. Clearing should lead to better
-    // performance than having them as a local here and pass via function
-    // argument.
-    state.clear();
-    materializer.reset(dest.getBody());
-    IRMapping mapping;
+        if (op.getNumRegions() != 0 && info.toElaborate == nullptr &&
+            *result == DeletionKind::Keep)
+          return op.emitOpError(
+              "ops with nested regions must be elaborated away");
 
-    for (auto [arg, elabArg] :
-         llvm::zip(family.getBody()->getArguments(), args))
-      state[arg] = elabArg;
-
-    for (auto &op : *family.getBody()) {
-      if (op.getNumRegions() != 0)
-        return op.emitOpError("nested regions not supported");
-
-      auto result = dispatchOpVisitor(&op);
-      if (failed(result))
-        return failure();
+        // TODO: ideally use an itnerative approach, for now we just assume that
+        // we don't have very deep nestings
+        if (info.toElaborate) {
+          IRMapping nestedMapping;
+          if (failed(elaborateBlock(info.toElaborate, builder, nestedMapping)))
+            return failure();
+        }
+      } while (info.toElaborate);
 
       if (*result == DeletionKind::Keep) {
         for (auto &operand : op.getOpOperands()) {
@@ -882,7 +965,6 @@ public:
           mapping.map(operand.get(), val);
         }
 
-        OpBuilder builder = OpBuilder::atBlockEnd(dest.getBody());
         builder.clone(op, mapping);
       }
 
@@ -903,6 +985,28 @@ public:
     return success();
   }
 
+  LogicalResult elaborate(SequenceOp family, SequenceOp dest,
+                          ArrayRef<ElaboratorValue *> args) {
+    LLVM_DEBUG(llvm::dbgs() << "\n=== Elaborating " << family.getOperationName()
+                            << " @" << family.getSymName() << " into @"
+                            << dest.getSymName() << "\n\n");
+
+    // Reduce max memory consumption and make sure the values cannot be accessed
+    // anymore because we deleted the ops above. Clearing should lead to better
+    // performance than having them as a local here and pass via function
+    // argument.
+    state.clear();
+    materializer.reset(dest.getBody());
+    IRMapping mapping;
+
+    for (auto [arg, elabArg] :
+         llvm::zip(family.getBody()->getArguments(), args))
+      state[arg] = elabArg;
+
+    OpBuilder builder = OpBuilder::atBlockEnd(dest.getBody());
+    return elaborateBlock(family.getBody(), builder, mapping);
+  }
+
   template <typename OpTy>
   LogicalResult elaborateInPlace(OpTy op) {
     LLVM_DEBUG(llvm::dbgs()
@@ -918,12 +1022,27 @@ public:
 
     SmallVector<Operation *> toDelete;
     for (auto &op : *op.getBody()) {
-      if (op.getNumRegions() != 0)
-        return op.emitOpError("nested regions not supported");
+      VisitorInfo info;
+      FailureOr<DeletionKind> result;
+      OpBuilder builder(&op);
+      do {
+        result = dispatchOpVisitor(&op, info);
+        if (failed(result))
+          return failure();
 
-      auto result = dispatchOpVisitor(&op);
-      if (failed(result))
-        return failure();
+        if (op.getNumRegions() != 0 && info.toElaborate == nullptr &&
+            *result == DeletionKind::Keep)
+          return op.emitOpError(
+              "ops with nested regions must be elaborated away");
+
+        // TODO: maybe worth asking the visitor if this is the last time we
+        // evaluate that block and could thus inline it and elaborate in-place.
+        if (info.toElaborate) {
+          IRMapping mapping;
+          if (failed(elaborateBlock(info.toElaborate, builder, mapping)))
+            return failure();
+        }
+      } while (info.toElaborate);
 
       if (*result == DeletionKind::Keep) {
         for (auto &operand : op.getOpOperands()) {
