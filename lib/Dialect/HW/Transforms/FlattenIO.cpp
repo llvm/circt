@@ -116,70 +116,6 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
         externModules(externModules) {}
 
   LogicalResult
-  matchAndRewrite(hw::InstanceOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto referencedMod = op.getReferencedModuleNameAttr();
-    // If externModules is populated and this is an extern module instance,
-    // donot flatten it.
-    if (externModules->contains(referencedMod.getValue()))
-      return success();
-
-    auto loc = op.getLoc();
-    // Flatten the operands.
-    llvm::SmallVector<Value> convOperands;
-    for (auto operand : adaptor.getOperands()) {
-      if (auto structType = getStructType(operand.getType())) {
-        auto explodedStruct = rewriter.create<hw::StructExplodeOp>(
-            loc, getInnerTypes(structType), operand);
-        llvm::copy(explodedStruct.getResults(),
-                   std::back_inserter(convOperands));
-      } else {
-        convOperands.push_back(operand);
-      }
-    }
-
-    // Get the new module return type.
-    llvm::SmallVector<Type> newResultTypes;
-    for (auto oldResultType : op.getResultTypes()) {
-      if (auto structType = getStructType(oldResultType))
-        for (auto t : structType.getElements())
-          newResultTypes.push_back(t.type);
-      else
-        newResultTypes.push_back(oldResultType);
-    }
-
-    // Create the new instance with the flattened module, attributes will be
-    // adjusted later.
-    auto newInstance = rewriter.create<hw::InstanceOp>(
-        loc, newResultTypes, op.getInstanceNameAttr(),
-        FlatSymbolRefAttr::get(referencedMod), convOperands,
-        op.getArgNamesAttr(), op.getResultNamesAttr(), op.getParametersAttr(),
-        op.getInnerSymAttr(), op.getDoNotPrintAttr());
-
-    // re-create any structs in the result.
-    llvm::SmallVector<Value> convResults;
-    size_t oldResultCntr = 0;
-    for (size_t resIndex = 0; resIndex < newInstance.getNumResults();
-         ++resIndex) {
-      Type oldResultType = op.getResultTypes()[oldResultCntr];
-      if (auto structType = getStructType(oldResultType)) {
-        size_t nElements = structType.getElements().size();
-        auto implodedStruct = rewriter.create<hw::StructCreateOp>(
-            loc, structType,
-            newInstance.getResults().slice(resIndex, nElements));
-        convResults.push_back(implodedStruct.getResult());
-        resIndex += nElements - 1;
-      } else
-        convResults.push_back(newInstance.getResult(resIndex));
-
-      ++oldResultCntr;
-    }
-    rewriter.replaceOp(op, convResults);
-    convertedOps->insert(newInstance);
-    return success();
-  }
-
-  LogicalResult
   matchAndRewrite(hw::InstanceOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto referencedMod = op.getReferencedModuleNameAttr();
@@ -271,6 +207,16 @@ public:
       return success();
     });
 
+    // Materialize !hw.struct<a,b,...> to a, b, ... via. hw.explode. This
+    // situation may occur in case of hw.extern_module's with struct outputs.
+    addTargetMaterialization([](OpBuilder &builder, TypeRange resultTypes,
+                                ValueRange inputs, Location loc) {
+      if (inputs.size() != 1 && !isStructType(inputs[0].getType()))
+        return ValueRange();
+
+      auto explodeOp = builder.create<hw::StructExplodeOp>(loc, inputs[0]);
+      return ValueRange(explodeOp.getResults());
+    });
     addTargetMaterialization([](OpBuilder &builder, hw::StructType type,
                                 ValueRange inputs, Location loc) {
       auto result = builder.create<hw::StructCreateOp>(loc, type, inputs);
@@ -492,9 +438,12 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
     target.addDynamicallyLegalOp<hw::InstanceOp>([&](hw::InstanceOp op) {
       auto refName = op.getReferencedModuleName();
       return externModules.contains(refName) ||
-             llvm::none_of(op->getOperands(), [](auto operand) {
-               return isStructType(operand.getType());
-             });
+             (llvm::none_of(op->getOperands(),
+                            [](auto operand) {
+                              return isStructType(operand.getType());
+                            }) &&
+              llvm::none_of(op->getResultTypes(),
+                            [](auto result) { return isStructType(result); }));
     });
 
     DenseMap<Operation *, ArrayAttr> oldArgNames, oldResNames;
@@ -593,7 +542,7 @@ public:
   void runOnOperation() override {
     ModuleOp module = getOperation();
     if (!flattenExtern) {
-      // Record the extern modules, donot flatten them.
+      // Record the extern modules, do not flatten them.
       for (auto m : module.getOps<hw::HWModuleExternOp>())
         externModules.insert(m.getModuleName());
       if (flattenIO<hw::HWModuleOp, hw::HWModuleGeneratedOp>(
