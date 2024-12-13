@@ -335,7 +335,7 @@ public:
           return failure();
         }
         llvm::raw_os_ostream llvmOut(outFile);
-        llvm::json::OStream jsonOS(llvmOut, 2);
+        llvm::json::OStream jsonOS(llvmOut, /*IndentSize=*/2);
         jsonOS.value(getState<ComponentLoweringState>().getExtMemData());
         jsonOS.flush();
         outFile.close();
