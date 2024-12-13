@@ -26,6 +26,39 @@ using namespace circt;
 using namespace comb;
 
 //===----------------------------------------------------------------------===//
+// Utility Functions
+//===----------------------------------------------------------------------===//
+
+// Extract individual bits from a value
+static SmallVector<Value> extractBits(ConversionPatternRewriter &rewriter,
+                                      Value val) {
+  assert(val.getType().isInteger() && "expected integer");
+  auto width = val.getType().getIntOrFloatBitWidth();
+  SmallVector<Value> bits;
+  bits.reserve(width);
+
+  // Check if we can reuse concat operands
+  if (auto concat = val.getDefiningOp<comb::ConcatOp>()) {
+    if (concat.getNumOperands() == width &&
+        llvm::all_of(concat.getOperandTypes(), [](Type type) {
+          return type.getIntOrFloatBitWidth() == 1;
+        })) {
+      // Reverse the operands to match the bit order
+      bits.append(std::make_reverse_iterator(concat.getOperands().end()),
+                  std::make_reverse_iterator(concat.getOperands().begin()));
+      return bits;
+    }
+  }
+
+  // Extract individual bits
+  for (int64_t i = 0; i < width; ++i)
+    bits.push_back(
+        rewriter.createOrFold<comb::ExtractOp>(val.getLoc(), val, i, 1));
+
+  return bits;
+}
+
+//===----------------------------------------------------------------------===//
 // Conversion patterns
 //===----------------------------------------------------------------------===//
 
@@ -169,6 +202,87 @@ struct CombMuxOpConversion : OpConversionPattern<MuxOp> {
   }
 };
 
+struct CombAddOpConversion : OpConversionPattern<AddOp> {
+  using OpConversionPattern<AddOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(AddOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto inputs = adaptor.getInputs();
+    // Lower only when there are two inputs.
+    // Variadic operands must be lowered in a different pattern.
+    if (inputs.size() != 2)
+      return failure();
+
+    auto width = op.getType().getIntOrFloatBitWidth();
+    // Skip a zero width value.
+    if (width == 0) {
+      rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, op.getType(), 0);
+      return success();
+    }
+
+    // Implement a naive Ripple-carry full adder.
+    Value carry;
+
+    auto aBits = extractBits(rewriter, inputs[0]);
+    auto bBits = extractBits(rewriter, inputs[1]);
+    SmallVector<Value> results;
+    results.resize(width);
+    for (int64_t i = 0; i < width; ++i) {
+      SmallVector<Value> xorOperands = {aBits[i], bBits[i]};
+      if (carry)
+        xorOperands.push_back(carry);
+
+      // sum[i] = xor(carry[i-1], a[i], b[i])
+      // NOTE: The result is stored in reverse order.
+      results[width - i - 1] =
+          rewriter.create<comb::XorOp>(op.getLoc(), xorOperands, true);
+
+      // If this is the last bit, we are done.
+      if (i == width - 1) {
+        break;
+      }
+
+      // carry[i] = (carry[i-1] & (a[i] ^ b[i])) | (a[i] & b[i])
+      Value nextCarry = rewriter.create<comb::AndOp>(
+          op.getLoc(), ValueRange{aBits[i], bBits[i]}, true);
+      if (!carry) {
+        // This is the first bit, so the carry is the next carry.
+        carry = nextCarry;
+        continue;
+      }
+
+      auto aXnorB = rewriter.create<comb::XorOp>(
+          op.getLoc(), ValueRange{aBits[i], bBits[i]}, true);
+      auto andOp = rewriter.create<comb::AndOp>(
+          op.getLoc(), ValueRange{carry, aXnorB}, true);
+      carry = rewriter.create<comb::OrOp>(op.getLoc(),
+                                          ValueRange{andOp, nextCarry}, true);
+    }
+
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, results);
+    return success();
+  }
+};
+
+struct CombSubOpConversion : OpConversionPattern<SubOp> {
+  using OpConversionPattern<SubOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(SubOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto lhs = op.getLhs();
+    auto rhs = op.getRhs();
+    // Since `-rhs = ~rhs + 1` holds, rewrite `sub(lhs, rhs)` to:
+    // sub(lhs, rhs) => add(lhs, -rhs) => add(lhs, add(~rhs, 1))
+    // => add(lhs, ~rhs, 1)
+    auto notRhs = rewriter.create<aig::AndInverterOp>(op.getLoc(), rhs,
+                                                      /*invert=*/true);
+    auto one = rewriter.create<hw::ConstantOp>(op.getLoc(), op.getType(), 1);
+    rewriter.replaceOpWithNewOp<comb::AddOp>(op, ValueRange{lhs, notRhs, one},
+                                             true);
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -179,6 +293,8 @@ namespace {
 struct ConvertCombToAIGPass
     : public impl::ConvertCombToAIGBase<ConvertCombToAIGPass> {
   void runOnOperation() override;
+  using ConvertCombToAIGBase<ConvertCombToAIGPass>::ConvertCombToAIGBase;
+  using ConvertCombToAIGBase<ConvertCombToAIGPass>::additionalLegalOps;
 };
 } // namespace
 
@@ -187,8 +303,11 @@ static void populateCombToAIGConversionPatterns(RewritePatternSet &patterns) {
       // Bitwise Logical Ops
       CombAndOpConversion, CombOrOpConversion, CombXorOpConversion,
       CombMuxOpConversion,
+      // Arithmetic Ops
+      CombAddOpConversion, CombSubOpConversion,
       // Variadic ops that must be lowered to binary operations
-      CombLowerVariadicOp<XorOp>>(patterns.getContext());
+      CombLowerVariadicOp<XorOp>, CombLowerVariadicOp<AddOp>>(
+      patterns.getContext());
 }
 
 void ConvertCombToAIGPass::runOnOperation() {
@@ -196,8 +315,13 @@ void ConvertCombToAIGPass::runOnOperation() {
   target.addIllegalDialect<comb::CombDialect>();
   // Keep data movement operations like Extract, Concat and Replicate.
   target.addLegalOp<comb::ExtractOp, comb::ConcatOp, comb::ReplicateOp,
-                    hw::BitcastOp>();
+                    hw::BitcastOp, hw::ConstantOp>();
   target.addLegalDialect<aig::AIGDialect>();
+
+  // This is a test only option to add logical ops.
+  if (!additionalLegalOps.empty())
+    for (const auto &opName : additionalLegalOps)
+      target.addLegalOp(OperationName(opName, &getContext()));
 
   RewritePatternSet patterns(&getContext());
   populateCombToAIGConversionPatterns(patterns);
