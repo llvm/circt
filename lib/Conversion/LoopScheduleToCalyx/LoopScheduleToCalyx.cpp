@@ -727,8 +727,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      IndexCastOp op) const {
-  Type sourceType = calyx::convIndexType(rewriter, op.getOperand().getType());
-  Type targetType = calyx::convIndexType(rewriter, op.getResult().getType());
+  Type sourceType = calyx::normalizeType(rewriter, op.getOperand().getType());
+  Type targetType = calyx::normalizeType(rewriter, op.getResult().getType());
   unsigned targetBits = targetType.getIntOrFloatBitWidth();
   unsigned sourceBits = sourceType.getIntOrFloatBitWidth();
   LogicalResult res = success();
@@ -793,7 +793,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
         funcOpArgRewrites[arg.value()] = inPorts.size();
         inPorts.push_back(calyx::PortInfo{
             rewriter.getStringAttr(inName),
-            calyx::convIndexType(rewriter, arg.value().getType()),
+            calyx::normalizeType(rewriter, arg.value().getType()),
             calyx::Direction::Input,
             DictionaryAttr::get(rewriter.getContext(), {})});
       }
@@ -802,7 +802,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
       funcOpResultMapping[res.index()] = outPorts.size();
       outPorts.push_back(calyx::PortInfo{
           rewriter.getStringAttr("out" + std::to_string(res.index())),
-          calyx::convIndexType(rewriter, res.value()), calyx::Direction::Output,
+          calyx::normalizeType(rewriter, res.value()), calyx::Direction::Output,
           DictionaryAttr::get(rewriter.getContext(), {})});
     }
 

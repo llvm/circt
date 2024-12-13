@@ -440,7 +440,7 @@ module {
 
 // -----
 
-// Test lowering SelectOp with floating point operands
+// Test lowering SelectOp and CmpFOp with floating point operands
 
 // CHECK:    %std_mux_1.cond, %std_mux_1.tru, %std_mux_1.fal, %std_mux_1.out = calyx.std_mux @std_mux_1 : i1, i64, i64, i64
 // CHECK-DAG:    %unordered_port_1_reg.in, %unordered_port_1_reg.write_en, %unordered_port_1_reg.clk, %unordered_port_1_reg.reset, %unordered_port_1_reg.out, %unordered_port_1_reg.done = calyx.register @unordered_port_1_reg : i1, i1, i1, i1, i1, i1
@@ -507,3 +507,26 @@ module {
   }
 }
 
+// Test SelectOp with signed integer type to signless integer type
+
+// -----
+
+// CHECK:    %std_mux_0.cond, %std_mux_0.tru, %std_mux_0.fal, %std_mux_0.out = calyx.std_mux @std_mux_0 : i1, i32, i32, i32
+// CHECK-DAG:    %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
+// CHECK:    calyx.wires {
+// CHECK:      calyx.group @ret_assign_0 {
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.in = %std_mux_0.out : i32
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.write_en = %true : i1
+// CHECK-DAG:        calyx.assign %std_mux_0.cond = %in2 : i1
+// CHECK-DAG:        calyx.assign %std_mux_0.tru = %in0 : i32
+// CHECK-DAG:        calyx.assign %std_mux_0.fal = %in1 : i32
+// CHECK-DAG:        calyx.group_done %ret_arg0_reg.done : i1
+// CHECK-DAG:      }
+// CHECK-DAG:    }
+
+module {
+  func.func @main(%true : si32, %false: si32, %cond: i1) -> si32 {
+    %res = "arith.select" (%cond, %true, %false) : (i1, si32, si32) -> si32
+    return %res : si32
+  }
+}
