@@ -58,6 +58,8 @@ static Value lowerVariadicAndInverterOp(AndInverterOp op, OperandRange operands,
                                    inverts.drop_front(firstHalf), rewriter);
     return rewriter.create<AndInverterOp>(op.getLoc(), lhs, rhs);
   }
+
+  return Value();
 }
 
 struct VariadicOpConversion : OpRewritePattern<aig::AndInverterOp> {
