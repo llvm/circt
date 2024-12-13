@@ -11,7 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Sim/SimDialect.h"
+#include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Sim/SimAttributes.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -29,8 +31,8 @@ void SimDialect::initialize() {
 #define GET_OP_LIST
 #include "circt/Dialect/Sim/Sim.cpp.inc"
       >();
-
   registerTypes();
+  registerAttributes();
 }
 
 #include "circt/Dialect/Sim/SimDialect.cpp.inc"
@@ -40,8 +42,18 @@ Operation *SimDialect::materializeConstant(::mlir::OpBuilder &builder,
                                            ::mlir::Type type,
                                            ::mlir::Location loc) {
 
+  // Delegate non 'sim' types to the HW dialect materializer.
+  if (!isa<SimDialect>(type.getDialect()))
+    return builder.getContext()
+        ->getLoadedDialect<hw::HWDialect>()
+        ->materializeConstant(builder, value, type, loc);
+
   if (auto fmtStrType = llvm::dyn_cast<FormatStringType>(type))
     return builder.create<FormatLitOp>(loc, fmtStrType,
                                        llvm::cast<StringAttr>(value));
+
+  if (auto neverTriggerAttr = llvm::dyn_cast<NeverTriggerAttr>(value))
+    return builder.create<NeverOp>(loc, neverTriggerAttr.getType());
+
   return nullptr;
 }

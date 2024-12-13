@@ -10,6 +10,7 @@
 ##===----------------------------------------------------------------------===//
 
 add_circt_dialect_library(CIRCTSim
+  SimAttributes.cpp
   SimDialect.cpp
   SimOps.cpp
   SimTypes.cpp
@@ -21,6 +22,7 @@ add_circt_dialect_library(CIRCTSim
   CIRCTHW
   CIRCTSV
   MLIRSimIncGen
+  MLIRSimAttributesIncGen
 
   LINK_COMPONENTS
   Support

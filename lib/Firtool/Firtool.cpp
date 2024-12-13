@@ -14,6 +14,7 @@
 #include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
+#include "circt/Dialect/Sim/SimPasses.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
 #include "circt/Support/Passes.h"
 #include "circt/Transforms/Passes.h"
@@ -284,6 +285,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
 
   if (!opt.shouldDisableOptimization()) {
     auto &modulePM = pm.nest<hw::HWModuleOp>();
+    modulePM.addPass(sim::createSerializeTriggers());
     modulePM.addPass(mlir::createCSEPass());
     modulePM.addPass(createSimpleCanonicalizerPass());
   }
@@ -294,8 +296,9 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   // Check OM object fields.
   pm.addPass(om::createVerifyObjectFieldsPass());
 
+  auto &modulePM = pm.nest<hw::HWModuleOp>();
   // Run the verif op verification pass
-  pm.addNestedPass<hw::HWModuleOp>(verif::createVerifyClockedAssertLikePass());
+  modulePM.addPass(verif::createVerifyClockedAssertLikePass());
 
   return success();
 }
@@ -311,6 +314,13 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
         opt.shouldEtcDisableModuleInlining()));
 
   pm.addPass(seq::createExternalizeClockGatePass(opt.getClockGateOptions()));
+  pm.addPass(circt::createLowerTriggersToSV());
+  {
+    auto &modulePM = pm.nest<hw::HWModuleOp>();
+    modulePM.addPass(circt::createSCFToSV());
+    modulePM.addPass(circt::createLowerPrintsToSV(
+        LowerPrintsToSVOptions{/*printToStdErr*/ true}));
+  }
   pm.addPass(circt::createLowerSimToSVPass());
   pm.addPass(circt::createLowerSeqToSVPass(
       {/*disableRegRandomization=*/!opt.isRandomEnabled(

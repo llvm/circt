@@ -804,6 +804,51 @@ def LowerSimToSV: Pass<"lower-sim-to-sv",  "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// LowerPrintsToSV
+//===----------------------------------------------------------------------===//
+
+def LowerPrintsToSV: Pass<"lower-prints-to-sv",  "hw::HWModuleOp"> {
+  let summary = "Lower `sim` print operations to SV.";
+  let dependentDialects = [
+    "circt::sv::SVDialect"
+  ];
+  let options = [
+    Option<"printToStdErr", "stderr-output", "bool", "false",
+           "Print to STDERR instead of STDOUT">
+  ];
+}
+
+//===----------------------------------------------------------------------===//
+// LowerTriggersToSV
+//===----------------------------------------------------------------------===//
+
+def LowerTriggersToSV: Pass<"lower-triggers-to-sv",  "mlir::ModuleOp"> {
+  let summary = "Lower `sim` trigger trees to SV.";
+  let dependentDialects = [
+    "circt::sv::SVDialect",
+    "circt::hw::HWDialect",
+    "circt::comb::CombDialect"
+  ];
+  let options = [
+    Option<"disallowForkJoin", "no-fork-join", "bool", "false",
+           "Do not produce concurrent triggered operations with fork/join. "
+           "An arbitrary non-concurrent sequence will be selected.">
+  ];
+}
+
+//===----------------------------------------------------------------------===//
+// SCFToSV
+//===----------------------------------------------------------------------===//
+
+def SCFToSV : Pass<"lower-scf-to-sv", "hw::HWModuleOp"> {
+  let summary = "Lower SCF to SV";
+  let dependentDialects = [
+    "sv::SVDialect"
+  ];
+}
+
+
+//===----------------------------------------------------------------------===//
 // ConvertCombToAIG
 //===----------------------------------------------------------------------===//
 
