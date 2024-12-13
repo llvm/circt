@@ -62,9 +62,10 @@ bool noStoresToMemory(Value memoryReference);
 // Get the index'th output port of compOp.
 Value getComponentOutput(calyx::ComponentOp compOp, unsigned outPortIdx);
 
-// If the provided type is an index type, converts it to i32, else, returns the
-// unmodified type.
-Type convIndexType(OpBuilder &builder, Type type);
+// If the provided type is an index type, converts it to i32; else if the
+// provided is an integer or floating point, bitcasts it to a signless integer
+// type; otherwise, returns the unmodified type.
+Type normalizeType(OpBuilder &builder, Type type);
 
 // Creates a new calyx::CombGroupOp or calyx::GroupOp group within compOp.
 template <typename TGroup>
@@ -837,6 +838,20 @@ struct PredicateInfo {
 };
 
 PredicateInfo getPredicateInfo(mlir::arith::CmpFPredicate pred);
+
+/// Performs a bit cast from a non-signless integer type value, such as a
+/// floating point value, to a signless integer type. Calyx treats everything as
+/// bit vectors, and leaves their interpretation to the respective operation
+/// using it. In CIRCT Calyx, we use signless `IntegerType` to represent a bit
+/// vector.
+template <typename T>
+Type toBitVector(T type) {
+  if (!type.isSignlessInteger()) {
+    unsigned bitWidth = cast<T>(type).getIntOrFloatBitWidth();
+    return IntegerType::get(type.getContext(), bitWidth);
+  }
+  return type;
+};
 
 } // namespace calyx
 } // namespace circt

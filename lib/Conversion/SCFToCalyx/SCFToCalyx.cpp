@@ -397,8 +397,10 @@ private:
   LogicalResult buildLibraryOp(PatternRewriter &rewriter, TSrcOp op,
                                TypeRange srcTypes, TypeRange dstTypes) const {
     SmallVector<Type> types;
-    llvm::append_range(types, srcTypes);
-    llvm::append_range(types, dstTypes);
+    for (Type srcType : srcTypes)
+      types.push_back(calyx::toBitVector(srcType));
+    for (Type dstType : dstTypes)
+      types.push_back(calyx::toBitVector(dstType));
 
     auto calyxOp =
         getState<ComponentLoweringState>().getNewLibraryOpInstance<TCalyxLibOp>(
@@ -1387,8 +1389,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      IndexCastOp op) const {
-  Type sourceType = calyx::convIndexType(rewriter, op.getOperand().getType());
-  Type targetType = calyx::convIndexType(rewriter, op.getResult().getType());
+  Type sourceType = calyx::normalizeType(rewriter, op.getOperand().getType());
+  Type targetType = calyx::normalizeType(rewriter, op.getResult().getType());
   unsigned targetBits = targetType.getIntOrFloatBitWidth();
   unsigned sourceBits = sourceType.getIntOrFloatBitWidth();
   LogicalResult res = success();
@@ -1577,7 +1579,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
         funcOpArgRewrites[arg.value()] = inPorts.size();
         inPorts.push_back(calyx::PortInfo{
             rewriter.getStringAttr(inName),
-            calyx::convIndexType(rewriter, arg.value().getType()),
+            calyx::normalizeType(rewriter, arg.value().getType()),
             calyx::Direction::Input,
             DictionaryAttr::get(rewriter.getContext(), {})});
       }
@@ -1593,7 +1595,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
 
       outPorts.push_back(calyx::PortInfo{
           rewriter.getStringAttr(resName),
-          calyx::convIndexType(rewriter, res.value()), calyx::Direction::Output,
+          calyx::normalizeType(rewriter, res.value()), calyx::Direction::Output,
           DictionaryAttr::get(rewriter.getContext(), {})});
     }
 

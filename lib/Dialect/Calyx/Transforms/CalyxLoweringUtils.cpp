@@ -136,11 +136,11 @@ Value getComponentOutput(calyx::ComponentOp compOp, unsigned outPortIdx) {
   return compOp.getArgument(index);
 }
 
-Type convIndexType(OpBuilder &builder, Type type) {
+Type normalizeType(OpBuilder &builder, Type type) {
   if (type.isIndex())
     return builder.getI32Type();
-  if (type.isIntOrFloat() && !type.isInteger())
-    return builder.getIntegerType(type.getIntOrFloatBitWidth());
+  if (type.isIntOrFloat())
+    return toBitVector(type);
   return type;
 }
 
@@ -522,7 +522,7 @@ ConvertIndexTypes::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
                                             PatternRewriter &rewriter) const {
   funcOp.walk([&](Block *block) {
     for (Value arg : block->getArguments())
-      arg.setType(calyx::convIndexType(rewriter, arg.getType()));
+      arg.setType(calyx::normalizeType(rewriter, arg.getType()));
   });
 
   funcOp.walk([&](Operation *op) {
@@ -531,7 +531,7 @@ ConvertIndexTypes::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
       if (!resType.isIndex())
         continue;
 
-      result.setType(calyx::convIndexType(rewriter, resType));
+      result.setType(calyx::normalizeType(rewriter, resType));
       auto constant = dyn_cast<mlir::arith::ConstantOp>(op);
       if (!constant)
         continue;
@@ -766,7 +766,7 @@ BuildReturnRegs::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
                                           PatternRewriter &rewriter) const {
 
   for (auto argType : enumerate(funcOp.getResultTypes())) {
-    auto convArgType = calyx::convIndexType(rewriter, argType.value());
+    auto convArgType = calyx::normalizeType(rewriter, argType.value());
     assert((isa<IntegerType>(convArgType) || isa<FloatType>(convArgType)) &&
            "unsupported return type");
     std::string name = "ret_arg" + std::to_string(argType.index());
