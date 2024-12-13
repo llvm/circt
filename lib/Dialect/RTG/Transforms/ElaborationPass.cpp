@@ -19,6 +19,7 @@
 #include "circt/Support/Namespace.h"
 #include "mlir/Dialect/Index/IR/IndexDialect.h"
 #include "mlir/Dialect/Index/IR/IndexOps.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/Support/Debug.h"
@@ -422,39 +423,105 @@ namespace {
 /// Construct an SSA value from a given elaborated value.
 class Materializer {
 public:
+  Materializer(OpBuilder builder) : builder(builder) {}
+
+  /// Materialize IR representing the provided `ElaboratorValue` and return the
+  /// `Value` or a null value on failure.
   Value materialize(ElaboratorValue *val, Location loc,
                     std::queue<SequenceValue *> &elabRequests,
                     function_ref<InFlightDiagnostic()> emitError) {
-    assert(block && "must call reset before calling this function");
-
     auto iter = materializedValues.find(val);
     if (iter != materializedValues.end())
       return iter->second;
 
     LLVM_DEBUG(llvm::dbgs() << "Materializing " << *val << "\n\n");
 
-    OpBuilder builder(block, insertionPoint);
     return TypeSwitch<ElaboratorValue *, Value>(val)
         .Case<AttributeValue, IndexValue, BoolValue, SetValue, BagValue,
-              SequenceValue>([&](auto val) {
-          return visit(val, builder, loc, elabRequests, emitError);
-        })
+              SequenceValue>(
+            [&](auto val) { return visit(val, loc, elabRequests, emitError); })
         .Default([](auto val) {
           assert(false && "all cases must be covered above");
           return Value();
         });
   }
 
-  Materializer &reset(Block *block) {
-    materializedValues.clear();
-    integerValues.clear();
-    this->block = block;
-    insertionPoint = block->begin();
-    return *this;
+  /// If `op` is not in the same region as the materializer insertion point, a
+  /// clone is created at the materializer's insertion point by also
+  /// materializing the `ElaboratorValue`s for each operand just before it.
+  /// Otherwise, all operations after the materializer's insertion point are
+  /// deleted until `op` is reached. An error is returned if the operation is
+  /// before the insertion point.
+  LogicalResult materialize(Operation *op,
+                            DenseMap<Value, ElaboratorValue *> &state,
+                            std::queue<SequenceValue *> &elabRequests) {
+    if (op->getNumRegions() > 0)
+      return op->emitOpError("ops with nested regions must be elaborated away");
+
+    // We don't support opaque values. If there is an SSA value that has a
+    // use-site it needs an equivalent ElaborationValue representation.
+    // NOTE: We could support cases where there is initially a use-site but that
+    // op is guaranteed to be deleted during elaboration. Or the use-sites are
+    // replaced with freshly materialized values from the ElaborationValue. But
+    // then, why can't we delete the value defining op?
+    for (auto res : op->getResults())
+      if (!res.use_empty())
+        return op->emitOpError(
+            "ops with results that have uses are not supported");
+
+    if (op->getParentRegion() == builder.getBlock()->getParent()) {
+      // We are doing in-place materialization, so mark all ops deleted until we
+      // reach the one to be materialized and modify it in-place.
+      auto ip = builder.getInsertionPoint();
+      while (ip != builder.getBlock()->end() && &*ip != op) {
+        LLVM_DEBUG(llvm::dbgs() << "Marking to be deleted: " << *ip << "\n\n");
+        toDelete.push_back(&*ip);
+
+        builder.setInsertionPointAfter(&*ip);
+        ip = builder.getInsertionPoint();
+      }
+
+      if (ip == builder.getBlock()->end())
+        return op->emitError("operation did not occur after the current "
+                             "materializer insertion point");
+
+      LLVM_DEBUG(llvm::dbgs() << "Modifying in-place: " << *op << "\n\n");
+    } else {
+      LLVM_DEBUG(llvm::dbgs() << "Materializing a clone of " << *op << "\n\n");
+      op = builder.clone(*op);
+      builder.setInsertionPoint(op);
+    }
+
+    for (auto &operand : op->getOpOperands()) {
+      auto emitError = [&]() {
+        auto diag = op->emitError();
+        diag.attachNote(op->getLoc())
+            << "while materializing value for operand#"
+            << operand.getOperandNumber();
+        return diag;
+      };
+
+      Value val = materialize(state.at(operand.get()), op->getLoc(),
+                              elabRequests, emitError);
+      if (!val)
+        return failure();
+
+      operand.set(val);
+    }
+
+    builder.setInsertionPointAfter(op);
+    return success();
+  }
+
+  /// Should be called once the `Region` is successfully materialized. No calls
+  /// to `materialize` should happen after this anymore.
+  void finalize() {
+    for (auto *op : llvm::reverse(toDelete))
+      op->erase();
   }
 
 private:
-  Value visit(AttributeValue *val, OpBuilder &builder, Location loc,
+  Value visit(AttributeValue *val, Location loc,
               std::queue<SequenceValue *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     auto attr = val->getAttr();
@@ -485,7 +552,7 @@ private:
     return res;
   }
 
-  Value visit(IndexValue *val, OpBuilder &builder, Location loc,
+  Value visit(IndexValue *val, Location loc,
               std::queue<SequenceValue *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     Value res = builder.create<index::ConstantOp>(loc, val->getIndex());
@@ -493,7 +560,7 @@ private:
     return res;
   }
 
-  Value visit(BoolValue *val, OpBuilder &builder, Location loc,
+  Value visit(BoolValue *val, Location loc,
               std::queue<SequenceValue *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     Value res = builder.create<index::BoolConstantOp>(loc, val->getBool());
@@ -501,7 +568,7 @@ private:
     return res;
   }
 
-  Value visit(SetValue *val, OpBuilder &builder, Location loc,
+  Value visit(SetValue *val, Location loc,
               std::queue<SequenceValue *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     SmallVector<Value> elements;
@@ -519,7 +586,7 @@ private:
     return res;
   }
 
-  Value visit(BagValue *val, OpBuilder &builder, Location loc,
+  Value visit(BagValue *val, Location loc,
               std::queue<SequenceValue *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     SmallVector<Value> values, weights;
@@ -550,7 +617,7 @@ private:
     return res;
   }
 
-  Value visit(SequenceValue *val, OpBuilder &builder, Location loc,
+  Value visit(SequenceValue *val, Location loc,
               std::queue<SequenceValue *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     elabRequests.push(val);
@@ -566,15 +633,41 @@ private:
   DenseMap<ElaboratorValue *, Value> materializedValues;
   DenseMap<uint64_t, Value> integerValues;
 
-  /// Cache the builders to continue insertions at their current insertion point
+  /// Cache the builder to continue insertions at their current insertion point
   /// for the reason stated above.
-  Block *block;
-  Block::iterator insertionPoint;
+  OpBuilder builder;
+
+  SmallVector<Operation *> toDelete;
 };
 
 /// Used to signal to the elaboration driver whether the operation should be
 /// removed.
 enum class DeletionKind { Keep, Delete };
+
+/// Elaborator state that should be shared by all elaborator instances.
+struct ElaboratorSharedState {
+  ElaboratorSharedState(SymbolTable &table, unsigned seed)
+      : table(table), rng(seed) {}
+
+  SymbolTable &table;
+  std::mt19937 rng;
+  Namespace names;
+
+  // A map used to intern elaborator values. We do this such that we can
+  // compare pointers when, e.g., computing set differences, uniquing the
+  // elements in a set, etc. Otherwise, we'd need to do a deep value comparison
+  // in those situations.
+  // Use a pointer as the key with custom MapInfo because of object slicing when
+  // inserting an object of a derived class of ElaboratorValue.
+  // The custom MapInfo makes sure that we do a value comparison instead of
+  // comparing the pointers.
+  DenseMap<ElaboratorValue *, std::unique_ptr<ElaboratorValue>, InternMapInfo>
+      interned;
+
+  /// The worklist used to keep track of the test and sequence operations to
+  /// make sure they are processed top-down (BFS traversal).
+  std::queue<SequenceValue *> worklist;
+};
 
 /// Interprets the IR to perform and lower the represented randomizations.
 class Elaborator : public RTGOpVisitor<Elaborator, FailureOr<DeletionKind>> {
@@ -583,7 +676,8 @@ public:
   using RTGBase::visitOp;
   using RTGBase::visitRegisterOp;
 
-  Elaborator(SymbolTable &table, std::mt19937 &rng) : rng(rng), table(table) {}
+  Elaborator(ElaboratorSharedState &sharedState, Materializer &materializer)
+      : sharedState(sharedState), materializer(materializer) {}
 
   /// Helper to perform internalization and keep track of interpreted value for
   /// the given SSA value.
@@ -592,7 +686,7 @@ public:
     // TODO: this isn't the most efficient way to internalize
     auto ptr = std::make_unique<ValueTy>(std::forward<Args>(args)...);
     auto *e = ptr.get();
-    auto [iter, _] = interned.insert({e, std::move(ptr)});
+    auto [iter, _] = sharedState.interned.insert({e, std::move(ptr)});
     state[val] = iter->second.get();
   }
 
@@ -617,7 +711,7 @@ public:
       args.push_back(state.at(arg));
 
     auto familyName = op.getSequenceAttr();
-    auto name = names.newName(familyName.getValue());
+    auto name = sharedState.names.newName(familyName.getValue());
     internalizeResult<SequenceValue>(op.getResult(), name, familyName,
                                      std::move(args));
     return DeletionKind::Delete;
@@ -646,7 +740,8 @@ public:
       std::mt19937 customRng(intAttr.getInt());
       selected = getUniformlyInRange(customRng, 0, set->getSet().size() - 1);
     } else {
-      selected = getUniformlyInRange(rng, 0, set->getSet().size() - 1);
+      selected =
+          getUniformlyInRange(sharedState.rng, 0, set->getSet().size() - 1);
     }
 
     state[op.getResult()] = set->getSet()[selected];
@@ -709,7 +804,7 @@ public:
       prefixSum.push_back({val, accumulator});
     }
 
-    auto customRng = rng;
+    auto customRng = sharedState.rng;
     if (auto intAttr =
             op->getAttrOfType<IntegerAttr>("rtg.elaboration_custom_seed")) {
       customRng = std::mt19937(intAttr.getInt());
@@ -768,6 +863,72 @@ public:
     auto size = cast<BagValue>(state.at(op.getBag()))->getBag().size();
     auto sizeAttr = IntegerAttr::get(IndexType::get(op->getContext()), size);
     internalizeResult<AttributeValue>(op.getResult(), sizeAttr);
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(scf::IfOp op) {
+    bool cond = cast<BoolValue>(state.at(op.getCondition()))->getBool();
+    auto &toElaborate = cond ? op.getThenRegion() : op.getElseRegion();
+    if (toElaborate.empty())
+      return DeletionKind::Delete;
+
+    // Just reuse this elaborator for the nested region because we need access
+    // to the elaborated values outside the nested region (since it is not
+    // isolated from above) and we want to materialize the region inline, thus
+    // don't need a new materializer instance.
+    if (failed(elaborate(toElaborate)))
+      return failure();
+
+    // Map the results of the 'scf.if' to the yielded values.
+    for (auto [res, out] :
+         llvm::zip(op.getResults(),
+                   toElaborate.front().getTerminator()->getOperands()))
+      state[res] = state.at(out);
+
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(scf::ForOp op) {
+    auto *lowerBound = dyn_cast<IndexValue>(state.at(op.getLowerBound()));
+    auto *step = dyn_cast<IndexValue>(state.at(op.getStep()));
+    auto *upperBound = dyn_cast<IndexValue>(state.at(op.getUpperBound()));
+
+    if (!lowerBound || !step || !upperBound)
+      return op->emitOpError("can only elaborate index type iterator");
+
+    // Prepare for first iteration by assigning the nested regions block
+    // arguments. We can just reuse this elaborator because we need access to
+    // values elaborated in the parent region anyway and materialize everything
+    // inline (i.e., don't need a new materializer).
+    state[op.getInductionVar()] = lowerBound;
+    for (auto [iterArg, initArg] :
+         llvm::zip(op.getRegionIterArgs(), op.getInitArgs()))
+      state[iterArg] = state.at(initArg);
+
+    // This loop performs the actual 'scf.for' loop iterations.
+    for (size_t i = lowerBound->getIndex(); i < upperBound->getIndex();
+         i += step->getIndex()) {
+      if (failed(elaborate(op.getBodyRegion())))
+        return failure();
+
+      // Prepare for the next iteration by updating the mapping of the nested
+      // regions block arguments
+      internalizeResult<IndexValue>(op.getInductionVar(), i + step->getIndex());
+      for (auto [iterArg, prevIterArg] :
+           llvm::zip(op.getRegionIterArgs(),
+                     op.getBody()->getTerminator()->getOperands()))
+        state[iterArg] = state.at(prevIterArg);
+    }
+
+    // Transfer the previously yielded values to the for loop result values.
+    for (auto [res, iterArg] :
+         llvm::zip(op->getResults(), op.getRegionIterArgs()))
+      state[res] = state.at(iterArg);
+
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(scf::YieldOp op) {
     return DeletionKind::Delete;
   }
 
@@ -832,62 +993,38 @@ public:
     }
 
     return TypeSwitch<Operation *, FailureOr<DeletionKind>>(op)
-        .Case<index::AddOp, index::CmpOp>([&](auto op) { return visitOp(op); })
+        .Case<
+            // Index ops
+            index::AddOp, index::CmpOp,
+            // SCF ops
+            scf::IfOp, scf::ForOp, scf::YieldOp>(
+            [&](auto op) { return visitOp(op); })
         .Default([&](Operation *op) { return RTGBase::dispatchOpVisitor(op); });
   }
 
-  LogicalResult elaborate(SequenceOp family, SequenceOp dest,
-                          ArrayRef<ElaboratorValue *> args) {
-    LLVM_DEBUG(llvm::dbgs() << "\n=== Elaborating " << family.getOperationName()
-                            << " @" << family.getSymName() << " into @"
-                            << dest.getSymName() << "\n\n");
-
-    // Reduce max memory consumption and make sure the values cannot be accessed
-    // anymore because we deleted the ops above. Clearing should lead to better
-    // performance than having them as a local here and pass via function
-    // argument.
-    state.clear();
-    materializer.reset(dest.getBody());
-    IRMapping mapping;
+  // NOLINTNEXTLINE(misc-no-recursion)
+  LogicalResult elaborate(Region &region,
+                          ArrayRef<ElaboratorValue *> regionArguments = {}) {
+    if (region.getBlocks().size() > 1)
+      return region.getParentOp()->emitOpError(
+          "regions with more than one block are not supported");
 
     for (auto [arg, elabArg] :
-         llvm::zip(family.getBody()->getArguments(), args))
+         llvm::zip(region.getArguments(), regionArguments))
       state[arg] = elabArg;
 
-    for (auto &op : *family.getBody()) {
-      if (op.getNumRegions() != 0)
-        return op.emitOpError("nested regions not supported");
-
+    Block *block = &region.front();
+    for (auto &op : *block) {
       auto result = dispatchOpVisitor(&op);
       if (failed(result))
         return failure();
 
-      if (*result == DeletionKind::Keep) {
-        for (auto &operand : op.getOpOperands()) {
-          if (mapping.contains(operand.get()))
-            continue;
-
-          auto emitError = [&]() {
-            auto diag = op.emitError();
-            diag.attachNote(op.getLoc())
-                << "while materializing value for operand#"
-                << operand.getOperandNumber();
-            return diag;
-          };
-          Value val = materializer.materialize(
-              state.at(operand.get()), op.getLoc(), worklist, emitError);
-          if (!val)
-            return failure();
-
-          mapping.map(operand.get(), val);
-        }
-
-        OpBuilder builder = OpBuilder::atBlockEnd(dest.getBody());
-        builder.clone(op, mapping);
-      }
+      if (*result == DeletionKind::Keep)
+        if (failed(materializer.materialize(&op, state, sharedState.worklist)))
+          return failure();
 
       LLVM_DEBUG({
-        llvm::dbgs() << "Elaborating " << op << " to\n[";
+        llvm::dbgs() << "Elaborated " << op << " to\n[";
 
         llvm::interleaveComma(op.getResults(), llvm::dbgs(), [&](auto res) {
           if (state.contains(res))
@@ -899,177 +1036,20 @@ public:
         llvm::dbgs() << "]\n\n";
       });
     }
-
-    return success();
-  }
-
-  template <typename OpTy>
-  LogicalResult elaborateInPlace(OpTy op) {
-    LLVM_DEBUG(llvm::dbgs()
-               << "\n=== Elaborating (in place) " << op.getOperationName()
-               << " @" << op.getSymName() << "\n\n");
-
-    // Reduce max memory consumption and make sure the values cannot be accessed
-    // anymore because we deleted the ops above. Clearing should lead to better
-    // performance than having them as a local here and pass via function
-    // argument.
-    state.clear();
-    materializer.reset(op.getBody());
-
-    SmallVector<Operation *> toDelete;
-    for (auto &op : *op.getBody()) {
-      if (op.getNumRegions() != 0)
-        return op.emitOpError("nested regions not supported");
-
-      auto result = dispatchOpVisitor(&op);
-      if (failed(result))
-        return failure();
-
-      if (*result == DeletionKind::Keep) {
-        for (auto &operand : op.getOpOperands()) {
-          auto emitError = [&]() {
-            auto diag = op.emitError();
-            diag.attachNote(op.getLoc())
-                << "while materializing value for operand#"
-                << operand.getOperandNumber();
-            return diag;
-          };
-          Value val = materializer.materialize(
-              state.at(operand.get()), op.getLoc(), worklist, emitError);
-          if (!val)
-            return failure();
-          operand.set(val);
-        }
-      } else { // DeletionKind::Delete
-        toDelete.push_back(&op);
-      }
-
-      LLVM_DEBUG({
-        llvm::dbgs() << "Elaborating " << op << " to\n[";
-
-        llvm::interleaveComma(op.getResults(), llvm::dbgs(), [&](auto res) {
-          if (state.contains(res))
-            llvm::dbgs() << *state.at(res);
-          else
-            llvm::dbgs() << "unknown";
-        });
-
-        llvm::dbgs() << "]\n\n";
-      });
-    }
-
-    for (auto *op : llvm::reverse(toDelete))
-      op->erase();
-
-    return success();
-  }
-
-  LogicalResult inlineSequences(TestOp testOp) {
-    OpBuilder builder(testOp);
-    for (auto iter = testOp.getBody()->begin();
-         iter != testOp.getBody()->end();) {
-      auto invokeOp = dyn_cast<InvokeSequenceOp>(&*iter);
-      if (!invokeOp) {
-        ++iter;
-        continue;
-      }
-
-      auto seqClosureOp =
-          invokeOp.getSequence().getDefiningOp<SequenceClosureOp>();
-      if (!seqClosureOp)
-        return invokeOp->emitError(
-            "sequence operand not directly defined by sequence_closure op");
-
-      auto seqOp = table.lookup<SequenceOp>(seqClosureOp.getSequenceAttr());
-
-      builder.setInsertionPointAfter(invokeOp);
-      IRMapping mapping;
-      for (auto &op : *seqOp.getBody())
-        builder.clone(op, mapping);
-
-      (iter++)->erase();
-
-      if (seqClosureOp->use_empty())
-        seqClosureOp->erase();
-    }
-
-    return success();
-  }
-
-  LogicalResult elaborateModule(ModuleOp moduleOp) {
-    // Update the name cache
-    names.clear();
-    names.add(moduleOp);
-
-    // Initialize the worklist with the test ops since they cannot be placed by
-    // other ops.
-    for (auto testOp : moduleOp.getOps<TestOp>())
-      if (failed(elaborateInPlace(testOp)))
-        return failure();
-
-    // Do top-down BFS traversal such that elaborating a sequence further down
-    // does not fix the outcome for multiple placements.
-    while (!worklist.empty()) {
-      auto *curr = worklist.front();
-      worklist.pop();
-
-      if (table.lookup<SequenceOp>(curr->getName()))
-        continue;
-
-      auto familyOp = table.lookup<SequenceOp>(curr->getFamilyName());
-      // TODO: use 'elaborateInPlace' and don't clone if this is the only
-      // remaining reference to this sequence
-      OpBuilder builder(familyOp);
-      auto seqOp = builder.cloneWithoutRegions(familyOp);
-      seqOp.getBodyRegion().emplaceBlock();
-      seqOp.setSymName(curr->getName());
-      table.insert(seqOp);
-      assert(seqOp.getSymName() == curr->getName() &&
-             "should not have been renamed");
-
-      if (failed(elaborate(familyOp, seqOp, curr->getArgs())))
-        return failure();
-    }
-
-    // Inline all sequences and remove the operations that place the sequences.
-    for (auto testOp : moduleOp.getOps<TestOp>())
-      if (failed(inlineSequences(testOp)))
-        return failure();
-
-    // Remove all sequences since they are not accessible from the outside and
-    // are not needed anymore since we fully inlined them.
-    for (auto seqOp : llvm::make_early_inc_range(moduleOp.getOps<SequenceOp>()))
-      seqOp->erase();
 
     return success();
   }
 
 private:
-  std::mt19937 rng;
-  SymbolTable &table;
-  Namespace names;
-
-  /// The worklist used to keep track of the test and sequence operations to
-  /// make sure they are processed top-down (BFS traversal).
-  std::queue<SequenceValue *> worklist;
-
-  // A map used to intern elaborator values. We do this such that we can
-  // compare pointers when, e.g., computing set differences, uniquing the
-  // elements in a set, etc. Otherwise, we'd need to do a deep value comparison
-  // in those situations.
-  // Use a pointer as the key with custom MapInfo because of object slicing when
-  // inserting an object of a derived class of ElaboratorValue.
-  // The custom MapInfo makes sure that we do a value comparison instead of
-  // comparing the pointers.
-  DenseMap<ElaboratorValue *, std::unique_ptr<ElaboratorValue>, InternMapInfo>
-      interned;
-
-  // A map from SSA values to a pointer of an interned elaborator value.
-  DenseMap<Value, ElaboratorValue *> state;
+  // State to be shared between all elaborator instances.
+  ElaboratorSharedState &sharedState;
 
   // Allows us to materialize ElaboratorValues to the IR operations necessary to
   // obtain an SSA value representing that elaborated value.
-  Materializer materializer;
+  Materializer &materializer;
+
+  // A map from SSA values to a pointer of an interned elaborator value.
+  DenseMap<Value, ElaboratorValue *> state;
 };
 } // namespace
 
@@ -1084,6 +1064,8 @@ struct ElaborationPass
 
   void runOnOperation() override;
   void cloneTargetsIntoTests(SymbolTable &table);
+  LogicalResult elaborateModule(ModuleOp moduleOp, SymbolTable &table);
+  LogicalResult inlineSequences(TestOp testOp, SymbolTable &table);
 };
 } // namespace
 
@@ -1093,9 +1075,7 @@ void ElaborationPass::runOnOperation() {
 
   cloneTargetsIntoTests(table);
 
-  std::mt19937 rng(seed);
-  Elaborator elaborator(table, rng);
-  if (failed(elaborator.elaborateModule(moduleOp)))
+  if (failed(elaborateModule(moduleOp, table)))
     return signalPassFailure();
 }
 
@@ -1142,4 +1122,102 @@ void ElaborationPass::cloneTargetsIntoTests(SymbolTable &table) {
   for (auto test : llvm::make_early_inc_range(moduleOp.getOps<TestOp>()))
     if (!test.getTarget().getEntries().empty())
       test->erase();
+}
+
+LogicalResult ElaborationPass::elaborateModule(ModuleOp moduleOp,
+                                               SymbolTable &table) {
+  ElaboratorSharedState state(table, seed);
+
+  // Update the name cache
+  state.names.add(moduleOp);
+
+  // Initialize the worklist with the test ops since they cannot be placed by
+  // other ops.
+  for (auto testOp : moduleOp.getOps<TestOp>()) {
+    LLVM_DEBUG(llvm::dbgs()
+               << "\n=== Elaborating test @" << testOp.getSymName() << "\n\n");
+    Materializer materializer(OpBuilder::atBlockBegin(testOp.getBody()));
+    Elaborator elaborator(state, materializer);
+    if (failed(elaborator.elaborate(testOp.getBodyRegion())))
+      return failure();
+
+    materializer.finalize();
+  }
+
+  // Do top-down BFS traversal such that elaborating a sequence further down
+  // does not fix the outcome for multiple placements.
+  while (!state.worklist.empty()) {
+    auto *curr = state.worklist.front();
+    state.worklist.pop();
+
+    if (table.lookup<SequenceOp>(curr->getName()))
+      continue;
+
+    auto familyOp = table.lookup<SequenceOp>(curr->getFamilyName());
+    // TODO: don't clone if this is the only remaining reference to this
+    // sequence
+    OpBuilder builder(familyOp);
+    auto seqOp = builder.cloneWithoutRegions(familyOp);
+    seqOp.getBodyRegion().emplaceBlock();
+    seqOp.setSymName(curr->getName());
+    table.insert(seqOp);
+    assert(seqOp.getSymName() == curr->getName() &&
+           "should not have been renamed");
+
+    LLVM_DEBUG(llvm::dbgs()
+               << "\n=== Elaborating sequence family @" << familyOp.getSymName()
+               << " into @" << seqOp.getSymName() << "\n\n");
+
+    Materializer materializer(OpBuilder::atBlockBegin(seqOp.getBody()));
+    Elaborator elaborator(state, materializer);
+    if (failed(elaborator.elaborate(familyOp.getBodyRegion(), curr->getArgs())))
+      return failure();
+
+    materializer.finalize();
+  }
+
+  // Inline all sequences and remove the operations that place the sequences.
+  for (auto testOp : moduleOp.getOps<TestOp>())
+    if (failed(inlineSequences(testOp, table)))
+      return failure();
+
+  // Remove all sequences since they are not accessible from the outside and
+  // are not needed anymore since we fully inlined them.
+  for (auto seqOp : llvm::make_early_inc_range(moduleOp.getOps<SequenceOp>()))
+    seqOp->erase();
+
+  return success();
+}
+
+LogicalResult ElaborationPass::inlineSequences(TestOp testOp,
+                                               SymbolTable &table) {
+  OpBuilder builder(testOp);
+  for (auto iter = testOp.getBody()->begin();
+       iter != testOp.getBody()->end();) {
+    auto invokeOp = dyn_cast<InvokeSequenceOp>(&*iter);
+    if (!invokeOp) {
+      ++iter;
+      continue;
+    }
+
+    auto seqClosureOp =
+        invokeOp.getSequence().getDefiningOp<SequenceClosureOp>();
+    if (!seqClosureOp)
+      return invokeOp->emitError(
+          "sequence operand not directly defined by sequence_closure op");
+
+    auto seqOp = table.lookup<SequenceOp>(seqClosureOp.getSequenceAttr());
+
+    builder.setInsertionPointAfter(invokeOp);
+    IRMapping mapping;
+    for (auto &op : *seqOp.getBody())
+      builder.clone(op, mapping);
+
+    (iter++)->erase();
+
+    if (seqClosureOp->use_empty())
+      seqClosureOp->erase();
+  }
+
+  return success();
 }

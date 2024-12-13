@@ -179,18 +179,18 @@ rtg.test @sequenceClosureFixesRandomization : !rtg.dict<> {
 // CHECK-LABLE: @indexOps
 rtg.test @indexOps : !rtg.dict<> {
   // CHECK: [[C:%.+]] = index.constant 2
-  // CHECK: [[T:%.+]] = index.bool.constant true
-  // CHECK: [[F:%.+]] = index.bool.constant false
   %0 = index.constant 1
 
   // CHECK: func.call @dummy2([[C]])
   %1 = index.add %0, %0
   func.call @dummy2(%1) : (index) -> ()
 
+  // CHECK: [[T:%.+]] = index.bool.constant true
   // CHECK: func.call @dummy5([[T]])
   %2 = index.cmp eq(%0, %0)
   func.call @dummy5(%2) : (i1) -> ()
 
+  // CHECK: [[F:%.+]] = index.bool.constant false
   // CHECK: func.call @dummy5([[F]])
   %3 = index.cmp ne(%0, %0)
   func.call @dummy5(%3) : (i1) -> ()
@@ -216,10 +216,94 @@ rtg.test @indexOps : !rtg.dict<> {
   func.call @dummy5(%8) : (i1) -> ()
 }
 
+// CHECK-LABEL: @scfIf
+rtg.test @scfIf : !rtg.dict<> {
+  %0 = index.bool.constant true
+  %1 = index.bool.constant false
+
+  // Don't elaborate body
+  scf.if %1 {
+    func.call @dummy5(%0) : (i1) -> ()
+    scf.yield
+  }
+
+  // Test nested ifs 
+  // CHECK-NEXT: [[T:%.+]] = index.bool.constant true
+  // CHECK-NEXT: func.call @dummy5([[T]])
+  // CHECK-NEXT: [[F:%.+]] = index.bool.constant false
+  // CHECK-NEXT: func.call @dummy5([[F]])
+  scf.if %0 {
+    scf.if %0 {
+      scf.if %0 {
+        func.call @dummy5(%0) : (i1) -> ()
+        scf.yield
+      }
+      scf.yield
+    }
+    scf.if %0 {
+      func.call @dummy5(%1) : (i1) -> ()
+      scf.yield
+    }
+    scf.yield
+  }
+
+  // Return values
+  // CHECK-NEXT: [[C1:%.+]] = index.constant 1
+  // CHECK-NEXT: func.call @dummy2([[C1]])
+  %2 = scf.if %0 -> index {
+    %3 = index.constant 1
+    scf.yield %3 : index
+  } else {
+    %3 = index.constant 2
+    scf.yield %3 : index
+  }
+  func.call @dummy2(%2) : (index) -> ()
+}
+
+// CHECK-LABEL: @scfFor
+rtg.test @scfFor : !rtg.dict<> {
+  // CHECK-NEXT: [[C0:%.+]] = index.constant 0
+  // CHECK-NEXT: func.call @dummy2([[C0]])
+  // CHECK-NEXT: [[C1:%.+]] = index.constant 1
+  // CHECK-NEXT: func.call @dummy2([[C1]])
+  // CHECK-NEXT: [[C2:%.+]] = index.constant 2
+  // CHECK-NEXT: func.call @dummy2([[C2]])
+  // CHECK-NEXT: func.call @dummy2([[C2]])
+  // CHECK-NEXT: [[C4:%.+]] = index.constant 4
+  // CHECK-NEXT: func.call @dummy2([[C4]])
+  // CHECK-NEXT: [[C3:%.+]] = index.constant 3
+  // CHECK-NEXT: func.call @dummy2([[C3]])
+  // CHECK-NEXT: func.call @dummy2([[C3]])
+  // CHECK-NEXT: func.call @dummy2([[C0]])
+  // CHECK-NEXT: }
+
+  %0 = index.constant 0
+  %1 = index.constant 2
+  %2 = index.constant 5
+  %3 = index.constant 1
+  // Three iterations
+  %4 = scf.for %i = %0 to %2 step %1 iter_args(%a = %0) -> (index) {
+    %5 = index.add %a, %3
+    func.call @dummy2(%i) : (index) -> ()
+    func.call @dummy2(%5) : (index) -> ()
+    scf.yield %5 : index
+  }
+  func.call @dummy2(%4) : (index) -> ()
+
+  // Zero iterations
+  %5 = scf.for %i = %0 to %0 step %1 iter_args(%a = %0) -> (index) {
+    %6 = index.add %a, %3
+    func.call @dummy2(%a) : (index) -> ()
+    func.call @dummy2(%6) : (index) -> ()
+    scf.yield %6 : index
+  }
+  func.call @dummy2(%5) : (index) -> ()
+}
+
 // -----
 
 rtg.test @nestedRegionsNotSupported : !rtg.dict<> {
-  // expected-error @below {{nested regions not supported}}
+  // expected-error @below {{ops with nested regions must be elaborated away}}
   scf.execute_region { scf.yield }
 }
 
