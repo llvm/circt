@@ -96,6 +96,7 @@ public:
   }
   bool shouldConvertProbesToSignals() const { return probesToSignals; }
   bool shouldReplaceSequentialMemories() const { return replSeqMem; }
+  bool shouldDisableLayerSink() const { return disableLayerSink; }
   bool shouldDisableOptimization() const { return disableOptimization; }
   bool shouldAdvancedLayerSink() const { return advancedLayerSink; }
   bool shouldLowerMemories() const { return lowerMemories; }
@@ -186,6 +187,11 @@ public:
 
   FirtoolOptions &setBuildMode(BuildMode value) {
     buildMode = value;
+    return *this;
+  }
+
+  FirtoolOptions &setDisableLayerSink(bool value) {
+    disableLayerSink = value;
     return *this;
   }
 
@@ -381,6 +387,7 @@ private:
   firrtl::PreserveValues::PreserveMode preserveMode;
   bool enableDebugInfo;
   BuildMode buildMode;
+  bool disableLayerSink;
   bool disableOptimization;
   bool exportChiselInterface;
   std::string chiselInterfaceOutDirectory;
