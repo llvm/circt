@@ -55,6 +55,10 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
 LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
                                                   const FirtoolOptions &opt,
                                                   StringRef inputFilename) {
+  // TODO: Ensure instance graph and other passes can handle instance choice
+  // then run this pass after all diagnostic passes have run.
+  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeOptionPass(
+      opt.shouldSelectDefaultInstanceChoice()));
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerSignaturesPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInjectDUTHierarchyPass());
@@ -131,10 +135,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createCheckCombLoopsPass());
 
-  // Must run the specialize instance-choice and layers passes after all
-  // diagnostic passes have run, otherwise it can hide errors.
-  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeOptionPass(
-      opt.shouldSelectDefaultInstanceChoice()));
+  // Must run this pass after all diagnostic passes have run, otherwise it can
+  // hide errors.
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeLayersPass());
 
   // Run after inference, layer specialization.
