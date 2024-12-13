@@ -125,6 +125,11 @@ void circtFirtoolOptionsSetBuildMode(CirctFirtoolFirtoolOptions options,
   unwrap(options)->setBuildMode(converted);
 }
 
+void circtFirtoolOptionsSetDisableLayerSink(CirctFirtoolFirtoolOptions options,
+                                            bool value) {
+  unwrap(options)->setDisableLayerSink(value);
+}
+
 void circtFirtoolOptionsSetDisableOptimization(
     CirctFirtoolFirtoolOptions options, bool value) {
   unwrap(options)->setDisableOptimization(value);

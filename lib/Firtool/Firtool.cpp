@@ -230,11 +230,14 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   //
   // TODO: Improve LowerLayers to avoid the need for canonicalization. See:
   //   https://github.com/llvm/circt/issues/7896
-  if (opt.shouldAdvancedLayerSink())
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createAdvancedLayerSinkPass());
-  else
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        firrtl::createLayerSinkPass());
+  if (!opt.shouldDisableLayerSink()) {
+    if (opt.shouldAdvancedLayerSink())
+      pm.nest<firrtl::CircuitOp>().addPass(
+          firrtl::createAdvancedLayerSinkPass());
+    else
+      pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+          firrtl::createLayerSinkPass());
+  }
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerLayersPass());
   if (!opt.shouldDisableOptimization())
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
@@ -524,6 +527,11 @@ struct FirtoolCmdOptions {
                                   "release", "Compile with optimizations")),
       llvm::cl::init(firtool::FirtoolOptions::BuildModeDefault)};
 
+  llvm::cl::opt<bool> disableLayerSink{
+      "disable-layer-sink",
+      llvm::cl::desc("Disable layer sink"),
+  };
+
   llvm::cl::opt<bool> disableOptimization{
       "disable-opt",
       llvm::cl::desc("Disable optimizations"),
@@ -791,6 +799,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   preserveMode = clOptions->preserveMode;
   enableDebugInfo = clOptions->enableDebugInfo;
   buildMode = clOptions->buildMode;
+  disableLayerSink = clOptions->disableLayerSink;
   disableOptimization = clOptions->disableOptimization;
   exportChiselInterface = clOptions->exportChiselInterface;
   chiselInterfaceOutDirectory = clOptions->chiselInterfaceOutDirectory;
