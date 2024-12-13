@@ -91,6 +91,48 @@ struct CombXorOpConversion : OpConversionPattern<XorOp> {
   }
 };
 
+// Lower comb::MuxOp to AIG operations.
+struct CombMuxOpConversion : OpConversionPattern<MuxOp> {
+  using OpConversionPattern<MuxOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(MuxOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Implement: c ? a : b = (replicate(c) & a) | (~replicate(c) & b)
+
+    Value cond = op.getCond();
+    auto trueVal = op.getTrueValue();
+    auto falseVal = op.getFalseValue();
+
+    if (!op.getType().isInteger()) {
+      // If the type of the mux is not integer, bitcast the operands first.
+      auto widthType = rewriter.getIntegerType(hw::getBitWidth(op.getType()));
+      trueVal =
+          rewriter.create<hw::BitcastOp>(op->getLoc(), widthType, trueVal);
+      falseVal =
+          rewriter.create<hw::BitcastOp>(op->getLoc(), widthType, falseVal);
+    }
+
+    // Replicate condition if needed
+    if (!trueVal.getType().isInteger(1))
+      cond = rewriter.create<comb::ReplicateOp>(op.getLoc(), trueVal.getType(),
+                                                cond);
+
+    // c ? a : b => (replicate(c) & a) | (~replicate(c) & b)
+    auto lhs = rewriter.create<aig::AndInverterOp>(op.getLoc(), cond, trueVal);
+    auto rhs = rewriter.create<aig::AndInverterOp>(op.getLoc(), cond, falseVal,
+                                                   true, false);
+
+    Value result = rewriter.create<comb::OrOp>(op.getLoc(), lhs, rhs);
+    // Insert the bitcast if the type of the mux is not integer.
+    if (result.getType() != op.getType())
+      result =
+          rewriter.create<hw::BitcastOp>(op.getLoc(), op.getType(), result);
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -105,15 +147,18 @@ struct ConvertCombToAIGPass
 } // namespace
 
 static void populateCombToAIGConversionPatterns(RewritePatternSet &patterns) {
-  patterns.add<CombAndOpConversion, CombOrOpConversion, CombXorOpConversion>(
-      patterns.getContext());
+  patterns.add<
+      // Bitwise Logical Ops
+      CombAndOpConversion, CombOrOpConversion, CombXorOpConversion,
+      CombMuxOpConversion>(patterns.getContext());
 }
 
 void ConvertCombToAIGPass::runOnOperation() {
   ConversionTarget target(getContext());
   target.addIllegalDialect<comb::CombDialect>();
   // Keep data movement operations like Extract, Concat and Replicate.
-  target.addLegalOp<comb::ExtractOp, comb::ConcatOp, comb::ReplicateOp>();
+  target.addLegalOp<comb::ExtractOp, comb::ConcatOp, comb::ReplicateOp,
+                    hw::BitcastOp>();
   target.addLegalDialect<aig::AIGDialect>();
 
   RewritePatternSet patterns(&getContext());
