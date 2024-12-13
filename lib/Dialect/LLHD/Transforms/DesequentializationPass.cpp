@@ -472,7 +472,7 @@ private:
                                OpBuilder &builder, Location loc) {
     for (auto *iter1 = triggers.begin(); iter1 != triggers.end(); ++iter1) {
       for (auto *iter2 = iter1 + 1; iter2 != triggers.end(); ++iter2) {
-        if (iter1->clocks == iter2->clocks && iter1->kinds == iter1->kinds) {
+        if (iter1->clocks == iter2->clocks && iter1->kinds == iter2->kinds) {
           iter1->enable =
               builder.create<comb::OrOp>(loc, iter1->enable, iter2->enable);
           triggers.erase(iter2--);

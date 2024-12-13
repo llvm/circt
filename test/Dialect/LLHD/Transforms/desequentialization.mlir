@@ -135,3 +135,27 @@ hw.module @asyncResetNotObserved(inout %rst : i1, inout %clk : i1, inout %sig : 
     cf.br ^bb1
   }
 }
+
+// CHECK-LABEL: @compareClkPrb
+// CHECK-SAME: (inout [[CLK:%.+]] : i1, inout [[OUT:%.+]] : i1)
+hw.module @compareClkPrb(inout %clk : i1, inout %out : i1) {
+  // CHECK: [[V0:%.+]] = llhd.prb [[CLK]]
+  // CHECK: [[V1:%.+]] = seq.to_clock [[V0]]
+  // CHECK: [[V2:%.+]] = comb.xor [[V0]], %true{{.*}}
+  // CHECK: [[V3:%.+]] = seq.compreg %false{{.*}}, [[V1]] reset [[V2]], %false{{.*}}
+  // CHECK: llhd.drv [[OUT]], [[V3]] after
+  %false = hw.constant false
+  %time = llhd.constant_time <0ns, 1d, 0e>
+  %clk_0 = llhd.prb %clk : !hw.inout<i1>
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    %clk_1 = llhd.prb %clk : !hw.inout<i1>
+    llhd.wait (%clk_0 : i1), ^bb2
+  ^bb2:
+    %clk_2 = llhd.prb %clk : !hw.inout<i1>
+    %cond = comb.icmp bin ne %clk_1, %clk_2 : i1
+    llhd.drv %out, %false after %time if %cond : !hw.inout<i1>
+    cf.br ^bb1
+  }
+}
