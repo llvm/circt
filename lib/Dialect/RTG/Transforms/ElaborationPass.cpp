@@ -22,6 +22,7 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/FoldingSet.h"
 #include "llvm/Support/Debug.h"
 #include <queue>
 #include <random>
@@ -85,24 +86,273 @@ static uint32_t getUniformlyInRange(std::mt19937 &rng, uint32_t a, uint32_t b) {
 namespace {
 
 /// The abstract base class for elaborated values.
-struct ElaboratorValue {
+class ElaboratorValue {
 public:
-  enum class ValueKind { Attribute, Set, Bag, Sequence, Index, Bool };
+  enum class ValueKind {
+    Attribute = 0U,
+    Set,
+    Bag,
+    Sequence,
+    Index,
+    Bool,
+    None
+  };
 
-  ElaboratorValue(ValueKind kind) : kind(kind) {}
-  virtual ~ElaboratorValue() {}
+  union StorageTy {
+    StorageTy() : ptr(nullptr) {}
+    StorageTy(const void *ptr) : ptr(ptr) {}
+    StorageTy(size_t index) : index(index) {}
+    StorageTy(bool boolean) : boolean(boolean) {}
 
-  virtual llvm::hash_code getHashValue() const = 0;
-  virtual bool isEqual(const ElaboratorValue &other) const = 0;
+    const void *ptr;
+    size_t index;
+    bool boolean;
+  };
 
-#ifndef NDEBUG
-  virtual void print(llvm::raw_ostream &os) const = 0;
-#endif
+  ElaboratorValue(ValueKind kind = ValueKind::None,
+                  StorageTy storage = StorageTy())
+      : kind(kind), storage(storage) {}
+
+  // This constructor is needed for LLVM RTTI
+  ElaboratorValue(StorageTy storage) : ElaboratorValue() {}
+
+  llvm::hash_code getHashValue() const {
+    switch (kind) {
+    case ValueKind::Attribute:
+    case ValueKind::Set:
+    case ValueKind::Bag:
+    case ValueKind::Sequence:
+      return llvm::hash_combine(kind, storage.ptr);
+    case ValueKind::Index:
+      return llvm::hash_combine(kind, storage.index);
+    case ValueKind::Bool:
+      return llvm::hash_combine(kind, storage.boolean);
+    case ValueKind::None:
+      return llvm::hash_value(kind);
+    }
+    llvm::llvm_unreachable_internal("all cases handled above");
+  }
+
+  bool operator==(const ElaboratorValue &other) const {
+    if (kind != other.kind)
+      return false;
+
+    switch (kind) {
+    case ValueKind::Attribute:
+    case ValueKind::Set:
+    case ValueKind::Bag:
+    case ValueKind::Sequence:
+      return storage.ptr == other.storage.ptr;
+    case ValueKind::Index:
+      return storage.index == other.storage.index;
+    case ValueKind::Bool:
+      return storage.boolean == other.storage.boolean;
+    case ValueKind::None:
+      return true;
+    }
+    llvm::llvm_unreachable_internal("all cases handled above");
+  }
+
+  operator bool() const { return kind != ValueKind::None; }
 
   ValueKind getKind() const { return kind; }
+  StorageTy getStorage() const { return storage; }
 
 private:
-  const ValueKind kind;
+  ValueKind kind;
+  StorageTy storage;
+};
+
+} // namespace
+
+namespace llvm {
+/// Add support for llvm style casts. We provide a cast between To and From if
+/// From is mlir::Attribute or derives from it.
+template <typename To, typename From>
+struct CastInfo<To, From,
+                std::enable_if_t<std::is_same_v<ElaboratorValue,
+                                                std::remove_const_t<From>> ||
+                                 std::is_base_of_v<ElaboratorValue, From>>>
+    : DefaultDoCastIfPossible<To, From, CastInfo<To, From>> {
+  /// Arguments are taken as mlir::Attribute here and not as `From`, because
+  /// when casting from an intermediate type of the hierarchy to one of its
+  /// children, the val.getTypeID() inside T::classof will use the static
+  /// getTypeID of the parent instead of the non-static Type::getTypeID that
+  /// returns the dynamic ID. This means that T::classof would end up comparing
+  /// the static TypeID of the children to the static TypeID of its parent,
+  /// making it impossible to downcast from the parent to the child.
+  static inline bool isPossible(ElaboratorValue ty) {
+    /// Return a constant true instead of a dynamic true when casting to self or
+    /// up the hierarchy.
+    if constexpr (std::is_base_of_v<To, From>) {
+      return true;
+    } else {
+      return To::classof(ty);
+    }
+  }
+  static inline To doCast(ElaboratorValue value) {
+    return To(value.getStorage());
+  }
+  static To castFailed() { return To(); }
+};
+
+template <>
+struct DenseMapInfo<ElaboratorValue> {
+  static inline ElaboratorValue getEmptyKey() { return ElaboratorValue(); }
+  static inline ElaboratorValue getTombstoneKey() {
+    return ElaboratorValue(ElaboratorValue::ValueKind::None,
+                           reinterpret_cast<const void *>(~0ULL));
+  }
+  static unsigned getHashValue(const ElaboratorValue &value) {
+    return value.getHashValue();
+  }
+  static bool isEqual(const ElaboratorValue &lhs, const ElaboratorValue &rhs) {
+    return lhs == rhs;
+  }
+};
+
+} // namespace llvm
+
+namespace {
+
+struct SetStorage : public llvm::FoldingSetNode {
+  SetStorage(SetVector<ElaboratorValue> &&set, Type type)
+      : set(std::move(set)), type(type) {}
+
+  // NOLINTNEXTLINE(readability-identifier-naming)
+  static void Profile(llvm::FoldingSetNodeID &ID,
+                      const SetVector<ElaboratorValue> &set, Type type) {
+    for (auto el : set) {
+      ID.AddPointer(el.getStorage().ptr);
+      ID.AddInteger(static_cast<unsigned>(el.getKind()));
+    }
+    ID.AddPointer(type.getAsOpaquePointer());
+  }
+
+  // NOLINTNEXTLINE(readability-identifier-naming)
+  void Profile(llvm::FoldingSetNodeID &ID) const { Profile(ID, set, type); }
+
+  // Stores the elaborated values of the set.
+  SetVector<ElaboratorValue> set;
+
+  // Store the set type such that we can materialize this evaluated value
+  // also in the case where the set is empty.
+  Type type;
+};
+
+struct BagStorage : public llvm::FoldingSetNode {
+  BagStorage(MapVector<ElaboratorValue, uint64_t> &&bag, Type type)
+      : bag(std::move(bag)), type(type) {}
+
+  // NOLINTNEXTLINE(readability-identifier-naming)
+  static void Profile(llvm::FoldingSetNodeID &ID,
+                      const MapVector<ElaboratorValue, uint64_t> &bag,
+                      Type type) {
+    for (auto el : bag) {
+      ID.AddPointer(el.first.getStorage().ptr);
+      ID.AddInteger(static_cast<unsigned>(el.first.getKind()));
+      ID.AddInteger(el.second);
+    }
+    ID.AddPointer(type.getAsOpaquePointer());
+  }
+
+  // NOLINTNEXTLINE(readability-identifier-naming)
+  void Profile(llvm::FoldingSetNodeID &ID) const { Profile(ID, bag, type); }
+
+  // Stores the elaborated values of the bag.
+  MapVector<ElaboratorValue, uint64_t> bag;
+
+  // Store the bag type such that we can materialize this evaluated value
+  // also in the case where the bag is empty.
+  Type type;
+};
+
+struct SequenceStorage : public llvm::FoldingSetNode {
+  SequenceStorage(StringRef name, StringAttr familyName,
+                  SmallVector<ElaboratorValue> &&args)
+      : name(name), familyName(familyName), args(std::move(args)) {}
+
+  // NOLINTNEXTLINE(readability-identifier-naming)
+  static void Profile(llvm::FoldingSetNodeID &ID, StringRef name,
+                      StringAttr familyName, ArrayRef<ElaboratorValue> args) {
+    ID.AddString(name);
+    ID.AddPointer(familyName.getAsOpaquePointer());
+    for (auto el : args) {
+      ID.AddPointer(el.getStorage().ptr);
+      ID.AddInteger(static_cast<unsigned>(el.getKind()));
+    }
+  }
+
+  // NOLINTNEXTLINE(readability-identifier-naming)
+  void Profile(llvm::FoldingSetNodeID &ID) const {
+    Profile(ID, name, familyName, args);
+  }
+
+  StringRef name;
+  StringAttr familyName;
+  SmallVector<ElaboratorValue> args;
+};
+
+class Internalizer {
+public:
+  template <typename StorageTy, typename... Args>
+  StorageTy *internalize(Args &&...args) {
+    llvm::FoldingSetNodeID profile;
+    StorageTy::Profile(profile, args...);
+    void *insertPos = nullptr;
+    if (auto *storage =
+            getInternSet<StorageTy>().FindNodeOrInsertPos(profile, insertPos))
+      return static_cast<StorageTy *>(storage);
+    auto *storagePtr = new (allocator.Allocate<StorageTy>())
+        StorageTy(std::forward<Args>(args)...);
+    getInternSet<StorageTy>().InsertNode(storagePtr, insertPos);
+    return storagePtr;
+  }
+
+  template <typename StorageTy>
+  llvm::FoldingSet<StorageTy> &getInternSet() {
+    assert(false && "no generic internalization set");
+  }
+
+  template <>
+  llvm::FoldingSet<SetStorage> &getInternSet() {
+    return internedSets;
+  }
+
+  template <>
+  llvm::FoldingSet<BagStorage> &getInternSet() {
+    return internedBags;
+  }
+
+  template <>
+  llvm::FoldingSet<SequenceStorage> &getInternSet() {
+    return internedSequences;
+  }
+
+  //  BagStorage *internalize(BagStorage &&storage) {
+  //   llvm::FoldingSetNodeID profile;
+  //   storage.Profile(profile);
+  //   void *insertPos = nullptr;
+  //   if (auto *bag = internedBags.FindNodeOrInsertPos(profile, insertPos))
+  //     return bag;
+  //   auto *storagePtr = new BagStorage(std::move(storage));
+  //   internedBags.InsertNode(storagePtr, insertPos);
+  //   return storagePtr;
+  // }
+
+private:
+  llvm::BumpPtrAllocator allocator;
+  // A map used to intern elaborator values. We do this such that we can
+  // compare pointers when, e.g., computing set differences, uniquing the
+  // elements in a set, etc. Otherwise, we'd need to do a deep value comparison
+  // in those situations.
+  // Use a pointer as the key with custom MapInfo because of object slicing when
+  // inserting an object of a derived class of ElaboratorValue.
+  // The custom MapInfo makes sure that we do a value comparison instead of
+  // comparing the pointers.
+  llvm::FoldingSet<SetStorage> internedSets;
+  llvm::FoldingSet<BagStorage> internedBags;
+  llvm::FoldingSet<SequenceStorage> internedSequences;
 };
 
 /// Holds any typed attribute. Wrapping around an MLIR `Attribute` allows us to
@@ -110,276 +360,162 @@ private:
 /// MLIR attribute rather than one per kind of attribute. We only support typed
 /// attributes because for materialization we need to provide the type to the
 /// dialect's materializer.
-class AttributeValue : public ElaboratorValue {
-public:
+struct AttributeValue : public ElaboratorValue {
+  AttributeValue() = default;
+  AttributeValue(StorageTy storage)
+      : ElaboratorValue(ValueKind::Attribute, storage) {}
   AttributeValue(TypedAttr attr)
-      : ElaboratorValue(ValueKind::Attribute), attr(attr) {
+      : ElaboratorValue(ValueKind::Attribute, attr.getAsOpaquePointer()) {
     assert(attr && "null attributes not allowed");
   }
 
   // Implement LLVMs RTTI
-  static bool classof(const ElaboratorValue *val) {
-    return val->getKind() == ValueKind::Attribute;
+  static bool classof(const ElaboratorValue &val) {
+    return val.getKind() == ValueKind::Attribute;
   }
 
-  llvm::hash_code getHashValue() const override {
-    return llvm::hash_combine(attr);
+  TypedAttr getAttr() const {
+    return cast<TypedAttr>(Attribute::getFromOpaquePointer(getStorage().ptr));
   }
-
-  bool isEqual(const ElaboratorValue &other) const override {
-    auto *attrValue = dyn_cast<AttributeValue>(&other);
-    if (!attrValue)
-      return false;
-
-    return attr == attrValue->attr;
-  }
-
-#ifndef NDEBUG
-  void print(llvm::raw_ostream &os) const override {
-    os << "<attr " << attr << " at " << this << ">";
-  }
-#endif
-
-  TypedAttr getAttr() const { return attr; }
-
-private:
-  const TypedAttr attr;
 };
 
 /// Holds an evaluated value of a `IndexType`'d value.
-class IndexValue : public ElaboratorValue {
-public:
-  IndexValue(size_t index) : ElaboratorValue(ValueKind::Index), index(index) {}
+struct IndexValue : public ElaboratorValue {
+  IndexValue() = default;
+  IndexValue(StorageTy storage) : ElaboratorValue(ValueKind::Index, storage) {}
+  IndexValue(size_t index) : ElaboratorValue(ValueKind::Index, index) {}
 
   // Implement LLVMs RTTI
-  static bool classof(const ElaboratorValue *val) {
-    return val->getKind() == ValueKind::Index;
+  static bool classof(const ElaboratorValue &val) {
+    return val.getKind() == ValueKind::Index;
   }
 
-  llvm::hash_code getHashValue() const override {
-    return llvm::hash_value(index);
-  }
-
-  bool isEqual(const ElaboratorValue &other) const override {
-    auto *indexValue = dyn_cast<IndexValue>(&other);
-    if (!indexValue)
-      return false;
-
-    return index == indexValue->index;
-  }
-
-#ifndef NDEBUG
-  void print(llvm::raw_ostream &os) const override {
-    os << "<index " << index << " at " << this << ">";
-  }
-#endif
-
-  size_t getIndex() const { return index; }
-
-private:
-  const size_t index;
+  size_t getIndex() const { return getStorage().index; }
 };
 
 /// Holds an evaluated value of an `i1` type'd value.
-class BoolValue : public ElaboratorValue {
-public:
-  BoolValue(bool value) : ElaboratorValue(ValueKind::Bool), value(value) {}
+struct BoolValue : public ElaboratorValue {
+  BoolValue() = default;
+  BoolValue(StorageTy storage) : ElaboratorValue(ValueKind::Bool, storage) {}
+  BoolValue(bool value) : ElaboratorValue(ValueKind::Bool, value) {}
 
   // Implement LLVMs RTTI
-  static bool classof(const ElaboratorValue *val) {
-    return val->getKind() == ValueKind::Bool;
+  static bool classof(const ElaboratorValue &val) {
+    return val.getKind() == ValueKind::Bool;
   }
 
-  llvm::hash_code getHashValue() const override {
-    return llvm::hash_value(value);
-  }
-
-  bool isEqual(const ElaboratorValue &other) const override {
-    auto *val = dyn_cast<BoolValue>(&other);
-    if (!val)
-      return false;
-
-    return value == val->value;
-  }
-
-#ifndef NDEBUG
-  void print(llvm::raw_ostream &os) const override {
-    os << "<bool " << (value ? "true" : "false") << " at " << this << ">";
-  }
-#endif
-
-  bool getBool() const { return value; }
-
-private:
-  const bool value;
+  bool getBool() const { return getStorage().boolean; }
 };
 
 /// Holds an evaluated value of a `SetType`'d value.
-class SetValue : public ElaboratorValue {
-public:
-  SetValue(SetVector<ElaboratorValue *> &&set, Type type)
-      : ElaboratorValue(ValueKind::Set), set(std::move(set)), type(type),
-        cachedHash(llvm::hash_combine(
-            llvm::hash_combine_range(set.begin(), set.end()), type)) {}
+struct SetValue : public ElaboratorValue {
+  SetValue() = default;
+  SetValue(StorageTy storage) : ElaboratorValue(ValueKind::Set, storage) {}
+  SetValue(Internalizer &internalizer, SetVector<ElaboratorValue> &&set,
+           Type type)
+      : ElaboratorValue(ValueKind::Set, internalizer.internalize<SetStorage>(
+                                            std::move(set), type)) {}
 
   // Implement LLVMs RTTI
-  static bool classof(const ElaboratorValue *val) {
-    return val->getKind() == ValueKind::Set;
+  static bool classof(const ElaboratorValue &val) {
+    return val.getKind() == ValueKind::Set;
   }
 
-  llvm::hash_code getHashValue() const override { return cachedHash; }
-
-  bool isEqual(const ElaboratorValue &other) const override {
-    auto *otherSet = dyn_cast<SetValue>(&other);
-    if (!otherSet)
-      return false;
-
-    if (cachedHash != otherSet->cachedHash)
-      return false;
-
-    // Make sure empty sets of different types are not considered equal
-    return set == otherSet->set && type == otherSet->type;
+  const SetVector<ElaboratorValue> &getSet() const {
+    return static_cast<const SetStorage *>(getStorage().ptr)->set;
   }
 
-#ifndef NDEBUG
-  void print(llvm::raw_ostream &os) const override {
-    os << "<set {";
-    llvm::interleaveComma(set, os, [&](ElaboratorValue *el) { el->print(os); });
-    os << "} at " << this << ">";
+  Type getType() const {
+    return static_cast<const SetStorage *>(getStorage().ptr)->type;
   }
-#endif
-
-  const SetVector<ElaboratorValue *> &getSet() const { return set; }
-
-  Type getType() const { return type; }
-
-private:
-  // We currently use a sorted vector to represent sets. Note that it is sorted
-  // by the pointer value and thus non-deterministic.
-  // We probably want to do some profiling in the future to see if a DenseSet or
-  // other representation is better suited.
-  const SetVector<ElaboratorValue *> set;
-
-  // Store the set type such that we can materialize this evaluated value
-  // also in the case where the set is empty.
-  const Type type;
-
-  // Compute the hash only once at constructor time.
-  const llvm::hash_code cachedHash;
 };
 
 /// Holds an evaluated value of a `BagType`'d value.
-class BagValue : public ElaboratorValue {
-public:
-  BagValue(MapVector<ElaboratorValue *, uint64_t> &&bag, Type type)
-      : ElaboratorValue(ValueKind::Bag), bag(std::move(bag)), type(type),
-        cachedHash(llvm::hash_combine(
-            llvm::hash_combine_range(bag.begin(), bag.end()), type)) {}
+struct BagValue : public ElaboratorValue {
+  BagValue() = default;
+  BagValue(StorageTy storage) : ElaboratorValue(ValueKind::Bag, storage) {}
+  BagValue(Internalizer &internalizer,
+           MapVector<ElaboratorValue, uint64_t> &&bag, Type type)
+      : ElaboratorValue(ValueKind::Bag, internalizer.internalize<BagStorage>(
+                                            std::move(bag), type)) {}
 
   // Implement LLVMs RTTI
-  static bool classof(const ElaboratorValue *val) {
-    return val->getKind() == ValueKind::Bag;
+  static bool classof(const ElaboratorValue &val) {
+    return val.getKind() == ValueKind::Bag;
   }
 
-  llvm::hash_code getHashValue() const override { return cachedHash; }
-
-  bool isEqual(const ElaboratorValue &other) const override {
-    auto *otherBag = dyn_cast<BagValue>(&other);
-    if (!otherBag)
-      return false;
-
-    if (cachedHash != otherBag->cachedHash)
-      return false;
-
-    return llvm::equal(bag, otherBag->bag) && type == otherBag->type;
+  const MapVector<ElaboratorValue, uint64_t> &getBag() const {
+    return static_cast<const BagStorage *>(getStorage().ptr)->bag;
   }
 
-#ifndef NDEBUG
-  void print(llvm::raw_ostream &os) const override {
-    os << "<bag {";
-    llvm::interleaveComma(bag, os,
-                          [&](std::pair<ElaboratorValue *, uint64_t> el) {
-                            el.first->print(os);
-                            os << " -> " << el.second;
-                          });
-    os << "} at " << this << ">";
+  Type getType() const {
+    return static_cast<const BagStorage *>(getStorage().ptr)->type;
   }
-#endif
-
-  const MapVector<ElaboratorValue *, uint64_t> &getBag() const { return bag; }
-
-  Type getType() const { return type; }
-
-private:
-  // Stores the elaborated values of the bag.
-  const MapVector<ElaboratorValue *, uint64_t> bag;
-
-  // Store the type of the bag such that we can materialize this evaluated value
-  // also in the case where the bag is empty.
-  const Type type;
-
-  // Compute the hash only once at constructor time.
-  const llvm::hash_code cachedHash;
 };
 
 /// Holds an evaluated value of a `SequenceType`'d value.
-class SequenceValue : public ElaboratorValue {
-public:
-  SequenceValue(StringRef name, StringAttr familyName,
-                SmallVector<ElaboratorValue *> &&args)
-      : ElaboratorValue(ValueKind::Sequence), name(name),
-        familyName(familyName), args(std::move(args)),
-        cachedHash(llvm::hash_combine(
-            llvm::hash_combine_range(this->args.begin(), this->args.end()),
-            name, familyName)) {}
+struct SequenceValue : public ElaboratorValue {
+  SequenceValue() = default;
+  SequenceValue(StorageTy storage)
+      : ElaboratorValue(ValueKind::Sequence, storage) {}
+  SequenceValue(Internalizer &internalizer, StringRef name,
+                StringAttr familyName, SmallVector<ElaboratorValue> &&args)
+      : ElaboratorValue(ValueKind::Sequence,
+                        internalizer.internalize<SequenceStorage>(
+                            name, familyName, std::move(args))) {}
 
   // Implement LLVMs RTTI
-  static bool classof(const ElaboratorValue *val) {
-    return val->getKind() == ValueKind::Sequence;
+  static bool classof(const ElaboratorValue &val) {
+    return val.getKind() == ValueKind::Sequence;
   }
 
-  llvm::hash_code getHashValue() const override { return cachedHash; }
-
-  bool isEqual(const ElaboratorValue &other) const override {
-    auto *otherSeq = dyn_cast<SequenceValue>(&other);
-    if (!otherSeq)
-      return false;
-
-    if (cachedHash != otherSeq->cachedHash)
-      return false;
-
-    return name == otherSeq->name && familyName == otherSeq->familyName &&
-           args == otherSeq->args;
+  StringRef getName() const {
+    return static_cast<const SequenceStorage *>(getStorage().ptr)->name;
   }
-
-#ifndef NDEBUG
-  void print(llvm::raw_ostream &os) const override {
-    os << "<sequence @" << name << " derived from @" << familyName.getValue()
-       << "(";
-    llvm::interleaveComma(args, os,
-                          [&](ElaboratorValue *val) { val->print(os); });
-    os << ") at " << this << ">";
+  StringAttr getFamilyName() const {
+    return static_cast<const SequenceStorage *>(getStorage().ptr)->familyName;
   }
-#endif
-
-  StringRef getName() const { return name; }
-  StringAttr getFamilyName() const { return familyName; }
-  ArrayRef<ElaboratorValue *> getArgs() const { return args; }
-
-private:
-  const StringRef name;
-  const StringAttr familyName;
-  const SmallVector<ElaboratorValue *> args;
-
-  // Compute the hash only once at constructor time.
-  const llvm::hash_code cachedHash;
+  ArrayRef<ElaboratorValue> getArgs() const {
+    return static_cast<const SequenceStorage *>(getStorage().ptr)->args;
+  }
 };
 } // namespace
 
 #ifndef NDEBUG
 static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
                                      const ElaboratorValue &value) {
-  value.print(os);
+  TypeSwitch<ElaboratorValue>(value)
+      .Case<AttributeValue>(
+          [&](auto val) { os << "<attr " << val.getAttr() << ">"; })
+      .Case<IndexValue>(
+          [&](auto val) { os << "<index " << val.getIndex() << ">"; })
+      .Case<BoolValue>(
+          [&](auto val) { os << "<bool " << val.getBool() << ">"; })
+      .Case<SetValue>([&](auto val) {
+        os << "<set {";
+        llvm::interleaveComma(val.getSet(), os);
+        os << "} at " << val.getStorage().ptr << ">";
+      })
+      .Case<BagValue>([&](auto val) {
+        os << "<bag {";
+        llvm::interleaveComma(
+            val.getBag(), os,
+            [&](const std::pair<ElaboratorValue, uint64_t> &el) {
+              os << el.first << " -> " << el.second;
+            });
+        os << "} at " << val.getStorage().ptr << ">";
+      })
+      .Case<SequenceValue>([&](auto val) {
+        os << "<sequence @" << val.getName() << " derived from @"
+           << val.getFamilyName().getValue() << "(";
+        llvm::interleaveComma(val.getArgs(), os,
+                              [&](const ElaboratorValue &val) { os << val; });
+        os << ") at " << val.getStorage().ptr << ">";
+      })
+      .Default([](auto val) {
+        assert(false && "all cases must be covered above");
+        return Value();
+      });
   return os;
 }
 #endif
@@ -387,32 +523,6 @@ static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
 //===----------------------------------------------------------------------===//
 // Hash Map Helpers
 //===----------------------------------------------------------------------===//
-
-// NOLINTNEXTLINE(readability-identifier-naming)
-static llvm::hash_code hash_value(const ElaboratorValue &val) {
-  return val.getHashValue();
-}
-
-namespace {
-struct InternMapInfo : public DenseMapInfo<ElaboratorValue *> {
-  static unsigned getHashValue(const ElaboratorValue *value) {
-    assert(value != getTombstoneKey() && value != getEmptyKey());
-    return hash_value(*value);
-  }
-
-  static bool isEqual(const ElaboratorValue *lhs, const ElaboratorValue *rhs) {
-    if (lhs == rhs)
-      return true;
-
-    auto *tk = getTombstoneKey();
-    auto *ek = getEmptyKey();
-    if (lhs == tk || rhs == tk || lhs == ek || rhs == ek)
-      return false;
-
-    return lhs->isEqual(*rhs);
-  }
-};
-} // namespace
 
 //===----------------------------------------------------------------------===//
 // Main Elaborator Implementation
@@ -423,8 +533,8 @@ namespace {
 /// Construct an SSA value from a given elaborated value.
 class Materializer {
 public:
-  Value materialize(ElaboratorValue *val, Location loc,
-                    std::queue<SequenceValue *> &elabRequests,
+  Value materialize(ElaboratorValue val, Location loc,
+                    std::queue<SequenceValue> &elabRequests,
                     function_ref<InFlightDiagnostic()> emitError) {
     assert(block && "must call reset before calling this function");
 
@@ -432,10 +542,10 @@ public:
     if (iter != materializedValues.end())
       return iter->second;
 
-    LLVM_DEBUG(llvm::dbgs() << "Materializing " << *val << "\n\n");
+    LLVM_DEBUG(llvm::dbgs() << "Materializing " << val << "\n\n");
 
     OpBuilder builder(block, insertionPoint);
-    return TypeSwitch<ElaboratorValue *, Value>(val)
+    return TypeSwitch<ElaboratorValue, Value>(val)
         .Case<AttributeValue, IndexValue, BoolValue, SetValue, BagValue,
               SequenceValue>([&](auto val) {
           return visit(val, builder, loc, elabRequests, emitError);
@@ -448,17 +558,16 @@ public:
 
   Materializer &reset(Block *block) {
     materializedValues.clear();
-    integerValues.clear();
     this->block = block;
     insertionPoint = block->begin();
     return *this;
   }
 
 private:
-  Value visit(AttributeValue *val, OpBuilder &builder, Location loc,
-              std::queue<SequenceValue *> &elabRequests,
+  Value visit(const AttributeValue &val, OpBuilder &builder, Location loc,
+              std::queue<SequenceValue> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
-    auto attr = val->getAttr();
+    auto attr = val.getAttr();
 
     // For index attributes (and arithmetic operations on them) we use the
     // index dialect.
@@ -486,28 +595,28 @@ private:
     return res;
   }
 
-  Value visit(IndexValue *val, OpBuilder &builder, Location loc,
-              std::queue<SequenceValue *> &elabRequests,
+  Value visit(const IndexValue &val, OpBuilder &builder, Location loc,
+              std::queue<SequenceValue> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
-    Value res = builder.create<index::ConstantOp>(loc, val->getIndex());
+    Value res = builder.create<index::ConstantOp>(loc, val.getIndex());
     materializedValues[val] = res;
     return res;
   }
 
-  Value visit(BoolValue *val, OpBuilder &builder, Location loc,
-              std::queue<SequenceValue *> &elabRequests,
+  Value visit(const BoolValue &val, OpBuilder &builder, Location loc,
+              std::queue<SequenceValue> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
-    Value res = builder.create<index::BoolConstantOp>(loc, val->getBool());
+    Value res = builder.create<index::BoolConstantOp>(loc, val.getBool());
     materializedValues[val] = res;
     return res;
   }
 
-  Value visit(SetValue *val, OpBuilder &builder, Location loc,
-              std::queue<SequenceValue *> &elabRequests,
+  Value visit(const SetValue &val, OpBuilder &builder, Location loc,
+              std::queue<SequenceValue> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     SmallVector<Value> elements;
-    elements.reserve(val->getSet().size());
-    for (auto *el : val->getSet()) {
+    elements.reserve(val.getSet().size());
+    for (auto el : val.getSet()) {
       auto materialized = materialize(el, loc, elabRequests, emitError);
       if (!materialized)
         return Value();
@@ -515,47 +624,38 @@ private:
       elements.push_back(materialized);
     }
 
-    auto res = builder.create<SetCreateOp>(loc, val->getType(), elements);
+    auto res = builder.create<SetCreateOp>(loc, val.getType(), elements);
     materializedValues[val] = res;
     return res;
   }
 
-  Value visit(BagValue *val, OpBuilder &builder, Location loc,
-              std::queue<SequenceValue *> &elabRequests,
+  Value visit(const BagValue &val, OpBuilder &builder, Location loc,
+              std::queue<SequenceValue> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     SmallVector<Value> values, weights;
-    values.reserve(val->getBag().size());
-    weights.reserve(val->getBag().size());
-    for (auto [val, weight] : val->getBag()) {
+    values.reserve(val.getBag().size());
+    weights.reserve(val.getBag().size());
+    for (auto [val, weight] : val.getBag()) {
       auto materializedVal = materialize(val, loc, elabRequests, emitError);
-      if (!materializedVal)
+      auto materializedWeight =
+          materialize(IndexValue(weight), loc, elabRequests, emitError);
+      if (!materializedVal || !materializedWeight)
         return Value();
-
-      auto iter = integerValues.find(weight);
-      Value materializedWeight;
-      if (iter != integerValues.end()) {
-        materializedWeight = iter->second;
-      } else {
-        materializedWeight = builder.create<index::ConstantOp>(
-            loc, builder.getIndexAttr(weight));
-        integerValues[weight] = materializedWeight;
-      }
 
       values.push_back(materializedVal);
       weights.push_back(materializedWeight);
     }
 
-    auto res =
-        builder.create<BagCreateOp>(loc, val->getType(), values, weights);
+    auto res = builder.create<BagCreateOp>(loc, val.getType(), values, weights);
     materializedValues[val] = res;
     return res;
   }
 
-  Value visit(SequenceValue *val, OpBuilder &builder, Location loc,
-              std::queue<SequenceValue *> &elabRequests,
+  Value visit(const SequenceValue &val, OpBuilder &builder, Location loc,
+              std::queue<SequenceValue> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     elabRequests.push(val);
-    return builder.create<SequenceClosureOp>(loc, val->getName(), ValueRange());
+    return builder.create<SequenceClosureOp>(loc, val.getName(), ValueRange());
   }
 
 private:
@@ -564,8 +664,7 @@ private:
   /// insertion point such that future materializations can also reuse previous
   /// materializations without running into dominance issues (or requiring
   /// additional checks to avoid them).
-  DenseMap<ElaboratorValue *, Value> materializedValues;
-  DenseMap<uint64_t, Value> integerValues;
+  DenseMap<ElaboratorValue, Value> materializedValues;
 
   /// Cache the builders to continue insertions at their current insertion point
   /// for the reason stated above.
@@ -596,16 +695,14 @@ public:
 
   Elaborator(SymbolTable &table, std::mt19937 &rng) : rng(rng), table(table) {}
 
-  /// Helper to perform internalization and keep track of interpreted value for
-  /// the given SSA value.
-  template <typename ValueTy, typename... Args>
-  void internalizeResult(Value val, Args &&...args) {
-    // TODO: this isn't the most efficient way to internalize
-    auto ptr = std::make_unique<ValueTy>(std::forward<Args>(args)...);
-    auto *e = ptr.get();
-    auto [iter, _] = interned.insert({e, std::move(ptr)});
-    state[val] = iter->second.get();
+  inline void store(Value val, const ElaboratorValue &eval) {
+    state[val] = eval;
   }
+  template <typename ValueTy>
+  inline ValueTy get(Value val) {
+    return dyn_cast<ValueTy>(state.at(val));
+  }
+  inline ElaboratorValue get(Value val) { return state.at(val); }
 
   /// Print a nice error message for operations we don't support yet.
   FailureOr<DeletionKind> visitUnhandledOp(Operation *op, VisitorInfo &info) {
@@ -623,14 +720,14 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(SequenceClosureOp op, VisitorInfo &info) {
-    SmallVector<ElaboratorValue *> args;
+    SmallVector<ElaboratorValue> args;
     for (auto arg : op.getArgs())
-      args.push_back(state.at(arg));
+      args.push_back(get(arg));
 
     auto familyName = op.getSequenceAttr();
     auto name = names.newName(familyName.getValue());
-    internalizeResult<SequenceValue>(op.getResult(), name, familyName,
-                                     std::move(args));
+    store(op.getResult(),
+          SequenceValue(internalizer, name, familyName, std::move(args)));
     return DeletionKind::Delete;
   }
 
@@ -639,83 +736,82 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(SetCreateOp op, VisitorInfo &info) {
-    SetVector<ElaboratorValue *> set;
+    SetVector<ElaboratorValue> set;
     for (auto val : op.getElements())
-      set.insert(state.at(val));
+      set.insert(get(val));
 
-    internalizeResult<SetValue>(op.getSet(), std::move(set),
-                                op.getSet().getType());
+    store(op.getSet(),
+          SetValue(internalizer, std::move(set), op.getSet().getType()));
     return DeletionKind::Delete;
   }
 
   FailureOr<DeletionKind> visitOp(SetSelectRandomOp op, VisitorInfo &info) {
-    auto *set = cast<SetValue>(state.at(op.getSet()));
+    auto set = cast<SetValue>(get(op.getSet()));
 
     size_t selected;
     if (auto intAttr =
             op->getAttrOfType<IntegerAttr>("rtg.elaboration_custom_seed")) {
       std::mt19937 customRng(intAttr.getInt());
-      selected = getUniformlyInRange(customRng, 0, set->getSet().size() - 1);
+      selected = getUniformlyInRange(customRng, 0, set.getSet().size() - 1);
     } else {
-      selected = getUniformlyInRange(rng, 0, set->getSet().size() - 1);
+      selected = getUniformlyInRange(rng, 0, set.getSet().size() - 1);
     }
 
-    state[op.getResult()] = set->getSet()[selected];
+    store(op.getResult(), set.getSet()[selected]);
     return DeletionKind::Delete;
   }
 
   FailureOr<DeletionKind> visitOp(SetDifferenceOp op, VisitorInfo &info) {
-    auto original = cast<SetValue>(state.at(op.getOriginal()))->getSet();
-    auto diff = cast<SetValue>(state.at(op.getDiff()))->getSet();
+    auto original = get<SetValue>(op.getOriginal()).getSet();
+    auto diff = get<SetValue>(op.getDiff()).getSet();
 
-    SetVector<ElaboratorValue *> result(original);
+    SetVector<ElaboratorValue> result(original);
     result.set_subtract(diff);
 
-    internalizeResult<SetValue>(op.getResult(), std::move(result),
-                                op.getResult().getType());
+    store(op.getResult(),
+          SetValue(internalizer, std::move(result), op.getResult().getType()));
     return DeletionKind::Delete;
   }
 
   FailureOr<DeletionKind> visitOp(SetUnionOp op, VisitorInfo &info) {
-    SetVector<ElaboratorValue *> result;
+    SetVector<ElaboratorValue> result;
     for (auto set : op.getSets())
-      result.set_union(cast<SetValue>(state.at(set))->getSet());
+      result.set_union(get<SetValue>(set).getSet());
 
-    internalizeResult<SetValue>(op.getResult(), std::move(result),
-                                op.getType());
+    store(op.getResult(),
+          SetValue(internalizer, std::move(result), op.getType()));
     return DeletionKind::Delete;
   }
 
   FailureOr<DeletionKind> visitOp(SetSizeOp op, VisitorInfo &info) {
-    auto size = cast<SetValue>(state.at(op.getSet()))->getSet().size();
-    auto sizeAttr = IntegerAttr::get(IndexType::get(op->getContext()), size);
-    internalizeResult<AttributeValue>(op.getResult(), sizeAttr);
+    auto size = get<SetValue>(op.getSet()).getSet().size();
+    store(op.getResult(), IndexValue(size));
     return DeletionKind::Delete;
   }
 
   FailureOr<DeletionKind> visitOp(BagCreateOp op, VisitorInfo &info) {
-    MapVector<ElaboratorValue *, uint64_t> bag;
+    MapVector<ElaboratorValue, uint64_t> bag;
     for (auto [val, multiple] :
          llvm::zip(op.getElements(), op.getMultiples())) {
-      auto *interpValue = state.at(val);
+      auto interpValue = get(val);
       // If the multiple is not stored as an AttributeValue, the elaboration
       // must have already failed earlier (since we don't have
       // unevaluated/opaque values).
-      auto *interpMultiple = cast<IndexValue>(state.at(multiple));
-      bag[interpValue] += interpMultiple->getIndex();
+      auto interpMultiple = get<IndexValue>(multiple);
+      bag[interpValue] += interpMultiple.getIndex();
     }
 
-    internalizeResult<BagValue>(op.getBag(), std::move(bag), op.getType());
+    store(op.getBag(), BagValue(internalizer, std::move(bag), op.getType()));
     return DeletionKind::Delete;
   }
 
   FailureOr<DeletionKind> visitOp(BagSelectRandomOp op, VisitorInfo &info) {
-    auto *bag = cast<BagValue>(state.at(op.getBag()));
+    auto bag = get<BagValue>(op.getBag());
 
-    SmallVector<std::pair<ElaboratorValue *, uint32_t>> prefixSum;
-    prefixSum.reserve(bag->getBag().size());
+    SmallVector<std::pair<ElaboratorValue, uint32_t>> prefixSum;
+    prefixSum.reserve(bag.getBag().size());
     uint32_t accumulator = 0;
-    for (auto [val, weight] : bag->getBag()) {
+    for (auto [val, weight] : bag.getBag()) {
       accumulator += weight;
       prefixSum.push_back({val, accumulator});
     }
@@ -729,20 +825,21 @@ public:
     auto idx = getUniformlyInRange(customRng, 0, accumulator - 1);
     auto *iter = llvm::upper_bound(
         prefixSum, idx,
-        [](uint32_t a, const std::pair<ElaboratorValue *, uint32_t> &b) {
+        [](uint32_t a, const std::pair<ElaboratorValue, uint32_t> &b) {
           return a < b.second;
         });
-    state[op.getResult()] = iter->first;
+
+    store(op.getResult(), iter->first);
     return DeletionKind::Delete;
   }
 
   FailureOr<DeletionKind> visitOp(BagDifferenceOp op, VisitorInfo &info) {
-    auto *original = cast<BagValue>(state.at(op.getOriginal()));
-    auto *diff = cast<BagValue>(state.at(op.getDiff()));
+    auto original = get<BagValue>(op.getOriginal());
+    auto diff = get<BagValue>(op.getDiff());
 
-    MapVector<ElaboratorValue *, uint64_t> result;
-    for (const auto &el : original->getBag()) {
-      if (!diff->getBag().contains(el.first)) {
+    MapVector<ElaboratorValue, uint64_t> result;
+    for (const auto &el : original.getBag()) {
+      if (!diff.getBag().contains(el.first)) {
         result.insert(el);
         continue;
       }
@@ -750,40 +847,39 @@ public:
       if (op.getInf())
         continue;
 
-      auto toDiff = diff->getBag().lookup(el.first);
+      auto toDiff = diff.getBag().lookup(el.first);
       if (el.second <= toDiff)
         continue;
 
       result.insert({el.first, el.second - toDiff});
     }
 
-    internalizeResult<BagValue>(op.getResult(), std::move(result),
-                                op.getType());
+    store(op.getResult(),
+          BagValue(internalizer, std::move(result), op.getType()));
     return DeletionKind::Delete;
   }
 
   FailureOr<DeletionKind> visitOp(BagUnionOp op, VisitorInfo &info) {
-    MapVector<ElaboratorValue *, uint64_t> result;
+    MapVector<ElaboratorValue, uint64_t> result;
     for (auto bag : op.getBags()) {
-      auto *val = cast<BagValue>(state.at(bag));
-      for (auto [el, multiple] : val->getBag())
+      auto val = get<BagValue>(bag);
+      for (auto [el, multiple] : val.getBag())
         result[el] += multiple;
     }
 
-    internalizeResult<BagValue>(op.getResult(), std::move(result),
-                                op.getType());
+    store(op.getResult(),
+          BagValue(internalizer, std::move(result), op.getType()));
     return DeletionKind::Delete;
   }
 
   FailureOr<DeletionKind> visitOp(BagUniqueSizeOp op, VisitorInfo &info) {
-    auto size = cast<BagValue>(state.at(op.getBag()))->getBag().size();
-    auto sizeAttr = IntegerAttr::get(IndexType::get(op->getContext()), size);
-    internalizeResult<AttributeValue>(op.getResult(), sizeAttr);
+    auto size = get<BagValue>(op.getBag()).getBag().size();
+    store(op.getResult(), IndexValue(size));
     return DeletionKind::Delete;
   }
 
   FailureOr<DeletionKind> visitOp(scf::IfOp op, VisitorInfo &info) {
-    bool cond = cast<BoolValue>(state.at(op.getCondition()))->getBool();
+    bool cond = get<BoolValue>(op.getCondition()).getBool();
     if (!info.toElaborate) {
       info.toElaborate = cond ? op.thenBlock() : op.elseBlock();
       return info.toElaborate ? DeletionKind::Keep : DeletionKind::Delete;
@@ -791,54 +887,54 @@ public:
 
     for (auto [res, out] : llvm::zip(
              op.getResults(), info.toElaborate->getTerminator()->getOperands()))
-      state[res] = state.at(out);
+      store(res, get(out));
 
     info.toElaborate = nullptr;
     return DeletionKind::Delete;
   }
 
   FailureOr<DeletionKind> visitOp(scf::ForOp op, VisitorInfo &info) {
-    auto *lowerBound = dyn_cast<IndexValue>(state.at(op.getLowerBound()));
-    auto *step = dyn_cast<IndexValue>(state.at(op.getStep()));
-    auto *upperBound = dyn_cast<IndexValue>(state.at(op.getUpperBound()));
+    auto lowerBound = get<IndexValue>(op.getLowerBound());
+    auto step = get<IndexValue>(op.getStep());
+    auto upperBound = get<IndexValue>(op.getUpperBound());
 
     if (!lowerBound || !step || !upperBound)
       return op->emitOpError("can only elaborate index type iterator");
 
     // The loop never executes the body
-    if (lowerBound->getIndex() >= upperBound->getIndex()) {
+    if (lowerBound.getIndex() >= upperBound.getIndex()) {
       for (auto [res, iterArg] : llvm::zip(op->getResults(), op.getInitArgs()))
-        state[res] = state.at(iterArg);
+        store(res, get(iterArg));
       return DeletionKind::Delete;
     }
 
     // First iteration
     if (!info.toElaborate) {
-      state[op.getInductionVar()] = lowerBound;
+      store(op.getInductionVar(), lowerBound);
       for (auto [iterArg, initArg] :
            llvm::zip(op.getRegionIterArgs(), op.getInitArgs()))
-        state[iterArg] = state.at(initArg);
+        store(iterArg, get(initArg));
       info.toElaborate = op.getBody();
       return DeletionKind::Keep;
     }
 
     // Last time was the last execution
-    size_t idx = cast<IndexValue>(state.at(op.getInductionVar()))->getIndex();
-    if (idx + step->getIndex() >= upperBound->getIndex()) {
+    size_t idx = get<IndexValue>(op.getInductionVar()).getIndex();
+    if (idx + step.getIndex() >= upperBound.getIndex()) {
       for (auto [res, iterArg] : llvm::zip(
                op->getResults(), op.getBody()->getTerminator()->getOperands()))
-        state[res] = state.at(iterArg);
+        store(res, get(iterArg));
 
       info.toElaborate = nullptr;
       return DeletionKind::Delete;
     }
 
     // We are doing a regular iteration
-    internalizeResult<IndexValue>(op.getInductionVar(), idx + step->getIndex());
+    store(op.getInductionVar(), IndexValue(idx + step.getIndex()));
     for (auto [iterArg, prevIterArg] :
          llvm::zip(op.getRegionIterArgs(),
                    info.toElaborate->getTerminator()->getOperands()))
-      state[iterArg] = state.at(prevIterArg);
+      store(iterArg, get(prevIterArg));
 
     info.toElaborate = op.getBody();
     return DeletionKind::Keep;
@@ -849,15 +945,15 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(index::AddOp op, VisitorInfo &info) {
-    size_t lhs = cast<IndexValue>(state.at(op.getLhs()))->getIndex();
-    size_t rhs = cast<IndexValue>(state.at(op.getRhs()))->getIndex();
-    internalizeResult<IndexValue>(op.getResult(), lhs + rhs);
+    size_t lhs = get<IndexValue>(op.getLhs()).getIndex();
+    size_t rhs = get<IndexValue>(op.getRhs()).getIndex();
+    store(op.getResult(), IndexValue(lhs + rhs));
     return DeletionKind::Delete;
   }
 
   FailureOr<DeletionKind> visitOp(index::CmpOp op, VisitorInfo &info) {
-    size_t lhs = cast<IndexValue>(state.at(op.getLhs()))->getIndex();
-    size_t rhs = cast<IndexValue>(state.at(op.getRhs()))->getIndex();
+    size_t lhs = get<IndexValue>(op.getLhs()).getIndex();
+    size_t rhs = get<IndexValue>(op.getRhs()).getIndex();
     bool result;
     switch (op.getPred()) {
     case index::IndexCmpPredicate::EQ:
@@ -881,7 +977,7 @@ public:
     default:
       return op->emitOpError("elaboration not supported");
     }
-    internalizeResult<BoolValue>(op.getResult(), result);
+    store(op.getResult(), BoolValue(result));
     return DeletionKind::Delete;
   }
 
@@ -899,11 +995,11 @@ public:
 
       auto intAttr = dyn_cast<IntegerAttr>(attr);
       if (intAttr && isa<IndexType>(attr.getType()))
-        internalizeResult<IndexValue>(op->getResult(0), intAttr.getInt());
+        store(op->getResult(0), IndexValue(intAttr.getInt()));
       else if (intAttr && intAttr.getType().isSignlessInteger(1))
-        internalizeResult<BoolValue>(op->getResult(0), intAttr.getInt());
+        store(op->getResult(0), BoolValue(intAttr.getInt()));
       else
-        internalizeResult<AttributeValue>(op->getResult(0), attr);
+        store(op->getResult(0), AttributeValue(attr));
 
       return DeletionKind::Delete;
     }
@@ -957,8 +1053,8 @@ public:
                 << operand.getOperandNumber();
             return diag;
           };
-          Value val = materializer.materialize(
-              state.at(operand.get()), op.getLoc(), worklist, emitError);
+          Value val = materializer.materialize(get(operand.get()), op.getLoc(),
+                                               worklist, emitError);
           if (!val)
             return failure();
 
@@ -973,7 +1069,7 @@ public:
 
         llvm::interleaveComma(op.getResults(), llvm::dbgs(), [&](auto res) {
           if (state.contains(res))
-            llvm::dbgs() << *state.at(res);
+            llvm::dbgs() << get(res);
           else
             llvm::dbgs() << "unknown";
         });
@@ -986,7 +1082,7 @@ public:
   }
 
   LogicalResult elaborate(SequenceOp family, SequenceOp dest,
-                          ArrayRef<ElaboratorValue *> args) {
+                          ArrayRef<ElaboratorValue> args) {
     LLVM_DEBUG(llvm::dbgs() << "\n=== Elaborating " << family.getOperationName()
                             << " @" << family.getSymName() << " into @"
                             << dest.getSymName() << "\n\n");
@@ -1053,8 +1149,8 @@ public:
                 << operand.getOperandNumber();
             return diag;
           };
-          Value val = materializer.materialize(
-              state.at(operand.get()), op.getLoc(), worklist, emitError);
+          Value val = materializer.materialize(get(operand.get()), op.getLoc(),
+                                               worklist, emitError);
           if (!val)
             return failure();
           operand.set(val);
@@ -1068,7 +1164,7 @@ public:
 
         llvm::interleaveComma(op.getResults(), llvm::dbgs(), [&](auto res) {
           if (state.contains(res))
-            llvm::dbgs() << *state.at(res);
+            llvm::dbgs() << get(res);
           else
             llvm::dbgs() << "unknown";
         });
@@ -1129,24 +1225,24 @@ public:
     // Do top-down BFS traversal such that elaborating a sequence further down
     // does not fix the outcome for multiple placements.
     while (!worklist.empty()) {
-      auto *curr = worklist.front();
+      auto curr = worklist.front();
       worklist.pop();
 
-      if (table.lookup<SequenceOp>(curr->getName()))
+      if (table.lookup<SequenceOp>(curr.getName()))
         continue;
 
-      auto familyOp = table.lookup<SequenceOp>(curr->getFamilyName());
+      auto familyOp = table.lookup<SequenceOp>(curr.getFamilyName());
       // TODO: use 'elaborateInPlace' and don't clone if this is the only
       // remaining reference to this sequence
       OpBuilder builder(familyOp);
       auto seqOp = builder.cloneWithoutRegions(familyOp);
       seqOp.getBodyRegion().emplaceBlock();
-      seqOp.setSymName(curr->getName());
+      seqOp.setSymName(curr.getName());
       table.insert(seqOp);
-      assert(seqOp.getSymName() == curr->getName() &&
+      assert(seqOp.getSymName() == curr.getName() &&
              "should not have been renamed");
 
-      if (failed(elaborate(familyOp, seqOp, curr->getArgs())))
+      if (failed(elaborate(familyOp, seqOp, curr.getArgs())))
         return failure();
     }
 
@@ -1168,29 +1264,20 @@ private:
   SymbolTable &table;
   Namespace names;
 
-  DenseMap<ElaboratorValue *, SequenceOp> materializedSequences;
+  DenseMap<ElaboratorValue, SequenceOp> materializedSequences;
 
   /// The worklist used to keep track of the test and sequence operations to
   /// make sure they are processed top-down (BFS traversal).
-  std::queue<SequenceValue *> worklist;
-
-  // A map used to intern elaborator values. We do this such that we can
-  // compare pointers when, e.g., computing set differences, uniquing the
-  // elements in a set, etc. Otherwise, we'd need to do a deep value comparison
-  // in those situations.
-  // Use a pointer as the key with custom MapInfo because of object slicing when
-  // inserting an object of a derived class of ElaboratorValue.
-  // The custom MapInfo makes sure that we do a value comparison instead of
-  // comparing the pointers.
-  DenseMap<ElaboratorValue *, std::unique_ptr<ElaboratorValue>, InternMapInfo>
-      interned;
+  std::queue<SequenceValue> worklist;
 
   // A map from SSA values to a pointer of an interned elaborator value.
-  DenseMap<Value, ElaboratorValue *> state;
+  DenseMap<Value, ElaboratorValue> state;
 
   // Allows us to materialize ElaboratorValues to the IR operations necessary to
   // obtain an SSA value representing that elaborated value.
   Materializer materializer;
+
+  Internalizer internalizer;
 };
 } // namespace
 
