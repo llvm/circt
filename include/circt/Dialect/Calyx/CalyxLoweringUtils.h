@@ -63,7 +63,7 @@ bool noStoresToMemory(Value memoryReference);
 Value getComponentOutput(calyx::ComponentOp compOp, unsigned outPortIdx);
 
 // If the provided type is an index type, converts it to i32; else if the
-// provided is an integer of floating point, bitcasts to a signless integer
+// provided is an integer or floating point, bitcasts it to a signless integer
 // type; otherwise, returns the unmodified type.
 Type normalizeType(OpBuilder &builder, Type type);
 
