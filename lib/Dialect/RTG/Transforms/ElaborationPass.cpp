@@ -98,69 +98,28 @@ public:
     None
   };
 
-  union StorageTy {
-    StorageTy() : ptr(nullptr) {}
-    StorageTy(const void *ptr) : ptr(ptr) {}
-    StorageTy(size_t index) : index(index) {}
-    StorageTy(bool boolean) : boolean(boolean) {}
-
-    const void *ptr;
-    size_t index;
-    bool boolean;
-  };
-
-  ElaboratorValue(ValueKind kind = ValueKind::None,
-                  StorageTy storage = StorageTy())
+  ElaboratorValue(ValueKind kind = ValueKind::None, uintptr_t storage = 0)
       : kind(kind), storage(storage) {}
 
   // This constructor is needed for LLVM RTTI
-  ElaboratorValue(StorageTy storage) : ElaboratorValue() {}
+  ElaboratorValue(uintptr_t storage) : ElaboratorValue() {}
 
   llvm::hash_code getHashValue() const {
-    switch (kind) {
-    case ValueKind::Attribute:
-    case ValueKind::Set:
-    case ValueKind::Bag:
-    case ValueKind::Sequence:
-      return llvm::hash_combine(kind, storage.ptr);
-    case ValueKind::Index:
-      return llvm::hash_combine(kind, storage.index);
-    case ValueKind::Bool:
-      return llvm::hash_combine(kind, storage.boolean);
-    case ValueKind::None:
-      return llvm::hash_value(kind);
-    }
-    llvm::llvm_unreachable_internal("all cases handled above");
+    return llvm::hash_combine(kind, storage);
   }
 
   bool operator==(const ElaboratorValue &other) const {
-    if (kind != other.kind)
-      return false;
-
-    switch (kind) {
-    case ValueKind::Attribute:
-    case ValueKind::Set:
-    case ValueKind::Bag:
-    case ValueKind::Sequence:
-      return storage.ptr == other.storage.ptr;
-    case ValueKind::Index:
-      return storage.index == other.storage.index;
-    case ValueKind::Bool:
-      return storage.boolean == other.storage.boolean;
-    case ValueKind::None:
-      return true;
-    }
-    llvm::llvm_unreachable_internal("all cases handled above");
+    return kind == other.kind && storage == other.storage;
   }
 
   operator bool() const { return kind != ValueKind::None; }
 
   ValueKind getKind() const { return kind; }
-  StorageTy getStorage() const { return storage; }
+  uintptr_t getRawStorage() const { return storage; }
 
-private:
+protected:
   ValueKind kind;
-  StorageTy storage;
+  uintptr_t storage;
 };
 
 } // namespace
@@ -191,7 +150,7 @@ struct CastInfo<To, From,
     }
   }
   static inline To doCast(ElaboratorValue value) {
-    return To(value.getStorage());
+    return To(value.getRawStorage());
   }
   static To castFailed() { return To(); }
 };
@@ -200,8 +159,7 @@ template <>
 struct DenseMapInfo<ElaboratorValue> {
   static inline ElaboratorValue getEmptyKey() { return ElaboratorValue(); }
   static inline ElaboratorValue getTombstoneKey() {
-    return ElaboratorValue(ElaboratorValue::ValueKind::None,
-                           reinterpret_cast<const void *>(~0ULL));
+    return ElaboratorValue(ElaboratorValue::ValueKind::None, ~uintptr_t());
   }
   static unsigned getHashValue(const ElaboratorValue &value) {
     return value.getHashValue();
@@ -223,7 +181,7 @@ struct SetStorage : public llvm::FoldingSetNode {
   static void Profile(llvm::FoldingSetNodeID &ID,
                       const SetVector<ElaboratorValue> &set, Type type) {
     for (auto el : set) {
-      ID.AddPointer(el.getStorage().ptr);
+      ID.AddInteger(el.getRawStorage());
       ID.AddInteger(static_cast<unsigned>(el.getKind()));
     }
     ID.AddPointer(type.getAsOpaquePointer());
@@ -249,7 +207,7 @@ struct BagStorage : public llvm::FoldingSetNode {
                       const MapVector<ElaboratorValue, uint64_t> &bag,
                       Type type) {
     for (auto el : bag) {
-      ID.AddPointer(el.first.getStorage().ptr);
+      ID.AddInteger(el.first.getRawStorage());
       ID.AddInteger(static_cast<unsigned>(el.first.getKind()));
       ID.AddInteger(el.second);
     }
@@ -278,7 +236,7 @@ struct SequenceStorage : public llvm::FoldingSetNode {
     ID.AddString(name);
     ID.AddPointer(familyName.getAsOpaquePointer());
     for (auto el : args) {
-      ID.AddPointer(el.getStorage().ptr);
+      ID.AddInteger(el.getRawStorage());
       ID.AddInteger(static_cast<unsigned>(el.getKind()));
     }
   }
@@ -361,11 +319,14 @@ private:
 /// attributes because for materialization we need to provide the type to the
 /// dialect's materializer.
 struct AttributeValue : public ElaboratorValue {
+  static_assert(sizeof(uintptr_t) == sizeof(const void *));
+
   AttributeValue() = default;
-  AttributeValue(StorageTy storage)
+  AttributeValue(uintptr_t storage)
       : ElaboratorValue(ValueKind::Attribute, storage) {}
   AttributeValue(TypedAttr attr)
-      : ElaboratorValue(ValueKind::Attribute, attr.getAsOpaquePointer()) {
+      : ElaboratorValue(ValueKind::Attribute, reinterpret_cast<uintptr_t>(
+                                                  attr.getAsOpaquePointer())) {
     assert(attr && "null attributes not allowed");
   }
 
@@ -375,46 +336,55 @@ struct AttributeValue : public ElaboratorValue {
   }
 
   TypedAttr getAttr() const {
-    return cast<TypedAttr>(Attribute::getFromOpaquePointer(getStorage().ptr));
+    return cast<TypedAttr>(Attribute::getFromOpaquePointer(
+        reinterpret_cast<const void *>(storage)));
   }
 };
 
 /// Holds an evaluated value of a `IndexType`'d value.
 struct IndexValue : public ElaboratorValue {
+  static_assert(sizeof(uintptr_t) >= sizeof(size_t));
+
   IndexValue() = default;
-  IndexValue(StorageTy storage) : ElaboratorValue(ValueKind::Index, storage) {}
-  IndexValue(size_t index) : ElaboratorValue(ValueKind::Index, index) {}
+  IndexValue(uintptr_t storage) : ElaboratorValue(ValueKind::Index, storage) {}
+  // IndexValue(size_t index) : ElaboratorValue(ValueKind::Index, index) {}
 
   // Implement LLVMs RTTI
   static bool classof(const ElaboratorValue &val) {
     return val.getKind() == ValueKind::Index;
   }
 
-  size_t getIndex() const { return getStorage().index; }
+  size_t getIndex() const { return storage; }
 };
 
 /// Holds an evaluated value of an `i1` type'd value.
 struct BoolValue : public ElaboratorValue {
+  static_assert(sizeof(uintptr_t) >= sizeof(bool));
+
   BoolValue() = default;
-  BoolValue(StorageTy storage) : ElaboratorValue(ValueKind::Bool, storage) {}
-  BoolValue(bool value) : ElaboratorValue(ValueKind::Bool, value) {}
+  BoolValue(uintptr_t storage) : ElaboratorValue(ValueKind::Bool, storage) {}
+  BoolValue(bool value) : ElaboratorValue(ValueKind::Bool, uintptr_t(value)) {}
 
   // Implement LLVMs RTTI
   static bool classof(const ElaboratorValue &val) {
     return val.getKind() == ValueKind::Bool;
   }
 
-  bool getBool() const { return getStorage().boolean; }
+  bool getBool() const { return storage; }
 };
 
 /// Holds an evaluated value of a `SetType`'d value.
 struct SetValue : public ElaboratorValue {
+  static_assert(sizeof(uintptr_t) == sizeof(const void *));
+
   SetValue() = default;
-  SetValue(StorageTy storage) : ElaboratorValue(ValueKind::Set, storage) {}
+  SetValue(uintptr_t storage) : ElaboratorValue(ValueKind::Set, storage) {}
   SetValue(Internalizer &internalizer, SetVector<ElaboratorValue> &&set,
            Type type)
-      : ElaboratorValue(ValueKind::Set, internalizer.internalize<SetStorage>(
-                                            std::move(set), type)) {}
+      : ElaboratorValue(
+            ValueKind::Set,
+            reinterpret_cast<uintptr_t>(
+                internalizer.internalize<SetStorage>(std::move(set), type))) {}
 
   // Implement LLVMs RTTI
   static bool classof(const ElaboratorValue &val) {
@@ -422,22 +392,26 @@ struct SetValue : public ElaboratorValue {
   }
 
   const SetVector<ElaboratorValue> &getSet() const {
-    return static_cast<const SetStorage *>(getStorage().ptr)->set;
+    return reinterpret_cast<const SetStorage *>(storage)->set;
   }
 
   Type getType() const {
-    return static_cast<const SetStorage *>(getStorage().ptr)->type;
+    return reinterpret_cast<const SetStorage *>(storage)->type;
   }
 };
 
 /// Holds an evaluated value of a `BagType`'d value.
 struct BagValue : public ElaboratorValue {
+  static_assert(sizeof(uintptr_t) == sizeof(const void *));
+
   BagValue() = default;
-  BagValue(StorageTy storage) : ElaboratorValue(ValueKind::Bag, storage) {}
+  BagValue(uintptr_t storage) : ElaboratorValue(ValueKind::Bag, storage) {}
   BagValue(Internalizer &internalizer,
            MapVector<ElaboratorValue, uint64_t> &&bag, Type type)
-      : ElaboratorValue(ValueKind::Bag, internalizer.internalize<BagStorage>(
-                                            std::move(bag), type)) {}
+      : ElaboratorValue(
+            ValueKind::Bag,
+            reinterpret_cast<uintptr_t>(
+                internalizer.internalize<BagStorage>(std::move(bag), type))) {}
 
   // Implement LLVMs RTTI
   static bool classof(const ElaboratorValue &val) {
@@ -445,24 +419,27 @@ struct BagValue : public ElaboratorValue {
   }
 
   const MapVector<ElaboratorValue, uint64_t> &getBag() const {
-    return static_cast<const BagStorage *>(getStorage().ptr)->bag;
+    return reinterpret_cast<const BagStorage *>(storage)->bag;
   }
 
   Type getType() const {
-    return static_cast<const BagStorage *>(getStorage().ptr)->type;
+    return reinterpret_cast<const BagStorage *>(storage)->type;
   }
 };
 
 /// Holds an evaluated value of a `SequenceType`'d value.
 struct SequenceValue : public ElaboratorValue {
+  static_assert(sizeof(uintptr_t) == sizeof(const void *));
+
   SequenceValue() = default;
-  SequenceValue(StorageTy storage)
+  SequenceValue(uintptr_t storage)
       : ElaboratorValue(ValueKind::Sequence, storage) {}
   SequenceValue(Internalizer &internalizer, StringRef name,
                 StringAttr familyName, SmallVector<ElaboratorValue> &&args)
       : ElaboratorValue(ValueKind::Sequence,
-                        internalizer.internalize<SequenceStorage>(
-                            name, familyName, std::move(args))) {}
+                        reinterpret_cast<uintptr_t>(
+                            internalizer.internalize<SequenceStorage>(
+                                name, familyName, std::move(args)))) {}
 
   // Implement LLVMs RTTI
   static bool classof(const ElaboratorValue &val) {
@@ -470,13 +447,13 @@ struct SequenceValue : public ElaboratorValue {
   }
 
   StringRef getName() const {
-    return static_cast<const SequenceStorage *>(getStorage().ptr)->name;
+    return reinterpret_cast<const SequenceStorage *>(storage)->name;
   }
   StringAttr getFamilyName() const {
-    return static_cast<const SequenceStorage *>(getStorage().ptr)->familyName;
+    return reinterpret_cast<const SequenceStorage *>(storage)->familyName;
   }
   ArrayRef<ElaboratorValue> getArgs() const {
-    return static_cast<const SequenceStorage *>(getStorage().ptr)->args;
+    return reinterpret_cast<const SequenceStorage *>(storage)->args;
   }
 };
 } // namespace
@@ -494,7 +471,8 @@ static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
       .Case<SetValue>([&](auto val) {
         os << "<set {";
         llvm::interleaveComma(val.getSet(), os);
-        os << "} at " << val.getStorage().ptr << ">";
+        os << "} at " << reinterpret_cast<const void *>(val.getRawStorage())
+           << ">";
       })
       .Case<BagValue>([&](auto val) {
         os << "<bag {";
@@ -503,14 +481,16 @@ static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
             [&](const std::pair<ElaboratorValue, uint64_t> &el) {
               os << el.first << " -> " << el.second;
             });
-        os << "} at " << val.getStorage().ptr << ">";
+        os << "} at " << reinterpret_cast<const void *>(val.getRawStorage())
+           << ">";
       })
       .Case<SequenceValue>([&](auto val) {
         os << "<sequence @" << val.getName() << " derived from @"
            << val.getFamilyName().getValue() << "(";
         llvm::interleaveComma(val.getArgs(), os,
                               [&](const ElaboratorValue &val) { os << val; });
-        os << ") at " << val.getStorage().ptr << ">";
+        os << ") at " << reinterpret_cast<const void *>(val.getRawStorage())
+           << ">";
       })
       .Default([](auto val) {
         assert(false && "all cases must be covered above");
@@ -997,7 +977,7 @@ public:
       if (intAttr && isa<IndexType>(attr.getType()))
         store(op->getResult(0), IndexValue(intAttr.getInt()));
       else if (intAttr && intAttr.getType().isSignlessInteger(1))
-        store(op->getResult(0), BoolValue(intAttr.getInt()));
+        store(op->getResult(0), BoolValue(bool(intAttr.getInt())));
       else
         store(op->getResult(0), AttributeValue(attr));
 
