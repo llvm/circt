@@ -527,10 +527,9 @@ struct FirtoolCmdOptions {
                                   "release", "Compile with optimizations")),
       llvm::cl::init(firtool::FirtoolOptions::BuildModeDefault)};
 
-  llvm::cl::opt<bool> disableLayerSink{
-      "disable-layer-sink",
-      llvm::cl::desc("Disable layer sink"),
-  };
+  llvm::cl::opt<bool> disableLayerSink{"disable-layer-sink",
+                                       llvm::cl::desc("Disable layer sink"),
+                                       llvm::cl::init(false)};
 
   llvm::cl::opt<bool> disableOptimization{
       "disable-opt",
