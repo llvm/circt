@@ -22,7 +22,6 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
-#include "llvm/ADT/FoldingSet.h"
 #include "llvm/Support/Debug.h"
 #include <queue>
 #include <random>
@@ -80,7 +79,7 @@ static uint32_t getUniformlyInRange(std::mt19937 &rng, uint32_t a, uint32_t b) {
 }
 
 //===----------------------------------------------------------------------===//
-// Elaborator Values
+// Elaborator Value Base
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -89,13 +88,13 @@ namespace {
 class ElaboratorValue {
 public:
   enum class ValueKind {
-    Attribute = 0U,
-    Set,
+    None = 0U,
+    Attribute,
     Bag,
-    Sequence,
-    Index,
     Bool,
-    None
+    Index,
+    Sequence,
+    Set,
   };
 
   ElaboratorValue(ValueKind kind = ValueKind::None, uintptr_t storage = 0)
@@ -122,32 +121,14 @@ protected:
   uintptr_t storage;
 };
 
-template<typename StorageTy>
-struct HashedStorage {
-    HashedStorage(unsigned hashcode = 0, StorageTy *storage = nullptr)
-        : hashcode(hashcode), storage(storage) {}
-
-  unsigned hashcode;
-  StorageTy *storage;
-};
-
-// struct SetStorage;
-// struct BagStorage;
-// struct SequenceStorage;
+// NOLINTNEXTLINE(readability-identifier-naming)
+llvm::hash_code hash_value(const ElaboratorValue &val) {
+  return val.getHashValue();
+}
 
 } // namespace
 
 namespace llvm {
-// llvm::hash_code hash_value(const HashedStorage<SetStorage> &storage) {
-//   return storage.hashcode;
-// }
-// llvm::hash_code hash_value(const HashedStorage<BagStorage> &storage) {
-//   return storage.hashcode;
-// }
-// llvm::hash_code hash_value(const HashedStorage<SequenceStorage> &storage) {
-//   return storage.hashcode;
-// }
-
 
 /// Add support for llvm style casts. We provide a cast between To and From if
 /// From is mlir::Attribute or derives from it.
@@ -195,18 +176,38 @@ struct DenseMapInfo<ElaboratorValue> {
 
 } // namespace llvm
 
-namespace {
-llvm::hash_code hash_value(const ElaboratorValue &val) {
-  return val.getHashValue();
-}
+//===----------------------------------------------------------------------===//
+// Elaborator Value Storages and Internalization
+//===----------------------------------------------------------------------===//
 
-template<typename StorageTy>
+namespace {
+
+/// Lightweight object to be used as the key for internalization sets. It caches
+/// the hashcode of the internalized object and a pointer to it. This allows a
+/// delayed allocation and construction of the actual object and thus only has
+/// to happen if the object is not already in the set.
+template <typename StorageTy>
+struct HashedStorage {
+  HashedStorage(unsigned hashcode = 0, StorageTy *storage = nullptr)
+      : hashcode(hashcode), storage(storage) {}
+
+  unsigned hashcode;
+  StorageTy *storage;
+};
+
+/// A DenseMapInfo implementation to support 'insert_as' for the internalization
+/// sets. When comparing two 'HashedStorage's we can just compare the already
+/// internalized storage pointers, otherwise we have to call the costly
+/// 'isEqual' method.
+template <typename StorageTy>
 struct StorageKeyInfo {
   static inline HashedStorage<StorageTy> getEmptyKey() {
-    return HashedStorage<StorageTy>(0, DenseMapInfo<StorageTy *>::getEmptyKey());
+    return HashedStorage<StorageTy>(0,
+                                    DenseMapInfo<StorageTy *>::getEmptyKey());
   }
   static inline HashedStorage<StorageTy> getTombstoneKey() {
-    return HashedStorage<StorageTy>(0, DenseMapInfo<StorageTy *>::getTombstoneKey());
+    return HashedStorage<StorageTy>(
+        0, DenseMapInfo<StorageTy *>::getTombstoneKey());
   }
 
   static inline unsigned getHashValue(const HashedStorage<StorageTy> &key) {
@@ -217,180 +218,147 @@ struct StorageKeyInfo {
   }
 
   static inline bool isEqual(const HashedStorage<StorageTy> &lhs,
-                              const HashedStorage<StorageTy> &rhs) {
+                             const HashedStorage<StorageTy> &rhs) {
     return lhs.storage == rhs.storage;
   }
-  static inline bool isEqual(const StorageTy &lhs, const HashedStorage<StorageTy> &rhs) {
+  static inline bool isEqual(const StorageTy &lhs,
+                             const HashedStorage<StorageTy> &rhs) {
     if (isEqual(rhs, getEmptyKey()) || isEqual(rhs, getTombstoneKey()))
       return false;
-    // Invoke the equality function on the lookup key.
+
     return lhs.isEqual(rhs.storage);
   }
 };
 
-template<typename StorageTy>
-struct StorageInfo : public DenseMapInfo<StorageTy *> {
-  using Base = DenseMapInfo<StorageTy *>;
-  static inline unsigned getHashValue(const StorageTy *key) {
-    return key->hashcode;
-  }
-
-  static inline bool isEqual(const StorageTy *lhs, const StorageTy *rhs) {
-    if (lhs == rhs)
-      return true;
-    if (lhs == Base::getEmptyKey() || lhs == Base::getTombstoneKey() || rhs == Base::getEmptyKey() || rhs == Base::getTombstoneKey())
-      return false;
-    return lhs->isEqual(rhs);
-  }
-};
-
+/// Storage object for an '!rtg.set<T>'.
 struct SetStorage {
   SetStorage(SetVector<ElaboratorValue> &&set, Type type)
-      : hashcode(llvm::hash_combine(type, llvm::hash_combine_range(set.begin(), set.end()))), set(std::move(set)), type(type) {}
+      : hashcode(llvm::hash_combine(
+            type, llvm::hash_combine_range(set.begin(), set.end()))),
+        set(std::move(set)), type(type) {}
 
   bool isEqual(const SetStorage *other) const {
-    return set == other->set && type == other->type;
+    return hashcode == other->hashcode && set == other->set &&
+           type == other->type;
   }
 
-  unsigned hashcode;
+  // The cached hashcode to avoid repeated computations.
+  const unsigned hashcode;
 
-  // Stores the elaborated values of the set.
-  SetVector<ElaboratorValue> set;
+  // Stores the elaborated values contained in the set.
+  const SetVector<ElaboratorValue> set;
 
   // Store the set type such that we can materialize this evaluated value
   // also in the case where the set is empty.
-  Type type;
+  const Type type;
 };
 
+/// Storage object for an '!rtg.bag<T>'.
 struct BagStorage {
   BagStorage(MapVector<ElaboratorValue, uint64_t> &&bag, Type type)
-      : hashcode(llvm::hash_combine(type, llvm::hash_combine_range(bag.begin(), bag.end()))), bag(std::move(bag)), type(type) {}
+      : hashcode(llvm::hash_combine(
+            type, llvm::hash_combine_range(bag.begin(), bag.end()))),
+        bag(std::move(bag)), type(type) {}
 
   bool isEqual(const BagStorage *other) const {
-    return llvm::equal(bag, other->bag) && type == other->type;
+    return hashcode == other->hashcode && llvm::equal(bag, other->bag) &&
+           type == other->type;
   }
 
-  unsigned hashcode;
+  // The cached hashcode to avoid repeated computations.
+  const unsigned hashcode;
 
-  // Stores the elaborated values of the bag.
-  MapVector<ElaboratorValue, uint64_t> bag;
+  // Stores the elaborated values contained in the bag with their number of
+  // occurences.
+  const MapVector<ElaboratorValue, uint64_t> bag;
 
   // Store the bag type such that we can materialize this evaluated value
   // also in the case where the bag is empty.
-  Type type;
+  const Type type;
 };
 
+/// Storage object for an '!rtg.sequence'.
 struct SequenceStorage {
   SequenceStorage(StringRef name, StringAttr familyName,
                   SmallVector<ElaboratorValue> &&args)
-      : hashcode(llvm::hash_combine(name, familyName, llvm::hash_combine_range(args.begin(), args.end()))), name(name), familyName(familyName), args(std::move(args)) {}
+      : hashcode(llvm::hash_combine(
+            name, familyName,
+            llvm::hash_combine_range(args.begin(), args.end()))),
+        name(name), familyName(familyName), args(std::move(args)) {}
 
   bool isEqual(const SequenceStorage *other) const {
-    return name == other->name && familyName == other->familyName && args == other->args;
+    return hashcode == other->hashcode && name == other->name &&
+           familyName == other->familyName && args == other->args;
   }
 
-  unsigned hashcode;
-  StringRef name;
-  StringAttr familyName;
-  SmallVector<ElaboratorValue> args;
+  // The cached hashcode to avoid repeated computations.
+  const unsigned hashcode;
+
+  // The name of this fully substituted and elaborated sequence.
+  const StringRef name;
+
+  // The name of the sequence family this sequence is derived from.
+  const StringAttr familyName;
+
+  // The elaborator values used during substitution of the sequence family.
+  const SmallVector<ElaboratorValue> args;
 };
 
-// struct LookupKey {
-//   unsigned hascode;
-//   function_ref<bool(const BaseStorage *)> isEqual;
-// };
-
+/// An 'Internalizer' object internalizes storages and takes ownership of them.
+/// When the initializer object is destroyed, all owned storages are also
+/// deallocated and thus must not be accessed anymore.
 class Internalizer {
 public:
-  // template <typename StorageTy, typename... Args>
-  // StorageTy *internalize(Args &&...args) {
-  //   StorageTy storage(std::forward<Args>(args)...);
-
-  //   auto existing = getInternSet<StorageTy>().insert_as(HashedStorage<StorageTy>(storage.hashcode), storage);
-  //   StorageTy *&storagePtr = existing.first->storage;
-  //   if (existing.second)
-  //     storagePtr = new (allocator.Allocate<StorageTy>()) StorageTy(std::move(storage));
-  //   return storagePtr;
-  // }
-
-  // template <typename StorageTy>
-  // DenseSet<HashedStorage<StorageTy>, StorageKeyInfo<StorageTy>> &getInternSet() {
-  //   assert(false && "no generic internalization set");
-  // }
-
-  // template <>
-  // DenseSet<HashedStorage<SetStorage>, StorageKeyInfo<SetStorage>> &getInternSet() {
-  //   return internedSets;
-  // }
-
-  // template <>
-  // DenseSet<HashedStorage<BagStorage>, StorageKeyInfo<BagStorage>> &getInternSet() {
-  //   return internedBags;
-  // }
-
-  // template <>
-  // DenseSet<HashedStorage<SequenceStorage>, StorageKeyInfo<SequenceStorage>> &getInternSet() {
-  //   return internedSequences;
-  // }
-
+  /// Internalize a storage of type `StorageTy` constructed with arguments
+  /// `args`. The pointers returned by this method can be used to compare
+  /// objects when, e.g., computing set differences, uniquing the elements in a
+  /// set, etc. Otherwise, we'd need to do a deep value comparison in those
+  /// situations.
   template <typename StorageTy, typename... Args>
   StorageTy *internalize(Args &&...args) {
-    auto *storagePtr = new (allocator.Allocate<StorageTy>()) StorageTy(std::forward<Args>(args)...);
-    auto existing = getInternSet<StorageTy>().insert(storagePtr);
-    if (!existing.second)
-      allocator.Deallocate(storagePtr);
+    StorageTy storage(std::forward<Args>(args)...);
 
-    return *existing.first;
+    auto existing = getInternSet<StorageTy>().insert_as(
+        HashedStorage<StorageTy>(storage.hashcode), storage);
+    StorageTy *&storagePtr = existing.first->storage;
+    if (existing.second)
+      storagePtr =
+          new (allocator.Allocate<StorageTy>()) StorageTy(std::move(storage));
+
+    return storagePtr;
   }
-
-  template <typename StorageTy>
-  DenseSet<StorageTy*, StorageInfo<StorageTy>> &getInternSet() {
-    assert(false && "no generic internalization set");
-  }
-
-  template <>
-  DenseSet<SetStorage*, StorageInfo<SetStorage>> &getInternSet() {
-    return internedSets;
-  }
-
-  template <>
-  DenseSet<BagStorage*, StorageInfo<BagStorage>> &getInternSet() {
-    return internedBags;
-  }
-
-  template <>
-  DenseSet<SequenceStorage*, StorageInfo<SequenceStorage>> &getInternSet() {
-    return internedSequences;
-  }
-
-  //  BagStorage *internalize(BagStorage &&storage) {
-  //   llvm::FoldingSetNodeID profile;
-  //   storage.Profile(profile);
-  //   void *insertPos = nullptr;
-  //   if (auto *bag = internedBags.FindNodeOrInsertPos(profile, insertPos))
-  //     return bag;
-  //   auto *storagePtr = new BagStorage(std::move(storage));
-  //   internedBags.InsertNode(storagePtr, insertPos);
-  //   return storagePtr;
-  // }
 
 private:
+  template <typename StorageTy>
+  DenseSet<HashedStorage<StorageTy>, StorageKeyInfo<StorageTy>> &
+  getInternSet() {
+    if constexpr (std::is_same_v<StorageTy, SetStorage>)
+      return internedSets;
+    else if constexpr (std::is_same_v<StorageTy, BagStorage>)
+      return internedBags;
+    else if constexpr (std::is_same_v<StorageTy, SequenceStorage>)
+      return internedSequences;
+    else
+      static_assert(!sizeof(StorageTy),
+                    "no intern set available for this storage type.");
+  }
+
+  // This allocator allocates on the heap. It automatically deallocates all
+  // objects it allocated once the allocator itself is destroyed.
   llvm::BumpPtrAllocator allocator;
-  // A map used to intern elaborator values. We do this such that we can
-  // compare pointers when, e.g., computing set differences, uniquing the
-  // elements in a set, etc. Otherwise, we'd need to do a deep value comparison
-  // in those situations.
-  // Use a pointer as the key with custom MapInfo because of object slicing when
-  // inserting an object of a derived class of ElaboratorValue.
-  // The custom MapInfo makes sure that we do a value comparison instead of
-  // comparing the pointers.
-  // DenseSet<HashedStorage<SetStorage>, StorageKeyInfo<SetStorage>> internedSets;
-  // DenseSet<HashedStorage<BagStorage>, StorageKeyInfo<BagStorage>> internedBags;
-  // DenseSet<HashedStorage<SequenceStorage>, StorageKeyInfo<SequenceStorage>> internedSequences;
-  DenseSet<SetStorage*, StorageInfo<SetStorage>> internedSets;
-  DenseSet<BagStorage*, StorageInfo<BagStorage>> internedBags;
-  DenseSet<SequenceStorage*, StorageInfo<SequenceStorage>> internedSequences;
+
+  // The sets holding the internalized objects. We use one set per storage type
+  // such that we can have a simpler equality checking function (no need to
+  // compare some sort of TypeIDs).
+  DenseSet<HashedStorage<SetStorage>, StorageKeyInfo<SetStorage>> internedSets;
+  DenseSet<HashedStorage<BagStorage>, StorageKeyInfo<BagStorage>> internedBags;
+  DenseSet<HashedStorage<SequenceStorage>, StorageKeyInfo<SequenceStorage>>
+      internedSequences;
 };
+
+//===----------------------------------------------------------------------===//
+// Concrete Elaborator Values
+//===----------------------------------------------------------------------===//
 
 /// Holds any typed attribute. Wrapping around an MLIR `Attribute` allows us to
 /// use this elaborator value class for any values that have a corresponding
@@ -550,8 +518,8 @@ static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
       .Case<SetValue>([&](auto val) {
         os << "<set {";
         llvm::interleaveComma(val.getSet(), os);
-        os << "} at " << reinterpret_cast<const void *>(val.getRawStorage())
-           << ">";
+        os << "} at "
+           << reinterpret_cast<const SetStorage *>(val.getRawStorage()) << ">";
       })
       .Case<BagValue>([&](auto val) {
         os << "<bag {";
@@ -560,15 +528,16 @@ static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
             [&](const std::pair<ElaboratorValue, uint64_t> &el) {
               os << el.first << " -> " << el.second;
             });
-        os << "} at " << reinterpret_cast<const void *>(val.getRawStorage())
-           << ">";
+        os << "} at "
+           << reinterpret_cast<const BagStorage *>(val.getRawStorage()) << ">";
       })
       .Case<SequenceValue>([&](auto val) {
         os << "<sequence @" << val.getName() << " derived from @"
            << val.getFamilyName().getValue() << "(";
         llvm::interleaveComma(val.getArgs(), os,
                               [&](const ElaboratorValue &val) { os << val; });
-        os << ") at " << reinterpret_cast<const void *>(val.getRawStorage())
+        os << ") at "
+           << reinterpret_cast<const SequenceStorage *>(val.getRawStorage())
            << ">";
       })
       .Default([](auto val) {
@@ -580,11 +549,7 @@ static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
 #endif
 
 //===----------------------------------------------------------------------===//
-// Hash Map Helpers
-//===----------------------------------------------------------------------===//
-
-//===----------------------------------------------------------------------===//
-// Main Elaborator Implementation
+// Elaborator Value Materialization
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -730,6 +695,10 @@ private:
   Block *block;
   Block::iterator insertionPoint;
 };
+
+//===----------------------------------------------------------------------===//
+// Elaboration Visitor
+//===----------------------------------------------------------------------===//
 
 /// Used to signal to the elaboration driver whether the operation should be
 /// removed.
@@ -1156,7 +1125,7 @@ public:
 
     for (auto [arg, elabArg] :
          llvm::zip(family.getBody()->getArguments(), args))
-      state[arg] = elabArg;
+      store(arg, elabArg);
 
     OpBuilder builder = OpBuilder::atBlockEnd(dest.getBody());
     return elaborateBlock(family.getBody(), builder, mapping);
