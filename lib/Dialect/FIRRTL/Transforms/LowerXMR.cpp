@@ -95,8 +95,8 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
     SmallVector<Operation *> forceAndReleaseOps;
     // The dataflow function, that propagates the reachable RefSendOp across
     // RefType Ops.
-    auto transferFunc = [&](Operation &op) -> LogicalResult {
-      return TypeSwitch<Operation *, LogicalResult>(&op)
+    auto transferFunc = [&](Operation *op) -> LogicalResult {
+      return TypeSwitch<Operation *, LogicalResult>(op)
           .Case<RefSendOp>([&](RefSendOp send) {
             // Get a reference to the actual signal to which the XMR will be
             // generated.
@@ -266,9 +266,14 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
       if (module.isPublic())
         publicModules.push_back(module);
 
-      for (Operation &op : module.getBodyBlock()->getOperations())
+      auto result = module.walk([&](Operation *op) {
         if (transferFunc(op).failed())
-          return signalPassFailure();
+          return WalkResult::interrupt();
+        return WalkResult::advance();
+      });
+
+      if (result.wasInterrupted())
+        return signalPassFailure();
 
       // Clear any enabled layers.
       module.setLayersAttr(ArrayAttr::get(module.getContext(), {}));

@@ -780,3 +780,22 @@ firrtl.circuit "WireProbe" {
     firrtl.ref.define %p, %w : !firrtl.probe<uint<5>>
   }
 }
+
+// -----
+// Test that operations with regions and blocks are visited.  This will error if
+// blocks are not visited.
+
+// CHECK-LABEL: "Foo"
+firrtl.circuit "Foo" {
+  // CHECK: hierpath {{.*}} [@Foo::@[[SYM:[^ ]+]]]
+  sv.macro.decl @A
+  firrtl.module @Foo(out %a: !firrtl.probe<uint<1>>) {
+    //CHECK: sv.ifdef
+    sv.ifdef @A {
+      %b = firrtl.wire : !firrtl.uint<1>
+      // CHECK: firrtl.node sym @[[SYM]] {{.*}} %b
+      %0 = firrtl.ref.send %b : !firrtl.uint<1>
+      firrtl.ref.define %a, %0 : !firrtl.probe<uint<1>>
+    }
+  }
+}
