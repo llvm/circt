@@ -851,7 +851,7 @@ Type toBitVector(T type) {
     return IntegerType::get(type.getContext(), bitWidth);
   }
   return type;
-};
+}
 
 } // namespace calyx
 } // namespace circt
