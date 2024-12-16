@@ -10,13 +10,15 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Scheduling/ASAPScheduler.h"
 #include "circt/Scheduling/Algorithms.h"
 #include "circt/Scheduling/Utilities.h"
+#include "llvm/Support/LogicalResult.h"
 
 using namespace circt;
 using namespace circt::scheduling;
 
-LogicalResult scheduling::scheduleASAP(Problem &prob) {
+LogicalResult ASAPScheduler::schedule(Problem &prob, Operation *lastOp) {
   return handleOperationsInTopologicalOrder(prob, [&](Operation *op) {
     // Operations with no predecessors are scheduled at time step 0
     if (prob.getDependences(op).empty()) {
@@ -42,4 +44,9 @@ LogicalResult scheduling::scheduleASAP(Problem &prob) {
     prob.setStartTime(op, startTime);
     return success();
   });
+}
+
+LogicalResult scheduling::scheduleASAP(Problem &prob) {
+  ASAPScheduler scheduler;
+  return scheduler.schedule(prob, nullptr /* lastOp isn't used here*/);
 }
