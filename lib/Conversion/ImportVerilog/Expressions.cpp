@@ -7,8 +7,20 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/Moore/MooreOps.h"
+#include "circt/Dialect/Moore/MooreTypes.h"
+#include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/Types.h"
 #include "slang/ast/SystemSubroutine.h"
+#include "slang/ast/TimingControl.h"
+#include "slang/ast/expressions/AssertionExpr.h"
+#include "slang/ast/expressions/MiscExpressions.h"
+#include "slang/ast/symbols/MemberSymbols.h"
+#include "slang/ast/symbols/ValueSymbol.h"
 #include "slang/syntax/AllSyntax.h"
+#include <slang/ast/expressions/OperatorExpressions.h>
 
 using namespace circt;
 using namespace ImportVerilog;
@@ -857,6 +869,154 @@ struct RvalueExprVisitor {
     return builder.create<moore::ConcatOp>(loc, slicedOperands);
   }
 
+
+  Value visit(const slang::ast::AssertionInstanceExpression &expr) {
+    // if(auto property = expr.symbol.as_if<slang::ast::PropertySymbol>()) {
+    //   loc = context.convertLocation(property->location);
+    // } else if(auto sequence = expr.symbol.as_if<slang::ast::SequenceSymbol>()) {
+    //   loc = context.convertLocation(sequence->location);
+    // }
+    auto resultType = moore::IntType::get(context.getContext(), 1, Domain::TwoValued);
+    auto instanceOp = builder.create<moore::AssertionInstanceOp>(loc, resultType, mlir::StringAttr::get(context.getContext(), expr.symbol.name));
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToEnd(&instanceOp.getBody().emplaceBlock());
+  
+    Context::ValueSymbolScope scope(context.valueSymbols);
+    for (const auto *var : expr.localVars) {
+      if(!var->isValue()) {
+        mlir::emitError(loc) << "not a value symbol";
+        return {};
+      }
+      auto &valueSym = (*var).as<slang::ast::ValueSymbol>();
+      auto type = context.convertType(*valueSym.getDeclaredType());
+      if (!type)
+        return {};
+
+      Value initial;
+      if (const auto *init = valueSym.getInitializer()) {
+        initial = context.convertRvalueExpression(*init);
+        if (!initial)
+          return {};
+      }
+
+      // Collect local temporary variables.
+      auto varOp = builder.create<moore::VariableOp>(
+          loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
+          builder.getStringAttr(valueSym.name), initial);
+      context.valueSymbols.insertIntoScope(context.valueSymbols.getCurScope(), &valueSym, varOp);
+
+    }
+
+    auto value = context.convertAssertionExpression(expr.body);
+    builder.create<moore::LemmaOp>(loc, value);
+
+    return instanceOp.getResult();
+  }
+  
+
+  Value visit(const slang::ast::SimpleAssertionExpr &assertionExpr) {
+    auto value = context.convertRvalueExpression(assertionExpr.expr);
+    if(!value) {
+      mlir::emitError(loc) << "value disappear";
+      return {};
+    }
+
+    return context.convertToBool(value);
+  }
+  
+  Value visit(const slang::ast::SequenceConcatExpr &assertionExpr) {
+    Value result = nullptr;
+    auto resultType = moore::IntType::get(context.getContext(), 1, Domain::TwoValued);
+    for (auto& elem : assertionExpr.elements) {
+      auto value = context.convertAssertionExpression(*elem.sequence);
+      if(elem.delay.min != 0 || !elem.delay.max.has_value() || elem.delay.max.value() != elem.delay.min) {
+        auto minCycle = builder.getI64IntegerAttr(elem.delay.min);
+        auto length = elem.delay.max.has_value() ? builder.getI64IntegerAttr(elem.delay.max.value() - elem.delay.min) : nullptr;
+        auto delayed = builder.create<moore::LTLDelayIntrinsicOp>(loc, resultType, value, minCycle, length);
+        value = delayed;
+      }
+      if(result) {
+        result = builder.create<moore::LTLConcatIntrinsicOp>(loc, resultType, result, value).getResult();
+      } else {
+        result = value;
+      }
+    }
+
+    return result;
+  }
+
+  Value visit(const slang::ast::ClockingAssertionExpr &assertionExpr) {
+    
+    auto &signalEvent = assertionExpr.clocking.as<slang::ast::SignalEventControl>();
+    auto property = context.convertAssertionExpression(assertionExpr.expr);
+    auto signal = context.convertRvalueExpression(signalEvent.expr);
+    auto clock = context.convertToBool(signal);
+    auto propertyType = cast<moore::IntType>(property.getType());
+    auto resultType = moore::IntType::get(context.getContext(), propertyType.getWidth(), propertyType.getDomain());
+
+    return builder.create<moore::LTLClockIntrinsicOp>(loc, resultType, context.convertToBool(property), Context::convertEdgeKind(signalEvent.edge), clock);
+  }
+
+  Value visit(const slang::ast::DisableIffAssertionExpr &assertionExpr) {
+    
+    return context.convertAssertionExpression(assertionExpr.expr);
+  }
+
+  Value visit(const slang::ast::BinaryAssertionExpr &assertionExpr) {
+
+    auto resultType = moore::IntType::get(context.getContext(), 1, Domain::TwoValued);
+    auto lhs = context.convertAssertionExpression(assertionExpr.left);
+    if (!lhs)
+      return {};
+    auto rhs = context.convertAssertionExpression(assertionExpr.right);
+    if (!rhs)
+      return {};
+
+    using slang::ast::BinaryAssertionOperator;
+    switch (assertionExpr.op) {
+
+    case BinaryAssertionOperator::And:
+      return createBinary<moore::AndOp>(lhs, rhs);
+    case BinaryAssertionOperator::Or:
+      return createBinary<moore::OrOp>(lhs, rhs);
+    case BinaryAssertionOperator::Intersect:
+      return {};
+    case BinaryAssertionOperator::Throughout:
+      return {};
+    case BinaryAssertionOperator::Within:
+      return {};
+    case BinaryAssertionOperator::Iff:
+      return {};
+    case BinaryAssertionOperator::Until:
+      return {};
+    case BinaryAssertionOperator::SUntil:
+      return {};
+    case BinaryAssertionOperator::UntilWith:
+      return {};
+    case BinaryAssertionOperator::SUntilWith:
+      return {};
+    case BinaryAssertionOperator::Implies:
+      return {};
+    case BinaryAssertionOperator::OverlappedImplication:
+      return builder.create<moore::LTLImplicationIntrinsicOp>(loc, resultType, lhs, rhs);
+    case BinaryAssertionOperator::NonOverlappedImplication: {
+      auto delayed = builder.create<moore::LTLDelayIntrinsicOp>(loc, resultType, rhs, builder.getI64IntegerAttr(1), builder.getI64IntegerAttr(0));
+      return builder.create<moore::LTLImplicationIntrinsicOp>(loc, resultType, lhs, delayed);
+    }
+    case BinaryAssertionOperator::OverlappedFollowedBy:
+      return {};
+    case BinaryAssertionOperator::NonOverlappedFollowedBy:
+      return {};
+    }
+
+    return {};
+  }
+
+  // Value visit(const slang::ast::SequenceWithMatchExpr &expr) {
+  //   mlir::emitError(loc) << "SequenceWithMatchExpr not implement";
+  //   return {};
+  // }
+
   /// Emit an error for all other expressions.
   template <typename T>
   Value visit(T &&node) {
@@ -867,6 +1027,10 @@ struct RvalueExprVisitor {
 
   Value visitInvalid(const slang::ast::Expression &expr) {
     mlir::emitError(loc, "invalid expression");
+    return {};
+  }
+  Value visitInvalid(const slang::ast::AssertionExpr &expr) {
+    mlir::emitError(loc, "invalid assertion expression");
     return {};
   }
 };
@@ -1239,4 +1403,12 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
   if (value.getType() != type)
     value = builder.create<moore::ConversionOp>(loc, type, value);
   return value;
+}
+
+Value Context::convertAssertionExpression(const slang::ast::AssertionExpr &expr) {
+  auto loc = convertLocation(expr.syntax->sourceRange());
+
+
+  auto visitor = RvalueExprVisitor(*this, loc);
+  return expr.visit(visitor);
 }

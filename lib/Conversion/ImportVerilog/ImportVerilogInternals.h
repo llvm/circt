@@ -86,6 +86,7 @@ struct Context {
   /// generally a good idea to pass in a location.
   Type convertType(const slang::ast::Type &type, LocationAttr loc = {});
   Type convertType(const slang::ast::DeclaredType &type);
+  static moore::Edge convertEdgeKind(slang::ast::EdgeKind edge);
 
   /// Convert hierarchy and structure AST nodes to MLIR ops.
   LogicalResult convertCompilation();
@@ -125,6 +126,7 @@ struct Context {
   /// one type to another.
   Value materializeConversion(Type type, Value value, bool isSigned,
                               Location loc);
+  Value convertAssertionExpression(const slang::ast::AssertionExpr &expr);
 
   /// Helper function to materialize an `SVInt` as an SSA value.
   Value materializeSVInt(const slang::SVInt &svint,

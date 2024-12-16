@@ -7,13 +7,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "mlir/IR/Diagnostics.h"
 #include "slang/ast/TimingControl.h"
 #include "llvm/ADT/ScopeExit.h"
+#include "llvm/Support/LogicalResult.h"
 
 using namespace circt;
 using namespace ImportVerilog;
 
-static moore::Edge convertEdgeKind(const slang::ast::EdgeKind edge) {
+moore::Edge Context::convertEdgeKind(slang::ast::EdgeKind edge) {
   using slang::ast::EdgeKind;
   switch (edge) {
   case EdgeKind::None:
@@ -39,7 +41,7 @@ struct EventControlVisitor {
 
   // Handle single signal events like `posedge x`, `negedge y iff z`, or `w`.
   LogicalResult visit(const slang::ast::SignalEventControl &ctrl) {
-    auto edge = convertEdgeKind(ctrl.edge);
+    auto edge = Context::convertEdgeKind(ctrl.edge);
     auto expr = context.convertRvalueExpression(ctrl.expr);
     if (!expr)
       return failure();

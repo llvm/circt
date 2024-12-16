@@ -7,7 +7,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "mlir/IR/Diagnostics.h"
 #include "slang/ast/Compilation.h"
+#include "slang/ast/symbols/MemberSymbols.h"
+#include "llvm/Support/LogicalResult.h"
 
 using namespace circt;
 using namespace ImportVerilog;
@@ -542,6 +545,43 @@ struct ModuleVisitor : public BaseVisitor {
   LogicalResult visit(const slang::ast::SubroutineSymbol &subroutine) {
     return context.convertFunction(subroutine);
   }
+
+  LogicalResult visit(const slang::ast::SequenceSymbol &sequence) {
+    for (auto port : sequence.ports) {
+      
+    }
+    
+
+    
+    // auto procOp = builder.create<moore::ProcedureOp>(
+    //     loc, convertProcedureKind(procNode.procedureKind));
+    // OpBuilder::InsertionGuard guard(builder);
+    // builder.setInsertionPointToEnd(&procOp.getBody().emplaceBlock());
+    // Context::ValueSymbolScope scope(context.valueSymbols);
+    // if (failed(context.convertStatement(procNode.getBody())))
+    //   return failure();
+    // if (builder.getBlock())
+    //   builder.create<moore::ReturnOp>(loc);
+    // return success();
+    return success();
+  }
+
+
+  LogicalResult visit(const slang::ast::PropertySymbol &property) {
+    
+    // auto procOp = builder.create<moore::ProcedureOp>(
+    //     loc, convertProcedureKind(procNode.procedureKind));
+    // OpBuilder::InsertionGuard guard(builder);
+    // builder.setInsertionPointToEnd(&procOp.getBody().emplaceBlock());
+    // Context::ValueSymbolScope scope(context.valueSymbols);
+    // if (failed(context.convertStatement(procNode.getBody())))
+    //   return failure();
+    // if (builder.getBlock())
+    //   builder.create<moore::ReturnOp>(loc);
+    // return success();
+    return success();
+  }
+
 
   /// Emit an error for all other members.
   template <typename T>
