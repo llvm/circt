@@ -425,6 +425,33 @@ moore.module @Net() {
   moore.assign %a, %3 : i32
 }
 
+// CHECK-LABEL: hw.module @UnpackedArray
+moore.module @UnpackedArray(in %arr : !moore.uarray<2 x i32>, in %sel : !moore.i1, out c : !moore.i32) {
+  // CHECK: hw.array_get %arr[%sel] : !hw.array<2xi32>, i1
+  %0 = moore.dyn_extract %arr from %sel : !moore.uarray<2 x i32>, !moore.i1 -> !moore.i32
+
+  // CHECK: [[TRUE:%.+]] = hw.constant true
+  // CHECK: hw.array_get %arr[[[TRUE]]] : !hw.array<2xi32>, i1
+  %1 = moore.extract %arr from 1 : !moore.uarray<2 x i32> -> !moore.i32
+
+  // CHECK: [[C0_128:%.+]] = hw.constant 0 : i128
+  // CHECK: [[INIT:%.+]] = hw.bitcast [[C0_128]] : (i128) -> !hw.array<4xi32>
+  // CHECK: [[SIG_0:%.+]] = llhd.sig [[INIT]] : !hw.array<4xi32>
+  %2 = moore.variable : <uarray<4 x i32>>
+
+  // CHECK: [[C1:%.+]] = hw.constant 1 : i2
+  // CHECK: llhd.sig.array_get [[SIG_0]][[[C1]]] : !hw.inout<array<4xi32>>
+  %3 = moore.extract_ref %2 from 1 : !moore.ref<!moore.uarray<4 x i32>> -> !moore.ref<!moore.i32>
+  moore.assign %3, %0 : i32
+
+  // CHECK: [[C0_1024:%.+]] = hw.constant 0 : i1024
+  // CHECK: [[INIT:%.+]] = hw.bitcast [[C0_1024]] : (i1024) -> !hw.array<4xarray<8xarray<8xi4>>>
+  // CHECK: [[SIG_1:%.+]] = llhd.sig [[INIT]] : !hw.array<4xarray<8xarray<8xi4>>>
+  %4 = moore.variable : <uarray<4 x uarray<8 x array<8 x i4>>>>
+
+  moore.output %0 : !moore.i32
+}
+
 // CHECK-LABEL: hw.module @Struct
 moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.struct<{exp_bits: i32, man_bits: i32}>, in %arg1 : !moore.ref<!moore.struct<{exp_bits: i32, man_bits: i32}>>, out a : !moore.i32, out b : !moore.struct<{exp_bits: i32, man_bits: i32}>, out c : !moore.struct<{exp_bits: i32, man_bits: i32}>) {
   // CHECK: hw.struct_extract %arg0["exp_bits"] : !hw.struct<exp_bits: i32, man_bits: i32>

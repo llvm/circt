@@ -1539,6 +1539,16 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return {};
   });
 
+  // FIXME: Unpacked arrays support more element types than their packed
+  // variants, and as such, mapping them to hw::Array is somewhat naive. See
+  // also the analogous note below concerning unpacked struct type conversion.
+  typeConverter.addConversion(
+      [&](UnpackedArrayType type) -> std::optional<Type> {
+        if (auto elementType = typeConverter.convertType(type.getElementType()))
+          return hw::ArrayType::get(elementType, type.getSize());
+        return {};
+      });
+
   typeConverter.addConversion([&](StructType type) -> std::optional<Type> {
     SmallVector<hw::StructType::FieldInfo> fields;
     for (auto field : type.getMembers()) {
