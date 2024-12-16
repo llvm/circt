@@ -738,6 +738,28 @@ public:
   }
 
   FailureOr<DeletionKind> visitExternalOp(Operation *op, VisitorInfo &info) {
+    if (op->hasTrait<OpTrait::ConstantLike>()) {
+      SmallVector<OpFoldResult, 1> result;
+      auto foldResult = op->fold(result);
+      (void)foldResult; // Make sure there is a user when assertions are off.
+      assert(succeeded(foldResult) &&
+             "constant folder of a constant-like must always succeed");
+      auto attr = dyn_cast<TypedAttr>(result[0].dyn_cast<Attribute>());
+      if (!attr)
+        return op->emitError(
+            "only typed attributes supported for constant-like operations");
+
+      auto intAttr = dyn_cast<IntegerAttr>(attr);
+      if (intAttr && isa<IndexType>(attr.getType()))
+        store(op->getResult(0), IndexValue(intAttr.getInt()));
+      else if (intAttr && intAttr.getType().isSignlessInteger(1))
+        store(op->getResult(0), BoolValue(bool(intAttr.getInt())));
+      else
+        store(op->getResult(0), AttributeValue(attr));
+
+      return DeletionKind::Delete;
+    }
+
     // TODO: we only have this to be able to write tests for this pass without
     // having to add support for more operations for now, so it should be
     // removed once it is not necessary anymore for writing tests
@@ -1010,28 +1032,6 @@ public:
   }
 
   FailureOr<DeletionKind> dispatchOpVisitor(Operation *op, VisitorInfo &info) {
-    if (op->hasTrait<OpTrait::ConstantLike>()) {
-      SmallVector<OpFoldResult, 1> result;
-      auto foldResult = op->fold(result);
-      (void)foldResult; // Make sure there is a user when assertions are off.
-      assert(succeeded(foldResult) &&
-             "constant folder of a constant-like must always succeed");
-      auto attr = dyn_cast<TypedAttr>(result[0].dyn_cast<Attribute>());
-      if (!attr)
-        return op->emitError(
-            "only typed attributes supported for constant-like operations");
-
-      auto intAttr = dyn_cast<IntegerAttr>(attr);
-      if (intAttr && isa<IndexType>(attr.getType()))
-        store(op->getResult(0), IndexValue(intAttr.getInt()));
-      else if (intAttr && intAttr.getType().isSignlessInteger(1))
-        store(op->getResult(0), BoolValue(bool(intAttr.getInt())));
-      else
-        store(op->getResult(0), AttributeValue(attr));
-
-      return DeletionKind::Delete;
-    }
-
     return TypeSwitch<Operation *, FailureOr<DeletionKind>>(op)
         .Case<
             // Index ops
