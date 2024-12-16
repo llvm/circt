@@ -13,6 +13,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Types.h"
 
+#include "circt/Dialect/RTG/IR/RTGISAAssemblyTypeInterfaces.h"
 #include "circt/Dialect/RTG/IR/RTGTypeInterfaces.h"
 
 #define GET_TYPEDEF_CLASSES

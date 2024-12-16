@@ -14,6 +14,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 
 #include "circt/Dialect/RTG/IR/RTGAttrInterfaces.h"
+#include "circt/Dialect/RTG/IR/RTGISAAssemblyAttrInterfaces.h"
 
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/RTGTest/IR/RTGTestAttributes.h.inc"

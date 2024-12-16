@@ -45,6 +45,201 @@ MLIR_CAPI_EXPORTED MlirAttribute rtgtestCPUAttrGet(MlirContext ctxt,
 /// Returns the core ID represented by the CPU attribute.
 MLIR_CAPI_EXPORTED unsigned rtgtestCPUAttrGetId(MlirAttribute attr);
 
+// Registers.
+//===----------------------------------------------------------------------===//
+
+/// If the type is an RTGTest RegZeroAttr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegZero(MlirAttribute attr);
+
+/// Creates an RTGTest RegZero attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegZeroAttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegRaAttr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegRa(MlirAttribute attr);
+
+/// Creates an RTGTest RegRa attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegRaAttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegSpAttr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegSp(MlirAttribute attr);
+
+/// Creates an RTGTest RegSp attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegSpAttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegGpAttr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegGp(MlirAttribute attr);
+
+/// Creates an RTGTest RegGp attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegGpAttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegTpAttr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegTp(MlirAttribute attr);
+
+/// Creates an RTGTest RegTp attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegTpAttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegT0Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegT0(MlirAttribute attr);
+
+/// Creates an RTGTest RegT0 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegT0AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegT1Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegT1(MlirAttribute attr);
+
+/// Creates an RTGTest RegT1 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegT1AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegT2Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegT2(MlirAttribute attr);
+
+/// Creates an RTGTest RegT2 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegT2AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegS0Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegS0(MlirAttribute attr);
+
+/// Creates an RTGTest RegS0 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegS0AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegS1Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegS1(MlirAttribute attr);
+
+/// Creates an RTGTest RegS1 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegS1AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegA0Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegA0(MlirAttribute attr);
+
+/// Creates an RTGTest RegA0 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegA0AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegA1Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegA1(MlirAttribute attr);
+
+/// Creates an RTGTest RegA1 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegA1AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegA2Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegA2(MlirAttribute attr);
+
+/// Creates an RTGTest RegA2 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegA2AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegA3Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegA3(MlirAttribute attr);
+
+/// Creates an RTGTest RegA3 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegA3AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegA4Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegA4(MlirAttribute attr);
+
+/// Creates an RTGTest RegA4 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegA4AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegA5Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegA5(MlirAttribute attr);
+
+/// Creates an RTGTest RegA5 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegA5AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegA6Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegA6(MlirAttribute attr);
+
+/// Creates an RTGTest RegA6 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegA6AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegA7Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegA7(MlirAttribute attr);
+
+/// Creates an RTGTest RegA7 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegA7AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegS2Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegS2(MlirAttribute attr);
+
+/// Creates an RTGTest RegS2 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegS2AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegS3Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegS3(MlirAttribute attr);
+
+/// Creates an RTGTest RegS3 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegS3AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegS4Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegS4(MlirAttribute attr);
+
+/// Creates an RTGTest RegS4 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegS4AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegS5Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegS5(MlirAttribute attr);
+
+/// Creates an RTGTest RegS5 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegS5AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegS6Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegS6(MlirAttribute attr);
+
+/// Creates an RTGTest RegS6 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegS6AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegS7Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegS7(MlirAttribute attr);
+
+/// Creates an RTGTest RegS7 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegS7AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegS8Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegS8(MlirAttribute attr);
+
+/// Creates an RTGTest RegS8 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegS8AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegS9Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegS9(MlirAttribute attr);
+
+/// Creates an RTGTest RegS9 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegS9AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegS10Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegS10(MlirAttribute attr);
+
+/// Creates an RTGTest RegS10 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegS10AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegS11Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegS11(MlirAttribute attr);
+
+/// Creates an RTGTest RegS11 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegS11AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegT3Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegT3(MlirAttribute attr);
+
+/// Creates an RTGTest RegT3 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegT3AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegT4Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegT4(MlirAttribute attr);
+
+/// Creates an RTGTest RegT4 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegT4AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegT5Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegT5(MlirAttribute attr);
+
+/// Creates an RTGTest RegT5 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegT5AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegT6Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegT6(MlirAttribute attr);
+
+/// Creates an RTGTest RegT6 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegT6AttrGet(MlirContext ctxt);
+
 #ifdef __cplusplus
 }
 #endif

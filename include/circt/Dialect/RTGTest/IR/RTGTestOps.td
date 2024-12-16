@@ -48,21 +48,3 @@ def ConstantTestOp : RTGTestOp<"constant_test", [
   let assemblyFormat = "type($result) attr-dict";
   let hasFolder = 1;
 }
-
-def RegisterOp : RTGTestOp<"reg", [
-  DeclareOpInterfaceMethods<RegisterOpInterface>,
-  DeclareOpInterfaceMethods<InferTypeOpInterface>,
-]> {
-  let summary = "returns a value representing a register";
-  let description = [{
-    This operation creates a value representing the register given as the 'reg'
-    attribute. A register can be a concrete register or a virtual register.
-    Virtual registers will be assigned a concrete register when running register
-    allocation.
-  }];
-
-  let arguments = (ins RegisterAttr:$reg);
-  let results = (outs RegisterType:$result);
-
-  let assemblyFormat = "$reg attr-dict";
-}

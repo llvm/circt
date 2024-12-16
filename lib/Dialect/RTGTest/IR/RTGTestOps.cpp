@@ -34,53 +34,6 @@ mlir::OpFoldResult ConstantTestOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
-// RegisterOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult RegisterOp::inferReturnTypes(
-    MLIRContext *context, std::optional<Location> location, ValueRange operands,
-    DictionaryAttr attributes, OpaqueProperties properties,
-    mlir::RegionRange regions, SmallVectorImpl<Type> &inferredReturnTypes) {
-  Registers reg = properties.as<Properties *>()->getReg().getValue();
-  if (static_cast<uint32_t>(reg) >= 32 && reg != Registers::Virtual) {
-    if (location)
-      return mlir::emitError(*location) << "unsupported register";
-
-    return failure();
-  }
-
-  inferredReturnTypes.push_back(IntegerRegisterType::get(context));
-  return success();
-}
-
-unsigned RegisterOp::getClassIndex() { return static_cast<uint32_t>(getReg()); }
-
-APInt RegisterOp::getClassIndexBinary() { return APInt(5, getClassIndex()); }
-
-std::string RegisterOp::getRegisterAssembly() {
-  return stringifyRegisters(getReg()).str();
-}
-
-llvm::BitVector RegisterOp::getAllowedRegs() {
-  llvm::BitVector retval(getMaxEnumValForRegisters(), false);
-  if (getReg() == Registers::Virtual)
-    return retval.set(0, 32);
-  return retval.set(static_cast<uint32_t>(getReg()));
-}
-
-unsigned RegisterOp::getFixedReg() {
-  if (getReg() == Registers::Virtual)
-    return ~0U;
-  return static_cast<uint32_t>(getReg());
-}
-
-void RegisterOp::setFixedReg(unsigned reg) {
-  auto sym = symbolizeRegisters(reg);
-  assert(sym.has_value() && sym.value() != Registers::Virtual);
-  setReg(sym.value());
-}
-
-//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
