@@ -3,6 +3,17 @@
 // CHECK-LABEL: rtg.sequence @seq
 // CHECK-SAME: attributes {rtg.some_attr} {
 rtg.sequence @seq0 attributes {rtg.some_attr} {
+  %arg = arith.constant 1 : index
+  // CHECK: [[LBL0:%.*]] = rtg.label_decl "label_string_{0}_{1}", %{{.*}}, %{{.*}}
+  %0 = rtg.label_decl "label_string_{0}_{1}", %arg, %arg
+  // CHECK: [[LBL1:%.+]] = rtg.label_unique_decl "label_string"
+  %1 = rtg.label_unique_decl "label_string"
+  // CHECK: rtg.label local [[LBL0]]
+  rtg.label local %0
+  // CHECK: rtg.label global [[LBL1]]
+  rtg.label global %1
+  // CHECK: rtg.label external [[LBL0]]
+  rtg.label external %0
 }
 
 // CHECK-LABEL: rtg.sequence @seq1
