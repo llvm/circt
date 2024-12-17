@@ -613,7 +613,7 @@ private:
   /// The design-under-test (DUT) as determined by the presence of a
   /// "sifive.enterprise.firrtl.MarkDUTAnnotation".  This will be null if no DUT
   /// was found.
-  FModuleOp dut;
+  FModuleLike dut;
 
   /// An optional directory for testbench-related files.  This is null if no
   /// "TestBenchDirAnnotation" is found.
@@ -1577,7 +1577,7 @@ void GrandCentralPass::runOnOperation() {
 
   // Find the DUT if it exists.  This needs to be known before the circuit is
   // walked.
-  for (auto mod : circuitOp.getOps<FModuleOp>()) {
+  for (auto mod : circuitOp.getOps<FModuleLike>()) {
     if (failed(extractDUT(mod, dut)))
       removalError = true;
   }

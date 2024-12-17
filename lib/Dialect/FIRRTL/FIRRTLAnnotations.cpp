@@ -564,7 +564,8 @@ FIRRTLType PortAnnoTarget::getType() const {
 // TODO: Remove these in favor of first-class annotations.
 //===----------------------------------------------------------------------===//
 
-LogicalResult circt::firrtl::extractDUT(const FModuleOp mod, FModuleOp &dut) {
+LogicalResult circt::firrtl::extractDUT(const FModuleLike mod,
+                                        FModuleLike &dut) {
   if (!AnnotationSet(mod).hasAnnotation(dutAnnoClass))
     return success();
 

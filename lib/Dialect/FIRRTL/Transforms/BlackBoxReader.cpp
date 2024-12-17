@@ -104,7 +104,7 @@ private:
   /// The design-under-test (DUT) as indicated by the presence of a
   /// "sifive.enterprise.firrtl.MarkDUTAnnotation".  This will be null if no
   /// annotation is present.
-  FModuleOp dut;
+  FModuleLike dut;
 
   /// The file list file name (sic) for black boxes. If set, generates a file
   /// that lists all non-header source files for black boxes. Can be changed
@@ -207,7 +207,7 @@ void BlackBoxReaderPass::runOnOperation() {
   // Do a shallow walk of the circuit to collect information necessary before we
   // do real work.
   for (auto &op : *circuitOp.getBodyBlock()) {
-    FModuleOp module = dyn_cast<FModuleOp>(op);
+    FModuleLike module = dyn_cast<FModuleLike>(op);
     // Find the DUT if it exists or error if there are multiple DUTs.
     if (module)
       if (failed(extractDUT(module, dut)))
