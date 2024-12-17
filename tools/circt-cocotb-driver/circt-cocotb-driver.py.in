@@ -82,9 +82,12 @@ class Icarus(csim.Icarus):
     # lives easier and create a minimum timescale through the command-line.
     cmd_file = os.path.join(objDir, "cmds.f")
     with open(cmd_file, "w+") as f:
-      f.write("+timescale+1ns/1ps")
+      f.write("+timescale+1ns/1ps\n")
 
-    self.compile_args.append(f"-f{cmd_file}")
+    self.compile_args.extend([
+        f"-f{cmd_file}",
+        "-gsupported-assertions",  # Enable SV assertions which are supported.
+    ])
     return super().run()
 
 
