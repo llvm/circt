@@ -15,6 +15,7 @@
 #include "circt/Support/LLVM.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Tools/circt-bmc/Passes.h"
+#include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/FunctionCallUtils.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -59,6 +60,8 @@ void LowerToBMCPass::runOnOperation() {
     hwModule.emitError("no property provided to check in module");
     return signalPassFailure();
   }
+
+  sortTopologically(&hwModule.getBodyRegion().front());
 
   // Create necessary function declarations and globals
   auto *ctx = &getContext();
