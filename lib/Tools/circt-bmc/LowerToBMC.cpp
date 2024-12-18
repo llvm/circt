@@ -61,7 +61,10 @@ void LowerToBMCPass::runOnOperation() {
     return signalPassFailure();
   }
 
-  sortTopologically(&hwModule.getBodyRegion().front());
+  if (!sortTopologically(&hwModule.getBodyRegion().front())) {
+    hwModule->emitError("could not resolve cycles in module");
+    return signalPassFailure();
+  }
 
   // Create necessary function declarations and globals
   auto *ctx = &getContext();

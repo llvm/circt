@@ -79,3 +79,15 @@ hw.module @testModule(in %clk0 : !seq.clock, in %clkStruct : !hw.struct<clk: !se
   verif.assert %1 : i1
   hw.output %0, %in0, %in1 : i32, i32, i32
 }
+
+// -----
+
+// expected-error @below {{could not resolve cycles in module}}
+hw.module @testModule(in %in0 : i32) attributes {num_regs = 0 : i32, initial_values = []} {
+  %add = comb.add %in0, %or : i32
+  %or = comb.or %in0, %add : i32
+  // Dummy property
+  %true = hw.constant true
+  verif.assert %true : i1
+  hw.output
+}
