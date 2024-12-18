@@ -1,8 +1,7 @@
 from typing import List, Optional
 import cocotb
-import IPython
 from cocotb.clock import Clock
-from cocotb.triggers import FallingEdge, RisingEdge, Timer
+from cocotb.triggers import RisingEdge
 
 
 async def init(dut, timeout: Optional[int] = None):
