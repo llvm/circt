@@ -56,19 +56,19 @@ class CompRegLikeBuilder(NamedValueOpView):
 
 class CompRegLike:
 
-  def __init__(self,
-               data_type,
-               input,
-               clk,
-               clockEnable=None,
-               *,
-               reset=None,
-               reset_value=None,
-               power_on_value=None,
-               name=None,
-               sym_name=None,
-               loc=None,
-               ip=None):
+  def init(self,
+           data_type,
+           input,
+           clk,
+           clockEnable=None,
+           *,
+           reset=None,
+           reset_value=None,
+           power_on_value=None,
+           name=None,
+           sym_name=None,
+           loc=None,
+           ip=None):
     operands = [input, clk]
     results = []
     attributes = {}
@@ -141,7 +141,10 @@ class CompRegBuilder(CompRegLikeBuilder):
 
 
 @_ods_cext.register_operation(_Dialect, replace=True)
-class CompRegOp(CompRegLike, CompRegOp):
+class CompRegOp(CompRegOp):
+
+  def __init__(self, *args, **kwargs):
+    CompRegLike.init(self, *args, **kwargs)
 
   @classmethod
   def create(cls,
@@ -168,7 +171,10 @@ class CompRegClockEnabledBuilder(CompRegLikeBuilder):
 
 
 @_ods_cext.register_operation(_Dialect, replace=True)
-class CompRegClockEnabledOp(CompRegLike, CompRegClockEnabledOp):
+class CompRegClockEnabledOp(CompRegClockEnabledOp):
+
+  def __init__(self, *args, **kwargs):
+    CompRegLike.init(self, *args, **kwargs)
 
   @classmethod
   def create(cls,
