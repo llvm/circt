@@ -103,21 +103,38 @@ FIFOLowering::matchAndRewrite(FIFOOp op, OpAdaptor adaptor,
   auto i1 = rewriter.getI1Type();
   auto c1 = rewriter.create<hw::ConstantOp>(loc, rewriter.getI1Type(),
                                             rewriter.getBoolAttr(true));
-  if (op.getInput().getType().getDataDelay() != 0)
+  mlir::TypedValue<ChannelType> chanInput = op.getInput();
+  if (chanInput.getType().getDataDelay() != 0)
     return op.emitOpError(
         "currently only supports input channels with zero data delay");
 
   Backedge inputEn = bb.get(i1);
-  auto unwrapPull = rewriter.create<UnwrapFIFOOp>(loc, op.getInput(), inputEn);
+  Value rawData;
+  Value dataNotAvailable;
+  if (chanInput.getType().getSignaling() == ChannelSignaling::ValidReady) {
+    auto unwrapValidReady =
+        rewriter.create<UnwrapValidReadyOp>(loc, chanInput, inputEn);
+    rawData = unwrapValidReady.getRawOutput();
+    dataNotAvailable = comb::createOrFoldNot(loc, unwrapValidReady.getValid(),
+                                             rewriter, /*twoState=*/true);
+    dataNotAvailable.getDefiningOp()->setAttr(
+        "sv.namehint", rewriter.getStringAttr("dataNotAvailable"));
+  } else if (chanInput.getType().getSignaling() == ChannelSignaling::FIFO) {
+    auto unwrapPull = rewriter.create<UnwrapFIFOOp>(loc, chanInput, inputEn);
+    rawData = unwrapPull.getData();
+    dataNotAvailable = unwrapPull.getEmpty();
+  } else {
+    return rewriter.notifyMatchFailure(
+        op, "only supports ValidReady and FIFO signaling");
+  }
 
   Backedge outputRdEn = bb.get(i1);
   auto seqFifo = rewriter.create<seq::FIFOOp>(
-      loc, outputType.getInner(), i1, i1, Type(), Type(), unwrapPull.getData(),
-      outputRdEn, inputEn, op.getClk(), op.getRst(), op.getDepthAttr(),
+      loc, outputType.getInner(), i1, i1, Type(), Type(), rawData, outputRdEn,
+      inputEn, op.getClk(), op.getRst(), op.getDepthAttr(),
       rewriter.getI64IntegerAttr(outputType.getDataDelay()), IntegerAttr(),
       IntegerAttr());
-  auto inputNotEmpty =
-      rewriter.create<comb::XorOp>(loc, unwrapPull.getEmpty(), c1);
+  auto inputNotEmpty = rewriter.create<comb::XorOp>(loc, dataNotAvailable, c1);
   inputNotEmpty->setAttr("sv.namehint",
                          rewriter.getStringAttr("inputNotEmpty"));
   auto seqFifoNotFull =
@@ -129,12 +146,29 @@ FIFOLowering::matchAndRewrite(FIFOOp op, OpAdaptor adaptor,
   static_cast<Value>(inputEn).getDefiningOp()->setAttr(
       "sv.namehint", rewriter.getStringAttr("inputEn"));
 
-  auto output =
-      rewriter.create<WrapFIFOOp>(loc, mlir::TypeRange{outputType, i1},
-                                  seqFifo.getOutput(), seqFifo.getEmpty());
-  outputRdEn.setValue(output.getRden());
+  Value output;
+  if (outputType.getSignaling() == ChannelSignaling::ValidReady) {
+    auto wrap = rewriter.create<WrapValidReadyOp>(
+        loc, mlir::TypeRange{outputType, i1}, seqFifo.getOutput(),
+        comb::createOrFoldNot(loc, seqFifo.getEmpty(), rewriter,
+                              /*twoState=*/true));
+    output = wrap.getChanOutput();
+    outputRdEn.setValue(
+        rewriter.create<comb::AndOp>(loc, wrap.getValid(), wrap.getReady()));
+    static_cast<Value>(outputRdEn)
+        .getDefiningOp()
+        ->setAttr("sv.namehint", rewriter.getStringAttr("outputRdEn"));
+  } else if (outputType.getSignaling() == ChannelSignaling::FIFO) {
+    auto wrap =
+        rewriter.create<WrapFIFOOp>(loc, mlir::TypeRange{outputType, i1},
+                                    seqFifo.getOutput(), seqFifo.getEmpty());
+    output = wrap.getChanOutput();
+    outputRdEn.setValue(wrap.getRden());
+  } else {
+    return rewriter.notifyMatchFailure(op, "only supports ValidReady and FIFO");
+  }
 
-  rewriter.replaceOp(op, output.getChanOutput());
+  rewriter.replaceOp(op, output);
   return success();
 }
 
