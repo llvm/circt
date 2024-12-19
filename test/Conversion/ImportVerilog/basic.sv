@@ -595,6 +595,10 @@ module Statements;
     // CHECK: [[TMP1:%.+]] = moore.read %y
     // CHECK: moore.nonblocking_assign %x, [[TMP1]] : i1
     x <= y;
+
+    // CHECK: [[TMP1:%.+]] = moore.read %y
+    // CHECK: moore.blocking_assign %x, [[TMP1]] : i1
+    assign x = y;
   end
 endmodule
 
