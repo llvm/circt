@@ -360,3 +360,24 @@ hw.module @wires () {
   sv.assign %r52, %c0_ui2 : ui2
   sv.assign %r53, %c0_ui2 : ui2
 }
+
+// -----
+
+// CHECK:  hw.type_scope @pycde {
+// CHECK:    hw.typedecl @MMIOIntermediateCmd : !hw.struct<offset: i32>
+// CHECK:  }
+// CHECK:  hw.module @MMIOAxiReadWriteMux(out cmd : !hw.typealias<@pycde::@MMIOIntermediateCmd, !hw.struct<offset: i32>>) {
+// CHECK:    %c0_i32 = hw.constant 0 : i32
+// CHECK:    [[R0:%.+]] = hw.struct_create (%c0_i32) : !hw.typealias<@pycde::@MMIOIntermediateCmd, !hw.struct<offset: i32>>
+// CHECK:    hw.output [[R0]] : !hw.typealias<@pycde::@MMIOIntermediateCmd, !hw.struct<offset: i32>>
+// CHECK:  }
+
+hw.type_scope @pycde {
+  hw.typedecl @MMIOIntermediateCmd : !hw.struct<offset: ui32>
+}
+hw.module @MMIOAxiReadWriteMux(out cmd : !hw.typealias<@pycde::@MMIOIntermediateCmd, !hw.struct<offset: ui32>>) {
+  %2 = hw.constant 0 : i32
+  %3 = hwarith.cast %2 : (i32) -> ui32
+  %4 = hw.struct_create (%3) : !hw.typealias<@pycde::@MMIOIntermediateCmd, !hw.struct<offset: ui32>>
+  hw.output %4: !hw.typealias<@pycde::@MMIOIntermediateCmd, !hw.struct<offset: ui32>>
+}
