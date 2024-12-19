@@ -342,6 +342,15 @@ def InitialOp : SVOp<"initial", [SingleBlock, NoTerminator, NoRegionArguments,
   }];
 }
 
+def ForkJoinOp : SVOp<"fork_join", [NoTerminator, NoRegionArguments,
+                                 RecursiveMemoryEffects,
+                                 RecursivelySpeculatable,
+                                 ProceduralRegion, ProceduralOp]> {
+
+  let regions = (region VariadicRegion<SizedRegion<1>>:$regions);
+  let assemblyFormat = "attr-dict-with-keyword $regions";
+}
+
 def CaseStmt: I32EnumAttrCase<"CaseStmt", 0, "case">;
 def CaseXStmt: I32EnumAttrCase<"CaseXStmt", 1, "casex">;
 def CaseZStmt: I32EnumAttrCase<"CaseZStmt", 2, "casez">;
@@ -448,8 +457,6 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
   let hasVerifier = 1;
 }
 
-
-
 //===----------------------------------------------------------------------===//
 // Other Statements
 //===----------------------------------------------------------------------===//
@@ -519,6 +526,20 @@ def FWriteOp : SVOp<"fwrite", [ProceduralOp]> {
   }];
 }
 
+def DisplayOp : SVOp<"display", [ProceduralOp]> {
+  let summary = "'$display'/'$write' statement";
+
+  let arguments = (ins StrAttr:$format_string,
+                       Variadic<AnyType>:$substitutions,
+                       UnitAttr:$noNewLine);
+  let results = (outs);
+
+  let assemblyFormat = [{
+    (`nolf` $noNewLine^)? $format_string attr-dict (`(` $substitutions^ `)` `:`
+    qualified(type($substitutions)))?
+  }];
+}
+
 def VerbatimOp : SVOp<"verbatim"> {
   let summary = "Verbatim opaque text emitted inline.";
   let description = [{
@@ -566,6 +587,18 @@ def MacroRefOp : SVOp<"macro.ref", [
   let extraClassDeclaration = [{
     MacroDeclOp getReferencedMacro(const hw::HWSymbolCache *cache);
   }];
+}
+
+def WaitOp : SVOp<"wait", [ProceduralOp]> {
+  let arguments = (ins I1:$cond);
+  let results = (outs);
+  let assemblyFormat = "$cond attr-dict";
+}
+
+def DelayOp : SVOp<"delay", [ProceduralOp]> {
+  let arguments = (ins UI32Attr:$delayValue);
+  let results = (outs);
+  let assemblyFormat = "$delayValue attr-dict";
 }
 
 //===----------------------------------------------------------------------===//
