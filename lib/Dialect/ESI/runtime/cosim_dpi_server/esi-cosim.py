@@ -157,6 +157,8 @@ class Simulator:
       simEnv = Simulator.get_env()
       if self.debug:
         simEnv["COSIM_DEBUG_FILE"] = "cosim_debug.log"
+        # Slow the simulation down to one tick per millisecond.
+        simEnv["DEBUG_PERIOD"] = "1"
       simProc = subprocess.Popen(self.run_command(gui),
                                  stdout=simStdout,
                                  stderr=simStderr,
