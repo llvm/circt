@@ -61,7 +61,7 @@ bool ExportVerilog::isSimpleReadOrPort(Value v) {
   auto readSrc = read.getInput().getDefiningOp();
   if (!readSrc)
     return false;
-  return isa<sv::WireOp, RegOp, LogicOp, XMROp, XMRRefOp>(readSrc);
+  return isa<sv::WireOp, RegOp, LogicOp, BitOp, XMROp, XMRRefOp>(readSrc);
 }
 
 // Check if the value is deemed worth spilling into a wire.
@@ -973,7 +973,7 @@ static LogicalResult legalizeHWModule(Block &block,
 
     // If a reg or logic is located in a procedural region, we have to move the
     // op declaration to a valid program point.
-    if (isProceduralRegion && isa<LogicOp, RegOp>(op)) {
+    if (isProceduralRegion && isa<LogicOp, BitOp, RegOp>(op)) {
       if (options.disallowLocalVariables) {
         // When `disallowLocalVariables` is enabled, "automatic logic" is
         // prohibited so hoist the op to a non-procedural region.
@@ -1096,7 +1096,7 @@ static LogicalResult legalizeHWModule(Block &block,
       Value readOp;
       if (auto maybeReadOp =
               op.getOperand(1).getDefiningOp<sv::ReadInOutOp>()) {
-        if (isa_and_nonnull<sv::WireOp, LogicOp>(
+        if (isa_and_nonnull<sv::WireOp, LogicOp, BitOp>(
                 maybeReadOp.getInput().getDefiningOp())) {
           wireOp = maybeReadOp.getInput();
           readOp = maybeReadOp;

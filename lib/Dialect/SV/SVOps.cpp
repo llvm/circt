@@ -361,6 +361,33 @@ void LogicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 std::optional<size_t> LogicOp::getTargetResultIndex() { return 0; }
 
 //===----------------------------------------------------------------------===//
+// BitOp
+//===----------------------------------------------------------------------===//
+
+void BitOp::build(OpBuilder &builder, OperationState &odsState,
+                  Type elementType, StringAttr name,
+                  hw::InnerSymAttr innerSym) {
+  if (!name)
+    name = builder.getStringAttr("");
+  odsState.addAttribute("name", name);
+  if (innerSym)
+    odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
+                          innerSym);
+  odsState.addTypes(hw::InOutType::get(elementType));
+}
+
+/// Suggest a name for each result value based on the saved result names
+/// attribute.
+void BitOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the bit has an optional 'name' attribute, use it.
+  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
+  if (!nameAttr.getValue().empty())
+    setNameFn(getResult(), nameAttr.getValue());
+}
+
+std::optional<size_t> BitOp::getTargetResultIndex() { return 0; }
+
+//===----------------------------------------------------------------------===//
 // Control flow like-operations
 //===----------------------------------------------------------------------===//
 
