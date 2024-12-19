@@ -662,6 +662,21 @@ struct StmtVisitor {
     return false;
   }
 
+  /// Handle procedural assign statements.
+  LogicalResult visit(const slang::ast::ProceduralAssignStatement &stmt) {
+    if (stmt.isForce) {
+      auto loc = context.convertLocation(stmt.sourceRange);
+      mlir::emitError(loc, "force assignments not supported.");
+      return mlir::failure();
+    }
+
+    auto value = context.convertRvalueExpression(stmt.assignment);
+    if (!value)
+      return mlir::failure();
+
+    return mlir::success();
+  }
+
   /// Create the optional diagnostic message print for finish-like ops.
   void createFinishMessage(const slang::ast::Expression *verbosityExpr) {
     unsigned verbosity = 1;
