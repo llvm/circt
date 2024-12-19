@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
-#include "slang/text/SFormat.h"
+#include "slang/ast/SFormat.h"
 
 using namespace mlir;
 using namespace circt;
@@ -15,7 +15,7 @@ using namespace ImportVerilog;
 using moore::IntAlign;
 using moore::IntFormat;
 using moore::IntPadding;
-using slang::SFormat::FormatOptions;
+using slang::ast::SFormat::FormatOptions;
 
 namespace {
 struct FormatStringParser {
@@ -87,7 +87,7 @@ struct FormatStringParser {
     auto onError = [&](auto, auto, auto, auto) {
       assert(false && "Slang should have already reported all errors");
     };
-    slang::SFormat::parse(format, onText, onArg, onError);
+    slang::ast::SFormat::parse(format, onText, onArg, onError);
     return failure(anyFailure);
   }
 
@@ -191,7 +191,7 @@ struct FormatStringParser {
 } // namespace
 
 FailureOr<Value> Context::convertFormatString(
-    slang::span<const slang::ast::Expression *const> arguments, Location loc,
+    std::span<const slang::ast::Expression *const> arguments, Location loc,
     IntFormat defaultFormat, bool appendNewline) {
   FormatStringParser parser(*this, ArrayRef(arguments.data(), arguments.size()),
                             loc, defaultFormat);
