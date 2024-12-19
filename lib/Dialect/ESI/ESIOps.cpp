@@ -77,13 +77,7 @@ LogicalResult ChannelBufferOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult FIFOOp::verify() {
-  ChannelType inputType = getInput().getType();
-  if (inputType.getSignaling() != ChannelSignaling::FIFO)
-    return emitOpError("only supports FIFO signaling on input");
-  ChannelType outputType = getOutput().getType();
-  if (outputType.getSignaling() != ChannelSignaling::FIFO)
-    return emitOpError("only supports FIFO signaling on output");
-  if (outputType.getInner() != inputType.getInner())
+  if (getOutput().getType().getInner() != getInput().getType().getInner())
     return emitOpError("input and output types must match");
   return success();
 }
