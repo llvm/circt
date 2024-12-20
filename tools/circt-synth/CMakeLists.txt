@@ -6,6 +6,7 @@ target_link_libraries(circt-synth
   CIRCTAIGTransforms
   CIRCTComb
   CIRCTCombToAIG
+  CIRCTEggSynthesis
   CIRCTHW
   CIRCTSupport
   MLIRIR

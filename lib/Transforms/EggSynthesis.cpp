@@ -36,6 +36,10 @@ using namespace circt;
 namespace {
 struct EggSynthesisPass
     : public circt::impl::EggSynthesisBase<EggSynthesisPass> {
+  EggSynthesisPass() : EggSynthesisBase() {}
+  EggSynthesisPass(EggSynthesisOptions options)
+      : EggSynthesisBase(std::move(options)) {}
+
   void runOnOperation() override;
 
 private:
@@ -75,7 +79,11 @@ private:
 };
 } // namespace
 
-std::unique_ptr<mlir::Pass> circt::createEggSynthesisPass() {
+std::unique_ptr<mlir::Pass>
+circt::createEggSynthesisPass(std::optional<EggSynthesisOptions> options) {
+  if (options.has_value())
+    return std::make_unique<EggSynthesisPass>(options.value());
+
   return std::make_unique<EggSynthesisPass>();
 }
 

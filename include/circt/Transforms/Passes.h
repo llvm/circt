@@ -47,7 +47,8 @@ std::unique_ptr<mlir::Pass> createPrintOpCountPass();
 std::unique_ptr<mlir::Pass>
 createMemoryBankingPass(std::optional<unsigned> bankingFactor = std::nullopt);
 std::unique_ptr<mlir::Pass> createIndexSwitchToIfPass();
-std::unique_ptr<mlir::Pass> createEggSynthesisPass();
+std::unique_ptr<mlir::Pass>
+    createEggSynthesisPass(std::optional<EggSynthesisOptions> = std::nullopt);
 
 //===----------------------------------------------------------------------===//
 // Utility functions.

@@ -20,6 +20,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
+#include "circt/Transforms/Passes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OwningOpRef.h"
 #include "mlir/Parser/Parser.h"
@@ -84,6 +85,15 @@ static cl::opt<bool>
                   cl::desc("Convert AIG to Comb at the end of the pipeline"),
                   cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<std::string> mappingLib("lib",
+                                       cl::desc("Technology mapping library"),
+                                       cl::cat(mainCategory));
+
+static cl::opt<std::string> mappingMetric(
+    "metric",
+    cl::desc("Technology mapping metric (choose Area, Timing, or Power)"),
+    cl::cat(mainCategory));
+
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -121,10 +131,13 @@ static void populateSynthesisPipeline(PassManager &pm) {
   mpm.addPass(createCSEPass());
   mpm.addPass(createSimpleCanonicalizerPass());
   // TODO: Add balancing, rewriting, FRAIG conversion, etc.
+
+  // Run mapping with egg-netlist-synthesizer.
+  EggSynthesisOptions eggSynthesisOptions{mappingLib, mappingMetric};
+  mpm.addPass(circt::createEggSynthesisPass(eggSynthesisOptions));
+
   if (untilReached(UntilEnd))
     return;
-
-  // TODO: Add LUT mapping, etc.
 }
 
 /// This function initializes the various components of the tool and
