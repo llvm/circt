@@ -8,7 +8,6 @@
 
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
-#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/OpImplementation.h"
@@ -152,12 +151,6 @@ LogicalResult DefineOp::verifyRegions() {
   for (auto &op : getBodyBlock()) {
     if (isMemoryEffectFree(&op))
       continue;
-
-    // Special case for post-synthesis IR: check for an instance op with a
-    // discardable unit attribute named pure.
-    if (auto instance = dyn_cast<hw::InstanceOp>(op))
-      if (instance->getDiscardableAttr("pure"))
-        continue;
 
     // We don't use a op-error here because that leads to the whole arc being
     // printed. This can be switched of when creating the context, but one
