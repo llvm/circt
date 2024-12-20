@@ -253,12 +253,12 @@ EggSynthesisPass::getExpr(Operation *op, BooleanEGraph &egraph) {
                   build_symbol(egraph, getSymbol(operand).str().str()));
 
             rust::Box<BooleanId> expr =
-                build_and(egraph, std::move(symbols[numOperands - 2]),
-                          std::move(symbols[numOperands - 1]));
+                build_or(egraph, std::move(symbols[numOperands - 2]),
+                         std::move(symbols[numOperands - 1]));
 
             for (size_t i = 3, e = numOperands; i <= e; ++i)
-              expr = build_and(egraph, std::move(symbols[numOperands - i]),
-                               std::move(expr));
+              expr = build_or(egraph, std::move(symbols[numOperands - i]),
+                              std::move(expr));
 
             return expr;
           })
