@@ -598,7 +598,7 @@ class Channel(Type):
     return self.inner_type
 
   def wrap(self, value,
-           validOrEmpty) -> typing.Tuple["ChannelSignal", "BitsSignal"]:
+           valid_or_empty) -> typing.Tuple["ChannelSignal", "BitsSignal"]:
     """Wrap a data signal and valid signal into a data channel signal and a
     ready signal."""
 
@@ -616,13 +616,13 @@ class Channel(Type):
       elif value.type != self.inner_type:
         raise TypeError(
             f"Expected signal of type {self.inner_type}, got {value.type}")
-      valid = Bits(1)(validOrEmpty)
+      valid = Bits(1)(valid_or_empty)
       wrap_op = esi.WrapValidReadyOp(self._type, types.i1, value.value,
                                      valid.value)
       return wrap_op[0], wrap_op[1]
     elif signaling == ChannelSignaling.FIFO:
       value = self.inner_type(value)
-      empty = Bits(1)(validOrEmpty)
+      empty = Bits(1)(valid_or_empty)
       wrap_op = esi.WrapFIFOOp(self._type, types.i1, value.value, empty.value)
       return wrap_op[0], wrap_op[1]
     else:
@@ -656,7 +656,7 @@ class Channel(Type):
 
   def merge(self, a: "ChannelSignal", b: "ChannelSignal") -> "ChannelSignal":
     """Merge two channels into a single channel, selecting a message from either
-    one. May implement an sort of fairness policy. Both channels must be of the
+    one. May implement any sort of fairness policy. Both channels must be of the
     same type. Returns both the merged channel."""
 
     from .constructs import Mux, Wire
