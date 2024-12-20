@@ -1,4 +1,4 @@
-set(LLVM_OPTIONAL_SOURCES
+add_circt_library(CIRCTTransforms
   FlattenMemRefs.cpp
   StripDebugInfoWithPred.cpp
   MapArithToComb.cpp
@@ -7,14 +7,8 @@ set(LLVM_OPTIONAL_SOURCES
   PrintOpCount.cpp
   MemoryBanking.cpp
   IndexSwitchToIf.cpp
-  EggSynthesis.cpp
-)
 
-add_circt_library(CIRCTTransforms
-  FlattenMemRefs.cpp
-  StripDebugInfoWithPred.cpp
-  MapArithToComb.cpp
-
+  PARTIAL_SOURCES_INTENDED
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Transforms
 
@@ -44,6 +38,7 @@ if(egg-netlist-synthesizer_FOUND)
     ADDITIONAL_HEADER_DIRS
     ${CIRCT_MAIN_INCLUDE_DIR}/circt/Transforms
 
+    PARTIAL_SOURCES_INTENDED
     LINK_LIBS PUBLIC
     CIRCTArc
     CIRCTComb

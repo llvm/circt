@@ -6,7 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
@@ -24,13 +23,19 @@
 
 #define DEBUG_TYPE "egg-synthesis"
 
+namespace circt {
+#define GEN_PASS_DEF_EGGSYNTHESIS
+#include "circt/Transforms/Passes.h.inc"
+} // namespace circt
+
 using namespace mlir;
 using namespace circt;
 
 /// Pass definition.
 
 namespace {
-struct EggSynthesisPass : public EggSynthesisBase<EggSynthesisPass> {
+struct EggSynthesisPass
+    : public circt::impl::EggSynthesisBase<EggSynthesisPass> {
   void runOnOperation() override;
 
 private:
@@ -379,18 +384,18 @@ EggSynthesisPass::generateCellDeclaration(BooleanExpression &expr, Location loc,
   // Get the gate output port.
   rust::String gateOutputName = expr_get_gate_output_name(expr);
   auto portName = builder.getStringAttr(std::string(gateOutputName));
-  auto portDirection = hw::PortDirection::OUTPUT;
+  auto portDirection = hw::ModulePort::Direction::Output;
   auto portType = builder.getI1Type();
-  ports.push_back(hw::PortInfo{portName, portDirection, portType});
+  ports.push_back(hw::PortInfo{{portName, portType, portDirection}});
 
   // Get the gate input ports.
   rust::Vec<rust::String> gateInputNames = expr_get_gate_input_names(expr);
   for (auto &gateInputName :
        llvm::make_range(gateInputNames.begin(), gateInputNames.end())) {
     auto portName = builder.getStringAttr(std::string(gateInputName));
-    auto portDirection = hw::PortDirection::INPUT;
+    auto portDirection = hw::ModulePort::Direction::Input;
     auto portType = builder.getI1Type();
-    ports.push_back(hw::PortInfo{portName, portDirection, portType});
+    ports.push_back(hw::PortInfo{{portName, portType, portDirection}});
   }
 
   // Build the gate declaration.

@@ -21,21 +21,7 @@ target_link_libraries(circt-opt
 
   CIRCTAnalysisTestPasses
   CIRCTBMCTransforms
-  CIRCTArc
-  CIRCTArcToLLVM
-  CIRCTArcTransforms
-  CIRCTCalyx
-  CIRCTCalyxToHW
-  CIRCTCalyxToFSM
-  CIRCTCalyxTransforms
-  CIRCTComb
-  CIRCTCombTransforms
-  CIRCTConvertToArcs
-  CIRCTDC
-  CIRCTDCToHW
-  CIRCTDCTransforms
   CIRCTEggSynthesis
-  CIRCTESI
   CIRCTExportChiselInterface
   CIRCTExportVerilog
   CIRCTLECTransforms
