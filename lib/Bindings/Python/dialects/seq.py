@@ -56,7 +56,8 @@ class CompRegLikeBuilder(NamedValueOpView):
 
 class CompRegLike:
 
-  def init(self,
+  @staticmethod
+  def init(op,
            data_type,
            input,
            clk,
@@ -74,10 +75,10 @@ class CompRegLike:
     attributes = {}
     results.append(data_type)
     operand_segment_sizes = [1, 1]
-    if isinstance(self, CompRegOp):
+    if isinstance(op, CompRegOp):
       if clockEnable is not None:
         raise Exception("Clock enable not supported on compreg")
-    elif isinstance(self, CompRegClockEnabledOp):
+    elif isinstance(op, CompRegClockEnabledOp):
       if clockEnable is None:
         raise Exception("Clock enable required on compreg.ce")
       operands.append(clockEnable)
@@ -120,11 +121,11 @@ class CompRegLike:
     if sym_name is not None:
       attributes["inner_sym"] = hw.InnerSymAttr.get(StringAttr.get(sym_name))
 
-    self._ODS_OPERAND_SEGMENTS = operand_segment_sizes
+    op._ODS_OPERAND_SEGMENTS = operand_segment_sizes
 
     OpView.__init__(
-        self,
-        self.build_generic(
+        op,
+        op.build_generic(
             attributes=attributes,
             results=results,
             operands=operands,
