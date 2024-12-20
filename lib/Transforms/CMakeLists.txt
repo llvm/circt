@@ -40,7 +40,7 @@ if(egg-netlist-synthesizer_FOUND)
 
     PARTIAL_SOURCES_INTENDED
     LINK_LIBS PUBLIC
-    CIRCTArc
+    CIRCTAIG
     CIRCTComb
     CIRCTHW
     MLIRIR

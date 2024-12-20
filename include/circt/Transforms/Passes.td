@@ -164,7 +164,7 @@ def IndexSwitchToIf : Pass<"switch-to-if", "::mlir::ModuleOp"> {
   let dependentDialects = ["mlir::scf::SCFDialect"];
 }
 
-def EggSynthesis : Pass<"egg-synthesis", "::circt::arc::DefineOp"> {
+def EggSynthesis : Pass<"egg-synthesis", "::circt::hw::HWModuleOp"> {
   let constructor = "circt::createEggSynthesisPass()";
   let options = [
     Option<"lib", "lib", "std::string",

@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/AIG/AIGOps.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -42,7 +42,8 @@ private:
   // CIRCT -> egg-netlist-synthesizer.
 
   std::optional<rust::Box<BooleanId>> getExpr(Operation *op,
-                                              BooleanEGraph &egraph);
+                                              BooleanEGraph &egraph,
+                                              BackedgeBuilder &backedgeBuilder);
 
   SmallString<8> getSymbol(Value value);
 
@@ -78,8 +79,10 @@ std::unique_ptr<mlir::Pass> circt::createEggSynthesisPass() {
   return std::make_unique<EggSynthesisPass>();
 }
 
+static bool isHardware(Type type) { return hw::isHWIntegerType(type); }
+
 static bool isBoolean(Type type) {
-  return hw::isHWIntegerType(type) && hw::getBitWidth(type) == 1;
+  return isHardware(type) && hw::getBitWidth(type) == 1;
 }
 
 void EggSynthesisPass::runOnOperation() {
@@ -98,27 +101,32 @@ void EggSynthesisPass::runOnOperation() {
     synthesizer = synthesizer_new(lib, metric).into_raw();
   }
 
-  arc::DefineOp defineOp = getOperation();
+  hw::HWModuleOp moduleOp = getOperation();
 
   OpPrintingFlags flags;
+
+  // Create the OpBuilder and BackedgeBuilder.
+  auto builder = OpBuilder(moduleOp);
+  auto backedgeBuilder = BackedgeBuilder(builder, moduleOp.getLoc());
 
   // Initialize an EGraph.
   rust::Box<BooleanEGraph> egraph = egraph_new();
 
   // Populate the EGraph with each operation.
   rust::Vec<BooleanId> stmts;
-  for (auto &op : defineOp.getBodyBlock()) {
+  for (auto &op : moduleOp.getOps()) {
     // Handle output specially.
-    if (isa<arc::OutputOp>(op))
+    if (isa<hw::OutputOp>(op))
       continue;
 
     // Invariants.
     assert(op.getNumResults() == 1);
-    assert(llvm::all_of(op.getResultTypes(), isBoolean));
-    assert(llvm::all_of(op.getOperandTypes(), isBoolean));
+    assert(llvm::all_of(op.getResultTypes(), isHardware));
+    assert(llvm::all_of(op.getOperandTypes(), isHardware));
 
     // Create an egraph expression, if possible and necessary.
-    std::optional<rust::Box<BooleanId>> expr = getExpr(&op, *egraph);
+    std::optional<rust::Box<BooleanId>> expr =
+        getExpr(&op, *egraph, backedgeBuilder);
     if (expr.has_value())
       append_expr(stmts, std::move(expr.value()));
   }
@@ -144,15 +152,11 @@ void EggSynthesisPass::runOnOperation() {
     llvm::dbgs() << '\n';
   });
 
-  // Create the OpBuilder and BackedgeBuilder.
-  auto builder = OpBuilder(defineOp);
-  auto backedgeBuilder = BackedgeBuilder(builder, defineOp.getLoc());
-
   // Ensure block arguments' symbols have backedges, which just return the arg.
-  for (auto arg : defineOp.getArguments()) {
+  for (auto arg : moduleOp.getBodyBlock()->getArguments()) {
     SmallString<8> symbol = valueToSymbol[arg];
     symbolToBackedge[symbol] = backedgeBuilder.get(
-        builder.getI1Type(), symbolToValue[symbol].getLoc());
+        symbolToValue[symbol].getType(), symbolToValue[symbol].getLoc());
     symbolToBackedge[symbol].setValue(arg);
   }
 
@@ -203,74 +207,55 @@ void EggSynthesisPass::runOnOperation() {
 /// CIRCT -> egg-netlist-synthesizer.
 
 std::optional<rust::Box<BooleanId>>
-EggSynthesisPass::getExpr(Operation *op, BooleanEGraph &egraph) {
+EggSynthesisPass::getExpr(Operation *op, BooleanEGraph &egraph,
+                          BackedgeBuilder &backedgeBuilder) {
   // Map the op to the Id of a BooleanExpression if possible and necessary.
   std::optional<rust::Box<BooleanId>> expr =
       llvm::TypeSwitch<Operation *, std::optional<rust::Box<BooleanId>>>(op)
-          .Case([&](hw::ConstantOp c) {
-            // For constants only used in not operations, mark to be erased.
-            bool isOnlyUsedInNot = true;
-            for (auto *op : c->getUsers()) {
-              if (auto xorOp = dyn_cast<comb::XorOp>(op)) {
-                if (!xorOp.isBinaryNot()) {
-                  isOnlyUsedInNot = false;
-                  break;
-                }
-              }
+          .Case([&](aig::AndInverterOp andInverter) {
+            // Create expressions for each AndInverterOp.
+            auto numOperands = andInverter.getNumOperands();
+            assert(numOperands >= 1);
+            assert(isBoolean(andInverter.getResult().getType()));
+
+            ArrayRef<bool> invertedOperands = andInverter.getInverted();
+
+            // Create symbols for each operand, inverting with NOT if necessary.
+            SmallVector<rust::Box<BooleanId>> symbols;
+            for (auto [i, operand] :
+                 llvm::enumerate(andInverter.getOperands())) {
+              assert(isBoolean(operand.getType()));
+
+              rust::Box<BooleanId> symbol =
+                  build_symbol(egraph, getSymbol(operand).str().str());
+
+              if (invertedOperands[i])
+                symbol = build_not(egraph, std::move(symbol));
+
+              symbols.push_back(std::move(symbol));
             }
 
-            if (isOnlyUsedInNot)
-              opsToErase.push_back(c);
+            // If we just have one input, return it.
+            if (numOperands == 1)
+              return std::move(symbols[0]);
 
+            // We assume we have already lowered to binary AndInverterOps.
+            assert(numOperands == 2);
+
+            // Create the AND with any NOTs.
+            rust::Box<BooleanId> expr =
+                build_and(egraph, std::move(symbols[0]), std::move(symbols[1]));
+
+            return expr;
+          })
+          .Case([&](comb::ExtractOp extract) {
+            // Create symbols and backedges for extracts to be picked up later.
+            getSymbol(extract.getInput());
+            auto symbol = getSymbol(extract.getResult());
+            symbolToBackedge[symbol] = backedgeBuilder.get(
+                extract.getResult().getType(), extract.getLoc());
+            symbolToBackedge[symbol].setValue(extract.getResult());
             return std::nullopt;
-          })
-          .Case([&](comb::AndOp a) {
-            auto numOperands = a.getNumOperands();
-            assert(numOperands >= 2);
-
-            SmallVector<rust::Box<BooleanId>> symbols;
-            for (Value operand : a.getOperands())
-              symbols.push_back(
-                  build_symbol(egraph, getSymbol(operand).str().str()));
-
-            rust::Box<BooleanId> expr =
-                build_and(egraph, std::move(symbols[numOperands - 2]),
-                          std::move(symbols[numOperands - 1]));
-
-            for (size_t i = 3, e = numOperands; i <= e; ++i)
-              expr = build_and(egraph, std::move(symbols[numOperands - i]),
-                               std::move(expr));
-
-            return expr;
-          })
-          .Case([&](comb::OrOp o) {
-            auto numOperands = o.getNumOperands();
-            assert(numOperands >= 2);
-
-            SmallVector<rust::Box<BooleanId>> symbols;
-            for (Value operand : o.getOperands())
-              symbols.push_back(
-                  build_symbol(egraph, getSymbol(operand).str().str()));
-
-            rust::Box<BooleanId> expr =
-                build_or(egraph, std::move(symbols[numOperands - 2]),
-                         std::move(symbols[numOperands - 1]));
-
-            for (size_t i = 3, e = numOperands; i <= e; ++i)
-              expr = build_or(egraph, std::move(symbols[numOperands - i]),
-                              std::move(expr));
-
-            return expr;
-          })
-          .Case([&](comb::XorOp n) {
-            assert(n.isBinaryNot());
-
-            rust::Box<BooleanId> symbol =
-                build_symbol(egraph, getSymbol(n.getOperand(0)).str().str());
-
-            rust::Box<BooleanId> expr = build_not(egraph, std::move(symbol));
-
-            return expr;
           })
           .Default([&](auto *op) { return std::nullopt; });
 
