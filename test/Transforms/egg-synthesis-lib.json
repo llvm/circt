@@ -1,0 +1,26 @@
+[
+  {
+    "name": "and2",
+    "area": 6.256,
+    "power": 0.767,
+    "timing": 1.501,
+    "searcher": "(& ?A ?B)",
+    "applier": "(and2 (input A ?A) (input B ?B) (output X))"
+  },
+  {
+    "name": "or2",
+    "area": 6.256,
+    "power": 0.445,
+    "timing": 1.496,
+    "searcher": "(| ?A ?B)",
+    "applier": "(or2 (input A ?A) (input B ?B) (output X))"
+  },
+  {
+    "name": "inv",
+    "area": 16.266,
+    "power": 2.378,
+    "timing": 1.643,
+    "searcher": "(! ?A)",
+    "applier": "(inv (input A ?A) (output Y))"
+  }
+]
