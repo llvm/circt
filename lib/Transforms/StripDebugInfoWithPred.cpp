@@ -57,7 +57,7 @@ struct StripDebugInfoWithPred
     SmallVector<Attribute> newLocs;
     if (auto resLocs = op->getAttrOfType<ArrayAttr>(attributeName)) {
       bool changed = false;
-      for (auto loc : resLocs.getAsRange<LocationAttr>()) {
+      for (auto loc : resLocs.getAsRange<Location>()) {
         auto newLoc = getStrippedLoc(loc);
         changed |= newLoc != loc;
         newLocs.push_back(newLoc);
