@@ -6,9 +6,17 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "slang/ast/Statements.h"
 #include "ImportVerilogInternals.h"
+#include "mlir/IR/Diagnostics.h"
+#include "slang/ast/Expression.h"
+#include "slang/ast/SemanticFacts.h"
 #include "slang/ast/SystemSubroutine.h"
+#include "slang/ast/expressions/AssertionExpr.h"
+#include "slang/text/SourceLocation.h"
+#include "slang/util/Assert.h"
 #include "llvm/ADT/ScopeExit.h"
+#include "llvm/Support/LogicalResult.h"
 
 using namespace mlir;
 using namespace circt;
@@ -544,6 +552,12 @@ struct StmtVisitor {
     } else {
       builder.setInsertionPointToEnd(&exitBlock);
     }
+    return success();
+  }
+  
+  LogicalResult visit(const slang::ast::ConcurrentAssertionStatement &stmt) {
+    auto property = context.convertAssertionExpression(stmt.propertySpec);
+    builder.create<moore::ConcurrentAssertOp>(loc, property, nullptr);
     return success();
   }
 
