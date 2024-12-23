@@ -1178,107 +1178,6 @@ OpFoldResult OrOp::fold(FoldAdaptor adaptor) {
   return constFoldAssociativeOp(inputs, hw::PEO::Or);
 }
 
-/// Simplify concat ops in an or op when a constant operand is present in either
-/// concat.
-///
-/// This will invert an or(concat, concat) into concat(or, or, ...), which can
-/// often be further simplified due to the smaller or ops being easier to fold.
-///
-/// For example:
-///
-/// or(..., concat(x, 0), concat(0, y))
-///    ==> or(..., concat(x, 0, y)), when x and y don't overlap.
-///
-/// or(..., concat(x: i2, cst1: i4), concat(cst2: i5, y: i1))
-///    ==> or(..., concat(or(x: i2,               extract(cst2, 4..3)),
-///                       or(extract(cst1, 3..1), extract(cst2, 2..0)),
-///                       or(extract(cst1, 0..0), y: i1))
-static bool canonicalizeOrOfConcatsWithCstOperands(OrOp op, size_t concatIdx1,
-                                                   size_t concatIdx2,
-                                                   PatternRewriter &rewriter) {
-  assert(concatIdx1 < concatIdx2 && "concatIdx1 must be < concatIdx2");
-
-  auto inputs = op.getInputs();
-  auto concat1 = inputs[concatIdx1].getDefiningOp<ConcatOp>();
-  auto concat2 = inputs[concatIdx2].getDefiningOp<ConcatOp>();
-
-  assert(concat1 && concat2 && "expected indexes to point to ConcatOps");
-
-  // We can simplify as long as a constant is present in either concat.
-  bool hasConstantOp1 =
-      llvm::any_of(concat1->getOperands(), [&](Value operand) -> bool {
-        return operand.getDefiningOp<hw::ConstantOp>();
-      });
-  if (!hasConstantOp1) {
-    bool hasConstantOp2 =
-        llvm::any_of(concat2->getOperands(), [&](Value operand) -> bool {
-          return operand.getDefiningOp<hw::ConstantOp>();
-        });
-    if (!hasConstantOp2)
-      return false;
-  }
-
-  SmallVector<Value> newConcatOperands;
-
-  // Simultaneously iterate over the operands of both concat ops, from MSB to
-  // LSB, pushing out or's of overlapping ranges of the operands. When operands
-  // span different bit ranges, we extract only the maximum overlap.
-  auto operands1 = concat1->getOperands();
-  auto operands2 = concat2->getOperands();
-  // Number of bits already consumed from operands 1 and 2, respectively.
-  unsigned consumedWidth1 = 0;
-  unsigned consumedWidth2 = 0;
-  for (auto it1 = operands1.begin(), end1 = operands1.end(),
-            it2 = operands2.begin(), end2 = operands2.end();
-       it1 != end1 && it2 != end2;) {
-    auto operand1 = *it1;
-    auto operand2 = *it2;
-
-    unsigned remainingWidth1 =
-        hw::getBitWidth(operand1.getType()) - consumedWidth1;
-    unsigned remainingWidth2 =
-        hw::getBitWidth(operand2.getType()) - consumedWidth2;
-    unsigned widthToConsume = std::min(remainingWidth1, remainingWidth2);
-    auto narrowedType = rewriter.getIntegerType(widthToConsume);
-
-    auto extract1 = rewriter.createOrFold<ExtractOp>(
-        op.getLoc(), narrowedType, operand1, remainingWidth1 - widthToConsume);
-    auto extract2 = rewriter.createOrFold<ExtractOp>(
-        op.getLoc(), narrowedType, operand2, remainingWidth2 - widthToConsume);
-
-    newConcatOperands.push_back(
-        rewriter.createOrFold<OrOp>(op.getLoc(), extract1, extract2, false));
-
-    consumedWidth1 += widthToConsume;
-    consumedWidth2 += widthToConsume;
-
-    if (widthToConsume == remainingWidth1) {
-      ++it1;
-      consumedWidth1 = 0;
-    }
-    if (widthToConsume == remainingWidth2) {
-      ++it2;
-      consumedWidth2 = 0;
-    }
-  }
-
-  ConcatOp newOp = rewriter.create<ConcatOp>(op.getLoc(), newConcatOperands);
-
-  // Copy the old operands except for concatIdx1 and concatIdx2, and append the
-  // new ConcatOp to the end.
-  SmallVector<Value> newOrOperands;
-  newOrOperands.append(inputs.begin(), inputs.begin() + concatIdx1);
-  newOrOperands.append(inputs.begin() + concatIdx1 + 1,
-                       inputs.begin() + concatIdx2);
-  newOrOperands.append(inputs.begin() + concatIdx2 + 1,
-                       inputs.begin() + inputs.size());
-  newOrOperands.push_back(newOp);
-
-  replaceOpWithNewOpAndCopyName<OrOp>(rewriter, op, op.getType(),
-                                      newOrOperands);
-  return true;
-}
-
 LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
   auto inputs = op.getInputs();
   auto size = inputs.size();
@@ -1326,16 +1225,6 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
         if (canonicalizeLogicalCstWithConcat(op, i, value, rewriter))
           return success();
     }
-  }
-
-  // or(..., concat(x, cst1), concat(cst2, y)
-  //    ==> or(..., concat(x, cst3, y)), when x and y don't overlap.
-  for (size_t i = 0; i < size - 1; ++i) {
-    if (auto concat = inputs[i].getDefiningOp<ConcatOp>())
-      for (size_t j = i + 1; j < size; ++j)
-        if (auto concat = inputs[j].getDefiningOp<ConcatOp>())
-          if (canonicalizeOrOfConcatsWithCstOperands(op, i, j, rewriter))
-            return success();
   }
 
   // extracts only of or(...) -> or(extract()...)
