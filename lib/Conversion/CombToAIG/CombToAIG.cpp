@@ -351,8 +351,8 @@ static void populateCombToAIGConversionPatterns(RewritePatternSet &patterns) {
       // Arithmetic Ops
       CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
       // Variadic ops that must be lowered to binary operations
-      CombLowerVariadicOp<XorOp>, CombLowerVariadicOp<AddOp>, CombLowerVariadicOp<MulOp>>(
-      patterns.getContext());
+      CombLowerVariadicOp<XorOp>, CombLowerVariadicOp<AddOp>,
+      CombLowerVariadicOp<MulOp>>(patterns.getContext());
 }
 
 void ConvertCombToAIGPass::runOnOperation() {
