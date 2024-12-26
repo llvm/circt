@@ -58,6 +58,36 @@ static SmallVector<Value> extractBits(ConversionPatternRewriter &rewriter,
   return bits;
 }
 
+static Value constructMuxTree(ConversionPatternRewriter &rewriter, Location loc,
+                              int64_t width, ArrayRef<Value> bits,
+                              ArrayRef<Value> nodes, Value outOfBoundValue) {
+  //  A helper function to get the result for a given index
+  auto getResult = [&](size_t id) -> Value {
+    // Return the result for the given index. If the index is out of bounds,
+    // return the out-of-bound value.
+    return id < nodes.size() ? nodes[id] : outOfBoundValue;
+  };
+
+  // Recursive helper function to construct the mux tree
+  std::function<Value(size_t, size_t)> constructTreeHelper =
+      [&](size_t id, size_t level) -> Value {
+    // Base case: at the lowest level, return the result
+    if (level == 0)
+      return getResult(id);
+
+    auto selector = bits[level - 1];
+
+    // Recursive case: create muxes for true and false branches
+    auto trueVal = constructTreeHelper(2 * id + 1, level - 1);
+    auto falseVal = constructTreeHelper(2 * id, level - 1);
+
+    // Combine the results with a mux
+    return rewriter.createOrFold<comb::MuxOp>(loc, selector, trueVal, falseVal);
+  };
+
+  return constructTreeHelper(0, llvm::Log2_64_Ceil(width));
+}
+
 //===----------------------------------------------------------------------===//
 // Conversion patterns
 //===----------------------------------------------------------------------===//
@@ -454,6 +484,117 @@ struct CombParityOpConversion : OpConversionPattern<ParityOp> {
   }
 };
 
+template <typename OpTy, bool isLeftShift, bool isSigned>
+struct CombShiftOpConversion : OpConversionPattern<OpTy> {
+  using OpConversionPattern<OpTy>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<OpTy>::OpAdaptor;
+  static_assert(!isSigned || !isLeftShift,
+                "Signed left shift is not supported");
+
+  LogicalResult
+  matchAndRewrite(OpTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto width = op.getType().getIntOrFloatBitWidth();
+    if (width <= 0)
+      return failure();
+    // For left shift, construct the mux tree from the most significant bit to
+    // the least significant bit. For right shift, construct the mux tree from
+    // the least significant bit to the most significant bit.
+
+    auto lhs = adaptor.getLhs();
+    auto rhs = adaptor.getRhs();
+    auto bits = extractBits(rewriter, rhs);
+    Value outofBoundsValue;
+    if (isSigned) {
+      assert(!isLeftShift && "Signed left shift is not supported");
+      auto sign = rewriter.createOrFold<comb::ExtractOp>(op.getLoc(), lhs,
+                                                         width - 1, 1);
+      // Replicate the sign bit to the width of the value.
+      outofBoundsValue =
+          rewriter.createOrFold<comb::ReplicateOp>(op.getLoc(), sign, width);
+    } else {
+      // For unsigned shift, use zeros for out-of-bounds.
+      outofBoundsValue = rewriter.create<hw::ConstantOp>(
+          op.getLoc(), IntegerType::get(rewriter.getContext(), width), 0);
+    }
+
+    SmallVector<Value> nodes = createShiftNodes(rewriter, op, lhs, width);
+
+    auto result = constructMuxTree(rewriter, op.getLoc(), width, bits, nodes,
+                                   outofBoundsValue);
+    // Add a gate to check if the shift amount is within bounds.
+    auto inBound = rewriter.createOrFold<comb::ICmpOp>(
+        op.getLoc(), ICmpPredicate::ult, rhs,
+        rewriter.create<hw::ConstantOp>(op.getLoc(), rhs.getType(), width));
+    result = rewriter.createOrFold<comb::MuxOp>(op.getLoc(), inBound, result,
+                                                outofBoundsValue);
+
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+
+private:
+  static SmallVector<Value>
+  createShiftNodes(ConversionPatternRewriter &rewriter, OpTy op, Value lhs,
+                   int64_t width) {
+    SmallVector<Value> nodes;
+    nodes.reserve(width);
+    Value lhsSign = isSigned ? rewriter.createOrFold<comb::ExtractOp>(
+                                   op.getLoc(), lhs, width - 1, 1)
+                             : Value();
+    for (int64_t i = 0; i < width; ++i) {
+      // Switch the extract operation based on the shift direction.
+      // For left shift, extract lower bits. For right shift, extract higher
+      // bits.
+      Value extract, padding;
+      if (isLeftShift) {
+        // Left shift.
+        extract = rewriter.createOrFold<comb::ExtractOp>(op.getLoc(), lhs, 0,
+                                                         width - i);
+        if (i == 0) {
+          nodes.push_back(extract);
+          continue;
+        }
+        // Use zeros for padding.
+        padding = rewriter.createOrFold<hw::ConstantOp>(
+            op.getLoc(), IntegerType::get(rewriter.getContext(), i), 0);
+      } else if (isSigned) {
+        // Signed right shift. Use the sign bit for padding.
+        padding = rewriter.createOrFold<comb::ReplicateOp>(op.getLoc(), lhsSign,
+                                                           i + 1);
+        if (i == width - 1) {
+          nodes.push_back(padding);
+          continue;
+        }
+
+        extract = rewriter.createOrFold<comb::ExtractOp>(op.getLoc(), lhs, i,
+                                                         width - i - 1);
+      } else {
+        // Unsigned right shift.
+        extract = rewriter.createOrFold<comb::ExtractOp>(op.getLoc(), lhs, i,
+                                                         width - i);
+        if (i == 0) {
+          nodes.push_back(extract);
+          continue;
+        }
+        // Use zeros for padding.
+        padding = rewriter.createOrFold<hw::ConstantOp>(
+            op.getLoc(), IntegerType::get(rewriter.getContext(), i), 0);
+      }
+
+      // Concatenate the extracted bits with padding.
+      auto concat = isLeftShift ? rewriter.createOrFold<comb::ConcatOp>(
+                                      op.getLoc(), extract, padding)
+                                : rewriter.createOrFold<comb::ConcatOp>(
+                                      op.getLoc(), padding, extract);
+
+      nodes.push_back(concat);
+    }
+
+    return nodes;
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -477,6 +618,13 @@ static void populateCombToAIGConversionPatterns(RewritePatternSet &patterns) {
       // Arithmetic Ops
       CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
       CombICmpOpConversion,
+      // Shift Ops
+      CombShiftOpConversion<comb::ShlOp, /*isLeftShift=*/true,
+                            /*isSigned=*/false>,
+      CombShiftOpConversion<comb::ShrUOp, /*isLeftShift=*/false,
+                            /*isSigned=*/false>,
+      CombShiftOpConversion<comb::ShrSOp, /*isLeftShift=*/false,
+                            /*isSigned=*/true>,
       // Variadic ops that must be lowered to binary operations
       CombLowerVariadicOp<XorOp>, CombLowerVariadicOp<AddOp>,
       CombLowerVariadicOp<MulOp>>(patterns.getContext());
