@@ -755,8 +755,8 @@ private:
 ///   2) Scattered annotations for how components bind to interfaces
 static std::optional<DictionaryAttr>
 parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
-                   DictionaryAttr root, StringRef companion, StringAttr name,
-                   StringAttr defName, std::optional<IntegerAttr> id,
+                   DictionaryAttr root, StringAttr name, StringAttr defName,
+                   std::optional<IntegerAttr> id,
                    std::optional<StringAttr> description, Twine clazz,
                    StringAttr companionAttr, Twine path = {}) {
 
@@ -932,8 +932,8 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
       if (auto maybeDescription = field.get("description"))
         description = cast<StringAttr>(maybeDescription);
       auto eltAttr = parseAugmentedType(
-          state, tpe, root, companion, name, defName, std::nullopt, description,
-          clazz, companionAttr, path + "_" + name.getValue());
+          state, tpe, root, name, defName, std::nullopt, description, clazz,
+          companionAttr, path + "_" + name.getValue());
       if (!eltAttr)
         return std::nullopt;
 
@@ -1115,10 +1115,10 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
       return std::nullopt;
     SmallVector<Attribute> elements;
     for (auto [i, elt] : llvm::enumerate(elementsAttr)) {
-      auto eltAttr = parseAugmentedType(
-          state, cast<DictionaryAttr>(elt), root, companion, name,
-          StringAttr::get(context, ""), id, std::nullopt, clazz, companionAttr,
-          path + "_" + Twine(i));
+      auto eltAttr =
+          parseAugmentedType(state, cast<DictionaryAttr>(elt), root, name,
+                             StringAttr::get(context, ""), id, std::nullopt,
+                             clazz, companionAttr, path + "_" + Twine(i));
       if (!eltAttr)
         return std::nullopt;
       elements.push_back(*eltAttr);
@@ -1167,8 +1167,8 @@ LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
   state.addToWorklistFn(DictionaryAttr::get(context, companionAttrs));
 
   auto prunedAttr =
-      parseAugmentedType(state, viewAttr, anno, companionAttr.getValue(), name,
-                         {}, id, {}, viewAnnoClass, companionAttr, Twine(name));
+      parseAugmentedType(state, viewAttr, anno, name, {}, id, {}, viewAnnoClass,
+                         companionAttr, Twine(name));
   if (!prunedAttr)
     return failure();
 
