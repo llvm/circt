@@ -11,8 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ICE40/ICE40Ops.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 
 using namespace circt;
 using namespace ice40;
@@ -21,28 +21,19 @@ using namespace ice40;
 // SBLut4Op
 //===----------------------------------------------------------------------===//
 
-LogicalResult SBLut4Op::verify()
-{
-  return success();
-}
+LogicalResult SBLut4Op::verify() { return success(); }
 
 //===----------------------------------------------------------------------===//
 // SBCarryOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult SBCarryOp::verify()
-{
-  return success();
-}
+LogicalResult SBCarryOp::verify() { return success(); }
 
 //===----------------------------------------------------------------------===//
 // SBLut4CarryOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult SBLut4CarryOp::verify()
-{
-  return success();
-}
+LogicalResult SBLut4CarryOp::verify() { return success(); }
 
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.

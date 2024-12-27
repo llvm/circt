@@ -14,8 +14,8 @@
 #define CIRCT_DIALECT_ICE40_ICE40OPS_H
 
 #include "circt/Dialect/ICE40/ICE40Dialect.h"
-#include "mlir/IR/OpImplementation.h"
 #include "mlir/Bytecode/BytecodeOpInterface.h"
+#include "mlir/IR/OpImplementation.h"
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/ICE40/ICE40.h.inc"
