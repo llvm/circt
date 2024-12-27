@@ -487,3 +487,40 @@ firrtl.circuit "Foo" {
     firrtl.instance a {lowerToBind} @Foo_A()
   }
 }
+
+// -----
+
+// Test that the DUT can be an extmodule
+// CHECK:      - operation: firrtl.circuit "Testharness"
+// CHECK-NEXT:   hasDut: true
+// CHECK-NEXT:   dut: firrtl.extmodule private @DUT
+// CHECK-NEXT:   effectiveDut: firrtl.extmodule private @DUT
+firrtl.circuit "Testharness" {
+  // CHECK:      - operation: firrtl.module @Testharness
+  // CHECK-NEXT:   isDut: false
+  // CHECK-NEXT:   anyInstanceUnderDut: false
+  // CHECK-NEXT:   allInstancesUnderDut: false
+  firrtl.module @Testharness() {
+    firrtl.instance dut @DUT()
+    firrtl.instance foo @Foo()
+  }
+
+  // CHECK:      - operation: firrtl.extmodule private @DUT
+  // CHECK-NEXT:   isDut: true
+  // CHECK-NEXT:   anyInstanceUnderDut: true
+  // CHECK-NEXT:   allInstancesUnderDut: true
+  firrtl.extmodule private @DUT() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  }
+
+  // CHECK:      - operation: firrtl.module private @Foo
+  // CHECK-NEXT:   isDut: false
+  // CHECK-NEXT:   anyInstanceUnderDut: false
+  // CHECK-NEXT:   allInstancesUnderDut: false
+  firrtl.module private @Foo() {
+  }
+}

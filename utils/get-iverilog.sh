@@ -14,7 +14,7 @@
 
 mkdir -p "$(dirname "$BASH_SOURCE[0]")/../ext"
 EXT_DIR=$(cd "$(dirname "$BASH_SOURCE[0]")/../ext" && pwd)
-IVERILOG_VER=11_0
+IVERILOG_VER=12_0
 
 echo $EXT_DIR
 cd $EXT_DIR

@@ -155,6 +155,9 @@ class Signal:
     else:
       self._name = new
 
+  def get_name(self, default: str = "") -> str:
+    return self.name if self.name is not None else default
+
   @property
   def appid(self) -> Optional[object]:  # Optional AppID.
     from .module import AppID
@@ -751,6 +754,21 @@ class ChannelSignal(Signal):
     ret_chan, ready = Channel(data.type).wrap(data, valid)
     ready_wire.assign(ready)
     return ret_chan
+
+  def fork(self, clk, rst) -> Tuple[ChannelSignal, ChannelSignal]:
+    """Fork the channel into two channels, returning the two new channels."""
+    from .constructs import Wire
+    from .types import Bits
+    both_ready = Wire(Bits(1))
+    both_ready.name = self.get_name() + "_fork_both_ready"
+    data, valid = self.unwrap(both_ready)
+    valid_gate = both_ready & valid
+    a, a_rdy = self.type.wrap(data, valid_gate)
+    b, b_rdy = self.type.wrap(data, valid_gate)
+    abuf = a.buffer(clk, rst, 1)
+    bbuf = b.buffer(clk, rst, 1)
+    both_ready.assign(a_rdy & b_rdy)
+    return abuf, bbuf
 
 
 class BundleSignal(Signal):

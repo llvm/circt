@@ -471,7 +471,12 @@ def HandshakeToDC : Pass<"lower-handshake-to-dc", "mlir::ModuleOp"> {
     function with graph region behaviour. Thus, for now, we just use `hw.module`
     as a container operation.
   }];
-  let dependentDialects = ["dc::DCDialect", "mlir::func::FuncDialect", "hw::HWDialect"];
+  let dependentDialects = [
+    "dc::DCDialect",
+    "mlir::arith::ArithDialect",
+    "mlir::func::FuncDialect",
+    "hw::HWDialect"
+  ];
   let options = [
     Option<"clkName", "clk-name", "std::string", "\"clk\"",
            "Name of the clock signal to use in the generated DC module">,

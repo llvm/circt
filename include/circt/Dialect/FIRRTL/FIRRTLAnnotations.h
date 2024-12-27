@@ -448,7 +448,7 @@ struct PortAnnoTarget : public AnnoTarget {
 /// found or if the DUT was found and a previous DUT was not set (if `dut` is
 /// null).  This returns failure if a DUT was found and a previous DUT was set.
 /// This function generates an error message in the failure case.
-LogicalResult extractDUT(FModuleOp mod, FModuleOp &dut);
+LogicalResult extractDUT(FModuleLike mod, FModuleLike &dut);
 
 } // namespace firrtl
 } // namespace circt

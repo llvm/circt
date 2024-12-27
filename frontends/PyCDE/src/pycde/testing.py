@@ -123,7 +123,7 @@ class _IVerilogHandler:
     # lives easier and create a minimum timescale through the command-line.
     cmd_file = os.path.join(pycde_system.output_directory, "cmds.f")
     with open(cmd_file, "w+") as f:
-      f.write("+timescale+1ns/1ps")
+      f.write("+timescale+1ns/1ps\n")
 
     return [f"-f{cmd_file}"]
 

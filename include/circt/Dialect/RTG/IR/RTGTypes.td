@@ -29,6 +29,18 @@ def SequenceType : RTGTypeDef<"Sequence"> {
   let assemblyFormat = "";
 }
 
+def LabelType : RTGTypeDef<"Label"> {
+  let summary = "a reference to a label";
+  let description = [{
+    This type represents a label. Payload dialects can add operations to cast
+    from this type to an immediate type they can use as an operand to an
+    instruction.
+  }];
+
+  let mnemonic = "label";
+  let assemblyFormat = "";
+}
+
 def SetType : RTGTypeDef<"Set"> {
   let summary = "a set of values";
   let description = [{

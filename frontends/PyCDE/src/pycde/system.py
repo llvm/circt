@@ -264,8 +264,8 @@ class System:
       # Then run all the passes to lower dialects which produce `hw.module`s.
       "builtin.module(lower-handshake-to-dc)",
       "builtin.module(dc-materialize-forks-sinks)",
-      "builtin.module(canonicalize)",
       "builtin.module(lower-dc-to-hw)",
+      "builtin.module(map-arith-to-comb)",
 
       # Run ESI manifest passes.
       "builtin.module(esi-appid-hier{{top={tops} }}, esi-build-manifest{{top={tops} }})",
@@ -275,7 +275,6 @@ class System:
       # Instaniate hlmems, which could produce new esi connections.
       "builtin.module(hw.module(lower-seq-hlmem))",
       "builtin.module(lower-esi-to-physical)",
-      # TODO: support more than just cosim.
       "builtin.module(lower-esi-bundles, lower-esi-ports)",
       "builtin.module(lower-esi-to-hw{{platform={platform}}})",
       "builtin.module(convert-fsm-to-sv)",

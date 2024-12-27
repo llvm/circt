@@ -765,7 +765,7 @@ public:
       genUnaryOp(op, expr, "not", 1);
     }
 
-    // Genrate the bad btor2 intruction
+    // Generate the bad btor2 instruction
     genBad(op);
   }
   // Assumptions are converted to a btor2 constraint instruction
@@ -802,7 +802,7 @@ public:
       assertLID = genUnaryOp(prop.getDefiningOp(), "not", 1);
     }
 
-    // Genrate the bad btor2 intruction
+    // Generate the bad btor2 instruction
     genBad(assertLID);
   }
 
@@ -821,7 +821,7 @@ public:
       assumeLID = genImplies(op, en, prop);
     }
 
-    // Genrate the bad btor2 intruction
+    // Generate the bad btor2 instruction
     genConstraint(assumeLID);
   }
 
