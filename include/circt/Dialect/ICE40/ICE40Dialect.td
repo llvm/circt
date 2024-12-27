@@ -24,15 +24,6 @@ def ICE40Dialect : Dialect {
     This dialect defines the `ice40` dialect, which is a dialect of the technology
     library for the Lattice ICE40 family of products.
   }];
-
-  let useDefaultTypePrinterParser = 1;
-
-  let extraClassDeclaration = [{
-    /// Register all HW types.
-    void registerTypes();
-    /// Register all HW attributes.
-    void registerAttributes();
-  }];
 }
 
 // Base class for the operation in this dialect.

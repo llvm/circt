@@ -28,6 +28,10 @@ def SBLut4Op : ICE40Op<"sb_lut4", []> {
   let results = (outs I1:$result);
 
   let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    $i0 `,` $i1 `,` $i2 `,` $i3 `,` $lut_init attr-dict
+  }];
 }
 
 def SBCarryOp : ICE40Op<"sb_carry", []> {
@@ -42,12 +46,17 @@ def SBCarryOp : ICE40Op<"sb_carry", []> {
   let results = (outs I1:$result);
 
   let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    $i0 `,` $i1 `,` $ci attr-dict
+  }];
 }
 
 def SBLut4CarryOp : ICE40Op<"sb_lut4_carry", []> {
   let summary = "LUT which also utilizes the carry logic";
   let description = [{
-      f(i0, i1, ci) = 1 iff popcount(concat(i0,i1,ci)) >= 2.
+      carry_out(i0, i1, ci) = 1 iff popcount(concat(i0,i1,ci)) >= 2.
+      result(i0, i1, i2, i3) = lut_init[concat(i3,i2,i1,i0)].
     There are constraints on the use, as i0 and i1 have to be the i0 and i1 input of a single lut.
     This op doesn't check this.  There is a combined op that handles that.
     }];
@@ -56,6 +65,10 @@ def SBLut4CarryOp : ICE40Op<"sb_lut4_carry", []> {
   let results = (outs I1:$result, I1:$carry_out);
 
   let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    $i0 `,` $i1 `,` $i2 `,` $i3 `,` $ci `,` $lut_init attr-dict
+  }];
 }
 
 #endif // CIRCT_DIALECT_ICE40_ICE40OPS_TD
