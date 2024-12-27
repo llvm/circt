@@ -23,6 +23,7 @@ add_circt_library(CIRCTSupport
   PrettyPrinterHelpers.cpp
   SymCache.cpp
   ValueMapper.cpp
+  VCD.cpp
   "${VERSION_CPP}"
 
   LINK_LIBS PUBLIC

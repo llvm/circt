@@ -14,6 +14,7 @@
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/InstanceGraph.h"
+#include "circt/Support/VCD.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OwningOpRef.h"
 #include "mlir/Parser/Parser.h"
@@ -38,7 +39,6 @@ using namespace circt;
 static cl::opt<bool>
     allowUnregisteredDialects("allow-unregistered-dialects",
                               cl::desc("Allow unknown dialects in the input"));
-static cl::opt<bool> allowEmpty("allow-empty", cl::desc("Allow empty"));
 
 static cl::OptionCategory mainCategory("circt-generate-lec-mapping Options");
 
@@ -59,10 +59,6 @@ static cl::opt<std::string> outputFilename("o", cl::desc("Output name"),
                                            cl::init("-"),
                                            cl::cat(mainCategory));
 
-static cl::opt<bool>
-    splitOutput("split-output", cl::Optional,
-                cl::desc("Output file in the directory"),
-                cl::init(false), cl::cat(mainCategory));
 //===----------------------------------------------------------------------===//
 // Tool implementation
 //===----------------------------------------------------------------------===//
@@ -82,6 +78,7 @@ static mlir::StringAttr getVariableName(Operation *op) {
 // $timescale   1ps $end
 //
 
+/*
 struct VCDConverter {
   LogicalResult convert();
   VCDConverter(llvm::raw_ostream &os, igraph::InstanceGraph &instanceGraph,
@@ -99,181 +96,13 @@ private:
     return mlir::emitError(mlir::UnknownLoc::get(getContext()));
   }
 
-  void consumeToken() { curToken = lexToken(); }
-
-  class Token {
-  public:
-    enum Kind {
-      eof,
-      keyword,
-      id,
-    } kind;
-    StringRef data;
-
-    bool isKeyword(StringRef keyword = "") {
-      if (keyword.empty())
-        return kind == Kind::keyword;
-      return kind == Kind::keyword && data == keyword;
-    }
-
-    bool isEnd() { return isKeyword("end"); }
-    bool isEof() { return kind == Kind::eof; }
-    bool isId(StringRef keyword = "") {
-      if (keyword.empty())
-        return kind == Kind::id;
-      return kind == Kind::id && data == keyword;
-    }
-  };
-
-  static Token eof() { return Token{Token::eof, ""}; }
-  static Token keyword(StringRef data) { return Token{Token::keyword, data}; }
-  static Token id(StringRef data) { return Token{Token::id, data}; }
-
-  mlir::ParseResult parseExpectedId(StringRef expected) {
-    auto token = getToken();
-    if (token.isId(expected)) {
-      consumeToken();
-      return success();
-    }
-    return failure();
-  }
-  mlir::ParseResult parseExpectedKeyword(StringRef expected) {
-    auto token = getToken();
-    if (token.isKeyword(expected)) {
-      consumeToken();
-      return success();
-    }
-    return failure();
-  }
-  mlir::ParseResult parseId(StringRef &id) {
-    auto token = getToken();
-    if (!token.isId())
-      return emitError() << "expected id";
-
-    id = token.data;
-    consumeToken();
-    return success();
-  }
-
-  Token lexToken() {
-    const char *tokStart = curPtr;
-    while (true) {
-      switch (*curPtr++) {
-      default: {
-        // Remember that this is a literalID
-        bool isKeyword = *tokStart == '$';
-
-        while (*curPtr != 0 && *curPtr != ' ' && *curPtr != '\t' &&
-               *curPtr != '\n' && *curPtr == '\r')
-          ++curPtr;
-        if (isKeyword)
-          return keyword(StringRef(tokStart + 1, curPtr - tokStart - 1));
-        return id(StringRef(tokStart, curPtr - tokStart));
-      }
-      case 0:
-        // This may either be a nul character in the source file or may be the
-        // EOF marker that llvm::MemoryBuffer guarantees will be there.
-        if (curPtr - 1 == curBuffer.end())
-          return eof();
-
-        [[fallthrough]]; // Treat as whitespace.
-
-      case ' ':
-      case '\t':
-      case '\n':
-      case '\r':
-        // Handle whitespace.
-        continue;
-      }
-    }
-  }
-
-  Token getToken() const { return curToken; }
-  bool consumeKeywordIf(StringRef keyword) {
-    if (getToken().isKeyword(keyword)) {
-      consumeToken();
-      return true;
-    }
-    return false;
-  }
-
-  // These are pass-through but defined for understandability.
-  LogicalResult convertValueChange();
-  LogicalResult convertScope();
-  Token getNextToken() {
-    consumeToken();
-    return getToken();
-  }
-  llvm::raw_ostream &os;
-  StringRef curBuffer;
-  StringRef cursor;
-  Token curToken;
-  const char *curPtr;
-
-  SmallVector<hw::HWModuleOp> moduleStack;
-
-  igraph::InstanceGraph &instanceGraph;
-
-  friend raw_ostream &operator<<(raw_ostream &os, VCDConverter::Token token) {
-    if (token.isEof())
-      return os << 0;
-    if (token.isKeyword())
-      os << '$';
-    return os << token.data;
-  }
+  // void consumeToken() { curToken = lexToken(); }
 };
-
-LogicalResult VCDConverter::skipUntilVariableDefinition() {
-  while (true) {
-    auto token = getToken();
-    if (token.isEof())
-      return success();
-
-    if (token.isKeyword("scope"))
-      return success();
-
-    // Just forward to the output.
-    os << token << ' ';
-    consumeToken();
-  }
-}
-
-LogicalResult VCDConverter::convertScope() {
-  bool result = consumeKeywordIf("scope");
-  assert(result && "must be $scope");
-  (void)result;
-
-  StringRef id, scopeName;
-  if (parseId(id) || parseId(scopeName) || parseExpectedKeyword("end"))
-    return failure();
-
-  // Parse $var or $scope.
-  while (true) {
-  }
-}
-
-LogicalResult VCDConverter::convertValueChange() { return success(); }
-
-LogicalResult VCDConverter::convert() {
-  if (failed(skipUntilVariableDefinition()))
-    return failure();
-
-  if (failed(convertScope()))
-    return failure();
-
-  if (failed(convertValueChange()))
-    return failure();
-
-  os << StringRef(curPtr, curBuffer.data() - curPtr);
-  return success();
-}
+*/
 
 /// This functions initializes the various components of the tool and
 /// orchestrates the work to be done.
 static LogicalResult execute(MLIRContext &context) {
-  if (allowUnregisteredDialects)
-    context.allowUnregisteredDialects();
-
   OwningOpRef<ModuleOp> ref = parseSourceFile<ModuleOp>(inputMLIR, &context);
   if (!ref) {
     errs() << "failed to parse input mlir file `" << inputMLIR << "`\n";
@@ -282,9 +111,7 @@ static LogicalResult execute(MLIRContext &context) {
 
   ModuleOp moduleOp = ref.get();
 
-  VCDConverter converter(llvm::errs(), )
-
-      ref.release();
+  ref.release();
 
   return success();
 }
@@ -317,7 +144,7 @@ int main(int argc, char **argv) {
   context.loadDialect<om::OMDialect>();
   context.loadDialect<sv::SVDialect>();
   context.loadDialect<ltl::LTLDialect>();
-  context.loadDialect<verif::VerifDialect>();
+  // context.loadDialect<verif::VerifDialect>();
 
   // Setup of diagnostic handling.
   llvm::SourceMgr sourceMgr;
