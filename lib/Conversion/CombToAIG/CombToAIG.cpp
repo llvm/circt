@@ -283,6 +283,51 @@ struct CombSubOpConversion : OpConversionPattern<SubOp> {
   }
 };
 
+struct CombMulOpConversion : OpConversionPattern<MulOp> {
+  using OpConversionPattern<MulOp>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<MulOp>::OpAdaptor;
+  LogicalResult
+  matchAndRewrite(MulOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (adaptor.getInputs().size() != 2)
+      return failure();
+
+    // FIXME: Currently it's lowered to a really naive implementation that
+    // chains add operations.
+
+    // a_{n}a_{n-1}...a_0 * b
+    // = sum_{i=0}^{n} a_i * 2^i * b
+    // = sum_{i=0}^{n} (a_i ? b : 0) << i
+    int64_t width = op.getType().getIntOrFloatBitWidth();
+    auto aBits = extractBits(rewriter, adaptor.getInputs()[0]);
+    SmallVector<Value> results;
+    auto rhs = op.getInputs()[1];
+    auto zero = rewriter.create<hw::ConstantOp>(op.getLoc(),
+                                                llvm::APInt::getZero(width));
+    for (int64_t i = 0; i < width; ++i) {
+      auto aBit = aBits[i];
+      auto andBit =
+          rewriter.createOrFold<comb::MuxOp>(op.getLoc(), aBit, rhs, zero);
+      auto upperBits = rewriter.createOrFold<comb::ExtractOp>(
+          op.getLoc(), andBit, 0, width - i);
+      if (i == 0) {
+        results.push_back(upperBits);
+        continue;
+      }
+
+      auto lowerBits =
+          rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getZero(i));
+
+      auto shifted = rewriter.createOrFold<comb::ConcatOp>(
+          op.getLoc(), op.getType(), ValueRange{upperBits, lowerBits});
+      results.push_back(shifted);
+    }
+
+    rewriter.replaceOpWithNewOp<comb::AddOp>(op, results, true);
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -304,10 +349,10 @@ static void populateCombToAIGConversionPatterns(RewritePatternSet &patterns) {
       CombAndOpConversion, CombOrOpConversion, CombXorOpConversion,
       CombMuxOpConversion,
       // Arithmetic Ops
-      CombAddOpConversion, CombSubOpConversion,
+      CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
       // Variadic ops that must be lowered to binary operations
-      CombLowerVariadicOp<XorOp>, CombLowerVariadicOp<AddOp>>(
-      patterns.getContext());
+      CombLowerVariadicOp<XorOp>, CombLowerVariadicOp<AddOp>,
+      CombLowerVariadicOp<MulOp>>(patterns.getContext());
 }
 
 void ConvertCombToAIGPass::runOnOperation() {

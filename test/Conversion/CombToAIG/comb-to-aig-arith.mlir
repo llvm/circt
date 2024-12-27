@@ -27,3 +27,22 @@ hw.module @sub(in %lhs: i4, in %rhs: i4, out out: i4) {
   %0 = comb.sub %lhs, %rhs : i4
   hw.output %0 : i4
 }
+
+
+// CHECK-LABEL: @mul
+// ALLOW_ADD-LABEL: @mul
+// ALLOW_ADD-NEXT:   %[[EXT_0:.+]] = comb.extract %lhs from 0 : (i2) -> i1
+// ALLOW_ADD-NEXT:   %[[EXT_1:.+]] = comb.extract %lhs from 1 : (i2) -> i1
+// ALLOW_ADD-NEXT:   %c0_i2 = hw.constant 0 : i2
+// ALLOW_ADD-NEXT:   %[[MUX_0:.+]] = comb.mux %0, %rhs, %c0_i2 : i2
+// ALLOW_ADD-NEXT:   %[[MUX_1:.+]] = comb.mux %1, %rhs, %c0_i2 : i2
+// ALLOW_ADD-NEXT:   %[[EXT_MUX_1:.+]] = comb.extract %3 from 0 : (i2) -> i1
+// ALLOW_ADD-NEXT:   %false = hw.constant false
+// ALLOW_ADD-NEXT:   %[[SHIFT:.+]] = comb.concat %4, %false : i1, i1
+// ALLOW_ADD-NEXT:   %[[ADD:.+]] = comb.add bin %[[MUX_0]], %[[SHIFT]] : i2
+// ALLOW_ADD-NEXT:   hw.output %[[ADD]] : i2
+// ALLOW_ADD-NEXT: }
+hw.module @mul(in %lhs: i2, in %rhs: i2, out out: i2) {
+  %0 = comb.mul %lhs, %rhs : i2
+  hw.output %0 : i2
+}
