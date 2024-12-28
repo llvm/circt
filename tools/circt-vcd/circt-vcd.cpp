@@ -103,16 +103,34 @@ private:
 /// This functions initializes the various components of the tool and
 /// orchestrates the work to be done.
 static LogicalResult execute(MLIRContext &context) {
-  OwningOpRef<ModuleOp> ref = parseSourceFile<ModuleOp>(inputMLIR, &context);
-  if (!ref) {
-    errs() << "failed to parse input mlir file `" << inputMLIR << "`\n";
+  // OwningOpRef<ModuleOp> ref = parseSourceFile<ModuleOp>(inputMLIR, &context);
+  // if (!ref) {
+  //   errs() << "failed to parse input mlir file `" << inputMLIR << "`\n";
+  //   return failure();
+  // }
+
+  // ModuleOp moduleOp = ref.get();
+  // ref.release();
+
+  std::string errorMessage;
+  auto input = mlir::openInputFile(inputVCD, &errorMessage);
+  if (!input) {
+    errs() << errorMessage << "\n";
     return failure();
   }
 
-  ModuleOp moduleOp = ref.get();
+  llvm::SourceMgr sourceMgr;
+  sourceMgr.AddNewSourceBuffer(std::move(input), llvm::SMLoc());
+  SourceMgrDiagnosticVerifierHandler sourceMgrHandler(sourceMgr, &context);
+  context.printOpOnDiagnostic(false);
 
-  ref.release();
-
+  auto vcdFile = circt::vcd::importVCDFile(sourceMgr, &context);
+  if (!vcdFile) {
+    errs() << "failed to parse input vcd file `" << inputVCD << "`\n";
+    return failure();
+  }
+  mlir::raw_indented_ostream os(llvm::outs());
+  vcdFile->printVCD(os);
   return success();
 }
 

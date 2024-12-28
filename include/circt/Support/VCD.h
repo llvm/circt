@@ -7,9 +7,8 @@
 //===----------------------------------------------------------------------===//
 //
 // This file provides support for VCD parser/printer.
-//           (Lexer)                 (Parser)                  (Parser)
-// VCD input -----> Sequence of Tokens ----> Sequence of Command ->
-// VCDFile struct
+//           (VCDLexer)       (VCDParser)
+// VCD input -----> [VCDToken] ----> VCDFile
 //
 //===----------------------------------------------------------------------===//
 
@@ -21,6 +20,7 @@
 #include "mlir/IR/Location.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/IR/Value.h"
+#include "mlir/Support/IndentedOstream.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/SourceMgr.h"
@@ -28,19 +28,44 @@
 #include <functional>
 #include <variant>
 
-using namespace circt;
-using namespace mlir;
+#define DEBUG_TYPE "vcd"
+
+using namespace ::mlir;
+using namespace ::llvm;
 namespace circt {
 namespace vcd {
 
 struct VCDFile {
   struct Header {
-    StringAttr timestamp;
-    StringAttr versionNumber;
-    uint64_t timescale;
+    // TODO: Parse header peroperly
+    ArrayAttr timestamp;
+    ArrayAttr versionNumber;
+    ArrayAttr timescale;
+
+    static void printArray(mlir::raw_indented_ostream &os, ArrayAttr array) {
+      llvm::interleave(
+          array.getAsValueRange<StringAttr>(), os,
+          [&](StringRef attr) { os << attr; }, " ");
+    }
+
+    void printVCD(mlir::raw_indented_ostream &os) const {
+      os << "$date ";
+      printArray(os, timestamp);
+      os << " $end\n";
+      os << "$version ";
+      printArray(os, versionNumber);
+      os << " $end\n";
+      os << "$timescale ";
+      printArray(os, timescale);
+      os << " $end\n";
+    }
   } header;
 
-  struct Node {};
+  struct Node {
+    virtual ~Node() = default;
+    virtual void dump() const = 0;
+    virtual void printVCD(mlir::raw_indented_ostream &os) const = 0;
+  };
   struct Scope : Node {
     StringAttr name;
     // SV 21.7.2.1
@@ -50,6 +75,20 @@ struct VCDFile {
     } kind;
     SmallVector<std::unique_ptr<Node>> children;
     Scope(StringAttr name, ScopeType kind) : name(name), kind(kind) {}
+    void dump() const override {
+      llvm::errs() << "Scope: " << name << "\n";
+      for (auto &child : children)
+        child->dump();
+    }
+    void printVCD(mlir::raw_indented_ostream &os) const override {
+      os << "$scope " << name.getValue() << "\n";
+      {
+        auto scope = os.scope();
+        for (auto &child : children)
+          child->printVCD(os);
+      }
+      os << "$upscope $end\n";
+    }
   };
 
   struct Decl {
@@ -67,17 +106,69 @@ struct VCDFile {
       real,
       time,
     } kind;
+
+    static StringRef getKindName(Kind kind) {
+      switch (kind) {
+      case wire:
+        return "wire";
+      case reg:
+        return "reg";
+      case integer:
+        return "integer";
+      case real:
+        return "real";
+      case time:
+        return "time";
+      }
+    }
+
+    int64_t bitWidth;
+    StringAttr id;
     StringAttr name;
+    ArrayAttr type; // TODO: Parse type properly
+    Variable(Kind kind, int64_t bitWidth, StringAttr id, StringAttr name,
+             ArrayAttr type)
+        : kind(kind), bitWidth(bitWidth), id(id), name(name), type(type) {}
+    void dump() const override {
+      llvm::errs() << "Variable: " << name << "\n";
+      llvm::errs() << "Kind: " << kind << "\n";
+      llvm::errs() << "BitWidth: " << bitWidth << "\n";
+      llvm::errs() << "ID: " << id.getValue() << "\n";
+      llvm::errs() << "Type: " << type << "\n";
+    }
+    void printVCD(mlir::raw_indented_ostream &os) const override {
+      os << "$var " << getKindName(kind) << " " << bitWidth << " "
+         << id.getValue() << " " << name.getValue() << " $end\n";
+    }
   };
 
-  struct VariableDefinition {
-    std::unique_ptr<Scope> scope;
-  } definition;
+  std::unique_ptr<Scope> rootScope;
 
   struct ValueChange {
-    // Lazying loading.
-    StringRef remainingData;
+    // For lazy loading.
+    StringRef remainingBuffer;
+    ValueChange(StringRef remainingBuffer) : remainingBuffer(remainingBuffer) {}
+    void printVCD(mlir::raw_indented_ostream &os) const {
+      os << remainingBuffer;
+    }
   } valueChange;
+
+  VCDFile(VCDFile::Header header, std::unique_ptr<Scope> rootScope,
+          ValueChange valueChange)
+      : header(header), rootScope(std::move(rootScope)),
+        valueChange(valueChange) {}
+
+  void dump() {
+    llvm::errs() << "VCDFile\n";
+    llvm::errs() << "Header: " << header.timestamp << "\n";
+    rootScope->dump();
+  }
+  void printVCD(mlir::raw_indented_ostream &os) const {
+    header.printVCD(os);
+    rootScope->printVCD(os);
+    os << "$enddefinitions $end\n";
+    valueChange.printVCD(os);
+  }
 };
 
 class VCDToken {
@@ -85,6 +176,7 @@ public:
   enum Kind {
     // Markers
     eof, // End of file
+    error,
 
     // Basic tokens
     identifier,   // Signal identifiers
@@ -121,32 +213,87 @@ public:
   bool is(Kind K) const { return kind == K; }
   bool isCommand() const { return spelling.starts_with("$"); }
 
-  llvm::SMLoc getLoc() const;
-  llvm::SMLoc getEndLoc() const;
-  llvm::SMRange getLocRange() const;
+  //===----------------------------------------------------------------------===//
+
+  SMLoc getLoc() const { return SMLoc::getFromPointer(spelling.data()); }
+  SMLoc getEndLoc() const {
+    return SMLoc::getFromPointer(spelling.data() + spelling.size());
+  }
+  SMRange getLocRange() const { return SMRange(getLoc(), getEndLoc()); }
 
 private:
   Kind kind;
   StringRef spelling;
-  llvm::SMLoc loc;
 };
 
-struct VCDCommand {
-  VCDToken token;
-  SmallVector<VCDToken> args;
+static StringAttr getMainBufferNameIdentifier(const llvm::SourceMgr &sourceMgr,
+                                              MLIRContext *context) {
+  auto mainBuffer = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
+  StringRef bufferName = mainBuffer->getBufferIdentifier();
+  if (bufferName.empty())
+    bufferName = "<unknown>";
+  return StringAttr::get(context, bufferName);
+}
 
-  VCDCommand() = default;
-  VCDCommand(VCDToken token, SmallVector<VCDToken> args)
-      : token(token), args(args) {}
-};
+static StringRef getTokenKindName(VCDToken::Kind kind) {
+  switch (kind) {
+  case VCDToken::eof:
+    return "eof";
+  case VCDToken::error:
+    return "error";
+  case VCDToken::kw_date:
+    return "kw_date";
+  case VCDToken::kw_version:
+    return "kw_version";
+  case VCDToken::kw_timescale:
+    return "kw_timescale";
+  case VCDToken::kw_scope:
+    return "kw_scope";
+  case VCDToken::kw_var:
+    return "kw_var";
+  case VCDToken::kw_upscope:
+    return "kw_upscope";
+  case VCDToken::kw_enddefinitions:
+    return "kw_enddefinitions";
+  case VCDToken::kw_dumpvars:
+    return "kw_dumpvars";
+  case VCDToken::kw_end:
+    return "kw_end";
+  }
+  llvm::report_fatal_error("unknown token kind");
+}
 
 class VCDLexer {
 public:
-  VCDLexer(const llvm::SourceMgr &sourceMgr, mlir::MLIRContext *context);
+  VCDLexer(const llvm::SourceMgr &sourceMgr, mlir::MLIRContext *context)
+      : sourceMgr(sourceMgr),
+        bufferNameIdentifier(getMainBufferNameIdentifier(sourceMgr, context)),
+        curBuffer(
+            sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID())->getBuffer()),
+        curPtr(curBuffer.begin()),
+        // Prime the first token.
+        curToken(lexTokenImpl()) {}
 
-  void lexToken() { curToken = lexTokenImpl(); }
+  void lexToken() {
+    LLVM_DEBUG(llvm::dbgs() << "lexToken\n");
+    curToken = lexTokenImpl();
+    LLVM_DEBUG(llvm::dbgs() << "curToken: " << curToken.getSpelling() << "\n");
+  }
   const VCDToken &getToken() const { return curToken; }
-  mlir::Location translateLocation(llvm::SMLoc loc);
+
+  /// Encode the specified source location information into a Location object
+  /// for attachment to the IR or error reporting.
+  Location translateLocation(llvm::SMLoc loc) {
+    assert(loc.isValid());
+    unsigned mainFileID = sourceMgr.getMainFileID();
+    auto lineAndColumn = sourceMgr.getLineAndColumn(loc, mainFileID);
+    return FileLineColLoc::get(bufferNameIdentifier, lineAndColumn.first,
+                               lineAndColumn.second);
+  }
+
+  StringRef remainingBuffer() const {
+    return StringRef(curPtr, curBuffer.end() - curPtr);
+  }
 
 private:
   VCDToken lexTokenImpl();
@@ -154,17 +301,21 @@ private:
     return VCDToken(kind, StringRef(tokStart, curPtr - tokStart));
   }
 
-  VCDToken emitError(const char *loc, const Twine &message);
+  VCDToken emitError(const char *loc, const Twine &message) {
+    mlir::emitError(translateLocation(SMLoc::getFromPointer(loc)), message);
+    return formToken(VCDToken::error, loc);
+  }
 
   // Lexer implementation methods
   VCDToken lexIdentifier(const char *tokStart);
   VCDToken lexCommand(const char *tokStart);
   VCDToken lexTimeValue(const char *tokStart);
+  VCDToken lexInteger(const char *tokStart);
   VCDToken lexString(const char *tokStart);
   VCDToken lexValue(const char *tokStart);
   void skipWhitespace();
-
   const llvm::SourceMgr &sourceMgr;
+  mlir::MLIRContext *context;
   const mlir::StringAttr bufferNameIdentifier;
   StringRef curBuffer;
   const char *curPtr;
@@ -175,12 +326,16 @@ VCDToken VCDLexer::lexTokenImpl() {
   skipWhitespace();
 
   const char *tokStart = curPtr;
+  llvm::errs() << "lexTokenImpl: " << (int)*curPtr << "\n";
   switch (*curPtr++) {
   default:
     // Handle identifiers
     if (llvm::isAlpha(curPtr[-1]))
       return lexIdentifier(tokStart);
-    return emitError(tokStart, "unexpected character");
+    if (llvm::isDigit(curPtr[-1]))
+      return lexInteger(tokStart);
+
+    return lexIdentifier(tokStart);
 
   case 0:
     // Handle EOF
@@ -201,30 +356,28 @@ VCDToken VCDLexer::lexTokenImpl() {
   case '#':
     return lexTimeValue(tokStart);
 
-  case '"':
-    return lexString(tokStart);
-
   case '(':
     return formToken(VCDToken::l_paren, tokStart);
   case ')':
     return formToken(VCDToken::r_paren, tokStart);
 
-  // Value changes
-  case '0':
-  case '1':
-  case 'x':
-  case 'X':
-  case 'z':
-  case 'Z':
-  case 'b':
-  case 'B':
-  case 'r':
-  case 'R':
-    return lexValue(tokStart);
+    // Value changes
+    // case '0':
+    // case '1':
+    // case 'x':
+    // case 'X':
+    // case 'z':
+    // case 'Z':
+    // case 'b':
+    // case 'B':
+    // case 'r':
+    // case 'R':
+    //   return lexValue(tokStart);
   }
 }
 
 VCDToken VCDLexer::lexCommand(const char *tokStart) {
+  LLVM_DEBUG(llvm::dbgs() << "lexCommand\n");
   // Read until whitespace
   while (!llvm::isSpace(*curPtr) && *curPtr != 0)
     ++curPtr;
@@ -246,9 +399,15 @@ VCDToken VCDLexer::lexCommand(const char *tokStart) {
           .Default(VCDToken::command);
 
   if (kind == VCDToken::command)
-    return emitError(tokStart, "unknown command");
+    return VCDToken(VCDToken::identifier, spelling);
 
   return VCDToken(kind, spelling);
+}
+
+VCDToken VCDLexer::lexInteger(const char *tokStart) {
+  while (llvm::isDigit(*curPtr))
+    ++curPtr;
+  return formToken(VCDToken::scalar_value, tokStart);
 }
 
 VCDToken VCDLexer::lexTimeValue(const char *tokStart) {
@@ -285,7 +444,7 @@ VCDToken VCDLexer::lexValue(const char *tokStart) {
 }
 
 VCDToken VCDLexer::lexIdentifier(const char *tokStart) {
-  while (llvm::isAlnum(*curPtr) || *curPtr == '_' || *curPtr == '$')
+  while (llvm::isAlnum(*curPtr) || llvm::isPunct(*curPtr))
     ++curPtr;
   return formToken(VCDToken::identifier, tokStart);
 }
@@ -312,94 +471,203 @@ void VCDLexer::skipWhitespace() {
 
 struct VCDParser {
   bool lazyLoadValueChange = false;
-  ParseResult parseCommand(VCDCommand &command) {
-    const auto &token = lexer.getToken();
-    // if is command
-    if (!token.isCommand())
+
+  StringAttr getStringAttr(StringRef str) {
+    return StringAttr::get(getContext(), str);
+  }
+
+  ParseResult parseAsId(StringAttr &id) {
+    auto token = lexer.getToken();
+    id = getStringAttr(token.getSpelling());
+    consumeToken();
+    return success();
+  }
+
+  ParseResult parseVariableKind(VCDFile::Variable::Kind &kind) {
+    auto variableKind = lexer.getToken().getSpelling();
+    auto kindOpt =
+        llvm::StringSwitch<std::optional<VCDFile::Variable::Kind>>(variableKind)
+            .Case("wire", VCDFile::Variable::wire)
+            .Case("reg", VCDFile::Variable::reg)
+            .Case("integer", VCDFile::Variable::integer)
+            .Case("real", VCDFile::Variable::real)
+            .Case("time", VCDFile::Variable::time)
+            .Default(std::nullopt);
+    if (!kindOpt)
+      return emitError() << "unexpected variable kind " << variableKind;
+    kind = kindOpt.value();
+    consumeToken();
+    return success();
+  }
+
+  ParseResult parseInt(APInt &result) {
+    auto token = lexer.getToken();
+    if (!token.is(VCDToken::scalar_value))
+      return emitError() << "expected bit width";
+    if (token.getSpelling().getAsInteger(10, result))
+      return emitError() << "invalid integer literal";
+    consumeToken();
+    return success();
+  }
+
+  ParseResult parseVariable(std::unique_ptr<VCDFile::Variable> &variable) {
+    if (parseExpectedKeyword(VCDToken::kw_var))
+      return failure();
+    VCDFile::Variable::Kind kind;
+    APInt bitWidth;
+    StringAttr id, name;
+    ArrayAttr type;
+    if (parseVariableKind(kind) || parseInt(bitWidth) || parseAsId(id) ||
+        parseAsId(name) || parseStringUntilEnd(type))
+      return failure();
+    variable = std::make_unique<VCDFile::Variable>(
+        kind, bitWidth.getZExtValue(), id, name, type);
+
+    variable->dump();
+    return success();
+  }
+
+  ParseResult parseScopeKind(VCDFile::Scope::ScopeType &kind) {
+    auto scopeKind = lexer.getToken().getSpelling();
+    auto kindOpt =
+        llvm::StringSwitch<std::optional<VCDFile::Scope::ScopeType>>(scopeKind)
+            .Case("module", VCDFile::Scope::module)
+            .Case("begin", VCDFile::Scope::begin)
+            .Default(std::nullopt);
+
+    if (!kind)
+      return emitError() << "expected scope kind";
+    kind = kindOpt.value();
+    consumeToken();
+    return success();
+  }
+
+  bool isDone() { return lexer.getToken().is(VCDToken::eof); }
+  ParseResult parseEnd() { return parseExpectedKeyword(VCDToken::kw_end); }
+
+  ParseResult parseScope(std::unique_ptr<VCDFile::Scope> &result) {
+    VCDFile::Scope::ScopeType kind;
+    StringAttr nameAttr;
+
+    if (parseExpectedKeyword(VCDToken::kw_scope) || parseScopeKind(kind) ||
+        parseAsId(nameAttr) || parseEnd())
       return failure();
 
-    command.token = token;
-    consumeToken();
+    auto scope = std::make_unique<VCDFile::Scope>(nameAttr, kind);
 
-    while (!lexer.getToken().is(VCDToken::kw_end)) {
-      auto arg = lexer.getToken();
-      command.args.push_back(arg);
+    while (!isDone() && getToken().getKind() != VCDToken::kw_upscope) {
+      auto token = getToken();
+      if (token.getKind() == VCDToken::kw_scope) {
+        std::unique_ptr<VCDFile::Scope> child;
+        if (parseScope(child))
+          return failure();
+        scope->children.push_back(std::move(child));
+      } else if (token.getKind() == VCDToken::kw_var) {
+        std::unique_ptr<VCDFile::Variable> variable;
+        if (parseVariable(variable))
+          return failure();
+        scope->children.push_back(std::move(variable));
+      } else {
+        return emitError() << "expected scope or variable";
+      }
+    }
+
+    if (parseExpectedKeyword(VCDToken::kw_upscope) || parseEnd())
+      return failure();
+    llvm::errs() << "parseScope: " << scope->name << "\n";
+
+    result = std::move(scope);
+    return success();
+  }
+
+  ParseResult parseStringUntilEnd(ArrayAttr &result) {
+    SmallVector<Attribute> args;
+    while (!isDone() && !lexer.getToken().is(VCDToken::kw_end)) {
+      args.push_back(getStringAttr(lexer.getToken().getSpelling()));
       consumeToken();
     }
+    if (parseExpectedKeyword(VCDToken::kw_end))
+      return failure();
+    result = ArrayAttr::get(getContext(), args);
     return success();
   }
 
-  ParseResult parseCommands(SmallVectorImpl<VCDCommand> &commands) {
-    while (!lexer.getToken().is(VCDToken::eof)) {
-      VCDCommand command;
-      if (parseCommand(command).failed())
-        return failure();
-      commands.push_back(command);
-    }
+  ParseResult parseAsArrayAttr(VCDToken::Kind kind, ArrayAttr &result) {
+    if (parseExpectedKeyword(kind) || parseStringUntilEnd(result))
+      return failure();
     return success();
   }
 
-  FailureOr<VCDFile> convertCommandsToFile(ArrayRef<VCDCommand> commands) {}
-
-  FailureOr<VCDFile> convertCommandsToFile(ArrayRef<VCDCommand> commands) {
-    VCDFile file;
-
-    struct ParserImpl {
-      VCDParser &parser;
-      ArrayRef<VCDCommand> commands;
-      ParserImpl(VCDParser &parser, ArrayRef<VCDCommand> commands)
-          : parser(parser), commands(commands) {}
-      VCDCommand getCommand() { return commands.front(); }
-      void consumeCommand() { commands = commands.drop_front(); }
-
-      bool isDone() { return commands.empty(); }
-      std::unique_ptr<VCDFile::Scope> parseScope() {
-        auto command = getCommand();
-        assert(command.token.getKind() == VCDToken::kw_scope);
-        consumeCommand();
-        auto scope = std::make_unique<VCDFile::Scope>(name);
-      }
-    } parser(*this, commands);
-    // 1. Parse header section
-    while (!parser.isDone() &&
-           !parser.getCommand().token.is(VCDToken::kw_scope)) {
-      const auto &front = parser.getCommand();
-      switch (front.token.getKind()) {
+  ParseResult parseHeader(VCDFile::Header &header) {
+    LLVM_DEBUG(llvm::dbgs() << "parseHeader\n");
+    while (true) {
+      auto token = getToken();
+      switch (token.getKind()) {
       case VCDToken::kw_date:
-        file.header.timestamp =
-            StringAttr::get(getContext(), front.args[0].getSpelling());
+        if (parseAsArrayAttr(VCDToken::kw_date, header.timestamp))
+          return failure();
         break;
       case VCDToken::kw_version:
-        file.header.versionNumber =
-            StringAttr::get(getContext(), front.args[0].getSpelling());
+        if (parseAsArrayAttr(VCDToken::kw_version, header.versionNumber))
+          return failure();
         break;
       case VCDToken::kw_timescale:
-        // FIXME: Parse timescale
-        file.header.timescale = 0;
+        if (parseAsArrayAttr(VCDToken::kw_timescale, header.timescale))
+          return failure();
         break;
       default:
-        return failure();
+        return success();
       }
-      parser.consumeCommand();
     }
+    return success();
+  }
+
+  ParseResult parseVCDFile(std::unique_ptr<VCDFile> &file) {
+    // 1. Parse header section
+    VCDFile::Header header;
+    if (parseHeader(header))
+      return failure();
 
     // There is no scope command, weird but we are done.
-    if (parser.isDone())
+    if (isDone())
       return success();
 
     // 2. Parse variable definition section
-    // 3. Parse value change section
+    std::unique_ptr<VCDFile::Scope> rootScope;
+    if (parseScope(rootScope) ||
+        parseExpectedKeyword(VCDToken::kw_enddefinitions))
+      return failure();
 
-    return file;
+    // 3. Parse value change section
+    file = std::make_unique<VCDFile>(
+        header, std::move(rootScope),
+        VCDFile::ValueChange(lexer.remainingBuffer()));
+    return success();
   }
+
   LogicalResult parseVariableDefinition();
   LogicalResult parseValueChange();
   mlir::MLIRContext *context;
   mlir::MLIRContext *getContext() { return context; }
 
-  InFlightDiagnostic emitError() {
-    // TODO: Add location converter
-    return mlir::emitError(mlir::UnknownLoc::get(getContext()));
+  /// Encode the specified source location information into an attribute for
+  /// attachment to the IR.
+  Location translateLocation(llvm::SMLoc loc) {
+    return lexer.translateLocation(loc);
+  }
+
+  InFlightDiagnostic emitError(const Twine &message = {}) {
+    return emitError(getToken().getLoc(), message);
+  }
+
+  InFlightDiagnostic emitError(SMLoc loc, const Twine &message = {}) {
+    auto diag = mlir::emitError(translateLocation(loc), message);
+
+    // If we hit a parse error in response to a lexer error, then the lexer
+    // already reported the error.
+    if (getToken().is(VCDToken::error))
+      diag.abandon();
+    return diag;
   }
 
   void consumeToken() { lexer.lexToken(); }
@@ -419,6 +687,8 @@ struct VCDParser {
       consumeToken();
       return success();
     }
+
+    emitError() << "expected keyword " << getTokenKindName(expected);
     return failure();
   }
 
@@ -433,14 +703,6 @@ struct VCDParser {
   }
 
   const VCDToken &getToken() const { return lexer.getToken(); }
-  bool consumeKeywordIf(StringRef keyword) {
-    const auto &token = lexer.getToken();
-    if (token.is(VCDToken::command) && token.getSpelling() == keyword) {
-      consumeToken();
-      return true;
-    }
-    return false;
-  }
 
   // These are pass-through but defined for understandability.
   LogicalResult convertValueChange();
@@ -450,9 +712,12 @@ struct VCDParser {
     return getToken();
   }
 
-  SmallVector<hw::HWModuleOp> moduleStack;
-  igraph::InstanceGraph &instanceGraph;
-  VCDLexer lexer;
+  // SmallVector<hw::HWModuleOp> moduleStack;
+  // igraph::InstanceGraph &instanceGraph;
+  VCDLexer &lexer;
+
+  VCDParser(mlir::MLIRContext *context, VCDLexer &lexer)
+      : context(context), lexer(lexer) {}
 
   friend raw_ostream &operator<<(raw_ostream &os, const VCDToken &token) {
     if (token.is(VCDToken::eof))
@@ -467,6 +732,16 @@ struct VCDParser {
 
 struct VCDEmitter {};
 
+std::unique_ptr<VCDFile> importVCDFile(llvm::SourceMgr &sourceMgr,
+                                       MLIRContext *context) {
+  VCDLexer lexer(sourceMgr, context);
+  VCDParser parser(context, lexer);
+  std::unique_ptr<VCDFile> file;
+  if (parser.parseVCDFile(file))
+    return nullptr;
+
+  return std::move(file);
+}
 } // namespace vcd
 } // namespace circt
 
