@@ -111,4 +111,24 @@ def LowerSeqShiftReg : Pass<"lower-seq-shiftreg", "hw::HWModuleOp"> {
   let dependentDialects = ["circt::hw::HWDialect"];
 }
 
+def FirregRandomization : Pass<"seq-firreg-randomization", "ModuleOp"> {
+  let summary = "Implement randomized initialization for FIRRTL registers";
+  let description = [{
+    This pass performs firreg random initialization for seq.compreg.
+
+    When `emitSV` is true, the pass generates a random function call as a
+    macro in the SV dialect. It supports configurable initialization of
+    registers through macros like `RANDOM` and `INIT_RANDOM_PROLOG`.
+
+    Otherwise, it produces simulatable IR using MLIR core dialects.
+  }];
+  let constructor = "circt::seq::createFirregRandomizationPass()";
+  let dependentDialects = ["circt::hw::HWDialect", "circt::sv::SVDialect",
+                           "mlir::func::FuncDialect"];
+   let options = [
+     Option<"emitSV", "emit-sv", "bool", "false",
+            [{If true, generate SV ops for register randomization}]>
+   ];
+}
+
 #endif // CIRCT_DIALECT_SEQ_SEQPASSES
