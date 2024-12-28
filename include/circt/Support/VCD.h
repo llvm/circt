@@ -143,19 +143,19 @@ struct VCDFile {
       module,
       begin,
     } kind;
-    SmallVector<std::unique_ptr<Node>> children;
+    MapVector<StringAttr, std::unique_ptr<Node>> children;
     Scope(StringAttr name, ScopeType kind) : name(name), kind(kind) {}
     void dump(mlir::raw_indented_ostream &os) const override {
       llvm::errs() << "Scope: " << name << "\n";
       auto scope = os.scope();
-      for (auto &child : children)
+      for (auto &[_, child] : children)
         child->dump(os);
     }
     void printVCD(mlir::raw_indented_ostream &os) const override {
       os << "$scope " << name.getValue() << "\n";
       {
         auto scope = os.scope();
-        for (auto &child : children)
+        for (auto &[_, child] : children)
           child->printVCD(os);
       }
       os << "$upscope $end\n";
@@ -549,12 +549,13 @@ struct VCDParser {
         std::unique_ptr<VCDFile::Scope> child;
         if (parseScope(child))
           return failure();
-        scope->children.push_back(std::move(child));
+        scope->children.insert(std::make_pair(child->name, std::move(child)));
       } else if (token.getKind() == VCDToken::kw_var) {
         std::unique_ptr<VCDFile::Variable> variable;
         if (parseVariable(variable))
           return failure();
-        scope->children.push_back(std::move(variable));
+        scope->children.insert(
+            std::make_pair(variable->name, std::move(variable)));
       } else {
         return emitError() << "expected scope or variable";
       }
@@ -716,9 +717,25 @@ struct VCDParser {
 struct VCDEmitter {};
 struct SignalMapping {
   mlir::ModuleOp moduleOp;
-  StringAttr top;
+  VCDFile::Scope *topScope;
+  FlatSymbolRefAttr topModuleName;
   const VCDFile &file;
+  igraph::InstanceGraph &instanceGraph;
+  igraph::InstancePathCache &instancePathCache;
   llvm::DenseMap<VCDFile::Variable *, circt::igraph::InstancePath> signalMap;
+
+  SignalMapping(mlir::ModuleOp moduleOp, const VCDFile &file,
+                igraph::InstanceGraph &instanceGraph,
+                igraph::InstancePathCache &instancePathCache,
+                ArrayRef<StringAttr> pathToTop, VCDFile::Scope *topScope,
+                FlatSymbolRefAttr topModuleName)
+      : moduleOp(moduleOp), topScope(topScope), topModuleName(topModuleName),
+        file(file), instanceGraph(instanceGraph),
+        instancePathCache(instancePathCache) {}
+
+  LogicalResult run() {
+    auto topModule = instanceGraph.lookup(topModuleName.getAttr());
+  }
 };
 
 std::unique_ptr<VCDFile> importVCDFile(llvm::SourceMgr &sourceMgr,
