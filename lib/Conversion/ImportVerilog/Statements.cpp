@@ -82,7 +82,8 @@ struct StmtVisitor {
 
     builder.setInsertionPointToEnd(&bodyBlock);
 
-    // find next dimension in this foreach statement, it finded then recuersive resolve, else perform body statement
+    // find next dimension in this foreach statement, it finded then recuersive
+    // resolve, else perform body statement
     bool hasNext = false;
     for (uint32_t nextLevel = level + 1; nextLevel < stmt.loopDims.size();
          nextLevel++) {
