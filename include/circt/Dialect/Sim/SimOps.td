@@ -278,6 +278,20 @@ def FormatCharOp : SimOp<"fmt.char", [Pure]> {
   let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
 }
 
+def FormatFloatOp : SimOp<"fmt.float", [Pure]> {
+  let summary = "Float format specifier";
+  let description = [{
+  }];
+
+  let arguments = (ins AnyFloat:$value);
+  let results = (outs FormatStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+}
+
+
 def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
   let summary = "Concatenate format strings";
   let description = [{

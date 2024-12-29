@@ -508,6 +508,24 @@ def StringConstantOp : MooreOp<"string_constant", [Pure]> {
   let assemblyFormat = "$value attr-dict `:` type($result)";
 }
 
+def RealLiteralOp : MooreOp<"real_constant", [Pure]> {
+  let summary = "Produce a constant real value";
+  let description = [{
+    Produces a constant value of real type.
+
+    Example:
+    ```mlir
+    %0 = moore.real_constant 1.23
+    ```
+
+    The default type for fixed-point format (e.g., 1.2), and exponent format (e.g., 2.0e10) shall be real.
+    See IEEE 1800-2017 § 5.7.2 "Real literal constants".
+  }];
+  let arguments = (ins F64Attr:$value);
+  let results = (outs RealType:$result);
+  let assemblyFormat = "$value attr-dict `:` type($result)";
+}
+
 //===----------------------------------------------------------------------===//
 // Casting and Resizing
 //===----------------------------------------------------------------------===//
@@ -1494,6 +1512,24 @@ def FormatIntOp : MooreOp<"fmt.int", [Pure]> {
     attr-dict `:` type($value)
   }];
 }
+
+def FormatFloatOp : MooreOp<"fmt.float", [Pure]> {
+  let summary = "Format an float value";
+  let description = [{
+    Format an float value as a string according to the specified format.
+
+    See IEEE 1800-2017 § 21.2.1.2 "Format specifications".
+  }];
+  let arguments = (ins
+    FloatType:$value
+  );
+  let results = (outs FormatStringType:$result);
+  let assemblyFormat = [{
+    $value `,`
+    attr-dict `:` type($value)
+  }];
+}
+
 
 //===----------------------------------------------------------------------===//
 // Builtin System Tasks and Functions

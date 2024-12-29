@@ -101,18 +101,23 @@ def RealType : MooreTypeDef<"Real", [], "moore::UnpackedType"> {
   let mnemonic = "real";
   let summary = "a SystemVerilog real type";
   let description = [{
-    This type represents the SystemVerilog real type. Since the Moore dialect
-    does not fully handle real-valued expressions properly yet, we coalesce the
-    `shortreal`, `real`, and `realtime` types in the SystemVerilgo standard to
-    this common `!moore.real` type. The standard specifies these types to be of
-    at least 32, 64, and 64 bits, respectively. The `!moore.real` type is 64
-    bits wide.
+    SystemVerilog real type. The real data type is the same as a C double.
+    The realtime declarations shall be treated synonymously with real 
+    declarations and can be used interchangeably.
 
-    | Verilog     | Moore Dialect |
-    |-------------|---------------|
-    | `shortreal` | `!moore.real` |
-    | `real`      | `!moore.real` |
-    | `realtime`  | `!moore.real` |
+    | Verilog     |   Moore Dialect    |
+    |-------------|--------------------|
+    | `shortreal` | `!moore.shortreal` |
+    | `real`      | `!moore.real`      |
+    | `realtime`  | `!moore.real`      |
+  }];
+}
+
+def ShortRealType : MooreTypeDef<"ShortReal", [], "moore::UnpackedType"> {
+  let mnemonic = "shortreal";
+  let summary = "a SystemVerilog short real type";
+  let description = [{
+    The shortreal data type is the same as a C float.
   }];
 }
 
@@ -420,6 +425,8 @@ def BitType : MooreType<CPred<[{
     IntType::getInt($_builder.getContext(), 1)
   }];
 }
+
+def FloatType : MooreType<Or<[RealType.predicate, ShortRealType.predicate]>, "float point type in moore", "moore::UnpackedType">;
 
 /// A packed or unpacked array type with a fixed size.
 def AnyStaticArrayType : MooreType<

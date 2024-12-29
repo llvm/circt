@@ -34,6 +34,7 @@ class OpenUnpackedArrayType;
 class PackedType;
 class QueueType;
 class RealType;
+class ShortRealType;
 class StringType;
 class StructType;
 class UnionType;
@@ -82,7 +83,7 @@ enum class Domain {
 class UnpackedType : public Type {
 public:
   static bool classof(Type type) {
-    return llvm::isa<PackedType, StringType, ChandleType, EventType, RealType,
+    return llvm::isa<PackedType, StringType, ChandleType, EventType, RealType, ShortRealType,
                      UnpackedArrayType, OpenUnpackedArrayType, AssocArrayType,
                      QueueType, UnpackedStructType, UnpackedUnionType>(type);
   }

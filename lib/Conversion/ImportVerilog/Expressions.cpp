@@ -879,6 +879,10 @@ struct RvalueExprVisitor {
     return builder.create<moore::ConcatOp>(loc, slicedOperands);
   }
 
+  Value visit(const slang::ast::RealLiteral &expr) {
+    return builder.create<moore::RealLiteralOp>(loc, builder.getF64FloatAttr(expr.getValue()));
+  }
+
   /// Emit an error for all other expressions.
   template <typename T>
   Value visit(T &&node) {
