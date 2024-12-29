@@ -27,6 +27,12 @@ def ModelOp : BLIFOp<"model", [IsolatedFromAbove, RegionKindInterface, SingleBlo
                        TypeAttrOf<ModuleType>:$module_type);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
+
+  let extraClassDeclaration = [{
+    static mlir::RegionKind getRegionKind(unsigned index) {
+      return mlir::RegionKind::Graph;
+    }
+  }];
 }
 
 def OutputOp : BLIFOp<"output", [Terminator]> {
@@ -44,7 +50,7 @@ def LogicGate: BLIFOp<"logic_gate", []> {
     means don't use the input.
   }];
   
-  let arguments = (ins ArrayProperty<ArrayProperty<I8Property>>:$func,
+  let arguments = (ins IntArrayProperty<I8Property>:$func,
                        Variadic<I1>:$inputs);
   let results = (outs I1:$result);
 }

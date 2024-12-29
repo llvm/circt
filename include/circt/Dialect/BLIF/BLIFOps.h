@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_BLIF_BLIFOPS_H
 
 #include "circt/Dialect/BLIF/BLIFDialect.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/OpImplementation.h"
 
@@ -21,3 +22,6 @@
 #include "circt/Dialect/BLIF/BLIF.h.inc"
 
 #endif // CIRCT_DIALECT_BLIF_BLIFOPS_H
+
+using namespace circt;
+using namespace blif;
