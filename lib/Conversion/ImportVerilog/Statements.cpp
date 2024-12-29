@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
-#include "mlir/IR/Diagnostics.h"
 #include "slang/ast/SystemSubroutine.h"
 #include "llvm/ADT/ScopeExit.h"
 
@@ -37,6 +36,7 @@ struct StmtVisitor {
 
   LogicalResult recursiveForeach(const slang::ast::ForeachLoopStatement &stmt,
                                  uint32_t level) {
+    // find current dimension we are operate.
     const auto &loopDim = stmt.loopDims[level];
     if (!loopDim.range.has_value()) {
       emitError(loc) << "dynamic loop variable is unsupported";
@@ -46,6 +46,7 @@ struct StmtVisitor {
     auto &bodyBlock = createBlock();
     auto &checkBlock = createBlock();
 
+    // Push the blocks onto the loop stack such that we can continue and break.
     context.loopStack.push_back({&stepBlock, &exitBlock});
     auto done = llvm::make_scope_exit([&] { context.loopStack.pop_back(); });
 
@@ -56,6 +57,8 @@ struct StmtVisitor {
 
     Value initial = builder.create<moore::ConstantOp>(
         loc, cast<moore::IntType>(type), loopDim.range->lower());
+
+    // Create loop varirable in this dimension
     Value varOp = builder.create<moore::VariableOp>(
         loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
         builder.getStringAttr(iter->name), initial);
@@ -64,6 +67,8 @@ struct StmtVisitor {
 
     builder.create<cf::BranchOp>(loc, &checkBlock);
     builder.setInsertionPointToEnd(&checkBlock);
+
+    // When the loop variable is greater than the upper bound, goto exit
     auto upperBound = builder.create<moore::ConstantOp>(
         loc, cast<moore::IntType>(type), loopDim.range->upper());
 
@@ -76,6 +81,8 @@ struct StmtVisitor {
     builder.create<cf::CondBranchOp>(loc, cond, &bodyBlock, &exitBlock);
 
     builder.setInsertionPointToEnd(&bodyBlock);
+
+    // find next dimension in this foreach statement, it finded then recuersive resolve, else perform body statement
     bool hasNext = false;
     for (uint32_t nextLevel = level + 1; nextLevel < stmt.loopDims.size();
          nextLevel++) {
@@ -95,6 +102,8 @@ struct StmtVisitor {
       builder.create<cf::BranchOp>(loc, &stepBlock);
 
     builder.setInsertionPointToEnd(&stepBlock);
+
+    // add one to loop variable
     var = builder.create<moore::ReadOp>(loc, varOp);
     auto one =
         builder.create<moore::ConstantOp>(loc, cast<moore::IntType>(type), 1);
