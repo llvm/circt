@@ -1268,6 +1268,9 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
     return value;
   auto dstPacked = dyn_cast<moore::PackedType>(type);
   auto srcPacked = dyn_cast<moore::PackedType>(value.getType());
+  if(isa<moore::RealType>(type) || isa<moore::ShortRealType>(type)) {
+    return builder.create<moore::ConversionOp>(value.getLoc(), type, value);
+  }
 
   // Resize the value if needed.
   if (dstPacked && srcPacked && dstPacked.getBitSize() &&

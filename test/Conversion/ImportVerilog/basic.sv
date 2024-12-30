@@ -672,6 +672,12 @@ module Expressions;
   // CHECK: %r1 = moore.variable : <real>
   // CHECK: %r2 = moore.variable : <real>
   real r1,r2;
+  // CHECK: %sr1 = moore.variable : <shortreal>
+  // CHECK: %sr2 = moore.variable : <shortreal>
+  shortreal sr1, sr2;
+  // CHECK: %rt1 = moore.variable : <real>
+  // CHECK: %rt2 = moore.variable : <real>
+  realtime rt1, rt2;
   // CHECK: %arrayInt = moore.variable : <array<2 x i32>>
   bit [1:0][31:0] arrayInt;
   // CHECK: %uarrayInt = moore.variable : <uarray<2 x i32>>
@@ -1394,6 +1400,57 @@ module Expressions;
     // CHECK: [[TMP3:%.+]] = moore.struct_create [[TMP0]], [[TMP1]] : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
     // CHECK: moore.struct_create [[TMP2]], [[TMP3]] : !moore.struct<{a: i32, b: i32}>, !moore.struct<{a: i32, b: i32}> -> struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>
     struct1 = '{c: '{a: 1, b: 2}, d: '{a: 3, b: 4}};
+
+    // CHECK: %[[R1_INIT:.*]] = moore.real_constant 3.140000e+00 : real
+    // CHECK: moore.blocking_assign %r1, %[[R1_INIT]] : real
+    r1 = 3.14;
+    // CHECK: %[[R2_INIT:.*]] = moore.real_constant 2.710000e+00 : real
+    // CHECK: moore.blocking_assign %r2, %[[R2_INIT]] : real
+    r2 = 2.71;
+    // CHECK: %[[SR1_INIT_REAL:.*]] = moore.real_constant 1.410000e+00 : real
+    // CHECK: %[[SR1_INIT:.*]] = moore.conversion %[[SR1_INIT_REAL]] : !moore.real -> !moore.shortreal
+    // CHECK: moore.blocking_assign %sr1, %[[SR1_INIT]] : shortreal
+    sr1 = 1.41;
+    // CHECK: %[[READ_R1_1:.*]] = moore.read %r1 : <real>
+    // CHECK: %[[READ_SR1_1:.*]] = moore.read %sr1 : <shortreal>
+    // CHECK: %[[SR1_TO_REAL_1:.*]] = moore.conversion %[[READ_SR1_1]] : !moore.shortreal -> !moore.real
+    // CHECK: %[[ADD_1:.*]] = moore.add %[[READ_R1_1]], %[[SR1_TO_REAL_1]] : real
+    // CHECK: %[[ADD_1_SHORT:.*]] = moore.conversion %[[ADD_1]] : !moore.real -> !moore.shortreal
+    // CHECK: moore.blocking_assign %sr2, %[[ADD_1_SHORT]] : shortreal
+    sr2 = r1 + sr1;
+    // CHECK: %[[READ_SR1_2:.*]] = moore.read %sr1 : <shortreal>
+    // CHECK: %[[SR1_TO_REAL_2:.*]] = moore.conversion %[[READ_SR1_2]] : !moore.shortreal -> !moore.real
+    // CHECK: moore.blocking_assign %rt1, %[[SR1_TO_REAL_2]] : real
+    rt1 = sr1;
+    // CHECK: %[[READ_SR1_3:.*]] = moore.read %sr1 : <shortreal>
+    // CHECK: %[[SR1_TO_REAL_3:.*]] = moore.conversion %[[READ_SR1_3]] : !moore.shortreal -> !moore.real
+    // CHECK: %[[READ_SR2:.*]] = moore.read %sr2 : <shortreal>
+    // CHECK: %[[SR2_TO_REAL:.*]] = moore.conversion %[[READ_SR2]] : !moore.shortreal -> !moore.real
+    // CHECK: %[[SUB_1:.*]] = moore.sub %[[SR1_TO_REAL_3]], %[[SR2_TO_REAL]] : real
+    // CHECK: moore.blocking_assign %rt2, %[[SUB_1]] : real
+    rt2 = sr1 - sr2;
+    // CHECK: %[[READ_R1_2:.*]] = moore.read %r1 : <real>
+    // CHECK: %[[READ_SR1_4:.*]] = moore.read %sr1 : <shortreal>
+    // CHECK: %[[SR1_TO_REAL_4:.*]] = moore.conversion %[[READ_SR1_4]] : !moore.shortreal -> !moore.real
+    // CHECK: %[[ADD_2:.*]] = moore.add %[[READ_R1_2]], %[[SR1_TO_REAL_4]] : real
+    // CHECK: %[[ADD_2_I64:.*]] = moore.conversion %[[ADD_2]] : !moore.real -> !moore.i64
+    // CHECK: %[[TRUNC_1:.*]] = moore.trunc %[[ADD_2_I64]] : i64 -> i32
+    // CHECK: moore.blocking_assign %a, %[[TRUNC_1]] : i32
+    a = r1 + sr1;
+    // CHECK: %[[READ_A:.*]] = moore.read %a : <i32>
+    // CHECK: %[[A_TO_REAL:.*]] = moore.conversion %[[READ_A]] : !moore.i32 -> !moore.real
+    // CHECK: %[[READ_SR1_5:.*]] = moore.read %sr1 : <shortreal>
+    // CHECK: %[[SR1_TO_REAL_5:.*]] = moore.conversion %[[READ_SR1_5]] : !moore.shortreal -> !moore.real
+    // CHECK: %[[ADD_3:.*]] = moore.add %[[A_TO_REAL]], %[[SR1_TO_REAL_5]] : real
+    // CHECK: moore.blocking_assign %r1, %[[ADD_3]] : real
+    r1 = a + sr1;
+    // CHECK: %[[READ_A_2:.*]] = moore.read %a : <i32>
+    // CHECK: %[[A_TO_REAL_2:.*]] = moore.conversion %[[READ_A_2]] : !moore.i32 -> !moore.real
+    // CHECK: %[[READ_R1_3:.*]] = moore.read %r1 : <real>
+    // CHECK: %[[ADD_4:.*]] = moore.add %[[A_TO_REAL_2]], %[[READ_R1_3]] : real
+    // CHECK: %[[ADD_4_SHORT:.*]] = moore.conversion %[[ADD_4]] : !moore.real -> !moore.shortreal
+    // CHECK: moore.blocking_assign %sr1, %[[ADD_4_SHORT]] : shortreal
+    sr1 = a + r1;
 
     // CHECK: [[TMP0:%.+]] = moore.constant 42
     // CHECK: [[TMP1:%.+]] = moore.constant 9001
