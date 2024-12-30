@@ -289,6 +289,22 @@ order not to pollute the infrastructure. For example, the `ChainingProblem` may
 be of limited use standalone, but can serve as a parent class for a future
 chaining-enabled modulo scheduling problem.
 
+## Extensible scheduler model
+
+See
+[Schedulers.h](https://github.com/llvm/circt/blob/main/include/circt/Scheduling/Schedulers.h)
+
+The `Scheduler` class serves as the base class of all schedulers. It is an interface that use template parameters to declare the list of `Problem` classes that can be scheduled by a specific scheduler. A scheduler that can handle a problem `ProblemX` must implement a method `LogicalResult schedule(ProblemX &problem, Operation *lastOp)`, which is responsible for scheduling the `problem` instance of the `ProblemX` problem.
+
+### Template parameters
+
+The `Scheduler` class is declared as follow:
+```c++
+template <typename... Ps>
+class Scheduler;
+```
+In this declaration, `Ps` is a **non-empty** variadic template parameter pack. `Ps` represents the list of `Problem` types that the scheduler can handle. Therefore, every element of `Ps` must be a subclass of `Problem`.
+
 ## Available schedulers
 
 - ASAP list scheduler
