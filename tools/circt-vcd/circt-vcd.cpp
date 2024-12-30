@@ -92,14 +92,6 @@ private:
 /// This functions initializes the various components of the tool and
 /// orchestrates the work to be done.
 static LogicalResult execute(MLIRContext &context) {
-  // OwningOpRef<ModuleOp> ref = parseSourceFile<ModuleOp>(inputMLIR, &context);
-  // if (!ref) {
-  //   errs() << "failed to parse input mlir file `" << inputMLIR << "`\n";
-  //   return failure();
-  // }
-
-  // ModuleOp moduleOp = ref.get();
-  // ref.release();
 
   std::string errorMessage;
   auto input = mlir::openInputFile(inputVCD, &errorMessage);
