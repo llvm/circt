@@ -38,7 +38,9 @@ SMLoc BLIFToken::getEndLoc() const {
   return SMLoc::getFromPointer(spelling.data() + spelling.size());
 }
 
-SMRange BLIFToken::getLocRange() const { return SMRange(getLoc(), getEndLoc()); }
+SMRange BLIFToken::getLocRange() const {
+  return SMRange(getLoc(), getEndLoc());
+}
 
 /// Return true if this is one of the keyword token kinds (e.g. kw_wire).
 bool BLIFToken::isKeyword() const {
@@ -353,7 +355,7 @@ BLIFToken BLIFLexer::lexIdentifierOrKeyword(const char *tokStart) {
     BLIFToken::Kind kind = llvm::StringSwitch<BLIFToken::Kind>(spelling)
 #define TOK_LPKEYWORD(SPELLING) .Case(#SPELLING, BLIFToken::lp_##SPELLING)
 #include "BLIFTokenKinds.def"
-                              .Default(BLIFToken::identifier);
+                               .Default(BLIFToken::identifier);
     if (kind != BLIFToken::identifier) {
       ++curPtr;
       return formToken(kind, tokStart);
@@ -364,7 +366,7 @@ BLIFToken BLIFLexer::lexIdentifierOrKeyword(const char *tokStart) {
   BLIFToken::Kind kind = llvm::StringSwitch<BLIFToken::Kind>(spelling)
 #define TOK_KEYWORD(SPELLING) .Case(#SPELLING, BLIFToken::kw_##SPELLING)
 #include "BLIFTokenKinds.def"
-                            .Default(BLIFToken::identifier);
+                             .Default(BLIFToken::identifier);
 
   // If this has the backticks of a literal identifier and it fell through the
   // above switch, indicating that it was not found to e a keyword, then change
@@ -458,8 +460,8 @@ BLIFToken BLIFLexer::lexNumber(const char *tokStart) {
     return emitError(tokStart, "unexpected character after sign");
 
   // If we encounter a "b", "o", "d", or "h", this is a radix-specified integer
-  // literal.  This is only supported for BLIFRTL 2.4.0 or later.  This is always
-  // lexed, but rejected during parsing if the version is too old.
+  // literal.  This is only supported for BLIFRTL 2.4.0 or later.  This is
+  // always lexed, but rejected during parsing if the version is too old.
   const char *oldPtr = curPtr;
   if (curPtr[-1] == '-' && *curPtr == '0')
     ++curPtr;
