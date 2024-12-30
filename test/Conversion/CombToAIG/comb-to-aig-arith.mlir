@@ -2,6 +2,18 @@
 // RUN: circt-opt %s --pass-pipeline="builtin.module(hw.module(convert-comb-to-aig{additional-legal-ops=comb.xor,comb.or,comb.and,comb.mux,comb.add}))" | FileCheck %s --check-prefix=ALLOW_ADD
 
 
+// CHECK-LABEL: @parity
+hw.module @parity(in %arg0: i4, out out: i1) {
+  // CHECK-NEXT: %[[ext0:.+]] = comb.extract %arg0 from 0 : (i4) -> i1
+  // CHECK-NEXT: %[[ext1:.+]] = comb.extract %arg0 from 1 : (i4) -> i1
+  // CHECK-NEXT: %[[ext2:.+]] = comb.extract %arg0 from 2 : (i4) -> i1
+  // CHECK-NEXT: %[[ext3:.+]] = comb.extract %arg0 from 3 : (i4) -> i1
+  // CHECK-NEXT: %[[xor:.+]] = comb.xor bin %[[ext0]], %[[ext1]], %[[ext2]], %[[ext3]] : i1
+  // CHECK-NEXT: hw.output %[[xor]] : i1
+  %0 = comb.parity %arg0 : i4
+  hw.output %0 : i1
+}
+
 // CHECK-LABEL: @add
 hw.module @add(in %lhs: i2, in %rhs: i2, out out: i2) {
   // CHECK:      %[[lhs0:.*]] = comb.extract %lhs from 0 : (i2) -> i1

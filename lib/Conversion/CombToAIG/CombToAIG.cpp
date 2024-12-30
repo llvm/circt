@@ -328,6 +328,19 @@ struct CombMulOpConversion : OpConversionPattern<MulOp> {
   }
 };
 
+struct CombParityOpConversion : OpConversionPattern<ParityOp> {
+  using OpConversionPattern<ParityOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ParityOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Parity is the XOR of all bits.
+    rewriter.replaceOpWithNewOp<comb::XorOp>(
+        op, extractBits(rewriter, adaptor.getInput()), true);
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -347,7 +360,7 @@ static void populateCombToAIGConversionPatterns(RewritePatternSet &patterns) {
   patterns.add<
       // Bitwise Logical Ops
       CombAndOpConversion, CombOrOpConversion, CombXorOpConversion,
-      CombMuxOpConversion,
+      CombMuxOpConversion, CombParityOpConversion,
       // Arithmetic Ops
       CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
       // Variadic ops that must be lowered to binary operations
