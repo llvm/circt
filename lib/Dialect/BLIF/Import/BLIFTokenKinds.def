@@ -34,7 +34,7 @@
 #define TOK_KEYWORD(SPELLING)
 #endif
 #ifndef TOK_KEYWORD_DOT
-#define TOK_KEYWORD(SPELLING)
+#define TOK_KEYWORD_DOT(SPELLING) TOK_KEYWORD(SPELLING)
 #endif
 
 // Markers
