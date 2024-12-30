@@ -41,7 +41,7 @@ def OutputOp : BLIFOp<"output", [Terminator]> {
 
 def I8Property : IntProperty<"int8_t">;
 
-def LogicGate: BLIFOp<"logic_gate", []> {
+def LogicGateOp: BLIFOp<"logic_gate", []> {
   let summary = "Combinatorial logic";
   let description = [{
     A logic gate represents a logic function in sum-of-products
@@ -55,5 +55,7 @@ def LogicGate: BLIFOp<"logic_gate", []> {
   let results = (outs I1:$result);
 }
 
+def LatchGateOp: BLIFOp<"latch_gate", []> {
+}
 
 #endif // CIRCT_DIALECT_BLIF_BLIFOPS_TD

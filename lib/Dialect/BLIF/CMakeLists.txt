@@ -17,3 +17,5 @@ add_circt_dialect_library(CIRCTBLIF
    )
 
 add_dependencies(circt-headers MLIRBLIFIncGen)
+
+add_subdirectory(Import)
