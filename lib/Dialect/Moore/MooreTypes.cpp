@@ -103,6 +103,8 @@ Domain PackedType::getDomain() const {
       .Case<IntType>([&](auto type) { return type.getDomain(); })
       .Case<ArrayType, OpenArrayType>(
           [&](auto type) { return type.getElementType().getDomain(); })
+      .Case<ShortRealType>([](auto) { return Domain::TwoValued;})
+      .Case<RealType>([](auto) { return Domain::TwoValued; })
       .Case<StructType, UnionType>([](auto type) {
         for (const auto &member : type.getMembers())
           if (member.type.getDomain() == Domain::FourValued)
@@ -143,6 +145,8 @@ std::optional<unsigned> PackedType::getBitSize() const {
         }
         return size;
       })
+      .Case<ShortRealType>([](auto) { return 32; })
+      .Case<RealType>([](auto) { return 64; })
       .Default([](auto) { return std::nullopt; });
 }
 

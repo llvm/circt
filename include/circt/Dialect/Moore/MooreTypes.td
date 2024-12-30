@@ -97,7 +97,7 @@ def IntType : MooreTypeDef<"Int", [], "moore::PackedType"> {
 // RealType
 //===----------------------------------------------------------------------===//
 
-def RealType : MooreTypeDef<"Real", [], "moore::UnpackedType"> {
+def RealType : MooreTypeDef<"Real", [], "moore::PackedType"> {
   let mnemonic = "real";
   let summary = "a SystemVerilog real type";
   let description = [{
@@ -113,7 +113,7 @@ def RealType : MooreTypeDef<"Real", [], "moore::UnpackedType"> {
   }];
 }
 
-def ShortRealType : MooreTypeDef<"ShortReal", [], "moore::UnpackedType"> {
+def ShortRealType : MooreTypeDef<"ShortReal", [], "moore::PackedType"> {
   let mnemonic = "shortreal";
   let summary = "a SystemVerilog short real type";
   let description = [{
@@ -426,7 +426,9 @@ def BitType : MooreType<CPred<[{
   }];
 }
 
-def FloatType : MooreType<Or<[RealType.predicate, ShortRealType.predicate]>, "float point type in moore", "moore::UnpackedType">;
+def FloatType : MooreType<Or<[RealType.predicate, ShortRealType.predicate]>, "float point type in moore", "moore::PackedType">;
+
+def NumericType : MooreType<Or<[FloatType.predicate, SimpleBitVectorType.predicate]>, "numeric type in moore", "moore::PackedType">;
 
 /// A packed or unpacked array type with a fixed size.
 def AnyStaticArrayType : MooreType<

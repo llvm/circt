@@ -701,8 +701,8 @@ def BoolCastOp : MooreOp<"bool_cast", [
 
 class BinaryOpBase<string mnemonic, list<Trait> traits = []> :
     MooreOp<mnemonic, traits # [Pure, SameOperandsAndResultType]> {
-  let arguments = (ins SimpleBitVectorType:$lhs, SimpleBitVectorType:$rhs);
-  let results = (outs SimpleBitVectorType:$result);
+  let arguments = (ins NumericType:$lhs, NumericType:$rhs);
+  let results = (outs NumericType:$result);
   let assemblyFormat = [{
     $lhs `,` $rhs attr-dict `:` type($result)
   }];

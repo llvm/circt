@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/Moore/MooreTypes.h"
 #include "slang/ast/SystemSubroutine.h"
 #include "slang/syntax/AllSyntax.h"
 
@@ -221,12 +222,32 @@ struct RvalueExprVisitor {
   // pass them into a binary op.
   template <class ConcreteOp>
   Value createBinary(Value lhs, Value rhs) {
-    lhs = context.convertToSimpleBitVector(lhs);
-    if (!lhs)
-      return {};
-    rhs = context.convertToSimpleBitVector(rhs);
-    if (!rhs)
-      return {};
+    auto lhsType = lhs.getType();
+    auto rhsType = rhs.getType();
+
+    // The result of using logical or relational operators or the inside operator on real operands shall be a
+    // single-bit scalar value.
+    // For other operators, if any operand, except before the ? in the conditional operator, is real, the result is
+    // real. Otherwise, if any operand, except before the ? in the conditional operator, is shortreal, the result is
+    // shortreal.
+    if(isa<moore::RealType>(lhsType) || isa<moore::RealType>(rhsType)) {
+      if(!isa<moore::RealType>(lhsType))
+        lhs = builder.create<moore::ConversionOp>(lhs.getLoc(), moore::RealType::get(context.getContext()), lhs);
+      if(!isa<moore::RealType>(rhsType))
+        rhs = builder.create<moore::ConversionOp>(rhs.getLoc(), moore::RealType::get(context.getContext()), rhs);
+    } else if(isa<moore::ShortRealType>(lhsType) || isa<moore::ShortRealType>(rhsType)) {
+      if(!isa<moore::ShortRealType>(lhsType))
+        lhs = builder.create<moore::ConversionOp>(lhs.getLoc(), moore::ShortRealType::get(context.getContext()), lhs);
+      if(!isa<moore::ShortRealType>(rhsType))
+        rhs = builder.create<moore::ConversionOp>(rhs.getLoc(), moore::ShortRealType::get(context.getContext()), rhs);
+    } else {
+      lhs = context.convertToSimpleBitVector(lhs);
+      if (!lhs)
+        return {};
+      rhs = context.convertToSimpleBitVector(rhs);
+      if (!rhs)
+        return {};
+    }
     return builder.create<ConcreteOp>(loc, lhs, rhs);
   }
 
