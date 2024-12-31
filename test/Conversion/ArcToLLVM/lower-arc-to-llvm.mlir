@@ -180,14 +180,16 @@ func.func @seqClocks(%clk1: !seq.clock, %clk2: !seq.clock) -> !seq.clock {
   %2 = arith.xori %0, %1 : i1
   %3 = seq.to_clock %2
   %4 = seq.clock_inv %3
-  return %4 : !seq.clock
+  %5 = seq.clock_gate %4, %0
+  return %5 : !seq.clock
 }
 // CHECK-LABEL: llvm.func @seqClocks
 //  CHECK-SAME: ([[CLK1:%.+]]: i1, [[CLK2:%.+]]: i1)
 //       CHECK: [[RES:%.+]] = llvm.xor [[CLK1]], [[CLK2]]
 //       CHECK: [[TRUE:%.+]] = llvm.mlir.constant(true) : i1
 //       CHECK: [[RES1:%.+]] = llvm.xor [[RES]], [[TRUE]] : i1
-//       CHECK: llvm.return [[RES1]] : i1
+//       CHECK: [[RES2:%.+]] = llvm.and [[RES1]], [[CLK1]] : i1
+//       CHECK: llvm.return [[RES2]] : i1
 
 // CHECK-LABEL: llvm.func @ReadAggregates(
 // CHECK-SAME: %arg0: !llvm.ptr
