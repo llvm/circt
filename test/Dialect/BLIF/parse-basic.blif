@@ -1,9 +1,13 @@
 # RUN: circt-translate -import-blif -verify-diagnostics -split-input-file %s | circt-opt | FileCheck %s
 
 .model simple
-.inputs a B
-.outputs c
-#.names a b c
+.input a
+.output b
+.clock clk1
+.inputs c d
+.outputs e f
+.clocks clk2 clk3
+.names a b c
 #11 1
 .end
 

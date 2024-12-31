@@ -69,7 +69,8 @@ public:
   bool isKeyword() const;
 
   bool isModelHeaderKeyword() const {
-    return isAny(kw_inputs, kw_outputs, kw_clock);
+    return isAny(kw_inputs, kw_outputs, kw_clocks, kw_input, kw_output,
+                 kw_clock);
   }
 
   /// Given a token containing a string literal, return its value, including

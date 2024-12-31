@@ -271,11 +271,14 @@ struct BLIFModelParser : public BLIFParser {
   explicit BLIFModelParser(Block &blockToInsertInto, BLIFLexer &lexer)
       : BLIFParser(blockToInsertInto.getParentOp()->getContext(), lexer),
         builder(UnknownLoc::get(getContext()), getContext()) {
-    builder.setInsertionPointToEnd(&blockToInsertInto);
+    builder.setInsertionPoint(&blockToInsertInto, blockToInsertInto.begin());
+    unresolved = builder
+                     .create<mlir::UnrealizedConversionCastOp>(
+                         builder.getIntegerType(1), ValueRange())
+                     .getResult(0);
   }
 
-  ParseResult parseSimpleStmt();
-  ParseResult parseSimpleStmtBlock();
+  ParseResult parseModelBody();
 
 private:
   ParseResult parseSimpleStmtImpl();
@@ -294,16 +297,53 @@ private:
   ParseResult parseModelReference();
   ParseResult parseModelCmdImpl();
   ParseResult parseModelCmd();
-  ParseResult parseModelBody();
 
   // Helper to fetch a module referenced by an instance-like statement.
   Value getReferencedModel(SMLoc loc, StringRef modelName);
 
+  /// Find the value corrosponding to the named identifier.
+  Value getNamedValue(StringRef name);
+
+  /// Set the value corrosponding to the named identifier.
+  void setNamedValue(StringRef name, Value value);
+
+  /// Remember to fix an op whose value could not be resolved
+  void addFixup(Operation *op, unsigned idx, StringRef name);
+
   // The builder to build into.
   ImplicitLocOpBuilder builder;
+
+  /// Keep track of names;
+  DenseMap<StringRef, Value> namedValues;
+
+  struct fixup {
+    Operation *op;
+    unsigned idx;
+    StringRef name;
+  };
+
+  DenseMap<StringRef, SmallVector<fixup>> fixups;
+
+  Value unresolved;
 };
 
 } // end anonymous namespace
+
+Value BLIFModelParser::getNamedValue(StringRef name) {
+  auto &val = namedValues[name];
+  if (!val)
+    val = unresolved;
+  return val;
+}
+
+void BLIFModelParser::setNamedValue(StringRef name, Value value) {
+  assert(!namedValues[name] && "name already exists");
+  namedValues[name] = value;
+}
+
+void BLIFModelParser::addFixup(Operation *op, unsigned idx, StringRef name) {
+  fixups[name].push_back({op, idx, name});
+}
 
 Value BLIFModelParser::getReferencedModel(SMLoc loc, StringRef modelName) {
   return {};
@@ -320,7 +360,19 @@ ParseResult BLIFModelParser::parseLogicGate() {
   output = inputs.back();
   inputs.pop_back();
   // TODO: READ THE TRUTH TABLE
-  // builder.create<LogicGateOp>(loc, inputs, output);
+  // Resolve Inputs
+  SmallVector<Value> inputValues;
+  for (auto input : inputs)
+    inputValues.push_back(getNamedValue(input));
+  // BuildOp
+  auto op = builder.create<LogicGateOp>(builder.getIntegerType(1), inputValues);
+  // Record output name
+  setNamedValue(output, op.getResult());
+  // Record Fixups
+  for (auto [idx, name, val] : llvm::enumerate(inputs, inputValues)) {
+    if (val == unresolved)
+      addFixup(op, idx, name);
+  }
   return success();
 }
 
@@ -394,7 +446,6 @@ ParseResult BLIFModelParser::parseModelCmd() {
 
 // Parse the body of this module.
 ParseResult BLIFModelParser::parseModelBody() {
-  //  auto &body = moduleOp->getRegion(0).front();
 
   while (true) {
     // The outer level parser can handle these tokens.
@@ -449,16 +500,40 @@ ParseResult BLIFFileParser::parseModel() {
       if (parseIdList(inputs, "expected input list", 1))
         return failure();
       break;
+    case BLIFToken::kw_input: {
+      consumeToken(BLIFToken::kw_input);
+      StringRef tmp;
+      if (parseId(tmp, "expected input"))
+        return failure();
+      inputs.push_back(tmp);
+      break;
+    }
     case BLIFToken::kw_outputs:
       consumeToken(BLIFToken::kw_outputs);
       if (parseIdList(outputs, "expected output list", 1))
         return failure();
       break;
-    case BLIFToken::kw_clock:
-      consumeToken(BLIFToken::kw_clock);
+    case BLIFToken::kw_output: {
+      consumeToken(BLIFToken::kw_output);
+      StringRef tmp;
+      if (parseId(tmp, "expected output"))
+        return failure();
+      outputs.push_back(tmp);
+      break;
+    }
+    case BLIFToken::kw_clocks:
+      consumeToken(BLIFToken::kw_clocks);
       if (parseIdList(clocks, "expected clock list", 1))
         return failure();
       break;
+    case BLIFToken::kw_clock: {
+      consumeToken(BLIFToken::kw_clock);
+      StringRef tmp;
+      if (parseId(tmp, "expected clock"))
+        return failure();
+      clocks.push_back(tmp);
+      break;
+    }
     default:
       break;
     }
@@ -469,8 +544,13 @@ ParseResult BLIFFileParser::parseModel() {
   builder.setInsertionPointToEnd(&m.getBody().back());
   builder.create<OutputOp>(ValueRange());
 
-  if (/*parseModelBody() ||*/ parseToken(BLIFToken::kw_end, "expected .end"))
+  BLIFModelParser bodyParser(m.getBody().back(), getLexer());
+
+  if (bodyParser.parseModelBody() ||
+      parseToken(BLIFToken::kw_end, "expected .end"))
     return failure();
+
+  // Fix up outputs
 
   return success();
 }
