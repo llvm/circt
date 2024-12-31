@@ -160,8 +160,8 @@ struct BLIFParser {
   ParseResult parseIdOrNil(StringRef &result, const Twine &message);
   ParseResult parseIdOrNil(StringAttr &result, const Twine &message);
 
-  ParseResult parseIdList(SmallVectorImpl<std::string> &result,
-                          const Twine &message);
+  ParseResult parseIdList(SmallVectorImpl<StringRef> &result,
+                          const Twine &message, unsigned minCount = 0);
 
 private:
   BLIFParser(const BLIFParser &) = delete;
@@ -239,6 +239,28 @@ ParseResult BLIFParser::parseId(StringAttr &result, const Twine &message) {
   return success();
 }
 
+  ParseResult BLIFParser::parseIdList(SmallVectorImpl<StringRef> &result,
+                          const Twine &message, unsigned minCount) {
+  while(true) {
+  switch (getToken().getKind()) {
+  // The most common case is an identifier.
+  case BLIFToken::identifier:
+    result.push_back(getTokenSpelling());
+    consumeToken();
+    if (minCount)
+        --minCount;
+    break;
+  default:
+    if (minCount) {
+      emitError(message);
+      return failure();
+    }
+    return success();
+  }
+  }
+}
+
+
 //===----------------------------------------------------------------------===//
 // BLIFModelParser
 //===----------------------------------------------------------------------===//
@@ -292,9 +314,9 @@ Value BLIFModelParser::getReferencedModel(SMLoc loc, StringRef modelName) {
 ParseResult BLIFModelParser::parseLogicGate() {
   auto startTok = consumeToken(BLIFToken::kw_names);
   auto loc = startTok.getLoc();
-  SmallVector<std::string> inputs;
+  SmallVector<StringRef> inputs;
   std::string output;
-  if (parseIdList(inputs, "expected input list"))
+  if (parseIdList(inputs, "expected input list", 1))
     return failure();
   output = inputs.back();
   inputs.pop_back();
@@ -413,22 +435,22 @@ private:
 ParseResult BLIFFileParser::parseModel() {
   StringAttr name;
   auto modLoc = getToken().getLoc();
-  SmallVector<std::string> inputs, outputs, clocks;
+  SmallVector<StringRef> inputs, outputs, clocks;
   consumeToken(BLIFToken::kw_model);
   if (parseId(name, "expected model name"))
     return failure();
   while (getToken().isModelHeaderKeyword()) {
     switch (getToken().getKind()) {
     case BLIFToken::kw_inputs:
-      if (parseIdList(inputs, "expected input list"))
+      if (parseIdList(inputs, "expected input list", 1))
         return failure();
       break;
     case BLIFToken::kw_outputs:
-      if (parseIdList(outputs, "expected output list"))
+      if (parseIdList(outputs, "expected output list", 1))
         return failure();
       break;
     case BLIFToken::kw_clock:
-      if (parseIdList(clocks, "expected clock list"))
+      if (parseIdList(clocks, "expected clock list", 1))
         return failure();
       break;
     default:

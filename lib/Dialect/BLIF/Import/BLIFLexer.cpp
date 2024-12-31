@@ -256,10 +256,6 @@ BLIFToken BLIFLexer::lexTokenImpl() {
         return lexFileInfo(tokStart);
       // Unknown character, emit an error.
       return emitError(tokStart, "unexpected character");
-    case '%':
-      if (*curPtr == '[')
-        return lexInlineAnnotation(tokStart);
-      return emitError(tokStart, "unexpected character following '%'");
     case '|':
       if (*curPtr == '}')
         return ++curPtr, formToken(BLIFToken::r_brace_bar, tokStart);
