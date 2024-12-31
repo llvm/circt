@@ -214,13 +214,8 @@ BLIFToken BLIFLexer::lexTokenImpl() {
       // Handle whitespace.
       continue;
 
-    case '`':
-    case '_':
-      // Handle identifiers.
-      return lexIdentifierOrKeyword(tokStart);
-
     case '.':
-      return formToken(BLIFToken::period, tokStart);
+      return lexPeriodOrKeyword(tokStart);
     case ',':
       return formToken(BLIFToken::comma, tokStart);
     case ':':
@@ -262,7 +257,7 @@ BLIFToken BLIFLexer::lexTokenImpl() {
       // Unknown character, emit an error.
       return emitError(tokStart, "unexpected character");
 
-    case ';':
+    case '#':
       skipComment();
       continue;
 
@@ -317,6 +312,33 @@ BLIFToken BLIFLexer::lexFileInfo(const char *tokStart) {
       break;
     }
   }
+}
+
+/// Lex a period or a keyword that starts with a period.
+///
+///   Period ::= '.'
+///
+BLIFToken BLIFLexer::lexPeriodOrKeyword(const char *tokStart) {
+
+  // Match the rest of the identifier regex: [a-zA-Z_$-]*
+  while (llvm::isAlpha(*curPtr) || llvm::isDigit(*curPtr) || *curPtr == '_' ||
+         *curPtr == '$' || *curPtr == '-')
+    ++curPtr;
+
+  StringRef spelling(tokStart, curPtr - tokStart);
+
+  // See if the identifier is a keyword.  By default, it is a period.
+  BLIFToken::Kind kind = llvm::StringSwitch<BLIFToken::Kind>(spelling)
+#define TOK_KEYWORD_DOT(SPELLING) .Case("." #SPELLING, BLIFToken::kw_##SPELLING)
+#include "BLIFTokenKinds.def"
+                             .Default(BLIFToken::period);
+  if (kind != BLIFToken::period) {
+    ++curPtr;
+    return formToken(kind, tokStart);
+  }
+
+  // Otherwise, this is a period.
+  return formToken(BLIFToken::period, tokStart);
 }
 
 /// Lex an identifier or keyword that starts with a letter.

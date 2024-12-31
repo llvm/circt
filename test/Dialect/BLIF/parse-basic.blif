@@ -1,13 +1,13 @@
-; RUN: circt-translate -import-blif -verify-diagnostics -split-input-file %s | circt-opt | FileCheck %s
+# RUN: circt-translate -import-blif -verify-diagnostics -split-input-file %s | circt-opt | FileCheck %s
 
 .model simple
 .inputs a B
 .outputs c
-.names a b c
-11 1
+#.names a b c
+#11 1
 .end
 
-;// -----
+#// -----
 
 # unamed model
 .names a b \

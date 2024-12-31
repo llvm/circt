@@ -69,7 +69,7 @@ public:
   bool isKeyword() const;
 
   bool isModelHeaderKeyword() const {
-    return true; // isAny(kw_inputs, kw_outputs, kw_names, kw_latch, kw_end);
+    return isAny(kw_inputs, kw_outputs, kw_clock);
   }
 
   /// Given a token containing a string literal, return its value, including
@@ -134,6 +134,7 @@ private:
   BLIFToken lexNumber(const char *tokStart);
   void skipComment();
   BLIFToken lexString(const char *tokStart, bool isVerbatim);
+  BLIFToken lexPeriodOrKeyword(const char *tokStart);
 
   const llvm::SourceMgr &sourceMgr;
   const mlir::StringAttr bufferNameIdentifier;

@@ -239,27 +239,26 @@ ParseResult BLIFParser::parseId(StringAttr &result, const Twine &message) {
   return success();
 }
 
-  ParseResult BLIFParser::parseIdList(SmallVectorImpl<StringRef> &result,
-                          const Twine &message, unsigned minCount) {
-  while(true) {
-  switch (getToken().getKind()) {
-  // The most common case is an identifier.
-  case BLIFToken::identifier:
-    result.push_back(getTokenSpelling());
-    consumeToken();
-    if (minCount)
+ParseResult BLIFParser::parseIdList(SmallVectorImpl<StringRef> &result,
+                                    const Twine &message, unsigned minCount) {
+  while (true) {
+    switch (getToken().getKind()) {
+    // The most common case is an identifier.
+    case BLIFToken::identifier:
+      result.push_back(getTokenSpelling());
+      consumeToken();
+      if (minCount)
         --minCount;
-    break;
-  default:
-    if (minCount) {
-      emitError(message);
-      return failure();
+      break;
+    default:
+      if (minCount) {
+        emitError(message);
+        return failure();
+      }
+      return success();
     }
-    return success();
-  }
   }
 }
-
 
 //===----------------------------------------------------------------------===//
 // BLIFModelParser
@@ -418,7 +417,10 @@ namespace {
 /// This class implements the parser, namely models
 struct BLIFFileParser : public BLIFParser {
   explicit BLIFFileParser(BLIFLexer &lexer, ModuleOp mlirModule)
-      : BLIFParser(mlirModule.getContext(), lexer), mlirModule(mlirModule) {}
+      : BLIFParser(mlirModule.getContext(), lexer), mlirModule(mlirModule),
+        builder(UnknownLoc::get(getContext()), getContext()) {
+    builder.setInsertionPointToStart(mlirModule.getBody());
+  }
 
   ParseResult parseFile();
 
@@ -426,6 +428,7 @@ private:
   ParseResult parseModel();
 
   ModuleOp mlirModule;
+  ImplicitLocOpBuilder builder;
 };
 
 } // end anonymous namespace
@@ -442,22 +445,29 @@ ParseResult BLIFFileParser::parseModel() {
   while (getToken().isModelHeaderKeyword()) {
     switch (getToken().getKind()) {
     case BLIFToken::kw_inputs:
+      consumeToken(BLIFToken::kw_inputs);
       if (parseIdList(inputs, "expected input list", 1))
         return failure();
       break;
     case BLIFToken::kw_outputs:
+      consumeToken(BLIFToken::kw_outputs);
       if (parseIdList(outputs, "expected output list", 1))
         return failure();
       break;
     case BLIFToken::kw_clock:
+      consumeToken(BLIFToken::kw_clock);
       if (parseIdList(clocks, "expected clock list", 1))
         return failure();
       break;
     default:
-      return emitError("unexpected token in model header");
+      break;
     }
   }
   // Create the model
+  auto m = builder.create<ModelOp>(name, inputs, outputs, clocks);
+  OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPointToEnd(&m.getBody().back());
+  builder.create<OutputOp>(ValueRange());
 
   if (/*parseModelBody() ||*/ parseToken(BLIFToken::kw_end, "expected .end"))
     return failure();

@@ -24,9 +24,18 @@ def ModelOp : BLIFOp<"model", [IsolatedFromAbove, RegionKindInterface, SingleBlo
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name,
-                       TypeAttrOf<ModuleType>:$module_type);
+                       TypeAttrOf<ModuleType>:$module_type,
+                       APIntAttr:$clocks);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
+
+  let builders = [
+    OpBuilder<(ins "StringRef":$name, 
+                    "ArrayRef<StringRef>":$inputs,
+                    "ArrayRef<StringRef>":$outputs,
+                    "ArrayRef<StringRef>":$clocks)>
+  ];
+
 
   let extraClassDeclaration = [{
     static mlir::RegionKind getRegionKind(unsigned index) {

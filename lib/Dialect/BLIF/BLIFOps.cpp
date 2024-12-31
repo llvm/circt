@@ -17,6 +17,41 @@
 using namespace circt;
 using namespace blif;
 
+void ModelOp::build(mlir::OpBuilder &odsBuilder, mlir::OperationState &odsState,
+                    StringRef name, ArrayRef<StringRef> inputs,
+                    ArrayRef<StringRef> outputs, ArrayRef<StringRef> clocks) {
+  SmallVector<hw::ModulePort> modulePorts;
+  auto I1 = odsBuilder.getIntegerType(1);
+  auto uLoc = odsBuilder.getUnknownLoc();
+  auto *r = odsState.addRegion();
+  Block *b = new Block();
+  r->push_back(b);
+
+  for (auto input : inputs) {
+    modulePorts.push_back(
+        {odsBuilder.getStringAttr(input), I1, hw::ModulePort::Input});
+    b->addArgument(I1, uLoc);
+  }
+  for (auto output : outputs)
+    modulePorts.push_back(
+        {odsBuilder.getStringAttr(output), I1, hw::ModulePort::Output});
+  for (auto clock : clocks) {
+    modulePorts.push_back(
+        {odsBuilder.getStringAttr(clock), I1, hw::ModulePort::Input});
+    b->addArgument(I1, uLoc);
+  }
+  auto moduleType = hw::ModuleType::get(odsBuilder.getContext(), modulePorts);
+  APInt clockVec(inputs.size() + outputs.size() + clocks.size(), 0);
+  for (size_t i = inputs.size() + outputs.size();
+       i < inputs.size() + outputs.size() + clocks.size(); i++)
+    clockVec.setBit(i);
+  auto clockAttr = odsBuilder.getIntegerAttr(
+      odsBuilder.getIntegerType(clockVec.getBitWidth()), clockVec);
+  odsState.addAttribute("sym_name", odsBuilder.getStringAttr(name));
+  odsState.addAttribute("module_type", TypeAttr::get(moduleType));
+  odsState.addAttribute("clocks", clockAttr);
+}
+
 namespace mlir {
 LogicalResult
 convertFromAttribute(SmallVectorImpl<int8_t> &storage, Attribute attr,

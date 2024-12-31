@@ -14,7 +14,7 @@
 #if !defined(TOK_MARKER) && !defined(TOK_IDENTIFIER) &&                        \
     !defined(TOK_LITERAL) && !defined(TOK_PUNCTUATION) &&                      \
     !defined(TOK_KEYWORD) && !defined(TOK_LPKEYWORD) &&                        \
-    !defined(TOK_LPKEYWORD_PRIM)
+    !defined(TOK_KEYWORD_DOT)
 #error Must define one of the TOK_ macros.
 #endif
 
