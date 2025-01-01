@@ -130,12 +130,11 @@ private:
 
   // Lexer implementation methods.
   BLIFToken lexFileInfo(const char *tokStart);
-  BLIFToken lexInlineAnnotation(const char *tokStart);
-  BLIFToken lexIdentifierOrKeyword(const char *tokStart);
+  BLIFToken lexIdentifier(const char *tokStart);
   BLIFToken lexNumber(const char *tokStart);
   void skipComment();
   BLIFToken lexString(const char *tokStart, bool isVerbatim);
-  BLIFToken lexPeriodOrKeyword(const char *tokStart);
+  BLIFToken lexCommand(const char *tokStart);
 
   const llvm::SourceMgr &sourceMgr;
   const mlir::StringAttr bufferNameIdentifier;

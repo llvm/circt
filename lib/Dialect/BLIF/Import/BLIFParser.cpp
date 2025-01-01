@@ -276,9 +276,18 @@ struct BLIFModelParser : public BLIFParser {
                      .create<mlir::UnrealizedConversionCastOp>(
                          builder.getIntegerType(1), ValueRange())
                      .getResult(0);
+    ModelOp model = cast<ModelOp>(blockToInsertInto.getParentOp());
+    int idx = 0;
+    for (auto port : model.getModuleType().getPorts()) {
+      if (port.dir == hw::ModulePort::Direction::Input)
+        setNamedValue(port.name.getValue(),
+                      blockToInsertInto.getArgument(idx++));
+    }
   }
 
   ParseResult parseModelBody();
+  ParseResult fixupUnresolvedValues();
+  ParseResult fixupOutput();
 
 private:
   ParseResult parseSimpleStmtImpl();
@@ -290,6 +299,8 @@ private:
     return parseExpImpl(result, message, /*isLeadingStmt:*/ false);
   }
 
+  ParseResult parseTruthLine();
+  ParseResult parseTruthTable();
   ParseResult parseLogicGate();
   ParseResult parseLatch();
   ParseResult parseLibraryLogicGate();
@@ -319,7 +330,6 @@ private:
   struct fixup {
     Operation *op;
     unsigned idx;
-    StringRef name;
   };
 
   DenseMap<StringRef, SmallVector<fixup>> fixups;
@@ -330,10 +340,8 @@ private:
 } // end anonymous namespace
 
 Value BLIFModelParser::getNamedValue(StringRef name) {
-  auto &val = namedValues[name];
-  if (!val)
-    val = unresolved;
-  return val;
+  auto val = namedValues.lookup(name);
+  return val ? val : unresolved;
 }
 
 void BLIFModelParser::setNamedValue(StringRef name, Value value) {
@@ -342,19 +350,23 @@ void BLIFModelParser::setNamedValue(StringRef name, Value value) {
 }
 
 void BLIFModelParser::addFixup(Operation *op, unsigned idx, StringRef name) {
-  fixups[name].push_back({op, idx, name});
+  fixups[name].push_back({op, idx});
 }
 
 Value BLIFModelParser::getReferencedModel(SMLoc loc, StringRef modelName) {
   return {};
 }
 
+ParseResult BLIFModelParser::parseTruthLine() { return failure(); }
+
+ParseResult BLIFModelParser::parseTruthTable() { return failure(); }
+
 /// logicgate ::= '.names' in* out NEWLINE single_output_cover*
 ParseResult BLIFModelParser::parseLogicGate() {
   auto startTok = consumeToken(BLIFToken::kw_names);
   auto loc = startTok.getLoc();
   SmallVector<StringRef> inputs;
-  std::string output;
+  StringRef output;
   if (parseIdList(inputs, "expected input list", 1))
     return failure();
   output = inputs.back();
@@ -460,6 +472,37 @@ ParseResult BLIFModelParser::parseModelBody() {
   return success();
 }
 
+ParseResult BLIFModelParser::fixupUnresolvedValues() {
+  for (auto &fixup : fixups) {
+    Value val = getNamedValue(fixup.first);
+    if (val == unresolved)
+      return emitError("unresolved value '") << fixup.first << "'";
+    for (auto [op, idx] : fixup.second) {
+      op->setOperand(idx, val);
+    }
+  }
+  return success();
+}
+
+ParseResult BLIFModelParser::fixupOutput() {
+  auto model = cast<ModelOp>(builder.getBlock()->getParentOp());
+  SmallVector<Value> outputs;
+  for (auto port : model.getModuleType().getPorts()) {
+    if (port.dir == hw::ModulePort::Direction::Output) {
+      auto val = getNamedValue(port.name.getValue());
+      if (val == unresolved)
+        emitWarning("unresolved output '") << port.name.getValue() << "'";
+      outputs.push_back(val);
+    }
+  }
+  builder.create<OutputOp>(outputs);
+  if (unresolved && unresolved.use_empty()) {
+    unresolved.getDefiningOp()->erase();
+    unresolved = nullptr;
+  }
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // BLIFFileParser
 //===----------------------------------------------------------------------===//
@@ -541,12 +584,9 @@ ParseResult BLIFFileParser::parseModel() {
   // Create the model
   auto m = builder.create<ModelOp>(name, inputs, outputs, clocks);
   OpBuilder::InsertionGuard guard(builder);
-  builder.setInsertionPointToEnd(&m.getBody().back());
-  builder.create<OutputOp>(ValueRange());
-
   BLIFModelParser bodyParser(m.getBody().back(), getLexer());
-
-  if (bodyParser.parseModelBody() ||
+  if (bodyParser.parseModelBody() || bodyParser.fixupUnresolvedValues() ||
+      bodyParser.fixupOutput() ||
       parseToken(BLIFToken::kw_end, "expected .end"))
     return failure();
 

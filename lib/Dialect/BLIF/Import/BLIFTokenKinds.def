@@ -13,8 +13,7 @@
 
 #if !defined(TOK_MARKER) && !defined(TOK_IDENTIFIER) &&                        \
     !defined(TOK_LITERAL) && !defined(TOK_PUNCTUATION) &&                      \
-    !defined(TOK_KEYWORD) && !defined(TOK_LPKEYWORD) &&                        \
-    !defined(TOK_KEYWORD_DOT)
+    !defined(TOK_KEYWORD) && !defined(TOK_KEYWORD_DOT)
 #error Must define one of the TOK_ macros.
 #endif
 
@@ -43,43 +42,20 @@ TOK_MARKER(error)
 
 // Identifiers.
 TOK_IDENTIFIER(identifier)         // foo
-TOK_IDENTIFIER(literal_identifier) // `42`
 
 // Literals
 TOK_LITERAL(integer)                 // 42
 TOK_LITERAL(signed_integer)          // -42 and +42
 TOK_LITERAL(radix_specified_integer) // 0b101010, 0o52, 0d42, 0h2a and negations
-TOK_LITERAL(floatingpoint)           // 42.0
-TOK_LITERAL(version)                 // 1.2.3
-TOK_LITERAL(string)                  // "foo"
-TOK_LITERAL(verbatim_string)         // 'foo'
-
-TOK_LITERAL(fileinfo)
-
-// Punctuation.
-TOK_PUNCTUATION(period, ".")
-TOK_PUNCTUATION(comma, ",")
-TOK_PUNCTUATION(colon, ":")
-TOK_PUNCTUATION(question, "?")
-TOK_PUNCTUATION(l_paren, "(")
-TOK_PUNCTUATION(r_paren, ")")
-TOK_PUNCTUATION(l_brace, "{")
-TOK_PUNCTUATION(l_brace_bar, "{|")
-TOK_PUNCTUATION(r_brace, "}")
-TOK_PUNCTUATION(r_brace_bar, "|}")
-TOK_PUNCTUATION(l_square, "[")
-TOK_PUNCTUATION(r_square, "]")
-TOK_PUNCTUATION(less, "<")
-TOK_PUNCTUATION(less_equal, "<=")
-TOK_PUNCTUATION(greater, ">")
-TOK_PUNCTUATION(equal, "=")
-TOK_PUNCTUATION(equal_greater, "=>")
+TOK_LITERAL(cover) // 0--1-
+TOK_LITERAL(bit) // 0 || 1
 
 // Keywords.  These turn "foo" into FIRToken::kw_foo enums.
 
 // NOTE: Please key these alphabetized to make it easier to find something in
 // this list and to cater to OCD.
 
+// Keywords which start with '.'.  These are separated as the kw_foo must be formed from '.foo'.
 TOK_KEYWORD_DOT(area)
 TOK_KEYWORD_DOT(cycle)
 TOK_KEYWORD_DOT(clock)
@@ -93,32 +69,26 @@ TOK_KEYWORD_DOT(default_output_required)
 TOK_KEYWORD_DOT(delay)
 TOK_KEYWORD_DOT(end)
 TOK_KEYWORD_DOT(end_kiss)
+TOK_KEYWORD_DOT(exdc)
+TOK_KEYWORD_DOT(gate)
 TOK_KEYWORD_DOT(input)
 TOK_KEYWORD_DOT(inputs)
 TOK_KEYWORD_DOT(input_arrival)
 TOK_KEYWORD_DOT(input_drive)
+TOK_KEYWORD_DOT(latch)
 TOK_KEYWORD_DOT(max_input_load)
+TOK_KEYWORD_DOT(mlatch)
 TOK_KEYWORD_DOT(model)
+TOK_KEYWORD_DOT(names)
 TOK_KEYWORD_DOT(output)
 TOK_KEYWORD_DOT(outputs)
 TOK_KEYWORD_DOT(output_load)
 TOK_KEYWORD_DOT(output_required)
 TOK_KEYWORD_DOT(search)
+TOK_KEYWORD_DOT(start_kiss)
+TOK_KEYWORD_DOT(subskt)
 TOK_KEYWORD_DOT(wire)
 TOK_KEYWORD_DOT(wire_load_slope)
-
-
-
-// These are for KEYWORD cases that correspond to a primitive operation.
-
-TOK_KEYWORD_DOT(names)
-TOK_KEYWORD_DOT(exdc)
-TOK_KEYWORD_DOT(latch)
-TOK_KEYWORD_DOT(gate)
-TOK_KEYWORD_DOT(mlatch)
-TOK_KEYWORD_DOT(subskt)
-TOK_KEYWORD_DOT(start_kiss)
-
 
 #undef TOK_MARKER
 #undef TOK_IDENTIFIER
@@ -126,4 +96,3 @@ TOK_KEYWORD_DOT(start_kiss)
 #undef TOK_PUNCTUATION
 #undef TOK_KEYWORD
 #undef TOK_KEYWORD_DOT
-#undef TOK_LPKEYWORD_PRIM

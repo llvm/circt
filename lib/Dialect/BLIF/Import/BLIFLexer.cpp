@@ -57,11 +57,6 @@ bool BLIFToken::isKeyword() const {
 /// Given a token containing a string literal, return its value, including
 /// removing the quote characters and unescaping the contents of the string. The
 /// lexer has already verified that this token is valid.
-std::string BLIFToken::getStringValue() const {
-  assert(getKind() == string);
-  return getStringValue(getSpelling());
-}
-
 std::string BLIFToken::getStringValue(StringRef spelling) {
   // Start by dropping the quotes.
   StringRef bytes = spelling.drop_front().drop_back();
@@ -111,14 +106,6 @@ std::string BLIFToken::getStringValue(StringRef spelling) {
   }
 
   return result;
-}
-
-/// Given a token containing a verbatim string, return its value, including
-/// removing the quote characters and unescaping the quotes of the string. The
-/// lexer has already verified that this token is valid.
-std::string BLIFToken::getVerbatimStringValue() const {
-  assert(getKind() == verbatim_string);
-  return getVerbatimStringValue(getSpelling());
 }
 
 std::string BLIFToken::getVerbatimStringValue(StringRef spelling) {
@@ -194,7 +181,7 @@ BLIFToken BLIFLexer::lexTokenImpl() {
     default:
       // Handle identifiers.
       if (llvm::isAlpha(curPtr[-1]))
-        return lexIdentifierOrKeyword(tokStart);
+        return lexIdentifier(tokStart);
 
       // Unknown character, emit an error.
       return emitError(tokStart, "unexpected character");
@@ -215,56 +202,11 @@ BLIFToken BLIFLexer::lexTokenImpl() {
       continue;
 
     case '.':
-      return lexPeriodOrKeyword(tokStart);
-    case ',':
-      return formToken(BLIFToken::comma, tokStart);
-    case ':':
-      return formToken(BLIFToken::colon, tokStart);
-    case '(':
-      return formToken(BLIFToken::l_paren, tokStart);
-    case ')':
-      return formToken(BLIFToken::r_paren, tokStart);
-    case '{':
-      if (*curPtr == '|')
-        return ++curPtr, formToken(BLIFToken::l_brace_bar, tokStart);
-      return formToken(BLIFToken::l_brace, tokStart);
-    case '}':
-      return formToken(BLIFToken::r_brace, tokStart);
-    case '[':
-      return formToken(BLIFToken::l_square, tokStart);
-    case ']':
-      return formToken(BLIFToken::r_square, tokStart);
-    case '<':
-      if (*curPtr == '=')
-        return ++curPtr, formToken(BLIFToken::less_equal, tokStart);
-      return formToken(BLIFToken::less, tokStart);
-    case '>':
-      return formToken(BLIFToken::greater, tokStart);
-    case '=':
-      if (*curPtr == '>')
-        return ++curPtr, formToken(BLIFToken::equal_greater, tokStart);
-      return formToken(BLIFToken::equal, tokStart);
-    case '?':
-      return formToken(BLIFToken::question, tokStart);
-    case '@':
-      if (*curPtr == '[')
-        return lexFileInfo(tokStart);
-      // Unknown character, emit an error.
-      return emitError(tokStart, "unexpected character");
-    case '|':
-      if (*curPtr == '}')
-        return ++curPtr, formToken(BLIFToken::r_brace_bar, tokStart);
-      // Unknown character, emit an error.
-      return emitError(tokStart, "unexpected character");
+      return lexCommand(tokStart);
 
     case '#':
       skipComment();
       continue;
-
-    case '"':
-      return lexString(tokStart, /*isVerbatim=*/false);
-    case '\'':
-      return lexString(tokStart, /*isVerbatim=*/true);
 
     case '-':
     case '+':
@@ -283,116 +225,47 @@ BLIFToken BLIFLexer::lexTokenImpl() {
   }
 }
 
-/// Lex a file info specifier.
-///
-///   FileInfo ::= '@[' ('\]'|.)* ']'
-///
-BLIFToken BLIFLexer::lexFileInfo(const char *tokStart) {
-  while (1) {
-    switch (*curPtr++) {
-    case ']': // This is the end of the fileinfo literal.
-      return formToken(BLIFToken::fileinfo, tokStart);
-    case '\\':
-      // Ignore escaped ']'
-      if (*curPtr == ']')
-        ++curPtr;
-      break;
-    case 0:
-      // This could be the end of file in the middle of the fileinfo.  If so
-      // emit an error.
-      if (curPtr - 1 != curBuffer.end())
-        break;
-      [[fallthrough]];
-    case '\n': // Vertical whitespace isn't allowed in a fileinfo.
-    case '\v':
-    case '\f':
-      return emitError(tokStart, "unterminated file info specifier");
-    default:
-      // Skip over other characters.
-      break;
-    }
-  }
-}
-
 /// Lex a period or a keyword that starts with a period.
 ///
-///   Period ::= '.'
+///   Command :== '.' [a-zA-Z_]+
 ///
-BLIFToken BLIFLexer::lexPeriodOrKeyword(const char *tokStart) {
+BLIFToken BLIFLexer::lexCommand(const char *tokStart) {
 
-  // Match the rest of the identifier regex: [a-zA-Z_$-]*
-  while (llvm::isAlpha(*curPtr) || llvm::isDigit(*curPtr) || *curPtr == '_' ||
-         *curPtr == '$' || *curPtr == '-')
+  // Match the rest of the command regex: [a-zA-Z_]*
+  while (llvm::isAlpha(*curPtr) || llvm::isDigit(*curPtr) || *curPtr == '_')
     ++curPtr;
 
   StringRef spelling(tokStart, curPtr - tokStart);
 
-  // See if the identifier is a keyword.  By default, it is a period.
+  // See if the identifier is a keyword.
   BLIFToken::Kind kind = llvm::StringSwitch<BLIFToken::Kind>(spelling)
 #define TOK_KEYWORD_DOT(SPELLING) .Case("." #SPELLING, BLIFToken::kw_##SPELLING)
 #include "BLIFTokenKinds.def"
-                             .Default(BLIFToken::period);
-  if (kind != BLIFToken::period) {
+                             .Default(BLIFToken::error);
+  if (kind != BLIFToken::error) {
     ++curPtr;
     return formToken(kind, tokStart);
   }
 
   // Otherwise, this is a period.
-  return formToken(BLIFToken::period, tokStart);
+  return emitError(tokStart, "unexpected character after period");
 }
 
-/// Lex an identifier or keyword that starts with a letter.
+/// Lex an identifier.
 ///
-///   LegalStartChar ::= [a-zA-Z_]
-///   LegalIdChar    ::= LegalStartChar | [0-9] | '$'
+///   LegalStartChar ::= [a-zA-Z]
+///   LegalIdChar    ::= LegalStartChar | [0-9] | '$' | '_'
 ///
 ///   Id ::= LegalStartChar (LegalIdChar)*
-///   LiteralId ::= [a-zA-Z0-9$_]+
 ///
-BLIFToken BLIFLexer::lexIdentifierOrKeyword(const char *tokStart) {
-  // Remember that this is a literalID
-  bool isLiteralId = *tokStart == '`';
+BLIFToken BLIFLexer::lexIdentifier(const char *tokStart) {
 
-  // Match the rest of the identifier regex: [0-9a-zA-Z_$-]*
+  // Match the rest of the identifier regex: [0-9a-zA-Z$_]*
   while (llvm::isAlpha(*curPtr) || llvm::isDigit(*curPtr) || *curPtr == '_' ||
-         *curPtr == '$' || *curPtr == '-')
+         *curPtr == '$')
     ++curPtr;
 
-  // Consume the trailing '`' in a literal identifier.
-  if (isLiteralId) {
-    if (*curPtr != '`')
-      return emitError(tokStart, "unterminated literal identifier");
-    ++curPtr;
-  }
-
-  StringRef spelling(tokStart, curPtr - tokStart);
-
-  // Check to see if this is a 'primop', which is an identifier juxtaposed with
-  // a '(' character.
-  if (*curPtr == '(') {
-    BLIFToken::Kind kind = llvm::StringSwitch<BLIFToken::Kind>(spelling)
-#define TOK_LPKEYWORD(SPELLING) .Case(#SPELLING, BLIFToken::lp_##SPELLING)
-#include "BLIFTokenKinds.def"
-                               .Default(BLIFToken::identifier);
-    if (kind != BLIFToken::identifier) {
-      ++curPtr;
-      return formToken(kind, tokStart);
-    }
-  }
-
-  // See if the identifier is a keyword.  By default, it is an identifier.
-  BLIFToken::Kind kind = llvm::StringSwitch<BLIFToken::Kind>(spelling)
-#define TOK_KEYWORD(SPELLING) .Case(#SPELLING, BLIFToken::kw_##SPELLING)
-#include "BLIFTokenKinds.def"
-                             .Default(BLIFToken::identifier);
-
-  // If this has the backticks of a literal identifier and it fell through the
-  // above switch, indicating that it was not found to e a keyword, then change
-  // its kind from identifier to literal identifier.
-  if (isLiteralId && kind == BLIFToken::identifier)
-    kind = BLIFToken::literal_identifier;
-
-  return BLIFToken(kind, spelling);
+  return formToken(BLIFToken::identifier, tokStart);
 }
 
 /// Skip a comment line, starting with a ';' and going to end of line.
@@ -411,48 +284,6 @@ void BLIFLexer::skipComment() {
       }
       [[fallthrough]];
     default:
-      // Skip over other characters.
-      break;
-    }
-  }
-}
-
-/// StringLit         ::= '"' UnquotedString? '"'
-/// VerbatimStringLit ::= '\'' UnquotedString? '\''
-/// UnquotedString    ::= ( '\\\'' | '\\"' | ~[\r\n] )+?
-///
-BLIFToken BLIFLexer::lexString(const char *tokStart, bool isVerbatim) {
-  while (1) {
-    switch (*curPtr++) {
-    case '"': // This is the end of the string literal.
-      if (isVerbatim)
-        break;
-      return formToken(BLIFToken::string, tokStart);
-    case '\'': // This is the end of the raw string.
-      if (!isVerbatim)
-        break;
-      return formToken(BLIFToken::verbatim_string, tokStart);
-    case '\\':
-      // Ignore escaped '\'' or '"'
-      if (*curPtr == '\'' || *curPtr == '"' || *curPtr == '\\')
-        ++curPtr;
-      else if (*curPtr == 'u' || *curPtr == 'U')
-        return emitError(tokStart, "unicode escape not supported in string");
-      break;
-    case 0:
-      // This could be the end of file in the middle of the string.  If so
-      // emit an error.
-      if (curPtr - 1 != curBuffer.end())
-        break;
-      [[fallthrough]];
-    case '\n': // Vertical whitespace isn't allowed in a string.
-    case '\r':
-    case '\v':
-    case '\f':
-      return emitError(tokStart, "unterminated string");
-    default:
-      if (curPtr[-1] & ~0x7F)
-        return emitError(tokStart, "string characters must be 7-bit ASCII");
       // Skip over other characters.
       break;
     }
@@ -521,31 +352,4 @@ BLIFToken BLIFLexer::lexNumber(const char *tokStart) {
       return formToken(BLIFToken::signed_integer, tokStart);
     return formToken(BLIFToken::integer, tokStart);
   }
-
-  // Lex a floating point literal.
-  curPtr += 2;
-  while (llvm::isDigit(*curPtr))
-    ++curPtr;
-
-  bool hasE = false;
-  if (*curPtr == 'E') {
-    hasE = true;
-    ++curPtr;
-    if (*curPtr == '+' || *curPtr == '-')
-      ++curPtr;
-    while (llvm::isDigit(*curPtr))
-      ++curPtr;
-  }
-
-  // If we encounter a '.' followed by a digit, again, and there was no
-  // exponent, then this is a version literal.  Otherwise it is a floating point
-  // literal.
-  if (*curPtr != '.' || !llvm::isDigit(curPtr[1]) || hasE)
-    return formToken(BLIFToken::floatingpoint, tokStart);
-
-  // Lex a version literal.
-  curPtr += 2;
-  while (llvm::isDigit(*curPtr))
-    ++curPtr;
-  return formToken(BLIFToken::version, tokStart);
 }

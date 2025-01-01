@@ -7,8 +7,12 @@
 .inputs c d
 .outputs e f
 .clocks clk2 clk3
-.names a b c
+.names a c b
 #11 1
+.names foo1 foo2 e # use before def
+.names c d foo1
+.names clk1 clk2 clk3 foo2
+.names foo1 foo2 f
 .end
 
 #// -----
