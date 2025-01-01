@@ -437,6 +437,8 @@ struct CombICmpOpConversion : OpConversionPattern<ICmpOp> {
                                                sameSignResult);
       return success();
     }
+    }
+  }
 };
 
 struct CombParityOpConversion : OpConversionPattern<ParityOp> {
