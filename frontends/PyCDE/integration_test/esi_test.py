@@ -109,6 +109,10 @@ class ConstProducer(Module):
 
 
 class JoinAddFunc(Func):
+  # This test is broken since the DC dialect flow is broken. Leaving the code
+  # here in case it gets fixed in the future.
+  # https://github.com/llvm/circt/issues/7949 is the latest layer of the onion.
+
   a = Input(UInt(32))
   b = Input(UInt(32))
   x = Output(UInt(32))
@@ -119,6 +123,7 @@ class JoinAddFunc(Func):
 
 
 class Join(Module):
+  # This test is broken since the JoinAddFunc function is broken.
   clk = Clock()
   rst = Reset()
 
@@ -141,7 +146,9 @@ class Top(Module):
       MMIOClient(i)()
     MMIOReadWriteClient(clk=ports.clk, rst=ports.rst)
     ConstProducer(clk=ports.clk, rst=ports.rst)
-    Join(clk=ports.clk, rst=ports.rst)
+
+    # Disable broken test.
+    # Join(clk=ports.clk, rst=ports.rst)
 
 
 if __name__ == "__main__":
