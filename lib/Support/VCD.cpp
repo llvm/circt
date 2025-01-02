@@ -19,6 +19,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/WithColor.h"
 
 #include <functional>
 #include <variant>
@@ -60,6 +61,20 @@ void VCDFile::Metadata::printVCD(mlir::raw_indented_ostream &os) const {
 
 bool VCDFile::Scope::classof(const Node *e) {
   return e->getKind() == Kind::scope;
+}
+
+void VCDFile::Scope::printVCD(mlir::raw_indented_ostream &os) const {
+  os << "Scope: " << name << "\n";
+  for (auto &[_, child] : children) {
+    child->printVCD(os);
+  }
+}
+
+void VCDFile::Scope::dump(mlir::raw_indented_ostream &os) const {
+  os << "Scope: " << name << "\n";
+  for (auto &[_, child] : children) {
+    child->dump(os);
+  }
 }
 
 bool VCDFile::Variable::classof(const Node *e) {
@@ -200,12 +215,10 @@ VCDToken VCDLexer::lexTokenImpl() {
   const char *tokStart = curPtr;
   switch (*curPtr++) {
   default:
-    // Handle identifiers
-    if (llvm::isAlpha(curPtr[-1]))
-      return lexIdentifier(tokStart);
     if (llvm::isDigit(curPtr[-1]))
       return lexInteger(tokStart);
 
+    // Treat it as identifiers
     return lexIdentifier(tokStart);
 
   case 0:
@@ -341,8 +354,6 @@ struct VCDParser {
 
   ParseResult parseInt(APInt &result) {
     auto token = lexer.getToken();
-    if (!token.is(VCDToken::scalar_value))
-      return emitError() << "expected bit width";
     if (token.getSpelling().getAsInteger(10, result))
       return emitError() << "invalid integer literal";
     consumeToken();
@@ -623,8 +634,27 @@ LogicalResult SignalMapping::run() {
   }
 }
 
-std::unique_ptr<VCDFile> importVCDFile(llvm::SourceMgr &sourceMgr,
-                                       MLIRContext *context) {
+void VCDFile::VCDFile::printVCD(mlir::raw_indented_ostream &os) const {
+  // Print the header
+  header.printVCD(os);
+  // Print the scope and variable definitions
+  rootScope->printVCD(os);
+  // Print the value change section
+  valueChange.printVCD(os);
+}
+
+void VCDFile::ValueChange::printVCD(mlir::raw_indented_ostream &os) const {
+  os << remainingBuffer;
+}
+
+VCDFile::VCDFile(VCDFile::Header header, std::unique_ptr<Scope> rootScope,
+                 ValueChange valueChange)
+    : header(std::move(header)), rootScope(std::move(rootScope)),
+      valueChange(valueChange) {}
+
+
+std::unique_ptr<VCDFile> circt::vcd::importVCDFile(llvm::SourceMgr &sourceMgr,
+                                                   MLIRContext *context) {
   VCDLexer lexer(sourceMgr, context);
   VCDParser parser(context, lexer);
   std::unique_ptr<VCDFile> file;

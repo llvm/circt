@@ -116,7 +116,8 @@ struct VCDFile {
 
     // Implement LLVM RTTI.
     static bool classof(const Node *e);
-    Scope(StringAttr name, ScopeType kind) : Node(Node::Kind::scope), name(name), kind(kind) {}
+    Scope(StringAttr name, ScopeType kind)
+        : Node(Node::Kind::scope), name(name), kind(kind) {}
     void dump(mlir::raw_indented_ostream &os) const override;
     void printVCD(mlir::raw_indented_ostream &os) const override;
     void setName(StringAttr name) { this->name = name; }
@@ -157,9 +158,10 @@ struct VCDFile {
       }
     }
 
-    Variable(VariableType kind, int64_t bitWidth, StringAttr id, StringAttr name,
-             ArrayAttr type)
-        : Node(Node::Kind::variable), kind(kind), bitWidth(bitWidth), id(id), name(name), type(type) {}
+    Variable(VariableType kind, int64_t bitWidth, StringAttr id,
+             StringAttr name, ArrayAttr type)
+        : Node(Node::Kind::variable), kind(kind), bitWidth(bitWidth), id(id),
+          name(name), type(type) {}
     void dump(mlir::raw_indented_ostream &os) const override {
       llvm::errs() << "Variable: " << name << "\n";
       llvm::errs() << "Kind: " << getKindName(kind) << "\n";
