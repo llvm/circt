@@ -1653,3 +1653,10 @@ circuit IsInvalid:
 
     ; expected-error @below {{'<=' connections were removed in FIRRTL 3.0.0}}
     b <= a
+
+;// -----
+FIRRTL version 4.0.0
+circuit Foo:
+  ; expected-error @below {{inline layers are a FIRRTL 4.1.0+ feature}}
+  layer A, inline:
+  public module Foo:

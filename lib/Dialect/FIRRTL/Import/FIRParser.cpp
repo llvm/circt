@@ -5508,6 +5508,9 @@ ParseResult FIRCircuitParser::parseLayer(CircuitOp circuit) {
                   << "' (did you misspell it?)";
       return failure();
     }
+    if (layerConvention == LayerConvention::Inline &&
+        requireFeature({4, 1, 0}, "inline layers"))
+      return failure();
     consumeToken();
 
     hw::OutputFileAttr outputDir;
