@@ -1,0 +1,45 @@
+#if !defined(TOK_MARKER) && !defined(TOK_IDENTIFIER) &&                        \
+    !defined(TOK_LITERAL) && !defined(TOK_KEYWORD)
+#error Must define one of the TOK_ macros.
+#endif
+
+#ifndef TOK_MARKER
+#define TOK_MARKER(X)
+#endif
+#ifndef TOK_IDENTIFIER
+#define TOK_IDENTIFIER(NAME)
+#endif
+#ifndef TOK_LITERAL
+#define TOK_LITERAL(NAME)
+#endif
+#ifndef TOK_COMMAND
+#define TOK_COMMAND(SPELLING)
+#endif
+#ifndef TOK_KEYWORD
+#define TOK_KEYWORD(SPELLING)
+#endif
+
+TOK_MARKER(eof)
+TOK_MARKER(error)
+
+TOK_COMMAND(date)
+TOK_COMMAND(version)
+TOK_COMMAND(timescale)
+TOK_COMMAND(scope)
+TOK_COMMAND(var)
+TOK_COMMAND(upscope)
+TOK_COMMAND(enddefinitions)
+TOK_COMMAND(dumpvars)
+TOK_COMMAND(comment)
+TOK_COMMAND(end)
+
+TOK_IDENTIFIER(identifier)
+
+TOK_LITERAL(scalar_value)
+TOK_LITERAL(time_value)
+
+#undef TOK_MARKER
+#undef TOK_IDENTIFIER
+#undef TOK_LITERAL
+#undef TOK_COMMAND
+#undef TOK_KEYWORD
