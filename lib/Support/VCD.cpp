@@ -96,15 +96,6 @@ private:
   const char *curPtr;
   VCDToken curToken;
 };
-
-struct VCDParser {
-  VCDParser(mlir::MLIRContext *context, VCDLexer &lexer);
-  ParseResult parseVCDFile(std::unique_ptr<VCDFile> &file);
-
-private:
-  mlir::MLIRContext *context;
-  VCDLexer &lexer;
-};
 } // namespace
 
 // VCDToken implementation
@@ -143,30 +134,6 @@ VCDLexer::VCDLexer(const llvm::SourceMgr &sourceMgr, mlir::MLIRContext *context)
       curBuffer(
           sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID())->getBuffer()),
       curPtr(curBuffer.begin()), curToken(lexTokenImpl()) {}
-
-VCDParser::VCDParser(mlir::MLIRContext *context, VCDLexer &lexer)
-    : context(context), lexer(lexer) {}
-
-// SignalMapping implementation
-SignalMapping::SignalMapping(mlir::ModuleOp moduleOp, const VCDFile &file,
-                             igraph::InstanceGraph &instanceGraph,
-                             igraph::InstancePathCache &instancePathCache,
-                             ArrayRef<StringAttr> pathToTop,
-                             VCDFile::Scope *topScope,
-                             FlatSymbolRefAttr topModuleName)
-    : moduleOp(moduleOp), topScope(topScope), topModuleName(topModuleName),
-      file(file), instanceGraph(instanceGraph),
-      instancePathCache(instancePathCache) {}
-
-std::unique_ptr<VCDFile> importVCDFile(llvm::SourceMgr &sourceMgr,
-                                       MLIRContext *context) {
-  VCDLexer lexer(sourceMgr, context);
-  VCDParser parser(context, lexer);
-  std::unique_ptr<VCDFile> file;
-  if (parser.parseVCDFile(file))
-    return nullptr;
-  return file;
-}
 
 static StringRef getTokenKindName(VCDToken::Kind kind) {
   switch (kind) {
@@ -596,26 +563,72 @@ struct VCDParser {
   ParseResult parse(VCDFile &file);
 };
 
-struct VCDEmitter {};
-struct SignalMapping {
-  mlir::ModuleOp moduleOp;
-  VCDFile::Scope *topScope;
-  FlatSymbolRefAttr topModuleName;
-  const VCDFile &file;
-  igraph::InstanceGraph &instanceGraph;
-  igraph::InstancePathCache &instancePathCache;
-  llvm::DenseMap<VCDFile::Variable *, circt::igraph::InstancePath> signalMap;
-
-  SignalMapping(mlir::ModuleOp moduleOp, const VCDFile &file,
-                igraph::InstanceGraph &instanceGraph,
-                igraph::InstancePathCache &instancePathCache,
-                ArrayRef<StringAttr> pathToTop, VCDFile::Scope *topScope,
-                FlatSymbolRefAttr topModuleName)
-      : moduleOp(moduleOp), topScope(topScope), topModuleName(topModuleName),
-        file(file), instanceGraph(instanceGraph),
-        instancePathCache(instancePathCache) {}
-
-  LogicalResult run() {
-    auto topModule = instanceGraph.lookup(topModuleName.getAttr());
+SignalMapping::SignalMapping(mlir::ModuleOp moduleOp, const VCDFile &file,
+                             igraph::InstanceGraph &instanceGraph,
+                             igraph::InstancePathCache &instancePathCache,
+                             ArrayRef<StringAttr> pathToTop,
+                             VCDFile::Scope *topScope,
+                             FlatSymbolRefAttr topModuleName)
+    : moduleOp(moduleOp), topScope(topScope), topModuleName(topModuleName),
+      file(file), instanceGraph(instanceGraph),
+      instancePathCache(instancePathCache) {
+  for (auto op : moduleOp.getOps<hw::HWModuleOp>()) {
+    verilogNameToOperation[op.getModuleNameAttr()].insert(
+        std::make_pair(op.getModuleNameAttr(), op));
   }
-};
+
+  mlir::parallelForEach(
+      moduleOp.getContext(), moduleOp.getOps<hw::HWModuleOp>(),
+      [&](hw::HWModuleOp op) {
+        auto &moduleMap = verilogNameToOperation[op.getModuleNameAttr()];
+        op.walk([&](Operation *op) {
+          TypeSwitch<Operation *>(op)
+              .Case<sv::RegOp>(
+                  [&](sv::RegOp reg) { moduleMap[reg.getNameAttr()] = reg; })
+              .Case<hw::InstanceOp>([&](hw::InstanceOp instance) {
+                moduleMap[instance.getInstanceNameAttr()] = instance;
+              });
+        });
+      });
+}
+
+LogicalResult SignalMapping::run() {
+  auto topModule = instanceGraph.lookup(topModuleName.getAttr());
+  if (!topModule ||
+      isa_and_nonnull<circt::hw::HWModuleOp>(topModule->getModule()))
+    return failure();
+
+  auto module = dyn_cast<hw::HWModuleOp>(topModule->getModule());
+
+  SmallVector<
+      std::tuple<VCDFile::Node *, circt::igraph::InstancePath, StringAttr>>
+      worklist;
+  worklist.push_back(std::make_tuple(topScope, circt::igraph::InstancePath(),
+                                     module.getModuleNameAttr()));
+  while (!worklist.empty()) {
+    auto [node, path, module] = worklist.pop_back_val();
+    if (auto *variable = dyn_cast<VCDFile::Variable>(node)) {
+      signalMap[variable] = path;
+    } else if (auto *scope = dyn_cast<VCDFile::Scope>(node)) {
+      auto instanceOp = dyn_cast_or_null<hw::InstanceOp>(
+          verilogNameToOperation[module][scope->getName()]);
+      if (!instanceOp)
+        continue;
+      auto newPath = instancePathCache.appendInstance(path, instanceOp);
+      auto newModule = instanceOp.getReferencedModuleNameAttr();
+      for (auto &[_, child] : scope->getChildren()) {
+        worklist.push_back(std::make_tuple(child.get(), newPath, newModule));
+      }
+    }
+  }
+}
+
+std::unique_ptr<VCDFile> importVCDFile(llvm::SourceMgr &sourceMgr,
+                                       MLIRContext *context) {
+  VCDLexer lexer(sourceMgr, context);
+  VCDParser parser(context, lexer);
+  std::unique_ptr<VCDFile> file;
+  if (parser.parseVCDFile(file))
+    return nullptr;
+  return file;
+}
