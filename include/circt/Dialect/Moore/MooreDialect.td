@@ -39,7 +39,7 @@ def MooreDialect : Dialect {
   let useDefaultAttributePrinterParser = 1;
   let useDefaultTypePrinterParser = 0;
   let hasConstantMaterializer = 1;
-  let dependentDialects = ["hw::HWDialect"];
+  let dependentDialects = ["hw::HWDialect", "mlir::func::FuncDialect"];
 }
 
 #endif // CIRCT_DIALECT_MOORE_MOOREDIALECT
