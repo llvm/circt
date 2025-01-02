@@ -94,9 +94,131 @@ struct VCDFile {
     virtual void printVCD(mlir::raw_indented_ostream &os) const = 0;
   };
 
-  struct Metadata;
-  struct Scope;
-  struct Variable;
+  struct Metadata : Node {
+    VCDToken command;
+    ArrayAttr values;
+    // Implement LLVM RTTI.
+    static bool classof(const Node *e) {
+      return e->getKind() == Kind::metadata;
+    }
+
+    Metadata(VCDToken command, ArrayAttr values)
+        : command(command), values(values) {
+      assert((command.is(VCDToken::kw_timescale) ||
+              command.is(VCDToken::kw_date) ||
+              command.is(VCDToken::kw_version) ||
+              command.is(VCDToken::kw_comment)) &&
+             "Invalid metadata command");
+    }
+
+    void dump(mlir::raw_indented_ostream &os) const override {
+      llvm::errs() << "Metadata: " << command.getSpelling() << "\n";
+      llvm::errs() << "Values: " << values << "\n";
+    }
+
+    static void printArray(mlir::raw_indented_ostream &os, ArrayAttr array) {
+      llvm::interleave(
+          array.getAsValueRange<StringAttr>(), os,
+          [&](StringRef attr) { os << attr; }, " ");
+    }
+    void printVCD(mlir::raw_indented_ostream &os) const override {
+      switch (command.getKind()) {
+      case VCDToken::kw_timescale:
+        os << "$timescale ";
+        break;
+      case VCDToken::kw_date:
+        os << "$date ";
+        break;
+      case VCDToken::kw_version:
+        os << "$version ";
+        break;
+      case VCDToken::kw_comment:
+        os << "$comment ";
+        break;
+      }
+      printArray(os, values);
+      os << "$end\n";
+    }
+  };
+
+  struct Scope : Node {
+    StringAttr name;
+
+    // Implement LLVM RTTI.
+    static bool classof(const Node *e) { return e->getKind() == Kind::scope; }
+    // SV 21.7.2.1
+    enum ScopeType {
+      module,
+      begin,
+    } kind;
+    llvm::MapVector<StringAttr, std::unique_ptr<Node>> children;
+    Scope(StringAttr name, ScopeType kind) : name(name), kind(kind) {}
+    void dump(mlir::raw_indented_ostream &os) const override {
+      llvm::errs() << "Scope: " << name << "\n";
+      auto scope = os.scope();
+      for (auto &[_, child] : children)
+        child->dump(os);
+    }
+    void printVCD(mlir::raw_indented_ostream &os) const override {
+      os << "$scope " << name.getValue() << "\n";
+      {
+        auto scope = os.scope();
+        for (auto &[_, child] : children)
+          child->printVCD(os);
+      }
+      os << "$upscope $end\n";
+    }
+  };
+
+  struct Variable : Node {
+    enum Kind {
+      wire,
+      reg,
+      integer,
+      real,
+      time,
+    } kind;
+
+    // Implement LLVM RTTI.
+    static bool classof(const Node *e) {
+      return e->getKind() == Node::Kind::variable;
+    }
+
+    static StringRef getKindName(Kind kind) {
+      switch (kind) {
+      case wire:
+        return "wire";
+      case reg:
+        return "reg";
+      case integer:
+        return "integer";
+      case real:
+        return "real";
+      case time:
+        return "time";
+      }
+    }
+
+    int64_t bitWidth;
+    StringAttr id;
+    StringAttr name;
+    ArrayAttr type; // TODO: Parse type properly
+    Variable(Kind kind, int64_t bitWidth, StringAttr id, StringAttr name,
+             ArrayAttr type)
+        : kind(kind), bitWidth(bitWidth), id(id), name(name), type(type) {}
+    void dump(mlir::raw_indented_ostream &os) const override {
+      llvm::errs() << "Variable: " << name << "\n";
+      llvm::errs() << "Kind: " << getKindName(kind) << "\n";
+      llvm::errs() << "BitWidth: " << bitWidth << "\n";
+      llvm::errs() << "ID: " << id.getValue() << "\n";
+      llvm::errs() << "Type: " << type << "\n";
+    }
+    void printVCD(mlir::raw_indented_ostream &os) const override {
+      os << "$var " << getKindName(kind) << " " << bitWidth << " "
+         << id.getValue() << " " << name.getValue() << " $end\n";
+    }
+  };
+
   struct Header {
     // TODO: Parse header peroperly
     SmallVector<std::unique_ptr<Node>> metadata;
