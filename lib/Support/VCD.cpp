@@ -30,6 +30,14 @@ using namespace circt;
 using namespace vcd;
 using namespace llvm;
 
+//===----------------------------------------------------------------------===//
+// VCDFile Data Structures
+//===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
+// VCDFile::Metadata
+//===----------------------------------------------------------------------===//
+
 VCDFile::Metadata::Metadata(VCDToken command, ArrayAttr values)
     : Node(Node::Kind::metadata), command(command), values(values) {
   assert((command.is(VCDToken::kw_timescale) || command.is(VCDToken::kw_date) ||
@@ -59,6 +67,10 @@ void VCDFile::Metadata::printVCD(mlir::raw_indented_ostream &os) const {
   os << "$end\n";
 }
 
+//===----------------------------------------------------------------------===//
+// VCDFile::Scope
+//===----------------------------------------------------------------------===//
+
 bool VCDFile::Scope::classof(const Node *e) {
   return e->getKind() == Kind::scope;
 }
@@ -77,9 +89,67 @@ void VCDFile::Scope::dump(mlir::raw_indented_ostream &os) const {
   }
 }
 
+//===----------------------------------------------------------------------===//
+// VCDFile::Variable
+//===----------------------------------------------------------------------===//
+
 bool VCDFile::Variable::classof(const Node *e) {
   return e->getKind() == Kind::variable;
 }
+
+void VCDFile::Variable::printVCD(mlir::raw_indented_ostream &os) const {
+  os << "$var " << getKindName(kind) << " " << bitWidth << " " << id.getValue()
+     << " " << name.getValue() << " $end\n";
+}
+
+void VCDFile::Variable::dump(mlir::raw_indented_ostream &os) const {
+  os << "Variable: " << name << "\n";
+  os << "Kind: " << getKindName(kind) << "\n";
+  os << "BitWidth: " << bitWidth << "\n";
+  os << "ID: " << id.getValue() << "\n";
+  llvm::errs() << "Type: " << type << "\n";
+}
+
+//===----------------------------------------------------------------------===//
+// VCDFile::Header
+//===----------------------------------------------------------------------===//
+
+void VCDFile::Header::printVCD(mlir::raw_indented_ostream &os) const {
+  for (auto &data : metadata)
+    data->printVCD(os);
+}
+
+//===----------------------------------------------------------------------===//
+// VCDFile::ValueChange
+//===----------------------------------------------------------------------===//
+
+void VCDFile::ValueChange::printVCD(mlir::raw_indented_ostream &os) const {
+  os << remainingBuffer << "\n";
+}
+
+// ===----------------------------------------------------------------------===//
+// VCDFile::VCDFile
+//===----------------------------------------------------------------------===//
+
+void VCDFile::VCDFile::printVCD(mlir::raw_indented_ostream &os) const {
+  // Print the header
+  header.printVCD(os);
+  // Print the scope and variable definitions
+  rootScope->printVCD(os);
+  // Print the value change section
+  valueChange.printVCD(os);
+}
+
+
+VCDFile::VCDFile(VCDFile::Header header, std::unique_ptr<Scope> rootScope,
+                 ValueChange valueChange)
+    : header(std::move(header)), rootScope(std::move(rootScope)),
+      valueChange(valueChange) {}
+
+
+//===----------------------------------------------------------------------===//
+// VCDLexer
+//===----------------------------------------------------------------------===//
 
 namespace {
 class VCDLexer {
@@ -319,6 +389,10 @@ void VCDLexer::skipWhitespace() {
   while (llvm::isSpace(*curPtr))
     ++curPtr;
 }
+
+//===----------------------------------------------------------------------===//
+// VCDParser
+//===----------------------------------------------------------------------===//
 
 struct VCDParser {
   bool lazyLoadValueChange = false;
@@ -574,6 +648,10 @@ struct VCDParser {
   ParseResult parse(VCDFile &file);
 };
 
+//===----------------------------------------------------------------------===//
+// SignalMapping
+//===----------------------------------------------------------------------===//
+
 SignalMapping::SignalMapping(mlir::ModuleOp moduleOp, const VCDFile &file,
                              igraph::InstanceGraph &instanceGraph,
                              igraph::InstancePathCache &instancePathCache,
@@ -634,24 +712,10 @@ LogicalResult SignalMapping::run() {
   }
 }
 
-void VCDFile::VCDFile::printVCD(mlir::raw_indented_ostream &os) const {
-  // Print the header
-  header.printVCD(os);
-  // Print the scope and variable definitions
-  rootScope->printVCD(os);
-  // Print the value change section
-  valueChange.printVCD(os);
-}
 
-void VCDFile::ValueChange::printVCD(mlir::raw_indented_ostream &os) const {
-  os << remainingBuffer;
-}
-
-VCDFile::VCDFile(VCDFile::Header header, std::unique_ptr<Scope> rootScope,
-                 ValueChange valueChange)
-    : header(std::move(header)), rootScope(std::move(rootScope)),
-      valueChange(valueChange) {}
-
+// ===----------------------------------------------------------------------===//
+// VCD Import
+// ===----------------------------------------------------------------------===//
 
 std::unique_ptr<VCDFile> circt::vcd::importVCDFile(llvm::SourceMgr &sourceMgr,
                                                    MLIRContext *context) {

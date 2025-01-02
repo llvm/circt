@@ -162,18 +162,8 @@ struct VCDFile {
              StringAttr name, ArrayAttr type)
         : Node(Node::Kind::variable), kind(kind), bitWidth(bitWidth), id(id),
           name(name), type(type) {}
-    void dump(mlir::raw_indented_ostream &os) const override {
-      llvm::errs() << "Variable: " << name << "\n";
-      llvm::errs() << "Kind: " << getKindName(kind) << "\n";
-      llvm::errs() << "BitWidth: " << bitWidth << "\n";
-      llvm::errs() << "ID: " << id.getValue() << "\n";
-      llvm::errs() << "Type: " << type << "\n";
-    }
-    void printVCD(mlir::raw_indented_ostream &os) const override {
-      os << "$var " << getKindName(kind) << " " << bitWidth << " "
-         << id.getValue() << " " << name.getValue() << " $end\n";
-    }
-
+    void dump(mlir::raw_indented_ostream &os) const override;
+    void printVCD(mlir::raw_indented_ostream &os) const override;
     StringAttr getName() const { return name; }
     StringAttr getId() const { return id; }
     int64_t getBitWidth() const { return bitWidth; }
@@ -191,10 +181,8 @@ struct VCDFile {
     // TODO: Parse header peroperly
     SmallVector<std::unique_ptr<Node>> metadata;
 
-    void printVCD(mlir::raw_indented_ostream &os) const {
-      for (auto &data : metadata)
-        data->printVCD(os);
-    }
+    void printVCD(mlir::raw_indented_ostream &os) const;
+     
   } header;
   struct ValueChange {
     // For lazy loading.
