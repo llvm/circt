@@ -64,10 +64,11 @@ firrtl.circuit "ExtractBlackBoxesSimple" attributes {annotations = [{class = "fi
   // CHECK:    firrtl.propassign %[[extractedInstances_field_0]], %extract_instances_metadata : !firrtl.class<@ExtractInstancesMetadata
   // CHECK:  }
 
-  // CHECK:  firrtl.class @ExtractInstancesSchema(in %name_in: !firrtl.string, out %name: !firrtl.string, in %path_in: !firrtl.path, out %path: !firrtl.path, in %filename_in: !firrtl.string, out %filename: !firrtl.string) {
+  // CHECK:  firrtl.class @ExtractInstancesSchema(in %name_in: !firrtl.string, out %name: !firrtl.string, in %path_in: !firrtl.path, out %path: !firrtl.path, in %filename_in: !firrtl.string, out %filename: !firrtl.string, in %inst_name_in: !firrtl.string, out %inst_name: !firrtl.string) {
   // CHECK:    firrtl.propassign %name, %name_in : !firrtl.string
   // CHECK:    firrtl.propassign %path, %path_in : !firrtl.path
   // CHECK:    firrtl.propassign %filename, %filename_in : !firrtl.string
+  // CHECK:    firrtl.propassign %inst_name, %inst_name_in : !firrtl.string
   // CHECK:  }
 
   // CHECK:  firrtl.class @ExtractInstancesMetadata(out %[[bb_0_field]]: !firrtl.class<@ExtractInstancesSchema
@@ -82,12 +83,15 @@ firrtl.circuit "ExtractBlackBoxesSimple" attributes {annotations = [{class = "fi
   // CHECK:    %[[V4:.+]] = firrtl.object.subfield %[[bb_0]][filename_in]
   // CHECK:    %[[V5:.+]] = firrtl.string "BlackBoxes.txt"
   // CHECK:    firrtl.propassign %[[V4]], %[[V5]] : !firrtl.string
+  // CHECK:    %[[V6:.+]] = firrtl.object.subfield %bb_0[inst_name_in]
+  // CHECK:    %[[V7:.+]] = firrtl.string "bb"
+  // CHECK;    firrtl.propassign %[[V6]], %[[V7]] : !firrtl.string
   // CHECK:    firrtl.propassign %[[bb_0_field]], %[[bb_0]]
   // CHECK:  }
 
   // CHECK:               emit.file "BlackBoxes.txt" {
   // CHECK-NEXT:            sv.verbatim "
-  // CHECK-SAME{LITERAL}:     bb_0 -> {{0}}.{{1}}\0A
+  // CHECK-SAME{LITERAL}:     bb_0 -> {{0}}.{{1}}.bb\0A
   // CHECK-SAME:              symbols = [
   // CHECK-SAME:                @DUTModule
   // CHECK-SAME:                #hw.innerNameRef<@DUTModule::[[WRAPPER_SYM]]>
@@ -185,8 +189,8 @@ firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "f
   }
   // CHECK:               emit.file "BlackBoxes.txt" {
   // CHECK-NEXT:            sv.verbatim "
-  // CHECK-SAME{LITERAL}:     prefix_0 -> {{0}}.{{1}}\0A
-  // CHECK-SAME{LITERAL}:     prefix_1 -> {{0}}.{{1}}\0A
+  // CHECK-SAME{LITERAL}:     prefix_0 -> {{0}}.{{1}}.bb2\0A
+  // CHECK-SAME{LITERAL}:     prefix_1 -> {{0}}.{{1}}.bb\0A
   // CHECK-SAME:              symbols = [
   // CHECK-SAME:                @DUTModule
   // CHECK-SAME:                @DUTModule::[[WRAPPER_SYM]]
@@ -289,8 +293,8 @@ firrtl.circuit "ExtractBlackBoxesIntoDUTSubmodule"  {
   }
   // CHECK:               emit.file "BlackBoxes.txt" {
   // CHECK-NEXT:            sv.verbatim "
-  // CHECK-SAME{LITERAL}:     bb_0 -> {{0}}.{{1}}\0A
-  // CHECK-SAME{LITERAL}:     bb_1 -> {{0}}.{{1}}\0A
+  // CHECK-SAME{LITERAL}:     bb_0 -> {{0}}.{{1}}.bb2\0A
+  // CHECK-SAME{LITERAL}:     bb_1 -> {{0}}.{{1}}.bb1\0A
   // CHECK-SAME:              symbols = [
   // CHECK-SAME:                @DUTModule
   // CHECK-SAME:                @DUTModule::[[WRAPPER_SYM]]
@@ -486,7 +490,7 @@ firrtl.circuit "ExtractClockGatesSimple" attributes {annotations = [{class = "si
   }
   // CHECK:               emit.file "ClockGates.txt" {
   // CHECK-NEXT:            sv.verbatim "
-  // CHECK-SAME{LITERAL}:     clock_gate_0 -> {{0}}\0A
+  // CHECK-SAME{LITERAL}:     clock_gate_0 -> {{0}}.gate\0A
   // CHECK-SAME:              symbols = [
   // CHECK-SAME:                @DUTModule
   // CHECK-SAME:              ]
@@ -563,8 +567,8 @@ firrtl.circuit "ExtractClockGatesMixed" attributes {annotations = [{class = "sif
   }
   // CHECK:               emit.file "ClockGates.txt" {
   // CHECK-NEXT:            sv.verbatim "
-  // CHECK-SAME{LITERAL}:     clock_gate_0 -> {{0}}.{{1}}\0A
-  // CHECK-SAME{LITERAL}:     clock_gate_1 -> {{0}}\0A
+  // CHECK-SAME{LITERAL}:     clock_gate_0 -> {{0}}.{{1}}.gate\0A
+  // CHECK-SAME{LITERAL}:     clock_gate_1 -> {{0}}.gate\0A
   // CHECK-SAME:              symbols = [
   // CHECK-SAME:                @DUTModule
   // CHECK-SAME:                @DUTModule::@inst
@@ -611,9 +615,9 @@ firrtl.circuit "ExtractClockGatesComposed" attributes {annotations = [
     %sifive_metadata = firrtl.object @SiFive_Metadata()
     // CHECK:  firrtl.object @SiFive_Metadata(
     // CHECK-SAME: out extractedInstances_field0: !firrtl.class<@ExtractInstancesMetadata
-    // CHECK-SAME: (out mem_wiring_0_field0: !firrtl.class<@ExtractInstancesSchema(in name_in: !firrtl.string, out name: !firrtl.string, in path_in: !firrtl.path, out path: !firrtl.path, in filename_in: !firrtl.string, out filename: !firrtl.string)>
-    // CHECK-SAME: out clock_gate_0_field1: !firrtl.class<@ExtractInstancesSchema(in name_in: !firrtl.string, out name: !firrtl.string, in path_in: !firrtl.path, out path: !firrtl.path, in filename_in: !firrtl.string, out filename: !firrtl.string)>
-    // CHECK-SAME: out clock_gate_1_field3: !firrtl.class<@ExtractInstancesSchema(in name_in: !firrtl.string, out name: !firrtl.string, in path_in: !firrtl.path, out path: !firrtl.path, in filename_in: !firrtl.string, out filename: !firrtl.string)>)>)
+    // CHECK-SAME: (out mem_wiring_0_field0: !firrtl.class<@ExtractInstancesSchema(in name_in: !firrtl.string, out name: !firrtl.string, in path_in: !firrtl.path, out path: !firrtl.path, in filename_in: !firrtl.string, out filename: !firrtl.string, in inst_name_in: !firrtl.string, out inst_name: !firrtl.string)>
+    // CHECK-SAME: out clock_gate_0_field1: !firrtl.class<@ExtractInstancesSchema(in name_in: !firrtl.string, out name: !firrtl.string, in path_in: !firrtl.path, out path: !firrtl.path, in filename_in: !firrtl.string, out filename: !firrtl.string, in inst_name_in: !firrtl.string, out inst_name: !firrtl.string)>
+    // CHECK-SAME: out clock_gate_1_field3: !firrtl.class<@ExtractInstancesSchema(in name_in: !firrtl.string, out name: !firrtl.string, in path_in: !firrtl.path, out path: !firrtl.path, in filename_in: !firrtl.string, out filename: !firrtl.string, in inst_name_in: !firrtl.string, out inst_name: !firrtl.string)>)>)
     %0 = firrtl.object.anyref_cast %sifive_metadata : !firrtl.class<@SiFive_Metadata()>
     firrtl.propassign %metadataObj, %0 : !firrtl.anyref
   }
@@ -621,15 +625,15 @@ firrtl.circuit "ExtractClockGatesComposed" attributes {annotations = [
 
   // CHECK:               emit.file "SeqMems.txt" {
   // CHECK-NEXT:            sv.verbatim "
-  // CHECK-SAME{LITERAL}:     mem_wiring_0 -> {{0}}\0A
+  // CHECK-SAME{LITERAL}:     mem_wiring_0 -> {{0}}.mem_ext\0A
   // CHECK-SAME:              symbols = [
   // CHECK-SAME:                @DUTModule
   // CHECK-SAME:              ]
 
   // CHECK:               emit.file "ClockGates.txt" {
   // CHECK-NEXT:            sv.verbatim "
-  // CHECK-SAME{LITERAL}:     clock_gate_0 -> {{0}}.{{1}}\0A
-  // CHECK-SAME{LITERAL}:     clock_gate_1 -> {{0}}\0A
+  // CHECK-SAME{LITERAL}:     clock_gate_0 -> {{0}}.{{1}}.gate\0A
+  // CHECK-SAME{LITERAL}:     clock_gate_1 -> {{0}}.gate\0A
   // CHECK-SAME:              symbols = [
   // CHECK-SAME:                @DUTModule
   // CHECK-SAME:                #hw.innerNameRef<@DUTModule::[[SYM0]]>
@@ -661,7 +665,7 @@ firrtl.circuit "ExtractSeqMemsSimple2" attributes {annotations = [{class = "sifi
   }
   // CHECK:               emit.file "SeqMems.txt" {
   // CHECK-NEXT:            sv.verbatim "
-  // CHECK-SAME{LITERAL}:     mem_wiring_0 -> {{0}}.{{1}}\0A
+  // CHECK-SAME{LITERAL}:     mem_wiring_0 -> {{0}}.{{1}}.mem_ext\0A
   // CHECK-SAME:              symbols = [
   // CHECK-SAME:                @DUTModule
   // CHECK-SAME:                @DUTModule::[[MEM_SYM]]
@@ -725,8 +729,8 @@ firrtl.circuit "InstSymConflict" {
   }
   // CHECK:               emit.file "BlackBoxes.txt" {
   // CHECK-NEXT:            sv.verbatim "
-  // CHECK-SAME{LITERAL}:     bb_1 -> {{0}}.{{1}}\0A
-  // CHECK-SAME{LITERAL}:     bb_0 -> {{0}}.{{2}}\0A
+  // CHECK-SAME{LITERAL}:     bb_1 -> {{0}}.{{1}}.bb\0A
+  // CHECK-SAME{LITERAL}:     bb_0 -> {{0}}.{{2}}.bb\0A
   // CHECK-SAME:              symbols = [
   // CHECK-SAME:                @DUTModule
   // CHECK-SAME:                #hw.innerNameRef<@DUTModule::@mod1>
