@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/Moore/MooreTypes.h"
+#include "slang/ast/types/AllTypes.h"
 #include "slang/syntax/AllSyntax.h"
 
 using namespace circt;
@@ -36,7 +38,15 @@ struct TypeVisitor {
   }
 
   Type visit(const slang::ast::FloatingType &type) {
-    return moore::RealType::get(context.getContext());
+    switch(type.floatKind) {
+    case slang::ast::FloatingType::ShortReal:
+      return moore::ShortRealType::get(context.getContext());
+    case slang::ast::FloatingType::Real:
+    case slang::ast::FloatingType::RealTime:
+      return moore::RealType::get(context.getContext());
+    default:
+      return {};
+    }
   }
 
   Type visit(const slang::ast::PredefinedIntegerType &type) {

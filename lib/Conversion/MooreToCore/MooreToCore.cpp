@@ -1477,6 +1477,18 @@ struct FormatIntOpConversion : public OpConversionPattern<FormatIntOp> {
   }
 };
 
+struct FormatFloatOpConversion : public OpConversionPattern<FormatFloatOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FormatFloatOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // TODO: These should honor the width, alignment, and padding.
+    return success();
+  }
+};
+
+
 struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -1730,6 +1742,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
     FormatLiteralOpConversion,
     FormatConcatOpConversion,
     FormatIntOpConversion,
+    FormatFloatOpConversion,
     DisplayBIOpConversion
   >(typeConverter, context);
   // clang-format on

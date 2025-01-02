@@ -141,6 +141,9 @@ struct FormatStringParser {
       return mlir::emitError(argLoc)
              << "expression cannot be formatted as string";
 
+    case 'f':
+      return emitFloat(arg, options);
+
     default:
       return mlir::emitError(loc)
              << "unsupported format specifier `" << fullSpecifier << "`";
@@ -179,6 +182,13 @@ struct FormatStringParser {
 
     fragments.push_back(builder.create<moore::FormatIntOp>(
         loc, value, format, width, alignment, padding));
+    return success();
+  }
+
+  LogicalResult emitFloat(const slang::ast::Expression &arg, const FormatOptions &options) {
+    auto value = context.convertRvalueExpression(arg);
+    
+    fragments.push_back(builder.create<moore::FormatFloatOp>(loc, value));
     return success();
   }
 

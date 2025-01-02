@@ -183,6 +183,17 @@ OpFoldResult FormatCharOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+OpFoldResult FormatFloatOp::fold(FoldAdaptor adaptor) {
+  if (auto floatAttr = llvm::dyn_cast_or_null<FloatAttr>(adaptor.getValue())) {
+    SmallVector<char, 32> strBuf;
+    floatAttr.getValue().toString(strBuf);
+    return StringAttr::get(getContext(), Twine(strBuf));
+  }
+
+  return {};
+}
+
+
 static StringAttr concatLiterals(MLIRContext *ctxt, ArrayRef<StringRef> lits) {
   assert(!lits.empty() && "No literals to concatenate");
   if (lits.size() == 1)
