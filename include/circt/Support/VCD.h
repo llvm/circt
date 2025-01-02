@@ -106,6 +106,13 @@ struct VCDFile {
         data->printVCD(os);
     }
   } header;
+  struct ValueChange {
+    // For lazy loading.
+    StringRef remainingBuffer;
+    ValueChange(StringRef remainingBuffer) : remainingBuffer(remainingBuffer) {}
+    void printVCD(mlir::raw_indented_ostream &os) const;
+    void dump(mlir::raw_indented_ostream &os) const;
+  } valueChange;
 
   VCDFile(VCDFile::Header header, std::unique_ptr<Scope> rootScope,
           ValueChange valueChange);
@@ -114,9 +121,6 @@ struct VCDFile {
   void printVCD(mlir::raw_indented_ostream &os) const;
 
   std::unique_ptr<Scope> rootScope;
-  ValueChange valueChange {
-
-  }
 };
 
 class VCDLexer {

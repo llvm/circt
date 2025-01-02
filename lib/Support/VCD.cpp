@@ -20,16 +20,25 @@ VCDToken::Kind VCDToken::getKind() const { return kind; }
 bool VCDToken::is(Kind K) const { return kind == K; }
 bool VCDToken::isCommand() const { return spelling.starts_with("$"); }
 
-SMLoc VCDToken::getLoc() const { 
-  return SMLoc::getFromPointer(spelling.data()); 
+llvm::SMLoc VCDToken::getLoc() const { 
+  return llvm::SMLoc::getFromPointer(spelling.data()); 
 }
 
-SMLoc VCDToken::getEndLoc() const {
-  return SMLoc::getFromPointer(spelling.data() + spelling.size());
+llvm::SMLoc VCDToken::getEndLoc() const {
+  return llvm::SMLoc::getFromPointer(spelling.data() + spelling.size());
 }
 
-SMRange VCDToken::getLocRange() const { 
-  return SMRange(getLoc(), getEndLoc()); 
+llvm::SMRange VCDToken::getLocRange() const { 
+  return llvm::SMRange(getLoc(), getEndLoc()); 
+}
+
+static StringAttr getMainBufferNameIdentifier(const llvm::SourceMgr &sourceMgr,
+                                              MLIRContext *context) {
+  auto mainBuffer = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
+  StringRef bufferName = mainBuffer->getBufferIdentifier();
+  if (bufferName.empty())
+    bufferName = "<unknown>";
+  return StringAttr::get(context, bufferName);
 }
 
 // VCDLexer implementation 
@@ -40,13 +49,9 @@ VCDLexer::VCDLexer(const llvm::SourceMgr &sourceMgr, mlir::MLIRContext *context)
       curPtr(curBuffer.begin()),
       curToken(lexTokenImpl()) {}
 
-// Move all the lexer implementation methods from the header...
-
 // VCDParser implementation
 VCDParser::VCDParser(mlir::MLIRContext *context, VCDLexer &lexer)
     : context(context), lexer(lexer) {}
-
-// Move all the parser implementation methods from the header...
 
 // SignalMapping implementation
 SignalMapping::SignalMapping(mlir::ModuleOp moduleOp, const VCDFile &file,
@@ -58,10 +63,7 @@ SignalMapping::SignalMapping(mlir::ModuleOp moduleOp, const VCDFile &file,
     : moduleOp(moduleOp), topScope(topScope), topModuleName(topModuleName),
       file(file), instanceGraph(instanceGraph),
       instancePathCache(instancePathCache) {
-  // Move constructor implementation from header...
 }
-
-// Move remaining SignalMapping implementation methods...
 
 std::unique_ptr<VCDFile> importVCDFile(llvm::SourceMgr &sourceMgr,
                                        MLIRContext *context) {
@@ -70,5 +72,5 @@ std::unique_ptr<VCDFile> importVCDFile(llvm::SourceMgr &sourceMgr,
   std::unique_ptr<VCDFile> file;
   if (parser.parseVCDFile(file))
     return nullptr;
-  return std::move(file);
+  return file;
 }
