@@ -70,6 +70,42 @@ void VCDFile::Metadata::printVCD(mlir::raw_indented_ostream &os) const {
 //===----------------------------------------------------------------------===//
 // VCDFile::Scope
 //===----------------------------------------------------------------------===//
+
+static StringRef getScopeKindName(VCDFile::Scope::ScopeType kind) {
+  switch (kind) {
+  case VCDFile::Scope::module:
+    return "module";
+  case VCDFile::Scope::begin:
+    return "begin";
+  }
+  llvm::report_fatal_error("unknown scope kind");
+}
+
+bool VCDFile::Scope::classof(const Node *e) {
+  return e->getKind() == Kind::scope;
+}
+
+void VCDFile::Scope::printVCD(mlir::raw_indented_ostream &os) const {
+  os << "$scope " << getScopeKindName(kind) << " " << name.getValue() << "\n";
+  {
+    auto scope = os.scope();
+    for (auto &[_, child] : children)
+      child->printVCD(os);
+  }
+  os << "$upscope $end\n";
+}
+
+void VCDFile::Scope::dump(mlir::raw_indented_ostream &os) const {
+  os << "Scope: " << name << "\n";
+  for (auto &[_, child] : children) {
+    child->dump(os);
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// VCDFile::Variable
+//===----------------------------------------------------------------------===//
+
 static StringRef getKindName(VCDFile::Variable::VariableType kind) {
   switch (kind) {
   case VCDFile::Variable::wire:
@@ -84,28 +120,6 @@ static StringRef getKindName(VCDFile::Variable::VariableType kind) {
     return "time";
   }
 }
-
-bool VCDFile::Scope::classof(const Node *e) {
-  return e->getKind() == Kind::scope;
-}
-
-void VCDFile::Scope::printVCD(mlir::raw_indented_ostream &os) const {
-  os << "Scope: " << name << "\n";
-  for (auto &[_, child] : children) {
-    child->printVCD(os);
-  }
-}
-
-void VCDFile::Scope::dump(mlir::raw_indented_ostream &os) const {
-  os << "Scope: " << name << "\n";
-  for (auto &[_, child] : children) {
-    child->dump(os);
-  }
-}
-
-//===----------------------------------------------------------------------===//
-// VCDFile::Variable
-//===----------------------------------------------------------------------===//
 
 bool VCDFile::Variable::classof(const Node *e) {
   return e->getKind() == Kind::variable;
