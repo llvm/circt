@@ -34,51 +34,6 @@
 namespace circt {
 namespace vcd {
 
-class VCDToken {
-public:
-  enum Kind {
-    // Markers
-    eof, // End of file
-    error,
-
-    // Basic tokens
-    identifier,   // Signal identifiers
-    command,      // $... commands
-    time_value,   // #... time values
-    scalar_value, // 0,1,x,z etc
-    vector_value, // b... or B...
-    real_value,   // r... or R...
-
-    // Commands
-    kw_date,
-    kw_version,
-    kw_timescale,
-    kw_scope,
-    kw_var,
-    kw_upscope,
-    kw_enddefinitions,
-    kw_dumpvars,
-    kw_comment,
-    kw_end,
-  };
-
-  VCDToken() = default;
-  VCDToken(Kind kind, StringRef spelling);
-
-  StringRef getSpelling() const;
-  Kind getKind() const;
-  bool is(Kind K) const;
-  bool isCommand() const;
-
-  llvm::SMLoc getLoc() const;
-  llvm::SMLoc getEndLoc() const;
-  llvm::SMRange getLocRange() const;
-
-private:
-  Kind kind;
-  StringRef spelling;
-};
-
 struct VCDFile {
   struct Node {
     // LLVM RTTI kind.
@@ -101,15 +56,21 @@ struct VCDFile {
   struct Metadata : Node {
     // Represent generic metadata command.
     // Used for $date, $version, $timescale and $comment.
+    enum MetadataKind {
+      date,
+      version,
+      timescale,
+      comment,
+    };
 
     // Implement LLVM RTTI.
     static bool classof(const Node *e);
-    Metadata(VCDToken command, ArrayAttr values);
+    Metadata(StringAttr command, ArrayAttr values);
     void printVCD(mlir::raw_indented_ostream &os) const override;
     void dump(mlir::raw_indented_ostream &os) const override;
 
   private:
-    VCDToken command;
+    StringAttr command;
     ArrayAttr values;
   };
 
@@ -143,7 +104,6 @@ struct VCDFile {
   struct Variable : Node {
     // Represent a variable which corresponds to
     // `$var type width id name[$type] $end`
-
     enum VariableType {
       wire,
       reg,
