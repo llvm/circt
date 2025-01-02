@@ -28,4 +28,9 @@ def LowerDPIFunc : Pass<"sim-lower-dpi-func", "mlir::ModuleOp"> {
   let dependentDialects = ["mlir::func::FuncDialect", "mlir::LLVM::LLVMDialect"];
 }
 
+def SerializeTriggers : Pass<"sim-serialize-triggers", "hw::HWModuleOp"> {
+  let summary = "TODO";
+}
+
+
 #endif // CIRCT_DIALECT_SIM_SEQPASSES

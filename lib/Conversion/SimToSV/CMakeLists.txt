@@ -1,5 +1,7 @@
 add_circt_conversion_library(CIRCTSimToSV
+  PrintsToSV.cpp
   SimToSV.cpp
+  TriggersToSV.cpp
 
   DEPENDS
   CIRCTConversionPassIncGen
