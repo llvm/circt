@@ -30,6 +30,26 @@ def PrintHWModuleGraph : Pass<"hw-print-module-graph", "mlir::ModuleOp"> {
   ];
 }
 
+def HWOutlineOps : Pass<"hw-outline-ops", "mlir::ModuleOp"> {
+  let summary = "Outlines operations into separate HW modules.";
+  let description = [{
+    This pass outlines all of the selected operations into separate modules,
+    uniquifying the modules. This is useful for debugging and cutting down RTL
+    size for certain high level ops.
+
+    Notes:
+      - Does not support ops with regions.
+      - In uniquifying the modules, dialect attributes are ignored. Only
+        properties are respected.
+      - Dialect attributes are, however, inherited by the module instances.
+  }];
+
+  let options = [
+    ListOption<"opNames", "op-names", "std::string",
+      "List of operation names to outline. If empty, this pass is a no-op.">
+  ];
+}
+
 def FlattenIO : Pass<"hw-flatten-io", "mlir::ModuleOp"> {
   let summary = "Flattens hw::Structure typed in- and output ports.";
   let constructor =  "circt::hw::createFlattenIOPass()";
