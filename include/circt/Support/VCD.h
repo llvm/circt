@@ -81,6 +81,7 @@ private:
 
 struct VCDFile {
   struct Node {
+    // LLVM RTTI kind.
     enum Kind {
       metadata,
       scope,
@@ -91,11 +92,16 @@ struct VCDFile {
     Node(Kind kind) : kind(kind) {}
 
     virtual ~Node() = default;
+    // Dump the node to the stream.
     virtual void dump(mlir::raw_indented_ostream &os) const = 0;
+    // Print it in VCD format.
     virtual void printVCD(mlir::raw_indented_ostream &os) const = 0;
   };
 
   struct Metadata : Node {
+    // Represent generic metadata command.
+    // Used for $date, $version, $timescale and $comment.
+
     // Implement LLVM RTTI.
     static bool classof(const Node *e);
     Metadata(VCDToken command, ArrayAttr values);
@@ -108,6 +114,9 @@ struct VCDFile {
   };
 
   struct Scope : Node {
+    // Represent a scope container which corresponds to
+    // `$scope name $end {...} $upscope $end`
+
     // SV 21.7.2.1
     enum ScopeType {
       module,
@@ -132,6 +141,9 @@ struct VCDFile {
   };
 
   struct Variable : Node {
+    // Represent a variable which corresponds to
+    // `$var type width id name[$type] $end`
+
     enum VariableType {
       wire,
       reg,
@@ -142,21 +154,6 @@ struct VCDFile {
 
     // Implement LLVM RTTI.
     static bool classof(const Node *e);
-
-    static StringRef getKindName(VariableType kind) {
-      switch (kind) {
-      case wire:
-        return "wire";
-      case reg:
-        return "reg";
-      case integer:
-        return "integer";
-      case real:
-        return "real";
-      case time:
-        return "time";
-      }
-    }
 
     Variable(VariableType kind, int64_t bitWidth, StringAttr id,
              StringAttr name, ArrayAttr type)
@@ -182,8 +179,9 @@ struct VCDFile {
     SmallVector<std::unique_ptr<Node>> metadata;
 
     void printVCD(mlir::raw_indented_ostream &os) const;
-     
+
   } header;
+
   struct ValueChange {
     // For lazy loading.
     StringRef remainingBuffer;
