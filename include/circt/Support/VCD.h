@@ -179,8 +179,7 @@ struct VCDFile {
     SmallVector<std::unique_ptr<Node>> metadata;
 
     void printVCD(mlir::raw_indented_ostream &os) const;
-
-  } header;
+  };
 
   struct ValueChange {
     // For lazy loading.
@@ -188,7 +187,7 @@ struct VCDFile {
     ValueChange(StringRef remainingBuffer) : remainingBuffer(remainingBuffer) {}
     void printVCD(mlir::raw_indented_ostream &os) const;
     void dump(mlir::raw_indented_ostream &os) const;
-  } valueChange;
+  };
 
   VCDFile(VCDFile::Header header, std::unique_ptr<Scope> rootScope,
           ValueChange valueChange);
@@ -196,7 +195,10 @@ struct VCDFile {
   void dump(mlir::raw_indented_ostream &os) const;
   void printVCD(mlir::raw_indented_ostream &os) const;
 
+private:
+  Header header;
   std::unique_ptr<Scope> rootScope;
+  ValueChange valueChange;
 };
 
 struct SignalMapping {

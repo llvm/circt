@@ -431,6 +431,7 @@ struct VCDParser {
   ParseResult parseVariable(std::unique_ptr<VCDFile::Variable> &variable);
   ParseResult parseScopeKind(VCDFile::Scope::ScopeType &kind);
   bool isDone();
+
   ParseResult parseEnd();
   ParseResult parseScope(std::unique_ptr<VCDFile::Scope> &result);
   ParseResult parseStringUntilEnd(ArrayAttr &result);
