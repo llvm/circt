@@ -1449,7 +1449,7 @@ circuit Layers:
 
 ;// -----
 ; CHECK-LABEL: firrtl.circuit "BasicProps"
-FIRRTL version 4.1.0
+FIRRTL version 4.2.0
 circuit BasicProps :
   public module BasicProps :
   ; CHECK-LABEL: module private @Integer
@@ -1655,7 +1655,7 @@ circuit WireOfProbesAndNames:
     wire probe : Probe<UInt<1>>
 
 ;// -----
-FIRRTL version 4.1.0
+FIRRTL version 4.2.0
 
 ; CHECK-LABEL: circuit "AnyRef"
 circuit AnyRef:
