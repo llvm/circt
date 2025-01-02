@@ -520,7 +520,7 @@ struct VerbatimType {
 
 /// A sum type representing either a type encoded as a string (VerbatimType)
 /// or an actual mlir::Type.
-typedef std::variant<VerbatimType, Type> TypeSum;
+using TypeSum = std::variant<VerbatimType, Type>;
 
 /// Stores the information content of an ExtractGrandCentralAnnotation.
 struct ExtractionInfo {
