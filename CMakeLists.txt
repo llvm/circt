@@ -558,14 +558,17 @@ llvm_canonicalize_cmake_booleans(CIRCT_SLANG_BUILD_FROM_SOURCE)
 if(CIRCT_SLANG_FRONTEND_ENABLED)
   message(STATUS "slang Verilog frontend is enabled")
   if(CIRCT_SLANG_BUILD_FROM_SOURCE)
+    # slang requires C++20
+    set(CMAKE_CXX_STANDARD 20)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
     # Build slang as part of CIRCT (see https://sv-lang.com/building.html)
     message(STATUS "Building slang from source")
     include(FetchContent)
     FetchContent_Declare(
       slang
       GIT_REPOSITORY https://github.com/MikePopoloski/slang.git
-      GIT_TAG v3.0
-      GIT_SHALLOW ON)
+      GIT_TAG bad0d6ba3dec20355b0156c535bbddf2f926ab37)
     set(FETCHCONTENT_TRY_FIND_PACKAGE_MODE "NEVER")
 
     # Force Slang to be built as a static library to avoid messing around with
@@ -580,6 +583,7 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
       set(CMAKE_CXX_FLAGS "")
     endif ()
     set(BUILD_SHARED_LIBS OFF)
+    set(SLANG_USE_MIMALLOC OFF)
     FetchContent_MakeAvailable(slang)
 
     set(CMAKE_CXX_FLAGS ${ORIGINAL_CMAKE_CXX_FLAGS})
@@ -588,7 +592,6 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     if(BUILD_SHARED_LIBS)
       set_target_properties(slang_slang PROPERTIES POSITION_INDEPENDENT_CODE ON)
       set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
-      set_target_properties(unordered_dense PROPERTIES POSITION_INDEPENDENT_CODE ON)
     endif()
 
     # The following feels *very* hacky, but CMake complains about the
@@ -597,17 +600,24 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     # statically link slang into the CIRCTImportVerilog library, but seems to be
     # harder than it ought to be.
     set_property(
-      GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang unordered_dense fmt)
+      GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang fmt)
     
     # Disable the installation of headers coming from third-party libraries. We
     # won't use those APIs directly. Just make them static libraries for the sake
     # of running slang normally.
     set_target_properties(fmt PROPERTIES PUBLIC_HEADER "")
-    set_target_properties(unordered_dense PROPERTIES PUBLIC_HEADER "")
 
-    install(TARGETS slang_slang unordered_dense fmt EXPORT CIRCTTargets)
+    install(TARGETS slang_slang fmt EXPORT CIRCTTargets)
+
+    # Match the behavior of slang_slang, which installs its own vendored
+    # boost_unordered if it does not a system-wide boost installation.
+    find_package(Boost 1.82.0 QUIET)
+    if(NOT Boost_FOUND)
+      set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS boost_unordered)
+      install(TARGETS boost_unordered EXPORT CIRCTTargets)
+    endif()
   else()
-    find_package(slang 3.0 REQUIRED)
+    find_package(slang 7.0 REQUIRED)
   endif()
 endif()
 
