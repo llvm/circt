@@ -18,6 +18,7 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
 #include "mlir/IR/Diagnostics.h"
@@ -107,6 +108,7 @@ static void populateSynthesisPipeline(PassManager &pm) {
   });
 
   auto &mpm = pm.nest<hw::HWModuleOp>();
+  mpm.addPass(circt::hw::createHWAggregateToCombPass());
   mpm.addPass(circt::createConvertCombToAIG());
   mpm.addPass(createCSEPass());
   if (untilReached(UntilAIGLowering))

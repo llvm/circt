@@ -87,4 +87,16 @@ def FooWires : Pass<"hw-foo-wires", "hw::HWModuleOp"> {
   let constructor = "circt::hw::createFooWiresPass()";
 }
 
+def HWAggregateToComb : Pass<"hw-aggregate-to-comb", "hw::HWModuleOp"> {
+  let summary = "Lower aggregate operations to comb operations";
+  let constructor = "circt::hw::createHWAggregateToCombPass()";
+
+  let description = [{
+    This pass lowers aggregate *operations* to comb operations within modules.
+    This pass does not lower ports, as ports are handled by FlattenIO. This pass
+    will also change the behavior of out-of-bounds access of arrays.
+  }];
+  let dependentDialects = ["comb::CombDialect"];
+}
+
 #endif // CIRCT_DIALECT_HW_PASSES_TD
