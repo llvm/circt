@@ -328,6 +328,119 @@ struct CombMulOpConversion : OpConversionPattern<MulOp> {
   }
 };
 
+struct CombICmpOpConversion : OpConversionPattern<ICmpOp> {
+  using OpConversionPattern<ICmpOp>::OpConversionPattern;
+  static Value constructUnsignedCompare(ICmpOp op, ArrayRef<Value> aBits,
+                                        ArrayRef<Value> bBits, bool isLess,
+                                        bool includeEq,
+                                        ConversionPatternRewriter &rewriter) {
+    // Construct following unsigned comparison expressions.
+    // a <= b  ==> (~a[n] &  b[n]) | (a[n] == b[n] & a[n-1:0] <= b[n-1:0])
+    // a <  b  ==> (~a[n] &  b[n]) | (a[n] == b[n] & a[n-1:0] < b[n-1:0])
+    // a >= b  ==> ( a[n] & ~b[n]) | (a[n] == b[n] & a[n-1:0] >= b[n-1:0])
+    // a >  b  ==> ( a[n] & ~b[n]) | (a[n] == b[n] & a[n-1:0] > b[n-1:0])
+    Value acc =
+        rewriter.create<hw::ConstantOp>(op.getLoc(), op.getType(), includeEq);
+
+    for (auto [aBit, bBit] : llvm::zip(aBits, bBits)) {
+      auto aBitXorBBit =
+          rewriter.createOrFold<comb::XorOp>(op.getLoc(), aBit, bBit, true);
+      auto aEqualB = rewriter.createOrFold<aig::AndInverterOp>(
+          op.getLoc(), aBitXorBBit, true);
+      auto pred = rewriter.createOrFold<aig::AndInverterOp>(
+          op.getLoc(), aBit, bBit, isLess, !isLess);
+
+      auto aBitAndBBit = rewriter.createOrFold<comb::AndOp>(
+          op.getLoc(), ValueRange{aEqualB, acc}, true);
+      acc = rewriter.createOrFold<comb::OrOp>(op.getLoc(), pred, aBitAndBBit,
+                                              true);
+    }
+    return acc;
+  }
+
+  LogicalResult
+  matchAndRewrite(ICmpOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto lhs = adaptor.getLhs();
+    auto rhs = adaptor.getRhs();
+
+    switch (op.getPredicate()) {
+    default:
+      return failure();
+
+    case ICmpPredicate::eq:
+    case ICmpPredicate::ceq: {
+      // a == b  ==> ~(a[n] ^ b[n]) & ~(a[n-1] ^ b[n-1]) & ...
+      auto xorOp = rewriter.createOrFold<comb::XorOp>(op.getLoc(), lhs, rhs);
+      auto xorBits = extractBits(rewriter, xorOp);
+      SmallVector<bool> allInverts(xorBits.size(), true);
+      rewriter.replaceOpWithNewOp<aig::AndInverterOp>(op, xorBits, allInverts);
+      return success();
+    }
+
+    case ICmpPredicate::ne:
+    case ICmpPredicate::cne: {
+      // a != b  ==> (a[n] ^ b[n]) | (a[n-1] ^ b[n-1]) | ...
+      auto xorOp = rewriter.createOrFold<comb::XorOp>(op.getLoc(), lhs, rhs);
+      rewriter.replaceOpWithNewOp<comb::OrOp>(op, extractBits(rewriter, xorOp),
+                                              true);
+      return success();
+    }
+
+    case ICmpPredicate::uge:
+    case ICmpPredicate::ugt:
+    case ICmpPredicate::ule:
+    case ICmpPredicate::ult: {
+      bool isLess = op.getPredicate() == ICmpPredicate::ult ||
+                    op.getPredicate() == ICmpPredicate::ule;
+      bool includeEq = op.getPredicate() == ICmpPredicate::uge ||
+                       op.getPredicate() == ICmpPredicate::ule;
+      auto aBits = extractBits(rewriter, lhs);
+      auto bBits = extractBits(rewriter, rhs);
+      rewriter.replaceOp(op, constructUnsignedCompare(op, aBits, bBits, isLess,
+                                                      includeEq, rewriter));
+      return success();
+    }
+    case ICmpPredicate::slt:
+    case ICmpPredicate::sle:
+    case ICmpPredicate::sgt:
+    case ICmpPredicate::sge: {
+      if (lhs.getType().getIntOrFloatBitWidth() == 0)
+        return rewriter.notifyMatchFailure(
+            op.getLoc(), "i0 signed comparison is unsupported");
+      bool isLess = op.getPredicate() == ICmpPredicate::slt ||
+                    op.getPredicate() == ICmpPredicate::sle;
+      bool includeEq = op.getPredicate() == ICmpPredicate::sge ||
+                       op.getPredicate() == ICmpPredicate::sle;
+
+      auto aBits = extractBits(rewriter, lhs);
+      auto bBits = extractBits(rewriter, rhs);
+
+      // Get a sign bit
+      auto signA = aBits.back();
+      auto signB = bBits.back();
+
+      // Compare magnitudes (all bits except sign)
+      auto sameSignResult = constructUnsignedCompare(
+          op, ArrayRef(aBits).drop_back(), ArrayRef(bBits).drop_back(), isLess,
+          includeEq, rewriter);
+
+      // XOR of signs: true if signs are different
+      auto signsDiffer =
+          rewriter.create<comb::XorOp>(op.getLoc(), signA, signB);
+
+      // Result when signs are different
+      Value diffSignResult = isLess ? signA : signB;
+
+      // Final result: choose based on whether signs differ
+      rewriter.replaceOpWithNewOp<comb::MuxOp>(op, signsDiffer, diffSignResult,
+                                               sameSignResult);
+      return success();
+    }
+    }
+  }
+};
+
 struct CombParityOpConversion : OpConversionPattern<ParityOp> {
   using OpConversionPattern<ParityOp>::OpConversionPattern;
 
@@ -363,6 +476,7 @@ static void populateCombToAIGConversionPatterns(RewritePatternSet &patterns) {
       CombMuxOpConversion, CombParityOpConversion,
       // Arithmetic Ops
       CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
+      CombICmpOpConversion,
       // Variadic ops that must be lowered to binary operations
       CombLowerVariadicOp<XorOp>, CombLowerVariadicOp<AddOp>,
       CombLowerVariadicOp<MulOp>>(patterns.getContext());

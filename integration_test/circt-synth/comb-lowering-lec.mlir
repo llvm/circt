@@ -41,3 +41,31 @@ hw.module @mul(in %arg0: i3, in %arg1: i3, in %arg2: i3, out add: i3) {
   %0 = comb.mul %arg0, %arg1, %arg2 : i3
   hw.output %0 : i3
 }
+
+// RUN: circt-lec %t.mlir %s -c1=icmp_eq_ne -c2=icmp_eq_ne --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_ICMP_EQ_NE
+// COMB_ICMP_EQ_NE: c1 == c2
+hw.module @icmp_eq_ne(in %lhs: i3, in %rhs: i3, out out_eq: i1, out out_ne: i1) {
+  %eq = comb.icmp eq %lhs, %rhs : i3
+  %ne = comb.icmp ne %lhs, %rhs : i3
+  hw.output %eq, %ne : i1, i1
+}
+
+// RUN: circt-lec %t.mlir %s -c1=icmp_unsigned_compare -c2=icmp_unsigned_compare --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_ICMP_UNSIGNED_COMPARE
+// COMB_ICMP_UNSIGNED_COMPARE: c1 == c2
+hw.module @icmp_unsigned_compare(in %lhs: i3, in %rhs: i3, out out_ugt: i1, out out_uge: i1, out out_ult: i1, out out_ule: i1) {
+  %ugt = comb.icmp ugt %lhs, %rhs : i3
+  %uge = comb.icmp uge %lhs, %rhs : i3
+  %ult = comb.icmp ult %lhs, %rhs : i3
+  %ule = comb.icmp ule %lhs, %rhs : i3
+  hw.output %ugt, %uge, %ult, %ule : i1, i1, i1, i1
+}
+
+// RUN: circt-lec %t.mlir %s -c1=icmp_signed_compare -c2=icmp_signed_compare --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_ICMP_SIGNED_COMPARE
+// COMB_ICMP_SIGNED_COMPARE: c1 == c2
+hw.module @icmp_signed_compare(in %lhs: i3, in %rhs: i3, out out_sgt: i1, out out_sge: i1, out out_slt: i1, out out_sle: i1) {
+  %sgt = comb.icmp sgt %lhs, %rhs : i3
+  %sge = comb.icmp sge %lhs, %rhs : i3
+  %slt = comb.icmp slt %lhs, %rhs : i3
+  %sle = comb.icmp sle %lhs, %rhs : i3
+  hw.output %sgt, %sge, %slt, %sle : i1, i1, i1, i1
+}
