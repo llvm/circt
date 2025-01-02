@@ -71,3 +71,12 @@ hw.module @shift5(in %lhs: i5, in %rhs: i5, out out_shl: i5, out out_shr: i5, ou
   %2 = comb.shrs %lhs, %rhs : i5
   hw.output %0, %1, %2 : i5, i5, i5
 }
+
+// RUN: circt-lec %t.mlir %s -c1=array -c2=array --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_ARRAY
+// COMB_ARRAY: c1 == c2
+hw.module @array(in %arg0: i2, in %arg1: i2, in %arg2: i2, in %arg3: i2, in %sel: i2, out out: i2) {
+  %0 = hw.array_create %arg0, %arg1, %arg2, %arg3 : i2
+  %1 = hw.array_get %0[%sel] : !hw.array<4xi2>, i2
+  // TODO: Verify aggregate constant.
+  hw.output %1 : i2
+}

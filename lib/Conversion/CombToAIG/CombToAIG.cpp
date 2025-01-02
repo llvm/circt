@@ -573,6 +573,124 @@ private:
   }
 };
 
+struct HWArrayCreateOpConversion : OpConversionPattern<hw::ArrayCreateOp> {
+  using OpConversionPattern<hw::ArrayCreateOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(hw::ArrayCreateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Lower to concat.
+    auto inputs = adaptor.getInputs();
+    SmallVector<Value> results;
+    for (auto input : inputs)
+      results.push_back(rewriter.getRemappedValue(input));
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, results);
+    return success();
+  }
+};
+
+struct HWAggregateConstantOpConversion
+    : OpConversionPattern<hw::AggregateConstantOp> {
+  using OpConversionPattern<hw::AggregateConstantOp>::OpConversionPattern;
+
+  static LogicalResult peelAttribute(Location loc, Attribute attr,
+                                     ConversionPatternRewriter &rewriter,
+                                     SmallVector<Value> &results) {
+    if (auto array = dyn_cast<ArrayAttr>(attr)) {
+      for (auto elem : array) {
+        if (failed(peelAttribute(loc, elem, rewriter, results)))
+          return failure();
+      }
+
+      return success();
+    }
+
+    if (auto intAttr = dyn_cast<IntegerAttr>(attr)) {
+      results.push_back(rewriter.create<hw::ConstantOp>(loc, intAttr));
+      return success();
+    }
+
+    return failure();
+  }
+
+  LogicalResult
+  matchAndRewrite(hw::AggregateConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Lower to concat.
+    SmallVector<Value> results;
+    if (failed(peelAttribute(op.getLoc(), adaptor.getFieldsAttr(), rewriter,
+                             results)))
+      return failure();
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, results);
+    return success();
+  }
+};
+
+struct HWArrayGetOpConversion : OpConversionPattern<hw::ArrayGetOp> {
+  using OpConversionPattern<hw::ArrayGetOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(hw::ArrayGetOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (!op.getType().isInteger())
+      return rewriter.notifyMatchFailure(op.getLoc(),
+                                         "only 1-d vector is supported now");
+    SmallVector<Value> results;
+    auto elemType =
+        cast<hw::ArrayType>(op.getInput().getType()).getElementType();
+
+    auto e = cast<hw::ArrayType>(op.getInput().getType()).getNumElements();
+
+    auto lowered = rewriter.getRemappedValue(op.getInput());
+    if (!lowered)
+      return failure();
+
+    for (size_t i = 0; i < e; ++i)
+      results.push_back(rewriter.createOrFold<comb::ExtractOp>(
+          op.getLoc(), lowered, i * elemType.getIntOrFloatBitWidth(),
+          elemType.getIntOrFloatBitWidth()));
+
+    auto bits = extractBits(rewriter, op.getIndex());
+    auto result = constructMuxTree(
+        rewriter, op.getLoc(),
+        hw::type_cast<hw::ArrayType>(op.getInput().getType()).getNumElements(),
+        bits, results, results.back());
+
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
+/// A type converter is needed to perform the in-flight materialization of "raw"
+/// (non-ESI channel) types to their ESI channel correspondents. This comes into
+/// effect when backedges exist in the input IR.
+class CombToAIGTypeConverter : public TypeConverter {
+public:
+  CombToAIGTypeConverter() {
+    addConversion([](Type type) -> Type { return type; });
+    addConversion([](hw::ArrayType t) -> Type {
+      return IntegerType::get(t.getContext(), hw::getBitWidth(t));
+    });
+    addTargetMaterialization([](mlir::OpBuilder &builder, mlir::Type resultType,
+                                mlir::ValueRange inputs,
+                                mlir::Location loc) -> mlir::Value {
+      if (inputs.size() != 1)
+        return Value();
+
+      return builder.create<hw::BitcastOp>(loc, resultType, inputs[0])
+          ->getResult(0);
+    });
+
+    addSourceMaterialization([](mlir::OpBuilder &builder, mlir::Type resultType,
+                                mlir::ValueRange inputs,
+                                mlir::Location loc) -> mlir::Value {
+      if (inputs.size() != 1)
+        return Value();
+
+      return builder.create<hw::BitcastOp>(loc, resultType, inputs[0])
+          ->getResult(0);
+    });
+  }
+};
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -588,7 +706,9 @@ struct ConvertCombToAIGPass
 };
 } // namespace
 
-static void populateCombToAIGConversionPatterns(RewritePatternSet &patterns) {
+static void
+populateCombToAIGConversionPatterns(RewritePatternSet &patterns,
+                                    CombToAIGTypeConverter &typeConverter) {
   patterns.add<
       // Bitwise Logical Ops
       CombAndOpConversion, CombOrOpConversion, CombXorOpConversion,
@@ -603,9 +723,11 @@ static void populateCombToAIGConversionPatterns(RewritePatternSet &patterns) {
                             /*isSigned=*/false>,
       CombShiftOpConversion<comb::ShrSOp, /*isLeftShift=*/false,
                             /*isSigned=*/true>,
+      // Array Ops
+      HWArrayGetOpConversion, HWArrayCreateOpConversion,
       // Variadic ops that must be lowered to binary operations
       CombLowerVariadicOp<XorOp>, CombLowerVariadicOp<AddOp>,
-      CombLowerVariadicOp<MulOp>>(patterns.getContext());
+      CombLowerVariadicOp<MulOp>>(typeConverter, patterns.getContext());
 }
 
 void ConvertCombToAIGPass::runOnOperation() {
@@ -622,7 +744,8 @@ void ConvertCombToAIGPass::runOnOperation() {
       target.addLegalOp(OperationName(opName, &getContext()));
 
   RewritePatternSet patterns(&getContext());
-  populateCombToAIGConversionPatterns(patterns);
+  CombToAIGTypeConverter typeConverter;
+  populateCombToAIGConversionPatterns(patterns, typeConverter);
 
   if (failed(mlir::applyPartialConversion(getOperation(), target,
                                           std::move(patterns))))

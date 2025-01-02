@@ -146,3 +146,42 @@ hw.module @shift2(in %lhs: i2, in %rhs: i2, out out_shl: i2, out out_shr: i2, ou
   // ALLOW_ICMP-NEXT: hw.output %[[L_SHIFT_WITH_BOUND_CHECK]], %[[R_SHIFT_WITH_BOUND_CHECK]], %[[R_SIGNED_SHIFT_WITH_BOUND_CHECK]]
   hw.output %0, %1, %2 : i2, i2, i2
 }
+
+
+// CHECK-LABEL: @array(
+hw.module @array(in %arg0: i2, in %arg1: i2, in %arg2: i2, in %arg3: i2, out out: !hw.array<4xi2>, in %sel: i2, out out_get: i2, out out_agg: !hw.array<4xi2>, out out_agg_get: i2) {
+  %0 = hw.array_create %arg0, %arg1, %arg2, %arg3 : i2
+  %1 = hw.array_get %0[%sel] : !hw.array<4xi2>, i2
+  %2 = hw.aggregate_constant [0 : i2, 1 : i2, -2 : i2, -1 : i2] : !hw.array<4xi2>
+  %3 = hw.array_get %2[%sel] : !hw.array<4xi2>, i2
+  // CHECK:     %[[CONCAT:.+]] = comb.concat %arg0, %arg1, %arg2, %arg3 : i2, i2, i2, i2
+  // CHECK-NEXT: %[[BITCAST:.+]] = hw.bitcast %[[CONCAT]] : (i8) -> !hw.array<4xi2>
+  // CHECK-NEXT: %[[ARG_3:.+]] = comb.extract %[[CONCAT]] from 0 : (i8) -> i2
+  // CHECK-NEXT: %[[ARG_2:.+]] = comb.extract %[[CONCAT]] from 2 : (i8) -> i2
+  // CHECK-NEXT: %[[ARG_1:.+]] = comb.extract %[[CONCAT]] from 4 : (i8) -> i2
+  // CHECK-NEXT: %[[ARG_0:.+]] = comb.extract %[[CONCAT]] from 6 : (i8) -> i2
+  // CHECK-NEXT: %[[SEL_0:.+]] = comb.extract %sel from 0 : (i2) -> i1
+  // CHECK-NEXT: %[[SEL_1:.+]] = comb.extract %sel from 1 : (i2) -> i1
+  // CHECK-NEXT: %[[MUX_0:.+]] = comb.mux %[[SEL_0]], %[[ARG_0]], %[[ARG_1]] : i2
+  // CHECK-NEXT: %[[MUX_1:.+]] = comb.mux %[[SEL_0]], %[[ARG_2]], %[[ARG_3]] : i2
+  // CHECK-NEXT: %[[ARRAY_GET_1:.+]] = comb.mux %[[SEL_1]], %[[MUX_0]], %[[MUX_1]] : i2
+  // CHECK-NEXT: %[[AGG_CONST:.+]] = hw.aggregate_constant [0 : i2, 1 : i2, -2 : i2, -1 : i2] : !hw.array<4xi2>
+  // CHECK-NEXT: %[[BITCAST_CONST:.+]] = hw.bitcast %[[AGG_CONST]] : (!hw.array<4xi2>) -> i8
+  // CHECK-NEXT: %[[ARG_3:.+]] = comb.extract %[[BITCAST_CONST]] from 0 : (i8) -> i2
+  // CHECK-NEXT: %[[ARG_2:.+]] = comb.extract %[[BITCAST_CONST]] from 2 : (i8) -> i2
+  // CHECK-NEXT: %[[ARG_1:.+]] = comb.extract %[[BITCAST_CONST]] from 4 : (i8) -> i2
+  // CHECK-NEXT: %[[ARG_0:.+]] = comb.extract %[[BITCAST_CONST]] from 6 : (i8) -> i2
+  // CHECK-NEXT: %[[MUX_0:.+]] = comb.mux %[[SEL_0]], %[[ARG_0]], %[[ARG_1]] : i2
+  // CHECK-NEXT: %[[MUX_1:.+]] = comb.mux %[[SEL_0]], %[[ARG_2]], %[[ARG_3]] : i2
+  // CHECK-NEXT: %[[AGG_GET_2:.+]] = comb.mux %[[SEL_1]], %[[MUX_0]], %[[MUX_1]] : i2
+  // CHECK-NEXT: hw.output %[[BITCAST]], %[[ARRAY_GET_1]], %[[AGG_CONST]], %[[AGG_GET_2]]
+  hw.output %0, %1, %2, %3 : !hw.array<4xi2>, i2, !hw.array<4xi2>, i2
+}
+
+hw.module.extern @foo(in %in: !hw.array<4xi2>, out out: !hw.array<4xi2>)
+// CHECK-LABEL: @array_instance(
+hw.module @array_instance(in %in: !hw.array<4xi2>, out out: !hw.array<4xi2>) {
+  // CHECK-NEXT: hw.instance "foo" @foo(in: %in: !hw.array<4xi2>) -> (out: !hw.array<4xi2>)
+  %0 = hw.instance "foo" @foo(in: %in: !hw.array<4xi2>) -> (out: !hw.array<4xi2>)
+  hw.output %0 : !hw.array<4xi2>
+}
