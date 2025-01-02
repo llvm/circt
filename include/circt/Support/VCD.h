@@ -88,6 +88,7 @@ struct VCDFile {
     };
     Kind kind;
     Kind getKind() const;
+    Node(Kind kind) : kind(kind) {}
 
     virtual ~Node() = default;
     virtual void dump(mlir::raw_indented_ostream &os) const = 0;
@@ -95,96 +96,53 @@ struct VCDFile {
   };
 
   struct Metadata : Node {
+    // Implement LLVM RTTI.
+    static bool classof(const Node *e);
+    Metadata(VCDToken command, ArrayAttr values);
+    void printVCD(mlir::raw_indented_ostream &os) const override;
+    void dump(mlir::raw_indented_ostream &os) const override;
+
+  private:
     VCDToken command;
     ArrayAttr values;
-    // Implement LLVM RTTI.
-    static bool classof(const Node *e) {
-      return e->getKind() == Kind::metadata;
-    }
-
-    Metadata(VCDToken command, ArrayAttr values)
-        : command(command), values(values) {
-      assert((command.is(VCDToken::kw_timescale) ||
-              command.is(VCDToken::kw_date) ||
-              command.is(VCDToken::kw_version) ||
-              command.is(VCDToken::kw_comment)) &&
-             "Invalid metadata command");
-    }
-
-    void dump(mlir::raw_indented_ostream &os) const override {
-      llvm::errs() << "Metadata: " << command.getSpelling() << "\n";
-      llvm::errs() << "Values: " << values << "\n";
-    }
-
-    static void printArray(mlir::raw_indented_ostream &os, ArrayAttr array) {
-      llvm::interleave(
-          array.getAsValueRange<StringAttr>(), os,
-          [&](StringRef attr) { os << attr; }, " ");
-    }
-    void printVCD(mlir::raw_indented_ostream &os) const override {
-      switch (command.getKind()) {
-      case VCDToken::kw_timescale:
-        os << "$timescale ";
-        break;
-      case VCDToken::kw_date:
-        os << "$date ";
-        break;
-      case VCDToken::kw_version:
-        os << "$version ";
-        break;
-      case VCDToken::kw_comment:
-        os << "$comment ";
-        break;
-      }
-      printArray(os, values);
-      os << "$end\n";
-    }
   };
 
   struct Scope : Node {
-    StringAttr name;
-
-    // Implement LLVM RTTI.
-    static bool classof(const Node *e) { return e->getKind() == Kind::scope; }
     // SV 21.7.2.1
     enum ScopeType {
       module,
       begin,
-    } kind;
+    };
+
+    // Implement LLVM RTTI.
+    static bool classof(const Node *e);
+    Scope(StringAttr name, ScopeType kind) : Node(Node::Kind::scope), name(name), kind(kind) {}
+    void dump(mlir::raw_indented_ostream &os) const override;
+    void printVCD(mlir::raw_indented_ostream &os) const override;
+    void setName(StringAttr name) { this->name = name; }
+    StringAttr getName() const { return name; }
+    auto &getChildren() { return children; }
+
+  private:
+    StringAttr name;
+
+    ScopeType kind;
     llvm::MapVector<StringAttr, std::unique_ptr<Node>> children;
-    Scope(StringAttr name, ScopeType kind) : name(name), kind(kind) {}
-    void dump(mlir::raw_indented_ostream &os) const override {
-      llvm::errs() << "Scope: " << name << "\n";
-      auto scope = os.scope();
-      for (auto &[_, child] : children)
-        child->dump(os);
-    }
-    void printVCD(mlir::raw_indented_ostream &os) const override {
-      os << "$scope " << name.getValue() << "\n";
-      {
-        auto scope = os.scope();
-        for (auto &[_, child] : children)
-          child->printVCD(os);
-      }
-      os << "$upscope $end\n";
-    }
   };
 
   struct Variable : Node {
-    enum Kind {
+    enum VariableType {
       wire,
       reg,
       integer,
       real,
       time,
-    } kind;
+    };
 
     // Implement LLVM RTTI.
-    static bool classof(const Node *e) {
-      return e->getKind() == Node::Kind::variable;
-    }
+    static bool classof(const Node *e);
 
-    static StringRef getKindName(Kind kind) {
+    static StringRef getKindName(VariableType kind) {
       switch (kind) {
       case wire:
         return "wire";
@@ -199,13 +157,9 @@ struct VCDFile {
       }
     }
 
-    int64_t bitWidth;
-    StringAttr id;
-    StringAttr name;
-    ArrayAttr type; // TODO: Parse type properly
-    Variable(Kind kind, int64_t bitWidth, StringAttr id, StringAttr name,
+    Variable(VariableType kind, int64_t bitWidth, StringAttr id, StringAttr name,
              ArrayAttr type)
-        : kind(kind), bitWidth(bitWidth), id(id), name(name), type(type) {}
+        : Node(Node::Kind::variable), kind(kind), bitWidth(bitWidth), id(id), name(name), type(type) {}
     void dump(mlir::raw_indented_ostream &os) const override {
       llvm::errs() << "Variable: " << name << "\n";
       llvm::errs() << "Kind: " << getKindName(kind) << "\n";
@@ -217,6 +171,18 @@ struct VCDFile {
       os << "$var " << getKindName(kind) << " " << bitWidth << " "
          << id.getValue() << " " << name.getValue() << " $end\n";
     }
+
+    StringAttr getName() const { return name; }
+    StringAttr getId() const { return id; }
+    int64_t getBitWidth() const { return bitWidth; }
+    VariableType getKind() const { return kind; }
+
+  private:
+    VariableType kind;
+    int64_t bitWidth;
+    StringAttr id;
+    StringAttr name;
+    ArrayAttr type; // TODO: Parse type properly
   };
 
   struct Header {
@@ -243,46 +209,6 @@ struct VCDFile {
   void printVCD(mlir::raw_indented_ostream &os) const;
 
   std::unique_ptr<Scope> rootScope;
-};
-
-class VCDLexer {
-public:
-  VCDLexer(const llvm::SourceMgr &sourceMgr, mlir::MLIRContext *context);
-
-  void lexToken();
-  const VCDToken &getToken() const;
-  Location translateLocation(llvm::SMLoc loc);
-  StringRef remainingBuffer() const;
-
-private:
-  VCDToken lexTokenImpl();
-  VCDToken formToken(VCDToken::Kind kind, const char *tokStart);
-  VCDToken emitError(const char *loc, const Twine &message);
-
-  VCDToken lexIdentifier(const char *tokStart);
-  VCDToken lexCommand(const char *tokStart);
-  VCDToken lexTimeValue(const char *tokStart);
-  VCDToken lexInteger(const char *tokStart);
-  VCDToken lexString(const char *tokStart);
-  VCDToken lexValue(const char *tokStart);
-  void skipWhitespace();
-
-  const llvm::SourceMgr &sourceMgr;
-  mlir::MLIRContext *context;
-  const mlir::StringAttr bufferNameIdentifier;
-  StringRef curBuffer;
-  const char *curPtr;
-  VCDToken curToken;
-};
-
-struct VCDParser {
-  VCDParser(mlir::MLIRContext *context, VCDLexer &lexer);
-  ParseResult parseVCDFile(std::unique_ptr<VCDFile> &file);
-
-private:
-  // ... (keep the private methods declarations)
-  mlir::MLIRContext *context;
-  VCDLexer &lexer;
 };
 
 struct SignalMapping {
