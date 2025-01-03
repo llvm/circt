@@ -271,7 +271,7 @@ ParseResult BLIFParser::parseOptionalInt(int &result) {
     consumeToken();
     return success();
   }
-  return failure();
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -492,16 +492,15 @@ ParseResult BLIFModelParser::parseLatch() {
 
   LatchModeEnum lType = LatchModeEnum::Unspecified;
   StringRef clkName;
-  if (parseOptionalLatchType(lType, clkName))
+  if (parseOptionalLatchType(lType, clkName) || parseOptionalInt(init_val))
     return emitError("invalid latch type"), failure();
-  parseOptionalInt(init_val);
 
   if (init_val < 0 || init_val > 3)
     return emitError("invalid initial latch value '") << init_val << "'",
            failure();
 
   Value inVal = getNamedValue(input);
-  Value clkVal = clkName == "NIL" | lType == LatchModeEnum::Unspecified
+  Value clkVal = ((clkName == "NIL") | (lType == LatchModeEnum::Unspecified))
                      ? Value()
                      : getNamedValue(clkName);
 
