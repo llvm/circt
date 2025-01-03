@@ -34,6 +34,10 @@
 namespace circt {
 namespace vcd {
 
+//===----------------------------------------------------------------------===//
+// VCDFile Data Structures
+//===----------------------------------------------------------------------===//
+
 struct VCDFile {
   struct Node {
     // LLVM RTTI kind.
@@ -80,7 +84,7 @@ struct VCDFile {
 
   struct Scope : Node {
     // Represent a scope container which corresponds to
-    // `$scope name $end {...} $upscope $end`
+    // `$scope name[dim..] $end {...} $upscope $end`
 
     // SV 21.7.2.1
     enum ScopeType {
@@ -91,7 +95,7 @@ struct VCDFile {
     // Implement LLVM RTTI.
     static bool classof(const Node *e);
     Scope(Location loc, StringAttr name, ScopeType kind, ArrayAttr dim)
-        : Node(Node::Kind::scope, loc), name(name), kind(kind), dim(dim) {}
+        : Node(Node::Kind::scope, loc), name(name), dim(dim), kind(kind) {}
     void dump(mlir::raw_indented_ostream &os) const override;
     void printVCD(mlir::raw_indented_ostream &os) const override;
     void setName(StringAttr name) { this->name = name; }
@@ -121,9 +125,9 @@ struct VCDFile {
     static bool classof(const Node *e);
 
     Variable(Location loc, VariableType kind, int64_t bitWidth, StringAttr id,
-             StringAttr name, ArrayAttr type)
+             StringAttr name, ArrayAttr dim)
         : Node(Node::Kind::variable, loc), kind(kind), bitWidth(bitWidth),
-          id(id), name(name), type(type) {}
+          id(id), name(name), dim(dim) {}
     void dump(mlir::raw_indented_ostream &os) const override;
     void printVCD(mlir::raw_indented_ostream &os) const override;
     StringAttr getName() const { return name; }
@@ -137,12 +141,12 @@ struct VCDFile {
     int64_t bitWidth;
     StringAttr id;
     StringAttr name;
-    ArrayAttr type; // TODO: Parse type properly
+    ArrayAttr dim; // TODO: Parse dim properly
   };
 
   struct Header {
     // TODO: Parse header peroperly
-    SmallVector<std::unique_ptr<Node>> metadata;
+    SmallVector<std::unique_ptr<Metadata>> metadata;
 
     void printVCD(mlir::raw_indented_ostream &os) const;
   };

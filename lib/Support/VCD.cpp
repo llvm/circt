@@ -134,7 +134,7 @@ void VCDFile::Variable::dump(mlir::raw_indented_ostream &os) const {
   os << "Kind: " << getKindName(kind) << "\n";
   os << "BitWidth: " << bitWidth << "\n";
   os << "ID: " << id.getValue() << "\n";
-  llvm::errs() << "Type: " << type << "\n";
+  llvm::errs() << "Dim: " << dim << "\n";
 }
 
 //===----------------------------------------------------------------------===//
@@ -409,15 +409,18 @@ void VCDLexer::skipWhitespace() {
 
 namespace {
 struct VCDParser {
-  bool lazyLoadValueChange = false;
+  VCDParser(mlir::MLIRContext *context, VCDLexer &lexer)
+      : context(context), lexer(lexer) {}
 
+  ParseResult parseVCDFile(std::unique_ptr<VCDFile> &file);
+
+private:
   StringAttr getStringAttr(StringRef str);
   ParseResult parseAsId(StringAttr &id);
   ParseResult parseVariableKind(VCDFile::Variable::VariableType &kind);
   ParseResult parseInt(APInt &result);
   ParseResult parseVariable(std::unique_ptr<VCDFile::Variable> &variable);
   ParseResult parseScopeKind(VCDFile::Scope::ScopeType &kind);
-  bool isDone();
 
   ParseResult parseEnd();
   ParseResult parseScope(std::unique_ptr<VCDFile::Scope> &result);
@@ -427,7 +430,6 @@ struct VCDParser {
   ParseResult parseMetadata(VCDFile::Metadata::MetadataType &kind,
                             ArrayAttr &result);
   ParseResult parseHeader(VCDFile::Header &header);
-  ParseResult parseVCDFile(std::unique_ptr<VCDFile> &file);
   LogicalResult parseVariableDefinition();
   LogicalResult parseValueChange();
   mlir::MLIRContext *context;
@@ -451,12 +453,9 @@ struct VCDParser {
 
   VCDLexer &lexer;
 
-  VCDParser(mlir::MLIRContext *context, VCDLexer &lexer)
-      : context(context), lexer(lexer) {}
+  bool isDone();
 
   friend raw_ostream &operator<<(raw_ostream &os, const VCDToken &token);
-
-  ParseResult parse(VCDFile &file);
 };
 
 StringAttr VCDParser::getStringAttr(StringRef str) {
@@ -827,7 +826,6 @@ LogicalResult SignalMapping::run() {
           worklist.push_back(std::make_tuple(child.get(), newPath, newModule));
         } else if (auto *nest = dyn_cast<VCDFile::Variable>(child.get())) {
           worklist.push_back(std::make_tuple(child.get(), path, module));
-        } else {
         }
       }
     }
