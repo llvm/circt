@@ -30,4 +30,7 @@ void BLIFDialect::initialize() {
       >();
 }
 
+// Provide implementations for the enums we use.
+#include "circt/Dialect/BLIF/BLIFEnums.cpp.inc"
+
 #include "circt/Dialect/BLIF/BLIFDialect.cpp.inc"

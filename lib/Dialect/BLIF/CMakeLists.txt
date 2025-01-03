@@ -7,6 +7,7 @@ add_circt_dialect_library(CIRCTBLIF
 
   DEPENDS
   MLIRBLIFIncGen
+  CIRCTBLIFEnumsIncGen
   
   LINK_COMPONENTS
   Support
@@ -16,6 +17,9 @@ add_circt_dialect_library(CIRCTBLIF
   MLIRInferTypeOpInterface
    )
 
-add_dependencies(circt-headers MLIRBLIFIncGen)
+add_dependencies(circt-headers 
+  MLIRBLIFIncGen
+  CIRCTBLIFEnumsIncGen
+  )
 
 add_subdirectory(Import)

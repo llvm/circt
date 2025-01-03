@@ -15,6 +15,7 @@
 
 include "circt/Dialect/BLIF/BLIFDialect.td"
 include "circt/Dialect/HW/HWTypes.td"
+include "mlir/IR/EnumAttr.td"
 include "mlir/IR/RegionKindInterface.td"
 
 def ModelOp : BLIFOp<"model", [IsolatedFromAbove, RegionKindInterface, SingleBlockImplicitTerminator<"OutputOp">]> {
@@ -64,7 +65,22 @@ def LogicGateOp: BLIFOp<"logic_gate", []> {
   let results = (outs I1:$result);
 }
 
+def LatchMode : I32EnumAttr<
+  "LatchModeEnum", "Latch Mode", [
+    I32EnumAttrCase<"Unspecified", 0, "un">,
+    I32EnumAttrCase<"FallingEdge", 1, "fe">,
+    I32EnumAttrCase<"RisingEdge", 2, "re">,
+    I32EnumAttrCase<"ActiveHigh", 3, "ah">,
+    I32EnumAttrCase<"ActiveLow", 4, "al">,
+    I32EnumAttrCase<"Asynchronous", 5, "as">
+  ]> {
+    let cppNamespace = "circt::blif";
+  }
+
 def LatchGateOp: BLIFOp<"latch_gate", []> {
+
+  let arguments = (ins I1:$input, LatchMode:$mode, Optional<I1>:$clock, I32Property:$initVal);
+  let results = (outs I1:$output);
 }
 
 #endif // CIRCT_DIALECT_BLIF_BLIFOPS_TD

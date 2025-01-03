@@ -148,20 +148,18 @@ struct BLIFParser {
   // Common Parser Rules
   //===--------------------------------------------------------------------===//
 
-  /// Parse 'intLit' into the specified value.
-  ParseResult parseIntLit(APInt &result, const Twine &message);
-  ParseResult parseIntLit(int64_t &result, const Twine &message);
-  ParseResult parseIntLit(int32_t &result, const Twine &message);
-
   // Parse the 'id' grammar, which is an identifier or an allowed keyword.
   ParseResult parseId(StringRef &result, const Twine &message);
   ParseResult parseId(StringAttr &result, const Twine &message);
+
   // Parse the 'id' grammar or the string literal "NIL"
   ParseResult parseIdOrNil(StringRef &result, const Twine &message);
   ParseResult parseIdOrNil(StringAttr &result, const Twine &message);
 
   ParseResult parseIdList(SmallVectorImpl<StringRef> &result,
                           const Twine &message, unsigned minCount = 0);
+
+  ParseResult parseOptionalInt(int &result);
 
 private:
   BLIFParser(const BLIFParser &) = delete;
@@ -260,6 +258,22 @@ ParseResult BLIFParser::parseIdList(SmallVectorImpl<StringRef> &result,
   }
 }
 
+/// id  ::= Id
+///
+/// Parse the 'id' grammar, which is a trivial string.  On
+/// success, this returns the identifier in the result attribute.
+ParseResult BLIFParser::parseOptionalInt(int &result) {
+  if (getToken().getKind() == BLIFToken::integer) {
+    if (getTokenSpelling().getAsInteger(10, result)) {
+      emitError("invalid integer value");
+      return failure();
+    }
+    consumeToken();
+    return success();
+  }
+  return failure();
+}
+
 //===----------------------------------------------------------------------===//
 // BLIFModelParser
 //===----------------------------------------------------------------------===//
@@ -292,17 +306,11 @@ struct BLIFModelParser : public BLIFParser {
 private:
   ParseResult parseSimpleStmtImpl();
 
-  // Exp Parsing
-  ParseResult parseExpImpl(Value &result, const Twine &message,
-                           bool isLeadingStmt);
-  ParseResult parseExp(Value &result, const Twine &message) {
-    return parseExpImpl(result, message, /*isLeadingStmt:*/ false);
-  }
-
   ParseResult parseOptionalTruthLine(StringRef &input, bool &output);
   ParseResult parseTruthTable(SmallVectorImpl<StringRef> &inputs,
                               SmallVectorImpl<bool> &outputs);
   ParseResult parseLogicGate();
+  ParseResult parseOptionalLatchType(LatchModeEnum &lType, StringRef &name);
   ParseResult parseLatch();
   ParseResult parseLibraryLogicGate();
   ParseResult parseLibraryLatch();
@@ -404,8 +412,7 @@ ParseResult BLIFModelParser::parseTruthTable(SmallVectorImpl<StringRef> &inputs,
 
 /// logicgate ::= '.names' in* out NEWLINE single_output_cover*
 ParseResult BLIFModelParser::parseLogicGate() {
-  auto startTok = consumeToken(BLIFToken::kw_names);
-  auto loc = startTok.getLoc();
+  consumeToken(BLIFToken::kw_names);
   SmallVector<StringRef> inputs;
   StringRef output;
   if (parseIdList(inputs, "expected input list", 1))
@@ -451,11 +458,29 @@ ParseResult BLIFModelParser::parseLogicGate() {
   return success();
 }
 
+ParseResult BLIFModelParser::parseOptionalLatchType(LatchModeEnum &lType,
+                                                    StringRef &clkName) {
+  if (getToken().getKind() == BLIFToken::identifier) {
+    lType = llvm::StringSwitch<LatchModeEnum>(getToken().getSpelling())
+                .Case("fe", LatchModeEnum::FallingEdge)
+                .Case("re", LatchModeEnum::RisingEdge)
+                .Case("ah", LatchModeEnum::ActiveHigh)
+                .Case("al", LatchModeEnum::ActiveLow)
+                .Case("as", LatchModeEnum::Asynchronous)
+                .Default(LatchModeEnum::Unspecified);
+    if (lType == LatchModeEnum::Unspecified) {
+      return success();
+    }
+    consumeToken();
+    return parseId(clkName, "Expected clock signal");
+  }
+  return success();
+}
+
 /// latch ::= '.latch' id_in id_out [latch_type [id | "NIL"]]? [ '0' | '1' | '2'
 /// | '3']?
 ParseResult BLIFModelParser::parseLatch() {
-  auto startTok = consumeToken(BLIFToken::kw_latch);
-  auto loc = startTok.getLoc();
+  consumeToken(BLIFToken::kw_latch);
   StringRef input;
   StringRef output;
   // latchType lType;
@@ -464,14 +489,30 @@ ParseResult BLIFModelParser::parseLatch() {
   if (parseId(input, "Expected input signal") ||
       parseId(output, "Expected output signal"))
     return failure();
-  // TODO: Latch type
-  // if (parseOptionalInt(init_val))
-  //  return failure();
+
+  LatchModeEnum lType = LatchModeEnum::Unspecified;
+  StringRef clkName;
+  if (parseOptionalLatchType(lType, clkName))
+    return emitError("invalid latch type"), failure();
+  parseOptionalInt(init_val);
+
   if (init_val < 0 || init_val > 3)
     return emitError("invalid initial latch value '") << init_val << "'",
            failure();
-  //  builder.create<LatchGateOp>(loc, input, output/*, lType*/, clock,
-  //  init_val);
+
+  Value inVal = getNamedValue(input);
+  Value clkVal = clkName == "NIL" | lType == LatchModeEnum::Unspecified
+                     ? Value()
+                     : getNamedValue(clkName);
+
+  auto op = builder.create<LatchGateOp>(builder.getIntegerType(1), inVal, lType,
+                                        clkVal, init_val);
+  // Record output name
+  setNamedValue(output, op.getResult());
+  // Record Fixups
+  if (inVal == unresolved)
+    addFixup(op, 0, input);
+
   return success();
 }
 
@@ -594,7 +635,6 @@ private:
 /// model_cmds* `.end`
 ParseResult BLIFFileParser::parseModel() {
   StringAttr name;
-  auto modLoc = getToken().getLoc();
   SmallVector<StringRef> inputs, outputs, clocks;
   consumeToken(BLIFToken::kw_model);
   if (parseId(name, "expected model name"))

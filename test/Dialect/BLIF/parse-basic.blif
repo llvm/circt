@@ -20,8 +20,11 @@
 -0 1
 .names clk1 clk2 clk3 foo2
 1-0 0
-.names foo1 foo2 f
+.latch foo2 foo3
+.latch foo3 foo4 2
+.latch foo4 foo5 al NIL
+.latch foo5 foo6 fe a
+.latch foo6 foo7 re a 1
+.names foo1 foo7 f
 -1 1
 .end
-
-

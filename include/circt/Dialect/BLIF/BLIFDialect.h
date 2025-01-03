@@ -19,5 +19,6 @@
 
 // Pull in the dialect definition.
 #include "circt/Dialect/BLIF/BLIFDialect.h.inc"
+#include "circt/Dialect/BLIF/BLIFEnums.h.inc"
 
 #endif // CIRCT_DIALECT_BLIF_BLIFDIALECT_H
