@@ -19,7 +19,15 @@ from .circt.dialects import esi as raw_esi, hw, msft
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, cast
 
+import atexit
+
 __dir__ = Path(__file__).parent
+
+
+@atexit.register
+def _cleanup():
+  raw_esi.cleanup()
+
 
 FlattenStructPorts = "esi.portFlattenStructs"
 PortInSuffix = "esi.portInSuffix"
