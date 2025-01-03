@@ -54,11 +54,11 @@ static cl::opt<std::string> inputVCD("vcd", cl::Required,
                                      cl::desc("input vcd file"),
                                      cl::cat(mainCategory));
 static cl::opt<std::string> dutPath("dut-path", cl::Required,
-                                     cl::desc("path to dut module"),
-                                     cl::cat(mainCategory));
+                                    cl::desc("path to dut module"),
+                                    cl::cat(mainCategory));
 static cl::opt<std::string> dutModuleName("dut-module-name", cl::Required,
-                                     cl::desc("name of dut module"),
-                                     cl::cat(mainCategory));
+                                          cl::desc("name of dut module"),
+                                          cl::cat(mainCategory));
 static cl::opt<std::string> outputFilename("o", cl::desc("Output name"),
                                            cl::value_desc("name"),
                                            cl::init("-"),
@@ -69,18 +69,19 @@ static cl::opt<std::string> outputFilename("o", cl::desc("Output name"),
 //===----------------------------------------------------------------------===//
 
 static mlir::StringAttr getVariableName(Operation *op) {
+  if (auto originalName = op->getAttrOfType<StringAttr>("hw.originalName"))
+    return originalName;
   if (auto name = op->getAttrOfType<StringAttr>("name"))
     return name;
   if (auto verilogName = op->getAttrOfType<StringAttr>("hw.verilogName"))
     return verilogName;
+
   return StringAttr();
 }
 
-
 struct VCDConverter {
   LogicalResult convert();
-  VCDConverter(vcd::VCDFile &file,
-               mlir::ModuleOp module)
+  VCDConverter(vcd::VCDFile &file, mlir::ModuleOp module)
       : file(file), module(module) {}
 
 private:
@@ -89,6 +90,23 @@ private:
   mlir::MLIRContext *getContext() { return module->getContext(); }
 };
 
+static llvm::SmallVector<StringRef> split(const std::string &s,
+                                          char seperator) {
+  llvm::SmallVector<StringRef> output;
+
+  std::string::size_type prev_pos = 0, pos = 0;
+
+  StringRef ref(s);
+
+  while ((pos = s.find(seperator, pos)) != std::string::npos) {
+    output.push_back(ref.substr(prev_pos, pos - prev_pos));
+    prev_pos = ++pos;
+  }
+
+  output.push_back(s.substr(prev_pos, pos - prev_pos)); // Last word
+
+  return output;
+}
 /// This functions initializes the various components of the tool and
 /// orchestrates the work to be done.
 static LogicalResult execute(MLIRContext &context) {
@@ -100,12 +118,12 @@ static LogicalResult execute(MLIRContext &context) {
     return failure();
   }
 
-  llvm::SourceMgr sourceMgr;
-  sourceMgr.AddNewSourceBuffer(std::move(input), llvm::SMLoc());
-  SourceMgrDiagnosticVerifierHandler sourceMgrHandler(sourceMgr, &context);
+  llvm::SourceMgr vcdSourceMgr;
+  vcdSourceMgr.AddNewSourceBuffer(std::move(input), llvm::SMLoc());
+  SourceMgrDiagnosticVerifierHandler sourceMgrHandler(vcdSourceMgr, &context);
   context.printOpOnDiagnostic(false);
 
-  auto vcdFile = circt::vcd::importVCDFile(sourceMgr, &context);
+  auto vcdFile = circt::vcd::importVCDFile(vcdSourceMgr, &context);
   if (!vcdFile) {
     errs() << "failed to parse input vcd file `" << inputVCD << "`\n";
     return failure();
@@ -113,6 +131,19 @@ static LogicalResult execute(MLIRContext &context) {
   auto output = openOutputFile(outputFilename, &errorMessage);
   if (!output) {
     errs() << errorMessage;
+    return failure();
+  }
+
+  llvm::SourceMgr mlirSourceMgr;
+  auto inputMLIRFile = mlir::openInputFile(inputMLIR, &errorMessage);
+  mlirSourceMgr.AddNewSourceBuffer(std::move(inputMLIRFile), llvm::SMLoc());
+  SourceMgrDiagnosticVerifierHandler mlirMgrHandler(mlirSourceMgr, &context);
+  auto module = parseSourceFile<ModuleOp>(mlirSourceMgr, &context);
+  auto path = split(dutPath.getValue(), '.');
+  vcd::SignalMapping mapping(module.get(), *vcdFile, path, dutModuleName);
+  if (failed(mapping.run()))
+  {
+    module.get()->emitError() << "failed";
     return failure();
   }
 

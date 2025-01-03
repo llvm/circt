@@ -1,5 +1,5 @@
 #if !defined(TOK_MARKER) && !defined(TOK_IDENTIFIER) &&                        \
-    !defined(TOK_LITERAL) && !defined(TOK_KEYWORD)
+    !defined(TOK_LITERAL) && !defined(TOK_KEYWORD) && !defined(TOK_COMMAND)
 #error Must define one of the TOK_ macros.
 #endif
 

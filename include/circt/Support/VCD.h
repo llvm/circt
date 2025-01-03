@@ -43,7 +43,7 @@ struct VCDFile {
       variable,
     };
     Kind kind;
-    Kind getKind() const;
+    Kind getKind() const { return kind; }
     Node(Kind kind) : kind(kind) {}
 
     virtual ~Node() = default;
@@ -56,7 +56,7 @@ struct VCDFile {
   struct Metadata : Node {
     // Represent generic metadata command.
     // Used for $date, $version, $timescale and $comment.
-    enum MetadataKind {
+    enum MetadataType {
       date,
       version,
       timescale,
@@ -65,12 +65,12 @@ struct VCDFile {
 
     // Implement LLVM RTTI.
     static bool classof(const Node *e);
-    Metadata(StringAttr command, ArrayAttr values);
+    Metadata(MetadataType command, ArrayAttr values);
     void printVCD(mlir::raw_indented_ostream &os) const override;
     void dump(mlir::raw_indented_ostream &os) const override;
 
   private:
-    StringAttr command;
+    MetadataType command;
     ArrayAttr values;
   };
 
@@ -86,8 +86,8 @@ struct VCDFile {
 
     // Implement LLVM RTTI.
     static bool classof(const Node *e);
-    Scope(StringAttr name, ScopeType kind)
-        : Node(Node::Kind::scope), name(name), kind(kind) {}
+    Scope(StringAttr name, ScopeType kind, ArrayAttr dim)
+        : Node(Node::Kind::scope), name(name), kind(kind), dim(dim) {}
     void dump(mlir::raw_indented_ostream &os) const override;
     void printVCD(mlir::raw_indented_ostream &os) const override;
     void setName(StringAttr name) { this->name = name; }
@@ -96,6 +96,7 @@ struct VCDFile {
 
   private:
     StringAttr name;
+    ArrayAttr dim;
 
     ScopeType kind;
     llvm::MapVector<StringAttr, std::unique_ptr<Node>> children;
@@ -122,6 +123,7 @@ struct VCDFile {
     void dump(mlir::raw_indented_ostream &os) const override;
     void printVCD(mlir::raw_indented_ostream &os) const override;
     StringAttr getName() const { return name; }
+    void setName(StringAttr newName) { name = newName; }
     StringAttr getId() const { return id; }
     int64_t getBitWidth() const { return bitWidth; }
     VariableType getKind() const { return kind; }
@@ -142,7 +144,8 @@ struct VCDFile {
   };
 
   struct ValueChange {
-    // For lazy loading.
+    // Value change section is not parsed yet. Just pass through the entire
+    // section for now.
     StringRef remainingBuffer;
     ValueChange(StringRef remainingBuffer) : remainingBuffer(remainingBuffer) {}
     void printVCD(mlir::raw_indented_ostream &os) const;
@@ -155,6 +158,8 @@ struct VCDFile {
   void dump(mlir::raw_indented_ostream &os) const;
   void printVCD(mlir::raw_indented_ostream &os) const;
 
+  const std::unique_ptr<Scope> &getRootScope() const { return rootScope; }
+
 private:
   Header header;
   std::unique_ptr<Scope> rootScope;
@@ -162,24 +167,22 @@ private:
 };
 
 struct SignalMapping {
-  SignalMapping(mlir::ModuleOp moduleOp, const VCDFile &file,
-                igraph::InstanceGraph &instanceGraph,
-                igraph::InstancePathCache &instancePathCache,
-                ArrayRef<StringAttr> pathToTop, VCDFile::Scope *topScope,
-                FlatSymbolRefAttr topModuleName);
+  SignalMapping(mlir::ModuleOp moduleOp, VCDFile &file,
+                ArrayRef<StringRef> pathToTop, StringRef topModuleName);
 
   LogicalResult run();
 
 private:
-  static mlir::StringAttr getVariableName(Operation *op);
-
   mlir::ModuleOp moduleOp;
-  VCDFile::Scope *topScope;
-  FlatSymbolRefAttr topModuleName;
-  const VCDFile &file;
-  igraph::InstanceGraph &instanceGraph;
-  igraph::InstancePathCache &instancePathCache;
-  llvm::DenseMap<VCDFile::Variable *, circt::igraph::InstancePath> signalMap;
+  // VCDFile::Scope *topScope;
+  StringRef topModuleName;
+  VCDFile &file;
+  ArrayRef<StringRef> path;
+  // igraph::InstanceGraph instanceGraph;
+  // igraph::InstancePathCache instancePathCache;
+  llvm::DenseMap<VCDFile::Variable *,
+                 std::pair<circt::igraph::InstancePath, Operation *>>
+      signalMap;
   llvm::DenseMap<StringAttr, DenseMap<StringAttr, Operation *>>
       verilogNameToOperation;
 };

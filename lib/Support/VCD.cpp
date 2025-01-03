@@ -1,5 +1,4 @@
-//===- VCD.cpp - VCD parser/printer implementation
-//-------------------------===//
+//===- VCD.cpp - VCD parser/printer implementation ------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -38,7 +37,8 @@ using namespace llvm;
 // VCDFile::Metadata
 //===----------------------------------------------------------------------===//
 
-VCDFile::Metadata::Metadata(StringAttr command, ArrayAttr values)
+VCDFile::Metadata::Metadata(VCDFile::Metadata::MetadataType command,
+                            ArrayAttr values)
     : Node(Node::Kind::metadata), command(command), values(values) {}
 
 bool VCDFile::Metadata::classof(const Node *e) {
@@ -81,7 +81,9 @@ bool VCDFile::Scope::classof(const Node *e) {
 }
 
 void VCDFile::Scope::printVCD(mlir::raw_indented_ostream &os) const {
-  os << "$scope " << getScopeKindName(kind) << " " << name.getValue() << "\n";
+  os << "$scope " << getScopeKindName(kind) << " " << name.getValue();
+  printArray(os, dim);
+  os << "\n";
   {
     auto scope = os.scope();
     for (auto &[_, child] : children)
@@ -165,8 +167,8 @@ void VCDFile::VCDFile::printVCD(mlir::raw_indented_ostream &os) const {
 
 VCDFile::VCDFile(VCDFile::Header header, std::unique_ptr<Scope> rootScope,
                  ValueChange valueChange)
-    : header(std::move(header)), valueChange(valueChange),
-      rootScope(std::move(rootScope)) {}
+    : header(std::move(header)), rootScope(std::move(rootScope)),
+      valueChange(valueChange) {}
 
 //===----------------------------------------------------------------------===//
 // VCDLexer
@@ -236,7 +238,16 @@ VCDToken::VCDToken(Kind kind, StringRef spelling)
 StringRef VCDToken::getSpelling() const { return spelling; }
 VCDToken::Kind VCDToken::getKind() const { return kind; }
 bool VCDToken::is(Kind K) const { return kind == K; }
-bool VCDToken::isCommand() const { return spelling.starts_with("$"); }
+bool VCDToken::isCommand() const {
+  switch (kind) {
+  default:
+    return false;
+#define TOK_COMMAND(SPELLING)                                                  \
+  case VCDToken::command_##SPELLING:                                           \
+    return true;
+#include "VCDTokenKinds.def"
+  }
+}
 
 llvm::SMLoc VCDToken::getLoc() const {
   return llvm::SMLoc::getFromPointer(spelling.data());
@@ -358,18 +369,10 @@ VCDToken VCDLexer::lexCommand(const char *tokStart) {
   StringRef spelling(tokStart, curPtr - tokStart);
 
   // Match known commands
-  VCDToken::Kind kind =
-      llvm::StringSwitch<VCDToken::Kind>(spelling)
-          .Case("$date", VCDToken::command_date)
-          .Case("$version", VCDToken::command_version)
-          .Case("$timescale", VCDToken::command_timescale)
-          .Case("$scope", VCDToken::command_scope)
-          .Case("$var", VCDToken::command_var)
-          .Case("$upscope", VCDToken::command_upscope)
-          .Case("$enddefinitions", VCDToken::command_enddefinitions)
-          .Case("$dumpvars", VCDToken::command_dumpvars)
-          .Case("$end", VCDToken::command_end)
-          .Default(VCDToken::error);
+  VCDToken::Kind kind = llvm::StringSwitch<VCDToken::Kind>(spelling)
+#define TOK_COMMAND(SPELLING) .Case("$" #SPELLING, VCDToken::command_##SPELLING)
+#include "VCDTokenKinds.def"
+                            .Default(VCDToken::error);
 
   return VCDToken(kind, spelling);
 }
@@ -387,7 +390,8 @@ VCDToken VCDLexer::lexTimeValue(const char *tokStart) {
 }
 
 VCDToken VCDLexer::lexIdentifier(const char *tokStart) {
-  while (llvm::isAlnum(*curPtr) || llvm::isPunct(*curPtr))
+  while (llvm::isAlnum(*curPtr) ||
+         (llvm::isPunct(*curPtr) && *curPtr != '[' && *curPtr != ']'))
     ++curPtr;
   return formToken(VCDToken::identifier, tokStart);
 }
@@ -418,6 +422,8 @@ struct VCDParser {
   ParseResult parseStringUntilEnd(ArrayAttr &result);
   ParseResult parseAsArrayAttr(VCDToken::Kind kind, ArrayAttr &result);
   ParseResult parseAsMetadata(VCDToken::Kind kind, ArrayAttr &result);
+  ParseResult parseMetadata(VCDFile::Metadata::MetadataType &kind,
+                            ArrayAttr &result);
   ParseResult parseHeader(VCDFile::Header &header);
   ParseResult parseVCDFile(std::unique_ptr<VCDFile> &file);
   LogicalResult parseVariableDefinition();
@@ -508,7 +514,7 @@ ParseResult VCDParser::parseScopeKind(VCDFile::Scope::ScopeType &kind) {
           .Case("begin", VCDFile::Scope::begin)
           .Default(std::nullopt);
 
-  if (!kind)
+  if (!kindOpt)
     return emitError() << "expected scope kind";
   kind = kindOpt.value();
   consumeToken();
@@ -522,14 +528,16 @@ ParseResult VCDParser::parseEnd() {
 }
 
 ParseResult VCDParser::parseScope(std::unique_ptr<VCDFile::Scope> &result) {
+  LLVM_DEBUG(llvm::dbgs() << "parseScope" << '\n');
   VCDFile::Scope::ScopeType kind;
   StringAttr nameAttr;
+  ArrayAttr dim;
 
   if (parseExpectedKeyword(VCDToken::command_scope) || parseScopeKind(kind) ||
-      parseAsId(nameAttr) || parseEnd())
+      parseAsId(nameAttr) || parseStringUntilEnd(dim))
     return failure();
 
-  auto scope = std::make_unique<VCDFile::Scope>(nameAttr, kind);
+  auto scope = std::make_unique<VCDFile::Scope>(nameAttr, kind, dim);
 
   while (!isDone() && getToken().getKind() != VCDToken::command_upscope) {
     auto token = getToken();
@@ -583,25 +591,39 @@ ParseResult VCDParser::parseAsMetadata(VCDToken::Kind kind, ArrayAttr &result) {
   return success();
 }
 
+ParseResult VCDParser::parseMetadata(VCDFile::Metadata::MetadataType &kind,
+                                     ArrayAttr &result) {
+  auto token = getToken();
+  switch (token.getKind()) {
+  default:
+    return failure();
+  case VCDToken::command_date:
+    kind = VCDFile::Metadata::MetadataType::date;
+    break;
+  case VCDToken::command_version:
+    kind = VCDFile::Metadata::MetadataType::version;
+    break;
+  case VCDToken::command_timescale:
+    kind = VCDFile::Metadata::MetadataType::timescale;
+    break;
+  }
+
+  consumeToken();
+
+  if (parseStringUntilEnd(result))
+    return failure();
+  return success();
+}
+
 ParseResult VCDParser::parseHeader(VCDFile::Header &header) {
   LLVM_DEBUG(llvm::dbgs() << "parseHeader\n");
   SmallVector<VCDFile::Metadata> metadata;
   while (true) {
-    auto token = getToken();
-    switch (token.getKind()) {
-    default:
-      return success();
-    case VCDToken::command_date:
-    case VCDToken::command_version:
-    case VCDToken::command_timescale:
-      consumeToken();
-      ArrayAttr attr;
-      if (parseStringUntilEnd(attr))
-        return failure();
-      metadata.push_back(
-          VCDFile::Metadata(getStringAttr(token.getSpelling()), attr));
+    VCDFile::Metadata::MetadataType kind;
+    ArrayAttr attr;
+    if (failed(parseMetadata(kind, attr)))
       break;
-    }
+    metadata.push_back(VCDFile::Metadata(kind, attr));
   }
   return success();
 }
@@ -689,15 +711,16 @@ raw_ostream &operator<<(raw_ostream &os, const VCDToken &token) {
 // SignalMapping
 //===----------------------------------------------------------------------===//
 
-SignalMapping::SignalMapping(mlir::ModuleOp moduleOp, const VCDFile &file,
-                             igraph::InstanceGraph &instanceGraph,
-                             igraph::InstancePathCache &instancePathCache,
-                             ArrayRef<StringAttr> pathToTop,
-                             VCDFile::Scope *topScope,
-                             FlatSymbolRefAttr topModuleName)
-    : moduleOp(moduleOp), topScope(topScope), topModuleName(topModuleName),
-      file(file), instanceGraph(instanceGraph),
-      instancePathCache(instancePathCache) {
+static mlir::StringAttr getVerilogName(Operation *op) {
+  if (auto verilogName = op->getAttrOfType<StringAttr>("hw.verilogName"))
+    return verilogName;
+  if (auto name = op->getAttrOfType<StringAttr>("name"))
+    return name;
+  return StringAttr();
+}
+SignalMapping::SignalMapping(mlir::ModuleOp moduleOp, VCDFile &file,
+                             ArrayRef<StringRef> path, StringRef topModuleName)
+    : moduleOp(moduleOp), topModuleName(topModuleName), file(file), path(path) {
   for (auto op : moduleOp.getOps<hw::HWModuleOp>()) {
     verilogNameToOperation[op.getModuleNameAttr()].insert(
         std::make_pair(op.getModuleNameAttr(), op));
@@ -710,43 +733,102 @@ SignalMapping::SignalMapping(mlir::ModuleOp moduleOp, const VCDFile &file,
         op.walk([&](Operation *op) {
           TypeSwitch<Operation *>(op)
               .Case<sv::RegOp>(
-                  [&](sv::RegOp reg) { moduleMap[reg.getNameAttr()] = reg; })
+                  [&](sv::RegOp reg) { moduleMap[getVerilogName(reg)] = reg; })
               .Case<hw::InstanceOp>([&](hw::InstanceOp instance) {
-                moduleMap[instance.getInstanceNameAttr()] = instance;
+                moduleMap[getVerilogName(instance)] = instance;
               });
         });
       });
 }
 
-LogicalResult SignalMapping::run() {
-  auto topModule = instanceGraph.lookup(topModuleName.getAttr());
-  if (!topModule ||
-      isa_and_nonnull<circt::hw::HWModuleOp>(topModule->getModule()))
-    return failure();
+static mlir::StringAttr getVariableName(Operation *op) {
+  if (auto originalName = op->getAttrOfType<StringAttr>("hw.originalName"))
+    return originalName;
+  if (auto name = op->getAttrOfType<StringAttr>("name"))
+    return name;
+  if (auto verilogName = op->getAttrOfType<StringAttr>("hw.verilogName"))
+    return verilogName;
 
-  auto module = dyn_cast<hw::HWModuleOp>(topModule->getModule());
+  return StringAttr();
+}
+
+LogicalResult SignalMapping::run() {
+  igraph::InstanceGraph instanceGraph(moduleOp);
+  igraph::InstancePathCache instancePathCache(instanceGraph);
+  auto topModule = instanceGraph.lookup(
+      StringAttr::get(moduleOp.getContext(), topModuleName));
+  if (!topModule ||
+      !isa_and_nonnull<circt::hw::HWModuleOp>(topModule->getModule())) {
+    return mlir::emitError(moduleOp->getLoc()) << topModuleName << " not exist";
+  }
+
+  auto module = dyn_cast<hw::HWModuleOp>(*topModule->getModule());
+
+  if (!module) {
+    return failure();
+  }
+  auto *scope = file.getRootScope().get();
+  for (auto inst : path) {
+    for (auto &[name, ch] : scope->getChildren()) {
+      llvm::errs() << name << " ";
+    }
+    llvm ::errs() << "\n";
+    auto it = scope->getChildren().find(
+        StringAttr::get(moduleOp->getContext(), inst));
+    if (it == scope->getChildren().end()) {
+      return mlir::emitError(moduleOp->getLoc())
+             << "instance " << inst << " doesn't exist";
+    }
+    scope = dyn_cast<VCDFile::Scope>(it->second.get());
+    if (!scope)
+      return mlir::emitError(moduleOp->getLoc())
+             << "instance " << inst << " doesn't exist";
+  }
+  // Get scope.
 
   SmallVector<
       std::tuple<VCDFile::Node *, circt::igraph::InstancePath, StringAttr>>
       worklist;
-  worklist.push_back(std::make_tuple(topScope, circt::igraph::InstancePath(),
+
+  worklist.push_back(std::make_tuple(scope, circt::igraph::InstancePath(),
                                      module.getModuleNameAttr()));
   while (!worklist.empty()) {
     auto [node, path, module] = worklist.pop_back_val();
     if (auto *variable = dyn_cast<VCDFile::Variable>(node)) {
-      signalMap[variable] = path;
-    } else if (auto *scope = dyn_cast<VCDFile::Scope>(node)) {
-      auto instanceOp = dyn_cast_or_null<hw::InstanceOp>(
-          verilogNameToOperation[module][scope->getName()]);
-      if (!instanceOp)
+      auto *op = verilogNameToOperation[module][variable->getName()];
+      if (!op) {
         continue;
-      auto newPath = instancePathCache.appendInstance(path, instanceOp);
-      auto newModule = instanceOp.getReferencedModuleNameAttr();
+      }
+      auto name = getVariableName(op);
+      if (name != variable->getName()) {
+        // variable->setName(name);
+      }
+    } else if (auto *scope = dyn_cast<VCDFile::Scope>(node)) {
+      // auto instanceOp = dyn_cast_or_null<hw::InstanceOp>(
+      //     verilogNameToOperation[module][scope->getName()]);
+      // if (!instanceOp) {
+      //   llvm::errs() << scope->getName() << " is not found";
+      //   continue;
+      // }
+
       for (auto &[_, child] : scope->getChildren()) {
-        worklist.push_back(std::make_tuple(child.get(), newPath, newModule));
+        if (auto nest = dyn_cast<VCDFile::Scope>(child.get())) {
+          auto instanceOp = dyn_cast_or_null<hw::InstanceOp>(
+              verilogNameToOperation[module][nest->getName()]);
+          if (!instanceOp) {
+            llvm::errs() << path << " " << scope->getName() << " is not found\n";
+            continue;
+          }
+          auto newPath = instancePathCache.appendInstance(path, instanceOp);
+          auto newModule = instanceOp.getReferencedModuleNameAttr();
+          worklist.push_back(std::make_tuple(child.get(), newPath, newModule));
+        } else {
+          worklist.push_back(std::make_tuple(child.get(), path, module));
+        }
       }
     }
   }
+  return success();
 }
 
 // ===----------------------------------------------------------------------===//
