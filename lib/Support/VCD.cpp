@@ -498,15 +498,14 @@ ParseResult VCDParser::parseInt(APInt &result) {
 
 ParseResult
 VCDParser::parseVariable(std::unique_ptr<VCDFile::Variable> &variable) {
-  if (parseExpectedKeyword(VCDToken::command_var))
-    return failure();
   VCDFile::Variable::VariableType kind;
   APInt bitWidth;
   StringAttr id, name;
   ArrayAttr type;
   auto loc = getCurrentLocation();
-  if (parseVariableKind(kind) || parseInt(bitWidth) || parseAsId(id) ||
-      parseAsId(name) || parseStringUntilEnd(type))
+  if (parseExpectedKeyword(VCDToken::command_var) || parseVariableKind(kind) ||
+      parseInt(bitWidth) || parseAsId(id) || parseAsId(name) ||
+      parseStringUntilEnd(type))
     return failure();
   variable = std::make_unique<VCDFile::Variable>(
       loc, kind, bitWidth.getZExtValue(), id, name, type);
@@ -708,12 +707,6 @@ mlir::ParseResult VCDParser::parseId(StringRef &id) {
 
 const VCDToken &VCDParser::getToken() const { return lexer.getToken(); }
 
-raw_ostream &operator<<(raw_ostream &os, const VCDToken &token) {
-  if (token.is(VCDToken::eof))
-    return os << 0;
-  return os << token.getSpelling();
-}
-
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -727,6 +720,7 @@ static mlir::StringAttr getVerilogName(Operation *op) {
     return name;
   return StringAttr();
 }
+
 SignalMapping::SignalMapping(mlir::ModuleOp moduleOp, VCDFile &file,
                              ArrayRef<StringRef> path, StringRef topModuleName)
     : moduleOp(moduleOp), topModuleName(topModuleName), file(file), path(path) {
