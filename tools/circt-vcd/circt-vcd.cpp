@@ -64,6 +64,11 @@ static cl::opt<std::string> outputFilename("o", cl::desc("Output name"),
                                            cl::init("-"),
                                            cl::cat(mainCategory));
 
+static cl::opt<bool> emitVCDDataStructure("emit-vcd-data-structure",
+                                          cl::desc("Emit VCD data structure"),
+                                          cl::init(false),
+                                          cl::cat(mainCategory));
+
 //===----------------------------------------------------------------------===//
 // Tool implementation
 //===----------------------------------------------------------------------===//
@@ -134,20 +139,25 @@ static LogicalResult execute(MLIRContext &context) {
     return failure();
   }
 
-  llvm::SourceMgr mlirSourceMgr;
-  auto inputMLIRFile = mlir::openInputFile(inputMLIR, &errorMessage);
-  mlirSourceMgr.AddNewSourceBuffer(std::move(inputMLIRFile), llvm::SMLoc());
-  SourceMgrDiagnosticVerifierHandler mlirMgrHandler(mlirSourceMgr, &context);
-  auto module = parseSourceFile<ModuleOp>(mlirSourceMgr, &context);
-  auto path = split(dutPath.getValue(), '.');
-  vcd::SignalMapping mapping(module.get(), *vcdFile, path, dutModuleName);
-  if (failed(mapping.run()))
-  {
-    module.get()->emitError() << "failed";
-    return failure();
-  }
+  // llvm::SourceMgr mlirSourceMgr;
+  // auto inputMLIRFile = mlir::openInputFile(inputMLIR, &errorMessage);
+  // mlirSourceMgr.AddNewSourceBuffer(std::move(inputMLIRFile), llvm::SMLoc());
+  // SourceMgrDiagnosticVerifierHandler mlirMgrHandler(mlirSourceMgr, &context);
+  // auto module = parseSourceFile<ModuleOp>(mlirSourceMgr, &context);
+  // auto path = split(dutPath.getValue(), '.');
+  // vcd::SignalMapping mapping(module.get(), *vcdFile, path, dutModuleName);
+  // if (failed(mapping.run())) {
+  //   module.get()->emitError() << "failed";
+  //   return failure();
+  // }
 
   mlir::raw_indented_ostream os(output->os());
+  if (emitVCDDataStructure) {
+    vcdFile->dump(os);
+    output->keep();
+    return success();
+  }
+
   vcdFile->printVCD(os);
   output->keep();
   return success();

@@ -149,6 +149,7 @@ struct VCDFile {
     SmallVector<std::unique_ptr<Metadata>> metadata;
 
     void printVCD(mlir::raw_indented_ostream &os) const;
+    void dump(mlir::raw_indented_ostream &os) const;
   };
 
   struct ValueChange {
@@ -174,7 +175,11 @@ private:
   ValueChange valueChange;
 };
 
+// Data structure to map VCD signals to MLIR operations.
 struct SignalMapping {
+  // Construct a signal mapping object.
+  // `pathToTop` is the path to the top module from the VCD top scope.
+  // `topModuleName` is the name of the top module. Used for symbol lookup.
   SignalMapping(mlir::ModuleOp moduleOp, VCDFile &file,
                 ArrayRef<StringRef> pathToTop, StringRef topModuleName);
 
@@ -194,6 +199,8 @@ private:
   StringRef topModuleName;
   VCDFile &file;
   ArrayRef<StringRef> path;
+
+  // Map from VCD variable to MLIR operation with the instance path.
   llvm::DenseMap<VCDFile::Variable *, Signal> signalMap;
 };
 

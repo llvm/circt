@@ -146,12 +146,21 @@ void VCDFile::Header::printVCD(mlir::raw_indented_ostream &os) const {
     data->printVCD(os);
 }
 
+void VCDFile::Header::dump(mlir::raw_indented_ostream &os) const {
+  for (auto &data : metadata)
+    data->dump(os);
+}
+
 //===----------------------------------------------------------------------===//
 // VCDFile::ValueChange
 //===----------------------------------------------------------------------===//
 
 void VCDFile::ValueChange::printVCD(mlir::raw_indented_ostream &os) const {
   os << remainingBuffer << "\n";
+}
+
+void VCDFile::ValueChange::dump(mlir::raw_indented_ostream &os) const {
+  os << "ValueChange(not parsed) :" << remainingBuffer << "\n";
 }
 
 // ===----------------------------------------------------------------------===//
@@ -165,6 +174,15 @@ void VCDFile::VCDFile::printVCD(mlir::raw_indented_ostream &os) const {
   rootScope->printVCD(os);
   // Print the value change section
   valueChange.printVCD(os);
+}
+
+void VCDFile::VCDFile::dump(mlir::raw_indented_ostream &os) const {
+  // Print the header
+  header.dump(os);
+  // Print the scope and variable definitions
+  rootScope->dump(os);
+  // Print the value change section
+  valueChange.dump(os);
 }
 
 VCDFile::VCDFile(VCDFile::Header header, std::unique_ptr<Scope> rootScope,
@@ -192,8 +210,7 @@ public:
 
   StringRef getSpelling() const;
   Kind getKind() const;
-  bool is(Kind K) const;
-  bool isCommand() const;
+  bool is(Kind kind) const;
 
   llvm::SMLoc getLoc() const;
   llvm::SMLoc getEndLoc() const;
@@ -203,6 +220,7 @@ private:
   Kind kind;
   StringRef spelling;
 };
+
 class VCDLexer {
 public:
   VCDLexer(const llvm::SourceMgr &sourceMgr, mlir::MLIRContext *context);
@@ -239,17 +257,7 @@ VCDToken::VCDToken(Kind kind, StringRef spelling)
 
 StringRef VCDToken::getSpelling() const { return spelling; }
 VCDToken::Kind VCDToken::getKind() const { return kind; }
-bool VCDToken::is(Kind K) const { return kind == K; }
-bool VCDToken::isCommand() const {
-  switch (kind) {
-  default:
-    return false;
-#define TOK_COMMAND(SPELLING)                                                  \
-  case VCDToken::command_##SPELLING:                                           \
-    return true;
-#include "VCDTokenKinds.def"
-  }
-}
+bool VCDToken::is(Kind k) const { return kind == k; }
 
 llvm::SMLoc VCDToken::getLoc() const {
   return llvm::SMLoc::getFromPointer(spelling.data());
