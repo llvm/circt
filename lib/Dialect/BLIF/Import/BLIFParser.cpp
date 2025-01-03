@@ -299,8 +299,9 @@ private:
     return parseExpImpl(result, message, /*isLeadingStmt:*/ false);
   }
 
-  ParseResult parseTruthLine();
-  ParseResult parseTruthTable();
+  ParseResult parseOptionalTruthLine(StringRef &input, bool &output);
+  ParseResult parseTruthTable(SmallVectorImpl<StringRef> &inputs,
+                              SmallVectorImpl<bool> &outputs);
   ParseResult parseLogicGate();
   ParseResult parseLatch();
   ParseResult parseLibraryLogicGate();
@@ -357,9 +358,49 @@ Value BLIFModelParser::getReferencedModel(SMLoc loc, StringRef modelName) {
   return {};
 }
 
-ParseResult BLIFModelParser::parseTruthLine() { return failure(); }
+ParseResult BLIFModelParser::parseOptionalTruthLine(StringRef &input,
+                                                    bool &output) {
+  switch (getToken().getKind()) {
+  case BLIFToken::cover:
+  case BLIFToken::integer:
+    input = getTokenSpelling();
+    consumeToken();
+    break;
+  default:
+    return failure();
+  }
 
-ParseResult BLIFModelParser::parseTruthTable() { return failure(); }
+  switch (getToken().getKind()) {
+  case BLIFToken::integer:
+    if (getTokenSpelling() == "0") {
+      consumeToken();
+      output = false;
+      return success();
+    }
+    if (getTokenSpelling() == "1") {
+      consumeToken();
+      output = true;
+      return success();
+    }
+    break;
+  default:
+    break;
+  }
+
+  return failure();
+}
+
+ParseResult BLIFModelParser::parseTruthTable(SmallVectorImpl<StringRef> &inputs,
+                                             SmallVectorImpl<bool> &outputs) {
+  StringRef input;
+  bool output;
+  while (succeeded(parseOptionalTruthLine(input, output))) {
+    inputs.push_back(input);
+    outputs.push_back(output);
+  }
+
+  return success();
+}
 
 /// logicgate ::= '.names' in* out NEWLINE single_output_cover*
 ParseResult BLIFModelParser::parseLogicGate() {
@@ -371,13 +412,35 @@ ParseResult BLIFModelParser::parseLogicGate() {
     return failure();
   output = inputs.back();
   inputs.pop_back();
-  // TODO: READ THE TRUTH TABLE
+  // Deal with truth table
+  SmallVector<StringRef> covers;
+  SmallVector<bool> sets;
+  if (parseTruthTable(covers, sets))
+    return failure();
+
+  SmallVector<SmallVector<int8_t>> truthTable;
+  for (auto [i, o] : llvm::zip_equal(covers, sets)) {
+    SmallVector<int8_t> row;
+    for (auto c : i)
+      if (c == '0')
+        row.push_back(0);
+      else if (c == '1')
+        row.push_back(1);
+      else if (c == '-')
+        row.push_back(2);
+      else
+        return emitError("invalid truth table value '") << c << "'";
+    row.push_back(o);
+    truthTable.push_back(row);
+  }
+
   // Resolve Inputs
   SmallVector<Value> inputValues;
   for (auto input : inputs)
     inputValues.push_back(getNamedValue(input));
   // BuildOp
-  auto op = builder.create<LogicGateOp>(builder.getIntegerType(1), inputValues);
+  auto op = builder.create<LogicGateOp>(builder.getIntegerType(1), truthTable,
+                                        inputValues);
   // Record output name
   setNamedValue(output, op.getResult());
   // Record Fixups

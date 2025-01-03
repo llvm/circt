@@ -59,7 +59,7 @@ def LogicGateOp: BLIFOp<"logic_gate", []> {
     means don't use the input.
   }];
   
-  let arguments = (ins /* IntArrayProperty<I8Property>:$func, */
+  let arguments = (ins ArrayProperty<IntArrayProperty<I8Property>>:$func,
                        Variadic<I1>:$inputs);
   let results = (outs I1:$result);
 }

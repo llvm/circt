@@ -132,6 +132,7 @@ private:
   BLIFToken lexFileInfo(const char *tokStart);
   BLIFToken lexIdentifier(const char *tokStart);
   BLIFToken lexNumber(const char *tokStart);
+  BLIFToken lexNumberOrCover(const char *tokStart);
   void skipComment();
   BLIFToken lexString(const char *tokStart, bool isVerbatim);
   BLIFToken lexCommand(const char *tokStart);

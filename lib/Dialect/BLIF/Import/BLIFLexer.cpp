@@ -194,9 +194,21 @@ BLIFToken BLIFLexer::lexTokenImpl() {
 
       [[fallthrough]]; // Treat as whitespace.
 
+    case '\\':
+      // Handle line continuations.
+      if (*curPtr == '\r') {
+        ++curPtr;
+      }
+      if (*curPtr == '\n') {
+        ++curPtr;
+        continue;
+      }
+
+    case '\n':
+      //        return formToken(BLIFToken::newline, tokStart);
+
     case ' ':
     case '\t':
-    case '\n':
     case '\r':
       // Handle whitespace.
       continue;
@@ -209,9 +221,10 @@ BLIFToken BLIFLexer::lexTokenImpl() {
       continue;
 
     case '-':
-    case '+':
     case '0':
     case '1':
+      return lexNumberOrCover(tokStart);
+
     case '2':
     case '3':
     case '4':
@@ -268,7 +281,7 @@ BLIFToken BLIFLexer::lexIdentifier(const char *tokStart) {
   return formToken(BLIFToken::identifier, tokStart);
 }
 
-/// Skip a comment line, starting with a ';' and going to end of line.
+/// Skip a comment line, starting with a '#' and going to end of line.
 void BLIFLexer::skipComment() {
   while (true) {
     switch (*curPtr++) {
@@ -294,62 +307,37 @@ void BLIFLexer::skipComment() {
 ///
 ///   UnsignedInt ::= '0' | PosInt
 ///   PosInt ::= [1-9] ([0-9])*
-///   DoubleLit ::=
-///       ( '+' | '-' )? Digit+ '.' Digit+ ( 'E' ( '+' | '-' )? Digit+ )?
-///   TripleLit ::=
-///       Digit+ '.' Digit+ '.' Digit+
-///   Radix-specified Integer ::=
-///       ( '-' )? '0' ( 'b' | 'o' | 'd' | 'h' ) LegalDigit*
 ///
 BLIFToken BLIFLexer::lexNumber(const char *tokStart) {
-  assert(llvm::isDigit(curPtr[-1]) || curPtr[-1] == '+' || curPtr[-1] == '-');
+  assert(llvm::isDigit(curPtr[-1]) || curPtr[-1] == '-');
 
   // There needs to be at least one digit.
   if (!llvm::isDigit(*curPtr) && !llvm::isDigit(curPtr[-1]))
     return emitError(tokStart, "unexpected character after sign");
 
-  // If we encounter a "b", "o", "d", or "h", this is a radix-specified integer
-  // literal.  This is only supported for BLIFRTL 2.4.0 or later.  This is
-  // always lexed, but rejected during parsing if the version is too old.
-  const char *oldPtr = curPtr;
-  if (curPtr[-1] == '-' && *curPtr == '0')
-    ++curPtr;
-  if (curPtr[-1] == '0') {
-    switch (*curPtr) {
-    case 'b':
-      ++curPtr;
-      while (*curPtr >= '0' && *curPtr <= '1')
-        ++curPtr;
-      return formToken(BLIFToken::radix_specified_integer, tokStart);
-    case 'o':
-      ++curPtr;
-      while (*curPtr >= '0' && *curPtr <= '7')
-        ++curPtr;
-      return formToken(BLIFToken::radix_specified_integer, tokStart);
-    case 'd':
-      ++curPtr;
-      while (llvm::isDigit(*curPtr))
-        ++curPtr;
-      return formToken(BLIFToken::radix_specified_integer, tokStart);
-    case 'h':
-      ++curPtr;
-      while (llvm::isHexDigit(*curPtr))
-        ++curPtr;
-      return formToken(BLIFToken::radix_specified_integer, tokStart);
-    default:
-      curPtr = oldPtr;
-      break;
-    }
-  }
-
   while (llvm::isDigit(*curPtr))
     ++curPtr;
 
-  // If we encounter a '.' followed by a digit, then this is a floating point
-  // literal, otherwise this is an integer or negative integer.
-  if (*curPtr != '.' || !llvm::isDigit(curPtr[1])) {
-    if (*tokStart == '-' || *tokStart == '+')
-      return formToken(BLIFToken::signed_integer, tokStart);
-    return formToken(BLIFToken::integer, tokStart);
+  return formToken(BLIFToken::integer, tokStart);
+}
+
+/// Lex a number literal or a cover literal
+///
+///
+///   Cover ::= [0-9\-]*
+///
+BLIFToken BLIFLexer::lexNumberOrCover(const char *tokStart) {
+  while (llvm::isDigit(*curPtr) || *curPtr == '-')
+    ++curPtr;
+
+  StringRef spelling(tokStart, curPtr - tokStart);
+  if (spelling.contains('2') || spelling.contains('3') ||
+      spelling.contains('4') || spelling.contains('5') ||
+      spelling.contains('6') || spelling.contains('7') ||
+      spelling.contains('8') || spelling.contains('9') ||
+      !spelling.contains('-')) {
+    curPtr = tokStart + 1;
+    return lexNumber(tokStart);
   }
+  return formToken(BLIFToken::integer, tokStart);
 }
