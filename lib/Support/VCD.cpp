@@ -742,8 +742,6 @@ SignalMapping::SignalMapping(mlir::ModuleOp moduleOp, VCDFile &file,
 }
 
 static mlir::StringAttr getVariableName(Operation *op) {
-  if (auto originalName = op->getAttrOfType<StringAttr>("hw.originalName"))
-    return originalName;
   if (auto name = op->getAttrOfType<StringAttr>("name"))
     return name;
   if (auto verilogName = op->getAttrOfType<StringAttr>("hw.verilogName"))
