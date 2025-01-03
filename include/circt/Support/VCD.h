@@ -42,15 +42,19 @@ struct VCDFile {
       scope,
       variable,
     };
-    Kind kind;
     Kind getKind() const { return kind; }
-    Node(Kind kind) : kind(kind) {}
+    Location getLoc() const { return loc; }
+    Node(Kind kind, Location loc) : kind(kind), loc(loc) {}
 
     virtual ~Node() = default;
     // Dump the node to the stream.
     virtual void dump(mlir::raw_indented_ostream &os) const = 0;
     // Print it in VCD format.
     virtual void printVCD(mlir::raw_indented_ostream &os) const = 0;
+
+  private:
+    Kind kind;
+    Location loc;
   };
 
   struct Metadata : Node {
@@ -65,7 +69,7 @@ struct VCDFile {
 
     // Implement LLVM RTTI.
     static bool classof(const Node *e);
-    Metadata(MetadataType command, ArrayAttr values);
+    Metadata(Location loc, MetadataType command, ArrayAttr values);
     void printVCD(mlir::raw_indented_ostream &os) const override;
     void dump(mlir::raw_indented_ostream &os) const override;
 
@@ -86,8 +90,8 @@ struct VCDFile {
 
     // Implement LLVM RTTI.
     static bool classof(const Node *e);
-    Scope(StringAttr name, ScopeType kind, ArrayAttr dim)
-        : Node(Node::Kind::scope), name(name), kind(kind), dim(dim) {}
+    Scope(Location loc, StringAttr name, ScopeType kind, ArrayAttr dim)
+        : Node(Node::Kind::scope, loc), name(name), kind(kind), dim(dim) {}
     void dump(mlir::raw_indented_ostream &os) const override;
     void printVCD(mlir::raw_indented_ostream &os) const override;
     void setName(StringAttr name) { this->name = name; }
@@ -116,10 +120,10 @@ struct VCDFile {
     // Implement LLVM RTTI.
     static bool classof(const Node *e);
 
-    Variable(VariableType kind, int64_t bitWidth, StringAttr id,
+    Variable(Location loc, VariableType kind, int64_t bitWidth, StringAttr id,
              StringAttr name, ArrayAttr type)
-        : Node(Node::Kind::variable), kind(kind), bitWidth(bitWidth), id(id),
-          name(name), type(type) {}
+        : Node(Node::Kind::variable, loc), kind(kind), bitWidth(bitWidth),
+          id(id), name(name), type(type) {}
     void dump(mlir::raw_indented_ostream &os) const override;
     void printVCD(mlir::raw_indented_ostream &os) const override;
     StringAttr getName() const { return name; }
@@ -172,19 +176,21 @@ struct SignalMapping {
 
   LogicalResult run();
 
+  using Signal = std::pair<circt::igraph::InstancePath, Operation *>;
+  std::optional<Signal> getSignal(VCDFile::Variable *variable) {
+    auto it = signalMap.find(variable);
+    if (it != signalMap.end())
+      return it->second;
+
+    return std::nullopt;
+  }
+
 private:
   mlir::ModuleOp moduleOp;
-  // VCDFile::Scope *topScope;
   StringRef topModuleName;
   VCDFile &file;
   ArrayRef<StringRef> path;
-  // igraph::InstanceGraph instanceGraph;
-  // igraph::InstancePathCache instancePathCache;
-  llvm::DenseMap<VCDFile::Variable *,
-                 std::pair<circt::igraph::InstancePath, Operation *>>
-      signalMap;
-  llvm::DenseMap<StringAttr, DenseMap<StringAttr, Operation *>>
-      verilogNameToOperation;
+  llvm::DenseMap<VCDFile::Variable *, Signal> signalMap;
 };
 
 std::unique_ptr<VCDFile> importVCDFile(llvm::SourceMgr &sourceMgr,

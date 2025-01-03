@@ -11,6 +11,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/InstanceGraph.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Location.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/IR/Value.h"
@@ -37,9 +38,10 @@ using namespace llvm;
 // VCDFile::Metadata
 //===----------------------------------------------------------------------===//
 
-VCDFile::Metadata::Metadata(VCDFile::Metadata::MetadataType command,
+VCDFile::Metadata::Metadata(Location loc,
+                            VCDFile::Metadata::MetadataType command,
                             ArrayAttr values)
-    : Node(Node::Kind::metadata), command(command), values(values) {}
+    : Node(Node::Kind::metadata, loc), command(command), values(values) {}
 
 bool VCDFile::Metadata::classof(const Node *e) {
   return e->getKind() == Kind::metadata;
@@ -430,16 +432,22 @@ struct VCDParser {
   LogicalResult parseValueChange();
   mlir::MLIRContext *context;
   mlir::MLIRContext *getContext() { return context; }
+
+  // Location handling.
   Location translateLocation(llvm::SMLoc loc);
+  Location getCurrentLocation();
+
+  // Error handling.
   InFlightDiagnostic emitError(const Twine &message = {});
   InFlightDiagnostic emitError(SMLoc loc, const Twine &message = {});
+
+  // Token handling.
   void consumeToken();
   mlir::ParseResult parseExpectedKeyword(VCDToken::Kind expected);
   mlir::ParseResult parseId(StringRef &id);
+
+  // Return the current token.
   const VCDToken &getToken() const;
-  LogicalResult convertValueChange();
-  LogicalResult convertScope();
-  const VCDToken &getNextToken();
 
   VCDLexer &lexer;
 
@@ -497,11 +505,12 @@ VCDParser::parseVariable(std::unique_ptr<VCDFile::Variable> &variable) {
   APInt bitWidth;
   StringAttr id, name;
   ArrayAttr type;
+  auto loc = getCurrentLocation();
   if (parseVariableKind(kind) || parseInt(bitWidth) || parseAsId(id) ||
       parseAsId(name) || parseStringUntilEnd(type))
     return failure();
-  variable = std::make_unique<VCDFile::Variable>(kind, bitWidth.getZExtValue(),
-                                                 id, name, type);
+  variable = std::make_unique<VCDFile::Variable>(
+      loc, kind, bitWidth.getZExtValue(), id, name, type);
 
   return success();
 }
@@ -532,12 +541,13 @@ ParseResult VCDParser::parseScope(std::unique_ptr<VCDFile::Scope> &result) {
   VCDFile::Scope::ScopeType kind;
   StringAttr nameAttr;
   ArrayAttr dim;
+  auto loc = translateLocation(lexer.getToken().getLoc());
 
   if (parseExpectedKeyword(VCDToken::command_scope) || parseScopeKind(kind) ||
       parseAsId(nameAttr) || parseStringUntilEnd(dim))
     return failure();
 
-  auto scope = std::make_unique<VCDFile::Scope>(nameAttr, kind, dim);
+  auto scope = std::make_unique<VCDFile::Scope>(loc, nameAttr, kind, dim);
 
   while (!isDone() && getToken().getKind() != VCDToken::command_upscope) {
     auto token = getToken();
@@ -621,9 +631,10 @@ ParseResult VCDParser::parseHeader(VCDFile::Header &header) {
   while (true) {
     VCDFile::Metadata::MetadataType kind;
     ArrayAttr attr;
+    auto loc = getCurrentLocation();
     if (failed(parseMetadata(kind, attr)))
       break;
-    metadata.push_back(VCDFile::Metadata(kind, attr));
+    metadata.push_back(VCDFile::Metadata(loc, kind, attr));
   }
   return success();
 }
@@ -653,6 +664,10 @@ ParseResult VCDParser::parseVCDFile(std::unique_ptr<VCDFile> &file) {
 
 Location VCDParser::translateLocation(llvm::SMLoc loc) {
   return lexer.translateLocation(loc);
+}
+
+Location VCDParser::getCurrentLocation() {
+  return translateLocation(lexer.getToken().getLoc());
 }
 
 InFlightDiagnostic VCDParser::emitError(const Twine &message) {
@@ -694,11 +709,6 @@ mlir::ParseResult VCDParser::parseId(StringRef &id) {
 
 const VCDToken &VCDParser::getToken() const { return lexer.getToken(); }
 
-const VCDToken &VCDParser::getNextToken() {
-  consumeToken();
-  return getToken();
-}
-
 raw_ostream &operator<<(raw_ostream &os, const VCDToken &token) {
   if (token.is(VCDToken::eof))
     return os << 0;
@@ -721,10 +731,26 @@ static mlir::StringAttr getVerilogName(Operation *op) {
 SignalMapping::SignalMapping(mlir::ModuleOp moduleOp, VCDFile &file,
                              ArrayRef<StringRef> path, StringRef topModuleName)
     : moduleOp(moduleOp), topModuleName(topModuleName), file(file), path(path) {
-  for (auto op : moduleOp.getOps<hw::HWModuleOp>()) {
+
+}
+
+static mlir::StringAttr getVariableName(Operation *op) {
+  if (auto name = op->getAttrOfType<StringAttr>("name"))
+    return name;
+  if (auto verilogName = op->getAttrOfType<StringAttr>("hw.verilogName"))
+    return verilogName;
+
+  return StringAttr();
+}
+
+LogicalResult SignalMapping::run() {
+  // 1. Populate verilogNameToOperation.
+  llvm::DenseMap<StringAttr, DenseMap<StringAttr, Operation *>>
+      verilogNameToOperation;
+
+  for (auto op : moduleOp.getOps<hw::HWModuleOp>())
     verilogNameToOperation[op.getModuleNameAttr()].insert(
         std::make_pair(op.getModuleNameAttr(), op));
-  }
 
   mlir::parallelForEach(
       moduleOp.getContext(), moduleOp.getOps<hw::HWModuleOp>(),
@@ -739,21 +765,11 @@ SignalMapping::SignalMapping(mlir::ModuleOp moduleOp, VCDFile &file,
               });
         });
       });
-}
 
-static mlir::StringAttr getVariableName(Operation *op) {
-  if (auto name = op->getAttrOfType<StringAttr>("name"))
-    return name;
-  if (auto verilogName = op->getAttrOfType<StringAttr>("hw.verilogName"))
-    return verilogName;
-
-  return StringAttr();
-}
-
-LogicalResult SignalMapping::run() {
+  // 2. Traverse instance graph.
   igraph::InstanceGraph instanceGraph(moduleOp);
   igraph::InstancePathCache instancePathCache(instanceGraph);
-  auto topModule = instanceGraph.lookup(
+  auto *topModule = instanceGraph.lookup(
       StringAttr::get(moduleOp.getContext(), topModuleName));
   if (!topModule ||
       !isa_and_nonnull<circt::hw::HWModuleOp>(topModule->getModule())) {
@@ -762,66 +778,56 @@ LogicalResult SignalMapping::run() {
 
   auto module = dyn_cast<hw::HWModuleOp>(*topModule->getModule());
 
-  if (!module) {
-    return failure();
-  }
+  // Find the scope of the top module.
   auto *scope = file.getRootScope().get();
   for (auto inst : path) {
-    for (auto &[name, ch] : scope->getChildren()) {
-      llvm::errs() << name << " ";
-    }
-    llvm ::errs() << "\n";
-    auto it = scope->getChildren().find(
+    auto *it = scope->getChildren().find(
         StringAttr::get(moduleOp->getContext(), inst));
-    if (it == scope->getChildren().end()) {
+    if (it == scope->getChildren().end() || !isa<VCDFile::Scope>(it->second))
       return mlir::emitError(moduleOp->getLoc())
              << "instance " << inst << " doesn't exist";
-    }
-    scope = dyn_cast<VCDFile::Scope>(it->second.get());
-    if (!scope)
-      return mlir::emitError(moduleOp->getLoc())
-             << "instance " << inst << " doesn't exist";
+
+    scope = cast<VCDFile::Scope>(it->second.get());
   }
-  // Get scope.
 
   SmallVector<
       std::tuple<VCDFile::Node *, circt::igraph::InstancePath, StringAttr>>
       worklist;
 
+  // 3. Traverse the scope and construct instance path on the fly.
   worklist.push_back(std::make_tuple(scope, circt::igraph::InstancePath(),
                                      module.getModuleNameAttr()));
   while (!worklist.empty()) {
     auto [node, path, module] = worklist.pop_back_val();
     if (auto *variable = dyn_cast<VCDFile::Variable>(node)) {
-      auto *op = verilogNameToOperation[module][variable->getName()];
-      if (!op) {
+      auto it = verilogNameToOperation[module].find(variable->getName());
+      if (it == verilogNameToOperation[module].end())
         continue;
-      }
-      auto name = getVariableName(op);
-      if (name != variable->getName()) {
-        // variable->setName(name);
-      }
-    } else if (auto *scope = dyn_cast<VCDFile::Scope>(node)) {
-      // auto instanceOp = dyn_cast_or_null<hw::InstanceOp>(
-      //     verilogNameToOperation[module][scope->getName()]);
-      // if (!instanceOp) {
-      //   llvm::errs() << scope->getName() << " is not found";
-      //   continue;
-      // }
 
+      auto *op = it->second;
+      auto name = getVariableName(op);
+      auto result =
+          signalMap.insert(std::make_pair(variable, std::make_pair(path, op)));
+      (void)result;
+      assert(result.second && "duplicate variable name");
+      if (name != variable->getName())
+        variable->setName(name);
+    } else if (auto *scope = dyn_cast<VCDFile::Scope>(node)) {
       for (auto &[_, child] : scope->getChildren()) {
-        if (auto nest = dyn_cast<VCDFile::Scope>(child.get())) {
+        if (auto *nest = dyn_cast<VCDFile::Scope>(child.get())) {
           auto instanceOp = dyn_cast_or_null<hw::InstanceOp>(
               verilogNameToOperation[module][nest->getName()]);
           if (!instanceOp) {
-            llvm::errs() << path << " " << scope->getName() << " is not found\n";
+            mlir::emitWarning(scope->getLoc())
+                << path << " " << scope->getName() << " is not found\n";
             continue;
           }
           auto newPath = instancePathCache.appendInstance(path, instanceOp);
           auto newModule = instanceOp.getReferencedModuleNameAttr();
           worklist.push_back(std::make_tuple(child.get(), newPath, newModule));
-        } else {
+        } else if (auto *nest = dyn_cast<VCDFile::Variable>(child.get())) {
           worklist.push_back(std::make_tuple(child.get(), path, module));
+        } else {
         }
       }
     }
