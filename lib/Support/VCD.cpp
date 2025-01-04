@@ -23,6 +23,7 @@
 #include "llvm/Support/WithColor.h"
 
 #include <functional>
+#include <memory>
 #include <variant>
 
 #define DEBUG_TYPE "vcd"
@@ -74,9 +75,9 @@ static void printArray(mlir::raw_indented_ostream &os, ArrayAttr array) {
 }
 
 void VCDFile::Metadata::printVCD(mlir::raw_indented_ostream &os) const {
-  os << command << " ";
+  os << "$" << getMetadataKindName(command) << " ";
   printArray(os, values);
-  os << "$end\n";
+  os << " $end\n";
 }
 
 //===----------------------------------------------------------------------===//
@@ -110,7 +111,8 @@ void VCDFile::Scope::printVCD(mlir::raw_indented_ostream &os) const {
 }
 
 void VCDFile::Scope::dump(mlir::raw_indented_ostream &os) const {
-  os << "Scope: " << name.getValue() << " kind=" << getScopeKindName(kind) << "\n";
+  os << "Scope: " << name.getValue() << " kind=" << getScopeKindName(kind)
+     << "\n";
   auto scope = os.scope();
   for (auto &[_, child] : children) {
     child->dump(os);
@@ -318,7 +320,7 @@ static StringRef getTokenKindName(VCDToken::Kind kind) {
     return #NAME;
 #define TOK_COMMAND(SPELLING)                                                  \
   case VCDToken::command_##SPELLING:                                           \
-    return #SPELLING;
+    return "$" #SPELLING;
 #include "VCDTokenKinds.def"
   }
   llvm::report_fatal_error("unknown token kind");
@@ -451,6 +453,7 @@ private:
   ParseResult parseEnd();
   ParseResult parseScope(std::unique_ptr<VCDFile::Scope> &result);
   ParseResult parseStringUntilEnd(ArrayAttr &result);
+  ParseResult parseStringUntilEnd(ArrayAttr &result, Location loc);
   ParseResult parseAsArrayAttr(VCDToken::Kind kind, ArrayAttr &result);
   ParseResult parseAsMetadata(VCDToken::Kind kind, ArrayAttr &result);
   ParseResult parseMetadata(VCDFile::Metadata::MetadataType &kind,
@@ -506,7 +509,7 @@ VCDParser::parseVariableKind(VCDFile::Variable::VariableType &kind) {
           .Case("time", VCDFile::Variable::VariableType::time)
           .Default(std::nullopt);
   if (!kindOpt)
-    return emitError() << "unexpected variable kind " << variableKind;
+    return emitError() << "unexpected variable kind `" << variableKind << "`";
   kind = kindOpt.value();
   consumeToken();
   return success();
@@ -546,7 +549,7 @@ ParseResult VCDParser::parseScopeKind(VCDFile::Scope::ScopeType &kind) {
           .Default(std::nullopt);
 
   if (!kindOpt)
-    return emitError() << "expected scope kind";
+    return emitError() << "unexpected scope kind `" << scopeKind << "`";
   kind = kindOpt.value();
   consumeToken();
   return success();
@@ -585,8 +588,13 @@ ParseResult VCDParser::parseScope(std::unique_ptr<VCDFile::Scope> &result) {
         return failure();
       scope->getChildren().insert(
           std::make_pair(variable->getName(), std::move(variable)));
+    } else if (token.getKind() == VCDToken::command_comment) {
+      ArrayAttr array;
+      // Skip the comment.
+      if (parseStringUntilEnd(array))
+        return failure();
     } else {
-      return emitError() << "expected scope or variable";
+      return emitError() << "unexpected token `" << token.getSpelling() << "`";
     }
   }
 
@@ -605,6 +613,7 @@ ParseResult VCDParser::parseStringUntilEnd(ArrayAttr &result) {
   }
   if (parseExpectedKeyword(VCDToken::command_end))
     return failure();
+
   result = ArrayAttr::get(getContext(), args);
   return success();
 }
@@ -717,7 +726,7 @@ mlir::ParseResult VCDParser::parseExpectedKeyword(VCDToken::Kind expected) {
     return success();
   }
 
-  emitError() << "expected keyword " << getTokenKindName(expected);
+  emitError() << "expected keyword `" << getTokenKindName(expected) << "`";
   return failure();
 }
 
