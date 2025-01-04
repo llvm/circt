@@ -14,15 +14,16 @@
 # RUN: FileCheck %s --input-file %t/hw/XrtTop.sv --check-prefix=TOP
 
 import pycde
-from pycde import Clock, Input, Module, generator, types
+from pycde import Clock, Input, Module, generator
+from pycde.types import Bits
 from pycde.bsp import XrtBSP
 
 import sys
 
 
 class Main(Module):
-  clk = Clock(types.i1)
-  rst = Input(types.i1)
+  clk = Clock()
+  rst = Input(Bits(1))
 
   @generator
   def construct(ports):
@@ -30,11 +31,7 @@ class Main(Module):
 
 
 gendir = sys.argv[1]
-s = pycde.System(XrtBSP(Main),
-                 name="ESILoopback",
-                 output_directory=gendir,
-                 sw_api_langs=["python"])
-s.run_passes(debug=True)
+s = pycde.System(XrtBSP(Main), name="ESILoopback", output_directory=gendir)
 s.compile()
 s.package()
 
