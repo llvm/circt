@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Arc/ModelInfoExport.h"
+#include "circt/Dialect/BLIF/BLIFEmitter.h"
 #include "circt/Dialect/BLIF/BLIFParser.h"
 #include "circt/Dialect/Calyx/CalyxEmitter.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
@@ -34,6 +35,7 @@ inline void registerAllTranslations() {
   static bool initOnce = []() {
     arc::registerArcModelInfoTranslation();
     blif::registerFromBLIFFileTranslation();
+    blif::registerToBLIFFileTranslation();
     calyx::registerToCalyxTranslation();
     firrtl::registerFromFIRFileTranslation();
     firrtl::registerToFIRFileTranslation();

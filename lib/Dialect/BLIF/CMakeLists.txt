@@ -23,4 +23,5 @@ add_dependencies(circt-headers
   CIRCTBLIFEnumsIncGen
   )
 
-add_subdirectory(Import)
+  add_subdirectory(Export)
+  add_subdirectory(Import)
