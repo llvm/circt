@@ -1,0 +1,47 @@
+$comment RUN: circt-vcd %s --emit-vcd-data-structure | FileCheck %s
+$comment 
+  CHECK:      Header:
+  CHECK-NEXT:   Metadata: comment
+  CHECK-NEXT:   Values:
+  CHECK-NEXT:   Metadata: date
+  CHECK-NEXT:   Values: ["Fri", "Jan", "3", "15", ":32:32", "2025"]
+  CHECK-NEXT:   Metadata: version
+  CHECK-NEXT:   Values: ["Verilator"]
+  CHECK-NEXT:   Metadata: timescale
+  CHECK-NEXT:   Values: ["1", "ns"]
+  CHECK-NEXT: Scope: tb kind=module
+  TODO: Parse dim properly.
+  CHECK-NEXT:   Variable: name=value kind=wire bitwidth=8 id=! dim=["[7:0", "]"]
+  CHECK-NEXT:   Variable: name=clk kind=reg bitwidth=1 id=" dim=[]
+  CHECK-NEXT:   Variable: name=rnd kind=wire bitwidth=8 id=# dim=["[7:0", "]"]
+  CHECK-NEXT:   Variable: name=rstn kind=integer bitwidth=1 id=$ dim=[]
+  CHECK-NEXT:   Variable: name=seed kind=time bitwidth=32 id=% dim=["[31:0", "]"]
+  CHECK-NEXT:   Scope: dut kind=begin
+  CHECK-NEXT:     Variable: name=a kind=wire bitwidth=1 id=! dim=[]
+  CHECK-NEXT:     Variable: name=c kind=wire bitwidth=1 id=# dim=[]
+  CHECK-NEXT: ValueChange(not parsed): 
+  CHECK-NEXT:   $dumpvars
+$end
+$date
+        Fri Jan 3 15:32:32 2025
+$end
+$version
+        Verilator
+$end
+$timescale
+        1ns
+$end
+$scope module tb $end
+$var wire 8 ! value [7:0] $end
+$var reg 1 " clk $end
+$var wire 8 # rnd [7:0] $end
+$var integer 1 $ rstn $end
+$var time 32 % seed [31:0] $end
+$scope begin dut $end
+$var wire 1 ! a $end
+$var wire 1 # c $end
+$upscope $end
+$upscope $end
+$enddefinitions $end
+$dumpvars
+$end
