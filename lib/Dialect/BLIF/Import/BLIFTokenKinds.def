@@ -1,0 +1,98 @@
+//===- BLIFTokenKinds.def - .blif file Token Descriptions -------*- C++ -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file is intended to be #include'd multiple times to extract information
+// about tokens for various clients in the lexer.
+//
+//===----------------------------------------------------------------------===//
+
+#if !defined(TOK_MARKER) && !defined(TOK_IDENTIFIER) &&                        \
+    !defined(TOK_LITERAL) && !defined(TOK_PUNCTUATION) &&                      \
+    !defined(TOK_KEYWORD) && !defined(TOK_KEYWORD_DOT)
+#error Must define one of the TOK_ macros.
+#endif
+
+#ifndef TOK_MARKER
+#define TOK_MARKER(X)
+#endif
+#ifndef TOK_IDENTIFIER
+#define TOK_IDENTIFIER(NAME)
+#endif
+#ifndef TOK_LITERAL
+#define TOK_LITERAL(NAME)
+#endif
+#ifndef TOK_PUNCTUATION
+#define TOK_PUNCTUATION(NAME, SPELLING)
+#endif
+#ifndef TOK_KEYWORD
+#define TOK_KEYWORD(SPELLING)
+#endif
+#ifndef TOK_KEYWORD_DOT
+#define TOK_KEYWORD_DOT(SPELLING) TOK_KEYWORD(SPELLING)
+#endif
+
+// Markers
+TOK_MARKER(eof)
+TOK_MARKER(error)
+
+// Identifiers.
+TOK_IDENTIFIER(identifier)         // foo
+
+// Literals
+TOK_LITERAL(integer)                 // 42
+TOK_LITERAL(signed_integer)          // -42 and +42
+TOK_LITERAL(radix_specified_integer) // 0b101010, 0o52, 0d42, 0h2a and negations
+TOK_LITERAL(cover) // 0--1-
+TOK_LITERAL(bit) // 0 || 1
+
+// Keywords.  These turn "foo" into FIRToken::kw_foo enums.
+
+// NOTE: Please key these alphabetized to make it easier to find something in
+// this list and to cater to OCD.
+
+// Keywords which start with '.'.  These are separated as the kw_foo must be formed from '.foo'.
+TOK_KEYWORD_DOT(area)
+TOK_KEYWORD_DOT(cycle)
+TOK_KEYWORD_DOT(clock)
+TOK_KEYWORD_DOT(clocks)
+TOK_KEYWORD_DOT(clock_event)
+TOK_KEYWORD_DOT(default_input_arrival)
+TOK_KEYWORD_DOT(default_input_drive)
+TOK_KEYWORD_DOT(default_max_input_load)
+TOK_KEYWORD_DOT(default_output_load)
+TOK_KEYWORD_DOT(default_output_required)
+TOK_KEYWORD_DOT(delay)
+TOK_KEYWORD_DOT(end)
+TOK_KEYWORD_DOT(end_kiss)
+TOK_KEYWORD_DOT(exdc)
+TOK_KEYWORD_DOT(gate)
+TOK_KEYWORD_DOT(input)
+TOK_KEYWORD_DOT(inputs)
+TOK_KEYWORD_DOT(input_arrival)
+TOK_KEYWORD_DOT(input_drive)
+TOK_KEYWORD_DOT(latch)
+TOK_KEYWORD_DOT(max_input_load)
+TOK_KEYWORD_DOT(mlatch)
+TOK_KEYWORD_DOT(model)
+TOK_KEYWORD_DOT(names)
+TOK_KEYWORD_DOT(output)
+TOK_KEYWORD_DOT(outputs)
+TOK_KEYWORD_DOT(output_load)
+TOK_KEYWORD_DOT(output_required)
+TOK_KEYWORD_DOT(search)
+TOK_KEYWORD_DOT(start_kiss)
+TOK_KEYWORD_DOT(subskt)
+TOK_KEYWORD_DOT(wire)
+TOK_KEYWORD_DOT(wire_load_slope)
+
+#undef TOK_MARKER
+#undef TOK_IDENTIFIER
+#undef TOK_LITERAL
+#undef TOK_PUNCTUATION
+#undef TOK_KEYWORD
+#undef TOK_KEYWORD_DOT

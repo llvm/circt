@@ -1,0 +1,30 @@
+# RUN: circt-translate -import-blif -verify-diagnostics %s | circt-opt | FileCheck %s
+
+# CHECK: blif.model
+.model simple
+.input a
+.output b
+.clock clk1
+.inputs c d
+.outputs e f
+.clocks clk2 clk3
+# CHECK: blif.logic_gate
+# CHECK-SAME: func = [array<i8: 1, 1, 1>, array<i8: 0, 2, 1>, array<i8: 2, 0, 1>]
+.names a c b
+11 1
+0- 1
+-0 1
+.names foo1 foo2 e # use before def
+00 1
+.names c d foo1
+-0 1
+.names clk1 clk2 clk3 foo2
+1-0 0
+.latch foo2 foo3
+.latch foo3 foo4 2
+.latch foo4 foo5 al NIL
+.latch foo5 foo6 fe a
+.latch foo6 foo7 re a 1
+.names foo1 foo7 f
+-1 1
+.end
