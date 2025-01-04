@@ -18,6 +18,7 @@
 #include "mlir/Support/IndentedOstream.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/WithColor.h"
 
@@ -772,11 +773,16 @@ LogicalResult SignalMapping::run() {
 
   // Find the scope of the top module.
   auto *scope = file.getRootScope().get();
-  for (auto inst : path) {
+  if (path.front() != scope->getName()) {
+    return mlir::emitError(scope->getLoc())
+           << "instance " << path.front() << " doesn't exist";
+  }
+
+  for (auto inst : path.drop_front()) {
     auto *it = scope->getChildren().find(
         StringAttr::get(moduleOp->getContext(), inst));
     if (it == scope->getChildren().end() || !isa<VCDFile::Scope>(it->second))
-      return mlir::emitError(moduleOp->getLoc())
+      return mlir::emitError(scope->getLoc())
              << "instance " << inst << " doesn't exist";
 
     scope = cast<VCDFile::Scope>(it->second.get());
