@@ -132,7 +132,7 @@ circuit TestHarness:
   ; CHECK:   `ifndef SYNTHESIS
   ; CHECK:     always @(posedge clock) begin
   ; CHECK:       if ((`PRINTF_COND_) & reset)
-  ; CHECK:         $fwrite(32'h80000002, "The last PC was: %x", dut_trace);
+  ; CHECK:         $fwrite(`PRINTF_FD_, "The last PC was: %x", dut_trace);
   ; CHECK:     end // always @(posedge)
   ; CHECK:   `endif // not def SYNTHESIS
   ; CHECK: endmodule
