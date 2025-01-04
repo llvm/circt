@@ -711,6 +711,14 @@ public:
     // Check for special cases where hw doesn't align with btor syntax
     if (pred == "ne")
       pred = "neq";
+    else if (pred == "ule")
+      pred = "ulte";
+    else if (pred == "sle")
+      pred = "slte";
+    else if (pred == "uge")
+      pred = "ugte";
+    else if (pred == "sge")
+      pred = "sgte";
 
     // Width of result is always 1 for comparison
     genSort("bitvec", 1);
