@@ -110,7 +110,7 @@ void VCDFile::Scope::printVCD(mlir::raw_indented_ostream &os) const {
 }
 
 void VCDFile::Scope::dump(mlir::raw_indented_ostream &os) const {
-  os << "Scope: " << name.getValue() << "\n";
+  os << "Scope: " << name.getValue() << " kind=" << getScopeKindName(kind) << "\n";
   auto scope = os.scope();
   for (auto &[_, child] : children) {
     child->dump(os);
