@@ -40,6 +40,39 @@ firrtl.module @Intrinsics(in %ui : !firrtl.uint, in %clock: !firrtl.clock, in %u
   %p = firrtl.int.generic "params" <FORMAT: none = "foobar"> : () -> !firrtl.bundle<x: uint<1>>
   %po = firrtl.int.generic "params_and_operand" <X: i64 = 123> %ui1 : (!firrtl.uint<1>) -> !firrtl.clock
   firrtl.int.generic "inputs" %clock, %ui1, %clock : (!firrtl.clock, !firrtl.uint<1>, !firrtl.clock) -> ()
+
+  %probe = firrtl.wire : !firrtl.probe<uint<1>>
+  // CHECK: firrtl.view "View"
+  // CHECK-SAME: <{
+  // CHECK-SAME:     elements = [
+  // CHECK-SAME:       {
+  // CHECK-SAME:         class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+  // CHECK-SAME:         id = 0 : i64,
+  // CHECK-SAME:         name = "baz"
+  // CHECK-SAME:       },
+  // CHECK-SAME:       {
+  // CHECK-SAME:         class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+  // CHECK-SAME:         id = 0 : i64,
+  // CHECK-SAME:         name = "qux"
+  // CHECK-SAME:       }
+  // CHECK-SAME:     ]
+  // CHECK-SAME: }>, %probe, %probe : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
+  firrtl.view "View", <{
+    class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+    defName = "Bar",
+    elements = [
+      {
+        class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        id = 0 : i64,
+        name = "baz"
+      },
+      {
+        class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        id = 0 : i64,
+        name = "qux"
+      }
+    ]
+  }>, %probe, %probe : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
 }
 
 // CHECK-LABEL: firrtl.module @FPGAProbe
