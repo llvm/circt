@@ -2,9 +2,11 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from .common import (AppID, Input, Output, _PyProxy, PortError)
+from .common import (AppID, Clock, Input, InputChannel, Output, OutputChannel,
+                     _PyProxy, PortError)
 from .constructs import AssignableSignal, Mux, Wire
-from .module import generator, Module, ModuleLikeBuilderBase, PortProxyBase
+from .module import (generator, modparams, Module, ModuleLikeBuilderBase,
+                     PortProxyBase)
 from .signals import (BitsSignal, BundleSignal, ChannelSignal, Signal,
                       _FromCirctValue)
 from .support import optional_dict_to_dict_attr, get_user_loc
@@ -825,3 +827,39 @@ def ChannelMux(input_channels: List[ChannelSignal]) -> ChannelSignal:
     return m.output_channel
 
   return build_tree(input_channels)
+
+
+@modparams
+def Mailbox(type):
+  """Constructs a module which stores an ESI message until it is read. Acts as a
+  sink -- always accepts new messages, dropping the current unread one if
+  necessary. It also allows snooping on the message contents."""
+  if isinstance(type, Channel):
+    type = type.inner_type
+
+  class Mailbox(Module):
+    clk = Clock()
+    rst = Input(Bits(1))
+
+    input = InputChannel(type)
+    output = OutputChannel(type)
+
+    data = Output(type)
+    valid = Output(Bits(1))
+
+    @generator
+    def generate(ports):
+      input_ready = Bits(1)(1)
+      input_data, input_valid = ports.input.unwrap(input_ready)
+      input_xact = input_valid & input_ready
+      valid_reset = Wire(Bits(1))
+      data = input_data.reg(ports.clk, ports.rst, ce=input_xact)
+      valid = input_valid.reg(ports.clk, ports.rst, ce=input_xact | valid_reset)
+
+      output, output_ready = Channel(type).wrap(data, valid)
+      valid_reset.assign(output_ready & valid)
+      ports.output = output
+      ports.data = data
+      ports.valid = valid
+
+  return Mailbox
