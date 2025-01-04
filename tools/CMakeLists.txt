@@ -18,6 +18,7 @@ add_subdirectory(kanagawatool)
 add_subdirectory(om-linker)
 add_subdirectory(py-split-input-file)
 add_subdirectory(circt-vcd)
+add_subdirectory(circt-vcd-converter)
 
 if(CIRCT_SLANG_FRONTEND_ENABLED)
   add_subdirectory(circt-verilog)

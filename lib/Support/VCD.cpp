@@ -95,7 +95,8 @@ void VCDFile::Scope::printVCD(mlir::raw_indented_ostream &os) const {
 }
 
 void VCDFile::Scope::dump(mlir::raw_indented_ostream &os) const {
-  os << "Scope: " << name << "\n";
+  os << "Scope: " << name.getValue() << "\n";
+  auto scope = os.scope();
   for (auto &[_, child] : children) {
     child->dump(os);
   }
@@ -130,11 +131,9 @@ void VCDFile::Variable::printVCD(mlir::raw_indented_ostream &os) const {
 }
 
 void VCDFile::Variable::dump(mlir::raw_indented_ostream &os) const {
-  os << "Variable: " << name << "\n";
-  os << "Kind: " << getKindName(kind) << "\n";
-  os << "BitWidth: " << bitWidth << "\n";
-  os << "ID: " << id.getValue() << "\n";
-  llvm::errs() << "Dim: " << dim << "\n";
+  os << "Variable: name=" << name.getValue() << " kind=" << getKindName(kind)
+     << " bitwidth=" << bitWidth << " id=" << id.getValue() << " dim=" << dim
+     << "\n";
 }
 
 //===----------------------------------------------------------------------===//
@@ -147,6 +146,8 @@ void VCDFile::Header::printVCD(mlir::raw_indented_ostream &os) const {
 }
 
 void VCDFile::Header::dump(mlir::raw_indented_ostream &os) const {
+  os << "Header:\n";
+  auto scope = os.scope();
   for (auto &data : metadata)
     data->dump(os);
 }
@@ -160,7 +161,9 @@ void VCDFile::ValueChange::printVCD(mlir::raw_indented_ostream &os) const {
 }
 
 void VCDFile::ValueChange::dump(mlir::raw_indented_ostream &os) const {
-  os << "ValueChange(not parsed) :" << remainingBuffer << "\n";
+  os << "ValueChange(not parsed): ";
+  auto scope = os.scope();
+  os << remainingBuffer << "\n";
 }
 
 // ===----------------------------------------------------------------------===//
@@ -462,8 +465,6 @@ private:
   VCDLexer &lexer;
 
   bool isDone();
-
-  friend raw_ostream &operator<<(raw_ostream &os, const VCDToken &token);
 };
 
 StringAttr VCDParser::getStringAttr(StringRef str) {
@@ -633,14 +634,13 @@ ParseResult VCDParser::parseMetadata(VCDFile::Metadata::MetadataType &kind,
 
 ParseResult VCDParser::parseHeader(VCDFile::Header &header) {
   LLVM_DEBUG(llvm::dbgs() << "parseHeader\n");
-  SmallVector<VCDFile::Metadata> metadata;
   while (true) {
     VCDFile::Metadata::MetadataType kind;
     ArrayAttr attr;
     auto loc = getCurrentLocation();
     if (failed(parseMetadata(kind, attr)))
       break;
-    metadata.push_back(VCDFile::Metadata(loc, kind, attr));
+    header.addMetadata(std::make_unique<VCDFile::Metadata>(loc, kind, attr));
   }
   return success();
 }
@@ -735,15 +735,6 @@ SignalMapping::SignalMapping(mlir::ModuleOp moduleOp, VCDFile &file,
 
 }
 
-static mlir::StringAttr getVariableName(Operation *op) {
-  if (auto name = op->getAttrOfType<StringAttr>("name"))
-    return name;
-  if (auto verilogName = op->getAttrOfType<StringAttr>("hw.verilogName"))
-    return verilogName;
-
-  return StringAttr();
-}
-
 LogicalResult SignalMapping::run() {
   // 1. Populate verilogNameToOperation.
   llvm::DenseMap<StringAttr, DenseMap<StringAttr, Operation *>>
@@ -806,13 +797,10 @@ LogicalResult SignalMapping::run() {
         continue;
 
       auto *op = it->second;
-      auto name = getVariableName(op);
       auto result =
           signalMap.insert(std::make_pair(variable, std::make_pair(path, op)));
       (void)result;
       assert(result.second && "duplicate variable name");
-      if (name != variable->getName())
-        variable->setName(name);
     } else if (auto *scope = dyn_cast<VCDFile::Scope>(node)) {
       for (auto &[_, child] : scope->getChildren()) {
         if (auto *nest = dyn_cast<VCDFile::Scope>(child.get())) {

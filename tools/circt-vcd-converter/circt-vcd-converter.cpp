@@ -1,4 +1,4 @@
-//===- circt-vcd.cpp - The vcd driver ------*- C++ -*-===//
+//===- circt-vcd-converter.cpp - The vcd converter ------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -22,6 +22,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
@@ -36,15 +37,29 @@ using namespace circt;
 // Command-line options declaration
 //===----------------------------------------------------------------------===//
 
+static cl::opt<bool>
+    allowUnregisteredDialects("allow-unregistered-dialects",
+                              cl::desc("Allow unknown dialects in the input"));
+
 static cl::OptionCategory mainCategory("circt-generate-lec-mapping Options");
 
-static cl::opt<std::string> inputVCD(cl::Positional,
+static cl::opt<std::string> inputMLIR("mlir", cl::Required,
+                                      cl::desc("input mlir file"),
+                                      cl::cat(mainCategory));
+static cl::opt<std::string> inputVCD("vcd", cl::Required,
+                                     cl::desc("input vcd file"),
+                                     cl::cat(mainCategory));
+static cl::opt<std::string> dutPath("dut-path", cl::Required,
                                     cl::desc("path to dut module"),
                                     cl::cat(mainCategory));
+static cl::opt<std::string> dutModuleName("dut-module-name", cl::Required,
+                                          cl::desc("name of dut module"),
+                                          cl::cat(mainCategory));
 static cl::opt<std::string> outputFilename("o", cl::desc("Output name"),
                                            cl::value_desc("name"),
                                            cl::init("-"),
                                            cl::cat(mainCategory));
+
 static cl::opt<bool> emitVCDDataStructure("emit-vcd-data-structure",
                                           cl::desc("Emit VCD data structure"),
                                           cl::init(false),
@@ -54,7 +69,54 @@ static cl::opt<bool> emitVCDDataStructure("emit-vcd-data-structure",
 // Tool implementation
 //===----------------------------------------------------------------------===//
 
+static mlir::StringAttr getVariableName(Operation *op) {
+  if (auto originalName = op->getAttrOfType<StringAttr>("hw.originalName"))
+    return originalName;
+  if (auto name = op->getAttrOfType<StringAttr>("name"))
+    return name;
+  if (auto verilogName = op->getAttrOfType<StringAttr>("hw.verilogName"))
+    return verilogName;
 
+  return StringAttr();
+}
+
+static LogicalResult convertVCD(vcd::VCDFile &file, mlir::ModuleOp module,
+                                StringRef dutPath, StringRef dutModuleName) {
+  vcd::SignalMapping mapping(module, file, dutPath, dutModuleName);
+  if (failed(mapping.run())) {
+    module->emitError() << "failed";
+    return failure();
+  }
+
+  SmallVector<vcd::VCDFile::Node *> worklist;
+  worklist.push_back(file.getRootScope().get());
+  auto &signalMap = mapping.getSignalMap();
+
+  // Walk VCD file data structure and rename variables.
+  while (!worklist.empty()) {
+    auto *node = worklist.pop_back_val();
+    if (auto *variable = dyn_cast<vcd::VCDFile::Variable>(node)) {
+      auto it = signalMap.find(variable);
+      if (it == signalMap.end()) {
+        // It's ok if the variable is not found in the signal map.
+        continue;
+      }
+
+      auto *op = it->second.second;
+      auto name = getVariableName(op);
+      if (name != variable->getName())
+        variable->setName(name);
+    }
+
+    if (auto *scope = dyn_cast<vcd::VCDFile::Scope>(node)) {
+      for (auto &[_, child] : scope->getChildren()) {
+        worklist.push_back(child.get());
+      }
+    }
+  }
+
+  return success();
+}
 
 /// This functions initializes the various components of the tool and
 /// orchestrates the work to be done.
@@ -83,14 +145,17 @@ static LogicalResult execute(MLIRContext &context) {
     return failure();
   }
 
+  llvm::SourceMgr mlirSourceMgr;
+  auto inputMLIRFile = mlir::openInputFile(inputMLIR, &errorMessage);
+  mlirSourceMgr.AddNewSourceBuffer(std::move(inputMLIRFile), llvm::SMLoc());
+  SourceMgrDiagnosticVerifierHandler mlirMgrHandler(mlirSourceMgr, &context);
+  auto module = parseSourceFile<ModuleOp>(mlirSourceMgr, &context);
+  SmallVector<StringRef> path(split(dutPath.getValue(), '.'));
+
+  if (failed(convertVCD(*vcdFile, *module, path, dutModuleName)))
+    return failure();
 
   mlir::raw_indented_ostream os(output->os());
-  if (emitVCDDataStructure) {
-    vcdFile->dump(os);
-    output->keep();
-    return success();
-  }
-
   vcdFile->printVCD(os);
   output->keep();
   return success();

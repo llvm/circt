@@ -1,4 +1,5 @@
 add_circt_tool(circt-vcd circt-vcd.cpp)
+
 target_link_libraries(circt-vcd
   PRIVATE
   CIRCTComb

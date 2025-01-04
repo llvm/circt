@@ -146,10 +146,14 @@ struct VCDFile {
 
   struct Header {
     // TODO: Parse header peroperly
-    SmallVector<std::unique_ptr<Metadata>> metadata;
-
+    void addMetadata(std::unique_ptr<Metadata> metadata) {
+      this->metadata.push_back(std::move(metadata));
+    }
     void printVCD(mlir::raw_indented_ostream &os) const;
     void dump(mlir::raw_indented_ostream &os) const;
+
+  private:
+    SmallVector<std::unique_ptr<Metadata>> metadata;
   };
 
   struct ValueChange {
@@ -186,12 +190,9 @@ struct SignalMapping {
   LogicalResult run();
 
   using Signal = std::pair<circt::igraph::InstancePath, Operation *>;
-  std::optional<Signal> getSignal(VCDFile::Variable *variable) {
-    auto it = signalMap.find(variable);
-    if (it != signalMap.end())
-      return it->second;
 
-    return std::nullopt;
+  const llvm::DenseMap<VCDFile::Variable *, Signal> &getSignalMap() const {
+    return signalMap;
   }
 
 private:
