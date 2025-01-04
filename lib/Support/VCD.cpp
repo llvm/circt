@@ -39,6 +39,20 @@ using namespace llvm;
 // VCDFile::Metadata
 //===----------------------------------------------------------------------===//
 
+static StringRef getMetadataKindName(VCDFile::Metadata::MetadataType kind) {
+  switch (kind) {
+  case VCDFile::Metadata::date:
+    return "date";
+  case VCDFile::Metadata::version:
+    return "version";
+  case VCDFile::Metadata::timescale:
+    return "timescale";
+  case VCDFile::Metadata::comment:
+    return "comment";
+  }
+  llvm::report_fatal_error("unknown scope kind");
+}
+
 VCDFile::Metadata::Metadata(Location loc,
                             VCDFile::Metadata::MetadataType command,
                             ArrayAttr values)
@@ -49,7 +63,7 @@ bool VCDFile::Metadata::classof(const Node *e) {
 }
 
 void VCDFile::Metadata::dump(mlir::raw_indented_ostream &os) const {
-  os << "Metadata: " << command << "\n";
+  os << "Metadata: " << getMetadataKindName(command) << "\n";
   os << "Values: " << values << "\n";
 }
 
@@ -624,6 +638,9 @@ ParseResult VCDParser::parseMetadata(VCDFile::Metadata::MetadataType &kind,
   case VCDToken::command_timescale:
     kind = VCDFile::Metadata::MetadataType::timescale;
     break;
+  case VCDToken::command_comment:
+    kind = VCDFile::Metadata::MetadataType::comment;
+    break;
   }
 
   consumeToken();
@@ -738,8 +755,6 @@ SignalMapping::SignalMapping(mlir::ModuleOp moduleOp, VCDFile &file,
 
 LogicalResult SignalMapping::run() {
   // 1. Populate verilogNameToOperation.
-  llvm::DenseMap<StringAttr, DenseMap<StringAttr, Operation *>>
-      verilogNameToOperation;
 
   for (auto op : moduleOp.getOps<hw::HWModuleOp>())
     verilogNameToOperation[op.getModuleNameAttr()].insert(
@@ -748,6 +763,7 @@ LogicalResult SignalMapping::run() {
   mlir::parallelForEach(
       moduleOp.getContext(), moduleOp.getOps<hw::HWModuleOp>(),
       [&](hw::HWModuleOp op) {
+        assert(verilogNameToOperation.contains(op.getModuleNameAttr()));
         auto &moduleMap = verilogNameToOperation[op.getModuleNameAttr()];
         op.walk([&](Operation *op) {
           TypeSwitch<Operation *>(op)
@@ -773,17 +789,17 @@ LogicalResult SignalMapping::run() {
 
   // Find the scope of the top module.
   auto *scope = file.getRootScope().get();
-  if (path.front() != scope->getName()) {
+  if (path.front() != scope->getName())
     return mlir::emitError(scope->getLoc())
-           << "instance " << path.front() << " doesn't exist";
-  }
+           << "root scope " << path.front() << " doesn't exist";
 
   for (auto inst : path.drop_front()) {
     auto *it = scope->getChildren().find(
         StringAttr::get(moduleOp->getContext(), inst));
     if (it == scope->getChildren().end() || !isa<VCDFile::Scope>(it->second))
       return mlir::emitError(scope->getLoc())
-             << "instance " << inst << " doesn't exist";
+             << "instance " << inst << " doesn't exist in the scope "
+             << scope->getName();
 
     scope = cast<VCDFile::Scope>(it->second.get());
   }

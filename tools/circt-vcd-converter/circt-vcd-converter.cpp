@@ -81,7 +81,8 @@ static mlir::StringAttr getVariableName(Operation *op) {
 }
 
 static LogicalResult convertVCD(vcd::VCDFile &file, mlir::ModuleOp module,
-                                StringRef dutPath, StringRef dutModuleName) {
+                                ArrayRef<StringRef> dutPath,
+                                StringRef dutModuleName) {
   vcd::SignalMapping mapping(module, file, dutPath, dutModuleName);
   if (failed(mapping.run())) {
     module->emitError() << "failed";

@@ -200,9 +200,14 @@ private:
   StringRef topModuleName;
   VCDFile &file;
   ArrayRef<StringRef> path;
+  void registerVerilogName(StringAttr moduleName, StringAttr verilogName,
+                           Operation *op);
+  
 
   // Map from VCD variable to MLIR operation with the instance path.
   llvm::DenseMap<VCDFile::Variable *, Signal> signalMap;
+  llvm::DenseMap<StringAttr, DenseMap<StringAttr, Operation *>>
+      verilogNameToOperation;
 };
 
 std::unique_ptr<VCDFile> importVCDFile(llvm::SourceMgr &sourceMgr,
