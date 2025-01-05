@@ -28,6 +28,8 @@ else ()
   add_compile_options(-Wno-covered-switch-default)
 endif ()
 
+add_subdirectory(circt-verilog-lsp)
+
 add_circt_translation_library(CIRCTImportVerilog
   Expressions.cpp
   FormatStrings.cpp
