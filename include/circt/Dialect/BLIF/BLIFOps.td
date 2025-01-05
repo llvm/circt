@@ -83,4 +83,15 @@ def LatchGateOp: BLIFOp<"latch_gate", []> {
   let results = (outs I1:$output);
 }
 
+def LibraryGateOp: BLIFOp<"library_gate", []> {
+  let summary = "Library logic";
+  let description = [{
+  }];
+  
+  let arguments = (ins FlatSymbolRefAttr:$libraryName,
+                       Variadic<I1>:$inputs);
+  let results = (outs I1:$result);
+}
+
+
 #endif // CIRCT_DIALECT_BLIF_BLIFOPS_TD
