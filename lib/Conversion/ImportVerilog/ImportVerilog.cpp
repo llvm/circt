@@ -109,7 +109,7 @@ public:
     return ::convertLocation(context, *sourceManager, bufferFilePaths, loc);
   }
 
-  static DiagnosticSeverity getSeverity(slang::DiagnosticSeverity severity) {
+  static mlir::DiagnosticSeverity getSeverity(slang::DiagnosticSeverity severity) {
     switch (severity) {
     case slang::DiagnosticSeverity::Fatal:
     case slang::DiagnosticSeverity::Error:

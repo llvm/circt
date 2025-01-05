@@ -73,18 +73,6 @@ struct LSPServer {
                         Callback<std::vector<DocumentSymbol>> reply);
 
   //===--------------------------------------------------------------------===//
-  // Code Completion
-
-  void onCompletion(const CompletionParams &params,
-                    Callback<CompletionList> reply);
-
-  //===--------------------------------------------------------------------===//
-  // Signature Help
-
-  void onSignatureHelp(const TextDocumentPositionParams &params,
-                       Callback<SignatureHelp> reply);
-
-  //===--------------------------------------------------------------------===//
   // Inlay Hints
 
   void onInlayHint(const InlayHintsParams &params,
@@ -244,22 +232,6 @@ void LSPServer::onDocumentSymbol(const DocumentSymbolParams &params,
 }
 
 //===----------------------------------------------------------------------===//
-// Code Completion
-
-void LSPServer::onCompletion(const CompletionParams &params,
-                             Callback<CompletionList> reply) {
-  reply(server.getCodeCompletion(params.textDocument.uri, params.position));
-}
-
-//===----------------------------------------------------------------------===//
-// Signature Help
-
-void LSPServer::onSignatureHelp(const TextDocumentPositionParams &params,
-                                Callback<SignatureHelp> reply) {
-  reply(server.getSignatureHelp(params.textDocument.uri, params.position));
-}
-
-//===----------------------------------------------------------------------===//
 // Inlay Hints
 
 void LSPServer::onInlayHint(const InlayHintsParams &params,
@@ -319,12 +291,12 @@ LogicalResult circt::lsp::runVerilogLSPServer(VerilogServer &server,
                         &LSPServer::onDocumentSymbol);
 
   // Code Completion
-  messageHandler.method("textDocument/completion", &lspServer,
-                        &LSPServer::onCompletion);
+  // messageHandler.method("textDocument/completion", &lspServer,
+  //                       &LSPServer::onCompletion);
 
-  // Signature Help
-  messageHandler.method("textDocument/signatureHelp", &lspServer,
-                        &LSPServer::onSignatureHelp);
+  // // Signature Help
+  // messageHandler.method("textDocument/signatureHelp", &lspServer,
+  //                       &LSPServer::onSignatureHelp);
 
   // Inlay Hints
   messageHandler.method("textDocument/inlayHint", &lspServer,

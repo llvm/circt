@@ -1658,7 +1658,7 @@ void ModuleEmitter::emitTypeDims(Type type, Location loc, raw_ostream &os) {
   emitDims(dims, os, loc, *this);
 }
 
-/// Return a 2-state integer atom type name if the width matches. See Spec 6.8
+/// Return a 2-state integer atom type name if the width matches. See casexSpec 6.8
 /// Variable declarations.
 static StringRef getTwoStateIntegerAtomType(size_t width) {
   switch (width) {

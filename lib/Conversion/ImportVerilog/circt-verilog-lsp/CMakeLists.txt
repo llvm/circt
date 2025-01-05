@@ -1,4 +1,4 @@
-llvm_add_library(CIRCTVerilogLspServerLib
+add_circt_library(CIRCTVerilogLspServerLib
   LSPServer.cpp
   VerilogServer.cpp
   Protocol.cpp
@@ -7,6 +7,12 @@ llvm_add_library(CIRCTVerilogLspServerLib
   ADDITIONAL_HEADER_DIRS
   ${MLIR_MAIN_INCLUDE_DIR}/circt/Tools/crct-verilog-lsp-server
 
+  DEPENDS
+  slang_slang
+
   LINK_LIBS PUBLIC
+  LLVMSupport
   MLIRLspServerSupportLib
-  )
+  PRIVATE
+  slang_slang
+)
