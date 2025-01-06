@@ -30,13 +30,19 @@
 #include "slang/syntax/SyntaxPrinter.h"
 #include "slang/syntax/SyntaxTree.h"
 #include "slang/util/Version.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/IntervalMap.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Parallel.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/SMLoc.h"
+#include "llvm/Support/raw_ostream.h"
 
+#include <cstdint>
+#include <memory>
 #include <optional>
 
 using namespace mlir;
@@ -83,10 +89,13 @@ convertLocation(const slang::SourceManager &sourceManager,
                 slang::SourceLocation loc) {
   if (loc && loc.buffer() != slang::SourceLocation::NoLocation.buffer()) {
     auto fileName = sourceManager.getFileName(loc);
-    auto line = sourceManager.getLineNumber(loc);
-    auto column = sourceManager.getColumnNumber(loc);
-    auto loc = mlir::lsp::URIForFile::fromFile(fileName).get();
-    return mlir::lsp::Location(loc, mlir::lsp::Range(line, column));
+    auto line = sourceManager.getLineNumber(loc) - 1;
+    auto column = sourceManager.getColumnNumber(loc) - 1;
+    auto loc = mlir::lsp::URIForFile::fromFile(
+        sourceManager.makeAbsolutePath(fileName));
+    if (auto e = loc.takeError())
+      return mlir::lsp::Location();
+    return mlir::lsp::Location(loc.get(), mlir::lsp::Range(Position(line, column)));
   }
   return mlir::lsp::Location();
 }
@@ -196,9 +205,28 @@ using VerilogIndexSymbol = slang::ast::Symbol;
 
 /// This class provides an index for definitions/uses within a Verilog document.
 /// It provides efficient lookup of a definition given an input source range.
+
+class VerilogServerContext {
+public:
+  VerilogServerContext(
+      const llvm::SourceMgr &sourceMgr,
+      const llvm::SmallDenseMap<uint32_t, uint32_t> &bufferIDMap)
+      : sourceMgr(sourceMgr), bufferIDMap(bufferIDMap) {}
+
+  const llvm::SourceMgr &getSourceMgr() const { return sourceMgr; }
+  const llvm::SmallDenseMap<uint32_t, uint32_t> &getBufferIDMap() const {
+    return bufferIDMap;
+  }
+
+private:
+  const llvm::SourceMgr &sourceMgr;
+  const llvm::SmallDenseMap<uint32_t, uint32_t> &bufferIDMap;
+};
+
 class VerilogIndex {
 public:
-  VerilogIndex() : intervalMap(allocator) {}
+  VerilogIndex(const VerilogServerContext &context)
+      : context(context), intervalMap(allocator) {}
 
   /// Initialize the index with the given ast::Module.
   void initialize(slang::ast::Compilation *compilation);
@@ -208,6 +236,10 @@ public:
   /// provided `loc` overlapped with.
   const VerilogIndexSymbol *lookup(SMLoc loc,
                                    SMRange *overlappedRange = nullptr) const;
+
+  size_t size() const {
+    return std::distance(intervalMap.begin(), intervalMap.end());
+  }
 
 private:
   /// The type of interval map used to store source references. SMRange is
@@ -227,14 +259,64 @@ private:
 
   /// A mapping between definitions and their corresponding symbol.
   DenseMap<const void *, std::unique_ptr<VerilogIndexSymbol>> defToSymbol;
+
+  const VerilogServerContext &context;
 };
 } // namespace
 
 void VerilogIndex::initialize(slang::ast::Compilation *compilation) {
-  auto &c = compilation->getRoot();
-  for (auto *unit : compilation->getCompilationUnits()) {
-    mlir::lsp::Logger::info("VerilogIndex::initialize {}", unit->name);
+  // auto &c = driver.compilation->getRoot();
+  // for (auto *unit : driver.compilation->getCompilationUnits()) {
+  //   mlir::lsp::Logger::info("VerilogIndex::initialize {}", unit->name);
+  // }
+  const auto &root = compilation->getRoot();
+  // for (auto *unit : root.compilationUnits) {
+  //   for (const auto &member : unit->members()) {
+  //     auto loc = convertLocation(member.location);
+  //     if (failed(member.visit(RootVisitor(*this, loc))))
+  //       return failure();
+  //   }
+  // }
+  auto insertDeclRef = [&](const VerilogIndexSymbol *sym, SMRange refLoc,
+                           bool isDef = false) {
+    const char *startLoc = refLoc.Start.getPointer();
+    const char *endLoc = refLoc.End.getPointer();
+    if (!intervalMap.overlaps(startLoc, endLoc)) {
+      intervalMap.insert(startLoc, endLoc, sym);
+    }
+  };
+  const auto *slangSourceMgr = compilation->getSourceManager();
+  for (auto *inst : root.topInstances) {
+    mlir::lsp::Logger::info("VerilogIndex::initialize {}", inst->name);
+    auto &body = inst->body;
+
+    for (auto *symbol : body.getPortList()) {
+      mlir::lsp::Logger::info("VerilogIndex::initialize port {}", symbol->name);
+      auto bufferId =
+          context.getBufferIDMap().at(symbol->location.buffer().getId());
+      const auto &sourceMgr = context.getSourceMgr();
+      // auto loc = sourceMgr->getExpansionRange(symbol->location);
+      auto *buffer = sourceMgr.getMemoryBuffer(bufferId);
+      assert(buffer->getBufferSize() > symbol->location.offset());
+      assert(buffer->getBufferSize() >
+             symbol->location.offset() + symbol->name.size());
+      // slangSourceMgr->getLineNumber(symbol->location);
+      // slangSourceMgr->getColumnNumber(symbol->location);
+
+      auto *start = buffer->getBuffer().data() + symbol->location.offset();
+      auto *end = buffer->getBuffer().data() + symbol->location.offset() +
+                  symbol->name.size();
+      auto range =
+          SMRange(SMLoc::getFromPointer(start), SMLoc::getFromPointer(end));
+      insertDeclRef(symbol, range);
+      mlir::lsp::Logger::info(
+          "VerilogIndex::initialize port range start={} end={} {}",
+          reinterpret_cast<int64_t>(range.Start.getPointer()),
+          reinterpret_cast<int64_t>(range.End.getPointer()),
+          reinterpret_cast<int64_t>(buffer->getBuffer().data()));
+    }
   }
+
   // mlir::lsp::Logger::info("VerilogIndex::initialize {}", c.name);
   // for (auto &member : c.members()) {
 
@@ -243,7 +325,8 @@ void VerilogIndex::initialize(slang::ast::Compilation *compilation) {
   //   mlir::lsp::Logger::info("VerilogIndex::initialize::syntax {}",
   //                           member.getSyntax()->toString());
   //   if (auto *module = member.as_if<slang::ast::CompilationUnitSymbol>()) {
-  //     mlir::lsp::Logger::info("VerilogIndex::initialize compilation unit {}",
+  //     mlir::lsp::Logger::info("VerilogIndex::initialize compilation unit
+  //     {}",
   //                             module->name);
   //   }
   // }
@@ -253,16 +336,7 @@ void VerilogIndex::initialize(slang::ast::Compilation *compilation) {
   //     it.first->second = std::make_unique<VerilogIndexSymbol>(def);
   //   return &*it.first->second;
   // };
-  // auto insertDeclRef = [&](VerilogIndexSymbol *sym, SMRange refLoc,
-  //                          bool isDef = false) {
-  //   const char *startLoc = refLoc.Start.getPointer();
-  //   const char *endLoc = refLoc.End.getPointer();
-  //   if (!intervalMap.overlaps(startLoc, endLoc)) {
-  //     intervalMap.insert(startLoc, endLoc, sym);
-  //     if (!isDef)
-  //       sym->references.push_back(refLoc);
-  //   }
-  // };
+
   // auto insertODSOpRef = [&](StringRef opName, SMRange refLoc) {
   //   const ods::Operation *odsOp = odsContext.lookupOperation(opName);
   //   if (!odsOp)
@@ -409,10 +483,16 @@ struct VerilogDocument {
 
   /// The source manager containing the contents of the input file.
   llvm::SourceMgr sourceMgr;
-  slang::SourceManager slangSourceMgr;
+  // slang::SourceManager slangSourceMgr;
+  llvm::SmallDenseMap<uint32_t, uint32_t> bufferIDMap;
 
   /// The parsed AST module, or failure if the file wasn't valid.
   FailureOr<std::unique_ptr<slang::ast::Compilation>> compilation;
+  slang::driver::Driver driver;
+
+  VerilogServerContext getContext() const {
+    return VerilogServerContext(sourceMgr, bufferIDMap);
+  }
 
   /// The index of the parsed module.
   VerilogIndex index;
@@ -423,7 +503,7 @@ struct VerilogDocument {
                                          slang::SourceLocation loc,
                                          const mlir::lsp::URIForFile &uri) {
     /// Incorrect!
-    return convertLocation(slangSourceMgr, loc);
+    return convertLocation(driver.sourceManager, loc);
   }
 };
 } // namespace
@@ -432,7 +512,8 @@ VerilogDocument::VerilogDocument(
     const mlir::lsp::URIForFile &uri, StringRef contents,
     const std::vector<std::string> &extraDirs,
 
-    std::vector<mlir::lsp::Diagnostic> &diagnostics) {
+    std::vector<mlir::lsp::Diagnostic> &diagnostics)
+    : index(getContext()) {
   auto memBuffer = llvm::MemoryBuffer::getMemBufferCopy(contents, uri.file());
   Logger::info("VerilogDocument::VerilogDocument");
 
@@ -456,7 +537,9 @@ VerilogDocument::VerilogDocument(
 
   const llvm::MemoryBuffer *mlirBuffer = sourceMgr.getMemoryBuffer(1);
   auto slangBuffer =
-      slangSourceMgr.assignText(uri.file(), mlirBuffer->getBuffer());
+      driver.sourceManager.assignText(uri.file(), mlirBuffer->getBuffer());
+  driver.buffers.push_back(slangBuffer);
+  bufferIDMap[1] = 1;
 
   // astContext.getDiagEngine().setHandlerFn([&](const slang::ast::Diagnostic
   // &diag) {
@@ -467,24 +550,28 @@ VerilogDocument::VerilogDocument(
   //     parseVerilogAST(astContext, sourceMgr, /*enableDocumentation=*/true);
 
   Logger::info("VerilogDocument::VerilogDocument try parse");
+  // auto parsed =
+  //     slang::syntax::SyntaxTree::fromBuffer(slangBuffer, slangSourceMgr, {});
 
-  auto parsed =
-      slang::syntax::SyntaxTree::fromBuffer(slangBuffer, slangSourceMgr, {});
+  bool success = driver.parseAllSources();
+
   Logger::info("VerilogDocument::VerilogDocument try parse done");
-
-  if (!parsed) {
+  if (!success) {
     mlir::lsp::Logger::error("Failed to parse Verilog file", uri.file());
     return;
   }
-  mlir::lsp::Logger::info("parsed: {}", parsed->root().toString());
-  compilation = std::make_unique<slang::ast::Compilation>();
-  (*compilation)->addSyntaxTree(parsed);
 
+  // mlir::lsp::Logger::info("parsed: {}", parsed->root().toString());
+  compilation = driver.createCompilation();
+  mlir::lsp::Logger::info("elaborated");
+
+  // From buffers.
   // From buffers.
   // const SourceBuffer& buffer,
   //                                                    SourceManager&
   //                                                    sourceManager, const
-  //                                                    Bag& options, MacroList
+  //                                                    Bag& options,
+  //                                                    MacroList
   //                                                    inheritedMacros
 
   // Initialize the set of parsed includes.
@@ -506,11 +593,28 @@ void VerilogDocument::getLocationsOf(
     const mlir::lsp::URIForFile &uri, const mlir::lsp::Position &defPos,
     std::vector<mlir::lsp::Location> &locations) {
   SMLoc posLoc = defPos.getAsSMLoc(sourceMgr);
+  mlir::lsp::Logger::info("VerilogDocument::getLocationsOf {} {}",
+                          reinterpret_cast<int64_t>(posLoc.getPointer()),
+                          posLoc.getPointer());
   const VerilogIndexSymbol *symbol = index.lookup(posLoc);
-  if (!symbol)
+  mlir::lsp::Logger::info("VerilogDocument::getLocationsOf {}", index.size());
+  if (!symbol) {
+    mlir::lsp::Logger::info("VerilogDocument::getLocationsOf not found");
     return;
+  }
+  mlir::lsp::Logger::info("VerilogDocument::getLocationsOf symbol {}",
+                          symbol->name);
 
-  locations.push_back(getLocationFromLoc(sourceMgr, symbol->location, uri));
+  auto loc = getLocationFromLoc(sourceMgr, symbol->location, uri);
+  // auto bufferId =
+  //     getContext().getBufferIDMap().at(symbol->location.buffer().getId());
+  // auto buffer = sourceMgr.pat;
+  // if (loc.uri.file().empty())
+  // return mlir::lsp::Logger::info(
+  //     "VerilogDocument::getLocationsOf loc is empty");
+  mlir::lsp::Logger::info("VerilogDocument::getLocationsOf loc {}",
+                          loc.range.start.line);
+  locations.push_back(loc);
 }
 
 void VerilogDocument::findReferencesOf(
@@ -628,7 +732,8 @@ void VerilogDocument::findDocumentSymbols(
   //                          mlir::lspSymbolKind::Class,
   //                          mlir::lspRange(sourceMgr, bodyLoc),
   //                          mlir::lspRange(sourceMgr, nameLoc));
-  //   } else if (const auto *cDecl = dyn_cast<ast::UserConstraintDecl>(decl)) {
+  //   } else if (const auto *cDecl = dyn_cast<ast::UserConstraintDecl>(decl))
+  //   {
   //     // TODO: Add source information for the code block body.
   //     SMRange nameLoc = cDecl->getName().getLoc();
   //     SMRange bodyLoc = nameLoc;
@@ -717,8 +822,8 @@ void VerilogDocument::getInlayHintsFor(
   //     return;
   // }
   auto loc = decl->sourceRange.end();
-  auto pos = slangSourceMgr.getLineNumber(loc);
-  auto col = slangSourceMgr.getColumnNumber(loc);
+  auto pos = driver.sourceManager.getLineNumber(loc);
+  auto col = driver.sourceManager.getColumnNumber(loc);
   mlir::lsp::InlayHint hint(mlir::lsp::InlayHintKind::Type,
                             mlir::lsp::Position(pos, col));
   {
@@ -781,7 +886,8 @@ void VerilogDocument::getVerilogViewOutput(
   // MLIRContext mlirContext;
   // SourceMgrDiagnosticHandler diagHandler(sourceMgr, &mlirContext, os);
   // OwningOpRef<ModuleOp> pdlModule =
-  //     codegenVerilogToMLIR(&mlirContext, astContext, sourceMgr, **astModule);
+  //     codegenVerilogToMLIR(&mlirContext, astContext, sourceMgr,
+  //     **astModule);
   // if (!pdlModule)
   //   return;
   // if (kind == mlir::lsp::VerilogViewOutputKind::MLIR) {
@@ -815,8 +921,8 @@ struct VerilogTextFileChunk {
     adjustLocForChunkOffset(range.start);
     adjustLocForChunkOffset(range.end);
   }
-  /// Adjust the line number of the given position to anchor at the beginning of
-  /// the file, instead of the beginning of this chunk.
+  /// Adjust the line number of the given position to anchor at the beginning
+  /// of the file, instead of the beginning of this chunk.
   void adjustLocForChunkOffset(mlir::lsp::Position &pos) {
     pos.line += lineOffset;
   }
@@ -833,7 +939,8 @@ struct VerilogTextFileChunk {
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// This class represents a text file containing one or more Verilog documents.
+/// This class represents a text file containing one or more Verilog
+/// documents.
 class VerilogTextFile {
 public:
   VerilogTextFile(const mlir::lsp::URIForFile &uri, StringRef fileContents,
@@ -992,8 +1099,8 @@ void VerilogTextFile::findDocumentSymbols(
   if (chunks.size() == 1)
     return chunks.front()->document.findDocumentSymbols(symbols);
 
-  // If there are multiple chunks in this file, we create top-level symbols for
-  // each chunk.
+  // If there are multiple chunks in this file, we create top-level symbols
+  // for each chunk.
   for (unsigned i = 0, e = chunks.size(); i < e; ++i) {
     VerilogTextFileChunk &chunk = *chunks[i];
     mlir::lsp::Position startPos(chunk.lineOffset);
