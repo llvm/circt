@@ -165,3 +165,16 @@ with Context() as ctx, Location.unknown():
     rtg.FixedRegisterOp(rtgtest.RegT6Attr.get())
 
   print(m)
+
+with Context() as ctx, Location.unknown():
+  circt.register_dialects(ctx)
+  m = Module.create()
+  with InsertionPoint(m.body):
+    # CHECK: rtgtest.immediate #rtgtest.imm12<3> : !rtgtest.imm12
+    rtgtest.ImmediateOp(rtgtest.Imm12Attr.get(3))
+    # CHECK: rtgtest.immediate #rtgtest.imm21<3> : !rtgtest.imm21
+    rtgtest.ImmediateOp(rtgtest.Imm21Attr.get(3))
+    # CHECK: rtgtest.immediate #rtgtest.imm32<3> : !rtgtest.imm32
+    rtgtest.ImmediateOp(rtgtest.Imm32Attr.get(3))
+
+  print(m)

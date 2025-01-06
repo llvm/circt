@@ -31,6 +31,27 @@ MLIR_CAPI_EXPORTED bool rtgtestTypeIsACPU(MlirType type);
 /// Creates an RTGTest CPU type in the context.
 MLIR_CAPI_EXPORTED MlirType rtgtestCPUTypeGet(MlirContext ctxt);
 
+// Immediates.
+//===----------------------------------------------------------------------===//
+
+/// If the type is an RTGTest Imm12Type.
+MLIR_CAPI_EXPORTED bool rtgtestTypeIsAImm12(MlirType type);
+
+/// Creates an RTGTest Imm12 type in the context.
+MLIR_CAPI_EXPORTED MlirType rtgtestImm12TypeGet(MlirContext ctxt);
+
+/// If the type is an RTGTest Imm21Type.
+MLIR_CAPI_EXPORTED bool rtgtestTypeIsAImm21(MlirType type);
+
+/// Creates an RTGTest Imm21 type in the context.
+MLIR_CAPI_EXPORTED MlirType rtgtestImm21TypeGet(MlirContext ctxt);
+
+/// If the type is an RTGTest Imm32Type.
+MLIR_CAPI_EXPORTED bool rtgtestTypeIsAImm32(MlirType type);
+
+/// Creates an RTGTest Imm32 type in the context.
+MLIR_CAPI_EXPORTED MlirType rtgtestImm32TypeGet(MlirContext ctxt);
+
 //===----------------------------------------------------------------------===//
 // Attribute API.
 //===----------------------------------------------------------------------===//
@@ -239,6 +260,39 @@ MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegT6(MlirAttribute attr);
 
 /// Creates an RTGTest RegT6 attribute in the context.
 MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegT6AttrGet(MlirContext ctxt);
+
+// Immediates.
+//===----------------------------------------------------------------------===//
+
+/// If the attribute is an RTGTest Imm12Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsAImm12(MlirAttribute attr);
+
+/// Creates an RTGTest Imm12 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestImm12AttrGet(MlirContext ctxt,
+                                                     unsigned value);
+
+/// Returns the value represented by the Imm12 attribute.
+MLIR_CAPI_EXPORTED unsigned rtgtestImm12AttrGetValue(MlirAttribute attr);
+
+/// If the attribute is an RTGTest Imm21Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsAImm21(MlirAttribute attr);
+
+/// Creates an RTGTest Imm21 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestImm21AttrGet(MlirContext ctxt,
+                                                     unsigned value);
+
+/// Returns the value represented by the Imm21 attribute.
+MLIR_CAPI_EXPORTED unsigned rtgtestImm21AttrGetValue(MlirAttribute attr);
+
+/// If the attribute is an RTGTest Imm32Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsAImm32(MlirAttribute attr);
+
+/// Creates an RTGTest Imm32 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestImm32AttrGet(MlirContext ctxt,
+                                                     unsigned value);
+
+/// Returns the value represented by the Imm32 attribute.
+MLIR_CAPI_EXPORTED unsigned rtgtestImm32AttrGetValue(MlirAttribute attr);
 
 #ifdef __cplusplus
 }

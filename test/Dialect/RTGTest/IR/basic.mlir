@@ -86,6 +86,23 @@ rtg.test @registers : !rtg.dict<reg: !rtgtest.ireg> {
   rtg.virtual_reg [#rtgtest.ra, #rtgtest.sp]
 }
 
+// CHECK-LABEL: @immediates
+rtg.test @immediates : !rtg.dict<> {
+  // CHECK: rtgtest.immediate #rtgtest.imm12<3> : !rtgtest.imm12
+  rtgtest.immediate #rtgtest.imm12<3> : !rtgtest.imm12
+  // CHECK: rtgtest.immediate #rtgtest.imm21<3> : !rtgtest.imm21
+  rtgtest.immediate #rtgtest.imm21<3> : !rtgtest.imm21
+  // CHECK: rtgtest.immediate #rtgtest.imm32<3> : !rtgtest.imm32
+  rtgtest.immediate #rtgtest.imm32<3> : !rtgtest.imm32
+}
+
+// -----
+
+rtg.test @immediateTooBig : !rtg.dict<> {
+  // expected-error @below {{cannot represent 2000000 with 12 bits}}
+  rtgtest.immediate #rtgtest.imm12<2000000> : !rtgtest.imm12
+}
+
 // -----
 
 rtg.test @emptyAllowed : !rtg.dict<> {
