@@ -32,4 +32,13 @@ def CPUType : RTGTestTypeDef<"CPU", [ContextResourceTypeInterface]> {
   let assemblyFormat = "";
 }
 
+def IntegerRegisterType : TypeDef<RTGTestDialect, "IntegerRegister", []> {
+  let summary = "represents an integer register";
+
+  let mnemonic = "ireg";
+  let assemblyFormat = "";
+}
+
+def RegisterType : AnyTypeOf<[IntegerRegisterType]>;
+
 #endif // CIRCT_DIALECT_RTGTEST_IR_RTGTESTTYPES_TD
