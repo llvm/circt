@@ -377,9 +377,11 @@ void MemoryBankingPass::runOnOperation() {
   getOperation().walk([&](mlir::affine::AffineParallelOp parOp) {
     DenseSet<Value> memrefsInPar = collectMemRefs(parOp);
 
-    for (auto memrefVal : memrefsInPar)
-      memoryToBanks[memrefVal] =
-          createBanks(memrefVal, bankingFactor, bankingDimension);
+    for (auto memrefVal : memrefsInPar) {
+      if (!memoryToBanks.contains(memrefVal))
+        memoryToBanks[memrefVal] =
+            createBanks(memrefVal, bankingFactor, bankingDimension);
+    }
   });
 
   auto *ctx = &getContext();
