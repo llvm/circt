@@ -15,6 +15,7 @@
 #include "mlir/Support/ToolUtilities.h"
 #include "mlir/Tools/lsp-server-support/CompilationDatabase.h"
 #include "mlir/Tools/lsp-server-support/Logging.h"
+#include "mlir/Tools/lsp-server-support/Protocol.h"
 #include "mlir/Tools/lsp-server-support/SourceMgrUtils.h"
 #include "slang/ast/ASTContext.h"
 #include "slang/ast/Compilation.h"
@@ -95,25 +96,10 @@ convertLocation(const slang::SourceManager &sourceManager,
         sourceManager.makeAbsolutePath(fileName));
     if (auto e = loc.takeError())
       return mlir::lsp::Location();
-    return mlir::lsp::Location(loc.get(), mlir::lsp::Range(Position(line, column)));
+    return mlir::lsp::Location(loc.get(),
+                               mlir::lsp::Range(Position(line, column)));
   }
   return mlir::lsp::Location();
-}
-
-static mlir::lsp::DiagnosticSeverity
-getSeverity(slang::DiagnosticSeverity severity) {
-  switch (severity) {
-  case slang::DiagnosticSeverity::Fatal:
-  case slang::DiagnosticSeverity::Error:
-    return mlir::lsp::DiagnosticSeverity::Error;
-  case slang::DiagnosticSeverity::Warning:
-    return mlir::lsp::DiagnosticSeverity::Warning;
-  case slang::DiagnosticSeverity::Ignored:
-  case slang::DiagnosticSeverity::Note:
-    return mlir::lsp::DiagnosticSeverity::Information;
-  }
-  llvm_unreachable("all slang diagnostic severities should be handled");
-  return mlir::lsp::DiagnosticSeverity::Error;
 }
 
 /// Convert the given MLIR diagnostic to the LSP form.
@@ -136,8 +122,8 @@ getLspDiagnoticFromDiag(slang::SourceManager &sourceMgr,
   if (loc.uri != uri)
     return std::nullopt;
 
-  lspDiag.severity = getSeverity(diag.severity);
-  lspDiag.message = diag.formattedMessage;
+  // lspDiag.severity = getSeverity(diag.severity);
+  // lspDiag.message = diag.formattedMessage;
 
   // Attach any notes to the main diagnostic as related information.
   // std::vector<mlir::lsp::DiagnosticRelatedInformation> relatedDiags;
@@ -210,17 +196,110 @@ class VerilogServerContext {
 public:
   VerilogServerContext(
       const llvm::SourceMgr &sourceMgr,
+      const slang::SourceManager &sourceManager,
       const llvm::SmallDenseMap<uint32_t, uint32_t> &bufferIDMap)
-      : sourceMgr(sourceMgr), bufferIDMap(bufferIDMap) {}
+      : sourceMgr(sourceMgr), slangSourceManager(sourceManager),
+        bufferIDMap(bufferIDMap) {}
 
   const llvm::SourceMgr &getSourceMgr() const { return sourceMgr; }
   const llvm::SmallDenseMap<uint32_t, uint32_t> &getBufferIDMap() const {
     return bufferIDMap;
   }
 
+  const slang::SourceManager &getSlangSourceManager() const {
+    return slangSourceManager;
+  }
+
+  llvm::SMLoc getSMLoc(slang::SourceLocation loc) const {
+    auto bufferID = loc.buffer().getId();
+    auto bufferIDMap = getBufferIDMap();
+    auto bufferIDMapIt = bufferIDMap.find(bufferID);
+    if (bufferIDMapIt == bufferIDMap.end())
+      return llvm::SMLoc();
+    const auto *buffer = sourceMgr.getMemoryBuffer(bufferIDMapIt->second);
+    assert(buffer->getBufferSize() > loc.offset());
+    return llvm::SMLoc::getFromPointer(buffer->getBufferStart() + loc.offset());
+  }
+
+  mlir::lsp::Location getLspLocation(slang::SourceLocation loc) const {
+    if (loc && loc.buffer() != slang::SourceLocation::NoLocation.buffer()) {
+      auto fileName = slangSourceManager.getFileName(loc);
+      auto line = slangSourceManager.getLineNumber(loc) - 1;
+      auto column = slangSourceManager.getColumnNumber(loc) - 1;
+      auto loc = mlir::lsp::URIForFile::fromFile(
+          slangSourceManager.makeAbsolutePath(fileName));
+      if (auto e = loc.takeError())
+        return mlir::lsp::Location();
+      return mlir::lsp::Location(loc.get(),
+                                 mlir::lsp::Range(Position(line, column)));
+    }
+
+    return mlir::lsp::Location();
+  }
+
 private:
   const llvm::SourceMgr &sourceMgr;
+  const slang::SourceManager &slangSourceManager;
   const llvm::SmallDenseMap<uint32_t, uint32_t> &bufferIDMap;
+};
+
+static mlir::lsp::DiagnosticSeverity
+getSeverity(slang::DiagnosticSeverity severity) {
+  switch (severity) {
+  case slang::DiagnosticSeverity::Fatal:
+  case slang::DiagnosticSeverity::Error:
+    return mlir::lsp::DiagnosticSeverity::Error;
+  case slang::DiagnosticSeverity::Warning:
+    return mlir::lsp::DiagnosticSeverity::Warning;
+  case slang::DiagnosticSeverity::Ignored:
+  case slang::DiagnosticSeverity::Note:
+    return mlir::lsp::DiagnosticSeverity::Information;
+  }
+  llvm_unreachable("all slang diagnostic severities should be handled");
+  return mlir::lsp::DiagnosticSeverity::Error;
+}
+/// A converter that can be plugged into a slang `DiagnosticEngine` as a client
+/// that will map slang diagnostics to their MLIR counterpart and emit them.
+class MlirDiagnosticClient : public slang::DiagnosticClient {
+  const VerilogServerContext &context;
+  std::vector<mlir::lsp::Diagnostic> &diags;
+
+public:
+  MlirDiagnosticClient(const VerilogServerContext &context,
+                       std::vector<mlir::lsp::Diagnostic> &diags)
+      : context(context), diags(diags) {}
+
+  void report(const slang::ReportedDiagnostic &slangDiag) override {
+    // Generate the primary MLIR diagnostic.
+    // auto &diagEngine = context->getDiagEngine();
+    mlir::lsp::Logger::info("MlirDiagnosticClient::report {}",
+                            slangDiag.formattedMessage);
+    diags.emplace_back();
+    auto &mlirDiag = diags.back();
+    mlirDiag.severity = getSeverity(slangDiag.severity);
+    mlirDiag.range = context.getLspLocation(slangDiag.location).range;
+    mlirDiag.source = "slang";
+    mlirDiag.message = slangDiag.formattedMessage;
+
+    // // Append the name of the option that can be used to control this
+    // // diagnostic.
+    // auto optionName = engine->getOptionName(diag.originalDiagnostic.code);
+    // if (!optionName.empty())
+    //   mlirDiag << " [-W" << optionName << "]";
+
+    // Write out macro expansions, if we have any, in reverse order.
+    // for (auto it = diag.expansionLocs.rbegin(); it !=
+    // diag.expansionLocs.rend();
+    //      it++) {
+    //   auto &note = mlirDiag.attachNote(
+    //       convertLocation(sourceManager->getFullyOriginalLoc(*it)));
+    //   auto macroName = sourceManager->getMacroName(*it);
+    //   if (macroName.empty())
+    //     note << "expanded from here";
+    //   else
+    //     note << "expanded from macro '" << macroName << "'";
+    // }
+  }
 };
 
 class VerilogIndex {
@@ -253,14 +332,14 @@ private:
   /// An allocator for the interval map.
   MapT::Allocator allocator;
 
+  const VerilogServerContext &context;
+
   /// An interval map containing a corresponding definition mapped to a source
   /// interval.
   MapT intervalMap;
 
   /// A mapping between definitions and their corresponding symbol.
   DenseMap<const void *, std::unique_ptr<VerilogIndexSymbol>> defToSymbol;
-
-  const VerilogServerContext &context;
 };
 } // namespace
 
@@ -491,7 +570,7 @@ struct VerilogDocument {
   slang::driver::Driver driver;
 
   VerilogServerContext getContext() const {
-    return VerilogServerContext(sourceMgr, bufferIDMap);
+    return VerilogServerContext(sourceMgr, driver.sourceManager, bufferIDMap);
   }
 
   /// The index of the parsed module.
@@ -553,6 +632,11 @@ VerilogDocument::VerilogDocument(
   // auto parsed =
   //     slang::syntax::SyntaxTree::fromBuffer(slangBuffer, slangSourceMgr, {});
 
+  auto diagClient =
+      std::make_shared<MlirDiagnosticClient>(getContext(), diagnostics);
+  driver.diagEngine.addClient(diagClient);
+  driver.processOptions();
+
   bool success = driver.parseAllSources();
 
   Logger::info("VerilogDocument::VerilogDocument try parse done");
@@ -561,8 +645,12 @@ VerilogDocument::VerilogDocument(
     return;
   }
 
-  // mlir::lsp::Logger::info("parsed: {}", parsed->root().toString());
+  mlir::lsp::Logger::info("parsed: {}",
+                          driver.syntaxTrees[0]->root().toString());
   compilation = driver.createCompilation();
+  for (auto &diag : (*compilation)->getAllDiagnostics())
+    driver.diagEngine.issue(diag);
+
   mlir::lsp::Logger::info("elaborated");
 
   // From buffers.
