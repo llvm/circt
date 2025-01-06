@@ -91,8 +91,7 @@ int main(int argc, char **argv) {
                                      prettyPrint);
 
   // Configure the servers and start the main language server.
-  // circt::lsp::VerilogServer::Options options(compilationDatabases,
-  //                                            extraIncludeDirs);
-  // circt::lsp::VerilogServer server(options);
-  return 0;
+  circt::lsp::VerilogServerOptions options(compilationDatabases,
+                                           extraIncludeDirs);
+  return failed(circt::lsp::CirctVerilogLspServerMain(options, transport));
 }

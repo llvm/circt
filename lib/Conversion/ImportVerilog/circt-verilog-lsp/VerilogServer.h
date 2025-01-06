@@ -39,6 +39,7 @@ struct Diagnostic;
 
 namespace circt {
 namespace lsp {
+struct VerilogServerOptions;
 class CompilationDatabase;
 struct VerilogViewOutputResult;
 enum class VerilogViewOutputKind;
@@ -56,8 +57,7 @@ using CompletionList = mlir::lsp::CompletionList;
 /// separate from the logic that involves LSP server/client communication.
 class VerilogServer {
 public:
-  struct Options;
-  VerilogServer(const Options &options);
+  VerilogServer(const circt::lsp::VerilogServerOptions &options);
   ~VerilogServer();
 
   /// Add the document, with the provided `version`, at the given URI. Any

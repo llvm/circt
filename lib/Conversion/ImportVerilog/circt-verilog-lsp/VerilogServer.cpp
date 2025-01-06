@@ -10,8 +10,8 @@
 #include "VerilogServer.h"
 
 #include "Protocol.h"
-#include "mlir/IR/BuiltinOps.h"
 #include "circt/Tools/circt-verilog-lsp/CirctVerilogLspServerMain.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/Support/ToolUtilities.h"
 #include "mlir/Tools/lsp-server-support/CompilationDatabase.h"
 #include "mlir/Tools/lsp-server-support/Logging.h"
@@ -20,6 +20,7 @@
 #include "slang/ast/Compilation.h"
 #include "slang/ast/Definition.h"
 #include "slang/ast/Statements.h"
+#include "slang/ast/symbols/CompilationUnitSymbols.h"
 #include "slang/ast/symbols/InstanceSymbols.h"
 #include "slang/ast/symbols/VariableSymbols.h"
 #include "slang/diagnostics/DiagnosticClient.h"
@@ -200,7 +201,7 @@ public:
   VerilogIndex() : intervalMap(allocator) {}
 
   /// Initialize the index with the given ast::Module.
-  void initialize(const slang::ast::Compilation *compilation);
+  void initialize(slang::ast::Compilation *compilation);
 
   /// Lookup a symbol for the given location. Returns nullptr if no symbol could
   /// be found. If provided, `overlappedRange` is set to the range that the
@@ -229,7 +230,23 @@ private:
 };
 } // namespace
 
-void VerilogIndex::initialize(const slang::ast::Compilation *compilation) {
+void VerilogIndex::initialize(slang::ast::Compilation *compilation) {
+  auto &c = compilation->getRoot();
+  for (auto *unit : compilation->getCompilationUnits()) {
+    mlir::lsp::Logger::info("VerilogIndex::initialize {}", unit->name);
+  }
+  // mlir::lsp::Logger::info("VerilogIndex::initialize {}", c.name);
+  // for (auto &member : c.members()) {
+
+  //   mlir::lsp::Logger::info("VerilogIndex::initialize {}",
+  //                           toString(member.kind));
+  //   mlir::lsp::Logger::info("VerilogIndex::initialize::syntax {}",
+  //                           member.getSyntax()->toString());
+  //   if (auto *module = member.as_if<slang::ast::CompilationUnitSymbol>()) {
+  //     mlir::lsp::Logger::info("VerilogIndex::initialize compilation unit {}",
+  //                             module->name);
+  //   }
+  // }
   // auto getOrInsertDef = [&](const auto *def) -> VerilogIndexSymbol * {
   //   auto it = defToSymbol.try_emplace(def, nullptr);
   //   if (it.second)
@@ -334,7 +351,8 @@ struct VerilogDocument {
   std::optional<mlir::lsp::Hover> findHover(const slang::ast::Statement *stmt,
                                             const SMRange &hoverRange);
   std::optional<mlir::lsp::Hover>
-  findHover(const slang::ast::Definition *instance, const SMRange &hoverRange){}
+  findHover(const slang::ast::Definition *instance, const SMRange &hoverRange) {
+  }
   mlir::lsp::Hover buildHoverForStatement(const slang::ast::Statement *stmt,
                                           const SMRange &hoverRange);
   mlir::lsp::Hover
@@ -416,6 +434,7 @@ VerilogDocument::VerilogDocument(
 
     std::vector<mlir::lsp::Diagnostic> &diagnostics) {
   auto memBuffer = llvm::MemoryBuffer::getMemBufferCopy(contents, uri.file());
+  Logger::info("VerilogDocument::VerilogDocument");
 
   if (!memBuffer) {
     mlir::lsp::Logger::error("Failed to create memory buffer for file",
@@ -423,17 +442,22 @@ VerilogDocument::VerilogDocument(
     return;
   }
 
+  Logger::info("VerilogDocument::VerilogDocument set include dirs");
   // Build the set of include directories for this file.
   llvm::SmallString<32> uriDirectory(uri.file());
   llvm::sys::path::remove_filename(uriDirectory);
   includeDirs.push_back(uriDirectory.str().str());
   includeDirs.insert(includeDirs.end(), extraDirs.begin(), extraDirs.end());
 
+  Logger::info("VerilogDocument::VerilogDocument set include dirs");
+
   sourceMgr.setIncludeDirs(includeDirs);
   sourceMgr.AddNewSourceBuffer(std::move(memBuffer), SMLoc());
 
+  const llvm::MemoryBuffer *mlirBuffer = sourceMgr.getMemoryBuffer(1);
   auto slangBuffer =
-      slangSourceMgr.assignText(uri.file(), memBuffer->getBuffer());
+      slangSourceMgr.assignText(uri.file(), mlirBuffer->getBuffer());
+
   // astContext.getDiagEngine().setHandlerFn([&](const slang::ast::Diagnostic
   // &diag) {
   //   // if (auto lspDiag = getLspDiagnoticFromDiag(sourceMgr, diag, uri))
@@ -442,13 +466,17 @@ VerilogDocument::VerilogDocument(
   // astModule =
   //     parseVerilogAST(astContext, sourceMgr, /*enableDocumentation=*/true);
 
+  Logger::info("VerilogDocument::VerilogDocument try parse");
+
   auto parsed =
       slang::syntax::SyntaxTree::fromBuffer(slangBuffer, slangSourceMgr, {});
+  Logger::info("VerilogDocument::VerilogDocument try parse done");
+
   if (!parsed) {
     mlir::lsp::Logger::error("Failed to parse Verilog file", uri.file());
     return;
   }
-  mlir::lsp::Logger::info("parsed:", parsed->root().toString());
+  mlir::lsp::Logger::info("parsed: {}", parsed->root().toString());
   compilation = std::make_unique<slang::ast::Compilation>();
   (*compilation)->addSyntaxTree(parsed);
 
@@ -493,8 +521,7 @@ void VerilogDocument::findReferencesOf(
   if (!symbol)
     return;
 
-  references.push_back(
-      getLocationFromLoc(sourceMgr, symbol->location, uri));
+  references.push_back(getLocationFromLoc(sourceMgr, symbol->location, uri));
   // for (SMRange refLoc : symbol->references)
   //   references.push_back(getLocationFromLoc(sourceMgr, refLoc, uri));
 }
@@ -1059,6 +1086,7 @@ VerilogTextFile::getVerilogViewOutput(circt::lsp::VerilogViewOutputKind kind) {
 void VerilogTextFile::initialize(
     const mlir::lsp::URIForFile &uri, int64_t newVersion,
     std::vector<mlir::lsp::Diagnostic> &diagnostics) {
+  Logger::info("VerilogTextFile::initialize");
   version = newVersion;
   chunks.clear();
 
@@ -1118,7 +1146,7 @@ struct circt::lsp::VerilogServer::Impl {
       : options(options), compilationDatabase(options.compilationDatabases) {}
 
   /// Verilog LSP options.
-  const Options &options;
+  const VerilogServerOptions &options;
 
   /// The compilation database containing additional information for files
   /// passed to the server.
@@ -1132,13 +1160,14 @@ struct circt::lsp::VerilogServer::Impl {
 // VerilogServer
 //===----------------------------------------------------------------------===//
 
-circt::lsp::VerilogServer::VerilogServer(const Options &options)
+circt::lsp::VerilogServer::VerilogServer(const VerilogServerOptions &options)
     : impl(std::make_unique<Impl>(options)) {}
 circt::lsp::VerilogServer::~VerilogServer() = default;
 
 void circt::lsp::VerilogServer::addDocument(
     const URIForFile &uri, StringRef contents, int64_t version,
     std::vector<mlir::lsp::Diagnostic> &diagnostics) {
+  Logger::info("VerilogServer::addDocument");
   // Build the set of additional include directories.
   std::vector<std::string> additionalIncludeDirs = impl->options.extraDirs;
   const auto &fileInfo = impl->compilationDatabase.getFileInfo(uri.file());
@@ -1146,6 +1175,7 @@ void circt::lsp::VerilogServer::addDocument(
 
   impl->files[uri.file()] = std::make_unique<VerilogTextFile>(
       uri, contents, version, additionalIncludeDirs, diagnostics);
+  Logger::info("VerilogServer::addDocument done");
 }
 
 void circt::lsp::VerilogServer::updateDocument(

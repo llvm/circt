@@ -12,16 +12,16 @@
 #include "mlir/Tools/lsp-server-support/Logging.h"
 #include "mlir/Tools/lsp-server-support/Transport.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/Program.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/Program.h"
 
 // using namespace mlir;
 // using namespace mlir::lsp;
 // using namespace circt::lsp;
 
-llvm::LogicalResult circt::CirctVerilogLspServerMain(
-    const circt::lsp::VerilogServer::Options &options,
-    mlir::lsp::JSONTransport &transport) {
+llvm::LogicalResult
+circt::lsp::CirctVerilogLspServerMain(const circt::lsp::VerilogServerOptions &options,
+                                      mlir::lsp::JSONTransport &transport) {
   circt::lsp::VerilogServer server(options);
   return circt::lsp::runVerilogLSPServer(server, transport);
 }

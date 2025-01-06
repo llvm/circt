@@ -17,7 +17,7 @@
 #include "llvm/ADT/StringMap.h"
 #include <optional>
 
-#define DEBUG_TYPE "pdll-lsp-server"
+#define DEBUG_TYPE "verilog-lsp-server"
 
 using namespace mlir;
 using namespace mlir::lsp;
@@ -146,7 +146,9 @@ void LSPServer::onInitialize(const InitializeParams &params,
        {"capabilities", std::move(serverCaps)}}};
   reply(std::move(result));
 }
-void LSPServer::onInitialized(const InitializedParams &) {}
+void LSPServer::onInitialized(const InitializedParams &) {
+  Logger::info("onInitialized");
+}
 void LSPServer::onShutdown(const NoParams &, Callback<std::nullptr_t> reply) {
   shutdownRequestReceived = true;
   reply(nullptr);
@@ -156,6 +158,7 @@ void LSPServer::onShutdown(const NoParams &, Callback<std::nullptr_t> reply) {
 // Document Change
 
 void LSPServer::onDocumentDidOpen(const DidOpenTextDocumentParams &params) {
+  Logger::info("onDocumentDidOpen");
   PublishDiagnosticsParams diagParams(params.textDocument.uri,
                                       params.textDocument.version);
   server.addDocument(params.textDocument.uri, params.textDocument.text,
