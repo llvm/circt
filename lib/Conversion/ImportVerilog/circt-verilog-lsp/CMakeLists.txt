@@ -11,7 +11,7 @@ add_circt_library(CIRCTVerilogLspServerLib
   slang_slang
 
   LINK_LIBS PUBLIC
-  LLVMSupport
+  # LLVMSupport
   MLIRLspServerSupportLib
   PRIVATE
   slang_slang
