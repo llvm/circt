@@ -24,6 +24,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/FormatVariadic.h"
 
 namespace circt {
 #define GEN_PASS_DEF_MEMORYBANKING
@@ -39,10 +40,14 @@ namespace {
 /// `bankingFactor` throughout the program.
 struct MemoryBankingPass
     : public circt::impl::MemoryBankingBase<MemoryBankingPass> {
-  MemoryBankingPass(const MemoryBankingPass &other) = default;
+  MemoryBankingPass(const MemoryBankingPass &other)
+      : circt::impl::MemoryBankingBase<MemoryBankingPass>(other),
+        memoryToBanks(other.memoryToBanks), opsToErase(other.opsToErase),
+        globalCounter(other.globalCounter.load()) {}
   explicit MemoryBankingPass(
       std::optional<unsigned> bankingFactor = std::nullopt,
-      std::optional<unsigned> bankingDimension = std::nullopt) {}
+      std::optional<unsigned> bankingDimension = std::nullopt)
+      : circt::impl::MemoryBankingBase<MemoryBankingPass>(), globalCounter(0) {}
 
   void runOnOperation() override;
 
@@ -88,8 +93,9 @@ MemRefType computeBankedMemRefType(MemRefType originalType,
   return newMemRefType;
 }
 
-SmallVector<Value, 4> createBanks(Value originalMem, uint64_t bankingFactor,
-                                  unsigned bankingDimension) {
+SmallVector<Value, 4>
+MemoryBankingPass::createBanks(Value originalMem, uint64_t bankingFactor,
+                               unsigned bankingDimension) {
   MemRefType originalMemRefType = cast<MemRefType>(originalMem.getType());
   MemRefType newMemRefType = computeBankedMemRefType(
       originalMemRefType, bankingFactor, bankingDimension);
@@ -123,6 +129,71 @@ SmallVector<Value, 4> createBanks(Value originalMem, uint64_t bankingFactor,
             auto bankAllocaOp =
                 builder.create<memref::AllocaOp>(loc, newMemRefType);
             banks.push_back(bankAllocaOp);
+          }
+        })
+        .Case<memref::GetGlobalOp>([&](memref::GetGlobalOp getGlobalOp) {
+          auto memTy = cast<MemRefType>(getGlobalOp.getType());
+          unsigned bankSize =
+              memTy.getShape()[bankingDimension] / bankingFactor;
+          OpBuilder::InsertPoint globalOpsInsertPt, getGlobalOpsInsertPt;
+          for (uint64_t bankCnt = 0; bankCnt < bankingFactor; ++bankCnt) {
+            auto *symbolTableOp =
+                getGlobalOp->getParentWithTrait<OpTrait::SymbolTable>();
+            auto globalOp =
+                dyn_cast_or_null<memref::GlobalOp>(SymbolTable::lookupSymbolIn(
+                    symbolTableOp, getGlobalOp.getNameAttr()));
+            MemRefType globalOpTy = globalOp.getType();
+            auto cstAttr = dyn_cast_or_null<DenseElementsAttr>(
+                globalOp.getConstantInitValue());
+            auto allAttrs = cstAttr.getValues<Attribute>();
+            unsigned beginIdx = bankSize * bankCnt;
+            unsigned endIdx = bankSize * (bankCnt + 1);
+            SmallVector<Attribute, 8> extractedElements;
+            for (unsigned i = 0; i < bankSize; i++) {
+              unsigned idx = bankCnt + bankingFactor * i;
+              extractedElements.push_back(allAttrs[idx]);
+            }
+
+            if (bankCnt == 0) {
+              // initialize globalOp and getGlobalOp's insertion points
+              builder.setInsertionPointAfter(globalOp);
+              globalOpsInsertPt = builder.saveInsertionPoint();
+              builder.setInsertionPointAfter(getGlobalOp);
+              getGlobalOpsInsertPt = builder.saveInsertionPoint();
+            }
+
+            // Prepare relevant information to create a new `GlobalOp`
+            auto newMemRefTy =
+                MemRefType::get(SmallVector<int64_t>{endIdx - beginIdx},
+                                globalOpTy.getElementType());
+            auto newTypeAttr = TypeAttr::get(newMemRefTy);
+            std::string newNameStr = llvm::formatv(
+                "{0}_{1}x{2}_{3}_{4}", globalOp.getConstantAttrName(),
+                endIdx - beginIdx, globalOpTy.getElementType(), bankCnt,
+                globalCounter++);
+            RankedTensorType tensorType = RankedTensorType::get(
+                {static_cast<int64_t>(extractedElements.size())},
+                globalOpTy.getElementType());
+            auto newInitValue =
+                DenseElementsAttr::get(tensorType, extractedElements);
+
+            // Create a new `GlobalOp`
+            builder.restoreInsertionPoint(globalOpsInsertPt);
+            auto newGlobalOp = builder.create<memref::GlobalOp>(
+                loc, builder.getStringAttr(newNameStr),
+                globalOp.getSymVisibilityAttr(), newTypeAttr, newInitValue,
+                globalOp.getConstantAttr(), globalOp.getAlignmentAttr());
+            builder.setInsertionPointAfter(newGlobalOp);
+            globalOpsInsertPt = builder.saveInsertionPoint();
+
+            // Create a new `GetGlobalOp` using the above created new `GlobalOp`
+            builder.restoreInsertionPoint(getGlobalOpsInsertPt);
+            auto newGetGlobalOp = builder.create<memref::GetGlobalOp>(
+                loc, newMemRefTy, newGlobalOp.getName());
+            builder.setInsertionPointAfter(newGetGlobalOp);
+            getGlobalOpsInsertPt = builder.saveInsertionPoint();
+
+            banks.push_back(newGetGlobalOp);
           }
         })
         .Default([](Operation *) {
