@@ -12,28 +12,37 @@
 #include "Protocol.h"
 #include "circt/Tools/circt-verilog-lsp/CirctVerilogLspServerMain.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/MLIRContext.h"
+#include "mlir/Support/FileUtilities.h"
 #include "mlir/Support/ToolUtilities.h"
 #include "mlir/Tools/lsp-server-support/CompilationDatabase.h"
 #include "mlir/Tools/lsp-server-support/Logging.h"
 #include "mlir/Tools/lsp-server-support/Protocol.h"
 #include "mlir/Tools/lsp-server-support/SourceMgrUtils.h"
 #include "slang/ast/ASTContext.h"
+#include "slang/ast/ASTVisitor.h"
 #include "slang/ast/Compilation.h"
 #include "slang/ast/Definition.h"
 #include "slang/ast/Statements.h"
+#include "slang/ast/SystemSubroutine.h"
+#include "slang/ast/expressions/AssignmentExpressions.h"
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
 #include "slang/ast/symbols/InstanceSymbols.h"
 #include "slang/ast/symbols/VariableSymbols.h"
 #include "slang/diagnostics/DiagnosticClient.h"
 #include "slang/diagnostics/Diagnostics.h"
 #include "slang/driver/Driver.h"
+#include "slang/syntax/AllSyntax.h"
+
 #include "slang/parsing/Preprocessor.h"
 #include "slang/syntax/SyntaxPrinter.h"
 #include "slang/syntax/SyntaxTree.h"
 #include "slang/util/Version.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/IntervalMap.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FileSystem.h"
@@ -194,12 +203,17 @@ using VerilogIndexSymbol = slang::ast::Symbol;
 
 class VerilogServerContext {
 public:
+  struct UserHint {
+    std::unique_ptr<llvm::json::Value> json;
+  };
+
   VerilogServerContext(
       const llvm::SourceMgr &sourceMgr,
       const slang::SourceManager &sourceManager,
-      const llvm::SmallDenseMap<uint32_t, uint32_t> &bufferIDMap)
+      const llvm::SmallDenseMap<uint32_t, uint32_t> &bufferIDMap,
+      const UserHint &userHint)
       : sourceMgr(sourceMgr), slangSourceManager(sourceManager),
-        bufferIDMap(bufferIDMap) {}
+        bufferIDMap(bufferIDMap), userHint(userHint) {}
 
   const llvm::SourceMgr &getSourceMgr() const { return sourceMgr; }
   const llvm::SmallDenseMap<uint32_t, uint32_t> &getBufferIDMap() const {
@@ -237,10 +251,16 @@ public:
     return mlir::lsp::Location();
   }
 
+  const UserHint &getUserHint() const { return userHint; }
+
+  mlir::MLIRContext *getContext() const { return ctx; }
+
 private:
+  mlir::MLIRContext *ctx;
   const llvm::SourceMgr &sourceMgr;
   const slang::SourceManager &slangSourceManager;
   const llvm::SmallDenseMap<uint32_t, uint32_t> &bufferIDMap;
+  const UserHint &userHint;
 };
 
 static mlir::lsp::DiagnosticSeverity
@@ -320,6 +340,9 @@ public:
     return std::distance(intervalMap.begin(), intervalMap.end());
   }
 
+  const VerilogServerContext &getContext() const { return context; }
+  auto &getIntervalMap() { return intervalMap; }
+
 private:
   /// The type of interval map used to store source references. SMRange is
   /// half-open, so we also need to use a half-open interval map.
@@ -342,6 +365,143 @@ private:
   DenseMap<const void *, std::unique_ptr<VerilogIndexSymbol>> defToSymbol;
 };
 } // namespace
+struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
+  IndexVisitor(VerilogIndex &index) : index(index) {}
+  VerilogIndex &index;
+
+  void handleSymbol(const slang::ast::Symbol *symbol, slang::SourceRange range,
+                    bool isDef = false) {
+    mlir::lsp::Logger::info("handleSymbol: {}", symbol->name);
+    auto start = getContext().getSMLoc(range.start());
+    auto end = getContext().getSMLoc(range.end());
+    mlir::lsp::Logger::info("handleSymbol nam: {}",
+                            symbol->getParentScope()
+                                ->getContainingInstance()
+                                ->getDefinition()
+                                .name);
+
+    insertDeclRef(symbol, SMRange(start, end), true);
+  }
+
+  // Handle references to the left-hand side of a parent assignment.
+  void visit(const slang::ast::LValueReferenceExpression &expr) {
+    mlir::lsp::Logger::info("visit: {}", slang::ast::toString(expr.kind));
+    auto *symbol = expr.getSymbolReference(true);
+    if (!symbol)
+      return;
+    handleSymbol(symbol, expr.sourceRange);
+    visitDefault(expr);
+  }
+  void visit(const slang::ast::NetSymbol &expr) {
+    mlir::lsp::Logger::info("visit: {}", slang::ast::toString(expr.kind));
+    handleSymbol(&expr, slang::SourceRange(expr.location,
+                                           expr.location + expr.name.length()),
+                 true);
+    visitDefault(expr);
+  }
+  void visit(const slang::ast::VariableSymbol &expr) {
+    mlir::lsp::Logger::info("visit: {}", slang::ast::toString(expr.kind));
+    handleSymbol(&expr, slang::SourceRange(expr.location,
+                                           expr.location + expr.name.length()),
+                 true);
+    visitDefault(expr);
+  }
+
+  void visit(const slang::ast::VariableDeclStatement &expr) {
+    mlir::lsp::Logger::info("visit: {}", slang::ast::toString(expr.kind));
+    handleSymbol(&expr.symbol, expr.sourceRange,true); 
+    visitDefault(expr);
+  }
+
+  // void visit(const slang::ast::AssignmentExpression &expr) {
+  //   mlir::lsp::Logger::info("visit: {}", slang::ast::toString(expr.kind));
+  //   if (auto *symbol = expr.left().getSymbolReference(true))
+  //     handleSymbol(symbol, expr.sourceRange);
+  // }
+
+  // Handle named values, such as references to declared variables.
+  // Handle named values, such as references to declared variables.
+  void visit(const slang::ast::NamedValueExpression &expr) {
+    mlir::lsp::Logger::info("visit: {}", slang::ast::toString(expr.kind));
+    auto *symbol = expr.getSymbolReference(true);
+    if (!symbol)
+      return;
+    handleSymbol(symbol, expr.sourceRange);
+    visitDefault(expr);
+    // if (auto value = context.valueSymbols.lookup(&expr.symbol)) {
+
+    //   return value;
+    // }
+
+    // // Try to materialize constant values directly.
+    // auto constant = context.evaluateConstant(expr);
+    // if (auto value = context.materializeConstant(constant, *expr.type, loc))
+    //   return value;
+
+    // // Otherwise some other part of ImportVerilog should have added an MLIR
+    // // value for this expression's symbol to the `context.valueSymbols`
+    // table. auto d = mlir::emitError(loc, "unknown name `") <<
+    // expr.symbol.name << "`";
+    // d.attachNote(context.convertLocation(expr.symbol.location))
+    //     << "no rvalue generated for " <<
+    //     slang::ast::toString(expr.symbol.kind);
+    // return {};
+  }
+
+  template <typename T>
+  void visit(const T &t) {
+    mlir::lsp::Logger::info("visit: {}", slang::ast::toString(t.kind));
+
+    visitDefault(t);
+  }
+  // Handle hierarchical values, such as `x = Top.sub.var`.
+  // Value visit(const slang::ast::HierarchicalValueExpression &expr) {
+  //   auto hierLoc = context.convertLocation(expr.symbol.location);
+  //   if (auto value = context.valueSymbols.lookup(&expr.symbol)) {
+  //     if (isa<moore::RefType>(value.getType())) {
+  //       auto readOp = builder.create<moore::ReadOp>(hierLoc, value);
+  //       if (context.rvalueReadCallback)
+  //         context.rvalueReadCallback(readOp);
+  //       value = readOp.getResult();
+  //     }
+  //     return value;
+  //   }
+
+  //   // Emit an error for those hierarchical values not recorded in the
+  //   // `valueSymbols`.
+  //   auto d = mlir::emitError(loc, "unknown hierarchical name `")
+  //            << expr.symbol.name << "`";
+  //   d.attachNote(hierLoc) << "no rvalue generated for "
+  //                         << slang::ast::toString(expr.symbol.kind);
+  //   return {};
+  // }
+
+  // Helper function to convert an argument to a simple bit vector type, pass it
+  // to a reduction op, and optionally invert the result.
+
+  /// Handle assignment patterns.
+  void visitInvalid(const slang::ast::Expression &expr) {
+    mlir::lsp::Logger::info("visitInvalid: {}",
+                            slang::ast::toString(expr.kind));
+  }
+
+  void visitInvalid(const slang::ast::Statement &) {}
+  void visitInvalid(const slang::ast::TimingControl &) {}
+  void visitInvalid(const slang::ast::Constraint &) {}
+  void visitInvalid(const slang::ast::AssertionExpr &) {}
+  void visitInvalid(const slang::ast::BinsSelectExpr &) {}
+  void visitInvalid(const slang::ast::Pattern &) {}
+
+  const VerilogServerContext &getContext() const { return index.getContext(); }
+  void insertDeclRef(const VerilogIndexSymbol *sym, SMRange refLoc,
+                     bool isDef = false) {
+    const char *startLoc = refLoc.Start.getPointer();
+    const char *endLoc = refLoc.End.getPointer();
+    if (!index.getIntervalMap().overlaps(startLoc, endLoc)) {
+      index.getIntervalMap().insert(startLoc, endLoc, sym);
+    }
+  };
+};
 
 void VerilogIndex::initialize(slang::ast::Compilation *compilation) {
   // auto &c = driver.compilation->getRoot();
@@ -365,34 +525,25 @@ void VerilogIndex::initialize(slang::ast::Compilation *compilation) {
     }
   };
   const auto *slangSourceMgr = compilation->getSourceManager();
+
+  IndexVisitor visitor(*this);
   for (auto *inst : root.topInstances) {
+    inst->body.visit(visitor);
     mlir::lsp::Logger::info("VerilogIndex::initialize {}", inst->name);
     auto &body = inst->body;
 
     for (auto *symbol : body.getPortList()) {
       mlir::lsp::Logger::info("VerilogIndex::initialize port {}", symbol->name);
-      auto bufferId =
-          context.getBufferIDMap().at(symbol->location.buffer().getId());
-      const auto &sourceMgr = context.getSourceMgr();
-      // auto loc = sourceMgr->getExpansionRange(symbol->location);
-      auto *buffer = sourceMgr.getMemoryBuffer(bufferId);
-      assert(buffer->getBufferSize() > symbol->location.offset());
-      assert(buffer->getBufferSize() >
-             symbol->location.offset() + symbol->name.size());
-      // slangSourceMgr->getLineNumber(symbol->location);
-      // slangSourceMgr->getColumnNumber(symbol->location);
-
-      auto *start = buffer->getBuffer().data() + symbol->location.offset();
-      auto *end = buffer->getBuffer().data() + symbol->location.offset() +
-                  symbol->name.size();
-      auto range =
-          SMRange(SMLoc::getFromPointer(start), SMLoc::getFromPointer(end));
-      insertDeclRef(symbol, range);
-      mlir::lsp::Logger::info(
-          "VerilogIndex::initialize port range start={} end={} {}",
-          reinterpret_cast<int64_t>(range.Start.getPointer()),
-          reinterpret_cast<int64_t>(range.End.getPointer()),
-          reinterpret_cast<int64_t>(buffer->getBuffer().data()));
+      auto startLoc = context.getSMLoc(symbol->location);
+      auto endLoc = SMLoc::getFromPointer(
+          context.getSMLoc(symbol->location).getPointer() +
+          symbol->name.size());
+      auto range = SMRange(startLoc, endLoc);
+      const char *startLoc2 = range.Start.getPointer();
+      const char *endLoc2 = range.End.getPointer();
+      if (!intervalMap.overlaps(startLoc2, endLoc2)) {
+        intervalMap.insert(startLoc2, endLoc2, symbol);
+      }
     }
   }
 
@@ -568,9 +719,11 @@ struct VerilogDocument {
   /// The parsed AST module, or failure if the file wasn't valid.
   FailureOr<std::unique_ptr<slang::ast::Compilation>> compilation;
   slang::driver::Driver driver;
+  VerilogServerContext::UserHint userHint;
 
   VerilogServerContext getContext() const {
-    return VerilogServerContext(sourceMgr, driver.sourceManager, bufferIDMap);
+    return VerilogServerContext(sourceMgr, driver.sourceManager, bufferIDMap,
+                                userHint);
   }
 
   /// The index of the parsed module.
@@ -590,7 +743,6 @@ struct VerilogDocument {
 VerilogDocument::VerilogDocument(
     const mlir::lsp::URIForFile &uri, StringRef contents,
     const std::vector<std::string> &extraDirs,
-
     std::vector<mlir::lsp::Diagnostic> &diagnostics)
     : index(getContext()) {
   auto memBuffer = llvm::MemoryBuffer::getMemBufferCopy(contents, uri.file());
@@ -631,6 +783,35 @@ VerilogDocument::VerilogDocument(
   Logger::info("VerilogDocument::VerilogDocument try parse");
   // auto parsed =
   //     slang::syntax::SyntaxTree::fromBuffer(slangBuffer, slangSourceMgr, {});
+
+  // ======
+  // Read a mapping file
+  StringRef path = "/home/uenoku/dev/circt-dev/mapping.json";
+  auto open = mlir::openInputFile(path);
+  if (!open) {
+    mlir::lsp::Logger::error("Failed to open mapping file {}", path);
+    return;
+  }
+  mlir::lsp::Logger::error("JSON {}", open->getBuffer());
+
+  auto json = llvm::json::parse(open->getBuffer());
+
+  if (auto err = json.takeError()) {
+    mlir::lsp::Logger::error("Failed to parse mapping file {}", err);
+    /*
+    mapping file is like this:
+    {
+      "module_Foo": {
+        "verilogName": "hintName",
+        "_GEN_123": "chisel_var"
+      }
+    }
+    */
+  } else {
+    userHint.json = std::make_unique<llvm::json::Value>(std::move(json.get()));
+  }
+
+  // ======
 
   auto diagClient =
       std::make_shared<MlirDiagnosticClient>(getContext(), diagnostics);
@@ -863,14 +1044,234 @@ static bool shouldAddHintFor(const slang::ast::Expression *expr,
   return true;
 }
 
+struct RvalueExprVisitor
+    : slang::ast::ASTVisitor<RvalueExprVisitor, true, true> {
+  RvalueExprVisitor(const VerilogServerContext &context, SMRange range,
+                    std::vector<mlir::lsp::InlayHint> &inlayHints)
+      : context(context), range(range), inlayHints(inlayHints) {}
+  bool contains(SMRange loc) {
+    return mlir::lsp::contains(range, loc.Start) ||
+           mlir::lsp::contains(range, loc.End);
+  }
+  SmallVector<StringRef> names;
+  void visit(const slang::ast::InstanceBodySymbol &body) {
+    names.push_back(body.name);
+    mlir::lsp::Logger::info("visit: {}", body.name);
+    visitDefault(body);
+    names.pop_back();
+  }
+
+  void handleSymbol(const slang::ast::Symbol *symbol, slang::SourceRange range,
+                    bool useEnd = true) {
+    mlir::lsp::Logger::info("handleSymbol: {}", symbol->name);
+    auto start = context.getSMLoc(range.start());
+    auto end = context.getSMLoc(range.end());
+    if (names.empty()) {
+      mlir::lsp::Logger::info("names empty");
+      return;
+    }
+
+    if (!contains(SMRange(start, end)))
+      return;
+    mlir::lsp::Logger::info("handleSymbol nam: {}",
+                            symbol->getParentScope()
+                                ->getContainingInstance()
+                                ->getDefinition()
+                                .name);
+    auto it = context.getUserHint().json->getAsObject()->find(names.back());
+    StringRef newName;
+    if (it != context.getUserHint().json->getAsObject()->end()) {
+      auto it2 = it->second.getAsObject()->find(symbol->name);
+      if (it2 == it->second.getAsObject()->end()) {
+        return;
+      }
+      newName = it2->second.getAsString().value();
+      mlir::lsp::Logger::info("name: {}", it2->second.getAsString());
+    }
+    inlayHints.emplace_back(
+        mlir::lsp::InlayHintKind::Parameter,
+        context.getLspLocation(useEnd ? range.end() : range.start())
+            .range.start);
+    auto &hint = inlayHints.back();
+    hint.label = newName;
+  }
+
+  // Handle references to the left-hand side of a parent assignment.
+  void visit(const slang::ast::LValueReferenceExpression &expr) {
+    mlir::lsp::Logger::info("visit: {}", slang::ast::toString(expr.kind));
+    auto *symbol = expr.getSymbolReference(true);
+    if (!symbol)
+      return;
+    handleSymbol(symbol, expr.sourceRange);
+    visitDefault(expr);
+  }
+  void visit(const slang::ast::NetSymbol &expr) {
+    mlir::lsp::Logger::info("visit: {}", slang::ast::toString(expr.kind));
+    handleSymbol(&expr, slang::SourceRange(expr.location,
+                                           expr.location + expr.name.length()));
+    visitDefault(expr);
+  }
+  void visit(const slang::ast::VariableSymbol &expr) {
+    mlir::lsp::Logger::info("visit: {}", slang::ast::toString(expr.kind));
+    handleSymbol(&expr, slang::SourceRange(expr.location,
+                                           expr.location + expr.name.length()));
+    visitDefault(expr);
+  }
+
+  void visit(const slang::ast::VariableDeclStatement &expr) {
+    mlir::lsp::Logger::info("visit: {}", slang::ast::toString(expr.kind));
+    handleSymbol(&expr.symbol, expr.sourceRange, false);
+    visitDefault(expr);
+  }
+
+  // void visit(const slang::ast::AssignmentExpression &expr) {
+  //   mlir::lsp::Logger::info("visit: {}", slang::ast::toString(expr.kind));
+  //   if (auto *symbol = expr.left().getSymbolReference(true))
+  //     handleSymbol(symbol, expr.sourceRange);
+  // }
+
+  // Handle named values, such as references to declared variables.
+  // Handle named values, such as references to declared variables.
+  void visit(const slang::ast::NamedValueExpression &expr) {
+    mlir::lsp::Logger::info("visit: {}", slang::ast::toString(expr.kind));
+    auto *symbol = expr.getSymbolReference(true);
+    if (!symbol)
+      return;
+    handleSymbol(symbol, expr.sourceRange);
+    visitDefault(expr);
+    // if (auto value = context.valueSymbols.lookup(&expr.symbol)) {
+
+    //   return value;
+    // }
+
+    // // Try to materialize constant values directly.
+    // auto constant = context.evaluateConstant(expr);
+    // if (auto value = context.materializeConstant(constant, *expr.type, loc))
+    //   return value;
+
+    // // Otherwise some other part of ImportVerilog should have added an MLIR
+    // // value for this expression's symbol to the `context.valueSymbols`
+    // table. auto d = mlir::emitError(loc, "unknown name `") <<
+    // expr.symbol.name << "`";
+    // d.attachNote(context.convertLocation(expr.symbol.location))
+    //     << "no rvalue generated for " <<
+    //     slang::ast::toString(expr.symbol.kind);
+    // return {};
+  }
+
+  template <typename T>
+  void visit(const T &t) {
+    mlir::lsp::Logger::info("visit: {}", slang::ast::toString(t.kind));
+
+    visitDefault(t);
+  }
+  // Handle hierarchical values, such as `x = Top.sub.var`.
+  // Value visit(const slang::ast::HierarchicalValueExpression &expr) {
+  //   auto hierLoc = context.convertLocation(expr.symbol.location);
+  //   if (auto value = context.valueSymbols.lookup(&expr.symbol)) {
+  //     if (isa<moore::RefType>(value.getType())) {
+  //       auto readOp = builder.create<moore::ReadOp>(hierLoc, value);
+  //       if (context.rvalueReadCallback)
+  //         context.rvalueReadCallback(readOp);
+  //       value = readOp.getResult();
+  //     }
+  //     return value;
+  //   }
+
+  //   // Emit an error for those hierarchical values not recorded in the
+  //   // `valueSymbols`.
+  //   auto d = mlir::emitError(loc, "unknown hierarchical name `")
+  //            << expr.symbol.name << "`";
+  //   d.attachNote(hierLoc) << "no rvalue generated for "
+  //                         << slang::ast::toString(expr.symbol.kind);
+  //   return {};
+  // }
+
+  // Helper function to convert an argument to a simple bit vector type, pass it
+  // to a reduction op, and optionally invert the result.
+
+  /// Handle assignment patterns.
+  void visitInvalid(const slang::ast::Expression &expr) {
+    mlir::lsp::Logger::info("visitInvalid: {}",
+                            slang::ast::toString(expr.kind));
+  }
+
+  void visitInvalid(const slang::ast::Statement &) {}
+  void visitInvalid(const slang::ast::TimingControl &) {}
+  void visitInvalid(const slang::ast::Constraint &) {}
+  void visitInvalid(const slang::ast::AssertionExpr &) {}
+  void visitInvalid(const slang::ast::BinsSelectExpr &) {}
+  void visitInvalid(const slang::ast::Pattern &) {}
+
+  const VerilogServerContext &context;
+  SMRange range;
+  std::vector<mlir::lsp::InlayHint> &inlayHints;
+};
+
 void VerilogDocument::getInlayHints(
     const mlir::lsp::URIForFile &uri, const mlir::lsp::Range &range,
     std::vector<mlir::lsp::InlayHint> &inlayHints) {
+  mlir::lsp::Logger::info("getInlayHints");
   if (failed(compilation))
     return;
   SMRange rangeLoc = range.getAsSMRange(sourceMgr);
+  mlir::lsp::Logger::info("trying range");
+
   if (!rangeLoc.isValid())
     return;
+  mlir::lsp::Logger::info("trying is valid");
+
+  // mlir::lsp::Logger::info("trying rangeLoc.Start.getPointer() {}",
+  //                         rangeLoc.Start.getPointer());
+  // mlir::lsp::Logger::info("trying rangeLoc.Start.getLine() {}",
+  //                         rangeLoc.End.getPointer());
+
+  // const auto *symbol = index.lookup(rangeLoc.Start);
+  // if (!symbol)
+  //   return;
+  // mlir::lsp::Logger::info("trying symbol {}", symbol->name);
+
+  // const auto *scope = symbol->getParentScope();
+  // if (!scope) {
+  //   mlir::lsp::Logger::info("no scope");
+  //   return;
+  // }
+  // const auto *instance = scope->getContainingInstance();
+  // if (!instance) {
+  //   mlir::lsp::Logger::info("no instance");
+  //   return;
+  // }
+
+  // llvm::StringRef instanceName = instance->name;
+
+  // mlir::lsp::Logger::info("scope: {}", instanceName);
+  // auto &mapping = getContext().getUserHint().json;
+  // auto it = mapping->getAsObject()->find(instanceName);
+  // if (it != mapping->getAsObject()->end()) {
+  //   auto it2 = it->second.getAsObject()->find(symbol->name);
+  //   if (it2 != it->second.getAsObject()->end()) {
+  //     mlir::lsp::Logger::info("name: {}", it2->second.getAsString());
+  //   }
+  // }
+
+  RvalueExprVisitor visitor(getContext(), rangeLoc, inlayHints);
+  for (auto *inst : compilation.value()->getRoot().topInstances) {
+    inst->body.visit(visitor);
+
+    // walk->body().visitExprs(visitor);
+    // walk->visitExprs(visitor);
+  }
+  // Walk through all instances and their bodies
+  // for (auto *instance : compilation.value()->getRoot().topInstances) {
+  //   // Visit expressions in instance body
+  //   for (auto *stmt : instance->body) {
+  //     if (auto *expr = stmt->as<slang::ast::ExpressionStatement>()) {
+  //       visitor.handle(expr->expr);
+  //     }
+  //   }
+  // }
+  // getContext().getUserHint().find(symbol->name, inlayHints);
+
   /*
   (astModule)->walk([&](const ast::Node *node) {
     SMRange loc = node->getLoc();
@@ -1445,6 +1846,8 @@ void circt::lsp::VerilogServer::getInlayHints(
   auto fileIt = impl->files.find(uri.file());
   if (fileIt == impl->files.end())
     return;
+
+  mlir::lsp::Logger::info("trying getInlayHints");
   fileIt->second->getInlayHints(uri, range, inlayHints);
 
   // Drop any duplicated hints that may have cropped up.
