@@ -10,15 +10,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Analysis/FIRRTLInstanceInfo.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
-#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
-#include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "mem-to-reg-of-vec"
@@ -41,27 +40,16 @@ struct MemToRegOfVecPass
 
   void runOnOperation() override {
     auto circtOp = getOperation();
-    DenseSet<Operation *> dutModuleSet;
+    auto &instanceInfo = getAnalysis<InstanceInfo>();
+
     if (!AnnotationSet::removeAnnotations(circtOp,
                                           convertMemToRegOfVecAnnoClass))
       return markAllAnalysesPreserved();
-    auto *body = circtOp.getBodyBlock();
 
-    // Find the device under test and create a set of all modules underneath it.
-    auto it = llvm::find_if(*body, [&](Operation &op) -> bool {
-      return AnnotationSet::hasAnnotation(&op, dutAnnoClass);
-    });
-    if (it != body->end()) {
-      auto &instanceGraph = getAnalysis<InstanceGraph>();
-      auto *node = instanceGraph.lookup(cast<igraph::ModuleOpInterface>(*it));
-      llvm::for_each(llvm::depth_first(node),
-                     [&](igraph::InstanceGraphNode *node) {
-                       dutModuleSet.insert(node->getModule());
-                     });
-    } else {
-      auto mods = circtOp.getOps<FModuleOp>();
-      dutModuleSet.insert(mods.begin(), mods.end());
-    }
+    DenseSet<Operation *> dutModuleSet;
+    for (auto moduleOp : circtOp.getOps<FModuleOp>())
+      if (instanceInfo.anyInstanceInEffectiveDesign(moduleOp))
+        dutModuleSet.insert(moduleOp);
 
     mlir::parallelForEach(circtOp.getContext(), dutModuleSet,
                           [&](Operation *op) {
