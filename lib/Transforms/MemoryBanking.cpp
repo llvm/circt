@@ -25,6 +25,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace circt {
 #define GEN_PASS_DEF_MEMORYBANKING
@@ -93,6 +94,25 @@ MemRefType computeBankedMemRefType(MemRefType originalType,
   return newMemRefType;
 }
 
+// Performs multi-dimensional slicing on `allAttrs` by extracting all elements
+// whose coordinates range from `bankCnt`*`bankingDimension` to
+// (`bankCnt`+1)*`bankingDimension` from `bankingDimension`'s dimension, leaving
+// other dimensions alone.
+SmallVector<Attribute> extractSubBlock(ArrayRef<Attribute> allAttrs,
+                                       ArrayRef<int64_t> memShape,
+                                       unsigned bankCnt,
+                                       unsigned bankingDimension,
+                                       unsigned bankingFactor) {
+  for (unsigned i = 0; i < allAttrs.size(); ++i) {
+    llvm::errs() << i << "'th attribute: " << allAttrs[i] << "\n";
+  }
+
+  unsigned bankSize = memShape[bankingDimension] / bankingFactor;
+
+  unsigned beginIdx = bankSize * bankCnt;
+  unsigned endIdx = bankSize * (bankCnt + 1);
+}
+
 SmallVector<Value, 4>
 MemoryBankingPass::createBanks(Value originalMem, uint64_t bankingFactor,
                                unsigned bankingDimension) {
@@ -133,19 +153,33 @@ MemoryBankingPass::createBanks(Value originalMem, uint64_t bankingFactor,
         })
         .Case<memref::GetGlobalOp>([&](memref::GetGlobalOp getGlobalOp) {
           auto memTy = cast<MemRefType>(getGlobalOp.getType());
+          ArrayRef<int64_t> originalShape = memTy.getShape();
+          auto newShape =
+              SmallVector<int64_t>(originalShape.begin(), originalShape.end());
+          newShape[bankingDimension] =
+              originalShape[bankingDimension] / bankingFactor;
+
+          // Get the original elements in the `GetGlobalOp`
+          auto *symbolTableOp =
+              getGlobalOp->getParentWithTrait<OpTrait::SymbolTable>();
+          auto globalOp =
+              dyn_cast_or_null<memref::GlobalOp>(SymbolTable::lookupSymbolIn(
+                  symbolTableOp, getGlobalOp.getNameAttr()));
+          MemRefType globalOpTy = globalOp.getType();
+          auto cstAttr = dyn_cast_or_null<DenseElementsAttr>(
+              globalOp.getConstantInitValue());
+          SmallVector<Attribute, 8> allAttrs;
+          for (auto attr : cstAttr.getValues<Attribute>())
+            allAttrs.push_back(attr);
+
           unsigned bankSize =
               memTy.getShape()[bankingDimension] / bankingFactor;
+
           OpBuilder::InsertPoint globalOpsInsertPt, getGlobalOpsInsertPt;
           for (uint64_t bankCnt = 0; bankCnt < bankingFactor; ++bankCnt) {
-            auto *symbolTableOp =
-                getGlobalOp->getParentWithTrait<OpTrait::SymbolTable>();
-            auto globalOp =
-                dyn_cast_or_null<memref::GlobalOp>(SymbolTable::lookupSymbolIn(
-                    symbolTableOp, getGlobalOp.getNameAttr()));
-            MemRefType globalOpTy = globalOp.getType();
-            auto cstAttr = dyn_cast_or_null<DenseElementsAttr>(
-                globalOp.getConstantInitValue());
-            auto allAttrs = cstAttr.getValues<Attribute>();
+            auto subBlock = extractSubBlock(allAttrs, originalShape, bankCnt,
+                                            bankingDimension, bankingFactor);
+
             unsigned beginIdx = bankSize * bankCnt;
             unsigned endIdx = bankSize * (bankCnt + 1);
             SmallVector<Attribute, 8> extractedElements;
