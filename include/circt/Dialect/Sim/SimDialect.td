@@ -26,13 +26,15 @@ def SimDialect : Dialect {
 
   let dependentDialects = ["circt::hw::HWDialect"];
 
-  let useDefaultAttributePrinterParser = 0;
+  let useDefaultAttributePrinterParser = 1;
   let useDefaultTypePrinterParser = 1;
   let hasConstantMaterializer = 1;
 
   let extraClassDeclaration = [{
     /// Register all Sim types.
     void registerTypes();
+    /// Register all attributes.
+    void registerAttributes();
   }];
 
 }

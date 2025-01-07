@@ -12,7 +12,18 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Types.h"
 
+#include "circt/Dialect/HW/HWEnums.h"
+
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/Sim/SimTypes.h.inc"
+
+namespace circt {
+namespace sim {
+static inline bool isTriigerType(::mlir::Type ty) {
+  return isa_and_nonnull<circt::sim::InitTriggerType,
+                         circt::sim::EdgeTriggerType>(ty);
+}
+} // namespace sim
+} // namespace circt
 
 #endif // CIRCT_DIALECT_SIM_SIMTYPES_H

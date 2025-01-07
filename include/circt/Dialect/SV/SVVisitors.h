@@ -33,14 +33,14 @@ public:
             ConstantXOp, ConstantZOp, ConstantStrOp, MacroRefExprOp,
             MacroRefExprSEOp, UnpackedArrayCreateOp, UnpackedOpenArrayCastOp,
             // Declarations.
-            RegOp, WireOp, LogicOp, LocalParamOp, XMROp, XMRRefOp,
+            RegOp, WireOp, LogicOp, BitOp, LocalParamOp, XMROp, XMRRefOp,
             // Control flow.
             OrderedOutputOp, IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp,
-            AlwaysCombOp, AlwaysFFOp, InitialOp, CaseOp,
+            AlwaysCombOp, AlwaysFFOp, InitialOp, CaseOp, ForkJoinOp,
             // Other Statements.
             AssignOp, BPAssignOp, PAssignOp, ForceOp, ReleaseOp, AliasOp,
             FWriteOp, SystemFunctionOp, VerbatimOp, MacroRefOp, FuncCallOp,
-            FuncCallProceduralOp, ReturnOp,
+            FuncCallProceduralOp, ReturnOp, WaitOp, DelayOp, DisplayOp,
             // Type declarations.
             InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
             InterfaceInstanceOp, GetModportOp, AssignInterfaceSignalOp,
@@ -92,6 +92,7 @@ public:
   HANDLE(RegOp, Unhandled);
   HANDLE(WireOp, Unhandled);
   HANDLE(LogicOp, Unhandled);
+  HANDLE(BitOp, Unhandled);
   HANDLE(LocalParamOp, Unhandled);
   HANDLE(XMROp, Unhandled);
   HANDLE(XMRRefOp, Unhandled);
@@ -121,6 +122,7 @@ public:
   HANDLE(AlwaysCombOp, Unhandled);
   HANDLE(AlwaysFFOp, Unhandled);
   HANDLE(InitialOp, Unhandled);
+  HANDLE(ForkJoinOp, Unhandled);
   HANDLE(CaseOp, Unhandled);
 
   // Other Statements.
@@ -137,6 +139,9 @@ public:
   HANDLE(ReturnOp, Unhandled);
   HANDLE(VerbatimOp, Unhandled);
   HANDLE(MacroRefOp, Unhandled);
+  HANDLE(WaitOp, Unhandled);
+  HANDLE(DelayOp, Unhandled);
+  HANDLE(DisplayOp, Unhandled);
 
   // Type declarations.
   HANDLE(InterfaceOp, Unhandled);

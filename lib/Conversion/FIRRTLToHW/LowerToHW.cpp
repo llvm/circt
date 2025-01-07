@@ -1463,6 +1463,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   Value getPossiblyInoutLoweredValue(Value value);
   Value getLoweredValue(Value value);
   Value getLoweredNonClockValue(Value value);
+  Value getPosedgeTriggerForClock(Value value);
   Value getLoweredAndExtendedValue(Value value, Type destType);
   Value getLoweredAndExtOrTruncValue(Value value, Type destType);
   Value getLoweredFmtOperand(Value operand);
@@ -1763,6 +1764,8 @@ private:
   /// via a deduped `seq.from_clock` op.
   DenseMap<Value, Value> fromClockMapping;
 
+  DenseMap<Value, Value> clockToTriggerMapping;
+
   /// This keeps track of constants that we have created so we can reuse them.
   /// This is populated by the getOrCreateIntConstant method.
   DenseMap<Attribute, Value> hwConstantMap;
@@ -1772,6 +1775,9 @@ private:
   /// This is populated by the getOrCreateXConstant method.
   DenseMap<unsigned, Value> hwConstantXMap;
   DenseMap<Type, Value> hwConstantZMap;
+
+  /// Cache for printf stirng literal tokens.
+  // llvm::StringMap<Value> printLiteralMap;
 
   /// We auto-unique "ReadInOut" ops from wires and regs, enabling
   /// optimizations and CSEs of the read values to be more obvious.  This
@@ -2107,6 +2113,20 @@ Value FIRRTLLowering::getLoweredNonClockValue(Value value) {
     return getNonClockValue(result);
 
   return result;
+}
+
+Value FIRRTLLowering::getPosedgeTriggerForClock(Value value) {
+  auto &cached = clockToTriggerMapping[value];
+  if (cached)
+    return cached;
+
+  auto loweredClock = getLoweredValue(value);
+  if (!isa<seq::ClockType>(loweredClock.getType()))
+    loweredClock = builder.createOrFold<seq::ToClockOp>(loweredClock);
+
+  cached = builder.createOrFold<sim::OnEdgeOp>(loweredClock,
+                                               hw::EventControl::AtPosEdge);
+  return cached;
 }
 
 /// Return the lowered aggregate value whose type is converted into
@@ -4395,42 +4415,119 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseInitialOp op) {
   return success();
 }
 
-// Printf is a macro op that lowers to an sv.ifdef.procedural, an sv.if,
-// and an sv.fwrite all nested together.
 LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
-  auto clock = getLoweredNonClockValue(op.getClock());
+  auto trigger = getPosedgeTriggerForClock(op.getClock());
   auto cond = getLoweredValue(op.getCond());
-  if (!clock || !cond)
+  if (!trigger || !cond)
     return failure();
 
   SmallVector<Value, 4> operands;
   operands.reserve(op.getSubstitutions().size());
   for (auto operand : op.getSubstitutions()) {
-    Value loweredValue = getLoweredFmtOperand(operand);
+    Value loweredValue = getLoweredValue(operand);
     if (!loweredValue)
       return failure();
     operands.push_back(loweredValue);
   }
 
-  // Emit an "#ifndef SYNTHESIS" guard into the always block.
-  circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
-  addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
-    addToAlwaysBlock(clock, [&]() {
-      circuitState.usedPrintfCond = true;
-      circuitState.addFragment(theModule, "PRINTF_COND_FRAGMENT");
+  circuitState.usedPrintfCond = true;
+  circuitState.addFragment(theModule, "PRINTF_COND_FRAGMENT");
+  Value ifCond =
+      builder.create<sv::MacroRefExprOp>(cond.getType(), "PRINTF_COND_");
+  ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond, true);
+  auto gateOp = builder.createOrFold<sim::TriggerGateOp>(trigger, ifCond);
+  auto triggeredOp = builder.create<sim::TriggeredOp>(gateOp, operands);
+  auto &triggeredBody = triggeredOp.getBody().front();
+  ImplicitLocOpBuilder triggeredBodyBuilder(builder.getLoc(), &triggeredBody,
+                                            triggeredBody.begin());
 
-      // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
-      Value ifCond =
-          builder.create<sv::MacroRefExprOp>(cond.getType(), "PRINTF_COND_");
-      ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond, true);
+  SmallVector<Value> tokens;
+  tokens.reserve(1 + 2 * op.getSubstitutions().size());
+  auto fmtStr = op.getFormatString().str();
+  auto fmtStrType = sim::FormatStringType::get(builder.getContext());
 
-      addIfProceduralBlock(ifCond, [&]() {
-        // Emit the sv.fwrite, writing to stderr by default.
-        Value fdStderr = builder.create<hw::ConstantOp>(APInt(32, 0x80000002));
-        builder.create<sv::FWriteOp>(fdStderr, op.getFormatString(), operands);
-      });
-    });
-  });
+  size_t pos = 0;
+  size_t skip = 0;
+  size_t substIndex = 0;
+
+  // Split the format string into a list of tokens which are either string
+  // literals or formatting substitutions.
+  while (pos < fmtStr.size()) {
+    // Look for the next substitution.
+    auto substPos = fmtStr.find('%', pos + skip);
+
+    if (substPos == std::string::npos) {
+      // No more substitutions. Create a literal for the remaining string.
+      auto tailToken = fmtStr.substr(pos, fmtStr.size() - pos);
+      auto lit = triggeredBodyBuilder.create<sim::FormatLitOp>(
+          sim::FormatStringType::get(builder.getContext()), tailToken);
+      tokens.push_back(lit);
+      break;
+    }
+
+    // '%' at the last position?
+    if (substPos == fmtStr.size() - 1)
+      return op.emitError("Incomplete substitution in format string");
+
+    char fmtChar = fmtStr[substPos + 1];
+
+    // "%%" is not really a substitution. Remove one '%' and continue searching
+    // beyond it.
+    if (fmtChar == '%') {
+      fmtStr.erase(substPos, 1);
+      skip = substPos + 1 - pos;
+      continue;
+    }
+
+    // Found an actual substitution. Create a literal for the preceeding string
+    // first.
+    if (substPos > pos) {
+      auto tailToken = fmtStr.substr(pos, substPos - pos);
+      auto lit = triggeredBodyBuilder.create<sim::FormatLitOp>(
+          sim::FormatStringType::get(builder.getContext()), tailToken);
+      tokens.push_back(lit);
+    }
+
+    // Then create the matching substitution token.
+    assert(substIndex < operands.size() &&
+           "Found more substitutions than operands.");
+    Value substToken;
+    if (fmtChar == 'x')
+      substToken = triggeredBodyBuilder.createOrFold<sim::FormatHexOp>(
+          fmtStrType, triggeredBody.getArgument(substIndex));
+    else if (fmtChar == 'd')
+      substToken = triggeredBodyBuilder.createOrFold<sim::FormatDecOp>(
+          fmtStrType, triggeredBody.getArgument(substIndex),
+          type_cast<IntType>(op.getSubstitutions()[substIndex].getType())
+              .isSigned());
+    else if (fmtChar == 'b')
+      substToken = triggeredBodyBuilder.createOrFold<sim::FormatBinOp>(
+          fmtStrType, triggeredBody.getArgument(substIndex));
+    // Note: %c substitutions are not defined in the FIRRTL spec, but Chisel
+    // allows them.
+    else if (fmtChar == 'c')
+      substToken = triggeredBodyBuilder.createOrFold<sim::FormatCharOp>(
+          fmtStrType, triggeredBody.getArgument(substIndex));
+    else
+      return op.emitError("Invalid substitution in format string: %" +
+                          Twine(fmtChar));
+
+    tokens.push_back(substToken);
+    substIndex++;
+
+    skip = 0;
+    pos = substPos + 2;
+  }
+  assert(!tokens.empty() && "No formatting tokens created");
+
+  Value combinedStrings;
+  if (tokens.size() > 1)
+    combinedStrings =
+        triggeredBodyBuilder.createOrFold<sim::FormatStringConcatOp>(fmtStrType,
+                                                                     tokens);
+  else
+    combinedStrings = tokens.front();
+  triggeredBodyBuilder.createOrFold<sim::PrintFormattedProcOp>(combinedStrings);
 
   return success();
 }

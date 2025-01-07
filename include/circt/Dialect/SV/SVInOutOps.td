@@ -106,7 +106,7 @@ def XMROp : SVOp<"xmr", []> {
     path has public visibility so paths are not invalidated.
   }];
   let arguments = (ins UnitAttr:$isRooted, StrArrayAttr:$path, StrAttr:$terminal);
-  let results = (outs InOutType:$result);
+  let results = (outs AnyType:$result);
   let assemblyFormat = "(`isRooted` $isRooted^)? custom<XMRPath>($path, $terminal) attr-dict `:` qualified(type($result))";
 }
 
@@ -132,7 +132,7 @@ def XMRRefOp : SVOp<"xmr.ref", [
     ins FlatSymbolRefAttr:$ref,
     DefaultValuedAttr<StrAttr, "{}">:$verbatimSuffix
   );
-  let results = (outs InOutType:$result);
+  let results = (outs AnyType:$result);
   let assemblyFormat = [{
     $ref ( $verbatimSuffix^ )? attr-dict `:` qualified(type($result))
   }];
@@ -241,6 +241,40 @@ def LogicOp : SVOp<"logic", [
   let description = [{
     Declare a SystemVerilog Variable Declaration of 'logic' type.
     See SV Spec 6.8, pp100.
+    }];
+
+  let arguments = (ins StrAttr:$name, OptionalAttr<InnerSymAttr>:$inner_sym);
+  let results = (outs InOutType:$result);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$elementType,
+                   CArg<"StringAttr", "StringAttr()">:$name,
+                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>,
+    OpBuilder<(ins "::mlir::Type":$elementType, CArg<"StringRef">:$name), [{
+      return build($_builder, $_state, elementType,
+                   $_builder.getStringAttr(name));
+    }]>
+  ];
+
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
+    `:` qualified(type($result))
+  }];
+
+  let extraClassDeclaration = [{
+    Type getElementType() {
+      return llvm::cast<InOutType>(getResult().getType()).getElementType();
+    }
+  }];
+}
+
+def BitOp : SVOp<"bit", [
+      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+      DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
+  let summary = "Define a bit";
+  let description = [{
+    Declare a SystemVerilog Variable Declaration of 'bit' type.
     }];
 
   let arguments = (ins StrAttr:$name, OptionalAttr<InnerSymAttr>:$inner_sym);
