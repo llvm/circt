@@ -63,3 +63,86 @@ def ConstantTestOp : RTGTestOp<"constant_test", [
   let assemblyFormat = "type($result) attr-dict";
   let hasFolder = 1;
 }
+
+//===- Instruction Formats -------------------------------------------------===//
+
+class InstFormatIOpBase<string mnemonic, int opcode7, int funct3>
+  : RTGTestOp<"rv32i." # mnemonic, [InstructionOpInterface]> {
+
+  let arguments = (ins IntegerRegisterType:$rd,
+                       IntegerRegisterType:$rs,
+                       Imm12Type:$imm);
+
+  let assemblyFormat = "$rd `,` $rs `,` $imm attr-dict";
+
+  let extraClassDeclaration = [{
+    static void printInstructionBinary(llvm::raw_ostream &os,
+                                       ArrayRef<Attribute> operands) {
+      FoldAdaptor adaptor(operands);
+
+      auto binary = APInt(12, cast<Imm12Attr>(adaptor.getImm()).getValue())
+        .concat(APInt(5, cast<rtg::RegisterAttrInterface>(
+          adaptor.getRs()).getClassIndex()))
+        .concat(APInt(3, }] # funct3 # [{))
+        .concat(APInt(5, cast<rtg::RegisterAttrInterface>(
+          adaptor.getRd()).getClassIndex()))
+        .concat(APInt(7, }] # opcode7 # [{));
+
+      SmallVector<char> str;
+      binary.toStringUnsigned(str, 16);
+      os << str;
+    }
+
+    static void printInstructionAssembly(llvm::raw_ostream &os,
+                                         ArrayRef<Attribute> operands) {
+      FoldAdaptor adaptor(operands);
+
+      os << getOperationName().split('.').second << " "
+         << cast<rtg::RegisterAttrInterface>(adaptor.getRd())
+              .getRegisterAssembly()
+         << ", "
+         << cast<Imm12Attr>(adaptor.getImm()).getValue()
+         << "("
+         << cast<rtg::RegisterAttrInterface>(adaptor.getRs())
+              .getRegisterAssembly()
+         << ")";
+    }
+  }];
+}
+
+class InstFormatIImmOpBase<string mnemonic, int opcode7, int funct12>
+  : RTGTestOp<"rv32i." # mnemonic, [InstructionOpInterface]> {
+
+  let assemblyFormat = "attr-dict";
+
+  let extraClassDeclaration = [{
+    static void printInstructionBinary(llvm::raw_ostream &os,
+                                       ArrayRef<Attribute> operands) {
+      auto binary = APInt(12, }] # funct12 # [{)
+      .concat(APInt(13, 0))
+      .concat(llvm::APInt(7, }] # opcode7 # [{));
+
+      SmallVector<char> str;
+      binary.toStringUnsigned(str, 16);
+      os << str;
+    }
+
+    static void printInstructionAssembly(llvm::raw_ostream &os,
+                                         ArrayRef<Attribute> operands) {
+      os << getOperationName().split('.').second;
+    }
+  }];
+}
+
+//===- Instructions -------------------------------------------------------===//
+
+def RV32I_JALROp    : InstFormatIOpBase<"jalr",  0b1100111, 0b000>;
+
+def RV32I_LBOp      : InstFormatIOpBase<"lb",  0b0000011, 0b000>;
+def RV32I_LHOp      : InstFormatIOpBase<"lh",  0b0000011, 0b001>;
+def RV32I_LWOp      : InstFormatIOpBase<"lw",  0b0000011, 0b010>;
+def RV32I_LBUOp     : InstFormatIOpBase<"lbu", 0b0000011, 0b100>;
+def RV32I_LHUOp     : InstFormatIOpBase<"lhu", 0b0000011, 0b101>;
+
+def RV32I_ECALLOp   : InstFormatIImmOpBase<"ecall", 0b1110011, 0b000000000000>;
+def RV32I_EBREAKOp  : InstFormatIImmOpBase<"ebreak", 0b1110011, 0b000000000001>;
