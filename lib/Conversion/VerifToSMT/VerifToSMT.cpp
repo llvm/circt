@@ -367,7 +367,9 @@ struct VerifBoundedModelCheckingOpConversion
           if (clockIndexes.size() == 1) {
             auto clockIndex = clockIndexes[0];
             auto oldClock = iterArgs[clockIndex];
-            auto newClock = loopVals[clockIndex];
+            // The clock is necessarily the first value returned by the loop
+            // region
+            auto newClock = loopVals[0];
             auto oldClockLow = builder.create<smt::BVNotOp>(loc, oldClock);
             auto isPosedgeBV =
                 builder.create<smt::BVAndOp>(loc, oldClockLow, newClock);
