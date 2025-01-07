@@ -370,14 +370,16 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
 
   void handleSymbol(const slang::ast::Symbol *symbol, slang::SourceRange range,
                     bool isDef = false) {
+    if (symbol->name.empty())
+      return;
     mlir::lsp::Logger::info("handleSymbol: {}", symbol->name);
     auto start = getContext().getSMLoc(range.start());
     auto end = getContext().getSMLoc(range.end());
-    mlir::lsp::Logger::info("handleSymbol nam: {}",
-                            symbol->getParentScope()
-                                ->getContainingInstance()
-                                ->getDefinition()
-                                .name);
+    // mlir::lsp::Logger::info("handleSymbol nam: {}",
+    //                         symbol->getParentScope()
+    //                             ->getContainingInstance()
+    //                             ->getDefinition()
+    //                             .name);
 
     insertDeclRef(symbol, SMRange(start, end), true);
   }
@@ -393,22 +395,24 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
   }
   void visit(const slang::ast::NetSymbol &expr) {
     mlir::lsp::Logger::info("visit: {}", slang::ast::toString(expr.kind));
-    handleSymbol(&expr, slang::SourceRange(expr.location,
-                                           expr.location + expr.name.length()),
-                 true);
+    handleSymbol(
+        &expr,
+        slang::SourceRange(expr.location, expr.location + expr.name.length()),
+        true);
     visitDefault(expr);
   }
   void visit(const slang::ast::VariableSymbol &expr) {
     mlir::lsp::Logger::info("visit: {}", slang::ast::toString(expr.kind));
-    handleSymbol(&expr, slang::SourceRange(expr.location,
-                                           expr.location + expr.name.length()),
-                 true);
+    handleSymbol(
+        &expr,
+        slang::SourceRange(expr.location, expr.location + expr.name.length()),
+        true);
     visitDefault(expr);
   }
 
   void visit(const slang::ast::VariableDeclStatement &expr) {
     mlir::lsp::Logger::info("visit: {}", slang::ast::toString(expr.kind));
-    handleSymbol(&expr.symbol, expr.sourceRange,true); 
+    handleSymbol(&expr.symbol, expr.sourceRange, true);
     visitDefault(expr);
   }
 
@@ -1063,6 +1067,9 @@ struct RvalueExprVisitor
   void handleSymbol(const slang::ast::Symbol *symbol, slang::SourceRange range,
                     bool useEnd = true) {
     mlir::lsp::Logger::info("handleSymbol: {}", symbol->name);
+    if (symbol->name.empty()) {
+      return;
+    }
     auto start = context.getSMLoc(range.start());
     auto end = context.getSMLoc(range.end());
     if (names.empty()) {
@@ -1072,11 +1079,11 @@ struct RvalueExprVisitor
 
     if (!contains(SMRange(start, end)))
       return;
-    mlir::lsp::Logger::info("handleSymbol nam: {}",
-                            symbol->getParentScope()
-                                ->getContainingInstance()
-                                ->getDefinition()
-                                .name);
+    // mlir::lsp::Logger::info("handleSymbol nam: {}",
+    //                         symbol->getParentScope()
+    //                             ->getContainingInstance()
+    //                             ->getDefinition()
+    //                             .name);
     auto it = context.getUserHint().json->getAsObject()->find(names.back());
     StringRef newName;
     if (it != context.getUserHint().json->getAsObject()->end()) {
@@ -1145,7 +1152,8 @@ struct RvalueExprVisitor
 
     // // Try to materialize constant values directly.
     // auto constant = context.evaluateConstant(expr);
-    // if (auto value = context.materializeConstant(constant, *expr.type, loc))
+    // if (auto value = context.materializeConstant(constant, *expr.type,
+    // loc))
     //   return value;
 
     // // Otherwise some other part of ImportVerilog should have added an MLIR
@@ -1186,8 +1194,8 @@ struct RvalueExprVisitor
   //   return {};
   // }
 
-  // Helper function to convert an argument to a simple bit vector type, pass it
-  // to a reduction op, and optionally invert the result.
+  // Helper function to convert an argument to a simple bit vector type, pass
+  // it to a reduction op, and optionally invert the result.
 
   /// Handle assignment patterns.
   void visitInvalid(const slang::ast::Expression &expr) {
