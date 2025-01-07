@@ -95,11 +95,9 @@ SmallVector<Value, 4> createBanks(Value originalMem, uint64_t bankingFactor,
     Block *block = blockArgMem.getOwner();
     unsigned blockArgNum = blockArgMem.getArgNumber();
 
-    SmallVector<Type> banksType;
-    for (unsigned i = 0; i < bankingFactor; ++i) {
+    for (unsigned i = 0; i < bankingFactor; ++i)
       block->insertArgument(blockArgNum + 1 + i, newMemRefType,
                             blockArgMem.getLoc());
-    }
 
     auto blockArgs =
         block->getArguments().slice(blockArgNum + 1, bankingFactor);
