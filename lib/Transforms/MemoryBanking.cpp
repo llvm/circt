@@ -50,6 +50,7 @@ private:
   // map from original memory definition to newly allocated banks
   DenseMap<Value, SmallVector<Value>> memoryToBanks;
   DenseSet<Operation *> opsToErase;
+  DenseSet<Value> oldMemRefVals;
 };
 } // namespace
 
@@ -134,10 +135,11 @@ struct BankAffineLoadPattern
     : public OpRewritePattern<mlir::affine::AffineLoadOp> {
   BankAffineLoadPattern(MLIRContext *context, uint64_t bankingFactor,
                         unsigned bankingDimension,
-                        DenseMap<Value, SmallVector<Value>> &memoryToBanks)
+                        DenseMap<Value, SmallVector<Value>> &memoryToBanks,
+                        DenseSet<Value> &oldMemRefVals)
       : OpRewritePattern<mlir::affine::AffineLoadOp>(context),
         bankingFactor(bankingFactor), bankingDimension(bankingDimension),
-        memoryToBanks(memoryToBanks) {}
+        memoryToBanks(memoryToBanks), oldMemRefVals(oldMemRefVals) {}
 
   LogicalResult matchAndRewrite(mlir::affine::AffineLoadOp loadOp,
                                 PatternRewriter &rewriter) const override {
@@ -187,6 +189,8 @@ struct BankAffineLoadPattern
     auto defaultValue = rewriter.create<arith::ConstantOp>(loc, zeroAttr);
     rewriter.create<scf::YieldOp>(loc, defaultValue.getResult());
 
+    if (isa<BlockArgument>(loadOp.getMemref()))
+      oldMemRefVals.insert(loadOp.getMemref());
     rewriter.replaceOp(loadOp, switchOp.getResult(0));
 
     return success();
@@ -196,6 +200,7 @@ private:
   uint64_t bankingFactor;
   unsigned bankingDimension;
   DenseMap<Value, SmallVector<Value>> &memoryToBanks;
+  DenseSet<Value> &oldMemRefVals;
 };
 
 // Replace the original store operations with newly created memory banks
@@ -205,11 +210,12 @@ struct BankAffineStorePattern
                          unsigned bankingDimension,
                          DenseMap<Value, SmallVector<Value>> &memoryToBanks,
                          DenseSet<Operation *> &opsToErase,
-                         DenseSet<Operation *> &processedOps)
+                         DenseSet<Operation *> &processedOps,
+                         DenseSet<Value> &oldMemRefVals)
       : OpRewritePattern<mlir::affine::AffineStoreOp>(context),
         bankingFactor(bankingFactor), bankingDimension(bankingDimension),
         memoryToBanks(memoryToBanks), opsToErase(opsToErase),
-        processedOps(processedOps) {}
+        processedOps(processedOps), oldMemRefVals(oldMemRefVals) {}
 
   LogicalResult matchAndRewrite(mlir::affine::AffineStoreOp storeOp,
                                 PatternRewriter &rewriter) const override {
@@ -262,6 +268,7 @@ struct BankAffineStorePattern
 
     processedOps.insert(storeOp);
     opsToErase.insert(storeOp);
+    oldMemRefVals.insert(storeOp.getMemref());
 
     return success();
   }
@@ -272,6 +279,7 @@ private:
   DenseMap<Value, SmallVector<Value>> &memoryToBanks;
   DenseSet<Operation *> &opsToErase;
   DenseSet<Operation *> &processedOps;
+  DenseSet<Value> &oldMemRefVals;
 };
 
 // Replace the original return operation with newly created memory banks
@@ -388,9 +396,10 @@ void MemoryBankingPass::runOnOperation() {
 
   DenseSet<Operation *> processedOps;
   patterns.add<BankAffineLoadPattern>(ctx, bankingFactor, bankingDimension,
-                                      memoryToBanks);
+                                      memoryToBanks, oldMemRefVals);
   patterns.add<BankAffineStorePattern>(ctx, bankingFactor, bankingDimension,
-                                       memoryToBanks, opsToErase, processedOps);
+                                       memoryToBanks, opsToErase, processedOps,
+                                       oldMemRefVals);
   patterns.add<BankReturnPattern>(ctx, memoryToBanks);
 
   GreedyRewriteConfig config;
@@ -401,10 +410,6 @@ void MemoryBankingPass::runOnOperation() {
   }
 
   // Clean up the old memref values
-  DenseSet<Value> oldMemRefVals;
-  for (const auto &[memory, _] : memoryToBanks)
-    oldMemRefVals.insert(memory);
-
   if (failed(cleanUpOldMemRefs(oldMemRefVals, opsToErase))) {
     signalPassFailure();
   }
