@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from .support import get_user_loc, _obj_to_value_infer_type
-from .types import ChannelDirection, ChannelSignaling, Type
+from .types import BundledChannel, ChannelDirection, ChannelSignaling, Type
 
 from .circt.dialects import esi, sv
 from .circt import support
@@ -784,15 +784,14 @@ class BundleSignal(Signal):
   def reg(self, clk, rst=None, name=None):
     raise TypeError("Cannot register a bundle")
 
-  def unpack(self, **kwargs: Dict[str,
-                                  ChannelSignal]) -> Dict[str, ChannelSignal]:
+  def unpack(self, **kwargs: ChannelSignal) -> Dict[str, ChannelSignal]:
     """Given FROM channels, unpack a bundle into the TO channels."""
     from_channels = {
         bc.name: (idx, bc) for idx, bc in enumerate(
             filter(lambda c: c.direction == ChannelDirection.FROM,
                    self.type.channels))
     }
-    to_channels = [
+    to_channels: List[BundledChannel] = [
         c for c in self.type.channels if c.direction == ChannelDirection.TO
     ]
 
@@ -801,7 +800,7 @@ class BundleSignal(Signal):
       if name not in from_channels:
         raise ValueError(f"Unknown channel name '{name}'")
       idx, bc = from_channels[name]
-      if value.type != bc.channel:
+      if not bc.channel.castable(value.type):
         raise TypeError(f"Expected channel type {bc.channel}, got {value.type} "
                         f"on channel '{name}'")
       operands[idx] = value.value
@@ -814,10 +813,13 @@ class BundleSignal(Signal):
                                    self.value, operands)
 
     to_channels_results = unpack_op.toChannels
-    return {
+    ret = {
         bc.name: _FromCirctValue(to_channels_results[idx])
         for idx, bc in enumerate(to_channels)
     }
+    if not all([bc.channel.castable(ret[bc.name].type) for bc in to_channels]):
+      raise TypeError("Unpacked bundle did not match expected types")
+    return ret
 
   def connect(self, other: BundleSignal):
     """Connect two bundles together such that one drives the other."""
