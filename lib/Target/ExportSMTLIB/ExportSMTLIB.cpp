@@ -602,6 +602,10 @@ struct StatementVisitor
                                     mlir::raw_indented_ostream &stream,
                                     ValueMap &valueMap) {
     // Ignore operations which are handled in the Expression Visitor.
+    if (isa<smt::Int2BVOp>(op))
+      return op->emitError(
+          "int2bv operations are not supported for SMTLIB emission");
+
     return success();
   }
 
@@ -634,10 +638,6 @@ static LogicalResult emit(SolverOp solver, const SMTEmissionOptions &options,
     if (!isa<SMTDialect>(op->getDialect()))
       return op->emitError()
              << "solver must not contain any non-SMT operations";
-
-    if (isa<smt::Int2BVOp>(op))
-      return op->emitError(
-          "int2bv operations are not supported for SMTLIB emission");
 
     for (Type resTy : op->getResultTypes()) {
       auto sortTy = dyn_cast<SortType>(resTy);
