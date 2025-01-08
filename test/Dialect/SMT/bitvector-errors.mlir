@@ -8,7 +8,7 @@ func.func @at_least_size_one(%arg0: !smt.bv<0>) {
 // -----
 
 // expected-error @below {{bit-vector must have at least a width of one}}
-func.func @at_least_size_one(%arg0: !smt.bv<-1>) {
+func.func @positive_width(%arg0: !smt.bv<-1>) {
   return
 }
 
