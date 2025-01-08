@@ -149,6 +149,7 @@ LogicalResult instance_like_impl::verifyOutputs(
 LogicalResult
 instance_like_impl::verifyParameters(ArrayAttr parameters,
                                      ArrayAttr moduleParameters,
+                                     ArrayRef<Type> resolvedModParametersRefs, 
                                      const EmitErrorFn &emitError) {
   // Check parameters match up.
   auto numParameters = parameters.size();
@@ -164,6 +165,7 @@ instance_like_impl::verifyParameters(ArrayAttr parameters,
   for (size_t i = 0; i != numParameters; ++i) {
     auto param = cast<ParamDeclAttr>(parameters[i]);
     auto modParam = cast<ParamDeclAttr>(moduleParameters[i]);
+    auto resolvedModParamType = resolvedModParametersRefs[i];
 
     auto paramName = param.getName();
     if (paramName != modParam.getName()) {
@@ -175,7 +177,7 @@ instance_like_impl::verifyParameters(ArrayAttr parameters,
       return failure();
     }
 
-    if (param.getType() != modParam.getType()) {
+    if (param.getType() != resolvedModParamType) {
       emitError([&](auto &diag) {
         diag << "parameter " << paramName << " should have type "
              << modParam.getType() << " but has type " << param.getType();
@@ -226,7 +228,15 @@ LogicalResult instance_like_impl::verifyInstanceOfHWModule(
   auto modResultNames =
       ArrayAttr::get(instance->getContext(), mod.getOutputNames());
 
+
+  // note : getModuleType(module).getInputs() is before resolution, 
   ArrayRef<Type> resolvedModInputTypesRef = getModuleType(module).getInputs();
+
+  // for (auto type : getModuleType(module).getInputs()) {
+  //   llvm::errs() << "Input Type: " << type << "\n";
+  // }
+  // exit(0);
+
   SmallVector<Type> resolvedModInputTypes;
   if (parameters) {
     if (failed(instance_like_impl::resolveParametricTypes(
@@ -235,6 +245,8 @@ LogicalResult instance_like_impl::verifyInstanceOfHWModule(
       return failure();
     resolvedModInputTypesRef = resolvedModInputTypes;
   }
+
+  // note: at this position, resolvedModInputTypesRef contains the resolved types of the module inputs
   if (failed(instance_like_impl::verifyInputs(
           argNames, modArgNames, inputs.getTypes(), resolvedModInputTypesRef,
           emitError)))
@@ -256,10 +268,24 @@ LogicalResult instance_like_impl::verifyInstanceOfHWModule(
     return failure();
 
   if (parameters) {
+    SmallVector<Type> rawModParameters;
+    SmallVector<Type> resolvedModParameters;
+    ArrayRef<Type> resolvedModParametersRefs;
+
+    auto modParameters = module->getAttrOfType<ArrayAttr>("parameters");
+    for (auto param : modParameters) {
+      auto paramDecl = cast<ParamDeclAttr>(param);
+      rawModParameters.push_back(paramDecl.getType());
+    }
+
+    if (failed(instance_like_impl::resolveParametricTypes(
+            instance->getLoc(), parameters, rawModParameters,
+            resolvedModParameters, emitError)))
+      return failure();
+    resolvedModParametersRefs = resolvedModParameters;
+
     // Check that the parameters are consistent with the referenced module.
-    ArrayAttr modParameters = module->getAttrOfType<ArrayAttr>("parameters");
-    if (failed(instance_like_impl::verifyParameters(parameters, modParameters,
-                                                    emitError)))
+    if (failed(instance_like_impl::verifyParameters(parameters, modParameters, resolvedModParametersRefs, emitError)))
       return failure();
   }
 
