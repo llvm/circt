@@ -39,6 +39,7 @@ public:
             ConcatOp, ExtractOp, RepeatOp, BVCmpOp,
             // Int arithmetic
             IntAddOp, IntMulOp, IntSubOp, IntDivOp, IntModOp, IntCmpOp,
+            Int2BVOp,
             // Core Ops
             EqOp, DistinctOp, IteOp,
             // Variable/symbol declaration
@@ -114,6 +115,7 @@ public:
   HANDLE(IntModOp, Unhandled);
 
   HANDLE(IntCmpOp, Unhandled);
+  HANDLE(Int2BVOp, Unhandled);
 
   HANDLE(EqOp, Unhandled);
   HANDLE(DistinctOp, Unhandled);

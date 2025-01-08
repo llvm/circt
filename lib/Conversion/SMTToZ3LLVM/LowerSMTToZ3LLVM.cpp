@@ -1191,6 +1191,26 @@ struct IntCmpOpLowering : public SMTLoweringPattern<IntCmpOp> {
   }
 };
 
+/// Lower `smt.int2bv` operations to the following Z3 API function calls.
+/// ```
+/// Z3_ast Z3_API Z3_mk_int2bv(Z3_context c, unsigned n, Z3_ast t1);
+/// ```
+struct Int2BVOpLowering : public SMTLoweringPattern<Int2BVOp> {
+  using SMTLoweringPattern::SMTLoweringPattern;
+
+  LogicalResult
+  matchAndRewrite(Int2BVOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Value widthConst =
+        rewriter.create<LLVM::ConstantOp>(op->getLoc(), rewriter.getI32Type(),
+                                          op.getResult().getType().getWidth());
+    rewriter.replaceOp(op,
+                       buildPtrAPICall(rewriter, op.getLoc(), "Z3_mk_int2bv",
+                                       {widthConst, adaptor.getInput()}));
+    return success();
+  }
+};
+
 /// Lower `smt.bv.cmp` operations to one of the following Z3 API function calls,
 /// performing two's complement comparison, depending on the predicate
 /// attribute.
@@ -1461,9 +1481,9 @@ void circt::populateSMTToZ3LLVMConversionPatterns(
                SolverOpLowering, ApplyFuncOpLowering, YieldOpLowering,
                RepeatOpLowering, ExtractOpLowering, BoolConstantOpLowering,
                IntConstantOpLowering, ArrayBroadcastOpLowering, BVCmpOpLowering,
-               IntCmpOpLowering, IntAbsOpLowering, QuantifierLowering<ForallOp>,
-               QuantifierLowering<ExistsOp>>(converter, patterns.getContext(),
-                                             globals, options);
+               IntCmpOpLowering, IntAbsOpLowering, Int2BVOpLowering,
+               QuantifierLowering<ForallOp>, QuantifierLowering<ExistsOp>>(
+      converter, patterns.getContext(), globals, options);
 }
 
 void LowerSMTToZ3LLVMPass::runOnOperation() {
