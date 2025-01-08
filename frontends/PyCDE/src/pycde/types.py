@@ -134,6 +134,12 @@ class Type:
     """Create an array type"""
     return Array(self, len)
 
+  def castable(self, value: Type) -> bool:
+    """Return True if a value of 'value' can be cast to this type."""
+    if not isinstance(value, Type):
+      raise TypeError("Can only cast to a Type")
+    return esi.check_inner_type_match(self._type, value._type)
+
   def __repr__(self):
     return self._type.__repr__()
 
@@ -551,6 +557,16 @@ class Any(Type):
   def is_hw_type(self) -> bool:
     return False
 
+  def _from_obj_or_sig(self,
+                       obj,
+                       alias: typing.Optional["TypeAlias"] = None) -> "Signal":
+    """Any signal can be any type. Skip the type check."""
+
+    from .signals import Signal
+    if isinstance(obj, Signal):
+      return obj
+    return self._from_obj(obj, alias)
+
 
 class Channel(Type):
   """An ESI channel type."""
@@ -713,11 +729,14 @@ class Bundle(Type):
     return False
 
   @property
-  def channels(self):
+  def channels(self) -> typing.List[BundledChannel]:
     return [
         BundledChannel(name, dir, _FromCirctType(type))
         for (name, dir, type) in self._type.channels
     ]
+
+  def castable(self, _) -> bool:
+    raise TypeError("Cannot check cast-ablity to a bundle")
 
   def inverted(self) -> "Bundle":
     """Return a new bundle with all the channels direction inverted."""
