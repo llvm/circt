@@ -6,7 +6,7 @@
 
 // CHECK-LABEL: @noResetNoEnable
 // CHECK-SAME: (inout [[CLK:%.+]] : i1, inout [[SIG:%.+]] : i1)
-hw.module @noResetNoEnable(inout %clk : i1, inout %sig : i1) {
+hw.module @noResetNoEnable(inout %clk : i1, inout %sig : i1, out out : i1) {
   // CHECK: [[V0:%.+]] = llhd.prb [[CLK]]
   // CHECK: [[V1:%.+]] = seq.to_clock [[V0]]
   // CHECK: [[V2:%.+]] = seq.compreg %false{{.*}}, [[V1]]
@@ -14,18 +14,25 @@ hw.module @noResetNoEnable(inout %clk : i1, inout %sig : i1) {
   %time = llhd.constant_time <0ns, 1d, 0e>
   %false = hw.constant false
   %true = hw.constant true
-  %p2 = llhd.prb %clk : !hw.inout<i1>
-  llhd.process {
-    cf.br ^bb1
-  ^bb1:
-    %p1 = llhd.prb %clk : !hw.inout<i1>
-    llhd.wait (%p2 : i1), ^bb2
-  ^bb2:
-    %old = comb.xor %p1, %true : i1
-    %posedge = comb.and %old, %p2 : i1
+  %0 = llhd.process -> i1 {
+    %p = llhd.prb %clk : !hw.inout<i1>
+    %old = comb.xor %0, %true : i1
+    %posedge = comb.and %old, %p : i1
     llhd.drv %sig, %false after %time if %posedge : !hw.inout<i1>
-    cf.br ^bb1
+    llhd.yield %p : i1
   }
+
+  // CHECK: [[V3:%.+]] = seq.compreg %false{{.*}}, [[V1]]
+  %1:2 = llhd.process -> i1, i1 {
+    %p = llhd.prb %clk : !hw.inout<i1>
+    %old = comb.xor %1#1, %true : i1
+    %posedge = comb.and %old, %p : i1
+    %2 = comb.mux %posedge, %false, %1#0 : i1
+    llhd.yield %2, %p : i1, i1
+  }
+
+  // CHECK: hw.output [[V3]] :
+  hw.output %1#0 : i1
 }
 
 // CHECK-LABEL: @negedgeClk
@@ -39,17 +46,12 @@ hw.module @negedgeClk(inout %clk : i1, inout %sig : i1) {
   %time = llhd.constant_time <0ns, 1d, 0e>
   %false = hw.constant false
   %true = hw.constant true
-  %p2 = llhd.prb %clk : !hw.inout<i1>
-  llhd.process {
-    cf.br ^bb1
-  ^bb1:
-    %p1 = llhd.prb %clk : !hw.inout<i1>
-    llhd.wait (%p2 : i1), ^bb2
-  ^bb2:
-    %old = comb.xor %p2, %true : i1
-    %posedge = comb.and %old, %p1 : i1
+  %0 = llhd.process -> i1 {
+    %p = llhd.prb %clk : !hw.inout<i1>
+    %old = comb.xor %p, %true : i1
+    %posedge = comb.and %old, %0 : i1
     llhd.drv %sig, %false after %time if %posedge : !hw.inout<i1>
-    cf.br ^bb1
+    llhd.yield %p : i1
   }
 }
 
@@ -64,18 +66,13 @@ hw.module @enable(in %c : i1, inout %clk : i1, inout %sig : i1) {
   %time = llhd.constant_time <0ns, 1d, 0e>
   %false = hw.constant false
   %true = hw.constant true
-  %p2 = llhd.prb %clk : !hw.inout<i1>
-  llhd.process {
-    cf.br ^bb1
-  ^bb1:
-    %p1 = llhd.prb %clk : !hw.inout<i1>
-    llhd.wait (%p2 : i1), ^bb2
-  ^bb2:
-    %old = comb.xor %p1, %true : i1
-    %posedge = comb.and %old, %p2 : i1
+  %0 = llhd.process -> i1 {
+    %p = llhd.prb %clk : !hw.inout<i1>
+    %old = comb.xor %0, %true : i1
+    %posedge = comb.and %old, %p : i1
     %cond = comb.and %posedge, %c : i1
     llhd.drv %sig, %false after %time if %cond : !hw.inout<i1>
-    cf.br ^bb1
+    llhd.yield %p : i1
   }
 }
 
@@ -91,48 +88,16 @@ hw.module @asyncReset(inout %rst : i1, inout %clk : i1, inout %sig : i1) {
   %time = llhd.constant_time <0ns, 1d, 0e>
   %false = hw.constant false
   %true = hw.constant true
-  %p2 = llhd.prb %clk : !hw.inout<i1>
-  %r2 = llhd.prb %rst : !hw.inout<i1>
-  llhd.process {
-    cf.br ^bb1
-  ^bb1:
-    %p1 = llhd.prb %clk : !hw.inout<i1>
-    %r1 = llhd.prb %rst : !hw.inout<i1>
-    llhd.wait (%p2, %r2 : i1, i1), ^bb2
-  ^bb2:
-    %old = comb.xor %p1, %true : i1
-    %posedge = comb.and %old, %p2 : i1
-    %0 = comb.xor %r2, %true : i1
-    %negedge = comb.and %0, %r1 : i1
+  %0:2 = llhd.process -> i1, i1 {
+    %p = llhd.prb %clk : !hw.inout<i1>
+    %r = llhd.prb %rst : !hw.inout<i1>
+    %old = comb.xor %0#0, %true : i1
+    %posedge = comb.and %old, %p : i1
+    %1 = comb.xor %r, %true : i1
+    %negedge = comb.and %1, %0#1 : i1
     %cond = comb.or %negedge, %posedge : i1
     llhd.drv %sig, %false after %time if %cond : !hw.inout<i1>
-    cf.br ^bb1
-  }
-}
-
-// CHECK-LABEL: @asyncResetNotObserved
-// CHECK-SAME: (inout [[RST:%.+]] : i1, inout [[CLK:%.+]] : i1, inout [[SIG:%.+]] : i1)
-hw.module @asyncResetNotObserved(inout %rst : i1, inout %clk : i1, inout %sig : i1) {
-  // CHECK: llhd.process
-  %time = llhd.constant_time <0ns, 1d, 0e>
-  %false = hw.constant false
-  %true = hw.constant true
-  %p2 = llhd.prb %clk : !hw.inout<i1>
-  %r2 = llhd.prb %rst : !hw.inout<i1>
-  llhd.process {
-    cf.br ^bb1
-  ^bb1:
-    %p1 = llhd.prb %clk : !hw.inout<i1>
-    %r1 = llhd.prb %rst : !hw.inout<i1>
-    llhd.wait (%p2 : i1), ^bb2
-  ^bb2:
-    %old = comb.xor %p1, %true : i1
-    %posedge = comb.and %old, %p2 : i1
-    %0 = comb.xor %r2, %true : i1
-    %negedge = comb.and %0, %r1 : i1
-    %cond = comb.or %negedge, %posedge : i1
-    llhd.drv %sig, %false after %time if %cond : !hw.inout<i1>
-    cf.br ^bb1
+    llhd.yield %p, %r : i1, i1
   }
 }
 
@@ -146,16 +111,40 @@ hw.module @compareClkPrb(inout %clk : i1, inout %out : i1) {
   // CHECK: llhd.drv [[OUT]], [[V3]] after
   %false = hw.constant false
   %time = llhd.constant_time <0ns, 1d, 0e>
-  %clk_0 = llhd.prb %clk : !hw.inout<i1>
+  %0 = llhd.process -> i1 {
+    %clk_prb = llhd.prb %clk : !hw.inout<i1>
+    %cond = comb.icmp bin ne %0, %clk_prb : i1
+    llhd.drv %out, %false after %time if %cond : !hw.inout<i1>
+    llhd.yield %clk_prb : i1
+  }
+}
+
+// CHECK-LABEL: hw.module @simple
+hw.module @simple() {
+  // CHECK-NEXT: hw.output
+  llhd.process {
+    llhd.yield
+  }
+}
+
+// CHECK-LABEL: hw.module @probes
+hw.module @probes(inout %arg0 : i64) {
+  // CHECK-NEXT: hw.output
+  %0 = llhd.prb %arg0 : !hw.inout<i64>
+  %1:2 = llhd.process -> i64, i64 {
+    %2 = llhd.prb %arg0 : !hw.inout<i64>
+    llhd.yield %0, %2 : i64, i64
+  }
+}
+
+// CHECK-LABEL: @multipleBlocksNotAllowed
+hw.module @multipleBlocksNotAllowed() {
+  // CHECK-NEXT: llhd.process
   llhd.process {
     cf.br ^bb1
   ^bb1:
-    %clk_1 = llhd.prb %clk : !hw.inout<i1>
-    llhd.wait (%clk_0 : i1), ^bb2
+    cf.br ^bb2
   ^bb2:
-    %clk_2 = llhd.prb %clk : !hw.inout<i1>
-    %cond = comb.icmp bin ne %clk_1, %clk_2 : i1
-    llhd.drv %out, %false after %time if %cond : !hw.inout<i1>
-    cf.br ^bb1
+    llhd.yield
   }
 }

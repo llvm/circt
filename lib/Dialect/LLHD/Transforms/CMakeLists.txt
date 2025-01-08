@@ -3,10 +3,8 @@ add_circt_dialect_library(CIRCTLLHDTransforms
   EarlyCodeMotionPass.cpp
   FunctionEliminationPass.cpp
   MemoryToBlockArgumentPass.cpp
-  ProcessLoweringPass.cpp
   Sig2RegPass.cpp
   TemporalCodeMotionPass.cpp
-  TemporalRegions.cpp
 
   DEPENDS
   CIRCTLLHDTransformsIncGen

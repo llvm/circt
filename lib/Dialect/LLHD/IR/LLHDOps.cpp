@@ -479,13 +479,31 @@ DrvOp::ensureOnlySafeAccesses(const MemorySlot &slot,
 }
 
 //===----------------------------------------------------------------------===//
-// WaitOp
+// ProcessOp
 //===----------------------------------------------------------------------===//
 
-// Implement this operation for the BranchOpInterface
-SuccessorOperands llhd::WaitOp::getSuccessorOperands(unsigned index) {
-  assert(index == 0 && "invalid successor index");
-  return SuccessorOperands(getDestOpsMutable());
+LogicalResult ProcessOp::verifyRegions() {
+  for (auto &block : getBody().getBlocks())
+    if (auto yieldOp = dyn_cast<llhd::YieldOp>(block.getTerminator());
+        yieldOp && yieldOp.getOperands().getTypes() != getResultTypes())
+      return yieldOp.emitError()
+             << "operand types must match 'llhd.process' result types";
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// FinalOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult FinalOp::verifyRegions() {
+  for (auto &block : getBody().getBlocks())
+    if (auto yieldOp = dyn_cast<llhd::YieldOp>(block.getTerminator());
+        yieldOp && !yieldOp.getOperands().empty())
+      return yieldOp.emitError()
+             << "must not have any operands when inside an 'llhd.final' op";
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

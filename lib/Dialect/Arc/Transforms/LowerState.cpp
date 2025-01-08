@@ -92,6 +92,7 @@ struct OpLowering {
   LogicalResult lowerDefault();
   LogicalResult lower(StateOp op);
   LogicalResult lower(sim::DPICallOp op);
+  LogicalResult lower(llhd::ProcessOp op);
   LogicalResult
   lowerStateful(Value clock, Value enable, Value reset, ValueRange inputs,
                 ResultRange results,
@@ -412,8 +413,9 @@ static scf::IfOp createOrReuseIf(OpBuilder &builder, Value condition,
 LogicalResult OpLowering::lower() {
   return TypeSwitch<Operation *, LogicalResult>(op)
       // Operations with special lowering.
-      .Case<StateOp, sim::DPICallOp, MemoryOp, TapOp, InstanceOp, hw::OutputOp,
-            seq::InitialOp, llhd::FinalOp>([&](auto op) { return lower(op); })
+      .Case<StateOp, sim::DPICallOp, llhd::ProcessOp, MemoryOp, TapOp,
+            InstanceOp, hw::OutputOp, seq::InitialOp, llhd::FinalOp>(
+          [&](auto op) { return lower(op); })
 
       // Operations that should be skipped entirely and never land on the
       // worklist to be lowered.
@@ -544,6 +546,61 @@ LogicalResult OpLowering::lower(sim::DPICallOp op) {
                                                    op.getResultTypes(), inputs)
                              .getResults();
                        });
+}
+
+LogicalResult OpLowering::lower(llhd::ProcessOp op) {
+  assert(phase == Phase::New);
+
+  // Determine the uses of values defined outside the op.
+  SmallVector<Value> externalOperands;
+  op.walk([&](Operation *nestedOp) {
+    for (auto value : nestedOp->getOperands())
+      if (!op->isAncestor(value.getParentBlock()->getParentOp()))
+        externalOperands.push_back(value);
+  });
+
+  // Make sure that all uses of external values are lowered first.
+  IRMapping mapping;
+  for (auto operand : externalOperands) {
+    auto lowered = lowerValue(operand, phase);
+    if (!initial && !lowered)
+      return failure();
+    mapping.map(operand, lowered);
+  }
+  if (initial)
+    return success();
+
+  // Handle the simple case where the process op contains only one block, which
+  // we can inline directly.
+  if (op.getBody().hasOneBlock()) {
+    for (auto &bodyOp : op.getBody().front().without_terminator())
+      module.getBuilder(phase).clone(bodyOp, mapping);
+
+    auto yieldOp = cast<llhd::YieldOp>(op.getBody().front().getTerminator());
+    for (auto [oldResult, newResult] :
+         llvm::zip(op.getResults(), yieldOp.getOperands()))
+      module.loweredValues[{oldResult, phase}] = mapping.lookup(newResult);
+
+    return success();
+  }
+
+  // Create a new `scf.execute_region` op and clone the entire `llhd.process`
+  // body region into it. Replace `llhd.yield` ops with `scf.yield`.
+  auto executeOp = module.getBuilder(phase).create<scf::ExecuteRegionOp>(
+      op.getLoc(), op.getResultTypes());
+  module.getBuilder(phase).cloneRegionBefore(
+      op.getBody(), executeOp.getRegion(), executeOp.getRegion().begin(),
+      mapping);
+  executeOp.walk([&](llhd::YieldOp op) {
+    OpBuilder(op).create<scf::YieldOp>(op.getLoc(), op.getOperands());
+    op.erase();
+  });
+
+  for (auto [oldResult, newResult] :
+       llvm::zip(op.getResults(), executeOp.getResults()))
+    module.loweredValues[{oldResult, phase}] = newResult;
+
+  return success();
 }
 
 /// Lower a state to a corresponding storage allocation and `write` of the
@@ -946,12 +1003,12 @@ LogicalResult OpLowering::lower(llhd::FinalOp op) {
   }
 
   // Create a new `scf.execute_region` op and clone the entire `llhd.final` body
-  // region into it. Replace `llhd.halt` ops with `scf.yield`.
+  // region into it. Replace `llhd.yield` ops with `scf.yield`.
   auto executeOp = module.finalBuilder.create<scf::ExecuteRegionOp>(
       op.getLoc(), TypeRange{});
   module.finalBuilder.cloneRegionBefore(op.getBody(), executeOp.getRegion(),
                                         executeOp.getRegion().begin(), mapping);
-  executeOp.walk([&](llhd::HaltOp op) {
+  executeOp.walk([&](llhd::YieldOp op) {
     OpBuilder(op).create<scf::YieldOp>(op.getLoc());
     op.erase();
   });

@@ -5,7 +5,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "TemporalRegions.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
@@ -14,7 +13,6 @@
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Region.h"
-#include "mlir/Pass/Pass.h"
 #include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/STLExtras.h"
@@ -22,7 +20,7 @@
 
 namespace circt {
 namespace llhd {
-#define GEN_PASS_DEF_TEMPORALCODEMOTION
+#define GEN_PASS_DEF_TEMPORALCODEMOTIONPASS
 #include "circt/Dialect/LLHD/Transforms/Passes.h.inc"
 } // namespace llhd
 } // namespace circt
@@ -91,10 +89,8 @@ getBranchDecisionsFromDominatorToTarget(OpBuilder &builder, Block *driveBlock,
 /// More a 'llhd.drv' operation before the 'moveBefore' operation by adjusting
 /// the 'enable' operand.
 static void moveDriveOpBefore(llhd::DrvOp drvOp, Block *dominator,
-                              Operation *moveBefore,
+                              OpBuilder &builder,
                               DenseMap<Block *, Value> &mem) {
-  OpBuilder builder(drvOp);
-  builder.setInsertionPoint(moveBefore);
   Block *drvParentBlock = drvOp->getBlock();
 
   // Find sequence of branch decisions and add them as a sequence of
@@ -107,12 +103,13 @@ static void moveDriveOpBefore(llhd::DrvOp drvOp, Block *dominator,
                                              finalValue);
 
   drvOp.getEnableMutable().assign(finalValue);
-  drvOp->moveBefore(moveBefore);
+  drvOp->remove();
+  builder.insert(drvOp);
 }
 
 namespace {
 struct TemporalCodeMotionPass
-    : public llhd::impl::TemporalCodeMotionBase<TemporalCodeMotionPass> {
+    : public llhd::impl::TemporalCodeMotionPassBase<TemporalCodeMotionPass> {
   void runOnOperation() override;
   LogicalResult runOnProcess(llhd::ProcessOp procOp);
 };
@@ -123,234 +120,124 @@ void TemporalCodeMotionPass::runOnOperation() {
     (void)runOnProcess(proc); // Ignore processes that could not be lowered
 }
 
-LogicalResult TemporalCodeMotionPass::runOnProcess(llhd::ProcessOp procOp) {
-  llhd::TemporalRegionAnalysis trAnalysis =
-      llhd::TemporalRegionAnalysis(procOp);
-  unsigned numTRs = trAnalysis.getNumTemporalRegions();
+static FailureOr<Block *> createUniqueExitBlock(llhd::ProcessOp procOp) {
+  SmallVector<llhd::YieldOp> yields(procOp.getBody().getOps<llhd::YieldOp>());
 
-  // Only support processes with max. 2 temporal regions and one wait terminator
-  // as this is enough to represent flip-flops, registers, etc.
-  // NOTE: there always has to be either a wait or halt terminator in a process
-  // If the wait block creates the backwards edge, we only have one TR,
-  // otherwise we have 2 TRs
-  // NOTE: as the wait instruction needs to be on every path around the loop,
-  // it has to be the only exiting block of its TR
-  // NOTE: the other TR can either have only one exiting block, then we do not
-  // need to add an auxillary block, otherwise we have to add one
-  // NOTE: All drive operations have to be moved to the single exiting block of
-  // its TR. To do so, add the condition under which its block is reached from
-  // the TR entry block as a gating condition to the 'llhd.drv' operation
-  // NOTE: the entry blocks that are not part of the infinite loop do not count
-  // as TR and have TR number -1
-  // TODO: need to check that entry blocks that are note part of the loop to not
-  // have any instructions that have side effects that should not be allowed
-  // outside of the loop (drv, prb, ...)
-  // TODO: add support for more TRs and wait terminators (e.g., to represent
-  // FSMs)
-  if (numTRs > 2)
+  // Return failure if there is an infinite loop.
+  if (yields.empty())
     return failure();
 
-  bool seenWait = false;
-  WalkResult walkResult = procOp.walk([&](llhd::WaitOp op) -> WalkResult {
-    if (seenWait)
-      return failure();
+  // No need to do anything if there is already a unique exit block.
+  if (yields.size() == 1)
+    return yields[0]->getBlock();
 
-    // Check that the block containing the wait is the only exiting block of
-    // that TR
-    int trId = trAnalysis.getBlockTR(op->getBlock());
-    if (!trAnalysis.hasSingleExitBlock(trId))
-      return failure();
+  // Create the auxillary block as we currently don't have a single exiting
+  // block and give it the same argument types as the process result types.
+  Block *auxBlock = &procOp.getBody().emplaceBlock();
+  auxBlock->addArguments(
+      procOp.getResults().getTypes(),
+      SmallVector<Location>(procOp.getResults().size(), procOp.getLoc()));
 
-    seenWait = true;
-    return WalkResult::advance();
-  });
-  if (walkResult.wasInterrupted())
-    return failure();
+  IRRewriter rewriter(OpBuilder::atBlockEnd(auxBlock));
+  rewriter.create<llhd::YieldOp>(procOp.getLoc(), auxBlock->getArguments());
 
-  //===--------------------------------------------------------------------===//
-  // Create unique exit block per TR
-  //===--------------------------------------------------------------------===//
-
-  // TODO: consider the case where a wait brances to itself
-  for (unsigned currTR = 0; currTR < numTRs; ++currTR) {
-    unsigned numTRSuccs = trAnalysis.getNumTRSuccessors(currTR);
-    (void)numTRSuccs;
-    // NOTE: Above error checks make this impossible to trigger, but the above
-    // are changed this one might have to be promoted to a proper error message.
-    assert((numTRSuccs == 1 ||
-            (numTRSuccs == 2 && trAnalysis.isOwnTRSuccessor(currTR))) &&
-           "only TRs with a single TR as possible successor are "
-           "supported for now.");
-
-    if (trAnalysis.hasSingleExitBlock(currTR))
-      continue;
-
-    // Get entry block of successor TR
-    Block *succTREntry =
-        trAnalysis.getTREntryBlock(*trAnalysis.getTRSuccessors(currTR).begin());
-
-    // Create the auxillary block as we currently don't have a single exiting
-    // block and give it the same arguments as the entry block of the
-    // successor TR
-    Block *auxBlock = new Block();
-    auxBlock->addArguments(
-        succTREntry->getArgumentTypes(),
-        SmallVector<Location>(succTREntry->getNumArguments(), procOp.getLoc()));
-
-    // Insert the auxillary block after the last block of the current TR
-    procOp.getBody().getBlocks().insertAfter(
-        Region::iterator(trAnalysis.getExitingBlocksInTR(currTR).back()),
-        auxBlock);
-
-    // Let all current exit blocks branch to the auxillary block instead.
-    for (Block *exit : trAnalysis.getExitingBlocksInTR(currTR))
-      for (auto [i, succ] : llvm::enumerate(exit->getSuccessors()))
-        if (trAnalysis.getBlockTR(succ) != static_cast<int>(currTR))
-          exit->getTerminator()->setSuccessor(auxBlock, i);
-
-    // Let the auxiallary block branch to the entry block of the successor
-    // temporal region entry block
-    OpBuilder b(procOp);
-    b.setInsertionPointToEnd(auxBlock);
-    b.create<cf::BranchOp>(procOp.getLoc(), succTREntry,
-                           auxBlock->getArguments());
+  // Let all current exit blocks branch to the auxillary block instead.
+  for (auto yieldOp : yields) {
+    rewriter.setInsertionPoint(yieldOp);
+    rewriter.replaceOpWithNewOp<cf::BranchOp>(yieldOp, auxBlock,
+                                              yieldOp.getOperands());
   }
 
-  //===--------------------------------------------------------------------===//
-  // Move drive instructions
-  //===--------------------------------------------------------------------===//
+  return auxBlock;
+}
 
+static void moveDriveOperationsToExitBlock(llhd::ProcessOp procOp,
+                                           Block *exitBlock) {
   DenseMap<Operation *, Block *> drvPos;
 
-  // Force a new analysis as we have changed the CFG
-  trAnalysis = llhd::TemporalRegionAnalysis(procOp);
-  numTRs = trAnalysis.getNumTemporalRegions();
-  OpBuilder builder(procOp);
+  DenseMap<Block *, Value> mem;
+  std::queue<Block *> workQueue;
+  SmallPtrSet<Block *, 32> workDone;
 
-  for (unsigned currTR = 0; currTR < numTRs; ++currTR) {
-    DenseMap<Block *, Value> mem;
+  Block *entryBlock = &procOp.getBody().front();
 
-    // We ensured this in the previous phase above.
-    assert(trAnalysis.getExitingBlocksInTR(currTR).size() == 1);
+  if (entryBlock != exitBlock)
+    workQueue.push(entryBlock);
 
-    Block *exitingBlock = trAnalysis.getExitingBlocksInTR(currTR)[0];
-    Block *entryBlock = trAnalysis.getTREntryBlock(currTR);
+  OpBuilder builder = OpBuilder::atBlockBegin(exitBlock);
 
-    DominanceInfo dom(procOp);
-    Block *dominator = exitingBlock;
+  while (!workQueue.empty()) {
+    Block *block = workQueue.front();
+    workQueue.pop();
+    workDone.insert(block);
 
-    // Collect all 'llhd.drv' operations in the process and compute their common
-    // dominator block.
-    procOp.walk([&](llhd::DrvOp op) {
-      if (trAnalysis.getBlockTR(op.getOperation()->getBlock()) ==
-          static_cast<int>(currTR)) {
-        Block *parentBlock = op.getOperation()->getBlock();
-        drvPos[op] = parentBlock;
-        dominator = dom.findNearestCommonDominator(dominator, parentBlock);
-      }
-    });
+    SmallVector<llhd::DrvOp> drives(block->getOps<llhd::DrvOp>());
+    for (auto drive : drives)
+      moveDriveOpBefore(drive, entryBlock, builder, mem);
 
-    // Set insertion point before first 'llhd.drv' op in the exiting block
-    Operation *moveBefore = exitingBlock->getTerminator();
-    exitingBlock->walk([&](llhd::DrvOp op) { moveBefore = op; });
-
-    assert(dominator &&
-           "could not find nearest common dominator for TR exiting "
-           "block and the block containing drv");
-
-    // If the dominator isn't already a TR entry block, set it to the nearest
-    // dominating TR entry block.
-    if (trAnalysis.getBlockTR(dominator) != static_cast<int>(currTR))
-      dominator = trAnalysis.getTREntryBlock(currTR);
-
-    std::queue<Block *> workQueue;
-    SmallPtrSet<Block *, 32> workDone;
-
-    if (entryBlock != exitingBlock)
-      workQueue.push(entryBlock);
-
-    while (!workQueue.empty()) {
-      Block *block = workQueue.front();
-      workQueue.pop();
-      workDone.insert(block);
-
-      builder.setInsertionPoint(moveBefore);
-      SmallVector<llhd::DrvOp> drives(block->getOps<llhd::DrvOp>());
-      for (auto drive : drives)
-        moveDriveOpBefore(drive, dominator, moveBefore, mem);
-
-      for (Block *succ : block->getSuccessors()) {
-        if (succ == exitingBlock ||
-            trAnalysis.getBlockTR(succ) != static_cast<int>(currTR))
-          continue;
-
-        if (llvm::all_of(succ->getPredecessors(), [&](Block *block) {
-              return workDone.contains(block);
-            }))
-          workQueue.push(succ);
-      }
-    }
-
-    // Merge entry and exit block of each TR, remove all other blocks
-    if (entryBlock != exitingBlock) {
-      entryBlock->getTerminator()->erase();
-      entryBlock->getOperations().splice(entryBlock->end(),
-                                         exitingBlock->getOperations());
+    for (Block *succ : block->getSuccessors()) {
+      if (llvm::all_of(
+              succ->getPredecessors(),
+              [&](Block *block) { return workDone.contains(block); }) &&
+          succ != exitBlock)
+        workQueue.push(succ);
     }
   }
 
+  // Merge entry and exit block of each TR, remove all other blocks
+  if (entryBlock != exitBlock) {
+    entryBlock->getTerminator()->erase();
+    entryBlock->getOperations().splice(entryBlock->end(),
+                                       exitBlock->getOperations());
+  }
+}
+
+LogicalResult TemporalCodeMotionPass::runOnProcess(llhd::ProcessOp procOp) {
+  auto result = createUniqueExitBlock(procOp);
+
+  // If there is no exit block in the process we don't have a place to move
+  // drives to, thus just fail.
+  if (failed(result))
+    return failure();
+
+  // Move drive instructions
   IRRewriter rewriter(procOp);
+  moveDriveOperationsToExitBlock(procOp, *result);
   (void)mlir::eraseUnreachableBlocks(rewriter, procOp->getRegions());
 
-  //===--------------------------------------------------------------------===//
   // Coalesce multiple drives to the same signal
-  //===--------------------------------------------------------------------===//
+  DenseMap<std::pair<Value, Value>, llhd::DrvOp> sigToDrv;
 
-  trAnalysis = llhd::TemporalRegionAnalysis(procOp);
-  DominanceInfo dom(procOp);
-  for (unsigned currTR = 0; currTR < numTRs; ++currTR) {
-    // We ensured this in the previous phase above.
-    assert(trAnalysis.getExitingBlocksInTR(currTR).size() == 1);
-
-    Block *exitingBlock = trAnalysis.getExitingBlocksInTR(currTR)[0];
-    DenseMap<std::pair<Value, Value>, llhd::DrvOp> sigToDrv;
-
-    SmallVector<llhd::DrvOp> drives(exitingBlock->getOps<llhd::DrvOp>());
-    for (auto op : drives) {
-      auto sigTimePair = std::make_pair(op.getSignal(), op.getTime());
-      if (!sigToDrv.count(sigTimePair)) {
-        sigToDrv[sigTimePair] = op;
-        continue;
-      }
-
-      OpBuilder builder(op);
-      if (op.getEnable()) {
-        // Multiplex value to be driven
-        auto firstDrive = sigToDrv[sigTimePair];
-        Value muxValue = builder.create<comb::MuxOp>(
-            op.getLoc(), op.getEnable(), op.getValue(), firstDrive.getValue());
-        op.getValueMutable().assign(muxValue);
-
-        // Take the disjunction of the enable conditions
-        if (firstDrive.getEnable()) {
-          Value orVal = builder.create<comb::OrOp>(op.getLoc(), op.getEnable(),
-                                                   firstDrive.getEnable());
-          op.getEnableMutable().assign(orVal);
-        } else {
-          // No enable is equivalent to a constant 'true' enable
-          op.getEnableMutable().clear();
-        }
-      }
-
-      sigToDrv[sigTimePair]->erase();
+  SmallVector<llhd::DrvOp> drives((*result)->getOps<llhd::DrvOp>());
+  for (auto op : drives) {
+    auto sigTimePair = std::make_pair(op.getSignal(), op.getTime());
+    if (!sigToDrv.count(sigTimePair)) {
       sigToDrv[sigTimePair] = op;
+      continue;
     }
+
+    OpBuilder builder(op);
+    if (op.getEnable()) {
+      // Multiplex value to be driven
+      auto firstDrive = sigToDrv[sigTimePair];
+      Value muxValue = builder.create<comb::MuxOp>(
+          op.getLoc(), op.getEnable(), op.getValue(), firstDrive.getValue());
+      op.getValueMutable().assign(muxValue);
+
+      // Take the disjunction of the enable conditions
+      if (firstDrive.getEnable()) {
+        Value orVal = builder.create<comb::OrOp>(op.getLoc(), op.getEnable(),
+                                                 firstDrive.getEnable());
+        op.getEnableMutable().assign(orVal);
+      } else {
+        // No enable is equivalent to a constant 'true' enable
+        op.getEnableMutable().clear();
+      }
+    }
+
+    sigToDrv[sigTimePair]->erase();
+    sigToDrv[sigTimePair] = op;
   }
 
   return success();
-}
-
-std::unique_ptr<OperationPass<hw::HWModuleOp>>
-circt::llhd::createTemporalCodeMotionPass() {
-  return std::make_unique<TemporalCodeMotionPass>();
 }

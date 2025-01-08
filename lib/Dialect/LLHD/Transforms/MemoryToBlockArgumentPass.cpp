@@ -68,14 +68,12 @@ static void getDFClosure(SmallVectorImpl<Block *> &initialSet, Operation *op,
   } while (numElements < closure.size());
 }
 
-/// Add a block argument to a given terminator. Only 'std.br', 'std.cond_br' and
-/// 'llhd.wait' are supported. The successor block has to be provided for the
-/// 'std.cond_br' terminator which has two possible successors.
+/// Add a block argument to a given terminator. Only 'cf.br', and 'cf.cond_br'
+/// are supported. The successor block has to be provided for the
+/// 'cf.cond_br' terminator which has two possible successors.
 static void addBlockOperandToTerminator(Operation *terminator,
                                         Block *successsor, Value toAppend) {
-  if (auto wait = dyn_cast<llhd::WaitOp>(terminator)) {
-    wait.getDestOpsMutable().append(toAppend);
-  } else if (auto br = dyn_cast<mlir::cf::BranchOp>(terminator)) {
+  if (auto br = dyn_cast<mlir::cf::BranchOp>(terminator)) {
     br.getDestOperandsMutable().append(toAppend);
   } else if (auto condBr = dyn_cast<mlir::cf::CondBranchOp>(terminator)) {
     if (condBr.getFalseDest() == successsor) {

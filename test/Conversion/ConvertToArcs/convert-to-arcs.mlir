@@ -291,3 +291,28 @@ hw.module @ObserveWires(in %in1: i32, in %in2: i32, out out: i32) {
 //   CHECK-DAG:   [[RES:%.+]]:2 = arc.call @[[ARC_NAME]]({{.*}}) :
 //   CHECK-DAG:   arc.tap [[RES]]#0 {name = "z"} : i32
 //       CHECK:   hw.output %0#1 : i32
+
+// CHECK: arc.define @[[LLHD_PROCESS_ARC_0:.+]]([[ARG0:%.+]]: i1, [[ARG1:%.+]]: i1)
+// CHECK-NEXT:   [[V0:%.+]] = comb.xor [[ARG0]], [[ARG1]] :
+// CHECK-NEXT:   arc.output [[V0]] :
+// CHECK: arc.define @[[LLHD_PROCESS_ARC_1:.+]]([[ARG0:%.+]]: i1, [[ARG1:%.+]]: i1)
+// CHECK-NEXT:   [[V0:%.+]] = comb.xor [[ARG0]], [[ARG1]] :
+// CHECK-NEXT:   arc.output [[V0]] :
+
+// CHECK: @llhdProcesses
+hw.module @llhdProcesses(in %in : i1, out out : i1) {
+//     CHECK: [[V0:%.+]] = llhd.process -> i1 {
+//     CHECK:   [[V3:%.+]] = comb.xor [[V1:%.+]], %true
+//     CHECK:   llhd.yield [[V3]] :
+// CHECK-DAG: [[V1]] = arc.call @[[LLHD_PROCESS_ARC_0]](%in, %true) :
+// CHECK-DAG: [[V2:%.+]] = arc.call @[[LLHD_PROCESS_ARC_1]]([[V0]], %true) :
+//     CHECK:   hw.output [[V2]] :
+  %true = hw.constant true
+  %0 = comb.xor %in, %true : i1
+  %1 = llhd.process -> i1 {
+    %2 = comb.xor %0, %true : i1
+    llhd.yield %2 : i1
+  }
+  %2 = comb.xor %1, %true : i1
+  hw.output %2 : i1
+}

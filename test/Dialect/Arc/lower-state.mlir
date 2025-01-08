@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --arc-lower-state | FileCheck %s
+// RUN: circt-opt %s --arc-lower-state --split-input-file --verify-diagnostics | FileCheck %s
 
 func.func private @VoidFunc()
 func.func private @RandomI42() -> i42
@@ -493,12 +493,12 @@ hw.module @SimpleFinal() {
   // CHECK-NEXT: func.call @VoidFunc() {body}
   llhd.final {
     func.call @VoidFunc() {finalA} : () -> ()
-    llhd.halt
+    llhd.yield
   }
   func.call @VoidFunc() {body} : () -> ()
   llhd.final {
     func.call @VoidFunc() {finalB} : () -> ()
-    llhd.halt
+    llhd.yield
   }
 }
 
@@ -514,12 +514,12 @@ hw.module @FinalWithDependencies() {
   // CHECK-NEXT: func.call @RandomI42() {sideEffect}
   llhd.final {
     func.call @ConsumeI42(%0) {finalA} : (i42) -> ()
-    llhd.halt
+    llhd.yield
   }
   func.call @VoidFunc() {body} : () -> ()
   llhd.final {
     func.call @ConsumeI42(%1) {finalB} : (i42) -> ()
-    llhd.halt
+    llhd.yield
   }
   %0 = hw.constant 9001 : i42
   %1 = func.call @RandomI42() {sideEffect} : () -> i42
@@ -541,7 +541,7 @@ hw.module @FinalWithControlFlow() {
     cf.br ^bb0(%0 : i42)
   ^bb0(%1: i42):
     func.call @ConsumeI42(%1) : (i42) -> ()
-    llhd.halt
+    llhd.yield
   }
 }
 
@@ -638,4 +638,61 @@ arc.define @MemoryPortRegressionArc2(%arg0: i1) -> i1 {
 }
 arc.define @MemoryPortRegressionArc3(%arg0: i3) -> i3 {
   arc.output %arg0 : i3
+}
+
+// CHECK-LABEL: @llhdProcesses
+hw.module @llhdProcesses(in %in : i1, out out0 : i1, out out1 : i1) {
+  %true = hw.constant true
+  %0 = comb.xor %in, %true : i1
+
+  // Combinational process, does not need state
+  %1 = llhd.process -> i1 {
+    %2 = comb.xor %0, %true : i1
+    llhd.yield %2 : i1
+  }
+  // CHECK: [[IN:%.+]] = arc.state_read
+  // CHECK-NEXT: [[V0:%.+]] = comb.xor [[IN]], %true
+  // CHECK-NEXT: [[V1:%.+]] = comb.xor [[V0]], %true
+
+  // Combinational process, does not need state
+  %2 = llhd.process -> i1 {
+    %3 = comb.xor %0, %true : i1
+    cf.cond_br %in, ^bb1, ^bb2(%3 : i1)
+  ^bb1:
+    llhd.yield %0 : i1
+  ^bb2(%arg0 : i1):
+    llhd.yield %arg0 : i1
+  }
+  // CHECK-NEXT: [[IN:%.+]] = arc.state_read
+  // CHECK-NEXT: [[V2:%.+]] = scf.execute_region -> i1 {
+  // CHECK-NEXT:   [[V3:%.+]] = comb.xor [[V0]], %true
+  // CHECK-NEXT:   cf.cond_br [[IN]], ^bb1, ^bb2([[V3]] : i1)
+  // CHECK-NEXT: ^bb1:
+  // CHECK-NEXT:   scf.yield [[V0]] : i1
+  // CHECK-NEXT: ^bb2([[V4:%.+]]: i1):
+  // CHECK-NEXT:   scf.yield [[V4]] : i1
+  // CHECK-NEXT: }
+
+  // CHECK-NEXT: arc.state_write %{{.*}} = [[V1]]
+  // CHECK-NEXT: arc.state_write %{{.*}} = [[V2]]
+  hw.output %1, %2 : i1, i1
+}
+
+// -----
+
+// Note: there is no combinational loop because the process has state here, we
+// just don't support that yet.
+hw.module @invalidLlhdProcesses(in %clk : i1, out out : i32) {
+  %one = hw.constant 1 : i32
+  // Dual edge triggered counter (assuming the process state is zero-initialized)
+  // expected-error @below {{'llhd.process' op is on a combinational loop}}
+  // expected-remark @below {{computing new phase here}}
+  %1:2 = llhd.process -> i1, i32 {
+    %new_val = comb.add %1#1, %one : i32
+    %edge = comb.icmp ne %1#0, %clk : i1
+    %4 = comb.mux %edge, %new_val, %1#1 : i32
+    llhd.yield %clk, %4 : i1, i32
+  }
+
+  hw.output %1#1 : i32
 }

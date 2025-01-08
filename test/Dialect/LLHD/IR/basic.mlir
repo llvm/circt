@@ -148,72 +148,31 @@ hw.module @checkDrv(inout %arg0 : i1, inout %arg1 : i64, in %arg2 : i1,
   llhd.drv %arg6, %arg8 after %t : !hw.inout<struct<foo: i1, bar: i2, baz: i4>>
 }
 
-// CHECK-LABEL: @check_wait_0
-hw.module @check_wait_0 () {
-  // CHECK-NEXT: llhd.process
-  llhd.process {
-    // CHECK: llhd.wait ^[[BB:.*]]
-    llhd.wait ^bb1
-    // CHECK-NEXT: ^[[BB]]
+// CHECK-LABEL: @Processes
+hw.module @Processes () {
+  // CHECK: %{{.*}} = llhd.process -> i1 {
+  // CHECK:   cf.br ^bb
+  // CHECK: ^bb
+  // CHECK:   llhd.yield %{{.*}} : i1
+  // CHECK: }
+  %0 = llhd.process -> i1 {
+    %true = hw.constant true
+    cf.br ^bb1
   ^bb1:
-    llhd.halt
+    llhd.yield %true : i1
   }
-}
 
-// CHECK-LABEL: @check_wait_1
-hw.module @check_wait_1 () {
-  // CHECK-NEXT: llhd.process
+  // CHECK: llhd.process {
+  // CHECK:   llhd.yield
+  // CHECK: }
   llhd.process {
-    // CHECK-NEXT: %[[TIME:.*]] = llhd.constant_time
-    %time = llhd.constant_time #llhd.time<0ns, 0d, 0e>
-    // CHECK-NEXT: llhd.wait for %[[TIME]], ^[[BB:.*]](%[[TIME]] : !llhd.time)
-    llhd.wait for %time, ^bb1(%time: !llhd.time)
-    // CHECK-NEXT: ^[[BB]](%[[T:.*]]: !llhd.time):
-  ^bb1(%t: !llhd.time):
-    llhd.halt
+    llhd.yield
   }
-}
 
-// CHECK: @check_wait_2(inout %[[ARG0:.*]] : i64, inout %[[ARG1:.*]] : i1) {
-hw.module @check_wait_2 (inout %arg0 : i64, inout %arg1 : i1) {
-  // CHECK: [[PRB0:%.+]] = llhd.prb %arg0
-  %prb0 = llhd.prb %arg0 : !hw.inout<i64>
-  // CHECK: [[PRB1:%.+]] = llhd.prb %arg1
-  %prb1 = llhd.prb %arg1 : !hw.inout<i1>
-  // CHECK-NEXT: llhd.process
-  llhd.process {
-    // CHECK-NEXT: llhd.wait ([[PRB0]], [[PRB1]] : i64, i1), ^[[BB:.*]](%[[ARG1]] : !hw.inout<i1>)
-    llhd.wait (%prb0, %prb1 : i64, i1), ^bb1(%arg1 : !hw.inout<i1>)
-    // CHECK: ^[[BB]](%[[A:.*]]: !hw.inout<i1>):
-  ^bb1(%a: !hw.inout<i1>):
-    llhd.halt
-  }
-}
-
-// CHECK: hw.module @check_wait_3(inout %[[ARG0:.*]] : i64, inout %[[ARG1:.*]] : i1) {
-hw.module @check_wait_3 (inout %arg0 : i64, inout %arg1 : i1) {
-  // CHECK: [[PRB0:%.+]] = llhd.prb %arg0
-  %prb0 = llhd.prb %arg0 : !hw.inout<i64>
-  // CHECK: [[PRB1:%.+]] = llhd.prb %arg1
-  %prb1 = llhd.prb %arg1 : !hw.inout<i1>
-  // CHECK-NEXT: llhd.process
-  llhd.process {
-    // CHECK-NEXT: %[[TIME:.*]] = llhd.constant_time
-    %time = llhd.constant_time #llhd.time<0ns, 0d, 0e>
-    // CHECK-NEXT: llhd.wait for %[[TIME]], ([[PRB0]], [[PRB1]] : i64, i1), ^[[BB:.*]](%[[ARG1]], %[[ARG0]] : !hw.inout<i1>, !hw.inout<i64>)
-    llhd.wait for %time, (%prb0, %prb1 : i64, i1), ^bb1(%arg1, %arg0 : !hw.inout<i1>, !hw.inout<i64>)
-    // CHECK: ^[[BB]](%[[A:.*]]: !hw.inout<i1>, %[[B:.*]]: !hw.inout<i64>):
-  ^bb1(%a: !hw.inout<i1>, %b: !hw.inout<i64>):
-    llhd.halt
-  }
-}
-
-// CHECK-LABEL: @FinalProcess
-hw.module @FinalProcess () {
   // CHECK-NEXT: llhd.final {
-  // CHECK-NEXT:   llhd.halt
+  // CHECK-NEXT:   llhd.yield
   // CHECK-NEXT: }
   llhd.final {
-    llhd.halt
+    llhd.yield
   }
 }

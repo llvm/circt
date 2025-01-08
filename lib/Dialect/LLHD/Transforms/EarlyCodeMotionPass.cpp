@@ -10,12 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "TemporalRegions.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Dominance.h"
-#include "mlir/Pass/Pass.h"
 
 namespace circt {
 namespace llhd {
@@ -51,7 +49,6 @@ void EarlyCodeMotionPass::runOnOperation() {
 }
 
 void EarlyCodeMotionPass::runOnProcess(llhd::ProcessOp proc) {
-  llhd::TemporalRegionAnalysis trAnalysis = llhd::TemporalRegionAnalysis(proc);
   mlir::DominanceInfo dom(proc);
 
   DenseMap<Block *, unsigned> entryDistance;
@@ -96,13 +93,6 @@ void EarlyCodeMotionPass::runOnProcess(llhd::ProcessOp proc) {
             dominationSet.push_back(&b);
         }
         validPlacements = intersection(dominationSet, validPlacements);
-      }
-
-      // The probe instruction has to stay in the same temporal region
-      if (isa<llhd::PrbOp>(op)) {
-        SmallVector<Block *, 8> blocksInTR =
-            trAnalysis.getBlocksInTR(trAnalysis.getBlockTR(block));
-        validPlacements = intersection(validPlacements, blocksInTR);
       }
 
       if (validPlacements.empty())

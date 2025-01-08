@@ -24,7 +24,7 @@ hw.module @check_proc_inline(inout %arg: i1, inout %out: i32) {
     %1 = func.call @complex(%0) : (i1) -> i32
     %time = llhd.constant_time #llhd.time<1ns, 0d, 0e>
     llhd.drv %out, %1 after %time : !hw.inout<i32>
-    llhd.halt
+    llhd.yield
   }
   hw.output
 }

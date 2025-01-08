@@ -11,7 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "TemporalRegions.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -505,67 +504,210 @@ struct DesequentializationPass
   }
   void runOnOperation() override;
   void runOnProcess(llhd::ProcessOp procOp) const;
-  LogicalResult
-  isSupportedSequentialProcess(llhd::ProcessOp procOp,
-                               const llhd::TemporalRegionAnalysis &trAnalysis,
-                               SmallVectorImpl<Value> &observed) const;
+  LogicalResult isSupportedSequentialProcess(llhd::ProcessOp procOp) const;
+  Value analyzeValue(OpBuilder &builder, Location loc, llhd::ProcessOp procOp,
+                     Value toAnalyze, Value updateValue) const;
 };
 } // namespace
 
-LogicalResult DesequentializationPass::isSupportedSequentialProcess(
-    llhd::ProcessOp procOp, const llhd::TemporalRegionAnalysis &trAnalysis,
-    SmallVectorImpl<Value> &observed) const {
-  unsigned numTRs = trAnalysis.getNumTemporalRegions();
+static bool formsProcessCycle(Value value) {
+  SmallVector<Operation *> worklist;
+  DenseSet<Operation *> visited;
 
-  // We only consider the case with three basic blocks and two TRs, because
-  // combinatorial circuits have fewer blocks and don't need
-  // desequentialization and more are not supported for now
-  // NOTE: 3 basic blocks because of the entry block and one for each TR
-  if (numTRs == 1) {
+  for (auto *user : value.getUsers())
+    worklist.push_back(user);
+
+  while (!worklist.empty()) {
+    auto *curr = worklist.pop_back_val();
+    if (visited.contains(curr))
+      continue;
+
+    for (auto operand : curr->getOperands())
+      if (auto *defOp = operand.getDefiningOp())
+        worklist.push_back(defOp);
+      else
+        ?
+
+        visited.insert(curr);
+  }
+}
+
+static bool isProcValidToInline(llhd::ProcessOp op) {
+  if (op.getBody().getBlocks().size() != 1) {
     LLVM_DEBUG({
-      llvm::dbgs() << "  Combinational process -> no need to desequentialize\n";
+      llvm::dbgs()
+          << "Process inlining not possible: not a single basic block\n";
     });
-    return failure();
+    return false;
   }
 
-  if (numTRs > 2 || procOp.getBody().getBlocks().size() != 3) {
-    LLVM_DEBUG(
-        { llvm::dbgs() << "  Complex sequential process -> not supported\n"; });
-    return failure();
+  Block &block = op.getBody().front();
+
+  if (!isa<llhd::YieldOp>(block.getTerminator())) {
+    LLVM_DEBUG({
+      llvm::dbgs() << "Process inlining not possible: body block has to "
+                      "be terminated by 'llhd.yield'\n";
+    });
+    return false;
   }
 
-  bool seenWait = false;
-  WalkResult result = procOp.walk([&](llhd::WaitOp op) -> WalkResult {
-    LLVM_DEBUG({ llvm::dbgs() << "  Analyzing Wait Operation:\n"; });
-    for (auto obs : op.getObserved()) {
-      observed.push_back(obs);
-      LLVM_DEBUG({ llvm::dbgs() << "  - Observes: " << obs << "\n"; });
-    }
-    LLVM_DEBUG({ llvm::dbgs() << "\n"; });
+  // TODO: no process results may be used inside the process
 
-    if (seenWait)
-      return failure();
+  return true;
+}
 
-    // Check that the block containing the wait is the only exiting block of
-    // that TR
-    if (!trAnalysis.hasSingleExitBlock(
-            trAnalysis.getBlockTR(op.getOperation()->getBlock())))
-      return failure();
+LogicalResult DesequentializationPass::isSupportedSequentialProcess(
+    llhd::ProcessOp procOp) const {
+  // There is no combinational loop from the process outputs back to the process
+  // body --> the process is already desequentialized.
 
-    seenWait = true;
-    return WalkResult::advance();
-  });
+  // Desequentialize the values that form loops.
 
-  if (result.wasInterrupted() || !seenWait) {
-    LLVM_DEBUG(
-        { llvm::dbgs() << "  Complex sequential process -> not supported\n"; });
-    return failure();
-  }
+  // Now that all processes that could be desequentialized are desequentialized,
+  // we check if we can inline the process. A process can be inlined if it only
+  // contains pure operations, has a single basic block, and is fully
+  // desequentialized.
 
-  LLVM_DEBUG(
-      { llvm::dbgs() << "  Sequential process, attempt lowering...\n"; });
+  // TODO: check that the same signals are driven in all execution paths
+
+  // if (numTRs == 1) {
+  //   LLVM_DEBUG({
+  //     llvm::dbgs() << "  Combinational process -> no need to
+  //     desequentialize\n";
+  //   });
+  //   return failure();
+  // }
+
+  // if (numTRs > 2 || procOp.getBody().getBlocks().size() != 3) {
+  //   LLVM_DEBUG(
+  //       { llvm::dbgs() << "  Complex sequential process -> not supported\n";
+  //       });
+  //   return failure();
+  // }
+
+  // LLVM_DEBUG(
+  //     { llvm::dbgs() << "  Sequential process, attempt lowering...\n"; });
 
   return success();
+}
+
+Value DesequentializationPass::analyzeValue(OpBuilder &builder, Location loc,
+                                            llhd::ProcessOp procOp,
+                                            Value toAnalyze,
+                                            Value updateValue) const {
+  auto sampledInPast = [&](Value value) -> bool {
+    if (isa<BlockArgument>(value))
+      return false;
+
+    return value.getDefiningOp() == procOp;
+  };
+
+  LLVM_DEBUG({ llvm::dbgs() << "  - Analyzing enable condition...\n"; });
+
+  SmallVector<Trigger> triggers;
+  auto sampledFromSameSignal = [](Value val1, Value val2) -> bool {
+    if (auto pOp = val1.getDefiningOp<llhd::ProcessOp>())
+      val1 = pOp.getBody().back().getTerminator()->getOperand(
+          cast<OpResult>(val1).getResultNumber());
+    if (auto pOp = val2.getDefiningOp<llhd::ProcessOp>())
+      val2 = pOp.getBody().back().getTerminator()->getOperand(
+          cast<OpResult>(val2).getResultNumber());
+
+    if (auto prb1 = val1.getDefiningOp<llhd::PrbOp>())
+      if (auto prb2 = val2.getDefiningOp<llhd::PrbOp>())
+        return prb1.getSignal() == prb2.getSignal();
+
+    // TODO: consider signals not represented by hw.inout (and thus don't have
+    // an llhd.prb op to look at)
+    return false;
+  };
+
+  if (failed(DnfAnalyzer(toAnalyze, sampledInPast)
+                 .computeTriggers(builder, loc, sampledFromSameSignal, triggers,
+                                  maxPrimitives))) {
+    LLVM_DEBUG({
+      llvm::dbgs() << "  Unable to compute trigger list for drive condition, "
+                      "skipping...\n";
+    });
+    return {};
+  }
+
+  LLVM_DEBUG({
+    if (triggers.empty())
+      llvm::dbgs() << "  - no triggers found!\n";
+  });
+
+  LLVM_DEBUG({
+    for (auto trigger : triggers) {
+      llvm::dbgs() << "  - Trigger\n";
+      for (auto [clk, kind] : llvm::zip(trigger.clocks, trigger.kinds))
+        llvm::dbgs() << "    - " << kind << " " << "clock: " << clk << "\n";
+
+      if (trigger.enable)
+        llvm::dbgs() << "      with enable: " << trigger.enable << "\n";
+    }
+  });
+
+  // TODO: add support
+  if (triggers.size() > 2 || triggers.empty())
+    return {};
+
+  // TODO: add support
+  if (triggers[0].clocks.size() != 1 || triggers[0].kinds.size() != 1)
+    return {};
+
+  // TODO: add support
+  if (triggers[0].kinds[0] == Trigger::Kind::Edge)
+    return {};
+
+  // if (!llvm::any_of(observed, [&](Value val) {
+  //       return sampledFromSameSignal(val, triggers[0].clocks[0]) &&
+  //              val.getParentRegion() != procOp.getBody();
+  //     }))
+  //   return WalkResult::interrupt();
+
+  Value clock = builder.create<seq::ToClockOp>(loc, triggers[0].clocks[0]);
+  Value reset, resetValue;
+
+  if (triggers[0].kinds[0] == Trigger::Kind::NegEdge)
+    clock = builder.create<seq::ClockInverterOp>(loc, clock);
+
+  if (triggers[0].enable)
+    clock = builder.create<seq::ClockGateOp>(loc, clock, triggers[0].enable);
+
+  if (triggers.size() == 2) {
+    // TODO: add support
+    if (triggers[1].clocks.size() != 1 || triggers[1].kinds.size() != 1)
+      return {};
+
+    // TODO: add support
+    if (triggers[1].kinds[0] == Trigger::Kind::Edge)
+      return {};
+
+    // TODO: add support
+    if (triggers[1].enable)
+      return {};
+
+    // if (!llvm::any_of(observed, [&](Value val) {
+    //       return sampledFromSameSignal(val, triggers[1].clocks[0]) &&
+    //              val.getParentRegion() != procOp.getBody();
+    //     }))
+    //   return WalkResult::interrupt();
+
+    reset = triggers[1].clocks[0];
+    resetValue = updateValue;
+
+    if (triggers[1].kinds[0] == Trigger::Kind::NegEdge) {
+      Value trueVal =
+          builder.create<hw::ConstantOp>(loc, builder.getBoolAttr(true));
+      reset = builder.create<comb::XorOp>(loc, reset, trueVal);
+    }
+  }
+
+  // FIXME: this adds async resets as sync resets and might also add the reset
+  // as clock and clock as reset.
+  return builder.create<seq::CompRegOp>(loc, updateValue, clock, reset,
+                                        resetValue);
 }
 
 void DesequentializationPass::runOnProcess(llhd::ProcessOp procOp) const {
@@ -576,14 +718,13 @@ void DesequentializationPass::runOnProcess(llhd::ProcessOp procOp) const {
     llvm::dbgs() << "===" << line << "===\n";
   });
 
-  llhd::TemporalRegionAnalysis trAnalysis(procOp);
-
   // If we don't support it, just skip it.
-  SmallVector<Value> observed;
-  if (failed(isSupportedSequentialProcess(procOp, trAnalysis, observed)))
+  if (failed(isSupportedSequentialProcess(procOp)))
     return;
 
-  OpBuilder builder(procOp);
+  // TODO: check that all drives are always executed
+
+  // Desequentialize all drives with an enable condition
   WalkResult result = procOp.walk([&](llhd::DrvOp op) {
     LLVM_DEBUG({ llvm::dbgs() << "\n  Lowering Drive Operation\n"; });
 
@@ -592,121 +733,11 @@ void DesequentializationPass::runOnProcess(llhd::ProcessOp procOp) const {
       return WalkResult::advance();
     }
 
-    Location loc = op.getLoc();
-    builder.setInsertionPoint(op);
-    int presentTR = trAnalysis.getBlockTR(op.getOperation()->getBlock());
-
-    auto sampledInPast = [&](Value value) -> bool {
-      if (isa<BlockArgument>(value))
-        return false;
-
-      if (!procOp->isAncestor(value.getDefiningOp()))
-        return false;
-
-      return trAnalysis.getBlockTR(value.getDefiningOp()->getBlock()) !=
-             presentTR;
-    };
-
-    LLVM_DEBUG({ llvm::dbgs() << "  - Analyzing enable condition...\n"; });
-
-    SmallVector<Trigger> triggers;
-    auto sampledFromSameSignal = [](Value val1, Value val2) -> bool {
-      if (auto prb1 = val1.getDefiningOp<llhd::PrbOp>())
-        if (auto prb2 = val2.getDefiningOp<llhd::PrbOp>())
-          return prb1.getSignal() == prb2.getSignal();
-
-      // TODO: consider signals not represented by hw.inout (and thus don't have
-      // an llhd.prb op to look at)
-      return false;
-    };
-
-    if (failed(DnfAnalyzer(op.getEnable(), sampledInPast)
-                   .computeTriggers(builder, loc, sampledFromSameSignal,
-                                    triggers, maxPrimitives))) {
-      LLVM_DEBUG({
-        llvm::dbgs() << "  Unable to compute trigger list for drive condition, "
-                        "skipping...\n";
-      });
+    OpBuilder builder(op);
+    auto regOut = analyzeValue(builder, op.getLoc(), procOp, op.getEnable(),
+                               op.getValue());
+    if (!regOut)
       return WalkResult::interrupt();
-    }
-
-    LLVM_DEBUG({
-      if (triggers.empty())
-        llvm::dbgs() << "  - no triggers found!\n";
-    });
-
-    LLVM_DEBUG({
-      for (auto trigger : triggers) {
-        llvm::dbgs() << "  - Trigger\n";
-        for (auto [clk, kind] : llvm::zip(trigger.clocks, trigger.kinds))
-          llvm::dbgs() << "    - " << kind << " "
-                       << "clock: " << clk << "\n";
-
-        if (trigger.enable)
-          llvm::dbgs() << "      with enable: " << trigger.enable << "\n";
-      }
-    });
-
-    // TODO: add support
-    if (triggers.size() > 2 || triggers.empty())
-      return WalkResult::interrupt();
-
-    // TODO: add support
-    if (triggers[0].clocks.size() != 1 || triggers[0].clocks.size() != 1)
-      return WalkResult::interrupt();
-
-    // TODO: add support
-    if (triggers[0].kinds[0] == Trigger::Kind::Edge)
-      return WalkResult::interrupt();
-
-    if (!llvm::any_of(observed, [&](Value val) {
-          return sampledFromSameSignal(val, triggers[0].clocks[0]) &&
-                 val.getParentRegion() != procOp.getBody();
-        }))
-      return WalkResult::interrupt();
-
-    Value clock = builder.create<seq::ToClockOp>(loc, triggers[0].clocks[0]);
-    Value reset, resetValue;
-
-    if (triggers[0].kinds[0] == Trigger::Kind::NegEdge)
-      clock = builder.create<seq::ClockInverterOp>(loc, clock);
-
-    if (triggers[0].enable)
-      clock = builder.create<seq::ClockGateOp>(loc, clock, triggers[0].enable);
-
-    if (triggers.size() == 2) {
-      // TODO: add support
-      if (triggers[1].clocks.size() != 1 || triggers[1].kinds.size() != 1)
-        return WalkResult::interrupt();
-
-      // TODO: add support
-      if (triggers[1].kinds[0] == Trigger::Kind::Edge)
-        return WalkResult::interrupt();
-
-      // TODO: add support
-      if (triggers[1].enable)
-        return WalkResult::interrupt();
-
-      if (!llvm::any_of(observed, [&](Value val) {
-            return sampledFromSameSignal(val, triggers[1].clocks[0]) &&
-                   val.getParentRegion() != procOp.getBody();
-          }))
-        return WalkResult::interrupt();
-
-      reset = triggers[1].clocks[0];
-      resetValue = op.getValue();
-
-      if (triggers[1].kinds[0] == Trigger::Kind::NegEdge) {
-        Value trueVal =
-            builder.create<hw::ConstantOp>(loc, builder.getBoolAttr(true));
-        reset = builder.create<comb::XorOp>(loc, reset, trueVal);
-      }
-    }
-
-    // FIXME: this adds async resets as sync resets and might also add the reset
-    // as clock and clock as reset.
-    Value regOut = builder.create<seq::CompRegOp>(loc, op.getValue(), clock,
-                                                  reset, resetValue);
 
     op.getEnableMutable().clear();
     op.getValueMutable().assign(regOut);
@@ -720,22 +751,35 @@ void DesequentializationPass::runOnProcess(llhd::ProcessOp procOp) const {
   if (result.wasInterrupted())
     return;
 
-  IRRewriter rewriter(builder);
-  auto &entryBlock = procOp.getBody().getBlocks().front();
+  // Desequentialize all process result values.
+  llhd::YieldOp yieldOp =
+      cast<llhd::YieldOp>(procOp.getBody().back().getTerminator());
+  OpBuilder builder(yieldOp);
+  for (auto [i, val] : llvm::enumerate(yieldOp.getOperands())) {
+    if (auto muxOp = val.getDefiningOp<comb::MuxOp>()) {
+      if (muxOp.getFalseValue() == procOp->getResult(i)) {
+        auto regOut = analyzeValue(builder, yieldOp.getLoc(), procOp,
+                                   muxOp.getCond(), muxOp.getTrueValue());
+        if (!regOut)
+          return;
 
-  // Delete the terminator of all blocks in the process.
-  for (Block &block : procOp.getBody().getBlocks()) {
-    block.getTerminator()->erase();
-
-    if (!block.isEntryBlock())
-      entryBlock.getOperations().splice(entryBlock.end(),
-                                        block.getOperations());
+        yieldOp->setOperand(i, regOut);
+      }
+    }
   }
 
-  rewriter.inlineBlockBefore(&entryBlock, procOp);
-  procOp.erase();
+  if (isProcValidToInline(procOp)) {
+    IRRewriter rewriter(procOp);
+    auto &entryBlock = procOp.getBody().getBlocks().front();
 
-  LLVM_DEBUG({ llvm::dbgs() << "Lowered process successfully!\n"; });
+    procOp->getResults().replaceAllUsesWith(
+        entryBlock.getTerminator()->getOperands());
+    entryBlock.getTerminator()->erase();
+    rewriter.inlineBlockBefore(&entryBlock, procOp);
+    procOp.erase();
+
+    LLVM_DEBUG({ llvm::dbgs() << "Process inlined successfully!\n"; });
+  }
 }
 
 void DesequentializationPass::runOnOperation() {

@@ -32,26 +32,10 @@ hw.module @basic(in %cond: i1) {
   %n = llhd.sig %c0_i5 : i5
   %o = llhd.sig %c0_i5 : i5
 
-  %prb_k = llhd.prb %k : !hw.inout<i5>
-  %prb_c = llhd.prb %c : !hw.inout<i1>
-  %prb_e = llhd.prb %e : !hw.inout<i1>
-  %prb_h = llhd.prb %h : !hw.inout<i4>
-  %prb_d = llhd.prb %d : !hw.inout<i1>
-  %prb_f = llhd.prb %f : !hw.inout<i1>
-  %prb_g = llhd.prb %g : !hw.inout<i4>
-
   // COM: Check that an auxillary block is created and all drives are moved to
   // COM: the exit block with the correct enable condition
   // CHECK: llhd.process
   llhd.process {
-  // CHECK: cf.br ^[[BB1:.+]]
-    cf.br ^bb1
-  // CHECK: ^[[BB1]]:
-  ^bb1:
-    // CHECK: llhd.wait ({{.*}}), ^[[BB2:.+]]
-    llhd.wait (%prb_k, %prb_c, %prb_e, %prb_h, %prb_d, %prb_f, %prb_g : i5, i1, i1, i4, i1, i1, i4), ^bb2
-  // CHECK: ^[[BB2]]:
-  ^bb2:
     // CHECK: [[V14:%.+]] = llhd.prb %k
     // CHECK: [[V15:%.+]] = llhd.prb %c
     // CHECK: [[V16:%.+]] = llhd.prb %e
@@ -86,22 +70,24 @@ hw.module @basic(in %cond: i1) {
     cf.cond_br %26, ^bb3, ^bb4
   ^bb3:
     llhd.drv %l, %c0_i5 after %1 if %cond : !hw.inout<i5>
-    cf.br ^bb1
+    llhd.yield
   ^bb4:
     cf.cond_br %27, ^bb5, ^bb6
   ^bb5:
     llhd.drv %m, %29 after %1 : !hw.inout<i5>
-    cf.br ^bb1
+    llhd.yield
   ^bb6:
-    cf.cond_br %30, ^bb7, ^bb1
+    cf.cond_br %30, ^bb7, ^bb10
   ^bb7:
     cf.cond_br %31, ^bb8, ^bb9
   ^bb8:
     llhd.drv %n, %35 after %1 : !hw.inout<i5>
-    cf.br ^bb1
+    llhd.yield
   ^bb9:
     llhd.drv %o, %39 after %1 : !hw.inout<i5>
-    cf.br ^bb1
+    llhd.yield
+  ^bb10:
+    llhd.yield
     // CHECK: llhd.drv %k, [[V14]] after [[V1]] if %true{{.*}} : !hw.inout<i5>
 
     // CHECK: [[V29:%.+]] = comb.and %true{{.*}}, [[V15]] : i1
@@ -129,15 +115,11 @@ hw.module @basic(in %cond: i1) {
     // CHECK: [[V50:%.+]] = comb.and [[V44]], [[V49]] : i1
     // CHECK: [[V51:%.+]] = comb.or %false{{.*}}, [[V50]] : i1
     // CHECK: llhd.drv %o, [[V28]] after [[V1]] if [[V51]] : !hw.inout<i5>
-    // CHECK: cf.br ^[[BB1]]
+    // CHECK: llhd.yield
   }
 
   // COM: check drive coalescing behavior
   llhd.process {
-    cf.br ^bb1
-  ^bb1:
-    llhd.wait ^bb2
-  ^bb2:
     // CHECK:      [[V20:%.+]] = llhd.prb %l
     // CHECK-NEXT: [[V21:%.+]] = llhd.prb %m
     %20 = llhd.prb %l : !hw.inout<i5>
@@ -160,48 +142,7 @@ hw.module @basic(in %cond: i1) {
     llhd.drv %m, %20 after %1 if %22 : !hw.inout<i5>
     llhd.drv %m, %21 after %1 if %cond : !hw.inout<i5>
 
-    // CHECK-NEXT: cf.br
-    cf.br ^bb1
-  }
-}
-
-// The following processes should stay unmodified, just make sure the pass doesn't crash on them
-
-// CHECK-LABEL: hw.module @more_than_one_wait
-hw.module @more_than_one_wait() {
-  llhd.process {
-    cf.br ^bb1
-  ^bb1:
-    llhd.wait ^bb2
-  ^bb2:
-    llhd.wait ^bb1
-  }
-}
-
-// CHECK-LABEL: hw.module @more_than_two_TRs
-hw.module @more_than_two_TRs() {
-  llhd.process {
-    cf.br ^bb1
-  ^bb1:
-    llhd.wait ^bb2
-  ^bb2:
-    llhd.wait ^bb3
-  ^bb3:
-    llhd.wait ^bb1
-  }
-}
-
-// CHECK-LABEL: hw.module @more_than_one_TR_wait_terminator
-hw.module @more_than_one_TR_wait_terminator(in %cond: i1) {
-  llhd.process {
-    cf.br ^bb1
-  ^bb1:
-    cf.cond_br %cond, ^bb2, ^bb3
-  ^bb2:
-    llhd.wait ^bb4
-  ^bb3:
-    llhd.wait ^bb4
-  ^bb4:
-    cf.br ^bb1
+    // CHECK-NEXT: llhd.yield
+    llhd.yield
   }
 }

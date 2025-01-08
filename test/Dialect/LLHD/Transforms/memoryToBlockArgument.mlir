@@ -15,7 +15,7 @@
 // CHECK:             cf.br ^bb3(%[[VAL_3]] : i32)
 // CHECK:           ^bb3(%[[VAL_4:.*]]: i32):
 // CHECK:             %[[VAL_5:.*]] = comb.xor %[[VAL_4]], %[[ALLSET]] : i32
-// CHECK:             llhd.halt
+// CHECK:             llhd.yield
 // CHECK:           }
 // CHECK:         }
 hw.module @check_simple() {
@@ -36,7 +36,7 @@ hw.module @check_simple() {
   ^bb3:
     %ld = llhd.load %ptr : !llhd.ptr<i32>
     %res = comb.xor %ld, %allset : i32
-    llhd.halt
+    llhd.yield
   }
 }
 
@@ -67,7 +67,7 @@ func.func @allocate_mem() -> !llhd.ptr<i32> {
 // CHECK:         ^bb3:
 // CHECK:           %[[VAL_4:.*]] = llhd.load %[[VAL_1]] : !llhd.ptr<i32>
 // CHECK:           %[[VAL_5:.*]] = comb.xor %[[VAL_4]], %[[ALLSET]] : i32
-// CHECK:           llhd.halt
+// CHECK:           llhd.yield
 // CHECK:         }
 hw.module @pointer_returned_from_call() {
   llhd.process {
@@ -86,7 +86,7 @@ hw.module @pointer_returned_from_call() {
   ^bb3:
     %ld = llhd.load %ptr : !llhd.ptr<i32>
     %res = comb.xor %ld, %allset : i32
-    llhd.halt
+    llhd.yield
   }
 }
 
@@ -118,7 +118,7 @@ func.func @store_something(%ptr : !llhd.ptr<i32>) {
 // CHECK:         ^bb3:
 // CHECK:           %[[VAL_4:.*]] = llhd.load %[[VAL_2]] : !llhd.ptr<i32>
 // CHECK:           %[[VAL_5:.*]] = comb.xor %[[VAL_4]], %[[ALLSET]] : i32
-// CHECK:           llhd.halt
+// CHECK:           llhd.yield
 // CHECK:         }
 hw.module @pointer_passed_to_function() {
   llhd.process {
@@ -137,7 +137,7 @@ hw.module @pointer_passed_to_function() {
   ^bb3:
     %ld = llhd.load %ptr : !llhd.ptr<i32>
     %res = comb.xor %ld, %allset : i32
-    llhd.halt
+    llhd.yield
   }
 }
 
@@ -158,7 +158,7 @@ hw.module @pointer_passed_to_function() {
 // CHECK:         ^bb3:
 // CHECK:           %[[VAL_6:.*]] = llhd.load %[[VAL_2]] : !llhd.ptr<i32>
 // CHECK:           %[[VAL_7:.*]] = comb.xor %[[VAL_6]], %[[ALLSET]] : i32
-// CHECK:           llhd.halt
+// CHECK:           llhd.yield
 // CHECK:         }
 hw.module @pointer_block_argument() {
   llhd.process {
@@ -178,7 +178,7 @@ hw.module @pointer_block_argument() {
   ^bb3:
     %ld = llhd.load %ptr : !llhd.ptr<i32>
     %res = comb.xor %ld, %allset : i32
-    llhd.halt
+    llhd.yield
   }
 }
 
@@ -196,7 +196,7 @@ hw.module @pointer_block_argument() {
 // CHECK:         ^bb3(%[[VAL_4:.*]]: i32, %[[VAL_5:.*]]: i32):
 // CHECK:           %[[VAL_6:.*]] = comb.xor %[[VAL_4]], %[[ALLSET]] : i32
 // CHECK:           %[[VAL_7:.*]] = comb.xor %[[VAL_5]], %[[ALLSET]] : i32
-// CHECK:           llhd.halt
+// CHECK:           llhd.yield
 // CHECK:         }
 hw.module @two_block_arguments() {
   llhd.process {
@@ -220,7 +220,7 @@ hw.module @two_block_arguments() {
     %ld2 = llhd.load %ptr2 : !llhd.ptr<i32>
     %res = comb.xor %ld, %allset : i32
     %res2 = comb.xor %ld2, %allset : i32
-    llhd.halt
+    llhd.yield
   }
 }
 
@@ -236,7 +236,7 @@ hw.module @two_block_arguments() {
 // CHECK:           cf.br ^bb2(%[[VAL_4]] : i32)
 // CHECK:         ^bb2(%[[VAL_5:.*]]: i32):
 // CHECK:           %[[VAL_6:.*]] = comb.xor %[[VAL_5]], %[[ALLSET]] : i32
-// CHECK:           llhd.halt
+// CHECK:           llhd.yield
 // CHECK:         }
 hw.module @multiple_store_one_block() {
   llhd.process {
@@ -256,44 +256,41 @@ hw.module @multiple_store_one_block() {
   ^bb2:
     %ld = llhd.load %ptr : !llhd.ptr<i32>
     %res = comb.xor %ld, %allset : i32
-    llhd.halt
+    llhd.yield
   }
 }
 
 // CHECK-LABEL:   @loop
 // CHECK-SAME:    (inout %[[VAL_0:.*]] : i2)
 // CHECK:         [[PRB:%.+]] = llhd.prb %[[VAL_0]]
-// CHECK:           cf.br ^bb1
-// CHECK:         ^bb1:
+// CHECK:         [[PROC:%.+]] = llhd.process 
 // CHECK:           %[[VAL_1:.*]] = hw.constant 0 : i32
-// CHECK:           cf.br ^bb2(%[[VAL_1]] : i32)
-// CHECK:         ^bb2(%[[VAL_2:.*]]: i32):
+// CHECK:           [[CHANGE:%.+]] = comb.icmp ne [[PRB]], [[PROC]] : i2
+// CHECK:           cf.cond_br [[CHANGE]], ^[[BB1:.+]](%[[VAL_1]] : i32), ^[[BB3:.+]](%[[VAL_1]] : i32)
+// CHECK:         ^[[BB1]](%[[VAL_2:.*]]: i32):
 // CHECK:           %[[VAL_3:.*]] = hw.constant 2 : i32
 // CHECK:           %[[VAL_4:.*]] = comb.icmp ult %[[VAL_2]], %[[VAL_3]] : i32
-// CHECK:           cf.cond_br %[[VAL_4]], ^bb4, ^bb3
-// CHECK:         ^bb3:
-// CHECK:           llhd.wait ([[PRB]] : i2), ^bb1
-// CHECK:         ^bb4:
+// CHECK:           cf.cond_br %[[VAL_4]], ^[[BB2:.+]], ^[[BB3]](%[[VAL_2]] : i32)
+// CHECK:         ^[[BB2]]:
 // CHECK:           %[[VAL_5:.*]] = hw.constant 0 : i2
 // CHECK:           %[[VAL_6:.*]] = hw.constant 1 : i32
 // CHECK:           %[[VAL_7:.*]] = comb.add %[[VAL_2]], %[[VAL_6]] : i32
-// CHECK:           cf.br ^bb2(%[[VAL_7]] : i32)
+// CHECK:           cf.br ^[[BB1]](%[[VAL_7]] : i32)
+// CHECK:         ^[[BB3]](%[[VAL_8:.*]]: i32):
+// CHECK:           llhd.yield [[PRB]] : i2
 // CHECK:         }
 hw.module @loop(inout %in_i : i2) {
-  %prb = llhd.prb %in_i : !hw.inout<i2>
-  llhd.process {
-    cf.br ^body
-  ^body:
+  %prb0 = llhd.prb %in_i : !hw.inout<i2>
+  %proc = llhd.process -> i2 {
     %0 = hw.constant 0 : i32
     %i = llhd.var %0 : i32
-    cf.br ^loop_body
+    %any_change = comb.icmp ne %prb0, %proc : i2
+    cf.cond_br %any_change, ^loop_body, ^exit
   ^loop_body:
     %i_ld = llhd.load %i : !llhd.ptr<i32>
     %1 = hw.constant 2 : i32
     %2 = comb.icmp ult %i_ld, %1 : i32
-    cf.cond_br %2, ^loop_continue, ^check
-  ^check:
-    llhd.wait (%prb : i2), ^body
+    cf.cond_br %2, ^loop_continue, ^exit
   ^loop_continue:
     %3 = hw.constant 0 : i2
     %5 = hw.constant 1 : i32
@@ -301,6 +298,8 @@ hw.module @loop(inout %in_i : i2) {
     %14 = comb.add %i_ld4, %5 : i32
     llhd.store %i, %14 : !llhd.ptr<i32>
     cf.br ^loop_body
+  ^exit:
+    llhd.yield %prb0 : i2
   }
 }
 
@@ -344,7 +343,7 @@ hw.module @loop(inout %in_i : i2) {
 // CHECK:           cf.cond_br %[[VAL_0]], ^bb8, ^bb11(%[[VAL_5]] : i8)
 // CHECK:         ^bb11(%[[VAL_18:.*]]: i8):
 // CHECK:           %[[VAL_19:.*]] = comb.xor %[[ALLSET]], %[[VAL_18]] : i8
-// CHECK:           llhd.halt
+// CHECK:           llhd.yield
 // CHECK:         }
 hw.module @more_complicated() {
   llhd.process {
@@ -402,6 +401,6 @@ hw.module @more_complicated() {
   ^bb10:
     %ld11 = llhd.load %ptr : !llhd.ptr<i8>
     %res11 = comb.xor %allset,  %ld11 : i8
-    llhd.halt
+    llhd.yield
   }
 }

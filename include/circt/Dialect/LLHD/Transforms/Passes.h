@@ -25,8 +25,6 @@ class HWModuleOp;
 namespace llhd {
 class ProcessOp;
 
-std::unique_ptr<OperationPass<ModuleOp>> createProcessLoweringPass();
-
 std::unique_ptr<OperationPass<ModuleOp>> createFunctionEliminationPass();
 
 std::unique_ptr<OperationPass<hw::HWModuleOp>>
@@ -34,10 +32,7 @@ createMemoryToBlockArgumentPass();
 
 std::unique_ptr<OperationPass<hw::HWModuleOp>> createEarlyCodeMotionPass();
 
-std::unique_ptr<OperationPass<hw::HWModuleOp>> createTemporalCodeMotionPass();
-
-#define GEN_PASS_DECL_SIG2REG
-#define GEN_PASS_DECL_DESEQUENTIALIZATION
+#define GEN_PASS_DECL
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/LLHD/Transforms/Passes.h.inc"
 

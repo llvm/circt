@@ -15,15 +15,6 @@
 
 include "mlir/Pass/PassBase.td"
 
-def ProcessLowering : Pass<"llhd-process-lowering", "ModuleOp"> {
-  let summary = "Lowers LLHD Processes to Entities.";
-  let description = [{
-    TODO
-  }];
-
-  let constructor = "circt::llhd::createProcessLoweringPass()";
-}
-
 def MemoryToBlockArgument : Pass<"llhd-memory-to-block-argument",
                                  "hw::HWModuleOp"> {
 
@@ -52,7 +43,7 @@ def MemoryToBlockArgument : Pass<"llhd-memory-to-block-argument",
       %ld = llhd.load %ptr : !llhd.ptr<i32>
       %c-1_i32 = hw.constant -1 : i32
       %res = comb.xor %ld, %c-1_i32 : i32
-      llhd.halt
+      llhd.yield
     }
     ```
 
@@ -69,7 +60,7 @@ def MemoryToBlockArgument : Pass<"llhd-memory-to-block-argument",
     ^bb2(%arg : i32):
       %c-1_i32 = hw.constant -1 : i32
       %res = comb.xor %arg, %c-1_i32 : i32
-      llhd.halt
+      llhd.yield
     }
     ```
 
@@ -115,7 +106,7 @@ def Sig2Reg : Pass<"llhd-sig2reg", "hw::HWModuleOp"> {
   let summary = "promote LLHD signals to SSA values";
 }
 
-def TemporalCodeMotion : Pass<"llhd-temporal-code-motion", "hw::HWModuleOp"> {
+def TemporalCodeMotionPass : Pass<"llhd-temporal-code-motion", "hw::HWModuleOp"> {
   let summary = "move drive operations to the exit basic block in processes";
   let description = [{
     This pass uses the temporal region analysis to transform the IR such that
@@ -128,8 +119,6 @@ def TemporalCodeMotion : Pass<"llhd-temporal-code-motion", "hw::HWModuleOp"> {
     This pass assumes that the early code motion pass has been run beforehand.
     Otherwise, dominance errors are to be expected.
   }];
-
-  let constructor = "circt::llhd::createTemporalCodeMotionPass()";
 }
 
 def Desequentialization : Pass<"llhd-desequentialize", "hw::HWModuleOp"> {

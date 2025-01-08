@@ -9,6 +9,7 @@
 #include "circt/Conversion/ConvertToArcs.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Support/Namespace.h"
@@ -27,8 +28,7 @@ static bool isArcBreakingOp(Operation *op) {
   return op->hasTrait<OpTrait::ConstantLike>() ||
          isa<hw::InstanceOp, seq::CompRegOp, MemoryOp, MemoryReadPortOp,
              ClockedOpInterface, seq::InitialOp, seq::ClockGateOp,
-             sim::DPICallOp>(op) ||
-         op->getNumResults() > 1;
+             sim::DPICallOp, llhd::ProcessOp, llhd::DelayOp>(op);
 }
 
 static LogicalResult convertInitialValue(seq::CompRegOp reg,
@@ -100,9 +100,7 @@ LogicalResult Converter::runOnModule(HWModuleOp module) {
   arcBreakers.clear();
   arcBreakerIndices.clear();
   for (Operation &op : *module.getBodyBlock()) {
-    if (isa<seq::InitialOp>(&op))
-      continue;
-    if (op.getNumRegions() > 0)
+    if (op.getNumRegions() > 0 && !isArcBreakingOp(&op))
       return op.emitOpError("has regions; not supported by ConvertToArcs");
     if (!isArcBreakingOp(&op) && !isa<hw::OutputOp>(&op))
       continue;
@@ -149,7 +147,15 @@ LogicalResult Converter::analyzeFanIn() {
   postOrder.clear();
   while (!worklist.empty()) {
     auto &[op, operandIdx] = worklist.back();
-    if (operandIdx == op->getNumOperands()) {
+    SmallVector<Value> operands(op->getOperands());
+    Operation *parent = op;
+    op->walk([&](Operation *operation) {
+      for (auto operand : operation->getOperands())
+        if (!parent->isAncestor(operand.getParentBlock()->getParentOp()))
+          operands.push_back(operand);
+    });
+
+    if (operandIdx == operands.size()) {
       if (!isArcBreakingOp(op) && !isa<hw::OutputOp>(op))
         postOrder.push_back(op);
       finished.insert(op);
@@ -157,7 +163,7 @@ LogicalResult Converter::analyzeFanIn() {
       worklist.pop_back();
       continue;
     }
-    auto operand = op->getOperand(operandIdx++); // advance to next operand
+    auto operand = operands[operandIdx++]; // advance to next operand
     auto *definingOp = operand.getDefiningOp();
     if (!definingOp || isArcBreakingOp(definingOp) ||
         finished.contains(definingOp))
