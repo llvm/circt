@@ -239,8 +239,8 @@ def ViewIntrinsicOp : FIRRTLOp<"view", []> {
     debugging in a waveform.  This is _not_ a true SystemVerilog Interface, it
     is only lowered to one.
   }];
-  let arguments = (ins StrAttr:$name, AugmentedBundleType:$augmentedType, Variadic<RefType>:$probes);
-  let assemblyFormat = "$name `,` $augmentedType (`,` $probes^)? attr-dict `:` type($probes)";
+  let arguments = (ins StrAttr:$name, AugmentedBundleType:$augmentedType, Variadic<FIRRTLBaseType>:$inputs);
+  let assemblyFormat = "$name `,` $augmentedType (`,` $inputs^)? attr-dict `:` type($inputs)";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLINTRINSICS_TD

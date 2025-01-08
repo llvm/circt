@@ -41,7 +41,7 @@ firrtl.module @Intrinsics(in %ui : !firrtl.uint, in %clock: !firrtl.clock, in %u
   %po = firrtl.int.generic "params_and_operand" <X: i64 = 123> %ui1 : (!firrtl.uint<1>) -> !firrtl.clock
   firrtl.int.generic "inputs" %clock, %ui1, %clock : (!firrtl.clock, !firrtl.uint<1>, !firrtl.clock) -> ()
 
-  %probe = firrtl.wire : !firrtl.probe<uint<1>>
+  %val = firrtl.wire : !firrtl.uint<1>
   // CHECK: firrtl.view "View"
   // CHECK-SAME: <{
   // CHECK-SAME:     elements = [
@@ -56,7 +56,7 @@ firrtl.module @Intrinsics(in %ui : !firrtl.uint, in %clock: !firrtl.clock, in %u
   // CHECK-SAME:         name = "qux"
   // CHECK-SAME:       }
   // CHECK-SAME:     ]
-  // CHECK-SAME: }>, %probe, %probe : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
+  // CHECK-SAME: }>, %val, %val : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.view "View", <{
     class = "sifive.enterprise.grandcentral.AugmentedBundleType",
     defName = "Bar",
@@ -72,7 +72,7 @@ firrtl.module @Intrinsics(in %ui : !firrtl.uint, in %clock: !firrtl.clock, in %u
         name = "qux"
       }
     ]
-  }>, %probe, %probe : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
+  }>, %val, %val : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @FPGAProbe
