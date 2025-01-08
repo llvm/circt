@@ -7,6 +7,13 @@ func.func @at_least_size_one(%arg0: !smt.bv<0>) {
 
 // -----
 
+// expected-error @below {{bit-vector must have at least a width of one}}
+func.func @at_least_size_one(%arg0: !smt.bv<-1>) {
+  return
+}
+
+// -----
+
 func.func @attr_type_and_return_type_match() {
   // expected-error @below {{inferred type(s) '!smt.bv<1>' are incompatible with return type(s) of operation '!smt.bv<32>'}}
   // expected-error @below {{failed to infer returned types}}
@@ -89,8 +96,8 @@ func.func @repeat_count_too_large(%arg0: !smt.bv<32>) {
 
 // -----
 
-func.func @repeat_result_type_bitwidth_too_large(%arg0: !smt.bv<18446744073709551612>) {
-  // expected-error @below {{result bit-width (provided integer times bit-width of the input type) must fit into 64 bits}}
-  smt.bv.repeat 2 times %arg0 : !smt.bv<18446744073709551612>
+// expected-error @below {{integer value too large}}
+// expected-error @below {{failed to parse BitVectorType parameter 'width' which is to be a `int64_t`}}
+func.func @bitwidth_too_large(%arg0: !smt.bv<18446744073709551612>) {
   return
 }
