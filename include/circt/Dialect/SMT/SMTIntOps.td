@@ -120,7 +120,7 @@ def IntCmpOp : SMTIntOp<"cmp", [Pure]> {
 }
 
 def Int2BVOp : SMTOp<"int2bv", [Pure]> {
-  let summary = "Convert an integer to an n-wide bitvector.";
+  let summary = "Convert an integer to an inferred-width bitvector.";
   let description = [{
     Designed to lower directly to an operation of the same name in Z3. The Z3
     C API describes the semantics as follows:
@@ -129,11 +129,9 @@ def Int2BVOp : SMTOp<"int2bv", [Pure]> {
     to n-1) is 1 if (t1 div 2^i) mod 2 is 1.
     The node t1 must have integer sort.
   }];
-  let arguments = (ins IntType:$input, ConfinedAttr<I32Attr, [IntNonNegative]>:$width);
+  let arguments = (ins IntType:$input);
   let results = (outs BitVectorType:$result);
-  let assemblyFormat = "$input `width` $width attr-dict `:` qualified(type($result))";
-
-  let hasVerifier = true;
+  let assemblyFormat = "$input attr-dict `:` qualified(type($result))";
 }
 
 #endif // CIRCT_DIALECT_SMT_SMTINTOPS_TD

@@ -382,7 +382,7 @@ func.func @test(%arg0: i32) {
 
     // CHECK: [[WIDTHCONST:%.+]] = llvm.mlir.constant(4 : i32) : i32
     // CHECK: llvm.call @Z3_mk_int2bv({{%[0-9a-zA-Z_]+}}, [[WIDTHCONST]], [[C123]]) : (!llvm.ptr, i32, !llvm.ptr) -> !llvm.ptr
-    smt.int2bv %10 width 4 : !smt.bv<4>
+    smt.int2bv %10 : !smt.bv<4>
 
     // CHECK: [[C0:%.+]] = llvm.mlir.constant(0 : i32)
     // CHECK: [[C2:%.+]] = llvm.mlir.constant(2 : i32)

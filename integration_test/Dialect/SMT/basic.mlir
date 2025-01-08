@@ -199,7 +199,7 @@ func.func @entry() {
   smt.solver () : () -> () {
     %c4 = smt.int.constant 4
     %c4_bv16 = smt.bv.constant #smt.bv<4> : !smt.bv<16>
-    %int2bv = smt.int2bv %c4 width 16 : !smt.bv<16>
+    %int2bv = smt.int2bv %c4 : !smt.bv<16>
     %eq = smt.distinct %c4_bv16, %int2bv : !smt.bv<16>
     func.call @check(%eq) : (!smt.bool) -> ()
     smt.yield

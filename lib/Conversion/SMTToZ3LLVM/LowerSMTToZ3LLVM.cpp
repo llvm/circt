@@ -1201,8 +1201,9 @@ struct Int2BVOpLowering : public SMTLoweringPattern<Int2BVOp> {
   LogicalResult
   matchAndRewrite(Int2BVOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    Value widthConst = rewriter.create<LLVM::ConstantOp>(
-        op->getLoc(), rewriter.getI32Type(), op.getWidth());
+    Value widthConst =
+        rewriter.create<LLVM::ConstantOp>(op->getLoc(), rewriter.getI32Type(),
+                                          op.getResult().getType().getWidth());
     rewriter.replaceOp(op,
                        buildPtrAPICall(rewriter, op.getLoc(), "Z3_mk_int2bv",
                                        {widthConst, adaptor.getInput()}));
