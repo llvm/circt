@@ -7,7 +7,7 @@
 import pycde
 from pycde import (AppID, Clock, Input, Module, generator)
 from pycde.esi import DeclareRandomAccessMemory, ServiceDecl
-from pycde.bsp import cosim, xrt
+from pycde.bsp import get_bsp
 from pycde.module import Metadata
 from pycde.types import Bits
 
@@ -90,14 +90,10 @@ def Top(xrt: bool):
 
 
 if __name__ == "__main__":
-  is_xrt = len(sys.argv) > 2 and sys.argv[2] == "xrt"
-  if is_xrt:
-    bsp = xrt.XrtBSP
-  else:
-    bsp = cosim.CosimBSP
+  is_xrt = len(sys.argv) > 2 and sys.argv[2].startswith("xrt")
+  bsp = get_bsp(sys.argv[2] if len(sys.argv) > 2 else None)
   s = pycde.System(bsp(Top(is_xrt)),
                    name="ESIMem",
                    output_directory=sys.argv[1])
-  s.generate()
   s.compile()
   s.package()

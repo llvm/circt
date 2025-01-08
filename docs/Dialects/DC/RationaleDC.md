@@ -74,10 +74,10 @@ By explicitly separating data and control parts of a program, we allow for
 control-only canonicalization to take place.
 Here are some examples of non-trivial canonicalization patterns:
 * **Transitive join closure**:
-  * Taking e.g. the Handshake dialect as the source abstraction, all operations
-  - unless some specific Handshake operations - will be considered as
-  *unit rate actors* and have join semantics. When lowering Handshake to DC,
-  and by separating the data and control paths, we can easily identify `join`
+  * Taking e.g. the Handshake dialect as the source abstraction, all
+  operations - unless some specific Handshake operations - will be considered as
+  *unit rate actors* and have join semantics. When lowering Handshake to DC, and
+  by separating the data and control paths, we can easily identify `join`
   operations which are staggered, and can be merged through a transitive closure
   of the control graph.
 * **Branch to select**: Canonicalizes away a select where its inputs originate

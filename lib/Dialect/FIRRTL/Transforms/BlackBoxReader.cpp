@@ -13,6 +13,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Analysis/FIRRTLInstanceInfo.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
@@ -81,8 +82,6 @@ struct BlackBoxReaderPass
   StringAttr loadFile(Operation *op, StringRef inputPath, OpBuilder &builder);
   hw::OutputFileAttr getOutputFile(Operation *origOp, StringAttr fileNameAttr,
                                    bool isCover = false);
-  // Check if module or any of its parents in the InstanceGraph is a DUT.
-  bool isDut(Operation *module);
 
   using BlackBoxReaderBase::inputPrefix;
 
@@ -101,18 +100,14 @@ private:
   /// The target directory for testbench files.
   StringRef testBenchDir;
 
-  /// The design-under-test (DUT) as indicated by the presence of a
-  /// "sifive.enterprise.firrtl.MarkDUTAnnotation".  This will be null if no
-  /// annotation is present.
-  FModuleLike dut;
-
   /// The file list file name (sic) for black boxes. If set, generates a file
   /// that lists all non-header source files for black boxes. Can be changed
   /// through `firrtl.transforms.BlackBoxResourceFileNameAnno` annotations.
   StringRef resourceFileName;
 
-  /// InstanceGraph to determine modules which are under the DUT.
+  /// Analyses used by this pass.
   InstanceGraph *instanceGraph;
+  InstanceInfo *instanceInfo;
 
   /// A cache of the modules which have been marked as DUT or a testbench.
   /// This is used to determine the output directory.
@@ -137,6 +132,7 @@ void BlackBoxReaderPass::runOnOperation() {
   CircuitNamespace ns(circuitOp);
 
   instanceGraph = &getAnalysis<InstanceGraph>();
+  instanceInfo = &getAnalysis<InstanceInfo>();
   auto context = &getContext();
 
   // If this pass has changed anything.
@@ -203,16 +199,6 @@ void BlackBoxReaderPass::runOnOperation() {
 
   // Newly generated IR will be placed at the end of the circuit.
   auto builder = circuitOp.getBodyBuilder();
-
-  // Do a shallow walk of the circuit to collect information necessary before we
-  // do real work.
-  for (auto &op : *circuitOp.getBodyBlock()) {
-    FModuleLike module = dyn_cast<FModuleLike>(op);
-    // Find the DUT if it exists or error if there are multiple DUTs.
-    if (module)
-      if (failed(extractDUT(module, dut)))
-        return signalPassFailure();
-  }
 
   LLVM_DEBUG(llvm::dbgs() << "Visiting extmodules:\n");
   auto bboxAnno =
@@ -312,7 +298,7 @@ void BlackBoxReaderPass::runOnOperation() {
   // If nothing has changed we can preserve the analysis.
   if (!anythingChanged)
     markAllAnalysesPreserved();
-  markAnalysesPreserved<InstanceGraph>();
+  markAnalysesPreserved<InstanceGraph, InstanceInfo>();
 
   // Clean up.
   emittedFileMap.clear();
@@ -405,6 +391,7 @@ hw::OutputFileAttr BlackBoxReaderPass::getOutputFile(Operation *origOp,
   auto ext = llvm::sys::path::extension(fileName);
   bool exclude = (ext == ".h" || ext == ".vh" || ext == ".svh");
   auto outDir = targetDir;
+
   // If the original operation has a specified output file that is not a
   // directory, then just use that.
   if (outputFile)
@@ -412,8 +399,10 @@ hw::OutputFileAttr BlackBoxReaderPass::getOutputFile(Operation *origOp,
   // In order to output into the testbench directory, we need to have a
   // testbench dir annotation, not have a blackbox target directory annotation
   // (or one set to the current directory), have a DUT annotation, and the
-  // module needs to be in or under the DUT.
-  else if (!testBenchDir.empty() && targetDir == "." && dut && !isDut(origOp))
+  // module needs to be in or under the effective design.
+  else if (!testBenchDir.empty() && targetDir == "." &&
+           !instanceInfo->allInstancesInEffectiveDesign(
+               cast<igraph::ModuleOpInterface>(origOp)))
     outDir = testBenchDir;
   else if (isCover)
     outDir = coverDir;
@@ -423,34 +412,6 @@ hw::OutputFileAttr BlackBoxReaderPass::getOutputFile(Operation *origOp,
   SmallString<128> outputFilePath(outDir);
   llvm::sys::path::append(outputFilePath, fileName);
   return hw::OutputFileAttr::getFromFilename(context, outputFilePath, exclude);
-}
-
-/// Return true if module is in the DUT hierarchy.
-/// NOLINTNEXTLINE(misc-no-recursion)
-bool BlackBoxReaderPass::isDut(Operation *module) {
-  // Check if result already cached.
-  auto iter = dutModuleMap.find(module);
-  if (iter != dutModuleMap.end())
-    return iter->getSecond();
-  // Any module with the dutAnno, is the DUT.
-  if (AnnotationSet::hasAnnotation(module, dutAnnoClass)) {
-    dutModuleMap[module] = true;
-    return true;
-  }
-  auto *node = instanceGraph->lookup(cast<igraph::ModuleOpInterface>(module));
-  bool anyParentIsDut = false;
-  if (node)
-    for (auto *u : node->uses()) {
-      if (cast<InstanceOp>(u->getInstance().getOperation()).getLowerToBind())
-        return false;
-      // Recursively check the parents.
-      auto dut = isDut(u->getInstance()->getParentOfType<FModuleOp>());
-      // Cache the result.
-      dutModuleMap[module] = dut;
-      anyParentIsDut |= dut;
-    }
-  dutModuleMap[module] = anyParentIsDut;
-  return anyParentIsDut;
 }
 
 //===----------------------------------------------------------------------===//

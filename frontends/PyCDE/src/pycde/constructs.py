@@ -135,7 +135,8 @@ def Reg(type: Type,
         clk: Signal = None,
         rst: Signal = None,
         rst_value=0,
-        ce: Signal = None):
+        ce: Signal = None,
+        name: str = None) -> Signal:
   """Declare a register. Must assign exactly once."""
 
   class RegisterValue(type._get_value_class()):
@@ -147,7 +148,7 @@ def Reg(type: Type,
       self._wire = None
 
   # Create a wire and register it.
-  wire = Wire(type)
+  wire = Wire(type, name)
   if rst_value is not None and not isinstance(rst_value, Signal):
     rst_value = type(rst_value)
   value = RegisterValue(wire.reg(clk=clk, rst=rst, rst_value=rst_value, ce=ce),
@@ -198,7 +199,7 @@ def ControlReg(clk: Signal,
                                                instance_name=name).out
 
 
-def Mux(sel: BitVectorSignal, *data_inputs: typing.List[Signal]):
+def Mux(sel: BitVectorSignal, *data_inputs: typing.List[Signal]) -> Signal:
   """Create a single mux from a list of values."""
   num_inputs = len(data_inputs)
   if num_inputs == 0:

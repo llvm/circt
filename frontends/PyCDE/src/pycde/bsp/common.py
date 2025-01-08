@@ -121,7 +121,7 @@ class ChannelMMIO(esi.ServiceImplementation):
   clk = Clock()
   rst = Input(Bits(1))
 
-  cmd = Input(esi.MMIOReadWriteCmdType)
+  cmd = Input(esi.MMIO.read_write.type)
 
   # Amount of register space each client gets. This is a GIANT HACK and needs to
   # be replaced by parameterizable services.

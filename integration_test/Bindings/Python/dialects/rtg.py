@@ -19,8 +19,8 @@ with Context() as ctx, Location.unknown():
     target = rtg.TargetOp('target_name', TypeAttr.get(dictTy))
     targetBlock = Block.create_at_start(target.bodyRegion, [])
     with InsertionPoint(targetBlock):
-      cpu0 = rtgtest.CPUDeclOp(cpuTy, 0)
-      cpu1 = rtgtest.CPUDeclOp(cpuTy, 1)
+      cpu0 = rtgtest.CPUDeclOp(0)
+      cpu1 = rtgtest.CPUDeclOp(1)
       rtg.YieldOp([cpu0, cpu1])
 
     test = rtg.TestOp('test_name', TypeAttr.get(dictTy))

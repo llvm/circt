@@ -117,18 +117,18 @@ private:
 class PyLocationVecIterator {
 public:
   /// Get item at the specified position, translating a nullptr to None.
-  static py::handle getItem(MlirAttribute locVec, intptr_t pos) {
+  static std::optional<MlirAttribute> getItem(MlirAttribute locVec,
+                                              intptr_t pos) {
     MlirAttribute loc = circtMSFTLocationVectorAttrGetElement(locVec, pos);
     if (loc.ptr == nullptr)
-      return py::none();
-    return py::detail::type_caster<MlirAttribute>().cast(
-        loc, py::return_value_policy::automatic, py::handle());
+      return std::nullopt;
+    return loc;
   }
 
   PyLocationVecIterator(MlirAttribute attr) : attr(attr) {}
   PyLocationVecIterator &dunderIter() { return *this; }
 
-  py::handle dunderNext() {
+  std::optional<MlirAttribute> dunderNext() {
     if (nextIndex >= circtMSFTLocationVectorAttrGetNumElements(attr)) {
       throw py::stop_iteration();
     }
