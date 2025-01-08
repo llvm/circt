@@ -228,14 +228,7 @@ LogicalResult instance_like_impl::verifyInstanceOfHWModule(
   auto modResultNames =
       ArrayAttr::get(instance->getContext(), mod.getOutputNames());
 
-
-  // note : getModuleType(module).getInputs() is before resolution, 
   ArrayRef<Type> resolvedModInputTypesRef = getModuleType(module).getInputs();
-
-  // for (auto type : getModuleType(module).getInputs()) {
-  //   llvm::errs() << "Input Type: " << type << "\n";
-  // }
-  // exit(0);
 
   SmallVector<Type> resolvedModInputTypes;
   if (parameters) {
@@ -246,7 +239,6 @@ LogicalResult instance_like_impl::verifyInstanceOfHWModule(
     resolvedModInputTypesRef = resolvedModInputTypes;
   }
 
-  // note: at this position, resolvedModInputTypesRef contains the resolved types of the module inputs
   if (failed(instance_like_impl::verifyInputs(
           argNames, modArgNames, inputs.getTypes(), resolvedModInputTypesRef,
           emitError)))
@@ -270,7 +262,6 @@ LogicalResult instance_like_impl::verifyInstanceOfHWModule(
   if (parameters) {
     SmallVector<Type> rawModParameters;
     SmallVector<Type> resolvedModParameters;
-    ArrayRef<Type> resolvedModParametersRefs;
 
     auto modParameters = module->getAttrOfType<ArrayAttr>("parameters");
     for (auto param : modParameters) {
@@ -278,14 +269,16 @@ LogicalResult instance_like_impl::verifyInstanceOfHWModule(
       rawModParameters.push_back(paramDecl.getType());
     }
 
+    // resolve parameters
     if (failed(instance_like_impl::resolveParametricTypes(
             instance->getLoc(), parameters, rawModParameters,
             resolvedModParameters, emitError)))
       return failure();
-    resolvedModParametersRefs = resolvedModParameters;
 
     // Check that the parameters are consistent with the referenced module.
-    if (failed(instance_like_impl::verifyParameters(parameters, modParameters, resolvedModParametersRefs, emitError)))
+    if (failed(instance_like_impl::verifyParameters(parameters, modParameters, 
+                                                    resolvedModParameters, 
+                                                    emitError)))
       return failure();
   }
 

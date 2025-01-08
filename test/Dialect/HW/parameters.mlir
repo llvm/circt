@@ -238,3 +238,13 @@ hw.module @NoneTypeParam<p1: none>() {}
 hw.module @ParamConcatInst() {
   hw.instance "inst" @NoneTypeParam<p1: none = #hw.param.expr.str.concat<"top", ".", "child">>() -> ()
 }
+
+// CHECK-LABEL: @param_in_param<
+hw.module.extern @param_in_param<DATA_RST_VALUE: !hw.int<#hw.param.decl.ref<"DATA_WIDTH">>, DATA_WIDTH: i32 = 32>(in %input : !hw.int<#hw.param.decl.ref<"DATA_WIDTH">>, in %clk : i1, in %rst : i1, out output : !hw.int<#hw.param.decl.ref<"DATA_WIDTH">>) attributes {verilogName = "param_in_param"}
+
+// CHECK-LABEL: @xx(
+// CHECK: %pipe_reg111.output = hw.instance "pipe_reg111" @param_in_param<DATA_RST_VALUE: i96 = 0, DATA_WIDTH: i32 = 96>(input: %input: i96, clk: %clk: i1, rst: %rst: i1) -> (output: i96)
+hw.module @xx(in %input : i96, in %clk : i1, in %rst : i1, out output : i96) {
+  %pipe_reg111.output = hw.instance "pipe_reg111" @param_in_param<DATA_RST_VALUE: i96 = 0, DATA_WIDTH: i32 = 96>(input: %input: i96, clk: %clk: i1, rst: %rst: i1) -> (output: i96)
+  hw.output %pipe_reg111.output : i96
+}
