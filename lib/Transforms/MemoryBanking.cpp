@@ -376,9 +376,10 @@ void MemoryBankingPass::runOnOperation() {
     DenseSet<Value> memrefsInPar = collectMemRefs(parOp);
 
     for (auto memrefVal : memrefsInPar) {
-      if (!memoryToBanks.contains(memrefVal))
-        memoryToBanks[memrefVal] =
-            createBanks(memrefVal, bankingFactor, bankingDimension);
+      auto [it, inserted] =
+          memoryToBanks.insert(std::make_pair(memrefVal, SmallVector<Value>{}));
+      if (inserted)
+        it->second = createBanks(memrefVal, bankingFactor, bankingDimension);
     }
   });
 
