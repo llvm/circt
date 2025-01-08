@@ -119,4 +119,13 @@ def IntCmpOp : SMTIntOp<"cmp", [Pure]> {
   let assemblyFormat = "$pred $lhs `,` $rhs attr-dict";
 }
 
+def Int2BVOp : SMTOp<"int2bv", [Pure]> {
+  let summary = "Convert an integer to an n-wide bitvector";
+  let arguments = (ins IntType:$input, ConfinedAttr<I32Attr, [IntNonNegative]>:$width);
+  let results = (outs BitVectorType:$result);
+  let assemblyFormat = "$input `width` $width attr-dict `:` qualified(type($result))";
+
+  let hasVerifier = true;
+}
+
 #endif // CIRCT_DIALECT_SMT_SMTINTOPS_TD

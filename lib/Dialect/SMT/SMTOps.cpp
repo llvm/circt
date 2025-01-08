@@ -468,5 +468,15 @@ void ExistsOp::build(
                               boundVarNames, patternBuilder, weight, noPattern);
 }
 
+//===----------------------------------------------------------------------===//
+// Int2BVOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult Int2BVOp::verify() {
+  if (getWidth() != getResult().getType().getWidth())
+    return emitOpError("given width and return type width must match");
+  return success();
+}
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/SMT/SMT.cpp.inc"

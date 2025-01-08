@@ -635,6 +635,10 @@ static LogicalResult emit(SolverOp solver, const SMTEmissionOptions &options,
       return op->emitError()
              << "solver must not contain any non-SMT operations";
 
+    if (isa<smt::Int2BVOp>(op))
+      return op->emitError(
+          "int2bv operations are not supported for SMTLIB emission");
+
     for (Type resTy : op->getResultTypes()) {
       auto sortTy = dyn_cast<SortType>(resTy);
       if (!sortTy)
