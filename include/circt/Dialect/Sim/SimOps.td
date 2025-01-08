@@ -13,11 +13,6 @@
 #ifndef CIRCT_DIALECT_SIM_SIMOPS_TD
 #define CIRCT_DIALECT_SIM_SIMOPS_TD
 
-include "mlir/Interfaces/SideEffectInterfaces.td"
-include "mlir/Interfaces/FunctionInterfaces.td"
-include "circt/Dialect/Sim/SimDialect.td"
-include "circt/Dialect/Sim/SimTypes.td"
-include "circt/Dialect/Seq/SeqTypes.td"
 include "circt/Dialect/HW/HWEnums.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
@@ -429,8 +424,8 @@ def TriggerSequenceOp : SimOp<"trigger_sequence", [
 def YieldSeqOp : SimOp<"yield_seq",[
   Terminator, HasParent<"circt::sim::TriggeredOp">
 ]> {
-  let summary = [{Yield results from a triggerd region with 'seq'
-   (i.e. register-like) semantics."}];
+  let summary =
+    "Yield results from a triggered region with sequential semantics.";
   let description = [{
     Terminates a triggered region and produces the given list of values.
     The results only become visible after all triggers and register updates
@@ -460,9 +455,8 @@ def TriggeredOp : SimOp<"triggered", [
   SingleBlockImplicitTerminator<"sim::YieldSeqOp">,
   HasParent<"circt::hw::HWModuleOp">
 ]> {
-  let summary = [{
-    Defines a procedure invoked on a given trigger and condition.
-  }];
+  let summary =
+    "Defines a procedure invoked on a given trigger and condition.";
   let description = [{
     Creates a procedural region which is invoked on a given trigger.
     The body region must complete without 'consuming' simulation time. It
