@@ -94,23 +94,75 @@ MemRefType computeBankedMemRefType(MemRefType originalType,
   return newMemRefType;
 }
 
+void decodeIndex(int64_t linIndex, ArrayRef<int64_t> shape,
+                 SmallVector<int64_t> &ndIndex) {
+  const unsigned rank = shape.size();
+  ndIndex.resize(rank);
+
+  // Go from last dimension to first (row-major decoding).
+  for (int d = rank - 1; d >= 0; --d) {
+    ndIndex[d] = linIndex % shape[d];
+    linIndex /= shape[d];
+  }
+}
+
 // Performs multi-dimensional slicing on `allAttrs` by extracting all elements
 // whose coordinates range from `bankCnt`*`bankingDimension` to
 // (`bankCnt`+1)*`bankingDimension` from `bankingDimension`'s dimension, leaving
 // other dimensions alone.
-SmallVector<Attribute> extractSubBlock(ArrayRef<Attribute> allAttrs,
-                                       ArrayRef<int64_t> memShape,
-                                       unsigned bankCnt,
-                                       unsigned bankingDimension,
-                                       unsigned bankingFactor) {
+SmallVector<Attribute> sliceSubBlock(ArrayRef<Attribute> allAttrs,
+                                     ArrayRef<int64_t> memShape,
+                                     unsigned bankingDimension,
+                                     unsigned bankingFactor) {
   for (unsigned i = 0; i < allAttrs.size(); ++i) {
     llvm::errs() << i << "'th attribute: " << allAttrs[i] << "\n";
   }
 
   unsigned bankSize = memShape[bankingDimension] / bankingFactor;
 
-  unsigned beginIdx = bankSize * bankCnt;
-  unsigned endIdx = bankSize * (bankCnt + 1);
+  auto totalSize = [](auto &&shape) {
+    size_t prod = 1;
+    for (auto s : shape)
+      prod *= s;
+    return prod;
+  };
+
+  size_t numElements = totalSize(memShape);
+  auto newShape = SmallVector<int64_t>(memShape.begin(), memShape.end());
+  newShape[bankingDimension] = memShape[bankingDimension] / bankingFactor;
+  size_t subNumElements = totalSize(newShape);
+
+  SmallVector<SmallVector<Attribute, 8>, 4> subBlocks;
+  subBlocks.resize(bankingFactor);
+
+  SmallVector<int64_t> ndIndex(memShape.size(), 0);
+  for (unsigned linIndex = 0; linIndex < numElements; ++linIndex) {
+    decodeIndex(linIndex, memShape, ndIndex);
+    unsigned subBlockIndex = ndIndex[bankingDimension] % bankingFactor;
+    subBlocks[subBlockIndex].push_back(allAttrs[linIndex]);
+  }
+
+  SmallVector<Attribute> result;
+  for (unsigned i = 0; i < bankingFactor; ++i) {
+    auto ctx =
+        subBlocks[i].empty() ? nullptr : subBlocks[i].front().getContext();
+    if (!ctx) {
+      result.push_back(ArrayAttr::get(ctx, {}));
+      continue;
+    }
+    auto subBlockAttr = ArrayAttr::get(ctx, subBlocks[i]);
+    result.push_back(subBlockAttr);
+  }
+
+  // unsigned beginIdx = bankSize * bankCnt;
+  // unsigned endIdx = bankSize * (bankCnt + 1);
+
+  llvm::errs() << "result is:\n";
+  for (auto res : result) {
+    llvm::errs() << res << "\n";
+  }
+
+  return result;
 }
 
 SmallVector<Value, 4>
@@ -176,10 +228,10 @@ MemoryBankingPass::createBanks(Value originalMem, uint64_t bankingFactor,
               memTy.getShape()[bankingDimension] / bankingFactor;
 
           OpBuilder::InsertPoint globalOpsInsertPt, getGlobalOpsInsertPt;
-          for (uint64_t bankCnt = 0; bankCnt < bankingFactor; ++bankCnt) {
-            auto subBlock = extractSubBlock(allAttrs, originalShape, bankCnt,
-                                            bankingDimension, bankingFactor);
+          auto subBlock = sliceSubBlock(allAttrs, originalShape,
+                                        bankingDimension, bankingFactor);
 
+          for (uint64_t bankCnt = 0; bankCnt < bankingFactor; ++bankCnt) {
             unsigned beginIdx = bankSize * bankCnt;
             unsigned endIdx = bankSize * (bankCnt + 1);
             SmallVector<Attribute, 8> extractedElements;
