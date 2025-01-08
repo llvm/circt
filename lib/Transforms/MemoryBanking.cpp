@@ -41,14 +41,10 @@ namespace {
 /// `bankingFactor` throughout the program.
 struct MemoryBankingPass
     : public circt::impl::MemoryBankingBase<MemoryBankingPass> {
-  MemoryBankingPass(const MemoryBankingPass &other)
-      : circt::impl::MemoryBankingBase<MemoryBankingPass>(other),
-        memoryToBanks(other.memoryToBanks), opsToErase(other.opsToErase),
-        globalCounter(other.globalCounter.load()) {}
+  MemoryBankingPass(const MemoryBankingPass &other) = default;
   explicit MemoryBankingPass(
       std::optional<unsigned> bankingFactor = std::nullopt,
-      std::optional<unsigned> bankingDimension = std::nullopt)
-      : circt::impl::MemoryBankingBase<MemoryBankingPass>(), globalCounter(0) {}
+      std::optional<unsigned> bankingDimension = std::nullopt) {}
 
   void runOnOperation() override;
 
@@ -94,12 +90,14 @@ MemRefType computeBankedMemRefType(MemRefType originalType,
   return newMemRefType;
 }
 
+// Updates n-dimensional index array `ndIndex` in-place by decoding the flat
+// index `linIndex` given the shape of the array. Assume row-major order.
 void decodeIndex(int64_t linIndex, ArrayRef<int64_t> shape,
                  SmallVector<int64_t> &ndIndex) {
   const unsigned rank = shape.size();
   ndIndex.resize(rank);
 
-  // Go from last dimension to first (row-major decoding).
+  // compute from last dimension to first because we assume row-major.
   for (int d = rank - 1; d >= 0; --d) {
     ndIndex[d] = linIndex % shape[d];
     linIndex /= shape[d];
@@ -110,16 +108,10 @@ void decodeIndex(int64_t linIndex, ArrayRef<int64_t> shape,
 // whose coordinates range from `bankCnt`*`bankingDimension` to
 // (`bankCnt`+1)*`bankingDimension` from `bankingDimension`'s dimension, leaving
 // other dimensions alone.
-SmallVector<Attribute> sliceSubBlock(ArrayRef<Attribute> allAttrs,
-                                     ArrayRef<int64_t> memShape,
-                                     unsigned bankingDimension,
-                                     unsigned bankingFactor) {
-  for (unsigned i = 0; i < allAttrs.size(); ++i) {
-    llvm::errs() << i << "'th attribute: " << allAttrs[i] << "\n";
-  }
-
-  unsigned bankSize = memShape[bankingDimension] / bankingFactor;
-
+SmallVector<SmallVector<Attribute>> sliceSubBlock(ArrayRef<Attribute> allAttrs,
+                                                  ArrayRef<int64_t> memShape,
+                                                  unsigned bankingDimension,
+                                                  unsigned bankingFactor) {
   auto totalSize = [](auto &&shape) {
     size_t prod = 1;
     for (auto s : shape)
@@ -128,11 +120,9 @@ SmallVector<Attribute> sliceSubBlock(ArrayRef<Attribute> allAttrs,
   };
 
   size_t numElements = totalSize(memShape);
-  auto newShape = SmallVector<int64_t>(memShape.begin(), memShape.end());
-  newShape[bankingDimension] = memShape[bankingDimension] / bankingFactor;
-  size_t subNumElements = totalSize(newShape);
-
-  SmallVector<SmallVector<Attribute, 8>, 4> subBlocks;
+  // `bankingFactor` number of flattened attributes that store the information
+  // in the original globalOp
+  SmallVector<SmallVector<Attribute>> subBlocks;
   subBlocks.resize(bankingFactor);
 
   SmallVector<int64_t> ndIndex(memShape.size(), 0);
@@ -142,32 +132,11 @@ SmallVector<Attribute> sliceSubBlock(ArrayRef<Attribute> allAttrs,
     subBlocks[subBlockIndex].push_back(allAttrs[linIndex]);
   }
 
-  SmallVector<Attribute> result;
-  for (unsigned i = 0; i < bankingFactor; ++i) {
-    auto ctx =
-        subBlocks[i].empty() ? nullptr : subBlocks[i].front().getContext();
-    if (!ctx) {
-      result.push_back(ArrayAttr::get(ctx, {}));
-      continue;
-    }
-    auto subBlockAttr = ArrayAttr::get(ctx, subBlocks[i]);
-    result.push_back(subBlockAttr);
-  }
-
-  // unsigned beginIdx = bankSize * bankCnt;
-  // unsigned endIdx = bankSize * (bankCnt + 1);
-
-  llvm::errs() << "result is:\n";
-  for (auto res : result) {
-    llvm::errs() << res << "\n";
-  }
-
-  return result;
+  return subBlocks;
 }
 
-SmallVector<Value, 4>
-MemoryBankingPass::createBanks(Value originalMem, uint64_t bankingFactor,
-                               unsigned bankingDimension) {
+SmallVector<Value, 4> createBanks(Value originalMem, uint64_t bankingFactor,
+                                  unsigned bankingDimension) {
   MemRefType originalMemRefType = cast<MemRefType>(originalMem.getType());
   MemRefType newMemRefType = computeBankedMemRefType(
       originalMemRefType, bankingFactor, bankingDimension);
@@ -224,22 +193,11 @@ MemoryBankingPass::createBanks(Value originalMem, uint64_t bankingFactor,
           for (auto attr : cstAttr.getValues<Attribute>())
             allAttrs.push_back(attr);
 
-          unsigned bankSize =
-              memTy.getShape()[bankingDimension] / bankingFactor;
+          auto subBlocks = sliceSubBlock(allAttrs, originalShape,
+                                         bankingDimension, bankingFactor);
 
           OpBuilder::InsertPoint globalOpsInsertPt, getGlobalOpsInsertPt;
-          auto subBlock = sliceSubBlock(allAttrs, originalShape,
-                                        bankingDimension, bankingFactor);
-
-          for (uint64_t bankCnt = 0; bankCnt < bankingFactor; ++bankCnt) {
-            unsigned beginIdx = bankSize * bankCnt;
-            unsigned endIdx = bankSize * (bankCnt + 1);
-            SmallVector<Attribute, 8> extractedElements;
-            for (unsigned i = 0; i < bankSize; i++) {
-              unsigned idx = bankCnt + bankingFactor * i;
-              extractedElements.push_back(allAttrs[idx]);
-            }
-
+          for (size_t bankCnt = 0; bankCnt < bankingFactor; ++bankCnt) {
             if (bankCnt == 0) {
               // initialize globalOp and getGlobalOp's insertion points
               builder.setInsertionPointAfter(globalOp);
@@ -250,18 +208,19 @@ MemoryBankingPass::createBanks(Value originalMem, uint64_t bankingFactor,
 
             // Prepare relevant information to create a new `GlobalOp`
             auto newMemRefTy =
-                MemRefType::get(SmallVector<int64_t>{endIdx - beginIdx},
-                                globalOpTy.getElementType());
+                MemRefType::get(newShape, globalOpTy.getElementType());
             auto newTypeAttr = TypeAttr::get(newMemRefTy);
             std::string newNameStr = llvm::formatv(
-                "{0}_{1}x{2}_{3}_{4}", globalOp.getConstantAttrName(),
-                endIdx - beginIdx, globalOpTy.getElementType(), bankCnt,
-                globalCounter++);
-            RankedTensorType tensorType = RankedTensorType::get(
-                {static_cast<int64_t>(extractedElements.size())},
-                globalOpTy.getElementType());
+                "{0}_{1}_{2}_{3}", globalOp.getConstantAttrName(),
+                llvm::join(llvm::map_range(
+                               newShape,
+                               [](int64_t dim) { return std::to_string(dim); }),
+                           "x"),
+                globalOpTy.getElementType(), bankCnt);
+            RankedTensorType tensorType =
+                RankedTensorType::get({newShape}, globalOpTy.getElementType());
             auto newInitValue =
-                DenseElementsAttr::get(tensorType, extractedElements);
+                DenseElementsAttr::get(tensorType, subBlocks[bankCnt]);
 
             // Create a new `GlobalOp`
             builder.restoreInsertionPoint(globalOpsInsertPt);
