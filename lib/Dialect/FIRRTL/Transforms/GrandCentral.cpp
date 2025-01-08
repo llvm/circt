@@ -642,6 +642,38 @@ private:
                  SmallVector<VerbatimXMRbuilder> &xmrElems,
                  SmallVector<InterfaceElemsBuilder> &interfaceBuilder);
 
+  // COPIES OF ABOVE FOR NEW FIRRTL.VIEW
+
+  /// Optionally build an AugmentedType from an attribute.  Return none if the
+  /// attribute is not a dictionary or if it does not match any of the known
+  /// templates for AugmentedTypes.
+  std::optional<Attribute> fromViewAttr(ViewIntrinsicOp view, Attribute attr);
+
+  /// Recursively examine an AugmentedType to populate the "mappings" file
+  /// (generate XMRs) for this interface.  This does not build new interfaces.
+  bool traverseViewField(Attribute field, VerbatimBuilder &path,
+                         SmallVector<VerbatimXMRbuilder> &xmrElems,
+                         SmallVector<InterfaceElemsBuilder> &interfaceBuilder,
+                         ViewIntrinsicOp view, size_t &idx);
+
+  /// Recursively examine an AugmentedType to both build new interfaces and
+  /// populate a "mappings" file (generate XMRs) using `traverseField`.  Return
+  /// the type of the field examined.
+  std::optional<TypeSum>
+  computeViewField(Attribute field, VerbatimBuilder &path,
+                   SmallVector<VerbatimXMRbuilder> &xmrElems,
+                   SmallVector<InterfaceElemsBuilder> &interfaceBuilder,
+                   ViewIntrinsicOp view, size_t &idx);
+
+  /// Recursively examine an AugmentedBundleType to both build new interfaces
+  /// and populate a "mappings" file (generate XMRs).  Return none if the
+  /// interface is invalid.
+  std::optional<StringAttr>
+  traverseViewBundle(AugmentedBundleTypeAttr bundle, VerbatimBuilder &path,
+                     SmallVector<VerbatimXMRbuilder> &xmrElems,
+                     SmallVector<InterfaceElemsBuilder> &interfaceBuilder,
+                     ViewIntrinsicOp view, size_t &idx);
+
   /// Return the module associated with this value.
   igraph::ModuleOpInterface getEnclosingModule(Value value,
                                                FlatSymbolRefAttr sym = {});
@@ -1227,6 +1259,54 @@ std::optional<Attribute> GrandCentralPass::fromAttr(Attribute attr) {
   return std::nullopt;
 }
 
+std::optional<Attribute> GrandCentralPass::fromViewAttr(ViewIntrinsicOp view,
+                                                        Attribute attr) {
+  auto dict = dyn_cast<DictionaryAttr>(attr);
+  if (!dict) {
+    view.emitError() << "attribute is not a dictionary: " << attr;
+    return std::nullopt;
+  }
+
+  auto clazz = dict.getAs<StringAttr>("class");
+  if (!clazz) {
+    view.emitError() << "missing 'class' key in " << dict;
+    return std::nullopt;
+  }
+
+  auto classBase = clazz.getValue();
+  classBase.consume_front("sifive.enterprise.grandcentral.Augmented");
+
+  if (classBase == "BundleType") {
+    if (dict.getAs<StringAttr>("defName") && dict.getAs<ArrayAttr>("elements"))
+      return AugmentedBundleTypeAttr::get(&getContext(), dict);
+    view.emitError() << "has an invalid AugmentedBundleType that does not "
+                        "contain 'defName' and 'elements' fields: "
+                     << dict;
+  } else if (classBase == "VectorType") {
+    if (dict.getAs<StringAttr>("name") && dict.getAs<ArrayAttr>("elements"))
+      return AugmentedVectorTypeAttr::get(&getContext(), dict);
+    view.emitError() << "has an invalid AugmentedVectorType that does not "
+                        "contain 'name' and 'elements' fields: "
+                     << dict;
+  } else if (classBase == "GroundType") {
+    auto id = dict.getAs<IntegerAttr>("id");
+    if (id) {
+      view.emitError()
+          << "has 'id' field which is only for old annotation encoding";
+      return std::nullopt;
+    }
+    auto name = dict.getAs<StringAttr>("name");
+    if (name)
+      return AugmentedGroundTypeAttr::get(&getContext(), dict);
+    view.emitError() << "has an invalid AugmentedGroundType that does not "
+                        "contain 'name' field:  "
+                     << dict;
+  } else {
+    view.emitError() << "has an invalid AugmentedType";
+  }
+  return std::nullopt;
+}
+
 bool GrandCentralPass::traverseField(
     Attribute field, IntegerAttr id, VerbatimBuilder &path,
     SmallVector<VerbatimXMRbuilder> &xmrElems,
@@ -1363,6 +1443,108 @@ bool GrandCentralPass::traverseField(
       .Default([](auto a) { return true; });
 }
 
+bool GrandCentralPass::traverseViewField(
+    Attribute field, VerbatimBuilder &path,
+    SmallVector<VerbatimXMRbuilder> &xmrElems,
+    SmallVector<InterfaceElemsBuilder> &interfaceBuilder, ViewIntrinsicOp view,
+    size_t &idx) {
+  return TypeSwitch<Attribute, bool>(field)
+      .Case<AugmentedGroundTypeAttr>([&](AugmentedGroundTypeAttr ground) {
+        // Grab next signal, increment index counter.
+        auto index = idx++;
+        if (index >= view.getNumOperands()) {
+          view.emitError("more ground types found than view has operands");
+          return false;
+        }
+
+        auto val = view.getOperand(index);
+        auto tpe = type_cast<FIRRTLBaseType>(val.getType());
+
+        // If the type is zero-width then do not emit an XMR.
+        if (!tpe.getBitWidthOrSentinel())
+          return true;
+
+        /// Increment all the indices inside `{{`, `}}` by one. This is to
+        /// indicate that a value is added to the `substitutions` of the
+        /// verbatim op, other than the symbols.
+        auto getStrAndIncrementIds = [&](StringRef base) -> StringAttr {
+          SmallString<128> replStr;
+          StringRef begin = "{{";
+          StringRef end = "}}";
+          // The replacement string.
+          size_t from = 0;
+          while (from < base.size()) {
+            // Search for the first `{{` and `}}`.
+            size_t beginAt = base.find(begin, from);
+            size_t endAt = base.find(end, from);
+            // If not found, then done.
+            if (beginAt == StringRef::npos || endAt == StringRef::npos ||
+                (beginAt > endAt)) {
+              replStr.append(base.substr(from));
+              break;
+            }
+            // Copy the string as is, until the `{{`.
+            replStr.append(base.substr(from, beginAt - from));
+            // Advance `from` to the character after the `}}`.
+            from = endAt + 2;
+            auto idChar = base.substr(beginAt + 2, endAt - beginAt - 2);
+            int idNum;
+            bool failed = idChar.getAsInteger(10, idNum);
+            (void)failed;
+            assert(!failed && "failed to parse integer from verbatim string");
+            // Now increment the id and append.
+            replStr.append("{{");
+            Twine(idNum + 1).toVector(replStr);
+            replStr.append("}}");
+          }
+          return StringAttr::get(&getContext(), "assign " + replStr + ";");
+        };
+
+        // This is the new style of XMRs using RefTypes.  The value substitution
+        // index is set to -1, as it will be incremented when generating the
+        // string.
+        // Generate the path from the LCA to the module that contains the leaf.
+        path += " = {{-1}}";
+
+        // Assemble the verbatim op.
+        auto mod = view->getParentOfType<FModuleOp>();
+        xmrElems.emplace_back(val, getStrAndIncrementIds(path.getString()),
+                              ArrayAttr::get(&getContext(), path.getSymbols()),
+                              mod);
+        return true;
+      })
+      .Case<AugmentedVectorTypeAttr>([&](auto vector) {
+        bool notFailed = true;
+        auto elements = vector.getElements();
+        for (size_t i = 0, e = elements.size(); i != e; ++i) {
+          auto field = fromViewAttr(view, elements[i]);
+          if (!field)
+            return false;
+          notFailed &= traverseViewField(
+              *field, path.snapshot().append("[" + Twine(i) + "]"), xmrElems,
+              interfaceBuilder, view, idx);
+        }
+        return notFailed;
+      })
+      .Case<AugmentedBundleTypeAttr>([&](AugmentedBundleTypeAttr bundle) {
+        bool anyFailed = true;
+        for (auto element : bundle.getElements()) {
+          auto field = fromViewAttr(view, element);
+          if (!field)
+            return false;
+          auto name = cast<DictionaryAttr>(element).getAs<StringAttr>("name");
+          if (!name)
+            name = cast<DictionaryAttr>(element).getAs<StringAttr>("defName");
+          anyFailed &= traverseViewField(
+              *field, path.snapshot().append("." + name.getValue()), xmrElems,
+              interfaceBuilder, view, idx);
+        }
+
+        return anyFailed;
+      })
+      .Default([](auto a) { return true; });
+}
+
 std::optional<TypeSum> GrandCentralPass::computeField(
     Attribute field, IntegerAttr id, VerbatimBuilder &path,
     SmallVector<VerbatimXMRbuilder> &xmrElems,
@@ -1429,6 +1611,73 @@ std::optional<TypeSum> GrandCentralPass::computeField(
           });
 }
 
+std::optional<TypeSum> GrandCentralPass::computeViewField(
+    Attribute field, VerbatimBuilder &path,
+    SmallVector<VerbatimXMRbuilder> &xmrElems,
+    SmallVector<InterfaceElemsBuilder> &interfaceBuilder, ViewIntrinsicOp view,
+    size_t &idx) {
+  return TypeSwitch<Attribute, std::optional<TypeSum>>(field)
+      .Case<AugmentedGroundTypeAttr>(
+          [&](AugmentedGroundTypeAttr ground) -> std::optional<TypeSum> {
+            // Traverse to generate mappings.
+            auto index = idx;
+            if (!traverseViewField(field, path, xmrElems, interfaceBuilder,
+                                   view, idx))
+              return std::nullopt;
+
+            auto val = view.getOperand(index);
+            auto tpe = dyn_cast<FIRRTLBaseType>(val.getType());
+            if (!tpe || !tpe.isGround()) {
+              mlir::emitError(val.getLoc(), "cannot be added to interface, "
+                                            "because it is not a ground type")
+                  .attachNote(view.getLoc())
+                  .append("interface part of view");
+              return std::nullopt;
+            }
+
+            return TypeSum(
+                IntegerType::get(&getContext(), tpe.getBitWidthOrSentinel()));
+          })
+      .Case<AugmentedVectorTypeAttr>(
+          [&](AugmentedVectorTypeAttr vector) -> std::optional<TypeSum> {
+            auto elements = vector.getElements();
+            if (elements.empty())
+              llvm::report_fatal_error(
+                  "unexpected empty augmented vector in GrandCentral View");
+            auto firstElement = fromViewAttr(view, elements[0]);
+            if (!firstElement)
+              return std::nullopt;
+            auto elementType = computeViewField(
+                *firstElement, path.snapshot().append("[" + Twine(0) + "]"),
+                xmrElems, interfaceBuilder, view, idx);
+            if (!elementType)
+              return std::nullopt;
+
+            for (size_t i = 1, e = elements.size(); i != e; ++i) {
+              auto subField = fromViewAttr(view, elements[i]);
+              if (!subField)
+                return std::nullopt;
+              (void)traverseViewField(
+                  *subField, path.snapshot().append("[" + Twine(i) + "]"),
+                  xmrElems, interfaceBuilder, view, idx);
+            }
+
+            if (auto *tpe = std::get_if<Type>(&*elementType))
+              return TypeSum(
+                  hw::UnpackedArrayType::get(*tpe, elements.getValue().size()));
+            auto str = std::get<VerbatimType>(*elementType);
+            str.dimensions.push_back(elements.getValue().size());
+            return TypeSum(str);
+          })
+      .Case<AugmentedBundleTypeAttr>(
+          [&](AugmentedBundleTypeAttr bundle) -> TypeSum {
+            auto ifaceName = traverseViewBundle(bundle, path, xmrElems,
+                                                interfaceBuilder, view, idx);
+            assert(ifaceName && *ifaceName);
+            return VerbatimType({ifaceName->str(), true});
+          });
+}
+
 /// Traverse an Annotation that is an AugmentedBundleType.  During traversal,
 /// construct any discovered SystemVerilog interfaces.  If this is the root
 /// interface, instantiate that interface in the companion. Recurse into fields
@@ -1463,6 +1712,51 @@ std::optional<StringAttr> GrandCentralPass::traverseBundle(
     auto elementType = computeField(
         *field, id, path.snapshot().append(".").append(name.getValue()),
         xmrElems, interfaceBuilder);
+    if (!elementType)
+      return std::nullopt;
+    StringAttr description =
+        cast<DictionaryAttr>(element).getAs<StringAttr>("description");
+    interfaceBuilder[lastIndex].elementsList.emplace_back(description, name,
+                                                          *elementType);
+  }
+  return iFaceName;
+}
+
+/// Traverse an attribute that is an AugmentedBundleType.  During traversal,
+/// construct any discovered SystemVerilog interfaces.  If this is the root
+/// interface, instantiate that interface in the companion. Recurse into fields
+/// of the AugmentedBundleType to construct nested interfaces and generate
+/// stringy-typed SystemVerilog hierarchical references to drive the
+/// interface. Returns false on any failure and true on success.
+std::optional<StringAttr> GrandCentralPass::traverseViewBundle(
+    AugmentedBundleTypeAttr bundle, VerbatimBuilder &path,
+    SmallVector<VerbatimXMRbuilder> &xmrElems,
+    SmallVector<InterfaceElemsBuilder> &interfaceBuilder, ViewIntrinsicOp view,
+    size_t &idx) {
+
+  unsigned lastIndex = interfaceBuilder.size();
+  auto iFaceName = StringAttr::get(
+      &getContext(), getNamespace().newName(getInterfaceName(bundle)));
+  interfaceBuilder.emplace_back(iFaceName, IntegerAttr() /* XXX */);
+
+  for (auto element : bundle.getElements()) {
+    auto field = fromViewAttr(view, element);
+    if (!field)
+      return std::nullopt;
+
+    auto name = cast<DictionaryAttr>(element).getAs<StringAttr>("name");
+    // auto signalSym = hw::InnerRefAttr::get(iface.sym_nameAttr(), name);
+    // TODO: The `append(name.getValue())` in the following should actually be
+    // `append(signalSym)`, but this requires that `computeField` and the
+    // functions it calls always return a type for which we can construct an
+    // `InterfaceSignalOp`. Since nested interface instances are currently
+    // busted (due to the interface being a symbol table), this doesn't work at
+    // the moment. Passing a `name` works most of the time, but can be brittle
+    // if the interface field requires renaming in the output (e.g. due to
+    // naming conflicts).
+    auto elementType = computeViewField(
+        *field, path.snapshot().append(".").append(name.getValue()), xmrElems,
+        interfaceBuilder, view, idx);
     if (!elementType)
       return std::nullopt;
     StringAttr description =
@@ -1595,10 +1889,14 @@ void GrandCentralPass::runOnOperation() {
     llvm::dbgs() << "\n";
   });
 
+  // Scan entire design for View operations.
+  SmallVector<ViewIntrinsicOp> views;
+  circuitOp.walk([&views](ViewIntrinsicOp view) { views.push_back(view); });
+
   // Exit immediately if no annotations indicative of interfaces that need to be
   // built exist.  However, still generate the YAML file if the annotation for
   // this was passed in because some flows expect this.
-  if (worklist.empty()) {
+  if (worklist.empty() && views.empty()) {
     SmallVector<sv::InterfaceOp, 0> interfaceVec;
     emitHierarchyYamlFile(interfaceVec);
     return markAllAnalysesPreserved();
@@ -2176,6 +2474,125 @@ void GrandCentralPass::runOnOperation() {
     if (!instanceInfo->allInstancesUnderEffectiveDut(
             companionIDMap[bundle.getID()].companion))
       continue;
+  }
+
+  for (auto view : views) {
+    auto bundle = view.getAugmentedType();
+
+    assert(!bundle.isRoot() && "'id' found in firrtl.view");
+
+    auto viewParentMod = view->getParentOfType<FModuleLike>();
+    auto symbolName = getModuleNamespace(viewParentMod)
+                          .newName("__" + getInterfaceName(bundle) + "__");
+
+    // Recursively walk the AugmentedBundleType to generate interfaces and XMRs.
+    // Error out if this returns None (indicating that the view is
+    // malformed in some way).  A good error message is generated inside
+    // `traverseViewBundle` or the functions it calls.
+    auto instanceSymbol =
+        hw::InnerRefAttr::get(SymbolTable::getSymbolName(viewParentMod),
+                              StringAttr::get(&getContext(), symbolName));
+    VerbatimBuilder::Base verbatimData;
+    VerbatimBuilder verbatim(verbatimData);
+    verbatim += instanceSymbol;
+    // List of interface elements.
+
+    SmallVector<VerbatimXMRbuilder> xmrElems;
+    SmallVector<InterfaceElemsBuilder> interfaceBuilder;
+
+    size_t index = 0;
+    auto ifaceName = traverseViewBundle(bundle, verbatim, xmrElems,
+                                        interfaceBuilder, view, index);
+    if (!ifaceName) {
+      removalError = true;
+      continue;
+    }
+    assert(index == view.getNumOperands());
+
+    if (interfaceBuilder.empty())
+      continue;
+    ImplicitLocOpBuilder viewBuilder(view.getLoc(), view);
+    viewBuilder.setInsertionPointAfter(view);
+
+    // Generate gathered XMR's.
+    for (auto xmrElem : xmrElems)
+      viewBuilder.create<sv::VerbatimOp>(xmrElem.str, xmrElem.val,
+                                         xmrElem.syms);
+    numXMRs += xmrElems.size();
+
+    sv::InterfaceOp topIface;
+    for (const auto &ifaceBuilder : interfaceBuilder) {
+      auto builder = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
+      auto loc = getOperation().getLoc();
+      sv::InterfaceOp iface =
+          builder.create<sv::InterfaceOp>(loc, ifaceBuilder.iFaceName);
+      if (!topIface)
+        topIface = iface;
+      ++numInterfaces;
+
+      iface.setCommentAttr(builder.getStringAttr("VCS coverage exclude_file"));
+      builder.setInsertionPointToEnd(
+          cast<sv::InterfaceOp>(iface).getBodyBlock());
+      interfaceMap[FlatSymbolRefAttr::get(builder.getContext(),
+                                          ifaceBuilder.iFaceName)] = iface;
+      for (auto elem : ifaceBuilder.elementsList) {
+
+        auto uloc = builder.getUnknownLoc();
+
+        auto description = elem.description;
+
+        if (description) {
+          auto descriptionOp = builder.create<sv::VerbatimOp>(
+              uloc, ("// " + cleanupDescription(description.getValue())));
+
+          // If we need to generate a YAML representation of this interface,
+          // then add an attribute indicating that this `sv::VerbatimOp` is
+          // actually a description.
+          if (maybeHierarchyFileYAML)
+            descriptionOp->setAttr("firrtl.grandcentral.yaml.type",
+                                   builder.getStringAttr("description"));
+        }
+        if (auto *str = std::get_if<VerbatimType>(&elem.elemType)) {
+          auto instanceOp = builder.create<sv::VerbatimOp>(
+              uloc, str->toStr(elem.elemName.getValue()));
+
+          // If we need to generate a YAML representation of the interface, then
+          // add attributes that describe what this `sv::VerbatimOp` is.
+          if (maybeHierarchyFileYAML) {
+            if (str->instantiation)
+              instanceOp->setAttr("firrtl.grandcentral.yaml.type",
+                                  builder.getStringAttr("instance"));
+            else
+              instanceOp->setAttr("firrtl.grandcentral.yaml.type",
+                                  builder.getStringAttr("unsupported"));
+            instanceOp->setAttr("firrtl.grandcentral.yaml.name", elem.elemName);
+            instanceOp->setAttr("firrtl.grandcentral.yaml.dimensions",
+                                builder.getI32ArrayAttr(str->dimensions));
+            instanceOp->setAttr(
+                "firrtl.grandcentral.yaml.symbol",
+                FlatSymbolRefAttr::get(builder.getContext(), str->str));
+          }
+          continue;
+        }
+
+        auto tpe = std::get<Type>(elem.elemType);
+        builder.create<sv::InterfaceSignalOp>(uloc, elem.elemName.getValue(),
+                                              tpe);
+      }
+    }
+
+    ++numViews;
+
+    interfaceVec.push_back(topIface);
+
+    // Instantiate the interface before the view and the XMR's we inserted
+    // above.
+    viewBuilder.setInsertionPoint(view);
+    viewBuilder.create<sv::InterfaceInstanceOp>(
+        topIface.getInterfaceType(), view.getName(),
+        hw::InnerSymAttr::get(builder.getStringAttr(symbolName)));
+
+    view.erase();
   }
 
   emitHierarchyYamlFile(interfaceVec);
