@@ -1,4 +1,5 @@
 // RUN: circt-opt %s -split-input-file -memory-banking="banking-factor=2 dimension=1" | FileCheck %s --check-prefix RANK2-BANKDIM1
+// RUN: circt-opt %s -split-input-file -memory-banking="banking-factor=2" | FileCheck %s --check-prefix GETGLOBAL
 
 // RANK2-BANKDIM1: #[[$ATTR_0:.+]] = affine_map<(d0, d1) -> (d1 mod 2)>
 // RANK2-BANKDIM1: #[[$ATTR_1:.+]] = affine_map<(d0, d1) -> (d1 floordiv 2)>
@@ -71,5 +72,50 @@ func.func @rank_two_bank_dim1(%arg0: memref<8x6xf32>, %arg1: memref<8x6xf32>) ->
     }
   }
   return %mem : memref<8x6xf32>
+}
+
+// -----
+
+// GETGLOBAL-LABEL:   memref.global "private" constant @constant_2x8_f32_0 : memref<2x8xf32> = dense<{{\[\[}}8.000000e+00, -2.000000e+00, -2.000000e+00, -1.000000e+00, -3.000000e+00, -2.000000e+00, 3.000000e+00, 6.000000e+00], [9.000000e+00, -1.000000e+00, -2.000000e+00, -2.000000e+00, -2.000000e+00, -2.000000e+00, -1.000000e+00, -2.000000e+00]]>
+// GETGLOBAL:         memref.global "private" constant @constant_2x8_f32_1 : memref<2x8xf32> = dense<{{\[\[}}1.000000e+00, -3.000000e+00, -2.000000e+00, -1.000000e+00, 5.000000e+00, -3.000000e+00, -1.000000e+00, -2.000000e+00], [2.000000e+00, -7.000000e+00, 3.000000e+00, 1.000000e+00, -2.000000e+00, 2.000000e+00, -9.000000e+00, -1.000000e+00]]>
+// GETGLOBAL:         memref.global "private" constant @constant_4x6_f32_0 : memref<4x6xf32> = dense<{{\[\[}}2.000000e+00, -2.000000e+00, -4.000000e+00, -1.000000e+00, -3.000000e+00, 3.000000e+00], [2.000000e+00, -2.000000e+00, 1.000000e+00, -1.000000e+00, 1.000000e+00, -8.000000e+00], [3.000000e+00, -3.000000e+00, -4.000000e+00, -3.000000e+00, -2.000000e+00, 1.000000e+00], [2.000000e+00, -9.000000e+00, 2.000000e+00, -3.000000e+00, -2.000000e+00, 1.000000e+00]]>
+// GETGLOBAL:         memref.global "private" constant @constant_4x6_f32_1 : memref<4x6xf32> = dense<{{\[\[}}1.000000e+00, 1.000000e+00, 1.000000e+00, -7.000000e+00, 3.000000e+00, -2.000000e+00], [3.000000e+00, -2.000000e+00, -2.000000e+00, -2.000000e+00, 3.000000e+00, 1.000000e+00], [1.000000e+00, 3.000000e+00, -2.000000e+00, -2.000000e+00, 2.000000e+00, -1.000000e+00], [8.000000e+00, -1.000000e+00, 2.000000e+00, 2.000000e+00, -2.000000e+00, -2.000000e+00]]>
+module {
+  memref.global "private" constant @__constant_4x8xf32 : memref<4x8xf32> = dense<[
+    [8.0,  -2.0, -2.0, -1.0, -3.0, -2.0,  3.0,  6.0],
+    [1.0,  -3.0, -2.0, -1.0,  5.0, -3.0, -1.0, -2.0],
+    [9.0,  -1.0, -2.0, -2.0, -2.0, -2.0, -1.0, -2.0],
+    [2.0,  -7.0,  3.0,  1.0, -2.0,  2.0, -9.0, -1.0]
+  ]>
+  memref.global "private" constant @__constant_8x6xf32 : memref<8x6xf32> = dense<[
+    [2.0,  -2.0, -4.0, -1.0, -3.0,  3.0],
+    [1.0,   1.0,  1.0, -7.0,  3.0, -2.0],
+    [2.0,  -2.0,  1.0, -1.0,  1.0, -8.0],
+    [3.0,  -2.0, -2.0, -2.0,  3.0,  1.0],
+    [3.0,  -3.0, -4.0, -3.0, -2.0,  1.0],
+    [1.0,   3.0, -2.0, -2.0,  2.0, -1.0],
+    [2.0,  -9.0,  2.0, -3.0, -2.0,  1.0],
+    [8.0,  -1.0,  2.0,  2.0, -2.0, -2.0]
+  ]>
+  func.func @main() {
+    %cst = arith.constant 0.000000e+00 : f32
+    %0 = memref.get_global @__constant_8x6xf32 : memref<8x6xf32>
+    %2 = memref.get_global @__constant_4x8xf32 : memref<4x8xf32>
+    %alloc = memref.alloc() : memref<6x8xf32>
+    affine.parallel (%arg2) = (0) to (6) {
+      affine.parallel (%arg3) = (0) to (8) {
+        %4 = affine.load %0[%arg3, %arg2] : memref<8x6xf32>
+        affine.store %4, %alloc[%arg2, %arg3] : memref<6x8xf32>
+      }
+    }
+    %alloc_5 = memref.alloc() : memref<8x4xf32>
+    affine.parallel (%arg2) = (0) to (8) {
+      affine.parallel (%arg3) = (0) to (4) {
+        %4 = affine.load %2[%arg3, %arg2] : memref<4x8xf32>
+        affine.store %4, %alloc_5[%arg2, %arg3] : memref<8x4xf32>
+      }
+    }
+    return
+  }
 }
 
