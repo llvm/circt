@@ -326,6 +326,33 @@ static LogicalResult collapseControl(OpTy controlOp,
   return failure();
 }
 
+// Remove duplicates from a parallel operation. This may inadvertently occur
+// during lowering.
+template <typename OpTy>
+static LogicalResult deduplicate(OpTy parOp, PatternRewriter &rewriter) {
+  static_assert(IsAny<OpTy, ParOp, StaticParOp>(),
+                "requires a parallel operation");
+  auto *body = parOp.getBodyBlock();
+  if (body->getOperations().size() < 2)
+    return failure();
+
+  LogicalResult result = LogicalResult::failure();
+  SetVector<StringRef> members;
+  for (auto &op : make_early_inc_range(*body)) {
+    auto enableOp = dyn_cast<EnableOp>(&op);
+    if (enableOp == nullptr)
+      continue;
+    StringRef groupName = enableOp.getGroupName();
+    if (members.contains(groupName)) {
+      rewriter.eraseOp(enableOp);
+      result = LogicalResult::success();
+      continue;
+    }
+    members.insert(groupName);
+  }
+  return result;
+}
+
 template <typename OpTy>
 static LogicalResult emptyControl(OpTy controlOp, PatternRewriter &rewriter) {
   if (controlOp.getBodyBlock()->empty()) {
@@ -942,24 +969,11 @@ void StaticSeqOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 // ParOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult ParOp::verify() {
-  llvm::SmallSet<StringRef, 8> groupNames;
-
-  // Add loose requirement that the body of a ParOp may not enable the same
-  // Group more than once, e.g. calyx.par { calyx.enable @G calyx.enable @G }
-  for (EnableOp op : getBodyBlock()->getOps<EnableOp>()) {
-    StringRef groupName = op.getGroupName();
-    if (groupNames.count(groupName))
-      return emitOpError() << "cannot enable the same group: \"" << groupName
-                           << "\" more than once.";
-    groupNames.insert(groupName);
-  }
-
-  return success();
-}
+LogicalResult ParOp::verify() { return success(); }
 
 void ParOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                         MLIRContext *context) {
+  patterns.add(deduplicate<ParOp>);
   patterns.add(collapseControl<ParOp>);
   patterns.add(emptyControl<ParOp>);
   patterns.insert<CollapseUnaryControl<ParOp>>(context);
@@ -970,18 +984,6 @@ void ParOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 //===----------------------------------------------------------------------===//
 
 LogicalResult StaticParOp::verify() {
-  llvm::SmallSet<StringRef, 8> groupNames;
-
-  // Add loose requirement that the body of a ParOp may not enable the same
-  // Group more than once, e.g. calyx.par { calyx.enable @G calyx.enable @G }
-  for (EnableOp op : getBodyBlock()->getOps<EnableOp>()) {
-    StringRef groupName = op.getGroupName();
-    if (groupNames.count(groupName))
-      return emitOpError() << "cannot enable the same group: \"" << groupName
-                           << "\" more than once.";
-    groupNames.insert(groupName);
-  }
-
   // static par must only have static control in it
   auto &ops = (*this).getBodyBlock()->getOperations();
   for (Operation &op : ops) {
@@ -997,6 +999,7 @@ void StaticParOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                               MLIRContext *context) {
   patterns.add(collapseControl<StaticParOp>);
   patterns.add(emptyControl<StaticParOp>);
+  patterns.add(deduplicate<StaticParOp>);
   patterns.insert<CollapseUnaryControl<StaticParOp>>(context);
 }
 
