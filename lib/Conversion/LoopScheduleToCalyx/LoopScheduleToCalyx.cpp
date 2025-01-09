@@ -1166,10 +1166,9 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
     }
     doneOp.getSrcMutable().assign(pipelineRegister.getDone());
 
-    // Remove the old register completely if it has no uses.
-    if (tempReg->use_empty()) {
+    // Remove the old register if it has no more uses.
+    if (tempReg->use_empty())
       rewriter.eraseOp(tempReg);
-    }
 
     return group;
   }

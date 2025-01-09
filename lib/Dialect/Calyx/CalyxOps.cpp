@@ -342,13 +342,11 @@ static LogicalResult deduplicate(OpTy parOp, PatternRewriter &rewriter) {
     auto enableOp = dyn_cast<EnableOp>(&op);
     if (enableOp == nullptr)
       continue;
-    StringRef groupName = enableOp.getGroupName();
-    if (members.contains(groupName)) {
+    bool inserted = members.insert(enableOp.getGroupName());
+    if (!inserted) {
       rewriter.eraseOp(enableOp);
       result = LogicalResult::success();
-      continue;
     }
-    members.insert(groupName);
   }
   return result;
 }
