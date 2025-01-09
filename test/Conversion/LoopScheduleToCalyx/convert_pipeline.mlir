@@ -267,3 +267,40 @@ module {
   }
 }
 
+// -----
+
+// Pipeline register to pipeline register writes are valid.
+
+//CHECK:  calyx.group @bb0_3 {
+//CHECK-NEXT:        calyx.assign %stage_1_register_0_reg.in = %stage_0_register_0_reg.out : i32
+//CHECK-NEXT:        calyx.assign %stage_1_register_0_reg.write_en = %true : i1
+//CHECK-NEXT:        calyx.group_done %stage_1_register_0_reg.done : i1
+//CHECK-NEXT:      }
+//CHECK-NEXT:    }
+module {
+  func.func @gemm(%arg0: i32, %arg1: memref<30x30xi32>) attributes {llvm.linkage = #llvm.linkage<external>} {
+    %alloca = memref.alloca() : memref<30x30xi32>
+    cf.br ^bb4
+  ^bb4:
+    %0 = arith.constant 0 : index
+    %c1_5 = arith.constant 1 : index
+    loopschedule.pipeline II =  2 trip_count =  20 iter_args(%arg5 = %0) : (index) -> () {
+      %6 = arith.cmpi ult, %arg5, %0 : index
+      loopschedule.register %6 : i1
+    } do {
+      %6:2 = loopschedule.pipeline.stage start = 0 {
+        %10 = memref.load %arg1[%0, %0] : memref<30x30xi32>
+        %11 = arith.addi %arg5, %c1_5 : index
+        loopschedule.register %10, %11 : i32, index
+      } : i32, index
+      %7 = loopschedule.pipeline.stage start = 1 {
+        loopschedule.register %6#0 : i32
+      } : i32
+      loopschedule.terminator iter_args(%6#1), results() : (index) -> ()
+    }
+    cf.br ^bb6
+  ^bb6:
+    return
+  }
+}
+

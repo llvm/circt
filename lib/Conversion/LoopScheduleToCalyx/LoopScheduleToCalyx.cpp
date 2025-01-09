@@ -126,6 +126,20 @@ public:
     return pipelineRegs[stage];
   }
 
+  /// Returns whether this value is a pipeline register.
+  bool isPipelineReg(Value value) {
+    auto regOp = value.getDefiningOp<calyx::RegisterOp>();
+    if (regOp == nullptr)
+      return false;
+    for (const auto &[_, registers] : pipelineRegs) {
+      for (const auto &[_, r] : registers) {
+        if (r == regOp)
+          return true;
+      }
+    }
+    return false;
+  }
+
   /// Add a stage's groups to the pipeline prologue.
   void addPipelinePrologue(Operation *op, SmallVector<StringAttr> groupNames) {
     pipelinePrologue[op].push_back(groupNames);
@@ -1019,11 +1033,11 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
 
     // Collect group names for the prologue or epilogue.
     SmallVector<StringAttr> prologueGroups, epilogueGroups;
+    auto &state = getState<ComponentLoweringState>();
 
     auto updatePrologueAndEpilogue = [&](calyx::GroupOp group) {
       // Mark the group for scheduling in the pipeline's block.
-      getState<ComponentLoweringState>().addBlockScheduleable(stage->getBlock(),
-                                                              group);
+      state.addBlockScheduleable(stage->getBlock(), group);
 
       // Add the group to the prologue or epilogue for this stage as
       // necessary. The goal is to fill the pipeline so it will be in steady
@@ -1046,8 +1060,7 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
       // Covers the case where there are no values that need to be passed
       // through to the next stage, e.g., some intermediary store.
       for (auto &op : stage.getBodyBlock())
-        if (auto group = getState<ComponentLoweringState>()
-                             .getNonPipelinedGroupFrom<calyx::GroupOp>(&op))
+        if (auto group = state.getNonPipelinedGroupFrom<calyx::GroupOp>(&op))
           updatePrologueAndEpilogue(*group);
     }
 
@@ -1058,26 +1071,39 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
       // Get the pipeline register for that result.
       auto pipelineRegister = pipelineRegisters[i];
 
-      // Get the evaluating group for that value.
-      calyx::GroupInterface evaluatingGroup =
-          getState<ComponentLoweringState>().getEvaluatingGroup(value);
-
-      // Remember the final group for this stage result.
       calyx::GroupOp group;
+      // Get the evaluating group for that value.
+      std::optional<calyx::GroupInterface> evaluatingGroup =
+          state.findEvaluatingGroup(value);
+      if (!evaluatingGroup.has_value()) {
+        if (!state.isPipelineReg(value)) {
+          llvm::errs() << "unexpected: this is not a pipeline register and was "
+                          "not previously evaluated. Please open an issue.\n";
+          return LogicalResult::failure();
+        }
+        // This is a pipeline register being written to another pipeline
+        // register. We create a new group to build this assignment.
+        std::string groupName = state.getUniqueName(
+            loweringState().blockName(pipelineRegister->getBlock()));
+        group = calyx::createGroup<calyx::GroupOp>(
+            rewriter, state.getComponentOp(), pipelineRegister->getLoc(),
+            groupName);
+        calyx::buildAssignmentsForRegisterWrite(
+            rewriter, group, state.getComponentOp(), pipelineRegister, value);
+      } else {
+        // Stitch the register in, depending on whether the group was
+        // combinational or sequential.
+        auto combGroup =
+            dyn_cast<calyx::CombGroupOp>(evaluatingGroup->getOperation());
+        group = combGroup == nullptr
+                    ? replaceGroupRegister(*evaluatingGroup, pipelineRegister,
+                                           rewriter)
+                    : convertCombToSeqGroup(combGroup, pipelineRegister, value,
+                                            rewriter);
 
-      // Stitch the register in, depending on whether the group was
-      // combinational or sequential.
-      if (auto combGroup =
-              dyn_cast<calyx::CombGroupOp>(evaluatingGroup.getOperation()))
-        group =
-            convertCombToSeqGroup(combGroup, pipelineRegister, value, rewriter);
-      else
-        group =
-            replaceGroupRegister(evaluatingGroup, pipelineRegister, rewriter);
-
-      // Replace the stage result uses with the register out.
-      stage.getResult(i).replaceAllUsesWith(pipelineRegister.getOut());
-
+        // Replace the stage result uses with the register out.
+        stage.getResult(i).replaceAllUsesWith(pipelineRegister.getOut());
+      }
       updatePrologueAndEpilogue(group);
     }
 

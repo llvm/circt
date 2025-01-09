@@ -29,6 +29,7 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/JSON.h"
 
+#include <optional>
 #include <variant>
 
 namespace circt {
@@ -404,12 +405,13 @@ public:
   /// Put the name of the callee and the instance of the call into map.
   void addInstance(StringRef calleeName, InstanceOp instanceOp);
 
-  /// Return the group which evaluates the value v. Optionally, caller may
-  /// specify the expected type of the group.
+  /// Returns the evaluating group or None if not found.
   template <typename TGroupOp = calyx::GroupInterface>
-  TGroupOp getEvaluatingGroup(Value v) {
+  std::optional<TGroupOp> findEvaluatingGroup(Value v) {
     auto it = valueGroupAssigns.find(v);
-    assert(it != valueGroupAssigns.end() && "No group evaluating value!");
+    if (it == valueGroupAssigns.end())
+      return std::nullopt;
+
     if constexpr (std::is_same_v<TGroupOp, calyx::GroupInterface>)
       return it->second;
     else {
@@ -417,6 +419,15 @@ public:
       assert(group && "Actual group type differed from expected group type");
       return group;
     }
+  }
+
+  /// Return the group which evaluates the value v. Optionally, caller may
+  /// specify the expected type of the group.
+  template <typename TGroupOp = calyx::GroupInterface>
+  TGroupOp getEvaluatingGroup(Value v) {
+    std::optional<TGroupOp> group = findEvaluatingGroup<TGroupOp>(v);
+    assert(group.has_value() && "No group evaluating value!");
+    return *group;
   }
 
   template <typename T, typename = void>
