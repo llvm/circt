@@ -126,20 +126,6 @@ public:
     return pipelineRegs[stage];
   }
 
-  /// Returns whether this value is a pipeline register.
-  bool isPipelineReg(Value value) {
-    auto regOp = value.getDefiningOp<calyx::RegisterOp>();
-    if (regOp == nullptr)
-      return false;
-    for (const auto &[_, registers] : pipelineRegs) {
-      for (const auto &[_, r] : registers) {
-        if (r == regOp)
-          return true;
-      }
-    }
-    return false;
-  }
-
   /// Add a stage's groups to the pipeline prologue.
   void addPipelinePrologue(Operation *op, SmallVector<StringAttr> groupNames) {
     pipelinePrologue[op].push_back(groupNames);
