@@ -27,11 +27,16 @@
 #include "slang/ast/expressions/AssignmentExpressions.h"
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
 #include "slang/ast/symbols/InstanceSymbols.h"
+#include "slang/ast/symbols/PortSymbols.h"
 #include "slang/ast/symbols/VariableSymbols.h"
 #include "slang/diagnostics/DiagnosticClient.h"
 #include "slang/diagnostics/Diagnostics.h"
 #include "slang/driver/Driver.h"
 #include "slang/syntax/AllSyntax.h"
+#include "llvm/ADT/APInt.h"
+#include "llvm/ADT/ScopeExit.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringExtras.h"
 
 #include "slang/parsing/Preprocessor.h"
 #include "slang/syntax/SyntaxPrinter.h"
@@ -47,12 +52,14 @@
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Parallel.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SMLoc.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <cstdint>
+#include <iterator>
 #include <memory>
 #include <optional>
 
@@ -267,6 +274,8 @@ public:
   }
 
   llvm::SmallDenseMap<uint32_t, uint32_t> bufferIDMap;
+  llvm::StringMap<std::pair<uint32_t, SmallString<128>>> filePathMap;
+  llvm::SmallVector<SmallString<128>> originalFileRoots;
   UserHint userHint;
   slang::driver::Driver driver;
   llvm::SourceMgr sourceMgr;
@@ -334,7 +343,7 @@ public:
 class VerilogIndex {
 public:
   VerilogIndex(VerilogServerContext &context)
-      : context(context), intervalMap(allocator) {}
+      : context(context), intervalMap(allocator), intervalMapLoc(allocator) {}
 
   /// Initialize the index with the given ast::Module.
   void initialize(slang::ast::Compilation *compilation);
@@ -344,6 +353,14 @@ public:
   /// provided `loc` overlapped with.
   const VerilogIndexSymbol *lookup(SMLoc loc,
                                    SMRange *overlappedRange = nullptr) const;
+  struct EmittedLoc {
+    StringRef filePath;
+    uint32_t line;
+    uint32_t column;
+    SMRange range;
+  };
+
+  const EmittedLoc *lookupLoc(SMLoc loc) const;
 
   size_t size() const {
     return std::distance(intervalMap.begin(), intervalMap.end());
@@ -352,6 +369,8 @@ public:
   VerilogServerContext &getContext() { return context; }
   auto &getIntervalMap() { return intervalMap; }
   auto &getReferences() { return references; }
+
+  void parseEmittedLoc();
 
 private:
   /// The type of interval map used to store source references. SMRange is
@@ -371,14 +390,84 @@ private:
   /// interval.
   MapT intervalMap;
 
+  using MapTLoc =
+      llvm::IntervalMap<const char *, const EmittedLoc *,
+                        llvm::IntervalMapImpl::NodeSizer<
+                            const char *, const EmittedLoc *>::LeafSize,
+                        llvm::IntervalMapHalfOpenInfo<const char *>>;
+
+  // TODO: Merge them.
+  MapTLoc intervalMapLoc;
+
   llvm::SmallDenseMap<const VerilogIndexSymbol *,
                       SmallVector<slang::SourceLocation>>
       references;
+
+  // TODO: Use allocator.
+  SmallVector<std::unique_ptr<EmittedLoc>> emittedLocs;
 
   /// A mapping between definitions and their corresponding symbol.
   DenseMap<const void *, std::unique_ptr<VerilogIndexSymbol>> defToSymbol;
 };
 } // namespace
+
+void VerilogIndex::parseEmittedLoc() {
+  auto &sourceMgr = getContext().getSourceMgr();
+  auto *getMainBuffer = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
+  StringRef text(getMainBuffer->getBufferStart(),
+                 getMainBuffer->getBufferSize());
+
+  // SmallVector<EmittedLoc> emittedLocs;
+  // Find all the locations that are emitted by ExportVerilog.
+
+  while (true) {
+    // HACK: This is bad.
+    StringRef start = "// @[";
+    auto loc = text.find(start);
+    if (loc == StringRef::npos)
+      break;
+
+    text = text.drop_front(loc + start.size());
+    auto end = text.find_first_of(']');
+    if (end == StringRef::npos)
+      break;
+    auto toParse = text.take_front(end);
+    mlir::lsp::Logger::info("toParse: {}", toParse);
+    StringRef filePath;
+    StringRef line;
+    StringRef column;
+    bool first = true;
+    for (auto cur : llvm::split(toParse, ", ")) {
+      auto sep = llvm::split(cur, ":");
+      if (std::distance(sep.begin(), sep.end()) != 3)
+        continue;
+      bool addFile = first;
+      first = false;
+
+      auto it = sep.begin();
+      filePath = (*it).empty() ? filePath : *it;
+      line = *(++it);
+      column = *(++it);
+      mlir::lsp::Logger::info("filePath: {}", filePath);
+      mlir::lsp::Logger::info("line: {}", line);
+      mlir::lsp::Logger::info("column: {}", column);
+      uint32_t lineInt;
+      if (line.getAsInteger(10, lineInt))
+        continue;
+      uint32_t columnInt;
+      if (column.getAsInteger(10, columnInt))
+        continue;
+      auto *start = addFile ? filePath.data() : line.data();
+      auto *end = column.end();
+      EmittedLoc loc = {filePath, lineInt - 1, columnInt - 1,
+                        llvm::SMRange(SMLoc::getFromPointer(start),
+                                      SMLoc::getFromPointer(end + 1))};
+      emittedLocs.push_back(std::make_unique<EmittedLoc>(loc));
+      intervalMapLoc.insert(start, end, emittedLocs.back().get());
+    }
+  }
+}
+
 struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
   IndexVisitor(VerilogIndex &index) : index(index) {}
   VerilogIndex &index;
@@ -411,19 +500,82 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
     auto firstLoc = symbol.getSyntax()->getFirstToken().location();
     auto text =
         getContext().getSlangSourceManager().getSourceText(firstLoc.buffer());
-    auto nonWhitespaceLoc = firstLoc;
-    while (firstLoc.offset() > 0 && text[firstLoc.offset() - 1] != '\n') {
-      if (text[firstLoc.offset() - 1] != ' ' &&
-          text[firstLoc.offset() - 1] != '\t')
-        nonWhitespaceLoc = firstLoc - 1;
-      firstLoc -= 1;
+    {
+      auto nonWhitespaceLoc = firstLoc;
+      while (firstLoc.offset() > 0 && text[firstLoc.offset() - 1] != '\n') {
+        if (text[firstLoc.offset() - 1] != ' ' &&
+            text[firstLoc.offset() - 1] != '\t')
+          nonWhitespaceLoc = firstLoc - 1;
+        firstLoc -= 1;
+      }
+
+      handleSymbol(&symbol.body.asSymbol(),
+                   slang::SourceRange(nonWhitespaceLoc,
+                                      symbol.location + symbol.name.size()),
+                   false);
     }
 
-    handleSymbol(
-        &symbol.body.asSymbol(),
-        slang::SourceRange(nonWhitespaceLoc, symbol.location + symbol.name.size()),
-        false);
-    visitDefault(symbol);
+    for (auto *con : symbol.getPortConnections()) {
+      // mlir::lsp::Logger::info("visit: {}",
+      //                         con->getExpression()->syntax->toString());
+
+      // if (auto *port = con->port.as_if<slang::ast::PortSymbol>()) {
+      //   if (auto *connect = con->getExpression()
+      //                           ->as_if<slang::ast::AssignmentExpression>())
+      //                           {
+      //     mlir::lsp::Logger::info("connect: {}",
+      //     connect->syntax->toString());
+
+      //     mlir::lsp::Logger::info(
+      //         "port: {}", con->port.as_if<slang::ast::PortSymbol>()->name);
+      //   }
+      // }
+
+      // Input only
+      if (auto *port = con->port.as_if<slang::ast::PortSymbol>();
+          port && con->getExpression()) {
+        slang::SourceLocation firstLoc;
+        if (con->getExpression()->syntax) {
+          firstLoc = con->getExpression()->syntax->getFirstToken().location();
+        } else if (auto *connect =
+                       con->getExpression()
+                           ->as_if<slang::ast::AssignmentExpression>()) {
+          firstLoc = connect->sourceRange.start();
+        } else {
+          mlir::lsp::Logger::info("no expression");
+        }
+
+        if (!firstLoc.valid())
+          continue;
+        auto loc = firstLoc;
+        // mlir::lsp::Logger::info("firstLOc: {}",
+        // text.substr(firstLoc.offset(), 100)); Skip to the first start of
+        // line.
+        while (loc.offset() > 0 && text[loc.offset() - 1] != '\n') {
+          loc -= 1;
+        }
+        if (loc.offset() == 0)
+          continue;
+
+        mlir::lsp::Logger::info("RUnning: {} {}", loc.offset(),
+                                firstLoc.offset());
+        // find the name of the port.
+        auto it = text.substr(loc.offset(), firstLoc.offset() - loc.offset())
+                      .find(port->name);
+        if (it == std::string::npos) {
+          continue;
+        }
+        mlir::lsp::Logger::info("Found: {}", it);
+        // mlir::lsp::Logger::info("visit: {}",
+        //                          port->internalSymbol->getSyntax()->toString());
+
+        // mlir::lsp::Logger::info("visit: {}",
+        //                          port->getSyntax()->toString());
+        handleSymbol(port,
+                     slang::SourceRange(loc + it, loc + it + port->name.size()),
+                     false);
+      }
+    }
   }
 
   // Handle references to the left-hand side of a parent assignment.
@@ -602,6 +754,12 @@ void VerilogIndex::initialize(slang::ast::Compilation *compilation) {
     }
   }
 
+  SmallString<128> path;
+  path += "/home/uenoku/dev/circt-dev";
+  getContext().originalFileRoots.push_back(path);
+
+  parseEmittedLoc();
+
   // mlir::lsp::Logger::debug("VerilogIndex::initialize {}", c.name);
   // for (auto &member : c.members()) {
 
@@ -665,6 +823,14 @@ const VerilogIndexSymbol *VerilogIndex::lookup(SMLoc loc,
     *overlappedRange = SMRange(SMLoc::getFromPointer(it.start()),
                                SMLoc::getFromPointer(it.stop()));
   }
+  return it.value();
+}
+
+const VerilogIndex::EmittedLoc *VerilogIndex::lookupLoc(SMLoc loc) const {
+  auto it = intervalMapLoc.find(loc.getPointer());
+  if (!it.valid() || loc.getPointer() < it.start())
+    return nullptr;
+
   return it.value();
 }
 
@@ -916,6 +1082,64 @@ void VerilogDocument::getLocationsOf(
     const mlir::lsp::URIForFile &uri, const mlir::lsp::Position &defPos,
     std::vector<mlir::lsp::Location> &locations) {
   SMLoc posLoc = defPos.getAsSMLoc(verilogContext.sourceMgr);
+
+  // CHECK INTERVAL MAP LOC
+  {
+    const auto *it = index.lookupLoc(posLoc);
+    if (it) {
+      mlir::lsp::Logger::debug(
+          "VerilogDocument::getLocationsOf interval map loc");
+      auto fileInfo = verilogContext.filePathMap.find(it->filePath);
+      if (fileInfo == verilogContext.filePathMap.end()) {
+        for (auto &lib : verilogContext.originalFileRoots) {
+          auto size = lib.size();
+          auto fixupSize = llvm::make_scope_exit([&]() { lib.resize(size); });
+          llvm::sys::path::append(lib, it->filePath);
+          if (llvm::sys::fs::exists(lib)) {
+            auto memoryBuffer = llvm::MemoryBuffer::getFile(lib);
+            if (!memoryBuffer) {
+              continue;
+            }
+            auto id = verilogContext.sourceMgr.AddNewSourceBuffer(
+                std::move(*memoryBuffer), SMLoc());
+
+            fileInfo = verilogContext.filePathMap
+                           .insert(std::make_pair(it->filePath,
+                                                  std::make_pair(id, lib)))
+                           .first;
+          }
+        }
+      }
+
+      const auto &[bufferId, filePath] = fileInfo->second;
+      mlir::lsp::Logger::debug(
+          "VerilogDocument::getLocationsOf interval map loc not found");
+
+      verilogContext.sourceMgr.getBufferInfo(bufferId);
+      auto uri = mlir::lsp::URIForFile::fromFile(filePath);
+      if (auto e = uri.takeError()) {
+        mlir::lsp::Logger::error(
+            "VerilogDocument::getLocationsOf interval map loc error");
+        return;
+      }
+
+      mlir::lsp::Location loc(uri.get(),
+                              mlir::lsp::Range(Position(it->line, it->column)));
+      locations.push_back(loc);
+      return;
+
+      // auto loc =
+      //     getLocationFromLoc(verilogContext.sourceMgr, it-range, uri);
+      // auto bufferId =
+      //     getContext().getBufferIDMap().at(symbol->location.buffer().getId());
+      // auto buffer = sourceMgr.pat;
+      // if (loc.uri.file().empty())
+      // return mlir::lsp::Logger::debug(
+      //     "VerilogDocument::getLocationsOf loc is empty");
+      return;
+    }
+  }
+
   mlir::lsp::Logger::debug("VerilogDocument::getLocationsOf {} {}",
                            reinterpret_cast<int64_t>(posLoc.getPointer()),
                            posLoc.getPointer());
