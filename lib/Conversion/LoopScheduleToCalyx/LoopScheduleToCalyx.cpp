@@ -1080,8 +1080,8 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
                           "evaluated in a Calyx group. Please open an issue.\n";
           return LogicalResult::failure();
         }
-        // This is a pipeline register being written to another pipeline
-        // register. We create a new group to build this assignment.
+        // This is a register's value being written to this pipeline register.
+        // We create a new group to build this assignment.
         std::string groupName = state.getUniqueName(
             loweringState().blockName(pipelineRegister->getBlock()));
         group = calyx::createGroup<calyx::GroupOp>(
