@@ -205,6 +205,40 @@ func.func @entry() {
     smt.yield
   }
 
+  // CHECK: unsat
+  // CHECK: Res: -1
+  smt.solver () : () -> () {
+    %c4 = smt.int.constant 4
+    %c4_bv16 = smt.bv.constant #smt.bv<4> : !smt.bv<16>
+    %bv2int = smt.bv2int %c4_bv16 unsigned : !smt.bv<16>
+    %eq = smt.distinct %c4, %bv2int : !smt.int
+    func.call @check(%eq) : (!smt.bool) -> ()
+    smt.yield
+  }
+
+  // CHECK: unsat
+  // CHECK: Res: -1
+  smt.solver () : () -> () {
+    %c-4 = smt.int.constant -4
+    %c-4_bv16 = smt.bv.constant #smt.bv<-4> : !smt.bv<16>
+    %bv2int = smt.bv2int %c-4_bv16 signed : !smt.bv<16>
+    %eq = smt.distinct %c-4, %bv2int : !smt.int
+    func.call @check(%eq) : (!smt.bool) -> ()
+    smt.yield
+  }
+
+  // Check that unsigned conversion actually produces unsigned result
+  // CHECK: unsat
+  // CHECK: Res: -1
+  smt.solver () : () -> () {
+    %c-4 = smt.int.constant -4
+    %c-4_bv16 = smt.bv.constant #smt.bv<-4> : !smt.bv<16>
+    %bv2int = smt.bv2int %c-4_bv16 unsigned : !smt.bv<16>
+    %eq = smt.eq %c-4, %bv2int : !smt.int
+    func.call @check(%eq) : (!smt.bool) -> ()
+    smt.yield
+  }
+
   return
 }
 

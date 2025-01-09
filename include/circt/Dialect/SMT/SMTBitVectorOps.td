@@ -238,4 +238,20 @@ def RepeatOp : SMTBVOp<"repeat", [Pure]> {
   }];
 }
 
+def BV2IntOp : SMTOp<"bv2int", [Pure]> {
+  let summary = "Convert an SMT bitvector to an SMT integer.";
+  let description = [{
+    Designed to lower directly to an operation of the same name in Z3. The Z3
+    C API describes the semantics as follows:
+    Create an integer from the bit-vector argument t1.
+    If is_signed is false, then the bit-vector t1 is treated as unsigned.
+    So the result is non-negative and in the range [0..2^N-1], where N are the
+    number of bits in t1. If is_signed is true, t1 is treated as a signed
+    bit-vector.
+  }];
+  let arguments = (ins BitVectorType:$input, BoolAttr:$is_signed);
+  let results = (outs IntType:$result);
+  let assemblyFormat = [{$input custom<KeywordBool>($is_signed, "\"signed\"", "\"unsigned\"") attr-dict `:` qualified(type($input))}];
+}
+
 #endif // CIRCT_DIALECT_SMT_SMTBITVECTOROPS_TD

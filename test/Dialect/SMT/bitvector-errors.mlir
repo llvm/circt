@@ -94,3 +94,21 @@ func.func @repeat_result_type_bitwidth_too_large(%arg0: !smt.bv<1844674407370955
   smt.bv.repeat 2 times %arg0 : !smt.bv<18446744073709551612>
   return
 }
+
+// -----
+
+func.func @no_bv2int_signedness() {
+  %c5_bv32 = smt.bv.constant #smt.bv<5> : !smt.bv<32>
+  // expected-error @below {{custom op 'smt.bv2int' expected keyword "signed" or "unsigned"}}
+  %bv2int = smt.bv2int %c5_bv32 : !smt.bv<32>
+  return
+}
+
+// -----
+
+func.func @invalid_bv2int_signedness() {
+  %c5_bv32 = smt.bv.constant #smt.bv<5> : !smt.bv<32>
+  // expected-error @below {{custom op 'smt.bv2int' expected keyword "signed" or "unsigned"}}
+  %bv2int = smt.bv2int %c5_bv32 maybe_signed : !smt.bv<32>
+  return
+}
