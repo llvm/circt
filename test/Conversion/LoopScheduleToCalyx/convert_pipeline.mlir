@@ -271,12 +271,16 @@ module {
 
 // Pipeline register to pipeline register writes are valid.
 
-//CHECK:  calyx.group @bb0_3 {
-//CHECK-NEXT:        calyx.assign %stage_1_register_0_reg.in = %stage_0_register_0_reg.out : i32
-//CHECK-NEXT:        calyx.assign %stage_1_register_0_reg.write_en = %true : i1
-//CHECK-NEXT:        calyx.group_done %stage_1_register_0_reg.done : i1
-//CHECK-NEXT:      }
-//CHECK-NEXT:    }
+//CHECK:      calyx.group @bb0_3 {
+//CHECK-NEXT:   calyx.assign %stage_1_register_0_reg.in = %stage_0_register_0_reg.out : i32
+//CHECK-NEXT:   calyx.assign %stage_1_register_0_reg.write_en = %true : i1
+//CHECK-NEXT:   calyx.group_done %stage_1_register_0_reg.done : i1
+//CHECK-NEXT: }
+//CHECK-NEXT: calyx.group @bb0_4 {
+//CHECK-NEXT:   calyx.assign %stage_2_register_0_reg.in = %stage_1_register_0_reg.out : i32
+//CHECK-NEXT:   calyx.assign %stage_2_register_0_reg.write_en = %true : i1
+//CHECK-NEXT:   calyx.group_done %stage_2_register_0_reg.done : i1
+//CHECK-NEXT: }
 module {
   func.func @foo(%arg0: i32, %arg1: memref<30x30xi32>) attributes {llvm.linkage = #llvm.linkage<external>} {
     %alloca = memref.alloca() : memref<30x30xi32>
@@ -295,6 +299,9 @@ module {
       } : i32, index
       %7 = loopschedule.pipeline.stage start = 1 {
         loopschedule.register %6#0 : i32
+      } : i32
+      %8 = loopschedule.pipeline.stage start = 2 {
+        loopschedule.register %7 : i32
       } : i32
       loopschedule.terminator iter_args(%6#1), results() : (index) -> ()
     }

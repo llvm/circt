@@ -1076,11 +1076,21 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
       std::optional<calyx::GroupInterface> evaluatingGroup =
           state.findEvaluatingGroup(value);
       if (!evaluatingGroup.has_value()) {
-        if (!state.isPipelineReg(value)) {
+        if (auto stage =
+                dyn_cast<LoopSchedulePipelineStageOp>(value.getDefiningOp())) {
+          // The pipeline register for this stage needs to be rediscovered.
+          auto opResult = cast<OpResult>(value);
+          unsigned int opNumber = opResult.getResultNumber();
+          auto &stageRegisters = state.getPipelineRegs(stage);
+          calyx::RegisterOp stageRegister =
+              stageRegisters.find(opNumber)->second;
+          value = stageRegister.getOut();
+        }
+        if (value.getDefiningOp<calyx::RegisterOp>() == nullptr) {
           // We add this for any unhandled cases.
           llvm::errs() << "unexpected: input value: " << value << ", in stage "
                        << stage.getStageNumber() << " register " << i
-                       << " is not a pipeline register and was not previously "
+                       << " is not a register and was not previously "
                           "evaluated in a Calyx group. Please open an issue.\n";
           return LogicalResult::failure();
         }
