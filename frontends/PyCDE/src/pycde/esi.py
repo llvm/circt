@@ -519,24 +519,34 @@ class _HostMem(ServiceDecl):
       ("tag", UInt(8)),
   ])
 
-  WriteReqType = StructType([
-      ("address", UInt(64)),
-      ("tag", UInt(8)),
-      ("data", Any()),
-  ])
-
   def __init__(self):
     super().__init__(self.__class__)
+
+  def write_req_bundle_type(self, data_type: Type) -> Bundle:
+    """Build a write request bundle type for the given data type."""
+    write_req_type = StructType([
+        ("address", UInt(64)),
+        ("tag", UInt(8)),
+        ("data", data_type),
+    ])
+    return Bundle([
+        BundledChannel("req", ChannelDirection.FROM, write_req_type),
+        BundledChannel("ackTag", ChannelDirection.TO, UInt(8))
+    ])
+
+  def write_req_channel_type(self, data_type: Type) -> StructType:
+    """Return a write request struct type for 'data_type'."""
+    return StructType([
+        ("address", UInt(64)),
+        ("tag", UInt(8)),
+        ("data", data_type),
+    ])
 
   def wrap_write_req(self, address: UIntSignal, data: Type, tag: UIntSignal,
                      valid: BitsSignal) -> Tuple[ChannelSignal, BitsSignal]:
     """Create the proper channel type for a write request and use it to wrap the
     given request arguments. Returns the Channel signal and a ready bit."""
-    inner_type = StructType([
-        ("address", UInt(64)),
-        ("tag", UInt(8)),
-        ("data", data.type),
-    ])
+    inner_type = self.write_req_channel_type(data.type)
     return Channel(inner_type).wrap(
         inner_type({
             "address": address,
@@ -548,10 +558,10 @@ class _HostMem(ServiceDecl):
     """Create a write request to the host memory out of a request channel."""
     self._materialize_service_decl()
 
-    write_bundle_type = Bundle([
-        BundledChannel("req", ChannelDirection.FROM, _HostMem.WriteReqType),
-        BundledChannel("ackTag", ChannelDirection.TO, UInt(8))
-    ])
+    # Extract the data type from the request channel and call the helper to get
+    # the write bundle type for the req channel.
+    req_data_type = req.type.inner_type.data
+    write_bundle_type = self.write_req_bundle_type(req_data_type)
 
     bundle = cast(
         BundleSignal,

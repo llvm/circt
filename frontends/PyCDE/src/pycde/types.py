@@ -858,9 +858,10 @@ class Bundle(Type):
     if len(to_channels) > 0:
       raise ValueError(f"Missing channels: {', '.join(to_channels.keys())}")
 
-    pack_op = esi.PackBundleOp(self._type,
-                               [bc.channel._type for bc in from_channels],
-                               operands)
+    with get_user_loc():
+      pack_op = esi.PackBundleOp(self._type,
+                                 [bc.channel._type for bc in from_channels],
+                                 operands)
 
     return BundleSignal(pack_op.bundle, self), Bundle.PackSignalResults(
         [_FromCirctValue(c) for c in pack_op.fromChannels], self)
