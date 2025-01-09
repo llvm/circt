@@ -1062,15 +1062,14 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
       std::optional<calyx::GroupInterface> evaluatingGroup =
           state.findEvaluatingGroup(value);
       if (!evaluatingGroup.has_value()) {
-        if (auto stage =
+        if (auto opStage =
                 dyn_cast<LoopSchedulePipelineStageOp>(value.getDefiningOp())) {
-          // The pipeline register for this stage needs to be rediscovered.
+          // The pipeline register for this input value needs to be discovered.
           auto opResult = cast<OpResult>(value);
           unsigned int opNumber = opResult.getResultNumber();
-          auto &stageRegisters = state.getPipelineRegs(stage);
-          calyx::RegisterOp stageRegister =
-              stageRegisters.find(opNumber)->second;
-          value = stageRegister.getOut();
+          auto &stageRegisters = state.getPipelineRegs(opStage);
+          calyx::RegisterOp opRegister = stageRegisters.find(opNumber)->second;
+          value = opRegister.getOut(); // Pass the `out` wire of this register.
         }
         if (value.getDefiningOp<calyx::RegisterOp>() == nullptr) {
           // We add this for any unhandled cases.
@@ -1080,8 +1079,8 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
                           "evaluated in a Calyx group. Please open an issue.\n";
           return LogicalResult::failure();
         }
-        // This is a register's value being written to this pipeline register.
-        // We create a new group to build this assignment.
+        // This is a register's `out` value being written to this pipeline
+        // register. We create a new group to build this assignment.
         std::string groupName = state.getUniqueName(
             loweringState().blockName(pipelineRegister->getBlock()));
         group = calyx::createGroup<calyx::GroupOp>(
