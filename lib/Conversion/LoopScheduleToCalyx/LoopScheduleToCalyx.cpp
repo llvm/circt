@@ -1077,8 +1077,11 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
           state.findEvaluatingGroup(value);
       if (!evaluatingGroup.has_value()) {
         if (!state.isPipelineReg(value)) {
-          llvm::errs() << "unexpected: this is not a pipeline register and was "
-                          "not previously evaluated. Please open an issue.\n";
+          // We add this for any unhandled cases.
+          llvm::errs() << "unexpected: input value: " << value << ", in stage "
+                       << stage.getStageNumber() << " register " << i
+                       << " is not a pipeline register and was not previously "
+                          "evaluated in a Calyx group. Please open an issue.\n";
           return LogicalResult::failure();
         }
         // This is a pipeline register being written to another pipeline
@@ -1091,8 +1094,8 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
         calyx::buildAssignmentsForRegisterWrite(
             rewriter, group, state.getComponentOp(), pipelineRegister, value);
       } else {
-        // Stitch the register in, depending on whether the group was
-        // combinational or sequential.
+        // This was previously evaluated. Stitch the register in, depending on
+        // whether the group was combinational or sequential.
         auto combGroup =
             dyn_cast<calyx::CombGroupOp>(evaluatingGroup->getOperation());
         group = combGroup == nullptr
