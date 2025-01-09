@@ -292,7 +292,7 @@ public:
     // Generate the primary MLIR diagnostic.
     // auto &diagEngine = context->getDiagEngine();
     mlir::lsp::Logger::debug("MlirDiagnosticClient::report {}",
-                            slangDiag.formattedMessage);
+                             slangDiag.formattedMessage);
     diags.emplace_back();
     auto &mlirDiag = diags.back();
     mlirDiag.severity = getSeverity(slangDiag.severity);
@@ -341,6 +341,7 @@ public:
 
   const VerilogServerContext &getContext() const { return context; }
   auto &getIntervalMap() { return intervalMap; }
+  auto &getReferences() { return references; }
 
 private:
   /// The type of interval map used to store source references. SMRange is
@@ -360,6 +361,10 @@ private:
   /// interval.
   MapT intervalMap;
 
+  llvm::SmallDenseMap<const VerilogIndexSymbol *,
+                      SmallVector<slang::SourceLocation>>
+      references;
+
   /// A mapping between definitions and their corresponding symbol.
   DenseMap<const void *, std::unique_ptr<VerilogIndexSymbol>> defToSymbol;
 };
@@ -376,10 +381,10 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
     assert(range.start().valid() && range.end().valid());
     mlir::lsp::Logger::debug("1");
 
-    auto start = getContext().getSMLoc(range.start());
+    // auto start = getContext().getSMLoc(range.start());
     mlir::lsp::Logger::debug("2");
 
-    auto end = getContext().getSMLoc(range.end());
+    // auto end = getContext().getSMLoc(range.end());
     mlir::lsp::Logger::debug("3");
 
     // mlir::lsp::Logger::debug("handleSymbol nam: {}",
@@ -388,7 +393,7 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
     //                             ->getDefinition()
     //                             .name);
 
-    insertDeclRef(symbol, SMRange(start, end), true);
+    insertDeclRef(symbol, range, true);
   }
 
   // Handle references to the left-hand side of a parent assignment.
@@ -492,7 +497,7 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
   /// Handle assignment patterns.
   void visitInvalid(const slang::ast::Expression &expr) {
     mlir::lsp::Logger::debug("visitInvalid: {}",
-                            slang::ast::toString(expr.kind));
+                             slang::ast::toString(expr.kind));
   }
 
   void visitInvalid(const slang::ast::Statement &) {}
@@ -503,13 +508,17 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
   void visitInvalid(const slang::ast::Pattern &) {}
 
   const VerilogServerContext &getContext() const { return index.getContext(); }
-  void insertDeclRef(const VerilogIndexSymbol *sym, SMRange refLoc,
+  void insertDeclRef(const VerilogIndexSymbol *sym, slang::SourceRange refLoc,
                      bool isDef = false) {
-    const char *startLoc = refLoc.Start.getPointer();
-    const char *endLoc = refLoc.End.getPointer();
+    const char *startLoc = getContext().getSMLoc(refLoc.start()).getPointer();
+    const char *endLoc = getContext().getSMLoc(refLoc.end()).getPointer();
     assert(startLoc && endLoc);
-    if (startLoc != endLoc && !index.getIntervalMap().overlaps(startLoc, endLoc)) {
+    if (startLoc != endLoc &&
+        !index.getIntervalMap().overlaps(startLoc, endLoc)) {
       index.getIntervalMap().insert(startLoc, endLoc, sym);
+      if (!isDef) {
+        index.getReferences()[sym].push_back(refLoc.start());
+      }
     }
   };
 };
@@ -544,7 +553,8 @@ void VerilogIndex::initialize(slang::ast::Compilation *compilation) {
     auto &body = inst->body;
 
     for (auto *symbol : body.getPortList()) {
-      mlir::lsp::Logger::debug("VerilogIndex::initialize port {}", symbol->name);
+      mlir::lsp::Logger::debug("VerilogIndex::initialize port {}",
+                               symbol->name);
       auto startLoc = context.getSMLoc(symbol->location);
       auto endLoc = SMLoc::getFromPointer(
           context.getSMLoc(symbol->location).getPointer() +
@@ -834,7 +844,7 @@ VerilogDocument::VerilogDocument(
   }
 
   mlir::lsp::Logger::debug("parsed: {}",
-                          driver.syntaxTrees[0]->root().toString());
+                           driver.syntaxTrees[0]->root().toString());
   compilation = driver.createCompilation();
   for (auto &diag : (*compilation)->getAllDiagnostics())
     driver.diagEngine.issue(diag);
@@ -870,8 +880,8 @@ void VerilogDocument::getLocationsOf(
     std::vector<mlir::lsp::Location> &locations) {
   SMLoc posLoc = defPos.getAsSMLoc(verilogContext.sourceMgr);
   mlir::lsp::Logger::debug("VerilogDocument::getLocationsOf {} {}",
-                          reinterpret_cast<int64_t>(posLoc.getPointer()),
-                          posLoc.getPointer());
+                           reinterpret_cast<int64_t>(posLoc.getPointer()),
+                           posLoc.getPointer());
   const VerilogIndexSymbol *symbol = index.lookup(posLoc);
   mlir::lsp::Logger::debug("VerilogDocument::getLocationsOf {}", index.size());
   if (!symbol) {
@@ -879,7 +889,7 @@ void VerilogDocument::getLocationsOf(
     return;
   }
   mlir::lsp::Logger::debug("VerilogDocument::getLocationsOf symbol {}",
-                          symbol->name);
+                           symbol->name);
 
   auto loc =
       getLocationFromLoc(verilogContext.sourceMgr, symbol->location, uri);
@@ -890,22 +900,26 @@ void VerilogDocument::getLocationsOf(
   // return mlir::lsp::Logger::debug(
   //     "VerilogDocument::getLocationsOf loc is empty");
   mlir::lsp::Logger::debug("VerilogDocument::getLocationsOf loc {}",
-                          loc.range.start.line);
+                           loc.range.start.line);
   locations.push_back(loc);
 }
 
 void VerilogDocument::findReferencesOf(
     const mlir::lsp::URIForFile &uri, const mlir::lsp::Position &pos,
     std::vector<mlir::lsp::Location> &references) {
+  mlir::lsp::Logger::info("VerilogDocument::findReferencesOf loc");
   SMLoc posLoc = pos.getAsSMLoc(verilogContext.sourceMgr);
   const VerilogIndexSymbol *symbol = index.lookup(posLoc);
   if (!symbol)
+  {
+  mlir::lsp::Logger::info("VerilogDocument::findReferencesOf symbol not found");
     return;
+  }
 
   references.push_back(
       getLocationFromLoc(verilogContext.sourceMgr, symbol->location, uri));
-  // for (SMRange refLoc : symbol->references)
-  //   references.push_back(getLocationFromLoc(sourceMgr, refLoc, uri));
+  for (auto refLoc : index.getReferences().lookup(symbol))
+    references.push_back(getContext().getLspLocation(refLoc));
 }
 
 //===--------------------------------------------------------------------===//
@@ -1209,7 +1223,7 @@ struct RvalueExprVisitor
   /// Handle assignment patterns.
   void visitInvalid(const slang::ast::Expression &expr) {
     mlir::lsp::Logger::debug("visitInvalid: {}",
-                            slang::ast::toString(expr.kind));
+                             slang::ast::toString(expr.kind));
   }
 
   void visitInvalid(const slang::ast::Statement &) {}
