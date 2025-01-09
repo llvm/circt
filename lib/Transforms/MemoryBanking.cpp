@@ -240,6 +240,7 @@ SmallVector<Value, 4> createBanks(Value originalMem, uint64_t bankingFactor,
 
             banks.push_back(newGetGlobalOp);
           }
+          globalOp.erase();
         })
         .Default([](Operation *) {
           llvm_unreachable("Unhandled memory operation type");
