@@ -287,7 +287,7 @@ LogicalResult circt::lsp::runVerilogLSPServer(VerilogServer &server,
                         &LSPServer::onDocumentLink);
 
   // Hover
-  messageHandler.method("textDocument/hover", &lspServer, &LSPServer::onHover);
+  // messageHandler.method("textDocument/hover", &lspServer, &LSPServer::onHover);
 
   // Document Symbols
   messageHandler.method("textDocument/documentSymbol", &lspServer,

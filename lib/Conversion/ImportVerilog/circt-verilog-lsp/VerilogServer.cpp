@@ -36,6 +36,8 @@
 #include "slang/parsing/Preprocessor.h"
 #include "slang/syntax/SyntaxPrinter.h"
 #include "slang/syntax/SyntaxTree.h"
+#include "slang/text/SourceLocation.h"
+#include "slang/text/SourceManager.h"
 #include "slang/util/Version.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/IntervalMap.h"
@@ -213,18 +215,26 @@ public:
     return bufferIDMap;
   }
 
-  llvm::SMLoc getSMLoc(slang::SourceLocation loc) const {
+  llvm::SMLoc getSMLoc(slang::SourceLocation loc) {
     auto bufferID = loc.buffer().getId();
     mlir::lsp::Logger::debug("id {}", bufferID);
     mlir::lsp::Logger::debug("id 2 {}", bufferID);
 
-    const auto &bufferIDMap = getBufferIDMap();
     auto bufferIDMapIt = bufferIDMap.find(bufferID);
     if (bufferIDMapIt == bufferIDMap.end()) {
+      auto path = getSlangSourceManager().getFullPath(loc.buffer());
+      auto memBuffer = llvm::MemoryBuffer::getFile(path.string());
+      if (!memBuffer) {
+        mlir::lsp::Logger::error("Failed to open file: {0}",
+                                 memBuffer.getError().message());
+        return llvm::SMLoc();
+      }
 
-      mlir::lsp::Logger::debug("buffer id not found");
+      auto id =
+          sourceMgr.AddNewSourceBuffer(std::move(memBuffer.get()), SMLoc());
 
-      return llvm::SMLoc();
+      bufferIDMapIt =
+          bufferIDMap.insert({bufferID, static_cast<uint32_t>(id)}).first;
     }
 
     mlir::lsp::Logger::debug("id result {}", bufferIDMapIt->second);
@@ -323,7 +333,7 @@ public:
 
 class VerilogIndex {
 public:
-  VerilogIndex(const VerilogServerContext &context)
+  VerilogIndex(VerilogServerContext &context)
       : context(context), intervalMap(allocator) {}
 
   /// Initialize the index with the given ast::Module.
@@ -339,7 +349,7 @@ public:
     return std::distance(intervalMap.begin(), intervalMap.end());
   }
 
-  const VerilogServerContext &getContext() const { return context; }
+  VerilogServerContext &getContext() { return context; }
   auto &getIntervalMap() { return intervalMap; }
   auto &getReferences() { return references; }
 
@@ -355,7 +365,7 @@ private:
   /// An allocator for the interval map.
   MapT::Allocator allocator;
 
-  const VerilogServerContext &context;
+  VerilogServerContext &context;
 
   /// An interval map containing a corresponding definition mapped to a source
   /// interval.
@@ -396,6 +406,27 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
     insertDeclRef(symbol, range, true);
   }
 
+  void visit(const slang::ast::InstanceSymbol &symbol) {
+    mlir::lsp::Logger::debug("visit: {}", slang::ast::toString(symbol.kind));
+    auto firstLoc = symbol.getSyntax()->getFirstToken().location();
+    auto text =
+        getContext().getSlangSourceManager().getSourceText(firstLoc.buffer());
+    auto nonWhitespaceLoc = firstLoc;
+    while (firstLoc.offset() > 0 && text[firstLoc.offset() - 1] != '\n') {
+      if (text[firstLoc.offset() - 1] != ' ' &&
+          text[firstLoc.offset() - 1] != '\t')
+        nonWhitespaceLoc = firstLoc - 1;
+      firstLoc -= 1;
+    }
+
+    handleSymbol(
+        &symbol.body.asSymbol(),
+        slang::SourceRange(nonWhitespaceLoc, symbol.location + symbol.name.size()),
+        false);
+    visitDefault(symbol);
+  }
+
+  // Handle references to the left-hand side of a parent assignment.
   // Handle references to the left-hand side of a parent assignment.
   void visit(const slang::ast::LValueReferenceExpression &expr) {
     mlir::lsp::Logger::debug("visit: {}", slang::ast::toString(expr.kind));
@@ -507,11 +538,14 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
   void visitInvalid(const slang::ast::BinsSelectExpr &) {}
   void visitInvalid(const slang::ast::Pattern &) {}
 
-  const VerilogServerContext &getContext() const { return index.getContext(); }
+  VerilogServerContext &getContext() { return index.getContext(); }
+
   void insertDeclRef(const VerilogIndexSymbol *sym, slang::SourceRange refLoc,
                      bool isDef = false) {
     const char *startLoc = getContext().getSMLoc(refLoc.start()).getPointer();
     const char *endLoc = getContext().getSMLoc(refLoc.end()).getPointer();
+    if (!startLoc || !endLoc)
+      return;
     assert(startLoc && endLoc);
     if (startLoc != endLoc &&
         !index.getIntervalMap().overlaps(startLoc, endLoc)) {
@@ -738,7 +772,7 @@ struct VerilogDocument {
   /// The parsed AST module, or failure if the file wasn't valid.
   FailureOr<std::unique_ptr<slang::ast::Compilation>> compilation;
   VerilogServerContext verilogContext;
-  const VerilogServerContext &getContext() const { return verilogContext; }
+  VerilogServerContext &getContext() { return verilogContext; }
 
   /// The index of the parsed module.
   VerilogIndex index;
@@ -781,6 +815,9 @@ VerilogDocument::VerilogDocument(
   sourceMgr.AddNewSourceBuffer(std::move(memBuffer), SMLoc());
 
   const llvm::MemoryBuffer *mlirBuffer = sourceMgr.getMemoryBuffer(1);
+  mlir::lsp::Logger::info(
+      "VerilogDocument::VerilogDocument set include dirs {}", uriDirectory);
+  verilogContext.driver.options.libDirs = includeDirs;
   auto slangBuffer = verilogContext.driver.sourceManager.assignText(
       uri.file(), mlirBuffer->getBuffer());
   verilogContext.driver.buffers.push_back(slangBuffer);
@@ -910,9 +947,9 @@ void VerilogDocument::findReferencesOf(
   mlir::lsp::Logger::info("VerilogDocument::findReferencesOf loc");
   SMLoc posLoc = pos.getAsSMLoc(verilogContext.sourceMgr);
   const VerilogIndexSymbol *symbol = index.lookup(posLoc);
-  if (!symbol)
-  {
-  mlir::lsp::Logger::info("VerilogDocument::findReferencesOf symbol not found");
+  if (!symbol) {
+    mlir::lsp::Logger::info(
+        "VerilogDocument::findReferencesOf symbol not found");
     return;
   }
 
@@ -1070,13 +1107,14 @@ static bool shouldAddHintFor(const slang::ast::Expression *expr,
 
 struct RvalueExprVisitor
     : slang::ast::ASTVisitor<RvalueExprVisitor, true, true> {
-  RvalueExprVisitor(const VerilogServerContext &context, SMRange range,
+  RvalueExprVisitor(VerilogServerContext &context, SMRange range,
                     std::vector<mlir::lsp::InlayHint> &inlayHints)
       : context(context), range(range), inlayHints(inlayHints) {}
   bool contains(SMRange loc) {
     return mlir::lsp::contains(range, loc.Start) ||
            mlir::lsp::contains(range, loc.End);
   }
+
   SmallVector<StringRef> names;
   void visit(const slang::ast::InstanceBodySymbol &body) {
     names.push_back(body.name);
@@ -1216,6 +1254,43 @@ struct RvalueExprVisitor
   //                         << slang::ast::toString(expr.symbol.kind);
   //   return {};
   // }
+  static StringRef directionToString(slang::ast::ArgumentDirection direction) {
+    switch (direction) {
+    case slang::ast::ArgumentDirection::In:
+      return "in";
+    case slang::ast::ArgumentDirection::Out:
+      return "out";
+    case slang::ast::ArgumentDirection::InOut:
+      return "inout";
+    case slang::ast::ArgumentDirection::Ref:
+      return "ref";
+    }
+    return "<unknown direction>";
+  }
+
+  void visit(const slang::ast::InstanceSymbol &expr) {
+    mlir::lsp::Logger::info("visit: {}", slang::ast::toString(expr.kind));
+    mlir::lsp::Logger::info("size: {}", expr.getPortConnections().size());
+
+    for (const auto &con : expr.getPortConnections()) {
+      auto *portSymbol = con->port.as_if<slang::ast::PortSymbol>();
+      if (portSymbol) {
+        auto loc = con->getExpression()->sourceRange;
+        mlir::lsp::Logger::info("portSymbol: {} {}", portSymbol->name,
+                                portSymbol->getType().toString());
+        inlayHints.emplace_back(
+            mlir::lsp::InlayHintKind::Type,
+            context.getLspLocation(loc.start()).range.start);
+
+        auto &hint = inlayHints.back();
+        hint.label = directionToString(portSymbol->direction);
+        hint.label += " ";
+        hint.label += portSymbol->getType().toString();
+        hint.label += ": ";
+      }
+    }
+    visitDefault(expr);
+  }
 
   // Helper function to convert an argument to a simple bit vector type, pass
   // it to a reduction op, and optionally invert the result.
@@ -1233,7 +1308,7 @@ struct RvalueExprVisitor
   void visitInvalid(const slang::ast::BinsSelectExpr &) {}
   void visitInvalid(const slang::ast::Pattern &) {}
 
-  const VerilogServerContext &context;
+  VerilogServerContext &context;
   SMRange range;
   std::vector<mlir::lsp::InlayHint> &inlayHints;
 };
