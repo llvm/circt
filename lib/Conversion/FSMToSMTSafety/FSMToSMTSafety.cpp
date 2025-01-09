@@ -101,7 +101,7 @@ mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b, llvm::Small
   // we need to modulo all the operations considering the width of the mlir value!
   if (auto addOp = llvm::dyn_cast<comb::AddOp>(op)){
     auto tmp = b.create<smt::IntAddOp>(loc, b.getType<smt::IntType>(), args);
-    auto attr = b.getI32IntegerAttr(op.getOperand(0).getType().getIntOrFloatBitWidth());
+    auto attr = b.getI32IntegerAttr(1 << op.getOperand(0).getType().getIntOrFloatBitWidth());
     auto mod = b.create<smt::IntConstantOp>(loc, attr);
     return b.create<smt::IntModOp>(loc, tmp, mod);
   }
@@ -115,7 +115,7 @@ mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b, llvm::Small
   if (auto mulOp = llvm::dyn_cast<comb::MulOp>(op))
   {
     auto tmp = b.create<smt::IntMulOp>(loc, b.getType<smt::IntType>(), args);
-    auto attr = b.getI32IntegerAttr(op.getOperand(0).getType().getIntOrFloatBitWidth());
+    auto attr = b.getI32IntegerAttr(1 << op.getOperand(0).getType().getIntOrFloatBitWidth());
     auto mod = b.create<smt::IntConstantOp>(loc, attr);
     return b.create<smt::IntModOp>(loc, tmp, mod);
   }
