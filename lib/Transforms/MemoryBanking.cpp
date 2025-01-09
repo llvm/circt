@@ -50,6 +50,8 @@ private:
   // map from original memory definition to newly allocated banks
   DenseMap<Value, SmallVector<Value>> memoryToBanks;
   DenseSet<Operation *> opsToErase;
+  // old/original memref values that need to be cleaned up after all rewrite
+  // patterns
   DenseSet<Value> oldMemRefVals;
 };
 } // namespace
@@ -189,8 +191,10 @@ struct BankAffineLoadPattern
     auto defaultValue = rewriter.create<arith::ConstantOp>(loc, zeroAttr);
     rewriter.create<scf::YieldOp>(loc, defaultValue.getResult());
 
-    if (isa<BlockArgument>(loadOp.getMemref()))
-      oldMemRefVals.insert(loadOp.getMemref());
+    // Only add loadOp.memref() to oldMemRefVals if it's a BlockArgument, since
+    // other values are replaced and don't need clean-up
+    if (Value memRef = loadOp.getMemref(); isa<BlockArgument>(memRef))
+      oldMemRefVals.insert(memRef);
     rewriter.replaceOp(loadOp, switchOp.getResult(0));
 
     return success();
