@@ -278,7 +278,7 @@ module {
 //CHECK-NEXT:      }
 //CHECK-NEXT:    }
 module {
-  func.func @gemm(%arg0: i32, %arg1: memref<30x30xi32>) attributes {llvm.linkage = #llvm.linkage<external>} {
+  func.func @foo(%arg0: i32, %arg1: memref<30x30xi32>) attributes {llvm.linkage = #llvm.linkage<external>} {
     %alloca = memref.alloca() : memref<30x30xi32>
     cf.br ^bb4
   ^bb4:
