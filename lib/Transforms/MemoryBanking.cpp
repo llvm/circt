@@ -25,7 +25,6 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FormatVariadic.h"
-#include "llvm/Support/raw_ostream.h"
 
 namespace circt {
 #define GEN_PASS_DEF_MEMORYBANKING
