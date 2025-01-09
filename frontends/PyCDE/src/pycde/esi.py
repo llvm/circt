@@ -8,7 +8,7 @@ from .constructs import AssignableSignal, Mux, Wire
 from .module import (generator, modparams, Module, ModuleLikeBuilderBase,
                      PortProxyBase)
 from .signals import (BitsSignal, BundleSignal, ChannelSignal, Signal,
-                      _FromCirctValue)
+                      _FromCirctValue, UIntSignal)
 from .support import optional_dict_to_dict_attr, get_user_loc
 from .system import System
 from .types import (Any, Bits, Bundle, BundledChannel, Channel,
@@ -519,8 +519,49 @@ class _HostMem(ServiceDecl):
       ("tag", UInt(8)),
   ])
 
+  WriteReqType = StructType([
+      ("address", UInt(64)),
+      ("tag", UInt(8)),
+      ("data", Any()),
+  ])
+
   def __init__(self):
     super().__init__(self.__class__)
+
+  def wrap_write_req(self, address: UIntSignal, data: Type, tag: UIntSignal,
+                     valid: BitsSignal) -> Tuple[ChannelSignal, BitsSignal]:
+    """Create the proper channel type for a write request and use it to wrap the
+    given request arguments. Returns the Channel signal and a ready bit."""
+    inner_type = StructType([
+        ("address", UInt(64)),
+        ("tag", UInt(8)),
+        ("data", data.type),
+    ])
+    return Channel(inner_type).wrap(
+        inner_type({
+            "address": address,
+            "tag": tag,
+            "data": data,
+        }), valid)
+
+  def write(self, appid: AppID, req: ChannelSignal) -> ChannelSignal:
+    """Create a write request to the host memory out of a request channel."""
+    self._materialize_service_decl()
+
+    write_bundle_type = Bundle([
+        BundledChannel("req", ChannelDirection.FROM, _HostMem.WriteReqType),
+        BundledChannel("ackTag", ChannelDirection.TO, UInt(8))
+    ])
+
+    bundle = cast(
+        BundleSignal,
+        _FromCirctValue(
+            raw_esi.RequestConnectionOp(
+                write_bundle_type._type,
+                hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("write")),
+                appid._appid).toClient))
+    resp = bundle.unpack(req=req)['ackTag']
+    return resp
 
   # Create a read request to the host memory out of a request channel and return
   # the response channel with the specified data type.
