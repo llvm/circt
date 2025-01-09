@@ -995,9 +995,9 @@ LogicalResult StaticParOp::verify() {
 
 void StaticParOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                               MLIRContext *context) {
+  patterns.add(deduplicate<StaticParOp>);
   patterns.add(collapseControl<StaticParOp>);
   patterns.add(emptyControl<StaticParOp>);
-  patterns.add(deduplicate<StaticParOp>);
   patterns.insert<CollapseUnaryControl<StaticParOp>>(context);
 }
 

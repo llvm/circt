@@ -6,11 +6,11 @@
 // CHECK-NEXT:  calyx.par {
 // CHECK-NEXT:   calyx.enable @bb0_1
 // CHECK-NEXT:  }
-// CHECK-NEXT: } {bound = 19 : i64}
+// CHECK-NEXT: }
 module {
   func.func @foo() attributes {} {
     %const = arith.constant 1 : index
-    loopschedule.pipeline II =  1 trip_count =  20 iter_args(%counter = %const) : (index) -> () {
+    loopschedule.pipeline II = 1 trip_count = 20 iter_args(%counter = %const) : (index) -> () {
       %latch = arith.cmpi ult, %counter, %const : index
       loopschedule.register %latch : i1
     } do {
