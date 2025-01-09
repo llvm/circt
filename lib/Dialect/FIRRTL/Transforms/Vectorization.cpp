@@ -96,7 +96,7 @@ void VectorizationPass::runOnOperation() {
               VectorCreateToLogicElementwise<XorPrimOp, ElementwiseXorPrimOp>>(
           &getContext());
   mlir::FrozenRewritePatternSet frozenPatterns(std::move(patterns));
-  (void)applyPatternsAndFoldGreedily(getOperation(), frozenPatterns);
+  (void)applyPatternsGreedily(getOperation(), frozenPatterns);
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createVectorizationPass() {

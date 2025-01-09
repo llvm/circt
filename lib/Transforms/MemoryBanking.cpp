@@ -408,8 +408,8 @@ void MemoryBankingPass::runOnOperation() {
 
   GreedyRewriteConfig config;
   config.strictMode = GreedyRewriteStrictness::ExistingOps;
-  if (failed(applyPatternsAndFoldGreedily(getOperation(), std::move(patterns),
-                                          config))) {
+  if (failed(
+          applyPatternsGreedily(getOperation(), std::move(patterns), config))) {
     signalPassFailure();
   }
 
