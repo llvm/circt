@@ -68,6 +68,13 @@ hw.module @instance_extern2(in %arg0 : i32, in %arg1 : !Struct1, out out : !Stru
 hw.module.extern @level1_extern(in %arg0 : i32, in %in : !Struct1, in %arg1: i32, out out0 : i32, out out: !Struct1, out out1: i32)
 
 
+// BASIC-LABEL:  hw.module @instance_extern(in %arg0 : i32, in %arg1.a : i1, in %arg1.b : i2, out out.a : i1, out out.b : i2) {
+// BASIC-NEXT:    %0 = hw.struct_create (%arg1.a, %arg1.b) : !hw.struct<a: i1, b: i2>
+// BASIC-NEXT:    %l1.out0, %l1.out, %l1.out1 = hw.instance "l1" @level1_extern(arg0: %arg0: i32, in: %0: !hw.struct<a: i1, b: i2>, arg1: %arg0: i32) -> (out0: i32, out: !hw.struct<a: i1, b: i2>, out1: i32)
+// BASIC-NEXT:    %a, %b = hw.struct_explode %l1.out : !hw.struct<a: i1, b: i2>
+// BASIC-NEXT:    hw.output %a, %b : i1, i2
+// BASIC-NEXT:  }
+
 // EXTERN-LABEL:  hw.module @instance_extern(in %arg0 : i32, in %arg1_a : i1, in %arg1_b : i2, out out_a : i1, out out_b : i2) {
 // EXTERN-NEXT:    %l1.out0, %l1.out_a, %l1.out_b, %l1.out1 = hw.instance "l1" @level1_extern(arg0: %arg0: i32, in_a: %arg1_a: i1, in_b: %arg1_b: i2, arg1: %arg0: i32) -> (out0: i32, out_a: i1, out_b: i2, out1: i32)
 // EXTERN-NEXT:    %0 = hw.struct_create (%l1.out_a, %l1.out_b) : !hw.struct<a: i1, b: i2>
