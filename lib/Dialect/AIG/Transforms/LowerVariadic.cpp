@@ -100,6 +100,6 @@ void LowerVariadicPass::runOnOperation() {
   populateLowerVariadicPatterns(patterns);
   mlir::FrozenRewritePatternSet frozen(std::move(patterns));
 
-  if (failed(mlir::applyPatternsAndFoldGreedily(getOperation(), frozen)))
+  if (failed(mlir::applyPatternsGreedily(getOperation(), frozen)))
     return signalPassFailure();
 }
