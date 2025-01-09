@@ -1644,6 +1644,9 @@ void LoopScheduleToCalyxPass::runOnOperation() {
   addOncePattern<calyx::InlineCombGroups>(loweringPatterns, patternState,
                                           *loweringState);
 
+  addGreedyPattern<calyx::DeduplicateParallelOp>(loweringPatterns);
+  addGreedyPattern<calyx::DeduplicateStaticParallelOp>(loweringPatterns);
+
   /// This pattern performs various SSA replacements that must be done
   /// after control generation.
   addOncePattern<LateSSAReplacement>(loweringPatterns, patternState, funcMap,

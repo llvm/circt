@@ -756,6 +756,23 @@ struct EliminateUnusedCombGroups : mlir::OpRewritePattern<calyx::CombGroupOp> {
                                 PatternRewriter &rewriter) const override;
 };
 
+/// Removes duplicate EnableOps in parallel operations.
+struct DeduplicateParallelOp : mlir::OpRewritePattern<calyx::ParOp> {
+  using mlir::OpRewritePattern<calyx::ParOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(calyx::ParOp parOp,
+                                PatternRewriter &rewriter) const override;
+};
+
+/// Removes duplicate EnableOps in static parallel operations.
+struct DeduplicateStaticParallelOp
+    : mlir::OpRewritePattern<calyx::StaticParOp> {
+  using mlir::OpRewritePattern<calyx::StaticParOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(calyx::StaticParOp parOp,
+                                PatternRewriter &rewriter) const override;
+};
+
 /// This pass recursively inlines use-def chains of combinational logic (from
 /// non-stateful groups) into groups referenced in the control schedule.
 class InlineCombGroups
