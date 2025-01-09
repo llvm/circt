@@ -68,6 +68,9 @@ struct Options {
   cl::opt<bool> listTests{"l", cl::desc("List tests in the input and exit"),
                           cl::init(false), cl::cat(cat)};
 
+  cl::opt<bool> listRunners{"list-runners", cl::desc("List test runners"),
+                            cl::init(false), cl::cat(cat)};
+
   cl::opt<bool> json{"json", cl::desc("Emit test list as JSON array"),
                      cl::init(false), cl::cat(cat)};
 
@@ -83,18 +86,108 @@ struct Options {
       cl::desc("Run the verifier after each transformation pass"),
       cl::init(true), cl::cat(cat)};
 
-  cl::opt<std::string> runner{
-      "r", cl::desc("Program to run individual tests"), cl::value_desc("bin"),
-      cl::init("circt-test-runner-sby.py"), cl::cat(cat)};
-
-  cl::opt<bool> runnerReadsMLIR{
-      "mlir-runner",
-      cl::desc("Pass the MLIR file to the runner instead of Verilog"),
-      cl::init(false), cl::cat(cat)};
+  cl::list<std::string> runners{"r", cl::desc("Use a specific set of runners"),
+                                cl::value_desc("name"),
+                                cl::MiscFlags::CommaSeparated, cl::cat(cat)};
 };
 Options opts;
 
 } // namespace
+
+//===----------------------------------------------------------------------===//
+// Runners
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// A program that can run tests.
+class Runner {
+public:
+  /// The name of the runner. The user can filter runners by this name, and
+  /// individual tests can indicate that they can or cannot run with runners
+  /// based on this name.
+  std::string name;
+  /// The runner binary. The value of this field is resolved using
+  /// `findProgramByName` and stored in `binaryPath`.
+  std::string binary;
+  /// The full path to the runner.
+  std::string binaryPath;
+  /// Whether this runner operates on Verilog or MLIR input.
+  bool readsMLIR = false;
+  /// Whether this runner should be ignored.
+  bool ignore = false;
+  /// Whether this runner is available or not. This is set to false if the
+  /// runner `binary` cannot be found.
+  bool available = false;
+};
+
+/// A collection of test runners.
+class RunnerSuite {
+public:
+  /// The MLIR context that is used for multi-threading.
+  MLIRContext *context;
+  /// The configured runners.
+  std::vector<Runner> runners;
+
+  RunnerSuite(MLIRContext *context) : context(context) {}
+  void addDefaultRunners();
+  LogicalResult resolve();
+};
+} // namespace
+
+/// Add the default runners to the suite. These are the runners that are defined
+/// as part of CIRCT.
+void RunnerSuite::addDefaultRunners() {
+  {
+    // SymbiYosys
+    Runner runner;
+    runner.name = "sby";
+    runner.binary = "circt-test-runner-sby.py";
+    runners.push_back(std::move(runner));
+  }
+  {
+    // circt-bmc
+    Runner runner;
+    runner.name = "circt-bmc";
+    runner.binary = "circt-test-runner-circt-bmc.py";
+    runner.readsMLIR = true;
+    runners.push_back(std::move(runner));
+  }
+}
+
+/// Resolve the `binary` field of each runner to a full `binaryPath`, and set
+/// the `available` field to reflect whether the runner was found.
+LogicalResult RunnerSuite::resolve() {
+  // If the user has provided a concrete list of runners to use, mark all other
+  // runners as to be ignored.
+  if (opts.runners.getNumOccurrences() > 0) {
+    for (auto &runner : runners)
+      if (!llvm::is_contained(opts.runners, runner.name))
+        runner.ignore = true;
+
+    // Produce errors if the user listed any runners that don't exist.
+    for (auto &name : opts.runners) {
+      if (!llvm::is_contained(
+              llvm::map_range(runners,
+                              [](auto &runner) { return runner.name; }),
+              name)) {
+        WithColor::error() << "unknown runner `" << name << "`\n";
+        return failure();
+      }
+    }
+  }
+
+  mlir::parallelForEach(context, runners, [&](auto &runner) {
+    if (runner.ignore)
+      return;
+
+    auto findResult = llvm::sys::findProgramByName(runner.binary);
+    if (!findResult)
+      return;
+    runner.available = true;
+    runner.binaryPath = findResult.get();
+  });
+  return success();
+}
 
 //===----------------------------------------------------------------------===//
 // Test Discovery
@@ -167,6 +260,31 @@ void TestSuite::discoverInModule(ModuleOp module) {
 // Tool Implementation
 //===----------------------------------------------------------------------===//
 
+/// List all configured runners.
+static LogicalResult listRunners(RunnerSuite &suite) {
+  // Open the output file for writing.
+  std::string errorMessage;
+  auto output = openOutputFile(opts.outputFilename, &errorMessage);
+  if (!output) {
+    WithColor::error() << errorMessage << "\n";
+    return failure();
+  }
+
+  for (auto &runner : suite.runners) {
+    auto &os = output->os();
+    os << runner.name;
+    if (runner.ignore)
+      os << "  ignored";
+    else if (runner.available)
+      os << "  " << runner.binaryPath;
+    else
+      os << "  unavailable";
+    os << "\n";
+  }
+  output->keep();
+  return success();
+}
+
 // Check if test should be included in output listing
 bool ignoreTestListing(Test &test, TestSuite &suite) {
   return !suite.listIgnored && test.ignore;
@@ -177,8 +295,10 @@ static LogicalResult listTests(TestSuite &suite) {
   // Open the output file for writing.
   std::string errorMessage;
   auto output = openOutputFile(opts.outputFilename, &errorMessage);
-  if (!output)
-    return emitError(UnknownLoc::get(suite.context)) << errorMessage;
+  if (!output) {
+    WithColor::error() << errorMessage << "\n";
+    return failure();
+  }
 
   // Handle JSON output.
   if (opts.json) {
@@ -216,18 +336,22 @@ static LogicalResult listTests(TestSuite &suite) {
   return success();
 }
 
-void reportIgnored(unsigned numIgnored) {
-  if (numIgnored > 0)
-    WithColor(llvm::errs(), raw_ostream::SAVEDCOLOR, true).get()
-        << ", " << numIgnored << " ignored";
-}
-
 /// Entry point for the circt-test tool. At this point an MLIRContext is
 /// available, all dialects have been registered, and all command line options
 /// have been parsed.
 static LogicalResult execute(MLIRContext *context) {
   SourceMgr srcMgr;
   SourceMgrDiagnosticHandler handler(srcMgr, context);
+
+  // Discover all available test runners.
+  RunnerSuite runnerSuite(context);
+  runnerSuite.addDefaultRunners();
+  if (failed(runnerSuite.resolve()))
+    return failure();
+
+  // List all runners and exit if requested.
+  if (opts.listRunners)
+    return listRunners(runnerSuite);
 
   // Parse the input file.
   auto module = parseSourceFile<ModuleOp>(opts.inputFilename, srcMgr, context);
@@ -259,7 +383,7 @@ static LogicalResult execute(MLIRContext *context) {
   std::string errorMessage;
   auto verilogFile = openOutputFile(verilogPath, &errorMessage);
   if (!verilogFile) {
-    WithColor::error() << errorMessage;
+    WithColor::error() << errorMessage << "\n";
     return failure();
   }
 
@@ -275,31 +399,39 @@ static LogicalResult execute(MLIRContext *context) {
     return failure();
   verilogFile->keep();
 
-  // Find the runner binary in the search path. Otherwise assume it is a binary
-  // we can run as is.
-  auto findResult = llvm::sys::findProgramByName(opts.runner);
-  if (!findResult) {
-    WithColor::error() << "cannot find runner `" << opts.runner
-                       << "`: " << findResult.getError().message() << "\n";
-    return failure();
-  }
-  auto &runner = findResult.get();
-
   // Run the tests.
   std::atomic<unsigned> numPassed(0);
   std::atomic<unsigned> numIgnored(0);
+  std::atomic<unsigned> numUnsupported(0);
+
   mlir::parallelForEach(context, suite.tests, [&](auto &test) {
     if (test.ignore) {
       ++numIgnored;
       return;
     }
+
+    // Pick a runner for this test. In the future we'll want to filter this
+    // based on the test's and runner's metadata, and potentially use a
+    // prioritized list of runners.
+    Runner *runner = nullptr;
+    for (auto &candidate : runnerSuite.runners) {
+      if (candidate.ignore || !candidate.available)
+        continue;
+      runner = &candidate;
+      break;
+    }
+    if (!runner) {
+      ++numUnsupported;
+      mlir::emitError(test.loc) << "no runner for test " << test.name;
+      return;
+    }
+
     // Create the directory in which we are going to run the test.
     SmallString<128> testDir(opts.resultDir);
     llvm::sys::path::append(testDir, test.name.getValue());
     if (auto error = llvm::sys::fs::create_directory(testDir)) {
-      mlir::emitError(UnknownLoc::get(context))
-          << "cannot create test directory `" << testDir
-          << "`: " << error.message() << "\n";
+      mlir::emitError(test.loc) << "cannot create test directory `" << testDir
+                                << "`: " << error.message();
       return;
     }
 
@@ -313,8 +445,8 @@ static LogicalResult execute(MLIRContext *context) {
 
     // Assemble the runner arguments.
     SmallVector<StringRef> args;
-    args.push_back(runner);
-    if (opts.runnerReadsMLIR)
+    args.push_back(runner->binary);
+    if (runner->readsMLIR)
       args.push_back(opts.inputFilename);
     else
       args.push_back(verilogPath);
@@ -347,14 +479,13 @@ static LogicalResult execute(MLIRContext *context) {
 
     // Execute the test runner.
     std::string errorMessage;
-    auto result =
-        llvm::sys::ExecuteAndWait(runner, args, /*Env=*/std::nullopt,
-                                  /*Redirects=*/{"", logPath, logPath},
-                                  /*SecondsToWait=*/0,
-                                  /*MemoryLimit=*/0, &errorMessage);
+    auto result = llvm::sys::ExecuteAndWait(
+        runner->binaryPath, args, /*Env=*/std::nullopt,
+        /*Redirects=*/{"", logPath, logPath},
+        /*SecondsToWait=*/0,
+        /*MemoryLimit=*/0, &errorMessage);
     if (result < 0) {
-      mlir::emitError(UnknownLoc::get(context))
-          << "cannot execute runner: " << errorMessage;
+      mlir::emitError(test.loc) << "cannot execute runner: " << errorMessage;
     } else if (result > 0) {
       auto d = mlir::emitError(test.loc)
                << "test " << test.name.getValue() << " failed";
@@ -365,23 +496,25 @@ static LogicalResult execute(MLIRContext *context) {
   });
 
   // Print statistics about how many tests passed and failed.
-  assert((numPassed + numIgnored) <= suite.tests.size());
-  unsigned numFailed = suite.tests.size() - numPassed - numIgnored;
+  unsigned numNonFailed = numPassed + numIgnored + numUnsupported;
+  assert(numNonFailed <= suite.tests.size());
+  unsigned numFailed = suite.tests.size() - numNonFailed;
   if (numFailed > 0) {
     WithColor(llvm::errs(), raw_ostream::SAVEDCOLOR, true).get()
         << numFailed << " tests ";
     WithColor(llvm::errs(), raw_ostream::RED, true).get() << "FAILED";
     llvm::errs() << ", " << numPassed << " passed";
-    reportIgnored(numIgnored);
-    llvm::errs() << "\n";
-    return failure();
+  } else {
+    WithColor(llvm::errs(), raw_ostream::SAVEDCOLOR, true).get()
+        << numPassed << " tests ";
+    WithColor(llvm::errs(), raw_ostream::GREEN, true).get() << "passed";
   }
-  WithColor(llvm::errs(), raw_ostream::SAVEDCOLOR, true).get()
-      << numPassed << " tests ";
-  WithColor(llvm::errs(), raw_ostream::GREEN, true).get() << "passed";
-  reportIgnored(numIgnored);
+  if (numIgnored > 0)
+    llvm::errs() << ", " << numIgnored << " ignored";
+  if (numUnsupported > 0)
+    llvm::errs() << ", " << numUnsupported << " unsupported";
   llvm::errs() << "\n";
-  return success();
+  return success(numFailed == 0);
 }
 
 int main(int argc, char **argv) {
