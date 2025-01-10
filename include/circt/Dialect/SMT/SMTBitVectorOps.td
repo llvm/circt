@@ -241,16 +241,15 @@ def RepeatOp : SMTBVOp<"repeat", [Pure]> {
 def BV2IntOp : SMTOp<"bv2int", [Pure]> {
   let summary = "Convert an SMT bit-vector to an SMT integer.";
   let description = [{
-    Adapted from the Z3 documentation:
-    Create an integer from the bit-vector argument `input`.
-    If `is_signed` is false, then the bit-vector `input` is treated as
-    unsigned. So the result is non-negative and in the range [0..2^N-1], where
-    N are the number of bits in `input`. If `is_signed` is true, `input` is
-    treated as a signed bit-vector.
+    Create an integer from the bit-vector argument `input`. If `is_signed` is
+    present, the bit-vector is treated as two's complement signed.  Otherwise,
+    it is treated as an unsigned integer in the range [0..2^N-1], where N is
+    the number of bits in `input`.
   }];
   let arguments = (ins BitVectorType:$input, UnitAttr:$is_signed);
   let results = (outs IntType:$result);
-  let assemblyFormat = [{$input (`signed` $is_signed^)? attr-dict `:` qualified(type($input))}];
+  let assemblyFormat = [{$input (`signed` $is_signed^)? attr-dict `:`
+    qualified(type($input))}];
 }
 
 #endif // CIRCT_DIALECT_SMT_SMTBITVECTOROPS_TD
