@@ -16,7 +16,6 @@ add_circt_dialect_library(CIRCTSMT
   Support
 
   LINK_LIBS PUBLIC
-  CIRCTSupport
   MLIRIR
   MLIRInferTypeOpInterface
   MLIRSideEffectInterfaces
