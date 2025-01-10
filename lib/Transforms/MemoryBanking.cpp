@@ -25,6 +25,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FormatVariadic.h"
+#include <numeric>
 
 namespace circt {
 #define GEN_PASS_DEF_MEMORYBANKING
@@ -113,14 +114,8 @@ SmallVector<SmallVector<Attribute>> sliceSubBlock(ArrayRef<Attribute> allAttrs,
                                                   ArrayRef<int64_t> memShape,
                                                   unsigned bankingDimension,
                                                   unsigned bankingFactor) {
-  auto totalSize = [](auto &&shape) {
-    size_t prod = 1;
-    for (auto s : shape)
-      prod *= s;
-    return prod;
-  };
-
-  size_t numElements = totalSize(memShape);
+  size_t numElements = std::reduce(memShape.begin(), memShape.end(), 1,
+                                   std::multiplies<size_t>());
   // `bankingFactor` number of flattened attributes that store the information
   // in the original globalOp
   SmallVector<SmallVector<Attribute>> subBlocks;
