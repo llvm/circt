@@ -7,6 +7,13 @@ func.func @at_least_size_one(%arg0: !smt.bv<0>) {
 
 // -----
 
+// expected-error @below {{bit-vector must have at least a width of one}}
+func.func @positive_width(%arg0: !smt.bv<-1>) {
+  return
+}
+
+// -----
+
 func.func @attr_type_and_return_type_match() {
   // expected-error @below {{inferred type(s) '!smt.bv<1>' are incompatible with return type(s) of operation '!smt.bv<32>'}}
   // expected-error @below {{failed to infer returned types}}
@@ -82,15 +89,15 @@ func.func @repeat_wrong_input_type(%arg0: !smt.bool) {
 // -----
 
 func.func @repeat_count_too_large(%arg0: !smt.bv<32>) {
-  // expected-error @below {{integer must fit into 64 bits}}
+  // expected-error @below {{integer must fit into 63 bits}}
   smt.bv.repeat 18446744073709551617 times %arg0 : !smt.bv<32>
   return
 }
 
 // -----
 
-func.func @repeat_result_type_bitwidth_too_large(%arg0: !smt.bv<18446744073709551612>) {
-  // expected-error @below {{result bit-width (provided integer times bit-width of the input type) must fit into 64 bits}}
-  smt.bv.repeat 2 times %arg0 : !smt.bv<18446744073709551612>
+func.func @repeat_result_type_bitwidth_too_large(%arg0: !smt.bv<9223372036854775807>) {
+  // expected-error @below {{result bit-width (provided integer times bit-width of the input type) must fit into 63 bits}}
+  smt.bv.repeat 2 times %arg0 : !smt.bv<9223372036854775807>
   return
 }

@@ -234,8 +234,8 @@ ParseResult RepeatOp::parse(OpAsmParser &parser, OperationState &result) {
     return parser.emitError(inputLoc) << "input must have bit-vector type";
 
   // Make sure no assertions can trigger and no silent overflows can happen
-  // Bit-width is stored as 'uint64_t' parameter in 'BitVectorType'
-  const unsigned maxBw = 64;
+  // Bit-width is stored as 'int64_t' parameter in 'BitVectorType'
+  const unsigned maxBw = 63;
   if (count.getActiveBits() > maxBw)
     return parser.emitError(countLoc)
            << "integer must fit into " << maxBw << " bits";
