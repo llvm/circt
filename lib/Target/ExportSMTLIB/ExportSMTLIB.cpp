@@ -603,8 +603,7 @@ struct StatementVisitor
                                     ValueMap &valueMap) {
     // Ignore operations which are handled in the Expression Visitor.
     if (isa<smt::Int2BVOp, BV2IntOp>(op))
-      return op->emitError(
-          "int2bv and bv2int operations are not supported for SMTLIB emission");
+      return op->emitError("operation not supported for SMTLIB emission");
 
     return success();
   }

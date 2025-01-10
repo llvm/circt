@@ -2,6 +2,6 @@
 
 smt.solver () : () -> () {
   %0 = smt.bv.constant #smt.bv<5> : !smt.bv<16>
-  // expected-error @below {{int2bv and bv2int operations are not supported for SMTLIB emission}}
+  // expected-error @below {{operation not supported for SMTLIB emission}}
   %1 = smt.bv2int %0 signed : !smt.bv<16>
 }
