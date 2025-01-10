@@ -130,6 +130,81 @@ SmallVector<SmallVector<Attribute>> sliceSubBlock(ArrayRef<Attribute> allAttrs,
   return subBlocks;
 }
 
+// Handles the splitting of a GetGlobalOp into multiple banked memory and
+// creates new GetGlobalOp to represent each banked memory by slicing the data
+// in the original GetGlobalOp.
+SmallVector<Value, 4> handleGetGlobalOp(memref::GetGlobalOp getGlobalOp,
+                                        uint64_t bankingFactor,
+                                        unsigned bankingDimension,
+                                        MemRefType newMemRefType,
+                                        OpBuilder &builder) {
+  SmallVector<Value, 4> banks;
+  auto memTy = cast<MemRefType>(getGlobalOp.getType());
+  ArrayRef<int64_t> originalShape = memTy.getShape();
+  auto newShape =
+      SmallVector<int64_t>(originalShape.begin(), originalShape.end());
+  newShape[bankingDimension] = originalShape[bankingDimension] / bankingFactor;
+
+  auto *symbolTableOp = getGlobalOp->getParentWithTrait<OpTrait::SymbolTable>();
+  auto globalOp = dyn_cast_or_null<memref::GlobalOp>(
+      SymbolTable::lookupSymbolIn(symbolTableOp, getGlobalOp.getNameAttr()));
+  assert(globalOp && "The corresponding GlobalOp should exist in the module");
+  MemRefType globalOpTy = globalOp.getType();
+
+  auto cstAttr =
+      dyn_cast_or_null<DenseElementsAttr>(globalOp.getConstantInitValue());
+  auto attributes = cstAttr.getValues<Attribute>();
+  SmallVector<Attribute, 8> allAttrs(attributes.begin(), attributes.end());
+
+  auto subBlocks =
+      sliceSubBlock(allAttrs, originalShape, bankingDimension, bankingFactor);
+
+  // Initialize globalOp and getGlobalOp's insertion points. Since
+  // bankingFactor is guaranteed to be greater than zero as it would
+  // have early exited if not, the loop below will execute at least
+  // once. So it's safe to manipulate the insertion points here.
+  builder.setInsertionPointAfter(globalOp);
+  OpBuilder::InsertPoint globalOpsInsertPt = builder.saveInsertionPoint();
+  builder.setInsertionPointAfter(getGlobalOp);
+  OpBuilder::InsertPoint getGlobalOpsInsertPt = builder.saveInsertionPoint();
+
+  for (size_t bankCnt = 0; bankCnt < bankingFactor; ++bankCnt) {
+    // Prepare relevant information to create a new GlobalOp
+    auto newMemRefTy = MemRefType::get(newShape, globalOpTy.getElementType());
+    auto newTypeAttr = TypeAttr::get(newMemRefTy);
+    std::string newNameStr =
+        llvm::formatv("{0}_{1}_{2}_{3}", globalOp.getConstantAttrName(),
+                      llvm::join(llvm::map_range(newShape,
+                                                 [](int64_t dim) {
+                                                   return std::to_string(dim);
+                                                 }),
+                                 "x"),
+                      globalOpTy.getElementType(), bankCnt);
+    RankedTensorType tensorType =
+        RankedTensorType::get({newShape}, globalOpTy.getElementType());
+    auto newInitValue = DenseElementsAttr::get(tensorType, subBlocks[bankCnt]);
+
+    builder.restoreInsertionPoint(globalOpsInsertPt);
+    auto newGlobalOp = builder.create<memref::GlobalOp>(
+        globalOp.getLoc(), builder.getStringAttr(newNameStr),
+        globalOp.getSymVisibilityAttr(), newTypeAttr, newInitValue,
+        globalOp.getConstantAttr(), globalOp.getAlignmentAttr());
+    builder.setInsertionPointAfter(newGlobalOp);
+    globalOpsInsertPt = builder.saveInsertionPoint();
+
+    builder.restoreInsertionPoint(getGlobalOpsInsertPt);
+    auto newGetGlobalOp = builder.create<memref::GetGlobalOp>(
+        getGlobalOp.getLoc(), newMemRefTy, newGlobalOp.getName());
+    builder.setInsertionPointAfter(newGetGlobalOp);
+    getGlobalOpsInsertPt = builder.saveInsertionPoint();
+
+    banks.push_back(newGetGlobalOp);
+  }
+
+  globalOp.erase();
+  return banks;
+}
+
 SmallVector<Value, 4> createBanks(Value originalMem, uint64_t bankingFactor,
                                   unsigned bankingDimension) {
   MemRefType originalMemRefType = cast<MemRefType>(originalMem.getType());
@@ -168,79 +243,10 @@ SmallVector<Value, 4> createBanks(Value originalMem, uint64_t bankingFactor,
           }
         })
         .Case<memref::GetGlobalOp>([&](memref::GetGlobalOp getGlobalOp) {
-          auto memTy = cast<MemRefType>(getGlobalOp.getType());
-          ArrayRef<int64_t> originalShape = memTy.getShape();
-          auto newShape =
-              SmallVector<int64_t>(originalShape.begin(), originalShape.end());
-          newShape[bankingDimension] =
-              originalShape[bankingDimension] / bankingFactor;
-
-          // Get the original elements in the `GetGlobalOp`
-          auto *symbolTableOp =
-              getGlobalOp->getParentWithTrait<OpTrait::SymbolTable>();
-          auto globalOp =
-              dyn_cast_or_null<memref::GlobalOp>(SymbolTable::lookupSymbolIn(
-                  symbolTableOp, getGlobalOp.getNameAttr()));
-          assert(globalOp &&
-                 "The corresponding GlobalOp should exist in the module");
-          MemRefType globalOpTy = globalOp.getType();
-
-          auto cstAttr = dyn_cast_or_null<DenseElementsAttr>(
-              globalOp.getConstantInitValue());
-          auto attributes = cstAttr.getValues<Attribute>();
-          SmallVector<Attribute, 8> allAttrs(attributes.begin(),
-                                             attributes.end());
-
-          auto subBlocks = sliceSubBlock(allAttrs, originalShape,
-                                         bankingDimension, bankingFactor);
-
-          // Initialize globalOp and getGlobalOp's insertion points. Since
-          // `bankingFactor` is guaranteed to be greater than zero as it would
-          // have early exited if not, the loop below will execute at least
-          // once. So it's safe to manipulate the insertion points here.
-          builder.setInsertionPointAfter(globalOp);
-          OpBuilder::InsertPoint globalOpsInsertPt =
-              builder.saveInsertionPoint();
-          builder.setInsertionPointAfter(getGlobalOp);
-          OpBuilder::InsertPoint getGlobalOpsInsertPt =
-              builder.saveInsertionPoint();
-
-          for (size_t bankCnt = 0; bankCnt < bankingFactor; ++bankCnt) {
-            // Prepare relevant information to create a new `GlobalOp`
-            auto newMemRefTy =
-                MemRefType::get(newShape, globalOpTy.getElementType());
-            auto newTypeAttr = TypeAttr::get(newMemRefTy);
-            std::string newNameStr = llvm::formatv(
-                "{0}_{1}_{2}_{3}", globalOp.getConstantAttrName(),
-                llvm::join(llvm::map_range(
-                               newShape,
-                               [](int64_t dim) { return std::to_string(dim); }),
-                           "x"),
-                globalOpTy.getElementType(), bankCnt);
-            RankedTensorType tensorType =
-                RankedTensorType::get({newShape}, globalOpTy.getElementType());
-            auto newInitValue =
-                DenseElementsAttr::get(tensorType, subBlocks[bankCnt]);
-
-            // Create a new `GlobalOp`
-            builder.restoreInsertionPoint(globalOpsInsertPt);
-            auto newGlobalOp = builder.create<memref::GlobalOp>(
-                loc, builder.getStringAttr(newNameStr),
-                globalOp.getSymVisibilityAttr(), newTypeAttr, newInitValue,
-                globalOp.getConstantAttr(), globalOp.getAlignmentAttr());
-            builder.setInsertionPointAfter(newGlobalOp);
-            globalOpsInsertPt = builder.saveInsertionPoint();
-
-            // Create a new `GetGlobalOp` using the above created new `GlobalOp`
-            builder.restoreInsertionPoint(getGlobalOpsInsertPt);
-            auto newGetGlobalOp = builder.create<memref::GetGlobalOp>(
-                loc, newMemRefTy, newGlobalOp.getName());
-            builder.setInsertionPointAfter(newGetGlobalOp);
-            getGlobalOpsInsertPt = builder.saveInsertionPoint();
-
-            banks.push_back(newGetGlobalOp);
-          }
-          globalOp.erase();
+          auto newBanks =
+              handleGetGlobalOp(getGlobalOp, bankingFactor, bankingDimension,
+                                newMemRefType, builder);
+          banks.append(newBanks.begin(), newBanks.end());
         })
         .Default([](Operation *) {
           llvm_unreachable("Unhandled memory operation type");
