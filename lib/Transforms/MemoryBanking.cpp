@@ -89,18 +89,20 @@ MemRefType computeBankedMemRefType(MemRefType originalType,
   return newMemRefType;
 }
 
-// Updates n-dimensional index array `ndIndex` in-place by decoding the flat
-// index `linIndex` given the shape of the array. Assume row-major order.
-void decodeIndex(int64_t linIndex, ArrayRef<int64_t> shape,
-                 SmallVector<int64_t> &ndIndex) {
+// Decodes the flat index `linIndex` into an n-dimensional index based on the
+// given `shape` of the array in row-major order. Returns an array to represent
+// the n-dimensional indices.
+SmallVector<int64_t> decodeIndex(int64_t linIndex, ArrayRef<int64_t> shape) {
   const unsigned rank = shape.size();
-  ndIndex.resize(rank);
+  SmallVector<int64_t> ndIndex(rank, 0);
 
-  // compute from last dimension to first because we assume row-major.
-  for (int d = rank - 1; d >= 0; --d) {
+  // Compute from last dimension to first because we assume row-major.
+  for (int64_t d = rank - 1; d >= 0; --d) {
     ndIndex[d] = linIndex % shape[d];
     linIndex /= shape[d];
   }
+
+  return ndIndex;
 }
 
 // Performs multi-dimensional slicing on `allAttrs` by extracting all elements
@@ -124,9 +126,8 @@ SmallVector<SmallVector<Attribute>> sliceSubBlock(ArrayRef<Attribute> allAttrs,
   SmallVector<SmallVector<Attribute>> subBlocks;
   subBlocks.resize(bankingFactor);
 
-  SmallVector<int64_t> ndIndex(memShape.size(), 0);
   for (unsigned linIndex = 0; linIndex < numElements; ++linIndex) {
-    decodeIndex(linIndex, memShape, ndIndex);
+    SmallVector<int64_t> ndIndex = decodeIndex(linIndex, memShape);
     unsigned subBlockIndex = ndIndex[bankingDimension] % bankingFactor;
     subBlocks[subBlockIndex].push_back(allAttrs[linIndex]);
   }
