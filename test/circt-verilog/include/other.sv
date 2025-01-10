@@ -2,4 +2,8 @@
 // does not get picked up by lit.
 // RUN:
 
-localparam Z = 9001;
+module Foo(input foo);
+wire a = bar;
+
+
+endmoudle

@@ -445,12 +445,15 @@ void VerilogIndex::parseEmittedLoc() {
       first = false;
 
       auto it = sep.begin();
-      filePath = (*it).empty() ? filePath : *it;
+      if (llvm::any_of(*it, [](char c) { return c != ' '; })) {
+        filePath = *it;
+        addFile = true;
+      }
       line = *(++it);
       column = *(++it);
-      mlir::lsp::Logger::info("filePath: {}", filePath);
-      mlir::lsp::Logger::info("line: {}", line);
-      mlir::lsp::Logger::info("column: {}", column);
+      // mlir::lsp::Logger::info("filePath: {}", filePath);
+      // mlir::lsp::Logger::info("line: {}", line);
+      // mlir::lsp::Logger::info("column: {}", column);
       uint32_t lineInt;
       if (line.getAsInteger(10, lineInt))
         continue;
@@ -981,8 +984,8 @@ VerilogDocument::VerilogDocument(
   sourceMgr.AddNewSourceBuffer(std::move(memBuffer), SMLoc());
 
   const llvm::MemoryBuffer *mlirBuffer = sourceMgr.getMemoryBuffer(1);
-  mlir::lsp::Logger::info(
-      "VerilogDocument::VerilogDocument set include dirs {}", uriDirectory);
+  // mlir::lsp::Logger::info(
+  //     "VerilogDocument::VerilogDocument set include dirs {}", uriDirectory);
   verilogContext.driver.options.libDirs = includeDirs;
   auto slangBuffer = verilogContext.driver.sourceManager.assignText(
       uri.file(), mlirBuffer->getBuffer());
@@ -1091,6 +1094,7 @@ void VerilogDocument::getLocationsOf(
           "VerilogDocument::getLocationsOf interval map loc");
       auto fileInfo = verilogContext.filePathMap.find(it->filePath);
       if (fileInfo == verilogContext.filePathMap.end()) {
+        bool found = false;
         for (auto &lib : verilogContext.originalFileRoots) {
           auto size = lib.size();
           auto fixupSize = llvm::make_scope_exit([&]() { lib.resize(size); });
@@ -1100,6 +1104,7 @@ void VerilogDocument::getLocationsOf(
             if (!memoryBuffer) {
               continue;
             }
+            found = true;
             auto id = verilogContext.sourceMgr.AddNewSourceBuffer(
                 std::move(*memoryBuffer), SMLoc());
 
@@ -1109,6 +1114,8 @@ void VerilogDocument::getLocationsOf(
                            .first;
           }
         }
+        if (!found)
+          return;
       }
 
       const auto &[bufferId, filePath] = fileInfo->second;
@@ -1349,6 +1356,8 @@ struct RvalueExprVisitor
 
   void handleSymbol(const slang::ast::Symbol *symbol, slang::SourceRange range,
                     bool useEnd = true) {
+    if (!symbol || !range.start().valid() || !range.end().valid())
+      return;
     mlir::lsp::Logger::debug("handleSymbol: {}", symbol->name);
     if (symbol->name.empty()) {
       return;
@@ -1498,8 +1507,12 @@ struct RvalueExprVisitor
 
     for (const auto &con : expr.getPortConnections()) {
       auto *portSymbol = con->port.as_if<slang::ast::PortSymbol>();
-      if (portSymbol) {
+      if (portSymbol && con->getExpression()) {
         auto loc = con->getExpression()->sourceRange;
+        if (!loc.start().valid())
+          return;
+        if (loc.start().buffer().getId() != 1)
+          return;
         mlir::lsp::Logger::info("portSymbol: {} {}", portSymbol->name,
                                 portSymbol->getType().toString());
         inlayHints.emplace_back(
