@@ -602,9 +602,8 @@ struct StatementVisitor
                                     mlir::raw_indented_ostream &stream,
                                     ValueMap &valueMap) {
     // Ignore operations which are handled in the Expression Visitor.
-    if (isa<smt::Int2BVOp>(op))
-      return op->emitError(
-          "int2bv operations are not supported for SMTLIB emission");
+    if (isa<smt::Int2BVOp, BV2IntOp>(op))
+      return op->emitError("operation not supported for SMTLIB emission");
 
     return success();
   }
