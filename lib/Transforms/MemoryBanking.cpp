@@ -117,7 +117,7 @@ SmallVector<SmallVector<Attribute>> sliceSubBlock(ArrayRef<Attribute> allAttrs,
   size_t numElements = std::reduce(memShape.begin(), memShape.end(), 1,
                                    std::multiplies<size_t>());
   // `bankingFactor` number of flattened attributes that store the information
-  // in the original globalOp
+  // in the original globalOp.
   SmallVector<SmallVector<Attribute>> subBlocks;
   subBlocks.resize(bankingFactor);
 
@@ -181,26 +181,31 @@ SmallVector<Value, 4> createBanks(Value originalMem, uint64_t bankingFactor,
           auto globalOp =
               dyn_cast_or_null<memref::GlobalOp>(SymbolTable::lookupSymbolIn(
                   symbolTableOp, getGlobalOp.getNameAttr()));
+          assert(globalOp &&
+                 "The corresponding GlobalOp should exist in the module");
           MemRefType globalOpTy = globalOp.getType();
+
           auto cstAttr = dyn_cast_or_null<DenseElementsAttr>(
               globalOp.getConstantInitValue());
-          SmallVector<Attribute, 8> allAttrs;
-          for (auto attr : cstAttr.getValues<Attribute>())
-            allAttrs.push_back(attr);
+          auto attributes = cstAttr.getValues<Attribute>();
+          SmallVector<Attribute, 8> allAttrs(attributes.begin(),
+                                             attributes.end());
 
           auto subBlocks = sliceSubBlock(allAttrs, originalShape,
                                          bankingDimension, bankingFactor);
 
-          OpBuilder::InsertPoint globalOpsInsertPt, getGlobalOpsInsertPt;
-          for (size_t bankCnt = 0; bankCnt < bankingFactor; ++bankCnt) {
-            if (bankCnt == 0) {
-              // initialize globalOp and getGlobalOp's insertion points
-              builder.setInsertionPointAfter(globalOp);
-              globalOpsInsertPt = builder.saveInsertionPoint();
-              builder.setInsertionPointAfter(getGlobalOp);
-              getGlobalOpsInsertPt = builder.saveInsertionPoint();
-            }
+          // Initialize globalOp and getGlobalOp's insertion points. Since
+          // `bankingFactor` is guaranteed to be greater than zero as it would
+          // have early exited if not, the loop below will execute at least
+          // once. So it's safe to manipulate the insertion points here.
+          builder.setInsertionPointAfter(globalOp);
+          OpBuilder::InsertPoint globalOpsInsertPt =
+              builder.saveInsertionPoint();
+          builder.setInsertionPointAfter(getGlobalOp);
+          OpBuilder::InsertPoint getGlobalOpsInsertPt =
+              builder.saveInsertionPoint();
 
+          for (size_t bankCnt = 0; bankCnt < bankingFactor; ++bankCnt) {
             // Prepare relevant information to create a new `GlobalOp`
             auto newMemRefTy =
                 MemRefType::get(newShape, globalOpTy.getElementType());
