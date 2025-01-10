@@ -1221,6 +1221,8 @@ struct BV2IntOpLowering : public SMTLoweringPattern<BV2IntOp> {
   LogicalResult
   matchAndRewrite(BV2IntOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
+    // FIXME: ideally we don't want to use i1 here, since bools can sometimes be
+    // compiled to wider widths in LLVM
     Value isSignedConst = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), rewriter.getI1Type(), op.getIsSigned());
     rewriter.replaceOp(op,
