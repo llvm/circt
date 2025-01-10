@@ -248,10 +248,9 @@ def BV2IntOp : SMTOp<"bv2int", [Pure]> {
     N are the number of bits in `input`. If `is_signed` is true, `input` is
     treated as a signed bit-vector.
   }];
-  let arguments = (ins BitVectorType:$input, BoolAttr:$is_signed);
+  let arguments = (ins BitVectorType:$input, UnitAttr:$is_signed);
   let results = (outs IntType:$result);
-  let assemblyFormat = [{$input custom<KeywordBool>($is_signed, "\"signed\"",
-    "\"unsigned\"") attr-dict `:` qualified(type($input))}];
+  let assemblyFormat = [{$input (`signed` $is_signed^)? attr-dict `:` qualified(type($input))}];
 }
 
 #endif // CIRCT_DIALECT_SMT_SMTBITVECTOROPS_TD

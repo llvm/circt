@@ -72,10 +72,10 @@ func.func @bitvectors() {
   // CHECK: %{{.*}} = smt.bv.repeat 2 times [[C0]] {smt.some_attr} : !smt.bv<32>
   %27 = smt.bv.repeat 2 times %c {smt.some_attr} : !smt.bv<32>
 
+  // CHECK: %{{.*}} = smt.bv2int [[C0]] {smt.some_attr} : !smt.bv<32>
+  %29 = smt.bv2int %c {smt.some_attr} : !smt.bv<32>
   // CHECK: %{{.*}} = smt.bv2int [[C0]] signed {smt.some_attr} : !smt.bv<32>
   %28 = smt.bv2int %c signed {smt.some_attr} : !smt.bv<32>
-  // CHECK: %{{.*}} = smt.bv2int [[C0]] unsigned {smt.some_attr} : !smt.bv<32>
-  %29 = smt.bv2int %c unsigned {smt.some_attr} : !smt.bv<32>
 
   return
 }
