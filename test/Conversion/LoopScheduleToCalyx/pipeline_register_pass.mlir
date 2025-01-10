@@ -1,6 +1,6 @@
 // RUN: circt-opt %s -lower-loopschedule-to-calyx -canonicalize -split-input-file | FileCheck %s
 
-// This will introduce duplicate groups; these should be subsequently removed during canonicalization.
+// This will introduce duplicate groups; these should be subsequently removed.
 
 // CHECK:      calyx.while %std_lt_0.out with @bb0_0 {
 // CHECK-NEXT:  calyx.par {
