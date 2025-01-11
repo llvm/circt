@@ -172,7 +172,7 @@ SmallVector<Value, 4> handleGetGlobalOp(memref::GetGlobalOp getGlobalOp,
     // Prepare relevant information to create a new GlobalOp
     auto newMemRefTy = MemRefType::get(newShape, globalOpTy.getElementType());
     auto newTypeAttr = TypeAttr::get(newMemRefTy);
-    std::string newNameStr =
+    std::string newName =
         llvm::formatv("{0}_{1}_{2}_{3}", globalOp.getConstantAttrName(),
                       llvm::join(llvm::map_range(newShape,
                                                  [](int64_t dim) {
@@ -186,7 +186,7 @@ SmallVector<Value, 4> handleGetGlobalOp(memref::GetGlobalOp getGlobalOp,
 
     builder.restoreInsertionPoint(globalOpsInsertPt);
     auto newGlobalOp = builder.create<memref::GlobalOp>(
-        globalOp.getLoc(), builder.getStringAttr(newNameStr),
+        globalOp.getLoc(), builder.getStringAttr(newName),
         globalOp.getSymVisibilityAttr(), newTypeAttr, newInitValue,
         globalOp.getConstantAttr(), globalOp.getAlignmentAttr());
     builder.setInsertionPointAfter(newGlobalOp);
