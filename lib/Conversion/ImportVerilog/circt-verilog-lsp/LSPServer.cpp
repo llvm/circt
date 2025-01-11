@@ -262,6 +262,8 @@ LogicalResult circt::lsp::runVerilogLSPServer(VerilogServer &server,
   LSPServer lspServer(server, transport);
   MessageHandler messageHandler(transport);
 
+  mlir::lsp::Logger::info("Starting Verilog LSP Server");
+
   // Initialization
   messageHandler.method("initialize", &lspServer, &LSPServer::onInitialize);
   messageHandler.notification("initialized", &lspServer,
