@@ -47,8 +47,10 @@ set(PYTHON_BINDINGS_LINK_LIBS
   CIRCTCAPISeq
   CIRCTCAPISV
   CIRCTCAPIVerif
-  MLIRCAPITransforms
   CIRCTCAPITransforms
+  # needed for mlirFrozenRewritePatternSetDestroy
+  # but not the actual passes
+  MLIRCAPITransforms
 )
 
 if (CIRCT_INCLUDE_TESTS)

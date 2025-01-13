@@ -55,7 +55,7 @@ static void registerPasses() {
   registerHandshakePasses();
   mlirRegisterCIRCTConversionPasses();
   mlirRegisterCIRCTTransformsPasses();
-  mlirRegisterTransformsPasses();
+  mlirRegisterTransformsCSE();
 }
 
 PYBIND11_MODULE(_circt, m) {
