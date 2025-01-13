@@ -437,19 +437,16 @@ firrtl.circuit "ForceRelease" {
   }
   // CHECK-LABEL: firrtl.module @ForceRelease
   firrtl.module @ForceRelease(in %c: !firrtl.uint<1>, in %clock: !firrtl.clock, in %x: !firrtl.uint<4>) {
+      // CHECK-NEXT: %[[REF:.+]] = firrtl.xmr.ref @[[XMRPATH]] : !firrtl.rwprobe<uint<4>>
       // CHECK-NEXT: firrtl.instance r sym @[[INST_SYM]] @RefMe()
       %r_p = firrtl.instance r @RefMe(out p: !firrtl.rwprobe<uint<4>>)
-      // CHECK-NEXT: %[[REF1:.+]] = firrtl.xmr.ref @[[XMRPATH]] : !firrtl.rwprobe<uint<4>>
-      // CHECK-NEXT: firrtl.ref.force %clock, %c, %[[REF1]], %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
+      // CHECK-NEXT: firrtl.ref.force %clock, %c, %[[REF]], %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
       firrtl.ref.force %clock, %c, %r_p, %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
-      // CHECK-NEXT: %[[REF2:.+]] = firrtl.xmr.ref @[[XMRPATH]] : !firrtl.rwprobe<uint<4>>
-      // CHECK-NEXT: firrtl.ref.force_initial %c, %[[REF2]], %x : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
+      // CHECK-NEXT: firrtl.ref.force_initial %c, %[[REF]], %x : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
       firrtl.ref.force_initial %c, %r_p, %x : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
-      // CHECK-NEXT: %[[REF3:.+]] = firrtl.xmr.ref @[[XMRPATH]] : !firrtl.rwprobe<uint<4>>
-      // CHECK-NEXT: firrtl.ref.release %clock, %c, %[[REF3]] : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
+      // CHECK-NEXT: firrtl.ref.release %clock, %c, %[[REF]] : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
       firrtl.ref.release %clock, %c, %r_p : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
-      // CHECK-NEXT: %[[REF4:.+]] = firrtl.xmr.ref @[[XMRPATH]] : !firrtl.rwprobe<uint<4>>
-      // CHECK-NEXT: firrtl.ref.release_initial %c, %[[REF4]] : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
+      // CHECK-NEXT: firrtl.ref.release_initial %c, %[[REF]] : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
       firrtl.ref.release_initial %c, %r_p : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
     }
   }
@@ -778,5 +775,24 @@ firrtl.circuit "WireProbe" {
     %w = firrtl.wire : !firrtl.probe<uint<5>>
     firrtl.ref.define %w, %0 : !firrtl.probe<uint<5>>
     firrtl.ref.define %p, %w : !firrtl.probe<uint<5>>
+  }
+}
+
+// -----
+// Test that operations with regions and blocks are visited.  This will error if
+// blocks are not visited.
+
+// CHECK-LABEL: "Foo"
+firrtl.circuit "Foo" {
+  // CHECK: hierpath {{.*}} [@Foo::@[[SYM:[^ ]+]]]
+  sv.macro.decl @A
+  firrtl.module @Foo(out %a: !firrtl.probe<uint<1>>) {
+    //CHECK: sv.ifdef
+    sv.ifdef @A {
+      %b = firrtl.wire : !firrtl.uint<1>
+      // CHECK: firrtl.node sym @[[SYM]] {{.*}} %b
+      %0 = firrtl.ref.send %b : !firrtl.uint<1>
+      firrtl.ref.define %a, %0 : !firrtl.probe<uint<1>>
+    }
   }
 }

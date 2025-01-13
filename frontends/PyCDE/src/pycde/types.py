@@ -134,6 +134,12 @@ class Type:
     """Create an array type"""
     return Array(self, len)
 
+  def castable(self, value: Type) -> bool:
+    """Return True if a value of 'value' can be cast to this type."""
+    if not isinstance(value, Type):
+      raise TypeError("Can only cast to a Type")
+    return esi.check_inner_type_match(self._type, value._type)
+
   def __repr__(self):
     return self._type.__repr__()
 
@@ -551,6 +557,16 @@ class Any(Type):
   def is_hw_type(self) -> bool:
     return False
 
+  def _from_obj_or_sig(self,
+                       obj,
+                       alias: typing.Optional["TypeAlias"] = None) -> "Signal":
+    """Any signal can be any type. Skip the type check."""
+
+    from .signals import Signal
+    if isinstance(obj, Signal):
+      return obj
+    return self._from_obj(obj, alias)
+
 
 class Channel(Type):
   """An ESI channel type."""
@@ -598,7 +614,7 @@ class Channel(Type):
     return self.inner_type
 
   def wrap(self, value,
-           valueOrEmpty) -> typing.Tuple["ChannelSignal", "BitsSignal"]:
+           valid_or_empty) -> typing.Tuple["ChannelSignal", "BitsSignal"]:
     """Wrap a data signal and valid signal into a data channel signal and a
     ready signal."""
 
@@ -608,20 +624,74 @@ class Channel(Type):
     # one.
 
     from .dialects import esi
+    from .signals import Signal
     signaling = self.signaling
     if signaling == ChannelSignaling.ValidReady:
-      value = self.inner_type(value)
-      valid = types.i1(valueOrEmpty)
+      if not isinstance(value, Signal):
+        value = self.inner_type(value)
+      elif value.type != self.inner_type:
+        raise TypeError(
+            f"Expected signal of type {self.inner_type}, got {value.type}")
+      valid = Bits(1)(valid_or_empty)
       wrap_op = esi.WrapValidReadyOp(self._type, types.i1, value.value,
                                      valid.value)
       return wrap_op[0], wrap_op[1]
     elif signaling == ChannelSignaling.FIFO:
       value = self.inner_type(value)
-      empty = types.i1(valueOrEmpty)
+      empty = Bits(1)(valid_or_empty)
       wrap_op = esi.WrapFIFOOp(self._type, types.i1, value.value, empty.value)
       return wrap_op[0], wrap_op[1]
     else:
       raise TypeError("Unknown signaling standard")
+
+  def _join(self, a: "ChannelSignal", b: "ChannelSignal") -> "ChannelSignal":
+    """Join two channels into a single channel. The resulting type is a struct
+    with two fields, 'a' and 'b' wherein 'a' is the data from channel a and 'b'
+    is the data from channel b."""
+
+    from .constructs import Wire
+    both_ready = Wire(Bits(1))
+    a_data, a_valid = a.unwrap(both_ready)
+    b_data, b_valid = b.unwrap(both_ready)
+    both_valid = a_valid & b_valid
+    result_data = self.inner_type({"a": a_data, "b": b_data})
+    result_chan, result_ready = self.wrap(result_data, both_valid)
+    both_ready.assign(result_ready & both_valid)
+    return result_chan
+
+  @staticmethod
+  def join(a: "ChannelSignal", b: "ChannelSignal") -> "ChannelSignal":
+    """Join two channels into a single channel. The resulting type is a struct
+    with two fields, 'a' and 'b' wherein 'a' is the data from channel a and 'b'
+    is the data from channel b."""
+
+    from .types import Channel, StructType
+    return Channel(
+        StructType([("a", a.type.inner_type),
+                    ("b", b.type.inner_type)]))._join(a, b)
+
+  def merge(self, a: "ChannelSignal", b: "ChannelSignal") -> "ChannelSignal":
+    """Merge two channels into a single channel, selecting a message from either
+    one. May implement any sort of fairness policy. Both channels must be of the
+    same type. Returns both the merged channel."""
+
+    from .constructs import Mux, Wire
+    a_ready = Wire(Bits(1))
+    b_ready = Wire(Bits(1))
+    a_data, a_valid = a.unwrap(a_ready)
+    b_data, b_valid = b.unwrap(b_ready)
+
+    sel_a = a_valid
+    sel_b = ~sel_a
+    out_ready = Wire(Bits(1))
+    a_ready.assign(sel_a & out_ready)
+    b_ready.assign(sel_b & out_ready)
+
+    valid = (sel_a & a_valid) | (sel_b & b_valid)
+    data = Mux(sel_a, b_data, a_data)
+    chan, ready = self.wrap(data, valid)
+    out_ready.assign(ready)
+    return chan
 
 
 @dataclass
@@ -659,11 +729,14 @@ class Bundle(Type):
     return False
 
   @property
-  def channels(self):
+  def channels(self) -> typing.List[BundledChannel]:
     return [
         BundledChannel(name, dir, _FromCirctType(type))
         for (name, dir, type) in self._type.channels
     ]
+
+  def castable(self, _) -> bool:
+    raise TypeError("Cannot check cast-ablity to a bundle")
 
   def inverted(self) -> "Bundle":
     """Return a new bundle with all the channels direction inverted."""

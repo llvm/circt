@@ -29,6 +29,7 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/JSON.h"
 
+#include <optional>
 #include <variant>
 
 namespace circt {
@@ -62,9 +63,10 @@ bool noStoresToMemory(Value memoryReference);
 // Get the index'th output port of compOp.
 Value getComponentOutput(calyx::ComponentOp compOp, unsigned outPortIdx);
 
-// If the provided type is an index type, converts it to i32, else, returns the
-// unmodified type.
-Type convIndexType(OpBuilder &builder, Type type);
+// If the provided type is an index type, converts it to i32; else if the
+// provided is an integer or floating point, bitcasts it to a signless integer
+// type; otherwise, returns the unmodified type.
+Type normalizeType(OpBuilder &builder, Type type);
 
 // Creates a new calyx::CombGroupOp or calyx::GroupOp group within compOp.
 template <typename TGroup>
@@ -403,12 +405,13 @@ public:
   /// Put the name of the callee and the instance of the call into map.
   void addInstance(StringRef calleeName, InstanceOp instanceOp);
 
-  /// Return the group which evaluates the value v. Optionally, caller may
-  /// specify the expected type of the group.
+  /// Returns the evaluating group or None if not found.
   template <typename TGroupOp = calyx::GroupInterface>
-  TGroupOp getEvaluatingGroup(Value v) {
+  std::optional<TGroupOp> findEvaluatingGroup(Value v) {
     auto it = valueGroupAssigns.find(v);
-    assert(it != valueGroupAssigns.end() && "No group evaluating value!");
+    if (it == valueGroupAssigns.end())
+      return std::nullopt;
+
     if constexpr (std::is_same_v<TGroupOp, calyx::GroupInterface>)
       return it->second;
     else {
@@ -416,6 +419,15 @@ public:
       assert(group && "Actual group type differed from expected group type");
       return group;
     }
+  }
+
+  /// Return the group which evaluates the value v. Optionally, caller may
+  /// specify the expected type of the group.
+  template <typename TGroupOp = calyx::GroupInterface>
+  TGroupOp getEvaluatingGroup(Value v) {
+    std::optional<TGroupOp> group = findEvaluatingGroup<TGroupOp>(v);
+    assert(group.has_value() && "No group evaluating value!");
+    return *group;
   }
 
   template <typename T, typename = void>
@@ -744,6 +756,23 @@ struct EliminateUnusedCombGroups : mlir::OpRewritePattern<calyx::CombGroupOp> {
                                 PatternRewriter &rewriter) const override;
 };
 
+/// Removes duplicate EnableOps in parallel operations.
+struct DeduplicateParallelOp : mlir::OpRewritePattern<calyx::ParOp> {
+  using mlir::OpRewritePattern<calyx::ParOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(calyx::ParOp parOp,
+                                PatternRewriter &rewriter) const override;
+};
+
+/// Removes duplicate EnableOps in static parallel operations.
+struct DeduplicateStaticParallelOp
+    : mlir::OpRewritePattern<calyx::StaticParOp> {
+  using mlir::OpRewritePattern<calyx::StaticParOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(calyx::StaticParOp parOp,
+                                PatternRewriter &rewriter) const override;
+};
+
 /// This pass recursively inlines use-def chains of combinational logic (from
 /// non-stateful groups) into groups referenced in the control schedule.
 class InlineCombGroups
@@ -837,6 +866,20 @@ struct PredicateInfo {
 };
 
 PredicateInfo getPredicateInfo(mlir::arith::CmpFPredicate pred);
+
+/// Performs a bit cast from a non-signless integer type value, such as a
+/// floating point value, to a signless integer type. Calyx treats everything as
+/// bit vectors, and leaves their interpretation to the respective operation
+/// using it. In CIRCT Calyx, we use signless `IntegerType` to represent a bit
+/// vector.
+template <typename T>
+Type toBitVector(T type) {
+  if (!type.isSignlessInteger()) {
+    unsigned bitWidth = cast<T>(type).getIntOrFloatBitWidth();
+    return IntegerType::get(type.getContext(), bitWidth);
+  }
+  return type;
+}
 
 } // namespace calyx
 } // namespace circt

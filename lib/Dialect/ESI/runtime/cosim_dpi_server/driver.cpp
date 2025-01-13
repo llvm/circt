@@ -34,6 +34,7 @@
 
 #include "signal.h"
 #include <iostream>
+#include <thread>
 
 vluint64_t timeStamp;
 
@@ -53,6 +54,14 @@ int main(int argc, char **argv) {
   // Construct the simulated module's C++ model.
   auto &dut = *new CLASSNAME(V, TOP_MODULE)();
   char *waveformFile = getenv("SAVE_WAVE");
+
+  char *periodStr = getenv("DEBUG_PERIOD");
+  unsigned debugPeriod = 0;
+  if (periodStr) {
+    debugPeriod = std::stoi(periodStr);
+    std::cout << "[driver] Setting debug period to " << debugPeriod
+              << std::endl;
+  }
 
   VerilatedVcdC *tfp = nullptr;
   if (waveformFile) {
@@ -97,6 +106,8 @@ int main(int argc, char **argv) {
     dut.clk = !dut.clk;
     if (tfp)
       tfp->dump(timeStamp);
+    if (debugPeriod)
+      std::this_thread::sleep_for(std::chrono::milliseconds(debugPeriod));
   }
 
   // Tell the simulator that we're going to exit. This flushes the output(s) and

@@ -460,7 +460,7 @@ func.func @func_range_no_smt_type(%arg0: !smt.func<(!smt.bool) !smt.func<(!smt.b
 // -----
 
 func.func @func_range_no_smt_type(%arg0: !smt.func<(!smt.bool) !smt.bool>) {
-  // expected-error @below {{0 operands present, but expected 1}}
+  // expected-error @below {{got 0 operands and 1 types}}
   smt.apply_func %arg0() : !smt.func<(!smt.bool) !smt.bool>
   return
 }

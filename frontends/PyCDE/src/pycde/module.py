@@ -145,7 +145,7 @@ class PortProxyBase:
     if isinstance(signal, Signal):
       if port.type != signal.type:
         raise PortError(
-            f"Input port {port.name} expected type {port.type}, not {signal.type}"
+            f"Output port {port.name} expected type {port.type}, not {signal.type}"
         )
     else:
       signal = port.type(signal)

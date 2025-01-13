@@ -86,6 +86,13 @@ static cl::opt<bool>
                  cl::desc("Run the verifier after each transformation pass"),
                  cl::init(true), cl::cat(mainCategory));
 
+static cl::opt<bool> printSolverOutput(
+    "print-solver-output",
+    cl::desc("Print the output (counterexample or proof) produced by the "
+             "solver on each invocation and the assertion set that they "
+             "prove/disprove."),
+    cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool>
     verbosePassExecutions("verbose-pass-executions",
                           cl::desc("Log executions of toplevel module passes"),
@@ -173,6 +180,7 @@ static LogicalResult executeBMC(MLIRContext &context) {
 
   if (outputFormat != OutputMLIR && outputFormat != OutputSMTLIB) {
     LowerSMTToZ3LLVMOptions options;
+    options.debug = printSolverOutput;
     pm.addPass(createLowerSMTToZ3LLVM(options));
     pm.addPass(createCSEPass());
     pm.addPass(createSimpleCanonicalizerPass());

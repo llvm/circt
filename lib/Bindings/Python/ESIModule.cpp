@@ -31,24 +31,39 @@ using namespace circt::esi;
 // The main entry point into the ESI Assembly API.
 //===----------------------------------------------------------------------===//
 
+/// Container for a Python function that will be called to generate a service.
+class ServiceGenFunc {
+public:
+  ServiceGenFunc(py::object genFunc) : genFunc(std::move(genFunc)) {}
+
+  MlirLogicalResult run(MlirOperation reqOp, MlirOperation declOp,
+                        MlirOperation recOp) {
+    py::gil_scoped_acquire acquire;
+    py::object rc = genFunc(reqOp, declOp, recOp);
+    return rc.cast<bool>() ? mlirLogicalResultSuccess()
+                           : mlirLogicalResultFailure();
+  }
+
+private:
+  py::object genFunc;
+};
+
 // Mapping from unique identifier to python callback. We use std::string
 // pointers since we also need to allocate memory for the string.
-llvm::DenseMap<std::string *, PyObject *> serviceGenFuncLookup;
+llvm::DenseMap<std::string *, ServiceGenFunc> serviceGenFuncLookup;
 static MlirLogicalResult serviceGenFunc(MlirOperation reqOp,
                                         MlirOperation declOp,
                                         MlirOperation recOp, void *userData) {
   std::string *name = static_cast<std::string *>(userData);
-  py::handle genFunc(serviceGenFuncLookup[name]);
-  py::gil_scoped_acquire();
-  py::object rc = genFunc(reqOp, declOp, recOp);
-  return rc.cast<bool>() ? mlirLogicalResultSuccess()
-                         : mlirLogicalResultFailure();
+  auto iter = serviceGenFuncLookup.find(name);
+  if (iter == serviceGenFuncLookup.end())
+    return mlirLogicalResultFailure();
+  return iter->getSecond().run(reqOp, declOp, recOp);
 }
 
 void registerServiceGenerator(std::string name, py::object genFunc) {
   std::string *n = new std::string(name);
-  genFunc.inc_ref();
-  serviceGenFuncLookup[n] = genFunc.ptr();
+  serviceGenFuncLookup.try_emplace(n, ServiceGenFunc(genFunc));
   circtESIRegisterGlobalServiceGenerator(wrap(*n), serviceGenFunc, n);
 }
 
@@ -80,6 +95,12 @@ using namespace mlir::python::adaptors;
 void circt::python::populateDialectESISubmodule(py::module &m) {
   m.doc() = "ESI Python Native Extension";
   ::registerESIPasses();
+
+  // Clean up references when the module is unloaded.
+  auto cleanup = []() { serviceGenFuncLookup.clear(); };
+  m.def("cleanup", cleanup,
+        "Cleanup various references. Must be called before the module is "
+        "unloaded in order to not leak.");
 
   m.def("registerServiceGenerator", registerServiceGenerator,
         "Register a service generator for a given service name.",
@@ -199,6 +220,10 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
       .def_property_readonly("root", &circtESIAppIDAttrPathGetRoot)
       .def("__len__", &circtESIAppIDAttrPathGetNumComponents)
       .def("__getitem__", &circtESIAppIDAttrPathGetComponent);
+
+  m.def("check_inner_type_match", &circtESICheckInnerTypeMatch,
+        "Check that two types match, allowing for AnyType in 'expected'.",
+        py::arg("expected"), py::arg("actual"));
 
   py::class_<PyAppIDIndex>(m, "AppIDIndex")
       .def(py::init<MlirOperation>(), py::arg("root"))

@@ -181,87 +181,6 @@ hw.module @dedupLong(in %arg0 : i7, in %arg1 : i7, in %arg2: i7, out resAnd: i7,
   hw.output %0, %1 : i7, i7
 }
 
-// CHECK-LABEL: hw.module @orExclusiveConcats
-hw.module @orExclusiveConcats(in %arg0 : i6, in %arg1 : i2, out o: i9) {
-  // CHECK-NEXT:    %false = hw.constant false
-  // CHECK-NEXT:    %0 = comb.concat %arg1, %false, %arg0 : i2, i1, i6
-  // CHECK-NEXT:    hw.output %0 : i9
-  %c0 = hw.constant 0 : i3
-  %0 = comb.concat %c0, %arg0 : i3, i6
-  %c1 = hw.constant 0 : i7
-  %1 = comb.concat %arg1, %c1 : i2, i7
-  %2 = comb.or %0, %1 : i9
-  hw.output %2 : i9
-}
-
-// When two concats are or'd together and have mutually-exclusive fields, they
-// can be merged together into a single concat.
-// concat0: 0aaa aaa0 0000 0bb0
-// concat1: 0000 0000 ccdd d000
-// merged:  0aaa aaa0 ccdd dbb0
-// CHECK-LABEL: hw.module @orExclusiveConcats2
-hw.module @orExclusiveConcats2(in %arg0 : i6, in %arg1 : i2, in %arg2: i2, in %arg3: i3, out o: i16) {
-  // CHECK-NEXT:    %false = hw.constant false
-  // CHECK-NEXT:    %0 = comb.concat %false, %arg0, %false, %arg2, %arg3, %arg1, %false : i1, i6, i1, i2, i3, i2, i1
-  // CHECK-NEXT:    hw.output %0 : i16
-  %c0 = hw.constant 0 : i1
-  %c1 = hw.constant 0 : i6
-  %c2 = hw.constant 0 : i1
-  %0 = comb.concat %c0, %arg0, %c1, %arg1, %c2: i1, i6, i6, i2, i1
-  %c3 = hw.constant 0 : i8
-  %c4 = hw.constant 0 : i3
-  %1 = comb.concat %c3, %arg2, %arg3, %c4 : i8, i2, i3, i3
-  %2 = comb.or %0, %1 : i16
-  hw.output %2 : i16
-}
-
-// When two concats are or'd together and have mutually-exclusive fields, they
-// can be merged together into a single concat.
-// concat0: aaaa 1111
-// concat1: 1111 10bb
-// merged:  1111 1111
-// CHECK-LABEL: hw.module @orExclusiveConcats3
-hw.module @orExclusiveConcats3(in %arg0 : i4, in %arg1 : i2, out o: i8) {
-  // CHECK-NEXT:    [[RES:%[a-z0-9_-]+]] = hw.constant -1 : i8
-  // CHECK-NEXT:    hw.output [[RES]] : i8
-  %c0 = hw.constant -1 : i4
-  %0 = comb.concat %arg0, %c0: i4, i4
-  %c1 = hw.constant -1 : i5
-  %c2 = hw.constant 0 : i1
-  %1 = comb.concat %c1, %c2, %arg1 : i5, i1, i2
-  %2 = comb.or %0, %1 : i8
-  hw.output %2 : i8
-}
-
-// CHECK-LABEL: hw.module @orMultipleExclusiveConcats
-hw.module @orMultipleExclusiveConcats(in %arg0 : i2, in %arg1 : i2, in %arg2: i2, out o: i6) {
-  // CHECK-NEXT:    %0 = comb.concat %arg0, %arg1, %arg2 : i2, i2, i2
-  // CHECK-NEXT:    hw.output %0 : i6
-  %c2 = hw.constant 0 : i2
-  %c4 = hw.constant 0 : i4
-  %0 = comb.concat %arg0, %c4: i2, i4
-  %1 = comb.concat %c2, %arg1, %c2: i2, i2, i2
-  %2 = comb.concat %c4, %arg2: i4, i2
-  %out = comb.or %0, %1, %2 : i6
-  hw.output %out : i6
-}
-
-// CHECK-LABEL: hw.module @orConcatsWithMux
-hw.module @orConcatsWithMux(in %bit: i1, in %cond: i1, out o: i6) {
-  // CHECK-NEXT:    [[RES:%[a-z0-9_-]+]] = hw.constant 0 : i4
-  // CHECK-NEXT:    %0 = comb.concat [[RES]], %cond, %bit : i4, i1, i1
-  // CHECK-NEXT:    hw.output %0 : i6
-  %c0 = hw.constant 0 : i5
-  %0 = comb.concat %c0, %bit: i5, i1
-  %c1 = hw.constant 0 : i4
-  %c2 = hw.constant 2 : i2
-  %c3 = hw.constant 0 : i2
-  %1 = comb.mux %cond, %c2, %c3 : i2
-  %2 = comb.concat %c1, %1 : i4, i2
-  %3 = comb.or %0, %2 : i6
-  hw.output %3 : i6
-}
-
 // CHECK-LABEL: @extractNested
 hw.module @extractNested(in %0: i5, out o1 : i1) {
 // Multiple layers of nested extract is a weak evidence that the cannonicalization
@@ -1311,7 +1230,7 @@ hw.module @muxConstantsFold(in %cond: i1, out o: i25) {
 hw.module @muxCommon(in %cond: i1, in %cond2: i1,
                      in %arg0 : i32, in %arg1 : i32, in %arg2: i32, in %arg3: i32,
   out o1: i32, out o2: i32, out o3: i32, out o4: i32, 
-  out o5: i32, out orResult: i32, out o6: i32, out o7: i32) {
+  out o5: i32, out orResult: i32, out o6: i32, out o7: i32, out o8 : i1) {
   %allones = hw.constant -1 : i32
   %notArg0 = comb.xor %arg0, %allones : i32
 
@@ -1356,10 +1275,13 @@ hw.module @muxCommon(in %cond: i1, in %cond2: i1,
   %1 = comb.mux %cond, %arg1, %arg0 : i32
   %o7 = comb.mux %cond2, %1, %arg0 : i32
 
+  /// CHECK: [[O8:%.+]] = comb.mux [[O8]], [[O8]], [[O8]] : i1
+  %o8 = comb.mux %o8, %o8, %o8 : i1
+
   // CHECK: hw.output [[O1]], [[O2]], [[O3]], [[O4]], [[O5]], [[ORRESULT]],
-  // CHECK: [[O6]], [[O7]]
-  hw.output %o1, %o2, %o3, %o4, %o5, %orResult, %o6, %o7
-    : i32, i32, i32, i32, i32, i32, i32, i32
+  // CHECK: [[O6]], [[O7]], [[O8]]
+  hw.output %o1, %o2, %o3, %o4, %o5, %orResult, %o6, %o7, %o8
+    : i32, i32, i32, i32, i32, i32, i32, i32, i1
 }
 
 // CHECK-LABEL: @flatten_multi_use_and

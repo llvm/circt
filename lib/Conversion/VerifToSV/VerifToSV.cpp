@@ -44,8 +44,8 @@ struct PrintOpConversionPattern : public OpConversionPattern<PrintOp> {
                   ConversionPatternRewriter &rewriter) const override {
 
     // Printf's will be emitted to stdout (32'h8000_0001 in IEEE Std 1800-2012).
-    Value fdStdout = rewriter.create<hw::ConstantOp>(
-        op.getLoc(), APInt(32, 0x80000001, false));
+    Value fdStdout =
+        rewriter.create<hw::ConstantOp>(op.getLoc(), APInt(32, 0x80000001));
 
     auto fstrOp =
         dyn_cast_or_null<FormatVerilogStringOp>(op.getString().getDefiningOp());

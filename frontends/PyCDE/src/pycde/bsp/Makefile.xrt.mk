@@ -16,6 +16,15 @@ SRC := hw
 BUILD := build_$(TARGET)
 TEMP := $(BUILD)/temp
 
+# Limit number of Vivado jobs to avoid running out of memory. 0 is unlimited.
+JOBS := 0
+
+# Frequency of the kernel in MHz
+FREQ := 150
+
+# Optimization level (set to 0-3, s, or quick)
+OPT := 1
+
 # Toggle to automatically set custom options for running in Azure NP-series VMs
 AZURE := true
 
@@ -24,7 +33,8 @@ LINK_OUT := $(BUILD)/$(NAME).link.xclbin
 XCL_OUT := $(NAME).$(TARGET).xclbin
 HOST_APP := $(BUILD)/host_app
 
-VPPFLAGS = --save-temps
+VPPFLAGS = --save-temps --kernel_frequency $(FREQ) -O $(OPT)
+VPPFLAGS += --remote_ip_cache cache
 
 # Platform must match the device + shell you're using
 # For Azure NP-series, use the official Azure Shell
@@ -32,7 +42,7 @@ VPPFLAGS = --save-temps
 
 ifeq ($(AZURE), true)
 PLATFORM := xilinx_u250_gen3x16_xdma_2_1_202010_1
-# For Azure NP-series, output the routed netlist as a DCP instead of a bitsream!
+# For Azure NP-series, output the routed netlist as a DCP instead of a bitstream!
 VPPFLAGS += --advanced.param compiler.acceleratorBinaryContent=dcp
 else
 PLATFORM := xilinx_u250_gen3x16_xdma_4_1_202210_1
@@ -43,6 +53,10 @@ PACKAGE := $(BUILD)/package
 
 ifneq ($(TARGET), hw)
 VPPFLAGS += -g
+endif
+
+ifneq ($(JOBS), 0)
+	VPPFLAGS += --jobs $(JOBS)
 endif
 
 device2xsa = $(strip $(patsubst %.xpfm, % , $(shell basename $(PLATFORM))))
@@ -97,13 +111,13 @@ azure_creds:
 		exit 1; \
 	fi
 
-	$(eval SAS_EXPIRY=$(shell date --date "now + 48hours" +"%Y-%m-%dT%0k:%MZ"))
+	$(eval SAS_EXPIRY=$(shell date --date "now + 16hours" +"%Y-%m-%dT%0k:%MZ"))
 	$(eval SAS=$(shell \
 		az storage container generate-sas \
 			--subscription $(AZ_FPGA_SUB) \
 			--account-name $(AZ_FPGA_STORAGE_ACCOUNT) \
 			--name $(AZ_FPGA_STORAGE_CONTAINER) \
-			--https-only --permissions rwc --auth-mode key \
+			--https-only --permissions rwc --as-user --auth-mode login \
 			--expiry $(SAS_EXPIRY) --output tsv))
 
 $(IMAGE_AZ_NAME).azure.xclbin: azure_creds $(XCL_OUT) validate-fpgaimage.sh
@@ -113,6 +127,7 @@ $(IMAGE_AZ_NAME).azure.xclbin: azure_creds $(XCL_OUT) validate-fpgaimage.sh
 	@echo "*   Using name $(IMAGE_AZ_NAME)"
 	@echo "*************************"
 
+	az account set --subscription "$(AZ_FPGA_SUB)"
 	az storage blob upload \
 		--subscription $(AZ_FPGA_SUB) \
 		--account-name $(AZ_FPGA_STORAGE_ACCOUNT) \
@@ -133,8 +148,7 @@ $(IMAGE_AZ_NAME).azure.xclbin: azure_creds $(XCL_OUT) validate-fpgaimage.sh
 		--name $(IMAGE_AZ_NAME).azure.xclbin --file $(IMAGE_AZ_NAME).azure.xclbin
 
 validate-fpgaimage.sh:
-	wget -O azure_validate.zip \
-		https://fpgaattestation.blob.core.windows.net/validationscripts/validate.zip
+	wget https://github.com/Azure/azhpc-fpga-attestation/raw/refs/heads/main/validate.zip -o azure_validate.zip
 	unzip azure_validate.zip
 	mv scripts/validate-fpgaimage.sh .
 

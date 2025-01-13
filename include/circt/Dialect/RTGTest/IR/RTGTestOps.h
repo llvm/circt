@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_RTGTEST_IR_RTGTESTOPS_H
 #define CIRCT_DIALECT_RTGTEST_IR_RTGTESTOPS_H
 
+#include "circt/Dialect/RTG/IR/RTGISAAssemblyOpInterfaces.h"
 #include "circt/Dialect/RTG/IR/RTGOpInterfaces.h"
 #include "circt/Dialect/RTG/IR/RTGOps.h"
 #include "circt/Dialect/RTGTest/IR/RTGTestDialect.h"

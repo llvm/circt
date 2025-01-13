@@ -103,6 +103,9 @@ circtFirtoolOptionsSetEnableDebugInfo(CirctFirtoolFirtoolOptions options,
 MLIR_CAPI_EXPORTED void
 circtFirtoolOptionsSetBuildMode(CirctFirtoolFirtoolOptions options,
                                 CirctFirtoolBuildMode value);
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetDisableLayerSink(CirctFirtoolFirtoolOptions options,
+                                       bool value);
 
 MLIR_CAPI_EXPORTED void
 circtFirtoolOptionsSetDisableOptimization(CirctFirtoolFirtoolOptions options,

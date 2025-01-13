@@ -10,7 +10,9 @@
 #define CIRCT_CONVERSION_COMBTOAIG_H
 
 #include "circt/Support/LLVM.h"
+#include "llvm/ADT/SmallVector.h"
 #include <memory>
+#include <string>
 
 namespace circt {
 

@@ -198,7 +198,7 @@ void LatencyRetimingPass::runOnOperation() {
   RewritePatternSet patterns(&getContext());
   patterns.add<LatencyRetimingPattern>(&getContext(), cache, statistics);
 
-  if (failed(applyPatternsAndFoldGreedily(getOperation(), std::move(patterns))))
+  if (failed(applyPatternsGreedily(getOperation(), std::move(patterns))))
     return signalPassFailure();
 
   numOpsRemoved = statistics.numOpsRemoved;

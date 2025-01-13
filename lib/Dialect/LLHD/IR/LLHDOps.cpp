@@ -263,6 +263,7 @@ DeletionKind SigArrayGetOp::rewire(const DestructurableMemorySlot &slot,
                                    const DataLayout &dataLayout) {
   APInt idx;
   bool result = matchPattern(getIndex(), m_ConstantInt(&idx));
+  (void)result;
   assert(result);
   auto index =
       IntegerAttr::get(IndexType::get(getContext()), idx.getZExtValue());

@@ -3,13 +3,15 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from typing import List, Optional, Dict
+import sys
+from typing import List, Optional, Dict, Tuple
 
 from .module import Module, ModuleLikeBuilderBase, PortError
-from .signals import BitsSignal, ChannelSignal, ClockSignal, Signal
+from .signals import (BitsSignal, ChannelSignal, ClockSignal, Signal,
+                      _FromCirctValue)
 from .system import System
-from .support import get_user_loc, obj_to_typed_attribute
-from .types import Channel
+from .support import clog2, get_user_loc
+from .types import Bits, Channel
 
 from .circt.dialects import handshake as raw_handshake
 from .circt import ir
@@ -40,6 +42,10 @@ class FuncBuilder(ModuleLikeBuilderBase):
   def generate(self):
     """Fill in (generate) this module. Only supports a single generator
     currently."""
+
+    print(
+        sys.stderr, "WARNING: the Func handshake flow is currently broken "
+        "and thus disabled.")
     if len(self.generators) != 1:
       raise ValueError("Must have exactly one generator.")
     g: Generator = list(self.generators.values())[0]
@@ -82,7 +88,7 @@ class FuncBuilder(ModuleLikeBuilderBase):
         # If the input is a channel signal, the types must match.
         if signal.type.inner_type != port.type:
           raise ValueError(
-              f"Wrong type on input signal '{name}'. Got '{signal.type}',"
+              f"Wrong type on input signal '{name}'. Got '{signal.type.inner_type}',"
               f" expected '{port.type}'")
         assert port.idx is not None
         circt_inputs[port.idx] = signal.value
@@ -120,7 +126,32 @@ class Func(Module):
   to hardware design.
 
   The PyCDE interface to it (this class) is considered experimental. Use at your
-  own risk and test the resulting RTL thoroughly."""
+  own risk and test the resulting RTL thoroughly.
+
+  Warning: the DC flow is currently broken and thus disabled. Do not use this.
+  https://github.com/llvm/circt/issues/7949
+  """
 
   BuilderType: type[ModuleLikeBuilderBase] = FuncBuilder
   _builder: FuncBuilder
+
+
+def demux(cond: BitsSignal, data: Signal) -> Tuple[Signal, Signal]:
+  """Demux a signal based on a condition."""
+  condbr = raw_handshake.ConditionalBranchOp(cond.value, data.value)
+  return (_FromCirctValue(condbr.trueResult),
+          _FromCirctValue(condbr.falseResult))
+
+
+def cmerge(*args: Signal) -> Tuple[Signal, BitsSignal]:
+  """Merge multiple signals into one and the index of the signal."""
+  if len(args) == 0:
+    raise ValueError("cmerge must have at least one argument")
+  first = args[0]
+  for a in args[1:]:
+    if a.type != first.type:
+      raise ValueError("All arguments to cmerge must have the same type")
+  idx_type = Bits(clog2(len(args)))
+  cm = raw_handshake.ControlMergeOp(a.type._type, idx_type._type,
+                                    [a.value for a in args])
+  return (_FromCirctValue(cm.result), BitsSignal(cm.index, idx_type))

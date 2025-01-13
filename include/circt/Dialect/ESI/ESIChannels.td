@@ -476,6 +476,27 @@ def PipelineStageOp : ESI_Physical_Op<"stage", [
 // Misc operations
 //===----------------------------------------------------------------------===//
 
+def FIFOOp : ESI_Physical_Op<"fifo", []> {
+  let summary = "A FIFO with ESI channel connections";
+  let description = [{
+    A FIFO is a first-in-first-out buffer. This operation is a simple FIFO
+    which can be used to connect two ESI channels. The ESI channels MUST have
+    FIFO signaling semantics.
+  }];
+
+  let arguments = (ins
+    ClockType:$clk, I1:$rst, ChannelType:$input,
+    ConfinedAttr<I64Attr, [IntMinValue<1>]>:$depth
+  );
+  let results = (outs ChannelType:$output);
+
+  let assemblyFormat = [{
+    `in` $input `clk` $clk `rst` $rst `depth` $depth attr-dict
+      `:` type($input) `->` type($output)
+  }];
+  let hasVerifier = 1;
+}
+
 def CosimToHostEndpointOp : ESI_Physical_Op<"cosim.to_host", []> {
   let summary = "Co-simulation endpoint sending data to the host.";
   let description = [{

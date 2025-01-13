@@ -325,7 +325,7 @@ public:
       if (auto fileLoc = dyn_cast<mlir::FileLineColLoc>(funcOp->getLoc())) {
         std::string filename = fileLoc.getFilename().str();
         std::filesystem::path path(filename);
-        std::string jsonFileName = writeJson.append(".json");
+        std::string jsonFileName = writeJson.getValue() + ".json";
         auto outFileName = path.parent_path().append(jsonFileName);
         std::ofstream outFile(outFileName);
 
@@ -335,7 +335,7 @@ public:
           return failure();
         }
         llvm::raw_os_ostream llvmOut(outFile);
-        llvm::json::OStream jsonOS(llvmOut, 2);
+        llvm::json::OStream jsonOS(llvmOut, /*IndentSize=*/2);
         jsonOS.value(getState<ComponentLoweringState>().getExtMemData());
         jsonOS.flush();
         outFile.close();
@@ -397,8 +397,10 @@ private:
   LogicalResult buildLibraryOp(PatternRewriter &rewriter, TSrcOp op,
                                TypeRange srcTypes, TypeRange dstTypes) const {
     SmallVector<Type> types;
-    llvm::append_range(types, srcTypes);
-    llvm::append_range(types, dstTypes);
+    for (Type srcType : srcTypes)
+      types.push_back(calyx::toBitVector(srcType));
+    for (Type dstType : dstTypes)
+      types.push_back(calyx::toBitVector(dstType));
 
     auto calyxOp =
         getState<ComponentLoweringState>().getNewLibraryOpInstance<TCalyxLibOp>(
@@ -1060,7 +1062,8 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
       // value's precision handling.
       value = bit_cast<double>(bitValue);
     } else {
-      APInt apInt(/*numBits=*/elmTyBitWidth, bitValue, isSigned);
+      APInt apInt(/*numBits=*/elmTyBitWidth, bitValue, isSigned,
+                  /*implicitTrunc=*/true);
       // The conditional ternary operation will cause the `value` to interpret
       // the underlying data as unsigned regardless `isSigned` or not.
       if (isSigned)
@@ -1386,8 +1389,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      IndexCastOp op) const {
-  Type sourceType = calyx::convIndexType(rewriter, op.getOperand().getType());
-  Type targetType = calyx::convIndexType(rewriter, op.getResult().getType());
+  Type sourceType = calyx::normalizeType(rewriter, op.getOperand().getType());
+  Type targetType = calyx::normalizeType(rewriter, op.getResult().getType());
   unsigned targetBits = targetType.getIntOrFloatBitWidth();
   unsigned sourceBits = sourceType.getIntOrFloatBitWidth();
   LogicalResult res = success();
@@ -1576,7 +1579,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
         funcOpArgRewrites[arg.value()] = inPorts.size();
         inPorts.push_back(calyx::PortInfo{
             rewriter.getStringAttr(inName),
-            calyx::convIndexType(rewriter, arg.value().getType()),
+            calyx::normalizeType(rewriter, arg.value().getType()),
             calyx::Direction::Input,
             DictionaryAttr::get(rewriter.getContext(), {})});
       }
@@ -1592,7 +1595,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
 
       outPorts.push_back(calyx::PortInfo{
           rewriter.getStringAttr(resName),
-          calyx::convIndexType(rewriter, res.value()), calyx::Direction::Output,
+          calyx::normalizeType(rewriter, res.value()), calyx::Direction::Output,
           DictionaryAttr::get(rewriter.getContext(), {})});
     }
 
@@ -1891,7 +1894,6 @@ private:
     OpBuilder insideBuilder(newParOp);
     Block *currBlock = nullptr;
     auto &region = newParOp.getRegion();
-    IRMapping operandMap;
 
     // extract lower bounds, upper bounds, and steps as integer index values
     SmallVector<int64_t> lbVals, ubVals, stepVals;
@@ -1917,6 +1919,11 @@ private:
     SmallVector<int64_t> indices = lbVals;
 
     while (true) {
+      // Each iteration starts with a fresh mapping, so each new block’s
+      // argument of a region-based operation (such as `scf.for`) get re-mapped
+      // independently.
+      IRMapping operandMap;
+
       // Create a new block in the region for the current combination of indices
       currBlock = &region.emplaceBlock();
       insideBuilder.setInsertionPointToEnd(currBlock);
@@ -2488,11 +2495,10 @@ public:
     if (runOnce)
       config.maxIterations = 1;
 
-    /// Can't return applyPatternsAndFoldGreedily. Root isn't
+    /// Can't return applyPatternsGreedily. Root isn't
     /// necessarily erased so it will always return failed(). Instead,
     /// forward the 'succeeded' value from PartialLoweringPatternBase.
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(pattern),
-                                       config);
+    (void)applyPatternsGreedily(getOperation(), std::move(pattern), config);
     return partialPatternRes;
   }
 
@@ -2815,8 +2821,8 @@ void SCFToCalyxPass::runOnOperation() {
   RewritePatternSet cleanupPatterns(&getContext());
   cleanupPatterns.add<calyx::MultipleGroupDonePattern,
                       calyx::NonTerminatingGroupDonePattern>(&getContext());
-  if (failed(applyPatternsAndFoldGreedily(getOperation(),
-                                          std::move(cleanupPatterns)))) {
+  if (failed(
+          applyPatternsGreedily(getOperation(), std::move(cleanupPatterns)))) {
     signalPassFailure();
     return;
   }

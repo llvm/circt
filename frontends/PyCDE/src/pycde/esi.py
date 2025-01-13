@@ -2,11 +2,13 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from .common import (AppID, Input, Output, _PyProxy, PortError)
+from .common import (AppID, Clock, Input, InputChannel, Output, OutputChannel,
+                     _PyProxy, PortError)
 from .constructs import AssignableSignal, Mux, Wire
-from .module import generator, Module, ModuleLikeBuilderBase, PortProxyBase
+from .module import (generator, modparams, Module, ModuleLikeBuilderBase,
+                     PortProxyBase)
 from .signals import (BitsSignal, BundleSignal, ChannelSignal, Signal,
-                      _FromCirctValue)
+                      _FromCirctValue, UIntSignal)
 from .support import optional_dict_to_dict_attr, get_user_loc
 from .system import System
 from .types import (Any, Bits, Bundle, BundledChannel, Channel,
@@ -19,7 +21,15 @@ from .circt.dialects import esi as raw_esi, hw, msft
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, cast
 
+import atexit
+
 __dir__ = Path(__file__).parent
+
+
+@atexit.register
+def _cleanup():
+  raw_esi.cleanup()
+
 
 FlattenStructPorts = "esi.portFlattenStructs"
 PortInSuffix = "esi.portInSuffix"
@@ -509,8 +519,49 @@ class _HostMem(ServiceDecl):
       ("tag", UInt(8)),
   ])
 
+  WriteReqType = StructType([
+      ("address", UInt(64)),
+      ("tag", UInt(8)),
+      ("data", Any()),
+  ])
+
   def __init__(self):
     super().__init__(self.__class__)
+
+  def wrap_write_req(self, address: UIntSignal, data: Type, tag: UIntSignal,
+                     valid: BitsSignal) -> Tuple[ChannelSignal, BitsSignal]:
+    """Create the proper channel type for a write request and use it to wrap the
+    given request arguments. Returns the Channel signal and a ready bit."""
+    inner_type = StructType([
+        ("address", UInt(64)),
+        ("tag", UInt(8)),
+        ("data", data.type),
+    ])
+    return Channel(inner_type).wrap(
+        inner_type({
+            "address": address,
+            "tag": tag,
+            "data": data,
+        }), valid)
+
+  def write(self, appid: AppID, req: ChannelSignal) -> ChannelSignal:
+    """Create a write request to the host memory out of a request channel."""
+    self._materialize_service_decl()
+
+    write_bundle_type = Bundle([
+        BundledChannel("req", ChannelDirection.FROM, _HostMem.WriteReqType),
+        BundledChannel("ackTag", ChannelDirection.TO, UInt(8))
+    ])
+
+    bundle = cast(
+        BundleSignal,
+        _FromCirctValue(
+            raw_esi.RequestConnectionOp(
+                write_bundle_type._type,
+                hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("write")),
+                appid._appid).toClient))
+    resp = bundle.unpack(req=req)['ackTag']
+    return resp
 
   # Create a read request to the host memory out of a request channel and return
   # the response channel with the specified data type.
@@ -817,3 +868,39 @@ def ChannelMux(input_channels: List[ChannelSignal]) -> ChannelSignal:
     return m.output_channel
 
   return build_tree(input_channels)
+
+
+@modparams
+def Mailbox(type):
+  """Constructs a module which stores an ESI message until it is read. Acts as a
+  sink -- always accepts new messages, dropping the current unread one if
+  necessary. It also allows snooping on the message contents."""
+  if isinstance(type, Channel):
+    type = type.inner_type
+
+  class Mailbox(Module):
+    clk = Clock()
+    rst = Input(Bits(1))
+
+    input = InputChannel(type)
+    output = OutputChannel(type)
+
+    data = Output(type)
+    valid = Output(Bits(1))
+
+    @generator
+    def generate(ports):
+      input_ready = Bits(1)(1)
+      input_data, input_valid = ports.input.unwrap(input_ready)
+      input_xact = input_valid & input_ready
+      valid_reset = Wire(Bits(1))
+      data = input_data.reg(ports.clk, ports.rst, ce=input_xact)
+      valid = input_valid.reg(ports.clk, ports.rst, ce=input_xact | valid_reset)
+
+      output, output_ready = Channel(type).wrap(data, valid)
+      valid_reset.assign(output_ready & valid)
+      ports.output = output
+      ports.data = data
+      ports.valid = valid
+
+  return Mailbox

@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from .support import get_user_loc, _obj_to_value_infer_type
-from .types import ChannelDirection, ChannelSignaling, Type
+from .types import BundledChannel, ChannelDirection, ChannelSignaling, Type
 
 from .circt.dialects import esi, sv
 from .circt import support
@@ -134,7 +134,7 @@ class Signal:
     return "sv.namehint"
 
   @property
-  def name(self):
+  def name(self) -> Optional[str]:
     owner = self.value.owner
     if hasattr(owner,
                "attributes") and self._namehint_attrname in owner.attributes:
@@ -146,6 +146,7 @@ class Signal:
       return mod_type.input_names[block_arg.arg_number]
     if hasattr(self, "_name"):
       return self._name
+    return None
 
   @name.setter
   def name(self, new: str):
@@ -154,6 +155,9 @@ class Signal:
       owner.attributes[self._namehint_attrname] = ir.StringAttr.get(new)
     else:
       self._name = new
+
+  def get_name(self, default: str = "") -> str:
+    return self.name if self.name is not None else default
 
   @property
   def appid(self) -> Optional[object]:  # Optional AppID.
@@ -302,6 +306,12 @@ def Or(*items: List[BitVectorSignal]):
 class BitsSignal(BitVectorSignal):
   """Operations on signless ints (bits). These will all return signless values -
   a user is expected to reapply signedness semantics if needed."""
+
+  def _exec_cast(self, targetValueType, type_getter, width: int = None):
+    if width is not None and width != self.type.width:
+      return self.pad_or_truncate(width)._exec_cast(targetValueType,
+                                                    type_getter)
+    return super()._exec_cast(targetValueType, type_getter)
 
   @singledispatchmethod
   def __getitem__(self, idxOrSlice: Union[int, slice]) -> BitVectorSignal:
@@ -752,6 +762,21 @@ class ChannelSignal(Signal):
     ready_wire.assign(ready)
     return ret_chan
 
+  def fork(self, clk, rst) -> Tuple[ChannelSignal, ChannelSignal]:
+    """Fork the channel into two channels, returning the two new channels."""
+    from .constructs import Wire
+    from .types import Bits
+    both_ready = Wire(Bits(1))
+    both_ready.name = self.get_name() + "_fork_both_ready"
+    data, valid = self.unwrap(both_ready)
+    valid_gate = both_ready & valid
+    a, a_rdy = self.type.wrap(data, valid_gate)
+    b, b_rdy = self.type.wrap(data, valid_gate)
+    abuf = a.buffer(clk, rst, 1)
+    bbuf = b.buffer(clk, rst, 1)
+    both_ready.assign(a_rdy & b_rdy)
+    return abuf, bbuf
+
 
 class BundleSignal(Signal):
   """Signal for types.Bundle."""
@@ -759,15 +784,14 @@ class BundleSignal(Signal):
   def reg(self, clk, rst=None, name=None):
     raise TypeError("Cannot register a bundle")
 
-  def unpack(self, **kwargs: Dict[str,
-                                  ChannelSignal]) -> Dict[str, ChannelSignal]:
+  def unpack(self, **kwargs: ChannelSignal) -> Dict[str, ChannelSignal]:
     """Given FROM channels, unpack a bundle into the TO channels."""
     from_channels = {
         bc.name: (idx, bc) for idx, bc in enumerate(
             filter(lambda c: c.direction == ChannelDirection.FROM,
                    self.type.channels))
     }
-    to_channels = [
+    to_channels: List[BundledChannel] = [
         c for c in self.type.channels if c.direction == ChannelDirection.TO
     ]
 
@@ -776,7 +800,7 @@ class BundleSignal(Signal):
       if name not in from_channels:
         raise ValueError(f"Unknown channel name '{name}'")
       idx, bc = from_channels[name]
-      if value.type != bc.channel:
+      if not bc.channel.castable(value.type):
         raise TypeError(f"Expected channel type {bc.channel}, got {value.type} "
                         f"on channel '{name}'")
       operands[idx] = value.value
@@ -789,10 +813,13 @@ class BundleSignal(Signal):
                                    self.value, operands)
 
     to_channels_results = unpack_op.toChannels
-    return {
+    ret = {
         bc.name: _FromCirctValue(to_channels_results[idx])
         for idx, bc in enumerate(to_channels)
     }
+    if not all([bc.channel.castable(ret[bc.name].type) for bc in to_channels]):
+      raise TypeError("Unpacked bundle did not match expected types")
+    return ret
 
   def connect(self, other: BundleSignal):
     """Connect two bundles together such that one drives the other."""

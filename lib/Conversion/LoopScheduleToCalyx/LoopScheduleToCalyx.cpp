@@ -29,6 +29,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
 
+#include <type_traits>
 #include <variant>
 
 namespace circt {
@@ -124,6 +125,19 @@ public:
   const DenseMap<unsigned, calyx::RegisterOp> &
   getPipelineRegs(Operation *stage) {
     return pipelineRegs[stage];
+  }
+
+  /// Returns the pipeline register for this value if its defining operation is
+  /// a stage, and std::nullopt otherwise.
+  std::optional<calyx::RegisterOp> getPipelineRegister(Value value) {
+    auto opStage = dyn_cast<LoopSchedulePipelineStageOp>(value.getDefiningOp());
+    if (opStage == nullptr)
+      return std::nullopt;
+    // The pipeline register for this input value needs to be discovered.
+    auto opResult = cast<OpResult>(value);
+    unsigned int opNumber = opResult.getResultNumber();
+    auto &stageRegisters = getPipelineRegs(opStage);
+    return stageRegisters.find(opNumber)->second;
   }
 
   /// Add a stage's groups to the pipeline prologue.
@@ -306,9 +320,14 @@ private:
     /// Create assignments to the inputs of the library op.
     auto group = createGroupForOp<TGroupOp>(rewriter, op);
     rewriter.setInsertionPointToEnd(group.getBodyBlock());
-    for (auto dstOp : enumerate(opInputPorts))
-      rewriter.create<calyx::AssignOp>(op.getLoc(), dstOp.value(),
-                                       op->getOperand(dstOp.index()));
+    for (auto dstOp : enumerate(opInputPorts)) {
+      Value srcOp = op->getOperand(dstOp.index());
+      std::optional<calyx::RegisterOp> pipelineRegister =
+          getState<ComponentLoweringState>().getPipelineRegister(srcOp);
+      if (pipelineRegister.has_value())
+        srcOp = pipelineRegister->getOut();
+      rewriter.create<calyx::AssignOp>(op.getLoc(), dstOp.value(), srcOp);
+    }
 
     /// Replace the result values of the source operator with the new operator.
     for (auto res : enumerate(opOutputPorts)) {
@@ -727,8 +746,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      IndexCastOp op) const {
-  Type sourceType = calyx::convIndexType(rewriter, op.getOperand().getType());
-  Type targetType = calyx::convIndexType(rewriter, op.getResult().getType());
+  Type sourceType = calyx::normalizeType(rewriter, op.getOperand().getType());
+  Type targetType = calyx::normalizeType(rewriter, op.getResult().getType());
   unsigned targetBits = targetType.getIntOrFloatBitWidth();
   unsigned sourceBits = sourceType.getIntOrFloatBitWidth();
   LogicalResult res = success();
@@ -793,7 +812,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
         funcOpArgRewrites[arg.value()] = inPorts.size();
         inPorts.push_back(calyx::PortInfo{
             rewriter.getStringAttr(inName),
-            calyx::convIndexType(rewriter, arg.value().getType()),
+            calyx::normalizeType(rewriter, arg.value().getType()),
             calyx::Direction::Input,
             DictionaryAttr::get(rewriter.getContext(), {})});
       }
@@ -802,7 +821,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
       funcOpResultMapping[res.index()] = outPorts.size();
       outPorts.push_back(calyx::PortInfo{
           rewriter.getStringAttr("out" + std::to_string(res.index())),
-          calyx::convIndexType(rewriter, res.value()), calyx::Direction::Output,
+          calyx::normalizeType(rewriter, res.value()), calyx::Direction::Output,
           DictionaryAttr::get(rewriter.getContext(), {})});
     }
 
@@ -1019,11 +1038,11 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
 
     // Collect group names for the prologue or epilogue.
     SmallVector<StringAttr> prologueGroups, epilogueGroups;
+    auto &state = getState<ComponentLoweringState>();
 
     auto updatePrologueAndEpilogue = [&](calyx::GroupOp group) {
       // Mark the group for scheduling in the pipeline's block.
-      getState<ComponentLoweringState>().addBlockScheduleable(stage->getBlock(),
-                                                              group);
+      state.addBlockScheduleable(stage->getBlock(), group);
 
       // Add the group to the prologue or epilogue for this stage as
       // necessary. The goal is to fill the pipeline so it will be in steady
@@ -1046,8 +1065,7 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
       // Covers the case where there are no values that need to be passed
       // through to the next stage, e.g., some intermediary store.
       for (auto &op : stage.getBodyBlock())
-        if (auto group = getState<ComponentLoweringState>()
-                             .getNonPipelinedGroupFrom<calyx::GroupOp>(&op))
+        if (auto group = state.getNonPipelinedGroupFrom<calyx::GroupOp>(&op))
           updatePrologueAndEpilogue(*group);
     }
 
@@ -1056,28 +1074,48 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
       Value value = operand.get();
 
       // Get the pipeline register for that result.
-      auto pipelineRegister = pipelineRegisters[i];
+      calyx::RegisterOp pipelineRegister = pipelineRegisters[i];
+      if (std::optional<calyx::RegisterOp> pr =
+              state.getPipelineRegister(value)) {
+        value = pr->getOut();
+      }
 
-      // Get the evaluating group for that value.
-      calyx::GroupInterface evaluatingGroup =
-          getState<ComponentLoweringState>().getEvaluatingGroup(value);
-
-      // Remember the final group for this stage result.
       calyx::GroupOp group;
+      // Get the evaluating group for that value.
+      std::optional<calyx::GroupInterface> evaluatingGroup =
+          state.findEvaluatingGroup(value);
+      if (!evaluatingGroup.has_value()) {
+        if (value.getDefiningOp<calyx::RegisterOp>() == nullptr) {
+          // We add this for any unhandled cases.
+          llvm::errs() << "unexpected: input value: " << value << ", in stage "
+                       << stage.getStageNumber() << " register " << i
+                       << " is not a register and was not previously "
+                          "evaluated in a Calyx group. Please open an issue.\n";
+          return LogicalResult::failure();
+        }
+        // This is a register's `out` value being written to this pipeline
+        // register. We create a new group to build this assignment.
+        std::string groupName = state.getUniqueName(
+            loweringState().blockName(pipelineRegister->getBlock()));
+        group = calyx::createGroup<calyx::GroupOp>(
+            rewriter, state.getComponentOp(), pipelineRegister->getLoc(),
+            groupName);
+        calyx::buildAssignmentsForRegisterWrite(
+            rewriter, group, state.getComponentOp(), pipelineRegister, value);
+      } else {
+        // This was previously evaluated. Stitch the register in, depending on
+        // whether the group was combinational or sequential.
+        auto combGroup =
+            dyn_cast<calyx::CombGroupOp>(evaluatingGroup->getOperation());
+        group = combGroup == nullptr
+                    ? replaceGroupRegister(*evaluatingGroup, pipelineRegister,
+                                           rewriter)
+                    : convertCombToSeqGroup(combGroup, pipelineRegister, value,
+                                            rewriter);
 
-      // Stitch the register in, depending on whether the group was
-      // combinational or sequential.
-      if (auto combGroup =
-              dyn_cast<calyx::CombGroupOp>(evaluatingGroup.getOperation()))
-        group =
-            convertCombToSeqGroup(combGroup, pipelineRegister, value, rewriter);
-      else
-        group =
-            replaceGroupRegister(evaluatingGroup, pipelineRegister, rewriter);
-
-      // Replace the stage result uses with the register out.
-      stage.getResult(i).replaceAllUsesWith(pipelineRegister.getOut());
-
+        // Replace the stage result uses with the register out.
+        stage.getResult(i).replaceAllUsesWith(pipelineRegister.getOut());
+      }
       updatePrologueAndEpilogue(group);
     }
 
@@ -1142,8 +1180,9 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
     }
     doneOp.getSrcMutable().assign(pipelineRegister.getDone());
 
-    // Remove the old register completely.
-    rewriter.eraseOp(tempReg);
+    // Remove the old register if it has no more uses.
+    if (tempReg->use_empty())
+      rewriter.eraseOp(tempReg);
 
     return group;
   }
@@ -1604,6 +1643,9 @@ void LoopScheduleToCalyxPass::runOnOperation() {
   /// non-stateful groups) into groups referenced in the control schedule.
   addOncePattern<calyx::InlineCombGroups>(loweringPatterns, patternState,
                                           *loweringState);
+
+  addGreedyPattern<calyx::DeduplicateParallelOp>(loweringPatterns);
+  addGreedyPattern<calyx::DeduplicateStaticParallelOp>(loweringPatterns);
 
   /// This pattern performs various SSA replacements that must be done
   /// after control generation.

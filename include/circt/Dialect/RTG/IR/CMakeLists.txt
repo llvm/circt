@@ -2,6 +2,11 @@ add_circt_dialect(RTG rtg)
 add_circt_doc(RTG Dialects/RTGOps -gen-op-doc)
 add_circt_doc(RTG Dialects/RTGTypes -gen-typedef-doc -dialect rtg)
 
+set(LLVM_TARGET_DEFINITIONS RTG.td)
+mlir_tablegen(RTGEnums.h.inc -gen-enum-decls)
+mlir_tablegen(RTGEnums.cpp.inc -gen-enum-defs)
+add_public_tablegen_target(CIRCTRTGEnumsIncGen)
+
 set(LLVM_TARGET_DEFINITIONS RTGInterfaces.td)
 mlir_tablegen(RTGOpInterfaces.h.inc -gen-op-interface-decls)
 mlir_tablegen(RTGOpInterfaces.cpp.inc -gen-op-interface-defs)

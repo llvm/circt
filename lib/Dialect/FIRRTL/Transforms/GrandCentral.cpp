@@ -520,7 +520,7 @@ struct VerbatimType {
 
 /// A sum type representing either a type encoded as a string (VerbatimType)
 /// or an actual mlir::Type.
-typedef std::variant<VerbatimType, Type> TypeSum;
+using TypeSum = std::variant<VerbatimType, Type>;
 
 /// Stores the information content of an ExtractGrandCentralAnnotation.
 struct ExtractionInfo {
@@ -609,11 +609,6 @@ private:
   DenseMap<Attribute, CompanionInfo> companionIDMap;
 
   NLATable *nlaTable;
-
-  /// The design-under-test (DUT) as determined by the presence of a
-  /// "sifive.enterprise.firrtl.MarkDUTAnnotation".  This will be null if no DUT
-  /// was found.
-  FModuleOp dut;
 
   /// An optional directory for testbench-related files.  This is null if no
   /// "TestBenchDirAnnotation" is found.
@@ -755,8 +750,8 @@ private:
 ///   2) Scattered annotations for how components bind to interfaces
 static std::optional<DictionaryAttr>
 parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
-                   DictionaryAttr root, StringRef companion, StringAttr name,
-                   StringAttr defName, std::optional<IntegerAttr> id,
+                   DictionaryAttr root, StringAttr name, StringAttr defName,
+                   std::optional<IntegerAttr> id,
                    std::optional<StringAttr> description, Twine clazz,
                    StringAttr companionAttr, Twine path = {}) {
 
@@ -932,8 +927,8 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
       if (auto maybeDescription = field.get("description"))
         description = cast<StringAttr>(maybeDescription);
       auto eltAttr = parseAugmentedType(
-          state, tpe, root, companion, name, defName, std::nullopt, description,
-          clazz, companionAttr, path + "_" + name.getValue());
+          state, tpe, root, name, defName, std::nullopt, description, clazz,
+          companionAttr, path + "_" + name.getValue());
       if (!eltAttr)
         return std::nullopt;
 
@@ -1115,10 +1110,10 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
       return std::nullopt;
     SmallVector<Attribute> elements;
     for (auto [i, elt] : llvm::enumerate(elementsAttr)) {
-      auto eltAttr = parseAugmentedType(
-          state, cast<DictionaryAttr>(elt), root, companion, name,
-          StringAttr::get(context, ""), id, std::nullopt, clazz, companionAttr,
-          path + "_" + Twine(i));
+      auto eltAttr =
+          parseAugmentedType(state, cast<DictionaryAttr>(elt), root, name,
+                             StringAttr::get(context, ""), id, std::nullopt,
+                             clazz, companionAttr, path + "_" + Twine(i));
       if (!eltAttr)
         return std::nullopt;
       elements.push_back(*eltAttr);
@@ -1167,8 +1162,8 @@ LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
   state.addToWorklistFn(DictionaryAttr::get(context, companionAttrs));
 
   auto prunedAttr =
-      parseAugmentedType(state, viewAttr, anno, companionAttr.getValue(), name,
-                         {}, id, {}, viewAnnoClass, companionAttr, Twine(name));
+      parseAugmentedType(state, viewAttr, anno, name, {}, id, {}, viewAnnoClass,
+                         companionAttr, Twine(name));
   if (!prunedAttr)
     return failure();
 
@@ -1575,13 +1570,6 @@ void GrandCentralPass::runOnOperation() {
     return false;
   });
 
-  // Find the DUT if it exists.  This needs to be known before the circuit is
-  // walked.
-  for (auto mod : circuitOp.getOps<FModuleOp>()) {
-    if (failed(extractDUT(mod, dut)))
-      removalError = true;
-  }
-
   if (removalError)
     return signalPassFailure();
 
@@ -1593,7 +1581,7 @@ void GrandCentralPass::runOnOperation() {
     else
       llvm::dbgs() << "  <none>\n";
     llvm::dbgs() << "DUT: ";
-    if (dut)
+    if (auto dut = instanceInfo->getDut())
       llvm::dbgs() << dut.getModuleName() << "\n";
     else
       llvm::dbgs() << "<none>\n";
@@ -1809,7 +1797,7 @@ void GrandCentralPass::runOnOperation() {
 
               // If the companion is instantiated above the DUT, then don't
               // extract it.
-              if (dut && !instancePaths->instanceGraph.isAncestor(op, dut)) {
+              if (!instanceInfo->allInstancesUnderEffectiveDut(op)) {
                 ++numAnnosRemoved;
                 return true;
               }
@@ -2104,9 +2092,8 @@ void GrandCentralPass::runOnOperation() {
       if (!topIface)
         topIface = iface;
       ++numInterfaces;
-      if (dut &&
-          !instancePaths->instanceGraph.isAncestor(
-              companionIDMap[ifaceBuilder.id].companion, dut) &&
+      if (!instanceInfo->allInstancesUnderEffectiveDut(
+              companionIDMap[ifaceBuilder.id].companion) &&
           testbenchDir)
         iface->setAttr("output_file",
                        hw::OutputFileAttr::getAsDirectory(
@@ -2186,8 +2173,8 @@ void GrandCentralPass::runOnOperation() {
 
     // If the interface is associated with a companion that is instantiated
     // above the DUT (e.g.., in the test harness), then don't extract it.
-    if (dut && !instancePaths->instanceGraph.isAncestor(
-                   companionIDMap[bundle.getID()].companion, dut))
+    if (!instanceInfo->allInstancesUnderEffectiveDut(
+            companionIDMap[bundle.getID()].companion))
       continue;
   }
 

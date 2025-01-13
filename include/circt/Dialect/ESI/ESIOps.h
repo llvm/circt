@@ -33,7 +33,7 @@ struct ServicePortInfo {
   ChannelBundleType type;
 };
 
-// Check that the channels on two bundles match allowing for AnyType.
+// Check that two types match, allowing for AnyType in 'expected'.
 // NOLINTNEXTLINE(misc-no-recursion)
 LogicalResult checkInnerTypeMatch(Type expected, Type actual);
 /// Check that the channels on two bundles match allowing for AnyType in the

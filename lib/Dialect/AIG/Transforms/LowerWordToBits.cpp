@@ -97,7 +97,7 @@ void LowerWordToBitsPass::runOnOperation() {
   // Use top-down traversal to reuse bits from `comb.concat`.
   config.useTopDownTraversal = true;
 
-  if (failed(mlir::applyPatternsAndFoldGreedily(getOperation(), frozenPatterns,
-                                                config)))
+  if (failed(
+          mlir::applyPatternsGreedily(getOperation(), frozenPatterns, config)))
     return signalPassFailure();
 }

@@ -174,6 +174,7 @@ LogicalResult TemporalCodeMotionPass::runOnProcess(llhd::ProcessOp procOp) {
   // TODO: consider the case where a wait brances to itself
   for (unsigned currTR = 0; currTR < numTRs; ++currTR) {
     unsigned numTRSuccs = trAnalysis.getNumTRSuccessors(currTR);
+    (void)numTRSuccs;
     // NOTE: Above error checks make this impossible to trigger, but the above
     // are changed this one might have to be promoted to a proper error message.
     assert((numTRSuccs == 1 ||

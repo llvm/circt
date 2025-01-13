@@ -46,6 +46,14 @@ hw.module @test(in %m : !sv.modport<@IData::@Noexist>) {
 
 // -----
 
+hw.module @testFifoTypes(in %clk: !seq.clock, in %rst: i1, in %a: !esi.channel<i32, FIFO>, in %b: !esi.channel<i16, FIFO(2)>) {
+  // expected-error @+1 {{input and output types must match}}
+  %fifo = esi.fifo in %a clk %clk rst %rst depth 12 : !esi.channel<i32, FIFO> -> !esi.channel<i16, FIFO(2)>
+  hw.output %fifo : !esi.channel<i16, FIFO(2)>
+}
+
+// -----
+
 esi.service.decl @HostComms {
   esi.service.port @Send : !esi.bundle<[!esi.channel<i16> from "send"]>
 }

@@ -246,10 +246,10 @@ static LogicalResult applyDUTAnno(const AnnoPathValue &target,
   if (!target.isLocal())
     return mlir::emitError(loc) << "must be local";
 
-  if (!isa<OpAnnoTarget>(target.ref) || !isa<FModuleOp>(op))
+  if (!isa<OpAnnoTarget>(target.ref) || !isa<FModuleLike>(op))
     return mlir::emitError(loc) << "can only target to a module";
 
-  auto moduleOp = cast<FModuleOp>(op);
+  auto moduleOp = cast<FModuleLike>(op);
 
   // DUT has public visibility.
   moduleOp.setPublic();

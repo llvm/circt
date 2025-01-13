@@ -55,6 +55,10 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
 LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
                                                   const FirtoolOptions &opt,
                                                   StringRef inputFilename) {
+  // TODO: Ensure instance graph and other passes can handle instance choice
+  // then run this pass after all diagnostic passes have run.
+  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeOptionPass(
+      opt.shouldSelectDefaultInstanceChoice()));
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerSignaturesPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInjectDUTHierarchyPass());
@@ -131,10 +135,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createCheckCombLoopsPass());
 
-  // Must run the specialize instance-choice and layers passes after all
-  // diagnostic passes have run, otherwise it can hide errors.
-  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeOptionPass(
-      opt.shouldSelectDefaultInstanceChoice()));
+  // Must run this pass after all diagnostic passes have run, otherwise it can
+  // hide errors.
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeLayersPass());
 
   // Run after inference, layer specialization.
@@ -228,11 +230,14 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   //
   // TODO: Improve LowerLayers to avoid the need for canonicalization. See:
   //   https://github.com/llvm/circt/issues/7896
-  if (opt.shouldAdvancedLayerSink())
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createAdvancedLayerSinkPass());
-  else
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        firrtl::createLayerSinkPass());
+  if (!opt.shouldDisableLayerSink()) {
+    if (opt.shouldAdvancedLayerSink())
+      pm.nest<firrtl::CircuitOp>().addPass(
+          firrtl::createAdvancedLayerSinkPass());
+    else
+      pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+          firrtl::createLayerSinkPass());
+  }
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerLayersPass());
   if (!opt.shouldDisableOptimization())
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
@@ -522,6 +527,10 @@ struct FirtoolCmdOptions {
                                   "release", "Compile with optimizations")),
       llvm::cl::init(firtool::FirtoolOptions::BuildModeDefault)};
 
+  llvm::cl::opt<bool> disableLayerSink{"disable-layer-sink",
+                                       llvm::cl::desc("Disable layer sink"),
+                                       cl::init(false)};
+
   llvm::cl::opt<bool> disableOptimization{
       "disable-opt",
       llvm::cl::desc("Disable optimizations"),
@@ -760,9 +769,10 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       allowAddingPortsOnPublic(false), probesToSignals(false),
       preserveAggregate(firrtl::PreserveAggregate::None),
       preserveMode(firrtl::PreserveValues::None), enableDebugInfo(false),
-      buildMode(BuildModeRelease), disableOptimization(false),
-      exportChiselInterface(false), chiselInterfaceOutDirectory(""),
-      vbToBV(false), noDedup(false), companionMode(firrtl::CompanionMode::Bind),
+      buildMode(BuildModeRelease), disableLayerSink(false),
+      disableOptimization(false), exportChiselInterface(false),
+      chiselInterfaceOutDirectory(""), vbToBV(false), noDedup(false),
+      companionMode(firrtl::CompanionMode::Bind),
       disableAggressiveMergeConnections(false), advancedLayerSink(false),
       lowerMemories(false), blackBoxRootPath(""), replSeqMem(false),
       replSeqMemFile(""), extractTestCode(false), ignoreReadEnableMem(false),
@@ -789,6 +799,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   preserveMode = clOptions->preserveMode;
   enableDebugInfo = clOptions->enableDebugInfo;
   buildMode = clOptions->buildMode;
+  disableLayerSink = clOptions->disableLayerSink;
   disableOptimization = clOptions->disableOptimization;
   exportChiselInterface = clOptions->exportChiselInterface;
   chiselInterfaceOutDirectory = clOptions->chiselInterfaceOutDirectory;

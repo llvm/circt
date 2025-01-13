@@ -29,7 +29,7 @@ def CompareOp(predicate):
 
   def decorated(cls):
 
-    class _Class(cls, OpView):
+    class _Class(cls):
 
       @staticmethod
       def create(lhs=None, rhs=None):
@@ -50,52 +50,52 @@ def CompareOp(predicate):
 
 
 @CompareOp(0)
-class EqOp:
+class EqOp(OpView):
   pass
 
 
 @CompareOp(1)
-class NeOp:
+class NeOp(OpView):
   pass
 
 
 @CompareOp(2)
-class LtSOp:
+class LtSOp(OpView):
   pass
 
 
 @CompareOp(3)
-class LeSOp:
+class LeSOp(OpView):
   pass
 
 
 @CompareOp(4)
-class GtSOp:
+class GtSOp(OpView):
   pass
 
 
 @CompareOp(5)
-class GeSOp:
+class GeSOp(OpView):
   pass
 
 
 @CompareOp(6)
-class LtUOp:
+class LtUOp(OpView):
   pass
 
 
 @CompareOp(7)
-class LeUOp:
+class LeUOp(OpView):
   pass
 
 
 @CompareOp(8)
-class GtUOp:
+class GtUOp(OpView):
   pass
 
 
 @CompareOp(9)
-class GeUOp:
+class GeUOp(OpView):
   pass
 
 

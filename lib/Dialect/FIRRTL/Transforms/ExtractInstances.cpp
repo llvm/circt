@@ -291,11 +291,6 @@ void ExtractInstancesPass::collectAnnos() {
   // annotations.
   for (auto module : circuit.getOps<FModuleLike>()) {
     AnnotationSet::removeAnnotations(module, [&](Annotation anno) {
-      if (anno.isClass(dutAnnoClass)) {
-        LLVM_DEBUG(llvm::dbgs()
-                   << "Marking DUT `" << module.getModuleName() << "`\n");
-        return false; // other passes may rely on this anno; keep it
-      }
       if (!isAnnoInteresting(anno))
         return false;
       LLVM_DEBUG(llvm::dbgs() << "Annotated module `" << module.getModuleName()

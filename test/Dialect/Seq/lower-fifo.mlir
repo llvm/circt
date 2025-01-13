@@ -4,43 +4,21 @@
 // RUN: circt-opt --lower-seq-fifo --canonicalize %s | FileCheck %s --implicit-check-not=seq.fifo
 
 
-// CHECK:   hw.module @fifo1(in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_1:.*]] : i1, in %[[VAL_2:.*]] : i32, in %[[VAL_3:.*]] : i1, in %[[VAL_4:.*]] : i1, out out : i32) {
-// CHECK:           %[[VAL_6:.*]] = hw.constant -1 : i2
-// CHECK:           %[[VAL_5:.*]] = hw.constant true
-// CHECK:           %[[VAL_7:.*]] = hw.constant -2 : i2
-// CHECK:           %[[VAL_8:.*]] = hw.constant 1 : i2
-// CHECK:           %[[VAL_9:.*]] = hw.constant 0 : i2
-// CHECK:           %[[VAL_10:.*]] = seq.compreg sym @fifo_count  %[[VAL_11:.*]], %[[CLOCK]] reset %[[VAL_1]], %[[VAL_9]]  : i2
-// CHECK:           %[[VAL_12:.*]] = seq.hlmem @fifo_mem %[[CLOCK]], %[[VAL_1]] : <3xi32>
-// CHECK:           %[[VAL_13:.*]] = seq.compreg sym @fifo_rd_addr  %[[VAL_14:.*]], %[[CLOCK]] reset %[[VAL_1]], %[[VAL_9]]  : i2
-// CHECK:           %[[VAL_15:.*]] = seq.compreg sym @fifo_wr_addr  %[[VAL_16:.*]], %[[CLOCK]] reset %[[VAL_1]], %[[VAL_9]]  : i2
-// CHECK:           %[[VAL_17:.*]] = seq.read %[[VAL_12]]{{\[}}%[[VAL_13]]] rden %[[VAL_3]] {latency = 0 : i64} : !seq.hlmem<3xi32>
-// CHECK:           seq.write %[[VAL_12]]{{\[}}%[[VAL_15]]] %[[VAL_2]] wren %[[VAL_4]] {latency = 1 : i64} : !seq.hlmem<3xi32>
-// CHECK:           %[[VAL_18:.*]] = comb.xor %[[VAL_3]], %[[VAL_5]] : i1
-// CHECK:           %[[VAL_19:.*]] = comb.xor %[[VAL_4]], %[[VAL_5]] : i1
-// CHECK:           %[[VAL_20:.*]] = comb.and %[[VAL_3]], %[[VAL_19]] : i1
-// CHECK:           %[[VAL_21:.*]] = comb.and %[[VAL_4]], %[[VAL_18]] : i1
-// CHECK:           %[[VAL_22:.*]] = comb.icmp eq %[[VAL_10]], %[[VAL_7]] : i2
-// CHECK:           %[[VAL_23:.*]] = comb.add %[[VAL_10]], %[[VAL_8]] : i2
-// CHECK:           %[[VAL_24:.*]] = comb.mux %[[VAL_22]], %[[VAL_10]], %[[VAL_23]] : i2
-// CHECK:           %[[VAL_25:.*]] = comb.icmp eq %[[VAL_10]], %[[VAL_9]] : i2
-// CHECK:           %[[VAL_26:.*]] = comb.add %[[VAL_10]], %[[VAL_6]] : i2
-// CHECK:           %[[VAL_27:.*]] = comb.xor %[[VAL_20]], %[[VAL_5]] : i1
-// CHECK:           %[[VAL_28:.*]] = comb.or %[[VAL_27]], %[[VAL_25]] : i1
-// CHECK:           %[[VAL_29:.*]] = comb.mux %[[VAL_28]], %[[VAL_10]], %[[VAL_26]] : i2
-// CHECK:           %[[VAL_30:.*]] = comb.mux %[[VAL_21]], %[[VAL_24]], %[[VAL_29]] : i2
-// CHECK:           %[[VAL_31:.*]] = comb.or %[[VAL_3]], %[[VAL_4]] : i1
-// CHECK:           %[[VAL_11]] = comb.mux %[[VAL_31]], %[[VAL_30]], %[[VAL_10]] {sv.namehint = "fifo_count_next"} : i2
-// CHECK:           %[[VAL_32:.*]] = comb.icmp ne %[[VAL_10]], %[[VAL_7]] : i2
-// CHECK:           %[[VAL_33:.*]] = comb.and %[[VAL_4]], %[[VAL_32]] : i1
-// CHECK:           %[[VAL_34:.*]] = comb.add %[[VAL_15]], %[[VAL_8]] : i2
-// CHECK:           %[[VAL_16]] = comb.mux %[[VAL_33]], %[[VAL_34]], %[[VAL_15]] {sv.namehint = "fifo_wr_addr_next"} : i2
-// CHECK:           %[[VAL_35:.*]] = comb.icmp ne %[[VAL_10]], %[[VAL_9]] : i2
-// CHECK:           %[[VAL_36:.*]] = comb.and %[[VAL_3]], %[[VAL_35]] : i1
-// CHECK:           %[[VAL_37:.*]] = comb.add %[[VAL_13]], %[[VAL_8]] : i2
-// CHECK:           %[[VAL_14]] = comb.mux %[[VAL_36]], %[[VAL_37]], %[[VAL_13]] {sv.namehint = "fifo_rd_addr_next"} : i2
-// CHECK:           hw.output %[[VAL_17]] : i32
-// CHECK:         }
+// CHECK:  hw.module @fifo1(in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_1:.*]] : i1, in %[[VAL_2:.*]] : i32, in %[[VAL_3:.*]] : i1, in %[[VAL_4:.*]] : i1, out out : i32) {
+// CHECK:    %fifo_count = seq.compreg sym @fifo_count %{{.+}}, %clk reset %rst, %c0_i2 : i2  
+// CHECK:    %fifo_mem = seq.hlmem @fifo_mem %clk, %rst : <3xi32>
+// CHECK:    %fifo_rd_addr = seq.compreg sym @fifo_rd_addr %{{.+}}, %clk reset %rst, %c0_i2 : i2  
+// CHECK:    %fifo_wr_addr = seq.compreg sym @fifo_wr_addr %{{.+}}, %clk reset %rst, %c0_i2 : i2  
+// CHECK:    %fifo_mem_rdata = seq.read %fifo_mem[%fifo_rd_addr] rden %rdEn {latency = 0 : i64} : !seq.hlmem<3xi32>
+// CHECK:    seq.write %fifo_mem[%fifo_wr_addr] %in wren %wrEn {latency = 1 : i64} : !seq.hlmem<3xi32>
+//           All of the comb logic which would be here is pretty much impossible
+//           to verify visually. As a rule, if it's difficult to verify
+//           visually, that's a candidate for a new op: #8002. Since I haven't
+//           verified it visually, I'm not including it here. There are
+//           integration tests for it.
+// CHECK:    verif.clocked_assert %{{.+}}, posedge %{{.+}} label "FIFO empty when read enabled" : i1
+// CHECK:    verif.clocked_assert %{{.+}}, posedge %{{.+}} label "FIFO full when write enabled" : i1
+// CHECK:    hw.output %fifo_mem_rdata : i32
 hw.module @fifo1(in %clk : !seq.clock, in %rst : i1, in %in : i32, in %rdEn : i1, in %wrEn : i1, out out : i32) {
   %out, %full, %empty = seq.fifo depth 3 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
   hw.output %out : i32
@@ -48,50 +26,15 @@ hw.module @fifo1(in %clk : !seq.clock, in %rst : i1, in %in : i32, in %rdEn : i1
 
 
 // CHECK:   hw.module @fifo2(in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_1:.*]] : i1, in %[[VAL_2:.*]] : [[TY:.+]], in %[[VAL_3:.*]] : i1, in %[[VAL_4:.*]] : i1, out out : [[TY]], out empty : i1, out full : i1, out almost_empty : i1, out almost_full : i1) {
-// CHECK:           %[[VAL_5:.*]] = hw.constant 2 : i3
-// CHECK:           %[[VAL_8:.*]] = hw.constant -1 : i3
-// CHECK:           %[[VAL_7:.*]] = hw.constant true
-// CHECK:           %[[VAL_6:.*]] = hw.constant 0 : i2
-// CHECK:           %[[VAL_9:.*]] = hw.constant 3 : i3
-// CHECK:           %[[VAL_10:.*]] = hw.constant 1 : i3
-// CHECK:           %[[VAL_11:.*]] = hw.constant 0 : i3
-// CHECK:           %[[VAL_12:.*]] = hw.constant 1 : i2
-// CHECK:           %[[VAL_13:.*]] = seq.compreg sym @fifo_count  %[[VAL_14:.*]], %[[CLOCK]] reset %[[VAL_1]], %[[VAL_11]]  : i3
-// CHECK:           %[[VAL_15:.*]] = seq.hlmem @fifo_mem %[[CLOCK]], %[[VAL_1]] : <4x[[TY]]>
-// CHECK:           %[[VAL_16:.*]] = seq.compreg sym @fifo_rd_addr  %[[VAL_17:.*]], %[[CLOCK]] reset %[[VAL_1]], %[[VAL_6]]  : i2
-// CHECK:           %[[VAL_18:.*]] = seq.compreg sym @fifo_wr_addr  %[[VAL_19:.*]], %[[CLOCK]] reset %[[VAL_1]], %[[VAL_6]]  : i2
-// CHECK:           %[[VAL_20:.*]] = seq.read %[[VAL_15]]{{\[}}%[[VAL_16]]] rden %[[VAL_3]] {latency = 1 : i64} : !seq.hlmem<4x[[TY]]>
-// CHECK:           seq.write %[[VAL_15]]{{\[}}%[[VAL_18]]] %[[VAL_2]] wren %[[VAL_4]] {latency = 1 : i64} : !seq.hlmem<4x[[TY]]>
-// CHECK:           %[[VAL_21:.*]] = comb.icmp eq %[[VAL_13]], %[[VAL_9]] {sv.namehint = "fifo_full"} : i3
-// CHECK:           %[[VAL_22:.*]] = comb.icmp eq %[[VAL_13]], %[[VAL_11]] {sv.namehint = "fifo_empty"} : i3
-// CHECK:           %[[VAL_23:.*]] = comb.xor %[[VAL_3]], %[[VAL_7]] : i1
-// CHECK:           %[[VAL_24:.*]] = comb.xor %[[VAL_4]], %[[VAL_7]] : i1
-// CHECK:           %[[VAL_25:.*]] = comb.and %[[VAL_3]], %[[VAL_24]] : i1
-// CHECK:           %[[VAL_26:.*]] = comb.and %[[VAL_4]], %[[VAL_23]] : i1
-// CHECK:           %[[VAL_27:.*]] = comb.icmp eq %[[VAL_13]], %[[VAL_9]] : i3
-// CHECK:           %[[VAL_28:.*]] = comb.add %[[VAL_13]], %[[VAL_10]] : i3
-// CHECK:           %[[VAL_29:.*]] = comb.mux %[[VAL_27]], %[[VAL_13]], %[[VAL_28]] : i3
-// CHECK:           %[[VAL_30:.*]] = comb.icmp eq %[[VAL_13]], %[[VAL_11]] : i3
-// CHECK:           %[[VAL_31:.*]] = comb.add %[[VAL_13]], %[[VAL_8]] : i3
-// CHECK:           %[[VAL_32:.*]] = comb.xor %[[VAL_25]], %[[VAL_7]] : i1
-// CHECK:           %[[VAL_33:.*]] = comb.or %[[VAL_32]], %[[VAL_30]] : i1
-// CHECK:           %[[VAL_34:.*]] = comb.mux %[[VAL_33]], %[[VAL_13]], %[[VAL_31]] : i3
-// CHECK:           %[[VAL_35:.*]] = comb.mux %[[VAL_26]], %[[VAL_29]], %[[VAL_34]] : i3
-// CHECK:           %[[VAL_36:.*]] = comb.or %[[VAL_3]], %[[VAL_4]] : i1
-// CHECK:           %[[VAL_14]] = comb.mux %[[VAL_36]], %[[VAL_35]], %[[VAL_13]] {sv.namehint = "fifo_count_next"} : i3
-// CHECK:           %[[VAL_37:.*]] = comb.xor %[[VAL_21]], %[[VAL_7]] : i1
-// CHECK:           %[[VAL_38:.*]] = comb.and %[[VAL_4]], %[[VAL_37]] : i1
-// CHECK:           %[[VAL_39:.*]] = comb.add %[[VAL_18]], %[[VAL_12]] : i2
-// CHECK:           %[[VAL_19]] = comb.mux %[[VAL_38]], %[[VAL_39]], %[[VAL_18]] {sv.namehint = "fifo_wr_addr_next"} : i2
-// CHECK:           %[[VAL_40:.*]] = comb.xor %[[VAL_22]], %[[VAL_7]] : i1
-// CHECK:           %[[VAL_41:.*]] = comb.and %[[VAL_3]], %[[VAL_40]] : i1
-// CHECK:           %[[VAL_42:.*]] = comb.add %[[VAL_16]], %[[VAL_12]] : i2
-// CHECK:           %[[VAL_17]] = comb.mux %[[VAL_41]], %[[VAL_42]], %[[VAL_16]] {sv.namehint = "fifo_rd_addr_next"} : i2
-// CHECK:           %[[VAL_43:.*]] = comb.extract %[[VAL_13]] from 1 : (i3) -> i2
-// CHECK:           %[[VAL_44:.*]] = comb.icmp ne %[[VAL_43]], %[[VAL_6]] {sv.namehint = "fifo_almost_full"} : i2
-// CHECK:           %[[VAL_45:.*]] = comb.icmp ult %[[VAL_13]], %[[VAL_5]] {sv.namehint = "fifo_almost_empty"} : i3
-  // CHECK:           hw.output %[[VAL_20]], %[[VAL_22]], %[[VAL_21]], %[[VAL_45]], %[[VAL_44]] : [[TY]], i1, i1, i1, i1
-// CHECK:         }
+// CHECK:     %fifo_count = seq.compreg sym @fifo_count %16, %clk reset %rst, %c0_i3 : i3  
+// CHECK:     %fifo_mem = seq.hlmem @fifo_mem %clk, %rst : <4x!hw.array<2xi32>>
+// CHECK:     %fifo_rd_addr = seq.compreg sym @fifo_rd_addr %28, %clk reset %rst, %c0_i2 : i2  
+// CHECK:     %fifo_wr_addr = seq.compreg sym @fifo_wr_addr %22, %clk reset %rst, %c0_i2 : i2  
+// CHECK:     %fifo_mem_rdata = seq.read %fifo_mem[%fifo_rd_addr] rden %rdEn {latency = 1 : i64} : !seq.hlmem<4x!hw.array<2xi32>>
+// CHECK:     seq.write %fifo_mem[%fifo_wr_addr] %in wren %wrEn {latency = 1 : i64} : !seq.hlmem<4x!hw.array<2xi32>>
+//            See comment above.
+// CHECK:     verif.clocked_assert %{{.+}}, posedge %{{.+}} label "FIFO empty when read enabled" : i1
+// CHECK:     verif.clocked_assert %{{.+}}, posedge %{{.+}} label "FIFO full when write enabled" : i1
 !testType = !hw.array<2xi32>
 hw.module @fifo2(in %clk : !seq.clock, in %rst : i1, in %in : !testType, in %rdEn : i1, in %wrEn : i1, out out: !testType, out empty: i1, out full: i1, out almost_empty : i1, out almost_full : i1) {
   %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 4 rd_latency 1 almost_full 2 almost_empty 1 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : !testType

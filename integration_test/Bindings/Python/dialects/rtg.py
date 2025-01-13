@@ -19,8 +19,8 @@ with Context() as ctx, Location.unknown():
     target = rtg.TargetOp('target_name', TypeAttr.get(dictTy))
     targetBlock = Block.create_at_start(target.bodyRegion, [])
     with InsertionPoint(targetBlock):
-      cpu0 = rtgtest.CPUDeclOp(cpuTy, 0)
-      cpu1 = rtgtest.CPUDeclOp(cpuTy, 1)
+      cpu0 = rtgtest.CPUDeclOp(0)
+      cpu1 = rtgtest.CPUDeclOp(1)
       rtg.YieldOp([cpu0, cpu1])
 
     test = rtg.TestOp('test_name', TypeAttr.get(dictTy))
@@ -84,11 +84,12 @@ with Context() as ctx, Location.unknown():
   with InsertionPoint(m.body):
     indexTy = IndexType.get()
     sequenceTy = rtg.SequenceType.get()
+    labelTy = rtg.LabelType.get()
     setTy = rtg.SetType.get(indexTy)
     bagTy = rtg.BagType.get(indexTy)
     seq = rtg.SequenceOp('seq')
-    Block.create_at_start(seq.bodyRegion, [sequenceTy, setTy, bagTy])
+    Block.create_at_start(seq.bodyRegion, [sequenceTy, labelTy, setTy, bagTy])
 
   # CHECK: rtg.sequence @seq
-  # CHECK: (%{{.*}}: !rtg.sequence, %{{.*}}: !rtg.set<index>, %{{.*}}: !rtg.bag<index>):
+  # CHECK: (%{{.*}}: !rtg.sequence, %{{.*}}: !rtg.label, %{{.*}}: !rtg.set<index>, %{{.*}}: !rtg.bag<index>):
   print(m)

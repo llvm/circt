@@ -711,6 +711,14 @@ public:
     // Check for special cases where hw doesn't align with btor syntax
     if (pred == "ne")
       pred = "neq";
+    else if (pred == "ule")
+      pred = "ulte";
+    else if (pred == "sle")
+      pred = "slte";
+    else if (pred == "uge")
+      pred = "ugte";
+    else if (pred == "sge")
+      pred = "sgte";
 
     // Width of result is always 1 for comparison
     genSort("bitvec", 1);
@@ -765,7 +773,7 @@ public:
       genUnaryOp(op, expr, "not", 1);
     }
 
-    // Genrate the bad btor2 intruction
+    // Generate the bad btor2 instruction
     genBad(op);
   }
   // Assumptions are converted to a btor2 constraint instruction
@@ -802,7 +810,7 @@ public:
       assertLID = genUnaryOp(prop.getDefiningOp(), "not", 1);
     }
 
-    // Genrate the bad btor2 intruction
+    // Generate the bad btor2 instruction
     genBad(assertLID);
   }
 
@@ -821,7 +829,7 @@ public:
       assumeLID = genImplies(op, en, prop);
     }
 
-    // Genrate the bad btor2 intruction
+    // Generate the bad btor2 instruction
     genConstraint(assumeLID);
   }
 

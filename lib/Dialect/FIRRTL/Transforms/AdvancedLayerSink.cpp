@@ -111,9 +111,18 @@ private:
     });
   }
 
+  /// Record whether the module-like op contains any effectful op.
   void update(FModuleLike moduleOp) {
-    if (!AnnotationSet(moduleOp).empty())
-      return markEffectful(moduleOp);
+    // If the module op has any annotations, then we pretend the module contains
+    // some kind of important effect, so that we cannot sink its instances.
+    if (auto annos = getAnnotationsIfPresent(moduleOp))
+      if (!annos.empty())
+        return markEffectful(moduleOp);
+
+    for (auto annos : moduleOp.getPortAnnotations())
+      if (!cast<ArrayAttr>(annos).empty())
+        return markEffectful(moduleOp);
+
     auto *op = moduleOp.getOperation();
     // Regular modules may be pure.
     if (auto m = dyn_cast<FModuleOp>(op))

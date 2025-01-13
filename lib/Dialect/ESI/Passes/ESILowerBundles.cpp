@@ -220,8 +220,7 @@ void ESIBundlesPass::runOnOperation() {
   RewritePatternSet patterns(&ctxt);
   PackBundleOp::getCanonicalizationPatterns(patterns, &ctxt);
   UnpackBundleOp::getCanonicalizationPatterns(patterns, &ctxt);
-  if (failed(mlir::applyPatternsAndFoldGreedily(getOperation(),
-                                                std::move(patterns))))
+  if (failed(mlir::applyPatternsGreedily(getOperation(), std::move(patterns))))
     signalPassFailure();
 
   top.walk([&](PackBundleOp pack) {

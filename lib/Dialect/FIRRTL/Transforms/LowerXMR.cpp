@@ -76,6 +76,50 @@ struct XMRNode {
   os << ", next=" << node.next << ")";
   return os;
 }
+
+/// Track information about operations being created in a module.  This is used
+/// to generate more compact code and reuse operations where possible.
+class ModuleState {
+
+public:
+  ModuleState(FModuleOp &moduleOp) : body(moduleOp.getBodyBlock()) {}
+
+  /// Return the existing XMRRefOp for this type, symbol, and suffix for this
+  /// module.  Otherwise, create a new one.  The first XMRRefOp will be created
+  /// at the beginning of the module.  Subsequent XMRRefOps will be created
+  /// immediately following the first one.
+  Value getOrCreateXMRRefOp(Type type, FlatSymbolRefAttr symbol,
+                            StringAttr suffix, ImplicitLocOpBuilder &builder) {
+    // Return the saved XMRRefOp.
+    auto it = xmrRefCache.find({type, symbol, suffix});
+    if (it != xmrRefCache.end())
+      return it->getSecond();
+
+    // Create a new XMRRefOp.
+    OpBuilder::InsertionGuard guard(builder);
+    if (xmrRefPoint.isSet())
+      builder.restoreInsertionPoint(xmrRefPoint);
+    else
+      builder.setInsertionPointToStart(body);
+
+    Value xmr = builder.create<XMRRefOp>(type, symbol, suffix);
+    xmrRefCache.insert({{type, symbol, suffix}, xmr});
+
+    xmrRefPoint = builder.saveInsertionPoint();
+    return xmr;
+  };
+
+private:
+  /// The module's body.  This is used to set the insertion point for the first
+  /// created operation.
+  Block *body;
+
+  /// Map used to know if we created this XMRRefOp before.
+  DenseMap<std::tuple<Type, SymbolRefAttr, StringAttr>, Value> xmrRefCache;
+
+  /// The saved insertion point for XMRRefOps.
+  OpBuilder::InsertPoint xmrRefPoint;
+};
 } // end anonymous namespace
 
 class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
@@ -95,8 +139,8 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
     SmallVector<Operation *> forceAndReleaseOps;
     // The dataflow function, that propagates the reachable RefSendOp across
     // RefType Ops.
-    auto transferFunc = [&](Operation &op) -> LogicalResult {
-      return TypeSwitch<Operation *, LogicalResult>(&op)
+    auto transferFunc = [&](Operation *op) -> LogicalResult {
+      return TypeSwitch<Operation *, LogicalResult>(op)
           .Case<RefSendOp>([&](RefSendOp send) {
             // Get a reference to the actual signal to which the XMR will be
             // generated.
@@ -263,12 +307,19 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
       LLVM_DEBUG(llvm::dbgs()
                  << "Traversing module:" << module.getModuleNameAttr() << "\n");
 
+      moduleStates.insert({module, ModuleState(module)});
+
       if (module.isPublic())
         publicModules.push_back(module);
 
-      for (Operation &op : module.getBodyBlock()->getOperations())
+      auto result = module.walk([&](Operation *op) {
         if (transferFunc(op).failed())
-          return signalPassFailure();
+          return WalkResult::interrupt();
+        return WalkResult::advance();
+      });
+
+      if (result.wasInterrupted())
+        return signalPassFailure();
 
       // Clear any enabled layers.
       module.setLayersAttr(ArrayAttr::get(module.getContext(), {}));
@@ -483,7 +534,10 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
               if (failed(resolveReference(op.getDest(), builder, ref, str)))
                 return failure();
 
-              Value xmr = builder.create<XMRRefOp>(destType, ref, str);
+              Value xmr =
+                  moduleStates.find(op->template getParentOfType<FModuleOp>())
+                      ->getSecond()
+                      .getOrCreateXMRRefOp(destType, ref, str, builder);
               op.getDestMutable().assign(xmr);
               return success();
             })
@@ -767,6 +821,7 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
     refPortsToRemoveMap.clear();
     dataflowAt.clear();
     refSendPathList.clear();
+    moduleStates.clear();
   }
 
   bool isZeroWidth(FIRRTLBaseType t) { return t.getBitWidthOrSentinel() == 0; }
@@ -854,6 +909,9 @@ private:
 
   /// The insertion point where the pass inserts HierPathOps.
   OpBuilder::InsertPoint pathInsertPoint = {};
+
+  /// Per-module helpers for creating operations within modules.
+  DenseMap<FModuleOp, ModuleState> moduleStates;
 };
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createLowerXMRPass() {

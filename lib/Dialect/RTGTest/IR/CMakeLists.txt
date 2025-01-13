@@ -8,8 +8,10 @@ add_circt_dialect_library(CIRCTRTGTestDialect
 
   DEPENDS
   MLIRRTGTestIncGen
+  CIRCTRTGTestEnumsIncGen
   
   LINK_LIBS PUBLIC
   MLIRIR
+  MLIRInferTypeOpInterface
   CIRCTRTGDialect
 )

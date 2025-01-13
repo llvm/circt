@@ -29,6 +29,13 @@ typedef enum FIRRTLConvention {
   FIRRTL_CONVENTION_SCALARIZED,
 } FIRRTLConvention;
 
+/// Layer lowering conventions.
+// NOLINTNEXTLINE(modernize-use-using)
+typedef enum FIRRTLLayerConvention {
+  FIRRTL_LAYER_CONVENTION_BIND,
+  FIRRTL_LAYER_CONVENTION_INLINE,
+} FIRRTLLayerConvention;
+
 /// Port direction.
 // NOLINTNEXTLINE(modernize-use-using)
 typedef enum FIRRTLDirection {
@@ -105,27 +112,73 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(FIRRTL, firrtl);
 // Type API.
 //===----------------------------------------------------------------------===//
 
+/// Returns `true` if this is a const type whose value is guaranteed to be
+/// unchanging at circuit execution time.
+MLIR_CAPI_EXPORTED bool firrtlTypeIsConst(MlirType type);
+
+/// Returns a const or non-const version of this type.
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetConstType(MlirType type, bool isConst);
+
+/// Gets the bit width for this type, returns -1 if unknown.
+///
+/// It recursively computes the bit width of aggregate types. For bundle and
+/// vectors, recursively get the width of each field element and return the
+/// total bit width of the aggregate type. This returns -1, if any of the bundle
+/// fields is a flip type, or ground type with unknown bit width.
+MLIR_CAPI_EXPORTED int64_t firrtlTypeGetBitWidth(MlirType type,
+                                                 bool ignoreFlip);
+
+/// Checks if this type is a unsigned integer type.
+MLIR_CAPI_EXPORTED bool firrtlTypeIsAUInt(MlirType type);
+
 /// Creates a unsigned integer type with the specified width.
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetUInt(MlirContext ctx, int32_t width);
+
+/// Checks if this type is a signed integer type.
+MLIR_CAPI_EXPORTED bool firrtlTypeIsASInt(MlirType type);
 
 /// Creates a signed integer type with the specified width.
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetSInt(MlirContext ctx, int32_t width);
 
+/// Checks if this type is a clock type.
+MLIR_CAPI_EXPORTED bool firrtlTypeIsAClock(MlirType type);
+
 /// Creates a clock type.
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetClock(MlirContext ctx);
+
+/// Checks if this type is a reset type.
+MLIR_CAPI_EXPORTED bool firrtlTypeIsAReset(MlirType type);
 
 /// Creates a reset type.
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetReset(MlirContext ctx);
 
-/// Creates a async reset type.
+/// Checks if this type is an async reset type.
+MLIR_CAPI_EXPORTED bool firrtlTypeIsAAsyncReset(MlirType type);
+
+/// Creates an async reset type.
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetAsyncReset(MlirContext ctx);
 
-/// Creates a analog type with the specified width.
+/// Checks if this type is an analog type.
+MLIR_CAPI_EXPORTED bool firrtlTypeIsAAnalog(MlirType type);
+
+/// Creates an analog type with the specified width.
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetAnalog(MlirContext ctx, int32_t width);
+
+/// Checks if this type is a vector type.
+MLIR_CAPI_EXPORTED bool firrtlTypeIsAVector(MlirType type);
 
 /// Creates a vector type with the specified element type and count.
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetVector(MlirContext ctx,
                                                 MlirType element, size_t count);
+
+/// Returns the element type of a vector type.
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetVectorElement(MlirType vec);
+
+/// Returns the number of elements in a vector type.
+MLIR_CAPI_EXPORTED size_t firrtlTypeGetVectorNumElements(MlirType vec);
+
+/// Returns true if the specified type is a bundle type.
+MLIR_CAPI_EXPORTED bool firrtlTypeIsABundle(MlirType type);
 
 /// Returns true if the specified type is an open bundle type.
 ///
@@ -139,34 +192,69 @@ MLIR_CAPI_EXPORTED bool firrtlTypeIsAOpenBundle(MlirType type);
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetBundle(
     MlirContext ctx, size_t count, const FIRRTLBundleField *fields);
 
+/// Returns the number of fields in the bundle type.
+MLIR_CAPI_EXPORTED size_t firrtlTypeGetBundleNumFields(MlirType bundle);
+
+/// Returns the field at the specified index in the bundle type.
+MLIR_CAPI_EXPORTED bool
+firrtlTypeGetBundleFieldByIndex(MlirType type, size_t index,
+                                FIRRTLBundleField *field);
+
 /// Returns the index of the field with the specified name in the bundle type.
 MLIR_CAPI_EXPORTED unsigned
 firrtlTypeGetBundleFieldIndex(MlirType type, MlirStringRef fieldName);
 
+/// Checks if this type is a ref type.
+MLIR_CAPI_EXPORTED bool firrtlTypeIsARef(MlirType type);
+
 /// Creates a ref type.
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetRef(MlirType target, bool forceable);
+
+/// Checks if this type is an anyref type.
+MLIR_CAPI_EXPORTED bool firrtlTypeIsAAnyRef(MlirType type);
 
 /// Creates an anyref type.
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetAnyRef(MlirContext ctx);
 
+/// Checks if this type is a property integer type.
+MLIR_CAPI_EXPORTED bool firrtlTypeIsAInteger(MlirType type);
+
 /// Creates a property integer type.
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetInteger(MlirContext ctx);
+
+/// Checks if this type is a property double type.
+MLIR_CAPI_EXPORTED bool firrtlTypeIsADouble(MlirType type);
 
 /// Creates a property double type.
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetDouble(MlirContext ctx);
 
+/// Checks if this type is a property string type.
+MLIR_CAPI_EXPORTED bool firrtlTypeIsAString(MlirType type);
+
 /// Creates a property string type.
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetString(MlirContext ctx);
+
+/// Checks if this type is a property boolean type.
+MLIR_CAPI_EXPORTED bool firrtlTypeIsABoolean(MlirType type);
 
 /// Creates a property boolean type.
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetBoolean(MlirContext ctx);
 
+/// Checks if this type is a property path type.
+MLIR_CAPI_EXPORTED bool firrtlTypeIsAPath(MlirType type);
+
 /// Creates a property path type.
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetPath(MlirContext ctx);
 
-/// Creates a property path type with the specified element type.
+/// Checks if this type is a property list type.
+MLIR_CAPI_EXPORTED bool firrtlTypeIsAList(MlirType type);
+
+/// Creates a property list type with the specified element type.
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetList(MlirContext ctx,
                                               MlirType elementType);
+
+/// Checks if this type is a class type.
+MLIR_CAPI_EXPORTED bool firrtlTypeIsAClass(MlirType type);
 
 /// Creates a class type with the specified name and elements.
 MLIR_CAPI_EXPORTED MlirType
@@ -184,6 +272,10 @@ MLIR_CAPI_EXPORTED MlirType firrtlTypeGetMaskType(MlirType type);
 /// Creates an ConventionAttr with the specified value.
 MLIR_CAPI_EXPORTED MlirAttribute
 firrtlAttrGetConvention(MlirContext ctx, FIRRTLConvention convention);
+
+/// Creates a LayerConventionAttr with the specified value.
+MLIR_CAPI_EXPORTED MlirAttribute
+firrtlAttrGetLayerConvention(MlirContext ctx, FIRRTLLayerConvention convention);
 
 /// Creates a DenseBoolArrayAttr with the specified port directions.
 MLIR_CAPI_EXPORTED MlirAttribute firrtlAttrGetPortDirs(

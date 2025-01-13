@@ -132,8 +132,7 @@ struct HandshakeSplitMerges
     patterns.insert<DeconstructCMergePattern, DeconstructMergePattern>(
         &getContext());
 
-    if (failed(
-            applyPatternsAndFoldGreedily(getOperation(), std::move(patterns))))
+    if (failed(applyPatternsGreedily(getOperation(), std::move(patterns))))
       signalPassFailure();
   };
 };

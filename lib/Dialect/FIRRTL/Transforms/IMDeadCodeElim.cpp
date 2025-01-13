@@ -540,8 +540,7 @@ void IMDeadCodeElimPass::visitSubelement(Operation *op) {
 }
 
 void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
-  auto *body = module.getBodyBlock();
-  assert(isBlockExecutable(body) &&
+  assert(isBlockExecutable(module.getBodyBlock()) &&
          "unreachable modules must be already deleted");
 
   auto removeDeadNonLocalAnnotations = [&](int _, Annotation anno) -> bool {

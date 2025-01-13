@@ -11,6 +11,7 @@ add_circt_dialect_library(CIRCTRTGDialect
 
   DEPENDS
   MLIRRTGIncGen
+  CIRCTRTGEnumsIncGen
   CIRCTRTGOpInterfacesIncGen
   CIRCTRTGISAAssemblyOpInterfacesIncGen
   CIRCTRTGTypeInterfacesIncGen

@@ -10,6 +10,7 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
+#include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -34,10 +35,10 @@ public:
   LogicalResult
   matchAndRewrite(seq::FIFOOp mem, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
+    Location loc = mem.getLoc();
     Type eltType = adaptor.getInput().getType();
     Value clk = adaptor.getClk();
     Value rst = adaptor.getRst();
-    Location loc = mem.getLoc();
     BackedgeBuilder bb(rewriter, loc);
     size_t depth = mem.getDepth();
     Type countType = rewriter.getIntegerType(llvm::Log2_64_Ceil(depth + 1));
@@ -47,11 +48,12 @@ public:
     Backedge nextCount = bb.get(countType);
 
     // ====== Some constants ======
-    Value countTcFull =
-        rewriter.create<hw::ConstantOp>(loc, countType, depth - 1);
+    Value countTcFull = rewriter.create<hw::ConstantOp>(loc, countType, depth);
     Value countTc1 = rewriter.create<hw::ConstantOp>(loc, countType, 1);
     Value countTc0 = rewriter.create<hw::ConstantOp>(loc, countType, 0);
+    Value ptrTc0 = rewriter.create<hw::ConstantOp>(loc, ptrType, 0);
     Value ptrTc1 = rewriter.create<hw::ConstantOp>(loc, ptrType, 1);
+    Value ptrTcFull = rewriter.create<hw::ConstantOp>(loc, ptrType, depth);
 
     // ====== Hardware units ======
     Value count = rewriter.create<seq::CompRegOp>(
@@ -123,8 +125,13 @@ public:
     Value wrAndNotFull = rewriter.create<comb::AndOp>(
         loc, adaptor.getWrEn(), comb::createOrFoldNot(loc, fifoFull, rewriter));
     auto addWrAddrPtrTc1 = rewriter.create<comb::AddOp>(loc, wrAddr, ptrTc1);
-    wrAddrNext.setValue(rewriter.create<comb::MuxOp>(loc, wrAndNotFull,
-                                                     addWrAddrPtrTc1, wrAddr));
+
+    auto wrAddrNextNoRollover = rewriter.create<comb::MuxOp>(
+        loc, wrAndNotFull, addWrAddrPtrTc1, wrAddr);
+    auto isMaxAddrWr = rewriter.create<comb::ICmpOp>(
+        loc, comb::ICmpPredicate::eq, wrAddrNextNoRollover, ptrTcFull);
+    wrAddrNext.setValue(rewriter.create<comb::MuxOp>(loc, isMaxAddrWr, ptrTc0,
+                                                     wrAddrNextNoRollover));
     static_cast<Value>(wrAddrNext)
         .getDefiningOp()
         ->setAttr("sv.namehint", rewriter.getStringAttr("fifo_wr_addr_next"));
@@ -133,8 +140,12 @@ public:
     Value rdAndNotEmpty =
         rewriter.create<comb::AndOp>(loc, adaptor.getRdEn(), notFifoEmpty);
     auto addRdAddrPtrTc1 = rewriter.create<comb::AddOp>(loc, rdAddr, ptrTc1);
-    rdAddrNext.setValue(rewriter.create<comb::MuxOp>(loc, rdAndNotEmpty,
-                                                     addRdAddrPtrTc1, rdAddr));
+    auto rdAddrNextNoRollover = rewriter.create<comb::MuxOp>(
+        loc, rdAndNotEmpty, addRdAddrPtrTc1, rdAddr);
+    auto isMaxAddrRd = rewriter.create<comb::ICmpOp>(
+        loc, comb::ICmpPredicate::eq, rdAddrNextNoRollover, ptrTcFull);
+    rdAddrNext.setValue(rewriter.create<comb::MuxOp>(loc, isMaxAddrRd, ptrTc0,
+                                                     rdAddrNextNoRollover));
     static_cast<Value>(rdAddrNext)
         .getDefiningOp()
         ->setAttr("sv.namehint", rewriter.getStringAttr("fifo_rd_addr_next"));
@@ -168,6 +179,22 @@ public:
           ->setAttr("sv.namehint", rewriter.getStringAttr("fifo_almost_empty"));
     }
 
+    // ====== Protocol checks =====
+    Value clkI1 = rewriter.create<seq::FromClockOp>(loc, clk);
+    Value notEmptyAndRden = comb::createOrFoldNot(
+        loc, rewriter.create<comb::AndOp>(loc, adaptor.getRdEn(), fifoEmpty),
+        rewriter);
+    rewriter.create<verif::ClockedAssertOp>(
+        loc, notEmptyAndRden, verif::ClockEdge::Pos, clkI1, /*enable=*/Value(),
+        rewriter.getStringAttr("FIFO empty when read enabled"));
+    Value notFullAndWren = comb::createOrFoldNot(
+        loc, rewriter.create<comb::AndOp>(loc, adaptor.getWrEn(), fifoFull),
+        rewriter);
+    rewriter.create<verif::ClockedAssertOp>(
+        loc, notFullAndWren, verif::ClockEdge::Pos, clkI1,
+        /*enable=*/Value(),
+        rewriter.getStringAttr("FIFO full when write enabled"));
+
     rewriter.replaceOp(mem, results);
     return success();
   }
@@ -186,7 +213,8 @@ void LowerSeqFIFOPass::runOnOperation() {
 
   // Lowering patterns must lower away all HLMem-related operations.
   target.addIllegalOp<seq::FIFOOp>();
-  target.addLegalDialect<seq::SeqDialect, hw::HWDialect, comb::CombDialect>();
+  target.addLegalDialect<seq::SeqDialect, hw::HWDialect, comb::CombDialect,
+                         verif::VerifDialect>();
   RewritePatternSet patterns(&ctxt);
   patterns.add<FIFOLowering>(&ctxt);
 

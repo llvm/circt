@@ -39,6 +39,18 @@ module {
     // CHECK:   [[NID12:[0-9]+]] ugt [[NID3]] [[NID10]] 2
     %5 = comb.icmp bin ugt %3, %a : i32
 
+    // CHECK:   [[NID13:[0-9]+]] ulte [[NID3]] [[NID10]] 2
+    %6 = comb.icmp bin ule %3, %a : i32
+
+    // CHECK:   [[NID14:[0-9]+]] slte [[NID3]] [[NID10]] 2
+    %7 = comb.icmp bin sle %3, %a : i32
+
+    // CHECK:   [[NID15:[0-9]+]] ugte [[NID3]] [[NID10]] 2
+    %8 = comb.icmp bin uge %3, %a : i32
+
+    // CHECK:   [[NID16:[0-9]+]] sgte [[NID3]] [[NID10]] 2
+    %9 = comb.icmp bin sge %3, %a : i32
+
     // CHECK:   [[NID13:[0-9]+]] implies [[NID3]] [[NID5]] [[NID12]]
     // CHECK:   [[NID14:[0-9]+]] not [[NID3]] [[NID13]]
     // CHECK:   [[NID15:[0-9]+]] bad [[NID14:[0-9]+]]

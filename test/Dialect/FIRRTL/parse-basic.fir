@@ -1,6 +1,6 @@
 ; RUN: circt-translate -import-firrtl -verify-diagnostics -split-input-file %s | circt-opt | FileCheck %s
 
-FIRRTL version 4.0.0
+FIRRTL version 4.1.0
 circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK-LABEL: firrtl.module @MyModule(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
@@ -1381,7 +1381,7 @@ circuit Top:
 ;// -----
 
 ; CHECK-LABEL: firrtl.circuit "Layers"
-FIRRTL version 4.0.0
+FIRRTL version 4.1.0
 circuit Layers:
   layer A, bind:
     layer B, bind:
@@ -1449,7 +1449,7 @@ circuit Layers:
 
 ;// -----
 ; CHECK-LABEL: firrtl.circuit "BasicProps"
-FIRRTL version 4.1.0
+FIRRTL version 4.2.0
 circuit BasicProps :
   public module BasicProps :
   ; CHECK-LABEL: module private @Integer
@@ -1655,7 +1655,7 @@ circuit WireOfProbesAndNames:
     wire probe : Probe<UInt<1>>
 
 ;// -----
-FIRRTL version 4.1.0
+FIRRTL version 4.2.0
 
 ; CHECK-LABEL: circuit "AnyRef"
 circuit AnyRef:

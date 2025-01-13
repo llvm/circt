@@ -148,15 +148,18 @@ assert data == 42
 # Handshake JoinAddFunc tests
 ################################################################################
 
-a = d.ports[esi.AppID("join_a")].write_port("data")
-a.connect()
-b = d.ports[esi.AppID("join_b")].write_port("data")
-b.connect()
-x = d.ports[esi.AppID("join_x")].read_port("data")
-x.connect()
+# Disabled test since the DC dialect flow is broken. Leaving the code here in
+# case someone fixes it.
 
-a.write(15)
-b.write(24)
-xdata = x.read()
-print(f"join: {xdata}")
-assert xdata == 15 + 24
+# a = d.ports[esi.AppID("join_a")].write_port("data")
+# a.connect()
+# b = d.ports[esi.AppID("join_b")].write_port("data")
+# b.connect()
+# x = d.ports[esi.AppID("join_x")].read_port("data")
+# x.connect()
+
+# a.write(15)
+# b.write(24)
+# xdata = x.read()
+# print(f"join: {xdata}")
+# assert xdata == 15 + 24

@@ -73,6 +73,16 @@ LogicalResult ChannelBufferOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// FIFO functions.
+//===----------------------------------------------------------------------===//
+
+LogicalResult FIFOOp::verify() {
+  if (getOutput().getType().getInner() != getInput().getType().getInner())
+    return emitOpError("input and output types must match");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // PipelineStageOp functions.
 //===----------------------------------------------------------------------===//
 

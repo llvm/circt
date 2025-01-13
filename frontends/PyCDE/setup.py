@@ -56,6 +56,8 @@ class CMakeBuild(build_py):
     if "BUILD_TYPE" in os.environ:
       cfg = os.environ["BUILD_TYPE"]
     cmake_args = [
+        "-Wno-dev",
+        "-GNinja",
         "-DCMAKE_INSTALL_PREFIX={}".format(os.path.abspath(cmake_install_dir)),
         "-DPython3_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
         "-DCMAKE_BUILD_TYPE={}".format(cfg),  # not used on MSVC, but no harm
