@@ -10,23 +10,30 @@
 #include "VerilogServer.h"
 
 #include "Protocol.h"
+#include "circt/Support/LLVM.h"
 #include "circt/Tools/circt-verilog-lsp/CirctVerilogLspServerMain.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/Support/FileUtilities.h"
+#include "mlir/Support/IndentedOstream.h"
 #include "mlir/Support/ToolUtilities.h"
 #include "mlir/Tools/lsp-server-support/CompilationDatabase.h"
 #include "mlir/Tools/lsp-server-support/Logging.h"
 #include "mlir/Tools/lsp-server-support/Protocol.h"
 #include "mlir/Tools/lsp-server-support/SourceMgrUtils.h"
+#include "slang/ast/ASTSerializer.h"
 #include "slang/ast/ASTVisitor.h"
 #include "slang/ast/Compilation.h"
 #include "slang/ast/Definition.h"
+#include "slang/ast/Expression.h"
 #include "slang/ast/Statements.h"
+#include "slang/ast/Symbol.h"
 #include "slang/ast/SystemSubroutine.h"
+#include "slang/ast/expressions/AssertionExpr.h"
 #include "slang/ast/expressions/AssignmentExpressions.h"
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
 #include "slang/ast/symbols/InstanceSymbols.h"
+#include "slang/ast/symbols/MemberSymbols.h"
 #include "slang/ast/symbols/PortSymbols.h"
 #include "slang/ast/symbols/VariableSymbols.h"
 #include "slang/diagnostics/DiagnosticClient.h"
@@ -34,6 +41,7 @@
 #include "slang/driver/Driver.h"
 #include "slang/syntax/AllSyntax.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
@@ -56,18 +64,27 @@
 #include "llvm/Support/Parallel.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SMLoc.h"
+#include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <cstdint>
 #include <iterator>
 #include <memory>
 #include <optional>
+#include <variant>
 
 using namespace mlir;
 using namespace mlir::lsp;
 
 using namespace circt::lsp;
 using namespace circt;
+
+struct EmittedLoc {
+  StringRef filePath;
+  uint32_t line;
+  uint32_t column;
+  SMRange range;
+};
 
 /// Returns a language server uri for the given source location. `mainFileURI`
 /// corresponds to the uri for the main file of the source manager.
@@ -222,6 +239,123 @@ public:
     return bufferIDMap;
   }
 
+  StringRef getExternalSourceLine(const EmittedLoc *loc) {
+    auto &sgr = getSourceMgr();
+    auto fileInfo = getOrOpenFile(loc->filePath);
+    if (!fileInfo) {
+      mlir::lsp::Logger::error("VerilogDocument::findHover fileInfo not found");
+      return StringRef();
+    }
+
+    mlir::lsp::Logger::info("VerilogDocument::findHover fileInfo found");
+    auto [bufferId, filePath] = *fileInfo;
+    // auto line = loc->line;
+    // auto column = loc->column;
+    auto buffer = sgr.getMemoryBuffer(bufferId);
+    assert(!buffer->getBuffer().empty());
+    auto start = buffer->getBuffer().find_last_of(
+        '\n', loc->range.Start.getPointer() - buffer->getBufferStart());
+    auto end = buffer->getBuffer().find_first_of(
+        '\n', (loc->range.End.getPointer() - buffer->getBufferStart()));
+    if (start == StringRef::npos || end == StringRef::npos) {
+      mlir::lsp::Logger::info("VerilogDocument::findHover npos");
+      return StringRef();
+    }
+    return StringRef(buffer->getBuffer().substr(start, end - start));
+  }
+
+  std::optional<std::pair<uint32_t, SmallString<128>>>
+  getOrOpenFile(StringRef filePath) {
+    auto fileInfo = filePathMap.find(filePath);
+    if (fileInfo != filePathMap.end())
+      return fileInfo->second;
+
+    for (auto &lib : originalFileRoots) {
+      auto size = lib.size();
+      auto fixupSize = llvm::make_scope_exit([&]() { lib.resize(size); });
+      llvm::sys::path::append(lib, filePath);
+      if (llvm::sys::fs::exists(lib)) {
+        auto memoryBuffer = llvm::MemoryBuffer::getFile(lib);
+        if (!memoryBuffer) {
+          continue;
+        }
+        auto id =
+            sourceMgr.AddNewSourceBuffer(std::move(*memoryBuffer), SMLoc());
+
+        fileInfo =
+            filePathMap
+                .insert(std::make_pair(filePath, std::make_pair(id, lib)))
+                .first;
+        return fileInfo->second;
+      }
+    }
+    return std::nullopt;
+  }
+
+  std::optional<mlir::lsp::URIForFile> getExternalURI(const EmittedLoc *loc) {
+    mlir::lsp::Logger::debug(
+        "VerilogDocument::getLocationsOf interval map loc");
+    // auto fileInfo = filePathMap.find(loc->filePath);
+    auto fileInfo = getOrOpenFile(loc->filePath);
+    // if (fileInfo == filePathMap.end()) {
+    //   bool found = false;
+    //   for (auto &lib : originalFileRoots) {
+    //     auto size = lib.size();
+    //     auto fixupSize = llvm::make_scope_exit([&]() { lib.resize(size); });
+    //     llvm::sys::path::append(lib, loc->filePath);
+    //     if (llvm::sys::fs::exists(lib)) {
+    //       auto memoryBuffer = llvm::MemoryBuffer::getFile(lib);
+    //       if (!memoryBuffer) {
+    //         continue;
+    //       }
+    //       found = true;
+    //       auto id =
+    //           sourceMgr.AddNewSourceBuffer(std::move(*memoryBuffer),
+    //           SMLoc());
+
+    //       fileInfo = filePathMap
+    //                      .insert(std::make_pair(loc->filePath,
+    //                                             std::make_pair(id, lib)))
+    //                      .first;
+    //     }
+    //   }
+    //   if (!found)
+    //     return std::nullopt;
+    // }
+
+    if (!fileInfo)
+      return std::nullopt;
+    const auto &[bufferId, filePath] = *fileInfo;
+    mlir::lsp::Logger::debug(
+        "VerilogDocument::getLocationsOf interval map loc not found");
+
+    // sourceMgr.getBufferInfo(bufferId);
+    auto uri = mlir::lsp::URIForFile::fromFile(filePath);
+    if (auto e = uri.takeError()) {
+      mlir::lsp::Logger::error(
+          "VerilogDocument::getLocationsOf interval map loc error");
+      return std::nullopt;
+    }
+
+    // auto loc =
+    //     getLocationFromLoc(verilogContext.sourceMgr, it-range, uri);
+    // auto bufferId =
+    //     getContext().getBufferIDMap().at(symbol->location.buffer().getId());
+    // auto buffer = sourceMgr.pat;
+    // if (loc.uri.file().empty())
+    // return mlir::lsp::Logger::debug(
+    //     "VerilogDocument::getLocationsOf loc is empty");
+    return *uri;
+  }
+
+  StringRef getSourceLine(slang::SourceLocation loc) {
+    auto text = getSlangSourceManager().getSourceText(loc.buffer());
+    auto offest = loc.offset();
+    auto start = text.find_last_of('\n', offest);
+    auto end = text.find_first_of('\n', offest);
+    return StringRef(text.substr(start, end - start));
+  }
+
   llvm::SMLoc getSMLoc(slang::SourceLocation loc) {
     auto bufferID = loc.buffer().getId();
     mlir::lsp::Logger::debug("id {}", bufferID);
@@ -353,12 +487,6 @@ public:
   /// provided `loc` overlapped with.
   const VerilogIndexSymbol *lookup(SMLoc loc,
                                    SMRange *overlappedRange = nullptr) const;
-  struct EmittedLoc {
-    StringRef filePath;
-    uint32_t line;
-    uint32_t column;
-    SMRange range;
-  };
 
   const EmittedLoc *lookupLoc(SMLoc loc) const;
 
@@ -371,6 +499,12 @@ public:
   auto &getReferences() { return references; }
 
   void parseEmittedLoc();
+
+  enum SymbolUse { AssignLValue, RValue, Unknown };
+
+  using ReferenceNode = llvm::PointerUnion<const slang::ast::Symbol *,
+                                           const slang::ast::PortConnection *,
+                                           const slang::ast::Expression *>;
 
 private:
   /// The type of interval map used to store source references. SMRange is
@@ -400,7 +534,9 @@ private:
   MapTLoc intervalMapLoc;
 
   llvm::SmallDenseMap<const VerilogIndexSymbol *,
-                      SmallVector<slang::SourceLocation>>
+                      SmallVector<std::tuple<slang::SourceLocation, SymbolUse,
+                                             std::optional<ReferenceNode>>,
+                                  8>>
       references;
 
   // TODO: Use allocator.
@@ -475,8 +611,24 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
   IndexVisitor(VerilogIndex &index) : index(index) {}
   VerilogIndex &index;
 
-  void handleSymbol(const slang::ast::Symbol *symbol, slang::SourceRange range,
-                    bool isDef = false) {
+  void visit(const slang::ast::InstanceBodySymbol &body) {
+    mlir::lsp::Logger::debug("visit: {}", body.name);
+    inInstancePortConnection = false;
+    visitDefault(body);
+  }
+
+  void addAssignment(const slang::ast::Symbol *dest,
+                     slang::SourceLocation start,
+                     VerilogIndex::ReferenceNode assignedContext) {
+    assert(dest);
+    index.getReferences()[dest].push_back(
+        std::make_tuple(start, VerilogIndex::AssignLValue, assignedContext));
+  }
+
+  void handleSymbol(
+      const slang::ast::Symbol *symbol, slang::SourceRange range,
+      bool isDef = false, bool isAssign = false,
+      std::optional<VerilogIndex::ReferenceNode> reference = std::nullopt) {
     if (symbol->name.empty())
       return;
     mlir::lsp::Logger::debug("index handleSymbol: {}", symbol->name);
@@ -495,7 +647,7 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
     //                             ->getDefinition()
     //                             .name);
 
-    insertDeclRef(symbol, range, true);
+    insertDeclRef(symbol, range, isDef, isAssign, reference);
   }
 
   void visit(const slang::ast::InstanceSymbol &symbol) {
@@ -519,6 +671,9 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
     }
 
     for (auto *con : symbol.getPortConnections()) {
+      inInstancePortConnection = true;
+      visitDefault(con);
+      inInstancePortConnection = false;
       // mlir::lsp::Logger::info("visit: {}",
       //                         con->getExpression()->syntax->toString());
 
@@ -544,6 +699,10 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
                        con->getExpression()
                            ->as_if<slang::ast::AssignmentExpression>()) {
           firstLoc = connect->sourceRange.start();
+          if (auto *left =
+                  connect->left().as_if<slang::ast::NamedValueExpression>()) {
+            addAssignment(left->getSymbolReference(true), firstLoc, con);
+          }
         } else {
           mlir::lsp::Logger::info("no expression");
         }
@@ -576,9 +735,10 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
         //                          port->getSyntax()->toString());
         handleSymbol(port,
                      slang::SourceRange(loc + it, loc + it + port->name.size()),
-                     false);
+                     false, false);
       }
     }
+    visitDefault(symbol);
   }
 
   // Handle references to the left-hand side of a parent assignment.
@@ -588,7 +748,7 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
     auto *symbol = expr.getSymbolReference(true);
     if (!symbol)
       return;
-    handleSymbol(symbol, expr.sourceRange);
+    handleSymbol(symbol, expr.sourceRange, false, false);
     visitDefault(expr);
   }
   void visit(const slang::ast::NetSymbol &expr) {
@@ -596,7 +756,7 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
     handleSymbol(
         &expr,
         slang::SourceRange(expr.location, expr.location + expr.name.length()),
-        true);
+        true, false);
     visitDefault(expr);
   }
   void visit(const slang::ast::VariableSymbol &expr) {
@@ -604,7 +764,7 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
     handleSymbol(
         &expr,
         slang::SourceRange(expr.location, expr.location + expr.name.length()),
-        true);
+        true, false);
     visitDefault(expr);
   }
 
@@ -614,16 +774,36 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
     visitDefault(expr);
   }
 
-  // void visit(const slang::ast::AssignmentExpression &expr) {
-  //   mlir::lsp::Logger::debug("visit: {}", slang::ast::toString(expr.kind));
-  //   if (auto *symbol = expr.left().getSymbolReference(true))
-  //     handleSymbol(symbol, expr.sourceRange);
+  bool inInstancePortConnection = false;
+  void visit(const slang::ast::AssignmentExpression &assign) {
+    if (!inInstancePortConnection)
+      if (auto *left =
+              assign.left().as_if<slang::ast::NamedValueExpression>()) {
+        addAssignment(left->getSymbolReference(true),
+                      assign.sourceRange.start(), &assign);
+      }
+    visitDefault(assign);
+  }
+
+  //
+  // void visit(const slang::ast::ContinuousAssignSymbol &symbol) {
+  //   mlir::lsp::Logger::debug("visit: {}", slang::ast::toString(symbol.kind));
+  //   if (const auto *assign =
+  //           symbol.getAssignment().as_if<slang::ast::AssignmentExpression>())
+  //           {
+  //     if (auto *left =
+  //             assign->left().as_if<slang::ast::NamedValueExpression>()) {
+  //       addAssignment(left->getSymbolReference(true),
+  //                     assign->sourceRange.start(), &symbol);
+  //     }
+  //   }
+  //   visitDefault(symbol);
   // }
 
   // Handle named values, such as references to declared variables.
   // Handle named values, such as references to declared variables.
   void visit(const slang::ast::NamedValueExpression &expr) {
-    mlir::lsp::Logger::debug("visit: {}", slang::ast::toString(expr.kind));
+    mlir::lsp::Logger::info("visit: {}", slang::ast::toString(expr.kind));
     auto *symbol = expr.getSymbolReference(true);
     if (!symbol)
       return;
@@ -651,7 +831,6 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
 
   template <typename T>
   void visit(const T &t) {
-    mlir::lsp::Logger::debug("visit: {}", slang::ast::toString(t.kind));
 
     visitDefault(t);
   }
@@ -695,8 +874,10 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
 
   VerilogServerContext &getContext() { return index.getContext(); }
 
-  void insertDeclRef(const VerilogIndexSymbol *sym, slang::SourceRange refLoc,
-                     bool isDef = false) {
+  void insertDeclRef(
+      const VerilogIndexSymbol *sym, slang::SourceRange refLoc,
+      bool isDef = false, bool isAssign = false,
+      std::optional<VerilogIndex::ReferenceNode> reference = std::nullopt) {
     const char *startLoc = getContext().getSMLoc(refLoc.start()).getPointer();
     const char *endLoc = getContext().getSMLoc(refLoc.end()).getPointer();
     if (!startLoc || !endLoc)
@@ -706,7 +887,11 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
         !index.getIntervalMap().overlaps(startLoc, endLoc)) {
       index.getIntervalMap().insert(startLoc, endLoc, sym);
       if (!isDef) {
-        index.getReferences()[sym].push_back(refLoc.start());
+        index.getReferences()[sym].push_back(
+            {refLoc.start(),
+             isAssign ? VerilogIndex::SymbolUse::AssignLValue
+                      : VerilogIndex::SymbolUse::RValue,
+             reference});
       }
     }
   };
@@ -725,15 +910,20 @@ void VerilogIndex::initialize(slang::ast::Compilation *compilation) {
   //       return failure();
   //   }
   // }
-  auto insertDeclRef = [&](const VerilogIndexSymbol *sym, SMRange refLoc,
-                           bool isDef = false) {
-    const char *startLoc = refLoc.Start.getPointer();
-    const char *endLoc = refLoc.End.getPointer();
-    if (!intervalMap.overlaps(startLoc, endLoc)) {
-      intervalMap.insert(startLoc, endLoc, sym);
-    }
-  };
-  const auto *slangSourceMgr = compilation->getSourceManager();
+  //  auto insertDeclRef = [&](const VerilogIndexSymbol *sym, SMRange refLoc,
+  // bool isDef = false, bool isAssign = false) {
+  // const char *startLoc = refLoc.Start.getPointer();
+  // const char *endLoc = refLoc.End.getPointer();
+  // if (!intervalMap.overlaps(startLoc, endLoc)) {
+  // intervalMap.insert(startLoc, endLoc, sym);
+  // if (!isDef) {
+  // index.getReferences()[sym].push_back(
+  //{refLoc.Start, isAssign ? VerilogIndex::SymbolUse::AssignLValue
+  //: VerilogIndex::SymbolUse::RValue});
+  //}
+  //}
+  //};
+  // const auto *slangSourceMgr = compilation->getSourceManager();
 
   IndexVisitor visitor(*this);
   for (auto *inst : root.topInstances) {
@@ -829,7 +1019,7 @@ const VerilogIndexSymbol *VerilogIndex::lookup(SMLoc loc,
   return it.value();
 }
 
-const VerilogIndex::EmittedLoc *VerilogIndex::lookupLoc(SMLoc loc) const {
+const EmittedLoc *VerilogIndex::lookupLoc(SMLoc loc) const {
   auto it = intervalMapLoc.find(loc.getPointer());
   if (!it.valid() || loc.getPointer() < it.start())
     return nullptr;
@@ -880,6 +1070,7 @@ struct VerilogDocument {
                                             const SMRange &hoverRange);
   std::optional<mlir::lsp::Hover>
   findHover(const slang::ast::Definition *instance, const SMRange &hoverRange) {
+    return std::nullopt;
   }
   mlir::lsp::Hover buildHoverForStatement(const slang::ast::Statement *stmt,
                                           const SMRange &hoverRange);
@@ -1133,7 +1324,6 @@ void VerilogDocument::getLocationsOf(
       mlir::lsp::Location loc(uri.get(),
                               mlir::lsp::Range(Position(it->line, it->column)));
       locations.push_back(loc);
-      return;
 
       // auto loc =
       //     getLocationFromLoc(verilogContext.sourceMgr, it-range, uri);
@@ -1184,9 +1374,9 @@ void VerilogDocument::findReferencesOf(
     return;
   }
 
-  references.push_back(
-      getLocationFromLoc(verilogContext.sourceMgr, symbol->location, uri));
-  for (auto refLoc : index.getReferences().lookup(symbol))
+  // references.push_back(
+  //     getLocationFromLoc(verilogContext.sourceMgr, symbol->location, uri));
+  for (auto [refLoc, use, expr] : index.getReferences().lookup(symbol))
     references.push_back(getContext().getLspLocation(refLoc));
 }
 
@@ -1215,18 +1405,177 @@ VerilogDocument::findHover(const mlir::lsp::URIForFile &uri,
     if (include.range.contains(hoverPos))
       return include.buildHover();
 
+  if (auto *emittedLocation = index.lookupLoc(posLoc)) {
+    auto uri = getContext().getExternalURI(emittedLocation);
+    if (!uri)
+      return std::nullopt;
+    mlir::lsp::Logger::info("VerilogDocument::findHover emittedLocation");
+    auto externalSource = getContext().getExternalSourceLine(emittedLocation);
+    if (externalSource.empty())
+      return std::nullopt;
+    mlir::lsp::Hover hover(
+        mlir::lsp::Range(verilogContext.sourceMgr, emittedLocation->range));
+    llvm::raw_string_ostream stream(hover.contents.value);
+    mlir::raw_indented_ostream hoverOS(stream);
+    hoverOS << "### External Source\n```\n";
+    hoverOS.printReindented(externalSource);
+    hoverOS << "\n```\n";
+    return hover;
+  }
+
   // Find the symbol at the given location.
   SMRange hoverRange;
   const VerilogIndexSymbol *symbol = index.lookup(posLoc, &hoverRange);
   if (!symbol)
     return std::nullopt;
 
+  // Hover
+
+  mlir::lsp::Hover hover(
+      mlir::lsp::Range(verilogContext.sourceMgr, hoverRange));
+  auto lineSource = getContext().getSourceLine(symbol->location);
+  llvm::raw_string_ostream stream(hover.contents.value);
+  mlir::raw_indented_ostream hoverOS(stream);
+  // Definition.
+  if (auto *type = symbol->getDeclaredType()) {
+    hoverOS << "**Type**: `" << type->getType().toString() << "`\n***\n";
+  }
+  hoverOS << "### Definition\n```verilog\n";
+  hoverOS.printReindented(lineSource);
+  hoverOS << "\n```\n";
+  auto loc = getContext().getLspLocation(symbol->location);
+  hoverOS << "\n[Go To Definition](" << loc.uri.uri() << "#L"
+          << verilogContext.getSlangSourceManager().getLineNumber(
+                 symbol->location)
+          << ")";
+  hoverOS << "\n***\n";
+
+  const auto &refs = index.getReferences().lookup(symbol);
+  slang::SourceLocation assignment;
+  std::optional<VerilogIndex::ReferenceNode> assignExpr;
+  for (auto [refLoc, use, expr] : refs) {
+    bool isAssign = use == VerilogIndex::SymbolUse::AssignLValue;
+    if (isAssign) {
+      if (assignExpr) {
+        if (expr->is<const slang::ast::PortConnection *>()) {
+          assignment = refLoc;
+          assignExpr = expr;
+        } else if (assignExpr->is<const slang::ast::PortConnection *>() &&
+                   !expr->is<const slang::ast::PortConnection *>()) {
+          // FIXME:
+          continue;
+        } else {
+          assignExpr = std::nullopt;
+          hoverOS << "*Multiple drivers found. Use find references to see "
+                     "all drivers*\n";
+          break;
+        }
+      } else {
+        assignment = refLoc;
+        assignExpr = expr;
+      }
+    }
+  }
+
+  mlir::lsp::Logger::info("VerilogDocument::findHover assignment before");
+  if (assignment.valid()) {
+    mlir::lsp::Logger::info(
+        "VerilogDocument::findHover assignment locaction is valid");
+  }
+  if (assignExpr) {
+    mlir::lsp::Logger::info(
+        "VerilogDocument::findHover assignment expr is valid");
+  }
+  if (assignment.valid() && assignExpr) {
+    mlir::lsp::Logger::info("VerilogDocument::findHover assignment");
+    // assert(assignExpr->syntax);
+    auto loc = verilogContext.getLspLocation(assignment);
+    // mlir::lsp::Hover hover(loc.range);
+    auto &slangMgr = verilogContext.getSlangSourceManager();
+    auto line = slangMgr.getLineNumber(assignment);
+    if (line == hoverPos.line) {
+      return std::nullopt;
+    }
+    auto buffer = assignment.buffer();
+    auto text = slangMgr.getSourceText(buffer);
+    // Take plus-minus 1 lines of context.
+    auto start = assignment.offset();
+    auto end = start;
+    auto lineSource = getContext().getSourceLine(assignment);
+    // while (start > 0 && text[start - 1] != '\n')
+    //   start--;
+    // if (start != 0)
+    //   start--;
+
+    // for (int i = 0; i < 2; i++) {
+    //   while (end < text.size() && text[end] != '\n')
+    //     end++;
+    //   if (end != text.size() && i != 1)
+    //     end++;
+    // }
+    llvm::raw_string_ostream stream(hover.contents.value);
+    mlir::raw_indented_ostream hoverOS(stream);
+
+    // hover.contents.value = "assigned at ";
+    // hover.contents.value += slangMgr.getFileName(assignment);
+    // hover.contents.value += ":";
+    // hover.contents.value +=
+    // std::to_string(slangMgr.getLineNumber(assignment)); hover.contents.value
+    // += ":"; hover.contents.value +=
+    // std::to_string(slangMgr.getColumnNumber(assignment));
+    // hover.contents.value += "\n";
+    hover.contents.value += "### Single driver found\n```verilog\n";
+    if (const auto *assign =
+            assignExpr->dyn_cast<const slang::ast::Symbol *>()) {
+
+      if (assign->getSyntax()) {
+        hoverOS << assign->getSyntax()->toString();
+      }
+    } else if (const auto *port =
+                   assignExpr->dyn_cast<const slang::ast::PortConnection *>()) {
+      auto &inst = port->parentInstance;
+      hoverOS << inst.body.name;
+      hoverOS << " ";
+      hoverOS << inst.name;
+      hoverOS << " (\n";
+      hoverOS.indent();
+      hoverOS << "...\n";
+      hoverOS << port->port.name;
+      hoverOS << "(";
+      if (auto *expr = port->getExpression()
+                           ->as_if<slang::ast::AssignmentExpression>()) {
+        hoverOS << expr->left().syntax->toString();
+      } else if (port->getExpression() && port->getExpression()->syntax)
+        hoverOS << port->getExpression()->syntax->toString();
+      else
+        hoverOS << "<unknown>";
+      hoverOS << ")\n";
+
+      hoverOS.unindent();
+    } else if (const auto *inst =
+                   assignExpr->dyn_cast<const slang::ast::Expression *>()) {
+
+      // if (auto *assign = inst->as_if<slang::ast::AssignmentExpression>()) {
+      //   if (assign->syntax)
+      //     hover.contents.value += assign->syntax->toString();
+      // }
+      hoverOS.printReindented(lineSource);
+    }
+
+    hoverOS << "\n```\n";
+
+    // FIXME: Is there a better way to do this?
+    hoverOS << "\n[Go To Assignment](" << uri.uri() << "#L"
+            << slangMgr.getLineNumber(assignment) << ")";
+    return hover;
+  }
+
   // Add hover for operation names.
   // if (const auto *op =
   //        llvm::dyn_cast_if_present<const ods::Operation
   //        *>(symbol->definition))
   //  return buildHoverForOpName(op, hoverRange);
-  return findHover(symbol->getDeclaringDefinition(), hoverRange);
+  return hover;
 }
 
 std::optional<mlir::lsp::Hover>
@@ -1708,7 +2057,12 @@ void VerilogDocument::getVerilogViewOutput(
   if (failed(compilation))
     return;
   if (kind == circt::lsp::VerilogViewOutputKind::AST) {
-    os << compilation.value()->getSyntaxTrees()[0]->root().toString();
+    slang::JsonWriter writer;
+    writer.setPrettyPrint(true);
+
+    slang::ast::ASTSerializer serializer(**compilation, writer);
+    serializer.serialize(compilation->get()->getRoot());
+    os << writer.view();
     return;
   }
 
