@@ -47,10 +47,10 @@ namespace circt {
 
 inline void registerAllPasses() {
   // Conversion Passes
-  registerConversionPasses();
+  registerCIRCTConversionPasses();
 
   // Transformation passes
-  registerTransformsPasses();
+  registerCIRCTTransformsPasses();
 
   // LEC transformation passes
   registerLECTransformsPasses();

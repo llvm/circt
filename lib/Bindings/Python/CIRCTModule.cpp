@@ -23,6 +23,7 @@
 #include "circt-c/Dialect/MSFT.h"
 #include "circt-c/Dialect/OM.h"
 #include "circt-c/Dialect/RTG.h"
+#include "circt-c/Transforms.h"
 #ifdef CIRCT_INCLUDE_TESTS
 #include "circt-c/Dialect/RTGTest.h"
 #endif
@@ -53,8 +54,9 @@ static void registerPasses() {
   registerHWArithPasses();
   registerHWPasses();
   registerHandshakePasses();
-  mlirRegisterConversionPasses();
-  mlirRegisterTransformsPasses();
+  mlirRegisterCIRCTConversionPasses();
+  mlirRegisterCIRCTTransformsPasses();
+  mlirRegisterTransformsCSE();
 }
 
 PYBIND11_MODULE(_circt, m) {
