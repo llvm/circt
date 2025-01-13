@@ -240,7 +240,7 @@ def ViewIntrinsicOp : FIRRTLOp<"view", []> {
     is only lowered to one.
   }];
   let arguments = (ins StrAttr:$name, AugmentedBundleType:$augmentedType, Variadic<FIRRTLBaseType>:$inputs);
-  let assemblyFormat = "$name `,` $augmentedType (`,` $inputs^)? attr-dict `:` type($inputs)";
+  let assemblyFormat = "$name `,` $augmentedType (`,` $inputs^)? attr-dict (`:` type($inputs)^)?";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLINTRINSICS_TD
