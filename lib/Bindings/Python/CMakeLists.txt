@@ -24,6 +24,9 @@ set(PYTHON_BINDINGS_SOURCES
   SeqModule.cpp
   SupportModule.cpp
   SVModule.cpp
+  # Headers must be included explicitly so they are installed.
+  CIRCTModules.h
+  PybindUtils.h
 )
 
 set(PYTHON_BINDINGS_LINK_LIBS
