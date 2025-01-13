@@ -291,6 +291,22 @@ MlirAttribute firrtlAttrGetConvention(MlirContext ctx,
   return wrap(ConventionAttr::get(unwrap(ctx), value));
 }
 
+MlirAttribute firrtlAttrGetLayerConvention(MlirContext ctx,
+                                           FIRRTLLayerConvention convention) {
+  LayerConvention value;
+
+  switch (convention) {
+  case FIRRTL_LAYER_CONVENTION_BIND:
+    value = LayerConvention::Bind;
+    break;
+  case FIRRTL_LAYER_CONVENTION_INLINE:
+    value = LayerConvention::Inline;
+    break;
+  }
+
+  return wrap(LayerConventionAttr::get(unwrap(ctx), value));
+}
+
 MlirAttribute firrtlAttrGetPortDirs(MlirContext ctx, size_t count,
                                     const FIRRTLDirection *dirs) {
   static_assert(FIRRTL_DIRECTION_IN ==
