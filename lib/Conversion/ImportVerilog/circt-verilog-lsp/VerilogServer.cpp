@@ -234,7 +234,7 @@ public:
 
   VerilogServerContext() {}
 
-  const llvm::SourceMgr &getSourceMgr() const { return sourceMgr; }
+  llvm::SourceMgr &getSourceMgr() { return sourceMgr; }
   const llvm::SmallDenseMap<uint32_t, uint32_t> &getBufferIDMap() const {
     return bufferIDMap;
   }
@@ -253,15 +253,57 @@ public:
     // auto column = loc->column;
     auto buffer = sgr.getMemoryBuffer(bufferId);
     assert(!buffer->getBuffer().empty());
-    auto start = buffer->getBuffer().find_last_of(
-        '\n', loc->range.Start.getPointer() - buffer->getBufferStart());
-    auto end = buffer->getBuffer().find_first_of(
-        '\n', (loc->range.End.getPointer() - buffer->getBufferStart()));
-    if (start == StringRef::npos || end == StringRef::npos) {
-      mlir::lsp::Logger::info("VerilogDocument::findHover npos");
-      return StringRef();
-    }
-    return StringRef(buffer->getBuffer().substr(start, end - start));
+
+    auto startLoc =
+        sgr.FindLocForLineAndColumn(bufferId, std::max(1u, loc->line - 2), 0);
+    auto endLoc =
+        sgr.FindLocForLineAndColumn(bufferId, std::max(1u, loc->line + 2), 0);
+
+    return StringRef(startLoc.getPointer(),
+                     endLoc.getPointer() - startLoc.getPointer());
+
+    //// Get buffer start and calculate offsets
+    // const char *bufferStart = buffer->getBufferStart();
+    // const char *bufferEnd = buffer->getBufferEnd();
+    // size_t startOffset = startLoc.getPointer() - bufferStart;
+    // size_t endOffset = endLoc.getPointer() - bufferStart;
+
+    //// Add debug logging
+    // mlir::lsp::Logger::debug("Buffer size: {}", buffer->getBufferSize());
+    // mlir::lsp::Logger::debug("Start offset: {}", startOffset);
+    // mlir::lsp::Logger::debug("End offset: {}", endOffset);
+
+    //// Validate offsets are within buffer bounds
+    // if (startOffset >= buffer->getBufferSize() ||
+    //     endOffset >= buffer->getBufferSize()) {
+    //   mlir::lsp::Logger::error("Invalid buffer offsets");
+    //   return StringRef();
+    // }
+
+    // StringRef bufferStr = buffer->getBuffer();
+    // auto start = bufferStr.rfind('\n', startOffset);
+    // auto end = bufferStr.find('\n', endOffset);
+
+    //// If no previous newline found, start from beginning of buffer
+    // if (start == StringRef::npos) {
+    //   start = 0;
+    // }
+    //// If no next newline found, go to end of buffer
+    // if (end == StringRef::npos) {
+    //   end = bufferStr.size();
+    // }
+
+    //// Add more info logging
+    // mlir::lsp::Logger::info("Start position: {}", start);
+    // mlir::lsp::Logger::info("End position: {}", end);
+
+    //// Skip the newline character if we found one
+    // size_t lineStart = (start == 0) ? 0 : start + 1;
+    // if (lineStart >= end) {
+    //   mlir::lsp::Logger::error("Invalid line bounds");
+    //   return StringRef();
+
+    // return bufferStr.substr(lineStart, end - lineStart);
   }
 
   std::optional<std::pair<uint32_t, SmallString<128>>>
@@ -1417,9 +1459,23 @@ VerilogDocument::findHover(const mlir::lsp::URIForFile &uri,
         mlir::lsp::Range(verilogContext.sourceMgr, emittedLocation->range));
     llvm::raw_string_ostream stream(hover.contents.value);
     mlir::raw_indented_ostream hoverOS(stream);
-    hoverOS << "### External Source\n```\n";
+    auto sourceURI = getContext().getExternalURI(emittedLocation);
+    assert(sourceURI && "External URI not found");
+    auto ext = emittedLocation->filePath.find_last_of('.');
+
+    hoverOS << "### External Source\n```";
+    if (ext != std::string::npos) {
+      hoverOS << emittedLocation->filePath.substr(
+          ext + 1, emittedLocation->filePath.size() - ext - 1);
+    }
+
+    hoverOS << "\n";
+
     hoverOS.printReindented(externalSource);
     hoverOS << "\n```\n";
+
+    hoverOS << "\n[Go To External Source](" << sourceURI->uri() << "#L"
+            << emittedLocation->line << ")";
     return hover;
   }
 
