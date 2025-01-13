@@ -14,6 +14,9 @@ function(add_circt_public_c_api_library name)
   add_mlir_public_c_api_library(${ARGV} DISABLE_INSTALL)
   add_dependencies(circt-capi ${name})
   add_circt_library_install(${name})
+  if(TARGET "obj.${name}" AND MLIR_INSTALL_AGGREGATE_OBJECTS)
+    add_circt_library_install(obj.${name})
+  endif()
 endfunction()
 
 # Additional parameters are forwarded to tablegen.
