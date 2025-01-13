@@ -630,21 +630,34 @@ void VerilogIndex::parseEmittedLoc() {
       line = *(++it);
       column = *(++it);
       // mlir::lsp::Logger::info("filePath: {}", filePath);
-      // mlir::lsp::Logger::info("line: {}", line);
-      // mlir::lsp::Logger::info("column: {}", column);
+      mlir::lsp::Logger::info("line: {}", line);
+      mlir::lsp::Logger::info("column: {}", column);
       uint32_t lineInt;
       if (line.getAsInteger(10, lineInt))
         continue;
-      uint32_t columnInt;
-      if (column.getAsInteger(10, columnInt))
-        continue;
-      auto *start = addFile ? filePath.data() : line.data();
-      auto *end = column.end();
-      EmittedLoc loc = {filePath, lineInt - 1, columnInt - 1,
-                        llvm::SMRange(SMLoc::getFromPointer(start),
-                                      SMLoc::getFromPointer(end + 1))};
-      emittedLocs.push_back(std::make_unique<EmittedLoc>(loc));
-      intervalMapLoc.insert(start, end, emittedLocs.back().get());
+      SmallVector<std::tuple<StringRef, const char *, const char *>> columns;
+      if (column.starts_with('{')) {
+        const char *start = addFile ? filePath.data() : line.data();
+        for (auto str : llvm::split(column.drop_back().drop_front(), ',')) {
+          columns.push_back(
+              std::make_tuple(str, start, str.drop_front(str.size()).data()));
+          start = str.drop_front(str.size()).data();
+        }
+      } else
+        columns.push_back(std::make_tuple(
+            column, addFile ? filePath.data() : line.data(), column.end()));
+      for (auto [column, start, end] : columns) {
+        uint32_t columnInt;
+        if (column.getAsInteger(10, columnInt))
+          continue;
+        // auto *start = addFile ? filePath.data() : line.data();
+        // auto *end = column.end();
+        EmittedLoc loc = {filePath, lineInt - 1, columnInt - 1,
+                          llvm::SMRange(SMLoc::getFromPointer(start),
+                                        SMLoc::getFromPointer(end + 1))};
+        emittedLocs.push_back(std::make_unique<EmittedLoc>(loc));
+        intervalMapLoc.insert(start, end, emittedLocs.back().get());
+      }
     }
   }
 }
@@ -921,7 +934,7 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
       bool isDef = false, bool isAssign = false,
       std::optional<VerilogIndex::ReferenceNode> reference = std::nullopt) {
     const char *startLoc = getContext().getSMLoc(refLoc.start()).getPointer();
-    const char *endLoc = getContext().getSMLoc(refLoc.end()).getPointer();
+    const char *endLoc = getContext().getSMLoc(refLoc.end()).getPointer() + 1;
     if (!startLoc || !endLoc)
       return;
     assert(startLoc && endLoc);
@@ -1475,7 +1488,7 @@ VerilogDocument::findHover(const mlir::lsp::URIForFile &uri,
     hoverOS << "\n```\n";
 
     hoverOS << "\n[Go To External Source](" << sourceURI->uri() << "#L"
-            << emittedLocation->line << ")";
+            << emittedLocation->line + 1 << ")";
     return hover;
   }
 
