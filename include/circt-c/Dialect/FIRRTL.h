@@ -29,6 +29,13 @@ typedef enum FIRRTLConvention {
   FIRRTL_CONVENTION_SCALARIZED,
 } FIRRTLConvention;
 
+/// Layer lowering conventions.
+// NOLINTNEXTLINE(modernize-use-using)
+typedef enum FIRRTLLayerConvention {
+  FIRRTL_LAYER_CONVENTION_BIND,
+  FIRRTL_LAYER_CONVENTION_INLINE,
+} FIRRTLLayerConvention;
+
 /// Port direction.
 // NOLINTNEXTLINE(modernize-use-using)
 typedef enum FIRRTLDirection {
@@ -265,6 +272,10 @@ MLIR_CAPI_EXPORTED MlirType firrtlTypeGetMaskType(MlirType type);
 /// Creates an ConventionAttr with the specified value.
 MLIR_CAPI_EXPORTED MlirAttribute
 firrtlAttrGetConvention(MlirContext ctx, FIRRTLConvention convention);
+
+/// Creates a LayerConventionAttr with the specified value.
+MLIR_CAPI_EXPORTED MlirAttribute
+firrtlAttrGetLayerConvention(MlirContext ctx, FIRRTLLayerConvention convention);
 
 /// Creates a DenseBoolArrayAttr with the specified port directions.
 MLIR_CAPI_EXPORTED MlirAttribute firrtlAttrGetPortDirs(
