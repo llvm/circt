@@ -1894,7 +1894,6 @@ private:
     OpBuilder insideBuilder(newParOp);
     Block *currBlock = nullptr;
     auto &region = newParOp.getRegion();
-    IRMapping operandMap;
 
     // extract lower bounds, upper bounds, and steps as integer index values
     SmallVector<int64_t> lbVals, ubVals, stepVals;
@@ -1920,6 +1919,11 @@ private:
     SmallVector<int64_t> indices = lbVals;
 
     while (true) {
+      // Each iteration starts with a fresh mapping, so each new block’s
+      // argument of a region-based operation (such as `scf.for`) get re-mapped
+      // independently.
+      IRMapping operandMap;
+
       // Create a new block in the region for the current combination of indices
       currBlock = &region.emplaceBlock();
       insideBuilder.setInsertionPointToEnd(currBlock);
