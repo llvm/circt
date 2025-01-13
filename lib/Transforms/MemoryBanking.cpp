@@ -409,6 +409,141 @@ private:
   DenseSet<Value> &oldMemRefVals;
 };
 
+struct BankMemrefCopyPattern : public OpRewritePattern<memref::CopyOp> {
+  BankMemrefCopyPattern(MLIRContext *ctx,
+                        uint64_t bankingFactor,
+                        unsigned bankingDimension,
+                        DenseMap<Value, SmallVector<Value>> &memoryToBanks)
+      : OpRewritePattern<memref::CopyOp>(ctx),
+        bankingFactor(bankingFactor),
+        bankingDimension(bankingDimension),
+        memoryToBanks(memoryToBanks) {}
+
+  LogicalResult matchAndRewrite(memref::CopyOp copyOp,
+                                PatternRewriter &rewriter) const override {
+    Value srcMem = copyOp.getSource();
+    Value dstMem = copyOp.getTarget();
+    
+    bool srcIsBanked = memoryToBanks.count(srcMem) != 0;
+    bool dstIsBanked = memoryToBanks.count(dstMem) != 0;
+    if (!srcIsBanked && !dstIsBanked) {
+      copyOp.emitError("At least one of the source and destination memory reference should be banked");
+      return failure();
+    }
+
+    Location loc = copyOp.getLoc();
+
+    if (srcIsBanked && dstIsBanked) {
+      auto &srcBanks = memoryToBanks.find(srcMem)->second;
+      auto &dstBanks = memoryToBanks.find(dstMem)->second;
+
+      rewriter.setInsertionPoint(copyOp);
+      for (size_t i = 0; i < bankingFactor; ++i)
+        rewriter.create<memref::CopyOp>(loc, srcBanks[i], dstBanks[i]);
+    } else if (srcIsBanked) {
+      auto &srcBanks = memoryToBanks.find(srcMem)->second;
+      if (failed(copyFromBanksToUnbanked(rewriter, loc,
+                                         srcBanks, dstMem,
+                                         bankingFactor, bankingDimension))) {
+        return failure();
+      }
+    } else {
+      auto &dstBanks = memoryToBanks.find(dstMem)->second;
+      if (failed(copyFromUnbankedToBanks(rewriter, loc, srcMem, dstBanks, bankingFactor, bankingDimension)))
+        return failure();
+    }
+
+    rewriter.eraseOp(copyOp);
+
+    return success();
+  }
+
+private:
+  uint64_t bankingFactor;
+  unsigned bankingDimension;
+  DenseMap<Value, SmallVector<Value>> &memoryToBanks;
+/// Helper function to create a subview with round-robin partitioning.
+/// Generates offsets, sizes, and strides for a specific bank and creates the subview.
+Value createRoundRobinSubview(PatternRewriter &rewriter, Location loc, Value mem,
+                              ArrayRef<int64_t> shape, size_t bankIndex,
+                              uint64_t bankingFactor, unsigned bankingDimension) const {
+  int64_t rank = shape.size();
+      // Initialize SubView offsets, sizes, strides for each dimension with default values.
+  SmallVector<OpFoldResult> offsets(rank, rewriter.getIndexAttr(0));
+  SmallVector<OpFoldResult> sizes(rank);
+  SmallVector<OpFoldResult> strides(rank, rewriter.getIndexAttr(1));
+
+  for (int64_t d = 0; d < rank; ++d) {
+    int64_t dimSize = shape[d];
+    if (d == bankingDimension) {
+      // Round-robin partition: offset = bankIndex, size = chunkSize, stride = bankingFactor
+      int64_t chunkSize = dimSize / (int64_t)bankingFactor;
+      offsets[d] = rewriter.getIndexAttr(bankIndex);
+      sizes[d] = rewriter.getIndexAttr(chunkSize);
+      strides[d] = rewriter.getIndexAttr(bankingFactor);
+    } else {
+      // Non-banked dimension: copy the entire range, unit stride
+      offsets[d] = rewriter.getIndexAttr(0);
+      sizes[d] = rewriter.getIndexAttr(dimSize);
+      strides[d] = rewriter.getIndexAttr(1);
+    }
+  }
+
+  return rewriter.create<memref::SubViewOp>(loc, mem, offsets, sizes, strides);
+}
+
+  /// Copy from source memory reference to destination memory reference when the source memory is banked into `srcBanks` and `dstMem` is unbanked. All `srcBanks` have the same MemRefType; the unbanked `dstMem` has the same shape as the source's "original" shape.
+  LogicalResult copyFromBanksToUnbanked(PatternRewriter &rewriter, Location loc,
+                                        ArrayRef<Value> srcBanks, Value dstMem,
+                                        uint64_t bankingFactor,
+                                        unsigned bankingDimension) const {
+    MemRefType dstType = dyn_cast<MemRefType>(dstMem.getType());
+    if (!dstType || dstType.getRank() <= bankingDimension)
+      return failure();
+
+    ArrayRef<int64_t> dstShape = dstType.getShape();
+    int64_t chunkSize = dstShape[bankingDimension] / (int64_t)bankingFactor;
+    if (chunkSize <= 0)
+      return failure();
+
+  // For each bank i in [0..bankingFactor), create a subview of the source
+  //    that picks out the "i-th round-robin slice" along the banking dimension.
+  for (size_t i = 0; i < bankingFactor; ++i) {
+    auto subView = createRoundRobinSubview(rewriter, loc, dstMem, dstShape, i, bankingFactor, bankingDimension);
+    rewriter.create<memref::CopyOp>(loc, srcBanks[i], subView);
+  }
+
+    return success();
+  }
+
+/// Copy from unbanked source memref `srcMem` to destination memory references
+/// `dstBanks`, where each bank has the same MemRefType, and `srcMem` has the
+/// shape of the "original" unbanked array.
+LogicalResult copyFromUnbankedToBanks(PatternRewriter &rewriter, Location loc,
+                                      Value srcMem, ArrayRef<Value> dstBanks,
+                                      uint64_t bankingFactor,
+                                      unsigned bankingDimension) const {
+  auto srcType = dyn_cast<MemRefType>(srcMem.getType());
+  if (!srcType || srcType.getRank() <= bankingDimension)
+    return failure();
+
+  ArrayRef<int64_t> srcShape = srcType.getShape();
+  // We'll assume static shapes and exact divisibility.
+  int64_t chunkSize = srcShape[bankingDimension] / (int64_t)bankingFactor;
+  if (chunkSize <= 0)
+    return failure();
+
+  // For each bank i in [0..bankingFactor), create a subview of the source
+  //    that picks out the "i-th round-robin slice" along the banking dimension.
+  for (size_t i = 0; i < bankingFactor; ++i) {
+    auto subView = createRoundRobinSubview(rewriter, loc, srcMem, srcShape, i, bankingFactor, bankingDimension);
+    rewriter.create<memref::CopyOp>(loc, subView, dstBanks[i]);
+  }
+
+  return success();
+}
+};
+
 // Replace the original return operation with newly created memory banks
 struct BankReturnPattern : public OpRewritePattern<func::ReturnOp> {
   BankReturnPattern(MLIRContext *context,
@@ -527,6 +662,8 @@ void MemoryBankingPass::runOnOperation() {
   patterns.add<BankAffineStorePattern>(ctx, bankingFactor, bankingDimension,
                                        memoryToBanks, opsToErase, processedOps,
                                        oldMemRefVals);
+  patterns.add<BankMemrefCopyPattern>(ctx, bankingFactor, bankingDimension, 
+                                      memoryToBanks);
   patterns.add<BankReturnPattern>(ctx, memoryToBanks);
 
   GreedyRewriteConfig config;
