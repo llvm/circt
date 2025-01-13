@@ -1,6 +1,6 @@
 // RUN: circt-opt %s --pass-pipeline="builtin.module(hw.module(convert-comb-to-aig{additional-legal-ops=comb.xor,comb.or,comb.and,comb.mux},cse))" | FileCheck %s
 // RUN: circt-opt %s --pass-pipeline="builtin.module(hw.module(convert-comb-to-aig{additional-legal-ops=comb.xor,comb.or,comb.and,comb.mux,comb.add},cse))" | FileCheck %s --check-prefix=ALLOW_ADD
-// RUN: circt-opt %s --pass-pipeline="builtin.module(hw.module(convert-comb-to-aig{additional-legal-ops=comb.xor,comb.or,comb.and,comb.mux,comb.icmp},cse))" | FileCheck %s --check-prefix=ALLOW_ICMP
+// RUN: circt-opt %s --pass-pipeline="builtin.module(hw.module(convert-comb-to-aig{additional-legal-ops=comb.xor,comb.or,comb.and,comb.mux,comb.icmp}))" | FileCheck %s --check-prefix=ALLOW_ICMP
 
 // CHECK-LABEL: @parity
 hw.module @parity(in %arg0: i4, out out: i1) {
@@ -139,22 +139,34 @@ hw.module @shift2(in %lhs: i2, in %rhs: i2, out out_shl: i2, out out_shr: i2, ou
   %1 = comb.shru %lhs, %rhs : i2
   %2 = comb.shrs %lhs, %rhs : i2
   // ALLOW_ICMP-NEXT: %[[RHS_0:.+]] = comb.extract %rhs from 0 : (i2) -> i1
-  // ALLOW_ICMP-NEXT: %[[C0_I2:.+]] = hw.constant 0
+  // ALLOW_ICMP-NEXT: %[[RHS_1:.+]] = comb.extract %rhs from 1 : (i2) -> i1
   // ALLOW_ICMP-NEXT: %[[LHS_0:.+]] = comb.extract %lhs from 0 : (i2) -> i1
   // ALLOW_ICMP-NEXT: %[[FALSE:.+]] = hw.constant false
   // ALLOW_ICMP-NEXT: %[[L_SHIFT_BY_1:.+]] = comb.concat %[[LHS_0]], %[[FALSE]]
+  // ALLOW_ICMP-NEXT: %[[C0_I2:.+]] = hw.constant 0
   // ALLOW_ICMP-NEXT: %[[L_SHIFT:.+]] = comb.mux %[[RHS_0]], %[[L_SHIFT_BY_1]], %lhs
   // ALLOW_ICMP-NEXT: %[[C3_I2:.+]] = hw.constant -2
   // ALLOW_ICMP-NEXT: %[[ICMP:.+]] = comb.icmp ult %rhs, %[[C3_I2]]
   // ALLOW_ICMP-NEXT: %[[L_SHIFT_WITH_BOUND_CHECK:.+]] = comb.mux %[[ICMP]], %[[L_SHIFT]], %[[C0_I2]]
+  // ALLOW_ICMP-NEXT: %[[RHS_0:.+]] = comb.extract %rhs from 0 : (i2) -> i1
+  // ALLOW_ICMP-NEXT: %[[RHS_1:.+]] = comb.extract %rhs from 1 : (i2) -> i1
   // ALLOW_ICMP-NEXT: %[[LHS_1:.+]] = comb.extract %lhs from 1 : (i2) -> i1
-  // ALLOW_ICMP-NEXT: %[[R_SHIFT_BY_1:.+]] = comb.concat %false, %[[LHS_1]]
+  // ALLOW_ICMP-NEXT: %[[FALSE:.+]] = hw.constant false
+  // ALLOW_ICMP-NEXT: %[[R_SHIFT_BY_1:.+]] = comb.concat %[[FALSE]], %[[LHS_1]]
+  // ALLOW_ICMP-NEXT: %[[C0_I2:.+]] = hw.constant 0
   // ALLOW_ICMP-NEXT: %[[R_SHIFT:.+]] = comb.mux %[[RHS_0]], %[[R_SHIFT_BY_1]], %lhs
+  // ALLOW_ICMP-NEXT: %[[C3_I2:.+]] = hw.constant -2
+  // ALLOW_ICMP-NEXT: %[[ICMP:.+]] = comb.icmp ult %rhs, %[[C3_I2]]
   // ALLOW_ICMP-NEXT: %[[R_SHIFT_WITH_BOUND_CHECK:.+]] = comb.mux %[[ICMP]], %[[R_SHIFT]], %[[C0_I2]]
-  // ALLOW_ICMP-NEXT: %[[SIGN_REPLICATE:.+]] = comb.replicate %[[LHS_1]]
-  // ALLOW_ICMP-NEXT: %[[R_SIGNED_SHIFT_BY_1:.*]] = comb.concat %[[LHS_1]], %[[LHS_0]]
-  // ALLOW_ICMP-NEXT: %[[R_SIGNED_SHIFT:.*]] = comb.mux %[[RHS_0]], %[[SIGN_REPLICATE]], %[[R_SIGNED_SHIFT_BY_1]]
-  // ALLOW_ICMP-NEXT: %[[R_SIGNED_SHIFT_WITH_BOUND_CHECK:.*]] = comb.mux %[[ICMP]], %[[R_SIGNED_SHIFT]], %[[SIGN_REPLICATE]]
-  // ALLOW_ICMP-NEXT: hw.output %[[L_SHIFT_WITH_BOUND_CHECK]], %[[R_SHIFT_WITH_BOUND_CHECK]], %[[R_SIGNED_SHIFT_WITH_BOUND_CHECK]]
+  // ALLOW_ICMP-NEXT: %[[LHS_1:.+]] = comb.extract %lhs from 1 : (i2) -> i1
+  // ALLOW_ICMP-NEXT: %[[RHS_0:.+]] = comb.extract %rhs from 0 : (i2) -> i1
+  // ALLOW_ICMP-NEXT: %[[RHS_1:.+]] = comb.extract %rhs from 1 : (i2) -> i1
+  // ALLOW_ICMP-NEXT: %[[LHS_0:.+]] = comb.extract %lhs from 0 : (i2) -> i1
+  // ALLOW_ICMP-NEXT: %[[CONCAT:.+]] = comb.concat %[[LHS_1]], %[[LHS_0]]
+  // ALLOW_ICMP-NEXT: %[[SIGN_REPLICATE:.+]] = comb.replicate %[[LHS_1]] : (i1) -> i2
+  // ALLOW_ICMP-NEXT: %[[C1_I2:.+]] = hw.constant 1
+  // ALLOW_ICMP-NEXT: %[[ICMP:.+]] = comb.icmp ult %rhs, %[[C1_I2]]
+  // ALLOW_ICMP-NEXT: %[[R_SIGNED_SHIFT:.*]] = comb.mux %[[ICMP]], %[[CONCAT]], %[[SIGN_REPLICATE]]
+  // ALLOW_ICMP-NEXT: hw.output %[[L_SHIFT_WITH_BOUND_CHECK]], %[[R_SHIFT_WITH_BOUND_CHECK]], %[[R_SIGNED_SHIFT]]
   hw.output %0, %1, %2 : i2, i2, i2
 }
