@@ -69,3 +69,12 @@ hw.module @icmp_signed_compare(in %lhs: i3, in %rhs: i3, out out_sgt: i1, out ou
   %sle = comb.icmp sle %lhs, %rhs : i3
   hw.output %sgt, %sge, %slt, %sle : i1, i1, i1, i1
 }
+
+// RUN: circt-lec %t.mlir %s -c1=shift5 -c2=shift5 --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_SHIFT
+// COMB_SHIFT: c1 == c2
+hw.module @shift5(in %lhs: i5, in %rhs: i5, out out_shl: i5, out out_shr: i5, out out_shrs: i5) {
+  %0 = comb.shl %lhs, %rhs : i5
+  %1 = comb.shru %lhs, %rhs : i5
+  %2 = comb.shrs %lhs, %rhs : i5
+  hw.output %0, %1, %2 : i5, i5, i5
+}

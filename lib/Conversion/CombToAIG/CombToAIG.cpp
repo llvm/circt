@@ -58,6 +58,88 @@ static SmallVector<Value> extractBits(ConversionPatternRewriter &rewriter,
   return bits;
 }
 
+// Construct a mux tree for given leaf nodes. `selectors` is the selector for
+// each level of the tree. Currently the selector is tested from MSB to LSB.
+static Value constructMuxTree(ConversionPatternRewriter &rewriter, Location loc,
+                              ArrayRef<Value> selectors,
+                              ArrayRef<Value> leafNodes,
+                              Value outOfBoundsValue) {
+  // Recursive helper function to construct the mux tree
+  std::function<Value(size_t, size_t)> constructTreeHelper =
+      [&](size_t id, size_t level) -> Value {
+    // Base case: at the lowest level, return the result
+    if (level == 0) {
+      // Return the result for the given index. If the index is out of bounds,
+      // return the out-of-bound value.
+      return id < leafNodes.size() ? leafNodes[id] : outOfBoundsValue;
+    }
+
+    auto selector = selectors[level - 1];
+
+    // Recursive case: create muxes for true and false branches
+    auto trueVal = constructTreeHelper(2 * id + 1, level - 1);
+    auto falseVal = constructTreeHelper(2 * id, level - 1);
+
+    // Combine the results with a mux
+    return rewriter.createOrFold<comb::MuxOp>(loc, selector, trueVal, falseVal);
+  };
+
+  return constructTreeHelper(0, llvm::Log2_64_Ceil(leafNodes.size()));
+}
+
+// Construct a mux tree for shift operations. `isLeftShift` controls the
+// direction of the shift operation and is used to determine order of the
+// padding and extracted bits. Callbacks `getPadding` and `getExtract` are used
+// to get the padding and extracted bits for each shift amount. `getPadding`
+// could return a nullptr as i0 value but except for that, these callbacks must
+// return a valid value for each shift amount in the range [0, maxShiftAmount].
+// The value for `maxShiftAmount` is used as the out-of-bounds value.
+template <bool isLeftShift>
+static Value createShiftLogic(ConversionPatternRewriter &rewriter, Location loc,
+                              Value shiftAmount, int64_t maxShiftAmount,
+                              llvm::function_ref<Value(int64_t)> getPadding,
+                              llvm::function_ref<Value(int64_t)> getExtract) {
+  // Extract individual bits from shift amount
+  auto bits = extractBits(rewriter, shiftAmount);
+
+  // Create nodes for each possible shift amount
+  SmallVector<Value> nodes;
+  nodes.reserve(maxShiftAmount);
+  for (int64_t i = 0; i < maxShiftAmount; ++i) {
+    Value extract = getExtract(i);
+    Value padding = getPadding(i);
+
+    if (!padding) {
+      nodes.push_back(extract);
+      continue;
+    }
+
+    // Concatenate extracted bits with padding
+    if (isLeftShift)
+      nodes.push_back(
+          rewriter.createOrFold<comb::ConcatOp>(loc, extract, padding));
+    else
+      nodes.push_back(
+          rewriter.createOrFold<comb::ConcatOp>(loc, padding, extract));
+  }
+
+  // Create out-of-bounds value
+  auto outOfBoundsValue = getPadding(maxShiftAmount);
+  assert(outOfBoundsValue && "outOfBoundsValue must be valid");
+
+  // Construct mux tree for shift operation
+  auto result = constructMuxTree(rewriter, loc, bits, nodes, outOfBoundsValue);
+
+  // Add bounds checking
+  auto inBound = rewriter.createOrFold<comb::ICmpOp>(
+      loc, ICmpPredicate::ult, shiftAmount,
+      rewriter.create<hw::ConstantOp>(loc, shiftAmount.getType(),
+                                      maxShiftAmount));
+
+  return rewriter.createOrFold<comb::MuxOp>(loc, inBound, result,
+                                            outOfBoundsValue);
+}
+
 //===----------------------------------------------------------------------===//
 // Conversion patterns
 //===----------------------------------------------------------------------===//
@@ -454,6 +536,105 @@ struct CombParityOpConversion : OpConversionPattern<ParityOp> {
   }
 };
 
+struct CombShlOpConversion : OpConversionPattern<comb::ShlOp> {
+  using OpConversionPattern<comb::ShlOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(comb::ShlOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto width = op.getType().getIntOrFloatBitWidth();
+    auto lhs = adaptor.getLhs();
+    auto result = createShiftLogic</*isLeftShift=*/true>(
+        rewriter, op.getLoc(), adaptor.getRhs(), width,
+        /*getPadding=*/
+        [&](int64_t index) {
+          // Don't create zero width value.
+          if (index == 0)
+            return Value();
+          // Padding is 0 for left shift.
+          return rewriter.createOrFold<hw::ConstantOp>(
+              op.getLoc(), rewriter.getIntegerType(index), 0);
+        },
+        /*getExtract=*/
+        [&](int64_t index) {
+          assert(index < width && "index out of bounds");
+          // Exract the bits from LSB.
+          return rewriter.createOrFold<comb::ExtractOp>(op.getLoc(), lhs, 0,
+                                                        width - index);
+        });
+
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
+struct CombShrUOpConversion : OpConversionPattern<comb::ShrUOp> {
+  using OpConversionPattern<comb::ShrUOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(comb::ShrUOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto width = op.getType().getIntOrFloatBitWidth();
+    auto lhs = adaptor.getLhs();
+    auto result = createShiftLogic</*isLeftShift=*/false>(
+        rewriter, op.getLoc(), adaptor.getRhs(), width,
+        /*getPadding=*/
+        [&](int64_t index) {
+          // Don't create zero width value.
+          if (index == 0)
+            return Value();
+          // Padding is 0 for right shift.
+          return rewriter.createOrFold<hw::ConstantOp>(
+              op.getLoc(), rewriter.getIntegerType(index), 0);
+        },
+        /*getExtract=*/
+        [&](int64_t index) {
+          assert(index < width && "index out of bounds");
+          // Exract the bits from MSB.
+          return rewriter.createOrFold<comb::ExtractOp>(op.getLoc(), lhs, index,
+                                                        width - index);
+        });
+
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
+struct CombShrSOpConversion : OpConversionPattern<comb::ShrSOp> {
+  using OpConversionPattern<comb::ShrSOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(comb::ShrSOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto width = op.getType().getIntOrFloatBitWidth();
+    if (width == 0)
+      return rewriter.notifyMatchFailure(op.getLoc(),
+                                         "i0 signed shift is unsupported");
+    auto lhs = adaptor.getLhs();
+    // Get the sign bit.
+    auto sign =
+        rewriter.createOrFold<comb::ExtractOp>(op.getLoc(), lhs, width - 1, 1);
+
+    // NOTE: The max shift amount is width - 1 because the sign bit is already
+    // shifted out.
+    auto result = createShiftLogic</*isLeftShift=*/false>(
+        rewriter, op.getLoc(), adaptor.getRhs(), width - 1,
+        /*getPadding=*/
+        [&](int64_t index) {
+          return rewriter.createOrFold<comb::ReplicateOp>(op.getLoc(), sign,
+                                                          index + 1);
+        },
+        /*getExtract=*/
+        [&](int64_t index) {
+          return rewriter.createOrFold<comb::ExtractOp>(op.getLoc(), lhs, index,
+                                                        width - index - 1);
+        });
+
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -477,6 +658,8 @@ static void populateCombToAIGConversionPatterns(RewritePatternSet &patterns) {
       // Arithmetic Ops
       CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
       CombICmpOpConversion,
+      // Shift Ops
+      CombShlOpConversion, CombShrUOpConversion, CombShrSOpConversion,
       // Variadic ops that must be lowered to binary operations
       CombLowerVariadicOp<XorOp>, CombLowerVariadicOp<AddOp>,
       CombLowerVariadicOp<MulOp>>(patterns.getContext());
