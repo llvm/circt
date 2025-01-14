@@ -90,10 +90,10 @@ static Value constructMuxTree(ConversionPatternRewriter &rewriter, Location loc,
 // Construct a mux tree for shift operations. `isLeftShift` controls the
 // direction of the shift operation and is used to determine order of the
 // padding and extracted bits. Callbacks `getPadding` and `getExtract` are used
-// to get the padding and extracted bits for each shift amount.  One of the
-// callbacks must return a valid value for each shift amount in the range [0,
-// maxShiftAmount]. The value for `maxShiftAmount` is used as the out-of-bounds
-// value.
+// to get the padding and extracted bits for each shift amount. `getPadding`
+// could return a nullptr as i0 value but except for that, these callbacks must
+// return a valid value for each shift amount in the range [0, maxShiftAmount].
+// The value for `maxShiftAmount` is used as the out-of-bounds value.
 template <bool isLeftShift>
 static Value createShiftLogic(ConversionPatternRewriter &rewriter, Location loc,
                               Value shiftAmount, int64_t maxShiftAmount,
@@ -109,8 +109,8 @@ static Value createShiftLogic(ConversionPatternRewriter &rewriter, Location loc,
     Value extract = getExtract(i);
     Value padding = getPadding(i);
 
-    if (!padding || !extract) {
-      nodes.push_back(extract ? extract : padding);
+    if (!padding) {
+      nodes.push_back(extract);
       continue;
     }
 
@@ -125,6 +125,7 @@ static Value createShiftLogic(ConversionPatternRewriter &rewriter, Location loc,
 
   // Create out-of-bounds value
   auto outOfBoundsValue = getPadding(maxShiftAmount);
+  assert(outOfBoundsValue && "outOfBoundsValue must be valid");
 
   // Construct mux tree for shift operation
   auto result = constructMuxTree(rewriter, loc, bits, nodes, outOfBoundsValue);

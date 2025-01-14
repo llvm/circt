@@ -135,9 +135,6 @@ hw.module @icmp_signed_compare(in %lhs: i2, in %rhs: i2, out out_sgt: i1, out ou
 // CHECK-LABEL: @shift2
 // ALLOW_ICMP-LABEL: @shift2
 hw.module @shift2(in %lhs: i2, in %rhs: i2, out out_shl: i2, out out_shr: i2, out out_shrs: i2) {
-  %0 = comb.shl %lhs, %rhs : i2
-  %1 = comb.shru %lhs, %rhs : i2
-  %2 = comb.shrs %lhs, %rhs : i2
   // ALLOW_ICMP-NEXT: %[[RHS_0:.+]] = comb.extract %rhs from 0 : (i2) -> i1
   // ALLOW_ICMP-NEXT: %[[RHS_1:.+]] = comb.extract %rhs from 1 : (i2) -> i1
   // ALLOW_ICMP-NEXT: %[[LHS_0:.+]] = comb.extract %lhs from 0 : (i2) -> i1
@@ -148,6 +145,8 @@ hw.module @shift2(in %lhs: i2, in %rhs: i2, out out_shl: i2, out out_shr: i2, ou
   // ALLOW_ICMP-NEXT: %[[C3_I2:.+]] = hw.constant -2
   // ALLOW_ICMP-NEXT: %[[ICMP:.+]] = comb.icmp ult %rhs, %[[C3_I2]]
   // ALLOW_ICMP-NEXT: %[[L_SHIFT_WITH_BOUND_CHECK:.+]] = comb.mux %[[ICMP]], %[[L_SHIFT]], %[[C0_I2]]
+  %0 = comb.shl %lhs, %rhs : i2
+
   // ALLOW_ICMP-NEXT: %[[RHS_0:.+]] = comb.extract %rhs from 0 : (i2) -> i1
   // ALLOW_ICMP-NEXT: %[[RHS_1:.+]] = comb.extract %rhs from 1 : (i2) -> i1
   // ALLOW_ICMP-NEXT: %[[LHS_1:.+]] = comb.extract %lhs from 1 : (i2) -> i1
@@ -158,6 +157,8 @@ hw.module @shift2(in %lhs: i2, in %rhs: i2, out out_shl: i2, out out_shr: i2, ou
   // ALLOW_ICMP-NEXT: %[[C3_I2:.+]] = hw.constant -2
   // ALLOW_ICMP-NEXT: %[[ICMP:.+]] = comb.icmp ult %rhs, %[[C3_I2]]
   // ALLOW_ICMP-NEXT: %[[R_SHIFT_WITH_BOUND_CHECK:.+]] = comb.mux %[[ICMP]], %[[R_SHIFT]], %[[C0_I2]]
+  %1 = comb.shru %lhs, %rhs : i2
+
   // ALLOW_ICMP-NEXT: %[[LHS_1:.+]] = comb.extract %lhs from 1 : (i2) -> i1
   // ALLOW_ICMP-NEXT: %[[RHS_0:.+]] = comb.extract %rhs from 0 : (i2) -> i1
   // ALLOW_ICMP-NEXT: %[[RHS_1:.+]] = comb.extract %rhs from 1 : (i2) -> i1
@@ -168,5 +169,7 @@ hw.module @shift2(in %lhs: i2, in %rhs: i2, out out_shl: i2, out out_shr: i2, ou
   // ALLOW_ICMP-NEXT: %[[ICMP:.+]] = comb.icmp ult %rhs, %[[C1_I2]]
   // ALLOW_ICMP-NEXT: %[[R_SIGNED_SHIFT:.*]] = comb.mux %[[ICMP]], %[[CONCAT]], %[[SIGN_REPLICATE]]
   // ALLOW_ICMP-NEXT: hw.output %[[L_SHIFT_WITH_BOUND_CHECK]], %[[R_SHIFT_WITH_BOUND_CHECK]], %[[R_SIGNED_SHIFT]]
+  %2 = comb.shrs %lhs, %rhs : i2
+
   hw.output %0, %1, %2 : i2, i2, i2
 }
