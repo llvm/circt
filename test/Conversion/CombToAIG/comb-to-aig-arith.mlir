@@ -168,8 +168,8 @@ hw.module @shift2(in %lhs: i2, in %rhs: i2, out out_shl: i2, out out_shr: i2, ou
   // ALLOW_ICMP-NEXT: %[[C1_I2:.+]] = hw.constant 1
   // ALLOW_ICMP-NEXT: %[[ICMP:.+]] = comb.icmp ult %rhs, %[[C1_I2]]
   // ALLOW_ICMP-NEXT: %[[R_SIGNED_SHIFT:.*]] = comb.mux %[[ICMP]], %[[CONCAT]], %[[SIGN_REPLICATE]]
-  // ALLOW_ICMP-NEXT: hw.output %[[L_SHIFT_WITH_BOUND_CHECK]], %[[R_SHIFT_WITH_BOUND_CHECK]], %[[R_SIGNED_SHIFT]]
   %2 = comb.shrs %lhs, %rhs : i2
 
+  // ALLOW_ICMP-NEXT: hw.output %[[L_SHIFT_WITH_BOUND_CHECK]], %[[R_SHIFT_WITH_BOUND_CHECK]], %[[R_SIGNED_SHIFT]]
   hw.output %0, %1, %2 : i2, i2, i2
 }
