@@ -106,6 +106,76 @@ rtg.target @target1 : !rtg.dict<num_cpus: i32> {
   rtg.yield %0 : i32
 }
 
+// Unused sequences are removed
+// CHECK-NOT: rtg.sequence @unused
+rtg.sequence @unused {}
+
+rtg.sequence @seq0 {
+^bb0(%arg0: index):
+  func.call @dummy5(%arg0) : (index) -> ()
+}
+
+rtg.sequence @seq1 {
+^bb0(%arg0: index):
+  %0 = rtg.sequence_closure @seq0(%arg0 : index)
+  func.call @dummy5(%arg0) : (index) -> ()
+  rtg.invoke_sequence %0
+  func.call @dummy5(%arg0) : (index) -> ()
+}
+
+// CHECK-LABEL: rtg.test @nestedSequences
+rtg.test @nestedSequences : !rtg.dict<> {
+  // CHECK: arith.constant 0 : index
+  // CHECK: func.call @dummy5
+  // CHECK: func.call @dummy5
+  // CHECK: func.call @dummy5
+  %0 = arith.constant 0 : index
+  %1 = rtg.sequence_closure @seq1(%0 : index)
+  rtg.invoke_sequence %1
+}
+
+rtg.sequence @seq2 {
+^bb0(%arg0: index):
+  func.call @dummy5(%arg0) : (index) -> ()
+}
+
+// CHECK-LABEL: rtg.test @sameSequenceDifferentArgs
+rtg.test @sameSequenceDifferentArgs : !rtg.dict<> {
+  // CHECK: [[C0:%.+]] = arith.constant 0 : index
+  // CHECK: func.call @dummy5([[C0]])
+  // CHECK: [[C1:%.+]] = arith.constant 1 : index
+  // CHECK: func.call @dummy5([[C1]])
+  %0 = arith.constant 0 : index
+  %1 = arith.constant 1 : index
+  %2 = rtg.sequence_closure @seq2(%0 : index)
+  %3 = rtg.sequence_closure @seq2(%1 : index)
+  rtg.invoke_sequence %2
+  rtg.invoke_sequence %3
+}
+
+rtg.sequence @seq3 {
+^bb0(%arg0: !rtg.set<index>):
+  %0 = rtg.set_select_random %arg0 : !rtg.set<index> // we can't use a custom seed here because it would render the test useless
+  func.call @dummy5(%0) : (index) -> ()
+}
+
+// CHECK-LABEL: rtg.test @sequenceClosureFixesRandomization
+rtg.test @sequenceClosureFixesRandomization : !rtg.dict<> {
+  // CHECK: %c0 = arith.constant 0 : index
+  // CHECK: func.call @dummy5(%c0
+  // CHECK: %c1 = arith.constant 1 : index
+  // CHECK: func.call @dummy5(%c1
+  // CHECK: func.call @dummy5(%c0
+  %0 = arith.constant 0 : index
+  %1 = arith.constant 1 : index
+  %2 = rtg.set_create %0, %1 : index
+  %3 = rtg.sequence_closure @seq3(%2 : !rtg.set<index>)
+  %4 = rtg.sequence_closure @seq3(%2 : !rtg.set<index>)
+  rtg.invoke_sequence %3
+  rtg.invoke_sequence %4
+  rtg.invoke_sequence %3
+}
+
 // -----
 
 rtg.test @nestedRegionsNotSupported : !rtg.dict<> {
