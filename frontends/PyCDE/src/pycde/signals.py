@@ -809,8 +809,9 @@ class BundleSignal(Signal):
       raise ValueError(
           f"Missing channel values for {', '.join(from_channels.keys())}")
 
-    unpack_op = esi.UnpackBundleOp([bc.channel._type for bc in to_channels],
-                                   self.value, operands)
+    with get_user_loc():
+      unpack_op = esi.UnpackBundleOp([bc.channel._type for bc in to_channels],
+                                     self.value, operands)
 
     to_channels_results = unpack_op.toChannels
     ret = {

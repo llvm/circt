@@ -114,6 +114,52 @@ class ReadMem(Module):
     mem_data_ce.assign(hostmem_read_resp_valid)
 
 
+class WriteMem(Module):
+  """Writes a cycle count to host memory at address 0 in MMIO upon each MMIO
+  transaction."""
+  clk = Clock()
+  rst = Reset()
+
+  @generator
+  def construct(ports):
+    cmd_chan_wire = Wire(Channel(esi.MMIOReadWriteCmdType))
+    resp_ready_wire = Wire(Bits(1))
+    cmd, cmd_valid = cmd_chan_wire.unwrap(resp_ready_wire)
+    mmio_xact = cmd_valid & resp_ready_wire
+
+    write_loc_ce = mmio_xact & cmd.write & (cmd.offset == UInt(32)(0))
+    write_loc = Reg(UInt(64),
+                    clk=ports.clk,
+                    rst=ports.rst,
+                    rst_value=0,
+                    ce=write_loc_ce)
+    write_loc.assign(cmd.data.as_uint())
+
+    response_data = write_loc.as_bits()
+    response_chan, response_ready = Channel(Bits(64)).wrap(
+        response_data, cmd_valid)
+    resp_ready_wire.assign(response_ready)
+
+    mmio_rw = esi.MMIO.read_write(appid=AppID("WriteMem"))
+    mmio_rw_cmd_chan = mmio_rw.unpack(data=response_chan)['cmd']
+    cmd_chan_wire.assign(mmio_rw_cmd_chan)
+
+    tag = Counter(8)(clk=ports.clk, rst=ports.rst, increment=mmio_xact)
+
+    cycle_counter = Counter(64)(clk=ports.clk,
+                                rst=ports.rst,
+                                increment=Bits(1)(1))
+
+    hostmem_write_req, _ = esi.HostMem.wrap_write_req(
+        write_loc,
+        cycle_counter.out.as_bits(),
+        tag.out,
+        valid=mmio_xact.reg(ports.clk, ports.rst))
+
+    hostmem_write_resp = esi.HostMem.write(appid=AppID("WriteMem_hostwrite"),
+                                           req=hostmem_write_req)
+
+
 class EsiTesterTop(Module):
   clk = Clock()
   rst = Reset()
@@ -122,6 +168,7 @@ class EsiTesterTop(Module):
   def construct(ports):
     PrintfExample(clk=ports.clk, rst=ports.rst)
     ReadMem(clk=ports.clk, rst=ports.rst)
+    WriteMem(clk=ports.clk, rst=ports.rst)
 
 
 if __name__ == "__main__":

@@ -426,6 +426,14 @@ struct HostMemReadResp {
   uint64_t data;
   uint8_t tag;
 };
+
+struct HostMemWriteReq {
+  uint64_t data;
+  uint8_t tag;
+  uint64_t address;
+};
+
+using HostMemWriteResp = uint8_t;
 #pragma pack(pop)
 
 class CosimHostMem : public HostMem {
@@ -437,6 +445,9 @@ public:
   void start() override {
     // We have to locate the channels ourselves since this service might be used
     // to retrieve the manifest.
+
+    // TODO: The types here are WRONG. They need to be wrapped in Channels! Fix
+    // this in a subsequent PR.
 
     // Setup the read side callback.
     ChannelDesc readArg, readResp;
@@ -465,6 +476,32 @@ public:
                                           *readRespPort, *readReqPort));
     read->connect([this](const MessageData &req) { return serviceRead(req); },
                   true);
+
+    // Setup the write side callback.
+    ChannelDesc writeArg, writeResp;
+    if (!rpcClient->getChannelDesc("__cosim_hostmem_write.arg", writeArg) ||
+        !rpcClient->getChannelDesc("__cosim_hostmem_write.result", writeResp))
+      throw std::runtime_error("Could not find HostMem channels");
+
+    const esi::Type *writeRespType =
+        getType(ctxt, new UIntType(writeResp.type(), 8));
+    const esi::Type *writeReqType =
+        getType(ctxt, new StructType(writeArg.type(),
+                                     {{"address", new UIntType("ui64", 64)},
+                                      {"tag", new UIntType("ui8", 8)},
+                                      {"data", new BitsType("i64", 64)}}));
+
+    // Get ports, create the function, then connect to it.
+    writeRespPort = std::make_unique<WriteCosimChannelPort>(
+        rpcClient->stub.get(), writeResp, writeRespType,
+        "__cosim_hostmem_write.result");
+    writeReqPort = std::make_unique<ReadCosimChannelPort>(
+        rpcClient->stub.get(), writeArg, writeReqType,
+        "__cosim_hostmem_write.arg");
+    write.reset(CallService::Callback::get(acc, AppID("__cosim_hostmem_write"),
+                                           *writeRespPort, *writeReqPort));
+    write->connect([this](const MessageData &req) { return serviceWrite(req); },
+                   true);
   }
 
   // Service the read request as a callback. Simply reads the data from the
@@ -488,6 +525,23 @@ public:
           msg = "Read result: data=0x" + toHex(resp.data) +
                 " tag=" + std::to_string(resp.tag);
         });
+    return MessageData::from(resp);
+  }
+
+  // Service a write request as a callback. Simply write the data to the
+  // location specified. TODO: check that the memory has been mapped.
+  MessageData serviceWrite(const MessageData &reqBytes) {
+    const HostMemWriteReq *req = reqBytes.as<HostMemWriteReq>();
+    acc.getLogger().debug(
+        [&](std::string &subsystem, std::string &msg,
+            std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "HostMem";
+          msg = "Write request: addr=0x" + toHex(req->address) + " data=0x" +
+                toHex(req->data) + " tag=" + std::to_string(req->tag);
+        });
+    uint64_t *dataPtr = reinterpret_cast<uint64_t *>(req->address);
+    *dataPtr = req->data;
+    HostMemWriteResp resp = req->tag;
     return MessageData::from(resp);
   }
 
@@ -530,6 +584,9 @@ private:
   std::unique_ptr<WriteCosimChannelPort> readRespPort;
   std::unique_ptr<ReadCosimChannelPort> readReqPort;
   std::unique_ptr<CallService::Callback> read;
+  std::unique_ptr<WriteCosimChannelPort> writeRespPort;
+  std::unique_ptr<ReadCosimChannelPort> writeReqPort;
+  std::unique_ptr<CallService::Callback> write;
 };
 
 } // namespace

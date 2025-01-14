@@ -72,6 +72,12 @@ def CosimBSP(user_module: Type[Module]) -> Module:
                                   resp_wire.type)
       resp_wire.assign(data)
 
+      ack_wire = Wire(Channel(UInt(8)))
+      write_req = hostmem.write.unpack(ackTag=ack_wire)['req']
+      ack_tag = esi.CallService.call(esi.AppID("__cosim_hostmem_write"),
+                                     write_req, UInt(8))
+      ack_wire.assign(ack_tag)
+
   class ESI_Cosim_Top(Module):
     clk = Clock()
     rst = Input(Bits(1))
