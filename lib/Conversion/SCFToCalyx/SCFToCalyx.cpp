@@ -2129,11 +2129,13 @@ private:
           if (res.failed())
             return res;
 
-          rewriter.setInsertionPointToEnd(elseSeqOpBlock);
-          calyx::GroupOp elseGroup =
-              getState<ComponentLoweringState>().getElseGroup(ifOp);
-          rewriter.create<calyx::EnableOp>(elseGroup.getLoc(),
-                                           elseGroup.getName());
+          if (!ifOp.getResults().empty()) {
+            rewriter.setInsertionPointToEnd(elseSeqOpBlock);
+            calyx::GroupOp elseGroup =
+                getState<ComponentLoweringState>().getElseGroup(ifOp);
+            rewriter.create<calyx::EnableOp>(elseGroup.getLoc(),
+                                             elseGroup.getName());
+          }
         }
       } else if (auto *callSchedPtr = std::get_if<CallScheduleable>(&group)) {
         auto instanceOp = callSchedPtr->instanceOp;
