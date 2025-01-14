@@ -2651,6 +2651,7 @@ private:
     builder.setInsertionPointToEnd(callerEntryBlock);
     builder.create<CallOp>(caller.getLoc(), calleeName, resultTypes,
                            fnOperands);
+    builder.create<ReturnOp>(caller.getLoc());
   }
 
   /// Conditionally creates an optional new top-level function; and inserts a
