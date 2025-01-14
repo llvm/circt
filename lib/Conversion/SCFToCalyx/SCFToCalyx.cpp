@@ -1953,6 +1953,9 @@ private:
         break;
     }
 
+    rewriter.setInsertionPointToEnd(newParOp.getBody());
+    rewriter.create<scf::ReduceOp>(newParOp.getLoc());
+
     rewriter.replaceOp(scfParOp, newParOp);
     return success();
   }
