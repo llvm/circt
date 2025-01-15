@@ -401,7 +401,7 @@ struct StmtVisitor {
       if (stmt.loopDims[level].loopVar)
         return recursiveForeach(stmt, level);
     }
-    return failure();
+    return success();
   }
 
   // Handle `repeat` loops.
