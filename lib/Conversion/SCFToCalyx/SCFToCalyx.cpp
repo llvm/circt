@@ -1117,7 +1117,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                            rewriter, forOp.getLoc(), types);
 
       auto directions = addOp.portDirections();
-      // For an add operation, we expect two input ports and one output port
+      // For an add operation, we expect two input ports and one output port.
       SmallVector<Value, 2> opInputPorts;
       Value opOutputPort;
       for (auto dir : enumerate(directions)) {
@@ -1166,7 +1166,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
       return success();
     }
     if (auto ifOp = dyn_cast<scf::IfOp>(yieldOp->getParentOp()))
-      // Empty yield inside ifOp, essentially a no-op
+      // Empty yield inside ifOp, essentially a no-op.
       return success();
     return yieldOp.getOperation()->emitError()
            << "Unsupported empty yieldOp outside ForOp or IfOp.";
@@ -2107,7 +2107,7 @@ private:
           return res;
 
         // `thenGroup`s won't be created in the first place if there's no
-        // yielded results for this `ifOp`
+        // yielded results for this `ifOp`.
         if (!ifOp.getResults().empty()) {
           rewriter.setInsertionPointToEnd(thenSeqOpBlock);
           calyx::GroupOp thenGroup =
