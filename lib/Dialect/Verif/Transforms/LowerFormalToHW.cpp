@@ -60,7 +60,7 @@ static LogicalResult lowerFormalToHW(FormalOp op) {
     rewriter.eraseOp(symOp);
   }
 
-  op.erase();
+  rewriter.eraseOp(op);
   return success();
 }
 } // namespace
