@@ -55,4 +55,30 @@ def RegisterOpInterface : OpInterface<"RegisterOpInterface"> {
   ];
 }
 
+def InstructionOpInterface : OpInterface<"InstructionOpInterface"> {
+  let description = [{
+    This interface should be implemented by operations that represent
+    ISA instructions.
+  }];
+  let cppNamespace = "::circt::rtg";
+
+  let methods = [
+    StaticInterfaceMethod<[{
+        Emits a binary representation of the instruction compatible with the
+        ISA specification.
+      }],
+      "void", "printInstructionBinary",
+      (ins "llvm::raw_ostream &":$os,
+           "llvm::ArrayRef<mlir::Attribute>":$operands)>,
+    StaticInterfaceMethod<[{
+        Emits the ISA assembly representation of the instruction to the provided
+        stream. The format should be the one understood by common assembler
+        tools.
+      }],
+      "void", "printInstructionAssembly",
+      (ins "llvm::raw_ostream &":$os,
+           "llvm::ArrayRef<mlir::Attribute>":$operands)>,
+  ];
+}
+
 #endif // CIRCT_DIALECT_RTG_IR_RTGISAASSEMBLYINTERFACES_TD
