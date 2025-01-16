@@ -12,8 +12,8 @@
 
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
+#include "mlir/IR/IRMapping.h"
 
-#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 using namespace circt;
 
@@ -35,91 +35,101 @@ struct LowerContractsPass
 };
 
 template <typename TO>
-void replaceContractOp(PatternRewriter &rewriter, RequireLike &op) {
+void replaceContractOp(OpBuilder &builder, RequireLike &op) {
   StringAttr labelAttr;
   if (auto label = op.getLabel())
-    labelAttr = rewriter.getStringAttr(label.value());
+    labelAttr = builder.getStringAttr(label.value());
 
-  rewriter.replaceOpWithNewOp<TO>(op, op.getProperty(), op.getEnable(),
-                                  labelAttr);
+  builder.setInsertionPointAfter(op);
+  builder.create<TO>(op.getLoc(), op.getProperty(), op.getEnable(), labelAttr);
+  op.erase();
 }
 
-struct HWOpRewritePattern : public OpRewritePattern<HWModuleOp> {
-  using OpRewritePattern<HWModuleOp>::OpRewritePattern;
 
-  LogicalResult matchAndRewrite(HWModuleOp op,
-                                PatternRewriter &rewriter) const override {
-    auto contracts = op.getBody().front().getOps<ContractOp>();
-    if (contracts.empty()) {
+void cloneFanIn(OpBuilder &builder, Operation *opToClone, IRMapping &mapping,
+                DenseSet<Operation *> &seen) {
+  if (seen.contains(opToClone))
+    return;
+  seen.insert(opToClone);
+
+  for (auto operand : opToClone->getOperands()) {
+    auto *definingOp = operand.getDefiningOp();
+    if (definingOp) {
+      cloneFanIn(builder, definingOp, mapping, seen);
+    } else if (!mapping.contains(operand)) {
+      auto sym = builder.create<verif::SymbolicValueOp>(
+          operand.getLoc(), operand.getType());
+      mapping.map(operand, sym);
+    }
+  }
+  auto *clonedOp = builder.clone(*opToClone, mapping);
+  for (auto [x, y] : llvm::zip(opToClone->getResults(), clonedOp->getResults())) {
+    mapping.map(x, y);
+  }
+}
+
+LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
+  OpBuilder mlirModuleBuilder(mlirModule);
+  mlirModuleBuilder.setInsertionPointAfter(hwModule);
+  SmallVector<ContractOp> contracts;
+  hwModule.walk([&](ContractOp op) {
+    contracts.push_back(op);
+  });
+  for (unsigned i = 0; i < contracts.size(); i++) {
+    auto contract = contracts[i];
+    auto name =
+        mlirModuleBuilder.getStringAttr(hwModule.getNameAttr().getValue() +
+                                        "_CheckContract_" + std::to_string(i));
+    auto formalOp = mlirModuleBuilder.create<verif::FormalOp>(
+        contract.getLoc(), name, mlirModuleBuilder.getDictionaryAttr({}));
+
+    OpBuilder formalBuilder(formalOp);
+    formalBuilder.createBlock(&formalOp.getBody());
+
+    // TODO: We should probably not modify original contract or make sure we've
+    // done the proper rewrite to the original module first before modifying it
+    for (auto [result, input] :
+         llvm::zip(contract.getResults(), contract.getInputs())) {
+      result.replaceAllUsesWith(input);
+    }
+
+    // Convert ensure to assert, require to assume
+    Block *contractBlock = &contract.getBody().front();
+    OpBuilder hwModuleBuilder(hwModule);
+    WalkResult result = contractBlock->walk([&](RequireLike op) {
+      if (isa<EnsureOp>(op)) {
+        replaceContractOp<AssertOp>(hwModuleBuilder, op);
+      } else if (isa<RequireOp>(op)) {
+        replaceContractOp<AssumeOp>(hwModuleBuilder, op);
+      } else {
+        return WalkResult::interrupt();
+      }
+      return WalkResult::advance();
+    });
+
+    if (result.wasInterrupted()) {
       return failure();
     }
 
-    auto name =
-        rewriter.getStringAttr(op.getNameAttr().getValue() + "_CheckContract");
-    auto formalOp = rewriter.create<verif::FormalOp>(
-        op.getLoc(), name, rewriter.getDictionaryAttr({}));
-
-    // Clone module body into formal op body
-    rewriter.cloneRegionBefore(op.getRegion(), formalOp.getBody(),
-                               formalOp.getBody().end());
-
-    auto *bodyBlock = &formalOp.getBody().front();
-
-    // Erase hw.output
-    rewriter.eraseOp(bodyBlock->getTerminator());
-
-    // Convert block args to symbolic values
-    rewriter.setInsertionPointToStart(bodyBlock);
-    for (auto arg : llvm::make_early_inc_range(bodyBlock->getArguments())) {
-      auto sym =
-          rewriter.create<verif::SymbolicValueOp>(arg.getLoc(), arg.getType());
-      rewriter.replaceAllUsesWith(arg, sym);
-    }
-    bodyBlock->eraseArguments(0, bodyBlock->getNumArguments());
-
-    // Inline contract ops
-    for (auto contractOp :
-         llvm::make_early_inc_range(bodyBlock->getOps<ContractOp>())) {
-
-      // Convert ensure to assert, require to assume
-      Block *contractBlock = &contractOp.getBody().front();
-      rewriter.setInsertionPointToEnd(contractBlock);
-
-      WalkResult result = contractBlock->walk([&](RequireLike op) {
-        if (isa<EnsureOp>(op)) {
-          replaceContractOp<AssertOp>(rewriter, op);
-        } else if (isa<RequireOp>(op)) {
-          replaceContractOp<AssumeOp>(rewriter, op);
-        } else {
-          return WalkResult::interrupt();
-        }
-        return WalkResult::advance();
-      });
-
-      if (result.wasInterrupted()) {
-        return failure();
-      }
-
-      // Inline body
-      rewriter.inlineBlockBefore(contractBlock, bodyBlock, bodyBlock->end());
-
-      // Replace results with inputs and erase
-      for (auto [input, result] :
-           llvm::zip(contractOp.getResults(), contractOp.getInputs())) {
-        rewriter.replaceAllUsesWith(input, result);
-      }
-      rewriter.eraseOp(contractOp);
+    IRMapping mapping;
+    DenseSet<Operation *> seen;
+    for (auto operand : contract.getOperands()) {
+      auto *definingOp = operand.getDefiningOp();
+      cloneFanIn(formalBuilder, definingOp, mapping, seen);
     }
 
-    return failure();
+    for (auto &op : contractBlock->getOperations()) {
+      cloneFanIn(formalBuilder, &op, mapping, seen);
+    }
   }
-};
+  return success();
+
+}
 } // namespace
 
 void LowerContractsPass::runOnOperation() {
-  RewritePatternSet patterns(&getContext());
-  patterns.add<HWOpRewritePattern>(patterns.getContext());
-
-  if (failed(applyPatternsAndFoldGreedily(getOperation(), std::move(patterns))))
-    signalPassFailure();
+  auto mlirModule = getOperation();
+  for (auto module : mlirModule.getOps<HWModuleOp>())
+    if (failed(runOnHWModule(module, mlirModule)))
+      signalPassFailure();
 }
