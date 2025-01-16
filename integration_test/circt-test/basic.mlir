@@ -1,7 +1,7 @@
 // See other `basic-*.mlir` files for run lines.
 // RUN: true
 
-// CHECK: 1 tests FAILED, 6 passed, 1 ignored
+// CHECK: 1 tests FAILED, 9 passed, 1 ignored, 3 unsupported
 
 hw.module @FullAdder(in %a: i1, in %b: i1, in %ci: i1, out s: i1, out co: i1) {
   %0 = comb.xor %a, %b : i1
@@ -148,4 +148,34 @@ verif.formal @ALUFailure {depth = 3} {
   // Check the two don't match (should fail).
   %ne = comb.icmp ne %z0, %z1 : i4
   verif.assert %ne : i1
+}
+
+verif.formal @RunnerRequireEither {require_runners = ["sby", "circt-bmc"]} {
+  %0 = hw.constant true
+  verif.assert %0 : i1
+}
+
+verif.formal @RunnerRequireSby {require_runners = ["sby"]} {
+  %0 = hw.constant true
+  verif.assert %0 : i1
+}
+
+verif.formal @RunnerRequireCirctBmc {require_runners = ["circt-bmc"]} {
+  %0 = hw.constant true
+  verif.assert %0 : i1
+}
+
+verif.formal @RunnerExcludeEither {exclude_runners = ["sby", "circt-bmc"]} {
+  %0 = hw.constant true
+  verif.assert %0 : i1
+}
+
+verif.formal @RunnerExcludeSby {exclude_runners = ["sby"]} {
+  %0 = hw.constant true
+  verif.assert %0 : i1
+}
+
+verif.formal @RunnerExcludeCirctBmc {exclude_runners = ["circt-bmc"]} {
+  %0 = hw.constant true
+  verif.assert %0 : i1
 }

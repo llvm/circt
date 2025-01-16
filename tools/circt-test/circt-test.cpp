@@ -34,6 +34,7 @@
 #include "mlir/Parser/Parser.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
+#include "mlir/Support/ToolUtilities.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
@@ -89,6 +90,18 @@ struct Options {
   cl::list<std::string> runners{"r", cl::desc("Use a specific set of runners"),
                                 cl::value_desc("name"),
                                 cl::MiscFlags::CommaSeparated, cl::cat(cat)};
+
+  cl::opt<bool> verifyDiagnostics{
+      "verify-diagnostics",
+      cl::desc("Check that emitted diagnostics match expected-* lines on the "
+               "corresponding line"),
+      cl::init(false), cl::Hidden, cl::cat(cat)};
+
+  cl::opt<bool> splitInputFile{
+      "split-input-file",
+      cl::desc("Split the input file into pieces and process each "
+               "chunk independently"),
+      cl::init(false), cl::Hidden, cl::cat(cat)};
 };
 Options opts;
 
@@ -105,7 +118,7 @@ public:
   /// The name of the runner. The user can filter runners by this name, and
   /// individual tests can indicate that they can or cannot run with runners
   /// based on this name.
-  std::string name;
+  StringAttr name;
   /// The runner binary. The value of this field is resolved using
   /// `findProgramByName` and stored in `binaryPath`.
   std::string binary;
@@ -140,14 +153,14 @@ void RunnerSuite::addDefaultRunners() {
   {
     // SymbiYosys
     Runner runner;
-    runner.name = "sby";
+    runner.name = StringAttr::get(context, "sby");
     runner.binary = "circt-test-runner-sby.py";
     runners.push_back(std::move(runner));
   }
   {
     // circt-bmc
     Runner runner;
-    runner.name = "circt-bmc";
+    runner.name = StringAttr::get(context, "circt-bmc");
     runner.binary = "circt-test-runner-circt-bmc.py";
     runner.readsMLIR = true;
     runners.push_back(std::move(runner));
@@ -209,9 +222,15 @@ public:
   /// be the location of an MLIR op, or a line in some other source file.
   LocationAttr loc;
   /// Whether or not the test should be ignored
-  bool ignore;
+  bool ignore = false;
   /// The user-defined attributes of this test.
   DictionaryAttr attrs;
+  /// The set of runners that can execute this test, specified by the
+  /// "require_runners" array attribute in `attrs`.
+  SmallPtrSet<StringAttr, 1> requiredRunners;
+  /// The set of runners that should be skipped for this test, specified by the
+  /// "exclude_runners" array attribute in `attrs`.
+  SmallPtrSet<StringAttr, 1> excludedRunners;
 };
 
 /// A collection of tests discovered in some MLIR input.
@@ -227,7 +246,7 @@ public:
 
   TestSuite(MLIRContext *context, bool listIgnored)
       : context(context), listIgnored(listIgnored) {}
-  void discoverInModule(ModuleOp module);
+  LogicalResult discoverInModule(ModuleOp module);
 };
 } // namespace
 
@@ -240,20 +259,63 @@ static StringRef toString(TestKind kind) {
   return "unknown";
 }
 
+static LogicalResult
+collectRunnerFilters(DictionaryAttr attrs, StringRef attrName,
+                     llvm::SmallPtrSetImpl<StringAttr> &names, Location loc,
+                     StringAttr testName) {
+  auto attr = attrs.get(attrName);
+  if (!attr)
+    return success();
+
+  auto arrayAttr = dyn_cast<ArrayAttr>(attr);
+  if (!arrayAttr)
+    return mlir::emitError(loc) << "`" << attrName << "` attribute of test "
+                                << testName << " must be an array";
+
+  for (auto elementAttr : arrayAttr.getValue()) {
+    auto stringAttr = dyn_cast<StringAttr>(elementAttr);
+    if (!stringAttr)
+      return mlir::emitError(loc)
+             << "element of `" << attrName << "` array of test " << testName
+             << " must be a string; got " << elementAttr;
+    names.insert(stringAttr);
+  }
+
+  return success();
+}
+
 /// Discover all tests in an MLIR module.
-void TestSuite::discoverInModule(ModuleOp module) {
-  module.walk([&](verif::FormalOp op) {
+LogicalResult TestSuite::discoverInModule(ModuleOp module) {
+  auto result = module.walk([&](verif::FormalOp op) {
     Test test;
     test.name = op.getSymNameAttr();
     test.kind = TestKind::Formal;
     test.loc = op.getLoc();
     test.attrs = op.getParametersAttr();
-    if (auto boolAttr = test.attrs.getAs<BoolAttr>("ignore"))
+
+    // Handle the `ignore` attribute.
+    if (auto attr = test.attrs.get("ignore")) {
+      auto boolAttr = dyn_cast<BoolAttr>(attr);
+      if (!boolAttr) {
+        op.emitError() << "`ignore` attribute of test " << test.name
+                       << " must be a boolean";
+        return WalkResult::interrupt();
+      }
       test.ignore = boolAttr.getValue();
-    else
-      test.ignore = false;
+    }
+
+    // Handle the `require_runners` and `exclude_runners` attributes.
+    if (failed(collectRunnerFilters(test.attrs, "require_runners",
+                                    test.requiredRunners, test.loc,
+                                    test.name)) ||
+        failed(collectRunnerFilters(test.attrs, "exclude_runners",
+                                    test.excludedRunners, test.loc, test.name)))
+      return WalkResult::interrupt();
+
     tests.push_back(std::move(test));
+    return WalkResult::advance();
   });
+  return failure(result.wasInterrupted());
 }
 
 //===----------------------------------------------------------------------===//
@@ -272,7 +334,7 @@ static LogicalResult listRunners(RunnerSuite &suite) {
 
   for (auto &runner : suite.runners) {
     auto &os = output->os();
-    os << runner.name;
+    os << runner.name.getValue();
     if (runner.ignore)
       os << "  ignored";
     else if (runner.available)
@@ -336,31 +398,20 @@ static LogicalResult listTests(TestSuite &suite) {
   return success();
 }
 
-/// Entry point for the circt-test tool. At this point an MLIRContext is
-/// available, all dialects have been registered, and all command line options
-/// have been parsed.
-static LogicalResult execute(MLIRContext *context) {
-  SourceMgr srcMgr;
-  SourceMgrDiagnosticHandler handler(srcMgr, context);
-
-  // Discover all available test runners.
-  RunnerSuite runnerSuite(context);
-  runnerSuite.addDefaultRunners();
-  if (failed(runnerSuite.resolve()))
-    return failure();
-
-  // List all runners and exit if requested.
-  if (opts.listRunners)
-    return listRunners(runnerSuite);
-
-  // Parse the input file.
-  auto module = parseSourceFile<ModuleOp>(opts.inputFilename, srcMgr, context);
+/// Called once the suite of available runners has been determined and a module
+/// has been parsed. If the `--split-input-file` option is set, this function is
+/// called once for each split of the input file.
+static LogicalResult executeWithHandler(MLIRContext *context,
+                                        RunnerSuite &runnerSuite,
+                                        SourceMgr &srcMgr) {
+  auto module = parseSourceFile<ModuleOp>(srcMgr, context);
   if (!module)
     return failure();
 
   // Discover all tests in the input.
   TestSuite suite(context, opts.listIgnored);
-  suite.discoverInModule(*module);
+  if (failed(suite.discoverInModule(*module)))
+    return failure();
   if (suite.tests.empty()) {
     llvm::errs() << "no tests discovered\n";
     return success();
@@ -417,12 +468,16 @@ static LogicalResult execute(MLIRContext *context) {
     for (auto &candidate : runnerSuite.runners) {
       if (candidate.ignore || !candidate.available)
         continue;
+      if (!test.requiredRunners.empty() &&
+          !test.requiredRunners.contains(candidate.name))
+        continue;
+      if (test.excludedRunners.contains(candidate.name))
+        continue;
       runner = &candidate;
       break;
     }
     if (!runner) {
       ++numUnsupported;
-      mlir::emitError(test.loc) << "no runner for test " << test.name;
       return;
     }
 
@@ -490,6 +545,7 @@ static LogicalResult execute(MLIRContext *context) {
       auto d = mlir::emitError(test.loc)
                << "test " << test.name.getValue() << " failed";
       d.attachNote() << "see `" << logPath << "`";
+      d.attachNote() << "executed with " << runner->name.getValue();
     } else {
       ++numPassed;
     }
@@ -515,6 +571,52 @@ static LogicalResult execute(MLIRContext *context) {
     llvm::errs() << ", " << numUnsupported << " unsupported";
   llvm::errs() << "\n";
   return success(numFailed == 0);
+}
+
+/// Entry point for the circt-test tool. At this point an MLIRContext is
+/// available, all dialects have been registered, and all command line options
+/// have been parsed.
+static LogicalResult execute(MLIRContext *context) {
+  // Discover all available test runners.
+  RunnerSuite runnerSuite(context);
+  runnerSuite.addDefaultRunners();
+  if (failed(runnerSuite.resolve()))
+    return failure();
+
+  // List all runners and exit if requested.
+  if (opts.listRunners)
+    return listRunners(runnerSuite);
+
+  // Read the input file.
+  auto input = llvm::MemoryBuffer::getFileOrSTDIN(opts.inputFilename);
+  if (input.getError()) {
+    WithColor::error() << "could not open input file " << opts.inputFilename;
+    return failure();
+  }
+
+  // Process the input file. If requested by the user, split the input file and
+  // process each chunk separately. This is useful for verifying diagnostics.
+  auto processBuffer = [&](std::unique_ptr<llvm::MemoryBuffer> chunk,
+                           raw_ostream &) {
+    SourceMgr srcMgr;
+    srcMgr.AddNewSourceBuffer(std::move(chunk), llvm::SMLoc());
+
+    // Call `executeWithHandler` with either the regular diagnostic handler, or,
+    // if `--verify-diagnostics` is set, with the verifying handler.
+    if (opts.verifyDiagnostics) {
+      SourceMgrDiagnosticVerifierHandler handler(srcMgr, context);
+      context->printOpOnDiagnostic(false);
+      (void)executeWithHandler(context, runnerSuite, srcMgr);
+      return handler.verify();
+    }
+
+    SourceMgrDiagnosticHandler handler(srcMgr, context);
+    return executeWithHandler(context, runnerSuite, srcMgr);
+  };
+
+  return mlir::splitAndProcessBuffer(
+      std::move(*input), processBuffer, llvm::outs(),
+      opts.splitInputFile ? mlir::kDefaultSplitMarker : "");
 }
 
 int main(int argc, char **argv) {
