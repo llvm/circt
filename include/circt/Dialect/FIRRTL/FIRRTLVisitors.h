@@ -236,13 +236,13 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<AttachOp, ConnectOp, MatchingConnectOp, RefDefineOp,
-                       ForceOp, PrintFOp, SkipOp, StopOp, WhenOp, AssertOp,
-                       AssumeOp, CoverOp, PropAssignOp, RefForceOp,
-                       RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
-                       FPGAProbeIntrinsicOp, VerifAssertIntrinsicOp,
-                       VerifAssumeIntrinsicOp, UnclockedAssumeIntrinsicOp,
-                       VerifCoverIntrinsicOp, LayerBlockOp, MatchOp>(
+        .template Case<
+            AttachOp, ConnectOp, MatchingConnectOp, RefDefineOp, ForceOp,
+            PrintFOp, SkipOp, StopOp, WhenOp, AssertOp, AssumeOp, CoverOp,
+            PropAssignOp, RefForceOp, RefForceInitialOp, RefReleaseOp,
+            RefReleaseInitialOp, FPGAProbeIntrinsicOp, VerifAssertIntrinsicOp,
+            VerifAssumeIntrinsicOp, UnclockedAssumeIntrinsicOp,
+            VerifCoverIntrinsicOp, LayerBlockOp, MatchOp, ViewIntrinsicOp>(
             [&](auto opNode) -> ResultType {
               return thisCast->visitStmt(opNode, args...);
             })
@@ -292,6 +292,7 @@ public:
   HANDLE(UnclockedAssumeIntrinsicOp);
   HANDLE(LayerBlockOp);
   HANDLE(MatchOp);
+  HANDLE(ViewIntrinsicOp);
 
 #undef HANDLE
 };
