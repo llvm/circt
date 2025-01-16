@@ -263,6 +263,7 @@ def Counter(width: int):
   class Counter(Module):
     clk = Clock()
     rst = Reset()
+    clear = Input(Bits(1))
     increment = Input(Bits(1))
     out = Output(UInt(width))
 
@@ -273,7 +274,8 @@ def Counter(width: int):
                   rst=ports.rst,
                   rst_value=0,
                   ce=ports.increment)
-      count.assign((count + 1).as_uint(width))
+      next = (count + 1).as_uint(width)
+      count.assign(Mux(ports.clear, next, UInt(width)(0)))
       ports.out = count
 
   return Counter

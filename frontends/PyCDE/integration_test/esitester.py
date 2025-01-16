@@ -78,17 +78,19 @@ class ReadMem(Module):
                    clk=ports.clk,
                    rst=ports.rst,
                    rst_value=0,
-                   ce=read_loc_ce)
+                   ce=read_loc_ce,
+                   name="read_loc")
     read_loc.assign(cmd.data.as_uint())
 
     mem_data_ce = Wire(Bits(1))
-    mem_data = Reg(Bits(64),
+    mem_data = Reg(Bits(96),
                    clk=ports.clk,
                    rst=ports.rst,
                    rst_value=0,
-                   ce=mem_data_ce)
+                   ce=mem_data_ce,
+                   name="mem_data")
 
-    response_data = mem_data
+    response_data = mem_data.as_bits(64)
     response_chan, response_ready = Channel(Bits(64)).wrap(
         response_data, cmd_valid)
     resp_ready_wire.assign(response_ready)
@@ -97,7 +99,10 @@ class ReadMem(Module):
     mmio_rw_cmd_chan = mmio_rw.unpack(data=response_chan)['cmd']
     cmd_chan_wire.assign(mmio_rw_cmd_chan)
 
-    tag = Counter(8)(clk=ports.clk, rst=ports.rst, increment=mmio_xact)
+    tag = Counter(8)(clk=ports.clk,
+                     rst=ports.rst,
+                     clear=Bits(1)(0),
+                     increment=mmio_xact)
 
     hostmem_read_req, hostmem_read_req_ready = Channel(
         esi.HostMem.ReadReqType).wrap({
@@ -107,7 +112,7 @@ class ReadMem(Module):
 
     hostmem_read_resp = esi.HostMem.read(appid=AppID("ReadMem_hostread"),
                                          req=hostmem_read_req,
-                                         data_type=Bits(64))
+                                         data_type=mem_data.type)
     hostmem_read_resp_data, hostmem_read_resp_valid = hostmem_read_resp.unwrap(
         1)
     mem_data.assign(hostmem_read_resp_data.data)
@@ -144,10 +149,14 @@ class WriteMem(Module):
     mmio_rw_cmd_chan = mmio_rw.unpack(data=response_chan)['cmd']
     cmd_chan_wire.assign(mmio_rw_cmd_chan)
 
-    tag = Counter(8)(clk=ports.clk, rst=ports.rst, increment=mmio_xact)
+    tag = Counter(8)(clk=ports.clk,
+                     rst=ports.rst,
+                     clear=Bits(1)(0),
+                     increment=mmio_xact)
 
     cycle_counter = Counter(64)(clk=ports.clk,
                                 rst=ports.rst,
+                                clear=Bits(1)(0),
                                 increment=Bits(1)(1))
 
     hostmem_write_req, _ = esi.HostMem.wrap_write_req(

@@ -13,7 +13,7 @@ from .circt import ir
 
 from contextvars import ContextVar
 from functools import singledispatchmethod
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 import re
 import numpy as np
 
@@ -336,7 +336,7 @@ class BitsSignal(BitVectorSignal):
     return self.slice(idx, 1)
 
   @staticmethod
-  def concat(items: List[BitVectorSignal]):
+  def concat(items: Iterable[BitVectorSignal]):
     """Concatenate a list of bitvectors into one larger bitvector."""
     from .dialects import comb
     return comb.ConcatOp(*items)

@@ -61,16 +61,15 @@ def CosimBSP(user_module: Type[Module]) -> Module:
               appid=esi.AppID("__cosim_hostmem"),
               clk=ports.clk,
               rst=ports.rst)
-      resp_wire = Wire(
-          Channel(
-              StructType([
-                  ("tag", UInt(8)),
-                  ("data", Bits(ESI_Cosim_UserTopWrapper.HostMemWidth)),
-              ])))
-      req = hostmem.read.unpack(resp=resp_wire)['req']
-      data = esi.CallService.call(esi.AppID("__cosim_hostmem_read"), req,
-                                  resp_wire.type)
-      resp_wire.assign(data)
+
+      resp_channel = esi.ChannelService.from_host(
+          esi.AppID("__cosim_hostmem_read_resp"),
+          StructType([
+              ("tag", UInt(8)),
+              ("data", Bits(ESI_Cosim_UserTopWrapper.HostMemWidth)),
+          ]))
+      req = hostmem.read.unpack(resp=resp_channel)['req']
+      esi.ChannelService.to_host(esi.AppID("__cosim_hostmem_read_req"), req)
 
       ack_wire = Wire(Channel(UInt(8)))
       write_req = hostmem.write.unpack(ackTag=ack_wire)['req']
