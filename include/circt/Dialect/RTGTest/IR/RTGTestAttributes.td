@@ -13,6 +13,8 @@
 #ifndef CIRCT_DIALECT_RTGTEST_IR_RTGTESTATTRIBUTES_TD
 #define CIRCT_DIALECT_RTGTEST_IR_RTGTESTATTRIBUTES_TD
 
+include "circt/Dialect/RTGTest/IR/RTGTestDialect.td"
+include "circt/Dialect/RTG/IR/RTGInterfaces.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/EnumAttr.td"
 
@@ -55,6 +57,23 @@ def RegisterAttr : I32EnumAttr<
     I32EnumAttrCase<"Virtual",  32>
   ]> {
   let cppNamespace = "::circt::rtgtest";
+}
+
+class RTGTestAttrDef<string name, list<Trait> traits = []> 
+  : AttrDef<RTGTestDialect, name, traits>;
+
+def CPUAttr : RTGTestAttrDef<"CPU", [ContextResourceAttrInterface]> {
+  let summary = "this attribute represents a CPU referred to by the core ID";
+
+  let parameters = (ins "size_t":$id);
+
+  let mnemonic = "cpu";
+  let assemblyFormat = "`<` $id `>`";
+
+  let extraClassDeclaration = [{
+    // TypedAttrInterface
+    Type getType() const;
+  }];
 }
 
 #endif // CIRCT_DIALECT_RTGTEST_IR_RTGTESTATTRIBUTES_TD

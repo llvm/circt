@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/RTGTest.h"
+#include "circt/Dialect/RTGTest/IR/RTGTestAttributes.h"
 #include "circt/Dialect/RTGTest/IR/RTGTestDialect.h"
 #include "circt/Dialect/RTGTest/IR/RTGTestTypes.h"
 
@@ -29,4 +30,20 @@ bool rtgtestTypeIsACPU(MlirType type) { return isa<CPUType>(unwrap(type)); }
 
 MlirType rtgtestCPUTypeGet(MlirContext ctxt) {
   return wrap(CPUType::get(unwrap(ctxt)));
+}
+
+//===----------------------------------------------------------------------===//
+// Attribute API.
+//===----------------------------------------------------------------------===//
+
+bool rtgtestAttrIsACPU(MlirAttribute attr) {
+  return isa<CPUAttr>(unwrap(attr));
+}
+
+MlirAttribute rtgtestCPUAttrGet(MlirContext ctxt, unsigned id) {
+  return wrap(CPUAttr::get(unwrap(ctxt), id));
+}
+
+unsigned rtgtestCPUAttrGetId(MlirAttribute attr) {
+  return cast<CPUAttr>(unwrap(attr)).getId();
 }

@@ -19,16 +19,17 @@ with Context() as ctx, Location.unknown():
     target = rtg.TargetOp('target_name', TypeAttr.get(dictTy))
     targetBlock = Block.create_at_start(target.bodyRegion, [])
     with InsertionPoint(targetBlock):
-      cpu0 = rtgtest.CPUDeclOp(0)
-      cpu1 = rtgtest.CPUDeclOp(1)
+      cpuAttr = rtgtest.CPUAttr.get(0)
+      cpu0 = rtgtest.CPUDeclOp(cpuAttr)
+      cpu1 = rtgtest.CPUDeclOp(rtgtest.CPUAttr.get(cpuAttr.id + 1))
       rtg.YieldOp([cpu0, cpu1])
 
     test = rtg.TestOp('test_name', TypeAttr.get(dictTy))
     Block.create_at_start(test.bodyRegion, [cpuTy, cpuTy])
 
   # CHECK: rtg.target @target_name : !rtg.dict<cpu0: !rtgtest.cpu, cpu1: !rtgtest.cpu> {
-  # CHECK:   [[V0:%.+]] = rtgtest.cpu_decl 0
-  # CHECK:   [[V1:%.+]] = rtgtest.cpu_decl 1
+  # CHECK:   [[V0:%.+]] = rtgtest.cpu_decl <0>
+  # CHECK:   [[V1:%.+]] = rtgtest.cpu_decl <1>
   # CHECK:   rtg.yield [[V0]], [[V1]] : !rtgtest.cpu, !rtgtest.cpu
   # CHECK: }
   # CHECK: rtg.test @test_name : !rtg.dict<cpu0: !rtgtest.cpu, cpu1: !rtgtest.cpu> {

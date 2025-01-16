@@ -31,6 +31,20 @@ MLIR_CAPI_EXPORTED bool rtgtestTypeIsACPU(MlirType type);
 /// Creates an RTGTest CPU type in the context.
 MLIR_CAPI_EXPORTED MlirType rtgtestCPUTypeGet(MlirContext ctxt);
 
+//===----------------------------------------------------------------------===//
+// Attribute API.
+//===----------------------------------------------------------------------===//
+
+/// If the type is an RTGTest CPUAttr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsACPU(MlirAttribute attr);
+
+/// Creates an RTGTest CPU attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestCPUAttrGet(MlirContext ctxt,
+                                                   unsigned id);
+
+/// Returns the core ID represented by the CPU attribute.
+MLIR_CAPI_EXPORTED unsigned rtgtestCPUAttrGetId(MlirAttribute attr);
+
 #ifdef __cplusplus
 }
 #endif

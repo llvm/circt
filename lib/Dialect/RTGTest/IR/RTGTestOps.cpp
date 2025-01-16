@@ -21,7 +21,9 @@ using namespace rtgtest;
 // CPUDeclOp
 //===----------------------------------------------------------------------===//
 
-size_t CPUDeclOp::getIdentifier(size_t idx) { return getId().getZExtValue(); }
+size_t CPUDeclOp::getIdentifier(size_t idx) { return getId().getId(); }
+
+mlir::OpFoldResult CPUDeclOp::fold(FoldAdaptor adaptor) { return getId(); }
 
 //===----------------------------------------------------------------------===//
 // ConstantTestOp
