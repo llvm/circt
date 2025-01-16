@@ -282,7 +282,8 @@ LogicalResult canonicalizePassthoughCall(mlir::CallOpInterface callOp,
                                          SymbolHandler &symbolCache,
                                          PatternRewriter &rewriter) {
   auto defOp = cast<DefineOp>(symbolCache.getDefinition(
-      callOp.getCallableForCallee().get<SymbolRefAttr>().getLeafReference()));
+      llvm::cast<SymbolRefAttr>(callOp.getCallableForCallee())
+          .getLeafReference()));
   if (defOp.isPassthrough()) {
     symbolCache.removeUser(defOp, callOp);
     rewriter.replaceOp(callOp, callOp.getArgOperands());

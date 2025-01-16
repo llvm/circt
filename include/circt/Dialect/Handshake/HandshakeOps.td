@@ -180,7 +180,7 @@ def ESIInstanceOp : Op<Handshake_Dialect, "esi_instance", [
 
     /// Set the callee for this operation.
     void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
-      (*this)->setAttr(getModuleAttrName(), callee.get<mlir::SymbolRefAttr>());
+      (*this)->setAttr(getModuleAttrName(), llvm::cast<mlir::SymbolRefAttr>(callee));
     }
 
     MutableOperandRange getArgOperandsMutable() {
@@ -251,7 +251,7 @@ def InstanceOp : Handshake_Op<"instance", [
 
     /// Set the callee for this operation.
     void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
-      (*this)->setAttr(getModuleAttrName(), callee.get<mlir::SymbolRefAttr>());
+      (*this)->setAttr(getModuleAttrName(), llvm::cast<mlir::SymbolRefAttr>(callee));
     }
 
     /// Get the control operand of this instance op

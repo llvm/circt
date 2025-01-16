@@ -203,7 +203,7 @@ LogicalResult LutCalculator::computeTableEntries(LutOp lut) {
       for (int j = (1U << bw) - 1; j >= 0; j--) {
         Attribute foldAttr;
         if (!(foldAttr = dyn_cast<Attribute>(results[j][i])))
-          foldAttr = vals[results[j][i].get<Value>()][j];
+          foldAttr = vals[llvm::cast<Value>(results[j][i])][j];
         ref[j] = foldAttr;
       }
     }
