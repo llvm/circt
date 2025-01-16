@@ -47,12 +47,10 @@ firrtl.module @Intrinsics(in %ui : !firrtl.uint, in %clock: !firrtl.clock, in %u
   // CHECK-SAME:     elements = [
   // CHECK-SAME:       {
   // CHECK-SAME:         class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-  // CHECK-SAME:         id = 0 : i64,
   // CHECK-SAME:         name = "baz"
   // CHECK-SAME:       },
   // CHECK-SAME:       {
   // CHECK-SAME:         class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-  // CHECK-SAME:         id = 0 : i64,
   // CHECK-SAME:         name = "qux"
   // CHECK-SAME:       }
   // CHECK-SAME:     ]
@@ -63,12 +61,10 @@ firrtl.module @Intrinsics(in %ui : !firrtl.uint, in %clock: !firrtl.clock, in %u
     elements = [
       {
         class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-        id = 0 : i64,
         name = "baz"
       },
       {
         class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-        id = 0 : i64,
         name = "qux"
       }
     ]
