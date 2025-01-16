@@ -260,14 +260,12 @@ LogicalResult instance_like_impl::verifyInstanceOfHWModule(
     return failure();
 
   if (parameters) {
-    SmallVector<Type> rawModParameters;
-    SmallVector<Type> resolvedModParameters;
-
     auto modParameters = module->getAttrOfType<ArrayAttr>("parameters");
-    for (auto param : modParameters) {
-      auto paramDecl = cast<ParamDeclAttr>(param);
+    SmallVector<Type> rawModParameters, resolvedModParameters;
+    rawModParameters.reserve(modParameters.size());
+    resolvedModParameters.reserve(modParameters.size());
+    for (auto paramDecl : modParameters.getAsRange<ParamDeclAttr>())
       rawModParameters.push_back(paramDecl.getType());
-    }
 
     // resolve parameters
     if (failed(instance_like_impl::resolveParametricTypes(
