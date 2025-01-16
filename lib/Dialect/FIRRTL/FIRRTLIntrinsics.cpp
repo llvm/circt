@@ -6,11 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-// TODO: Local tryGetAs that produces error for view not "Annotation" ?
-
-#include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
-// remove me
-#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLIntrinsics.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
@@ -715,19 +710,59 @@ public:
   }
 };
 
-// TODO: THIS SHOULD GO ELSEWHERE!!
+//===----------------------------------------------------------------------===//
+// View intrinsic converter and helpers
+//===----------------------------------------------------------------------===//
+
+/// Implements the same behavior as DictionaryAttr::getAs<A> to return the
+/// value of a specific type associated with a key in a dictionary. However,
+/// this is specialized to print a useful error message, specific to custom
+/// attribute process, on failure.
+/// These attributes are created from input JSON.
+template <typename A>
+A tryGetAs(DictionaryAttr &dict, const Attribute &root, StringRef key,
+           Location loc, Twine path = Twine()) {
+  SmallString<128> msg;
+  // Check that the key exists.
+  auto value = dict.get(key);
+  if (!value) {
+    if (path.isTriviallyEmpty())
+      ("View info did not contain required key '" + key + "'.").toVector(msg);
+    else
+      ("View info attribute with path '" + path +
+       "' did not contain required key '" + key + "'.")
+          .toVector(msg);
+    mlir::emitError(loc, msg).attachNote()
+        << "The full info attribute is reproduced here: " << root;
+    return nullptr;
+  }
+
+  // Check that the value has the correct type.
+  auto valueA = dyn_cast<A>(value);
+  if (!valueA) {
+    if (path.isTriviallyEmpty())
+      ("View info did not contain the correct type for key '" + key + "'.")
+          .toVector(msg);
+    else
+      ("View info attribute with path '" + path +
+       "' did not contain the correct type for key '" + key + "'.")
+          .toVector(msg);
+    mlir::emitError(loc, msg).attachNote()
+        << "The full info attribute is reproduced here: " << root;
+    return nullptr;
+  }
+  return valueA;
+}
 
 /// Recursively walk a sifive.enterprise.grandcentral.AugmentedType to extract
-/// any annotations it may contain.  This is going to generate two types of
-/// annotations:
-///   1) Annotations necessary to build interfaces and store them at "~"
-///   2) Scattered annotations for how components bind to interfaces
-static std::optional<DictionaryAttr> parseAugmentedType(
-    MLIRContext *context, Location loc, DictionaryAttr augmentedType,
-    DictionaryAttr root, StringAttr name, StringAttr defName,
-    std::optional<StringAttr> description, Twine clazz, Twine path = {}) {
+/// and slightly restructure information needed for a view.
+std::optional<DictionaryAttr>
+parseAugmentedType(MLIRContext *context, Location loc,
+                   DictionaryAttr augmentedType, DictionaryAttr root,
+                   StringAttr name, StringAttr defName,
+                   std::optional<StringAttr> description, Twine path = {}) {
   auto classAttr =
-      tryGetAs<StringAttr>(augmentedType, root, "class", loc, clazz, path);
+      tryGetAs<StringAttr>(augmentedType, root, "class", loc, path);
   if (!classAttr)
     return std::nullopt;
   StringRef classBase = classAttr.getValue();
@@ -737,7 +772,7 @@ static std::optional<DictionaryAttr> parseAugmentedType(
                     "'sifive.enterprise.grandCentral.Augmented*', but was '" +
                         classAttr.getValue() + "' (Did you misspell it?)")
             .attachNote()
-        << "see annotation: " << augmentedType;
+        << "see attribute: " << augmentedType;
     return std::nullopt;
   }
 
@@ -745,8 +780,7 @@ static std::optional<DictionaryAttr> parseAugmentedType(
   //   "defName": String
   //   "elements": Seq[AugmentedField]
   if (classBase == "BundleType") {
-    defName =
-        tryGetAs<StringAttr>(augmentedType, root, "defName", loc, clazz, path);
+    defName = tryGetAs<StringAttr>(augmentedType, root, "defName", loc, path);
     if (!defName)
       return std::nullopt;
 
@@ -756,7 +790,7 @@ static std::optional<DictionaryAttr> parseAugmentedType(
     //   "tpe": AugmentedType
     SmallVector<Attribute> elements;
     auto elementsAttr =
-        tryGetAs<ArrayAttr>(augmentedType, root, "elements", loc, clazz, path);
+        tryGetAs<ArrayAttr>(augmentedType, root, "elements", loc, path);
     if (!elementsAttr)
       return std::nullopt;
     for (size_t i = 0, e = elementsAttr.size(); i != e; ++i) {
@@ -764,18 +798,15 @@ static std::optional<DictionaryAttr> parseAugmentedType(
       if (!field) {
         mlir::emitError(
             loc,
-            // TODO: Not clazz, not annotation
-            "Annotation '" + Twine(clazz) + "' with path '.elements[" +
-                Twine(i) +
+            "View info attribute with path '.elements[" + Twine(i) +
                 "]' contained an unexpected type (expected a DictionaryAttr).")
                 .attachNote()
-            << "The received element was: " << elementsAttr[i] << "\n";
+            << "The received element was: " << elementsAttr[i];
         return std::nullopt;
       }
       auto ePath = (path + ".elements[" + Twine(i) + "]").str();
-      auto name = tryGetAs<StringAttr>(field, root, "name", loc, clazz, ePath);
-      auto tpe =
-          tryGetAs<DictionaryAttr>(field, root, "tpe", loc, clazz, ePath);
+      auto name = tryGetAs<StringAttr>(field, root, "name", loc, ePath);
+      auto tpe = tryGetAs<DictionaryAttr>(field, root, "tpe", loc, ePath);
       if (!name || !tpe)
         return std::nullopt;
       std::optional<StringAttr> description;
@@ -783,7 +814,7 @@ static std::optional<DictionaryAttr> parseAugmentedType(
         description = cast<StringAttr>(maybeDescription);
       auto eltAttr =
           parseAugmentedType(context, loc, tpe, root, name, defName,
-                             description, clazz, path + "_" + name.getValue());
+                             description, path + "_" + name.getValue());
       if (!eltAttr)
         return std::nullopt;
 
@@ -801,9 +832,9 @@ static std::optional<DictionaryAttr> parseAugmentedType(
       attrs.append("tpe", tpeClass);
       elements.push_back(*eltAttr);
     }
-    // Add an annotation that stores information necessary to construct the
-    // module for the view.  This needs the name of the module (defName) and the
-    // names of the components inside it.
+    // Add an attribute that stores information necessary to construct the
+    // interface for the view.  This needs the name of the interface (defName)
+    // and the names of the components inside it.
     NamedAttrList attrs;
     attrs.append("class", classAttr);
     attrs.append("defName", defName);
@@ -818,7 +849,7 @@ static std::optional<DictionaryAttr> parseAugmentedType(
   if (classBase == "GroundType") {
     NamedAttrList elementIface;
 
-    // Populate the annotation for the interface element.
+    // Populate the attribute for the interface element.
     elementIface.append("class", classAttr);
     if (description)
       elementIface.append("description", *description);
@@ -831,15 +862,14 @@ static std::optional<DictionaryAttr> parseAugmentedType(
   //   "elements": Seq[AugmentedType]
   if (classBase == "VectorType") {
     auto elementsAttr =
-        tryGetAs<ArrayAttr>(augmentedType, root, "elements", loc, clazz, path);
+        tryGetAs<ArrayAttr>(augmentedType, root, "elements", loc, path);
     if (!elementsAttr)
       return std::nullopt;
     SmallVector<Attribute> elements;
     for (auto [i, elt] : llvm::enumerate(elementsAttr)) {
-      auto eltAttr =
-          parseAugmentedType(context, loc, cast<DictionaryAttr>(elt), root,
-                             name, StringAttr::get(context, ""), std::nullopt,
-                             clazz, path + "_" + Twine(i));
+      auto eltAttr = parseAugmentedType(
+          context, loc, cast<DictionaryAttr>(elt), root, name,
+          StringAttr::get(context, ""), std::nullopt, path + "_" + Twine(i));
       if (!eltAttr)
         return std::nullopt;
       elements.push_back(*eltAttr);
@@ -854,11 +884,11 @@ static std::optional<DictionaryAttr> parseAugmentedType(
   }
 
   // Anything else is unexpected or a user error if they manually wrote
-  // annotations.  Print an error and error out.
+  // the JSON/attribute.  Print an error and error out.
   mlir::emitError(loc, "found unknown AugmentedType '" + classAttr.getValue() +
                            "' (Did you misspell it?)")
           .attachNote()
-      << "see annotation: " << augmentedType;
+      << "see attribute: " << augmentedType;
   return std::nullopt;
 }
 
@@ -895,7 +925,7 @@ public:
     auto nameAttr = gi.getParamValue<StringAttr>("name");
     auto result = parseAugmentedType(
         gi.op.getContext(), gi.op.getLoc(), dict, dict, nameAttr,
-        /* defName= */ {}, /* description= */ std::nullopt, viewAnnoClass);
+        /* defName= */ {}, /* description= */ std::nullopt);
 
     if (!result)
       return gi.emitError()
