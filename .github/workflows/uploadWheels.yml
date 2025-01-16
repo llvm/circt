@@ -53,9 +53,9 @@ jobs:
           SETUPTOOLS_SCM_DEBUG: True
 
       - name: Upload (stage) wheels as artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: python-wheels
+          name: python-wheels-${{ matrix.config.cibw_build }}
           path: ./wheelhouse/*.whl
           retention-days: 7
           if-no-files-found: error
@@ -73,9 +73,10 @@ jobs:
 
     steps:
       - name: Download wheels
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
-          name: python-wheels
+          pattern: python-wheels-*
+          merge-multiple: true
           path: ./wheelhouse/
 
       - name: List downloaded wheels
