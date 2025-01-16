@@ -81,6 +81,10 @@ def AggregateType : FIRRTLDialectType<
   CPred<"type_isa<FVectorType, BundleType, FEnumType>($_self)">,
   "a aggregate type", "::circt::firrtl::FIRRTLBaseType">;
 
+def GroundType : FIRRTLDialectType<
+  CPred<"llvm::isa<FIRRTLBaseType>($_self) && cast<FIRRTLBaseType>($_self).isGround()">,
+  "a ground type", "::circt::firrtl::FIRRTLBaseType">;
+
 def PassiveType : FIRRTLDialectType<
   CPred<"type_isa<FIRRTLBaseType>($_self) && cast<FIRRTLBaseType>($_self).isPassive()">,
   "a passive base type (contain no flips)", "::circt::firrtl::FIRRTLBaseType">;
