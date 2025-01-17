@@ -292,7 +292,7 @@ def TaggedGearbox(input_bitwidth: int,
         client_data_bits = upstream_data
         client_valid = upstream_valid
       elif output_bitwidth < input_bitwidth:
-        client_data_bits = upstream_data[:input_bitwidth]
+        client_data_bits = upstream_data[:output_bitwidth]
         client_valid = upstream_valid
       else:
         # Create registers equal to the number of upstream transactions needed
