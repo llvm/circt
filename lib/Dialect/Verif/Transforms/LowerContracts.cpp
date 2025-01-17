@@ -33,7 +33,6 @@ struct LowerContractsPass
   void runOnOperation() override;
 };
 
-template <typename TO>
 Operation *replaceContractOp(OpBuilder &builder, RequireLike op,
                              IRMapping &mapping) {
   StringAttr labelAttr;
@@ -44,14 +43,19 @@ Operation *replaceContractOp(OpBuilder &builder, RequireLike op,
   if (auto enable = op.getEnable())
     enable = mapping.lookup(enable);
 
-  return builder.create<TO>(op.getLoc(), mapping.lookup(op.getProperty()),
-                            enableValue, labelAttr);
+  if (isa<EnsureOp>(op))
+    return builder.create<AssertOp>(
+        op.getLoc(), mapping.lookup(op.getProperty()), enableValue, labelAttr);
+  if (isa<RequireOp>(op))
+    return builder.create<AssumeOp>(
+        op.getLoc(), mapping.lookup(op.getProperty()), enableValue, labelAttr);
+  return nullptr;
 }
 
-void cloneFanIn(OpBuilder &builder, Operation *opToClone, IRMapping &mapping,
-                DenseSet<Operation *> &seen) {
+LogicalResult cloneFanIn(OpBuilder &builder, Operation *opToClone,
+                         IRMapping &mapping, DenseSet<Operation *> &seen) {
   if (seen.contains(opToClone))
-    return;
+    return llvm::success();
   seen.insert(opToClone);
 
   // Ensure all operands have been mapped
@@ -62,7 +66,8 @@ void cloneFanIn(OpBuilder &builder, Operation *opToClone, IRMapping &mapping,
     auto *definingOp = operand.getDefiningOp();
     if (definingOp) {
       // Recurse and clone defining op
-      cloneFanIn(builder, definingOp, mapping, seen);
+      if (failed(cloneFanIn(builder, definingOp, mapping, seen)))
+        return failure();
     } else {
       // Create symbolic values for arguments
       auto sym = builder.create<verif::SymbolicValueOp>(operand.getLoc(),
@@ -73,12 +78,11 @@ void cloneFanIn(OpBuilder &builder, Operation *opToClone, IRMapping &mapping,
 
   Operation *clonedOp;
   // Replace ensure/require ops, otherwise clone
-  if (isa<EnsureOp>(opToClone)) {
-    clonedOp = replaceContractOp<AssertOp>(
-        builder, dyn_cast<RequireLike>(*opToClone), mapping);
-  } else if (isa<RequireOp>(opToClone)) {
-    clonedOp = replaceContractOp<AssumeOp>(
-        builder, dyn_cast<RequireLike>(*opToClone), mapping);
+  if (auto requireLike = dyn_cast<RequireLike>(*opToClone)) {
+    clonedOp = replaceContractOp(builder, requireLike, mapping);
+    if (!clonedOp) {
+      return failure();
+    }
   } else {
     clonedOp = builder.clone(*opToClone, mapping);
   }
@@ -88,6 +92,7 @@ void cloneFanIn(OpBuilder &builder, Operation *opToClone, IRMapping &mapping,
        llvm::zip(opToClone->getResults(), clonedOp->getResults())) {
     mapping.map(x, y);
   }
+  return success();
 }
 
 LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
@@ -118,7 +123,8 @@ LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
     // Clone fan in cone for contract operands
     for (auto operand : contract.getOperands()) {
       auto *definingOp = operand.getDefiningOp();
-      cloneFanIn(formalBuilder, definingOp, mapping, seen);
+      if (failed(cloneFanIn(formalBuilder, definingOp, mapping, seen)))
+        return failure();
     }
 
     // Map results by looking up the input mappings
@@ -129,7 +135,8 @@ LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
 
     // Clone body of the contract
     for (auto &op : contract.getBody().front().getOperations()) {
-      cloneFanIn(formalBuilder, &op, mapping, seen);
+      if (failed(cloneFanIn(formalBuilder, &op, mapping, seen)))
+        return failure();
     }
   }
   return success();
