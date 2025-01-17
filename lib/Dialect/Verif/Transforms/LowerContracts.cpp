@@ -121,7 +121,8 @@ LogicalResult cloneFanIn(OpBuilder &builder, Operation *opToClone,
 
     if (auto *definingOp = operand.getDefiningOp()) {
       // Recurse and clone defining op
-      if (failed(cloneFanIn(builder, definingOp, mapping, seen, assumeContract)))
+      if (failed(
+              cloneFanIn(builder, definingOp, mapping, seen, assumeContract)))
         return failure();
     } else {
       // Create symbolic values for arguments
@@ -182,7 +183,6 @@ LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
     if (failed(cloneContractBody(contract, formalBuilder, mapping, seen, false,
                                  true)))
       return failure();
-
   }
   for (auto contract : contracts) {
     // Inline contract into hwModule
