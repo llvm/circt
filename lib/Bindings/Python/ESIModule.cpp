@@ -221,6 +221,10 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
       .def("__len__", &circtESIAppIDAttrPathGetNumComponents)
       .def("__getitem__", &circtESIAppIDAttrPathGetComponent);
 
+  m.def("check_inner_type_match", &circtESICheckInnerTypeMatch,
+        "Check that two types match, allowing for AnyType in 'expected'.",
+        py::arg("expected"), py::arg("actual"));
+
   py::class_<PyAppIDIndex>(m, "AppIDIndex")
       .def(py::init<MlirOperation>(), py::arg("root"))
       .def("get_child_appids_of", &PyAppIDIndex::getChildAppIDsOf,

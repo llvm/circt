@@ -128,7 +128,9 @@ def MemoryBanking : Pass<"memory-banking", "::mlir::func::FuncOp"> {
   let constructor = "circt::createMemoryBankingPass()";
   let options = [
     Option<"bankingFactor", "banking-factor", "unsigned", /*default=*/"1",
-           "Use this banking factor for all memories being partitioned">
+           "Use this banking factor for all memories being partitioned">,
+    Option<"bankingDimension", "dimension", "unsigned", /*default=*/"0",
+           "The dimension along which to bank the memory. For rank=1, must be 0.">
   ];
   let dependentDialects = ["mlir::memref::MemRefDialect, mlir::scf::SCFDialect, mlir::affine::AffineDialect"];
 }

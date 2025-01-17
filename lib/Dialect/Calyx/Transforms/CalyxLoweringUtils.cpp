@@ -29,6 +29,28 @@ using namespace mlir::arith;
 namespace circt {
 namespace calyx {
 
+template <typename OpTy>
+static LogicalResult deduplicateParallelOperation(OpTy parOp,
+                                                  PatternRewriter &rewriter) {
+  auto *body = parOp.getBodyBlock();
+  if (body->getOperations().size() < 2)
+    return failure();
+
+  LogicalResult result = LogicalResult::failure();
+  SetVector<StringRef> members;
+  for (auto &op : make_early_inc_range(*body)) {
+    auto enableOp = dyn_cast<EnableOp>(&op);
+    if (enableOp == nullptr)
+      continue;
+    bool inserted = members.insert(enableOp.getGroupName());
+    if (!inserted) {
+      rewriter.eraseOp(enableOp);
+      result = LogicalResult::success();
+    }
+  }
+  return result;
+}
+
 void appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
                                   Value memref, unsigned memoryID,
                                   SmallVectorImpl<calyx::PortInfo> &inPorts,
@@ -607,6 +629,22 @@ EliminateUnusedCombGroups::matchAndRewrite(calyx::CombGroupOp combGroupOp,
 
   rewriter.eraseOp(combGroupOp);
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// DeduplicateParallelOperations
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+DeduplicateParallelOp::matchAndRewrite(calyx::ParOp parOp,
+                                       PatternRewriter &rewriter) const {
+  return deduplicateParallelOperation<calyx::ParOp>(parOp, rewriter);
+}
+
+LogicalResult
+DeduplicateStaticParallelOp::matchAndRewrite(calyx::StaticParOp parOp,
+                                             PatternRewriter &rewriter) const {
+  return deduplicateParallelOperation<calyx::StaticParOp>(parOp, rewriter);
 }
 
 //===----------------------------------------------------------------------===//

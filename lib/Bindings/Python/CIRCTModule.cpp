@@ -23,9 +23,11 @@
 #include "circt-c/Dialect/MSFT.h"
 #include "circt-c/Dialect/OM.h"
 #include "circt-c/Dialect/RTG.h"
+#include "circt-c/Transforms.h"
 #ifdef CIRCT_INCLUDE_TESTS
 #include "circt-c/Dialect/RTGTest.h"
 #endif
+#include "circt-c/Dialect/SMT.h"
 #include "circt-c/Dialect/SV.h"
 #include "circt-c/Dialect/Seq.h"
 #include "circt-c/Dialect/Verif.h"
@@ -52,8 +54,9 @@ static void registerPasses() {
   registerHWArithPasses();
   registerHWPasses();
   registerHandshakePasses();
-  mlirRegisterConversionPasses();
-  mlirRegisterTransformsPasses();
+  mlirRegisterCIRCTConversionPasses();
+  mlirRegisterCIRCTTransformsPasses();
+  mlirRegisterTransformsCSE();
 }
 
 PYBIND11_MODULE(_circt, m) {
@@ -135,6 +138,10 @@ PYBIND11_MODULE(_circt, m) {
         MlirDialectHandle verif = mlirGetDialectHandle__verif__();
         mlirDialectHandleRegisterDialect(verif, context);
         mlirDialectHandleLoadDialect(verif, context);
+
+        MlirDialectHandle smt = mlirGetDialectHandle__smt__();
+        mlirDialectHandleRegisterDialect(smt, context);
+        mlirDialectHandleLoadDialect(smt, context);
       },
       "Register CIRCT dialects on a PyMlirContext.");
 

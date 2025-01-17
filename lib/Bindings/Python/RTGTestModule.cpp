@@ -31,4 +31,14 @@ void circt::python::populateDialectRTGTestSubmodule(py::module &m) {
             return cls(rtgtestCPUTypeGet(ctxt));
           },
           py::arg("self"), py::arg("ctxt") = nullptr);
+
+  mlir_attribute_subclass(m, "CPUAttr", rtgtestAttrIsACPU)
+      .def_classmethod(
+          "get",
+          [](py::object cls, unsigned id, MlirContext ctxt) {
+            return cls(rtgtestCPUAttrGet(ctxt, id));
+          },
+          py::arg("self"), py::arg("id"), py::arg("ctxt") = nullptr)
+      .def_property_readonly(
+          "id", [](MlirAttribute self) { return rtgtestCPUAttrGetId(self); });
 }

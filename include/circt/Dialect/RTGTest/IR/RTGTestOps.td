@@ -22,7 +22,9 @@ class RTGTestOp<string mnemonic, list<Trait> traits = []> :
 
 def CPUDeclOp : RTGTestOp<"cpu_decl", [
   Pure,
+  ConstantLike,
   ContextResourceDefining,
+  FirstAttrDerivedResultType,
 ]> {
   let summary = "declare a CPU";
   let description = [{
@@ -30,10 +32,11 @@ def CPUDeclOp : RTGTestOp<"cpu_decl", [
     taking advantage of it.
   }];
 
-  let arguments = (ins IndexAttr:$id);
+  let arguments = (ins CPUAttr:$id);
   let results = (outs CPUType:$cpu);
 
   let assemblyFormat = "$id attr-dict";
+  let hasFolder = 1;
 }
 
 def ConstantTestOp : RTGTestOp<"constant_test", [

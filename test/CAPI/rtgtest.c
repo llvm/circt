@@ -21,11 +21,23 @@ static void testCPUType(MlirContext ctx) {
   mlirTypeDump(cpuTy);
 }
 
+static void testCPUAttr(MlirContext ctx) {
+  MlirAttribute cpuAttr = rtgtestCPUAttrGet(ctx, 3);
+
+  // CHECK: is_cpu
+  fprintf(stderr, rtgtestAttrIsACPU(cpuAttr) ? "is_cpu\n" : "isnot_cpu\n");
+  // CHECK: 3
+  fprintf(stderr, "%u\n", rtgtestCPUAttrGetId(cpuAttr));
+  // CHECK: #rtgtest.cpu<3>
+  mlirAttributeDump(cpuAttr);
+}
+
 int main(int argc, char **argv) {
   MlirContext ctx = mlirContextCreate();
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__rtgtest__(), ctx);
 
   testCPUType(ctx);
+  testCPUAttr(ctx);
 
   mlirContextDestroy(ctx);
 

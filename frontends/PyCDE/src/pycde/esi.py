@@ -8,7 +8,7 @@ from .constructs import AssignableSignal, Mux, Wire
 from .module import (generator, modparams, Module, ModuleLikeBuilderBase,
                      PortProxyBase)
 from .signals import (BitsSignal, BundleSignal, ChannelSignal, Signal,
-                      _FromCirctValue)
+                      _FromCirctValue, UIntSignal)
 from .support import optional_dict_to_dict_attr, get_user_loc
 from .system import System
 from .types import (Any, Bits, Bundle, BundledChannel, Channel,
@@ -521,6 +521,57 @@ class _HostMem(ServiceDecl):
 
   def __init__(self):
     super().__init__(self.__class__)
+
+  def write_req_bundle_type(self, data_type: Type) -> Bundle:
+    """Build a write request bundle type for the given data type."""
+    write_req_type = StructType([
+        ("address", UInt(64)),
+        ("tag", UInt(8)),
+        ("data", data_type),
+    ])
+    return Bundle([
+        BundledChannel("req", ChannelDirection.FROM, write_req_type),
+        BundledChannel("ackTag", ChannelDirection.TO, UInt(8))
+    ])
+
+  def write_req_channel_type(self, data_type: Type) -> StructType:
+    """Return a write request struct type for 'data_type'."""
+    return StructType([
+        ("address", UInt(64)),
+        ("tag", UInt(8)),
+        ("data", data_type),
+    ])
+
+  def wrap_write_req(self, address: UIntSignal, data: Type, tag: UIntSignal,
+                     valid: BitsSignal) -> Tuple[ChannelSignal, BitsSignal]:
+    """Create the proper channel type for a write request and use it to wrap the
+    given request arguments. Returns the Channel signal and a ready bit."""
+    inner_type = self.write_req_channel_type(data.type)
+    return Channel(inner_type).wrap(
+        inner_type({
+            "address": address,
+            "tag": tag,
+            "data": data,
+        }), valid)
+
+  def write(self, appid: AppID, req: ChannelSignal) -> ChannelSignal:
+    """Create a write request to the host memory out of a request channel."""
+    self._materialize_service_decl()
+
+    # Extract the data type from the request channel and call the helper to get
+    # the write bundle type for the req channel.
+    req_data_type = req.type.inner_type.data
+    write_bundle_type = self.write_req_bundle_type(req_data_type)
+
+    bundle = cast(
+        BundleSignal,
+        _FromCirctValue(
+            raw_esi.RequestConnectionOp(
+                write_bundle_type._type,
+                hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("write")),
+                appid._appid).toClient))
+    resp = bundle.unpack(req=req)['ackTag']
+    return resp
 
   # Create a read request to the host memory out of a request channel and return
   # the response channel with the specified data type.

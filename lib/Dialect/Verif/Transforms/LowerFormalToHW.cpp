@@ -31,46 +31,48 @@ struct LowerFormalToHWPass
   void runOnOperation() override;
 };
 
-struct FormalOpRewritePattern : public OpRewritePattern<verif::FormalOp> {
-  using OpRewritePattern<FormalOp>::OpRewritePattern;
+static LogicalResult lowerFormalToHW(FormalOp op) {
+  IRRewriter rewriter(op);
 
-  LogicalResult matchAndRewrite(FormalOp op,
-                                PatternRewriter &rewriter) const override {
-    // Create the ports for all the symbolic values
-    SmallVector<hw::PortInfo> ports;
-    for (auto symOp : op.getBody().front().getOps<verif::SymbolicValueOp>()) {
-      ports.push_back(
-          hw::PortInfo({{rewriter.getStringAttr("symbolic_value_" +
-                                                std::to_string(ports.size())),
-                         symOp.getType(), hw::ModulePort::Input}}));
-    }
-
-    auto moduleOp =
-        rewriter.create<hw::HWModuleOp>(op.getLoc(), op.getNameAttr(), ports);
-
-    rewriter.inlineBlockBefore(&op.getBody().front(),
-                               &moduleOp.getBodyBlock()->front(),
-                               op.getBody().getArguments());
-
-    // Replace symbolic values with module arguments
-    size_t i = 0;
-    for (auto symOp : make_early_inc_range(
-             moduleOp.getBodyBlock()->getOps<SymbolicValueOp>())) {
-      rewriter.replaceAllUsesWith(symOp.getResult(),
-                                  moduleOp.getArgumentForInput(i));
-      i++;
-      rewriter.eraseOp(symOp);
-    }
-    rewriter.eraseOp(op);
-    return success();
+  // Create the ports for all the symbolic values
+  SmallVector<hw::PortInfo> ports;
+  for (auto symOp : op.getBody().front().getOps<verif::SymbolicValueOp>()) {
+    ports.push_back(
+        hw::PortInfo({{rewriter.getStringAttr("symbolic_value_" +
+                                              std::to_string(ports.size())),
+                       symOp.getType(), hw::ModulePort::Input}}));
   }
-};
+
+  auto moduleOp =
+      rewriter.create<hw::HWModuleOp>(op.getLoc(), op.getNameAttr(), ports);
+
+  rewriter.inlineBlockBefore(&op.getBody().front(),
+                             &moduleOp.getBodyBlock()->front(),
+                             op.getBody().getArguments());
+
+  // Replace symbolic values with module arguments
+  size_t i = 0;
+  for (auto symOp : make_early_inc_range(
+           moduleOp.getBodyBlock()->getOps<SymbolicValueOp>())) {
+    rewriter.replaceAllUsesWith(symOp.getResult(),
+                                moduleOp.getArgumentForInput(i));
+    i++;
+    rewriter.eraseOp(symOp);
+  }
+
+  rewriter.eraseOp(op);
+  return success();
+}
 } // namespace
 
 void LowerFormalToHWPass::runOnOperation() {
-  RewritePatternSet patterns(&getContext());
-  patterns.add<FormalOpRewritePattern>(patterns.getContext());
-
-  if (failed(applyPatternsAndFoldGreedily(getOperation(), std::move(patterns))))
-    signalPassFailure();
+  bool changed = false;
+  for (auto op :
+       llvm::make_early_inc_range(getOperation().getOps<FormalOp>())) {
+    if (failed(lowerFormalToHW(op)))
+      return signalPassFailure();
+    changed = true;
+  }
+  if (!changed)
+    return markAllAnalysesPreserved();
 }

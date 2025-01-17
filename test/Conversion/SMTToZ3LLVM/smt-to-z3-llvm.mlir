@@ -380,6 +380,17 @@ func.func @test(%arg0: i32) {
     // CHECK-NEXT: llvm.call @Z3_mk_gt({{%[0-9a-zA-Z_]+}}, [[C123]], [[C123]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
     smt.int.cmp gt %10, %10
 
+    // CHECK: [[WIDTHCONST:%.+]] = llvm.mlir.constant(4 : i32) : i32
+    // CHECK: llvm.call @Z3_mk_int2bv({{%[0-9a-zA-Z_]+}}, [[WIDTHCONST]], [[C123]]) : (!llvm.ptr, i32, !llvm.ptr) -> !llvm.ptr
+    smt.int2bv %10 : !smt.bv<4>
+
+    // CHECK: [[UNSIGNEDCONST:%.+]] = llvm.mlir.constant(false) : i1
+    // CHECK: llvm.call @Z3_mk_bv2int({{%[0-9a-zA-Z_]+}}, [[BV0]], [[UNSIGNEDCONST]]) : (!llvm.ptr, !llvm.ptr, i1) -> !llvm.ptr
+    smt.bv2int %c0_bv4 : !smt.bv<4>
+    // CHECK: [[SIGNEDCONST:%.+]] = llvm.mlir.constant(true) : i1
+    // CHECK: llvm.call @Z3_mk_bv2int({{%[0-9a-zA-Z_]+}}, [[BV0]], [[SIGNEDCONST]]) : (!llvm.ptr, !llvm.ptr, i1) -> !llvm.ptr
+    smt.bv2int %c0_bv4 signed : !smt.bv<4>
+
     // CHECK: [[C0:%.+]] = llvm.mlir.constant(0 : i32)
     // CHECK: [[C2:%.+]] = llvm.mlir.constant(2 : i32)
     // CHECK: [[ZERO:%.+]] = llvm.mlir.zero : !llvm.ptr

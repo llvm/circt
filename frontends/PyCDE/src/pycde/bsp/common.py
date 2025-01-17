@@ -5,13 +5,13 @@
 from __future__ import annotations
 
 from ..common import Clock, Input, Output, Reset
-from ..constructs import AssignableSignal, ControlReg, NamedWire, Wire
+from ..constructs import AssignableSignal, NamedWire, Wire
 from .. import esi
 from ..module import Module, generator, modparams
 from ..signals import BitsSignal, BundleSignal, ChannelSignal
 from ..support import clog2
 from ..types import (Array, Bits, Bundle, BundledChannel, Channel,
-                     ChannelDirection, StructType, Type, UInt)
+                     ChannelDirection, StructType, UInt)
 
 from typing import Dict, List, Tuple
 import typing
@@ -266,14 +266,14 @@ def ChannelHostMem(read_width: int,
     clk = Clock()
     rst = Reset()
 
-    UpstreamReq = StructType([
+    UpstreamReadReq = StructType([
         ("address", UInt(64)),
         ("length", UInt(32)),
         ("tag", UInt(8)),
     ])
     read = Output(
         Bundle([
-            BundledChannel("req", ChannelDirection.TO, UpstreamReq),
+            BundledChannel("req", ChannelDirection.TO, UpstreamReadReq),
             BundledChannel(
                 "resp", ChannelDirection.FROM,
                 StructType([
@@ -281,11 +281,77 @@ def ChannelHostMem(read_width: int,
                     ("data", Bits(read_width)),
                 ])),
         ]))
+    UpstreamWriteReq = StructType([
+        ("address", UInt(64)),
+        ("tag", UInt(8)),
+        ("data", Bits(write_width)),
+    ])
+    write = Output(
+        Bundle([
+            BundledChannel("req", ChannelDirection.TO, UpstreamWriteReq),
+            BundledChannel("ackTag", ChannelDirection.FROM, UInt(8)),
+        ]))
 
     @generator
     def generate(ports, bundles: esi._ServiceGeneratorBundles):
       read_reqs = [req for req in bundles.to_client_reqs if req.port == 'read']
       ports.read = ChannelHostMemImpl.build_tagged_read_mux(ports, read_reqs)
+      write_reqs = [
+          req for req in bundles.to_client_reqs if req.port == 'write'
+      ]
+      ports.write = ChannelHostMemImpl.build_tagged_write_mux(ports, write_reqs)
+
+    @staticmethod
+    def build_tagged_write_mux(
+        ports, reqs: List[esi._OutputBundleSetter]) -> BundleSignal:
+      """Build the write side of the HostMem service."""
+
+      # If there's no write clients, just return a no-op write bundle
+      if len(reqs) == 0:
+        req, _ = Channel(ChannelHostMemImpl.UpstreamWriteReq).wrap(
+            {
+                "address": 0,
+                "tag": 0,
+                "data": 0
+            }, 0)
+        write_bundle, _ = ChannelHostMemImpl.write.type.pack(req=req)
+        return write_bundle
+
+      # TODO: mux together multiple write clients.
+      assert len(reqs) == 1, "Only one write client supported for now."
+
+      # Build the write request channels and ack wires.
+      write_channels: List[ChannelSignal] = []
+      write_acks = []
+      for req in reqs:
+        # Get the request channel and its data type.
+        reqch = [c.channel for c in req.type.channels if c.name == 'req'][0]
+        data_type = reqch.inner_type.data
+        assert data_type == Bits(
+            write_width
+        ), f"Gearboxing not yet supported. Client {req.client_name}"
+
+        # Write acks to be filled in later.
+        write_ack = Wire(Channel(UInt(8)))
+        write_acks.append(write_ack)
+
+        # Pack up the bundle and assign the request channel.
+        write_req_bundle_type = esi.HostMem.write_req_bundle_type(data_type)
+        bundle_sig, froms = write_req_bundle_type.pack(ackTag=write_ack)
+        tagged_client_req = froms["req"]
+        req.assign(bundle_sig)
+        write_channels.append(tagged_client_req)
+
+      # TODO: re-write the tags and store the client and client tag.
+
+      # Build a channel mux for the write requests.
+      tagged_write_channel = esi.ChannelMux(write_channels)
+      upstream_write_bundle, froms = ChannelHostMemImpl.write.type.pack(
+          req=tagged_write_channel)
+      ack_tag = froms["ackTag"]
+      # TODO: decode the ack tag and assign it to the correct client.
+      write_acks[0].assign(ack_tag)
+      return upstream_write_bundle
 
     @staticmethod
     def build_tagged_read_mux(
@@ -293,7 +359,7 @@ def ChannelHostMem(read_width: int,
       """Build the read side of the HostMem service."""
 
       if len(reqs) == 0:
-        req, req_ready = Channel(ChannelHostMemImpl.UpstreamReq).wrap(
+        req, req_ready = Channel(ChannelHostMemImpl.UpstreamReadReq).wrap(
             {
                 "tag": 0,
                 "length": 0,
@@ -305,7 +371,7 @@ def ChannelHostMem(read_width: int,
       # TODO: mux together multiple read clients.
       assert len(reqs) == 1, "Only one read client supported for now."
 
-      req = Wire(Channel(ChannelHostMemImpl.UpstreamReq))
+      req = Wire(Channel(ChannelHostMemImpl.UpstreamReadReq))
       read_bundle, froms = ChannelHostMemImpl.read.type.pack(req=req)
       resp_chan_ready = Wire(Bits(1))
       resp_data, resp_valid = froms["resp"].unwrap(resp_chan_ready)
@@ -335,7 +401,7 @@ def ChannelHostMem(read_width: int,
 
         # Assign the multiplexed read request to the upstream request.
         req.assign(
-            client_req.transform(lambda r: ChannelHostMemImpl.UpstreamReq({
+            client_req.transform(lambda r: ChannelHostMemImpl.UpstreamReadReq({
                 "address": r.address,
                 "length": 1,
                 "tag": r.tag

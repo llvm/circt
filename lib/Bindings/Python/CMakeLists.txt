@@ -24,6 +24,9 @@ set(PYTHON_BINDINGS_SOURCES
   SeqModule.cpp
   SupportModule.cpp
   SVModule.cpp
+  # Headers must be included explicitly so they are installed.
+  CIRCTModules.h
+  PybindUtils.h
 )
 
 set(PYTHON_BINDINGS_LINK_LIBS
@@ -45,8 +48,12 @@ set(PYTHON_BINDINGS_LINK_LIBS
   CIRCTCAPIRTG
   CIRCTCAPIRtgTool
   CIRCTCAPISeq
+  CIRCTCAPISMT
   CIRCTCAPISV
   CIRCTCAPIVerif
+  CIRCTCAPITransforms
+  # needed for mlirFrozenRewritePatternSetDestroy
+  # but not the actual passes
   MLIRCAPITransforms
 )
 
@@ -211,6 +218,14 @@ declare_mlir_dialect_python_bindings(
   SOURCES
     dialects/verif.py
   DIALECT_NAME verif)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/SMTOps.td
+  SOURCES
+    dialects/smt.py
+  DIALECT_NAME smt)
 
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects

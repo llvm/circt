@@ -304,6 +304,33 @@ def FormalOp : VerifOp<"formal", [
       verif.assert %4 : i1
     }
     ```
+
+    ### Parameters
+    The following parameters have a predefined meaning and are interpreted by
+    tools such as `circt-test` to guide execution of tests:
+
+    - `ignore`: Indicates whether the test should be ignored and skipped. This
+      can be useful for temporarily disabling tests without having to remove
+      them from the input. Must be a _boolean_ value.
+      ```mlir
+      verif.formal @Foo {ignore = true}
+      ```
+
+    - `require_runners`: A list of test runners that may be used to execute this
+      test. This option may be used to force a test to run using one of a few
+      known-good runners, acting like a whitelist. Must be an _array_ of
+      _strings_.
+      ```mlir
+      verif.formal @Foo {require_runners = ["sby", "circt-bmc"]}
+      ```
+
+    - `exclude_runners`: A list of test runners that must not be used to execute
+      this test. This option may be used to exclude a few known-bad runners from
+      executing this test, acting like a blacklist. Must be an _array_ of
+      _strings_.
+      ```mlir
+      verif.formal @Foo {exclude_runners = ["sby", "circt-bmc"]}
+      ```
   }];
   let arguments = (ins
     SymbolNameAttr:$sym_name,

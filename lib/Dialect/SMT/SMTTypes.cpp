@@ -41,7 +41,7 @@ bool smt::isAnySMTValueType(Type type) {
 
 LogicalResult
 BitVectorType::verify(function_ref<InFlightDiagnostic()> emitError,
-                      uint64_t width) {
+                      int64_t width) {
   if (width <= 0U)
     return emitError() << "bit-vector must have at least a width of one";
   return success();
