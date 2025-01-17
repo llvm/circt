@@ -17,6 +17,12 @@
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
 
+namespace circt {
+namespace verif {
+class RequireLike;
+} // namespace verif
+} // namesapce circt
+
 #include "circt/Dialect/Verif/VerifOpInterfaces.h.inc"
 
 #endif // CIRCT_DIALECT_VERIF_VERIFOPINTERFACES_H

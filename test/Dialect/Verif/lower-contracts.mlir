@@ -8,7 +8,7 @@
 // CHECK-NEXT:  %2 = verif.contract %1 : i42 {
 // CHECK-NEXT:    %3 = comb.mul %a, %c9_i42 : i42
 // CHECK-NEXT:    %4 = comb.icmp eq %2, %3 : i42
-// CHECK-NEXT:    verif.assert %4 : i1
+// CHECK-NEXT:    verif.ensure %4 : i1
 // CHECK-NEXT:  }
 // CHECK-NEXT:  hw.output %2 : i42
 // CHECK-NEXT: }

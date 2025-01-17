@@ -35,16 +35,18 @@ struct LowerContractsPass
 };
 
 template <typename TO>
-void replaceContractOp(OpBuilder &builder, RequireLike &op) {
+Operation *replaceContractOp(OpBuilder &builder, RequireLike op, IRMapping &mapping) {
   StringAttr labelAttr;
   if (auto label = op.getLabel())
     labelAttr = builder.getStringAttr(label.value());
 
-  builder.setInsertionPointAfter(op);
-  builder.create<TO>(op.getLoc(), op.getProperty(), op.getEnable(), labelAttr);
-  op.erase();
-}
+  Value enableValue;
+  if (auto enable = op.getEnable())
+    enable = mapping.lookup(enable);
 
+  return builder.create<TO>(op.getLoc(), mapping.lookup(op.getProperty()),
+                            enableValue, labelAttr);
+}
 
 void cloneFanIn(OpBuilder &builder, Operation *opToClone, IRMapping &mapping,
                 DenseSet<Operation *> &seen) {
@@ -64,22 +66,39 @@ void cloneFanIn(OpBuilder &builder, Operation *opToClone, IRMapping &mapping,
       mapping.map(operand, sym);
     }
   }
-  auto *clonedOp = builder.clone(*opToClone, mapping);
+
+  Operation *clonedOp;
+  if (isa<EnsureOp>(opToClone)) {
+    clonedOp = replaceContractOp<AssertOp>(builder, dyn_cast<RequireLike>(*opToClone), mapping);
+  } else if (isa<RequireOp>(opToClone)) {
+    clonedOp = replaceContractOp<AssumeOp>(builder, dyn_cast<RequireLike>(*opToClone), mapping);
+  } else {
+    clonedOp = builder.clone(*opToClone, mapping);
+  }
   for (auto [x, y] :
        llvm::zip(opToClone->getResults(), clonedOp->getResults())) {
     mapping.map(x, y);
   }
 }
 
-LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
-  OpBuilder mlirModuleBuilder(mlirModule);
-  mlirModuleBuilder.setInsertionPointAfter(hwModule);
+SmallVector<ContractOp> collectContracts(HWModuleOp hwModule) {
   SmallVector<ContractOp> contracts;
   hwModule.walk([&](ContractOp op) {
     contracts.push_back(op);
   });
+  return contracts;
+}
+
+LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
+
+  OpBuilder mlirModuleBuilder(mlirModule);
+  mlirModuleBuilder.setInsertionPointAfter(hwModule);
+
+  SmallVector<ContractOp> contracts = collectContracts(hwModule);
+
   for (unsigned i = 0; i < contracts.size(); i++) {
     auto contract = contracts[i];
+
     auto name =
         mlirModuleBuilder.getStringAttr(hwModule.getNameAttr().getValue() +
                                         "_CheckContract_" + std::to_string(i));
@@ -88,24 +107,6 @@ LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
 
     OpBuilder formalBuilder(formalOp);
     formalBuilder.createBlock(&formalOp.getBody());
-
-    // Convert ensure to assert, require to assume
-    Block *contractBlock = &contract.getBody().front();
-    OpBuilder hwModuleBuilder(hwModule);
-    WalkResult result = contractBlock->walk([&](RequireLike op) {
-      if (isa<EnsureOp>(op)) {
-        replaceContractOp<AssertOp>(hwModuleBuilder, op);
-      } else if (isa<RequireOp>(op)) {
-        replaceContractOp<AssumeOp>(hwModuleBuilder, op);
-      } else {
-        return WalkResult::interrupt();
-      }
-      return WalkResult::advance();
-    });
-
-    if (result.wasInterrupted()) {
-      return failure();
-    }
 
     IRMapping mapping;
     DenseSet<Operation *> seen;
@@ -119,7 +120,7 @@ LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
       mapping.map(result, mapping.lookup(input));
     }
 
-    for (auto &op : contractBlock->getOperations()) {
+    for (auto &op : contract.getBody().front().getOperations()) {
       cloneFanIn(formalBuilder, &op, mapping, seen);
     }
   }
