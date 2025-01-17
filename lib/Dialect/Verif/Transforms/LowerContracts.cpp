@@ -43,12 +43,13 @@ Operation *replaceContractOp(OpBuilder &builder, RequireLike op,
   if (auto enable = op.getEnable())
     enable = mapping.lookup(enable);
 
+  auto loc = op.getLoc();
+  auto property = mapping.lookup(op.getProperty());
+
   if (isa<EnsureOp>(op))
-    return builder.create<AssertOp>(
-        op.getLoc(), mapping.lookup(op.getProperty()), enableValue, labelAttr);
+    return builder.create<AssertOp>(loc, property, enableValue, labelAttr);
   if (isa<RequireOp>(op))
-    return builder.create<AssumeOp>(
-        op.getLoc(), mapping.lookup(op.getProperty()), enableValue, labelAttr);
+    return builder.create<AssumeOp>(loc, property, enableValue, labelAttr);
   return nullptr;
 }
 
@@ -73,6 +74,16 @@ LogicalResult cloneFanIn(OpBuilder &builder, Operation *opToClone,
                                                         operand.getType());
       mapping.map(operand, sym);
     }
+  }
+
+
+  if (auto contract = dyn_cast<ContractOp>(opToClone)) {
+    // Assume it holds, map outputs to inputs
+    for (auto [result, input] :
+         llvm::zip(contract.getResults(), contract.getInputs())) {
+      mapping.map(result, mapping.lookup(input));
+    }
+    return success();
   }
 
   Operation *clonedOp;

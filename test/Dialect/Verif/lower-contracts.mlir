@@ -142,3 +142,39 @@ hw.module @NoContract(in %a: i42, out z: i42) {
   %1 = comb.add %a, %0 : i42
   hw.output %1 : i42
 }
+
+// CHECK: verif.formal @TwoContracts_CheckContract_0 {} {
+// CHECK-NEXT:   %0 = verif.symbolic_value : i42
+// CHECK-NEXT:   %c1_i42 = hw.constant 1 : i42
+// CHECK-NEXT:   %1 = comb.shl %0, %c1_i42 : i42
+// CHECK-NEXT:   %c2_i42 = hw.constant 2 : i42
+// CHECK-NEXT:   %2 = comb.mul %0, %c2_i42 : i42
+// CHECK-NEXT:   %3 = comb.icmp eq %1, %2 : i42
+// CHECK-NEXT:   verif.assert %3 : i1
+// CHECK-NEXT: }
+
+// CHECK: verif.formal @TwoContracts_CheckContract_1 {} {
+// CHECK-NEXT:   %0 = verif.symbolic_value : i42
+// CHECK-NEXT:   %c1_i42 = hw.constant 1 : i42
+// CHECK-NEXT:   %1 = comb.shl %0, %c1_i42 : i42
+// CHECK-NEXT:   %2 = comb.add %0, %0 : i42
+// CHECK-NEXT:   %3 = comb.icmp eq %1, %2 : i42
+// CHECK-NEXT:   verif.assert %3 : i1
+// CHECK-NEXT: }
+
+hw.module @TwoContracts(in %a: i42, out z: i42) {
+  %c1_i42 = hw.constant 1 : i42
+  %0 = comb.shl %a, %c1_i42 : i42
+  %1 = verif.contract %0 : i42 {
+    %c2_i42 = hw.constant 2 : i42
+    %2 = comb.mul %a, %c2_i42 : i42
+    %3 = comb.icmp eq %1, %2 : i42
+    verif.ensure %3 : i1
+  }
+  %4 = verif.contract %1 : i42 {
+    %5 = comb.add %a, %a : i42
+    %6 = comb.icmp eq %4, %5 : i42
+    verif.ensure %6 : i1
+  }
+  hw.output %4 : i42
+}
