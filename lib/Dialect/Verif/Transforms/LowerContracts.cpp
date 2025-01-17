@@ -53,17 +53,20 @@ void cloneFanIn(OpBuilder &builder, Operation *opToClone, IRMapping &mapping,
   seen.insert(opToClone);
 
   for (auto operand : opToClone->getOperands()) {
+    if (mapping.contains(operand))
+      continue;
     auto *definingOp = operand.getDefiningOp();
     if (definingOp) {
       cloneFanIn(builder, definingOp, mapping, seen);
-    } else if (!mapping.contains(operand)) {
-      auto sym = builder.create<verif::SymbolicValueOp>(
-          operand.getLoc(), operand.getType());
+    } else {
+      auto sym = builder.create<verif::SymbolicValueOp>(operand.getLoc(),
+                                                        operand.getType());
       mapping.map(operand, sym);
     }
   }
   auto *clonedOp = builder.clone(*opToClone, mapping);
-  for (auto [x, y] : llvm::zip(opToClone->getResults(), clonedOp->getResults())) {
+  for (auto [x, y] :
+       llvm::zip(opToClone->getResults(), clonedOp->getResults())) {
     mapping.map(x, y);
   }
 }
@@ -85,13 +88,6 @@ LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
 
     OpBuilder formalBuilder(formalOp);
     formalBuilder.createBlock(&formalOp.getBody());
-
-    // TODO: We should probably not modify original contract or make sure we've
-    // done the proper rewrite to the original module first before modifying it
-    for (auto [result, input] :
-         llvm::zip(contract.getResults(), contract.getInputs())) {
-      result.replaceAllUsesWith(input);
-    }
 
     // Convert ensure to assert, require to assume
     Block *contractBlock = &contract.getBody().front();
@@ -116,6 +112,11 @@ LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
     for (auto operand : contract.getOperands()) {
       auto *definingOp = operand.getDefiningOp();
       cloneFanIn(formalBuilder, definingOp, mapping, seen);
+    }
+
+    for (auto [result, input] :
+         llvm::zip(contract.getResults(), contract.getInputs())) {
+      mapping.map(result, mapping.lookup(input));
     }
 
     for (auto &op : contractBlock->getOperations()) {
