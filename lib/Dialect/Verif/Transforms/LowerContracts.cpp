@@ -76,7 +76,6 @@ LogicalResult cloneFanIn(OpBuilder &builder, Operation *opToClone,
     }
   }
 
-
   if (auto contract = dyn_cast<ContractOp>(opToClone)) {
     // Assume it holds, map outputs to inputs
     for (auto [result, input] :
