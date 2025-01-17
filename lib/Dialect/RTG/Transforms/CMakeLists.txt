@@ -10,6 +10,7 @@ add_circt_dialect_library(CIRCTRTGTransforms
   LINK_LIBS PRIVATE
   CIRCTRTGDialect
   MLIRIndexDialect
+  MLIRSCFDialect
   MLIRIR
   MLIRPass
 )
