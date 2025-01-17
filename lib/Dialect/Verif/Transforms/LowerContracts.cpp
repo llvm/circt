@@ -63,8 +63,7 @@ LogicalResult cloneFanIn(OpBuilder &builder, Operation *opToClone,
     if (mapping.contains(operand))
       continue;
 
-    auto *definingOp = operand.getDefiningOp();
-    if (definingOp) {
+    if (auto *definingOp = operand.getDefiningOp()) {
       // Recurse and clone defining op
       if (failed(cloneFanIn(builder, definingOp, mapping, seen)))
         return failure();
