@@ -704,16 +704,18 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
     }
 
     // Update verbatims that target operations extracted alongside.
-    mlir::AttrTypeReplacer replacer;
-    replacer.addReplacement(
-        [&innerRefMap](hw::InnerRefAttr ref) -> std::optional<Attribute> {
-          auto it = innerRefMap.find(ref);
-          if (it != innerRefMap.end())
-            return hw::InnerRefAttr::get(it->second.second, ref.getName());
-          return std::nullopt;
-        });
-    for (auto verbatim : verbatims)
-      replacer.replaceElementsIn(verbatim);
+    if (!verbatims.empty()) {
+      mlir::AttrTypeReplacer replacer;
+      replacer.addReplacement(
+          [&innerRefMap](hw::InnerRefAttr ref) -> std::optional<Attribute> {
+            auto it = innerRefMap.find(ref);
+            if (it != innerRefMap.end())
+              return hw::InnerRefAttr::get(it->second.second, ref.getName());
+            return std::nullopt;
+          });
+      for (auto verbatim : verbatims)
+        replacer.replaceElementsIn(verbatim);
+    }
 
     // Connect instance ports to values.
     assert(ports.size() == connectValues.size() &&
