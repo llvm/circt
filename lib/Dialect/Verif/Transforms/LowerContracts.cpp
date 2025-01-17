@@ -78,6 +78,7 @@ LogicalResult cloneFanIn(OpBuilder &builder, Operation *opToClone,
 
   if (auto contract = dyn_cast<ContractOp>(opToClone)) {
     // Assume it holds, map outputs to inputs
+    // TODO: Should inline contract here instead
     for (auto [result, input] :
          llvm::zip(contract.getResults(), contract.getInputs())) {
       mapping.map(result, mapping.lookup(input));
