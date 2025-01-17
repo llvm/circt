@@ -46,9 +46,9 @@ Operation *replaceContractOp(OpBuilder &builder, RequireLike op,
   auto loc = op.getLoc();
   auto property = mapping.lookup(op.getProperty());
 
-  if (isa<EnsureOp>(op))
+  if ((isa<EnsureOp>(op) && !assumeContract) || (isa<RequireOp>(op) && assumeContract))
     return builder.create<AssertOp>(loc, property, enableValue, labelAttr);
-  if (isa<RequireOp>(op))
+  if ((isa<EnsureOp>(op) && assumeContract) || (isa<RequireOp>(op) && !assumeContract))
     return builder.create<AssumeOp>(loc, property, enableValue, labelAttr);
   return nullptr;
 }

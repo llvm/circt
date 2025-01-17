@@ -162,10 +162,10 @@ hw.module @NoContract(in %a: i42, out z: i42) {
 // CHECK-NEXT:   %2 = verif.symbolic_value : i42
 // CHECK-NEXT:   %c2_i42 = hw.constant 2 : i42
 // CHECK-NEXT:   %3 = comb.icmp ult %c1_i42, %c2_i42 : i42
-// CHECK-NEXT:   verif.assume %3 : i1
+// CHECK-NEXT:   verif.assert %3 : i1
 // CHECK-NEXT:   %4 = comb.mul %0, %c2_i42 : i42
 // CHECK-NEXT:   %5 = comb.icmp eq %2, %4 : i42
-// CHECK-NEXT:   verif.assert %5 : i1
+// CHECK-NEXT:   verif.assume %5 : i1
 // CHECK-NEXT:   %6 = comb.add %0, %0 : i42
 // CHECK-NEXT:   %7 = comb.icmp eq %2, %6 : i42
 // CHECK-NEXT:   verif.assert %7 : i1
