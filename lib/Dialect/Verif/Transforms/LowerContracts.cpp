@@ -46,9 +46,11 @@ Operation *replaceContractOp(OpBuilder &builder, RequireLike op,
   auto loc = op.getLoc();
   auto property = mapping.lookup(op.getProperty());
 
-  if ((isa<EnsureOp>(op) && !assumeContract) || (isa<RequireOp>(op) && assumeContract))
+  if ((isa<EnsureOp>(op) && !assumeContract) ||
+      (isa<RequireOp>(op) && assumeContract))
     return builder.create<AssertOp>(loc, property, enableValue, labelAttr);
-  if ((isa<EnsureOp>(op) && assumeContract) || (isa<RequireOp>(op) && !assumeContract))
+  if ((isa<EnsureOp>(op) && assumeContract) ||
+      (isa<RequireOp>(op) && !assumeContract))
     return builder.create<AssumeOp>(loc, property, enableValue, labelAttr);
   return nullptr;
 }
@@ -165,7 +167,9 @@ LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
     }
 
     // Clone body of the contract
-    if (failed(cloneContractBody(contract, formalBuilder, mapping, seen, false))) return failure();
+    if (failed(
+            cloneContractBody(contract, formalBuilder, mapping, seen, false)))
+      return failure();
   }
   return success();
 }
