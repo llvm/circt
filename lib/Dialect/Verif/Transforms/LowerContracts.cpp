@@ -14,7 +14,6 @@
 #include "circt/Dialect/Verif/VerifPasses.h"
 #include "mlir/IR/IRMapping.h"
 
-
 using namespace circt;
 
 namespace circt {
@@ -35,7 +34,8 @@ struct LowerContractsPass
 };
 
 template <typename TO>
-Operation *replaceContractOp(OpBuilder &builder, RequireLike op, IRMapping &mapping) {
+Operation *replaceContractOp(OpBuilder &builder, RequireLike op,
+                             IRMapping &mapping) {
   StringAttr labelAttr;
   if (auto label = op.getLabel())
     labelAttr = builder.getStringAttr(label.value());
@@ -69,9 +69,11 @@ void cloneFanIn(OpBuilder &builder, Operation *opToClone, IRMapping &mapping,
 
   Operation *clonedOp;
   if (isa<EnsureOp>(opToClone)) {
-    clonedOp = replaceContractOp<AssertOp>(builder, dyn_cast<RequireLike>(*opToClone), mapping);
+    clonedOp = replaceContractOp<AssertOp>(
+        builder, dyn_cast<RequireLike>(*opToClone), mapping);
   } else if (isa<RequireOp>(opToClone)) {
-    clonedOp = replaceContractOp<AssumeOp>(builder, dyn_cast<RequireLike>(*opToClone), mapping);
+    clonedOp = replaceContractOp<AssumeOp>(
+        builder, dyn_cast<RequireLike>(*opToClone), mapping);
   } else {
     clonedOp = builder.clone(*opToClone, mapping);
   }
@@ -83,9 +85,7 @@ void cloneFanIn(OpBuilder &builder, Operation *opToClone, IRMapping &mapping,
 
 SmallVector<ContractOp> collectContracts(HWModuleOp hwModule) {
   SmallVector<ContractOp> contracts;
-  hwModule.walk([&](ContractOp op) {
-    contracts.push_back(op);
-  });
+  hwModule.walk([&](ContractOp op) { contracts.push_back(op); });
   return contracts;
 }
 
@@ -125,7 +125,6 @@ LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
     }
   }
   return success();
-
 }
 } // namespace
 

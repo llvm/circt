@@ -21,7 +21,7 @@ namespace circt {
 namespace verif {
 class RequireLike;
 } // namespace verif
-} // namesapce circt
+} // namespace circt
 
 #include "circt/Dialect/Verif/VerifOpInterfaces.h.inc"
 
