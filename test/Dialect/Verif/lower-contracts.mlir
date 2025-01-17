@@ -1,16 +1,15 @@
 // RUN: circt-opt --lower-contracts %s | FileCheck %s
 
 // CHECK: hw.module @Mul9(in %a : i42, out z : i42) {
-// CHECK-NEXT:  %c3_i42 = hw.constant 3 : i42
-// CHECK-NEXT:  %c9_i42 = hw.constant 9 : i42
-// CHECK-NEXT:  %0 = comb.shl %a, %c3_i42 : i42
-// CHECK-NEXT:  %1 = comb.add %a, %0 : i42
-// CHECK-NEXT:  %2 = verif.contract %1 : i42 {
-// CHECK-NEXT:    %3 = comb.mul %a, %c9_i42 : i42
-// CHECK-NEXT:    %4 = comb.icmp eq %2, %3 : i42
-// CHECK-NEXT:    verif.ensure %4 : i1
-// CHECK-NEXT:  }
-// CHECK-NEXT:  hw.output %2 : i42
+// CHECK-NEXT:   %c3_i42 = hw.constant 3 : i42
+// CHECK-NEXT:   %c9_i42 = hw.constant 9 : i42
+// CHECK-NEXT:   %0 = comb.shl %a, %c3_i42 : i42
+// CHECK-NEXT:   %1 = comb.add %a, %0 : i42
+// CHECK-NEXT:   %2 = verif.symbolic_value : i42
+// CHECK-NEXT:   %3 = comb.mul %a, %c9_i42 : i42
+// CHECK-NEXT:   %4 = comb.icmp eq %2, %3 : i42
+// CHECK-NEXT:   verif.assume %4 : i1
+// CHECK-NEXT:   hw.output %2 : i42
 // CHECK-NEXT: }
 
 // CHECK: verif.formal @Mul9_CheckContract_0 {

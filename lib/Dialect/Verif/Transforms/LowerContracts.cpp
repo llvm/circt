@@ -59,56 +59,8 @@ LogicalResult cloneFanIn(OpBuilder &builder, Operation *opToClone,
                          IRMapping &mapping, DenseSet<Operation *> &seen,
                          bool assumeContract);
 
-LogicalResult cloneContractBody(ContractOp &contract, OpBuilder &builder,
-                                IRMapping &mapping, DenseSet<Operation *> &seen,
-                                bool assumeContract) {
-  for (auto &op : contract.getBody().front().getOperations()) {
-    if (failed(cloneFanIn(builder, &op, mapping, seen, assumeContract)))
-      return failure();
-  }
-  return llvm::success();
-}
-
-LogicalResult inlineContract(ContractOp &contract, OpBuilder &builder,
-                             IRMapping &mapping, DenseSet<Operation *> &seen) {
-  for (auto result : contract.getResults()) {
-    auto sym =
-        builder.create<SymbolicValueOp>(result.getLoc(), result.getType());
-    mapping.map(result, sym);
-  }
-  return cloneContractBody(contract, builder, mapping, seen, true);
-}
-
-LogicalResult cloneFanIn(OpBuilder &builder, Operation *opToClone,
-                         IRMapping &mapping, DenseSet<Operation *> &seen,
-                         bool assumeContract) {
-  if (seen.contains(opToClone))
-    return llvm::success();
-  seen.insert(opToClone);
-
-  // Ensure all operands have been mapped
-  for (auto operand : opToClone->getOperands()) {
-    if (mapping.contains(operand))
-      continue;
-
-    if (auto *definingOp = operand.getDefiningOp()) {
-      // Recurse and clone defining op
-      if (failed(
-              cloneFanIn(builder, definingOp, mapping, seen, assumeContract)))
-        return failure();
-    } else {
-      // Create symbolic values for arguments
-      auto sym = builder.create<verif::SymbolicValueOp>(operand.getLoc(),
-                                                        operand.getType());
-      mapping.map(operand, sym);
-    }
-  }
-
-  if (auto contract = dyn_cast<ContractOp>(opToClone)) {
-    // Assume it holds
-    return inlineContract(contract, builder, mapping, seen);
-  }
-
+LogicalResult cloneContractOp(OpBuilder &builder, Operation *opToClone,
+                              IRMapping &mapping, bool assumeContract) {
   Operation *clonedOp;
   // Replace ensure/require ops, otherwise clone
   if (auto requireLike = dyn_cast<RequireLike>(*opToClone)) {
@@ -125,12 +77,72 @@ LogicalResult cloneFanIn(OpBuilder &builder, Operation *opToClone,
        llvm::zip(opToClone->getResults(), clonedOp->getResults())) {
     mapping.map(x, y);
   }
-  return success();
+  return llvm::success();
+}
+
+LogicalResult cloneContractBody(ContractOp &contract, OpBuilder &builder,
+                                IRMapping &mapping, DenseSet<Operation *> &seen,
+                                bool assumeContract, bool shouldCloneFanIn) {
+  for (auto &op : contract.getBody().front().getOperations()) {
+    if (shouldCloneFanIn) {
+      if (failed(cloneFanIn(builder, &op, mapping, seen, assumeContract)))
+        return failure();
+    } else {
+      if (failed(cloneContractOp(builder, &op, mapping, assumeContract)))
+        return failure();
+    }
+  }
+  return llvm::success();
+}
+
+LogicalResult inlineContract(ContractOp &contract, OpBuilder &builder,
+                             IRMapping &mapping, DenseSet<Operation *> &seen,
+                             bool shouldCloneFanIn) {
+  for (auto result : contract.getResults()) {
+    auto sym =
+        builder.create<SymbolicValueOp>(result.getLoc(), result.getType());
+    mapping.map(result, sym);
+  }
+  return cloneContractBody(contract, builder, mapping, seen, true,
+                           shouldCloneFanIn);
+}
+
+LogicalResult cloneFanIn(OpBuilder &builder, Operation *opToClone,
+                         IRMapping &mapping, DenseSet<Operation *> &seen,
+                         bool assumeContract) {
+  if (seen.contains(opToClone))
+    return llvm::success();
+  seen.insert(opToClone);
+
+  // Ensure all operands have been mapped
+  for (auto operand : opToClone->getOperands()) {
+    if (mapping.contains(operand))
+      continue;
+
+    if (auto *definingOp = operand.getDefiningOp()) {
+      // Recurse and clone defining op
+      if (failed(cloneFanIn(builder, definingOp, mapping, seen, assumeContract)))
+        return failure();
+    } else {
+      // Create symbolic values for arguments
+      auto sym = builder.create<verif::SymbolicValueOp>(operand.getLoc(),
+                                                        operand.getType());
+      mapping.map(operand, sym);
+    }
+  }
+
+  if (auto contract = dyn_cast<ContractOp>(opToClone)) {
+    // Assume it holds
+    return inlineContract(contract, builder, mapping, seen, true);
+  }
+
+  return cloneContractOp(builder, opToClone, mapping, assumeContract);
 }
 
 LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
   OpBuilder mlirModuleBuilder(mlirModule);
   mlirModuleBuilder.setInsertionPointAfter(hwModule);
+  OpBuilder hwModuleBuilder(hwModule);
 
   // Collect contract ops
   SmallVector<ContractOp> contracts;
@@ -167,9 +179,21 @@ LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
     }
 
     // Clone body of the contract
-    if (failed(
-            cloneContractBody(contract, formalBuilder, mapping, seen, false)))
+    if (failed(cloneContractBody(contract, formalBuilder, mapping, seen, false,
+                                 true)))
       return failure();
+
+  }
+  for (auto contract : contracts) {
+    // Inline contract into hwModule
+    hwModuleBuilder.setInsertionPointAfter(contract);
+    IRMapping mapping;
+    DenseSet<Operation *> seen;
+    if (failed(inlineContract(contract, hwModuleBuilder, mapping, seen, false)))
+      return failure();
+    for (auto result : contract.getResults())
+      result.replaceAllUsesWith(mapping.lookup(result));
+    contract.erase();
   }
   return success();
 }

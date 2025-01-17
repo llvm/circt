@@ -320,7 +320,8 @@ def FormalOp : VerifOp<"formal", [
 }
 
 def SymbolicValueOp : VerifOp<"symbolic_value", [
-  HasParent<"verif::FormalOp">,
+  // TODO: reenable after we do assume equal replacement for contracts
+  // HasParent<"verif::FormalOp">,
 ]>{
   let summary = "Create a symbolic value for formal verification";
   let description = [{
