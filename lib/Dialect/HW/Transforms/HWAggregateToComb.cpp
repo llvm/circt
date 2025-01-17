@@ -11,7 +11,6 @@
 #include "circt/Dialect/HW/HWPasses.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
 namespace hw {
