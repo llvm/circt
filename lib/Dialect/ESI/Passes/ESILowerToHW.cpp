@@ -159,19 +159,26 @@ public:
     WrapValidReadyOp wrap = dyn_cast<WrapValidReadyOp>(op);
     UnwrapValidReadyOp unwrap = dyn_cast<UnwrapValidReadyOp>(op);
     if (wrap) {
-      if (wrap.getChanOutput().getUsers().empty()) {
+      // Lower away snoop ops.
+      for (auto user : wrap.getChanOutput().getUsers())
+        if (auto snoop = dyn_cast<SnoopValidReadyOp>(user))
+          rewriter.replaceOp(
+              snoop, {wrap.getValid(), wrap.getReady(), wrap.getRawInput()});
+
+      if (ChannelType::hasNoConsumers(wrap.getChanOutput())) {
         auto c1 = rewriter.create<hw::ConstantOp>(wrap.getLoc(),
                                                   rewriter.getI1Type(), 1);
         rewriter.replaceOp(wrap, {nullptr, c1});
         return success();
       }
 
-      if (!wrap.getChanOutput().hasOneUse())
+      if (!ChannelType::hasOneConsumer(wrap.getChanOutput()))
         return rewriter.notifyMatchFailure(
             wrap, "This conversion only supports wrap-unwrap back-to-back. "
                   "Wrap didn't have exactly one use.");
       if (!(unwrap = dyn_cast<UnwrapValidReadyOp>(
-                wrap.getChanOutput().use_begin()->getOwner())))
+                ChannelType::getSingleConsumer(wrap.getChanOutput())
+                    ->getOwner())))
         return rewriter.notifyMatchFailure(
             wrap, "This conversion only supports wrap-unwrap back-to-back. "
                   "Could not find 'unwrap'.");
@@ -189,11 +196,16 @@ public:
       valid = wrap.getValid();
       data = wrap.getRawInput();
       ready = operands[1];
+
+      // Lower away snoop ops.
+      for (auto user : operands[0].getUsers())
+        if (auto snoop = dyn_cast<SnoopValidReadyOp>(user))
+          rewriter.replaceOp(snoop, {valid, ready, data});
     } else {
       return failure();
     }
 
-    if (!wrap.getChanOutput().hasOneUse())
+    if (!ChannelType::hasOneConsumer(wrap.getChanOutput()))
       return rewriter.notifyMatchFailure(wrap, [](Diagnostic &d) {
         d << "This conversion only supports wrap-unwrap back-to-back. "
              "Wrap didn't have exactly one use.";
