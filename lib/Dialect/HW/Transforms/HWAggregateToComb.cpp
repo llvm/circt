@@ -11,6 +11,7 @@
 #include "circt/Dialect/HW/HWPasses.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/APInt.h"
 
 namespace circt {
 namespace hw {
@@ -23,6 +24,8 @@ using namespace mlir;
 using namespace circt;
 
 namespace {
+
+// Lower hw.array_create and hw.array_concat to comb.concat.
 template <typename OpTy>
 struct HWArrayCreateLikeOpConversion : OpConversionPattern<OpTy> {
   using OpConversionPattern<OpTy>::OpConversionPattern;
@@ -30,12 +33,7 @@ struct HWArrayCreateLikeOpConversion : OpConversionPattern<OpTy> {
   LogicalResult
   matchAndRewrite(OpTy op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // Lower to concat.
-    auto inputs = adaptor.getInputs();
-    SmallVector<Value> results;
-    for (auto input : inputs)
-      results.push_back(rewriter.getRemappedValue(input));
-    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, results);
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, adaptor.getInputs());
     return success();
   }
 };
@@ -46,9 +44,10 @@ struct HWAggregateConstantOpConversion
 
   static LogicalResult peelAttribute(Location loc, Attribute attr,
                                      ConversionPatternRewriter &rewriter,
-                                     SmallVector<Value> &results) {
+                                     APInt &intVal) {
     SmallVector<Attribute> worklist;
     worklist.push_back(attr);
+    unsigned nextInsertion = intVal.getBitWidth();
 
     while (!worklist.empty()) {
       auto current = worklist.pop_back_val();
@@ -59,7 +58,9 @@ struct HWAggregateConstantOpConversion
       }
 
       if (auto intAttr = dyn_cast<IntegerAttr>(current)) {
-        results.push_back(rewriter.create<hw::ConstantOp>(loc, intAttr));
+        auto chunk = intAttr.getValue();
+        nextInsertion -= chunk.getBitWidth();
+        intVal.insertBits(chunk, nextInsertion);
         continue;
       }
 
@@ -74,10 +75,13 @@ struct HWAggregateConstantOpConversion
                   ConversionPatternRewriter &rewriter) const override {
     // Lower to concat.
     SmallVector<Value> results;
+    auto bitWidth = hw::getBitWidth(op.getType());
+    assert(bitWidth >= 0 && "bit width must be known for constant");
+    APInt intVal(bitWidth, 0);
     if (failed(peelAttribute(op.getLoc(), adaptor.getFieldsAttr(), rewriter,
-                             results)))
+                             intVal)))
       return failure();
-    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, results);
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(op,  intVal);
     return success();
   }
 };
@@ -96,10 +100,7 @@ struct HWArrayGetOpConversion : OpConversionPattern<hw::ArrayGetOp> {
     if (elemWidth < 0)
       return rewriter.notifyMatchFailure(op.getLoc(), "unknown element width");
 
-    auto lowered = rewriter.getRemappedValue(op.getInput());
-    if (!lowered)
-      return failure();
-
+    auto lowered = adaptor.getInput();
     for (size_t i = 0; i < numElements; ++i)
       results.push_back(rewriter.createOrFold<comb::ExtractOp>(
           op.getLoc(), lowered, i * elemWidth, elemWidth));
@@ -166,7 +167,7 @@ struct HWAggregateToCombPass
 void HWAggregateToCombPass::runOnOperation() {
   ConversionTarget target(getContext());
 
-  // TODO: Add structs.
+  // TODO: Add ArraySliceOp and struct operatons as well.
   target.addIllegalOp<hw::ArrayGetOp, hw::ArrayCreateOp, hw::ArrayConcatOp,
                       hw::AggregateConstantOp>();
 

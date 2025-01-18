@@ -3,7 +3,7 @@
 
 // CHECK-LABEL: @agg_const
 hw.module @agg_const(out out: !hw.array<4xi4>) {
-  // CHECK:      %[[CONST:.+]] = comb.concat %c0_i4, %c1_i4, %c-2_i4, %c-1_i4 : i4, i4, i4, i4
+  // CHECK:      %[[CONST:.+]] = hw.constant 495 : i16
   // CHECK-NEXT: %[[BITCAST:.+]] = hw.bitcast %[[CONST]] : (i16) -> !hw.array<4xi4>
   // CHECK-NEXT: hw.output %[[BITCAST]] : !hw.array<4xi4>
   %0 = hw.aggregate_constant [0 : i4, 1 : i4, -2 : i4, -1 : i4] : !hw.array<4xi4>
@@ -21,16 +21,14 @@ hw.module @array_get_for_port(in %in: !hw.array<5xi4>, out out: i4) {
 }
 
 // CHECK-LABEL: @array_concat
-hw.module @array_concat(in %lhs: !hw.array<2xi4>, in %rhs: !hw.array<3xi4>, out out: i4) {
+hw.module @array_concat(in %lhs: !hw.array<2xi4>, in %rhs: !hw.array<3xi4>, out out: !hw.array<5xi4>) {
   %0 = hw.array_concat %lhs, %rhs : !hw.array<2xi4>, !hw.array<3xi4>
-  %c_i2 = hw.constant 3 : i3
   // CHECK-NEXT: %[[BITCAST_RHS:.+]] = hw.bitcast %rhs : (!hw.array<3xi4>) -> i12
   // CHECK-NEXT: %[[BITCAST_LHS:.+]] = hw.bitcast %lhs : (!hw.array<2xi4>) -> i8
   // CHECK-NEXT: %[[CONCAT:.+]] = comb.concat %[[BITCAST_LHS]], %[[BITCAST_RHS]] : i8, i12
-  // CHECK:      %[[EXTRACT:.+]] = comb.extract %[[CONCAT]] from 12 : (i20) -> i4
-  // CHECK:      hw.output %[[EXTRACT]] : i4
-  %1 = hw.array_get %0[%c_i2] : !hw.array<5xi4>, i3
-  hw.output %1 : i4
+  // CHECK-NEXT: %[[BITCAST_OUT:.+]] = hw.bitcast %[[CONCAT]] : (i20) -> !hw.array<5xi4>
+  // CHECK:      hw.output %[[BITCAST_OUT]]
+  hw.output %0 : !hw.array<5xi4>
 }
 
 hw.module.extern @foo(in %in: !hw.array<4xi2>, out out: !hw.array<4xi2>)
