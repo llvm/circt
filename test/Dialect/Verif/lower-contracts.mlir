@@ -1,26 +1,24 @@
-// RUN: circt-opt --lower-contracts %s | FileCheck %s
+// RUN: circt-opt --lower-contracts --canonicalize --cse %s | FileCheck %s
 
 // CHECK: hw.module @Mul9(in %a : i42, out z : i42) {
-// CHECK-NEXT:   %c3_i42 = hw.constant 3 : i42
 // CHECK-NEXT:   %c9_i42 = hw.constant 9 : i42
-// CHECK-NEXT:   %0 = comb.shl %a, %c3_i42 : i42
-// CHECK-NEXT:   %1 = comb.add %a, %0 : i42
-// CHECK-NEXT:   %2 = verif.symbolic_value : i42
-// CHECK-NEXT:   %3 = comb.mul %a, %c9_i42 : i42
-// CHECK-NEXT:   %4 = comb.icmp eq %2, %3 : i42
-// CHECK-NEXT:   verif.assume %4 : i1
-// CHECK-NEXT:   hw.output %2 : i42
+// CHECK-NEXT:   %0 = verif.symbolic_value : i42
+// CHECK-NEXT:   %1 = comb.mul %a, %c9_i42 : i42
+// CHECK-NEXT:   %2 = comb.icmp eq %0, %1 : i42
+// CHECK-NEXT:   verif.assume %2 : i1
+// CHECK-NEXT:   hw.output %0 : i42
 // CHECK-NEXT: }
 
 // CHECK: verif.formal @Mul9_CheckContract_0 {
-// CHECK-NEXT:    %0 = verif.symbolic_value : i42
-// CHECK-NEXT:    %c3_i42 = hw.constant 3 : i42
-// CHECK-NEXT:    %1 = comb.shl %0, %c3_i42 : i42
-// CHECK-NEXT:    %2 = comb.add %0, %1 : i42
-// CHECK-NEXT:    %c9_i42 = hw.constant 9 : i42
-// CHECK-NEXT:    %3 = comb.mul %0, %c9_i42 : i42
-// CHECK-NEXT:    %4 = comb.icmp eq %2, %3 : i42
-// CHECK-NEXT:    verif.assert %4 : i1
+// CHECK-NEXT:   %c0_i3 = hw.constant 0 : i3
+// CHECK-NEXT:   %c9_i42 = hw.constant 9 : i42
+// CHECK-NEXT:   %0 = verif.symbolic_value : i42
+// CHECK-NEXT:   %1 = comb.extract %0 from 0 : (i42) -> i39
+// CHECK-NEXT:   %2 = comb.concat %1, %c0_i3 : i39, i3
+// CHECK-NEXT:   %3 = comb.add %0, %2 : i42
+// CHECK-NEXT:   %4 = comb.mul %0, %c9_i42 : i42
+// CHECK-NEXT:   %5 = comb.icmp eq %3, %4 : i42
+// CHECK-NEXT:   verif.assert %5 : i1
 // CHECK-NEXT: }
 
 hw.module @Mul9(in %a: i42, out z: i42) {
@@ -37,20 +35,23 @@ hw.module @Mul9(in %a: i42, out z: i42) {
 }
 
 // CHECK: verif.formal @CarrySaveCompress3to2_CheckContract_0 {
-// CHECK-NEXT:    %0 = verif.symbolic_value : i42
-// CHECK-NEXT:    %1 = verif.symbolic_value : i42
-// CHECK-NEXT:    %2 = verif.symbolic_value : i42
-// CHECK-NEXT:    %3 = comb.xor %0, %1, %2 : i42
-// CHECK-NEXT:    %4 = comb.and %0, %1 : i42
-// CHECK-NEXT:    %5 = comb.or %0, %1 : i42
-// CHECK-NEXT:    %6 = comb.and %5, %2 : i42
-// CHECK-NEXT:    %7 = comb.or %4, %6 : i42
-// CHECK-NEXT:    %c1_i42 = hw.constant 1 : i42
-// CHECK-NEXT:    %8 = comb.shl %7, %c1_i42 : i42
-// CHECK-NEXT:    %9 = comb.add %0, %1, %2 : i42
-// CHECK-NEXT:    %10 = comb.add %3, %8 : i42
-// CHECK-NEXT:    %11 = comb.icmp eq %9, %10 : i42
-// CHECK-NEXT:    verif.assert %11 : i1
+// CHECK-NEXT:   %false = hw.constant false
+// CHECK-NEXT:   %0 = verif.symbolic_value : i42
+// CHECK-NEXT:   %1 = verif.symbolic_value : i42
+// CHECK-NEXT:   %2 = verif.symbolic_value : i42
+// CHECK-NEXT:   %3 = comb.xor %0, %1, %2 : i42
+// CHECK-NEXT:   %4 = comb.extract %0 from 0 : (i42) -> i41
+// CHECK-NEXT:   %5 = comb.extract %1 from 0 : (i42) -> i41
+// CHECK-NEXT:   %6 = comb.and %4, %5 : i41
+// CHECK-NEXT:   %7 = comb.or %4, %5 : i41
+// CHECK-NEXT:   %8 = comb.extract %2 from 0 : (i42) -> i41
+// CHECK-NEXT:   %9 = comb.and %7, %8 : i41
+// CHECK-NEXT:   %10 = comb.or %6, %9 : i41
+// CHECK-NEXT:   %11 = comb.concat %10, %false : i41, i1
+// CHECK-NEXT:   %12 = comb.add %0, %1, %2 : i42
+// CHECK-NEXT:   %13 = comb.add %3, %11 : i42
+// CHECK-NEXT:   %14 = comb.icmp eq %12, %13 : i42
+// CHECK-NEXT:   verif.assert %14 : i1
 // CHECK-NEXT: }
 
 hw.module @CarrySaveCompress3to2(
@@ -74,27 +75,30 @@ hw.module @CarrySaveCompress3to2(
 }
 
 // CHECK:  verif.formal @ShiftLeft_CheckContract_0 {} {
-// CHECK-NEXT:    %0 = verif.symbolic_value : i8
-// CHECK-NEXT:    %1 = comb.extract %0 from 0 : (i8) -> i1
-// CHECK-NEXT:    %2 = comb.extract %0 from 1 : (i8) -> i1
-// CHECK-NEXT:    %3 = comb.extract %0 from 2 : (i8) -> i1
-// CHECK-NEXT:    %4 = verif.symbolic_value : i8
-// CHECK-NEXT:    %c4_i8 = hw.constant 4 : i8
-// CHECK-NEXT:    %5 = comb.shl %4, %c4_i8 : i8
-// CHECK-NEXT:    %6 = comb.mux %3, %5, %4 : i8
-// CHECK-NEXT:    %c2_i8 = hw.constant 2 : i8
-// CHECK-NEXT:    %7 = comb.shl %6, %c2_i8 : i8
-// CHECK-NEXT:    %8 = comb.mux %2, %7, %6 : i8
-// CHECK-NEXT:    %c1_i8 = hw.constant 1 : i8
-// CHECK-NEXT:    %9 = comb.shl %8, %c1_i8 : i8
-// CHECK-NEXT:    %10 = comb.mux %1, %9, %8 : i8
-// CHECK-NEXT:    %c8_i8 = hw.constant 8 : i8
-// CHECK-NEXT:    %11 = comb.icmp ult %0, %c8_i8 : i8
-// CHECK-NEXT:    verif.assume %11 : i1
-// CHECK-NEXT:    %12 = comb.shl %4, %0 : i8
-// CHECK-NEXT:    %13 = comb.icmp eq %10, %12 : i8
-// CHECK-NEXT:    verif.assert %13 : i1
-// CHECK-NEXT:  }
+// CHECK-NEXT:   %false = hw.constant false
+// CHECK-NEXT:   %c0_i2 = hw.constant 0 : i2
+// CHECK-NEXT:   %c0_i4 = hw.constant 0 : i4
+// CHECK-NEXT:   %c8_i8 = hw.constant 8 : i8
+// CHECK-NEXT:   %0 = verif.symbolic_value : i8
+// CHECK-NEXT:   %1 = comb.extract %0 from 0 : (i8) -> i1
+// CHECK-NEXT:   %2 = comb.extract %0 from 1 : (i8) -> i1
+// CHECK-NEXT:   %3 = comb.extract %0 from 2 : (i8) -> i1
+// CHECK-NEXT:   %4 = verif.symbolic_value : i8
+// CHECK-NEXT:   %5 = comb.extract %4 from 0 : (i8) -> i4
+// CHECK-NEXT:   %6 = comb.concat %5, %c0_i4 : i4, i4
+// CHECK-NEXT:   %7 = comb.mux %3, %6, %4 : i8
+// CHECK-NEXT:   %8 = comb.extract %7 from 0 : (i8) -> i6
+// CHECK-NEXT:   %9 = comb.concat %8, %c0_i2 : i6, i2
+// CHECK-NEXT:   %10 = comb.mux %2, %9, %7 : i8
+// CHECK-NEXT:   %11 = comb.extract %10 from 0 : (i8) -> i7
+// CHECK-NEXT:   %12 = comb.concat %11, %false : i7, i1
+// CHECK-NEXT:   %13 = comb.mux %1, %12, %10 : i8
+// CHECK-NEXT:   %14 = comb.icmp ult %0, %c8_i8 : i8
+// CHECK-NEXT:   verif.assume %14 : i1
+// CHECK-NEXT:   %15 = comb.shl %4, %0 : i8
+// CHECK-NEXT:   %16 = comb.icmp eq %13, %15 : i8
+// CHECK-NEXT:   verif.assert %16 : i1
+// CHECK-NEXT: }
 
 hw.module @ShiftLeft(in %a: i8, in %b: i8, out z: i8) {
   %c4_i8 = hw.constant 4 : i8
@@ -129,10 +133,11 @@ hw.module @ShiftLeft(in %a: i8, in %b: i8, out z: i8) {
 }
 
 // CHECK: hw.module @NoContract(in %a : i42, out z : i42) {
-// CHECK-NEXT:   %c3_i42 = hw.constant 3 : i42
-// CHECK-NEXT:   %0 = comb.shl %a, %c3_i42 : i42
-// CHECK-NEXT:   %1 = comb.add %a, %0 : i42
-// CHECK-NEXT:   hw.output %1 : i42
+// CHECK-NEXT:   %c0_i3 = hw.constant 0 : i3
+// CHECK-NEXT:   %0 = comb.extract %a from 0 : (i42) -> i39
+// CHECK-NEXT:   %1 = comb.concat %0, %c0_i3 : i39, i3
+// CHECK-NEXT:   %2 = comb.add %a, %1 : i42
+// CHECK-NEXT:   hw.output %2 : i42
 // CHECK-NEXT: }
 
 hw.module @NoContract(in %a: i42, out z: i42) {
@@ -143,31 +148,25 @@ hw.module @NoContract(in %a: i42, out z: i42) {
 }
 
 // CHECK: verif.formal @TwoContracts_CheckContract_0 {} {
+// CHECK-NEXT:   %true = hw.constant true
 // CHECK-NEXT:   %0 = verif.symbolic_value : i42
-// CHECK-NEXT:   %c1_i42 = hw.constant 1 : i42
-// CHECK-NEXT:   %1 = comb.shl %0, %c1_i42 : i42
-// CHECK-NEXT:   %c2_i42 = hw.constant 2 : i42
-// CHECK-NEXT:   %2 = comb.icmp ult %c1_i42, %c2_i42 : i42
-// CHECK-NEXT:   verif.assume %2 : i1
-// CHECK-NEXT:   %3 = comb.mul %0, %c2_i42 : i42
-// CHECK-NEXT:   %4 = comb.icmp eq %1, %3 : i42
-// CHECK-NEXT:   verif.assert %4 : i1
+// CHECK-NEXT:   %1 = comb.extract %0 from 0 : (i42) -> i41
+// CHECK-NEXT:   verif.assume %true : i1
+// CHECK-NEXT:   %2 = comb.icmp eq %1, %1 : i41
+// CHECK-NEXT:   verif.assert %2 : i1
 // CHECK-NEXT: }
 
 // CHECK: verif.formal @TwoContracts_CheckContract_1 {} {
+// CHECK-NEXT:   %false = hw.constant false
+// CHECK-NEXT:   %true = hw.constant true
 // CHECK-NEXT:   %0 = verif.symbolic_value : i42
-// CHECK-NEXT:   %c1_i42 = hw.constant 1 : i42
-// CHECK-NEXT:   %1 = comb.shl %0, %c1_i42 : i42
-// CHECK-NEXT:   %2 = verif.symbolic_value : i42
-// CHECK-NEXT:   %c2_i42 = hw.constant 2 : i42
-// CHECK-NEXT:   %3 = comb.icmp ult %c1_i42, %c2_i42 : i42
-// CHECK-NEXT:   verif.assert %3 : i1
-// CHECK-NEXT:   %4 = comb.mul %0, %c2_i42 : i42
-// CHECK-NEXT:   %5 = comb.icmp eq %2, %4 : i42
-// CHECK-NEXT:   verif.assume %5 : i1
-// CHECK-NEXT:   %6 = comb.add %0, %0 : i42
-// CHECK-NEXT:   %7 = comb.icmp eq %2, %6 : i42
-// CHECK-NEXT:   verif.assert %7 : i1
+// CHECK-NEXT:   %1 = verif.symbolic_value : i42
+// CHECK-NEXT:   verif.assert %true : i1
+// CHECK-NEXT:   %2 = comb.extract %0 from 0 : (i42) -> i41
+// CHECK-NEXT:   %3 = comb.concat %2, %false : i41, i1
+// CHECK-NEXT:   %4 = comb.icmp eq %1, %3 : i42
+// CHECK-NEXT:   verif.assume %4 : i1
+// CHECK-NEXT:   verif.assert %4 : i1
 // CHECK-NEXT: }
 
 hw.module @TwoContracts(in %a: i42, out z: i42) {
