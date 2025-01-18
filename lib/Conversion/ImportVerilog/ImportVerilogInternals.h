@@ -156,7 +156,7 @@ struct Context {
 
   /// Helper function to construct conditions for a fixed-size unpacked array in
   /// an `inside` expression.
-  void collectConditionsForUnpackedArray(
+  LogicalResult collectConditionsForUnpackedArray(
       const slang::ast::FixedSizeUnpackedArrayType &slangType,
       Value upackedArrayValue, SmallVector<Value> &conditions, Value lhs,
       Location loc);
