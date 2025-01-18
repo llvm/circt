@@ -85,6 +85,11 @@ struct PrefixingInliner : public InlinerInterface {
       op->setAttr("names", ArrayAttr::get(namesAttr.getContext(), names));
     }
   }
+
+  bool allowSingleBlockOptimization(
+      iterator_range<Region::iterator> inlinedBlocks) const final {
+    return true;
+  }
 };
 } // namespace
 
