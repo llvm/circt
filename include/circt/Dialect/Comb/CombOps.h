@@ -57,6 +57,15 @@ Value createOrFoldNot(Location loc, Value value, OpBuilder &builder,
 Value createOrFoldNot(Value value, ImplicitLocOpBuilder &builder,
                       bool twoState = false);
 
+/// Extract bits from a value.
+void extractBits(OpBuilder &builder, Value val, SmallVectorImpl<Value> &bits);
+
+/// Construct a mux tree for given leaf nodes. `selectors` is the selector for
+/// each level of the tree. Currently the selector is tested from MSB to LSB.
+Value constructMuxTree(OpBuilder &builder, Location loc,
+                       ArrayRef<Value> selectors, ArrayRef<Value> leafNodes,
+                       Value outOfBoundsValue);
+
 } // namespace comb
 } // namespace circt
 

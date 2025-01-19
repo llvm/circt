@@ -29,62 +29,11 @@ using namespace comb;
 // Utility Functions
 //===----------------------------------------------------------------------===//
 
-// Extract individual bits from a value
-static SmallVector<Value> extractBits(ConversionPatternRewriter &rewriter,
-                                      Value val) {
-  assert(val.getType().isInteger() && "expected integer");
-  auto width = val.getType().getIntOrFloatBitWidth();
+// A wrapper for comb::extractBits that returns a SmallVector<Value>.
+static SmallVector<Value> extractBits(OpBuilder &builder, Value val) {
   SmallVector<Value> bits;
-  bits.reserve(width);
-
-  // Check if we can reuse concat operands
-  if (auto concat = val.getDefiningOp<comb::ConcatOp>()) {
-    if (concat.getNumOperands() == width &&
-        llvm::all_of(concat.getOperandTypes(), [](Type type) {
-          return type.getIntOrFloatBitWidth() == 1;
-        })) {
-      // Reverse the operands to match the bit order
-      bits.append(std::make_reverse_iterator(concat.getOperands().end()),
-                  std::make_reverse_iterator(concat.getOperands().begin()));
-      return bits;
-    }
-  }
-
-  // Extract individual bits
-  for (int64_t i = 0; i < width; ++i)
-    bits.push_back(
-        rewriter.createOrFold<comb::ExtractOp>(val.getLoc(), val, i, 1));
-
+  comb::extractBits(builder, val, bits);
   return bits;
-}
-
-// Construct a mux tree for given leaf nodes. `selectors` is the selector for
-// each level of the tree. Currently the selector is tested from MSB to LSB.
-static Value constructMuxTree(ConversionPatternRewriter &rewriter, Location loc,
-                              ArrayRef<Value> selectors,
-                              ArrayRef<Value> leafNodes,
-                              Value outOfBoundsValue) {
-  // Recursive helper function to construct the mux tree
-  std::function<Value(size_t, size_t)> constructTreeHelper =
-      [&](size_t id, size_t level) -> Value {
-    // Base case: at the lowest level, return the result
-    if (level == 0) {
-      // Return the result for the given index. If the index is out of bounds,
-      // return the out-of-bound value.
-      return id < leafNodes.size() ? leafNodes[id] : outOfBoundsValue;
-    }
-
-    auto selector = selectors[level - 1];
-
-    // Recursive case: create muxes for true and false branches
-    auto trueVal = constructTreeHelper(2 * id + 1, level - 1);
-    auto falseVal = constructTreeHelper(2 * id, level - 1);
-
-    // Combine the results with a mux
-    return rewriter.createOrFold<comb::MuxOp>(loc, selector, trueVal, falseVal);
-  };
-
-  return constructTreeHelper(0, llvm::Log2_64_Ceil(leafNodes.size()));
 }
 
 // Construct a mux tree for shift operations. `isLeftShift` controls the
@@ -128,7 +77,8 @@ static Value createShiftLogic(ConversionPatternRewriter &rewriter, Location loc,
   assert(outOfBoundsValue && "outOfBoundsValue must be valid");
 
   // Construct mux tree for shift operation
-  auto result = constructMuxTree(rewriter, loc, bits, nodes, outOfBoundsValue);
+  auto result =
+      comb::constructMuxTree(rewriter, loc, bits, nodes, outOfBoundsValue);
 
   // Add bounds checking
   auto inBound = rewriter.createOrFold<comb::ICmpOp>(
@@ -667,10 +617,21 @@ static void populateCombToAIGConversionPatterns(RewritePatternSet &patterns) {
 
 void ConvertCombToAIGPass::runOnOperation() {
   ConversionTarget target(getContext());
+
+  // Comb is source dialect.
   target.addIllegalDialect<comb::CombDialect>();
   // Keep data movement operations like Extract, Concat and Replicate.
   target.addLegalOp<comb::ExtractOp, comb::ConcatOp, comb::ReplicateOp,
                     hw::BitcastOp, hw::ConstantOp>();
+
+  // Treat array operations as illegal. Strictly speaking, other than array get
+  // operation with non-const index are legal in AIG but array types prevent a
+  // bunch of optimizations so just lower them to integer operations. It's
+  // required to run HWAggregateToComb pass before this pass.
+  target.addIllegalOp<hw::ArrayGetOp, hw::ArrayCreateOp, hw::ArrayConcatOp,
+                      hw::AggregateConstantOp>();
+
+  // AIG is target dialect.
   target.addLegalDialect<aig::AIGDialect>();
 
   // This is a test only option to add logical ops.
