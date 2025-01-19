@@ -1,4 +1,5 @@
 add_circt_dialect_library(CIRCTHWTransforms
+  HWOutlineOps.cpp
   HWPrintInstanceGraph.cpp
   HWSpecialize.cpp
   PrintHWModuleGraph.cpp
