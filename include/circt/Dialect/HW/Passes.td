@@ -95,6 +95,10 @@ def HWAggregateToComb : Pass<"hw-aggregate-to-comb", "hw::HWModuleOp"> {
     This pass lowers aggregate *operations* to comb operations within modules.
     Note that this pass does not lower ports. Ports lowering is handled
     by FlattenIO.
+
+    This pass will change the behavior of out-of-bounds access of arrays,
+    specifically the last element of the array is used as a value for
+    out-of-bounds access.
   }];
   let dependentDialects = ["comb::CombDialect"];
 }

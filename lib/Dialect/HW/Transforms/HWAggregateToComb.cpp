@@ -81,7 +81,7 @@ struct HWAggregateConstantOpConversion
     if (failed(peelAttribute(op.getLoc(), adaptor.getFieldsAttr(), rewriter,
                              intVal)))
       return failure();
-    rewriter.replaceOpWithNewOp<hw::ConstantOp>(op,  intVal);
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, intVal);
     return success();
   }
 };
