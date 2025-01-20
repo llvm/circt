@@ -3,7 +3,6 @@
 kanagawa.design @foo {
 
 // CHECK-LABEL:  kanagawa.class sym @HighLevel {
-// CHECK-NEXT:    %this = kanagawa.this <@foo::@HighLevel> 
 // CHECK-NEXT:    kanagawa.var @single : memref<i32>
 // CHECK-NEXT:    kanagawa.var @array : memref<10xi32>
 // CHECK-NEXT:    kanagawa.method @foo() -> (i32, i32) {
@@ -27,7 +26,6 @@ kanagawa.design @foo {
 
 
 kanagawa.class sym @HighLevel {
-  %this = kanagawa.this <@foo::@HighLevel>
   kanagawa.var @single : memref<i32>
   kanagawa.var @array : memref<10xi32>
 
@@ -55,14 +53,12 @@ kanagawa.class sym @HighLevel {
 
 
 // CHECK-LABEL:  kanagawa.class sym @A {
-// CHECK-NEXT:    %this = kanagawa.this <@foo::@A> 
 // CHECK-NEXT:    %in = kanagawa.port.input "in" sym @in : i1
 // CHECK-NEXT:    %out = kanagawa.port.output "out" sym @out : i1
 // CHECK-NEXT:    %AnonymousPort = kanagawa.port.input sym @AnonymousPort : i1
 // CHECK-NEXT:  }
 
 // CHECK-LABEL:  kanagawa.class sym @LowLevel {
-// CHECK-NEXT:    %this = kanagawa.this <@foo::@LowLevel> 
 // CHECK-NEXT:    %LowLevel_in = kanagawa.port.input "LowLevel_in" sym @LowLevel_in : i1
 // CHECK-NEXT:    %LowLevel_out = kanagawa.port.output "LowLevel_out" sym @LowLevel_out : i1
 // CHECK-NEXT:    %in_wire, %in_wire.out = kanagawa.wire.input @in_wire : i1
@@ -70,12 +66,11 @@ kanagawa.class sym @HighLevel {
 // CHECK-NEXT:    %out_wire = kanagawa.wire.output @out_wire, %true : i1
 // CHECK-NEXT:    %a = kanagawa.instance @a, <@foo::@A> 
 // CHECK-NEXT:    kanagawa.container sym @D {
-// CHECK-NEXT:      %this_0 = kanagawa.this <@foo::@D> 
 // CHECK-NEXT:      %parent = kanagawa.path [#kanagawa.step<parent : !kanagawa.scoperef<@foo::@LowLevel>> : !kanagawa.scoperef<@foo::@LowLevel>]
 // CHECK-NEXT:      %parent.LowLevel_in.ref = kanagawa.get_port %parent, @LowLevel_in : !kanagawa.scoperef<@foo::@LowLevel> -> !kanagawa.portref<in i1>
 // CHECK-NEXT:      %parent.LowLevel_out.ref = kanagawa.get_port %parent, @LowLevel_out : !kanagawa.scoperef<@foo::@LowLevel> -> !kanagawa.portref<out i1>
-// CHECK-NEXT:      %true_1 = hw.constant true
-// CHECK-NEXT:      kanagawa.port.write %parent.LowLevel_in.ref, %true_1 : !kanagawa.portref<in i1>
+// CHECK-NEXT:      %true_0 = hw.constant true
+// CHECK-NEXT:      kanagawa.port.write %parent.LowLevel_in.ref, %true_0 : !kanagawa.portref<in i1>
 // CHECK-NEXT:      %parent.LowLevel_out.ref.val = kanagawa.port.read %parent.LowLevel_out.ref : !kanagawa.portref<out i1>
 // CHECK-NEXT:      %parent.a = kanagawa.path [#kanagawa.step<parent : !kanagawa.scoperef> : !kanagawa.scoperef, #kanagawa.step<child, @a : !kanagawa.scoperef<@foo::@A>> : !kanagawa.scoperef<@foo::@A>]
 // CHECK-NEXT:      %parent.a.in.ref = kanagawa.get_port %parent.a, @in : !kanagawa.scoperef<@foo::@A> -> !kanagawa.portref<in i1>
@@ -86,19 +81,16 @@ kanagawa.class sym @HighLevel {
 // CHECK-NEXT:    }
 
 // CHECK-NEXT:      kanagawa.container "ThisName" sym @ThisSymbol {
-// CHECK-NEXT:        %this_0 = kanagawa.this <@foo::@ThisSymbol> 
 // CHECK-NEXT:      }
 // CHECK-NEXT:  }
 
 kanagawa.class sym @A {
-  %this = kanagawa.this <@foo::@A>
   kanagawa.port.input "in" sym @in : i1
   kanagawa.port.output "out" sym @out : i1
   kanagawa.port.input sym @AnonymousPort : i1
 }
 
 kanagawa.class sym @LowLevel {
-  %this = kanagawa.this <@foo::@LowLevel>
   kanagawa.port.input "LowLevel_in" sym @LowLevel_in : i1
   kanagawa.port.output "LowLevel_out" sym @LowLevel_out : i1
 
@@ -110,7 +102,6 @@ kanagawa.class sym @LowLevel {
   %a = kanagawa.instance @a, <@foo::@A>
 
   kanagawa.container sym @D {
-    %this_d = kanagawa.this <@foo::@D>
     %parent_C = kanagawa.path [
       #kanagawa.step<parent : !kanagawa.scoperef<@foo::@LowLevel>>
     ]
@@ -136,7 +127,6 @@ kanagawa.class sym @LowLevel {
   }
 
   kanagawa.container "ThisName" sym @ThisSymbol {
-    %this2 = kanagawa.this <@foo::@ThisSymbol>
   }
 }
 

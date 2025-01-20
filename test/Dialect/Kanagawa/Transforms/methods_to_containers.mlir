@@ -1,9 +1,7 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(kanagawa.design(kanagawa.class(kanagawa-convert-methods-to-containers)))' %s | FileCheck %s
 
 // CHECK-LABEL:   kanagawa.class sym @ToContainers {
-// CHECK:           %[[VAL_0:.*]] = kanagawa.this <@foo::@ToContainers>
 // CHECK:           kanagawa.container sym @foo {
-// CHECK:             %[[VAL_1:.*]] = kanagawa.this <@foo::@foo>
 // CHECK:             %[[VAL_2:.*]] = kanagawa.port.input "arg0" sym @arg0 : !dc.value<i32>
 // CHECK:             %[[VAL_3:.*]] = kanagawa.port.read %[[VAL_2]] : !kanagawa.portref<in !dc.value<i32>>
 // CHECK:             %[[VAL_4:.*]] = kanagawa.port.output "out0" sym @out0 : !dc.value<i32>
@@ -21,7 +19,6 @@
 
 kanagawa.design @foo {
 kanagawa.class sym @ToContainers {
-  %this = kanagawa.this <@foo::@ToContainers> 
   kanagawa.method.df @foo(%arg0: !dc.value<i32>) -> !dc.value<i32> {
     %token, %output = dc.unpack %arg0 : !dc.value<i32>
     %0:2 = dc.fork [2] %token 

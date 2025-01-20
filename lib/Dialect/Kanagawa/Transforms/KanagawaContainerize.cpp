@@ -58,15 +58,6 @@ struct OutlineContainerPattern : public OpConversionPattern<ContainerOp> {
 
     rewriter.mergeBlocks(op.getBodyBlock(), newContainer.getBodyBlock(), {});
 
-    // Rename the kanagawa.this operation to refer to the proper op.
-    auto thisOp =
-        cast<ThisOp>(cast<ScopeOpInterface>(*newContainer.getOperation())
-                         .getThis()
-                         .getDefiningOp());
-    rewriter.setInsertionPoint(thisOp);
-    rewriter.replaceOpWithNewOp<ThisOp>(thisOp, design.getSymNameAttr(),
-                                        newContainer.getInnerSymAttr());
-
     // Create a container instance op in the parent class.
     rewriter.setInsertionPoint(op);
     rewriter.create<ContainerInstanceOp>(
