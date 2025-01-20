@@ -342,7 +342,7 @@ module {
 // CHECK-DAG:        calyx.assign %mem_0.content_en = %true : i1
 // CHECK-DAG:        calyx.group_done %mem_0.done : i1
 // CHECK-DAG:      }
-// CHECK-DAG:      calyx.group @bb1_0 {
+// CHECK-DAG:      calyx.group @bb0_2 {
 // CHECK-DAG:        calyx.assign %std_slice_5.in = %c4_i32 : i32
 // CHECK-DAG:        calyx.assign %mem_1.addr0 = %std_slice_5.out : i3
 // CHECK-DAG:        calyx.assign %mem_1.content_en = %true : i1
@@ -351,7 +351,7 @@ module {
 // CHECK-DAG:        calyx.assign %load_1_reg.write_en = %mem_1.done : i1
 // CHECK-DAG:        calyx.group_done %load_1_reg.done : i1
 // CHECK-DAG:      }
-// CHECK-DAG:      calyx.group @bb1_1 {
+// CHECK-DAG:      calyx.group @bb0_3 {
 // CHECK-DAG:        calyx.assign %std_slice_4.in = %c1_i32 : i32
 // CHECK-DAG:        calyx.assign %mem_0.addr0 = %std_slice_4.out : i3
 // CHECK-DAG:        calyx.assign %mem_0.write_data = %load_1_reg.out : i32
@@ -359,7 +359,7 @@ module {
 // CHECK-DAG:        calyx.assign %mem_0.content_en = %true : i1
 // CHECK-DAG:        calyx.group_done %mem_0.done : i1
 // CHECK-DAG:      }
-// CHECK-DAG:      calyx.group @bb2_0 {
+// CHECK-DAG:      calyx.group @bb0_4 {
 // CHECK-DAG:        calyx.assign %std_slice_3.in = %c2_i32 : i32
 // CHECK-DAG:        calyx.assign %mem_1.addr0 = %std_slice_3.out : i3
 // CHECK-DAG:        calyx.assign %mem_1.content_en = %true : i1
@@ -368,7 +368,7 @@ module {
 // CHECK-DAG:        calyx.assign %load_2_reg.write_en = %mem_1.done : i1
 // CHECK-DAG:        calyx.group_done %load_2_reg.done : i1
 // CHECK-DAG:      }
-// CHECK-DAG:      calyx.group @bb2_1 {
+// CHECK-DAG:      calyx.group @bb0_5 {
 // CHECK-DAG:        calyx.assign %std_slice_2.in = %c4_i32 : i32
 // CHECK-DAG:        calyx.assign %mem_0.addr0 = %std_slice_2.out : i3
 // CHECK-DAG:        calyx.assign %mem_0.write_data = %load_2_reg.out : i32
@@ -376,7 +376,7 @@ module {
 // CHECK-DAG:        calyx.assign %mem_0.content_en = %true : i1
 // CHECK-DAG:        calyx.group_done %mem_0.done : i1
 // CHECK-DAG:      }
-// CHECK-DAG:      calyx.group @bb3_0 {
+// CHECK-DAG:      calyx.group @bb0_6 {
 // CHECK-DAG:        calyx.assign %std_slice_1.in = %c6_i32 : i32
 // CHECK-DAG:        calyx.assign %mem_1.addr0 = %std_slice_1.out : i3
 // CHECK-DAG:        calyx.assign %mem_1.content_en = %true : i1
@@ -385,7 +385,7 @@ module {
 // CHECK-DAG:        calyx.assign %load_3_reg.write_en = %mem_1.done : i1
 // CHECK-DAG:        calyx.group_done %load_3_reg.done : i1
 // CHECK-DAG:      }
-// CHECK-DAG:      calyx.group @bb3_1 {
+// CHECK-DAG:      calyx.group @bb0_7 {
 // CHECK-DAG:        calyx.assign %std_slice_0.in = %c5_i32 : i32
 // CHECK-DAG:        calyx.assign %mem_0.addr0 = %std_slice_0.out : i3
 // CHECK-DAG:        calyx.assign %mem_0.write_data = %load_3_reg.out : i32
@@ -402,16 +402,16 @@ module {
 // CHECK-DAG:            calyx.enable @bb0_1
 // CHECK-DAG:          }
 // CHECK-DAG:          calyx.seq {
-// CHECK-DAG:            calyx.enable @bb1_0
-// CHECK-DAG:            calyx.enable @bb1_1
+// CHECK-DAG:            calyx.enable @bb0_2
+// CHECK-DAG:            calyx.enable @bb0_3
 // CHECK-DAG:          }
 // CHECK-DAG:          calyx.seq {
-// CHECK-DAG:            calyx.enable @bb2_0
-// CHECK-DAG:            calyx.enable @bb2_1
+// CHECK-DAG:            calyx.enable @bb0_4
+// CHECK-DAG:            calyx.enable @bb0_5
 // CHECK-DAG:          }
 // CHECK-DAG:          calyx.seq {
-// CHECK-DAG:            calyx.enable @bb3_0
-// CHECK-DAG:            calyx.enable @bb3_1
+// CHECK-DAG:            calyx.enable @bb0_6
+// CHECK-DAG:            calyx.enable @bb0_7
 // CHECK-DAG:          }
 // CHECK-DAG:        }
 // CHECK-DAG:      }

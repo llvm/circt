@@ -2066,8 +2066,11 @@ private:
           if (auto execRegion = dyn_cast<scf::ExecuteRegionOp>(&op)) {
             rewriter.setInsertionPointToEnd(calyxParOp.getBodyBlock());
             for (auto &execBlock : execRegion.getRegion().getBlocks()) {
+              rewriter.setInsertionPointToEnd(calyxParOp.getBodyBlock());
+              auto seqOp = rewriter.create<calyx::SeqOp>(execRegion.getLoc());
+              rewriter.setInsertionPointToEnd(seqOp.getBodyBlock());
               if (LogicalResult res = scheduleBasicBlock(
-                      rewriter, path, calyxParOp.getBodyBlock(), &execBlock);
+                      rewriter, path, seqOp.getBodyBlock(), &execBlock);
                   res.failed())
                 return res;
             }
