@@ -1941,9 +1941,9 @@ private:
     SmallVector<int64_t> indices = lbVals;
 
     while (true) {
+      insideBuilder.setInsertionPointToEnd(newParBodyBlock);
       // Create an `scf.execute_region` to wrap each unrolled block since
       // `scf.parallel` requires only one block in the body region.
-      insideBuilder.setInsertionPointToEnd(newParBodyBlock);
       auto execRegionOp =
           insideBuilder.create<scf::ExecuteRegionOp>(loc, TypeRange{});
       auto &execRegion = execRegionOp.getRegion();
@@ -2062,20 +2062,26 @@ private:
       } else if (auto *parSchedPtr = std::get_if<ParScheduleable>(&group)) {
         auto parOp = parSchedPtr->parOp;
         auto calyxParOp = rewriter.create<calyx::ParOp>(parOp.getLoc());
-        for (auto &op : parOp.getBody()->getOperations()) {
-          if (auto execRegion = dyn_cast<scf::ExecuteRegionOp>(&op)) {
-            rewriter.setInsertionPointToEnd(calyxParOp.getBodyBlock());
-            for (auto &execBlock : execRegion.getRegion().getBlocks()) {
+
+        WalkResult walkResult =
+            parOp.walk([&](scf::ExecuteRegionOp execRegion) {
               rewriter.setInsertionPointToEnd(calyxParOp.getBodyBlock());
               auto seqOp = rewriter.create<calyx::SeqOp>(execRegion.getLoc());
               rewriter.setInsertionPointToEnd(seqOp.getBodyBlock());
-              if (LogicalResult res = scheduleBasicBlock(
-                      rewriter, path, seqOp.getBodyBlock(), &execBlock);
-                  res.failed())
-                return res;
-            }
-          }
-        }
+
+              for (auto &execBlock : execRegion.getRegion().getBlocks()) {
+                if (LogicalResult res = scheduleBasicBlock(
+                        rewriter, path, seqOp.getBodyBlock(), &execBlock);
+                    res.failed()) {
+                  return WalkResult::interrupt();
+                }
+              }
+              return WalkResult::advance();
+            });
+
+        if (walkResult.wasInterrupted())
+          return failure();
+
       } else if (auto *forSchedPtr = std::get_if<ForScheduleable>(&group);
                  forSchedPtr) {
         auto forOp = forSchedPtr->forOp;
