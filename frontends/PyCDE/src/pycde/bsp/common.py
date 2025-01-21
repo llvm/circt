@@ -383,8 +383,11 @@ def HostmemReadProcessor(read_width: int, hostmem_module,
         ports.upstream = upstream_read_bundle
         return
 
-      # TODO: mux together multiple read clients.
-      assert len(reqs) == 1, "Only one read client supported for now."
+      # Since we use the tag to identify the client, we can't have more than 256
+      # read clients. Supporting more than 256 clients would require
+      # tag-rewriting, which we'll probably have to implement at some point.
+      # TODO: Implement tag-rewriting.
+      assert len(reqs) <= 256, "More than 256 read clients not supported."
 
       # Pack the upstream bundle and leave the request as a wire.
       upstream_req_channel = Wire(Channel(hostmem_module.UpstreamReadReq))
@@ -393,15 +396,16 @@ def HostmemReadProcessor(read_width: int, hostmem_module,
       ports.upstream = upstream_read_bundle
       upstream_resp_channel = froms["resp"]
 
-      for client in reqs:
+      demux = esi.TaggedDemux(len(reqs), upstream_resp_channel.type)(
+          clk=ports.clk, rst=ports.rst, in_=upstream_resp_channel)
+
+      tagged_client_reqs = []
+      for idx, client in enumerate(reqs):
         # Find the response channel in the request bundle.
         resp_type = [
             c.channel for c in client.type.channels if c.name == 'resp'
         ][0]
-        # TODO: route the response to the correct client.
-        # TODO: tag re-writing to deal with tag aliasing.
-        # Pretend to demux the upstream response channel.
-        demuxed_upstream_channel = upstream_resp_channel
+        demuxed_upstream_channel = demux.get_out(idx)
 
         # TODO: Should responses come back out-of-order (interleaved tags),
         # re-order them here so the gearbox doesn't get confused. (Longer term.)
@@ -421,18 +425,24 @@ def HostmemReadProcessor(read_width: int, hostmem_module,
         # Assign the client response to the correct port.
         client_bundle, froms = client.type.pack(resp=client_resp_channel)
         client_req = froms["req"]
+        tagged_client_req = client_req.transform(
+            lambda r: hostmem_module.UpstreamReadReq({
+                "address": r.address,
+                "length": (client_type.data.bitwidth + 7) // 8,
+                # TODO: Change this once we support tag-rewriting.
+                "tag": idx
+            }))
+        tagged_client_reqs.append(tagged_client_req)
+
         # Set the port for the client request.
         setattr(ports, HostmemReadProcessorImpl.reqPortMap[client],
                 client_bundle)
 
-        # Assign the multiplexed read request to the upstream request.
-        # TODO: mux together multiple read clients.
-        upstream_req_channel.assign(
-            client_req.transform(lambda r: hostmem_module.UpstreamReadReq({
-                "address": r.address,
-                "length": (client_type.data.bitwidth + 7) // 8,
-                "tag": r.tag
-            })))
+      # Assign the multiplexed read request to the upstream request.
+      # TODO: Don't release a request until the client is ready to accept
+      # the response otherwise the system could deadlock.
+      muxed_client_reqs = esi.ChannelMux(tagged_client_reqs)
+      upstream_req_channel.assign(muxed_client_reqs)
       HostmemReadProcessorImpl.reqPortMap.clear()
 
   return HostmemReadProcessorImpl
