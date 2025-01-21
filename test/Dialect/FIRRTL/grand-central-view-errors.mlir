@@ -80,3 +80,64 @@ firrtl.circuit "HasID" {
     }>, %c0_ui1 : !firrtl.uint<1>
   }
 }
+
+// -----
+// Attribute missing "class" field.
+
+// In the future, verifier on firrtl.view can catch this.
+firrtl.circuit "MissingClass" {
+  firrtl.module @MissingClass() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+
+    // expected-error @below {{missing 'class' key in {description = "description of foo", name = "foo"}}}
+    firrtl.view "GroundView", <{
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "GroundView",
+      elements = [
+        {
+          // (Missing class key)
+          description = "description of foo",
+          name = "foo"
+        }
+      ]
+    }>, %c0_ui1 : !firrtl.uint<1>
+  }
+}
+
+// -----
+// Top-level attribute missing "defName" field.
+
+// In the future, verifier on firrtl.view can catch this.
+firrtl.circuit "MissingDefName" {
+  firrtl.module @MissingDefName() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+
+    // expected-error @below {{op missing 'defName' at top-level}}
+    firrtl.view "GroundView", <{
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      elements = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          description = "description of foo",
+          name = "foo"
+        }
+      ]
+    }>, %c0_ui1 : !firrtl.uint<1>
+  }
+}
+
+// -----
+// Top-level attribute missing "elements" field.
+
+// In the future, verifier on firrtl.view can catch this.
+firrtl.circuit "MissingElements" {
+  firrtl.module @MissingElements() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+
+    // expected-error @below {{op missing 'elements' at top-level}}
+    firrtl.view "GroundView", <{
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "GroundView"
+    }>, %c0_ui1 : !firrtl.uint<1>
+  }
+}

@@ -1745,6 +1745,16 @@ std::optional<StringAttr> GrandCentralPass::traverseViewBundle(
     SmallVector<InterfaceElemsBuilder> &interfaceBuilder, ViewIntrinsicOp view,
     size_t &idx) {
 
+  // TODO: Require as part of attribute, structurally.
+  if (!bundle.getDefName()) {
+    view.emitOpError("missing 'defName' at top-level");
+    return std::nullopt;
+  }
+  if (!bundle.getElements()) {
+    view.emitOpError("missing 'elements' at top-level");
+    return std::nullopt;
+  }
+
   unsigned lastIndex = interfaceBuilder.size();
   auto iFaceName = StringAttr::get(
       &getContext(), getNamespace().newName(getInterfaceName(bundle)));
@@ -2491,6 +2501,17 @@ void GrandCentralPass::runOnOperation() {
     auto bundle = view.getAugmentedType();
 
     assert(!bundle.isRoot() && "'id' found in firrtl.view");
+
+    if (!bundle.getDefName()) {
+      view.emitOpError("missing 'defName' at top-level");
+      removalError = true;
+      continue;
+    }
+    if (!bundle.getElements()) {
+      view.emitOpError("missing 'elements' at top-level");
+      removalError = true;
+      continue;
+    }
 
     auto viewParentMod = view->getParentOfType<FModuleLike>();
     auto symbolName = getModuleNamespace(viewParentMod)
