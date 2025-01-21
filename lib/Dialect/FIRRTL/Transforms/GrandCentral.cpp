@@ -1460,7 +1460,9 @@ bool GrandCentralPass::traverseViewField(
         // Grab next signal, increment index counter.
         auto index = idx++;
         if (index >= view.getNumOperands()) {
-          view.emitError("more ground types found than view has operands");
+          view.emitOpError("more ground types needed (")
+              << idx << " so far) than view has operands ("
+              << view.getNumOperands() << ")";
           return false;
         }
 
