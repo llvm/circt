@@ -67,7 +67,7 @@ def ConstantTestOp : RTGTestOp<"constant_test", [
 //===- Instruction Formats -------------------------------------------------===//
 
 class InstFormatIOpBase<string mnemonic, int opcode7, int funct3>
-  : RTGTestOp<"rv32i." # mnemonic, [InstructionOpInterface]> {
+  : RTGTestOp<"rv32i." # mnemonic, [InstructionOpAdaptor]> {
 
   let arguments = (ins IntegerRegisterType:$rd,
                        IntegerRegisterType:$rs,
@@ -75,11 +75,9 @@ class InstFormatIOpBase<string mnemonic, int opcode7, int funct3>
 
   let assemblyFormat = "$rd `,` $rs `,` $imm attr-dict";
 
-  let extraClassDeclaration = [{
-    static void printInstructionBinary(llvm::raw_ostream &os,
-                                       ArrayRef<Attribute> operands) {
-      FoldAdaptor adaptor(operands);
-
+  let extraClassDefinition = [{
+    void $cppClass::printInstructionBinary(llvm::raw_ostream &os,
+                                           FoldAdaptor adaptor) {
       auto binary = APInt(12, cast<Imm12Attr>(adaptor.getImm()).getValue())
         .concat(APInt(5, cast<rtg::RegisterAttrInterface>(
           adaptor.getRs()).getClassIndex()))
@@ -93,10 +91,8 @@ class InstFormatIOpBase<string mnemonic, int opcode7, int funct3>
       os << str;
     }
 
-    static void printInstructionAssembly(llvm::raw_ostream &os,
-                                         ArrayRef<Attribute> operands) {
-      FoldAdaptor adaptor(operands);
-
+    void $cppClass::printInstructionAssembly(llvm::raw_ostream &os,
+                                             FoldAdaptor adaptor) {
       os << getOperationName().rsplit('.').second << " "
          << cast<rtg::RegisterAttrInterface>(adaptor.getRd())
               .getRegisterAssembly()
@@ -111,13 +107,13 @@ class InstFormatIOpBase<string mnemonic, int opcode7, int funct3>
 }
 
 class InstFormatIImmOpBase<string mnemonic, int opcode7, int funct12>
-  : RTGTestOp<"rv32i." # mnemonic, [InstructionOpInterface]> {
+  : RTGTestOp<"rv32i." # mnemonic, [InstructionOpAdaptor]> {
 
   let assemblyFormat = "attr-dict";
 
-  let extraClassDeclaration = [{
-    static void printInstructionBinary(llvm::raw_ostream &os,
-                                       ArrayRef<Attribute> operands) {
+  let extraClassDefinition = [{
+    void $cppClass::printInstructionBinary(llvm::raw_ostream &os,
+                                           FoldAdaptor adaptor) {
       auto binary = APInt(12, }] # funct12 # [{)
       .concat(APInt(13, 0))
       .concat(llvm::APInt(7, }] # opcode7 # [{));
@@ -127,8 +123,8 @@ class InstFormatIImmOpBase<string mnemonic, int opcode7, int funct12>
       os << str;
     }
 
-    static void printInstructionAssembly(llvm::raw_ostream &os,
-                                         ArrayRef<Attribute> operands) {
+    void $cppClass::printInstructionAssembly(llvm::raw_ostream &os,
+                                             FoldAdaptor adaptor) {
       os << getOperationName().rsplit('.').second;
     }
   }];
