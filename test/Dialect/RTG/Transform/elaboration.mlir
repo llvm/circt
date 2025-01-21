@@ -300,6 +300,44 @@ rtg.test @scfFor : !rtg.dict<> {
   func.call @dummy2(%5) : (index) -> ()
 }
 
+// CHECK-LABEL: @fixedRegisters
+rtg.test @fixedRegisters : !rtg.dict<> {
+  // CHECK-NEXT: [[RA:%.+]] = rtg.fixed_reg #rtgtest.ra
+  // CHECK-NEXT: [[SP:%.+]] = rtg.fixed_reg #rtgtest.sp
+  // CHECK-NEXT: [[IMM:%.+]] = rtgtest.immediate #rtgtest.imm12<0>
+  // CHECK-NEXT: rtgtest.rv32i.jalr [[RA]], [[SP]], [[IMM]]
+  %ra = rtg.fixed_reg #rtgtest.ra
+  %sp = rtg.fixed_reg #rtgtest.sp
+  %imm = rtgtest.immediate #rtgtest.imm12<0>
+  rtgtest.rv32i.jalr %ra, %sp, %imm
+}
+
+// CHECK-LABEL: @virtualRegisters
+rtg.test @virtualRegisters : !rtg.dict<> {
+  // CHECK-NEXT: [[R0:%.+]] = rtg.virtual_reg [#rtgtest.a0 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg]
+  // CHECK-NEXT: [[R1:%.+]] = rtg.virtual_reg [#rtgtest.s0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg]
+  // CHECK-NEXT: [[IMM:%.+]] = rtgtest.immediate #rtgtest.imm12<0>
+  // CHECK-NEXT: rtgtest.rv32i.jalr [[R0]], [[R1]], [[IMM]]
+  // CHECK-NEXT: rtgtest.rv32i.jalr [[R0]], [[R1]], [[IMM]]
+  %r0 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1]
+  %r1 = rtg.virtual_reg [#rtgtest.s0, #rtgtest.s1]
+  %imm = rtgtest.immediate #rtgtest.imm12<0>
+  rtgtest.rv32i.jalr %r0, %r1, %imm
+  rtgtest.rv32i.jalr %r0, %r1, %imm
+
+  // CHECK-NEXT: [[R2:%.+]] = rtg.virtual_reg [#rtgtest.s0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg]
+  // CHECK-NEXT: rtgtest.rv32i.jalr [[R0]], [[R2]], [[IMM]]
+  // CHECK-NEXT: [[R3:%.+]] = rtg.virtual_reg [#rtgtest.s0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg]
+  // CHECK-NEXT: rtgtest.rv32i.jalr [[R0]], [[R3]], [[IMM]]
+  %0 = index.constant 0
+  %1 = index.constant 1
+  %2 = index.constant 2
+  scf.for %i = %0 to %2 step %1 {
+    %r2 = rtg.virtual_reg [#rtgtest.s0, #rtgtest.s1]
+    rtgtest.rv32i.jalr %r0, %r2, %imm
+  }
+}
+
 // -----
 
 rtg.test @nestedRegionsNotSupported : !rtg.dict<> {
