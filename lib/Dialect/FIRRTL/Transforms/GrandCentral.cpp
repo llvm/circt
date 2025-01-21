@@ -1281,9 +1281,10 @@ std::optional<Attribute> GrandCentralPass::fromViewAttr(ViewIntrinsicOp view,
   }
 
   auto classBase = clazz.getValue();
-  classBase.consume_front("sifive.enterprise.grandcentral.Augmented");
-
-  if (classBase == "BundleType") {
+  if (!classBase.consume_front("sifive.enterprise.grandcentral.Augmented"))
+    view.emitOpError() << "has an invalid AugmentedType class '" << classBase
+                       << "'";
+  else if (classBase == "BundleType") {
     if (dict.getAs<StringAttr>("defName") && dict.getAs<ArrayAttr>("elements"))
       return AugmentedBundleTypeAttr::get(&getContext(), dict);
     view.emitError() << "has an invalid AugmentedBundleType that does not "
@@ -1312,7 +1313,7 @@ std::optional<Attribute> GrandCentralPass::fromViewAttr(ViewIntrinsicOp view,
                         "contain 'name' field:  "
                      << dict;
   } else {
-    view.emitError() << "has an invalid AugmentedType";
+    view.emitOpError() << "has an invalid AugmentedType '" << classBase << "'";
   }
   return std::nullopt;
 }

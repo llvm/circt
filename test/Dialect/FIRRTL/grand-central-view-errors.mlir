@@ -141,3 +141,47 @@ firrtl.circuit "MissingElements" {
     }>, %c0_ui1 : !firrtl.uint<1>
   }
 }
+
+// -----
+// Invalid / unsupported "class" in element.
+
+// In the future, verifier on firrtl.view can catch this.
+firrtl.circuit "InvalidClass" {
+  firrtl.module @InvalidClass() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+
+    // expected-error @below {{op has an invalid AugmentedType class 'invalid class'}}
+    firrtl.view "GroundView", <{
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "GroundView",
+      elements = [
+        {
+          class = "invalid class",
+          name = "foo"
+        }
+      ]
+    }>, %c0_ui1 : !firrtl.uint<1>
+  }
+}
+
+// -----
+// Invalid augmented "class" in element.
+
+// In the future, verifier on firrtl.view can catch this.
+firrtl.circuit "InvalidAug" {
+  firrtl.module @InvalidAug() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+
+    // expected-error @below {{op has an invalid AugmentedType 'GroundTorp'}}
+    firrtl.view "GroundView", <{
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "GroundView",
+      elements = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundTorp",
+          name = "foo"
+        }
+      ]
+    }>, %c0_ui1 : !firrtl.uint<1>
+  }
+}
