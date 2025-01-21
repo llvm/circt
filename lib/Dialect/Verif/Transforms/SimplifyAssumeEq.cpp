@@ -38,7 +38,7 @@ struct SimplifyAssumeEqPass
 };
 
 LogicalResult tryReplaceEqualValues(mlir::Value &from, mlir::Value &to,
-                                 AssumeOp &op, PatternRewriter &rewriter) {
+                                    AssumeOp &op, PatternRewriter &rewriter) {
   auto *fromOp = from.getDefiningOp();
   if (fromOp && dyn_cast<verif::SymbolicValueOp>(fromOp)) {
     rewriter.replaceAllUsesWith(from, to);
@@ -63,7 +63,7 @@ struct AssumeEqRewritePattern : public OpRewritePattern<verif::AssumeOp> {
     if (!icmp)
       return llvm::failure();
 
-    if (icmp.getPredicate() != comb::ICmpPredicate::eq) 
+    if (icmp.getPredicate() != comb::ICmpPredicate::eq)
       return llvm::failure();
 
     auto lhs = icmp.getLhs();
