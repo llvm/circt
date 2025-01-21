@@ -1,7 +1,6 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
 
-import unittest
 from pycde import (Clock, Input, InputChannel, Output, OutputChannel, Module,
                    Reset, generator, types)
 from pycde import esi

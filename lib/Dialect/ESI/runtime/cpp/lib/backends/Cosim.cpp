@@ -451,9 +451,9 @@ public:
 
     // Setup the read side callback.
     ChannelDesc readArg, readResp;
-    if (!rpcClient->getChannelDesc("__cosim_hostmem_read.arg", readArg) ||
-        !rpcClient->getChannelDesc("__cosim_hostmem_read.result", readResp))
-      throw std::runtime_error("Could not find HostMem channels");
+    if (!rpcClient->getChannelDesc("__cosim_hostmem_read_req.data", readArg) ||
+        !rpcClient->getChannelDesc("__cosim_hostmem_read_resp.data", readResp))
+      throw std::runtime_error("Could not find HostMem read channels");
 
     const esi::Type *readRespType =
         getType(ctxt, new StructType(readResp.type(),
@@ -465,23 +465,22 @@ public:
                                       {"length", new UIntType("ui32", 32)},
                                       {"tag", new UIntType("ui8", 8)}}));
 
-    // Get ports, create the function, then connect to it.
+    // Get ports. Unfortunately, we can't model this as a callback since there
+    // will sometimes be multiple responses per request.
     readRespPort = std::make_unique<WriteCosimChannelPort>(
         rpcClient->stub.get(), readResp, readRespType,
-        "__cosim_hostmem_read.result");
+        "__cosim_hostmem_read_resp.data");
     readReqPort = std::make_unique<ReadCosimChannelPort>(
         rpcClient->stub.get(), readArg, readReqType,
-        "__cosim_hostmem_read.arg");
-    read.reset(CallService::Callback::get(acc, AppID("__cosim_hostmem_read"),
-                                          *readRespPort, *readReqPort));
-    read->connect([this](const MessageData &req) { return serviceRead(req); },
-                  true);
+        "__cosim_hostmem_read_req.data");
+    readReqPort->connect(
+        [this](const MessageData &req) { return serviceRead(req); });
 
     // Setup the write side callback.
     ChannelDesc writeArg, writeResp;
     if (!rpcClient->getChannelDesc("__cosim_hostmem_write.arg", writeArg) ||
         !rpcClient->getChannelDesc("__cosim_hostmem_write.result", writeResp))
-      throw std::runtime_error("Could not find HostMem channels");
+      throw std::runtime_error("Could not find HostMem write channels");
 
     const esi::Type *writeRespType =
         getType(ctxt, new UIntType(writeResp.type(), 8));
@@ -506,7 +505,7 @@ public:
 
   // Service the read request as a callback. Simply reads the data from the
   // location specified. TODO: check that the memory has been mapped.
-  MessageData serviceRead(const MessageData &reqBytes) {
+  bool serviceRead(const MessageData &reqBytes) {
     const HostMemReadReq *req = reqBytes.as<HostMemReadReq>();
     acc.getLogger().debug(
         [&](std::string &subsystem, std::string &msg,
@@ -516,16 +515,20 @@ public:
                 " len=" + std::to_string(req->length) +
                 " tag=" + std::to_string(req->tag);
         });
+    // Send one response per 8 bytes.
     uint64_t *dataPtr = reinterpret_cast<uint64_t *>(req->address);
-    HostMemReadResp resp{.data = *dataPtr, .tag = req->tag};
-    acc.getLogger().debug(
-        [&](std::string &subsystem, std::string &msg,
-            std::unique_ptr<std::map<std::string, std::any>> &details) {
-          subsystem = "HostMem";
-          msg = "Read result: data=0x" + toHex(resp.data) +
-                " tag=" + std::to_string(resp.tag);
-        });
-    return MessageData::from(resp);
+    for (uint32_t i = 0, e = (req->length + 7) / 8; i < e; ++i) {
+      HostMemReadResp resp{.data = dataPtr[i], .tag = req->tag};
+      acc.getLogger().debug(
+          [&](std::string &subsystem, std::string &msg,
+              std::unique_ptr<std::map<std::string, std::any>> &details) {
+            subsystem = "HostMem";
+            msg = "Read result: data=0x" + toHex(resp.data) +
+                  " tag=" + std::to_string(resp.tag);
+          });
+      readRespPort->write(MessageData::from(resp));
+    }
+    return true;
   }
 
   // Service a write request as a callback. Simply write the data to the
