@@ -165,6 +165,7 @@ struct ExtractInstancesPass
   /// Cache of the inner ref to the new instances created. Will be used to
   /// create a path to the instance
   DenseMap<InnerRefAttr, InstanceOp> innerRefToInstances;
+  Type stringType, pathType;
 };
 } // end anonymous namespace
 
@@ -186,6 +187,9 @@ void ExtractInstancesPass::runOnOperation() {
   innerRefToInstances.clear();
   extractMetadataClass = {};
   schemaClass = {};
+  auto *context = circuitOp->getContext();
+  stringType = StringType::get(context);
+  pathType = PathType::get(context);
 
   // Walk the IR and gather all the annotations relevant for extraction that
   // appear on instances and the instantiated modules.
@@ -1168,10 +1172,10 @@ void ExtractInstancesPass::createSchema() {
   auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
       unknownLoc, circuitOp.getBodyBlock());
   mlir::Type portsType[] = {
-      StringType::get(context), // name
-      PathType::get(context),   // extracted instance path
-      StringType::get(context), // filename
-      StringType::get(context)  // instance name
+      stringType, // name
+      pathType,   // extracted instance path
+      stringType, // filename
+      stringType  // instance name
   };
   StringRef portFields[] = {"name", "path", "filename", "inst_name"};
 
