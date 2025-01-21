@@ -1298,8 +1298,11 @@ std::optional<Attribute> GrandCentralPass::fromViewAttr(ViewIntrinsicOp view,
   } else if (classBase == "GroundType") {
     auto id = dict.getAs<IntegerAttr>("id");
     if (id) {
-      view.emitError()
-          << "has 'id' field which is only for old annotation encoding";
+      (
+          view.emitOpError()
+          << "has 'id' field which is only for old annotation encoding")
+              .attachNote()
+          << "id within GroundType attribute: " << dict;
       return std::nullopt;
     }
     auto name = dict.getAs<StringAttr>("name");

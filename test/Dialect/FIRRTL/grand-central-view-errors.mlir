@@ -55,3 +55,28 @@ firrtl.circuit "TooManyOperands" {
     }>, %c0_ui1, %c0_ui1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
+// -----
+// View has "id" field on ground type. 
+
+// In the future, verifier on firrtl.view can catch this.
+firrtl.circuit "HasID" {
+  firrtl.module @HasID() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+
+    // expected-error @below {{op has 'id' field which is only for old annotation encoding}}
+    // expected-note @below {{id within GroundType attribute: {class = "sifive.enterprise.grandcentral.AugmentedGroundType", description = "description of foo", id = 1 : i64, name = "foo"}}}
+    firrtl.view "GroundView", <{
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "GroundView",
+      elements = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          description = "description of foo",
+          id = 1,
+          name = "foo"
+        }
+      ]
+    }>, %c0_ui1 : !firrtl.uint<1>
+  }
+}
