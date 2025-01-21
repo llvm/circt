@@ -185,3 +185,46 @@ firrtl.circuit "InvalidAug" {
     }>, %c0_ui1 : !firrtl.uint<1>
   }
 }
+
+// -----
+// Bundle missing 'defName' or `element
+
+firrtl.circuit "InvalidBundleDefNameElements" {
+  firrtl.module @InvalidBundleDefNameElements() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // expected-error @below {{has an invalid AugmentedBundleType that does not contain 'defName' and 'elements' fields: {class = "sifive.enterprise.grandcentral.AugmentedBundleType", description = "description of foo"}}
+    firrtl.view "View", <{
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "GroundView",
+      elements = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+          description = "description of foo",
+          name = "foo"
+        }
+      ]
+    }>, %c0_ui1 : !firrtl.uint<1>
+  }
+}
+
+// -----
+// Bundle missing 'name'.
+
+firrtl.circuit "InvalidBundleNoName" {
+  firrtl.module @InvalidBundleNoName() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // expected-error @below {{missing 'name' field in element of bundle: {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "foo", description = "description of foo", elements = []}}
+    firrtl.view "View", <{
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "GroundView",
+      elements = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+          description = "description of foo",
+          defName = "foo",
+          elements = []
+        }
+      ]
+    }>, %c0_ui1 : !firrtl.uint<1>
+  }
+}

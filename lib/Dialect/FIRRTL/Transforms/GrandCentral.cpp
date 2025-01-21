@@ -1767,6 +1767,10 @@ std::optional<StringAttr> GrandCentralPass::traverseViewBundle(
       return std::nullopt;
 
     auto name = cast<DictionaryAttr>(element).getAs<StringAttr>("name");
+    if (!name) {
+      view.emitError("missing 'name' field in element of bundle: ") << element;
+      return std::nullopt;
+    }
     // auto signalSym = hw::InnerRefAttr::get(iface.sym_nameAttr(), name);
     // TODO: The `append(name.getValue())` in the following should actually be
     // `append(signalSym)`, but this requires that `computeField` and the
