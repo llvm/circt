@@ -50,4 +50,12 @@ def LowerContractsPass : Pass<"lower-contracts", "mlir::ModuleOp"> {
   }];
 }
 
+def SimplifyAssumeEqPass : Pass<"simplify-assume-eq", "hw::HWModuleOp"> {
+  let summary = "Use assume equal statements to simplify symbolic values";
+  let description = [{
+    When a symbolic value is assumed equal to another value, the symbolic value
+    is replaced with its equal value to simplify.
+  }];
+}
+
 #endif // CIRCT_DIALECT_VERIF_PASSES_TD

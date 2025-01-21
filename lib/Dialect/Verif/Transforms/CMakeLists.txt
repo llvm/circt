@@ -3,6 +3,7 @@ add_circt_dialect_library(CIRCTVerifTransforms
   PrepareForFormal.cpp
   LowerFormalToHW.cpp
   LowerContracts.cpp
+  SimplifyAssumeEq.cpp
 
   DEPENDS
   CIRCTVerifTransformsIncGen
