@@ -73,6 +73,30 @@ LogicalResult ChannelBufferOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// Snoop operation functions.
+//===----------------------------------------------------------------------===//
+
+LogicalResult SnoopValidReadyOp::verify() {
+  ChannelType type = getInput().getType();
+  if (type.getSignaling() != ChannelSignaling::ValidReady)
+    return emitOpError("only supports valid-ready signaling");
+  if (type.getInner() != getData().getType())
+    return emitOpError("input and output types must match");
+  return success();
+}
+
+LogicalResult SnoopValidReadyOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  auto i1 = IntegerType::get(context, 1);
+  results.push_back(i1);
+  results.push_back(i1);
+  results.push_back(cast<ChannelType>(operands[0].getType()).getInner());
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // FIFO functions.
 //===----------------------------------------------------------------------===//
 
@@ -159,10 +183,8 @@ LogicalResult WrapValidReadyOp::verify() {
   mlir::TypedValue<ChannelType> chanOut = getChanOutput();
   if (chanOut.getType().getSignaling() != ChannelSignaling::ValidReady)
     return emitOpError("only supports valid-ready signaling");
-  if (!chanOut.hasOneUse() && !chanOut.getUses().empty()) {
-    llvm::errs() << "chanOut: " << chanOut.getLoc() << "\n";
-    return emitOpError("only supports zero or one use");
-  }
+  if (failed(ChannelType::verifyChannel(chanOut)))
+    return failure();
   return success();
 }
 
