@@ -1,7 +1,6 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(kanagawa.design(kanagawa.class(kanagawa.method(kanagawa-reblock))))' %s | FileCheck %s
 
 // CHECK-LABEL:   kanagawa.class sym @Reblock {
-// CHECK:           %[[VAL_0:.*]] = kanagawa.this <@foo::@Reblock>
 // CHECK:           kanagawa.method @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32) -> i32 {
 // CHECK:             %[[VAL_3:.*]] = kanagawa.sblock () -> i32 {
 // CHECK:               %[[VAL_4:.*]] = arith.addi %[[VAL_1]], %[[VAL_2]] : i32
@@ -28,7 +27,6 @@
 
 kanagawa.design @foo {
 kanagawa.class sym @Reblock {
-  %this = kanagawa.this <@foo::@Reblock>
 
   kanagawa.method @foo(%arg0 : i32, %arg1 : i32) -> i32 {
       %0 = arith.addi %arg0, %arg1 : i32

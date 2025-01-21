@@ -57,13 +57,11 @@
 
 kanagawa.design @foo {
 kanagawa.class sym @A {
-  %this = kanagawa.this @A
   kanagawa.port.input "in" sym @in : i1
   kanagawa.port.output "out" sym @out : i1
   kanagawa.port.input "clk" sym @clk : !seq.clock
   
   kanagawa.container@B {
-    %B_this = kanagawa.this @B
     %parent = kanagawa.path [
       #kanagawa.step<parent : !kanagawa.scoperef<@foo::@A>>
     ]
