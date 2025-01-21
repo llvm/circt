@@ -596,10 +596,8 @@ struct GrandCentralPass
   void runOnOperation() override;
 
 private:
-  /// Optionally build an AugmentedType from an attribute.  Return none if the
-  /// attribute is not a dictionary or if it does not match any of the known
-  /// templates for AugmentedTypes.
-  std::optional<Attribute> fromAttr(Attribute attr);
+
+  //===- Annotation handling data -----------------------------------------===//
 
   /// Mapping of ID to leaf ground type and an optional non-local annotation
   /// associated with that ID.
@@ -614,10 +612,13 @@ private:
   /// "TestBenchDirAnnotation" is found.
   StringAttr testbenchDir;
 
-  /// Return a string containing the name of an interface.
-  std::string getInterfaceName(AugmentedBundleTypeAttr bundleType) {
-    return (bundleType.getDefName().getValue()).str();
-  }
+  //===- Annotation handling functions ------------------------------------===//
+
+  /// Optionally build an AugmentedType from an attribute.  Return none if the
+  /// attribute is not a dictionary or if it does not match any of the known
+  /// templates for AugmentedTypes.
+  std::optional<Attribute> fromAttr(Attribute attr);
+
 
   /// Recursively examine an AugmentedType to populate the "mappings" file
   /// (generate XMRs) for this interface.  This does not build new interfaces.
@@ -642,7 +643,19 @@ private:
                  SmallVector<VerbatimXMRbuilder> &xmrElems,
                  SmallVector<InterfaceElemsBuilder> &interfaceBuilder);
 
-  // COPIES OF ABOVE FOR NEW FIRRTL.VIEW
+  /// Return the module associated with this value.
+  igraph::ModuleOpInterface getEnclosingModule(Value value,
+                                               FlatSymbolRefAttr sym = {});
+
+  // Utility that acts like emitOpError, but does _not_ include a note.  The
+  // note in emitOpError includes the entire op which means the **ENTIRE**
+  // FIRRTL circuit.  This doesn't communicate anything useful to the user
+  // other than flooding their terminal.
+  InFlightDiagnostic emitCircuitError(StringRef message = {}) {
+    return emitError(getOperation().getLoc(), "'firrtl.circuit' op " + message);
+  }
+
+  //===- Intrinsic Handling Functions -------------------------------------===//
 
   /// Optionally build an AugmentedType from an attribute.  Return none if the
   /// attribute is not a dictionary or if it does not match any of the known
@@ -674,9 +687,12 @@ private:
                      SmallVector<InterfaceElemsBuilder> &interfaceBuilder,
                      ViewIntrinsicOp view, size_t &idx);
 
-  /// Return the module associated with this value.
-  igraph::ModuleOpInterface getEnclosingModule(Value value,
-                                               FlatSymbolRefAttr sym = {});
+  //===- Common helpers and state -----------------------------------------===//
+
+  /// Return a string containing the name of an interface.
+  std::string getInterfaceName(AugmentedBundleTypeAttr bundleType) {
+    return (bundleType.getDefName().getValue()).str();
+  }
 
   /// Information about how the circuit should be extracted.  This will be
   /// non-empty if an extraction annotation is found.
@@ -698,6 +714,7 @@ private:
   ///
   /// TODO: Investigate a way to not use a pointer here like how `getNamespace`
   /// works below.
+  /// Only used for annotation handling / companions.
   InstancePathCache *instancePaths = nullptr;
 
   /// An instance info analysis that is used to query if modules are in the
@@ -735,14 +752,6 @@ private:
     if (!symbolTable)
       symbolTable = &getAnalysis<SymbolTable>();
     return **symbolTable;
-  }
-
-  // Utility that acts like emitOpError, but does _not_ include a note.  The
-  // note in emitOpError includes the entire op which means the **ENTIRE**
-  // FIRRTL circuit.  This doesn't communicate anything useful to the user
-  // other than flooding their terminal.
-  InFlightDiagnostic emitCircuitError(StringRef message = {}) {
-    return emitError(getOperation().getLoc(), "'firrtl.circuit' op " + message);
   }
 
   // Insert comment delimiters ("// ") after newlines in the description string.
@@ -1503,7 +1512,6 @@ bool GrandCentralPass::traverseViewField(
         // This is the new style of XMRs using RefTypes.  The value substitution
         // index is set to -1, as it will be incremented when generating the
         // string.
-        // Generate the path from the LCA to the module that contains the leaf.
         path += " = {{-1}}";
 
         // Assemble the verbatim op.
