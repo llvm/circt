@@ -596,7 +596,6 @@ struct GrandCentralPass
   void runOnOperation() override;
 
 private:
-
   //===- Annotation handling data -----------------------------------------===//
 
   /// Mapping of ID to leaf ground type and an optional non-local annotation
@@ -618,7 +617,6 @@ private:
   /// attribute is not a dictionary or if it does not match any of the known
   /// templates for AugmentedTypes.
   std::optional<Attribute> fromAttr(Attribute attr);
-
 
   /// Recursively examine an AugmentedType to populate the "mappings" file
   /// (generate XMRs) for this interface.  This does not build new interfaces.
@@ -2516,9 +2514,11 @@ void GrandCentralPass::runOnOperation() {
       continue;
     }
     if (index != view.getNumOperands()) {
-      assert(index < view.getNumOperands() && "this should error while consuming");
+      assert(index < view.getNumOperands() &&
+             "this should error while consuming");
       removalError = true;
-      view.emitOpError() << "has too many operands: " << view.getNumOperands() << " operands but only " << index << " were needed";
+      view.emitOpError() << "has too many operands: " << view.getNumOperands()
+                         << " operands but only " << index << " were needed";
       continue;
     }
 
