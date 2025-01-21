@@ -182,10 +182,9 @@ class EsiTesterTop(Module):
   @generator
   def construct(ports):
     PrintfExample(clk=ports.clk, rst=ports.rst)
-    # Once I get read muxing working, enable all three.
-    # ReadMem(32)(clk=ports.clk, rst=ports.rst)
-    # ReadMem(64)(clk=ports.clk, rst=ports.rst)
-    ReadMem(96)(clk=ports.clk, rst=ports.rst)
+    ReadMem(32)(appid=esi.AppID("readmem", 32), clk=ports.clk, rst=ports.rst)
+    ReadMem(64)(appid=esi.AppID("readmem", 64), clk=ports.clk, rst=ports.rst)
+    ReadMem(96)(appid=esi.AppID("readmem", 96), clk=ports.clk, rst=ports.rst)
     WriteMem(clk=ports.clk, rst=ports.rst)
 
 

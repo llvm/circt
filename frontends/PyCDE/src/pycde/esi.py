@@ -3,7 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from .common import (AppID, Clock, Input, InputChannel, Output, OutputChannel,
-                     _PyProxy, PortError)
+                     _PyProxy, PortError, Reset)
 from .constructs import AssignableSignal, Mux, Wire
 from .module import (generator, modparams, Module, ModuleLikeBuilderBase,
                      PortProxyBase)
@@ -20,6 +20,7 @@ from .circt.dialects import esi as raw_esi, hw, msft
 
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, cast
+import typing
 
 import atexit
 
@@ -786,6 +787,42 @@ def package(sys: System):
 
   import shutil
   shutil.copy(__dir__ / "ESIPrimitives.sv", sys.hw_output_dir)
+
+
+def TaggedDemux(num_clients: int,
+                channel_type: Channel) -> typing.Type["TaggedDemuxImpl"]:
+  """Construct a tagged demultiplexer for a given tagged data type.
+  'tagged_data_type' is assumed to be a struct with a 'tag' field and a 'data'
+  field. Demux the data to the appropriate output channel based on the tag."""
+
+  class TaggedDemuxImpl(Module):
+    clk = Clock()
+    rst = Reset()
+
+    in_ = Input(channel_type)
+
+    output_names = [f"out{i}" for i in range(num_clients)]
+    for idx in range(num_clients):
+      locals()[output_names[idx]] = Output(channel_type)
+
+    def get_out(self, idx: int) -> ChannelSignal:
+      return getattr(self, self.output_names[idx])
+
+    @generator
+    def build(ports) -> None:
+      upstream_ready_wire = Wire(Bits(1))
+      upstream_data, upstream_valid = ports.in_.unwrap(upstream_ready_wire)
+
+      upstream_ready = Bits(1)(1)
+      for idx in range(num_clients):
+        output_valid = upstream_valid & (upstream_data.tag == UInt(8)(idx))
+        output_ch, output_ready = channel_type.wrap(upstream_data, output_valid)
+        setattr(ports, TaggedDemuxImpl.output_names[idx], output_ch)
+        upstream_ready = upstream_ready & output_ready
+
+      upstream_ready_wire.assign(upstream_ready)
+
+  return TaggedDemuxImpl
 
 
 def ChannelDemux2(data_type: Type):
