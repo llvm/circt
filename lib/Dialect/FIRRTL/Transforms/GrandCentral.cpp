@@ -2515,7 +2515,12 @@ void GrandCentralPass::runOnOperation() {
       removalError = true;
       continue;
     }
-    assert(index == view.getNumOperands());
+    if (index != view.getNumOperands()) {
+      assert(index < view.getNumOperands() && "this should error while consuming");
+      removalError = true;
+      view.emitOpError() << "has too many operands: " << view.getNumOperands() << " operands but only " << index << " were needed";
+      continue;
+    }
 
     if (interfaceBuilder.empty())
       continue;
