@@ -191,7 +191,6 @@ firrtl.circuit "InvalidAug" {
 
 firrtl.circuit "InvalidBundleDefNameElements" {
   firrtl.module @InvalidBundleDefNameElements() {
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // expected-error @below {{has an invalid AugmentedBundleType that does not contain 'defName' and 'elements' fields: {class = "sifive.enterprise.grandcentral.AugmentedBundleType", description = "description of foo"}}
     firrtl.view "View", <{
       class = "sifive.enterprise.grandcentral.AugmentedBundleType",
@@ -203,7 +202,7 @@ firrtl.circuit "InvalidBundleDefNameElements" {
           name = "foo"
         }
       ]
-    }>, %c0_ui1 : !firrtl.uint<1>
+    }>
   }
 }
 
@@ -212,7 +211,6 @@ firrtl.circuit "InvalidBundleDefNameElements" {
 
 firrtl.circuit "InvalidBundleNoName" {
   firrtl.module @InvalidBundleNoName() {
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // expected-error @below {{missing 'name' field in element of bundle: {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "foo", description = "description of foo", elements = []}}
     firrtl.view "View", <{
       class = "sifive.enterprise.grandcentral.AugmentedBundleType",
@@ -223,6 +221,33 @@ firrtl.circuit "InvalidBundleNoName" {
           description = "description of foo",
           defName = "foo",
           elements = []
+        }
+      ]
+    }>
+  }
+}
+
+// -----
+// Vector missing 'name'.
+
+firrtl.circuit "InvalidVectorNoName" {
+  firrtl.module @InvalidVectorNoName() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // expected-error @below {{has an invalid AugmentedVectorType that does not contain 'name' and 'elements' fields: {class = "sifive.enterprise.grandcentral.AugmentedVectorType", description = "description of foo", elements = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", description = "description of bar", name = "UNUSED"}]}}
+    firrtl.view "View", <{
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "GroundView",
+      elements = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedVectorType",
+          description = "description of foo",
+          elements = [
+            {
+              class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+              description = "description of bar",
+              name = "UNUSED"
+            }
+          ]
         }
       ]
     }>, %c0_ui1 : !firrtl.uint<1>
