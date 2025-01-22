@@ -341,7 +341,7 @@ Example:
 | Property   | Type   | Description                                          |
 | ---------- | ------ | -------------                                        |
 | class      | string | `sifive.enterprise.grandcentral.AugmentedVectorType` |
-| elements   | array  | List of augmented types.
+| elements   | array  | List of augmented types. |
 
 Creates a SystemVerilog unpacked array.
 
