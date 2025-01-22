@@ -1425,99 +1425,6 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
   return systemCallRes();
 }
 
-FailureOr<Value>
-Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
-                                 Location loc, Value value) {
-  auto systemCallRes =
-      llvm::StringSwitch<std::function<FailureOr<Value>()>>(subroutine.name)
-          // Signed and unsigned system functions.
-          .Case("$signed", [&]() { return value; })
-          .Case("$unsigned", [&]() { return value; })
-
-          // Math functions in SystemVerilog.
-          .Case("$clog2",
-                [&]() -> FailureOr<Value> {
-                  value = convertToSimpleBitVector(value);
-                  if (!value)
-                    return failure();
-                  return (Value)builder.create<moore::Clog2BIOp>(loc, value);
-                })
-          .Case("$ln",
-                [&]() -> Value {
-                  return builder.create<moore::LnBIOp>(loc, value);
-                })
-          .Case("$log10",
-                [&]() -> Value {
-                  return builder.create<moore::Log10BIOp>(loc, value);
-                })
-          .Case("$sin",
-                [&]() -> Value {
-                  return builder.create<moore::SinBIOp>(loc, value);
-                })
-          .Case("$cos",
-                [&]() -> Value {
-                  return builder.create<moore::CosBIOp>(loc, value);
-                })
-          .Case("$tan",
-                [&]() -> Value {
-                  return builder.create<moore::TanBIOp>(loc, value);
-                })
-          .Case("$exp",
-                [&]() -> Value {
-                  return builder.create<moore::ExpBIOp>(loc, value);
-                })
-          .Case("$sqrt",
-                [&]() -> Value {
-                  return builder.create<moore::SqrtBIOp>(loc, value);
-                })
-          .Case("$floor",
-                [&]() -> Value {
-                  return builder.create<moore::FloorBIOp>(loc, value);
-                })
-          .Case("$ceil",
-                [&]() -> Value {
-                  return builder.create<moore::CeilBIOp>(loc, value);
-                })
-          .Case("$asin",
-                [&]() -> Value {
-                  return builder.create<moore::AsinBIOp>(loc, value);
-                })
-          .Case("$acos",
-                [&]() -> Value {
-                  return builder.create<moore::AcosBIOp>(loc, value);
-                })
-          .Case("$atan",
-                [&]() -> Value {
-                  return builder.create<moore::AtanBIOp>(loc, value);
-                })
-          .Case("$sinh",
-                [&]() -> Value {
-                  return builder.create<moore::SinhBIOp>(loc, value);
-                })
-          .Case("$cosh",
-                [&]() -> Value {
-                  return builder.create<moore::CoshBIOp>(loc, value);
-                })
-          .Case("$tanh",
-                [&]() -> Value {
-                  return builder.create<moore::TanhBIOp>(loc, value);
-                })
-          .Case("$asinh",
-                [&]() -> Value {
-                  return builder.create<moore::AsinhBIOp>(loc, value);
-                })
-          .Case("$acosh",
-                [&]() -> Value {
-                  return builder.create<moore::AcoshBIOp>(loc, value);
-                })
-          .Case("$atanh",
-                [&]() -> Value {
-                  return builder.create<moore::AtanhBIOp>(loc, value);
-                })
-          .Default([&]() -> Value { return {}; });
-  return systemCallRes();
-}
-
 LogicalResult Context::collectConditionsForUnpackedArray(
     const slang::ast::FixedSizeUnpackedArrayType &slangType,
     Value upackedArrayValue, SmallVector<Value> &conditions, Value lhs,
@@ -1546,10 +1453,9 @@ LogicalResult Context::collectConditionsForUnpackedArray(
         conditions.push_back(builder.create<moore::EqOp>(loc, lhs, elemValue));
       }
     } else {
-      return mlir::emitError(
-          loc, "only singular values and fixed-size unpacked arrays "
-               "allowed as elements of unpacked arrays in 'inside' "
-               "expressions");
+      assert(false && "Slang guarantees only singular values and fixed-size "
+                      "unpacked arrays allowed as elements of unpacked arrays "
+                      "in 'inside' expressions");
     }
   }
   return success();
