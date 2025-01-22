@@ -1,4 +1,4 @@
-//===- ESIModule.cpp - ESI API pybind module ------------------------------===//
+//===- ESIModule.cpp - ESI API nanobind module ----------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -13,17 +13,16 @@
 #include "circt-c/Dialect/ESI.h"
 #include "mlir-c/Bindings/Python/Interop.h"
 
-#include "mlir/Bindings/Python/PybindAdaptors.h"
+#include "mlir/Bindings/Python/NanobindAdaptors.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Support.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 
-#include "PybindUtils.h"
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
-namespace py = pybind11;
+#include "NanobindUtils.h"
+#include <nanobind/nanobind.h>
+namespace nb = nanobind;
 
 using namespace circt::esi;
 
@@ -34,18 +33,18 @@ using namespace circt::esi;
 /// Container for a Python function that will be called to generate a service.
 class ServiceGenFunc {
 public:
-  ServiceGenFunc(py::object genFunc) : genFunc(std::move(genFunc)) {}
+  ServiceGenFunc(nb::object genFunc) : genFunc(std::move(genFunc)) {}
 
   MlirLogicalResult run(MlirOperation reqOp, MlirOperation declOp,
                         MlirOperation recOp) {
-    py::gil_scoped_acquire acquire;
-    py::object rc = genFunc(reqOp, declOp, recOp);
-    return rc.cast<bool>() ? mlirLogicalResultSuccess()
-                           : mlirLogicalResultFailure();
+    nb::gil_scoped_acquire acquire;
+    nb::object rc = genFunc(reqOp, declOp, recOp);
+    return nb::cast<bool>(rc) ? mlirLogicalResultSuccess()
+                              : mlirLogicalResultFailure();
   }
 
 private:
-  py::object genFunc;
+  nb::object genFunc;
 };
 
 // Mapping from unique identifier to python callback. We use std::string
@@ -61,7 +60,7 @@ static MlirLogicalResult serviceGenFunc(MlirOperation reqOp,
   return iter->getSecond().run(reqOp, declOp, recOp);
 }
 
-void registerServiceGenerator(std::string name, py::object genFunc) {
+void registerServiceGenerator(std::string name, nb::object genFunc) {
   std::string *n = new std::string(name);
   serviceGenFuncLookup.try_emplace(n, ServiceGenFunc(genFunc));
   circtESIRegisterGlobalServiceGenerator(wrap(*n), serviceGenFunc, n);
@@ -77,22 +76,22 @@ public:
     return circtESIAppIDIndexGetChildAppIDsOf(index, op);
   }
 
-  py::object getAppIDPathAttr(MlirOperation fromMod, MlirAttribute appid,
+  nb::object getAppIDPathAttr(MlirOperation fromMod, MlirAttribute appid,
                               MlirLocation loc) const {
     MlirAttribute path =
         circtESIAppIDIndexGetAppIDPath(index, fromMod, appid, loc);
     if (path.ptr == nullptr)
-      return py::none();
-    return py::cast(path);
+      return nb::none();
+    return nb::cast(path);
   }
 
 private:
   CirctESIAppIDIndex index;
 };
 
-using namespace mlir::python::adaptors;
+using namespace mlir::python::nanobind_adaptors;
 
-void circt::python::populateDialectESISubmodule(py::module &m) {
+void circt::python::populateDialectESISubmodule(nb::module_ &m) {
   m.doc() = "ESI Python Native Extension";
   ::registerESIPasses();
 
@@ -104,19 +103,19 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
 
   m.def("registerServiceGenerator", registerServiceGenerator,
         "Register a service generator for a given service name.",
-        py::arg("impl_type"), py::arg("generator"));
+        nb::arg("impl_type"), nb::arg("generator"));
 
   mlir_type_subclass(m, "ChannelType", circtESITypeIsAChannelType)
       .def_classmethod(
           "get",
-          [](py::object cls, MlirType inner, uint32_t signaling = 0,
+          [](nb::object cls, MlirType inner, uint32_t signaling = 0,
              uint64_t dataDelay = 0) {
             if (circtESITypeIsAChannelType(inner))
               return cls(inner);
             return cls(circtESIChannelTypeGet(inner, signaling, dataDelay));
           },
-          py::arg("cls"), py::arg("inner"), py::arg("signaling") = 0,
-          py::arg("dataDelay") = 0)
+          nb::arg("cls"), nb::arg("inner"), nb::arg("signaling") = 0,
+          nb::arg("dataDelay") = 0)
       .def_property_readonly(
           "inner", [](MlirType self) { return circtESIChannelGetInner(self); })
       .def_property_readonly(
@@ -129,53 +128,53 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
   mlir_type_subclass(m, "AnyType", circtESITypeIsAnAnyType)
       .def_classmethod(
           "get",
-          [](py::object cls, MlirContext ctxt) {
+          [](nb::object cls, MlirContext ctxt) {
             return cls(circtESIAnyTypeGet(ctxt));
           },
-          py::arg("self"), py::arg("ctxt") = nullptr);
+          nb::arg("self"), nb::arg("ctxt") = nullptr);
 
   mlir_type_subclass(m, "ListType", circtESITypeIsAListType)
       .def_classmethod(
           "get",
-          [](py::object cls, MlirType inner) {
+          [](nb::object cls, MlirType inner) {
             return cls(circtESIListTypeGet(inner));
           },
-          py::arg("cls"), py::arg("inner"))
+          nb::arg("cls"), nb::arg("inner"))
       .def_property_readonly("element_type", [](MlirType self) {
         return circtESIListTypeGetElementType(self);
       });
 
-  py::enum_<ChannelDirection>(m, "ChannelDirection")
+  nb::enum_<ChannelDirection>(m, "ChannelDirection")
       .value("TO", ChannelDirection::to)
       .value("FROM", ChannelDirection::from);
   mlir_type_subclass(m, "BundleType", circtESITypeIsABundleType)
       .def_classmethod(
           "get",
-          [](py::object cls, std::vector<py::tuple> channelTuples,
+          [](nb::object cls, std::vector<nb::tuple> channelTuples,
              bool resettable, MlirContext ctxt) {
             llvm::SmallVector<CirctESIBundleTypeBundleChannel, 4> channels(
-                llvm::map_range(channelTuples, [ctxt](py::tuple t) {
-                  std::string name = py::cast<std::string>(t[0]);
+                llvm::map_range(channelTuples, [ctxt](nb::tuple t) {
+                  std::string name = nb::cast<std::string>(t[0]);
                   return CirctESIBundleTypeBundleChannel{
                       mlirIdentifierGet(ctxt, mlirStringRefCreate(
                                                   name.data(), name.length())),
-                      (uint32_t)py::cast<ChannelDirection>(t[1]),
-                      py::cast<MlirType>(t[2])};
+                      (uint32_t)nb::cast<ChannelDirection>(t[1]),
+                      nb::cast<MlirType>(t[2])};
                 }));
             return cls(circtESIBundleTypeGet(ctxt, channels.size(),
                                              channels.data(), resettable));
           },
-          py::arg("cls"), py::arg("channels"), py::arg("resettable"),
-          py::arg("ctxt") = nullptr)
+          nb::arg("cls"), nb::arg("channels"), nb::arg("resettable"),
+          nb::arg("ctxt") = nullptr)
       .def_property_readonly("resettable", &circtESIBundleTypeGetResettable)
       .def_property_readonly("channels", [](MlirType bundleType) {
-        std::vector<py::tuple> channels;
+        std::vector<nb::tuple> channels;
         size_t numChannels = circtESIBundleTypeGetNumChannels(bundleType);
         for (size_t i = 0; i < numChannels; ++i) {
           CirctESIBundleTypeBundleChannel channel =
               circtESIBundleTypeGetChannel(bundleType, i);
           MlirStringRef name = mlirIdentifierStr(channel.name);
-          channels.push_back(py::make_tuple(py::str(name.data, name.length),
+          channels.push_back(nb::make_tuple(nb::str(name.data, name.length),
                                             (ChannelDirection)channel.direction,
                                             channel.channelType));
         }
@@ -185,56 +184,56 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
   mlir_attribute_subclass(m, "AppIDAttr", circtESIAttributeIsAnAppIDAttr)
       .def_classmethod(
           "get",
-          [](py::object cls, std::string name, std::optional<uint64_t> index,
+          [](nb::object cls, std::string name, std::optional<uint64_t> index,
              MlirContext ctxt) {
             if (index.has_value())
               return cls(circtESIAppIDAttrGet(ctxt, wrap(name), index.value()));
             return cls(circtESIAppIDAttrGetNoIdx(ctxt, wrap(name)));
           },
-          "Create an AppID attribute", py::arg("cls"), py::arg("name"),
-          py::arg("index") = py::none(), py::arg("context") = py::none())
+          "Create an AppID attribute", nb::arg("cls"), nb::arg("name"),
+          nb::arg("index") = nb::none(), nb::arg("context") = nb::none())
       .def_property_readonly("name",
                              [](MlirAttribute self) {
                                llvm::StringRef name =
                                    unwrap(circtESIAppIDAttrGetName(self));
                                return std::string(name.data(), name.size());
                              })
-      .def_property_readonly("index", [](MlirAttribute self) -> py::object {
+      .def_property_readonly("index", [](MlirAttribute self) -> nb::object {
         uint64_t index;
         if (circtESIAppIDAttrGetIndex(self, &index))
-          return py::cast(index);
-        return py::none();
+          return nb::cast(index);
+        return nb::none();
       });
 
   mlir_attribute_subclass(m, "AppIDPathAttr",
                           circtESIAttributeIsAnAppIDPathAttr)
       .def_classmethod(
           "get",
-          [](py::object cls, MlirAttribute root,
+          [](nb::object cls, MlirAttribute root,
              std::vector<MlirAttribute> path, MlirContext ctxt) {
             return cls(
                 circtESIAppIDAttrPathGet(ctxt, root, path.size(), path.data()));
           },
-          "Create an AppIDPath attribute", py::arg("cls"), py::arg("root"),
-          py::arg("path"), py::arg("context") = py::none())
+          "Create an AppIDPath attribute", nb::arg("cls"), nb::arg("root"),
+          nb::arg("path"), nb::arg("context") = nb::none())
       .def_property_readonly("root", &circtESIAppIDAttrPathGetRoot)
       .def("__len__", &circtESIAppIDAttrPathGetNumComponents)
       .def("__getitem__", &circtESIAppIDAttrPathGetComponent);
 
   m.def("check_inner_type_match", &circtESICheckInnerTypeMatch,
         "Check that two types match, allowing for AnyType in 'expected'.",
-        py::arg("expected"), py::arg("actual"));
+        nb::arg("expected"), nb::arg("actual"));
 
-  py::class_<PyAppIDIndex>(m, "AppIDIndex")
-      .def(py::init<MlirOperation>(), py::arg("root"))
+  nb::class_<PyAppIDIndex>(m, "AppIDIndex")
+      .def(nb::init<MlirOperation>(), nb::arg("root"))
       .def("get_child_appids_of", &PyAppIDIndex::getChildAppIDsOf,
            "Return a dictionary of AppIDAttrs to ArrayAttr of InnerRefAttrs "
            "containing the relative paths to the leaf of the particular "
            "AppIDAttr. Argument MUST be HWModuleLike.",
-           py::arg("mod"))
+           nb::arg("mod"))
       .def("get_appid_path", &PyAppIDIndex::getAppIDPathAttr,
            "Return an array of InnerNameRefAttrs representing the relative "
            "path to 'appid' from 'fromMod'.",
-           py::arg("from_mod"), py::arg("appid"),
-           py::arg("query_site") = py::none());
+           nb::arg("from_mod"), nb::arg("appid"),
+           nb::arg("query_site") = nb::none());
 }

@@ -514,11 +514,11 @@ option(CIRCT_BINDINGS_PYTHON_ENABLED "Enables CIRCT Python bindings." OFF)
 if(CIRCT_BINDINGS_PYTHON_ENABLED)
   message(STATUS "CIRCT Python bindings are enabled.")
   set(MLIR_DISABLE_CONFIGURE_PYTHON_DEV_PACKAGES 0)
-  mlir_detect_pybind11_install()
+  mlir_detect_nanobind_install()
   # Prime the search like mlir_configure_python_dev_modules
   find_package(Python3 3.8 COMPONENTS Interpreter Development)
   find_package(Python3 3.8 COMPONENTS Interpreter Development.Module)
-  find_package(pybind11 2.10 CONFIG REQUIRED)
+  find_package(nanobind 2.4.0 CONFIG REQUIRED)
 else()
   message(STATUS "CIRCT Python bindings are disabled.")
   # Lookup python either way as some integration tests use python without the

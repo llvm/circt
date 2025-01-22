@@ -1,4 +1,4 @@
-//===- SupportModule.cpp - Support API pybind module ----------------------===//
+//===- SupportModule.cpp - Support API nanobind module --------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,43 +8,41 @@
 
 #include "CIRCTModules.h"
 
-#include "mlir/Bindings/Python/PybindAdaptors.h"
+#include "mlir/Bindings/Python/NanobindAdaptors.h"
 
-#include "PybindUtils.h"
+#include "NanobindUtils.h"
 #include "mlir-c/Support.h"
-#include <pybind11/pybind11.h>
-#include <pybind11/pytypes.h>
-#include <pybind11/stl.h>
+#include <nanobind/nanobind.h>
 
-namespace py = pybind11;
+namespace nb = nanobind;
 
 using namespace circt;
-using namespace mlir::python::adaptors;
+using namespace mlir::python::nanobind_adaptors;
 
 /// Populate the support python module.
-void circt::python::populateSupportSubmodule(py::module &m) {
+void circt::python::populateSupportSubmodule(nb::module_ &m) {
   m.doc() = "CIRCT Python utils";
   // Walk with filter.
   m.def(
       "_walk_with_filter",
       [](MlirOperation operation, const std::vector<std::string> &opNames,
-         std::function<py::object(MlirOperation)> callback,
-         py::object walkOrderRaw) {
+         std::function<nb::object(MlirOperation)> callback,
+         nb::object walkOrderRaw) {
         struct UserData {
-          std::function<py::object(MlirOperation)> callback;
+          std::function<nb::object(MlirOperation)> callback;
           bool gotException;
           std::string exceptionWhat;
-          py::object exceptionType;
+          nb::handle exceptionType;
           std::vector<MlirIdentifier> opNames;
         };
 
-        // As we transition from pybind11 to nanobind, the WalkOrder enum and
+        // As we transition from nanobind to nanobind, the WalkOrder enum and
         // automatic casting will be defined as a nanobind enum upstream. Do a
-        // manual conversion that works with either pybind11 or nanobind for
+        // manual conversion that works with either nanobind or nanobind for
         // now. When we're on nanobind in CIRCT, we can go back to automatic
         // casting.
         MlirWalkOrder walkOrder;
-        auto walkOrderRawValue = py::cast<int>(walkOrderRaw.attr("value"));
+        auto walkOrderRawValue = nb::cast<int>(walkOrderRaw.attr("value"));
         switch (walkOrderRawValue) {
         case 0:
           walkOrder = MlirWalkOrder::MlirWalkPreOrder;
@@ -84,15 +82,15 @@ void circt::python::populateSupportSubmodule(py::module &m) {
             return MlirWalkResult::MlirWalkResultAdvance;
 
           try {
-            // As we transition from pybind11 to nanobind, the WalkResult enum
+            // As we transition from nanobind to nanobind, the WalkResult enum
             // and automatic casting will be defined as a nanobind enum
-            // upstream. Do a manual conversion that works with either pybind11
+            // upstream. Do a manual conversion that works with either nanobind
             // or nanobind for now. When we're on nanobind in CIRCT, we can go
             // back to automatic casting.
             MlirWalkResult walkResult;
             auto walkResultRaw = (calleeUserData->callback)(op);
             auto walkResultRawValue =
-                py::cast<int>(walkResultRaw.attr("value"));
+                nb::cast<int>(walkResultRaw.attr("value"));
             switch (walkResultRawValue) {
             case 0:
               walkResult = MlirWalkResult::MlirWalkResultAdvance;
@@ -105,7 +103,7 @@ void circt::python::populateSupportSubmodule(py::module &m) {
               break;
             }
             return walkResult;
-          } catch (py::error_already_set &e) {
+          } catch (nb::python_error &e) {
             calleeUserData->gotException = true;
             calleeUserData->exceptionWhat = e.what();
             calleeUserData->exceptionType = e.type();
@@ -119,6 +117,6 @@ void circt::python::populateSupportSubmodule(py::module &m) {
           throw std::runtime_error(message);
         }
       },
-      py::arg("op"), py::arg("op_names"), py::arg("callback"),
-      py::arg("walk_order"));
+      nb::arg("op"), nb::arg("op_names"), nb::arg("callback"),
+      nb::arg("walk_order"));
 }
