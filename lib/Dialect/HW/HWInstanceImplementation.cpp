@@ -146,11 +146,9 @@ LogicalResult instance_like_impl::verifyOutputs(
   return success();
 }
 
-LogicalResult
-instance_like_impl::verifyParameters(ArrayAttr parameters,
-                                     ArrayAttr moduleParameters,
-                                     ArrayRef<Type> resolvedModParametersRefs, 
-                                     const EmitErrorFn &emitError) {
+LogicalResult instance_like_impl::verifyParameters(
+    ArrayAttr parameters, ArrayAttr moduleParameters,
+    ArrayRef<Type> resolvedModParametersRefs, const EmitErrorFn &emitError) {
   // Check parameters match up.
   auto numParameters = parameters.size();
   if (numParameters != moduleParameters.size()) {
@@ -274,9 +272,8 @@ LogicalResult instance_like_impl::verifyInstanceOfHWModule(
       return failure();
 
     // Check that the parameters are consistent with the referenced module.
-    if (failed(instance_like_impl::verifyParameters(parameters, modParameters, 
-                                                    resolvedModParameters, 
-                                                    emitError)))
+    if (failed(instance_like_impl::verifyParameters(
+            parameters, modParameters, resolvedModParameters, emitError)))
       return failure();
   }
 
