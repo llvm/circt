@@ -4,11 +4,20 @@ target_link_libraries(circt-synth
   CIRCTAIG
   CIRCTAIGToComb
   CIRCTAIGTransforms
+  CIRCTAIGAnalysis
   CIRCTComb
   CIRCTCombToAIG
   CIRCTHW
   CIRCTHWTransforms
   CIRCTSupport
+  CIRCTVerif
+  CIRCTSV
+  CIRCTEmit
+  CIRCTSeq
+  CIRCTOM
+  CIRCTLTL
+  CIRCTDebug
+  CIRCTSim
   MLIRIR
   MLIRParser
   LLVMSupport

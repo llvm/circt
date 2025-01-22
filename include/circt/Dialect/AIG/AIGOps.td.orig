@@ -130,26 +130,4 @@ def OutputOp : AIGOp<"output", [Terminator,
   }];
 }
 
-def DelayOp : AIGOp<"analysis.delay", [Pure]> {
-  let summary = "AIG dialect delay operation (analysis only)";
-  let description = [{
-    The `aig.delay` operation represents an arrival time to each operand.
-    Example:
-    ```mlir
-      // This indicates that the first input has an arrival time of 1, the second
-      // has an arrival time of 2, and the third has an arrival time of 3.
-      // The 2nd and 3rd inputs are same, we need to take the maximum of them
-      // since each operand represents "shrinked" edges of the original graph.
-      %r1 = aig.analysis.delay %a, %b, %b {delays = [1, 2, 3]} : i3
-      =>
-      %r1 = aig.analysis.delay %a, %b {delays = [1, 3]} : i3
-    ```
-  }];
-
-  // TODO: Restrict to HWIntegerType.
-  let arguments = (ins Variadic<AnyType>:$inputs, DenseI64ArrayAttr:$delays);
-  let results = (outs AnyType:$result);
-  let assemblyFormat = "$inputs $delays attr-dict `:` functional-type($inputs, $result)";
-}
-
 #endif // CIRCT_DIALECT_AIG_OPS_TD

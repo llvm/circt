@@ -806,6 +806,30 @@ def LowerSimToSV: Pass<"lower-sim-to-sv",  "mlir::ModuleOp"> {
     "circt::sv::SVDialect",
     "circt::hw::HWDialect"
   ];
+  let options = [
+    Option<"keepBitwiseLogicalOps", "keep-bitwise-logical-ops", "bool", "false",
+           "Keep bitwise logic in the output">
+  ];
+}
+
+//===----------------------------------------------------------------------===//
+// ConvertCombToAIG
+//===----------------------------------------------------------------------===//
+
+def ConvertAIGToComb: Pass<"convert-aig-to-comb",  "hw::HWModuleOp"> {
+  let summary = "Lower AIG ops to Comb ops.";
+  let description = [{
+    This pass converts AIG operations to Comb operations. This is mostly
+    used for verifying post-synthesis results.
+  }];
+  let dependentDialects = [
+    "circt::comb::CombDialect",
+    "circt::aig::AIGDialect",
+  ];
+  let options = [
+    Option<"keepBitwiseLogicalOps", "keep-bitwise-logical-ops", "bool", "false",
+           "Keep bitwise logic in the output">
+  ];
 }
 
 //===----------------------------------------------------------------------===//
@@ -824,21 +848,5 @@ def ConvertCombToAIG: Pass<"convert-comb-to-aig",  "hw::HWModuleOp"> {
                "Specify additional legal ops for testing">,
   ];
 }
-
-//===----------------------------------------------------------------------===//
-// ConvertAIGToComb
-//===----------------------------------------------------------------------===//
-
-def ConvertAIGToComb: Pass<"convert-aig-to-comb", "hw::HWModuleOp"> {
-  let summary = "Lower AIG ops to Comb ops";
-  let description = [{
-    This pass converts AIG operations to Comb operations. This is mostly
-    used for verifying post-synthesis results.
-  }];
-  let dependentDialects = [
-    "circt::comb::CombDialect", "circt::hw::HWDialect"
-  ];
-}
-
 
 #endif // CIRCT_CONVERSION_PASSES_TD

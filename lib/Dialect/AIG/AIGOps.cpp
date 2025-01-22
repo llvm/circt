@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/AIG/AIGOps.h"
+#include "circt/Dialect//Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/PatternMatch.h"
 
@@ -37,8 +38,10 @@ LogicalResult AndInverterOp::canonicalize(AndInverterOp op,
       APInt::getAllOnes(op.getResult().getType().getIntOrFloatBitWidth());
 
   bool invertedConstFound = false;
+  bool flippedFound = false;
 
   for (auto [value, inverted] : llvm::zip(op.getInputs(), op.getInverted())) {
+    bool newInverted = inverted;
     if (auto constOp = value.getDefiningOp<hw::ConstantOp>()) {
       if (inverted) {
         constValue &= ~constOp.getValue();
@@ -49,12 +52,21 @@ LogicalResult AndInverterOp::canonicalize(AndInverterOp op,
       continue;
     }
 
+    if (auto andInverterOp = value.getDefiningOp<aig::AndInverterOp>()) {
+      if (andInverterOp.getInputs().size() == 1 &&
+          andInverterOp.isInverted(0)) {
+        value = andInverterOp.getOperand(0);
+        newInverted = andInverterOp.isInverted(0) ^ inverted;
+        flippedFound = true;
+      }
+    }
+
     auto it = seen.find(value);
     if (it == seen.end()) {
-      seen.insert({value, inverted});
+      seen.insert({value, newInverted});
       uniqueValues.push_back(value);
-      uniqueInverts.push_back(inverted);
-    } else if (it->second != inverted) {
+      uniqueInverts.push_back(newInverted);
+    } else if (it->second != newInverted) {
       // replace with const 0
       rewriter.replaceOpWithNewOp<hw::ConstantOp>(
           op, APInt::getZero(value.getType().getIntOrFloatBitWidth()));
@@ -69,15 +81,49 @@ LogicalResult AndInverterOp::canonicalize(AndInverterOp op,
   }
 
   // No change.
-  if (uniqueValues.size() == op.getInputs().size() ||
+  if ((uniqueValues.size() == op.getInputs().size() && !flippedFound) ||
       (!constValue.isAllOnes() && !invertedConstFound &&
        uniqueValues.size() + 1 == op.getInputs().size()))
     return failure();
 
   if (!constValue.isAllOnes()) {
-    auto constOp = rewriter.create<hw::ConstantOp>(op.getLoc(), constValue);
-    uniqueInverts.push_back(false);
-    uniqueValues.push_back(constOp);
+    // Partially bit blast.
+    auto width = op.getType().getIntOrFloatBitWidth();
+    if (width != 1 && uniqueValues.size() != 0) {
+      Value newOp = rewriter.create<aig::AndInverterOp>(
+          op->getLoc(), uniqueValues, uniqueInverts);
+
+      SmallVector<Value> concatResult;
+      int32_t currentBit = -1, start = 0;
+      for (size_t i = 0; i <= width; ++i) {
+        if (i != width && currentBit == constValue[i])
+          continue;
+
+        size_t len = i - start;
+        if (currentBit == 0) {
+          if (i != 0) {
+            concatResult.push_back(rewriter.create<hw::ConstantOp>(
+                op.getLoc(), APInt::getZero(len)));
+          }
+        } else {
+          if (i != 0) {
+            concatResult.push_back(rewriter.create<comb::ExtractOp>(
+                op.getLoc(), newOp, start, len));
+          }
+        }
+        start = i;
+        if (i != width)
+          currentBit = constValue[i];
+      }
+      std::reverse(concatResult.begin(), concatResult.end());
+      rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, op.getType(),
+                                                  concatResult);
+      return success();
+    } else {
+      auto constOp = rewriter.create<hw::ConstantOp>(op.getLoc(), constValue);
+      uniqueInverts.push_back(false);
+      uniqueValues.push_back(constOp);
+    }
   }
 
   // It means the input is reduced to all ones.
@@ -169,8 +215,8 @@ LogicalResult CutOp::verify() {
   for (auto [input, arg] : llvm::zip(getInputs(), block->getArguments()))
     if (input.getType() != arg.getType())
       return emitOpError("input type ")
-             << input.getType() << " does not match "
-             << "block argument type " << arg.getType();
+             << input.getType() << " does not match " << "block argument type "
+             << arg.getType();
 
   if (getNumResults() != block->getTerminator()->getNumOperands())
     return emitOpError("the number of results and the number of terminator "

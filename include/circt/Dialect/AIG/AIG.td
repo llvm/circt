@@ -15,6 +15,7 @@ def AIG_Dialect : Dialect {
   let name = "aig";
   let cppNamespace = "::circt::aig";
   let summary = "Representation of AIGs";
+  let dependentDialects = ["::circt::comb::CombDialect"];
 }
 
 include "circt/Dialect/AIG/AIGOps.td"

@@ -61,6 +61,32 @@ static Value lowerVariadicAndInverterOp(AndInverterOp op, OperandRange operands,
 
   return Value();
 }
+static Value lowerVariadicAndInverterOp(AndInverterOp op, OperandRange operands,
+                                        ArrayRef<bool> inverts,
+                                        mlir::ImplicitLocOpBuilder &rewriter) {
+  switch (operands.size()) {
+  case 0:
+    assert(0 && "cannot be called with empty operand range");
+    break;
+  case 1:
+    if (inverts[0])
+      return rewriter.create<AndInverterOp>(op.getLoc(), operands[0], true);
+    else
+      return operands[0];
+  case 2:
+    return rewriter.create<AndInverterOp>(op.getLoc(), operands[0], operands[1],
+                                          inverts[0], inverts[1]);
+  default:
+    auto firstHalf = operands.size() / 2;
+    auto lhs =
+        lowerVariadicAndInverterOp(op, operands.take_front(firstHalf),
+                                   inverts.take_front(firstHalf), rewriter);
+    auto rhs =
+        lowerVariadicAndInverterOp(op, operands.drop_front(firstHalf),
+                                   inverts.drop_front(firstHalf), rewriter);
+    return rewriter.create<AndInverterOp>(op.getLoc(), lhs, rhs);
+  }
+}
 
 struct VariadicOpConversion : OpRewritePattern<aig::AndInverterOp> {
   using OpRewritePattern<aig::AndInverterOp>::OpRewritePattern;

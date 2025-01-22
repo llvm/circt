@@ -16,9 +16,17 @@
 #include "circt/Dialect/AIG/AIGDialect.h"
 #include "circt/Dialect/AIG/AIGPasses.h"
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Debug/DebugDialect.h"
+#include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
+#include "circt/Dialect/LTL/LTLDialect.h"
+#include "circt/Dialect/OM/OMDialect.h"
+#include "circt/Dialect/SV/SVDialect.h"
+#include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Sim/SimDialect.h"
+#include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
 #include "mlir/IR/Diagnostics.h"
@@ -85,6 +93,38 @@ static cl::opt<bool>
                   cl::desc("Convert AIG to Comb at the end of the pipeline"),
                   cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool>
+    enableWordToBits("enable-word-to-bits",
+                     cl::desc("Perform bit-blasting in the pipeline"),
+                     cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    allowUnregisteredDialects("allow-unregistered-dialects",
+                              cl::desc("Allow unregistered dialects in the "
+                                       "input file"),
+                              cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    printResourceUsage("print-resource-usage",
+                       cl::desc("Print resource usage of AIG operations"),
+                       cl::init(false), cl::cat(mainCategory));
+static cl::opt<std::string>
+    resourceUsageOutputFile("resource-usage-output",
+                            cl::desc("Output file for resource usage"),
+                            cl::init("-"), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    printLongestPath("print-longest-path",
+                     cl::desc("Print longest path of AIG operations"),
+                     cl::init(false), cl::cat(mainCategory));
+static cl::opt<std::string>
+    longestPathOutputFile("longest-path-output",
+                          cl::desc("Output file for longest path"),
+                          cl::init("-"), cl::cat(mainCategory));
+
+static cl::opt<std::string> topModuleName("top-module",
+                                          cl::desc("Top module name"),
+                                          cl::init(""), cl::cat(mainCategory));
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -119,14 +159,31 @@ static void populateSynthesisPipeline(PassManager &pm) {
   // TODO: LowerWordToBits is not scalable for large designs. Change to
   // conditionally enable the pass once the rest of the pipeline was able to
   // handle multibit operands properly.
-  mpm.addPass(aig::createLowerWordToBits());
+  if (enableWordToBits)
+    mpm.addPass(aig::createLowerWordToBits());
   mpm.addPass(createCSEPass());
   mpm.addPass(createSimpleCanonicalizerPass());
+
+
+  if (printResourceUsage) {
+    circt::aig::PrintResourceUsageAnalysisOptions options;
+    options.topModuleName = topModuleName;
+    options.outputJSONFile = resourceUsageOutputFile;
+    options.printSummary = true;
+    pm.addPass(circt::aig::createPrintResourceUsageAnalysis(options));
+  }
+
+  if (printLongestPath) {
+    circt::aig::PrintLongestPathAnalysisOptions options;
+    options.topModuleName = topModuleName;
+    options.outputJSONFile = longestPathOutputFile;
+    options.printSummary = true;
+    pm.addPass(circt::aig::createPrintLongestPathAnalysis(options));
+  }
   // TODO: Add balancing, rewriting, FRAIG conversion, etc.
   if (untilReached(UntilEnd))
     return;
 
-  // TODO: Add LUT mapping, etc.
 }
 
 /// This function initializes the various components of the tool and
@@ -205,7 +262,10 @@ int main(int argc, char **argv) {
   // Register the supported CIRCT dialects and create a context to work with.
   DialectRegistry registry;
   registry.insert<circt::aig::AIGDialect, circt::comb::CombDialect,
-                  circt::hw::HWDialect>();
+                  circt::hw::HWDialect, circt::verif::VerifDialect,
+                  circt::sv::SVDialect, emit::EmitDialect, seq::SeqDialect,
+                  om::OMDialect, sv::SVDialect, verif::VerifDialect,
+                  ltl::LTLDialect, debug::DebugDialect, sim::SimDialect>();
   MLIRContext context(registry);
 
   // Setup of diagnostic handling.

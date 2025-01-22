@@ -15,6 +15,7 @@
 
 #include "circt/Conversion/AIGToComb.h"
 #include "circt/Conversion/AffineToLoopSchedule.h"
+#include "circt/Conversion/AIGToComb.h"
 #include "circt/Conversion/ArcToLLVM.h"
 #include "circt/Conversion/CFToHandshake.h"
 #include "circt/Conversion/CalyxNative.h"

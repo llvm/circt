@@ -105,8 +105,7 @@ static bool hasSVAttributes(Operation *op) {
 }
 
 namespace {
-template <typename SubType>
-struct ComplementMatcher {
+template <typename SubType> struct ComplementMatcher {
   SubType lhs;
   ComplementMatcher(SubType lhs) : lhs(std::move(lhs)) {}
   bool match(Operation *op) {
@@ -497,6 +496,14 @@ OpFoldResult ExtractOp::fold(FoldAdaptor adaptor) {
     unsigned dstWidth = cast<IntegerType>(getType()).getWidth();
     return getIntAttr(input.getValue().lshr(getLowBit()).trunc(dstWidth),
                       getContext());
+  }
+
+  if (auto replicate = getInput().getDefiningOp<ReplicateOp>()) {
+    auto replicateWidth =
+        replicate.getInput().getType().getIntOrFloatBitWidth();
+    auto extractWidth = cast<IntegerType>(getType()).getWidth();
+    if (extractWidth == replicateWidth && getLowBit() % replicateWidth == 0)
+      return replicate.getOperand();
   }
   return {};
 }
@@ -907,8 +914,7 @@ OpFoldResult AndOp::fold(FoldAdaptor adaptor) {
 ///
 /// For example for `or(a[0], a[1], ..., a[n-1])` this function returns `a`
 /// (assuming the bit-width of `a` is `n`).
-template <typename Op>
-static Value getCommonOperand(Op op) {
+template <typename Op> static Value getCommonOperand(Op op) {
   if (!op.getType().isInteger(1))
     return Value();
 

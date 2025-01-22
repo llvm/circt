@@ -64,9 +64,9 @@ struct WordRewritePattern : public OpRewritePattern<AndInverterOp> {
         }
         // Otherwise, we need to extract the bit.
         operands.push_back(
-            rewriter.create<comb::ExtractOp>(op.getLoc(), operand, i, 1));
+            rewriter.createOrFold<comb::ExtractOp>(op.getLoc(), operand, i, 1));
       }
-      results.push_back(rewriter.create<AndInverterOp>(op.getLoc(), operands,
+      results.push_back(rewriter.createOrFold<AndInverterOp>(op.getLoc(), operands,
                                                        op.getInvertedAttr()));
     }
 

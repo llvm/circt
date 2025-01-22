@@ -202,6 +202,14 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
         type.getContext(), llvm::Log2_64_Ceil(type.getNumElements()));
     return smt::ArrayType::get(type.getContext(), domainType, rangeType);
   });
+  converter.addConversion([&](ArrayType type) -> std::optional<Type> {
+    auto rangeType = converter.convertType(type.getElementType());
+    if (!rangeType)
+      return {};
+    auto domainType = smt::BitVectorType::get(
+        type.getContext(), llvm::Log2_64_Ceil(type.getNumElements()));
+    return smt::ArrayType::get(type.getContext(), domainType, rangeType);
+  });
 
   // Default target materialization to convert from illegal types to legal
   // types, e.g., at the boundary of an inlined child block.

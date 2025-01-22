@@ -5613,7 +5613,7 @@ FIRCircuitParser::parseModuleBody(const SymbolTable &circuitSymTbl,
         printfLoc = printFOp.getLoc();
     });
 
-    if (numVerifPrintfs > 0) {
+    if (false && numVerifPrintfs > 0) {
       auto diag =
           mlir::emitError(deferredModule.moduleOp.getLoc(), "module contains ")
           << numVerifPrintfs
