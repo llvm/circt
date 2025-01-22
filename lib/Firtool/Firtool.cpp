@@ -185,13 +185,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createExtractInstancesPass());
 
-  // Run passes to resolve Grand Central features.  This should run before
-  // BlackBoxReader because Grand Central needs to inform BlackBoxReader where
-  // certain black boxes should be placed.  Note: all Grand Central Taps related
-  // collateral is resolved entirely by LowerAnnotations.
-  pm.addNestedPass<firrtl::CircuitOp>(
-      firrtl::createGrandCentralPass(opt.getCompanionMode()));
-
   // Run SymbolDCE as late as possible, but before InnerSymbolDCE. This is for
   // hierpathop's and just for general cleanup.
   pm.addNestedPass<firrtl::CircuitOp>(mlir::createSymbolDCEPass());
@@ -249,6 +242,15 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.nest<firrtl::CircuitOp>().addPass(
       firrtl::createAssignOutputDirsPass(outputFilename));
+
+  // Run passes to resolve Grand Central features.  This should run before
+  // BlackBoxReader because Grand Central needs to inform BlackBoxReader where
+  // certain black boxes should be placed.  Note: all Grand Central Taps related
+  // collateral is resolved entirely by LowerAnnotations.
+  // Run this after output directories are (otherwise) assigned,
+  // so generated interfaces can be appropriately marked.
+  pm.addNestedPass<firrtl::CircuitOp>(
+      firrtl::createGrandCentralPass(opt.getCompanionMode()));
 
   // Read black box source files into the IR.
   StringRef blackBoxRoot = opt.getBlackBoxRootPath().empty()
