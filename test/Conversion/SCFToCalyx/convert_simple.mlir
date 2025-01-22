@@ -582,7 +582,8 @@ module {
   }
 }
 
-// Test lower scf.parallel when there is a nested scf.if that can be simplified/canonicalized.
+// Test lower scf.parallel when there is a nested scf.if that can be
+// canonicalized. See: https://github.com/llvm/circt/issues/8086
 
 // -----
 
