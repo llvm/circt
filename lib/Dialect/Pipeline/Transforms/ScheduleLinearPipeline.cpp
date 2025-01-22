@@ -151,7 +151,7 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
   auto schedPipeline = b.template create<pipeline::ScheduledPipelineOp>(
       pipeline.getLoc(), pipeline.getDataOutputs().getTypes(),
       pipeline.getInputs(), pipeline.getInputNames(), pipeline.getOutputNames(),
-      pipeline.getClock(), pipeline.getReset(), pipeline.getGo(),
+      pipeline.getClock(), pipeline.getGo(), pipeline.getReset(),
       pipeline.getStall(), pipeline.getNameAttr());
 
   Block *currentStage = schedPipeline.getStage(0);
