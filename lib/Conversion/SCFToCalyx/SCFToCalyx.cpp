@@ -1986,6 +1986,26 @@ private:
     rewriter.create<scf::ReduceOp>(newParOp.getLoc());
 
     rewriter.replaceOp(scfParOp, newParOp);
+
+    auto containsIfOp = [](scf::ParallelOp parOp) -> bool {
+      bool hasIfOp = false;
+      parOp.walk([&](scf::IfOp ifOp) {
+        hasIfOp = true;
+        return WalkResult::interrupt();
+      });
+      return hasIfOp;
+    };
+    if (containsIfOp(newParOp)) {
+      auto *context = newParOp.getContext();
+      RewritePatternSet patterns(newParOp.getContext());
+      scf::IfOp::getCanonicalizationPatterns(patterns, context);
+      if (failed(
+              applyPatternsGreedily(newParOp->getParentOfType<func::FuncOp>(),
+                                    std::move(patterns)))) {
+        return failure();
+      }
+    }
+
     return success();
   }
 };
@@ -2081,7 +2101,6 @@ private:
 
         if (walkResult.wasInterrupted())
           return failure();
-
       } else if (auto *forSchedPtr = std::get_if<ForScheduleable>(&group);
                  forSchedPtr) {
         auto forOp = forSchedPtr->forOp;
@@ -2780,6 +2799,8 @@ void SCFToCalyxPass::runOnOperation() {
   /// This pass inlines scf.ExecuteRegionOp's by adding control-flow.
   addGreedyPattern<InlineExecuteRegionOpPattern>(loweringPatterns);
 
+  /// Partial evaluate the scf.ParallelOp and apply the scf.IfOp
+  /// canonicalization optionally.
   addOncePattern<BuildParGroups>(loweringPatterns, patternState, funcMap,
                                  *loweringState);
 
