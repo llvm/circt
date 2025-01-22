@@ -12,6 +12,7 @@
 
 include "mlir/IR/CommonAttrConstraints.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
+include "circt/Dialect/RTG/IR/RTGTypes.td"
 include "circt/Dialect/RTG/IR/RTGInterfaces.td"
 include "circt/Dialect/RTG/IR/RTGISAAssemblyInterfaces.td"
 
@@ -47,7 +48,7 @@ def ImmediateOp : RTGTestOp<"immediate", [
 ]> {
   let summary = "declare an immediate value";
 
-  let arguments = (ins AnyAttrOf<[Imm12, Imm21, Imm32]>:$imm);
+  let arguments = (ins AnyAttrOf<[Imm12, Imm13, Imm21, Imm32]>:$imm);
   let results = (outs AnyType:$result);
 
   let assemblyFormat = "$imm attr-dict";
@@ -78,7 +79,7 @@ class InstFormatIOpBase<string mnemonic, int opcode7, int funct3>
   let extraClassDefinition = [{
     void $cppClass::printInstructionBinary(llvm::raw_ostream &os,
                                            FoldAdaptor adaptor) {
-      auto binary = APInt(12, cast<Imm12Attr>(adaptor.getImm()).getValue())
+      auto binary = cast<Imm12Attr>(adaptor.getImm()).getAPInt()
         .concat(APInt(5, cast<rtg::RegisterAttrInterface>(
           adaptor.getRs()).getClassIndex()))
         .concat(APInt(3, }] # funct3 # [{))
@@ -130,9 +131,72 @@ class InstFormatIImmOpBase<string mnemonic, int opcode7, int funct12>
   }];
 }
 
+class InstFormatBOpBase<string mnemonic, int opcode7, int funct3>
+  : RTGTestOp<"rv32i." # mnemonic, [InstructionOpAdaptor]> {
+
+  let arguments = (ins IntegerRegisterType:$rs1,
+                       IntegerRegisterType:$rs2,
+                       AnyTypeOf<[Imm13Type, LabelType]>:$imm);
+
+  let assemblyFormat = [{
+    $rs1 `,` $rs2 `,` $imm `:` qualified(type($imm)) attr-dict
+  }];
+
+  let extraClassDefinition = [{
+    void $cppClass::printInstructionBinary(llvm::raw_ostream &os,
+                                           FoldAdaptor adaptor) {
+      assert (isa<Imm13Attr>(adaptor.getImm()) &&
+              "binary of labels not supported");
+
+      auto imm = cast<Imm13Attr>(adaptor.getImm()).getAPInt();
+      auto rs1 = cast<rtg::RegisterAttrInterface>(adaptor.getRs1());
+      auto rs2 = cast<rtg::RegisterAttrInterface>(adaptor.getRs2());
+
+      auto binary = imm.extractBits(1, 12)
+      .concat(imm.extractBits(6, 5))
+      .concat(llvm::APInt(5, rs2.getClassIndex()))
+      .concat(llvm::APInt(5, rs1.getClassIndex()))
+      .concat(llvm::APInt(3, }] # funct3 # [{))
+      .concat(imm.extractBits(4, 1))
+      .concat(imm.extractBits(1, 11))
+      .concat(llvm::APInt(7, }] # opcode7 # [{));
+
+      SmallVector<char> str;
+      binary.toStringUnsigned(str, 16);
+      os << str;
+    }
+
+    void $cppClass::printInstructionAssembly(llvm::raw_ostream &os,
+                                             FoldAdaptor adaptor) {
+      os << getOperationName().rsplit('.').second
+         << " "
+         << cast<rtg::RegisterAttrInterface>(adaptor.getRs1())
+            .getRegisterAssembly()
+         << ", "
+         << cast<rtg::RegisterAttrInterface>(adaptor.getRs2())
+            .getRegisterAssembly()
+         << ", ";
+
+      if (auto label = dyn_cast<StringAttr>(adaptor.getImm())) {
+        os << label.getValue();
+        return;      
+      }
+
+      os << cast<Imm13Attr>(adaptor.getImm()).getValue();
+    }
+  }];
+}
+
 //===- Instructions -------------------------------------------------------===//
 
 def RV32I_JALROp    : InstFormatIOpBase<"jalr",  0b1100111, 0b000>;
+
+def RV32I_BEQ       : InstFormatBOpBase<"beq",  0b1100011, 0b000>;
+def RV32I_BNE       : InstFormatBOpBase<"bne",  0b1100011, 0b001>;
+def RV32I_BLT       : InstFormatBOpBase<"blt",  0b1100011, 0b100>;
+def RV32I_BGE       : InstFormatBOpBase<"bge",  0b1100011, 0b101>;
+def RV32I_BLTU      : InstFormatBOpBase<"bltu", 0b1100011, 0b110>;
+def RV32I_BGEU      : InstFormatBOpBase<"bgeu", 0b1100011, 0b111>;
 
 def RV32I_LBOp      : InstFormatIOpBase<"lb",  0b0000011, 0b000>;
 def RV32I_LHOp      : InstFormatIOpBase<"lh",  0b0000011, 0b001>;

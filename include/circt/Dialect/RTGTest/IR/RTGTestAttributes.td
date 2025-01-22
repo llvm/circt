@@ -45,6 +45,12 @@ class ImmediateAttrBase<int width> : RTGTestAttrDef<"Imm" # width, [
 
   let assemblyFormat = "`<` $value `>`";
 
+  let extraClassDeclaration = [{
+    llvm::APInt getAPInt() const {
+      return llvm::APInt(}] # width # [{, getValue());
+    }
+  }];
+
   let extraClassDefinition = [{
     Type $cppClass::getType() const {
       return Imm}] # width # [{Type::get(getContext());
@@ -66,6 +72,7 @@ class ImmediateAttrBase<int width> : RTGTestAttrDef<"Imm" # width, [
 }
 
 def Imm12 : ImmediateAttrBase<12>;
+def Imm13 : ImmediateAttrBase<13>;
 def Imm21 : ImmediateAttrBase<21>;
 def Imm32 : ImmediateAttrBase<32>;
 

@@ -268,6 +268,13 @@ static void testImmediates(MlirContext ctx) {
   // CHECK: !rtgtest.imm12
   mlirTypeDump(imm12Type);
 
+  MlirType imm13Type = rtgtestImm13TypeGet(ctx);
+  // CHECK: is_imm13
+  fprintf(stderr,
+          rtgtestTypeIsAImm13(imm13Type) ? "is_imm13\n" : "isnot_imm13\n");
+  // CHECK: !rtgtest.imm13
+  mlirTypeDump(imm13Type);
+
   MlirType imm21Type = rtgtestImm21TypeGet(ctx);
   // CHECK: is_imm21
   fprintf(stderr,

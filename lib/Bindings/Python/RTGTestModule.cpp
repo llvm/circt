@@ -38,6 +38,14 @@ void circt::python::populateDialectRTGTestSubmodule(nb::module_ &m) {
           },
           nb::arg("self"), nb::arg("ctxt") = nullptr);
 
+  mlir_type_subclass(m, "Imm13Type", rtgtestTypeIsAImm13)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, MlirContext ctxt) {
+            return cls(rtgtestImm13TypeGet(ctxt));
+          },
+          nb::arg("self"), nb::arg("ctxt") = nullptr);
+
   mlir_type_subclass(m, "Imm21Type", rtgtestTypeIsAImm21)
       .def_classmethod(
           "get",
@@ -329,6 +337,17 @@ void circt::python::populateDialectRTGTestSubmodule(nb::module_ &m) {
           nb::arg("self"), nb::arg("value"), nb::arg("ctxt") = nullptr)
       .def_property_readonly("value", [](MlirAttribute self) {
         return rtgtestImm12AttrGetValue(self);
+      });
+
+  mlir_attribute_subclass(m, "Imm13Attr", rtgtestAttrIsAImm13)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, unsigned value, MlirContext ctxt) {
+            return cls(rtgtestImm13AttrGet(ctxt, value));
+          },
+          nb::arg("self"), nb::arg("value"), nb::arg("ctxt") = nullptr)
+      .def_property_readonly("value", [](MlirAttribute self) {
+        return rtgtestImm13AttrGetValue(self);
       });
 
   mlir_attribute_subclass(m, "Imm21Attr", rtgtestAttrIsAImm21)

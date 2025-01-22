@@ -40,6 +40,12 @@ MLIR_CAPI_EXPORTED bool rtgtestTypeIsAImm12(MlirType type);
 /// Creates an RTGTest Imm12 type in the context.
 MLIR_CAPI_EXPORTED MlirType rtgtestImm12TypeGet(MlirContext ctxt);
 
+/// If the type is an RTGTest Imm13Type.
+MLIR_CAPI_EXPORTED bool rtgtestTypeIsAImm13(MlirType type);
+
+/// Creates an RTGTest Imm13 type in the context.
+MLIR_CAPI_EXPORTED MlirType rtgtestImm13TypeGet(MlirContext ctxt);
+
 /// If the type is an RTGTest Imm21Type.
 MLIR_CAPI_EXPORTED bool rtgtestTypeIsAImm21(MlirType type);
 
@@ -273,6 +279,16 @@ MLIR_CAPI_EXPORTED MlirAttribute rtgtestImm12AttrGet(MlirContext ctxt,
 
 /// Returns the value represented by the Imm12 attribute.
 MLIR_CAPI_EXPORTED unsigned rtgtestImm12AttrGetValue(MlirAttribute attr);
+
+/// If the attribute is an RTGTest Imm13Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsAImm13(MlirAttribute attr);
+
+/// Creates an RTGTest Imm13 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestImm13AttrGet(MlirContext ctxt,
+                                                     unsigned value);
+
+/// Returns the value represented by the Imm13 attribute.
+MLIR_CAPI_EXPORTED unsigned rtgtestImm13AttrGetValue(MlirAttribute attr);
 
 /// If the attribute is an RTGTest Imm21Attr.
 MLIR_CAPI_EXPORTED bool rtgtestAttrIsAImm21(MlirAttribute attr);

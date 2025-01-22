@@ -41,6 +41,12 @@ MlirType rtgtestImm12TypeGet(MlirContext ctxt) {
   return wrap(Imm12Type::get(unwrap(ctxt)));
 }
 
+bool rtgtestTypeIsAImm13(MlirType type) { return isa<Imm13Type>(unwrap(type)); }
+
+MlirType rtgtestImm13TypeGet(MlirContext ctxt) {
+  return wrap(Imm13Type::get(unwrap(ctxt)));
+}
+
 bool rtgtestTypeIsAImm21(MlirType type) { return isa<Imm21Type>(unwrap(type)); }
 
 MlirType rtgtestImm21TypeGet(MlirContext ctxt) {
@@ -341,6 +347,18 @@ MlirAttribute rtgtestImm12AttrGet(MlirContext ctxt, unsigned value) {
 
 unsigned rtgtestImm12AttrGetValue(MlirAttribute attr) {
   return cast<Imm12Attr>(unwrap(attr)).getValue();
+}
+
+bool rtgtestAttrIsAImm13(MlirAttribute attr) {
+  return isa<Imm13Attr>(unwrap(attr));
+}
+
+MlirAttribute rtgtestImm13AttrGet(MlirContext ctxt, unsigned value) {
+  return wrap(Imm13Attr::get(unwrap(ctxt), value));
+}
+
+unsigned rtgtestImm13AttrGetValue(MlirAttribute attr) {
+  return cast<Imm13Attr>(unwrap(attr)).getValue();
 }
 
 bool rtgtestAttrIsAImm21(MlirAttribute attr) {
