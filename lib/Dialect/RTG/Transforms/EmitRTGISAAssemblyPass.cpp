@@ -18,6 +18,7 @@
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/ToolOutputFile.h"
@@ -43,7 +44,7 @@ public:
   Emitter(llvm::raw_ostream &os, const DenseSet<StringAttr> &unsupportedInstr)
       : os(os), unsupportedInstr(unsupportedInstr) {}
 
-  LogicalResult emitInstruction(InstructionOpInterface instr) {
+  LogicalResult emit(InstructionOpInterface instr) {
     os << llvm::indent(4);
     bool useBinary =
         unsupportedInstr.contains(instr->getName().getIdentifier());
@@ -55,6 +56,9 @@ public:
 
     SmallVector<Attribute> operands;
     for (auto operand : instr->getOperands()) {
+      if (isa<LabelType>(operand.getType()) && useBinary)
+        return instr->emitError("labels cannot be emitted as binary");
+
       auto attr = state.lookup(operand);
       if (!attr)
         return failure();
@@ -74,6 +78,29 @@ public:
     instr.printInstructionBinary(os, operands);
     os << "\n";
 
+    return success();
+  }
+
+  LogicalResult emit(LabelDeclOp op) {
+    if (!op.getArgs().empty())
+      return op->emitError(
+          "label arguments must be elaborated before emission");
+
+    state[op.getLabel()] = op.getFormatStringAttr();
+    return success();
+  }
+
+  LogicalResult emit(LabelOp op) {
+    auto labelStr = cast<StringAttr>(state[op.getLabel()]).getValue();
+    if (op.getVisibility() == LabelVisibility::external) {
+      os << ".extern " << labelStr << "\n";
+      return success();
+    }
+
+    if (op.getVisibility() == LabelVisibility::global)
+      os << ".global " << labelStr << "\n";
+
+    os << labelStr << ":\n";
     return success();
   }
 
@@ -98,14 +125,15 @@ public:
         continue;
       }
 
-      if (auto instr = dyn_cast<InstructionOpInterface>(&op)) {
-        if (failed(emitInstruction(instr)))
-          return failure();
+      auto res = TypeSwitch<Operation *, LogicalResult>(&op)
+                     .Case<InstructionOpInterface, LabelDeclOp, LabelOp>(
+                         [&](auto op) { return emit(op); })
+                     .Default([](auto op) {
+                       return op->emitError("emitter unknown RTG operation");
+                     });
 
-        continue;
-      }
-
-      return op.emitError("emitter unknown RTG operation");
+      if (failed(res))
+        return failure();
     }
 
     state.clear();
