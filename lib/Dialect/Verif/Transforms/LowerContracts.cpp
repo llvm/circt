@@ -155,7 +155,7 @@ LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
     // Create verif.formal op
     auto name =
         mlirModuleBuilder.getStringAttr(hwModule.getNameAttr().getValue() +
-                                        "_CheckContract_" + std::to_string(i));
+                                        "_CheckContract_" + Twine(i));
     auto formalOp = mlirModuleBuilder.create<verif::FormalOp>(
         contract.getLoc(), name, mlirModuleBuilder.getDictionaryAttr({}));
 
