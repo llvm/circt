@@ -1,4 +1,4 @@
-//===- MSFTModule.cpp - MSFT API pybind module ----------------------------===//
+//===- MSFTModule.cpp - MSFT API nanobind module --------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -11,22 +11,19 @@
 #include "circt-c/Dialect/MSFT.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 
-#include "mlir/Bindings/Python/PybindAdaptors.h"
+#include "mlir/Bindings/Python/NanobindAdaptors.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Support.h"
 
-#include "PybindUtils.h"
-#include <pybind11/functional.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
-namespace py = pybind11;
+#include "NanobindUtils.h"
+namespace nb = nanobind;
 
 // using namespace circt;
 // using namespace circt::msft;
-using namespace mlir::python::adaptors;
+using namespace mlir::python::nanobind_adaptors;
 
-static py::handle getPhysLocationAttr(MlirAttribute attr) {
-  return py::module::import("circt.dialects.msft")
+static nb::handle getPhysLocationAttr(MlirAttribute attr) {
+  return nb::module_::import_("circt.dialects.msft")
       .attr("PhysLocationAttr")(attr)
       .release();
 }
@@ -68,21 +65,22 @@ public:
   MlirOperation getInstanceAt(MlirAttribute loc) {
     return circtMSFTPlacementDBGetInstanceAt(db, loc);
   }
-  py::handle getNearestFreeInColumn(CirctMSFTPrimitiveType prim,
-                                    uint64_t column, uint64_t nearestToY) {
+  nb::handle getNearestFreeInColumn(PrimitiveType prim, uint64_t column,
+                                    uint64_t nearestToY) {
+    auto cPrim = static_cast<CirctMSFTPrimitiveType>(prim);
     MlirAttribute nearest = circtMSFTPlacementDBGetNearestFreeInColumn(
-        db, prim, column, nearestToY);
+        db, cPrim, column, nearestToY);
     if (!nearest.ptr)
-      return py::none();
+      return nb::none();
     return getPhysLocationAttr(nearest);
   }
   void walkPlacements(
-      py::function pycb,
-      std::tuple<py::object, py::object, py::object, py::object> bounds,
-      py::object prim, py::object walkOrder) {
+      nb::callable pycb,
+      std::tuple<nb::object, nb::object, nb::object, nb::object> bounds,
+      nb::object prim, nb::object walkOrder) {
 
-    auto handleNone = [](py::object o) {
-      return o.is_none() ? -1 : o.cast<int64_t>();
+    auto handleNone = [](nb::object o) {
+      return o.is_none() ? -1 : nb::cast<int64_t>(o);
     };
     int64_t cBounds[4] = {
         handleNone(std::get<0>(bounds)), handleNone(std::get<1>(bounds)),
@@ -91,11 +89,11 @@ public:
     if (prim.is_none())
       cPrim = -1;
     else
-      cPrim = prim.cast<CirctMSFTPrimitiveType>();
+      cPrim = nb::cast<CirctMSFTPrimitiveType>(prim);
 
     CirctMSFTWalkOrder cWalkOrder;
     if (!walkOrder.is_none())
-      cWalkOrder = walkOrder.cast<CirctMSFTWalkOrder>();
+      cWalkOrder = nb::cast<CirctMSFTWalkOrder>(walkOrder);
     else
       cWalkOrder = CirctMSFTWalkOrder{CirctMSFTDirection::NONE,
                                       CirctMSFTDirection::NONE};
@@ -103,8 +101,8 @@ public:
     circtMSFTPlacementDBWalkPlacements(
         db,
         [](MlirAttribute loc, MlirOperation locOp, void *userData) {
-          py::gil_scoped_acquire gil;
-          py::function pycb = *((py::function *)(userData));
+          nb::gil_scoped_acquire gil;
+          nb::callable pycb = *((nb::callable *)(userData));
           pycb(loc, locOp);
         },
         cBounds, cPrim, cWalkOrder, &pycb);
@@ -130,14 +128,13 @@ public:
 
   std::optional<MlirAttribute> dunderNext() {
     if (nextIndex >= circtMSFTLocationVectorAttrGetNumElements(attr)) {
-      throw py::stop_iteration();
+      throw nb::stop_iteration();
     }
     return getItem(attr, nextIndex++);
   }
 
-  static void bind(py::module &m) {
-    py::class_<PyLocationVecIterator>(m, "LocationVectorAttrIterator",
-                                      py::module_local())
+  static void bind(nb::module_ &m) {
+    nb::class_<PyLocationVecIterator>(m, "LocationVectorAttrIterator")
         .def("__iter__", &PyLocationVecIterator::dunderIter)
         .def("__next__", &PyLocationVecIterator::dunderNext);
   }
@@ -148,20 +145,20 @@ private:
 };
 
 /// Populate the msft python module.
-void circt::python::populateDialectMSFTSubmodule(py::module &m) {
+void circt::python::populateDialectMSFTSubmodule(nb::module_ &m) {
   mlirMSFTRegisterPasses();
 
   m.doc() = "MSFT dialect Python native extension";
 
   m.def("replaceAllUsesWith", &circtMSFTReplaceAllUsesWith);
 
-  py::enum_<PrimitiveType>(m, "PrimitiveType")
+  nb::enum_<PrimitiveType>(m, "PrimitiveType")
       .value("M20K", PrimitiveType::M20K)
       .value("DSP", PrimitiveType::DSP)
       .value("FF", PrimitiveType::FF)
       .export_values();
 
-  py::enum_<CirctMSFTDirection>(m, "Direction")
+  nb::enum_<CirctMSFTDirection>(m, "Direction")
       .value("NONE", CirctMSFTDirection::NONE)
       .value("ASC", CirctMSFTDirection::ASC)
       .value("DESC", CirctMSFTDirection::DESC)
@@ -171,14 +168,14 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
                           circtMSFTAttributeIsAPhysLocationAttribute)
       .def_classmethod(
           "get",
-          [](py::object cls, PrimitiveType devType, uint64_t x, uint64_t y,
+          [](nb::object cls, PrimitiveType devType, uint64_t x, uint64_t y,
              uint64_t num, MlirContext ctxt) {
             return cls(circtMSFTPhysLocationAttrGet(ctxt, (uint64_t)devType, x,
                                                     y, num));
           },
-          "Create a physical location attribute", py::arg(),
-          py::arg("dev_type"), py::arg("x"), py::arg("y"), py::arg("num"),
-          py::arg("ctxt") = py::none())
+          "Create a physical location attribute", nb::arg(),
+          nb::arg("dev_type"), nb::arg("x"), nb::arg("y"), nb::arg("num"),
+          nb::arg("ctxt") = nb::none())
       .def_property_readonly(
           "devtype",
           [](MlirAttribute self) {
@@ -201,21 +198,21 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
                           circtMSFTAttributeIsAPhysicalBoundsAttr)
       .def_classmethod(
           "get",
-          [](py::object cls, uint64_t xMin, uint64_t xMax, uint64_t yMin,
+          [](nb::object cls, uint64_t xMin, uint64_t xMax, uint64_t yMin,
              uint64_t yMax, MlirContext ctxt) {
             auto physicalBounds =
                 circtMSFTPhysicalBoundsAttrGet(ctxt, xMin, xMax, yMin, yMax);
             return cls(physicalBounds);
           },
-          "Create a PhysicalBounds attribute", py::arg("cls"), py::arg("xMin"),
-          py::arg("xMax"), py::arg("yMin"), py::arg("yMax"),
-          py::arg("context") = py::none());
+          "Create a PhysicalBounds attribute", nb::arg("cls"), nb::arg("xMin"),
+          nb::arg("xMax"), nb::arg("yMin"), nb::arg("yMax"),
+          nb::arg("context") = nb::none());
 
   mlir_attribute_subclass(m, "LocationVectorAttr",
                           circtMSFTAttributeIsALocationVectorAttribute)
       .def_classmethod(
           "get",
-          [](py::object cls, MlirType type, std::vector<py::handle> pylocs,
+          [](nb::object cls, MlirType type, std::vector<nb::handle> pylocs,
              MlirContext ctxt) {
             // Get a LocationVector being sensitive to None in the list of
             // locations.
@@ -229,38 +226,38 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
             return cls(circtMSFTLocationVectorAttrGet(ctxt, type, locs.size(),
                                                       locs.data()));
           },
-          "Create a LocationVector attribute", py::arg("cls"), py::arg("type"),
-          py::arg("locs"), py::arg("context") = py::none())
+          "Create a LocationVector attribute", nb::arg("cls"), nb::arg("type"),
+          nb::arg("locs"), nb::arg("context") = nb::none())
       .def("reg_type", &circtMSFTLocationVectorAttrGetType)
       .def("__len__", &circtMSFTLocationVectorAttrGetNumElements)
       .def("__getitem__", &PyLocationVecIterator::getItem,
-           "Get the location at the specified position", py::arg("pos"))
+           "Get the location at the specified position", nb::arg("pos"))
       .def("__iter__",
            [](MlirAttribute arr) { return PyLocationVecIterator(arr); });
   PyLocationVecIterator::bind(m);
 
-  py::class_<PrimitiveDB>(m, "PrimitiveDB")
-      .def(py::init<MlirContext>(), py::arg("ctxt") = py::none())
+  nb::class_<PrimitiveDB>(m, "PrimitiveDB")
+      .def(nb::init<MlirContext>(), nb::arg("ctxt") = nb::none())
       .def("add_primitive", &PrimitiveDB::addPrimitive,
-           "Inform the DB about a new placement.", py::arg("loc_and_prim"))
+           "Inform the DB about a new placement.", nb::arg("loc_and_prim"))
       .def("is_valid_location", &PrimitiveDB::isValidLocation,
            "Query the DB as to whether or not a primitive exists.",
-           py::arg("loc"));
+           nb::arg("loc"));
 
-  py::class_<PlacementDB>(m, "PlacementDB")
-      .def(py::init<MlirModule, PrimitiveDB *>(), py::arg("top"),
-           py::arg("seed") = nullptr)
+  nb::class_<PlacementDB>(m, "PlacementDB")
+      .def(nb::init<MlirModule, PrimitiveDB *>(), nb::arg("top"),
+           nb::arg("seed") = nullptr)
       .def("place", &PlacementDB::place, "Place a dynamic instance.",
-           py::arg("dyn_inst"), py::arg("location"), py::arg("subpath"),
-           py::arg("src_location") = py::none())
+           nb::arg("dyn_inst"), nb::arg("location"), nb::arg("subpath"),
+           nb::arg("src_location") = nb::none())
       .def("remove_placement", &PlacementDB::removePlacement,
-           "Remove a placement.", py::arg("location"))
+           "Remove a placement.", nb::arg("location"))
       .def("move_placement", &PlacementDB::movePlacement,
-           "Move a placement to another location.", py::arg("old_location"),
-           py::arg("new_location"))
+           "Move a placement to another location.", nb::arg("old_location"),
+           nb::arg("new_location"))
       .def("get_nearest_free_in_column", &PlacementDB::getNearestFreeInColumn,
            "Find the nearest free primitive location in column.",
-           py::arg("prim_type"), py::arg("column"), py::arg("nearest_to_y"))
+           nb::arg("prim_type"), nb::arg("column"), nb::arg("nearest_to_y"))
       .def("get_instance_at", &PlacementDB::getInstanceAt,
            "Get the instance at location. Returns None if nothing exists "
            "there. Otherwise, returns (path, subpath, op) of the instance "
@@ -268,14 +265,14 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .def("walk_placements", &PlacementDB::walkPlacements,
            "Walk the placements, with possible bounds. Bounds are (xmin, xmax, "
            "ymin, ymax) with 'None' being unbounded.",
-           py::arg("callback"),
-           py::arg("bounds") =
-               std::make_tuple(py::none(), py::none(), py::none(), py::none()),
-           py::arg("prim_type") = py::none(),
-           py::arg("walk_order") = py::none());
+           nb::arg("callback"),
+           nb::arg("bounds") =
+               std::make_tuple(nb::none(), nb::none(), nb::none(), nb::none()),
+           nb::arg("prim_type") = nb::none(),
+           nb::arg("walk_order") = nb::none());
 
-  py::class_<CirctMSFTWalkOrder>(m, "WalkOrder")
-      .def(py::init<CirctMSFTDirection, CirctMSFTDirection>(),
-           py::arg("columns") = CirctMSFTDirection::NONE,
-           py::arg("rows") = CirctMSFTDirection::NONE);
+  nb::class_<CirctMSFTWalkOrder>(m, "WalkOrder")
+      .def(nb::init<CirctMSFTDirection, CirctMSFTDirection>(),
+           nb::arg("columns") = CirctMSFTDirection::NONE,
+           nb::arg("rows") = CirctMSFTDirection::NONE);
 }

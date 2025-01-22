@@ -1,4 +1,4 @@
-//===- RTGToolModule.cpp - RTG Tool API pybind module ---------------------===//
+//===- RTGToolModule.cpp - RTG Tool API nanobind module -------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,12 +10,10 @@
 
 #include "circt-c/RtgTool.h"
 
-#include "mlir/Bindings/Python/PybindAdaptors.h"
+#include "mlir/Bindings/Python/NanobindAdaptors.h"
 
-#include <pybind11/pybind11.h>
-#include <pybind11/pytypes.h>
-#include <pybind11/stl.h>
-namespace py = pybind11;
+#include <nanobind/nanobind.h>
+namespace nb = nanobind;
 
 using namespace circt;
 
@@ -75,48 +73,48 @@ private:
 } // namespace
 
 /// Populate the rtgtool python module.
-void circt::python::populateDialectRTGToolSubmodule(py::module &m) {
+void circt::python::populateDialectRTGToolSubmodule(nb::module_ &m) {
   m.doc() = "RTGTool Python native extension";
 
-  py::enum_<CirctRtgToolOutputFormat>(m, "OutputFormat")
+  nb::enum_<CirctRtgToolOutputFormat>(m, "OutputFormat")
       .value("MLIR", CIRCT_RTGTOOL_OUTPUT_FORMAT_MLIR)
       .value("ELABORATED_MLIR", CIRCT_RTGTOOL_OUTPUT_FORMAT_ELABORATED_MLIR)
       .value("ASM", CIRCT_RTGTOOL_OUTPUT_FORMAT_ASM);
 
-  py::class_<PyRtgToolOptions>(m, "Options")
-      .def(py::init<unsigned, CirctRtgToolOutputFormat, bool, bool,
+  nb::class_<PyRtgToolOptions>(m, "Options")
+      .def(nb::init<unsigned, CirctRtgToolOutputFormat, bool, bool,
                     const std::vector<const char *> &, const std::string &>(),
-           py::arg("seed"),
-           py::arg("output_format") = CIRCT_RTGTOOL_OUTPUT_FORMAT_ASM,
-           py::arg("verify_passes") = true,
-           py::arg("verbose_pass_execution") = false,
-           py::arg("unsupported_instructions") = std::vector<const char *>(),
-           py::arg("unsupported_instructions_file") = "")
+           nb::arg("seed"),
+           nb::arg("output_format") = CIRCT_RTGTOOL_OUTPUT_FORMAT_ASM,
+           nb::arg("verify_passes") = true,
+           nb::arg("verbose_pass_execution") = false,
+           nb::arg("unsupported_instructions") = std::vector<const char *>(),
+           nb::arg("unsupported_instructions_file") = "")
       .def("set_output_format", &PyRtgToolOptions::setOutputFormat,
-           "Specify the output format of the tool", py::arg("format"))
+           "Specify the output format of the tool", nb::arg("format"))
       .def("set_seed", &PyRtgToolOptions::setSeed,
-           "Specify the seed for all RNGs used in the tool", py::arg("seed"))
+           "Specify the seed for all RNGs used in the tool", nb::arg("seed"))
       .def("set_verify_passes", &PyRtgToolOptions::setVerifyPasses,
            "Specify whether the verifiers should be run after each pass",
-           py::arg("enable"))
+           nb::arg("enable"))
       .def("set_verbose_pass_execution",
            &PyRtgToolOptions::setVerbosePassExecution,
            "Specify whether passes should run in verbose mode",
-           py::arg("enable"))
+           nb::arg("enable"))
       .def("set_unsupported_instructions",
            &PyRtgToolOptions::setUnsupportedInstructions,
            "Set the list of of instructions unsupported by the assembler",
-           py::arg("instructions"))
+           nb::arg("instructions"))
       .def("add_unsupported_instruction",
            &PyRtgToolOptions::addUnsupportedInstruction,
            "Add the instruction given by name to the list of instructions not "
            "supported by the assembler",
-           py::arg("instruction_name"))
+           nb::arg("instruction_name"))
       .def("set_unsupported_instructions_file",
            &PyRtgToolOptions::setUnsupportedInstructionsFile,
            "Register a file containing a comma-separated list of instruction "
            "names which are not supported by the assembler.",
-           py::arg("filename"));
+           nb::arg("filename"));
 
   m.def("populate_randomizer_pipeline",
         [](MlirPassManager pm, const PyRtgToolOptions &options) {

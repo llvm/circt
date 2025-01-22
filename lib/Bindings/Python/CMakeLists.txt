@@ -26,7 +26,7 @@ set(PYTHON_BINDINGS_SOURCES
   SVModule.cpp
   # Headers must be included explicitly so they are installed.
   CIRCTModules.h
-  PybindUtils.h
+  NanobindUtils.h
 )
 
 set(PYTHON_BINDINGS_LINK_LIBS
@@ -70,6 +70,8 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension
     ${PYTHON_BINDINGS_LINK_LIBS}
   PRIVATE_LINK_LIBS
     LLVMSupport
+  PYTHON_BINDINGS_LIBRARY
+    nanobind
 )
 
 add_dependencies(CIRCTBindingsPythonExtension circt-headers)
