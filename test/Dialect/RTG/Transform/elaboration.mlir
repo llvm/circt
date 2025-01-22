@@ -338,6 +338,34 @@ rtg.test @virtualRegisters : !rtg.dict<> {
   }
 }
 
+// CHECK-LABEL: @labels
+rtg.test @labels : !rtg.dict<> {
+  // CHECK-NEXT: [[L0:%.+]] = rtg.label_decl "label0"
+  // CHECK-NEXT: rtg.label local [[L0]]
+  // CHECK-NEXT: rtg.label local [[L0]]
+  // CHECK-NEXT: [[L1:%.+]] = rtg.label_decl "label1_0_1"
+  // CHECK-NEXT: rtg.label local [[L1]]
+  // CHECK-NEXT: [[L2:%.+]] = rtg.label_decl "label0_0"
+  // CHECK-NEXT: rtg.label local [[L2]]
+  // CHECK-NEXT: rtg.label local [[L2]]
+  // CHECK-NEXT: [[L3:%.+]] = rtg.label_decl "label0_1"
+  // CHECK-NEXT: rtg.label local [[L3]]
+
+  %0 = index.constant 0
+  %1 = index.constant 1
+  %l0 = rtg.label_decl "label0"
+  %l1 = rtg.label_decl "label{{0}}", %0
+  %l2 = rtg.label_decl "label{{0}}_{{1}}_{{0}}", %1, %0
+  %l3 = rtg.label_unique_decl "label0"
+  %l4 = rtg.label_unique_decl "label0"
+  rtg.label local %l0
+  rtg.label local %l1
+  rtg.label local %l2
+  rtg.label local %l3
+  rtg.label local %l3
+  rtg.label local %l4
+}
+
 // -----
 
 rtg.test @nestedRegionsNotSupported : !rtg.dict<> {

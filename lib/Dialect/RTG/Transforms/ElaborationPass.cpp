@@ -109,14 +109,33 @@ struct VirtualRegister {
   ArrayAttr allowedRegs;
 };
 
+struct LabelValue {
+  LabelValue(StringAttr name, uint64_t id = 0) : name(name), id(id) {}
+
+  bool operator==(const LabelValue &other) const {
+    return name == other.name && id == other.id;
+  }
+
+  /// The label name. For unique labels, this is just the prefix.
+  StringAttr name;
+
+  /// Standard label declarations always have id=0
+  uint64_t id;
+};
+
 /// The abstract base class for elaborated values.
 using ElaboratorValue =
     std::variant<TypedAttr, BagStorage *, bool, size_t, SequenceStorage *,
-                 SetStorage *, VirtualRegister>;
+                 SetStorage *, VirtualRegister, LabelValue>;
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 llvm::hash_code hash_value(const VirtualRegister &val) {
   return llvm::hash_value(val.id);
+}
+
+// NOLINTNEXTLINE(readability-identifier-naming)
+llvm::hash_code hash_value(const LabelValue &val) {
+  return llvm::hash_combine(val.id, val.name);
 }
 
 // NOLINTNEXTLINE(readability-identifier-naming)
@@ -156,6 +175,21 @@ struct DenseMapInfo<VirtualRegister> {
   }
 
   static bool isEqual(const VirtualRegister &lhs, const VirtualRegister &rhs) {
+    return lhs == rhs;
+  }
+};
+
+template <>
+struct DenseMapInfo<LabelValue> {
+  static inline LabelValue getEmptyKey() { return LabelValue(StringAttr(), 0); }
+  static inline LabelValue getTombstoneKey() {
+    return LabelValue(StringAttr(), ~0);
+  }
+  static unsigned getHashValue(const LabelValue &val) {
+    return llvm::hash_combine(val.name, val.id);
+  }
+
+  static bool isEqual(const LabelValue &lhs, const LabelValue &rhs) {
     return lhs == rhs;
   }
 };
@@ -389,6 +423,10 @@ static void print(const VirtualRegister &val, llvm::raw_ostream &os) {
   os << "<virtual-register " << val.id << " " << val.allowedRegs << ">";
 }
 
+static void print(const LabelValue &val, llvm::raw_ostream &os) {
+  os << "<label " << val.id << " " << val.name << ">";
+}
+
 static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
                                      const ElaboratorValue &value) {
   std::visit([&](auto val) { print(val, os); }, value);
@@ -606,6 +644,20 @@ private:
     return res;
   }
 
+  Value visit(const LabelValue &val, Location loc,
+              std::queue<SequenceStorage *> &elabRequests,
+              function_ref<InFlightDiagnostic()> emitError) {
+    if (val.id == 0) {
+      auto res = builder.create<LabelDeclOp>(loc, val.name, ValueRange());
+      materializedValues[val] = res;
+      return res;
+    }
+
+    auto res = builder.create<LabelUniqueDeclOp>(loc, val.name, ValueRange());
+    materializedValues[val] = res;
+    return res;
+  }
+
 private:
   /// Cache values we have already materialized to reuse them later. We start
   /// with an insertion point at the start of the block and cache the (updated)
@@ -637,6 +689,7 @@ struct ElaboratorSharedState {
   SymbolTable &table;
   std::mt19937 rng;
   Namespace names;
+  Namespace labelNames;
   Internalizer internalizer;
 
   /// The worklist used to keep track of the test and sequence operations to
@@ -644,6 +697,7 @@ struct ElaboratorSharedState {
   std::queue<SequenceStorage *> worklist;
 
   uint64_t virtualRegisterID = 0;
+  uint64_t uniqueLabelID = 1;
 };
 
 /// Interprets the IR to perform and lower the represented randomizations.
@@ -656,7 +710,7 @@ public:
       : sharedState(sharedState), materializer(materializer) {}
 
   template <typename ValueTy>
-  inline ValueTy get(Value val) {
+  inline ValueTy get(Value val) const {
     return std::get<ValueTy>(state.at(val));
   }
 
@@ -871,6 +925,41 @@ public:
                                             op.getAllowedRegsAttr());
     return DeletionKind::Delete;
   }
+
+  StringAttr substituteFormatString(StringAttr formatString,
+                                    ValueRange substitutes) const {
+    if (substitutes.empty() || formatString.empty())
+      return formatString;
+
+    auto original = formatString.getValue().str();
+    for (auto [i, subst] : llvm::enumerate(substitutes)) {
+      size_t startPos = 0;
+      std::string from = "{{" + std::to_string(i) + "}}";
+      while ((startPos = original.find(from, startPos)) != std::string::npos) {
+        auto substString = std::to_string(get<size_t>(subst));
+        original.replace(startPos, from.length(), substString);
+      }
+    }
+
+    return StringAttr::get(formatString.getContext(), original);
+  }
+
+  FailureOr<DeletionKind> visitOp(LabelDeclOp op) {
+    auto substituted =
+        substituteFormatString(op.getFormatStringAttr(), op.getArgs());
+    sharedState.labelNames.add(substituted.getValue());
+    state[op.getLabel()] = LabelValue(substituted);
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(LabelUniqueDeclOp op) {
+    state[op.getLabel()] = LabelValue(
+        substituteFormatString(op.getFormatStringAttr(), op.getArgs()),
+        sharedState.uniqueLabelID++);
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(LabelOp op) { return DeletionKind::Keep; }
 
   FailureOr<DeletionKind> visitOp(scf::IfOp op) {
     bool cond = get<bool>(op.getCondition());
@@ -1160,10 +1249,20 @@ LogicalResult ElaborationPass::elaborateModule(ModuleOp moduleOp,
     materializer.finalize();
   }
 
-  // Inline all sequences and remove the operations that place the sequences.
-  for (auto testOp : moduleOp.getOps<TestOp>())
+  for (auto testOp : moduleOp.getOps<TestOp>()) {
+    // Inline all sequences and remove the operations that place the sequences.
     if (failed(inlineSequences(testOp, table)))
       return failure();
+
+    // Convert 'rtg.label_unique_decl' to 'rtg.label_decl' by choosing a unique
+    // name based on the set of names we collected during elaboration.
+    for (auto labelOp :
+         llvm::make_early_inc_range(testOp.getOps<LabelUniqueDeclOp>())) {
+      IRRewriter rewriter(labelOp);
+      auto newName = state.labelNames.newName(labelOp.getFormatString());
+      rewriter.replaceOpWithNewOp<LabelDeclOp>(labelOp, newName, ValueRange());
+    }
+  }
 
   // Remove all sequences since they are not accessible from the outside and
   // are not needed anymore since we fully inlined them.

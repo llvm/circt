@@ -61,6 +61,8 @@ public:
         nextIndex.insert({strAttr.getValue(), 0});
   }
 
+  void add(StringRef name) { nextIndex.insert({name, 0}); }
+
   /// Removes a symbol from the namespace. Returns true if the symbol was
   /// removed, false if the symbol was not found.
   /// This is only allowed to be called _before_ any call to newName.
