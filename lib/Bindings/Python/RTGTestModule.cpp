@@ -20,8 +20,9 @@ namespace py = pybind11;
 using namespace circt;
 using namespace mlir::python::adaptors;
 
+namespace circt::python {
 /// Populate the rtgtest python module.
-void circt::python::populateDialectRTGTestSubmodule(py::module &m) {
+void populateDialectRTGTestSubmodule(py::module &m) {
   m.doc() = "RTGTest dialect Python native extension";
 
   mlir_type_subclass(m, "CPUType", rtgtestTypeIsACPU)
@@ -42,3 +43,4 @@ void circt::python::populateDialectRTGTestSubmodule(py::module &m) {
       .def_property_readonly(
           "id", [](MlirAttribute self) { return rtgtestCPUAttrGetId(self); });
 }
+} // namespace circt::python
