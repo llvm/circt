@@ -289,3 +289,94 @@ always @(posedge clock) begin
   end
 end
 ```
+
+### circt_view
+
+This will become a SystemVerilog Interface that is driven by its arguments.
+This is _not_ a true SystemVerilog Interface, it is only lowered to one.
+
+
+| Parameter     | Type   | Description                                         |
+| ------------- | ------ | --------------------------------------------------- |
+| name          | string | Instance name of the view.                          |
+| view          | string | JSON encoding the view structure.                   |
+
+| Port       | Direction | Type     | Description                         |
+| ---------- | --------- | -------- | ----------------------------------- |
+| ...        | input     | Ground   | Leaf ground values for the view     |
+
+The structure of the view is encoded using JSON, with the top-level object
+required to be an `AugmentedBundleType`.
+
+The intrinsic operands correspond to the `AugmentedGroundType` leaves,
+and must be of ground type.
+
+This encoding is a trimmed version of what's used for the old GrandCentral View
+annotation.
+
+These views do not interact with any GrandCentral annotations or options governing
+the behavior of the annotation-based views.
+
+Output directory behavior is a work in progress presently.
+
+#### AugmentedGroundType
+
+| Property   | Type   | Description                                          |
+| ---------- | ------ | -------------                                        |
+| class      | string | `sifive.enterprise.grandcentral.AugmentedGroundType` |
+
+Creates a SystemVerilog logic type.
+
+Each ground type corresponds to an operand to the view intrinsic.
+
+Example:
+```json
+{
+  "class": "sifive.enterprise.grandcentral.AugmentedGroundType"
+}
+```
+
+#### AugmentedVectorType
+
+| Property   | Type   | Description                                          |
+| ---------- | ------ | -------------                                        |
+| class      | string | `sifive.enterprise.grandcentral.AugmentedVectorType` |
+| elements   | array  | List of augmented types.
+
+Creates a SystemVerilog unpacked array.
+
+Example:
+```json
+{
+  "class": "sifive.enterprise.grandcentral.AugmentedVectorType",
+  "elements": [
+    {
+      "class": "sifive.enterprise.grandcentral.AugmentedGroundType"
+    },
+    {
+      "class": "sifive.enterprise.grandcentral.AugmentedGroundType"
+    }
+  ]
+}
+```
+
+#### AugmentedField
+
+| Property    | Type   | Description                        |
+| ----------  | ------ | -------------                      |
+| name        | string | Name of the field                  |
+| description | string | A textual description of this type |
+| tpe         | string | A nested augmented type            |
+
+A field in an augmented bundle type.  This can provide a small description of
+what the field in the bundle is.
+
+#### AugmentedBundleType
+
+| Property   | Type   | Description                                               |
+| ---------- | ------ | -------------                                             |
+| class      | string | sifive.enterprise.grandcentral.AugmentedBundleType        |
+| defName    | string | The name of the SystemVerilog interface.  May be renamed. |
+| elements   | array  | List of AugmentedFields                                   |
+
+Creates a SystemVerilog interface for each bundle type.
