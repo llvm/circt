@@ -201,8 +201,11 @@ SmallVector<Value, 4> handleGetGlobalOp(memref::GetGlobalOp getGlobalOp,
 }
 
 SmallVector<Value, 4> createBanks(Value originalMem, uint64_t bankingFactor,
-                                  unsigned bankingDimension) {
+                                  std::optional<unsigned> bankingDimensionOpt) {
   MemRefType originalMemRefType = cast<MemRefType>(originalMem.getType());
+  unsigned rank = originalMemRefType.getRank();
+  unsigned bankingDimension = bankingDimensionOpt.value_or(
+      rank - 1); // default to the innermost dimension
   MemRefType newMemRefType = computeBankedMemRefType(
       originalMemRefType, bankingFactor, bankingDimension);
   SmallVector<Value, 4> banks;
@@ -509,7 +512,11 @@ void MemoryBankingPass::runOnOperation() {
       auto [it, inserted] =
           memoryToBanks.insert(std::make_pair(memrefVal, SmallVector<Value>{}));
       if (inserted)
-        it->second = createBanks(memrefVal, bankingFactor, bankingDimension);
+        it->second = createBanks(
+            memrefVal, bankingFactor,
+            bankingDimension.hasValue()
+                ? std::optional<unsigned>(bankingDimension.getValue())
+                : std::nullopt);
     }
   });
 
