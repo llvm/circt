@@ -361,12 +361,15 @@ public:
         vInput.replaceAllUsesWith(vArg);
     }
 
-    // Build stage enable register. The enable register is always reset to 0.
-    // The stage enable register takes the previous-stage combinational valid
-    // output and determines whether this stage is active or not in the next
-    // cycle.
-    // A non-stallable stage always registers the incoming enable signal,
-    // whereas other stages register based on the current stall state.
+    // Build stage enable register. The enable register is reset to 0 iff a
+    // reset signal is available. We here rely on the compreg builders, which
+    // accept reset signal/reset value mlir::Value's that are null.
+    //
+    // The stage enable register takes the
+    // previous-stage combinational valid output and determines whether this
+    // stage is active or not in the next cycle. A non-stallable stage always
+    // registers the incoming enable signal, whereas other stages register based
+    // on the current stall state.
     StageKind stageKind = pipeline.getStageKind(stageIndex);
     Value stageEnabled;
     if (stageIndex == 0) {
@@ -374,8 +377,11 @@ public:
     } else {
       auto stageRegPrefix = getStagePrefix(stageIndex);
       auto enableRegName = (stageRegPrefix.strref() + "_enable").str();
-      hw::ConstantOp enableRegResetVal =
-          builder.create<hw::ConstantOp>(loc, APInt(1, 0, false));
+
+      Value enableRegResetVal;
+      if (args.reset)
+        enableRegResetVal =
+            builder.create<hw::ConstantOp>(loc, APInt(1, 0, false)).getResult();
 
       switch (stageKind) {
       case StageKind::Continuous:
@@ -407,8 +413,10 @@ public:
         llvm::TypeSwitch<Operation *, void>(stageEnabled.getDefiningOp())
             .Case<seq::CompRegOp, seq::CompRegClockEnabledOp>([&](auto op) {
               op.getInitialValueMutable().assign(
-                  circt::seq::createConstantInitialValue(builder,
-                                                         enableRegResetVal));
+                  circt::seq::createConstantInitialValue(
+                      builder, loc,
+                      builder.getIntegerAttr(builder.getI1Type(),
+                                             APInt(1, 0, false))));
             });
       }
     }

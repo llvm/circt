@@ -173,3 +173,27 @@ hw.module @withStallability(in %arg0 : i32, in %go : i1, in %clk : !seq.clock, i
   }
   hw.output %0 : i32
 }
+
+// CHECK-LABEL:  hw.module @withoutReset(in %arg0 : i32, in %stall : i1, in %go : i1, in %clk : !seq.clock, out out : i32) {
+// CHECK-NEXT:    %out, %done = pipeline.scheduled(%a0 : i32 = %arg0) clock(%clk) go(%go) entryEn(%s0_enable)  -> (out : i32) {
+// CHECK-NEXT:      pipeline.stage ^bb1  
+// CHECK-NEXT:    ^bb1(%s1_enable: i1):  // pred: ^bb0
+// CHECK-NEXT:      pipeline.return %a0 : i32
+// CHECK-NEXT:    }
+// CHECK-NEXT:    %out_0, %done_1 = pipeline.unscheduled(%a0 : i32 = %arg0) stall(%stall) clock(%clk) go(%go) entryEn(%s0_enable)  -> (out : i32) {
+// CHECK-NEXT:      pipeline.return %a0 : i32
+// CHECK-NEXT:    }
+// CHECK-NEXT:    hw.output %out : i32
+// CHECK-NEXT:  }
+hw.module @withoutReset(in %arg0 : i32, in %stall : i1, in %go : i1, in %clk : !seq.clock, out out: i32) {
+  %0:2 = pipeline.scheduled(%a0 : i32 = %arg0) clock(%clk) go(%go) entryEn(%s0_enable) -> (out: i32) {
+    pipeline.stage ^bb1
+   ^bb1(%s1_enable : i1):
+    pipeline.return %a0 : i32
+  }
+
+  %1:2 = pipeline.unscheduled (%a0 : i32 = %arg0) stall (%stall) clock (%clk) go (%go) entryEn (%s0_enable) -> (out: i32) {
+    pipeline.return %a0 : i32
+  }
+  hw.output %0 : i32
+}
