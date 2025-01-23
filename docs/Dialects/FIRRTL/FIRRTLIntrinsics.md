@@ -314,11 +314,6 @@ and must be of ground type.
 This encoding is a trimmed version of what's used for the old GrandCentral View
 annotation.
 
-These views do not interact with any GrandCentral annotations or options governing
-the behavior of the annotation-based views.
-
-Output directory behavior is a work in progress presently.
-
 #### AugmentedGroundType
 
 | Property   | Type   | Description                                          |
