@@ -146,8 +146,9 @@ SmallVector<Value, 4> handleGetGlobalOp(memref::GetGlobalOp getGlobalOp,
   newShape[bankingDimension] = originalShape[bankingDimension] / bankingFactor;
 
   auto *symbolTableOp = getGlobalOp->getParentWithTrait<OpTrait::SymbolTable>();
+  auto globalOpNameAttr = getGlobalOp.getNameAttr();
   auto globalOp = dyn_cast_or_null<memref::GlobalOp>(
-      SymbolTable::lookupSymbolIn(symbolTableOp, getGlobalOp.getNameAttr()));
+      SymbolTable::lookupSymbolIn(symbolTableOp, globalOpNameAttr));
   assert(globalOp && "The corresponding GlobalOp should exist in the module");
   MemRefType globalOpTy = globalOp.getType();
 
@@ -172,14 +173,8 @@ SmallVector<Value, 4> handleGetGlobalOp(memref::GetGlobalOp getGlobalOp,
     // Prepare relevant information to create a new GlobalOp
     auto newMemRefTy = MemRefType::get(newShape, globalOpTy.getElementType());
     auto newTypeAttr = TypeAttr::get(newMemRefTy);
-    std::string newName =
-        llvm::formatv("{0}_{1}_{2}_{3}", globalOp.getConstantAttrName(),
-                      llvm::join(llvm::map_range(newShape,
-                                                 [](int64_t dim) {
-                                                   return std::to_string(dim);
-                                                 }),
-                                 "x"),
-                      globalOpTy.getElementType(), bankCnt);
+    std::string newName = llvm::formatv(
+        "{0}_{1}_{2}", globalOpNameAttr.getValue(), "bank", bankCnt);
     RankedTensorType tensorType =
         RankedTensorType::get({newShape}, globalOpTy.getElementType());
     auto newInitValue = DenseElementsAttr::get(tensorType, subBlocks[bankCnt]);
