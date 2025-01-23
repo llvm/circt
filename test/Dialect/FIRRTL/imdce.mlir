@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl-imdeadcodeelim)' --split-input-file -verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl-imdeadcodeelim)' --split-input-file --verify-diagnostics --allow-unregistered-dialect %s | FileCheck %s
 firrtl.circuit "top" {
   // In `dead_module`, %source is connected to %dest through several dead operations such as
   // node, wire, reg or rgereset. %dest is also dead at any instantiation, so check that
@@ -582,4 +582,27 @@ firrtl.circuit "Foo" {
     firrtl.matchingconnect %bar_a, %a : !firrtl.uint<1>
     firrtl.matchingconnect %b, %bar_b : !firrtl.uint<1>
   }
+}
+
+// -----
+
+// Modules referenced from unknown ops cannot be removed, even if they are empty
+// and all their instances have been deleted.
+// CHECK-LABEL: firrtl.circuit "FormalMarkerIsUse"
+firrtl.circuit "FormalMarkerIsUse" {
+  // expected-warning @below {{module `FormalMarkerIsUse` is empty but cannot be removed because the module is public}}
+  firrtl.module @FormalMarkerIsUse() {
+    // CHECK-NOT: firrtl.instance foo @Foo
+    // CHECK-NOT: firrtl.instance bar @Bar
+    firrtl.instance foo @Foo()
+    firrtl.instance bar @Bar()
+  }
+  // CHECK: firrtl.module private @Foo
+  // CHECK: firrtl.module private @Bar
+  // CHECK: firrtl.module private @Uninstantiated
+  firrtl.module private @Foo() {}
+  firrtl.module private @Bar() {}
+  firrtl.module private @Uninstantiated() {}
+  firrtl.formal @Test, @Foo {}
+  "some_unknown_dialect.op"() { magic = @Bar, other = @Uninstantiated } : () -> ()
 }
