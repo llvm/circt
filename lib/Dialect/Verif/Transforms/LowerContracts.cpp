@@ -153,9 +153,8 @@ LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
     auto contract = contracts[i];
 
     // Create verif.formal op
-    auto name =
-        mlirModuleBuilder.getStringAttr(hwModule.getNameAttr().getValue() +
-                                        "_CheckContract_" + Twine(i));
+    auto name = mlirModuleBuilder.getStringAttr(
+        hwModule.getNameAttr().getValue() + "_CheckContract_" + Twine(i));
     auto formalOp = mlirModuleBuilder.create<verif::FormalOp>(
         contract.getLoc(), name, mlirModuleBuilder.getDictionaryAttr({}));
 
