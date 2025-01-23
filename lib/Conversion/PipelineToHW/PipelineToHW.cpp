@@ -379,10 +379,9 @@ public:
       auto enableRegName = (stageRegPrefix.strref() + "_enable").str();
 
       Value enableRegResetVal;
-      if (args.reset) {
+      if (args.reset)
         enableRegResetVal =
             builder.create<hw::ConstantOp>(loc, APInt(1, 0, false)).getResult();
-      }
 
       switch (stageKind) {
       case StageKind::Continuous:

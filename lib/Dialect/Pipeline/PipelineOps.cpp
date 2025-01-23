@@ -210,10 +210,8 @@ static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
   if (parser.resolveOperand(clockOperand, clkType, result.operands))
     return failure();
 
-  if (withReset) {
-    if (parser.resolveOperand(resetOperand, i1, result.operands))
-      return failure();
-  }
+  if (withReset && parser.resolveOperand(resetOperand, i1, result.operands))
+    return failure();
 
   if (parser.resolveOperand(goOperand, i1, result.operands))
     return failure();
