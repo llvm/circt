@@ -15,7 +15,11 @@
 #include "circt/Conversion/SMTToZ3LLVM.h"
 #include "circt/Conversion/VerifToSMT.h"
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Emit/EmitDialect.h"
+#include "circt/Dialect/Emit/EmitPasses.h"
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/OM/OMDialect.h"
+#include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/SMT/SMTDialect.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
@@ -168,6 +172,8 @@ static LogicalResult executeBMC(MLIRContext &context) {
         std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
             "circt-bmc"));
 
+  pm.addPass(om::createStripOMPass());
+  pm.addPass(emit::createStripEmitPass());
   pm.addPass(createExternalizeRegisters());
   LowerToBMCOptions lowerToBMCOptions;
   lowerToBMCOptions.bound = clockBound;
@@ -307,11 +313,21 @@ int main(int argc, char **argv) {
 
   // Register the supported CIRCT dialects and create a context to work with.
   DialectRegistry registry;
-  registry.insert<circt::comb::CombDialect, circt::hw::HWDialect,
-                  circt::seq::SeqDialect, circt::smt::SMTDialect,
-                  mlir::func::FuncDialect, circt::verif::VerifDialect,
-                  mlir::LLVM::LLVMDialect, mlir::arith::ArithDialect,
-                  mlir::BuiltinDialect>();
+  // clang-format off
+  registry.insert<
+    circt::comb::CombDialect,
+    circt::emit::EmitDialect,
+    circt::hw::HWDialect,
+    circt::om::OMDialect,
+    circt::seq::SeqDialect,
+    circt::smt::SMTDialect,
+    circt::verif::VerifDialect,
+    mlir::arith::ArithDialect,
+    mlir::BuiltinDialect,
+    mlir::func::FuncDialect,
+    mlir::LLVM::LLVMDialect
+  >();
+  // clang-format on
   mlir::func::registerInlinerExtension(registry);
   mlir::registerBuiltinDialectTranslation(registry);
   mlir::registerLLVMDialectTranslation(registry);

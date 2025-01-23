@@ -17,7 +17,11 @@
 #include "circt/Conversion/SMTToZ3LLVM.h"
 #include "circt/Conversion/VerifToSMT.h"
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Emit/EmitDialect.h"
+#include "circt/Dialect/Emit/EmitPasses.h"
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/OM/OMDialect.h"
+#include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/SMT/SMTDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
@@ -217,10 +221,14 @@ static LogicalResult executeLEC(MLIRContext &context) {
         std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
             "circt-lec"));
 
-  ConstructLECOptions constructLECOptions;
-  constructLECOptions.firstModule = firstModuleName;
-  constructLECOptions.secondModule = secondModuleName;
-  pm.addPass(createConstructLEC(constructLECOptions));
+  pm.addPass(om::createStripOMPass());
+  pm.addPass(emit::createStripEmitPass());
+  {
+    ConstructLECOptions opts;
+    opts.firstModule = firstModuleName;
+    opts.secondModule = secondModuleName;
+    pm.addPass(createConstructLEC(opts));
+  }
   pm.addPass(createConvertHWToSMT());
   pm.addPass(createConvertCombToSMT());
   pm.addPass(createConvertVerifToSMT());
@@ -352,10 +360,20 @@ int main(int argc, char **argv) {
 
   // Register the supported CIRCT dialects and create a context to work with.
   DialectRegistry registry;
-  registry.insert<circt::comb::CombDialect, circt::hw::HWDialect,
-                  circt::smt::SMTDialect, circt::verif::VerifDialect,
-                  mlir::func::FuncDialect, mlir::LLVM::LLVMDialect,
-                  mlir::arith::ArithDialect, mlir::BuiltinDialect>();
+  // clang-format off
+  registry.insert<
+    circt::comb::CombDialect,
+    circt::emit::EmitDialect,
+    circt::hw::HWDialect,
+    circt::om::OMDialect,
+    circt::smt::SMTDialect,
+    circt::verif::VerifDialect,
+    mlir::arith::ArithDialect,
+    mlir::BuiltinDialect,
+    mlir::func::FuncDialect,
+    mlir::LLVM::LLVMDialect
+  >();
+  // clang-format on
   mlir::func::registerInlinerExtension(registry);
   mlir::registerBuiltinDialectTranslation(registry);
   mlir::registerLLVMDialectTranslation(registry);

@@ -22,6 +22,7 @@
 #include "circt/Dialect/Comb/CombPasses.h"
 #include "circt/Dialect/DC/DCPasses.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
+#include "circt/Dialect/Emit/EmitPasses.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/FSM/FSMPasses.h"
 #include "circt/Dialect/HW/HWPasses.h"
@@ -64,24 +65,25 @@ inline void registerAllPasses() {
   calyx::registerPasses();
   comb::registerPasses();
   dc::registerPasses();
+  emit::registerPasses();
   esi::registerESIPasses();
   firrtl::registerPasses();
   fsm::registerPasses();
+  handshake::registerPasses();
+  hw::registerPasses();
+  kanagawa::registerPasses();
   llhd::registerPasses();
+  moore::registerPasses();
   msft::registerPasses();
   om::registerPasses();
-  seq::registerPasses();
-  sv::registerPasses();
-  handshake::registerPasses();
-  kanagawa::registerPasses();
-  rtg::registerPasses();
-  hw::registerPasses();
   pipeline::registerPasses();
+  rtg::registerPasses();
+  seq::registerPasses();
   sim::registerPasses();
   ssp::registerPasses();
+  sv::registerPasses();
   systemc::registerPasses();
   verif::registerPasses();
-  moore::registerPasses();
 }
 
 } // namespace circt

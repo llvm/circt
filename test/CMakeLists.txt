@@ -26,6 +26,7 @@ set(CIRCT_TEST_DEPENDS
   circt-capi-rtg-test
   circt-capi-rtgtest-test
   circt-as
+  circt-bmc
   circt-dis
   circt-lec
   circt-opt

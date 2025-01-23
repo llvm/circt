@@ -9,21 +9,21 @@ set(LLVM_LINK_COMPONENTS Support ${ARCILATOR_JIT_LLVM_COMPONENTS})
 
 set(libs
   CIRCTArc
-  CIRCTHWTransforms
   CIRCTArcToLLVM
   CIRCTArcTransforms
   CIRCTCombToArith
   CIRCTConvertToArcs
-  CIRCTEmit
+  CIRCTEmitTransforms
   CIRCTExportArc
-  CIRCTOM
+  CIRCTHWTransforms
   CIRCTLLHD
-  CIRCTVerif
+  CIRCTOMTransforms
   CIRCTSeqToSV
   CIRCTSeqTransforms
   CIRCTSimTransforms
   CIRCTSupport
   CIRCTTransforms
+  CIRCTVerif
   MLIRArithDialect
   MLIRBuiltinToLLVMIRTranslation
   MLIRControlFlowDialect
