@@ -683,7 +683,7 @@ def ConvertToArcs : Pass<"convert-to-arcs", "mlir::ModuleOp"> {
 // ConvertCombToArith
 //===----------------------------------------------------------------------===//
 
-def ConvertCombToArith : Pass<"convert-comb-to-arith", "mlir::ModuleOp"> {
+def ConvertCombToArith : Pass<"convert-comb-to-arith"> {
   let summary = "Convert combinational ops and constants into arith ops";
   let constructor = "circt::createConvertCombToArithPass()";
   let dependentDialects = ["mlir::arith::ArithDialect"];
@@ -693,7 +693,7 @@ def ConvertCombToArith : Pass<"convert-comb-to-arith", "mlir::ModuleOp"> {
 // ConvertCombToSMT
 //===----------------------------------------------------------------------===//
 
-def ConvertCombToSMT : Pass<"convert-comb-to-smt", "mlir::ModuleOp"> {
+def ConvertCombToSMT : Pass<"convert-comb-to-smt"> {
   let summary = "Convert combinational ops and constants to SMT ops";
   // Need to depend on HWDialect because some 'comb' canonicalization patterns
   // build 'hw.constant' operations.
