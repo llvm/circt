@@ -511,3 +511,55 @@ firrtl.circuit "NoInterfaces" attributes {
 // CHECK-LABEL: module {
 // CHECK:         sv.verbatim
 // CHECK-SAME:      []
+
+// -----
+
+firrtl.circuit "SetOutputDir" {
+  firrtl.module @SetOutputDir() attributes {output_file = #hw.output_file<"path/">} {
+    firrtl.view "view", <{
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "MyViewInterface",
+      elements = [{
+        class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+        defName = "SubInterface",
+        name = "sub",
+        elements = []
+      }]
+    }>
+  }
+
+  firrtl.module @ExcludeFromFileList() attributes {output_file = #hw.output_file<"other/", excludeFromFileList>} {
+    firrtl.view "view", <{
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "MyViewInterface",
+      elements = [{
+        class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+        defName = "SubInterface",
+        name = "sub",
+        elements = []
+      }]
+    }>
+  }
+}
+
+// CHECK-LABEL: "SetOutputDir"
+
+// CHECK: module @SetOutputDir()
+// CHECK-NEXT: !sv.interface<@[[OUTSYM_1:.+]]>
+
+// CHECK: module @ExcludeFromFileList()
+// CHECK-NEXT: !sv.interface<@[[OUTSYM_2:.+]]>
+
+// CHECK: sv.interface @[[OUTSYM_1]]
+// CHECK-SAME: output_file = #hw.output_file<"path{{/|\\\\}}">
+// CHECK: sv.verbatim "[[SUB_1:.+]] sub();"
+
+// CHECK: sv.interface @[[SUB_1]]
+// CHECK-SAME: output_file = #hw.output_file<"path{{/|\\\\}}">
+
+// CHECK: sv.interface @[[OUTSYM_2]]
+// CHECK-SAME: output_file = #hw.output_file<"other{{/|\\\\}}", excludeFromFileList>
+// CHECK: sv.verbatim "[[SUB_2:.+]] sub();"
+
+// CHECK: sv.interface @[[SUB_2]]
+// CHECK-SAME: output_file = #hw.output_file<"other{{/|\\\\}}", excludeFromFileList>

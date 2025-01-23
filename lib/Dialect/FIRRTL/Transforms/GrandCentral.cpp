@@ -2565,6 +2565,8 @@ void GrandCentralPass::runOnOperation() {
     numXMRs += xmrElems.size();
 
     sv::InterfaceOp topIface;
+    auto containingOutputFileAttr =
+        viewParentMod->getAttrOfType<hw::OutputFileAttr>("output_file");
     for (const auto &ifaceBuilder : interfaceBuilder) {
       auto builder = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
       auto loc = getOperation().getLoc();
@@ -2573,6 +2575,11 @@ void GrandCentralPass::runOnOperation() {
       if (!topIface)
         topIface = iface;
       ++numInterfaces;
+
+      // Propagate output_file information from parent to the interface.
+      // Require/expect "AssignOutputDirs" ran before this.
+      if (containingOutputFileAttr)
+        iface->setAttr("output_file", containingOutputFileAttr);
 
       iface.setCommentAttr(builder.getStringAttr("VCS coverage exclude_file"));
       builder.setInsertionPointToEnd(
