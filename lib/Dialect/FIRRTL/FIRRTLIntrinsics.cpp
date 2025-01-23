@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLIntrinsics.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Support/JSON.h"
@@ -714,44 +715,11 @@ public:
 // View intrinsic converter and helpers
 //===----------------------------------------------------------------------===//
 
-/// Implements the same behavior as DictionaryAttr::getAs<A> to return the
-/// value of a specific type associated with a key in a dictionary. However,
-/// this is specialized to print a useful error message, specific to custom
-/// attribute process, on failure.
-/// These attributes are created from input JSON.
 template <typename A>
-A tryGetAs(DictionaryAttr &dict, const Attribute &root, StringRef key,
-           Location loc, Twine path = Twine()) {
-  SmallString<128> msg;
-  // Check that the key exists.
-  auto value = dict.get(key);
-  if (!value) {
-    if (path.isTriviallyEmpty())
-      ("View info did not contain required key '" + key + "'.").toVector(msg);
-    else
-      ("View info attribute with path '" + path +
-       "' did not contain required key '" + key + "'.")
-          .toVector(msg);
-    mlir::emitError(loc, msg).attachNote()
-        << "The full info attribute is reproduced here: " << root;
-    return nullptr;
-  }
-
-  // Check that the value has the correct type.
-  auto valueA = dyn_cast<A>(value);
-  if (!valueA) {
-    if (path.isTriviallyEmpty())
-      ("View info did not contain the correct type for key '" + key + "'.")
-          .toVector(msg);
-    else
-      ("View info attribute with path '" + path +
-       "' did not contain the correct type for key '" + key + "'.")
-          .toVector(msg);
-    mlir::emitError(loc, msg).attachNote()
-        << "The full info attribute is reproduced here: " << root;
-    return nullptr;
-  }
-  return valueA;
+A tryGetAs(DictionaryAttr dict, Attribute root, StringRef key, Location loc,
+           Twine path = Twine()) {
+  return tryGetAsBase<A>(dict, root, key, loc, "View info", "info attribute",
+                         path);
 }
 
 /// Recursively walk a sifive.enterprise.grandcentral.AugmentedType to extract
