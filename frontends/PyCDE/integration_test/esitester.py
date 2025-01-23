@@ -23,7 +23,7 @@
 
 import pycde
 from pycde import AppID, Clock, Module, Reset, generator, modparams
-from pycde.bsp import cosim
+from pycde.bsp import get_bsp
 from pycde.constructs import Counter, Reg, Wire
 from pycde.esi import CallService
 import pycde.esi as esi
@@ -189,7 +189,8 @@ class EsiTesterTop(Module):
 
 
 if __name__ == "__main__":
-  s = pycde.System(cosim.CosimBSP(EsiTesterTop),
+  bsp = get_bsp(sys.argv[2])
+  s = pycde.System(bsp(EsiTesterTop),
                    name="EsiTester",
                    output_directory=sys.argv[1])
   s.compile()

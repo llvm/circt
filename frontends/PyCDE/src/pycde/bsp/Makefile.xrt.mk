@@ -33,7 +33,8 @@ LINK_OUT := $(BUILD)/$(NAME).link.xclbin
 XCL_OUT := $(NAME).$(TARGET).xclbin
 HOST_APP := $(BUILD)/host_app
 
-VPPFLAGS = --save-temps --kernel_frequency $(FREQ) -O $(OPT)
+VPPFLAGS = --config xrt_vitis.cfg
+VPPFLAGS += --save-temps --kernel_frequency $(FREQ) -O $(OPT)
 VPPFLAGS += --remote_ip_cache cache
 
 # Platform must match the device + shell you're using
@@ -41,7 +42,11 @@ VPPFLAGS += --remote_ip_cache cache
 # For a local card or hw_emu mode, use the latest U250 XDMA Shell
 
 ifeq ($(AZURE), true)
-PLATFORM := xilinx_u250_gen3x16_xdma_2_1_202010_1
+	ifeq ($(TARGET), hw_emu)
+		PLATFORM := xilinx_u250_gen3x16_xdma_4_1_202210_1
+	else
+		PLATFORM := xilinx_u250_gen3x16_xdma_2_1_202010_1
+	endif
 # For Azure NP-series, output the routed netlist as a DCP instead of a bitstream!
 VPPFLAGS += --advanced.param compiler.acceleratorBinaryContent=dcp
 else
@@ -91,7 +96,6 @@ $(BUILD)/emconfig.json:
 
 clean:
 	rm -rf $(BUILD) temp_kernel .Xil vivado* kernel *.jou *.log *.wdb *.wcfg *.protoinst *.csv
-	rm -f runtime/*.so
 
 # Targets which only apply to image builds.
 ifeq ($(TARGET), hw)
