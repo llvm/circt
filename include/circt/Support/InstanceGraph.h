@@ -200,11 +200,30 @@ public:
   InstanceGraph(const InstanceGraph &) = delete;
   virtual ~InstanceGraph() = default;
 
-  /// Look up an InstanceGraphNode for a module.
-  InstanceGraphNode *lookup(ModuleOpInterface op);
+  /// Lookup an module by name. Returns null if no module with the given name
+  /// exists in the instance graph.
+  InstanceGraphNode *lookupOrNull(StringAttr name);
 
-  /// Lookup an module by name.
-  InstanceGraphNode *lookup(StringAttr name);
+  /// Look up an InstanceGraphNode for a module. Returns null if the module has
+  /// not been added to the instance graph.
+  InstanceGraphNode *lookupOrNull(ModuleOpInterface op) {
+    return lookup(op.getModuleNameAttr());
+  }
+
+  /// Look up an InstanceGraphNode for a module. Aborts if the module does not
+  /// exist.
+  InstanceGraphNode *lookup(ModuleOpInterface op) {
+    auto *node = lookupOrNull(op);
+    assert(node != nullptr && "Module not in InstanceGraph!");
+    return node;
+  }
+
+  /// Lookup an module by name. Aborts if the module does not exist.
+  InstanceGraphNode *lookup(StringAttr name) {
+    auto *node = lookupOrNull(name);
+    assert(node != nullptr && "Module not in InstanceGraph!");
+    return node;
+  }
 
   /// Lookup an InstanceGraphNode for a module.
   InstanceGraphNode *operator[](ModuleOpInterface op) { return lookup(op); }
