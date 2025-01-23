@@ -142,6 +142,27 @@ rtg.test @instructions : !rtg.dict<imm: !rtgtest.imm12, imm13: !rtgtest.imm13, l
   rtgtest.rv32i.bltu %rd, %rs, %label : !rtg.label
   // CHECK: rtgtest.rv32i.bgeu [[RD]], [[RS]], [[LABEL]] : !rtg.label
   rtgtest.rv32i.bgeu %rd, %rs, %label : !rtg.label
+
+  // CHECK: rtgtest.rv32i.add [[RD]], [[RS]], [[RS]] {rtg.some_attr}
+  rtgtest.rv32i.add %rd, %rs, %rs {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.sub [[RD]], [[RS]], [[RS]] {rtg.some_attr}
+  rtgtest.rv32i.sub %rd, %rs, %rs {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.sll [[RD]], [[RS]], [[RS]] {rtg.some_attr}
+  rtgtest.rv32i.sll %rd, %rs, %rs {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.slt [[RD]], [[RS]], [[RS]] {rtg.some_attr}
+  rtgtest.rv32i.slt %rd, %rs, %rs {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.sltu [[RD]], [[RS]], [[RS]] {rtg.some_attr}
+  rtgtest.rv32i.sltu %rd, %rs, %rs {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.xor [[RD]], [[RS]], [[RS]] {rtg.some_attr}
+  rtgtest.rv32i.xor %rd, %rs, %rs {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.srl [[RD]], [[RS]], [[RS]] {rtg.some_attr}
+  rtgtest.rv32i.srl %rd, %rs, %rs {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.sra [[RD]], [[RS]], [[RS]] {rtg.some_attr}
+  rtgtest.rv32i.sra %rd, %rs, %rs {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.or [[RD]], [[RS]], [[RS]] {rtg.some_attr}
+  rtgtest.rv32i.or %rd, %rs, %rs {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.and [[RD]], [[RS]], [[RS]] {rtg.some_attr}
+  rtgtest.rv32i.and %rd, %rs, %rs {rtg.some_attr}
 }
 
 // -----

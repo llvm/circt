@@ -81,6 +81,56 @@ rtg.test @test0 : !rtg.dict<> {
   // CHECK-NEXT:    # bgeu ra, s0, 6144
   // CHECK-NEXT:    .word 0x8080F0E3
   rtgtest.rv32i.bgeu %rd, %rs, %imm13 : !rtgtest.imm13
+
+  // CHECK-ALLOWED-NEXT:    add ra, s0, s0
+  // CHECK-NEXT:    # add ra, s0, s0
+  // CHECK-NEXT:    .word 0x8400B3
+  rtgtest.rv32i.add %rd, %rs, %rs
+
+  // CHECK-ALLOWED-NEXT:    sub ra, s0, s0
+  // CHECK-NEXT:    # sub ra, s0, s0
+  // CHECK-NEXT:    .word 0x408400B3
+  rtgtest.rv32i.sub %rd, %rs, %rs
+
+  // CHECK-ALLOWED-NEXT:    sll ra, s0, s0
+  // CHECK-NEXT:    # sll ra, s0, s0
+  // CHECK-NEXT:    .word 0x8410B3
+  rtgtest.rv32i.sll %rd, %rs, %rs
+
+  // CHECK-ALLOWED-NEXT:    slt ra, s0, s0
+  // CHECK-NEXT:    # slt ra, s0, s0
+  // CHECK-NEXT:    .word 0x8420B3
+  rtgtest.rv32i.slt %rd, %rs, %rs
+
+  // CHECK-ALLOWED-NEXT:    sltu ra, s0, s0
+  // CHECK-NEXT:    # sltu ra, s0, s0
+  // CHECK-NEXT:    .word 0x8430B3
+  rtgtest.rv32i.sltu %rd, %rs, %rs
+
+  // CHECK-ALLOWED-NEXT:    xor ra, s0, s0
+  // CHECK-NEXT:    # xor ra, s0, s0
+  // CHECK-NEXT:    .word 0x8440B3
+  rtgtest.rv32i.xor %rd, %rs, %rs
+
+  // CHECK-ALLOWED-NEXT:    srl ra, s0, s0
+  // CHECK-NEXT:    # srl ra, s0, s0
+  // CHECK-NEXT:    .word 0x8450B3
+  rtgtest.rv32i.srl %rd, %rs, %rs
+
+  // CHECK-ALLOWED-NEXT:    sra ra, s0, s0
+  // CHECK-NEXT:    # sra ra, s0, s0
+  // CHECK-NEXT:    .word 0x408450B3
+  rtgtest.rv32i.sra %rd, %rs, %rs
+
+  // CHECK-ALLOWED-NEXT:    or ra, s0, s0
+  // CHECK-NEXT:    # or ra, s0, s0
+  // CHECK-NEXT:    .word 0x8460B3
+  rtgtest.rv32i.or %rd, %rs, %rs
+
+  // CHECK-ALLOWED-NEXT:    and ra, s0, s0
+  // CHECK-NEXT:    # and ra, s0, s0
+  // CHECK-NEXT:    .word 0x8470B3
+  rtgtest.rv32i.and %rd, %rs, %rs
 }
 
 // CHECK-EMPTY:
