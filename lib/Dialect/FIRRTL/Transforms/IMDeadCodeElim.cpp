@@ -355,21 +355,40 @@ void IMDeadCodeElimPass::runOnOperation() {
       return;
     }
 
-    // If there is an unknown use of inner sym or hierpath, just mark all of
-    // them alive.
-    for (NamedAttribute namedAttr : op->getAttrs()) {
-      namedAttr.getValue().walk([&](Attribute subAttr) {
-        if (auto innerRef = dyn_cast<hw::InnerRefAttr>(subAttr))
-          if (auto instance = dyn_cast_or_null<firrtl::InstanceOp>(
-                  innerRefNamespace->lookupOp(innerRef)))
-            markAlive(instance);
+    // If there is an unknown symbol or inner symbol use, mark all of them
+    // alive.
+    op->getAttrDictionary().walk([&](Attribute attr) {
+      if (auto innerRef = dyn_cast<hw::InnerRefAttr>(attr)) {
+        // Mark instances alive that are targeted by an inner ref.
+        if (auto instance = dyn_cast_or_null<firrtl::InstanceOp>(
+                innerRefNamespace->lookupOp(innerRef)))
+          markAlive(instance);
+        return;
+      }
 
-        if (auto flatSymbolRefAttr = dyn_cast<FlatSymbolRefAttr>(subAttr))
-          if (auto hierPath = symbolTable->template lookup<hw::HierPathOp>(
-                  flatSymbolRefAttr.getAttr()))
-            markAlive(hierPath);
-      });
-    }
+      if (auto symbolRef = dyn_cast<FlatSymbolRefAttr>(attr)) {
+        auto *symbol = symbolTable->lookup(symbolRef.getAttr());
+        if (!symbol)
+          return;
+
+        // Mark referenced hierarchical paths alive.
+        if (auto hierPath = dyn_cast<hw::HierPathOp>(symbol))
+          markAlive(hierPath);
+
+        // Mark modules referenced by unknown ops alive.
+        if (auto module = dyn_cast<FModuleOp>(symbol)) {
+          if (!isa<firrtl::InstanceOp>(op)) {
+            LLVM_DEBUG(llvm::dbgs()
+                       << "Unknown use of " << module.getModuleNameAttr()
+                       << " in " << op->getName() << "\n");
+            markAlive(module);
+            markBlockExecutable(module.getBodyBlock());
+          }
+        }
+
+        return;
+      }
+    });
   });
 
   // Create a vector of modules in the post order of instance graph.
@@ -800,6 +819,10 @@ void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
         << "these are instances with symbols";
     return;
   }
+
+  // We cannot delete alive modules.
+  if (liveElements.contains(module))
+    return;
 
   instanceGraph->erase(instanceGraphNode);
   module.erase();
