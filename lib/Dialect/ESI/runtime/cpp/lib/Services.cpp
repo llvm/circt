@@ -311,5 +311,7 @@ Service::Type ServiceRegistry::lookupServiceType(const std::string &svcName) {
     return typeid(CallService);
   if (svcName == MMIO::StdName)
     return typeid(MMIO);
+  if (svcName == HostMem::StdName)
+    return typeid(HostMem);
   return typeid(CustomService);
 }
