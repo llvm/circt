@@ -131,6 +131,21 @@ rtg.test @test0 : !rtg.dict<> {
   // CHECK-NEXT:    # and ra, s0, s0
   // CHECK-NEXT:    .word 0x8470B3
   rtgtest.rv32i.and %rd, %rs, %rs
+
+  // CHECK-ALLOWED-NEXT:    sb ra, 0(s0)
+  // CHECK-NEXT:    # sb ra, 0(s0)
+  // CHECK-NEXT:    .word 0x808023
+  rtgtest.rv32i.sb %rd, %rs, %imm
+
+  // CHECK-ALLOWED-NEXT:    sh ra, 0(s0)
+  // CHECK-NEXT:    # sh ra, 0(s0)
+  // CHECK-NEXT:    .word 0x809023
+  rtgtest.rv32i.sh %rd, %rs, %imm
+
+  // CHECK-ALLOWED-NEXT:    sw ra, 0(s0)
+  // CHECK-NEXT:    # sw ra, 0(s0)
+  // CHECK-NEXT:    .word 0x80A023
+  rtgtest.rv32i.sw %rd, %rs, %imm
 }
 
 // CHECK-EMPTY:
