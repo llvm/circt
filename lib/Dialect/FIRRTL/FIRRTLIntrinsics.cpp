@@ -872,6 +872,14 @@ public:
     if (gi.hasNoOutput() || gi.namedParam("info") || gi.namedParam("name"))
       return failure();
 
+    // Check operands.
+    for (auto idx : llvm::seq(gi.getNumInputs()))
+      if (gi.checkInputType(idx, "must be ground type", [](auto ty) {
+            auto base = type_dyn_cast<FIRRTLBaseType>(ty);
+            return base && base.isGround();
+          }))
+        return failure();
+
     // Parse "info" string parameter as JSON.
     auto view =
         llvm::json::parse(gi.getParamValue<StringAttr>("info").getValue());
@@ -906,6 +914,19 @@ public:
         AugmentedBundleTypeAttr::get(gi.op.getContext(), *result);
     if (augmentedType.getClass() != augmentedBundleTypeClass)
       return gi.emitError() << ": 'info' must be augmented bundle";
+
+    size_t numLeaves = 0;
+    augmentedType.walk([&numLeaves](DictionaryAttr dict) {
+      assert(dict.get("class") && "should have already failed");
+      if (dict.getAs<StringAttr>("class") == augmentedGroundTypeClass) {
+        ++numLeaves;
+        llvm::errs() << "dict: " << dict << "\n";
+      }
+    });
+    if (numLeaves != gi.getNumInputs())
+      return gi.emitError()
+             << " has " << gi.getNumInputs() << " operands but view 'info' has "
+             << numLeaves << " leaf elements";
 
     // Check complete, convert!
 
