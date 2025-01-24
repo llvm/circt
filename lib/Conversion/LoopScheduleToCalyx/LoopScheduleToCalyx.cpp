@@ -1549,11 +1549,10 @@ public:
     if (runOnce)
       config.maxIterations = 1;
 
-    /// Can't return applyPatternsAndFoldGreedily. Root isn't
+    /// Can't return applyPatternsGreedily. Root isn't
     /// necessarily erased so it will always return failed(). Instead,
     /// forward the 'succeeded' value from PartialLoweringPatternBase.
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(pattern),
-                                       config);
+    (void)applyPatternsGreedily(getOperation(), std::move(pattern), config);
     return partialPatternRes;
   }
 
@@ -1684,8 +1683,8 @@ void LoopScheduleToCalyxPass::runOnOperation() {
   RewritePatternSet cleanupPatterns(&getContext());
   cleanupPatterns.add<calyx::MultipleGroupDonePattern,
                       calyx::NonTerminatingGroupDonePattern>(&getContext());
-  if (failed(applyPatternsAndFoldGreedily(getOperation(),
-                                          std::move(cleanupPatterns)))) {
+  if (failed(
+          applyPatternsGreedily(getOperation(), std::move(cleanupPatterns)))) {
     signalPassFailure();
     return;
   }

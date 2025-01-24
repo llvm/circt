@@ -64,7 +64,7 @@ public:
   LogicalResult
   matchAndRewrite(TOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    ValueRange flattenedOperands = flattenValues(adaptor.getOperands());
+    SmallVector<Value> flattenedOperands = flattenValues(adaptor.getOperands());
 
     // flattenedOperands may be empty (in case all operands are i0 typed and
     // have already been pruned. Then the 1:N adaptor will reflect this as no
@@ -145,7 +145,7 @@ public:
   LogicalResult
   matchAndRewrite(comb::ParityOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    ValueRange flattenedOperands = flattenValues(adaptor.getOperands());
+    SmallVector<Value> flattenedOperands = flattenValues(adaptor.getOperands());
     if (!flattenedOperands.empty() && noI0TypedValue(flattenedOperands))
       return failure();
 
