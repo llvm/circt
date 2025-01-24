@@ -238,3 +238,13 @@ hw.module @NoneTypeParam<p1: none>() {}
 hw.module @ParamConcatInst() {
   hw.instance "inst" @NoneTypeParam<p1: none = #hw.param.expr.str.concat<"top", ".", "child">>() -> ()
 }
+
+// CHECK-LABEL: @param_in_param<
+hw.module.extern @param_in_param<RESET_VALUE: !hw.int<#hw.param.decl.ref<"DATA_WIDTH">>, DATA_WIDTH: i32 = 32>(in %input : !hw.int<#hw.param.decl.ref<"DATA_WIDTH">>, out output : !hw.int<#hw.param.decl.ref<"DATA_WIDTH">>)
+
+// CHECK-LABEL: @param_in_param_inst(
+// CHECK: %a.output = hw.instance "a" @param_in_param<RESET_VALUE: i96 = 0, DATA_WIDTH: i32 = 96>(input: %input: i96) -> (output: i96)
+hw.module @param_in_param_inst(in %input : i96, in %clk : i1, in %rst : i1, out output : i96) {
+  %a.output = hw.instance "a" @param_in_param<RESET_VALUE: i96 = 0, DATA_WIDTH: i32 = 96>(input: %input: i96) -> (output: i96)
+  hw.output %a.output : i96
+}
