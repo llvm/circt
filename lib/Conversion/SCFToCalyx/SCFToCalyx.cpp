@@ -2191,8 +2191,6 @@ private:
         OpBuilder::InsertionGuard g(rewriter);
         auto callBody = rewriter.create<calyx::SeqOp>(instanceOp.getLoc());
         rewriter.setInsertionPointToStart(callBody.getBodyBlock());
-        std::string initGroupName = "init_" + instanceOp.getSymName().str();
-        rewriter.create<calyx::EnableOp>(instanceOp.getLoc(), initGroupName);
 
         auto callee = callSchedPtr->callOp.getCallee();
         auto *calleeOp = SymbolTable::lookupNearestSymbolFrom(
