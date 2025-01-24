@@ -35,9 +35,7 @@ struct LowerContractsPass
 
 Operation *replaceContractOp(OpBuilder &builder, RequireLike op,
                              IRMapping &mapping, bool assumeContract) {
-  StringAttr labelAttr;
-  if (auto label = op.getLabel())
-    labelAttr = builder.getStringAttr(label.value());
+  StringAttr labelAttr = op.getLabelAttr();
 
   Value enableValue;
   if (auto enable = op.getEnable())

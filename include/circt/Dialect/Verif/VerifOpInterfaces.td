@@ -13,6 +13,8 @@ def RequireLike : OpInterface<"RequireLike"> {
   let methods = [
     InterfaceMethod<"Get the label",
       "std::optional<llvm::StringRef>", "getLabel", (ins)>,
+    InterfaceMethod<"Get the label attribute",
+      "mlir::StringAttr", "getLabelAttr", (ins)>,
     InterfaceMethod<"Get the property",
       "mlir::Value", "getProperty", (ins)>,
     InterfaceMethod<"Get the enable",
