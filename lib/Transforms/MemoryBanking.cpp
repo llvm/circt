@@ -204,8 +204,24 @@ SmallVector<Value, 4> createBanks(Value originalMem, uint64_t bankingFactor,
                                   std::optional<unsigned> bankingDimensionOpt) {
   MemRefType originalMemRefType = cast<MemRefType>(originalMem.getType());
   unsigned rank = originalMemRefType.getRank();
-  unsigned bankingDimension = bankingDimensionOpt.value_or(
-      rank - 1); // default to the innermost dimension
+  ArrayRef<int64_t> shape = originalMemRefType.getShape();
+
+  // Get the banking dimension if specified; use the innermost dimension that
+  // has size greater than one if not.
+  unsigned bankingDimension;
+  if (!bankingDimensionOpt.has_value()) {
+    bankingDimension = rank;
+    for (int dim = rank - 1; dim >= 0; --dim) {
+      if (shape[dim] > 1) {
+        bankingDimension = dim;
+        break;
+      }
+    }
+  } else {
+    bankingDimension = *bankingDimensionOpt;
+  }
+  assert(bankingDimension < rank && "No eligible dimension for banking");
+
   MemRefType newMemRefType = computeBankedMemRefType(
       originalMemRefType, bankingFactor, bankingDimension);
   SmallVector<Value, 4> banks;
