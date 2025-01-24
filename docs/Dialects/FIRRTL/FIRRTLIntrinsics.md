@@ -299,7 +299,7 @@ This is _not_ a true SystemVerilog Interface, it is only lowered to one.
 | Parameter     | Type   | Description                                         |
 | ------------- | ------ | --------------------------------------------------- |
 | name          | string | Instance name of the view.                          |
-| view          | string | JSON encoding the view structure.                   |
+| info          | string | JSON encoding the view structure.                   |
 
 | Port       | Direction | Type     | Description                         |
 | ---------- | --------- | -------- | ----------------------------------- |
@@ -313,6 +313,43 @@ and must be of ground type.
 
 This encoding is a trimmed version of what's used for the old GrandCentral View
 annotation.
+
+Example usage:
+```firrtl
+circuit ViewExample:
+  public module ViewExample:
+    input in : { x : UInt<2>, y : { z : UInt<3>[2] } }
+    intrinsic(circt_view<name="view", info="{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"ViewName\",\"elements\":[{\"description\":\"X marks the spot\",\"name\":\"x\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"}},{\"description\":\"y bundle\",\"name\":\"y\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"YView\",\"elements\":[{\"name\":\"z\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedVectorType\",\"elements\":[{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"},{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"}]}}]}}]}">, in.x, in.y.z[0], in.y.z[1])
+```
+
+Example Output:
+```systemverilog
+module ViewExample(
+  input [1:0] in_x,
+  input [2:0] in_y_z_0,
+              in_y_z_1
+);
+
+  ViewName view();
+  assign view.x = in_x;
+  assign view.y.z[0] = in_y_z_0;
+  assign view.y.z[1] = in_y_z_1;
+endmodule
+
+// VCS coverage exclude_file
+interface ViewName;
+  // X marks the spot
+  logic [1:0] x;
+  // y bundle
+  YView y();
+endinterface
+
+// VCS coverage exclude_file
+interface YView;
+  logic [2:0] z[0:1];
+endinterface
+
+```
 
 #### AugmentedGroundType
 
