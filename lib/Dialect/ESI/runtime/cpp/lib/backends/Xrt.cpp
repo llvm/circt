@@ -62,13 +62,6 @@ struct esi::backends::xrt::XrtAccelerator::Impl {
     // Find memory group for the host.
     ::xrt::xclbin xcl(xclbin);
     std::optional<::xrt::xclbin::mem> host_mem;
-<<<<<<< HEAD
-    for (auto mem : xcl.get_mems())
-      // The host memory is tagged with "HOST[0]". Memory type is wrong --
-      // reports as DRAM rather than host memory so we can't filter on that.
-      if (mem.get_tag().starts_with("HOST"))
-        host_mem = mem;
-=======
     for (auto mem : xcl.get_mems()) {
       // The host memory is tagged with "HOST[0]". Memory type is wrong --
       // reports as DRAM rather than host memory so we can't filter on that.
@@ -79,7 +72,6 @@ struct esi::backends::xrt::XrtAccelerator::Impl {
           host_mem = mem;
       }
     }
->>>>>>> main
     if (!host_mem)
       throw std::runtime_error("No host memory found in xclbin");
     memoryGroup = host_mem->get_index();
@@ -133,7 +125,7 @@ namespace {
 class XrtHostMem : public HostMem {
 public:
   XrtHostMem(::xrt::device &device, int32_t memoryGroup)
-      : device(device), memoryGroup(memoryGroup) {};
+      : device(device), memoryGroup(memoryGroup){};
 
   struct XrtHostMemRegion : public HostMemRegion {
     XrtHostMemRegion(::xrt::device &device, std::size_t size,
