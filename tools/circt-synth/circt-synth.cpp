@@ -148,6 +148,7 @@ static void populateSynthesisPipeline(PassManager &pm) {
   });
 
   auto &mpm = pm.nest<hw::HWModuleOp>();
+  mpm.addPass(createSimpleCanonicalizerPass());
   mpm.addPass(circt::hw::createHWAggregateToCombPass());
   mpm.addPass(circt::createConvertCombToAIG());
   mpm.addPass(createCSEPass());

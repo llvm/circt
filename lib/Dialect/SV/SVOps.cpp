@@ -1890,8 +1890,8 @@ LogicalResult BindOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (!inst)
     return emitError("Referenced instance doesn't exist ")
            << getInstance().getModule() << "::" << getInstance().getName();
-  if (!inst.getDoNotPrint())
-    return emitError("Referenced instance isn't marked as doNotPrint");
+ //  if (!inst.getDoNotPrint())
+ //    return emitError("Referenced instance isn't marked as doNotPrint");
   return success();
 }
 

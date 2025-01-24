@@ -106,7 +106,8 @@ static bool hasSVAttributes(Operation *op) {
 }
 
 namespace {
-template <typename SubType> struct ComplementMatcher {
+template <typename SubType>
+struct ComplementMatcher {
   SubType lhs;
   ComplementMatcher(SubType lhs) : lhs(std::move(lhs)) {}
   bool match(Operation *op) {
@@ -645,16 +646,10 @@ static bool extractFromShl(ExtractOp op, ShlOp shlOp,
   // Create comparison: y >= low + width
   auto width = op.getType().getIntOrFloatBitWidth();
   auto lowBit = op.getLowBit();
-  auto compareConst = rewriter.create<hw::ConstantOp>(
-      op.getLoc(),
-      APInt(shiftAmount.getType().getIntOrFloatBitWidth(), lowBit + width));
-  auto cmp = rewriter.create<ICmpOp>(op.getLoc(), ICmpPredicate::uge,
-                                     shiftAmount, compareConst);
+
+  // y >= const
 
   // Create zero constant for the result width
-  auto zero =
-      rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getZero(width));
-
   auto extractLhs = rewriter.createOrFold<ExtractOp>(
       op.getLoc(), shlOp.getLhs(), lowBit, width);
   auto extractRhs = rewriter.createOrFold<ExtractOp>(
@@ -663,10 +658,25 @@ static bool extractFromShl(ExtractOp op, ShlOp shlOp,
   // Create the shifted value with same shift amount
   auto newShift =
       rewriter.createOrFold<ShlOp>(op.getLoc(), extractLhs, extractRhs);
+  if (llvm::isUIntN(shiftAmount.getType().getIntOrFloatBitWidth(),
+                    width + lowBit)) {
+    auto zero =
+        rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getZero(width));
+
+    auto compareConst = rewriter.create<hw::ConstantOp>(
+        op.getLoc(),
+        APInt(shiftAmount.getType().getIntOrFloatBitWidth(), lowBit + width));
+    auto cmp = rewriter.create<ICmpOp>(op.getLoc(), ICmpPredicate::uge,
+                                       shiftAmount, compareConst);
+
+    replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, cmp, zero, newShift,
+                                         /*twoState=*/false);
+
+    return true;
+  }
 
   // Create mux: y >= n ? 0 : shl(x, concat(0, y))
-  replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, cmp, zero, newShift,
-                                       /*twoState=*/false);
+  replaceOpAndCopyName(rewriter, op, newShift);
 
   return true;
 }
@@ -968,7 +978,8 @@ OpFoldResult AndOp::fold(FoldAdaptor adaptor) {
 ///
 /// For example for `or(a[0], a[1], ..., a[n-1])` this function returns `a`
 /// (assuming the bit-width of `a` is `n`).
-template <typename Op> static Value getCommonOperand(Op op) {
+template <typename Op>
+static Value getCommonOperand(Op op) {
   if (!op.getType().isInteger(1))
     return Value();
 

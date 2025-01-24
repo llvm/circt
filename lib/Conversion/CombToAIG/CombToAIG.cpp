@@ -585,6 +585,199 @@ struct CombShrSOpConversion : OpConversionPattern<comb::ShrSOp> {
   }
 };
 
+// Consider this as Comb canonicalization.
+template <typename OpTy, bool isDivOp>
+struct CombDivModUOpConversion : OpConversionPattern<OpTy> {
+  using OpConversionPattern<OpTy>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<OpTy>::OpAdaptor;
+  LogicalResult
+  matchAndRewrite(OpTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    op.emitWarning() << *op << "\n";
+    hw::ConstantOp rhsConstantOp =
+        adaptor.getRhs().template getDefiningOp<hw::ConstantOp>();
+    APInt rhsValue;
+    // TODO: Support non-constant divisor.
+    if (rhsConstantOp) {
+      rhsValue = rhsConstantOp.getValue();
+    } else {
+      /*
+      auto concat = adaptor.getRhs().template getDefiningOp<comb::ConcatOp>();
+      if (!concat)
+        return rewriter.notifyMatchFailure(
+            op, "currently divisor that has non-power-of-two constant as "
+                "rhs is not supported");
+
+      // If the rhs is known to be either zero or a constant power of two,
+      // we can ignore the zero division since it's undefined.
+      int64_t nonZeroBit = -1;
+      int64_t numBits = 0;
+      for (auto bit : llvm::reverse(concat.getOperands())) {
+        if (auto constOp = bit.template getDefiningOp<hw::ConstantOp>()) {
+          if (!constOp.getValue().isZero())
+            return rewriter.notifyMatchFailure(
+                op, "currently divisor that has non-power-of-two constant as "
+                    "rhs is not supported");
+        } else if (bit.getType().getIntOrFloatBitWidth() == 1) {
+          if (nonZeroBit != -1)
+            // If there are two unknown bits, unsupported.
+            return rewriter.notifyMatchFailure(
+                op, "currently divisor with non-constant rhs is not supported");
+          nonZeroBit = numBits;
+        } else {
+          return rewriter.notifyMatchFailure(
+              op, "currently divisor with non-constant rhs is not supported");
+        }
+        numBits += bit.getType().getIntOrFloatBitWidth();
+      }
+
+      if (nonZeroBit == -1) {
+        rhsValue = APInt::getZero(op.getType().getIntOrFloatBitWidth());
+      } else {
+        rhsValue =
+            APInt(op.getType().getIntOrFloatBitWidth(), 1).shl(nonZeroBit);
+      }
+      */
+    }
+
+    if (!rhsValue.isPowerOf2()) {
+      return rewriter.notifyMatchFailure(
+          op, "currently divisor with non-power-of-2 is not supported");
+    }
+
+    size_t shiftAmount = rhsValue.ceilLogBase2();
+    size_t width = op.getType().getIntOrFloatBitWidth();
+
+    if (isDivOp) {
+      // Extract upper bits.
+      Value upperBits = rewriter.createOrFold<comb::ExtractOp>(
+          op.getLoc(), adaptor.getLhs(), shiftAmount, width - shiftAmount);
+      Value constZero = rewriter.create<hw::ConstantOp>(
+          op.getLoc(), APInt::getZero(shiftAmount));
+      rewriter.replaceOpWithNewOp<comb::ConcatOp>(
+          op, op.getType(), ArrayRef<Value>{constZero, upperBits});
+    } else {
+      // Extract lower bits.
+      Value lowerBits = rewriter.createOrFold<comb::ExtractOp>(
+          op.getLoc(), adaptor.getLhs(), 0, shiftAmount);
+      Value constZero = rewriter.create<hw::ConstantOp>(
+          op.getLoc(), APInt::getZero(width - shiftAmount));
+
+      rewriter.replaceOpWithNewOp<comb::ConcatOp>(
+          op, op.getType(), ArrayRef<Value>{constZero, lowerBits});
+    }
+    return success();
+  }
+};
+
+// When rhs is not power of two and the number of unknown bits are small (<=6),
+// create a mux tree that emulates all possible cases.
+// TODO: This is probably not most efficient so consider revisiting this.
+template <typename OpTy, bool isDivOp>
+struct CombDivModUOpTableConversion : OpConversionPattern<OpTy> {
+  using OpConversionPattern<OpTy>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<OpTy>::OpAdaptor;
+  LogicalResult
+  matchAndRewrite(OpTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    if (auto rhsConstantOp =
+            adaptor.getRhs().template getDefiningOp<hw::ConstantOp>())
+      // Let the other pattern matches this.
+      if (rhsConstantOp.getValue().isPowerOf2())
+        return failure();
+
+    auto width = op.getType().getIntOrFloatBitWidth();
+
+    SmallVector<Value> lhsBits, rhsBits;
+    auto getBits = [&](auto &&recurse, llvm::SmallVectorImpl<Value> &results,
+                       Value elem) -> size_t {
+      if (auto concat = elem.getDefiningOp<comb::ConcatOp>()) {
+        size_t numUnknownBits = 0;
+        for (auto c : llvm::reverse(concat.getInputs())) {
+          if (c.getType().isInteger(0))
+            continue;
+          numUnknownBits += recurse(recurse, results, c);
+        }
+        return numUnknownBits;
+      }
+      results.push_back(elem);
+      return elem.getDefiningOp<hw::ConstantOp>()
+                 ? 0
+                 : elem.getType().getIntOrFloatBitWidth();
+    };
+
+    auto numLhsUnknownBits = getBits(getBits, lhsBits, op.getLhs());
+    auto numRhsUnknownBits = getBits(getBits, rhsBits, op.getRhs());
+    // std::reverse(lhsBits.begin(), lhsBits.end());
+    // std::reverse(rhsBits.begin(), rhsBits.end());
+
+    // Give up if there are too many unknown bits.
+    if (numLhsUnknownBits + numRhsUnknownBits > 8)
+      return failure();
+
+    auto subStituteMask = [width](llvm::SmallVectorImpl<Value> &bits,
+                                  size_t mask) -> APInt {
+      size_t pos = 0, unknownPos = 0;
+      APInt result(width, 0);
+      for (auto elem : bits) {
+        auto elemWidth = elem.getType().getIntOrFloatBitWidth();
+        if (auto constant = elem.getDefiningOp<hw::ConstantOp>()) {
+          result |= constant.getValue().zext(width) << APInt(width, pos);
+        } else {
+          size_t usedMask = (1 << (elemWidth + unknownPos)) - (1 << unknownPos);
+          result |= APInt(width, ((usedMask & mask) >> unknownPos) << pos);
+          unknownPos += elemWidth;
+        }
+        pos += elemWidth;
+      }
+      return result;
+    };
+
+    SmallVector<Value> results;
+    auto allZero =
+        rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getZero(width));
+    for (size_t lhsMask = 0, e = 1 << numLhsUnknownBits; lhsMask < e;
+         ++lhsMask) {
+      auto lhsValue = subStituteMask(lhsBits, lhsMask);
+      for (size_t rhsMask = 0, e2 = 1 << numRhsUnknownBits; rhsMask < e2;
+           ++rhsMask) {
+        APInt rhsValue = subStituteMask(rhsBits, rhsMask);
+        llvm::errs() << lhsValue.getZExtValue() << " "
+                     << rhsValue.getZExtValue() << "\n";
+        if (rhsValue.isZero()) {
+          // Undefined value. Just use zero for now.
+          results.push_back(allZero);
+        } else {
+          APInt result =
+              isDivOp ? lhsValue.udiv(rhsValue) : lhsValue.urem(rhsValue);
+          results.push_back(
+              rewriter.create<hw::ConstantOp>(op.getLoc(), result));
+        }
+      }
+    }
+    SmallVector<Value> tableInputs;
+    for (auto &bits : {lhsBits, rhsBits}) {
+      SmallVector<Value> tmp;
+      for (auto bit : bits) {
+        if (!bit.getDefiningOp<hw::ConstantOp>()) {
+          auto extracted = extractBits(rewriter, bit);
+          tmp.append(extracted);
+        }
+      }
+      std::reverse(tmp.begin(), tmp.end());
+      tableInputs.append(tmp.begin(), tmp.end());
+    }
+    std::reverse(tableInputs.begin(), tableInputs.end());
+    assert(numLhsUnknownBits + numRhsUnknownBits == tableInputs.size());
+    auto muxed = constructMuxTree(rewriter, op->getLoc(), tableInputs,
+                                  results, allZero);
+
+    rewriter.replaceOp(op, muxed);
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -610,12 +803,19 @@ static void populateCombToAIGConversionPatterns(RewritePatternSet &patterns) {
       CombICmpOpConversion,
       // Shift Ops
       CombShlOpConversion, CombShrUOpConversion, CombShrSOpConversion,
+      CombDivModUOpConversion<DivUOp, true>,
+      CombDivModUOpConversion<ModUOp, false>,
+      CombDivModUOpTableConversion<DivUOp, true>,
+      CombDivModUOpTableConversion<ModUOp, false>,
       // Variadic ops that must be lowered to binary operations
       CombLowerVariadicOp<XorOp>, CombLowerVariadicOp<AddOp>,
       CombLowerVariadicOp<MulOp>>(patterns.getContext());
 }
 
 void ConvertCombToAIGPass::runOnOperation() {
+  if (!getOperation().getModuleName().starts_with("SiFive_") ||
+      getOperation().getNumOutputPorts() == 0)
+    return markAllAnalysesPreserved();
   ConversionTarget target(getContext());
 
   // Comb is source dialect.

@@ -1031,10 +1031,10 @@ LogicalResult Graph::buildGraph() {
   auto isOperandReady = [&](Value value, Operation *op) {
     return isRootValue(value);
   };
-  llvm::errs() << theModule.getModuleNameAttr() << "Running Toposort\n";
+  // llvm::errs() << theModule.getModuleNameAttr() << "Running Toposort\n";
   mlir::computeTopologicalSorting(interestingOps, isOperandReady);
 
-  llvm::errs() << theModule.getModuleNameAttr() << "Running Graph const";
+  // llvm::errs() << theModule.getModuleNameAttr() << "Running Graph const";
   SmallVector<int64_t> cnt(8);
 
   for (auto op : interestingOps) {
@@ -1166,7 +1166,7 @@ LogicalResult LongestPathAnalysisImpl::run() {
         if (hwMod.getModuleName().ends_with("_assert") ||
             hwMod.getModuleName().ends_with("_cover") ||
             hwMod.getModuleName().ends_with("_assume") ||
-            hwMod.getNumOutputPorts() == 0)
+            hwMod.getNumOutputPorts() == 0 || hwMod->getAttrOfType<hw::OutputFileAttr>("output_file"))
           continue;
 
         underHierarchy.push_back(hwMod);
@@ -1197,6 +1197,7 @@ LogicalResult LongestPathAnalysisImpl::run() {
 
         return result;
       });
+  llvm::errs() << "FINISHED\n";
 
   struct PathResult {
     hw::HWModuleOp root;
