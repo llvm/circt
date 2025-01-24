@@ -18,7 +18,8 @@ include "circt/Dialect/HW/HWTypes.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/RegionKindInterface.td"
 
-def ModelOp : BLIFOp<"model", [IsolatedFromAbove, RegionKindInterface, SingleBlockImplicitTerminator<"OutputOp">]> {
+def ModelOp : BLIFOp<"model", [IsolatedFromAbove, RegionKindInterface, 
+                               SingleBlockImplicitTerminator<"OutputOp">]> {
   let summary = "A model, which is a module";
   let description = [{
     The basic container.  Is like a module.
@@ -32,9 +33,9 @@ def ModelOp : BLIFOp<"model", [IsolatedFromAbove, RegionKindInterface, SingleBlo
 
   let builders = [
     OpBuilder<(ins "StringRef":$name, 
-                    "ArrayRef<StringRef>":$inputs,
-                    "ArrayRef<StringRef>":$outputs,
-                    "ArrayRef<StringRef>":$clocks)>
+                   "ArrayRef<StringRef>":$inputs,
+                   "ArrayRef<StringRef>":$outputs,
+                   "ArrayRef<StringRef>":$clocks)>
   ];
 
 
