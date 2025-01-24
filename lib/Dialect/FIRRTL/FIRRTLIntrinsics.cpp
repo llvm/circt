@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLIntrinsics.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
@@ -718,8 +719,8 @@ public:
 template <typename A>
 A tryGetAs(DictionaryAttr dict, Attribute root, StringRef key, Location loc,
            Twine path = Twine()) {
-  return tryGetAsBase<A>(dict, root, key, loc, "View info", "info attribute",
-                         path);
+  return tryGetAsBase<A>(dict, root, key, loc, "View 'info'",
+                         "'info' attribute", path);
 }
 
 /// Recursively walk a sifive.enterprise.grandcentral.AugmentedType to extract
@@ -766,7 +767,7 @@ parseAugmentedType(MLIRContext *context, Location loc,
       if (!field) {
         mlir::emitError(
             loc,
-            "View info attribute with path '.elements[" + Twine(i) +
+            "View 'info' attribute with path '.elements[" + Twine(i) +
                 "]' contained an unexpected type (expected a DictionaryAttr).")
                 .attachNote()
             << "The received element was: " << elementsAttr[i];
@@ -774,8 +775,10 @@ parseAugmentedType(MLIRContext *context, Location loc,
       }
       auto ePath = (path + ".elements[" + Twine(i) + "]").str();
       auto name = tryGetAs<StringAttr>(field, root, "name", loc, ePath);
+      if (!name)
+        return std::nullopt;
       auto tpe = tryGetAs<DictionaryAttr>(field, root, "tpe", loc, ePath);
-      if (!name || !tpe)
+      if (!tpe)
         return std::nullopt;
       std::optional<StringAttr> description;
       if (auto maybeDescription = field.get("description"))
@@ -874,7 +877,7 @@ public:
         llvm::json::parse(gi.getParamValue<StringAttr>("info").getValue());
     if (auto err = view.takeError()) {
       handleAllErrors(std::move(err), [&](const llvm::json::ParseError &a) {
-        gi.emitError() << " error parsing view JSON: " << a.message();
+        gi.emitError() << ": error parsing view JSON: " << a.message();
       });
       return failure();
     }
@@ -888,7 +891,7 @@ public:
     // construction.
     auto dict = dyn_cast<DictionaryAttr>(value);
     if (!dict)
-      return gi.emitError() << " info parameter must be a dictionary";
+      return gi.emitError() << ": 'info' parameter must be a dictionary";
 
     auto nameAttr = gi.getParamValue<StringAttr>("name");
     auto result = parseAugmentedType(
@@ -896,12 +899,13 @@ public:
         /* defName= */ {}, /* description= */ std::nullopt);
 
     if (!result)
-      return gi.emitError()
-             << " view info must be augmented bundle type attribute";
+      return failure();
 
     // Build AugmentedBundleTypeAttr, unchecked.
     auto augmentedType =
         AugmentedBundleTypeAttr::get(gi.op.getContext(), *result);
+    if (augmentedType.getClass() != augmentedBundleTypeClass)
+      return gi.emitError() << ": 'info' must be augmented bundle";
 
     // Check complete, convert!
 
