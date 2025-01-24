@@ -193,6 +193,8 @@ private:
 
 class HostMem : public Service {
 public:
+  static constexpr std::string_view StdName = "esi.service.std.hostmem";
+
   virtual ~HostMem() = default;
   virtual std::string getServiceSymbol() const override;
 
@@ -200,9 +202,19 @@ public:
   /// deconstructed.
   struct HostMemRegion {
     virtual ~HostMemRegion() = default;
+    /// Get a pointer to the host memory.
     virtual void *getPtr() const = 0;
+    /// Sometimes the pointer the device sees is different from the pointer the
+    /// host sees. Call this functon to get the device pointer.
+    virtual void *getDevicePtr() const { return getPtr(); }
     operator void *() const { return getPtr(); }
     virtual std::size_t getSize() const = 0;
+    /// Flush the memory region to ensure that the device sees the latest
+    /// contents. Because some platforms require it before DMA transactions, it
+    /// is recommended to call this before any DMA on all platforms. On
+    /// platforms which don't require it, it is a cheap no-op virtual method
+    /// call.
+    virtual void flush() {}
   };
 
   /// Options for allocating host memory.

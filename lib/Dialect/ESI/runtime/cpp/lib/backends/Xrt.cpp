@@ -51,7 +51,7 @@ XrtAccelerator::connect(Context &ctxt, std::string connectionString) {
 }
 
 struct esi::backends::xrt::XrtAccelerator::Impl {
-  constexpr static char kernel[] = "esi_kernel";
+  constexpr static char kernel_name[] = "esi_kernel";
 
   Impl(std::string xclbin, std::string device_id) {
     if (device_id.empty())
@@ -59,17 +59,37 @@ struct esi::backends::xrt::XrtAccelerator::Impl {
     else
       device = ::xrt::device(device_id);
 
-    auto uuid = device.load_xclbin(xclbin);
-    ip = ::xrt::ip(device, uuid, kernel);
+    // Find memory group for the host.
+    ::xrt::xclbin xcl(xclbin);
+    std::optional<::xrt::xclbin::mem> host_mem;
+    for (auto mem : xcl.get_mems()) {
+      // The host memory is tagged with "HOST[0]". Memory type is wrong --
+      // reports as DRAM rather than host memory so we can't filter on that.
+      if (mem.get_tag().starts_with("HOST")) {
+        if (host_mem.has_value())
+          throw std::runtime_error("Multiple host memories found in xclbin");
+        else
+          host_mem = mem;
+      }
+    }
+    if (!host_mem)
+      throw std::runtime_error("No host memory found in xclbin");
+    memoryGroup = host_mem->get_index();
+
+    // Load the xclbin and instantiate the IP.
+    auto uuid = device.load_xclbin(xcl);
+    ip = ::xrt::ip(device, uuid, kernel_name);
   }
 
   std::map<std::string, ChannelPort &> requestChannelsFor(AppIDPath,
                                                           const BundleType *) {
-    throw std::runtime_error("XRT does not support channel communication yet");
+    // TODO: Create plugin DMA engines. Instantiate elsewhere.
+    return {};
   }
 
   ::xrt::device device;
   ::xrt::ip ip;
+  int32_t memoryGroup;
 };
 
 /// Construct and connect to a cosim server.
@@ -100,6 +120,47 @@ private:
 };
 } // namespace
 
+namespace {
+/// Host memory service specialized to XRT.
+class XrtHostMem : public HostMem {
+public:
+  XrtHostMem(::xrt::device &device, int32_t memoryGroup)
+      : device(device), memoryGroup(memoryGroup){};
+
+  struct XrtHostMemRegion : public HostMemRegion {
+    XrtHostMemRegion(::xrt::device &device, std::size_t size,
+                     HostMem::Options opts, int32_t memoryGroup) {
+      bo = ::xrt::bo(device, size, ::xrt::bo::flags::host_only, memoryGroup);
+      // Map the buffer into application memory space so that the application
+      // can use it just like any memory -- no need to use bo::write.
+      ptr = bo.map();
+    }
+    virtual void *getPtr() const override { return ptr; }
+    /// On XRT platforms, the pointer which the device sees is different from
+    /// the pointer the user application sees.
+    virtual void *getDevicePtr() const override { return (void *)bo.address(); }
+    virtual std::size_t getSize() const override { return bo.size(); }
+    /// It is required to use 'sync' to flush the caches before executing any
+    /// DMA.
+    virtual void flush() override { bo.sync(XCL_BO_SYNC_BO_TO_DEVICE); }
+
+  private:
+    ::xrt::bo bo;
+    void *ptr;
+  };
+
+  std::unique_ptr<HostMemRegion>
+  allocate(std::size_t size, HostMem::Options opts) const override {
+    return std::unique_ptr<HostMemRegion>(
+        new XrtHostMemRegion(device, size, opts, memoryGroup));
+  }
+
+private:
+  ::xrt::device &device;
+  int32_t memoryGroup;
+};
+} // namespace
+
 std::map<std::string, ChannelPort &> XrtAccelerator::requestChannelsFor(
     AppIDPath idPath, const BundleType *bundleType, const ServiceTable &) {
   return impl->requestChannelsFor(idPath, bundleType);
@@ -111,6 +172,8 @@ Service *XrtAccelerator::createService(Service::Type svcType, AppIDPath id,
                                        const HWClientDetails &clients) {
   if (svcType == typeid(MMIO))
     return new XrtMMIO(impl->ip);
+  else if (svcType == typeid(HostMem))
+    return new XrtHostMem(impl->device, impl->memoryGroup);
   else if (svcType == typeid(SysInfo))
     return new MMIOSysInfo(getService<MMIO>());
   return nullptr;
