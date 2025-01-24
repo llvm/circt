@@ -209,6 +209,7 @@ LogicalResult MachineOpConverter::dispatch() {
   solver.getBodyRegion().emplaceBlock();
 
   b.setInsertionPointToStart(solver.getBody());
+
   // fsm arguments
   for (auto a : machineArgs){
     if (a.getType().getIntOrFloatBitWidth()==1){
@@ -221,6 +222,7 @@ LogicalResult MachineOpConverter::dispatch() {
       numArgs++;
     }
   }
+
   // fsm outputs
   if (machineOp.getResultTypes().size() > 0){
     for (auto o : machineOp.getResultTypes()){
@@ -242,6 +244,7 @@ LogicalResult MachineOpConverter::dispatch() {
   }
 
   llvm::SmallVector<int> varInitValues;
+
   // fsm variables
   for (auto variableOp : machineOp.front().getOps<fsm::VariableOp>()) {
     if (variableOp.getType().getIntOrFloatBitWidth()==1){
@@ -280,7 +283,6 @@ LogicalResult MachineOpConverter::dispatch() {
   argVarTypes.push_back(b.getType<smt::IntType>());
 
   // populate state functions and transitions vector
-
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
     std::string stateName = stateOp.getName().str();
     mlir::StringAttr acFunName =
@@ -289,19 +291,13 @@ LogicalResult MachineOpConverter::dispatch() {
     smt::DeclareFunOp acFun = b.create<smt::DeclareFunOp>(
         loc, b.getType<smt::SMTFuncType>(argVarTypes, range), acFunName);
     stateFunctions.push_back(acFun);
-    insertStates(states, stateName);
+    auto fromState = insertStates(states, stateName);
+    outputOfStateId.push_back({&stateOp.getOutput(), fromState});
   }
 
   int initialStateId = -1;
 
-  for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
-    std::string stateName = stateOp.getName().str();
-    auto fromState = insertStates(states, stateName);
-    if (!stateOp.getOutput().empty()) {
-      outputOfStateId.push_back({&stateOp.getOutput(), fromState});
-    }
-  }
-
+  // populate vector of transitions
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
     std::string stateName = stateOp.getName().str();
     auto fromState = insertStates(states, stateName);
