@@ -214,3 +214,57 @@ hw.module @TwoContracts(in %a: i42, out z: i42) {
   }
   hw.output %4 : i42
 }
+
+// CHECK: hw.module @NestedContract(in %a : i42, in %b : i42, in %s : i1, out z : i42) {
+// CHECK-NEXT:   %false = hw.constant false
+// CHECK-NEXT:   %0 = comb.extract %a from 0 : (i42) -> i41
+// CHECK-NEXT:   %1 = comb.concat %0, %false : i41, i1
+// CHECK-NEXT:   %2 = comb.mul %a, %a : i42
+// CHECK-NEXT:   %3 = scf.if %s -> (i42) {
+// CHECK-NEXT:     %6 = comb.add %1, %2 : i42
+// CHECK-NEXT:     scf.yield %6 : i42
+// CHECK-NEXT:   } else {
+// CHECK-NEXT:     %6 = comb.mul %1, %2 : i42
+// CHECK-NEXT:     scf.yield %6 : i42
+// CHECK-NEXT:   }
+// CHECK-NEXT:   %4 = verif.symbolic_value : i42
+// CHECK-NEXT:   %5 = comb.icmp eq %3, %b : i42
+// CHECK-NEXT:   verif.assume %5 : i1
+// CHECK-NEXT:   hw.output %3 : i42
+// CHECK-NEXT: }
+
+// CHECK: verif.formal @NestedContract_CheckContract_0 {} {
+// CHECK-NEXT:   %false = hw.constant false
+// CHECK-NEXT:   %0 = verif.symbolic_value : i1
+// CHECK-NEXT:   %1 = verif.symbolic_value : i42
+// CHECK-NEXT:   %2 = comb.extract %1 from 0 : (i42) -> i41
+// CHECK-NEXT:   %3 = comb.concat %2, %false : i41, i1
+// CHECK-NEXT:   %4 = comb.mul %1, %1 : i42
+// CHECK-NEXT:   %5 = scf.if %0 -> (i42) {
+// CHECK-NEXT:     %8 = comb.add %3, %4 : i42
+// CHECK-NEXT:     scf.yield %8 : i42
+// CHECK-NEXT:   } else {
+// CHECK-NEXT:     %8 = comb.mul %3, %4 : i42
+// CHECK-NEXT:     scf.yield %8 : i42
+// CHECK-NEXT:   }
+// CHECK-NEXT:   %6 = verif.symbolic_value : i42
+// CHECK-NEXT:   %7 = comb.icmp eq %5, %6 : i42
+// CHECK-NEXT:   verif.assert %7 : i1
+// CHECK-NEXT: }
+
+hw.module @NestedContract(in %a: i42, in %b: i42, in %s: i1, out z: i42) {
+  %0 = comb.add %a, %a : i42
+  %1 = comb.mul %a, %a : i42
+  %2 = scf.if %s -> (i42) {
+    %3 = comb.add %0, %1 : i42
+    scf.yield %3 : i42
+  } else {
+    %3 = comb.mul %0, %1 : i42
+    scf.yield %3 : i42
+  }
+  %3 = verif.contract %2 : i42 {
+    %4 = comb.icmp eq %2, %b : i42
+    verif.ensure %4 : i1
+  }
+  hw.output %2 : i42
+}

@@ -105,19 +105,17 @@ LogicalResult inlineContract(ContractOp &contract, OpBuilder &builder,
                            shouldCloneFanIn);
 }
 
-LogicalResult cloneFanIn(OpBuilder &builder, Operation *opToClone,
-                         IRMapping &mapping, DenseSet<Operation *> &seen,
-                         bool assumeContract) {
-  if (seen.contains(opToClone))
-    return llvm::success();
-  seen.insert(opToClone);
-
-  // Ensure all operands have been mapped
+LogicalResult cloneOperands(OpBuilder &builder, Operation *opToClone,
+                            IRMapping &mapping, DenseSet<Operation *> &seen,
+                            bool assumeContract, Operation *parent = nullptr) {
   for (auto operand : opToClone->getOperands()) {
     if (mapping.contains(operand))
       continue;
 
     if (auto *definingOp = operand.getDefiningOp()) {
+      // Don't need to clone if defining op is within parent op
+      if (parent && parent->isAncestor(operand.getParentBlock()->getParentOp()))
+        continue;
       // Recurse and clone defining op
       if (failed(
               cloneFanIn(builder, definingOp, mapping, seen, assumeContract)))
@@ -129,6 +127,28 @@ LogicalResult cloneFanIn(OpBuilder &builder, Operation *opToClone,
       mapping.map(operand, sym);
     }
   }
+  return success();
+}
+
+LogicalResult cloneFanIn(OpBuilder &builder, Operation *opToClone,
+                         IRMapping &mapping, DenseSet<Operation *> &seen,
+                         bool assumeContract) {
+  if (seen.contains(opToClone))
+    return llvm::success();
+  seen.insert(opToClone);
+
+  if (failed(cloneOperands(builder, opToClone, mapping, seen, assumeContract)))
+    return failure();
+  // Ensure all operands have been mapped
+  if (opToClone
+          ->walk([&](Operation *nestedOp) {
+            if (failed(cloneOperands(builder, nestedOp, mapping, seen,
+                                     assumeContract, opToClone)))
+              return WalkResult::interrupt();
+            return WalkResult::advance();
+          })
+          .wasInterrupted())
+    return failure();
 
   if (auto contract = dyn_cast<ContractOp>(opToClone)) {
     // Assume it holds
