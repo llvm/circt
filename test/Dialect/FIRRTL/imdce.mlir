@@ -533,7 +533,7 @@ firrtl.circuit "DeadPublic" {
 // crash).  This should work for both FIRRTL operations and non-FIRRTL
 // operations.
 //
-// CHECK-LAEBL: "Foo"
+// CHECK-LABEL: "Foo"
 firrtl.circuit "Foo" {
   firrtl.layer @A bind {}
   sv.macro.decl @B["B"]
