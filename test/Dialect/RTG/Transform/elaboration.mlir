@@ -176,7 +176,7 @@ rtg.test @sequenceClosureFixesRandomization : !rtg.dict<> {
   rtg.invoke_sequence %3
 }
 
-// CHECK-LABLE: @indexOps
+// CHECK-LABEL: @indexOps
 rtg.test @indexOps : !rtg.dict<> {
   // CHECK: [[C:%.+]] = index.constant 2
   %0 = index.constant 1
