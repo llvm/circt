@@ -335,25 +335,15 @@ LogicalResult MachineOpConverter::dispatch() {
 
         if (!initOutputReg->empty()){
           llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> avToSmt;
-          for (auto [id, av] : llvm::enumerate(forallArgs)){
-            if (int(id) >= numOut + numArgs && int(id) < forallArgs.size() - 1) {
-              if (isa<smt::BoolType>(av.getType())){
-                auto initVarVal = b.create<smt::BoolConstantOp>(loc, b.getBoolAttr(varInitValues[id - numOut - numArgs]));
-                initArgs.push_back(initVarVal);
-              } else{
-                auto initVarVal = b.create<smt::IntConstantOp>(loc, b.getI32IntegerAttr(varInitValues[id - numOut - numArgs]));
-                initArgs.push_back(initVarVal);
-              }
-                } else {
+          for (auto [id, av] : llvm::enumerate(forallArgs))
               avToSmt.push_back({av, av});
-            }
-            for (auto &op : initOutputReg->getOps()) {
-              // todo: check that updates requiring inputs for operations work
-              if (auto outputOp = dyn_cast<fsm::OutputOp>(op)) {
-                for (auto outs : outputOp->getOperands()) {
-                  auto toRet = getSmtValue(outs, avToSmt, b, loc);
-                  outputSmtValues.push_back(toRet);
-                }
+
+          for (auto &op : initOutputReg->getOps()) {
+            // todo: check that updates requiring inputs for operations work
+            if (auto outputOp = dyn_cast<fsm::OutputOp>(op)) {
+              for (auto outs : outputOp->getOperands()) {
+                auto toRet = getSmtValue(outs, avToSmt, b, loc);
+                outputSmtValues.push_back(toRet);
               }
             }
           }
@@ -376,8 +366,6 @@ LogicalResult MachineOpConverter::dispatch() {
         }
 
         // retrieve output region constraint at the initial state
-
-
 
         auto initTime = b.create<smt::IntConstantOp>(loc, b.getI32IntegerAttr(0));
         auto lhs = b.create<smt::EqOp>(loc, forallArgs.back(), initTime);
