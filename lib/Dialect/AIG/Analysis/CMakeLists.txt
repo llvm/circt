@@ -6,6 +6,7 @@ add_circt_dialect_library(CIRCTAIGAnalysis
   CIRCTAIGPassesIncGen
 
   LINK_LIBS PUBLIC
+  MLIRSupport
   CIRCTAIG
   CIRCTComb
   CIRCTHW

@@ -21,8 +21,10 @@
 #include "circt/Support/InstanceGraph.h"
 #include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/IR/Operation.h"
+#include "llvm//Support/ToolOutputFile.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/AnalysisManager.h"
+#include "mlir/Support/FileUtilities.h"
 #include "mlir/Transforms/CSE.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/ScopeExit.h"
@@ -1011,8 +1013,8 @@ LogicalResult Graph::buildGraph() {
   SmallVector<Operation *> interestingOps;
   // Add input nodes.
   theModule.walk([&](Operation *op) {
-    if (isa<seq::FirRegOp, seq::CompRegOp, hw::InstanceOp, seq::FirMemReadOp>(
-            op)) {
+    if (isa<seq::FirRegOp, seq::CompRegOp, hw::InstanceOp, seq::FirMemReadOp,
+            seq::FirMemReadWriteOp>(op)) {
       for (auto result : op->getResults())
         graph.addInputNode(result);
     } else if (isa<comb::ConcatOp, comb::ExtractOp, comb::ReplicateOp,
@@ -1023,7 +1025,8 @@ LogicalResult Graph::buildGraph() {
     } else if (isa<sv::ConstantXOp>(op)) {
       interestingOps.push_back(op);
     }
-    if (isa<seq::FirRegOp, seq::CompRegOp, hw::InstanceOp, hw::OutputOp>(op)) {
+    if (isa<seq::FirRegOp, seq::CompRegOp, hw::InstanceOp, hw::OutputOp,
+            seq::FirMemReadWriteOp>(op)) {
       graph.outputOperations.push_back(op);
     }
   });
@@ -1143,8 +1146,9 @@ LogicalResult Graph::buildGraph() {
 struct LongestPathAnalysisImpl {
   LongestPathAnalysisImpl(mlir::ModuleOp mod,
                           igraph::InstanceGraph *instanceGraph,
-                          StringAttr topModuleName)
-      : mod(mod), instanceGraph(instanceGraph), topModuleName(topModuleName) {}
+                          StringAttr topModuleName, llvm::raw_ostream &os)
+      : mod(mod), instanceGraph(instanceGraph), topModuleName(topModuleName),
+        os(os) {}
   LogicalResult flatten(hw::HWModuleOp mod);
   LogicalResult run();
 
@@ -1154,6 +1158,7 @@ private:
   mlir::ModuleOp mod;
   StringAttr topModuleName;
   igraph::InstanceGraph *instanceGraph;
+  llvm::raw_ostream &os;
   DenseMap<StringAttr, std::unique_ptr<Graph>> moduleToGraph;
 };
 
@@ -1166,7 +1171,8 @@ LogicalResult LongestPathAnalysisImpl::run() {
         if (hwMod.getModuleName().ends_with("_assert") ||
             hwMod.getModuleName().ends_with("_cover") ||
             hwMod.getModuleName().ends_with("_assume") ||
-            hwMod.getNumOutputPorts() == 0 || hwMod->getAttrOfType<hw::OutputFileAttr>("output_file"))
+            hwMod.getNumOutputPorts() == 0 ||
+            hwMod->getAttrOfType<hw::OutputFileAttr>("output_file"))
           continue;
 
         underHierarchy.push_back(hwMod);
@@ -1302,17 +1308,17 @@ LogicalResult LongestPathAnalysisImpl::run() {
       std::greater<
           std::tuple<int64_t, OutputNode *, InputNode *, hw::HWModuleOp>>());
 
-  llvm::errs() << "// ------ LongestPathAnalysis Summary -----\n";
-  llvm::errs() << "Top module: " << topModuleName << "\n";
-  llvm::errs() << "Top " << topK << " longest paths:\n";
+  os << "// ------ LongestPathAnalysis Summary -----\n";
+  os << "Top module: " << topModuleName << "\n";
+  os << "Top " << topK << " longest paths:\n";
   for (size_t i = 0; i < std::min(topK, longestPaths.size()); ++i) {
     auto [length, outputNode, inputNode, root] = longestPaths[i];
-    llvm::errs() << i + 1 << ": length= " << length << " ";
-    llvm::errs() << "root=" << root.getModuleNameAttr().getValue() << " ";
-    outputNode->print(llvm::errs());
-    llvm::errs() << " -> ";
-    inputNode->print(llvm::errs());
-    llvm::errs() << "\n";
+    os << i + 1 << ": length= " << length << " ";
+    os << "root=" << root.getModuleNameAttr().getValue() << " ";
+    outputNode->print(os);
+    os << " -> ";
+    inputNode->print(os);
+    os << "\n";
     // llvm::errs() << " addr=" << inputNode << "\n";
     // llvm::errs() << " addr=" << outputNode << "\n";
   }
@@ -1377,9 +1383,16 @@ void PrintLongestPathAnalysisPass::runOnOperation() {
     llvm::errs() << "Cloned subhierarchy\n";
   }
 
+  std::string errorMessage;
+  auto outputFile = mlir::openOutputFile(outputJSONFile, &errorMessage);
+  if (!outputFile) {
+    llvm::errs() << errorMessage;
+    return;
+  }
+
   LongestPathAnalysisImpl longestPathAnalysis(
       workSpaceMod, &instanceGraph,
-      StringAttr::get(&getContext(), topModuleName));
+      StringAttr::get(&getContext(), topModuleName), outputFile->os());
   if (failed(longestPathAnalysis.run())) {
     llvm::errs() << "Failed to run longest path analysis\n";
     return signalPassFailure();
@@ -1392,20 +1405,10 @@ void PrintLongestPathAnalysisPass::runOnOperation() {
     llvm::errs() << "Top module: " << topModuleName << "\n";
   }
 
-  if (!outputJSONFile.empty()) {
-    std::error_code ec;
-    llvm::raw_fd_ostream os(outputJSONFile, ec);
-    if (ec) {
-      emitError(UnknownLoc::get(&getContext()))
-          << "failed to open output JSON file '" << outputJSONFile
-          << "': " << ec.message();
-      return signalPassFailure();
-    }
-  }
-
   if (!isInplace) {
     workSpaceBlock->erase();
   }
+  outputFile->keep();
 }
 
 void InputNode::walk(llvm::function_ref<void(Node *)> callback) {
