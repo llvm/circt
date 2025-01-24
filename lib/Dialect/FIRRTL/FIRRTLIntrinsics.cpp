@@ -915,14 +915,29 @@ public:
     if (augmentedType.getClass() != augmentedBundleTypeClass)
       return gi.emitError() << ": 'info' must be augmented bundle";
 
+    // Scan for ground-type (leaves) and count.
+    SmallVector<DictionaryAttr> worklist;
+    worklist.push_back(augmentedType.getUnderlying());
     size_t numLeaves = 0;
-    augmentedType.walk([&numLeaves](DictionaryAttr dict) {
-      assert(dict.get("class") && "should have already failed");
-      if (dict.getAs<StringAttr>("class") == augmentedGroundTypeClass) {
+    auto augGroundAttr =
+        StringAttr::get(gi.op.getContext(), augmentedGroundTypeClass);
+    auto augBundleAttr =
+        StringAttr::get(gi.op.getContext(), augmentedBundleTypeClass);
+    auto augVectorAttr =
+        StringAttr::get(gi.op.getContext(), augmentedVectorTypeClass);
+    while (!worklist.empty()) {
+      auto dict = worklist.pop_back_val();
+      auto clazz = dict.getAs<StringAttr>("class");
+      if (clazz == augGroundAttr) {
         ++numLeaves;
-        llvm::errs() << "dict: " << dict << "\n";
+        continue;
       }
-    });
+      assert(clazz == augBundleAttr || clazz == augVectorAttr);
+      llvm::append_range(
+          worklist,
+          dict.getAs<ArrayAttr>("elements").getAsRange<DictionaryAttr>());
+    }
+
     if (numLeaves != gi.getNumInputs())
       return gi.emitError()
              << " has " << gi.getNumInputs() << " operands but view 'info' has "

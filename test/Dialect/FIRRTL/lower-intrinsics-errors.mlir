@@ -130,15 +130,8 @@ firrtl.circuit "ViewOperandNotGround" {
 
 firrtl.circuit "ViewWrongOperandCount" {
   firrtl.module public @ViewWrongOperandCount() {
-    // expected-error @below {{View 'info' with path '.elements[0]' did not contain required key 'tpe'}}
-    // expected-note @below {{The full 'info' attribute is reproduced here:}}
+    // expected-error @below {{circt_view has 0 operands but view 'info' has 1 leaf elements}}
     // expected-error @below {{failed to legalize}}
     firrtl.int.generic "circt_view" <name: none = "view", info: none = "{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\", \"defName\": \"MyView\", \"elements\": [{\"name\": \"foo\", \"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"}}]}"> : () -> ()
   }
 }
-
-//
-
-// TODO:
-// Field names conflict
-// too many/too few operands
