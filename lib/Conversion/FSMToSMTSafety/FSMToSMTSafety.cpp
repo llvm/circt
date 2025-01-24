@@ -292,6 +292,8 @@ LogicalResult MachineOpConverter::dispatch() {
     insertStates(states, stateName);
   }
 
+  int initialStateId = -1;
+
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
     std::string stateName = stateOp.getName().str();
     auto fromState = insertStates(states, stateName);
@@ -322,13 +324,45 @@ LogicalResult MachineOpConverter::dispatch() {
 
   auto forall = b.create<smt::ForallOp>(
       loc, argVarTypes,
-      [&varInitValues, &stateFunctions, &numOut, &argVars, &numArgs](OpBuilder &b, Location loc,
+      [&varInitValues, &stateFunctions, &numOut, &argVars, &numArgs, &outputOfStateId](OpBuilder &b, Location loc,
                         llvm::SmallVector<mlir::Value> forallArgs) -> mlir::Value {
         llvm::SmallVector<mlir::Value> initArgs;
         // nb. args also has the time
+        
+        llvm::SmallVector<mlir::Value> outputSmtValues; 
+
+        auto initOutputReg = getOutputRegion(outputOfStateId, 0); // the index of the initial state is always zero s
+
+        if (!initOutputReg->empty()){
+          llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> avToSmt;
+          for (auto [id, av] : llvm::enumerate(forallArgs)){
+            if (int(id) >= numOut + numArgs && int(id) < forallArgs.size() - 1) {
+              if (isa<smt::BoolType>(av.getType())){
+                auto initVarVal = b.create<smt::BoolConstantOp>(loc, b.getBoolAttr(varInitValues[id - numOut - numArgs]));
+                initArgs.push_back(initVarVal);
+              } else{
+                auto initVarVal = b.create<smt::IntConstantOp>(loc, b.getI32IntegerAttr(varInitValues[id - numOut - numArgs]));
+                initArgs.push_back(initVarVal);
+              }
+                } else {
+              avToSmt.push_back({av, av});
+            }
+            for (auto &op : initOutputReg->getOps()) {
+              // todo: check that updates requiring inputs for operations work
+              if (auto outputOp = dyn_cast<fsm::OutputOp>(op)) {
+                for (auto outs : outputOp->getOperands()) {
+                  auto toRet = getSmtValue(outs, avToSmt, b, loc);
+                  outputSmtValues.push_back(toRet);
+                }
+              }
+            }
+          }
+        }
 
         for (auto [i, a] : llvm::enumerate(forallArgs)) {
-          if (int(i) >= numOut + numArgs && int(i) < forallArgs.size() - 1) {
+          if (int(i) >= numArgs && int(i) < numOut + numArgs && int(i) < forallArgs.size() - 1) {
+            initArgs.push_back(outputSmtValues[i - numArgs]);
+          } else if (int(i) >= numOut + numArgs && int(i) < forallArgs.size() - 1) {
             if (isa<smt::BoolType>(a.getType())){
               auto initVarVal = b.create<smt::BoolConstantOp>(loc, b.getBoolAttr(varInitValues[i - numOut - numArgs]));
               initArgs.push_back(initVarVal);
@@ -340,6 +374,11 @@ LogicalResult MachineOpConverter::dispatch() {
             initArgs.push_back(a);
           }
         }
+
+        // retrieve output region constraint at the initial state
+
+
+
         auto initTime = b.create<smt::IntConstantOp>(loc, b.getI32IntegerAttr(0));
         auto lhs = b.create<smt::EqOp>(loc, forallArgs.back(), initTime);
         auto rhs = b.create<smt::ApplyFuncOp>(loc, stateFunctions[0], initArgs);
@@ -349,7 +388,7 @@ LogicalResult MachineOpConverter::dispatch() {
 
   b.create<smt::AssertOp>(loc, forall);
 
-  // // create solver region
+  // create solver region
 
 
   for (auto [id1, t1] : llvm::enumerate(transitions)) {
