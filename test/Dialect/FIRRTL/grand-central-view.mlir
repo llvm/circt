@@ -583,30 +583,30 @@ firrtl.circuit "SetOutputDir" {
 // CHECK-NEXT: !sv.interface<@[[OUTSYM_4:.+]]>
 
 // CHECK: sv.interface @[[OUTSYM_1]]
-// CHECK-SAME: output_file = #hw.output_file<"path{{/|\\\\}}">
+// CHECK-SAME: output_file = #hw.output_file<"path{{[/|\]}}">
 // CHECK: sv.verbatim "[[SUB_1:.+]] sub();"
 
 // CHECK: sv.interface @[[SUB_1]]
-// CHECK-SAME: output_file = #hw.output_file<"path{{/|\\\\}}">
+// CHECK-SAME: output_file = #hw.output_file<"path{{[/|\]}}">
 
 // CHECK: sv.interface @[[OUTSYM_2]]
-// CHECK-SAME: output_file = #hw.output_file<"other{{/|\\\\}}", excludeFromFileList>
+// CHECK-SAME: output_file = #hw.output_file<"other{{[/|\]}}", excludeFromFileList>
 // CHECK: sv.verbatim "[[SUB_2:.+]] sub();"
 
 // CHECK: sv.interface @[[SUB_2]]
-// CHECK-SAME: output_file = #hw.output_file<"other{{/|\\\\}}", excludeFromFileList>
+// CHECK-SAME: output_file = #hw.output_file<"other{{[/|\]}}", excludeFromFileList>
 
 // Place interfaces in same /file/ if module is output to specific file.
 // CHECK: sv.interface @[[OUTSYM_3]]
-// CHECK-SAME: output_file = #hw.output_file<"dir{{/|\\\\}}file.sv">
+// CHECK-SAME: output_file = #hw.output_file<"dir{{[/|\]}}file.sv">
 // CHECK: sv.verbatim "[[SUB_3:.+]] sub();"
 
 // CHECK: sv.interface @[[SUB_3]]
-// CHECK-SAME: output_file = #hw.output_file<"dir{{/|\\\\}}file.sv">
+// CHECK-SAME: output_file = #hw.output_file<"dir{{[/|\]}}file.sv">
 
 // CHECK: sv.interface @[[OUTSYM_4]]
-// CHECK-SAME: output_file = #hw.output_file<"include{{/|\\\\}}", includeReplicatedOps>
+// CHECK-SAME: output_file = #hw.output_file<"include{{[/|\]}}", includeReplicatedOps>
 // CHECK: sv.verbatim "[[SUB_4:.+]] sub();"
 
 // CHECK: sv.interface @[[SUB_4]]
-// CHECK-SAME: output_file = #hw.output_file<"include{{/|\\\\}}", includeReplicatedOps>
+// CHECK-SAME: output_file = #hw.output_file<"include{{[/|\]}}", includeReplicatedOps>
