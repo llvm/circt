@@ -7,10 +7,11 @@ from ..constructs import Mux, Wire
 from ..module import Module, generator
 from ..signals import BitsSignal, Struct
 from ..system import System
-from ..types import Bits, Channel, UInt
+from ..support import clog2
+from ..types import Bits, Channel, StructType, UInt
 from .. import esi
 
-from .common import ChannelMMIO, Reset
+from .common import ChannelHostMem, ChannelMMIO, Reset
 
 import glob
 import pathlib
@@ -165,13 +166,14 @@ def XrtChannelTop(user_module):
     clk = Clock()
     rst = Input(Bits(1))
 
-    read_address = InputChannel(Bits(20))  # MMIO read: address channel.
-    read_data = OutputChannel(
+    mmio_read_address = InputChannel(Bits(20))  # MMIO read: address channel.
+    mmio_read_data = OutputChannel(
         AXI_Lite_Read_Resp)  # MMIO read: data response channel.
 
-    write_address = InputChannel(Bits(20))  # MMIO write: address channel.
-    write_data = InputChannel(Bits(32))  # MMIO write: data channel.
-    write_resp = OutputChannel(Bits(2))  # MMIO write: write response channel.
+    mmio_write_address = InputChannel(Bits(20))  # MMIO write: address channel.
+    mmio_write_data = InputChannel(Bits(32))  # MMIO write: data channel.
+    mmio_write_resp = OutputChannel(
+        Bits(2))  # MMIO write: write response channel.
 
     @generator
     def build(ports):
@@ -180,16 +182,16 @@ def XrtChannelTop(user_module):
       data = Wire(Channel(esi.MMIODataType))
       rw_mux = MMIOAxiReadWriteMux(clk=ports.clk,
                                    rst=ports.rst,
-                                   read_address=ports.read_address,
-                                   write_address=ports.write_address,
-                                   write_data=ports.write_data)
+                                   read_address=ports.mmio_read_address,
+                                   write_address=ports.mmio_write_address,
+                                   write_data=ports.mmio_write_data)
       sel = rw_mux.sel.buffer(ports.clk, ports.rst, 1)
       rw_demux = MMIOAxiReadWriteDemux(clk=ports.clk,
                                        rst=ports.rst,
                                        data=data,
                                        sel=sel)
-      ports.read_data = rw_demux.read_data
-      ports.write_resp = rw_mux.write_resp
+      ports.mmio_read_data = rw_demux.read_data
+      ports.mmio_write_resp = rw_mux.write_resp
 
       cmd, froms = esi.MMIO.read_write.type.pack(cmd=rw_mux.cmd)
       data.assign(froms["data"])
@@ -231,7 +233,14 @@ def XrtBSP(user_module):
     ap_clk = Clock()
     ap_resetn = Input(Bits(1))
 
-    # AXI4-Lite slave interface
+    HostMemAddressWidth = 64
+    HostMemIdWidth = 8
+    HostMemDataWidth = 512
+
+    ############################################################################
+    # AXI4-Lite slave interface for MMIO
+    ############################################################################
+
     s_axi_control_AWVALID = Input(Bits(1))
     s_axi_control_AWREADY = Output(Bits(1))
     s_axi_control_AWADDR = Input(Bits(20))
@@ -250,47 +259,170 @@ def XrtBSP(user_module):
     s_axi_control_BREADY = Input(Bits(1))
     s_axi_control_BRESP = Output(Bits(2))
 
+    ############################################################################
+    # AXI4 master interface for host DMA
+    ############################################################################
+
+    # Write side
+    #   Address req channel
+    m_axi_gmem_AWVALID = Output(Bits(1))
+    m_axi_gmem_AWREADY = Input(Bits(1))
+    m_axi_gmem_AWADDR = Output(Bits(HostMemAddressWidth))
+    m_axi_gmem_AWID = Output(Bits(HostMemIdWidth))
+    m_axi_gmem_AWLEN = Output(Bits(8))
+    m_axi_gmem_AWSIZE = Output(Bits(3))
+    m_axi_gmem_AWBURST = Output(Bits(2))
+
+    #   Data req channel
+    m_axi_gmem_WVALID = Output(Bits(1))
+    m_axi_gmem_WREADY = Input(Bits(1))
+    m_axi_gmem_WDATA = Output(Bits(HostMemDataWidth))
+    m_axi_gmem_WSTRB = Output(Bits(HostMemDataWidth // 8))
+    m_axi_gmem_WLAST = Output(Bits(1))
+
+    #   Resp channel
+    m_axi_gmem_BVALID = Input(Bits(1))
+    m_axi_gmem_BREADY = Output(Bits(1))
+    m_axi_gmem_BRESP = Input(Bits(2))
+    m_axi_gmem_BID = Input(Bits(HostMemIdWidth))
+
+    # Read side
+    #   Address req channel
+    m_axi_gmem_ARVALID = Output(Bits(1))
+    m_axi_gmem_ARREADY = Input(Bits(1))
+    m_axi_gmem_ARADDR = Output(UInt(HostMemAddressWidth))
+    m_axi_gmem_ARID = Output(UInt(HostMemIdWidth))
+    m_axi_gmem_ARLEN = Output(UInt(8))
+    m_axi_gmem_ARSIZE = Output(Bits(3))
+    m_axi_gmem_ARBURST = Output(Bits(2))
+
+    #   Data resp channel
+    m_axi_gmem_RVALID = Input(Bits(1))
+    m_axi_gmem_RREADY = Output(Bits(1))
+    m_axi_gmem_RDATA = Input(Bits(HostMemDataWidth))
+    m_axi_gmem_RLAST = Input(Bits(1))
+    m_axi_gmem_RID = Input(UInt(HostMemIdWidth))
+    m_axi_gmem_RRESP = Input(Bits(2))
+
     @generator
     def construct(ports):
       System.current().platform = "fpga"
-
       rst = ~ports.ap_resetn
 
+      # Instantiate the user module.
       XrtChannelsTmplInst = XrtChannelTop(user_module)
 
+      # Set up the MMIO service and tie it to the AXI-lite channels.
       read_address, arready = Channel(
-          XrtChannelsTmplInst.read_address.type).wrap(
+          XrtChannelsTmplInst.mmio_read_address.type).wrap(
               ports.s_axi_control_ARADDR, ports.s_axi_control_ARVALID)
       ports.s_axi_control_ARREADY = arready
       write_address, awready = Channel(
-          XrtChannelsTmplInst.write_address.type).wrap(
+          XrtChannelsTmplInst.mmio_write_address.type).wrap(
               ports.s_axi_control_AWADDR, ports.s_axi_control_AWVALID)
       ports.s_axi_control_AWREADY = awready
-      write_data, wready = Channel(XrtChannelsTmplInst.write_data.type).wrap(
-          ports.s_axi_control_WDATA, ports.s_axi_control_WVALID)
+      write_data, wready = Channel(
+          XrtChannelsTmplInst.mmio_write_data.type).wrap(
+              ports.s_axi_control_WDATA, ports.s_axi_control_WVALID)
       ports.s_axi_control_WREADY = wready
 
       xrt_channels = XrtChannelsTmplInst(
           clk=ports.ap_clk,
           rst=rst,
-          read_address=read_address,
-          write_address=write_address,
-          write_data=write_data,
+          mmio_read_address=read_address,
+          mmio_write_address=write_address,
+          mmio_write_data=write_data,
       )
 
-      rdata, rvalid = xrt_channels.read_data.unwrap(ports.s_axi_control_RREADY)
+      rdata, rvalid = xrt_channels.mmio_read_data.unwrap(
+          ports.s_axi_control_RREADY)
       ports.s_axi_control_RVALID = rvalid
       ports.s_axi_control_RDATA = rdata.data
       ports.s_axi_control_RRESP = rdata.resp
 
-      wrresp_data, wrresp_valid = xrt_channels.write_resp.unwrap(
+      wrresp_data, wrresp_valid = xrt_channels.mmio_write_resp.unwrap(
           ports.s_axi_control_BREADY)
       ports.s_axi_control_BVALID = wrresp_valid
       ports.s_axi_control_BRESP = wrresp_data
 
+      # Construct the host memory interface.
+      XrtTop.construct_hostmem(ports)
+
       # Copy additional sources
-      sys: System = System.current()
+      sys = System.current()
       sys.add_packaging_step(XrtTop.package)
+
+    @staticmethod
+    def construct_hostmem(ports):
+      """Construct the host memory interface"""
+      rst = ~ports.ap_resetn
+
+      # Instantiate a hostmem service generator which multiplexes requests to a
+      # single read and single write channel.
+      HostMemDataWidthBytes = XrtTop.HostMemDataWidth // 8
+      hostmem = ChannelHostMem(read_width=XrtTop.HostMemDataWidth,
+                               write_width=XrtTop.HostMemDataWidth)(
+                                   decl=esi.HostMem,
+                                   appid=esi.AppID("__xrt_hostmem"),
+                                   clk=ports.ap_clk,
+                                   rst=rst)
+
+      ##########################################################################
+      # Read path
+      ##########################################################################
+
+      read_resp_data_type = hostmem.read.type.resp.inner
+      read_resp_wire = Wire(Channel(read_resp_data_type))
+      read_req = hostmem.read.unpack(resp=read_resp_wire)['req']
+
+      # Unwrap the read request channel and tie it to the AXI4 master interface.
+      read_req_data, read_req_valid = read_req.unwrap(ports.m_axi_gmem_ARREADY)
+      ports.m_axi_gmem_ARVALID = read_req_valid
+      ports.m_axi_gmem_ARADDR = read_req_data.address
+      ports.m_axi_gmem_ARID = read_req_data.tag
+      # TODO: Test reads > HostMemDataWidthBytes. I'm pretty sure this is wrong
+      # for lengths >512bits but initially we won't be transferring >512 bits.
+      ports.m_axi_gmem_ARSIZE = Bits(3)(clog2(HostMemDataWidthBytes) - 1)
+      ports.m_axi_gmem_ARLEN = (read_req_data.length /
+                                HostMemDataWidthBytes).as_uint(8)
+      ports.m_axi_gmem_ARBURST = Bits(2)(1)  # INCR
+
+      # Wrap up the read response data into a channel.
+      read_resp_data = read_resp_data_type({
+          "tag": ports.m_axi_gmem_RID,
+          "data": ports.m_axi_gmem_RDATA,
+      })
+      read_resp, read_resp_ready = read_resp_wire.type.wrap(
+          read_resp_data, ports.m_axi_gmem_RVALID)
+      ports.m_axi_gmem_RREADY = read_resp_ready
+      read_resp_wire.assign(read_resp)
+
+      ##########################################################################
+      # Write path
+      # TODO: this
+      ##########################################################################
+
+      write_ack_wire = Wire(Channel(esi.HostMem.TagType))
+      write_req = hostmem.write.unpack(ackTag=write_ack_wire)['req']
+      write_ack, write_ack_ready = Channel(esi.HostMem.TagType).wrap(
+          esi.HostMem.TagType(0),
+          Bits(1)(0))
+      write_ack_wire.assign(write_ack)
+
+      # Tie off the write side outputs.
+      ports.m_axi_gmem_AWVALID = Bits(1)(0)
+      ports.m_axi_gmem_AWADDR = Bits(XrtTop.HostMemAddressWidth)(0)
+      ports.m_axi_gmem_AWID = Bits(XrtTop.HostMemIdWidth)(0)
+      ports.m_axi_gmem_AWLEN = Bits(8)(0)
+      ports.m_axi_gmem_AWSIZE = Bits(3)(0)
+      ports.m_axi_gmem_AWBURST = Bits(2)(0)
+
+      ports.m_axi_gmem_WVALID = Bits(1)(0)
+      ports.m_axi_gmem_WDATA = Bits(XrtTop.HostMemDataWidth)(0)
+      ports.m_axi_gmem_WSTRB = Bits(XrtTop.HostMemDataWidth // 8)(0)
+      ports.m_axi_gmem_WLAST = Bits(1)(0)
+
+      ports.m_axi_gmem_BREADY = Bits(1)(0)
 
     @staticmethod
     def package(sys: System):
@@ -308,6 +440,8 @@ def XrtBSP(user_module):
       shutil.copy(__dir__ / "xrt_package.tcl",
                   sys.output_directory / "xrt_package.tcl")
       shutil.copy(__dir__ / "xrt.ini", sys.output_directory / "xrt.ini")
+      shutil.copy(__dir__ / "xrt_vitis.cfg",
+                  sys.output_directory / "xrt_vitis.cfg")
       shutil.copy(__dir__ / "xsim.tcl", sys.output_directory / "xsim.tcl")
 
   return XrtTop
@@ -341,10 +475,10 @@ def XrtCosimBSP(user_module):
                                 write_data=write_data)
       esi.ChannelService.to_host(
           esi.AppID("mmio_axi_rddata"),
-          xrt.read_data.transform(lambda x: x.data.as_uint()))
+          xrt.mmio_read_data.transform(lambda x: x.data.as_uint()))
       esi.ChannelService.to_host(
           esi.AppID("mmio_axi_wrresp"),
-          xrt.write_resp.transform(lambda x: x.as_uint(8)))
+          xrt.mmio_write_resp.transform(lambda x: x.as_uint(8)))
 
   from .cosim import CosimBSP
   return CosimBSP(XrtCosimBSP)

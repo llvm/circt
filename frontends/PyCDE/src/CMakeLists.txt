@@ -47,6 +47,7 @@ declare_mlir_python_sources(PyCDESources
   pycde/bsp/Makefile.xrt.mk
   pycde/bsp/xrt_package.tcl
   pycde/bsp/xrt.ini
+  pycde/bsp/xrt_vitis.cfg
   pycde/bsp/xsim.tcl
 )
 
