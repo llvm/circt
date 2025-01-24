@@ -1444,6 +1444,9 @@ struct ConditionalOpConversion : public OpConversionPattern<ConditionalOp> {
               !memOp.hasEffect<MemoryEffects::Free>())
             return WalkResult::advance();
 
+        if (operation->hasTrait<OpTrait::HasRecursiveMemoryEffects>())
+          return WalkResult::advance();
+
         return WalkResult::interrupt();
       });
       return !result.wasInterrupted();
