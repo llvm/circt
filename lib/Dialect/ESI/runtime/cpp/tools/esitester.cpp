@@ -126,7 +126,7 @@ void dmaTest(Accelerator *acc, esi::services::HostMem::HostMemRegion &region,
       dataPtr[0] = 0x12345678 << i;
       dataPtr[1] = 0xDEADBEEF << i;
       region.flush();
-      readMem->write(8, (uint64_t)devicePtr);
+      readMem->write(8, reinterpret_cast<uint64_t>(devicePtr));
 
       // Wait for the accelerator to read the correct value. Timeout and fail
       // after 10ms.

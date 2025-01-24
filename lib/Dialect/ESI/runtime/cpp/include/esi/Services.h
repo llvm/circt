@@ -210,8 +210,10 @@ public:
     operator void *() const { return getPtr(); }
     virtual std::size_t getSize() const = 0;
     /// Flush the memory region to ensure that the device sees the latest
-    /// contents. Recommended before DMA transactions, though not all platforms
-    /// require it.
+    /// contents. Because some platforms require it before DMA transactions, it
+    /// is recommended to call this before any DMA on all platforms. On
+    /// platforms which don't require it, it is a cheap no-op virtual method
+    /// call.
     virtual void flush() {}
   };
 
