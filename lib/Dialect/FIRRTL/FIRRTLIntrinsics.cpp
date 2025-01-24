@@ -7,9 +7,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLIntrinsics.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Support/JSON.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/Support/JSON.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -708,6 +712,245 @@ public:
   }
 };
 
+//===----------------------------------------------------------------------===//
+// View intrinsic converter and helpers
+//===----------------------------------------------------------------------===//
+
+template <typename A>
+A tryGetAs(DictionaryAttr dict, Attribute root, StringRef key, Location loc,
+           Twine path = Twine()) {
+  return tryGetAsBase<A>(dict, root, key, loc, "View 'info'",
+                         "'info' attribute", path);
+}
+
+/// Recursively walk a sifive.enterprise.grandcentral.AugmentedType to extract
+/// and slightly restructure information needed for a view.
+std::optional<DictionaryAttr>
+parseAugmentedType(MLIRContext *context, Location loc,
+                   DictionaryAttr augmentedType, DictionaryAttr root,
+                   StringAttr name, StringAttr defName,
+                   std::optional<StringAttr> description, Twine path = {}) {
+  auto classAttr =
+      tryGetAs<StringAttr>(augmentedType, root, "class", loc, path);
+  if (!classAttr)
+    return std::nullopt;
+  StringRef classBase = classAttr.getValue();
+  if (!classBase.consume_front("sifive.enterprise.grandcentral.Augmented")) {
+    mlir::emitError(loc,
+                    "the 'class' was expected to start with "
+                    "'sifive.enterprise.grandCentral.Augmented*', but was '" +
+                        classAttr.getValue() + "' (Did you misspell it?)")
+            .attachNote()
+        << "see attribute: " << augmentedType;
+    return std::nullopt;
+  }
+
+  // An AugmentedBundleType looks like:
+  //   "defName": String
+  //   "elements": Seq[AugmentedField]
+  if (classBase == "BundleType") {
+    defName = tryGetAs<StringAttr>(augmentedType, root, "defName", loc, path);
+    if (!defName)
+      return std::nullopt;
+
+    // Each element is an AugmentedField with members:
+    //   "name": String
+    //   "description": Option[String]
+    //   "tpe": AugmentedType
+    SmallVector<Attribute> elements;
+    auto elementsAttr =
+        tryGetAs<ArrayAttr>(augmentedType, root, "elements", loc, path);
+    if (!elementsAttr)
+      return std::nullopt;
+    for (size_t i = 0, e = elementsAttr.size(); i != e; ++i) {
+      auto field = dyn_cast_or_null<DictionaryAttr>(elementsAttr[i]);
+      if (!field) {
+        mlir::emitError(
+            loc,
+            "View 'info' attribute with path '.elements[" + Twine(i) +
+                "]' contained an unexpected type (expected a DictionaryAttr).")
+                .attachNote()
+            << "The received element was: " << elementsAttr[i];
+        return std::nullopt;
+      }
+      auto ePath = (path + ".elements[" + Twine(i) + "]").str();
+      auto name = tryGetAs<StringAttr>(field, root, "name", loc, ePath);
+      if (!name)
+        return std::nullopt;
+      auto tpe = tryGetAs<DictionaryAttr>(field, root, "tpe", loc, ePath);
+      if (!tpe)
+        return std::nullopt;
+      std::optional<StringAttr> description;
+      if (auto maybeDescription = field.get("description"))
+        description = cast<StringAttr>(maybeDescription);
+      auto eltAttr =
+          parseAugmentedType(context, loc, tpe, root, name, defName,
+                             description, path + "_" + name.getValue());
+      if (!eltAttr)
+        return std::nullopt;
+
+      // Collect information necessary to build a module with this view later.
+      // This includes the optional description and name.
+      NamedAttrList attrs;
+      if (auto maybeDescription = field.get("description"))
+        attrs.append("description", cast<StringAttr>(maybeDescription));
+      attrs.append("name", name);
+      auto tpeClass = tpe.getAs<StringAttr>("class");
+      if (!tpeClass) {
+        mlir::emitError(loc, "missing 'class' key in") << tpe;
+        return std::nullopt;
+      }
+      attrs.append("tpe", tpeClass);
+      elements.push_back(*eltAttr);
+    }
+    // Add an attribute that stores information necessary to construct the
+    // interface for the view.  This needs the name of the interface (defName)
+    // and the names of the components inside it.
+    NamedAttrList attrs;
+    attrs.append("class", classAttr);
+    attrs.append("defName", defName);
+    if (description)
+      attrs.append("description", *description);
+    attrs.append("elements", ArrayAttr::get(context, elements));
+    attrs.append("name", name);
+    return DictionaryAttr::getWithSorted(context, attrs);
+  }
+
+  // An AugmentedGroundType has no contents.
+  if (classBase == "GroundType") {
+    NamedAttrList elementIface;
+
+    // Populate the attribute for the interface element.
+    elementIface.append("class", classAttr);
+    if (description)
+      elementIface.append("description", *description);
+    elementIface.append("name", name);
+
+    return DictionaryAttr::getWithSorted(context, elementIface);
+  }
+
+  // An AugmentedVectorType looks like:
+  //   "elements": Seq[AugmentedType]
+  if (classBase == "VectorType") {
+    auto elementsAttr =
+        tryGetAs<ArrayAttr>(augmentedType, root, "elements", loc, path);
+    if (!elementsAttr)
+      return std::nullopt;
+    SmallVector<Attribute> elements;
+    for (auto [i, elt] : llvm::enumerate(elementsAttr)) {
+      auto eltAttr = parseAugmentedType(
+          context, loc, cast<DictionaryAttr>(elt), root, name,
+          StringAttr::get(context, ""), std::nullopt, path + "_" + Twine(i));
+      if (!eltAttr)
+        return std::nullopt;
+      elements.push_back(*eltAttr);
+    }
+    NamedAttrList attrs;
+    attrs.append("class", classAttr);
+    if (description)
+      attrs.append("description", *description);
+    attrs.append("elements", ArrayAttr::get(context, elements));
+    attrs.append("name", name);
+    return DictionaryAttr::getWithSorted(context, attrs);
+  }
+
+  // Anything else is unexpected or a user error if they manually wrote
+  // the JSON/attribute.  Print an error and error out.
+  mlir::emitError(loc, "found unknown AugmentedType '" + classAttr.getValue() +
+                           "' (Did you misspell it?)")
+          .attachNote()
+      << "see attribute: " << augmentedType;
+  return std::nullopt;
+}
+
+class ViewConverter : public IntrinsicConverter {
+public:
+  LogicalResult checkAndConvert(GenericIntrinsic gi,
+                                GenericIntrinsicOpAdaptor adaptor,
+                                PatternRewriter &rewriter) override {
+    // Check structure of the intrinsic.
+    if (gi.hasNoOutput() || gi.namedParam("info") || gi.namedParam("name"))
+      return failure();
+
+    // Check operands.
+    for (auto idx : llvm::seq(gi.getNumInputs()))
+      if (gi.checkInputType(idx, "must be ground type", [](auto ty) {
+            auto base = type_dyn_cast<FIRRTLBaseType>(ty);
+            return base && base.isGround();
+          }))
+        return failure();
+
+    // Parse "info" string parameter as JSON.
+    auto view =
+        llvm::json::parse(gi.getParamValue<StringAttr>("info").getValue());
+    if (auto err = view.takeError()) {
+      handleAllErrors(std::move(err), [&](const llvm::json::ParseError &a) {
+        gi.emitError() << ": error parsing view JSON: " << a.message();
+      });
+      return failure();
+    }
+
+    // Convert JSON to MLIR attribute.
+    llvm::json::Path::Root root;
+    auto value = convertJSONToAttribute(gi.op.getContext(), view.get(), root);
+    assert(value && "JSON to attribute failed but should not ever fail");
+
+    // Check attribute is a dictionary, for AugmentedBundleTypeAttr
+    // construction.
+    auto dict = dyn_cast<DictionaryAttr>(value);
+    if (!dict)
+      return gi.emitError() << ": 'info' parameter must be a dictionary";
+
+    auto nameAttr = gi.getParamValue<StringAttr>("name");
+    auto result = parseAugmentedType(
+        gi.op.getContext(), gi.op.getLoc(), dict, dict, nameAttr,
+        /* defName= */ {}, /* description= */ std::nullopt);
+
+    if (!result)
+      return failure();
+
+    // Build AugmentedBundleTypeAttr, unchecked.
+    auto augmentedType =
+        AugmentedBundleTypeAttr::get(gi.op.getContext(), *result);
+    if (augmentedType.getClass() != augmentedBundleTypeClass)
+      return gi.emitError() << ": 'info' must be augmented bundle";
+
+    // Scan for ground-type (leaves) and count.
+    SmallVector<DictionaryAttr> worklist;
+    worklist.push_back(augmentedType.getUnderlying());
+    size_t numLeaves = 0;
+    auto augGroundAttr =
+        StringAttr::get(gi.op.getContext(), augmentedGroundTypeClass);
+    auto augBundleAttr =
+        StringAttr::get(gi.op.getContext(), augmentedBundleTypeClass);
+    auto augVectorAttr =
+        StringAttr::get(gi.op.getContext(), augmentedVectorTypeClass);
+    while (!worklist.empty()) {
+      auto dict = worklist.pop_back_val();
+      auto clazz = dict.getAs<StringAttr>("class");
+      if (clazz == augGroundAttr) {
+        ++numLeaves;
+        continue;
+      }
+      assert(clazz == augBundleAttr || clazz == augVectorAttr);
+      llvm::append_range(
+          worklist,
+          dict.getAs<ArrayAttr>("elements").getAsRange<DictionaryAttr>());
+    }
+
+    if (numLeaves != gi.getNumInputs())
+      return gi.emitError()
+             << " has " << gi.getNumInputs() << " operands but view 'info' has "
+             << numLeaves << " leaf elements";
+
+    // Check complete, convert!
+
+    rewriter.replaceOpWithNewOp<ViewIntrinsicOp>(
+        gi.op, nameAttr.getValue(), augmentedType, adaptor.getOperands());
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -773,4 +1016,6 @@ void FIRRTLIntrinsicLoweringDialectInterface::populateIntrinsicLowerings(
   lowering.add<CirctUnclockedAssumeConverter>("circt.unclocked_assume",
                                               "circt_unclocked_assume");
   lowering.add<CirctDPICallConverter>("circt.dpi_call", "circt_dpi_call");
+
+  lowering.add<ViewConverter>("circt.view", "circt_view");
 }

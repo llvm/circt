@@ -30,3 +30,108 @@ firrtl.circuit "MissingParam" {
     }
 }
 
+// -----
+
+firrtl.circuit "ViewNotBundle" {
+  firrtl.module public @ViewNotBundle() {
+    // expected-error @below {{'info' must be augmented bundle}}
+    // expected-error @below {{failed to legalize}}
+    firrtl.int.generic "circt_view" <name: none = "view", info: none = "{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"}"> : () -> ()
+  }
+}
+
+// -----
+
+firrtl.circuit "ViewNotJSON" {
+  firrtl.module public @ViewNotJSON() {
+    // expected-error @below {{error parsing view JSON}}
+    // expected-error @below {{failed to legalize}}
+    firrtl.int.generic "circt_view" <name: none = "view", info: none = "boop"> : () -> ()
+  }
+}
+
+// -----
+
+firrtl.circuit "ViewNoDefname" {
+  firrtl.module public @ViewNoDefname() {
+    // expected-error @below {{View 'info' did not contain required key 'defName'}}
+    // expected-note @below {{The full 'info' attribute is reproduced here: {class = "sifive.enterprise.grandcentral.AugmentedBundleType"}}}
+    // expected-error @below {{failed to legalize}}
+    firrtl.int.generic "circt_view" <name: none = "view", info: none = "{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\"}"> : () -> ()
+  }
+}
+
+// -----
+
+firrtl.circuit "ViewDefnameNotString" {
+  firrtl.module public @ViewDefnameNotString() {
+    // expected-error @below {{View 'info' did not contain the correct type for key 'defName'}}
+    // expected-note @below {{The full 'info' attribute is reproduced here:}}
+    // expected-error @below {{failed to legalize}}
+    firrtl.int.generic "circt_view" <name: none = "view", info: none = "{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\", \"defName\": 5}"> : () -> ()
+  }
+}
+
+// -----
+
+firrtl.circuit "ViewNoElementsField" {
+  firrtl.module public @ViewNoElementsField() {
+    // expected-error @below {{View 'info' did not contain required key 'elements'}}
+    // expected-note @below {{The full 'info' attribute is reproduced here:}}
+    // expected-error @below {{failed to legalize}}
+    firrtl.int.generic "circt_view" <name: none = "view", info: none = "{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\", \"defName\": \"MyView\"}"> : () -> ()
+  }
+}
+
+// -----
+
+firrtl.circuit "ViewInvalidElement" {
+  firrtl.module public @ViewInvalidElement() {
+    // expected-error @below {{View 'info' attribute with path '.elements[0]' contained an unexpected type (expected a DictionaryAttr)}}
+    // expected-note @below {{The received element was: 5 : i64}}
+    // expected-error @below {{failed to legalize}}
+    firrtl.int.generic "circt_view" <name: none = "view", info: none = "{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\", \"defName\": \"MyView\", \"elements\": [5]}"> : () -> ()
+  }
+}
+
+// -----
+
+firrtl.circuit "ViewElementEmptyDict" {
+  firrtl.module public @ViewElementEmptyDict() {
+    // expected-error @below {{View 'info' with path '.elements[0]' did not contain required key 'name'}}
+    // expected-note @below {{The full 'info' attribute is reproduced here:}}
+    // expected-error @below {{failed to legalize}}
+    firrtl.int.generic "circt_view" <name: none = "view", info: none = "{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\", \"defName\": \"MyView\", \"elements\": [{}]}"> : () -> ()
+  }
+}
+
+// -----
+
+firrtl.circuit "ViewElementGroundNoType" {
+  firrtl.module public @ViewElementGroundNoType() {
+    // expected-error @below {{View 'info' with path '.elements[0]' did not contain required key 'tpe'}}
+    // expected-note @below {{The full 'info' attribute is reproduced here:}}
+    // expected-error @below {{failed to legalize}}
+    firrtl.int.generic "circt_view" <name: none = "view", info: none = "{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\", \"defName\": \"MyView\", \"elements\": [{\"name\": \"foo\"}]}"> : () -> ()
+  }
+}
+
+// -----
+
+firrtl.circuit "ViewOperandNotGround" {
+  firrtl.module public @ViewOperandNotGround(in %vec : !firrtl.vector<uint<1>, 2>) {
+    // expected-error @below {{circt_view input 0 must be ground type}}
+    // expected-error @below {{failed to legalize}}
+    firrtl.int.generic "circt_view" <name: none = "view", info: none = ""> %vec : (!firrtl.vector<uint<1>, 2>) -> ()
+  }
+}
+
+// -----
+
+firrtl.circuit "ViewWrongOperandCount" {
+  firrtl.module public @ViewWrongOperandCount() {
+    // expected-error @below {{circt_view has 0 operands but view 'info' has 1 leaf elements}}
+    // expected-error @below {{failed to legalize}}
+    firrtl.int.generic "circt_view" <name: none = "view", info: none = "{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\", \"defName\": \"MyView\", \"elements\": [{\"name\": \"foo\", \"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"}}]}"> : () -> ()
+  }
+}

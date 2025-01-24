@@ -289,3 +289,126 @@ always @(posedge clock) begin
   end
 end
 ```
+
+### circt_view
+
+This will become a SystemVerilog Interface that is driven by its arguments.
+This is _not_ a true SystemVerilog Interface, it is only lowered to one.
+
+
+| Parameter     | Type   | Description                                         |
+| ------------- | ------ | --------------------------------------------------- |
+| name          | string | Instance name of the view.                          |
+| info          | string | JSON encoding the view structure.                   |
+
+| Port       | Direction | Type     | Description                         |
+| ---------- | --------- | -------- | ----------------------------------- |
+| ...        | input     | Ground   | Leaf ground values for the view     |
+
+The structure of the view is encoded using JSON, with the top-level object
+required to be an `AugmentedBundleType`.
+
+The intrinsic operands correspond to the `AugmentedGroundType` leaves,
+and must be of ground type.
+
+This encoding is a trimmed version of what's used for the old GrandCentral View
+annotation.
+
+Example usage:
+```firrtl
+circuit ViewExample:
+  public module ViewExample:
+    input in : { x : UInt<2>, y : { z : UInt<3>[2] } }
+    intrinsic(circt_view<name="view", info="{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"ViewName\",\"elements\":[{\"description\":\"X marks the spot\",\"name\":\"x\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"}},{\"description\":\"y bundle\",\"name\":\"y\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"YView\",\"elements\":[{\"name\":\"z\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedVectorType\",\"elements\":[{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"},{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"}]}}]}}]}">, in.x, in.y.z[0], in.y.z[1])
+```
+
+Example Output:
+```systemverilog
+module ViewExample(
+  input [1:0] in_x,
+  input [2:0] in_y_z_0,
+              in_y_z_1
+);
+
+  ViewName view();
+  assign view.x = in_x;
+  assign view.y.z[0] = in_y_z_0;
+  assign view.y.z[1] = in_y_z_1;
+endmodule
+
+// VCS coverage exclude_file
+interface ViewName;
+  // X marks the spot
+  logic [1:0] x;
+  // y bundle
+  YView y();
+endinterface
+
+// VCS coverage exclude_file
+interface YView;
+  logic [2:0] z[0:1];
+endinterface
+
+```
+
+#### AugmentedGroundType
+
+| Property   | Type   | Description                                          |
+| ---------- | ------ | -------------                                        |
+| class      | string | `sifive.enterprise.grandcentral.AugmentedGroundType` |
+
+Creates a SystemVerilog logic type.
+
+Each ground type corresponds to an operand to the view intrinsic.
+
+Example:
+```json
+{
+  "class": "sifive.enterprise.grandcentral.AugmentedGroundType"
+}
+```
+
+#### AugmentedVectorType
+
+| Property   | Type   | Description                                          |
+| ---------- | ------ | -------------                                        |
+| class      | string | `sifive.enterprise.grandcentral.AugmentedVectorType` |
+| elements   | array  | List of augmented types. |
+
+Creates a SystemVerilog unpacked array.
+
+Example:
+```json
+{
+  "class": "sifive.enterprise.grandcentral.AugmentedVectorType",
+  "elements": [
+    {
+      "class": "sifive.enterprise.grandcentral.AugmentedGroundType"
+    },
+    {
+      "class": "sifive.enterprise.grandcentral.AugmentedGroundType"
+    }
+  ]
+}
+```
+
+#### AugmentedField
+
+| Property    | Type   | Description                        |
+| ----------  | ------ | -------------                      |
+| name        | string | Name of the field                  |
+| description | string | A textual description of this type |
+| tpe         | string | A nested augmented type            |
+
+A field in an augmented bundle type.  This can provide a small description of
+what the field in the bundle is.
+
+#### AugmentedBundleType
+
+| Property   | Type   | Description                                               |
+| ---------- | ------ | -------------                                             |
+| class      | string | sifive.enterprise.grandcentral.AugmentedBundleType        |
+| defName    | string | The name of the SystemVerilog interface.  May be renamed. |
+| elements   | array  | List of AugmentedFields                                   |
+
+Creates a SystemVerilog interface for each bundle type.
