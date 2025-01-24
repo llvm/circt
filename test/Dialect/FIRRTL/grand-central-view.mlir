@@ -540,6 +540,32 @@ firrtl.circuit "SetOutputDir" {
       }]
     }>
   }
+
+  firrtl.module @PlaceInSameFile() attributes {output_file = #hw.output_file<"dir/file.sv">} {
+    firrtl.view "view", <{
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "MyViewInterface",
+      elements = [{
+        class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+        defName = "SubInterface",
+        name = "sub",
+        elements = []
+      }]
+    }>
+  }
+
+  firrtl.module @IncludeReplicatedOps() attributes {output_file = #hw.output_file<"include/", includeReplicatedOps>} {
+    firrtl.view "view", <{
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "MyViewInterface",
+      elements = [{
+        class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+        defName = "SubInterface",
+        name = "sub",
+        elements = []
+      }]
+    }>
+  }
 }
 
 // CHECK-LABEL: "SetOutputDir"
@@ -549,6 +575,12 @@ firrtl.circuit "SetOutputDir" {
 
 // CHECK: module @ExcludeFromFileList()
 // CHECK-NEXT: !sv.interface<@[[OUTSYM_2:.+]]>
+
+// CHECK: module @PlaceInSameFile()
+// CHECK-NEXT: !sv.interface<@[[OUTSYM_3:.+]]>
+
+// CHECK: module @IncludeReplicatedOps()
+// CHECK-NEXT: !sv.interface<@[[OUTSYM_4:.+]]>
 
 // CHECK: sv.interface @[[OUTSYM_1]]
 // CHECK-SAME: output_file = #hw.output_file<"path{{/|\\\\}}">
@@ -563,3 +595,18 @@ firrtl.circuit "SetOutputDir" {
 
 // CHECK: sv.interface @[[SUB_2]]
 // CHECK-SAME: output_file = #hw.output_file<"other{{/|\\\\}}", excludeFromFileList>
+
+// Place interfaces in same /file/ if module is output to specific file.
+// CHECK: sv.interface @[[OUTSYM_3]]
+// CHECK-SAME: output_file = #hw.output_file<"dir{{/|\\\\}}file.sv">
+// CHECK: sv.verbatim "[[SUB_3:.+]] sub();"
+
+// CHECK: sv.interface @[[SUB_3]]
+// CHECK-SAME: output_file = #hw.output_file<"dir{{/|\\\\}}file.sv">
+
+// CHECK: sv.interface @[[OUTSYM_4]]
+// CHECK-SAME: output_file = #hw.output_file<"include{{/|\\\\}}", includeReplicatedOps>
+// CHECK: sv.verbatim "[[SUB_4:.+]] sub();"
+
+// CHECK: sv.interface @[[SUB_4]]
+// CHECK-SAME: output_file = #hw.output_file<"include{{/|\\\\}}", includeReplicatedOps>
