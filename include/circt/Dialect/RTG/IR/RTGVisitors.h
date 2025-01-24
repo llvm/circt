@@ -31,16 +31,22 @@ public:
   ResultType dispatchOpVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<SequenceOp, SequenceClosureOp, SetCreateOp,
-                       SetSelectRandomOp, SetDifferenceOp, SetUnionOp,
-                       SetSizeOp, TestOp, InvokeSequenceOp, BagCreateOp,
-                       BagSelectRandomOp, BagDifferenceOp, BagUnionOp,
-                       BagUniqueSizeOp, LabelDeclOp, LabelUniqueDeclOp, LabelOp,
-                       TargetOp, YieldOp>([&](auto expr) -> ResultType {
+        .template Case<
+            // Bags
+            BagCreateOp, BagSelectRandomOp, BagDifferenceOp, BagUnionOp,
+            BagUniqueSizeOp,
+            // Labels
+            LabelDeclOp, LabelUniqueDeclOp, LabelOp,
+            // Registers
+            FixedRegisterOp, VirtualRegisterOp,
+            // RTG tests
+            TestOp, TargetOp, YieldOp,
+            // Sequences
+            SequenceOp, SequenceClosureOp, InvokeSequenceOp,
+            // Sets
+            SetCreateOp, SetSelectRandomOp, SetDifferenceOp, SetUnionOp,
+            SetSizeOp>([&](auto expr) -> ResultType {
           return thisCast->visitOp(expr, args...);
-        })
-        .template Case<RegisterOpInterface>([&](auto expr) -> ResultType {
-          return thisCast->visitRegisterOp(expr, args...);
         })
         .template Case<ContextResourceOpInterface>(
             [&](auto expr) -> ResultType {
@@ -65,10 +71,6 @@ public:
   /// This callback is invoked on any operations that are not
   /// handled by the concrete visitor.
   ResultType visitUnhandledOp(Operation *op, ExtraArgs... args);
-
-  ResultType visitRegisterOp(RegisterOpInterface op, ExtraArgs... args) {
-    return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);
-  }
 
   ResultType visitContextResourceOp(ContextResourceOpInterface op,
                                     ExtraArgs... args) {
@@ -103,6 +105,8 @@ public:
   HANDLE(TestOp, Unhandled);
   HANDLE(TargetOp, Unhandled);
   HANDLE(YieldOp, Unhandled);
+  HANDLE(FixedRegisterOp, Unhandled);
+  HANDLE(VirtualRegisterOp, Unhandled);
 #undef HANDLE
 };
 

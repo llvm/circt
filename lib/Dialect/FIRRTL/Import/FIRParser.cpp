@@ -1554,12 +1554,12 @@ ParseResult FIRModuleContext::lookupSymbolEntry(SymbolValueEntry &result,
 ParseResult FIRModuleContext::resolveSymbolEntry(Value &result,
                                                  SymbolValueEntry &entry,
                                                  SMLoc loc, bool fatal) {
-  if (!entry.is<Value>()) {
+  if (!isa<Value>(entry)) {
     if (fatal)
       emitError(loc, "bundle value should only be used from subfield");
     return failure();
   }
-  result = entry.get<Value>();
+  result = cast<Value>(entry);
   return success();
 }
 
@@ -1567,14 +1567,14 @@ ParseResult FIRModuleContext::resolveSymbolEntry(Value &result,
                                                  SymbolValueEntry &entry,
                                                  StringRef fieldName,
                                                  SMLoc loc) {
-  if (!entry.is<UnbundledID>()) {
+  if (!isa<UnbundledID>(entry)) {
     emitError(loc, "value should not be used from subfield");
     return failure();
   }
 
   auto fieldAttr = StringAttr::get(getContext(), fieldName);
 
-  unsigned unbundledId = entry.get<UnbundledID>() - 1;
+  unsigned unbundledId = cast<UnbundledID>(entry) - 1;
   assert(unbundledId < unbundledValues.size());
   UnbundledValueEntry &ubEntry = unbundledValues[unbundledId];
   for (auto elt : ubEntry) {
@@ -2211,7 +2211,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     if (!moduleContext.resolveSymbolEntry(result, symtabEntry, loc, false))
       break;
 
-    assert(symtabEntry.is<UnbundledID>() && "should be an instance");
+    assert(isa<UnbundledID>(symtabEntry) && "should be an instance");
 
     // Otherwise we referred to an implicitly bundled value.  We *must* be in
     // the midst of processing a field ID reference or 'is invalid'.  If not,
@@ -2223,7 +2223,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
 
       locationProcessor.setLoc(loc);
       // Invalidate all of the results of the bundled value.
-      unsigned unbundledId = symtabEntry.get<UnbundledID>() - 1;
+      unsigned unbundledId = cast<UnbundledID>(symtabEntry) - 1;
       UnbundledValueEntry &ubEntry =
           moduleContext.getUnbundledEntry(unbundledId);
       for (auto elt : ubEntry)
@@ -3304,7 +3304,7 @@ ParseResult FIRStmtParser::parseStaticRefExp(Value &result,
     if (!moduleContext.resolveSymbolEntry(result, symtabEntry, loc, false))
       return success();
 
-    assert(symtabEntry.is<UnbundledID>() && "should be an instance");
+    assert(isa<UnbundledID>(symtabEntry) && "should be an instance");
 
     // Handle the normal "instance.x" reference.
     StringRef fieldName;
@@ -3419,7 +3419,7 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
     }
   } else {
     // This target can be a port or a regular value.
-    result = symtabEntry.get<Value>();
+    result = cast<Value>(symtabEntry);
   }
 
   assert(result);
@@ -3980,12 +3980,12 @@ ParseResult FIRStmtParser::parseInvalidate() {
   // We're dealing with an instance.  This instance may or may not have a
   // trailing expression.  Handle the special case of no trailing expression
   // first by invalidating all of its results.
-  assert(symtabEntry.is<UnbundledID>() && "should be an instance");
+  assert(isa<UnbundledID>(symtabEntry) && "should be an instance");
 
   if (getToken().isNot(FIRToken::period)) {
     locationProcessor.setLoc(loc);
     // Invalidate all of the results of the bundled value.
-    unsigned unbundledId = symtabEntry.get<UnbundledID>() - 1;
+    unsigned unbundledId = cast<UnbundledID>(symtabEntry) - 1;
     UnbundledValueEntry &ubEntry = moduleContext.getUnbundledEntry(unbundledId);
     for (auto elt : ubEntry)
       emitInvalidate(elt.second);

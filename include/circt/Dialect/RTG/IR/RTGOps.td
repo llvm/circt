@@ -19,6 +19,7 @@ include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "circt/Dialect/RTG/IR/RTGInterfaces.td"
+include "circt/Dialect/RTG/IR/RTGISAAssemblyInterfaces.td"
 
 // Base class for the operation in this dialect.
 class RTGOp<string mnemonic, list<Trait> traits = []> :
@@ -322,6 +323,44 @@ def BagUniqueSizeOp : RTGOp<"bag_unique_size", [Pure]> {
   let assemblyFormat = [{
     $bag `:` qualified(type($bag)) attr-dict
   }];
+}
+
+//===- ISA Register Handling Operations -----------------------------------===//
+
+def FixedRegisterOp : RTGOp<"fixed_reg", [
+  Pure, ConstantLike,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "returns a value representing a fixed register";
+  let description = [{
+    This operation creates a value representing the register given as the 'reg'
+    attribute. This is always a concrete ISA register.
+    The return type always matches the register attribute type.
+  }];
+
+  let arguments = (ins RegisterAttrInterface:$reg);
+  let results = (outs RegisterTypeInterface:$result);
+
+  let assemblyFormat = "$reg attr-dict";
+  let hasFolder = 1;
+}
+
+def VirtualRegisterOp : RTGOp<"virtual_reg", [
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "returns a value representing a virtual register";
+  let description = [{
+    This operation creates a value representing a virtual register. The
+    'allowedRegisters' attribute specifies the concrete registers that may be
+    chosen during register allocation.
+  }];
+
+  // ArrayAttr of RegisterAttrInterfaces
+  let arguments = (ins ArrayAttr:$allowedRegs);
+  let results = (outs RegisterTypeInterface:$result);
+
+  let assemblyFormat = "$allowedRegs attr-dict";
+  let hasVerifier = 1;
 }
 
 //===- Test Specification Operations --------------------------------------===//

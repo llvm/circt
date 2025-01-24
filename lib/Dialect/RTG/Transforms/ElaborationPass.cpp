@@ -674,7 +674,6 @@ class Elaborator : public RTGOpVisitor<Elaborator, FailureOr<DeletionKind>> {
 public:
   using RTGBase = RTGOpVisitor<Elaborator, FailureOr<DeletionKind>>;
   using RTGBase::visitOp;
-  using RTGBase::visitRegisterOp;
 
   Elaborator(ElaboratorSharedState &sharedState, Materializer &materializer)
       : sharedState(sharedState), materializer(materializer) {}

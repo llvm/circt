@@ -918,7 +918,7 @@ void IMConstPropPass::visitOperation(Operation *op, FieldRef changedField) {
         resultLattice = LatticeValue::getOverdefined();
     } else { // Folding to an operand results in its value.
       resultLattice =
-          latticeValues[getOrCacheFieldRefFromValue(foldResult.get<Value>())];
+          latticeValues[getOrCacheFieldRefFromValue(cast<Value>(foldResult))];
     }
 
     mergeLatticeValue(getOrCacheFieldRefFromValue(op->getResult(i)),

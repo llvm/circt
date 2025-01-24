@@ -62,11 +62,24 @@ struct esi::backends::xrt::XrtAccelerator::Impl {
     // Find memory group for the host.
     ::xrt::xclbin xcl(xclbin);
     std::optional<::xrt::xclbin::mem> host_mem;
+<<<<<<< HEAD
     for (auto mem : xcl.get_mems())
       // The host memory is tagged with "HOST[0]". Memory type is wrong --
       // reports as DRAM rather than host memory so we can't filter on that.
       if (mem.get_tag().starts_with("HOST"))
         host_mem = mem;
+=======
+    for (auto mem : xcl.get_mems()) {
+      // The host memory is tagged with "HOST[0]". Memory type is wrong --
+      // reports as DRAM rather than host memory so we can't filter on that.
+      if (mem.get_tag().starts_with("HOST")) {
+        if (host_mem.has_value())
+          throw std::runtime_error("Multiple host memories found in xclbin");
+        else
+          host_mem = mem;
+      }
+    }
+>>>>>>> main
     if (!host_mem)
       throw std::runtime_error("No host memory found in xclbin");
     memoryGroup = host_mem->get_index();
@@ -120,7 +133,7 @@ namespace {
 class XrtHostMem : public HostMem {
 public:
   XrtHostMem(::xrt::device &device, int32_t memoryGroup)
-      : device(device), memoryGroup(memoryGroup){};
+      : device(device), memoryGroup(memoryGroup) {};
 
   struct XrtHostMemRegion : public HostMemRegion {
     XrtHostMemRegion(::xrt::device &device, std::size_t size,
@@ -135,7 +148,7 @@ public:
     /// the pointer the user application sees.
     virtual void *getDevicePtr() const override { return (void *)bo.address(); }
     virtual std::size_t getSize() const override { return bo.size(); }
-    /// It is recommended to use 'sync' to flush the caches before executing any
+    /// It is required to use 'sync' to flush the caches before executing any
     /// DMA.
     virtual void flush() override { bo.sync(XCL_BO_SYNC_BO_TO_DEVICE); }
 
