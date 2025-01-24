@@ -15,6 +15,7 @@
 
 include "circt/Dialect/RTGTest/IR/RTGTestDialect.td"
 include "circt/Dialect/RTG/IR/RTGInterfaces.td"
+include "circt/Dialect/RTG/IR/RTGISAAssemblyInterfaces.td"
 include "mlir/IR/AttrTypeBase.td"
 
 class RTGTestTypeDef<string name, list<Trait> traits = []> 
@@ -32,7 +33,9 @@ def CPUType : RTGTestTypeDef<"CPU", [ContextResourceTypeInterface]> {
   let assemblyFormat = "";
 }
 
-def IntegerRegisterType : TypeDef<RTGTestDialect, "IntegerRegister", []> {
+def IntegerRegisterType : TypeDef<RTGTestDialect, "IntegerRegister", [
+  RegisterTypeInterface
+]> {
   let summary = "represents an integer register";
 
   let mnemonic = "ireg";
