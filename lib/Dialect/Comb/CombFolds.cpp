@@ -11,6 +11,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -622,6 +623,54 @@ static bool extractFromReplicate(ExtractOp op, ReplicateOp replicate,
   return false;
 }
 
+// This pushes the extract into the shl operation if possible.
+// extract(shl(x, concat(0, y)), low, width) -> y >= low + width ? 0 : shl(x,
+// concat(0, y))
+
+static bool extractFromShl(ExtractOp op, ShlOp shlOp,
+                           PatternRewriter &rewriter) {
+  // Check if shift amount is concat(0, y)
+  auto concatOp = shlOp.getRhs().getDefiningOp<ConcatOp>();
+  if (!concatOp || concatOp.getOperands().size() != 2)
+    return false;
+
+  // Verify first operand is zero constant
+  auto constOp = concatOp.getOperands().front().getDefiningOp<hw::ConstantOp>();
+  if (!constOp || !constOp.getValue().isZero())
+    return false;
+
+  // Get the actual shift amount (y)
+  Value shiftAmount = concatOp.getOperands().back();
+
+  // Create comparison: y >= low + width
+  auto width = op.getType().getIntOrFloatBitWidth();
+  auto lowBit = op.getLowBit();
+  auto compareConst = rewriter.create<hw::ConstantOp>(
+      op.getLoc(),
+      APInt(shiftAmount.getType().getIntOrFloatBitWidth(), lowBit + width));
+  auto cmp = rewriter.create<ICmpOp>(op.getLoc(), ICmpPredicate::uge,
+                                     shiftAmount, compareConst);
+
+  // Create zero constant for the result width
+  auto zero =
+      rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getZero(width));
+
+  auto extractLhs = rewriter.createOrFold<ExtractOp>(
+      op.getLoc(), shlOp.getLhs(), lowBit, width);
+  auto extractRhs = rewriter.createOrFold<ExtractOp>(
+      op.getLoc(), shlOp.getRhs(), lowBit, width);
+
+  // Create the shifted value with same shift amount
+  auto newShift =
+      rewriter.createOrFold<ShlOp>(op.getLoc(), extractLhs, extractRhs);
+
+  // Create mux: y >= n ? 0 : shl(x, concat(0, y))
+  replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, cmp, zero, newShift,
+                                       /*twoState=*/false);
+
+  return true;
+}
+
 LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   if (hasOperandsOutsideOfBlock(&*op))
     return failure();
@@ -658,6 +707,11 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   if (auto replicate = dyn_cast_or_null<ReplicateOp>(inputOp))
     if (extractFromReplicate(op, replicate, rewriter))
       return success();
+
+  if (auto shlOp = dyn_cast_or_null<ShlOp>(inputOp)) {
+    if (extractFromShl(op, shlOp, rewriter))
+      return success();
+  }
 
   // `extract(and(a, cst))` -> `extract(a)` when the relevant bits of the
   // and/or/xor are not modifying the extracted bits.
