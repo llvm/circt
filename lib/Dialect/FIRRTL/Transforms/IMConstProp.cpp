@@ -369,12 +369,44 @@ void IMConstPropPass::runOnOperation() {
 
   instanceGraph = &getAnalysis<InstanceGraph>();
 
-  // Mark the input ports of public modules as being overdefined.
-  for (auto module : circuit.getBodyBlock()->getOps<FModuleOp>()) {
-    if (module.isPublic()) {
-      markBlockExecutable(module.getBodyBlock());
-      for (auto port : module.getBodyBlock()->getArguments())
-        markOverdefined(port);
+  // Mark input ports as overdefined where appropriate.
+  for (auto &op : circuit.getOps()) {
+    // Inputs of public modules are overdefined.
+    if (auto module = dyn_cast<FModuleOp>(op)) {
+      if (module.isPublic()) {
+        markBlockExecutable(module.getBodyBlock());
+        for (auto port : module.getBodyBlock()->getArguments())
+          markOverdefined(port);
+      }
+      continue;
+    }
+
+    // Otherwise we check whether the top-level operation contains any
+    // references to modules. Symbol uses in NLAs are ignored.
+    if (isa<hw::HierPathOp>(op))
+      continue;
+
+    // Inputs of modules referenced by unknown operations are overdefined, since
+    // we don't know how those operations affect the input port values. This
+    // handles things like `firrtl.formal`, which may may assign symbolic values
+    // to input ports of a private module.
+    auto symbolUses = SymbolTable::getSymbolUses(&op);
+    if (!symbolUses)
+      continue;
+    for (const auto &use : *symbolUses) {
+      if (auto symRef = dyn_cast<FlatSymbolRefAttr>(use.getSymbolRef())) {
+        if (auto *igNode = instanceGraph->lookupOrNull(symRef.getAttr())) {
+          if (auto module = dyn_cast<FModuleOp>(*igNode->getModule())) {
+            LLVM_DEBUG(llvm::dbgs()
+                       << "Unknown use of " << module.getModuleNameAttr()
+                       << " in " << op.getName()
+                       << ", marking inputs as overdefined\n");
+            markBlockExecutable(module.getBodyBlock());
+            for (auto port : module.getBodyBlock()->getArguments())
+              markOverdefined(port);
+          }
+        }
+      }
     }
   }
 

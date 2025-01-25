@@ -106,14 +106,11 @@ void InstanceGraph::erase(InstanceGraphNode *node) {
   nodes.erase(node);
 }
 
-InstanceGraphNode *InstanceGraph::lookup(StringAttr name) {
+InstanceGraphNode *InstanceGraph::lookupOrNull(StringAttr name) {
   auto it = nodeMap.find(name);
-  assert(it != nodeMap.end() && "Module not in InstanceGraph!");
+  if (it == nodeMap.end())
+    return nullptr;
   return it->second;
-}
-
-InstanceGraphNode *InstanceGraph::lookup(ModuleOpInterface op) {
-  return lookup(cast<ModuleOpInterface>(op).getModuleNameAttr());
 }
 
 void InstanceGraph::replaceInstance(InstanceOpInterface inst,
