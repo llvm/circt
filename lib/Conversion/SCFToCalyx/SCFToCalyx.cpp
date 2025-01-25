@@ -914,7 +914,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   case CombLogic::None: {
     // it's guaranteed to be either ORD or UNO
     outputValue = inputRegs[0].getOut();
-    doneValue = inputRegs[0].getOut();
+    doneValue = inputRegs[0].getDone();
     break;
   }
   case CombLogic::And: {
