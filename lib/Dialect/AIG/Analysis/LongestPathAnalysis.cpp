@@ -22,6 +22,7 @@
 #include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/IR/Visitors.h"
 #include "mlir/Pass/AnalysisManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Transforms/CSE.h"
@@ -153,6 +154,16 @@ struct Node {
     walkPreOrder(callback);
   }
 
+  mlir::WalkResult
+  walkPostOrder(llvm::function_ref<mlir::WalkResult(Node *)> func) {
+    // for (auto *node : llvm::post_order(this)) {
+    //   // if (func(node) == mlir::WalkResult::interrupt())
+    //   //   return mlir::WalkResult::interrupt();
+    // }
+
+    return mlir::WalkResult::advance();
+  }
+
   virtual void map(const GraphMapping &nodeToNewNode) {
     revertComputedResult();
     for (size_t i = 0, e = getNumIncomingNodes(); i < e; ++i) {
@@ -164,6 +175,32 @@ struct Node {
   }
 
   virtual void revertComputedResult() {}
+};
+
+struct NodeIterator
+    : public llvm::iterator_facade_base<NodeIterator, std::forward_iterator_tag,
+                                        Node *> {
+  NodeIterator() : node(nullptr), idx(end()) {}
+
+  constexpr size_t end() { return std::numeric_limits<size_t>::max(); }
+
+  NodeIterator(Node *node)
+      : node(node), idx(node->getNumIncomingNodes() ? 0 : end()) {}
+  Node *operator*() const { return node->getIncomingNode(idx); }
+  using llvm::iterator_facade_base<NodeIterator, std::forward_iterator_tag,
+                                   Node *>::operator++;
+  NodeIterator &operator++() {
+    assert(idx >= 0 && "idx is negative");
+    idx++;
+    if (idx == node->getNumIncomingNodes())
+      idx = end();
+    return *this;
+  }
+  bool operator==(const NodeIterator &other) const {
+    return node == other.node && idx == other.idx;
+  }
+  Node *node;
+  size_t idx;
 };
 
 struct DebugNode : Node {
@@ -711,6 +748,19 @@ struct ExtractNode : Node {
     input->dump(indent + 2);
     llvm::dbgs().indent(indent) << ")";
   }
+};
+
+// Graph traits for modules.
+template <>
+struct llvm::GraphTraits<Node *> {
+  using NodeType = Node;
+  using NodeRef = NodeType *;
+
+  using ChildIteratorType = NodeIterator;
+
+  static NodeRef getEntryNode(NodeRef node) { return node; }
+  static ChildIteratorType child_begin(NodeRef node) { return {node}; }
+  static ChildIteratorType child_end(NodeRef node) { return {}; }
 };
 
 struct Graph {
