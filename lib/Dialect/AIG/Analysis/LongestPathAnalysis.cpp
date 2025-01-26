@@ -80,7 +80,6 @@ struct DebugPoint {
   size_t bitPos;
 
   int64_t delay;
-  DebugNode *node;
 
   // Trait for list of debug points.
   void Profile(llvm::FoldingSetNodeID &ID) const {
@@ -98,6 +97,8 @@ struct Edge {
   Node *node;
   // The delay of the edge
   int64_t delay;
+
+  llvm::ImmutableList<DebugPoint> points;
 };
 
 struct ShrinkedEdge {
@@ -209,15 +210,21 @@ struct DebugNode : Node {
     llvm::dbgs().indent(indent)
         << "(debug node " << name << " " << bitPos << ")";
   }
-  void print(llvm::raw_ostream &os) const override {
+  static void printImpl(llvm::raw_ostream &os, StringAttr name,
+                        circt::igraph::InstancePath path, size_t bitPos) {
     std::string pathString;
     llvm::raw_string_ostream osPath(pathString);
     path.print(osPath);
-    os << "DebugNode(" << pathString << "." << name << "[" << bitPos << "])";
+    os << "DebugNode(" << pathString << "." << name.getValue() << "[" << bitPos
+       << "])";
+  }
+
+  void print(llvm::raw_ostream &os) const override {
+    printImpl(os, name, path, bitPos);
   }
 
   Node *getInput() const { return input; }
-  Node *query(size_t bitOffset) override { return input->query(bitOffset); }
+  Node *query(size_t bitOffset) override { return this; }
 
   StringAttr getName() const { return name; }
   size_t getBitPos() const { return bitPos; }
@@ -250,7 +257,6 @@ struct DebugNode : Node {
       point.bitPos = currentPos;
       point.path = path;
       point.delay = result.delay;
-      point.node = this;
       result.points = getListFactory().add(point, result.points);
     }
   }
@@ -394,10 +400,12 @@ struct DelayNode : Node {
     assert(bitOffset == 0 && "delay node has no bit offset");
     return this;
   }
-  void addEdge(Node *node, int64_t delay) {
+
+  void addEdge(Node *node, int64_t delay,
+               llvm::ImmutableList<DebugPoint> points) {
     revertComputedResult();
     assert(node && "node is null");
-    edges.emplace_back(Edge{node, delay});
+    edges.emplace_back(Edge{node, delay, points});
   }
 
   void setBitPos(size_t bitPos) { this->bitPos = bitPos; }
@@ -436,7 +444,7 @@ struct DelayNode : Node {
     edges.clear();
     for (auto &edge : maxDelays) {
       assert(edge.node && "input node is null");
-      addEdge(edge.node, edge.delay);
+      addEdge(edge.node, edge.delay, edge.points);
     }
     computedResult = std::move(maxDelays);
   }
@@ -918,7 +926,7 @@ struct Graph {
                   assert(edge.node && "input node is null");
                   auto *cloned = recurse(edge.node);
                   assert(cloned && "cloned is null");
-                  delayNode->addEdge(cloned, edge.delay);
+                  delayNode->addEdge(cloned, edge.delay, edge.points);
                 }
                 return delayNode;
               })
@@ -978,8 +986,12 @@ struct Graph {
           // outputNode->dump(0);
           auto queryed = outputNode->query(0);
           assert(queryed && "queryed is null");
-          clonedResult[cast<InputNode>(inputNodes->query(i))] =
-              queryed; // (この中にinstanceがいる)
+          auto* inputNode = inputNodes->query(i);
+          if (auto *debugNode = dyn_cast<DebugNode>(inputNode)) {
+            inputNode = debugNode->getInput();
+          }
+
+          clonedResult[cast<InputNode>(inputNode)] = queryed; // (この中にinstanceがいる)
         }
       }
 
@@ -992,8 +1004,11 @@ struct Graph {
           auto *outputNode = childGraph->outputNodes.at(
               {childOutput.getOwner(), childOutput.getOperandNumber(), i});
           recurse(outputNode);
-          auto inputNode =
-              cast<InputNode>(valueToNodes.at(instanceResult)->query(i));
+          auto inputNodeTmp = valueToNodes.at(instanceResult)->query(i);
+          if (auto *debugNode = dyn_cast<DebugNode>(inputNodeTmp)) {
+            inputNodeTmp = debugNode->getInput();
+          }
+          auto inputNode = cast<InputNode>(inputNodeTmp);
           LLVM_DEBUG({
             llvm::dbgs() << "Updated input node: " << instanceResult << "\n";
             inputNode->dump(0);
@@ -1227,7 +1242,7 @@ struct Graph {
         auto *node = inputNode->query(i);
         assert(node);
         uint64_t delay = std::max(1u, llvm::Log2_64_Ceil(inputs.size()));
-        nodePtr->addEdge(node, delay);
+        nodePtr->addEdge(node, delay, {});
       }
 
       (void)nodePtr->computeResult();
@@ -1580,11 +1595,10 @@ LogicalResult LongestPathAnalysisImpl::run() {
     }
   }
 
-  std::sort(
-      longestPaths.begin(), longestPaths.end(),
-      [](const auto &a, const auto &b) {
-        return std::get<0>(a) > std::get<0>(b);
-      });
+  std::sort(longestPaths.begin(), longestPaths.end(),
+            [](const auto &a, const auto &b) {
+              return std::get<0>(a) > std::get<0>(b);
+            });
 
   os << "// ------ LongestPathAnalysis Summary -----\n";
   os << "Top module: " << topModuleName << "\n";
@@ -1600,7 +1614,7 @@ LogicalResult LongestPathAnalysisImpl::run() {
     for (auto point : points) {
       os.indent(2);
       os << "arrived at " << point.delay << " ";
-      point.node->print(os);
+      DebugNode::printImpl(os, point.name, point.path, point.bitPos);
       os << "\n";
     }
     os << "\n";
