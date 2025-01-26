@@ -135,6 +135,7 @@ mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b, llvm::Small
 
 mlir::Value getSmtValue(mlir::Value op, const llvm::SmallVector<std::pair<mlir::Value, mlir::Value>>& fsmArgVals, OpBuilder &b, Location &loc){
   // op can be an arg/var of the fsm
+
   for (auto fav: fsmArgVals){
     if (op == fav.first){
       return fav.second;
@@ -326,13 +327,32 @@ LogicalResult MachineOpConverter::dispatch() {
         // nb. args also has the time
         
         llvm::SmallVector<mlir::Value> outputSmtValues; 
+        llvm::SmallVector<mlir::Value> initVarValues; 
 
         auto initOutputReg = getOutputRegion(outputOfStateId, 0); // the index of the initial state is always zero s
 
+        // first we collect the initial data of variables 
+        for (auto [i, a] : llvm::enumerate(forallArgs)) {
+          if (int(i) >= numOut + numArgs && int(i) < forallArgs.size() - 1) {
+            if (isa<smt::BoolType>(a.getType())){
+              auto initVarVal = b.create<smt::BoolConstantOp>(loc, b.getBoolAttr(varInitValues[i - numOut - numArgs]));
+              initVarValues.push_back(initVarVal);
+            } else{
+              auto initVarVal = b.create<smt::IntConstantOp>(loc, b.getI32IntegerAttr(varInitValues[i - numOut - numArgs]));
+              initVarValues.push_back(initVarVal);
+            }
+          }
+        }
+
         if (!initOutputReg->empty()){
           llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> avToSmt;
-          for (auto [id, av] : llvm::enumerate(forallArgs))
-              avToSmt.push_back({av, av});
+          for (auto [i, a] : llvm::enumerate(argVars)){
+            if (int(i) >= numOut + numArgs && int(i) < forallArgs.size() - 1) {
+              avToSmt.push_back({a, initVarValues[i - numOut - numArgs]});
+            } else {
+              avToSmt.push_back({a, a});
+            }
+          }
 
           for (auto &op : initOutputReg->getOps()) {
             // todo: check that updates requiring inputs for operations work
@@ -346,20 +366,17 @@ LogicalResult MachineOpConverter::dispatch() {
         }
 
         for (auto [i, a] : llvm::enumerate(forallArgs)) {
-          if (int(i) >= numArgs && int(i) < numOut + numArgs && int(i) < forallArgs.size() - 1) {
-            initArgs.push_back(outputSmtValues[i - numArgs]);
-          } else if (int(i) >= numOut + numArgs && int(i) < forallArgs.size() - 1) {
-            if (isa<smt::BoolType>(a.getType())){
-              auto initVarVal = b.create<smt::BoolConstantOp>(loc, b.getBoolAttr(varInitValues[i - numOut - numArgs]));
-              initArgs.push_back(initVarVal);
-            } else{
-              auto initVarVal = b.create<smt::IntConstantOp>(loc, b.getI32IntegerAttr(varInitValues[i - numOut - numArgs]));
-              initArgs.push_back(initVarVal);
+            if (int(i) >= numArgs && int(i) < numOut + numArgs && int(i) < forallArgs.size() - 1) { // outputs
+              initArgs.push_back(outputSmtValues[i - numArgs]); 
+            } else if (int(i) >= numOut + numArgs && int(i) < forallArgs.size() - 1) { // variables
+              initArgs.push_back(initVarValues[i - numOut - numArgs]);
+            } else {
+              initArgs.push_back(a);
             }
-          } else {
-            initArgs.push_back(a);
           }
-        }
+
+
+
 
         // retrieve output region constraint at the initial state
 
