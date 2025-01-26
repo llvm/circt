@@ -75,6 +75,38 @@ def VerifyInnerRefNamespace : Pass<"hw-verify-irn"> {
   let constructor =  "circt::hw::createVerifyInnerRefNamespacePass()";
 }
 
+def HWExpungeModule : Pass<"hw-expunge-module", "mlir::ModuleOp"> {
+  let summary = "Remove module from the hierarchy, and recursively expose their ports to upper level.";
+  let description = [{
+    This pass removes a list of modules from the hierarchy on-by-one, recursively exposing their ports to upper level.
+    The newly generated ports are by default named as <instance_path>__<port_name>. During a naming conflict, an warning would be genreated,
+    and an random suffix would be added to the <instance_path> part.
+
+    For each given (transitive) parent module, the prefix can alternatively be specified by option instead of using the instance path.
+  }];
+  let constructor =  "circt::hw::createHWExpungeModulePass()";
+
+  let options = [
+    ListOption<"modules", "modules", "std::string",
+      "Comma separated list of module names to be removed from the hierarchy.">,
+    ListOption<"portPrefixes", "port-prefixes", "std::string",
+      "Specify the prefix for ports of a given parent module's expunged childen. Each specification is formatted as <module>:<instance-path>=<prefix>. Only affect the top-most level module of the instance path.">,
+  ];
+}
+
+def HWTreeShake : Pass<"hw-tree-shake", "mlir::ModuleOp"> {
+  let summary = "Remove unused modules.";
+  let description = [{
+    This pass removes all modules besides a specified list of modules and their transitive dependencies.
+  }];
+  let constructor =  "circt::hw::createHWTreeShakePass()";
+
+  let options = [
+    ListOption<"keep", "keep", "std::string",
+      "Comma separated list of module names to be kept.">,
+  ];
+}
+
 /**
  * Tutorial Pass, doesn't do anything interesting
  */
