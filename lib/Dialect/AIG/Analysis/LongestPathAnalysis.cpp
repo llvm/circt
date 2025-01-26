@@ -20,6 +20,7 @@
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/InstanceGraph.h"
 #include "mlir/Analysis/TopologicalSortUtils.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/IR/Visitors.h"
@@ -31,6 +32,7 @@
 #include "llvm/ADT/ImmutableList.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/ScopeExit.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/JSON.h"
 
 #include "llvm/Support/raw_ostream.h"
@@ -80,6 +82,7 @@ struct DebugPoint {
   size_t bitPos;
 
   int64_t delay;
+  StringRef comment;
 
   // Trait for list of debug points.
   void Profile(llvm::FoldingSetNodeID &ID) const {
@@ -122,6 +125,7 @@ struct Node {
     Extract,
     Constant,
     Debug,
+    DummyTop, // Dummy node for the entry. Connect to all output nodes.
   };
   Kind kind;
   size_t width;
@@ -196,6 +200,9 @@ struct NodeIterator
     return *this;
   }
   bool operator==(const NodeIterator &other) const {
+    if (idx == std::numeric_limits<size_t>::max())
+      return other.idx == std::numeric_limits<size_t>::max();
+
     return node == other.node && idx == other.idx;
   }
   Node *node;
@@ -203,24 +210,31 @@ struct NodeIterator
 };
 
 struct DebugNode : Node {
-  DebugNode(Graph *graph, StringAttr name, size_t bitPos, Node *input)
-      : Node(graph, Kind::Debug, 1), name(name), bitPos(bitPos), input(input) {}
+  DebugNode(Graph *graph, StringAttr name, size_t bitPos, Node *input,
+            StringRef comment)
+      : Node(graph, Kind::Debug, 1), name(name), bitPos(bitPos), input(input),
+        comment(comment) {}
   static bool classof(const Node *e) { return e->getKind() == Kind::Debug; }
   void dump(size_t indent) const override {
     llvm::dbgs().indent(indent)
-        << "(debug node " << name << " " << bitPos << ")";
+        << "(debug node " << name << " " << bitPos << "\n";
+    input->dump(indent + 2);
+    llvm::dbgs().indent(indent) << ")\n";
   }
   static void printImpl(llvm::raw_ostream &os, StringAttr name,
-                        circt::igraph::InstancePath path, size_t bitPos) {
+                        circt::igraph::InstancePath path, size_t bitPos,
+                        StringRef comment) {
     std::string pathString;
     llvm::raw_string_ostream osPath(pathString);
     path.print(osPath);
     os << "DebugNode(" << pathString << "." << name.getValue() << "[" << bitPos
        << "])";
+    if (!comment.empty())
+      os << " // " << comment;
   }
 
   void print(llvm::raw_ostream &os) const override {
-    printImpl(os, name, path, bitPos);
+    printImpl(os, name, path, bitPos, comment);
   }
 
   Node *getInput() const { return input; }
@@ -247,6 +261,9 @@ struct DebugNode : Node {
       input->walkPreOrder(callback);
   }
 
+  StringRef comment;
+  StringRef getComment() const { return comment; }
+
   void populateResults(SmallVectorImpl<ShrinkedEdge> &results) override {
     size_t currentPos = results.size();
     input->populateResults(results);
@@ -254,9 +271,10 @@ struct DebugNode : Node {
       auto &result = results[currentPos];
       DebugPoint point;
       point.name = name;
-      point.bitPos = currentPos;
+      point.bitPos = bitPos;
       point.path = path;
       point.delay = result.delay;
+      point.comment = comment;
       result.points = getListFactory().add(point, result.points);
     }
   }
@@ -337,8 +355,14 @@ struct InputNode : Node {
         .Case<seq::CompRegOp, seq::FirRegOp>(
             [](auto op) { return op.getNameAttr().getValue(); })
         .Case<hw::InstanceOp>([&](hw::InstanceOp op) {
-          return cast<StringAttr>(
+          SmallString<16> str;
+          str += op.getInstanceName();
+          str += ".";
+          str += cast<StringAttr>(
               op.getResultNamesAttr()[cast<OpResult>(value).getResultNumber()]);
+          return StringAttr::get(op.getContext(), str);
+          // return cast<StringAttr>(
+          //     op.getResultNamesAttr()[cast<OpResult>(value).getResultNumber()]);
         })
         .Case<seq::FirMemReadOp>([&](seq::FirMemReadOp op) {
           llvm::SmallString<16> str;
@@ -478,7 +502,13 @@ struct DelayNode : Node {
                 // auto tail = debugPoint.getTail();
                 // auto front = debugPoint.getHead();
                 // front.delay += delayFromLastDebug;
-                for (auto point : points) {
+                SmallVector<DebugPoint> newPoints;
+                for (auto &point : points) {
+                  newPoints.push_back(point);
+                }
+
+                for (auto point : llvm::reverse(newPoints)) {
+                  // for (auto point : llvm::reverse(newPoints)) {
                   point.delay += shrinkedEdge.delay;
                   debugPoint = getListFactory().add(point, debugPoint);
                 }
@@ -498,6 +528,7 @@ struct DelayNode : Node {
             point.bitPos = debugNode->getBitPos();
             point.path = debugNode->getPath();
             point.delay = delay;
+            point.comment = debugNode->getComment();
             auto listCreate = getListFactory().add(point, points);
             visitNode(debugNode->getInput(), delay, listCreate);
           } else
@@ -625,8 +656,13 @@ struct OutputNode : Node {
           auto hwModule = cast<hw::HWModuleOp>(op.getParentOp());
           return hwModule.getOutputNameAttr(operandIdx).getValue();
         })
-        .Case<hw::InstanceOp>(
-            [&](hw::InstanceOp op) { return op.getInputName(operandIdx); })
+        .Case<hw::InstanceOp>([&](hw::InstanceOp op) {
+          SmallString<16> str;
+          str += op.getInstanceName();
+          str += ".";
+          str += op.getInputName(operandIdx);
+          return StringAttr::get(op.getContext(), str);
+        })
         .Default([&](auto op) {
           llvm::dbgs() << "Unknown op: " << *op << "\n";
           return "";
@@ -670,6 +706,38 @@ struct OutputNode : Node {
   }
 
   ~OutputNode() = default;
+};
+
+struct DummyTopNode : Node {
+  DummyTopNode(Graph *graph) : Node(graph, Kind::DummyTop, 0) {}
+  static bool classof(const Node *e) { return e->getKind() == Kind::DummyTop; }
+  void dump(size_t indent) const override {
+    llvm::dbgs().indent(indent) << "(dummy top node)";
+  }
+  Node *query(size_t bitOffset) override {
+    assert(false && "dummy top node has no query");
+    return nullptr;
+  }
+  void print(llvm::raw_ostream &os) const override { os << "DummyTopNode()"; }
+  SmallVector<OutputNode *> outputNodes;
+  void addOutputNode(OutputNode *outputNode) {
+    outputNodes.push_back(outputNode);
+  }
+  size_t getNumIncomingNodes() const override { return outputNodes.size(); }
+  Node *getIncomingNode(size_t idx) const override { return outputNodes[idx]; }
+  void setIncomingNode(size_t idx, Node *node) override {
+    assert(false && "dummy top node has no incoming nodes");
+  }
+
+  void walk(llvm::function_ref<void(Node *)> func) override {
+    for (auto *outputNode : outputNodes)
+      outputNode->walk(func);
+  }
+  void walkPreOrder(llvm::function_ref<bool(Node *)> func) override {
+    assert(false && "dummy top node has no incoming nodes");
+    for (auto *outputNode : outputNodes)
+      outputNode->walkPreOrder(func);
+  }
 };
 
 struct ConcatNode : Node {
@@ -951,9 +1019,9 @@ struct Graph {
               })
               .Case<DebugNode>([&](DebugNode *node) {
                 dist[7]++;
-                return allocateNode<DebugNode>(node->getName(),
-                                               node->getBitPos(),
-                                               recurse(node->getInput()));
+                return allocateNode<DebugNode>(
+                    node->getName(), node->getBitPos(),
+                    recurse(node->getInput()), node->getComment());
               })
               .Default([&](Node *node) {
                 assert(false && "unknown node");
@@ -986,12 +1054,13 @@ struct Graph {
           // outputNode->dump(0);
           auto queryed = outputNode->query(0);
           assert(queryed && "queryed is null");
-          auto* inputNode = inputNodes->query(i);
+          auto *inputNode = inputNodes->query(i);
           if (auto *debugNode = dyn_cast<DebugNode>(inputNode)) {
             inputNode = debugNode->getInput();
           }
 
-          clonedResult[cast<InputNode>(inputNode)] = queryed; // (この中にinstanceがいる)
+          clonedResult[cast<InputNode>(inputNode)] =
+              queryed; // (この中にinstanceがいる)
         }
       }
 
@@ -1026,15 +1095,20 @@ struct Graph {
         openOutputs.insert(cast<OutputNode>(clonedResult.at(outputNode)));
       }
     }
-    llvm::dbgs() << "handle output operatoins";
-
     DenseSet<Node *> visited;
+    SmallVector<OutputNode *> outputNodAcc;
 
+    DummyTopNode dummyNode(this);
     for (auto op : outputOperations) {
       for (auto &operand : op->getOpOperands()) {
         for (size_t i = 0; i < getBitWidth(operand.get()); ++i) {
           auto outPutNode = outputNodes.at({op, operand.getOperandNumber(), i});
           outPutNode->computedResult.reset();
+          dummyNode.addOutputNode(outPutNode);
+          // for (auto *node : llvm::post_order((Node *)outPutNode)) {
+          //   node->map(nodeToNewNode);
+          // }
+          /*
           outPutNode->walkPreOrder([&](Node *node) {
             LLVM_DEBUG({
               llvm::dbgs() << "Updating node: ";
@@ -1052,6 +1126,7 @@ struct Graph {
             });
             return true;
           });
+          */
           LLVM_DEBUG({ outPutNode->dump(0); });
           bool found = false;
           /*
@@ -1075,13 +1150,19 @@ struct Graph {
       }
     }
 
-    for (auto outPutNode : openOutputs)
-      outPutNode->walkPreOrder([&](Node *node) {
-        if (!visited.insert(node).second)
-          return false;
-        node->map(nodeToNewNode);
-        return true;
-      });
+    for (auto outPutNode : openOutputs) {
+      // outPutNode->walkPreOrder([&](Node *node) {
+      //   if (!visited.insert(node).second)
+      //     return false;
+      //   node->map(nodeToNewNode);
+      //   return true;
+      // });
+      // outputNodAcc.push_back(outPutNode);
+      dummyNode.addOutputNode(outPutNode);
+    }
+    for (auto *node : llvm::post_order((Node *)&dummyNode)) {
+      node->map(nodeToNewNode);
+    }
 
     outputOperations.erase(
         llvm::remove_if(outputOperations,
@@ -1133,11 +1214,26 @@ struct Graph {
     auto width = getBitWidth(value);
     assert(isRootValue(value) && "only root values can be input nodes");
     SmallVector<Node *> nodes;
+
+    auto comment =
+        value.getDefiningOp()
+            ? (TypeSwitch<Operation *, StringRef>(value.getDefiningOp())
+                   .Case<hw::InstanceOp>([&](hw::InstanceOp op) {
+                     return "instance output port";
+                   })
+                   .Case<seq::FirRegOp, seq::CompRegOp>(
+                       [&](auto) { return "register output"; })
+                   .Case<seq::FirMemReadOp, seq::FirMemReadWriteOp>(
+                       [&](auto) { return "memory read port"; })
+                   .Default([](Operation *) { return ""; }))
+            : "input port";
+
     for (auto i = 0; i < width; ++i) {
       auto node = allocateNode<InputNode>(value, i);
       if (enableTrace) {
         auto debugNode = allocateNode<DebugNode>(
-            StringAttr::get(theModule->getContext(), node->getName()), i, node);
+            StringAttr::get(theModule->getContext(), node->getName()), i, node,
+            comment);
         nodes.push_back(debugNode);
       } else {
         nodes.push_back(node);
@@ -1174,6 +1270,16 @@ struct Graph {
   void addOutputNode(OpOperand &operand) {
     auto operandOp = operand.getOwner();
     size_t width = getBitWidth(operand.get());
+    StringRef comment =
+        TypeSwitch<Operation *, StringRef>(operandOp)
+            .Case<hw::InstanceOp>(
+                [&](hw::InstanceOp op) { return "instance input port"; })
+            .Case<hw::OutputOp>([&](hw::OutputOp op) { return "output port"; })
+            .Case<seq::FirRegOp, seq::CompRegOp>(
+                [&](auto) { return "register input"; })
+            .Case<seq::FirMemWriteOp, seq::FirMemReadWriteOp>(
+                [&](auto) { return "memory write port"; })
+            .Default([](Operation *) { return ""; });
 
     // auto outputName =
     // theModule.getOutputNameAttr(operand.getOperandNumber());
@@ -1185,7 +1291,7 @@ struct Graph {
         node = allocateNode<DebugNode>(
             StringAttr::get(operand.getOwner()->getContext(),
                             outputNode->getName()),
-            i, node);
+            i, node, comment);
         outputNode->setIncomingNode(0, node);
       }
 
@@ -1614,7 +1720,8 @@ LogicalResult LongestPathAnalysisImpl::run() {
     for (auto point : points) {
       os.indent(2);
       os << "arrived at " << point.delay << " ";
-      DebugNode::printImpl(os, point.name, point.path, point.bitPos);
+      DebugNode::printImpl(os, point.name, point.path, point.bitPos,
+                           point.comment);
       os << "\n";
     }
     os << "\n";
