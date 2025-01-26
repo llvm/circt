@@ -32,7 +32,9 @@
 #include "llvm/ADT/ImmutableList.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/ScopeExit.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Support/JSON.h"
 
 #include "llvm/Support/raw_ostream.h"
@@ -489,53 +491,69 @@ struct DelayNode : Node {
       }
     };
 
-    std::function<void(Node *, int64_t, llvm::ImmutableList<DebugPoint>)>
-        visitNode = [&](Node *node, int64_t delay,
-                        llvm::ImmutableList<DebugPoint> points) {
-          if (auto *inputNode = dyn_cast<InputNode>(node))
-            updateIfMax(inputNode, delay, points);
-          else if (auto *delayNode = dyn_cast<DelayNode>(node)) {
-            // Shrink two edges.
-            for (auto &shrinkedEdge : delayNode->getComputedResult()) {
-              auto debugPoint = shrinkedEdge.points;
-              if (!debugPoint.isEmpty()) {
-                // auto tail = debugPoint.getTail();
-                // auto front = debugPoint.getHead();
-                // front.delay += delayFromLastDebug;
-                SmallVector<DebugPoint> newPoints;
-                for (auto &point : points) {
-                  newPoints.push_back(point);
-                }
+    // std::function<void(Node *, int64_t, llvm::ImmutableList<DebugPoint>)>
+    //     visitNode = [&](Node *node, int64_t delay,
+    //                     llvm::ImmutableList<DebugPoint> points) {
+    //       if (auto *inputNode = dyn_cast<InputNode>(node))
+    //         updateIfMax(inputNode, delay, points);
+    //       else if (auto *delayNode = dyn_cast<DelayNode>(node)) {
+    //         // Shrink two edges.
+    //         for (auto &shrinkedEdge : delayNode->getComputedResult()) {
+    //           auto debugPoint = shrinkedEdge.points;
+    //           if (!debugPoint.isEmpty()) {
+    //             // auto tail = debugPoint.getTail();
+    //             // auto front = debugPoint.getHead();
+    //             // front.delay += delayFromLastDebug;
+    //             SmallVector<DebugPoint> newPoints;
+    //             for (auto &point : points) {
+    //               newPoints.push_back(point);
+    //             }
 
-                for (auto point : llvm::reverse(newPoints)) {
-                  // for (auto point : llvm::reverse(newPoints)) {
-                  point.delay += shrinkedEdge.delay;
-                  debugPoint = getListFactory().add(point, debugPoint);
-                }
-                updateIfMax(shrinkedEdge.node, delay + shrinkedEdge.delay,
-                            debugPoint);
-              } else {
-                updateIfMax(shrinkedEdge.node, delay + shrinkedEdge.delay,
-                            points);
-              }
-            }
-          } else if (auto *concatNode = dyn_cast<ConstantNode>(node)) {
-            // It must arrive with no delay.
-            return;
-          } else if (auto *debugNode = dyn_cast<DebugNode>(node)) {
-            DebugPoint point;
-            point.name = debugNode->getName();
-            point.bitPos = debugNode->getBitPos();
-            point.path = debugNode->getPath();
-            point.delay = delay;
-            point.comment = debugNode->getComment();
-            auto listCreate = getListFactory().add(point, points);
-            visitNode(debugNode->getInput(), delay, listCreate);
-          } else
-            assert(false && "unknown node type");
-        };
+    //            for (auto point : llvm::reverse(newPoints)) {
+    //              // for (auto point : llvm::reverse(newPoints)) {
+    //              point.delay += shrinkedEdge.delay;
+    //              debugPoint = getListFactory().add(point, debugPoint);
+    //            }
+    //            updateIfMax(shrinkedEdge.node, delay + shrinkedEdge.delay,
+    //                        debugPoint);
+    //          } else {
+    //            updateIfMax(shrinkedEdge.node, delay + shrinkedEdge.delay,
+    //                        points);
+    //          }
+    //        }
+    //      } else if (auto *concatNode = dyn_cast<ConstantNode>(node)) {
+    //        // It must arrive with no delay.
+    //        return;
+    //      } else if (auto *debugNode = dyn_cast<DebugNode>(node)) {
+    //        DebugPoint point;
+    //        point.name = debugNode->getName();
+    //        point.bitPos = debugNode->getBitPos();
+    //        point.path = debugNode->getPath();
+    //        point.delay = delay;
+    //        point.comment = debugNode->getComment();
+    //        auto listCreate = getListFactory().add(point, points);
+    //        visitNode(debugNode->getInput(), delay, listCreate);
+    //      } else
+    //        assert(false && "unknown node type");
+    //    };
+    SmallVector<ShrinkedEdge> results;
     for (auto &edge : edges) {
-      visitNode(edge.node, edge.delay, getListFactory().getEmptyList());
+      results.clear();
+      edge.node->populateResults(results);
+      for (auto shrinkedEdge : results) {
+        shrinkedEdge.delay += edge.delay;
+        // Concat edge.points to shrinkedEdge.points.
+        llvm::SmallVector<DebugPoint> newPoints;
+        for (auto point : edge.points) {
+          newPoints.push_back(point);
+        }
+        for (auto point : llvm::reverse(newPoints)) {
+          point.delay += shrinkedEdge.delay;
+          shrinkedEdge.points =
+              getListFactory().add(point, shrinkedEdge.points);
+        }
+        updateIfMax(shrinkedEdge.node, shrinkedEdge.delay, shrinkedEdge.points);
+      }
       // if (auto *inputNode = dyn_cast<InputNode>(edge.node))
       //   updateIfMax(inputNode, edge.delay, {});
       // else if (auto *delayNode = dyn_cast<DelayNode>(edge.node)) {
