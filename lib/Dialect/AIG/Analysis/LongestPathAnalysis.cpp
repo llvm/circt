@@ -26,6 +26,7 @@
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Transforms/CSE.h"
 #include "llvm//Support/ToolOutputFile.h"
+#include "llvm/ADT/ImmutableList.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/JSON.h"
@@ -69,6 +70,40 @@ struct Node;
 // A mapping from input nodes to new nodes (c.f. IRMapping in MLIR)
 using GraphMapping = DenseMap<InputNode *, Node *>;
 
+struct DebugPoint {
+  circt::igraph::InstancePath path;
+  StringAttr name;
+  size_t bitPos;
+
+  int64_t delay;
+  // Trait for list of debug points.
+  void Profile(llvm::FoldingSetNodeID &ID) const {
+    for (auto &inst : path) {
+      ID.AddPointer(inst.getAsOpaquePointer());
+    }
+    ID.AddPointer(name.getAsOpaquePointer());
+    ID.AddInteger(bitPos);
+    ID.AddInteger(delay);
+  }
+};
+
+struct Edge {
+  // The input node that this edge is coming from
+  Node *node;
+  // The delay of the edge
+  int64_t delay;
+};
+
+struct ShrinkedEdge {
+  // The input node that this edge is coming from
+  InputNode *node;
+  // The delay of the edge
+  int64_t delay;
+  // The debug points on this edge. Sum of the cost is equal to the delay.
+  // Immutable list is to avoid copying when adding points.
+  llvm::ImmutableList<DebugPoint> points;
+};
+
 struct Node {
   enum Kind {
     Input,
@@ -96,8 +131,11 @@ struct Node {
   virtual Node *getIncomingNode(size_t idx) const = 0;
   virtual void setIncomingNode(size_t idx, Node *node) = 0;
 
-  virtual void
-  populateResults(SmallVector<std::pair<int64_t, InputNode *>> &results) {};
+  virtual void populateResults(SmallVectorImpl<ShrinkedEdge> &results) {
+    dump(0);
+    assert(false && "populateResults is not implemented");
+    // assert(false && "populateResults is not implemented");
+  };
 
   virtual Node *query(size_t bitOffset) = 0;
   virtual ~Node() {}
@@ -143,7 +181,12 @@ struct DebugNode : Node {
     os << "DebugNode(" << pathString << "." << name << "[" << bitPos << "])";
   }
 
+  Node *getInput() const { return input; }
   Node *query(size_t bitOffset) override { return input->query(bitOffset); }
+
+  StringAttr getName() const { return name; }
+  size_t getBitPos() const { return bitPos; }
+  circt::igraph::InstancePath getPath() const { return path; }
 
 private:
   StringAttr name;
@@ -177,6 +220,8 @@ struct ConstantNode : Node {
 
   void walk(llvm::function_ref<void(Node *)>) override;
   void walkPreOrder(llvm::function_ref<bool(Node *)>) override;
+
+  void populateResults(SmallVectorImpl<ShrinkedEdge> &results) override {}
 
 private:
   ConstantNode *boolNode = nullptr;
@@ -253,8 +298,9 @@ struct InputNode : Node {
        << "])";
   }
 
-  void populateResults(SmallVector<std::pair<int64_t, InputNode *>> &results) {
-    results.push_back(std::make_pair(0, this));
+  void populateResults(SmallVectorImpl<ShrinkedEdge> &results) override {
+    results.emplace_back(
+        ShrinkedEdge{this, 0, llvm::ImmutableList<DebugPoint>()});
   }
 };
 
@@ -263,18 +309,18 @@ struct DelayNode : Node {
   DelayNode &operator=(const DelayNode &other) = default;
   DelayNode(const DelayNode &other) = default;
   DelayNode(Graph *graph, Value value, size_t bitPos)
-      : Node(graph, Kind::Delay, 1), value(value), bitPos(bitPos), edges(),
+      : Node(graph, Kind::Delay, 1), value(value), bitPos(bitPos),
         computedResult() {}
   static bool classof(const Node *e) { return e->getKind() == Kind::Delay; }
-  SmallVector<std::pair<int64_t, Node *>> getEdges() const { return edges; }
+  const SmallVector<Edge> &getEdges() const { return edges; }
   void walk(llvm::function_ref<void(Node *)>) override;
   void walkPreOrder(llvm::function_ref<bool(Node *)>) override;
   Value getValue() const { return value; }
   size_t getBitPos() const { return bitPos; }
   size_t getNumIncomingNodes() const override { return edges.size(); }
-  Node *getIncomingNode(size_t idx) const override { return edges[idx].second; }
+  Node *getIncomingNode(size_t idx) const override { return edges[idx].node; }
   void setIncomingNode(size_t idx, Node *node) override {
-    edges[idx].second = node;
+    edges[idx].node = node;
   }
 
   Node *query(size_t bitOffset) override {
@@ -284,11 +330,10 @@ struct DelayNode : Node {
   void addEdge(Node *node, int64_t delay) {
     revertComputedResult();
     assert(node && "node is null");
-    edges.push_back(std::make_pair(delay, node));
+    edges.emplace_back(Edge{node, delay});
   }
 
   void setBitPos(size_t bitPos) { this->bitPos = bitPos; }
-
 
   // void map(const GraphMapping &nodeToNewNode) override {
   //   revertComputedResult();
@@ -310,47 +355,105 @@ struct DelayNode : Node {
   //   // llvm::dbgs() << "Done mapping delay node " << edges.size() << "\n";
   // }
 
-  void populateResults(
-      SmallVector<std::pair<int64_t, InputNode *>> &results) override {
+  void populateResults(SmallVectorImpl<ShrinkedEdge> &results) override {
     auto &computedResult = getComputedResult();
     results.append(computedResult.begin(), computedResult.end());
   }
+
   void revertComputedResult() override { computedResult.reset(); }
 
   void shrinkEdges() {
     // This removes intermediate nodes in the graph.
-    SmallVector<std::pair<int64_t, InputNode *>> maxDelays;
+    SmallVector<ShrinkedEdge> maxDelays;
     populateResults(maxDelays);
     edges.clear();
-    for (auto [delay, inputNode] : maxDelays) {
-      assert(inputNode && "input node is null");
-      addEdge(inputNode, delay);
+    for (auto &edge : maxDelays) {
+      assert(edge.node && "input node is null");
+      addEdge(edge.node, edge.delay);
     }
     computedResult = std::move(maxDelays);
   }
 
+  llvm::ImmutableListFactory<DebugPoint> &getListFactory();
+
   void computeResult() {
-    computedResult =
-        std::make_optional(SmallVector<std::pair<int64_t, InputNode *>>());
-    llvm::MapVector<InputNode *, int64_t> maxDelays;
-    for (auto [delay, node] : edges) {
-      if (auto *inputNode = dyn_cast<InputNode>(node))
-        maxDelays[inputNode] = std::max(maxDelays[inputNode], delay);
-      else if (auto *delayNode = dyn_cast<DelayNode>(node)) {
-        for (auto [newDelay, inputNode] : delayNode->getComputedResult())
-          maxDelays[inputNode] =
-              std::max(maxDelays[inputNode], delay + newDelay);
-      } else if (auto *concatNode = dyn_cast<ConstantNode>(node)) {
-        continue;
-      } else
-        llvm_unreachable("unknown node type");
+    computedResult = std::make_optional(SmallVector<ShrinkedEdge>());
+    llvm::MapVector<InputNode *, ShrinkedEdge> maxDelays;
+    auto updateIfMax = [&maxDelays](InputNode *node, int64_t delay,
+                                    llvm::ImmutableList<DebugPoint> points) {
+      auto it = maxDelays.find(node);
+      if (it == maxDelays.end()) {
+        maxDelays[node] = ShrinkedEdge{node, delay, points};
+      } else if (it->second.delay < delay) {
+        // What if tie-breaking is needed?
+        it->second.delay = delay;
+        it->second.points = points;
+        it->second.node = node;
+      }
+    };
+
+    std::function<void(Node *, int64_t, int64_t,
+                       llvm::ImmutableList<DebugPoint>)>
+        visitNode = [&](Node *node, int64_t delay, int64_t delayFromLastDebug,
+                        llvm::ImmutableList<DebugPoint> points) {
+          if (auto *inputNode = dyn_cast<InputNode>(node))
+            updateIfMax(inputNode, delay, points);
+          else if (auto *delayNode = dyn_cast<DelayNode>(node)) {
+            // Shrink two edges.
+            for (auto &shrinkedEdge : delayNode->getComputedResult()) {
+              auto debugPoint = shrinkedEdge.points;
+              if (!debugPoint.isEmpty()) {
+                auto tail = debugPoint.getTail();
+                auto front = debugPoint.getHead();
+                front.delay += delayFromLastDebug;
+                auto result = getListFactory().add(front, tail);
+                for (auto point : points) {
+                  result = getListFactory().add(point, result);
+                }
+                updateIfMax(shrinkedEdge.node, delay + shrinkedEdge.delay,
+                            result);
+              } else {
+                updateIfMax(shrinkedEdge.node, delay + shrinkedEdge.delay,
+                            points);
+              }
+            }
+          } else if (auto *concatNode = dyn_cast<ConstantNode>(node)) {
+            // It must arrive with no delay.
+            return;
+          } else if (auto *debugNode = dyn_cast<DebugNode>(node)) {
+            DebugPoint point;
+            point.name = debugNode->getName();
+            point.bitPos = debugNode->getBitPos();
+            point.path = debugNode->getPath();
+            point.delay = delayFromLastDebug;
+            auto listCreate = getListFactory().add(point, points);
+            visitNode(debugNode->getInput(), delay, 0, listCreate);
+          } else
+            assert(false && "unknown node type");
+        };
+    for (auto &edge : edges) {
+      visitNode(edge.node, edge.delay, 0, getListFactory().getEmptyList());
+      // if (auto *inputNode = dyn_cast<InputNode>(edge.node))
+      //   updateIfMax(inputNode, edge.delay, {});
+      // else if (auto *delayNode = dyn_cast<DelayNode>(edge.node)) {
+      //   for (auto &shrinkedEdge : delayNode->getComputedResult()) {
+      //     updateIfMax(shrinkedEdge.node, edge.delay + shrinkedEdge.delay,
+      //                 shrinkedEdge.points);
+      //   }
+      // } else if (auto *concatNode = dyn_cast<ConstantNode>(edge.node)) {
+      //   // It must arrive with no delay.
+      //   continue;
+      // } else if (auto *debugNode = dyn_cast<DebugNode>(edge.node)) {
+      //     maxDelays[probe.input] = std::max(maxDelays[probe.input], delay);
+      // } else
+      //   assert(false && "unknown node type");
     }
 
-    for (auto [inputNode, delay] : maxDelays)
-      computedResult->push_back(std::make_pair(delay, inputNode));
+    for (auto &[inputNode, shrinkedEdge] : maxDelays)
+      computedResult->emplace_back(shrinkedEdge);
   }
 
-  const SmallVector<std::pair<int64_t, InputNode *>> &getComputedResult() {
+  const SmallVector<ShrinkedEdge> &getComputedResult() {
     if (!computedResult) {
       computeResult();
       shrinkEdges();
@@ -360,7 +463,7 @@ struct DelayNode : Node {
     return computedResult.value();
   }
 
-  std::optional<SmallVector<std::pair<int64_t, InputNode *>>> computedResult;
+  std::optional<SmallVector<ShrinkedEdge>> computedResult;
 
   ~DelayNode() override {
     edges.clear();
@@ -371,8 +474,8 @@ struct DelayNode : Node {
     llvm::dbgs().indent(indent)
         << "(delay node " << value << " " << bitPos << "\n";
     for (auto edge : edges) {
-      llvm::dbgs().indent(indent + 2) << "edge: delay " << edge.first << "\n";
-      edge.second->dump(indent + 2);
+      llvm::dbgs().indent(indent + 2) << "edge: delay " << edge.delay << "\n";
+      edge.node->dump(indent + 2);
       llvm::dbgs() << "\n";
     }
     llvm::dbgs().indent(indent) << ")\n";
@@ -381,7 +484,7 @@ struct DelayNode : Node {
 private:
   Value value;
   size_t bitPos;
-  SmallVector<std::pair<int64_t, Node *>> edges;
+  SmallVector<Edge> edges;
 };
 
 struct OutputNode : Node {
@@ -390,7 +493,7 @@ struct OutputNode : Node {
   size_t bitPos;
   Node *node;
 
-  std::optional<SmallVector<std::pair<int64_t, InputNode *>>> computedResult;
+  std::optional<SmallVector<ShrinkedEdge>> computedResult;
   void resetComputedResult() { computedResult.reset(); }
 
   void walk(llvm::function_ref<void(Node *)>) override;
@@ -406,10 +509,10 @@ struct OutputNode : Node {
     return node;
   }
 
- // void map(const GraphMapping &nodeToNewNode) override {
- //   computedResult.reset();
- //   Node::map(nodeToNewNode);
- // }
+  // void map(const GraphMapping &nodeToNewNode) override {
+  //   computedResult.reset();
+  //   Node::map(nodeToNewNode);
+  // }
 
   void revertComputedResult() override { computedResult.reset(); }
 
@@ -456,16 +559,15 @@ struct OutputNode : Node {
         });
   }
 
-  void populateResults(
-      SmallVector<std::pair<int64_t, InputNode *>> &results) override {
+  void populateResults(SmallVectorImpl<ShrinkedEdge> &results) override {
+    // assert(false && "populateResults is not implemented");
     node->populateResults(results);
   }
 
-  const SmallVector<std::pair<int64_t, InputNode *>> &getComputedResult() {
+  const SmallVector<ShrinkedEdge> &getComputedResult() {
     if (!computedResult) {
       // TODO: compute result
-      computedResult =
-          std::make_optional(SmallVector<std::pair<int64_t, InputNode *>>());
+      computedResult = std::make_optional(SmallVector<ShrinkedEdge>());
       populateResults(computedResult.value());
     }
 
@@ -482,10 +584,10 @@ struct OutputNode : Node {
     result["name"] = getName();
     result["bitPosition"] = bitPos;
     SmallVector<llvm::json::Value> fanIn;
-    for (auto [delay, inputNode] : getComputedResult()) {
+    for (auto &edge : getComputedResult()) {
       llvm::json::Object fanInObj;
-      fanInObj["delay"] = delay;
-      fanInObj["node"] = inputNode->getJSONObject();
+      fanInObj["delay"] = edge.delay;
+      fanInObj["node"] = edge.node->getJSONObject();
       fanIn.push_back(std::move(fanInObj));
     }
 
@@ -624,6 +726,8 @@ struct Graph {
   hw::HWModuleOp theModule;
   LogicalResult buildGraph();
 
+  llvm::ImmutableListFactory<DebugPoint> listFactory;
+
   hw::HWModuleOp getModule() { return theModule; }
 
   SetVector<OutputNode *> locallyClosedOutputs;
@@ -645,8 +749,8 @@ struct Graph {
 
   void accumulateLocalPaths(OutputNode *outputNode) {
     bool isClosed =
-        llvm::all_of(outputNode->getComputedResult(), [&](auto &pair) {
-          return isLocalInput(pair.second->value);
+        llvm::all_of(outputNode->getComputedResult(), [&](auto &edge) {
+          return isLocalInput(edge.node->value);
         });
 
     if (isClosed) {
@@ -731,11 +835,11 @@ struct Graph {
                 dist[3]++;
                 auto delayNode = allocateNode<DelayNode>(node->getValue(),
                                                          node->getBitPos());
-                for (auto [delay, inputNode] : node->getEdges()) {
-                  assert(inputNode && "input node is null");
-                  auto *cloned = recurse(inputNode);
+                for (auto &edge : node->getEdges()) {
+                  assert(edge.node && "input node is null");
+                  auto *cloned = recurse(edge.node);
                   assert(cloned && "cloned is null");
-                  delayNode->addEdge(cloned, delay);
+                  delayNode->addEdge(cloned, edge.delay);
                 }
                 return delayNode;
               })
@@ -1147,59 +1251,59 @@ LogicalResult Graph::buildGraph() {
   // %1 = aig.cut.node()
   // %2 = aig.cut.node()
 
-  bool modifyModule = false;
-  if (modifyModule) {
-    OpBuilder builder(theModule.getContext());
-    DenseMap<InputNode *, Value> inputNodeToValue;
-    for (auto op : graph.outputOperations) {
-      builder.setInsertionPoint(op);
-      size_t idx = 0;
-      for (auto operand : llvm::make_early_inc_range(op->getOperands())) {
-        auto guard = llvm::make_scope_exit([&]() { ++idx; });
-        auto *node = graph.getOrConstant(operand);
-        SmallVector<Value> operands;
-        for (auto i = 0; i < node->getWidth(); ++i) {
-          auto *result = node->query(i);
-          result->walk([&](Node *node) {
-            if (auto *delayNode = dyn_cast<DelayNode>(node))
-              delayNode->shrinkEdges();
-          });
-          assert(result && "result not found");
-          SmallVector<std::pair<int64_t, InputNode *>> delays;
-          result->populateResults(delays);
-          SmallVector<Value> delayOperands;
-          SmallVector<int64_t> operandDelays;
-          for (auto [delay, inputNode] : delays) {
-            auto &value = inputNodeToValue[inputNode];
-            if (!value) {
-              value = getBitWidth(inputNode->value) == 1
-                          ? inputNode->value
-                          : builder.createOrFold<comb::ExtractOp>(
-                                op->getLoc(), inputNode->value,
-                                inputNode->getBitPos(), 1);
-            }
-            operandDelays.push_back(delay);
-            delayOperands.push_back(value);
-          }
+  // bool modifyModule = false;
+  // if (modifyModule) {
+  //   OpBuilder builder(theModule.getContext());
+  //   DenseMap<InputNode *, Value> inputNodeToValue;
+  //   for (auto op : graph.outputOperations) {
+  //     builder.setInsertionPoint(op);
+  //     size_t idx = 0;
+  //     for (auto operand : llvm::make_early_inc_range(op->getOperands())) {
+  //       auto guard = llvm::make_scope_exit([&]() { ++idx; });
+  //       auto *node = graph.getOrConstant(operand);
+  //       SmallVector<Value> operands;
+  //       for (auto i = 0; i < node->getWidth(); ++i) {
+  //         auto *result = node->query(i);
+  //         result->walk([&](Node *node) {
+  //           if (auto *delayNode = dyn_cast<DelayNode>(node))
+  //             delayNode->shrinkEdges();
+  //         });
+  //         assert(result && "result not found");
+  //         SmallVector<ShrinkedEdge> delays;
+  //         result->populateResults(delays);
+  //         SmallVector<Value> delayOperands;
+  //         SmallVector<int64_t> operandDelays;
+  //         for (auto [delay, inputNode] : delays) {
+  //           auto &value = inputNodeToValue[inputNode];
+  //           if (!value) {
+  //             value = getBitWidth(inputNode->value) == 1
+  //                         ? inputNode->value
+  //                         : builder.createOrFold<comb::ExtractOp>(
+  //                               op->getLoc(), inputNode->value,
+  //                               inputNode->getBitPos(), 1);
+  //           }
+  //           operandDelays.push_back(delay);
+  //           delayOperands.push_back(value);
+  //         }
 
-          operands.push_back(builder.create<aig::DelayOp>(
-              op->getLoc(),
-              isa<seq::ClockType>(operand.getType()) ? operand.getType()
-                                                     : builder.getI1Type(),
-              delayOperands, operandDelays));
-        }
-        if (operands.size() == 1) {
-          op->setOperand(idx, operands.front());
-          continue;
-        }
+  //         operands.push_back(builder.create<aig::DelayOp>(
+  //             op->getLoc(),
+  //             isa<seq::ClockType>(operand.getType()) ? operand.getType()
+  //                                                    : builder.getI1Type(),
+  //             delayOperands, operandDelays));
+  //       }
+  //       if (operands.size() == 1) {
+  //         op->setOperand(idx, operands.front());
+  //         continue;
+  //       }
 
-        std::reverse(operands.begin(), operands.end());
-        auto delayOp = builder.createOrFold<comb::ConcatOp>(
-            op->getLoc(), operand.getType(), operands);
-        op->setOperand(idx, delayOp);
-      }
-    }
-  }
+  //       std::reverse(operands.begin(), operands.end());
+  //       auto delayOp = builder.createOrFold<comb::ConcatOp>(
+  //           op->getLoc(), operand.getType(), operands);
+  //       op->setOperand(idx, delayOp);
+  //     }
+  //   }
+  // }
 
   return success();
 }
@@ -1367,9 +1471,8 @@ LogicalResult LongestPathAnalysisImpl::run() {
   for (auto &outputNode : results) {
     // resultsJSON.push_back(outputNode->getJSONObject());
     // outputNode->resetComputedResult();
-    for (auto [length, inputNode] :
-         outputNode.outputNode->getComputedResult()) {
-      longestPaths.emplace_back(length, outputNode.outputNode, inputNode,
+    for (auto &edge : outputNode.outputNode->getComputedResult()) {
+      longestPaths.emplace_back(edge.delay, outputNode.outputNode, edge.node,
                                 outputNode.root);
     }
   }
@@ -1501,8 +1604,8 @@ void OutputNode::walkPreOrder(llvm::function_ref<bool(Node *)> callback) {
 }
 
 void DelayNode::walk(llvm::function_ref<void(Node *)> callback) {
-  for (auto [delay, inputNode] : edges) {
-    inputNode->walk(callback);
+  for (auto &edge : edges) {
+    edge.node->walk(callback);
   }
 
   callback(this);
@@ -1511,8 +1614,8 @@ void DelayNode::walk(llvm::function_ref<void(Node *)> callback) {
 void DelayNode::walkPreOrder(llvm::function_ref<bool(Node *)> callback) {
   if (!callback(this))
     return;
-  for (auto [delay, inputNode] : edges) {
-    inputNode->walkPreOrder(callback);
+  for (auto &edge : edges) {
+    edge.node->walkPreOrder(callback);
   }
 }
 
@@ -1560,4 +1663,8 @@ void ConstantNode::walkPreOrder(llvm::function_ref<bool(Node *)> callback) {
   callback(this);
   // if (boolNode)
   //   boolNode->walkPreOrder(callback);
+}
+
+llvm::ImmutableListFactory<DebugPoint> &DelayNode::getListFactory() {
+  return graph->listFactory;
 }
