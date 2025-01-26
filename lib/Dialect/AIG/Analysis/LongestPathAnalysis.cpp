@@ -21,11 +21,11 @@
 #include "circt/Support/InstanceGraph.h"
 #include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/IR/Operation.h"
-#include "llvm//Support/ToolOutputFile.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/AnalysisManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Transforms/CSE.h"
+#include "llvm//Support/ToolOutputFile.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/JSON.h"
@@ -64,6 +64,10 @@ using namespace aig;
 
 struct InputNode;
 struct Graph;
+struct Node;
+
+// A mapping from input nodes to new nodes (c.f. IRMapping in MLIR)
+using GraphMapping = DenseMap<InputNode *, Node *>;
 
 struct Node {
   enum Kind {
@@ -88,6 +92,10 @@ struct Node {
   Kind getKind() const { return kind; }
   Graph *getGraph() const { return graph; }
 
+  virtual size_t getNumIncomingNodes() const = 0;
+  virtual Node *getIncomingNode(size_t idx) const = 0;
+  virtual void setIncomingNode(size_t idx, Node *node) = 0;
+
   virtual void
   populateResults(SmallVector<std::pair<int64_t, InputNode *>> &results) {};
 
@@ -107,9 +115,17 @@ struct Node {
     walkPreOrder(callback);
   }
 
-  virtual void map(DenseMap<InputNode *, Node *> &nodeToNewNode) {
-    assert(false);
-  };
+  virtual void map(const GraphMapping &nodeToNewNode) {
+    revertComputedResult();
+    for (size_t i = 0, e = getNumIncomingNodes(); i < e; ++i) {
+      Node *node = getIncomingNode(i);
+      if (auto *inputNode = dyn_cast<InputNode>(node))
+        if (auto *newNode = nodeToNewNode.lookup(inputNode))
+          setIncomingNode(i, newNode);
+    }
+  }
+
+  virtual void revertComputedResult() {}
 };
 
 struct DebugNode : Node {
@@ -142,25 +158,32 @@ struct ConstantNode : Node {
   void dump(size_t indent) const override {
     llvm::dbgs().indent(indent) << "(constant node " << width << ")";
   }
+
+  size_t getNumIncomingNodes() const override { return 0; }
+  Node *getIncomingNode(size_t idx) const override {
+    assert(false && "no incoming nodes");
+  }
+  void setIncomingNode(size_t idx, Node *node) override {
+    assert(false && "no incoming nodes");
+  }
+
   Node *query(size_t bitOffset) override {
     assert(boolNode && "bool node is null");
     if (width == 1)
       return this;
 
     return this;
-    // return boolNode->query(bitOffset);
   }
 
   void walk(llvm::function_ref<void(Node *)>) override;
   void walkPreOrder(llvm::function_ref<bool(Node *)>) override;
-  void map(DenseMap<InputNode *, Node *> &nodeToNewNode) override {}
 
 private:
   ConstantNode *boolNode = nullptr;
 };
 
 struct InputNode : Node {
-  Value value; // port, instance output, or register.
+  Value value; // port, instance output, register, mem.
   size_t bitPos;
   InputNode(Graph *graph, Value value, size_t bitPos)
       : Node(graph, Kind::Input, 1), value(value), bitPos(bitPos) {}
@@ -177,6 +200,14 @@ struct InputNode : Node {
   void dump(size_t indent) const override {
     llvm::dbgs().indent(indent)
         << "(input node " << value << " " << bitPos << "@" << this << ")";
+  }
+
+  size_t getNumIncomingNodes() const override { return 0; }
+  Node *getIncomingNode(size_t idx) const override {
+    assert(false && "no incoming nodes");
+  }
+  void setIncomingNode(size_t idx, Node *node) override {
+    assert(false && "no incoming nodes");
   }
 
   StringRef getName() const {
@@ -222,8 +253,6 @@ struct InputNode : Node {
        << "])";
   }
 
-  void map(DenseMap<InputNode *, Node *> &nodeToNewNode) override {}
-
   void populateResults(SmallVector<std::pair<int64_t, InputNode *>> &results) {
     results.push_back(std::make_pair(0, this));
   }
@@ -242,6 +271,11 @@ struct DelayNode : Node {
   void walkPreOrder(llvm::function_ref<bool(Node *)>) override;
   Value getValue() const { return value; }
   size_t getBitPos() const { return bitPos; }
+  size_t getNumIncomingNodes() const override { return edges.size(); }
+  Node *getIncomingNode(size_t idx) const override { return edges[idx].second; }
+  void setIncomingNode(size_t idx, Node *node) override {
+    edges[idx].second = node;
+  }
 
   Node *query(size_t bitOffset) override {
     assert(bitOffset == 0 && "delay node has no bit offset");
@@ -252,33 +286,36 @@ struct DelayNode : Node {
     assert(node && "node is null");
     edges.push_back(std::make_pair(delay, node));
   }
+
   void setBitPos(size_t bitPos) { this->bitPos = bitPos; }
 
-  void map(DenseMap<InputNode *, Node *> &nodeToNewNode) override {
-    revertComputedResult();
-    // llvm::dbgs() << "Mapping delay node " << edges.size() << "\n";
-    for (size_t i = 0, e = edges.size(); i < e; ++i) {
-      assert(edges[i].second && "edge node is null");
-      if (auto *newNode = dyn_cast<InputNode>(edges[i].second)) {
-        if (nodeToNewNode.count(newNode)) {
-          if (auto *newEdgeNode = nodeToNewNode[newNode]) {
-            // llvm::dbgs() << "Updating edge " << i << " from " <<
-            // edges[i].second
-            //              << " to " << newEdgeNode << "\n";
-            edges[i].second = newEdgeNode;
-          }
-        }
-      }
-    }
-    // llvm::dbgs() << "Done mapping delay node " << edges.size() << "\n";
-  }
+
+  // void map(const GraphMapping &nodeToNewNode) override {
+  //   revertComputedResult();
+  //   Node::map(nodeToNewNode);
+  //   // // llvm::dbgs() << "Mapping delay node " << edges.size() << "\n";
+  //   // for (size_t i = 0, e = edges.size(); i < e; ++i) {
+  //   //   assert(edges[i].second && "edge node is null");
+  //   //   if (auto *newNode = dyn_cast<InputNode>(edges[i].second)) {
+  //   //     if (nodeToNewNode.count(newNode)) {
+  //   //       if (auto *newEdgeNode = nodeToNewNode.lookup(newNode)) {
+  //   //         // llvm::dbgs() << "Updating edge " << i << " from " <<
+  //   //         // edges[i].second
+  //   //         //              << " to " << newEdgeNode << "\n";
+  //   //         edges[i].second = newEdgeNode;
+  //   //       }
+  //   //     }
+  //   //   }
+  //   // }
+  //   // llvm::dbgs() << "Done mapping delay node " << edges.size() << "\n";
+  // }
 
   void populateResults(
       SmallVector<std::pair<int64_t, InputNode *>> &results) override {
     auto &computedResult = getComputedResult();
     results.append(computedResult.begin(), computedResult.end());
   }
-  void revertComputedResult() { computedResult.reset(); }
+  void revertComputedResult() override { computedResult.reset(); }
 
   void shrinkEdges() {
     // This removes intermediate nodes in the graph.
@@ -358,12 +395,23 @@ struct OutputNode : Node {
 
   void walk(llvm::function_ref<void(Node *)>) override;
   void walkPreOrder(llvm::function_ref<bool(Node *)>) override;
-  void map(DenseMap<InputNode *, Node *> &nodeToNewNode) override {
-    computedResult.reset();
-    if (auto *inputNode = dyn_cast<InputNode>(node))
-      if (auto *newNode = nodeToNewNode[inputNode])
-        node = newNode;
+  size_t getNumIncomingNodes() const override { return 1; }
+  void setIncomingNode(size_t idx, Node *node) override {
+    assert(idx == 0);
+    this->node = node;
   }
+
+  Node *getIncomingNode(size_t idx) const override {
+    assert(idx == 0);
+    return node;
+  }
+
+ // void map(const GraphMapping &nodeToNewNode) override {
+ //   computedResult.reset();
+ //   Node::map(nodeToNewNode);
+ // }
+
+  void revertComputedResult() override { computedResult.reset(); }
 
   OutputNode(Graph *graph, Operation *op, size_t operandIdx, size_t bitPos,
              Node *node)
@@ -460,13 +508,16 @@ struct ConcatNode : Node {
   ~ConcatNode() override { nodes.clear(); }
   ConcatNode(const ConcatNode &other) = default;
   ConcatNode &operator=(const ConcatNode &other) = default;
+  size_t getNumIncomingNodes() const override { return nodes.size(); }
+  Node *getIncomingNode(size_t idx) const override { return nodes[idx]; }
+  void setIncomingNode(size_t idx, Node *node) override { nodes[idx] = node; }
 
-  void map(DenseMap<InputNode *, Node *> &nodeToNewNode) override {
-    for (auto &node : nodes)
-      if (auto *newNode = dyn_cast<InputNode>(node))
-        if (auto *newEdgeNode = nodeToNewNode[newNode])
-          node = newEdgeNode;
-  }
+  // void map(const GraphMapping &nodeToNewNode) override {
+  //   for (auto &node : nodes)
+  //     if (auto *newNode = dyn_cast<InputNode>(node))
+  //       if (auto *newEdgeNode = nodeToNewNode.lookup(newNode))
+  //         node = newEdgeNode;
+  // }
   Node *query(size_t bitOffset) override {
     // TODO: bisect
     for (auto node : nodes) {
@@ -505,6 +556,16 @@ struct ReplicateNode : Node {
   Node *query(size_t bitOffset) override {
     return node->query(bitOffset % node->getWidth());
   }
+
+  size_t getNumIncomingNodes() const override { return 1; }
+  Node *getIncomingNode(size_t idx) const override {
+    assert(idx == 0);
+    return node;
+  }
+  void setIncomingNode(size_t idx, Node *node) override {
+    assert(idx == 0);
+    this->node = node;
+  }
   void walk(llvm::function_ref<void(Node *)>) override;
   void walkPreOrder(llvm::function_ref<bool(Node *)>) override;
   void dump(size_t indent) const override {
@@ -527,6 +588,16 @@ struct ExtractNode : Node {
   void walk(llvm::function_ref<void(Node *)>) override;
   void walkPreOrder(llvm::function_ref<bool(Node *)>) override;
   ~ExtractNode() = default;
+
+  size_t getNumIncomingNodes() const override { return 1; }
+  Node *getIncomingNode(size_t idx) const override {
+    assert(idx == 0);
+    return input;
+  }
+  void setIncomingNode(size_t idx, Node *node) override {
+    assert(idx == 0);
+    input = node;
+  }
 
   Node *query(size_t bitOffset) override {
     // exract(a, 2) : i4 -> query(2)

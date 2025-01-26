@@ -813,9 +813,9 @@ static void populateCombToAIGConversionPatterns(RewritePatternSet &patterns) {
 }
 
 void ConvertCombToAIGPass::runOnOperation() {
-  if (!getOperation().getModuleName().starts_with("SiFive_") ||
-      getOperation().getNumOutputPorts() == 0)
-    return markAllAnalysesPreserved();
+  // if (!getOperation().getModuleName().starts_with("SiFive_") ||
+  //     getOperation().getNumOutputPorts() == 0)
+  //   return markAllAnalysesPreserved();
   ConversionTarget target(getContext());
 
   // Comb is source dialect.
