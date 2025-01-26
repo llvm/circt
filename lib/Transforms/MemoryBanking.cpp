@@ -44,7 +44,7 @@ struct MemoryBankingPass
   MemoryBankingPass(const MemoryBankingPass &other) = default;
   explicit MemoryBankingPass(
       std::optional<unsigned> bankingFactor = std::nullopt,
-      std::optional<unsigned> bankingDimension = std::nullopt) {}
+      std::optional<int> bankingDimension = std::nullopt) {}
 
   void runOnOperation() override;
 
@@ -200,30 +200,41 @@ SmallVector<Value, 4> handleGetGlobalOp(memref::GetGlobalOp getGlobalOp,
   return banks;
 }
 
+std::optional<int> getBankingDimension(std::optional<int> bankingDimensionOpt,
+                                       int64_t rank, ArrayRef<int64_t> shape) {
+  // If the banking dimension is already specified, return it.
+  // Note, the banking dimension will always be nonempty because TableGen will
+  // assign it with a default value -1 if it's not specified by the user. Thus,
+  // -1 is the sentinel value to indicate the default behavior, which is the
+  // innermost dimension with shape greater than 1.
+  if (bankingDimensionOpt.has_value() && *bankingDimensionOpt >= 0) {
+    return bankingDimensionOpt;
+  }
+
+  // Otherwise, find the innermost dimension with size > 1.
+  // For example, [[1], [2], [3], [4]] with `bankingFactor`=2 will be banked to
+  // [[1], [3]] and [[2], [4]].
+  for (int dim = rank - 1; dim >= 0; --dim) {
+    if (shape[dim] > 1) {
+      return dim;
+    }
+  }
+
+  return std::nullopt;
+}
+
 SmallVector<Value, 4> createBanks(Value originalMem, uint64_t bankingFactor,
-                                  std::optional<unsigned> bankingDimensionOpt) {
+                                  std::optional<int> bankingDimensionOpt) {
   MemRefType originalMemRefType = cast<MemRefType>(originalMem.getType());
   unsigned rank = originalMemRefType.getRank();
   ArrayRef<int64_t> shape = originalMemRefType.getShape();
 
-  // Get the banking dimension if specified; use the innermost dimension that
-  // has size greater than one if not.
-  unsigned bankingDimension;
-  if (!bankingDimensionOpt.has_value()) {
-    bankingDimension = rank;
-    for (int dim = rank - 1; dim >= 0; --dim) {
-      if (shape[dim] > 1) {
-        bankingDimension = dim;
-        break;
-      }
-    }
-  } else {
-    bankingDimension = *bankingDimensionOpt;
-  }
-  assert(bankingDimension < rank && "No eligible dimension for banking");
+  auto bankingDimension = getBankingDimension(bankingDimensionOpt, rank, shape);
+  assert(bankingDimension.has_value() && bankingDimension >= 0 &&
+         "No eligible dimension for banking");
 
   MemRefType newMemRefType = computeBankedMemRefType(
-      originalMemRefType, bankingFactor, bankingDimension);
+      originalMemRefType, bankingFactor, *bankingDimension);
   SmallVector<Value, 4> banks;
   if (auto blockArgMem = dyn_cast<BlockArgument>(originalMem)) {
     Block *block = blockArgMem.getOwner();
@@ -258,7 +269,7 @@ SmallVector<Value, 4> createBanks(Value originalMem, uint64_t bankingFactor,
         })
         .Case<memref::GetGlobalOp>([&](memref::GetGlobalOp getGlobalOp) {
           auto newBanks =
-              handleGetGlobalOp(getGlobalOp, bankingFactor, bankingDimension,
+              handleGetGlobalOp(getGlobalOp, bankingFactor, *bankingDimension,
                                 newMemRefType, builder);
           banks.append(newBanks.begin(), newBanks.end());
         })
@@ -273,11 +284,11 @@ SmallVector<Value, 4> createBanks(Value originalMem, uint64_t bankingFactor,
 struct BankAffineLoadPattern
     : public OpRewritePattern<mlir::affine::AffineLoadOp> {
   BankAffineLoadPattern(MLIRContext *context, uint64_t bankingFactor,
-                        unsigned bankingDimension,
+                        std::optional<int> bankingDimensionOpt,
                         DenseMap<Value, SmallVector<Value>> &memoryToBanks,
                         DenseSet<Value> &oldMemRefVals)
       : OpRewritePattern<mlir::affine::AffineLoadOp>(context),
-        bankingFactor(bankingFactor), bankingDimension(bankingDimension),
+        bankingFactor(bankingFactor), bankingDimensionOpt(bankingDimensionOpt),
         memoryToBanks(memoryToBanks), oldMemRefVals(oldMemRefVals) {}
 
   LogicalResult matchAndRewrite(mlir::affine::AffineLoadOp loadOp,
@@ -286,19 +297,26 @@ struct BankAffineLoadPattern
     auto banks = memoryToBanks[loadOp.getMemref()];
     auto loadIndices = loadOp.getIndices();
     int64_t memrefRank = loadOp.getMemRefType().getRank();
+    ArrayRef<int64_t> shape = loadOp.getMemRefType().getShape();
+
+    auto bankingDimension =
+        getBankingDimension(bankingDimensionOpt, memrefRank, shape);
+    assert(bankingDimension.has_value() && *bankingDimension >= 0 &&
+           "No eligible dimension for banking");
+
     auto modMap = AffineMap::get(
         /*dimCount=*/memrefRank, /*symbolCount=*/0,
-        {rewriter.getAffineDimExpr(bankingDimension) % bankingFactor});
+        {rewriter.getAffineDimExpr(*bankingDimension) % bankingFactor});
     auto divMap = AffineMap::get(
         memrefRank, 0,
-        {rewriter.getAffineDimExpr(bankingDimension).floorDiv(bankingFactor)});
+        {rewriter.getAffineDimExpr(*bankingDimension).floorDiv(bankingFactor)});
 
     Value bankIndex =
         rewriter.create<affine::AffineApplyOp>(loc, modMap, loadIndices);
     Value offset =
         rewriter.create<affine::AffineApplyOp>(loc, divMap, loadIndices);
     SmallVector<Value, 4> newIndices(loadIndices.begin(), loadIndices.end());
-    newIndices[bankingDimension] = offset;
+    newIndices[*bankingDimension] = offset;
 
     SmallVector<Type> resultTypes = {loadOp.getResult().getType()};
 
@@ -339,7 +357,7 @@ struct BankAffineLoadPattern
 
 private:
   uint64_t bankingFactor;
-  unsigned bankingDimension;
+  std::optional<int> bankingDimensionOpt;
   DenseMap<Value, SmallVector<Value>> &memoryToBanks;
   DenseSet<Value> &oldMemRefVals;
 };
@@ -348,13 +366,13 @@ private:
 struct BankAffineStorePattern
     : public OpRewritePattern<mlir::affine::AffineStoreOp> {
   BankAffineStorePattern(MLIRContext *context, uint64_t bankingFactor,
-                         unsigned bankingDimension,
+                         std::optional<int> bankingDimensionOpt,
                          DenseMap<Value, SmallVector<Value>> &memoryToBanks,
                          DenseSet<Operation *> &opsToErase,
                          DenseSet<Operation *> &processedOps,
                          DenseSet<Value> &oldMemRefVals)
       : OpRewritePattern<mlir::affine::AffineStoreOp>(context),
-        bankingFactor(bankingFactor), bankingDimension(bankingDimension),
+        bankingFactor(bankingFactor), bankingDimensionOpt(bankingDimensionOpt),
         memoryToBanks(memoryToBanks), opsToErase(opsToErase),
         processedOps(processedOps), oldMemRefVals(oldMemRefVals) {}
 
@@ -367,20 +385,26 @@ struct BankAffineStorePattern
     auto banks = memoryToBanks[storeOp.getMemref()];
     auto storeIndices = storeOp.getIndices();
     int64_t memrefRank = storeOp.getMemRefType().getRank();
+    ArrayRef<int64_t> shape = storeOp.getMemRefType().getShape();
+
+    auto bankingDimension =
+        getBankingDimension(bankingDimensionOpt, memrefRank, shape);
+    assert(bankingDimension.has_value() && bankingDimension >= 0 &&
+           "No eligible dimension for banking");
 
     auto modMap = AffineMap::get(
         /*dimCount=*/memrefRank, /*symbolCount=*/0,
-        {rewriter.getAffineDimExpr(bankingDimension) % bankingFactor});
+        {rewriter.getAffineDimExpr(*bankingDimension) % bankingFactor});
     auto divMap = AffineMap::get(
         memrefRank, 0,
-        {rewriter.getAffineDimExpr(bankingDimension).floorDiv(bankingFactor)});
+        {rewriter.getAffineDimExpr(*bankingDimension).floorDiv(bankingFactor)});
 
     Value bankIndex =
         rewriter.create<affine::AffineApplyOp>(loc, modMap, storeIndices);
     Value offset =
         rewriter.create<affine::AffineApplyOp>(loc, divMap, storeIndices);
     SmallVector<Value, 4> newIndices(storeIndices.begin(), storeIndices.end());
-    newIndices[bankingDimension] = offset;
+    newIndices[*bankingDimension] = offset;
 
     SmallVector<Type> resultTypes = {};
 
@@ -416,7 +440,7 @@ struct BankAffineStorePattern
 
 private:
   uint64_t bankingFactor;
-  unsigned bankingDimension;
+  std::optional<int> bankingDimensionOpt;
   DenseMap<Value, SmallVector<Value>> &memoryToBanks;
   DenseSet<Operation *> &opsToErase;
   DenseSet<Operation *> &processedOps;
@@ -528,11 +552,7 @@ void MemoryBankingPass::runOnOperation() {
       auto [it, inserted] =
           memoryToBanks.insert(std::make_pair(memrefVal, SmallVector<Value>{}));
       if (inserted)
-        it->second = createBanks(
-            memrefVal, bankingFactor,
-            bankingDimension.hasValue()
-                ? std::optional<unsigned>(bankingDimension.getValue())
-                : std::nullopt);
+        it->second = createBanks(memrefVal, bankingFactor, bankingDimension);
     }
   });
 
@@ -563,7 +583,7 @@ void MemoryBankingPass::runOnOperation() {
 namespace circt {
 std::unique_ptr<mlir::Pass>
 createMemoryBankingPass(std::optional<unsigned> bankingFactor,
-                        std::optional<unsigned> bankingDimension) {
+                        std::optional<int> bankingDimension) {
   return std::make_unique<MemoryBankingPass>(bankingFactor, bankingDimension);
 }
 } // namespace circt
