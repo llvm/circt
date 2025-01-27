@@ -45,8 +45,21 @@ def LowerFormalToHWPass : Pass<"lower-formal-to-hw", "mlir::ModuleOp"> {
 def LowerContractsPass : Pass<"lower-contracts", "mlir::ModuleOp"> {
   let summary = "Lower contracts into formal tests";
   let description = [{
-    Converts `hw.module` ops containing a `verif.contract` into a
-    `verif.formal` op.
+    For `hw.module` ops containing any `verif.contract` ops, apply the
+    contracts in the `hw.module` body and emit a `verif.formal` op that checks
+    each applied contract.
+
+    Contracts are checked by turning `require`s into `assume`s and `ensure`s
+    into `asserts`s.  Inputs to the `hw.module` op are replaced with
+    `verif.symbolic_value` ops and other contracts are assumed to hold by
+    inlining the contract body.
+
+    Contracts are applied by turing `require`s into `assert`s and `ensure`s
+    into `assume`s in the original `hw.module` op body.  Results of the
+    contract are replaced with `verif.symbolic_value` ops.  In some cases,
+    using the `SimplifyAssumeEqPass` after lowering contracts and before
+    canonicalization and cse can result in a greatly simplify `hw.module` op
+    body.
   }];
 }
 
