@@ -29,20 +29,22 @@ rtg.sequence @seq1(%arg0: i32, %arg1: !rtg.sequence) { }
 
 // CHECK-LABEL: rtg.sequence @seqRandomizationAndEmbedding
 rtg.sequence @seqRandomizationAndEmbedding() {
-  // CHECK: [[V0:%.+]] = rtg.sequence_closure @seq0
+  // CHECK: [[V0:%.+]] = rtg.get_sequence @seq0
   // CHECK: [[C0:%.+]] = arith.constant 0 : i32
-  // CHECK: [[V1:%.+]] = rtg.sequence_closure @seq1([[C0]], [[V0]] : i32, !rtg.sequence)
-  // CHECK: [[V2:%.+]] = rtg.randomize_sequence [[V0]]
-  // CHECK: [[V3:%.+]] = rtg.randomize_sequence [[V1]]
-  // CHECK: rtg.embed_sequence [[V2]]
+  // CHECK: [[V1:%.+]] = rtg.get_sequence @seq1
+  // CHECK: [[V2:%.+]] = rtg.substitute_sequence [[V1]]([[C0]], [[V0]]) : !rtg.sequence<i32, !rtg.sequence>
+  // CHECK: [[V3:%.+]] = rtg.randomize_sequence [[V0]]
+  // CHECK: [[V4:%.+]] = rtg.randomize_sequence [[V2]]
   // CHECK: rtg.embed_sequence [[V3]]
-  %0 = rtg.sequence_closure @seq0
+  // CHECK: rtg.embed_sequence [[V4]]
+  %0 = rtg.get_sequence @seq0 : !rtg.sequence
   %c0_i32 = arith.constant 0 : i32
-  %1 = rtg.sequence_closure @seq1(%c0_i32, %0 : i32, !rtg.sequence)
-  %2 = rtg.randomize_sequence %0
-  %3 = rtg.randomize_sequence %1
-  rtg.embed_sequence %2
+  %1 = rtg.get_sequence @seq1 : !rtg.sequence<i32, !rtg.sequence>
+  %2 = rtg.substitute_sequence %1(%c0_i32, %0) : !rtg.sequence<i32, !rtg.sequence>
+  %3 = rtg.randomize_sequence %0
+  %4 = rtg.randomize_sequence %2
   rtg.embed_sequence %3
+  rtg.embed_sequence %4
 }
 
 // CHECK-LABEL: @sets

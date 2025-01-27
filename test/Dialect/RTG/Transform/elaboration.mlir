@@ -115,10 +115,11 @@ rtg.sequence @seq0(%arg0: index) {
 }
 
 rtg.sequence @seq1(%arg0: index) {
-  %0 = rtg.sequence_closure @seq0(%arg0 : index)
-  %1 = rtg.randomize_sequence %0
+  %0 = rtg.get_sequence @seq0 : !rtg.sequence<index>
+  %1 = rtg.substitute_sequence %0(%arg0) : !rtg.sequence<index>
+  %2 = rtg.randomize_sequence %1
   func.call @dummy2(%arg0) : (index) -> ()
-  rtg.embed_sequence %1
+  rtg.embed_sequence %2
   func.call @dummy2(%arg0) : (index) -> ()
 }
 
@@ -129,9 +130,10 @@ rtg.test @nestedSequences : !rtg.dict<> {
   // CHECK: func.call @dummy2
   // CHECK: func.call @dummy2
   %0 = index.constant 0
-  %1 = rtg.sequence_closure @seq1(%0 : index)
-  %2 = rtg.randomize_sequence %1 
-  rtg.embed_sequence %2
+  %1 = rtg.get_sequence @seq1 : !rtg.sequence<index>
+  %2 = rtg.substitute_sequence %1(%0) : !rtg.sequence<index>
+  %3 = rtg.randomize_sequence %2 
+  rtg.embed_sequence %3
 }
 
 rtg.sequence @seq2(%arg0: index) {
@@ -146,12 +148,14 @@ rtg.test @sameSequenceDifferentArgs : !rtg.dict<> {
   // CHECK: func.call @dummy2([[C1]])
   %0 = index.constant 0
   %1 = index.constant 1
-  %2 = rtg.sequence_closure @seq2(%0 : index)
-  %3 = rtg.randomize_sequence %2
-  %4 = rtg.sequence_closure @seq2(%1 : index)
-  %5 = rtg.randomize_sequence %4
-  rtg.embed_sequence %3
-  rtg.embed_sequence %5
+  %2 = rtg.get_sequence @seq2 : !rtg.sequence<index>
+  %3 = rtg.substitute_sequence %2(%0) : !rtg.sequence<index>
+  %4 = rtg.randomize_sequence %3
+  %5 = rtg.get_sequence @seq2 : !rtg.sequence<index>
+  %6 = rtg.substitute_sequence %5(%1) : !rtg.sequence<index>
+  %7 = rtg.randomize_sequence %6
+  rtg.embed_sequence %4
+  rtg.embed_sequence %7
 }
 
 rtg.sequence @seq3(%arg0: !rtg.set<index>) {
@@ -169,13 +173,15 @@ rtg.test @sequenceClosureFixesRandomization : !rtg.dict<> {
   %0 = index.constant 0
   %1 = index.constant 1
   %2 = rtg.set_create %0, %1 : index
-  %3 = rtg.sequence_closure @seq3(%2 : !rtg.set<index>)
-  %4 = rtg.randomize_sequence %3
-  %5 = rtg.sequence_closure @seq3(%2 : !rtg.set<index>)
-  %6 = rtg.randomize_sequence %5
-  rtg.embed_sequence %4
-  rtg.embed_sequence %6
-  rtg.embed_sequence %4
+  %3 = rtg.get_sequence @seq3 : !rtg.sequence<!rtg.set<index>>
+  %4 = rtg.substitute_sequence %3(%2) : !rtg.sequence<!rtg.set<index>>
+  %5 = rtg.randomize_sequence %4
+  %6 = rtg.get_sequence @seq3 : !rtg.sequence<!rtg.set<index>>
+  %7 = rtg.substitute_sequence %6(%2) : !rtg.sequence<!rtg.set<index>>
+  %8 = rtg.randomize_sequence %7
+  rtg.embed_sequence %5
+  rtg.embed_sequence %8
+  rtg.embed_sequence %5
 }
 
 // CHECK-LABEL: @indexOps

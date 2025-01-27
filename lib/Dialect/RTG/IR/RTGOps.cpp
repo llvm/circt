@@ -90,11 +90,11 @@ void SequenceOp::print(OpAsmPrinter &p) {
 }
 
 //===----------------------------------------------------------------------===//
-// SequenceClosureOp
+// GetSequenceOp
 //===----------------------------------------------------------------------===//
 
 LogicalResult
-SequenceClosureOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+GetSequenceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   SequenceOp seq =
       symbolTable.lookupNearestSymbolFrom<SequenceOp>(*this, getSequenceAttr());
   if (!seq)
@@ -102,12 +102,93 @@ SequenceClosureOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
            << "'" << getSequence()
            << "' does not reference a valid 'rtg.sequence' operation";
 
-  if (TypeRange(seq.getSequenceType().getElementTypes()) !=
-      getArgs().getTypes())
-    return emitOpError("referenced 'rtg.sequence' op's argument types must "
-                       "match 'args' types");
+  if (seq.getSequenceType() != getType())
+    return emitOpError("referenced 'rtg.sequence' op's type does not match");
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// SubstituteSequenceOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SubstituteSequenceOp::verify() {
+  if (getReplacements().empty())
+    return emitOpError("must at least have one replacement value");
+
+  if (getReplacements().size() >
+      getSequence().getType().getElementTypes().size())
+    return emitOpError(
+        "must not have more replacement values than sequence arguments");
+
+  if (getReplacements().getTypes() !=
+      getSequence().getType().getElementTypes().take_front(
+          getReplacements().size()))
+    return emitOpError("replacement types must match the same number of "
+                       "sequence argument types from the front");
+
+  return success();
+}
+
+LogicalResult SubstituteSequenceOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    SmallVectorImpl<Type> &inferredReturnTypes) {
+  ArrayRef<Type> argTypes =
+      cast<SequenceType>(operands[0].getType()).getElementTypes();
+  auto seqType =
+      SequenceType::get(context, argTypes.drop_front(operands.size() - 1));
+  inferredReturnTypes.push_back(seqType);
+  return success();
+}
+
+ParseResult SubstituteSequenceOp::parse(::mlir::OpAsmParser &parser,
+                                        ::mlir::OperationState &result) {
+  OpAsmParser::UnresolvedOperand sequenceRawOperand;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> replacementsOperands;
+  Type sequenceRawType;
+
+  if (parser.parseOperand(sequenceRawOperand) || parser.parseLParen())
+    return failure();
+
+  auto replacementsOperandsLoc = parser.getCurrentLocation();
+  if (parser.parseOperandList(replacementsOperands) || parser.parseRParen() ||
+      parser.parseColon() || parser.parseType(sequenceRawType) ||
+      parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  if (!isa<SequenceType>(sequenceRawType))
+    return parser.emitError(parser.getNameLoc())
+           << "'sequence' must be handle to a sequence or sequence family, but "
+              "got "
+           << sequenceRawType;
+
+  if (parser.resolveOperand(sequenceRawOperand, sequenceRawType,
+                            result.operands))
+    return failure();
+
+  if (parser.resolveOperands(replacementsOperands,
+                             cast<SequenceType>(sequenceRawType)
+                                 .getElementTypes()
+                                 .take_front(replacementsOperands.size()),
+                             replacementsOperandsLoc, result.operands))
+    return failure();
+
+  SmallVector<Type> inferredReturnTypes;
+  if (failed(inferReturnTypes(
+          parser.getContext(), result.location, result.operands,
+          result.attributes.getDictionary(parser.getContext()),
+          result.getRawProperties(), result.regions, inferredReturnTypes)))
+    return failure();
+
+  result.addTypes(inferredReturnTypes);
+  return success();
+}
+
+void SubstituteSequenceOp::print(OpAsmPrinter &p) {
+  p << ' ' << getSequence() << "(" << getReplacements()
+    << ") : " << getSequence().getType();
+  p.printOptionalAttrDict((*this)->getAttrs(), {});
 }
 
 //===----------------------------------------------------------------------===//

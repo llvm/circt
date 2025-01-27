@@ -6,14 +6,59 @@ func.func @seq0() {
 }
 
 // expected-error @below {{'seq0' does not reference a valid 'rtg.sequence' operation}}
-rtg.sequence_closure @seq0
+rtg.get_sequence @seq0 : !rtg.sequence
 
 // -----
 
-rtg.sequence @seq0(%arg0: i32) { }
+rtg.sequence @seq0(%arg0: index) { }
 
-// expected-error @below {{referenced 'rtg.sequence' op's argument types must match 'args' types}}
-rtg.sequence_closure @seq0
+// expected-error @below {{referenced 'rtg.sequence' op's type does not match}}
+"rtg.get_sequence"() <{sequence="seq0"}> : () -> !rtg.sequence
+
+// -----
+
+rtg.sequence @seq0(%arg0: index) { }
+
+%0 = rtg.get_sequence @seq0 : !rtg.sequence<index>
+// expected-error @below {{must at least have one replacement value}}
+rtg.substitute_sequence %0() : !rtg.sequence<index>
+
+// -----
+
+rtg.sequence @seq0(%arg0: index) { }
+
+%c = index.constant 0
+%0 = rtg.get_sequence @seq0 : !rtg.sequence<index>
+// expected-error @below {{number of operands and types do not match: got 2 operands and 1 types}}
+rtg.substitute_sequence %0(%c, %c) : !rtg.sequence<index>
+
+// -----
+
+rtg.sequence @seq0(%arg0: index) { }
+
+// expected-note @below {{prior use here}}
+%c = index.bool.constant true
+%0 = rtg.get_sequence @seq0 : !rtg.sequence<index>
+// expected-error @below {{use of value '%c' expects different type than prior uses: 'index' vs 'i1'}}
+rtg.substitute_sequence %0(%c) : !rtg.sequence<index>
+
+// -----
+
+rtg.sequence @seq0(%arg0: index) { }
+
+%c = index.constant 0
+%0 = rtg.get_sequence @seq0 : !rtg.sequence<index>
+// expected-error @below {{must not have more replacement values than sequence arguments}}
+"rtg.substitute_sequence"(%0, %c, %c) : (!rtg.sequence<index>, index, index) -> !rtg.sequence
+
+// -----
+
+rtg.sequence @seq0(%arg0: index) { }
+
+%c = index.bool.constant true
+%0 = rtg.get_sequence @seq0 : !rtg.sequence<index>
+// expected-error @below {{replacement types must match the same number of sequence argument types from the front}}
+"rtg.substitute_sequence"(%0, %c) : (!rtg.sequence<index>, i1) -> !rtg.sequence
 
 // -----
 
