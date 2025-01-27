@@ -770,8 +770,8 @@ struct CombDivModUOpTableConversion : OpConversionPattern<OpTy> {
     }
     std::reverse(tableInputs.begin(), tableInputs.end());
     assert(numLhsUnknownBits + numRhsUnknownBits == tableInputs.size());
-    auto muxed = constructMuxTree(rewriter, op->getLoc(), tableInputs,
-                                  results, allZero);
+    auto muxed =
+        constructMuxTree(rewriter, op->getLoc(), tableInputs, results, allZero);
 
     rewriter.replaceOp(op, muxed);
     return success();
@@ -813,6 +813,9 @@ static void populateCombToAIGConversionPatterns(RewritePatternSet &patterns) {
 }
 
 void ConvertCombToAIGPass::runOnOperation() {
+  if (!getOperation().getModuleName().starts_with("SiFive_") ||
+      getOperation().getNumOutputPorts() == 0)
+    return markAllAnalysesPreserved();
   // if (!getOperation().getModuleName().starts_with("SiFive_") ||
   //     getOperation().getNumOutputPorts() == 0)
   //   return markAllAnalysesPreserved();

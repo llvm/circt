@@ -553,6 +553,10 @@ struct DelayNode : Node {
     edges.clear();
     for (auto &edge : maxDelays) {
       assert(edge.node && "input node is null");
+      // SmallVector<DebugPoint> points;
+      // for (auto point : edge.points) {
+      //   points.push_back(point);
+      // }
       addEdge(edge.node, edge.delay, edge.points);
     }
     computedResult = std::move(maxDelays);
@@ -562,7 +566,8 @@ struct DelayNode : Node {
     computedResult = std::make_optional(SmallVector<ShrinkedEdge>());
     llvm::MapVector<InputNode *, ShrinkedEdge> maxDelays;
     // auto update = [&maxDelays](InputNode *node, int64_t delay,
-    //                                 llvm::ImmutableList<DebugPoint> points) {
+    //                                 llvm::ImmutableList<DebugPoint> points)
+    //                                 {
     //   auto it = maxDelays.find(node);
     //   if (it == maxDelays.end()) {
     //     maxDelays[node] = ShrinkedEdge{node, delay, points};
@@ -632,17 +637,18 @@ struct DelayNode : Node {
             shrinkedEdge.delay + edge.delay <= it->second.delay)
           continue;
 
-        shrinkedEdge.delay += edge.delay;
         // Concat edge.points to shrinkedEdge.points.
-        llvm::SmallVector<DebugPoint> newPoints;
+        SmallVector<DebugPoint> newPoints;
         for (auto point : edge.points) {
           newPoints.push_back(point);
         }
         for (auto point : llvm::reverse(newPoints)) {
-          point.delay += edge.delay;
+          point.delay += shrinkedEdge.delay;
           shrinkedEdge.points =
               getListFactory().add(point, shrinkedEdge.points);
         }
+
+        shrinkedEdge.delay += edge.delay;
         maxDelays.insert_or_assign(shrinkedEdge.node, shrinkedEdge);
       }
       // if (auto *inputNode = dyn_cast<InputNode>(edge.node))
@@ -1069,9 +1075,10 @@ struct Graph {
   }
   LogicalResult
   inlineGraph(ArrayRef<std::pair<hw::InstanceOp, Graph *>> children,
-              circt::igraph::InstancePathCache *instancePathCache, std::mutex& mutex) {
-    // We need to clone the subgraph of the child graph which are reachable from
-    // input and output nodes.
+              circt::igraph::InstancePathCache *instancePathCache,
+              std::mutex &mutex) {
+    // We need to clone the subgraph of the child graph which are reachable
+    // from input and output nodes.
     DenseMap<InputNode *, Node *> nodeToNewNode;
     // This stores the cloned child graph.
     DenseMap<Node *, Node *> clonedResult;
@@ -1122,7 +1129,36 @@ struct Graph {
                   assert(edge.node && "input node is null");
                   auto *cloned = recurse(edge.node);
                   assert(cloned && "cloned is null");
-                  delayNode->addEdge(cloned, edge.delay, edge.points);
+                  SmallVector<DebugPoint> points;
+                  for (auto point : edge.points) {
+                    // auto it = localCache.find({instance, point.path});
+                    // if (it != localCache.end()) {
+                    //   point.path = it->second;
+                    // } else {
+                    //   std::lock_guard<std::mutex> lock(mutex);
+                    //   auto newPath = instancePathCache->prependInstance(
+                    //       instance, node->path);
+                    //   localCache[{instance, newPath}] = newPath;
+                    //   point.path = newPath;
+                    // }
+                    points.push_back(point);
+                  }
+
+                  auto newPoints = listFactory.getEmptyList();
+                  for (auto point : llvm::reverse(points)) {
+                    auto it = localCache.find({instance, point.path});
+                    if (it != localCache.end()) {
+                      point.path = it->second;
+                    } else {
+                      std::lock_guard<std::mutex> lock(mutex);
+                      auto newPath = instancePathCache->prependInstance(
+                          instance, node->path);
+                      localCache[{instance, newPath}] = newPath;
+                      point.path = newPath;
+                    }
+                    newPoints = listFactory.add(point, newPoints);
+                  }
+                  delayNode->addEdge(cloned, edge.delay, newPoints);
                 }
                 return delayNode;
               })
@@ -1165,6 +1201,7 @@ struct Graph {
         localCache[{instance, newPath}] = newPath;
         result->setPath(newPath);
       }
+
       clonedResult[node] = result;
       return result;
     };
@@ -1314,7 +1351,6 @@ struct Graph {
       }
     }
 
-
     return success();
   }
 
@@ -1375,7 +1411,8 @@ struct Graph {
 
     for (auto i = 0; i < width; ++i) {
       auto node = allocateNode<InputNode>(value, i);
-      if (enableTrace) {
+      if (enableTrace &&
+          llvm::isa_and_nonnull<hw::InstanceOp>(value.getDefiningOp())) {
         auto debugNode = allocateNode<DebugNode>(
             StringAttr::get(theModule->getContext(), node->getName()), i, node,
             comment);
@@ -1432,7 +1469,7 @@ struct Graph {
       auto *node = getOrConstant(operand.get())->query(i);
       auto *outputNode = allocateNode<OutputNode>(
           operandOp, operand.getOperandNumber(), i, node);
-      if (enableTrace) {
+      if (enableTrace && llvm::isa_and_nonnull<hw::InstanceOp>(operandOp)) {
         node = allocateNode<DebugNode>(
             StringAttr::get(operand.getOwner()->getContext(),
                             outputNode->getName()),
@@ -1754,9 +1791,9 @@ LogicalResult LongestPathAnalysisImpl::run() {
   // Parallelize this part.
 
   // Otherwise, process the elements in parallel.
-  // std::min((unsigned)underHierarchy.size(), threadPool.getMaxConcurrency());
-  // Build a wrapper processing function that properly initializes a parallel
-  // diagnostic handler.
+  // std::min((unsigned)underHierarchy.size(),
+  // threadPool.getMaxConcurrency()); Build a wrapper processing function that
+  // properly initializes a parallel diagnostic handler.
   DenseMap<hw::HWModuleOp, SmallVector<PathResult>> pathResults;
 
   auto createTaskGroup = [&](hw::HWModuleOp mod) {
@@ -1837,7 +1874,9 @@ LogicalResult LongestPathAnalysisImpl::run() {
       if (childTask == moduleToGraph.end())
         continue;
       while (!childTask->second->elaborated) {
-        // llvm::dbgs() << "Waiting for " << childMod.getModuleName() << " to be ";
+        // llvm::dbgs() << "Waiting for " << childMod.getModuleName() << " to
+        // be
+        // ";
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
       }
     };
@@ -1848,7 +1887,6 @@ LogicalResult LongestPathAnalysisImpl::run() {
   for (auto moduleOp : underHierarchy) {
     createTaskGroup(moduleOp);
   }
-
 
   if (failed(mlir::failableParallelForEach(getContext(), underHierarchy,
                                            asyncMod))) {
@@ -1892,7 +1930,8 @@ LogicalResult LongestPathAnalysisImpl::run() {
       std::tuple<int64_t, PathResult::FreezedOutputNode,
                  PathResult::FreezedOutput::FreezedInput, hw::HWModuleOp>>
       longestPaths;
-  // std::priority_queue<std::tuple<int64_t, OutputNode *, InputNode *>> queue;
+  // std::priority_queue<std::tuple<int64_t, OutputNode *, InputNode *>>
+  // queue;
   for (auto &outputNode : results) {
     // resultsJSON.push_back(outputNode->getJSONObject());
     // outputNode->resetComputedResult();

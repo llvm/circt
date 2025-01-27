@@ -73,6 +73,9 @@ static void populateAIGToCombConversionPatterns(RewritePatternSet &patterns) {
 }
 
 void ConvertAIGToCombPass::runOnOperation() {
+  if (!getOperation().getModuleName().starts_with("SiFive_") ||
+      getOperation().getNumOutputPorts() == 0)
+    return markAllAnalysesPreserved();
   ConversionTarget target(getContext());
   target.addLegalDialect<comb::CombDialect, hw::HWDialect>();
   target.addIllegalDialect<aig::AIGDialect>();
