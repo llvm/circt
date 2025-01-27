@@ -29,6 +29,7 @@ from pycde.esi import CallService
 import pycde.esi as esi
 from pycde.types import Bits, Channel, UInt
 
+import typing
 import sys
 
 # CHECK: [INFO] [CONNECT] connecting to backend
@@ -125,54 +126,58 @@ def ReadMem(width: int):
   return ReadMem
 
 
-class WriteMem(Module):
-  """Writes a cycle count to host memory at address 0 in MMIO upon each MMIO
-  transaction."""
-  clk = Clock()
-  rst = Reset()
+def WriteMem(width: int) -> typing.Type['WriteMem']:
 
-  @generator
-  def construct(ports):
-    cmd_chan_wire = Wire(Channel(esi.MMIOReadWriteCmdType))
-    resp_ready_wire = Wire(Bits(1))
-    cmd, cmd_valid = cmd_chan_wire.unwrap(resp_ready_wire)
-    mmio_xact = cmd_valid & resp_ready_wire
+  class WriteMem(Module):
+    """Writes a cycle count to host memory at address 0 in MMIO upon each MMIO
+    transaction."""
+    clk = Clock()
+    rst = Reset()
 
-    write_loc_ce = mmio_xact & cmd.write & (cmd.offset == UInt(32)(0))
-    write_loc = Reg(UInt(64),
-                    clk=ports.clk,
-                    rst=ports.rst,
-                    rst_value=0,
-                    ce=write_loc_ce)
-    write_loc.assign(cmd.data.as_uint())
+    @generator
+    def construct(ports):
+      cmd_chan_wire = Wire(Channel(esi.MMIOReadWriteCmdType))
+      resp_ready_wire = Wire(Bits(1))
+      cmd, cmd_valid = cmd_chan_wire.unwrap(resp_ready_wire)
+      mmio_xact = cmd_valid & resp_ready_wire
 
-    response_data = write_loc.as_bits()
-    response_chan, response_ready = Channel(Bits(64)).wrap(
-        response_data, cmd_valid)
-    resp_ready_wire.assign(response_ready)
+      write_loc_ce = mmio_xact & cmd.write & (cmd.offset == UInt(32)(0))
+      write_loc = Reg(UInt(64),
+                      clk=ports.clk,
+                      rst=ports.rst,
+                      rst_value=0,
+                      ce=write_loc_ce)
+      write_loc.assign(cmd.data.as_uint())
 
-    mmio_rw = esi.MMIO.read_write(appid=AppID("WriteMem"))
-    mmio_rw_cmd_chan = mmio_rw.unpack(data=response_chan)['cmd']
-    cmd_chan_wire.assign(mmio_rw_cmd_chan)
+      response_data = write_loc.as_bits()
+      response_chan, response_ready = Channel(response_data.type).wrap(
+          response_data, cmd_valid)
+      resp_ready_wire.assign(response_ready)
 
-    tag = Counter(8)(clk=ports.clk,
-                     rst=ports.rst,
-                     clear=Bits(1)(0),
-                     increment=mmio_xact)
+      mmio_rw = esi.MMIO.read_write(appid=AppID("WriteMem"))
+      mmio_rw_cmd_chan = mmio_rw.unpack(data=response_chan)['cmd']
+      cmd_chan_wire.assign(mmio_rw_cmd_chan)
 
-    cycle_counter = Counter(64)(clk=ports.clk,
-                                rst=ports.rst,
-                                clear=Bits(1)(0),
-                                increment=Bits(1)(1))
+      tag = Counter(8)(clk=ports.clk,
+                       rst=ports.rst,
+                       clear=Bits(1)(0),
+                       increment=mmio_xact)
 
-    hostmem_write_req, _ = esi.HostMem.wrap_write_req(
-        write_loc,
-        cycle_counter.out.as_bits(),
-        tag.out,
-        valid=mmio_xact.reg(ports.clk, ports.rst))
+      cycle_counter = Counter(width)(clk=ports.clk,
+                                     rst=ports.rst,
+                                     clear=Bits(1)(0),
+                                     increment=Bits(1)(1))
 
-    hostmem_write_resp = esi.HostMem.write(appid=AppID("WriteMem_hostwrite"),
-                                           req=hostmem_write_req)
+      hostmem_write_req, _ = esi.HostMem.wrap_write_req(
+          write_loc,
+          cycle_counter.out.as_bits(),
+          tag.out,
+          valid=mmio_xact.reg(ports.clk, ports.rst))
+
+      hostmem_write_resp = esi.HostMem.write(appid=AppID("WriteMem_hostwrite"),
+                                             req=hostmem_write_req)
+
+  return WriteMem
 
 
 class EsiTesterTop(Module):
@@ -185,7 +190,7 @@ class EsiTesterTop(Module):
     ReadMem(32)(appid=esi.AppID("readmem", 32), clk=ports.clk, rst=ports.rst)
     ReadMem(64)(appid=esi.AppID("readmem", 64), clk=ports.clk, rst=ports.rst)
     ReadMem(96)(appid=esi.AppID("readmem", 96), clk=ports.clk, rst=ports.rst)
-    WriteMem(clk=ports.clk, rst=ports.rst)
+    WriteMem(96)(clk=ports.clk, rst=ports.rst)
 
 
 if __name__ == "__main__":

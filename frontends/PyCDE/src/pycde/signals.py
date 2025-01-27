@@ -550,6 +550,8 @@ class ArraySignal(Signal):
     _validate_idx(self.type.size, idx)
     from .dialects import hw
     with get_user_loc():
+      if isinstance(idx, UIntSignal):
+        idx = idx.as_bits()
       v = hw.ArrayGetOp(self.value, idx)
       if self.name and isinstance(idx, int):
         v.name = self.name + f"__{idx}"
@@ -560,6 +562,8 @@ class ArraySignal(Signal):
     idxs = s.indices(len(self))
     if idxs[2] != 1:
       raise ValueError("Array slices do not support steps")
+    if not isinstance(idxs[0], int) or not isinstance(idxs[1], int):
+      raise ValueError("Array slices must be constant ints")
 
     from .types import types
     from .dialects import hw
