@@ -71,9 +71,10 @@ DenseSet<Value> collectMemRefs(mlir::affine::AffineParallelOp parOp) {
   return memrefVals;
 }
 
-// Verify the banking scheme with different conditions.
-void verifyBankingConditions(unsigned bankingDimension, unsigned bankingFactor,
-                             MemRefType originalType) {
+// Verify the banking configuration with different conditions.
+void verifyBankingConfigurations(unsigned bankingDimension,
+                                 unsigned bankingFactor,
+                                 MemRefType originalType) {
   auto originalShape = originalType.getShape();
   assert(!originalShape.empty() && "memref shape should not be empty");
   assert(bankingDimension < originalType.getRank() &&
@@ -333,7 +334,8 @@ SmallVector<Value, 4> createBanks(Value originalMem, unsigned bankingFactor,
 
   resolveBankingAttributes(originalMem, bankingFactor, bankingDimension);
 
-  verifyBankingConditions(bankingDimension, bankingFactor, originalMemRefType);
+  verifyBankingConfigurations(bankingDimension, bankingFactor,
+                              originalMemRefType);
 
   MemRefType newMemRefType = computeBankedMemRefType(
       originalMemRefType, bankingFactor, bankingDimension);
@@ -418,8 +420,8 @@ struct BankAffineLoadPattern
 
     resolveBankingAttributes(originalMem, bankingFactor, bankingDimension);
 
-    verifyBankingConditions(bankingDimension, bankingFactor,
-                            originalMemRefType);
+    verifyBankingConfigurations(bankingDimension, bankingFactor,
+                                originalMemRefType);
 
     auto modMap = AffineMap::get(
         /*dimCount=*/memrefRank, /*symbolCount=*/0,
@@ -511,8 +513,8 @@ struct BankAffineStorePattern
 
     resolveBankingAttributes(originalMem, bankingFactor, bankingDimension);
 
-    verifyBankingConditions(bankingDimension, bankingFactor,
-                            originalMemRefType);
+    verifyBankingConfigurations(bankingDimension, bankingFactor,
+                                originalMemRefType);
 
     auto modMap = AffineMap::get(
         /*dimCount=*/memrefRank, /*symbolCount=*/0,
