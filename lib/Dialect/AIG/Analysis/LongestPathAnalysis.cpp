@@ -1076,6 +1076,9 @@ struct Graph {
     hw::InstanceOp instance;
     size_t clonedNum = 0;
     SmallVector<int> dist(8);
+    DenseMap<std::pair<hw::InstanceOp, circt::igraph::InstancePath>,
+            circt::igraph::InstancePath>
+        localCache;
     std::function<Node *(Node *)> recurse = [&](Node *node) -> Node * {
       if (clonedResult.count(node)) {
         assert(clonedResult[node] && "cloned result is null");
@@ -1151,8 +1154,14 @@ struct Graph {
                 return nullptr;
               });
       assert(result && "result is null");
-      auto newPath = instancePathCache->prependInstance(instance, node->path);
-      result->setPath(newPath);
+      auto it = localCache.find({instance, node->path});
+      if (it != localCache.end()) {
+        result->setPath(it->second);
+      } else {
+        auto newPath = instancePathCache->prependInstance(instance, node->path);
+        result->setPath(newPath);
+        localCache[{instance, newPath}] = newPath;
+      }
       clonedResult[node] = result;
       return result;
     };

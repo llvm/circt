@@ -16,6 +16,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
 #include "llvm/ADT/GraphTraits.h"
+#include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/iterator.h"
 #include "llvm/Support/DOTGraphTraits.h"
@@ -310,12 +311,26 @@ public:
   /// Print the path to any stream-like object.
   void print(llvm::raw_ostream &into) const;
 
+  llvm::hash_code getHash() const { return hash; }
+  static InstancePath getTombstone() {
+    return InstancePath(ArrayRef<InstanceOpInterface>{InstanceOpInterface()});
+  }
+
 private:
   // Only the path cache is allowed to create paths.
   friend struct InstancePathCache;
-  InstancePath(ArrayRef<InstanceOpInterface> path) : path(path) {}
+  InstancePath(ArrayRef<InstanceOpInterface> path) : path(path) {
+    if (path.size() == 1 && path[0] == nullptr) {
+      hash = llvm::hash_value("tombstone");
+      return;
+    }
+    auto range = llvm::map_range(
+        path, [](InstanceOpInterface op) { return op.getAsOpaquePointer(); });
+    hash = llvm::hash_combine_range(range.begin(), range.end());
+  }
 
   ArrayRef<InstanceOpInterface> path;
+  llvm::hash_code hash;
 };
 
 inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
@@ -443,6 +458,23 @@ struct llvm::DOTGraphTraits<circt::igraph::InstanceGraph *>
     auto *instanceRecord = *it.getCurrent();
     auto instanceOp = instanceRecord->getInstance();
     return ("label=" + instanceOp.getInstanceName()).str();
+  }
+};
+
+template <>
+struct llvm::DenseMapInfo<circt::igraph::InstancePath> {
+  static circt::igraph::InstancePath getEmptyKey() {
+    return circt::igraph::InstancePath();
+  }
+  static circt::igraph::InstancePath getTombstoneKey() {
+    return circt::igraph::InstancePath::getTombstone();
+  }
+  static llvm::hash_code getHashValue(circt::igraph::InstancePath path) {
+    return path.getHash();
+  }
+  static bool isEqual(circt::igraph::InstancePath a,
+                      circt::igraph::InstancePath b) {
+    return a == b;
   }
 };
 
