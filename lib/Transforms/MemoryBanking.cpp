@@ -200,27 +200,30 @@ SmallVector<Value, 4> handleGetGlobalOp(memref::GetGlobalOp getGlobalOp,
   return banks;
 }
 
-std::optional<int> getBankingDimension(std::optional<int> bankingDimensionOpt,
-                                       int64_t rank, ArrayRef<int64_t> shape) {
+unsigned getBankingDimension(std::optional<int> bankingDimensionOpt,
+                             int64_t rank, ArrayRef<int64_t> shape) {
   // If the banking dimension is already specified, return it.
   // Note, the banking dimension will always be nonempty because TableGen will
   // assign it with a default value -1 if it's not specified by the user. Thus,
   // -1 is the sentinel value to indicate the default behavior, which is the
   // innermost dimension with shape greater than 1.
   if (bankingDimensionOpt.has_value() && *bankingDimensionOpt >= 0) {
-    return bankingDimensionOpt;
+    return static_cast<unsigned>(*bankingDimensionOpt);
   }
 
   // Otherwise, find the innermost dimension with size > 1.
   // For example, [[1], [2], [3], [4]] with `bankingFactor`=2 will be banked to
   // [[1], [3]] and [[2], [4]].
+  int bankingDimension = -1;
   for (int dim = rank - 1; dim >= 0; --dim) {
     if (shape[dim] > 1) {
-      return dim;
+      bankingDimension = dim;
+      break;
     }
   }
 
-  return std::nullopt;
+  assert(bankingDimension >= 0 && "No eligible dimension for banking");
+  return static_cast<unsigned>(bankingDimension);
 }
 
 SmallVector<Value, 4> createBanks(Value originalMem, uint64_t bankingFactor,
@@ -230,11 +233,9 @@ SmallVector<Value, 4> createBanks(Value originalMem, uint64_t bankingFactor,
   ArrayRef<int64_t> shape = originalMemRefType.getShape();
 
   auto bankingDimension = getBankingDimension(bankingDimensionOpt, rank, shape);
-  assert(bankingDimension.has_value() && bankingDimension >= 0 &&
-         "No eligible dimension for banking");
 
   MemRefType newMemRefType = computeBankedMemRefType(
-      originalMemRefType, bankingFactor, *bankingDimension);
+      originalMemRefType, bankingFactor, bankingDimension);
   SmallVector<Value, 4> banks;
   if (auto blockArgMem = dyn_cast<BlockArgument>(originalMem)) {
     Block *block = blockArgMem.getOwner();
@@ -269,7 +270,7 @@ SmallVector<Value, 4> createBanks(Value originalMem, uint64_t bankingFactor,
         })
         .Case<memref::GetGlobalOp>([&](memref::GetGlobalOp getGlobalOp) {
           auto newBanks =
-              handleGetGlobalOp(getGlobalOp, bankingFactor, *bankingDimension,
+              handleGetGlobalOp(getGlobalOp, bankingFactor, bankingDimension,
                                 newMemRefType, builder);
           banks.append(newBanks.begin(), newBanks.end());
         })
@@ -301,22 +302,20 @@ struct BankAffineLoadPattern
 
     auto bankingDimension =
         getBankingDimension(bankingDimensionOpt, memrefRank, shape);
-    assert(bankingDimension.has_value() && *bankingDimension >= 0 &&
-           "No eligible dimension for banking");
 
     auto modMap = AffineMap::get(
         /*dimCount=*/memrefRank, /*symbolCount=*/0,
-        {rewriter.getAffineDimExpr(*bankingDimension) % bankingFactor});
+        {rewriter.getAffineDimExpr(bankingDimension) % bankingFactor});
     auto divMap = AffineMap::get(
         memrefRank, 0,
-        {rewriter.getAffineDimExpr(*bankingDimension).floorDiv(bankingFactor)});
+        {rewriter.getAffineDimExpr(bankingDimension).floorDiv(bankingFactor)});
 
     Value bankIndex =
         rewriter.create<affine::AffineApplyOp>(loc, modMap, loadIndices);
     Value offset =
         rewriter.create<affine::AffineApplyOp>(loc, divMap, loadIndices);
     SmallVector<Value, 4> newIndices(loadIndices.begin(), loadIndices.end());
-    newIndices[*bankingDimension] = offset;
+    newIndices[bankingDimension] = offset;
 
     SmallVector<Type> resultTypes = {loadOp.getResult().getType()};
 
@@ -389,22 +388,20 @@ struct BankAffineStorePattern
 
     auto bankingDimension =
         getBankingDimension(bankingDimensionOpt, memrefRank, shape);
-    assert(bankingDimension.has_value() && bankingDimension >= 0 &&
-           "No eligible dimension for banking");
 
     auto modMap = AffineMap::get(
         /*dimCount=*/memrefRank, /*symbolCount=*/0,
-        {rewriter.getAffineDimExpr(*bankingDimension) % bankingFactor});
+        {rewriter.getAffineDimExpr(bankingDimension) % bankingFactor});
     auto divMap = AffineMap::get(
         memrefRank, 0,
-        {rewriter.getAffineDimExpr(*bankingDimension).floorDiv(bankingFactor)});
+        {rewriter.getAffineDimExpr(bankingDimension).floorDiv(bankingFactor)});
 
     Value bankIndex =
         rewriter.create<affine::AffineApplyOp>(loc, modMap, storeIndices);
     Value offset =
         rewriter.create<affine::AffineApplyOp>(loc, divMap, storeIndices);
     SmallVector<Value, 4> newIndices(storeIndices.begin(), storeIndices.end());
-    newIndices[*bankingDimension] = offset;
+    newIndices[bankingDimension] = offset;
 
     SmallVector<Type> resultTypes = {};
 
