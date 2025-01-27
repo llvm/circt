@@ -75,7 +75,7 @@ DenseSet<Value> collectMemRefs(mlir::affine::AffineParallelOp parOp) {
 void verifyBankingConfigurations(unsigned bankingDimension,
                                  unsigned bankingFactor,
                                  MemRefType originalType) {
-  auto originalShape = originalType.getShape();
+  ArrayRef<int64_t> originalShape = originalType.getShape();
   assert(!originalShape.empty() && "memref shape should not be empty");
   assert(bankingDimension < originalType.getRank() &&
          "dimension must be within the memref rank");
@@ -244,7 +244,11 @@ void resolveBankingAttributes(Value originalMem, unsigned &bankingFactor,
     if (auto attrDimension = dyn_cast_if_present<IntegerAttr>(
             originalDef->getAttr("banking.dimension")))
       bankingDimension = attrDimension.getInt();
-  } else if (isa<BlockArgument>(originalMem)) {
+
+    return;
+  }
+
+  if (isa<BlockArgument>(originalMem)) {
     auto blockArg = cast<BlockArgument>(originalMem);
     auto *parentOp = blockArg.getOwner()->getParentOp();
 
@@ -253,7 +257,6 @@ void resolveBankingAttributes(Value originalMem, unsigned &bankingFactor,
            "Expected the original memory to be a FuncOp block argument!");
 
     unsigned argIndex = blockArg.getArgNumber();
-
     if (auto argAttrs = funcOp.getArgAttrDict(argIndex)) {
       if (auto attrFactor =
               dyn_cast_if_present<IntegerAttr>(argAttrs.get("banking.factor")))
@@ -262,6 +265,8 @@ void resolveBankingAttributes(Value originalMem, unsigned &bankingFactor,
               argAttrs.get("banking.dimension")))
         bankingDimension = attrDimension.getInt();
     }
+
+    return;
   }
 }
 
@@ -652,8 +657,9 @@ LogicalResult cleanUpOldMemRefs(DenseSet<Value> &oldMemRefVals,
     ArrayAttr existingArgAttrs = funcOp->getAttrOfType<ArrayAttr>("arg_attrs");
     if (existingArgAttrs) {
       SmallVector<Attribute, 4> updatedArgAttrs;
-      DenseSet<unsigned> indicesToErase(erasedArgIndices[funcOp].begin(),
-                                        erasedArgIndices[funcOp].end());
+      auto erasedIndices = erasedArgIndices[funcOp];
+      DenseSet<unsigned> indicesToErase(erasedIndices.begin(),
+                                        erasedIndices.end());
       for (unsigned i = 0; i < existingArgAttrs.size(); ++i) {
         if (!indicesToErase.contains(i))
           updatedArgAttrs.push_back(existingArgAttrs[i]);
