@@ -448,6 +448,86 @@ def HostmemReadProcessor(read_width: int, hostmem_module,
   return HostmemReadProcessorImpl
 
 
+def HostMemWriteProcessor(
+    write_width: int, hostmem_module,
+    reqs: List[esi._OutputBundleSetter]) -> type["HostMemWriteProcessorImpl"]:
+  """Construct a host memory write request module to orchestrate the the write
+  connections. Responsible for both gearboxing the data, multiplexing the
+  requests, reassembling out-of-order responses and routing the responses to the
+  correct clients.
+
+  Generate this module dynamically to allow for multiple write clients of
+  multiple types to be directly accomodated."""
+
+  class HostMemWriteProcessorImpl(Module):
+
+    clk = Clock()
+    rst = Reset()
+
+    # Add an output port for each read client.
+    reqPortMap: Dict[esi._OutputBundleSetter, str] = {}
+    for req in reqs:
+      name = "client_" + req.client_name_str
+      locals()[name] = Output(req.type)
+      reqPortMap[req] = name
+
+    # And then the port which goes to the host.
+    upstream = Output(hostmem_module.write.type)
+
+    @generator
+    def build(ports):
+      # If there's no write clients, just create a no-op write bundle
+      if len(reqs) == 0:
+        req, _ = Channel(hostmem_module.UpstreamWriteReq).wrap(
+            {
+                "address": 0,
+                "tag": 0,
+                "data": 0
+            }, 0)
+        write_bundle, _ = hostmem_module.write.type.pack(req=req)
+        ports.upstream = write_bundle
+        return
+
+      # TODO: mux together multiple write clients.
+      assert len(reqs) == 1, "Only one write client supported for now."
+
+      # Build the write request channels and ack wires.
+      write_channels: List[ChannelSignal] = []
+      write_acks = []
+      for req in reqs:
+        # Get the request channel and its data type.
+        reqch = [c.channel for c in req.type.channels if c.name == 'req'][0]
+        data_type = reqch.inner_type.data
+        assert data_type == Bits(
+            write_width
+        ), f"Gearboxing not yet supported. Client {req.client_name}"
+
+        # Write acks to be filled in later.
+        write_ack = Wire(Channel(UInt(8)))
+        write_acks.append(write_ack)
+
+        # Pack up the bundle and assign the request channel.
+        write_req_bundle_type = esi.HostMem.write_req_bundle_type(data_type)
+        bundle_sig, froms = write_req_bundle_type.pack(ackTag=write_ack)
+        tagged_client_req = froms["req"]
+        # Set the port for the client request.
+        setattr(ports, HostMemWriteProcessorImpl.reqPortMap[req], bundle_sig)
+        write_channels.append(tagged_client_req)
+
+      # TODO: re-write the tags and store the client and client tag.
+
+      # Build a channel mux for the write requests.
+      tagged_write_channel = esi.ChannelMux(write_channels)
+      upstream_write_bundle, froms = hostmem_module.write.type.pack(
+          req=tagged_write_channel)
+      ack_tag = froms["ackTag"]
+      # TODO: decode the ack tag and assign it to the correct client.
+      write_acks[0].assign(ack_tag)
+      ports.upstream = upstream_write_bundle
+
+  return HostMemWriteProcessorImpl
+
+
 @modparams
 def ChannelHostMem(read_width: int,
                    write_width: int) -> typing.Type['ChannelHostMemImpl']:
@@ -502,58 +582,11 @@ def ChannelHostMem(read_width: int,
       write_reqs = [
           req for req in bundles.to_client_reqs if req.port == 'write'
       ]
-      ports.write = ChannelHostMemImpl.build_tagged_write_mux(ports, write_reqs)
-
-    @staticmethod
-    def build_tagged_write_mux(
-        ports, reqs: List[esi._OutputBundleSetter]) -> BundleSignal:
-      """Build the write side of the HostMem service."""
-
-      # If there's no write clients, just return a no-op write bundle
-      if len(reqs) == 0:
-        req, _ = Channel(ChannelHostMemImpl.UpstreamWriteReq).wrap(
-            {
-                "address": 0,
-                "tag": 0,
-                "data": 0
-            }, 0)
-        write_bundle, _ = ChannelHostMemImpl.write.type.pack(req=req)
-        return write_bundle
-
-      # TODO: mux together multiple write clients.
-      assert len(reqs) == 1, "Only one write client supported for now."
-
-      # Build the write request channels and ack wires.
-      write_channels: List[ChannelSignal] = []
-      write_acks = []
-      for req in reqs:
-        # Get the request channel and its data type.
-        reqch = [c.channel for c in req.type.channels if c.name == 'req'][0]
-        data_type = reqch.inner_type.data
-        assert data_type == Bits(
-            write_width
-        ), f"Gearboxing not yet supported. Client {req.client_name}"
-
-        # Write acks to be filled in later.
-        write_ack = Wire(Channel(UInt(8)))
-        write_acks.append(write_ack)
-
-        # Pack up the bundle and assign the request channel.
-        write_req_bundle_type = esi.HostMem.write_req_bundle_type(data_type)
-        bundle_sig, froms = write_req_bundle_type.pack(ackTag=write_ack)
-        tagged_client_req = froms["req"]
-        req.assign(bundle_sig)
-        write_channels.append(tagged_client_req)
-
-      # TODO: re-write the tags and store the client and client tag.
-
-      # Build a channel mux for the write requests.
-      tagged_write_channel = esi.ChannelMux(write_channels)
-      upstream_write_bundle, froms = ChannelHostMemImpl.write.type.pack(
-          req=tagged_write_channel)
-      ack_tag = froms["ackTag"]
-      # TODO: decode the ack tag and assign it to the correct client.
-      write_acks[0].assign(ack_tag)
-      return upstream_write_bundle
+      write_proc_module = HostMemWriteProcessor(write_width, ChannelHostMemImpl,
+                                                write_reqs)
+      write_proc = write_proc_module(clk=ports.clk, rst=ports.rst)
+      ports.write = write_proc.upstream
+      for req in write_reqs:
+        req.assign(getattr(write_proc, write_proc_module.reqPortMap[req]))
 
   return ChannelHostMemImpl

@@ -16,7 +16,7 @@
 # REQUIRES: esi-runtime, esi-cosim, rtl-sim, esitester
 # RUN: rm -rf %t
 # RUN: mkdir %t && cd %t
-# RUN: %PYTHON% %s %t 2>&1
+# RUN: %PYTHON% %s %t cosim 2>&1
 # RUN: esi-cosim.py --source %t -- esitester cosim env wait | FileCheck %s
 # RUN: ESI_COSIM_MANIFEST_MMIO=1 esi-cosim.py --source %t -- esiquery cosim env info
 # RUN: esi-cosim.py --source %t -- esitester cosim env dmatest
