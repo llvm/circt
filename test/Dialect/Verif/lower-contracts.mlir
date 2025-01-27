@@ -49,11 +49,11 @@ hw.module @Mul9(in %a: i42, out z: i42) {
 // CHECK-NEXT:   %3 = comb.xor %0, %1, %2 : i42
 // CHECK-NEXT:   %4 = comb.extract %0 from 0 : (i42) -> i41
 // CHECK-NEXT:   %5 = comb.extract %1 from 0 : (i42) -> i41
-// CHECK-NEXT:   %6 = comb.and %4, %5 : i41
-// CHECK-NEXT:   %7 = comb.or %4, %5 : i41
-// CHECK-NEXT:   %8 = comb.extract %2 from 0 : (i42) -> i41
-// CHECK-NEXT:   %9 = comb.and %7, %8 : i41
-// CHECK-NEXT:   %10 = comb.or %6, %9 : i41
+// CHECK-NEXT:   %6 = comb.or %4, %5 : i41
+// CHECK-NEXT:   %7 = comb.extract %2 from 0 : (i42) -> i41
+// CHECK-NEXT:   %8 = comb.and %6, %7 : i41
+// CHECK-NEXT:   %9 = comb.and %4, %5 : i41
+// CHECK-NEXT:   %10 = comb.or %9, %8 : i41
 // CHECK-NEXT:   %11 = comb.concat %10, %false : i41, i1
 // CHECK-NEXT:   %12 = comb.add %0, %1, %2 : i42
 // CHECK-NEXT:   %13 = comb.add %3, %11 : i42
@@ -95,22 +95,22 @@ hw.module @CarrySaveCompress3to2(
 // CHECK-NEXT:   %c0_i4 = hw.constant 0 : i4
 // CHECK-NEXT:   %c8_i8 = hw.constant 8 : i8
 // CHECK-NEXT:   %0 = verif.symbolic_value : i8
-// CHECK-NEXT:   %1 = comb.extract %0 from 0 : (i8) -> i1
-// CHECK-NEXT:   %2 = comb.extract %0 from 1 : (i8) -> i1
-// CHECK-NEXT:   %3 = comb.extract %0 from 2 : (i8) -> i1
-// CHECK-NEXT:   %4 = verif.symbolic_value : i8
-// CHECK-NEXT:   %5 = comb.extract %4 from 0 : (i8) -> i4
-// CHECK-NEXT:   %6 = comb.concat %5, %c0_i4 : i4, i4
-// CHECK-NEXT:   %7 = comb.mux %3, %6, %4 : i8
-// CHECK-NEXT:   %8 = comb.extract %7 from 0 : (i8) -> i6
-// CHECK-NEXT:   %9 = comb.concat %8, %c0_i2 : i6, i2
-// CHECK-NEXT:   %10 = comb.mux %2, %9, %7 : i8
-// CHECK-NEXT:   %11 = comb.extract %10 from 0 : (i8) -> i7
-// CHECK-NEXT:   %12 = comb.concat %11, %false : i7, i1
-// CHECK-NEXT:   %13 = comb.mux %1, %12, %10 : i8
+// CHECK-NEXT:   %1 = verif.symbolic_value : i8
+// CHECK-NEXT:   %2 = comb.extract %1 from 0 : (i8) -> i4
+// CHECK-NEXT:   %3 = comb.concat %2, %c0_i4 : i4, i4
+// CHECK-NEXT:   %4 = comb.extract %0 from 2 : (i8) -> i1
+// CHECK-NEXT:   %5 = comb.mux %4, %3, %1 : i8
+// CHECK-NEXT:   %6 = comb.extract %5 from 0 : (i8) -> i6
+// CHECK-NEXT:   %7 = comb.concat %6, %c0_i2 : i6, i2
+// CHECK-NEXT:   %8 = comb.extract %0 from 1 : (i8) -> i1
+// CHECK-NEXT:   %9 = comb.mux %8, %7, %5 : i8
+// CHECK-NEXT:   %10 = comb.extract %9 from 0 : (i8) -> i7
+// CHECK-NEXT:   %11 = comb.concat %10, %false : i7, i1
+// CHECK-NEXT:   %12 = comb.extract %0 from 0 : (i8) -> i1
+// CHECK-NEXT:   %13 = comb.mux %12, %11, %9 : i8
 // CHECK-NEXT:   %14 = comb.icmp ult %0, %c8_i8 : i8
 // CHECK-NEXT:   verif.assume %14 : i1
-// CHECK-NEXT:   %15 = comb.shl %4, %0 : i8
+// CHECK-NEXT:   %15 = comb.shl %1, %0 : i8
 // CHECK-NEXT:   %16 = comb.icmp eq %13, %15 : i8
 // CHECK-NEXT:   verif.assert %16 : i1
 // CHECK-NEXT: }
@@ -187,11 +187,11 @@ hw.module @NoContract(in %a: i42, out z: i42) {
 // CHECK-NEXT:   %c2_i42 = hw.constant 2 : i42
 // CHECK-NEXT:   %0 = verif.symbolic_value : i42
 // CHECK-NEXT:   %1 = verif.symbolic_value : i42
-// CHECK-NEXT:   %2 = comb.icmp ult %0, %c2_i42 : i42
+// CHECK-NEXT:   %2 = comb.icmp ult %1, %c2_i42 : i42
 // CHECK-NEXT:   verif.assert %2 : i1
-// CHECK-NEXT:   %3 = comb.extract %0 from 0 : (i42) -> i41
+// CHECK-NEXT:   %3 = comb.extract %1 from 0 : (i42) -> i41
 // CHECK-NEXT:   %4 = comb.concat %3, %false : i41, i1
-// CHECK-NEXT:   %5 = comb.icmp eq %1, %4 : i42
+// CHECK-NEXT:   %5 = comb.icmp eq %0, %4 : i42
 // CHECK-NEXT:   verif.assume %5 : i1
 // CHECK-NEXT:   verif.assert %5 : i1
 // CHECK-NEXT: }
@@ -237,14 +237,14 @@ hw.module @TwoContracts(in %a: i42, out z: i42) {
 // CHECK-NEXT:   %false = hw.constant false
 // CHECK-NEXT:   %0 = verif.symbolic_value : i1
 // CHECK-NEXT:   %1 = verif.symbolic_value : i42
-// CHECK-NEXT:   %2 = comb.extract %1 from 0 : (i42) -> i41
-// CHECK-NEXT:   %3 = comb.concat %2, %false : i41, i1
-// CHECK-NEXT:   %4 = comb.mul %1, %1 : i42
+// CHECK-NEXT:   %2 = comb.mul %1, %1 : i42
+// CHECK-NEXT:   %3 = comb.extract %1 from 0 : (i42) -> i41
+// CHECK-NEXT:   %4 = comb.concat %3, %false : i41, i1
 // CHECK-NEXT:   %5 = scf.if %0 -> (i42) {
-// CHECK-NEXT:     %8 = comb.add %3, %4 : i42
+// CHECK-NEXT:     %8 = comb.add %4, %2 : i42
 // CHECK-NEXT:     scf.yield %8 : i42
 // CHECK-NEXT:   } else {
-// CHECK-NEXT:     %8 = comb.mul %3, %4 : i42
+// CHECK-NEXT:     %8 = comb.mul %4, %2 : i42
 // CHECK-NEXT:     scf.yield %8 : i42
 // CHECK-NEXT:   }
 // CHECK-NEXT:   %6 = verif.symbolic_value : i42

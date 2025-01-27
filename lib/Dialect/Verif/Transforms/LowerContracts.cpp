@@ -10,6 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <ranges>
+
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
 #include "mlir/IR/IRMapping.h"
@@ -53,10 +55,6 @@ Operation *replaceContractOp(OpBuilder &builder, RequireLike op,
   return nullptr;
 }
 
-LogicalResult cloneFanIn(OpBuilder &builder, Operation *opToClone,
-                         IRMapping &mapping, DenseSet<Operation *> &seen,
-                         bool assumeContract);
-
 LogicalResult cloneContractOp(OpBuilder &builder, Operation *opToClone,
                               IRMapping &mapping, bool assumeContract) {
   Operation *clonedOp;
@@ -77,6 +75,10 @@ LogicalResult cloneContractOp(OpBuilder &builder, Operation *opToClone,
   }
   return llvm::success();
 }
+
+LogicalResult cloneFanIn(OpBuilder &builder, Operation *opToClone,
+                         IRMapping &mapping, DenseSet<Operation *> &seen,
+                         bool assumeContract);
 
 LogicalResult cloneContractBody(ContractOp &contract, OpBuilder &builder,
                                 IRMapping &mapping, DenseSet<Operation *> &seen,
@@ -105,21 +107,36 @@ LogicalResult inlineContract(ContractOp &contract, OpBuilder &builder,
                            shouldCloneFanIn);
 }
 
-LogicalResult cloneOperands(OpBuilder &builder, Operation *opToClone,
-                            IRMapping &mapping, DenseSet<Operation *> &seen,
-                            bool assumeContract, Operation *parent = nullptr) {
-  for (auto operand : opToClone->getOperands()) {
+void buildOpsToClone(OpBuilder &builder, IRMapping &mapping, Operation *op,
+                     SmallVector<Operation *> &opsToClone,
+                     std::queue<Operation *> &workList,
+                     DenseSet<Operation *> &seen, Operation *parent = nullptr) {
+  if (auto contract = dyn_cast<ContractOp>(*op)) {
+    for (auto result : contract.getResults()) {
+      auto sym =
+          builder.create<SymbolicValueOp>(result.getLoc(), result.getType());
+      mapping.map(result, sym);
+    }
+    // Assume it holds
+    // TODO: merge w/ parent/walk logic?
+    auto &contractOps = contract.getBody().front().getOperations();
+    for (auto it = contractOps.rbegin(); it != contractOps.rend(); ++it) {
+      if (!seen.contains(&*it)) {
+        workList.push(&*it);
+      }
+    }
+    return;
+  }
+  for (auto operand : op->getOperands()) {
     if (mapping.contains(operand))
       continue;
-
+    // Don't need to clone if defining op is within parent op
+    if (parent && parent->isAncestor(operand.getParentBlock()->getParentOp()))
+      continue;
     if (auto *definingOp = operand.getDefiningOp()) {
-      // Don't need to clone if defining op is within parent op
-      if (parent && parent->isAncestor(operand.getParentBlock()->getParentOp()))
-        continue;
-      // Recurse and clone defining op
-      if (failed(
-              cloneFanIn(builder, definingOp, mapping, seen, assumeContract)))
-        return failure();
+      if (!seen.contains(definingOp)) {
+        workList.push(definingOp);
+      }
     } else {
       // Create symbolic values for arguments
       auto sym = builder.create<verif::SymbolicValueOp>(operand.getLoc(),
@@ -127,35 +144,47 @@ LogicalResult cloneOperands(OpBuilder &builder, Operation *opToClone,
       mapping.map(operand, sym);
     }
   }
-  return success();
 }
 
 LogicalResult cloneFanIn(OpBuilder &builder, Operation *opToClone,
                          IRMapping &mapping, DenseSet<Operation *> &seen,
                          bool assumeContract) {
-  if (seen.contains(opToClone))
-    return llvm::success();
-  seen.insert(opToClone);
-
-  if (failed(cloneOperands(builder, opToClone, mapping, seen, assumeContract)))
-    return failure();
-  // Ensure all operands have been mapped
-  if (opToClone
-          ->walk([&](Operation *nestedOp) {
-            if (failed(cloneOperands(builder, nestedOp, mapping, seen,
-                                     assumeContract, opToClone)))
-              return WalkResult::interrupt();
-            return WalkResult::advance();
-          })
-          .wasInterrupted())
-    return failure();
-
-  if (auto contract = dyn_cast<ContractOp>(opToClone)) {
-    // Assume it holds
-    return inlineContract(contract, builder, mapping, seen, true);
+  SmallVector<Operation *> opsToClone;
+  std::queue<Operation *> workList;
+  workList.push(opToClone);
+  while (!workList.empty()) {
+    auto *currentOp = workList.front();
+    workList.pop();
+    if (seen.contains(currentOp))
+      continue;
+    seen.insert(currentOp);
+    buildOpsToClone(builder, mapping, currentOp, opsToClone, workList, seen);
+    if (auto contract = dyn_cast<ContractOp>(*currentOp))
+      continue;
+    currentOp->walk([&](Operation *nestedOp) {
+      buildOpsToClone(builder, mapping, nestedOp, opsToClone, workList, seen,
+                      currentOp);
+    });
+    opsToClone.push_back(currentOp);
   }
 
-  return cloneContractOp(builder, opToClone, mapping, assumeContract);
+  for (auto it = opsToClone.rbegin(); it != opsToClone.rend(); ++it) {
+    Operation *op = *it;
+    Operation *clonedOp;
+    if (auto requireLike = dyn_cast<RequireLike>(*op)) {
+      clonedOp =
+          replaceContractOp(builder, requireLike, mapping, assumeContract);
+      if (!clonedOp) {
+        return failure();
+      }
+    } else {
+      clonedOp = builder.clone(*op, mapping);
+    }
+    for (auto [x, y] : llvm::zip(op->getResults(), clonedOp->getResults())) {
+      mapping.map(x, y);
+    }
+  }
+  return success();
 }
 
 LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
@@ -186,7 +215,7 @@ LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
     // Clone fan in cone for contract operands
     for (auto operand : contract.getOperands()) {
       auto *definingOp = operand.getDefiningOp();
-      if (failed(cloneFanIn(formalBuilder, definingOp, mapping, seen, false)))
+      if (failed(cloneFanIn(formalBuilder, definingOp, mapping, seen, true)))
         return failure();
     }
 
