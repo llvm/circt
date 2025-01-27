@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <ranges>
+#include <queue>
 
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
