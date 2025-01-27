@@ -1,4 +1,4 @@
-//===- OMPasses.h - OM dialect passes -------------------------------------===//
+//===- EmitPasses.h - Emit dialect passes ---------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_OM_OMPASSES_H
-#define CIRCT_DIALECT_OM_OMPASSES_H
+#ifndef CIRCT_DIALECT_EMIT_EMITPASSES_H
+#define CIRCT_DIALECT_EMIT_EMITPASSES_H
 
 #include "circt/Support/LLVM.h"
 #include "mlir/Pass/Pass.h"
@@ -18,18 +18,13 @@ class Pass;
 } // namespace mlir
 
 namespace circt {
-namespace om {
-
-std::unique_ptr<mlir::Pass> createOMLinkModulesPass();
-std::unique_ptr<mlir::Pass> createFreezePathsPass(
-    std::function<StringAttr(Operation *)> getOpNameFallback = {});
-std::unique_ptr<mlir::Pass> createVerifyObjectFieldsPass();
+namespace emit {
 
 #define GEN_PASS_DECL
 #define GEN_PASS_REGISTRATION
-#include "circt/Dialect/OM/OMPasses.h.inc"
+#include "circt/Dialect/Emit/EmitPasses.h.inc"
 
-} // namespace om
+} // namespace emit
 } // namespace circt
 
-#endif // CIRCT_DIALECT_OM_OMPASSES_H
+#endif // CIRCT_DIALECT_EMIT_EMITPASSES_H
