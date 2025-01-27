@@ -119,6 +119,7 @@ struct PathResult {
     size_t bitPos;
     igraph::InstancePath outputPath;
     FreezedOutputNode() = default;
+    void print(llvm::raw_ostream &os) const;
   };
   struct FreezedOutput {
     FreezedOutputNode output;
@@ -131,6 +132,7 @@ struct PathResult {
       size_t delay;
       llvm::ImmutableList<DebugPoint> points;
       FreezedInput() = default;
+      void print(llvm::raw_ostream &os) const;
     };
 
     SmallVector<FreezedInput> freezedInputs;
@@ -416,7 +418,9 @@ struct InputNode : Node {
     assert(false && "no incoming nodes");
   }
 
-  StringRef getName() const {
+  StringRef getName() const { return getNameImpl(value, bitPos); }
+
+  static StringRef getNameImpl(Value value, size_t bitPos) {
     if (auto arg = value.dyn_cast<BlockArgument>()) {
       auto op = cast<hw::HWModuleOp>(arg.getParentBlock()->getParentOp());
       return op.getArgName(arg.getArgNumber());
@@ -458,16 +462,21 @@ struct InputNode : Node {
   }
 
   void print(llvm::raw_ostream &os) const override {
-    std::string pathString;
-    llvm::raw_string_ostream osPath(pathString);
-    path.print(osPath);
-    os << "InputNode(" << pathString << "." << getName() << "[" << bitPos
-       << "])";
+    printImpl(os, path, value, bitPos);
   }
 
   void populateResults(SmallVectorImpl<ShrinkedEdge> &results) override {
     results.emplace_back(
         ShrinkedEdge{this, 0, llvm::ImmutableList<DebugPoint>()});
+  }
+
+  static void printImpl(llvm::raw_ostream &os, igraph::InstancePath path,
+                        Value value, size_t bitPos) {
+    std::string pathString;
+    llvm::raw_string_ostream osPath(pathString);
+    path.print(osPath);
+    os << "InputNode(" << pathString << "." << getNameImpl(value, bitPos) << "["
+       << bitPos << "])";
   }
 };
 
@@ -629,7 +638,7 @@ struct DelayNode : Node {
           newPoints.push_back(point);
         }
         for (auto point : llvm::reverse(newPoints)) {
-          point.delay += shrinkedEdge.delay;
+          point.delay += edge.delay;
           shrinkedEdge.points =
               getListFactory().add(point, shrinkedEdge.points);
         }
@@ -740,15 +749,22 @@ struct OutputNode : Node {
     llvm::dbgs().indent(indent) << ")\n";
   }
 
-  void print(llvm::raw_ostream &os) const override {
+  static void printImpl(llvm::raw_ostream &os, igraph::InstancePath path,
+                        Operation *op, size_t operandIdx, size_t bitPos) {
     std::string pathString;
     llvm::raw_string_ostream osPath(pathString);
     path.print(osPath);
-    os << "OutputNode(" << pathString << "." << getName() << "[" << bitPos
-       << "])";
+    os << "OutputNode(" << pathString << "." << getNameImpl(op, operandIdx)
+       << "[" << bitPos << "])";
   }
 
-  StringRef getName() const {
+  void print(llvm::raw_ostream &os) const override {
+    printImpl(os, path, op, operandIdx, bitPos);
+  }
+
+  StringRef getName() const { return getNameImpl(op, operandIdx); }
+
+  static StringRef getNameImpl(Operation *op, size_t operandIdx) {
     return TypeSwitch<Operation *, StringRef>(op)
         .Case<seq::CompRegOp, seq::FirRegOp>([&](auto op) {
           auto ref = op.getNameAttr().getValue();
@@ -1821,9 +1837,9 @@ LogicalResult LongestPathAnalysisImpl::run() {
     auto [length, outputNode, in, root] = longestPaths[i];
     os << i + 1 << ": length= " << length << " ";
     os << "root=" << root.getModuleNameAttr().getValue() << " ";
-    // outputNode->print(os);
-    // os << " -> ";
-    // inputNode->print(os);
+    outputNode.print(os);
+    os << " -> ";
+    in.print(os);
     os << "\n";
     for (auto point : in.points) {
       os.indent(2);
@@ -2039,4 +2055,13 @@ PathResult::FreezedOutput OutputNode::freeze() const {
     result.freezedInputs.push_back(edge.freeze());
   }
   return result;
+}
+
+void PathResult::FreezedOutputNode::print(llvm::raw_ostream &os) const {
+  OutputNode::printImpl(os, outputPath, op, operandIdx, bitPos);
+}
+
+void PathResult::FreezedOutput::FreezedInput::print(
+    llvm::raw_ostream &os) const {
+  InputNode::printImpl(os, inputPath, input, inputBitPos);
 }
