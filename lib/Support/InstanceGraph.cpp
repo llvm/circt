@@ -315,6 +315,7 @@ InstancePath InstancePathCache::appendInstance(InstancePath path,
 
 InstancePath InstancePathCache::prependInstance(InstanceOpInterface inst,
                                                 InstancePath path) {
+                                                  return path;
   size_t n = path.size() + 1;
   auto *newPath = allocator.Allocate<InstanceOpInterface>(n);
   std::copy(path.begin(), path.end(), newPath + 1);

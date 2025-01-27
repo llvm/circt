@@ -38,6 +38,7 @@
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Support/JSON.h"
 
+#include "llvm/Support/ThreadPool.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <queue>
@@ -992,12 +993,14 @@ struct llvm::GraphTraits<Node *> {
 
 struct Graph {
   Graph(hw::HWModuleOp mod) : theModule(mod) {}
-  size_t inlinedCount = 0;
+  std::atomic<size_t> inlinedCount = 0;
   void dropNodes() { nodePool.clear(); }
   SmallVector<Value>
       inputValues; // Ports + Instance outputs + Registers outputs.
   SmallVector<Operation *>
       outputOperations; // HW output, Instance inputs, Register inputs.
+
+  std::atomic<bool> elaborated = false;
 
   DenseMap<std::tuple<Operation *, size_t, size_t>, OutputNode *> outputNodes;
   DenseMap<Value, Node *> valueToNodes;
@@ -1064,10 +1067,9 @@ struct Graph {
       accumulateLocalPaths(outputNode);
     }
   }
-
   LogicalResult
   inlineGraph(ArrayRef<std::pair<hw::InstanceOp, Graph *>> children,
-              circt::igraph::InstancePathCache *instancePathCache) {
+              circt::igraph::InstancePathCache *instancePathCache, std::mutex& mutex) {
     // We need to clone the subgraph of the child graph which are reachable from
     // input and output nodes.
     DenseMap<InputNode *, Node *> nodeToNewNode;
@@ -1077,7 +1079,7 @@ struct Graph {
     size_t clonedNum = 0;
     SmallVector<int> dist(8);
     DenseMap<std::pair<hw::InstanceOp, circt::igraph::InstancePath>,
-            circt::igraph::InstancePath>
+             circt::igraph::InstancePath>
         localCache;
     std::function<Node *(Node *)> recurse = [&](Node *node) -> Node * {
       if (clonedResult.count(node)) {
@@ -1158,9 +1160,10 @@ struct Graph {
       if (it != localCache.end()) {
         result->setPath(it->second);
       } else {
+        std::lock_guard<std::mutex> lock(mutex);
         auto newPath = instancePathCache->prependInstance(instance, node->path);
-        result->setPath(newPath);
         localCache[{instance, newPath}] = newPath;
+        result->setPath(newPath);
       }
       clonedResult[node] = result;
       return result;
@@ -1305,11 +1308,12 @@ struct Graph {
       // Check if the childGraph can be freed.
       auto &instanceGraph = instancePathCache->instanceGraph;
       auto *instanceNode = instanceGraph.lookup(childGraph->theModule);
-      childGraph->inlinedCount++;
-      if (childGraph->inlinedCount == instanceNode->getNumUses()) {
+      auto sz = ++childGraph->inlinedCount;
+      if (sz == instanceNode->getNumUses()) {
         childGraph->dropNodes();
       }
     }
+
 
     return success();
   }
@@ -1746,10 +1750,27 @@ LogicalResult LongestPathAnalysisImpl::run() {
 
   SmallVector<PathResult> results;
   circt::igraph::InstancePathCache instancePathCache(*instanceGraph);
-  DenseSet<StringAttr> visited;
-  for (auto moduleOp : underHierarchy) {
-    auto *node = instanceGraph->lookup(moduleOp.getModuleNameAttr());
-    auto &graph = moduleToGraph.at(moduleOp.getModuleNameAttr());
+  // DenseSet<StringAttr> visited;
+  // Parallelize this part.
+
+  // Otherwise, process the elements in parallel.
+  // std::min((unsigned)underHierarchy.size(), threadPool.getMaxConcurrency());
+  // Build a wrapper processing function that properly initializes a parallel
+  // diagnostic handler.
+  DenseMap<hw::HWModuleOp, SmallVector<PathResult>> pathResults;
+
+  auto createTaskGroup = [&](hw::HWModuleOp mod) {
+    assert(mod);
+    pathResults.try_emplace(mod, SmallVector<PathResult>());
+  };
+
+  auto processModule = [&](hw::HWModuleOp mod) -> LogicalResult {
+    {
+      std::lock_guard<std::mutex> lock(mutex);
+      llvm::dbgs() << "Processing module: " << mod.getModuleName() << "\n";
+    }
+    auto *node = instanceGraph->lookup(mod.getModuleNameAttr());
+    auto &graph = moduleToGraph.at(mod.getModuleNameAttr());
     SmallVector<std::pair<hw::InstanceOp, Graph *>, 4> childInstances;
     for (auto *child : *node) {
 
@@ -1768,10 +1789,11 @@ LogicalResult LongestPathAnalysisImpl::run() {
       auto childGraph = moduleToGraph.find(target.getModuleNameAttr());
       if (childGraph == moduleToGraph.end())
         continue;
+      assert(childGraph->second->elaborated);
       childInstances.push_back({instanceOp, childGraph->second.get()});
     }
 
-    if (failed(graph->inlineGraph(childInstances, &instancePathCache))) {
+    if (failed(graph->inlineGraph(childInstances, &instancePathCache, mutex))) {
       return failure();
     }
     // Accumulate local paths.
@@ -1781,15 +1803,61 @@ LogicalResult LongestPathAnalysisImpl::run() {
     llvm::dbgs() << graph->theModule.getModuleName() << "\n";
     llvm::dbgs() << graph->locallyClosedOutputs.size() << "\n";
     llvm::dbgs() << graph->openOutputs.size() << "\n";
+    auto &results = pathResults[mod];
     for (auto outputNode : graph->locallyClosedOutputs) {
       PathResult result;
-      result.root = moduleOp;
+      result.root = mod;
       result.output = outputNode->freeze();
       result.isTopLevel = false;
       results.emplace_back(result);
     }
 
-    visited.insert(moduleOp.getModuleNameAttr());
+    graph->elaborated = true;
+
+    // visited.insert(moduleOp.getModuleNameAttr());
+    return success();
+  };
+
+  auto asyncMod = [&](hw::HWModuleOp mod) -> LogicalResult {
+    assert(mod);
+    auto &instanceGraph = instancePathCache.instanceGraph;
+    auto *node = instanceGraph.lookup(mod.getModuleNameAttr());
+    assert(node);
+
+    for (auto *child : *node) {
+      if (!child || !child->getTarget())
+        continue;
+      auto tmp = child->getTarget()->getModule();
+      if (!tmp || !isa<hw::HWModuleOp>(*tmp))
+        continue;
+      auto childMod = dyn_cast<hw::HWModuleOp>(*tmp);
+
+      // skip external modules.
+      auto childTask = moduleToGraph.find(childMod.getModuleNameAttr());
+      if (childTask == moduleToGraph.end())
+        continue;
+      while (!childTask->second->elaborated) {
+        // llvm::dbgs() << "Waiting for " << childMod.getModuleName() << " to be ";
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      }
+    };
+
+    return processModule(mod);
+  };
+
+  for (auto moduleOp : underHierarchy) {
+    createTaskGroup(moduleOp);
+  }
+
+
+  if (failed(mlir::failableParallelForEach(getContext(), underHierarchy,
+                                           asyncMod))) {
+    return failure();
+  }
+
+  for (auto &result : underHierarchy) {
+    results.insert(results.end(), pathResults[result].begin(),
+                   pathResults[result].end());
   }
 
   auto top = underHierarchy.back();
