@@ -35,6 +35,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/TinyPtrVector.h"
+#include "llvm/ADT/iterator_range.h"
 #include "llvm/Support/JSON.h"
 
 #include "llvm/Support/raw_ostream.h"
@@ -106,6 +107,38 @@ struct Edge {
   llvm::ImmutableList<DebugPoint> points;
 };
 
+struct PathResult {
+  // Path result must not have any reference to the graph.
+  // The nodes are freed after the graph is all inlined.
+  hw::HWModuleOp root;
+
+  // Output.
+  struct FreezedOutputNode {
+    Operation *op;
+    size_t operandIdx;
+    size_t bitPos;
+    igraph::InstancePath outputPath;
+    FreezedOutputNode() = default;
+  };
+  struct FreezedOutput {
+    FreezedOutputNode output;
+
+    // Input.
+    struct FreezedInput {
+      Value input;
+      size_t inputBitPos;
+      igraph::InstancePath inputPath;
+      size_t delay;
+      llvm::ImmutableList<DebugPoint> points;
+      FreezedInput() = default;
+    };
+
+    SmallVector<FreezedInput> freezedInputs;
+  } output;
+
+  bool isTopLevel;
+};
+
 struct ShrinkedEdge {
   // The input node that this edge is coming from
   InputNode *node;
@@ -114,6 +147,11 @@ struct ShrinkedEdge {
   // The debug points on this edge. Sum of the cost is equal to the delay.
   // Immutable list is to avoid copying when adding points.
   llvm::ImmutableList<DebugPoint> points;
+
+  ShrinkedEdge(InputNode *node, int64_t delay,
+               llvm::ImmutableList<DebugPoint> points)
+      : node(node), delay(delay), points(points) {}
+  PathResult::FreezedOutput::FreezedInput freeze() const;
 };
 
 struct Node {
@@ -150,6 +188,11 @@ struct Node {
     assert(false && "populateResults is not implemented");
     // assert(false && "populateResults is not implemented");
   };
+
+  virtual llvm::iterator_range<const ShrinkedEdge *> getShrinkedEdges() {
+    dump(0);
+    assert(false && "getShrinkedEdges is not implemented");
+  }
 
   virtual Node *query(size_t bitOffset) = 0;
   virtual ~Node() {}
@@ -217,6 +260,7 @@ struct DebugNode : Node {
       : Node(graph, Kind::Debug, 1), name(name), bitPos(bitPos), input(input),
         comment(comment) {}
   static bool classof(const Node *e) { return e->getKind() == Kind::Debug; }
+  std::optional<SmallVector<ShrinkedEdge>> computedResult;
   void dump(size_t indent) const override {
     llvm::dbgs().indent(indent)
         << "(debug node " << name << " " << bitPos << "\n";
@@ -265,19 +309,31 @@ struct DebugNode : Node {
 
   StringRef comment;
   StringRef getComment() const { return comment; }
+  void revertComputedResult() override { computedResult.reset(); }
+  std::optional<SmallVector<ShrinkedEdge>> &getComputedResult() {
+    if (!computedResult) {
+      computedResult = std::make_optional(SmallVector<ShrinkedEdge>());
+      populateResults(*computedResult);
+    }
+    return computedResult;
+  }
+
+  llvm::iterator_range<const ShrinkedEdge *> getShrinkedEdges() override {
+    auto &computedResult = getComputedResult();
+    return llvm::make_range(computedResult->begin(), computedResult->end());
+  }
 
   void populateResults(SmallVectorImpl<ShrinkedEdge> &results) override {
     size_t currentPos = results.size();
-    input->populateResults(results);
-    for (size_t e = results.size(); currentPos < e; ++currentPos) {
-      auto &result = results[currentPos];
+    for (auto shrinkedEdge : input->query(0)->getShrinkedEdges()) {
       DebugPoint point;
       point.name = name;
       point.bitPos = bitPos;
       point.path = path;
-      point.delay = result.delay;
+      point.delay = shrinkedEdge.delay;
       point.comment = comment;
-      result.points = getListFactory().add(point, result.points);
+      shrinkedEdge.points = getListFactory().add(point, shrinkedEdge.points);
+      results.push_back(shrinkedEdge);
     }
   }
 
@@ -293,6 +349,10 @@ struct ConstantNode : Node {
   static bool classof(const Node *e) { return e->getKind() == Kind::Constant; }
   void dump(size_t indent) const override {
     llvm::dbgs().indent(indent) << "(constant node " << width << ")";
+  }
+
+  llvm::iterator_range<const ShrinkedEdge *> getShrinkedEdges() override {
+    return llvm::make_range(nullptr, nullptr);
   }
 
   size_t getNumIncomingNodes() const override { return 0; }
@@ -324,7 +384,8 @@ struct InputNode : Node {
   Value value; // port, instance output, register, mem.
   size_t bitPos;
   InputNode(Graph *graph, Value value, size_t bitPos)
-      : Node(graph, Kind::Input, 1), value(value), bitPos(bitPos) {}
+      : Node(graph, Kind::Input, 1), value(value), bitPos(bitPos),
+        edge(this, 0, {}) {}
 
   void walk(llvm::function_ref<void(Node *)>) override;
   void walkPreOrder(llvm::function_ref<bool(Node *)>) override;
@@ -334,6 +395,13 @@ struct InputNode : Node {
     assert(bitOffset == 0 && "input node has no bit offset");
     return this;
   }
+
+  ShrinkedEdge edge;
+
+  llvm::iterator_range<const ShrinkedEdge *> getShrinkedEdges() override {
+    return llvm::make_range(&edge, &edge + 1);
+  }
+
   size_t getBitPos() const { return bitPos; }
   void dump(size_t indent) const override {
     llvm::dbgs().indent(indent)
@@ -461,6 +529,11 @@ struct DelayNode : Node {
     results.append(computedResult.begin(), computedResult.end());
   }
 
+  llvm::iterator_range<const ShrinkedEdge *> getShrinkedEdges() {
+    auto &computedResult = getComputedResult();
+    return llvm::make_range(computedResult.begin(), computedResult.end());
+  }
+
   void revertComputedResult() override { computedResult.reset(); }
 
   void shrinkEdges() {
@@ -478,18 +551,18 @@ struct DelayNode : Node {
   void computeResult() {
     computedResult = std::make_optional(SmallVector<ShrinkedEdge>());
     llvm::MapVector<InputNode *, ShrinkedEdge> maxDelays;
-    auto updateIfMax = [&maxDelays](InputNode *node, int64_t delay,
-                                    llvm::ImmutableList<DebugPoint> points) {
-      auto it = maxDelays.find(node);
-      if (it == maxDelays.end()) {
-        maxDelays[node] = ShrinkedEdge{node, delay, points};
-      } else if (it->second.delay < delay) {
-        // What if tie-breaking is needed?
-        it->second.delay = delay;
-        it->second.points = points;
-        it->second.node = node;
-      }
-    };
+    // auto update = [&maxDelays](InputNode *node, int64_t delay,
+    //                                 llvm::ImmutableList<DebugPoint> points) {
+    //   auto it = maxDelays.find(node);
+    //   if (it == maxDelays.end()) {
+    //     maxDelays[node] = ShrinkedEdge{node, delay, points};
+    //   } else if (it->second.delay < delay) {
+    //     // What if tie-breaking is needed?
+    //     it->second.delay = delay;
+    //     it->second.points = points;
+    //     it->second.node = node;
+    //   }
+    // };
 
     // std::function<void(Node *, int64_t, llvm::ImmutableList<DebugPoint>)>
     //     visitNode = [&](Node *node, int64_t delay,
@@ -539,8 +612,16 @@ struct DelayNode : Node {
     SmallVector<ShrinkedEdge> results;
     for (auto &edge : edges) {
       results.clear();
-      edge.node->populateResults(results);
-      for (auto shrinkedEdge : results) {
+      auto *queryNode = edge.node->query(0);
+      assert((isa<InputNode, DelayNode, ConstantNode, DebugNode>(queryNode)) &&
+             "query node is not an input node");
+      for (auto shrinkedEdge : queryNode->getShrinkedEdges()) {
+        auto it = maxDelays.find(shrinkedEdge.node);
+        // Check if we need to update.
+        if (it != maxDelays.end() &&
+            shrinkedEdge.delay + edge.delay <= it->second.delay)
+          continue;
+
         shrinkedEdge.delay += edge.delay;
         // Concat edge.points to shrinkedEdge.points.
         llvm::SmallVector<DebugPoint> newPoints;
@@ -552,7 +633,7 @@ struct DelayNode : Node {
           shrinkedEdge.points =
               getListFactory().add(point, shrinkedEdge.points);
         }
-        updateIfMax(shrinkedEdge.node, shrinkedEdge.delay, shrinkedEdge.points);
+        maxDelays.insert_or_assign(shrinkedEdge.node, shrinkedEdge);
       }
       // if (auto *inputNode = dyn_cast<InputNode>(edge.node))
       //   updateIfMax(inputNode, edge.delay, {});
@@ -630,12 +711,17 @@ struct OutputNode : Node {
     return node;
   }
 
-  // void map(const GraphMapping &nodeToNewNode) override {
-  //   computedResult.reset();
-  //   Node::map(nodeToNewNode);
-  // }
+  void map(const GraphMapping &nodeToNewNode) override {
+    computedResult.reset();
+    Node::map(nodeToNewNode);
+  }
 
   void revertComputedResult() override { computedResult.reset(); }
+
+  llvm::iterator_range<const ShrinkedEdge *> getShrinkedEdges() {
+    auto &computedResult = getComputedResult();
+    return llvm::make_range(computedResult.begin(), computedResult.end());
+  }
 
   OutputNode(Graph *graph, Operation *op, size_t operandIdx, size_t bitPos,
              Node *node)
@@ -724,6 +810,8 @@ struct OutputNode : Node {
   }
 
   ~OutputNode() = default;
+
+  PathResult::FreezedOutput freeze() const;
 };
 
 struct DummyTopNode : Node {
@@ -888,6 +976,8 @@ struct llvm::GraphTraits<Node *> {
 
 struct Graph {
   Graph(hw::HWModuleOp mod) : theModule(mod) {}
+  size_t inlinedCount = 0;
+  void dropNodes() { nodePool.clear(); }
   SmallVector<Value>
       inputValues; // Ports + Instance outputs + Registers outputs.
   SmallVector<Operation *>
@@ -1001,8 +1091,7 @@ struct Graph {
               })
               .Case<ConstantNode>([&](ConstantNode *node) {
                 dist[2]++;
-                return node;
-                // return allocateNode<ConstantNode>(node->width, &dummy);
+                return allocateNode<ConstantNode>(node->width, &dummy);
               })
               .Case<DelayNode>([&](DelayNode *node) {
                 dist[3]++;
@@ -1178,15 +1267,24 @@ struct Graph {
       // outputNodAcc.push_back(outPutNode);
       dummyNode.addOutputNode(outPutNode);
     }
-    for (auto *node : llvm::post_order((Node *)&dummyNode)) {
+    for (auto *node : llvm::post_order((Node *)&dummyNode))
       node->map(nodeToNewNode);
-    }
 
     outputOperations.erase(
         llvm::remove_if(outputOperations,
                         [&](Operation *op) { return isa<hw::InstanceOp>(op); }),
         outputOperations.end());
     llvm::errs() << "Done " << theModule.getModuleNameAttr() << '\n';
+
+    for (auto [instanceOp, childGraph] : children) {
+      // Check if the childGraph can be freed.
+      auto &instanceGraph = instancePathCache->instanceGraph;
+      auto *instanceNode = instanceGraph.lookup(childGraph->theModule);
+      childGraph->inlinedCount++;
+      if (childGraph->inlinedCount == instanceNode->getNumUses()) {
+        childGraph->dropNodes();
+      }
+    }
 
     return success();
   }
@@ -1621,12 +1719,6 @@ LogicalResult LongestPathAnalysisImpl::run() {
       });
   llvm::errs() << "FINISHED\n";
 
-  struct PathResult {
-    hw::HWModuleOp root;
-    OutputNode *outputNode;
-    bool isTopLevel;
-  };
-
   SmallVector<PathResult> results;
   circt::igraph::InstancePathCache instancePathCache(*instanceGraph);
   DenseSet<StringAttr> visited;
@@ -1665,12 +1757,9 @@ LogicalResult LongestPathAnalysisImpl::run() {
     llvm::dbgs() << graph->locallyClosedOutputs.size() << "\n";
     llvm::dbgs() << graph->openOutputs.size() << "\n";
     for (auto outputNode : graph->locallyClosedOutputs) {
-
-      // outputNode->print(llvm::dbgs());
-      // llvm::dbgs() << "\n";
       PathResult result;
       result.root = moduleOp;
-      result.outputNode = outputNode;
+      result.output = outputNode->freeze();
       result.isTopLevel = false;
       results.emplace_back(result);
     }
@@ -1688,7 +1777,7 @@ LogicalResult LongestPathAnalysisImpl::run() {
             topGraph->outputNodes.at({outputOp, operand.getOperandNumber(), i});
         PathResult result;
         result.root = top;
-        result.outputNode = output;
+        result.output = output->freeze();
         result.isTopLevel = true;
         results.emplace_back(result);
       }
@@ -1698,7 +1787,7 @@ LogicalResult LongestPathAnalysisImpl::run() {
   for (auto &outputNode : topGraph->openOutputs) {
     PathResult result;
     result.root = top;
-    result.outputNode = outputNode;
+    result.output = outputNode->freeze();
     result.isTopLevel = true;
     results.emplace_back(result);
   }
@@ -1706,16 +1795,17 @@ LogicalResult LongestPathAnalysisImpl::run() {
   SmallVector<llvm::json::Object> resultsJSON;
   size_t topK = 1000000;
 
-  SmallVector<std::tuple<int64_t, OutputNode *, InputNode *, hw::HWModuleOp,
-                         llvm::ImmutableList<DebugPoint>>>
+  SmallVector<
+      std::tuple<int64_t, PathResult::FreezedOutputNode,
+                 PathResult::FreezedOutput::FreezedInput, hw::HWModuleOp>>
       longestPaths;
   // std::priority_queue<std::tuple<int64_t, OutputNode *, InputNode *>> queue;
   for (auto &outputNode : results) {
     // resultsJSON.push_back(outputNode->getJSONObject());
     // outputNode->resetComputedResult();
-    for (auto &edge : outputNode.outputNode->getComputedResult()) {
-      longestPaths.emplace_back(edge.delay, outputNode.outputNode, edge.node,
-                                outputNode.root, edge.points);
+    for (auto &edge : outputNode.output.freezedInputs) {
+      longestPaths.emplace_back(edge.delay, outputNode.output.output, edge,
+                                outputNode.root);
     }
   }
 
@@ -1728,14 +1818,14 @@ LogicalResult LongestPathAnalysisImpl::run() {
   os << "Top module: " << topModuleName << "\n";
   os << "Top " << topK << " longest paths:\n";
   for (size_t i = 0; i < std::min(topK, longestPaths.size()); ++i) {
-    auto [length, outputNode, inputNode, root, points] = longestPaths[i];
+    auto [length, outputNode, in, root] = longestPaths[i];
     os << i + 1 << ": length= " << length << " ";
     os << "root=" << root.getModuleNameAttr().getValue() << " ";
-    outputNode->print(os);
-    os << " -> ";
-    inputNode->print(os);
+    // outputNode->print(os);
+    // os << " -> ";
+    // inputNode->print(os);
     os << "\n";
-    for (auto point : points) {
+    for (auto point : in.points) {
       os.indent(2);
       os << "arrived at " << point.delay << " ";
       DebugNode::printImpl(os, point.name, point.path, point.bitPos,
@@ -1927,4 +2017,26 @@ bool Node::walk2(llvm::function_ref<bool(Node *)> func) {
   }
 
   return true;
+}
+
+PathResult::FreezedOutput::FreezedInput ShrinkedEdge::freeze() const {
+  PathResult::FreezedOutput::FreezedInput result;
+  result.input = node->value;
+  result.inputBitPos = node->bitPos;
+  result.inputPath = node->path;
+  result.delay = delay;
+  result.points = points;
+  return result;
+}
+
+PathResult::FreezedOutput OutputNode::freeze() const {
+  PathResult::FreezedOutput result;
+  result.output.op = op;
+  result.output.operandIdx = operandIdx;
+  result.output.bitPos = bitPos;
+  result.output.outputPath = path;
+  for (auto &edge : node->getShrinkedEdges()) {
+    result.freezedInputs.push_back(edge.freeze());
+  }
+  return result;
 }
