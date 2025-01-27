@@ -142,7 +142,8 @@ $(IMAGE_AZ_NAME).azure.xclbin: azure_creds $(XCL_OUT) validate-fpgaimage.sh
 	bash validate-fpgaimage.sh --storage-account $(AZ_FPGA_STORAGE_ACCOUNT) \
 														 --container $(AZ_FPGA_STORAGE_CONTAINER) \
 														 --netlist-name $(IMAGE_AZ_NAME).xclbin \
-														 --blob-container-sas "$(SAS)"
+														 --blob-container-sas "$(SAS)" \
+														 --endpoint fpga-attestation-alternate-vitis.azurewebsites.net
 
 	az storage blob download \
 		--subscription $(AZ_FPGA_SUB) \
@@ -152,9 +153,7 @@ $(IMAGE_AZ_NAME).azure.xclbin: azure_creds $(XCL_OUT) validate-fpgaimage.sh
 		--name $(IMAGE_AZ_NAME).azure.xclbin --file $(IMAGE_AZ_NAME).azure.xclbin
 
 validate-fpgaimage.sh:
-	wget https://github.com/Azure/azhpc-fpga-attestation/raw/refs/heads/main/validate.zip -o azure_validate.zip
-	unzip azure_validate.zip
-	mv scripts/validate-fpgaimage.sh .
+	wget https://raw.githubusercontent.com/teqdruid/azhpc-fpga-attestation/refs/heads/jodemme/alt-url/scripts/validate-fpgaimage.sh
 
 azpackage: $(NAME)_azpackage.tar.gz
 $(NAME)_azpackage.tar.gz: $(IMAGE_AZ_NAME).azure.xclbin
