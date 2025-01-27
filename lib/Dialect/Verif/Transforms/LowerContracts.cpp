@@ -55,8 +55,8 @@ Operation *replaceContractOp(OpBuilder &builder, RequireLike op,
   return nullptr;
 }
 
-LogicalResult cloneContractOp(OpBuilder &builder, Operation *opToClone,
-                              IRMapping &mapping, bool assumeContract) {
+LogicalResult cloneOp(OpBuilder &builder, Operation *opToClone,
+                      IRMapping &mapping, bool assumeContract) {
   Operation *clonedOp;
   // Replace ensure/require ops, otherwise clone
   if (auto requireLike = dyn_cast<RequireLike>(*opToClone)) {
@@ -88,7 +88,7 @@ LogicalResult cloneContractBody(ContractOp &contract, OpBuilder &builder,
       if (failed(cloneFanIn(builder, &op, mapping, seen, assumeContract)))
         return failure();
     } else {
-      if (failed(cloneContractOp(builder, &op, mapping, assumeContract)))
+      if (failed(cloneOp(builder, &op, mapping, assumeContract)))
         return failure();
     }
   }
@@ -169,20 +169,8 @@ LogicalResult cloneFanIn(OpBuilder &builder, Operation *opToClone,
   }
 
   for (auto it = opsToClone.rbegin(); it != opsToClone.rend(); ++it) {
-    Operation *op = *it;
-    Operation *clonedOp;
-    if (auto requireLike = dyn_cast<RequireLike>(*op)) {
-      clonedOp =
-          replaceContractOp(builder, requireLike, mapping, assumeContract);
-      if (!clonedOp) {
-        return failure();
-      }
-    } else {
-      clonedOp = builder.clone(*op, mapping);
-    }
-    for (auto [x, y] : llvm::zip(op->getResults(), clonedOp->getResults())) {
-      mapping.map(x, y);
-    }
+    if (failed(cloneOp(builder, *it, mapping, assumeContract)))
+      return failure();
   }
   return success();
 }
