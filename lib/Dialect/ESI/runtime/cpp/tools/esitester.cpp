@@ -151,11 +151,16 @@ void dmaTest(Accelerator *acc, esi::services::HostMem::HostMemRegion &region,
   // Initiate a test write.
   // TODO: remove the width == 96 once multiplexing support is added.
   if (write) {
-    auto check = [&]() {
+    assert(width % 8 == 0);
+    auto check = [&](bool print) {
       region.flush();
-      for (size_t i = 0, e = (width + 63) / 64; i < e; ++i)
+      for (size_t i = 0, e = (width + 63) / 64; i < e; ++i) {
+        if (print)
+          std::cout << "dataPtr[" << i << "] = 0x" << esi::toHex(dataPtr[i])
+                    << std::endl;
         if (dataPtr[i] == 0xFFFFFFFFFFFFFFFFull)
           return false;
+      }
       return true;
     };
 
@@ -179,12 +184,19 @@ void dmaTest(Accelerator *acc, esi::services::HostMem::HostMemRegion &region,
     writeMem->write(0, reinterpret_cast<uint64_t>(devicePtr));
     // Wait for the accelerator to write. Timeout and fail after 10ms.
     for (int i = 0; i < 100; ++i) {
-      if (check())
+      if (check(false))
         break;
       std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
-    if (!check())
+    if (!check(true))
       throw std::runtime_error("DMA write test failed");
+
+    // Check that the accelerator didn't write too far.
+    size_t widthInBytes = width / 8;
+    uint8_t *dataPtr8 = reinterpret_cast<uint8_t *>(region.getPtr());
+    for (size_t i = widthInBytes, e = (widthInBytes + 7) / 8; i < e; ++i)
+      if (dataPtr8[i] != 0xFF)
+        throw std::runtime_error("DMA write test failed -- write went too far");
   }
 }
 

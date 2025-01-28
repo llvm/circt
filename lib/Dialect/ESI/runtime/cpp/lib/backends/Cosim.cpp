@@ -428,6 +428,7 @@ struct HostMemReadResp {
 };
 
 struct HostMemWriteReq {
+  uint8_t valid_bytes;
   uint64_t data;
   uint8_t tag;
   uint64_t address;
@@ -540,10 +541,13 @@ public:
             std::unique_ptr<std::map<std::string, std::any>> &details) {
           subsystem = "HostMem";
           msg = "Write request: addr=0x" + toHex(req->address) + " data=0x" +
-                toHex(req->data) + " tag=" + std::to_string(req->tag);
+                toHex(req->data) +
+                " valid_bytes=" + std::to_string(req->valid_bytes) +
+                " tag=" + std::to_string(req->tag);
         });
-    uint64_t *dataPtr = reinterpret_cast<uint64_t *>(req->address);
-    *dataPtr = req->data;
+    uint8_t *dataPtr = reinterpret_cast<uint8_t *>(req->address);
+    for (uint8_t i = 0; i < req->valid_bytes; ++i)
+      dataPtr[i] = (req->data >> (i * 8)) & 0xFF;
     HostMemWriteResp resp = req->tag;
     return MessageData::from(resp);
   }
