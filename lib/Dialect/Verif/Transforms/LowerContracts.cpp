@@ -76,49 +76,17 @@ LogicalResult cloneOp(OpBuilder &builder, Operation *opToClone,
   return llvm::success();
 }
 
-LogicalResult cloneFanIn(OpBuilder &builder, Operation *opToClone,
-                         IRMapping &mapping, DenseSet<Operation *> &seen,
-                         bool assumeContract);
-
-LogicalResult cloneContractBody(ContractOp &contract, OpBuilder &builder,
-                                IRMapping &mapping, DenseSet<Operation *> &seen,
-                                bool assumeContract, bool shouldCloneFanIn) {
-  for (auto &op : contract.getBody().front().getOperations()) {
-    if (shouldCloneFanIn) {
-      if (failed(cloneFanIn(builder, &op, mapping, seen, assumeContract)))
-        return failure();
-    } else {
-      if (failed(cloneOp(builder, &op, mapping, assumeContract)))
-        return failure();
-    }
-  }
-  return llvm::success();
-}
-
-LogicalResult inlineContract(ContractOp &contract, OpBuilder &builder,
-                             IRMapping &mapping, DenseSet<Operation *> &seen,
-                             bool shouldCloneFanIn) {
-  for (auto result : contract.getResults()) {
-    auto sym =
-        builder.create<SymbolicValueOp>(result.getLoc(), result.getType());
-    mapping.map(result, sym);
-  }
-  return cloneContractBody(contract, builder, mapping, seen, true,
-                           shouldCloneFanIn);
-}
-
 void buildOpsToClone(OpBuilder &builder, IRMapping &mapping, Operation *op,
                      SmallVector<Operation *> &opsToClone,
                      std::queue<Operation *> &workList,
                      DenseSet<Operation *> &seen, Operation *parent = nullptr) {
   if (auto contract = dyn_cast<ContractOp>(*op)) {
+    // Assume it holds
     for (auto result : contract.getResults()) {
       auto sym =
           builder.create<SymbolicValueOp>(result.getLoc(), result.getType());
       mapping.map(result, sym);
     }
-    // Assume it holds
-    // TODO: merge w/ parent/walk logic?
     auto &contractOps = contract.getBody().front().getOperations();
     for (auto it = contractOps.rbegin(); it != contractOps.rend(); ++it) {
       if (!seen.contains(&*it)) {
@@ -147,8 +115,9 @@ void buildOpsToClone(OpBuilder &builder, IRMapping &mapping, Operation *op,
 }
 
 LogicalResult cloneFanIn(OpBuilder &builder, Operation *opToClone,
-                         IRMapping &mapping, DenseSet<Operation *> &seen,
-                         bool assumeContract) {
+                         IRMapping &mapping, DenseSet<Operation *> &seen) {
+  if (seen.contains(opToClone))
+    return success();
   SmallVector<Operation *> opsToClone;
   std::queue<Operation *> workList;
   workList.push(opToClone);
@@ -169,7 +138,71 @@ LogicalResult cloneFanIn(OpBuilder &builder, Operation *opToClone,
   }
 
   for (auto it = opsToClone.rbegin(); it != opsToClone.rend(); ++it) {
-    if (failed(cloneOp(builder, *it, mapping, assumeContract)))
+    if (failed(cloneOp(builder, *it, mapping, true)))
+      return failure();
+  }
+  return success();
+}
+
+LogicalResult cloneOperands(Operation *op, OpBuilder &builder,
+                            IRMapping &mapping, DenseSet<Operation *> &seen,
+                            Operation *parent = nullptr) {
+  for (auto operand : op->getOperands()) {
+    if (mapping.contains(operand))
+      continue;
+    auto *definingOp = operand.getDefiningOp();
+    if (!definingOp) {
+      auto sym = builder.create<verif::SymbolicValueOp>(operand.getLoc(),
+                                                        operand.getType());
+      mapping.map(operand, sym);
+      continue;
+    }
+    if (parent && parent->isAncestor(definingOp))
+      continue;
+    if (failed(cloneFanIn(builder, definingOp, mapping, seen)))
+      return failure();
+  }
+  return success();
+}
+
+    LogicalResult
+    inlineContract(ContractOp &contract, OpBuilder &builder, IRMapping &mapping,
+                   DenseSet<Operation *> &seen, bool assumeContract,
+                   bool shouldCloneFanIn) {
+  if (shouldCloneFanIn) {
+    // Clone fan in cone for contract operands
+    if (failed(cloneOperands(contract, builder, mapping, seen)))
+      return failure();
+
+    // Also clone fan in cone for nested operations, skip any operations
+    // contained within the contract since they'll be cloned later as part of
+    // the contract body
+    if (contract->walk([&](Operation *nestedOp) {
+      if (failed(cloneOperands(nestedOp, builder, mapping, seen, contract))) 
+        return WalkResult::interrupt();
+      return WalkResult::advance();
+    }).wasInterrupted())
+      return failure();
+  }
+
+  if (assumeContract) {
+    // Create symbolic values for results
+    for (auto result : contract.getResults()) {
+      auto sym =
+          builder.create<SymbolicValueOp>(result.getLoc(), result.getType());
+      mapping.map(result, sym);
+    }
+  } else {
+    // Map results by looking up the input mappings
+    for (auto [result, input] :
+         llvm::zip(contract.getResults(), contract.getInputs())) {
+      mapping.map(result, mapping.lookup(input));
+    }
+  }
+
+  // Clone body of the contract
+  for (auto &op : contract.getBody().front().getOperations()) {
+    if (failed(cloneOp(builder, &op, mapping, assumeContract)))
       return failure();
   }
   return success();
@@ -200,35 +233,24 @@ LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
     IRMapping mapping;
     DenseSet<Operation *> seen;
 
-    // Clone fan in cone for contract operands
-    for (auto operand : contract.getOperands()) {
-      auto *definingOp = operand.getDefiningOp();
-      if (failed(cloneFanIn(formalBuilder, definingOp, mapping, seen, true)))
-        return failure();
-    }
-
-    // Map results by looking up the input mappings
-    for (auto [result, input] :
-         llvm::zip(contract.getResults(), contract.getInputs())) {
-      mapping.map(result, mapping.lookup(input));
-    }
-
-    // Clone body of the contract
-    if (failed(cloneContractBody(contract, formalBuilder, mapping, seen, false,
-                                 true)))
+    if (failed(inlineContract(contract, formalBuilder, mapping, seen, false,
+                              true)))
       return failure();
   }
+
   for (auto contract : contracts) {
     // Inline contract into hwModule
     hwModuleBuilder.setInsertionPointAfter(contract);
     IRMapping mapping;
     DenseSet<Operation *> seen;
-    if (failed(inlineContract(contract, hwModuleBuilder, mapping, seen, false)))
+    if (failed(inlineContract(contract, hwModuleBuilder, mapping, seen, true,
+                              false)))
       return failure();
     for (auto result : contract.getResults())
       result.replaceAllUsesWith(mapping.lookup(result));
     contract.erase();
   }
+
   return success();
 }
 } // namespace
