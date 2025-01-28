@@ -76,27 +76,31 @@ LogicalResult cloneOp(OpBuilder &builder, Operation *opToClone,
   return llvm::success();
 }
 
+void assumeContractHolds(OpBuilder &builder, IRMapping &mapping,
+                         ContractOp contract,
+                         SmallVector<Operation *> &opsToClone,
+                         std::queue<Operation *> &workList,
+                         DenseSet<Operation *> &seen) {
+  // Assume it holds by creating symbolic values for the results and inlining
+  // the contract ops into the worklist, by default the clone logic replaces
+  // contract ops with the assume variant
+  for (auto result : contract.getResults()) {
+    auto sym =
+        builder.create<SymbolicValueOp>(result.getLoc(), result.getType());
+    mapping.map(result, sym);
+  }
+  auto &contractOps = contract.getBody().front().getOperations();
+  for (auto it = contractOps.rbegin(); it != contractOps.rend(); ++it) {
+    if (!seen.contains(&*it)) {
+      workList.push(&*it);
+    }
+  }
+}
+
 void buildOpsToClone(OpBuilder &builder, IRMapping &mapping, Operation *op,
                      SmallVector<Operation *> &opsToClone,
                      std::queue<Operation *> &workList,
-                     DenseSet<Operation *> &seen, bool assumeContract,
-                     Operation *parent = nullptr) {
-  auto contract = dyn_cast<ContractOp>(*op);
-  if (contract && assumeContract) {
-    // Assume it holds
-    for (auto result : contract.getResults()) {
-      auto sym =
-          builder.create<SymbolicValueOp>(result.getLoc(), result.getType());
-      mapping.map(result, sym);
-    }
-    auto &contractOps = contract.getBody().front().getOperations();
-    for (auto it = contractOps.rbegin(); it != contractOps.rend(); ++it) {
-      if (!seen.contains(&*it)) {
-        workList.push(&*it);
-      }
-    }
-    return;
-  }
+                     DenseSet<Operation *> &seen, Operation *parent = nullptr) {
   for (auto operand : op->getOperands()) {
     if (mapping.contains(operand))
       continue;
@@ -116,34 +120,46 @@ void buildOpsToClone(OpBuilder &builder, IRMapping &mapping, Operation *op,
   }
 }
 
-LogicalResult cloneFanIn(OpBuilder &builder, Operation *opToClone,
+LogicalResult cloneFanIn(OpBuilder &builder, Operation *contractToClone,
                          IRMapping &mapping) {
   DenseSet<Operation *> seen;
   SmallVector<Operation *> opsToClone;
   std::queue<Operation *> workList;
-  workList.push(opToClone);
+  workList.push(contractToClone);
+
   while (!workList.empty()) {
     auto *currentOp = workList.front();
     workList.pop();
+
     if (seen.contains(currentOp))
       continue;
-    seen.insert(currentOp);
-    auto contract = dyn_cast<ContractOp>(*currentOp);
-    bool assumeContract = contract && (currentOp != opToClone);
 
-    buildOpsToClone(builder, mapping, currentOp, opsToClone, workList, seen,
-                    assumeContract);
-    if (contract && assumeContract)
+    seen.insert(currentOp);
+
+    auto contract = dyn_cast<ContractOp>(*currentOp);
+    // If it's not the contract being cloned, assume it holds
+    if (contract && (currentOp != contractToClone)) {
+      assumeContractHolds(builder, mapping, contract, opsToClone, workList,
+                          seen);
+      // If a contract is assumed, it's nested ops are inlined into the worklist
+      // so no need to walk the body or clone the op
       continue;
+    }
+
+    // Clone fan in for operands
+    buildOpsToClone(builder, mapping, currentOp, opsToClone, workList, seen);
+    // Clone fan in for nested ops
     currentOp->walk([&](Operation *nestedOp) {
       buildOpsToClone(builder, mapping, nestedOp, opsToClone, workList, seen,
-                      assumeContract, currentOp);
+                      currentOp);
     });
-    // Contracts are cloned differently
-    if (!contract)
+
+    // Source contract is cloned externally
+    if (currentOp != contractToClone)
       opsToClone.push_back(currentOp);
   }
 
+  // Clone the ops in reverse order so mapping is available for operands
   for (auto it = opsToClone.rbegin(); it != opsToClone.rend(); ++it) {
     if (failed(cloneOp(builder, *it, mapping, true)))
       return failure();
