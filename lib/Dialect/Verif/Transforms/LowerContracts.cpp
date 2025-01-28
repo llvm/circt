@@ -168,12 +168,11 @@ LogicalResult cloneFanIn(OpBuilder &builder, Operation *contractToClone,
 }
 
 LogicalResult inlineContract(ContractOp &contract, OpBuilder &builder,
-                             bool assumeContract, bool shouldCloneFanIn,
-                             bool replaceResults) {
+                             bool assumeContract) {
   IRMapping mapping;
   DenseSet<Operation *> seen;
-  if (shouldCloneFanIn) {
-    // Clone fan in cone for contract
+  if (!assumeContract) {
+    // Inlining into formal op, need to clone fan in cone for contract
     if (failed(cloneFanIn(builder, contract, mapping)))
       return failure();
   }
@@ -199,7 +198,8 @@ LogicalResult inlineContract(ContractOp &contract, OpBuilder &builder,
       return failure();
   }
 
-  if (replaceResults) {
+  if (assumeContract) {
+    // Inlining into hw module, need to update the results using the mapping
     for (auto result : contract.getResults())
       result.replaceAllUsesWith(mapping.lookup(result));
   }
@@ -228,14 +228,14 @@ LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
     OpBuilder formalBuilder(formalOp);
     formalBuilder.createBlock(&formalOp.getBody());
 
-    if (failed(inlineContract(contract, formalBuilder, false, true, false)))
+    if (failed(inlineContract(contract, formalBuilder, false)))
       return failure();
   }
 
   for (auto contract : contracts) {
     // Inline contract into hwModule
     hwModuleBuilder.setInsertionPointAfter(contract);
-    if (failed(inlineContract(contract, hwModuleBuilder, true, false, true)))
+    if (failed(inlineContract(contract, hwModuleBuilder, true)))
       return failure();
     contract.erase();
   }
