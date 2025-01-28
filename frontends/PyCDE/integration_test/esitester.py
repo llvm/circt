@@ -126,6 +126,7 @@ def ReadMem(width: int):
   return ReadMem
 
 
+@modparams
 def WriteMem(width: int) -> typing.Type['WriteMem']:
 
   class WriteMem(Module):
@@ -190,7 +191,9 @@ class EsiTesterTop(Module):
     ReadMem(32)(appid=esi.AppID("readmem", 32), clk=ports.clk, rst=ports.rst)
     ReadMem(64)(appid=esi.AppID("readmem", 64), clk=ports.clk, rst=ports.rst)
     ReadMem(96)(appid=esi.AppID("readmem", 96), clk=ports.clk, rst=ports.rst)
-    WriteMem(96)(clk=ports.clk, rst=ports.rst)
+    WriteMem(32)(appid=esi.AppID("writemem", 32), clk=ports.clk, rst=ports.rst)
+    WriteMem(64)(appid=esi.AppID("writemem", 64), clk=ports.clk, rst=ports.rst)
+    WriteMem(96)(appid=esi.AppID("writemem", 96), clk=ports.clk, rst=ports.rst)
 
 
 if __name__ == "__main__":
