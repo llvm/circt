@@ -165,10 +165,9 @@ LogicalResult cloneOperands(Operation *op, OpBuilder &builder,
   return success();
 }
 
-    LogicalResult
-    inlineContract(ContractOp &contract, OpBuilder &builder, IRMapping &mapping,
-                   DenseSet<Operation *> &seen, bool assumeContract,
-                   bool shouldCloneFanIn) {
+LogicalResult inlineContract(ContractOp &contract, OpBuilder &builder,
+                             IRMapping &mapping, DenseSet<Operation *> &seen,
+                             bool assumeContract, bool shouldCloneFanIn) {
   if (shouldCloneFanIn) {
     // Clone fan in cone for contract operands
     if (failed(cloneOperands(contract, builder, mapping, seen)))
@@ -177,11 +176,14 @@ LogicalResult cloneOperands(Operation *op, OpBuilder &builder,
     // Also clone fan in cone for nested operations, skip any operations
     // contained within the contract since they'll be cloned later as part of
     // the contract body
-    if (contract->walk([&](Operation *nestedOp) {
-      if (failed(cloneOperands(nestedOp, builder, mapping, seen, contract))) 
-        return WalkResult::interrupt();
-      return WalkResult::advance();
-    }).wasInterrupted())
+    if (contract
+            ->walk([&](Operation *nestedOp) {
+              if (failed(cloneOperands(nestedOp, builder, mapping, seen,
+                                       contract)))
+                return WalkResult::interrupt();
+              return WalkResult::advance();
+            })
+            .wasInterrupted())
       return failure();
   }
 
