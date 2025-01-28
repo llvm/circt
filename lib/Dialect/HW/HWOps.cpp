@@ -1129,6 +1129,11 @@ LogicalResult HWModuleOp::verify() {
     return emitOpError("entry block must have")
            << numInputs << " arguments to match module signature";
 
+  // Check there are no HiZ outputs
+  for (auto t : type.getPorts())
+    if (t.dir != ModulePort::Direction::Input && isa<HiZType>(type))
+      return emitOpError("HiZ types may only be inputs");
+
   return success();
 }
 
