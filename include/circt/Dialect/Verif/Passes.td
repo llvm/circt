@@ -58,7 +58,7 @@ def LowerContractsPass : Pass<"lower-contracts", "mlir::ModuleOp"> {
     into `assume`s in the original `hw.module` op body.  Results of the
     contract are replaced with `verif.symbolic_value` ops.  In some cases,
     using the `SimplifyAssumeEqPass` after lowering contracts and before
-    canonicalization and cse can result in a greatly simplify `hw.module` op
+    canonicalization and cse can result in a greatly simplified `hw.module` op
     body.
   }];
 }

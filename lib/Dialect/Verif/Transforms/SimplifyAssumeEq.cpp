@@ -55,11 +55,7 @@ struct AssumeEqRewritePattern : public OpRewritePattern<verif::AssumeOp> {
   LogicalResult matchAndRewrite(AssumeOp op,
                                 PatternRewriter &rewriter) const override {
     auto prop = op.getProperty();
-    auto *definingOp = prop.getDefiningOp();
-    if (!definingOp)
-      return llvm::failure();
-
-    auto icmp = dyn_cast<comb::ICmpOp>(definingOp);
+    auto icmp = prop.getDefiningOp<comb::ICmpOp>();
     if (!icmp)
       return llvm::failure();
 
