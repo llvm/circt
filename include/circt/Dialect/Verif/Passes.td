@@ -54,7 +54,7 @@ def LowerContractsPass : Pass<"lower-contracts", "mlir::ModuleOp"> {
     `verif.symbolic_value` ops and other contracts are assumed to hold by
     inlining the contract body.
 
-    Contracts are applied by turing `require`s into `assert`s and `ensure`s
+    Contracts are applied by turning `require`s into `assert`s and `ensure`s
     into `assume`s in the original `hw.module` op body.  Results of the
     contract are replaced with `verif.symbolic_value` ops.  In some cases,
     using the `SimplifyAssumeEqPass` after lowering contracts and before
