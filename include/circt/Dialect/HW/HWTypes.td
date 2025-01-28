@@ -41,6 +41,33 @@ def InOutType : DialectType<HWDialect,
     CPred<"::circt::hw::type_isa<circt::hw::InOutType>($_self)">,
           "InOutType", "::circt::hw::InOutType">;
 
+def HiZType : DialectType<HWDialect,
+    CPred<"::circt::hw::type_isa<circt::hw::HiZType>($_self)">,
+          "HiZType", "::circt::hw::HiZType">;
+
+
+// This type constraint is used by operations whose asm strings have a type "T"
+// in the asmstring, which constraints an input or output to type `T`, and then
+// constraints another to `!hw.hiZ<T>`.  The "value" and "hiZValue" are the
+// name of the operand or result for the type sides of this.
+//
+// Note that the hiZValue must be constrained to being an HiZElementType to
+// ensure that functions and other things aren't passed into this.
+class HiZTypeConstraint<string value, string hiZValue>
+  : TypesMatchWith<"type should be element of hiZ type",
+                   value, hiZValue,
+                   "HiZType::get($_self.getContext(), $_self)">;
+
+// This type constraint indicates that the specified value matches the element
+// type of the specified hiZValue.  It is the dual to HiZTypeConstraint used
+// when inference needs to "go the other way".
+//
+// Note that the hiZValue must be constrained to being an HiZElementType to
+// ensure that functions and other things aren't passed into this.
+class HiZElementConstraint<string value, string hiZValue>
+  : TypesMatchWith<"type should be element of hiZ type",
+                   hiZValue, value, "hw::getHiZElementType($_self)">;
+
 class InOutTypeOf<list<Type> allowedTypes>
   : ContainerType<AnyTypeOf<allowedTypes>, CPred<"::circt::hw::type_isa<::circt::hw::InOutType>($_self)">,
     "::circt::hw::type_cast<::circt::hw::InOutType>($_self).getElementType()", "InOutType">;

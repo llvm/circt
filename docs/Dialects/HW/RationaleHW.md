@@ -81,6 +81,19 @@ constructs that work with the inout type.  These aren't necessary
 for combinational logic, but are nonetheless pretty useful when generating
 Verilog.
 
+### `hiZ` Type
+
+Use of high impedance is uncommon in digital design, relegated to only a few,
+generally low-speed, uses.  Because of this, we separate high-impedance 
+signaling from the rest of the type system through a high impedance type
+wrapper and read and conditional drive operations.  Not having implicit `z` in
+the normal types seen by most of the system greatly simplifies semantics.
+
+HiZ types may only be inputs to modules.
+
+CIRCT makes no attempt to protect against physically unwise uses of high 
+impedance busses, such as multiple drivers.
+
 ### `enum` Type
 
 Enum types have the property that the bit width of the type is the minimum 
