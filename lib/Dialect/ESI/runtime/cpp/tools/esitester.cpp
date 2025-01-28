@@ -149,19 +149,32 @@ void dmaTest(Accelerator *acc, esi::services::HostMem::HostMemRegion &region,
   }
 
   // Initiate a test write.
-  if (write) {
+  // TODO: remove the width == 96 once multiplexing support is added.
+  if (write && width == 96) {
+    auto check = [&]() {
+      region.flush();
+      for (size_t i = 0, e = (width + 63) / 64; i < e; ++i)
+        if (dataPtr[i] == 0xFFFFFFFFFFFFFFFFull)
+          return false;
+      return true;
+    };
+
     auto *writeMem = acc->getPorts()
                          .at(AppID("WriteMem"))
                          .getAs<services::MMIO::MMIORegion>();
-    *dataPtr = 0;
-    writeMem->write(0, (uint64_t)dataPtr);
+    for (size_t i = 0, e = (width + 63) / 64; i < e; ++i)
+      dataPtr[i] = 0xFFFFFFFFFFFFFFFFull;
+    region.flush();
+    // Command the accelerator to write to 'devicePtr', the pointer which the
+    // device should use for 'dataPtr'.
+    writeMem->write(0, reinterpret_cast<uint64_t>(devicePtr));
     // Wait for the accelerator to write. Timeout and fail after 10ms.
     for (int i = 0; i < 100; ++i) {
-      if (*dataPtr != 0)
+      if (check())
         break;
       std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
-    if (*dataPtr == 0)
+    if (!check())
       throw std::runtime_error("DMA write test failed");
   }
 }
