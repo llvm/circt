@@ -42,23 +42,23 @@ hw.module @Mul9(in %a: i42, out z: i42) {
 // CHECK-NEXT: }
 
 // CHECK: verif.formal @CarrySaveCompress3to2_CheckContract_0 {
-// CHECK-NEXT:   %false = hw.constant false
-// CHECK-NEXT:   %0 = verif.symbolic_value : i42
-// CHECK-NEXT:   %1 = verif.symbolic_value : i42
-// CHECK-NEXT:   %2 = verif.symbolic_value : i42
-// CHECK-NEXT:   %3 = comb.xor %0, %1, %2 : i42
-// CHECK-NEXT:   %4 = comb.extract %0 from 0 : (i42) -> i41
-// CHECK-NEXT:   %5 = comb.extract %1 from 0 : (i42) -> i41
-// CHECK-NEXT:   %6 = comb.or %4, %5 : i41
-// CHECK-NEXT:   %7 = comb.extract %2 from 0 : (i42) -> i41
-// CHECK-NEXT:   %8 = comb.and %6, %7 : i41
-// CHECK-NEXT:   %9 = comb.and %4, %5 : i41
-// CHECK-NEXT:   %10 = comb.or %9, %8 : i41
-// CHECK-NEXT:   %11 = comb.concat %10, %false : i41, i1
-// CHECK-NEXT:   %12 = comb.add %0, %1, %2 : i42
-// CHECK-NEXT:   %13 = comb.add %3, %11 : i42
-// CHECK-NEXT:   %14 = comb.icmp eq %12, %13 : i42
-// CHECK-NEXT:   verif.assert %14 : i1
+// CHECK-NEXT:    %false = hw.constant false
+// CHECK-NEXT:    %0 = verif.symbolic_value : i42
+// CHECK-NEXT:    %1 = verif.symbolic_value : i42
+// CHECK-NEXT:    %2 = verif.symbolic_value : i42
+// CHECK-NEXT:    %3 = comb.extract %0 from 0 : (i42) -> i41
+// CHECK-NEXT:    %4 = comb.extract %1 from 0 : (i42) -> i41
+// CHECK-NEXT:    %5 = comb.or %3, %4 : i41
+// CHECK-NEXT:    %6 = comb.extract %2 from 0 : (i42) -> i41
+// CHECK-NEXT:    %7 = comb.and %5, %6 : i41
+// CHECK-NEXT:    %8 = comb.and %3, %4 : i41
+// CHECK-NEXT:    %9 = comb.or %8, %7 : i41
+// CHECK-NEXT:    %10 = comb.concat %9, %false : i41, i1
+// CHECK-NEXT:    %11 = comb.xor %0, %1, %2 : i42
+// CHECK-NEXT:    %12 = comb.add %0, %1, %2 : i42
+// CHECK-NEXT:    %13 = comb.add %11, %10 : i42
+// CHECK-NEXT:    %14 = comb.icmp eq %12, %13 : i42
+// CHECK-NEXT:    verif.assert %14 : i1
 // CHECK-NEXT: }
 
 hw.module @CarrySaveCompress3to2(
@@ -183,17 +183,17 @@ hw.module @NoContract(in %a: i42, out z: i42) {
 // CHECK-NEXT: }
 
 // CHECK: verif.formal @TwoContracts_CheckContract_1 {} {
-// CHECK-NEXT:   %false = hw.constant false
-// CHECK-NEXT:   %c2_i42 = hw.constant 2 : i42
-// CHECK-NEXT:   %0 = verif.symbolic_value : i42
-// CHECK-NEXT:   %1 = verif.symbolic_value : i42
-// CHECK-NEXT:   %2 = comb.icmp ult %1, %c2_i42 : i42
-// CHECK-NEXT:   verif.assert %2 : i1
-// CHECK-NEXT:   %3 = comb.extract %1 from 0 : (i42) -> i41
-// CHECK-NEXT:   %4 = comb.concat %3, %false : i41, i1
-// CHECK-NEXT:   %5 = comb.icmp eq %0, %4 : i42
-// CHECK-NEXT:   verif.assume %5 : i1
-// CHECK-NEXT:   verif.assert %5 : i1
+// CHECK-NEXT:    %false = hw.constant false
+// CHECK-NEXT:    %c2_i42 = hw.constant 2 : i42
+// CHECK-NEXT:    %0 = verif.symbolic_value : i42
+// CHECK-NEXT:    %1 = verif.symbolic_value : i42
+// CHECK-NEXT:    %2 = comb.icmp ult %0, %c2_i42 : i42
+// CHECK-NEXT:    verif.assert %2 : i1
+// CHECK-NEXT:    %3 = comb.extract %0 from 0 : (i42) -> i41
+// CHECK-NEXT:    %4 = comb.concat %3, %false : i41, i1
+// CHECK-NEXT:    %5 = comb.icmp eq %1, %4 : i42
+// CHECK-NEXT:    verif.assume %5 : i1
+// CHECK-NEXT:    verif.assert %5 : i1
 // CHECK-NEXT: }
 
 hw.module @TwoContracts(in %a: i42, out z: i42) {
@@ -234,22 +234,22 @@ hw.module @TwoContracts(in %a: i42, out z: i42) {
 // CHECK-NEXT: }
 
 // CHECK: verif.formal @NestedContract_CheckContract_0 {} {
-// CHECK-NEXT:   %false = hw.constant false
-// CHECK-NEXT:   %0 = verif.symbolic_value : i1
-// CHECK-NEXT:   %1 = verif.symbolic_value : i42
-// CHECK-NEXT:   %2 = comb.mul %1, %1 : i42
-// CHECK-NEXT:   %3 = comb.extract %1 from 0 : (i42) -> i41
-// CHECK-NEXT:   %4 = comb.concat %3, %false : i41, i1
-// CHECK-NEXT:   %5 = scf.if %0 -> (i42) {
-// CHECK-NEXT:     %8 = comb.add %4, %2 : i42
-// CHECK-NEXT:     scf.yield %8 : i42
-// CHECK-NEXT:   } else {
-// CHECK-NEXT:     %8 = comb.mul %4, %2 : i42
-// CHECK-NEXT:     scf.yield %8 : i42
-// CHECK-NEXT:   }
-// CHECK-NEXT:   %6 = verif.symbolic_value : i42
-// CHECK-NEXT:   %7 = comb.icmp eq %5, %6 : i42
-// CHECK-NEXT:   verif.assert %7 : i1
+// CHECK-NEXT:    %false = hw.constant false
+// CHECK-NEXT:    %0 = verif.symbolic_value : i42
+// CHECK-NEXT:    %1 = verif.symbolic_value : i1
+// CHECK-NEXT:    %2 = verif.symbolic_value : i42
+// CHECK-NEXT:    %3 = comb.mul %2, %2 : i42
+// CHECK-NEXT:    %4 = comb.extract %2 from 0 : (i42) -> i41
+// CHECK-NEXT:    %5 = comb.concat %4, %false : i41, i1
+// CHECK-NEXT:    %6 = scf.if %1 -> (i42) {
+// CHECK-NEXT:      %8 = comb.add %5, %3 : i42
+// CHECK-NEXT:      scf.yield %8 : i42
+// CHECK-NEXT:    } else {
+// CHECK-NEXT:      %8 = comb.mul %5, %3 : i42
+// CHECK-NEXT:      scf.yield %8 : i42
+// CHECK-NEXT:    }
+// CHECK-NEXT:    %7 = comb.icmp eq %6, %0 : i42
+// CHECK-NEXT:    verif.assert %7 : i1
 // CHECK-NEXT: }
 
 hw.module @NestedContract(in %a: i42, in %b: i42, in %s: i1, out z: i42) {
