@@ -793,7 +793,8 @@ def TaggedDemux(num_clients: int,
                 channel_type: Channel) -> typing.Type["TaggedDemuxImpl"]:
   """Construct a tagged demultiplexer for a given tagged data type.
   'tagged_data_type' is assumed to be a struct with a 'tag' field and a 'data'
-  field. Demux the data to the appropriate output channel based on the tag."""
+  field OR a UInt representing the tag itself. Demux the data to the appropriate
+  output channel based on the tag."""
 
   class TaggedDemuxImpl(Module):
     clk = Clock()
@@ -812,10 +813,17 @@ def TaggedDemux(num_clients: int,
     def build(ports) -> None:
       upstream_ready_wire = Wire(Bits(1))
       upstream_data, upstream_valid = ports.in_.unwrap(upstream_ready_wire)
+      upstream_data_type = upstream_data.type
 
       upstream_ready = Bits(1)(1)
       for idx in range(num_clients):
-        output_valid = upstream_valid & (upstream_data.tag == UInt(8)(idx))
+        if isinstance(upstream_data_type, StructType):
+          tag = upstream_data.tag
+        elif isinstance(upstream_data_type, UInt):
+          tag = upstream_data
+        else:
+          raise TypeError("TaggedDemux input must be a struct or UInt.")
+        output_valid = upstream_valid & (tag == UInt(8)(idx))
         output_ch, output_ready = channel_type.wrap(upstream_data, output_valid)
         setattr(ports, TaggedDemuxImpl.output_names[idx], output_ch)
         upstream_ready = upstream_ready & output_ready

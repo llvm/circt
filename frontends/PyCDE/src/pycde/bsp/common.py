@@ -489,10 +489,14 @@ def TaggedWriteGearbox(input_bitwidth: int,
         upstream_data_bits = client_data
         upstream_valid = client_valid
         ready_for_client.assign(upstream_ready)
+        tag = client_tag_and_data.tag
+        address = client_tag_and_data.address
       elif output_bitwidth > input_bitwidth:
         upstream_data_bits = client_data.as_bits(output_bitwidth)
         upstream_valid = client_valid
         ready_for_client.assign(upstream_ready)
+        tag = client_tag_and_data.tag
+        address = client_tag_and_data.address
       else:
         # Create registers equal to the number of upstream transactions needed
         # to complete the transmission.
@@ -521,21 +525,23 @@ def TaggedWriteGearbox(input_bitwidth: int,
         clear.assign(upstream_xact & (counter.out == (num_chunks - 1)))
         increment.assign(upstream_xact)
         ready_for_client.assign(~upstream_valid)
+        counter_bytes = BitsSignal.concat([counter.out.as_bits(),
+                                           Bits(3)(0)]).as_uint()
 
-      # Construct the output channel. Shared logic across all three cases.
-      tag_reg = client_tag_and_data.tag.reg(ports.clk,
-                                            ce=client_xact,
-                                            name="tag_reg")
-      addr_reg = client_tag_and_data.address.reg(ports.clk,
-                                                 ce=client_xact,
-                                                 name="address_reg")
-      counter_bytes = BitsSignal.concat([counter.out.as_bits(),
-                                         Bits(3)(0)]).as_uint()
-      addr_incremented = (addr_reg + counter_bytes).as_uint(64)
+        # Construct the output channel. Shared logic across all three cases.
+        tag_reg = client_tag_and_data.tag.reg(ports.clk,
+                                              ce=client_xact,
+                                              name="tag_reg")
+        addr_reg = client_tag_and_data.address.reg(ports.clk,
+                                                   ce=client_xact,
+                                                   name="address_reg")
+        address = (addr_reg + counter_bytes).as_uint(64)
+        tag = tag_reg
+
       upstream_channel, upstrm_ready_sig = TaggedWriteGearboxImpl.out.type.wrap(
           {
-              "address": addr_incremented,
-              "tag": tag_reg,
+              "address": address,
+              "tag": tag,
               "data": upstream_data_bits,
           }, upstream_valid)
       upstream_ready.assign(upstrm_ready_sig)
@@ -584,29 +590,31 @@ def HostMemWriteProcessor(
         ports.upstream = write_bundle
         return
 
-      # TODO: mux together multiple write clients.
-      assert len(reqs) == 1, "Only one write client supported for now."
+      assert len(reqs) <= 256, "More than 256 write clients not supported."
+
       upstream_req_channel = Wire(Channel(hostmem_module.UpstreamWriteReq))
       upstream_write_bundle, froms = hostmem_module.write.type.pack(
           req=upstream_req_channel)
       ports.upstream = upstream_write_bundle
       upstream_ack_tag = froms["ackTag"]
+
+      demuxed_acks = esi.TaggedDemux(len(reqs), upstream_ack_tag.type)(
+          clk=ports.clk, rst=ports.rst, in_=upstream_ack_tag)
+
       # TODO: re-write the tags and store the client and client tag.
 
       # Build the write request channels and ack wires.
       write_channels: List[ChannelSignal] = []
-      for req in reqs:
+      for idx, req in enumerate(reqs):
         # Get the request channel and its data type.
         reqch = [c.channel for c in req.type.channels if c.name == 'req'][0]
         client_type = reqch.inner_type
 
-        # Write acks to be filled in later.
-        write_ack = upstream_ack_tag
-
         # Pack up the bundle and assign the request channel.
         write_req_bundle_type = esi.HostMem.write_req_bundle_type(
             client_type.data)
-        bundle_sig, froms = write_req_bundle_type.pack(ackTag=write_ack)
+        bundle_sig, froms = write_req_bundle_type.pack(
+            ackTag=demuxed_acks.get_out(idx))
 
         tagged_client_req = froms["req"]
         bitcast_client_req = tagged_client_req.transform(lambda m: client_type({
@@ -620,7 +628,12 @@ def HostMemWriteProcessor(
                                      write_width)(clk=ports.clk,
                                                   rst=ports.rst,
                                                   in_=bitcast_client_req)
-        write_channels.append(gearbox.out)
+        write_channels.append(
+            gearbox.out.transform(lambda m: m.type({
+                "address": m.address,
+                "tag": idx,
+                "data": m.data,
+            })))
         # Set the port for the client request.
         setattr(ports, HostMemWriteProcessorImpl.reqPortMap[req], bundle_sig)
 

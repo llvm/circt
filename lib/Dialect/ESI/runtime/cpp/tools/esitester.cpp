@@ -150,7 +150,7 @@ void dmaTest(Accelerator *acc, esi::services::HostMem::HostMemRegion &region,
 
   // Initiate a test write.
   // TODO: remove the width == 96 once multiplexing support is added.
-  if (write && width == 96) {
+  if (write) {
     auto check = [&]() {
       region.flush();
       for (size_t i = 0, e = (width + 63) / 64; i < e; ++i)
@@ -159,9 +159,18 @@ void dmaTest(Accelerator *acc, esi::services::HostMem::HostMemRegion &region,
       return true;
     };
 
-    auto *writeMem = acc->getPorts()
-                         .at(AppID("WriteMem"))
-                         .getAs<services::MMIO::MMIORegion>();
+    auto writeMemChildIter = acc->getChildren().find(AppID("writemem", width));
+    if (writeMemChildIter == acc->getChildren().end())
+      throw std::runtime_error("DMA test failed. No writemem child found");
+    auto &writeMemPorts = writeMemChildIter->second->getPorts();
+    auto writeMemPortIter = writeMemPorts.find(AppID("WriteMem"));
+    if (writeMemPortIter == writeMemPorts.end())
+      throw std::runtime_error("DMA test failed. No WriteMem port found");
+    auto *writeMem =
+        writeMemPortIter->second.getAs<services::MMIO::MMIORegion>();
+    if (!writeMem)
+      throw std::runtime_error("DMA test failed. WriteMem port is not MMIO");
+
     for (size_t i = 0, e = (width + 63) / 64; i < e; ++i)
       dataPtr[i] = 0xFFFFFFFFFFFFFFFFull;
     region.flush();
