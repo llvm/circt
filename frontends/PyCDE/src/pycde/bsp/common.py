@@ -6,8 +6,8 @@ from __future__ import annotations
 from math import ceil
 
 from ..common import Clock, Input, InputChannel, Output, OutputChannel, Reset
-from ..constructs import (AssignableSignal, ControlReg, Counter, NamedWire, Reg,
-                          Wire)
+from ..constructs import (AssignableSignal, ControlReg, Counter, Mux, NamedWire,
+                          Reg, Wire)
 from .. import esi
 from ..module import Module, generator, modparams
 from ..signals import BitsSignal, BundleSignal, ChannelSignal
@@ -458,6 +458,8 @@ def TaggedWriteGearbox(input_bitwidth: int,
 
   if output_bitwidth % 8 != 0:
     raise ValueError("Output bitwidth must be a multiple of 8.")
+  if input_bitwidth % 8 != 0:
+    raise ValueError("Input bitwidth must be a multiple of 8.")
 
   class TaggedWriteGearboxImpl(Module):
     clk = Clock()
@@ -473,7 +475,10 @@ def TaggedWriteGearbox(input_bitwidth: int,
             ("address", UInt(64)),
             ("tag", esi.HostMem.TagType),
             ("data", Bits(output_bitwidth)),
+            ("valid_bytes", Bits(8)),
         ]))
+
+    num_chunks = ceil(input_bitwidth / output_bitwidth)
 
     @generator
     def build(ports):
@@ -482,6 +487,8 @@ def TaggedWriteGearbox(input_bitwidth: int,
       client_tag_and_data, client_valid = ports.in_.unwrap(ready_for_client)
       client_data = client_tag_and_data.data
       client_xact = ready_for_client & client_valid
+      input_bitwidth_bytes = input_bitwidth // 8
+      output_bitwidth_bytes = output_bitwidth // 8
 
       # Determine if gearboxing is necessary and whether it needs to be
       # gearboxed up or just sliced down.
@@ -491,19 +498,23 @@ def TaggedWriteGearbox(input_bitwidth: int,
         ready_for_client.assign(upstream_ready)
         tag = client_tag_and_data.tag
         address = client_tag_and_data.address
+        valid_bytes = Bits(8)(input_bitwidth_bytes)
       elif output_bitwidth > input_bitwidth:
         upstream_data_bits = client_data.as_bits(output_bitwidth)
         upstream_valid = client_valid
         ready_for_client.assign(upstream_ready)
         tag = client_tag_and_data.tag
         address = client_tag_and_data.address
+        valid_bytes = Bits(8)(input_bitwidth_bytes)
       else:
         # Create registers equal to the number of upstream transactions needed
         # to complete the transmission.
-        num_chunks = ceil(input_bitwidth / output_bitwidth)
+        num_chunks = TaggedWriteGearboxImpl.num_chunks
         num_chunks_idx_bitwidth = clog2(num_chunks)
-        padding = Bits(output_bitwidth - (input_bitwidth % output_bitwidth))(0)
-        client_data_padded = BitsSignal.concat([padding, client_data])
+        padding_numbits = output_bitwidth - (input_bitwidth % output_bitwidth)
+        assert padding_numbits % 8 == 0, "Padding must be a multiple of 8."
+        client_data_padded = BitsSignal.concat(
+            [Bits(padding_numbits)(0), client_data])
         chunks = [
             client_data_padded[i * output_bitwidth:(i + 1) * output_bitwidth]
             for i in range(num_chunks)
@@ -537,12 +548,16 @@ def TaggedWriteGearbox(input_bitwidth: int,
                                                    name="address_reg")
         address = (addr_reg + counter_bytes).as_uint(64)
         tag = tag_reg
+        valid_bytes = Mux(counter.out == (num_chunks - 1),
+                          Bits(8)(output_bitwidth_bytes),
+                          Bits(8)(padding_numbits // 8))
 
       upstream_channel, upstrm_ready_sig = TaggedWriteGearboxImpl.out.type.wrap(
           {
               "address": address,
               "tag": tag,
               "data": upstream_data_bits,
+              "valid_bytes": valid_bytes
           }, upstream_valid)
       upstream_ready.assign(upstrm_ready_sig)
       ports.out = upstream_channel
@@ -584,7 +599,8 @@ def HostMemWriteProcessor(
             {
                 "address": 0,
                 "tag": 0,
-                "data": 0
+                "data": 0,
+                "valid_bytes": 0,
             }, 0)
         write_bundle, _ = hostmem_module.write.type.pack(req=req)
         ports.upstream = write_bundle
@@ -633,6 +649,7 @@ def HostMemWriteProcessor(
                 "address": m.address,
                 "tag": idx,
                 "data": m.data,
+                "valid_bytes": m.valid_bytes
             })))
         # Set the port for the client request.
         setattr(ports, HostMemWriteProcessorImpl.reqPortMap[req], bundle_sig)
@@ -670,10 +687,14 @@ def ChannelHostMem(read_width: int,
                     ("data", Bits(read_width)),
                 ])),
         ]))
+
+    if write_width % 8 != 0:
+      raise ValueError("Write width must be a multiple of 8.")
     UpstreamWriteReq = StructType([
         ("address", UInt(64)),
         ("tag", UInt(8)),
         ("data", Bits(write_width)),
+        ("valid_bytes", Bits(8)),
     ])
     write = Output(
         Bundle([
