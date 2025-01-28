@@ -606,3 +606,17 @@ firrtl.circuit "FormalMarkerIsUse" {
   firrtl.formal @Test, @Foo {}
   "some_unknown_dialect.op"() { magic = @Bar, other = @Uninstantiated } : () -> ()
 }
+
+// -----
+
+// Block arguments on operations that aren't modules, e.g. contracts, must not
+// crash the `firrtl::hasDontTouch` query.
+// CHECK-LABEL: firrtl.circuit "NonModuleBlockArgsMustNotCrash"
+firrtl.circuit "NonModuleBlockArgsMustNotCrash" {
+  firrtl.module @NonModuleBlockArgsMustNotCrash(in %a: !firrtl.uint<42>, out %b: !firrtl.uint<42>) {
+    %0 = firrtl.contract %a : !firrtl.uint<42> {
+    ^bb0(%arg0: !firrtl.uint<42>):
+    }
+    firrtl.matchingconnect %b, %0 : !firrtl.uint<42>
+  }
+}
