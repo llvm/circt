@@ -8,7 +8,7 @@ from ..module import Module, generator
 from ..signals import BitsSignal, Struct
 from ..system import System
 from ..support import clog2
-from ..types import Bits, Channel, StructType, UInt
+from ..types import Array, Bits, Channel, UInt
 from .. import esi
 
 from .common import ChannelHostMem, ChannelMMIO, Reset
@@ -382,7 +382,7 @@ def XrtBSP(user_module):
       ports.m_axi_gmem_ARID = read_req_data.tag
       # TODO: Test reads > HostMemDataWidthBytes. I'm pretty sure this is wrong
       # for lengths >512bits but initially we won't be transferring >512 bits.
-      ports.m_axi_gmem_ARSIZE = Bits(3)(clog2(HostMemDataWidthBytes) - 1)
+      ports.m_axi_gmem_ARSIZE = clog2(HostMemDataWidthBytes)
       ports.m_axi_gmem_ARLEN = (read_req_data.length /
                                 HostMemDataWidthBytes).as_uint(8)
       ports.m_axi_gmem_ARBURST = Bits(2)(1)  # INCR
@@ -399,30 +399,46 @@ def XrtBSP(user_module):
 
       ##########################################################################
       # Write path
-      # TODO: this
       ##########################################################################
 
       write_ack_wire = Wire(Channel(esi.HostMem.TagType))
       write_req = hostmem.write.unpack(ackTag=write_ack_wire)['req']
+      address_req, data_req = write_req.fork(ports.ap_clk, rst)
+
+      # Write address channels
+      address_req_data, address_req_valid = address_req.unwrap(
+          ports.m_axi_gmem_AWREADY)
+      ports.m_axi_gmem_AWVALID = address_req_valid
+      ports.m_axi_gmem_AWADDR = address_req_data.address.as_bits()
+      ports.m_axi_gmem_AWID = address_req_data.tag.as_bits()
+      ports.m_axi_gmem_AWLEN = Bits(8)(0)  # Single xact burst.
+      ports.m_axi_gmem_AWSIZE = clog2(HostMemDataWidthBytes)
+      ports.m_axi_gmem_AWBURST = Bits(2)(1)  # INCR
+
+      # Write data channels
+      data_req_data, data_req_valid = data_req.unwrap(ports.m_axi_gmem_WREADY)
+      ports.m_axi_gmem_WVALID = data_req_valid
+      ports.m_axi_gmem_WDATA = data_req_data.data
+
+      wstrb_lookup_table_len = HostMemDataWidthBytes
+      wstrb_lookup_table = Array(Bits(HostMemDataWidthBytes),
+                                 wstrb_lookup_table_len)([
+                                     Bits(HostMemDataWidthBytes)(2**vb - 1)
+                                     for vb in range(wstrb_lookup_table_len)
+                                 ])
+      # TODO: Single writes only support HostMemDataWidthBytes bytes. Fine for
+      # now since the gearbox takes data down to 512 bits. The `valid_bytes`
+      # field, however, is 8 bits, so it theoretically supports up to 256 bytes.
+      # We should probably break this up into multiple transactions.
+      ports.m_axi_gmem_WSTRB = wstrb_lookup_table[
+          data_req_data.valid_bytes.as_uint(clog2(wstrb_lookup_table_len))]
+      ports.m_axi_gmem_WLAST = Bits(1)(1)
+
+      # Write ack channel
       write_ack, write_ack_ready = Channel(esi.HostMem.TagType).wrap(
-          esi.HostMem.TagType(0),
-          Bits(1)(0))
+          ports.m_axi_gmem_BID.as_uint(), ports.m_axi_gmem_BVALID)
       write_ack_wire.assign(write_ack)
-
-      # Tie off the write side outputs.
-      ports.m_axi_gmem_AWVALID = Bits(1)(0)
-      ports.m_axi_gmem_AWADDR = Bits(XrtTop.HostMemAddressWidth)(0)
-      ports.m_axi_gmem_AWID = Bits(XrtTop.HostMemIdWidth)(0)
-      ports.m_axi_gmem_AWLEN = Bits(8)(0)
-      ports.m_axi_gmem_AWSIZE = Bits(3)(0)
-      ports.m_axi_gmem_AWBURST = Bits(2)(0)
-
-      ports.m_axi_gmem_WVALID = Bits(1)(0)
-      ports.m_axi_gmem_WDATA = Bits(XrtTop.HostMemDataWidth)(0)
-      ports.m_axi_gmem_WSTRB = Bits(XrtTop.HostMemDataWidth // 8)(0)
-      ports.m_axi_gmem_WLAST = Bits(1)(0)
-
-      ports.m_axi_gmem_BREADY = Bits(1)(0)
+      ports.m_axi_gmem_BREADY = write_ack_ready
 
     @staticmethod
     def package(sys: System):
