@@ -73,6 +73,18 @@ public:
     return unsupportedInstructionsFile;
   }
 
+  RtgToolOptions &setSplitOutput(bool enable) {
+    splitOutput = enable;
+    return *this;
+  }
+  bool getSplitOutput() const { return splitOutput; }
+
+  RtgToolOptions &setOutputPath(StringRef path) {
+    outputPath = path;
+    return *this;
+  }
+  std::string getOutputPath() const { return outputPath; }
+
 private:
   OutputFormat outputFormat = OutputFormat::ElaboratedMLIR;
   unsigned seed;
@@ -80,6 +92,8 @@ private:
   bool verbosePassExecution = false;
   SmallVector<std::string> unsupportedInstructions;
   std::string unsupportedInstructionsFile;
+  bool splitOutput = false;
+  std::string outputPath;
 };
 
 /// Populates the passes necessary to lower IR with RTG randomization operations
