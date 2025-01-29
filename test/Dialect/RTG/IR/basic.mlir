@@ -1,8 +1,7 @@
-// RUN: circt-opt %s | FileCheck %s
+// RUN: circt-opt %s --verify-roundtrip | FileCheck %s
 
 // CHECK-LABEL: rtg.sequence @seq
-// CHECK-SAME: attributes {rtg.some_attr} {
-rtg.sequence @seq0 attributes {rtg.some_attr} {
+rtg.sequence @seq0() {
   %arg = arith.constant 1 : index
   // CHECK: [[LBL0:%.*]] = rtg.label_decl "label_string_{0}_{1}", %{{.*}}, %{{.*}}
   %0 = rtg.label_decl "label_string_{0}_{1}", %arg, %arg
@@ -16,14 +15,16 @@ rtg.sequence @seq0 attributes {rtg.some_attr} {
   rtg.label external %0
 }
 
+// CHECK-LABEL: rtg.sequence @seqAttrsAndTypeElements
+// CHECK-SAME: (%arg0: !rtg.sequence<!rtg.sequence<!rtg.label, !rtg.set<index>>>) attributes {rtg.some_attr} {
+rtg.sequence @seqAttrsAndTypeElements(%arg0: !rtg.sequence<!rtg.sequence<!rtg.label, !rtg.set<index>>>) attributes {rtg.some_attr} {}
+
 // CHECK-LABEL: rtg.sequence @seq1
-// CHECK: ^bb0(%arg0: i32, %arg1: !rtg.sequence):
-rtg.sequence @seq1 {
-^bb0(%arg0: i32, %arg1: !rtg.sequence):
-}
+// CHECK-SAME: (%arg0: i32, %arg1: !rtg.sequence)
+rtg.sequence @seq1(%arg0: i32, %arg1: !rtg.sequence) { }
 
 // CHECK-LABEL: rtg.sequence @invocations
-rtg.sequence @invocations {
+rtg.sequence @invocations() {
   // CHECK: [[V0:%.+]] = rtg.sequence_closure @seq0
   // CHECK: [[C0:%.+]] = arith.constant 0 : i32
   // CHECK: [[V1:%.+]] = rtg.sequence_closure @seq1([[C0]], [[V0]] : i32, !rtg.sequence)
@@ -55,8 +56,7 @@ func.func @sets(%arg0: i32, %arg1: i32) {
 }
 
 // CHECK-LABEL: @bags
-rtg.sequence @bags {
-^bb0(%arg0: i32, %arg1: i32, %arg2: index):
+rtg.sequence @bags(%arg0: i32, %arg1: i32, %arg2: index) {
   // CHECK: [[BAG:%.+]] = rtg.bag_create (%arg2 x %arg0, %arg2 x %arg1) : i32 {rtg.some_attr}
   // CHECK: [[R:%.+]] = rtg.bag_select_random [[BAG]] : !rtg.bag<i32> {rtg.some_attr}
   // CHECK: [[EMPTY:%.+]] = rtg.bag_create : i32

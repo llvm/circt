@@ -19,15 +19,26 @@ include "mlir/IR/AttrTypeBase.td"
 class RTGTypeDef<string name> : TypeDef<RTGDialect, name>;
 
 def SequenceType : RTGTypeDef<"Sequence"> {
-  let summary = "handle to a sequence closure";
+  let summary = "handle to a sequence or sequence family";
   let description = [{
-    An SSA value of this type refers to an `rtg.sequence` operation and the
-    argument values it should be invoked with (if it has any).
+    An SSA value of this type refers to a sequence if the list of element types
+    is empty or a sequence family if there are elements left to be substituted.
   }];
 
+  let parameters = (ins OptionalArrayRefParameter<
+                          "mlir::Type", "element types">:$elementTypes);
+
   let mnemonic = "sequence";
-  let assemblyFormat = "";
+  let assemblyFormat = "(`<` $elementTypes^ `>`)?";
 }
+
+def FullySubstitutedSequenceType : DialectType<RTGDialect,
+    CPred<"llvm::isa<rtg::SequenceType>($_self) && "
+          "llvm::cast<rtg::SequenceType>($_self).getElementTypes().empty()">,
+    "fully substituted sequence type", "::circt::rtg::SequenceType">,
+  BuildableType<
+    "::circt::rtg::SequenceType::get($_builder.getContext(), " #
+                                    "llvm::ArrayRef<::mlir::Type>{})">;
 
 def LabelType : RTGTypeDef<"Label"> {
   let summary = "a reference to a label";

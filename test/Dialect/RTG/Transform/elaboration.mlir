@@ -108,15 +108,13 @@ rtg.target @target1 : !rtg.dict<num_cpus: index> {
 
 // Unused sequences are removed
 // CHECK-NOT: rtg.sequence @unused
-rtg.sequence @unused {}
+rtg.sequence @unused() {}
 
-rtg.sequence @seq0 {
-^bb0(%arg0: index):
+rtg.sequence @seq0(%arg0: index) {
   func.call @dummy2(%arg0) : (index) -> ()
 }
 
-rtg.sequence @seq1 {
-^bb0(%arg0: index):
+rtg.sequence @seq1(%arg0: index) {
   %0 = rtg.sequence_closure @seq0(%arg0 : index)
   func.call @dummy2(%arg0) : (index) -> ()
   rtg.invoke_sequence %0
@@ -134,8 +132,7 @@ rtg.test @nestedSequences : !rtg.dict<> {
   rtg.invoke_sequence %1
 }
 
-rtg.sequence @seq2 {
-^bb0(%arg0: index):
+rtg.sequence @seq2(%arg0: index) {
   func.call @dummy2(%arg0) : (index) -> ()
 }
 
@@ -153,8 +150,7 @@ rtg.test @sameSequenceDifferentArgs : !rtg.dict<> {
   rtg.invoke_sequence %3
 }
 
-rtg.sequence @seq3 {
-^bb0(%arg0: !rtg.set<index>):
+rtg.sequence @seq3(%arg0: !rtg.set<index>) {
   %0 = rtg.set_select_random %arg0 : !rtg.set<index> // we can't use a custom seed here because it would render the test useless
   func.call @dummy2(%0) : (index) -> ()
 }

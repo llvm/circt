@@ -32,8 +32,20 @@ bool rtgTypeIsASequence(MlirType type) {
   return isa<SequenceType>(unwrap(type));
 }
 
-MlirType rtgSequenceTypeGet(MlirContext ctxt) {
-  return wrap(SequenceType::get(unwrap(ctxt)));
+MlirType rtgSequenceTypeGet(MlirContext ctxt, intptr_t numElements,
+                            MlirType const *elementTypes) {
+  SmallVector<Type> types;
+  for (unsigned i = 0; i < numElements; ++i)
+    types.emplace_back(unwrap(elementTypes[i]));
+  return wrap(SequenceType::get(unwrap(ctxt), types));
+}
+
+unsigned rtgSequenceTypeGetNumElements(MlirType type) {
+  return cast<SequenceType>(unwrap(type)).getElementTypes().size();
+}
+
+MlirType rtgSequenceTypeGetElement(MlirType type, unsigned i) {
+  return wrap(cast<SequenceType>(unwrap(type)).getElementTypes()[i]);
 }
 
 // LabelType
