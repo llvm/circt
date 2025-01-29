@@ -6333,7 +6333,10 @@ void ModuleEmitter::emitPortList(Operation *module,
         ps << "output ";
         break;
       case ModulePort::Direction::Input:
-        ps << (hasOutputs ? "input  " : "input ");
+        if (isa<HiZType>(portType))
+          ps << (hasOutputs ? "inout " : "inout ");
+        else
+          ps << (hasOutputs ? "input  " : "input ");
         break;
       case ModulePort::Direction::InOut:
         ps << (hasOutputs ? "inout  " : "inout ");
