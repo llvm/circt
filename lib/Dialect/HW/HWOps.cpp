@@ -1764,6 +1764,13 @@ LogicalResult OutputOp::verify() {
 // Other Operations
 //===----------------------------------------------------------------------===//
 
+void CreateHiZOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the wire has an optional 'name' attribute, use it.
+  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
+  if (nameAttr && !nameAttr.getValue().empty())
+    setNameFn(getResult(), nameAttr.getValue());
+}
+
 static ParseResult parseSliceTypes(OpAsmParser &p, Type &srcType,
                                    Type &idxType) {
   Type type;

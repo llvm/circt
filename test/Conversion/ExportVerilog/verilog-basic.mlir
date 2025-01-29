@@ -390,6 +390,18 @@ hw.module @SimpleConstPrintReset(in %clock: i1, in %reset: i1, in %in4: i4) {
 
 }
 
+ // CHECK-LABEL: hw.module @HIZ(in %foo : !hw.hiZ<i2>, out o : i2) {
+hw.module @HIZ(in %foo : !hw.hiZ<i2>, out o : i2) {
+  %a = hw.constant 42 : i12
+  %b = hw.constant 1 : i2
+  %t = hw.constant 1 : i1
+  %l0 = hw.hiZ.create : !hw.hiZ<i12>
+  hw.hiZ.drive %l0, %a, %t : i12
+  hw.hiZ.drive %foo, %b, %t : i2
+  %l2 = hw.hiZ.sample %foo : i2
+  hw.output %l2 : i2
+}
+
 // CHECK-LABEL: module InlineDeclAssignment
 hw.module @InlineDeclAssignment(in %a: i1) {
   // CHECK: wire b = a;

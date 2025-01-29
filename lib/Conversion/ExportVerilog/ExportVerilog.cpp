@@ -278,6 +278,8 @@ static void getTypeDims(SmallVectorImpl<Attribute> &dims, Type type,
 
   if (auto inout = hw::type_dyn_cast<InOutType>(type))
     return getTypeDims(dims, inout.getElementType(), loc);
+  if (auto hiz = hw::type_dyn_cast<HiZType>(type))
+    return getTypeDims(dims, hiz.getElementType(), loc);
   if (auto uarray = hw::type_dyn_cast<hw::UnpackedArrayType>(type))
     return getTypeDims(dims, uarray.getElementType(), loc);
   if (auto uarray = hw::type_dyn_cast<sv::UnpackedOpenArrayType>(type))
@@ -1552,7 +1554,7 @@ static StringRef getVerilogDeclWord(Operation *op,
 
     return "reg";
   }
-  if (isa<sv::WireOp>(op))
+  if (isa<sv::WireOp, CreateHiZOp>(op))
     return "wire";
   if (isa<ConstantOp, AggregateConstantOp, LocalParamOp, ParamValueOp>(op))
     return "localparam";
@@ -1845,6 +1847,12 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         os << typedecl.getPreferredName();
         emitDims(dims, os, typedecl->getLoc(), emitter);
         return true;
+      })
+      .Case<HiZType>([&](HiZType hiz) {
+        return printPackedTypeImpl(hiz.getElementType(), os, loc, dims,
+                                   implicitIntType, singleBitDefaultType,
+                                   emitter, /*optionalAliasType=*/{},
+                                   emitAsTwoStateType);
       })
       .Default([&](Type type) {
         os << "<<invalid type '" << type << "'>>";
@@ -2365,6 +2373,7 @@ private:
   SubExprInfo visitTypeOp(UnionExtractOp op);
   SubExprInfo visitTypeOp(EnumCmpOp op);
   SubExprInfo visitTypeOp(EnumConstantOp op);
+  SubExprInfo visitTypeOp(ReadHiZOp op);
 
   // Comb Dialect Operations
   using CombinationalVisitor::visitComb;
@@ -3340,6 +3349,11 @@ SubExprInfo ExprEmitter::visitTypeOp(EnumConstantOp op) {
   return {Selection, IsUnsigned};
 }
 
+SubExprInfo ExprEmitter::visitTypeOp(ReadHiZOp op) {
+ auto info = emitSubExpr(op.getInput(), LowestPrecedence);
+  return {Symbol, info.signedness};
+}
+
 SubExprInfo ExprEmitter::visitTypeOp(EnumCmpOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
@@ -3976,6 +3990,9 @@ private:
   LogicalResult visitStmt(TypeScopeOp op);
   LogicalResult visitStmt(TypedeclOp op);
 
+  LogicalResult visitStmt(DriveHiZOp op);
+  LogicalResult visitStmt(CreateHiZOp op);
+
   LogicalResult emitIfDef(Operation *op, MacroIdentAttr cond);
   LogicalResult visitSV(OrderedOutputOp op);
   LogicalResult visitSV(IfDefOp op) { return emitIfDef(op, op.getCond()); }
@@ -4350,6 +4367,27 @@ LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
     ps << PP::end;
   emitLocationInfoAndNewLine(ops);
   return success();
+}
+
+LogicalResult StmtEmitter::visitStmt(DriveHiZOp op) {
+  startStatement();
+  ps.addCallback({op, true});
+  SmallPtrSet<Operation *, 8> emitted;
+
+  ps << "assign ";
+  emitExpression(op.getInput(), emitted);
+  ps << " = ";
+  emitExpression(op.getCond(), emitted);
+  ps << " ? ";
+  emitExpression(op.getValue(), emitted);
+  ps << " : 'z;";
+  ps.addCallback({op, false});
+  setPendingNewline();
+  return success();
+}
+
+LogicalResult StmtEmitter::visitStmt(CreateHiZOp op) {
+  return emitDeclaration(op);
 }
 
 template <typename CallOpTy>

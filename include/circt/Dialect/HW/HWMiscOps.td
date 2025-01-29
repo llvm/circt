@@ -225,7 +225,7 @@ def DriveHiZOp
 }
 
 def CreateHiZOp
- : HWOp<"hiZ.create", []> {
+ : HWOp<"hiZ.create", [DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Create a new HiZ bus";
   let description = [{
     High impedance busses must come from somewhere.  Thw two options are as
@@ -233,9 +233,9 @@ def CreateHiZOp
     new bus.
   }];
 
-  let arguments = (ins);
+  let arguments = (ins OptionalAttr<StrAttr>:$name);
   let results = (outs HiZType:$result);
-  let assemblyFormat = "attr-dict `:` qualified(type($result))";
+  let assemblyFormat = "custom<ImplicitSSAName>($name) attr-dict `:` qualified(type($result))";
  }
 
 #endif // CIRCT_DIALECT_HW_HWMISCOPS_TD
