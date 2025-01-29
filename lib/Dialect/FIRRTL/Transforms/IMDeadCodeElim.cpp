@@ -492,19 +492,21 @@ void IMDeadCodeElimPass::visitValue(Value value) {
 
   // Requiring an input port propagates the liveness to each instance.
   if (auto blockArg = dyn_cast<BlockArgument>(value)) {
-    auto module = cast<FModuleOp>(blockArg.getParentBlock()->getParentOp());
-    auto portDirection = module.getPortDirection(blockArg.getArgNumber());
-    // If the port is input, it's necessary to mark corresponding input ports of
-    // instances as alive. We don't have to propagate the liveness of output
-    // ports.
-    if (portDirection == Direction::In) {
-      for (auto *instRec : instanceGraph->lookup(module)->uses()) {
-        auto instance = cast<InstanceOp>(instRec->getInstance());
-        if (liveElements.contains(instance))
-          markAlive(instance.getResult(blockArg.getArgNumber()));
+    if (auto module =
+            dyn_cast<FModuleOp>(blockArg.getParentBlock()->getParentOp())) {
+      auto portDirection = module.getPortDirection(blockArg.getArgNumber());
+      // If the port is input, it's necessary to mark corresponding input ports
+      // of instances as alive. We don't have to propagate the liveness of
+      // output ports.
+      if (portDirection == Direction::In) {
+        for (auto *instRec : instanceGraph->lookup(module)->uses()) {
+          auto instance = cast<InstanceOp>(instRec->getInstance());
+          if (liveElements.contains(instance))
+            markAlive(instance.getResult(blockArg.getArgNumber()));
+        }
       }
+      return;
     }
-    return;
   }
 
   // Marking an instance port as alive propagates to the corresponding port of
@@ -533,10 +535,15 @@ void IMDeadCodeElimPass::visitValue(Value value) {
     return;
   }
 
-  // If op is defined by an operation, mark its operands as alive.
-  if (auto op = value.getDefiningOp())
+  // If the value is defined by an operation, mark its operands alive and any
+  // nested blocks executable.
+  if (auto op = value.getDefiningOp()) {
     for (auto operand : op->getOperands())
       markAlive(operand);
+    for (auto &region : op->getRegions())
+      for (auto &block : region)
+        markBlockExecutable(&block);
+  }
 
   // If either result of a forceable declaration is alive, they both are.
   if (auto fop = value.getDefiningOp<Forceable>();
