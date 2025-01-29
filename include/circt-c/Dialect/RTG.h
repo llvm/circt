@@ -58,6 +58,28 @@ MLIR_CAPI_EXPORTED MlirType rtgDictTypeGet(MlirContext ctxt,
                                            MlirAttribute const *entryNames,
                                            MlirType const *entryTypes);
 
+//===----------------------------------------------------------------------===//
+// Attribute API.
+//===----------------------------------------------------------------------===//
+
+enum RTGLabelVisibility {
+  RTG_LABEL_VISIBILITY_LOCAL,
+  RTG_LABEL_VISIBILITY_GLOBAL,
+  RTG_LABEL_VISIBILITY_EXTERNAL
+};
+typedef enum RTGLabelVisibility RTGLabelVisibility;
+
+/// If the attribute is an RTG label visibility.
+MLIR_CAPI_EXPORTED bool rtgAttrIsALabelVisibilityAttr(MlirAttribute attr);
+
+/// Get the RTG label visibility from the attribute.
+MLIR_CAPI_EXPORTED RTGLabelVisibility
+rtgLabelVisibilityAttrGetValue(MlirAttribute attr);
+
+/// Creates an RTG label visibility attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute
+rtgLabelVisibilityAttrGet(MlirContext ctxt, RTGLabelVisibility visibility);
+
 #ifdef __cplusplus
 }
 #endif
