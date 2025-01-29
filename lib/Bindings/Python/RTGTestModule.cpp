@@ -30,6 +30,14 @@ void circt::python::populateDialectRTGTestSubmodule(nb::module_ &m) {
           },
           nb::arg("self"), nb::arg("ctxt") = nullptr);
 
+  mlir_type_subclass(m, "IntegerRegisterType", rtgtestTypeIsAIntegerRegister)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, MlirContext ctxt) {
+            return cls(rtgtestIntegerRegisterTypeGet(ctxt));
+          },
+          nb::arg("self"), nb::arg("ctxt") = nullptr);
+
   mlir_type_subclass(m, "Imm12Type", rtgtestTypeIsAImm12)
       .def_classmethod(
           "get",

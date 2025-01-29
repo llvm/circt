@@ -88,11 +88,13 @@ with Context() as ctx, Location.unknown():
     labelTy = rtg.LabelType.get()
     setTy = rtg.SetType.get(indexTy)
     bagTy = rtg.BagType.get(indexTy)
+    ireg = rtgtest.IntegerRegisterType.get()
     seq = rtg.SequenceOp('seq')
-    Block.create_at_start(seq.bodyRegion, [sequenceTy, labelTy, setTy, bagTy])
+    Block.create_at_start(seq.bodyRegion,
+                          [sequenceTy, labelTy, setTy, bagTy, ireg])
 
   # CHECK: rtg.sequence @seq
-  # CHECK: (%{{.*}}: !rtg.sequence, %{{.*}}: !rtg.label, %{{.*}}: !rtg.set<index>, %{{.*}}: !rtg.bag<index>):
+  # CHECK: (%{{.*}}: !rtg.sequence, %{{.*}}: !rtg.label, %{{.*}}: !rtg.set<index>, %{{.*}}: !rtg.bag<index>, %{{.*}}: !rtgtest.ireg):
   print(m)
 
 with Context() as ctx, Location.unknown():

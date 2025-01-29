@@ -21,6 +21,16 @@ static void testCPUType(MlirContext ctx) {
   mlirTypeDump(cpuTy);
 }
 
+static void testIntegerRegisterType(MlirContext ctx) {
+  MlirType iregTy = rtgtestIntegerRegisterTypeGet(ctx);
+
+  // CHECK: is_ireg
+  fprintf(stderr,
+          rtgtestTypeIsAIntegerRegister(iregTy) ? "is_ireg\n" : "isnot_ireg\n");
+  // CHECK: !rtgtest.ireg
+  mlirTypeDump(iregTy);
+}
+
 static void testCPUAttr(MlirContext ctx) {
   MlirAttribute cpuAttr = rtgtestCPUAttrGet(ctx, 3);
 
@@ -322,6 +332,7 @@ int main(int argc, char **argv) {
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__rtgtest__(), ctx);
 
   testCPUType(ctx);
+  testIntegerRegisterType(ctx);
   testCPUAttr(ctx);
   testRegisters(ctx);
   testImmediates(ctx);
