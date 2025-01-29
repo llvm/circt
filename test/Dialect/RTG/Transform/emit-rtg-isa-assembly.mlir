@@ -10,12 +10,16 @@ rtg.test @test0 : !rtg.dict<> {
   %rd = rtg.fixed_reg #rtgtest.ra
   %rs = rtg.fixed_reg #rtgtest.s0
   %imm = rtgtest.immediate #rtgtest.imm12<0>
+  %imm5 = rtgtest.immediate #rtgtest.imm5<31>
+  %imm21 = rtgtest.immediate #rtgtest.imm21<0>
+  %imm32 = rtgtest.immediate #rtgtest.imm32<0>
+  %neg_imm = rtgtest.immediate #rtgtest.imm12<4080>
   %imm13 = rtgtest.immediate #rtgtest.imm13<6144>
 
-  // CHECK-ALLOWED-NEXT:    jalr ra, 0(s0)
-  // CHECK-NEXT:    # jalr ra, 0(s0)
-  // CHECK-NEXT:    .word 0x400E7
-  rtgtest.rv32i.jalr %rd, %rs, %imm
+  // CHECK-ALLOWED-NEXT:    jalr ra, -16(s0)
+  // CHECK-NEXT:    # jalr ra, -16(s0)
+  // CHECK-NEXT:    .word 0xFF0400E7
+  rtgtest.rv32i.jalr %rd, %rs, %neg_imm
 
   // CHECK-ALLOWED-NEXT:    lb ra, 0(s0)
   // CHECK-NEXT:    # lb ra, 0(s0)
@@ -132,10 +136,10 @@ rtg.test @test0 : !rtg.dict<> {
   // CHECK-NEXT:    .word 0x8470B3
   rtgtest.rv32i.and %rd, %rs, %rs
 
-  // CHECK-ALLOWED-NEXT:    sb ra, 0(s0)
-  // CHECK-NEXT:    # sb ra, 0(s0)
-  // CHECK-NEXT:    .word 0x808023
-  rtgtest.rv32i.sb %rd, %rs, %imm
+  // CHECK-ALLOWED-NEXT:    sb ra, -16(s0)
+  // CHECK-NEXT:    # sb ra, -16(s0)
+  // CHECK-NEXT:    .word 0xFE808823
+  rtgtest.rv32i.sb %rd, %rs, %neg_imm
 
   // CHECK-ALLOWED-NEXT:    sh ra, 0(s0)
   // CHECK-NEXT:    # sh ra, 0(s0)
@@ -146,6 +150,66 @@ rtg.test @test0 : !rtg.dict<> {
   // CHECK-NEXT:    # sw ra, 0(s0)
   // CHECK-NEXT:    .word 0x80A023
   rtgtest.rv32i.sw %rd, %rs, %imm
+
+  // CHECK-ALLOWED-NEXT:    lui ra, 0
+  // CHECK-NEXT:    # lui ra, 0
+  // CHECK-NEXT:    .word 0xB7
+  rtgtest.rv32i.lui %rd, %imm32 : !rtgtest.imm32
+
+  // CHECK-ALLOWED-NEXT:    auipc ra, 0
+  // CHECK-NEXT:    # auipc ra, 0
+  // CHECK-NEXT:    .word 0x97
+  rtgtest.rv32i.auipc %rd, %imm32 : !rtgtest.imm32
+
+  // CHECK-ALLOWED-NEXT:    jal ra, 0
+  // CHECK-NEXT:    # jal ra, 0
+  // CHECK-NEXT:    .word 0xEF
+  rtgtest.rv32i.jal %rd, %imm21 : !rtgtest.imm21
+
+  // CHECK-ALLOWED-NEXT:    addi ra, s0, -16
+  // CHECK-NEXT:    # addi ra, s0, -16
+  // CHECK-NEXT:    .word 0xFF040093
+  rtgtest.rv32i.addi %rd, %rs, %neg_imm
+
+  // CHECK-ALLOWED-NEXT:    slti ra, s0, 0
+  // CHECK-NEXT:    # slti ra, s0, 0
+  // CHECK-NEXT:    .word 0x42093
+  rtgtest.rv32i.slti %rd, %rs, %imm
+
+  // CHECK-ALLOWED-NEXT:    sltiu ra, s0, 0
+  // CHECK-NEXT:    # sltiu ra, s0, 0
+  // CHECK-NEXT:    .word 0x43093
+  rtgtest.rv32i.sltiu %rd, %rs, %imm
+
+  // CHECK-ALLOWED-NEXT:    xori ra, s0, 0
+  // CHECK-NEXT:    # xori ra, s0, 0
+  // CHECK-NEXT:    .word 0x44093
+  rtgtest.rv32i.xori %rd, %rs, %imm
+
+  // CHECK-ALLOWED-NEXT:    ori ra, s0, 0
+  // CHECK-NEXT:    # ori ra, s0, 0
+  // CHECK-NEXT:    .word 0x46093
+  rtgtest.rv32i.ori %rd, %rs, %imm
+
+  // CHECK-ALLOWED-NEXT:    andi ra, s0, 0
+  // CHECK-NEXT:    # andi ra, s0, 0
+  // CHECK-NEXT:    .word 0x47093
+  rtgtest.rv32i.andi %rd, %rs, %imm
+
+  // CHECK-ALLOWED-NEXT:    slli ra, s0, 31
+  // CHECK-NEXT:    # slli ra, s0, 31
+  // CHECK-NEXT:    .word 0x1F41093
+  rtgtest.rv32i.slli %rd, %rs, %imm5
+
+  // CHECK-ALLOWED-NEXT:    srli ra, s0, 31
+  // CHECK-NEXT:    # srli ra, s0, 31
+  // CHECK-NEXT:    .word 0x1F45093
+  rtgtest.rv32i.srli %rd, %rs, %imm5
+
+  // CHECK-ALLOWED-NEXT:    srai ra, s0, 31
+  // CHECK-NEXT:    # srai ra, s0, 31
+  // CHECK-NEXT:    .word 0x41F45093
+  rtgtest.rv32i.srai %rd, %rs, %imm5
 }
 
 // CHECK-EMPTY:

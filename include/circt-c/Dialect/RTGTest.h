@@ -40,6 +40,12 @@ MLIR_CAPI_EXPORTED MlirType rtgtestIntegerRegisterTypeGet(MlirContext ctxt);
 // Immediates.
 //===----------------------------------------------------------------------===//
 
+/// If the type is an RTGTest Imm5Type.
+MLIR_CAPI_EXPORTED bool rtgtestTypeIsAImm5(MlirType type);
+
+/// Creates an RTGTest Imm5 type in the context.
+MLIR_CAPI_EXPORTED MlirType rtgtestImm5TypeGet(MlirContext ctxt);
+
 /// If the type is an RTGTest Imm12Type.
 MLIR_CAPI_EXPORTED bool rtgtestTypeIsAImm12(MlirType type);
 
@@ -275,6 +281,16 @@ MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegT6AttrGet(MlirContext ctxt);
 
 // Immediates.
 //===----------------------------------------------------------------------===//
+
+/// If the attribute is an RTGTest Imm5Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsAImm5(MlirAttribute attr);
+
+/// Creates an RTGTest Imm5 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestImm5AttrGet(MlirContext ctxt,
+                                                    unsigned value);
+
+/// Returns the value represented by the Imm5 attribute.
+MLIR_CAPI_EXPORTED unsigned rtgtestImm5AttrGetValue(MlirAttribute attr);
 
 /// If the attribute is an RTGTest Imm12Attr.
 MLIR_CAPI_EXPORTED bool rtgtestAttrIsAImm12(MlirAttribute attr);

@@ -172,6 +172,8 @@ with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
   m = Module.create()
   with InsertionPoint(m.body):
+    # CHECK: rtgtest.immediate #rtgtest.imm5<3> : !rtgtest.imm5
+    rtgtest.ImmediateOp(rtgtest.Imm5Attr.get(3))
     # CHECK: rtgtest.immediate #rtgtest.imm12<3> : !rtgtest.imm12
     rtgtest.ImmediateOp(rtgtest.Imm12Attr.get(3))
     # CHECK: rtgtest.immediate #rtgtest.imm13<3> : !rtgtest.imm13

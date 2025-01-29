@@ -43,6 +43,12 @@ MlirType rtgtestIntegerRegisterTypeGet(MlirContext ctxt) {
 // Immediates.
 //===----------------------------------------------------------------------===//
 
+bool rtgtestTypeIsAImm5(MlirType type) { return isa<Imm5Type>(unwrap(type)); }
+
+MlirType rtgtestImm5TypeGet(MlirContext ctxt) {
+  return wrap(Imm5Type::get(unwrap(ctxt)));
+}
+
 bool rtgtestTypeIsAImm12(MlirType type) { return isa<Imm12Type>(unwrap(type)); }
 
 MlirType rtgtestImm12TypeGet(MlirContext ctxt) {
@@ -344,6 +350,18 @@ MlirAttribute rtgtestRegT6AttrGet(MlirContext ctxt) {
 
 // Immediates.
 //===----------------------------------------------------------------------===//
+
+bool rtgtestAttrIsAImm5(MlirAttribute attr) {
+  return isa<Imm5Attr>(unwrap(attr));
+}
+
+MlirAttribute rtgtestImm5AttrGet(MlirContext ctxt, unsigned value) {
+  return wrap(Imm5Attr::get(unwrap(ctxt), value));
+}
+
+unsigned rtgtestImm5AttrGetValue(MlirAttribute attr) {
+  return cast<Imm5Attr>(unwrap(attr)).getValue();
+}
 
 bool rtgtestAttrIsAImm12(MlirAttribute attr) {
   return isa<Imm12Attr>(unwrap(attr));
