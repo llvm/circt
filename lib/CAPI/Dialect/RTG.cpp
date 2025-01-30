@@ -48,6 +48,17 @@ MlirType rtgSequenceTypeGetElement(MlirType type, unsigned i) {
   return wrap(cast<SequenceType>(unwrap(type)).getElementTypes()[i]);
 }
 
+// RandomizedSequenceType
+//===----------------------------------------------------------------------===//
+
+bool rtgTypeIsARandomizedSequence(MlirType type) {
+  return isa<RandomizedSequenceType>(unwrap(type));
+}
+
+MlirType rtgRandomizedSequenceTypeGet(MlirContext ctxt) {
+  return wrap(RandomizedSequenceType::get(unwrap(ctxt)));
+}
+
 // LabelType
 //===----------------------------------------------------------------------===//
 

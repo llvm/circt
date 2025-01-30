@@ -85,17 +85,42 @@ def SequenceClosureOp : RTGOp<"sequence_closure", [
   }];
 }
 
-def InvokeSequenceOp : RTGOp<"invoke_sequence", []> {
-  let summary = "invoke a sequence of instructions";
+def RandomizeSequenceOp : RTGOp<"randomize_sequence", []> {
+  let summary = "randomize the content of a sequence";
   let description = [{
-    This operation takes a sequence closure as operand and acts as a placeholder
-    for that sequence instantiated with the arguments in the closure in place.
+    This operation takes a fully substituted sequence and randomizes its
+    content. This means, no operations the returned sequence does not contain
+    any randomization constructs anymore (such as random selection from sets and
+    bags, or other 'randomize_sequence' operations).
+
+    It is useful to have this operation separate from 'embed_sequence' such that
+    the exact same sequence (i.e., with the same random choices taken) can be
+    embedded at multiple places.
+    It is also useful to have this separate from sequence substitution because
+    this operation is sensitive to the context, but the substitution values for
+    a sequence family might already be available in a parent sequence that is
+    placed on a different context. Thus, not having it separated would mean that
+    the substitution values must all be passed down as arguments to the child
+    sequence instead of a a single fully substituted sequence value.
+  }];
+
+  let arguments = (ins FullySubstitutedSequenceType:$sequence);
+  let results = (outs RandomizedSequenceType:$randomizedSequence);
+
+  let assemblyFormat = "$sequence attr-dict";
+}
+
+def EmbedSequenceOp : RTGOp<"embed_sequence", []> {
+  let summary = "embed a sequence of instructions into another sequence";
+  let description = [{
+    This operation takes a fully randomized sequence and embeds it into another
+    sequence or test at the position of this operation.
     In particular, this is not any kind of function call, it doesn't set up a
     stack frame, etc. It behaves as if the sequence of instructions it refers to
     were directly inlined relacing this operation.
   }];
 
-  let arguments = (ins FullySubstitutedSequenceType:$sequence);
+  let arguments = (ins RandomizedSequenceType:$sequence);
 
   let assemblyFormat = "$sequence attr-dict";
 }

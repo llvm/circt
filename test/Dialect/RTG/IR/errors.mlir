@@ -23,9 +23,9 @@ rtg.sequence_closure @seq0
 // -----
 
 // expected-note @below {{prior use here}}
-rtg.sequence @seq0(%arg0: !rtg.sequence<i32>) {
-  // expected-error @below {{use of value '%arg0' expects different type than prior uses: '!rtg.sequence' vs '!rtg.sequence<i32>'}}
-  rtg.invoke_sequence %arg0
+rtg.sequence @seq0(%arg0: !rtg.sequence) {
+  // expected-error @below {{use of value '%arg0' expects different type than prior uses: '!rtg.randomized_sequence' vs '!rtg.sequence'}}
+  rtg.embed_sequence %arg0
 }
 
 // -----

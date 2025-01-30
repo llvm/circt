@@ -32,6 +32,17 @@ def SequenceType : RTGTypeDef<"Sequence"> {
   let assemblyFormat = "(`<` $elementTypes^ `>`)?";
 }
 
+def RandomizedSequenceType : RTGTypeDef<"RandomizedSequence"> {
+  let summary = "handle to a fully randomized sequence";
+  let description = [{
+    Sequences can contain operations to randomize their content in various ways.
+    A sequence of this type is guaranteed to not have any such operations
+    anymore (transitively).
+  }];
+
+  let mnemonic = "randomized_sequence";
+}
+
 def FullySubstitutedSequenceType : DialectType<RTGDialect,
     CPred<"llvm::isa<rtg::SequenceType>($_self) && "
           "llvm::cast<rtg::SequenceType>($_self).getElementTypes().empty()">,

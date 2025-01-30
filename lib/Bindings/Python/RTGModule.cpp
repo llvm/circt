@@ -40,6 +40,14 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
         return rtgSequenceTypeGetElement(self, i);
       });
 
+  mlir_type_subclass(m, "RandomizedSequenceType", rtgTypeIsARandomizedSequence)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, MlirContext ctxt) {
+            return cls(rtgRandomizedSequenceTypeGet(ctxt));
+          },
+          nb::arg("self"), nb::arg("ctxt") = nullptr);
+
   mlir_type_subclass(m, "LabelType", rtgTypeIsALabel)
       .def_classmethod(
           "get",

@@ -40,6 +40,12 @@ MLIR_CAPI_EXPORTED unsigned rtgSequenceTypeGetNumElements(MlirType type);
 MLIR_CAPI_EXPORTED MlirType rtgSequenceTypeGetElement(MlirType type,
                                                       unsigned i);
 
+/// If the type is an RTG randomized sequence.
+MLIR_CAPI_EXPORTED bool rtgTypeIsARandomizedSequence(MlirType type);
+
+/// Creates an RTG randomized sequence type in the context.
+MLIR_CAPI_EXPORTED MlirType rtgRandomizedSequenceTypeGet(MlirContext ctxt);
+
 /// If the type is an RTG label.
 MLIR_CAPI_EXPORTED bool rtgTypeIsALabel(MlirType type);
 

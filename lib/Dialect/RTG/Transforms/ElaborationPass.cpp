@@ -86,6 +86,7 @@ static uint32_t getUniformlyInRange(std::mt19937 &rng, uint32_t a, uint32_t b) {
 namespace {
 struct BagStorage;
 struct SequenceStorage;
+struct RandomizedSequenceStorage;
 struct SetStorage;
 
 /// Represents a unique virtual register.
@@ -126,7 +127,8 @@ struct LabelValue {
 /// The abstract base class for elaborated values.
 using ElaboratorValue =
     std::variant<TypedAttr, BagStorage *, bool, size_t, SequenceStorage *,
-                 SetStorage *, VirtualRegister, LabelValue>;
+                 RandomizedSequenceStorage *, SetStorage *, VirtualRegister,
+                 LabelValue>;
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 llvm::hash_code hash_value(const VirtualRegister &val) {
@@ -299,16 +301,34 @@ struct BagStorage {
 
 /// Storage object for an '!rtg.sequence'.
 struct SequenceStorage {
-  SequenceStorage(StringRef name, StringAttr familyName,
-                  SmallVector<ElaboratorValue> &&args)
+  SequenceStorage(StringAttr familyName, SmallVector<ElaboratorValue> &&args)
       : hashcode(llvm::hash_combine(
-            name, familyName,
-            llvm::hash_combine_range(args.begin(), args.end()))),
-        name(name), familyName(familyName), args(std::move(args)) {}
+            familyName, llvm::hash_combine_range(args.begin(), args.end()))),
+        familyName(familyName), args(std::move(args)) {}
 
   bool isEqual(const SequenceStorage *other) const {
-    return hashcode == other->hashcode && name == other->name &&
-           familyName == other->familyName && args == other->args;
+    return hashcode == other->hashcode && familyName == other->familyName &&
+           args == other->args;
+  }
+
+  // The cached hashcode to avoid repeated computations.
+  const unsigned hashcode;
+
+  // The name of the sequence family this sequence is derived from.
+  const StringAttr familyName;
+
+  // The elaborator values used during substitution of the sequence family.
+  const SmallVector<ElaboratorValue> args;
+};
+
+/// Storage object for an '!rtg.randomized_sequence'.
+struct RandomizedSequenceStorage {
+  RandomizedSequenceStorage(StringRef name, SequenceStorage *sequence)
+      : hashcode(llvm::hash_combine(name, sequence)), name(name),
+        sequence(sequence) {}
+
+  bool isEqual(const RandomizedSequenceStorage *other) const {
+    return hashcode == other->hashcode && sequence == other->sequence;
   }
 
   // The cached hashcode to avoid repeated computations.
@@ -317,11 +337,7 @@ struct SequenceStorage {
   // The name of this fully substituted and elaborated sequence.
   const StringRef name;
 
-  // The name of the sequence family this sequence is derived from.
-  const StringAttr familyName;
-
-  // The elaborator values used during substitution of the sequence family.
-  const SmallVector<ElaboratorValue> args;
+  const SequenceStorage *sequence;
 };
 
 /// An 'Internalizer' object internalizes storages and takes ownership of them.
@@ -358,6 +374,8 @@ private:
       return internedBags;
     else if constexpr (std::is_same_v<StorageTy, SequenceStorage>)
       return internedSequences;
+    else if constexpr (std::is_same_v<StorageTy, RandomizedSequenceStorage>)
+      return internedRandomizedSequences;
     else
       static_assert(!sizeof(StorageTy),
                     "no intern set available for this storage type.");
@@ -374,6 +392,9 @@ private:
   DenseSet<HashedStorage<BagStorage>, StorageKeyInfo<BagStorage>> internedBags;
   DenseSet<HashedStorage<SequenceStorage>, StorageKeyInfo<SequenceStorage>>
       internedSequences;
+  DenseSet<HashedStorage<RandomizedSequenceStorage>,
+           StorageKeyInfo<RandomizedSequenceStorage>>
+      internedRandomizedSequences;
 };
 
 } // namespace
@@ -405,9 +426,16 @@ static void print(size_t val, llvm::raw_ostream &os) {
 }
 
 static void print(SequenceStorage *val, llvm::raw_ostream &os) {
-  os << "<sequence @" << val->name << " derived from @"
-     << val->familyName.getValue() << "(";
+  os << "<sequence @" << val->familyName.getValue() << "(";
   llvm::interleaveComma(val->args, os,
+                        [&](const ElaboratorValue &val) { os << val; });
+  os << ") at " << val << ">";
+}
+
+static void print(RandomizedSequenceStorage *val, llvm::raw_ostream &os) {
+  os << "<randomized-sequence @" << val->name << " derived from @"
+     << val->sequence->familyName.getValue() << "(";
+  llvm::interleaveComma(val->sequence->args, os,
                         [&](const ElaboratorValue &val) { os << val; });
   os << ") at " << val << ">";
 }
@@ -450,7 +478,7 @@ public:
   /// Materialize IR representing the provided `ElaboratorValue` and return the
   /// `Value` or a null value on failure.
   Value materialize(ElaboratorValue val, Location loc,
-                    std::queue<SequenceStorage *> &elabRequests,
+                    std::queue<RandomizedSequenceStorage *> &elabRequests,
                     function_ref<InFlightDiagnostic()> emitError) {
     auto iter = materializedValues.find(val);
     if (iter != materializedValues.end())
@@ -469,9 +497,9 @@ public:
   /// Otherwise, all operations after the materializer's insertion point are
   /// deleted until `op` is reached. An error is returned if the operation is
   /// before the insertion point.
-  LogicalResult materialize(Operation *op,
-                            DenseMap<Value, ElaboratorValue> &state,
-                            std::queue<SequenceStorage *> &elabRequests) {
+  LogicalResult
+  materialize(Operation *op, DenseMap<Value, ElaboratorValue> &state,
+              std::queue<RandomizedSequenceStorage *> &elabRequests) {
     if (op->getNumRegions() > 0)
       return op->emitOpError("ops with nested regions must be elaborated away");
 
@@ -545,7 +573,7 @@ private:
   }
 
   Value visit(TypedAttr val, Location loc,
-              std::queue<SequenceStorage *> &elabRequests,
+              std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     // For index attributes (and arithmetic operations on them) we use the
     // index dialect.
@@ -574,7 +602,7 @@ private:
   }
 
   Value visit(size_t val, Location loc,
-              std::queue<SequenceStorage *> &elabRequests,
+              std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     Value res = builder.create<index::ConstantOp>(loc, val);
     materializedValues[val] = res;
@@ -582,7 +610,7 @@ private:
   }
 
   Value visit(bool val, Location loc,
-              std::queue<SequenceStorage *> &elabRequests,
+              std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     Value res = builder.create<index::BoolConstantOp>(loc, val);
     materializedValues[val] = res;
@@ -590,7 +618,7 @@ private:
   }
 
   Value visit(SetStorage *val, Location loc,
-              std::queue<SequenceStorage *> &elabRequests,
+              std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     SmallVector<Value> elements;
     elements.reserve(val->set.size());
@@ -608,7 +636,7 @@ private:
   }
 
   Value visit(BagStorage *val, Location loc,
-              std::queue<SequenceStorage *> &elabRequests,
+              std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     SmallVector<Value> values, weights;
     values.reserve(val->bag.size());
@@ -630,14 +658,24 @@ private:
   }
 
   Value visit(SequenceStorage *val, Location loc,
-              std::queue<SequenceStorage *> &elabRequests,
+              std::queue<RandomizedSequenceStorage *> &elabRequests,
+              function_ref<InFlightDiagnostic()> emitError) {
+    emitError() << "materializing a non-randomized sequence not supported yet";
+    return Value();
+  }
+
+  Value visit(RandomizedSequenceStorage *val, Location loc,
+              std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     elabRequests.push(val);
-    return builder.create<SequenceClosureOp>(loc, val->name, ValueRange());
+    Value seq = builder.create<SequenceClosureOp>(
+        loc, SequenceType::get(builder.getContext(), {}), val->name,
+        ValueRange{});
+    return builder.create<RandomizeSequenceOp>(loc, seq);
   }
 
   Value visit(const VirtualRegister &val, Location loc,
-              std::queue<SequenceStorage *> &elabRequests,
+              std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     auto res = builder.create<VirtualRegisterOp>(loc, val.allowedRegs);
     materializedValues[val] = res;
@@ -645,7 +683,7 @@ private:
   }
 
   Value visit(const LabelValue &val, Location loc,
-              std::queue<SequenceStorage *> &elabRequests,
+              std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     if (val.id == 0) {
       auto res = builder.create<LabelDeclOp>(loc, val.name, ValueRange());
@@ -694,7 +732,7 @@ struct ElaboratorSharedState {
 
   /// The worklist used to keep track of the test and sequence operations to
   /// make sure they are processed top-down (BFS traversal).
-  std::queue<SequenceStorage *> worklist;
+  std::queue<RandomizedSequenceStorage *> worklist;
 
   uint64_t virtualRegisterID = 0;
   uint64_t uniqueLabelID = 1;
@@ -758,19 +796,27 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(SequenceClosureOp op) {
-    SmallVector<ElaboratorValue> args;
-    for (auto arg : op.getArgs())
-      args.push_back(state.at(arg));
+    SmallVector<ElaboratorValue> replacements;
+    for (auto replacement : op.getArgs())
+      replacements.push_back(state.at(replacement));
 
-    auto familyName = op.getSequenceAttr();
-    auto name = sharedState.names.newName(familyName.getValue());
     state[op.getResult()] =
-        sharedState.internalizer.internalize<SequenceStorage>(name, familyName,
-                                                              std::move(args));
+        sharedState.internalizer.internalize<SequenceStorage>(
+            op.getSequenceAttr(), std::move(replacements));
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind> visitOp(InvokeSequenceOp op) {
+  FailureOr<DeletionKind> visitOp(RandomizeSequenceOp op) {
+    auto *seq = get<SequenceStorage *>(op.getSequence());
+
+    auto name = sharedState.names.newName(seq->familyName.getValue());
+    state[op.getResult()] =
+        sharedState.internalizer.internalize<RandomizedSequenceStorage>(name,
+                                                                        seq);
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(EmbedSequenceOp op) {
     return DeletionKind::Keep;
   }
 
@@ -1227,7 +1273,7 @@ LogicalResult ElaborationPass::elaborateModule(ModuleOp moduleOp,
     if (table.lookup<SequenceOp>(curr->name))
       continue;
 
-    auto familyOp = table.lookup<SequenceOp>(curr->familyName);
+    auto familyOp = table.lookup<SequenceOp>(curr->sequence->familyName);
     // TODO: don't clone if this is the only remaining reference to this
     // sequence
     OpBuilder builder(familyOp);
@@ -1243,7 +1289,8 @@ LogicalResult ElaborationPass::elaborateModule(ModuleOp moduleOp,
 
     Materializer materializer(OpBuilder::atBlockBegin(seqOp.getBody()));
     Elaborator elaborator(state, materializer);
-    if (failed(elaborator.elaborate(familyOp.getBodyRegion(), curr->args)))
+    if (failed(elaborator.elaborate(familyOp.getBodyRegion(),
+                                    curr->sequence->args)))
       return failure();
 
     materializer.finalize();
@@ -1277,29 +1324,35 @@ LogicalResult ElaborationPass::inlineSequences(TestOp testOp,
   OpBuilder builder(testOp);
   for (auto iter = testOp.getBody()->begin();
        iter != testOp.getBody()->end();) {
-    auto invokeOp = dyn_cast<InvokeSequenceOp>(&*iter);
-    if (!invokeOp) {
+    auto embedOp = dyn_cast<EmbedSequenceOp>(&*iter);
+    if (!embedOp) {
       ++iter;
       continue;
     }
 
-    auto seqClosureOp =
-        invokeOp.getSequence().getDefiningOp<SequenceClosureOp>();
-    if (!seqClosureOp)
-      return invokeOp->emitError(
-          "sequence operand not directly defined by sequence_closure op");
+    auto randSeqOp = embedOp.getSequence().getDefiningOp<RandomizeSequenceOp>();
+    if (!randSeqOp)
+      return embedOp->emitError("sequence operand not directly defined by "
+                                "'rtg.randomize_sequence' op");
+    auto getSeqOp = randSeqOp.getSequence().getDefiningOp<SequenceClosureOp>();
+    if (!getSeqOp)
+      return randSeqOp->emitError(
+          "sequence operand not directly defined by 'rtg.sequence_closure' op");
 
-    auto seqOp = table.lookup<SequenceOp>(seqClosureOp.getSequenceAttr());
+    auto seqOp = table.lookup<SequenceOp>(getSeqOp.getSequenceAttr());
 
-    builder.setInsertionPointAfter(invokeOp);
+    builder.setInsertionPointAfter(embedOp);
     IRMapping mapping;
     for (auto &op : *seqOp.getBody())
       builder.clone(op, mapping);
 
     (iter++)->erase();
 
-    if (seqClosureOp->use_empty())
-      seqClosureOp->erase();
+    if (randSeqOp->use_empty())
+      randSeqOp->erase();
+
+    if (getSeqOp->use_empty())
+      getSeqOp->erase();
   }
 
   return success();
