@@ -1,4 +1,5 @@
 add_circt_dialect_library(CIRCTRTGDialect
+  RTGAttributes.cpp
   RTGAttrInterfaces.cpp
   RTGDialect.cpp
   RTGISAAssemblyAttrInterfaces.cpp
@@ -13,6 +14,7 @@ add_circt_dialect_library(CIRCTRTGDialect
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/RTG/IR
 
   DEPENDS
+  CIRCTRTGAttributeIncGen
   CIRCTRTGAttrInterfacesIncGen
   CIRCTRTGEnumsIncGen
   CIRCTRTGISAAssemblyAttrInterfacesIncGen

@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/RTG.h"
+#include "circt/Dialect/RTG/IR/RTGAttributes.h"
 #include "circt/Dialect/RTG/IR/RTGDialect.h"
 #include "circt/Dialect/RTG/IR/RTGTypes.h"
 
@@ -141,4 +142,12 @@ MlirAttribute rtgLabelVisibilityAttrGet(MlirContext ctxt,
     }
   };
   return wrap(LabelVisibilityAttr::get(unwrap(ctxt), convert(visibility)));
+}
+
+bool rtgAttrIsADefaultContextAttr(MlirAttribute attr) {
+  return isa<DefaultContextAttr>(unwrap(attr));
+}
+
+MlirAttribute rtgDefaultContextAttrGet(MlirContext ctxt, MlirType type) {
+  return wrap(DefaultContextAttr::get(unwrap(ctxt), unwrap(type)));
 }

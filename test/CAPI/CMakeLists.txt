@@ -95,6 +95,7 @@ target_link_libraries(circt-capi-rtg-test
 
   MLIRCAPIIR
   CIRCTCAPIRTG
+  CIRCTCAPIRTGTest
 )
 
 add_llvm_executable(circt-capi-rtgtest-test
