@@ -368,6 +368,8 @@ class VerifIntrinsicOp<string mnemonic, list<Trait> traits = []> :
 def VerifAssertIntrinsicOp : VerifIntrinsicOp<"assert">;
 def VerifAssumeIntrinsicOp : VerifIntrinsicOp<"assume">;
 def VerifCoverIntrinsicOp : VerifIntrinsicOp<"cover">;
+def VerifRequireIntrinsicOp : VerifIntrinsicOp<"require">;
+def VerifEnsureIntrinsicOp : VerifIntrinsicOp<"ensure">;
 
 //===----------------------------------------------------------------------===//
 // Layer Block Op

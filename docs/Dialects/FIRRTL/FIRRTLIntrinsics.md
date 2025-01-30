@@ -414,3 +414,42 @@ what the field in the bundle is.
 | elements | array  | List of AugmentedFields                                   |
 
 Creates a SystemVerilog interface for each bundle type.
+
+### circt_verif_assert
+
+Asserts that a property holds.
+The property may be an boolean, sequence, or property.
+Booleans are represented as `UInt<1>` values.
+Sequences and properties are defined by the corresponding `circt_ltl_*` intrinsics and are also represented as `UInt<1>`, but are converted into dedicated sequence and property types later in the compiler.
+
+| Parameter | Type   | Description                 |
+| --------- | ------ | --------------------------- |
+| label     | string | Optional user-defined label |
+
+| Argument | Type    | Description                                     |
+| -------- | ------- | ----------------------------------------------- |
+| property | UInt<1> | A property to be checked.                       |
+| enable   | UInt<1> | Optional enable condition.                      |
+|          |         | If 0, behaves as if the assert was not present. |
+
+### circt_verif_assume
+
+Assumes that a property holds.
+Otherwise behaves like [`circt_verif_assert`](#circt_verif_assert).
+
+### circt_verif_cover
+
+Checks that a property holds at least once, or can hold at all.
+Otherwise behaves like [`circt_verif_assert`](#circt_verif_assert).
+
+### circt_verif_require
+
+Requires that a property holds as a pre-condition to a contract.
+Gets converted into an assert if used outside of a FIRRTL `contract`.
+Otherwise behaves like [`circt_verif_assert`](#circt_verif_assert).
+
+### circt_verif_ensure
+
+Ensures that a property holds as a post-condition of a contract.
+Gets converted into an assert if used outside of a FIRRTL `contract`.
+Otherwise behaves like [`circt_verif_assert`](#circt_verif_assert).
