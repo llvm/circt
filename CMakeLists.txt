@@ -597,23 +597,22 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     # linking) without the latter being in an export set. I think we'd want to
     # statically link slang into the CIRCTImportVerilog library, but seems to be
     # harder than it ought to be.
-    set_property(
-      GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang fmt)
+    get_target_property(slang_deps slang_slang INTERFACE_LINK_LIBRARIES)
+    foreach(alias ${slang_deps})
+      if (TARGET ${alias})
+        get_target_property(link ${alias} ALIASED_TARGET)
+        set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS ${link})
+        install(TARGETS ${link} EXPORT CIRCTTargets)
+      endif()
+    endforeach()
     
     # Disable the installation of headers coming from third-party libraries. We
     # won't use those APIs directly. Just make them static libraries for the sake
     # of running slang normally.
     set_target_properties(fmt PROPERTIES PUBLIC_HEADER "")
 
-    install(TARGETS slang_slang fmt EXPORT CIRCTTargets)
-
-    # Match the behavior of slang_slang, which installs its own vendored
-    # boost_unordered if it does not a system-wide boost installation.
-    find_package(Boost 1.82.0 QUIET)
-    if(NOT Boost_FOUND)
-      set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS boost_unordered)
-      install(TARGETS boost_unordered EXPORT CIRCTTargets)
-    endif()
+    set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang)
+    install(TARGETS slang_slang EXPORT CIRCTTargets)
   else()
     find_package(slang 7.0 REQUIRED)
   endif()
