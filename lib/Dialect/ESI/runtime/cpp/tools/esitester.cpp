@@ -149,19 +149,18 @@ void dmaTest(Accelerator *acc, esi::services::HostMem::HostMemRegion &region,
   }
 
   // Initiate a test write.
-  // TODO: remove the width == 96 once multiplexing support is added.
   if (write) {
     assert(width % 8 == 0);
     auto check = [&](bool print) {
-      region.flush();
-      for (size_t i = 0, e = (width + 63) / 64; i < e; ++i) {
+      bool ret = true;
+      for (size_t i = 0; i < 8; ++i) {
         if (print)
           std::cout << "dataPtr[" << i << "] = 0x" << esi::toHex(dataPtr[i])
                     << std::endl;
-        if (dataPtr[i] == 0xFFFFFFFFFFFFFFFFull)
-          return false;
+        if (i < (width + 63) / 64 && dataPtr[i] == 0xFFFFFFFFFFFFFFFFull)
+          ret = false;
       }
-      return true;
+      return ret;
     };
 
     auto writeMemChildIter = acc->getChildren().find(AppID("writemem", width));
@@ -176,9 +175,10 @@ void dmaTest(Accelerator *acc, esi::services::HostMem::HostMemRegion &region,
     if (!writeMem)
       throw std::runtime_error("DMA test failed. WriteMem port is not MMIO");
 
-    for (size_t i = 0, e = (width + 63) / 64; i < e; ++i)
+    for (size_t i = 0, e = 8; i < e; ++i)
       dataPtr[i] = 0xFFFFFFFFFFFFFFFFull;
     region.flush();
+
     // Command the accelerator to write to 'devicePtr', the pointer which the
     // device should use for 'dataPtr'.
     writeMem->write(0, reinterpret_cast<uint64_t>(devicePtr));
@@ -194,9 +194,12 @@ void dmaTest(Accelerator *acc, esi::services::HostMem::HostMemRegion &region,
     // Check that the accelerator didn't write too far.
     size_t widthInBytes = width / 8;
     uint8_t *dataPtr8 = reinterpret_cast<uint8_t *>(region.getPtr());
-    for (size_t i = widthInBytes, e = (widthInBytes + 7) / 8; i < e; ++i)
+    for (size_t i = widthInBytes; i < 64; ++i) {
+      std::cout << "endcheck dataPtr8[" << i << "] = 0x"
+                << esi::toHex(dataPtr8[i]) << std::endl;
       if (dataPtr8[i] != 0xFF)
         throw std::runtime_error("DMA write test failed -- write went too far");
+    }
   }
 }
 
