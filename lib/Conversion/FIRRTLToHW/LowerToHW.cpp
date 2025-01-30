@@ -1580,6 +1580,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitDecl(MemOp op);
   LogicalResult visitDecl(InstanceOp oldInstance);
   LogicalResult visitDecl(VerbatimWireOp op);
+  LogicalResult visitDecl(ContractOp op);
 
   // Unary Ops.
   LogicalResult lowerNoopCast(Operation *op);
@@ -1837,6 +1838,19 @@ private:
   /// the LTL ops, which were necessary to go from the def-before-use FIRRTL
   /// dialect to the graph-like HW dialect.
   SetVector<Operation *> ltlOpFixupWorklist;
+
+  /// A worklist of operation ranges to be lowered. Parnet operations can push
+  /// their nested operations onto this worklist to be processed after the
+  /// parent operation has handled the region, blocks, and block arguments.
+  SmallVector<std::pair<Block::iterator, Block::iterator>> worklist;
+
+  void addToWorklist(Block &block) {
+    worklist.push_back({block.begin(), block.end()});
+  }
+  void addToWorklist(Region &region) {
+    for (auto &block : llvm::reverse(region))
+      addToWorklist(block);
+  }
 };
 } // end anonymous namespace
 
@@ -1847,16 +1861,27 @@ LogicalResult FIRRTLModuleLowering::lowerModuleOperations(
 
 // This is the main entrypoint for the lowering pass.
 LogicalResult FIRRTLLowering::run() {
-  // FIRRTL FModule is a single block because FIRRTL ops are a DAG.  Walk
-  // through each operation, lowering each in turn if we can, introducing
-  // casts if we cannot.
-  auto &body = theModule.getBody();
+  // Mark the module's block arguments are already lowered. This will allow
+  // `getLoweredValue` to return the block arguments as they are.
+  for (auto arg : theModule.getBodyBlock()->getArguments())
+    if (failed(setLowering(arg, arg)))
+      return failure();
 
+  // Add the operations in the body to the worklist and lower all operations
+  // until the worklist is empty. Operations may push their own nested
+  // operations onto the worklist to lower them in turn. The `builder` is
+  // positioned ahead of each operation as it is being lowered.
+  addToWorklist(theModule.getBody());
   SmallVector<Operation *, 16> opsToRemove;
 
-  // Iterate through each operation in the module body, attempting to lower
-  // each of them.  We maintain 'builder' for each invocation.
-  auto result = theModule.walk([&](Operation *op) {
+  while (!worklist.empty()) {
+    auto &[opsIt, opsEnd] = worklist.back();
+    if (opsIt == opsEnd) {
+      worklist.pop_back();
+      continue;
+    }
+    Operation *op = &*opsIt++;
+
     builder.setInsertionPoint(op);
     builder.setLoc(op->getLoc());
     auto done = succeeded(dispatchVisitor(op));
@@ -1872,14 +1897,10 @@ LogicalResult FIRRTLLowering::run() {
         break;
       case LoweringFailure:
         backedgeBuilder.abandon();
-        return WalkResult::interrupt();
+        return failure();
       }
     }
-    return WalkResult::advance();
-  });
-
-  if (result.wasInterrupted())
-    return failure();
+  }
 
   // Replace all backedges with uses of their regular values.  We process them
   // after the module body since the lowering table is too hard to keep up to
@@ -1933,7 +1954,7 @@ LogicalResult FIRRTLLowering::run() {
       if (!isZeroBitFIRRTLType(result.getType()))
         continue;
       if (!zeroI0) {
-        auto builder = OpBuilder::atBlockBegin(&body.front());
+        auto builder = OpBuilder::atBlockBegin(theModule.getBodyBlock());
         zeroI0 = builder.create<hw::ConstantOp>(op->getLoc(),
                                                 builder.getIntegerType(0), 0);
         maybeUnusedValues.insert(zeroI0);
@@ -2082,10 +2103,6 @@ Value FIRRTLLowering::getOrCreateZConstant(Type type) {
 /// unknown width integers.  This returns hw::inout type values if present, it
 /// does not implicitly read from them.
 Value FIRRTLLowering::getPossiblyInoutLoweredValue(Value value) {
-  // Block arguments are considered lowered.
-  if (isa<BlockArgument>(value))
-    return value;
-
   // If we lowered this value, then return the lowered value, otherwise fail.
   if (auto lowering = valueMapping.lookup(value)) {
     assert(!isa<FIRRTLType>(lowering.getType()) &&
@@ -2724,11 +2741,20 @@ void FIRRTLLowering::addIfProceduralBlock(Value cond,
 ///
 FIRRTLLowering::UnloweredOpResult
 FIRRTLLowering::handleUnloweredOp(Operation *op) {
+  // FIRRTL operations must explicitly handle their regions.
+  if (!op->getRegions().empty() && isa<FIRRTLDialect>(op->getDialect())) {
+    op->emitOpError("must explicitly handle its regions");
+    return LoweringFailure;
+  }
+
   // Simply pass through non-FIRRTL operations and consider them already
   // lowered. This allows us to handled partially lowered inputs, and also allow
   // other FIRRTL operations to spawn additional already-lowered operations,
   // like `hw.output`.
   if (!isa<FIRRTLDialect>(op->getDialect())) {
+    // Push nested operations onto the worklist such that they are lowered.
+    for (auto &region : op->getRegions())
+      addToWorklist(region);
     for (auto &operand : op->getOpOperands())
       if (auto lowered = getPossiblyInoutLoweredValue(operand.get()))
         operand.set(lowered);
@@ -3394,6 +3420,37 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     (void)setLowering(oldPortResult, resultVal);
     ++resultNo;
   }
+  return success();
+}
+
+LogicalResult FIRRTLLowering::visitDecl(ContractOp oldOp) {
+  SmallVector<Value> inputs;
+  SmallVector<Type> types;
+  for (auto input : oldOp.getInputs()) {
+    auto lowered = getLoweredValue(input);
+    if (!lowered)
+      return failure();
+    inputs.push_back(lowered);
+    types.push_back(lowered.getType());
+  }
+
+  auto newOp = builder.create<verif::ContractOp>(types, inputs);
+  newOp->setDiscardableAttrs(oldOp->getDiscardableAttrDictionary());
+  auto &body = newOp.getBody().emplaceBlock();
+
+  for (auto [newResult, oldResult, oldArg] :
+       llvm::zip(newOp.getResults(), oldOp.getResults(),
+                 oldOp.getBody().getArguments())) {
+    if (failed(setLowering(oldResult, newResult)))
+      return failure();
+    if (failed(setLowering(oldArg, newResult)))
+      return failure();
+  }
+
+  body.getOperations().splice(body.end(),
+                              oldOp.getBody().front().getOperations());
+  addToWorklist(body);
+
   return success();
 }
 
