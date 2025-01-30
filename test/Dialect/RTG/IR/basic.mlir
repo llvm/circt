@@ -106,3 +106,9 @@ rtg.target @target : !rtg.dict<num_cpus: i32, num_modes: i32> {
 rtg.test @test : !rtg.dict<num_cpus: i32, num_modes: i32> {
 ^bb0(%arg0: i32, %arg1: i32):
 }
+
+// CHECK-LABEL: rtg.sequence @integerHandlingOps
+rtg.sequence @integerHandlingOps(%arg0: index, %arg1: index) {
+  // CHECK: rtg.random_number_in_range [%arg0, %arg1)
+  rtg.random_number_in_range [%arg0, %arg1)
+}

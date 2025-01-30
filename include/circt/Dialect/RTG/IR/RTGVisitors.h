@@ -41,6 +41,8 @@ public:
             FixedRegisterOp, VirtualRegisterOp,
             // RTG tests
             TestOp, TargetOp, YieldOp,
+            // Integers
+            RandomNumberInRangeOp,
             // Sequences
             SequenceOp, GetSequenceOp, SubstituteSequenceOp,
             RandomizeSequenceOp, EmbedSequenceOp,
@@ -92,6 +94,7 @@ public:
   HANDLE(SubstituteSequenceOp, Unhandled);
   HANDLE(RandomizeSequenceOp, Unhandled);
   HANDLE(EmbedSequenceOp, Unhandled);
+  HANDLE(RandomNumberInRangeOp, Unhandled);
   HANDLE(SetCreateOp, Unhandled);
   HANDLE(SetSelectRandomOp, Unhandled);
   HANDLE(SetDifferenceOp, Unhandled);
