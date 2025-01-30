@@ -1153,7 +1153,7 @@ struct Graph {
                       std::lock_guard<std::mutex> lock(mutex);
                       auto newPath = instancePathCache->prependInstance(
                           instance, node->path);
-                      localCache[{instance, newPath}] = newPath;
+                      localCache[{instance, node->path}] = newPath;
                       point.path = newPath;
                     }
                     newPoints = listFactory.add(point, newPoints);
