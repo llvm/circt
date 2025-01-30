@@ -1935,6 +1935,7 @@ private:
   ParseResult parseWire();
   ParseResult parseRegister(unsigned regIndent);
   ParseResult parseRegisterWithReset();
+  ParseResult parseContract(unsigned blockIndent);
 
   // Helper to fetch a module referenced by an instance-like statement.
   FModuleLike getReferencedModule(SMLoc loc, StringRef moduleName);
@@ -2667,6 +2668,7 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
 ///      ::= cmem | smem | mem
 ///      ::= node | wire
 ///      ::= register
+///      ::= contract
 ///
 ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   auto kind = getToken().getKind();
@@ -2776,6 +2778,8 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseRegister(stmtIndent);
   case FIRToken::kw_regreset:
     return parseRegisterWithReset();
+  case FIRToken::kw_contract:
+    return parseContract(stmtIndent);
   }
 }
 
@@ -4729,6 +4733,79 @@ ParseResult FIRStmtParser::parseRegisterWithReset() {
           .getResult();
 
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
+}
+
+/// contract ::= 'contract' (id,+ '=' exp,+) ':' info? contract_body
+/// contract_body ::= simple_stmt | INDENT simple_stmt+ DEDENT
+ParseResult FIRStmtParser::parseContract(unsigned blockIndent) {
+  if (requireFeature(missingSpecFIRVersion, "contracts"))
+    return failure();
+
+  auto startTok = consumeToken(FIRToken::kw_contract);
+
+  // Parse the contract results and expressions.
+  SmallVector<StringRef> ids;
+  SmallVector<SMLoc> locs;
+  SmallVector<Value> values;
+  SmallVector<Type> types;
+  if (!consumeIf(FIRToken::colon)) {
+    auto parseContractId = [&] {
+      StringRef id;
+      locs.push_back(getToken().getLoc());
+      if (parseId(id, "expected contract result name"))
+        return failure();
+      ids.push_back(id);
+      return success();
+    };
+    auto parseContractValue = [&] {
+      Value value;
+      if (parseExp(value, "expected expression for contract result"))
+        return failure();
+      values.push_back(value);
+      types.push_back(value.getType());
+      return success();
+    };
+    if (parseListUntil(FIRToken::equal, parseContractId) ||
+        parseListUntil(FIRToken::colon, parseContractValue))
+      return failure();
+  }
+  if (parseOptionalInfo())
+    return failure();
+
+  // Each result must have a corresponding expression assigned.
+  if (ids.size() != values.size())
+    return emitError(startTok.getLoc())
+           << "contract requires same number of results and expressions; got "
+           << ids.size() << " results and " << values.size()
+           << " expressions instead";
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  // Add block arguments for each result and declare their names in a subscope
+  // for the contract body.
+  auto contract = builder.create<ContractOp>(types, values);
+  auto &block = contract.getBody().emplaceBlock();
+
+  // Parse the contract body.
+  {
+    FIRModuleContext::ContextScope scope(moduleContext, &block);
+    for (auto [id, loc, type] : llvm::zip(ids, locs, types)) {
+      auto arg = block.addArgument(type, LocWithInfo(loc, this).getLoc());
+      if (failed(moduleContext.addSymbolEntry(id, arg, loc)))
+        return failure();
+    }
+    if (getIndentation() > blockIndent)
+      if (parseSubBlock(block, blockIndent, SymbolRefAttr{}))
+        return failure();
+  }
+
+  // Declare the results.
+  for (auto [id, loc, value, result] :
+       llvm::zip(ids, locs, values, contract.getResults()))
+    if (failed(moduleContext.addSymbolEntry(id, result, loc)))
+      return failure();
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

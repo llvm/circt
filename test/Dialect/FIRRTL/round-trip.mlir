@@ -162,4 +162,18 @@ firrtl.formal @myTestB, @Top {bound = 42 : i19}
 // CHECK: firrtl.formal @myTestC, @Top {} attributes {foo}
 firrtl.formal @myTestC, @Top {} attributes {foo}
 
+// CHECK-LABEL: firrtl.module @Contracts
+firrtl.module @Contracts(in %a: !firrtl.uint<42>, in %b: !firrtl.bundle<x: uint<1337>>) {
+  // CHECK: firrtl.contract {
+  // CHECK: }
+  firrtl.contract {}
+
+  // CHECK: {{%.+}}:2 = firrtl.contract %a, %b : !firrtl.uint<42>, !firrtl.bundle<x: uint<1337>> {
+  // CHECK: ^bb0(%arg0: !firrtl.uint<42>, %arg1: !firrtl.bundle<x: uint<1337>>):
+  // CHECK: }
+  firrtl.contract %a, %b : !firrtl.uint<42>, !firrtl.bundle<x: uint<1337>> {
+  ^bb0(%arg0: !firrtl.uint<42>, %arg1: !firrtl.bundle<x: uint<1337>>):
+  }
+}
+
 }

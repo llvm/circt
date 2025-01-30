@@ -279,7 +279,7 @@ firrtl.circuit "Foo" {
 
 firrtl.circuit "Foo" {
   firrtl.extmodule @Foo()
-  // expected-error @+1 {{'firrtl.instance' op expects parent op to be one of 'firrtl.module, firrtl.layerblock, firrtl.when, firrtl.match, sv.ifdef'}}
+  // expected-error @+1 {{'firrtl.instance' op expects parent op to be one of 'firrtl.contract, firrtl.module, firrtl.layerblock, firrtl.match, firrtl.when, sv.ifdef'}}
   firrtl.instance "" @Foo()
 }
 
@@ -1819,7 +1819,7 @@ firrtl.circuit "ClassCannotHaveHardwarePorts" {
 firrtl.circuit "ClassCannotHaveWires" {
   firrtl.module @ClassCannotHaveWires() {}
   firrtl.class @ClassWithWire() {
-    // expected-error @below {{'firrtl.wire' op expects parent op to be one of 'firrtl.module, firrtl.layerblock, firrtl.when, firrtl.match, sv.ifdef'}}
+    // expected-error @below {{'firrtl.wire' op expects parent op to be one of 'firrtl.contract, firrtl.module, firrtl.layerblock, firrtl.match, firrtl.when, sv.ifdef'}}
     %w = firrtl.wire : !firrtl.uint<8>
   }
 }
@@ -2625,4 +2625,37 @@ firrtl.circuit "MultipleDUTModules" {
       }
     ]
   } {}
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+  firrtl.module @Foo(in %a: !firrtl.uint<42>) {
+    // expected-error @below {{result types and region argument types must match}}
+    firrtl.contract %a : !firrtl.uint<42> {
+    ^bb0:
+    }
+  }
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+  firrtl.module @Foo(in %a: !firrtl.uint<42>) {
+    // expected-error @below {{result types and region argument types must match}}
+    firrtl.contract {
+    ^bb0(%arg0: !firrtl.uint<1337>):
+    }
+  }
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+  firrtl.module @Foo(in %a: !firrtl.uint<42>) {
+    // expected-error @below {{result types and region argument types must match}}
+    firrtl.contract %a : !firrtl.uint<42> {
+    ^bb0(%arg0: !firrtl.uint<1337>):
+    }
+  }
 }

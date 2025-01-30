@@ -1660,3 +1660,10 @@ circuit Foo:
   ; expected-error @below {{inline layers are a FIRRTL 4.1.0+ feature}}
   layer A, inline:
   public module Foo:
+
+;// -----
+FIRRTL version 4.1.0
+circuit Top:
+  public module Top:
+    ; expected-error @below {{contracts are a FIRRTL 4.2.0+ feature}}
+    contract:

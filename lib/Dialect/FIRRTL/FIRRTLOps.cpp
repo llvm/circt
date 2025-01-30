@@ -3430,6 +3430,16 @@ LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
+// ContractOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ContractOp::verify() {
+  if (getBody().getArgumentTypes() != getInputs().getType())
+    return emitOpError("result types and region argument types must match");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ObjectOp
 //===----------------------------------------------------------------------===//
 
