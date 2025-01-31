@@ -64,4 +64,21 @@ def EmitRTGISAAssemblyPass : Pass<"rtg-emit-isa-assembly", "mlir::ModuleOp"> {
   ];
 }
 
+def LinearScanRegisterAllocationPass : Pass<
+    "rtg-linear-scan-register-allocation", "rtg::TestOp"> {
+
+  let summary = "simple linear scan register allocation for RTG";
+  let description = [{
+    Performs a simple version of the linear scan register allocation algorithm
+    based on the 'rtg.virtual_reg' operations.
+
+    This pass is expected to be run after elaboration.
+  }];
+
+  let statistics = [
+    Statistic<"numRegistersSpilled", "num-registers-spilled",
+      "Number of registers spilled to the stack.">,
+  ];
+}
+
 #endif // CIRCT_DIALECT_RTG_TRANSFORMS_RTGPASSES_TD

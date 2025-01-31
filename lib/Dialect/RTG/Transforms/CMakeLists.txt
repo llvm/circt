@@ -1,6 +1,7 @@
 add_circt_dialect_library(CIRCTRTGTransforms
   ElaborationPass.cpp
   EmitRTGISAAssemblyPass.cpp
+  LinearScanRegisterAllocationPass.cpp
 
   DEPENDS
   CIRCTRTGTransformsIncGen
