@@ -231,6 +231,50 @@ class InstFormatROpBase<string mnemonic, int opcode7, int funct3, int funct7>
   }];
 }
 
+class InstFormatSOpBase<string mnemonic, int opcode7, int funct3>
+  : RTGTestOp<"rv32i." # mnemonic, [InstructionOpAdaptor]> {
+
+  let arguments = (ins IntegerRegisterType:$rs1,
+                       IntegerRegisterType:$rs2,
+                       Imm12Type:$imm);
+
+  let assemblyFormat = "$rs1 `,` $rs2 `,` $imm attr-dict";
+
+  let extraClassDefinition = [{
+    void $cppClass::printInstructionBinary(llvm::raw_ostream &os,
+                                           FoldAdaptor adaptor) {
+      auto rs1 = cast<rtg::RegisterAttrInterface>(adaptor.getRs1());
+      auto rs2 = cast<rtg::RegisterAttrInterface>(adaptor.getRs2());
+      auto imm = cast<Imm12Attr>(adaptor.getImm()).getAPInt();
+
+      auto binary = imm.extractBits(7, 5)
+      .concat(llvm::APInt(5, rs2.getClassIndex()))
+      .concat(llvm::APInt(5, rs1.getClassIndex()))
+      .concat(llvm::APInt(3, }] # funct3 # [{))
+      .concat(imm.extractBits(5, 0))
+      .concat(llvm::APInt(7, }] # opcode7 # [{));
+
+      SmallVector<char> str;
+      binary.toStringUnsigned(str, 16);
+      os << str;
+    }
+
+    void $cppClass::printInstructionAssembly(llvm::raw_ostream &os,
+                                             FoldAdaptor adaptor) {
+      os << getOperationName().rsplit('.').second
+         << " "
+         << cast<rtg::RegisterAttrInterface>(adaptor.getRs1())
+              .getRegisterAssembly()
+         << ", "
+         << cast<Imm12Attr>(adaptor.getImm()).getValue()
+         << "("
+         << cast<rtg::RegisterAttrInterface>(adaptor.getRs2())
+              .getRegisterAssembly()
+         << ")";
+    }
+  }];
+}
+
 //===- Instructions -------------------------------------------------------===//
 
 def RV32I_JALROp    : InstFormatIOpBase<"jalr",  0b1100111, 0b000>;
@@ -247,6 +291,10 @@ def RV32I_LHOp      : InstFormatIOpBase<"lh",  0b0000011, 0b001>;
 def RV32I_LWOp      : InstFormatIOpBase<"lw",  0b0000011, 0b010>;
 def RV32I_LBUOp     : InstFormatIOpBase<"lbu", 0b0000011, 0b100>;
 def RV32I_LHUOp     : InstFormatIOpBase<"lhu", 0b0000011, 0b101>;
+
+def RV32I_SB        : InstFormatSOpBase<"sb", 0b0100011, 0b000>;
+def RV32I_SH        : InstFormatSOpBase<"sh", 0b0100011, 0b001>;
+def RV32I_SW        : InstFormatSOpBase<"sw", 0b0100011, 0b010>;
 
 def RV32I_ADD       : InstFormatROpBase<"add",  0b110011, 0b000, 0b0000000>;
 def RV32I_SUB       : InstFormatROpBase<"sub",  0b110011, 0b000, 0b0100000>;

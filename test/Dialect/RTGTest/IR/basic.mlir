@@ -163,6 +163,13 @@ rtg.test @instructions : !rtg.dict<imm: !rtgtest.imm12, imm13: !rtgtest.imm13, l
   rtgtest.rv32i.or %rd, %rs, %rs {rtg.some_attr}
   // CHECK: rtgtest.rv32i.and [[RD]], [[RS]], [[RS]] {rtg.some_attr}
   rtgtest.rv32i.and %rd, %rs, %rs {rtg.some_attr}
+
+  // CHECK: rtgtest.rv32i.sb [[RD]], [[RS]], [[IMM]] {rtg.some_attr}
+  rtgtest.rv32i.sb %rd, %rs, %imm {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.sh [[RD]], [[RS]], [[IMM]] {rtg.some_attr}
+  rtgtest.rv32i.sh %rd, %rs, %imm {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.sw [[RD]], [[RS]], [[IMM]] {rtg.some_attr}
+  rtgtest.rv32i.sw %rd, %rs, %imm {rtg.some_attr}
 }
 
 // -----
