@@ -88,9 +88,36 @@ struct BagStorage;
 struct SequenceStorage;
 struct SetStorage;
 
+/// Represents a unique virtual register.
+struct VirtualRegister {
+  VirtualRegister(uint64_t id, ArrayAttr allowedRegs)
+      : id(id), allowedRegs(allowedRegs) {}
+
+  bool operator==(const VirtualRegister &other) const {
+    assert(
+        id != other.id ||
+        allowedRegs == other.allowedRegs &&
+            "instances with the same ID must have the same allowed registers");
+    return id == other.id;
+  }
+
+  // The ID of this virtual register.
+  uint64_t id;
+
+  // The list of fixed registers allowed to be selected for this virtual
+  // register.
+  ArrayAttr allowedRegs;
+};
+
 /// The abstract base class for elaborated values.
-using ElaboratorValue = std::variant<TypedAttr, BagStorage *, bool, size_t,
-                                     SequenceStorage *, SetStorage *>;
+using ElaboratorValue =
+    std::variant<TypedAttr, BagStorage *, bool, size_t, SequenceStorage *,
+                 SetStorage *, VirtualRegister>;
+
+// NOLINTNEXTLINE(readability-identifier-naming)
+llvm::hash_code hash_value(const VirtualRegister &val) {
+  return llvm::hash_value(val.id);
+}
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 llvm::hash_code hash_value(const ElaboratorValue &val) {
@@ -114,6 +141,23 @@ struct DenseMapInfo<bool> {
   static unsigned getHashValue(const bool &val) { return val * 37U; }
 
   static bool isEqual(const bool &lhs, const bool &rhs) { return lhs == rhs; }
+};
+
+template <>
+struct DenseMapInfo<VirtualRegister> {
+  static inline VirtualRegister getEmptyKey() {
+    return VirtualRegister(0, ArrayAttr());
+  }
+  static inline VirtualRegister getTombstoneKey() {
+    return VirtualRegister(~0, ArrayAttr());
+  }
+  static unsigned getHashValue(const VirtualRegister &val) {
+    return llvm::hash_combine(val.id, val.allowedRegs);
+  }
+
+  static bool isEqual(const VirtualRegister &lhs, const VirtualRegister &rhs) {
+    return lhs == rhs;
+  }
 };
 
 } // namespace llvm
@@ -341,6 +385,10 @@ static void print(SetStorage *val, llvm::raw_ostream &os) {
   os << "} at " << val << ">";
 }
 
+static void print(const VirtualRegister &val, llvm::raw_ostream &os) {
+  os << "<virtual-register " << val.id << " " << val.allowedRegs << ">";
+}
+
 static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
                                      const ElaboratorValue &value) {
   std::visit([&](auto val) { print(val, os); }, value);
@@ -403,16 +451,9 @@ public:
     if (op->getParentRegion() == builder.getBlock()->getParent()) {
       // We are doing in-place materialization, so mark all ops deleted until we
       // reach the one to be materialized and modify it in-place.
-      auto ip = builder.getInsertionPoint();
-      while (ip != builder.getBlock()->end() && &*ip != op) {
-        LLVM_DEBUG(llvm::dbgs() << "Marking to be deleted: " << *ip << "\n\n");
-        toDelete.push_back(&*ip);
+      deleteOpsUntil([&](auto iter) { return &*iter == op; });
 
-        builder.setInsertionPointAfter(&*ip);
-        ip = builder.getInsertionPoint();
-      }
-
-      if (ip == builder.getBlock()->end())
+      if (builder.getInsertionPoint() == builder.getBlock()->end())
         return op->emitError("operation did not occur after the current "
                              "materializer insertion point");
 
@@ -447,11 +488,24 @@ public:
   /// Should be called once the `Region` is successfully materialized. No calls
   /// to `materialize` should happen after this anymore.
   void finalize() {
+    deleteOpsUntil([](auto iter) { return false; });
+
     for (auto *op : llvm::reverse(toDelete))
       op->erase();
   }
 
 private:
+  void deleteOpsUntil(function_ref<bool(Block::iterator)> stop) {
+    auto ip = builder.getInsertionPoint();
+    while (ip != builder.getBlock()->end() && !stop(ip)) {
+      LLVM_DEBUG(llvm::dbgs() << "Marking to be deleted: " << *ip << "\n\n");
+      toDelete.push_back(&*ip);
+
+      builder.setInsertionPointAfter(&*ip);
+      ip = builder.getInsertionPoint();
+    }
+  }
+
   Value visit(TypedAttr val, Location loc,
               std::queue<SequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
@@ -544,6 +598,14 @@ private:
     return builder.create<SequenceClosureOp>(loc, val->name, ValueRange());
   }
 
+  Value visit(const VirtualRegister &val, Location loc,
+              std::queue<SequenceStorage *> &elabRequests,
+              function_ref<InFlightDiagnostic()> emitError) {
+    auto res = builder.create<VirtualRegisterOp>(loc, val.allowedRegs);
+    materializedValues[val] = res;
+    return res;
+  }
+
 private:
   /// Cache values we have already materialized to reuse them later. We start
   /// with an insertion point at the start of the block and cache the (updated)
@@ -580,6 +642,8 @@ struct ElaboratorSharedState {
   /// The worklist used to keep track of the test and sequence operations to
   /// make sure they are processed top-down (BFS traversal).
   std::queue<SequenceStorage *> worklist;
+
+  uint64_t virtualRegisterID = 0;
 };
 
 /// Interprets the IR to perform and lower the represented randomizations.
@@ -596,33 +660,39 @@ public:
     return std::get<ValueTy>(state.at(val));
   }
 
+  FailureOr<DeletionKind> visitConstantLike(Operation *op) {
+    assert(op->hasTrait<OpTrait::ConstantLike>() &&
+           "op is expected to be constant-like");
+
+    SmallVector<OpFoldResult, 1> result;
+    auto foldResult = op->fold(result);
+    (void)foldResult; // Make sure there is a user when assertions are off.
+    assert(succeeded(foldResult) &&
+           "constant folder of a constant-like must always succeed");
+    auto attr = dyn_cast<TypedAttr>(result[0].dyn_cast<Attribute>());
+    if (!attr)
+      return op->emitError(
+          "only typed attributes supported for constant-like operations");
+
+    auto intAttr = dyn_cast<IntegerAttr>(attr);
+    if (intAttr && isa<IndexType>(attr.getType()))
+      state[op->getResult(0)] = size_t(intAttr.getInt());
+    else if (intAttr && intAttr.getType().isSignlessInteger(1))
+      state[op->getResult(0)] = bool(intAttr.getInt());
+    else
+      state[op->getResult(0)] = attr;
+
+    return DeletionKind::Delete;
+  }
+
   /// Print a nice error message for operations we don't support yet.
   FailureOr<DeletionKind> visitUnhandledOp(Operation *op) {
     return op->emitOpError("elaboration not supported");
   }
 
   FailureOr<DeletionKind> visitExternalOp(Operation *op) {
-    if (op->hasTrait<OpTrait::ConstantLike>()) {
-      SmallVector<OpFoldResult, 1> result;
-      auto foldResult = op->fold(result);
-      (void)foldResult; // Make sure there is a user when assertions are off.
-      assert(succeeded(foldResult) &&
-             "constant folder of a constant-like must always succeed");
-      auto attr = dyn_cast<TypedAttr>(result[0].dyn_cast<Attribute>());
-      if (!attr)
-        return op->emitError(
-            "only typed attributes supported for constant-like operations");
-
-      auto intAttr = dyn_cast<IntegerAttr>(attr);
-      if (intAttr && isa<IndexType>(attr.getType()))
-        state[op->getResult(0)] = size_t(intAttr.getInt());
-      else if (intAttr && intAttr.getType().isSignlessInteger(1))
-        state[op->getResult(0)] = bool(intAttr.getInt());
-      else
-        state[op->getResult(0)] = attr;
-
-      return DeletionKind::Delete;
-    }
+    if (op->hasTrait<OpTrait::ConstantLike>())
+      return visitConstantLike(op);
 
     // TODO: we only have this to be able to write tests for this pass without
     // having to add support for more operations for now, so it should be
@@ -789,6 +859,16 @@ public:
   FailureOr<DeletionKind> visitOp(BagUniqueSizeOp op) {
     auto size = get<BagStorage *>(op.getBag())->bag.size();
     state[op.getResult()] = size;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(FixedRegisterOp op) {
+    return visitConstantLike(op);
+  }
+
+  FailureOr<DeletionKind> visitOp(VirtualRegisterOp op) {
+    state[op.getResult()] = VirtualRegister(sharedState.virtualRegisterID++,
+                                            op.getAllowedRegsAttr());
     return DeletionKind::Delete;
   }
 
