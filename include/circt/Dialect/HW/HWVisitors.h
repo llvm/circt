@@ -93,9 +93,10 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<OutputOp, InstanceOp, InstanceChoiceOp, TypeScopeOp,
-                       TypedeclOp, DriveHiZOp, CreateHiZOp>([&](auto expr) -> ResultType {
-          return thisCast->visitStmt(expr, args...);
-        })
+                       TypedeclOp, DriveHiZOp, CreateHiZOp>(
+            [&](auto expr) -> ResultType {
+              return thisCast->visitStmt(expr, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidStmt(op, args...);
         });
@@ -137,7 +138,7 @@ public:
   HANDLE(TypedeclOp, Unhandled);
   HANDLE(DriveHiZOp, Unhandled);
   HANDLE(CreateHiZOp, Unhandled);
-  
+
 #undef HANDLE
 };
 

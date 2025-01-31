@@ -3350,7 +3350,7 @@ SubExprInfo ExprEmitter::visitTypeOp(EnumConstantOp op) {
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(ReadHiZOp op) {
- auto info = emitSubExpr(op.getInput(), LowestPrecedence);
+  auto info = emitSubExpr(op.getInput(), LowestPrecedence);
   return {Symbol, info.signedness};
 }
 
