@@ -14,6 +14,7 @@
 #ifndef CIRCT_DIALECT_RTGTEST_IR_RTGTESTDIALECT_H
 #define CIRCT_DIALECT_RTGTEST_IR_RTGTESTDIALECT_H
 
+#include "circt/Dialect/RTG/IR/RTGDialect.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
