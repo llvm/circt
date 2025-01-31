@@ -39,6 +39,7 @@ class ImmTypeBase<int width> : TypeDef<RTGTestDialect, "Imm" # width, []> {
 }
 
 def Imm12Type : ImmTypeBase<12>;
+def Imm13Type : ImmTypeBase<13>;
 def Imm21Type : ImmTypeBase<21>;
 def Imm32Type : ImmTypeBase<32>;
 
