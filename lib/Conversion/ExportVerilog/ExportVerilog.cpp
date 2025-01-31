@@ -6334,7 +6334,7 @@ void ModuleEmitter::emitPortList(Operation *module,
         break;
       case ModulePort::Direction::Input:
         if (isa<HiZType>(portType))
-          ps << (hasOutputs ? "inout " : "inout ");
+          ps << (hasOutputs ? "inout  " : "inout ");
         else
           ps << (hasOutputs ? "input  " : "input ");
         break;
