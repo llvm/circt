@@ -97,7 +97,7 @@ class InstFormatIOpBase<string mnemonic, int opcode7, int funct3>
                                          ArrayRef<Attribute> operands) {
       FoldAdaptor adaptor(operands);
 
-      os << getOperationName().split('.').second << " "
+      os << getOperationName().rsplit('.').second << " "
          << cast<rtg::RegisterAttrInterface>(adaptor.getRd())
               .getRegisterAssembly()
          << ", "
@@ -129,7 +129,7 @@ class InstFormatIImmOpBase<string mnemonic, int opcode7, int funct12>
 
     static void printInstructionAssembly(llvm::raw_ostream &os,
                                          ArrayRef<Attribute> operands) {
-      os << getOperationName().split('.').second;
+      os << getOperationName().rsplit('.').second;
     }
   }];
 }

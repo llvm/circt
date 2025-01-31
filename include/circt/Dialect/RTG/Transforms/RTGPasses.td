@@ -32,4 +32,36 @@ def ElaborationPass : Pass<"rtg-elaborate", "mlir::ModuleOp"> {
   let dependentDialects = ["mlir::index::IndexDialect"];
 }
 
+def EmitRTGISAAssemblyPass : Pass<"rtg-emit-isa-assembly", "mlir::ModuleOp"> {
+  let summary = "Elaborate the contexts of RTG";
+  let description = [{
+    Emits all 'rtg.test's in the IR in a format understood by assemblers.
+
+    There are two options to specify lists of instructions that are not
+    supported by the assembler. For instructions in any of those lists, this
+    pass will emit the equivalent binary representation.
+
+    This pass operates on the `InstructionOpInterface` and folds constant-like
+    operations to support downstream dialects.
+  }];
+
+  let options = [
+    Option<"splitOutput", "split-output", "bool", /*default=*/"false",
+      "If 'true' emits one file per 'rtg.test' in the IR. The name of the "
+      "file matches the test name and is placed in 'path'. Otherwise, path "
+      "is interpreted as the full file path including filename.">,
+    Option<"path", "path", "std::string", /*default=*/"",
+      "The directory or file path in which the output files should be "
+      "created. If empty is is emitted to stderr (not allowed if "
+      "'split-output' is set to 'true')">,
+    Option<"unsupportedInstructionsFile", "unsupported-instructions-file",
+      "std::string", /*default=*/"",
+      "An absolute path to a file with a list of instruction names not "
+      "supported by the assembler.">,
+    ListOption<"unsupportedInstructions", "unsupported-instructions",
+      "std::string",
+      "A list of ISA instruction names not supported by the assembler.">,
+  ];
+}
+
 #endif // CIRCT_DIALECT_RTG_TRANSFORMS_RTGPASSES_TD

@@ -1,0 +1,1 @@
+rtgtest.rv32i.jalr,rtgtest.rv32i.lb,rtgtest.rv32i.lh,rtgtest.rv32i.lw,rtgtest.rv32i.lbu,rtgtest.rv32i.lhu

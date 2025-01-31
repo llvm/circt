@@ -1,5 +1,6 @@
 add_circt_dialect_library(CIRCTRTGTransforms
   ElaborationPass.cpp
+  EmitRTGISAAssemblyPass.cpp
 
   DEPENDS
   CIRCTRTGTransformsIncGen
@@ -9,9 +10,10 @@ add_circt_dialect_library(CIRCTRTGTransforms
 
   LINK_LIBS PRIVATE
   CIRCTRTGDialect
+  CIRCTSupport
   MLIRIndexDialect
-  MLIRSCFDialect
   MLIRIR
   MLIRPass
+  MLIRSCFDialect
 )
 
