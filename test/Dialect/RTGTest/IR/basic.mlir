@@ -96,6 +96,28 @@ rtg.test @immediates : !rtg.dict<> {
   rtgtest.immediate #rtgtest.imm32<3> : !rtgtest.imm32
 }
 
+// CHECK-LABEL: @instructions
+rtg.test @instructions : !rtg.dict<imm: !rtgtest.imm12, rd: !rtgtest.ireg, rs: !rtgtest.ireg> {
+// CHECK: ([[IMM:%.+]]: !rtgtest.imm12, [[RD:%.+]]: !rtgtest.ireg, [[RS:%.+]]: !rtgtest.ireg)
+^bb0(%imm: !rtgtest.imm12, %rd: !rtgtest.ireg, %rs: !rtgtest.ireg):
+  // CHECK: rtgtest.rv32i.jalr [[RD]], [[RS]], [[IMM]]
+  rtgtest.rv32i.jalr %rd, %rs, %imm
+  // CHECK: rtgtest.rv32i.lb [[RD]], [[RS]], [[IMM]]
+  rtgtest.rv32i.lb %rd, %rs, %imm
+  // CHECK: rtgtest.rv32i.lh [[RD]], [[RS]], [[IMM]]
+  rtgtest.rv32i.lh %rd, %rs, %imm
+  // CHECK: rtgtest.rv32i.lw [[RD]], [[RS]], [[IMM]]
+  rtgtest.rv32i.lw %rd, %rs, %imm
+  // CHECK: rtgtest.rv32i.lbu [[RD]], [[RS]], [[IMM]]
+  rtgtest.rv32i.lbu %rd, %rs, %imm
+  // CHECK: rtgtest.rv32i.lhu [[RD]], [[RS]], [[IMM]]
+  rtgtest.rv32i.lhu %rd, %rs, %imm
+  // CHECK: rtgtest.rv32i.ecall
+  rtgtest.rv32i.ecall
+  // CHECK: rtgtest.rv32i.ebreak
+  rtgtest.rv32i.ebreak
+}
+
 // -----
 
 rtg.test @immediateTooBig : !rtg.dict<> {
