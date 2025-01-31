@@ -46,7 +46,29 @@ binary.
 
 ## Bounded Model Checking
 
-TODO
+The `circt-bmc` tool takes one MLIR input file with operations of the HW, Comb,
+and Seq dialects, along with operations from the Verif dialect to annotate the
+design with properties. The name of the top module is also taken as an argument,
+along with a bound indicating how many timesteps the design should be model
+checked over. To get to know the exact CLI command type `circt-bmc --help`.
+
+An example of a file that can be provided to `circt-bmc` can be seen below:
+
+```mlir
+hw.module @StateProp(in %clk: !seq.clock, in %i0: i1) {
+  %c-1_i1 = hw.constant -1 : i1
+  %reg = seq.compreg %i0, %clk : i1
+  %not_reg = comb.xor bin %reg, %c-1_i1 : i1
+  %not_not_reg = comb.xor bin %not_reg, %c-1_i1 : i1
+  // Condition
+  %eq = comb.icmp bin eq %not_not_reg, %reg : i1
+  verif.assert %eq : i1
+}
+```
+
+This design negates a register's output twice and checks that the register's
+output is always equivalent to the double-negated value - this is specified with
+a `verif.assert` operation.
 
 ## Infrastructure Overview
 
