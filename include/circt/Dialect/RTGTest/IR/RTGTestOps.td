@@ -39,6 +39,21 @@ def CPUDeclOp : RTGTestOp<"cpu_decl", [
   let hasFolder = 1;
 }
 
+def ImmediateOp : RTGTestOp<"immediate", [
+  Pure,
+  ConstantLike,
+  FirstAttrDerivedResultType,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "declare an immediate value";
+
+  let arguments = (ins AnyAttrOf<[Imm12, Imm21, Imm32]>:$imm);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = "$imm attr-dict";
+  let hasFolder = 1;
+}
+
 def ConstantTestOp : RTGTestOp<"constant_test", [
   Pure, ConstantLike,
 ]> {

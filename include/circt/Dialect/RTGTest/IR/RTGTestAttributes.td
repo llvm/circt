@@ -35,6 +35,40 @@ def CPUAttr : RTGTestAttrDef<"CPU", [ContextResourceAttrInterface]> {
   }];
 }
 
+class ImmediateAttrBase<int width> : RTGTestAttrDef<"Imm" # width, [
+  DeclareAttrInterfaceMethods<TypedAttrInterface>,
+]> {
+  let summary = "represents a " # width # "-bit immediate value";
+
+  let mnemonic = "imm" # width;
+  let parameters = (ins "uint32_t":$value);
+
+  let assemblyFormat = "`<` $value `>`";
+
+  let extraClassDefinition = [{
+    Type $cppClass::getType() const {
+      return Imm}] # width # [{Type::get(getContext());
+    }
+
+    LogicalResult $cppClass::verify(
+      ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
+      uint32_t value) {
+
+      if (32 - llvm::countl_zero(value) > }] # width # [{)
+        return emitError() << "cannot represent " << value << " with }] #
+          width # [{ bits";
+
+      return success();
+    }
+  }];
+
+  let genVerifyDecl = 1;
+}
+
+def Imm12 : ImmediateAttrBase<12>;
+def Imm21 : ImmediateAttrBase<21>;
+def Imm32 : ImmediateAttrBase<32>;
+
 class IntegerRegisterAttrBase<string cppName, string name, int classIndex>
   : RTGTestAttrDef<cppName, [RegisterAttrInterface]> {
 
