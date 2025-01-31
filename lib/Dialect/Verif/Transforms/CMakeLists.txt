@@ -1,9 +1,10 @@
 add_circt_dialect_library(CIRCTVerifTransforms
-  VerifyClockedAssertLike.cpp
-  PrepareForFormal.cpp
-  LowerFormalToHW.cpp
   LowerContracts.cpp
+  LowerFormalToHW.cpp
+  PrepareForFormal.cpp
   SimplifyAssumeEq.cpp
+  StripContracts.cpp
+  VerifyClockedAssertLike.cpp
 
   DEPENDS
   CIRCTVerifTransformsIncGen

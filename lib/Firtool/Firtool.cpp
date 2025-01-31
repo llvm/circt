@@ -304,6 +304,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
 
 LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
                                       const FirtoolOptions &opt) {
+  pm.nestAny().addPass(verif::createStripContractsPass());
   pm.addPass(verif::createLowerFormalToHWPass());
 
   if (opt.shouldExtractTestCode())

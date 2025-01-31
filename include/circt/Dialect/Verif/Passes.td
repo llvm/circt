@@ -71,4 +71,12 @@ def SimplifyAssumeEqPass : Pass<"simplify-assume-eq", "hw::HWModuleOp"> {
   }];
 }
 
+def StripContractsPass : Pass<"strip-contracts"> {
+  let summary = "Remove contracts from the IR";
+  let description = [{
+    Replaces all `verif.contract` ops in the IR with their operands, making them
+    act as simple passthroughs.
+  }];
+}
+
 #endif // CIRCT_DIALECT_VERIF_PASSES_TD
