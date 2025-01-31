@@ -42,6 +42,35 @@ AcceleratorServiceThread *AcceleratorConnection::getServiceThread() {
     serviceThread = std::make_unique<AcceleratorServiceThread>();
   return serviceThread.get();
 }
+void AcceleratorConnection::createEngine(const std::string &engineTypeName,
+                                         AppIDPath idPath,
+                                         const ServiceImplDetails &details,
+                                         const HWClientDetails &clients) {
+  std::unique_ptr<Engine> engine = ::esi::registry::createEngine(
+      *this, engineTypeName, idPath, details, clients);
+  registerEngine(idPath, std::move(engine), clients);
+}
+
+void AcceleratorConnection::registerEngine(AppIDPath idPath,
+                                           std::unique_ptr<Engine> engine,
+                                           const HWClientDetails &clients) {
+  assert(engine);
+  auto [engineIter, _] = ownedEngines.emplace(idPath, std::move(engine));
+
+  // Engine is now owned by the accelerator connection, so the std::unique_ptr
+  // is no longer valid. Resolve a new one from the map iter.
+  Engine *enginePtr = engineIter->second.get();
+  // Compute our parents idPath path.
+  AppIDPath prefix = std::move(idPath);
+  if (prefix.size() > 0)
+    prefix.pop_back();
+
+  for (const auto &client : clients) {
+    AppIDPath fullClientPath = prefix + client.relPath;
+    for (const auto &channel : client.channelAssignments)
+      clientEngines[fullClientPath].setEngine(channel.first, enginePtr);
+  }
+}
 
 services::Service *AcceleratorConnection::getService(Service::Type svcType,
                                                      AppIDPath id,

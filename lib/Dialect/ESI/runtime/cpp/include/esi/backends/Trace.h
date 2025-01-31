@@ -64,14 +64,13 @@ public:
 
   /// Internal implementation.
   struct Impl;
-
-  /// Request the host side channel ports for a particular instance (identified
-  /// by the AppID path). For convenience, provide the bundle type.
-  std::map<std::string, ChannelPort &>
-  requestChannelsFor(AppIDPath, const BundleType *,
-                     const ServiceTable &) override;
+  Impl &getImpl();
 
 protected:
+  void createEngine(const std::string &engineTypeName, AppIDPath idPath,
+                    const ServiceImplDetails &details,
+                    const HWClientDetails &clients) override;
+
   virtual Service *createService(Service::Type service, AppIDPath idPath,
                                  std::string implName,
                                  const ServiceImplDetails &details,

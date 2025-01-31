@@ -81,12 +81,6 @@ struct esi::backends::xrt::XrtAccelerator::Impl {
     ip = ::xrt::ip(device, uuid, kernel_name);
   }
 
-  std::map<std::string, ChannelPort &> requestChannelsFor(AppIDPath,
-                                                          const BundleType *) {
-    // TODO: Create plugin DMA engines. Instantiate elsewhere.
-    return {};
-  }
-
   ::xrt::device device;
   ::xrt::ip ip;
   int32_t memoryGroup;
@@ -103,7 +97,8 @@ XrtAccelerator::~XrtAccelerator() { disconnect(); }
 namespace {
 class XrtMMIO : public MMIO {
 public:
-  XrtMMIO(::xrt::ip &ip) : ip(ip) {}
+  XrtMMIO(XrtAccelerator &conn, ::xrt::ip &ip, const HWClientDetails &clients)
+      : MMIO(conn, clients), ip(ip) {}
 
   uint64_t read(uint32_t addr) const override {
     auto lo = static_cast<uint64_t>(ip.read_register(addr));
@@ -124,8 +119,8 @@ namespace {
 /// Host memory service specialized to XRT.
 class XrtHostMem : public HostMem {
 public:
-  XrtHostMem(::xrt::device &device, int32_t memoryGroup)
-      : device(device), memoryGroup(memoryGroup){};
+  XrtHostMem(XrtAccelerator &conn, ::xrt::device &device, int32_t memoryGroup)
+      : HostMem(conn), device(device), memoryGroup(memoryGroup){};
 
   struct XrtHostMemRegion : public HostMemRegion {
     XrtHostMemRegion(::xrt::device &device, std::size_t size,
@@ -161,19 +156,14 @@ private:
 };
 } // namespace
 
-std::map<std::string, ChannelPort &> XrtAccelerator::requestChannelsFor(
-    AppIDPath idPath, const BundleType *bundleType, const ServiceTable &) {
-  return impl->requestChannelsFor(idPath, bundleType);
-}
-
 Service *XrtAccelerator::createService(Service::Type svcType, AppIDPath id,
                                        std::string implName,
                                        const ServiceImplDetails &details,
                                        const HWClientDetails &clients) {
   if (svcType == typeid(MMIO))
-    return new XrtMMIO(impl->ip);
+    return new XrtMMIO(*this, impl->ip, clients);
   else if (svcType == typeid(HostMem))
-    return new XrtHostMem(impl->device, impl->memoryGroup);
+    return new XrtHostMem(*this, impl->device, impl->memoryGroup);
   else if (svcType == typeid(SysInfo))
     return new MMIOSysInfo(getService<MMIO>());
   return nullptr;

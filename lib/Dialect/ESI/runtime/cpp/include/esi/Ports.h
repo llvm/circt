@@ -25,6 +25,9 @@
 
 namespace esi {
 
+class ChannelPort;
+using PortMap = std::map<std::string, ChannelPort &>;
+
 /// Unidirectional channels are the basic communication primitive between the
 /// host and accelerator. A 'ChannelPort' is the host side of a channel. It can
 /// be either read or write but not both. At this level, channels are untyped --
@@ -190,7 +193,7 @@ public:
   }
 
   /// Construct a port.
-  BundlePort(AppID id, std::map<std::string, ChannelPort &> channels);
+  BundlePort(AppID id, const BundleType *type, PortMap channels);
   virtual ~BundlePort() = default;
 
   /// Get the ID of the port.
@@ -202,9 +205,7 @@ public:
   /// ordinary users should not use. You have been warned.
   WriteChannelPort &getRawWrite(const std::string &name) const;
   ReadChannelPort &getRawRead(const std::string &name) const;
-  const std::map<std::string, ChannelPort &> &getChannels() const {
-    return channels;
-  }
+  const PortMap &getChannels() const { return channels; }
 
   /// Cast this Bundle port to a subclass which is actually useful. Returns
   /// nullptr if the cast fails.
@@ -224,9 +225,10 @@ public:
     return result;
   }
 
-private:
+protected:
   AppID id;
-  std::map<std::string, ChannelPort &> channels;
+  const BundleType *type;
+  PortMap channels;
 };
 
 } // namespace esi
