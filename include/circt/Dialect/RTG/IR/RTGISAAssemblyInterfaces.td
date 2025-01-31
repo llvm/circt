@@ -68,4 +68,33 @@ def InstructionOpInterface : OpInterface<"InstructionOpInterface"> {
   ];
 }
 
+def InstructionOpAdaptorTrait : NativeOpTrait<"InstructionOpAdaptorTrait"> {
+  let extraConcreteClassDeclaration = [{
+    static void printInstructionBinary(llvm::raw_ostream &os,
+                                       FoldAdaptor adaptor);
+
+    static void printInstructionAssembly(llvm::raw_ostream &os,
+                                         FoldAdaptor adaptor);
+  }];
+
+  let extraConcreteClassDefinition = [{
+    void $cppClass::printInstructionBinary(
+        llvm::raw_ostream &os, llvm::ArrayRef<mlir::Attribute> operands) {
+      printInstructionBinary(os, FoldAdaptor(operands));
+    }
+
+    void $cppClass::printInstructionAssembly(
+        llvm::raw_ostream &os, llvm::ArrayRef<mlir::Attribute> operands) {
+      printInstructionAssembly(os, FoldAdaptor(operands));
+    }
+  }];
+
+  let cppNamespace = "::circt::rtg";
+}
+
+def InstructionOpAdaptor : TraitList<[
+  DeclareOpInterfaceMethods<InstructionOpInterface>,
+  InstructionOpAdaptorTrait,
+]>;
+
 #endif // CIRCT_DIALECT_RTG_IR_RTGISAASSEMBLYINTERFACES_TD

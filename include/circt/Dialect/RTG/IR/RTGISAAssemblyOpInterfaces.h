@@ -19,4 +19,15 @@
 
 #include "circt/Dialect/RTG/IR/RTGISAAssemblyOpInterfaces.h.inc"
 
+namespace circt {
+namespace rtg {
+
+template <typename ConcreteType>
+class InstructionOpAdaptorTrait
+    : public mlir::OpTrait::TraitBase<ConcreteType, InstructionOpAdaptorTrait> {
+};
+
+} // namespace rtg
+} // namespace circt
+
 #endif // CIRCT_DIALECT_RTG_IR_RTGISAASSEMBLYOPINTERFACES_H
