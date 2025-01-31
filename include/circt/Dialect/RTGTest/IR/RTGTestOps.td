@@ -187,6 +187,50 @@ class InstFormatBOpBase<string mnemonic, int opcode7, int funct3>
   }];
 }
 
+class InstFormatROpBase<string mnemonic, int opcode7, int funct3, int funct7>
+  : RTGTestOp<"rv32i." # mnemonic, [InstructionOpAdaptor]> {
+
+  let arguments = (ins IntegerRegisterType:$rd,
+                       IntegerRegisterType:$rs1,
+                       IntegerRegisterType:$rs2);
+
+  let assemblyFormat = "$rd `,` $rs1 `,` $rs2 attr-dict";
+
+  let extraClassDefinition = [{
+    void $cppClass::printInstructionBinary(llvm::raw_ostream &os,
+                                         FoldAdaptor adaptor) {
+      auto rd = cast<rtg::RegisterAttrInterface>(adaptor.getRd());
+      auto rs1 = cast<rtg::RegisterAttrInterface>(adaptor.getRs1());
+      auto rs2 = cast<rtg::RegisterAttrInterface>(adaptor.getRs2());
+
+      auto binary = llvm::APInt(7, }] # funct7 # [{)
+      .concat(llvm::APInt(5, rs2.getClassIndex()))
+      .concat(llvm::APInt(5, rs1.getClassIndex()))
+      .concat(llvm::APInt(3, }] # funct3 # [{))
+      .concat(llvm::APInt(5, rd.getClassIndex()))
+      .concat(llvm::APInt(7, }] # opcode7 # [{));
+
+      SmallVector<char> str;
+      binary.toStringUnsigned(str, 16);
+      os << str;
+    }
+
+    void $cppClass::printInstructionAssembly(llvm::raw_ostream &os,
+                                             FoldAdaptor adaptor) {
+      os << getOperationName().rsplit('.').second
+         << " "
+         << cast<rtg::RegisterAttrInterface>(adaptor.getRd())
+            .getRegisterAssembly()
+         << ", "
+         << cast<rtg::RegisterAttrInterface>(adaptor.getRs1())
+            .getRegisterAssembly()
+         << ", "
+         << cast<rtg::RegisterAttrInterface>(adaptor.getRs2())
+            .getRegisterAssembly();
+    }
+  }];
+}
+
 //===- Instructions -------------------------------------------------------===//
 
 def RV32I_JALROp    : InstFormatIOpBase<"jalr",  0b1100111, 0b000>;
@@ -203,6 +247,17 @@ def RV32I_LHOp      : InstFormatIOpBase<"lh",  0b0000011, 0b001>;
 def RV32I_LWOp      : InstFormatIOpBase<"lw",  0b0000011, 0b010>;
 def RV32I_LBUOp     : InstFormatIOpBase<"lbu", 0b0000011, 0b100>;
 def RV32I_LHUOp     : InstFormatIOpBase<"lhu", 0b0000011, 0b101>;
+
+def RV32I_ADD       : InstFormatROpBase<"add",  0b110011, 0b000, 0b0000000>;
+def RV32I_SUB       : InstFormatROpBase<"sub",  0b110011, 0b000, 0b0100000>;
+def RV32I_SLL       : InstFormatROpBase<"sll",  0b110011, 0b001, 0b0000000>;
+def RV32I_SLT       : InstFormatROpBase<"slt",  0b110011, 0b010, 0b0000000>;
+def RV32I_SLTU      : InstFormatROpBase<"sltu", 0b110011, 0b011, 0b0000000>;
+def RV32I_XOR       : InstFormatROpBase<"xor",  0b110011, 0b100, 0b0000000>;
+def RV32I_SRL       : InstFormatROpBase<"srl",  0b110011, 0b101, 0b0000000>;
+def RV32I_SRA       : InstFormatROpBase<"sra",  0b110011, 0b101, 0b0100000>;
+def RV32I_OR        : InstFormatROpBase<"or",   0b110011, 0b110, 0b0000000>;
+def RV32I_AND       : InstFormatROpBase<"and",  0b110011, 0b111, 0b0000000>;
 
 def RV32I_ECALLOp   : InstFormatIImmOpBase<"ecall", 0b1110011, 0b000000000000>;
 def RV32I_EBREAKOp  : InstFormatIImmOpBase<"ebreak", 0b1110011, 0b000000000001>;
