@@ -796,3 +796,26 @@ firrtl.circuit "Foo" {
     }
   }
 }
+
+// -----
+// Test that all modules are reached and updated.
+
+// CHECK-LABEL: firrtl.circuit "PF"
+firrtl.circuit "PF" {
+  // CHECK: @Child()
+  firrtl.module @Child(out %p: !firrtl.probe<uint<1>>) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %0 = firrtl.ref.send %c1_ui1 : !firrtl.uint<1>
+    firrtl.ref.define %p, %0 : !firrtl.probe<uint<1>>
+  }
+  // CHECK: @PF()
+  firrtl.module @PF(out %p: !firrtl.probe<uint<1>>) {
+    %c_p = firrtl.instance c @Child(out p: !firrtl.probe<uint<1>>)
+    firrtl.ref.define %p, %c_p : !firrtl.probe<uint<1>>
+  }
+  // CHECK: @Other()
+  firrtl.module @Other(out %p: !firrtl.probe<uint<1>>) {
+    %c_p = firrtl.instance c @Child(out p: !firrtl.probe<uint<1>>)
+    firrtl.ref.define %p, %c_p : !firrtl.probe<uint<1>>
+  }
+}
