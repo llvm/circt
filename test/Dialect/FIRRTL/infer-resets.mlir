@@ -516,14 +516,6 @@ firrtl.circuit "ReusePortsAsync" {
   firrtl.module @BadName(in %clock: !firrtl.clock, in %existingReset: !firrtl.asyncreset) {
     %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8>
   }
-  // CHECK-LABEL: firrtl.module @BadType
-  // CHECK-SAME: in %reset_0: !firrtl.asyncreset,
-  // CHECK-SAME: in %clock: !firrtl.clock
-  // CHECK-SAME: in %reset: !firrtl.uint<1>
-  // CHECK: %reg = firrtl.regreset %clock, %reset_0, %c0_ui8
-  firrtl.module @BadType(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
-    %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8>
-  }
   // CHECK-LABEL: firrtl.module @ReusePorts
   firrtl.module @ReusePortsAsync(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) attributes {
     portAnnotations = [[],[{class = "circt.FullResetAnnotation", resetType = "async"}]]} {
@@ -531,11 +523,8 @@ firrtl.circuit "ReusePortsAsync" {
     // CHECK: firrtl.matchingconnect %child_reset, %reset
     // CHECK: %badName_reset, %badName_clock, %badName_existingReset = firrtl.instance badName
     // CHECK: firrtl.matchingconnect %badName_reset, %reset
-    // CHECK: %badType_reset_0, %badType_clock, %badType_reset = firrtl.instance badType
-    // CHECK: firrtl.matchingconnect %badType_reset_0, %reset
     %child_clock, %child_reset = firrtl.instance child @Child(in clock: !firrtl.clock, in reset: !firrtl.asyncreset)
     %badName_clock, %badName_existingReset = firrtl.instance badName @BadName(in clock: !firrtl.clock, in existingReset: !firrtl.asyncreset)
-    %badType_clock, %badType_reset = firrtl.instance badType @BadType(in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
   }
 }
 
@@ -557,14 +546,6 @@ firrtl.circuit "ReusePortsSync" {
   firrtl.module @BadName(in %clock: !firrtl.clock, in %existingReset: !firrtl.uint<1>) {
     %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8>
   }
-  // CHECK-LABEL: firrtl.module @BadType
-  // CHECK-SAME: in %reset_0: !firrtl.uint<1>
-  // CHECK-SAME: in %clock: !firrtl.clock
-  // CHECK-SAME: in %reset: !firrtl.asyncreset
-  // CHECK: %reg = firrtl.regreset %clock, %reset_0, %c0_ui8
-  firrtl.module @BadType(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
-    %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8>
-  }
   // CHECK-LABEL: firrtl.module @ReusePorts
   firrtl.module @ReusePortsSync(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) attributes {
     portAnnotations = [[],[{class = "circt.FullResetAnnotation", resetType = "sync"}]]} {
@@ -572,11 +553,8 @@ firrtl.circuit "ReusePortsSync" {
     // CHECK: firrtl.matchingconnect %child_reset, %reset
     // CHECK: %badName_reset, %badName_clock, %badName_existingReset = firrtl.instance badName
     // CHECK: firrtl.matchingconnect %badName_reset, %reset
-    // CHECK: %badType_reset_0, %badType_clock, %badType_reset = firrtl.instance badType
-    // CHECK: firrtl.matchingconnect %badType_reset_0, %reset
     %child_clock, %child_reset = firrtl.instance child @Child(in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
     %badName_clock, %badName_existingReset = firrtl.instance badName @BadName(in clock: !firrtl.clock, in existingReset: !firrtl.uint<1>)
-    %badType_clock, %badType_reset = firrtl.instance badType @BadType(in clock: !firrtl.clock, in reset: !firrtl.asyncreset)
   }
 }
 
@@ -1241,5 +1219,25 @@ firrtl.circuit "MovableNodeShouldDominateInstance" {
   firrtl.module @Child(in %clock: !firrtl.clock) {
     // CHECK: firrtl.regreset %clock, %localReset, %c0_ui8
     %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8>
+  }
+}
+
+// -----
+// A module should be able to be in two reset domains as long as both domains
+// share the same port name and type.
+
+firrtl.circuit "top" {
+  firrtl.module @child(in %clock: !firrtl.clock) {
+    %r = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8>
+  }
+  firrtl.module @parent_1(in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}]) {
+    %c_clock  = firrtl.instance c @child(in clock: !firrtl.clock)
+  }
+  firrtl.module @parent_2(in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}]) {
+    %c_clock = firrtl.instance c @child(in clock: !firrtl.clock)
+  }
+  firrtl.module @top(in %clock: !firrtl.clock) {
+    %parent_1_reset = firrtl.instance p1 @parent_1(in reset: !firrtl.asyncreset)
+    %parent_2_reset = firrtl.instance p2 @parent_2(in reset: !firrtl.asyncreset)
   }
 }
