@@ -20,8 +20,6 @@ def ProcessLowering : Pass<"llhd-process-lowering", "ModuleOp"> {
   let description = [{
     TODO
   }];
-
-  let constructor = "circt::llhd::createProcessLoweringPass()";
 }
 
 def MemoryToBlockArgument : Pass<"llhd-memory-to-block-argument",
@@ -74,8 +72,6 @@ def MemoryToBlockArgument : Pass<"llhd-memory-to-block-argument",
     ```
 
   }];
-
-  let constructor = "circt::llhd::createMemoryToBlockArgumentPass()";
 }
 
 def FunctionElimination : Pass<"llhd-function-elimination", "ModuleOp"> {
@@ -89,8 +85,6 @@ def FunctionElimination : Pass<"llhd-function-elimination", "ModuleOp"> {
     the case that there is still a function call left in a `llhd.process` or
     `hw.module`.
   }];
-
-  let constructor = "circt::llhd::createFunctionEliminationPass()";
 }
 
 def EarlyCodeMotion : Pass<"llhd-early-code-motion", "hw::HWModuleOp"> {
@@ -107,8 +101,6 @@ def EarlyCodeMotion : Pass<"llhd-early-code-motion", "hw::HWModuleOp"> {
     `llhd.drv`. It also enables total control flow elimination as the `llhd.prb`
     instructions would not be moved by other canonicalization passes.
   }];
-
-  let constructor = "circt::llhd::createEarlyCodeMotionPass()";
 }
 
 def Sig2Reg : Pass<"llhd-sig2reg", "hw::HWModuleOp"> {
@@ -128,8 +120,6 @@ def TemporalCodeMotion : Pass<"llhd-temporal-code-motion", "hw::HWModuleOp"> {
     This pass assumes that the early code motion pass has been run beforehand.
     Otherwise, dominance errors are to be expected.
   }];
-
-  let constructor = "circt::llhd::createTemporalCodeMotionPass()";
 }
 
 def Desequentialization : Pass<"llhd-desequentialize", "hw::HWModuleOp"> {

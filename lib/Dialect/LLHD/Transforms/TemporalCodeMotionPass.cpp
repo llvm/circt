@@ -9,7 +9,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "circt/Dialect/LLHD/Transforms/Passes.h"
+#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/PatternMatch.h"
@@ -23,7 +23,7 @@
 namespace circt {
 namespace llhd {
 #define GEN_PASS_DEF_TEMPORALCODEMOTION
-#include "circt/Dialect/LLHD/Transforms/Passes.h.inc"
+#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h.inc"
 } // namespace llhd
 } // namespace circt
 
@@ -348,9 +348,4 @@ LogicalResult TemporalCodeMotionPass::runOnProcess(llhd::ProcessOp procOp) {
   }
 
   return success();
-}
-
-std::unique_ptr<OperationPass<hw::HWModuleOp>>
-circt::llhd::createTemporalCodeMotionPass() {
-  return std::make_unique<TemporalCodeMotionPass>();
 }

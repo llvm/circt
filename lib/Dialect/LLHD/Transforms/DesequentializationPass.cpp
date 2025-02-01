@@ -16,7 +16,7 @@
 #include "circt/Dialect/Comb/CombVisitors.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "circt/Dialect/LLHD/Transforms/Passes.h"
+#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/FVInt.h"
 #include "mlir/IR/PatternMatch.h"
@@ -27,7 +27,7 @@
 namespace circt {
 namespace llhd {
 #define GEN_PASS_DEF_DESEQUENTIALIZATION
-#include "circt/Dialect/LLHD/Transforms/Passes.h.inc"
+#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h.inc"
 } // namespace llhd
 } // namespace circt
 

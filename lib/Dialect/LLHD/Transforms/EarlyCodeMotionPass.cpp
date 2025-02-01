@@ -12,7 +12,7 @@
 
 #include "TemporalRegions.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "circt/Dialect/LLHD/Transforms/Passes.h"
+#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/Pass/Pass.h"
@@ -20,7 +20,7 @@
 namespace circt {
 namespace llhd {
 #define GEN_PASS_DEF_EARLYCODEMOTION
-#include "circt/Dialect/LLHD/Transforms/Passes.h.inc"
+#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h.inc"
 } // namespace llhd
 } // namespace circt
 
@@ -140,9 +140,4 @@ void EarlyCodeMotionPass::runOnProcess(llhd::ProcessOp proc) {
       }
     }
   }
-}
-
-std::unique_ptr<OperationPass<hw::HWModuleOp>>
-circt::llhd::createEarlyCodeMotionPass() {
-  return std::make_unique<EarlyCodeMotionPass>();
 }
