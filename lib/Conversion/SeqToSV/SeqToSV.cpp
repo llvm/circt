@@ -81,7 +81,6 @@ struct ModuleLoweringState {
 
   struct FragmentInfo {
     bool needsRegFragment = false;
-    bool needsMemFragment = false;
   } fragment;
 
   HWModuleOp module;
@@ -591,9 +590,11 @@ void SeqToSVPass::runOnOperation() {
   // Identify memories and group them by module.
   auto uniqueMems = memLowering.collectMemories(modules);
   MapVector<HWModuleOp, SmallVector<FirMemLowering::MemoryConfig>> memsByModule;
+  SmallVector<HWModuleGeneratedOp> generatedModules;
   for (auto &[config, memOps] : uniqueMems) {
     // Create the `HWModuleGeneratedOp`s for each unique configuration.
     auto genOp = memLowering.createMemoryModule(config, memOps);
+    generatedModules.push_back(genOp);
 
     // Group memories by their parent module for parallelism.
     for (auto memOp : memOps) {
@@ -630,10 +631,10 @@ void SeqToSVPass::runOnOperation() {
 
         if (auto *it = memsByModule.find(module); it != memsByModule.end()) {
           memLowering.lowerMemoriesInModule(module, it->second);
-          if (!disableMemRandomization) {
-            state.fragment.needsMemFragment = true;
-          }
+          // Generated memories need register randomization since `HWMemSimImpl`
+          // may add registers.
           needsMemRandomization = true;
+          needsRegRandomization = true;
         }
         return state.immutableValueLowering.lower();
       });
@@ -650,8 +651,8 @@ void SeqToSVPass::runOnOperation() {
 
   for (auto &[_, state] : moduleLoweringStates) {
     const auto &info = state.fragment;
-    if (!info.needsRegFragment && !info.needsMemFragment) {
-      // If neither is emitted, just skip it.
+    // Do not add fragments if not needed.
+    if (!info.needsRegFragment) {
       continue;
     }
 
@@ -661,14 +662,26 @@ void SeqToSVPass::runOnOperation() {
             module->getAttrOfType<ArrayAttr>(emit::getFragmentsAttrName()))
       fragmentAttrs = llvm::to_vector(others);
 
-    if (info.needsRegFragment)
+    if (info.needsRegFragment) {
       fragmentAttrs.push_back(randomInitRegFragmentName);
-    if (info.needsMemFragment)
-      fragmentAttrs.push_back(randomInitMemFragmentName);
-    fragmentAttrs.push_back(randomInitFragmentName);
+      fragmentAttrs.push_back(randomInitFragmentName);
+    }
 
     module->setAttr(emit::getFragmentsAttrName(),
                     ArrayAttr::get(context, fragmentAttrs));
+  }
+
+  // Set fragments for generated modules.
+  SmallVector<Attribute> genModFragments;
+  if (!disableRegRandomization)
+    genModFragments.push_back(randomInitRegFragmentName);
+  if (!disableMemRandomization)
+    genModFragments.push_back(randomInitMemFragmentName);
+  if (!genModFragments.empty()) {
+    genModFragments.push_back(randomInitFragmentName);
+    auto fragmentAttr = ArrayAttr::get(context, genModFragments);
+    for (auto genOp : generatedModules)
+      genOp->setAttr(emit::getFragmentsAttrName(), fragmentAttr);
   }
 
   // Mark all ops which can have clock types as illegal.
