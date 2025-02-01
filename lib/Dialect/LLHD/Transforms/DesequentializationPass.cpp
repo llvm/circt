@@ -202,15 +202,17 @@ namespace {
 /// triggers.
 class DnfAnalyzer {
 public:
-  DnfAnalyzer(Value value, function_ref<bool(Value)> sampledInPast)
-      : root(value) {
+  DnfAnalyzer(Value value) : root(value) {
     assert(value.getType().isSignlessInteger(1) &&
            "only 1-bit signless integers supported");
+  }
 
+  LogicalResult prepareAnalyzer(function_ref<bool(Value)> sampledInPast,
+                                unsigned maxPrimitives) {
     DenseSet<Value> alreadyAdded;
 
     SmallVector<Value> worklist;
-    worklist.push_back(value);
+    worklist.push_back(root);
 
     while (!worklist.empty()) {
       Value curr = worklist.pop_back_val();
@@ -256,9 +258,15 @@ public:
         llvm::dbgs() << "  - Primitive variable: " << val << "\n";
     });
 
+    if (primitives.size() > maxPrimitives) {
+      LLVM_DEBUG({ llvm::dbgs() << "  Too many primitives, skipping...\n"; });
+      return failure();
+    }
+
     this->isClock = SmallVector<bool>(primitives.size(), false);
     this->dontCare = SmallVector<APInt>(primitives.size(),
                                         APInt(1ULL << primitives.size(), 0));
+    return success();
   }
 
   /// Note that clocks can be dual edge triggered, but this is not directly
@@ -268,12 +276,7 @@ public:
   LogicalResult
   computeTriggers(OpBuilder &builder, Location loc,
                   function_ref<bool(Value, Value)> sampledFromSameSignal,
-                  SmallVectorImpl<Trigger> &triggers, unsigned maxPrimitives) {
-    if (primitives.size() > maxPrimitives) {
-      LLVM_DEBUG({ llvm::dbgs() << "  Too many primitives, skipping...\n"; });
-      return failure();
-    }
-
+                  SmallVectorImpl<Trigger> &triggers) {
     // Populate the truth table and the result APInt.
     computeTruthTable();
 
@@ -620,9 +623,10 @@ void DesequentializationPass::runOnProcess(llhd::ProcessOp procOp) const {
       return false;
     };
 
-    if (failed(DnfAnalyzer(op.getEnable(), sampledInPast)
-                   .computeTriggers(builder, loc, sampledFromSameSignal,
-                                    triggers, maxPrimitives))) {
+    DnfAnalyzer analyzer(op.getEnable());
+    if (failed(analyzer.prepareAnalyzer(sampledInPast, maxPrimitives)) ||
+        failed(analyzer.computeTriggers(builder, loc, sampledFromSameSignal,
+                                        triggers))) {
       LLVM_DEBUG({
         llvm::dbgs() << "  Unable to compute trigger list for drive condition, "
                         "skipping...\n";
