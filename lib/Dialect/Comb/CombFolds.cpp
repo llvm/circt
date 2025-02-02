@@ -627,7 +627,6 @@ static bool extractFromReplicate(ExtractOp op, ReplicateOp replicate,
 // This pushes the extract into the shl operation if possible.
 // extract(shl(x, concat(0, y)), low, width) -> y >= low + width ? 0 : shl(x,
 // concat(0, y))
-
 static bool extractFromShl(ExtractOp op, ShlOp shlOp,
                            PatternRewriter &rewriter) {
   // Check if shift amount is concat(0, y)
@@ -647,8 +646,6 @@ static bool extractFromShl(ExtractOp op, ShlOp shlOp,
   auto width = op.getType().getIntOrFloatBitWidth();
   auto lowBit = op.getLowBit();
 
-  // y >= const
-
   // Create zero constant for the result width
   auto extractLhs = rewriter.createOrFold<ExtractOp>(
       op.getLoc(), shlOp.getLhs(), lowBit, width);
@@ -658,25 +655,25 @@ static bool extractFromShl(ExtractOp op, ShlOp shlOp,
   // Create the shifted value with same shift amount
   auto newShift =
       rewriter.createOrFold<ShlOp>(op.getLoc(), extractLhs, extractRhs);
-  if (llvm::isUIntN(shiftAmount.getType().getIntOrFloatBitWidth(),
-                    width + lowBit)) {
-    auto zero =
-        rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getZero(width));
 
-    auto compareConst = rewriter.create<hw::ConstantOp>(
-        op.getLoc(),
-        APInt(shiftAmount.getType().getIntOrFloatBitWidth(), lowBit + width));
-    auto cmp = rewriter.create<ICmpOp>(op.getLoc(), ICmpPredicate::uge,
-                                       shiftAmount, compareConst);
-
-    replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, cmp, zero, newShift,
-                                         /*twoState=*/false);
-
+  if (!llvm::isUIntN(shiftAmount.getType().getIntOrFloatBitWidth(),
+                     width + lowBit)) {
+    // Create mux: y >= n ? 0 : shl(x, concat(0, y))
+    replaceOpAndCopyName(rewriter, op, newShift);
     return true;
   }
 
-  // Create mux: y >= n ? 0 : shl(x, concat(0, y))
-  replaceOpAndCopyName(rewriter, op, newShift);
+  auto zero =
+      rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getZero(width));
+
+  auto compareConst = rewriter.create<hw::ConstantOp>(
+      op.getLoc(),
+      APInt(shiftAmount.getType().getIntOrFloatBitWidth(), lowBit + width));
+  auto cmp = rewriter.create<ICmpOp>(op.getLoc(), ICmpPredicate::uge,
+                                     shiftAmount, compareConst);
+
+  replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, cmp, zero, newShift,
+                                       /*twoState=*/false);
 
   return true;
 }

@@ -500,6 +500,21 @@ struct DelayNode : Node {
     edges[idx].node = node;
   }
 
+  void removeEdges(const llvm::BitVector &vector) {
+    size_t currentPos = 0;
+    for (size_t i = 0; i < edges.size(); i++) {
+      if (vector[i]) {
+        // remove
+      } else {
+        if (currentPos != i)
+          edges[currentPos] = edges[i];
+        currentPos++;
+      }
+    }
+    edges.resize(currentPos);
+    revertComputedResult();
+  }
+
   Node *query(size_t bitOffset) override {
     assert(bitOffset == 0 && "delay node has no bit offset");
     return this;
