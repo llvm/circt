@@ -16,6 +16,7 @@
 #include "circt/Dialect/AIG/AIGDialect.h"
 #include "circt/Dialect/AIG/AIGPasses.h"
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
@@ -97,6 +98,11 @@ static bool untilReached(Until until) {
 // Tool implementation
 //===----------------------------------------------------------------------===//
 
+template <typename... AllowedOpTy>
+static void partiallyLegalizeCombToAIG(SmallVectorImpl<std::string> &ops) {
+  (ops.push_back(AllowedOpTy::getOperationName().str()), ...);
+}
+
 static void populateSynthesisPipeline(PassManager &pm) {
   // Add the AIG to Comb at the scope exit if requested.
   auto addAIGToComb = llvm::make_scope_exit([&]() {
@@ -108,6 +114,20 @@ static void populateSynthesisPipeline(PassManager &pm) {
   });
 
   auto &mpm = pm.nest<hw::HWModuleOp>();
+
+  {
+    // Partially legalize Comb to AIG, run CSE and canonicalization.
+    circt::ConvertCombToAIGOptions options;
+    partiallyLegalizeCombToAIG<
+        comb::AndOp, comb::OrOp, comb::XorOp, comb::MuxOp, comb::ICmpOp,
+        hw::ArrayGetOp, hw::ArraySliceOp, hw::ArrayCreateOp, hw::ArrayConcatOp, hw::AggregateConstantOp>(
+        options.additionalLegalOps);
+    mpm.addPass(circt::createConvertCombToAIG(options));
+  }
+  mpm.addPass(createCSEPass());
+  mpm.addPass(createSimpleCanonicalizerPass());
+
+  // Fully legalize AIG to Comb.
   mpm.addPass(circt::hw::createHWAggregateToCombPass());
   mpm.addPass(circt::createConvertCombToAIG());
   mpm.addPass(createCSEPass());
