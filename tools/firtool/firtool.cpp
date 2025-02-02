@@ -495,7 +495,7 @@ static LogicalResult processBuffer(
                                             (*outputFile)->os())))
         return failure();
 
-    // If requseted, emit the HW IR to hwOutFile.
+    // If requested, emit the HW IR to hwOutFile.
     if (!hwOutFile.empty())
       pm.addPass(std::make_unique<DumpIRPass>(hwOutFile.getValue()));
 
