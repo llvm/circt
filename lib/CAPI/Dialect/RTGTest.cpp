@@ -32,6 +32,14 @@ MlirType rtgtestCPUTypeGet(MlirContext ctxt) {
   return wrap(CPUType::get(unwrap(ctxt)));
 }
 
+bool rtgtestTypeIsAIntegerRegister(MlirType type) {
+  return isa<IntegerRegisterType>(unwrap(type));
+}
+
+MlirType rtgtestIntegerRegisterTypeGet(MlirContext ctxt) {
+  return wrap(IntegerRegisterType::get(unwrap(ctxt)));
+}
+
 // Immediates.
 //===----------------------------------------------------------------------===//
 

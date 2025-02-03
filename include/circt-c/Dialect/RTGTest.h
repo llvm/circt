@@ -31,6 +31,12 @@ MLIR_CAPI_EXPORTED bool rtgtestTypeIsACPU(MlirType type);
 /// Creates an RTGTest CPU type in the context.
 MLIR_CAPI_EXPORTED MlirType rtgtestCPUTypeGet(MlirContext ctxt);
 
+/// If the type is an RTGTest IntegerRegisterType.
+MLIR_CAPI_EXPORTED bool rtgtestTypeIsAIntegerRegister(MlirType type);
+
+/// Creates an RTGTest IntegerRegisterType in the context.
+MLIR_CAPI_EXPORTED MlirType rtgtestIntegerRegisterTypeGet(MlirContext ctxt);
+
 // Immediates.
 //===----------------------------------------------------------------------===//
 
