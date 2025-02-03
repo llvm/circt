@@ -126,12 +126,13 @@ def ClockSwitchIntrinsicOp : FIRRTLOp<"int.clock_switch", [Pure]> {
   let arguments = (ins NonConstClockType:$input0,
                        NonConstClockType:$input1,
                        NonConstUInt1Type:$select,
+                       I32Attr:$depth,
                        Optional<NonConstUInt1Type>:$test_enable);
   let results = (outs NonConstClockType:$output);
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
   let assemblyFormat = [{
-    $input0 `,` $input1 `,` $enable (`,` $test_enable^)? attr-dict
+    $input0 `,` $input1 `,` $enable `,` $depth (`,` $test_enable^)? attr-dict
   }];
 }
 
