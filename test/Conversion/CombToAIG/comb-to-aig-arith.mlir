@@ -83,12 +83,12 @@ hw.module @icmp_unsigned_compare(in %lhs: i2, in %rhs: i2, out out_ugt: i1, out 
   // CHECK-NEXT:   %[[LHS_1:.+]] = comb.extract %lhs from 1 : (i2) -> i1
   // CHECK-NEXT:   %[[RHS_0:.+]] = comb.extract %rhs from 0 : (i2) -> i1
   // CHECK-NEXT:   %[[RHS_1:.+]] = comb.extract %rhs from 1 : (i2) -> i1
+  // CHECK-NEXT:   %[[LSB_NEQ:.+]] = comb.xor %[[LHS_0]], %[[RHS_0]]
   // CHECK-NEXT:   %[[LSB_GT:.+]] = aig.and_inv %[[LHS_0]], not %[[RHS_0]]
   // CHECK-NEXT:   %[[MSB_NEQ:.+]] = comb.xor %[[LHS_1]], %[[RHS_1]]
-  // CHECK-NEXT:   %[[MSB_GT:.+]] = aig.and_inv %[[LHS_1]], not %[[RHS_1]] 
   // CHECK-NEXT:   %[[MSB_EQ:.+]] = aig.and_inv not %[[MSB_NEQ]]
-  // CHECK-NEXT:   %[[MSB_EQ_AND_LSB_GT:.+]] = comb.and %[[MSB_EQ]], %[[LSB_GT]]  
-  // CHECK-NEXT:   %[[LSB_NEQ:.+]] = comb.xor %[[LHS_0]], %[[RHS_0]]
+  // CHECK-NEXT:   %[[MSB_GT:.+]] = aig.and_inv %[[LHS_1]], not %[[RHS_1]]
+  // CHECK-NEXT:   %[[MSB_EQ_AND_LSB_GT:.+]] = comb.and %[[MSB_EQ]], %[[LSB_GT]]
   // CHECK-NEXT:   %[[UGT:.+]] = comb.or %[[MSB_GT]], %[[MSB_EQ_AND_LSB_GT]]
   // CHECK-NEXT:   %[[LSB_EQ:.+]] = aig.and_inv not %[[LSB_NEQ]]
   // CHECK-NEXT:   %[[LSB_UGE:.+]] = comb.or %[[LSB_GT]], %[[LSB_EQ]]

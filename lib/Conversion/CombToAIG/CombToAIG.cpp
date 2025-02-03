@@ -376,8 +376,8 @@ struct CombICmpOpConversion : OpConversionPattern<ICmpOp> {
     for (auto [aBit, bBit] : llvm::zip(aBits, bBits)) {
       auto aBitXorBBit =
           rewriter.createOrFold<comb::XorOp>(op.getLoc(), aBit, bBit);
-      auto aEqualB =
-          rewriter.createOrFold<aig::AndInverterOp>(op.getLoc(), aBitXorBBit);
+      auto aEqualB = rewriter.createOrFold<aig::AndInverterOp>(
+          op.getLoc(), aBitXorBBit, /*invert=*/true);
       auto pred = rewriter.createOrFold<aig::AndInverterOp>(
           op.getLoc(), aBit, bBit, isLess, !isLess);
 
