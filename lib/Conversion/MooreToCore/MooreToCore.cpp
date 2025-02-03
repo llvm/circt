@@ -18,6 +18,8 @@
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Transforms/Passes.h"
+#include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -1508,10 +1510,15 @@ static void populateLegality(ConversionTarget &target,
   target.addLegalOp<debug::ScopeOp>();
 
   target.addDynamicallyLegalOp<
-      cf::CondBranchOp, cf::BranchOp, scf::IfOp, scf::ForOp, scf::YieldOp,
-      func::CallOp, func::ReturnOp, UnrealizedConversionCastOp, hw::OutputOp,
-      hw::InstanceOp, debug::ArrayOp, debug::StructOp, debug::VariableOp>(
+      cf::CondBranchOp, cf::BranchOp, scf::YieldOp, func::CallOp,
+      func::ReturnOp, UnrealizedConversionCastOp, hw::OutputOp, hw::InstanceOp,
+      debug::ArrayOp, debug::StructOp, debug::VariableOp>(
       [&](Operation *op) { return converter.isLegal(op); });
+
+  target.addDynamicallyLegalOp<scf::IfOp, scf::ForOp, scf::ExecuteRegionOp,
+                               scf::WhileOp, scf::ForallOp>([&](Operation *op) {
+    return converter.isLegal(op) && !op->getParentOfType<llhd::ProcessOp>();
+  });
 
   target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp op) {
     return converter.isSignatureLegal(op.getFunctionType()) &&
@@ -1738,6 +1745,8 @@ static void populateOpConversion(RewritePatternSet &patterns,
                                                             typeConverter);
   hw::populateHWModuleLikeTypeConversionPattern(
       hw::HWModuleOp::getOperationName(), patterns, typeConverter);
+  populateSCFToControlFlowConversionPatterns(patterns);
+  populateArithToCombPatterns(patterns, typeConverter);
 }
 
 //===----------------------------------------------------------------------===//
