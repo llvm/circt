@@ -353,7 +353,8 @@ def SymbolicValueOp : VerifOp<"symbolic_value", [
   let description = [{
     This operation creates a new symbolic value that can be used to formally
     verify designs. Verification tools will try to find concrete assignments for
-    symbolic values that violate asserts or make covers true.
+    symbolic values that violate asserts or make covers true. This value is not
+    fixed - the value taken can vary arbitrarily between timesteps.
   }];
   let results = (outs AnyType:$result);
   let assemblyFormat = "attr-dict `:` type($result)";
