@@ -363,8 +363,6 @@ static LogicalResult executeWithSources(MLIRContext *context,
   OwningOpRef<ModuleOp> module;
   switch (opts.format) {
   case Format::SV: {
-    auto parserTimer = ts.nest("SystemVerilog Parser");
-
     // If the user requested for the files to be only preprocessed, do so and
     // print the results to the configured output file.
     if (opts.loweringMode == LoweringMode::OnlyPreprocess) {
