@@ -273,7 +273,7 @@ static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
   }
   auto newop = rewriter.create<OpTy>(op.getLoc(), newType, args);
   newop->setDialectAttrs(op->getDialectAttrs());
-  
+
   Value newResult = newop.getResult();
   if (range.first)
     newResult = rewriter.createOrFold<ConcatOp>(
@@ -960,8 +960,7 @@ static bool canonicalizeIdempotentInputs(Op op, PatternRewriter &rewriter) {
     // previously.
     if (depth < limit && input.getParentBlock() == op->getBlock()) {
       if (auto inputOp = input.template getDefiningOp<Op>();
-      inputOp && 
-          checked.insert(inputOp).second)
+          inputOp && checked.insert(inputOp).second)
         worklist.push_back({inputOp, depth + 1});
     }
   };
@@ -1238,8 +1237,7 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
   // .., c_n), a, 0)
   if (auto firstMux = op.getOperand(0).getDefiningOp<comb::MuxOp>()) {
     APInt value;
-    if (
-        matchPattern(firstMux.getFalseValue(), m_ConstantInt(&value)) &&
+    if (matchPattern(firstMux.getFalseValue(), m_ConstantInt(&value)) &&
         value.isZero()) {
       SmallVector<Value> conditions{firstMux.getCond()};
       auto check = [&](Value v) {
@@ -1247,15 +1245,14 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
         if (!mux)
           return false;
         conditions.push_back(mux.getCond());
-        return 
-               firstMux.getTrueValue() == mux.getTrueValue() &&
+        return firstMux.getTrueValue() == mux.getTrueValue() &&
                firstMux.getFalseValue() == mux.getFalseValue();
       };
       if (llvm::all_of(op.getOperands().drop_front(), check)) {
         auto cond = rewriter.create<comb::OrOp>(op.getLoc(), conditions);
-        replaceOpWithNewOpAndCopyName<comb::MuxOp>(
-            rewriter, op, cond, firstMux.getTrueValue(),
-            firstMux.getFalseValue());
+        replaceOpWithNewOpAndCopyName<comb::MuxOp>(rewriter, op, cond,
+                                                   firstMux.getTrueValue(),
+                                                   firstMux.getFalseValue());
         return success();
       }
     }
@@ -1304,9 +1301,8 @@ static void canonicalizeXorIcmpTrue(XorOp op, unsigned icmpOperand,
   auto icmp = op.getOperand(icmpOperand).getDefiningOp<ICmpOp>();
   auto negatedPred = ICmpOp::getNegatedPredicate(icmp.getPredicate());
 
-  Value result =
-      rewriter.create<ICmpOp>(icmp.getLoc(), negatedPred, icmp.getOperand(0),
-                              icmp.getOperand(1));
+  Value result = rewriter.create<ICmpOp>(
+      icmp.getLoc(), negatedPred, icmp.getOperand(0), icmp.getOperand(1));
 
   // If the xor had other operands, rebuild it.
   if (op.getNumOperands() > 2) {
@@ -1608,8 +1604,7 @@ LogicalResult MulOp::canonicalize(MulOp op, PatternRewriter &rewriter) {
       value.isPowerOf2()) {
     auto shift = rewriter.create<hw::ConstantOp>(op.getLoc(), op.getType(),
                                                  value.exactLogBase2());
-    auto shlOp =
-        rewriter.create<comb::ShlOp>(op.getLoc(), inputs[0], shift);
+    auto shlOp = rewriter.create<comb::ShlOp>(op.getLoc(), inputs[0], shift);
 
     replaceOpWithNewOpAndCopyName<MulOp>(rewriter, op, op.getType(),
                                          ArrayRef<Value>(shlOp));
@@ -2222,8 +2217,8 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
   // `mux(cond, x|y|z|a, a)` -> `(x|y|z)&replicate(cond) | a`
   // `mux(cond, x^y^z^a, a)` -> `(x^y^z)&replicate(cond) ^ a`
   if (isaOrOp || isaXorOp) {
-    auto masked = rewriter.createOrFold<AndOp>(op.getLoc(), extendedCond,
-                                               restOfAssoc);
+    auto masked =
+        rewriter.createOrFold<AndOp>(op.getLoc(), extendedCond, restOfAssoc);
     if (isaXorOp)
       replaceOpWithNewOpAndCopyName<XorOp>(rewriter, op, masked, commonValue);
     else
@@ -2233,8 +2228,8 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
 
   // `mux(cond, a, x&y&z&a)` -> `((x&y&z)|replicate(cond)) & a`
   assert(isaAndOp && "unexpected operation here");
-  auto masked = rewriter.createOrFold<OrOp>(op.getLoc(), extendedCond,
-                                            restOfAssoc);
+  auto masked =
+      rewriter.createOrFold<OrOp>(op.getLoc(), extendedCond, restOfAssoc);
   replaceOpWithNewOpAndCopyName<AndOp>(rewriter, op, masked, commonValue);
   return true;
 }
@@ -2298,8 +2293,8 @@ static bool foldCommonMuxOperation(MuxOp mux, Operation *trueOp,
         rewriter.createOrFold<ConcatOp>(falseOp->getLoc(), operands);
     // Merge the LSBs with a new mux and concat the MSB with the LSB to be
     // done.
-    Value lsb = rewriter.createOrFold<MuxOp>(
-        mux->getLoc(), mux.getCond(), trueLSB, falseLSB);
+    Value lsb = rewriter.createOrFold<MuxOp>(mux->getLoc(), mux.getCond(),
+                                             trueLSB, falseLSB);
     replaceOpWithNewOpAndCopyName<ConcatOp>(rewriter, mux, sharedMSB, lsb);
     return true;
   }
@@ -2327,8 +2322,8 @@ static bool foldCommonMuxOperation(MuxOp mux, Operation *trueOp,
     Value falseMSB =
         rewriter.createOrFold<ConcatOp>(falseOp->getLoc(), operands);
     // Merge the MSBs with a new mux and concat the MSB with the LSB to be done.
-    Value msb = rewriter.createOrFold<MuxOp>(
-        mux->getLoc(), mux.getCond(), trueMSB, falseMSB);
+    Value msb = rewriter.createOrFold<MuxOp>(mux->getLoc(), mux.getCond(),
+                                             trueMSB, falseMSB);
     replaceOpWithNewOpAndCopyName<ConcatOp>(rewriter, mux, msb, sharedLSB);
     return true;
   }
@@ -2346,9 +2341,9 @@ static bool foldMuxOfUniformArrays(MuxOp op, PatternRewriter &rewriter) {
   if (!trueVec.isUniform() || !falseVec.isUniform())
     return false;
 
-  auto mux = rewriter.create<MuxOp>(
-      op.getLoc(), op.getCond(), trueVec.getUniformElement(),
-      falseVec.getUniformElement());
+  auto mux = rewriter.create<MuxOp>(op.getLoc(), op.getCond(),
+                                    trueVec.getUniformElement(),
+                                    falseVec.getUniformElement());
 
   SmallVector<Value> values(trueVec.getInputs().size(), mux);
   rewriter.replaceOpWithNewOp<hw::ArrayCreateOp>(op, values);
@@ -2418,8 +2413,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
             op.getLoc(), op.getTrueValue(), trailingZeros, 1);
         auto v2 = rewriter.createOrFold<ExtractOp>(
             op.getLoc(), op.getFalseValue(), trailingZeros, 1);
-        operands.push_back(rewriter.createOrFold<MuxOp>(
-            op.getLoc(), op.getCond(), v1, v2));
+        operands.push_back(
+            rewriter.createOrFold<MuxOp>(op.getLoc(), op.getCond(), v1, v2));
 
         if (trailingZeros > 0)
           operands.push_back(rewriter.createOrFold<ExtractOp>(
@@ -2487,19 +2482,15 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
     };
 
     if (isa<AndOp>(condOp) && getInvertedOperands()) {
-      auto newOr =
-          rewriter.createOrFold<OrOp>(op.getLoc(), invertedOperands);
-      replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, newOr,
-                                           op.getFalseValue(),
-                                           op.getTrueValue());
+      auto newOr = rewriter.createOrFold<OrOp>(op.getLoc(), invertedOperands);
+      replaceOpWithNewOpAndCopyName<MuxOp>(
+          rewriter, op, newOr, op.getFalseValue(), op.getTrueValue());
       return success();
     }
     if (isa<OrOp>(condOp) && getInvertedOperands()) {
-      auto newAnd =
-          rewriter.createOrFold<AndOp>(op.getLoc(), invertedOperands);
-      replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, newAnd,
-                                           op.getFalseValue(),
-                                           op.getTrueValue());
+      auto newAnd = rewriter.createOrFold<AndOp>(op.getLoc(), invertedOperands);
+      replaceOpWithNewOpAndCopyName<MuxOp>(
+          rewriter, op, newAnd, op.getFalseValue(), op.getTrueValue());
       return success();
     }
   }
@@ -2508,9 +2499,9 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
       falseMux && falseMux != op) {
     // mux(selector, x, mux(selector, y, z) = mux(selector, x, z)
     if (op.getCond() == falseMux.getCond()) {
-      replaceOpWithNewOpAndCopyName<MuxOp>(
-          rewriter, op, op.getCond(), op.getTrueValue(),
-          falseMux.getFalseValue());
+      replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, op.getCond(),
+                                           op.getTrueValue(),
+                                           falseMux.getFalseValue());
       return success();
     }
 
@@ -2523,9 +2514,9 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
       trueMux && trueMux != op) {
     // mux(selector, mux(selector, a, b), c) = mux(selector, a, c)
     if (op.getCond() == trueMux.getCond()) {
-      replaceOpWithNewOpAndCopyName<MuxOp>(
-          rewriter, op, op.getCond(), trueMux.getTrueValue(),
-          op.getFalseValue());
+      replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, op.getCond(),
+                                           trueMux.getTrueValue(),
+                                           op.getFalseValue());
       return success();
     }
 
@@ -2544,8 +2535,7 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
         rewriter.getFusedLoc({trueMux.getLoc(), falseMux.getLoc()}),
         op.getCond(), trueMux.getFalseValue(), falseMux.getFalseValue());
     replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, trueMux.getCond(),
-                                         trueMux.getTrueValue(), subMux
-                                         );
+                                         trueMux.getTrueValue(), subMux);
     return success();
   }
 
@@ -2559,8 +2549,7 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
         rewriter.getFusedLoc({trueMux.getLoc(), falseMux.getLoc()}),
         op.getCond(), trueMux.getTrueValue(), falseMux.getTrueValue());
     replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, trueMux.getCond(),
-                                         subMux, trueMux.getFalseValue()
-                                         );
+                                         subMux, trueMux.getFalseValue());
     return success();
   }
 
@@ -2576,8 +2565,7 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
             {op.getLoc(), trueMux.getLoc(), falseMux.getLoc()}),
         op.getCond(), trueMux.getCond(), falseMux.getCond());
     replaceOpWithNewOpAndCopyName<MuxOp>(
-        rewriter, op, subMux, trueMux.getTrueValue(), trueMux.getFalseValue()
-        );
+        rewriter, op, subMux, trueMux.getTrueValue(), trueMux.getFalseValue());
     return success();
   }
 
@@ -2817,8 +2805,7 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, Operation *lhs,
 
   auto replaceWith = [&](ICmpPredicate predicate, Value lhs,
                          Value rhs) -> LogicalResult {
-    replaceOpWithNewOpAndCopyName<ICmpOp>(rewriter, op, predicate, lhs, rhs
-                                          );
+    replaceOpWithNewOpAndCopyName<ICmpOp>(rewriter, op, predicate, lhs, rhs);
     return success();
   };
 
@@ -2968,8 +2955,7 @@ static void combineEqualityICmpWithKnownBitsAndConstant(
       cmpOp.getOperand(1).getLoc(), newConstant);
 
   replaceOpWithNewOpAndCopyName<ICmpOp>(rewriter, cmpOp, cmpOp.getPredicate(),
-                                        concatResult, newConstantOp
-                                        );
+                                        concatResult, newConstantOp);
 }
 
 // Simplify icmp eq(xor(a,b,cst1), cst2) -> icmp eq(xor(a,b), cst1^cst2).
@@ -3038,8 +3024,7 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
 
     auto replaceWith = [&](ICmpPredicate predicate, Value lhs,
                            Value rhs) -> LogicalResult {
-      replaceOpWithNewOpAndCopyName<ICmpOp>(rewriter, op, predicate, lhs, rhs
-                                            );
+      replaceOpWithNewOpAndCopyName<ICmpOp>(rewriter, op, predicate, lhs, rhs);
       return success();
     };
 
@@ -3149,8 +3134,7 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
         if (rhs.isZero()) {
           // x == 0 -> x ^ 1
           replaceOpWithNewOpAndCopyName<XorOp>(rewriter, op, op.getLhs(),
-                                               getConstant(APInt(1, 1))
-                                               );
+                                               getConstant(APInt(1, 1)));
           return success();
         }
         if (rhs.isAllOnes()) {
@@ -3170,8 +3154,7 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
         if (rhs.isAllOnes()) {
           // x != 1 -> x ^ 1
           replaceOpWithNewOpAndCopyName<XorOp>(rewriter, op, op.getLhs(),
-                                               getConstant(APInt(1, 1))
-                                               );
+                                               getConstant(APInt(1, 1)));
           return success();
         }
       }
@@ -3212,8 +3195,7 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
               op.getLoc(), rhs.isAllOnes() ? APInt::getAllOnes(width)
                                            : APInt::getZero(width));
           replaceOpWithNewOpAndCopyName<ICmpOp>(rewriter, op, op.getPredicate(),
-                                                replicateOp.getInput(), cst
-                                                );
+                                                replicateOp.getInput(), cst);
           return success();
         }
     }

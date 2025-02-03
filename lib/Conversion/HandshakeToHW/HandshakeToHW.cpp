@@ -533,13 +533,13 @@ struct RTLBuilder {
 
   // Bitwise 'and'.
   Value bAnd(ValueRange values, std::optional<StringRef> name = {}) {
-    return buildNamedOp(
-        [&]() { return b.create<comb::AndOp>(loc, values); }, name);
+    return buildNamedOp([&]() { return b.create<comb::AndOp>(loc, values); },
+                        name);
   }
 
   Value bOr(ValueRange values, std::optional<StringRef> name = {}) {
-    return buildNamedOp(
-        [&]() { return b.create<comb::OrOp>(loc, values); }, name);
+    return buildNamedOp([&]() { return b.create<comb::OrOp>(loc, values); },
+                        name);
   }
 
   // Bitwise 'not'.

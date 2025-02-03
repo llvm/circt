@@ -285,8 +285,8 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
 
       auto aXnorB = rewriter.create<comb::XorOp>(
           op.getLoc(), ValueRange{aBits[i], bBits[i]});
-      auto andOp = rewriter.create<comb::AndOp>(
-          op.getLoc(), ValueRange{carry, aXnorB});
+      auto andOp =
+          rewriter.create<comb::AndOp>(op.getLoc(), ValueRange{carry, aXnorB});
       carry = rewriter.create<comb::OrOp>(op.getLoc(),
                                           ValueRange{andOp, nextCarry});
     }
@@ -376,8 +376,8 @@ struct CombICmpOpConversion : OpConversionPattern<ICmpOp> {
     for (auto [aBit, bBit] : llvm::zip(aBits, bBits)) {
       auto aBitXorBBit =
           rewriter.createOrFold<comb::XorOp>(op.getLoc(), aBit, bBit);
-      auto aEqualB = rewriter.createOrFold<aig::AndInverterOp>(
-          op.getLoc(), aBitXorBBit);
+      auto aEqualB =
+          rewriter.createOrFold<aig::AndInverterOp>(op.getLoc(), aBitXorBBit);
       auto pred = rewriter.createOrFold<aig::AndInverterOp>(
           op.getLoc(), aBit, bBit, isLess, !isLess);
 
@@ -412,8 +412,7 @@ struct CombICmpOpConversion : OpConversionPattern<ICmpOp> {
     case ICmpPredicate::cne: {
       // a != b  ==> (a[n] ^ b[n]) | (a[n-1] ^ b[n-1]) | ...
       auto xorOp = rewriter.createOrFold<comb::XorOp>(op.getLoc(), lhs, rhs);
-      rewriter.replaceOpWithNewOp<comb::OrOp>(op, extractBits(rewriter, xorOp)
-                                              );
+      rewriter.replaceOpWithNewOp<comb::OrOp>(op, extractBits(rewriter, xorOp));
       return success();
     }
 

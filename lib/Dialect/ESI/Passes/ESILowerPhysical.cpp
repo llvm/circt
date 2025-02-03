@@ -115,8 +115,8 @@ FIFOLowering::matchAndRewrite(FIFOOp op, OpAdaptor adaptor,
     auto unwrapValidReady =
         rewriter.create<UnwrapValidReadyOp>(loc, chanInput, inputEn);
     rawData = unwrapValidReady.getRawOutput();
-    dataNotAvailable = comb::createOrFoldNot(loc, unwrapValidReady.getValid(),
-                                             rewriter);
+    dataNotAvailable =
+        comb::createOrFoldNot(loc, unwrapValidReady.getValid(), rewriter);
     dataNotAvailable.getDefiningOp()->setAttr(
         "sv.namehint", rewriter.getStringAttr("dataNotAvailable"));
   } else if (chanInput.getType().getSignaling() == ChannelSignaling::FIFO) {

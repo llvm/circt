@@ -3231,7 +3231,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       // enable. Else keep mask port.
       auto mode = addInputPort("wmode", 1);
       if (!memSummary.isMasked)
-        mode = builder.createOrFold<comb::AndOp>(mode, addInputPort("wmask", 1));
+        mode =
+            builder.createOrFold<comb::AndOp>(mode, addInputPort("wmask", 1));
       auto wdata = addInputPort("wdata", memSummary.dataWidth);
       // Ignore mask port, if maskBits =1
       Value mask;
@@ -4024,7 +4025,8 @@ LogicalResult FIRRTLLowering::visitExpr(MuxPrimOp op) {
 
   if (isa<ClockType>(op.getType()))
     return setLoweringTo<seq::ClockMuxOp>(op, cond, ifTrue, ifFalse);
-  return setLoweringTo<comb::MuxOp>(op, ifTrue.getType(), cond, ifTrue, ifFalse);
+  return setLoweringTo<comb::MuxOp>(op, ifTrue.getType(), cond, ifTrue,
+                                    ifFalse);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(Mux2CellIntrinsicOp op) {
@@ -4034,8 +4036,8 @@ LogicalResult FIRRTLLowering::visitExpr(Mux2CellIntrinsicOp op) {
   if (!cond || !ifTrue || !ifFalse)
     return failure();
 
-  auto val = builder.create<comb::MuxOp>(ifTrue.getType(), cond, ifTrue,
-                                         ifFalse);
+  auto val =
+      builder.create<comb::MuxOp>(ifTrue.getType(), cond, ifTrue, ifFalse);
   return setLowering(op, createValueWithMuxAnnotation(val, true));
 }
 
@@ -4629,10 +4631,8 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       // Formulate the `enable -> predicate` as `!enable | predicate`.
       // Except for covers, combine them: enable & predicate
       if (!isCover) {
-        auto notEnable =
-            comb::createOrFoldNot(enable, builder);
-        predicate =
-            builder.createOrFold<comb::OrOp>(notEnable, predicate);
+        auto notEnable = comb::createOrFoldNot(enable, builder);
+        predicate = builder.createOrFold<comb::OrOp>(notEnable, predicate);
       } else {
         predicate = builder.createOrFold<comb::AndOp>(enable, predicate);
       }

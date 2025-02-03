@@ -391,8 +391,7 @@ private:
               builder.create<comb::XorOp>(loc, primitives[k], trueVal));
         }
         if (!conjuncts.empty())
-          enableMap[key] =
-              builder.createOrFold<comb::AndOp>(loc, conjuncts);
+          enableMap[key] = builder.createOrFold<comb::AndOp>(loc, conjuncts);
       }
     }
   }

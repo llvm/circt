@@ -349,10 +349,9 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
 
     // Read logic.
     Value rcond = b.createOrFold<comb::AndOp>(
-        readEn,
-        b.createOrFold<comb::ICmpOp>(
-            comb::ICmpPredicate::eq, readWMode,
-            b.createOrFold<ConstantOp>(readWMode.getType(), 0)));
+        readEn, b.createOrFold<comb::ICmpOp>(
+                    comb::ICmpPredicate::eq, readWMode,
+                    b.createOrFold<ConstantOp>(readWMode.getType(), 0)));
 
     auto val = getMemoryRead(b, reg, readAddr, addMuxPragmas);
 
@@ -376,8 +375,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     for (auto wmask : llvm::enumerate(maskValues)) {
       b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock, [&]() {
         auto wcond = b.createOrFold<comb::AndOp>(
-            writeEn,
-            b.createOrFold<comb::AndOp>(wmask.value(), writeWMode));
+            writeEn, b.createOrFold<comb::AndOp>(wmask.value(), writeWMode));
         b.create<sv::IfOp>(wcond, [&]() {
           Value slotReg = b.create<sv::ArrayIndexInOutOp>(reg, writeAddr);
           b.create<sv::PAssignOp>(

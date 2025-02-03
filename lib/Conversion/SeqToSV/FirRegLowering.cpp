@@ -371,8 +371,7 @@ FirRegLowering::tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
 
     auto indexCompare =
         (*extractedConditions.begin()).getDefiningOp<comb::ICmpOp>();
-    if (!indexCompare ||
-        indexCompare.getPredicate() != comb::ICmpPredicate::eq)
+    if (!indexCompare || indexCompare.getPredicate() != comb::ICmpPredicate::eq)
       return {};
     // `IndexValue` must be same.
     if (indexValue && indexValue != indexCompare.getLhs())
@@ -431,8 +430,7 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
     // If this is a two-state mux within the fanout from the register, we use
     // if/else structure for proper enable inference.
     auto mux = next.getDefiningOp<comb::MuxOp>();
-    if (mux && 
-        reachableMuxes->isMuxReachableFrom(firReg, mux)) {
+    if (mux && reachableMuxes->isMuxReachableFrom(firReg, mux)) {
       addToIfBlock(
           builder, mux.getCond(),
           [&]() { addToWorklist(reg, term, mux.getTrueValue()); },
