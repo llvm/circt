@@ -720,7 +720,8 @@ moore.module @WaitEvent() {
     // CHECK:   [[BEFORE:%.+]] = llhd.prb %a
     // CHECK:   llhd.wait ([[PRB_A0]] : {{.+}}), ^[[CHECK:.+]]
     // CHECK: ^[[CHECK]]:
-    // CHECK:   cf.br
+    // CHECK:   cf.br ^[[RESUME:.+]]
+    // CHECK: ^[[RESUME]]:
     moore.wait_event {
       %0 = moore.read %a : <i1>
       moore.detect_event any %0 : i1

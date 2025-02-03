@@ -469,16 +469,20 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
       rewriter.eraseOp(detectOp);
     }
 
-    // If any `detect_event` op detected an event, branch to the "resume" block
-    // which contains any code after the `wait_event` op. If no events were
-    // detected, branch back to the "wait" block to wait for the next change on
-    // the interesting signals.
     rewriter.setInsertionPointToEnd(checkBlock);
-    if (!triggers.empty()) {
+    if (triggers.empty()) {
+      // If there are no triggers to check, we always branch to the resume
+      // block. If there are no detect_event operations in the wait event, the
+      // 'llhd.wait' operation will not have any observed values and thus the
+      // process will hang there forever.
+      rewriter.create<cf::BranchOp>(loc, resumeBlock);
+    } else {
+      // If any `detect_event` op detected an event, branch to the "resume"
+      // block which contains any code after the `wait_event` op. If no events
+      // were detected, branch back to the "wait" block to wait for the next
+      // change on the interesting signals.
       auto triggered = rewriter.createOrFold<comb::OrOp>(loc, triggers, true);
       rewriter.create<cf::CondBranchOp>(loc, triggered, resumeBlock, waitBlock);
-    } else {
-      rewriter.create<cf::BranchOp>(loc, waitBlock);
     }
 
     return success();
