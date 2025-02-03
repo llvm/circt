@@ -38,6 +38,7 @@ class ImmTypeBase<int width> : TypeDef<RTGTestDialect, "Imm" # width, []> {
   let mnemonic = "imm" # width;
 }
 
+def Imm5Type  : ImmTypeBase<5>;
 def Imm12Type : ImmTypeBase<12>;
 def Imm13Type : ImmTypeBase<13>;
 def Imm21Type : ImmTypeBase<21>;

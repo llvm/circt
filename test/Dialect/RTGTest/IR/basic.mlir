@@ -88,6 +88,8 @@ rtg.test @registers : !rtg.dict<reg: !rtgtest.ireg> {
 
 // CHECK-LABEL: @immediates
 rtg.test @immediates : !rtg.dict<> {
+  // CHECK: rtgtest.immediate #rtgtest.imm5<3> : !rtgtest.imm5
+  rtgtest.immediate #rtgtest.imm5<3> : !rtgtest.imm5
   // CHECK: rtgtest.immediate #rtgtest.imm12<3> : !rtgtest.imm12
   rtgtest.immediate #rtgtest.imm12<3> : !rtgtest.imm12
   // CHECK: rtgtest.immediate #rtgtest.imm13<3> : !rtgtest.imm13
@@ -99,9 +101,9 @@ rtg.test @immediates : !rtg.dict<> {
 }
 
 // CHECK-LABEL: @instructions
-rtg.test @instructions : !rtg.dict<imm: !rtgtest.imm12, imm13: !rtgtest.imm13, label: !rtg.label, rd: !rtgtest.ireg, rs: !rtgtest.ireg> {
-// CHECK: ([[IMM:%.+]]: !rtgtest.imm12, [[IMM13:%.+]]: !rtgtest.imm13, [[LABEL:%.+]]: !rtg.label, [[RD:%.+]]: !rtgtest.ireg, [[RS:%.+]]: !rtgtest.ireg)
-^bb0(%imm: !rtgtest.imm12, %imm13: !rtgtest.imm13, %label: !rtg.label, %rd: !rtgtest.ireg, %rs: !rtgtest.ireg):
+rtg.test @instructions : !rtg.dict<imm: !rtgtest.imm12, imm13: !rtgtest.imm13, imm21: !rtgtest.imm21, imm32: !rtgtest.imm32, imm5: !rtgtest.imm5, label: !rtg.label, rd: !rtgtest.ireg, rs: !rtgtest.ireg> {
+// CHECK: ([[IMM:%.+]]: !rtgtest.imm12, [[IMM13:%.+]]: !rtgtest.imm13, [[IMM21:%.+]]: !rtgtest.imm21, [[IMM32:%.+]]: !rtgtest.imm32, [[IMM5:%.+]]: !rtgtest.imm5, [[LABEL:%.+]]: !rtg.label, [[RD:%.+]]: !rtgtest.ireg, [[RS:%.+]]: !rtgtest.ireg)
+^bb0(%imm: !rtgtest.imm12, %imm13: !rtgtest.imm13, %imm21: !rtgtest.imm21, %imm32: !rtgtest.imm32, %imm5: !rtgtest.imm5, %label: !rtg.label, %rd: !rtgtest.ireg, %rs: !rtgtest.ireg):
   // CHECK: rtgtest.rv32i.jalr [[RD]], [[RS]], [[IMM]]
   rtgtest.rv32i.jalr %rd, %rs, %imm
   // CHECK: rtgtest.rv32i.lb [[RD]], [[RS]], [[IMM]]
@@ -170,6 +172,40 @@ rtg.test @instructions : !rtg.dict<imm: !rtgtest.imm12, imm13: !rtgtest.imm13, l
   rtgtest.rv32i.sh %rd, %rs, %imm {rtg.some_attr}
   // CHECK: rtgtest.rv32i.sw [[RD]], [[RS]], [[IMM]] {rtg.some_attr}
   rtgtest.rv32i.sw %rd, %rs, %imm {rtg.some_attr}
+
+  // CHECK: rtgtest.rv32i.lui [[RD]], [[IMM32]] : !rtgtest.imm32 {rtg.some_attr}
+  rtgtest.rv32i.lui %rd, %imm32 : !rtgtest.imm32 {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.auipc [[RD]], [[IMM32]] : !rtgtest.imm32 {rtg.some_attr}
+  rtgtest.rv32i.auipc %rd, %imm32 : !rtgtest.imm32 {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.jal [[RD]], [[IMM21]] : !rtgtest.imm21 {rtg.some_attr}
+  rtgtest.rv32i.jal %rd, %imm21 : !rtgtest.imm21 {rtg.some_attr}
+
+  // CHECK: rtgtest.rv32i.lui [[RD]], [[LABEL]] : !rtg.label {rtg.some_attr}
+  rtgtest.rv32i.lui %rd, %label : !rtg.label {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.auipc [[RD]], [[LABEL]] : !rtg.label {rtg.some_attr}
+  rtgtest.rv32i.auipc %rd, %label : !rtg.label {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.jal [[RD]], [[LABEL]] : !rtg.label {rtg.some_attr}
+  rtgtest.rv32i.jal %rd, %label : !rtg.label {rtg.some_attr}
+
+  // CHECK: rtgtest.rv32i.addi [[RD]], [[RS]], [[IMM]] {rtg.some_attr}
+  rtgtest.rv32i.addi %rd, %rs, %imm {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.slti [[RD]], [[RS]], [[IMM]] {rtg.some_attr}
+  rtgtest.rv32i.slti %rd, %rs, %imm {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.sltiu [[RD]], [[RS]], [[IMM]] {rtg.some_attr}
+  rtgtest.rv32i.sltiu %rd, %rs, %imm {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.xori [[RD]], [[RS]], [[IMM]] {rtg.some_attr}
+  rtgtest.rv32i.xori %rd, %rs, %imm {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.ori [[RD]], [[RS]], [[IMM]] {rtg.some_attr}
+  rtgtest.rv32i.ori %rd, %rs, %imm {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.andi [[RD]], [[RS]], [[IMM]] {rtg.some_attr}
+  rtgtest.rv32i.andi %rd, %rs, %imm {rtg.some_attr}
+
+  // CHECK: rtgtest.rv32i.slli [[RD]], [[RS]], [[IMM5]] {rtg.some_attr}
+  rtgtest.rv32i.slli %rd, %rs, %imm5 {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.srli [[RD]], [[RS]], [[IMM5]] {rtg.some_attr}
+  rtgtest.rv32i.srli %rd, %rs, %imm5 {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.srai [[RD]], [[RS]], [[IMM5]] {rtg.some_attr}
+  rtgtest.rv32i.srai %rd, %rs, %imm5 {rtg.some_attr}
 }
 
 // -----

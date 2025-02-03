@@ -271,6 +271,12 @@ static void testRegisters(MlirContext ctx) {
 }
 
 static void testImmediates(MlirContext ctx) {
+  MlirType imm5Type = rtgtestImm5TypeGet(ctx);
+  // CHECK: is_imm5
+  fprintf(stderr, rtgtestTypeIsAImm5(imm5Type) ? "is_imm5\n" : "isnot_imm5\n");
+  // CHECK: !rtgtest.imm5
+  mlirTypeDump(imm5Type);
+
   MlirType imm12Type = rtgtestImm12TypeGet(ctx);
   // CHECK: is_imm12
   fprintf(stderr,
@@ -298,6 +304,14 @@ static void testImmediates(MlirContext ctx) {
           rtgtestTypeIsAImm32(imm32Type) ? "is_imm32\n" : "isnot_imm32\n");
   // CHECK: !rtgtest.imm32
   mlirTypeDump(imm32Type);
+
+  MlirAttribute imm5Attr = rtgtestImm5AttrGet(ctx, 3);
+  // CHECK: is_imm5
+  fprintf(stderr, rtgtestAttrIsAImm5(imm5Attr) ? "is_imm5\n" : "isnot_imm5\n");
+  // CHECK: 3
+  fprintf(stderr, "%u\n", rtgtestImm5AttrGetValue(imm5Attr));
+  // CHECK: #rtgtest.imm5<3>
+  mlirAttributeDump(imm5Attr);
 
   MlirAttribute imm12Attr = rtgtestImm12AttrGet(ctx, 3);
   // CHECK: is_imm12

@@ -71,6 +71,7 @@ class ImmediateAttrBase<int width> : RTGTestAttrDef<"Imm" # width, [
   let genVerifyDecl = 1;
 }
 
+def Imm5  : ImmediateAttrBase<5>;
 def Imm12 : ImmediateAttrBase<12>;
 def Imm13 : ImmediateAttrBase<13>;
 def Imm21 : ImmediateAttrBase<21>;

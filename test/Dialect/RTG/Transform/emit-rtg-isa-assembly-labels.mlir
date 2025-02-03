@@ -27,6 +27,12 @@ rtg.test @test0 : !rtg.dict<> {
   rtgtest.rv32i.bltu %rd, %rs, %label : !rtg.label
   // CHECK-NEXT:    bgeu ra, s0, label_name
   rtgtest.rv32i.bgeu %rd, %rs, %label : !rtg.label
+  // CHECK-NEXT:    lui ra, label_name
+  rtgtest.rv32i.lui %rd, %label : !rtg.label
+  // CHECK-NEXT:    auipc ra, label_name
+  rtgtest.rv32i.auipc %rd, %label : !rtg.label
+  // CHECK-NEXT:    jal ra, label_name
+  rtgtest.rv32i.jal %rd, %label : !rtg.label
 }
 
 // CHECK-EMPTY:
