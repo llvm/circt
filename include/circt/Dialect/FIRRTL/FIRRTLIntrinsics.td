@@ -114,8 +114,8 @@ def ClockSwitchIntrinsicOp : FIRRTLOp<"int.clock_switch", [Pure]> {
   let summary = "Safely switch a clock with an enable signal";
   let description = [{
     The `int.clock_switch` switches clocks safely, without glitches,
-    based on a boolean enable value. If the enable input is 1, the output clock
-    produced by the second input clock.  If the enable
+    based on a boolean switch value. If the switch input is 1, the output clock
+    produced by the second input clock.  If the switch
     input is 0, the output clock is the first input clock.
 
     The depth parameter determins the depth of the synchronizers.  This must be 
