@@ -822,6 +822,8 @@ def ConvertCombToAIG: Pass<"convert-comb-to-aig",  "hw::HWModuleOp"> {
   let options = [
     ListOption<"additionalLegalOps", "additional-legal-ops", "std::string",
                "Specify additional legal ops for testing">,
+    Option<"maxEmulationUnknownBits", "max-emulation-unknown-bits", "uint32_t", "10",
+           "Maximum number of unknown bits to emulate in a table lookup">
   ];
 }
 
