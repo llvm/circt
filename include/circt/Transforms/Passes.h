@@ -36,6 +36,9 @@ enum class OpCountEmissionFormat {
 
 #include "circt/Transforms/Passes.h.inc"
 
+void populateArithToCombPatterns(mlir::RewritePatternSet &patterns,
+                                 TypeConverter &typeConverter);
+
 std::unique_ptr<mlir::Pass> createMapArithToCombPass();
 std::unique_ptr<mlir::Pass> createFlattenMemRefPass();
 std::unique_ptr<mlir::Pass> createFlattenMemRefCallsPass();

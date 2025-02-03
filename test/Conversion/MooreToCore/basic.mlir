@@ -1034,3 +1034,15 @@ func.func @PowSOp(%arg0: !moore.i32, %arg1: !moore.i32) {
   %0 = moore.pows %arg0, %arg1 : i32
   return
 }
+
+// CHECK-LABEL: @scfInsideProcess
+moore.module @scfInsideProcess(in %in0: !moore.i32, in %in1: !moore.i32) {
+  %var = moore.variable : <!moore.i32>
+  // CHECK: llhd.process
+  // CHECK-NOT: scf.for
+  moore.procedure initial {
+    %0 = moore.pows %in0, %in1 : !moore.i32
+    moore.blocking_assign %var, %0 : !moore.i32
+    moore.return
+  }
+}
