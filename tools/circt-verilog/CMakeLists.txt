@@ -4,6 +4,7 @@ set(libs
   CIRCTHW
   CIRCTImportVerilog
   CIRCTLLHD
+  CIRCTLLHDTransforms
   CIRCTMoore
   CIRCTMooreToCore
   CIRCTMooreTransforms

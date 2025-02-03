@@ -17,7 +17,9 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
+#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
 #include "circt/Dialect/Moore/MooreDialect.h"
 #include "circt/Dialect/Moore/MoorePasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
@@ -59,6 +61,7 @@ enum class LoweringMode {
   OnlyLint,
   OnlyParse,
   OutputIRMoore,
+  OutputIRLLHD,
   OutputIRHW,
   Full
 };
@@ -101,6 +104,10 @@ struct CLOptions {
           clEnumValN(LoweringMode::OutputIRMoore, "ir-moore",
                      "Run the entire pass manager to just before MooreToCore "
                      "conversion, and emit the resulting Moore dialect IR"),
+          clEnumValN(
+              LoweringMode::OutputIRLLHD, "ir-llhd",
+              "Run the entire pass manager to just before the LLHD pipeline "
+              ", and emit the resulting LLHD+Core dialect IR"),
           clEnumValN(LoweringMode::OutputIRHW, "ir-hw",
                      "Run the MooreToCore conversion and emit the resulting "
                      "core dialect IR")),
@@ -295,6 +302,30 @@ static void populateMooreToCoreLowering(PassManager &pm) {
   }
 }
 
+/// Convert LLHD dialect IR into core dialect IR
+static void populateLLHDLowering(PassManager &pm) {
+  pm.addPass(createInlinerPass());
+  {
+    auto &anyPM = pm.nestAny();
+    anyPM.addPass(mlir::createSROA());
+  }
+  pm.addNestedPass<hw::HWModuleOp>(llhd::createEarlyCodeMotion());
+  pm.addNestedPass<hw::HWModuleOp>(llhd::createTemporalCodeMotion());
+  {
+    auto &anyPM = pm.nestAny();
+    anyPM.addPass(mlir::createCSEPass());
+    anyPM.addPass(mlir::createCanonicalizerPass());
+  }
+  pm.addNestedPass<hw::HWModuleOp>(llhd::createDesequentialization());
+  pm.addPass(llhd::createProcessLowering());
+  pm.addNestedPass<hw::HWModuleOp>(llhd::createSig2Reg());
+  {
+    auto &anyPM = pm.nestAny();
+    anyPM.addPass(mlir::createCSEPass());
+    anyPM.addPass(mlir::createCanonicalizerPass());
+  }
+}
+
 /// Populate the given pass manager with transformations as configured by the
 /// command line options.
 static void populatePasses(PassManager &pm) {
@@ -302,6 +333,9 @@ static void populatePasses(PassManager &pm) {
   if (opts.loweringMode == LoweringMode::OutputIRMoore)
     return;
   populateMooreToCoreLowering(pm);
+  if (opts.loweringMode == LoweringMode::OutputIRLLHD)
+    return;
+  populateLLHDLowering(pm);
 }
 
 //===----------------------------------------------------------------------===//
