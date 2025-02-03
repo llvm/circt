@@ -357,8 +357,11 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
     SmallVector<Value> valuesBefore;
     rewriter.setInsertionPointToEnd(waitBlock);
     auto clonedOp = cast<WaitEventOp>(rewriter.clone(*op));
+    bool allDetectsAreAnyChange = true;
     for (auto detectOp :
          llvm::make_early_inc_range(clonedOp.getOps<DetectEventOp>())) {
+      if (detectOp.getEdge() != Edge::AnyChange || detectOp.getCondition())
+        allDetectsAreAnyChange = false;
       valuesBefore.push_back(detectOp.getInput());
       rewriter.eraseOp(detectOp);
     }
@@ -448,18 +451,21 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
     // value corresponds to the detect op's input.
     SmallVector<Value> triggers;
     for (auto [detectOp, before] : llvm::zip(detectOps, valuesBefore)) {
-      if (!isa<IntType>(before.getType()))
-        return detectOp->emitError() << "requires int operand";
+      if (!allDetectsAreAnyChange) {
+        if (!isa<IntType>(before.getType()))
+          return detectOp->emitError() << "requires int operand";
 
-      rewriter.setInsertionPoint(detectOp);
-      auto trigger =
-          computeTrigger(before, detectOp.getInput(), detectOp.getEdge());
-      if (detectOp.getCondition()) {
-        auto condition = typeConverter->materializeTargetConversion(
-            rewriter, loc, rewriter.getI1Type(), detectOp.getCondition());
-        trigger = rewriter.create<comb::AndOp>(loc, trigger, condition, true);
+        rewriter.setInsertionPoint(detectOp);
+        auto trigger =
+            computeTrigger(before, detectOp.getInput(), detectOp.getEdge());
+        if (detectOp.getCondition()) {
+          auto condition = typeConverter->materializeTargetConversion(
+              rewriter, loc, rewriter.getI1Type(), detectOp.getCondition());
+          trigger = rewriter.create<comb::AndOp>(loc, trigger, condition, true);
+        }
+        triggers.push_back(trigger);
       }
-      triggers.push_back(trigger);
+
       rewriter.eraseOp(detectOp);
     }
 

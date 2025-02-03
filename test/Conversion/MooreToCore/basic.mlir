@@ -630,7 +630,6 @@ moore.module @WaitEvent() {
   // CHECK: [[PRB_D3:%.+]] = llhd.prb %d
   // CHECK: [[PRB_D2:%.+]] = llhd.prb %d
   // CHECK: [[PRB_D1:%.+]] = llhd.prb %d
-  // CHECK: [[PRB_D0:%.+]] = llhd.prb %d
   %a = moore.variable : <i1>
   %b = moore.variable : <i1>
   %c = moore.variable : <i1>
@@ -665,27 +664,10 @@ moore.module @WaitEvent() {
     // CHECK:   [[BEFORE:%.+]] = llhd.prb %a
     // CHECK:   llhd.wait ([[PRB_A0]] : {{.+}}), ^[[CHECK:.+]]
     // CHECK: ^[[CHECK]]:
-    // CHECK:   [[AFTER:%.+]] = llhd.prb %a
-    // CHECK:   [[TMP:%.+]] = comb.icmp bin ne [[BEFORE]], [[AFTER]]
-    // CHECK:   cf.cond_br [[TMP]]
+    // CHECK:   cf.br
     moore.wait_event {
       %0 = moore.read %a : <i1>
       moore.detect_event any %0 : i1
-    }
-    moore.return
-  }
-
-  // CHECK: llhd.process {
-  moore.procedure initial {
-    // CHECK:   [[BEFORE:%.+]] = llhd.prb %d
-    // CHECK:   llhd.wait ([[PRB_D0]] : {{.+}}), ^[[CHECK:.+]]
-    // CHECK: ^[[CHECK]]:
-    // CHECK:   [[AFTER:%.+]] = llhd.prb %d
-    // CHECK:   [[TMP:%.+]] = comb.icmp bin ne [[BEFORE]], [[AFTER]]
-    // CHECK:   cf.cond_br [[TMP]]
-    moore.wait_event {
-      %0 = moore.read %d : <i4>
-      moore.detect_event any %0 : i4
     }
     moore.return
   }
@@ -711,22 +693,9 @@ moore.module @WaitEvent() {
 
   // CHECK: llhd.process {
   moore.procedure initial {
-    // CHECK:   [[BEFORE_A:%.+]] = llhd.prb %a
-    // CHECK:   [[BEFORE_B:%.+]] = llhd.prb %b
-    // CHECK:   [[BEFORE_C:%.+]] = llhd.prb %c
-    // CHECK:   [[BEFORE_D:%.+]] = llhd.prb %d
     // CHECK:   llhd.wait ([[PRB_A2]], [[PRB_B1]], [[PRB_C]], [[PRB_D1]] : {{.+}}), ^[[CHECK:.+]]
     // CHECK: ^[[CHECK]]:
-    // CHECK:   [[AFTER_A:%.+]] = llhd.prb %a
-    // CHECK:   [[AFTER_B:%.+]] = llhd.prb %b
-    // CHECK:   [[AFTER_C:%.+]] = llhd.prb %c
-    // CHECK:   [[AFTER_D:%.+]] = llhd.prb %d
-    // CHECK:   [[TMP1:%.+]] = comb.icmp bin ne [[BEFORE_A]], [[AFTER_A]]
-    // CHECK:   [[TMP2:%.+]] = comb.icmp bin ne [[BEFORE_B]], [[AFTER_B]]
-    // CHECK:   [[TMP3:%.+]] = comb.icmp bin ne [[BEFORE_C]], [[AFTER_C]]
-    // CHECK:   [[TMP4:%.+]] = comb.icmp bin ne [[BEFORE_D]], [[AFTER_D]]
-    // CHECK:   [[TMP5:%.+]] = comb.or bin [[TMP1]], [[TMP2]], [[TMP3]], [[TMP4]]
-    // CHECK:   cf.cond_br [[TMP5]]
+    // CHECK:   cf.br
     moore.wait_event {
       %0 = moore.read %a : <i1>
       %1 = moore.read %b : <i1>
