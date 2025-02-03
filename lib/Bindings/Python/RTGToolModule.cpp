@@ -23,14 +23,17 @@ class PyRtgToolOptions {
 public:
   PyRtgToolOptions(unsigned seed, CirctRtgToolOutputFormat outputFormat,
                    bool verifyPasses, bool verbosePassExecution,
-                   const std::vector<const char *> &unsupportedInstructions,
-                   const std::string &unsupportedInstructionsFile)
+                   const std::vector<std::string> &unsupportedInstructions,
+                   const std::string &unsupportedInstructionsFile,
+                   bool splitOutput, const std::string &outputPath)
       : options(circtRtgToolOptionsCreateDefault(seed)) {
     setOutputFormat(outputFormat);
     setVerifyPasses(verifyPasses);
     setVerbosePassExecution(verbosePassExecution);
     setUnsupportedInstructions(unsupportedInstructions);
     setUnsupportedInstructionsFile(unsupportedInstructionsFile);
+    setSplitOutput(splitOutput);
+    setOutputPath(outputPath);
   }
   ~PyRtgToolOptions() { circtRtgToolOptionsDestroy(options); }
 
@@ -52,10 +55,11 @@ public:
   }
 
   void
-  setUnsupportedInstructions(const std::vector<const char *> &instructions) {
+  setUnsupportedInstructions(const std::vector<std::string> &instructions) {
     circtRtgToolOptionsSetUnsupportedInstructions(
         options, instructions.size(),
-        const_cast<const char **>(instructions.data()));
+        reinterpret_cast<const void **>(
+            const_cast<std::string *>(instructions.data())));
   }
 
   void addUnsupportedInstruction(const std::string &instruction) {
@@ -65,6 +69,14 @@ public:
   void setUnsupportedInstructionsFile(const std::string &filename) {
     circtRtgToolOptionsSetUnsupportedInstructionsFile(options,
                                                       filename.c_str());
+  }
+
+  void setSplitOutput(bool enable) {
+    circtRtgToolOptionsSetSplitOutput(options, enable);
+  }
+
+  void setOutputPath(const std::string &path) {
+    circtRtgToolOptionsSetOutputPath(options, path.c_str());
   }
 
 private:
@@ -83,13 +95,15 @@ void circt::python::populateDialectRTGToolSubmodule(nb::module_ &m) {
 
   nb::class_<PyRtgToolOptions>(m, "Options")
       .def(nb::init<unsigned, CirctRtgToolOutputFormat, bool, bool,
-                    const std::vector<const char *> &, const std::string &>(),
+                    const std::vector<std::string> &, const std::string &, bool,
+                    const std::string &>(),
            nb::arg("seed"),
            nb::arg("output_format") = CIRCT_RTGTOOL_OUTPUT_FORMAT_ASM,
            nb::arg("verify_passes") = true,
            nb::arg("verbose_pass_execution") = false,
            nb::arg("unsupported_instructions") = std::vector<const char *>(),
-           nb::arg("unsupported_instructions_file") = "")
+           nb::arg("unsupported_instructions_file") = "",
+           nb::arg("split_output") = false, nb::arg("output_path") = "")
       .def("set_output_format", &PyRtgToolOptions::setOutputFormat,
            "Specify the output format of the tool", nb::arg("format"))
       .def("set_seed", &PyRtgToolOptions::setSeed,
@@ -114,6 +128,13 @@ void circt::python::populateDialectRTGToolSubmodule(nb::module_ &m) {
            &PyRtgToolOptions::setUnsupportedInstructionsFile,
            "Register a file containing a comma-separated list of instruction "
            "names which are not supported by the assembler.",
+           nb::arg("filename"))
+      .def("set_split_output", &PyRtgToolOptions::setSplitOutput,
+           "Determines whether each test should be emitted to a separate file.",
+           nb::arg("filename"))
+      .def("output_path", &PyRtgToolOptions::setOutputPath,
+           "The path of a file to be emitted to or a directory if "
+           "'split_output' is enabled.",
            nb::arg("filename"));
 
   m.def("populate_randomizer_pipeline",

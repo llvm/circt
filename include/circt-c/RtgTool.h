@@ -56,7 +56,7 @@ circtRtgToolOptionsSetVerbosePassExecution(CirctRtgToolOptions options,
 
 MLIR_CAPI_EXPORTED void circtRtgToolOptionsSetUnsupportedInstructions(
     CirctRtgToolOptions options, unsigned numInstr,
-    const char **unsupportedInstructions);
+    const void **unsupportedInstructions);
 
 MLIR_CAPI_EXPORTED void circtRtgToolOptionsAddUnsupportedInstruction(
     CirctRtgToolOptions options, const char *unsupportedInstruction);
@@ -64,6 +64,12 @@ MLIR_CAPI_EXPORTED void circtRtgToolOptionsAddUnsupportedInstruction(
 MLIR_CAPI_EXPORTED void
 circtRtgToolOptionsSetUnsupportedInstructionsFile(CirctRtgToolOptions options,
                                                   const char *filename);
+
+MLIR_CAPI_EXPORTED void
+circtRtgToolOptionsSetSplitOutput(CirctRtgToolOptions options, bool enable);
+
+MLIR_CAPI_EXPORTED void
+circtRtgToolOptionsSetOutputPath(CirctRtgToolOptions options, const char *path);
 
 //===----------------------------------------------------------------------===//
 // Pipeline Population API.
