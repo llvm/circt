@@ -110,6 +110,31 @@ def ClockGateIntrinsicOp : FIRRTLOp<"int.clock_gate", [Pure]> {
   }];
 }
 
+def ClockSwitchIntrinsicOp : FIRRTLOp<"int.clock_switch", [Pure]> {
+  let summary = "Safely switch a clock with an enable signal";
+  let description = [{
+    The `int.clock_switch` switches clocks safely, without glitches,
+    based on a boolean enable value. If the enable input is 1, the output clock
+    produced by the second input clock.  If the enable
+    input is 0, the output clock is the first input clock.
+
+    The depth parameter determins the depth of the synchronizers.  This must be 
+    at least 1, which is sufficient for related clock sources.  Additional 
+    stages are useful for unrelated clock sources.
+  }];
+
+  let arguments = (ins NonConstClockType:$input0,
+                       NonConstClockType:$input1,
+                       NonConstUInt1Type:$select,
+                       Optional<NonConstUInt1Type>:$test_enable);
+  let results = (outs NonConstClockType:$output);
+  let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
+  let assemblyFormat = [{
+    $input0 `,` $input1 `,` $enable (`,` $test_enable^)? attr-dict
+  }];
+}
+
 def ClockInverterIntrinsicOp : FIRRTLOp<"int.clock_inv", [Pure]> {
   let summary = "Inverts the clock signal";
 
