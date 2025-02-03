@@ -20,24 +20,24 @@ include "mlir/IR/EnumAttr.td"
 // Base class for binary operators.
 class BinOp<string mnemonic, list<Trait> traits = []> :
       CombOp<mnemonic, traits # [Pure]> {
-  let arguments = (ins HWIntegerType:$lhs, HWIntegerType:$rhs, UnitAttr:$twoState);
+  let arguments = (ins HWIntegerType:$lhs, HWIntegerType:$rhs);
   let results = (outs HWIntegerType:$result);
 
   let assemblyFormat =
-    "$lhs `,` $rhs (`bin` $twoState^)? attr-dict `:` functional-type($args, $results)";
+    "$lhs `,` $rhs attr-dict `:` functional-type($args, $results)";
 }
 
 // Binary operator with uniform input/result types.
 class UTBinOp<string mnemonic, list<Trait> traits = []> :
       BinOp<mnemonic,
                traits # [SameTypeOperands, SameOperandsAndResultType]> {
-  let assemblyFormat = "(`bin` $twoState^)? $lhs `,` $rhs attr-dict `:` qualified(type($result))";
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` qualified(type($result))";
 }
 
 // Base class for variadic operators.
 class VariadicOp<string mnemonic, list<Trait> traits = []> :
       CombOp<mnemonic, traits # [Pure]> {
-  let arguments = (ins Variadic<HWIntegerType>:$inputs, UnitAttr:$twoState);
+  let arguments = (ins Variadic<HWIntegerType>:$inputs);
   let results = (outs HWIntegerType:$result);
 }
 
@@ -49,12 +49,11 @@ class UTVariadicOp<string mnemonic, list<Trait> traits = []> :
   let hasFolder = true;
   let hasVerifier = 1;
 
-  let assemblyFormat = "(`bin` $twoState^)? $inputs attr-dict `:` qualified(type($result))";
+  let assemblyFormat = "$inputs attr-dict `:` qualified(type($result))";
 
   let builders = [
-    OpBuilder<(ins "Value":$lhs, "Value":$rhs, CArg<"bool", "false">:$twoState), [{
-      return build($_builder, $_state, lhs.getType(),
-                   ValueRange{lhs, rhs}, twoState);
+    OpBuilder<(ins "Value":$lhs, "Value":$rhs), [{
+      return build($_builder, $_state, lhs.getType(), ValueRange{lhs, rhs});
     }]>
   ];
 }
@@ -75,8 +74,23 @@ let hasFolder = true in {
   }
 }
 
-def AndOp : UTVariadicOp<"and", [Commutative]>;
-def OrOp  : UTVariadicOp<"or", [Commutative]>;
+def AndOp : UTVariadicOp<"and", [Commutative]> {
+    let description = [{
+      And operation.  Truth table per bit:
+      All(input == 1) -> 1
+      Any(input == 0) -> 0
+      All other cases depends on execution environment.
+  }];
+}
+
+def OrOp  : UTVariadicOp<"or", [Commutative]> {
+    let description = [{
+      Or operation.  Truth table per bit:
+      Any(input == 1) -> 1
+      All(input == 0) -> 0
+      All other cases depend on execution environment.
+  }];
+}
 def XorOp : UTVariadicOp<"xor", [Commutative]> {
   let extraClassDeclaration = [{
     /// Return true if this is a two operand xor with an all ones constant as
@@ -127,10 +141,10 @@ def ICmpOp : CombOp<"icmp", [Pure, SameTypeOperands]> {
   }];
 
   let arguments = (ins ICmpPredicate:$predicate,
-                   HWIntegerType:$lhs, HWIntegerType:$rhs, UnitAttr:$twoState);
+                   HWIntegerType:$lhs, HWIntegerType:$rhs);
   let results = (outs I1:$result);
 
-  let assemblyFormat = "(`bin` $twoState^)? $predicate $lhs `,` $rhs attr-dict `:` qualified(type($lhs))";
+  let assemblyFormat = "$predicate $lhs `,` $rhs attr-dict `:` qualified(type($lhs))";
 
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
@@ -164,11 +178,11 @@ def ICmpOp : CombOp<"icmp", [Pure, SameTypeOperands]> {
 // Base class for unary reduction operations that produce an i1.
 class UnaryI1ReductionOp<string mnemonic, list<Trait> traits = []> :
       CombOp<mnemonic, traits # [Pure]> {
-  let arguments = (ins HWIntegerType:$input, UnitAttr:$twoState);
+  let arguments = (ins HWIntegerType:$input);
   let results = (outs I1:$result);
   let hasFolder = 1;
 
-  let assemblyFormat = "(`bin` $twoState^)? $input attr-dict `:` qualified(type($input))";
+  let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
 }
 
 def ParityOp : UnaryI1ReductionOp<"parity">;
@@ -277,11 +291,11 @@ def MuxOp : CombOp<"mux",
   }];
 
   let arguments = (ins I1:$cond, AnyType:$trueValue,
-                       AnyType:$falseValue, UnitAttr:$twoState);
+                       AnyType:$falseValue);
   let results = (outs AnyType:$result);
 
   let assemblyFormat =
-    "(`bin` $twoState^)? $cond `,` $trueValue `,` $falseValue  attr-dict `:` qualified(type($result))";
+    "$cond `,` $trueValue `,` $falseValue  attr-dict `:` qualified(type($result))";
 
   let hasFolder = true;
   let hasCanonicalizer = true;

@@ -42,7 +42,7 @@ private:
         getMux(loc, b, t, f, table.drop_front(half), inputs.drop_front());
     Value if0 =
         getMux(loc, b, t, f, table.drop_back(half), inputs.drop_front());
-    return b.create<MuxOp>(loc, inputs.front(), if1, if0, false);
+    return b.create<MuxOp>(loc, inputs.front(), if1, if0);
   }
 
 public:

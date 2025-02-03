@@ -161,7 +161,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
   hw.module @InstResult(in %clock: i1) {
     %0, %1 = hw.instance "mem" @Mem() -> (result_name: i1, "": i1)
     hw.instance "dummy" sym @keep @Dummy(in1: %0 : i1, in2: %1 : i1) -> ()
-    %2 = comb.and bin %0, %1 : i1
+    %2 = comb.and %0, %1 : i1
     sv.always posedge %clock  {
       sv.cover %2, immediate
     }
@@ -444,7 +444,7 @@ module {
   // CHECK: %designAndTestCode = seq.firreg
   // CHECK-NOT: seq.firreg
   hw.module @RegExtracted(in %clock: !seq.clock, in %reset: i1, in %in: i1, out out: i1) {
-    %muxed = comb.mux bin %reset, %in, %testCode1 : i1
+    %muxed = comb.mux %reset, %in, %testCode1 : i1
     %testCode1 = seq.firreg %muxed clock %clock : i1
     %testCode2 = seq.firreg %testCode1 clock %clock : i1
     %symbol = seq.firreg %in clock %clock sym @foo : i1
@@ -468,10 +468,10 @@ module {
 module {
   // CHECK-LABEL: @ConstantCloned_cover(in %in : i1, in %clock : i1)
   // CHECK-NEXT:   %true = hw.constant true
-  // CHECK-NEXT:   comb.xor bin %in, %true : i1
+  // CHECK-NEXT:   comb.xor %in, %true : i1
   hw.module @ConstantCloned(in %clock: i1, in %in: i1, out out: i1) {
     %true = hw.constant true
-    %not = comb.xor bin %in, %true : i1
+    %not = comb.xor %in, %true : i1
 
     sv.always posedge %clock {
       sv.cover %not, immediate

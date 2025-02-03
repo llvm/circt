@@ -12,12 +12,12 @@ arc.define @Simple(%arg0: i4) -> i4 {
   %1 = comb.concat %c0_i2, %arg0 : i2, i4
   %2 = comb.concat %false, %arg0 : i1, i4
   %3 = comb.concat %arg0, %false : i4, i1
-  %4 = comb.and bin %2, %3 : i5
+  %4 = comb.and %2, %3 : i5
   %5 = comb.concat %false, %4 : i1, i5
-  %6 = comb.add bin %1, %5 : i6
-  %7 = comb.and bin %1, %6 : i6
+  %6 = comb.add %1, %5 : i6
+  %7 = comb.and %1, %6 : i6
   %8 = comb.concat %false, %7 : i1, i6
-  %9 = comb.add bin %0, %8 : i7
+  %9 = comb.add %0, %8 : i7
   %10 = comb.extract %9 from 0 : (i7) -> i4
   %11 = comb.and %arg0, %10 : i4
   %12 = comb.add %arg0, %11 : i4

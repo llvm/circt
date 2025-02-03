@@ -24,20 +24,20 @@ module {
     %0 = comb.concat %wf, %count : i1, i32
     // CHECK:  %c1_i33 = hw.constant 1 : i33
     %c1_i33 = hw.constant 1 : i33
-    // CHECK:  %1 = comb.sub bin %0, %c1_i33 : i33
-    %1 = comb.sub bin %0, %c1_i33 : i33
+    // CHECK:  %1 = comb.sub %0, %c1_i33 : i33
+    %1 = comb.sub %0, %c1_i33 : i33
     // CHECK:  %2 = comb.extract %1 from 0 : (i33) -> i32
     %2 = comb.extract %1 from 0 : (i33) -> i32
     // CHECK:  %3 = comb.concat %false, %2 : i1, i32
     %3 = comb.concat %wf, %d : i1, i32
     // CHECK:  %c2_i33 = hw.constant 2 : i33
     %c2_i33 = hw.constant 2 : i33
-    // CHECK:  %4 = comb.add bin %3, %c2_i33 : i33
-    %4 = comb.add bin %3, %c2_i33 : i33
+    // CHECK:  %4 = comb.add %3, %c2_i33 : i33
+    %4 = comb.add %3, %c2_i33 : i33
     // CHECK:  %5 = comb.extract %4 from 0 : (i33) -> i32
     %5 = comb.extract %4 from 0 : (i33) -> i32
-    // CHECK:  %6 = comb.mux bin %in, %2, %5 : i32
-    %6 = comb.mux bin %ww_in, %b, %c : i32
+    // CHECK:  %6 = comb.mux %in, %2, %5 : i32
+    %6 = comb.mux %ww_in, %b, %c : i32
     // CHECK:  hw.output %count : i32
     hw.output %count : i32
   }

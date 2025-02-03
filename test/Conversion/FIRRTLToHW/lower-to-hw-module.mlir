@@ -114,7 +114,7 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: [[OUTD:%.+]] = hw.wire %z_i4
     // CHECK-NEXT: [[T0:%.+]] = comb.concat %false, %inA
     // CHECK-NEXT: [[T1:%.+]] = comb.concat %false, [[OUTC]]
-    // CHECK-NEXT: comb.sub bin [[T0]], [[T1]]
+    // CHECK-NEXT: comb.sub [[T0]], [[T1]]
     %0 = firrtl.sub %inA, %outC : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
     // No connections to outD.
@@ -156,7 +156,7 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: hw.instance "myext" @MyParameterizedExtModule<DEFAULT: i64 = 0, DEPTH: f64 = 3.242000e+01, FORMAT: none = "xyz_timeout=%d\0A", WIDTH: i8 = 32>(in: [[ARG:%.+]]: i1) -> (out: i8)
     %myext:2 = firrtl.instance myext @MyParameterizedExtModule(in in: !firrtl.uint<1>, out out: !firrtl.uint<8>)
 
-    // CHECK: [[ADD:%.+]] = comb.add bin %0, %1
+    // CHECK: [[ADD:%.+]] = comb.add %0, %1
 
     // Calculation of input (the firrtl.add + firrtl.eq) happens after the
     // instance.
@@ -164,7 +164,7 @@ firrtl.circuit "Simple" {
 
     // Multiple uses of the add.
     %a = firrtl.eq %0, %arg2 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<1>
-    // CHECK-NEXT: [[ARG]] = comb.icmp bin eq [[ADD]], %arg2 : i3
+    // CHECK-NEXT: [[ARG]] = comb.icmp eq [[ADD]], %arg2 : i3
     firrtl.connect %myext#0, %a : !firrtl.uint<1>, !firrtl.uint<1>
 
     firrtl.connect %out0, %myext#1 : !firrtl.uint<8>, !firrtl.uint<8>

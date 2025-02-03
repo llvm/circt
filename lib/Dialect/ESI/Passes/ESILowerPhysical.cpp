@@ -115,8 +115,8 @@ FIFOLowering::matchAndRewrite(FIFOOp op, OpAdaptor adaptor,
     auto unwrapValidReady =
         rewriter.create<UnwrapValidReadyOp>(loc, chanInput, inputEn);
     rawData = unwrapValidReady.getRawOutput();
-    dataNotAvailable = comb::createOrFoldNot(loc, unwrapValidReady.getValid(),
-                                             rewriter, /*twoState=*/true);
+    dataNotAvailable =
+        comb::createOrFoldNot(loc, unwrapValidReady.getValid(), rewriter);
     dataNotAvailable.getDefiningOp()->setAttr(
         "sv.namehint", rewriter.getStringAttr("dataNotAvailable"));
   } else if (chanInput.getType().getSignaling() == ChannelSignaling::FIFO) {
@@ -150,8 +150,7 @@ FIFOLowering::matchAndRewrite(FIFOOp op, OpAdaptor adaptor,
   if (outputType.getSignaling() == ChannelSignaling::ValidReady) {
     auto wrap = rewriter.create<WrapValidReadyOp>(
         loc, mlir::TypeRange{outputType, i1}, seqFifo.getOutput(),
-        comb::createOrFoldNot(loc, seqFifo.getEmpty(), rewriter,
-                              /*twoState=*/true));
+        comb::createOrFoldNot(loc, seqFifo.getEmpty(), rewriter));
     output = wrap.getChanOutput();
     outputRdEn.setValue(
         rewriter.create<comb::AndOp>(loc, wrap.getValid(), wrap.getReady()));

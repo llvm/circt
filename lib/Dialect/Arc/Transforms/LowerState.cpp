@@ -752,16 +752,16 @@ LogicalResult OpLowering::lower(MemoryOp op) {
       auto mask = callOp.getResult(write.getMaskIdx(write.getEnable()));
       auto maskInv = module.builder.createOrFold<comb::XorOp>(
           write.getLoc(), mask,
-          module.builder.create<ConstantOp>(write.getLoc(), mask.getType(), -1),
-          true);
+          module.builder.create<ConstantOp>(write.getLoc(), mask.getType(),
+                                            -1));
       auto oldData =
           module.builder.create<MemoryReadOp>(write.getLoc(), state, address);
-      auto oldMasked = module.builder.create<comb::AndOp>(
-          write.getLoc(), maskInv, oldData, true);
+      auto oldMasked =
+          module.builder.create<comb::AndOp>(write.getLoc(), maskInv, oldData);
       auto newMasked =
-          module.builder.create<comb::AndOp>(write.getLoc(), mask, data, true);
+          module.builder.create<comb::AndOp>(write.getLoc(), mask, data);
       data = module.builder.create<comb::OrOp>(write.getLoc(), oldMasked,
-                                               newMasked, true);
+                                               newMasked);
     }
 
     // Actually write to the memory.

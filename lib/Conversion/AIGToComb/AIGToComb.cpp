@@ -44,11 +44,11 @@ struct AIGAndInverterOpConversion : OpConversionPattern<aig::AndInverterOp> {
     operands.reserve(op.getNumOperands());
     for (auto [input, inverted] : llvm::zip(op.getOperands(), op.getInverted()))
       operands.push_back(inverted ? rewriter.createOrFold<comb::XorOp>(
-                                        op.getLoc(), input, allOnes, true)
+                                        op.getLoc(), input, allOnes)
                                   : input);
     // NOTE: Use createOrFold to avoid creating a new operation if possible.
     rewriter.replaceOp(
-        op, rewriter.createOrFold<comb::AndOp>(op.getLoc(), operands, true));
+        op, rewriter.createOrFold<comb::AndOp>(op.getLoc(), operands));
     return success();
   }
 };

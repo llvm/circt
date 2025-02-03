@@ -208,10 +208,10 @@ struct DivOpLowering : public OpConversionPattern<DivOp> {
 
     Value divResult;
     if (signedDivision)
-      divResult = rewriter.create<comb::DivSOp>(loc, lhsValue, rhsValue, false)
+      divResult = rewriter.create<comb::DivSOp>(loc, lhsValue, rhsValue)
                       ->getOpResult(0);
     else
-      divResult = rewriter.create<comb::DivUOp>(loc, lhsValue, rhsValue, false)
+      divResult = rewriter.create<comb::DivUOp>(loc, lhsValue, rhsValue)
                       ->getOpResult(0);
 
     // Carry over any attributes from the original div op.
@@ -312,7 +312,7 @@ struct ICmpOpLowering : public OpConversionPattern<ICmpOp> {
                                      rhsType.isSigned());
 
     auto newOp = rewriter.create<comb::ICmpOp>(op->getLoc(), combPred, lhsValue,
-                                               rhsValue, false);
+                                               rhsValue);
     rewriter.modifyOpInPlace(
         newOp, [&]() { newOp->setDialectAttrs(op->getDialectAttrs()); });
     rewriter.replaceOp(op, newOp);
@@ -340,8 +340,7 @@ struct BinaryOpLowering : public OpConversionPattern<BinOp> {
                                      targetWidth, isLhsTypeSigned);
     Value rhsValue = extendTypeWidth(rewriter, loc, adaptor.getInputs()[1],
                                      targetWidth, isRhsTypeSigned);
-    auto newOp =
-        rewriter.create<ReplaceOp>(op.getLoc(), lhsValue, rhsValue, false);
+    auto newOp = rewriter.create<ReplaceOp>(op.getLoc(), lhsValue, rhsValue);
     rewriter.modifyOpInPlace(
         newOp, [&]() { newOp->setDialectAttrs(op->getDialectAttrs()); });
     rewriter.replaceOp(op, newOp);

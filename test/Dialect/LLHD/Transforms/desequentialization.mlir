@@ -154,7 +154,7 @@ hw.module @compareClkPrb(inout %clk : i1, inout %out : i1) {
     llhd.wait (%clk_0 : i1), ^bb2
   ^bb2:
     %clk_2 = llhd.prb %clk : !hw.inout<i1>
-    %cond = comb.icmp bin ne %clk_1, %clk_2 : i1
+    %cond = comb.icmp ne %clk_1, %clk_2 : i1
     llhd.drv %out, %false after %time if %cond : !hw.inout<i1>
     cf.br ^bb1
   }

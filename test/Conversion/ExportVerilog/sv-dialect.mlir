@@ -1781,7 +1781,7 @@ sv.func @func_def(in %in_0 : i2, out out_0: i1, in %in_1: i2, out out_1 : i1 {sv
 // CHECK-NEXT: endfunction
 sv.func @recurse_add(in %n : i32, out out : i32 {sv.func.explicitly_returned}) {
   %one = hw.constant 1 : i32
-  %cond = comb.icmp bin ule %n, %one: i32
+  %cond = comb.icmp ule %n, %one: i32
   %result = sv.logic : !hw.inout<i32>
   sv.if %cond {
     sv.bpassign %result, %n: i32
@@ -1886,7 +1886,7 @@ hw.module @intrinsic(in %clk: i1, out io1: i1, out io2: i1, out io3: i1, out io4
   // CHECK: wire [4:0] [[tmp:.*]];
 
   %x_i1 = sv.constantX : i1
-  %0 = comb.icmp bin ceq %clk, %x_i1 : i1
+  %0 = comb.icmp ceq %clk, %x_i1 : i1
   // CHECK: assign io1 = clk === 1'bx
 
   %1 = sv.constantStr "foo"

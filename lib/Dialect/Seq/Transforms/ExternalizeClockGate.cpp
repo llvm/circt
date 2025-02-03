@@ -92,7 +92,7 @@ void ExternalizeClockGatePass::runOnOperation() {
       // If the clock gate has a test enable operand but the module does not,
       // add a `comb.or` to merge the two enable conditions.
       if (!hasTestEnable && testEnable) {
-        enable = builder.createOrFold<comb::OrOp>(enable, testEnable, true);
+        enable = builder.createOrFold<comb::OrOp>(enable, testEnable);
         testEnable = {};
       }
 

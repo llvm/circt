@@ -297,8 +297,8 @@ static bool areEquivalentValues(Value term, Value next) {
 
 static llvm::SetVector<Value> extractConditions(Value value) {
   auto andOp = value.getDefiningOp<comb::AndOp>();
-  // If the value is not AndOp with a bin flag, use it as a condition.
-  if (!andOp || !andOp.getTwoState()) {
+  // If the value is not AndOp, use it as a condition.
+  if (!andOp) {
     llvm::SetVector<Value> ret;
     ret.insert(value);
     return ret;
@@ -333,7 +333,7 @@ FirRegLowering::tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
         auto [i, value] = idxAndValue;
         auto mux = value.template getDefiningOp<comb::MuxOp>();
         // Ensure that mux has binary flag.
-        if (!mux || !mux.getTwoState())
+        if (!mux)
           return false;
         // The next value must be same.
         if (trueVal && trueVal != mux.getTrueValue())
@@ -371,8 +371,7 @@ FirRegLowering::tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
 
     auto indexCompare =
         (*extractedConditions.begin()).getDefiningOp<comb::ICmpOp>();
-    if (!indexCompare || !indexCompare.getTwoState() ||
-        indexCompare.getPredicate() != comb::ICmpPredicate::eq)
+    if (!indexCompare || indexCompare.getPredicate() != comb::ICmpPredicate::eq)
       return {};
     // `IndexValue` must be same.
     if (indexValue && indexValue != indexCompare.getLhs())
@@ -390,7 +389,7 @@ FirRegLowering::tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
     commonConditionValue = getOrCreateConstant(reg.getLoc(), APInt(1, 1));
   else
     commonConditionValue = builder.createOrFold<comb::AndOp>(
-        reg.getLoc(), builder.getI1Type(), commonConditions.takeVector(), true);
+        reg.getLoc(), builder.getI1Type(), commonConditions.takeVector());
   return std::make_tuple(commonConditionValue, indexValue, trueVal);
 }
 
@@ -431,8 +430,7 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
     // If this is a two-state mux within the fanout from the register, we use
     // if/else structure for proper enable inference.
     auto mux = next.getDefiningOp<comb::MuxOp>();
-    if (mux && mux.getTwoState() &&
-        reachableMuxes->isMuxReachableFrom(firReg, mux)) {
+    if (mux && reachableMuxes->isMuxReachableFrom(firReg, mux)) {
       addToIfBlock(
           builder, mux.getCond(),
           [&]() { addToWorklist(reg, term, mux.getTrueValue()); },

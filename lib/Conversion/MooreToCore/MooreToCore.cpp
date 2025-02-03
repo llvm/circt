@@ -65,12 +65,12 @@ static Value adjustIntegerWidth(OpBuilder &builder, Value value,
                                              intWidth - targetWidth);
   Value zero = builder.create<hw::ConstantOp>(
       loc, builder.getIntegerType(intWidth - targetWidth), 0);
-  Value isZero = builder.create<comb::ICmpOp>(loc, comb::ICmpPredicate::eq, hi,
-                                              zero, false);
+  Value isZero =
+      builder.create<comb::ICmpOp>(loc, comb::ICmpPredicate::eq, hi, zero);
   Value lo = builder.create<comb::ExtractOp>(loc, value, 0, targetWidth);
   Value max = builder.create<hw::ConstantOp>(
       loc, builder.getIntegerType(targetWidth), -1);
-  return builder.create<comb::MuxOp>(loc, isZero, lo, max, false);
+  return builder.create<comb::MuxOp>(loc, isZero, lo, max);
 }
 
 /// Get the ModulePortInfo from a SVModuleOp.
@@ -418,28 +418,24 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
 
       if (edge == Edge::AnyChange)
         return rewriter.create<comb::ICmpOp>(loc, ICmpPredicate::ne, before,
-                                             after, true);
+                                             after);
 
       SmallVector<Value> disjuncts;
       Value trueVal = rewriter.create<hw::ConstantOp>(loc, APInt(1, 1));
 
       if (edge == Edge::PosEdge || edge == Edge::BothEdges) {
-        Value notOldVal =
-            rewriter.create<comb::XorOp>(loc, before, trueVal, true);
-        Value posedge =
-            rewriter.create<comb::AndOp>(loc, notOldVal, after, true);
+        Value notOldVal = rewriter.create<comb::XorOp>(loc, before, trueVal);
+        Value posedge = rewriter.create<comb::AndOp>(loc, notOldVal, after);
         disjuncts.push_back(posedge);
       }
 
       if (edge == Edge::NegEdge || edge == Edge::BothEdges) {
-        Value notCurrVal =
-            rewriter.create<comb::XorOp>(loc, after, trueVal, true);
-        Value posedge =
-            rewriter.create<comb::AndOp>(loc, before, notCurrVal, true);
+        Value notCurrVal = rewriter.create<comb::XorOp>(loc, after, trueVal);
+        Value posedge = rewriter.create<comb::AndOp>(loc, before, notCurrVal);
         disjuncts.push_back(posedge);
       }
 
-      return rewriter.createOrFold<comb::OrOp>(loc, disjuncts, true);
+      return rewriter.createOrFold<comb::OrOp>(loc, disjuncts);
     };
 
     // Convert all `detect_event` ops into a check for the corresponding event
@@ -457,7 +453,7 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
       if (detectOp.getCondition()) {
         auto condition = typeConverter->materializeTargetConversion(
             rewriter, loc, rewriter.getI1Type(), detectOp.getCondition());
-        trigger = rewriter.create<comb::AndOp>(loc, trigger, condition, true);
+        trigger = rewriter.create<comb::AndOp>(loc, trigger, condition);
       }
       triggers.push_back(trigger);
       rewriter.eraseOp(detectOp);
@@ -469,7 +465,7 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
     // the interesting signals.
     rewriter.setInsertionPointToEnd(checkBlock);
     if (!triggers.empty()) {
-      auto triggered = rewriter.createOrFold<comb::OrOp>(loc, triggers, true);
+      auto triggered = rewriter.createOrFold<comb::OrOp>(loc, triggers);
       rewriter.create<cf::CondBranchOp>(loc, triggered, resumeBlock, waitBlock);
     } else {
       rewriter.create<cf::BranchOp>(loc, waitBlock);
@@ -917,7 +913,7 @@ struct BinaryOpConversion : public OpConversionPattern<SourceOp> {
   matchAndRewrite(SourceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<TargetOp>(op, adaptor.getLhs(),
-                                          adaptor.getRhs(), false);
+                                          adaptor.getRhs());
     return success();
   }
 };
@@ -1167,7 +1163,7 @@ struct ShlOpConversion : public OpConversionPattern<ShlOp> {
         adjustIntegerWidth(rewriter, adaptor.getAmount(),
                            resultType.getIntOrFloatBitWidth(), op->getLoc());
     rewriter.replaceOpWithNewOp<comb::ShlOp>(op, resultType, adaptor.getValue(),
-                                             amount, false);
+                                             amount);
     return success();
   }
 };
@@ -1184,8 +1180,8 @@ struct ShrOpConversion : public OpConversionPattern<ShrOp> {
     Value amount =
         adjustIntegerWidth(rewriter, adaptor.getAmount(),
                            resultType.getIntOrFloatBitWidth(), op->getLoc());
-    rewriter.replaceOpWithNewOp<comb::ShrUOp>(
-        op, resultType, adaptor.getValue(), amount, false);
+    rewriter.replaceOpWithNewOp<comb::ShrUOp>(op, resultType,
+                                              adaptor.getValue(), amount);
     return success();
   }
 };
@@ -1280,8 +1276,8 @@ struct AShrOpConversion : public OpConversionPattern<AShrOp> {
     Value amount =
         adjustIntegerWidth(rewriter, adaptor.getAmount(),
                            resultType.getIntOrFloatBitWidth(), op->getLoc());
-    rewriter.replaceOpWithNewOp<comb::ShrSOp>(
-        op, resultType, adaptor.getValue(), amount, false);
+    rewriter.replaceOpWithNewOp<comb::ShrSOp>(op, resultType,
+                                              adaptor.getValue(), amount);
     return success();
   }
 };

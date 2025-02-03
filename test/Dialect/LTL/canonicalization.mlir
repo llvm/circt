@@ -131,11 +131,11 @@ func.func @NonConsecutiveRepeatFolds(%arg0: !ltl.sequence) {
 
 // CHECK-LABEL: @CanonicalizeToComb
 func.func @CanonicalizeToComb(%arg0: i1, %arg1: i1, %arg2: i1) {
-  // CHECK-NEXT: comb.and bin %arg0, %arg1, %arg2 : i1
+  // CHECK-NEXT: comb.and %arg0, %arg1, %arg2 : i1
   %0 = ltl.and %arg0, %arg1, %arg2 : i1, i1, i1
-  // CHECK-NEXT: comb.or bin %arg0, %arg1, %arg2 : i1
+  // CHECK-NEXT: comb.or %arg0, %arg1, %arg2 : i1
   %1 = ltl.or %arg0, %arg1, %arg2 : i1, i1, i1
-  // CHECK-NEXT: comb.and bin %arg0, %arg1, %arg2 : i1
+  // CHECK-NEXT: comb.and %arg0, %arg1, %arg2 : i1
   %2 = ltl.intersect %arg0, %arg1, %arg2 : i1, i1, i1
 
   call @Bool(%0) : (i1) -> ()

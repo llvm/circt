@@ -48,10 +48,10 @@ hw.module @CoverAssert(
     %0 = comb.icmp eq %eeeeee_fffff_gggggg_hhh_i_jjjjj_kkkkkkkkk_lllllll_mmmmmmmmm_nnnnnnnn_0, %c0_i4 : i4
     %1 = comb.icmp eq %eeeeee_fffff_gggggg_hhh_i_jjjjj_kkkkkkkkk_lllllll_mmmmmmmmm_nnnnnnnn_0, %c0_i4 : i4
 
-    %2 = comb.xor bin %reset, %true : i1
-    %3 = comb.xor bin %reset, %true : i1
-    %4 = comb.and bin %0, %2 : i1
-    %5 = comb.and bin %1, %3 : i1
+    %2 = comb.xor %reset, %true : i1
+    %3 = comb.xor %reset, %true : i1
+    %4 = comb.and %0, %2 : i1
+    %5 = comb.and %1, %3 : i1
 
 //      CHECK:  cover__information_label:
 // CHECK-NEXT:    cover property (@(posedge clock)
@@ -68,34 +68,34 @@ hw.module @CoverAssert(
 }
 
 hw.module @MuxChain(in %a_0: i1, in %a_1: i1, in %a_2: i1, in %c_0: i1, in %c_1: i1, in %c_2: i1, out out: i1) {
-  %0 = comb.mux bin %a_1, %c_1, %c_0 : i1
-  %1 = comb.mux bin %a_0, %0, %c_2 : i1
-  %2 = comb.mux bin %a_2, %1, %c_1 : i1
-  %3 = comb.mux bin %a_1, %c_0, %2 : i1
-  %4 = comb.mux bin %a_0, %c_2, %3 : i1
-  %5 = comb.mux bin %a_2, %c_1, %4 : i1
-  %6 = comb.mux bin %a_1, %c_0, %5 : i1
-  %7 = comb.mux bin %a_0, %c_2, %6 : i1
-  %8 = comb.mux bin %a_2, %c_1, %7 : i1
-  %9 = comb.mux bin %a_1, %c_0, %8 : i1
-  %10 = comb.mux bin %a_0, %c_2, %9 : i1
-  %11 = comb.mux bin %a_2, %c_1, %10 : i1
-  %12 = comb.mux bin %a_1, %c_0, %11 : i1
-  %13 = comb.mux bin %a_0, %c_2, %12 : i1
-  %14 = comb.mux bin %a_2, %c_1, %13 : i1
-  %15 = comb.mux bin %a_1, %c_0, %14 : i1
-  %16 = comb.mux bin %a_0, %c_2, %15 : i1
-  %17 = comb.mux bin %a_2, %c_1, %16 : i1
-  %18 = comb.mux bin %a_1, %c_0, %17 : i1
-  %19 = comb.mux bin %a_0, %c_2, %18 : i1
-  %20 = comb.mux bin %a_2, %c_1, %19 : i1
-  %21 = comb.mux bin %a_1, %c_0, %20 : i1
-  %22 = comb.mux bin %a_0, %c_2, %21 : i1
-  %23 = comb.mux bin %a_2, %c_1, %22 : i1
-  %24 = comb.mux bin %a_1, %c_0, %23 : i1
-  %25 = comb.mux bin %a_0, %c_2, %24 : i1
-  %26 = comb.mux bin %a_0, %c_1, %25 : i1
-  %27 = comb.mux bin %a_0, %c_0, %26 : i1
+  %0 = comb.mux %a_1, %c_1, %c_0 : i1
+  %1 = comb.mux %a_0, %0, %c_2 : i1
+  %2 = comb.mux %a_2, %1, %c_1 : i1
+  %3 = comb.mux %a_1, %c_0, %2 : i1
+  %4 = comb.mux %a_0, %c_2, %3 : i1
+  %5 = comb.mux %a_2, %c_1, %4 : i1
+  %6 = comb.mux %a_1, %c_0, %5 : i1
+  %7 = comb.mux %a_0, %c_2, %6 : i1
+  %8 = comb.mux %a_2, %c_1, %7 : i1
+  %9 = comb.mux %a_1, %c_0, %8 : i1
+  %10 = comb.mux %a_0, %c_2, %9 : i1
+  %11 = comb.mux %a_2, %c_1, %10 : i1
+  %12 = comb.mux %a_1, %c_0, %11 : i1
+  %13 = comb.mux %a_0, %c_2, %12 : i1
+  %14 = comb.mux %a_2, %c_1, %13 : i1
+  %15 = comb.mux %a_1, %c_0, %14 : i1
+  %16 = comb.mux %a_0, %c_2, %15 : i1
+  %17 = comb.mux %a_2, %c_1, %16 : i1
+  %18 = comb.mux %a_1, %c_0, %17 : i1
+  %19 = comb.mux %a_0, %c_2, %18 : i1
+  %20 = comb.mux %a_2, %c_1, %19 : i1
+  %21 = comb.mux %a_1, %c_0, %20 : i1
+  %22 = comb.mux %a_0, %c_2, %21 : i1
+  %23 = comb.mux %a_2, %c_1, %22 : i1
+  %24 = comb.mux %a_1, %c_0, %23 : i1
+  %25 = comb.mux %a_0, %c_2, %24 : i1
+  %26 = comb.mux %a_0, %c_1, %25 : i1
+  %27 = comb.mux %a_0, %c_0, %26 : i1
   hw.output %27 : i1
 
 //      CHECK:  assign out =

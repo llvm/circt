@@ -365,7 +365,7 @@ public:
                   ConversionPatternRewriter &rewriter) const final {
     rewriter.replaceOpWithNewOp<comb::MuxOp>(clockMux, adaptor.getCond(),
                                              adaptor.getTrueClock(),
-                                             adaptor.getFalseClock(), true);
+                                             adaptor.getFalseClock());
     return success();
   }
 };

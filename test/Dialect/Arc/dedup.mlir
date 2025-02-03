@@ -345,14 +345,14 @@ arc.define @RootCallArc(%arg0: i4, %arg1: i4) -> i4 {
 // CHECK-LABEL: arc.define @OutlineRegressionA
 arc.define @OutlineRegressionA(%arg0: i1, %arg1: i3) -> (i3, i3) {
   %c0_i3 = hw.constant 0 : i3
-  %0 = comb.mux bin %arg0, %arg1, %c0_i3 {OutlineRegression} : i3
+  %0 = comb.mux %arg0, %arg1, %c0_i3 {OutlineRegression} : i3
   arc.output %0, %c0_i3 : i3, i3
 }
 
 // CHECK-NOT: arc.define @OutlineRegressionB
 arc.define @OutlineRegressionB(%arg0: i1, %arg1: i3) -> (i3, i3) {
   %c0_i3 = hw.constant 0 : i3
-  %0 = comb.mux bin %arg0, %c0_i3, %arg1 {OutlineRegression} : i3
+  %0 = comb.mux %arg0, %c0_i3, %arg1 {OutlineRegression} : i3
   arc.output %0, %c0_i3 : i3, i3
 }
 

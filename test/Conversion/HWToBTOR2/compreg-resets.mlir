@@ -19,7 +19,7 @@ module {
     %reg1 = seq.compreg %in, %clock reset %reset1, %c0_i32 : i32
 
     //CHECK:    [[NID9:[0-9]+]] and [[NID0]] [[NID1]] [[NID2]]
-    %reset_and = comb.and bin %reset0, %reset1 : i1
+    %reset_and = comb.and %reset0, %reset1 : i1
 
     %reg2 = seq.compreg %in, %clock reset %reset_and, %c0_i32 : i32
 

@@ -305,8 +305,8 @@ hw.module @Issue5763(in %a: i3) {
   // CHECK: assert property ((&a) & a[0]);
   %c-1_i3 = hw.constant -1 : i3
   %0 = comb.extract %a from 0 : (i3) -> i1
-  %1 = comb.icmp bin eq %a, %c-1_i3 : i3
-  %2 = comb.and bin %1, %0 : i1
+  %1 = comb.icmp eq %a, %c-1_i3 : i3
+  %2 = comb.and %1, %0 : i1
   sv.assert_property %2 : i1
 }
 
