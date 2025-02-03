@@ -1495,6 +1495,13 @@ hw.module @ConcatOfConstants(in %index: i2, out r0: !hw.array<2xi2>) {
   hw.output %concat : !hw.array<2xi2>
 }
 
+// CHECK-LABEL: hw.module @ConcatOfSingleElement
+hw.module @ConcatOfSingleElement(in %i0: !hw.array<2xi2>, out r0: !hw.array<2xi2>) {
+  %r0 = hw.array_concat %i0 : !hw.array<2xi2>
+  // CHECK: hw.output %i0 : !hw.array<2xi2>
+  hw.output %r0 : !hw.array<2xi2>
+}
+
 // CHECK-LABEL: hw.module @ConcatOfCreate
 hw.module @ConcatOfCreate(in %a: i1, in %b: i1, out out0: !hw.array<5xi1>) {
   %lhs = hw.array_create %a, %b : i1

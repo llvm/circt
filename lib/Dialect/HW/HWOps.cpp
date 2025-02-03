@@ -2110,6 +2110,9 @@ void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
 }
 
 OpFoldResult ArrayConcatOp::fold(FoldAdaptor adaptor) {
+  if (getInputs().size() == 1)
+    return getInputs()[0];
+
   auto inputs = adaptor.getInputs();
   SmallVector<Attribute> array;
   for (size_t i = 0, e = getNumOperands(); i < e; ++i) {
