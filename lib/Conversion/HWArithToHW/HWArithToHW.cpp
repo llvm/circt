@@ -340,8 +340,7 @@ struct BinaryOpLowering : public OpConversionPattern<BinOp> {
                                      targetWidth, isLhsTypeSigned);
     Value rhsValue = extendTypeWidth(rewriter, loc, adaptor.getInputs()[1],
                                      targetWidth, isRhsTypeSigned);
-    auto newOp =
-        rewriter.create<ReplaceOp>(op.getLoc(), lhsValue, rhsValue);
+    auto newOp = rewriter.create<ReplaceOp>(op.getLoc(), lhsValue, rhsValue);
     rewriter.modifyOpInPlace(
         newOp, [&]() { newOp->setDialectAttrs(op->getDialectAttrs()); });
     rewriter.replaceOp(op, newOp);
