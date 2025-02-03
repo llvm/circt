@@ -354,7 +354,7 @@ private:
     auto right =
         wireIn(op.getRight(), op.instanceName(), op.portName(op.getRight()), b);
 
-    auto add = b.create<ResultTy>(left, right, false);
+    auto add = b.create<ResultTy>(left, right);
 
     auto out = wireOut(add, op.instanceName(), op.portName(op.getOut()), b);
     wires.append({left.getInput(), right.getInput(), out});
@@ -369,7 +369,7 @@ private:
     auto right =
         wireIn(op.getRight(), op.instanceName(), op.portName(op.getRight()), b);
 
-    auto add = b.create<ICmpOp>(pred, left, right, false);
+    auto add = b.create<ICmpOp>(pred, left, right);
 
     auto out = wireOut(add, op.instanceName(), op.portName(op.getOut()), b);
     wires.append({left.getInput(), right.getInput(), out});
@@ -395,7 +395,7 @@ private:
     auto done =
         wireOut(doneReg, op.instanceName(), op.portName(op.getDone()), b);
 
-    auto targetOp = b.create<TargetOpTy>(left, right, false);
+    auto targetOp = b.create<TargetOpTy>(left, right);
     for (auto &&[targetRes, sourceRes] :
          llvm::zip(targetOp->getResults(), op.getOutputPorts())) {
       auto portName = op.portName(sourceRes);

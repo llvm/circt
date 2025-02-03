@@ -26,7 +26,7 @@ hw.module @Foo(in %clock: !seq.clock, in %en: i1, in %inA: i3, in %inB: i3) {
 }
 
 arc.define @FooMux(%arg0: i1, %arg1: i3, %arg2: i3) -> i3 {
-  %0 = comb.mux bin %arg0, %arg1, %arg2 : i3
+  %0 = comb.mux %arg0, %arg1, %arg2 : i3
   arc.output %0 : i3
 }
 
@@ -60,6 +60,6 @@ arc.define @FooMux(%arg0: i1, %arg1: i3, %arg2: i3) -> i3 {
 // CHECK-NEXT:      hw.output
 // CHECK-NEXT:    }
 // CHECK-NEXT:    arc.define @FooMux(%arg0: i1, %arg1: i3, %arg2: i3) -> i3 {
-// CHECK-NEXT:      [[ANS:%.+]] = comb.mux bin %arg0, %arg1, %arg2 : i3
+// CHECK-NEXT:      [[ANS:%.+]] = comb.mux %arg0, %arg1, %arg2 : i3
 // CHECK-NEXT:      arc.output [[ANS:%.+]] : i3
 // CHECK-NEXT:    }

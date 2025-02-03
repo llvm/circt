@@ -534,12 +534,12 @@ struct RTLBuilder {
   // Bitwise 'and'.
   Value bAnd(ValueRange values, std::optional<StringRef> name = {}) {
     return buildNamedOp(
-        [&]() { return b.create<comb::AndOp>(loc, values, false); }, name);
+        [&]() { return b.create<comb::AndOp>(loc, values); }, name);
   }
 
   Value bOr(ValueRange values, std::optional<StringRef> name = {}) {
     return buildNamedOp(
-        [&]() { return b.create<comb::OrOp>(loc, values, false); }, name);
+        [&]() { return b.create<comb::OrOp>(loc, values); }, name);
   }
 
   // Bitwise 'not'.
@@ -558,7 +558,7 @@ struct RTLBuilder {
     return buildNamedOp(
         [&]() { return b.create<comb::XorOp>(loc, value, allOnes); }, name);
 
-    return b.createOrFold<comb::XorOp>(loc, value, allOnes, false);
+    return b.createOrFold<comb::XorOp>(loc, value, allOnes);
   }
 
   Value shl(Value value, Value shift, std::optional<StringRef> name = {}) {

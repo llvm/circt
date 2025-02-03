@@ -71,7 +71,7 @@ static void updateGroupAssignmentGuards(OpBuilder &builder, GroupOp &group,
       // If the assignment is guarded already, take the bitwise & of the current
       // guard and the group's go signal.
       assign->setOperand(2, builder.create<comb::AndOp>(
-                                group.getLoc(), assign.getGuard(), op, false));
+                                group.getLoc(), assign.getGuard(), op));
     else
       // Otherwise, just insert it as the guard.
       assign->insertOperands(2, {op});

@@ -76,14 +76,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %out5, %tmp1 : !firrtl.uint<4>, !firrtl.uint<4>
 
     // CHECK: [[ZEXT:%.+]] = comb.concat %false, %in1 : i1, i4
-    // CHECK: [[ADD:%.+]] = comb.add bin [[ZEXT]], %c12_i5 : i5
+    // CHECK: [[ADD:%.+]] = comb.add [[ZEXT]], %c12_i5 : i5
     %0 = firrtl.add %c12_ui4, %in1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
     %1 = firrtl.asUInt %in1 : (!firrtl.uint<4>) -> !firrtl.uint<4>
 
     // CHECK: [[ZEXT1:%.+]] = comb.concat %false, [[ADD]] : i1, i5
     // CHECK: [[ZEXT2:%.+]] = comb.concat %c0_i2, %in1 : i2, i4
-    // CHECK-NEXT: [[SUB:%.+]] = comb.sub bin [[ZEXT1]], [[ZEXT2]] : i6
+    // CHECK-NEXT: [[SUB:%.+]] = comb.sub [[ZEXT1]], [[ZEXT2]] : i6
     %2 = firrtl.sub %0, %1 : (!firrtl.uint<5>, !firrtl.uint<4>) -> !firrtl.uint<6>
 
     %in2s = firrtl.asSInt %in2 : (!firrtl.uint<2>) -> !firrtl.sint<2>
@@ -96,13 +96,13 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %4 = firrtl.pad %in2, 4 : (!firrtl.uint<2>) -> !firrtl.uint<4>
 
     // CHECK: [[IN2EXT:%.+]] = comb.concat %c0_i2, %in2 : i2, i2
-    // CHECK: [[XOR:%.+]] = comb.xor bin [[IN2EXT]], [[PADRES2]] : i4
+    // CHECK: [[XOR:%.+]] = comb.xor [[IN2EXT]], [[PADRES2]] : i4
     %5 = firrtl.xor %in2, %4 : (!firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
-    // CHECK: comb.and bin [[XOR]]
+    // CHECK: comb.and [[XOR]]
     %and = firrtl.and %5, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
-    // CHECK: comb.or bin [[XOR]]
+    // CHECK: comb.or [[XOR]]
     %or = firrtl.or %5, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
     // CHECK: [[CONCAT1:%.+]] = comb.concat [[PADRES2]], [[XOR]] : i4, i4
@@ -159,32 +159,32 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: = comb.concat [[CONCAT1]], %c0_i3 : i8, i3
     %14 = firrtl.shl %6, 3 : (!firrtl.uint<8>) -> !firrtl.uint<11>
 
-    // CHECK-NEXT: = comb.parity bin [[CONCAT1]] : i8
+    // CHECK-NEXT: = comb.parity [[CONCAT1]] : i8
     %15 = firrtl.xorr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: = comb.icmp bin eq  {{.*}}, %c-1_i8 : i8
+    // CHECK-NEXT: = comb.icmp eq  {{.*}}, %c-1_i8 : i8
     %16 = firrtl.andr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: = comb.icmp bin ne {{.*}}, %c0_i8 : i8
+    // CHECK-NEXT: = comb.icmp ne {{.*}}, %c0_i8 : i8
     %17 = firrtl.orr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[ZEXTC1:%.+]] = comb.concat %c0_i6, [[CONCAT1]] : i6, i8
     // CHECK-NEXT: [[ZEXT2:%.+]] = comb.concat %c0_i8, [[SUB]] : i8, i6
-    // CHECK-NEXT: [[VAL18:%.+]] = comb.mul bin [[ZEXTC1]], [[ZEXT2]] : i14
+    // CHECK-NEXT: [[VAL18:%.+]] = comb.mul [[ZEXTC1]], [[ZEXT2]] : i14
     %18 = firrtl.mul %6, %2 : (!firrtl.uint<8>, !firrtl.uint<6>) -> !firrtl.uint<14>
 
     // CHECK: [[IN3SEXT:%.+]] = comb.concat {{.*}}, %in3 : i1, i8
     // CHECK: [[PADRESSEXT:%.+]] = comb.concat {{.*}}, [[PADRES]] : i6, i3
-    // CHECK-NEXT: = comb.divs bin [[IN3SEXT]], [[PADRESSEXT]] : i9
+    // CHECK-NEXT: = comb.divs [[IN3SEXT]], [[PADRESSEXT]] : i9
     %19 = firrtl.div %in3, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<9>
 
     // CHECK: [[IN3EX:%.+]] = comb.concat {{.*}}, [[PADRES]] : i5, i3
-    // CHECK-NEXT: [[MOD1:%.+]] = comb.mods bin %in3, [[IN3EX]] : i8
+    // CHECK-NEXT: [[MOD1:%.+]] = comb.mods %in3, [[IN3EX]] : i8
     // CHECK-NEXT: = comb.extract [[MOD1]] from 0 : (i8) -> i3
     %20 = firrtl.rem %in3, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<3>
 
     // CHECK: [[IN4EX:%.+]] = comb.concat {{.*}}, [[PADRES]] : i5, i3
-    // CHECK-NEXT: [[MOD2:%.+]] = comb.mods bin [[IN4EX]], %in3 : i8
+    // CHECK-NEXT: [[MOD2:%.+]] = comb.mods [[IN4EX]], %in3 : i8
     // CHECK-NEXT: = comb.extract [[MOD2]] from 0 : (i8) -> i3
     %21 = firrtl.rem %3, %in3 : (!firrtl.sint<3>, !firrtl.sint<8>) -> !firrtl.sint<3>
 
@@ -206,42 +206,42 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // Will be dropped, here because this triggered a crash
     %s23 = firrtl.cvt %in3 : (!firrtl.sint<8>) -> !firrtl.sint<8>
 
-    // CHECK-NEXT: [[XOR:%.+]] = comb.xor bin [[CVT]], %c-1_i3 : i3
+    // CHECK-NEXT: [[XOR:%.+]] = comb.xor [[CVT]], %c-1_i3 : i3
     %24 = firrtl.not %23 : (!firrtl.sint<3>) -> !firrtl.uint<3>
 
     %s24 = firrtl.asSInt %24 : (!firrtl.uint<3>) -> !firrtl.sint<3>
 
     // CHECK: [[SEXT:%.+]] = comb.concat {{.*}}, [[XOR]] : i1, i3
-    // CHECK-NEXT: [[SUB:%.+]] = comb.sub bin %c0_i4, [[SEXT]] : i4
+    // CHECK-NEXT: [[SUB:%.+]] = comb.sub %c0_i4, [[SEXT]] : i4
     %25 = firrtl.neg %s24 : (!firrtl.sint<3>) -> !firrtl.sint<4>
 
     // CHECK: [[CVT4:%.+]] = comb.concat {{.*}}, [[CVT]] : i1, i3
-    // CHECK-NEXT: comb.mux bin {{.*}}, [[CVT4]], [[SUB]] : i4
+    // CHECK-NEXT: comb.mux {{.*}}, [[CVT4]], [[SUB]] : i4
     %26 = firrtl.mux(%17, %23, %25) : (!firrtl.uint<1>, !firrtl.sint<3>, !firrtl.sint<4>) -> !firrtl.sint<4>
 
-    // CHECK-NEXT: = comb.icmp bin eq {{.*}}, %c-1_i14 : i14
+    // CHECK-NEXT: = comb.icmp eq {{.*}}, %c-1_i14 : i14
     %28 = firrtl.andr %18 : (!firrtl.uint<14>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[XOREXT:%.+]] = comb.concat %c0_i11, [[XOR]]
-    // CHECK-NEXT: [[SHIFT:%.+]] = comb.shru bin [[XOREXT]], [[VAL18]] : i14
+    // CHECK-NEXT: [[SHIFT:%.+]] = comb.shru [[XOREXT]], [[VAL18]] : i14
     // CHECK-NEXT: [[DSHR:%.+]] = comb.extract [[SHIFT]] from 0 : (i14) -> i3
     %29 = firrtl.dshr %24, %18 : (!firrtl.uint<3>, !firrtl.uint<14>) -> !firrtl.uint<3>
 
     // CHECK-NEXT: = comb.concat %c0_i5, {{.*}} : i5, i3
-    // CHECK-NEXT: [[SHIFT:%.+]] = comb.shrs bin %in3, {{.*}} : i8
+    // CHECK-NEXT: [[SHIFT:%.+]] = comb.shrs %in3, {{.*}} : i8
     %a29 = firrtl.dshr %in3, %9 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<8>
 
     // CHECK: = comb.concat {{.*}}, %in3 : i7, i8
     // CHECK-NEXT: = comb.concat %c0_i12, [[DSHR]]
-    // CHECK-NEXT: [[SHIFT:%.+]] = comb.shl bin {{.*}}, {{.*}} : i15
+    // CHECK-NEXT: [[SHIFT:%.+]] = comb.shl {{.*}}, {{.*}} : i15
     %30 = firrtl.dshl %in3, %29 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<15>
 
-    // CHECK-NEXT: = comb.shl bin [[DSHR]], [[DSHR]] : i3
+    // CHECK-NEXT: = comb.shl [[DSHR]], [[DSHR]] : i3
     %dshlw = firrtl.dshlw %29, %29 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
 
     // Issue #367: https://github.com/llvm/circt/issues/367
     // CHECK: = comb.concat {{.*}} : i10, i4
-    // CHECK-NEXT: [[SHIFT:%.+]] = comb.shrs bin {{.*}}, {{.*}} : i14
+    // CHECK-NEXT: [[SHIFT:%.+]] = comb.shrs {{.*}}, {{.*}} : i14
     // CHECK-NEXT: = comb.extract [[SHIFT]] from 0 : (i14) -> i4
     %31 = firrtl.dshr %25, %18 : (!firrtl.sint<4>, !firrtl.uint<14>) -> !firrtl.sint<4>
 
@@ -249,17 +249,17 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
     %32 = firrtl.dshr %in1, %c0_ui1 { name = "test" } : (!firrtl.uint<4>, !firrtl.const.uint<1>) -> !firrtl.uint<4>
 
-    // CHECK: comb.icmp bin ule {{.*}}, {{.*}} : i4
+    // CHECK: comb.icmp ule {{.*}}, {{.*}} : i4
     %41 = firrtl.leq %in1, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
-    // CHECK-NEXT: comb.icmp bin ult {{.*}}, {{.*}} : i4
+    // CHECK-NEXT: comb.icmp ult {{.*}}, {{.*}} : i4
     %42 = firrtl.lt %in1, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
-    // CHECK-NEXT: comb.icmp bin uge {{.*}}, {{.*}} : i4
+    // CHECK-NEXT: comb.icmp uge {{.*}}, {{.*}} : i4
     %43 = firrtl.geq %in1, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
-    // CHECK-NEXT: comb.icmp bin ugt {{.*}}, {{.*}} : i4
+    // CHECK-NEXT: comb.icmp ugt {{.*}}, {{.*}} : i4
     %44 = firrtl.gt %in1, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
-    // CHECK-NEXT: comb.icmp bin eq {{.*}}, {{.*}} : i4
+    // CHECK-NEXT: comb.icmp eq {{.*}}, {{.*}} : i4
     %45 = firrtl.eq %in1, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
-    // CHECK-NEXT: comb.icmp bin ne {{.*}}, {{.*}} : i4
+    // CHECK-NEXT: comb.icmp ne {{.*}}, {{.*}} : i4
     %46 = firrtl.neq %in1, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
 
     // Noop
@@ -272,10 +272,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: [[VERB3READ:%.+]] = sv.read_inout [[VERB3]]
     // CHECK: [[VERB1EXT:%.+]] = comb.concat {{%.+}}, [[VERB1]] : i1, i42
     // CHECK: [[VERB2EXT:%.+]] = comb.concat {{%.+}}, [[VERB2]] : i11, i32
-    // CHECK: [[ADD:%.+]] = comb.add bin [[VERB1EXT]], [[VERB2EXT]] : i43
+    // CHECK: [[ADD:%.+]] = comb.add [[VERB1EXT]], [[VERB2EXT]] : i43
     // CHECK: [[VERB3EXT:%.+]] = comb.concat {{%.+}}, [[VERB3READ]] : i12, i32
     // CHECK: [[ADDEXT:%.+]] = comb.concat {{%.+}}, [[ADD]] : i1, i43
-    // CHECK: = comb.add bin [[VERB3EXT]], [[ADDEXT]] : i44
+    // CHECK: = comb.add [[VERB3EXT]], [[ADDEXT]] : i44
     %56 = firrtl.verbatim.expr "MAGIC_CONSTANT" : () -> !firrtl.uint<42>
     %57 = firrtl.verbatim.expr "$bits({{0}}, {{1}})"(%56) : (!firrtl.uint<42>) -> !firrtl.uint<32> {symbols = [@Simple]}
     %58 = firrtl.verbatim.wire "$size({{0}}, {{1}})"(%56) : (!firrtl.uint<42>) -> !firrtl.uint<32> {symbols = [@Simple]}
@@ -284,12 +284,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // Issue #353
     // CHECK: [[PADRES_EXT:%.+]] = comb.concat {{.*}}, [[PADRES]] : i5, i3
-    // CHECK: = comb.and bin %in3, [[PADRES_EXT]] : i8
+    // CHECK: = comb.and %in3, [[PADRES_EXT]] : i8
     %49 = firrtl.and %in3, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.uint<8>
 
     // Issue #355: https://github.com/llvm/circt/issues/355
     // CHECK: [[IN1:%.+]] = comb.concat %c0_i6, %in1 : i6, i4
-    // CHECK: [[DIV:%.+]] = comb.divu bin [[IN1]], %c306_i10 : i10
+    // CHECK: [[DIV:%.+]] = comb.divu [[IN1]], %c306_i10 : i10
     // CHECK: = comb.extract [[DIV]] from 0 : (i10) -> i4
     %c306_ui10 = firrtl.constant 306 : !firrtl.uint<10>
     %50 = firrtl.div %in1, %c306_ui10 : (!firrtl.uint<4>, !firrtl.uint<10>) -> !firrtl.uint<4>
@@ -298,11 +298,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %51 = firrtl.neg %c1175_ui11 : (!firrtl.uint<11>) -> !firrtl.sint<12>
     // https://github.com/llvm/circt/issues/821
     // CHECK: [[CONCAT:%.+]] = comb.concat %false, %in1 : i1, i4
-    // CHECK:  = comb.sub bin %c0_i5, [[CONCAT]] : i5
+    // CHECK:  = comb.sub %c0_i5, [[CONCAT]] : i5
     %52 = firrtl.neg %in1 : (!firrtl.uint<4>) -> !firrtl.sint<5>
     %53 = firrtl.neg %in4 : (!firrtl.uint<0>) -> !firrtl.sint<1>
     // CHECK: [[SEXT:%.+]] = comb.concat {{.*}}, %in3 : i1, i8
-    // CHECK: = comb.sub bin %c0_i9, [[SEXT]] : i9
+    // CHECK: = comb.sub %c0_i9, [[SEXT]] : i9
     %54 = firrtl.neg %in3 : (!firrtl.sint<8>) -> !firrtl.sint<9>
     firrtl.connect %out1, %53 : !firrtl.sint<1>, !firrtl.sint<1>
     %55 = firrtl.neg %in5 : (!firrtl.sint<0>) -> !firrtl.sint<1>
@@ -345,19 +345,19 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: } else  {
     // CHECK-NEXT:   sv.always posedge [[CLOCK]] {
     // CHECK-NEXT:     %PRINTF_COND_ = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
-    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND_, %reset
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and %PRINTF_COND_, %reset
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
     // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "No operands!\0A"
     // CHECK-NEXT:     }
     // CHECK-NEXT:     %PRINTF_COND__0 = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
-    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND__0, %reset : i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and %PRINTF_COND__0, %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
     // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Hi %x %x\0A"([[ADD]], %b) : i5, i4
     // CHECK-NEXT:     }
     // CHECK-NEXT:     %PRINTF_COND__1 = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
-    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND__1, %reset : i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and %PRINTF_COND__1, %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
     // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Hi signed %d %d\0A"([[SUMSIGNED]], [[DSIGNED]]) : i5, i4
@@ -392,12 +392,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-SAME: attributes {emit.fragments = [@STOP_COND_FRAGMENT]}
   firrtl.module private @Stop(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock, in %reset: !firrtl.uint<1>) {
     // CHECK-NEXT: [[STOP_COND_1:%.+]] = sv.macro.ref.expr @STOP_COND_
-    // CHECK-NEXT: [[COND:%.+]] = comb.and bin [[STOP_COND_1]], %reset : i1
+    // CHECK-NEXT: [[COND:%.+]] = comb.and [[STOP_COND_1]], %reset : i1
     // CHECK-NEXT: sim.fatal %clock1, [[COND]]
     firrtl.stop %clock1, %reset, 42 : !firrtl.clock, !firrtl.uint<1>
 
     // CHECK-NEXT: [[STOP_COND_2:%.+]] = sv.macro.ref.expr @STOP_COND_
-    // CHECK-NEXT: [[COND:%.+]] = comb.and bin [[STOP_COND_2:%.+]], %reset : i1
+    // CHECK-NEXT: [[COND:%.+]] = comb.and [[STOP_COND_2:%.+]], %reset : i1
     // CHECK-NEXT: sim.finish %clock2, [[COND]]
     firrtl.stop %clock2, %reset, 0 : !firrtl.clock, !firrtl.uint<1>
   }
@@ -432,34 +432,34 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.int.unclocked_assume %bCond, %bEn, "assume0"(%value) : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42> {name = "assume_unr", guards = ["USE_PROPERTY_AS_CONSTRAINT", "USE_UNR_ONLY_CONSTRAINTS"]}
     // CHECK-NEXT: [[CLOCK:%.+]] = seq.from_clock %clock
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %aEn, [[TRUE]]
-    // CHECK-NEXT: [[TMP2:%.+]] = comb.or bin [[TMP1]], %aCond
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %aEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %aCond
     // CHECK-NEXT: sv.assert.concurrent posedge [[CLOCK]], [[TMP2]] message "assert0"
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP3:%.+]] = comb.xor bin %aEn, [[TRUE]]
-    // CHECK-NEXT: [[TMP4:%.+]] = comb.or bin [[TMP3]], %aCond
+    // CHECK-NEXT: [[TMP3:%.+]] = comb.xor %aEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP4:%.+]] = comb.or [[TMP3]], %aCond
     // CHECK-NEXT: sv.assert.concurrent posedge [[CLOCK]], [[TMP4]] label "assert__assert_0" message "assert0"
     // CHECK-NEXT: [[SAMPLED:%.+]] =  sv.system.sampled %value : i42
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP5:%.+]] = comb.xor bin %aEn, [[TRUE]]
-    // CHECK-NEXT: [[TMP6:%.+]] = comb.or bin [[TMP5]], %aCond
+    // CHECK-NEXT: [[TMP5:%.+]] = comb.xor %aEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP6:%.+]] = comb.or [[TMP5]], %aCond
     // CHECK-NEXT: sv.assert.concurrent posedge [[CLOCK]], [[TMP6]] message "assert0"([[SAMPLED]]) : i42
     // CHECK-NEXT: [[SAMPLED:%.+]] = sv.system.sampled %value : i42
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP7:%.+]] = comb.xor bin %bEn, [[TRUE]] : i1
-    // CHECK-NEXT: [[TMP8:%.+]] = comb.or bin [[TMP7]], %bCond : i1
+    // CHECK-NEXT: [[TMP7:%.+]] = comb.xor %bEn, [[TRUE]] : i1
+    // CHECK-NEXT: [[TMP8:%.+]] = comb.or [[TMP7]], %bCond : i1
     // CHECK:      sv.ifdef @USE_PROPERTY_AS_CONSTRAINT {
     // CHECK-NEXT:   [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT:   [[TMP1:%.+]] = comb.xor bin %aEn, [[TRUE]]
-    // CHECK-NEXT:   [[TMP2:%.+]] = comb.or bin [[TMP1]], %aCond
+    // CHECK-NEXT:   [[TMP1:%.+]] = comb.xor %aEn, [[TRUE]]
+    // CHECK-NEXT:   [[TMP2:%.+]] = comb.or [[TMP1]], %aCond
     // CHECK-NEXT:   sv.assume.concurrent posedge [[CLOCK]], [[TMP2]] message "assert0"
     // CHECK-NEXT:   [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT:   [[TMP3:%.+]] = comb.xor bin %aEn, [[TRUE]]
-    // CHECK-NEXT:   [[TMP4:%.+]] = comb.or bin [[TMP3]], %aCond
+    // CHECK-NEXT:   [[TMP3:%.+]] = comb.xor %aEn, [[TRUE]]
+    // CHECK-NEXT:   [[TMP4:%.+]] = comb.or [[TMP3]], %aCond
     // CHECK-NEXT:   sv.assume.concurrent posedge [[CLOCK]], [[TMP4]] label "assume__assert_0" message "assert0"
     // CHECK-NEXT:   [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT:   [[TMP5:%.+]] = comb.xor bin %aEn, [[TRUE]]
-    // CHECK-NEXT:   [[TMP6:%.+]] = comb.or bin [[TMP5]], %aCond
+    // CHECK-NEXT:   [[TMP5:%.+]] = comb.xor %aEn, [[TRUE]]
+    // CHECK-NEXT:   [[TMP6:%.+]] = comb.or [[TMP5]], %aCond
     // CHECK-NEXT:   sv.assume.concurrent posedge [[CLOCK]], [[TMP6]] message "assert0"([[SAMPLED]])
     // CHECK-NEXT:   sv.ifdef  @USE_UNR_ONLY_CONSTRAINTS {
     // CHECK-NEXT:     sv.always edge [[TMP8]] {
@@ -471,26 +471,26 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.assume %clock, %bCond, %bEn, "assume0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, name = "assume_0"}
     firrtl.assume %clock, %bCond, %bEn, "assume0"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42> {isConcurrent = true}
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %bEn, [[TRUE]]
-    // CHECK-NEXT: [[TMP2:%.+]] = comb.or bin [[TMP1]], %bCond
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %bEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %bCond
     // CHECK-NEXT: sv.assume.concurrent posedge [[CLOCK]], [[TMP2]] message "assume0"
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %bEn, [[TRUE]]
-    // CHECK-NEXT: [[TMP2:%.+]] = comb.or bin [[TMP1]], %bCond
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %bEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %bCond
     // CHECK-NEXT: sv.assume.concurrent posedge [[CLOCK]], [[TMP2]] label "assume__assume_0" message "assume0"
     // CHECK-NEXT: [[SAMPLED:%.+]] = sv.system.sampled %value
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %bEn, [[TRUE]]
-    // CHECK-NEXT: [[TMP2:%.+]] = comb.or bin [[TMP1]], %bCond
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %bEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %bCond
     // CHECK-NEXT: sv.assume.concurrent posedge [[CLOCK]], [[TMP2]] message "assume0"([[SAMPLED]]) : i42
     firrtl.cover %clock, %cCond, %cEn, "cover0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true}
     firrtl.cover %clock, %cCond, %cEn, "cover0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, name = "cover_0"}
     firrtl.cover %clock, %cCond, %cEn, "cover0"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42> {isConcurrent = true}
-    // CHECK-NEXT: [[TMP:%.+]] = comb.and bin %cEn, %cCond
+    // CHECK-NEXT: [[TMP:%.+]] = comb.and %cEn, %cCond
     // CHECK-NEXT: sv.cover.concurrent posedge [[CLOCK]], [[TMP]]
-    // CHECK-NEXT: [[TMP:%.+]] = comb.and bin %cEn, %cCond
+    // CHECK-NEXT: [[TMP:%.+]] = comb.and %cEn, %cCond
     // CHECK-NEXT: sv.cover.concurrent posedge [[CLOCK]], [[TMP]] label "cover__cover_0"
-    // CHECK-NEXT: [[TMP:%.+]] = comb.and bin %cEn, %cCond
+    // CHECK-NEXT: [[TMP:%.+]] = comb.and %cEn, %cCond
     // CHECK-NEXT: sv.cover.concurrent posedge [[CLOCK]], [[TMP]]
     firrtl.cover %clock, %cCond, %cEn, "cover1" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 1 : i32, isConcurrent = true, name = "cover_1"}
     firrtl.cover %clock, %cCond, %cEn, "cover2" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 2 : i32, isConcurrent = true, name = "cover_2"}
@@ -542,14 +542,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: sv.ifdef @HELLO {
     // CHECK-NEXT:   sv.ifdef @WORLD {
     // CHECK-NEXT:     [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT:     [[TMP1:%.+]] = comb.xor bin %enable, [[TRUE]]
-    // CHECK-NEXT:     [[TMP2:%.+]] = comb.or bin [[TMP1]], %cond
+    // CHECK-NEXT:     [[TMP1:%.+]] = comb.xor %enable, [[TRUE]]
+    // CHECK-NEXT:     [[TMP2:%.+]] = comb.or [[TMP1]], %cond
     // CHECK-NEXT:     sv.assert.concurrent posedge [[CLOCK]], [[TMP2]] message "assert0"
     // CHECK-NEXT:     [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT:     [[TMP1:%.+]] = comb.xor bin %enable, [[TRUE]]
-    // CHECK-NEXT:     [[TMP2:%.+]] = comb.or bin [[TMP1]], %cond
+    // CHECK-NEXT:     [[TMP1:%.+]] = comb.xor %enable, [[TRUE]]
+    // CHECK-NEXT:     [[TMP2:%.+]] = comb.or [[TMP1]], %cond
     // CHECK-NEXT:     sv.assume.concurrent posedge [[CLOCK]], [[TMP2]] message "assume0"
-    // CHECK-NEXT:     [[TMP:%.+]] = comb.and bin %enable, %cond
+    // CHECK-NEXT:     [[TMP:%.+]] = comb.and %enable, %cond
     // CHECK-NEXT:     sv.cover.concurrent posedge [[CLOCK]], [[TMP]]
     // CHECK-NOT:      label
     // CHECK-NEXT:   }
@@ -571,24 +571,24 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: [[FALSE:%.+]] = hw.constant false
     // CHECK-NEXT: [[CLOCK:%.+]] = seq.from_clock %clock
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %enable, [[TRUE]]
-    // CHECK-NEXT: [[TMP2:%.+]] = comb.or bin [[TMP1]], %cond
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %enable, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %cond
     // CHECK-NEXT: sv.assert.concurrent posedge [[CLOCK]], [[TMP2]] message "assert0"
     // CHECK-NEXT: sv.ifdef @USE_PROPERTY_AS_CONSTRAINT {
     // CHECK-NEXT:   [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT:   [[TMP1:%.+]] = comb.xor bin %enable, [[TRUE]]
-    // CHECK-NEXT:   [[TMP2:%.+]] = comb.or bin [[TMP1]], %cond
+    // CHECK-NEXT:   [[TMP1:%.+]] = comb.xor %enable, [[TRUE]]
+    // CHECK-NEXT:   [[TMP2:%.+]] = comb.or [[TMP1]], %cond
     // CHECK-NEXT:   sv.assume.concurrent posedge [[CLOCK]], [[TMP2]]
     // CHECK-NEXT: }
     firrtl.assert %clock, %cond, %enable, "assert1 %d, %d"(%value, %i0) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<0> {isConcurrent = true, format = "ifElseFatal"}
     firrtl.assert %clock, %cond, %enable, "assert2 %d"(%value2) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.sint<24> {isConcurrent = true, format = "ifElseFatal"}
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %cond, [[TRUE]]
-    // CHECK-NEXT: [[TMP2:%.+]] = comb.and bin %enable, [[TMP1]]
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %cond, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.and %enable, [[TMP1]]
     // CHECK-NEXT: [[SIGNEDVAL:%.+]] = sv.system "signed"(%value2) : (i24) -> i24
     // CHECK-NEXT: [[TRUE2:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP3:%.+]] = comb.xor bin %cond, [[TRUE2]]
-    // CHECK-NEXT: [[TMP4:%.+]] = comb.and bin %enable, [[TMP3]]
+    // CHECK-NEXT: [[TMP3:%.+]] = comb.xor %cond, [[TRUE2]]
+    // CHECK-NEXT: [[TMP4:%.+]] = comb.and %enable, [[TMP3]]
     // CHECK-NEXT: sv.ifdef @SYNTHESIS {
     // CHECK-NEXT: } else {
     // CHECK-NEXT:   sv.always posedge [[CLOCK]] {
@@ -668,7 +668,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %tmp48 = firrtl.wire : !firrtl.uint<27>
 
     // CHECK-NEXT: %0 = comb.concat %c0_i38, %inp_2 : i38, i27
-    // CHECK-NEXT: %1 = comb.divu bin %0, %inpi : i65
+    // CHECK-NEXT: %1 = comb.divu %0, %inpi : i65
     %0 = firrtl.div %inp_2, %inpi : (!firrtl.uint<27>, !firrtl.uint<65>) -> !firrtl.uint<27>
     // CHECK-NEXT: %2 = comb.extract %1 from 0 : (i65) -> i27
     firrtl.connect %tmp48, %0 : !firrtl.uint<27>, !firrtl.uint<27>
@@ -821,7 +821,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // https://github.com/llvm/circt/issues/699
   firrtl.module private @ASQ(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %widx_widx_bin = firrtl.regreset %clock, %reset, %c0_ui1 {name = "widx_widx_bin"} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<4>
+    %widx_widx_= firrtl.regreset %clock, %reset, %c0_ui1 {name = "widx_widx_bin"} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<4>
   }
 
   // CHECK-LABEL: hw.module private @Struct0bits(in %source : !hw.struct<valid: i1, ready: i1, data: i0>) {
@@ -1096,11 +1096,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @PreserveName
   firrtl.module private @PreserveName(in %a : !firrtl.uint<1>, in %b : !firrtl.uint<1>, out %c : !firrtl.uint<1>) {
-    // CHECK: comb.or bin %a, %b {sv.namehint = "myname"}
+    // CHECK: comb.or %a, %b {sv.namehint = "myname"}
     %foo = firrtl.or %a, %b {name = "myname"} : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.connect %c, %foo : !firrtl.uint<1>, !firrtl.uint<1>
 
-    // CHECK: comb.shl bin {{.*}} {sv.namehint = "anothername"}
+    // CHECK: comb.shl {{.*}} {sv.namehint = "anothername"}
     %bar = firrtl.dshl %a, %b {name = "anothername"} : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
   }
 
@@ -1443,17 +1443,17 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK-NEXT: %0 = hw.bitcast %a : (!hw.array<2xi1>) -> i2
     // CHECK-NEXT: %1 = hw.bitcast %b : (!hw.array<2xi1>) -> i2
-    // CHECK-NEXT: %2 = comb.or bin %0, %1 : i2
+    // CHECK-NEXT: %2 = comb.or %0, %1 : i2
     // CHECK-NEXT: %[[OR:.+]] = hw.bitcast %2 : (i2) -> !hw.array<2xi1>
 
     // CHECK-NEXT: %4 = hw.bitcast %a : (!hw.array<2xi1>) -> i2
     // CHECK-NEXT: %5 = hw.bitcast %b : (!hw.array<2xi1>) -> i2
-    // CHECK-NEXT: %6 = comb.and bin %4, %5 : i2
+    // CHECK-NEXT: %6 = comb.and %4, %5 : i2
     // CHECK-NEXT: %[[AND:.+]] = hw.bitcast %6 : (i2) -> !hw.array<2xi1>
 
     // CHECK-NEXT: %8 = hw.bitcast %a : (!hw.array<2xi1>) -> i2
     // CHECK-NEXT: %9 = hw.bitcast %b : (!hw.array<2xi1>) -> i2
-    // CHECK-NEXT: %10 = comb.xor bin %8, %9 : i2
+    // CHECK-NEXT: %10 = comb.xor %8, %9 : i2
     // CHECK-NEXT: %[[XOR:.+]] = hw.bitcast %10 : (i2) -> !hw.array<2xi1>
 
     // CHECK-NEXT: hw.output %[[OR]], %[[AND]], %[[XOR]] : !hw.array<2xi1>, !hw.array<2xi1>, !hw.array<2xi1>
@@ -1465,7 +1465,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %mux2cell_in0 = hw.wire %sel1 sym @{{.+}} : i1
     // CHECK-NEXT: %mux2cell_in1 = hw.wire %v1 sym @{{.+}} : i32
     // CHECK-NEXT: %mux2cell_in2 = hw.wire %v0 sym @{{.+}} : i32
-    // CHECK-NEXT: %0 = comb.mux bin %mux2cell_in0, %mux2cell_in1, %mux2cell_in2 {sv.attributes = [#sv.attribute<"cadence map_to_mux", emitAsComment>]} : i32
+    // CHECK-NEXT: %0 = comb.mux %mux2cell_in0, %mux2cell_in1, %mux2cell_in2 {sv.attributes = [#sv.attribute<"cadence map_to_mux", emitAsComment>]} : i32
     // CHECK-NEXT: %1 = sv.wire : !hw.inout<i32>
     // CHECK-NEXT: sv.assign %1, %0 {sv.attributes = [#sv.attribute<"synopsys infer_mux_override", emitAsComment>]} : i32
     // CHECK-NEXT: %2 = sv.read_inout %1 : !hw.inout<i32>

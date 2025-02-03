@@ -33,10 +33,10 @@ hw.module @nestedRegionTest(in %arg0: i4, in %arg1: i4, out out0: i4) {
 arc.define @sub3(%arg0: i4, %arg1: i4) -> i4 {
   %0 = comb.extract %arg0 from 2 : (i4) -> i1
   %1 = scf.if %0 -> (i4) {
-    %2 = comb.xor bin %arg0, %arg1 : i4
+    %2 = comb.xor %arg0, %arg1 : i4
     scf.yield %2 : i4
   } else {
-    %2 = comb.and bin %arg0, %arg1 : i4
+    %2 = comb.and %arg0, %arg1 : i4
     scf.yield %2 : i4
   }
   arc.output %1 : i4
@@ -45,10 +45,10 @@ arc.define @sub3(%arg0: i4, %arg1: i4) -> i4 {
 // CHECK-LABEL: hw.module @nestedRegionTest
 // CHECK-NEXT: [[EXT:%.+]] = comb.extract %arg0 from 2 : (i4) -> i1
 // CHECK-NEXT: [[IFRES:%.+]] = scf.if [[EXT]] -> (i4) {
-// CHECK-NEXT:   [[XOR:%.+]] = comb.xor bin %arg0, %arg1 : i4
+// CHECK-NEXT:   [[XOR:%.+]] = comb.xor %arg0, %arg1 : i4
 // CHECK-NEXT:   scf.yield [[XOR]] : i4
 // CHECK-NEXT: } else {
-// CHECK-NEXT:   [[AND:%.+]] = comb.and bin %arg0, %arg1 : i4
+// CHECK-NEXT:   [[AND:%.+]] = comb.and %arg0, %arg1 : i4
 // CHECK-NEXT:   scf.yield [[AND]] : i4
 // CHECK-NEXT: }
 // CHECK-NEXT: hw.output [[IFRES]] : i4
@@ -62,12 +62,12 @@ hw.module @opsInNestedRegionsAreAlsoCounted(in %arg0: i4, in %arg1: i4, out out0
 arc.define @sub4(%arg0: i4, %arg1: i4) -> i4 {
   %0 = comb.extract %arg0 from 2 : (i4) -> i1
   %1 = scf.if %0 -> (i4) {
-    %2 = comb.xor bin %arg0, %arg1 : i4
-    %3 = comb.and bin %2, %arg1 : i4
+    %2 = comb.xor %arg0, %arg1 : i4
+    %3 = comb.and %2, %arg1 : i4
     scf.yield %3 : i4
   } else {
-    %2 = comb.and bin %arg0, %arg1 : i4
-    %3 = comb.or bin %arg0, %2 : i4
+    %2 = comb.and %arg0, %arg1 : i4
+    %3 = comb.or %arg0, %2 : i4
     scf.yield %3 : i4
   }
   arc.output %1 : i4

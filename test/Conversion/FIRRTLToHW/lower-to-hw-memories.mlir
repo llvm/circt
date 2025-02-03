@@ -125,7 +125,7 @@ firrtl.circuit "Foo" {
   // CHECK-LABEL: hw.module @FoldSingleMaskBitIntoEnable
   firrtl.module @FoldSingleMaskBitIntoEnable(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>, in %addr: !firrtl.uint<4>, in %data: !firrtl.uint<42>, in %mask: !firrtl.uint<1>) {
     // CHECK: %mem = seq.firmem 0, 1, undefined, port_order : <12 x 42>
-    // CHECK: [[TMP:%.+]] = comb.and bin %en, %mask :
+    // CHECK: [[TMP:%.+]] = comb.and %en, %mask :
     // CHECK: seq.firmem.write_port %mem[{{%.+}}] = {{%.+}}, clock {{%.+}} enable [[TMP]] :
     %mem_w = firrtl.mem Undefined {depth = 12 : i64, name = "mem", portNames = ["w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
     %mem_w.clk = firrtl.subfield %mem_w[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
@@ -148,7 +148,7 @@ firrtl.circuit "Foo" {
   // CHECK-LABEL: hw.module @FoldSingleMaskBitIntoMode
   firrtl.module @FoldSingleMaskBitIntoMode(in %clk : !firrtl.clock, in %en : !firrtl.uint<1>, in %addr : !firrtl.uint<4>, in %wdata : !firrtl.uint<42>, in %wmode: !firrtl.uint<1>, in %wmask: !firrtl.uint<1>) {
     // CHECK: %mem = seq.firmem 0, 1, undefined, port_order : <12 x 42>
-    // CHECK: [[TMP:%.+]] = comb.and bin %wmode, %wmask :
+    // CHECK: [[TMP:%.+]] = comb.and %wmode, %wmask :
     // CHECK: seq.firmem.read_write_port %mem[{{%.+}}] = {{%.+}} if [[TMP]], clock {{%.+}} enable {{%.+}} :
     %mem_rw = firrtl.mem Undefined {depth = 12 : i64, name = "mem", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
     %mem_rw.clk = firrtl.subfield %mem_rw[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>

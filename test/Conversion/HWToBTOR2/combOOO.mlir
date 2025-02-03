@@ -19,9 +19,9 @@ module {
     sv.always posedge %0 {
       sv.assert %4, immediate message "a + 1 should be greater than a"
     }
-    %4 = comb.icmp bin ugt %3, %a : i32
+    %4 = comb.icmp ugt %3, %a : i32
     %3 = comb.extract %2 from 0 : (i33) -> i32
-    %2 = comb.add bin %1, %c1_i33 : i33
+    %2 = comb.add %1, %c1_i33 : i33
     %c1_i33 = hw.constant 1 : i33
     %1 = comb.concat %false, %a : i1, i32
     %false = hw.constant false

@@ -425,8 +425,8 @@ ICMPCanonicalizer::matchAndRewrite(comb::ICmpOp op,
   };
   auto negate = [&](Value input) -> Value {
     auto constTrue = rewriter.create<hw::ConstantOp>(op.getLoc(), APInt(1, 1));
-    return rewriter.create<comb::XorOp>(op.getLoc(), input, constTrue,
-                                        op.getTwoState());
+    return rewriter.create<comb::XorOp>(op.getLoc(), input, constTrue
+                                        );
   };
 
   APInt rhs;
@@ -438,7 +438,7 @@ ICMPCanonicalizer::matchAndRewrite(comb::ICmpOp op,
              op.getPredicate() == comb::ICmpPredicate::ne) &&
             rhs.isAllOnes()) {
           Value andOp = rewriter.create<comb::AndOp>(
-              op.getLoc(), concatOp.getInputs(), op.getTwoState());
+              op.getLoc(), concatOp.getInputs());
           if (*optionalWidth == 1) {
             if (op.getPredicate() == comb::ICmpPredicate::ne)
               andOp = negate(andOp);
@@ -448,8 +448,7 @@ ICMPCanonicalizer::matchAndRewrite(comb::ICmpOp op,
           rewriter.replaceOpWithNewOp<comb::ICmpOp>(
               op, op.getPredicate(), andOp,
               getConstant(APInt(*optionalWidth, rhs.getZExtValue(),
-                                /*isSigned=*/false, /*implicitTrunc=*/true)),
-              op.getTwoState());
+                                /*isSigned=*/false, /*implicitTrunc=*/true)));
           return success();
         }
 
@@ -457,7 +456,7 @@ ICMPCanonicalizer::matchAndRewrite(comb::ICmpOp op,
              op.getPredicate() == comb::ICmpPredicate::eq) &&
             rhs.isZero()) {
           Value orOp = rewriter.create<comb::OrOp>(
-              op.getLoc(), concatOp.getInputs(), op.getTwoState());
+              op.getLoc(), concatOp.getInputs());
           if (*optionalWidth == 1) {
             if (op.getPredicate() == comb::ICmpPredicate::eq)
               orOp = negate(orOp);
@@ -467,8 +466,7 @@ ICMPCanonicalizer::matchAndRewrite(comb::ICmpOp op,
           rewriter.replaceOpWithNewOp<comb::ICmpOp>(
               op, op.getPredicate(), orOp,
               getConstant(APInt(*optionalWidth, rhs.getZExtValue(),
-                                /*isSigned=*/false, /*implicitTrunc=*/true)),
-              op.getTwoState());
+                                /*isSigned=*/false, /*implicitTrunc=*/true)));
           return success();
         }
       }

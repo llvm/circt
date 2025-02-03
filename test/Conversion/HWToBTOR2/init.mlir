@@ -18,7 +18,7 @@ module {
     %reg = seq.compreg %false, %clock reset %reset, %false initial %init : i1
 
     //CHECK:    [[NID4:[0-9]+]] eq [[NID0]] [[NID2]] [[RESET]]
-    %10 = comb.icmp bin eq %reg, %false : i1
+    %10 = comb.icmp eq %reg, %false : i1
 
     sv.always posedge %0 {
         //CHECK:    [[NID5:[0-9]+]] not [[NID0]] [[NID4]]

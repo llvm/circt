@@ -54,10 +54,10 @@ hw.module @muxConstantInputsNegated(in %cond: i1, out o: i2) {
 
 // CHECK-LABEL: @notMux
 hw.module @notMux(in %a: i4, in %b: i4, in %cond: i1, in %cond2: i1, out o: i4, out o2: i4) {
-  // CHECK-NEXT: comb.mux bin %cond, %b, %a : i4
+  // CHECK-NEXT: comb.mux %cond, %b, %a : i4
   %c1 = hw.constant 1 : i1
   %0 = comb.xor %cond, %c1 : i1
-  %1 = comb.mux bin %0, %a, %b : i4
+  %1 = comb.mux %0, %a, %b : i4
 
   // CHECK-NEXT: %1 = comb.and %cond, %cond2 : i1
   // CHECK-NEXT: %2 = comb.mux %1, %b, %a : i4
@@ -491,13 +491,13 @@ hw.module @narrowAdditionToDirectAddition(in %x: i8, in %y: i8, out z1: i8) {
 // Validates that narrowing preserves the two-state attribute.
 // CHECK-LABEL: hw.module @narrowAdditionToDirectAdditionTwoState
 hw.module @narrowAdditionToDirectAdditionTwoState(in %x: i8, in %y: i8, out z1: i8) {
-  // CHECK-NEXT: [[RESULT:%.+]] = comb.add bin %x, %y : i8
+  // CHECK-NEXT: [[RESULT:%.+]] = comb.add %x, %y : i8
   // CHECK-NEXT: hw.output [[RESULT]]
 
   %false = hw.constant false
   %0 = comb.concat %x, %x : i8, i8
   %1 = comb.concat %y, %y : i8, i8
-  %2 = comb.add bin %0, %1 : i16
+  %2 = comb.add %0, %1 : i16
   %3 = comb.extract %2 from 0 : (i16) -> i8
   hw.output %3 : i8
 }
@@ -1401,57 +1401,57 @@ hw.module @MuxSimplify(in %index: i1, in %a: i1, in %foo_0: i2, in %foo_1: i2, o
   %true = hw.constant true
   %c-2_i2 = hw.constant -2 : i2
   %c1_i2 = hw.constant 1 : i2
-  %0 = comb.xor bin %index, %true : i1
-  %1 = comb.mux bin %0, %c1_i2, %foo_0 : i2
-  %2 = comb.mux bin %index, %c1_i2, %foo_1 : i2
-  %3 = comb.mux bin %0, %c-2_i2, %foo_0 : i2
-  %4 = comb.mux bin %a, %1, %3 : i2
-  %5 = comb.mux bin %index, %c-2_i2, %foo_1 : i2
-  %6 = comb.mux bin %a, %2, %5 : i2
+  %0 = comb.xor %index, %true : i1
+  %1 = comb.mux %0, %c1_i2, %foo_0 : i2
+  %2 = comb.mux %index, %c1_i2, %foo_1 : i2
+  %3 = comb.mux %0, %c-2_i2, %foo_0 : i2
+  %4 = comb.mux %a, %1, %3 : i2
+  %5 = comb.mux %index, %c-2_i2, %foo_1 : i2
+  %6 = comb.mux %a, %2, %5 : i2
   
-  %7 = comb.mux bin %a, %foo_0, %foo_1 : i2
-  %8 = comb.mux bin %index, %foo_0, %foo_1 : i2
+  %7 = comb.mux %a, %foo_0, %foo_1 : i2
+  %8 = comb.mux %index, %foo_0, %foo_1 : i2
   %9 = comb.xor %a, %index : i1
-  %10 = comb.mux bin %9, %7, %8 : i2
+  %10 = comb.mux %9, %7, %8 : i2
   
-  %11 = comb.mux bin %index, %foo_0, %foo_1 : i2
-  %12 = comb.mux bin %a, %foo_0, %11 : i2
+  %11 = comb.mux %index, %foo_0, %foo_1 : i2
+  %12 = comb.mux %a, %foo_0, %11 : i2
 
-  %13 = comb.mux bin %index, %foo_1, %foo_0 : i2
-  %14 = comb.mux bin %a, %foo_0, %11 : i2
+  %13 = comb.mux %index, %foo_1, %foo_0 : i2
+  %14 = comb.mux %a, %foo_0, %11 : i2
 
-  %15 = comb.mux bin %index, %foo_1, %foo_0 : i2
-  %16 = comb.mux bin %a, %11, %foo_0 : i2
+  %15 = comb.mux %index, %foo_1, %foo_0 : i2
+  %16 = comb.mux %a, %11, %foo_0 : i2
 
-  %17 = comb.mux bin %index, %foo_0, %foo_1 : i2
-  %18 = comb.mux bin %a, %11, %foo_0 : i2
+  %17 = comb.mux %index, %foo_0, %foo_1 : i2
+  %18 = comb.mux %a, %11, %foo_0 : i2
 
   hw.output %4, %6, %10, %12, %14, %16, %18 : i2, i2, i2, i2, i2, i2, i2
 }
 // CHECK:  %0 = comb.mux %a, %c1_i2, %c-2_i2 : i2
-// CHECK-NEXT:  %1 = comb.mux bin %index, %foo_0, %0 : i2
+// CHECK-NEXT:  %1 = comb.mux %index, %foo_0, %0 : i2
 // CHECK-NEXT:  %2 = comb.mux %a, %c1_i2, %c-2_i2 : i2
-// CHECK-NEXT:  %3 = comb.mux bin %index, %2, %foo_1 : i2
+// CHECK-NEXT:  %3 = comb.mux %index, %2, %foo_1 : i2
 // CHECK-NEXT:  %4 = comb.xor %a, %index : i1 
 // CHECK-NEXT:  %5 = comb.mux %4, %a, %index : i1 
-// CHECK-NEXT:  %6 = comb.mux bin %5, %foo_0, %foo_1 : i2 
+// CHECK-NEXT:  %6 = comb.mux %5, %foo_0, %foo_1 : i2 
 // CHECK-NEXT:  %7 = comb.or %a, %index : i1
-// CHECK-NEXT:  %8 = comb.mux bin %7, %foo_0, %foo_1 : i2
+// CHECK-NEXT:  %8 = comb.mux %7, %foo_0, %foo_1 : i2
 // CHECK-NEXT:  %9 = comb.or %a, %index : i1
-// CHECK-NEXT:  %10 = comb.mux bin %9, %foo_0, %foo_1 : i2
+// CHECK-NEXT:  %10 = comb.mux %9, %foo_0, %foo_1 : i2
 // CHECK-NEXT:  %11 = comb.xor %a, %true : i1
 // CHECK-NEXT:  %12 = comb.or %11, %index : i1
-// CHECK-NEXT:  %13 = comb.mux bin %12, %foo_0, %foo_1 : i2
+// CHECK-NEXT:  %13 = comb.mux %12, %foo_0, %foo_1 : i2
 // CHECK-NEXT:  %14 = comb.xor %a, %true : i1
 // CHECK-NEXT:  %15 = comb.or %14, %index : i1
-// CHECK-NEXT:  %16 = comb.mux bin %15, %foo_0, %foo_1 : i2
+// CHECK-NEXT:  %16 = comb.mux %15, %foo_0, %foo_1 : i2
 // CHECK-NEXT:  hw.output %1, %3, %6, %8, %10, %13, %16
 
 // CHECK-LABEL: @twoStateICmp
 hw.module @twoStateICmp(in %arg: i4, out cond: i1) {
-  // CHECK: %0 = comb.icmp bin eq %arg, %c-1_i4
+  // CHECK: %0 = comb.icmp eq %arg, %c-1_i4
   %c-1_i4 = hw.constant -1 : i4
-  %0 = comb.icmp bin eq %c-1_i4, %arg : i4
+  %0 = comb.icmp eq %c-1_i4, %arg : i4
   hw.output %0 : i1
 }
 
@@ -1466,16 +1466,16 @@ hw.module @Issue5531(in %arg0 : i64, in %arg1 : i64, out out: i32) {
 
 // or(mux(c_1, a, 0), mux(c_2, a, 0), ..., mux(c_n, a, 0)) -> mux(or(c_1, c_2, .., c_n), a, 0)
 // CHECK-LABEL: OrMuxSameTrueValueAndZero
-// CHECK:      %[[OR:.+]] = comb.or bin %tag_0, %tag_1, %tag_2, %tag_3 : i1
-// CHECK-NEXT: %[[RESULT:.+]] = comb.mux bin %[[OR]], %in, %c0_i4 : i4
+// CHECK:      %[[OR:.+]] = comb.or %tag_0, %tag_1, %tag_2, %tag_3 : i1
+// CHECK-NEXT: %[[RESULT:.+]] = comb.mux %[[OR]], %in, %c0_i4 : i4
 // CHECK-NEXT: hw.output %[[RESULT]]
 hw.module @OrMuxSameTrueValueAndZero(in %tag_0: i1, in %tag_1: i1, in %tag_2: i1, in %tag_3: i1, in %in: i4, out out: i4) {
   %c0_i4 = hw.constant 0 : i4
-  %0 = comb.mux bin %tag_0, %in, %c0_i4 : i4
-  %1 = comb.mux bin %tag_1, %in, %c0_i4 : i4
-  %2 = comb.mux bin %tag_2, %in, %c0_i4 : i4
-  %3 = comb.mux bin %tag_3, %in, %c0_i4 : i4
-  %4 = comb.or bin %0, %1, %2, %3 : i4
+  %0 = comb.mux %tag_0, %in, %c0_i4 : i4
+  %1 = comb.mux %tag_1, %in, %c0_i4 : i4
+  %2 = comb.mux %tag_2, %in, %c0_i4 : i4
+  %3 = comb.mux %tag_3, %in, %c0_i4 : i4
+  %4 = comb.or %0, %1, %2, %3 : i4
   hw.output %4 : i4
 }
 
@@ -1536,18 +1536,16 @@ hw.module @OrMuxSameTrueValueAndZero(in %tag_0: i1, in %tag_1: i1, in %tag_2: i1
 
 // Check multi-operation idempotent operand deduplication.
 // CHECK-LABEL: @IdemTwoState
-// CHECK-NEXT: %[[ZERO:.+]] = comb.or bin %cond, %val1
-// CHECK-NEXT: %[[ONE:.+]] = comb.or bin %val1, %val2
+// CHECK-NEXT: %[[ZERO:.+]] = comb.or %cond, %val1
+// CHECK-NEXT: %[[ONE:.+]] = comb.or %val1, %val2
 // Don't allow dropping these (%0/%1) due to two-state differences.
 // CHECK-NEXT: %[[TWO:.+]] = comb.or %[[ZERO]], %[[ONE]]
-// New operation should preserve two-state-ness.
-// CHECK-NEXT: %[[THREE:.+]] = comb.or bin %[[TWO]], %[[ZERO]], %[[ONE]]
-// CHECK-NEXT: hw.output %[[ZERO]], %[[ONE]], %[[TWO]], %[[THREE]]
+// CHECK-NEXT: hw.output %[[ZERO]], %[[ONE]], %[[TWO]], %[[TWO]]
 hw.module @IdemTwoState(in %cond: i32, in %val1: i32, in %val2: i32, out o1: i32, out o2: i32, out o3: i32, out o4: i32) {
-  %0 = comb.or bin %cond, %val1 : i32
-  %1 = comb.or bin %val1, %val2: i32
+  %0 = comb.or %cond, %val1 : i32
+  %1 = comb.or %val1, %val2: i32
   %2 = comb.or %0, %1 : i32
-  %3 = comb.or bin %cond, %val1, %val2, %2, %0, %1 : i32
+  %3 = comb.or %cond, %val1, %val2, %2, %0, %1 : i32
   hw.output %0, %1, %2, %3: i32, i32, i32, i32
 }
 
@@ -1558,70 +1556,6 @@ hw.module @IdemTwoState(in %cond: i32, in %val1: i32, in %val2: i32, out o1: i32
 // CHECK: %[[ALL_ZEROS:.+]] = hw.constant 0 : i4
 // CHECK-NEXT: hw.output %[[TRUE]], %[[FALSE]], %[[TRUE]], %[[FALSE]], %[[TRUE]], %[[FALSE]], %[[TRUE]], %[[FALSE]], %[[TRUE]], %[[FALSE]], %[[ALL_ONES]], %[[ALL_ZEROS]]
 hw.module @combineOppositeBinCmpIntoConstant(in %tag_0: i4, in %tag_1: i4, out o0: i1, out o1: i1, out o2: i1, out o3: i1, out o4: i1, out o5: i1, out o6: i1, out o7: i1, out o8: i1, out o9: i1, out o10: i4, out o11: i4) {
-  %op_ne = comb.icmp bin ne %tag_0, %tag_1 : i4
-  %op_eq = comb.icmp bin eq %tag_0, %tag_1 : i4
-  %eq_ne_or = comb.or %op_ne, %op_eq : i1
-  %eq_ne_and = comb.and %op_ne, %op_eq : i1
-
-  %op_slt = comb.icmp bin slt %tag_0, %tag_1 : i4
-  %op_sge = comb.icmp bin sge %tag_0, %tag_1 : i4
-  %slt_sge_or = comb.or %op_slt, %op_sge : i1
-  %slt_sge_and = comb.and %op_slt, %op_sge : i1
-
-  %op_sle = comb.icmp bin sle %tag_0, %tag_1 : i4
-  %op_sgt = comb.icmp bin sgt %tag_0, %tag_1 : i4
-  %sle_sgt_or = comb.or %op_sle, %op_sgt : i1
-  %sle_sgt_and = comb.and %op_sle, %op_sgt : i1
-
-  %op_ult = comb.icmp bin ult %tag_0, %tag_1 : i4
-  %op_uge = comb.icmp bin uge %tag_0, %tag_1 : i4
-  %ult_uge_or = comb.or %op_ult, %op_uge : i1
-  %ult_uge_and = comb.and %op_ult, %op_uge : i1
-
-  %op_ule = comb.icmp bin ule %tag_0, %tag_1 : i4
-  %op_ugt = comb.icmp bin ugt %tag_0, %tag_1 : i4
-  %ule_ugt_or = comb.or %op_ule, %op_ugt : i1
-  %ule_ugt_and = comb.and %op_ule, %op_ugt : i1
-
-  %op_neg_one = hw.constant -1 : i4
-  %op_xor = comb.xor bin %tag_1, %op_neg_one : i4
-  %opposite_xor_or = comb.or %tag_1, %op_xor : i4
-  %opposite_xor_and = comb.and %tag_1, %op_xor : i4
-
-  hw.output %eq_ne_or, %eq_ne_and,
-            %slt_sge_or, %slt_sge_and,
-            %sle_sgt_or, %sle_sgt_and,
-            %ult_uge_or, %ult_uge_and,
-            %ule_ugt_or, %ule_ugt_and,
-            %opposite_xor_or, %opposite_xor_and :
-            i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i4, i4
-}
-
-// CHECK-LABEL: hw.module @cantCombineOppositeNonBinCmpIntoConstant
-// CHECK: %[[ALL_ZEROS:.+]] = hw.constant 0 : i4
-// CHECK: %[[ALL_ONES:.+]] = hw.constant -1 : i4
-// CHECK: %[[OP_NE:.+]] = comb.icmp ne %tag_0, %tag_1 : i4
-// CHECK: %[[OP_EQ:.+]] = comb.icmp eq %tag_0, %tag_1 : i4
-// CHECK: %[[EQ_NE_OR:.+]] = comb.or %[[OP_NE]], %[[OP_EQ]] : i1
-// CHECK: %[[EQ_NE_AND:.+]] = comb.and %[[OP_NE]], %[[OP_EQ]] : i1
-// CHECK: %[[OP_SLT:.+]] = comb.icmp slt %tag_0, %tag_1 : i4
-// CHECK: %[[OP_SGE:.+]] = comb.icmp sge %tag_0, %tag_1 : i4
-// CHECK: %[[SLT_SGE_OR:.+]] = comb.or %[[OP_SLT]], %[[OP_SGE]] : i1
-// CHECK: %[[SLT_SGE_AND:.+]] = comb.and %[[OP_SLT]], %[[OP_SGE]] : i1
-// CHECK: %[[OP_SLE:.+]] = comb.icmp sle %tag_0, %tag_1 : i4
-// CHECK: %[[OP_SGT:.+]] = comb.icmp sgt %tag_0, %tag_1 : i4
-// CHECK: %[[SLE_SGT_OR:.+]] = comb.or %[[OP_SLE]], %[[OP_SGT]] : i1
-// CHECK: %[[SLE_SGT_AND:.+]] = comb.and %[[OP_SLE]], %[[OP_SGT]] : i1
-// CHECK: %[[OP_ULT:.+]] = comb.icmp ult %tag_0, %tag_1 : i4
-// CHECK: %[[OP_UGE:.+]] = comb.icmp uge %tag_0, %tag_1 : i4
-// CHECK: %[[ULT_UGE_OR:.+]] = comb.or %[[OP_ULT]], %[[OP_UGE]] : i1
-// CHECK: %[[ULT_UGE_AND:.+]] = comb.and %[[OP_ULT]], %[[OP_UGE]] : i1
-// CHECK: %[[OP_ULE:.+]] = comb.icmp ule %tag_0, %tag_1 : i4
-// CHECK: %[[OP_UGT:.+]] = comb.icmp ugt %tag_0, %tag_1 : i4
-// CHECK: %[[ULE_UGT_OR:.+]] = comb.or %[[OP_ULE]], %[[OP_UGT]] : i1
-// CHECK: %[[ULE_UGT_AND:.+]] = comb.and %[[OP_ULE]], %[[OP_UGT]] : i1
-// CHECK-NEXT: hw.output %[[EQ_NE_OR]], %[[EQ_NE_AND]], %[[SLT_SGE_OR]], %[[SLT_SGE_AND]], %[[SLE_SGT_OR]], %[[SLE_SGT_AND]], %[[ULT_UGE_OR]], %[[ULT_UGE_AND]], %[[ULE_UGT_OR]], %[[ULE_UGT_AND]], %[[ALL_ONES]], %[[ALL_ZEROS]] : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i4, i4
-hw.module @cantCombineOppositeNonBinCmpIntoConstant(in %tag_0: i4, in %tag_1: i4, out o0: i1, out o1: i1, out o2: i1, out o3: i1, out o4: i1, out o5: i1, out o6: i1, out o7: i1, out o8: i1, out o9: i1, out o10: i4, out o11: i4) {
   %op_ne = comb.icmp ne %tag_0, %tag_1 : i4
   %op_eq = comb.icmp eq %tag_0, %tag_1 : i4
   %eq_ne_or = comb.or %op_ne, %op_eq : i1

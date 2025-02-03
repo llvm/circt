@@ -603,7 +603,7 @@ MultipleGroupDonePattern::matchAndRewrite(calyx::GroupOp groupOp,
   llvm::transform(groupDoneOps, std::back_inserter(doneOpSrcs),
                   [](calyx::GroupDoneOp op) { return op.getSrc(); });
   Value allDone = rewriter.create<comb::AndOp>(groupDoneOps.front().getLoc(),
-                                               doneOpSrcs, false);
+                                               doneOpSrcs);
 
   /// Create a group done op with the complex expression as a guard.
   rewriter.create<calyx::GroupDoneOp>(

@@ -666,7 +666,7 @@ moore.module @WaitEvent() {
     // CHECK:   llhd.wait ([[PRB_A0]] : {{.+}}), ^[[CHECK:.+]]
     // CHECK: ^[[CHECK]]:
     // CHECK:   [[AFTER:%.+]] = llhd.prb %a
-    // CHECK:   [[TMP:%.+]] = comb.icmp bin ne [[BEFORE]], [[AFTER]]
+    // CHECK:   [[TMP:%.+]] = comb.icmp ne [[BEFORE]], [[AFTER]]
     // CHECK:   cf.cond_br [[TMP]]
     moore.wait_event {
       %0 = moore.read %a : <i1>
@@ -681,7 +681,7 @@ moore.module @WaitEvent() {
     // CHECK:   llhd.wait ([[PRB_D0]] : {{.+}}), ^[[CHECK:.+]]
     // CHECK: ^[[CHECK]]:
     // CHECK:   [[AFTER:%.+]] = llhd.prb %d
-    // CHECK:   [[TMP:%.+]] = comb.icmp bin ne [[BEFORE]], [[AFTER]]
+    // CHECK:   [[TMP:%.+]] = comb.icmp ne [[BEFORE]], [[AFTER]]
     // CHECK:   cf.cond_br [[TMP]]
     moore.wait_event {
       %0 = moore.read %d : <i4>
@@ -698,8 +698,8 @@ moore.module @WaitEvent() {
     // CHECK: ^[[CHECK]]:
     // CHECK:   [[AFTER_A:%.+]] = llhd.prb %a
     // CHECK:   [[AFTER_B:%.+]] = llhd.prb %b
-    // CHECK:   [[TMP1:%.+]] = comb.icmp bin ne [[BEFORE_A]], [[AFTER_A]]
-    // CHECK:   [[TMP2:%.+]] = comb.and bin [[TMP1]], [[AFTER_B]]
+    // CHECK:   [[TMP1:%.+]] = comb.icmp ne [[BEFORE_A]], [[AFTER_A]]
+    // CHECK:   [[TMP2:%.+]] = comb.and [[TMP1]], [[AFTER_B]]
     // CHECK:   cf.cond_br [[TMP2]]
     moore.wait_event {
       %0 = moore.read %a : <i1>
@@ -721,11 +721,11 @@ moore.module @WaitEvent() {
     // CHECK:   [[AFTER_B:%.+]] = llhd.prb %b
     // CHECK:   [[AFTER_C:%.+]] = llhd.prb %c
     // CHECK:   [[AFTER_D:%.+]] = llhd.prb %d
-    // CHECK:   [[TMP1:%.+]] = comb.icmp bin ne [[BEFORE_A]], [[AFTER_A]]
-    // CHECK:   [[TMP2:%.+]] = comb.icmp bin ne [[BEFORE_B]], [[AFTER_B]]
-    // CHECK:   [[TMP3:%.+]] = comb.icmp bin ne [[BEFORE_C]], [[AFTER_C]]
-    // CHECK:   [[TMP4:%.+]] = comb.icmp bin ne [[BEFORE_D]], [[AFTER_D]]
-    // CHECK:   [[TMP5:%.+]] = comb.or bin [[TMP1]], [[TMP2]], [[TMP3]], [[TMP4]]
+    // CHECK:   [[TMP1:%.+]] = comb.icmp ne [[BEFORE_A]], [[AFTER_A]]
+    // CHECK:   [[TMP2:%.+]] = comb.icmp ne [[BEFORE_B]], [[AFTER_B]]
+    // CHECK:   [[TMP3:%.+]] = comb.icmp ne [[BEFORE_C]], [[AFTER_C]]
+    // CHECK:   [[TMP4:%.+]] = comb.icmp ne [[BEFORE_D]], [[AFTER_D]]
+    // CHECK:   [[TMP5:%.+]] = comb.or [[TMP1]], [[TMP2]], [[TMP3]], [[TMP4]]
     // CHECK:   cf.cond_br [[TMP5]]
     moore.wait_event {
       %0 = moore.read %a : <i1>
@@ -747,8 +747,8 @@ moore.module @WaitEvent() {
     // CHECK: ^[[CHECK]]:
     // CHECK:   [[AFTER:%.+]] = llhd.prb %a
     // CHECK:   [[TRUE:%.+]] = hw.constant true
-    // CHECK:   [[TMP1:%.+]] = comb.xor bin [[BEFORE]], [[TRUE]]
-    // CHECK:   [[TMP2:%.+]] = comb.and bin [[TMP1]], [[AFTER]]
+    // CHECK:   [[TMP1:%.+]] = comb.xor [[BEFORE]], [[TRUE]]
+    // CHECK:   [[TMP2:%.+]] = comb.and [[TMP1]], [[AFTER]]
     // CHECK:   cf.cond_br [[TMP2]]
     moore.wait_event {
       %0 = moore.read %a : <i1>
@@ -764,8 +764,8 @@ moore.module @WaitEvent() {
     // CHECK: ^[[CHECK]]:
     // CHECK:   [[AFTER:%.+]] = llhd.prb %a
     // CHECK:   [[TRUE:%.+]] = hw.constant true
-    // CHECK:   [[TMP1:%.+]] = comb.xor bin [[AFTER]], [[TRUE]]
-    // CHECK:   [[TMP2:%.+]] = comb.and bin [[BEFORE]], [[TMP1]]
+    // CHECK:   [[TMP1:%.+]] = comb.xor [[AFTER]], [[TRUE]]
+    // CHECK:   [[TMP2:%.+]] = comb.and [[BEFORE]], [[TMP1]]
     // CHECK:   cf.cond_br [[TMP2]]
     moore.wait_event {
       %0 = moore.read %a : <i1>
@@ -781,11 +781,11 @@ moore.module @WaitEvent() {
     // CHECK: ^[[CHECK]]:
     // CHECK:   [[AFTER:%.+]] = llhd.prb %a
     // CHECK:   [[TRUE:%.+]] = hw.constant true
-    // CHECK:   [[TMP1:%.+]] = comb.xor bin [[BEFORE]], [[TRUE]]
-    // CHECK:   [[TMP2:%.+]] = comb.and bin [[TMP1]], [[AFTER]]
-    // CHECK:   [[TMP3:%.+]] = comb.xor bin [[AFTER]], [[TRUE]]
-    // CHECK:   [[TMP4:%.+]] = comb.and bin [[BEFORE]], [[TMP3]]
-    // CHECK:   [[TMP5:%.+]] = comb.or bin [[TMP2]], [[TMP4]]
+    // CHECK:   [[TMP1:%.+]] = comb.xor [[BEFORE]], [[TRUE]]
+    // CHECK:   [[TMP2:%.+]] = comb.and [[TMP1]], [[AFTER]]
+    // CHECK:   [[TMP3:%.+]] = comb.xor [[AFTER]], [[TRUE]]
+    // CHECK:   [[TMP4:%.+]] = comb.and [[BEFORE]], [[TMP3]]
+    // CHECK:   [[TMP5:%.+]] = comb.or [[TMP2]], [[TMP4]]
     // CHECK:   cf.cond_br [[TMP5]]
     moore.wait_event {
       %0 = moore.read %a : <i1>
@@ -803,8 +803,8 @@ moore.module @WaitEvent() {
     // CHECK:   [[TMP1:%.+]] = comb.extract [[BEFORE]] from 0 : (i4) -> i1
     // CHECK:   [[TMP2:%.+]] = comb.extract [[AFTER]] from 0 : (i4) -> i1
     // CHECK:   [[TRUE:%.+]] = hw.constant true
-    // CHECK:   [[TMP3:%.+]] = comb.xor bin [[TMP1]], [[TRUE]]
-    // CHECK:   [[TMP4:%.+]] = comb.and bin [[TMP3]], [[TMP2]]
+    // CHECK:   [[TMP3:%.+]] = comb.xor [[TMP1]], [[TRUE]]
+    // CHECK:   [[TMP4:%.+]] = comb.and [[TMP3]], [[TMP2]]
     // CHECK:   cf.cond_br [[TMP4]]
     moore.wait_event {
       %0 = moore.read %d : <i4>
@@ -822,8 +822,8 @@ moore.module @WaitEvent() {
     // CHECK:   [[TMP1:%.+]] = comb.extract [[BEFORE]] from 0 : (i4) -> i1
     // CHECK:   [[TMP2:%.+]] = comb.extract [[AFTER]] from 0 : (i4) -> i1
     // CHECK:   [[TRUE:%.+]] = hw.constant true
-    // CHECK:   [[TMP3:%.+]] = comb.xor bin [[TMP2]], [[TRUE]]
-    // CHECK:   [[TMP4:%.+]] = comb.and bin [[TMP1]], [[TMP3]]
+    // CHECK:   [[TMP3:%.+]] = comb.xor [[TMP2]], [[TRUE]]
+    // CHECK:   [[TMP4:%.+]] = comb.and [[TMP1]], [[TMP3]]
     // CHECK:   cf.cond_br [[TMP4]]
     moore.wait_event {
       %0 = moore.read %d : <i4>
@@ -841,11 +841,11 @@ moore.module @WaitEvent() {
     // CHECK:   [[TMP1:%.+]] = comb.extract [[BEFORE]] from 0 : (i4) -> i1
     // CHECK:   [[TMP2:%.+]] = comb.extract [[AFTER]] from 0 : (i4) -> i1
     // CHECK:   [[TRUE:%.+]] = hw.constant true
-    // CHECK:   [[TMP3:%.+]] = comb.xor bin [[TMP1]], [[TRUE]]
-    // CHECK:   [[TMP4:%.+]] = comb.and bin [[TMP3]], [[TMP2]]
-    // CHECK:   [[TMP5:%.+]] = comb.xor bin [[TMP2]], [[TRUE]]
-    // CHECK:   [[TMP6:%.+]] = comb.and bin [[TMP1]], [[TMP5]]
-    // CHECK:   [[TMP7:%.+]] = comb.or bin [[TMP4]], [[TMP6]]
+    // CHECK:   [[TMP3:%.+]] = comb.xor [[TMP1]], [[TRUE]]
+    // CHECK:   [[TMP4:%.+]] = comb.and [[TMP3]], [[TMP2]]
+    // CHECK:   [[TMP5:%.+]] = comb.xor [[TMP2]], [[TRUE]]
+    // CHECK:   [[TMP6:%.+]] = comb.and [[TMP1]], [[TMP5]]
+    // CHECK:   [[TMP7:%.+]] = comb.or [[TMP4]], [[TMP6]]
     // CHECK:   cf.cond_br [[TMP7]]
     moore.wait_event {
       %0 = moore.read %d : <i4>

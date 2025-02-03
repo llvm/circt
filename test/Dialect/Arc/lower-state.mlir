@@ -343,11 +343,11 @@ hw.module @MemoryEnableAndMask(in %clock: !seq.clock, in %a: i2, in %b: i42, in 
   // CHECK:   [[TMP:%.+]]:4 = arc.call @IdI2AndI42AndI1AndI42Arc([[A]], [[B]], [[EN]], [[MASK]])
   // CHECK:   scf.if [[TMP]]#2 {
   // CHECK:     [[ALL_ONES:%.+]] = hw.constant -1
-  // CHECK:     [[MASK_INV:%.+]] = comb.xor bin [[TMP]]#3, [[ALL_ONES]]
+  // CHECK:     [[MASK_INV:%.+]] = comb.xor [[TMP]]#3, [[ALL_ONES]]
   // CHECK:     [[DATA_OLD:%.+]] = arc.memory_read [[MEM]][[[TMP]]#0]
-  // CHECK:     [[MASKED_OLD:%.+]] = comb.and bin [[MASK_INV]], [[DATA_OLD]]
-  // CHECK:     [[MASKED_NEW:%.+]] = comb.and bin [[TMP]]#3, [[TMP]]#1
-  // CHECK:     [[DATA_NEW:%.+]] = comb.or bin [[MASKED_OLD]], [[MASKED_NEW]]
+  // CHECK:     [[MASKED_OLD:%.+]] = comb.and [[MASK_INV]], [[DATA_OLD]]
+  // CHECK:     [[MASKED_NEW:%.+]] = comb.and [[TMP]]#3, [[TMP]]#1
+  // CHECK:     [[DATA_NEW:%.+]] = comb.or [[MASKED_OLD]], [[MASKED_NEW]]
   // CHECK:     arc.memory_write [[MEM]][[[TMP]]#0], [[DATA_NEW]]
   // CHECK:   }
   // CHECK: }

@@ -139,8 +139,7 @@ void StripSVPass::runOnOperation() {
         // Note: this register will have an sync reset regardless.
         if (reg.hasReset())
           next = builder.create<comb::MuxOp>(reg.getLoc(), reg.getReset(),
-                                             reg.getResetValue(), reg.getNext(),
-                                             false);
+                                             reg.getResetValue(), reg.getNext());
         else
           next = reg.getNext();
 

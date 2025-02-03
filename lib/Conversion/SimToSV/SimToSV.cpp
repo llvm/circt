@@ -124,7 +124,7 @@ public:
                 loc, tmpResultType, "value$plusargs",
                 ArrayRef<Value>{str, regv});
             auto test = rewriter.create<comb::ICmpOp>(
-                loc, comb::ICmpPredicate::ne, call, zero32, true);
+                loc, comb::ICmpPredicate::ne, call, zero32);
             rewriter.create<sv::BPAssignOp>(loc, regf, test);
           });
         });

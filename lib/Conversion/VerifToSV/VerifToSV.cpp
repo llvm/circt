@@ -120,7 +120,7 @@ struct HasBeenResetConversion : public OpConversionPattern<HasBeenResetOp> {
     auto resetIsZero = rewriter.createOrFold<comb::ICmpOp>(
         op.getLoc(), comb::ICmpPredicate::ceq, reset, constZero);
     auto resetStartedAndEnded = rewriter.createOrFold<comb::AndOp>(
-        op.getLoc(), regIsOne, resetIsZero, true);
+        op.getLoc(), regIsOne, resetIsZero);
     rewriter.replaceOpWithNewOp<hw::WireOp>(
         op, resetStartedAndEnded, rewriter.getStringAttr("hasBeenReset"));
 

@@ -87,7 +87,7 @@ struct MaterializeCalyxToFSMPass
         guardConjunction = guards.front();
       else
         guardConjunction =
-            b.create<comb::AndOp>(transition.getLoc(), guards, false);
+            b.create<comb::AndOp>(transition.getLoc(), guards);
       guardOp.setOperand(guardConjunction);
     }
   }

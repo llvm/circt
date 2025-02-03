@@ -28,10 +28,10 @@ hw.module @outOfOrderInoutOperations(in %a: i4, out c: i4) {
 
 // CHECK-LABEL: @twoState_variadic
 hw.module @twoState_variadic(in %a: i1, in %b: i1, in %c: i1, out d:i1){
-  // CHECK:      %0 = comb.or bin %b, %c : i1
-  // CHECK-NEXT: %1 = comb.or bin %a, %0 : i1
+  // CHECK:      %0 = comb.or %b, %c : i1
+  // CHECK-NEXT: %1 = comb.or %a, %0 : i1
   // CHECK-NEXT: hw.output %1 : i1
-  %0 = comb.or bin %a, %b, %c: i1
+  %0 = comb.or %a, %b, %c: i1
   hw.output %0: i1
 }
 

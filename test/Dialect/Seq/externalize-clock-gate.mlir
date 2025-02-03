@@ -25,7 +25,7 @@ hw.module @Foo(in %clock: !seq.clock, in %enable: i1, in %test_enable: i1) {
 
   // CHECK-WITHOUT-TESTENABLE: [[CAST:%.+]] = seq.from_clock %clock
   // CHECK-WITHOUT-TESTENABLE: hw.instance "ckg" @VeryGate(I: [[CAST]]: i1, E: %enable: i1) -> (O: i1)
-  // CHECK-WITHOUT-TESTENABLE: [[COMBINED_ENABLE:%.+]] = comb.or bin %enable, %test_enable : i1
+  // CHECK-WITHOUT-TESTENABLE: [[COMBINED_ENABLE:%.+]] = comb.or %enable, %test_enable : i1
   // CHECK-WITHOUT-TESTENABLE: hw.instance "ckg" @VeryGate(I: [[CAST]]: i1, E: [[COMBINED_ENABLE]]: i1) -> (O: i1)
   // CHECK-WITHOUT-TESTENABLE: hw.instance "ckg" sym @symbol @VeryGate(I: [[CAST]]: i1, E: %enable: i1) -> (O: i1)
 }

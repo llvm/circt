@@ -33,19 +33,19 @@ module {
     %count = seq.firreg %9 clock %clock reset sync %reset, %c0_i32 {firrtl.random_init_start = 0 : ui64} : i32
 
     //CHECK:    [[NID13:[0-9]+]] eq [[NID0]] [[NID12]] [[NID7]]
-    %1 = comb.icmp bin eq %count, %c22_i32 : i32
+    %1 = comb.icmp eq %count, %c22_i32 : i32
 
     //CHECK:    [[NID14:[0-9]+]] and [[NID0]] [[NID13]] [[NID2]]
-    %2 = comb.and bin %1, %en : i1
+    %2 = comb.and %1, %en : i1
 
     //CHECK:    [[NID15:[0-9]+]] ite [[NID6]] [[NID14]] [[NID11]] [[NID12]]
-    %3 = comb.mux bin %2, %c0_i32, %count : i32
+    %3 = comb.mux %2, %c0_i32, %count : i32
 
     //CHECK:    [[NID16:[0-9]+]] neq [[NID0]] [[NID12]] [[NID7]]
-    %4 = comb.icmp bin ne %count, %c22_i32 : i32
+    %4 = comb.icmp ne %count, %c22_i32 : i32
 
     //CHECK:    [[NID17:[0-9]+]] and [[NID0]] [[NID16]] [[NID2]]
-    %5 = comb.and bin %4, %en : i1
+    %5 = comb.and %4, %en : i1
 
     //CHECK:    [[NID18:[0-9]+]] sort bitvec 33
     //CHECK:    [[NID19:[0-9]+]] concat [[NID18]] [[NID5]] [[NID12]]
@@ -55,19 +55,19 @@ module {
     %c1_i33 = hw.constant 1 : i33
 
     //CHECK:    [[NID21:[0-9]+]] add [[NID18]] [[NID19]] [[NID20]]
-    %7 = comb.add bin %6, %c1_i33 : i33
+    %7 = comb.add %6, %c1_i33 : i33
 
     //CHECK:    [[NID22:[0-9]+]] slice [[NID6]] [[NID21]] 31 0
     %8 = comb.extract %7 from 0 : (i33) -> i32
 
     //CHECK:    [[NID23:[0-9]+]] ite [[NID6]] [[NID17]] [[NID22]] [[NID15]]
-    %9 = comb.mux bin %5, %8, %3 : i32
+    %9 = comb.mux %5, %8, %3 : i32
 
     //CHECK:    [[NID24:[0-9]+]] constd [[NID6]] 10
     %c10_i32 = hw.constant 10 : i32
 
     //CHECK:    [[NID25:[0-9]+]] neq [[NID0]] [[NID12]] [[NID24]]
-    %10 = comb.icmp bin ne %count, %c10_i32 : i32
+    %10 = comb.icmp ne %count, %c10_i32 : i32
     sv.always posedge %0 {
       sv.if %en {
 

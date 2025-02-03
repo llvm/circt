@@ -285,13 +285,13 @@ struct RTLBuilder {
   ///  Bitwise 'and'.
   Value bitAnd(ValueRange values, StringRef name = {}) {
     return buildNamedOp(
-        [&]() { return b.create<comb::AndOp>(loc, values, false); }, name);
+        [&]() { return b.create<comb::AndOp>(loc, values); }, name);
   }
 
   // Bitwise 'or'.
   Value bitOr(ValueRange values, StringRef name = {}) {
     return buildNamedOp(
-        [&]() { return b.create<comb::OrOp>(loc, values, false); }, name);
+        [&]() { return b.create<comb::OrOp>(loc, values); }, name);
   }
 
   ///  Bitwise 'not'.

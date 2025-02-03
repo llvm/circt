@@ -196,7 +196,7 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; MLIRLOWER-NEXT:    %0 = comb.extract %inp_2 from 4 : (i5) -> i1
 ; MLIRLOWER-NEXT:    %1 = comb.concat %0, %inp_2 : i1, i5
 ; MLIRLOWER-NEXT:    %2 = comb.concat %c0_i5, %inp_1 : i5, i1
-; MLIRLOWER-NEXT:    %3 = comb.shl bin %1, %2 : i6
+; MLIRLOWER-NEXT:    %3 = comb.shl %1, %2 : i6
 ; MLIRLOWER-NEXT:    %4 = comb.extract %3 from 0 : (i6) -> i3
 ; MLIRLOWER-NEXT:    %5 = comb.extract %inp_2 from 0 : (i5) -> i3
 ; MLIRLOWER-NEXT:    hw.output %4, %5 : i3, i3

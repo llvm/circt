@@ -429,7 +429,7 @@ static Operation *rewriteAddWithNegativeConstant(comb::AddOp add,
   // Get the positive constant.
   auto negCst = builder.create<hw::ConstantOp>(-rhsCst.getValue());
   auto sub =
-      builder.create<comb::SubOp>(add.getOperand(0), negCst, add.getTwoState());
+      builder.create<comb::SubOp>(add.getOperand(0), negCst);
   add.getResult().replaceAllUsesWith(sub);
   add.erase();
   if (rhsCst.use_empty())

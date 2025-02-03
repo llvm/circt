@@ -28,7 +28,7 @@ module {
     %c1_i33 = hw.constant 1 : i33
 
     // CHECK:   [[NID9:[0-9]+]] add [[NID6]] [[NID7]] [[NID8]]
-    %2 = comb.add bin %1, %c1_i33 : i33
+    %2 = comb.add %1, %c1_i33 : i33
 
     // CHECK:   [[NID10:[0-9]+]] slice [[NID0]] [[NID9]] 31 0
     %3 = comb.extract %2 from 0 : (i33) -> i32
@@ -37,19 +37,19 @@ module {
     %4 = comb.extract %2 from 16 : (i33) -> i1
 
     // CHECK:   [[NID12:[0-9]+]] ugt [[NID3]] [[NID10]] 2
-    %5 = comb.icmp bin ugt %3, %a : i32
+    %5 = comb.icmp ugt %3, %a : i32
 
     // CHECK:   [[NID13:[0-9]+]] ulte [[NID3]] [[NID10]] 2
-    %6 = comb.icmp bin ule %3, %a : i32
+    %6 = comb.icmp ule %3, %a : i32
 
     // CHECK:   [[NID14:[0-9]+]] slte [[NID3]] [[NID10]] 2
-    %7 = comb.icmp bin sle %3, %a : i32
+    %7 = comb.icmp sle %3, %a : i32
 
     // CHECK:   [[NID15:[0-9]+]] ugte [[NID3]] [[NID10]] 2
-    %8 = comb.icmp bin uge %3, %a : i32
+    %8 = comb.icmp uge %3, %a : i32
 
     // CHECK:   [[NID16:[0-9]+]] sgte [[NID3]] [[NID10]] 2
-    %9 = comb.icmp bin sge %3, %a : i32
+    %9 = comb.icmp sge %3, %a : i32
 
     // CHECK:   [[NID13:[0-9]+]] implies [[NID3]] [[NID5]] [[NID12]]
     // CHECK:   [[NID14:[0-9]+]] not [[NID3]] [[NID13]]

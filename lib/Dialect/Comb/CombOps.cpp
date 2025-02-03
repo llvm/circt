@@ -45,15 +45,13 @@ Value comb::createOrFoldSExt(Value value, Type destTy,
   return createOrFoldSExt(builder.getLoc(), value, destTy, builder);
 }
 
-Value comb::createOrFoldNot(Location loc, Value value, OpBuilder &builder,
-                            bool twoState) {
+Value comb::createOrFoldNot(Location loc, Value value, OpBuilder &builder) {
   auto allOnes = builder.create<hw::ConstantOp>(loc, value.getType(), -1);
-  return builder.createOrFold<XorOp>(loc, value, allOnes, twoState);
+  return builder.createOrFold<XorOp>(loc, value, allOnes);
 }
 
-Value comb::createOrFoldNot(Value value, ImplicitLocOpBuilder &builder,
-                            bool twoState) {
-  return createOrFoldNot(builder.getLoc(), value, builder, twoState);
+Value comb::createOrFoldNot(Value value, ImplicitLocOpBuilder &builder) {
+  return createOrFoldNot(builder.getLoc(), value, builder);
 }
 
 // Extract individual bits from a value

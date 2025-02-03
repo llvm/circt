@@ -641,7 +641,7 @@ MachineOpConverter::convertTransitions( // NOLINT(misc-no-recursion)
       if (failed(otherNextState))
         return failure();
       comb::MuxOp nextStateMux = b.create<comb::MuxOp>(
-          transition.getLoc(), guard, nextState, *otherNextState, false);
+          transition.getLoc(), guard, nextState, *otherNextState);
       nextState = nextStateMux;
     }
   }

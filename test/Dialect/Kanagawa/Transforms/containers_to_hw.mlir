@@ -90,7 +90,7 @@ kanagawa.design @D {
 // CHECK-LABEL:   hw.module @D_Top() {
 // CHECK:           %[[VAL_0:.*]] = hw.instance "myInst" @D_Inst() -> (out: i1)
 // CHECK:           %[[VAL_1:.*]] = hw.constant true
-// CHECK:           %[[VAL_2:.*]] = comb.and bin %[[VAL_1]], %[[VAL_0]] : i1
+// CHECK:           %[[VAL_2:.*]] = comb.and %[[VAL_1]], %[[VAL_0]] : i1
 // CHECK:           hw.output
 // CHECK:         }
 
@@ -104,7 +104,7 @@ kanagawa.container sym @Top {
   %true = hw.constant 1 : i1
   %out.ref = kanagawa.get_port %myInst, @out : !kanagawa.scoperef<@D::@Inst> -> !kanagawa.portref<out i1>
   %out.v = kanagawa.port.read %out.ref : !kanagawa.portref<out i1>
-  %blake = comb.and bin %true, %out.v : i1
+  %blake = comb.and %true, %out.v : i1
 }
 
 }

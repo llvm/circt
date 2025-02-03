@@ -16,7 +16,7 @@ circuit StopAndFinishTest:
     input cond : UInt<1>
 
     ; CHECK: [[STOP_COND:%.+]] = sv.macro.ref.expr @STOP_COND_() : () -> i1
-    ; CHECK: [[COND:%.+]] = comb.and bin [[STOP_COND:%.+]], %cond : i1
+    ; CHECK: [[COND:%.+]] = comb.and [[STOP_COND:%.+]], %cond : i1
     ; CHECK: sv.ifdef @SYNTHESIS {
     ; CHECK: } else {
     ; CHECK:   sv.always posedge %clock {

@@ -253,12 +253,12 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     switch (readEnableMode) {
     case ReadEnableMode::Undefined: {
       Value x = b.create<sv::ConstantXOp>(rdata.getType());
-      rdata = b.create<comb::MuxOp>(en, rdata, x, false);
+      rdata = b.create<comb::MuxOp>(en, rdata, x);
       break;
     }
     case ReadEnableMode::Zero: {
       Value x = b.create<hw::ConstantOp>(rdata.getType(), 0);
-      rdata = b.create<comb::MuxOp>(en, rdata, x, false);
+      rdata = b.create<comb::MuxOp>(en, rdata, x);
       break;
     }
     case ReadEnableMode::Ignore:
@@ -352,20 +352,19 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
         readEn,
         b.createOrFold<comb::ICmpOp>(
             comb::ICmpPredicate::eq, readWMode,
-            b.createOrFold<ConstantOp>(readWMode.getType(), 0), false),
-        false);
+            b.createOrFold<ConstantOp>(readWMode.getType(), 0)));
 
     auto val = getMemoryRead(b, reg, readAddr, addMuxPragmas);
 
     switch (readEnableMode) {
     case ReadEnableMode::Undefined: {
       Value x = b.create<sv::ConstantXOp>(val.getType());
-      val = b.create<comb::MuxOp>(rcond, val, x, false);
+      val = b.create<comb::MuxOp>(rcond, val, x);
       break;
     }
     case ReadEnableMode::Zero: {
       Value x = b.create<hw::ConstantOp>(val.getType(), 0);
-      val = b.create<comb::MuxOp>(rcond, val, x, false);
+      val = b.create<comb::MuxOp>(rcond, val, x);
       break;
     }
     case ReadEnableMode::Ignore:
@@ -378,8 +377,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock, [&]() {
         auto wcond = b.createOrFold<comb::AndOp>(
             writeEn,
-            b.createOrFold<comb::AndOp>(wmask.value(), writeWMode, false),
-            false);
+            b.createOrFold<comb::AndOp>(wmask.value(), writeWMode));
         b.create<sv::IfOp>(wcond, [&]() {
           Value slotReg = b.create<sv::ArrayIndexInOutOp>(reg, writeAddr);
           b.create<sv::PAssignOp>(
@@ -436,7 +434,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       // data into it.
       for (auto wmask : llvm::enumerate(maskValues)) {
         // Guard by corresponding mask bit.
-        auto wcond = b.createOrFold<comb::AndOp>(en, wmask.value(), false);
+        auto wcond = b.createOrFold<comb::AndOp>(en, wmask.value());
         b.create<sv::IfOp>(wcond, [&]() {
           auto slot = b.create<sv::ArrayIndexInOutOp>(reg, addr);
           b.create<sv::PAssignOp>(

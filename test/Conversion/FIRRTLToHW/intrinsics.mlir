@@ -8,8 +8,8 @@ firrtl.circuit "Intrinsics" {
     // CHECK-NEXT: %x_i6 = sv.constantX : i6
     // CHECK-NEXT: [[CLK:%.+]] = seq.from_clock %clk
     // CHECK-NEXT: %x_i1 = sv.constantX : i1
-    // CHECK-NEXT: [[T0:%.+]] = comb.icmp bin ceq %a, %x_i1
-    // CHECK-NEXT: [[T1:%.+]] = comb.icmp bin ceq [[CLK]], %x_i1
+    // CHECK-NEXT: [[T0:%.+]] = comb.icmp ceq %a, %x_i1
+    // CHECK-NEXT: [[T1:%.+]] = comb.icmp ceq [[CLK]], %x_i1
     // CHECK-NEXT: %x0 = hw.wire [[T0]]
     // CHECK-NEXT: %x1 = hw.wire [[T1]]
     %0 = firrtl.int.isX %a : !firrtl.uint<1>
@@ -29,13 +29,13 @@ firrtl.circuit "Intrinsics" {
     %x4 = firrtl.node interesting_name %4 : !firrtl.uint<5>
 
     // CHECK-NEXT: %[[vecCast:.*]] = hw.bitcast %b
-    // CHECK-NEXT: comb.icmp bin ceq %[[vecCast]], %x_i6
+    // CHECK-NEXT: comb.icmp ceq %[[vecCast]], %x_i6
     // CHECK-NEXT: %x5 = hw.wire
     %5 = firrtl.int.isX %b : !firrtl.vector<uint<2>,3>
     %x5 = firrtl.node interesting_name %5 : !firrtl.uint<1>
 
     // CHECK-NEXT: %[[bundleCast:.*]] = hw.bitcast %c
-    // CHECK-NEXT: comb.icmp bin ceq %[[bundleCast]], %x_i6
+    // CHECK-NEXT: comb.icmp ceq %[[bundleCast]], %x_i6
     // CHECK-NEXT: %x6 = hw.wire
     %6 = firrtl.int.isX %c : !firrtl.bundle<a: uint<3>, b: uint<3>>
     %x6 = firrtl.node interesting_name %6 : !firrtl.uint<1>

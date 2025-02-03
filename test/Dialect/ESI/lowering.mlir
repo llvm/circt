@@ -221,7 +221,7 @@ hw.module @fifo1(in %clk: !seq.clock, in %rst: i1, in %in: !esi.channel<i32, FIF
 // CHECK-NEXT:     %true = hw.constant true
 // CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %in, [[InputEN:%.+]] : i32
 // CHECK-NEXT:     %true_0 = hw.constant true
-// CHECK-NEXT:     [[DataNotAvailable:%.+]] = comb.xor bin %valid, %true_0 {sv.namehint = "dataNotAvailable"} : i1
+// CHECK-NEXT:     [[DataNotAvailable:%.+]] = comb.xor %valid, %true_0 {sv.namehint = "dataNotAvailable"} : i1
 // CHECK-NEXT:     %out, %full, %empty = seq.fifo depth 12 rd_latency 2   in %rawOutput rdEn %rden wrEn [[InputEN]] clk %clk rst %rst : i32
 // CHECK-NEXT:     [[InputNotEmpty:%.+]] = comb.xor [[DataNotAvailable]], %true {sv.namehint = "inputNotEmpty"} : i1
 // CHECK-NEXT:     [[SeqFifoNotFull:%.+]] = comb.xor %full, %true {sv.namehint = "seqFifoNotFull"} : i1
@@ -244,7 +244,7 @@ hw.module @fifoValidReadyInput(
 // CHECK-NEXT:     [[SeqFifoNotFull:%.+]] = comb.xor %full, %true {sv.namehint = "seqFifoNotFull"} : i1
 // CHECK-NEXT:     [[InputEN]] = comb.and [[InputNotEmpty]], [[SeqFifoNotFull]] {sv.namehint = "inputEn"} : i1
 // CHECK-NEXT:     %true_1 = hw.constant true
-// CHECK-NEXT:     [[R3:%.+]] = comb.xor bin %empty_0, %true_1 : i1
+// CHECK-NEXT:     [[R3:%.+]] = comb.xor %empty_0, %true_1 : i1
 // CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr %out, [[R3]] : i32
 // CHECK-NEXT:     [[OutputRdEn]] = comb.and [[R3]], %ready {sv.namehint = "outputRdEn"} : i1
 // CHECK-NEXT:     hw.output %chanOutput : !esi.channel<i32>

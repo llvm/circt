@@ -22,7 +22,7 @@ hw.module @HasBeenResetAsync(in %clock: i1, in %reset: i1, out out: i1) {
   // CHECK-NEXT: [[REG:%.+]] = sv.read_inout %hasBeenResetReg
   // CHECK-NEXT: [[REG_HI:%.+]] = comb.icmp ceq [[REG]], %true
   // CHECK-NEXT: [[RESET_LO:%.+]] = comb.icmp ceq %reset, %false
-  // CHECK-NEXT: [[DONE:%.+]] = comb.and bin [[REG_HI]], [[RESET_LO]]
+  // CHECK-NEXT: [[DONE:%.+]] = comb.and [[REG_HI]], [[RESET_LO]]
   // CHECK-NEXT: %hasBeenReset = hw.wire [[DONE]]
 
   // CHECK-NEXT: hw.output %hasBeenReset
@@ -48,7 +48,7 @@ hw.module @HasBeenResetSync(in %clock: i1, in %reset: i1, out out: i1) {
   // CHECK-NEXT: [[REG:%.+]] = sv.read_inout %hasBeenResetReg
   // CHECK-NEXT: [[REG_HI:%.+]] = comb.icmp ceq [[REG]], %true
   // CHECK-NEXT: [[RESET_LO:%.+]] = comb.icmp ceq %reset, %false
-  // CHECK-NEXT: [[DONE:%.+]] = comb.and bin [[REG_HI]], [[RESET_LO]]
+  // CHECK-NEXT: [[DONE:%.+]] = comb.and [[REG_HI]], [[RESET_LO]]
   // CHECK-NEXT: %hasBeenReset = hw.wire [[DONE]]
 
   // CHECK-NEXT: hw.output %hasBeenReset

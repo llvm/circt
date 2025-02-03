@@ -180,8 +180,8 @@ hw.module private @UninitReg1(in %clock : !seq.clock, in %reset : i1, in %cond :
   %c0_i2 = hw.constant 0 : i2
   // CHECK-NEXT: %count = sv.reg sym @count : !hw.inout<i2>
   // CHECK-NEXT: %0 = sv.read_inout %count : !hw.inout<i2>
-  // CHECK-NEXT: %1 = comb.mux bin %cond, %value, %0 : i2
-  // CHECK-NEXT: %2 = comb.mux bin %reset, %c0_i2, %1 : i2
+  // CHECK-NEXT: %1 = comb.mux %cond, %value, %0 : i2
+  // CHECK-NEXT: %2 = comb.mux %reset, %c0_i2, %1 : i2
   // CHECK-NEXT: sv.always posedge %clock {
   // CHECK-NEXT:   sv.if %reset {
   // CHECK-NEXT:     sv.passign %count, %c0_i2
@@ -194,8 +194,8 @@ hw.module private @UninitReg1(in %clock : !seq.clock, in %reset : i1, in %cond :
   // CHECK-NEXT: }
 
   %count = seq.firreg %2 clock %clock sym @count : i2
-  %1 = comb.mux bin %cond, %value, %count : i2
-  %2 = comb.mux bin %reset, %c0_i2, %1 : i2
+  %1 = comb.mux %cond, %value, %count : i2
+  %2 = comb.mux %reset, %c0_i2, %1 : i2
 
   // DISABLED-NOT: sv.ifdef.procedural @RANDOMIZE_REG
   // CHECK-NEXT: sv.ifdef @ENABLE_INITIAL_REG_ {
@@ -231,26 +231,6 @@ hw.module private @UninitReg1(in %clock : !seq.clock, in %reset : i1, in %cond :
   hw.output
 }
 
-// COMMON-LABEL: hw.module private @UninitReg1_nonbin(in %clock : i1, in %reset : i1, in %cond : i1, in %value : i2)
-hw.module private @UninitReg1_nonbin(in %clock : !seq.clock, in %reset : i1, in %cond : i1, in %value : i2) {
-  // CHECK: %c0_i2 = hw.constant 0 : i2
-  %c0_i2 = hw.constant 0 : i2
-  // CHECK-NEXT: %count = sv.reg sym @count : !hw.inout<i2>
-  // CHECK-NEXT: %0 = sv.read_inout %count : !hw.inout<i2>
-  // CHECK-NEXT: %1 = comb.mux %cond, %value, %0 : i2
-  // CHECK-NEXT: %2 = comb.mux %reset, %c0_i2, %1 : i2
-  // CHECK-NEXT: sv.always posedge %clock {
-  // CHECK-NEXT:   sv.passign %count, %2
-  // CHECK-NEXT: }
-
-  %count = seq.firreg %2 clock %clock sym @count : i2
-  %1 = comb.mux %cond, %value, %count : i2
-  %2 = comb.mux %reset, %c0_i2, %1 : i2
-  // CHECK: hw.output
-  hw.output
-}
-
-
 // module InitReg1 :
 //     input clock : Clock
 //     input reset : UInt<1>
@@ -276,7 +256,7 @@ hw.module private @InitReg1(in %clock: !seq.clock, in %reset: i1, in %io_d: i32,
   %1 = comb.concat %false, %reg2 : i1, i32
   %2 = comb.add %0, %1 : i33
   %3 = comb.extract %2 from 1 : (i33) -> i32
-  %4 = comb.mux bin %io_en, %io_d, %3 : i32
+  %4 = comb.mux %io_en, %io_d, %3 : i32
 
   // DISABLED-NOT: sv.ifdef.procedural @RANDOMIZE_REG
   // COMMON:       %reg = sv.reg sym @[[reg_sym:.+]] : !hw.inout<i32>
@@ -289,7 +269,7 @@ hw.module private @InitReg1(in %clock: !seq.clock, in %reset: i1, in %io_d: i32,
   // COMMON-NEXT:  %4 = comb.concat %false, %1 : i1, i32
   // COMMON-NEXT:  %5 = comb.add %3, %4 : i33
   // COMMON-NEXT:  %6 = comb.extract %5 from 1 : (i33) -> i32
-  // COMMON-NEXT:  %7 = comb.mux bin %io_en, %io_d, %6 : i32
+  // COMMON-NEXT:  %7 = comb.mux %io_en, %io_d, %6 : i32
   // COMMON-NEXT:  sv.always posedge %clock, posedge %reset {
   // COMMON-NEXT:    sv.if %reset {
   // COMMON-NEXT:      sv.passign %reg, %c0_i32 : i32
@@ -534,58 +514,58 @@ hw.module @issue1594(in %clock: !seq.clock, in %reset: i1, in %a: i1, out b: i1)
 hw.module @DeeplyNestedIfs(in %a_0: i1, in %a_1: i1, in %a_2: i1, in %c_0_0: i1, in %c_0_1: i1, in %c_1_0: i1, in %c_1_1: i1, in %c_2_0: i1, in %c_2_1: i1, in %clock: !seq.clock, out out_0: i1, out out_1: i1) {
   %r_0 = seq.firreg %25 clock %clock {firrtl.random_init_start = 0 : ui64} : i1
   %r_1 = seq.firreg %51 clock %clock {firrtl.random_init_start = 1 : ui64} : i1
-  %0 = comb.mux bin %a_1, %c_1_0, %c_0_0 : i1
-  %1 = comb.mux bin %a_0, %0, %c_2_0 : i1
-  %2 = comb.mux bin %a_2, %1, %c_1_0 : i1
-  %3 = comb.mux bin %a_1, %2, %c_0_0 : i1
-  %4 = comb.mux bin %a_0, %3, %c_2_0 : i1
-  %5 = comb.mux bin %a_2, %4, %c_1_0 : i1
-  %6 = comb.mux bin %a_1, %5, %c_0_0 : i1
-  %7 = comb.mux bin %a_0, %6, %c_2_0 : i1
-  %8 = comb.mux bin %a_2, %7, %c_1_0 : i1
-  %9 = comb.mux bin %a_1, %8, %c_0_0 : i1
-  %10 = comb.mux bin %a_0, %9, %c_2_0 : i1
-  %11 = comb.mux bin %a_2, %10, %c_1_0 : i1
-  %12 = comb.mux bin %a_1, %11, %c_0_0 : i1
-  %13 = comb.mux bin %a_0, %12, %c_2_0 : i1
-  %14 = comb.mux bin %a_2, %13, %c_1_0 : i1
-  %15 = comb.mux bin %a_1, %14, %c_0_0 : i1
-  %16 = comb.mux bin %a_0, %15, %c_2_0 : i1
-  %17 = comb.mux bin %a_2, %16, %c_1_0 : i1
-  %18 = comb.mux bin %a_1, %17, %c_0_0 : i1
-  %19 = comb.mux bin %a_0, %18, %c_2_0 : i1
-  %20 = comb.mux bin %a_2, %19, %c_1_0 : i1
-  %21 = comb.mux bin %a_1, %20, %c_0_0 : i1
-  %22 = comb.mux bin %a_0, %21, %c_2_0 : i1
-  %23 = comb.mux bin %a_2, %22, %c_1_0 : i1
-  %24 = comb.mux bin %a_1, %23, %c_0_0 : i1
-  %25 = comb.mux bin %a_0, %24, %r_0 : i1
-  %26 = comb.mux bin %a_1, %c_1_1, %c_0_1 : i1
-  %27 = comb.mux bin %a_0, %26, %c_2_1 : i1
-  %28 = comb.mux bin %a_2, %27, %c_1_1 : i1
-  %29 = comb.mux bin %a_1, %28, %c_0_1 : i1
-  %30 = comb.mux bin %a_0, %29, %c_2_1 : i1
-  %31 = comb.mux bin %a_2, %30, %c_1_1 : i1
-  %32 = comb.mux bin %a_1, %31, %c_0_1 : i1
-  %33 = comb.mux bin %a_0, %32, %c_2_1 : i1
-  %34 = comb.mux bin %a_2, %33, %c_1_1 : i1
-  %35 = comb.mux bin %a_1, %34, %c_0_1 : i1
-  %36 = comb.mux bin %a_0, %35, %c_2_1 : i1
-  %37 = comb.mux bin %a_2, %36, %c_1_1 : i1
-  %38 = comb.mux bin %a_1, %37, %c_0_1 : i1
-  %39 = comb.mux bin %a_0, %38, %c_2_1 : i1
-  %40 = comb.mux bin %a_2, %39, %c_1_1 : i1
-  %41 = comb.mux bin %a_1, %40, %c_0_1 : i1
-  %42 = comb.mux bin %a_0, %41, %c_2_1 : i1
-  %43 = comb.mux bin %a_2, %42, %c_1_1 : i1
-  %44 = comb.mux bin %a_1, %43, %c_0_1 : i1
-  %45 = comb.mux bin %a_0, %44, %c_2_1 : i1
-  %46 = comb.mux bin %a_2, %45, %c_1_1 : i1
-  %47 = comb.mux bin %a_1, %46, %c_0_1 : i1
-  %48 = comb.mux bin %a_0, %47, %c_2_1 : i1
-  %49 = comb.mux bin %a_2, %48, %c_1_1 : i1
-  %50 = comb.mux bin %a_1, %49, %c_0_1 : i1
-  %51 = comb.mux bin %a_0, %50, %r_1 : i1
+  %0 = comb.mux %a_1, %c_1_0, %c_0_0 : i1
+  %1 = comb.mux %a_0, %0, %c_2_0 : i1
+  %2 = comb.mux %a_2, %1, %c_1_0 : i1
+  %3 = comb.mux %a_1, %2, %c_0_0 : i1
+  %4 = comb.mux %a_0, %3, %c_2_0 : i1
+  %5 = comb.mux %a_2, %4, %c_1_0 : i1
+  %6 = comb.mux %a_1, %5, %c_0_0 : i1
+  %7 = comb.mux %a_0, %6, %c_2_0 : i1
+  %8 = comb.mux %a_2, %7, %c_1_0 : i1
+  %9 = comb.mux %a_1, %8, %c_0_0 : i1
+  %10 = comb.mux %a_0, %9, %c_2_0 : i1
+  %11 = comb.mux %a_2, %10, %c_1_0 : i1
+  %12 = comb.mux %a_1, %11, %c_0_0 : i1
+  %13 = comb.mux %a_0, %12, %c_2_0 : i1
+  %14 = comb.mux %a_2, %13, %c_1_0 : i1
+  %15 = comb.mux %a_1, %14, %c_0_0 : i1
+  %16 = comb.mux %a_0, %15, %c_2_0 : i1
+  %17 = comb.mux %a_2, %16, %c_1_0 : i1
+  %18 = comb.mux %a_1, %17, %c_0_0 : i1
+  %19 = comb.mux %a_0, %18, %c_2_0 : i1
+  %20 = comb.mux %a_2, %19, %c_1_0 : i1
+  %21 = comb.mux %a_1, %20, %c_0_0 : i1
+  %22 = comb.mux %a_0, %21, %c_2_0 : i1
+  %23 = comb.mux %a_2, %22, %c_1_0 : i1
+  %24 = comb.mux %a_1, %23, %c_0_0 : i1
+  %25 = comb.mux %a_0, %24, %r_0 : i1
+  %26 = comb.mux %a_1, %c_1_1, %c_0_1 : i1
+  %27 = comb.mux %a_0, %26, %c_2_1 : i1
+  %28 = comb.mux %a_2, %27, %c_1_1 : i1
+  %29 = comb.mux %a_1, %28, %c_0_1 : i1
+  %30 = comb.mux %a_0, %29, %c_2_1 : i1
+  %31 = comb.mux %a_2, %30, %c_1_1 : i1
+  %32 = comb.mux %a_1, %31, %c_0_1 : i1
+  %33 = comb.mux %a_0, %32, %c_2_1 : i1
+  %34 = comb.mux %a_2, %33, %c_1_1 : i1
+  %35 = comb.mux %a_1, %34, %c_0_1 : i1
+  %36 = comb.mux %a_0, %35, %c_2_1 : i1
+  %37 = comb.mux %a_2, %36, %c_1_1 : i1
+  %38 = comb.mux %a_1, %37, %c_0_1 : i1
+  %39 = comb.mux %a_0, %38, %c_2_1 : i1
+  %40 = comb.mux %a_2, %39, %c_1_1 : i1
+  %41 = comb.mux %a_1, %40, %c_0_1 : i1
+  %42 = comb.mux %a_0, %41, %c_2_1 : i1
+  %43 = comb.mux %a_2, %42, %c_1_1 : i1
+  %44 = comb.mux %a_1, %43, %c_0_1 : i1
+  %45 = comb.mux %a_0, %44, %c_2_1 : i1
+  %46 = comb.mux %a_2, %45, %c_1_1 : i1
+  %47 = comb.mux %a_1, %46, %c_0_1 : i1
+  %48 = comb.mux %a_0, %47, %c_2_1 : i1
+  %49 = comb.mux %a_2, %48, %c_1_1 : i1
+  %50 = comb.mux %a_1, %49, %c_0_1 : i1
+  %51 = comb.mux %a_0, %50, %r_1 : i1
   hw.output %r_0, %r_1 : i1, i1
 }
 
@@ -598,8 +578,8 @@ hw.module @ArrayElements(in %a: !hw.array<2xi1>, in %clock: !seq.clock, in %cond
   %r = seq.firreg %6 clock %clock {firrtl.random_init_start = 0 : ui64} : !hw.array<2xi1>
   %2 = hw.array_get %r[%true] : !hw.array<2xi1>, i1
   %3 = hw.array_get %r[%false] : !hw.array<2xi1>, i1
-  %4 = comb.mux bin %cond, %1, %3 : i1
-  %5 = comb.mux bin %cond, %0, %2 : i1
+  %4 = comb.mux %cond, %1, %3 : i1
+  %5 = comb.mux %cond, %0, %2 : i1
   %6 = hw.array_create %5, %4 : i1
   hw.output %r : !hw.array<2xi1>
   // CHECK:      %[[r1:.+]] = sv.array_index_inout %r[%false] : !hw.inout<array<2xi1>>, i1
@@ -639,15 +619,15 @@ hw.module @Subaccess(in %clock: !seq.clock, in %en: i1, in %addr: i2, in %data: 
   %0 = hw.array_get %r[%c0_i2] : !hw.array<3xi32>, i2
   %1 = hw.array_get %r[%c1_i2] : !hw.array<3xi32>, i2
   %2 = hw.array_get %r[%c-2_i2] : !hw.array<3xi32>, i2
-  %3 = comb.icmp bin eq %addr, %c0_i2 : i2
-  %4 = comb.and bin %en, %3 : i1
-  %5 = comb.mux bin %4, %data, %0 : i32
-  %6 = comb.icmp bin eq %addr, %c1_i2 : i2
-  %7 = comb.and bin %en, %6 : i1
-  %8 = comb.mux bin %7, %data, %1 : i32
-  %9 = comb.icmp bin eq %addr, %c-2_i2 : i2
-  %10 = comb.and bin %en, %9 : i1
-  %11 = comb.mux bin %10, %data, %2 : i32
+  %3 = comb.icmp eq %addr, %c0_i2 : i2
+  %4 = comb.and %en, %3 : i1
+  %5 = comb.mux %4, %data, %0 : i32
+  %6 = comb.icmp eq %addr, %c1_i2 : i2
+  %7 = comb.and %en, %6 : i1
+  %8 = comb.mux %7, %data, %1 : i32
+  %9 = comb.icmp eq %addr, %c-2_i2 : i2
+  %10 = comb.and %en, %9 : i1
+  %11 = comb.mux %10, %data, %2 : i32
   %12 = hw.array_create %11, %8, %5 : i32
   hw.output %r : !hw.array<3xi32>
   // CHECK:     %[[IDX:.+]] = sv.array_index_inout %r[%addr] : !hw.inout<array<3xi32>>, i2
@@ -680,37 +660,37 @@ hw.module @NestedSubaccess(in %clock: !seq.clock, in %en_0: i1, in %en_1: i1, in
   %0 = hw.array_get %r[%c0_i2] : !hw.array<3xi32>, i2
   %1 = hw.array_get %r[%c1_i2] : !hw.array<3xi32>, i2
   %2 = hw.array_get %r[%c-2_i2] : !hw.array<3xi32>, i2
-  %3 = comb.icmp bin eq %addr_0, %c0_i2 : i2
-  %4 = comb.mux bin %3, %data_0, %0 : i32
-  %5 = comb.icmp bin eq %addr_0, %c1_i2 : i2
-  %6 = comb.mux bin %5, %data_0, %1 : i32
-  %7 = comb.icmp bin eq %addr_0, %c-2_i2 : i2
-  %8 = comb.mux bin %7, %data_0, %2 : i32
-  %9 = comb.icmp bin eq %addr_1, %c0_i2 : i2
-  %10 = comb.mux bin %9, %data_1, %0 : i32
-  %11 = comb.icmp bin eq %addr_1, %c1_i2 : i2
-  %12 = comb.mux bin %11, %data_1, %1 : i32
-  %13 = comb.icmp bin eq %addr_1, %c-2_i2 : i2
-  %14 = comb.mux bin %13, %data_1, %2 : i32
-  %15 = comb.icmp bin eq %addr_2, %c0_i2 : i2
-  %16 = comb.mux bin %15, %data_2, %0 : i32
-  %17 = comb.icmp bin eq %addr_2, %c1_i2 : i2
-  %18 = comb.mux bin %17, %data_2, %1 : i32
-  %19 = comb.icmp bin eq %addr_2, %c-2_i2 : i2
-  %20 = comb.mux bin %19, %data_2, %2 : i32
-  %21 = comb.icmp bin eq %addr_3, %c0_i2 : i2
-  %22 = comb.mux bin %21, %data_3, %0 : i32
-  %23 = comb.icmp bin eq %addr_3, %c1_i2 : i2
-  %24 = comb.mux bin %23, %data_3, %1 : i32
-  %25 = comb.icmp bin eq %addr_3, %c-2_i2 : i2
-  %26 = comb.mux bin %25, %data_3, %2 : i32
+  %3 = comb.icmp eq %addr_0, %c0_i2 : i2
+  %4 = comb.mux %3, %data_0, %0 : i32
+  %5 = comb.icmp eq %addr_0, %c1_i2 : i2
+  %6 = comb.mux %5, %data_0, %1 : i32
+  %7 = comb.icmp eq %addr_0, %c-2_i2 : i2
+  %8 = comb.mux %7, %data_0, %2 : i32
+  %9 = comb.icmp eq %addr_1, %c0_i2 : i2
+  %10 = comb.mux %9, %data_1, %0 : i32
+  %11 = comb.icmp eq %addr_1, %c1_i2 : i2
+  %12 = comb.mux %11, %data_1, %1 : i32
+  %13 = comb.icmp eq %addr_1, %c-2_i2 : i2
+  %14 = comb.mux %13, %data_1, %2 : i32
+  %15 = comb.icmp eq %addr_2, %c0_i2 : i2
+  %16 = comb.mux %15, %data_2, %0 : i32
+  %17 = comb.icmp eq %addr_2, %c1_i2 : i2
+  %18 = comb.mux %17, %data_2, %1 : i32
+  %19 = comb.icmp eq %addr_2, %c-2_i2 : i2
+  %20 = comb.mux %19, %data_2, %2 : i32
+  %21 = comb.icmp eq %addr_3, %c0_i2 : i2
+  %22 = comb.mux %21, %data_3, %0 : i32
+  %23 = comb.icmp eq %addr_3, %c1_i2 : i2
+  %24 = comb.mux %23, %data_3, %1 : i32
+  %25 = comb.icmp eq %addr_3, %c-2_i2 : i2
+  %26 = comb.mux %25, %data_3, %2 : i32
   %27 = hw.array_create %8, %6, %4 : i32
   %28 = hw.array_create %14, %12, %10 : i32
   %29 = hw.array_create %20, %18, %16 : i32
-  %30 = comb.mux bin %en_2, %28, %29 : !hw.array<3xi32>
-  %31 = comb.mux bin %en_1, %27, %30 : !hw.array<3xi32>
+  %30 = comb.mux %en_2, %28, %29 : !hw.array<3xi32>
+  %31 = comb.mux %en_1, %27, %30 : !hw.array<3xi32>
   %32 = hw.array_create %26, %24, %22 : i32
-  %33 = comb.mux bin %en_0, %31, %32 : !hw.array<3xi32>
+  %33 = comb.mux %en_0, %31, %32 : !hw.array<3xi32>
   // CHECK:        %[[IDX1:.+]] = sv.array_index_inout %r[%addr_0] : !hw.inout<array<3xi32>>, i2
   // CHECK:        %[[IDX2:.+]] = sv.array_index_inout %r[%addr_1] : !hw.inout<array<3xi32>>, i2
   // CHECK:        %[[IDX3:.+]] = sv.array_index_inout %r[%addr_2] : !hw.inout<array<3xi32>>, i2
@@ -826,8 +806,8 @@ hw.module @RegMuxInlining1(in %clock: !seq.clock, in %reset: i1, in %a: i1, in %
   // CHECK: [[REG1:%.+]] = sv.reg : !hw.inout<i8>
   %r2 = seq.firreg %4 clock %clock : i8
 
-  // CHECK: [[VALUE:%.+]] = comb.mux bin %a, %foo, %bar
-  %0 = comb.mux bin %a, %foo, %bar {sv.namehint = "value"} : i8
+  // CHECK: [[VALUE:%.+]] = comb.mux %a, %foo, %bar
+  %0 = comb.mux %a, %foo, %bar {sv.namehint = "value"} : i8
 
   // CHECK: sv.always posedge %clock {
   // CHECK:   sv.if %c {
@@ -840,10 +820,10 @@ hw.module @RegMuxInlining1(in %clock: !seq.clock, in %reset: i1, in %a: i1, in %
   // CHECK:     }
   // CHECK:   }
   // CHECK: }
-  %1 = comb.mux bin %b, %fizz, %r1 : i8
-  %2 = comb.mux bin %b, %0, %r2 : i8
-  %3 = comb.mux bin %c, %0, %1 : i8
-  %4 = comb.mux bin %c, %buzz, %2 : i8
+  %1 = comb.mux %b, %fizz, %r1 : i8
+  %2 = comb.mux %b, %0, %r2 : i8
+  %3 = comb.mux %c, %0, %1 : i8
+  %4 = comb.mux %c, %buzz, %2 : i8
   %5 = comb.add %r1, %r2 {sv.namehint = "_out_T"} : i8
   hw.output %5 : i8
 }
@@ -877,9 +857,9 @@ hw.module @RegMuxInlining2(in %clock: !seq.clock, in %reset: i1, in %a: i1, in %
   // CHECK:     sv.passign [[REG0]], %z
   // CHECK:   }
   // CHECK: }
-  %0 = comb.mux bin %c, %x, %r1 : i8
-  %1 = comb.mux bin %b, %0, %y : i8
-  %2 = comb.mux bin %a, %1, %z : i8
+  %0 = comb.mux %c, %x, %r1 : i8
+  %1 = comb.mux %b, %0, %y : i8
+  %2 = comb.mux %a, %1, %z : i8
   hw.output %r1 : i8
 }
 
@@ -908,13 +888,13 @@ hw.module @RegMuxInlining3(in %clock: !seq.clock, in %c: i1, out out: i8) {
   // CHECK:   sv.passign [[REG1]], [[REG0_READ]]
   // CHECK:   sv.passign [[REG2]], [[REG0_READ]]
   // CHECK: }
-  %0 = comb.mux bin %c, %r2, %r3 : i8
+  %0 = comb.mux %c, %r2, %r3 : i8
   hw.output %r1 : i8
 }
 
  // CHECK-LABEL: hw.module @SharedMux
  hw.module @SharedMux(in %clock: !seq.clock, in %cond : i1, out o: i2){
-    %mux = comb.mux bin %cond, %r1, %r2 : i2
+    %mux = comb.mux %cond, %r1, %r2 : i2
     %r1 = seq.firreg %mux clock %clock : i2
     %r2 = seq.firreg %mux clock %clock : i2
     hw.output %r2: i2

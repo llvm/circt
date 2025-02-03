@@ -70,28 +70,28 @@ arc.define @nestedUnused(%arg0: i32, %arg1: i32) -> i32 {
 
 // CHECK-LABEL: hw.module @icmpEqCanonicalizer
 hw.module @icmpEqCanonicalizer(in %arg0: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1, in %arg4: i4, in %arg5: i4, in %arg6: i4, in %arg7: i4, out out0: i1, out out1: i1, out out2: i1, out out3: i1) {
-  // CHECK: [[V0:%.+]] = comb.and bin %arg0, %arg1, %arg2, %arg3 : i1
+  // CHECK: [[V0:%.+]] = comb.and %arg0, %arg1, %arg2, %arg3 : i1
   %c-1_i4 = hw.constant -1 : i4
   %0 = comb.concat %arg0, %arg1, %arg2, %arg3 : i1, i1, i1, i1
-  %1 = comb.icmp bin eq %0, %c-1_i4 : i4
+  %1 = comb.icmp eq %0, %c-1_i4 : i4
 
-  // CHECK-NEXT: [[V1:%.+]] = comb.or bin %arg0, %arg1, %arg2, %arg3 : i1
-  // CHECK-NEXT: [[V2:%.+]] = comb.xor bin [[V1]], %true : i1
+  // CHECK-NEXT: [[V1:%.+]] = comb.or %arg0, %arg1, %arg2, %arg3 : i1
+  // CHECK-NEXT: [[V2:%.+]] = comb.xor [[V1]], %true : i1
   %c0_i4 = hw.constant 0 : i4
   %2 = comb.concat %arg0, %arg1, %arg2, %arg3 : i1, i1, i1, i1
-  %3 = comb.icmp bin eq %2, %c0_i4 : i4
+  %3 = comb.icmp eq %2, %c0_i4 : i4
 
-  // CHECK-NEXT: [[V3:%.+]] = comb.and bin %arg4, %arg5, %arg6, %arg7 : i4
-  // CHECK-NEXT: [[V4:%.+]] = comb.icmp bin eq [[V3]], %c-1_i4 : i4
+  // CHECK-NEXT: [[V3:%.+]] = comb.and %arg4, %arg5, %arg6, %arg7 : i4
+  // CHECK-NEXT: [[V4:%.+]] = comb.icmp eq [[V3]], %c-1_i4 : i4
   %c-1_i16 = hw.constant -1 : i16
   %4 = comb.concat %arg4, %arg5, %arg6, %arg7 : i4, i4, i4, i4
-  %5 = comb.icmp bin eq %4, %c-1_i16 : i16
+  %5 = comb.icmp eq %4, %c-1_i16 : i16
 
-  // CHECK-NEXT: [[V5:%.+]] = comb.or bin %arg4, %arg5, %arg6, %arg7 : i4
-  // CHECK-NEXT: [[V6:%.+]] = comb.icmp bin eq [[V5]], %c0_i4 : i4
+  // CHECK-NEXT: [[V5:%.+]] = comb.or %arg4, %arg5, %arg6, %arg7 : i4
+  // CHECK-NEXT: [[V6:%.+]] = comb.icmp eq [[V5]], %c0_i4 : i4
   %c0_i16 = hw.constant 0 : i16
   %6 = comb.concat %arg4, %arg5, %arg6, %arg7 : i4, i4, i4, i4
-  %7 = comb.icmp bin eq %6, %c0_i16 : i16
+  %7 = comb.icmp eq %6, %c0_i16 : i16
 
   // CHECK-NEXT: hw.output [[V0]], [[V2]], [[V4]], [[V6]] :
   hw.output %1, %3, %5, %7 : i1, i1, i1, i1
@@ -99,28 +99,28 @@ hw.module @icmpEqCanonicalizer(in %arg0: i1, in %arg1: i1, in %arg2: i1, in %arg
 
 // CHECK-LABEL: hw.module @icmpNeCanonicalizer
 hw.module @icmpNeCanonicalizer(in %arg0: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1, in %arg4: i4, in %arg5: i4, in %arg6: i4, in %arg7: i4, out out0: i1, out out1: i1, out out2: i1, out out3: i1) {
-  // CHECK: [[V0:%.+]] = comb.or bin %arg0, %arg1, %arg2, %arg3 : i1
+  // CHECK: [[V0:%.+]] = comb.or %arg0, %arg1, %arg2, %arg3 : i1
   %c0_i4 = hw.constant 0 : i4
   %0 = comb.concat %arg0, %arg1, %arg2, %arg3 : i1, i1, i1, i1
-  %1 = comb.icmp bin ne %0, %c0_i4 : i4
+  %1 = comb.icmp ne %0, %c0_i4 : i4
 
-  // CHECK-NEXT: [[V1:%.+]] = comb.and bin %arg0, %arg1, %arg2, %arg3 : i1
-  // CHECK-NEXT: [[V2:%.+]] = comb.xor bin [[V1]], %true : i1
+  // CHECK-NEXT: [[V1:%.+]] = comb.and %arg0, %arg1, %arg2, %arg3 : i1
+  // CHECK-NEXT: [[V2:%.+]] = comb.xor [[V1]], %true : i1
   %c-1_i4 = hw.constant -1 : i4
   %2 = comb.concat %arg0, %arg1, %arg2, %arg3 : i1, i1, i1, i1
-  %3 = comb.icmp bin ne %2, %c-1_i4 : i4
+  %3 = comb.icmp ne %2, %c-1_i4 : i4
 
-  // CHECK-NEXT: [[V3:%.+]] = comb.or bin %arg4, %arg5, %arg6, %arg7 : i4
-  // CHECK-NEXT: [[V4:%.+]] = comb.icmp bin ne [[V3]], %c0_i4 : i4
+  // CHECK-NEXT: [[V3:%.+]] = comb.or %arg4, %arg5, %arg6, %arg7 : i4
+  // CHECK-NEXT: [[V4:%.+]] = comb.icmp ne [[V3]], %c0_i4 : i4
   %c0_i16 = hw.constant 0 : i16
   %4 = comb.concat %arg4, %arg5, %arg6, %arg7 : i4, i4, i4, i4
-  %5 = comb.icmp bin ne %4, %c0_i16 : i16
+  %5 = comb.icmp ne %4, %c0_i16 : i16
 
-  // CHECK-NEXT: [[V5:%.+]] = comb.and bin %arg4, %arg5, %arg6, %arg7 : i4
-  // CHECK-NEXT: [[V6:%.+]] = comb.icmp bin ne [[V5]], %c-1_i4 : i4
+  // CHECK-NEXT: [[V5:%.+]] = comb.and %arg4, %arg5, %arg6, %arg7 : i4
+  // CHECK-NEXT: [[V6:%.+]] = comb.icmp ne [[V5]], %c-1_i4 : i4
   %c-1_i16 = hw.constant -1 : i16
   %6 = comb.concat %arg4, %arg5, %arg6, %arg7 : i4, i4, i4, i4
-  %7 = comb.icmp bin ne %6, %c-1_i16 : i16
+  %7 = comb.icmp ne %6, %c-1_i16 : i16
 
   // CHECK-NEXT: hw.output [[V0]], [[V2]], [[V4]], [[V6]] :
   hw.output %1, %3, %5, %7 : i1, i1, i1, i1
@@ -322,7 +322,7 @@ in %clock: !seq.clock, in %o: i8, in %v: i8, in %q: i8, in %s: i8) {
 }
 
 arc.define @FooMux(%arg0: i1, %arg1: i8, %arg2: i8) -> i8 {
-  %0 = comb.mux bin %arg0, %arg1, %arg2 : i8
+  %0 = comb.mux %arg0, %arg1, %arg2 : i8
   arc.output %0 : i8
 }
 arc.define @Just_A_Dummy_Func(%arg0: i8, %arg1: i8) -> i8 {

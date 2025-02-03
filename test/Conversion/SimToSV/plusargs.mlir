@@ -30,7 +30,7 @@ hw.module @plusargs_value(out test: i1, out value: i5) {
   // CHECK-NEXT:     %c0_i32 = hw.constant 0 : i32
   // CHECK-NEXT:     [[BAR_STR:%.*]] = sv.constantStr "bar"
   // CHECK-NEXT:     [[TMP:%.*]] = sv.system "value$plusargs"([[BAR_STR]], [[BAR_VALUE_DECL]])
-  // CHECK-NEXT:     [[TMP2:%.*]] = comb.icmp bin ne [[TMP]], %c0_i32
+  // CHECK-NEXT:     [[TMP2:%.*]] = comb.icmp ne [[TMP]], %c0_i32
   // CHECK-NEXT:     sv.bpassign [[BAR_FOUND_DECL]], [[TMP2]]
   // CHECK-NEXT:   }
   // CHECK-NEXT: }

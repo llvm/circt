@@ -392,7 +392,7 @@ private:
         }
         if (!conjuncts.empty())
           enableMap[key] =
-              builder.createOrFold<comb::AndOp>(loc, conjuncts, false);
+              builder.createOrFold<comb::AndOp>(loc, conjuncts);
       }
     }
   }

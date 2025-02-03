@@ -25,7 +25,7 @@ firrtl.circuit "Arithmetic" {
     // CHECK-DAG: %c0_i4 = hw.constant 0 : i4
     // CHECK-DAG: %false = hw.constant false
     // CHECK-NEXT: [[UIN3EXT:%.+]] = comb.concat %false, %uin3c : i1, i3
-    // CHECK-NEXT: [[ADDRES:%.+]] = comb.add bin [[UIN3EXT]], %c0_i4 : i4
+    // CHECK-NEXT: [[ADDRES:%.+]] = comb.add [[UIN3EXT]], %c0_i4 : i4
     %1 = firrtl.add %uin0c, %uin3c : (!firrtl.uint<0>, !firrtl.uint<3>) -> !firrtl.uint<4>
     firrtl.connect %out1, %1 : !firrtl.uint<4>, !firrtl.uint<4>
 
