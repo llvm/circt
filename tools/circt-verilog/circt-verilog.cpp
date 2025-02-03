@@ -28,6 +28,7 @@
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/AsmState.h"
@@ -542,6 +543,7 @@ int main(int argc, char **argv) {
   // clang-format on
 
   // Perform the actual work and use "exit" to avoid slow context teardown.
+  mlir::func::registerInlinerExtension(registry);
   MLIRContext context(registry);
   exit(failed(execute(&context)));
 }

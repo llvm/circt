@@ -15,6 +15,7 @@ set(libs
   MLIRBytecodeReader
   MLIRControlFlowDialect
   MLIRFuncDialect
+  MLIRFuncInlinerExtension
   MLIRIR
   MLIRParser
   MLIRSCFDialect
