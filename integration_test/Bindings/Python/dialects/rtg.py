@@ -180,3 +180,20 @@ with Context() as ctx, Location.unknown():
     rtgtest.ImmediateOp(rtgtest.Imm32Attr.get(3))
 
   print(m)
+
+with Context() as ctx, Location.unknown():
+  circt.register_dialects(ctx)
+  m = Module.create()
+  with InsertionPoint(m.body):
+    seq = rtg.SequenceOp('seq')
+    block = Block.create_at_start(seq.bodyRegion, [])
+    with InsertionPoint(block):
+      l = rtg.label_decl("label", [])
+      visibility = rtg.LabelVisibilityAttr.get(rtg.GLOBAL)
+      rtg.label(visibility, l)
+      assert visibility.value == rtg.GLOBAL
+
+  # CHECK: rtg.sequence @seq
+  # CHECK: rtg.label_decl "label"
+  # CHECK: rtg.label global {{%.+}}
+  print(m)

@@ -75,6 +75,29 @@ static void testDictType(MlirContext ctx) {
   mlirTypeDump(emptyDictTy);
 }
 
+static void testLabelVisibilityAttr(MlirContext ctx) {
+  MlirAttribute labelVisibility =
+      rtgLabelVisibilityAttrGet(ctx, RTG_LABEL_VISIBILITY_GLOBAL);
+
+  // CHECK: is_label_visibility
+  fprintf(stderr, rtgAttrIsALabelVisibilityAttr(labelVisibility)
+                      ? "is_label_visibility\n"
+                      : "isnot_label_visibility\n");
+
+  // CHECK: global_label
+  switch (rtgLabelVisibilityAttrGetValue(labelVisibility)) {
+  case RTG_LABEL_VISIBILITY_LOCAL:
+    fprintf(stderr, "local_label\n");
+    break;
+  case RTG_LABEL_VISIBILITY_GLOBAL:
+    fprintf(stderr, "global_label\n");
+    break;
+  case RTG_LABEL_VISIBILITY_EXTERNAL:
+    fprintf(stderr, "external_label\n");
+    break;
+  }
+}
+
 int main(int argc, char **argv) {
   MlirContext ctx = mlirContextCreate();
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__rtg__(), ctx);
@@ -84,6 +107,8 @@ int main(int argc, char **argv) {
   testSetType(ctx);
   testBagType(ctx);
   testDictType(ctx);
+
+  testLabelVisibilityAttr(ctx);
 
   mlirContextDestroy(ctx);
 

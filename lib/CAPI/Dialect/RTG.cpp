@@ -82,3 +82,40 @@ MlirType rtgDictTypeGet(MlirContext ctxt, intptr_t numEntries,
   }
   return wrap(DictType::get(unwrap(ctxt), entries));
 }
+
+//===----------------------------------------------------------------------===//
+// Attribute API.
+//===----------------------------------------------------------------------===//
+
+bool rtgAttrIsALabelVisibilityAttr(MlirAttribute attr) {
+  return isa<LabelVisibilityAttr>(unwrap(attr));
+}
+
+RTGLabelVisibility rtgLabelVisibilityAttrGetValue(MlirAttribute attr) {
+  auto convert = [](LabelVisibility visibility) {
+    switch (visibility) {
+    case LabelVisibility::local:
+      return RTG_LABEL_VISIBILITY_LOCAL;
+    case LabelVisibility::global:
+      return RTG_LABEL_VISIBILITY_GLOBAL;
+    case LabelVisibility::external:
+      return RTG_LABEL_VISIBILITY_EXTERNAL;
+    }
+  };
+  return convert(cast<LabelVisibilityAttr>(unwrap(attr)).getValue());
+}
+
+MlirAttribute rtgLabelVisibilityAttrGet(MlirContext ctxt,
+                                        RTGLabelVisibility visibility) {
+  auto convert = [](RTGLabelVisibility visibility) {
+    switch (visibility) {
+    case RTG_LABEL_VISIBILITY_LOCAL:
+      return LabelVisibility::local;
+    case RTG_LABEL_VISIBILITY_GLOBAL:
+      return LabelVisibility::global;
+    case RTG_LABEL_VISIBILITY_EXTERNAL:
+      return LabelVisibility::external;
+    }
+  };
+  return wrap(LabelVisibilityAttr::get(unwrap(ctxt), convert(visibility)));
+}
