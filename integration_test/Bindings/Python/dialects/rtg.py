@@ -89,14 +89,18 @@ with Context() as ctx, Location.unknown():
     setTy = rtg.SetType.get(indexTy)
     bagTy = rtg.BagType.get(indexTy)
     ireg = rtgtest.IntegerRegisterType.get()
+    randomizedSequenceTy = rtg.RandomizedSequenceType.get()
     seq = rtg.SequenceOp(
         'seq',
         TypeAttr.get(
-            rtg.SequenceType.get([sequenceTy, labelTy, setTy, bagTy, ireg])))
-    Block.create_at_start(seq.bodyRegion,
-                          [sequenceTy, labelTy, setTy, bagTy, ireg])
+            rtg.SequenceType.get(
+                [sequenceTy, labelTy, setTy, bagTy, ireg,
+                 randomizedSequenceTy])))
+    Block.create_at_start(
+        seq.bodyRegion,
+        [sequenceTy, labelTy, setTy, bagTy, ireg, randomizedSequenceTy])
 
-  # CHECK: rtg.sequence @seq(%{{.*}}: !rtg.sequence, %{{.*}}: !rtg.label, %{{.*}}: !rtg.set<index>, %{{.*}}: !rtg.bag<index>, %{{.*}}: !rtgtest.ireg)
+  # CHECK: rtg.sequence @seq(%{{.*}}: !rtg.sequence, %{{.*}}: !rtg.label, %{{.*}}: !rtg.set<index>, %{{.*}}: !rtg.bag<index>, %{{.*}}: !rtgtest.ireg, %{{.*}}: !rtg.randomized_sequence)
   print(m)
 
 with Context() as ctx, Location.unknown():

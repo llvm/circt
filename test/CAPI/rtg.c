@@ -35,6 +35,17 @@ static void testSequenceType(MlirContext ctx) {
   mlirTypeDump(sequenceWithArgsTy);
 }
 
+static void testRandomizedSequenceType(MlirContext ctx) {
+  MlirType sequenceTy = rtgRandomizedSequenceTypeGet(ctx);
+
+  // CHECK: is_randomized_sequence
+  fprintf(stderr, rtgTypeIsARandomizedSequence(sequenceTy)
+                      ? "is_randomized_sequence\n"
+                      : "isnot_randomized_sequence\n");
+  // CHECK: !rtg.randomized_sequence
+  mlirTypeDump(sequenceTy);
+}
+
 static void testLabelType(MlirContext ctx) {
   MlirType labelTy = rtgLabelTypeGet(ctx);
 
@@ -114,6 +125,7 @@ int main(int argc, char **argv) {
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__rtg__(), ctx);
 
   testSequenceType(ctx);
+  testRandomizedSequenceType(ctx);
   testLabelType(ctx);
   testSetType(ctx);
   testBagType(ctx);

@@ -1,5 +1,9 @@
 // RUN: circt-opt %s --verify-roundtrip | FileCheck %s
 
+// CHECK-LABEL: rtg.sequence @ranomizedSequenceType
+// CHECK-SAME: (%{{.*}}: !rtg.randomized_sequence)
+rtg.sequence @ranomizedSequenceType(%seq: !rtg.randomized_sequence) {}
+
 // CHECK-LABEL: rtg.sequence @seq
 rtg.sequence @seq0() {
   %arg = arith.constant 1 : index
@@ -23,18 +27,22 @@ rtg.sequence @seqAttrsAndTypeElements(%arg0: !rtg.sequence<!rtg.sequence<!rtg.la
 // CHECK-SAME: (%arg0: i32, %arg1: !rtg.sequence)
 rtg.sequence @seq1(%arg0: i32, %arg1: !rtg.sequence) { }
 
-// CHECK-LABEL: rtg.sequence @invocations
-rtg.sequence @invocations() {
+// CHECK-LABEL: rtg.sequence @seqRandomizationAndEmbedding
+rtg.sequence @seqRandomizationAndEmbedding() {
   // CHECK: [[V0:%.+]] = rtg.sequence_closure @seq0
   // CHECK: [[C0:%.+]] = arith.constant 0 : i32
   // CHECK: [[V1:%.+]] = rtg.sequence_closure @seq1([[C0]], [[V0]] : i32, !rtg.sequence)
-  // CHECK: rtg.invoke_sequence [[V0]]
-  // CHECK: rtg.invoke_sequence [[V1]]
+  // CHECK: [[V2:%.+]] = rtg.randomize_sequence [[V0]]
+  // CHECK: [[V3:%.+]] = rtg.randomize_sequence [[V1]]
+  // CHECK: rtg.embed_sequence [[V2]]
+  // CHECK: rtg.embed_sequence [[V3]]
   %0 = rtg.sequence_closure @seq0
   %c0_i32 = arith.constant 0 : i32
   %1 = rtg.sequence_closure @seq1(%c0_i32, %0 : i32, !rtg.sequence)
-  rtg.invoke_sequence %0
-  rtg.invoke_sequence %1
+  %2 = rtg.randomize_sequence %0
+  %3 = rtg.randomize_sequence %1
+  rtg.embed_sequence %2
+  rtg.embed_sequence %3
 }
 
 // CHECK-LABEL: @sets
