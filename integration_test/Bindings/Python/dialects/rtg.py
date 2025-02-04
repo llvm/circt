@@ -32,8 +32,7 @@ with Context() as ctx, Location.unknown():
   # CHECK:   [[V1:%.+]] = rtgtest.cpu_decl <1>
   # CHECK:   rtg.yield [[V0]], [[V1]] : !rtgtest.cpu, !rtgtest.cpu
   # CHECK: }
-  # CHECK: rtg.test @test_name : !rtg.dict<cpu0: !rtgtest.cpu, cpu1: !rtgtest.cpu> {
-  # CHECK: ^bb{{.*}}(%{{.*}}: !rtgtest.cpu, %{{.*}}: !rtgtest.cpu):
+  # CHECK: rtg.test @test_name(cpu0 = %cpu0: !rtgtest.cpu, cpu1 = %cpu1: !rtgtest.cpu) {
   # CHECK: }
   print(m)
 
@@ -62,7 +61,7 @@ with Context() as ctx, Location.unknown():
       seq_get = rtg.GetSequenceOp(rtg.SequenceType.get(), 'sequence_name')
       rtg.RandomizeSequenceOp(seq_get)
 
-  # CHECK: rtg.test @test_name : !rtg.dict<> {
+  # CHECK: rtg.test @test_name() {
   # CHECK-NEXT:   [[SEQ:%.+]] = rtg.get_sequence @sequence_name
   # CHECK-NEXT:   rtg.randomize_sequence [[SEQ]]
   # CHECK-NEXT: }
@@ -76,7 +75,7 @@ with Context() as ctx, Location.unknown():
   rtgtool.populate_randomizer_pipeline(pm, options)
   pm.run(m.operation)
 
-  # CHECK: rtg.test @test_name : !rtg.dict<> {
+  # CHECK: rtg.test @test_name() {
   # CHECK-NEXT: }
   print(m)
 

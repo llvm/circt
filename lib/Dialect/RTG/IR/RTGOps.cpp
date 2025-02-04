@@ -11,8 +11,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/RTG/IR/RTGOps.h"
+#include "circt/Support/ParsingUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/SmallString.h"
 
 using namespace mlir;
 using namespace circt;
@@ -397,6 +399,97 @@ LogicalResult TestOp::verifyRegions() {
     return emitOpError("argument types must match dict entry types");
 
   return success();
+}
+
+ParseResult TestOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse the name as a symbol.
+  if (parser.parseSymbolName(
+          result.getOrAddProperties<TestOp::Properties>().sym_name))
+    return failure();
+
+  // Parse the function signature.
+  SmallVector<OpAsmParser::Argument> arguments;
+  SmallVector<StringAttr> names;
+
+  auto parseOneArgument = [&]() -> ParseResult {
+    std::string name;
+    if (parser.parseKeywordOrString(&name) || parser.parseEqual() ||
+        parser.parseArgument(arguments.emplace_back(), /*allowType=*/true,
+                             /*allowAttrs=*/true))
+      return failure();
+
+    names.push_back(StringAttr::get(result.getContext(), name));
+    return success();
+  };
+  if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                     parseOneArgument, " in argument list"))
+    return failure();
+
+  SmallVector<Type> argTypes;
+  SmallVector<DictEntry> entries;
+  SmallVector<Location> argLocs;
+  argTypes.reserve(arguments.size());
+  argLocs.reserve(arguments.size());
+  for (auto [name, arg] : llvm::zip(names, arguments)) {
+    argTypes.push_back(arg.type);
+    argLocs.push_back(arg.sourceLoc ? *arg.sourceLoc : result.location);
+    entries.push_back({name, arg.type});
+  }
+  auto emitError = [&]() -> InFlightDiagnostic {
+    return parser.emitError(parser.getCurrentLocation());
+  };
+  Type type = DictType::getChecked(emitError, result.getContext(),
+                                   ArrayRef<DictEntry>(entries));
+  if (!type)
+    return failure();
+  result.getOrAddProperties<TestOp::Properties>().target = TypeAttr::get(type);
+
+  auto loc = parser.getCurrentLocation();
+  if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
+    return failure();
+  if (failed(verifyInherentAttrs(result.name, result.attributes, [&]() {
+        return parser.emitError(loc)
+               << "'" << result.name.getStringRef() << "' op ";
+      })))
+    return failure();
+
+  std::unique_ptr<Region> bodyRegionRegion = std::make_unique<Region>();
+  if (parser.parseRegion(*bodyRegionRegion, arguments))
+    return failure();
+
+  if (bodyRegionRegion->empty()) {
+    bodyRegionRegion->emplaceBlock();
+    bodyRegionRegion->addArguments(argTypes, argLocs);
+  }
+  result.addRegion(std::move(bodyRegionRegion));
+
+  return success();
+}
+
+void TestOp::print(OpAsmPrinter &p) {
+  p << ' ';
+  p.printSymbolName(getSymNameAttr().getValue());
+  p << "(";
+  SmallString<32> resultNameStr;
+  llvm::interleaveComma(
+      llvm::zip(getTarget().getEntries(), getBody()->getArguments()), p,
+      [&](auto entryAndArg) {
+        auto [entry, arg] = entryAndArg;
+        p << entry.name.getValue() << " = ";
+        p.printRegionArgument(arg);
+      });
+  p << ")";
+  p.printOptionalAttrDictWithKeyword(
+      (*this)->getAttrs(), {getSymNameAttrName(), getTargetAttrName()});
+  p << ' ';
+  p.printRegion(getBodyRegion(), /*printEntryBlockArgs=*/false);
+}
+
+void TestOp::getAsmBlockArgumentNames(Region &region,
+                                      OpAsmSetValueNameFn setNameFn) {
+  for (auto [entry, arg] :
+       llvm::zip(getTarget().getEntries(), region.getArguments()))
+    setNameFn(arg, entry.name.getValue());
 }
 
 //===----------------------------------------------------------------------===//

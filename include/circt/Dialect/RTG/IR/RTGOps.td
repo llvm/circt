@@ -481,6 +481,7 @@ def TestOp : RTGOp<"test", [
   Symbol,
   SingleBlock,
   NoTerminator,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
   HasParent<"mlir::ModuleOp">
 ]> {
   let summary = "the root of a test";
@@ -509,10 +510,7 @@ def TestOp : RTGOp<"test", [
                        TypeAttrOf<DictType>:$target);
   let regions = (region SizedRegion<1>:$bodyRegion);
 
-  let assemblyFormat = [{
-    $sym_name `:` $target attr-dict-with-keyword $bodyRegion
-  }];
-
+  let hasCustomAssemblyFormat = 1;
   let hasRegionVerifier = 1;
 }
 

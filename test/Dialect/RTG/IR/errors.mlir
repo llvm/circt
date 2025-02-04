@@ -83,29 +83,24 @@ rtg.target @target : !rtg.dict<a: i32> {
 // -----
 
 // expected-error @below {{argument types must match dict entry types}}
-rtg.test @test : !rtg.dict<a: i32> {
+"rtg.test"() <{sym_name="test", target=!rtg.dict<a: i32>}> ({^bb0(%b: i8):}) : () -> ()
+
+// -----
+
+// expected-error @below {{dictionary must be sorted by names and contain no duplicates, first violation at entry 'a'}}
+rtg.test @test(a = %a: i32, a = %a: i32) {
 }
 
 // -----
 
 // expected-error @below {{dictionary must be sorted by names and contain no duplicates, first violation at entry 'a'}}
-rtg.test @test : !rtg.dict<a: i32, a: i32> {
-^bb0(%arg0: i32, %arg1: i32):
-}
-
-// -----
-
-// expected-error @below {{dictionary must be sorted by names and contain no duplicates, first violation at entry 'a'}}
-rtg.test @test : !rtg.dict<b: i32, a: i32> {
-^bb0(%arg0: i32, %arg1: i32):
+rtg.test @test(b = %b: i32, a = %a: i32) {
 }
 
 // -----
 
 // expected-error @below {{empty strings not allowed as entry names}}
-rtg.test @test : !rtg.dict<"": i32> {
-^bb0(%arg0: i32):
-}
+rtg.test @test(dict = %dict: !rtg.dict<"": i32>) { }
 
 // -----
 

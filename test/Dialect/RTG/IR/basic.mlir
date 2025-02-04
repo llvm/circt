@@ -89,8 +89,8 @@ rtg.target @empty_target : !rtg.dict<> {
   rtg.yield
 }
 
-// CHECK-LABEL: rtg.test @empty_test : !rtg.dict<> {
-rtg.test @empty_test : !rtg.dict<> { }
+// CHECK-LABEL: rtg.test @empty_test() {
+rtg.test @empty_test() { }
 
 // CHECK-LABEL: rtg.target @target : !rtg.dict<num_cpus: i32, num_modes: i32> {
 // CHECK:   rtg.yield %{{.*}}, %{{.*}} : i32, i32
@@ -115,19 +115,19 @@ rtg.target @context_switch : !rtg.dict<> {
 }
 
 // CHECK-LABEL: @contexts
-rtg.test @contexts : !rtg.dict<ctxt0: !rtgtest.cpu> {
-^bb0(%arg0: !rtgtest.cpu):
+rtg.test @contexts(ctxt0 = %ctxt0: !rtgtest.cpu) {
   // CHECK: rtg.on_context {{%.+}}, {{%.+}} : !rtgtest.cpu
   %seq = rtg.get_sequence @seq0 : !rtg.sequence
-  rtg.on_context %arg0, %seq : !rtgtest.cpu
+  rtg.on_context %ctxt0, %seq : !rtgtest.cpu
 }
 
-// CHECK-LABEL: rtg.test @test : !rtg.dict<num_cpus: i32, num_modes: i32> {
-// CHECK: ^bb0(%arg0: i32, %arg1: i32):
-// CHECK: }
-rtg.test @test : !rtg.dict<num_cpus: i32, num_modes: i32> {
-^bb0(%arg0: i32, %arg1: i32):
-}
+// CHECK-LABEL: rtg.test @test0
+// CHECK-SAME: (num_cpus = %num_cpus: i32, num_modes = %num_modes: i32) {
+rtg.test @test0(num_cpus = %num_cpus: i32, num_modes = %num_modes: i32) { }
+
+// CHECK-LABEL: rtg.test @test1
+// CHECK-SAME: (num_cpus = %num_cpus: i32, num_modes = %num_modes: i32) {
+rtg.test @test1(num_cpus = %a: i32, num_modes = %b: i32) { }
 
 // CHECK-LABEL: rtg.sequence @integerHandlingOps
 rtg.sequence @integerHandlingOps(%arg0: index, %arg1: index) {
