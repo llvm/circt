@@ -106,7 +106,7 @@ hw.module @InOutLoopback (in %clk: !seq.clock) {
 // CONN-LABEL:  esi.pure_module @LoopbackCosimPure {
 // CONN-NEXT:     [[clk:%.+]] = esi.pure_module.input "clk" : !seq.clock
 // CONN-NEXT:     [[rst:%.+]] = esi.pure_module.input "rst" : i1
-// CONN-NEXT:     esi.manifest.service_impl #esi.appid<"cosim"> svc @HostComms by "cosim" with {} {
+// CONN-NEXT:     esi.manifest.service_impl #esi.appid<"cosim"> svc @HostComms by "cosim" engine with {} {
 // CONN-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inout">] req <@HostComms::@ReqResp>(!esi.bundle<[!esi.channel<i16> to "req", !esi.channel<i8> from "resp"]>) channels {req = {name = "loopback_inout.req", type = "cosim"}, resp = {name = "loopback_inout.resp", type = "cosim"}}
 // CONN-NEXT:     }
 // CONN-NEXT:     [[r2:%.+]] = esi.cosim.from_host [[clk]], [[rst]], "loopback_inout.req" : !esi.channel<i16>
@@ -194,7 +194,7 @@ hw.module @CallableFunc1() {
 
 // CONN-LABEL:   hw.module @CallableAccel1(in %clk : !seq.clock, in %rst : i1) {
 // CONN-NEXT:      hw.instance "func1" @CallableFunc1(func1: %bundle: !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>) -> ()
-// CONN-NEXT:      esi.manifest.service_impl #esi.appid<"funcComms"> svc @funcs std "esi.service.std.func" by "cosim" with {} {
+// CONN-NEXT:      esi.manifest.service_impl #esi.appid<"funcComms"> svc @funcs std "esi.service.std.func" by "cosim" engine with {} {
 // CONN-NEXT:        esi.manifest.impl_conn [#esi.appid<"func1">] req <@funcs::@call>(!esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>) channels {arg = {name = "func1.arg", type = "cosim"}, result = {name = "func1.result", type = "cosim"}}
 // CONN-NEXT:      }
 // CONN-NEXT:      %0 = esi.cosim.from_host %clk, %rst, "func1.arg" : !esi.channel<i16>

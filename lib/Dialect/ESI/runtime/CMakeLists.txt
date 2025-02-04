@@ -100,6 +100,7 @@ set(ESICppRuntimeSources
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Context.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Common.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Design.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Engines.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Logging.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Manifest.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Services.cpp

@@ -768,7 +768,9 @@ void ESIPureModuleOp::setHWModuleType(hw::ModuleType type) {
 // Manifest ops.
 //===----------------------------------------------------------------------===//
 
-StringRef ServiceImplRecordOp::getManifestClass() { return "service"; }
+StringRef ServiceImplRecordOp::getManifestClass() {
+  return getIsEngine() ? "engine" : "service";
+}
 
 void ServiceImplRecordOp::getDetails(SmallVectorImpl<NamedAttribute> &results) {
   auto *ctxt = getContext();

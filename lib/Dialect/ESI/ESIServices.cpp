@@ -58,6 +58,7 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
   }
 
   Block &connImplBlock = implRecord.getReqDetails().front();
+  implRecord.setIsEngine(true);
   OpBuilder implRecords = OpBuilder::atBlockEnd(&connImplBlock);
 
   // Assemble the name to use for an endpoint.
@@ -300,8 +301,9 @@ ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req,
   // the generator for possible modification.
   OpBuilder b(req);
   auto implRecord = b.create<ServiceImplRecordOp>(
-      req.getLoc(), req.getAppID(), req.getServiceSymbolAttr(),
-      req.getStdServiceAttr(), req.getImplTypeAttr(), b.getDictionaryAttr({}));
+      req.getLoc(), req.getAppID(), /*isEngine=*/false,
+      req.getServiceSymbolAttr(), req.getStdServiceAttr(),
+      req.getImplTypeAttr(), b.getDictionaryAttr({}));
   implRecord.getReqDetails().emplaceBlock();
 
   return genF->second(req, decl, implRecord);

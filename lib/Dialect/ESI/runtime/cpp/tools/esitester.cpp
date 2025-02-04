@@ -101,6 +101,11 @@ void registerCallbacks(AcceleratorConnection *conn, Accelerator *accel) {
             return MessageData();
           },
           true);
+    else
+      std::cerr << "PrintfExample port is not a CallService::Callback"
+                << std::endl;
+  } else {
+    std::cerr << "No PrintfExample port found" << std::endl;
   }
 }
 
