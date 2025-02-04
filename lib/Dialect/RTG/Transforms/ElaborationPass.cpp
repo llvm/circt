@@ -668,9 +668,8 @@ private:
               std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     elabRequests.push(val);
-    Value seq = builder.create<SequenceClosureOp>(
-        loc, SequenceType::get(builder.getContext(), {}), val->name,
-        ValueRange{});
+    Value seq = builder.create<GetSequenceOp>(
+        loc, SequenceType::get(builder.getContext(), {}), val->name);
     return builder.create<RandomizeSequenceOp>(loc, seq);
   }
 
@@ -795,14 +794,25 @@ public:
     return visitUnhandledOp(op);
   }
 
-  FailureOr<DeletionKind> visitOp(SequenceClosureOp op) {
+  FailureOr<DeletionKind> visitOp(GetSequenceOp op) {
     SmallVector<ElaboratorValue> replacements;
-    for (auto replacement : op.getArgs())
+    state[op.getResult()] =
+        sharedState.internalizer.internalize<SequenceStorage>(
+            op.getSequenceAttr(), std::move(replacements));
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(SubstituteSequenceOp op) {
+    auto *seq = get<SequenceStorage *>(op.getSequence());
+
+    SmallVector<ElaboratorValue> replacements(seq->args);
+    for (auto replacement : op.getReplacements())
       replacements.push_back(state.at(replacement));
 
     state[op.getResult()] =
         sharedState.internalizer.internalize<SequenceStorage>(
-            op.getSequenceAttr(), std::move(replacements));
+            seq->familyName, std::move(replacements));
+
     return DeletionKind::Delete;
   }
 
@@ -1334,10 +1344,10 @@ LogicalResult ElaborationPass::inlineSequences(TestOp testOp,
     if (!randSeqOp)
       return embedOp->emitError("sequence operand not directly defined by "
                                 "'rtg.randomize_sequence' op");
-    auto getSeqOp = randSeqOp.getSequence().getDefiningOp<SequenceClosureOp>();
+    auto getSeqOp = randSeqOp.getSequence().getDefiningOp<GetSequenceOp>();
     if (!getSeqOp)
       return randSeqOp->emitError(
-          "sequence operand not directly defined by 'rtg.sequence_closure' op");
+          "sequence operand not directly defined by 'rtg.get_sequence' op");
 
     auto seqOp = table.lookup<SequenceOp>(getSeqOp.getSequenceAttr());
 

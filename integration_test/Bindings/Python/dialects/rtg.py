@@ -53,17 +53,18 @@ with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
   m = Module.create()
   with InsertionPoint(m.body):
-    seq = rtg.SequenceOp('sequence_name',
-                         TypeAttr.get(rtg.SequenceType.get([])))
+    seq = rtg.SequenceOp('sequence_name', TypeAttr.get(rtg.SequenceType.get()))
     Block.create_at_start(seq.bodyRegion, [])
 
     test = rtg.TestOp('test_name', TypeAttr.get(rtg.DictType.get()))
     block = Block.create_at_start(test.bodyRegion, [])
     with InsertionPoint(block):
-      seq_closure = rtg.SequenceClosureOp('sequence_name', [])
+      seq_get = rtg.GetSequenceOp(rtg.SequenceType.get(), 'sequence_name')
+      rtg.RandomizeSequenceOp(seq_get)
 
   # CHECK: rtg.test @test_name : !rtg.dict<> {
-  # CHECK-NEXT:   rtg.sequence_closure
+  # CHECK-NEXT:   [[SEQ:%.+]] = rtg.get_sequence @sequence_name
+  # CHECK-NEXT:   rtg.randomize_sequence [[SEQ]]
   # CHECK-NEXT: }
   print(m)
 

@@ -59,30 +59,22 @@ def SequenceOp : RTGOp<"sequence", [
   let hasRegionVerifier = 1;
 }
 
-def SequenceClosureOp : RTGOp<"sequence_closure", [
+def GetSequenceOp : RTGOp<"get_sequence", [
   Pure,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
-  let summary = "create a sequence closure with the provided arguments";
+  let summary = "create a sequence value";
   let description = [{
-    This operation creates a closure object for the provided sequence and
-    arguments. This allows sequences to be passed around as an SSA value.
-    For example, it can be inserted into a set and selected at random which
-    is one of the main ways to do randomization. Not having to deal with
-    sequence arguments after randomly selecting a sequence simplifies the
-    problem of coming up with values to pass as arguments, but also provides a
-    way for the user to constrain the arguments at the location where they are
-    added to the set. In the future, it can also be possible to add sequence
-    handles directly to a set and randomly pick arguments at the invokation
-    site.
+    This operation creates a sequence value referring to the provided sequence
+    by symbol. It allows sequences to be passed around as an SSA value. For
+    example, it can be inserted into a set and selected at random which is one
+    of the main ways to do randomization.
   }];
 
-  let arguments = (ins SymbolNameAttr:$sequence, Variadic<AnyType>:$args);
-  let results = (outs FullySubstitutedSequenceType:$ref);
+  let arguments = (ins SymbolNameAttr:$sequence);
+  let results = (outs SequenceType:$ref);
 
-  let assemblyFormat = [{
-    $sequence (`(` $args^ `:` qualified(type($args)) `)`)? attr-dict
-  }];
+  let assemblyFormat = "$sequence `:` qualified(type($ref)) attr-dict";
 }
 
 def RandomizeSequenceOp : RTGOp<"randomize_sequence", []> {
@@ -105,9 +97,33 @@ def RandomizeSequenceOp : RTGOp<"randomize_sequence", []> {
   }];
 
   let arguments = (ins FullySubstitutedSequenceType:$sequence);
+
   let results = (outs RandomizedSequenceType:$randomizedSequence);
 
   let assemblyFormat = "$sequence attr-dict";
+}
+
+def SubstituteSequenceOp : RTGOp<"substitute_sequence", [
+  Pure,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "partially substitute arguments of a sequence family";
+  let description = [{
+    This operation substitutes the first N of the M >= N arguments of the given
+    sequence family, where N is the size of provided argument substitution list.
+    A new sequence (if N == M) or sequence family with M-N will be returned.
+    
+    Not having to deal with sequence arguments after randomly selecting a
+    sequence simplifies the problem of coming up with values to pass as
+    arguments, but also provides a way for the user to constrain the arguments
+    at the location where they are added to a set or bag.
+  }];
+
+  let arguments = (ins SequenceType:$sequence, Variadic<AnyType>:$replacements);
+  let results = (outs SequenceType:$result);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
 
 def EmbedSequenceOp : RTGOp<"embed_sequence", []> {
@@ -417,7 +433,7 @@ def TestOp : RTGOp<"test", [
     `rtg.sequence`'s body with the exception of the block arguments.
     The arguments must match the fields of the dict type in the target attribute
     exactly. The test must not have any additional arguments and cannot be
-    referenced by an `rtg.sequence_closure` operation.
+    referenced by an `rtg.get_sequence` operation.
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name,

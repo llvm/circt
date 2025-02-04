@@ -42,7 +42,8 @@ public:
             // RTG tests
             TestOp, TargetOp, YieldOp,
             // Sequences
-            SequenceOp, SequenceClosureOp, RandomizeSequenceOp, EmbedSequenceOp,
+            SequenceOp, GetSequenceOp, SubstituteSequenceOp,
+            RandomizeSequenceOp, EmbedSequenceOp,
             // Sets
             SetCreateOp, SetSelectRandomOp, SetDifferenceOp, SetUnionOp,
             SetSizeOp>([&](auto expr) -> ResultType {
@@ -87,7 +88,8 @@ public:
   }
 
   HANDLE(SequenceOp, Unhandled);
-  HANDLE(SequenceClosureOp, Unhandled);
+  HANDLE(GetSequenceOp, Unhandled);
+  HANDLE(SubstituteSequenceOp, Unhandled);
   HANDLE(RandomizeSequenceOp, Unhandled);
   HANDLE(EmbedSequenceOp, Unhandled);
   HANDLE(SetCreateOp, Unhandled);
