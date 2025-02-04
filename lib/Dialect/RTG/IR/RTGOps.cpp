@@ -194,6 +194,24 @@ void SubstituteSequenceOp::print(OpAsmPrinter &p) {
 }
 
 //===----------------------------------------------------------------------===//
+// InterleaveSequencesOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult InterleaveSequencesOp::verify() {
+  if (getSequences().empty())
+    return emitOpError("must have at least one sequence in the list");
+
+  return success();
+}
+
+OpFoldResult InterleaveSequencesOp::fold(FoldAdaptor adaptor) {
+  if (getSequences().size() == 1)
+    return getSequences()[0];
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // SetCreateOp
 //===----------------------------------------------------------------------===//
 

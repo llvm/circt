@@ -134,3 +134,11 @@ rtg.sequence @integerHandlingOps(%arg0: index, %arg1: index) {
   // CHECK: rtg.random_number_in_range [%arg0, %arg1)
   rtg.random_number_in_range [%arg0, %arg1)
 }
+
+// CHECK-LABEL: rtg.test @interleaveSequences
+rtg.test @interleaveSequences(seq0 = %seq0: !rtg.randomized_sequence, seq1 = %seq1: !rtg.randomized_sequence) {
+  // CHECK: rtg.interleave_sequences %seq0 {rtg.some_attr}
+  rtg.interleave_sequences %seq0 {rtg.some_attr}
+  // CHECK: rtg.interleave_sequences %seq0, %seq1 batch 4 {rtg.some_attr}
+  rtg.interleave_sequences %seq0, %seq1 batch 4 {rtg.some_attr}
+}
