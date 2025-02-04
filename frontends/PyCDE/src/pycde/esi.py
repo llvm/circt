@@ -129,6 +129,22 @@ def Cosim(decl: ServiceDecl, clk, rst):
   decl.instantiate_builtin(AppID("cosim", 0), "cosim", [], [clk, rst])
 
 
+class EngineModule(Module):
+  """A module which implements an ESI engines. Engines have the responsibility
+  of transporting messages between two different devices."""
+
+  @property
+  def TypeName(self):
+    assert False, "Engine modules must have a TypeName property."
+
+  def __init__(self, appid: AppID, **inputs):
+    super(EngineModule, self).__init__(appid=appid, **inputs)
+
+  @property
+  def appid(self) -> AppID:
+    return AppID(self.inst.attributes["esi.appid"])
+
+
 class NamedChannelValue(ChannelSignal):
   """A ChannelValue with the name of the client request."""
 
@@ -189,12 +205,46 @@ class _OutputBundleSetter(AssignableSignal):
           f"Channel type mismatch. Expected {self.type}, got {new_value.type}.")
     msft.replaceAllUsesWith(self._bundle_to_replace, new_value.value)
     self._bundle_to_replace = None
-    self.req = None
 
   def cleanup(self):
     """Null out all the references to all the ops to allow them to be GC'd."""
     self.req = None
     self.rec = None
+
+
+class EngineServiceRecord:
+  """Represents a record in the engine section of the manifest."""
+
+  def __init__(self,
+               engine: EngineModule,
+               details: Optional[Dict[str, object]] = None):
+    rec_appid = AppID(f"{engine.appid.name}_record", engine.appid.index)
+    self._rec = raw_esi.ServiceImplRecordOp(appID=rec_appid._appid,
+                                            serviceImplName=engine.TypeName,
+                                            implDetails=details,
+                                            isEngine=True)
+    self._rec.regions[0].blocks.append()
+
+  def add_record(self,
+                 client: _OutputBundleSetter,
+                 channel_assignments: Optional[Dict] = None,
+                 details: Optional[Dict[str, object]] = None):
+    """Add a record to the manifest for this client request. Generally used to
+    give the runtime necessary information about how to connect to the client
+    through the generated service. For instance, offsets into an MMIO space."""
+
+    channel_assignments = optional_dict_to_dict_attr(channel_assignments)
+    details = optional_dict_to_dict_attr(details)
+
+    with get_user_loc(), ir.InsertionPoint.at_block_begin(
+        self._rec.reqDetails.blocks[0]):
+      raw_esi.ServiceImplClientRecordOp(
+          client.req.relativeAppIDPath,
+          client.req.servicePort,
+          ir.TypeAttr.get(client.req.toClient.type),
+          channelAssignments=channel_assignments,
+          implDetails=details,
+      )
 
 
 class _ServiceGeneratorBundles:
@@ -219,6 +269,14 @@ class _ServiceGeneratorBundles:
         for idx, req in enumerate(to_client_reqs)
     ]
     assert len(self._output_reqs) == len(req.results) - num_output_ports
+
+  def emit_engine(self,
+                  engine: EngineModule,
+                  details: Dict[str, object] = None):
+    """Emit and return an engine record."""
+    details = optional_dict_to_dict_attr(details)
+    with get_user_loc(), ir.InsertionPoint(self._rec):
+      return EngineServiceRecord(engine, details)
 
   @property
   def to_client_reqs(self) -> List[_OutputBundleSetter]:
