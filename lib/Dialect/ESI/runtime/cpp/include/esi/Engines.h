@@ -42,9 +42,9 @@ class Engine {
 public:
   virtual ~Engine() = default;
   /// Start the engine, if applicable.
-  virtual void connect(){};
+  virtual void connect() {};
   /// Stop the engine, if applicable.
-  virtual void disconnect(){};
+  virtual void disconnect() {};
   /// Get a port for a channel, from the cache if it exists or create it. An
   /// engine may override this method if different behavior is desired.
   virtual ChannelPort &requestPort(AppIDPath idPath,
