@@ -1189,6 +1189,18 @@ LogicalResult PowUOp::canonicalize(PowUOp op, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
+// SubOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
+  if (auto intAttr = dyn_cast_or_null<FVIntegerAttr>(adaptor.getRhs()))
+    if (intAttr.getValue().isZero())
+      return getLhs();
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

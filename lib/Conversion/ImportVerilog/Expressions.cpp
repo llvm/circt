@@ -430,23 +430,54 @@ struct RvalueExprVisitor {
     return builder.create<moore::ReplicateOp>(loc, type, value);
   }
 
+  Value getSelectIndex(Value index, const slang::ConstantRange &range) const {
+    auto indexType = cast<moore::UnpackedType>(index.getType());
+    auto bw = std::max(llvm::Log2_32_Ceil(std::abs(range.upper())),
+                       indexType.getBitSize().value());
+    auto intType =
+        moore::IntType::get(index.getContext(), bw, indexType.getDomain());
+
+    if (range.isLittleEndian()) {
+      if (range.lower() == 0)
+        return index;
+
+      Value newIndex =
+          builder.createOrFold<moore::ConversionOp>(loc, intType, index);
+      Value offset =
+          builder.create<moore::ConstantOp>(loc, intType, range.lower());
+      return builder.createOrFold<moore::SubOp>(loc, newIndex, offset);
+    }
+
+    if (range.upper() == 0)
+      return builder.createOrFold<moore::NegOp>(loc, index);
+
+    Value newIndex =
+        builder.createOrFold<moore::ConversionOp>(loc, intType, index);
+    Value offset =
+        builder.create<moore::ConstantOp>(loc, intType, range.upper());
+    return builder.createOrFold<moore::SubOp>(loc, offset, newIndex);
+  }
+
   // Handle single bit selections.
   Value visit(const slang::ast::ElementSelectExpression &expr) {
     auto type = context.convertType(*expr.type);
     auto value = context.convertRvalueExpression(expr.value());
     if (!type || !value)
       return {};
+    auto range = expr.value().type->getFixedRange();
     if (auto *constValue = expr.selector().constant) {
       assert(!constValue->hasUnknown());
       assert(constValue->size() <= 32);
 
       auto lowBit = constValue->integer().as<uint32_t>().value();
-      return builder.create<moore::ExtractOp>(loc, type, value, lowBit);
+      return builder.create<moore::ExtractOp>(loc, type, value,
+                                              range.translateIndex(lowBit));
     }
     auto lowBit = context.convertRvalueExpression(expr.selector());
     if (!lowBit)
       return {};
-    return builder.create<moore::DynExtractOp>(loc, type, value, lowBit);
+    return builder.create<moore::DynExtractOp>(loc, type, value,
+                                               getSelectIndex(lowBit, range));
   }
 
   // Handle range bits selections.
@@ -509,9 +540,12 @@ struct RvalueExprVisitor {
       else
         dynLowBit = context.convertRvalueExpression(expr.left());
     }
+    auto range = expr.value().type->getFixedRange();
     if (leftConst && rightConst)
-      return builder.create<moore::ExtractOp>(loc, type, value, constLowBit);
-    return builder.create<moore::DynExtractOp>(loc, type, value, dynLowBit);
+      return builder.create<moore::ExtractOp>(
+          loc, type, value, range.translateIndex(constLowBit));
+    return builder.create<moore::DynExtractOp>(
+        loc, type, value, getSelectIndex(dynLowBit, range));
   }
 
   Value visit(const slang::ast::MemberAccessExpression &expr) {

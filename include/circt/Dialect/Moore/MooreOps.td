@@ -708,6 +708,8 @@ def SubOp : BinaryOpBase<"sub"> {
 
     See IEEE 1800-2017 § 11.4.3 "Arithmetic operators".
   }];
+
+  let hasFolder = 1;
 }
 
 def MulOp : BinaryOpBase<"mul", [Commutative]> {
