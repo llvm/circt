@@ -1008,6 +1008,31 @@ moore.module @StringConstant() {
   }
 }
 
+// CHECK-LABEL: func.func @RecurciveConditional
+func.func @RecurciveConditional(%arg0 : !moore.l1, %arg1 : !moore.l1) {
+  // CHECK: [[C_2:%.+]] = hw.constant -2 : i2
+  // CHECK: [[C_1:%.+]] = hw.constant 1 : i2
+  // CHECK: [[C_0:%.+]] = hw.constant 0 : i2
+  %c_2 = moore.constant -2 : l2
+  %c_1 = moore.constant 1 : l2
+  %c_0 = moore.constant 0 : l2
+
+  // CHECK: [[MUX0:%.+]] = comb.mux %arg1, [[C_0]], [[C_1]] : i2
+  // CHECK: [[MUX1:%.+]] = comb.mux %arg0, [[MUX0]], [[C_2]] : i2
+  %0 = moore.conditional %arg0 : l1 -> l2 {
+    %1 = moore.conditional %arg1 : l1 -> l2 {
+      moore.yield %c_0 : l2
+    } {
+      moore.yield %c_1 : l2
+    }
+    moore.yield %1 : l2
+  } {
+    moore.yield %c_2 : l2
+  }
+
+  return
+}
+
 // CHECK-LABEL: func.func @Conversions
 func.func @Conversions(%arg0: !moore.i16, %arg1: !moore.l16) {
   // CHECK: [[TMP:%.+]] = comb.extract %arg0 from 0 : (i16) -> i8
