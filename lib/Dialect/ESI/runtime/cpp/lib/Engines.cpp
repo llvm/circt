@@ -16,6 +16,36 @@
 
 using namespace esi;
 
+namespace {
+/// Created by default when the DMA engine cannot be resolved. Throws the error
+/// upon trying to connect and creates ports which throw errors on their
+/// connection attempts.
+class UnknownEngine : public Engine {
+public:
+  UnknownEngine(AcceleratorConnection &conn, std::string engineName)
+      : engineName(engineName) {}
+  void connect() override {
+    throw std::runtime_error("Unknown engine '" + engineName + "'");
+  }
+
+  std::unique_ptr<ChannelPort> createPort(AppIDPath idPath,
+                                          const std::string &channelName,
+                                          BundleType::Direction dir,
+                                          const Type *type) override {
+    if (BundlePort::isWrite(dir))
+      return std::make_unique<UnknownWriteChannelPort>(
+          type,
+          "Unknown engine '" + engineName + "': cannot create write port");
+    else
+      return std::make_unique<UnknownReadChannelPort>(
+          type, "Unknown engine '" + engineName + "': cannot create read port");
+  }
+
+protected:
+  std::string engineName;
+};
+} // namespace
+
 ChannelPort &Engine::requestPort(AppIDPath idPath,
                                  const std::string &channelName,
                                  BundleType::Direction dir, const Type *type) {
@@ -61,7 +91,7 @@ registry::createEngine(AcceleratorConnection &conn,
                        const HWClientDetails &clients) {
   auto it = engineRegistry.find(dmaEngineName);
   if (it == engineRegistry.end())
-    throw std::runtime_error("Unknown engine: " + dmaEngineName);
+    return std::make_unique<UnknownEngine>(conn, dmaEngineName);
   return it->second(conn, idPath, details, clients);
 }
 
