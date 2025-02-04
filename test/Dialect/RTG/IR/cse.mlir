@@ -2,7 +2,7 @@
 
 // CHECK-LABEL: rtg.sequence @seq
 // CHECK-SAME: attributes {rtg.some_attr} {
-rtg.sequence @seq0 attributes {rtg.some_attr} {
+rtg.sequence @seq0() attributes {rtg.some_attr} {
   // CHECK-NEXT: arith.constant
   %arg = arith.constant 1 : index
   // CHECK-NEXT: rtg.label_decl "label_string_{0}_{1}", %{{.*}}, %{{.*}}

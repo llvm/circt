@@ -41,12 +41,11 @@ with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
   m = Module.create()
   with InsertionPoint(m.body):
-    seq = rtg.SequenceOp('seq')
     setTy = rtg.SetType.get(rtg.SequenceType.get())
+    seq = rtg.SequenceOp('seq', TypeAttr.get(rtg.SequenceType.get([setTy])))
     seqBlock = Block.create_at_start(seq.bodyRegion, [setTy])
 
-  # CHECK: rtg.sequence @seq {
-  # CHECK: ^bb{{.*}}(%{{.*}}: !rtg.set<!rtg.sequence>):
+  # CHECK: rtg.sequence @seq(%{{.*}}: !rtg.set<!rtg.sequence>) {
   # CHECK: }
   print(m)
 
@@ -54,7 +53,8 @@ with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
   m = Module.create()
   with InsertionPoint(m.body):
-    seq = rtg.SequenceOp('sequence_name')
+    seq = rtg.SequenceOp('sequence_name',
+                         TypeAttr.get(rtg.SequenceType.get([])))
     Block.create_at_start(seq.bodyRegion, [])
 
     test = rtg.TestOp('test_name', TypeAttr.get(rtg.DictType.get()))
@@ -89,12 +89,14 @@ with Context() as ctx, Location.unknown():
     setTy = rtg.SetType.get(indexTy)
     bagTy = rtg.BagType.get(indexTy)
     ireg = rtgtest.IntegerRegisterType.get()
-    seq = rtg.SequenceOp('seq')
+    seq = rtg.SequenceOp(
+        'seq',
+        TypeAttr.get(
+            rtg.SequenceType.get([sequenceTy, labelTy, setTy, bagTy, ireg])))
     Block.create_at_start(seq.bodyRegion,
                           [sequenceTy, labelTy, setTy, bagTy, ireg])
 
-  # CHECK: rtg.sequence @seq
-  # CHECK: (%{{.*}}: !rtg.sequence, %{{.*}}: !rtg.label, %{{.*}}: !rtg.set<index>, %{{.*}}: !rtg.bag<index>, %{{.*}}: !rtgtest.ireg):
+  # CHECK: rtg.sequence @seq(%{{.*}}: !rtg.sequence, %{{.*}}: !rtg.label, %{{.*}}: !rtg.set<index>, %{{.*}}: !rtg.bag<index>, %{{.*}}: !rtgtest.ireg)
   print(m)
 
 with Context() as ctx, Location.unknown():
@@ -189,7 +191,7 @@ with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
   m = Module.create()
   with InsertionPoint(m.body):
-    seq = rtg.SequenceOp('seq')
+    seq = rtg.SequenceOp('seq', TypeAttr.get(rtg.SequenceType.get([])))
     block = Block.create_at_start(seq.bodyRegion, [])
     with InsertionPoint(block):
       l = rtg.label_decl("label", [])

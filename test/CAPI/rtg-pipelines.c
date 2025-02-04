@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
   mlirDialectHandleRegisterDialect(mlirGetDialectHandle__rtg__(), ctx);
 
   MlirModule moduleOp = mlirModuleCreateParse(
-      ctx, mlirStringRefCreateFromCString("rtg.sequence @seq {\n"
+      ctx, mlirStringRefCreateFromCString("rtg.sequence @seq() {\n"
                                           "}\n"
                                           "rtg.test @test : !rtg.dict<> {\n"
                                           "  %0 = rtg.sequence_closure @seq\n"

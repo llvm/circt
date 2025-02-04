@@ -10,12 +10,23 @@ rtg.sequence_closure @seq0
 
 // -----
 
-rtg.sequence @seq0 {
-^bb0(%arg0: i32):
-}
+rtg.sequence @seq0(%arg0: i32) { }
 
 // expected-error @below {{referenced 'rtg.sequence' op's argument types must match 'args' types}}
 rtg.sequence_closure @seq0
+
+// -----
+
+// expected-error @below {{sequence type does not match block argument types}}
+"rtg.sequence"()<{sym_name="seq0", sequenceType=!rtg.sequence<i32>}>({^bb0:}) : () -> ()
+
+// -----
+
+// expected-note @below {{prior use here}}
+rtg.sequence @seq0(%arg0: !rtg.sequence<i32>) {
+  // expected-error @below {{use of value '%arg0' expects different type than prior uses: '!rtg.sequence' vs '!rtg.sequence<i32>'}}
+  rtg.invoke_sequence %arg0
+}
 
 // -----
 
@@ -53,30 +64,28 @@ rtg.test @test : !rtg.dict<"": i32> {
 
 // -----
 
-rtg.sequence @seq {
-^bb0(%arg0: i32, %arg1: i64, %arg2: index):
+rtg.sequence @seq(%arg0: i32, %arg1: i64, %arg2: index) {
   // expected-error @below {{types of all elements must match}}
   "rtg.bag_create"(%arg0, %arg1, %arg2, %arg2){} : (i32, i64, index, index) -> !rtg.bag<i32>
 }
 
 // -----
 
-rtg.sequence @seq {
-^bb0(%arg0: i64, %arg1: i64, %arg2: index):
+rtg.sequence @seq(%arg0: i64, %arg1: i64, %arg2: index) {
   // expected-error @below {{operand types must match bag element type}}
   "rtg.bag_create"(%arg0, %arg1, %arg2, %arg2){} : (i64, i64, index, index) -> !rtg.bag<i32>
 }
 
 // -----
 
-rtg.sequence @seq {
+rtg.sequence @seq() {
   // expected-error @below {{expected 1 or more operands, but found 0}}
   rtg.set_union : !rtg.set<i32>
 }
 
 // -----
 
-rtg.sequence @seq {
+rtg.sequence @seq() {
   // expected-error @below {{expected 1 or more operands, but found 0}}
   rtg.bag_union : !rtg.bag<i32>
 }

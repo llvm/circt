@@ -29,7 +29,16 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(RTG, rtg);
 MLIR_CAPI_EXPORTED bool rtgTypeIsASequence(MlirType type);
 
 /// Creates an RTG sequence type in the context.
-MLIR_CAPI_EXPORTED MlirType rtgSequenceTypeGet(MlirContext ctxt);
+MLIR_CAPI_EXPORTED MlirType rtgSequenceTypeGet(MlirContext ctxt,
+                                               intptr_t numElements,
+                                               MlirType const *elementTypes);
+
+/// The number of substitution elements of the RTG sequence.
+MLIR_CAPI_EXPORTED unsigned rtgSequenceTypeGetNumElements(MlirType type);
+
+/// The type of of the substitution element at the given index.
+MLIR_CAPI_EXPORTED MlirType rtgSequenceTypeGetElement(MlirType type,
+                                                      unsigned i);
 
 /// If the type is an RTG label.
 MLIR_CAPI_EXPORTED bool rtgTypeIsALabel(MlirType type);

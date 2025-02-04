@@ -15,13 +15,24 @@
 #include "mlir-c/BuiltinTypes.h"
 
 static void testSequenceType(MlirContext ctx) {
-  MlirType sequenceTy = rtgSequenceTypeGet(ctx);
+  MlirType sequenceTy = rtgSequenceTypeGet(ctx, 0, NULL);
 
   // CHECK: is_sequence
   fprintf(stderr, rtgTypeIsASequence(sequenceTy) ? "is_sequence\n"
                                                  : "isnot_sequence\n");
   // CHECK: !rtg.sequence
   mlirTypeDump(sequenceTy);
+
+  MlirType sequenceWithArgsTy = rtgSequenceTypeGet(ctx, 1, &sequenceTy);
+  // CHECK: is_sequence
+  fprintf(stderr, rtgTypeIsASequence(sequenceWithArgsTy) ? "is_sequence\n"
+                                                         : "isnot_sequence\n");
+  // CHECK: 1
+  fprintf(stderr, "%d\n", rtgSequenceTypeGetNumElements(sequenceWithArgsTy));
+  // CHECK: !rtg.sequence
+  mlirTypeDump(rtgSequenceTypeGetElement(sequenceWithArgsTy, 0));
+  // CHECK: !rtg.sequence<!rtg.sequence>
+  mlirTypeDump(sequenceWithArgsTy);
 }
 
 static void testLabelType(MlirContext ctx) {

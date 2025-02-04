@@ -26,10 +26,19 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
   mlir_type_subclass(m, "SequenceType", rtgTypeIsASequence)
       .def_classmethod(
           "get",
-          [](nb::object cls, MlirContext ctxt) {
-            return cls(rtgSequenceTypeGet(ctxt));
+          [](nb::object cls, std::vector<MlirType> &elementTypes,
+             MlirContext ctxt) {
+            return cls(rtgSequenceTypeGet(ctxt, elementTypes.size(),
+                                          elementTypes.data()));
           },
-          nb::arg("self"), nb::arg("ctxt") = nullptr);
+          nb::arg("self"), nb::arg("elementTypes") = std::vector<MlirType>(),
+          nb::arg("ctxt") = nullptr)
+      .def_property_readonly(
+          "num_elements",
+          [](MlirType self) { return rtgSequenceTypeGetNumElements(self); })
+      .def("get_element", [](MlirType self, unsigned i) {
+        return rtgSequenceTypeGetElement(self, i);
+      });
 
   mlir_type_subclass(m, "LabelType", rtgTypeIsALabel)
       .def_classmethod(

@@ -19,6 +19,77 @@ using namespace circt;
 using namespace rtg;
 
 //===----------------------------------------------------------------------===//
+// SequenceOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SequenceOp::verifyRegions() {
+  if (TypeRange(getSequenceType().getElementTypes()) !=
+      getBody()->getArgumentTypes())
+    return emitOpError("sequence type does not match block argument types");
+
+  return success();
+}
+
+ParseResult SequenceOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse the name as a symbol.
+  if (parser.parseSymbolName(
+          result.getOrAddProperties<SequenceOp::Properties>().sym_name))
+    return failure();
+
+  // Parse the function signature.
+  SmallVector<OpAsmParser::Argument> arguments;
+  if (parser.parseArgumentList(arguments, OpAsmParser::Delimiter::Paren,
+                               /*allowType=*/true, /*allowAttrs=*/true))
+    return failure();
+
+  SmallVector<Type> argTypes;
+  SmallVector<Location> argLocs;
+  argTypes.reserve(arguments.size());
+  argLocs.reserve(arguments.size());
+  for (auto &arg : arguments) {
+    argTypes.push_back(arg.type);
+    argLocs.push_back(arg.sourceLoc ? *arg.sourceLoc : result.location);
+  }
+  Type type = SequenceType::get(result.getContext(), argTypes);
+  result.getOrAddProperties<SequenceOp::Properties>().sequenceType =
+      TypeAttr::get(type);
+
+  auto loc = parser.getCurrentLocation();
+  if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
+    return failure();
+  if (failed(verifyInherentAttrs(result.name, result.attributes, [&]() {
+        return parser.emitError(loc)
+               << "'" << result.name.getStringRef() << "' op ";
+      })))
+    return failure();
+
+  std::unique_ptr<Region> bodyRegionRegion = std::make_unique<Region>();
+  if (parser.parseRegion(*bodyRegionRegion, arguments))
+    return failure();
+
+  if (bodyRegionRegion->empty()) {
+    bodyRegionRegion->emplaceBlock();
+    bodyRegionRegion->addArguments(argTypes, argLocs);
+  }
+  result.addRegion(std::move(bodyRegionRegion));
+
+  return success();
+}
+
+void SequenceOp::print(OpAsmPrinter &p) {
+  p << ' ';
+  p.printSymbolName(getSymNameAttr().getValue());
+  p << "(";
+  llvm::interleaveComma(getBody()->getArguments(), p,
+                        [&](auto arg) { p.printRegionArgument(arg); });
+  p << ")";
+  p.printOptionalAttrDictWithKeyword(
+      (*this)->getAttrs(), {getSymNameAttrName(), getSequenceTypeAttrName()});
+  p << ' ';
+  p.printRegion(getBodyRegion(), /*printEntryBlockArgs=*/false);
+}
+
+//===----------------------------------------------------------------------===//
 // SequenceClosureOp
 //===----------------------------------------------------------------------===//
 
@@ -31,7 +102,8 @@ SequenceClosureOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
            << "'" << getSequence()
            << "' does not reference a valid 'rtg.sequence' operation";
 
-  if (seq.getBodyRegion().getArgumentTypes() != getArgs().getTypes())
+  if (TypeRange(seq.getSequenceType().getElementTypes()) !=
+      getArgs().getTypes())
     return emitOpError("referenced 'rtg.sequence' op's argument types must "
                        "match 'args' types");
 

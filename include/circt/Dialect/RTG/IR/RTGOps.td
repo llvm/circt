@@ -50,12 +50,13 @@ def SequenceOp : RTGOp<"sequence", [
     stronger top-level isolation guarantees.
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name);
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       TypeAttrOf<SequenceType>:$sequenceType);
+
   let regions = (region SizedRegion<1>:$bodyRegion);
 
-  let assemblyFormat = [{
-    $sym_name attr-dict-with-keyword $bodyRegion
-  }];
+  let hasCustomAssemblyFormat = 1;
+  let hasRegionVerifier = 1;
 }
 
 def SequenceClosureOp : RTGOp<"sequence_closure", [
@@ -77,7 +78,7 @@ def SequenceClosureOp : RTGOp<"sequence_closure", [
   }];
 
   let arguments = (ins SymbolNameAttr:$sequence, Variadic<AnyType>:$args);
-  let results = (outs SequenceType:$ref);
+  let results = (outs FullySubstitutedSequenceType:$ref);
 
   let assemblyFormat = [{
     $sequence (`(` $args^ `:` qualified(type($args)) `)`)? attr-dict
@@ -94,7 +95,7 @@ def InvokeSequenceOp : RTGOp<"invoke_sequence", []> {
     were directly inlined relacing this operation.
   }];
 
-  let arguments = (ins SequenceType:$sequence);
+  let arguments = (ins FullySubstitutedSequenceType:$sequence);
 
   let assemblyFormat = "$sequence attr-dict";
 }
