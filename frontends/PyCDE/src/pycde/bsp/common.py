@@ -15,7 +15,7 @@ from ..support import clog2
 from ..types import (Array, Bits, Bundle, BundledChannel, Channel,
                      ChannelDirection, StructType, Type, UInt)
 
-from typing import Dict, List, Tuple
+from typing import Callable, Dict, List, Tuple
 import typing
 
 MagicNumber = 0x207D98E5_E5100E51  # random + ESI__ESI
@@ -727,3 +727,77 @@ def ChannelHostMem(read_width: int,
         req.assign(getattr(write_proc, write_proc_module.reqPortMap[req]))
 
   return ChannelHostMemImpl
+
+
+@modparams
+def DummyToHostEngine(client_type: Type) -> type['DummyToHostEngineImpl']:
+  """Create a fake DMA engine which just throws everything away."""
+
+  class DummyToHostEngineImpl(Module):
+    clk = Clock()
+    rst = Reset()
+    input_channel = InputChannel(client_type)
+
+    @generator
+    def build(ports):
+      pass
+
+  return DummyToHostEngineImpl
+
+
+@modparams
+def DummyFromHostEngine(client_type: Type) -> type['DummyFromHostEngineImpl']:
+  """Create a fake DMA engine which just never produces messages."""
+
+  class DummyFromHostEngineImpl(Module):
+    clk = Clock()
+    rst = Reset()
+    output_channel = OutputChannel(client_type)
+
+    @generator
+    def build(ports):
+      valid = Bits(1)(0)
+      data = Bits(client_type.bitwidth)(0).bitcast(client_type)
+      channel, ready = Channel(client_type).wrap(data, valid)
+      ports.output_channel = channel
+
+  return DummyFromHostEngineImpl
+
+
+def ChannelEngineService(
+    to_host_engine_gen: Callable,
+    from_host_engine_gen: Callable) -> type['ChannelEngineService']:
+  """Returns a channel service implementation which calls
+  to_host_engine_gen(<client_type>) or from_host_engine_gen(<client_type>) to
+  generate the to_host and from_host engines for each channel. Does not support
+  engines which can service multiple clients at once."""
+
+  class ChannelEngineService(esi.ServiceImplementation):
+    """Service implementation which services the clients via a per-channel DMA
+    engine."""
+
+    clk = Clock()
+    rst = Reset()
+
+    @generator
+    def build(ports, bundles: esi._ServiceGeneratorBundles):
+      for bundle in bundles.to_client_reqs:
+        bundle_type = bundle.type
+        to_channels = {}
+        # Create a DMA engine for each channel headed TO the client (from the host).
+        for bc in bundle_type.channels:
+          if bc.direction == ChannelDirection.TO:
+            engine = from_host_engine_gen(bc.channel.inner_type)(clk=ports.clk,
+                                                                 rst=ports.rst)
+            to_channels[bc.name] = engine.output_channel
+
+        client_bundle_sig, froms = bundle_type.pack(**to_channels)
+        bundle.assign(client_bundle_sig)
+
+        # Create a DMA engine for each channel headed FROM the client (to the host).
+        for bc in bundle_type.channels:
+          if bc.direction == ChannelDirection.FROM:
+            engine = to_host_engine_gen(bc.channel.inner_type)
+            engine(clk=ports.clk, rst=ports.rst, input_channel=froms[bc.name])
+
+  return ChannelEngineService

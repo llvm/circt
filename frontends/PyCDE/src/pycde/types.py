@@ -469,6 +469,8 @@ class BitVectorType(Type):
 class Bits(BitVectorType):
 
   def __new__(cls, width: int):
+    if width < 0:
+      raise ValueError("Bits width must be non-negative")
     return super(Bits, cls).__new__(
         cls,
         ir.IntegerType.get_signless(width),

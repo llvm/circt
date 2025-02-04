@@ -11,7 +11,8 @@ from ..support import clog2
 from ..types import Array, Bits, Channel, UInt
 from .. import esi
 
-from .common import ChannelHostMem, ChannelMMIO, Reset
+from .common import (ChannelEngineService, ChannelHostMem, ChannelMMIO,
+                     DummyFromHostEngine, DummyToHostEngine, Reset)
 
 import glob
 import pathlib
@@ -307,10 +308,14 @@ def XrtBSP(user_module):
     @generator
     def construct(ports):
       System.current().platform = "fpga"
+      clk = ports.ap_clk
       rst = ~ports.ap_resetn
 
       # Instantiate the user module.
       XrtChannelsTmplInst = XrtChannelTop(user_module)
+
+      ChannelEngineService(DummyToHostEngine, DummyFromHostEngine)(
+          None, appid=esi.AppID("__channel_engines"), clk=clk, rst=rst)
 
       # Set up the MMIO service and tie it to the AXI-lite channels.
       read_address, arready = Channel(
