@@ -1017,6 +1017,25 @@ public:
 
   FailureOr<DeletionKind> visitOp(LabelOp op) { return DeletionKind::Keep; }
 
+  FailureOr<DeletionKind> visitOp(RandomNumberInRangeOp op) {
+    size_t lower = get<size_t>(op.getLowerBound());
+    size_t upper = get<size_t>(op.getUpperBound()) - 1;
+    if (lower > upper)
+      return op->emitError("cannot select a number from an empty range");
+
+    if (auto intAttr =
+            op->getAttrOfType<IntegerAttr>("rtg.elaboration_custom_seed")) {
+      std::mt19937 customRng(intAttr.getInt());
+      state[op.getResult()] =
+          size_t(getUniformlyInRange(customRng, lower, upper));
+    } else {
+      state[op.getResult()] =
+          size_t(getUniformlyInRange(sharedState.rng, lower, upper));
+    }
+
+    return DeletionKind::Delete;
+  }
+
   FailureOr<DeletionKind> visitOp(scf::IfOp op) {
     bool cond = get<bool>(op.getCondition());
     auto &toElaborate = cond ? op.getThenRegion() : op.getElseRegion();

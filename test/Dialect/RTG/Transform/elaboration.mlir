@@ -374,6 +374,21 @@ rtg.test @labels : !rtg.dict<> {
   rtg.label local %l4
 }
 
+// CHECK-LABEL: rtg.test @randomIntegers
+rtg.test @randomIntegers : !rtg.dict<> {
+  %lower = index.constant 5
+  %upper = index.constant 10
+  %0 = rtg.random_number_in_range [%lower, %upper) {rtg.elaboration_custom_seed=0}
+  // CHECK-NEXT: [[V0:%.+]] = index.constant 5
+  // CHECK-NEXT: func.call @dummy2([[V0]])
+  func.call @dummy2(%0) : (index) -> ()
+
+  %1 = rtg.random_number_in_range [%lower, %upper) {rtg.elaboration_custom_seed=3}
+  // CHECK-NEXT: [[V1:%.+]] = index.constant 8
+  // CHECK-NEXT: func.call @dummy2([[V1]])
+  func.call @dummy2(%1) : (index) -> ()
+}
+
 // -----
 
 rtg.test @nestedRegionsNotSupported : !rtg.dict<> {
@@ -397,4 +412,15 @@ rtg.test @untypedAttributes : !rtg.dict<> {
   // expected-error @below {{materializer of dialect 'builtin' unable to materialize value for attribute '"str"'}}
   // expected-note @below {{while materializing value for operand#0}}
   func.call @dummy(%0) : (index) -> ()
+}
+
+// -----
+
+func.func @dummy2(%arg0: index) -> () {return}
+
+rtg.test @randomIntegers : !rtg.dict<> {
+  %c5 = index.constant 5
+  // expected-error @below {{cannot select a number from an empty range}}
+  %0 = rtg.random_number_in_range [%c5, %c5)
+  func.call @dummy2(%0) : (index) -> ()
 }
