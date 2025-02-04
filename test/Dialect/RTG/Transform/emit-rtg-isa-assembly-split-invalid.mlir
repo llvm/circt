@@ -2,5 +2,5 @@
 
 // expected-error @below {{'split-output' option only valid in combination with a valid 'path' argument}}
 module {
-  rtg.test @test0 : !rtg.dict<> {}
+  rtg.test @test0() {}
 }

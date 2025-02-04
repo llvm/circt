@@ -22,6 +22,7 @@ add_circt_dialect_library(CIRCTRTGDialect
   CIRCTRTGISAAssemblyTypeInterfacesIncGen
   CIRCTRTGOpInterfacesIncGen
   CIRCTRTGTypeInterfacesIncGen
+  CIRCTSupport
   MLIRRTGIncGen
     
   LINK_LIBS PUBLIC

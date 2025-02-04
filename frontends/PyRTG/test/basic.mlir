@@ -25,7 +25,7 @@ rtg.sequence @seq0() {
   rtg.label local %0
 }
 
-rtg.test @test0 : !rtg.dict<> {
+rtg.test @test0() {
   %0 = rtg.get_sequence @seq0 : !rtg.sequence
   %1 = rtg.randomize_sequence %0
   rtg.embed_sequence %1

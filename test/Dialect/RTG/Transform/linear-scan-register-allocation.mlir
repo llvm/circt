@@ -1,7 +1,7 @@
 // RUN: circt-opt --rtg-linear-scan-register-allocation --split-input-file --verify-diagnostics %s | FileCheck %s
 
 // CHECK-LABEL: @test0
-rtg.test @test0 : !rtg.dict<> {
+rtg.test @test0() {
   // CHECK: [[V0:%.+]] = rtg.fixed_reg #rtgtest.ra
   // CHECK: [[V1:%.+]] = rtg.fixed_reg #rtgtest.s1
   // CHECK: [[V2:%.+]] = rtg.fixed_reg #rtgtest.s0
@@ -22,7 +22,7 @@ rtg.test @test0 : !rtg.dict<> {
 }
 
 // CHECK-LABEL: @withFixedRegs
-rtg.test @withFixedRegs : !rtg.dict<> {
+rtg.test @withFixedRegs() {
   // CHECK: [[V0:%.+]] = rtg.fixed_reg #rtgtest.ra
   // CHECK: [[V1:%.+]] = rtg.fixed_reg #rtgtest.s1
   // CHECK: [[V2:%.+]] = rtg.fixed_reg #rtgtest.s0
@@ -44,7 +44,7 @@ rtg.test @withFixedRegs : !rtg.dict<> {
 
 // -----
 
-rtg.test @spilling : !rtg.dict<> {
+rtg.test @spilling() {
   %0 = rtg.virtual_reg [#rtgtest.ra]
   // expected-error @below {{need to spill this register, but not supported yet}}
   %1 = rtg.virtual_reg [#rtgtest.ra]
@@ -54,7 +54,7 @@ rtg.test @spilling : !rtg.dict<> {
 
 // -----
 
-rtg.test @unsupportedUser : !rtg.dict<> {
+rtg.test @unsupportedUser() {
   %0 = rtg.virtual_reg [#rtgtest.ra]
   // expected-error @below {{only operations implementing 'InstructionOpInterface are allowed to use registers}}
   rtg.set_create %0 : !rtgtest.ireg
