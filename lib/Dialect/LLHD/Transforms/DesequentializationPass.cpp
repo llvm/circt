@@ -714,6 +714,9 @@ void DesequentializationPass::runOnProcess(llhd::ProcessOp procOp) const {
 
     op.getEnableMutable().clear();
     op.getValueMutable().assign(regOut);
+    Value epsilonTime =
+        builder.create<llhd::ConstantTimeOp>(loc, 0, "ns", 0, 1);
+    op.getTimeMutable().assign(epsilonTime);
 
     LLVM_DEBUG(
         { llvm::dbgs() << "  Lowered Drive Operation successfully!\n\n"; });

@@ -7,10 +7,11 @@
 // CHECK-LABEL: @noResetNoEnable
 // CHECK-SAME: (inout [[CLK:%.+]] : i1, inout [[SIG:%.+]] : i1)
 hw.module @noResetNoEnable(inout %clk : i1, inout %sig : i1) {
+  // CHECK: [[T:%.+]] = llhd.constant_time <0ns, 0d, 1e>
   // CHECK: [[V0:%.+]] = llhd.prb [[CLK]]
   // CHECK: [[V1:%.+]] = seq.to_clock [[V0]]
   // CHECK: [[V2:%.+]] = seq.compreg %false{{.*}}, [[V1]]
-  // CHECK: llhd.drv [[SIG]], [[V2]] after
+  // CHECK: llhd.drv [[SIG]], [[V2]] after [[T]]
   %time = llhd.constant_time <0ns, 1d, 0e>
   %false = hw.constant false
   %true = hw.constant true
