@@ -47,7 +47,7 @@ public:
             RandomNumberInRangeOp,
             // Sequences
             SequenceOp, GetSequenceOp, SubstituteSequenceOp,
-            RandomizeSequenceOp, EmbedSequenceOp,
+            RandomizeSequenceOp, EmbedSequenceOp, InterleaveSequencesOp,
             // Sets
             SetCreateOp, SetSelectRandomOp, SetDifferenceOp, SetUnionOp,
             SetSizeOp>([&](auto expr) -> ResultType {
@@ -86,6 +86,7 @@ public:
   HANDLE(GetSequenceOp, Unhandled);
   HANDLE(SubstituteSequenceOp, Unhandled);
   HANDLE(RandomizeSequenceOp, Unhandled);
+  HANDLE(InterleaveSequencesOp, Unhandled);
   HANDLE(EmbedSequenceOp, Unhandled);
   HANDLE(RandomNumberInRangeOp, Unhandled);
   HANDLE(OnContextOp, Unhandled);

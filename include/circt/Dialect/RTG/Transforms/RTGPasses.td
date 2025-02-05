@@ -64,6 +64,22 @@ def EmitRTGISAAssemblyPass : Pass<"rtg-emit-isa-assembly", "mlir::ModuleOp"> {
   ];
 }
 
+def InlineSequencesPass : Pass<"rtg-inline-sequences", "mlir::ModuleOp"> {
+  let summary = "inline and interleave sequences";
+  let description = [{
+    Inline all sequences into tests and remove the 'rtg.sequence' operations.
+    Also computes and materializes all interleaved sequences
+    ('interleave_sequences' operation).
+  }];
+
+  let statistics = [
+    Statistic<"numSequencesInlined", "num-sequences-inlined",
+      "Number of sequences inlined into another sequence or test.">,
+    Statistic<"numSequencesInterleaved", "num-sequences-interleaved",
+      "Number of sequences interleaved with another sequence.">,
+  ];
+}
+
 def LinearScanRegisterAllocationPass : Pass<
     "rtg-linear-scan-register-allocation", "rtg::TestOp"> {
 
@@ -78,6 +94,20 @@ def LinearScanRegisterAllocationPass : Pass<
   let statistics = [
     Statistic<"numRegistersSpilled", "num-registers-spilled",
       "Number of registers spilled to the stack.">,
+  ];
+}
+
+def LowerUniqueLabelsPass : Pass<"rtg-lower-unique-labels", "mlir::ModuleOp"> {
+  let summary = "lower label_unique_decl to label_decl operations";
+  let description = [{
+    This pass lowers label_unique_decl operations to label_decl operations by
+    creating a unique label string based on all the existing unique and
+    non-unique label declarations in the module.
+  }];
+
+  let statistics = [
+    Statistic<"numLabelsLowered", "num-labels-lowered",
+      "Number of unique labels lowered to regular label declarations.">,
   ];
 }
 
