@@ -2200,6 +2200,29 @@ firrtl.circuit "Top" {
 }
 
 // -----
+// Try to read from an output property port with sink flow.
+firrtl.circuit "Top" {
+  // expected-note @below {{the source was defined here}}
+  firrtl.module @Top(out %a : !firrtl.string, out %b : !firrtl.string) {
+    // expected-error @below {{connect has invalid flow: the source expression "b" has sink flow, expected source or duplex flow}}
+    firrtl.propassign %a, %b : !firrtl.string
+  }
+}
+
+// -----
+// Try to read from an input property instance port with sink flow.
+
+firrtl.circuit "Top" {
+  firrtl.module @Child(in %in : !firrtl.string) { }
+  firrtl.module @Top(out %out : !firrtl.string) {
+    // expected-note @below {{the source was defined here}}
+    %child_in = firrtl.instance child @Child(in in : !firrtl.string)
+    // expected-error @below {{connect has invalid flow: the source expression "child.in" has sink flow, expected source or duplex flow}}
+    firrtl.propassign %out, %child_in : !firrtl.string
+  }
+}
+
+// -----
 // Try to assign to the input port of an output object of a local object.
 // This fails because we can only assign directly to the ports of a local object
 // declaration.
