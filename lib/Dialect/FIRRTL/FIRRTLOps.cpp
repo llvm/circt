@@ -3518,9 +3518,11 @@ static LogicalResult checkConnectFlow(Operation *connect) {
   // instance/memory input ports.
   auto srcFlow = foldFlow(src);
   if (!isValidSrc(srcFlow)) {
-    // A sink that is a port output or instance input used as a source is okay.
+    // A sink that is a port output or instance input used as a source is okay,
+    // as long as it is not a property.
     auto kind = getDeclarationKind(src);
-    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
+    if (isa<PropertyType>(src.getType()) ||
+        (kind != DeclKind::Port && kind != DeclKind::Instance)) {
       auto srcRef = getFieldRefFromValue(src, /*lookThroughCasts=*/true);
       auto [srcName, rootKnown] = getFieldName(srcRef);
       auto diag = emitError(connect->getLoc());
