@@ -123,7 +123,46 @@ void TemporalCodeMotionPass::runOnOperation() {
     (void)runOnProcess(proc); // Ignore processes that could not be lowered
 }
 
+static LogicalResult checkForCFGLoop(llhd::ProcessOp procOp) {
+  SmallVector<Block *> toCheck(
+      llvm::map_range(procOp.getOps<llhd::WaitOp>(), [](llhd::WaitOp waitOp) {
+        return waitOp.getSuccessor();
+      }));
+  toCheck.push_back(&procOp.getBody().front());
+
+  SmallVector<Block *> worklist;
+  DenseSet<Block *> visited;
+  for (auto *block : toCheck) {
+    worklist.clear();
+    visited.clear();
+    worklist.push_back(block);
+
+    while (!worklist.empty()) {
+      Block *curr = worklist.pop_back_val();
+      if (isa<llhd::WaitOp>(curr->getTerminator()))
+        continue;
+
+      visited.insert(curr);
+
+      for (auto *succ : curr->getSuccessors()) {
+        if (visited.contains(succ))
+          return failure();
+
+        worklist.push_back(succ);
+      }
+    }
+  }
+
+  return success();
+}
+
 LogicalResult TemporalCodeMotionPass::runOnProcess(llhd::ProcessOp procOp) {
+  // Make sure there are no CFG loops that don't contain a block with a wait
+  // terminator in the cycle because that's currently not supported by the
+  // temporal region analysis and this pass.
+  if (failed(checkForCFGLoop(procOp)))
+    return failure();
+
   llhd::TemporalRegionAnalysis trAnalysis =
       llhd::TemporalRegionAnalysis(procOp);
   unsigned numTRs = trAnalysis.getNumTemporalRegions();

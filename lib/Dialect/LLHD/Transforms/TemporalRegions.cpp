@@ -91,6 +91,11 @@ void llhd::TemporalRegionAnalysis::recalculate(Operation *operation) {
       // If at least one predecessor has a wait terminator or at least one
       // predecessor has an unknown temporal region or not all predecessors have
       // the same TR, create a new TR
+      // FIXME: `!allPredecessorTRsKnown` is a problem when there are CFG loops
+      // in the process. If there is no wait op along any of the CFG edges of
+      // such a loop we don't want to assign a new temporal region. However, we
+      // also cannot just assume here that we can just assign the same TR, so
+      // this might require a bigger change to the algorithm.
     } else if (!allPredecessorTRsKnown(block, workDone) ||
                anyPredecessorHasWait(block) ||
                !(std::adjacent_find(block->pred_begin(), block->pred_end(),
