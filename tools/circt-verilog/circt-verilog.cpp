@@ -432,6 +432,7 @@ static LogicalResult executeWithSources(MLIRContext *context,
   if (opts.loweringMode != LoweringMode::OnlyParse) {
     PassManager pm(context);
     pm.enableVerifier(true);
+    pm.enableTiming(ts);
     if (failed(applyPassManagerCLOptions(pm)))
       return failure();
     populatePasses(pm);
