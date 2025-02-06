@@ -1978,3 +1978,48 @@ circuit Foo:
     bar is invalid
 
     b <= a
+
+;// -----
+FIRRTL version 4.2.0
+; CHECK-LABEL: firrtl.circuit "Contracts"
+circuit Contracts:
+  ; CHECK-LABEL: firrtl.module @Contracts(
+  ; CHECK-SAME:    in %a: !firrtl.uint<42>
+  ; CHECK-SAME:    in %b: !firrtl.uint<1337>
+  ; CHECK-SAME:    in %c: !firrtl.bundle<x: uint<4>, y: uint<5>>
+  ; CHECK-SAME:  )
+  public module Contracts:
+    input a : UInt<42>
+    input b : UInt<1337>
+    input c : {x: UInt<4>, y: UInt<5>}
+
+    ; CHECK:      firrtl.contract {
+    ; CHECK-NEXT: }
+    contract: @[FooBar.scala 369:27]
+
+    ; CHECK:      [[C1:%.+]] = firrtl.contract %a : !firrtl.uint<42> {
+    ; CHECK-NEXT: ^bb0(%arg0: !firrtl.uint<42>):
+    ; CHECK-NEXT:   %t2 = firrtl.node {{.+}} %arg0 : !firrtl.uint<42>
+    ; CHECK-NEXT: }
+    contract t = a:
+      node t2 = t
+
+    ; CHECK:      [[C2:%.+]]:3 = firrtl.contract %a, %b, %c : !firrtl.uint<42>, !firrtl.uint<1337>, !firrtl.bundle<x: uint<4>, y: uint<5>> {
+    ; CHECK-NEXT: ^bb0(%arg0: !firrtl.uint<42>, %arg1: !firrtl.uint<1337>, %arg2: !firrtl.bundle<x: uint<4>, y: uint<5>>):
+    ; CHECK-NEXT:   %u2 = firrtl.node {{.+}} %arg0 : !firrtl.uint<42>
+    ; CHECK-NEXT:   %v2 = firrtl.node {{.+}} %arg1 : !firrtl.uint<1337>
+    ; CHECK-NEXT:   %w2 = firrtl.node {{.+}} %arg2 : !firrtl.bundle<x: uint<4>, y: uint<5>>
+    ; CHECK-NEXT: }
+    contract u, v, w = a, b, c:
+      node u2 = u
+      node v2 = v
+      node w2 = w
+
+    ; CHECK: %t3 = firrtl.node {{.+}} [[C1]] : !firrtl.uint<42>
+    ; CHECK: %u3 = firrtl.node {{.+}} [[C2]]#0 : !firrtl.uint<42>
+    ; CHECK: %v3 = firrtl.node {{.+}} [[C2]]#1 : !firrtl.uint<1337>
+    ; CHECK: %w3 = firrtl.node {{.+}} [[C2]]#2 : !firrtl.bundle<x: uint<4>, y: uint<5>>
+    node t3 = t
+    node u3 = u
+    node v3 = v
+    node w3 = w
