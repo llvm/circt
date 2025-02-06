@@ -613,10 +613,11 @@ firrtl.circuit "FormalMarkerIsUse" {
 // crash the `firrtl::hasDontTouch` query.
 // CHECK-LABEL: firrtl.circuit "NonModuleBlockArgsMustNotCrash"
 firrtl.circuit "NonModuleBlockArgsMustNotCrash" {
-  firrtl.module @NonModuleBlockArgsMustNotCrash(in %a: !firrtl.uint<42>, out %b: !firrtl.uint<42>) {
-    %0 = firrtl.contract %a : !firrtl.uint<42> {
-    ^bb0(%arg0: !firrtl.uint<42>):
+  firrtl.module @NonModuleBlockArgsMustNotCrash(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+    %0 = firrtl.contract %a : !firrtl.uint<1> {
+    ^bb0(%arg0: !firrtl.uint<1>):
+      firrtl.int.verif.assert %arg0 : !firrtl.uint<1>
     }
-    firrtl.matchingconnect %b, %0 : !firrtl.uint<42>
+    firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
   }
 }
