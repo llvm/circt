@@ -242,7 +242,8 @@ public:
             PropAssignOp, RefForceOp, RefForceInitialOp, RefReleaseOp,
             RefReleaseInitialOp, FPGAProbeIntrinsicOp, VerifAssertIntrinsicOp,
             VerifAssumeIntrinsicOp, UnclockedAssumeIntrinsicOp,
-            VerifCoverIntrinsicOp, LayerBlockOp, MatchOp, ViewIntrinsicOp>(
+            VerifCoverIntrinsicOp, VerifRequireIntrinsicOp,
+            VerifEnsureIntrinsicOp, LayerBlockOp, MatchOp, ViewIntrinsicOp>(
             [&](auto opNode) -> ResultType {
               return thisCast->visitStmt(opNode, args...);
             })
@@ -289,6 +290,8 @@ public:
   HANDLE(VerifAssertIntrinsicOp);
   HANDLE(VerifAssumeIntrinsicOp);
   HANDLE(VerifCoverIntrinsicOp);
+  HANDLE(VerifRequireIntrinsicOp);
+  HANDLE(VerifEnsureIntrinsicOp);
   HANDLE(UnclockedAssumeIntrinsicOp);
   HANDLE(LayerBlockOp);
   HANDLE(MatchOp);

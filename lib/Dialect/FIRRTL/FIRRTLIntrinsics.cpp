@@ -1001,6 +1001,10 @@ void FIRRTLIntrinsicLoweringDialectInterface::populateIntrinsicLowerings(
       "circt.verif.assume", "circt_verif_assume");
   lowering.add<CirctVerifConverter<VerifCoverIntrinsicOp>>("circt.verif.cover",
                                                            "circt_verif_cover");
+  lowering.add<CirctVerifConverter<VerifRequireIntrinsicOp>>(
+      "circt.verif.require", "circt_verif_require");
+  lowering.add<CirctVerifConverter<VerifEnsureIntrinsicOp>>(
+      "circt.verif.ensure", "circt_verif_ensure");
   lowering.add<CirctMux2CellConverter>("circt.mux2cell", "circt_mux2cell");
   lowering.add<CirctMux4CellConverter>("circt.mux4cell", "circt_mux4cell");
   lowering.add<CirctHasBeenResetConverter>("circt.has_been_reset",

@@ -87,26 +87,22 @@ verif.contract {}
 verif.contract {
   // CHECK: verif.require {{%.+}} : i1
   // CHECK: verif.require {{%.+}} if {{%.+}} : i1
-  // CHECK: verif.require {{%.+}} clock {{%.+}} : i1
   // CHECK: verif.require {{%.+}} label "foo" : i1
   // CHECK: verif.require {{%.+}} : !ltl.sequence
   // CHECK: verif.require {{%.+}} : !ltl.property
   verif.require %true : i1
   verif.require %true if %true : i1
-  verif.require %true clock %d : i1
   verif.require %true label "foo" : i1
   verif.require %s : !ltl.sequence
   verif.require %p : !ltl.property
 
   // CHECK: verif.ensure {{%.+}} : i1
   // CHECK: verif.ensure {{%.+}} if {{%.+}} : i1
-  // CHECK: verif.ensure {{%.+}} clock {{%.+}} : i1
   // CHECK: verif.ensure {{%.+}} label "foo" : i1
   // CHECK: verif.ensure {{%.+}} : !ltl.sequence
   // CHECK: verif.ensure {{%.+}} : !ltl.property
   verif.ensure %true : i1
   verif.ensure %true if %true : i1
-  verif.ensure %true clock %d : i1
   verif.ensure %true label "foo" : i1
   verif.ensure %s : !ltl.sequence
   verif.ensure %p : !ltl.property

@@ -405,20 +405,17 @@ def ContractOp : VerifOp<"contract", [
 }
 
 class RequireLikeOp<string mnemonic> : VerifOp<mnemonic, [
-  AttrSizedOperandSegments,
   HasParent<"verif::ContractOp">,
   DeclareOpInterfaceMethods<RequireLike>
 ]> {
   let arguments = (ins
     LTLAnyPropertyType:$property,
-    Optional<ClockType>:$clock,
     Optional<I1>:$enable,
     OptionalAttr<StrAttr>:$label
   );
   let assemblyFormat = [{
     $property
     (`if` $enable^)?
-    (`clock` $clock^)?
     (`label` $label^)?
     attr-dict `:` type($property)
   }];

@@ -87,10 +87,14 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: firrtl.int.verif.assert %in {label = "hello"} :
     // CHECK-NEXT: firrtl.int.verif.assume %in :
     // CHECK-NEXT: firrtl.int.verif.cover %in :
+    // CHECK-NEXT: firrtl.int.verif.require %in :
+    // CHECK-NEXT: firrtl.int.verif.ensure %in :
     firrtl.int.generic "circt_verif_assert"  %in : (!firrtl.uint<1>) -> ()
     firrtl.int.generic "circt_verif_assert" <label: none = "hello"> %in : (!firrtl.uint<1>) -> ()
     firrtl.int.generic "circt_verif_assume"  %in : (!firrtl.uint<1>) -> ()
     firrtl.int.generic "circt_verif_cover"  %in : (!firrtl.uint<1>) -> ()
+    firrtl.int.generic "circt_verif_require"  %in : (!firrtl.uint<1>) -> ()
+    firrtl.int.generic "circt_verif_ensure"  %in : (!firrtl.uint<1>) -> ()
   }
 
   // CHECK-LABEL: firrtl.module private @MuxCell(

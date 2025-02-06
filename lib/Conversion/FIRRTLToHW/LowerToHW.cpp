@@ -1696,6 +1696,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(VerifAssertIntrinsicOp op);
   LogicalResult visitStmt(VerifAssumeIntrinsicOp op);
   LogicalResult visitStmt(VerifCoverIntrinsicOp op);
+  LogicalResult visitStmt(VerifRequireIntrinsicOp op);
+  LogicalResult visitStmt(VerifEnsureIntrinsicOp op);
   LogicalResult visitExpr(HasBeenResetIntrinsicOp op);
   LogicalResult visitStmt(UnclockedAssumeIntrinsicOp op);
 
@@ -3887,6 +3889,18 @@ LogicalResult FIRRTLLowering::visitStmt(VerifAssumeIntrinsicOp op) {
 
 LogicalResult FIRRTLLowering::visitStmt(VerifCoverIntrinsicOp op) {
   return lowerVerifIntrinsicOp<verif::CoverOp>(op);
+}
+
+LogicalResult FIRRTLLowering::visitStmt(VerifRequireIntrinsicOp op) {
+  if (!isa<verif::ContractOp>(op->getParentOp()))
+    return lowerVerifIntrinsicOp<verif::AssertOp>(op);
+  return lowerVerifIntrinsicOp<verif::RequireOp>(op);
+}
+
+LogicalResult FIRRTLLowering::visitStmt(VerifEnsureIntrinsicOp op) {
+  if (!isa<verif::ContractOp>(op->getParentOp()))
+    return lowerVerifIntrinsicOp<verif::AssertOp>(op);
+  return lowerVerifIntrinsicOp<verif::EnsureOp>(op);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(HasBeenResetIntrinsicOp op) {
