@@ -356,7 +356,7 @@ def SymbolicValueOp : VerifOp<"symbolic_value", [
     symbolic values that violate asserts or make covers true. This value is not
     fixed - the value taken can vary arbitrarily between timesteps.
   }];
-  let results = (outs AnyType:$result);
+  let results = (outs Res<AnyType, "", [MemAlloc]>:$result);
   let assemblyFormat = "attr-dict `:` type($result)";
 }
 
