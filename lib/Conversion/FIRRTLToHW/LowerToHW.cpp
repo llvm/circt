@@ -209,7 +209,7 @@ struct FIRRTLModuleLowering;
 /// This is state shared across the parallel module lowering logic.
 struct CircuitLoweringState {
   // Flags indicating whether the circuit uses certain header fragments.
-  std::atomic<bool> usedPrintfCond{false};
+  std::atomic<bool> usedPrintf{false};
   std::atomic<bool> usedAssertVerboseCond{false};
   std::atomic<bool> usedStopCond{false};
 
@@ -809,7 +809,19 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
         guard, []() {}, body);
   };
 
-  if (state.usedPrintfCond) {
+  if (state.usedPrintf) {
+    b.create<sv::MacroDeclOp>("PRINTF_FD");
+    b.create<sv::MacroDeclOp>("PRINTF_FD_");
+    b.create<emit::FragmentOp>("PRINTF_FD_FRAGMENT", [&] {
+      b.create<sv::VerbatimOp>(
+          "\n// Users can define 'PRINTF_FD' to add a specified fd to "
+          "prints.");
+      emitGuard("PRINTF_FD_", [&]() {
+        emitGuardedDefine("PRINTF_FD", "PRINTF_FD_", "(`PRINTF_FD)",
+                          "32'h80000002");
+      });
+    });
+
     b.create<sv::MacroDeclOp>("PRINTF_COND");
     b.create<sv::MacroDeclOp>("PRINTF_COND_");
     b.create<emit::FragmentOp>("PRINTF_COND_FRAGMENT", [&] {
@@ -1684,6 +1696,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(VerifAssertIntrinsicOp op);
   LogicalResult visitStmt(VerifAssumeIntrinsicOp op);
   LogicalResult visitStmt(VerifCoverIntrinsicOp op);
+  LogicalResult visitStmt(VerifRequireIntrinsicOp op);
+  LogicalResult visitStmt(VerifEnsureIntrinsicOp op);
   LogicalResult visitExpr(HasBeenResetIntrinsicOp op);
   LogicalResult visitStmt(UnclockedAssumeIntrinsicOp op);
 
@@ -3877,6 +3891,18 @@ LogicalResult FIRRTLLowering::visitStmt(VerifCoverIntrinsicOp op) {
   return lowerVerifIntrinsicOp<verif::CoverOp>(op);
 }
 
+LogicalResult FIRRTLLowering::visitStmt(VerifRequireIntrinsicOp op) {
+  if (!isa<verif::ContractOp>(op->getParentOp()))
+    return lowerVerifIntrinsicOp<verif::AssertOp>(op);
+  return lowerVerifIntrinsicOp<verif::RequireOp>(op);
+}
+
+LogicalResult FIRRTLLowering::visitStmt(VerifEnsureIntrinsicOp op) {
+  if (!isa<verif::ContractOp>(op->getParentOp()))
+    return lowerVerifIntrinsicOp<verif::AssertOp>(op);
+  return lowerVerifIntrinsicOp<verif::EnsureOp>(op);
+}
+
 LogicalResult FIRRTLLowering::visitExpr(HasBeenResetIntrinsicOp op) {
   auto clock = getLoweredNonClockValue(op.getClock());
   auto reset = getLoweredValue(op.getReset());
@@ -4416,7 +4442,8 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToAlwaysBlock(clock, [&]() {
-      circuitState.usedPrintfCond = true;
+      circuitState.usedPrintf = true;
+      circuitState.addFragment(theModule, "PRINTF_FD_FRAGMENT");
       circuitState.addFragment(theModule, "PRINTF_COND_FRAGMENT");
 
       // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
@@ -4425,9 +4452,10 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
       ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond, true);
 
       addIfProceduralBlock(ifCond, [&]() {
-        // Emit the sv.fwrite, writing to stderr by default.
-        Value fdStderr = builder.create<hw::ConstantOp>(APInt(32, 0x80000002));
-        builder.create<sv::FWriteOp>(fdStderr, op.getFormatString(), operands);
+        // Emit the sv.fwrite, writing to fd specified by `PRINTF_FD.
+        Value fd = builder.create<sv::MacroRefExprOp>(
+            builder.getIntegerType(32), "PRINTF_FD_");
+        builder.create<sv::FWriteOp>(fd, op.getFormatString(), operands);
       });
     });
   });

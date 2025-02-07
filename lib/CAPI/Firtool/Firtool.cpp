@@ -125,6 +125,11 @@ void circtFirtoolOptionsSetBuildMode(CirctFirtoolFirtoolOptions options,
   unwrap(options)->setBuildMode(converted);
 }
 
+void circtFirtoolOptionsSetDisableLayerSink(CirctFirtoolFirtoolOptions options,
+                                            bool value) {
+  unwrap(options)->setDisableLayerSink(value);
+}
+
 void circtFirtoolOptionsSetDisableOptimization(
     CirctFirtoolFirtoolOptions options, bool value) {
   unwrap(options)->setDisableOptimization(value);
@@ -315,6 +320,11 @@ void circtFirtoolOptionsSetDisableCSEinClasses(
     CirctFirtoolFirtoolOptions options, bool value) {
 
   unwrap(options)->setDisableCSEinClasses(value);
+}
+
+void circtFirtoolOptionsSetSelectDefaultInstanceChoice(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setSelectDefaultInstanceChoice(value);
 }
 
 //===----------------------------------------------------------------------===//

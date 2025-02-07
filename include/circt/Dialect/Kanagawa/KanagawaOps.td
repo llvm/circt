@@ -459,7 +459,7 @@ def CallOp : KanagawaOp<"call", [
 
     /// Set the callee for this operation.
     void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
-      (*this)->setAttr(getCalleeAttrName(), callee.get<mlir::SymbolRefAttr>());
+      (*this)->setAttr(getCalleeAttrName(), llvm::cast<mlir::SymbolRefAttr>(callee));
     }
 
     /// Return the callee of this operation.
@@ -537,35 +537,6 @@ def PathOp : KanagawaOp<"path", [
   }];
 
   let hasCanonicalizeMethod = 1;
-}
-
-def ThisOp : KanagawaOp<"this", [
-  DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
-  HasCustomSSAName
-]> {
-  let summary = "Return a handle to the current scope `!kanagawa.scoperef`";
-  let arguments = (ins InnerRefAttr:$scopeName);
-  let results = (outs ScopeRefType:$thisRef);
-
-  let assemblyFormat = [{
-    $scopeName attr-dict custom<ScopeRefFromName>(type($thisRef), ref($scopeName))
-  }];
-
-  let builders = [
-    OpBuilder<(ins "StringAttr":$moduleName, "hw::InnerSymAttr":$sym), [{
-      auto name = $_builder.getAttr<hw::InnerRefAttr>(
-        FlatSymbolRefAttr::get(moduleName), sym.getSymName());
-      build($_builder, $_state, $_builder.getType<ScopeRefType>(name), name);
-    }]>,
-    OpBuilder<(ins "hw::InnerRefAttr":$name), [{
-      build($_builder, $_state, $_builder.getType<ScopeRefType>(name), name);
-    }]>
-  ];
-
-  let extraClassDeclaration = [{
-    /// Return the scope operation which this accelerator refers to
-    ScopeOpInterface getScope(const hw::InnerRefNamespace &symbolTable);
-  }];
 }
 
 // ===---------------------------------------------------------------------===//
@@ -713,7 +684,6 @@ def GetPortOp : KanagawaOp<"get_port", [
     }]>
   ];
 
-  let hasCanonicalizeMethod = 1;
   let extraClassDeclaration = [{
     // Returns the direction requested by this get_port op.
     kanagawa::Direction getDirection() {

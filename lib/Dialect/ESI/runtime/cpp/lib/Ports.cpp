@@ -19,8 +19,8 @@
 
 using namespace esi;
 
-BundlePort::BundlePort(AppID id, std::map<std::string, ChannelPort &> channels)
-    : id(id), channels(channels) {}
+BundlePort::BundlePort(AppID id, const BundleType *type, PortMap channels)
+    : id(id), type(type), channels(channels) {}
 
 WriteChannelPort &BundlePort::getRawWrite(const std::string &name) const {
   auto f = channels.find(name);

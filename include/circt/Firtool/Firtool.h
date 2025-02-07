@@ -96,6 +96,7 @@ public:
   }
   bool shouldConvertProbesToSignals() const { return probesToSignals; }
   bool shouldReplaceSequentialMemories() const { return replSeqMem; }
+  bool shouldDisableLayerSink() const { return disableLayerSink; }
   bool shouldDisableOptimization() const { return disableOptimization; }
   bool shouldAdvancedLayerSink() const { return advancedLayerSink; }
   bool shouldLowerMemories() const { return lowerMemories; }
@@ -132,6 +133,9 @@ public:
   bool shouldFixupEICGWrapper() const { return fixupEICGWrapper; }
   bool shouldAddCompanionAssume() const { return addCompanionAssume; }
   bool shouldDisableCSEinClasses() const { return disableCSEinClasses; }
+  bool shouldSelectDefaultInstanceChoice() const {
+    return selectDefaultInstanceChoice;
+  }
 
   // Setters, used by the CAPI
   FirtoolOptions &setOutputFilename(StringRef name) {
@@ -183,6 +187,11 @@ public:
 
   FirtoolOptions &setBuildMode(BuildMode value) {
     buildMode = value;
+    return *this;
+  }
+
+  FirtoolOptions &setDisableLayerSink(bool value) {
+    disableLayerSink = value;
     return *this;
   }
 
@@ -362,6 +371,11 @@ public:
     return *this;
   }
 
+  FirtoolOptions &setSelectDefaultInstanceChoice(bool value) {
+    selectDefaultInstanceChoice = value;
+    return *this;
+  }
+
 private:
   std::string outputFilename;
   bool disableAnnotationsUnknown;
@@ -373,6 +387,7 @@ private:
   firrtl::PreserveValues::PreserveMode preserveMode;
   bool enableDebugInfo;
   BuildMode buildMode;
+  bool disableLayerSink;
   bool disableOptimization;
   bool exportChiselInterface;
   std::string chiselInterfaceOutDirectory;
@@ -409,6 +424,7 @@ private:
   bool fixupEICGWrapper;
   bool addCompanionAssume;
   bool disableCSEinClasses;
+  bool selectDefaultInstanceChoice;
 };
 
 void registerFirtoolCLOptions();

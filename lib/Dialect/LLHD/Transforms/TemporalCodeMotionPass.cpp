@@ -9,7 +9,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "circt/Dialect/LLHD/Transforms/Passes.h"
+#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/PatternMatch.h"
@@ -23,7 +23,7 @@
 namespace circt {
 namespace llhd {
 #define GEN_PASS_DEF_TEMPORALCODEMOTION
-#include "circt/Dialect/LLHD/Transforms/Passes.h.inc"
+#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h.inc"
 } // namespace llhd
 } // namespace circt
 
@@ -123,7 +123,46 @@ void TemporalCodeMotionPass::runOnOperation() {
     (void)runOnProcess(proc); // Ignore processes that could not be lowered
 }
 
+static LogicalResult checkForCFGLoop(llhd::ProcessOp procOp) {
+  SmallVector<Block *> toCheck(
+      llvm::map_range(procOp.getOps<llhd::WaitOp>(), [](llhd::WaitOp waitOp) {
+        return waitOp.getSuccessor();
+      }));
+  toCheck.push_back(&procOp.getBody().front());
+
+  SmallVector<Block *> worklist;
+  DenseSet<Block *> visited;
+  for (auto *block : toCheck) {
+    worklist.clear();
+    visited.clear();
+    worklist.push_back(block);
+
+    while (!worklist.empty()) {
+      Block *curr = worklist.pop_back_val();
+      if (isa<llhd::WaitOp>(curr->getTerminator()))
+        continue;
+
+      visited.insert(curr);
+
+      for (auto *succ : curr->getSuccessors()) {
+        if (visited.contains(succ))
+          return failure();
+
+        worklist.push_back(succ);
+      }
+    }
+  }
+
+  return success();
+}
+
 LogicalResult TemporalCodeMotionPass::runOnProcess(llhd::ProcessOp procOp) {
+  // Make sure there are no CFG loops that don't contain a block with a wait
+  // terminator in the cycle because that's currently not supported by the
+  // temporal region analysis and this pass.
+  if (failed(checkForCFGLoop(procOp)))
+    return failure();
+
   llhd::TemporalRegionAnalysis trAnalysis =
       llhd::TemporalRegionAnalysis(procOp);
   unsigned numTRs = trAnalysis.getNumTemporalRegions();
@@ -174,6 +213,7 @@ LogicalResult TemporalCodeMotionPass::runOnProcess(llhd::ProcessOp procOp) {
   // TODO: consider the case where a wait brances to itself
   for (unsigned currTR = 0; currTR < numTRs; ++currTR) {
     unsigned numTRSuccs = trAnalysis.getNumTRSuccessors(currTR);
+    (void)numTRSuccs;
     // NOTE: Above error checks make this impossible to trigger, but the above
     // are changed this one might have to be promoted to a proper error message.
     assert((numTRSuccs == 1 ||
@@ -347,9 +387,4 @@ LogicalResult TemporalCodeMotionPass::runOnProcess(llhd::ProcessOp procOp) {
   }
 
   return success();
-}
-
-std::unique_ptr<OperationPass<hw::HWModuleOp>>
-circt::llhd::createTemporalCodeMotionPass() {
-  return std::make_unique<TemporalCodeMotionPass>();
 }

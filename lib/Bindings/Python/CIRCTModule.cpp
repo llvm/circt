@@ -1,4 +1,4 @@
-//===- CIRCTModule.cpp - Main pybind module -------------------------------===//
+//===- CIRCTModule.cpp - Main nanobind module -----------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -23,9 +23,11 @@
 #include "circt-c/Dialect/MSFT.h"
 #include "circt-c/Dialect/OM.h"
 #include "circt-c/Dialect/RTG.h"
+#include "circt-c/Transforms.h"
 #ifdef CIRCT_INCLUDE_TESTS
 #include "circt-c/Dialect/RTGTest.h"
 #endif
+#include "circt-c/Dialect/SMT.h"
 #include "circt-c/Dialect/SV.h"
 #include "circt-c/Dialect/Seq.h"
 #include "circt-c/Dialect/Verif.h"
@@ -33,14 +35,14 @@
 #include "mlir-c/Bindings/Python/Interop.h"
 #include "mlir-c/IR.h"
 #include "mlir-c/Transforms.h"
-#include "mlir/Bindings/Python/PybindAdaptors.h"
+#include "mlir/Bindings/Python/NanobindAdaptors.h"
 
 #include "llvm-c/ErrorHandling.h"
 #include "llvm/Support/Signals.h"
 
-#include "PybindUtils.h"
-#include <pybind11/pybind11.h>
-namespace py = pybind11;
+#include "NanobindUtils.h"
+#include <nanobind/nanobind.h>
+namespace nb = nanobind;
 
 static void registerPasses() {
   registerArcPasses();
@@ -52,11 +54,12 @@ static void registerPasses() {
   registerHWArithPasses();
   registerHWPasses();
   registerHandshakePasses();
-  mlirRegisterConversionPasses();
-  mlirRegisterTransformsPasses();
+  mlirRegisterCIRCTConversionPasses();
+  mlirRegisterCIRCTTransformsPasses();
+  mlirRegisterTransformsCSE();
 }
 
-PYBIND11_MODULE(_circt, m) {
+NB_MODULE(_circt, m) {
   m.doc() = "CIRCT Python Native Extension";
   registerPasses();
   llvm::sys::PrintStackTraceOnErrorSignal(/*argv=*/"");
@@ -64,7 +67,7 @@ PYBIND11_MODULE(_circt, m) {
 
   m.def(
       "register_dialects",
-      [](py::object capsule) {
+      [](nb::object capsule) {
         // Get the MlirContext capsule from PyMlirContext capsule.
         auto wrappedCapsule = capsule.attr(MLIR_PYTHON_CAPI_PTR_ATTR);
         MlirContext context = mlirPythonCapsuleToContext(wrappedCapsule.ptr());
@@ -135,12 +138,16 @@ PYBIND11_MODULE(_circt, m) {
         MlirDialectHandle verif = mlirGetDialectHandle__verif__();
         mlirDialectHandleRegisterDialect(verif, context);
         mlirDialectHandleLoadDialect(verif, context);
+
+        MlirDialectHandle smt = mlirGetDialectHandle__smt__();
+        mlirDialectHandleRegisterDialect(smt, context);
+        mlirDialectHandleLoadDialect(smt, context);
       },
       "Register CIRCT dialects on a PyMlirContext.");
 
-  m.def("export_verilog", [](MlirModule mod, py::object fileObject) {
+  m.def("export_verilog", [](MlirModule mod, nb::object fileObject) {
     circt::python::PyFileAccumulator accum(fileObject, false);
-    py::gil_scoped_release();
+    nb::gil_scoped_release();
     mlirExportVerilog(mod, accum.getCallback(), accum.getUserData());
   });
 
@@ -149,26 +156,26 @@ PYBIND11_MODULE(_circt, m) {
     mlirExportSplitVerilog(mod, cDirectory);
   });
 
-  py::module esi = m.def_submodule("_esi", "ESI API");
+  nb::module_ esi = m.def_submodule("_esi", "ESI API");
   circt::python::populateDialectESISubmodule(esi);
-  py::module msft = m.def_submodule("_msft", "MSFT API");
+  nb::module_ msft = m.def_submodule("_msft", "MSFT API");
   circt::python::populateDialectMSFTSubmodule(msft);
-  py::module hw = m.def_submodule("_hw", "HW API");
+  nb::module_ hw = m.def_submodule("_hw", "HW API");
   circt::python::populateDialectHWSubmodule(hw);
-  py::module seq = m.def_submodule("_seq", "Seq API");
+  nb::module_ seq = m.def_submodule("_seq", "Seq API");
   circt::python::populateDialectSeqSubmodule(seq);
-  py::module om = m.def_submodule("_om", "OM API");
+  nb::module_ om = m.def_submodule("_om", "OM API");
   circt::python::populateDialectOMSubmodule(om);
-  py::module rtg = m.def_submodule("_rtg", "RTG API");
+  nb::module_ rtg = m.def_submodule("_rtg", "RTG API");
   circt::python::populateDialectRTGSubmodule(rtg);
-  py::module rtgtool = m.def_submodule("_rtgtool", "RTGTool API");
+  nb::module_ rtgtool = m.def_submodule("_rtgtool", "RTGTool API");
   circt::python::populateDialectRTGToolSubmodule(rtgtool);
 #ifdef CIRCT_INCLUDE_TESTS
-  py::module rtgtest = m.def_submodule("_rtgtest", "RTGTest API");
+  nb::module_ rtgtest = m.def_submodule("_rtgtest", "RTGTest API");
   circt::python::populateDialectRTGTestSubmodule(rtgtest);
 #endif
-  py::module sv = m.def_submodule("_sv", "SV API");
+  nb::module_ sv = m.def_submodule("_sv", "SV API");
   circt::python::populateDialectSVSubmodule(sv);
-  py::module support = m.def_submodule("_support", "CIRCT support");
+  nb::module_ support = m.def_submodule("_support", "CIRCT support");
   circt::python::populateSupportSubmodule(support);
 }

@@ -345,6 +345,34 @@ The options are:
 }
 ```
 
+### BodyTypeLoweringAnnotation
+
+| Property            | Type   | Description                                          |
+| ------------------- | ------ | ---------------------------------------------------- |
+| class               | string | `circt.BodyTypeLoweringAnnotation`                   |
+| convention          | string | See `Convention` annotation                          |
+| target              | string | See `Convention` annotation                          |
+| includeHierarchy    | bool   | Apply the convention to all modules in the hierarchy |
+
+Specify the type lowering option for module internal signals.
+This is similar to the `Convention` annotation, but for internal signals
+rather than module ports. Refer to the `Convention` annotation for each
+property description.
+
+When `includeHierarchy` is `false`, it indicates the convention is applied only to
+the specified module. If `includeHierarchy` is `true`, the convention is applied to
+all modules in the hierarchy. If there are multiple annotation instances that specify
+conventions, the `scalarized` convention takes precedence over the `internal` convention.
+
+```json
+{
+  "class": "circt.BodyTypeLoweringAnnotation",
+  "convention": "scalarized",
+  "target": "~Foo|Bar",
+  "includeHierarchy": true
+}
+```
+
 ### ElaborationArtefactsDirectory
 
 | Property   | Type   | Description                                              |
@@ -948,21 +976,12 @@ array.
 A reference target is a JSON serialization of a regular reference target
 string.
 
-#### UnknownGroundType
-
-| Property   | Type   | Description                                                          |
-| ---------- | ------ | -------------                                                        |
-| class      | string | `sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$` |
-
-This represents an unknown FIRRTL ground type.
-
 #### AugmentedGroundType
 
 | Property   | Type   | Description                                          |
 | ---------- | ------ | -------------                                        |
 | class      | string | `sifive.enterprise.grandcentral.AugmentedGroundType` |
 | ref        | object | ReferenceTarget of the target component              |
-| tpe        | object | UnknownGroundType                                    |
 
 Creates a SystemVerilog logic type.
 
@@ -985,9 +1004,6 @@ Example:
         "value": 0
       }
     ]
-  },
-  "tpe": {
-    "class": "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"
   }
 }
 ```
@@ -997,7 +1013,7 @@ Example:
 | Property   | Type   | Description                                          |
 | ---------- | ------ | -------------                                        |
 | class      | string | `sifive.enterprise.grandcentral.AugmentedVectorType` |
-| elements   | array  | List of augmented types.
+| elements   | array  | List of augmented types.                             |
 
 Creates a SystemVerilog unpacked array.
 

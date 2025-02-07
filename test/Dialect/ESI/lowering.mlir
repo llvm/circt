@@ -1,6 +1,6 @@
 // RUN: circt-opt %s --lower-esi-to-physical -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 // RUN: circt-opt %s --lower-esi-ports -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=IFACE %s
-// RUN: circt-opt %s --lower-esi-to-physical --lower-esi-ports --hw-flatten-io --lower-esi-to-hw -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=HW %s
+// RUN: circt-opt %s --lower-esi-to-physical --lower-esi-ports --hw-flatten-io --lower-esi-to-hw | FileCheck --check-prefix=HW %s
 
 hw.module.extern @Sender(in %clk: !seq.clock, out x: !esi.channel<i4>, out y: i8) attributes {esi.bundle}
 hw.module.extern @ArrSender(out x: !esi.channel<!hw.array<4xi64>>) attributes {esi.bundle}
@@ -53,6 +53,7 @@ hw.module @test(in %clk: !seq.clock, in %rst:i1) {
   // IFACE-NEXT:    %[[#modport4:]] = sv.modport.get %i4ToRecv2 @source : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@source>
   // IFACE-NEXT:    hw.instance "recv2" @Reciever(a: %[[#modport4:]]: !sv.modport<@IValidReady_i4::@source>, clk: %clk: !seq.clock) -> ()
 
+  // HW-LABEL:    hw.module @test(in %clk : !seq.clock, in %rst : i1)
   // After all 3 ESI lowering passes, there shouldn't be any ESI constructs!
   // HW-NOT: esi
 }
@@ -76,6 +77,9 @@ hw.module @InternRcvr(in %in: !esi.channel<!hw.array<4xi8>>) {}
 hw.module @test2(in %clk: !seq.clock, in %rst:i1) {
   %ints, %c4 = hw.instance "adder" @add11(clk: %clk: !seq.clock, ints: %ints: !esi.channel<i32>) -> (mutatedInts: !esi.channel<i32>, c4: i4)
 
+  %valid, %ready, %data = esi.snoop.vr %ints: !esi.channel<i32>
+  %xact = comb.and %valid, %ready : i1
+
   %nullBit = esi.null : !esi.channel<i4>
   hw.instance "nullRcvr" @Reciever(a: %nullBit: !esi.channel<i4>, clk: %clk: !seq.clock) -> ()
 
@@ -83,14 +87,15 @@ hw.module @test2(in %clk: !seq.clock, in %rst:i1) {
   hw.instance "nullInternRcvr" @InternRcvr(in: %nullArray: !esi.channel<!hw.array<4xi8>>) -> ()
 }
 // HW-LABEL: hw.module @test2(in %clk : !seq.clock, in %rst : i1) {
-// HW:   %adder.ints_ready, %adder.mutatedInts, %adder.mutatedInts_valid, %adder.c4 = hw.instance "adder" @add11(clk: %clk: !seq.clock, ints: %adder.mutatedInts: i32, ints_valid: %adder.mutatedInts_valid: i1, mutatedInts_ready: %adder.ints_ready: i1) -> (ints_ready: i1, mutatedInts: i32, mutatedInts_valid: i1, c4: i4)
-// HW:   [[ZERO:%.+]] = hw.bitcast %c0_i4 : (i4) -> i4
-// HW:   sv.interface.signal.assign %i4ToNullRcvr(@IValidReady_i4::@data) = [[ZERO]] : i4
-// HW:   [[ZM:%.+]] = sv.modport.get %{{.+}} @source : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@source>
-// HW:   hw.instance "nullRcvr" @Reciever(a: [[ZM]]: !sv.modport<@IValidReady_i4::@source>, clk: %clk: !seq.clock) -> ()
-// HW:   %c0_i32 = hw.constant 0 : i32
-// HW:   [[ZA:%.+]] = hw.bitcast %c0_i32 : (i32) -> !hw.array<4xi8>
-// HW:   %nullInternRcvr.in_ready = hw.instance "nullInternRcvr" @InternRcvr(in: [[ZA]]: !hw.array<4xi8>, in_valid: %false_0: i1) -> (in_ready: i1)
+// HW-NEXT:    %adder.ints_ready, %adder.mutatedInts, %adder.mutatedInts_valid, %adder.c4 = hw.instance "adder" @add11(clk: %clk: !seq.clock, ints: %adder.mutatedInts: i32, ints_valid: %adder.mutatedInts_valid: i1, mutatedInts_ready: %adder.ints_ready: i1) -> (ints_ready: i1, mutatedInts: i32, mutatedInts_valid: i1, c4: i4)
+// HW-NEXT:    [[XACT:%.+]] = comb.and %adder.mutatedInts_valid, %adder.ints_ready : i1
+// HW:         [[ZERO:%.+]] = hw.bitcast %c0_i4 : (i4) -> i4
+// HW:         sv.interface.signal.assign %i4ToNullRcvr(@IValidReady_i4::@data) = [[ZERO]] : i4
+// HW:         [[ZM:%.+]] = sv.modport.get %{{.+}} @source : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@source>
+// HW:         hw.instance "nullRcvr" @Reciever(a: [[ZM]]: !sv.modport<@IValidReady_i4::@source>, clk: %clk: !seq.clock) -> ()
+// HW:         %c0_i32 = hw.constant 0 : i32
+// HW:         [[ZA:%.+]] = hw.bitcast %c0_i32 : (i32) -> !hw.array<4xi8>
+// HW:         %nullInternRcvr.in_ready = hw.instance "nullInternRcvr" @InternRcvr(in: [[ZA]]: !hw.array<4xi8>, in_valid: %false_0: i1) -> (in_ready: i1)
 
 hw.module @twoChannelArgs(in %clk: !seq.clock, in %ints: !esi.channel<i32>, in %foo: !esi.channel<i7>) {
   %rdy = hw.constant 1 : i1
@@ -196,4 +201,57 @@ hw.module @i3LoopbackOddNames(in %in: !esi.channel<i3>, out out: !esi.channel<i3
     attributes {esi.portFlattenStructs, esi.portValidSuffix="_good",
                 esi.portReadySuffix="_letErRip", esi.portOutSuffix="_out"} {
   hw.output %in : !esi.channel<i3>
+}
+
+// CHECK-LABEL:  hw.module @fifo1(in %clk : !seq.clock, in %rst : i1, in %in : !esi.channel<i32, FIFO>, out out : !esi.channel<i32, FIFO(2)>) {
+// CHECK-NEXT:     %true = hw.constant true
+// CHECK-NEXT:     %data, %empty = esi.unwrap.fifo %in, [[R2:%.+]] : !esi.channel<i32, FIFO>
+// CHECK-NEXT:     %out, %full, %empty_0 = seq.fifo depth 12 rd_latency 2   in %data rdEn %rden wrEn [[R2]] clk %clk rst %rst : i32
+// CHECK-NEXT:     [[R0:%.+]] = comb.xor %empty, %true {sv.namehint = "inputNotEmpty"} : i1
+// CHECK-NEXT:     [[R1:%.+]] = comb.xor %full, %true {sv.namehint = "seqFifoNotFull"} : i1
+// CHECK-NEXT:     [[R2]] = comb.and [[R0]], [[R1]] {sv.namehint = "inputEn"} : i1
+// CHECK-NEXT:     %chanOutput, %rden = esi.wrap.fifo %out, %empty_0 : !esi.channel<i32, FIFO(2)>
+// CHECK-NEXT:     hw.output %chanOutput : !esi.channel<i32, FIFO(2)>
+hw.module @fifo1(in %clk: !seq.clock, in %rst: i1, in %in: !esi.channel<i32, FIFO>, out out: !esi.channel<i32, FIFO(2)>) {
+  %fifo = esi.fifo in %in clk %clk rst %rst depth 12 : !esi.channel<i32, FIFO> -> !esi.channel<i32, FIFO(2)>
+  hw.output %fifo : !esi.channel<i32, FIFO(2)>
+}
+
+// CHECK-LABEL:  hw.module @fifoValidReadyInput(in %clk : !seq.clock, in %rst : i1, in %in : !esi.channel<i32>, out out : !esi.channel<i32, FIFO(2)>) {
+// CHECK-NEXT:     %true = hw.constant true
+// CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %in, [[InputEN:%.+]] : i32
+// CHECK-NEXT:     %true_0 = hw.constant true
+// CHECK-NEXT:     [[DataNotAvailable:%.+]] = comb.xor bin %valid, %true_0 {sv.namehint = "dataNotAvailable"} : i1
+// CHECK-NEXT:     %out, %full, %empty = seq.fifo depth 12 rd_latency 2   in %rawOutput rdEn %rden wrEn [[InputEN]] clk %clk rst %rst : i32
+// CHECK-NEXT:     [[InputNotEmpty:%.+]] = comb.xor [[DataNotAvailable]], %true {sv.namehint = "inputNotEmpty"} : i1
+// CHECK-NEXT:     [[SeqFifoNotFull:%.+]] = comb.xor %full, %true {sv.namehint = "seqFifoNotFull"} : i1
+// CHECK-NEXT:     [[InputEN]] = comb.and [[InputNotEmpty]], [[SeqFifoNotFull]] {sv.namehint = "inputEn"} : i1
+// CHECK-NEXT:     %chanOutput, %rden = esi.wrap.fifo %out, %empty : !esi.channel<i32, FIFO(2)>
+// CHECK-NEXT:     hw.output %chanOutput : !esi.channel<i32, FIFO(2)>
+hw.module @fifoValidReadyInput(
+    in %clk: !seq.clock, in %rst: i1,
+    in %in: !esi.channel<i32, ValidReady>,
+    out out: !esi.channel<i32, FIFO(2)>) {
+  %fifo = esi.fifo in %in clk %clk rst %rst depth 12 : !esi.channel<i32, ValidReady> -> !esi.channel<i32, FIFO(2)>
+  hw.output %fifo : !esi.channel<i32, FIFO(2)>
+}
+
+// CHECK-LABEL:  hw.module @fifoValidReadyOutput(in %clk : !seq.clock, in %rst : i1, in %in : !esi.channel<i32, FIFO>, out out : !esi.channel<i32>) {
+// CHECK-NEXT:     %true = hw.constant true
+// CHECK-NEXT:     %data, %empty = esi.unwrap.fifo %in, [[InputEN:%.+]] : !esi.channel<i32, FIFO>
+// CHECK-NEXT:     %out, %full, %empty_0 = seq.fifo depth 12   in %data rdEn [[OutputRdEn:%.+]] wrEn [[InputEN]] clk %clk rst %rst : i32
+// CHECK-NEXT:     [[InputNotEmpty:%.+]] = comb.xor %empty, %true {sv.namehint = "inputNotEmpty"} : i1
+// CHECK-NEXT:     [[SeqFifoNotFull:%.+]] = comb.xor %full, %true {sv.namehint = "seqFifoNotFull"} : i1
+// CHECK-NEXT:     [[InputEN]] = comb.and [[InputNotEmpty]], [[SeqFifoNotFull]] {sv.namehint = "inputEn"} : i1
+// CHECK-NEXT:     %true_1 = hw.constant true
+// CHECK-NEXT:     [[R3:%.+]] = comb.xor bin %empty_0, %true_1 : i1
+// CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr %out, [[R3]] : i32
+// CHECK-NEXT:     [[OutputRdEn]] = comb.and [[R3]], %ready {sv.namehint = "outputRdEn"} : i1
+// CHECK-NEXT:     hw.output %chanOutput : !esi.channel<i32>
+hw.module @fifoValidReadyOutput(
+    in %clk: !seq.clock, in %rst: i1,
+    in %in: !esi.channel<i32, FIFO>,
+    out out: !esi.channel<i32, ValidReady>) {
+  %fifo = esi.fifo in %in clk %clk rst %rst depth 12 : !esi.channel<i32, FIFO> -> !esi.channel<i32, ValidReady>
+  hw.output %fifo : !esi.channel<i32, ValidReady>
 }

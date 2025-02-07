@@ -34,7 +34,7 @@ std::string MessageData::toHex() const {
   return ss.str();
 }
 
-std::string esi::toHex(uint32_t val) {
+std::string esi::toHex(uint64_t val) {
   std::ostringstream ss;
   ss << std::hex << val;
   return ss.str();

@@ -119,6 +119,21 @@ firrtl.circuit "Intrinsics" {
     firrtl.int.verif.cover %k0 : !firrtl.uint<1>
     // CHECK-NEXT: verif.cover [[K0]] label "hello" : !ltl.property
     firrtl.int.verif.cover %k0 {label = "hello"} : !firrtl.uint<1>
+    // CHECK-NEXT: verif.assert %a : i1
+    firrtl.int.verif.require %a : !firrtl.uint<1>
+    // CHECK-NEXT: verif.assert %a : i1
+    firrtl.int.verif.ensure %a : !firrtl.uint<1>
+    // CHECK-NEXT: verif.contract
+    verif.contract {
+      // CHECK-NEXT: verif.require %a : i1
+      firrtl.int.verif.require %a : !firrtl.uint<1>
+      // CHECK-NEXT: verif.require %a label "hello" : i1
+      firrtl.int.verif.require %a {label = "hello"} : !firrtl.uint<1>
+      // CHECK-NEXT: verif.ensure [[C0]] : !ltl.sequence
+      firrtl.int.verif.ensure %c0 : !firrtl.uint<1>
+      // CHECK-NEXT: verif.ensure [[C0]] label "hello" : !ltl.sequence
+      firrtl.int.verif.ensure %c0 {label = "hello"} : !firrtl.uint<1>
+    }
   }
 
   // CHECK-LABEL: hw.module @LowerIntrinsicStyle

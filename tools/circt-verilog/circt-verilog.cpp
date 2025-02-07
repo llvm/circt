@@ -17,7 +17,9 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
+#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
 #include "circt/Dialect/Moore/MooreDialect.h"
 #include "circt/Dialect/Moore/MoorePasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
@@ -26,6 +28,7 @@
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/AsmState.h"
@@ -59,6 +62,7 @@ enum class LoweringMode {
   OnlyLint,
   OnlyParse,
   OutputIRMoore,
+  OutputIRLLHD,
   OutputIRHW,
   Full
 };
@@ -101,6 +105,10 @@ struct CLOptions {
           clEnumValN(LoweringMode::OutputIRMoore, "ir-moore",
                      "Run the entire pass manager to just before MooreToCore "
                      "conversion, and emit the resulting Moore dialect IR"),
+          clEnumValN(
+              LoweringMode::OutputIRLLHD, "ir-llhd",
+              "Run the entire pass manager to just before the LLHD pipeline "
+              ", and emit the resulting LLHD+Core dialect IR"),
           clEnumValN(LoweringMode::OutputIRHW, "ir-hw",
                      "Run the MooreToCore conversion and emit the resulting "
                      "core dialect IR")),
@@ -295,6 +303,30 @@ static void populateMooreToCoreLowering(PassManager &pm) {
   }
 }
 
+/// Convert LLHD dialect IR into core dialect IR
+static void populateLLHDLowering(PassManager &pm) {
+  pm.addPass(createInlinerPass());
+  {
+    auto &anyPM = pm.nestAny();
+    anyPM.addPass(mlir::createSROA());
+  }
+  pm.addNestedPass<hw::HWModuleOp>(llhd::createEarlyCodeMotion());
+  pm.addNestedPass<hw::HWModuleOp>(llhd::createTemporalCodeMotion());
+  {
+    auto &anyPM = pm.nestAny();
+    anyPM.addPass(mlir::createCSEPass());
+    anyPM.addPass(mlir::createCanonicalizerPass());
+  }
+  pm.addNestedPass<hw::HWModuleOp>(llhd::createDesequentialization());
+  pm.addPass(llhd::createProcessLowering());
+  pm.addNestedPass<hw::HWModuleOp>(llhd::createSig2Reg());
+  {
+    auto &anyPM = pm.nestAny();
+    anyPM.addPass(mlir::createCSEPass());
+    anyPM.addPass(mlir::createCanonicalizerPass());
+  }
+}
+
 /// Populate the given pass manager with transformations as configured by the
 /// command line options.
 static void populatePasses(PassManager &pm) {
@@ -302,6 +334,9 @@ static void populatePasses(PassManager &pm) {
   if (opts.loweringMode == LoweringMode::OutputIRMoore)
     return;
   populateMooreToCoreLowering(pm);
+  if (opts.loweringMode == LoweringMode::OutputIRLLHD)
+    return;
+  populateLLHDLowering(pm);
 }
 
 //===----------------------------------------------------------------------===//
@@ -363,8 +398,6 @@ static LogicalResult executeWithSources(MLIRContext *context,
   OwningOpRef<ModuleOp> module;
   switch (opts.format) {
   case Format::SV: {
-    auto parserTimer = ts.nest("SystemVerilog Parser");
-
     // If the user requested for the files to be only preprocessed, do so and
     // print the results to the configured output file.
     if (opts.loweringMode == LoweringMode::OnlyPreprocess) {
@@ -399,6 +432,7 @@ static LogicalResult executeWithSources(MLIRContext *context,
   if (opts.loweringMode != LoweringMode::OnlyParse) {
     PassManager pm(context);
     pm.enableVerifier(true);
+    pm.enableTiming(ts);
     if (failed(applyPassManagerCLOptions(pm)))
       return failure();
     populatePasses(pm);
@@ -510,6 +544,7 @@ int main(int argc, char **argv) {
   // clang-format on
 
   // Perform the actual work and use "exit" to avoid slow context teardown.
+  mlir::func::registerInlinerExtension(registry);
   MLIRContext context(registry);
   exit(failed(execute(&context)));
 }

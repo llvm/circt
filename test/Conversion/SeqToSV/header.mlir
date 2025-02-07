@@ -68,8 +68,11 @@
 
 emit.fragment @SomeFragment {}
 
+// CHECK-LABEL: hw.module.generated
+// CHECK-SAME:    emit.fragments = [@RANDOM_INIT_REG_FRAGMENT, @RANDOM_INIT_MEM_FRAGMENT, @RANDOM_INIT_FRAGMENT]
+
 // CHECK-LABEL: hw.module @fragment_ref(in %clk : i1)
-// CHECK-SAME: emit.fragments = [@SomeFragment, @RANDOM_INIT_REG_FRAGMENT, @RANDOM_INIT_MEM_FRAGMENT, @RANDOM_INIT_FRAGMENT]
+// CHECK-SAME: emit.fragments = [@SomeFragment, @RANDOM_INIT_REG_FRAGMENT, @RANDOM_INIT_FRAGMENT]
 hw.module @fragment_ref(in %clk : !seq.clock) attributes {emit.fragments = [@SomeFragment]} {
   %cst0_i32 = hw.constant 0 : i32
   %rA = seq.firreg %cst0_i32 clock %clk sym @regA : i32

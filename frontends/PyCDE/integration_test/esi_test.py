@@ -6,7 +6,7 @@
 
 import pycde
 from pycde import (AppID, Clock, Module, Reset, modparams, generator)
-from pycde.bsp import cosim
+from pycde.bsp import get_bsp
 from pycde.common import Constant, Input, Output
 from pycde.constructs import ControlReg, Reg, Wire
 from pycde.esi import ChannelService, FuncService, MMIO, MMIOReadWriteCmdType
@@ -76,6 +76,7 @@ class MMIOReadWriteClient(Module):
     cmd, cmd_valid = cmd_chan_wire.unwrap(resp_ready_wire)
 
     add_amt = Reg(UInt(64),
+                  name="add_amt",
                   clk=ports.clk,
                   rst=ports.rst,
                   rst_value=0,
@@ -109,6 +110,10 @@ class ConstProducer(Module):
 
 
 class JoinAddFunc(Func):
+  # This test is broken since the DC dialect flow is broken. Leaving the code
+  # here in case it gets fixed in the future.
+  # https://github.com/llvm/circt/issues/7949 is the latest layer of the onion.
+
   a = Input(UInt(32))
   b = Input(UInt(32))
   x = Output(UInt(32))
@@ -119,6 +124,7 @@ class JoinAddFunc(Func):
 
 
 class Join(Module):
+  # This test is broken since the JoinAddFunc function is broken.
   clk = Clock()
   rst = Reset()
 
@@ -141,14 +147,13 @@ class Top(Module):
       MMIOClient(i)()
     MMIOReadWriteClient(clk=ports.clk, rst=ports.rst)
     ConstProducer(clk=ports.clk, rst=ports.rst)
-    Join(clk=ports.clk, rst=ports.rst)
+
+    # Disable broken test.
+    # Join(clk=ports.clk, rst=ports.rst)
 
 
 if __name__ == "__main__":
-  s = pycde.System(cosim.CosimBSP(Top),
-                   name="ESILoopback",
-                   output_directory=sys.argv[1])
+  bsp = get_bsp(sys.argv[2] if len(sys.argv) > 2 else None)
+  s = pycde.System(bsp(Top), name="ESILoopback", output_directory=sys.argv[1])
   s.compile()
   s.package()
-
-  s.print()

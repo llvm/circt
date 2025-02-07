@@ -15,6 +15,7 @@ add_circt_dialect_library(CIRCTSeqTransforms
   CIRCTSeq
   CIRCTSupport
   CIRCTSV
+  CIRCTVerif
   MLIRIR
   MLIRPass
   MLIRTransformUtils

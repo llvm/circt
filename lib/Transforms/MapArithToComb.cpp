@@ -163,25 +163,7 @@ public:
     target.addIllegalDialect<arith::ArithDialect>();
     MapArithTypeConverter typeConverter;
     RewritePatternSet patterns(ctx);
-
-    patterns.insert<OneToOnePattern<arith::AddIOp, comb::AddOp>,
-                    OneToOnePattern<arith::SubIOp, comb::SubOp>,
-                    OneToOnePattern<arith::MulIOp, comb::MulOp>,
-                    OneToOnePattern<arith::DivSIOp, comb::DivSOp>,
-                    OneToOnePattern<arith::DivUIOp, comb::DivUOp>,
-                    OneToOnePattern<arith::RemSIOp, comb::ModSOp>,
-                    OneToOnePattern<arith::RemUIOp, comb::ModUOp>,
-                    OneToOnePattern<arith::AndIOp, comb::AndOp>,
-                    OneToOnePattern<arith::OrIOp, comb::OrOp>,
-                    OneToOnePattern<arith::XOrIOp, comb::XorOp>,
-                    OneToOnePattern<arith::ShLIOp, comb::ShlOp>,
-                    OneToOnePattern<arith::ShRSIOp, comb::ShrSOp>,
-                    OneToOnePattern<arith::ShRUIOp, comb::ShrUOp>,
-                    OneToOnePattern<arith::ConstantOp, hw::ConstantOp, true>,
-                    OneToOnePattern<arith::SelectOp, comb::MuxOp>,
-                    ExtSConversionPattern, ExtZConversionPattern,
-                    TruncateConversionPattern, CompConversionPattern>(
-        typeConverter, ctx);
+    populateArithToCombPatterns(patterns, typeConverter);
 
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns))))
@@ -190,6 +172,28 @@ public:
 };
 
 } // namespace
+
+void circt::populateArithToCombPatterns(mlir::RewritePatternSet &patterns,
+                                        TypeConverter &typeConverter) {
+  patterns.insert<OneToOnePattern<arith::AddIOp, comb::AddOp>,
+                  OneToOnePattern<arith::SubIOp, comb::SubOp>,
+                  OneToOnePattern<arith::MulIOp, comb::MulOp>,
+                  OneToOnePattern<arith::DivSIOp, comb::DivSOp>,
+                  OneToOnePattern<arith::DivUIOp, comb::DivUOp>,
+                  OneToOnePattern<arith::RemSIOp, comb::ModSOp>,
+                  OneToOnePattern<arith::RemUIOp, comb::ModUOp>,
+                  OneToOnePattern<arith::AndIOp, comb::AndOp>,
+                  OneToOnePattern<arith::OrIOp, comb::OrOp>,
+                  OneToOnePattern<arith::XOrIOp, comb::XorOp>,
+                  OneToOnePattern<arith::ShLIOp, comb::ShlOp>,
+                  OneToOnePattern<arith::ShRSIOp, comb::ShrSOp>,
+                  OneToOnePattern<arith::ShRUIOp, comb::ShrUOp>,
+                  OneToOnePattern<arith::ConstantOp, hw::ConstantOp, true>,
+                  OneToOnePattern<arith::SelectOp, comb::MuxOp>,
+                  ExtSConversionPattern, ExtZConversionPattern,
+                  TruncateConversionPattern, CompConversionPattern>(
+      typeConverter, patterns.getContext());
+}
 
 std::unique_ptr<mlir::Pass> circt::createMapArithToCombPass() {
   return std::make_unique<MapArithToCombPass>();

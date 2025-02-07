@@ -379,19 +379,12 @@ module {
 // CHECK-SAME:                            %[[VAL_3:.*]]: i1 {reset},
 // CHECK-SAME:                            %[[VAL_4:.*]]: i1 {go}) -> (
 // CHECK-SAME:                            %[[VAL_5:.*]]: i1 {done}) {
-// CHECK:           %[[VAL_6:.*]] = hw.constant true
 // CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]], %[[VAL_9:.*]], %[[VAL_10:.*]], %[[VAL_11:.*]], %[[VAL_12:.*]], %[[VAL_13:.*]], %[[VAL_14:.*]] = calyx.seq_mem @mem_0 <[8] x 32> [3] {external = true} : i3, i1, i1, i1, i1, i32, i32, i1
 // CHECK:           %[[VAL_15:.*]], %[[VAL_16:.*]], %[[VAL_17:.*]], %[[VAL_18:.*]], %[[VAL_19:.*]], %[[VAL_20:.*]] = calyx.instance @main_1_instance of @main_1 : i32, i32, i1, i1, i1, i1
 // CHECK:           calyx.wires {
-// CHECK:             calyx.group @init_main_1_instance {
-// CHECK:               calyx.assign %[[VAL_18]] = %[[VAL_6]] : i1
-// CHECK:               calyx.assign %[[VAL_19]] = %[[VAL_6]] : i1
-// CHECK:               calyx.group_done %[[VAL_20]] : i1
-// CHECK:             }
 // CHECK:           }
 // CHECK:           calyx.control {
 // CHECK:             calyx.seq {
-// CHECK:               calyx.enable @init_main_1_instance
 // CHECK:               calyx.invoke @main_1_instance[arg_mem_0 = mem_0](%[[VAL_15]] = %[[VAL_0]], %[[VAL_16]] = %[[VAL_1]]) -> (i32, i32)
 // CHECK:             }
 // CHECK:           }
@@ -440,19 +433,12 @@ module {
 // CHECK-SAME:                            %[[VAL_2:.*]]: i1 {reset},
 // CHECK-SAME:                            %[[VAL_3:.*]]: i1 {go}) -> (
 // CHECK-SAME:                            %[[VAL_4:.*]]: i1 {done}) {
-// CHECK:           %[[VAL_5:.*]] = hw.constant true
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]], %[[VAL_8:.*]], %[[VAL_9:.*]], %[[VAL_10:.*]], %[[VAL_11:.*]], %[[VAL_12:.*]], %[[VAL_13:.*]] = calyx.seq_mem @mem_0 <[8] x 32> [3] {external = true} : i3, i1, i1, i1, i1, i32, i32, i1
 // CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]], %[[VAL_16:.*]], %[[VAL_17:.*]], %[[VAL_18:.*]], %[[VAL_19:.*]] = calyx.instance @main_1_instance of @main_1 : i32, i1, i1, i1, i32, i1
 // CHECK:           calyx.wires {
-// CHECK:             calyx.group @init_main_1_instance {
-// CHECK:               calyx.assign %[[VAL_16]] = %[[VAL_5]] : i1
-// CHECK:               calyx.assign %[[VAL_17]] = %[[VAL_5]] : i1
-// CHECK:               calyx.group_done %[[VAL_19]] : i1
-// CHECK:             }
 // CHECK:           }
 // CHECK:           calyx.control {
 // CHECK:             calyx.seq {
-// CHECK:               calyx.enable @init_main_1_instance
 // CHECK:               calyx.invoke @main_1_instance[arg_mem_0 = mem_0](%[[VAL_14]] = %[[VAL_0]]) -> (i32)
 // CHECK:             }
 // CHECK:           }
@@ -510,19 +496,12 @@ module {
 // CHECK-SAME:                            %[[VAL_3:.*]]: i1 {reset},
 // CHECK-SAME:                            %[[VAL_4:.*]]: i1 {go}) -> (
 // CHECK-SAME:                            %[[VAL_5:.*]]: i1 {done}) {
-// CHECK:           %[[VAL_6:.*]] = hw.constant true
 // CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]], %[[VAL_9:.*]], %[[VAL_10:.*]], %[[VAL_11:.*]], %[[VAL_12:.*]], %[[VAL_13:.*]], %[[VAL_14:.*]] = calyx.seq_mem @mem_0 <[8] x 32> [3] {external = true} : i3, i1, i1, i1, i1, i32, i32, i1
 // CHECK:           %[[VAL_15:.*]], %[[VAL_16:.*]], %[[VAL_17:.*]], %[[VAL_18:.*]], %[[VAL_19:.*]], %[[VAL_20:.*]], %[[VAL_21:.*]], %[[VAL_22:.*]] = calyx.instance @main_1_instance of @main_1 : i32, i32, i1, i1, i1, i32, i32, i1
 // CHECK:           calyx.wires {
-// CHECK:             calyx.group @init_main_1_instance {
-// CHECK:               calyx.assign %[[VAL_18]] = %[[VAL_6]] : i1
-// CHECK:               calyx.assign %[[VAL_19]] = %[[VAL_6]] : i1
-// CHECK:               calyx.group_done %[[VAL_22]] : i1
-// CHECK:             }
 // CHECK:           }
 // CHECK:           calyx.control {
 // CHECK:             calyx.seq {
-// CHECK:               calyx.enable @init_main_1_instance
 // CHECK:               calyx.invoke @main_1_instance[arg_mem_0 = mem_0](%[[VAL_15]] = %[[VAL_0]], %[[VAL_16]] = %[[VAL_1]]) -> (i32, i32)
 // CHECK:             }
 // CHECK:           }
@@ -663,19 +642,12 @@ module {
 // CHECK-SAME:                            %[[VAL_1:.*]]: i1 {reset},
 // CHECK-SAME:                            %[[VAL_2:.*]]: i1 {go}) -> (
 // CHECK-SAME:                            %[[VAL_3:.*]]: i1 {done}) {
-// CHECK:           %[[VAL_4:.*]] = hw.constant true
 // CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]], %[[VAL_7:.*]], %[[VAL_8:.*]], %[[VAL_9:.*]], %[[VAL_10:.*]], %[[VAL_11:.*]], %[[VAL_12:.*]] = calyx.seq_mem @mem_0 <[33] x 32> [6] {external = true} : i6, i1, i1, i1, i1, i32, i32, i1
 // CHECK:           %[[VAL_13:.*]], %[[VAL_14:.*]], %[[VAL_15:.*]], %[[VAL_16:.*]], %[[VAL_17:.*]] = calyx.instance @main_1_instance of @main_1 : i1, i1, i1, i32, i1
 // CHECK:           calyx.wires {
-// CHECK:             calyx.group @init_main_1_instance {
-// CHECK:               calyx.assign %[[VAL_14]] = %[[VAL_4]] : i1
-// CHECK:               calyx.assign %[[VAL_15]] = %[[VAL_4]] : i1
-// CHECK:               calyx.group_done %[[VAL_17]] : i1
-// CHECK:             }
 // CHECK:           }
 // CHECK:           calyx.control {
 // CHECK:             calyx.seq {
-// CHECK:               calyx.enable @init_main_1_instance
 // CHECK:               calyx.invoke @main_1_instance[arg_mem_0 = mem_0]() -> ()
 // CHECK:             }
 // CHECK:           }
@@ -819,20 +791,13 @@ module {
 // CHECK-SAME:                            %[[VAL_1:.*]]: i1 {reset},
 // CHECK-SAME:                            %[[VAL_2:.*]]: i1 {go}) -> (
 // CHECK-SAME:                            %[[VAL_3:.*]]: i1 {done}) {
-// CHECK:           %[[VAL_4:.*]] = hw.constant true
 // CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]], %[[VAL_7:.*]], %[[VAL_8:.*]], %[[VAL_9:.*]], %[[VAL_10:.*]], %[[VAL_11:.*]], %[[VAL_12:.*]] = calyx.seq_mem @mem_1 <[1] x 32> [1] {external = true} : i1, i1, i1, i1, i1, i32, i32, i1
 // CHECK:           %[[VAL_13:.*]], %[[VAL_14:.*]], %[[VAL_15:.*]], %[[VAL_16:.*]], %[[VAL_17:.*]], %[[VAL_18:.*]], %[[VAL_19:.*]], %[[VAL_20:.*]] = calyx.seq_mem @mem_0 <[1] x 32> [1] {external = true} : i1, i1, i1, i1, i1, i32, i32, i1
 // CHECK:           %[[VAL_21:.*]], %[[VAL_22:.*]], %[[VAL_23:.*]], %[[VAL_24:.*]], %[[VAL_25:.*]] = calyx.instance @main_1_instance of @main_1 : i1, i1, i1, i32, i1
 // CHECK:           calyx.wires {
-// CHECK:             calyx.group @init_main_1_instance {
-// CHECK:               calyx.assign %[[VAL_22]] = %[[VAL_4]] : i1
-// CHECK:               calyx.assign %[[VAL_23]] = %[[VAL_4]] : i1
-// CHECK:               calyx.group_done %[[VAL_25]] : i1
-// CHECK:             }
 // CHECK:           }
 // CHECK:           calyx.control {
 // CHECK:             calyx.seq {
-// CHECK:               calyx.enable @init_main_1_instance
 // CHECK:               calyx.invoke @main_1_instance[arg_mem_0 = mem_0, arg_mem_1 = mem_1]() -> ()
 // CHECK:             }
 // CHECK:           }

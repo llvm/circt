@@ -82,6 +82,52 @@ def ChannelTypeImpl : ESI_Type<"Channel"> {
                          ::circt::esi::ChannelSignaling::ValidReady, 0);
       }]>,
   ];
+
+  let extraClassDeclaration = [{
+    /// Consumers are ones which actually absorb tokens. Non-consumer ops
+    /// include any snooping operations.
+    static SmallVector<std::reference_wrapper<OpOperand>, 4> getConsumers(
+      mlir::TypedValue<ChannelType>);
+    static bool hasOneConsumer(mlir::TypedValue<ChannelType>);
+    static bool hasNoConsumers(mlir::TypedValue<ChannelType>);
+    static LogicalResult verifyChannel(mlir::TypedValue<ChannelType>);
+
+    /// Get the single consumer of a channel. Returns nullptr if there are zero
+    /// or more than one.
+    static OpOperand* getSingleConsumer(mlir::TypedValue<ChannelType>);
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Snoop operations reveal the internal signals of a channel.
+//===----------------------------------------------------------------------===//
+
+def SnoopValidReadyOp : ESI_Physical_Op<"snoop.vr", [InferTypeOpInterface]> {
+  let summary = "Get the valid, ready, and data signals from a channel";
+  let description = [{
+    A snoop allows one to combinationally observe a channel's internal signals.
+    It does not count as another user of the channel. Useful for constructing
+    control logic which can be combinationally driven. Also potentially useful
+    for debugging.
+  }];
+
+  let arguments = (ins ChannelType:$input);
+  let results = (outs I1:$valid, I1:$ready, AnyType:$data);
+  let hasVerifier = 1;
+  let assemblyFormat = [{
+    $input attr-dict `:` qualified(type($input))
+  }];
+
+  let extraClassDeclaration = [{
+    /// Infer the return types of this operation.
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          std::optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::OpaqueProperties properties,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results);
+  }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -475,6 +521,27 @@ def PipelineStageOp : ESI_Physical_Op<"stage", [
 //===----------------------------------------------------------------------===//
 // Misc operations
 //===----------------------------------------------------------------------===//
+
+def FIFOOp : ESI_Physical_Op<"fifo", []> {
+  let summary = "A FIFO with ESI channel connections";
+  let description = [{
+    A FIFO is a first-in-first-out buffer. This operation is a simple FIFO
+    which can be used to connect two ESI channels. The ESI channels MUST have
+    FIFO signaling semantics.
+  }];
+
+  let arguments = (ins
+    ClockType:$clk, I1:$rst, ChannelType:$input,
+    ConfinedAttr<I64Attr, [IntMinValue<1>]>:$depth
+  );
+  let results = (outs ChannelType:$output);
+
+  let assemblyFormat = [{
+    `in` $input `clk` $clk `rst` $rst `depth` $depth attr-dict
+      `:` type($input) `->` type($output)
+  }];
+  let hasVerifier = 1;
+}
 
 def CosimToHostEndpointOp : ESI_Physical_Op<"cosim.to_host", []> {
   let summary = "Co-simulation endpoint sending data to the host.";

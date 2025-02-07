@@ -157,6 +157,8 @@ class Simulator:
       simEnv = Simulator.get_env()
       if self.debug:
         simEnv["COSIM_DEBUG_FILE"] = "cosim_debug.log"
+        # Slow the simulation down to one tick per millisecond.
+        simEnv["DEBUG_PERIOD"] = "1"
       simProc = subprocess.Popen(self.run_command(gui),
                                  stdout=simStdout,
                                  stderr=simStderr,
@@ -240,7 +242,9 @@ class Verilator(Simulator):
         "-DTOP_MODULE=" + self.sources.top,
     ]
     if self.debug:
-      cmd += ["--trace", "--trace-params", "--trace-structs"]
+      cmd += [
+          "--trace", "--trace-params", "--trace-structs", "--trace-underscore"
+      ]
       cflags.append("-DTRACE")
     if len(cflags) > 0:
       cmd += ["-CFLAGS", " ".join(cflags)]

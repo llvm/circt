@@ -71,7 +71,7 @@ PrepareSchedulingPass::prepareSBlock(IsolatedStaticBlockOp sblock) {
 
   auto pipeline = b.create<pipeline::UnscheduledPipelineOp>(
       loc, retTypes, bodyBlock->getArguments(), b.getArrayAttr(inNames),
-      b.getArrayAttr(outNames), ph.getClock(), ph.getReset(), ph.getGo(),
+      b.getArrayAttr(outNames), ph.getClock(), ph.getGo(), ph.getReset(),
       ph.getStall());
   b.setInsertionPointToEnd(pipeline.getEntryStage());
 

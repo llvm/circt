@@ -122,6 +122,10 @@ def type_to_pytype(t) -> ir.Type:
   except ValueError:
     pass
   try:
+    return esi.AnyType(t)
+  except ValueError:
+    pass
+  try:
     return esi.BundleType(t)
   except ValueError:
     pass

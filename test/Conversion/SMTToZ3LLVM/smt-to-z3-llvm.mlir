@@ -38,6 +38,25 @@ llvm.mlir.global internal @solver() {alignment = 8 : i64} : !llvm.ptr {
 // CHECK:   llvm.call @Z3_del_context([[CTX]]) : (!llvm.ptr) -> ()
 // CHECK:   llvm.return
 
+// CHECK-LABEL: llvm.func @test_logic
+// CHECK:   [[CONFIG1:%.+]] = llvm.call @Z3_mk_config() : () -> !llvm.ptr
+// CHECK-DEBUG: [[PROOF_STR1:%.+]] = llvm.mlir.addressof @str{{.*}} : !llvm.ptr
+// CHECK-DEBUG: [[TRUE_STR1:%.+]] = llvm.mlir.addressof @str{{.*}} : !llvm.ptr
+// CHECK-DEBUG: llvm.call @Z3_set_param_value({{.*}}, [[PROOF_STR1]], [[TRUE_STR1]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> ()
+// CHECK:   [[CTX1:%.+]] = llvm.call @Z3_mk_context([[CONFIG1]]) : (!llvm.ptr) -> !llvm.ptr
+// CHECK:   [[CTX_ADDR1:%.+]] = llvm.mlir.addressof @ctx_0 : !llvm.ptr
+// CHECK:   llvm.store [[CTX1]], [[CTX_ADDR1]] : !llvm.ptr, !llvm.ptr
+// CHECK:   llvm.call @Z3_del_config([[CONFIG1]]) : (!llvm.ptr) -> ()
+// CHECK:   [[LOGICADDR:%.+]] = llvm.mlir.addressof [[LOGICSTR:@.+]] : !llvm.ptr
+// CHECK:   [[SOLVER1:%.+]] = llvm.call @Z3_mk_solver_for_logic([[CTX1]], [[LOGICADDR]]) : (!llvm.ptr, !llvm.ptr) -> !llvm.ptr
+// CHECK:   llvm.call @Z3_solver_inc_ref([[CTX1]], [[SOLVER1]]) : (!llvm.ptr, !llvm.ptr) -> ()
+// CHECK:   [[SOLVER_ADDR1:%.+]] = llvm.mlir.addressof @solver_0 : !llvm.ptr
+// CHECK:   llvm.store [[SOLVER1]], [[SOLVER_ADDR1]] : !llvm.ptr, !llvm.ptr
+// CHECK:   llvm.call @solver
+// CHECK:   llvm.call @Z3_solver_dec_ref([[CTX1]], [[SOLVER1]]) : (!llvm.ptr, !llvm.ptr) -> ()
+// CHECK:   llvm.call @Z3_del_context([[CTX1]]) : (!llvm.ptr) -> ()
+// CHECK:   llvm.return
+
 // CHECK-LABEL: llvm.func @solver
 func.func @test(%arg0: i32) {
   %0 = smt.solver (%arg0) : (i32) -> (i32) {
@@ -361,6 +380,17 @@ func.func @test(%arg0: i32) {
     // CHECK-NEXT: llvm.call @Z3_mk_gt({{%[0-9a-zA-Z_]+}}, [[C123]], [[C123]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
     smt.int.cmp gt %10, %10
 
+    // CHECK: [[WIDTHCONST:%.+]] = llvm.mlir.constant(4 : i32) : i32
+    // CHECK: llvm.call @Z3_mk_int2bv({{%[0-9a-zA-Z_]+}}, [[WIDTHCONST]], [[C123]]) : (!llvm.ptr, i32, !llvm.ptr) -> !llvm.ptr
+    smt.int2bv %10 : !smt.bv<4>
+
+    // CHECK: [[UNSIGNEDCONST:%.+]] = llvm.mlir.constant(false) : i1
+    // CHECK: llvm.call @Z3_mk_bv2int({{%[0-9a-zA-Z_]+}}, [[BV0]], [[UNSIGNEDCONST]]) : (!llvm.ptr, !llvm.ptr, i1) -> !llvm.ptr
+    smt.bv2int %c0_bv4 : !smt.bv<4>
+    // CHECK: [[SIGNEDCONST:%.+]] = llvm.mlir.constant(true) : i1
+    // CHECK: llvm.call @Z3_mk_bv2int({{%[0-9a-zA-Z_]+}}, [[BV0]], [[SIGNEDCONST]]) : (!llvm.ptr, !llvm.ptr, i1) -> !llvm.ptr
+    smt.bv2int %c0_bv4 signed : !smt.bv<4>
+
     // CHECK: [[C0:%.+]] = llvm.mlir.constant(0 : i32)
     // CHECK: [[C2:%.+]] = llvm.mlir.constant(2 : i32)
     // CHECK: [[ZERO:%.+]] = llvm.mlir.zero : !llvm.ptr
@@ -422,4 +452,15 @@ func.func @test(%arg0: i32) {
 
   // CHECK: llvm.return
   return
+}
+
+// CHECK-LABEL:  llvm.func @solver
+func.func @test_logic() {
+  smt.solver () : () -> () {
+    %c0_bv4 = smt.bv.constant #smt.bv<0> : !smt.bv<4>
+    smt.set_logic "HORN"
+    smt.check sat {} unknown {} unsat {}
+    smt.yield
+  }
+  func.return
 }

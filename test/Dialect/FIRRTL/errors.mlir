@@ -279,7 +279,7 @@ firrtl.circuit "Foo" {
 
 firrtl.circuit "Foo" {
   firrtl.extmodule @Foo()
-  // expected-error @+1 {{'firrtl.instance' op expects parent op to be one of 'firrtl.module, firrtl.layerblock, firrtl.when, firrtl.match, sv.ifdef'}}
+  // expected-error @+1 {{'firrtl.instance' op expects parent op to be one of 'firrtl.contract, firrtl.module, firrtl.layerblock, firrtl.match, firrtl.when, sv.ifdef'}}
   firrtl.instance "" @Foo()
 }
 
@@ -1819,7 +1819,7 @@ firrtl.circuit "ClassCannotHaveHardwarePorts" {
 firrtl.circuit "ClassCannotHaveWires" {
   firrtl.module @ClassCannotHaveWires() {}
   firrtl.class @ClassWithWire() {
-    // expected-error @below {{'firrtl.wire' op expects parent op to be one of 'firrtl.module, firrtl.layerblock, firrtl.when, firrtl.match, sv.ifdef'}}
+    // expected-error @below {{'firrtl.wire' op expects parent op to be one of 'firrtl.contract, firrtl.module, firrtl.layerblock, firrtl.match, firrtl.when, sv.ifdef'}}
     %w = firrtl.wire : !firrtl.uint<8>
   }
 }
@@ -2196,6 +2196,29 @@ firrtl.circuit "Top" {
     %1 = firrtl.object.subfield %port[input] : !firrtl.class<@MyClass(in input: !firrtl.string)>
     // expected-error @below {{connect has invalid flow: the destination expression "port.input" has no flow, expected sink or duplex flow}}
     firrtl.propassign %1, %0 : !firrtl.string
+  }
+}
+
+// -----
+// Try to read from an output property port with sink flow.
+firrtl.circuit "Top" {
+  // expected-note @below {{the source was defined here}}
+  firrtl.module @Top(out %a : !firrtl.string, out %b : !firrtl.string) {
+    // expected-error @below {{connect has invalid flow: the source expression "b" has sink flow, expected source or duplex flow}}
+    firrtl.propassign %a, %b : !firrtl.string
+  }
+}
+
+// -----
+// Try to read from an input property instance port with sink flow.
+
+firrtl.circuit "Top" {
+  firrtl.module @Child(in %in : !firrtl.string) { }
+  firrtl.module @Top(out %out : !firrtl.string) {
+    // expected-note @below {{the source was defined here}}
+    %child_in = firrtl.instance child @Child(in in : !firrtl.string)
+    // expected-error @below {{connect has invalid flow: the source expression "child.in" has sink flow, expected source or duplex flow}}
+    firrtl.propassign %out, %child_in : !firrtl.string
   }
 }
 
@@ -2602,4 +2625,37 @@ firrtl.circuit "MultipleDUTModules" {
       }
     ]
   } {}
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+  firrtl.module @Foo(in %a: !firrtl.uint<42>) {
+    // expected-error @below {{result types and region argument types must match}}
+    firrtl.contract %a : !firrtl.uint<42> {
+    ^bb0:
+    }
+  }
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+  firrtl.module @Foo(in %a: !firrtl.uint<42>) {
+    // expected-error @below {{result types and region argument types must match}}
+    firrtl.contract {
+    ^bb0(%arg0: !firrtl.uint<1337>):
+    }
+  }
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+  firrtl.module @Foo(in %a: !firrtl.uint<42>) {
+    // expected-error @below {{result types and region argument types must match}}
+    firrtl.contract %a : !firrtl.uint<42> {
+    ^bb0(%arg0: !firrtl.uint<1337>):
+    }
+  }
 }

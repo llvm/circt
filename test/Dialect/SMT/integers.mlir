@@ -29,6 +29,8 @@ func.func @integer_operations() {
   %11 = smt.int.cmp ge %0, %0 {smt.some_attr}
   // CHECK-NEXT: smt.int.cmp gt [[V0]], [[V0]] {smt.some_attr}
   %12 = smt.int.cmp gt %0, %0 {smt.some_attr}
+  // CHECK-NEXT: smt.int2bv [[V0]] {smt.some_attr} : !smt.bv<4>
+  %13 = smt.int2bv %0 {smt.some_attr} : !smt.bv<4>
 
   return
 }

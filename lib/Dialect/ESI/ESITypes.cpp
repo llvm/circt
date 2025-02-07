@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ESI/ESITypes.h"
+#include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -23,6 +24,48 @@ using namespace circt;
 using namespace circt::esi;
 
 AnyType AnyType::get(MLIRContext *context) { return Base::get(context); }
+
+/// Get the list of users with snoops filtered out. Returns a filtered range
+/// which is lazily constructed.
+static auto getChannelConsumers(mlir::TypedValue<ChannelType> chan) {
+  return llvm::make_filter_range(chan.getUses(), [](auto &use) {
+    return !isa<SnoopValidReadyOp>(use.getOwner());
+  });
+}
+SmallVector<std::reference_wrapper<OpOperand>, 4>
+ChannelType::getConsumers(mlir::TypedValue<ChannelType> chan) {
+  return SmallVector<std::reference_wrapper<OpOperand>, 4>(
+      getChannelConsumers(chan));
+}
+bool ChannelType::hasOneConsumer(mlir::TypedValue<ChannelType> chan) {
+  auto consumers = getChannelConsumers(chan);
+  if (consumers.empty())
+    return false;
+  return ++consumers.begin() == consumers.end();
+}
+bool ChannelType::hasNoConsumers(mlir::TypedValue<ChannelType> chan) {
+  return getChannelConsumers(chan).empty();
+}
+OpOperand *ChannelType::getSingleConsumer(mlir::TypedValue<ChannelType> chan) {
+  auto consumers = getChannelConsumers(chan);
+  auto iter = consumers.begin();
+  if (iter == consumers.end())
+    return nullptr;
+  OpOperand *result = &*iter;
+  if (++iter != consumers.end())
+    return nullptr;
+  return result;
+}
+LogicalResult ChannelType::verifyChannel(mlir::TypedValue<ChannelType> chan) {
+  auto consumers = getChannelConsumers(chan);
+  if (consumers.empty() || ++consumers.begin() == consumers.end())
+    return success();
+  auto err = chan.getDefiningOp()->emitOpError(
+      "channels must have at most one consumer");
+  for (auto &consumer : consumers)
+    err.attachNote(consumer.getOwner()->getLoc()) << "channel used here";
+  return err;
+}
 
 LogicalResult
 WindowType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,

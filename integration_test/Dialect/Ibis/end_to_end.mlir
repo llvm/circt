@@ -7,15 +7,12 @@ kanagawa.design @foo {
 // A class hierarchy with a shared parent, and accessing between the children
 
 kanagawa.class sym @C1 {
-  %this = kanagawa.this <@foo::@C1>
   %out = kanagawa.port.output "out" sym @out : i32
   %c0 = hw.constant 42 : i32
   kanagawa.port.write %out, %c0 : !kanagawa.portref<out i32>
 }
 
 kanagawa.class sym @C2 {
-  %this = kanagawa.this <@foo::@C2>
-
   %go_port = kanagawa.port.input "go" sym @go : i1
   %clk_port = kanagawa.port.input "clk" sym @clk : !seq.clock
   %rst_port = kanagawa.port.input "rst" sym @rst : i1
@@ -23,8 +20,6 @@ kanagawa.class sym @C2 {
   %out_port = kanagawa.port.output "out" sym @out : i32
 
   kanagawa.container sym @MyMethod {
-    %t = kanagawa.this <@foo::@MyMethod>
-
     // Grab parent go, clk, reset inputs - note that the requested direction of
     // these are flipped wrt. the defined direction of the ports. The semantics
     // are now that get_port defines the intended usage of the port (in => i'll write to the port, out => i'll read from the port).
@@ -69,7 +64,6 @@ kanagawa.class sym @C2 {
 }
 
 kanagawa.class sym @Parent {
-  %this = kanagawa.this <@foo::@Parent>
   %c1 = kanagawa.instance @c1, <@foo::@C1>
   %c2 = kanagawa.instance @c2, <@foo::@C2>
 

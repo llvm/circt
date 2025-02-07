@@ -43,7 +43,6 @@ static llvm::raw_string_ostream &genValueName(llvm::raw_string_ostream &os,
   auto *definingOp = value.getDefiningOp();
   assert(definingOp && "scoperef should always be defined by some op");
   llvm::TypeSwitch<Operation *, void>(definingOp)
-      .Case<ThisOp>([&](auto op) { os << "this"; })
       .Case<InstanceOp, ContainerInstanceOp>(
           [&](auto op) { os << op.getInstanceNameAttr().strref(); })
       .Case<PortOpInterface>([&](auto op) { os << op.getNameHint(); })
@@ -84,23 +83,7 @@ static StringAttr genValueNameAttr(Value v) {
 // ScopeOpInterface
 //===----------------------------------------------------------------------===//
 
-FailureOr<mlir::TypedValue<ScopeRefType>>
-circt::kanagawa::detail::getThisFromScope(Operation *op) {
-  auto scopeOp = cast<ScopeOpInterface>(op);
-  auto thisOps = scopeOp.getBodyBlock()->getOps<kanagawa::ThisOp>();
-  if (thisOps.empty())
-    return op->emitOpError("must contain a 'kanagawa.this' operation");
-
-  if (std::next(thisOps.begin()) != thisOps.end())
-    return op->emitOpError("must contain only one 'kanagawa.this' operation");
-
-  return (*thisOps.begin()).getThisRef();
-}
-
 LogicalResult circt::kanagawa::detail::verifyScopeOpInterface(Operation *op) {
-  if (failed(getThisFromScope(op)))
-    return failure();
-
   if (!isa<hw::InnerSymbolOpInterface>(op))
     return op->emitOpError("must implement 'InnerSymbolOpInterface'");
 
@@ -322,44 +305,8 @@ PortOpInterface GetPortOp::getPort(const hw::InnerRefNamespace &ns) {
       targetScope.lookupInnerSym(getPortSymbol()));
 }
 
-LogicalResult GetPortOp::canonicalize(GetPortOp op, PatternRewriter &rewriter) {
-  // Canonicalize away get_port on %this in favor of using the port SSA value
-  // directly.
-  // get_port(%this, @P) -> kanagawa.port.#
-  auto parentScope = dyn_cast<ScopeOpInterface>(op->getParentOp());
-  if (parentScope) {
-    auto scopeThis = parentScope.getThis();
-    if (op.getInstance() == scopeThis) {
-      auto definingPort = parentScope.lookupPort(op.getPortSymbol());
-      rewriter.replaceOp(op, {definingPort.getPort()});
-      return success();
-    }
-  }
-
-  return failure();
-}
-
 void GetPortOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), genValueNameAttr(getResult()));
-}
-
-//===----------------------------------------------------------------------===//
-// ThisOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult ThisOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
-  if (!getScope(ns))
-    return emitOpError() << "'" << getScopeName() << "' does not exist";
-
-  return success();
-}
-
-void ThisOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getResult(), "this");
-}
-
-ScopeOpInterface ThisOp::getScope(const hw::InnerRefNamespace &ns) {
-  return ns.lookupOp<ScopeOpInterface>(getScopeNameAttr());
 }
 
 //===----------------------------------------------------------------------===//

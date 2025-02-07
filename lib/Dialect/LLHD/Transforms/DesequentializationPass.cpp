@@ -16,7 +16,7 @@
 #include "circt/Dialect/Comb/CombVisitors.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "circt/Dialect/LLHD/Transforms/Passes.h"
+#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/FVInt.h"
 #include "mlir/IR/PatternMatch.h"
@@ -27,7 +27,7 @@
 namespace circt {
 namespace llhd {
 #define GEN_PASS_DEF_DESEQUENTIALIZATION
-#include "circt/Dialect/LLHD/Transforms/Passes.h.inc"
+#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h.inc"
 } // namespace llhd
 } // namespace circt
 
@@ -202,15 +202,17 @@ namespace {
 /// triggers.
 class DnfAnalyzer {
 public:
-  DnfAnalyzer(Value value, function_ref<bool(Value)> sampledInPast)
-      : root(value) {
+  DnfAnalyzer(Value value) : root(value) {
     assert(value.getType().isSignlessInteger(1) &&
            "only 1-bit signless integers supported");
+  }
 
+  LogicalResult prepareAnalyzer(function_ref<bool(Value)> sampledInPast,
+                                unsigned maxPrimitives) {
     DenseSet<Value> alreadyAdded;
 
     SmallVector<Value> worklist;
-    worklist.push_back(value);
+    worklist.push_back(root);
 
     while (!worklist.empty()) {
       Value curr = worklist.pop_back_val();
@@ -256,9 +258,15 @@ public:
         llvm::dbgs() << "  - Primitive variable: " << val << "\n";
     });
 
+    if (primitives.size() > maxPrimitives) {
+      LLVM_DEBUG({ llvm::dbgs() << "  Too many primitives, skipping...\n"; });
+      return failure();
+    }
+
     this->isClock = SmallVector<bool>(primitives.size(), false);
     this->dontCare = SmallVector<APInt>(primitives.size(),
                                         APInt(1ULL << primitives.size(), 0));
+    return success();
   }
 
   /// Note that clocks can be dual edge triggered, but this is not directly
@@ -268,12 +276,7 @@ public:
   LogicalResult
   computeTriggers(OpBuilder &builder, Location loc,
                   function_ref<bool(Value, Value)> sampledFromSameSignal,
-                  SmallVectorImpl<Trigger> &triggers, unsigned maxPrimitives) {
-    if (primitives.size() > maxPrimitives) {
-      LLVM_DEBUG({ llvm::dbgs() << "  Too many primitives, skipping...\n"; });
-      return failure();
-    }
-
+                  SmallVectorImpl<Trigger> &triggers) {
     // Populate the truth table and the result APInt.
     computeTruthTable();
 
@@ -472,7 +475,7 @@ private:
                                OpBuilder &builder, Location loc) {
     for (auto *iter1 = triggers.begin(); iter1 != triggers.end(); ++iter1) {
       for (auto *iter2 = iter1 + 1; iter2 != triggers.end(); ++iter2) {
-        if (iter1->clocks == iter2->clocks && iter1->kinds == iter1->kinds) {
+        if (iter1->clocks == iter2->clocks && iter1->kinds == iter2->kinds) {
           iter1->enable =
               builder.create<comb::OrOp>(loc, iter1->enable, iter2->enable);
           triggers.erase(iter2--);
@@ -620,9 +623,10 @@ void DesequentializationPass::runOnProcess(llhd::ProcessOp procOp) const {
       return false;
     };
 
-    if (failed(DnfAnalyzer(op.getEnable(), sampledInPast)
-                   .computeTriggers(builder, loc, sampledFromSameSignal,
-                                    triggers, maxPrimitives))) {
+    DnfAnalyzer analyzer(op.getEnable());
+    if (failed(analyzer.prepareAnalyzer(sampledInPast, maxPrimitives)) ||
+        failed(analyzer.computeTriggers(builder, loc, sampledFromSameSignal,
+                                        triggers))) {
       LLVM_DEBUG({
         llvm::dbgs() << "  Unable to compute trigger list for drive condition, "
                         "skipping...\n";
@@ -710,6 +714,9 @@ void DesequentializationPass::runOnProcess(llhd::ProcessOp procOp) const {
 
     op.getEnableMutable().clear();
     op.getValueMutable().assign(regOut);
+    Value epsilonTime =
+        builder.create<llhd::ConstantTimeOp>(loc, 0, "ns", 0, 1);
+    op.getTimeMutable().assign(epsilonTime);
 
     LLVM_DEBUG(
         { llvm::dbgs() << "  Lowered Drive Operation successfully!\n\n"; });

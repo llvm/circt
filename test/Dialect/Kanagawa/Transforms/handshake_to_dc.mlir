@@ -4,7 +4,6 @@
 // This file just tests the kanagawa-specific hooks.
 
 // CHECK-LABEL:   kanagawa.class sym @ToDC {
-// CHECK:           %[[VAL_0:.*]] = kanagawa.this <@foo::@ToDC>
 // CHECK:           kanagawa.method.df @foo(%[[VAL_1:.*]]: !dc.value<i32>) -> !dc.value<i32> {
 // CHECK:             %[[VAL_2:.*]], %[[VAL_3:.*]] = dc.unpack %[[VAL_1]] : !dc.value<i32>
 // CHECK:             %[[VAL_4:.*]]:2 = dc.fork [2] %[[VAL_2]]
@@ -20,7 +19,6 @@
 
 kanagawa.design @foo {
 kanagawa.class sym @ToDC {
-  %this = kanagawa.this <@foo::@ToDC> 
   kanagawa.method.df @foo(%arg0: i32) -> (i32) {
     %o0, %o1 = handshake.fork [2] %arg0 : i32
     %1 = kanagawa.sblock.isolated(%a0 : i32 = %o0, %a1 : i32 = %o1) -> i32 {

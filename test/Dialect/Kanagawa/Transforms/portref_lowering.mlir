@@ -3,20 +3,17 @@
 kanagawa.design @D {
 
 kanagawa.container sym @C {
-  %this = kanagawa.this <@D::@C> 
   %in = kanagawa.port.input "in" sym @in : i1
   %out = kanagawa.port.output "out" sym @out : i1
 }
 
 // CHECK-LABEL:   kanagawa.container sym @AccessSibling {
-// CHECK:           %[[VAL_0:.*]] = kanagawa.this <@D::@AccessSibling>
 // CHECK:           %[[VAL_1:.*]] = kanagawa.port.input "p_b_out" sym @p_b_out : i1
 // CHECK:           %[[VAL_2:.*]] = kanagawa.port.output "p_b_in" sym @p_b_in : i1
 // CHECK:           kanagawa.port.write %[[VAL_2]], %[[VAL_3:.*]] : !kanagawa.portref<out i1>
 // CHECK:           %[[VAL_3]] = kanagawa.port.read %[[VAL_1]] : !kanagawa.portref<in i1>
 // CHECK:         }
 kanagawa.container sym @AccessSibling {
-  %this = kanagawa.this <@D::@AccessSibling> 
   %p_b_out = kanagawa.port.input "p_b_out" sym @p_b_out : !kanagawa.portref<out i1>
   %p_b_out_val = kanagawa.port.read %p_b_out : !kanagawa.portref<in !kanagawa.portref<out i1>>
   %p_b_in = kanagawa.port.input "p_b_in" sym @p_b_in : !kanagawa.portref<in i1>
@@ -28,7 +25,6 @@ kanagawa.container sym @AccessSibling {
 }
 
 // CHECK-LABEL:   kanagawa.container sym @Parent {
-// CHECK:           %[[VAL_0:.*]] = kanagawa.this <@D::@Parent>
 // CHECK:           %[[VAL_1:.*]] = kanagawa.container.instance @a, <@D::@AccessSibling>
 // CHECK:           %[[VAL_2:.*]] = kanagawa.get_port %[[VAL_1]], @p_b_out : !kanagawa.scoperef<@D::@AccessSibling> -> !kanagawa.portref<in i1>
 // CHECK:           %[[VAL_3:.*]] = kanagawa.port.read %[[VAL_4:.*]] : !kanagawa.portref<out i1>
@@ -41,7 +37,6 @@ kanagawa.container sym @AccessSibling {
 // CHECK:           %[[VAL_7]] = kanagawa.get_port %[[VAL_8]], @in : !kanagawa.scoperef<@D::@C> -> !kanagawa.portref<in i1>
 // CHECK:         }
 kanagawa.container sym @Parent {
-  %this = kanagawa.this <@D::@Parent> 
   %a = kanagawa.container.instance @a, <@D::@AccessSibling> 
   %a.p_b_out = kanagawa.get_port %a, @p_b_out : !kanagawa.scoperef<@D::@AccessSibling> -> !kanagawa.portref<in !kanagawa.portref<out i1>>
   kanagawa.port.write %a.p_b_out, %b.out : !kanagawa.portref<in !kanagawa.portref<out i1>>
@@ -60,12 +55,10 @@ kanagawa.design @D {
 
 
 // CHECK-LABEL:   kanagawa.container sym @ParentPortAccess {
-// CHECK:           %[[VAL_0:.*]] = kanagawa.this <@D::@ParentPortAccess>
 // CHECK:           %[[VAL_1:.*]] = kanagawa.port.output "p_in" sym @p_in : i1
 // CHECK:           %[[VAL_2:.*]] = kanagawa.port.input "p_out" sym @p_out : i1
 // CHECK:         }
 kanagawa.container sym @ParentPortAccess {
-  %this = kanagawa.this <@D::@ParentPortAccess> 
   %p_in = kanagawa.port.input "p_in" sym @p_in : !kanagawa.portref<in i1>
   %p_in_val = kanagawa.port.read %p_in : !kanagawa.portref<in !kanagawa.portref<in i1>>
   %p_out = kanagawa.port.input "p_out" sym @p_out : !kanagawa.portref<out i1>
@@ -73,7 +66,6 @@ kanagawa.container sym @ParentPortAccess {
 }
 
 // CHECK-LABEL:   kanagawa.container sym @Parent {
-// CHECK:           %[[VAL_0:.*]] = kanagawa.this <@D::@Parent>
 // CHECK:           %[[VAL_1:.*]] = kanagawa.container.instance @c, <@D::@ParentPortAccess>
 // CHECK:           %[[VAL_2:.*]] = kanagawa.get_port %[[VAL_1]], @p_in : !kanagawa.scoperef<@D::@ParentPortAccess> -> !kanagawa.portref<out i1>
 // CHECK:           %[[VAL_3:.*]] = kanagawa.port.read %[[VAL_2]] : !kanagawa.portref<out i1>
@@ -85,7 +77,6 @@ kanagawa.container sym @ParentPortAccess {
 // CHECK:           %[[VAL_7]] = kanagawa.port.output "out" sym @out : i1
 // CHECK:         }
 kanagawa.container sym @Parent {
-  %this = kanagawa.this <@D::@Parent> 
   %c = kanagawa.container.instance @c, <@D::@ParentPortAccess> 
   %c.p_in = kanagawa.get_port %c, @p_in : !kanagawa.scoperef<@D::@ParentPortAccess> -> !kanagawa.portref<in !kanagawa.portref<in i1>>
   kanagawa.port.write %c.p_in, %in : !kanagawa.portref<in !kanagawa.portref<in i1>>
@@ -105,14 +96,12 @@ kanagawa.design @D {
 // C1 child -> P1 parent -> P2 parent -> C2 child -> C3 child
 
 // CHECK-LABEL:   kanagawa.container sym @C1 {
-// CHECK:           %[[VAL_0:.*]] = kanagawa.this <@D::@C1>
 // CHECK:           %[[VAL_1:.*]] = kanagawa.port.output "parent_parent_c2_c3_in" sym @parent_parent_c2_c3_in : i1
 // CHECK:           kanagawa.port.write %[[VAL_1]], %[[VAL_2:.*]] : !kanagawa.portref<out i1>
 // CHECK:           %[[VAL_3:.*]] = kanagawa.port.input "parent_parent_c2_c3_out" sym @parent_parent_c2_c3_out : i1
 // CHECK:           %[[VAL_2]] = kanagawa.port.read %[[VAL_3]] : !kanagawa.portref<in i1>
 // CHECK:         }
 kanagawa.container sym @C1 {
-  %this = kanagawa.this <@D::@C1> 
   %parent_parent_c2_c3_in = kanagawa.port.input "parent_parent_c2_c3_in" sym @parent_parent_c2_c3_in : !kanagawa.portref<in i1>
   %parent_parent_c2_c3_out = kanagawa.port.input "parent_parent_c2_c3_out" sym @parent_parent_c2_c3_out : !kanagawa.portref<out i1>
 
@@ -124,7 +113,6 @@ kanagawa.container sym @C1 {
 }
 
 // CHECK-LABEL:   kanagawa.container sym @C2 {
-// CHECK:           %[[VAL_0:.*]] = kanagawa.this <@D::@C2>
 // CHECK:           %[[VAL_1:.*]] = kanagawa.container.instance @c3, <@D::@C>
 // CHECK:           %[[VAL_2:.*]] = kanagawa.get_port %[[VAL_1]], @in : !kanagawa.scoperef<@D::@C> -> !kanagawa.portref<in i1>
 // CHECK:           %[[VAL_3:.*]] = kanagawa.get_port %[[VAL_1]], @out : !kanagawa.scoperef<@D::@C> -> !kanagawa.portref<out i1>
@@ -136,7 +124,6 @@ kanagawa.container sym @C1 {
 // CHECK:           kanagawa.port.write %[[VAL_6]], %[[VAL_7]] : !kanagawa.portref<out i1>
 // CHECK:         }
 kanagawa.container sym @C2 {
-  %this = kanagawa.this <@D::@C2> 
   %c3 = kanagawa.container.instance @c3, <@D::@C> 
   %c3.in = kanagawa.get_port %c3, @in : !kanagawa.scoperef<@D::@C> -> !kanagawa.portref<in i1>
   %c3.out = kanagawa.get_port %c3, @out : !kanagawa.scoperef<@D::@C> -> !kanagawa.portref<out i1>
@@ -146,13 +133,11 @@ kanagawa.container sym @C2 {
   kanagawa.port.write %parent_parent_c2_c3_out, %c3.out : !kanagawa.portref<out !kanagawa.portref<out i1>>
 }
 kanagawa.container sym @C {
-  %this = kanagawa.this <@D::@C> 
   %in = kanagawa.port.input "in" sym @in : i1
   %out = kanagawa.port.output "out" sym @out : i1
 }
 
 // CHECK-LABEL:   kanagawa.container sym @P1 {
-// CHECK:           %[[VAL_0:.*]] = kanagawa.this <@D::@P1>
 // CHECK:           %[[VAL_1:.*]] = kanagawa.container.instance @c1, <@D::@C1>
 // CHECK:           %[[VAL_2:.*]] = kanagawa.get_port %[[VAL_1]], @parent_parent_c2_c3_in : !kanagawa.scoperef<@D::@C1> -> !kanagawa.portref<out i1>
 // CHECK:           %[[VAL_3:.*]] = kanagawa.port.read %[[VAL_2]] : !kanagawa.portref<out i1>
@@ -164,7 +149,6 @@ kanagawa.container sym @C {
 // CHECK:           %[[VAL_6]] = kanagawa.port.input "parent_parent_c2_c3_out" sym @parent_parent_c2_c3_out : i1
 // CHECK:         }
 kanagawa.container sym @P1 {
-  %this = kanagawa.this <@D::@P1> 
   %c1 = kanagawa.container.instance @c1, <@D::@C1> 
   %c1.parent_parent_c2_c3_in = kanagawa.get_port %c1, @parent_parent_c2_c3_in : !kanagawa.scoperef<@D::@C1> -> !kanagawa.portref<in !kanagawa.portref<in i1>>
   kanagawa.port.write %c1.parent_parent_c2_c3_in, %0 : !kanagawa.portref<in !kanagawa.portref<in i1>>
@@ -177,7 +161,6 @@ kanagawa.container sym @P1 {
 }
 
 // CHECK-LABEL:   kanagawa.container sym @P2 {
-// CHECK:           %[[VAL_0:.*]] = kanagawa.this <@D::@P2>
 // CHECK:           %[[VAL_1:.*]] = kanagawa.container.instance @p1, <@D::@P1>
 // CHECK:           %[[VAL_2:.*]] = kanagawa.get_port %[[VAL_1]], @parent_parent_c2_c3_in : !kanagawa.scoperef<@D::@P1> -> !kanagawa.portref<out i1>
 // CHECK:           %[[VAL_3:.*]] = kanagawa.port.read %[[VAL_2]] : !kanagawa.portref<out i1>
@@ -193,7 +176,6 @@ kanagawa.container sym @P1 {
 // CHECK:           kanagawa.port.write %[[VAL_10]], %[[VAL_9]] : !kanagawa.portref<in i1>
 // CHECK:         }
 kanagawa.container sym @P2 {
-  %this = kanagawa.this <@D::@P2> 
   %p1 = kanagawa.container.instance @p1, <@D::@P1> 
   %p1.parent_parent_c2_c3_in = kanagawa.get_port %p1, @parent_parent_c2_c3_in : !kanagawa.scoperef<@D::@P1> -> !kanagawa.portref<in !kanagawa.portref<in i1>>
   kanagawa.port.write %p1.parent_parent_c2_c3_in, %1 : !kanagawa.portref<in !kanagawa.portref<in i1>>
@@ -214,12 +196,10 @@ kanagawa.design @D {
 
 
 // CHECK-LABEL:   kanagawa.container sym @AccessParent {
-// CHECK:           %[[VAL_0:.*]] = kanagawa.this <@D::@AccessParent>
 // CHECK:           %[[VAL_1:.*]] = kanagawa.port.output "p_out" sym @p_out : i1
 // CHECK:           %[[VAL_2:.*]] = kanagawa.port.input "p_in" sym @p_in : i1
 // CHECK:         }
 kanagawa.container sym @AccessParent {
-  %this = kanagawa.this <@D::@AccessParent> 
   %p_out = kanagawa.port.input "p_out" sym @p_out : !kanagawa.portref<in i1>
   %p_out.val = kanagawa.port.read %p_out : !kanagawa.portref<in !kanagawa.portref<in i1>>
   %p_in = kanagawa.port.input "p_in" sym @p_in : !kanagawa.portref<out i1>
@@ -227,7 +207,6 @@ kanagawa.container sym @AccessParent {
 }
 
 // CHECK-LABEL:   kanagawa.container sym @Parent {
-// CHECK:           %[[VAL_0:.*]] = kanagawa.this <@D::@Parent>
 // CHECK:           %[[VAL_1:.*]] = kanagawa.port.input "in" sym @in : i1
 // CHECK:           %[[VAL_2:.*]] = kanagawa.port.read %[[VAL_1]] : !kanagawa.portref<in i1>
 // CHECK:           %[[VAL_3:.*]] = kanagawa.wire.output @in.rd, %[[VAL_2]] : i1
@@ -243,7 +222,6 @@ kanagawa.container sym @AccessParent {
 // CHECK:           kanagawa.port.write %[[VAL_10]], %[[VAL_11]] : !kanagawa.portref<in i1>
 // CHECK:         }
 kanagawa.container sym @Parent {
-  %this = kanagawa.this <@D::@Parent> 
   %in = kanagawa.port.input "in" sym @in : i1
   %in.val = kanagawa.port.read %in : !kanagawa.portref<in i1>
   %in.rd = kanagawa.wire.output @in.rd, %in.val : i1

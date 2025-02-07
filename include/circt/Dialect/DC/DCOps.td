@@ -94,6 +94,7 @@ def JoinOp : DCOp<"join", [Commutative]> {
 
   let assemblyFormat = "$tokens attr-dict";
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "mlir::ValueRange":$ins), [{

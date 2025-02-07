@@ -13,12 +13,11 @@ func.func @staggeredJoin1(%a: !dc.token, %b : !dc.token) -> (!dc.token) {
     return %1 : !dc.token
 }
 
-// TODO: For some reason, the canonicalizer no longer combines the two joins. Investigate.
 // CHECK-LABEL:   func.func @staggeredJoin2(
 // CHECK-SAME:           %[[VAL_0:.*]]: !dc.token, %[[VAL_1:.*]]: !dc.token, %[[VAL_2:.*]]: !dc.token, %[[VAL_3:.*]]: !dc.token) -> !dc.token {
-// CHECKx:           %[[VAL_4:.*]] = dc.join %[[VAL_2]], %[[VAL_3]], %[[VAL_0]], %[[VAL_1]]
-// CHECKx:           return %[[VAL_4]] : !dc.token
-// CHECKx:         }
+// CHECK:           %[[VAL_4:.*]] = dc.join %[[VAL_2]], %[[VAL_3]], %[[VAL_0]], %[[VAL_1]]
+// CHECK:           return %[[VAL_4]] : !dc.token
+// CHECK:         }
 func.func @staggeredJoin2(%a: !dc.token, %b : !dc.token, %c : !dc.token, %d : !dc.token) -> (!dc.token) {
     %0 = dc.join %a, %b
     %1 = dc.join %c, %0, %d
@@ -102,13 +101,11 @@ func.func @forkToFork2(%a: !dc.token) -> (!dc.token, !dc.token, !dc.token) {
     return %0, %2, %3 : !dc.token, !dc.token, !dc.token
 }
 
-// TODO: For some reason, the canonicalizer no longer simplifies this redundant
-// triangle pattern. Investigate.
 // CHECK-LABEL:   func.func @merge(
 // CHECK-SAME:                     %[[VAL_0:.*]]: !dc.value<i1>) -> !dc.token {
-// CHECKx:           %[[VAL_1:.*]], %[[VAL_2:.*]] = dc.unpack %[[VAL_0]] : !dc.value<i1>
-// CHECKx:           return %[[VAL_1]] : !dc.token
-// CHECKx:         }
+// CHECK:           %[[VAL_1:.*]], %[[VAL_2:.*]] = dc.unpack %[[VAL_0]] : !dc.value<i1>
+// CHECK:           return %[[VAL_1]] : !dc.token
+// CHECK:         }
 func.func @merge(%sel : !dc.value<i1>) -> (!dc.token) {
     // Canonicalize away a merge that is fed by a branch with the same select
     // input.
@@ -117,18 +114,33 @@ func.func @merge(%sel : !dc.value<i1>) -> (!dc.token) {
     return %0 : !dc.token
 }
 
-// TODO: For some reason, the canonicalizer no longer removes the source->join
-// pattern. Investigate.
 // CHECK-LABEL:   func.func @joinOnSource(
 // CHECK-SAME:                            %[[VAL_0:.*]]: !dc.token,
 // CHECK-SAME:                            %[[VAL_1:.*]]: !dc.token) -> !dc.token {
-// CHECKx:           %[[VAL_2:.*]] = dc.join %[[VAL_0]], %[[VAL_1]]
-// CHECKx:           return %[[VAL_2]] : !dc.token
-// CHECKx:         }
+// CHECK:           %[[VAL_2:.*]] = dc.join %[[VAL_0]], %[[VAL_1]]
+// CHECK:           return %[[VAL_2]] : !dc.token
+// CHECK:         }
 func.func @joinOnSource(%a : !dc.token, %b : !dc.token) -> (!dc.token) {
     %0 = dc.source
     %out = dc.join %a, %0, %b
     return %out : !dc.token
+}
+
+
+// Join on branch, where all branch results are used in the join is a no-op,
+// and the join can use the token of the input value to the branch.
+// CHECK-LABEL:   func.func @joinOnBranch(
+// CHECK-SAME:                            %[[VAL_0:.*]]: !dc.value<i1>, %[[VAL_1:.*]]: !dc.value<i1>, %[[VAL_2:.*]]: !dc.token) -> (!dc.token, !dc.token) {
+// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = dc.branch %[[VAL_1]]
+// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = dc.unpack %[[VAL_0]] : !dc.value<i1>
+// CHECK:           %[[VAL_7:.*]] = dc.join %[[VAL_2]], %[[VAL_3]], %[[VAL_5]]
+// CHECK:           return %[[VAL_7]], %[[VAL_4]] : !dc.token, !dc.token
+// CHECK:         }
+func.func @joinOnBranch(%sel : !dc.value<i1>, %sel2 : !dc.value<i1>, %other : !dc.token) -> (!dc.token, !dc.token) {
+    %true, %false = dc.branch %sel
+    %true2, %false2 = dc.branch %sel2
+    %out = dc.join %true, %false, %other, %true2
+    return %out, %false2 : !dc.token, !dc.token
 }
 
 // CHECK-LABEL:   func.func @forkOfSource() -> (!dc.token, !dc.token) {

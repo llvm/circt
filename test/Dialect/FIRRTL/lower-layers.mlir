@@ -396,9 +396,9 @@ firrtl.circuit "Test" {
   // Inline Layers
   //===--------------------------------------------------------------------===//
 
-  // CHECK:      sv.macro.decl @[[INLINE:.*]]["Inline"]
-  // CHECK-NEXT: sv.macro.decl @Inline$Inline
-  // CHECK-NEXT: sv.macro.decl @Bound$Inline
+  // CHECK:      sv.macro.decl @layer_Test$Inline
+  // CHECK-NEXT: sv.macro.decl @layer_Test$Inline$Inline
+  // CHECK-NEXT: sv.macro.decl @layer_Test$Bound$Inline
   firrtl.layer @Inline inline {
     firrtl.layer @Inline inline {}
   }
@@ -409,15 +409,15 @@ firrtl.circuit "Test" {
 
   // CHECK:      firrtl.module private @ModuleWithInlineLayerBlocks_Bound() {
   // CHECK-NEXT:   %w3 = firrtl.wire
-  // CHECK-NEXT:   sv.ifdef @Bound$Inline {
+  // CHECK-NEXT:   sv.ifdef @layer_Test$Bound$Inline {
   // CHECK-NEXT:     %w4 = firrtl.wire
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
 
   // CHECK-NEXT: firrtl.module @ModuleWithInlineLayerBlocks() {
-  // CHECK-NEXT:   sv.ifdef @[[INLINE]] {
+  // CHECK-NEXT:   sv.ifdef @layer_Test$Inline {
   // CHECK-NEXT:     %w1 = firrtl.wire
-  // CHECK-NEXT:     sv.ifdef @Inline$Inline {
+  // CHECK-NEXT:     sv.ifdef @layer_Test$Inline$Inline {
   // CHECK-NEXT:       %w2 = firrtl.wire
   // CHECK-NEXT:     }
   // CHECK-NEXT:   }
@@ -763,3 +763,24 @@ firrtl.circuit "RWTH" {
     }
   }
 }
+
+// -----
+
+// Check sv.verbatim inner refs are updated, as occurs with views under layers.
+// CHECK-LABEL: circuit "Verbatim"
+firrtl.circuit "Verbatim" {
+  firrtl.layer @ViewLayer  bind { }
+  firrtl.module @Verbatim() {
+    firrtl.layerblock @ViewLayer {
+      %c1_ui10 = firrtl.constant 1 : !firrtl.uint<10>
+      %n = firrtl.node sym @node %c1_ui10 : !firrtl.uint<10>
+      sv.verbatim "// node: {{0}}, {{1}}"(%n) : !firrtl.uint<10> {symbols = [#hw.innerNameRef<@Verbatim::@node>]}
+    }
+  }
+}
+// CHECK:        firrtl.module private @[[VL:.+]]() {
+// CHECK-NEXT:     firrtl.constant 1
+// CHECK-NEXT:     firrtl.node sym @node
+// CHECK-NEXT:     sv.verbatim 
+// CHECK-SAME:     !firrtl.uint<10> {symbols = [#hw.innerNameRef<@[[VL]]::@node>]}
+// CHECK-NEXT:   }

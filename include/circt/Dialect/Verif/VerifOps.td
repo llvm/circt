@@ -10,6 +10,7 @@
 #define CIRCT_DIALECT_VERIF_VERIFOPS_TD
 
 include "circt/Dialect/Verif/VerifDialect.td"
+include "circt/Dialect/Verif/VerifOpInterfaces.td"
 include "circt/Dialect/LTL/LTLDialect.td"
 include "circt/Dialect/LTL/LTLTypes.td"
 include "circt/Dialect/HW/HWTypes.td"
@@ -304,6 +305,33 @@ def FormalOp : VerifOp<"formal", [
       verif.assert %4 : i1
     }
     ```
+
+    ### Parameters
+    The following parameters have a predefined meaning and are interpreted by
+    tools such as `circt-test` to guide execution of tests:
+
+    - `ignore`: Indicates whether the test should be ignored and skipped. This
+      can be useful for temporarily disabling tests without having to remove
+      them from the input. Must be a _boolean_ value.
+      ```mlir
+      verif.formal @Foo {ignore = true}
+      ```
+
+    - `require_runners`: A list of test runners that may be used to execute this
+      test. This option may be used to force a test to run using one of a few
+      known-good runners, acting like a whitelist. Must be an _array_ of
+      _strings_.
+      ```mlir
+      verif.formal @Foo {require_runners = ["sby", "circt-bmc"]}
+      ```
+
+    - `exclude_runners`: A list of test runners that must not be used to execute
+      this test. This option may be used to exclude a few known-bad runners from
+      executing this test, acting like a blacklist. Must be an _array_ of
+      _strings_.
+      ```mlir
+      verif.formal @Foo {exclude_runners = ["sby", "circt-bmc"]}
+      ```
   }];
   let arguments = (ins
     SymbolNameAttr:$sym_name,
@@ -319,13 +347,14 @@ def FormalOp : VerifOp<"formal", [
 }
 
 def SymbolicValueOp : VerifOp<"symbolic_value", [
-  HasParent<"verif::FormalOp">,
+  ParentOneOf<["verif::FormalOp", "hw::HWModuleOp"]>,
 ]>{
   let summary = "Create a symbolic value for formal verification";
   let description = [{
     This operation creates a new symbolic value that can be used to formally
     verify designs. Verification tools will try to find concrete assignments for
-    symbolic values that violate asserts or make covers true.
+    symbolic values that violate asserts or make covers true. This value is not
+    fixed - the value taken can vary arbitrarily between timesteps.
   }];
   let results = (outs AnyType:$result);
   let assemblyFormat = "attr-dict `:` type($result)";
@@ -376,19 +405,17 @@ def ContractOp : VerifOp<"contract", [
 }
 
 class RequireLikeOp<string mnemonic> : VerifOp<mnemonic, [
-  AttrSizedOperandSegments,
   HasParent<"verif::ContractOp">,
+  DeclareOpInterfaceMethods<RequireLike>
 ]> {
   let arguments = (ins
     LTLAnyPropertyType:$property,
-    Optional<ClockType>:$clock,
     Optional<I1>:$enable,
     OptionalAttr<StrAttr>:$label
   );
   let assemblyFormat = [{
     $property
     (`if` $enable^)?
-    (`clock` $clock^)?
     (`label` $label^)?
     attr-dict `:` type($property)
   }];

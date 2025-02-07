@@ -309,7 +309,8 @@ public:
 
   /// This method transforms the entry from an operation to a string value.
   void setString(StringRef value) {
-    assert(pointerData.is<Operation *>() && "shouldn't already be a string");
+    assert(llvm::isa<Operation *>(pointerData) &&
+           "shouldn't already be a string");
     length = value.size();
     void *data = malloc(length);
     memcpy(data, value.data(), length);

@@ -10,13 +10,16 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/EnumAttr.td"
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/CommonAttrConstraints.td"
 include "mlir/IR/Properties.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "circt/Dialect/RTG/IR/RTGInterfaces.td"
+include "circt/Dialect/RTG/IR/RTGISAAssemblyInterfaces.td"
 
 // Base class for the operation in this dialect.
 class RTGOp<string mnemonic, list<Trait> traits = []> :
@@ -47,53 +50,151 @@ def SequenceOp : RTGOp<"sequence", [
     stronger top-level isolation guarantees.
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name);
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       TypeAttrOf<SequenceType>:$sequenceType);
+
   let regions = (region SizedRegion<1>:$bodyRegion);
 
-  let assemblyFormat = [{
-    $sym_name attr-dict-with-keyword $bodyRegion
-  }];
+  let hasCustomAssemblyFormat = 1;
+  let hasRegionVerifier = 1;
 }
 
-def SequenceClosureOp : RTGOp<"sequence_closure", [
+def GetSequenceOp : RTGOp<"get_sequence", [
   Pure,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
-  let summary = "create a sequence closure with the provided arguments";
+  let summary = "create a sequence value";
   let description = [{
-    This operation creates a closure object for the provided sequence and
-    arguments. This allows sequences to be passed around as an SSA value.
-    For example, it can be inserted into a set and selected at random which
-    is one of the main ways to do randomization. Not having to deal with
-    sequence arguments after randomly selecting a sequence simplifies the
-    problem of coming up with values to pass as arguments, but also provides a
-    way for the user to constrain the arguments at the location where they are
-    added to the set. In the future, it can also be possible to add sequence
-    handles directly to a set and randomly pick arguments at the invokation
-    site.
+    This operation creates a sequence value referring to the provided sequence
+    by symbol. It allows sequences to be passed around as an SSA value. For
+    example, it can be inserted into a set and selected at random which is one
+    of the main ways to do randomization.
   }];
 
-  let arguments = (ins SymbolNameAttr:$sequence, Variadic<AnyType>:$args);
+  let arguments = (ins SymbolNameAttr:$sequence);
   let results = (outs SequenceType:$ref);
 
-  let assemblyFormat = [{
-    $sequence (`(` $args^ `:` qualified(type($args)) `)`)? attr-dict
-  }];
+  let assemblyFormat = "$sequence `:` qualified(type($ref)) attr-dict";
 }
 
-def InvokeSequenceOp : RTGOp<"invoke_sequence", []> {
-  let summary = "invoke a sequence of instructions";
+def RandomizeSequenceOp : RTGOp<"randomize_sequence", []> {
+  let summary = "randomize the content of a sequence";
   let description = [{
-    This operation takes a sequence closure as operand and acts as a placeholder
-    for that sequence instantiated with the arguments in the closure in place.
+    This operation takes a fully substituted sequence and randomizes its
+    content. This means, no operations the returned sequence does not contain
+    any randomization constructs anymore (such as random selection from sets and
+    bags, or other 'randomize_sequence' operations).
+
+    It is useful to have this operation separate from 'embed_sequence' such that
+    the exact same sequence (i.e., with the same random choices taken) can be
+    embedded at multiple places.
+    It is also useful to have this separate from sequence substitution because
+    this operation is sensitive to the context, but the substitution values for
+    a sequence family might already be available in a parent sequence that is
+    placed on a different context. Thus, not having it separated would mean that
+    the substitution values must all be passed down as arguments to the child
+    sequence instead of a a single fully substituted sequence value.
+  }];
+
+  let arguments = (ins FullySubstitutedSequenceType:$sequence);
+
+  let results = (outs RandomizedSequenceType:$randomizedSequence);
+
+  let assemblyFormat = "$sequence attr-dict";
+}
+
+def SubstituteSequenceOp : RTGOp<"substitute_sequence", [
+  Pure,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "partially substitute arguments of a sequence family";
+  let description = [{
+    This operation substitutes the first N of the M >= N arguments of the given
+    sequence family, where N is the size of provided argument substitution list.
+    A new sequence (if N == M) or sequence family with M-N will be returned.
+    
+    Not having to deal with sequence arguments after randomly selecting a
+    sequence simplifies the problem of coming up with values to pass as
+    arguments, but also provides a way for the user to constrain the arguments
+    at the location where they are added to a set or bag.
+  }];
+
+  let arguments = (ins SequenceType:$sequence, Variadic<AnyType>:$replacements);
+  let results = (outs SequenceType:$result);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
+def EmbedSequenceOp : RTGOp<"embed_sequence", []> {
+  let summary = "embed a sequence of instructions into another sequence";
+  let description = [{
+    This operation takes a fully randomized sequence and embeds it into another
+    sequence or test at the position of this operation.
     In particular, this is not any kind of function call, it doesn't set up a
     stack frame, etc. It behaves as if the sequence of instructions it refers to
     were directly inlined relacing this operation.
   }];
 
-  let arguments = (ins SequenceType:$sequence);
+  let arguments = (ins RandomizedSequenceType:$sequence);
 
   let assemblyFormat = "$sequence attr-dict";
+}
+
+//===- Label Operations ---------------------------------------------------===//
+
+class LabelDeclBase<string mnemonic,
+                    list<Trait> traits> : RTGOp<mnemonic, traits> {
+  let description = [{
+    Declares a label that can then be placed by an `rtg.label` operation in an
+    instruction sequence, passed on to sequences via their arguments, and used
+    by instructions (e.g., as jump targets) by allowing ISA dialects to use them
+    directly as an operand of an instruction or by casting it to a value
+    representing an immediate.
+
+    The format string may contain placeholders of the form `{i}` where `i`
+    refers to the i-th element in `args`.
+    The declared label is uniqued by the compiler to no collide with any other
+    label declarations.
+  }];
+
+  // TODO: 'args' can be generalized to more types
+  let arguments = (ins StrAttr:$formatString, Variadic<Index>:$args);
+
+  let assemblyFormat = [{
+    $formatString (`,` $args^)? attr-dict
+  }];
+}
+
+def LabelDeclOp : LabelDeclBase<"label_decl", [Pure]> {
+  let summary = "declares a label for an instruction sequence";
+  let results = (outs LabelType:$label);
+}
+
+def LabelUniqueDeclOp : LabelDeclBase<"label_unique_decl", []> {
+  let summary = "declares a unique label for an instruction sequence";
+  let results = (outs Res<LabelType, "", [MemAlloc]>:$label);
+}
+
+def LabelVisibilityAttr : I32EnumAttr<"LabelVisibility",
+                                      "visibility specifiers for labels", [
+  I32EnumAttrCase<"local",  0>,
+  I32EnumAttrCase<"global", 1>,
+  I32EnumAttrCase<"external", 2>,
+]> {
+  let cppNamespace = "::circt::rtg";
+}
+
+def LabelOp : RTGOp<"label", []> {
+  let summary = "places a label in an instruction sequence";
+  let description = [{
+    Any declared label must only be placed at most once in any fully elaborated
+    instruction sequence.
+  }];
+
+  let arguments = (ins LabelVisibilityAttr:$visibility, LabelType:$label);
+
+  let assemblyFormat = "$visibility $label attr-dict";
 }
 
 //===- Set Operations ------------------------------------------------------===//
@@ -138,6 +239,34 @@ def SetDifferenceOp : RTGOp<"set_difference", [
 
   let assemblyFormat = [{
     $original `,` $diff `:` qualified(type($output)) attr-dict
+  }];
+}
+
+def SetUnionOp : RTGOp<"set_union", [
+  Pure, SameOperandsAndResultType, Commutative
+]> {
+  let summary = "computes the union of sets";
+  let description = [{
+    Computes the union of the given sets. The list of sets must contain at
+    least one element.
+  }];
+
+  let arguments = (ins Variadic<SetType>:$sets);
+  let results = (outs SetType:$result);
+
+  let assemblyFormat = [{
+    $sets `:` qualified(type($result)) attr-dict
+  }];
+}
+
+def SetSizeOp : RTGOp<"set_size", [Pure]> {
+  let summary = "returns the number of elements in the set";
+
+  let arguments = (ins SetType:$set);
+  let results = (outs Index:$result);
+
+  let assemblyFormat = [{
+    $set `:` qualified(type($set)) attr-dict
   }];
 }
 
@@ -206,6 +335,94 @@ def BagDifferenceOp : RTGOp<"bag_difference", [
   }];
 }
 
+def BagUnionOp : RTGOp<"bag_union", [
+  Pure, SameOperandsAndResultType, Commutative
+]> {
+  let summary = "computes the union of bags";
+  let description = [{
+    Computes the union of the given bags. The list of sets must contain at
+    least one element.
+  }];
+
+  let arguments = (ins Variadic<BagType>:$bags);
+  let results = (outs BagType:$result);
+
+  let assemblyFormat = [{
+    $bags `:` qualified(type($result)) attr-dict
+  }];
+}
+
+def BagUniqueSizeOp : RTGOp<"bag_unique_size", [Pure]> {
+  let summary = "returns the number of unique elements in the bag";
+  let description = [{
+    This operation returns the number of unique elements in the bag, i.e., for
+    the bag `{a, a, b, c, c}` it returns 3.
+  }];
+
+  let arguments = (ins BagType:$bag);
+  let results = (outs Index:$result);
+
+  let assemblyFormat = [{
+    $bag `:` qualified(type($bag)) attr-dict
+  }];
+}
+
+//===- Integer Operations -------------------------------------------------===//
+
+def RandomNumberInRangeOp : RTGOp<"random_number_in_range", []> {
+  let summary = "returns a number uniformly at random within the given range";
+  let description = [{
+    This operation computes a random number based on a uniform distribution
+    within the given range. The lower bound is inclusive while the upper bound
+    is exclusive. If the range is empty, compilation will fail.
+    This is (obviously) more performant than inserting all legal numbers into a
+    set and using 'set_select_random', but yields the same behavior.
+  }];
+
+  let arguments = (ins Index:$lowerBound, Index:$upperBound);
+  let results = (outs Index:$result);
+
+  let assemblyFormat = "` ` `[` $lowerBound `,` $upperBound `)` attr-dict";
+}
+
+//===- ISA Register Handling Operations -----------------------------------===//
+
+def FixedRegisterOp : RTGOp<"fixed_reg", [
+  Pure, ConstantLike,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "returns a value representing a fixed register";
+  let description = [{
+    This operation creates a value representing the register given as the 'reg'
+    attribute. This is always a concrete ISA register.
+    The return type always matches the register attribute type.
+  }];
+
+  let arguments = (ins RegisterAttrInterface:$reg);
+  let results = (outs RegisterTypeInterface:$result);
+
+  let assemblyFormat = "$reg attr-dict";
+  let hasFolder = 1;
+}
+
+def VirtualRegisterOp : RTGOp<"virtual_reg", [
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "returns a value representing a virtual register";
+  let description = [{
+    This operation creates a value representing a virtual register. The
+    'allowedRegisters' attribute specifies the concrete registers that may be
+    chosen during register allocation.
+  }];
+
+  // ArrayAttr of RegisterAttrInterfaces
+  let arguments = (ins ArrayAttr:$allowedRegs);
+  let results = (outs RegisterTypeInterface:$result);
+
+  let assemblyFormat = "$allowedRegs attr-dict";
+  let hasVerifier = 1;
+}
+
 //===- Test Specification Operations --------------------------------------===//
 
 def TestOp : RTGOp<"test", [
@@ -234,7 +451,7 @@ def TestOp : RTGOp<"test", [
     `rtg.sequence`'s body with the exception of the block arguments.
     The arguments must match the fields of the dict type in the target attribute
     exactly. The test must not have any additional arguments and cannot be
-    referenced by an `rtg.sequence_closure` operation.
+    referenced by an `rtg.get_sequence` operation.
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name,

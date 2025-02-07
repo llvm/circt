@@ -30,7 +30,6 @@
 namespace circt {
 namespace kanagawa {
 class ContainerOp;
-class ThisOp;
 
 // Symbol name for the kanagawa operator library to be used during scheduling.
 static constexpr const char *kKanagawaOperatorLibName =
@@ -39,11 +38,6 @@ static constexpr const char *kKanagawaOperatorLibName =
 namespace detail {
 // Verify that `op` conforms to the ScopeOpInterface.
 LogicalResult verifyScopeOpInterface(Operation *op);
-
-// Returns the %this value of an kanagawa scope-defining operation. Implemented
-// here to hide the dependence on `kanagawa.this`, which is not defined before
-// the interface definition.
-mlir::FailureOr<mlir::TypedValue<ScopeRefType>> getThisFromScope(Operation *op);
 
 } // namespace detail
 } // namespace kanagawa

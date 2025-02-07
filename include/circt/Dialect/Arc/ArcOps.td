@@ -235,7 +235,7 @@ def StateOp : ArcOp<"state", [
 
     /// Set the callee for this operation.
     void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
-      (*this)->setAttr(getArcAttrName(), callee.get<mlir::SymbolRefAttr>());
+      (*this)->setAttr(getArcAttrName(), llvm::cast<mlir::SymbolRefAttr>(callee));
     }
   }];
 }
@@ -276,7 +276,7 @@ def CallOp : ArcOp<"call", [
 
     /// Set the callee for this operation.
     void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
-      (*this)->setAttr(getArcAttrName(), callee.get<mlir::SymbolRefAttr>());
+      (*this)->setAttr(getArcAttrName(), llvm::cast<mlir::SymbolRefAttr>(callee));
     }
   }];
 }
@@ -365,7 +365,7 @@ def MemoryWritePortOp : ArcOp<"memory_write_port", [
 
     /// Set the callee for this operation.
     void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
-      (*this)->setAttr(getArcAttrName(), callee.get<mlir::SymbolRefAttr>());
+      (*this)->setAttr(getArcAttrName(), llvm::cast<mlir::SymbolRefAttr>(callee));
     }
   }];
 }

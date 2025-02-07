@@ -188,10 +188,10 @@ void InlineArcsAnalysis::analyze(ArrayRef<Region *> regionsWithCalls,
         ++numOpsInArc[arcName];
       if (isa<mlir::CallOpInterface>(op))
         // TODO: make safe
-        callsInArcBody[arcName].push_back(cast<mlir::CallOpInterface>(op)
-                                              .getCallableForCallee()
-                                              .get<mlir::SymbolRefAttr>()
-                                              .getLeafReference());
+        callsInArcBody[arcName].push_back(
+            cast<mlir::SymbolRefAttr>(
+                cast<mlir::CallOpInterface>(op).getCallableForCallee())
+                .getLeafReference());
     });
     if (numOpsInArc[arcName] <= options.maxNonTrivialOpsInBody)
       ++statistics.numTrivialArcs;
@@ -207,11 +207,11 @@ void InlineArcsAnalysis::analyze(ArrayRef<Region *> regionsWithCalls,
 
   for (auto *regionWithCalls : regionsWithCalls) {
     regionWithCalls->walk([&](mlir::CallOpInterface op) {
-      if (!op.getCallableForCallee().is<SymbolRefAttr>())
+      if (!isa<SymbolRefAttr>(op.getCallableForCallee()))
         return;
 
       StringAttr arcName =
-          op.getCallableForCallee().get<SymbolRefAttr>().getLeafReference();
+          cast<SymbolRefAttr>(op.getCallableForCallee()).getLeafReference();
       if (!usersPerArc.contains(arcName))
         return;
 
@@ -228,7 +228,7 @@ void InlineArcsAnalysis::analyze(ArrayRef<Region *> regionsWithCalls,
 
 bool InlineArcsAnalysis::shouldInline(mlir::CallOpInterface callOp) const {
   // Arcs are always referenced via symbol.
-  if (!callOp.getCallableForCallee().is<SymbolRefAttr>())
+  if (!isa<SymbolRefAttr>(callOp.getCallableForCallee()))
     return false;
 
   if (!callOp->getParentOfType<DefineOp>() && options.intoArcsOnly)
@@ -237,8 +237,8 @@ bool InlineArcsAnalysis::shouldInline(mlir::CallOpInterface callOp) const {
   // The `numOpsInArc` map contains an entry for all arcs considered. If the
   // callee symbol is not present, it is either not an arc or an arc that we
   // don't consider and thus don't want to inline.
-  StringAttr arcName =
-      callOp.getCallableForCallee().get<SymbolRefAttr>().getLeafReference();
+  StringAttr arcName = llvm::cast<SymbolRefAttr>(callOp.getCallableForCallee())
+                           .getLeafReference();
   if (!numOpsInArc.contains(arcName))
     return false;
 
@@ -259,7 +259,7 @@ bool InlineArcsAnalysis::shouldInline(mlir::CallOpInterface callOp) const {
 
 DefineOp InlineArcsAnalysis::getArc(mlir::CallOpInterface callOp) const {
   StringAttr arcName =
-      callOp.getCallableForCallee().get<SymbolRefAttr>().getLeafReference();
+      cast<SymbolRefAttr>(callOp.getCallableForCallee()).getLeafReference();
   return arcMap.at(arcName);
 }
 
@@ -280,9 +280,9 @@ size_t InlineArcsAnalysis::getNumArcUses(StringAttr arcName) const {
 
 void InlineArcsAnalysis::notifyInlinedCallInto(mlir::CallOpInterface callOp,
                                                Region *region) {
-  StringAttr calledArcName = callOp.getCallableForCallee()
-                                 .get<mlir::SymbolRefAttr>()
-                                 .getLeafReference();
+  StringAttr calledArcName =
+      cast<mlir::SymbolRefAttr>(callOp.getCallableForCallee())
+          .getLeafReference();
   --usersPerArc[calledArcName];
   ++statistics.numInlinedArcs;
 

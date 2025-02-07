@@ -18,7 +18,11 @@ include "mlir/Pass/PassBase.td"
 def LowerSeqFIFO : Pass<"lower-seq-fifo", "hw::HWModuleOp"> {
   let summary = "Lower seq.fifo ops";
   let constructor = "circt::seq::createLowerSeqFIFOPass()";
-  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
+  let dependentDialects = [
+    "circt::hw::HWDialect",
+    "circt::comb::CombDialect",
+    "circt::verif::VerifDialect"
+  ];
 }
 
 def LowerSeqHLMem: Pass<"lower-seq-hlmem", "hw::HWModuleOp"> {

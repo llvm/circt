@@ -111,10 +111,11 @@ class InstanceBuilder(support.NamedValueOpView):
 
 
 class ModuleLike:
-  """Custom Python base class for module-like operations."""
+  """Custom Python helper class for module-like operations."""
 
-  def __init__(
-      self,
+  @staticmethod
+  def init(
+      op,
       name,
       input_ports=[],
       output_ports=[],
@@ -172,40 +173,39 @@ class ModuleLike:
     attributes["module_type"] = TypeAttr.get(hw.ModuleType.get(module_ports))
 
     _ods_cext.ir.OpView.__init__(
-        self,
-        self.build_generic(attributes=attributes,
-                           results=results,
-                           operands=operands,
-                           loc=loc,
-                           ip=ip))
+        op,
+        op.build_generic(attributes=attributes,
+                         results=results,
+                         operands=operands,
+                         loc=loc,
+                         ip=ip))
 
     if body_builder:
-      entry_block = self.add_entry_block()
+      entry_block = op.add_entry_block()
 
       with InsertionPoint(entry_block):
         with support.BackedgeBuilder(str(name)):
-          outputs = body_builder(self)
+          outputs = body_builder(op)
           _create_output_op(name, output_ports, entry_block, outputs)
 
-  @property
-  def type(self):
-    return hw.ModuleType(TypeAttr(self.attributes["module_type"]).value)
+  @staticmethod
+  def type(op):
+    return hw.ModuleType(TypeAttr(op.attributes["module_type"]).value)
 
-  @property
-  def name(self):
-    return self.attributes["sym_name"]
+  @staticmethod
+  def name(op):
+    return op.attributes["sym_name"]
 
-  @property
-  def is_external(self):
-    return len(self.regions[0].blocks) == 0
+  @staticmethod
+  def is_external(op):
+    return len(op.regions[0].blocks) == 0
 
-  @property
-  def parameters(self) -> list[ParamDeclAttr]:
-    return [
-        hw.ParamDeclAttr(a) for a in ArrayAttr(self.attributes["parameters"])
-    ]
+  @staticmethod
+  def parameters(op) -> list[ParamDeclAttr]:
+    return [hw.ParamDeclAttr(a) for a in ArrayAttr(op.attributes["parameters"])]
 
-  def instantiate(self,
+  @staticmethod
+  def instantiate(op,
                   name: str,
                   parameters: Dict[str, object] = {},
                   results=None,
@@ -213,7 +213,7 @@ class ModuleLike:
                   loc=None,
                   ip=None,
                   **kwargs):
-    return InstanceBuilder(self,
+    return InstanceBuilder(op,
                            name,
                            kwargs,
                            parameters=parameters,
@@ -291,7 +291,7 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
 
 
 @_ods_cext.register_operation(_Dialect, replace=True)
-class HWModuleOp(ModuleLike, HWModuleOp):
+class HWModuleOp(HWModuleOp):
   """Specialization for the HW module op class."""
 
   def __init__(
@@ -308,14 +308,34 @@ class HWModuleOp(ModuleLike, HWModuleOp):
   ):
     if "comment" not in attributes:
       attributes["comment"] = StringAttr.get("")
-    super().__init__(name,
-                     input_ports,
-                     output_ports,
-                     parameters=parameters,
-                     attributes=attributes,
-                     body_builder=body_builder,
-                     loc=loc,
-                     ip=ip)
+    ModuleLike.init(self,
+                    name,
+                    input_ports,
+                    output_ports,
+                    parameters=parameters,
+                    attributes=attributes,
+                    body_builder=body_builder,
+                    loc=loc,
+                    ip=ip)
+
+  def instantiate(self, *args, **kwargs):
+    return ModuleLike.instantiate(self, *args, **kwargs)
+
+  @property
+  def type(self):
+    return ModuleLike.type(self)
+
+  @property
+  def name(self):
+    return ModuleLike.name(self)
+
+  @property
+  def is_external(self):
+    return ModuleLike.is_external(self)
+
+  @property
+  def parameters(self) -> list[ParamDeclAttr]:
+    return ModuleLike.parameters(self)
 
   @property
   def body(self):
@@ -359,7 +379,7 @@ class HWModuleOp(ModuleLike, HWModuleOp):
 
 
 @_ods_cext.register_operation(_Dialect, replace=True)
-class HWModuleExternOp(ModuleLike, HWModuleExternOp):
+class HWModuleExternOp(HWModuleExternOp):
   """Specialization for the HW module op class."""
 
   def __init__(
@@ -376,14 +396,34 @@ class HWModuleExternOp(ModuleLike, HWModuleExternOp):
   ):
     if "comment" not in attributes:
       attributes["comment"] = StringAttr.get("")
-    super().__init__(name,
-                     input_ports,
-                     output_ports,
-                     parameters=parameters,
-                     attributes=attributes,
-                     body_builder=body_builder,
-                     loc=loc,
-                     ip=ip)
+    ModuleLike.init(self,
+                    name,
+                    input_ports,
+                    output_ports,
+                    parameters=parameters,
+                    attributes=attributes,
+                    body_builder=body_builder,
+                    loc=loc,
+                    ip=ip)
+
+  def instantiate(self, *args, **kwargs):
+    return ModuleLike.instantiate(self, *args, **kwargs)
+
+  @property
+  def type(self):
+    return ModuleLike.type(self)
+
+  @property
+  def name(self):
+    return ModuleLike.name(self)
+
+  @property
+  def is_external(self):
+    return ModuleLike.is_external(self)
+
+  @property
+  def parameters(self) -> list[ParamDeclAttr]:
+    return ModuleLike.parameters(self)
 
 
 @_ods_cext.register_operation(_Dialect, replace=True)

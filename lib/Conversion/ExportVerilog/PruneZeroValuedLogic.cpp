@@ -33,6 +33,14 @@ static bool noI0TypedValue(ValueRange values) {
   return noI0Type(values.getTypes());
 }
 
+/// Flatten the given value ranges into a single vector of values.
+static SmallVector<Value> flattenValues(ArrayRef<ValueRange> values) {
+  SmallVector<Value> result;
+  for (const auto &vals : values)
+    llvm::append_range(result, vals);
+  return result;
+}
+
 namespace {
 
 class PruneTypeConverter : public mlir::TypeConverter {
@@ -51,11 +59,17 @@ struct NoI0OperandsConversionPattern : public OpConversionPattern<TOp> {
 public:
   using OpConversionPattern<TOp>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<TOp>::OpAdaptor;
+  using OneToNOpAdaptor = typename OpConversionPattern<TOp>::OneToNOpAdaptor;
 
   LogicalResult
-  matchAndRewrite(TOp op, OpAdaptor adaptor,
+  matchAndRewrite(TOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (noI0TypedValue(adaptor.getOperands()))
+    SmallVector<Value> flattenedOperands = flattenValues(adaptor.getOperands());
+
+    // flattenedOperands may be empty (in case all operands are i0 typed and
+    // have already been pruned. Then the 1:N adaptor will reflect this as no
+    // operands).
+    if (!flattenedOperands.empty() && noI0TypedValue(flattenedOperands))
       return failure();
 
     // Part of i0-typed logic - prune it!
@@ -76,6 +90,8 @@ struct NoI0OperandsConversionPattern<comb::ICmpOp>
 public:
   using OpConversionPattern<comb::ICmpOp>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<comb::ICmpOp>::OpAdaptor;
+  using OneToNOpAdaptor =
+      typename OpConversionPattern<comb::ICmpOp>::OneToNOpAdaptor;
 
   // Returns the result of applying the predicate when the LHS and RHS are the
   // exact same value.
@@ -103,9 +119,9 @@ public:
   }
 
   LogicalResult
-  matchAndRewrite(comb::ICmpOp op, OpAdaptor adaptor,
+  matchAndRewrite(comb::ICmpOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (noI0TypedValue(adaptor.getOperands()))
+    if (noI0TypedValue(flattenValues(adaptor.getOperands())))
       return failure();
 
     // Caluculate the result of i0 value comparison.
@@ -123,11 +139,14 @@ struct NoI0OperandsConversionPattern<comb::ParityOp>
 public:
   using OpConversionPattern<comb::ParityOp>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<comb::ParityOp>::OpAdaptor;
+  using OneToNOpAdaptor =
+      typename OpConversionPattern<comb::ParityOp>::OneToNOpAdaptor;
 
   LogicalResult
-  matchAndRewrite(comb::ParityOp op, OpAdaptor adaptor,
+  matchAndRewrite(comb::ParityOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (noI0TypedValue(adaptor.getOperands()))
+    SmallVector<Value> flattenedOperands = flattenValues(adaptor.getOperands());
+    if (!flattenedOperands.empty() && noI0TypedValue(flattenedOperands))
       return failure();
 
     // The value of "comb.parity i0" is 0.
@@ -143,9 +162,11 @@ struct NoI0OperandsConversionPattern<comb::ConcatOp>
 public:
   using OpConversionPattern<comb::ConcatOp>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<comb::ConcatOp>::OpAdaptor;
+  using OneToNOpAdaptor =
+      typename OpConversionPattern<comb::ConcatOp>::OneToNOpAdaptor;
 
   LogicalResult
-  matchAndRewrite(comb::ConcatOp op, OpAdaptor adaptor,
+  matchAndRewrite(comb::ConcatOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Replace an i0 value with i0 constant.
     if (op.getType().isInteger(0)) {
@@ -154,14 +175,18 @@ public:
       return success();
     }
 
-    if (noI0TypedValue(adaptor.getOperands()))
+    SmallVector<Value> materializedOperands =
+        flattenValues(adaptor.getOperands());
+
+    // If the materializedOperands are the same as the original operands, then
+    // there were no i0 operands. If not, then that means that this op used to
+    // have an i0 operand but materialization removed that operand, as reflect
+    // in the 1:N operand adaptor.
+    if (materializedOperands.size() == adaptor.getOperands().size())
       return failure();
 
-    // Filter i0 operands and create a new concat op.
-    SmallVector<Value> newOperands;
-    llvm::copy_if(op.getOperands(), std::back_inserter(newOperands),
-                  [](auto op) { return !op.getType().isInteger(0); });
-    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, newOperands);
+    // Create a new concat op with the materialized operands.
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, materializedOperands);
     return success();
   }
 };
@@ -184,10 +209,10 @@ template <typename TOp>
 struct NoI0ResultsConversionPattern : public OpConversionPattern<TOp> {
 public:
   using OpConversionPattern<TOp>::OpConversionPattern;
-  using OpAdaptor = typename OpConversionPattern<TOp>::OpAdaptor;
+  using OneToNOpAdaptor = typename OpConversionPattern<TOp>::OneToNOpAdaptor;
 
   LogicalResult
-  matchAndRewrite(TOp op, OpAdaptor adaptor,
+  matchAndRewrite(TOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     if (noI0TypedValue(op->getResults()))
       return failure();

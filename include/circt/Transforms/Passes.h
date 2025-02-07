@@ -36,6 +36,9 @@ enum class OpCountEmissionFormat {
 
 #include "circt/Transforms/Passes.h.inc"
 
+void populateArithToCombPatterns(mlir::RewritePatternSet &patterns,
+                                 TypeConverter &typeConverter);
+
 std::unique_ptr<mlir::Pass> createMapArithToCombPass();
 std::unique_ptr<mlir::Pass> createFlattenMemRefPass();
 std::unique_ptr<mlir::Pass> createFlattenMemRefCallsPass();
@@ -45,7 +48,8 @@ std::unique_ptr<mlir::Pass> createMaximizeSSAPass();
 std::unique_ptr<mlir::Pass> createInsertMergeBlocksPass();
 std::unique_ptr<mlir::Pass> createPrintOpCountPass();
 std::unique_ptr<mlir::Pass>
-createMemoryBankingPass(std::optional<unsigned> bankingFactor = std::nullopt);
+createMemoryBankingPass(std::optional<unsigned> bankingFactor = std::nullopt,
+                        std::optional<int> bankingDimension = std::nullopt);
 std::unique_ptr<mlir::Pass> createIndexSwitchToIfPass();
 
 //===----------------------------------------------------------------------===//

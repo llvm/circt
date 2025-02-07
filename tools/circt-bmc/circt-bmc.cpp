@@ -15,7 +15,11 @@
 #include "circt/Conversion/SMTToZ3LLVM.h"
 #include "circt/Conversion/VerifToSMT.h"
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Emit/EmitDialect.h"
+#include "circt/Dialect/Emit/EmitPasses.h"
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/OM/OMDialect.h"
+#include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/SMT/SMTDialect.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
@@ -85,6 +89,13 @@ static cl::opt<bool>
     verifyPasses("verify-each",
                  cl::desc("Run the verifier after each transformation pass"),
                  cl::init(true), cl::cat(mainCategory));
+
+static cl::opt<bool> printSolverOutput(
+    "print-solver-output",
+    cl::desc("Print the output (counterexample or proof) produced by the "
+             "solver on each invocation and the assertion set that they "
+             "prove/disprove."),
+    cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool>
     verbosePassExecutions("verbose-pass-executions",
@@ -161,6 +172,8 @@ static LogicalResult executeBMC(MLIRContext &context) {
         std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
             "circt-bmc"));
 
+  pm.addPass(om::createStripOMPass());
+  pm.addPass(emit::createStripEmitPass());
   pm.addPass(createExternalizeRegisters());
   LowerToBMCOptions lowerToBMCOptions;
   lowerToBMCOptions.bound = clockBound;
@@ -173,6 +186,7 @@ static LogicalResult executeBMC(MLIRContext &context) {
 
   if (outputFormat != OutputMLIR && outputFormat != OutputSMTLIB) {
     LowerSMTToZ3LLVMOptions options;
+    options.debug = printSolverOutput;
     pm.addPass(createLowerSMTToZ3LLVM(options));
     pm.addPass(createCSEPass());
     pm.addPass(createSimpleCanonicalizerPass());
@@ -299,11 +313,21 @@ int main(int argc, char **argv) {
 
   // Register the supported CIRCT dialects and create a context to work with.
   DialectRegistry registry;
-  registry.insert<circt::comb::CombDialect, circt::hw::HWDialect,
-                  circt::seq::SeqDialect, circt::smt::SMTDialect,
-                  mlir::func::FuncDialect, circt::verif::VerifDialect,
-                  mlir::LLVM::LLVMDialect, mlir::arith::ArithDialect,
-                  mlir::BuiltinDialect>();
+  // clang-format off
+  registry.insert<
+    circt::comb::CombDialect,
+    circt::emit::EmitDialect,
+    circt::hw::HWDialect,
+    circt::om::OMDialect,
+    circt::seq::SeqDialect,
+    circt::smt::SMTDialect,
+    circt::verif::VerifDialect,
+    mlir::arith::ArithDialect,
+    mlir::BuiltinDialect,
+    mlir::func::FuncDialect,
+    mlir::LLVM::LLVMDialect
+  >();
+  // clang-format on
   mlir::func::registerInlinerExtension(registry);
   mlir::registerBuiltinDialectTranslation(registry);
   mlir::registerLLVMDialectTranslation(registry);

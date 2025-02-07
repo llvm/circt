@@ -99,6 +99,7 @@ def ServiceImplRecordOp : ESI_Op<"manifest.service_impl", [
   }];
 
   let arguments = (ins AppIDAttr:$appID,
+                       DefaultValuedAttr<UnitAttr, "false">:$isEngine,
                        OptionalAttr<FlatSymbolRefAttr>:$service,
                        OptionalAttr<StrAttr>:$stdService,
                        StrAttr:$serviceImplName,
@@ -106,7 +107,7 @@ def ServiceImplRecordOp : ESI_Op<"manifest.service_impl", [
   let regions = (region SizedRegion<1>:$reqDetails);
   let assemblyFormat = [{
     qualified($appID) (`svc` $service^)? (`std` $stdService^)?
-   `by` $serviceImplName `with` $implDetails
+   `by` $serviceImplName (`engine` $isEngine^)? `with` $implDetails
     attr-dict-with-keyword custom<ServiceImplRecordReqDetails>($reqDetails)
   }];
 

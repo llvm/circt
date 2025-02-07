@@ -251,6 +251,10 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
           SystemFunctionOp, UnpackedArrayCreateOp, UnpackedOpenArrayCastOp>(op))
     return true;
 
+  // These are Verif dialect expressions.
+  if (isa<verif::ContractOp>(op))
+    return true;
+
   // All HW combinational logic ops and SV expression ops are Verilog
   // expressions.
   return isCombinational(op) || isExpression(op);
@@ -2135,7 +2139,7 @@ namespace {
 class ExprEmitter : public EmitterBase,
                     public TypeOpVisitor<ExprEmitter, SubExprInfo>,
                     public CombinationalVisitor<ExprEmitter, SubExprInfo>,
-                    public Visitor<ExprEmitter, SubExprInfo> {
+                    public sv::Visitor<ExprEmitter, SubExprInfo> {
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
   /// of any emitted expressions in the specified set.
@@ -2176,7 +2180,7 @@ public:
 private:
   friend class TypeOpVisitor<ExprEmitter, SubExprInfo>;
   friend class CombinationalVisitor<ExprEmitter, SubExprInfo>;
-  friend class Visitor<ExprEmitter, SubExprInfo>;
+  friend class sv::Visitor<ExprEmitter, SubExprInfo>;
 
   enum SubExprSignRequirement { NoRequirement, RequireSigned, RequireUnsigned };
 
@@ -2209,8 +2213,6 @@ private:
     return visitUnhandledExpr(op);
   }
   SubExprInfo visitUnhandledSV(Operation *op) { return visitUnhandledExpr(op); }
-
-  using Visitor::visitSV;
 
   /// These are flags that control `emitBinary`.
   enum EmitBinaryFlags {
@@ -2307,6 +2309,7 @@ private:
   /// Print an aggregate array or struct constant as the given type.
   void printConstantAggregate(Attribute attr, Type type, Operation *op);
 
+  using sv::Visitor<ExprEmitter, SubExprInfo>::visitSV;
   SubExprInfo visitSV(GetModportOp op);
   SubExprInfo visitSV(SystemFunctionOp op);
   SubExprInfo visitSV(ReadInterfaceSignalOp op);
@@ -2588,6 +2591,14 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
                                      SubExprSignRequirement signRequirement,
                                      bool isSelfDeterminedUnsignedValue,
                                      bool isAssignmentLikeContext) {
+  // `verif.contract` ops act as no-ops.
+  if (auto result = dyn_cast<OpResult>(exp))
+    if (auto contract = dyn_cast<verif::ContractOp>(result.getOwner()))
+      return emitSubExpr(contract.getInputs()[result.getResultNumber()],
+                         parenthesizeIfLooserThan, signRequirement,
+                         isSelfDeterminedUnsignedValue,
+                         isAssignmentLikeContext);
+
   // If this is a self-determined unsigned value, look through any inline zero
   // extensions.  This occurs on the RHS of a shift operation for example.
   if (isSelfDeterminedUnsignedValue && exp.hasOneUse()) {

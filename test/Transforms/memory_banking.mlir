@@ -1,6 +1,7 @@
-// RUN: circt-opt %s -split-input-file -memory-banking="banking-factor=2" | FileCheck %s --check-prefix UNROLL-BY-2
-// RUN: circt-opt %s -split-input-file -memory-banking="banking-factor=1" | FileCheck %s --check-prefix UNROLL-BY-1
-// RUN: circt-opt %s -split-input-file -memory-banking="banking-factor=8" | FileCheck %s --check-prefix UNROLL-BY-8
+// RUN: circt-opt %s -split-input-file -memory-banking="factor=2" | FileCheck %s --check-prefix UNROLL-BY-2
+// RUN: circt-opt %s -split-input-file -memory-banking="factor=1" | FileCheck %s --check-prefix UNROLL-BY-1
+// RUN: circt-opt %s -split-input-file -memory-banking="factor=8" | FileCheck %s --check-prefix UNROLL-BY-8
+// RUN: circt-opt %s -split-input-file -memory-banking="factor=2" | FileCheck %s --check-prefix ALLOC-UNROLL-2
 
 // -----
 
@@ -259,3 +260,78 @@ func.func @bank_one_dim_unroll8(%arg0: memref<8xf32>, %arg1: memref<8xf32>) -> (
   }
   return %mem : memref<8xf32>
 }
+
+// -----
+
+// ALLOC-UNROLL-2: #[[$ATTR_0:.+]] = affine_map<(d0) -> (d0 mod 2)>
+// ALLOC-UNROLL-2: #[[$ATTR_1:.+]] = affine_map<(d0) -> (d0 floordiv 2)>
+
+
+// ALLOC-UNROLL-2-LABEL:   func.func @alloc_unroll2() -> (memref<4xf32>, memref<4xf32>) {
+// ALLOC-UNROLL-2:           %[[VAL_0:.*]] = arith.constant 0.000000e+00 : f32
+// ALLOC-UNROLL-2:           %[[VAL_1:.*]] = memref.alloc() : memref<4xf32>
+// ALLOC-UNROLL-2:           %[[VAL_2:.*]] = memref.alloc() : memref<4xf32>
+// ALLOC-UNROLL-2:           %[[VAL_3:.*]] = memref.alloc() : memref<4xf32>
+// ALLOC-UNROLL-2:           %[[VAL_4:.*]] = memref.alloc() : memref<4xf32>
+// ALLOC-UNROLL-2:           %[[VAL_5:.*]] = memref.alloc() : memref<4xf32>
+// ALLOC-UNROLL-2:           %[[VAL_6:.*]] = memref.alloc() : memref<4xf32>
+// ALLOC-UNROLL-2:           affine.parallel (%[[VAL_7:.*]]) = (0) to (8) {
+// ALLOC-UNROLL-2:             %[[VAL_8:.*]] = affine.apply #[[$ATTR_0]](%[[VAL_7]])
+// ALLOC-UNROLL-2:             %[[VAL_9:.*]] = affine.apply #[[$ATTR_1]](%[[VAL_7]])
+// ALLOC-UNROLL-2:             %[[VAL_10:.*]] = scf.index_switch %[[VAL_8]] -> f32
+// ALLOC-UNROLL-2:             case 0 {
+// ALLOC-UNROLL-2:               %[[VAL_11:.*]] = affine.load %[[VAL_1]]{{\[}}%[[VAL_9]]] : memref<4xf32>
+// ALLOC-UNROLL-2:               scf.yield %[[VAL_11]] : f32
+// ALLOC-UNROLL-2:             }
+// ALLOC-UNROLL-2:             case 1 {
+// ALLOC-UNROLL-2:               %[[VAL_12:.*]] = affine.load %[[VAL_2]]{{\[}}%[[VAL_9]]] : memref<4xf32>
+// ALLOC-UNROLL-2:               scf.yield %[[VAL_12]] : f32
+// ALLOC-UNROLL-2:             }
+// ALLOC-UNROLL-2:             default {
+// ALLOC-UNROLL-2:               scf.yield %[[VAL_0]] : f32
+// ALLOC-UNROLL-2:             }
+// ALLOC-UNROLL-2:             %[[VAL_13:.*]] = affine.apply #[[$ATTR_0]](%[[VAL_7]])
+// ALLOC-UNROLL-2:             %[[VAL_14:.*]] = affine.apply #[[$ATTR_1]](%[[VAL_7]])
+// ALLOC-UNROLL-2:             %[[VAL_15:.*]] = scf.index_switch %[[VAL_13]] -> f32
+// ALLOC-UNROLL-2:             case 0 {
+// ALLOC-UNROLL-2:               %[[VAL_16:.*]] = affine.load %[[VAL_3]]{{\[}}%[[VAL_14]]] : memref<4xf32>
+// ALLOC-UNROLL-2:               scf.yield %[[VAL_16]] : f32
+// ALLOC-UNROLL-2:             }
+// ALLOC-UNROLL-2:             case 1 {
+// ALLOC-UNROLL-2:               %[[VAL_17:.*]] = affine.load %[[VAL_4]]{{\[}}%[[VAL_14]]] : memref<4xf32>
+// ALLOC-UNROLL-2:               scf.yield %[[VAL_17]] : f32
+// ALLOC-UNROLL-2:             }
+// ALLOC-UNROLL-2:             default {
+// ALLOC-UNROLL-2:               scf.yield %[[VAL_0]] : f32
+// ALLOC-UNROLL-2:             }
+// ALLOC-UNROLL-2:             %[[VAL_18:.*]] = arith.mulf %[[VAL_10]], %[[VAL_15]] : f32
+// ALLOC-UNROLL-2:             %[[VAL_19:.*]] = affine.apply #[[$ATTR_0]](%[[VAL_7]])
+// ALLOC-UNROLL-2:             %[[VAL_20:.*]] = affine.apply #[[$ATTR_1]](%[[VAL_7]])
+// ALLOC-UNROLL-2:             scf.index_switch %[[VAL_19]]
+// ALLOC-UNROLL-2:             case 0 {
+// ALLOC-UNROLL-2:               affine.store %[[VAL_18]], %[[VAL_5]]{{\[}}%[[VAL_20]]] : memref<4xf32>
+// ALLOC-UNROLL-2:               scf.yield
+// ALLOC-UNROLL-2:             }
+// ALLOC-UNROLL-2:             case 1 {
+// ALLOC-UNROLL-2:               affine.store %[[VAL_18]], %[[VAL_6]]{{\[}}%[[VAL_20]]] : memref<4xf32>
+// ALLOC-UNROLL-2:               scf.yield
+// ALLOC-UNROLL-2:             }
+// ALLOC-UNROLL-2:             default {
+// ALLOC-UNROLL-2:             }
+// ALLOC-UNROLL-2:           }
+// ALLOC-UNROLL-2:           return %[[VAL_5]], %[[VAL_6]] : memref<4xf32>, memref<4xf32>
+// ALLOC-UNROLL-2:         }
+
+func.func @alloc_unroll2() -> (memref<8xf32>) {
+  %arg0 = memref.alloc() : memref<8xf32>
+  %arg1 = memref.alloc() : memref<8xf32>
+  %mem = memref.alloc() : memref<8xf32>
+  affine.parallel (%i) = (0) to (8) {
+    %1 = affine.load %arg0[%i] : memref<8xf32>
+    %2 = affine.load %arg1[%i] : memref<8xf32>
+    %3 = arith.mulf %1, %2 : f32
+    affine.store %3, %mem[%i] : memref<8xf32>
+  }
+  return %mem : memref<8xf32>
+}
+

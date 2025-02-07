@@ -1,4 +1,5 @@
 add_circt_dialect_library(CIRCTRTGTestDialect
+  RTGTestAttributes.cpp
   RTGTestDialect.cpp
   RTGTestOps.cpp
   RTGTestTypes.cpp
@@ -8,8 +9,11 @@ add_circt_dialect_library(CIRCTRTGTestDialect
 
   DEPENDS
   MLIRRTGTestIncGen
+  CIRCTRTGTestEnumsIncGen
+  CIRCTRTGTestAttributeIncGen
   
   LINK_LIBS PUBLIC
   MLIRIR
+  MLIRInferTypeOpInterface
   CIRCTRTGDialect
 )

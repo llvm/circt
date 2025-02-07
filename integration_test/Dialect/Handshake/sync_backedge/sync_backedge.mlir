@@ -2,18 +2,18 @@
 
 // Test the original HandshakeToHW flow.
 
-// RUN: hlstool %s --dynamic-hw --input-level core --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables > %t.sv && \
+// RUN: hlstool %s --dynamic-hw --input-level core --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables > %t.sv
 // RUN: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=sync_backedge --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
 // RUN: hlstool %s --dynamic-hw --input-level core --buffering-strategy=all --verilog --lowering-options=disallowLocalVariables > %t.sv && \
 // RUN: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=sync_backedge --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
 // Test the DC lowering flow.
-// TODO: This test does not pass with DC. Debug.
-// RUNx: hlstool %s --dynamic-hw --dc --input-level core --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables > %t.sv && \
+// TODO: This test does not pass with DC as DC to HW does not support buffer initValues.
+// RUNx: hlstool %s --dynamic-hw --dc --input-level core --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables > %t.sv
 // RUNx: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=sync_backedge --pythonFolder="%S,%S/.." %t.sv %esi_prims 2>&1 | FileCheck %s
 
-// RUNx: hlstool %s --dynamic-hw --dc --input-level core --buffering-strategy=all --verilog --lowering-options=disallowLocalVariables > %t.sv && \
+// RUNx: hlstool %s --dynamic-hw --dc --input-level core --buffering-strategy=all --verilog --lowering-options=disallowLocalVariables > %t.sv
 // RUNx: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=sync_backedge --pythonFolder="%S,%S/.." %t.sv %esi_prims 2>&1 | FileCheck %s
 
 // CHECK: ** TEST

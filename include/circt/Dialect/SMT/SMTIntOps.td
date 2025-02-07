@@ -119,4 +119,19 @@ def IntCmpOp : SMTIntOp<"cmp", [Pure]> {
   let assemblyFormat = "$pred $lhs `,` $rhs attr-dict";
 }
 
+def Int2BVOp : SMTOp<"int2bv", [Pure]> {
+  let summary = "Convert an integer to an inferred-width bitvector.";
+  let description = [{
+    Designed to lower directly to an operation of the same name in Z3. The Z3
+    C API describes the semantics as follows:
+    Create an n bit bit-vector from the integer argument t1.
+    The resulting bit-vector has n bits, where the i'th bit (counting from 0
+    to n-1) is 1 if (t1 div 2^i) mod 2 is 1.
+    The node t1 must have integer sort.
+  }];
+  let arguments = (ins IntType:$input);
+  let results = (outs BitVectorType:$result);
+  let assemblyFormat = "$input attr-dict `:` qualified(type($result))";
+}
+
 #endif // CIRCT_DIALECT_SMT_SMTINTOPS_TD

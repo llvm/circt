@@ -6,6 +6,7 @@
 // UNSUPPORTED: valgrind
 
 function void dummyA(int x); endfunction
+function void dummyB(real x); endfunction
 
 // IEEE 1800-2017 § 20.2 "Simulation control system tasks"
 // CHECK-LABEL: func.func private @SimulationControlBuiltins(
@@ -191,9 +192,47 @@ endfunction
 // CHECK-LABEL: func.func private @MathBuiltins(
 // CHECK-SAME: [[X:%.+]]: !moore.i32
 // CHECK-SAME: [[Y:%.+]]: !moore.l42
-function void MathBuiltins(int x, logic [41:0] y);
+// CHECK-SAME: [[R:%.+]]: !moore.real
+function void MathBuiltins(int x, logic [41:0] y, real r);
   // CHECK: moore.builtin.clog2 [[X]] : i32
   dummyA($clog2(x));
   // CHECK: moore.builtin.clog2 [[Y]] : l42
   dummyA($clog2(y));
+
+  // CHECK:  moore.builtin.ln [[R]] : real
+  dummyB($ln(r));
+  // CHECK:  moore.builtin.log10 [[R]] : real
+  dummyB($log10(r));
+  // CHECK:  moore.builtin.exp [[R]] : real
+  dummyB($exp(r));
+  // CHECK:  moore.builtin.sqrt [[R]] : real
+  dummyB($sqrt(r));
+  // CHECK:  moore.builtin.floor [[R]] : real
+  dummyB($floor(r));
+  // CHECK:  moore.builtin.ceil [[R]] : real
+  dummyB($ceil(r));
+  // CHECK:  moore.builtin.sin [[R]] : real
+  dummyB($sin(r));
+  // CHECK:  moore.builtin.cos [[R]] : real
+  dummyB($cos(r));
+  // CHECK:  moore.builtin.tan [[R]] : real
+  dummyB($tan(r));
+  // CHECK:  moore.builtin.asin [[R]] : real
+  dummyB($asin(r));
+  // CHECK:  moore.builtin.acos [[R]] : real
+  dummyB($acos(r));
+  // CHECK:  moore.builtin.atan [[R]] : real
+  dummyB($atan(r));
+  // CHECK:  moore.builtin.sinh [[R]] : real
+  dummyB($sinh(r));
+  // CHECK:  moore.builtin.cosh [[R]] : real
+  dummyB($cosh(r));
+  // CHECK:  moore.builtin.tanh [[R]] : real
+  dummyB($tanh(r));
+  // CHECK:  moore.builtin.asinh [[R]] : real
+  dummyB($asinh(r));
+  // CHECK:  moore.builtin.acosh [[R]] : real
+  dummyB($acosh(r));
+  // CHECK:  moore.builtin.atanh [[R]] : real
+  dummyB($atanh(r));
 endfunction

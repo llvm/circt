@@ -2,7 +2,7 @@
 
 module {
   // CHECK-LABEL: module
-  // CHECK-NOT:   module
+  // CHECK-NEXT:   module
   // CHECK-NOT:   om.class.extern
   // CHECK-LABEL: om.class @A
   // CHECK-LABEL: om.class @Conflict_A
@@ -61,12 +61,12 @@ module {
 
 // -----
 
-// Check that OM ops are deleted.  Make the "delete-me" op a landmine that will
-// cause a symbol collision if it is _not_ deleted.
+// Check that OM ops are not deleted.  Make the "dont-delete-me" op a landmine that will
+// cause a symbol collision if it is moved to the top level.
 module {
   module {
-    // CHECK-NOT: delete-me
-    "delete-me"() {sym_name = "Bar"} : () -> ()
+    // CHECK: dont-delete-me
+    "dont-delete-me"() {sym_name = "Bar"} : () -> ()
     om.class @Foo() {
       om.class.fields
     }

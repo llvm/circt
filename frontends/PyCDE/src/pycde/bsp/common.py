@@ -3,9 +3,11 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
+from math import ceil
 
-from ..common import Clock, Input, Output, Reset
-from ..constructs import AssignableSignal, ControlReg, NamedWire, Wire
+from ..common import Clock, Input, InputChannel, Output, OutputChannel, Reset
+from ..constructs import (AssignableSignal, ControlReg, Counter, Mux, NamedWire,
+                          Reg, Wire)
 from .. import esi
 from ..module import Module, generator, modparams
 from ..signals import BitsSignal, BundleSignal, ChannelSignal
@@ -13,7 +15,7 @@ from ..support import clog2
 from ..types import (Array, Bits, Bundle, BundledChannel, Channel,
                      ChannelDirection, StructType, Type, UInt)
 
-from typing import Dict, List, Tuple
+from typing import Callable, Dict, List, Tuple
 import typing
 
 MagicNumber = 0x207D98E5_E5100E51  # random + ESI__ESI
@@ -121,7 +123,7 @@ class ChannelMMIO(esi.ServiceImplementation):
   clk = Clock()
   rst = Input(Bits(1))
 
-  cmd = Input(esi.MMIOReadWriteCmdType)
+  cmd = Input(esi.MMIO.read_write.type)
 
   # Amount of register space each client gets. This is a GIANT HACK and needs to
   # be replaced by parameterizable services.
@@ -256,6 +258,410 @@ class ChannelMMIO(esi.ServiceImplementation):
 
 
 @modparams
+def TaggedReadGearbox(input_bitwidth: int,
+                      output_bitwidth: int) -> type["TaggedReadGearboxImpl"]:
+  """Build a gearbox to convert the upstream data to the client data
+  type. Assumes a struct {tag, data} and only gearboxes the data. Tag is stored
+  separately and the struct is re-assembled later on."""
+
+  class TaggedReadGearboxImpl(Module):
+    clk = Clock()
+    rst = Reset()
+    in_ = InputChannel(
+        StructType([
+            ("tag", esi.HostMem.TagType),
+            ("data", Bits(input_bitwidth)),
+        ]))
+    out = OutputChannel(
+        StructType([
+            ("tag", esi.HostMem.TagType),
+            ("data", Bits(output_bitwidth)),
+        ]))
+
+    @generator
+    def build(ports):
+      ready_for_upstream = Wire(Bits(1), name="ready_for_upstream")
+      upstream_tag_and_data, upstream_valid = ports.in_.unwrap(
+          ready_for_upstream)
+      upstream_data = upstream_tag_and_data.data
+      upstream_xact = ready_for_upstream & upstream_valid
+
+      # Determine if gearboxing is necessary and whether it needs to be
+      # gearboxed up or just sliced down.
+      if output_bitwidth == input_bitwidth:
+        client_data_bits = upstream_data
+        client_valid = upstream_valid
+      elif output_bitwidth < input_bitwidth:
+        client_data_bits = upstream_data[:output_bitwidth]
+        client_valid = upstream_valid
+      else:
+        # Create registers equal to the number of upstream transactions needed
+        # to fill the client data. Set the output to the concatenation of said
+        # registers.
+        chunks = ceil(output_bitwidth / input_bitwidth)
+        reg_ces = [Wire(Bits(1)) for _ in range(chunks)]
+        regs = [
+            upstream_data.reg(ports.clk,
+                              ports.rst,
+                              ce=reg_ces[idx],
+                              name=f"chunk_reg_{idx}") for idx in range(chunks)
+        ]
+        client_data_bits = BitsSignal.concat(reversed(regs))[:output_bitwidth]
+
+        # Use counter to determine to which register to write and determine if
+        # the registers are all full.
+        clear_counter = Wire(Bits(1))
+        counter_width = clog2(chunks)
+        counter = Counter(counter_width)(clk=ports.clk,
+                                         rst=ports.rst,
+                                         clear=clear_counter,
+                                         increment=upstream_xact)
+        set_client_valid = counter.out == chunks - 1
+        client_xact = Wire(Bits(1))
+        client_valid = ControlReg(ports.clk, ports.rst, [set_client_valid],
+                                  [client_xact])
+        client_xact.assign(client_valid & ready_for_upstream)
+        clear_counter.assign(client_xact)
+        for idx, reg_ce in enumerate(reg_ces):
+          reg_ce.assign(upstream_xact &
+                        (counter.out == UInt(counter_width)(idx)))
+
+      # Construct the output channel. Shared logic across all three cases.
+      tag_reg = upstream_tag_and_data.tag.reg(ports.clk,
+                                              ports.rst,
+                                              ce=upstream_xact,
+                                              name="tag_reg")
+
+      client_channel, client_ready = TaggedReadGearboxImpl.out.type.wrap(
+          {
+              "tag": tag_reg,
+              "data": client_data_bits,
+          }, client_valid)
+      ready_for_upstream.assign(client_ready)
+      ports.out = client_channel
+
+  return TaggedReadGearboxImpl
+
+
+def HostmemReadProcessor(read_width: int, hostmem_module,
+                         reqs: List[esi._OutputBundleSetter]):
+  """Construct a host memory read request module to orchestrate the the read
+  connections. Responsible for both gearboxing the data, multiplexing the
+  requests, reassembling out-of-order responses and routing the responses to the
+  correct clients.
+
+  Generate this module dynamically to allow for multiple read clients of
+  multiple types to be directly accomodated."""
+
+  class HostmemReadProcessorImpl(Module):
+    clk = Clock()
+    rst = Reset()
+
+    # Add an output port for each read client.
+    reqPortMap: Dict[esi._OutputBundleSetter, str] = {}
+    for req in reqs:
+      name = "client_" + req.client_name_str
+      locals()[name] = Output(req.type)
+      reqPortMap[req] = name
+
+    # And then the port which goes to the host.
+    upstream = Output(hostmem_module.read.type)
+
+    @generator
+    def build(ports):
+      """Build the read side of the HostMem service."""
+
+      # If there's no read clients, just return a no-op read bundle.
+      if len(reqs) == 0:
+        upstream_req_channel, _ = Channel(hostmem_module.UpstreamReadReq).wrap(
+            {
+                "tag": 0,
+                "length": 0,
+                "address": 0
+            }, 0)
+        upstream_read_bundle, _ = hostmem_module.read.type.pack(
+            req=upstream_req_channel)
+        ports.upstream = upstream_read_bundle
+        return
+
+      # Since we use the tag to identify the client, we can't have more than 256
+      # read clients. Supporting more than 256 clients would require
+      # tag-rewriting, which we'll probably have to implement at some point.
+      # TODO: Implement tag-rewriting.
+      assert len(reqs) <= 256, "More than 256 read clients not supported."
+
+      # Pack the upstream bundle and leave the request as a wire.
+      upstream_req_channel = Wire(Channel(hostmem_module.UpstreamReadReq))
+      upstream_read_bundle, froms = hostmem_module.read.type.pack(
+          req=upstream_req_channel)
+      ports.upstream = upstream_read_bundle
+      upstream_resp_channel = froms["resp"]
+
+      demux = esi.TaggedDemux(len(reqs), upstream_resp_channel.type)(
+          clk=ports.clk, rst=ports.rst, in_=upstream_resp_channel)
+
+      tagged_client_reqs = []
+      for idx, client in enumerate(reqs):
+        # Find the response channel in the request bundle.
+        resp_type = [
+            c.channel for c in client.type.channels if c.name == 'resp'
+        ][0]
+        demuxed_upstream_channel = demux.get_out(idx)
+
+        # TODO: Should responses come back out-of-order (interleaved tags),
+        # re-order them here so the gearbox doesn't get confused. (Longer term.)
+        # For now, only support one outstanding transaction at a time.  This has
+        # the additional benefit of letting the upstream tag be the client
+        # identifier. TODO: Implement the gating logic here.
+
+        # Gearbox the data to the client's data type.
+        client_type = resp_type.inner_type
+        gearbox = TaggedReadGearbox(read_width, client_type.data.bitwidth)(
+            clk=ports.clk, rst=ports.rst, in_=demuxed_upstream_channel)
+        client_resp_channel = gearbox.out.transform(lambda m: client_type({
+            "tag": m.tag,
+            "data": m.data.bitcast(client_type.data)
+        }))
+
+        # Assign the client response to the correct port.
+        client_bundle, froms = client.type.pack(resp=client_resp_channel)
+        client_req = froms["req"]
+        tagged_client_req = client_req.transform(
+            lambda r: hostmem_module.UpstreamReadReq({
+                "address": r.address,
+                "length": (client_type.data.bitwidth + 7) // 8,
+                # TODO: Change this once we support tag-rewriting.
+                "tag": idx
+            }))
+        tagged_client_reqs.append(tagged_client_req)
+
+        # Set the port for the client request.
+        setattr(ports, HostmemReadProcessorImpl.reqPortMap[client],
+                client_bundle)
+
+      # Assign the multiplexed read request to the upstream request.
+      # TODO: Don't release a request until the client is ready to accept
+      # the response otherwise the system could deadlock.
+      muxed_client_reqs = esi.ChannelMux(tagged_client_reqs)
+      upstream_req_channel.assign(muxed_client_reqs)
+      HostmemReadProcessorImpl.reqPortMap.clear()
+
+  return HostmemReadProcessorImpl
+
+
+@modparams
+def TaggedWriteGearbox(input_bitwidth: int,
+                       output_bitwidth: int) -> type["TaggedWriteGearboxImpl"]:
+  """Build a gearbox to convert the client data to upstream write chunks.
+  Assumes a struct {address, tag, data} and only gearboxes the data. Tag is
+  stored separately and the struct is re-assembled later on."""
+
+  if output_bitwidth % 8 != 0:
+    raise ValueError("Output bitwidth must be a multiple of 8.")
+  if input_bitwidth % 8 != 0:
+    raise ValueError("Input bitwidth must be a multiple of 8.")
+
+  class TaggedWriteGearboxImpl(Module):
+    clk = Clock()
+    rst = Reset()
+    in_ = InputChannel(
+        StructType([
+            ("address", UInt(64)),
+            ("tag", esi.HostMem.TagType),
+            ("data", Bits(input_bitwidth)),
+        ]))
+    out = OutputChannel(
+        StructType([
+            ("address", UInt(64)),
+            ("tag", esi.HostMem.TagType),
+            ("data", Bits(output_bitwidth)),
+            ("valid_bytes", Bits(8)),
+        ]))
+
+    num_chunks = ceil(input_bitwidth / output_bitwidth)
+
+    @generator
+    def build(ports):
+      upstream_ready = Wire(Bits(1))
+      ready_for_client = Wire(Bits(1))
+      client_tag_and_data, client_valid = ports.in_.unwrap(ready_for_client)
+      client_data = client_tag_and_data.data
+      client_xact = ready_for_client & client_valid
+      input_bitwidth_bytes = input_bitwidth // 8
+      output_bitwidth_bytes = output_bitwidth // 8
+
+      # Determine if gearboxing is necessary and whether it needs to be
+      # gearboxed up or just sliced down.
+      if output_bitwidth == input_bitwidth:
+        upstream_data_bits = client_data
+        upstream_valid = client_valid
+        ready_for_client.assign(upstream_ready)
+        tag = client_tag_and_data.tag
+        address = client_tag_and_data.address
+        valid_bytes = Bits(8)(input_bitwidth_bytes)
+      elif output_bitwidth > input_bitwidth:
+        upstream_data_bits = client_data.as_bits(output_bitwidth)
+        upstream_valid = client_valid
+        ready_for_client.assign(upstream_ready)
+        tag = client_tag_and_data.tag
+        address = client_tag_and_data.address
+        valid_bytes = Bits(8)(input_bitwidth_bytes)
+      else:
+        # Create registers equal to the number of upstream transactions needed
+        # to complete the transmission.
+        num_chunks = TaggedWriteGearboxImpl.num_chunks
+        num_chunks_idx_bitwidth = clog2(num_chunks)
+        padding_numbits = output_bitwidth - (input_bitwidth % output_bitwidth)
+        assert padding_numbits % 8 == 0, "Padding must be a multiple of 8."
+        client_data_padded = BitsSignal.concat(
+            [Bits(padding_numbits)(0), client_data])
+        chunks = [
+            client_data_padded[i * output_bitwidth:(i + 1) * output_bitwidth]
+            for i in range(num_chunks)
+        ]
+        chunk_regs = Array(Bits(output_bitwidth), num_chunks)([
+            c.reg(ports.clk, ce=client_xact, name=f"chunk_{idx}")
+            for idx, c in enumerate(chunks)
+        ])
+        increment = Wire(Bits(1))
+        clear = Wire(Bits(1))
+        counter = Counter(num_chunks_idx_bitwidth)(clk=ports.clk,
+                                                   rst=ports.rst,
+                                                   increment=increment,
+                                                   clear=clear)
+        upstream_data_bits = chunk_regs[counter.out]
+        upstream_valid = ControlReg(ports.clk, ports.rst, [client_xact],
+                                    [clear])
+        upstream_xact = upstream_valid & upstream_ready
+        clear.assign(upstream_xact & (counter.out == (num_chunks - 1)))
+        increment.assign(upstream_xact)
+        ready_for_client.assign(~upstream_valid)
+        counter_bytes = BitsSignal.concat([counter.out.as_bits(),
+                                           Bits(3)(0)]).as_uint()
+
+        # Construct the output channel. Shared logic across all three cases.
+        tag_reg = client_tag_and_data.tag.reg(ports.clk,
+                                              ce=client_xact,
+                                              name="tag_reg")
+        addr_reg = client_tag_and_data.address.reg(ports.clk,
+                                                   ce=client_xact,
+                                                   name="address_reg")
+        address = (addr_reg + counter_bytes).as_uint(64)
+        tag = tag_reg
+        valid_bytes = Mux(counter.out == (num_chunks - 1),
+                          Bits(8)(output_bitwidth_bytes),
+                          Bits(8)(padding_numbits // 8))
+
+      upstream_channel, upstrm_ready_sig = TaggedWriteGearboxImpl.out.type.wrap(
+          {
+              "address": address,
+              "tag": tag,
+              "data": upstream_data_bits,
+              "valid_bytes": valid_bytes
+          }, upstream_valid)
+      upstream_ready.assign(upstrm_ready_sig)
+      ports.out = upstream_channel
+
+  return TaggedWriteGearboxImpl
+
+
+def HostMemWriteProcessor(
+    write_width: int, hostmem_module,
+    reqs: List[esi._OutputBundleSetter]) -> type["HostMemWriteProcessorImpl"]:
+  """Construct a host memory write request module to orchestrate the the write
+  connections. Responsible for both gearboxing the data, multiplexing the
+  requests, reassembling out-of-order responses and routing the responses to the
+  correct clients.
+
+  Generate this module dynamically to allow for multiple write clients of
+  multiple types to be directly accomodated."""
+
+  class HostMemWriteProcessorImpl(Module):
+
+    clk = Clock()
+    rst = Reset()
+
+    # Add an output port for each read client.
+    reqPortMap: Dict[esi._OutputBundleSetter, str] = {}
+    for req in reqs:
+      name = "client_" + req.client_name_str
+      locals()[name] = Output(req.type)
+      reqPortMap[req] = name
+
+    # And then the port which goes to the host.
+    upstream = Output(hostmem_module.write.type)
+
+    @generator
+    def build(ports):
+      # If there's no write clients, just create a no-op write bundle
+      if len(reqs) == 0:
+        req, _ = Channel(hostmem_module.UpstreamWriteReq).wrap(
+            {
+                "address": 0,
+                "tag": 0,
+                "data": 0,
+                "valid_bytes": 0,
+            }, 0)
+        write_bundle, _ = hostmem_module.write.type.pack(req=req)
+        ports.upstream = write_bundle
+        return
+
+      assert len(reqs) <= 256, "More than 256 write clients not supported."
+
+      upstream_req_channel = Wire(Channel(hostmem_module.UpstreamWriteReq))
+      upstream_write_bundle, froms = hostmem_module.write.type.pack(
+          req=upstream_req_channel)
+      ports.upstream = upstream_write_bundle
+      upstream_ack_tag = froms["ackTag"]
+
+      demuxed_acks = esi.TaggedDemux(len(reqs), upstream_ack_tag.type)(
+          clk=ports.clk, rst=ports.rst, in_=upstream_ack_tag)
+
+      # TODO: re-write the tags and store the client and client tag.
+
+      # Build the write request channels and ack wires.
+      write_channels: List[ChannelSignal] = []
+      for idx, req in enumerate(reqs):
+        # Get the request channel and its data type.
+        reqch = [c.channel for c in req.type.channels if c.name == 'req'][0]
+        client_type = reqch.inner_type
+
+        # Pack up the bundle and assign the request channel.
+        write_req_bundle_type = esi.HostMem.write_req_bundle_type(
+            client_type.data)
+        bundle_sig, froms = write_req_bundle_type.pack(
+            ackTag=demuxed_acks.get_out(idx))
+
+        tagged_client_req = froms["req"]
+        bitcast_client_req = tagged_client_req.transform(lambda m: client_type({
+            "tag": m.tag,
+            "address": m.address,
+            "data": m.data.bitcast(client_type.data)
+        }))
+
+        # Gearbox the data to the client's data type.
+        gearbox = TaggedWriteGearbox(client_type.data.bitwidth,
+                                     write_width)(clk=ports.clk,
+                                                  rst=ports.rst,
+                                                  in_=bitcast_client_req)
+        write_channels.append(
+            gearbox.out.transform(lambda m: m.type({
+                "address": m.address,
+                "tag": idx,
+                "data": m.data,
+                "valid_bytes": m.valid_bytes
+            })))
+        # Set the port for the client request.
+        setattr(ports, HostMemWriteProcessorImpl.reqPortMap[req], bundle_sig)
+
+      # Build a channel mux for the write requests.
+      muxed_write_channel = esi.ChannelMux(write_channels)
+      upstream_req_channel.assign(muxed_write_channel)
+
+  return HostMemWriteProcessorImpl
+
+
+@modparams
 def ChannelHostMem(read_width: int,
                    write_width: int) -> typing.Type['ChannelHostMemImpl']:
 
@@ -266,81 +672,132 @@ def ChannelHostMem(read_width: int,
     clk = Clock()
     rst = Reset()
 
-    UpstreamReq = StructType([
+    UpstreamReadReq = StructType([
         ("address", UInt(64)),
-        ("length", UInt(32)),
+        ("length", UInt(32)),  # In bytes.
         ("tag", UInt(8)),
     ])
     read = Output(
         Bundle([
-            BundledChannel("req", ChannelDirection.TO, UpstreamReq),
+            BundledChannel("req", ChannelDirection.TO, UpstreamReadReq),
             BundledChannel(
                 "resp", ChannelDirection.FROM,
                 StructType([
-                    ("tag", UInt(8)),
+                    ("tag", esi.HostMem.TagType),
                     ("data", Bits(read_width)),
                 ])),
         ]))
 
+    if write_width % 8 != 0:
+      raise ValueError("Write width must be a multiple of 8.")
+    UpstreamWriteReq = StructType([
+        ("address", UInt(64)),
+        ("tag", UInt(8)),
+        ("data", Bits(write_width)),
+        ("valid_bytes", Bits(8)),
+    ])
+    write = Output(
+        Bundle([
+            BundledChannel("req", ChannelDirection.TO, UpstreamWriteReq),
+            BundledChannel("ackTag", ChannelDirection.FROM, UInt(8)),
+        ]))
+
     @generator
     def generate(ports, bundles: esi._ServiceGeneratorBundles):
+      # Split the read side out into a separate module. Must assign the output
+      # ports to the clients since we can't service a request in a different
+      # module.
       read_reqs = [req for req in bundles.to_client_reqs if req.port == 'read']
-      ports.read = ChannelHostMemImpl.build_tagged_read_mux(ports, read_reqs)
+      read_proc_module = HostmemReadProcessor(read_width, ChannelHostMemImpl,
+                                              read_reqs)
+      read_proc = read_proc_module(clk=ports.clk, rst=ports.rst)
+      ports.read = read_proc.upstream
+      for req in read_reqs:
+        req.assign(getattr(read_proc, read_proc_module.reqPortMap[req]))
 
-    @staticmethod
-    def build_tagged_read_mux(
-        ports, reqs: List[esi._OutputBundleSetter]) -> BundleSignal:
-      """Build the read side of the HostMem service."""
-
-      if len(reqs) == 0:
-        req, req_ready = Channel(ChannelHostMemImpl.UpstreamReq).wrap(
-            {
-                "tag": 0,
-                "length": 0,
-                "address": 0
-            }, 0)
-        read_bundle, _ = ChannelHostMemImpl.read.type.pack(req=req)
-        return read_bundle
-
-      # TODO: mux together multiple read clients.
-      assert len(reqs) == 1, "Only one read client supported for now."
-
-      req = Wire(Channel(ChannelHostMemImpl.UpstreamReq))
-      read_bundle, froms = ChannelHostMemImpl.read.type.pack(req=req)
-      resp_chan_ready = Wire(Bits(1))
-      resp_data, resp_valid = froms["resp"].unwrap(resp_chan_ready)
-      for client in reqs:
-        resp_type = [
-            c.channel for c in client.type.channels if c.name == 'resp'
-        ][0]
-        client_read_type = resp_type.inner_type.data
-        # TODO: support gearboxing up to the correct width.
-        assert client_read_type.width == read_width, \
-          "Gearboxing not yet supported."
-        client_tag = resp_data.tag
-        client_resp_valid = resp_valid
-        client_resp, client_resp_ready = Channel(resp_type).wrap(
-            {
-                # TODO: tag re-writing to deal with tag aliasing.
-                "tag": client_tag,
-                "data": resp_data.data.bitcast(client_read_type),
-            },
-            client_resp_valid)
-        # TODO: mux this properly.
-        resp_chan_ready.assign(client_resp_ready)
-
-        client_bundle, froms = client.type.pack(resp=client_resp)
-        client_req = froms["req"]
-        client.assign(client_bundle)
-
-        # Assign the multiplexed read request to the upstream request.
-        req.assign(
-            client_req.transform(lambda r: ChannelHostMemImpl.UpstreamReq({
-                "address": r.address,
-                "length": 1,
-                "tag": r.tag
-            })))
-
-      return read_bundle
+      # The write side.
+      write_reqs = [
+          req for req in bundles.to_client_reqs if req.port == 'write'
+      ]
+      write_proc_module = HostMemWriteProcessor(write_width, ChannelHostMemImpl,
+                                                write_reqs)
+      write_proc = write_proc_module(clk=ports.clk, rst=ports.rst)
+      ports.write = write_proc.upstream
+      for req in write_reqs:
+        req.assign(getattr(write_proc, write_proc_module.reqPortMap[req]))
 
   return ChannelHostMemImpl
+
+
+@modparams
+def DummyToHostEngine(client_type: Type) -> type['DummyToHostEngineImpl']:
+  """Create a fake DMA engine which just throws everything away."""
+
+  class DummyToHostEngineImpl(Module):
+    clk = Clock()
+    rst = Reset()
+    input_channel = InputChannel(client_type)
+
+    @generator
+    def build(ports):
+      pass
+
+  return DummyToHostEngineImpl
+
+
+@modparams
+def DummyFromHostEngine(client_type: Type) -> type['DummyFromHostEngineImpl']:
+  """Create a fake DMA engine which just never produces messages."""
+
+  class DummyFromHostEngineImpl(Module):
+    clk = Clock()
+    rst = Reset()
+    output_channel = OutputChannel(client_type)
+
+    @generator
+    def build(ports):
+      valid = Bits(1)(0)
+      data = Bits(client_type.bitwidth)(0).bitcast(client_type)
+      channel, ready = Channel(client_type).wrap(data, valid)
+      ports.output_channel = channel
+
+  return DummyFromHostEngineImpl
+
+
+def ChannelEngineService(
+    to_host_engine_gen: Callable,
+    from_host_engine_gen: Callable) -> type['ChannelEngineService']:
+  """Returns a channel service implementation which calls
+  to_host_engine_gen(<client_type>) or from_host_engine_gen(<client_type>) to
+  generate the to_host and from_host engines for each channel. Does not support
+  engines which can service multiple clients at once."""
+
+  class ChannelEngineService(esi.ServiceImplementation):
+    """Service implementation which services the clients via a per-channel DMA
+    engine."""
+
+    clk = Clock()
+    rst = Reset()
+
+    @generator
+    def build(ports, bundles: esi._ServiceGeneratorBundles):
+      for bundle in bundles.to_client_reqs:
+        bundle_type = bundle.type
+        to_channels = {}
+        # Create a DMA engine for each channel headed TO the client (from the host).
+        for bc in bundle_type.channels:
+          if bc.direction == ChannelDirection.TO:
+            engine = from_host_engine_gen(bc.channel.inner_type)(clk=ports.clk,
+                                                                 rst=ports.rst)
+            to_channels[bc.name] = engine.output_channel
+
+        client_bundle_sig, froms = bundle_type.pack(**to_channels)
+        bundle.assign(client_bundle_sig)
+
+        # Create a DMA engine for each channel headed FROM the client (to the host).
+        for bc in bundle_type.channels:
+          if bc.direction == ChannelDirection.FROM:
+            engine = to_host_engine_gen(bc.channel.inner_type)
+            engine(clk=ports.clk, rst=ports.rst, input_channel=froms[bc.name])
+
+  return ChannelEngineService

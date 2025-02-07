@@ -182,7 +182,9 @@ def SCFToCalyx : Pass<"lower-scf-to-calyx", "mlir::ModuleOp"> {
             "Identifier of top-level function to be the entry-point component"
             " of the Calyx program.">,
     Option<"ciderSourceLocationMetadata", "cider-source-location-metadata", "bool", "",
-            "Whether to track source location for the Cider debugger.">
+            "Whether to track source location for the Cider debugger.">,
+    Option<"writeJsonOpt", "write-json", "std::string", "",
+            "Whether to write memory contents to the json file.">
   ];
 }
 
@@ -469,7 +471,12 @@ def HandshakeToDC : Pass<"lower-handshake-to-dc", "mlir::ModuleOp"> {
     function with graph region behaviour. Thus, for now, we just use `hw.module`
     as a container operation.
   }];
-  let dependentDialects = ["dc::DCDialect", "mlir::func::FuncDialect", "hw::HWDialect"];
+  let dependentDialects = [
+    "dc::DCDialect",
+    "mlir::arith::ArithDialect",
+    "mlir::func::FuncDialect",
+    "hw::HWDialect"
+  ];
   let options = [
     Option<"clkName", "clk-name", "std::string", "\"clk\"",
            "Name of the clock signal to use in the generated DC module">,
@@ -676,7 +683,7 @@ def ConvertToArcs : Pass<"convert-to-arcs", "mlir::ModuleOp"> {
 // ConvertCombToArith
 //===----------------------------------------------------------------------===//
 
-def ConvertCombToArith : Pass<"convert-comb-to-arith", "mlir::ModuleOp"> {
+def ConvertCombToArith : Pass<"convert-comb-to-arith"> {
   let summary = "Convert combinational ops and constants into arith ops";
   let constructor = "circt::createConvertCombToArithPass()";
   let dependentDialects = ["mlir::arith::ArithDialect"];
@@ -686,7 +693,7 @@ def ConvertCombToArith : Pass<"convert-comb-to-arith", "mlir::ModuleOp"> {
 // ConvertCombToSMT
 //===----------------------------------------------------------------------===//
 
-def ConvertCombToSMT : Pass<"convert-comb-to-smt", "mlir::ModuleOp"> {
+def ConvertCombToSMT : Pass<"convert-comb-to-smt"> {
   let summary = "Convert combinational ops and constants to SMT ops";
   // Need to depend on HWDialect because some 'comb' canonicalization patterns
   // build 'hw.constant' operations.
@@ -810,6 +817,13 @@ def ConvertCombToAIG: Pass<"convert-comb-to-aig",  "hw::HWModuleOp"> {
   let dependentDialects = [
     "circt::comb::CombDialect",
     "circt::aig::AIGDialect",
+  ];
+
+  let options = [
+    ListOption<"additionalLegalOps", "additional-legal-ops", "std::string",
+               "Specify additional legal ops for testing">,
+    Option<"maxEmulationUnknownBits", "max-emulation-unknown-bits", "uint32_t", "10",
+           "Maximum number of unknown bits to emulate in a table lookup">
   ];
 }
 

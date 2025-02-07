@@ -1405,8 +1405,47 @@ firrtl.circuit "UnrealizedConversion" {
   }
 }
 
+firrtl.circuit "Conventions1" {
+  // COMMON-LABEL: @Conventions1
+  // AGGREGATE-SAME: %input_0
+  // AGGREGATE-NEXT: firrtl.reg
+  // AGGREGATE-SAME: !firrtl.vector<uint<8>, 1>
+  firrtl.module public @Conventions1(in %input: !firrtl.vector<uint<8>, 1>, in %clk: !firrtl.clock, out %port: !firrtl.vector<uint<8>, 1>) attributes {convention = #firrtl<convention scalarized>, body_type_lowering = #firrtl<convention internal>}{
+    %r = firrtl.reg interesting_name %clk : !firrtl.clock, !firrtl.vector<uint<8>, 1>
+    firrtl.matchingconnect %r, %input : !firrtl.vector<uint<8>, 1>
+    firrtl.matchingconnect %port, %r : !firrtl.vector<uint<8>, 1>
+  }
+  // COMMON-LABEL: @Conventions2
+  // AGGREGATE-SAME: %input_0: !firrtl.uint<8>
+  // AGGREGATE-NEXT: firrtl.reg
+  // AGGREGATE-SAME: !firrtl.uint<8>
+  firrtl.module private @Conventions2(in %input: !firrtl.vector<uint<8>, 1>, in %clk: !firrtl.clock, out %port: !firrtl.vector<uint<8>, 1>) attributes {convention = #firrtl<convention scalarized>, body_type_lowering = #firrtl<convention scalarized>}{
+    %r = firrtl.reg interesting_name %clk : !firrtl.clock, !firrtl.vector<uint<8>, 1>
+    firrtl.matchingconnect %r, %input : !firrtl.vector<uint<8>, 1>
+    firrtl.matchingconnect %port, %r : !firrtl.vector<uint<8>, 1>
+  }
+  // COMMON-LABEL: @Conventions3
+  // AGGREGATE-SAME: %input: !firrtl.vector<uint<8>, 1>
+  // AGGREGATE-NEXT: firrtl.reg
+  // AGGREGATE-SAME: !firrtl.vector<uint<8>, 1>
+  firrtl.module private @Conventions3(in %input: !firrtl.vector<uint<8>, 1>, in %clk: !firrtl.clock, out %port: !firrtl.vector<uint<8>, 1>) attributes {convention = #firrtl<convention internal>, body_type_lowering = #firrtl<convention internal>}{
+    %r = firrtl.reg interesting_name %clk : !firrtl.clock, !firrtl.vector<uint<8>, 1>
+    firrtl.matchingconnect %r, %input : !firrtl.vector<uint<8>, 1>
+    firrtl.matchingconnect %port, %r : !firrtl.vector<uint<8>, 1>
+  }
+  // COMMON-LABEL: @Conventions4
+  // AGGREGATE-SAME: %input: !firrtl.vector<uint<8>, 1>
+  // AGGREGATE-NEXT: firrtl.reg
+  // AGGREGATE-SAME: !firrtl.uint<8>
+  firrtl.module private @Conventions4(in %input: !firrtl.vector<uint<8>, 1>, in %clk: !firrtl.clock, out %port: !firrtl.vector<uint<8>, 1>) attributes {convention = #firrtl<convention internal>, body_type_lowering = #firrtl<convention scalarized>}{
+    %r = firrtl.reg interesting_name %clk : !firrtl.clock, !firrtl.vector<uint<8>, 1>
+    firrtl.matchingconnect %r, %input : !firrtl.vector<uint<8>, 1>
+    firrtl.matchingconnect %port, %r : !firrtl.vector<uint<8>, 1>
+  }
+}
+
 // Test that memories have their prefixes copied when lowering.
-// See: https://github.com/llvm/circt/issues/7835
+// https://github.com/llvm/circt/issues/7835
 firrtl.circuit "MemoryPrefixCopying" {
   // COMMON-LABEL: firrtl.module @MemoryPrefixCopying
   firrtl.module @MemoryPrefixCopying() {

@@ -318,7 +318,9 @@ bool firrtl::hasDontTouch(Value value) {
   if (auto *op = value.getDefiningOp())
     return hasDontTouch(op);
   auto arg = dyn_cast<BlockArgument>(value);
-  auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
+  auto module = dyn_cast<FModuleOp>(arg.getOwner()->getParentOp());
+  if (!module)
+    return false;
   return (module.getPortSymbolAttr(arg.getArgNumber())) ||
          AnnotationSet::forPort(module, arg.getArgNumber()).hasDontTouch();
 }
@@ -3430,6 +3432,16 @@ LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
+// ContractOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ContractOp::verify() {
+  if (getBody().getArgumentTypes() != getInputs().getType())
+    return emitOpError("result types and region argument types must match");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ObjectOp
 //===----------------------------------------------------------------------===//
 
@@ -3518,9 +3530,11 @@ static LogicalResult checkConnectFlow(Operation *connect) {
   // instance/memory input ports.
   auto srcFlow = foldFlow(src);
   if (!isValidSrc(srcFlow)) {
-    // A sink that is a port output or instance input used as a source is okay.
+    // A sink that is a port output or instance input used as a source is okay,
+    // as long as it is not a property.
     auto kind = getDeclarationKind(src);
-    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
+    if (isa<PropertyType>(src.getType()) ||
+        (kind != DeclKind::Port && kind != DeclKind::Instance)) {
       auto srcRef = getFieldRefFromValue(src, /*lookThroughCasts=*/true);
       auto [srcName, rootKnown] = getFieldName(srcRef);
       auto diag = emitError(connect->getLoc());

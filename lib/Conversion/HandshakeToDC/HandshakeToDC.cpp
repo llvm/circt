@@ -538,7 +538,8 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.getI32IntegerAttr(1);
     rewriter.replaceOpWithNewOp<dc::BufferOp>(
-        op, adaptor.getOperand(), static_cast<size_t>(op.getNumSlots()));
+        op, adaptor.getOperand(), static_cast<size_t>(op.getNumSlots()),
+        op.getInitValuesAttr());
     return success();
   }
 };

@@ -16,8 +16,8 @@
 #ifndef ESI_TYPES_H
 #define ESI_TYPES_H
 
-#include <map>
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -53,6 +53,13 @@ public:
 
   const ChannelVector &getChannels() const { return channels; }
   std::ptrdiff_t getBitWidth() const override { return -1; };
+
+  std::pair<const Type *, Direction> findChannel(std::string name) const {
+    for (auto [channelName, dir, type] : channels)
+      if (channelName == name)
+        return std::make_pair(type, dir);
+    throw std::runtime_error("Channel '" + name + "' not found in bundle");
+  }
 
 protected:
   ChannelVector channels;

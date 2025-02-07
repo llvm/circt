@@ -508,6 +508,23 @@ def StringConstantOp : MooreOp<"string_constant", [Pure]> {
   let assemblyFormat = "$value attr-dict `:` type($result)";
 }
 
+def RealLiteralOp : MooreOp<"real_constant", [Pure]> {
+  let summary = "Produce a constant real value";
+  let description = [{
+    Produces a constant value of real type.
+    
+    Example:
+    ```mlir
+    %0 = moore.real_constant 1.23
+    ```
+    The real type has fixed-point(1.2) and exponent(2.0e10) formats.
+    See IEEE 1800-2017 § 5.7.2 "Real literal constants".
+  }];
+  let arguments = (ins F64Attr:$value);
+  let results = (outs RealType:$result);
+  let assemblyFormat = "$value attr-dict `:` type($result)";
+}
+
 //===----------------------------------------------------------------------===//
 // Casting and Resizing
 //===----------------------------------------------------------------------===//
@@ -708,6 +725,8 @@ def SubOp : BinaryOpBase<"sub"> {
 
     See IEEE 1800-2017 § 11.4.3 "Arithmetic operators".
   }];
+
+  let hasFolder = 1;
 }
 
 def MulOp : BinaryOpBase<"mul", [Commutative]> {
@@ -1608,6 +1627,20 @@ def SeverityBIOp : Builtin<"severity"> {
 // Math Builtins
 //===----------------------------------------------------------------------===//
 
+class RealMathFunc<string mnemonic, list<Trait> traits = []> : 
+    Builtin<mnemonic, traits # [SameOperandsAndResultType]> {
+  let description = [{
+    The system real math functions shall accept real value arguments and return
+    a real result type. Their behavior shall match the equivalent C language
+    standard math library function indicated.
+
+    See IEEE 1800-2017 § 20.8.2 "Real math functions".
+   }];
+  let arguments = (ins RealType:$value);
+  let results = (outs RealType:$result);
+  let assemblyFormat = "$value attr-dict `:` type($value)";
+}
+
 def Clog2BIOp : Builtin<"clog2", [SameOperandsAndResultType]> {
   let summary = "Compute ceil(log2(x)) of x";
   let description = [{
@@ -1624,6 +1657,78 @@ def Clog2BIOp : Builtin<"clog2", [SameOperandsAndResultType]> {
   let arguments = (ins IntType:$value);
   let results = (outs IntType:$result);
   let assemblyFormat = "$value attr-dict `:` type($value)";
+}
+
+def LnBIOp : RealMathFunc<"ln"> {
+  let summary = "Natural logarithm";
+}
+
+def Log10BIOp : RealMathFunc<"log10"> {
+  let summary = "Decimal logarithm";
+}
+
+def ExpBIOp : RealMathFunc<"exp"> {
+  let summary = "Exponential";
+}
+
+def SqrtBIOp : RealMathFunc<"sqrt"> {
+  let summary = "Square root";
+}
+
+def FloorBIOp : RealMathFunc<"floor"> {
+  let summary = "Floor";
+}
+
+def CeilBIOp : RealMathFunc<"ceil"> {
+  let summary = "Ceiling";
+}
+
+def SinBIOp : RealMathFunc<"sin"> {
+  let summary = "Sine";
+}
+
+def CosBIOp : RealMathFunc<"cos"> {
+  let summary = "Cosine";
+}
+
+def TanBIOp : RealMathFunc<"tan"> {
+  let summary = "Tangent";
+}
+
+def AsinBIOp : RealMathFunc<"asin"> {
+  let summary = "Arc-sine";
+}
+
+def AcosBIOp : RealMathFunc<"acos"> {
+  let summary = "Arc-cosine";
+}
+
+def AtanBIOp : RealMathFunc<"atan"> {
+  let summary = "Arc-tangent";
+}
+
+def SinhBIOp : RealMathFunc<"sinh"> {
+  let summary = "Hyperbolic sine";
+}
+
+def CoshBIOp : RealMathFunc<"cosh"> {
+  let summary = "Hyperbolic cosine";
+}
+
+def TanhBIOp : RealMathFunc<"tanh"> {
+  let summary = "Hyperbolic tangent";
+}
+
+def AsinhBIOp : RealMathFunc<"asinh"> {
+  let summary = "Arc-hyperbolic sine";
+}
+
+def AcoshBIOp : RealMathFunc<"acosh"> {
+  let summary = "Arc-hyperbolic cosine";
+}
+
+def AtanhBIOp : RealMathFunc<"atanh"> {
+  let summary = "Arc-hyperbolic tangent";
 }
 
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

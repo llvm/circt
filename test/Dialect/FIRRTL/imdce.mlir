@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl-imdeadcodeelim)' --split-input-file -verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl-imdeadcodeelim)' --split-input-file --verify-diagnostics --allow-unregistered-dialect %s | FileCheck %s
 firrtl.circuit "top" {
   // In `dead_module`, %source is connected to %dest through several dead operations such as
   // node, wire, reg or rgereset. %dest is also dead at any instantiation, so check that
@@ -533,7 +533,7 @@ firrtl.circuit "DeadPublic" {
 // crash).  This should work for both FIRRTL operations and non-FIRRTL
 // operations.
 //
-// CHECK-LAEBL: "Foo"
+// CHECK-LABEL: "Foo"
 firrtl.circuit "Foo" {
   firrtl.layer @A bind {}
   sv.macro.decl @B["B"]
@@ -581,5 +581,43 @@ firrtl.circuit "Foo" {
     %bar_a, %bar_b, %bar_probe = firrtl.instance bar @Bar(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>, out probe: !firrtl.probe<uint<1>, @A>)
     firrtl.matchingconnect %bar_a, %a : !firrtl.uint<1>
     firrtl.matchingconnect %b, %bar_b : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Modules referenced from unknown ops cannot be removed, even if they are empty
+// and all their instances have been deleted.
+// CHECK-LABEL: firrtl.circuit "FormalMarkerIsUse"
+firrtl.circuit "FormalMarkerIsUse" {
+  // expected-warning @below {{module `FormalMarkerIsUse` is empty but cannot be removed because the module is public}}
+  firrtl.module @FormalMarkerIsUse() {
+    // CHECK-NOT: firrtl.instance foo @Foo
+    // CHECK-NOT: firrtl.instance bar @Bar
+    firrtl.instance foo @Foo()
+    firrtl.instance bar @Bar()
+  }
+  // CHECK: firrtl.module private @Foo
+  // CHECK: firrtl.module private @Bar
+  // CHECK: firrtl.module private @Uninstantiated
+  firrtl.module private @Foo() {}
+  firrtl.module private @Bar() {}
+  firrtl.module private @Uninstantiated() {}
+  firrtl.formal @Test, @Foo {}
+  "some_unknown_dialect.op"() { magic = @Bar, other = @Uninstantiated } : () -> ()
+}
+
+// -----
+
+// Block arguments on operations that aren't modules, e.g. contracts, must not
+// crash the `firrtl::hasDontTouch` query.
+// CHECK-LABEL: firrtl.circuit "NonModuleBlockArgsMustNotCrash"
+firrtl.circuit "NonModuleBlockArgsMustNotCrash" {
+  firrtl.module @NonModuleBlockArgsMustNotCrash(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+    %0 = firrtl.contract %a : !firrtl.uint<1> {
+    ^bb0(%arg0: !firrtl.uint<1>):
+      firrtl.int.verif.assert %arg0 : !firrtl.uint<1>
+    }
+    firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
   }
 }

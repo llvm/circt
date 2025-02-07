@@ -56,7 +56,7 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
     Value constZero = seq::createConstantInitialValue(
         rewriter, op->getLoc(), rewriter.getIntegerAttr(i1, 0));
 
-    // Generate the constant used to enegate the
+    // Generate the constant used to negate the reset value
     Value constOne = rewriter.create<hw::ConstantOp>(op.getLoc(), i1, 1);
 
     // Create a backedge for the register to be used in the OrOp

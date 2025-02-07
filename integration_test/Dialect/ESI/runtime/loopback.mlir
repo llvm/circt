@@ -143,8 +143,6 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // QUERY-HIER: * Instance:top
 // QUERY-HIER: * Ports:
 // QUERY-HIER:     internal_write:
-// QUERY-HIER:       ack: !esi.channel<i0>
-// QUERY-HIER:       req: !esi.channel<!hw.struct<address: i5, data: i64>>
 // QUERY-HIER:     func1: function i16(i16)
 // QUERY-HIER:     structFunc: function !hw.struct<x: si8, y: si8>(!hw.struct<a: ui16, b: si8>)
 // QUERY-HIER:     arrayFunc: function !hw.array<2xsi8>(!hw.array<1xsi8>)

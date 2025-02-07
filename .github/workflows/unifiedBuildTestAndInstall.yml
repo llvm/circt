@@ -8,10 +8,14 @@ on:
         required: true
         type: choice
         options:
+          - ubuntu-24.04
           - ubuntu-22.04
           - ubuntu-20.04
+          - macos-15-large
+          - macos-15
+          - macos-14-large
+          - macos-14
           - macos-13
-          - macos-12
           - windows-2022
           - windows-2019
       cmake_build_type:
@@ -261,14 +265,14 @@ jobs:
 
 # Upload build artifacts
       - name: Upload Binary (Non-Tag)
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: inputs.install && github.ref_type != 'tag'
         with:
           name: ${{ steps.name_archive.outputs.name }}
           path: ${{ steps.name_archive.outputs.name }}
           retention-days: 7
       - name: Upload SHA256 (Non-Tag)
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: inputs.install && github.ref_type != 'tag'
         with:
           name: ${{ steps.name_archive.outputs.name }}.sha256

@@ -12,7 +12,7 @@
 
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "circt/Dialect/LLHD/Transforms/Passes.h"
+#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Visitors.h"
@@ -24,7 +24,7 @@
 namespace circt {
 namespace llhd {
 #define GEN_PASS_DEF_FUNCTIONELIMINATION
-#include "circt/Dialect/LLHD/Transforms/Passes.h.inc"
+#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h.inc"
 } // namespace llhd
 } // namespace circt
 
@@ -95,8 +95,3 @@ LogicalResult FunctionEliminationPass::runOnModule(hw::HWModuleOp module) {
   return success();
 }
 } // namespace
-
-std::unique_ptr<OperationPass<ModuleOp>>
-circt::llhd::createFunctionEliminationPass() {
-  return std::make_unique<FunctionEliminationPass>();
-}

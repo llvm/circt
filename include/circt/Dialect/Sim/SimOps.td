@@ -143,7 +143,7 @@ def DPICallOp : SimOp<"func.dpi.call",
 
     /// Set the callee for this operation.
     void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
-      (*this)->setAttr(getCalleeAttrName(), callee.get<mlir::SymbolRefAttr>());
+      (*this)->setAttr(getCalleeAttrName(), llvm::cast<mlir::SymbolRefAttr>(callee));
     }
   }];
 

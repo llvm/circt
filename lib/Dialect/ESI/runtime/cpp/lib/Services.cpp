@@ -15,6 +15,7 @@
 
 #include "esi/Services.h"
 #include "esi/Accelerator.h"
+#include "esi/Engines.h"
 
 #include "zlib.h"
 
@@ -24,12 +25,11 @@
 using namespace esi;
 using namespace esi::services;
 
-Service *Service::getChildService(AcceleratorConnection *conn,
-                                  Service::Type service, AppIDPath id,
+Service *Service::getChildService(Service::Type service, AppIDPath id,
                                   std::string implName,
                                   ServiceImplDetails details,
                                   HWClientDetails clients) {
-  return conn->getService(service, id, implName, details, clients);
+  return conn.getService(service, id, implName, details, clients);
 }
 
 std::string SysInfo::getServiceSymbol() const { return "__builtin_SysInfo"; }
@@ -53,8 +53,8 @@ std::string SysInfo::getJsonManifest() const {
 // MMIO class implementations.
 //===----------------------------------------------------------------------===//
 
-MMIO::MMIO(Context &ctxt, AppIDPath idPath, std::string implName,
-           const ServiceImplDetails &details, const HWClientDetails &clients) {
+MMIO::MMIO(AcceleratorConnection &conn, const HWClientDetails &clients)
+    : Service(conn) {
   for (const HWClientDetail &client : clients) {
     auto offsetIter = client.implOptions.find("offset");
     if (offsetIter == client.implOptions.end())
@@ -79,9 +79,7 @@ MMIO::MMIO(Context &ctxt, AppIDPath idPath, std::string implName,
 std::string MMIO::getServiceSymbol() const {
   return std::string(MMIO::StdName);
 }
-ServicePort *MMIO::getPort(AppIDPath id, const BundleType *type,
-                           const std::map<std::string, ChannelPort &> &,
-                           AcceleratorConnection &conn) const {
+BundlePort *MMIO::getPort(AppIDPath id, const BundleType *type) const {
   auto regionIter = regions.find(id);
   if (regionIter == regions.end())
     return nullptr;
@@ -92,10 +90,8 @@ ServicePort *MMIO::getPort(AppIDPath id, const BundleType *type,
 namespace {
 class MMIOPassThrough : public MMIO {
 public:
-  MMIOPassThrough(Context &ctxt, AppIDPath idPath, std::string implName,
-                  const ServiceImplDetails &details,
-                  const HWClientDetails &clients, MMIO *parent)
-      : MMIO(ctxt, idPath, implName, details, clients), parent(parent) {}
+  MMIOPassThrough(const HWClientDetails &clients, MMIO *parent)
+      : MMIO(parent->getConnection(), clients), parent(parent) {}
   uint64_t read(uint32_t addr) const override { return parent->read(addr); }
   void write(uint32_t addr, uint64_t data) override {
     parent->write(addr, data);
@@ -106,15 +102,12 @@ private:
 };
 } // namespace
 
-Service *MMIO::getChildService(AcceleratorConnection *conn,
-                               Service::Type service, AppIDPath id,
+Service *MMIO::getChildService(Service::Type service, AppIDPath id,
                                std::string implName, ServiceImplDetails details,
                                HWClientDetails clients) {
   if (service != typeid(MMIO))
-    return Service::getChildService(conn, service, id, implName, details,
-                                    clients);
-  return new MMIOPassThrough(conn->getCtxt(), id, implName, details, clients,
-                             this);
+    return Service::getChildService(service, id, implName, details, clients);
+  return new MMIOPassThrough(clients, this);
 }
 
 //===----------------------------------------------------------------------===//
@@ -122,7 +115,7 @@ Service *MMIO::getChildService(AcceleratorConnection *conn,
 //===----------------------------------------------------------------------===//
 
 MMIO::MMIORegion::MMIORegion(AppID id, MMIO *parent, RegionDescriptor desc)
-    : ServicePort(id, {}), parent(parent), desc(desc) {}
+    : ServicePort(id, nullptr, {}), parent(parent), desc(desc) {}
 uint64_t MMIO::MMIORegion::read(uint32_t addr) const {
   if (addr >= desc.size)
     throw std::runtime_error("MMIO read out of bounds: " + toHex(addr));
@@ -134,7 +127,8 @@ void MMIO::MMIORegion::write(uint32_t addr, uint64_t data) {
   parent->write(desc.base + addr, data);
 }
 
-MMIOSysInfo::MMIOSysInfo(const MMIO *mmio) : mmio(mmio) {}
+MMIOSysInfo::MMIOSysInfo(const MMIO *mmio)
+    : SysInfo(mmio->getConnection()), mmio(mmio) {}
 
 uint32_t MMIOSysInfo::getEsiVersion() const {
   uint64_t reg;
@@ -165,10 +159,10 @@ std::vector<uint8_t> MMIOSysInfo::getCompressedManifest() const {
 
 std::string HostMem::getServiceSymbol() const { return "__builtin_HostMem"; }
 
-CustomService::CustomService(AppIDPath idPath,
+CustomService::CustomService(AppIDPath idPath, AcceleratorConnection &conn,
                              const ServiceImplDetails &details,
                              const HWClientDetails &clients)
-    : id(idPath) {
+    : Service(conn), id(idPath) {
   if (auto f = details.find("service"); f != details.end()) {
     serviceSymbol = std::any_cast<std::string>(f->second);
     // Strip off initial '@'.
@@ -176,9 +170,15 @@ CustomService::CustomService(AppIDPath idPath,
   }
 }
 
-FuncService::FuncService(AcceleratorConnection *acc, AppIDPath idPath,
-                         const std::string &implName,
-                         ServiceImplDetails details, HWClientDetails clients) {
+BundlePort *CustomService::getPort(AppIDPath id, const BundleType *type) const {
+  return new BundlePort(id.back(), type,
+                        conn.getEngineMapFor(id).requestPorts(id, type));
+}
+
+FuncService::FuncService(AppIDPath idPath, AcceleratorConnection &conn,
+                         ServiceImplDetails details, HWClientDetails clients)
+    : Service(conn) {
+
   if (auto f = details.find("service"); f != details.end())
     // Strip off initial '@'.
     symbol = std::any_cast<std::string>(f->second).substr(1);
@@ -186,42 +186,38 @@ FuncService::FuncService(AcceleratorConnection *acc, AppIDPath idPath,
 
 std::string FuncService::getServiceSymbol() const { return symbol; }
 
-ServicePort *
-FuncService::getPort(AppIDPath id, const BundleType *type,
-                     const std::map<std::string, ChannelPort &> &channels,
-                     AcceleratorConnection &acc) const {
-  return new Function(id.back(), channels);
+BundlePort *FuncService::getPort(AppIDPath id, const BundleType *type) const {
+  return new Function(id.back(), type,
+                      conn.getEngineMapFor(id).requestPorts(id, type));
 }
 
-FuncService::Function::Function(
-    AppID id, const std::map<std::string, ChannelPort &> &channels)
-    : ServicePort(id, channels),
-      arg(dynamic_cast<WriteChannelPort &>(channels.at("arg"))),
-      result(dynamic_cast<ReadChannelPort &>(channels.at("result"))) {
-  assert(channels.size() == 2 && "FuncService must have exactly two channels");
-}
-
-FuncService::Function *FuncService::Function::get(AppID id,
+FuncService::Function *FuncService::Function::get(AppID id, BundleType *type,
                                                   WriteChannelPort &arg,
                                                   ReadChannelPort &result) {
-  return new Function(id, {{"arg", arg}, {"result", result}});
+  return new Function(
+      id, type, {{std::string("arg"), arg}, {std::string("result"), result}});
+  return nullptr;
 }
 
 void FuncService::Function::connect() {
-  arg.connect();
-  result.connect();
+  if (channels.size() != 2)
+    throw std::runtime_error("FuncService must have exactly two channels");
+  arg = &getRawWrite("arg");
+  arg->connect();
+  result = &getRawRead("result");
+  result->connect();
 }
 
 std::future<MessageData>
 FuncService::Function::call(const MessageData &argData) {
   std::scoped_lock<std::mutex> lock(callMutex);
-  arg.write(argData);
-  return result.readAsync();
+  arg->write(argData);
+  return result->readAsync();
 }
 
-CallService::CallService(AcceleratorConnection *acc, AppIDPath idPath,
-                         std::string implName, ServiceImplDetails details,
-                         HWClientDetails clients) {
+CallService::CallService(AcceleratorConnection &acc, AppIDPath idPath,
+                         ServiceImplDetails details)
+    : Service(acc) {
   if (auto f = details.find("service"); f != details.end())
     // Strip off initial '@'.
     symbol = std::any_cast<std::string>(f->second).substr(1);
@@ -229,63 +225,46 @@ CallService::CallService(AcceleratorConnection *acc, AppIDPath idPath,
 
 std::string CallService::getServiceSymbol() const { return symbol; }
 
-ServicePort *
-CallService::getPort(AppIDPath id, const BundleType *type,
-                     const std::map<std::string, ChannelPort &> &channels,
-                     AcceleratorConnection &acc) const {
-  return new Callback(acc, id.back(), channels);
+BundlePort *CallService::getPort(AppIDPath id, const BundleType *type) const {
+  return new Callback(conn, id.back(), type,
+                      conn.getEngineMapFor(id).requestPorts(id, type));
 }
 
-ReadChannelPort &getRead(const std::map<std::string, ChannelPort &> &channels,
-                         const std::string &name) {
-  auto f = channels.find(name);
-  if (f == channels.end())
-    throw std::runtime_error("CallService must have an '" + name + "' channel");
-  return dynamic_cast<ReadChannelPort &>(f->second);
-}
-
-WriteChannelPort &getWrite(const std::map<std::string, ChannelPort &> &channels,
-                           const std::string &name) {
-  auto f = channels.find(name);
-  if (f == channels.end())
-    throw std::runtime_error("CallService must have an '" + name + "' channel");
-  return dynamic_cast<WriteChannelPort &>(f->second);
-}
-
-CallService::Callback::Callback(
-    AcceleratorConnection &acc, AppID id,
-    const std::map<std::string, ChannelPort &> &channels)
-    : ServicePort(id, channels), arg(getRead(channels, "arg")),
-      result(getWrite(channels, "result")), acc(acc) {
+CallService::Callback::Callback(AcceleratorConnection &acc, AppID id,
+                                const BundleType *type, PortMap channels)
+    : ServicePort(id, type, channels), acc(acc) {
   if (channels.size() != 2)
     throw std::runtime_error("CallService must have exactly two channels");
 }
 
 CallService::Callback *CallService::Callback::get(AcceleratorConnection &acc,
-                                                  AppID id,
+                                                  AppID id, BundleType *type,
                                                   WriteChannelPort &result,
                                                   ReadChannelPort &arg) {
-  return new Callback(acc, id, {{"arg", arg}, {"result", result}});
+  return new Callback(acc, id, type, {{"arg", arg}, {"result", result}});
 }
 
 void CallService::Callback::connect(
     std::function<MessageData(const MessageData &)> callback, bool quick) {
-  result.connect();
+  if (channels.size() != 2)
+    throw std::runtime_error("CallService must have exactly two channels");
+  result = &getRawWrite("result");
+  result->connect();
+  arg = &getRawRead("arg");
   if (quick) {
     // If it's quick, we can just call the callback directly.
-    arg.connect([this, callback](MessageData argMsg) -> bool {
+    arg->connect([this, callback](MessageData argMsg) -> bool {
       MessageData resultMsg = callback(std::move(argMsg));
-      this->result.write(std::move(resultMsg));
+      this->result->write(std::move(resultMsg));
       return true;
     });
   } else {
     // If it's not quick, we need to use the service thread.
-    arg.connect();
+    arg->connect();
     acc.getServiceThread()->addListener(
-        {&arg},
-        [this, callback](ReadChannelPort *, MessageData argMsg) -> void {
+        {arg}, [this, callback](ReadChannelPort *, MessageData argMsg) -> void {
           MessageData resultMsg = callback(std::move(argMsg));
-          this->result.write(std::move(resultMsg));
+          this->result->write(std::move(resultMsg));
         });
   }
 }
@@ -297,9 +276,11 @@ Service *ServiceRegistry::createService(AcceleratorConnection *acc,
                                         HWClientDetails clients) {
   // TODO: Add a proper registration mechanism.
   if (svcType == typeid(FuncService))
-    return new FuncService(acc, id, implName, details, clients);
+    return new FuncService(id, *acc, details, clients);
   if (svcType == typeid(CallService))
-    return new CallService(acc, id, implName, details, clients);
+    return new CallService(*acc, id, details);
+  if (svcType == typeid(CustomService))
+    return new CustomService(id, *acc, details, clients);
   return nullptr;
 }
 
@@ -311,5 +292,7 @@ Service::Type ServiceRegistry::lookupServiceType(const std::string &svcName) {
     return typeid(CallService);
   if (svcName == MMIO::StdName)
     return typeid(MMIO);
+  if (svcName == HostMem::StdName)
+    return typeid(HostMem);
   return typeid(CustomService);
 }

@@ -355,21 +355,40 @@ void IMDeadCodeElimPass::runOnOperation() {
       return;
     }
 
-    // If there is an unknown use of inner sym or hierpath, just mark all of
-    // them alive.
-    for (NamedAttribute namedAttr : op->getAttrs()) {
-      namedAttr.getValue().walk([&](Attribute subAttr) {
-        if (auto innerRef = dyn_cast<hw::InnerRefAttr>(subAttr))
-          if (auto instance = dyn_cast_or_null<firrtl::InstanceOp>(
-                  innerRefNamespace->lookupOp(innerRef)))
-            markAlive(instance);
+    // If there is an unknown symbol or inner symbol use, mark all of them
+    // alive.
+    op->getAttrDictionary().walk([&](Attribute attr) {
+      if (auto innerRef = dyn_cast<hw::InnerRefAttr>(attr)) {
+        // Mark instances alive that are targeted by an inner ref.
+        if (auto instance = dyn_cast_or_null<firrtl::InstanceOp>(
+                innerRefNamespace->lookupOp(innerRef)))
+          markAlive(instance);
+        return;
+      }
 
-        if (auto flatSymbolRefAttr = dyn_cast<FlatSymbolRefAttr>(subAttr))
-          if (auto hierPath = symbolTable->template lookup<hw::HierPathOp>(
-                  flatSymbolRefAttr.getAttr()))
-            markAlive(hierPath);
-      });
-    }
+      if (auto symbolRef = dyn_cast<FlatSymbolRefAttr>(attr)) {
+        auto *symbol = symbolTable->lookup(symbolRef.getAttr());
+        if (!symbol)
+          return;
+
+        // Mark referenced hierarchical paths alive.
+        if (auto hierPath = dyn_cast<hw::HierPathOp>(symbol))
+          markAlive(hierPath);
+
+        // Mark modules referenced by unknown ops alive.
+        if (auto module = dyn_cast<FModuleOp>(symbol)) {
+          if (!isa<firrtl::InstanceOp>(op)) {
+            LLVM_DEBUG(llvm::dbgs()
+                       << "Unknown use of " << module.getModuleNameAttr()
+                       << " in " << op->getName() << "\n");
+            markAlive(module);
+            markBlockExecutable(module.getBodyBlock());
+          }
+        }
+
+        return;
+      }
+    });
   });
 
   // Create a vector of modules in the post order of instance graph.
@@ -473,19 +492,21 @@ void IMDeadCodeElimPass::visitValue(Value value) {
 
   // Requiring an input port propagates the liveness to each instance.
   if (auto blockArg = dyn_cast<BlockArgument>(value)) {
-    auto module = cast<FModuleOp>(blockArg.getParentBlock()->getParentOp());
-    auto portDirection = module.getPortDirection(blockArg.getArgNumber());
-    // If the port is input, it's necessary to mark corresponding input ports of
-    // instances as alive. We don't have to propagate the liveness of output
-    // ports.
-    if (portDirection == Direction::In) {
-      for (auto *instRec : instanceGraph->lookup(module)->uses()) {
-        auto instance = cast<InstanceOp>(instRec->getInstance());
-        if (liveElements.contains(instance))
-          markAlive(instance.getResult(blockArg.getArgNumber()));
+    if (auto module =
+            dyn_cast<FModuleOp>(blockArg.getParentBlock()->getParentOp())) {
+      auto portDirection = module.getPortDirection(blockArg.getArgNumber());
+      // If the port is input, it's necessary to mark corresponding input ports
+      // of instances as alive. We don't have to propagate the liveness of
+      // output ports.
+      if (portDirection == Direction::In) {
+        for (auto *instRec : instanceGraph->lookup(module)->uses()) {
+          auto instance = cast<InstanceOp>(instRec->getInstance());
+          if (liveElements.contains(instance))
+            markAlive(instance.getResult(blockArg.getArgNumber()));
+        }
       }
+      return;
     }
-    return;
   }
 
   // Marking an instance port as alive propagates to the corresponding port of
@@ -514,10 +535,15 @@ void IMDeadCodeElimPass::visitValue(Value value) {
     return;
   }
 
-  // If op is defined by an operation, mark its operands as alive.
-  if (auto op = value.getDefiningOp())
+  // If the value is defined by an operation, mark its operands alive and any
+  // nested blocks executable.
+  if (auto op = value.getDefiningOp()) {
     for (auto operand : op->getOperands())
       markAlive(operand);
+    for (auto &region : op->getRegions())
+      for (auto &block : region)
+        markBlockExecutable(&block);
+  }
 
   // If either result of a forceable declaration is alive, they both are.
   if (auto fop = value.getDefiningOp<Forceable>();
@@ -540,8 +566,7 @@ void IMDeadCodeElimPass::visitSubelement(Operation *op) {
 }
 
 void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
-  auto *body = module.getBodyBlock();
-  assert(isBlockExecutable(body) &&
+  assert(isBlockExecutable(module.getBodyBlock()) &&
          "unreachable modules must be already deleted");
 
   auto removeDeadNonLocalAnnotations = [&](int _, Annotation anno) -> bool {
@@ -801,6 +826,10 @@ void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
         << "these are instances with symbols";
     return;
   }
+
+  // We cannot delete alive modules.
+  if (liveElements.contains(module))
+    return;
 
   instanceGraph->erase(instanceGraphNode);
   module.erase();

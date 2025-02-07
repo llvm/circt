@@ -38,46 +38,125 @@ OpFoldResult JoinOp::fold(FoldAdaptor adaptor) {
   if (auto tokens = getTokens(); tokens.size() == 1)
     return tokens.front();
 
-  // These folders are disabled to work around MLIR bugs when changing
-  // the number of operands.  https://github.com/llvm/llvm-project/issues/64280
   return {};
+}
 
-  // Remove operands which originate from a dc.source op (redundant).
-  auto *op = getOperation();
-  for (OpOperand &operand : llvm::make_early_inc_range(op->getOpOperands())) {
-    if (auto source = operand.get().getDefiningOp<dc::SourceOp>()) {
-      op->eraseOperand(operand.getOperandNumber());
-      return getOutput();
+struct JoinOnBranchPattern : public OpRewritePattern<JoinOp> {
+  using OpRewritePattern<JoinOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(JoinOp op,
+                                PatternRewriter &rewriter) const override {
+
+    struct BranchOperandInfo {
+      // Unique operands from the branch op, in case we have the same operand
+      // from the branch op multiple times.
+      SetVector<Value> uniqueOperands;
+      // Indices which the operands are at in the join op.
+      BitVector indices;
+    };
+
+    DenseMap<BranchOp, BranchOperandInfo> branchOperands;
+    for (auto &opOperand : op->getOpOperands()) {
+      auto branch = opOperand.get().getDefiningOp<BranchOp>();
+      if (!branch)
+        continue;
+
+      BranchOperandInfo &info = branchOperands[branch];
+      info.uniqueOperands.insert(opOperand.get());
+      info.indices.resize(op->getNumOperands());
+      info.indices.set(opOperand.getOperandNumber());
     }
-  }
 
-  // Remove duplicate operands.
-  llvm::DenseSet<Value> uniqueOperands;
-  for (OpOperand &operand : llvm::make_early_inc_range(op->getOpOperands())) {
-    if (!uniqueOperands.insert(operand.get()).second) {
-      op->eraseOperand(operand.getOperandNumber());
-      return getOutput();
+    if (branchOperands.empty())
+      return failure();
+
+    // Do we have both operands from any given branch op?
+    for (auto &it : branchOperands) {
+      auto branch = it.first;
+      auto &operandInfo = it.second;
+      if (operandInfo.uniqueOperands.size() != 2) {
+        // We don't have both operands from the branch op.
+        continue;
+      }
+
+      // We have both operands from the branch op. Replace the join op with the
+      // branch op's data operand.
+
+      // Unpack the !dc.value<i1> input to the branch op
+      auto unpacked =
+          rewriter.create<UnpackOp>(op.getLoc(), branch.getCondition());
+      rewriter.modifyOpInPlace(op, [&]() {
+        op->eraseOperands(operandInfo.indices);
+        op.getTokensMutable().append({unpacked.getToken()});
+      });
+
+      // Only attempt a single branch at a time - else we'd have to maintain
+      // OpOperand indices during the loop... too complicated, let recursive
+      // pattern application handle this.
+      return success();
     }
-  }
 
-  // Canonicalization staggered joins where the sink join contains inputs also
-  // found in the source join.
-  for (OpOperand &operand : llvm::make_early_inc_range(op->getOpOperands())) {
-    auto otherJoin = operand.get().getDefiningOp<dc::JoinOp>();
-    if (!otherJoin) {
-      // Operand does not originate from a join so it's a valid join input.
-      continue;
+    return failure();
+  }
+};
+struct StaggeredJoinCanonicalization : public OpRewritePattern<JoinOp> {
+  using OpRewritePattern<JoinOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(JoinOp op,
+                                PatternRewriter &rewriter) const override {
+    for (OpOperand &operand : llvm::make_early_inc_range(op->getOpOperands())) {
+      auto otherJoin = operand.get().getDefiningOp<dc::JoinOp>();
+      if (!otherJoin) {
+        // Operand does not originate from a join so it's a valid join input.
+        continue;
+      }
+
+      // Operand originates from a join. Erase the current join operand and
+      // add all of the otherJoin op's inputs to this join.
+      // DCE will take care of otherJoin in case it's no longer used.
+      rewriter.modifyOpInPlace(op, [&]() {
+        op.getTokensMutable().erase(operand.getOperandNumber());
+        op.getTokensMutable().append(otherJoin.getTokens());
+      });
+      return success();
     }
-
-    // Operand originates from a join. Erase the current join operand and add
-    // all of the otherJoin op's inputs to this join.
-    // DCE will take care of otherJoin in case it's no longer used.
-    op->eraseOperand(operand.getOperandNumber());
-    op->insertOperands(getNumOperands(), otherJoin.getTokens());
-    return getOutput();
+    return failure();
   }
+};
 
-  return {};
+struct RemoveJoinOnSourcePattern : public OpRewritePattern<JoinOp> {
+  using OpRewritePattern<JoinOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(JoinOp op,
+                                PatternRewriter &rewriter) const override {
+    for (OpOperand &operand : llvm::make_early_inc_range(op->getOpOperands())) {
+      if (auto source = operand.get().getDefiningOp<dc::SourceOp>()) {
+        rewriter.modifyOpInPlace(
+            op, [&]() { op->eraseOperand(operand.getOperandNumber()); });
+        return success();
+      }
+    }
+    return failure();
+  }
+};
+
+struct RemoveDuplicateJoinOperandsPattern : public OpRewritePattern<JoinOp> {
+  using OpRewritePattern<JoinOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(JoinOp op,
+                                PatternRewriter &rewriter) const override {
+    llvm::DenseSet<Value> uniqueOperands;
+    for (OpOperand &operand : llvm::make_early_inc_range(op->getOpOperands())) {
+      if (!uniqueOperands.insert(operand.get()).second) {
+        rewriter.modifyOpInPlace(
+            op, [&]() { op->eraseOperand(operand.getOperandNumber()); });
+        return success();
+      }
+    }
+    return failure();
+  }
+};
+
+void JoinOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                         MLIRContext *context) {
+  results.insert<RemoveDuplicateJoinOperandsPattern, RemoveJoinOnSourcePattern,
+                 StaggeredJoinCanonicalization, JoinOnBranchPattern>(context);
 }
 
 // =============================================================================

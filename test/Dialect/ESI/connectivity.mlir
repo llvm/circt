@@ -1,4 +1,5 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s --verify-esi-connections
 
 hw.module @Sender(out x: !esi.channel<i1>) {
   %0 = arith.constant 0 : i1
@@ -38,8 +39,11 @@ hw.module @test(in %clk: !seq.clock, in %rst: i1) {
   hw.instance "recv" @Reciever (a: %bufferedChan2: !esi.channel<i1>) -> ()
 
   // CHECK-NEXT:  %sender.x_0 = hw.instance "sender" @Sender() -> (x: !esi.channel<i1>)
-  // CHECK-NEXT:  %1 = esi.buffer %clk, %rst, %sender.x_0 {stages = 4 : i64} : i1
-  // CHECK-NEXT:  hw.instance "recv" @Reciever(a: %1: !esi.channel<i1>) -> ()
+  // CHECK-NEXT:  [[R1:%.+]] = esi.buffer %clk, %rst, %sender.x_0 {stages = 4 : i64} : i1
+  // CHECK-NEXT:  hw.instance "recv" @Reciever(a: [[R1]]: !esi.channel<i1>) -> ()
+
+  %valid, %ready, %data = esi.snoop.vr %bufferedChan2 : !esi.channel<i1>
+  // CHECK-NEXT:  %valid, %ready, %data = esi.snoop.vr [[R1]] : !esi.channel<i1>
 
   %nullBit = esi.null : !esi.channel<i1>
   hw.instance "nullRcvr" @Reciever(a: %nullBit: !esi.channel<i1>) -> ()

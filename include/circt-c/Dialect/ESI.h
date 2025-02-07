@@ -39,6 +39,8 @@ MLIR_CAPI_EXPORTED void circtESIAppendMlirFile(MlirModule,
 MLIR_CAPI_EXPORTED MlirOperation circtESILookup(MlirModule,
                                                 MlirStringRef symbol);
 
+MLIR_CAPI_EXPORTED bool circtESICheckInnerTypeMatch(MlirType to, MlirType from);
+
 //===----------------------------------------------------------------------===//
 // Channel bundles
 //===----------------------------------------------------------------------===//

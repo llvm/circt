@@ -315,7 +315,7 @@ static LogicalResult canonicalizePrimOp(
                       ->materializeConstant(rewriter, cst, type, op->getLoc())
                       ->getResult(0);
   else
-    resultValue = result.get<Value>();
+    resultValue = cast<Value>(result);
 
   // Insert a pad if the type widths disagree.
   if (width !=

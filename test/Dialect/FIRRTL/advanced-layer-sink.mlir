@@ -715,3 +715,26 @@ firrtl.circuit "Sub" {
     }
   }
 }
+
+// Test that a port annotation on a module prevents us from sinking instances of
+// that module into layerblocks.
+firrtl.circuit "DoNotSinkInstanceOfModuleWithPortAnno" {
+  firrtl.layer @A bind {}
+  firrtl.module @ModuleWithPortAnno(out %out : !firrtl.uint<1>)
+    attributes {
+      portAnnotations = [
+        [{class = "circt.FullResetAnnotation", resetType = "async"}]
+      ]
+    }
+  {}
+
+  // CHECK: firrtl.module @DoNotSinkInstanceOfModuleWithPortAnno
+  firrtl.module @DoNotSinkInstanceOfModuleWithPortAnno() {
+    // CHECK-NEXT: firrtl.instance foo @ModuleWithPortAnn
+    %foo_out = firrtl.instance foo @ModuleWithPortAnno(out out : !firrtl.uint<1>)
+    // CHECK-NEXT: firrtl.layerblock 
+    firrtl.layerblock @A {
+      "unknown"(%foo_out) : (!firrtl.uint<1>) -> ()
+    }
+  }
+}

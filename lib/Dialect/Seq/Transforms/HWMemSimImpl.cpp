@@ -753,6 +753,8 @@ void HWMemSimImplPass::runOnOperation() {
                      addVivadoRAMAddressConflictSynthesisBugWorkaround,
                      mlirModuleNamespace)
             .generateMemory(newModule, mem);
+        if (auto fragments = oldModule->getAttr(emit::getFragmentsAttrName()))
+          newModule->setAttr(emit::getFragmentsAttrName(), fragments);
       }
 
       oldModule.erase();

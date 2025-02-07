@@ -55,48 +55,65 @@ using namespace firrtl;
 // Utilities
 //===----------------------------------------------------------------------===//
 
-namespace {
-/// A reset domain.
-struct ResetDomain {
-  /// Whether this is the root of the reset domain.
-  bool isTop = false;
-  /// The reset signal for this domain. A null value indicates that this domain
-  /// explicitly has no reset.
-  Value reset;
-
-  // Implementation details for this domain.
-  Value existingValue;
-  std::optional<unsigned> existingPort;
-  StringAttr newPortName;
-
-  ResetDomain(Value reset) : reset(reset) {}
-};
-} // namespace
-
-inline bool operator==(const ResetDomain &a, const ResetDomain &b) {
-  return (a.isTop == b.isTop && a.reset == b.reset);
-}
-inline bool operator!=(const ResetDomain &a, const ResetDomain &b) {
-  return !(a == b);
-}
-
 /// Return the name and parent module of a reset. The reset value must either be
 /// a module port or a wire/node operation.
 static std::pair<StringAttr, FModuleOp> getResetNameAndModule(Value reset) {
   if (auto arg = dyn_cast<BlockArgument>(reset)) {
     auto module = cast<FModuleOp>(arg.getParentRegion()->getParentOp());
     return {module.getPortNameAttr(arg.getArgNumber()), module};
-  } else {
-    auto op = reset.getDefiningOp();
-    return {op->getAttrOfType<StringAttr>("name"),
-            op->getParentOfType<FModuleOp>()};
   }
+  auto *op = reset.getDefiningOp();
+  return {op->getAttrOfType<StringAttr>("name"),
+          op->getParentOfType<FModuleOp>()};
 }
 
 /// Return the name of a reset. The reset value must either be a module port or
 /// a wire/node operation.
-static inline StringAttr getResetName(Value reset) {
+static StringAttr getResetName(Value reset) {
   return getResetNameAndModule(reset).first;
+}
+
+namespace {
+/// A reset domain.
+struct ResetDomain {
+  /// Whether this is the root of the reset domain.
+  bool isTop = false;
+
+  /// The reset signal for this domain. A null value indicates that this domain
+  /// explicitly has no reset.
+  Value rootReset;
+
+  /// The name of this reset signal.
+  StringAttr resetName;
+  /// The type of this reset signal.
+  Type resetType;
+
+  /// Implementation details for this domain. This will be the module local
+  /// signal for this domain.
+  Value localReset;
+  /// If this module already has a port with the matching name, this holds the
+  /// index of the port.
+  std::optional<unsigned> existingPort;
+
+  /// Create a reset domain without any reset.
+  ResetDomain() = default;
+
+  /// Create a reset domain associated with the root reset.
+  ResetDomain(Value rootReset)
+      : rootReset(rootReset), resetName(getResetName(rootReset)),
+        resetType(rootReset.getType()) {}
+
+  /// Returns true if this is in a reset domain, false if this is not a domain.
+  explicit operator bool() const { return static_cast<bool>(rootReset); }
+};
+} // namespace
+
+inline bool operator==(const ResetDomain &a, const ResetDomain &b) {
+  return (a.isTop == b.isTop && a.resetName == b.resetName &&
+          a.resetType == b.resetType);
+}
+inline bool operator!=(const ResetDomain &a, const ResetDomain &b) {
+  return !(a == b);
 }
 
 /// Construct a zero value of the given type using the given builder.
@@ -452,8 +469,8 @@ struct InferResetsPass
                     Value parentReset, InstanceGraph &instGraph,
                     unsigned indent = 0);
 
-  void determineImpl();
-  void determineImpl(FModuleOp module, ResetDomain &domain);
+  LogicalResult determineImpl();
+  LogicalResult determineImpl(FModuleOp module, ResetDomain &domain);
 
   LogicalResult implementFullReset();
   LogicalResult implementFullReset(FModuleOp module, ResetDomain &domain);
@@ -539,7 +556,8 @@ void InferResetsPass::runOnOperationInner() {
     return signalPassFailure();
 
   // Determine how each reset shall be implemented.
-  determineImpl();
+  if (failed(determineImpl()))
+    return signalPassFailure();
 
   // Implement the full resets.
   if (failed(implementFullReset()))
@@ -1496,14 +1514,14 @@ LogicalResult InferResetsPass::buildDomains(CircuitOp circuit) {
 
       // Describe the reset domain the instance is in.
       note << " is in";
-      if (domain.reset) {
-        auto nameAndModule = getResetNameAndModule(domain.reset);
+      if (domain.rootReset) {
+        auto nameAndModule = getResetNameAndModule(domain.rootReset);
         note << " reset domain rooted at '" << nameAndModule.first.getValue()
              << "' of module '" << nameAndModule.second.getName() << "'";
 
         // Show where the domain reset is declared (once per reset).
-        if (printedDomainResets.insert(domain.reset).second) {
-          diag.attachNote(domain.reset.getLoc())
+        if (printedDomainResets.insert(domain.rootReset).second) {
+          diag.attachNote(domain.rootReset.getLoc())
               << "reset domain '" << nameAndModule.first.getValue()
               << "' of module '" << nameAndModule.second.getName()
               << "' declared here:";
@@ -1529,11 +1547,17 @@ void InferResetsPass::buildDomains(FModuleOp module,
   });
 
   // Assemble the domain for this module.
-  ResetDomain domain(parentReset);
+  ResetDomain domain;
   auto it = annotatedResets.find(module);
   if (it != annotatedResets.end()) {
+    // If there is an actual reset, use it for our domain. Otherwise, our
+    // module is explicitly marked to have no domain.
+    if (auto localReset = it->second)
+      domain = ResetDomain(localReset);
     domain.isTop = true;
-    domain.reset = it->second;
+  } else if (parentReset) {
+    // Otherwise, we default to using the reset domain of our parent.
+    domain = ResetDomain(parentReset);
   }
 
   // Associate the domain with this module. If the module already has an
@@ -1551,12 +1575,13 @@ void InferResetsPass::buildDomains(FModuleOp module,
       continue;
     auto childPath =
         instancePathCache->appendInstance(instPath, record->getInstance());
-    buildDomains(submodule, childPath, domain.reset, instGraph, indent + 1);
+    buildDomains(submodule, childPath, domain.rootReset, instGraph, indent + 1);
   }
 }
 
 /// Determine how the reset for each module shall be implemented.
-void InferResetsPass::determineImpl() {
+LogicalResult InferResetsPass::determineImpl() {
+  auto anyFailed = false;
   LLVM_DEBUG({
     llvm::dbgs() << "\n";
     debugHeader("Determine implementation") << "\n\n";
@@ -1564,13 +1589,15 @@ void InferResetsPass::determineImpl() {
   for (auto &it : domains) {
     auto module = cast<FModuleOp>(it.first);
     auto &domain = it.second.back().first;
-    determineImpl(module, domain);
+    if (failed(determineImpl(module, domain)))
+      anyFailed = true;
   }
+  return failure(anyFailed);
 }
 
 /// Determine how the reset for a module shall be implemented. This function
-/// fills in the `existingValue`, `existingPort`, and `newPortName` fields of
-/// the given reset domain.
+/// fills in the `localReset` and `existingPort` fields of the given reset
+/// domain.
 ///
 /// Generally it does the following:
 /// - If the domain has explicitly no reset ("ignore"), leaves everything
@@ -1578,73 +1605,63 @@ void InferResetsPass::determineImpl() {
 /// - If the domain is the place where the reset is defined ("top"), fills in
 ///   the existing port/wire/node as reset.
 /// - If the module already has a port with the reset's name:
-///   - If the port has the same type as the reset domain, reuses that port.
-///   - Otherwise appends a `_N` suffix with increasing N to create a
-///   yet-unused
-///     port name, and marks that as to be created.
+///   - If the port has the same name and type as the reset domain, reuses that
+///   port.
+///   - Otherwise errors out.
 /// - Otherwise indicates that a port with the reset's name should be created.
 ///
-void InferResetsPass::determineImpl(FModuleOp module, ResetDomain &domain) {
-  if (!domain.reset)
-    return; // nothing to do if the module needs no reset
+LogicalResult InferResetsPass::determineImpl(FModuleOp module,
+                                             ResetDomain &domain) {
+  // Nothing to do if the module needs no reset.
+  if (!domain)
+    return success();
   LLVM_DEBUG(llvm::dbgs() << "Planning reset for " << module.getName() << "\n");
 
   // If this is the root of a reset domain, we don't need to add any ports
   // and can just simply reuse the existing values.
   if (domain.isTop) {
-    LLVM_DEBUG(llvm::dbgs() << "- Rooting at local value "
-                            << getResetName(domain.reset) << "\n");
-    domain.existingValue = domain.reset;
-    if (auto blockArg = dyn_cast<BlockArgument>(domain.reset))
+    LLVM_DEBUG(llvm::dbgs()
+               << "- Rooting at local value " << domain.resetName << "\n");
+    domain.localReset = domain.rootReset;
+    if (auto blockArg = dyn_cast<BlockArgument>(domain.rootReset))
       domain.existingPort = blockArg.getArgNumber();
-    return;
+    return success();
   }
 
   // Otherwise, check if a port with this name and type already exists and
   // reuse that where possible.
-  auto neededName = getResetName(domain.reset);
-  auto neededType = domain.reset.getType();
+  auto neededName = domain.resetName;
+  auto neededType = domain.resetType;
   LLVM_DEBUG(llvm::dbgs() << "- Looking for existing port " << neededName
                           << "\n");
   auto portNames = module.getPortNames();
-  auto ports = llvm::zip(portNames, module.getArguments());
-  auto portIt = llvm::find_if(
-      ports, [&](auto port) { return std::get<0>(port) == neededName; });
-  if (portIt != ports.end() && std::get<1>(*portIt).getType() == neededType) {
-    LLVM_DEBUG(llvm::dbgs()
-               << "- Reusing existing port " << neededName << "\n");
-    domain.existingValue = std::get<1>(*portIt);
-    domain.existingPort = std::distance(ports.begin(), portIt);
-    return;
+  auto *portIt = llvm::find(portNames, neededName);
+
+  // If this port does not yet exist, record that we need to create it.
+  if (portIt == portNames.end()) {
+    LLVM_DEBUG(llvm::dbgs() << "- Creating new port " << neededName << "\n");
+    domain.resetName = neededName;
+    return success();
   }
 
-  // If we have found a port but the types don't match, pick a new name for
-  // the reset port.
-  //
-  // CAVEAT: The Scala FIRRTL compiler just throws an error in this case. This
-  // seems unnecessary though, since the compiler can just insert a new reset
-  // signal as needed.
-  if (portIt != ports.end()) {
-    LLVM_DEBUG(llvm::dbgs()
-               << "- Existing " << neededName << " has incompatible type "
-               << std::get<1>(*portIt).getType() << "\n");
-    StringAttr newName;
-    unsigned suffix = 0;
-    do {
-      newName =
-          StringAttr::get(&getContext(), Twine(neededName.getValue()) +
-                                             Twine("_") + Twine(suffix++));
-    } while (llvm::is_contained(portNames, newName));
-    LLVM_DEBUG(llvm::dbgs()
-               << "- Creating uniquified port " << newName << "\n");
-    domain.newPortName = newName;
-    return;
+  LLVM_DEBUG(llvm::dbgs() << "- Reusing existing port " << neededName << "\n");
+
+  // If this port has the wrong type, then error out.
+  auto portNo = std::distance(portNames.begin(), portIt);
+  auto portType = module.getPortType(portNo);
+  if (portType != neededType) {
+    auto diag = emitError(module.getPortLocation(portNo), "module '")
+                << module.getName() << "' is in reset domain requiring port '"
+                << domain.resetName.getValue() << "' to have type "
+                << domain.resetType << ", but has type " << portType;
+    diag.attachNote(domain.rootReset.getLoc()) << "reset domain rooted here";
+    return failure();
   }
 
-  // At this point we know that there is no such port, and we can safely
-  // create one as needed.
-  LLVM_DEBUG(llvm::dbgs() << "- Creating new port " << neededName << "\n");
-  domain.newPortName = neededName;
+  // We have a pre-existing port which we should use.
+  domain.existingPort = portNo;
+  domain.localReset = module.getArgument(portNo);
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1675,7 +1692,7 @@ LogicalResult InferResetsPass::implementFullReset(FModuleOp module,
                           << "\n");
 
   // Nothing to do if the module was marked explicitly with no reset domain.
-  if (!domain.reset) {
+  if (!domain) {
     LLVM_DEBUG(llvm::dbgs()
                << "- Skipping because module explicitly has no domain\n");
     return success();
@@ -1690,19 +1707,18 @@ LogicalResult InferResetsPass::implementFullReset(FModuleOp module,
   annotations.applyToOperation(module);
 
   // If needed, add a reset port to the module.
-  Value actualReset = domain.existingValue;
-  if (domain.newPortName) {
-    PortInfo portInfo{domain.newPortName,
-                      domain.reset.getType(),
+  auto actualReset = domain.localReset;
+  if (!domain.localReset) {
+    PortInfo portInfo{domain.resetName,
+                      domain.resetType,
                       Direction::In,
                       {},
-                      domain.reset.getLoc()};
+                      domain.rootReset.getLoc()};
     module.insertPorts({{0, portInfo}});
     actualReset = module.getArgument(0);
-    LLVM_DEBUG(llvm::dbgs()
-               << "- Inserted port " << domain.newPortName << "\n");
+    LLVM_DEBUG(llvm::dbgs() << "- Inserted port " << domain.resetName << "\n");
   }
-  assert(actualReset);
+
   LLVM_DEBUG({
     llvm::dbgs() << "- Using ";
     if (auto blockArg = dyn_cast<BlockArgument>(actualReset))
@@ -1759,7 +1775,7 @@ LogicalResult InferResetsPass::implementFullReset(FModuleOp module,
         emitConnect(builder, wireOp.getResult(), nodeOp.getResult());
         resetOp = wireOp;
         actualReset = wireOp.getResult();
-        domain.existingValue = wireOp.getResult();
+        domain.localReset = wireOp.getResult();
       }
 
       // Determine the block into which the reset declaration needs to be
@@ -1821,20 +1837,19 @@ void InferResetsPass::implementFullReset(Operation *op, FModuleOp module,
     if (domainIt == domains.end())
       return;
     auto &domain = domainIt->second.back().first;
-    if (!domain.reset)
+    if (!domain)
       return;
     LLVM_DEBUG(llvm::dbgs()
                << "- Update instance '" << instOp.getName() << "'\n");
 
     // If needed, add a reset port to the instance.
     Value instReset;
-    if (domain.newPortName) {
+    if (!domain.localReset) {
       LLVM_DEBUG(llvm::dbgs() << "  - Adding new result as reset\n");
 
       auto newInstOp = instOp.cloneAndInsertPorts(
           {{/*portIndex=*/0,
-            {domain.newPortName,
-             type_cast<FIRRTLBaseType>(actualReset.getType()),
+            {domain.resetName, type_cast<FIRRTLBaseType>(actualReset.getType()),
              Direction::In}}});
       instReset = newInstOp.getResult(0);
 

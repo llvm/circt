@@ -1,11 +1,11 @@
 name: Windows build and test
 
-# Run on main (after PRs land) to ensure that they aren't heinously breaking the
-# Windows build.
 on:
   push:
     branches:
       - main
+  pull_request:
+    types: [assigned, opened, synchronize, reopened]
   workflow_dispatch:
 
 jobs:

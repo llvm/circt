@@ -23,9 +23,11 @@
 #include "circt/Dialect/Arc/ModelInfoExport.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Emit/EmitDialect.h"
+#include "circt/Dialect/Emit/EmitPasses.h"
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
+#include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Dialect/Sim/SimDialect.h"
@@ -252,6 +254,8 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   // represented as intrinsic ops.
   if (untilReached(UntilPreprocessing))
     return;
+  pm.addPass(om::createStripOMPass());
+  pm.addPass(emit::createStripEmitPass());
   pm.addPass(createLowerFirMemPass());
   {
     arc::AddTapsOptions opts;
@@ -355,7 +359,6 @@ static void populateArcToLLVMPipeline(PassManager &pm) {
   // Lower the arcs and update functions to LLVM.
   if (untilReached(UntilLLVMLowering))
     return;
-  pm.addPass(createConvertCombToArithPass());
   pm.addPass(createLowerArcToLLVMPass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());

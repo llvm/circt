@@ -55,6 +55,7 @@ struct FIRParserOptions {
   std::vector<std::string> enableLayers;
   std::vector<std::string> disableLayers;
   std::optional<LayerSpecialization> defaultLayerSpecialization;
+  std::vector<std::string> selectInstanceChoice;
 };
 
 mlir::OwningOpRef<mlir::ModuleOp> importFIRFile(llvm::SourceMgr &sourceMgr,
@@ -123,7 +124,7 @@ constexpr FIRVersion minimumFIRVersion(2, 0, 0);
 /// new version of the spec is released, all uses of `nextFIRVersion` in the
 /// parser are replaced with the concrete version `{x, y, z}`, and this
 /// declaration here is bumped to the next probable version number.
-constexpr FIRVersion nextFIRVersion(4, 1, 0);
+constexpr FIRVersion nextFIRVersion(4, 2, 0);
 
 /// A marker for parser features that are currently missing from the spec.
 ///

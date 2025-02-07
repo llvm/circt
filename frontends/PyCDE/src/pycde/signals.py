@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from .support import get_user_loc, _obj_to_value_infer_type
-from .types import ChannelDirection, ChannelSignaling, Type
+from .types import BundledChannel, ChannelDirection, ChannelSignaling, Type
 
 from .circt.dialects import esi, sv
 from .circt import support
@@ -13,7 +13,7 @@ from .circt import ir
 
 from contextvars import ContextVar
 from functools import singledispatchmethod
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 import re
 import numpy as np
 
@@ -134,7 +134,7 @@ class Signal:
     return "sv.namehint"
 
   @property
-  def name(self):
+  def name(self) -> Optional[str]:
     owner = self.value.owner
     if hasattr(owner,
                "attributes") and self._namehint_attrname in owner.attributes:
@@ -146,6 +146,7 @@ class Signal:
       return mod_type.input_names[block_arg.arg_number]
     if hasattr(self, "_name"):
       return self._name
+    return None
 
   @name.setter
   def name(self, new: str):
@@ -154,6 +155,9 @@ class Signal:
       owner.attributes[self._namehint_attrname] = ir.StringAttr.get(new)
     else:
       self._name = new
+
+  def get_name(self, default: str = "") -> str:
+    return self.name if self.name is not None else default
 
   @property
   def appid(self) -> Optional[object]:  # Optional AppID.
@@ -303,6 +307,12 @@ class BitsSignal(BitVectorSignal):
   """Operations on signless ints (bits). These will all return signless values -
   a user is expected to reapply signedness semantics if needed."""
 
+  def _exec_cast(self, targetValueType, type_getter, width: int = None):
+    if width is not None and width != self.type.width:
+      return self.pad_or_truncate(width)._exec_cast(targetValueType,
+                                                    type_getter)
+    return super()._exec_cast(targetValueType, type_getter)
+
   @singledispatchmethod
   def __getitem__(self, idxOrSlice: Union[int, slice]) -> BitVectorSignal:
     lo, hi = get_slice_bounds(len(self), idxOrSlice)
@@ -326,7 +336,7 @@ class BitsSignal(BitVectorSignal):
     return self.slice(idx, 1)
 
   @staticmethod
-  def concat(items: List[BitVectorSignal]):
+  def concat(items: Iterable[BitVectorSignal]):
     """Concatenate a list of bitvectors into one larger bitvector."""
     from .dialects import comb
     return comb.ConcatOp(*items)
@@ -540,6 +550,8 @@ class ArraySignal(Signal):
     _validate_idx(self.type.size, idx)
     from .dialects import hw
     with get_user_loc():
+      if isinstance(idx, UIntSignal):
+        idx = idx.as_bits()
       v = hw.ArrayGetOp(self.value, idx)
       if self.name and isinstance(idx, int):
         v.name = self.name + f"__{idx}"
@@ -550,6 +562,8 @@ class ArraySignal(Signal):
     idxs = s.indices(len(self))
     if idxs[2] != 1:
       raise ValueError("Array slices do not support steps")
+    if not isinstance(idxs[0], int) or not isinstance(idxs[1], int):
+      raise ValueError("Array slices must be constant ints")
 
     from .types import types
     from .dialects import hw
@@ -738,6 +752,13 @@ class ChannelSignal(Signal):
             stages=stages,
         ), self.type)
 
+  def snoop(self) -> Tuple[Bits(1), Bits(1), Type]:
+    """Combinationally snoop on the internal signals of a channel."""
+    from .dialects import esi
+    assert self.type.signaling == ChannelSignaling.ValidReady, "Only valid-ready channels can be snooped currently"
+    snoop = esi.SnoopValidReadyOp(self.value)
+    return snoop[0], snoop[1], snoop[2]
+
   def transform(self, transform: Callable[[Signal], Signal]) -> ChannelSignal:
     """Transform the data in the channel using the provided function. Said
     function must be combinational so it is intended for wire and simple type
@@ -752,6 +773,21 @@ class ChannelSignal(Signal):
     ready_wire.assign(ready)
     return ret_chan
 
+  def fork(self, clk, rst) -> Tuple[ChannelSignal, ChannelSignal]:
+    """Fork the channel into two channels, returning the two new channels."""
+    from .constructs import Wire
+    from .types import Bits
+    both_ready = Wire(Bits(1))
+    both_ready.name = self.get_name() + "_fork_both_ready"
+    data, valid = self.unwrap(both_ready)
+    valid_gate = both_ready & valid
+    a, a_rdy = self.type.wrap(data, valid_gate)
+    b, b_rdy = self.type.wrap(data, valid_gate)
+    abuf = a.buffer(clk, rst, 1)
+    bbuf = b.buffer(clk, rst, 1)
+    both_ready.assign(a_rdy & b_rdy)
+    return abuf, bbuf
+
 
 class BundleSignal(Signal):
   """Signal for types.Bundle."""
@@ -759,15 +795,14 @@ class BundleSignal(Signal):
   def reg(self, clk, rst=None, name=None):
     raise TypeError("Cannot register a bundle")
 
-  def unpack(self, **kwargs: Dict[str,
-                                  ChannelSignal]) -> Dict[str, ChannelSignal]:
+  def unpack(self, **kwargs: ChannelSignal) -> Dict[str, ChannelSignal]:
     """Given FROM channels, unpack a bundle into the TO channels."""
     from_channels = {
         bc.name: (idx, bc) for idx, bc in enumerate(
             filter(lambda c: c.direction == ChannelDirection.FROM,
                    self.type.channels))
     }
-    to_channels = [
+    to_channels: List[BundledChannel] = [
         c for c in self.type.channels if c.direction == ChannelDirection.TO
     ]
 
@@ -776,7 +811,7 @@ class BundleSignal(Signal):
       if name not in from_channels:
         raise ValueError(f"Unknown channel name '{name}'")
       idx, bc = from_channels[name]
-      if value.type != bc.channel:
+      if not bc.channel.castable(value.type):
         raise TypeError(f"Expected channel type {bc.channel}, got {value.type} "
                         f"on channel '{name}'")
       operands[idx] = value.value
@@ -785,14 +820,18 @@ class BundleSignal(Signal):
       raise ValueError(
           f"Missing channel values for {', '.join(from_channels.keys())}")
 
-    unpack_op = esi.UnpackBundleOp([bc.channel._type for bc in to_channels],
-                                   self.value, operands)
+    with get_user_loc():
+      unpack_op = esi.UnpackBundleOp([bc.channel._type for bc in to_channels],
+                                     self.value, operands)
 
     to_channels_results = unpack_op.toChannels
-    return {
+    ret = {
         bc.name: _FromCirctValue(to_channels_results[idx])
         for idx, bc in enumerate(to_channels)
     }
+    if not all([bc.channel.castable(ret[bc.name].type) for bc in to_channels]):
+      raise TypeError("Unpacked bundle did not match expected types")
+    return ret
 
   def connect(self, other: BundleSignal):
     """Connect two bundles together such that one drives the other."""

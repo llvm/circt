@@ -616,6 +616,7 @@ public:
   SmallString<16> toString(unsigned radix = 10, bool uppercase = true) const {
     SmallString<16> str;
     bool success = tryToString(str, radix, uppercase);
+    (void)success;
     assert(success && "radix cannot represent FVInt");
     return str;
   }

@@ -75,7 +75,7 @@ public:
 } // namespace
 
 void LowerCombPass::runOnOperation() {
-  ModuleOp module = getOperation();
+  auto module = getOperation();
 
   ConversionTarget target(getContext());
   RewritePatternSet patterns(&getContext());

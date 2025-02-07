@@ -87,10 +87,14 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: firrtl.int.verif.assert %in {label = "hello"} :
     // CHECK-NEXT: firrtl.int.verif.assume %in :
     // CHECK-NEXT: firrtl.int.verif.cover %in :
+    // CHECK-NEXT: firrtl.int.verif.require %in :
+    // CHECK-NEXT: firrtl.int.verif.ensure %in :
     firrtl.int.generic "circt_verif_assert"  %in : (!firrtl.uint<1>) -> ()
     firrtl.int.generic "circt_verif_assert" <label: none = "hello"> %in : (!firrtl.uint<1>) -> ()
     firrtl.int.generic "circt_verif_assume"  %in : (!firrtl.uint<1>) -> ()
     firrtl.int.generic "circt_verif_cover"  %in : (!firrtl.uint<1>) -> ()
+    firrtl.int.generic "circt_verif_require"  %in : (!firrtl.uint<1>) -> ()
+    firrtl.int.generic "circt_verif_ensure"  %in : (!firrtl.uint<1>) -> ()
   }
 
   // CHECK-LABEL: firrtl.module private @MuxCell(
@@ -163,5 +167,66 @@ firrtl.circuit "Foo" {
     firrtl.int.generic "circt_dpi_call" <isClocked: ui32 = 1, functionName: none = "clocked_void"> %clock, %enable, %in1, %in2 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> ()
     // CHECK-NEXT:  %1 = firrtl.int.dpi.call "unclocked_result"(%in1, %in2) enable %enable : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
     %1 = firrtl.int.generic "circt_dpi_call" <isClocked: ui32 = 0, functionName: none = "unclocked_result"> %enable, %in1, %in2 : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: firrtl.module private @ViewIntrinsicTest
+  firrtl.module private @ViewIntrinsicTest(in %in: !firrtl.vector<uint<1>, 5>) attributes {convention = #firrtl<convention scalarized>} {
+    %0 = firrtl.subindex %in[4] : !firrtl.vector<uint<1>, 5>
+    %1 = firrtl.subindex %in[3] : !firrtl.vector<uint<1>, 5>
+    %2 = firrtl.subindex %in[2] : !firrtl.vector<uint<1>, 5>
+    %3 = firrtl.subindex %in[1] : !firrtl.vector<uint<1>, 5>
+    %4 = firrtl.subindex %in[0] : !firrtl.vector<uint<1>, 5>
+
+    // Taken from old test, these descriptions don't really apply anymore but leaving as-is for now.
+    firrtl.int.generic "circt_view" <name: none = "view", info: none = "{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"ViewName\",\"elements\":[{\"description\":\"the register in GCTInterface\",\"name\":\"register\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"Register\",\"elements\":[{\"name\":\"_2\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedVectorType\",\"elements\":[{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"},{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"}]}},{\"name\":\"_0_inst\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"_0_def\",\"elements\":[{\"name\":\"_1\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"}},{\"name\":\"_0\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"}}]}}]}},{\"description\":\"the port 'a' in GCTInterface\",\"name\":\"port\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"}}]}"> %4, %3, %2, %1, %0 : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> ()
+
+    // CHECK: firrtl.view "view", <{
+    // CHECK-SAME:   class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+    // CHECK-SAME:   defName = "ViewName",
+    // CHECK-SAME:   elements = [
+    // CHECK-SAME:      {
+    // CHECK-SAME:        class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+    // CHECK-SAME:        defName = "Register",
+    // CHECK-SAME:        description = "the register in GCTInterface",
+    // CHECK-SAME:        elements = [
+    // CHECK-SAME:          {
+    // CHECK-SAME:            class = "sifive.enterprise.grandcentral.AugmentedVectorType",
+    // CHECK-SAME:            elements = [
+    // CHECK-SAME:              {
+    // CHECK-SAME:                class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+    // CHECK-SAME:                name = "_2"
+    // CHECK-SAME:              }, {
+    // CHECK-SAME:                class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+    // CHECK-SAME:                name = "_2
+    // CHECK-SAME:              }
+    // CHECK-SAME:            ],
+    // CHECK-SAME:            name = "_2"
+    // CHECK-SAME:          }, {
+    // CHECK-SAME:            class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+    // CHECK-SAME:            defName = "_0_def",
+    // CHECK-SAME:            elements = [
+    // CHECK-SAME:              {
+    // CHECK-SAME:                class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+    // CHECK-SAME:                name = "_1"
+    // CHECK-SAME:              }, {
+    // CHECK-SAME:                class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+    // CHECK-SAME:                name = "_0"
+    // CHECK-SAME:              }
+    // CHECK-SAME:            ],
+    // CHECK-SAME:            name = "_0_inst"
+    // CHECK-SAME:          }
+    // CHECK-SAME:        ],
+    // CHECK-SAME:        name = "register"
+    // CHECK-SAME:     }, {
+    // CHECK-SAME:       class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+    // CHECK-SAME:       description = "the port 'a' in GCTInterface",
+    // CHECK-SAME:       name = "port"
+    // CHECK-SAME:     }
+    // CHECK-SAME:   ],
+    // This is copied in, for better or for worse.
+    // CHECK-SAME:   name = "view"
+    // CHECK-SAME: }>,
+    // Check operands and types.
+    // CHECK-SAME: %4, %3, %2, %1, %0 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
   }
 }

@@ -119,13 +119,18 @@ class Multiple(Module):
 
 
 # CHECK:  hw.module @Casting(in %in0 : i16)
-# CHECK-NEXT:    %0 = hwarith.cast %in0 {{({sv.namehint = ".*"} )?}}: (i16) -> si16
-# CHECK-NEXT:    %1 = hwarith.cast %in0 {{({sv.namehint = ".*"} )?}}: (i16) -> ui16
-# CHECK-NEXT:    %2 = hwarith.cast %0 {{({sv.namehint = ".*"} )?}}: (si16) -> i16
-# CHECK-NEXT:    %3 = hwarith.cast %in0 {{({sv.namehint = ".*"} )?}}: (i16) -> si8
-# CHECK-NEXT:    %4 = hwarith.cast %in0 {{({sv.namehint = ".*"} )?}}: (i16) -> ui8
-# CHECK-NEXT:    %5 = hwarith.cast %0 {{({sv.namehint = ".*"} )?}}: (si16) -> i8
-# CHECK-NEXT:    %6 = hwarith.cast %0 {{({sv.namehint = ".*"} )?}}: (si16) -> si24
+# CHECK-NEXT:    [[R0:%.+]] = hwarith.cast %in0 {{({sv.namehint = ".*"} )?}}: (i16) -> si16
+# CHECK-NEXT:    [[R1:%.+]] = hwarith.cast %in0 {{({sv.namehint = ".*"} )?}}: (i16) -> ui16
+# CHECK-NEXT:    [[R2:%.+]] = hwarith.cast [[R0]] {{({sv.namehint = ".*"} )?}}: (si16) -> i16
+# CHECK-NEXT:    [[R11:%.+]] = comb.extract %in0 from 0 : (i16) -> i8
+# CHECK-NEXT:    [[R3:%.+]] = hwarith.cast [[R11]] {{({sv.namehint = ".*"} )?}}: (i8) -> si8
+# CHECK-NEXT:    [[R12:%.+]] = comb.extract %in0 from 0 : (i16) -> i8
+# CHECK-NEXT:    [[R4:%.+]] = hwarith.cast [[R12]] {{({sv.namehint = ".*"} )?}}: (i8) -> ui8
+# CHECK-NEXT:    [[R5:%.+]] = hwarith.cast [[R0]] {{({sv.namehint = ".*"} )?}}: (si16) -> i8
+# CHECK-NEXT:    [[R6:%.+]] = hwarith.cast [[R0]] {{({sv.namehint = ".*"} )?}}: (si16) -> si24
+# CHECK-NEXT:    [[Rc0_i16:%.+]] = hw.constant 0 : i16
+# CHECK-NEXT:    [[R9:%.+]] = comb.concat [[Rc0_i16]], %in0 {{({sv.namehint = ".*"} )?}}: i16, i16
+# CHECK-NEXT:    [[R10:%.+]] = hwarith.cast [[R9]] {{({sv.namehint = ".*"} )?}}: (i32) -> ui32
 # CHECK-NEXT:    hw.output
 @unittestmodule(run_passes=True)
 class Casting(Module):
@@ -140,6 +145,7 @@ class Casting(Module):
     in0u8 = ports.in0.as_uint(8)
     in0s_i8 = in0s.as_bits(8)
     in0s_s24 = in0s.as_sint(24)
+    in0s_u32 = ports.in0.as_uint(32)
 
 
 # -----
