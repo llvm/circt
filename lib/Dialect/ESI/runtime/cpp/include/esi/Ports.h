@@ -99,6 +99,24 @@ private:
   volatile bool connected = false;
 };
 
+/// Instantiated when a backend does not know how to create a write channel.
+class UnknownWriteChannelPort : public WriteChannelPort {
+public:
+  UnknownWriteChannelPort(const Type *type, std::string errmsg)
+      : WriteChannelPort(type), errmsg(errmsg) {}
+
+  void connect(std::optional<unsigned> bufferSize = std::nullopt) override {
+    throw std::runtime_error(errmsg);
+  }
+  void write(const MessageData &) override { throw std::runtime_error(errmsg); }
+  bool tryWrite(const MessageData &) override {
+    throw std::runtime_error(errmsg);
+  }
+
+protected:
+  std::string errmsg;
+};
+
 /// A ChannelPort which reads data from the accelerator. It has two modes:
 /// Callback and Polling which cannot be used at the same time. The mode is set
 /// at connect() time. To change the mode, disconnect() and then connect()
@@ -179,6 +197,27 @@ protected:
   uint64_t maxDataQueueMsgs;
   /// Promises to be fulfilled when data is available.
   std::queue<std::promise<MessageData>> promiseQueue;
+};
+
+/// Instantiated when a backend does not know how to create a read channel.
+class UnknownReadChannelPort : public ReadChannelPort {
+public:
+  UnknownReadChannelPort(const Type *type, std::string errmsg)
+      : ReadChannelPort(type), errmsg(errmsg) {}
+
+  void connect(std::function<bool(MessageData)> callback,
+               std::optional<unsigned> bufferSize = std::nullopt) override {
+    throw std::runtime_error(errmsg);
+  }
+  void connect(std::optional<unsigned> bufferSize = std::nullopt) override {
+    throw std::runtime_error(errmsg);
+  }
+  std::future<MessageData> readAsync() override {
+    throw std::runtime_error(errmsg);
+  }
+
+protected:
+  std::string errmsg;
 };
 
 /// Services provide connections to 'bundles' -- collections of named,

@@ -55,13 +55,13 @@ int main(int argc, const char *argv[]) {
     Accelerator *accel = manifest.buildAccelerator(*acc);
     acc->getServiceThread()->addPoll(*accel);
 
-    registerCallbacks(acc.get(), accel);
-
     if (cmd == "loop") {
+      registerCallbacks(acc.get(), accel);
       while (true) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
       }
     } else if (cmd == "wait") {
+      registerCallbacks(acc.get(), accel);
       std::this_thread::sleep_for(std::chrono::seconds(1));
     } else if (cmd == "dmatest") {
       dmaTest(acc.get(), accel, true, true);
