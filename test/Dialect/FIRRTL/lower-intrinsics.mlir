@@ -228,5 +228,9 @@ firrtl.circuit "Foo" {
     // CHECK-SAME: }>,
     // Check operands and types.
     // CHECK-SAME: %4, %3, %2, %1, %0 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+
+    firrtl.int.generic "circt_view" <name: none = "view2", yaml: none = "views.yml", info: none = "{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"ViewName\",\"elements\":[]}"> : () -> ()
+
+    // CHECK: firrtl.view "view2", yaml "views.yml", <{
   }
 }

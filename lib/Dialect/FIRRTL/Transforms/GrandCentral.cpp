@@ -773,7 +773,8 @@ private:
   DenseMap<Attribute, sv::InterfaceOp> interfaceMap;
 
   /// Emit the hierarchy yaml file.
-  void emitHierarchyYamlFile(SmallVectorImpl<sv::InterfaceOp> &intfs);
+  void emitHierarchyYamlFile(StringRef yamlPath,
+                             SmallVectorImpl<sv::InterfaceOp> &intfs);
 };
 
 } // namespace
@@ -1915,6 +1916,12 @@ void GrandCentralPass::runOnOperation() {
     llvm::dbgs() << "\n";
   });
 
+  // per-YAML output list of interfaces.
+  llvm::SmallMapVector<StringAttr, SmallVector<sv::InterfaceOp, 0>, 1>
+      interfaceYAMLMap;
+  if (maybeHierarchyFileYAML.has_value())
+    interfaceYAMLMap[maybeHierarchyFileYAML.value()] = {};
+
   // Scan entire design for View operations.
   SmallVector<ViewIntrinsicOp> views;
   circuitOp.walk([&views](ViewIntrinsicOp view) { views.push_back(view); });
@@ -1923,8 +1930,8 @@ void GrandCentralPass::runOnOperation() {
   // built exist.  However, still generate the YAML file if the annotation for
   // this was passed in because some flows expect this.
   if (worklist.empty() && views.empty()) {
-    SmallVector<sv::InterfaceOp, 0> interfaceVec;
-    emitHierarchyYamlFile(interfaceVec);
+    for (auto &[yamlPath, intfs] : interfaceYAMLMap)
+      emitHierarchyYamlFile(yamlPath.getValue(), intfs);
     return markAllAnalysesPreserved();
   }
 
@@ -2254,8 +2261,8 @@ void GrandCentralPass::runOnOperation() {
       mod->erase();
     }
 
-    SmallVector<sv::InterfaceOp, 0> interfaceVec;
-    emitHierarchyYamlFile(interfaceVec);
+    for (auto &[yamlPath, intfs] : interfaceYAMLMap)
+      emitHierarchyYamlFile(yamlPath.getValue(), intfs);
     return;
   }
 
@@ -2311,7 +2318,6 @@ void GrandCentralPass::runOnOperation() {
   // will use XMRs to drive the interface.  If extraction info is available,
   // then the top-level instantiate interface will be marked for extraction via
   // a SystemVerilog bind.
-  SmallVector<sv::InterfaceOp, 2> interfaceVec;
   SmallDenseMap<FModuleLike, SmallVector<InterfaceElemsBuilder>>
       companionToInterfaceMap;
   auto compareInterfaceSignal = [&](InterfaceElemsBuilder &lhs,
@@ -2481,7 +2487,8 @@ void GrandCentralPass::runOnOperation() {
 
     ++numViews;
 
-    interfaceVec.push_back(topIface);
+    if (maybeHierarchyFileYAML.has_value())
+      interfaceYAMLMap[maybeHierarchyFileYAML.value()].push_back(topIface);
 
     // Instantiate the interface inside the companion.
     builder.setInsertionPointToStart(companionModule.getBodyBlock());
@@ -2567,6 +2574,7 @@ void GrandCentralPass::runOnOperation() {
     sv::InterfaceOp topIface;
     auto containingOutputFileAttr =
         viewParentMod->getAttrOfType<hw::OutputFileAttr>("output_file");
+    auto yamlPath = view.getYamlFileAttr();
     for (const auto &ifaceBuilder : interfaceBuilder) {
       auto builder = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
       auto loc = getOperation().getLoc();
@@ -2599,7 +2607,7 @@ void GrandCentralPass::runOnOperation() {
           // If we need to generate a YAML representation of this interface,
           // then add an attribute indicating that this `sv::VerbatimOp` is
           // actually a description.
-          if (maybeHierarchyFileYAML)
+          if (yamlPath)
             descriptionOp->setAttr("firrtl.grandcentral.yaml.type",
                                    builder.getStringAttr("description"));
         }
@@ -2609,7 +2617,7 @@ void GrandCentralPass::runOnOperation() {
 
           // If we need to generate a YAML representation of the interface, then
           // add attributes that describe what this `sv::VerbatimOp` is.
-          if (maybeHierarchyFileYAML) {
+          if (yamlPath) {
             if (str->instantiation)
               instanceOp->setAttr("firrtl.grandcentral.yaml.type",
                                   builder.getStringAttr("instance"));
@@ -2634,7 +2642,8 @@ void GrandCentralPass::runOnOperation() {
 
     ++numViews;
 
-    interfaceVec.push_back(topIface);
+    if (yamlPath)
+      interfaceYAMLMap[yamlPath].push_back(topIface);
 
     // Instantiate the interface before the view and the XMR's we inserted
     // above.
@@ -2646,7 +2655,8 @@ void GrandCentralPass::runOnOperation() {
     view.erase();
   }
 
-  emitHierarchyYamlFile(interfaceVec);
+  for (auto &[yamlPath, intfs] : interfaceYAMLMap)
+    emitHierarchyYamlFile(yamlPath.getValue(), intfs);
 
   // Signal pass failure if any errors were found while examining circuit
   // annotations.
@@ -2656,13 +2666,7 @@ void GrandCentralPass::runOnOperation() {
 }
 
 void GrandCentralPass::emitHierarchyYamlFile(
-    SmallVectorImpl<sv::InterfaceOp> &intfs) {
-  // If a `GrandCentralHierarchyFileAnnotation` was passed in, generate a YAML
-  // representation of the interfaces that we produced with the filename that
-  // that annotation provided.
-  if (!maybeHierarchyFileYAML)
-    return;
-
+    StringRef yamlPath, SmallVectorImpl<sv::InterfaceOp> &intfs) {
   CircuitOp circuitOp = getOperation();
 
   std::string yamlString;
@@ -2673,10 +2677,9 @@ void GrandCentralPass::emitHierarchyYamlFile(
 
   auto builder = OpBuilder::atBlockBegin(circuitOp.getBodyBlock());
   builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), yamlString)
-      ->setAttr("output_file",
-                hw::OutputFileAttr::getFromFilename(
-                    &getContext(), maybeHierarchyFileYAML->getValue(),
-                    /*excludeFromFileList=*/true));
+      ->setAttr("output_file", hw::OutputFileAttr::getFromFilename(
+                                   &getContext(), yamlPath,
+                                   /*excludeFromFileList=*/true));
   LLVM_DEBUG({ llvm::dbgs() << "Generated YAML:" << yamlString << "\n"; });
 }
 

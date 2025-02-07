@@ -4,19 +4,7 @@
 // types. All the interfaces share a common, simple circuit that provides two
 // signals, "foo" and "bar".
 
-firrtl.circuit "InterfaceGroundType" attributes {
-  annotations = [
-    {
-      class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-      directory = "gct-dir",
-      filename = "bindings.sv"
-    },
-    {
-      class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
-      filename = "gct.yaml"
-    }
-  ]
-} {
+firrtl.circuit "InterfaceGroundType" {
   firrtl.module @Companion() {
     // These are dummy references created for the purposes of the test.
     %_ui0 = firrtl.verbatim.expr "???" : () -> !firrtl.uint<0>
@@ -38,7 +26,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c-1_si2 = firrtl.constant -1 : !firrtl.sint<2>
 
-    firrtl.view "GroundView", <{
+    firrtl.view "GroundView", yaml "gct.yaml", <{
       class = "sifive.enterprise.grandcentral.AugmentedBundleType",
       defName = "GroundView",
       elements = [
@@ -55,7 +43,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
       ]
     }>, %foo, %bar : !firrtl.uint<1>, !firrtl.uint<2>
 
-    firrtl.view "VectorView", <{
+    firrtl.view "VectorView", yaml "gct.yaml", <{
       class = "sifive.enterprise.grandcentral.AugmentedBundleType",
       defName = "VectorView",
       elements = [
@@ -77,7 +65,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
     }>, %foo, %foo : !firrtl.uint<1>, !firrtl.uint<1>
 
 
-    firrtl.view "BundleView", <{
+    firrtl.view "BundleView", yaml "gct.yaml", <{
       class = "sifive.enterprise.grandcentral.AugmentedBundleType",
       defName = "BundleView",
       elements = [
@@ -99,7 +87,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
       ]
     }>, %foo, %bar : !firrtl.uint<1>, !firrtl.uint<2>
 
-    firrtl.view "VectorOfBundleView", <{
+    firrtl.view "VectorOfBundleView", yaml "gct.yaml", <{
       class = "sifive.enterprise.grandcentral.AugmentedBundleType",
       defName = "VectorOfBundleView",
       elements = [
@@ -127,7 +115,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
       ]
     }>, %foo, %bar : !firrtl.uint<1>, !firrtl.uint<2>
 
-    firrtl.view "VectorOfVectorView", <{
+    firrtl.view "VectorOfVectorView", yaml "gct.yaml", <{
       class = "sifive.enterprise.grandcentral.AugmentedBundleType",
       defName = "VectorOfVectorView",
       elements = [
@@ -178,7 +166,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
       ]
     }>, %bar, %bar, %bar, %bar, %bar, %bar : !firrtl.uint<2>, !firrtl.uint<2>, !firrtl.uint<2>, !firrtl.uint<2>, !firrtl.uint<2>, !firrtl.uint<2>
 
-    firrtl.view "ConstantView", <{
+    firrtl.view "ConstantView", yaml "gct.yaml", <{
       class = "sifive.enterprise.grandcentral.AugmentedBundleType",
       defName = "ConstantView",
       elements = [
@@ -194,7 +182,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
       ]
     }>, %c0_ui1, %c-1_si2 : !firrtl.uint<1>, !firrtl.sint<2>
 
-    firrtl.view "ZeroWidthView", <{
+    firrtl.view "ZeroWidthView", yaml "gct.yaml", <{
       class = "sifive.enterprise.grandcentral.AugmentedBundleType",
       defName = "ZeroWidthView",
       elements = [
@@ -209,13 +197,6 @@ firrtl.circuit "InterfaceGroundType" attributes {
     firrtl.instance companion @Companion()
   }
 }
-
-// All AugmentedBundleType annotations are removed from the circuit.
-//
-// CHECK-LABEL: firrtl.circuit "InterfaceGroundType" {{.+}} {annotations =
-// CHECK-SAME:    class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation"
-// CHECK-NOT:     class = "sifive.enterprise.grandcentral.AugmentedBundleType"
-// CHECK-SAME: {
 
 // Check YAML Output.
 //
@@ -420,15 +401,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
 
 // -----
 
-firrtl.circuit "Top" attributes {
-  annotations = [
-    {
-      class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-      directory = ".",
-      filename = "bindings.sv"
-    }
-  ]
-} {
+firrtl.circuit "Top" {
   firrtl.module private @Companion_w1(in %_gen_uint: !firrtl.uint<1>) {
     %view_uintrefPort = firrtl.node %_gen_uint : !firrtl.uint<1>
     firrtl.view "View_w1", <{
@@ -498,19 +471,6 @@ firrtl.circuit "Top" attributes {
 // CHECK-LABEL:  sv.interface @MyInterface_w2 {{.+}} {
 // CHECK-NEXT:     sv.verbatim "SameName_0 SameName();"
 // CHECK-NEXT:   }
-
-// -----
-
-firrtl.circuit "NoInterfaces" attributes {
-  annotations = [
-    {class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
-     filename = "gct.yaml"}]} {
-  firrtl.module @NoInterfaces() {}
-}
-
-// CHECK-LABEL: module {
-// CHECK:         sv.verbatim
-// CHECK-SAME:      []
 
 // -----
 
