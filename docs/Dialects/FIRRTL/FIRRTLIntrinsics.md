@@ -298,10 +298,11 @@ This will become a SystemVerilog Interface that is driven by its arguments.
 This is _not_ a true SystemVerilog Interface, it is only lowered to one.
 
 
-| Parameter | Type   | Description                       |
-| --------- | ------ | --------------------------------- |
-| name      | string | Instance name of the view.        |
-| info      | string | JSON encoding the view structure. |
+| Parameter | Type   | Description                             |
+| --------- | ------ | --------------------------------------- |
+| name      | string | Instance name of the view.              |
+| info      | string | JSON encoding the view structure.       |
+| yaml      | string | Optional path to emit YAML description. |
 
 | Argument | Type   | Description                     |
 | -------- | ------ | ------------------------------- |

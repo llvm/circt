@@ -869,7 +869,8 @@ public:
                                 GenericIntrinsicOpAdaptor adaptor,
                                 PatternRewriter &rewriter) override {
     // Check structure of the intrinsic.
-    if (gi.hasNoOutput() || gi.namedParam("info") || gi.namedParam("name"))
+    if (gi.hasNoOutput() || gi.namedParam("info") || gi.namedParam("name") ||
+        gi.namedParam("yaml", true))
       return failure();
 
     // Check operands.
@@ -944,9 +945,9 @@ public:
              << numLeaves << " leaf elements";
 
     // Check complete, convert!
-
+    auto yaml = gi.getParamValue<StringAttr>("yaml");
     rewriter.replaceOpWithNewOp<ViewIntrinsicOp>(
-        gi.op, nameAttr.getValue(), augmentedType, adaptor.getOperands());
+        gi.op, nameAttr.getValue(), yaml, augmentedType, adaptor.getOperands());
     return success();
   }
 };
