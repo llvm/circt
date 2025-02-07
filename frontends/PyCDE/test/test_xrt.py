@@ -143,5 +143,5 @@ s.package()
 # CHTOP:  Main Main (
 # CHTOP:  MMIOAxiReadWriteMux MMIOAxiReadWriteMux (
 # CHTOP:  MMIOAxiReadWriteDemux MMIOAxiReadWriteDemux (
-# CHTOP:  HeaderMMIO_manifest_loc65536 HeaderMMIO (
+# CHTOP:  HeaderMMIO_manifest_loc4096 HeaderMMIO (
 # CHTOP:  ESI_Manifest_ROM_Wrapper ESI_Manifest_ROM_Wrapper (

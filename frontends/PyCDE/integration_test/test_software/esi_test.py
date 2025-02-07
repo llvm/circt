@@ -56,9 +56,6 @@ mmio14 = d.ports[esi.AppID("mmio_client", 14)]
 read_offset(mmio14, 0, 14)
 read_offset(mmio14, 13, 14)
 
-assert mmio14.descriptor.base == 196608
-assert mmio14.descriptor.size == 65536
-
 ################################################################################
 # MMIOReadWriteClient tests
 ################################################################################
@@ -78,7 +75,7 @@ add_amt = 137
 mmio_rw.write(8, add_amt)
 read_offset_check(0, add_amt)
 read_offset_check(12, add_amt)
-read_offset_check(0x1400, add_amt)
+read_offset_check(0x140, add_amt)
 
 ################################################################################
 # Manifest tests

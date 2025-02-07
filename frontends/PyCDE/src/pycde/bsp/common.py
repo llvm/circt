@@ -137,9 +137,9 @@ class ChannelMMIO(esi.ServiceImplementation):
   # TODO: only supports one outstanding transaction at a time. This is NOT
   # enforced or checked! Enforce this.
 
-  RegisterSpace = 0x10000
+  RegisterSpace = 0x1000
   RegisterSpaceBits = RegisterSpace.bit_length() - 1
-  AddressMask = 0xFFFF
+  AddressMask = 0xFFF
 
   # Start at this address for assigning MMIO addresses to service requests.
   initial_offset: int = RegisterSpace
@@ -318,7 +318,8 @@ def TaggedReadGearbox(input_bitwidth: int,
                                          increment=upstream_xact)
         set_client_valid = counter.out == chunks - 1
         client_xact = Wire(Bits(1))
-        client_valid = ControlReg(ports.clk, ports.rst, [set_client_valid],
+        client_valid = ControlReg(ports.clk, ports.rst,
+                                  [set_client_valid & upstream_xact],
                                   [client_xact])
         client_xact.assign(client_valid & ready_for_upstream)
         clear_counter.assign(client_xact)
@@ -550,7 +551,7 @@ def TaggedWriteGearbox(input_bitwidth: int,
         tag = tag_reg
         valid_bytes = Mux(counter.out == (num_chunks - 1),
                           Bits(8)(output_bitwidth_bytes),
-                          Bits(8)(padding_numbits // 8))
+                          Bits(8)((output_bitwidth - padding_numbits) // 8))
 
       upstream_channel, upstrm_ready_sig = TaggedWriteGearboxImpl.out.type.wrap(
           {
@@ -632,18 +633,20 @@ def HostMemWriteProcessor(
         bundle_sig, froms = write_req_bundle_type.pack(
             ackTag=demuxed_acks.get_out(idx))
 
+        gearbox_mod = TaggedWriteGearbox(client_type.data.bitwidth, write_width)
+        gearbox_in_type = gearbox_mod.in_.type.inner_type
         tagged_client_req = froms["req"]
-        bitcast_client_req = tagged_client_req.transform(lambda m: client_type({
-            "tag": m.tag,
-            "address": m.address,
-            "data": m.data.bitcast(client_type.data)
-        }))
+        bitcast_client_req = tagged_client_req.transform(
+            lambda m: gearbox_in_type({
+                "tag": m.tag,
+                "address": m.address,
+                "data": m.data.bitcast(gearbox_in_type.data)
+            }))
 
         # Gearbox the data to the client's data type.
-        gearbox = TaggedWriteGearbox(client_type.data.bitwidth,
-                                     write_width)(clk=ports.clk,
-                                                  rst=ports.rst,
-                                                  in_=bitcast_client_req)
+        gearbox = gearbox_mod(clk=ports.clk,
+                              rst=ports.rst,
+                              in_=bitcast_client_req)
         write_channels.append(
             gearbox.out.transform(lambda m: m.type({
                 "address": m.address,
@@ -793,9 +796,35 @@ def ChannelEngineService(
     def build(ports, bundles: esi._ServiceGeneratorBundles):
 
       def build_engine_appid(client_appid: List[esi.AppID],
-                             channel_name: str) -> esi.AppID:
+                             channel_name: str) -> str:
         appid_strings = [str(appid) for appid in client_appid]
-        return esi.AppID(f"{'_'.join(appid_strings)}.{channel_name}")
+        return f"{'_'.join(appid_strings)}.{channel_name}"
+
+      def build_engine(bc: BundledChannel, input_channel=None) -> Type:
+        idbase = build_engine_appid(bundle.client_name, bc.name)
+        eng_appid = esi.AppID(idbase)
+        if bc.direction == ChannelDirection.FROM:
+          engine_mod = to_host_engine_gen(bc.channel.inner_type)
+        else:
+          engine_mod = from_host_engine_gen(bc.channel.inner_type)
+        eng_inputs = {
+            "clk": ports.clk,
+            "rst": ports.rst,
+        }
+        eng_details: Dict[str, object] = {"engine_inst": eng_appid}
+        if input_channel is not None:
+          eng_inputs["input_channel"] = input_channel
+        if hasattr(engine_mod, "mmio"):
+          mmio_appid = esi.AppID(idbase + ".mmio")
+          eng_inputs["mmio"] = esi.MMIO.read_write(mmio_appid)
+          eng_details["mmio"] = mmio_appid
+        if hasattr(engine_mod, "hostmem"):
+          eng_inputs["hostmem"] = esi.HostMem.write_from_bundle(
+              esi.AppID(idbase + ".hostmem"), engine_mod.hostmem.type)
+        engine = engine_mod(appid=eng_appid, **eng_inputs)
+        engine_rec = bundles.emit_engine(engine, details=eng_details)
+        engine_rec.add_record(bundle, {bc.name: {}})
+        return engine
 
       for bundle in bundles.to_client_reqs:
         bundle_type = bundle.type
@@ -803,12 +832,8 @@ def ChannelEngineService(
         # Create a DMA engine for each channel headed TO the client (from the host).
         for bc in bundle_type.channels:
           if bc.direction == ChannelDirection.TO:
-            eng_appid = build_engine_appid(bundle.client_name, bc.name)
-            engine_mod = from_host_engine_gen(bc.channel.inner_type)
-            engine = engine_mod(clk=ports.clk, rst=ports.rst, appid=eng_appid)
+            engine = build_engine(bc)
             to_channels[bc.name] = engine.output_channel
-            engine_rec = bundles.emit_engine(engine)
-            engine_rec.add_record(bundle, {bc.name: {"engine_inst": eng_appid}})
 
         client_bundle_sig, froms = bundle_type.pack(**to_channels)
         bundle.assign(client_bundle_sig)
@@ -816,13 +841,6 @@ def ChannelEngineService(
         # Create a DMA engine for each channel headed FROM the client (to the host).
         for bc in bundle_type.channels:
           if bc.direction == ChannelDirection.FROM:
-            eng_appid = build_engine_appid(bundle.client_name, bc.name)
-            engine_mod = to_host_engine_gen(bc.channel.inner_type)
-            engine = engine_mod(appid=eng_appid,
-                                clk=ports.clk,
-                                rst=ports.rst,
-                                input_channel=froms[bc.name])
-            engine_rec = bundles.emit_engine(engine)
-            engine_rec.add_record(bundle, {bc.name: {"engine_inst": eng_appid}})
+            build_engine(bc, froms[bc.name])
 
   return ChannelEngineService

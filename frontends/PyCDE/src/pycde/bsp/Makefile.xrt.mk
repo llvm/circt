@@ -92,7 +92,7 @@ $(XCL_OUT): $(LINK_OUT)
 # Generate configuration for use with hw_emu mode
 emconfig: $(BUILD)/emconfig.json
 $(BUILD)/emconfig.json:
-	emconfigutil --platform $(PLATFORM) --od $(BUILD)
+	$(XILINX_VITIS)/bin/emconfigutil --platform $(PLATFORM) --od $(BUILD)
 
 clean:
 	rm -rf $(BUILD) temp_kernel .Xil vivado* kernel *.jou *.log *.wdb *.wcfg *.protoinst *.csv

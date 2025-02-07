@@ -34,6 +34,10 @@ std::string MessageData::toHex() const {
   return ss.str();
 }
 
+std::string esi::toHex(void *val) {
+  return toHex(reinterpret_cast<uint64_t>(val));
+}
+
 std::string esi::toHex(uint64_t val) {
   std::ostringstream ss;
   ss << std::hex << val;
