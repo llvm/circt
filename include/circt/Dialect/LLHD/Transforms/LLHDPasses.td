@@ -107,6 +107,10 @@ def Sig2Reg : Pass<"llhd-sig2reg", "hw::HWModuleOp"> {
   let summary = "promote LLHD signals to SSA values";
 }
 
+def Mem2RegPass : Pass<"llhd-mem2reg"> {
+  let summary = "Promotes memory and signal slots into values.";
+}
+
 def TemporalCodeMotion : Pass<"llhd-temporal-code-motion", "hw::HWModuleOp"> {
   let summary = "move drive operations to the exit basic block in processes";
   let description = [{
