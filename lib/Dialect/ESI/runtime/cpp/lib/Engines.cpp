@@ -80,24 +80,37 @@ void BundleEngineMap::setEngine(const std::string &channelName,
     throw std::runtime_error("Channel already exists in engine map");
 }
 
+//===----------------------------------------------------------------------===//
+// Registry
+//===----------------------------------------------------------------------===//
 namespace {
-std::map<std::string, registry::internal::EngineCreate> engineRegistry;
-}
+class EngineRegistry {
+public:
+  static std::map<std::string, registry::internal::EngineCreate> &get() {
+    static EngineRegistry instance;
+    return instance.engineRegistry;
+  }
+
+private:
+  std::map<std::string, registry::internal::EngineCreate> engineRegistry;
+};
+} // namespace
 
 std::unique_ptr<Engine>
 registry::createEngine(AcceleratorConnection &conn,
                        const std::string &dmaEngineName, AppIDPath idPath,
                        const ServiceImplDetails &details,
                        const HWClientDetails &clients) {
-  auto it = engineRegistry.find(dmaEngineName);
-  if (it == engineRegistry.end())
+  auto &reg = EngineRegistry::get();
+  auto it = reg.find(dmaEngineName);
+  if (it == reg.end())
     return std::make_unique<UnknownEngine>(conn, dmaEngineName);
   return it->second(conn, idPath, details, clients);
 }
 
 void registry::internal::registerEngine(const std::string &name,
                                         EngineCreate create) {
-  auto tried = engineRegistry.try_emplace(name, create);
+  auto tried = EngineRegistry::get().try_emplace(name, create);
   if (!tried.second)
     throw std::runtime_error("Engine already exists in registry");
 }

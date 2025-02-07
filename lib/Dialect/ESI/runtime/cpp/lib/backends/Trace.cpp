@@ -43,7 +43,6 @@ struct esi::backends::trace::TraceAccelerator::Impl {
   Impl(Mode mode, std::filesystem::path manifestJson,
        std::filesystem::path traceFile)
       : manifestJson(manifestJson), traceFile(traceFile) {
-    engine = std::make_unique<TraceEngine>(*this);
     if (!std::filesystem::exists(manifestJson))
       throw std::runtime_error("manifest file '" + manifestJson.string() +
                                "' does not exist");
@@ -88,7 +87,6 @@ private:
   std::filesystem::path manifestJson;
   std::filesystem::path traceFile;
   std::vector<std::unique_ptr<ChannelPort>> channels;
-  std::unique_ptr<TraceEngine> engine;
 };
 
 void TraceAccelerator::Impl::write(const AppIDPath &id,

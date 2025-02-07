@@ -273,7 +273,7 @@ def Counter(width: int):
                   clk=ports.clk,
                   rst=ports.rst,
                   rst_value=0,
-                  ce=ports.increment)
+                  ce=ports.increment | ports.clear)
       next = (count + 1).as_uint(width)
       count.assign(Mux(ports.clear, next, UInt(width)(0)))
       ports.out = count
