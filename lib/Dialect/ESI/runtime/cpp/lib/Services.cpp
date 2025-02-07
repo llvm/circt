@@ -232,10 +232,7 @@ BundlePort *CallService::getPort(AppIDPath id, const BundleType *type) const {
 
 CallService::Callback::Callback(AcceleratorConnection &acc, AppID id,
                                 const BundleType *type, PortMap channels)
-    : ServicePort(id, type, channels), acc(acc) {
-  if (channels.size() != 2)
-    throw std::runtime_error("CallService must have exactly two channels");
-}
+    : ServicePort(id, type, channels), acc(acc) {}
 
 CallService::Callback *CallService::Callback::get(AcceleratorConnection &acc,
                                                   AppID id, BundleType *type,
