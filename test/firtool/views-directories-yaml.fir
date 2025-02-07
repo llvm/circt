@@ -19,7 +19,6 @@ circuit ViewInLayer:
     layerblock Other:
       node n = and(x, y)
       layerblock A:
-        ; TODO: Maybe the YAML path should be relative to governing output directory?
         intrinsic(circt_view<name="view_a", yaml="other/views.yml", info="{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\", \"defName\": \"AView\", \"elements\": [{\"name\": \"foo\", \"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"}}]}">, n)
       layerblock B:
         intrinsic(circt_view<name="view_b", yaml="other/views.yml", info="{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\", \"defName\": \"BView\", \"elements\": [{\"name\": \"foo\", \"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"}}]}">, n)
