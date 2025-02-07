@@ -2575,8 +2575,6 @@ void GrandCentralPass::runOnOperation() {
     auto containingOutputFileAttr =
         viewParentMod->getAttrOfType<hw::OutputFileAttr>("output_file");
     auto yamlPath = view.getYamlFileAttr();
-    if (!yamlPath && maybeHierarchyFileYAML.has_value())
-      yamlPath = *maybeHierarchyFileYAML;
     for (const auto &ifaceBuilder : interfaceBuilder) {
       auto builder = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
       auto loc = getOperation().getLoc();
