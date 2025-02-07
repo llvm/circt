@@ -124,7 +124,7 @@ firrtl.circuit "Intrinsics" {
     // CHECK-NEXT: verif.assert %a : i1
     firrtl.int.verif.ensure %a : !firrtl.uint<1>
     // CHECK-NEXT: verif.contract
-    verif.contract {
+    firrtl.contract {
       // CHECK-NEXT: verif.require %a : i1
       firrtl.int.verif.require %a : !firrtl.uint<1>
       // CHECK-NEXT: verif.require %a label "hello" : i1

@@ -1731,3 +1731,30 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT: hw.instance "Foo" @Foo(a: [[A]]: i42) -> (z: i42)
   firrtl.formal @MyTest2, @Foo {world = "abc"}
 }
+
+// -----
+
+firrtl.circuit "Foo" {
+  // CHECK-LABEL: hw.module @Foo
+  firrtl.module @Foo(in %a: !firrtl.uint<42>, in %b: !firrtl.uint<1337>) {
+    // CHECK: verif.contract {
+    // CHECK-NEXT: }
+    firrtl.contract {
+    }
+
+    // CHECK: [[TMP:%.+]]:2 = verif.contract %a, %b : i42, i1337 {
+    // CHECK-NEXT:   dbg.variable "c2", [[TMP]]#0 : i42
+    // CHECK-NEXT:   dbg.variable "d2", [[TMP]]#1 : i1337
+    // CHECK-NEXT: }
+    %c, %d = firrtl.contract %a, %b : !firrtl.uint<42>, !firrtl.uint<1337> {
+    ^bb0(%c2: !firrtl.uint<42>, %d2: !firrtl.uint<1337>):
+      dbg.variable "c2", %c2 : !firrtl.uint<42>
+      dbg.variable "d2", %d2 : !firrtl.uint<1337>
+    }
+
+    // CHECK: dbg.variable "c", [[TMP]]#0 : i42
+    // CHECK: dbg.variable "d", [[TMP]]#1 : i1337
+    dbg.variable "c", %c : !firrtl.uint<42>
+    dbg.variable "d", %d : !firrtl.uint<1337>
+  }
+}
