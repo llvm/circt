@@ -825,12 +825,30 @@ struct DynExtractOpConversion : public OpConversionPattern<DynExtractOp> {
                                      op->getLoc());
 
       if (isa<hw::ArrayType>(resultType)) {
+        // FIXME: for packed arrays, the part that is OOB must be 0 or X and the
+        // part overlapping with the range must match the values of the range;
+        // for unpacked arrays, if part of the accessed slice is OOB the entire
+        // result is 0 or X
         rewriter.replaceOpWithNewOp<hw::ArraySliceOp>(op, resultType,
                                                       adaptor.getInput(), idx);
         return success();
       }
 
-      rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(op, adaptor.getInput(), idx);
+      Value size = rewriter.create<hw::ConstantOp>(
+          op.getLoc(), adaptor.getLowBit().getType(), arrType.getNumElements());
+      Value isOOB = rewriter.create<comb::ICmpOp>(
+          op.getLoc(), ICmpPredicate::uge, adaptor.getLowBit(), size);
+      Value access =
+          rewriter.create<hw::ArrayGetOp>(op.getLoc(), adaptor.getInput(), idx);
+      int64_t bw = hw::getBitWidth(arrType.getElementType());
+      if (bw < 0)
+        return failure();
+
+      Value zeroValueRaw =
+          rewriter.create<hw::ConstantOp>(op.getLoc(), APInt(bw, 0));
+      Value zeroValue = rewriter.createOrFold<hw::BitcastOp>(
+          op.getLoc(), arrType.getElementType(), zeroValueRaw);
+      rewriter.replaceOpWithNewOp<comb::MuxOp>(op, isOOB, zeroValue, access);
       return success();
     }
 
