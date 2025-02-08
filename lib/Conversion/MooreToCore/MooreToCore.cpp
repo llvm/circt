@@ -195,6 +195,9 @@ static void getValuesToObserve(Region *region,
   region->getParentOp()->walk<WalkOrder::PreOrder, ForwardDominanceIterator<>>(
       [&](Operation *operation) {
         for (auto value : operation->getOperands()) {
+          if (isa<BlockArgument>(value))
+            value = rewriter.getRemappedValue(value);
+
           if (region->isAncestor(value.getParentRegion()))
             continue;
           if (auto *defOp = value.getDefiningOp();

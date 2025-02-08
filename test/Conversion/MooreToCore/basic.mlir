@@ -1097,3 +1097,22 @@ moore.module @scfInsideProcess(in %in0: !moore.i32, in %in1: !moore.i32) {
     moore.return
   }
 }
+
+// CHECK-LABEL: @blockArgAsObservedValue
+moore.module @blockArgAsObservedValue(in %in0: !moore.i32, in %in1: !moore.i32) {
+  %var = moore.variable : <!moore.i32>
+  // CHECK: [[PRB:%.+]] = llhd.prb %var : !hw.inout<i32>
+  // CHECK: llhd.process
+  moore.procedure always_comb {
+    // CHECK: ^bb1:  // 2 preds: ^bb0, ^bb5
+      // CHECK: [[COND:%.+]] = comb.icmp slt %in1, %{{.*}} : i32
+      // CHECK: comb.mux [[COND]], %{{.*}}, %in0 : i32
+      // CHECK: comb.mux [[COND]], %{{.*}}, %in1 : i32
+    %0 = moore.pows %in0, %in1 : !moore.i32
+    moore.blocking_assign %var, %0 : !moore.i32
+    
+    // CHECK: ^bb5:  // pred: ^bb4
+    // CHECK:   llhd.wait (%in0, %in1, [[PRB]] : i32, i32, i32), ^bb1
+    moore.return
+  }
+}
