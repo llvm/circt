@@ -24,6 +24,7 @@
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
 #include "circt/Support/JSON.h"
+#include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
@@ -35,6 +36,7 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Support/ToolUtilities.h"
+#include "mlir/Transforms/Passes.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
@@ -82,14 +84,22 @@ struct Options {
       "d", cl::desc("Result directory (default `.circt-test`)"),
       cl::value_desc("dir"), cl::init(".circt-test"), cl::cat(cat)};
 
-  cl::opt<bool> verifyPasses{
-      "verify-each",
-      cl::desc("Run the verifier after each transformation pass"),
-      cl::init(true), cl::cat(cat)};
-
   cl::list<std::string> runners{"r", cl::desc("Use a specific set of runners"),
                                 cl::value_desc("name"),
                                 cl::MiscFlags::CommaSeparated, cl::cat(cat)};
+
+  cl::opt<bool> ignoreContracts{
+      "ignore-contracts",
+      cl::desc("Do not use contracts to simplify and parallelize tests"),
+      cl::init(false), cl::cat(cat)};
+
+  cl::opt<bool> emitIR{"ir", cl::desc("Emit IR after initial lowering"),
+                       cl::init(false), cl::cat(cat)};
+
+  cl::opt<bool> verifyPasses{
+      "verify-each",
+      cl::desc("Run the verifier after each transformation pass"),
+      cl::init(true), cl::Hidden, cl::cat(cat)};
 
   cl::opt<bool> verifyDiagnostics{
       "verify-diagnostics",
@@ -404,9 +414,37 @@ static LogicalResult listTests(TestSuite &suite) {
 static LogicalResult executeWithHandler(MLIRContext *context,
                                         RunnerSuite &runnerSuite,
                                         SourceMgr &srcMgr) {
+  std::string errorMessage;
   auto module = parseSourceFile<ModuleOp>(srcMgr, context);
   if (!module)
     return failure();
+
+  // Preprocess the input.
+  {
+    PassManager pm(context);
+    pm.enableVerifier(opts.verifyPasses);
+    if (opts.ignoreContracts)
+      pm.addPass(verif::createStripContractsPass());
+    else
+      pm.addPass(verif::createLowerContractsPass());
+    pm.addNestedPass<hw::HWModuleOp>(verif::createSimplifyAssumeEqPass());
+    pm.addPass(createCSEPass());
+    pm.addPass(createSimpleCanonicalizerPass());
+    if (failed(pm.run(*module)))
+      return failure();
+  }
+
+  // Emit the IR and exit if requested.
+  if (opts.emitIR) {
+    auto output = openOutputFile(opts.outputFilename, &errorMessage);
+    if (!output) {
+      WithColor::error() << errorMessage << "\n";
+      return failure();
+    }
+    module->print(output->os());
+    output->keep();
+    return success();
+  }
 
   // Discover all tests in the input.
   TestSuite suite(context, opts.listIgnored);
@@ -428,10 +466,21 @@ static LogicalResult executeWithHandler(MLIRContext *context,
     return failure();
   }
 
+  // Generate the MLIR output.
+  SmallString<128> mlirPath(opts.resultDir);
+  llvm::sys::path::append(mlirPath, "design.mlir");
+  auto mlirFile = openOutputFile(mlirPath, &errorMessage);
+  if (!mlirFile) {
+    WithColor::error() << errorMessage << "\n";
+    return failure();
+  }
+  module->print(mlirFile->os());
+  mlirFile->os().flush();
+  mlirFile->keep();
+
   // Open the Verilog file for writing.
   SmallString<128> verilogPath(opts.resultDir);
   llvm::sys::path::append(verilogPath, "design.sv");
-  std::string errorMessage;
   auto verilogFile = openOutputFile(verilogPath, &errorMessage);
   if (!verilogFile) {
     WithColor::error() << errorMessage << "\n";
@@ -448,6 +497,7 @@ static LogicalResult executeWithHandler(MLIRContext *context,
   pm.addPass(createExportVerilogPass(verilogFile->os()));
   if (failed(pm.run(*module)))
     return failure();
+  verilogFile->os().flush();
   verilogFile->keep();
 
   // Run the tests.
@@ -502,7 +552,7 @@ static LogicalResult executeWithHandler(MLIRContext *context,
     SmallVector<StringRef> args;
     args.push_back(runner->binary);
     if (runner->readsMLIR)
-      args.push_back(opts.inputFilename);
+      args.push_back(mlirPath);
     else
       args.push_back(verilogPath);
     args.push_back("-t");
