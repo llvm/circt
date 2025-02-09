@@ -39,4 +39,16 @@ def LowerConcatRef : Pass<"moore-lower-concatref", "moore::SVModuleOp"> {
     let constructor = "circt::moore::createLowerConcatRefPass()";
 }
 
+def MergeExtractRef : Pass<"moore-merge-extractref", "moore::SVModuleOp"> {
+    let summary = "Merge moore.extract_ref ops";
+    let description = [{
+      It's used to merge moore.extract_ref together in the big-endian order
+      without existing in if/for statements and nested moore.extract_ref.
+      Like merge "arr[3:2] = 2'b0" and "arr[1:0] = 2'b0" together becoming
+      "arr = 4'b0"; For a more detailed description please to view the
+      MergeExtractRef.cpp.
+    }];
+    let constructor = "circt::moore::createMergeExtractRefPass()";
+}
+
 #endif // CIRCT_DIALECT_MOORE_MOOREPASSES_TD
