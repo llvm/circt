@@ -623,9 +623,9 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
 /// folding because it only works with values that can be expressed in an
 /// `int64_t`.
 void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
-                       int64_t value) {
+                       int64_t value, bool isSigned) {
   build(builder, result, type,
-        APInt(type.getWidth(), (uint64_t)value, /*isSigned=*/true));
+        APInt(type.getWidth(), (uint64_t)value, isSigned));
 }
 
 OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
