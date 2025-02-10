@@ -310,7 +310,6 @@ class MMIOReq(Module):
 # CHECK-NEXT:     [[R6:%.+]] = hw.struct_create ([[R0]], [[R4]], [[R5]]) : !hw.struct<address: ui64, tag: ui8, data: ui256>
 # CHECK-NEXT:     %chanOutput_0, %ready_1 = esi.wrap.vr [[R6]], %false : !hw.struct<address: ui64, tag: ui8, data: ui256>
 # CHECK-NEXT:     [[R7:%.+]] = esi.service.req <@_HostMem::@write>(#esi.appid<"host_mem_write_req">) : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: ui256>> from "req", !esi.channel<ui8> to "ackTag"]>
-# CHECK-NEXT:     %ackTag = esi.bundle.unpack %chanOutput_0 from [[R7]] : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: ui256>> from "req", !esi.channel<ui8> to "ackTag"]>
 # CHECK:        esi.service.std.hostmem @_HostMem
 @unittestmodule(esi_sys=True)
 class HostMemReq(Module):

@@ -9,7 +9,7 @@ from .module import (generator, modparams, Module, ModuleLikeBuilderBase,
                      PortProxyBase)
 from .signals import (BitsSignal, BundleSignal, ChannelSignal, Signal,
                       _FromCirctValue, UIntSignal)
-from .support import optional_dict_to_dict_attr, get_user_loc
+from .support import clog2, optional_dict_to_dict_attr, get_user_loc
 from .system import System
 from .types import (Any, Bits, Bundle, BundledChannel, Channel,
                     ChannelDirection, StructType, Type, UInt, types,
@@ -640,8 +640,6 @@ class _HostMem(ServiceDecl):
 
   def write(self, appid: AppID, req: ChannelSignal) -> ChannelSignal:
     """Create a write request to the host memory out of a request channel."""
-    self._materialize_service_decl()
-
     # Extract the data type from the request channel and call the helper to get
     # the write bundle type for the req channel.
     req_data_type = req.type.inner_type.data
@@ -654,8 +652,6 @@ class _HostMem(ServiceDecl):
                 write_bundle_type._type,
                 hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("write")),
                 appid._appid).toClient))
-    resp = bundle.unpack(req=req)['ackTag']
-    return resp
 
   # Create a read request to the host memory out of a request channel and return
   # the response channel with the specified data type.
@@ -924,34 +920,58 @@ def ChannelDemux2(data_type: Type):
   return ChannelDemux2
 
 
-def ChannelDemux(input: ChannelSignal, sel: BitsSignal,
-                 num_outs: int) -> List[ChannelSignal]:
-  """Build a demultiplexer of ESI channels. Ideally, this would be a
-  parameterized module with an array of output channels, but the current ESI
-  channel-port lowering doesn't deal with arrays of channels. Independent of the
-  signaling protocol."""
+def ChannelDemux(input: ChannelSignal,
+                 sel: BitsSignal,
+                 num_outs: int,
+                 instance_name: Optional[str] = None) -> List[ChannelSignal]:
+  """Build a demultiplexer of ESI channels. 'num_outs' is the number of outputs,
+  sel it the select signal, and input is the input channel. Function simply
+  passes though to the module and is provided to legacy reasons."""
+  demux = ChannelDemuxMod(input.type, num_outs)(input=input,
+                                                sel=sel,
+                                                instance_name=instance_name)
+  return [getattr(demux, f"output_{i}") for i in range(num_outs)]
 
-  dmux2 = ChannelDemux2(input.type)
 
-  def build_tree(inter_input: ChannelSignal, inter_sel: BitsSignal,
-                 inter_num_outs: int, path: str) -> List[ChannelSignal]:
-    """Builds a binary tree of demuxes to demux the input channel."""
-    if inter_num_outs == 0:
-      return []
-    if inter_num_outs == 1:
-      return [inter_input]
+@modparams
+def ChannelDemuxMod(input_channel_type: Type, num_outs: int):
+  """Build a demultiplexer of ESI channels."""
 
-    demux2 = dmux2(sel=inter_sel[-1].as_bits(),
-                   inp=inter_input,
-                   instance_name=f"demux2_path{path}")
-    next_sel = inter_sel[:-1].as_bits()
-    tree0 = build_tree(demux2.output0, next_sel, (inter_num_outs + 1) // 2,
-                       path + "0")
-    tree1 = build_tree(demux2.output1, next_sel, (inter_num_outs + 1) // 2,
-                       path + "1")
-    return tree0 + tree1
+  class ChannelDemuxImpl(Module):
+    input = Input(input_channel_type)
+    sel = Input(Bits(clog2(num_outs)))
 
-  return build_tree(input, sel, num_outs, "")
+    # Add an output port for each read client.
+    for i in range(num_outs):
+      locals()[f"output_{i}"] = Output(input_channel_type)
+
+    @generator
+    def build(ports) -> None:
+      dmux2 = ChannelDemux2(ports.input.type)
+
+      def build_tree(inter_input: ChannelSignal, inter_sel: BitsSignal,
+                     inter_num_outs: int, path: str) -> List[ChannelSignal]:
+        """Builds a binary tree of demuxes to demux the input channel."""
+        if inter_num_outs == 0:
+          return []
+        if inter_num_outs == 1:
+          return [inter_input]
+
+        demux2 = dmux2(sel=inter_sel[-1].as_bits(),
+                       inp=inter_input,
+                       instance_name=f"demux2_path{path}")
+        next_sel = inter_sel[:-1].as_bits()
+        tree0 = build_tree(demux2.output0, next_sel, (inter_num_outs + 1) // 2,
+                           path + "0")
+        tree1 = build_tree(demux2.output1, next_sel, (inter_num_outs + 1) // 2,
+                           path + "1")
+        return tree0 + tree1
+
+      outputs = build_tree(ports.input, ports.sel, num_outs, "")
+      for idx, output in enumerate(outputs):
+        setattr(ports, f"output_{idx}", output)
+
+  return ChannelDemuxImpl
 
 
 def ChannelMux2(data_type: Channel):
