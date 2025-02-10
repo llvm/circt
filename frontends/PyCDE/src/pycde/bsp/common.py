@@ -208,7 +208,8 @@ class ChannelMMIO(esi.ServiceImplementation):
     client_cmd_channels = esi.ChannelDemux(
         sel=sel_bits.pad_or_truncate(read_clients_clog2),
         input=client_cmd_chan,
-        num_outs=len(table))
+        num_outs=len(table),
+        instance_name="client_cmd_demux")
     client_data_channels = []
     for (idx, offset) in enumerate(sorted(table.keys())):
       bundle_wire = table[offset]
@@ -834,8 +835,6 @@ def ChannelEngineService(
           if bc.direction == ChannelDirection.TO:
             engine = build_engine(bc)
             to_channels[bc.name] = engine.output_channel
-            engine_rec = bundles.emit_engine(engine)
-            engine_rec.add_record(bundle, {bc.name: {"engine_inst": eng_appid}})
 
         client_bundle_sig, froms = bundle_type.pack(**to_channels)
         bundle.assign(client_bundle_sig)
