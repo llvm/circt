@@ -2,7 +2,6 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from os import write
 from typing import Dict, Tuple, Type
 
 from ..signals import BundleSignal
@@ -16,6 +15,7 @@ from .. import esi
 
 from .common import (ChannelEngineService, ChannelHostMem, ChannelMMIO,
                      DummyFromHostEngine, DummyToHostEngine)
+from .dma import OneItemBuffersToHost
 
 from ..circt import ir
 from ..circt.dialects import esi as raw_esi
@@ -52,7 +52,7 @@ def CosimBSP(user_module: Type[Module], emulate_dma: bool = False) -> Module:
     def build(ports):
       user_module(clk=ports.clk, rst=ports.rst)
       if emulate_dma:
-        ChannelEngineService(DummyToHostEngine, DummyFromHostEngine)(
+        ChannelEngineService(OneItemBuffersToHost, DummyFromHostEngine)(
             None,
             appid=esi.AppID("__channel_engines"),
             clk=ports.clk,

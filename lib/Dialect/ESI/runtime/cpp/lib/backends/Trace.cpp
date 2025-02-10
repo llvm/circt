@@ -226,7 +226,8 @@ private:
 namespace {
 class TraceEngine : public Engine {
 public:
-  TraceEngine(TraceAccelerator::Impl &impl) : impl(impl) {}
+  TraceEngine(AcceleratorConnection &conn, TraceAccelerator::Impl &impl)
+      : Engine(conn), impl(impl) {}
 
   std::unique_ptr<ChannelPort> createPort(AppIDPath idPath,
                                           const std::string &channelName,
@@ -250,7 +251,8 @@ void TraceAccelerator::createEngine(const std::string &dmaEngineName,
                                     AppIDPath idPath,
                                     const ServiceImplDetails &details,
                                     const HWClientDetails &clients) {
-  registerEngine(idPath, std::make_unique<TraceEngine>(getImpl()), clients);
+  registerEngine(idPath, std::make_unique<TraceEngine>(*this, getImpl()),
+                 clients);
 }
 
 class TraceMMIO : public MMIO {
