@@ -834,6 +834,8 @@ def ChannelEngineService(
           if bc.direction == ChannelDirection.TO:
             engine = build_engine(bc)
             to_channels[bc.name] = engine.output_channel
+            engine_rec = bundles.emit_engine(engine)
+            engine_rec.add_record(bundle, {bc.name: {"engine_inst": eng_appid}})
 
         client_bundle_sig, froms = bundle_type.pack(**to_channels)
         bundle.assign(client_bundle_sig)
