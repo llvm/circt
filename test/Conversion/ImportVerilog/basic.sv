@@ -2344,3 +2344,28 @@ function int AssignFuncArgs2(int x, int y);
   // CHECK: [[ADD:%.+]] = moore.add [[READ_X]], [[READ_Y]] : i32
   return x+y;
 endfunction
+
+// CHECK-LABEL: moore.module @RangeElementSelection(
+module RangeElementSelection(
+    input reg [3:0] a [0:2],
+    output reg [3:0] b,
+    input reg [1:0] c);
+    // CHECK: [[A:%.+]] = moore.variable name "a" : <uarray<3 x l4>
+    // CHECK: [[C:%.+]] = moore.variable name "c" : <l2>
+
+    always_comb begin
+      // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <uarray<3 x l4>>
+      // CHECK: [[READ_C:%.+]] = moore.read [[C]] : <l2>
+      // CHECK: [[M2:%.+]] = moore.constant -2 : l2
+      // CHECK: [[SUB_1:%.+]] = moore.sub [[M2]], [[READ_C]] : l2
+      // CHECK: [[DYN_EXT_1:%.+]] = moore.dyn_extract [[READ_A]] from [[SUB_1]] : uarray<3 x l4>, l2 -> l4
+      // CHECK: [[READ_B:%.+]] = moore.read %b : <l4>
+      // CHECK: [[READ_C_1:%.+]] = moore.read [[C]] : <l2>
+      // CHECK: [[EXTRACT:%.+]] = moore.extract [[READ_C_1]] from 0 : l2 -> l1
+      // CHECK: [[ONE:%.+]] = moore.constant 1 : l1
+      // CHECK: [[SUB_2:%.+]] = moore.sub [[EXTRACT]], [[ONE]] : l1
+      // CHECK: [[DYN_EXT_2:%.+]] = moore.dyn_extract [[READ_B]] from [[SUB_2]] : l4, l1 -> l2
+      b = a[c];
+      b[3:0] = b[c[0]-:2];
+    end
+endmodule
