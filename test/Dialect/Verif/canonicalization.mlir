@@ -56,3 +56,10 @@ hw.module @clockedCover(in %clock : i1, in %a : i1, in %en : i1) {
   %clk = ltl.clock %a, posedge %clock : i1
   verif.cover %clk if %en : !ltl.sequence
 }
+
+// CHECK-LABEL: @RemoveUnusedSymbolicValues
+hw.module @RemoveUnusedSymbolicValues() {
+  // CHECK-NOT: verif.symbolic_value
+  // CHECK: hw.output
+  %0 = verif.symbolic_value : i32
+}
