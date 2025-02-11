@@ -50,13 +50,20 @@ mlir_check_all_link_libraries(arcilator)
 
 configure_file(arcilator-header-cpp.py
   ${CIRCT_TOOLS_DIR}/arcilator-header-cpp.py)
-add_custom_target(arcilator-header-cpp SOURCES
-  ${CIRCT_TOOLS_DIR}/arcilator-header-cpp.py)
 
 configure_file(arcilator-runtime.h
   ${CIRCT_TOOLS_DIR}/arcilator-runtime.h)
-add_custom_target(arcilator-runtime-header SOURCES
-  ${CIRCT_TOOLS_DIR}/arcilator-runtime.h)
+
+if(CIRCT_BUILD_TOOLS)
+  install(PROGRAMS arcilator-header-cpp.py
+    DESTINATION "${CIRCT_TOOLS_INSTALL_DIR}"
+    COMPONENT arcilator
+  )
+  install(FILES arcilator-runtime.h
+    DESTINATION include
+    COMPONENT arcilator
+  )
+endif()
 
 if(ARCILATOR_JIT_ENABLED)
   target_include_directories(arcilator PRIVATE
