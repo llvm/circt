@@ -1407,6 +1407,8 @@ def IntegerMulOp : IntegerBinaryPrimOp<"integer.mul", [Commutative]> {
                                          !firrtl.integer
     ```
   }];
+
+  let hasFolder = true;
 }
 
 def IntegerShrOp : IntegerBinaryPrimOp<"integer.shr"> {
