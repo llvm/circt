@@ -50,6 +50,8 @@ def ProcessOp : LLHDOp<"process", [
   let regions = (region MinSizedRegion<1>: $body);
 
   let assemblyFormat = "attr-dict-with-keyword $body";
+
+  let hasCanonicalizeMethod = 1;
 }
 
 def FinalOp : LLHDOp<"final", [
