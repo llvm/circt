@@ -1,4 +1,4 @@
-// RUN: circt-opt %s | circt-opt | FileCheck %s
+// RUN: circt-opt --verify-roundtrip %s | FileCheck %s
 
 %true = hw.constant true
 %s = unrealized_conversion_cast to !ltl.sequence
@@ -62,6 +62,17 @@ verif.formal @FormalTestWithAttrs {
 verif.formal @FormalTestBody {} {
   // CHECK: {{%.+}} = verif.symbolic_value : i42
   %0 = verif.symbolic_value : i42
+}
+
+//===----------------------------------------------------------------------===//
+// Simulation Test
+//===----------------------------------------------------------------------===//
+
+verif.simulation @EmptySimulationTest {} {
+^bb0(%clock: !seq.clock, %init: i1):
+  %0 = hw.constant true
+  %1 = hw.constant 9001 : i42
+  verif.yield %0, %1 : i1, i42
 }
 
 //===----------------------------------------------------------------------===//
