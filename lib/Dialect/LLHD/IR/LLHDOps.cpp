@@ -499,6 +499,20 @@ LogicalResult llhd::ConnectOp::canonicalize(llhd::ConnectOp op,
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// ProcessOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ProcessOp::canonicalize(ProcessOp op, PatternRewriter &rewriter) {
+  if (op.getBody().hasOneBlock()) {
+    auto &block = op.getBody().front();
+    if (block.getOperations().size() == 1 && isa<HaltOp>(block.getTerminator()))
+      rewriter.eraseOp(op);
+  }
+
+  return success();
+}
+
 #include "circt/Dialect/LLHD/IR/LLHDEnums.cpp.inc"
 
 #define GET_OP_CLASSES
