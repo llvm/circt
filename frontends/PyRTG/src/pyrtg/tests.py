@@ -21,7 +21,7 @@ class Test:
     sig = inspect.signature(test_func)
     assert len(sig.parameters) == 0, "test arguments not supported yet"
 
-    self.type = rtg.DictType.get(None, [])
+    self.type = rtg.DictType.get([])
 
   @property
   def name(self) -> str:
