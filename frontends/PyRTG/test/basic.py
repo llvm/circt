@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, rtg, Label, Set, Integer
+from pyrtg import test, rtg, Label, Set, Integer, Bag
 
 # MLIR-LABEL: rtg.test @test0
 # MLIR-NEXT: }
@@ -22,6 +22,8 @@ def test0():
 # MLIR-LABEL: rtg.test @test_labels
 # MLIR-NEXT: index.constant 5
 # MLIR-NEXT: index.constant 3
+# MLIR-NEXT: index.constant 2
+# MLIR-NEXT: index.constant 1
 # MLIR-NEXT: [[L0:%.+]] = rtg.label_decl "l0"
 # MLIR-NEXT: [[L1:%.+]] = rtg.label_unique_decl "l1"
 # MLIR-NEXT: [[L2:%.+]] = rtg.label_unique_decl "l1"
@@ -45,6 +47,19 @@ def test0():
 # MLIR-NEXT: rtg.label_decl "L_{{[{][{]0[}][}]}}", %idx3
 # MLIR-NEXT: rtg.label local
 
+# MLIR-NEXT: [[BAG0:%.+]] = rtg.bag_create (%idx2 x [[L0:%.+]], %idx1 x [[L1:%.+]]) : !rtg.label
+# MLIR-NEXT: [[BAG1:%.+]] = rtg.bag_create (%idx1 x [[L2:%.+]]) : !rtg.label
+# MLIR-NEXT: [[EMPTY_BAG:%.+]] = rtg.bag_create  : !rtg.label
+# MLIR-NEXT: [[BAG2_1:%.+]] = rtg.bag_union [[BAG0]], [[BAG1]] : !rtg.bag<!rtg.label>
+# MLIR-NEXT: [[BAG2:%.+]] = rtg.bag_union [[BAG2_1]], [[EMPTY_BAG]] : !rtg.bag<!rtg.label>
+# MLIR-NEXT: [[RL2:%.+]] = rtg.bag_select_random [[BAG2]] : !rtg.bag<!rtg.label>
+# MLIR-NEXT: [[SUB:%.+]] = rtg.bag_create (%idx1 x [[RL2]]) : !rtg.label
+# MLIR-NEXT: [[BAG3:%.+]] = rtg.bag_difference [[BAG2]], [[SUB]] inf : !rtg.bag<!rtg.label>
+# MLIR-NEXT: rtg.label local [[RL2]]
+# MLIR-NEXT: [[BAG4:%.+]] = rtg.bag_difference [[BAG3]], [[BAG1]] : !rtg.bag<!rtg.label>
+# MLIR-NEXT: [[RL3:%.+]] = rtg.bag_select_random [[BAG4]] : !rtg.bag<!rtg.label>
+# MLIR-NEXT: rtg.label local [[RL3]]
+
 # MLIR-NEXT: }
 
 # ELABORATED-LABEL: rtg.test @test_labels
@@ -63,6 +78,9 @@ def test0():
 # ELABORATED-NEXT: rtg.label_decl "L_3"
 # ELABORATED-NEXT: rtg.label local
 
+# ELABORATED-NEXT: rtg.label local
+# ELABORATED-NEXT: rtg.label local
+
 # ELABORATED-NEXT: }
 
 # ASM-LABEL: Begin of test_labels
@@ -77,6 +95,9 @@ def test0():
 
 # ASM-NEXT: L_5:
 # ASM-NEXT: L_3:
+
+# ASM-NEXT: l1_1:
+# ASM-NEXT: l0:
 
 # ASM-EMPTY:
 # ASM: End of test_labels
@@ -109,3 +130,14 @@ def test_labels():
   l3.place()
   l4 = Label.declare(r"L_{{0}}", 3)
   l4.place()
+
+  bag0 = Bag.create((2, l0), (1, l1))
+  bag1 = Bag.create((1, l2))
+  empty_bag = Bag.create_empty(rtg.LabelType.get())
+  bag2 = bag0 + bag1 + empty_bag
+  rl2 = bag2.get_random_and_exclude()
+  rl2.place()
+
+  bag2 -= bag1
+  rl3 = bag2.get_random()
+  rl3.place()

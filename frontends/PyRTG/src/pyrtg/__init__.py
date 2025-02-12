@@ -10,3 +10,4 @@ from .rtg import rtg
 from .index import index
 from .sets import Set
 from .integers import Integer
+from .bags import Bag
