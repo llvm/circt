@@ -12,6 +12,9 @@ def _FromCirctValue(value: ir.Value) -> Value:
   if isinstance(type, rtg.LabelType):
     from .labels import Label
     return Label(value)
+  if isinstance(type, rtg.SetType):
+    from .sets import Set
+    return Set(value)
   assert False, "Unsupported value"
 
 
@@ -35,6 +38,8 @@ def wrap_opviews_with_values(dialect, module_name, excluded=[]):
         def create(*args, **kwargs):
           # If any of the arguments are 'pyrtg.Value', we need to convert them.
           def to_circt(arg):
+            if isinstance(arg, Value):
+              return arg._get_ssa_value()
             if isinstance(arg, (list, tuple)):
               return [to_circt(a) for a in arg]
             return arg
