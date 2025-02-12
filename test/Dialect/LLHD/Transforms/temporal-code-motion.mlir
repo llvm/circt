@@ -163,6 +163,26 @@ hw.module @basic(in %cond: i1) {
     // CHECK-NEXT: cf.br
     cf.br ^bb1
   }
+
+  // COM: check correctness of cfg loops detection
+  // CHECK:      llhd.process {
+  // CHECK-NEXT:   cf.br ^bb
+  // CHECK-NEXT: ^bb
+  // CHECK-NEXT:   llhd.wait ^bb
+  // CHECK-NEXT: }
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    cf.cond_br %cond, ^bb2, ^bb3
+  ^bb2:
+    cf.br ^bb4
+  ^bb3:
+    cf.br ^bb4
+  ^bb4:
+    cf.br ^bb5
+  ^bb5:
+    llhd.wait ^bb1
+  }
 }
 
 // The following processes should stay unmodified, just make sure the pass doesn't crash on them
@@ -206,8 +226,8 @@ hw.module @more_than_one_TR_wait_terminator(in %cond: i1) {
   }
 }
 
-// CHECK-LABEL: @unsupportedLoop
-hw.module @unsupportedLoop() {
+// CHECK-LABEL: @unsupportedLoop0
+hw.module @unsupportedLoop0() {
   // CHECK-NEXT: llhd.process {
   // CHECK-NEXT:   cf.br ^bb
   // CHECK-NEXT: ^bb
@@ -219,4 +239,34 @@ hw.module @unsupportedLoop() {
     llhd.wait ^bb1
   }
   hw.output
+}
+
+// CHECK-LABEL: @unsupportedLoop1
+hw.module @unsupportedLoop1(in %cond : i1) {
+  // CHECK-NEXT: llhd.process {
+  // CHECK-NEXT:   cf.br ^[[BB1:.+]]
+  // CHECK-NEXT: ^[[BB1]]:
+  // CHECK-NEXT:   cf.cond_br %cond, ^[[BB2:.+]], ^[[BB3:.+]]
+  // CHECK-NEXT: ^[[BB2]]:
+  // CHECK-NEXT:   cf.br ^[[BB4:.+]]
+  // CHECK-NEXT: ^[[BB3]]:
+  // CHECK-NEXT:   cf.cond_br %cond, ^[[BB1]], ^[[BB4]]
+  // CHECK-NEXT: ^[[BB4]]:
+  // CHECK-NEXT:   cf.br ^[[BB5:.+]]
+  // CHECK-NEXT: ^[[BB5]]:
+  // CHECK-NEXT:   llhd.wait ^[[BB1]]
+  // CHECK-NEXT: }
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    cf.cond_br %cond, ^bb2, ^bb3
+  ^bb2:
+    cf.br ^bb4
+  ^bb3:
+    cf.cond_br %cond, ^bb1, ^bb4
+  ^bb4:
+    cf.br ^bb5
+  ^bb5:
+    llhd.wait ^bb1
+  }
 }
