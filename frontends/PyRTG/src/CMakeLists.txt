@@ -14,6 +14,7 @@ declare_mlir_python_sources(PyRTGSources
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   SOURCES
   pyrtg/__init__.py
+  pyrtg/bags.py
   pyrtg/core.py
   pyrtg/index.py
   pyrtg/integers.py

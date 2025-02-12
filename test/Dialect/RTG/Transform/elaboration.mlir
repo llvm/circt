@@ -570,3 +570,21 @@ rtg.test @contextSwitchNotAvailable(cpu = %cpu: !rtgtest.cpu) {
   // expected-error @below {{no context transition registered to switch from #rtg.default : !rtgtest.cpu to #rtgtest.cpu<0> : !rtgtest.cpu}}
   rtg.on_context %cpu, %0 : !rtgtest.cpu
 }
+
+// -----
+
+rtg.test @emptySetSelect() {
+  %0 = rtg.set_create : !rtg.label
+  // expected-error @below {{cannot select from an empty set}}
+  %1 = rtg.set_select_random %0 : !rtg.set<!rtg.label>
+  rtg.label local %1
+}
+
+// -----
+
+rtg.test @emptyBagSelect() {
+  %0 = rtg.bag_create : !rtg.label
+  // expected-error @below {{cannot select from an empty bag}}
+  %1 = rtg.bag_select_random %0 : !rtg.bag<!rtg.label>
+  rtg.label local %1
+}
