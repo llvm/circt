@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, Label, rtg
+from pyrtg import test, rtg, Label, Set
 
 # MLIR-LABEL: rtg.test @test0
 # MLIR-NEXT: }
@@ -26,6 +26,18 @@ def test0():
 # MLIR-NEXT: rtg.label global [[L0]]
 # MLIR-NEXT: rtg.label external [[L1]]
 # MLIR-NEXT: rtg.label local [[L2]]
+
+# MLIR-NEXT: [[SET0:%.+]] = rtg.set_create [[L0]], [[L1]] : !rtg.label
+# MLIR-NEXT: [[SET1:%.+]] = rtg.set_create [[L2]] : !rtg.label
+# MLIR-NEXT: [[EMPTY_SET:%.+]] = rtg.set_create  : !rtg.label
+# MLIR-NEXT: [[SET2_1:%.+]] = rtg.set_union [[SET0]], [[SET1]] : !rtg.set<!rtg.label>
+# MLIR-NEXT: [[SET2:%.+]] = rtg.set_union [[SET2_1]], [[EMPTY_SET]] : !rtg.set<!rtg.label>
+# MLIR-NEXT: [[RL0:%.+]] = rtg.set_select_random [[SET2]] : !rtg.set<!rtg.label>
+# MLIR-NEXT: rtg.label local [[RL0]]
+# MLIR-NEXT: [[SET2_MINUS_SET0:%.+]] = rtg.set_difference [[SET2]], [[SET0]] : !rtg.set<!rtg.label>
+# MLIR-NEXT: [[RL1:%.+]] = rtg.set_select_random [[SET2_MINUS_SET0]] : !rtg.set<!rtg.label>
+# MLIR-NEXT: rtg.label local [[RL1]]
+
 # MLIR-NEXT: }
 
 # ELABORATED-LABEL: rtg.test @test_labels
@@ -35,6 +47,10 @@ def test0():
 # ELABORATED-NEXT: rtg.label external [[L1]]
 # ELABORATED-NEXT: [[L2:%.+]] = rtg.label_decl "l1_1"
 # ELABORATED-NEXT: rtg.label local [[L2]]
+
+# ELABORATED-NEXT: rtg.label local [[L0]]
+# ELABORATED-NEXT: rtg.label local [[L2]]
+
 # ELABORATED-NEXT: }
 
 # ASM-LABEL: Begin of test_labels
@@ -43,6 +59,10 @@ def test0():
 # ASM-NEXT: l0:
 # ASM-NEXT: .extern l1_0
 # ASM-NEXT: l1_1:
+
+# ASM-NEXT: l0:
+# ASM-NEXT: l1_1:
+
 # ASM-EMPTY:
 # ASM: End of test_labels
 
@@ -55,3 +75,14 @@ def test_labels():
   l0.place(rtg.LabelVisibility.GLOBAL)
   l1.place(rtg.LabelVisibility.EXTERNAL)
   l2.place()
+
+  set0 = Set.create(l0, l1)
+  set1 = Set.create(l2)
+  empty_set = Set.create_empty(rtg.LabelType.get())
+  set2 = set0 + set1 + empty_set
+  rl0 = set2.get_random()
+  rl0.place()
+
+  set2 -= set0
+  rl1 = set2.get_random_and_exclude()
+  rl1.place()
