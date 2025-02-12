@@ -266,6 +266,20 @@ def LowerVectorizations : Pass<"arc-lower-vectorizations", "mlir::ModuleOp"> {
   ];
 }
 
+def LowerVerifSimulationsPass : Pass<"arc-lower-verif-simulations",
+                                     "mlir::ModuleOp"> {
+  let summary = "Lower verif.simulation ops to main functions";
+  let dependentDialects = [
+    "arc::ArcDialect",
+    "hw::HWDialect",
+    "mlir::arith::ArithDialect",
+    "mlir::cf::ControlFlowDialect",
+    "mlir::func::FuncDialect",
+    "mlir::scf::SCFDialect",
+    "seq::SeqDialect",
+  ];
+}
+
 def MakeTables : Pass<"arc-make-tables", "mlir::ModuleOp"> {
   let summary = "Transform appropriate arc logic into lookup tables";
   let constructor = "circt::arc::createMakeTablesPass()";
