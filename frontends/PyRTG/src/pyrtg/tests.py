@@ -5,10 +5,11 @@
 import inspect
 
 from .circt import ir
-from .circt.dialects import rtg
+from .core import CodeGenRoot
+from .rtg import rtg
 
 
-class Test:
+class Test(CodeGenRoot):
   """
   Represents an RTG Test. Stores the test function and location.
   """
