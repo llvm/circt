@@ -376,8 +376,8 @@ def SimulationOp : VerifOp<"simulation", [
 
     The first operand is a "done" signal of type `i1` which indicates the end of
     the simulation. The simulation stops when the done signal is 1 during a
-    0-to-1 transition of the clock. No additional clock toggles occur once done
-    has been sampled as 1.
+    0-to-1 transition of the clock after the init signal has dropped to 0. No
+    additional clock toggles occur once done has been sampled as 1.
 
     The second operand is an "exit code" signal which may be of any integer
     type. It indicates success of a test as 0, or failure as any non-zero

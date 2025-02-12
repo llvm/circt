@@ -14,6 +14,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   LowerLUT.cpp
   LowerState.cpp
   LowerVectorizations.cpp
+  LowerVerifSimulations.cpp
   MakeTables.cpp
   MergeIfs.cpp
   MuxToControlFlow.cpp
@@ -34,15 +35,16 @@ add_circt_dialect_library(CIRCTArcTransforms
   CIRCTHW
   CIRCTLLHD
   CIRCTOM
-  CIRCTSV
   CIRCTSeq
   CIRCTSim
   CIRCTSupport
+  CIRCTSV
+  CIRCTVerif
   MLIRFuncDialect
-  MLIRLLVMDialect
-  MLIRSCFDialect
-  MLIRVectorDialect
   MLIRIR
+  MLIRLLVMDialect
   MLIRPass
+  MLIRSCFDialect
   MLIRTransformUtils
+  MLIRVectorDialect
 )
