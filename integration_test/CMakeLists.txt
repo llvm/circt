@@ -19,7 +19,7 @@ set(CIRCT_INTEGRATION_TEST_DEPENDS
   )
 
 if (MLIR_ENABLE_EXECUTION_ENGINE)
-  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS mlir-cpu-runner)
+  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS mlir-runner)
 endif()
 
 # If Python bindings are available to build then enable the tests.

@@ -550,7 +550,7 @@ parseFuncOpArgs(OpAsmParser &parser,
                 SmallVectorImpl<Type> &resTypes,
                 SmallVectorImpl<DictionaryAttr> &resAttrs) {
   bool isVariadic;
-  if (mlir::function_interface_impl::parseFunctionSignature(
+  if (mlir::function_interface_impl::parseFunctionSignatureWithArguments(
           parser, /*allowVariadic=*/true, entryArgs, isVariadic, resTypes,
           resAttrs)
           .failed())
@@ -641,7 +641,7 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
                              result.attributes) ||
       parseFuncOpArgs(parser, args, resTypes, resAttributes))
     return failure();
-  mlir::function_interface_impl::addArgAndResultAttrs(
+  mlir::call_interface_impl::addArgAndResultAttrs(
       builder, result, args, resAttributes,
       handshake::FuncOp::getArgAttrsAttrName(result.name),
       handshake::FuncOp::getResAttrsAttrName(result.name));

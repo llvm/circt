@@ -77,6 +77,10 @@ void LowerToBMCPass::runOnOperation() {
   // Lookup or declare printf function.
   auto printfFunc =
       LLVM::lookupOrCreateFn(moduleOp, "printf", ptrTy, voidTy, true);
+  if (failed(printfFunc)) {
+    moduleOp->emitError("failed to lookup or create printf");
+    return signalPassFailure();
+  }
 
   // Replace the top-module with a function performing the BMC
   auto entryFunc = builder.create<func::FuncOp>(
@@ -203,7 +207,8 @@ void LowerToBMCPass::runOnOperation() {
 
   auto formatString = builder.create<LLVM::SelectOp>(
       loc, bmcOp.getResult(), successStrAddr.value(), failureStrAddr.value());
-  builder.create<LLVM::CallOp>(loc, printfFunc, ValueRange{formatString});
+  builder.create<LLVM::CallOp>(loc, printfFunc.value(),
+                               ValueRange{formatString});
   builder.create<func::ReturnOp>(loc);
 
   if (insertMainFunc) {

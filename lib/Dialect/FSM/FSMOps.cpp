@@ -44,7 +44,7 @@ void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
   if (argAttrs.empty())
     return;
   assert(type.getNumInputs() == argAttrs.size());
-  function_interface_impl::addArgAndResultAttrs(
+  call_interface_impl::addArgAndResultAttrs(
       builder, state, argAttrs,
       /*resultAttrs=*/std::nullopt, MachineOp::getArgAttrsAttrName(state.name),
       MachineOp::getResAttrsAttrName(state.name));
