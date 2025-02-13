@@ -15,6 +15,7 @@
 
 include "circt/Dialect/RTGTest/IR/RTGTestDialect.td"
 include "circt/Dialect/RTG/IR/RTGInterfaces.td"
+include "circt/Dialect/RTG/IR/RTGTypes.td"
 include "circt/Dialect/RTG/IR/RTGISAAssemblyInterfaces.td"
 include "mlir/IR/AttrTypeBase.td"
 
@@ -33,16 +34,13 @@ def CPUType : RTGTestTypeDef<"CPU", [ContextResourceTypeInterface]> {
   let assemblyFormat = "";
 }
 
-class ImmTypeBase<int width> : TypeDef<RTGTestDialect, "Imm" # width, []> {
-  let summary = "represents a " # width # "-bit immediate";
-  let mnemonic = "imm" # width;
-}
-
+let dialect = RTGTestDialect in {
 def Imm5Type  : ImmTypeBase<5>;
 def Imm12Type : ImmTypeBase<12>;
 def Imm13Type : ImmTypeBase<13>;
 def Imm21Type : ImmTypeBase<21>;
 def Imm32Type : ImmTypeBase<32>;
+}
 
 def IntegerRegisterType : TypeDef<RTGTestDialect, "IntegerRegister", [
   RegisterTypeInterface
