@@ -64,6 +64,8 @@ static void testSetType(MlirContext ctx) {
   fprintf(stderr, rtgTypeIsASet(setTy) ? "is_set\n" : "isnot_set\n");
   // CHECK: !rtg.set<i32>
   mlirTypeDump(setTy);
+  // CHECK: i32{{$}}
+  mlirTypeDump(rtgSetTypeGetElementType(setTy));
 }
 
 static void testBagType(MlirContext ctx) {
@@ -74,6 +76,8 @@ static void testBagType(MlirContext ctx) {
   fprintf(stderr, rtgTypeIsABag(bagTy) ? "is_bag\n" : "isnot_bag\n");
   // CHECK: !rtg.bag<i32>
   mlirTypeDump(bagTy);
+  // CHECK: i32{{$}}
+  mlirTypeDump(rtgBagTypeGetElementType(bagTy));
 }
 
 static void testDictType(MlirContext ctx) {

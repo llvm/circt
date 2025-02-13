@@ -62,7 +62,10 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
           [](nb::object cls, MlirType elementType) {
             return cls(rtgSetTypeGet(elementType));
           },
-          nb::arg("self"), nb::arg("element_type"));
+          nb::arg("self"), nb::arg("element_type"))
+      .def_property_readonly("element_type", [](MlirType self) {
+        return rtgSetTypeGetElementType(self);
+      });
 
   mlir_type_subclass(m, "BagType", rtgTypeIsABag)
       .def_classmethod(
@@ -70,13 +73,17 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
           [](nb::object cls, MlirType elementType) {
             return cls(rtgBagTypeGet(elementType));
           },
-          nb::arg("self"), nb::arg("element_type"));
+          nb::arg("self"), nb::arg("element_type"))
+      .def_property_readonly("element_type", [](MlirType self) {
+        return rtgBagTypeGetElementType(self);
+      });
 
   mlir_type_subclass(m, "DictType", rtgTypeIsADict)
       .def_classmethod(
           "get",
-          [](nb::object cls, MlirContext ctxt,
-             const std::vector<std::pair<MlirAttribute, MlirType>> &entries) {
+          [](nb::object cls,
+             const std::vector<std::pair<MlirAttribute, MlirType>> &entries,
+             MlirContext ctxt) {
             std::vector<MlirAttribute> names;
             std::vector<MlirType> types;
             for (auto entry : entries) {
@@ -86,9 +93,10 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
             return cls(
                 rtgDictTypeGet(ctxt, types.size(), names.data(), types.data()));
           },
-          nb::arg("self"), nb::arg("ctxt") = nullptr,
+          nb::arg("self"),
           nb::arg("entries") =
-              std::vector<std::pair<MlirAttribute, MlirType>>());
+              std::vector<std::pair<MlirAttribute, MlirType>>(),
+          nb::arg("ctxt") = nullptr);
 
   nb::enum_<RTGLabelVisibility>(m, "LabelVisibility")
       .value("LOCAL", RTG_LABEL_VISIBILITY_LOCAL)
