@@ -242,7 +242,7 @@ void EmitRTGISAAssemblyPass::runOnOperation() {
 LogicalResult
 EmitRTGISAAssemblyPass::emit(const DenseSet<StringAttr> &unsupportedInstr) {
   std::unique_ptr<llvm::ToolOutputFile> file;
-  bool emitToFile = path.hasValue() && !path.empty();
+  bool emitToFile = path.hasValue() && !path.empty() && path != "-";
   if (emitToFile) {
     file = createOutputFile(path, std::string(),
                             [&]() { return getOperation().emitError(); });
@@ -252,7 +252,9 @@ EmitRTGISAAssemblyPass::emit(const DenseSet<StringAttr> &unsupportedInstr) {
     file->keep();
   }
 
-  Emitter emitter(emitToFile ? file->os() : llvm::errs(), unsupportedInstr);
+  Emitter emitter(emitToFile ? file->os()
+                             : (path == "-" ? llvm::outs() : llvm::errs()),
+                  unsupportedInstr);
   for (auto test : getOperation().getOps<TestOp>())
     if (failed(emitter.emitTest(test, true)))
       return failure();
