@@ -479,16 +479,6 @@ DrvOp::ensureOnlySafeAccesses(const MemorySlot &slot,
 }
 
 //===----------------------------------------------------------------------===//
-// WaitOp
-//===----------------------------------------------------------------------===//
-
-// Implement this operation for the BranchOpInterface
-SuccessorOperands llhd::WaitOp::getSuccessorOperands(unsigned index) {
-  assert(index == 0 && "invalid successor index");
-  return SuccessorOperands(getDestOpsMutable());
-}
-
-//===----------------------------------------------------------------------===//
 // ConnectOp
 //===----------------------------------------------------------------------===//
 
