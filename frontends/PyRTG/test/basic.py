@@ -2,7 +2,30 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, rtg, Label, Set, Integer, Bag
+from pyrtg import test, sequence, rtg, Label, Set, Integer, Bag
+
+# MLIR-LABEL: rtg.sequence @seq0
+# MLIR-SAME: ([[SET:%.+]]: !rtg.set<!rtg.label>)
+# MLIR-NEXT: [[LABEL:%.+]] = rtg.set_select_random [[SET]]
+# MLIR-NEXT: rtg.label local [[LABEL]]
+# MLIR-NEXT: }
+
+
+@sequence(Set.type(Label.type()))
+def seq0(set: Set):
+  set.get_random().place()
+
+
+# MLIR-LABEL: rtg.sequence @seq1
+# MLIR-NEXT: [[LABEL:%.+]] = rtg.label_decl "s1"
+# MLIR-NEXT: rtg.label local [[LABEL]]
+# MLIR-NEXT: }
+
+
+@sequence()
+def seq1():
+  Label.declare("s1").place()
+
 
 # MLIR-LABEL: rtg.test @test0
 # MLIR-NEXT: }
@@ -60,6 +83,19 @@ def test0():
 # MLIR-NEXT: [[RL3:%.+]] = rtg.bag_select_random [[BAG4]] : !rtg.bag<!rtg.label>
 # MLIR-NEXT: rtg.label local [[RL3]]
 
+# MLIR-NEXT: [[SEQ:%.+]] = rtg.get_sequence @seq0 : !rtg.sequence<!rtg.set<!rtg.label>>
+# MLIR-NEXT: [[SUBST:%.+]] = rtg.substitute_sequence [[SEQ]]([[SET0]]) : !rtg.sequence<!rtg.set<!rtg.label>>
+# MLIR-NEXT: [[RAND1:%.+]] = rtg.randomize_sequence [[SUBST]]
+# MLIR-NEXT: rtg.embed_sequence [[RAND1]]
+# MLIR-NEXT: [[RAND2:%.+]] = rtg.randomize_sequence [[SUBST]]
+# MLIR-NEXT: rtg.embed_sequence [[RAND2]]
+# MLIR-NEXT: [[RAND3:%.+]] = rtg.randomize_sequence [[SUBST]]
+# MLIR-NEXT: rtg.embed_sequence [[RAND3]]
+
+# MLIR-NEXT: [[SEQ1:%.+]] = rtg.get_sequence @seq1 : !rtg.sequence
+# MLIR-NEXT: [[RAND4:%.+]] = rtg.randomize_sequence [[SEQ1]]
+# MLIR-NEXT: rtg.embed_sequence [[RAND4]]
+
 # MLIR-NEXT: }
 
 # ELABORATED-LABEL: rtg.test @test_labels
@@ -81,6 +117,15 @@ def test0():
 # ELABORATED-NEXT: rtg.label local
 # ELABORATED-NEXT: rtg.label local
 
+# ELABORATED-NEXT: [[L3:%.+]] = rtg.label_decl "l1_2"
+# ELABORATED-NEXT: rtg.label local [[L3]]
+# ELABORATED-NEXT: [[L4:%.+]] = rtg.label_decl "l1_3"
+# ELABORATED-NEXT: rtg.label local [[L4]]
+# ELABORATED-NEXT: rtg.label local [[L0]]
+
+# ELABORATED-NEXT: [[L5:%.+]] = rtg.label_decl "s1"
+# ELABORATED-NEXT: rtg.label local [[L5]]
+
 # ELABORATED-NEXT: }
 
 # ASM-LABEL: Begin of test_labels
@@ -98,6 +143,12 @@ def test0():
 
 # ASM-NEXT: l1_1:
 # ASM-NEXT: l0:
+
+# ASM-NEXT: l1_2:
+# ASM-NEXT: l1_3:
+# ASM-NEXT: l0:
+
+# ASM-NEXT: s1:
 
 # ASM-EMPTY:
 # ASM: End of test_labels
@@ -141,3 +192,9 @@ def test_labels():
   bag2 -= bag1
   rl3 = bag2.get_random()
   rl3.place()
+
+  seq0(set0)
+  seq0.get()(set0)
+  seq0.randomize(set0)()
+
+  seq1()

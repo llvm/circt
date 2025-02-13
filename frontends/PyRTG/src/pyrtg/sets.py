@@ -103,3 +103,11 @@ class Set(Value):
 
   def get_type(self) -> ir.Type:
     return self._value.type
+
+  def type(*args: ir.Type) -> ir.Type:
+    """
+    Returns the set type for the given element type.
+    """
+
+    assert len(args) == 1, "Set type requires exactly one element type"
+    return rtg.SetType.get(args[0])

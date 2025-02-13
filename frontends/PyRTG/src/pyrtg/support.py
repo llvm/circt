@@ -18,6 +18,12 @@ def _FromCirctValue(value: ir.Value) -> Value:
   if isinstance(type, rtg.BagType):
     from .bags import Bag
     return Bag(value)
+  if isinstance(type, rtg.SequenceType):
+    from .sequences import Sequence
+    return Sequence(value)
+  if isinstance(type, rtg.RandomizedSequenceType):
+    from .sequences import RandomizedSequence
+    return RandomizedSequence(value)
   if isinstance(type, ir.IndexType):
     from .integers import Integer
     return Integer(value)
@@ -44,7 +50,8 @@ def wrap_opviews_with_values(dialect, module_name, excluded=[]):
         def create(*args, **kwargs):
           # If any of the arguments are 'pyrtg.Value', we need to convert them.
           def to_circt(arg):
-            if isinstance(arg, Value):
+            from .sequences import SequenceDeclaration
+            if isinstance(arg, (Value, SequenceDeclaration)):
               return arg._get_ssa_value()
             if isinstance(arg, (list, tuple)):
               return [to_circt(a) for a in arg]
