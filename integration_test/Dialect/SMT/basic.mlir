@@ -1,13 +1,13 @@
 // RUN: circt-opt %s --lower-smt-to-z3-llvm --canonicalize | \
-// RUN: mlir-cpu-runner -e entry -entry-point-result=void --shared-libs=%libz3 | \
+// RUN: mlir-runner -e entry -entry-point-result=void --shared-libs=%libz3 | \
 // RUN: FileCheck %s
 
 // RUN: circt-opt %s --lower-smt-to-z3-llvm=debug=true --canonicalize | \
-// RUN: mlir-cpu-runner -e entry -entry-point-result=void --shared-libs=%libz3 | \
+// RUN: mlir-runner -e entry -entry-point-result=void --shared-libs=%libz3 | \
 // RUN: FileCheck %s
 
 // REQUIRES: libz3
-// REQUIRES: mlir-cpu-runner
+// REQUIRES: mlir-runner
 
 func.func @entry() {
   %false = llvm.mlir.constant(0 : i1) : i1

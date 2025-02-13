@@ -164,7 +164,7 @@ func.func @funcCallOp(%arg0: i32) -> (i32, i32) {
   // CHECK-NEXT: [[V1:%.+]] = llvm.extractvalue [[V0]][0] : !llvm.struct<(i32, i32)>
   // CHECK-NEXT: [[V2:%.+]] = llvm.extractvalue [[V0]][1] : !llvm.struct<(i32, i32)>
   %0:2 = func.call @dummyFuncCallee(%arg0) : (i32) -> (i32, i32)
-  // CHECK-NEXT: [[V3:%.+]] = llvm.mlir.undef : !llvm.struct<(i32, i32)>
+  // CHECK-NEXT: [[V3:%.+]] = llvm.mlir.poison : !llvm.struct<(i32, i32)>
   // CHECK-NEXT: [[V4:%.+]] = llvm.insertvalue [[V1]], [[V3]][0] : !llvm.struct<(i32, i32)>
   // CHECK-NEXT: [[V5:%.+]] = llvm.insertvalue [[V2]], [[V4]][1] : !llvm.struct<(i32, i32)>
   // CHECK-NEXT: llvm.return [[V5]] :
