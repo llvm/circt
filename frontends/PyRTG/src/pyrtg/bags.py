@@ -134,3 +134,11 @@ class Bag(Value):
 
   def get_type(self) -> ir.Type:
     return self._value.type
+
+  def type(*args: ir.Type) -> ir.Type:
+    """
+    Returns the bag type for the given element type.
+    """
+
+    assert len(args) == 1, "Bag type requires exactly one element type"
+    return rtg.BagType.get(args[0])

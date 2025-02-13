@@ -49,3 +49,11 @@ class Integer(Value):
       self = index.ConstantOp(self._value)
 
     return self._value
+
+  def type(*args: ir.Type) -> ir.Type:
+    """
+    Returns the index type.
+    """
+
+    assert len(args) == 0, "Integer type does not take type arguments"
+    return ir.IndexType.get()
