@@ -389,6 +389,78 @@ rtg.test @randomIntegers : !rtg.dict<> {
   func.call @dummy2(%1) : (index) -> ()
 }
 
+// CHECK-LABEL: rtg.test @contexts_contextCpu
+rtg.test @contexts : !rtg.dict<cpu0: !rtgtest.cpu, cpu1: !rtgtest.cpu> {
+^bb0(%cpu0: !rtgtest.cpu, %cpu1: !rtgtest.cpu):
+  // CHECK-NEXT: rtg.label_decl "label0"
+  // CHECK-NEXT: rtg.label
+  // CHECK-NEXT: rtg.label_decl "label5"
+  // CHECK-NEXT: rtg.label
+  // CHECK-NEXT: rtg.label_decl "label2"
+  // CHECK-NEXT: rtg.label
+  // CHECK-NEXT: rtg.label_decl "label7"
+  // CHECK-NEXT: rtg.label
+  // CHECK-NEXT: rtg.label_decl "label4"
+  // CHECK-NEXT: rtg.label
+  // CHECK-NEXT: rtg.label_decl "label8"
+  // CHECK-NEXT: rtg.label
+  // CHECK-NEXT: rtg.label_decl "label3"
+  // CHECK-NEXT: rtg.label
+  // CHECK-NEXT: rtg.label_decl "label6"
+  // CHECK-NEXT: rtg.label
+  // CHECK-NEXT: rtg.label_decl "label1"
+  // CHECK-NEXT: rtg.label
+  %0 = rtg.get_sequence @cpuSeq : !rtg.sequence<!rtgtest.cpu>
+  %1 = rtg.substitute_sequence %0(%cpu1) : !rtg.sequence<!rtgtest.cpu>
+  %l0 = rtg.label_decl "label0"
+  rtg.label local %l0
+  rtg.on_context %cpu0, %1 : !rtgtest.cpu
+  %l1 = rtg.label_decl "label1"
+  rtg.label local %l1
+}
+
+rtg.target @contextCpu : !rtg.dict<cpu0: !rtgtest.cpu, cpu1: !rtgtest.cpu> {
+  %cpu0 = rtgtest.cpu_decl <0>
+  %cpu1 = rtgtest.cpu_decl <1>
+  %0 = rtg.get_sequence @switchCpuSeq : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
+  %1 = rtg.get_sequence @switchNestedCpuSeq : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
+  rtg.context_switch #rtg.default : !rtgtest.cpu -> #rtgtest.cpu<0> : !rtgtest.cpu, %0 : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
+  rtg.context_switch #rtgtest.cpu<0> : !rtgtest.cpu -> #rtgtest.cpu<1> : !rtgtest.cpu, %1 : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
+  rtg.yield %cpu0, %cpu1 : !rtgtest.cpu, !rtgtest.cpu
+}
+
+rtg.sequence @cpuSeq(%cpu: !rtgtest.cpu) {
+  %l2 = rtg.label_decl "label2"
+  rtg.label local %l2
+  %0 = rtg.get_sequence @nestedCpuSeq : !rtg.sequence
+  rtg.on_context %cpu, %0 : !rtgtest.cpu
+  %l3 = rtg.label_decl "label3"
+  rtg.label local %l3
+}
+
+rtg.sequence @nestedCpuSeq() {
+  %l4 = rtg.label_decl "label4"
+  rtg.label local %l4
+}
+
+rtg.sequence @switchCpuSeq(%parent: !rtgtest.cpu, %child: !rtgtest.cpu, %seq: !rtg.sequence) {
+  %l5 = rtg.label_decl "label5"
+  rtg.label local %l5
+  %0 = rtg.randomize_sequence %seq
+  rtg.embed_sequence %0
+  %l6 = rtg.label_decl "label6"
+  rtg.label local %l6
+}
+
+rtg.sequence @switchNestedCpuSeq(%parent: !rtgtest.cpu, %child: !rtgtest.cpu, %seq: !rtg.sequence) {
+  %l7 = rtg.label_decl "label7"
+  rtg.label local %l7
+  %0 = rtg.randomize_sequence %seq
+  rtg.embed_sequence %0
+  %l8 = rtg.label_decl "label8"
+  rtg.label local %l8
+}
+
 // -----
 
 rtg.test @nestedRegionsNotSupported : !rtg.dict<> {
@@ -423,4 +495,48 @@ rtg.test @randomIntegers : !rtg.dict<> {
   // expected-error @below {{cannot select a number from an empty range}}
   %0 = rtg.random_number_in_range [%c5, %c5)
   func.call @dummy2(%0) : (index) -> ()
+}
+
+// -----
+
+rtg.sequence @seq0(%seq: !rtg.randomized_sequence) {
+  // expected-error @below {{attempting to place sequence seq1_0 derived from seq1 under context #rtgtest.cpu<0> : !rtgtest.cpu, but it was previously randomized for context 'default'}}
+  rtg.embed_sequence %seq
+}
+rtg.sequence @seq1() { }
+rtg.sequence @seq(%arg0: !rtgtest.cpu, %arg1: !rtgtest.cpu, %seq: !rtg.sequence) {
+  %0 = rtg.randomize_sequence %seq
+  rtg.embed_sequence %0
+}
+
+rtg.target @invalidRandomizationTarget : !rtg.dict<cpu: !rtgtest.cpu> {
+  %0 = rtg.get_sequence @seq : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
+  rtg.context_switch #rtg.default : !rtgtest.cpu -> #rtgtest.cpu<0>, %0 : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
+  %1 = rtgtest.cpu_decl <0>
+  rtg.yield %1 : !rtgtest.cpu
+}
+
+rtg.test @invalidRandomization : !rtg.dict<cpu: !rtgtest.cpu> {
+^bb0(%cpu: !rtgtest.cpu):
+  %0 = rtg.get_sequence @seq1 : !rtg.sequence
+  %1 = rtg.randomize_sequence %0
+  %2 = rtg.get_sequence @seq0 : !rtg.sequence<!rtg.randomized_sequence>
+  %3 = rtg.substitute_sequence %2(%1) : !rtg.sequence<!rtg.randomized_sequence>
+  rtg.on_context %cpu, %3 : !rtgtest.cpu
+}
+
+// -----
+
+rtg.sequence @seq() {}
+
+rtg.target @target : !rtg.dict<cpu: !rtgtest.cpu> {
+  %0 = rtgtest.cpu_decl <0>
+  rtg.yield %0 : !rtgtest.cpu
+}
+
+rtg.test @contextSwitchNotAvailable : !rtg.dict<cpu: !rtgtest.cpu> {
+^bb0(%cpu: !rtgtest.cpu):
+  %0 = rtg.get_sequence @seq : !rtg.sequence
+  // expected-error @below {{no context transition registered to switch from #rtg.default : !rtgtest.cpu to #rtgtest.cpu<0> : !rtgtest.cpu}}
+  rtg.on_context %cpu, %0 : !rtgtest.cpu
 }
