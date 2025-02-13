@@ -3,7 +3,7 @@
 // CHECK:# Begin of test0
 // CHECK-EMPTY:
 
-rtg.test @test0 : !rtg.dict<> {
+rtg.test @test0() {
   %rd = rtg.fixed_reg #rtgtest.ra
   %rs = rtg.fixed_reg #rtgtest.s0
   %label = rtg.label_decl "label_name"

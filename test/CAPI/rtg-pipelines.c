@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
       ctx, mlirStringRefCreateFromCString(
                "rtg.sequence @seq() {\n"
                "}\n"
-               "rtg.test @test : !rtg.dict<> {\n"
+               "rtg.test @test() {\n"
                "  %0 = rtg.get_sequence @seq : !rtg.sequence\n"
                "}\n"));
   if (mlirModuleIsNull(moduleOp)) {

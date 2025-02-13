@@ -4,7 +4,7 @@
 // CHECK: Begin of test0
 // CHECK-EMPTY:
 
-rtg.test @test0 : !rtg.dict<> {
+rtg.test @test0() {
   // CHECK-TEST0: ebreak
   rtgtest.rv32i.ebreak
 }
@@ -15,7 +15,7 @@ rtg.test @test0 : !rtg.dict<> {
 // CHECK-NEXT: Begin of test1
 // CHECK-EMPTY:
 
-rtg.test @test1 : !rtg.dict<> {
+rtg.test @test1() {
   // CHECK-TEST1: ecall
   rtgtest.rv32i.ecall
 }

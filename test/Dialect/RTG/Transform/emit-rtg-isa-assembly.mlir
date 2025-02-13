@@ -6,7 +6,7 @@
 // CHECK-ALLOWED:# Begin of test0
 // CHECK-ALLOWED-EMPTY:
 
-rtg.test @test0 : !rtg.dict<> {
+rtg.test @test0() {
   %rd = rtg.fixed_reg #rtgtest.ra
   %rs = rtg.fixed_reg #rtgtest.s0
   %imm = rtgtest.immediate #rtgtest.imm12<0>
