@@ -12,3 +12,4 @@ from .sets import Set
 from .integers import Integer
 from .bags import Bag
 from .sequences import sequence
+from .target import target, entry
