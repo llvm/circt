@@ -28,7 +28,7 @@ class Test(CodeGenRoot):
   def name(self) -> str:
     return self.test_func.__name__
 
-  def codegen(self):
+  def _codegen(self):
     test = rtg.TestOp(self.name, ir.TypeAttr.get(self.type))
     block = ir.Block.create_at_start(test.bodyRegion, [])
     with ir.InsertionPoint(block):
