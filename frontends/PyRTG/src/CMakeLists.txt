@@ -23,6 +23,7 @@ declare_mlir_python_sources(PyRTGSources
   pyrtg/sequences.py
   pyrtg/sets.py
   pyrtg/support.py
+  pyrtg/target.py
   pyrtg/tests.py
   rtgtool/rtgtool.py
 )
