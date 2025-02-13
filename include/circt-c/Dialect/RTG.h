@@ -95,6 +95,13 @@ rtgLabelVisibilityAttrGetValue(MlirAttribute attr);
 MLIR_CAPI_EXPORTED MlirAttribute
 rtgLabelVisibilityAttrGet(MlirContext ctxt, RTGLabelVisibility visibility);
 
+/// If the attribute is an RTG default context.
+MLIR_CAPI_EXPORTED bool rtgAttrIsADefaultContextAttr(MlirAttribute attr);
+
+/// Creates an RTG default context attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgDefaultContextAttrGet(MlirContext ctxt,
+                                                          MlirType type);
+
 #ifdef __cplusplus
 }
 #endif

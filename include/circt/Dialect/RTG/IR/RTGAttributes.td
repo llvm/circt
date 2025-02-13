@@ -16,6 +16,7 @@
 include "circt/Dialect/RTG/IR/RTGInterfaces.td"
 include "circt/Dialect/RTG/IR/RTGDialect.td"
 include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/Interfaces.td"
 
 class RTGAttrDef<string name, list<Trait> traits = []> 
   : AttrDef<RTGDialect, name, traits>;
@@ -54,6 +55,24 @@ class ImmediateAttrBase<int width> : RTGAttrDef<"Imm" # width, [
   }];
 
   let genVerifyDecl = 1;
+}
+
+
+def DefaultContextAttr : RTGAttrDef<"DefaultContext", [
+  DeclareAttrInterfaceMethods<ContextResourceAttrInterface>,
+]> {
+  let summary = "the default context of its type";
+  let description = [{
+    A target must specify a default value for each context resource type it
+    uses. The tests matched against that target then start in that context
+    initially and 'on_context' operations can be used to switch to another
+    context within a test. Essentially, this attribute is used within tests to
+    refer to the default context set in the target.
+  }];
+
+  let mnemonic = "default";
+  let parameters = (ins AttributeSelfTypeParameter<"">:$type);
+  let assemblyFormat = "";
 }
 
 #endif // CIRCT_DIALECT_RTG_IR_RTGATTRIBUTES_TD

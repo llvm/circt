@@ -11,6 +11,7 @@
 #include <stdio.h>
 
 #include "circt-c/Dialect/RTG.h"
+#include "circt-c/Dialect/RTGTest.h"
 #include "mlir-c/BuiltinAttributes.h"
 #include "mlir-c/BuiltinTypes.h"
 
@@ -120,9 +121,23 @@ static void testLabelVisibilityAttr(MlirContext ctx) {
   }
 }
 
+static void testDefaultContextAttr(MlirContext ctx) {
+  MlirType cpuTy = rtgtestCPUTypeGet(ctx);
+  MlirAttribute defaultCtxtAttr = rtgDefaultContextAttrGet(ctx, cpuTy);
+
+  // CHECK: is_default_context
+  fprintf(stderr, rtgAttrIsADefaultContextAttr(defaultCtxtAttr)
+                      ? "is_default_context\n"
+                      : "isnot_default_context\n");
+
+  // CHECK: !rtgtest.cpu
+  mlirTypeDump(mlirAttributeGetType(defaultCtxtAttr));
+}
+
 int main(int argc, char **argv) {
   MlirContext ctx = mlirContextCreate();
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__rtg__(), ctx);
+  mlirDialectHandleLoadDialect(mlirGetDialectHandle__rtgtest__(), ctx);
 
   testSequenceType(ctx);
   testRandomizedSequenceType(ctx);
@@ -132,6 +147,7 @@ int main(int argc, char **argv) {
   testDictType(ctx);
 
   testLabelVisibilityAttr(ctx);
+  testDefaultContextAttr(ctx);
 
   mlirContextDestroy(ctx);
 

@@ -208,3 +208,11 @@ with Context() as ctx, Location.unknown():
   # CHECK: rtg.label_decl "label"
   # CHECK: rtg.label global {{%.+}}
   print(m)
+
+with Context() as ctx, Location.unknown():
+  circt.register_dialects(ctx)
+  attr = rtg.DefaultContextAttr.get(rtgtest.CPUType.get())
+  # CHECK: !rtgtest.cpu
+  print(attr.type)
+  # CHECK: #rtg.default : !rtgtest.cpu
+  print(attr)

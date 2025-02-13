@@ -134,3 +134,43 @@ rtg.sequence @seq() {
   // expected-error @below {{expected 1 or more operands, but found 0}}
   rtg.bag_union : !rtg.bag<i32>
 }
+
+// -----
+
+rtg.sequence @seq() {}
+
+rtg.target @target : !rtg.dict<> {
+  %0 = rtg.get_sequence @seq : !rtg.sequence
+  // expected-error @below {{sequence type must have exactly 3 element types}}
+  rtg.context_switch #rtgtest.cpu<0> -> #rtgtest.cpu<1>, %0 : !rtg.sequence
+}
+
+// -----
+
+rtg.sequence @seq(%arg0: !rtg.sequence, %arg1: !rtg.sequence, %arg2: !rtg.sequence) {}
+
+rtg.target @target : !rtg.dict<> {
+  %0 = rtg.get_sequence @seq : !rtg.sequence<!rtg.sequence, !rtg.sequence, !rtg.sequence>
+  // expected-error @below {{first sequence element type must match 'from' attribute type}}
+  rtg.context_switch #rtgtest.cpu<0> -> #rtgtest.cpu<1>, %0 : !rtg.sequence<!rtg.sequence, !rtg.sequence, !rtg.sequence>
+}
+
+// -----
+
+rtg.sequence @seq(%arg0: !rtgtest.cpu, %arg1: !rtg.sequence, %arg2: !rtg.sequence) {}
+
+rtg.target @target : !rtg.dict<> {
+  %0 = rtg.get_sequence @seq : !rtg.sequence<!rtgtest.cpu, !rtg.sequence, !rtg.sequence>
+  // expected-error @below {{second sequence element type must match 'to' attribute type}}
+  rtg.context_switch #rtgtest.cpu<0> -> #rtgtest.cpu<1>, %0 : !rtg.sequence<!rtgtest.cpu, !rtg.sequence, !rtg.sequence>
+}
+
+// -----
+
+rtg.sequence @seq(%arg0: !rtgtest.cpu, %arg1: !rtgtest.cpu, %arg2: !rtgtest.cpu) {}
+
+rtg.target @target : !rtg.dict<> {
+  %0 = rtg.get_sequence @seq : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtgtest.cpu>
+  // expected-error @below {{third sequence element type must be a fully substituted sequence}}
+  rtg.context_switch #rtgtest.cpu<0> -> #rtgtest.cpu<1>, %0 : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtgtest.cpu>
+}
