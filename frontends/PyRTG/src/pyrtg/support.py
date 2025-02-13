@@ -15,6 +15,9 @@ def _FromCirctValue(value: ir.Value) -> Value:
   if isinstance(type, rtg.SetType):
     from .sets import Set
     return Set(value)
+  if isinstance(type, rtg.BagType):
+    from .bags import Bag
+    return Bag(value)
   if isinstance(type, ir.IndexType):
     from .integers import Integer
     return Integer(value)

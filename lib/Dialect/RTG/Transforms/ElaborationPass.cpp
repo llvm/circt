@@ -967,6 +967,9 @@ public:
   FailureOr<DeletionKind> visitOp(SetSelectRandomOp op) {
     auto set = get<SetStorage *>(op.getSet())->set;
 
+    if (set.empty())
+      return op->emitError("cannot select from an empty set");
+
     size_t selected;
     if (auto intAttr =
             op->getAttrOfType<IntegerAttr>("rtg.elaboration_custom_seed")) {
@@ -1025,6 +1028,9 @@ public:
 
   FailureOr<DeletionKind> visitOp(BagSelectRandomOp op) {
     auto bag = get<BagStorage *>(op.getBag())->bag;
+
+    if (bag.empty())
+      return op->emitError("cannot select from an empty bag");
 
     SmallVector<std::pair<ElaboratorValue, uint32_t>> prefixSum;
     prefixSum.reserve(bag.size());
