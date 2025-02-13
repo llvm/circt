@@ -46,6 +46,9 @@ using namespace circt;
 using namespace arc;
 using namespace hw;
 
+static constexpr StringLiteral arrayGetOOBHandlerSymName =
+    "_arc_env_array_get_oob_handler";
+
 //===----------------------------------------------------------------------===//
 // Lowering Patterns
 //===----------------------------------------------------------------------===//
@@ -646,8 +649,9 @@ void LowerArcToLLVMPass::runOnOperation() {
 
   // CIRCT patterns.
   DenseMap<std::pair<Type, ArrayAttr>, LLVM::GlobalOp> constAggregateGlobalsMap;
-  populateHWToLLVMConversionPatterns(converter, patterns, globals,
-                                     constAggregateGlobalsMap);
+  populateHWToLLVMConversionPatterns(
+      converter, patterns, globals, constAggregateGlobalsMap,
+      StringAttr::get(&getContext(), arrayGetOOBHandlerSymName));
   populateHWToLLVMTypeConversions(converter);
   populateCombToArithConversionPatterns(converter, patterns);
   populateCombToLLVMConversionPatterns(converter, patterns);
