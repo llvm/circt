@@ -9,6 +9,7 @@ target_link_libraries(circt-synth
   CIRCTHW
   CIRCTHWTransforms
   CIRCTSupport
+  CIRCTTransforms
   MLIRIR
   MLIRParser
   LLVMSupport
