@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, rtg, Label, Set
+from pyrtg import test, rtg, Label, Set, Integer
 
 # MLIR-LABEL: rtg.test @test0
 # MLIR-NEXT: }
@@ -20,6 +20,8 @@ def test0():
 
 
 # MLIR-LABEL: rtg.test @test_labels
+# MLIR-NEXT: index.constant 5
+# MLIR-NEXT: index.constant 3
 # MLIR-NEXT: [[L0:%.+]] = rtg.label_decl "l0"
 # MLIR-NEXT: [[L1:%.+]] = rtg.label_unique_decl "l1"
 # MLIR-NEXT: [[L2:%.+]] = rtg.label_unique_decl "l1"
@@ -38,6 +40,11 @@ def test0():
 # MLIR-NEXT: [[RL1:%.+]] = rtg.set_select_random [[SET2_MINUS_SET0]] : !rtg.set<!rtg.label>
 # MLIR-NEXT: rtg.label local [[RL1]]
 
+# MLIR-NEXT: rtg.label_decl "L_{{[{][{]0[}][}]}}", %idx5
+# MLIR-NEXT: rtg.label local
+# MLIR-NEXT: rtg.label_decl "L_{{[{][{]0[}][}]}}", %idx3
+# MLIR-NEXT: rtg.label local
+
 # MLIR-NEXT: }
 
 # ELABORATED-LABEL: rtg.test @test_labels
@@ -51,6 +58,11 @@ def test0():
 # ELABORATED-NEXT: rtg.label local [[L0]]
 # ELABORATED-NEXT: rtg.label local [[L2]]
 
+# ELABORATED-NEXT: rtg.label_decl "L_5"
+# ELABORATED-NEXT: rtg.label local
+# ELABORATED-NEXT: rtg.label_decl "L_3"
+# ELABORATED-NEXT: rtg.label local
+
 # ELABORATED-NEXT: }
 
 # ASM-LABEL: Begin of test_labels
@@ -62,6 +74,9 @@ def test0():
 
 # ASM-NEXT: l0:
 # ASM-NEXT: l1_1:
+
+# ASM-NEXT: L_5:
+# ASM-NEXT: L_3:
 
 # ASM-EMPTY:
 # ASM: End of test_labels
@@ -86,3 +101,11 @@ def test_labels():
   set2 -= set0
   rl1 = set2.get_random_and_exclude()
   rl1.place()
+
+  sub = Integer(1) - Integer(2)
+  add = (sub & Integer(4) | Integer(3) ^ Integer(5))
+  add += sub
+  l3 = Label.declare(r"L_{{0}}", add)
+  l3.place()
+  l4 = Label.declare(r"L_{{0}}", 3)
+  l4.place()

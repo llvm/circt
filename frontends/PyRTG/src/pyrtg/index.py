@@ -2,11 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from . import tests
-from . import core
-from .tests import test
-from .labels import Label
-from .rtg import rtg
-from .index import index
-from .sets import Set
-from .integers import Integer
+from .support import wrap_opviews_with_values
+from .circt.dialects import index
+
+wrap_opviews_with_values(index, index.__name__)

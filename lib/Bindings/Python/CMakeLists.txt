@@ -52,6 +52,7 @@ set(PYTHON_BINDINGS_LINK_LIBS
   CIRCTCAPISV
   CIRCTCAPIVerif
   CIRCTCAPITransforms
+  MLIRCAPIIndex
   # needed for mlirFrozenRewritePatternSetDestroy
   # but not the actual passes
   MLIRCAPITransforms
@@ -138,6 +139,15 @@ declare_mlir_dialect_python_bindings(
   SOURCES
     dialects/hw.py
   DIALECT_NAME hw)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${MLIR_MAIN_SRC_DIR}/python/mlir"
+  TD_FILE dialects/IndexOps.td
+  SOURCES
+    dialects/index.py
+  DIALECT_NAME index
+  GEN_ENUM_BINDINGS)
 
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
