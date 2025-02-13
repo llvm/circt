@@ -5,10 +5,11 @@
 import inspect
 
 from .circt import ir
-from .circt.dialects import rtg
+from .core import CodeGenRoot
+from .rtg import rtg
 
 
-class Test:
+class Test(CodeGenRoot):
   """
   Represents an RTG Test. Stores the test function and location.
   """
@@ -21,7 +22,7 @@ class Test:
     sig = inspect.signature(test_func)
     assert len(sig.parameters) == 0, "test arguments not supported yet"
 
-    self.type = rtg.DictType.get(None, [])
+    self.type = rtg.DictType.get([])
 
   @property
   def name(self) -> str:

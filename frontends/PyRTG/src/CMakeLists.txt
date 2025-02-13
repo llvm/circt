@@ -14,6 +14,10 @@ declare_mlir_python_sources(PyRTGSources
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   SOURCES
   pyrtg/__init__.py
+  pyrtg/core.py
+  pyrtg/labels.py
+  pyrtg/rtg.py
+  pyrtg/support.py
   pyrtg/tests.py
   rtgtool/rtgtool.py
 )
