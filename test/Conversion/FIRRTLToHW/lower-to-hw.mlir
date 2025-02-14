@@ -330,7 +330,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 //    printf(clock, reset, "Hi signed %d %d\n", add(c, c), d)
 
   // CHECK-LABEL: hw.module private @Print
-  // CHECK-SAME: attributes {emit.fragments = [@PRINTF_COND_FRAGMENT]}
+  // CHECK-SAME: attributes {emit.fragments = [@PRINTF_FD_FRAGMENT, @PRINTF_COND_FRAGMENT]}
   firrtl.module private @Print(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
                        in %a: !firrtl.uint<4>, in %b: !firrtl.uint<4>,
                        in %c: !firrtl.sint<4>, in %d: !firrtl.sint<4>) {
@@ -347,20 +347,20 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:     %PRINTF_COND_ = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND_, %reset
     // CHECK-NEXT:     sv.if [[AND]] {
-    // CHECK-NEXT:       [[FD:%.+]] = hw.constant -2147483646 : i32
-    // CHECK-NEXT:       sv.fwrite [[FD]], "No operands!\0A"
+    // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
+    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "No operands!\0A"
     // CHECK-NEXT:     }
     // CHECK-NEXT:     %PRINTF_COND__0 = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND__0, %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
-    // CHECK-NEXT:       [[FD:%.+]] = hw.constant -2147483646 : i32
-    // CHECK-NEXT:       sv.fwrite [[FD]], "Hi %x %x\0A"([[ADD]], %b) : i5, i4
+    // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
+    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Hi %x %x\0A"([[ADD]], %b) : i5, i4
     // CHECK-NEXT:     }
     // CHECK-NEXT:     %PRINTF_COND__1 = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND__1, %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
-    // CHECK-NEXT:       [[FD:%.+]] = hw.constant -2147483646 : i32
-    // CHECK-NEXT:       sv.fwrite [[FD]], "Hi signed %d %d\0A"([[SUMSIGNED]], [[DSIGNED]]) : i5, i4
+    // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
+    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Hi signed %d %d\0A"([[SUMSIGNED]], [[DSIGNED]]) : i5, i4
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
@@ -1730,4 +1730,31 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT: [[A:%.+]] = verif.symbolic_value : i42
   // CHECK-NEXT: hw.instance "Foo" @Foo(a: [[A]]: i42) -> (z: i42)
   firrtl.formal @MyTest2, @Foo {world = "abc"}
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+  // CHECK-LABEL: hw.module @Foo
+  firrtl.module @Foo(in %a: !firrtl.uint<42>, in %b: !firrtl.uint<1337>) {
+    // CHECK: verif.contract {
+    // CHECK-NEXT: }
+    firrtl.contract {
+    }
+
+    // CHECK: [[TMP:%.+]]:2 = verif.contract %a, %b : i42, i1337 {
+    // CHECK-NEXT:   dbg.variable "c2", [[TMP]]#0 : i42
+    // CHECK-NEXT:   dbg.variable "d2", [[TMP]]#1 : i1337
+    // CHECK-NEXT: }
+    %c, %d = firrtl.contract %a, %b : !firrtl.uint<42>, !firrtl.uint<1337> {
+    ^bb0(%c2: !firrtl.uint<42>, %d2: !firrtl.uint<1337>):
+      dbg.variable "c2", %c2 : !firrtl.uint<42>
+      dbg.variable "d2", %d2 : !firrtl.uint<1337>
+    }
+
+    // CHECK: dbg.variable "c", [[TMP]]#0 : i42
+    // CHECK: dbg.variable "d", [[TMP]]#1 : i1337
+    dbg.variable "c", %c : !firrtl.uint<42>
+    dbg.variable "d", %d : !firrtl.uint<1337>
+  }
 }

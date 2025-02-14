@@ -1554,12 +1554,12 @@ ParseResult FIRModuleContext::lookupSymbolEntry(SymbolValueEntry &result,
 ParseResult FIRModuleContext::resolveSymbolEntry(Value &result,
                                                  SymbolValueEntry &entry,
                                                  SMLoc loc, bool fatal) {
-  if (!entry.is<Value>()) {
+  if (!isa<Value>(entry)) {
     if (fatal)
       emitError(loc, "bundle value should only be used from subfield");
     return failure();
   }
-  result = entry.get<Value>();
+  result = cast<Value>(entry);
   return success();
 }
 
@@ -1567,14 +1567,14 @@ ParseResult FIRModuleContext::resolveSymbolEntry(Value &result,
                                                  SymbolValueEntry &entry,
                                                  StringRef fieldName,
                                                  SMLoc loc) {
-  if (!entry.is<UnbundledID>()) {
+  if (!isa<UnbundledID>(entry)) {
     emitError(loc, "value should not be used from subfield");
     return failure();
   }
 
   auto fieldAttr = StringAttr::get(getContext(), fieldName);
 
-  unsigned unbundledId = entry.get<UnbundledID>() - 1;
+  unsigned unbundledId = cast<UnbundledID>(entry) - 1;
   assert(unbundledId < unbundledValues.size());
   UnbundledValueEntry &ubEntry = unbundledValues[unbundledId];
   for (auto elt : ubEntry) {
@@ -1935,6 +1935,7 @@ private:
   ParseResult parseWire();
   ParseResult parseRegister(unsigned regIndent);
   ParseResult parseRegisterWithReset();
+  ParseResult parseContract(unsigned blockIndent);
 
   // Helper to fetch a module referenced by an instance-like statement.
   FModuleLike getReferencedModule(SMLoc loc, StringRef moduleName);
@@ -2211,7 +2212,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     if (!moduleContext.resolveSymbolEntry(result, symtabEntry, loc, false))
       break;
 
-    assert(symtabEntry.is<UnbundledID>() && "should be an instance");
+    assert(isa<UnbundledID>(symtabEntry) && "should be an instance");
 
     // Otherwise we referred to an implicitly bundled value.  We *must* be in
     // the midst of processing a field ID reference or 'is invalid'.  If not,
@@ -2223,7 +2224,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
 
       locationProcessor.setLoc(loc);
       // Invalidate all of the results of the bundled value.
-      unsigned unbundledId = symtabEntry.get<UnbundledID>() - 1;
+      unsigned unbundledId = cast<UnbundledID>(symtabEntry) - 1;
       UnbundledValueEntry &ubEntry =
           moduleContext.getUnbundledEntry(unbundledId);
       for (auto elt : ubEntry)
@@ -2667,6 +2668,7 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
 ///      ::= cmem | smem | mem
 ///      ::= node | wire
 ///      ::= register
+///      ::= contract
 ///
 ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   auto kind = getToken().getKind();
@@ -2776,6 +2778,8 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseRegister(stmtIndent);
   case FIRToken::kw_regreset:
     return parseRegisterWithReset();
+  case FIRToken::kw_contract:
+    return parseContract(stmtIndent);
   }
 }
 
@@ -3304,7 +3308,7 @@ ParseResult FIRStmtParser::parseStaticRefExp(Value &result,
     if (!moduleContext.resolveSymbolEntry(result, symtabEntry, loc, false))
       return success();
 
-    assert(symtabEntry.is<UnbundledID>() && "should be an instance");
+    assert(isa<UnbundledID>(symtabEntry) && "should be an instance");
 
     // Handle the normal "instance.x" reference.
     StringRef fieldName;
@@ -3419,7 +3423,7 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
     }
   } else {
     // This target can be a port or a regular value.
-    result = symtabEntry.get<Value>();
+    result = cast<Value>(symtabEntry);
   }
 
   assert(result);
@@ -3980,12 +3984,12 @@ ParseResult FIRStmtParser::parseInvalidate() {
   // We're dealing with an instance.  This instance may or may not have a
   // trailing expression.  Handle the special case of no trailing expression
   // first by invalidating all of its results.
-  assert(symtabEntry.is<UnbundledID>() && "should be an instance");
+  assert(isa<UnbundledID>(symtabEntry) && "should be an instance");
 
   if (getToken().isNot(FIRToken::period)) {
     locationProcessor.setLoc(loc);
     // Invalidate all of the results of the bundled value.
-    unsigned unbundledId = symtabEntry.get<UnbundledID>() - 1;
+    unsigned unbundledId = cast<UnbundledID>(symtabEntry) - 1;
     UnbundledValueEntry &ubEntry = moduleContext.getUnbundledEntry(unbundledId);
     for (auto elt : ubEntry)
       emitInvalidate(elt.second);
@@ -4729,6 +4733,79 @@ ParseResult FIRStmtParser::parseRegisterWithReset() {
           .getResult();
 
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
+}
+
+/// contract ::= 'contract' (id,+ '=' exp,+) ':' info? contract_body
+/// contract_body ::= simple_stmt | INDENT simple_stmt+ DEDENT
+ParseResult FIRStmtParser::parseContract(unsigned blockIndent) {
+  if (requireFeature(missingSpecFIRVersion, "contracts"))
+    return failure();
+
+  auto startTok = consumeToken(FIRToken::kw_contract);
+
+  // Parse the contract results and expressions.
+  SmallVector<StringRef> ids;
+  SmallVector<SMLoc> locs;
+  SmallVector<Value> values;
+  SmallVector<Type> types;
+  if (!consumeIf(FIRToken::colon)) {
+    auto parseContractId = [&] {
+      StringRef id;
+      locs.push_back(getToken().getLoc());
+      if (parseId(id, "expected contract result name"))
+        return failure();
+      ids.push_back(id);
+      return success();
+    };
+    auto parseContractValue = [&] {
+      Value value;
+      if (parseExp(value, "expected expression for contract result"))
+        return failure();
+      values.push_back(value);
+      types.push_back(value.getType());
+      return success();
+    };
+    if (parseListUntil(FIRToken::equal, parseContractId) ||
+        parseListUntil(FIRToken::colon, parseContractValue))
+      return failure();
+  }
+  if (parseOptionalInfo())
+    return failure();
+
+  // Each result must have a corresponding expression assigned.
+  if (ids.size() != values.size())
+    return emitError(startTok.getLoc())
+           << "contract requires same number of results and expressions; got "
+           << ids.size() << " results and " << values.size()
+           << " expressions instead";
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  // Add block arguments for each result and declare their names in a subscope
+  // for the contract body.
+  auto contract = builder.create<ContractOp>(types, values);
+  auto &block = contract.getBody().emplaceBlock();
+
+  // Parse the contract body.
+  {
+    FIRModuleContext::ContextScope scope(moduleContext, &block);
+    for (auto [id, loc, type] : llvm::zip(ids, locs, types)) {
+      auto arg = block.addArgument(type, LocWithInfo(loc, this).getLoc());
+      if (failed(moduleContext.addSymbolEntry(id, arg, loc)))
+        return failure();
+    }
+    if (getIndentation() > blockIndent)
+      if (parseSubBlock(block, blockIndent, SymbolRefAttr{}))
+        return failure();
+  }
+
+  // Declare the results.
+  for (auto [id, loc, value, result] :
+       llvm::zip(ids, locs, values, contract.getResults()))
+    if (failed(moduleContext.addSymbolEntry(id, result, loc)))
+      return failure();
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -5508,6 +5585,9 @@ ParseResult FIRCircuitParser::parseLayer(CircuitOp circuit) {
                   << "' (did you misspell it?)";
       return failure();
     }
+    if (layerConvention == LayerConvention::Inline &&
+        requireFeature({4, 1, 0}, "inline layers"))
+      return failure();
     consumeToken();
 
     hw::OutputFileAttr outputDir;

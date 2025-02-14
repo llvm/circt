@@ -64,10 +64,11 @@ void circtRtgToolOptionsSetVerbosePassExecution(CirctRtgToolOptions options,
 
 void circtRtgToolOptionsSetUnsupportedInstructions(
     CirctRtgToolOptions options, unsigned numInstr,
-    const char **unsupportedInstructions) {
+    const void **unsupportedInstructions) {
   SmallVector<std::string> instr;
   for (unsigned i = 0; i < numInstr; ++i)
-    instr.push_back(std::string(unsupportedInstructions[i]));
+    instr.push_back(
+        reinterpret_cast<std::string *>(unsupportedInstructions)[i]);
   unwrap(options)->setUnsupportedInstructions(std::move(instr));
 }
 
@@ -80,6 +81,16 @@ void circtRtgToolOptionsAddUnsupportedInstruction(
 void circtRtgToolOptionsSetUnsupportedInstructionsFile(
     CirctRtgToolOptions options, const char *filename) {
   unwrap(options)->setUnsupportedInstructionsFile(std::string(filename));
+}
+
+void circtRtgToolOptionsSetSplitOutput(CirctRtgToolOptions options,
+                                       bool enable) {
+  unwrap(options)->setSplitOutput(enable);
+}
+
+void circtRtgToolOptionsSetOutputPath(CirctRtgToolOptions options,
+                                      const char *path) {
+  unwrap(options)->setOutputPath(std::string(path));
 }
 
 //===----------------------------------------------------------------------===//

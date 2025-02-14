@@ -188,18 +188,44 @@ struct GenericIntrinsic {
 ///
 /// Intrinsic converters contain validation logic, along with a converter
 /// method to transform generic intrinsic ops to their implementation.
+
+/// Instances of a converter must be stateless and are expected to be able
+/// to be used simultaneously on different intrinsic operations in parallel.
 class IntrinsicConverter {
 public:
+  virtual void anchor(); // vtable anchor
+
   virtual ~IntrinsicConverter() = default;
 
   /// Checks whether the intrinsic is well-formed.
   ///
   /// This or's multiple ParseResults together, returning true on failure.
-  virtual bool check(GenericIntrinsic gi) = 0;
+  virtual bool check(GenericIntrinsic gi) {
+    llvm::report_fatal_error(
+        "check() or checkAndConvert() must be implemented");
+    return true;
+  }
 
   /// Transform the intrinsic to its implementation.
   virtual void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
-                       PatternRewriter &rewriter) = 0;
+                       PatternRewriter &rewriter) {
+    llvm::report_fatal_error(
+        "convert() or checkAndConvert() must be implemented");
+  }
+
+  /// Perform both check and convert, defaults to using check() and convert().
+  /// Return failure if check fails (no changes to IR should be made).
+  /// Otherwise, transform the intrinsic and return success.
+  /// Prefer overriding check and convert, but overriding this can avoid
+  /// recomputing work done during check needed for the conversion.
+  virtual LogicalResult checkAndConvert(GenericIntrinsic gi,
+                                        GenericIntrinsicOpAdaptor adaptor,
+                                        PatternRewriter &rewriter) {
+    if (check(gi))
+      return failure();
+    convert(gi, adaptor, rewriter);
+    return success();
+  };
 };
 
 template <typename OpTy>

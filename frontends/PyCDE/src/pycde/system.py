@@ -262,10 +262,15 @@ class System:
       lambda sys: TypeAlias.declare_aliases(sys.mod),
 
       # Then run all the passes to lower dialects which produce `hw.module`s.
-      "builtin.module(lower-handshake-to-dc)",
-      "builtin.module(dc-materialize-forks-sinks)",
-      "builtin.module(lower-dc-to-hw)",
-      "builtin.module(map-arith-to-comb)",
+
+      # The DC flow is broken, so don't bother running these passes. Leaving
+      # them in case someone fixes it in the future.
+      # https://github.com/llvm/circt/issues/7949 is the latest layer of the
+      # onion.
+      # "builtin.module(lower-handshake-to-dc)",
+      # "builtin.module(dc-materialize-forks-sinks)",
+      # "builtin.module(lower-dc-to-hw)",
+      # "builtin.module(map-arith-to-comb)",
 
       # Run ESI manifest passes.
       "builtin.module(esi-appid-hier{{top={tops} }}, esi-build-manifest{{top={tops} }})",

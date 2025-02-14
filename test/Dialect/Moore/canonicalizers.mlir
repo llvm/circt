@@ -291,3 +291,11 @@ func.func @MoveInitialOutOfSSAVariable() {
   func.call @useRef(%1) : (!moore.ref<i42>) -> ()
   return
 }
+
+// CHECK-LABEL: @sub
+func.func @sub(%arg0: !moore.i32) -> !moore.i32 {
+  %0 = moore.constant 0 : !moore.i32
+  %1 = moore.sub %arg0, %0 : !moore.i32
+  // CHECK: return %arg0 :
+  return %1 : !moore.i32
+}

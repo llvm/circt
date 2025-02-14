@@ -80,9 +80,9 @@ tool_dirs = [
 ]
 tools = [
     'arcilator', 'circt-opt', 'circt-translate', 'firtool', 'circt-rtl-sim.py',
-    'equiv-rtl.sh', 'handshake-runner', 'hlstool', 'ibistool', 'circt-lec',
+    'equiv-rtl.sh', 'handshake-runner', 'hlstool', 'kanagawatool', 'circt-lec',
     'circt-bmc', 'circt-test', 'circt-test-runner-sby.py',
-    'circt-test-runner-circt-bmc.py'
+    'circt-test-runner-circt-bmc.py', 'circt-cocotb-driver.py'
 ]
 
 # Enable python if its path was configured
@@ -217,12 +217,12 @@ if config.z3_library != "":
   tools.append(ToolSubst(f"%libz3", config.z3_library))
   config.available_features.add('libz3')
 
-# Add mlir-cpu-runner if the execution engine is built.
+# Add mlir-runner if the execution engine is built.
 if config.mlir_enable_execution_engine:
-  config.available_features.add('mlir-cpu-runner')
+  config.available_features.add('mlir-runner')
   config.available_features.add('circt-lec-jit')
   config.available_features.add('circt-bmc-jit')
-  tools.append('mlir-cpu-runner')
+  tools.append('mlir-runner')
 
 # Add circt-verilog if the Slang frontend is enabled.
 if config.slang_frontend_enabled:

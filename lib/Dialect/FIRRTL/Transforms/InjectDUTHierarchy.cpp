@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Analysis/FIRRTLInstanceInfo.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
@@ -82,10 +83,6 @@ void InjectDUTHierarchy::runOnOperation() {
 
   CircuitOp circuit = getOperation();
 
-  /// The design-under-test (DUT).  This is kept up-to-date by the pass as the
-  /// DUT changes due to internal logic.
-  FModuleOp dut;
-
   /// The wrapper module that is created inside the DUT to house all its logic.
   FModuleOp wrapper;
 
@@ -131,41 +128,19 @@ void InjectDUTHierarchy::runOnOperation() {
   if (!wrapperName)
     return markAllAnalysesPreserved();
 
-  // TODO: Combine this logic with GrandCentral and other places that need to
-  // find the DUT.  Consider changing the MarkDUTAnnotation scattering to put
-  // this information on the Circuit so that we don't have to dig through all
-  // the modules to find the DUT.
-  for (auto mod : circuit.getOps<FModuleOp>()) {
-    if (!AnnotationSet::hasAnnotation(mod, dutAnnoClass))
-      continue;
-    if (dut) {
-      auto diag = emitError(mod.getLoc())
-                  << "is marked with a '" << dutAnnoClass << "', but '"
-                  << dut.getModuleName()
-                  << "' also had such an annotation (this should "
-                     "be impossible!)";
-      diag.attachNote(dut.getLoc()) << "the first DUT was found here";
-      error = true;
-      break;
-    }
-    dut = mod;
-  }
-
-  if (error)
-    return signalPassFailure();
-
-  // If a hierarchy annotation was provided, ensure that a DUT annotation also
-  // exists.  The pass could silently ignore this case and do nothing, but it is
-  // better to provide an error.
-  if (wrapperName && !dut) {
+  // A DUT must exist in order to continue.  The pass could silently ignore this
+  // case and do nothing, but it is better to provide an error.
+  InstanceInfo &instanceInfo = getAnalysis<InstanceInfo>();
+  if (!instanceInfo.getDut()) {
     emitError(circuit->getLoc())
         << "contained a '" << injectDUTHierarchyAnnoClass << "', but no '"
         << dutAnnoClass << "' was provided";
-    error = true;
+    return signalPassFailure();
   }
 
-  if (error)
-    return signalPassFailure();
+  /// The design-under-test (DUT).  This is kept up-to-date by the pass as the
+  /// DUT changes due to internal logic.
+  FModuleOp dut = cast<FModuleOp>(instanceInfo.getDut());
 
   // Create a module that will become the new DUT.  The original DUT is renamed
   // to become the wrapper.  This is done to save copying into the wrapper.

@@ -163,6 +163,11 @@ struct Context {
       moore::IntFormat defaultFormat = moore::IntFormat::Decimal,
       bool appendNewline = false);
 
+  /// Convert system function calls only have arity-1.
+  FailureOr<Value>
+  convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
+                          Location loc, Value value);
+
   /// Evaluate the constant value of an expression.
   slang::ConstantValue evaluateConstant(const slang::ast::Expression &expr);
 

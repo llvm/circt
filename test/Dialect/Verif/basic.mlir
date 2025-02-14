@@ -1,4 +1,4 @@
-// RUN: circt-opt %s | circt-opt | FileCheck %s
+// RUN: circt-opt --verify-roundtrip %s | FileCheck %s
 
 %true = hw.constant true
 %s = unrealized_conversion_cast to !ltl.sequence
@@ -65,6 +65,17 @@ verif.formal @FormalTestBody {} {
 }
 
 //===----------------------------------------------------------------------===//
+// Simulation Test
+//===----------------------------------------------------------------------===//
+
+verif.simulation @EmptySimulationTest {} {
+^bb0(%clock: !seq.clock, %init: i1):
+  %0 = hw.constant true
+  %1 = hw.constant 9001 : i42
+  verif.yield %0, %1 : i1, i42
+}
+
+//===----------------------------------------------------------------------===//
 // Contracts
 //===----------------------------------------------------------------------===//
 
@@ -87,26 +98,22 @@ verif.contract {}
 verif.contract {
   // CHECK: verif.require {{%.+}} : i1
   // CHECK: verif.require {{%.+}} if {{%.+}} : i1
-  // CHECK: verif.require {{%.+}} clock {{%.+}} : i1
   // CHECK: verif.require {{%.+}} label "foo" : i1
   // CHECK: verif.require {{%.+}} : !ltl.sequence
   // CHECK: verif.require {{%.+}} : !ltl.property
   verif.require %true : i1
   verif.require %true if %true : i1
-  verif.require %true clock %d : i1
   verif.require %true label "foo" : i1
   verif.require %s : !ltl.sequence
   verif.require %p : !ltl.property
 
   // CHECK: verif.ensure {{%.+}} : i1
   // CHECK: verif.ensure {{%.+}} if {{%.+}} : i1
-  // CHECK: verif.ensure {{%.+}} clock {{%.+}} : i1
   // CHECK: verif.ensure {{%.+}} label "foo" : i1
   // CHECK: verif.ensure {{%.+}} : !ltl.sequence
   // CHECK: verif.ensure {{%.+}} : !ltl.property
   verif.ensure %true : i1
   verif.ensure %true if %true : i1
-  verif.ensure %true clock %d : i1
   verif.ensure %true label "foo" : i1
   verif.ensure %s : !ltl.sequence
   verif.ensure %p : !ltl.property

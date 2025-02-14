@@ -8,7 +8,6 @@
 
 kanagawa.design @foo {
 kanagawa.container sym @D_up {
-  %this = kanagawa.this <@foo::@D_up>
   %d = kanagawa.path [
     #kanagawa.step<parent : !kanagawa.scoperef>,
     #kanagawa.step<parent : !kanagawa.scoperef>,
@@ -32,39 +31,31 @@ kanagawa.container sym @D_up {
   %clk_out_val = kanagawa.port.read %clk_out_ref : !kanagawa.portref<out i1>
 }
 kanagawa.container sym @C_up {
-  %this = kanagawa.this <@foo::@C_up>
   %d = kanagawa.container.instance @d, @D_up
 }
 kanagawa.container sym @B_up {
-  %this = kanagawa.this <@foo::@B_up>
   %c = kanagawa.container.instance @c, @C_up
   
 }
 
 kanagawa.container sym @A_up {
-  %this = kanagawa.this <@foo::@A_up>
   %b = kanagawa.container.instance @b, @B_up
 }
 
 kanagawa.container sym @Top {
-  %this = kanagawa.this <@foo::@Top>
   %a_down = kanagawa.container.instance @a_down, @A_down
   %a_up = kanagawa.container.instance @a_up, @A_up
 }
 kanagawa.container sym @A_down {
-  %this = kanagawa.this <@foo::@A_down>
   %b = kanagawa.container.instance @b, @B_down
 }
 kanagawa.container sym @B_down {
-  %this = kanagawa.this <@foo::@B_down>
   %c = kanagawa.container.instance @c, @C_down
 }
 kanagawa.container sym @C_down {
-  %this = kanagawa.this <@foo::@C_down>
   %d = kanagawa.container.instance @d, @D_down
 }
 kanagawa.container sym @D_down {
-  %this = kanagawa.this <@foo::@D_down>
   %clk = kanagawa.port.input "clk_in" sym @clk_in : i1
   %clk_out = kanagawa.port.output "clk_out" sym @clk_out : i1
   %clk.val = kanagawa.port.read %clk : !kanagawa.portref<in i1>

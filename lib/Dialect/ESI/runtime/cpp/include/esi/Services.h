@@ -28,6 +28,7 @@
 
 namespace esi {
 class AcceleratorConnection;
+class Engine;
 namespace services {
 
 /// Add a custom interface to a service client at a particular point in the
@@ -45,6 +46,7 @@ public:
 class Service {
 public:
   using Type = const std::type_info &;
+  Service(AcceleratorConnection &conn) : conn(conn) {}
   virtual ~Service() = default;
 
   virtual std::string getServiceSymbol() const = 0;
@@ -56,19 +58,21 @@ public:
   /// calling the `getService` method on `AcceleratorConnection` to get the
   /// global service, implying that the child service does not need to use the
   /// service it is replacing.
-  virtual Service *getChildService(AcceleratorConnection *conn,
-                                   Service::Type service, AppIDPath id = {},
+  virtual Service *getChildService(Service::Type service, AppIDPath id = {},
                                    std::string implName = {},
                                    ServiceImplDetails details = {},
                                    HWClientDetails clients = {});
 
   /// Get specialized port for this service to attach to the given appid path.
   /// Null returns mean nothing to attach.
-  virtual ServicePort *getPort(AppIDPath id, const BundleType *type,
-                               const std::map<std::string, ChannelPort &> &,
-                               AcceleratorConnection &) const {
+  virtual BundlePort *getPort(AppIDPath id, const BundleType *type) const {
     return nullptr;
   }
+
+  AcceleratorConnection &getConnection() const { return conn; }
+
+protected:
+  AcceleratorConnection &conn;
 };
 
 /// A service for which there are no standard services registered. Requires
@@ -76,13 +80,16 @@ public:
 /// the ones in StdServices.h.
 class CustomService : public Service {
 public:
-  CustomService(AppIDPath idPath, const ServiceImplDetails &details,
+  CustomService(AppIDPath idPath, AcceleratorConnection &,
+                const ServiceImplDetails &details,
                 const HWClientDetails &clients);
   virtual ~CustomService() = default;
 
   virtual std::string getServiceSymbol() const override {
     return serviceSymbol;
   }
+  virtual BundlePort *getPort(AppIDPath id,
+                              const BundleType *type) const override;
 
 protected:
   std::string serviceSymbol;
@@ -92,6 +99,7 @@ protected:
 /// Information about the Accelerator system.
 class SysInfo : public Service {
 public:
+  using Service::Service;
   virtual ~SysInfo() = default;
 
   virtual std::string getServiceSymbol() const override;
@@ -116,9 +124,7 @@ public:
     uint32_t size;
   };
 
-  MMIO(Context &ctxt, AppIDPath idPath, std::string implName,
-       const ServiceImplDetails &details, const HWClientDetails &clients);
-  MMIO() = default;
+  MMIO(AcceleratorConnection &, const HWClientDetails &clients);
   virtual ~MMIO() = default;
 
   /// Read a 64-bit value from the global MMIO space.
@@ -133,8 +139,7 @@ public:
 
   /// If the service is a MMIO service, return a region of the MMIO space which
   /// peers into ours.
-  virtual Service *getChildService(AcceleratorConnection *conn,
-                                   Service::Type service, AppIDPath id = {},
+  virtual Service *getChildService(Service::Type service, AppIDPath id = {},
                                    std::string implName = {},
                                    ServiceImplDetails details = {},
                                    HWClientDetails clients = {}) override;
@@ -142,9 +147,8 @@ public:
   virtual std::string getServiceSymbol() const override;
 
   /// Get a MMIO region port for a particular region descriptor.
-  virtual ServicePort *getPort(AppIDPath id, const BundleType *type,
-                               const std::map<std::string, ChannelPort &> &,
-                               AcceleratorConnection &) const override;
+  virtual BundlePort *getPort(AppIDPath id,
+                              const BundleType *type) const override;
 
 private:
   /// MMIO base address table.
@@ -193,6 +197,9 @@ private:
 
 class HostMem : public Service {
 public:
+  static constexpr std::string_view StdName = "esi.service.std.hostmem";
+
+  using Service::Service;
   virtual ~HostMem() = default;
   virtual std::string getServiceSymbol() const override;
 
@@ -200,9 +207,19 @@ public:
   /// deconstructed.
   struct HostMemRegion {
     virtual ~HostMemRegion() = default;
+    /// Get a pointer to the host memory.
     virtual void *getPtr() const = 0;
+    /// Sometimes the pointer the device sees is different from the pointer the
+    /// host sees. Call this functon to get the device pointer.
+    virtual void *getDevicePtr() const { return getPtr(); }
     operator void *() const { return getPtr(); }
     virtual std::size_t getSize() const = 0;
+    /// Flush the memory region to ensure that the device sees the latest
+    /// contents. Because some platforms require it before DMA transactions, it
+    /// is recommended to call this before any DMA on all platforms. On
+    /// platforms which don't require it, it is a cheap no-op virtual method
+    /// call.
+    virtual void flush() {}
   };
 
   /// Options for allocating host memory.
@@ -234,22 +251,20 @@ public:
 /// Service for calling functions.
 class FuncService : public Service {
 public:
-  FuncService(AcceleratorConnection *acc, AppIDPath id,
-              const std::string &implName, ServiceImplDetails details,
+  FuncService(AppIDPath id, AcceleratorConnection &, ServiceImplDetails details,
               HWClientDetails clients);
 
   virtual std::string getServiceSymbol() const override;
-  virtual ServicePort *getPort(AppIDPath id, const BundleType *type,
-                               const std::map<std::string, ChannelPort &> &,
-                               AcceleratorConnection &) const override;
+  virtual BundlePort *getPort(AppIDPath id,
+                              const BundleType *type) const override;
 
   /// A function call which gets attached to a service port.
   class Function : public ServicePort {
     friend class FuncService;
-    Function(AppID id, const std::map<std::string, ChannelPort &> &channels);
+    using ServicePort::ServicePort;
 
   public:
-    static Function *get(AppID id, WriteChannelPort &arg,
+    static Function *get(AppID id, BundleType *type, WriteChannelPort &arg,
                          ReadChannelPort &result);
 
     void connect();
@@ -257,16 +272,18 @@ public:
 
     virtual std::optional<std::string> toString() const override {
       const esi::Type *argType =
-          dynamic_cast<const ChannelType *>(arg.getType())->getInner();
+          dynamic_cast<const ChannelType *>(type->findChannel("arg").first)
+              ->getInner();
       const esi::Type *resultType =
-          dynamic_cast<const ChannelType *>(result.getType())->getInner();
+          dynamic_cast<const ChannelType *>(type->findChannel("result").first)
+              ->getInner();
       return "function " + resultType->getID() + "(" + argType->getID() + ")";
     }
 
   private:
     std::mutex callMutex;
-    WriteChannelPort &arg;
-    ReadChannelPort &result;
+    WriteChannelPort *arg;
+    ReadChannelPort *result;
   };
 
 private:
@@ -276,22 +293,21 @@ private:
 /// Service for servicing function calls from the accelerator.
 class CallService : public Service {
 public:
-  CallService(AcceleratorConnection *acc, AppIDPath id, std::string implName,
-              ServiceImplDetails details, HWClientDetails clients);
+  CallService(AcceleratorConnection &acc, AppIDPath id,
+              ServiceImplDetails details);
 
   virtual std::string getServiceSymbol() const override;
-  virtual ServicePort *getPort(AppIDPath id, const BundleType *type,
-                               const std::map<std::string, ChannelPort &> &,
-                               AcceleratorConnection &) const override;
+  virtual BundlePort *getPort(AppIDPath id,
+                              const BundleType *type) const override;
 
   /// A function call which gets attached to a service port.
   class Callback : public ServicePort {
     friend class CallService;
-    Callback(AcceleratorConnection &acc, AppID id,
-             const std::map<std::string, ChannelPort &> &channels);
+    Callback(AcceleratorConnection &acc, AppID id, const BundleType *,
+             PortMap channels);
 
   public:
-    static Callback *get(AcceleratorConnection &acc, AppID id,
+    static Callback *get(AcceleratorConnection &acc, AppID id, BundleType *type,
                          WriteChannelPort &result, ReadChannelPort &arg);
 
     /// Connect a callback to code which will be executed when the accelerator
@@ -303,15 +319,17 @@ public:
 
     virtual std::optional<std::string> toString() const override {
       const esi::Type *argType =
-          dynamic_cast<const ChannelType *>(arg.getType())->getInner();
+          dynamic_cast<const ChannelType *>(type->findChannel("arg").first)
+              ->getInner();
       const esi::Type *resultType =
-          dynamic_cast<const ChannelType *>(result.getType())->getInner();
+          dynamic_cast<const ChannelType *>(type->findChannel("result").first)
+              ->getInner();
       return "callback " + resultType->getID() + "(" + argType->getID() + ")";
     }
 
   private:
-    ReadChannelPort &arg;
-    WriteChannelPort &result;
+    ReadChannelPort *arg;
+    WriteChannelPort *result;
     AcceleratorConnection &acc;
   };
 

@@ -1,7 +1,6 @@
 // RUN: kanagawatool --hi --post-kanagawa-ir %s | FileCheck %s
 
 // CHECK-LABEL:   kanagawa.class sym @ToHandshake {
-// CHECK:           %[[VAL_0:.*]] = kanagawa.this <@foo::@ToHandshake>
 // CHECK:           kanagawa.method @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32, %[[VAL_3:.*]]: i1) -> i32 {
 // CHECK:             %[[VAL_4:.*]]:3 = kanagawa.sblock.isolated () -> (i32, i32, i32) {
 // CHECK:               %[[VAL_5:.*]] = arith.constant 2 : i32
@@ -48,7 +47,6 @@
 
 kanagawa.design @foo {
 kanagawa.class sym @ToHandshake {
-  %this = kanagawa.this <@foo::@ToHandshake>
   kanagawa.method @foo(%a: i32, %b: i32, %c: i1) -> i32 {
     %c2_i32 = arith.constant 2 : i32
     %c1 = arith.constant 1 : i32

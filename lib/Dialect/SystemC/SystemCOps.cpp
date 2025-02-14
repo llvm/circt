@@ -171,7 +171,7 @@ ParseResult SCModuleOp::parse(OpAsmParser &parser, OperationState &result) {
   result.addAttribute(SCModuleOp::getFunctionTypeAttrName(result.name),
                       functionType);
 
-  mlir::function_interface_impl::addArgAndResultAttrs(
+  mlir::call_interface_impl::addArgAndResultAttrs(
       parser.getBuilder(), result, entryArgs, resultAttrs,
       SCModuleOp::getArgAttrsAttrName(result.name),
       SCModuleOp::getResAttrsAttrName(result.name));
@@ -855,7 +855,7 @@ void FuncOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   if (argAttrs.empty())
     return;
   assert(type.getNumInputs() == argAttrs.size());
-  mlir::function_interface_impl::addArgAndResultAttrs(
+  mlir::call_interface_impl::addArgAndResultAttrs(
       odsBuilder, odsState, argAttrs,
       /*resultAttrs=*/std::nullopt, FuncOp::getArgAttrsAttrName(odsState.name),
       FuncOp::getResAttrsAttrName(odsState.name));
@@ -893,7 +893,7 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   // Parse the function signature.
   mlir::SMLoc signatureLocation = parser.getCurrentLocation();
   bool isVariadic = false;
-  if (mlir::function_interface_impl::parseFunctionSignature(
+  if (mlir::function_interface_impl::parseFunctionSignatureWithArguments(
           parser, false, entryArgs, isVariadic, resultTypes, resultAttrs))
     return failure();
 
@@ -935,7 +935,7 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // Add the attributes to the function arguments.
   assert(resultAttrs.size() == resultTypes.size());
-  mlir::function_interface_impl::addArgAndResultAttrs(
+  mlir::call_interface_impl::addArgAndResultAttrs(
       builder, result, entryArgs, resultAttrs,
       FuncOp::getArgAttrsAttrName(result.name),
       FuncOp::getResAttrsAttrName(result.name));

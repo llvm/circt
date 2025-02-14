@@ -52,6 +52,8 @@ struct ConvertHWToBTOR2Pass
       public hw::TypeOpVisitor<ConvertHWToBTOR2Pass>,
       public verif::Visitor<ConvertHWToBTOR2Pass> {
 public:
+  using verif::Visitor<ConvertHWToBTOR2Pass>::visitVerif;
+
   ConvertHWToBTOR2Pass(raw_ostream &os) : os(os) {}
   // Executes the pass
   void runOnOperation() override;
@@ -711,6 +713,14 @@ public:
     // Check for special cases where hw doesn't align with btor syntax
     if (pred == "ne")
       pred = "neq";
+    else if (pred == "ule")
+      pred = "ulte";
+    else if (pred == "sle")
+      pred = "slte";
+    else if (pred == "uge")
+      pred = "ugte";
+    else if (pred == "sge")
+      pred = "sgte";
 
     // Width of result is always 1 for comparison
     genSort("bitvec", 1);
@@ -835,14 +845,8 @@ public:
   void visitVerif(verif::AssumeOp op) { visitAssumeLike(op); }
   void visitVerif(verif::ClockedAssumeOp op) { visitAssumeLike(op); }
 
-  // Cover is not supported in btor2
-  void visitVerif(verif::CoverOp op) {
-    op->emitError("Cover is not supported in btor2!");
-    return signalPassFailure();
-  }
-
-  void visitVerif(verif::ClockedCoverOp op) {
-    op->emitError("Cover is not supported in btor2!");
+  void visitUnhandledVerif(Operation *op) {
+    op->emitError("not supported in btor2!");
     return signalPassFailure();
   }
 

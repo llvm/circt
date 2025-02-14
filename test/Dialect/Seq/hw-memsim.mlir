@@ -445,3 +445,29 @@ hw.module.generated @ReadWriteWithHighWriteLatency, @FIRRTLMem(in %rw_addr: i4, 
 // CHECK: [[TMP:%.+]] = comb.and [[WRITE_WMODE_3R]], %true
 // CHECK: [[WCOND:%.+]] comb.and [[WRITE_EN_3R]], [[TMP]]
 // CHECK: [[WPTR:%.+]] = sv.array_index_inout [[MEM]][[[WRITE_ADDR_3R]]]
+
+emit.fragment @Fragment {}
+hw.module.generated @TestFragment, @FIRRTLMem(
+  in %ro_addr_0: i4,
+  in %ro_en_0: i1,
+  in %ro_clock_0: i1,
+  out ro_data_0: i16
+) attributes {
+  depth = 10 : i64,
+  numReadPorts = 1 : ui32,
+  numReadWritePorts = 0 : ui32,
+  numWritePorts = 0 : ui32,
+  readLatency = 0 : ui32,
+  readUnderWrite = 0 : i32,
+  width = 16 : ui32,
+  writeClockIDs = [],
+  writeLatency = 1 : ui32,
+  writeUnderWrite = 0 : i32,
+  initFilename = "",
+  initIsBinary = false,
+  initIsInline = false,
+  emit.fragments = [@Fragment]
+}
+
+// CHECK-LABEL: hw.module private @TestFragment
+// CHECK-SAME:    emit.fragments = [@Fragment]

@@ -40,6 +40,35 @@ firrtl.module @Intrinsics(in %ui : !firrtl.uint, in %clock: !firrtl.clock, in %u
   %p = firrtl.int.generic "params" <FORMAT: none = "foobar"> : () -> !firrtl.bundle<x: uint<1>>
   %po = firrtl.int.generic "params_and_operand" <X: i64 = 123> %ui1 : (!firrtl.uint<1>) -> !firrtl.clock
   firrtl.int.generic "inputs" %clock, %ui1, %clock : (!firrtl.clock, !firrtl.uint<1>, !firrtl.clock) -> ()
+
+  %val = firrtl.wire : !firrtl.uint<1>
+  // CHECK: firrtl.view "View"
+  // CHECK-SAME: <{
+  // CHECK-SAME:     elements = [
+  // CHECK-SAME:       {
+  // CHECK-SAME:         class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+  // CHECK-SAME:         name = "baz"
+  // CHECK-SAME:       },
+  // CHECK-SAME:       {
+  // CHECK-SAME:         class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+  // CHECK-SAME:         name = "qux"
+  // CHECK-SAME:       }
+  // CHECK-SAME:     ]
+  // CHECK-SAME: }>, %val, %val : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.view "View", <{
+    class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+    defName = "Bar",
+    elements = [
+      {
+        class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        name = "baz"
+      },
+      {
+        class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        name = "qux"
+      }
+    ]
+  }>, %val, %val : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @FPGAProbe
@@ -132,5 +161,19 @@ firrtl.formal @myTestA, @Top {}
 firrtl.formal @myTestB, @Top {bound = 42 : i19}
 // CHECK: firrtl.formal @myTestC, @Top {} attributes {foo}
 firrtl.formal @myTestC, @Top {} attributes {foo}
+
+// CHECK-LABEL: firrtl.module @Contracts
+firrtl.module @Contracts(in %a: !firrtl.uint<42>, in %b: !firrtl.bundle<x: uint<1337>>) {
+  // CHECK: firrtl.contract {
+  // CHECK: }
+  firrtl.contract {}
+
+  // CHECK: {{%.+}}:2 = firrtl.contract %a, %b : !firrtl.uint<42>, !firrtl.bundle<x: uint<1337>> {
+  // CHECK: ^bb0(%arg0: !firrtl.uint<42>, %arg1: !firrtl.bundle<x: uint<1337>>):
+  // CHECK: }
+  firrtl.contract %a, %b : !firrtl.uint<42>, !firrtl.bundle<x: uint<1337>> {
+  ^bb0(%arg0: !firrtl.uint<42>, %arg1: !firrtl.bundle<x: uint<1337>>):
+  }
+}
 
 }

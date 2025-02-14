@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/ESI/ESIPasses.h"
 #include "circt/Dialect/ESI/ESITypes.h"
 
@@ -42,14 +43,9 @@ void ESIVerifyConnectionsPass::runOnOperation() {
           error.attachNote(user->getLoc()) << "bundle used here";
         signalPassFailure();
 
-      } else if (isa<ChannelType>(v.getType())) {
-        if (std::distance(v.getUses().begin(), v.getUses().end()) <= 1)
-          continue;
-        mlir::InFlightDiagnostic error =
-            op->emitError("channels must have at most one use");
-        for (Operation *user : v.getUsers())
-          error.attachNote(user->getLoc()) << "channel used here";
-        signalPassFailure();
+      } else if (auto cv = dyn_cast<mlir::TypedValue<ChannelType>>(v)) {
+        if (failed(ChannelType::verifyChannel(cv)))
+          signalPassFailure();
       }
   });
 }

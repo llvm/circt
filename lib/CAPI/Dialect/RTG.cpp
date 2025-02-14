@@ -32,8 +32,31 @@ bool rtgTypeIsASequence(MlirType type) {
   return isa<SequenceType>(unwrap(type));
 }
 
-MlirType rtgSequenceTypeGet(MlirContext ctxt) {
-  return wrap(SequenceType::get(unwrap(ctxt)));
+MlirType rtgSequenceTypeGet(MlirContext ctxt, intptr_t numElements,
+                            MlirType const *elementTypes) {
+  SmallVector<Type> types;
+  for (unsigned i = 0; i < numElements; ++i)
+    types.emplace_back(unwrap(elementTypes[i]));
+  return wrap(SequenceType::get(unwrap(ctxt), types));
+}
+
+unsigned rtgSequenceTypeGetNumElements(MlirType type) {
+  return cast<SequenceType>(unwrap(type)).getElementTypes().size();
+}
+
+MlirType rtgSequenceTypeGetElement(MlirType type, unsigned i) {
+  return wrap(cast<SequenceType>(unwrap(type)).getElementTypes()[i]);
+}
+
+// RandomizedSequenceType
+//===----------------------------------------------------------------------===//
+
+bool rtgTypeIsARandomizedSequence(MlirType type) {
+  return isa<RandomizedSequenceType>(unwrap(type));
+}
+
+MlirType rtgRandomizedSequenceTypeGet(MlirContext ctxt) {
+  return wrap(RandomizedSequenceType::get(unwrap(ctxt)));
 }
 
 // LabelType
@@ -81,4 +104,41 @@ MlirType rtgDictTypeGet(MlirContext ctxt, intptr_t numEntries,
     entries.emplace_back(entry);
   }
   return wrap(DictType::get(unwrap(ctxt), entries));
+}
+
+//===----------------------------------------------------------------------===//
+// Attribute API.
+//===----------------------------------------------------------------------===//
+
+bool rtgAttrIsALabelVisibilityAttr(MlirAttribute attr) {
+  return isa<LabelVisibilityAttr>(unwrap(attr));
+}
+
+RTGLabelVisibility rtgLabelVisibilityAttrGetValue(MlirAttribute attr) {
+  auto convert = [](LabelVisibility visibility) {
+    switch (visibility) {
+    case LabelVisibility::local:
+      return RTG_LABEL_VISIBILITY_LOCAL;
+    case LabelVisibility::global:
+      return RTG_LABEL_VISIBILITY_GLOBAL;
+    case LabelVisibility::external:
+      return RTG_LABEL_VISIBILITY_EXTERNAL;
+    }
+  };
+  return convert(cast<LabelVisibilityAttr>(unwrap(attr)).getValue());
+}
+
+MlirAttribute rtgLabelVisibilityAttrGet(MlirContext ctxt,
+                                        RTGLabelVisibility visibility) {
+  auto convert = [](RTGLabelVisibility visibility) {
+    switch (visibility) {
+    case RTG_LABEL_VISIBILITY_LOCAL:
+      return LabelVisibility::local;
+    case RTG_LABEL_VISIBILITY_GLOBAL:
+      return LabelVisibility::global;
+    case RTG_LABEL_VISIBILITY_EXTERNAL:
+      return LabelVisibility::external;
+    }
+  };
+  return wrap(LabelVisibilityAttr::get(unwrap(ctxt), convert(visibility)));
 }

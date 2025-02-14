@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "circt/Dialect/LLHD/Transforms/Passes.h"
+#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Visitors.h"
@@ -23,7 +23,7 @@
 namespace circt {
 namespace llhd {
 #define GEN_PASS_DEF_PROCESSLOWERING
-#include "circt/Dialect/LLHD/Transforms/Passes.h.inc"
+#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h.inc"
 } // namespace llhd
 } // namespace circt
 
@@ -159,8 +159,3 @@ void ProcessLoweringPass::runOnOperation() {
   });
 }
 } // namespace
-
-std::unique_ptr<OperationPass<ModuleOp>>
-circt::llhd::createProcessLoweringPass() {
-  return std::make_unique<ProcessLoweringPass>();
-}

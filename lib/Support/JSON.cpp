@@ -101,7 +101,7 @@ Attribute circt::convertJSONToAttribute(MLIRContext *context,
 
   // Float
   if (auto a = value.getAsNumber())
-    return FloatAttr::get(mlir::FloatType::getF64(context), *a);
+    return FloatAttr::get(mlir::Float64Type::get(context), *a);
 
   // Boolean
   if (auto a = value.getAsBoolean())

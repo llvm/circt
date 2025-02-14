@@ -37,8 +37,14 @@ class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
 class HardwareDeclOp<string mnemonic, list <Trait> traits = []> :
   ReferableDeclOp<mnemonic, traits # [
     ParentOneOf<[
-      "firrtl::FModuleOp", "firrtl::LayerBlockOp",
-      "firrtl::WhenOp", "firrtl::MatchOp", "sv::IfDefOp"]>]> {}
+      "firrtl::ContractOp",
+      "firrtl::FModuleOp",
+      "firrtl::LayerBlockOp",
+      "firrtl::MatchOp",
+      "firrtl::WhenOp",
+      "sv::IfDefOp",
+    ]>
+  ]> {}
 
 def InstanceOp : HardwareDeclOp<"instance", [
     DeclareOpInterfaceMethods<FInstanceLike>,
@@ -648,6 +654,27 @@ def WireOp : HardwareDeclOp<"wire", [
     (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict) `:`
     qualified(type($result)) (`,` qualified(type($ref))^)?
   }];
+}
+
+def ContractOp : FIRRTLOp<"contract", [
+  SingleBlock,
+  NoTerminator,
+  AllTypesMatch<["inputs", "outputs"]>,
+]> {
+  let summary = "Contract declaration";
+  let description = [{
+    The `firrtl.contract` operation defines values that adhere to a set of
+    formal assertions and assumptions outlined in the contract's body.
+
+    See the `verif.contract` operation for more details.
+  }];
+  let arguments = (ins Variadic<PassiveType>:$inputs);
+  let results = (outs Variadic<PassiveType>:$outputs);
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{
+    ($inputs^ `:` type($inputs))? attr-dict-with-keyword $body
+  }];
+  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//

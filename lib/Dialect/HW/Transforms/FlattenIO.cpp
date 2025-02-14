@@ -228,6 +228,18 @@ public:
       auto result = builder.create<hw::StructCreateOp>(loc, type, inputs);
       return result.getResult();
     });
+
+    // In the presence of hw.extern_module which takes struct arguments, we may
+    // have materialized struct explodes for said arguments (say, e.g., if the
+    // parent module of the hw.instance had structs in its input, and feeds
+    // these structs to the hw.instance).
+    // These struct explodes needs to be converted back to the original struct,
+    // which persist beyond the conversion.
+    addSourceMaterialization([](OpBuilder &builder, hw::StructType type,
+                                ValueRange inputs, Location loc) {
+      auto result = builder.create<hw::StructCreateOp>(loc, type, inputs);
+      return result.getResult();
+    });
   }
 };
 

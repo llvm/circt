@@ -1921,7 +1921,7 @@ OpFoldResult MuxOp::fold(FoldAdaptor adaptor) {
     return {};
 
   // mux (c, b, b) -> b
-  if (getTrueValue() == getFalseValue())
+  if (getTrueValue() == getFalseValue() && getTrueValue() != getResult())
     return getTrueValue();
   if (auto tv = adaptor.getTrueValue())
     if (tv == adaptor.getFalseValue())
@@ -2183,6 +2183,9 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
   // `mux(cond, mux(cond2, a, b), a)` -> `mux(~cond|cond2, a, b)`
   // `mux(cond, mux(cond2, b, a), a)` -> `mux(~cond|~cond2, a, b)`
   if (auto subMux = dyn_cast<MuxOp>(subExpr)) {
+    if (subMux == op)
+      return false;
+
     Value otherValue;
     Value subCond = subMux.getCond();
 
@@ -2514,8 +2517,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
     }
   }
 
-  if (auto falseMux =
-          dyn_cast_or_null<MuxOp>(op.getFalseValue().getDefiningOp())) {
+  if (auto falseMux = op.getFalseValue().getDefiningOp<MuxOp>();
+      falseMux && falseMux != op) {
     // mux(selector, x, mux(selector, y, z) = mux(selector, x, z)
     if (op.getCond() == falseMux.getCond()) {
       replaceOpWithNewOpAndCopyName<MuxOp>(
@@ -2529,8 +2532,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
       return success();
   }
 
-  if (auto trueMux =
-          dyn_cast_or_null<MuxOp>(op.getTrueValue().getDefiningOp())) {
+  if (auto trueMux = op.getTrueValue().getDefiningOp<MuxOp>();
+      trueMux && trueMux != op) {
     // mux(selector, mux(selector, a, b), c) = mux(selector, a, c)
     if (op.getCond() == trueMux.getCond()) {
       replaceOpWithNewOpAndCopyName<MuxOp>(
@@ -2548,7 +2551,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
   if (auto trueMux = dyn_cast_or_null<MuxOp>(op.getTrueValue().getDefiningOp()),
       falseMux = dyn_cast_or_null<MuxOp>(op.getFalseValue().getDefiningOp());
       trueMux && falseMux && trueMux.getCond() == falseMux.getCond() &&
-      trueMux.getTrueValue() == falseMux.getTrueValue()) {
+      trueMux.getTrueValue() == falseMux.getTrueValue() && trueMux != op &&
+      falseMux != op) {
     auto subMux = rewriter.create<MuxOp>(
         rewriter.getFusedLoc({trueMux.getLoc(), falseMux.getLoc()}),
         op.getCond(), trueMux.getFalseValue(), falseMux.getFalseValue());
@@ -2562,7 +2566,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
   if (auto trueMux = dyn_cast_or_null<MuxOp>(op.getTrueValue().getDefiningOp()),
       falseMux = dyn_cast_or_null<MuxOp>(op.getFalseValue().getDefiningOp());
       trueMux && falseMux && trueMux.getCond() == falseMux.getCond() &&
-      trueMux.getFalseValue() == falseMux.getFalseValue()) {
+      trueMux.getFalseValue() == falseMux.getFalseValue() && trueMux != op &&
+      falseMux != op) {
     auto subMux = rewriter.create<MuxOp>(
         rewriter.getFusedLoc({trueMux.getLoc(), falseMux.getLoc()}),
         op.getCond(), trueMux.getTrueValue(), falseMux.getTrueValue());
@@ -2577,7 +2582,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
       falseMux = dyn_cast_or_null<MuxOp>(op.getFalseValue().getDefiningOp());
       trueMux && falseMux &&
       trueMux.getTrueValue() == falseMux.getTrueValue() &&
-      trueMux.getFalseValue() == falseMux.getFalseValue()) {
+      trueMux.getFalseValue() == falseMux.getFalseValue() && trueMux != op &&
+      falseMux != op) {
     auto subMux = rewriter.create<MuxOp>(
         rewriter.getFusedLoc(
             {op.getLoc(), trueMux.getLoc(), falseMux.getLoc()}),

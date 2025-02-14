@@ -14,11 +14,15 @@
 #ifndef CIRCT_DIALECT_RTGTEST_IR_RTGTESTDIALECT_H
 #define CIRCT_DIALECT_RTGTEST_IR_RTGTESTDIALECT_H
 
+#include "circt/Dialect/RTG/IR/RTGDialect.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
 // Pull in the Dialect definition.
 #include "circt/Dialect/RTGTest/IR/RTGTestDialect.h.inc"
+
+// Pull in all enum type definitions and utility function declarations.
+#include "circt/Dialect/RTGTest/IR/RTGTestEnums.h.inc"
 
 #endif // CIRCT_DIALECT_RTGTEST_IR_RTGTESTDIALECT_H

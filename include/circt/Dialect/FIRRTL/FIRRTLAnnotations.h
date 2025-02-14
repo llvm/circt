@@ -436,20 +436,6 @@ struct PortAnnoTarget : public AnnoTarget {
   }
 };
 
-//===----------------------------------------------------------------------===//
-// Utilities for Specific Annotations
-//
-// TODO: Remove these in favor of first-class annotations.
-//===----------------------------------------------------------------------===//
-
-/// Utility that searches for a MarkDUTAnnotation on a specific module, `mod`,
-/// and tries to update a design-under-test (DUT), `dut`, with this module if
-/// the module is the DUT.  This function returns success if either no DUT was
-/// found or if the DUT was found and a previous DUT was not set (if `dut` is
-/// null).  This returns failure if a DUT was found and a previous DUT was set.
-/// This function generates an error message in the failure case.
-LogicalResult extractDUT(FModuleLike mod, FModuleLike &dut);
-
 } // namespace firrtl
 } // namespace circt
 

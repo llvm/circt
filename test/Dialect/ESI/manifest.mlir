@@ -55,7 +55,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 
 // HIER-LABEL:  esi.manifest.compressed <"{{.+}}">
 // HIER-LABEL:  esi.manifest.hier_root @top {
-// HIER-NEXT:     esi.manifest.service_impl #esi.appid<"cosim"> svc @HostComms by "cosim" with {} {
+// HIER-NEXT:     esi.manifest.service_impl #esi.appid<"cosim"> svc @HostComms by "cosim" engine with {} {
 // HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_tohw">] req <@HostComms::@Recv>(!esi.bundle<[!esi.channel<i8> to "recv"]>) channels {recv = {name = "loopback_inst[0].loopback_tohw.recv", type = "cosim"}}
 // HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_fromhw">] req <@HostComms::@Send>(!esi.bundle<[!esi.channel<i8> from "send"]>) channels {send = {name = "loopback_inst[0].loopback_fromhw.send", type = "cosim"}}
 // HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_fromhw_i0">] req <@HostComms::@SendI0>(!esi.bundle<[!esi.channel<i0> from "send"]>) channels {send = {name = "loopback_inst[0].loopback_fromhw_i0.send", type = "cosim"}}
@@ -111,7 +111,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:        }
 // CHECK-NEXT:      ],
 
-// CHECK-LABEL:     "services": [
+// CHECK-LABEL:     "engines": [
 // CHECK-NEXT:        {
 // CHECK-NEXT:          "appID": {
 // CHECK-NEXT:            "name": "cosim"

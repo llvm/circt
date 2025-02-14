@@ -164,7 +164,7 @@ func.func @funcCallOp(%arg0: i32) -> (i32, i32) {
   // CHECK-NEXT: [[V1:%.+]] = llvm.extractvalue [[V0]][0] : !llvm.struct<(i32, i32)>
   // CHECK-NEXT: [[V2:%.+]] = llvm.extractvalue [[V0]][1] : !llvm.struct<(i32, i32)>
   %0:2 = func.call @dummyFuncCallee(%arg0) : (i32) -> (i32, i32)
-  // CHECK-NEXT: [[V3:%.+]] = llvm.mlir.undef : !llvm.struct<(i32, i32)>
+  // CHECK-NEXT: [[V3:%.+]] = llvm.mlir.poison : !llvm.struct<(i32, i32)>
   // CHECK-NEXT: [[V4:%.+]] = llvm.insertvalue [[V1]], [[V3]][0] : !llvm.struct<(i32, i32)>
   // CHECK-NEXT: [[V5:%.+]] = llvm.insertvalue [[V2]], [[V4]][1] : !llvm.struct<(i32, i32)>
   // CHECK-NEXT: llvm.return [[V5]] :
@@ -179,12 +179,17 @@ func.func @seqClocks(%clk1: !seq.clock, %clk2: !seq.clock) -> !seq.clock {
   %1 = seq.from_clock %clk2
   %2 = arith.xori %0, %1 : i1
   %3 = seq.to_clock %2
-  return %3 : !seq.clock
+  %4 = seq.clock_inv %3
+  %5 = seq.clock_gate %4, %0
+  return %5 : !seq.clock
 }
 // CHECK-LABEL: llvm.func @seqClocks
 //  CHECK-SAME: ([[CLK1:%.+]]: i1, [[CLK2:%.+]]: i1)
 //       CHECK: [[RES:%.+]] = llvm.xor [[CLK1]], [[CLK2]]
-//       CHECK: llvm.return [[RES]] : i1
+//       CHECK: [[TRUE:%.+]] = llvm.mlir.constant(true) : i1
+//       CHECK: [[RES1:%.+]] = llvm.xor [[RES]], [[TRUE]] : i1
+//       CHECK: [[RES2:%.+]] = llvm.and [[RES1]], [[CLK1]] : i1
+//       CHECK: llvm.return [[RES2]] : i1
 
 // CHECK-LABEL: llvm.func @ReadAggregates(
 // CHECK-SAME: %arg0: !llvm.ptr

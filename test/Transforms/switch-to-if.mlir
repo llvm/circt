@@ -55,3 +55,51 @@ module {
     return %0 : i32
   }
 }
+
+// Switch to nested if-else when the yielded result is empty
+
+// -----
+
+module {
+// CHECK-LABEL:   func.func @main(
+// CHECK-SAME:                    %[[VAL_0:.*]]: index,
+// CHECK-SAME:                    %[[VAL_1:.*]]: memref<2xi32>,
+// CHECK-SAME:                    %[[VAL_2:.*]]: memref<2xi32>) {
+// CHECK:           %[[VAL_3:.*]] = arith.constant 1 : index
+// CHECK:           %[[VAL_4:.*]] = arith.addi %[[VAL_3]], %[[VAL_0]] : index
+// CHECK:           %[[VAL_5:.*]] = arith.constant 2 : index
+// CHECK:           %[[VAL_6:.*]] = arith.cmpi eq, %[[VAL_4]], %[[VAL_5]] : index
+// CHECK:           scf.if %[[VAL_6]] {
+// CHECK:             %[[VAL_7:.*]] = arith.constant 10 : i32
+// CHECK:             memref.store %[[VAL_7]], %[[VAL_1]]{{\[}}%[[VAL_3]]] : memref<2xi32>
+// CHECK:           } else {
+// CHECK:             %[[VAL_8:.*]] = arith.constant 5 : index
+// CHECK:             %[[VAL_9:.*]] = arith.cmpi eq, %[[VAL_4]], %[[VAL_8]] : index
+// CHECK:             scf.if %[[VAL_9]] {
+// CHECK:               %[[VAL_10:.*]] = arith.constant 20 : i32
+// CHECK:               memref.store %[[VAL_10]], %[[VAL_2]]{{\[}}%[[VAL_3]]] : memref<2xi32>
+// CHECK:             } else {
+// CHECK:             }
+// CHECK:           }
+// CHECK:           return
+// CHECK:         }
+  func.func @main(%arg0 : index, %arg1 : memref<2xi32>, %arg2 : memref<2xi32>) {
+    %one = arith.constant 1 : index
+    %cond = arith.addi %one, %arg0 : index
+    scf.index_switch %cond
+    case 2 {
+        %1 = arith.constant 10 : i32
+        memref.store %1, %arg1[%one] : memref<2xi32>
+        scf.yield
+    }
+    case 5 {
+        %2 = arith.constant 20 : i32
+        memref.store %2, %arg2[%one] : memref<2xi32>
+        scf.yield
+    }
+    default {
+        scf.yield
+    }
+    return
+  }
+}

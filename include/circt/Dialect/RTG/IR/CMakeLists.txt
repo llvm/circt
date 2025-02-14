@@ -18,7 +18,22 @@ mlir_tablegen(RTGTypeInterfaces.cpp.inc -gen-type-interface-defs)
 add_public_tablegen_target(CIRCTRTGTypeInterfacesIncGen)
 add_dependencies(circt-headers CIRCTRTGTypeInterfacesIncGen)
 
+mlir_tablegen(RTGAttrInterfaces.h.inc -gen-attr-interface-decls)
+mlir_tablegen(RTGAttrInterfaces.cpp.inc -gen-attr-interface-defs)
+add_public_tablegen_target(CIRCTRTGAttrInterfacesIncGen)
+add_dependencies(circt-headers CIRCTRTGAttrInterfacesIncGen)
+
 set(LLVM_TARGET_DEFINITIONS RTGISAAssemblyInterfaces.td)
+mlir_tablegen(RTGISAAssemblyAttrInterfaces.h.inc -gen-attr-interface-decls)
+mlir_tablegen(RTGISAAssemblyAttrInterfaces.cpp.inc -gen-attr-interface-defs)
+add_public_tablegen_target(CIRCTRTGISAAssemblyAttrInterfacesIncGen)
+add_dependencies(circt-headers CIRCTRTGISAAssemblyAttrInterfacesIncGen)
+
+mlir_tablegen(RTGISAAssemblyTypeInterfaces.h.inc -gen-type-interface-decls)
+mlir_tablegen(RTGISAAssemblyTypeInterfaces.cpp.inc -gen-type-interface-defs)
+add_public_tablegen_target(CIRCTRTGISAAssemblyTypeInterfacesIncGen)
+add_dependencies(circt-headers CIRCTRTGISAAssemblyTypeInterfacesIncGen)
+
 mlir_tablegen(RTGISAAssemblyOpInterfaces.h.inc -gen-op-interface-decls)
 mlir_tablegen(RTGISAAssemblyOpInterfaces.cpp.inc -gen-op-interface-defs)
 add_public_tablegen_target(CIRCTRTGISAAssemblyOpInterfacesIncGen)

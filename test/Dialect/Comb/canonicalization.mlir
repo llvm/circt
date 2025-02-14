@@ -1230,7 +1230,7 @@ hw.module @muxConstantsFold(in %cond: i1, out o: i25) {
 hw.module @muxCommon(in %cond: i1, in %cond2: i1,
                      in %arg0 : i32, in %arg1 : i32, in %arg2: i32, in %arg3: i32,
   out o1: i32, out o2: i32, out o3: i32, out o4: i32, 
-  out o5: i32, out orResult: i32, out o6: i32, out o7: i32) {
+  out o5: i32, out orResult: i32, out o6: i32, out o7: i32, out o8 : i1) {
   %allones = hw.constant -1 : i32
   %notArg0 = comb.xor %arg0, %allones : i32
 
@@ -1275,10 +1275,13 @@ hw.module @muxCommon(in %cond: i1, in %cond2: i1,
   %1 = comb.mux %cond, %arg1, %arg0 : i32
   %o7 = comb.mux %cond2, %1, %arg0 : i32
 
+  /// CHECK: [[O8:%.+]] = comb.mux [[O8]], [[O8]], [[O8]] : i1
+  %o8 = comb.mux %o8, %o8, %o8 : i1
+
   // CHECK: hw.output [[O1]], [[O2]], [[O3]], [[O4]], [[O5]], [[ORRESULT]],
-  // CHECK: [[O6]], [[O7]]
-  hw.output %o1, %o2, %o3, %o4, %o5, %orResult, %o6, %o7
-    : i32, i32, i32, i32, i32, i32, i32, i32
+  // CHECK: [[O6]], [[O7]], [[O8]]
+  hw.output %o1, %o2, %o3, %o4, %o5, %orResult, %o6, %o7, %o8
+    : i32, i32, i32, i32, i32, i32, i32, i32, i1
 }
 
 // CHECK-LABEL: @flatten_multi_use_and

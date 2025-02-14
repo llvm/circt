@@ -36,9 +36,10 @@ public:
             // Bit-vector bitwise
             BVNotOp, BVAndOp, BVOrOp, BVXOrOp,
             // Other bit-vector ops
-            ConcatOp, ExtractOp, RepeatOp, BVCmpOp,
+            ConcatOp, ExtractOp, RepeatOp, BVCmpOp, BV2IntOp,
             // Int arithmetic
             IntAddOp, IntMulOp, IntSubOp, IntDivOp, IntModOp, IntCmpOp,
+            Int2BVOp,
             // Core Ops
             EqOp, DistinctOp, IteOp,
             // Variable/symbol declaration
@@ -105,6 +106,7 @@ public:
   HANDLE(ExtractOp, Unhandled);
   HANDLE(RepeatOp, Unhandled);
   HANDLE(BVCmpOp, Unhandled);
+  HANDLE(BV2IntOp, Unhandled);
 
   // Int arithmetic
   HANDLE(IntAddOp, Unhandled);
@@ -114,6 +116,7 @@ public:
   HANDLE(IntModOp, Unhandled);
 
   HANDLE(IntCmpOp, Unhandled);
+  HANDLE(Int2BVOp, Unhandled);
 
   HANDLE(EqOp, Unhandled);
   HANDLE(DistinctOp, Unhandled);

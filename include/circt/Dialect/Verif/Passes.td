@@ -42,4 +42,41 @@ def LowerFormalToHWPass : Pass<"lower-formal-to-hw", "mlir::ModuleOp"> {
   }];
 }
 
+def LowerContractsPass : Pass<"lower-contracts", "mlir::ModuleOp"> {
+  let summary = "Lower contracts into formal tests";
+  let description = [{
+    For `hw.module` ops containing any `verif.contract` ops, apply the
+    contracts in the `hw.module` body and emit a `verif.formal` op that checks
+    each applied contract.
+
+    Contracts are checked by turning `require`s into `assume`s and `ensure`s
+    into `asserts`s.  Inputs to the `hw.module` op are replaced with
+    `verif.symbolic_value` ops and other contracts are assumed to hold by
+    inlining the contract body.
+
+    Contracts are applied by turning `require`s into `assert`s and `ensure`s
+    into `assume`s in the original `hw.module` op body.  Results of the
+    contract are replaced with `verif.symbolic_value` ops.  In some cases,
+    using the `SimplifyAssumeEqPass` after lowering contracts and before
+    canonicalization and cse can result in a greatly simplified `hw.module` op
+    body.
+  }];
+}
+
+def SimplifyAssumeEqPass : Pass<"simplify-assume-eq", "hw::HWModuleOp"> {
+  let summary = "Use assume equal statements to simplify symbolic values";
+  let description = [{
+    When a symbolic value is assumed equal to another value, the symbolic value
+    is replaced with its equal value to simplify.
+  }];
+}
+
+def StripContractsPass : Pass<"strip-contracts"> {
+  let summary = "Remove contracts from the IR";
+  let description = [{
+    Replaces all `verif.contract` ops in the IR with their operands, making them
+    act as simple passthroughs.
+  }];
+}
+
 #endif // CIRCT_DIALECT_VERIF_PASSES_TD

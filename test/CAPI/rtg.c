@@ -15,12 +15,34 @@
 #include "mlir-c/BuiltinTypes.h"
 
 static void testSequenceType(MlirContext ctx) {
-  MlirType sequenceTy = rtgSequenceTypeGet(ctx);
+  MlirType sequenceTy = rtgSequenceTypeGet(ctx, 0, NULL);
 
   // CHECK: is_sequence
   fprintf(stderr, rtgTypeIsASequence(sequenceTy) ? "is_sequence\n"
                                                  : "isnot_sequence\n");
   // CHECK: !rtg.sequence
+  mlirTypeDump(sequenceTy);
+
+  MlirType sequenceWithArgsTy = rtgSequenceTypeGet(ctx, 1, &sequenceTy);
+  // CHECK: is_sequence
+  fprintf(stderr, rtgTypeIsASequence(sequenceWithArgsTy) ? "is_sequence\n"
+                                                         : "isnot_sequence\n");
+  // CHECK: 1
+  fprintf(stderr, "%d\n", rtgSequenceTypeGetNumElements(sequenceWithArgsTy));
+  // CHECK: !rtg.sequence
+  mlirTypeDump(rtgSequenceTypeGetElement(sequenceWithArgsTy, 0));
+  // CHECK: !rtg.sequence<!rtg.sequence>
+  mlirTypeDump(sequenceWithArgsTy);
+}
+
+static void testRandomizedSequenceType(MlirContext ctx) {
+  MlirType sequenceTy = rtgRandomizedSequenceTypeGet(ctx);
+
+  // CHECK: is_randomized_sequence
+  fprintf(stderr, rtgTypeIsARandomizedSequence(sequenceTy)
+                      ? "is_randomized_sequence\n"
+                      : "isnot_randomized_sequence\n");
+  // CHECK: !rtg.randomized_sequence
   mlirTypeDump(sequenceTy);
 }
 
@@ -75,15 +97,41 @@ static void testDictType(MlirContext ctx) {
   mlirTypeDump(emptyDictTy);
 }
 
+static void testLabelVisibilityAttr(MlirContext ctx) {
+  MlirAttribute labelVisibility =
+      rtgLabelVisibilityAttrGet(ctx, RTG_LABEL_VISIBILITY_GLOBAL);
+
+  // CHECK: is_label_visibility
+  fprintf(stderr, rtgAttrIsALabelVisibilityAttr(labelVisibility)
+                      ? "is_label_visibility\n"
+                      : "isnot_label_visibility\n");
+
+  // CHECK: global_label
+  switch (rtgLabelVisibilityAttrGetValue(labelVisibility)) {
+  case RTG_LABEL_VISIBILITY_LOCAL:
+    fprintf(stderr, "local_label\n");
+    break;
+  case RTG_LABEL_VISIBILITY_GLOBAL:
+    fprintf(stderr, "global_label\n");
+    break;
+  case RTG_LABEL_VISIBILITY_EXTERNAL:
+    fprintf(stderr, "external_label\n");
+    break;
+  }
+}
+
 int main(int argc, char **argv) {
   MlirContext ctx = mlirContextCreate();
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__rtg__(), ctx);
 
   testSequenceType(ctx);
+  testRandomizedSequenceType(ctx);
   testLabelType(ctx);
   testSetType(ctx);
   testBagType(ctx);
   testDictType(ctx);
+
+  testLabelVisibilityAttr(ctx);
 
   mlirContextDestroy(ctx);
 

@@ -70,6 +70,10 @@ MlirType circtESIListTypeGetElementType(MlirType list) {
   return wrap(cast<ListType>(unwrap(list)).getElementType());
 }
 
+bool circtESICheckInnerTypeMatch(MlirType to, MlirType from) {
+  return succeeded(checkInnerTypeMatch(unwrap(to), unwrap(from)));
+}
+
 void circtESIAppendMlirFile(MlirModule cMod, MlirStringRef filename) {
   ModuleOp modOp = unwrap(cMod);
   auto loadedMod =

@@ -11,6 +11,7 @@
 
 include "mlir/IR/Interfaces.td"
 include "mlir/IR/OpBase.td"
+include "mlir/IR/BuiltinAttributeInterfaces.td"
 
 def ContextResourceOpInterface : OpInterface<"ContextResourceOpInterface"> {
   let description = [{
@@ -46,6 +47,20 @@ def ContextResourceTypeInterface : TypeInterface<
     Any operation that creates a value of a type implementing this interface
     must implement the `ContextResourceOpInterface` (does not apply to
     operations that just forward a value of such type).
+  }];
+  let cppNamespace = "::circt::rtg";
+}
+
+def ContextResourceAttrInterface : AttrInterface<
+    "ContextResourceAttrInterface", [TypedAttrInterface]> {
+  let description = [{
+    This interface should be implemented by attributes that represent context
+    resources.
+    Any attribute implementing this interface must be of a type implementing
+    the `ContextResourceTypeInterface`.
+
+    TODO: properly verify this; unfortunately, we don't have a 'verify' field
+    here like the 'OpInterface' has.
   }];
   let cppNamespace = "::circt::rtg";
 }

@@ -110,6 +110,62 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: hw.array_get %arg5[[[V0]]] : !hw.array<5xi32>
   moore.extract %arg5 from 2 : !moore.array<5 x i32> -> i32
 
+  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i2
+  // CHECK-NEXT: [[C1:%.+]] = hw.constant 0 : i2
+  // CHECK-NEXT: comb.concat [[C0]], %arg2, [[C1]] : i2, i6, i2
+  moore.extract %arg2 from -2 : !moore.i6 -> !moore.i10
+
+  // CHECK-NEXT: [[V0:%.+]] = comb.extract %arg2 from 4 : (i6) -> i2
+  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i2
+  // CHECK-NEXT: comb.concat [[V0]], [[C0]] : i2, i2
+  moore.extract %arg2 from 4 : !moore.i6 -> !moore.i4
+
+  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i2
+  // CHECK-NEXT: [[V0:%.+]] = comb.extract %arg2 from 0 : (i6) -> i2
+  // CHECK-NEXT: comb.concat [[C0]], [[V0]] : i2, i2
+  moore.extract %arg2 from -2 : !moore.i6 -> !moore.i4
+
+  // CHECK-NEXT: hw.constant 0 : i4
+  moore.extract %arg2 from -6 : !moore.i6 -> !moore.i4
+
+  // CHECK-NEXT: hw.constant 0 : i4
+  moore.extract %arg2 from 6 : !moore.i6 -> !moore.i4
+
+  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i64
+  // CHECK-NEXT: [[V0:%..+]] = hw.bitcast [[C0]] : (i64) -> !hw.array<2xi32>
+  // CHECK-NEXT: hw.constant 0 : i3
+  // CHECK-NEXT: [[C1:%.+]] = hw.constant 0 : i64
+  // CHECK-NEXT: [[V1:%.+]] = hw.bitcast [[C1]] : (i64) -> !hw.array<2xi32>
+  // CHECK-NEXT: hw.array_concat [[V0]], %arg5, [[V1]] : !hw.array<2xi32>, !hw.array<5xi32>, !hw.array<2xi32>
+  moore.extract %arg5 from -2 : !moore.array<5 x i32> -> !moore.array<9 x i32>
+
+  // CHECK-NEXT: [[IDX:%.+]] = hw.constant 2 : i3
+  // CHECK-NEXT: [[V0:%.+]] = hw.array_slice %arg5[[[IDX]]] : (!hw.array<5xi32>) -> !hw.array<3xi32>
+  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i32
+  // CHECK-NEXT: [[V1:%.+]] = hw.bitcast [[C0]] : (i32) -> !hw.array<1xi32>
+  // CHECK-NEXT: hw.array_concat [[V0]], [[V1]] : !hw.array<3xi32>, !hw.array<1xi32>
+  moore.extract %arg5 from 2 : !moore.array<5 x i32> -> !moore.array<4 x i32>
+
+  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i32
+  // CHECK-NEXT: [[V0:%.+]] = hw.bitcast [[C0]] : (i32) -> !hw.array<1xi32>
+  // CHECK-NEXT: [[IDX:%.+]] = hw.constant 0 : i3
+  // CHECK-NEXT: [[V1:%.+]] = hw.array_slice %arg5[[[IDX]]] : (!hw.array<5xi32>) -> !hw.array<1xi32>
+  // CHECK-NEXT: hw.array_concat [[V0]], [[V1]] : !hw.array<1xi32>, !hw.array<1xi32>
+  moore.extract %arg5 from -1 : !moore.array<5 x i32> -> !moore.array<2 x i32>
+
+  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i64
+  // CHECK-NEXT: hw.bitcast [[C0]] : (i64) -> !hw.array<2xi32>
+  moore.extract %arg5 from -2 : !moore.array<5 x i32> -> !moore.array<2 x i32>
+
+  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i64
+  // CHECK-NEXT: hw.bitcast [[C0]] : (i64) -> !hw.array<2xi32>
+  moore.extract %arg5 from 5 : !moore.array<5 x i32> -> !moore.array<2 x i32>
+
+  // CHECK-NEXT: hw.constant 0 : i32
+  moore.extract %arg5 from -2 : !moore.array<5 x i32> -> i32
+  // CHECK-NEXT: hw.constant 0 : i32
+  moore.extract %arg5 from 6 : !moore.array<5 x i32> -> i32
+
   // CHECK-NEXT: [[V0:%.+]] = hw.constant 0 : i0
   // CHECK-NEXT: llhd.sig.extract %arg6 from [[V0]] : (!hw.inout<i1>) -> !hw.inout<i1>
   moore.extract_ref %arg6 from 0 : !moore.ref<!moore.i1> -> !moore.ref<!moore.i1>
@@ -630,7 +686,6 @@ moore.module @WaitEvent() {
   // CHECK: [[PRB_D3:%.+]] = llhd.prb %d
   // CHECK: [[PRB_D2:%.+]] = llhd.prb %d
   // CHECK: [[PRB_D1:%.+]] = llhd.prb %d
-  // CHECK: [[PRB_D0:%.+]] = llhd.prb %d
   %a = moore.variable : <i1>
   %b = moore.variable : <i1>
   %c = moore.variable : <i1>
@@ -665,27 +720,11 @@ moore.module @WaitEvent() {
     // CHECK:   [[BEFORE:%.+]] = llhd.prb %a
     // CHECK:   llhd.wait ([[PRB_A0]] : {{.+}}), ^[[CHECK:.+]]
     // CHECK: ^[[CHECK]]:
-    // CHECK:   [[AFTER:%.+]] = llhd.prb %a
-    // CHECK:   [[TMP:%.+]] = comb.icmp bin ne [[BEFORE]], [[AFTER]]
-    // CHECK:   cf.cond_br [[TMP]]
+    // CHECK:   cf.br ^[[RESUME:.+]]
+    // CHECK: ^[[RESUME]]:
     moore.wait_event {
       %0 = moore.read %a : <i1>
       moore.detect_event any %0 : i1
-    }
-    moore.return
-  }
-
-  // CHECK: llhd.process {
-  moore.procedure initial {
-    // CHECK:   [[BEFORE:%.+]] = llhd.prb %d
-    // CHECK:   llhd.wait ([[PRB_D0]] : {{.+}}), ^[[CHECK:.+]]
-    // CHECK: ^[[CHECK]]:
-    // CHECK:   [[AFTER:%.+]] = llhd.prb %d
-    // CHECK:   [[TMP:%.+]] = comb.icmp bin ne [[BEFORE]], [[AFTER]]
-    // CHECK:   cf.cond_br [[TMP]]
-    moore.wait_event {
-      %0 = moore.read %d : <i4>
-      moore.detect_event any %0 : i4
     }
     moore.return
   }
@@ -711,22 +750,9 @@ moore.module @WaitEvent() {
 
   // CHECK: llhd.process {
   moore.procedure initial {
-    // CHECK:   [[BEFORE_A:%.+]] = llhd.prb %a
-    // CHECK:   [[BEFORE_B:%.+]] = llhd.prb %b
-    // CHECK:   [[BEFORE_C:%.+]] = llhd.prb %c
-    // CHECK:   [[BEFORE_D:%.+]] = llhd.prb %d
     // CHECK:   llhd.wait ([[PRB_A2]], [[PRB_B1]], [[PRB_C]], [[PRB_D1]] : {{.+}}), ^[[CHECK:.+]]
     // CHECK: ^[[CHECK]]:
-    // CHECK:   [[AFTER_A:%.+]] = llhd.prb %a
-    // CHECK:   [[AFTER_B:%.+]] = llhd.prb %b
-    // CHECK:   [[AFTER_C:%.+]] = llhd.prb %c
-    // CHECK:   [[AFTER_D:%.+]] = llhd.prb %d
-    // CHECK:   [[TMP1:%.+]] = comb.icmp bin ne [[BEFORE_A]], [[AFTER_A]]
-    // CHECK:   [[TMP2:%.+]] = comb.icmp bin ne [[BEFORE_B]], [[AFTER_B]]
-    // CHECK:   [[TMP3:%.+]] = comb.icmp bin ne [[BEFORE_C]], [[AFTER_C]]
-    // CHECK:   [[TMP4:%.+]] = comb.icmp bin ne [[BEFORE_D]], [[AFTER_D]]
-    // CHECK:   [[TMP5:%.+]] = comb.or bin [[TMP1]], [[TMP2]], [[TMP3]], [[TMP4]]
-    // CHECK:   cf.cond_br [[TMP5]]
+    // CHECK:   cf.br
     moore.wait_event {
       %0 = moore.read %a : <i1>
       %1 = moore.read %b : <i1>
@@ -910,6 +936,29 @@ moore.module @WaitEvent() {
   }
 }
 
+// CHECK-LABEL: hw.module @EmptyWaitEvent(
+moore.module @EmptyWaitEvent(out out : !moore.l32) {
+  // CHECK: [[OUT:%.+]] = llhd.sig %c0_i32
+  // CHECK: llhd.process {
+  // CHECK:   cf.br
+  // CHECK: ^bb
+  // CHECK:   llhd.halt
+  // CHECK: ^bb{{.*}} // no predecessors
+  // CHECK: }
+  // CHECK: [[PRB:%.+]] = llhd.prb [[OUT]] : !hw.inout<i32>
+  // CHECK: hw.output [[PRB]] : i32
+  %0 = moore.constant 0 : l32
+  %out = moore.variable : <l32>
+  moore.procedure always {
+    moore.wait_event {
+    }
+    moore.blocking_assign %out, %0 : l32
+    moore.return
+  }
+  %1 = moore.read %out : <l32>
+  moore.output %1 : !moore.l32
+}
+
 // Just check that block without predecessors are handled without crashing
 // CHECK-LABEL: @NoPredecessorBlockErasure
 moore.module @NoPredecessorBlockErasure(in %clk_i : !moore.l1, in %raddr_i : !moore.array<2 x l5>, out rdata_o : !moore.array<2 x l32>, in %waddr_i : !moore.array<1 x l5>, in %wdata_i : !moore.array<1 x l32>, in %we_i : !moore.l1) {
@@ -982,6 +1031,31 @@ moore.module @StringConstant() {
   }
 }
 
+// CHECK-LABEL: func.func @RecurciveConditional
+func.func @RecurciveConditional(%arg0 : !moore.l1, %arg1 : !moore.l1) {
+  // CHECK: [[C_2:%.+]] = hw.constant -2 : i2
+  // CHECK: [[C_1:%.+]] = hw.constant 1 : i2
+  // CHECK: [[C_0:%.+]] = hw.constant 0 : i2
+  %c_2 = moore.constant -2 : l2
+  %c_1 = moore.constant 1 : l2
+  %c_0 = moore.constant 0 : l2
+
+  // CHECK: [[MUX0:%.+]] = comb.mux %arg1, [[C_0]], [[C_1]] : i2
+  // CHECK: [[MUX1:%.+]] = comb.mux %arg0, [[MUX0]], [[C_2]] : i2
+  %0 = moore.conditional %arg0 : l1 -> l2 {
+    %1 = moore.conditional %arg1 : l1 -> l2 {
+      moore.yield %c_0 : l2
+    } {
+      moore.yield %c_1 : l2
+    }
+    moore.yield %1 : l2
+  } {
+    moore.yield %c_2 : l2
+  }
+
+  return
+}
+
 // CHECK-LABEL: func.func @Conversions
 func.func @Conversions(%arg0: !moore.i16, %arg1: !moore.l16) {
   // CHECK: [[TMP:%.+]] = comb.extract %arg0 from 0 : (i16) -> i8
@@ -1033,4 +1107,35 @@ func.func @PowSOp(%arg0: !moore.i32, %arg1: !moore.i32) {
   // CHECK: scf.yield [[MUL]] : i32
   %0 = moore.pows %arg0, %arg1 : i32
   return
+}
+
+// CHECK-LABEL: @scfInsideProcess
+moore.module @scfInsideProcess(in %in0: !moore.i32, in %in1: !moore.i32) {
+  %var = moore.variable : <!moore.i32>
+  // CHECK: llhd.process
+  // CHECK-NOT: scf.for
+  moore.procedure initial {
+    %0 = moore.pows %in0, %in1 : !moore.i32
+    moore.blocking_assign %var, %0 : !moore.i32
+    moore.return
+  }
+}
+
+// CHECK-LABEL: @blockArgAsObservedValue
+moore.module @blockArgAsObservedValue(in %in0: !moore.i32, in %in1: !moore.i32) {
+  %var = moore.variable : <!moore.i32>
+  // CHECK: [[PRB:%.+]] = llhd.prb %var : !hw.inout<i32>
+  // CHECK: llhd.process
+  moore.procedure always_comb {
+    // CHECK: ^bb1:  // 2 preds: ^bb0, ^bb5
+      // CHECK: [[COND:%.+]] = comb.icmp slt %in1, %{{.*}} : i32
+      // CHECK: comb.mux [[COND]], %{{.*}}, %in0 : i32
+      // CHECK: comb.mux [[COND]], %{{.*}}, %in1 : i32
+    %0 = moore.pows %in0, %in1 : !moore.i32
+    moore.blocking_assign %var, %0 : !moore.i32
+    
+    // CHECK: ^bb5:  // pred: ^bb4
+    // CHECK:   llhd.wait (%in0, %in1, [[PRB]] : i32, i32, i32), ^bb1
+    moore.return
+  }
 }

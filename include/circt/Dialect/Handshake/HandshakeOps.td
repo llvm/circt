@@ -180,12 +180,22 @@ def ESIInstanceOp : Op<Handshake_Dialect, "esi_instance", [
 
     /// Set the callee for this operation.
     void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
-      (*this)->setAttr(getModuleAttrName(), callee.get<mlir::SymbolRefAttr>());
+      (*this)->setAttr(getModuleAttrName(), llvm::cast<mlir::SymbolRefAttr>(callee));
     }
 
     MutableOperandRange getArgOperandsMutable() {
       return getOpOperandsMutable();
     }
+
+    /// Stub implementations for ArgumentAttributesMethods. If desired,
+    /// implement these by defining arg_attrs and res_attrs as arguments to the
+    /// operation as OptionalAttr<DictArrayAttr>.
+    mlir::ArrayAttr getArgAttrsAttr() { return nullptr; }
+    mlir::ArrayAttr getResAttrsAttr() { return nullptr; }
+    void setArgAttrsAttr(mlir::ArrayAttr args) {}
+    void setResAttrsAttr(mlir::ArrayAttr args) {}
+    mlir::Attribute removeArgAttrsAttr() { return nullptr; }
+    mlir::Attribute removeResAttrsAttr() { return nullptr; }
   }];
 }
 
@@ -251,7 +261,7 @@ def InstanceOp : Handshake_Op<"instance", [
 
     /// Set the callee for this operation.
     void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
-      (*this)->setAttr(getModuleAttrName(), callee.get<mlir::SymbolRefAttr>());
+      (*this)->setAttr(getModuleAttrName(), llvm::cast<mlir::SymbolRefAttr>(callee));
     }
 
     /// Get the control operand of this instance op
@@ -263,6 +273,15 @@ def InstanceOp : Handshake_Op<"instance", [
       return getOpOperandsMutable();
     }
 
+    /// Stub implementations for ArgumentAttributesMethods. If desired,
+    /// implement these by defining arg_attrs and res_attrs as arguments to the
+    /// operation as OptionalAttr<DictArrayAttr>.
+    mlir::ArrayAttr getArgAttrsAttr() { return nullptr; }
+    mlir::ArrayAttr getResAttrsAttr() { return nullptr; }
+    void setArgAttrsAttr(mlir::ArrayAttr args) {}
+    void setResAttrsAttr(mlir::ArrayAttr args) {}
+    mlir::Attribute removeArgAttrsAttr() { return nullptr; }
+    mlir::Attribute removeResAttrsAttr() { return nullptr; }
   }];
 
   let assemblyFormat = [{

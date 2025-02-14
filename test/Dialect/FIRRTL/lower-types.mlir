@@ -1445,7 +1445,7 @@ firrtl.circuit "Conventions1" {
 }
 
 // Test that memories have their prefixes copied when lowering.
-// See: https://github.com/llvm/circt/issues/7835
+// https://github.com/llvm/circt/issues/7835
 firrtl.circuit "MemoryPrefixCopying" {
   // COMMON-LABEL: firrtl.module @MemoryPrefixCopying
   firrtl.module @MemoryPrefixCopying() {

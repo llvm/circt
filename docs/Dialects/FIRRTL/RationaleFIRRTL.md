@@ -4,6 +4,8 @@ This document describes various design points of the FIRRTL dialect, why it is
 the way it is, and current status and progress.  This follows in the spirit of
 other [MLIR Rationale docs](https://mlir.llvm.org/docs/Rationale/).
 
+[TOC]
+
 ## Introduction
 
 [The FIRRTL project](https://github.com/chipsalliance/firrtl) is an existing

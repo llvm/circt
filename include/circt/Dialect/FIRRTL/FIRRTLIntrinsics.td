@@ -231,4 +231,16 @@ def DPICallIntrinsicOp : FIRRTLOp<"int.dpi.call",
   let hasVerifier = 1;
 }
 
+def ViewIntrinsicOp : FIRRTLOp<"view", []> {
+  let summary = "A SystemVerilog Interface only usable for waveform debugging";
+  let description = [{
+    This will become a SystemVerilog Interface that is driven by its arguments.
+    This is _not_ intended to be used for anything other than assistance when
+    debugging in a waveform.  This is _not_ a true SystemVerilog Interface, it
+    is only lowered to one.
+  }];
+  let arguments = (ins StrAttr:$name, OptionalAttr<StrAttr>:$yamlFile, AugmentedBundleType:$augmentedType, Variadic<GroundType>:$inputs);
+  let assemblyFormat = "$name `,` (`yaml` $yamlFile^ `,`)? $augmentedType (`,` $inputs^)? attr-dict (`:` type($inputs)^)?";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLINTRINSICS_TD

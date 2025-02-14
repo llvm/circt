@@ -142,9 +142,11 @@ static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
   result.addAttribute("inputNames", inputNames);
 
   Type i1 = parser.getBuilder().getI1Type();
+
+  OpAsmParser::UnresolvedOperand stallOperand, clockOperand, resetOperand,
+      goOperand;
+
   // Parse optional 'stall (%stallArg)'
-  OpAsmParser::Argument stallArg;
-  OpAsmParser::UnresolvedOperand stallOperand;
   bool withStall = false;
   if (succeeded(parser.parseOptionalKeyword("stall"))) {
     if (parser.parseLParen() || parser.parseOperand(stallOperand) ||
@@ -154,10 +156,19 @@ static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
   }
 
   // Parse clock, reset, and go.
-  OpAsmParser::UnresolvedOperand clockOperand, resetOperand, goOperand;
-  if (parseKeywordAndOperand(parser, "clock", clockOperand) ||
-      parseKeywordAndOperand(parser, "reset", resetOperand) ||
-      parseKeywordAndOperand(parser, "go", goOperand))
+  if (parseKeywordAndOperand(parser, "clock", clockOperand))
+    return failure();
+
+  // Parse optional 'reset (%resetArg)'
+  bool withReset = false;
+  if (succeeded(parser.parseOptionalKeyword("reset"))) {
+    if (parser.parseLParen() || parser.parseOperand(resetOperand) ||
+        parser.parseRParen())
+      return failure();
+    withReset = true;
+  }
+
+  if (parseKeywordAndOperand(parser, "go", goOperand))
     return failure();
 
   // Parse entry stage enable block argument.
@@ -196,9 +207,13 @@ static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
   }
 
   Type clkType = seq::ClockType::get(parser.getContext());
-  if (parser.resolveOperand(clockOperand, clkType, result.operands) ||
-      parser.resolveOperand(resetOperand, i1, result.operands) ||
-      parser.resolveOperand(goOperand, i1, result.operands))
+  if (parser.resolveOperand(clockOperand, clkType, result.operands))
+    return failure();
+
+  if (withReset && parser.resolveOperand(resetOperand, i1, result.operands))
+    return failure();
+
+  if (parser.resolveOperand(goOperand, i1, result.operands))
     return failure();
 
   // Assemble the body region block arguments - this is where the magic happens
@@ -216,13 +231,13 @@ static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
   if (parser.parseRegion(*body, regionArgs))
     return failure();
 
-  result.addAttribute(
-      "operandSegmentSizes",
-      parser.getBuilder().getDenseI32ArrayAttr(
-          {static_cast<int32_t>(inputTypes.size()),
-           static_cast<int32_t>(withStall ? 1 : 0),
-           /*clock*/ static_cast<int32_t>(1),
-           /*reset*/ static_cast<int32_t>(1), /*go*/ static_cast<int32_t>(1)}));
+  result.addAttribute("operandSegmentSizes",
+                      parser.getBuilder().getDenseI32ArrayAttr(
+                          {static_cast<int32_t>(inputTypes.size()),
+                           static_cast<int32_t>(withStall ? 1 : 0),
+                           /*clock*/ static_cast<int32_t>(1),
+                           /*reset*/ static_cast<int32_t>(withReset ? 1 : 0),
+                           /*go*/ static_cast<int32_t>(1)}));
 
   return success();
 }
@@ -246,16 +261,17 @@ static void printPipelineOp(OpAsmPrinter &p, TPipelineOp op) {
 
   // Print the optional stall.
   if (op.hasStall()) {
-    p << "stall(";
-    p.printOperand(op.getStall());
-    p << ") ";
+    printKeywordOperand(p, "stall", op.getStall());
+    p << " ";
   }
 
   // Print the clock, reset, and go.
   printKeywordOperand(p, "clock", op.getClock());
   p << " ";
-  printKeywordOperand(p, "reset", op.getReset());
-  p << " ";
+  if (op.hasReset()) {
+    printKeywordOperand(p, "reset", op.getReset());
+    p << " ";
+  }
   printKeywordOperand(p, "go", op.getGo());
   p << " ";
 
@@ -290,7 +306,7 @@ static void printPipelineOp(OpAsmPrinter &p, TPipelineOp op) {
 static void buildPipelineLikeOp(OpBuilder &odsBuilder, OperationState &odsState,
                                 TypeRange dataOutputs, ValueRange inputs,
                                 ArrayAttr inputNames, ArrayAttr outputNames,
-                                Value clock, Value reset, Value go, Value stall,
+                                Value clock, Value go, Value reset, Value stall,
                                 StringAttr name, ArrayAttr stallability) {
   odsState.addOperands(inputs);
   if (stall)
@@ -432,11 +448,11 @@ void UnscheduledPipelineOp::build(OpBuilder &odsBuilder,
                                   OperationState &odsState,
                                   TypeRange dataOutputs, ValueRange inputs,
                                   ArrayAttr inputNames, ArrayAttr outputNames,
-                                  Value clock, Value reset, Value go,
+                                  Value clock, Value go, Value reset,
                                   Value stall, StringAttr name,
                                   ArrayAttr stallability) {
   buildPipelineLikeOp(odsBuilder, odsState, dataOutputs, inputs, inputNames,
-                      outputNames, clock, reset, go, stall, name, stallability);
+                      outputNames, clock, go, reset, stall, name, stallability);
 }
 
 //===----------------------------------------------------------------------===//
@@ -453,10 +469,10 @@ ParseResult ScheduledPipelineOp::parse(OpAsmParser &parser,
 void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                                 TypeRange dataOutputs, ValueRange inputs,
                                 ArrayAttr inputNames, ArrayAttr outputNames,
-                                Value clock, Value reset, Value go, Value stall,
+                                Value clock, Value go, Value reset, Value stall,
                                 StringAttr name, ArrayAttr stallability) {
   buildPipelineLikeOp(odsBuilder, odsState, dataOutputs, inputs, inputNames,
-                      outputNames, clock, reset, go, stall, name, stallability);
+                      outputNames, clock, go, reset, stall, name, stallability);
 }
 
 Block *ScheduledPipelineOp::addStage() {

@@ -2107,7 +2107,7 @@ static void populateTypeConverter(TypeConverter &converter) {
 
   // Convert FIRRTL double type to OM.
   converter.addConversion(
-      [](DoubleType type) { return FloatType::getF64(type.getContext()); });
+      [](DoubleType type) { return Float64Type::get(type.getContext()); });
 
   // Add a target materialization such that the conversion does not fail when a
   // type conversion could not be reconciled automatically by the framework.

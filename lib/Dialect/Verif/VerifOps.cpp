@@ -160,6 +160,37 @@ LogicalResult BoundedModelCheckingOp::verifyRegions() {
 }
 
 //===----------------------------------------------------------------------===//
+// SimulationOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SimulationOp::verifyRegions() {
+  if (getBody()->getNumArguments() != 2)
+    return emitOpError() << "must have two block arguments";
+  if (!isa<seq::ClockType>(getBody()->getArgument(0).getType()))
+    return emitOpError() << "block argument #0 must be a `!seq.clock`";
+  if (!getBody()->getArgument(1).getType().isSignlessInteger(1))
+    return emitOpError() << "block argument #1 must be a `i1`";
+
+  auto *yieldOp = getBody()->getTerminator();
+  if (yieldOp->getNumOperands() != 2)
+    return yieldOp->emitOpError() << "must have two operands";
+  if (!yieldOp->getOperand(0).getType().isSignlessInteger(1))
+    return yieldOp->emitOpError() << "operand #0 must be an `i1`";
+  if (!isa<IntegerType>(yieldOp->getOperand(1).getType()))
+    return yieldOp->emitOpError() << "operand #1 must be an integer";
+
+  return success();
+}
+
+void SimulationOp::getAsmBlockArgumentNames(Region &region,
+                                            OpAsmSetValueNameFn setNameFn) {
+  if (region.empty() || region.getNumArguments() != 2)
+    return;
+  setNameFn(region.getArgument(0), "clock");
+  setNameFn(region.getArgument(1), "init");
+}
+
+//===----------------------------------------------------------------------===//
 // Generated code
 //===----------------------------------------------------------------------===//
 

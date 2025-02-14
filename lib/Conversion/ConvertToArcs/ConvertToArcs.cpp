@@ -357,7 +357,7 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
       rewriter.setInsertionPoint(callOp);
       arc = rewriter.replaceOpWithNewOp<StateOp>(
           callOp.getOperation(),
-          callOp.getCallableForCallee().get<SymbolRefAttr>(),
+          llvm::cast<SymbolRefAttr>(callOp.getCallableForCallee()),
           callOp->getResultTypes(), clock, Value{}, 1, callOp.getArgOperands());
     }
 

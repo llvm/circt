@@ -229,6 +229,21 @@ firrtl.circuit "top" {
 }
 
 // -----
+// A module in a domain which already has the reset port should error if the
+// type of the port is wrong.
+firrtl.circuit "Top" {
+  // expected-error @below {{module 'Child' is in reset domain requiring port 'reset' to have type '!firrtl.asyncreset', but has type '!firrtl.uint<1>'}}
+  firrtl.module @Child(in %clock: !firrtl.clock, in %reset : !firrtl.uint<1>) {
+    %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8>
+  }
+  // expected-note @below {{reset domain rooted here}}
+  firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}]) {
+    %child_clock, %child_reset = firrtl.instance child @Child(in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
+    firrtl.connect %child_clock, %clock : !firrtl.clock, !firrtl.clock
+  }
+}
+
+// -----
 // Multiple instances of same module cannot live in different reset domains
 firrtl.circuit "Top" {
   // expected-error @+1 {{module 'Foo' instantiated in different reset domains}}

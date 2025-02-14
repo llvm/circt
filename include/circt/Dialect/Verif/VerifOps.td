@@ -9,16 +9,18 @@
 #ifndef CIRCT_DIALECT_VERIF_VERIFOPS_TD
 #define CIRCT_DIALECT_VERIF_VERIFOPS_TD
 
-include "circt/Dialect/Verif/VerifDialect.td"
+include "circt/Dialect/HW/HWAttributes.td"
+include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/LTL/LTLDialect.td"
 include "circt/Dialect/LTL/LTLTypes.td"
-include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/Seq/SeqTypes.td"
-include "circt/Dialect/HW/HWAttributes.td"
+include "circt/Dialect/Verif/VerifDialect.td"
+include "circt/Dialect/Verif/VerifOpInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/EnumAttr.td"
+include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/PatternBase.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
@@ -254,8 +256,9 @@ def LogicEquivalenceCheckingOp : VerifOp<"lec", [
 def YieldOp : VerifOp<"yield", [
   Terminator,
   ParentOneOf<[
-    "verif::LogicEquivalenceCheckingOp", "verif::BoundedModelCheckingOp",
-    "verif::ContractOp"
+    "verif::BoundedModelCheckingOp",
+    "verif::LogicEquivalenceCheckingOp",
+    "verif::SimulationOp",
   ]>
 ]> {
   let summary = "yields values from a region";
@@ -271,11 +274,12 @@ def YieldOp : VerifOp<"yield", [
 }
 
 //===----------------------------------------------------------------------===//
-// Formal Test
+// Verification Entry Points
 //===----------------------------------------------------------------------===//
 
 def FormalOp : VerifOp<"formal", [
   IsolatedFromAbove,
+  NoRegionArguments,
   NoTerminator,
   RegionKindInterface,
   SingleBlock,
@@ -304,6 +308,33 @@ def FormalOp : VerifOp<"formal", [
       verif.assert %4 : i1
     }
     ```
+
+    ### Parameters
+    The following parameters have a predefined meaning and are interpreted by
+    tools such as `circt-test` to guide execution of tests:
+
+    - `ignore`: Indicates whether the test should be ignored and skipped. This
+      can be useful for temporarily disabling tests without having to remove
+      them from the input. Must be a _boolean_ value.
+      ```mlir
+      verif.formal @Foo {ignore = true}
+      ```
+
+    - `require_runners`: A list of test runners that may be used to execute this
+      test. This option may be used to force a test to run using one of a few
+      known-good runners, acting like a whitelist. Must be an _array_ of
+      _strings_.
+      ```mlir
+      verif.formal @Foo {require_runners = ["sby", "circt-bmc"]}
+      ```
+
+    - `exclude_runners`: A list of test runners that must not be used to execute
+      this test. This option may be used to exclude a few known-bad runners from
+      executing this test, acting like a blacklist. Must be an _array_ of
+      _strings_.
+      ```mlir
+      verif.formal @Foo {exclude_runners = ["sby", "circt-bmc"]}
+      ```
   }];
   let arguments = (ins
     SymbolNameAttr:$sym_name,
@@ -318,16 +349,115 @@ def FormalOp : VerifOp<"formal", [
   }];
 }
 
+def SimulationOp : VerifOp<"simulation", [
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
+  IsolatedFromAbove,
+  RegionKindInterface,
+  SingleBlockImplicitTerminator<"verif::YieldOp">,
+  Symbol,
+]> {
+  let summary = "A simulation unit test";
+  let description = [{
+    This operation defines a simulation unit test that can be automatically run
+    by various tools. To describe a test, the body of this op should contain the
+    hardware to be tested, alongside any necessary forms of stimulus generation.
+
+    ### Inputs
+
+    The body has two block arguments as input values: a "clock" signal of type
+    `!seq.clock` and an "init" signal of type `i1`. The clock signal starts at 0
+    and continuously toggles between 0 and 1 throughout the simulation. The init
+    signal starts at 1, remains 1 during a single 0-to-1 transition of the
+    clock, and then drops to 0 for the remainder of the simulation.
+
+    ### Outputs
+
+    The body must have a `verif.yield` terminator op with exactly two operands:
+
+    The first operand is a "done" signal of type `i1` which indicates the end of
+    the simulation. The simulation stops when the done signal is 1 during a
+    0-to-1 transition of the clock. No additional clock toggles occur once done
+    has been sampled as 1.
+
+    The second operand is an "exit code" signal which may be of any integer
+    type. It indicates success of a test as 0, or failure as any non-zero
+    integer. The exit code is sampled at the same time as the done signal. Only
+    the zero versus non-zero value distinction is relevant to indicate
+    simulation success and must be preserved. The exact non-zero value is for
+    informational purposes only and may not be reproduced accurately by
+    simulators. Simulators may in the worst case map all non-zero values to 1,
+    reducing the exit code to a single bit indicating failure or success.
+
+    ### Schedule
+
+    The clock and init values adhere to the following schedule during
+    simulation:
+
+    | Time      | Clock | Init  | Comment
+    |-----------|-------|-------| ----
+    | t0 (>=0s) | undef | undef | Clock and init may initially be undefined.
+    | t1 (>=t0) | 0     | 1     | Initialization code (e.g., `seq.initial`, Verilog `initial` procedures) may run before or after clock and init change to their initial value.
+    | t2 (>t1)  | 1     | 1     | Single rising clock edge occurs while init is high.
+    | t3 (>t2)  | 0     | 1     | Init may stay during the falling clock edge.
+    | t4 (>=t3) | 0     | 0     | Init goes to 0 before second rising clock edge.
+    | t5 (>t4)  | 1     | 0     | Clock toggles continue indefinitely.
+    | t6 (>t5)  | 0     | 0     |
+
+    Simulation termination occurs when the done signal is 1 during a 0-to-1
+    transition of the clock.
+
+    ### Example
+    ```
+    verif.simulation @AdderTest {myParam = 42, myTag = "hello"} {
+    ^bb0(%clock: !seq.clock, %init: i1):
+      // Count the first 9001 simulation cycles.
+      %c0_i19 = hw.constant 0 : i19
+      %c1_i19 = hw.constant 1 : i19
+      %c9001_i19 = hw.constant 9001 : i19
+      %count = seq.compreg %0, %clock reset %init, %c0_i19 : i19
+      %done = comb.icmp eq %count, %c9001_i19 : i19
+      %0 = comb.add %count, %c1_i19 : i19
+
+      // Generate inputs to the adder.
+      %1, %2 = func.call @generateAdderInputs(%count) : (i19) -> (i42, i42)
+      %3 = hw.instance "dut" @Adder(a: %1: i42, b: %2: i42) -> (c: i42)
+
+      // Check results and track failures.
+      %4 = comb.add %1, %2 : i42
+      %5 = comb.icmp ne %3, %4 : i42
+      %false = hw.constant false
+      %failure = seq.compreg %6, %clock reset %init, %false : i1
+      %6 = comb.or %failure, %5 : i1
+
+      verif.yield %done, %failure : i1, i1
+    }
+    ```
+  }];
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    DictionaryAttr:$parameters
+  );
+  let regions = (region SizedRegion<1>:$region);
+  let assemblyFormat = "$sym_name $parameters attr-dict-with-keyword $region";
+  let extraClassDeclaration = [{
+    static RegionKind getRegionKind(unsigned index) {
+      return RegionKind::Graph;
+    }
+  }];
+  let hasRegionVerifier = true;
+}
+
 def SymbolicValueOp : VerifOp<"symbolic_value", [
-  HasParent<"verif::FormalOp">,
+  ParentOneOf<["verif::FormalOp", "hw::HWModuleOp"]>,
 ]>{
   let summary = "Create a symbolic value for formal verification";
   let description = [{
     This operation creates a new symbolic value that can be used to formally
     verify designs. Verification tools will try to find concrete assignments for
-    symbolic values that violate asserts or make covers true.
+    symbolic values that violate asserts or make covers true. This value is not
+    fixed - the value taken can vary arbitrarily between timesteps.
   }];
-  let results = (outs AnyType:$result);
+  let results = (outs Res<AnyType, "", [MemAlloc]>:$result);
   let assemblyFormat = "attr-dict `:` type($result)";
 }
 
@@ -376,19 +506,17 @@ def ContractOp : VerifOp<"contract", [
 }
 
 class RequireLikeOp<string mnemonic> : VerifOp<mnemonic, [
-  AttrSizedOperandSegments,
   HasParent<"verif::ContractOp">,
+  DeclareOpInterfaceMethods<RequireLike>
 ]> {
   let arguments = (ins
     LTLAnyPropertyType:$property,
-    Optional<ClockType>:$clock,
     Optional<I1>:$enable,
     OptionalAttr<StrAttr>:$label
   );
   let assemblyFormat = [{
     $property
     (`if` $enable^)?
-    (`clock` $clock^)?
     (`label` $label^)?
     attr-dict `:` type($property)
   }];

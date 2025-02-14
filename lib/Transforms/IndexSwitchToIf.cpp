@@ -36,6 +36,7 @@ struct SwitchToIfConversion : public OpConversionPattern<scf::IndexSwitchOp> {
     auto loc = switchOp.getLoc();
 
     Region &defaultRegion = switchOp.getDefaultRegion();
+    bool hasResults = !switchOp.getResultTypes().empty();
 
     Value finalResult;
     scf::IfOp prevIfOp = nullptr;
@@ -66,17 +67,21 @@ struct SwitchToIfConversion : public OpConversionPattern<scf::IndexSwitchOp> {
                                     ifOp.getElseRegion().end());
       }
 
-      if (prevIfOp) {
+      if (prevIfOp && hasResults) {
         rewriter.setInsertionPointToEnd(&prevIfOp.getElseRegion().front());
         rewriter.create<scf::YieldOp>(loc, ifOp.getResult(0));
       }
 
-      if (i == 0)
+      if (i == 0 && hasResults)
         finalResult = ifOp.getResult(0);
+
       prevIfOp = ifOp;
     }
 
-    rewriter.replaceOp(switchOp, finalResult);
+    if (hasResults)
+      rewriter.replaceOp(switchOp, finalResult);
+    else
+      rewriter.eraseOp(switchOp);
 
     return success();
   }

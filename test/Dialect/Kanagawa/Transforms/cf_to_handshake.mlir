@@ -41,7 +41,6 @@
 
 kanagawa.design @foo {
 kanagawa.class sym @ToHandshake {
-  %this = kanagawa.this <@foo::@ToHandshake>
   // Just a simple test demonstrating the intended mixing of `kanagawa.sblock`s and
   // control flow operations. The meat of cf-to-handshake conversion is tested
   // in the handshake dialect tests.

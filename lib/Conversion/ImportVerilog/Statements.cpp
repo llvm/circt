@@ -34,6 +34,93 @@ struct StmtVisitor {
     return *block.release();
   }
 
+  LogicalResult recursiveForeach(const slang::ast::ForeachLoopStatement &stmt,
+                                 uint32_t level) {
+    // find current dimension we are operate.
+    const auto &loopDim = stmt.loopDims[level];
+    if (!loopDim.range.has_value()) {
+      emitError(loc) << "dynamic loop variable is unsupported";
+    }
+    auto &exitBlock = createBlock();
+    auto &stepBlock = createBlock();
+    auto &bodyBlock = createBlock();
+    auto &checkBlock = createBlock();
+
+    // Push the blocks onto the loop stack such that we can continue and break.
+    context.loopStack.push_back({&stepBlock, &exitBlock});
+    auto done = llvm::make_scope_exit([&] { context.loopStack.pop_back(); });
+
+    const auto &iter = loopDim.loopVar;
+    auto type = context.convertType(*iter->getDeclaredType());
+    if (!type)
+      return failure();
+
+    Value initial = builder.create<moore::ConstantOp>(
+        loc, cast<moore::IntType>(type), loopDim.range->lower());
+
+    // Create loop varirable in this dimension
+    Value varOp = builder.create<moore::VariableOp>(
+        loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
+        builder.getStringAttr(iter->name), initial);
+    context.valueSymbols.insertIntoScope(context.valueSymbols.getCurScope(),
+                                         iter, varOp);
+
+    builder.create<cf::BranchOp>(loc, &checkBlock);
+    builder.setInsertionPointToEnd(&checkBlock);
+
+    // When the loop variable is greater than the upper bound, goto exit
+    auto upperBound = builder.create<moore::ConstantOp>(
+        loc, cast<moore::IntType>(type), loopDim.range->upper());
+
+    auto var = builder.create<moore::ReadOp>(loc, varOp);
+    Value cond = builder.create<moore::SleOp>(loc, var, upperBound);
+    if (!cond)
+      return failure();
+    cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
+    cond = builder.create<moore::ConversionOp>(loc, builder.getI1Type(), cond);
+    builder.create<cf::CondBranchOp>(loc, cond, &bodyBlock, &exitBlock);
+
+    builder.setInsertionPointToEnd(&bodyBlock);
+
+    // find next dimension in this foreach statement, it finded then recuersive
+    // resolve, else perform body statement
+    bool hasNext = false;
+    for (uint32_t nextLevel = level + 1; nextLevel < stmt.loopDims.size();
+         nextLevel++) {
+      if (stmt.loopDims[nextLevel].loopVar) {
+        if (failed(recursiveForeach(stmt, nextLevel)))
+          return failure();
+        hasNext = true;
+        break;
+      }
+    }
+
+    if (!hasNext) {
+      if (failed(context.convertStatement(stmt.body)))
+        return failure();
+    }
+    if (!isTerminated())
+      builder.create<cf::BranchOp>(loc, &stepBlock);
+
+    builder.setInsertionPointToEnd(&stepBlock);
+
+    // add one to loop variable
+    var = builder.create<moore::ReadOp>(loc, varOp);
+    auto one =
+        builder.create<moore::ConstantOp>(loc, cast<moore::IntType>(type), 1);
+    auto postValue = builder.create<moore::AddOp>(loc, var, one).getResult();
+    builder.create<moore::BlockingAssignOp>(loc, varOp, postValue);
+    builder.create<cf::BranchOp>(loc, &checkBlock);
+
+    if (exitBlock.hasNoPredecessors()) {
+      exitBlock.erase();
+      setTerminated();
+    } else {
+      builder.setInsertionPointToEnd(&exitBlock);
+    }
+    return success();
+  }
+
   // Skip empty statements (stray semicolons).
   LogicalResult visit(const slang::ast::EmptyStatement &) { return success(); }
 
@@ -305,6 +392,14 @@ struct StmtVisitor {
       setTerminated();
     } else {
       builder.setInsertionPointToEnd(&exitBlock);
+    }
+    return success();
+  }
+
+  LogicalResult visit(const slang::ast::ForeachLoopStatement &stmt) {
+    for (uint32_t level = 0; level < stmt.loopDims.size(); level++) {
+      if (stmt.loopDims[level].loopVar)
+        return recursiveForeach(stmt, level);
     }
     return success();
   }

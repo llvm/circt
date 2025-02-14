@@ -19,11 +19,82 @@ using namespace circt;
 using namespace rtg;
 
 //===----------------------------------------------------------------------===//
-// SequenceClosureOp
+// SequenceOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SequenceOp::verifyRegions() {
+  if (TypeRange(getSequenceType().getElementTypes()) !=
+      getBody()->getArgumentTypes())
+    return emitOpError("sequence type does not match block argument types");
+
+  return success();
+}
+
+ParseResult SequenceOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse the name as a symbol.
+  if (parser.parseSymbolName(
+          result.getOrAddProperties<SequenceOp::Properties>().sym_name))
+    return failure();
+
+  // Parse the function signature.
+  SmallVector<OpAsmParser::Argument> arguments;
+  if (parser.parseArgumentList(arguments, OpAsmParser::Delimiter::Paren,
+                               /*allowType=*/true, /*allowAttrs=*/true))
+    return failure();
+
+  SmallVector<Type> argTypes;
+  SmallVector<Location> argLocs;
+  argTypes.reserve(arguments.size());
+  argLocs.reserve(arguments.size());
+  for (auto &arg : arguments) {
+    argTypes.push_back(arg.type);
+    argLocs.push_back(arg.sourceLoc ? *arg.sourceLoc : result.location);
+  }
+  Type type = SequenceType::get(result.getContext(), argTypes);
+  result.getOrAddProperties<SequenceOp::Properties>().sequenceType =
+      TypeAttr::get(type);
+
+  auto loc = parser.getCurrentLocation();
+  if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
+    return failure();
+  if (failed(verifyInherentAttrs(result.name, result.attributes, [&]() {
+        return parser.emitError(loc)
+               << "'" << result.name.getStringRef() << "' op ";
+      })))
+    return failure();
+
+  std::unique_ptr<Region> bodyRegionRegion = std::make_unique<Region>();
+  if (parser.parseRegion(*bodyRegionRegion, arguments))
+    return failure();
+
+  if (bodyRegionRegion->empty()) {
+    bodyRegionRegion->emplaceBlock();
+    bodyRegionRegion->addArguments(argTypes, argLocs);
+  }
+  result.addRegion(std::move(bodyRegionRegion));
+
+  return success();
+}
+
+void SequenceOp::print(OpAsmPrinter &p) {
+  p << ' ';
+  p.printSymbolName(getSymNameAttr().getValue());
+  p << "(";
+  llvm::interleaveComma(getBody()->getArguments(), p,
+                        [&](auto arg) { p.printRegionArgument(arg); });
+  p << ")";
+  p.printOptionalAttrDictWithKeyword(
+      (*this)->getAttrs(), {getSymNameAttrName(), getSequenceTypeAttrName()});
+  p << ' ';
+  p.printRegion(getBodyRegion(), /*printEntryBlockArgs=*/false);
+}
+
+//===----------------------------------------------------------------------===//
+// GetSequenceOp
 //===----------------------------------------------------------------------===//
 
 LogicalResult
-SequenceClosureOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+GetSequenceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   SequenceOp seq =
       symbolTable.lookupNearestSymbolFrom<SequenceOp>(*this, getSequenceAttr());
   if (!seq)
@@ -31,11 +102,93 @@ SequenceClosureOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
            << "'" << getSequence()
            << "' does not reference a valid 'rtg.sequence' operation";
 
-  if (seq.getBodyRegion().getArgumentTypes() != getArgs().getTypes())
-    return emitOpError("referenced 'rtg.sequence' op's argument types must "
-                       "match 'args' types");
+  if (seq.getSequenceType() != getType())
+    return emitOpError("referenced 'rtg.sequence' op's type does not match");
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// SubstituteSequenceOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SubstituteSequenceOp::verify() {
+  if (getReplacements().empty())
+    return emitOpError("must at least have one replacement value");
+
+  if (getReplacements().size() >
+      getSequence().getType().getElementTypes().size())
+    return emitOpError(
+        "must not have more replacement values than sequence arguments");
+
+  if (getReplacements().getTypes() !=
+      getSequence().getType().getElementTypes().take_front(
+          getReplacements().size()))
+    return emitOpError("replacement types must match the same number of "
+                       "sequence argument types from the front");
+
+  return success();
+}
+
+LogicalResult SubstituteSequenceOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    SmallVectorImpl<Type> &inferredReturnTypes) {
+  ArrayRef<Type> argTypes =
+      cast<SequenceType>(operands[0].getType()).getElementTypes();
+  auto seqType =
+      SequenceType::get(context, argTypes.drop_front(operands.size() - 1));
+  inferredReturnTypes.push_back(seqType);
+  return success();
+}
+
+ParseResult SubstituteSequenceOp::parse(::mlir::OpAsmParser &parser,
+                                        ::mlir::OperationState &result) {
+  OpAsmParser::UnresolvedOperand sequenceRawOperand;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> replacementsOperands;
+  Type sequenceRawType;
+
+  if (parser.parseOperand(sequenceRawOperand) || parser.parseLParen())
+    return failure();
+
+  auto replacementsOperandsLoc = parser.getCurrentLocation();
+  if (parser.parseOperandList(replacementsOperands) || parser.parseRParen() ||
+      parser.parseColon() || parser.parseType(sequenceRawType) ||
+      parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  if (!isa<SequenceType>(sequenceRawType))
+    return parser.emitError(parser.getNameLoc())
+           << "'sequence' must be handle to a sequence or sequence family, but "
+              "got "
+           << sequenceRawType;
+
+  if (parser.resolveOperand(sequenceRawOperand, sequenceRawType,
+                            result.operands))
+    return failure();
+
+  if (parser.resolveOperands(replacementsOperands,
+                             cast<SequenceType>(sequenceRawType)
+                                 .getElementTypes()
+                                 .take_front(replacementsOperands.size()),
+                             replacementsOperandsLoc, result.operands))
+    return failure();
+
+  SmallVector<Type> inferredReturnTypes;
+  if (failed(inferReturnTypes(
+          parser.getContext(), result.location, result.operands,
+          result.attributes.getDictionary(parser.getContext()),
+          result.getRawProperties(), result.regions, inferredReturnTypes)))
+    return failure();
+
+  result.addTypes(inferredReturnTypes);
+  return success();
+}
+
+void SubstituteSequenceOp::print(OpAsmPrinter &p) {
+  p << ' ' << getSequence() << "(" << getReplacements()
+    << ") : " << getSequence().getType();
+  p.printOptionalAttrDict((*this)->getAttrs(), {});
 }
 
 //===----------------------------------------------------------------------===//
@@ -147,6 +300,66 @@ LogicalResult BagCreateOp::verify() {
     if (getElements()[0].getType() != getBag().getType().getElementType())
       return emitOpError() << "operand types must match bag element type";
 
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// FixedRegisterOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult FixedRegisterOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    SmallVectorImpl<Type> &inferredReturnTypes) {
+  inferredReturnTypes.push_back(
+      properties.as<Properties *>()->getReg().getType());
+  return success();
+}
+
+OpFoldResult FixedRegisterOp::fold(FoldAdaptor adaptor) { return getRegAttr(); }
+
+//===----------------------------------------------------------------------===//
+// VirtualRegisterOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult VirtualRegisterOp::verify() {
+  if (getAllowedRegs().empty())
+    return emitOpError("must have at least one allowed register");
+
+  if (llvm::any_of(getAllowedRegs(), [](Attribute attr) {
+        return !isa<RegisterAttrInterface>(attr);
+      }))
+    return emitOpError("all elements must be of RegisterAttrInterface");
+
+  if (!llvm::all_equal(
+          llvm::map_range(getAllowedRegs().getAsRange<RegisterAttrInterface>(),
+                          [](auto attr) { return attr.getType(); })))
+    return emitOpError("all allowed registers must be of the same type");
+
+  return success();
+}
+
+LogicalResult VirtualRegisterOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    SmallVectorImpl<Type> &inferredReturnTypes) {
+  auto allowedRegs = properties.as<Properties *>()->getAllowedRegs();
+  if (allowedRegs.empty()) {
+    if (loc)
+      return mlir::emitError(*loc, "must have at least one allowed register");
+
+    return failure();
+  }
+
+  auto regAttr = dyn_cast<RegisterAttrInterface>(allowedRegs[0]);
+  if (!regAttr) {
+    if (loc)
+      return mlir::emitError(
+          *loc, "allowed register attributes must be of RegisterAttrInterface");
+
+    return failure();
+  }
+  inferredReturnTypes.push_back(regAttr.getType());
   return success();
 }
 

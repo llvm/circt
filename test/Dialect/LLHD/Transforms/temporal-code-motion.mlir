@@ -205,3 +205,18 @@ hw.module @more_than_one_TR_wait_terminator(in %cond: i1) {
     cf.br ^bb1
   }
 }
+
+// CHECK-LABEL: @unsupportedLoop
+hw.module @unsupportedLoop() {
+  // CHECK-NEXT: llhd.process {
+  // CHECK-NEXT:   cf.br ^bb
+  // CHECK-NEXT: ^bb
+  // CHECK-NEXT:   llhd.wait ^bb
+  // CHECK-NEXT: }
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    llhd.wait ^bb1
+  }
+  hw.output
+}

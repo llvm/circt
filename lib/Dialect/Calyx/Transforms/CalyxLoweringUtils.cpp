@@ -29,6 +29,28 @@ using namespace mlir::arith;
 namespace circt {
 namespace calyx {
 
+template <typename OpTy>
+static LogicalResult deduplicateParallelOperation(OpTy parOp,
+                                                  PatternRewriter &rewriter) {
+  auto *body = parOp.getBodyBlock();
+  if (body->getOperations().size() < 2)
+    return failure();
+
+  LogicalResult result = LogicalResult::failure();
+  SetVector<StringRef> members;
+  for (auto &op : make_early_inc_range(*body)) {
+    auto enableOp = dyn_cast<EnableOp>(&op);
+    if (enableOp == nullptr)
+      continue;
+    bool inserted = members.insert(enableOp.getGroupName());
+    if (!inserted) {
+      rewriter.eraseOp(enableOp);
+      result = LogicalResult::success();
+    }
+  }
+  return result;
+}
+
 void appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
                                   Value memref, unsigned memoryID,
                                   SmallVectorImpl<calyx::PortInfo> &inPorts,
@@ -610,6 +632,22 @@ EliminateUnusedCombGroups::matchAndRewrite(calyx::CombGroupOp combGroupOp,
 }
 
 //===----------------------------------------------------------------------===//
+// DeduplicateParallelOperations
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+DeduplicateParallelOp::matchAndRewrite(calyx::ParOp parOp,
+                                       PatternRewriter &rewriter) const {
+  return deduplicateParallelOperation<calyx::ParOp>(parOp, rewriter);
+}
+
+LogicalResult
+DeduplicateStaticParallelOp::matchAndRewrite(calyx::StaticParOp parOp,
+                                             PatternRewriter &rewriter) const {
+  return deduplicateParallelOperation<calyx::StaticParOp>(parOp, rewriter);
+}
+
+//===----------------------------------------------------------------------===//
 // InlineCombGroups
 //===----------------------------------------------------------------------===//
 
@@ -809,24 +847,6 @@ BuildCallInstance::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
           createInstance(callOp.getLoc(), rewriter, getComponent(), resultTypes,
                          instanceName, componentOp.getName());
       getState().addInstance(instanceName, instanceOp);
-      hw::ConstantOp constantOp =
-          createConstant(callOp.getLoc(), rewriter, getComponent(), 1, 1);
-      OpBuilder::InsertionGuard g(rewriter);
-      rewriter.setInsertionPointToStart(
-          getComponent().getWiresOp().getBodyBlock());
-
-      // Creates the group that initializes the instance.
-      calyx::GroupOp groupOp = rewriter.create<calyx::GroupOp>(
-          callOp.getLoc(), "init_" + instanceName);
-      rewriter.setInsertionPointToStart(groupOp.getBodyBlock());
-      auto portInfos = instanceOp.getReferencedComponent().getPortInfo();
-      auto results = instanceOp.getResults();
-      for (const auto &[portInfo, result] : llvm::zip(portInfos, results)) {
-        if (portInfo.hasAttribute(goPort) || portInfo.hasAttribute(resetPort))
-          rewriter.create<calyx::AssignOp>(callOp.getLoc(), result, constantOp);
-        else if (portInfo.hasAttribute(donePort))
-          rewriter.create<calyx::GroupDoneOp>(callOp.getLoc(), result);
-      }
     }
     WalkResult::advance();
   });

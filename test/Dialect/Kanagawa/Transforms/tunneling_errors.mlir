@@ -2,12 +2,10 @@
 
 kanagawa.design @foo {
 kanagawa.container sym @Parent {
-  %this = kanagawa.this <@foo::@Parent>
   %in = kanagawa.port.input "in" sym @in : i1
 }
 
 kanagawa.container sym @Orphan {
-  %this = kanagawa.this <@foo::@Orphan>
   // expected-error @+2 {{'kanagawa.path' op cannot tunnel up from "Orphan" because it has no uses}}
   // expected-error @+1 {{failed to legalize operation 'kanagawa.path' that was explicitly marked illegal}}
   %parent = kanagawa.path [
@@ -21,17 +19,14 @@ kanagawa.container sym @Orphan {
 
 kanagawa.design @foo {
 kanagawa.container sym @Parent {
-  %this = kanagawa.this <@foo::@Parent>
   %mc = kanagawa.container.instance @mc, <@foo::@MissingChild>
 }
 
 kanagawa.container sym @Child {
-  %this = kanagawa.this <@foo::@Child>
   %in = kanagawa.port.input "in" sym @in : i1
 }
 
 kanagawa.container sym @MissingChild {
-  %this = kanagawa.this <@foo::@MissingChild>
   // expected-error @+2 {{'kanagawa.path' op expected an instance named @c in @Parent but found none}}
   // expected-error @+1 {{failed to legalize operation 'kanagawa.path' that was explicitly marked illegal}}
   %parent = kanagawa.path [

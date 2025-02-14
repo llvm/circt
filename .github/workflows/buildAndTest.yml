@@ -97,7 +97,7 @@ jobs:
       # Upload the format patches to an artifact (zip'd) associated
       # with the workflow run. Only run this on a failure.
       - name: Upload format patches
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         continue-on-error: true
         if: ${{ failure() }}
         with:
@@ -285,7 +285,7 @@ jobs:
       # Upload the tidy patches to an artifact (zip'd) associated
       # with the workflow run. Only run this on a failure.
       - name: Upload tidy patches
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         continue-on-error: true
         if: ${{ failure() }}
         with:

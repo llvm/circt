@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/ArcToLLVM.h"
+#include "circt/Conversion/CombToArith.h"
 #include "circt/Conversion/CombToLLVM.h"
 #include "circt/Conversion/HWToLLVM.h"
 #include "circt/Dialect/Arc/ArcOps.h"
@@ -259,8 +260,21 @@ struct ClockGateOpLowering : public OpConversionPattern<seq::ClockGateOp> {
   LogicalResult
   matchAndRewrite(seq::ClockGateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    rewriter.replaceOpWithNewOp<comb::AndOp>(op, adaptor.getInput(),
-                                             adaptor.getEnable(), true);
+    rewriter.replaceOpWithNewOp<LLVM::AndOp>(op, adaptor.getInput(),
+                                             adaptor.getEnable());
+    return success();
+  }
+};
+
+/// Lower 'seq.clock_inv x' to 'llvm.xor x true'
+struct ClockInvOpLowering : public OpConversionPattern<seq::ClockInverterOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(seq::ClockInverterOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto constTrue = rewriter.create<LLVM::ConstantOp>(op->getLoc(),
+                                                       rewriter.getI1Type(), 1);
+    rewriter.replaceOpWithNewOp<LLVM::XOrOp>(op, adaptor.getInput(), constTrue);
     return success();
   }
 };
@@ -367,17 +381,22 @@ struct SimInstantiateOpLowering
     // sizeof(size_t) on the target architecture.
     Type convertedIndex = typeConverter->convertType(rewriter.getIndexType());
 
-    LLVM::LLVMFuncOp mallocFunc =
+    FailureOr<LLVM::LLVMFuncOp> mallocFunc =
         LLVM::lookupOrCreateMallocFn(moduleOp, convertedIndex);
-    LLVM::LLVMFuncOp freeFunc = LLVM::lookupOrCreateFreeFn(moduleOp);
+    if (failed(mallocFunc))
+      return mallocFunc;
+
+    FailureOr<LLVM::LLVMFuncOp> freeFunc = LLVM::lookupOrCreateFreeFn(moduleOp);
+    if (failed(freeFunc))
+      return freeFunc;
 
     Location loc = op.getLoc();
     Value numStateBytes = rewriter.create<LLVM::ConstantOp>(
         loc, convertedIndex, model.numStateBytes);
-    Value allocated =
-        rewriter
-            .create<LLVM::CallOp>(loc, mallocFunc, ValueRange{numStateBytes})
-            .getResult();
+    Value allocated = rewriter
+                          .create<LLVM::CallOp>(loc, mallocFunc.value(),
+                                                ValueRange{numStateBytes})
+                          .getResult();
     Value zero =
         rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI8Type(), 0);
     rewriter.create<LLVM::MemsetOp>(loc, allocated, zero, numStateBytes, false);
@@ -404,7 +423,7 @@ struct SimInstantiateOpLowering
                                     ValueRange{allocated});
     }
 
-    rewriter.create<LLVM::CallOp>(loc, freeFunc, ValueRange{allocated});
+    rewriter.create<LLVM::CallOp>(loc, freeFunc.value(), ValueRange{allocated});
     rewriter.eraseOp(op);
 
     return success();
@@ -536,6 +555,8 @@ struct SimEmitValueOpLowering
     auto printfFunc = LLVM::lookupOrCreateFn(
         moduleOp, "printf", LLVM::LLVMPointerType::get(getContext()),
         LLVM::LLVMVoidType::get(getContext()), true);
+    if (failed(printfFunc))
+      return printfFunc;
 
     // Insert the format string if not already available.
     SmallString<16> formatStrName{"_arc_sim_emit_"};
@@ -566,7 +587,7 @@ struct SimEmitValueOpLowering
     Value formatStrGlobalPtr =
         rewriter.create<LLVM::AddressOfOp>(loc, formatStrGlobal);
     rewriter.replaceOpWithNewOp<LLVM::CallOp>(
-        op, printfFunc, ValueRange{formatStrGlobalPtr, toPrint});
+        op, printfFunc.value(), ValueRange{formatStrGlobalPtr, toPrint});
 
     return success();
   }
@@ -635,6 +656,7 @@ void LowerArcToLLVMPass::runOnOperation() {
   populateHWToLLVMConversionPatterns(converter, patterns, globals,
                                      constAggregateGlobalsMap);
   populateHWToLLVMTypeConversions(converter);
+  populateCombToArithConversionPatterns(converter, patterns);
   populateCombToLLVMConversionPatterns(converter, patterns);
 
   // Arc patterns.
@@ -646,6 +668,7 @@ void LowerArcToLLVMPass::runOnOperation() {
     AllocStateLikeOpLowering<arc::RootOutputOp>,
     AllocStorageOpLowering,
     ClockGateOpLowering,
+    ClockInvOpLowering,
     MemoryReadOpLowering,
     MemoryWriteOpLowering,
     ModelOpLowering,

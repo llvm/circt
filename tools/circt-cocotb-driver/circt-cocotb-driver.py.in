@@ -60,6 +60,11 @@ class Icarus(csim.Icarus):
   def __init__(self, **kwargs):
     super().__init__(**kwargs)
 
+    # If cmake discovered the iverilog path, add it to the path.
+    if "@IVERILOG_PATH@" != "":
+      iverilog_dir = os.path.dirname("@IVERILOG_PATH@")
+      os.environ["PATH"] = f"{iverilog_dir}:{os.environ['PATH']}"
+
     # Ensure that iverilog is available in path and it is at least iverilog v11
     try:
       out = subprocess.check_output(["iverilog", "-V"])
@@ -101,14 +106,18 @@ class Questa(csim.Questa):
   def __init__(self, **kwargs):
     super().__init__(**kwargs)
 
-    # Ensure that iverilog is available in path and it is at least iverilog v11
+    # If cmake discovered the Questa path, add it to the path.
+    if "@QUESTA_PATH@" != "":
+      os.environ["PATH"] = f"@QUESTA_PATH@:{os.environ['PATH']}"
+
+    # Ensure that Questa is available in path and it is at least iverilog v11
     try:
       out = subprocess.check_output(["vlog", "-version"])
     except subprocess.CalledProcessError:
       raise Exception("vlog not found in path")
 
-    # find the 'Icarus Verilog version #' string and extract the version number
-    # using a regex
+    # find the Questa version string and extract the version number using a
+    # regex
     ver_re = r"QuestaSim-64 vlog (\d+\.\d+)"
     ver_match = re.search(ver_re, out.decode("utf-8"))
     if ver_match is None:

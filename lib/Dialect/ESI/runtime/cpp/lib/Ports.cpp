@@ -19,8 +19,8 @@
 
 using namespace esi;
 
-BundlePort::BundlePort(AppID id, std::map<std::string, ChannelPort &> channels)
-    : id(id), channels(channels) {}
+BundlePort::BundlePort(AppID id, const BundleType *type, PortMap channels)
+    : id(id), type(type), channels(channels) {}
 
 WriteChannelPort &BundlePort::getRawWrite(const std::string &name) const {
   auto f = channels.find(name);
@@ -45,13 +45,12 @@ void ReadChannelPort::connect(std::function<bool(MessageData)> callback,
                               std::optional<unsigned> bufferSize) {
   if (mode != Mode::Disconnected)
     throw std::runtime_error("Channel already connected");
-  mode = Mode::Callback;
   this->callback = callback;
   connectImpl(bufferSize);
+  mode = Mode::Callback;
 }
 
 void ReadChannelPort::connect(std::optional<unsigned> bufferSize) {
-  mode = Mode::Polling;
   maxDataQueueMsgs = DefaultMaxDataQueueMsgs;
   this->callback = [this](MessageData data) {
     std::scoped_lock<std::mutex> lock(pollingM);
@@ -72,6 +71,7 @@ void ReadChannelPort::connect(std::optional<unsigned> bufferSize) {
     return true;
   };
   connectImpl(bufferSize);
+  mode = Mode::Polling;
 }
 
 std::future<MessageData> ReadChannelPort::readAsync() {

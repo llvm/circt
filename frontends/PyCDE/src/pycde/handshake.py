@@ -3,6 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
+import sys
 from typing import List, Optional, Dict, Tuple
 
 from .module import Module, ModuleLikeBuilderBase, PortError
@@ -41,6 +42,10 @@ class FuncBuilder(ModuleLikeBuilderBase):
   def generate(self):
     """Fill in (generate) this module. Only supports a single generator
     currently."""
+
+    print(
+        sys.stderr, "WARNING: the Func handshake flow is currently broken "
+        "and thus disabled.")
     if len(self.generators) != 1:
       raise ValueError("Must have exactly one generator.")
     g: Generator = list(self.generators.values())[0]
@@ -121,7 +126,11 @@ class Func(Module):
   to hardware design.
 
   The PyCDE interface to it (this class) is considered experimental. Use at your
-  own risk and test the resulting RTL thoroughly."""
+  own risk and test the resulting RTL thoroughly.
+
+  Warning: the DC flow is currently broken and thus disabled. Do not use this.
+  https://github.com/llvm/circt/issues/7949
+  """
 
   BuilderType: type[ModuleLikeBuilderBase] = FuncBuilder
   _builder: FuncBuilder

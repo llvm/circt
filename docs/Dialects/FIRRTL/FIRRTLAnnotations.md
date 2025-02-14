@@ -976,21 +976,12 @@ array.
 A reference target is a JSON serialization of a regular reference target
 string.
 
-#### UnknownGroundType
-
-| Property   | Type   | Description                                                          |
-| ---------- | ------ | -------------                                                        |
-| class      | string | `sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$` |
-
-This represents an unknown FIRRTL ground type.
-
 #### AugmentedGroundType
 
 | Property   | Type   | Description                                          |
 | ---------- | ------ | -------------                                        |
 | class      | string | `sifive.enterprise.grandcentral.AugmentedGroundType` |
 | ref        | object | ReferenceTarget of the target component              |
-| tpe        | object | UnknownGroundType                                    |
 
 Creates a SystemVerilog logic type.
 
@@ -1013,9 +1004,6 @@ Example:
         "value": 0
       }
     ]
-  },
-  "tpe": {
-    "class": "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"
   }
 }
 ```
@@ -1025,7 +1013,7 @@ Example:
 | Property   | Type   | Description                                          |
 | ---------- | ------ | -------------                                        |
 | class      | string | `sifive.enterprise.grandcentral.AugmentedVectorType` |
-| elements   | array  | List of augmented types.
+| elements   | array  | List of augmented types.                             |
 
 Creates a SystemVerilog unpacked array.
 

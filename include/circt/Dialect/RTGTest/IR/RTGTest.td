@@ -18,9 +18,12 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
 
 include "circt/Dialect/RTG/IR/RTGInterfaces.td"
+include "circt/Dialect/RTG/IR/RTGISAAssemblyInterfaces.td"
 
 include "circt/Dialect/RTGTest/IR/RTGTestDialect.td"
+include "circt/Dialect/RTGTest/IR/RTGTestAttributes.td"
 include "circt/Dialect/RTGTest/IR/RTGTestTypes.td"
+include "circt/Dialect/RTGTest/IR/RTGTestAttributes.td"
 include "circt/Dialect/RTGTest/IR/RTGTestOps.td"
 
 #endif // CIRCT_DIALECT_RTGTEST_IR_RTGTEST_TD

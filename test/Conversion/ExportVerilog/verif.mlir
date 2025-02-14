@@ -310,7 +310,6 @@ hw.module @Issue5763(in %a: i3) {
   sv.assert_property %2 : i1
 }
 
-
 // CHECK-LABEL: module ClockedAsserts
 hw.module @ClockedAsserts(in %clk: i1, in %a: i1, in %b: i1) {
   %true = hw.constant true
@@ -324,4 +323,12 @@ hw.module @ClockedAsserts(in %clk: i1, in %a: i1, in %b: i1) {
 
   // CHECK: cover property (@(posedge clk) disable iff (b) not a);
   sv.cover_property %n0 on posedge %clk disable_iff %b: !ltl.property
+}
+
+// CHECK-LABEL: module Contracts
+hw.module @Contracts(in %a: i42, out b : i42) {
+  %0 = verif.contract %a : i42 {
+  }
+  // CHECK: assign b = a;
+  hw.output %0 : i42
 }

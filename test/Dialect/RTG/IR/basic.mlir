@@ -1,8 +1,11 @@
-// RUN: circt-opt %s | FileCheck %s
+// RUN: circt-opt %s --verify-roundtrip | FileCheck %s
+
+// CHECK-LABEL: rtg.sequence @ranomizedSequenceType
+// CHECK-SAME: (%{{.*}}: !rtg.randomized_sequence)
+rtg.sequence @ranomizedSequenceType(%seq: !rtg.randomized_sequence) {}
 
 // CHECK-LABEL: rtg.sequence @seq
-// CHECK-SAME: attributes {rtg.some_attr} {
-rtg.sequence @seq0 attributes {rtg.some_attr} {
+rtg.sequence @seq0() {
   %arg = arith.constant 1 : index
   // CHECK: [[LBL0:%.*]] = rtg.label_decl "label_string_{0}_{1}", %{{.*}}, %{{.*}}
   %0 = rtg.label_decl "label_string_{0}_{1}", %arg, %arg
@@ -16,24 +19,32 @@ rtg.sequence @seq0 attributes {rtg.some_attr} {
   rtg.label external %0
 }
 
-// CHECK-LABEL: rtg.sequence @seq1
-// CHECK: ^bb0(%arg0: i32, %arg1: !rtg.sequence):
-rtg.sequence @seq1 {
-^bb0(%arg0: i32, %arg1: !rtg.sequence):
-}
+// CHECK-LABEL: rtg.sequence @seqAttrsAndTypeElements
+// CHECK-SAME: (%arg0: !rtg.sequence<!rtg.sequence<!rtg.label, !rtg.set<index>>>) attributes {rtg.some_attr} {
+rtg.sequence @seqAttrsAndTypeElements(%arg0: !rtg.sequence<!rtg.sequence<!rtg.label, !rtg.set<index>>>) attributes {rtg.some_attr} {}
 
-// CHECK-LABEL: rtg.sequence @invocations
-rtg.sequence @invocations {
-  // CHECK: [[V0:%.+]] = rtg.sequence_closure @seq0
+// CHECK-LABEL: rtg.sequence @seq1
+// CHECK-SAME: (%arg0: i32, %arg1: !rtg.sequence)
+rtg.sequence @seq1(%arg0: i32, %arg1: !rtg.sequence) { }
+
+// CHECK-LABEL: rtg.sequence @seqRandomizationAndEmbedding
+rtg.sequence @seqRandomizationAndEmbedding() {
+  // CHECK: [[V0:%.+]] = rtg.get_sequence @seq0
   // CHECK: [[C0:%.+]] = arith.constant 0 : i32
-  // CHECK: [[V1:%.+]] = rtg.sequence_closure @seq1([[C0]], [[V0]] : i32, !rtg.sequence)
-  // CHECK: rtg.invoke_sequence [[V0]]
-  // CHECK: rtg.invoke_sequence [[V1]]
-  %0 = rtg.sequence_closure @seq0
+  // CHECK: [[V1:%.+]] = rtg.get_sequence @seq1
+  // CHECK: [[V2:%.+]] = rtg.substitute_sequence [[V1]]([[C0]], [[V0]]) : !rtg.sequence<i32, !rtg.sequence>
+  // CHECK: [[V3:%.+]] = rtg.randomize_sequence [[V0]]
+  // CHECK: [[V4:%.+]] = rtg.randomize_sequence [[V2]]
+  // CHECK: rtg.embed_sequence [[V3]]
+  // CHECK: rtg.embed_sequence [[V4]]
+  %0 = rtg.get_sequence @seq0 : !rtg.sequence
   %c0_i32 = arith.constant 0 : i32
-  %1 = rtg.sequence_closure @seq1(%c0_i32, %0 : i32, !rtg.sequence)
-  rtg.invoke_sequence %0
-  rtg.invoke_sequence %1
+  %1 = rtg.get_sequence @seq1 : !rtg.sequence<i32, !rtg.sequence>
+  %2 = rtg.substitute_sequence %1(%c0_i32, %0) : !rtg.sequence<i32, !rtg.sequence>
+  %3 = rtg.randomize_sequence %0
+  %4 = rtg.randomize_sequence %2
+  rtg.embed_sequence %3
+  rtg.embed_sequence %4
 }
 
 // CHECK-LABEL: @sets
@@ -55,8 +66,7 @@ func.func @sets(%arg0: i32, %arg1: i32) {
 }
 
 // CHECK-LABEL: @bags
-rtg.sequence @bags {
-^bb0(%arg0: i32, %arg1: i32, %arg2: index):
+rtg.sequence @bags(%arg0: i32, %arg1: i32, %arg2: index) {
   // CHECK: [[BAG:%.+]] = rtg.bag_create (%arg2 x %arg0, %arg2 x %arg1) : i32 {rtg.some_attr}
   // CHECK: [[R:%.+]] = rtg.bag_select_random [[BAG]] : !rtg.bag<i32> {rtg.some_attr}
   // CHECK: [[EMPTY:%.+]] = rtg.bag_create : i32
@@ -95,4 +105,10 @@ rtg.target @target : !rtg.dict<num_cpus: i32, num_modes: i32> {
 // CHECK: }
 rtg.test @test : !rtg.dict<num_cpus: i32, num_modes: i32> {
 ^bb0(%arg0: i32, %arg1: i32):
+}
+
+// CHECK-LABEL: rtg.sequence @integerHandlingOps
+rtg.sequence @integerHandlingOps(%arg0: index, %arg1: index) {
+  // CHECK: rtg.random_number_in_range [%arg0, %arg1)
+  rtg.random_number_in_range [%arg0, %arg1)
 }

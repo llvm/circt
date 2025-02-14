@@ -1,7 +1,6 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
 
-import unittest
 from pycde import (Clock, Input, InputChannel, Output, OutputChannel, Module,
                    Reset, generator, types)
 from pycde import esi
@@ -211,9 +210,10 @@ class RecvBundleTest(Module):
 
 
 # CHECK-LABEL:  hw.module @ChannelTransform(in %s1_in : !esi.channel<i32>, out s2_out : !esi.channel<i8>)
-# CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %s1_in, %ready : i32
+# CHECK-NEXT:     %valid, %ready, %data = esi.snoop.vr %s1_in : !esi.channel<i32>
+# CHECK-NEXT:     %rawOutput, %valid_0 = esi.unwrap.vr %s1_in, %ready_1 : i32
 # CHECK-NEXT:     [[R0:%.+]] = comb.extract %rawOutput from 0 : (i32) -> i8
-# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R0]], %valid : i8
+# CHECK-NEXT:     %chanOutput, %ready_1 = esi.wrap.vr [[R0]], %valid_0 : i8
 # CHECK-NEXT:     hw.output %chanOutput : !esi.channel<i8>
 @unittestmodule()
 class ChannelTransform(Module):
@@ -222,6 +222,7 @@ class ChannelTransform(Module):
 
   @generator
   def build(self):
+    valid, ready, data = self.s1_in.snoop()
     self.s2_out = self.s1_in.transform(lambda x: x[0:8])
 
 
@@ -302,8 +303,13 @@ class MMIOReq(Module):
 # CHECK-NEXT:     [[R2:%.+]] = hwarith.constant 0 : ui8
 # CHECK-NEXT:     [[R3:%.+]] = hw.struct_create ([[R0]], [[R2]]) : !hw.struct<address: ui64, tag: ui8>
 # CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R3]], %false : !hw.struct<address: ui64, tag: ui8>
-# CHECK-NEXT:     [[R1:%.+]] = esi.service.req <@_HostMem::@read>(#esi.appid<"host_mem_req">) : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from "req", !esi.channel<!hw.struct<tag: ui8, data: ui256>> to "resp"]>
+# CHECK-NEXT:     [[R1:%.+]] = esi.service.req <@_HostMem::@read>(#esi.appid<"host_mem_read_req">) : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from "req", !esi.channel<!hw.struct<tag: ui8, data: ui256>> to "resp"]>
 # CHECK-NEXT:     %resp = esi.bundle.unpack %chanOutput from [[R1]] : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from "req", !esi.channel<!hw.struct<tag: ui8, data: ui256>> to "resp"]>
+# CHECK-NEXT:     [[R4:%.+]] = hwarith.constant 0 : ui8
+# CHECK-NEXT:     [[R5:%.+]] = hwarith.constant 0 : ui256
+# CHECK-NEXT:     [[R6:%.+]] = hw.struct_create ([[R0]], [[R4]], [[R5]]) : !hw.struct<address: ui64, tag: ui8, data: ui256>
+# CHECK-NEXT:     %chanOutput_0, %ready_1 = esi.wrap.vr [[R6]], %false : !hw.struct<address: ui64, tag: ui8, data: ui256>
+# CHECK-NEXT:     [[R7:%.+]] = esi.service.req <@_HostMem::@write>(#esi.appid<"host_mem_write_req">) : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: ui256>> from "req", !esi.channel<ui8> to "ackTag"]>
 # CHECK:        esi.service.std.hostmem @_HostMem
 @unittestmodule(esi_sys=True)
 class HostMemReq(Module):
@@ -313,12 +319,18 @@ class HostMemReq(Module):
     u64 = UInt(64)(0)
     c1 = Bits(1)(0)
 
-    address, _ = Channel(esi.HostMem.ReadReqType).wrap(
+    read_address, _ = Channel(esi.HostMem.ReadReqType).wrap(
         esi.HostMem.ReadReqType({
             "tag": 0,
             "address": u64
         }), c1)
 
-    _ = HostMem.read(appid=AppID("host_mem_req"),
-                     req=address,
+    _ = HostMem.read(appid=AppID("host_mem_read_req"),
+                     req=read_address,
                      data_type=UInt(256))
+
+    write_req, _ = esi.HostMem.wrap_write_req(tag=UInt(8)(0),
+                                              data=UInt(256)(0),
+                                              address=u64,
+                                              valid=c1)
+    _ = HostMem.write(appid=AppID("host_mem_write_req"), req=write_req)
