@@ -19,13 +19,14 @@
 # RUN: %PYTHON% %s %t cosim 2>&1
 # RUN: esi-cosim.py --source %t -- esitester cosim env wait | FileCheck %s
 # RUN: ESI_COSIM_MANIFEST_MMIO=1 esi-cosim.py --source %t -- esiquery cosim env info
-# RUN: esi-cosim.py --source %t -- esitester cosim env dmatest
+# RUN: esi-cosim.py --source %t -- esitester cosim env hostmemtest
+# RUN: esi-cosim.py --source %t -- esitester cosim env dmawritetest
 
 import pycde
 from pycde import AppID, Clock, Module, Reset, generator, modparams
 from pycde.bsp import get_bsp
-from pycde.constructs import Counter, Reg, Wire
-from pycde.esi import CallService
+from pycde.constructs import ControlReg, Counter, Reg, Wire
+from pycde.esi import CallService, ChannelService
 import pycde.esi as esi
 from pycde.types import Bits, Channel, UInt
 
@@ -181,6 +182,67 @@ def WriteMem(width: int) -> typing.Type['WriteMem']:
   return WriteMem
 
 
+def ToHostDMATest(width: int):
+  """Construct a module that sends a cycle count over a channel to the host the
+  specified number of times."""
+
+  class ToHostDMATest(Module):
+    clk = Clock()
+    rst = Reset()
+
+    @generator
+    def construct(ports):
+      count_reached = Wire(Bits(1))
+      count_valid = Wire(Bits(1))
+      out_xact = Wire(Bits(1))
+      cycle_counter = Counter(width)(clk=ports.clk,
+                                     rst=ports.rst,
+                                     clear=Bits(1)(0),
+                                     increment=Bits(1)(1))
+
+      write_cntr_incr = ~count_reached & count_valid & out_xact
+      write_counter = Counter(32)(clk=ports.clk,
+                                  rst=ports.rst,
+                                  clear=count_reached,
+                                  increment=write_cntr_incr)
+      num_writes = write_counter.out
+
+      # Get the MMIO space for commands.
+      cmd_chan_wire = Wire(Channel(esi.MMIOReadWriteCmdType))
+      resp_ready_wire = Wire(Bits(1))
+      cmd, cmd_valid = cmd_chan_wire.unwrap(resp_ready_wire)
+      mmio_xact = cmd_valid & resp_ready_wire
+      response_data = Bits(64)(0)
+      response_chan, response_ready = Channel(response_data.type).wrap(
+          response_data, cmd_valid)
+      resp_ready_wire.assign(response_ready)
+
+      # write_count is the specified number of times to send the cycle count.
+      write_count_ce = mmio_xact & cmd.write & (cmd.offset == UInt(32)(0))
+      write_count = cmd.data.as_uint().reg(clk=ports.clk,
+                                           rst=ports.rst,
+                                           rst_value=0,
+                                           ce=write_count_ce)
+      count_reached.assign(num_writes == write_count)
+      count_valid.assign(
+          ControlReg(clk=ports.clk,
+                     rst=ports.rst,
+                     asserts=[write_count_ce],
+                     resets=[count_reached]))
+
+      mmio_rw = esi.MMIO.read_write(appid=AppID("ToHostDMATest"))
+      mmio_rw_cmd_chan = mmio_rw.unpack(data=response_chan)['cmd']
+      cmd_chan_wire.assign(mmio_rw_cmd_chan)
+
+      # Output channel.
+      out_channel, out_channel_ready = Channel(UInt(width)).wrap(
+          cycle_counter.out, count_valid)
+      out_xact.assign(out_channel_ready & count_valid)
+      ChannelService.to_host(name=AppID("out"), chan=out_channel)
+
+  return ToHostDMATest
+
+
 class EsiTesterTop(Module):
   clk = Clock()
   rst = Reset()
@@ -194,6 +256,10 @@ class EsiTesterTop(Module):
     WriteMem(32)(appid=esi.AppID("writemem", 32), clk=ports.clk, rst=ports.rst)
     WriteMem(64)(appid=esi.AppID("writemem", 64), clk=ports.clk, rst=ports.rst)
     WriteMem(96)(appid=esi.AppID("writemem", 96), clk=ports.clk, rst=ports.rst)
+    for width in [32, 64, 128, 256, 384, 504, 512]:
+      ToHostDMATest(width)(appid=esi.AppID("tohostdmatest", width),
+                           clk=ports.clk,
+                           rst=ports.rst)
 
 
 if __name__ == "__main__":
