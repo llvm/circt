@@ -16,6 +16,7 @@
 
 #include "circt/Dialect/AIG/AIGDialect.h"
 #include "circt/Dialect/Arc/ArcDialect.h"
+#include "circt/Dialect/BLIF/BLIFDialect.h"
 #include "circt/Dialect/Calyx/CalyxDialect.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/DC/DCDialect.h"
@@ -28,6 +29,7 @@
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HWArith/HWArithDialect.h"
 #include "circt/Dialect/Handshake/HandshakeDialect.h"
+#include "circt/Dialect/ICE40/ICE40Dialect.h"
 #include "circt/Dialect/Interop/InteropDialect.h"
 #include "circt/Dialect/Kanagawa/KanagawaDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
@@ -58,6 +60,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
   registry.insert<
     aig::AIGDialect,
     arc::ArcDialect,
+    blif::BLIFDialect,
     calyx::CalyxDialect,
     chirrtl::CHIRRTLDialect,
     comb::CombDialect,
@@ -70,6 +73,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     handshake::HandshakeDialect,
     hw::HWDialect,
     hwarith::HWArithDialect,
+    ice40::ICE40Dialect,
     interop::InteropDialect,
     kanagawa::KanagawaDialect,
     llhd::LLHDDialect,
