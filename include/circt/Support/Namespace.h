@@ -77,6 +77,9 @@ public:
     locked = false;
   }
 
+  /// Check if the name is already present in the namespace.
+  bool contains(StringRef name) const { return nextIndex.contains(name); }
+
   /// Return a unique name, derived from the input `name`, and add the new name
   /// to the internal namespace.  There are two possible outcomes for the
   /// returned name:
