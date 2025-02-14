@@ -111,7 +111,6 @@ def WaitOp : LLHDOp<"wait", [
     Terminator,
     AttrSizedOperandSegments,
     HasParent<"ProcessOp">,
-    DeclareOpInterfaceMethods<BranchOpInterface>
   ]> {
   let summary = "Suspends execution of a process.";
   let description = [{
