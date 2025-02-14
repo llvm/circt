@@ -1,11 +1,13 @@
-// RUN: arcilator %s --run --jit-entry=main | FileCheck %s
+// RUN: arcilator %s --run --jit-entry=main 2> %t | FileCheck %s --check-prefix=STDOUT
+// RUN: cat %t | FileCheck %s --check-prefix=STDERR
 // REQUIRES: arcilator-jit
 
-// CHECK-LABEL: out = cd
-// CHECK-NEXT: ARCENV-WARNING: Out-of-bounds array access caught: Index = 6, Size = 6
-// CHECK-NEXT: out = ab
-// CHECK-NEXT: ARCENV-WARNING: Out-of-bounds array access caught: Index = 7, Size = 6
-// CHECK-NEXT: output = ef
+// STDOUT:      out = cd
+// STDOUT-NEXT: out = ab
+// STDOUT-NEXT: out = ef
+
+// STDERR:      ARCENV-WARNING: Out-of-bounds array access caught: Index = 6, Size = 6
+// STDERR-NEXT: ARCENV-WARNING: Out-of-bounds array access caught: Index = 7, Size = 6
 
 module {
 
