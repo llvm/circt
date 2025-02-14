@@ -642,6 +642,11 @@ struct StmtVisitor {
     return success();
   }
 
+  // Handle concurrent assertion statements.
+  LogicalResult visit(const slang::ast::ConcurrentAssertionStatement &stmt) {
+    return failure();
+  }
+
   /// Handle the subset of system calls that return no result value. Return
   /// true if the called system task could be handled, false otherwise. Return
   /// failure if an error occurred.

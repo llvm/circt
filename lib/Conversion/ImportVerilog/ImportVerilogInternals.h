@@ -13,6 +13,7 @@
 #include "circt/Conversion/ImportVerilog.h"
 #include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -117,6 +118,10 @@ struct Context {
   Value convertRvalueExpression(const slang::ast::Expression &expr,
                                 Type requiredType = {});
   Value convertLvalueExpression(const slang::ast::Expression &expr);
+
+  // Convert an assertion expression AST node to MLIR ops.
+  Value convertAssertionExpression(const slang::ast::AssertionExpr &expr,
+                                   Location loc);
 
   // Traverse the whole AST to collect hierarchical names.
   LogicalResult
