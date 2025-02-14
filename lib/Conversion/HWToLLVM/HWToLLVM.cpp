@@ -180,7 +180,8 @@ struct ArrayGetOpConversion : public ConvertOpToLLVMPattern<hw::ArrayGetOp> {
                                      ArrayRef<LLVM::GEPArg>{0, zextIndex});
 
     auto indexBitWidth = hw::getBitWidth(op.getIndex().getType());
-    assert(indexBitWidth >= 0 && indexBitWidth < 64);
+    assert(indexBitWidth >= 0 && indexBitWidth < 64 &&
+           "Illegal index bit width");
     if ((UINT64_C(1) << indexBitWidth) <= arrTy.getNumElements()) {
       // The array spans the entire index range, so
       // access directly without bounds check.
@@ -201,46 +202,46 @@ struct ArrayGetOpConversion : public ConvertOpToLLVMPattern<hw::ArrayGetOp> {
       auto safePtr = rewriter.create<LLVM::SelectOp>(opLoc, isOOB, arrPtr, gep);
       rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, elemTy, safePtr);
       return success();
-    } else {
-      // We do have an OOB handler: Call it if necessary.
-      auto block = op->getBlock();
-      auto moduleOp = block->getParent()->getParentOfType<ModuleOp>();
-      declareOOBHandler(moduleOp);
-
-      // Split the control flow and create an unlikely branch to the handler.
-      auto continueBlock =
-          rewriter.splitBlock(rewriter.getInsertionBlock(), op->getIterator());
-      auto ptrArg = continueBlock->addArgument(ptrType, opLoc);
-      auto callHandlerBlock = rewriter.createBlock(continueBlock);
-      rewriter.setInsertionPointToEnd(block);
-
-      auto condBrOp = rewriter.create<LLVM::CondBrOp>(
-          opLoc, isOOB.getResult(), callHandlerBlock, mlir::ValueRange(),
-          continueBlock, mlir::ValueRange{gep});
-      condBrOp.setBranchWeights(ArrayRef<int32_t>{0, INT32_MAX});
-
-      // Create the arguments and call to the handler function
-      rewriter.setInsertionPointToStart(callHandlerBlock);
-
-      auto sizeCst64 = rewriter.createOrFold<LLVM::ZExtOp>(
-          opLoc, rewriter.getI64Type(), sizeCst);
-      auto index64 = rewriter.createOrFold<LLVM::ZExtOp>(
-          opLoc, rewriter.getI64Type(), zextIndex);
-      auto elementBitsCst = rewriter.create<LLVM::ConstantOp>(
-          opLoc, rewriter.getI32Type(),
-          arrTy.getElementType().getIntOrFloatBitWidth());
-
-      auto callOp = rewriter.create<LLVM::CallOp>(
-          opLoc, getOOBHandlerFuncType(rewriter), arrayGetOOBSymName,
-          mlir::ValueRange{arrPtr, sizeCst64, elementBitsCst, gep.getResult(),
-                           index64});
-      rewriter.create<LLVM::BrOp>(opLoc, mlir::ValueRange{callOp.getResult()},
-                                  continueBlock);
-
-      // Perform the (hopefully now valid) access
-      rewriter.setInsertionPointToStart(continueBlock);
-      rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, elemTy, ptrArg);
     }
+
+    // We do have an OOB handler: Call it if necessary.
+    auto originalBlock = op->getBlock();
+    auto moduleOp = originalBlock->getParent()->getParentOfType<ModuleOp>();
+    declareOOBHandler(moduleOp);
+
+    // Split the control flow and create an unlikely branch to the handler.
+    auto continueBlock =
+        rewriter.splitBlock(rewriter.getInsertionBlock(), op->getIterator());
+    auto ptrArg = continueBlock->addArgument(ptrType, opLoc);
+    auto callHandlerBlock = rewriter.createBlock(continueBlock);
+    rewriter.setInsertionPointToEnd(originalBlock);
+
+    auto condBrOp = rewriter.create<LLVM::CondBrOp>(
+        opLoc, isOOB.getResult(), callHandlerBlock, mlir::ValueRange(),
+        continueBlock, mlir::ValueRange{gep});
+    condBrOp.setBranchWeights(ArrayRef<int32_t>{0, INT32_MAX});
+
+    // Create the arguments and call to the handler function
+    rewriter.setInsertionPointToStart(callHandlerBlock);
+
+    auto sizeCst64 = rewriter.createOrFold<LLVM::ZExtOp>(
+        opLoc, rewriter.getI64Type(), sizeCst);
+    auto index64 = rewriter.createOrFold<LLVM::ZExtOp>(
+        opLoc, rewriter.getI64Type(), zextIndex);
+    auto elementBitsCst = rewriter.create<LLVM::ConstantOp>(
+        opLoc, rewriter.getI32Type(),
+        arrTy.getElementType().getIntOrFloatBitWidth());
+
+    auto callOp = rewriter.create<LLVM::CallOp>(
+        opLoc, getOOBHandlerFuncType(rewriter), arrayGetOOBSymName,
+        mlir::ValueRange{arrPtr, sizeCst64, elementBitsCst, gep.getResult(),
+                         index64});
+    rewriter.create<LLVM::BrOp>(opLoc, mlir::ValueRange{callOp.getResult()},
+                                continueBlock);
+
+    // Perform the (hopefully now valid) access
+    rewriter.setInsertionPointToStart(continueBlock);
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, elemTy, ptrArg);
 
     return success();
   }
