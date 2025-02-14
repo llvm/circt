@@ -164,8 +164,7 @@ struct ArrayGetOpConversion : public ConvertOpToLLVMPattern<hw::ArrayGetOp> {
           op->getLoc(), IntegerType::get(rewriter.getContext(), 32),
           rewriter.getI32IntegerAttr(1));
       arrPtr = rewriter.create<LLVM::AllocaOp>(
-          op->getLoc(), ptrType,
-          adaptor.getInput().getType(), oneC,
+          op->getLoc(), ptrType, adaptor.getInput().getType(), oneC,
           /*alignment=*/4);
       rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.getInput(), arrPtr);
     }
@@ -176,9 +175,9 @@ struct ArrayGetOpConversion : public ConvertOpToLLVMPattern<hw::ArrayGetOp> {
     auto elemTy = typeConverter->convertType(op.getResult().getType());
     auto zextIndex = zextByOne(op->getLoc(), rewriter, op.getIndex());
 
-    auto gep = rewriter.create<LLVM::GEPOp>(
-        op->getLoc(), ptrType, arrTy,
-        arrPtr, ArrayRef<LLVM::GEPArg>{0, zextIndex});
+    auto gep =
+        rewriter.create<LLVM::GEPOp>(op->getLoc(), ptrType, arrTy, arrPtr,
+                                     ArrayRef<LLVM::GEPArg>{0, zextIndex});
 
     auto indexBitWidth = hw::getBitWidth(op.getIndex().getType());
     assert(indexBitWidth >= 0 && indexBitWidth < 64);
@@ -196,7 +195,7 @@ struct ArrayGetOpConversion : public ConvertOpToLLVMPattern<hw::ArrayGetOp> {
     auto isOOB = rewriter.create<LLVM::ICmpOp>(opLoc, LLVM::ICmpPredicate::uge,
                                                zextIndex, sizeCst.getResult());
 
-    if (arrayGetOOBSymName.empty()) {
+    if (!arrayGetOOBSymName) {
       // We've got no OOB handler: Redirect any OOB access to the array's base
       // address.
       auto safePtr = rewriter.create<LLVM::SelectOp>(opLoc, isOOB, arrPtr, gep);
@@ -248,9 +247,9 @@ struct ArrayGetOpConversion : public ConvertOpToLLVMPattern<hw::ArrayGetOp> {
 
 protected:
   LLVM::LLVMFunctionType getOOBHandlerFuncType(OpBuilder &builder) const {
-    /* Handler Signature:
-     * void* symName(void* base, uint64_t size,
-     *   uint32_t eltBits, void* oobAddr, uint64_t oobIdx) */
+    // Handler Signature:
+    // void* symName(void* base, uint64_t size,
+    //   uint32_t eltBits, void* oobAddr, uint64_t oobIdx)
     auto ptrType = LLVM::LLVMPointerType::get(builder.getContext());
     return LLVM::LLVMFunctionType::get(ptrType, {ptrType, builder.getI64Type(),
                                                  builder.getI32Type(), ptrType,
