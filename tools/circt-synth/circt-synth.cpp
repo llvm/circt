@@ -25,6 +25,7 @@
 #include "circt/Support/InstanceGraphInterface.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
+#include "circt/Transforms/Passes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OwningOpRef.h"
 #include "mlir/IR/Threading.h"
@@ -135,100 +136,12 @@ struct ConditionallyRunPass
   llvm::function_ref<bool(Operation *)> shouldRunPass;
 };
 
-struct NestPassesUnderHierarchyPass
-    : public PassWrapper<NestPassesUnderHierarchyPass,
-                         OperationPass<mlir::ModuleOp>> {
-  NestPassesUnderHierarchyPass(
-      llvm::function_ref<void(OpPassManager &)> pipeline)
-      : PassWrapper<NestPassesUnderHierarchyPass,
-                    OperationPass<mlir::ModuleOp>>(),
-        pipeline(pipeline) {}
-
-  void runOnOperation() override {
-    auto &instanceGraph = getAnalysis<circt::igraph::InstanceGraph>();
-    std::function<bool(Operation *)> runPass;
-    llvm::SetVector<Operation *> visited;
-    if (topName.empty()) {
-      runPass = [&](Operation *op) { return true; };
-    } else {
-      auto name = mlir::StringAttr::get(getOperation()->getContext(), topName);
-      auto *top = instanceGraph.lookup(name);
-      if (!top)
-        return signalPassFailure();
-      SmallVector<igraph::InstanceGraphNode *> worklist;
-      worklist.push_back(top);
-      while (!worklist.empty()) {
-        auto *node = worklist.pop_back_val();
-        auto op = node->getModule();
-        if (!op || !visited.insert(op).second)
-          continue;
-        for (auto *child : *node) {
-          auto childOp = child->getInstance();
-          if (!childOp || childOp->hasAttr("doNotPrint"))
-            continue;
-          worklist.push_back(child->getTarget());
-        }
-      }
-
-      runPass = [&](Operation *op) -> bool { return visited.count(op); };
-    }
-
-    auto dynamicPM = OpPassManager(getOperation()->getName());
-    auto &pm = dynamicPM.nest<hw::HWModuleOp>();
-    pm.addPass(std::make_unique<ConditionallyRunPass>(pipeline, runPass));
-    if (failed(runPipeline(dynamicPM, getOperation())))
-      return signalPassFailure();
-
-    // We must maintain a fixed pool of pass managers which is at least as large
-    // as the maximum parallelism of the failableParallelForEach below.
-    // Note: The number of pass managers here needs to remain constant
-    // to prevent issues with pass instrumentations that rely on having the same
-    // pass manager for the main thread.
-    size_t numThreads = getContext().getNumThreads();
-    OpPassManager nestedPipelines;
-
-    llvm::SmallVector<OpPassManager> pipelines;
-    pipeline(nestedPipelines);
-    const auto &opPipelines = nestedPipelines;
-    if (pipelines.size() < numThreads) {
-      pipelines.reserve(numThreads);
-      pipelines.resize(numThreads, opPipelines);
-    }
-
-    // An atomic failure variable for the async executors.
-    std::vector<std::atomic<bool>> activePMs(pipelines.size());
-    std::fill(activePMs.begin(), activePMs.end(), false);
-    auto result = mlir::failableParallelForEach(
-        getContext(), visited.getArrayRef(), [&](Operation *node) -> LogicalResult {
-          // Find a pass manager for this operation.
-          auto it = llvm::find_if(activePMs, [](std::atomic<bool> &isActive) {
-            bool expectedInactive = false;
-            return isActive.compare_exchange_strong(expectedInactive, true);
-          });
-          assert(it != activePMs.end() &&
-                 "could not find inactive pass manager for thread");
-          unsigned pmIndex = it - activePMs.begin();
-          auto result = runPipeline(pipelines[pmIndex], node);
-          // Reset the active bit for this pass manager.
-          activePMs[pmIndex].store(false);
-          return result;
-        });
-  }
-
-  llvm::function_ref<void(OpPassManager &)> pipeline;
-};
-
-static std::unique_ptr<Pass> createNestPassesUnderHierarchyPass(
-    llvm::function_ref<void(OpPassManager &)> pipeline) {
-  return std::make_unique<NestPassesUnderHierarchyPass>(pipeline);
-}
-
 //===----------------------------------------------------------------------===//
 // Tool implementation
 //===----------------------------------------------------------------------===//
 
 static void populateSynthesisPipeline(PassManager &pm) {
-  pm.addPass(createNestPassesUnderHierarchyPass([](OpPassManager &mpm) {
+  auto pipeline = [](OpPassManager &mpm) {
     // Add the AIG to Comb at the scope exit if requested.
     auto addAIGToComb = llvm::make_scope_exit([&]() {
       if (convertToComb) {
@@ -245,16 +158,21 @@ static void populateSynthesisPipeline(PassManager &pm) {
     mpm.addPass(createCSEPass());
     mpm.addPass(aig::createLowerVariadic());
     // TODO: LowerWordToBits is not scalable for large designs. Change to
-    // conditionally enable the pass once the rest of the pipeline was able to
-    // handle multibit operands properly.
+    // conditionally enable the pass once the rest of the pipeline was able
+    // to handle multibit operands properly.
     mpm.addPass(aig::createLowerWordToBits());
     mpm.addPass(createCSEPass());
     mpm.addPass(createSimpleCanonicalizerPass());
     // TODO: Add balancing, rewriting, FRAIG conversion, etc.
     if (untilReached(UntilEnd))
       return;
-  }));
+  };
 
+  if (topName.empty()) {
+    pipeline(pm.nest<hw::HWModuleOp>());
+  } else {
+    pm.addPass(circt::createHierarchicalRunner(topName, pipeline));
+  }
   // TODO: Add LUT mapping, etc.
 }
 

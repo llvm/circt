@@ -11,6 +11,7 @@ target_link_libraries(circt-synth
   CIRCTSeq
   CIRCTOM
   CIRCTSupport
+  CIRCTTransforms
   MLIRIR
   MLIRParser
   LLVMSupport

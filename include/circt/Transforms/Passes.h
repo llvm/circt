@@ -51,7 +51,12 @@ std::unique_ptr<mlir::Pass>
 createMemoryBankingPass(std::optional<unsigned> bankingFactor = std::nullopt,
                         std::optional<int> bankingDimension = std::nullopt);
 std::unique_ptr<mlir::Pass> createIndexSwitchToIfPass();
+std::unique_ptr<mlir::Pass> createHierarchicalRunner(
+    const std::string &topName,
+    llvm::function_ref<void(mlir::OpPassManager &)> pipeline,
+    bool includeBoundInstances = false);
 
+//===----------------------------------------------------------------------===//
 //===----------------------------------------------------------------------===//
 // Utility functions.
 //===----------------------------------------------------------------------===//
