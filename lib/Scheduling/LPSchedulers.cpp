@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Scheduling/LPSchedulers.h"
 #include "circt/Scheduling/Algorithms.h"
 
 #include "mlir/IR/Operation.h"
@@ -21,7 +22,7 @@ using namespace circt;
 using namespace circt::scheduling;
 using namespace operations_research;
 
-LogicalResult scheduling::scheduleLP(Problem &prob, Operation *lastOp) {
+LogicalResult LPScheduler::schedule(Problem &prob, Operation *lastOp) {
   Operation *containingOp = prob.getContainingOp();
   if (!prob.hasOperation(lastOp))
     return containingOp->emitError("problem does not include last operation");
@@ -78,7 +79,7 @@ LogicalResult scheduling::scheduleLP(Problem &prob, Operation *lastOp) {
   return success();
 }
 
-LogicalResult scheduling::scheduleLP(CyclicProblem &prob, Operation *lastOp) {
+LogicalResult LPScheduler::schedule(CyclicProblem &prob, Operation *lastOp) {
   Operation *containingOp = prob.getContainingOp();
   if (!prob.hasOperation(lastOp))
     return containingOp->emitError("problem does not include last operation");
@@ -146,4 +147,14 @@ LogicalResult scheduling::scheduleLP(CyclicProblem &prob, Operation *lastOp) {
     prob.setStartTime(op, std::round(t[op]->solution_value()));
 
   return success();
+}
+
+LogicalResult scheduling::scheduleLP(Problem &prob, Operation *lastOp) {
+  LPScheduler scheduler;
+  return scheduler.schedule(prob, lastOp);
+}
+
+LogicalResult scheduling::scheduleLP(CyclicProblem &prob, Operation *lastOp) {
+  LPScheduler scheduler;
+  return scheduler.schedule(prob, lastOp);
 }
