@@ -326,72 +326,60 @@ module {
 
 // CHECK:    calyx.wires {
 // CHECK-DAG:      calyx.group @bb0_0 {
-// CHECK-DAG:        calyx.assign %std_slice_7.in = %c0_i32 : i32
-// CHECK-DAG:        calyx.assign %mem_1.addr0 = %std_slice_7.out : i3
-// CHECK-DAG:        calyx.assign %mem_1.content_en = %true : i1
-// CHECK-DAG:        calyx.assign %mem_1.write_en = %false : i1
-// CHECK-DAG:        calyx.assign %load_0_reg.in = %mem_1.read_data : i32
-// CHECK-DAG:        calyx.assign %load_0_reg.write_en = %mem_1.done : i1
+// CHECK-DAG:        calyx.assign %std_slice_5.in = %c1_i32 : i32
+// CHECK-DAG:        calyx.assign %arg_mem_0.addr0 = %std_slice_5.out : i1
+// CHECK-DAG:        calyx.assign %arg_mem_0.content_en = %true : i1
+// CHECK-DAG:        calyx.assign %arg_mem_0.write_en = %false : i1
+// CHECK-DAG:        calyx.assign %load_0_reg.in = %arg_mem_0.read_data : i32
+// CHECK-DAG:        calyx.assign %load_0_reg.write_en = %arg_mem_0.done : i1
 // CHECK-DAG:        calyx.group_done %load_0_reg.done : i1
 // CHECK-DAG:      }
 // CHECK-DAG:      calyx.group @bb0_1 {
-// CHECK-DAG:        calyx.assign %std_slice_6.in = %c0_i32 : i32
-// CHECK-DAG:        calyx.assign %mem_0.addr0 = %std_slice_6.out : i3
-// CHECK-DAG:        calyx.assign %mem_0.write_data = %load_0_reg.out : i32
-// CHECK-DAG:        calyx.assign %mem_0.write_en = %true : i1
-// CHECK-DAG:        calyx.assign %mem_0.content_en = %true : i1
-// CHECK-DAG:        calyx.group_done %mem_0.done : i1
-// CHECK-DAG:      }
-// CHECK-DAG:      calyx.group @bb0_2 {
-// CHECK-DAG:        calyx.assign %std_slice_5.in = %c4_i32 : i32
-// CHECK-DAG:        calyx.assign %mem_1.addr0 = %std_slice_5.out : i3
-// CHECK-DAG:        calyx.assign %mem_1.content_en = %true : i1
-// CHECK-DAG:        calyx.assign %mem_1.write_en = %false : i1
-// CHECK-DAG:        calyx.assign %load_1_reg.in = %mem_1.read_data : i32
-// CHECK-DAG:        calyx.assign %load_1_reg.write_en = %mem_1.done : i1
+// CHECK-DAG:        calyx.assign %std_slice_4.in = %c1_i32 : i32
+// CHECK-DAG:        calyx.assign %arg_mem_2.addr0 = %std_slice_4.out : i1
+// CHECK-DAG:        calyx.assign %arg_mem_2.content_en = %true : i1
+// CHECK-DAG:        calyx.assign %arg_mem_2.write_en = %false : i1
+// CHECK-DAG:        calyx.assign %load_1_reg.in = %arg_mem_2.read_data : i32
+// CHECK-DAG:        calyx.assign %load_1_reg.write_en = %arg_mem_2.done : i1
 // CHECK-DAG:        calyx.group_done %load_1_reg.done : i1
 // CHECK-DAG:      }
 // CHECK-DAG:      calyx.group @bb0_3 {
-// CHECK-DAG:        calyx.assign %std_slice_4.in = %c1_i32 : i32
-// CHECK-DAG:        calyx.assign %mem_0.addr0 = %std_slice_4.out : i3
-// CHECK-DAG:        calyx.assign %mem_0.write_data = %load_1_reg.out : i32
-// CHECK-DAG:        calyx.assign %mem_0.write_en = %true : i1
-// CHECK-DAG:        calyx.assign %mem_0.content_en = %true : i1
-// CHECK-DAG:        calyx.group_done %mem_0.done : i1
+// CHECK-DAG:        calyx.assign %std_slice_3.in = %c1_i32 : i32
+// CHECK-DAG:        calyx.assign %arg_mem_1.addr0 = %std_slice_3.out : i1
+// CHECK-DAG:        calyx.assign %arg_mem_1.write_data = %std_add_0.out : i32
+// CHECK-DAG:        calyx.assign %arg_mem_1.write_en = %true : i1
+// CHECK-DAG:        calyx.assign %arg_mem_1.content_en = %true : i1
+// CHECK-DAG:        calyx.assign %std_add_0.left = %load_0_reg.out : i32
+// CHECK-DAG:        calyx.assign %std_add_0.right = %load_1_reg.out : i32
+// CHECK-DAG:        calyx.group_done %arg_mem_1.done : i1
 // CHECK-DAG:      }
 // CHECK-DAG:      calyx.group @bb0_4 {
-// CHECK-DAG:        calyx.assign %std_slice_3.in = %c2_i32 : i32
-// CHECK-DAG:        calyx.assign %mem_1.addr0 = %std_slice_3.out : i3
-// CHECK-DAG:        calyx.assign %mem_1.content_en = %true : i1
-// CHECK-DAG:        calyx.assign %mem_1.write_en = %false : i1
-// CHECK-DAG:        calyx.assign %load_2_reg.in = %mem_1.read_data : i32
-// CHECK-DAG:        calyx.assign %load_2_reg.write_en = %mem_1.done : i1
+// CHECK-DAG:        calyx.assign %std_slice_2.in = %c0_i32 : i32
+// CHECK-DAG:        calyx.assign %arg_mem_0.addr0 = %std_slice_2.out : i1
+// CHECK-DAG:        calyx.assign %arg_mem_0.content_en = %true : i1
+// CHECK-DAG:        calyx.assign %arg_mem_0.write_en = %false : i1
+// CHECK-DAG:        calyx.assign %load_2_reg.in = %arg_mem_0.read_data : i32
+// CHECK-DAG:        calyx.assign %load_2_reg.write_en = %arg_mem_0.done : i1
 // CHECK-DAG:        calyx.group_done %load_2_reg.done : i1
 // CHECK-DAG:      }
 // CHECK-DAG:      calyx.group @bb0_5 {
-// CHECK-DAG:        calyx.assign %std_slice_2.in = %c4_i32 : i32
-// CHECK-DAG:        calyx.assign %mem_0.addr0 = %std_slice_2.out : i3
-// CHECK-DAG:        calyx.assign %mem_0.write_data = %load_2_reg.out : i32
-// CHECK-DAG:        calyx.assign %mem_0.write_en = %true : i1
-// CHECK-DAG:        calyx.assign %mem_0.content_en = %true : i1
-// CHECK-DAG:        calyx.group_done %mem_0.done : i1
-// CHECK-DAG:      }
-// CHECK-DAG:      calyx.group @bb0_6 {
-// CHECK-DAG:        calyx.assign %std_slice_1.in = %c6_i32 : i32
-// CHECK-DAG:        calyx.assign %mem_1.addr0 = %std_slice_1.out : i3
-// CHECK-DAG:        calyx.assign %mem_1.content_en = %true : i1
-// CHECK-DAG:        calyx.assign %mem_1.write_en = %false : i1
-// CHECK-DAG:        calyx.assign %load_3_reg.in = %mem_1.read_data : i32
-// CHECK-DAG:        calyx.assign %load_3_reg.write_en = %mem_1.done : i1
+// CHECK-DAG:        calyx.assign %std_slice_1.in = %c0_i32 : i32
+// CHECK-DAG:        calyx.assign %arg_mem_2.addr0 = %std_slice_1.out : i1
+// CHECK-DAG:        calyx.assign %arg_mem_2.content_en = %true : i1
+// CHECK-DAG:        calyx.assign %arg_mem_2.write_en = %false : i1
+// CHECK-DAG:        calyx.assign %load_3_reg.in = %arg_mem_2.read_data : i32
+// CHECK-DAG:        calyx.assign %load_3_reg.write_en = %arg_mem_2.done : i1
 // CHECK-DAG:        calyx.group_done %load_3_reg.done : i1
 // CHECK-DAG:      }
 // CHECK-DAG:      calyx.group @bb0_7 {
-// CHECK-DAG:        calyx.assign %std_slice_0.in = %c5_i32 : i32
-// CHECK-DAG:        calyx.assign %mem_0.addr0 = %std_slice_0.out : i3
-// CHECK-DAG:        calyx.assign %mem_0.write_data = %load_3_reg.out : i32
-// CHECK-DAG:        calyx.assign %mem_0.write_en = %true : i1
-// CHECK-DAG:        calyx.assign %mem_0.content_en = %true : i1
-// CHECK-DAG:        calyx.group_done %mem_0.done : i1
+// CHECK-DAG:        calyx.assign %std_slice_0.in = %c0_i32 : i32
+// CHECK-DAG:        calyx.assign %arg_mem_1.addr0 = %std_slice_0.out : i1
+// CHECK-DAG:        calyx.assign %arg_mem_1.write_data = %std_add_1.out : i32
+// CHECK-DAG:        calyx.assign %arg_mem_1.write_en = %true : i1
+// CHECK-DAG:        calyx.assign %arg_mem_1.content_en = %true : i1
+// CHECK-DAG:        calyx.assign %std_add_1.left = %load_2_reg.out : i32
+// CHECK-DAG:        calyx.assign %std_add_1.right = %load_3_reg.out : i32
+// CHECK-DAG:        calyx.group_done %arg_mem_1.done : i1
 // CHECK-DAG:      }
 // CHECK-DAG:    }
 // CHECK-DAG:    calyx.control {
@@ -400,17 +388,11 @@ module {
 // CHECK-DAG:          calyx.seq {
 // CHECK-DAG:            calyx.enable @bb0_0
 // CHECK-DAG:            calyx.enable @bb0_1
-// CHECK-DAG:          }
-// CHECK-DAG:          calyx.seq {
-// CHECK-DAG:            calyx.enable @bb0_2
 // CHECK-DAG:            calyx.enable @bb0_3
 // CHECK-DAG:          }
 // CHECK-DAG:          calyx.seq {
 // CHECK-DAG:            calyx.enable @bb0_4
 // CHECK-DAG:            calyx.enable @bb0_5
-// CHECK-DAG:          }
-// CHECK-DAG:          calyx.seq {
-// CHECK-DAG:            calyx.enable @bb0_6
 // CHECK-DAG:            calyx.enable @bb0_7
 // CHECK-DAG:          }
 // CHECK-DAG:        }
@@ -418,22 +400,26 @@ module {
 // CHECK-DAG:    }
 
 module {
-  func.func @main() {
-    %c2 = arith.constant 2 : index
-    %c1 = arith.constant 1 : index
-    %c3 = arith.constant 3 : index
+  func.func @main(%arg0: memref<2xi32>, %arg1: memref<2xi32>) {
     %c0 = arith.constant 0 : index
-    %alloc = memref.alloc() : memref<6xi32>
-    %alloc_1 = memref.alloc() : memref<6xi32>
-    scf.parallel (%arg2, %arg3) = (%c0, %c0) to (%c3, %c2) step (%c2, %c1) {
-      %4 = arith.shli %arg3, %c2 : index
-      %5 = arith.addi %4, %arg2 : index
-      %6 = memref.load %alloc_1[%5] : memref<6xi32>
-      %7 = arith.shli %arg2, %c1 : index
-      %8 = arith.addi %7, %arg3 : index
-      memref.store %6, %alloc[%8] : memref<6xi32>
-      scf.reduce 
-    }
+    %c1 = arith.constant 1 : index
+    %alloc = memref.alloc() : memref<2xi32>
+    scf.parallel (%arg2) = (%c0) to (%c1) step (%c1) {
+      scf.execute_region {
+        %0 = memref.load %arg0[%c1] : memref<2xi32>
+        %1 = memref.load %alloc[%c1] : memref<2xi32>
+        %2 = arith.addi %0, %1 : i32
+        memref.store %2, %arg1[%c1] : memref<2xi32>
+        scf.yield
+      }
+      scf.execute_region {
+        %0 = memref.load %arg0[%c0] : memref<2xi32>
+        %1 = memref.load %alloc[%c0] : memref<2xi32>
+        %2 = arith.addi %0, %1 : i32
+        memref.store %2, %arg1[%c0] : memref<2xi32>
+        scf.yield
+      }
+    } {calyx.parallel = true}
     return
   }
 }
@@ -531,102 +517,3 @@ module {
   }
 }
 
-// Test parallel op lowering when it has region-based nested ops, such as `scf.for`
-
-// -----
-
-// CHECK:           calyx.control {
-// CHECK:             calyx.seq {
-// CHECK:               calyx.par {
-// CHECK:                 calyx.seq {
-// CHECK:                   calyx.enable @init_for_0_induction_var
-// CHECK:                   calyx.repeat 2 {
-// CHECK:                     calyx.seq {
-// CHECK:                       calyx.enable @bb0_0
-// CHECK:                       calyx.enable @bb0_1
-// CHECK:                       calyx.enable @incr_for_0_induction_var
-// CHECK:                     }
-// CHECK:                   }
-// CHECK:                 }
-// CHECK:                 calyx.seq {
-// CHECK:                   calyx.enable @init_for_1_induction_var
-// CHECK:                   calyx.repeat 2 {
-// CHECK:                     calyx.seq {
-// CHECK:                       calyx.enable @bb0_2
-// CHECK:                       calyx.enable @bb0_3
-// CHECK:                       calyx.enable @incr_for_1_induction_var
-// CHECK:                     }
-// CHECK:                   }
-// CHECK:                 }
-// CHECK:               }
-// CHECK:             }
-// CHECK:           }
-// CHECK:         } {toplevel}
-
-module {
-  func.func @main() {
-    %c2 = arith.constant 2 : index
-    %c1 = arith.constant 1 : index
-    %c0 = arith.constant 0 : index
-    %alloc = memref.alloc() : memref<6xi32>
-    %alloc_1 = memref.alloc() : memref<6xi32>
-    scf.parallel (%arg2) = (%c0) to (%c2) step (%c1) {
-      scf.for %arg3 = %c0 to %c2 step %c1 {
-        %1 = memref.load %alloc_1[%arg3] : memref<6xi32>
-        %2 = arith.shli %arg2, %c1 : index
-        memref.store %1, %alloc[%2] : memref<6xi32>
-      }
-      scf.reduce
-    }
-    return
-  }
-}
-
-// Test lower scf.parallel when there is a nested scf.if that can be
-// canonicalized. See: https://github.com/llvm/circt/issues/8086
-
-// -----
-
-// CHECK:           calyx.control {
-// CHECK:             calyx.seq {
-// CHECK:               calyx.par {
-// CHECK:                 calyx.seq {
-// CHECK:                   calyx.enable @bb0_0
-// CHECK:                   calyx.enable @bb0_1
-// CHECK:                 }
-// CHECK:                 calyx.seq {
-// CHECK:                   calyx.enable @bb0_2
-// CHECK:                   calyx.enable @bb0_3
-// CHECK:                 }
-// CHECK:                 calyx.seq {
-// CHECK:                   calyx.enable @bb0_4
-// CHECK:                   calyx.enable @bb0_5
-// CHECK:                 }
-// CHECK:               }
-// CHECK:             }
-// CHECK:           }
-// CHECK:         }
-
-module {
-  func.func @main(%arg0 : memref<6xi32>, %arg1 : memref<6xi32>) {
-    %c2 = arith.constant 2 : index
-    %c1 = arith.constant 1 : index
-    %c3 = arith.constant 3 : index
-    %c0 = arith.constant 0 : index
-    scf.parallel (%arg2, %arg3) = (%c0, %c0) to (%c3, %c2) step (%c1, %c1) {
-      %4 = arith.shli %arg3, %c2 : index
-      %5 = arith.addi %4, %arg2 : index
-      %6 = memref.load %arg0[%5] : memref<6xi32>
-      %7 = arith.shli %arg2, %c1 : index
-      %8 = arith.addi %7, %arg3 : index
-      %9 = arith.remui %8, %c2 : index
-      %10 = arith.cmpi eq, %9, %c0 : index
-      scf.if %10 {
-        memref.store %6, %arg1[%8] : memref<6xi32>
-        scf.yield
-      }
-      scf.reduce 
-    }
-    return
-  }
-}
