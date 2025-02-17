@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag
+from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag, rtgtest, Imm5, Imm12, Imm13, Imm21, Imm32, IntegerRegister
 
 # MLIR-LABEL: rtg.target @Tgt0 : !rtg.dict<entry0: !rtg.set<index>>
 # MLIR-NEXT: [[C0:%.+]] = index.constant 0
@@ -258,3 +258,32 @@ def test_labels():
   seq0.randomize(set0)()
 
   seq1()
+
+
+# MLIR-NEXT: rtg.test @test_registers_and_immediates()
+# MLIR-NEXT: [[IMM32:%.+]] = rtgtest.immediate #rtgtest.imm32<32> : !rtgtest.imm32
+# MLIR-NEXT: [[IMM21:%.+]] = rtgtest.immediate #rtgtest.imm21<16> : !rtgtest.imm21
+# MLIR-NEXT: [[IMM13:%.+]] = rtgtest.immediate #rtgtest.imm13<9> : !rtgtest.imm13
+# MLIR-NEXT: [[T2:%.+]] = rtg.fixed_reg #rtgtest.t2 : !rtgtest.ireg
+# MLIR-NEXT: [[IMM5:%.+]] = rtgtest.immediate #rtgtest.imm5<4> : !rtgtest.imm5
+# MLIR-NEXT: [[T1:%.+]] = rtg.fixed_reg #rtgtest.t1 : !rtgtest.ireg
+# MLIR-NEXT: [[IMM12:%.+]] = rtgtest.immediate #rtgtest.imm12<8> : !rtgtest.imm12
+# MLIR-NEXT: [[T0:%.+]] = rtg.fixed_reg #rtgtest.t0 : !rtgtest.ireg
+# MLIR-NEXT: [[VREG:%.+]] = rtg.virtual_reg [#rtgtest.t0 : !rtgtest.ireg, #rtgtest.t1 : !rtgtest.ireg, #rtgtest.t2 : !rtgtest.ireg, #rtgtest.t3 : !rtgtest.ireg, #rtgtest.t4 : !rtgtest.ireg, #rtgtest.t5 : !rtgtest.ireg, #rtgtest.t6 : !rtgtest.ireg, #rtgtest.a7 : !rtgtest.ireg, #rtgtest.a6 : !rtgtest.ireg, #rtgtest.a5 : !rtgtest.ireg, #rtgtest.a4 : !rtgtest.ireg, #rtgtest.a3 : !rtgtest.ireg, #rtgtest.a2 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg, #rtgtest.a0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg, #rtgtest.s2 : !rtgtest.ireg, #rtgtest.s3 : !rtgtest.ireg, #rtgtest.s4 : !rtgtest.ireg, #rtgtest.s5 : !rtgtest.ireg, #rtgtest.s6 : !rtgtest.ireg, #rtgtest.s7 : !rtgtest.ireg, #rtgtest.s8 : !rtgtest.ireg, #rtgtest.s9 : !rtgtest.ireg, #rtgtest.s10 : !rtgtest.ireg, #rtgtest.s11 : !rtgtest.ireg, #rtgtest.s0 : !rtgtest.ireg, #rtgtest.ra : !rtgtest.ireg, #rtgtest.sp : !rtgtest.ireg]
+# MLIR-NEXT: rtgtest.rv32i.addi [[VREG]], [[T0]], [[IMM12]]
+# MLIR-NEXT: rtgtest.rv32i.slli [[VREG]], [[T1]], [[IMM5]]
+# MLIR-NEXT: rtgtest.rv32i.beq [[VREG]], [[T2]], [[IMM13]] : !rtgtest.imm13
+# MLIR-NEXT: rtgtest.rv32i.jal [[VREG]], [[IMM21]] : !rtgtest.imm21
+# MLIR-NEXT: rtgtest.rv32i.auipc [[VREG]], [[IMM32]] : !rtgtest.imm32
+# MLIR-NEXT: }
+
+
+@test()
+def test_registers_and_immediates():
+  vreg = IntegerRegister.virtual()
+  imm12 = Imm12(8)
+  rtgtest.ADDI(vreg, IntegerRegister.t0(), imm12)
+  rtgtest.SLLI(vreg, IntegerRegister.t1(), Imm5(4))
+  rtgtest.BEQ(vreg, IntegerRegister.t2(), Imm13(9))
+  rtgtest.JAL(vreg, Imm21(16))
+  rtgtest.AUIPC(vreg, Imm32(32))
