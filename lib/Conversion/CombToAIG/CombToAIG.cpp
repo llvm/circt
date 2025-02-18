@@ -895,7 +895,7 @@ void ConvertCombToAIGPass::runOnOperation() {
   // AIG is target dialect.
   target.addLegalDialect<aig::AIGDialect>();
 
-  // This is a test only option to add logical ops.
+  // If additional legal ops are specified, add them to the target.
   if (!additionalLegalOps.empty())
     for (const auto &opName : additionalLegalOps)
       target.addLegalOp(OperationName(opName, &getContext()));
