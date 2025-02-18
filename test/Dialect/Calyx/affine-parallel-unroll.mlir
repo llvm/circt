@@ -99,3 +99,84 @@ module {
     return
   }
 }
+
+// -----
+
+// Canonicalze SCF IndexSwitchOp after unroll as Affine ParallelOp often contains SCF IndexSwitchOp after banking
+
+// CHECK-LABEL:   func.func @main(
+// CHECK-SAME:                    %[[VAL_0:.*]]: memref<2x2xf32>) {
+// CHECK:           %[[VAL_1:.*]] = arith.constant 0 : index
+// CHECK:           %[[VAL_2:.*]] = arith.constant 1 : index
+// CHECK:           %[[VAL_3:.*]] = arith.constant 1.000000e+00 : f32
+// CHECK:           %[[VAL_4:.*]] = arith.constant 2.000000e+00 : f32
+// CHECK:           %[[VAL_5:.*]] = arith.constant 3.000000e+00 : f32
+// CHECK:           %[[VAL_6:.*]] = arith.constant 4.200000e+00 : f32
+// CHECK:           affine.parallel (%[[VAL_7:.*]]) = (0) to (1) {
+// CHECK:             scf.execute_region {
+// CHECK:               memref.store %[[VAL_6]], %[[VAL_0]]{{\[}}%[[VAL_2]], %[[VAL_2]]] : memref<2x2xf32>
+// CHECK:               scf.yield
+// CHECK:             }
+// CHECK:             scf.execute_region {
+// CHECK:               memref.store %[[VAL_4]], %[[VAL_0]]{{\[}}%[[VAL_2]], %[[VAL_1]]] : memref<2x2xf32>
+// CHECK:               scf.yield
+// CHECK:             }
+// CHECK:             scf.execute_region {
+// CHECK:               memref.store %[[VAL_5]], %[[VAL_0]]{{\[}}%[[VAL_1]], %[[VAL_2]]] : memref<2x2xf32>
+// CHECK:               scf.yield
+// CHECK:             }
+// CHECK:             scf.execute_region {
+// CHECK:               memref.store %[[VAL_3]], %[[VAL_0]]{{\[}}%[[VAL_1]], %[[VAL_1]]] : memref<2x2xf32>
+// CHECK:               scf.yield
+// CHECK:             }
+// CHECK:           } {calyx.unroll = true}
+// CHECK:           return
+// CHECK:         }
+
+#map = affine_map<(d0) -> (d0 mod 2)>
+module {
+  func.func @main(%arg0: memref<2x2xf32>) {
+    %cst_0 = arith.constant 0.0 : f32
+    %cst_1 = arith.constant 1.0 : f32
+    %cst_2 = arith.constant 2.0 : f32
+    %cst_3 = arith.constant 3.0 : f32
+    %cst_4 = arith.constant 4.2 : f32
+    affine.parallel (%i, %j) = (0, 0) to (2, 2) {
+      %0 = affine.apply #map(%j)
+      %1 = scf.index_switch %0 -> f32
+      case 0 {
+        %3 = affine.apply #map(%i)
+        %4 = scf.index_switch %3 -> f32
+        case 0 {
+          scf.yield %cst_1 : f32
+        }
+        case 1 {
+          scf.yield %cst_2 : f32
+        }
+        default {
+          scf.yield %cst_0 : f32
+        }
+        scf.yield %4 : f32
+      }
+      case 1 {
+        %3 = affine.apply #map(%i)
+        %4 = scf.index_switch %3 -> f32
+        case 0 {
+          scf.yield %cst_3 : f32
+        }
+        case 1 {
+          scf.yield %cst_4 : f32
+        }
+        default {
+          scf.yield %cst_0 : f32
+        }
+        scf.yield %4 : f32
+      }
+      default {
+        scf.yield %cst_0 : f32
+      }
+      memref.store %1, %arg0[%i, %j] : memref<2x2xf32>
+    }
+    return
+  }
+}

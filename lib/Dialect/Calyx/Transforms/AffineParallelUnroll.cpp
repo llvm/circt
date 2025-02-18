@@ -157,8 +157,18 @@ void AffineParallelUnrollPass::runOnOperation() {
   RewritePatternSet patterns(ctx);
   patterns.add<AffineParallelUnroll>(ctx);
 
-  if (failed(applyPatternsGreedily(getOperation(), std::move(patterns))))
+  if (failed(applyPatternsGreedily(getOperation(), std::move(patterns)))) {
+    getOperation()->emitError("Failed to unroll affine.parallel");
     signalPassFailure();
+  }
+
+  RewritePatternSet canonicalizePatterns(ctx);
+  scf::IndexSwitchOp::getCanonicalizationPatterns(canonicalizePatterns, ctx);
+  if (failed(applyPatternsGreedily(getOperation(),
+                                   std::move(canonicalizePatterns)))) {
+    getOperation()->emitError("Failed to apply canonicalization.");
+    signalPassFailure();
+  }
 }
 
 std::unique_ptr<mlir::Pass> circt::calyx::createAffineParallelUnrollPass() {

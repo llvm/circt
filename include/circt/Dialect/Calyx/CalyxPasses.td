@@ -227,7 +227,7 @@ def AffineParallelUnroll : Pass<"affine-parallel-unroll", "::mlir::func::FuncOp"
         %2 = arith.addf %0, %1 : f32
         memref.store %2, %alloc_2[%c1, %c1] : memref<2x2xf32>
       }
-    } {calyx.parallel = true}
+    } {calyx.unroll = true}
     ```
   }];
   let dependentDialects = ["mlir::affine::AffineDialect"];
