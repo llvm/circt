@@ -5,12 +5,17 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+//
+// This file implements the HierarchicalRunner pass which runs a pass pipeline
+// on specific hierarchichy.
+//
+//===----------------------------------------------------------------------===//
 
 #include "circt/Support/InstanceGraph.h"
 #include "circt/Transforms/Passes.h"
-#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/Pass/AnalysisManager.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "llvm/ADT/SmallVector.h"
@@ -29,7 +34,6 @@ struct HierarchicalRunnerPass
   using circt::impl::HierarchicalRunnerBase<
       HierarchicalRunnerPass>::HierarchicalRunnerBase;
   void runOnOperation() override;
-  OpPassManager dynamicPM;
   HierarchicalRunnerPass(const std::string &topName,
                          llvm::function_ref<void(OpPassManager &)> populateFunc,
                          bool includeBoundInstances) {
@@ -56,21 +60,24 @@ struct HierarchicalRunnerPass
   void getDependentDialects(DialectRegistry &registry) const override {
     dynamicPM.getDependentDialects(registry);
   }
+
+private:
+  OpPassManager dynamicPM;
 };
 } // namespace
 
 void HierarchicalRunnerPass::runOnOperation() {
   auto &instanceGraph = getAnalysis<circt::igraph::InstanceGraph>();
-  std::function<bool(Operation *)> runPass;
-  llvm::SetVector<Operation *> visited;
 
+  llvm::SetVector<Operation *> visited;
   auto name = mlir::StringAttr::get(getOperation()->getContext(), topName);
-  auto *top = instanceGraph.lookup(name);
+  auto *top = instanceGraph.lookupOrNull(name);
   if (!top) {
     mlir::emitError(mlir::UnknownLoc::get(&getContext()))
         << "top module not found in instance graph " << topName;
     return signalPassFailure();
   }
+
   SmallVector<igraph::InstanceGraphNode *> worklist;
 
   auto am = getAnalysisManager();
@@ -83,11 +90,14 @@ void HierarchicalRunnerPass::runOnOperation() {
     if (!op || !visited.insert(op))
       continue;
 
+    // Ensure an analysis manager has been constructed for each of the nodes.
+    // This prevents thread races when running the nested pipelines.
     am.nest(op);
 
     for (auto *child : *node) {
       auto childOp = child->getInstance();
-      if (!childOp || childOp->hasAttr("doNotPrint"))
+      if (!childOp ||
+          (!includeBoundInstances && childOp->hasAttr("doNotPrint")))
         continue;
 
       worklist.push_back(child->getTarget());
@@ -101,14 +111,7 @@ void HierarchicalRunnerPass::runOnOperation() {
   // pass manager for the main thread.
   size_t numThreads = getContext().getNumThreads();
 
-  llvm::SmallVector<OpPassManager> pipelines;
-  const auto &opPipelines = dynamicPM;
-  if (pipelines.size() < numThreads) {
-    pipelines.reserve(numThreads);
-    pipelines.resize(numThreads, opPipelines);
-  }
-
-
+  llvm::SmallVector<OpPassManager> pipelines(numThreads, dynamicPM);
 
   // An atomic failure variable for the async executors.
   std::vector<std::atomic<bool>> activePMs(pipelines.size());
