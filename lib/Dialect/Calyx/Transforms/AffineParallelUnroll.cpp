@@ -40,8 +40,8 @@ struct AffineParallelUnroll : public OpRewritePattern<AffineParallelOp> {
 
   LogicalResult matchAndRewrite(AffineParallelOp affineParallelOp,
                                 PatternRewriter &rewriter) const override {
-    if (affineParallelOp->hasAttr("calyx.parallel"))
-      // We assume that having "calyx.parallel" attribute means that it has
+    if (affineParallelOp->hasAttr("calyx.unroll"))
+      // We assume that having "calyx.unroll" attribute means that it has
       // already been unrolled.
       return failure();
 
@@ -55,7 +55,7 @@ struct AffineParallelUnroll : public OpRewritePattern<AffineParallelOp> {
 
     rewriter.setInsertionPointAfter(affineParallelOp);
     // Create a single-iteration parallel loop op and mark its special by
-    // setting the "calyx.parallel" attribute.
+    // setting the "calyx.unroll" attribute.
     AffineMap lbMap = AffineMap::get(0, 0, rewriter.getAffineConstantExpr(0),
                                      rewriter.getContext());
     AffineMap ubMap = AffineMap::get(0, 0, rewriter.getAffineConstantExpr(1),
@@ -66,7 +66,7 @@ struct AffineParallelUnroll : public OpRewritePattern<AffineParallelOp> {
         /*lowerBoundsMap=*/lbMap, /*lowerBoundsOperands=*/SmallVector<Value>(),
         /*upperBoundsMap=*/ubMap, /*upperBoundsOperands=*/SmallVector<Value>(),
         /*steps=*/SmallVector<int64_t>({1}));
-    newParallelOp->setAttr("calyx.parallel", rewriter.getBoolAttr(true));
+    newParallelOp->setAttr("calyx.unroll", rewriter.getBoolAttr(true));
 
     SmallVector<int64_t> pLoopLowerBounds =
         affineParallelOp.getLowerBoundsMap().getConstantResults();
