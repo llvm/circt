@@ -1530,8 +1530,8 @@ class InlineExecuteRegionOpPattern
   LogicalResult matchAndRewrite(scf::ExecuteRegionOp execOp,
                                 PatternRewriter &rewriter) const override {
     if (auto parOp = dyn_cast_or_null<scf::ParallelOp>(execOp->getParentOp())) {
-      if (auto boolAttr =
-              dyn_cast_or_null<mlir::BoolAttr>(parOp->getAttr(unrolledParallelAttr)))
+      if (auto boolAttr = dyn_cast_or_null<mlir::BoolAttr>(
+              parOp->getAttr(unrolledParallelAttr)))
         // If the `ExecuteRegionOp` was inserted when running the
         // `AffineParallelUnrollPass` (indicated by having `calyx.unroll`
         // attribute), we should skip inline.
