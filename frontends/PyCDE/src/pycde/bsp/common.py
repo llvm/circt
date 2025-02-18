@@ -208,7 +208,8 @@ class ChannelMMIO(esi.ServiceImplementation):
     client_cmd_channels = esi.ChannelDemux(
         sel=sel_bits.pad_or_truncate(read_clients_clog2),
         input=client_cmd_chan,
-        num_outs=len(table))
+        num_outs=len(table),
+        instance_name="client_cmd_demux")
     client_data_channels = []
     for (idx, offset) in enumerate(sorted(table.keys())):
       bundle_wire = table[offset]

@@ -31,9 +31,9 @@ buildIndex(const std::vector<std::unique_ptr<Instance>> &insts) {
 }
 
 /// Build an index of ports by AppID.
-static std::map<AppID, const BundlePort &>
+static std::map<AppID, BundlePort &>
 buildIndex(const std::vector<std::unique_ptr<BundlePort>> &ports) {
-  std::map<AppID, const BundlePort &> index;
+  std::map<AppID, BundlePort &> index;
   for (auto &item : ports)
     index.emplace(item->getID(), *item);
   return index;
@@ -54,6 +54,33 @@ bool HWModule::poll() {
   for (auto &child : children)
     result |= child->poll();
   return result;
+}
+
+const HWModule *HWModule::resolveInst(const AppIDPath &path,
+                                      AppIDPath &lastLookup) const {
+  const HWModule *hwmodule = this;
+  for (auto &id : path) {
+    lastLookup.push_back(id);
+    auto childIter = hwmodule->childIndex.find(id);
+    if (childIter == hwmodule->childIndex.end())
+      return nullptr;
+    hwmodule = childIter->second;
+  }
+  return hwmodule;
+}
+
+BundlePort *HWModule::resolvePort(const AppIDPath &path,
+                                  AppIDPath &lastLookup) const {
+  AppID portID = path.back();
+  AppIDPath instPath = path;
+  instPath.pop_back();
+  const HWModule *hwmodule = resolveInst(instPath, lastLookup);
+  lastLookup.push_back(portID);
+  const auto &ports = hwmodule->getPorts();
+  const auto &portIter = ports.find(portID);
+  if (portIter == ports.end())
+    return nullptr;
+  return &portIter->second;
 }
 
 } // namespace esi

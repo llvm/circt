@@ -528,6 +528,7 @@ public:
   struct CosimHostMemRegion : public HostMemRegion {
     CosimHostMemRegion(std::size_t size) {
       ptr = malloc(size);
+      memset(ptr, 0xFF, size);
       this->size = size;
     }
     virtual ~CosimHostMemRegion() { free(ptr); }
@@ -541,7 +542,15 @@ public:
 
   virtual std::unique_ptr<HostMemRegion>
   allocate(std::size_t size, HostMem::Options opts) const override {
-    return std::unique_ptr<HostMemRegion>(new CosimHostMemRegion(size));
+    auto ret = std::unique_ptr<HostMemRegion>(new CosimHostMemRegion(size));
+    acc.getLogger().debug(
+        [&](std::string &subsystem, std::string &msg,
+            std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "HostMem";
+          msg = "Allocated host memory region at 0x" + toHex(ret->getPtr()) +
+                " of size " + std::to_string(size);
+        });
+    return ret;
   }
   virtual bool mapMemory(void *ptr, std::size_t size,
                          HostMem::Options opts) const override {
@@ -576,7 +585,7 @@ class CosimEngine : public Engine {
 public:
   CosimEngine(CosimAccelerator &conn, AppIDPath idPath,
               const ServiceImplDetails &details, const HWClientDetails &clients)
-      : conn(conn) {
+      : Engine(conn), conn(conn) {
     // Compute our parents idPath path.
     AppIDPath prefix = std::move(idPath);
     if (prefix.size() > 0)
