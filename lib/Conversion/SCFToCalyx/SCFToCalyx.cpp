@@ -54,6 +54,8 @@ namespace circt {
 class ComponentLoweringStateInterface;
 namespace scftocalyx {
 
+static constexpr std::string_view unrolledParallelAttr = "calyx.unroll";
+
 //===----------------------------------------------------------------------===//
 // Utility types
 //===----------------------------------------------------------------------===//
@@ -1171,6 +1173,10 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     if (auto ifOp = dyn_cast<scf::IfOp>(yieldOp->getParentOp()))
       // Empty yield inside ifOp, essentially a no-op.
       return success();
+    if (auto executeRegionOp =
+            dyn_cast<scf::ExecuteRegionOp>(yieldOp->getParentOp()))
+      // Empty yield inside an `ExecuteRegionOp` acts as the terminator op.
+      return success();
     return yieldOp.getOperation()->emitError()
            << "Unsupported empty yieldOp outside ForOp or IfOp.";
   }
@@ -1468,6 +1474,11 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      scf::ParallelOp parOp) const {
+  if (!parOp->hasAttr(unrolledParallelAttr)) {
+    parOp.emitError(
+        "AffineParallelUnroll must be run in order to lower scf.parallel");
+    return failure();
+  }
   getState<ComponentLoweringState>().addBlockScheduleable(
       parOp.getOperation()->getBlock(), ParScheduleable{parOp});
   return success();
@@ -1518,6 +1529,14 @@ class InlineExecuteRegionOpPattern
 
   LogicalResult matchAndRewrite(scf::ExecuteRegionOp execOp,
                                 PatternRewriter &rewriter) const override {
+    if (auto parOp = dyn_cast_or_null<scf::ParallelOp>(execOp->getParentOp())) {
+      if (auto boolAttr = dyn_cast_or_null<mlir::BoolAttr>(
+              parOp->getAttr(unrolledParallelAttr)))
+        // If the `ExecuteRegionOp` was inserted when running the
+        // `AffineParallelUnrollPass` (indicated by having `calyx.unroll`
+        // attribute), we should skip inline.
+        return success();
+    }
     /// Determine type of "yield" operations inside the ERO.
     TypeRange yieldTypes = execOp.getResultTypes();
 
@@ -1873,140 +1892,6 @@ class BuildIfGroups : public calyx::FuncOpPartialLoweringPattern {
       return WalkResult::advance();
     });
     return res;
-  }
-};
-
-class BuildParGroups : public calyx::FuncOpPartialLoweringPattern {
-  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
-
-  LogicalResult
-  partiallyLowerFuncToComp(FuncOp funcOp,
-                           PatternRewriter &rewriter) const override {
-    WalkResult walkResult = funcOp.walk([&](scf::ParallelOp scfParOp) {
-      if (!scfParOp.getResults().empty()) {
-        scfParOp.emitError(
-            "Reduce operations in scf.parallel is not supported yet");
-        return WalkResult::interrupt();
-      }
-
-      if (failed(partialEval(rewriter, scfParOp)))
-        return WalkResult::interrupt();
-
-      return WalkResult::advance();
-    });
-
-    return walkResult.wasInterrupted() ? failure() : success();
-  }
-
-private:
-  // Partially evaluate/pre-compute all blocks being executed in parallel by
-  // statically generate loop indices combinations
-  LogicalResult partialEval(PatternRewriter &rewriter,
-                            scf::ParallelOp scfParOp) const {
-    assert(scfParOp.getLoopSteps() && "Parallel loop must have steps");
-    auto *body = scfParOp.getBody();
-    auto parOpIVs = scfParOp.getInductionVars();
-    auto steps = scfParOp.getStep();
-    auto lowerBounds = scfParOp.getLowerBound();
-    auto upperBounds = scfParOp.getUpperBound();
-    rewriter.setInsertionPointAfter(scfParOp);
-    scf::ParallelOp newParOp = scfParOp.cloneWithoutRegions();
-    auto loc = newParOp.getLoc();
-    rewriter.insert(newParOp);
-    OpBuilder insideBuilder(newParOp);
-    auto &region = newParOp.getRegion();
-    auto *newParBodyBlock = &region.emplaceBlock();
-
-    // extract lower bounds, upper bounds, and steps as integer index values
-    SmallVector<int64_t> lbVals, ubVals, stepVals;
-    for (auto lb : lowerBounds) {
-      auto lbOp = lb.getDefiningOp<arith::ConstantIndexOp>();
-      assert(lbOp &&
-             "Lower bound must be a statically computable constant index");
-      lbVals.push_back(lbOp.value());
-    }
-    for (auto ub : upperBounds) {
-      auto ubOp = ub.getDefiningOp<arith::ConstantIndexOp>();
-      assert(ubOp &&
-             "Upper bound must be a statically computable constant index");
-      ubVals.push_back(ubOp.value());
-    }
-    for (auto step : steps) {
-      auto stepOp = step.getDefiningOp<arith::ConstantIndexOp>();
-      assert(stepOp && "Step must be a statically computable constant index");
-      stepVals.push_back(stepOp.value());
-    }
-
-    // Initialize indices with lower bounds
-    SmallVector<int64_t> indices = lbVals;
-
-    while (true) {
-      insideBuilder.setInsertionPointToEnd(newParBodyBlock);
-      // Create an `scf.execute_region` to wrap each unrolled block since
-      // `scf.parallel` requires only one block in the body region.
-      auto execRegionOp =
-          insideBuilder.create<scf::ExecuteRegionOp>(loc, TypeRange{});
-      auto &execRegion = execRegionOp.getRegion();
-      Block *execBlock = &execRegion.emplaceBlock();
-      OpBuilder regionBuilder(execRegionOp);
-      // Each iteration starts with a fresh mapping, so each new block’s
-      // argument of a region-based operation (such as `scf.for`) get re-mapped
-      // independently.
-      IRMapping operandMap;
-
-      regionBuilder.setInsertionPointToEnd(execBlock);
-      // Map induction variables to constant indices
-      for (unsigned i = 0; i < indices.size(); ++i) {
-        Value ivConstant =
-            regionBuilder.create<arith::ConstantIndexOp>(loc, indices[i]);
-        operandMap.map(parOpIVs[i], ivConstant);
-      }
-
-      for (auto it = body->begin(); it != std::prev(body->end()); ++it)
-        regionBuilder.clone(*it, operandMap);
-
-      // A terminator should always be inserted in `scf.execute_region`'s block.
-      regionBuilder.create<scf::ReduceOp>(loc);
-      // Increment indices using `step`
-      bool done = false;
-      for (int dim = indices.size() - 1; dim >= 0; --dim) {
-        indices[dim] += stepVals[dim];
-        if (indices[dim] < ubVals[dim])
-          break;
-        indices[dim] = lbVals[dim];
-        if (dim == 0)
-          // All combinations have been generated
-          done = true;
-      }
-      if (done)
-        break;
-    }
-
-    rewriter.setInsertionPointToEnd(newParOp.getBody());
-    rewriter.create<scf::ReduceOp>(newParOp.getLoc());
-
-    rewriter.replaceOp(scfParOp, newParOp);
-
-    auto containsIfOp = [](scf::ParallelOp parOp) -> bool {
-      bool hasIfOp = false;
-      parOp.walk([&](scf::IfOp ifOp) {
-        hasIfOp = true;
-        return WalkResult::interrupt();
-      });
-      return hasIfOp;
-    };
-    if (containsIfOp(newParOp)) {
-      auto *context = newParOp.getContext();
-      RewritePatternSet patterns(newParOp.getContext());
-      scf::IfOp::getCanonicalizationPatterns(patterns, context);
-      if (failed(
-              applyPatternsGreedily(newParOp->getParentOfType<func::FuncOp>(),
-                                    std::move(patterns)))) {
-        return failure();
-      }
-    }
-
-    return success();
   }
 };
 
@@ -2796,11 +2681,6 @@ void SCFToCalyxPass::runOnOperation() {
 
   /// This pass inlines scf.ExecuteRegionOp's by adding control-flow.
   addGreedyPattern<InlineExecuteRegionOpPattern>(loweringPatterns);
-
-  /// Partial evaluate the scf.ParallelOp and apply the scf.IfOp
-  /// canonicalization optionally.
-  addOncePattern<BuildParGroups>(loweringPatterns, patternState, funcMap,
-                                 *loweringState);
 
   /// This pattern converts all index typed values to an i32 integer.
   addOncePattern<calyx::ConvertIndexTypes>(loweringPatterns, patternState,
