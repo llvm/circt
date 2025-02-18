@@ -340,7 +340,7 @@ class ComponentLoweringStateInterface {
 public:
   ComponentLoweringStateInterface(calyx::ComponentOp component);
 
-  ~ComponentLoweringStateInterface();
+  virtual ~ComponentLoweringStateInterface();
 
   /// Returns the calyx::ComponentOp associated with this lowering state.
   calyx::ComponentOp getComponentOp();
