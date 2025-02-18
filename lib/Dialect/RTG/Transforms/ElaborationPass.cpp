@@ -13,6 +13,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/RTG/IR/RTGAttributes.h"
 #include "circt/Dialect/RTG/IR/RTGOps.h"
 #include "circt/Dialect/RTG/IR/RTGVisitors.h"
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
@@ -323,12 +324,16 @@ struct SequenceStorage {
 
 /// Storage object for an '!rtg.randomized_sequence'.
 struct RandomizedSequenceStorage {
-  RandomizedSequenceStorage(StringRef name, SequenceStorage *sequence)
-      : hashcode(llvm::hash_combine(name, sequence)), name(name),
-        sequence(sequence) {}
+  RandomizedSequenceStorage(StringRef name,
+                            ContextResourceAttrInterface context,
+                            StringAttr test, SequenceStorage *sequence)
+      : hashcode(llvm::hash_combine(name, context, test, sequence)), name(name),
+        context(context), test(test), sequence(sequence) {}
 
   bool isEqual(const RandomizedSequenceStorage *other) const {
-    return hashcode == other->hashcode && sequence == other->sequence;
+    return hashcode == other->hashcode && name == other->name &&
+           context == other->context && test == other->test &&
+           sequence == other->sequence;
   }
 
   // The cached hashcode to avoid repeated computations.
@@ -336,6 +341,12 @@ struct RandomizedSequenceStorage {
 
   // The name of this fully substituted and elaborated sequence.
   const StringRef name;
+
+  // The context under which this sequence is placed.
+  const ContextResourceAttrInterface context;
+
+  // The test in which this sequence is placed.
+  const StringAttr test;
 
   const SequenceStorage *sequence;
 };
@@ -434,7 +445,8 @@ static void print(SequenceStorage *val, llvm::raw_ostream &os) {
 
 static void print(RandomizedSequenceStorage *val, llvm::raw_ostream &os) {
   os << "<randomized-sequence @" << val->name << " derived from @"
-     << val->sequence->familyName.getValue() << "(";
+     << val->sequence->familyName.getValue() << " under context "
+     << val->context << " in test " << val->test << "(";
   llvm::interleaveComma(val->sequence->args, os,
                         [&](const ElaboratorValue &val) { os << val; });
   os << ") at " << val << ">";
@@ -558,6 +570,11 @@ public:
 
     for (auto *op : llvm::reverse(toDelete))
       op->erase();
+  }
+
+  template <typename OpTy, typename... Args>
+  OpTy create(Location location, Args &&...args) {
+    return builder.create<OpTy>(location, std::forward<Args>(args)...);
   }
 
 private:
@@ -737,14 +754,29 @@ struct ElaboratorSharedState {
   uint64_t uniqueLabelID = 1;
 };
 
+/// A collection of state per RTG test.
+struct TestState {
+  /// The name of the test.
+  StringAttr name;
+
+  /// The context switches registered for this test.
+  MapVector<
+      std::pair<ContextResourceAttrInterface, ContextResourceAttrInterface>,
+      SequenceStorage *>
+      contextSwitches;
+};
+
 /// Interprets the IR to perform and lower the represented randomizations.
 class Elaborator : public RTGOpVisitor<Elaborator, FailureOr<DeletionKind>> {
 public:
   using RTGBase = RTGOpVisitor<Elaborator, FailureOr<DeletionKind>>;
   using RTGBase::visitOp;
 
-  Elaborator(ElaboratorSharedState &sharedState, Materializer &materializer)
-      : sharedState(sharedState), materializer(materializer) {}
+  Elaborator(ElaboratorSharedState &sharedState, TestState &testState,
+             Materializer &materializer,
+             ContextResourceAttrInterface currentContext = {})
+      : sharedState(sharedState), testState(testState),
+        materializer(materializer), currentContext(currentContext) {}
 
   template <typename ValueTy>
   inline ValueTy get(Value val) const {
@@ -821,12 +853,26 @@ public:
 
     auto name = sharedState.names.newName(seq->familyName.getValue());
     state[op.getResult()] =
-        sharedState.internalizer.internalize<RandomizedSequenceStorage>(name,
-                                                                        seq);
+        sharedState.internalizer.internalize<RandomizedSequenceStorage>(
+            name, currentContext, testState.name, seq);
     return DeletionKind::Delete;
   }
 
   FailureOr<DeletionKind> visitOp(EmbedSequenceOp op) {
+    auto *seq = get<RandomizedSequenceStorage *>(op.getSequence());
+    if (seq->context != currentContext) {
+      auto err = op->emitError("attempting to place sequence ")
+                 << seq->name << " derived from "
+                 << seq->sequence->familyName.getValue() << " under context "
+                 << currentContext
+                 << ", but it was previously randomized for context ";
+      if (seq->context)
+        err << seq->context;
+      else
+        err << "'default'";
+      return err;
+    }
+
     return DeletionKind::Keep;
   }
 
@@ -1036,6 +1082,60 @@ public:
     return DeletionKind::Delete;
   }
 
+  FailureOr<DeletionKind> visitOp(OnContextOp op) {
+    ContextResourceAttrInterface from = currentContext,
+                                 to = cast<ContextResourceAttrInterface>(
+                                     get<TypedAttr>(op.getContext()));
+    if (!currentContext)
+      from = DefaultContextAttr::get(op->getContext(), to.getType());
+
+    auto emitError = [&]() {
+      auto diag = op.emitError();
+      diag.attachNote(op.getLoc())
+          << "while materializing value for context switching for " << op;
+      return diag;
+    };
+
+    if (from == to) {
+      Value seqVal = materializer.materialize(
+          get<SequenceStorage *>(op.getSequence()), op.getLoc(),
+          sharedState.worklist, emitError);
+      Value randSeqVal =
+          materializer.create<RandomizeSequenceOp>(op.getLoc(), seqVal);
+      materializer.create<EmbedSequenceOp>(op.getLoc(), randSeqVal);
+      return DeletionKind::Delete;
+    }
+
+    // Switch to the desired context.
+    auto *iter = testState.contextSwitches.find({from, to});
+    // NOTE: we could think about supporting context switching via intermediate
+    // context, i.e., treat it as a transitive relation.
+    if (iter == testState.contextSwitches.end())
+      return op->emitError("no context transition registered to switch from ")
+             << from << " to " << to;
+
+    auto familyName = iter->second->familyName;
+    SmallVector<ElaboratorValue> args{from, to,
+                                      get<SequenceStorage *>(op.getSequence())};
+    auto *seq = sharedState.internalizer.internalize<SequenceStorage>(
+        familyName, std::move(args));
+    auto *randSeq =
+        sharedState.internalizer.internalize<RandomizedSequenceStorage>(
+            sharedState.names.newName(familyName.getValue()), to,
+            testState.name, seq);
+    Value seqVal = materializer.materialize(randSeq, op.getLoc(),
+                                            sharedState.worklist, emitError);
+    materializer.create<EmbedSequenceOp>(op.getLoc(), seqVal);
+
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(ContextSwitchOp op) {
+    testState.contextSwitches[{op.getFromAttr(), op.getToAttr()}] =
+        get<SequenceStorage *>(op.getSequence());
+    return DeletionKind::Delete;
+  }
+
   FailureOr<DeletionKind> visitOp(scf::IfOp op) {
     bool cond = get<bool>(op.getCondition());
     auto &toElaborate = cond ? op.getThenRegion() : op.getElseRegion();
@@ -1193,12 +1293,18 @@ private:
   // State to be shared between all elaborator instances.
   ElaboratorSharedState &sharedState;
 
+  // State to a specific RTG test and the sequences placed within it.
+  TestState &testState;
+
   // Allows us to materialize ElaboratorValues to the IR operations necessary to
   // obtain an SSA value representing that elaborated value.
   Materializer &materializer;
 
   // A map from SSA values to a pointer of an interned elaborator value.
   DenseMap<Value, ElaboratorValue> state;
+
+  // The current context we are elaborating under.
+  ContextResourceAttrInterface currentContext;
 };
 } // namespace
 
@@ -1282,11 +1388,14 @@ LogicalResult ElaborationPass::elaborateModule(ModuleOp moduleOp,
 
   // Initialize the worklist with the test ops since they cannot be placed by
   // other ops.
+  DenseMap<StringAttr, TestState> testStates;
   for (auto testOp : moduleOp.getOps<TestOp>()) {
     LLVM_DEBUG(llvm::dbgs()
                << "\n=== Elaborating test @" << testOp.getSymName() << "\n\n");
     Materializer materializer(OpBuilder::atBlockBegin(testOp.getBody()));
-    Elaborator elaborator(state, materializer);
+    testStates[testOp.getSymNameAttr()].name = testOp.getSymNameAttr();
+    Elaborator elaborator(state, testStates[testOp.getSymNameAttr()],
+                          materializer);
     if (failed(elaborator.elaborate(testOp.getBodyRegion())))
       return failure();
 
@@ -1314,10 +1423,12 @@ LogicalResult ElaborationPass::elaborateModule(ModuleOp moduleOp,
 
     LLVM_DEBUG(llvm::dbgs()
                << "\n=== Elaborating sequence family @" << familyOp.getSymName()
-               << " into @" << seqOp.getSymName() << "\n\n");
+               << " into @" << seqOp.getSymName() << " under context "
+               << curr->context << "\n\n");
 
     Materializer materializer(OpBuilder::atBlockBegin(seqOp.getBody()));
-    Elaborator elaborator(state, materializer);
+    Elaborator elaborator(state, testStates[curr->test], materializer,
+                          curr->context);
     if (failed(elaborator.elaborate(familyOp.getBodyRegion(),
                                     curr->sequence->args)))
       return failure();
