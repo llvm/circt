@@ -257,6 +257,7 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   pm.addPass(om::createStripOMPass());
   pm.addPass(emit::createStripEmitPass());
   pm.addPass(createLowerFirMemPass());
+  pm.addPass(createLowerVerifSimulationsPass());
   {
     arc::AddTapsOptions opts;
     opts.tapPorts = observePorts;
