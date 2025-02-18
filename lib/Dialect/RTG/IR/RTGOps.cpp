@@ -364,6 +364,31 @@ LogicalResult VirtualRegisterOp::inferReturnTypes(
 }
 
 //===----------------------------------------------------------------------===//
+// ContextSwitchOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ContextSwitchOp::verify() {
+  auto elementTypes = getSequence().getType().getElementTypes();
+  if (elementTypes.size() != 3)
+    return emitOpError("sequence type must have exactly 3 element types");
+
+  if (getFrom().getType() != elementTypes[0])
+    return emitOpError(
+        "first sequence element type must match 'from' attribute type");
+
+  if (getTo().getType() != elementTypes[1])
+    return emitOpError(
+        "second sequence element type must match 'to' attribute type");
+
+  auto seqTy = dyn_cast<SequenceType>(elementTypes[2]);
+  if (!seqTy || !seqTy.getElementTypes().empty())
+    return emitOpError(
+        "third sequence element type must be a fully substituted sequence");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TestOp
 //===----------------------------------------------------------------------===//
 

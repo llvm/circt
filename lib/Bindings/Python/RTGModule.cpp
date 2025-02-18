@@ -107,4 +107,12 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
       .def_property_readonly("value", [](MlirAttribute self) {
         return rtgLabelVisibilityAttrGetValue(self);
       });
+
+  mlir_attribute_subclass(m, "DefaultContextAttr", rtgAttrIsADefaultContextAttr)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, MlirType type, MlirContext ctxt) {
+            return cls(rtgDefaultContextAttrGet(ctxt, type));
+          },
+          nb::arg("self"), nb::arg("type"), nb::arg("ctxt") = nullptr);
 }

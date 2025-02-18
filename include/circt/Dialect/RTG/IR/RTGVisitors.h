@@ -35,6 +35,8 @@ public:
             // Bags
             BagCreateOp, BagSelectRandomOp, BagDifferenceOp, BagUnionOp,
             BagUniqueSizeOp,
+            // Contexts
+            OnContextOp, ContextSwitchOp,
             // Labels
             LabelDeclOp, LabelUniqueDeclOp, LabelOp,
             // Registers
@@ -51,10 +53,6 @@ public:
             SetSizeOp>([&](auto expr) -> ResultType {
           return thisCast->visitOp(expr, args...);
         })
-        .template Case<ContextResourceOpInterface>(
-            [&](auto expr) -> ResultType {
-              return thisCast->visitContextResourceOp(expr, args...);
-            })
         .Default([&](auto expr) -> ResultType {
           if (op->getDialect() ==
               op->getContext()->getLoadedDialect<RTGDialect>())
@@ -75,11 +73,6 @@ public:
   /// handled by the concrete visitor.
   ResultType visitUnhandledOp(Operation *op, ExtraArgs... args);
 
-  ResultType visitContextResourceOp(ContextResourceOpInterface op,
-                                    ExtraArgs... args) {
-    return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);
-  }
-
   ResultType visitExternalOp(Operation *op, ExtraArgs... args) {
     return ResultType();
   }
@@ -95,6 +88,8 @@ public:
   HANDLE(RandomizeSequenceOp, Unhandled);
   HANDLE(EmbedSequenceOp, Unhandled);
   HANDLE(RandomNumberInRangeOp, Unhandled);
+  HANDLE(OnContextOp, Unhandled);
+  HANDLE(ContextSwitchOp, Unhandled);
   HANDLE(SetCreateOp, Unhandled);
   HANDLE(SetSelectRandomOp, Unhandled);
   HANDLE(SetDifferenceOp, Unhandled);

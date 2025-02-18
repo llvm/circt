@@ -100,6 +100,28 @@ rtg.target @target : !rtg.dict<num_cpus: i32, num_modes: i32> {
   rtg.yield %1, %1 : i32, i32
 }
 
+// CHECK-LABEL: rtg.sequence @switch_seq
+// CHECK-SAME: (%{{.*}}: !rtgtest.cpu, %{{.*}}: !rtgtest.cpu, %{{.*}}: !rtg.sequence)
+rtg.sequence @switch_seq(%from: !rtgtest.cpu, %to: !rtgtest.cpu, %seq: !rtg.sequence) { }
+
+// CHECK-LABEL: rtg.target @context_switch
+rtg.target @context_switch : !rtg.dict<> {
+  // CHECK: [[V0:%.+]] = rtg.get_sequence
+  // CHECK: rtg.context_switch #rtg.default : !rtgtest.cpu -> #rtgtest.cpu<1> : !rtgtest.cpu, [[V0]] : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
+  %0 = rtg.get_sequence @switch_seq : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
+  rtg.context_switch #rtg.default : !rtgtest.cpu -> #rtgtest.cpu<1>, %0 : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
+
+  rtg.yield
+}
+
+// CHECK-LABEL: @contexts
+rtg.test @contexts : !rtg.dict<ctxt0: !rtgtest.cpu> {
+^bb0(%arg0: !rtgtest.cpu):
+  // CHECK: rtg.on_context {{%.+}}, {{%.+}} : !rtgtest.cpu
+  %seq = rtg.get_sequence @seq0 : !rtg.sequence
+  rtg.on_context %arg0, %seq : !rtgtest.cpu
+}
+
 // CHECK-LABEL: rtg.test @test : !rtg.dict<num_cpus: i32, num_modes: i32> {
 // CHECK: ^bb0(%arg0: i32, %arg1: i32):
 // CHECK: }

@@ -13,28 +13,8 @@ include "mlir/IR/Interfaces.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
 
-def ContextResourceOpInterface : OpInterface<"ContextResourceOpInterface"> {
-  let description = [{
-    This interface should be implemented by operations that define
-    context resources. The operation should define at least one SSA value of a type
-    implementing the `ContextResourceTypeInterface`.
-  }];
-  let cppNamespace = "::circt::rtg";
-
-  let methods = [
-    InterfaceMethod<[{
-        Provides a unique identifier for the defined context resource at `idx`
-        (not counting op results that are not of a type implementing the
-        `ContextResourceTypeInterface`).
-        For example, if the context resource are CPUs it could be the core ID.
-      }],
-      "size_t", "getIdentifier", (ins "size_t":$idx)>,
-  ];
-}
-
 /// Context resources can only be defined inside the `rtg.target` operation.
 def ContextResourceDefining : TraitList<[
-  DeclareOpInterfaceMethods<ContextResourceOpInterface>,
   HasParent<"::circt::rtg::TargetOp">,
 ]>;
 
