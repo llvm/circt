@@ -419,7 +419,7 @@ module {
         memref.store %2, %arg1[%c0] : memref<2xi32>
         scf.yield
       }
-    } {calyx.parallel = true}
+    } {calyx.unroll = true}
     return
   }
 }
