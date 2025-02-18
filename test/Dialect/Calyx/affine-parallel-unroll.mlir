@@ -129,7 +129,7 @@ module {
 // CHECK:               memref.store %[[VAL_3]], %[[VAL_0]]{{\[}}%[[VAL_1]], %[[VAL_1]]] : memref<2x2xf32>
 // CHECK:               scf.yield
 // CHECK:             }
-// CHECK:           } {calyx.parallel = true}
+// CHECK:           } {calyx.unroll = true}
 // CHECK:           return
 // CHECK:         }
 
