@@ -1472,7 +1472,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      scf::ParallelOp parOp) const {
-  if (!parOp->hasAttr("calyx.parallel")) {
+  if (!parOp->hasAttr("calyx.unroll")) {
     parOp.emitError(
         "AffineParallelUnroll must be run in order to lower scf.parallel");
     return failure();
@@ -1528,10 +1528,10 @@ class InlineExecuteRegionOpPattern
   LogicalResult matchAndRewrite(scf::ExecuteRegionOp execOp,
                                 PatternRewriter &rewriter) const override {
     if (auto parOp = dyn_cast_or_null<scf::ParallelOp>(execOp->getParentOp())) {
-      if (auto boolAttr = dyn_cast_or_null<mlir::BoolAttr>(
-              parOp->getAttr("calyx.parallel")))
+      if (auto boolAttr =
+              dyn_cast_or_null<mlir::BoolAttr>(parOp->getAttr("calyx.unroll")))
         // If the `ExecuteRegionOp` was inserted when running the
-        // `AffineParallelUnrollPass` (indicated by having `calyx.parallel`
+        // `AffineParallelUnrollPass` (indicated by having `calyx.unroll`
         // attribute), we should skip inline.
         return success();
     }
