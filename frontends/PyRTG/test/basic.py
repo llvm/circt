@@ -2,7 +2,42 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, rtg, Label, Set, Integer, Bag
+from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag
+
+# MLIR-LABEL: rtg.target @Tgt0 : !rtg.dict<entry0: !rtg.set<index>>
+# MLIR-NEXT: [[C0:%.+]] = index.constant 0
+# MLIR-NEXT: [[C1:%.+]] = index.constant 1
+# MLIR-NEXT: [[SET:%.+]] = rtg.set_create [[C0:%.+]], [[C1:%.+]] : index
+# MLIR-NEXT: rtg.yield [[SET]] : !rtg.set<index>
+# MLIR-NEXT: }
+
+
+@target
+class Tgt0:
+
+  @entry
+  def entry0():
+    return Set.create(Integer(0), Integer(1))
+
+
+# MLIR-LABEL: rtg.target @Tgt1 : !rtg.dict<entry0: index, entry1: !rtg.label>
+# MLIR-NEXT: [[C0:%.+]] = index.constant 0
+# MLIR-NEXT: [[LBL:%.+]] = rtg.label_decl "l0"
+# MLIR-NEXT: rtg.yield [[C0]], [[LBL]] : index, !rtg.label
+# MLIR-NEXT: }
+
+
+@target
+class Tgt1:
+
+  @entry
+  def entry0():
+    return Integer(0)
+
+  @entry
+  def entry1():
+    return Label.declare("l0")
+
 
 # MLIR-LABEL: rtg.sequence @seq0
 # MLIR-SAME: ([[SET:%.+]]: !rtg.set<!rtg.label>)
@@ -37,9 +72,34 @@ def seq1():
 # ASM: End of test0
 
 
-@test
+@test()
 def test0():
   pass
+
+
+# MLIR-LABEL: rtg.test @test_args
+# MLIR-SAME: (entry0 = [[SET:%.+]]: !rtg.set<index>)
+# MLIR-NEXT: [[RAND:%.+]] = rtg.set_select_random [[SET]] : !rtg.set<index>
+# MLIR-NEXT: rtg.label_decl "L_{{[{][{]0[}][}]}}", [[RAND]]
+# MLIR-NEXT: rtg.label local
+# MLIR-NEXT: }
+
+# ELABORATED-LABEL: rtg.test @test_args_Tgt0
+# CHECK: rtg.label_decl "L_0"
+# CHECK-NEXT: rtg.label local
+# CHECK-NEXT: }
+
+# ASM-LABEL: Begin of test_args
+# ASM-EMPTY:
+# ASM-NEXT: L_0:
+# ASM-EMPTY:
+# ASM: End of test_args
+
+
+@test(("entry0", Set.type(Integer.type())))
+def test_args(set: Set):
+  i = set.get_random()
+  Label.declare(r"L_{{0}}", i).place()
 
 
 # MLIR-LABEL: rtg.test @test_labels
@@ -154,7 +214,7 @@ def test0():
 # ASM: End of test_labels
 
 
-@test
+@test()
 def test_labels():
   l0 = Label.declare("l0")
   l1 = Label.declare_unique("l1")
