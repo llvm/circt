@@ -139,8 +139,8 @@ struct PrintResourceUsageAnalysisPass
           PrintResourceUsageAnalysisPass> {
   using PrintResourceUsageAnalysisBase::PrintResourceUsageAnalysisBase;
 
-  using PrintResourceUsageAnalysisBase::printSummary;
   using PrintResourceUsageAnalysisBase::outputJSONFile;
+  using PrintResourceUsageAnalysisBase::printSummary;
   using PrintResourceUsageAnalysisBase::topModuleName;
   void runOnOperation() override;
 };
@@ -153,6 +153,7 @@ void PrintResourceUsageAnalysisPass::runOnOperation() {
         << "'top-name' option is required for PrintResourceUsageAnalysis";
     return signalPassFailure();
   }
+
   auto &symTbl = getAnalysis<mlir::SymbolTable>();
   auto top = symTbl.lookup<hw::HWModuleOp>(topModuleName);
   if (!top) {
@@ -169,15 +170,14 @@ void PrintResourceUsageAnalysisPass::runOnOperation() {
                  << usage->getTotal().getNumAndInverterGates() << "\n";
     llvm::errs() << "Total number of DFF bits: "
                  << usage->getTotal().getNumDFFBits() << "\n";
-  
   }
   if (!outputJSONFile.empty()) {
     std::error_code ec;
     llvm::raw_fd_ostream os(outputJSONFile, ec);
     if (ec) {
       emitError(UnknownLoc::get(&getContext()))
-          << "failed to open output JSON file '" << outputJSONFile << "': "
-          << ec.message();
+          << "failed to open output JSON file '" << outputJSONFile
+          << "': " << ec.message();
       return signalPassFailure();
     }
     usage->emitJSON(os);

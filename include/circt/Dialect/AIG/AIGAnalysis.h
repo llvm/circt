@@ -154,6 +154,7 @@ public:
     uint64_t numAndInverterGates = 0;
     uint64_t numDFFBits = 0;
   };
+
   struct ModuleResourceUsage {
     ModuleResourceUsage(StringAttr moduleName, ResourceUsage local,
                         ResourceUsage total)
@@ -168,7 +169,6 @@ public:
           : moduleName(moduleName), instanceName(instanceName), usage(usage) {}
     };
     SmallVector<InstanceResource> instances;
-    // DenseMap<mlir::FileLineColLoc, ResourceUsage> locationUsage;
     ResourceUsage getTotal() const { return total; }
     void emitJSON(raw_ostream &os) const;
   };
@@ -179,6 +179,7 @@ public:
   DenseMap<StringAttr, std::unique_ptr<ModuleResourceUsage>> designUsageCache;
   igraph::InstanceGraph *instanceGraph;
 };
+
 } // namespace aig
 } // namespace circt
 
