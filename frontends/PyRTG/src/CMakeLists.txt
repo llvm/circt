@@ -25,6 +25,8 @@ declare_mlir_python_sources(PyRTGSources
   pyrtg/support.py
   pyrtg/target.py
   pyrtg/tests.py
+  pyrtg/resources.py
+  pyrtg/rtgtest.py
   rtgtool/rtgtool.py
 )
 

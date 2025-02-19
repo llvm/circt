@@ -57,7 +57,7 @@ Operation *RTGTestDialect::materializeConstant(OpBuilder &builder,
           return builder.create<rtg::FixedRegisterOp>(loc, attr);
         return nullptr;
       })
-      .Case<Imm12Attr, Imm21Attr, Imm32Attr>(
+      .Case<Imm5Attr, Imm12Attr, Imm13Attr, Imm21Attr, Imm32Attr>(
           [&](auto attr) { return builder.create<ImmediateOp>(loc, attr); })
       .Default([](auto attr) { return nullptr; });
 }
