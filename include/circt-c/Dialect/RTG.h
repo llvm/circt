@@ -58,11 +58,17 @@ MLIR_CAPI_EXPORTED bool rtgTypeIsASet(MlirType type);
 /// Creates an RTG set type in the context.
 MLIR_CAPI_EXPORTED MlirType rtgSetTypeGet(MlirType elementType);
 
+/// Return the element type of the RTG set.
+MLIR_CAPI_EXPORTED MlirType rtgSetTypeGetElementType(MlirType type);
+
 /// If the type is an RTG bag.
 MLIR_CAPI_EXPORTED bool rtgTypeIsABag(MlirType type);
 
 /// Creates an RTG bag type in the context.
 MLIR_CAPI_EXPORTED MlirType rtgBagTypeGet(MlirType elementType);
+
+/// Return the element type of the RTG bag.
+MLIR_CAPI_EXPORTED MlirType rtgBagTypeGetElementType(MlirType type);
 
 /// If the type is an RTG dict.
 MLIR_CAPI_EXPORTED bool rtgTypeIsADict(MlirType type);
