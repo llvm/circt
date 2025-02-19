@@ -8,15 +8,14 @@ rtg.target @cpus : !rtg.dict<cpu: !rtgtest.cpu> {
   rtg.yield %0 : !rtgtest.cpu
 }
 
-rtg.test @misc : !rtg.dict<> {
+rtg.test @misc() {
   // CHECK: rtgtest.constant_test i32 {value = "str"}
   %0 = rtgtest.constant_test i32 {value = "str"}
 }
 
 // CHECK-LABEL: rtg.test @registers
 // CHECK-SAME: !rtgtest.ireg
-rtg.test @registers : !rtg.dict<reg: !rtgtest.ireg> {
-^bb0(%reg: !rtgtest.ireg):
+rtg.test @registers(reg = %reg: !rtgtest.ireg) {
   // CHECK: rtg.fixed_reg #rtgtest.zero : !rtgtest.ireg
   // CHECK: rtg.fixed_reg #rtgtest.ra : !rtgtest.ireg
   // CHECK: rtg.fixed_reg #rtgtest.sp : !rtgtest.ireg
@@ -87,7 +86,7 @@ rtg.test @registers : !rtg.dict<reg: !rtgtest.ireg> {
 }
 
 // CHECK-LABEL: @immediates
-rtg.test @immediates : !rtg.dict<> {
+rtg.test @immediates() {
   // CHECK: rtgtest.immediate #rtgtest.imm5<3> : !rtgtest.imm5
   rtgtest.immediate #rtgtest.imm5<3> : !rtgtest.imm5
   // CHECK: rtgtest.immediate #rtgtest.imm12<3> : !rtgtest.imm12
@@ -101,9 +100,8 @@ rtg.test @immediates : !rtg.dict<> {
 }
 
 // CHECK-LABEL: @instructions
-rtg.test @instructions : !rtg.dict<imm: !rtgtest.imm12, imm13: !rtgtest.imm13, imm21: !rtgtest.imm21, imm32: !rtgtest.imm32, imm5: !rtgtest.imm5, label: !rtg.label, rd: !rtgtest.ireg, rs: !rtgtest.ireg> {
-// CHECK: ([[IMM:%.+]]: !rtgtest.imm12, [[IMM13:%.+]]: !rtgtest.imm13, [[IMM21:%.+]]: !rtgtest.imm21, [[IMM32:%.+]]: !rtgtest.imm32, [[IMM5:%.+]]: !rtgtest.imm5, [[LABEL:%.+]]: !rtg.label, [[RD:%.+]]: !rtgtest.ireg, [[RS:%.+]]: !rtgtest.ireg)
-^bb0(%imm: !rtgtest.imm12, %imm13: !rtgtest.imm13, %imm21: !rtgtest.imm21, %imm32: !rtgtest.imm32, %imm5: !rtgtest.imm5, %label: !rtg.label, %rd: !rtgtest.ireg, %rs: !rtgtest.ireg):
+// CHECK-SAME: (imm = [[IMM:%.+]]: !rtgtest.imm12, imm13 = [[IMM13:%.+]]: !rtgtest.imm13, imm21 = [[IMM21:%.+]]: !rtgtest.imm21, imm32 = [[IMM32:%.+]]: !rtgtest.imm32, imm5 = [[IMM5:%.+]]: !rtgtest.imm5, label = [[LABEL:%.+]]: !rtg.label, rd = [[RD:%.+]]: !rtgtest.ireg, rs = [[RS:%.+]]: !rtgtest.ireg)
+rtg.test @instructions(imm = %imm: !rtgtest.imm12, imm13 = %imm13: !rtgtest.imm13, imm21 = %imm21: !rtgtest.imm21, imm32 = %imm32: !rtgtest.imm32, imm5 = %imm5: !rtgtest.imm5, label = %label: !rtg.label, rd = %rd: !rtgtest.ireg, rs = %rs: !rtgtest.ireg) {
   // CHECK: rtgtest.rv32i.jalr [[RD]], [[RS]], [[IMM]]
   rtgtest.rv32i.jalr %rd, %rs, %imm
   // CHECK: rtgtest.rv32i.lb [[RD]], [[RS]], [[IMM]]
@@ -210,21 +208,21 @@ rtg.test @instructions : !rtg.dict<imm: !rtgtest.imm12, imm13: !rtgtest.imm13, i
 
 // -----
 
-rtg.test @immediateTooBig : !rtg.dict<> {
+rtg.test @immediateTooBig() {
   // expected-error @below {{cannot represent 2000000 with 12 bits}}
   rtgtest.immediate #rtgtest.imm12<2000000> : !rtgtest.imm12
 }
 
 // -----
 
-rtg.test @emptyAllowed : !rtg.dict<> {
+rtg.test @emptyAllowed() {
   // expected-error @below {{must have at least one allowed register}}
   rtg.virtual_reg []
 }
 
 // -----
 
-rtg.test @invalidAllowedAttr : !rtg.dict<> {
+rtg.test @invalidAllowedAttr() {
   // expected-error @below {{allowed register attributes must be of RegisterAttrInterface}}
   rtg.virtual_reg ["invalid"]
 }

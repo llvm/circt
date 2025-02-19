@@ -8,7 +8,7 @@ func.func @dummy5(%arg0: i1) -> () {return}
 
 // Test the set operations and passing a sequence to another one via argument
 // CHECK-LABEL: rtg.test @setOperations
-rtg.test @setOperations : !rtg.dict<> {
+rtg.test @setOperations() {
   // CHECK-NEXT: [[V0:%.+]] = index.constant 2
   // CHECK-NEXT: [[V1:%.+]] = index.constant 3
   // CHECK-NEXT: [[V2:%.+]] = index.constant 4
@@ -30,7 +30,7 @@ rtg.test @setOperations : !rtg.dict<> {
 }
 
 // CHECK-LABEL: rtg.test @bagOperations
-rtg.test @bagOperations : !rtg.dict<> {
+rtg.test @bagOperations() {
   // CHECK-NEXT: [[V0:%.+]] = index.constant 2
   // CHECK-NEXT: [[V1:%.+]] = index.constant 8
   // CHECK-NEXT: [[V2:%.+]] = index.constant 3
@@ -56,7 +56,7 @@ rtg.test @bagOperations : !rtg.dict<> {
 }
 
 // CHECK-LABEL: rtg.test @setSize
-rtg.test @setSize : !rtg.dict<> {
+rtg.test @setSize() {
   // CHECK-NEXT: [[C:%.+]] = index.constant 1
   // CHECK-NEXT: func.call @dummy2([[C]])
   // CHECK-NEXT: }
@@ -67,7 +67,7 @@ rtg.test @setSize : !rtg.dict<> {
 }
 
 // CHECK-LABEL: rtg.test @bagSize
-rtg.test @bagSize : !rtg.dict<> {
+rtg.test @bagSize() {
   // CHECK-NEXT: [[C:%.+]] = index.constant 1
   // CHECK-NEXT: func.call @dummy2([[C]])
   // CHECK-NEXT: }
@@ -85,15 +85,13 @@ rtg.test @bagSize : !rtg.dict<> {
 // CHECK-LABEL: @targetTest_target1
 // CHECK: [[V0:%.+]] = index.constant 1
 // CHECK: func.call @dummy2([[V0]]) :
-rtg.test @targetTest : !rtg.dict<num_cpus: index> {
-^bb0(%arg0: index):
-  func.call @dummy2(%arg0) : (index) -> ()
+rtg.test @targetTest(num_cpus = %num_cpus: index) {
+  func.call @dummy2(%num_cpus) : (index) -> ()
 }
 
 // CHECK-NOT: @unmatchedTest
-rtg.test @unmatchedTest : !rtg.dict<num_cpus: !rtg.sequence> {
-^bb0(%arg0: !rtg.sequence):
-  func.call @dummy3(%arg0) : (!rtg.sequence) -> ()
+rtg.test @unmatchedTest(num_cpus = %num_cpus: !rtg.sequence) {
+  func.call @dummy3(%num_cpus) : (!rtg.sequence) -> ()
 }
 
 rtg.target @target0 : !rtg.dict<num_cpus: index> {
@@ -124,7 +122,7 @@ rtg.sequence @seq1(%arg0: index) {
 }
 
 // CHECK-LABEL: rtg.test @nestedSequences
-rtg.test @nestedSequences : !rtg.dict<> {
+rtg.test @nestedSequences() {
   // CHECK: index.constant 0
   // CHECK: func.call @dummy2
   // CHECK: func.call @dummy2
@@ -141,7 +139,7 @@ rtg.sequence @seq2(%arg0: index) {
 }
 
 // CHECK-LABEL: rtg.test @sameSequenceDifferentArgs
-rtg.test @sameSequenceDifferentArgs : !rtg.dict<> {
+rtg.test @sameSequenceDifferentArgs() {
   // CHECK: [[C0:%.+]] = index.constant 0
   // CHECK: func.call @dummy2([[C0]])
   // CHECK: [[C1:%.+]] = index.constant 1
@@ -164,7 +162,7 @@ rtg.sequence @seq3(%arg0: !rtg.set<index>) {
 }
 
 // CHECK-LABEL: rtg.test @sequenceClosureFixesRandomization
-rtg.test @sequenceClosureFixesRandomization : !rtg.dict<> {
+rtg.test @sequenceClosureFixesRandomization() {
   // CHECK: %idx0 = index.constant 0
   // CHECK: func.call @dummy2(%idx0
   // CHECK: %idx1 = index.constant 1
@@ -185,7 +183,7 @@ rtg.test @sequenceClosureFixesRandomization : !rtg.dict<> {
 }
 
 // CHECK-LABEL: @indexOps
-rtg.test @indexOps : !rtg.dict<> {
+rtg.test @indexOps() {
   // CHECK: [[C:%.+]] = index.constant 2
   %0 = index.constant 1
 
@@ -225,7 +223,7 @@ rtg.test @indexOps : !rtg.dict<> {
 }
 
 // CHECK-LABEL: @scfIf
-rtg.test @scfIf : !rtg.dict<> {
+rtg.test @scfIf() {
   %0 = index.bool.constant true
   %1 = index.bool.constant false
 
@@ -269,7 +267,7 @@ rtg.test @scfIf : !rtg.dict<> {
 }
 
 // CHECK-LABEL: @scfFor
-rtg.test @scfFor : !rtg.dict<> {
+rtg.test @scfFor() {
   // CHECK-NEXT: [[C0:%.+]] = index.constant 0
   // CHECK-NEXT: func.call @dummy2([[C0]])
   // CHECK-NEXT: [[C1:%.+]] = index.constant 1
@@ -309,7 +307,7 @@ rtg.test @scfFor : !rtg.dict<> {
 }
 
 // CHECK-LABEL: @fixedRegisters
-rtg.test @fixedRegisters : !rtg.dict<> {
+rtg.test @fixedRegisters() {
   // CHECK-NEXT: [[RA:%.+]] = rtg.fixed_reg #rtgtest.ra
   // CHECK-NEXT: [[SP:%.+]] = rtg.fixed_reg #rtgtest.sp
   // CHECK-NEXT: [[IMM:%.+]] = rtgtest.immediate #rtgtest.imm12<0>
@@ -321,7 +319,7 @@ rtg.test @fixedRegisters : !rtg.dict<> {
 }
 
 // CHECK-LABEL: @virtualRegisters
-rtg.test @virtualRegisters : !rtg.dict<> {
+rtg.test @virtualRegisters() {
   // CHECK-NEXT: [[R0:%.+]] = rtg.virtual_reg [#rtgtest.a0 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg]
   // CHECK-NEXT: [[R1:%.+]] = rtg.virtual_reg [#rtgtest.s0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg]
   // CHECK-NEXT: [[IMM:%.+]] = rtgtest.immediate #rtgtest.imm12<0>
@@ -347,7 +345,7 @@ rtg.test @virtualRegisters : !rtg.dict<> {
 }
 
 // CHECK-LABEL: @labels
-rtg.test @labels : !rtg.dict<> {
+rtg.test @labels() {
   // CHECK-NEXT: [[L0:%.+]] = rtg.label_decl "label0"
   // CHECK-NEXT: rtg.label local [[L0]]
   // CHECK-NEXT: rtg.label local [[L0]]
@@ -375,7 +373,7 @@ rtg.test @labels : !rtg.dict<> {
 }
 
 // CHECK-LABEL: rtg.test @randomIntegers
-rtg.test @randomIntegers : !rtg.dict<> {
+rtg.test @randomIntegers() {
   %lower = index.constant 5
   %upper = index.constant 10
   %0 = rtg.random_number_in_range [%lower, %upper) {rtg.elaboration_custom_seed=0}
@@ -390,8 +388,7 @@ rtg.test @randomIntegers : !rtg.dict<> {
 }
 
 // CHECK-LABEL: rtg.test @contexts_contextCpu
-rtg.test @contexts : !rtg.dict<cpu0: !rtgtest.cpu, cpu1: !rtgtest.cpu> {
-^bb0(%cpu0: !rtgtest.cpu, %cpu1: !rtgtest.cpu):
+rtg.test @contexts(cpu0 = %cpu0: !rtgtest.cpu, cpu1 = %cpu1: !rtgtest.cpu) {
   // CHECK-NEXT: rtg.label_decl "label0"
   // CHECK-NEXT: rtg.label
   // CHECK-NEXT: rtg.label_decl "label5"
@@ -463,14 +460,14 @@ rtg.sequence @switchNestedCpuSeq(%parent: !rtgtest.cpu, %child: !rtgtest.cpu, %s
 
 // -----
 
-rtg.test @nestedRegionsNotSupported : !rtg.dict<> {
+rtg.test @nestedRegionsNotSupported() {
   // expected-error @below {{ops with nested regions must be elaborated away}}
   scf.execute_region { scf.yield }
 }
 
 // -----
 
-rtg.test @untypedAttributes : !rtg.dict<> {
+rtg.test @untypedAttributes() {
   // expected-error @below {{only typed attributes supported for constant-like operations}}
   %0 = rtgtest.constant_test index {value = [10 : index]}
 }
@@ -479,7 +476,7 @@ rtg.test @untypedAttributes : !rtg.dict<> {
 
 func.func @dummy(%arg0: index) {return}
 
-rtg.test @untypedAttributes : !rtg.dict<> {
+rtg.test @untypedAttributes() {
   %0 = rtgtest.constant_test index {value = "str"}
   // expected-error @below {{materializer of dialect 'builtin' unable to materialize value for attribute '"str"'}}
   // expected-note @below {{while materializing value for operand#0}}
@@ -490,7 +487,7 @@ rtg.test @untypedAttributes : !rtg.dict<> {
 
 func.func @dummy2(%arg0: index) -> () {return}
 
-rtg.test @randomIntegers : !rtg.dict<> {
+rtg.test @randomIntegers() {
   %c5 = index.constant 5
   // expected-error @below {{cannot select a number from an empty range}}
   %0 = rtg.random_number_in_range [%c5, %c5)
@@ -516,8 +513,7 @@ rtg.target @invalidRandomizationTarget : !rtg.dict<cpu: !rtgtest.cpu> {
   rtg.yield %1 : !rtgtest.cpu
 }
 
-rtg.test @invalidRandomization : !rtg.dict<cpu: !rtgtest.cpu> {
-^bb0(%cpu: !rtgtest.cpu):
+rtg.test @invalidRandomization(cpu = %cpu: !rtgtest.cpu) {
   %0 = rtg.get_sequence @seq1 : !rtg.sequence
   %1 = rtg.randomize_sequence %0
   %2 = rtg.get_sequence @seq0 : !rtg.sequence<!rtg.randomized_sequence>
@@ -534,8 +530,7 @@ rtg.target @target : !rtg.dict<cpu: !rtgtest.cpu> {
   rtg.yield %0 : !rtgtest.cpu
 }
 
-rtg.test @contextSwitchNotAvailable : !rtg.dict<cpu: !rtgtest.cpu> {
-^bb0(%cpu: !rtgtest.cpu):
+rtg.test @contextSwitchNotAvailable(cpu = %cpu: !rtgtest.cpu) {
   %0 = rtg.get_sequence @seq : !rtg.sequence
   // expected-error @below {{no context transition registered to switch from #rtg.default : !rtgtest.cpu to #rtgtest.cpu<0> : !rtgtest.cpu}}
   rtg.on_context %cpu, %0 : !rtgtest.cpu
