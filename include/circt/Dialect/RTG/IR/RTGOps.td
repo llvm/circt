@@ -141,6 +141,28 @@ def EmbedSequenceOp : RTGOp<"embed_sequence", []> {
   let assemblyFormat = "$sequence attr-dict";
 }
 
+def InterleaveSequencesOp : RTGOp<"interleave_sequences", [Pure]> {
+  let summary = "interleave a list of sequences";
+  let description = [{
+    This operation takes a list of (at least one) fully randomized sequences and
+    interleaves them by taking the next `batchSize` number of operations
+    implementing the `InstructionOpInterface` of each sequence round-robin.
+
+    Therefore, if only one sequence is in the list, this operation returns that
+    sequence unchanged.
+  }];
+
+  let arguments = (ins Variadic<RandomizedSequenceType>:$sequences,
+                       DefaultValuedAttr<I32Attr, "1">:$batchSize);
+
+  let results = (outs RandomizedSequenceType:$interleavedSequence);
+
+  let assemblyFormat = "$sequences (`batch` $batchSize^)? attr-dict";
+
+  let hasVerifier = 1;
+  let hasFolder = 1;
+}
+
 //===- Label Operations ---------------------------------------------------===//
 
 class LabelDeclBase<string mnemonic,

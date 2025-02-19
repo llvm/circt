@@ -169,3 +169,10 @@ rtg.target @target : !rtg.dict<> {
   // expected-error @below {{third sequence element type must be a fully substituted sequence}}
   rtg.context_switch #rtgtest.cpu<0> -> #rtgtest.cpu<1>, %0 : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtgtest.cpu>
 }
+
+// -----
+
+rtg.test @test() {
+  // expected-error @below {{must have at least one sequence in the list}}
+  %0 = rtg.interleave_sequences
+}
