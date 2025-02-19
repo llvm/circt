@@ -15,6 +15,8 @@ declare_mlir_python_sources(PyRTGSources
   SOURCES
   pyrtg/__init__.py
   pyrtg/core.py
+  pyrtg/index.py
+  pyrtg/integers.py
   pyrtg/labels.py
   pyrtg/rtg.py
   pyrtg/sets.py
