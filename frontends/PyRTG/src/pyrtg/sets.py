@@ -95,7 +95,7 @@ class Set(Value):
     """
 
     r = self.get_random()
-    self = self - r
+    self._value = (self - r)._get_ssa_value()
     return r
 
   def _get_ssa_value(self) -> ir.Value:
