@@ -208,18 +208,6 @@ LogicalResult CalyxParLICM::run(AffineParallelOp affineParallelOp) {
 
   readOpHoistAnalysis(affineParallelOp, constantMemAccessIndices);
 
-  // Second, perform dependency analysis on each memOp:
-  //    1. If memOp is a load, we hoist it if:
-  //      - Its access indices are all constants;
-  //      - It occurs more than once throughout all scf.execute_region's (same
-  //      memref && same access indices);
-  //      - The same memref && access indices is not being stored within any
-  //      scf.execute_region.
-  //    2. If memOp is a store, we never hoist it; but raise exception if we
-  //    observe that:
-  //      - Its access are all constants;
-  //      - It occurs more than once throughout all scf.execute_region's.
-
   return success();
 }
 
