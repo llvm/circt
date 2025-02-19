@@ -61,3 +61,11 @@ class Label(Value):
 
   def _get_ssa_value(self) -> ir.Value:
     return self._value
+
+  def type(*args: ir.Type) -> ir.Type:
+    """
+    Returns the label type.
+    """
+
+    assert len(args) == 0, "Label type does not take type arguments"
+    return rtg.LabelType.get()
