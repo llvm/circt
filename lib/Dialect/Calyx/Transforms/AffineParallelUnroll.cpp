@@ -12,12 +12,15 @@
 
 #include "circt/Dialect/Calyx/CalyxPasses.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OperationSupport.h"
+#include "mlir/IR/Visitors.h"
 #include "mlir/Pass/PassManager.h"
+#include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
@@ -32,6 +35,193 @@ using namespace circt;
 using namespace mlir;
 using namespace mlir::affine;
 using namespace mlir::arith;
+
+namespace {
+struct CalyxParLICM {
+  // This pass tries to prevent potential memory banking contention by hoisting
+  // memory accesses after AffineParallelUnroll. It only hoists memory reads
+  // that occur *more than once* inside `scf.execute_region`s. Since
+  // AffineParallelUnroll converts loop indices to constants, this consecutive
+  // pass can safely analyze and remove redundant accesses.
+  LogicalResult run(AffineParallelOp affineParallelOp);
+
+  // Computes and collects all memory accesses (read/write) that have constant
+  // access indices.
+  DenseMap<Operation *, SmallVector<int64_t, 4>>
+  computeConstMemAccessIndices(AffineParallelOp affineParallelOp);
+
+  // Performs memory contention analysis on memory write operations, returning
+  // `failure` if the pass identifies two write operations write to the same
+  // memory reference at the same access indices in different parallel regions.
+  LogicalResult
+  writeOpAnalysis(DenseMap<Operation *, SmallVector<int64_t, 4>> &);
+
+  // Tries to hoist memory read operations that will cause memory access
+  // contention, such as reading from the same memory reference with the same
+  // access indices in different parallel regions.
+  void readOpHoistAnalysis(AffineParallelOp affineParallelOp,
+                           DenseMap<Operation *, SmallVector<int64_t, 4>> &);
+
+  DenseMap<std::pair<Value, SmallVector<int64_t, 4>>, scf::ExecuteRegionOp>
+      constantWriteOpIndices;
+
+  DenseMap<std::pair<Value, SmallVector<int64_t, 4>>, int> constantReadOpCounts;
+};
+} // end anonymous namespace
+
+namespace llvm {
+template <>
+struct DenseMapInfo<std::pair<Value, SmallVector<int64_t, 4>>> {
+  using PairType = std::pair<Value, SmallVector<int64_t, 4>>;
+
+  static inline PairType getEmptyKey() {
+    return {DenseMapInfo<Value>::getEmptyKey(), {}};
+  }
+
+  static inline PairType getTombstoneKey() {
+    return {DenseMapInfo<Value>::getTombstoneKey(), {}};
+  }
+
+  static unsigned getHashValue(const PairType &pair) {
+    unsigned hash = DenseMapInfo<Value>::getHashValue(pair.first);
+    for (const auto &v : pair.second)
+      hash = llvm::hash_combine(hash, DenseMapInfo<int64_t>::getHashValue(v));
+    return hash;
+  }
+
+  static bool isEqual(const PairType &lhs, const PairType &rhs) {
+    return lhs.first == rhs.first && lhs.second == rhs.second;
+  }
+};
+} // namespace llvm
+
+DenseMap<Operation *, SmallVector<int64_t, 4>>
+CalyxParLICM::computeConstMemAccessIndices(AffineParallelOp affineParallelOp) {
+  DenseMap<Operation *, SmallVector<int64_t, 4>> constantMemAccessIndices;
+
+  MLIRContext *ctx = affineParallelOp->getContext();
+  auto executeRegionOps =
+      affineParallelOp.getBody()->getOps<scf::ExecuteRegionOp>();
+  for (auto executeRegionOp : executeRegionOps) {
+    executeRegionOp.walk([&](Operation *op) {
+      if (!isa<AffineReadOpInterface, AffineWriteOpInterface>(op))
+        return WalkResult::advance();
+
+      auto read = dyn_cast<AffineReadOpInterface>(op);
+      AffineMap map = read ? read.getAffineMap()
+                           : cast<AffineWriteOpInterface>(op).getAffineMap();
+      ValueRange mapOperands =
+          read ? read.getMapOperands()
+               : cast<AffineWriteOpInterface>(op).getMapOperands();
+
+      SmallVector<Attribute> operandConsts;
+      for (Value operand : mapOperands) {
+        if (auto constOp =
+                operand.template getDefiningOp<arith::ConstantIndexOp>()) {
+          operandConsts.push_back(
+              IntegerAttr::get(IndexType::get(ctx), constOp.value()));
+        } else {
+          return WalkResult::advance();
+        }
+      }
+
+      SmallVector<int64_t, 4> evaluatedIndices, foldedResults;
+      bool hasPoison = false;
+      map.partialConstantFold(operandConsts, &foldedResults, &hasPoison);
+      if (!(hasPoison || foldedResults.empty()))
+        constantMemAccessIndices[op] = foldedResults;
+
+      return WalkResult::advance();
+    });
+  }
+
+  return constantMemAccessIndices;
+}
+
+LogicalResult CalyxParLICM::writeOpAnalysis(
+    DenseMap<Operation *, SmallVector<int64_t, 4>> &constantMemAccessIndices) {
+  for (auto &[memOp, constIndices] : constantMemAccessIndices) {
+    auto writeOp = dyn_cast<AffineWriteOpInterface>(memOp);
+    if (!writeOp) {
+      continue;
+    }
+
+    auto parentExecuteRegionOp =
+        writeOp->getParentOfType<scf::ExecuteRegionOp>();
+    auto key = std::pair(writeOp.getMemRef(), constIndices);
+    if (constantWriteOpIndices.find(key) != constantWriteOpIndices.end() &&
+        constantWriteOpIndices[key] != parentExecuteRegionOp) {
+      // It cannot occur more than once in different parallel regions, which
+      // will result in write contention.
+      return failure();
+    }
+
+    constantWriteOpIndices[key] = parentExecuteRegionOp;
+  }
+  return success();
+}
+
+void CalyxParLICM::readOpHoistAnalysis(
+    AffineParallelOp affineParallelOp,
+    DenseMap<Operation *, SmallVector<int64_t, 4>> &constantMemAccessIndices) {
+  for (auto &[memOp, constIndices] : constantMemAccessIndices) {
+    auto readOp = dyn_cast<AffineReadOpInterface>(memOp);
+    if (!readOp)
+      continue;
+
+    auto key = std::pair(readOp.getMemRef(), constIndices);
+    if (constantWriteOpIndices.contains(key))
+      continue;
+    constantReadOpCounts[key]++;
+  }
+  bool shouldHoist = llvm::any_of(
+      constantReadOpCounts, [](const auto &entry) { return entry.second > 1; });
+  if (!shouldHoist)
+    return;
+
+  OpBuilder builder(affineParallelOp);
+  DenseMap<std::pair<Value, SmallVector<int64_t, 4>>, ValueRange> hoistedReads;
+  for (auto &[memOp, constIndices] : constantMemAccessIndices) {
+    auto readOp = dyn_cast<AffineReadOpInterface>(memOp);
+    if (!readOp)
+      continue;
+
+    auto key = std::pair(readOp.getMemRef(), constIndices);
+    if (constantReadOpCounts[key] > 1) {
+      if (hoistedReads.find(key) == hoistedReads.end()) {
+        builder.setInsertionPoint(affineParallelOp);
+        Operation *clonedRead = builder.clone(*readOp.getOperation());
+        hoistedReads[key] = clonedRead->getOpResults();
+      }
+      readOp->replaceAllUsesWith(hoistedReads[key]);
+    }
+  }
+}
+
+LogicalResult CalyxParLICM::run(AffineParallelOp affineParallelOp) {
+  auto constantMemAccessIndices =
+      computeConstMemAccessIndices(affineParallelOp);
+
+  if (failed(writeOpAnalysis(constantMemAccessIndices))) {
+    return failure();
+  }
+
+  readOpHoistAnalysis(affineParallelOp, constantMemAccessIndices);
+
+  // Second, perform dependency analysis on each memOp:
+  //    1. If memOp is a load, we hoist it if:
+  //      - Its access indices are all constants;
+  //      - It occurs more than once throughout all scf.execute_region's (same
+  //      memref && same access indices);
+  //      - The same memref && access indices is not being stored within any
+  //      scf.execute_region.
+  //    2. If memOp is a store, we never hoist it; but raise exception if we
+  //    observe that:
+  //      - Its access are all constants;
+  //      - It occurs more than once throughout all scf.execute_region's.
+
+  return success();
+}
 
 namespace {
 
@@ -161,6 +351,15 @@ void AffineParallelUnrollPass::runOnOperation() {
     getOperation()->emitError("Failed to unroll affine.parallel");
     signalPassFailure();
   }
+
+  getOperation()->walk([&](AffineParallelOp parOp) {
+    if (parOp->hasAttr("calyx.unroll")) {
+      if (failed(CalyxParLICM().run(parOp))) {
+        parOp.emitError("Failed to unroll");
+        signalPassFailure();
+      }
+    }
+  });
 
   RewritePatternSet canonicalizePatterns(ctx);
   scf::IndexSwitchOp::getCanonicalizationPatterns(canonicalizePatterns, ctx);
