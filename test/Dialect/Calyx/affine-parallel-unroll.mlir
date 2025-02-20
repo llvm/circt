@@ -220,7 +220,9 @@ module {
     affine.parallel (%arg2) = (0) to (2) {
       %0 = affine.apply #map(%arg2)
       affine.for %arg3 = 0 to 2 {
+        // The following load will be hoisted.
         %1 = affine.load %arg0[%0] : memref<2xf32>
+        // The following load will be hoisted.
         %2 = affine.load %arg1[%0] : memref<2xf32>
         %3 = affine.load %alloc[%arg3] : memref<2xf32>
         %4 = arith.mulf %1, %2 : f32

@@ -38,7 +38,7 @@ using namespace mlir::arith;
 
 namespace {
 // This pass tries to prevent potential memory banking contention by hoisting
-// memory accesses after AffineParallelUnroll. It only hoists memory reads
+// memory reads after AffineParallelUnroll. It only hoists memory reads
 // that occur *more than once* inside `scf.execute_region`s. Since
 // AffineParallelUnroll converts loop indices to constants, this consecutive
 // pass can safely analyze and remove redundant accesses.
@@ -160,24 +160,29 @@ LogicalResult MemoryBankConflictResolver::writeOpAnalysis(
 
       auto writeOp = cast<AffineWriteOpInterface>(op);
       Value memref = writeOp.getMemRef();
+      // We record all memory writes, which will be used in the read op
+      // analysis.
       writtenMemRefs.insert(memref);
+
+      auto constIndicesIt = constantMemAccessIndices.find(op);
+      if (constIndicesIt == constantMemAccessIndices.end())
+        // Currently, we give up all write op analysis whose write indices are
+        // non-constants.
+        return WalkResult::advance();
 
       auto parentExecuteRegionOp =
           writeOp->getParentOfType<scf::ExecuteRegionOp>();
-      if (constantMemAccessIndices.find(op) == constantMemAccessIndices.end())
-        return WalkResult::advance();
-
-      auto constIndices = constantMemAccessIndices[op];
-      auto key = std::pair(writeOp.getMemRef(), constIndices);
-      if (constantWriteOpIndices.find(key) != constantWriteOpIndices.end() &&
-          constantWriteOpIndices[key] != parentExecuteRegionOp) {
+      auto key = std::pair(writeOp.getMemRef(), constIndicesIt->second);
+      auto writeOpIndicesIt = constantWriteOpIndices.find(key);
+      if (writeOpIndicesIt != constantWriteOpIndices.end() &&
+          writeOpIndicesIt->second != parentExecuteRegionOp) {
         // Cannot write to the same memory reference at the same indices more
         // than once in different parallel regions (but it's okay to write twice
         // within the same parallel region because everything is sequential),
         // because it will result in write contention.
         return WalkResult::interrupt();
       }
-      constantWriteOpIndices[key] = parentExecuteRegionOp;
+      writeOpIndicesIt->second = parentExecuteRegionOp;
 
       return WalkResult::advance();
     });
