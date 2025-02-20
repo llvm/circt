@@ -16,9 +16,18 @@
 #include "circt/Dialect/AIG/AIGDialect.h"
 #include "circt/Dialect/AIG/AIGPasses.h"
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Debug/DebugDialect.h"
+#include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
+#include "circt/Dialect/LTL/LTLDialect.h"
+#include "circt/Dialect/OM/OMDialect.h"
+#include "circt/Dialect/SV/SVDialect.h"
+#include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Sim/SimDialect.h"
+#include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
 #include "mlir/IR/Diagnostics.h"
@@ -65,6 +74,11 @@ static cl::opt<bool>
     verbosePassExecutions("verbose-pass-executions",
                           cl::desc("Log executions of toplevel module passes"),
                           cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    allowUnregisteredDialects("allow-unregistered-dialects",
+                              cl::desc("Allow unknown dialects in the input"),
+                              cl::init(false), cl::cat(mainCategory));
 
 // Options to control early-out from pipeline.
 enum Until { UntilAIGLowering, UntilEnd };
@@ -204,9 +218,13 @@ int main(int argc, char **argv) {
 
   // Register the supported CIRCT dialects and create a context to work with.
   DialectRegistry registry;
-  registry.insert<circt::aig::AIGDialect, circt::comb::CombDialect,
-                  circt::hw::HWDialect>();
+  registry.insert<aig::AIGDialect, comb::CombDialect, debug::DebugDialect,
+                  emit::EmitDialect, hw::HWDialect, ltl::LTLDialect,
+                  om::OMDialect, seq::SeqDialect, sim::SimDialect,
+                  sv::SVDialect, verif::VerifDialect>();
   MLIRContext context(registry);
+  if (allowUnregisteredDialects)
+    context.allowUnregisteredDialects();
 
   // Setup of diagnostic handling.
   llvm::SourceMgr sourceMgr;
