@@ -76,7 +76,7 @@ static cl::opt<bool>
                           cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool>
-    allowUnregisteredDialects("allow-unregistered-dialects",
+    allowUnregisteredDialects("allow-unregistered-dialect",
                               cl::desc("Allow unknown dialects in the input"),
                               cl::init(false), cl::cat(mainCategory));
 
