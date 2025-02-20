@@ -20,17 +20,18 @@ verif.simulation @AdderTest {} {
 
   // Check results and track failures.
   %4 = comb.add %1, %2 : i42
-  %5 = comb.icmp ne %3, %4 : i42
-  %false = hw.constant false
-  %failure = seq.compreg %6, %clock reset %init, %false : i1
-  %6 = comb.or %failure, %5 : i1
+  %5 = comb.icmp eq %3, %4 : i42
+  %true = hw.constant true
+  %success = seq.compreg %6, %clock reset %init, %true : i1
+  %6 = comb.and %success, %5 : i1
+  %7 = comb.xor %5, %true : i1
 
   // Print some statistics about the test.
   sim.func.dpi.call @printStart() clock %clock enable %init : () -> ()
-  sim.func.dpi.call @printFailure(%1, %2, %3, %4) clock %clock enable %failure : (i42, i42, i42, i42) -> ()
-  sim.func.dpi.call @printDone(%failure) clock %clock enable %done : (i1) -> ()
+  sim.func.dpi.call @printFailure(%1, %2, %3, %4) clock %clock enable %7 : (i42, i42, i42, i42) -> ()
+  sim.func.dpi.call @printDone(%success) clock %clock enable %done : (i1) -> ()
 
-  verif.yield %done, %failure : i1, i1
+  verif.yield %done, %success : i1, i1
 }
 
 hw.module private @Adder(in %a: i42, in %b: i42, out c: i42) {
@@ -52,7 +53,7 @@ func.func private @generateAdderInputs.impl(%arg0: i19, %arg1: !llvm.ptr, %arg2:
 }
 
 sim.func.dpi @printStart() attributes {verilogName = "printStart.impl"}
-sim.func.dpi @printDone(in %failure: i1) attributes {verilogName = "printDone.impl"}
+sim.func.dpi @printDone(in %success: i1) attributes {verilogName = "printDone.impl"}
 sim.func.dpi @printFailure(in %a: i42, in %b: i42, in %c_act: i42, in %c_exp: i42) attributes {verilogName = "printFailure.impl"}
 
 func.func private @printStart.impl() {
@@ -71,10 +72,10 @@ func.func private @printFailure.impl(%a: i42, %b: i42, %c_act: i42, %c_exp: i42)
   return
 }
 
-func.func private @printDone.impl(%failure: i1) {
+func.func private @printDone.impl(%success: i1) {
   %0 = llvm.mlir.addressof @str.pass : !llvm.ptr
   %1 = llvm.mlir.addressof @str.fail : !llvm.ptr
-  %2 = llvm.select %failure, %1, %0 : i1, !llvm.ptr
+  %2 = llvm.select %success, %0, %1 : i1, !llvm.ptr
   call @puts(%2) : (!llvm.ptr) -> ()
   return
 }

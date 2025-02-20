@@ -193,7 +193,7 @@ verif.simulation @foo {} {
 
 // -----
 
-// expected-error @below {{op block argument #0 must be a `!seq.clock`}}
+// expected-error @below {{op block argument #0 must be of type `!seq.clock`}}
 verif.simulation @foo {} {
 ^bb0(%arg0: i1, %arg1: i1):
   verif.yield %arg0, %arg1 : i1, i1
@@ -201,7 +201,7 @@ verif.simulation @foo {} {
 
 // -----
 
-// expected-error @below {{op block argument #1 must be a `i1`}}
+// expected-error @below {{op block argument #1 must be of type `i1`}}
 verif.simulation @foo {} {
 ^bb0(%arg0: !seq.clock, %arg1: i42):
   %true = hw.constant true
@@ -220,7 +220,7 @@ verif.simulation @foo {} {
 
 verif.simulation @foo {} {
 ^bb0(%arg0: !seq.clock, %arg1: i1):
-  // expected-error @below {{op operand #0 must be an `i1`}}
+  // expected-error @below {{op operand #0 must be of type `i1`}}
   verif.yield %arg0, %arg1 : !seq.clock, i1
 }
 
@@ -228,6 +228,6 @@ verif.simulation @foo {} {
 
 verif.simulation @foo {} {
 ^bb0(%arg0: !seq.clock, %arg1: i1):
-  // expected-error @below {{op operand #1 must be an integer}}
+  // expected-error @below {{op operand #1 must be of type `i1`}}
   verif.yield %arg1, %arg0 : i1, !seq.clock
 }
