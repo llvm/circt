@@ -105,6 +105,8 @@ def EarlyCodeMotion : Pass<"llhd-early-code-motion", "hw::HWModuleOp"> {
 
 def Sig2Reg : Pass<"llhd-sig2reg", "hw::HWModuleOp"> {
   let summary = "promote LLHD signals to SSA values";
+
+  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
 }
 
 def TemporalCodeMotion : Pass<"llhd-temporal-code-motion", "hw::HWModuleOp"> {
