@@ -109,7 +109,7 @@ struct StmtVisitor {
     auto one =
         builder.create<moore::ConstantOp>(loc, cast<moore::IntType>(type), 1);
     auto postValue = builder.create<moore::AddOp>(loc, var, one).getResult();
-    builder.create<moore::BlockingAssignOp>(loc, varOp, postValue);
+    builder.create<moore::BlockingAssignOp>(loc, varOp, postValue, Value());
     builder.create<cf::BranchOp>(loc, &checkBlock);
 
     if (exitBlock.hasNoPredecessors()) {

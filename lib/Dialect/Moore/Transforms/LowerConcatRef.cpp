@@ -71,7 +71,7 @@ struct ConcatRefLowering : public OpConversionPattern<OpTy> {
       // description mentioned.
       srcWidth = srcWidth - width;
 
-      rewriter.create<OpTy>(op.getLoc(), operand, extract);
+      rewriter.create<OpTy>(op.getLoc(), operand, extract, Value());
     }
     rewriter.eraseOp(op);
     return success();

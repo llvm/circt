@@ -68,7 +68,7 @@ void SimplifyProceduresPass::runOnOperation() {
               varOp.getResult());
           auto newVarOp = builder.create<VariableOp>(
               nestedOp.getLoc(), resultType, StringAttr{}, Value{});
-          builder.create<BlockingAssignOp>(nestedOp.getLoc(), newVarOp, readOp);
+          builder.create<BlockingAssignOp>(nestedOp.getLoc(), newVarOp, readOp, Value());
           builder.clearInsertionPoint();
 
           // Replace the users of the global variable with a corresponding
@@ -87,7 +87,7 @@ void SimplifyProceduresPass::runOnOperation() {
       for (auto [assignOp, localVar, var] : assignOps) {
         builder.setInsertionPointAfter(assignOp);
         auto readOp = builder.create<ReadOp>(assignOp.getLoc(), localVar);
-        builder.create<BlockingAssignOp>(assignOp.getLoc(), var, readOp);
+        builder.create<BlockingAssignOp>(assignOp.getLoc(), var, readOp, Value());
         builder.clearInsertionPoint();
       }
     });
