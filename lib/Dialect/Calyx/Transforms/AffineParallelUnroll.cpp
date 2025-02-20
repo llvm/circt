@@ -37,12 +37,12 @@ using namespace mlir::affine;
 using namespace mlir::arith;
 
 namespace {
-struct CalyxParLICM {
-  // This pass tries to prevent potential memory banking contention by hoisting
-  // memory accesses after AffineParallelUnroll. It only hoists memory reads
-  // that occur *more than once* inside `scf.execute_region`s. Since
-  // AffineParallelUnroll converts loop indices to constants, this consecutive
-  // pass can safely analyze and remove redundant accesses.
+// This pass tries to prevent potential memory banking contention by hoisting
+// memory accesses after AffineParallelUnroll. It only hoists memory reads
+// that occur *more than once* inside `scf.execute_region`s. Since
+// AffineParallelUnroll converts loop indices to constants, this consecutive
+// pass can safely analyze and remove redundant accesses.
+struct MemoryBankConflictResolver {
   LogicalResult run(AffineParallelOp affineParallelOp);
 
   // Computes and collects all memory accesses (read/write) that have constant
@@ -54,7 +54,8 @@ struct CalyxParLICM {
   // `failure` if the pass identifies two write operations write to the same
   // memory reference at the same access indices in different parallel regions.
   LogicalResult
-  writeOpAnalysis(DenseMap<Operation *, SmallVector<int64_t, 4>> &);
+  writeOpAnalysis(DenseMap<Operation *, SmallVector<int64_t, 4>> &,
+                  AffineParallelOp affineParallelOp);
 
   // Tries to hoist memory read operations that will cause memory access
   // contention, such as reading from the same memory reference with the same
@@ -62,9 +63,16 @@ struct CalyxParLICM {
   void readOpHoistAnalysis(AffineParallelOp affineParallelOp,
                            DenseMap<Operation *, SmallVector<int64_t, 4>> &);
 
+  // A collection of all memory references that are being written to.
+  DenseSet<Value> writtenMemRefs;
+
+  // Stores the mapping from memory writes and their associated constant access
+  // indices to the parallel region.
   DenseMap<std::pair<Value, SmallVector<int64_t, 4>>, scf::ExecuteRegionOp>
       constantWriteOpIndices;
 
+  // Counts the total number of each memory reads and their associated constant
+  // access indices across all parallel regions.
   DenseMap<std::pair<Value, SmallVector<int64_t, 4>>, int> constantReadOpCounts;
 };
 } // end anonymous namespace
@@ -96,7 +104,8 @@ struct DenseMapInfo<std::pair<Value, SmallVector<int64_t, 4>>> {
 } // namespace llvm
 
 DenseMap<Operation *, SmallVector<int64_t, 4>>
-CalyxParLICM::computeConstMemAccessIndices(AffineParallelOp affineParallelOp) {
+MemoryBankConflictResolver::computeConstMemAccessIndices(
+    AffineParallelOp affineParallelOp) {
   DenseMap<Operation *, SmallVector<int64_t, 4>> constantMemAccessIndices;
 
   MLIRContext *ctx = affineParallelOp->getContext();
@@ -138,30 +147,49 @@ CalyxParLICM::computeConstMemAccessIndices(AffineParallelOp affineParallelOp) {
   return constantMemAccessIndices;
 }
 
-LogicalResult CalyxParLICM::writeOpAnalysis(
-    DenseMap<Operation *, SmallVector<int64_t, 4>> &constantMemAccessIndices) {
-  for (auto &[memOp, constIndices] : constantMemAccessIndices) {
-    auto writeOp = dyn_cast<AffineWriteOpInterface>(memOp);
-    if (!writeOp) {
-      continue;
-    }
+LogicalResult MemoryBankConflictResolver::writeOpAnalysis(
+    DenseMap<Operation *, SmallVector<int64_t, 4>> &constantMemAccessIndices,
+    AffineParallelOp affineParallelOp) {
+  auto executeRegionOps =
+      affineParallelOp.getBody()->getOps<scf::ExecuteRegionOp>();
+  WalkResult result;
+  for (auto executeRegionOp : executeRegionOps) {
+    auto walkResult = executeRegionOp.walk([&](Operation *op) {
+      if (!isa<AffineWriteOpInterface>(op))
+        return WalkResult::advance();
 
-    auto parentExecuteRegionOp =
-        writeOp->getParentOfType<scf::ExecuteRegionOp>();
-    auto key = std::pair(writeOp.getMemRef(), constIndices);
-    if (constantWriteOpIndices.find(key) != constantWriteOpIndices.end() &&
-        constantWriteOpIndices[key] != parentExecuteRegionOp) {
-      // It cannot occur more than once in different parallel regions, which
-      // will result in write contention.
+      auto writeOp = cast<AffineWriteOpInterface>(op);
+      Value memref = writeOp.getMemRef();
+      writtenMemRefs.insert(memref);
+
+      auto parentExecuteRegionOp =
+          writeOp->getParentOfType<scf::ExecuteRegionOp>();
+      if (constantMemAccessIndices.find(op) == constantMemAccessIndices.end())
+        return WalkResult::advance();
+
+      auto constIndices = constantMemAccessIndices[op];
+      auto key = std::pair(writeOp.getMemRef(), constIndices);
+      if (constantWriteOpIndices.find(key) != constantWriteOpIndices.end() &&
+          constantWriteOpIndices[key] != parentExecuteRegionOp) {
+        // Cannot write to the same memory reference at the same indices more
+        // than once in different parallel regions (but it's okay to write twice
+        // within the same parallel region because everything is sequential),
+        // because it will result in write contention.
+        return WalkResult::interrupt();
+      }
+      constantWriteOpIndices[key] = parentExecuteRegionOp;
+
+      return WalkResult::advance();
+    });
+
+    if (walkResult.wasInterrupted())
       return failure();
-    }
-
-    constantWriteOpIndices[key] = parentExecuteRegionOp;
   }
+
   return success();
 }
 
-void CalyxParLICM::readOpHoistAnalysis(
+void MemoryBankConflictResolver::readOpHoistAnalysis(
     AffineParallelOp affineParallelOp,
     DenseMap<Operation *, SmallVector<int64_t, 4>> &constantMemAccessIndices) {
   for (auto &[memOp, constIndices] : constantMemAccessIndices) {
@@ -169,11 +197,20 @@ void CalyxParLICM::readOpHoistAnalysis(
     if (!readOp)
       continue;
 
-    auto key = std::pair(readOp.getMemRef(), constIndices);
-    if (constantWriteOpIndices.contains(key))
+    auto memref = readOp.getMemRef();
+    auto key = std::pair(memref, constIndices);
+    // We do not hoist any read as long as it's being written in any parallel
+    // region.
+    auto memrefIsWritten = [&](Value memref) {
+      return llvm::any_of(writtenMemRefs, [memref](const auto &entry) {
+        return entry == memref;
+      });
+    };
+    if (memrefIsWritten(memref))
       continue;
     constantReadOpCounts[key]++;
   }
+
   bool shouldHoist = llvm::any_of(
       constantReadOpCounts, [](const auto &entry) { return entry.second > 1; });
   if (!shouldHoist)
@@ -198,11 +235,12 @@ void CalyxParLICM::readOpHoistAnalysis(
   }
 }
 
-LogicalResult CalyxParLICM::run(AffineParallelOp affineParallelOp) {
+LogicalResult
+MemoryBankConflictResolver::run(AffineParallelOp affineParallelOp) {
   auto constantMemAccessIndices =
       computeConstMemAccessIndices(affineParallelOp);
 
-  if (failed(writeOpAnalysis(constantMemAccessIndices))) {
+  if (failed(writeOpAnalysis(constantMemAccessIndices, affineParallelOp))) {
     return failure();
   }
 
@@ -342,7 +380,7 @@ void AffineParallelUnrollPass::runOnOperation() {
 
   getOperation()->walk([&](AffineParallelOp parOp) {
     if (parOp->hasAttr("calyx.unroll")) {
-      if (failed(CalyxParLICM().run(parOp))) {
+      if (failed(MemoryBankConflictResolver().run(parOp))) {
         parOp.emitError("Failed to unroll");
         signalPassFailure();
       }

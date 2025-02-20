@@ -188,24 +188,24 @@ module {
 // CHECK-SAME:                    %[[VAL_1:.*]]: memref<2xf32>) {
 // CHECK:           %[[VAL_2:.*]] = arith.constant 0 : index
 // CHECK:           %[[VAL_3:.*]] = memref.alloc() : memref<2xf32>
-// CHECK-DAG:           %[[VAL_4:.*]] = affine.load %[[VAL_0]]{{\[}}%[[VAL_2]]] : memref<2xf32>
-// CHECK-DAG:           %[[VAL_5:.*]] = affine.load %[[VAL_1]]{{\[}}%[[VAL_2]]] : memref<2xf32>
+// CHECK-DAG:           %[[VAL_4:.*]] = affine.load %[[VAL_1]]{{\[}}%[[VAL_2]]] : memref<2xf32>
+// CHECK-DAG:           %[[VAL_5:.*]] = affine.load %[[VAL_0]]{{\[}}%[[VAL_2]]] : memref<2xf32>
 // CHECK:           affine.parallel (%[[VAL_6:.*]]) = (0) to (1) {
 // CHECK:             scf.execute_region {
 // CHECK:               affine.for %[[VAL_7:.*]] = 0 to 2 {
 // CHECK:                 %[[VAL_8:.*]] = affine.load %[[VAL_3]]{{\[}}%[[VAL_7]]] : memref<2xf32>
-// CHECK:                 %[[VAL_9:.*]] = arith.mulf %[[VAL_4]], %[[VAL_5]] : f32
+// CHECK:                 %[[VAL_9:.*]] = arith.mulf %[[VAL_5]], %[[VAL_4]] : f32
 // CHECK:                 %[[VAL_10:.*]] = arith.addf %[[VAL_8]], %[[VAL_9]] : f32
-// CHECK:                 affine.store %[[VAL_10]], %[[VAL_0]]{{\[}}%[[VAL_7]]] : memref<2xf32>
+// CHECK:                 affine.store %[[VAL_10]], %[[VAL_3]]{{\[}}%[[VAL_7]]] : memref<2xf32>
 // CHECK:               }
 // CHECK:               scf.yield
 // CHECK:             }
 // CHECK:             scf.execute_region {
 // CHECK:               affine.for %[[VAL_11:.*]] = 0 to 2 {
 // CHECK:                 %[[VAL_12:.*]] = affine.load %[[VAL_3]]{{\[}}%[[VAL_11]]] : memref<2xf32>
-// CHECK:                 %[[VAL_13:.*]] = arith.mulf %[[VAL_4]], %[[VAL_5]] : f32
+// CHECK:                 %[[VAL_13:.*]] = arith.mulf %[[VAL_5]], %[[VAL_4]] : f32
 // CHECK:                 %[[VAL_14:.*]] = arith.addf %[[VAL_12]], %[[VAL_13]] : f32
-// CHECK:                 affine.store %[[VAL_14]], %[[VAL_0]]{{\[}}%[[VAL_11]]] : memref<2xf32>
+// CHECK:                 affine.store %[[VAL_14]], %[[VAL_3]]{{\[}}%[[VAL_11]]] : memref<2xf32>
 // CHECK:               }
 // CHECK:               scf.yield
 // CHECK:             }
@@ -225,7 +225,7 @@ module {
         %3 = affine.load %alloc[%arg3] : memref<2xf32>
         %4 = arith.mulf %1, %2 : f32
         %5 = arith.addf %3, %4 : f32
-        affine.store %5, %arg0[%arg3] : memref<2xf32>
+        affine.store %5, %alloc[%arg3] : memref<2xf32>
       }
     }
     return
