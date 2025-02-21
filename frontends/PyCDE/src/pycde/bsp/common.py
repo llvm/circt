@@ -513,7 +513,10 @@ def TaggedWriteGearbox(input_bitwidth: int,
         # to complete the transmission.
         num_chunks = TaggedWriteGearboxImpl.num_chunks
         num_chunks_idx_bitwidth = clog2(num_chunks)
-        padding_numbits = output_bitwidth - (input_bitwidth % output_bitwidth)
+        if input_bitwidth % output_bitwidth == 0:
+          padding_numbits = 0
+        else:
+          padding_numbits = output_bitwidth - (input_bitwidth % output_bitwidth)
         assert padding_numbits % 8 == 0, "Padding must be a multiple of 8."
         client_data_padded = BitsSignal.concat(
             [Bits(padding_numbits)(0), client_data])

@@ -383,7 +383,7 @@ def XrtBSP(user_module):
       ports.m_axi_gmem_WVALID = data_req_valid
       ports.m_axi_gmem_WDATA = data_req_data.data
 
-      wstrb_lookup_table_len = HostMemDataWidthBytes
+      wstrb_lookup_table_len = HostMemDataWidthBytes + 1
       wstrb_lookup_table = Array(Bits(HostMemDataWidthBytes),
                                  wstrb_lookup_table_len)([
                                      Bits(HostMemDataWidthBytes)(2**vb - 1)

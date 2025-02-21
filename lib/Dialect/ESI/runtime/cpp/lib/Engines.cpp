@@ -64,8 +64,6 @@ class OneItemBuffersToHostReadPort : public ReadChannelPort {
 public:
   /// Offset into the MMIO space to which the buffer pointer is written.
   static constexpr size_t BufferPtrOffset = 8;
-  /// Offset into the buffer where the valid byte is stored.
-  static constexpr size_t ValidDataOffset = 0;
 
   OneItemBuffersToHostReadPort(const Type *type, OneItemBuffersToHost *engine)
       : ReadChannelPort(type), engine(engine) {
@@ -80,6 +78,7 @@ protected:
   size_t bufferSize;
   OneItemBuffersToHost *engine;
   std::unique_ptr<services::HostMem::HostMemRegion> buffer;
+  uint64_t pollCount = 0;
 };
 
 class OneItemBuffersToHost : public Engine {
@@ -155,13 +154,24 @@ void OneItemBuffersToHostReadPort::writeBufferPtr() {
 
 void OneItemBuffersToHostReadPort::connectImpl(std::optional<unsigned>) {
   engine->connect();
-  buffer = engine->hostMem->allocate(bufferSize, {});
+  buffer = engine->hostMem->allocate(128, {});
   memset(buffer->getPtr(), 0, bufferSize);
   writeBufferPtr();
 }
 
 bool OneItemBuffersToHostReadPort::pollImpl() {
   uint8_t *bufferData = reinterpret_cast<uint8_t *>(buffer->getPtr());
+  if (pollCount++ % 100000 == 0) {
+    engine->conn.getLogger().debug(
+        [this, bufferData](
+            std::string &subsystem, std::string &msg,
+            std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "OneItemBuffersToHost";
+          msg = "Polling buffer contents 0x";
+          for (size_t i = 0; i < 128; ++i)
+            msg += toHex(bufferData[i]);
+        });
+  }
   if (bufferData[bufferSize - 1] == 0)
     return false;
 

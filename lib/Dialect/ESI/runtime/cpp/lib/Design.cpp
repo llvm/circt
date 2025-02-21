@@ -76,6 +76,8 @@ BundlePort *HWModule::resolvePort(const AppIDPath &path,
   instPath.pop_back();
   const HWModule *hwmodule = resolveInst(instPath, lastLookup);
   lastLookup.push_back(portID);
+  if (!hwmodule)
+    return nullptr;
   const auto &ports = hwmodule->getPorts();
   const auto &portIter = ports.find(portID);
   if (portIter == ports.end())

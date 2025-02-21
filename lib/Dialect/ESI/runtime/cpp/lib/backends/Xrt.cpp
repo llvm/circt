@@ -101,11 +101,27 @@ public:
       : MMIO(conn, clients), ip(ip) {}
 
   uint64_t read(uint32_t addr) const override {
+    Logger &logger = conn.getLogger();
     auto lo = static_cast<uint64_t>(ip.read_register(addr));
     auto hi = static_cast<uint64_t>(ip.read_register(addr + 0x4));
-    return (hi << 32) | lo;
+    uint64_t ret = (hi << 32) | lo;
+    logger.debug(
+        [addr, ret](std::string &subsystem, std::string &msg,
+                    std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "xrt_mmio";
+          msg = "MMIO[0x" + toHex(addr) + "] = 0x" + toHex(ret);
+        });
+    return ret;
   }
   void write(uint32_t addr, uint64_t data) override {
+    Logger &logger = conn.getLogger();
+    logger.debug(
+        [addr,
+         data](std::string &subsystem, std::string &msg,
+               std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "xrt_mmio";
+          msg = "MMIO[0x" + toHex(addr) + "] <- 0x" + toHex(data);
+        });
     ip.write_register(addr, data);
     ip.write_register(addr + 0x4, data >> 32);
   }
@@ -120,7 +136,7 @@ namespace {
 class XrtHostMem : public HostMem {
 public:
   XrtHostMem(XrtAccelerator &conn, ::xrt::device &device, int32_t memoryGroup)
-      : HostMem(conn), device(device), memoryGroup(memoryGroup){};
+      : HostMem(conn), device(device), memoryGroup(memoryGroup) {};
 
   struct XrtHostMemRegion : public HostMemRegion {
     XrtHostMemRegion(::xrt::device &device, std::size_t size,

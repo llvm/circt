@@ -275,7 +275,6 @@ class _ServiceGeneratorBundles:
                   engine: EngineModule,
                   details: Dict[str, object] = None):
     """Emit and return an engine record."""
-    details = optional_dict_to_dict_attr(details)
     with get_user_loc(), ir.InsertionPoint(self._rec):
       return EngineServiceRecord(engine, details)
 
