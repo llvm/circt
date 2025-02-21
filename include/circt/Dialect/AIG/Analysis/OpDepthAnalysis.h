@@ -28,9 +28,7 @@ public:
   OpDepthAnalysis(hw::HWModuleOp moduleOp, mlir::AnalysisManager &am);
 
   /// Get the depth of operations of a specific name
-  size_t getOpDepth(AndInverterOp op) const {
-    return opDepths.at(op);
-  }
+  size_t getOpDepth(AndInverterOp op) const { return opDepths.at(op); }
 
   bool isOnCriticalPath(AndInverterOp op) const {
     return criticalPath.count(op);
