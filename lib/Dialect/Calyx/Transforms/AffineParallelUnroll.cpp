@@ -63,9 +63,6 @@ struct MemoryBankConflictResolver {
   void readOpHoistAnalysis(AffineParallelOp affineParallelOp,
                            DenseMap<Operation *, SmallVector<int64_t, 4>> &);
 
-  // A collection of all memory references that are being written to.
-  DenseSet<Value> writtenMemRefs;
-
   // Stores the mapping from memory writes and their associated constant access
   // indices to the parallel region.
   DenseMap<std::pair<Value, SmallVector<int64_t, 4>>, scf::ExecuteRegionOp>
@@ -159,10 +156,6 @@ LogicalResult MemoryBankConflictResolver::writeOpAnalysis(
         return WalkResult::advance();
 
       auto writeOp = cast<AffineWriteOpInterface>(op);
-      Value memref = writeOp.getMemRef();
-      // We record all memory writes, which will be used in the read op
-      // analysis.
-      writtenMemRefs.insert(memref);
 
       auto constIndicesIt = constantMemAccessIndices.find(op);
       if (constIndicesIt == constantMemAccessIndices.end())
@@ -206,8 +199,12 @@ void MemoryBankConflictResolver::readOpHoistAnalysis(
     auto key = std::pair(memref, constIndices);
     // We do not hoist any read as long as it's being written in any parallel
     // region.
-    if (writtenMemRefs.contains(memref))
+    if (llvm::any_of(memref.getUsers(), [&](Operation *user) {
+          return affineParallelOp->isAncestor(user) &&
+                 hasEffect<MemoryEffects::Write>(user, memref);
+        })) {
       continue;
+    }
     constantReadOpCounts[key]++;
   }
 
