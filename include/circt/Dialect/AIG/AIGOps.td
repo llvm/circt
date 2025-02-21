@@ -22,7 +22,7 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 class AIGOp<string mnemonic, list<Trait> traits = []> :
   Op<AIG_Dialect, mnemonic, traits>;
 
-def AndInverterOp : AIGOp<"and_inv", [SameOperandsAndResultType, Pure]> {
+def AndInverterOp : AIGOp<"and_inv", [SameOperandsAndResultType, Pure, Commutative]> {
   let summary = "AIG dialect AND operation";
   let description = [{
     The `aig.and_inv` operation represents an And-Inverter in the AIG dialect.
