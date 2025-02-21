@@ -13,14 +13,9 @@
 //===----------------------------------------------------------------------===//
 #include "llvm/ADT/PriorityQueue.h"
 
-#include "circt/Analysis/OpDepthAnalysis.h"
 #include "circt/Dialect/AIG/AIGOps.h"
 #include "circt/Dialect/AIG/AIGPasses.h"
-#include "circt/Dialect/HW/HWOps.h"
-#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-
-#include "mlir/IR/Iterators.h"
-#include "mlir/Transforms/WalkPatternRewriteDriver.h"
+#include "circt/Dialect/AIG/Analysis/OpDepthAnalysis.h"
 
 #define DEBUG_TYPE "aig-balance-variadic"
 

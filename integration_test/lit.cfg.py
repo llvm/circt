@@ -213,6 +213,7 @@ if config.z3_path != "":
   config.available_features.add('z3')
 
 # Enable libz3 if it has been detected.
+config.z3_library = "/Volumes/SSD2T/tool_src/eda/z3/build/libz3.4.13.4.0.dylib"
 if config.z3_library != "":
   tools.append(ToolSubst(f"%libz3", config.z3_library))
   config.available_features.add('libz3')

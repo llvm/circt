@@ -15,7 +15,6 @@
 #include "circt/Dialect/AIG/AIGPasses.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-#include "llvm/ADT/SmallVector.h"
 
 #define DEBUG_TYPE "aig-balancing"
 

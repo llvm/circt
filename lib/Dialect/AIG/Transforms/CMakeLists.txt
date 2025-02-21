@@ -11,5 +11,5 @@ add_circt_dialect_library(CIRCTAIGTransforms
   CIRCTAIG
   CIRCTComb
   CIRCTHW
-  CIRCTOpDepthAnalysis
+  CIRCTAIGAnalysis
 )

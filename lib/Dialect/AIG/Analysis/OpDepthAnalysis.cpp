@@ -10,8 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Analysis/OpDepthAnalysis.h"
-#include "mlir/IR/Operation.h"
+#include "circt/Dialect/AIG/Analysis/OpDepthAnalysis.h"
 
 using namespace circt;
 using namespace aig;

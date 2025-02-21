@@ -13,11 +13,6 @@
 #ifndef CIRCT_ANALYSIS_OPDEPTH_ANALYSIS_H
 #define CIRCT_ANALYSIS_OPDEPTH_ANALYSIS_H
 
-#include "circt/Support/LLVM.h"
-#include "mlir/IR/Operation.h"
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/SetVector.h"
-
 #include "circt/Dialect/AIG/AIGOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 
@@ -34,7 +29,6 @@ public:
 
   /// Get the depth of operations of a specific name
   size_t getOpDepth(AndInverterOp op) const {
-    assert(opDepths.count(op));
     return opDepths.at(op);
   }
 
