@@ -206,12 +206,7 @@ void MemoryBankConflictResolver::readOpHoistAnalysis(
     auto key = std::pair(memref, constIndices);
     // We do not hoist any read as long as it's being written in any parallel
     // region.
-    auto memrefIsWritten = [&](Value memref) {
-      return llvm::any_of(writtenMemRefs, [memref](const auto &entry) {
-        return entry == memref;
-      });
-    };
-    if (memrefIsWritten(memref))
+    if (writtenMemRefs.contains(memref))
       continue;
     constantReadOpCounts[key]++;
   }
