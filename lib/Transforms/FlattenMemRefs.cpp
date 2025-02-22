@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Support/LLVM.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
@@ -25,6 +26,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/MathExtras.h"
 
 namespace circt {
@@ -238,6 +240,27 @@ struct GetGlobalOpConversion : public OpConversionPattern<memref::GetGlobalOp> {
   }
 };
 
+struct ReshapeOpConversion : public OpConversionPattern<memref::ReshapeOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(memref::ReshapeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Value flattenedSource = rewriter.getRemappedValue(op.getSource());
+    if (!flattenedSource)
+      return failure();
+
+    auto flattenedSrcType = cast<MemRefType>(flattenedSource.getType());
+    if (isUniDimensional(flattenedSrcType) ||
+        !flattenedSrcType.hasStaticShape()) {
+      rewriter.replaceOp(op, flattenedSource);
+      return success();
+    }
+
+    return failure();
+  }
+};
+
 // A generic pattern which will replace an op with a new op of the same type
 // but using the adaptor (type converted) operands.
 template <typename TOp>
@@ -403,7 +426,7 @@ public:
     RewritePatternSet patterns(ctx);
     SetVector<StringRef> rewrittenCallees;
     patterns.add<LoadOpConversion, StoreOpConversion, AllocOpConversion,
-                 GlobalOpConversion, GetGlobalOpConversion,
+                 GlobalOpConversion, GetGlobalOpConversion, ReshapeOpConversion,
                  OperandConversionPattern<func::ReturnOp>,
                  OperandConversionPattern<memref::DeallocOp>,
                  CondBranchOpConversion,
