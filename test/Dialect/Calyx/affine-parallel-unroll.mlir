@@ -234,3 +234,48 @@ module {
   }
 }
 
+// -----
+
+// We do not hoist a constant-indices load when there is a write in the parallel region
+
+// CHECK-LABEL:   func.func @war(
+// CHECK-SAME:                   %[[VAL_0:.*]]: memref<2xf32>,
+// CHECK-SAME:                   %[[VAL_1:.*]]: memref<2xf32>) {
+// CHECK:           %[[VAL_2:.*]] = arith.constant 4.200000e+01 : f32
+// CHECK:           %[[VAL_3:.*]] = arith.constant 0 : index
+// CHECK:           affine.parallel (%[[VAL_4:.*]]) = (0) to (1) {
+// CHECK:             scf.execute_region {
+// CHECK:               affine.for %[[VAL_5:.*]] = 0 to 2 {
+// CHECK:                 affine.store %[[VAL_2]], %[[VAL_0]]{{\[}}%[[VAL_5]]] : memref<2xf32>
+// CHECK:                 %[[VAL_6:.*]] = affine.load %[[VAL_0]]{{\[}}%[[VAL_3]]] : memref<2xf32>
+// CHECK:                 affine.store %[[VAL_6]], %[[VAL_1]]{{\[}}%[[VAL_5]]] : memref<2xf32>
+// CHECK:               }
+// CHECK:               scf.yield
+// CHECK:             }
+// CHECK:             scf.execute_region {
+// CHECK:               affine.for %[[VAL_7:.*]] = 0 to 2 {
+// CHECK:                 affine.store %[[VAL_2]], %[[VAL_0]]{{\[}}%[[VAL_7]]] : memref<2xf32>
+// CHECK:                 %[[VAL_8:.*]] = affine.load %[[VAL_0]]{{\[}}%[[VAL_3]]] : memref<2xf32>
+// CHECK:                 affine.store %[[VAL_8]], %[[VAL_1]]{{\[}}%[[VAL_7]]] : memref<2xf32>
+// CHECK:               }
+// CHECK:               scf.yield
+// CHECK:             }
+// CHECK:           } {calyx.unroll = true}
+// CHECK:           return
+// CHECK:         }
+
+module {
+  func.func @war(%arg0: memref<2xf32>, %arg1: memref<2xf32>) {
+    %fortytwo = arith.constant 42.0 : f32
+    %zeroidx = arith.constant 0 : index
+    affine.parallel (%arg2) = (0) to (2) {
+      affine.for %arg3 = 0 to 2 {
+        affine.store %fortytwo, %arg0[%arg3] : memref<2xf32>
+        // The following load should not be hoisted.
+        %0 = affine.load %arg0[%zeroidx] : memref<2xf32>
+        affine.store %0, %arg1[%arg3] : memref<2xf32>
+      }
+    }
+    return
+  }
+}
