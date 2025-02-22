@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Support/LLVM.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
@@ -25,6 +26,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/MathExtras.h"
 
 namespace circt {
@@ -250,10 +252,12 @@ struct ReshapeOpConversion : public OpConversionPattern<memref::ReshapeOp> {
 
     auto flattenedSrcType = cast<MemRefType>(flattenedSource.getType());
     if (isUniDimensional(flattenedSrcType) ||
-        !flattenedSrcType.hasStaticShape())
+        !flattenedSrcType.hasStaticShape()) {
       rewriter.replaceOp(op, flattenedSource);
+      return success();
+    }
 
-    return success();
+    return failure();
   }
 };
 
