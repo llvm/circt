@@ -59,7 +59,7 @@ struct BalanceVariadicDriver {
       auto *lop = lhs.second.getValue().getDefiningOp();
       auto *rop = rhs.second.getValue().getDefiningOp();
       if (lop && rop) {
-        return lop->isBeforeInBlock(rop);
+        return !lop->isBeforeInBlock(rop);
       }
 
       if (!lop && rop)
