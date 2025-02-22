@@ -50,7 +50,27 @@ struct BalanceVariadicDriver {
   struct PairSorter {
     bool operator()(const std::pair<size_t, Signal> &lhs,
                     const std::pair<size_t, Signal> &rhs) const {
-      return lhs.first > rhs.first;
+      // First compare by level (higher level = lower priority)
+      if (lhs.first != rhs.first)
+        return lhs.first > rhs.first;
+
+      // If levels are equal, compare by argnumber or result number for
+      // deterministic ordering
+      auto *lop = lhs.second.getValue().getDefiningOp();
+      auto *rop = rhs.second.getValue().getDefiningOp();
+      if (lop && rop) {
+        return lop->isBeforeInBlock(rop);
+      }
+
+      if (!lop && rop)
+        return false;
+
+      if (lop && !rop)
+        return true;
+
+      BlockArgument larg = cast<BlockArgument>(lhs.second.getValue());
+      BlockArgument rarg = cast<BlockArgument>(rhs.second.getValue());
+      return larg.getArgNumber() > rarg.getArgNumber();
     }
   };
 
