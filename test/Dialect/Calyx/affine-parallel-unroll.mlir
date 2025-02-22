@@ -180,3 +180,102 @@ module {
     return
   }
 }
+
+// -----
+
+// CHECK-LABEL:   func.func @licm(
+// CHECK-SAME:                    %[[VAL_0:.*]]: memref<2xf32>,
+// CHECK-SAME:                    %[[VAL_1:.*]]: memref<2xf32>) {
+// CHECK:           %[[VAL_2:.*]] = arith.constant 0 : index
+// CHECK:           %[[VAL_3:.*]] = memref.alloc() : memref<2xf32>
+// CHECK-DAG:           %[[VAL_4:.*]] = affine.load %[[VAL_1]]{{\[}}%[[VAL_2]]] : memref<2xf32>
+// CHECK-DAG:           %[[VAL_5:.*]] = affine.load %[[VAL_0]]{{\[}}%[[VAL_2]]] : memref<2xf32>
+// CHECK:           affine.parallel (%[[VAL_6:.*]]) = (0) to (1) {
+// CHECK:             scf.execute_region {
+// CHECK:               affine.for %[[VAL_7:.*]] = 0 to 2 {
+// CHECK:                 %[[VAL_8:.*]] = affine.load %[[VAL_3]]{{\[}}%[[VAL_7]]] : memref<2xf32>
+// CHECK:                 %[[VAL_9:.*]] = arith.mulf %[[VAL_5]], %[[VAL_4]] : f32
+// CHECK:                 %[[VAL_10:.*]] = arith.addf %[[VAL_8]], %[[VAL_9]] : f32
+// CHECK:                 affine.store %[[VAL_10]], %[[VAL_3]]{{\[}}%[[VAL_7]]] : memref<2xf32>
+// CHECK:               }
+// CHECK:               scf.yield
+// CHECK:             }
+// CHECK:             scf.execute_region {
+// CHECK:               affine.for %[[VAL_11:.*]] = 0 to 2 {
+// CHECK:                 %[[VAL_12:.*]] = affine.load %[[VAL_3]]{{\[}}%[[VAL_11]]] : memref<2xf32>
+// CHECK:                 %[[VAL_13:.*]] = arith.mulf %[[VAL_5]], %[[VAL_4]] : f32
+// CHECK:                 %[[VAL_14:.*]] = arith.addf %[[VAL_12]], %[[VAL_13]] : f32
+// CHECK:                 affine.store %[[VAL_14]], %[[VAL_3]]{{\[}}%[[VAL_11]]] : memref<2xf32>
+// CHECK:               }
+// CHECK:               scf.yield
+// CHECK:             }
+// CHECK:           } {calyx.unroll = true}
+// CHECK:           return
+// CHECK:         }
+
+#map = affine_map<(d0) -> (d0 floordiv 2)>
+module {
+  func.func @licm(%arg0: memref<2xf32>, %arg1: memref<2xf32>) {
+    %alloc = memref.alloc() : memref<2xf32>
+    affine.parallel (%arg2) = (0) to (2) {
+      %0 = affine.apply #map(%arg2)
+      affine.for %arg3 = 0 to 2 {
+        // The following load will be hoisted.
+        %1 = affine.load %arg0[%0] : memref<2xf32>
+        // The following load will be hoisted.
+        %2 = affine.load %arg1[%0] : memref<2xf32>
+        %3 = affine.load %alloc[%arg3] : memref<2xf32>
+        %4 = arith.mulf %1, %2 : f32
+        %5 = arith.addf %3, %4 : f32
+        affine.store %5, %alloc[%arg3] : memref<2xf32>
+      }
+    }
+    return
+  }
+}
+
+// -----
+
+// We do not hoist a constant-indices load when there is a write in the parallel region
+
+// CHECK-LABEL:   func.func @war(
+// CHECK-SAME:                   %[[VAL_0:.*]]: memref<2xf32>,
+// CHECK-SAME:                   %[[VAL_1:.*]]: memref<2xf32>) {
+// CHECK:           %[[VAL_2:.*]] = arith.constant 4.200000e+01 : f32
+// CHECK:           %[[VAL_3:.*]] = arith.constant 0 : index
+// CHECK:           affine.parallel (%[[VAL_4:.*]]) = (0) to (1) {
+// CHECK:             scf.execute_region {
+// CHECK:               affine.for %[[VAL_5:.*]] = 0 to 2 {
+// CHECK:                 affine.store %[[VAL_2]], %[[VAL_0]]{{\[}}%[[VAL_5]]] : memref<2xf32>
+// CHECK:                 %[[VAL_6:.*]] = affine.load %[[VAL_0]]{{\[}}%[[VAL_3]]] : memref<2xf32>
+// CHECK:                 affine.store %[[VAL_6]], %[[VAL_1]]{{\[}}%[[VAL_5]]] : memref<2xf32>
+// CHECK:               }
+// CHECK:               scf.yield
+// CHECK:             }
+// CHECK:             scf.execute_region {
+// CHECK:               affine.for %[[VAL_7:.*]] = 0 to 2 {
+// CHECK:                 affine.store %[[VAL_2]], %[[VAL_0]]{{\[}}%[[VAL_7]]] : memref<2xf32>
+// CHECK:                 %[[VAL_8:.*]] = affine.load %[[VAL_0]]{{\[}}%[[VAL_3]]] : memref<2xf32>
+// CHECK:                 affine.store %[[VAL_8]], %[[VAL_1]]{{\[}}%[[VAL_7]]] : memref<2xf32>
+// CHECK:               }
+// CHECK:               scf.yield
+// CHECK:             }
+// CHECK:           } {calyx.unroll = true}
+// CHECK:           return
+// CHECK:         }
+
+module {
+  func.func @war(%arg0: memref<2xf32>, %arg1: memref<2xf32>) {
+    %fortytwo = arith.constant 42.0 : f32
+    %zeroidx = arith.constant 0 : index
+    affine.parallel (%arg2) = (0) to (2) {
+      affine.for %arg3 = 0 to 2 {
+        affine.store %fortytwo, %arg0[%arg3] : memref<2xf32>
+        // The following load should not be hoisted.
+        %0 = affine.load %arg0[%zeroidx] : memref<2xf32>
+        affine.store %0, %arg1[%arg3] : memref<2xf32>
+      }
+    }
+    return
+  }
+}
