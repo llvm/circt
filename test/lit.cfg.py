@@ -22,7 +22,7 @@ config.name = 'CIRCT'
 config.test_format = lit.formats.ShTest(not llvm_config.use_lit_shell)
 
 # suffixes: A list of file extensions to treat as test files.
-config.suffixes = ['.td', '.mlir', '.ll', '.fir', '.sv']
+config.suffixes = ['.td', '.mlir', '.ll', '.fir', '.sv', '.test']
 
 # test_source_root: The root path where tests are located.
 config.test_source_root = os.path.dirname(__file__)
@@ -91,5 +91,6 @@ if config.scheduling_or_tools != "":
 if config.slang_frontend_enabled:
   config.available_features.add('slang')
   tools.append('circt-verilog')
+  tools.append('circt-verilog-lsp-server')
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
