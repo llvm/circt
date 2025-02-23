@@ -518,6 +518,20 @@ def HandshakeToHW : Pass<"lower-handshake-to-hw", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// ICE40ToBLIF
+//===----------------------------------------------------------------------===//
+
+def ICE40ToBLIF : Pass<"lower-ice40-to-blif", "mlir::ModuleOp"> {
+  let summary = "Lower ICE40 to BLIF";
+  let description = [{
+    This pass lowers ICE40 to BLIF.
+  }];
+  let constructor = "circt::createICE40ToBLIFPass()";
+  let dependentDialects = ["ice40::ICE40Dialect", "hw::HWDialect",
+                           "blif::BLIFDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // Moore to Comb/HW/LLHD
 //===----------------------------------------------------------------------===//
 
