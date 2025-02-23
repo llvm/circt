@@ -2369,3 +2369,17 @@ module RangeElementSelection(
       b[3:0] = b[c[0]-:2];
     end
 endmodule
+
+// CHECK-LABEL: moore.module @DelayControl
+module DelayControl;
+  // CHECK: [[A:%.+]] = moore.net wire : <l1>
+  wire a;
+  // CHECK: [[CONST:%.+]] = moore.constant 10 : i32
+  // CHECK: [[DELAY:%.+]] = moore.delay [[CONST]] ns : !moore.i32
+  // CHECK: moore.assign [[A]], {{.+}} after [[DELAY]] : l1
+  assign #10 a = 1'b0;
+  // CHECK: [[CONST:%.+]] = moore.real_constant 1.560000e+00 : real
+  // CHECK: [[DELAY:%.+]] = moore.delay [[CONST]] ns : !moore.real
+  // CHECK: moore.assign [[A]], {{.+}} after [[DELAY]] : l1
+  assign #1.56 a = 1'b1;
+endmodule
