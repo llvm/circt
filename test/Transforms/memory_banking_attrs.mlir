@@ -95,8 +95,8 @@
 // CHECK:         }
 
 module {
-  func.func @main(%arg0: memref<3x5xf32> {banking.factor=5, banking.dimension=1}, %arg1: memref<5x3xf32>{banking.factor=5, banking.dimension=0}) -> (memref<5x3xf32>) {
-    %mem = memref.alloc() {banking.factor=5, banking.dimension=0} : memref<5x3xf32>
+  func.func @main(%arg0: memref<3x5xf32> {banking.factors=5, banking.dimensions=1}, %arg1: memref<5x3xf32>{banking.factors=5, banking.dimensions=0}) -> (memref<5x3xf32>) {
+    %mem = memref.alloc() {banking.factors=5, banking.dimensions=0} : memref<5x3xf32>
     affine.parallel (%i) = (0) to (5) {
       affine.parallel (%j) = (0) to (3) {
         %1 = affine.load %arg0[%j, %i] : memref<3x5xf32>
@@ -201,7 +201,7 @@ module {
 // CHECK:         }
 
 module {
-  func.func @overwrite(%arg0: memref<8x3xf32>, %arg1: memref<8x6xf32> {banking.factor=6, banking.dimension=1}) -> (memref<8x6xf32>) {
+  func.func @overwrite(%arg0: memref<8x3xf32>, %arg1: memref<8x6xf32> {banking.factors=6, banking.dimensions=1}) -> (memref<8x6xf32>) {
     %mem = memref.alloc() : memref<8x6xf32>
     affine.parallel (%i) = (0) to (8) {
       affine.parallel (%j) = (0) to (6) {

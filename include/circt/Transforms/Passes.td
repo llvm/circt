@@ -127,10 +127,11 @@ def MemoryBanking : Pass<"memory-banking", "::mlir::func::FuncOp"> {
   let summary = "Partition the memories used in affine parallel loops into banks";
   let constructor = "circt::createMemoryBankingPass()";
   let options = [
-    Option<"bankingFactor", "factor", "unsigned", /*default=*/"1",
+    ListOption<"bankingFactorsList", "factors", "unsigned",
            "Use this banking factor for all memories being partitioned">,
-    Option<"bankingDimension", "dimension", "int", /*default=*/"-1",
-           "The dimension along which to bank the memory. If -1, the innermost dimension with size > 1 is used.">
+    ListOption<"bankingDimensionsList", "dimensions", "unsigned",
+           "The dimension along which to bank the memory. If unspecified and"
+           "there is only one factor, the innermost dimension with size > 1 is used.">
   ];
   let dependentDialects = ["mlir::memref::MemRefDialect, mlir::scf::SCFDialect, mlir::affine::AffineDialect"];
 }
