@@ -1,21 +1,23 @@
-// RUN: circt-opt %s -memory-banking="factor=3 dimension=1"
+// RUN: circt-opt %s -memory-banking="factor=3 dimension=1" | FileCheck %s
 
 // CHECK: #[[$ATTR_0:.+]] = affine_map<(d0, d1) -> (d1 mod 5)>
 // CHECK: #[[$ATTR_1:.+]] = affine_map<(d0, d1) -> (d1 floordiv 5)>
 // CHECK: #[[$ATTR_2:.+]] = affine_map<(d0, d1) -> (d0 mod 5)>
 // CHECK: #[[$ATTR_3:.+]] = affine_map<(d0, d1) -> (d0 floordiv 5)>
+// CHECK: #[[$ATTR_4:.+]] = affine_map<(d0, d1) -> (d1 mod 3)>
+// CHECK: #[[$ATTR_5:.+]] = affine_map<(d0, d1) -> (d1 floordiv 3)>
 
 // CHECK-LABEL:   func.func @main(
-// CHECK-SAME:                    %[[VAL_0:arg0]]: memref<3x1xf32>,
-// CHECK-SAME:                    %[[VAL_1:arg1]]: memref<3x1xf32>,
-// CHECK-SAME:                    %[[VAL_2:arg2]]: memref<3x1xf32>,
-// CHECK-SAME:                    %[[VAL_3:arg3]]: memref<3x1xf32>,
-// CHECK-SAME:                    %[[VAL_4:arg4]]: memref<3x1xf32>,
-// CHECK-SAME:                    %[[VAL_5:arg5]]: memref<1x3xf32>,
-// CHECK-SAME:                    %[[VAL_6:arg6]]: memref<1x3xf32>,
-// CHECK-SAME:                    %[[VAL_7:arg7]]: memref<1x3xf32>,
-// CHECK-SAME:                    %[[VAL_8:arg8]]: memref<1x3xf32>,
-// CHECK-SAME:                    %[[VAL_9:arg9]]: memref<1x3xf32>) -> (memref<1x3xf32>, memref<1x3xf32>, memref<1x3xf32>, memref<1x3xf32>, memref<1x3xf32>) {
+// CHECK-SAME:                    %[[VAL_0:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: memref<3x1xf32>,
+// CHECK-SAME:                    %[[VAL_1:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: memref<3x1xf32>,
+// CHECK-SAME:                    %[[VAL_2:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: memref<3x1xf32>,
+// CHECK-SAME:                    %[[VAL_3:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: memref<3x1xf32>,
+// CHECK-SAME:                    %[[VAL_4:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: memref<3x1xf32>,
+// CHECK-SAME:                    %[[VAL_5:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: memref<1x3xf32>,
+// CHECK-SAME:                    %[[VAL_6:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: memref<1x3xf32>,
+// CHECK-SAME:                    %[[VAL_7:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: memref<1x3xf32>,
+// CHECK-SAME:                    %[[VAL_8:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: memref<1x3xf32>,
+// CHECK-SAME:                    %[[VAL_9:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: memref<1x3xf32>) -> (memref<1x3xf32>, memref<1x3xf32>, memref<1x3xf32>, memref<1x3xf32>, memref<1x3xf32>) {
 // CHECK:           %[[VAL_10:.*]] = arith.constant 0.000000e+00 : f32
 // CHECK:           %[[VAL_11:.*]] = memref.alloc() : memref<1x3xf32>
 // CHECK:           %[[VAL_12:.*]] = memref.alloc() : memref<1x3xf32>
@@ -77,27 +79,19 @@
 // CHECK:                 scf.yield %[[VAL_10]] : f32
 // CHECK:               }
 // CHECK:               %[[VAL_34:.*]] = arith.mulf %[[VAL_20]], %[[VAL_28]] : f32
-// CHECK:               %[[VAL_35:.*]] = affine.apply #[[$ATTR_2]](%[[VAL_16]], %[[VAL_17]])
-// CHECK:               %[[VAL_36:.*]] = affine.apply #[[$ATTR_3]](%[[VAL_16]], %[[VAL_17]])
+// CHECK:               %[[VAL_35:.*]] = affine.apply #[[$ATTR_4]](%[[VAL_16]], %[[VAL_17]])
+// CHECK:               %[[VAL_36:.*]] = affine.apply #[[$ATTR_5]](%[[VAL_16]], %[[VAL_17]])
 // CHECK:               scf.index_switch %[[VAL_35]]
 // CHECK:               case 0 {
-// CHECK:                 affine.store %[[VAL_34]], %[[VAL_11]]{{\[}}%[[VAL_36]], %[[VAL_17]]] : memref<1x3xf32>
+// CHECK:                 affine.store %[[VAL_34]], %[[VAL_11]]{{\[}}%[[VAL_16]], %[[VAL_36]]] : memref<1x3xf32>
 // CHECK:                 scf.yield
 // CHECK:               }
 // CHECK:               case 1 {
-// CHECK:                 affine.store %[[VAL_34]], %[[VAL_12]]{{\[}}%[[VAL_36]], %[[VAL_17]]] : memref<1x3xf32>
+// CHECK:                 affine.store %[[VAL_34]], %[[VAL_12]]{{\[}}%[[VAL_16]], %[[VAL_36]]] : memref<1x3xf32>
 // CHECK:                 scf.yield
 // CHECK:               }
 // CHECK:               case 2 {
-// CHECK:                 affine.store %[[VAL_34]], %[[VAL_13]]{{\[}}%[[VAL_36]], %[[VAL_17]]] : memref<1x3xf32>
-// CHECK:                 scf.yield
-// CHECK:               }
-// CHECK:               case 3 {
-// CHECK:                 affine.store %[[VAL_34]], %[[VAL_14]]{{\[}}%[[VAL_36]], %[[VAL_17]]] : memref<1x3xf32>
-// CHECK:                 scf.yield
-// CHECK:               }
-// CHECK:               case 4 {
-// CHECK:                 affine.store %[[VAL_34]], %[[VAL_15]]{{\[}}%[[VAL_36]], %[[VAL_17]]] : memref<1x3xf32>
+// CHECK:                 affine.store %[[VAL_34]], %[[VAL_13]]{{\[}}%[[VAL_16]], %[[VAL_36]]] : memref<1x3xf32>
 // CHECK:                 scf.yield
 // CHECK:               }
 // CHECK:               default {
