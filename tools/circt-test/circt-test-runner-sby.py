@@ -37,9 +37,9 @@ for task in tasks:
 """
 
 # Generate the SymbiYosys script.
-script = f"""
+script = """
   [tasks]
-  {('\n  ').join(tasks)}
+  {tasks}
 
 {options}
 
@@ -47,12 +47,16 @@ script = f"""
   smtbmc z3
 
   [script]
-  read -formal {source_path.name}
-  prep -top {args.test}
+  read -formal {source_path_name}
+  prep -top {test}
 
   [files]
   {source_path}
-"""
+""".format(tasks='\n  '.join(tasks),
+           options=options,
+           source_path_name=source_path.name,
+           test=args.test,
+           source_path=source_path)
 with open(script_path, "w") as f:
   for line in script.strip().splitlines():
     f.write(line.strip() + "\n")

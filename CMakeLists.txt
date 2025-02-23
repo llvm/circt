@@ -510,6 +510,24 @@ else()
 endif()
 
 #-------------------------------------------------------------------------------
+# SymbiYosys Configuration
+#-------------------------------------------------------------------------------
+
+# If SymbiYosys hasn't been explicitly disabled, find it.
+option(SBY_DISABLE "Disable the SymbiYosys tests.")
+if (SBY_DISABLE)
+  message(STATUS "Disabling SymbiYosys tests.")
+else()
+  find_program(SBY_PATH "sby")
+  if(EXISTS ${SBY_PATH})
+    message(STATUS "Found SymbiYosys at ${SBY_PATH}.")
+  else()
+    set(SBY_PATH "")
+    message(STATUS "Did not find SymbiYosys.")
+  endif()
+endif()
+
+#-------------------------------------------------------------------------------
 # Tcl bindings
 #-------------------------------------------------------------------------------
 option(CIRCT_BINDINGS_TCL_ENABLED "Enables CIRCT Tcl bindings." OFF)
