@@ -133,6 +133,13 @@ public:
     return clientEngines[id];
   }
 
+  Accelerator &getAccelerator() {
+    if (!ownedAccelerator)
+      throw std::runtime_error(
+          "AcceleratorConnection does not own an accelerator");
+    return *ownedAccelerator;
+  }
+
 protected:
   /// If `createEngine` is overridden, this method should be called to register
   /// the engine and all of the channels it services.
@@ -163,9 +170,8 @@ private:
 
   std::unique_ptr<AcceleratorServiceThread> serviceThread;
 
-  /// List of accelerator objects owned by this connection. These are destroyed
-  /// when the connection dies or is shutdown.
-  std::vector<std::unique_ptr<Accelerator>> ownedAccelerators;
+  /// Accelerator object owned by this connection.
+  std::unique_ptr<Accelerator> ownedAccelerator;
 };
 
 namespace registry {

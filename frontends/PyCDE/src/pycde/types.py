@@ -481,9 +481,29 @@ class Bits(BitVectorType):
     return BitsSignal
 
   def _from_obj(self, x: int, alias: typing.Optional[TypeAlias] = None):
+    # The MLIR python bindings don't support IntegerAttributes with unsigned
+    # 64-bit values since the bindings accept signed integers so an unsigned
+    # 64-bit integer overflows that.
+    # https://github.com/llvm/llvm-project/issues/128072
+    # So we need to work around that here using concats.
+    # TODO: Adapt this to UInt and SInt.
     from .dialects import hw
     self._from_obj_check(x)
     circt_type = self if alias is None else alias
+    if x.bit_length() > 63:
+      # Split the int into an array of 32-bit ints.
+      chunks = [(x >> i) & 0xFFFFFFFF for i in range(0, x.bit_length(), 32)]
+      last_bitwidth = self.bitwidth % 32
+      if last_bitwidth == 0:
+        last_bitwidth = 32
+      chunk_consts = [
+          hw.ConstantOp(ir.IntegerType.get_signless(32), c) for c in chunks[:-1]
+      ]
+      chunk_consts.append(
+          hw.ConstantOp(ir.IntegerType.get_signless(last_bitwidth), chunks[-1]))
+
+      from .signals import BitsSignal
+      return BitsSignal.concat(chunk_consts).bitcast(circt_type)
     return hw.ConstantOp(circt_type, x)
 
 

@@ -13,8 +13,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/Engines.h"
+#include "esi/Accelerator.h"
+
+#include <cstring>
 
 using namespace esi;
+
+//===----------------------------------------------------------------------===//
+// Unknown Engine
+//===----------------------------------------------------------------------===//
 
 namespace {
 /// Created by default when the DMA engine cannot be resolved. Throws the error
@@ -23,7 +30,8 @@ namespace {
 class UnknownEngine : public Engine {
 public:
   UnknownEngine(AcceleratorConnection &conn, std::string engineName)
-      : engineName(engineName) {}
+      : Engine(conn), engineName(engineName) {}
+
   void connect() override {
     throw std::runtime_error("Unknown engine '" + engineName + "'");
   }
@@ -45,6 +53,141 @@ protected:
   std::string engineName;
 };
 } // namespace
+
+//===----------------------------------------------------------------------===//
+// OneItemBuffersToHost engine
+//===----------------------------------------------------------------------===//
+
+namespace {
+class OneItemBuffersToHost;
+class OneItemBuffersToHostReadPort : public ReadChannelPort {
+public:
+  /// Offset into the MMIO space to which the buffer pointer is written.
+  static constexpr size_t BufferPtrOffset = 8;
+
+  OneItemBuffersToHostReadPort(const Type *type, OneItemBuffersToHost *engine)
+      : ReadChannelPort(type), engine(engine) {
+    bufferSize = (type->getBitWidth() / 8) + 1;
+  }
+
+  void writeBufferPtr();
+  void connectImpl(std::optional<unsigned>) override;
+  bool pollImpl() override;
+
+protected:
+  size_t bufferSize;
+  OneItemBuffersToHost *engine;
+  std::unique_ptr<services::HostMem::HostMemRegion> buffer;
+  uint64_t pollCount = 0;
+};
+
+class OneItemBuffersToHost : public Engine {
+  friend class OneItemBuffersToHostReadPort;
+
+public:
+  OneItemBuffersToHost(AcceleratorConnection &conn, AppIDPath idPath,
+                       const ServiceImplDetails &details)
+      : Engine(conn), thisPath(idPath) {
+    auto mmioIDIter = details.find("mmio");
+    if (mmioIDIter != details.end())
+      mmioID = std::any_cast<AppID>(mmioIDIter->second);
+  }
+
+  static std::unique_ptr<Engine> create(AcceleratorConnection &conn,
+                                        AppIDPath idPath,
+                                        const ServiceImplDetails &details,
+                                        const HWClientDetails &clients) {
+    return std::make_unique<OneItemBuffersToHost>(conn, idPath, details);
+  }
+
+  void connect() override {
+    if (connected)
+      return;
+    if (!mmioID)
+      throw std::runtime_error("OneItemBuffersToHost: no mmio path");
+    hostMem = conn.getService<services::HostMem>();
+    if (!hostMem)
+      throw std::runtime_error("OneItemBuffersToHost: no host memory service");
+    hostMem->start();
+
+    Accelerator &acc = conn.getAccelerator();
+    AppIDPath mmioPath = thisPath;
+    mmioPath.pop_back();
+    mmioPath.push_back(*mmioID);
+    AppIDPath lastPath;
+    BundlePort *port = acc.resolvePort(mmioPath, lastPath);
+    if (port == nullptr)
+      throw std::runtime_error(
+          "OneItemBuffersToHost: could not find MMIO port at " +
+          mmioPath.toStr());
+    mmio = dynamic_cast<services::MMIO::MMIORegion *>(port);
+    if (!mmio)
+      throw std::runtime_error(
+          "OneItemBuffersToHost: MMIO port is not an MMIO port");
+    connected = true;
+  }
+
+  std::unique_ptr<ChannelPort> createPort(AppIDPath idPath,
+                                          const std::string &channelName,
+                                          BundleType::Direction dir,
+                                          const Type *type) override {
+    if (BundlePort::isWrite(dir))
+      return std::make_unique<UnknownWriteChannelPort>(
+          type, "OneItemBuffersToHost: cannot create write port");
+    return std::make_unique<OneItemBuffersToHostReadPort>(type, this);
+  }
+
+protected:
+  AppIDPath thisPath;
+  std::optional<AppID> mmioID;
+  services::MMIO::MMIORegion *mmio;
+  services::HostMem *hostMem;
+};
+} // namespace
+
+void OneItemBuffersToHostReadPort::writeBufferPtr() {
+  uint8_t *bufferData = reinterpret_cast<uint8_t *>(buffer->getPtr());
+  bufferData[bufferSize - 1] = 0;
+  engine->mmio->write(BufferPtrOffset,
+                      reinterpret_cast<uint64_t>(buffer->getDevicePtr()));
+}
+
+void OneItemBuffersToHostReadPort::connectImpl(std::optional<unsigned>) {
+  engine->connect();
+  buffer = engine->hostMem->allocate(128, {});
+  memset(buffer->getPtr(), 0, bufferSize);
+  writeBufferPtr();
+}
+
+bool OneItemBuffersToHostReadPort::pollImpl() {
+  uint8_t *bufferData = reinterpret_cast<uint8_t *>(buffer->getPtr());
+  if (pollCount++ % 100000 == 0) {
+    engine->conn.getLogger().debug(
+        [this, bufferData](
+            std::string &subsystem, std::string &msg,
+            std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "OneItemBuffersToHost";
+          msg = "Polling buffer contents 0x";
+          for (size_t i = 0; i < 128; ++i)
+            msg += toHex(bufferData[i]);
+        });
+  }
+  if (bufferData[bufferSize - 1] == 0)
+    return false;
+
+  MessageData data(bufferData, bufferSize - 1);
+  if (callback(data)) {
+    writeBufferPtr();
+    return true;
+  }
+  return false;
+}
+
+REGISTER_ENGINE("OneItemBuffersToHost", OneItemBuffersToHost);
+
+//===----------------------------------------------------------------------===//
+// Engine / Bundle Engine Map
+//===----------------------------------------------------------------------===//
 
 ChannelPort &Engine::requestPort(AppIDPath idPath,
                                  const std::string &channelName,
@@ -83,6 +226,7 @@ void BundleEngineMap::setEngine(const std::string &channelName,
 //===----------------------------------------------------------------------===//
 // Registry
 //===----------------------------------------------------------------------===//
+
 namespace {
 class EngineRegistry {
 public:

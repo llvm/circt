@@ -41,7 +41,7 @@ void StreamLogger::logImpl(Level level, const std::string &subsystem,
 
   switch (level) {
   case Level::Error:
-    os << "[ERROR] ";
+    os << "[  ERROR] ";
     indentSpaces = 8;
     break;
   case Level::Warning:
@@ -49,11 +49,11 @@ void StreamLogger::logImpl(Level level, const std::string &subsystem,
     indentSpaces = 10;
     break;
   case Level::Info:
-    os << "[INFO] ";
+    os << "[  INFO] ";
     indentSpaces = 7;
     break;
   case Level::Debug:
-    os << "[DEBUG] ";
+    os << "[ DEBUG] ";
     indentSpaces = 8;
     break;
   }
@@ -64,11 +64,12 @@ void StreamLogger::logImpl(Level level, const std::string &subsystem,
   }
   os << msg << std::endl;
 
-  if (!details)
-    return;
-  std::string indent(indentSpaces, ' ');
-  for (const auto &detail : *details)
-    os << indent << detail.first << ": " << toString(detail.second) << "\n";
+  if (details) {
+    std::string indent(indentSpaces, ' ');
+    for (const auto &detail : *details)
+      os << indent << detail.first << ": " << toString(detail.second) << "\n";
+  }
+  os.flush();
 }
 
 std::string esi::toString(const std::any &value) {

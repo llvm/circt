@@ -15,8 +15,5 @@ def get_bsp(name: Optional[str] = None):
     return CosimBSP_DMA
   elif name == "xrt":
     return XrtBSP
-  elif name == "xrt_cosim":
-    from .xrt import XrtCosimBSP
-    return XrtCosimBSP
   else:
     raise ValueError(f"Unknown bsp type: {name}")
