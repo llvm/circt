@@ -17,8 +17,10 @@
 
 #include "circt/Support/LLVM.h"
 #include "circt/Tools/circt-verilog-lsp-server/CirctVerilogLspServerMain.h"
+#include "mlir/IR/MLIRContext.h"
 #include "mlir/Tools/lsp-server-support/Logging.h"
 #include "mlir/Tools/lsp-server-support/Protocol.h"
+#include "slang/ast/ASTVisitor.h"
 #include "slang/ast/Compilation.h"
 #include "slang/diagnostics/DiagnosticClient.h"
 #include "slang/diagnostics/Diagnostics.h"
@@ -26,6 +28,7 @@
 #include "slang/syntax/SyntaxTree.h"
 #include "slang/text/SourceLocation.h"
 #include "slang/text/SourceManager.h"
+#include "llvm/ADT/IntervalMap.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -64,6 +67,127 @@ struct VerilogServerContext {
       : options(options) {}
   const VerilogServerOptions &options;
 };
+
+class VerilogDocument;
+using VerilogIndexSymbol =
+    llvm::PointerUnion<const slang::ast::Symbol *, LocationAttr>;
+
+class VerilogIndex {
+public:
+  VerilogIndex(VerilogDocument &document)
+      : document(document), mlirContext(mlir::MLIRContext::Threading::DISABLED),
+        intervalMap(allocator) {}
+
+  /// Initialize the index with the given compilation unit.
+  void initialize(slang::ast::Compilation &compilation);
+
+  void insertSymbol(slang::ast::Symbol *symbol);
+
+  VerilogDocument &getDocument() { return document; }
+
+  /// The type of interval map used to store source references. SMRange is
+  /// half-open, so we also need to use a half-open interval map.
+  using MapT =
+      llvm::IntervalMap<const char *, const VerilogIndexSymbol *,
+                        llvm::IntervalMapImpl::NodeSizer<
+                            const char *, const VerilogIndexSymbol *>::LeafSize,
+                        llvm::IntervalMapHalfOpenInfo<const char *>>;
+
+  MapT &getIntervalMap() { return intervalMap; }
+
+private:
+  MapT intervalMap;
+  /// An allocator for the interval map.
+  MapT::Allocator allocator;
+
+  VerilogDocument &document;
+
+  // MLIR context used for generating location attr.
+  mlir::MLIRContext mlirContext;
+};
+
+} // namespace
+
+namespace {
+
+/*
+class VerilogIndex {
+public:
+  VerilogIndex(VerilogServerContext &context)
+      : context(context), intervalMap(allocator), intervalMapLoc(allocator) {}
+
+  /// Initialize the index with the given ast::Module.
+  void initialize(slang::ast::Compilation *compilation);
+
+  using IndexElement = llvm::PointerUnion<slang::ast::Symbol *, LocationAttr>;
+
+  /// Lookup a symbol for the given location. Returns nullptr if no symbol
+  /// could be found. If provided, `overlappedRange` is set to the range that
+  /// the provided `loc` overlapped with.
+  const VerilogIndexSymbol *lookup(SMLoc loc,
+                                   SMRange *overlappedRange = nullptr) const;
+
+  const EmittedLoc *lookupLoc(SMLoc loc) const;
+
+  size_t size() const {
+    return std::distance(intervalMap.begin(), intervalMap.end());
+  }
+
+  VerilogServerContext &getContext() { return context; }
+  auto &getIntervalMap() { return intervalMap; }
+  auto &getReferences() { return references; }
+
+  void parseEmittedLoc();
+
+  enum SymbolUse { AssignLValue, RValue, Unknown };
+
+  llvm::StringMap<llvm::StringMap<slang::ast::Symbol *>> moduleVariableToSymbol;
+
+  using ReferenceNode = llvm::PointerUnion<const slang::ast::Symbol *,
+                                           const slang::ast::PortConnection *,
+                                           const slang::ast::Expression *>;
+
+private:
+  /// The type of interval map used to store source references. SMRange is
+  /// half-open, so we also need to use a half-open interval map.
+  using MapT =
+      llvm::IntervalMap<const char *, const VerilogIndexSymbol *,
+                        llvm::IntervalMapImpl::NodeSizer<
+                            const char *, const VerilogIndexSymbol *>::LeafSize,
+                        llvm::IntervalMapHalfOpenInfo<const char *>>;
+
+  /// An allocator for the interval map.
+  MapT::Allocator allocator;
+
+  VerilogServerContext &context;
+
+  /// An interval map containing a corresponding definition mapped to a source
+  /// interval.
+  MapT intervalMap;
+
+  using MapTLoc =
+      llvm::IntervalMap<const char *, const EmittedLoc *,
+                        llvm::IntervalMapImpl::NodeSizer<
+                            const char *, const EmittedLoc *>::LeafSize,
+                        llvm::IntervalMapHalfOpenInfo<const char *>>;
+
+  // TODO: Merge them.
+  MapTLoc intervalMapLoc;
+
+  llvm::SmallDenseMap<const VerilogIndexSymbol *,
+                      SmallVector<std::tuple<slang::SourceLocation, SymbolUse,
+                                             std::optional<ReferenceNode>>,
+                                  8>>
+      references;
+
+  // TODO: Use allocator.
+  SmallVector<std::unique_ptr<EmittedLoc>> emittedLocs;
+
+  slang::ast::Symbol *lookupSymbolFromModuleAndName() {}
+
+  /// A mapping between definitions and their corresponding symbol.
+  // DenseMap<const void *, std::unique_ptr<VerilogIndexSymbol>> defToSymbol;
+}; */
 
 //===----------------------------------------------------------------------===//
 // VerilogDocument
@@ -106,6 +230,9 @@ private:
 
   // The LLVM source manager.
   llvm::SourceMgr sourceMgr;
+
+  /// The index of the parsed module.
+  VerilogIndex index;
 
   // The URI of the document.
   const mlir::lsp::URIForFile &uri;
@@ -153,7 +280,7 @@ void LSPDiagnosticClient::report(const slang::ReportedDiagnostic &slangDiag) {
 VerilogDocument::VerilogDocument(
     VerilogServerContext &context, const mlir::lsp::URIForFile &uri,
     StringRef contents, std::vector<mlir::lsp::Diagnostic> &diagnostics)
-    : uri(uri) {
+    : uri(uri), index(*this) {
   unsigned int bufferId;
   if (auto memBufferOwn =
           llvm::MemoryBuffer::getMemBufferCopy(contents, uri.file())) {
@@ -222,6 +349,8 @@ VerilogDocument::getLspLocation(slang::SourceLocation loc) const {
 
   return mlir::lsp::Location();
 }
+
+namespace {} // namespace
 
 //===----------------------------------------------------------------------===//
 // VerilogTextFile
@@ -296,6 +425,117 @@ void VerilogTextFile::initialize(
   version = newVersion;
   document =
       std::make_unique<VerilogDocument>(context, uri, contents, diagnostics);
+}
+
+struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor> {
+  IndexVisitor(VerilogIndex &index) : index(index) {}
+  VerilogIndex &index;
+
+  void handleSymbol(const slang::ast::Symbol *symbol,
+                    slang::SourceRange range) {
+    assert(range.start().valid() && range.end().valid());
+    insertDeclRef(symbol, range);
+  }
+
+  void handleSymbol(const slang::ast::Symbol *symbol,
+                    slang::SourceLocation location) {
+    if (symbol->name.empty())
+      return;
+    handleSymbol(
+        symbol, slang::SourceRange(location, location + symbol->name.length()));
+  }
+
+  // Handle references to the left-hand side of a parent assignment.
+  void visit(const slang::ast::LValueReferenceExpression &expr) {
+    auto *symbol = expr.getSymbolReference(true);
+    if (!symbol)
+      return;
+    handleSymbol(symbol, expr.sourceRange);
+  }
+
+  void visit(const slang::ast::Symbol &expr) {
+    handleSymbol(&expr, expr.location);
+  }
+
+  //
+  //  void visit(const slang::ast::VariableSymbol &expr) {
+  //    handleSymbol(&expr, expr.location));
+  //    visitDefault(expr);
+  //  }
+  //
+  //  void visit(const slang::ast::VariableDeclStatement &expr) {
+  //    handleSymbol(&expr.symbol, expr.sourceRange);
+  //    visitDefault(expr);
+  //  }
+
+  // Handle named values, such as references to declared variables.
+  // void visit(const slang::ast::NamedValueExpression &expr) {
+  //   auto *symbol = expr.getSymbolReference(true);
+  //   if (!symbol)
+  //     return;
+  //   handleSymbol(symbol, expr.sourceRange);
+  //   visitDefault(expr);
+  // }
+
+  template <typename T>
+  void visit(const T &t) {
+
+    visitDefault(t);
+  }
+  // Helper function to convert an argument to a simple bit vector type, pass it
+  // to a reduction op, and optionally invert the result.
+
+  /// Handle assignment patterns.
+  void visitInvalid(const slang::ast::Expression &expr) {
+    mlir::lsp::Logger::debug("visitInvalid: {}",
+                             slang::ast::toString(expr.kind));
+  }
+
+  void visitInvalid(const slang::ast::Statement &) {}
+  void visitInvalid(const slang::ast::TimingControl &) {}
+  void visitInvalid(const slang::ast::Constraint &) {}
+  void visitInvalid(const slang::ast::AssertionExpr &) {}
+  void visitInvalid(const slang::ast::BinsSelectExpr &) {}
+  void visitInvalid(const slang::ast::Pattern &) {}
+
+  VerilogDocument &getDocument() { return index.getDocument(); }
+
+  void insertDeclRef(const slang::ast::Symbol *sym, slang::SourceRange refLoc,
+                     bool isDef = false, bool isAssign = false) {
+    const char *startLoc = getDocument().getSMLoc(refLoc.start()).getPointer();
+    const char *endLoc = index.document.getSMLoc(refLoc.end()).getPointer() + 1;
+    if (!startLoc || !endLoc)
+      return;
+    assert(startLoc && endLoc);
+
+    if (startLoc != endLoc &&
+        !index.getIntervalMap().overlaps(startLoc, endLoc)) {
+      index.getIntervalMap().insert(startLoc, endLoc, sym);
+    }
+  };
+};
+
+void VerilogIndex::initialize(slang::ast::Compilation &compilation) {
+  const auto &root = compilation.getRoot();
+  IndexVisitor visitor(*this);
+  for (auto *inst : root.topInstances) {
+    inst->body.visit(visitor);
+    auto &body = inst->body;
+    for (auto *symbol : body.getPortList()) {
+      auto startLoc = document.getSMLoc(symbol->location);
+      auto endLoc = SMLoc::getFromPointer(
+          document.getSMLoc(symbol->location).getPointer() +
+          symbol->name.size());
+      auto range = SMRange(startLoc, endLoc);
+      const char *startLoc2 = range.Start.getPointer();
+      const char *endLoc2 = range.End.getPointer();
+      if (!intervalMap.overlaps(startLoc2, endLoc2)) {
+        intervalMap.insert(startLoc2, endLoc2, symbol);
+      }
+    }
+  }
+
+  parseEmittedLoc();
 }
 
 //===----------------------------------------------------------------------===//
