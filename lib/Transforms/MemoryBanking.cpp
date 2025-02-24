@@ -211,15 +211,16 @@ SmallVector<Value, 4> handleGetGlobalOp(memref::GetGlobalOp getGlobalOp,
 }
 
 unsigned
-getSpecifiedOrDefaultBankingDim(const ArrayRef<unsigned> bankingDimensions,
+getSpecifiedOrDefaultBankingDim(const std::optional<int> bankingDimensionOpt,
                                 int64_t rank, ArrayRef<int64_t> shape) {
   // If the banking dimension is already specified, return it.
   // Note, the banking dimension will always be nonempty because TableGen will
   // assign it with a default value -1 if it's not specified by the user. Thus,
   // -1 is the sentinel value to indicate the default behavior, which is the
   // innermost dimension with shape greater than 1.
-  if (!bankingDimensions.empty())
-    return bankingDimensions[0];
+  if (bankingDimensionOpt.has_value() && *bankingDimensionOpt >= 0) {
+    return static_cast<unsigned>(*bankingDimensionOpt);
+  }
 
   // Otherwise, find the innermost dimension with size > 1.
   // For example, [[1], [2], [3], [4]] with `bankingFactor`=2 will be banked to
@@ -336,18 +337,18 @@ void updateFuncOpArgAttrs(func::FuncOp funcOp, unsigned argIndex,
                   ArrayAttr::get(funcOp.getContext(), updatedArgAttrs));
 }
 
-SmallVector<Value, 4> createBanks(Value originalMem,
-                                  const ArrayRef<unsigned> bankingFactors,
-                                  const ArrayRef<unsigned> bankingDimensions) {
+SmallVector<Value, 4>
+createBanks(Value originalMem, const unsigned bankingFactor,
+            const std::optional<int> bankingDimensionOpt) {
   MemRefType originalMemRefType = cast<MemRefType>(originalMem.getType());
   unsigned rank = originalMemRefType.getRank();
   ArrayRef<int64_t> shape = originalMemRefType.getShape();
 
   unsigned bankingDimension =
-      getSpecifiedOrDefaultBankingDim(bankingDimensions, rank, shape);
+      getSpecifiedOrDefaultBankingDim(bankingDimensionOpt, rank, shape);
 
-  auto currFactorDim = resolveBankingAttributes(originalMem, bankingFactors[0],
-                                                bankingDimension);
+  auto currFactorDim =
+      resolveBankingAttributes(originalMem, bankingFactor, bankingDimension);
 
   verifyBankingConfigurations(currFactorDim.dimension, currFactorDim.factor,
                               originalMemRefType);
@@ -432,11 +433,8 @@ struct BankAffineLoadPattern
     int64_t memrefRank = originalMemRefType.getRank();
     ArrayRef<int64_t> shape = originalMemRefType.getShape();
 
-    auto bankingDimension = getSpecifiedOrDefaultBankingDim(
-        bankingDimensionOpt.has_value()
-            ? SmallVector<unsigned>{static_cast<unsigned>(*bankingDimensionOpt)}
-            : SmallVector<unsigned>{},
-        memrefRank, shape);
+    auto bankingDimension =
+        getSpecifiedOrDefaultBankingDim(bankingDimensionOpt, memrefRank, shape);
 
     auto currFactorDim =
         resolveBankingAttributes(originalMem, bankingFactor, bankingDimension);
@@ -531,11 +529,8 @@ struct BankAffineStorePattern
     int64_t memrefRank = originalMemRefType.getRank();
     ArrayRef<int64_t> shape = originalMemRefType.getShape();
 
-    auto bankingDimension = getSpecifiedOrDefaultBankingDim(
-        bankingDimensionOpt.has_value()
-            ? SmallVector<unsigned>{static_cast<unsigned>(*bankingDimensionOpt)}
-            : SmallVector<unsigned>{},
-        memrefRank, shape);
+    auto bankingDimension =
+        getSpecifiedOrDefaultBankingDim(bankingDimensionOpt, memrefRank, shape);
 
     auto currFactorDim =
         resolveBankingAttributes(originalMem, bankingFactor, bankingDimension);
@@ -724,19 +719,23 @@ void MemoryBankingPass::runOnOperation() {
     return;
   }
 
-  getOperation().walk([&](mlir::affine::AffineParallelOp parOp) {
-    DenseSet<Value> memrefsInPar = collectMemRefs(parOp);
-
-    for (auto memrefVal : memrefsInPar) {
-      auto [it, inserted] =
-          memoryToBanks.insert(std::make_pair(memrefVal, SmallVector<Value>{}));
-      if (inserted)
-        it->second = createBanks(memrefVal, bankingFactors, bankingDimensions);
-    }
-  });
-
   // Iterate over all banking factors and dimensions in a single pass
   for (size_t i = 0; i < bankingFactors.size(); ++i) {
+    getOperation().walk([&](mlir::affine::AffineParallelOp parOp) {
+      DenseSet<Value> memrefsInPar = collectMemRefs(parOp);
+
+      for (auto memrefVal : memrefsInPar) {
+        auto [it, inserted] = memoryToBanks.insert(
+            std::make_pair(memrefVal, SmallVector<Value>{}));
+        if (inserted)
+          it->second =
+              createBanks(memrefVal, bankingFactors[i],
+                          bankingDimensions.size() > i
+                              ? std::optional<int>(bankingDimensions[i])
+                              : std::nullopt);
+      }
+    });
+
     unsigned factor = bankingFactors[i];
     std::optional<int> dimensionOpt =
         (i < bankingDimensions.size())
