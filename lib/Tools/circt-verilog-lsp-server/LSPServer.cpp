@@ -44,6 +44,15 @@ struct LSPServer {
   void onDocumentDidChange(const DidChangeTextDocumentParams &params);
 
   //===--------------------------------------------------------------------===//
+  // Definitions and References
+  //===--------------------------------------------------------------------===//
+
+  void onGoToDefinition(const TextDocumentPositionParams &params,
+                        Callback<std::vector<Location>> reply);
+  void onReference(const ReferenceParams &params,
+                   Callback<std::vector<Location>> reply);
+
+  //===--------------------------------------------------------------------===//
   // Fields
   //===--------------------------------------------------------------------===//
 
@@ -68,12 +77,19 @@ void LSPServer::onInitialize(const InitializeParams &params,
                              Callback<llvm::json::Value> reply) {
   // Send a response with the capabilities of this server.
   llvm::json::Object serverCaps{
-      {"textDocumentSync",
-       llvm::json::Object{
-           {"openClose", true},
-           {"change", (int)TextDocumentSyncKind::Incremental},
-           {"save", true},
-       }}};
+      {
+          "textDocumentSync",
+          llvm::json::Object{
+              {"openClose", true},
+              {"change", (int)TextDocumentSyncKind::Incremental},
+              {"save", true},
+
+          },
+
+      },
+      {"definitionProvider", true},
+      {"referencesProvider", true},
+  };
 
   llvm::json::Object result{
       {{"serverInfo", llvm::json::Object{{"name", "circt-verilog-lsp-server"},
@@ -125,6 +141,24 @@ void LSPServer::onDocumentDidChange(const DidChangeTextDocumentParams &params) {
 }
 
 //===----------------------------------------------------------------------===//
+// Definitions and References
+//===----------------------------------------------------------------------===//
+
+void LSPServer::onGoToDefinition(const TextDocumentPositionParams &params,
+                                 Callback<std::vector<Location>> reply) {
+  std::vector<Location> locations;
+  server.getLocationsOf(params.textDocument.uri, params.position, locations);
+  reply(std::move(locations));
+}
+
+void LSPServer::onReference(const ReferenceParams &params,
+                            Callback<std::vector<Location>> reply) {
+  std::vector<Location> locations;
+  server.findReferencesOf(params.textDocument.uri, params.position, locations);
+  reply(std::move(locations));
+}
+
+//===----------------------------------------------------------------------===//
 // Entry Point
 //===----------------------------------------------------------------------===//
 
@@ -146,6 +180,12 @@ LogicalResult circt::lsp::runVerilogLSPServer(VerilogServer &server,
                               &LSPServer::onDocumentDidClose);
   messageHandler.notification("textDocument/didChange", &lspServer,
                               &LSPServer::onDocumentDidChange);
+
+  // Definitions and References
+  messageHandler.method("textDocument/definition", &lspServer,
+                        &LSPServer::onGoToDefinition);
+  messageHandler.method("textDocument/references", &lspServer,
+                        &LSPServer::onReference);
 
   // Diagnostics
   lspServer.publishDiagnostics =

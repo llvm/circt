@@ -23,6 +23,8 @@
 namespace mlir {
 namespace lsp {
 struct Diagnostic;
+struct Position;
+struct Location;
 struct TextDocumentContentChangeEvent;
 class URIForFile;
 } // namespace lsp
@@ -59,6 +61,14 @@ public:
   /// document, or std::nullopt if the uri did not have a corresponding document
   /// within the server.
   std::optional<int64_t> removeDocument(const URIForFile &uri);
+
+  /// Return the locations of the object pointed at by the given position.
+  void getLocationsOf(const URIForFile &uri, const mlir::lsp::Position &defPos,
+                      std::vector<mlir::lsp::Location> &locations);
+
+  /// Find all references of the object pointed at by the given position.
+  void findReferencesOf(const URIForFile &uri, const mlir::lsp::Position &pos,
+                        std::vector<mlir::lsp::Location> &references);
 
 private:
   struct Impl;
