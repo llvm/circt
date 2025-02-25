@@ -560,8 +560,13 @@ void VerilogIndex::initialize(slang::ast::Compilation &compilation) {
 void VerilogIndex::parseSourceLocationOnLine(StringRef toParse) {
   StringRef filePath, line, column;
   bool first = true;
+  // columns := num(,num)*
+  // line := num
+  // lineCols := line `:` columns | line `:` `{` columns `}`+
+  // location := filePath `:` lineCols+
   for (auto cur : llvm::split(toParse, ", ")) {
     auto sep = llvm::split(cur, ":");
+
     if (std::distance(sep.begin(), sep.end()) != 3)
       continue;
 
@@ -573,23 +578,24 @@ void VerilogIndex::parseSourceLocationOnLine(StringRef toParse) {
       filePath = *it;
       addFile = true;
     }
+
     line = *(++it);
     column = *(++it);
     uint32_t lineInt;
     if (line.getAsInteger(10, lineInt))
       continue;
 
-    SmallVector<std::tuple<StringRef, const char *, const char *>> columns;
+    SmallVector<std::tuple<StringRef, StringRef, StringRef>> columns;
     if (column.starts_with('{')) {
-      const char *start = addFile ? filePath.data() : line.data();
+      StringRef start = addFile ? filePath : line;
       for (auto str : llvm::split(column.drop_back().drop_front(), ',')) {
         columns.push_back(
-            std::make_tuple(str, start, str.drop_front(str.size()).data()));
-        start = str.drop_front(str.size()).data();
+            std::make_tuple(str, start, str.drop_front(str.size())));
+        start = str.drop_front(str.size());
       }
     } else {
-      columns.push_back(std::make_tuple(
-          column, addFile ? filePath.data() : line.data(), column.end()));
+      columns.push_back(
+          std::make_tuple(column, addFile ? filePath : line, column.end()));
     }
     for (auto [column, start, end] : columns) {
       uint32_t columnInt;
@@ -598,7 +604,7 @@ void VerilogIndex::parseSourceLocationOnLine(StringRef toParse) {
       auto loc =
           mlir::FileLineColRange::get(&mlirContext, filePath, lineInt - 1,
                                       columnInt - 1, lineInt - 1, columnInt);
-      intervalMap.insert(start, end, loc);
+      intervalMap.insert(start.data(), end.data(), loc);
     }
   }
 }
