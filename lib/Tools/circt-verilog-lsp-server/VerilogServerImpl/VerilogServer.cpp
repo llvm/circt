@@ -289,7 +289,7 @@ private:
   VerilogIndex index;
 
   // The URI of the document.
-  const mlir::lsp::URIForFile &uri;
+  mlir::lsp::URIForFile uri;
 };
 
 } // namespace
