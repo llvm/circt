@@ -586,8 +586,10 @@ void VerilogTextFile::findReferencesOf(
   document->findReferencesOf(uri, pos, references);
 }
 
-struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
-  IndexVisitor(VerilogIndex &index) : index(index) {}
+namespace {
+// Index the AST to find symbol uses and definitions.
+struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
+  VerilogIndexer(VerilogIndex &index) : index(index) {}
   VerilogIndex &index;
 
   void insertSymbolUse(const slang::ast::Symbol *symbol,
@@ -647,10 +649,11 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
   template <typename T>
   void visitInvalid(const T &t) {}
 };
+} // namespace
 
 void VerilogIndex::initialize(slang::ast::Compilation &compilation) {
   const auto &root = compilation.getRoot();
-  IndexVisitor visitor(*this);
+  VerilogIndexer visitor(*this);
   for (auto *inst : root.topInstances) {
     // Visit the body of the instance.
     inst->body.visit(visitor);
@@ -660,6 +663,7 @@ void VerilogIndex::initialize(slang::ast::Compilation &compilation) {
       insertSymbolUse(symbol);
   }
 
+  // Parse the source location from the main file.
   parseSourceLocation();
 }
 
