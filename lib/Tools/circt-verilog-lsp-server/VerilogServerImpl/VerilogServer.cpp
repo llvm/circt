@@ -103,6 +103,7 @@ public:
 private:
   /// Parse source location in the file.
   void parseSourceLocation();
+  void parseSourceLocationOnLine(StringRef line);
 
   MapT intervalMap;
   /// An allocator for the interval map.
@@ -556,13 +557,59 @@ void VerilogIndex::initialize(slang::ast::Compilation &compilation) {
   parseSourceLocation();
 }
 
+void VerilogIndex::parseSourceLocationOnLine(StringRef toParse) {
+  StringRef filePath, line, column;
+  bool first = true;
+  for (auto cur : llvm::split(toParse, ", ")) {
+    auto sep = llvm::split(cur, ":");
+    if (std::distance(sep.begin(), sep.end()) != 3)
+      continue;
+    bool addFile = first;
+    first = false;
+
+    auto it = sep.begin();
+    if (llvm::any_of(*it, [](char c) { return c != ' '; })) {
+      filePath = *it;
+      addFile = true;
+    }
+    line = *(++it);
+    column = *(++it);
+    uint32_t lineInt;
+    if (line.getAsInteger(10, lineInt))
+      continue;
+
+    SmallVector<std::tuple<StringRef, const char *, const char *>> columns;
+    if (column.starts_with('{')) {
+      const char *start = addFile ? filePath.data() : line.data();
+      for (auto str : llvm::split(column.drop_back().drop_front(), ',')) {
+        columns.push_back(
+            std::make_tuple(str, start, str.drop_front(str.size()).data()));
+        start = str.drop_front(str.size()).data();
+      }
+    } else {
+      columns.push_back(std::make_tuple(
+          column, addFile ? filePath.data() : line.data(), column.end()));
+    }
+    for (auto [column, start, end] : columns) {
+      uint32_t columnInt;
+      if (column.getAsInteger(10, columnInt))
+        continue;
+      auto loc =
+          mlir::FileLineColRange::get(&mlirContext, filePath, lineInt - 1,
+                                      columnInt - 1, lineInt - 1, columnInt);
+      intervalMap.insert(start, end, loc);
+    }
+  }
+}
+
 void VerilogIndex::parseSourceLocation() {
   auto &sourceMgr = getDocument().getSourceMgr();
   auto *getMainBuffer = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
   StringRef text(getMainBuffer->getBufferStart(),
                  getMainBuffer->getBufferSize());
+
   while (true) {
-    // HACK: This is bad.
+    // Find the source location from the text.
     StringRef start = "// @[";
     auto loc = text.find(start);
     if (loc == StringRef::npos)
@@ -573,48 +620,7 @@ void VerilogIndex::parseSourceLocation() {
     if (end == StringRef::npos)
       break;
     auto toParse = text.take_front(end);
-    StringRef filePath;
-    StringRef line;
-    StringRef column;
-    bool first = true;
-    for (auto cur : llvm::split(toParse, ", ")) {
-      auto sep = llvm::split(cur, ":");
-      if (std::distance(sep.begin(), sep.end()) != 3)
-        continue;
-      bool addFile = first;
-      first = false;
-
-      auto it = sep.begin();
-      if (llvm::any_of(*it, [](char c) { return c != ' '; })) {
-        filePath = *it;
-        addFile = true;
-      }
-      line = *(++it);
-      column = *(++it);
-      uint32_t lineInt;
-      if (line.getAsInteger(10, lineInt))
-        continue;
-      SmallVector<std::tuple<StringRef, const char *, const char *>> columns;
-      if (column.starts_with('{')) {
-        const char *start = addFile ? filePath.data() : line.data();
-        for (auto str : llvm::split(column.drop_back().drop_front(), ',')) {
-          columns.push_back(
-              std::make_tuple(str, start, str.drop_front(str.size()).data()));
-          start = str.drop_front(str.size()).data();
-        }
-      } else
-        columns.push_back(std::make_tuple(
-            column, addFile ? filePath.data() : line.data(), column.end()));
-      for (auto [column, start, end] : columns) {
-        uint32_t columnInt;
-        if (column.getAsInteger(10, columnInt))
-          continue;
-        mlir::FileLineColRange loc =
-            mlir::FileLineColRange::get(&mlirContext, filePath, lineInt - 1,
-                                        columnInt - 1, lineInt - 1, columnInt);
-        intervalMap.insert(start, end, loc);
-      }
-    }
+    parseSourceLocationOnLine(toParse);
   }
 }
 
