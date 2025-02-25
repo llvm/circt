@@ -21,6 +21,9 @@ import typing
 MagicNumber = 0x207D98E5_E5100E51  # random + ESI__ESI
 VersionNumber = 0  # Version 0: format subject to change
 
+IndirectionMagicNumber = 0x312bf0cc_E5100E51  # random + ESI__ESI
+IndirectionVersionNumber = 0  # Version 0: format subject to change
+
 
 class ESI_Manifest_ROM(Module):
   """Module which will be created later by CIRCT which will contain the
@@ -255,6 +258,112 @@ class ChannelMMIO(esi.ServiceImplementation):
         esi.MMIOReadWriteCmdType).wrap(client_cmd, cmd_valid)
     cmd_ready_wire.assign(client_addr_ready)
     return sel_bits, client_addr_chan
+
+
+class MMIOIndirection(Module):
+  """Some platforms do not support MMIO space greater than a certain size (e.g.
+  Vitis 2022's limit is 4k). This module implements a level of indirection to
+  provide access to a full 32-bit address space.
+
+  MMIO addresses:
+    - 0x0:  0 constant
+    - 0x8:  64 bit ESI magic number for Indirect MMIO (0x312bf0cc_E5100E51)
+    - 0x10: Version number for Indirect MMIO (0)
+    - 0x18: Location of read/write in the virtual MMIO space.
+    - 0x20: A read from this location will initiate a read in the virtual MMIO
+            space specified by the address stored in 0x18 and return the result.
+            A write to this location will initiate a write into the virtual MMIO
+            space to the virtual address specified in 0x18.
+  """
+  clk = Clock()
+  rst = Reset()
+
+  upstream = Input(esi.MMIO.read_write.type)
+  downstream = Output(esi.MMIO.read_write.type)
+
+  @generator
+  def build(ports):
+    # This implementation assumes there is only one outstanding upstream MMIO
+    # transaction in flight at once. TODO: enforce this or make it more robust.
+
+    reg_bits = 8
+    location_reg = UInt(reg_bits)(0x18)
+    indirect_mmio_reg = UInt(reg_bits)(0x20)
+
+    # Set up the upstream MMIO interface. Capture last upstream command in a
+    # mailbox which never empties to give access to the last command for all
+    # time.
+    upstream_resp_chan_wire = Wire(Channel(esi.MMIODataType))
+    upstream_cmd_chan = ports.upstream.unpack(
+        data=upstream_resp_chan_wire)["cmd"]
+    upstream_cmd_ready = Wire(Bits(1))
+    upstream_mailbox = esi.Mailbox(esi.MMIOReadWriteCmdType)(
+        instance_name="upstream_cmd_mailbox",
+        clk=ports.clk,
+        rst=ports.rst,
+        input=upstream_cmd_chan)
+    upstream_mailbox.output.unwrap(Bits(1)(0))
+    phys_loc = upstream_mailbox.data.offset.as_uint(reg_bits)
+
+    # Set up the downstream MMIO interface.
+    upstream_resp_ready_wire = Wire(Bits(1))
+    downstream_cmd_chan_wire = Wire(Channel(esi.MMIOReadWriteCmdType))
+    ports.downstream, froms = esi.MMIO.read_write.type.pack(
+        cmd=downstream_cmd_chan_wire)
+    downstream_data_chan = froms["data"]
+    downstream_ready = upstream_resp_ready_wire
+    downstream_data, downstream_data_valid = downstream_data_chan.unwrap(
+        downstream_ready)
+
+    # Capture the address into the virtual MMIO space when a write to the
+    # location register occurs.
+    write_virt_address = upstream_mailbox.valid & upstream_mailbox.data.write & (
+        phys_loc == location_reg)
+    virt_address = upstream_mailbox.data.data.as_uint(32).reg(
+        name="virt_address",
+        clk=ports.clk,
+        ce=write_virt_address,
+    )
+
+    # Build the command into the virtual space.
+    virt_cmd = esi.MMIOReadWriteCmdType({
+        "write": upstream_mailbox.data.write,
+        "offset": virt_address,
+        "data": upstream_mailbox.data.data
+    })
+    downstream_cmd_chan, downstream_data_chan_ready = Channel(
+        esi.MMIOReadWriteCmdType).wrap(
+            virt_cmd, upstream_mailbox.valid & (phys_loc == indirect_mmio_reg))
+    downstream_cmd_chan_wire.assign(downstream_cmd_chan)
+
+    # Build the pysical MMIO register space.
+    upstream_data_resp_array = Array(Bits(64), 5)([
+        0x0,  # 0x0
+        IndirectionMagicNumber,  # 0x8
+        IndirectionVersionNumber,  # 0x10
+        virt_address.as_bits(64),  # 0x18
+        downstream_data,  # 0x20
+    ])
+    upstream_addr_words = NamedWire(upstream_mailbox.data.offset.as_bits()[3:6],
+                                    "upstream_addr_words")
+    upstream_resp_data = upstream_data_resp_array[upstream_addr_words]
+    upstream_resp_valid = Mux(
+        phys_loc == indirect_mmio_reg,
+        downstream_data_valid,
+        upstream_mailbox.valid,
+    )
+    upstream_cmd_ready.assign(
+        Mux(
+            phys_loc == indirect_mmio_reg,
+            downstream_data_chan_ready,
+            Bits(1)(1),
+        ))
+
+    # Wrap the response.
+    upstream_resp_chan, upstream_resp_ready = Channel(esi.MMIODataType).wrap(
+        upstream_resp_data, upstream_resp_valid)
+    upstream_resp_ready_wire.assign(upstream_resp_ready)
+    upstream_resp_chan_wire.assign(upstream_resp_chan)
 
 
 @modparams
