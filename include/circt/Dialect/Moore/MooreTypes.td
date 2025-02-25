@@ -439,6 +439,12 @@ def AnyUnionType : MooreType<
   "packed or unpacked union type",
   "moore::UnpackedType">;
 
+def AnyIndexedUnpackedArrayType : MooreType<
+  Or<[UnpackedArrayType.predicate, OpenUnpackedArrayType.predicate, QueueType.predicate]>, 
+  "unpacked array type except associative array type",
+  "moore::UnpackedType">;
+
+
 /// A ref type with the specified constraints on the nested type.
 class SpecificRefType<Type type> : ConfinedType<RefType,
   [SubstLeaves<"$_self", "llvm::cast<moore::RefType>($_self).getNestedType()",

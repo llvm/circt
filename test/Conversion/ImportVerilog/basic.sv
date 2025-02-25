@@ -707,6 +707,16 @@ module Expressions;
   logic [47:0] vec_5;
   // CHECK: %arr = moore.variable : <uarray<3 x uarray<6 x i4>>>
   bit [4:1] arr [1:3][2:7];
+  
+  // CHECK: [[TMP0:%.+]] = moore.string_constant "hello" : i40
+  // CHECK: [[TMP1:%.+]] = moore.conversion [[TMP0]] : !moore.i40 -> !moore.string
+  // CHECK: [[TMP2:%.+]] = moore.string_constant "sad" : i24
+  // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.i24 -> !moore.string
+  // CHECK: [[TMP4:%.+]] = moore.string_constant "world" : i40
+  // CHECK: [[TMP5:%.+]] = moore.conversion [[TMP4]] : !moore.i40 -> !moore.string
+  // CHECK: [[TMP6:%.+]] = moore.unpacked_array_concat [[TMP1]], [[TMP3]], [[TMP5]] : (!moore.string, !moore.string, !moore.string) -> open_uarray<string>
+  // CHECK: %vec_s = moore.variable [[TMP6]] : <open_uarray<string>>
+  string vec_s [] = { "hello", "sad", "world" };
 
   logic arr_1 [63:0];
   // CHECK: %struct0 = moore.variable : <struct<{a: i32, b: i32}>>
@@ -993,6 +1003,7 @@ module Expressions;
     // CHECK: moore.extract_ref %vec_1 from 11 : <l32> -> <l3>
     vec_1[15-:3] = y;
 
+    vec_s = { "hello", "sad", "world" };
     //===------------------------------------------------------------------===//
     // Unary operators
 
