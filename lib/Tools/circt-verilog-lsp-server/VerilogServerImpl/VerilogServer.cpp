@@ -18,6 +18,7 @@
 #include "circt/Support/LLVM.h"
 #include "circt/Tools/circt-verilog-lsp-server/CirctVerilogLspServerMain.h"
 #include "mlir/IR/Attributes.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Location.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/Tools/lsp-server-support/Logging.h"
@@ -35,6 +36,7 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SMLoc.h"
@@ -99,6 +101,8 @@ public:
                         llvm::IntervalMapImpl::NodeSizer<
                             const char *, VerilogIndexSymbol>::LeafSize,
                         llvm::IntervalMapHalfOpenInfo<const char *>>;
+
+  const MapT &getIntervalMap() { return intervalMap; }
 
 private:
   /// Parse source location in the file.
@@ -205,7 +209,8 @@ private:
 /// This class represents all of the information pertaining to a specific
 /// Verilog document.
 class LSPDiagnosticClient;
-struct VerilogDocument {
+class VerilogDocument {
+public:
   VerilogDocument(VerilogServerContext &globalContext,
                   const mlir::lsp::URIForFile &uri, StringRef contents,
                   std::vector<mlir::lsp::Diagnostic> &diagnostics);
@@ -229,10 +234,67 @@ struct VerilogDocument {
   // Return SMLoc from slang location.
   llvm::SMLoc getSMLoc(slang::SourceLocation loc);
 
+  //===--------------------------------------------------------------------===//
+  // Definitions and References
+  //===--------------------------------------------------------------------===//
+
+  void getLocationsOf(const mlir::lsp::URIForFile &uri,
+                      const mlir::lsp::Position &defPos,
+                      std::vector<mlir::lsp::Location> &locations);
+
+  void findReferencesOf(const mlir::lsp::URIForFile &uri,
+                        const mlir::lsp::Position &pos,
+                        std::vector<mlir::lsp::Location> &references);
+
 private:
+  std::optional<std::pair<uint32_t, SmallString<128>>>
+  getOrOpenFile(StringRef filePath) {
+    auto fileInfo = filePathMap.find(filePath);
+    if (fileInfo != filePathMap.end())
+      return fileInfo->second;
+
+    auto check = [&](StringRef path)
+        -> std::optional<std::pair<uint32_t, SmallString<128>>> {
+      if (llvm::sys::fs::exists(path)) {
+        auto memoryBuffer = llvm::MemoryBuffer::getFile(path);
+        if (!memoryBuffer) {
+          return std::nullopt;
+        }
+        auto id =
+            sourceMgr.AddNewSourceBuffer(std::move(*memoryBuffer), SMLoc());
+
+        fileInfo =
+            filePathMap
+                .insert(std::make_pair(filePath, std::make_pair(id, path)))
+                .first;
+
+        return fileInfo->second;
+      }
+      return std::nullopt;
+    };
+
+    if (llvm::sys::path::is_absolute(filePath))
+      return check(filePath);
+
+    for (auto &libRoot : globalContext.options.extraSourceLocationDirs) {
+      SmallString<128> lib(libRoot);
+      llvm::sys::path::append(lib, filePath);
+      if (auto fileInfo = check(lib))
+        return fileInfo;
+    }
+
+    return std::nullopt;
+  }
+
+  VerilogServerContext &globalContext;
+
   // A map from slang buffer ID to the corresponding buffer ID in the LLVM
   // source manager.
   llvm::SmallDenseMap<uint32_t, uint32_t> bufferIDMap;
+
+  // A map from a file name to the corresponding buffer ID in the LLVM
+  // source manager.
+  llvm::StringMap<std::pair<uint32_t, SmallString<128>>> filePathMap;
 
   // The compilation result.
   FailureOr<std::unique_ptr<slang::ast::Compilation>> compilation;
@@ -292,7 +354,7 @@ void LSPDiagnosticClient::report(const slang::ReportedDiagnostic &slangDiag) {
 VerilogDocument::VerilogDocument(
     VerilogServerContext &context, const mlir::lsp::URIForFile &uri,
     StringRef contents, std::vector<mlir::lsp::Diagnostic> &diagnostics)
-    : uri(uri), index(*this) {
+    : globalContext(context), index(*this), uri(uri) {
   unsigned int bufferId;
   if (auto memBufferOwn =
           llvm::MemoryBuffer::getMemBufferCopy(contents, uri.file())) {
@@ -695,4 +757,51 @@ void VerilogIndex::insertSymbolUse(const slang::ast::Symbol *symbol,
 
   if (startLoc != endLoc && !intervalMap.overlaps(startLoc, endLoc))
     intervalMap.insert(startLoc, endLoc, symbol);
+}
+
+//===----------------------------------------------------------------------===//
+// VerilogDocument: Definitions and References
+//===----------------------------------------------------------------------===//
+
+static mlir::lsp::Range getRange(const mlir::FileLineColRange &fileLoc) {
+  return mlir::lsp::Range(
+      mlir::lsp::Position(fileLoc.getStartLine(), fileLoc.getStartColumn()),
+      mlir::lsp::Position(fileLoc.getEndLine(), fileLoc.getEndColumn()));
+}
+
+void VerilogDocument::getLocationsOf(
+    const mlir::lsp::URIForFile &uri, const mlir::lsp::Position &defPos,
+    std::vector<mlir::lsp::Location> &locations) {
+  SMLoc posLoc = defPos.getAsSMLoc(sourceMgr);
+  const auto &intervalMap = index.getIntervalMap();
+  auto it = intervalMap.find(posLoc.getPointer());
+  if (it == intervalMap.end())
+    return;
+
+  auto element = it.value();
+  if (auto attr = dyn_cast<Attribute>(element)) {
+    // Check if the attribute is a FileLineColRange.
+    if (auto fileLoc = dyn_cast<mlir::FileLineColRange>(attr)) {
+      // Return URI for the file.
+      auto fileInfo = getOrOpenFile(fileLoc.getFilename().getValue());
+      if (!fileInfo)
+        return;
+      const auto &[bufferId, filePath] = *fileInfo;
+      auto uri = mlir::lsp::URIForFile::fromFile(filePath);
+      if (auto e = uri.takeError()) {
+        circt::lsp::Logger::error(
+            "VerilogDocument::getLocationsOf interval map loc error");
+        return;
+      }
+
+      mlir::lsp::Location loc(uri.get(), getRange(fileLoc));
+      locations.push_back(loc);
+    }
+
+    return;
+  }
+
+  // If the element is verilog symbol, return the definition of the symbol.
+  const auto *symbol = cast<const slang::ast::Symbol *>(element);
+  locations.push_back(getLspLocation(symbol->location));
 }
