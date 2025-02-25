@@ -29,11 +29,16 @@ circuit PlusArgTest:
     ; CHECK-NEXT:   sv.assign [[RESULT_BAR_REG]], %z_i32 {sv.attributes = [#sv.attribute<"This dummy assignment exists to avoid undriven lint warnings (e.g., Verilator UNDRIVEN).", emitAsComment>]} : i32
     ; CHECK-NEXT:   sv.assign [[FOUND_BAR_REG]], %false : i1
     ; CHECK-NEXT: } else {
-    ; CHECK-NEXT:   sv.initial {
-    ; CHECK-NEXT:     [[FORMAT_BAR:%.+]] = sv.constantStr "foo=%d"
-    ; CHECK-NEXT:     [[TMP_BAR:%.+]] = sv.system "value$plusargs"([[FORMAT_BAR]], [[RESULT_BAR_REG]]) : (!hw.string, !hw.inout<i32>) -> i32
-    ; CHECK-NEXT:     [[FOUND_BAR_VAL:%.+]] = comb.icmp bin ne [[TMP_BAR]], %c0_i32 : i32
-    ; CHECK-NEXT:     sv.bpassign [[FOUND_BAR_REG]], [[FOUND_BAR_VAL]] : i1
+    ; CHECK-NEXT:   sv.ifdef @UPF_SIMULATION {
+    ; CHECK-NEXT:     sv.assign [[RESULT_BAR_REG]], %c0_i32 {sv.attributes = [#sv.attribute<"This dummy assignment exists to avoid undriven lint warnings (e.g., Verilator UNDRIVEN).", emitAsComment>]} : i32
+    ; CHECK-NEXT:     sv.assign [[FOUND_BAR_REG]], %false : i1
+    ; CHECK-NEXT:   } else {
+    ; CHECK-NEXT:     sv.initial {
+    ; CHECK-NEXT:       [[FORMAT_BAR:%.+]] = sv.constantStr "foo=%d"
+    ; CHECK-NEXT:       [[TMP_BAR:%.+]] = sv.system "value$plusargs"([[FORMAT_BAR]], [[RESULT_BAR_REG]]) : (!hw.string, !hw.inout<i32>) -> i32
+    ; CHECK-NEXT:       [[FOUND_BAR_VAL:%.+]] = comb.icmp bin ne [[TMP_BAR]], %c0_i32 : i32
+    ; CHECK-NEXT:       sv.bpassign [[FOUND_BAR_REG]], [[FOUND_BAR_VAL]] : i1
+    ; CHECK-NEXT:     }
     ; CHECK-NEXT:   }
     ; CHECK-NEXT: }
     ; CHECK-NEXT: [[FOUND_BAR:%.+]] = sv.read_inout [[FOUND_BAR_REG]] : !hw.inout<i1>
