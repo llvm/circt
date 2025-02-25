@@ -77,12 +77,19 @@ void LSPServer::onInitialize(const InitializeParams &params,
                              Callback<llvm::json::Value> reply) {
   // Send a response with the capabilities of this server.
   llvm::json::Object serverCaps{
-      {"textDocumentSync",
-       llvm::json::Object{
-           {"openClose", true},
-           {"change", (int)TextDocumentSyncKind::Incremental},
-           {"save", true},
-       }}};
+      {
+          "textDocumentSync",
+          llvm::json::Object{
+              {"openClose", true},
+              {"change", (int)TextDocumentSyncKind::Incremental},
+              {"save", true},
+
+          },
+
+      },
+      {"definitionProvider", true},
+      {"referencesProvider", true},
+  };
 
   llvm::json::Object result{
       {{"serverInfo", llvm::json::Object{{"name", "circt-verilog-lsp-server"},
@@ -150,7 +157,6 @@ void LSPServer::onReference(const ReferenceParams &params,
   server.findReferencesOf(params.textDocument.uri, params.position, locations);
   reply(std::move(locations));
 }
-
 
 //===----------------------------------------------------------------------===//
 // Entry Point

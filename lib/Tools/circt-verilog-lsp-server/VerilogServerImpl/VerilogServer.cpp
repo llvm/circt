@@ -91,7 +91,8 @@ public:
 
   /// Register a reference to a symbol `symbol` from `from`.
   void insertSymbolUse(const slang::ast::Symbol *symbol,
-                       slang::SourceRange from = slang::SourceRange(),
+                       slang::SourceRange from, bool isDefinition = false);
+  void insertSymbolUse(const slang::ast::Symbol *symbol,
                        bool isDefinition = false);
 
   VerilogDocument &getDocument() { return document; }
@@ -362,7 +363,8 @@ VerilogDocument::VerilogDocument(
       driver.sourceManager.assignText(uri.file(), memBuffer->getBuffer());
   driver.buffers.push_back(slangBuffer);
   bufferIDMap[slangBuffer.id.getId()] = bufferId;
-
+  circt::lsp::Logger::error("bufferID: " +
+                            std::to_string(slangBuffer.id.getId()));
   auto diagClient = std::make_shared<LSPDiagnosticClient>(*this, diagnostics);
   driver.diagEngine.addClient(diagClient);
 
@@ -373,8 +375,14 @@ VerilogDocument::VerilogDocument(
   }
 
   compilation = driver.createCompilation();
+  if (failed(compilation)) {
+    return;
+  }
+
   for (auto &diag : (*compilation)->getAllDiagnostics())
     driver.diagEngine.issue(diag);
+
+  index.initialize(**compilation);
 }
 
 mlir::lsp::Location
@@ -416,6 +424,8 @@ VerilogDocument::getLspLocation(slang::SourceRange range) const {
 
 llvm::SMLoc VerilogDocument::getSMLoc(slang::SourceLocation loc) {
   auto bufferID = loc.buffer().getId();
+  circt::lsp::Logger::error("bufferID: " + std::to_string(bufferID));
+
   // Check if the source is already opened by LLVM source manager.
   auto bufferIDMapIt = bufferIDMap.find(bufferID);
   if (bufferIDMapIt == bufferIDMap.end()) {
@@ -423,8 +433,9 @@ llvm::SMLoc VerilogDocument::getSMLoc(slang::SourceLocation loc) {
     auto path = getSlangSourceManager().getFullPath(loc.buffer());
     auto memBuffer = llvm::MemoryBuffer::getFile(path.string());
     if (!memBuffer) {
-      circt::lsp::Logger::error("Failed to open file: " +
-                                memBuffer.getError().message());
+      circt::lsp::Logger::error(
+          "Failed to open file: " + path.filename().string() +
+          memBuffer.getError().message());
       return llvm::SMLoc();
     }
 
@@ -616,8 +627,8 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
 
   /// Handle assignment patterns.
   void visitInvalid(const slang::ast::Expression &expr) {
-    mlir::lsp::Logger::debug("visitInvalid: {}",
-                             slang::ast::toString(expr.kind));
+    // mlir::lsp::Logger::debug("visitInvalid: {}",
+    //                          slang::ast::toString(expr.kind));
   }
 
   void visitInvalid(const slang::ast::Statement &) {}
@@ -796,6 +807,7 @@ void circt::lsp::VerilogServer::findReferencesOf(
 
 void VerilogIndex::insertSymbolUse(const slang::ast::Symbol *symbol,
                                    slang::SourceRange from, bool isDefinition) {
+  assert(from.start().valid() && from.end().valid());
   const char *startLoc = getDocument().getSMLoc(from.start()).getPointer();
   const char *endLoc = getDocument().getSMLoc(from.end()).getPointer();
   if (!startLoc || !endLoc)
@@ -807,6 +819,14 @@ void VerilogIndex::insertSymbolUse(const slang::ast::Symbol *symbol,
     if (!isDefinition)
       references[symbol].push_back(from);
   }
+}
+void VerilogIndex::insertSymbolUse(const slang::ast::Symbol *symbol,
+                                   bool isDefinition) {
+  if (!symbol->location)
+    return;
+  auto size = symbol->name.size() ? symbol->name.size() : 1;
+  insertSymbolUse(
+      symbol, slang::SourceRange(symbol->location, symbol->location + size));
 }
 
 //===----------------------------------------------------------------------===//
