@@ -17,6 +17,8 @@
 
 #include "circt/Support/LLVM.h"
 #include "circt/Tools/circt-verilog-lsp-server/CirctVerilogLspServerMain.h"
+#include "mlir/IR/Attributes.h"
+#include "mlir/IR/Location.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/Tools/lsp-server-support/Logging.h"
 #include "mlir/Tools/lsp-server-support/Protocol.h"
@@ -29,10 +31,13 @@
 #include "slang/text/SourceLocation.h"
 #include "slang/text/SourceManager.h"
 #include "llvm/ADT/IntervalMap.h"
+#include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/SMLoc.h"
 #include "llvm/Support/SourceMgr.h"
 
 #include <memory>
@@ -70,7 +75,7 @@ struct VerilogServerContext {
 
 class VerilogDocument;
 using VerilogIndexSymbol =
-    llvm::PointerUnion<const slang::ast::Symbol *, LocationAttr>;
+    llvm::PointerUnion<const slang::ast::Symbol *, mlir::Attribute>;
 
 class VerilogIndex {
 public:
@@ -81,21 +86,24 @@ public:
   /// Initialize the index with the given compilation unit.
   void initialize(slang::ast::Compilation &compilation);
 
-  void insertSymbol(slang::ast::Symbol *symbol);
+  /// Register a reference to a symbol `symbol` from `from`.
+  void insertSymbolUse(const slang::ast::Symbol *symbol,
+                       slang::SourceRange from = slang::SourceRange());
 
   VerilogDocument &getDocument() { return document; }
 
   /// The type of interval map used to store source references. SMRange is
   /// half-open, so we also need to use a half-open interval map.
   using MapT =
-      llvm::IntervalMap<const char *, const VerilogIndexSymbol *,
+      llvm::IntervalMap<const char *, VerilogIndexSymbol,
                         llvm::IntervalMapImpl::NodeSizer<
-                            const char *, const VerilogIndexSymbol *>::LeafSize,
+                            const char *, VerilogIndexSymbol>::LeafSize,
                         llvm::IntervalMapHalfOpenInfo<const char *>>;
 
-  MapT &getIntervalMap() { return intervalMap; }
-
 private:
+  /// Parse source location in the file.
+  void parseSourceLocation();
+
   MapT intervalMap;
   /// An allocator for the interval map.
   MapT::Allocator allocator;
@@ -216,6 +224,9 @@ struct VerilogDocument {
 
   // Return LSP location from slang location.
   mlir::lsp::Location getLspLocation(slang::SourceLocation loc) const;
+
+  // Return SMLoc from slang location.
+  llvm::SMLoc getSMLoc(slang::SourceLocation loc);
 
 private:
   // A map from slang buffer ID to the corresponding buffer ID in the LLVM
@@ -350,6 +361,30 @@ VerilogDocument::getLspLocation(slang::SourceLocation loc) const {
   return mlir::lsp::Location();
 }
 
+llvm::SMLoc VerilogDocument::getSMLoc(slang::SourceLocation loc) {
+  auto bufferID = loc.buffer().getId();
+  // Check if the source is already opened by LLVM source manager.
+  auto bufferIDMapIt = bufferIDMap.find(bufferID);
+  if (bufferIDMapIt == bufferIDMap.end()) {
+    // If not, open the source file and add it to the LLVM source manager.
+    auto path = getSlangSourceManager().getFullPath(loc.buffer());
+    auto memBuffer = llvm::MemoryBuffer::getFile(path.string());
+    if (!memBuffer) {
+      circt::lsp::Logger::error("Failed to open file: " +
+                                memBuffer.getError().message());
+      return llvm::SMLoc();
+    }
+
+    auto id = sourceMgr.AddNewSourceBuffer(std::move(memBuffer.get()), SMLoc());
+    bufferIDMapIt =
+        bufferIDMap.insert({bufferID, static_cast<uint32_t>(id)}).first;
+  }
+
+  const auto *buffer = sourceMgr.getMemoryBuffer(bufferIDMapIt->second);
+
+  return llvm::SMLoc::getFromPointer(buffer->getBufferStart() + loc.offset());
+}
+
 namespace {} // namespace
 
 //===----------------------------------------------------------------------===//
@@ -427,7 +462,7 @@ void VerilogTextFile::initialize(
       std::make_unique<VerilogDocument>(context, uri, contents, diagnostics);
 }
 
-struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor> {
+struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
   IndexVisitor(VerilogIndex &index) : index(index) {}
   VerilogIndex &index;
 
@@ -502,16 +537,7 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor> {
 
   void insertDeclRef(const slang::ast::Symbol *sym, slang::SourceRange refLoc,
                      bool isDef = false, bool isAssign = false) {
-    const char *startLoc = getDocument().getSMLoc(refLoc.start()).getPointer();
-    const char *endLoc = index.document.getSMLoc(refLoc.end()).getPointer() + 1;
-    if (!startLoc || !endLoc)
-      return;
-    assert(startLoc && endLoc);
-
-    if (startLoc != endLoc &&
-        !index.getIntervalMap().overlaps(startLoc, endLoc)) {
-      index.getIntervalMap().insert(startLoc, endLoc, sym);
-    }
+    index.insertSymbolUse(sym, refLoc);
   };
 };
 
@@ -519,23 +545,77 @@ void VerilogIndex::initialize(slang::ast::Compilation &compilation) {
   const auto &root = compilation.getRoot();
   IndexVisitor visitor(*this);
   for (auto *inst : root.topInstances) {
+    // Visit the body of the instance.
     inst->body.visit(visitor);
-    auto &body = inst->body;
-    for (auto *symbol : body.getPortList()) {
-      auto startLoc = document.getSMLoc(symbol->location);
-      auto endLoc = SMLoc::getFromPointer(
-          document.getSMLoc(symbol->location).getPointer() +
-          symbol->name.size());
-      auto range = SMRange(startLoc, endLoc);
-      const char *startLoc2 = range.Start.getPointer();
-      const char *endLoc2 = range.End.getPointer();
-      if (!intervalMap.overlaps(startLoc2, endLoc2)) {
-        intervalMap.insert(startLoc2, endLoc2, symbol);
+
+    // Insert the symbols in the port list.
+    for (const auto *symbol : inst->body.getPortList())
+      insertSymbolUse(symbol);
+  }
+
+  parseSourceLocation();
+}
+
+void VerilogIndex::parseSourceLocation() {
+  auto &sourceMgr = getDocument().getSourceMgr();
+  auto *getMainBuffer = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
+  StringRef text(getMainBuffer->getBufferStart(),
+                 getMainBuffer->getBufferSize());
+  while (true) {
+    // HACK: This is bad.
+    StringRef start = "// @[";
+    auto loc = text.find(start);
+    if (loc == StringRef::npos)
+      break;
+
+    text = text.drop_front(loc + start.size());
+    auto end = text.find_first_of(']');
+    if (end == StringRef::npos)
+      break;
+    auto toParse = text.take_front(end);
+    StringRef filePath;
+    StringRef line;
+    StringRef column;
+    bool first = true;
+    for (auto cur : llvm::split(toParse, ", ")) {
+      auto sep = llvm::split(cur, ":");
+      if (std::distance(sep.begin(), sep.end()) != 3)
+        continue;
+      bool addFile = first;
+      first = false;
+
+      auto it = sep.begin();
+      if (llvm::any_of(*it, [](char c) { return c != ' '; })) {
+        filePath = *it;
+        addFile = true;
+      }
+      line = *(++it);
+      column = *(++it);
+      uint32_t lineInt;
+      if (line.getAsInteger(10, lineInt))
+        continue;
+      SmallVector<std::tuple<StringRef, const char *, const char *>> columns;
+      if (column.starts_with('{')) {
+        const char *start = addFile ? filePath.data() : line.data();
+        for (auto str : llvm::split(column.drop_back().drop_front(), ',')) {
+          columns.push_back(
+              std::make_tuple(str, start, str.drop_front(str.size()).data()));
+          start = str.drop_front(str.size()).data();
+        }
+      } else
+        columns.push_back(std::make_tuple(
+            column, addFile ? filePath.data() : line.data(), column.end()));
+      for (auto [column, start, end] : columns) {
+        uint32_t columnInt;
+        if (column.getAsInteger(10, columnInt))
+          continue;
+        mlir::FileLineColRange loc =
+            mlir::FileLineColRange::get(&mlirContext, filePath, lineInt - 1,
+                                        columnInt - 1, lineInt - 1, columnInt);
+        intervalMap.insert(start, end, loc);
       }
     }
   }
-
-  parseEmittedLoc();
 }
 
 //===----------------------------------------------------------------------===//
@@ -590,4 +670,16 @@ circt::lsp::VerilogServer::removeDocument(const URIForFile &uri) {
   int64_t version = it->second->getVersion();
   impl->files.erase(it);
   return version;
+}
+
+void VerilogIndex::insertSymbolUse(const slang::ast::Symbol *symbol,
+                                   slang::SourceRange from) {
+  const char *startLoc = getDocument().getSMLoc(from.start()).getPointer();
+  const char *endLoc = getDocument().getSMLoc(from.end()).getPointer();
+  if (!startLoc || !endLoc)
+    return;
+  assert(startLoc && endLoc);
+
+  if (startLoc != endLoc && !intervalMap.overlaps(startLoc, endLoc))
+    intervalMap.insert(startLoc, endLoc, symbol);
 }
