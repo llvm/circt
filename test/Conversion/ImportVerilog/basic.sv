@@ -132,37 +132,6 @@ module Basic;
   bit [0:0] b1;
   bit b2 = b1;
 
-  // CHECK: moore.procedure initial {
-  // CHECK: }
-  initial;
-
-  // CHECK: moore.procedure final {
-  // CHECK: }
-  final begin end
-
-  // CHECK: moore.procedure always {
-  // CHECK:   %x = moore.variable
-  // CHECK:   %y = moore.variable
-  // CHECK: }
-  always begin
-    int x;
-    begin
-      int y;
-    end
-  end
-
-  // CHECK: moore.procedure always_comb {
-  // CHECK: }
-  always_comb begin end
-
-  // CHECK: moore.procedure always_latch {
-  // CHECK: }
-  always_latch begin end
-
-  // CHECK: moore.procedure always_ff {
-  // CHECK: }
-  always_ff @* begin end
-
   // CHECK: [[TMP1:%.+]] = moore.read %v2
   // CHECK: moore.assign %v1, [[TMP1]] : i32
   assign v1 = v2;

@@ -117,6 +117,11 @@ struct CLOptions {
   cl::opt<bool> debugInfo{"g", cl::desc("Generate debug information"),
                           cl::cat(cat)};
 
+  cl::opt<bool> lowerAlwaysAtStarAsComb{
+      "always-at-star-as-comb",
+      cl::desc("Interpret `always @(*)` as `always_comb`"), cl::init(true),
+      cl::cat(cat)};
+
   //===--------------------------------------------------------------------===//
   // Include paths
   //===--------------------------------------------------------------------===//
@@ -357,6 +362,7 @@ static LogicalResult executeWithSources(MLIRContext *context,
   else if (opts.loweringMode == LoweringMode::OnlyParse)
     options.mode = ImportVerilogOptions::Mode::OnlyParse;
   options.debugInfo = opts.debugInfo;
+  options.lowerAlwaysAtStarAsComb = opts.lowerAlwaysAtStarAsComb;
 
   options.includeDirs = opts.includeDirs;
   options.includeSystemDirs = opts.includeSystemDirs;

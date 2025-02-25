@@ -505,17 +505,32 @@ struct ModuleVisitor : public BaseVisitor {
   }
 
   // Handle procedures.
-  LogicalResult visit(const slang::ast::ProceduralBlockSymbol &procNode) {
-    auto procOp = builder.create<moore::ProcedureOp>(
-        loc, convertProcedureKind(procNode.procedureKind));
+  LogicalResult convertProcedure(moore::ProcedureKind kind,
+                                 const slang::ast::Statement &body) {
+    auto procOp = builder.create<moore::ProcedureOp>(loc, kind);
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToEnd(&procOp.getBody().emplaceBlock());
     Context::ValueSymbolScope scope(context.valueSymbols);
-    if (failed(context.convertStatement(procNode.getBody())))
+    if (failed(context.convertStatement(body)))
       return failure();
     if (builder.getBlock())
       builder.create<moore::ReturnOp>(loc);
     return success();
+  }
+
+  LogicalResult visit(const slang::ast::ProceduralBlockSymbol &procNode) {
+    // Detect `always @(*) <stmt>` and convert to `always_comb <stmt>` if
+    // requested by the user.
+    if (context.options.lowerAlwaysAtStarAsComb) {
+      auto *stmt = procNode.getBody().as_if<slang::ast::TimedStatement>();
+      if (procNode.procedureKind == slang::ast::ProceduralBlockKind::Always &&
+          stmt &&
+          stmt->timing.kind == slang::ast::TimingControlKind::ImplicitEvent)
+        return convertProcedure(moore::ProcedureKind::AlwaysComb, stmt->stmt);
+    }
+
+    return convertProcedure(convertProcedureKind(procNode.procedureKind),
+                            procNode.getBody());
   }
 
   // Handle generate block.
