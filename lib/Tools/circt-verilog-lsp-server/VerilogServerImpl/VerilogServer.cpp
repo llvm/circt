@@ -43,6 +43,7 @@
 #include "llvm/Support/SMLoc.h"
 #include "llvm/Support/SourceMgr.h"
 
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
@@ -106,7 +107,7 @@ public:
                             const char *, VerilogIndexSymbol>::LeafSize,
                         llvm::IntervalMapHalfOpenInfo<const char *>>;
 
-  const MapT &getIntervalMap() { return intervalMap; }
+  MapT &getIntervalMap() { return intervalMap; }
 
   using ReferenceMap = SmallDenseMap<const slang::ast::Symbol *,
                                      SmallVector<slang::SourceRange>>;
@@ -589,32 +590,64 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
   IndexVisitor(VerilogIndex &index) : index(index) {}
   VerilogIndex &index;
 
-  void handleSymbol(const slang::ast::Symbol *symbol, slang::SourceRange range,
-                    bool isDefinition = false) {
-    assert(range.start().valid() && range.end().valid());
-    insertDeclRef(symbol, range, isDefinition);
+  void visit(const slang::ast::InstanceBodySymbol &body) {
+    inInstancePortConnection = false;
+    visitDefault(body);
   }
 
-  void handleSymbol(const slang::ast::Symbol *symbol,
-                    slang::SourceLocation location, bool isDefinition = false) {
+  void handleSymbol(const slang::ast::Symbol *symbol, slang::SourceRange range,
+                    bool isDef = false, bool isAssign = false) {
     if (symbol->name.empty())
       return;
-    handleSymbol(symbol,
-                 slang::SourceRange(location, location + symbol->name.length()),
-                 isDefinition);
+    assert(range.start().valid() && range.end().valid());
+    insertDeclRef(symbol, range, isDef, isAssign);
   }
 
-  void visit(const slang::ast::VariableDeclStatement &expr) {
-    handleSymbol(&expr.symbol, expr.sourceRange, /*isDefinition=*/true);
-    visitDefault(expr);
-  }
-
-  // Handle named values, such as references to declared variables.
-  void visit(const slang::ast::Expression &expr) {
+  // Handle references to the left-hand side of a parent assignment.
+  void visit(const slang::ast::LValueReferenceExpression &expr) {
     auto *symbol = expr.getSymbolReference(true);
     if (!symbol)
       return;
-    handleSymbol(symbol, expr.sourceRange, false);
+    handleSymbol(symbol, expr.sourceRange, false, false);
+    visitDefault(expr);
+  }
+  void visit(const slang::ast::NetSymbol &expr) {
+    handleSymbol(
+        &expr,
+        slang::SourceRange(expr.location, expr.location + expr.name.length()),
+        true, false);
+    visitDefault(expr);
+  }
+  void visit(const slang::ast::VariableSymbol &expr) {
+    handleSymbol(
+        &expr,
+        slang::SourceRange(expr.location, expr.location + expr.name.length()),
+        true, false);
+    visitDefault(expr);
+  }
+
+  void visit(const slang::ast::VariableDeclStatement &expr) {
+    handleSymbol(&expr.symbol, expr.sourceRange, true);
+    visitDefault(expr);
+  }
+
+  bool inInstancePortConnection = false;
+  void visit(const slang::ast::AssignmentExpression &assign) {
+    if (!inInstancePortConnection)
+      if (auto *left =
+              assign.left().as_if<slang::ast::NamedValueExpression>()) {
+        // addAssignment(left->getSymbolReference(true),
+        //               assign.sourceRange.start(), &assign);
+      }
+    visitDefault(assign);
+  }
+
+  // Handle named values, such as references to declared variables.
+  void visit(const slang::ast::NamedValueExpression &expr) {
+    auto *symbol = expr.getSymbolReference(true);
+    if (!symbol)
+      return;
+    handleSymbol(symbol, expr.sourceRange);
     visitDefault(expr);
   }
 
@@ -639,11 +672,28 @@ struct IndexVisitor : slang::ast::ASTVisitor<IndexVisitor, true, true> {
   void visitInvalid(const slang::ast::BinsSelectExpr &) {}
   void visitInvalid(const slang::ast::Pattern &) {}
 
-  VerilogDocument &getDocument() { return index.getDocument(); }
+  // VerilogServerContext &getContext() { return index.getContext(); }
 
   void insertDeclRef(const slang::ast::Symbol *sym, slang::SourceRange refLoc,
-                     bool isDefinition = false) {
-    index.insertSymbolUse(sym, refLoc, isDefinition);
+                     bool isDef = false, bool isAssign = false) {
+    const char *startLoc =
+        index.getDocument().getSMLoc(refLoc.start()).getPointer();
+    const char *endLoc =
+        index.getDocument().getSMLoc(refLoc.end()).getPointer() + 1;
+    if (!startLoc || !endLoc)
+      return;
+    assert(startLoc && endLoc);
+
+    if (startLoc != endLoc &&
+        !index.getIntervalMap().overlaps(startLoc, endLoc)) {
+      index.getIntervalMap().insert(startLoc, endLoc, sym);
+
+      // if (!isDef) {
+      //   index.getReferences()[sym].push_back(
+      //       {refLoc.start(),
+      //        isAssign});
+      // }
+    }
   };
 };
 
@@ -816,10 +866,6 @@ void VerilogIndex::insertSymbolUse(const slang::ast::Symbol *symbol,
   assert(startLoc && endLoc);
 
   if (startLoc != endLoc && !intervalMap.overlaps(startLoc, endLoc)) {
-    circt::lsp::Logger::debug(
-        Twine("insertSymbolUse: ") + symbol->name + Twine(" startLoc: ") +
-        std::to_string(from.start().offset()) + Twine(" endLoc: ") +
-        std::to_string(from.end().offset()));
     intervalMap.insert(startLoc, endLoc, symbol);
     if (!isDefinition)
       references[symbol].push_back(from);
@@ -850,8 +896,9 @@ void VerilogDocument::getLocationsOf(
   SMLoc posLoc = defPos.getAsSMLoc(sourceMgr);
   const auto &intervalMap = index.getIntervalMap();
   auto it = intervalMap.find(posLoc.getPointer());
-  if (it == intervalMap.end())
+  if (it == intervalMap.end()) {
     return;
+  }
 
   auto element = it.value();
   if (auto attr = dyn_cast<Attribute>(element)) {
