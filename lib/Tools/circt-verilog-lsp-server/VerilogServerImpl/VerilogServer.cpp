@@ -45,6 +45,7 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 
 using namespace mlir;
 using namespace mlir::lsp;
@@ -815,6 +816,10 @@ void VerilogIndex::insertSymbolUse(const slang::ast::Symbol *symbol,
   assert(startLoc && endLoc);
 
   if (startLoc != endLoc && !intervalMap.overlaps(startLoc, endLoc)) {
+    circt::lsp::Logger::debug(
+        Twine("insertSymbolUse: ") + symbol->name + Twine(" startLoc: ") +
+        std::to_string(from.start().offset()) + Twine(" endLoc: ") +
+        std::to_string(from.end().offset()));
     intervalMap.insert(startLoc, endLoc, symbol);
     if (!isDefinition)
       references[symbol].push_back(from);
