@@ -564,6 +564,7 @@ void VerilogIndex::parseSourceLocationOnLine(StringRef toParse) {
     auto sep = llvm::split(cur, ":");
     if (std::distance(sep.begin(), sep.end()) != 3)
       continue;
+
     bool addFile = first;
     first = false;
 
