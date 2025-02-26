@@ -440,5 +440,58 @@ hw.module @CaptureAcrossWaits(in %u: i42, in %bool: i1) {
   }
 }
 
+// Conditional drive forwarding.
+// CHECK-LABEL: @ConditionalDrives
+hw.module @ConditionalDrives(in %u: i42, in %v: i42, in %q: i1, in %r: i1) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %a = llhd.sig %u : i42
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, %u after {{%.+}} if %q
+    llhd.drv %a, %u after %0 if %q : !hw.inout<i42>
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NOT: llhd.drv
+    llhd.drv %a, %u after %0 if %q : !hw.inout<i42>
+    // CHECK-NEXT: cf.br ^bb2(%u : i42)
+    cf.br ^bb2
+  ^bb1:
+    // CHECK-NEXT: ^bb1:
+    // CHECK-NOT: llhd.drv
+    llhd.drv %a, %v after %0 if %q : !hw.inout<i42>
+    // CHECK-NEXT: cf.br ^bb2(%v : i42)
+    cf.br ^bb2
+  ^bb2:
+    // CHECK-NEXT: ^bb2([[A:%.+]]: i42):
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[A]] after {{%.+}} if %q
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NOT: llhd.drv
+    llhd.drv %a, %u after %0 if %q : !hw.inout<i42>
+    // CHECK-NEXT: cf.br ^bb2(%u, %q : i42, i1)
+    cf.br ^bb2
+  ^bb1:
+    // CHECK-NEXT: ^bb1:
+    // CHECK-NOT: llhd.drv
+    llhd.drv %a, %v after %0 if %r : !hw.inout<i42>
+    // CHECK-NEXT: cf.br ^bb2(%v, %r : i42, i1)
+    cf.br ^bb2
+  ^bb2:
+    // CHECK-NEXT: ^bb2([[A:%.+]]: i42, [[ACOND:%.+]]: i1):
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[A]] after {{%.+}} if [[ACOND]]
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
 func.func private @use_i42(%arg0: i42)
 func.func private @use_inout_i42(%arg0: !hw.inout<i42>)
