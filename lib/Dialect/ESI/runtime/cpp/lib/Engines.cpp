@@ -148,6 +148,8 @@ protected:
 void OneItemBuffersToHostReadPort::writeBufferPtr() {
   uint8_t *bufferData = reinterpret_cast<uint8_t *>(buffer->getPtr());
   bufferData[bufferSize - 1] = 0;
+  memset(buffer->getPtr(), 0, 128);
+  buffer->flush();
   engine->mmio->write(BufferPtrOffset,
                       reinterpret_cast<uint64_t>(buffer->getDevicePtr()));
 }
@@ -155,15 +157,16 @@ void OneItemBuffersToHostReadPort::writeBufferPtr() {
 void OneItemBuffersToHostReadPort::connectImpl(std::optional<unsigned>) {
   engine->connect();
   buffer = engine->hostMem->allocate(128, {});
-  memset(buffer->getPtr(), 0, bufferSize);
+  memset(buffer->getPtr(), 0, 128);
   writeBufferPtr();
 }
 
 bool OneItemBuffersToHostReadPort::pollImpl() {
+  buffer->flush();
   uint8_t *bufferData = reinterpret_cast<uint8_t *>(buffer->getPtr());
   if (pollCount++ % 100000 == 0) {
     engine->conn.getLogger().debug(
-        [this, bufferData](
+        [bufferData](
             std::string &subsystem, std::string &msg,
             std::unique_ptr<std::map<std::string, std::any>> &details) {
           subsystem = "OneItemBuffersToHost";
@@ -174,7 +177,14 @@ bool OneItemBuffersToHostReadPort::pollImpl() {
   }
   if (bufferData[bufferSize - 1] == 0)
     return false;
-
+  engine->conn.getLogger().debug(
+      [bufferData](std::string &subsystem, std::string &msg,
+                   std::unique_ptr<std::map<std::string, std::any>> &details) {
+        subsystem = "OneItemBuffersToHost";
+        msg = "Polling buffer contents 0x";
+        for (size_t i = 0; i < 128; ++i)
+          msg += toHex(bufferData[i]);
+      });
   MessageData data(bufferData, bufferSize - 1);
   if (callback(data)) {
     writeBufferPtr();

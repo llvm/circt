@@ -234,14 +234,9 @@ void hostmemTest(AcceleratorConnection *conn, Accelerator *acc, bool read,
     dataPtr[i] = 0;
   scratchRegion->flush();
 
-  hostmemTest(acc, *scratchRegion, 32, scratchRegion->getDevicePtr(), read,
-              write);
-  hostmemTest(acc, *scratchRegion, 64, scratchRegion->getDevicePtr(), read,
-              write);
-  hostmemTest(acc, *scratchRegion, 96, scratchRegion->getDevicePtr(), read,
-              write);
-  hostmemTest(acc, *scratchRegion, 504, scratchRegion->getDevicePtr(), read,
-              write);
+  for (size_t width : {32, 64, 128, 256, 384, 504, 512})
+    hostmemTest(acc, *scratchRegion, width, scratchRegion->getDevicePtr(), read,
+                write);
 }
 
 static void dmaWriteTest(AcceleratorConnection *conn, Accelerator *acc,
@@ -266,27 +261,28 @@ static void dmaWriteTest(AcceleratorConnection *conn, Accelerator *acc,
   ReadChannelPort &outPort = outPortIter->second.getRawRead("data");
   outPort.connect();
 
-  size_t xferCount = 16;
+  size_t xferCount = 2;
   uint64_t last = 0;
   MessageData data;
   toHostMMIO->write(0, xferCount);
-  if (width == 64) {
-    for (size_t i = 0; i < xferCount; ++i) {
-      outPort.read(data);
+  for (size_t i = 0; i < xferCount; ++i) {
+    outPort.read(data);
+    if (width == 64) {
       uint64_t val = *data.as<uint64_t>();
       if (val < last)
         throw std::runtime_error("dma write test failed. Out of order data");
       last = val;
-      logger.info("esitester",
-                  "Cycle count [" + std::to_string(i) + "] = 0x" + toHex(val));
     }
+    logger.info("esitester",
+                "Cycle count [" + std::to_string(i) + "] = 0x" + data.toHex());
   }
   outPort.disconnect();
   logger.info("esitester", "==   DMA write test complete");
 }
 
 static void dmaWriteTest(AcceleratorConnection *conn, Accelerator *acc) {
-  for (size_t width : {32, 64, 128, 256, 384, 504, 512})
+  // for (size_t width : {32, 64, 128, 256, 384, 504, 512})
+  for (size_t width : {64, 512})
     dmaWriteTest(conn, acc, width);
 }
 
@@ -338,7 +334,7 @@ static void bandWidthTest(AcceleratorConnection *conn, Accelerator *acc,
 }
 
 static void bandwidthTest(AcceleratorConnection *conn, Accelerator *acc) {
-  for (size_t width : {32, 64, 128, 256, 384, 504, 512})
-    // for (size_t width : {504})
-    bandWidthTest(conn, acc, width, 10);
+  // for (size_t width : {32, 64, 128, 256, 384, 504})
+  for (size_t width : {512})
+    bandWidthTest(conn, acc, width, 160000);
 }

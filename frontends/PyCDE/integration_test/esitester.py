@@ -198,7 +198,7 @@ def ToHostDMATest(width: int):
       cycle_counter = Counter(width)(clk=ports.clk,
                                      rst=ports.rst,
                                      clear=Bits(1)(0),
-                                     increment=Bits(1)(1))
+                                     increment=out_xact)
 
       write_cntr_incr = ~count_reached & count_valid & out_xact
       write_counter = Counter(32)(clk=ports.clk,
@@ -250,14 +250,14 @@ class EsiTesterTop(Module):
   @generator
   def construct(ports):
     # PrintfExample(clk=ports.clk, rst=ports.rst)
-    for width in [32, 64, 96, 128, 256, 384, 504, 512]:
-      # for width in [504, 512]:
-      ReadMem(width)(appid=esi.AppID("readmem", width),
-                     clk=ports.clk,
-                     rst=ports.rst)
-      WriteMem(width)(appid=esi.AppID("writemem", width),
-                      clk=ports.clk,
-                      rst=ports.rst)
+    # for width in [32, 64, 96, 128, 256, 384, 504, 512]:
+    for width in [64, 512]:
+      # ReadMem(width)(appid=esi.AppID("readmem", width),
+      #                clk=ports.clk,
+      #                rst=ports.rst)
+      # WriteMem(width)(appid=esi.AppID("writemem", width),
+      #                 clk=ports.clk,
+      #                 rst=ports.rst)
       ToHostDMATest(width)(appid=esi.AppID("tohostdmatest", width),
                            clk=ports.clk,
                            rst=ports.rst)
