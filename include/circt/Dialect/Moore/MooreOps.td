@@ -390,7 +390,6 @@ def EdgeAttr: I32EnumAttr<"Edge", "Edge kind",
 }
 
 def WaitEventOp : MooreOp<"wait_event", [
-  RecursiveMemoryEffects,
   NoRegionArguments,
   SingleBlock,
   NoTerminator

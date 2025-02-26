@@ -237,6 +237,16 @@ def StateOp : ArcOp<"state", [
     void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
       (*this)->setAttr(getArcAttrName(), llvm::cast<mlir::SymbolRefAttr>(callee));
     }
+
+    /// Stub implementations for ArgumentAttributesMethods. If desired,
+    /// implement these by defining arg_attrs and res_attrs as arguments to the
+    /// operation as OptionalAttr<DictArrayAttr>.
+    mlir::ArrayAttr getArgAttrsAttr() { return nullptr; }
+    mlir::ArrayAttr getResAttrsAttr() { return nullptr; }
+    void setArgAttrsAttr(mlir::ArrayAttr args) {}
+    void setResAttrsAttr(mlir::ArrayAttr args) {}
+    mlir::Attribute removeArgAttrsAttr() { return nullptr; }
+    mlir::Attribute removeResAttrsAttr() { return nullptr; }
   }];
 }
 
@@ -278,6 +288,16 @@ def CallOp : ArcOp<"call", [
     void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
       (*this)->setAttr(getArcAttrName(), llvm::cast<mlir::SymbolRefAttr>(callee));
     }
+
+    /// Stub implementations for ArgumentAttributesMethods. If desired,
+    /// implement these by defining arg_attrs and res_attrs as arguments to the
+    /// operation as OptionalAttr<DictArrayAttr>.
+    mlir::ArrayAttr getArgAttrsAttr() { return nullptr; }
+    mlir::ArrayAttr getResAttrsAttr() { return nullptr; }
+    void setArgAttrsAttr(mlir::ArrayAttr args) {}
+    void setResAttrsAttr(mlir::ArrayAttr args) {}
+    mlir::Attribute removeArgAttrsAttr() { return nullptr; }
+    mlir::Attribute removeResAttrsAttr() { return nullptr; }
   }];
 }
 
@@ -367,6 +387,16 @@ def MemoryWritePortOp : ArcOp<"memory_write_port", [
     void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
       (*this)->setAttr(getArcAttrName(), llvm::cast<mlir::SymbolRefAttr>(callee));
     }
+
+    /// Stub implementations for ArgumentAttributesMethods. If desired,
+    /// implement these by defining arg_attrs and res_attrs as arguments to the
+    /// operation as OptionalAttr<DictArrayAttr>.
+    mlir::ArrayAttr getArgAttrsAttr() { return nullptr; }
+    mlir::ArrayAttr getResAttrsAttr() { return nullptr; }
+    void setArgAttrsAttr(mlir::ArrayAttr args) {}
+    void setResAttrsAttr(mlir::ArrayAttr args) {}
+    mlir::Attribute removeArgAttrsAttr() { return nullptr; }
+    mlir::Attribute removeResAttrsAttr() { return nullptr; }
   }];
 }
 

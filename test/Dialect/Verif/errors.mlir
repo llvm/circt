@@ -181,3 +181,53 @@ verif.bmc bound 10 num_regs 1 initial_values [unit] attributes {verif.some_attr}
   verif.assert %true : i1
   verif.yield %arg0 : i32
 }
+
+// -----
+
+// expected-error @below {{op must have two block arguments}}
+verif.simulation @foo {} {
+^bb0(%arg0: !seq.clock):
+  %true = hw.constant true
+  verif.yield %true, %true : i1, i1
+}
+
+// -----
+
+// expected-error @below {{op block argument #0 must be of type `!seq.clock`}}
+verif.simulation @foo {} {
+^bb0(%arg0: i1, %arg1: i1):
+  verif.yield %arg0, %arg1 : i1, i1
+}
+
+// -----
+
+// expected-error @below {{op block argument #1 must be of type `i1`}}
+verif.simulation @foo {} {
+^bb0(%arg0: !seq.clock, %arg1: i42):
+  %true = hw.constant true
+  verif.yield %true, %true : i1, i1
+}
+
+// -----
+
+verif.simulation @foo {} {
+^bb0(%arg0: !seq.clock, %arg1: i1):
+  // expected-error @below {{op must have two operands}}
+  verif.yield
+}
+
+// -----
+
+verif.simulation @foo {} {
+^bb0(%arg0: !seq.clock, %arg1: i1):
+  // expected-error @below {{op operand #0 must be of type `i1`}}
+  verif.yield %arg0, %arg1 : !seq.clock, i1
+}
+
+// -----
+
+verif.simulation @foo {} {
+^bb0(%arg0: !seq.clock, %arg1: i1):
+  // expected-error @below {{op operand #1 must be of type `i1`}}
+  verif.yield %arg1, %arg0 : i1, !seq.clock
+}

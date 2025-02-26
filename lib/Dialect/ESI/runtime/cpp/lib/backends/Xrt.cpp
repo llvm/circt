@@ -95,17 +95,29 @@ XrtAccelerator::XrtAccelerator(Context &ctxt, std::string xclbin,
 XrtAccelerator::~XrtAccelerator() { disconnect(); }
 
 namespace {
+/// Implementation of MMIO for XRT. Uses an indirect register to access a
+/// virtual MMIO space since Vivado/Vitis don't support large enough MMIO
+/// spaces.
 class XrtMMIO : public MMIO {
+
+  // Physical register to write the virtual address.
+  constexpr static uint32_t IndirectLocation = 0x18;
+  // Physical register to read/write the virtual MMIO address stored at
+  // `IndirectLocation`.
+  constexpr static uint32_t IndirectMMIOReg = 0x20;
+
 public:
   XrtMMIO(XrtAccelerator &conn, ::xrt::ip &ip, const HWClientDetails &clients)
       : MMIO(conn, clients), ip(ip) {}
 
   uint64_t read(uint32_t addr) const override {
     Logger &logger = conn.getLogger();
-    auto lo = static_cast<uint64_t>(ip.read_register(addr));
-    auto hi = static_cast<uint64_t>(ip.read_register(addr + 0x4));
-    uint64_t ret = (hi << 32) | lo;
-    logger.debug(
+    // Write the address to the indirect location register.
+    xrt_write(IndirectLocation, addr);
+    // Read from the indirect register.
+    uint64_t ret = xrt_read(IndirectMMIOReg);
+
+    getConnection().getLogger().debug(
         [addr, ret](std::string &subsystem, std::string &msg,
                     std::unique_ptr<std::map<std::string, std::any>> &details) {
           subsystem = "xrt_mmio";
@@ -114,14 +126,28 @@ public:
     return ret;
   }
   void write(uint32_t addr, uint64_t data) override {
-    Logger &logger = conn.getLogger();
-    logger.debug(
+    // Write the address to the indirect location register.
+    xrt_write(IndirectLocation, addr);
+    // Write to the indirect register.
+    xrt_write(IndirectMMIOReg, data);
+
+    conn.getLogger().debug(
         [addr,
          data](std::string &subsystem, std::string &msg,
                std::unique_ptr<std::map<std::string, std::any>> &details) {
           subsystem = "xrt_mmio";
           msg = "MMIO[0x" + toHex(addr) + "] <- 0x" + toHex(data);
         });
+  }
+
+  /// Read a physical register.
+  uint64_t xrt_read(uint32_t addr) const {
+    auto lo = static_cast<uint64_t>(ip.read_register(addr));
+    auto hi = static_cast<uint64_t>(ip.read_register(addr + 0x4));
+    return (hi << 32) | lo;
+  }
+  /// Write a physical register.
+  void xrt_write(uint32_t addr, uint64_t data) const {
     ip.write_register(addr, data);
     ip.write_register(addr + 0x4, data >> 32);
   }

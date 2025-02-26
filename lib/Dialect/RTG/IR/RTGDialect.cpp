@@ -25,6 +25,7 @@ using namespace rtg;
 //===----------------------------------------------------------------------===//
 
 void RTGDialect::initialize() {
+  registerAttributes();
   registerTypes();
   // Register operations.
   addOperations<

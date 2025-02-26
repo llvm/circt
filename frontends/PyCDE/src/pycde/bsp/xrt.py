@@ -12,7 +12,7 @@ from ..types import Array, Bits, Channel, UInt
 from .. import esi
 
 from .common import (ChannelEngineService, ChannelHostMem, ChannelMMIO,
-                     DummyFromHostEngine, Reset)
+                     DummyFromHostEngine, MMIOIndirection, Reset)
 from .dma import OneItemBuffersToHost
 
 import glob
@@ -292,11 +292,12 @@ def XrtBSP(user_module):
       cmd, froms = esi.MMIO.read_write.type.pack(cmd=rw_mux.cmd)
       data.assign(froms["data"])
 
+      indirect_mmio = MMIOIndirection(clk=clk, rst=rst, upstream=cmd)
       ChannelMMIO(esi.MMIO,
                   appid=esi.AppID("__xrt_mmio"),
                   clk=clk,
                   rst=rst,
-                  cmd=cmd)
+                  cmd=indirect_mmio.downstream)
 
       rdata, rvalid = rw_demux.read_data.unwrap(ports.s_axi_control_RREADY)
       ports.s_axi_control_RVALID = rvalid

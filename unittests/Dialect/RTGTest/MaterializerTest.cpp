@@ -39,18 +39,26 @@ TEST(MaterializerTest, ImmediateAttr) {
   auto moduleOp = ModuleOp::create(loc);
   OpBuilder builder = OpBuilder::atBlockBegin(moduleOp.getBody());
 
+  auto attr5 = Imm5Attr::get(&context, 0);
   auto attr12 = Imm12Attr::get(&context, 0);
+  auto attr13 = Imm13Attr::get(&context, 0);
   auto attr21 = Imm32Attr::get(&context, 0);
   auto attr32 = Imm21Attr::get(&context, 0);
 
+  auto *op5 = context.getLoadedDialect<RTGTestDialect>()->materializeConstant(
+      builder, attr5, attr5.getType(), loc);
   auto *op12 = context.getLoadedDialect<RTGTestDialect>()->materializeConstant(
       builder, attr12, attr12.getType(), loc);
+  auto *op13 = context.getLoadedDialect<RTGTestDialect>()->materializeConstant(
+      builder, attr13, attr13.getType(), loc);
   auto *op21 = context.getLoadedDialect<RTGTestDialect>()->materializeConstant(
       builder, attr21, attr21.getType(), loc);
   auto *op32 = context.getLoadedDialect<RTGTestDialect>()->materializeConstant(
       builder, attr32, attr32.getType(), loc);
 
+  ASSERT_TRUE(op5 && isa<ImmediateOp>(op5));
   ASSERT_TRUE(op12 && isa<ImmediateOp>(op12));
+  ASSERT_TRUE(op13 && isa<ImmediateOp>(op13));
   ASSERT_TRUE(op21 && isa<ImmediateOp>(op21));
   ASSERT_TRUE(op32 && isa<ImmediateOp>(op32));
 }

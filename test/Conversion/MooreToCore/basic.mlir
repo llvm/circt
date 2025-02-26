@@ -936,6 +936,29 @@ moore.module @WaitEvent() {
   }
 }
 
+// CHECK-LABEL: hw.module @EmptyWaitEvent(
+moore.module @EmptyWaitEvent(out out : !moore.l32) {
+  // CHECK: [[OUT:%.+]] = llhd.sig %c0_i32
+  // CHECK: llhd.process {
+  // CHECK:   cf.br
+  // CHECK: ^bb
+  // CHECK:   llhd.halt
+  // CHECK: ^bb{{.*}} // no predecessors
+  // CHECK: }
+  // CHECK: [[PRB:%.+]] = llhd.prb [[OUT]] : !hw.inout<i32>
+  // CHECK: hw.output [[PRB]] : i32
+  %0 = moore.constant 0 : l32
+  %out = moore.variable : <l32>
+  moore.procedure always {
+    moore.wait_event {
+    }
+    moore.blocking_assign %out, %0 : l32
+    moore.return
+  }
+  %1 = moore.read %out : <l32>
+  moore.output %1 : !moore.l32
+}
+
 // Just check that block without predecessors are handled without crashing
 // CHECK-LABEL: @NoPredecessorBlockErasure
 moore.module @NoPredecessorBlockErasure(in %clk_i : !moore.l1, in %raddr_i : !moore.array<2 x l5>, out rdata_o : !moore.array<2 x l32>, in %waddr_i : !moore.array<1 x l5>, in %wdata_i : !moore.array<1 x l32>, in %we_i : !moore.l1) {

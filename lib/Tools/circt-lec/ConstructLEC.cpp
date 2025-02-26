@@ -75,6 +75,10 @@ void ConstructLECPass::runOnOperation() {
   // Lookup or declare printf function.
   auto printfFunc =
       LLVM::lookupOrCreateFn(getOperation(), "printf", ptrTy, voidTy, true);
+  if (failed(printfFunc)) {
+    getOperation()->emitError("failed to lookup or create printf");
+    return signalPassFailure();
+  }
 
   // Lookup the modules.
   auto moduleA = lookupModule(firstModule);
@@ -144,7 +148,8 @@ void ConstructLECPass::runOnOperation() {
       lookupOrCreateStringGlobal(builder, getOperation(), "c1 != c2\n");
   Value formatString = builder.create<LLVM::SelectOp>(
       loc, areEquivalent, eqFormatString, neqFormatString);
-  builder.create<LLVM::CallOp>(loc, printfFunc, ValueRange{formatString});
+  builder.create<LLVM::CallOp>(loc, printfFunc.value(),
+                               ValueRange{formatString});
 
   builder.create<func::ReturnOp>(loc, ValueRange{});
 }

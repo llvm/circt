@@ -6,9 +6,17 @@ target_link_libraries(circt-synth
   CIRCTAIGTransforms
   CIRCTComb
   CIRCTCombToAIG
+  CIRCTDebug
+  CIRCTEmit
   CIRCTHW
   CIRCTHWTransforms
+  CIRCTLTL
+  CIRCTOM
+  CIRCTSeq
+  CIRCTSim
   CIRCTSupport
+  CIRCTSV
+  CIRCTVerif
   MLIRIR
   MLIRParser
   LLVMSupport

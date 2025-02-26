@@ -29,7 +29,12 @@ void rtg::populateRandomizerPipeline(mlir::PassManager &pm,
         std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
             "rtgtool"));
 
-  pm.addPass(createSimpleCanonicalizerPass());
+  {
+    // Initial canonicalization of the input IR.
+    auto &anyPm = pm.nestAny();
+    anyPm.addPass(mlir::createCSEPass());
+    anyPm.addPass(createSimpleCanonicalizerPass());
+  }
 
   if (options.getOutputFormat() == RtgToolOptions::OutputFormat::MLIR)
     return;
@@ -39,9 +44,14 @@ void rtg::populateRandomizerPipeline(mlir::PassManager &pm,
     passOptions.seed = options.getSeed();
     pm.addPass(rtg::createElaborationPass(passOptions));
   }
+  pm.addPass(rtg::createInlineSequencesPass());
+  pm.addPass(rtg::createLowerUniqueLabelsPass());
   pm.addNestedPass<rtg::TestOp>(rtg::createLinearScanRegisterAllocationPass());
-  pm.addPass(mlir::createCSEPass());
-  pm.addPass(createSimpleCanonicalizerPass());
+  {
+    auto &anyPm = pm.nestAny();
+    anyPm.addPass(mlir::createCSEPass());
+    anyPm.addPass(createSimpleCanonicalizerPass());
+  }
 
   if (options.getOutputFormat() == RtgToolOptions::OutputFormat::ElaboratedMLIR)
     return;

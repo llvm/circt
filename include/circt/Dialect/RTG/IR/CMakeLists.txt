@@ -38,3 +38,8 @@ mlir_tablegen(RTGISAAssemblyOpInterfaces.h.inc -gen-op-interface-decls)
 mlir_tablegen(RTGISAAssemblyOpInterfaces.cpp.inc -gen-op-interface-defs)
 add_public_tablegen_target(CIRCTRTGISAAssemblyOpInterfacesIncGen)
 add_dependencies(circt-headers CIRCTRTGISAAssemblyOpInterfacesIncGen)
+
+set(LLVM_TARGET_DEFINITIONS RTGAttributes.td)
+mlir_tablegen(RTGAttributes.h.inc -gen-attrdef-decls)
+mlir_tablegen(RTGAttributes.cpp.inc -gen-attrdef-defs)
+add_public_tablegen_target(CIRCTRTGAttributeIncGen)

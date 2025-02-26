@@ -479,16 +479,6 @@ DrvOp::ensureOnlySafeAccesses(const MemorySlot &slot,
 }
 
 //===----------------------------------------------------------------------===//
-// WaitOp
-//===----------------------------------------------------------------------===//
-
-// Implement this operation for the BranchOpInterface
-SuccessorOperands llhd::WaitOp::getSuccessorOperands(unsigned index) {
-  assert(index == 0 && "invalid successor index");
-  return SuccessorOperands(getDestOpsMutable());
-}
-
-//===----------------------------------------------------------------------===//
 // ConnectOp
 //===----------------------------------------------------------------------===//
 
@@ -496,6 +486,20 @@ LogicalResult llhd::ConnectOp::canonicalize(llhd::ConnectOp op,
                                             PatternRewriter &rewriter) {
   if (op.getLhs() == op.getRhs())
     rewriter.eraseOp(op);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ProcessOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ProcessOp::canonicalize(ProcessOp op, PatternRewriter &rewriter) {
+  if (op.getBody().hasOneBlock()) {
+    auto &block = op.getBody().front();
+    if (block.getOperations().size() == 1 && isa<HaltOp>(block.getTerminator()))
+      rewriter.eraseOp(op);
+  }
+
   return success();
 }
 

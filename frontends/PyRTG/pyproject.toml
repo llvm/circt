@@ -1,0 +1,23 @@
+[build-system]
+requires = [
+  "setuptools>=68",
+  "setuptools_scm>=8.0",
+  "wheel",
+  "cmake>=3.12",
+
+  # MLIR build depends.
+  "numpy",
+  "pybind11>=2.11,<=2.12",
+  "nanobind==2.4.0",
+  "PyYAML",
+
+  # PyRTG depends
+]
+build-backend = "setuptools.build_meta"
+
+# Enable version inference from Git.
+[tool.setuptools_scm]
+root = "../.."
+tag_regex = "^pyrtg-(\\d+\\.\\d+\\.\\d+)?$"
+local_scheme = "no-local-version"
+git_describe_command = "git describe --dirty --tags --long --match pyrtg*"

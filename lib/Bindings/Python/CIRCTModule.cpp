@@ -33,6 +33,7 @@
 #include "circt-c/Dialect/Verif.h"
 #include "circt-c/ExportVerilog.h"
 #include "mlir-c/Bindings/Python/Interop.h"
+#include "mlir-c/Dialect/Index.h"
 #include "mlir-c/IR.h"
 #include "mlir-c/Transforms.h"
 #include "mlir/Bindings/Python/NanobindAdaptors.h"
@@ -100,6 +101,10 @@ NB_MODULE(_circt, m) {
         MlirDialectHandle hwarith = mlirGetDialectHandle__hwarith__();
         mlirDialectHandleRegisterDialect(hwarith, context);
         mlirDialectHandleLoadDialect(hwarith, context);
+
+        MlirDialectHandle index = mlirGetDialectHandle__index__();
+        mlirDialectHandleRegisterDialect(index, context);
+        mlirDialectHandleLoadDialect(index, context);
 
         MlirDialectHandle om = mlirGetDialectHandle__om__();
         mlirDialectHandleRegisterDialect(om, context);

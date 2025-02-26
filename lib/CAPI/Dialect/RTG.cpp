@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/RTG.h"
+#include "circt/Dialect/RTG/IR/RTGAttributes.h"
 #include "circt/Dialect/RTG/IR/RTGDialect.h"
 #include "circt/Dialect/RTG/IR/RTGTypes.h"
 
@@ -78,6 +79,10 @@ MlirType rtgSetTypeGet(MlirType elementType) {
   return wrap(SetType::get(ty.getContext(), ty));
 }
 
+MlirType rtgSetTypeGetElementType(MlirType type) {
+  return wrap(cast<SetType>(unwrap(type)).getElementType());
+}
+
 // BagType
 //===----------------------------------------------------------------------===//
 
@@ -86,6 +91,10 @@ bool rtgTypeIsABag(MlirType type) { return isa<BagType>(unwrap(type)); }
 MlirType rtgBagTypeGet(MlirType elementType) {
   auto ty = unwrap(elementType);
   return wrap(BagType::get(ty.getContext(), ty));
+}
+
+MlirType rtgBagTypeGetElementType(MlirType type) {
+  return wrap(cast<BagType>(unwrap(type)).getElementType());
 }
 
 // DictType
@@ -141,4 +150,12 @@ MlirAttribute rtgLabelVisibilityAttrGet(MlirContext ctxt,
     }
   };
   return wrap(LabelVisibilityAttr::get(unwrap(ctxt), convert(visibility)));
+}
+
+bool rtgAttrIsADefaultContextAttr(MlirAttribute attr) {
+  return isa<DefaultContextAttr>(unwrap(attr));
+}
+
+MlirAttribute rtgDefaultContextAttrGet(MlirContext ctxt, MlirType type) {
+  return wrap(DefaultContextAttr::get(unwrap(ctxt), unwrap(type)));
 }

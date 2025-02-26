@@ -141,6 +141,28 @@ def EmbedSequenceOp : RTGOp<"embed_sequence", []> {
   let assemblyFormat = "$sequence attr-dict";
 }
 
+def InterleaveSequencesOp : RTGOp<"interleave_sequences", [Pure]> {
+  let summary = "interleave a list of sequences";
+  let description = [{
+    This operation takes a list of (at least one) fully randomized sequences and
+    interleaves them by taking the next `batchSize` number of operations
+    implementing the `InstructionOpInterface` of each sequence round-robin.
+
+    Therefore, if only one sequence is in the list, this operation returns that
+    sequence unchanged.
+  }];
+
+  let arguments = (ins Variadic<RandomizedSequenceType>:$sequences,
+                       DefaultValuedAttr<I32Attr, "1">:$batchSize);
+
+  let results = (outs RandomizedSequenceType:$interleavedSequence);
+
+  let assemblyFormat = "$sequences (`batch` $batchSize^)? attr-dict";
+
+  let hasVerifier = 1;
+  let hasFolder = 1;
+}
+
 //===- Label Operations ---------------------------------------------------===//
 
 class LabelDeclBase<string mnemonic,
@@ -195,6 +217,57 @@ def LabelOp : RTGOp<"label", []> {
   let arguments = (ins LabelVisibilityAttr:$visibility, LabelType:$label);
 
   let assemblyFormat = "$visibility $label attr-dict";
+}
+
+//===- Context Operations -------------------------------------------------===//
+
+def OnContextOp : RTGOp<"on_context", []> {
+  let summary = "places a sequence on a context";
+  let description = [{
+    This operation takes a context and a fully substituted, but not yet
+    randomized sequence and inserts the necessary instructions to switch from
+    the current context to the provided context, randomizes and embeds the given
+    sequence under the given context, and inserts instructions to switch back to
+    the original context.
+
+    These instructions are provided by the 'rtg.context_switch' operation. If no
+    'rtg.context_switch' for this transition is provided, the compiler will
+    error out. If multiple such context switches apply, the most recently
+    registered one takes precedence.
+  }];
+
+  let arguments = (ins ContextResourceTypeInterface:$context,
+                       FullySubstitutedSequenceType:$sequence);
+
+  let assemblyFormat = [{
+    $context `,` $sequence `:` qualified(type($context)) attr-dict
+  }];
+}
+
+def ContextSwitchOp : RTGOp<"context_switch", [
+  HasParent<"rtg::TargetOp">,
+]> {
+  let summary = "a specification of how to switch contexts";
+  let description = [{
+    This operation allows the user to specify a sequence of instructions to
+    switch from context 'from' to context 'to', randomize and embed a provided
+    sequence, and switch back from context 'to' to context 'from'.  This
+    sequence of instructions should be provided as the 'sequence' operand which
+    is a sequence of the type '!rtg.sequence<context-type-interface,
+    context-type-interface, !rtg.sequence>'.  The first parameter is the 'from'
+    context, the second one the 'to' context, and the third is the sequence to
+    randomize and embed under the 'to' context.
+  }];
+
+  let arguments = (ins ContextResourceAttrInterface:$from,
+                       ContextResourceAttrInterface:$to,
+                       SequenceType:$sequence);
+
+  let assemblyFormat = [{
+    $from `->` $to `,` $sequence `:` qualified(type($sequence)) attr-dict
+  }];
+
+  let hasVerifier = 1;
 }
 
 //===- Set Operations ------------------------------------------------------===//
@@ -430,6 +503,7 @@ def TestOp : RTGOp<"test", [
   Symbol,
   SingleBlock,
   NoTerminator,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
   HasParent<"mlir::ModuleOp">
 ]> {
   let summary = "the root of a test";
@@ -458,10 +532,7 @@ def TestOp : RTGOp<"test", [
                        TypeAttrOf<DictType>:$target);
   let regions = (region SizedRegion<1>:$bodyRegion);
 
-  let assemblyFormat = [{
-    $sym_name `:` $target attr-dict-with-keyword $bodyRegion
-  }];
-
+  let hasCustomAssemblyFormat = 1;
   let hasRegionVerifier = 1;
 }
 

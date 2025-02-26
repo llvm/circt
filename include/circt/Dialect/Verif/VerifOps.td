@@ -9,17 +9,18 @@
 #ifndef CIRCT_DIALECT_VERIF_VERIFOPS_TD
 #define CIRCT_DIALECT_VERIF_VERIFOPS_TD
 
-include "circt/Dialect/Verif/VerifDialect.td"
-include "circt/Dialect/Verif/VerifOpInterfaces.td"
+include "circt/Dialect/HW/HWAttributes.td"
+include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/LTL/LTLDialect.td"
 include "circt/Dialect/LTL/LTLTypes.td"
-include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/Seq/SeqTypes.td"
-include "circt/Dialect/HW/HWAttributes.td"
+include "circt/Dialect/Verif/VerifDialect.td"
+include "circt/Dialect/Verif/VerifOpInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/EnumAttr.td"
+include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/PatternBase.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
@@ -255,8 +256,9 @@ def LogicEquivalenceCheckingOp : VerifOp<"lec", [
 def YieldOp : VerifOp<"yield", [
   Terminator,
   ParentOneOf<[
-    "verif::LogicEquivalenceCheckingOp", "verif::BoundedModelCheckingOp",
-    "verif::ContractOp"
+    "verif::BoundedModelCheckingOp",
+    "verif::LogicEquivalenceCheckingOp",
+    "verif::SimulationOp",
   ]>
 ]> {
   let summary = "yields values from a region";
@@ -272,11 +274,12 @@ def YieldOp : VerifOp<"yield", [
 }
 
 //===----------------------------------------------------------------------===//
-// Formal Test
+// Verification Entry Points
 //===----------------------------------------------------------------------===//
 
 def FormalOp : VerifOp<"formal", [
   IsolatedFromAbove,
+  NoRegionArguments,
   NoTerminator,
   RegionKindInterface,
   SingleBlock,
@@ -344,6 +347,100 @@ def FormalOp : VerifOp<"formal", [
       return RegionKind::Graph;
     }
   }];
+}
+
+def SimulationOp : VerifOp<"simulation", [
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
+  IsolatedFromAbove,
+  RegionKindInterface,
+  SingleBlockImplicitTerminator<"verif::YieldOp">,
+  Symbol,
+]> {
+  let summary = "A simulation unit test";
+  let description = [{
+    This operation defines a simulation unit test that can be automatically run
+    by various tools. To describe a test, the body of this op should contain the
+    hardware to be tested, alongside any necessary forms of stimulus generation.
+
+    ### Inputs
+
+    The body has two block arguments as input values: a "clock" signal of type
+    `!seq.clock` and an "init" signal of type `i1`. The clock signal starts at 0
+    and continuously toggles between 0 and 1 throughout the simulation. The init
+    signal starts at 1, remains 1 during a single 0-to-1 transition of the
+    clock, and then drops to 0 for the remainder of the simulation.
+
+    ### Outputs
+
+    The body must have a `verif.yield` terminator op with exactly two operands:
+
+    The first operand is a "done" signal of type `i1` which indicates the end of
+    the simulation. The simulation stops when the done signal is 1 during a
+    0-to-1 transition of the clock after the init signal has dropped to 0. No
+    additional clock toggles occur once done has been sampled as 1.
+
+    The second operand is a "success" signal of type `i1` which indicates the
+    success of a test as 1, or failure as 0. The signal is sampled at the same
+    time as the done signal. Simulators must signal failure to the operating
+    system through a non-zero exit code.
+
+    ### Schedule
+
+    The clock and init values adhere to the following schedule during
+    simulation:
+
+    | Time      | Clock | Init  | Comment
+    |-----------|-------|-------| ----
+    | t0 (>=0s) | undef | undef | Clock and init may initially be undefined.
+    | t1 (>=t0) | 0     | 1     | Initialization code (e.g., `seq.initial`, Verilog `initial` procedures) may run before or after clock and init change to their initial value.
+    | t2 (>t1)  | 1     | 1     | Single rising clock edge occurs while init is high.
+    | t3 (>t2)  | 0     | 1     | Init may stay during the falling clock edge.
+    | t4 (>=t3) | 0     | 0     | Init goes to 0 before second rising clock edge.
+    | t5 (>t4)  | 1     | 0     | Clock toggles continue indefinitely.
+    | t6 (>t5)  | 0     | 0     |
+
+    Simulation termination occurs when the done signal is 1 during a 0-to-1
+    transition of the clock.
+
+    ### Example
+    ```
+    verif.simulation @AdderTest {myParam = 42, myTag = "hello"} {
+    ^bb0(%clock: !seq.clock, %init: i1):
+      // Count the first 9001 simulation cycles.
+      %c0_i19 = hw.constant 0 : i19
+      %c1_i19 = hw.constant 1 : i19
+      %c9001_i19 = hw.constant 9001 : i19
+      %count = seq.compreg %0, %clock reset %init, %c0_i19 : i19
+      %done = comb.icmp eq %count, %c9001_i19 : i19
+      %0 = comb.add %count, %c1_i19 : i19
+
+      // Generate inputs to the adder.
+      %1, %2 = func.call @generateAdderInputs(%count) : (i19) -> (i42, i42)
+      %3 = hw.instance "dut" @Adder(a: %1: i42, b: %2: i42) -> (c: i42)
+
+      // Check results and track failures.
+      %4 = comb.add %1, %2 : i42
+      %5 = comb.icmp eq %3, %4 : i42
+      %true = hw.constant true
+      %success = seq.compreg %6, %clock reset %init, %true : i1
+      %6 = comb.and %success, %5 : i1
+
+      verif.yield %done, %success : i1, i1
+    }
+    ```
+  }];
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    DictionaryAttr:$parameters
+  );
+  let regions = (region SizedRegion<1>:$region);
+  let assemblyFormat = "$sym_name $parameters attr-dict-with-keyword $region";
+  let extraClassDeclaration = [{
+    static RegionKind getRegionKind(unsigned index) {
+      return RegionKind::Graph;
+    }
+  }];
+  let hasRegionVerifier = true;
 }
 
 def SymbolicValueOp : VerifOp<"symbolic_value", [

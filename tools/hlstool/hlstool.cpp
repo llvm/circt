@@ -241,7 +241,7 @@ static void loadDHLSPipeline(OpPassManager &pm) {
   pm.addPass(circt::createFlattenMemRefPass());
   pm.nest<func::FuncOp>().addPass(
       circt::handshake::createHandshakeLegalizeMemrefsPass());
-  pm.addPass(mlir::createConvertSCFToCFPass());
+  pm.addPass(mlir::createSCFToControlFlowPass());
   pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
 
   // DHLS conversion
@@ -325,7 +325,7 @@ static LogicalResult doHLSFlowDynamic(
   // Software lowering
   addIRLevel(IRLevel::PreCompile, [&]() {
     pm.addPass(mlir::createLowerAffinePass());
-    pm.addPass(mlir::createConvertSCFToCFPass());
+    pm.addPass(mlir::createSCFToControlFlowPass());
   });
 
   addIRLevel(IRLevel::Core, [&]() { loadDHLSPipeline(pm); });

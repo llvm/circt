@@ -185,4 +185,53 @@ def GoInsertion : Pass<"calyx-go-insertion", "calyx::ComponentOp"> {
   let constructor = "circt::calyx::createGoInsertionPass()";
 }
 
+def AffineParallelUnroll : Pass<"affine-parallel-unroll", "::mlir::func::FuncOp"> {
+  let summary = "Unrolls affine.parallel operations in a way suitable for Calyx.";
+  let description = [{
+    This pass unrolls `affine.parallel` operations completely and wrap each unrolled body
+    with `scf.execute_region` operations to better align with `calyx.par`'s representation.
+    Moreover, the newly created `affine.parallel` will be attached with attributes to 
+    indicate that this is different from normal `affine.parallel`. Behavior is undefined if
+    there is a data race or memory banking contention.
+    An example:
+    ```
+    affine.parallel (%x, %y) from (0, 0) to (2, 2) {
+      %0 = memref.load %alloc_0[%x, %y] : memref<2x2xf32>
+      %1 = memref.load %alloc_1[%x, %y] : memref<2x2xf32>
+      %2 = arith.addf %0, %1 : f32
+      memref.store %2, %alloc_2[%x, %y] : memref<2x2xf32>
+    }
+    =>
+    affine.parallel _ from 0 to 1 {
+      scf.execute_region {
+        %0 = memref.load %alloc_0[%c0, %c0] : memref<2x2xf32>
+        %1 = memref.load %alloc_1[%c0, %c0] : memref<2x2xf32>
+        %2 = arith.addf %0, %1 : f32
+        memref.store %2, %alloc_2[%c0, %c0] : memref<2x2xf32>
+      }
+      scf.execute_region {
+        %0 = memref.load %alloc_0[%c0, %c1] : memref<2x2xf32>
+        %1 = memref.load %alloc_1[%c0, %c1] : memref<2x2xf32>
+        %2 = arith.addf %0, %1 : f32
+        memref.store %2, %alloc_2[%c0, %c1] : memref<2x2xf32>
+      }
+      scf.execute_region {
+        %0 = memref.load %alloc_0[%c1, %c0] : memref<2x2xf32>
+        %1 = memref.load %alloc_1[%c1, %c0] : memref<2x2xf32>
+        %2 = arith.addf %0, %1 : f32
+        memref.store %2, %alloc_2[%c1, %c0] : memref<2x2xf32>
+      }
+      scf.execute_region {
+        %0 = memref.load %alloc_0[%c1, %c1] : memref<2x2xf32>
+        %1 = memref.load %alloc_1[%c1, %c1] : memref<2x2xf32>
+        %2 = arith.addf %0, %1 : f32
+        memref.store %2, %alloc_2[%c1, %c1] : memref<2x2xf32>
+      }
+    } {calyx.unroll = true}
+    ```
+  }];
+  let dependentDialects = ["mlir::affine::AffineDialect"];
+  let constructor = "circt::calyx::createAffineParallelUnrollPass()";
+}
+
 #endif // CIRCT_DIALECT_CALYX_CALYXPASSES_TD

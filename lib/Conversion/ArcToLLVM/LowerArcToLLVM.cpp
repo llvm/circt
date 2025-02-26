@@ -381,17 +381,22 @@ struct SimInstantiateOpLowering
     // sizeof(size_t) on the target architecture.
     Type convertedIndex = typeConverter->convertType(rewriter.getIndexType());
 
-    LLVM::LLVMFuncOp mallocFunc =
+    FailureOr<LLVM::LLVMFuncOp> mallocFunc =
         LLVM::lookupOrCreateMallocFn(moduleOp, convertedIndex);
-    LLVM::LLVMFuncOp freeFunc = LLVM::lookupOrCreateFreeFn(moduleOp);
+    if (failed(mallocFunc))
+      return mallocFunc;
+
+    FailureOr<LLVM::LLVMFuncOp> freeFunc = LLVM::lookupOrCreateFreeFn(moduleOp);
+    if (failed(freeFunc))
+      return freeFunc;
 
     Location loc = op.getLoc();
     Value numStateBytes = rewriter.create<LLVM::ConstantOp>(
         loc, convertedIndex, model.numStateBytes);
-    Value allocated =
-        rewriter
-            .create<LLVM::CallOp>(loc, mallocFunc, ValueRange{numStateBytes})
-            .getResult();
+    Value allocated = rewriter
+                          .create<LLVM::CallOp>(loc, mallocFunc.value(),
+                                                ValueRange{numStateBytes})
+                          .getResult();
     Value zero =
         rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI8Type(), 0);
     rewriter.create<LLVM::MemsetOp>(loc, allocated, zero, numStateBytes, false);
@@ -418,7 +423,7 @@ struct SimInstantiateOpLowering
                                     ValueRange{allocated});
     }
 
-    rewriter.create<LLVM::CallOp>(loc, freeFunc, ValueRange{allocated});
+    rewriter.create<LLVM::CallOp>(loc, freeFunc.value(), ValueRange{allocated});
     rewriter.eraseOp(op);
 
     return success();
@@ -550,6 +555,8 @@ struct SimEmitValueOpLowering
     auto printfFunc = LLVM::lookupOrCreateFn(
         moduleOp, "printf", LLVM::LLVMPointerType::get(getContext()),
         LLVM::LLVMVoidType::get(getContext()), true);
+    if (failed(printfFunc))
+      return printfFunc;
 
     // Insert the format string if not already available.
     SmallString<16> formatStrName{"_arc_sim_emit_"};
@@ -580,7 +587,7 @@ struct SimEmitValueOpLowering
     Value formatStrGlobalPtr =
         rewriter.create<LLVM::AddressOfOp>(loc, formatStrGlobal);
     rewriter.replaceOpWithNewOp<LLVM::CallOp>(
-        op, printfFunc, ValueRange{formatStrGlobalPtr, toPrint});
+        op, printfFunc.value(), ValueRange{formatStrGlobalPtr, toPrint});
 
     return success();
   }
