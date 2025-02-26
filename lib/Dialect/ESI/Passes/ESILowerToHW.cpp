@@ -187,7 +187,11 @@ public:
       valid = operands[1];
       ready = unwrap.getReady();
     } else if (unwrap) {
-      wrap = dyn_cast<WrapValidReadyOp>(operands[0].getDefiningOp());
+      Operation *defOp = operands[0].getDefiningOp();
+      if (!defOp)
+        return rewriter.notifyMatchFailure(
+            unwrap, "unwrap input is not defined by an op");
+      wrap = dyn_cast<WrapValidReadyOp>(defOp);
       if (!wrap)
         return rewriter.notifyMatchFailure(
             operands[0].getDefiningOp(),
