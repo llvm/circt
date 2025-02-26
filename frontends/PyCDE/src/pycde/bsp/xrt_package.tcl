@@ -50,25 +50,33 @@ ipx::associate_bus_interfaces -busif s_axi_control -clock ap_clk $core
 set mem_map     [::ipx::add_memory_map "s_axi_control" $core]
 set addr_block  [::ipx::add_address_block "reg0" $mem_map]
 
-set_property range 0x100000 $addr_block
+set_property range 0x1000 $addr_block
 set_property range_resolve_type "immediate" $addr_block
-set_property range_minimum 0x100000 $addr_block
+set_property range_minimum 0x1000 $addr_block
 
-set reg      [::ipx::add_register "EsiMagicNumberLow" $addr_block]
+set reg      [::ipx::add_register "IndirectionMagicNumberLow" $addr_block]
+  set_property address_offset  8  $reg
+  set_property size           32 $reg
+
+set reg      [::ipx::add_register "IndirectionMagicNumberHigh" $addr_block]
+  set_property address_offset 12  $reg
+  set_property size           32 $reg
+
+set reg      [::ipx::add_register "IndirectionVersionNumber" $addr_block]
   set_property address_offset 16  $reg
   set_property size           32 $reg
 
-set reg      [::ipx::add_register "EsiMagicNumberHigh" $addr_block]
-  set_property address_offset 20  $reg
+set reg [::ipx::add_register "IndirectionLocation" $addr_block]
+  set_property address_offset 24 $reg
   set_property size           32 $reg
 
-set reg      [::ipx::add_register "EsiVersionNumber" $addr_block]
-  set_property address_offset 24  $reg
-  set_property size           32 $reg
-
-set reg [::ipx::add_register "EsiManifestLoc" $addr_block]
+set reg [::ipx::add_register "IndirectionRegLow" $addr_block]
   set_property address_offset 32 $reg
-  set_property size 32 $reg
+  set_property size           32 $reg
+
+set reg [::ipx::add_register "IndirectionRegHigh" $addr_block]
+  set_property address_offset 36 $reg
+  set_property size           32 $reg
 
 set_property slave_memory_map_ref "s_axi_control" [::ipx::get_bus_interfaces -of $core "s_axi_control"]
 
