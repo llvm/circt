@@ -1,5 +1,4 @@
-//===- BalanceVariadic.cpp - Lowering Variadic to Binary Ops ------*- C++
-//-*-===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -91,7 +90,7 @@ struct BalanceVariadicDriver {
 
     // extract the top two elements with minimum level
     // and replace them with a new AndInverterOp
-    while (sortByLevel.size() > 2) {
+    while (sortByLevel.size() > 1) {
       auto [llv, lhs] = sortByLevel.top();
       sortByLevel.pop();
       auto [rlv, rhs] = sortByLevel.top();
@@ -110,18 +109,16 @@ struct BalanceVariadicDriver {
       break;
     case 1: {
       auto signal = sortByLevel.top().second;
-      sortByLevel.pop();
-      rewriter.replaceOp(op, signal.getValue());
+      Value val = signal.getValue();
+      if (signal.isComplement()) {
+        // TODO: push inverter to use AndInverterOp (fanout)
+        val = rewriter.create<AndInverterOp>(op.getLoc(), val, true);
+      }
+      rewriter.replaceOp(op, val);
       break;
     }
     default:
-      auto lhs = sortByLevel.top().second;
-      sortByLevel.pop();
-      auto rhs = sortByLevel.top().second;
-
-      rewriter.replaceOp(op, rewriter.create<AndInverterOp>(
-                                 op.getLoc(), lhs.getValue(), rhs.getValue(),
-                                 lhs.isComplement(), rhs.isComplement()));
+      assert(0); // should not happen
     }
   }
 
@@ -143,7 +140,6 @@ struct BalanceVariadicDriver {
       return;
 
     balanceVariadicAndInverterOp(op);
-    // opDepthAnalysis->updateLevel(op, true);
   }
 
   void balancing() {

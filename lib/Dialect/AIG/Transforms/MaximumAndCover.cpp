@@ -1,4 +1,4 @@
-//===- Balancing.cpp -AIG Binary Ops depth balancing ------*- C++ -*-===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -35,15 +35,7 @@ struct MaximumAndCover : OpRewritePattern<aig::AndInverterOp> {
                                 PatternRewriter &rewriter) const override {
     // multi-fanout node cannot be collapsed
     auto hasMultiFanout = [](AndInverterOp op) {
-      int fanouts = 0;
-      for (auto *user : op->getUsers()) {
-        (void)user;
-        fanouts++;
-        if (fanouts > 1) {
-          return true;
-        }
-      }
-      return false;
+      return !(op->hasOneUse() || op->use_empty());
     };
 
     llvm::SmallVector<Value> newFanins;
