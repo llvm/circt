@@ -92,9 +92,11 @@ services::Service *AcceleratorConnection::getService(Service::Type svcType,
 
 Accelerator *
 AcceleratorConnection::takeOwnership(std::unique_ptr<Accelerator> acc) {
-  Accelerator *ret = acc.get();
-  ownedAccelerators.push_back(std::move(acc));
-  return ret;
+  if (ownedAccelerator)
+    throw std::runtime_error(
+        "AcceleratorConnection already owns an accelerator");
+  ownedAccelerator = std::move(acc);
+  return ownedAccelerator.get();
 }
 
 /// Get the path to the currently running executable.
@@ -327,8 +329,9 @@ void AcceleratorServiceThread::Impl::loop() {
   while (!shutdown) {
     // Ideally we'd have some wake notification here, but this sufficies for
     // now.
-    // TODO: investigate better ways to do this.
-    std::this_thread::sleep_for(std::chrono::microseconds(100));
+    // TODO: investigate better ways to do this. For now, just play nice with
+    // the other processes but don't waste time in between polling intervals.
+    std::this_thread::yield();
 
     // Check and gather data from all the read ports we are monitoring. Put the
     // callbacks to be called later so we can release the lock.
