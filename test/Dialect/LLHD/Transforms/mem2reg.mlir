@@ -493,5 +493,61 @@ hw.module @ConditionalDrives(in %u: i42, in %v: i42, in %q: i1, in %r: i1) {
   }
 }
 
+// Delayed and blocking drive interaction.
+// CHECK-LABEL: @DelayedDrives
+hw.module @DelayedDrives(in %u: i42, in %v: i42, in %bool: i1) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %1 = llhd.constant_time <0ns, 1d, 0e>
+  %a = llhd.sig %u : i42
+  // Delayed drives after blocking drives persist.
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NEXT: [[T:%.+]] = llhd.constant_time <0ns, 0d, 1e>
+    // CHECK-NEXT: llhd.drv %a, %u after [[T]]
+    // CHECK-NEXT: [[T:%.+]] = llhd.constant_time <0ns, 1d, 0e>
+    // CHECK-NEXT: llhd.drv %a, %v after [[T]]
+    llhd.drv %a, %u after %0 : !hw.inout<i42>
+    llhd.drv %a, %v after %1 : !hw.inout<i42>
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+  // Later blocking drives erase earlier delayed drives.
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NOT: llhd.drv %a, %u
+    // CHECK-NEXT: [[T:%.+]] = llhd.constant_time <0ns, 0d, 1e>
+    // CHECK-NEXT: llhd.drv %a, %v after [[T]]
+    llhd.drv %a, %u after %1 : !hw.inout<i42>
+    llhd.drv %a, %v after %0 : !hw.inout<i42>
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NOT: llhd.drv
+    llhd.drv %a, %u after %1 : !hw.inout<i42>
+    // CHECK-NEXT: hw.constant 0 : i42
+    // CHECK-NEXT: hw.constant false
+    // CHECK-NEXT: cf.cond_br %bool, ^bb1, ^bb2({{%c0_i42.*}}, {{%false.*}}, %u, {{%true.*}} : i42, i1, i42, i1)
+    cf.cond_br %bool, ^bb1, ^bb2
+  ^bb1:
+    // CHECK-NEXT: ^bb1:
+    // CHECK-NOT: llhd.drv
+    llhd.drv %a, %v after %0 : !hw.inout<i42>
+    // CHECK-NEXT: hw.constant 0 : i42
+    // CHECK-NEXT: hw.constant false
+    // CHECK-NEXT: cf.br ^bb2(%v, {{%true.*}}, {{%c0_i42.*}}, {{%false.*}} : i42, i1, i42, i1)
+    cf.br ^bb2
+  ^bb2:
+    // CHECK-NEXT: ^bb2([[ABLK:%.+]]: i42, [[ABLKCOND:%.+]]: i1, [[ADEL:%.+]]: i42, [[ADELCOND:%.+]]: i1):
+    // CHECK-NEXT: [[T:%.+]] = llhd.constant_time <0ns, 0d, 1e>
+    // CHECK-NEXT: llhd.drv %a, [[ABLK]] after [[T]] if [[ABLKCOND]]
+    // CHECK-NEXT: [[T:%.+]] = llhd.constant_time <0ns, 1d, 0e>
+    // CHECK-NEXT: llhd.drv %a, [[ADEL]] after [[T]] if [[ADELCOND]]
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
 func.func private @use_i42(%arg0: i42)
 func.func private @use_inout_i42(%arg0: !hw.inout<i42>)
