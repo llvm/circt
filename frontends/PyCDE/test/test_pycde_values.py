@@ -4,6 +4,7 @@ from pycde.dialects import comb, hw
 from pycde import dim, generator, types, Clock, Input, Output, Module
 from pycde.signals import And, Or
 from pycde.testing import unittestmodule
+from pycde.types import Bits
 
 
 # CHECK-LABEL: hw.module @BitsMod(in %inp : i5)
@@ -39,6 +40,14 @@ class BitsMod(Module):
 
     # CHECK:  %16 = comb.and bin %12, %13, %14 : i1
     And(a, b, c)
+
+    # CHECK:  %c0_i32 = hw.constant 0 : i32
+    # CHECK:  %c0_i32_0 = hw.constant 0 : i32
+    # CHECK:  %c0_i32_1 = hw.constant 0 : i32
+    # CHECK:  %c16_i24 = hw.constant 16 : i24
+    # CHECK:  [[R17:%.+]] = comb.concat %c0_i32, %c0_i32_0, %c0_i32_1, %c16_i24 : i32, i32, i32, i24
+    # CHECK:  %18 = hw.bitcast [[R17]] : (i120) -> i120
+    Bits(120)(2**100)
 
 
 @unittestmodule(SIZE=4)
