@@ -404,16 +404,14 @@ SmallVector<Value, 4> MemoryBankingPass::createBanks(OpBuilder &builder,
       getRemainingBankingInfo(context, currBankingConfig, bankingFactorsStr);
   Attribute remainingDimensions =
       getRemainingBankingInfo(context, currBankingConfig, bankingDimensionsStr);
-  DictionaryAttr remainingAttrs = DictionaryAttr::get(context);
-  if (!remainingFactors) {
-    assert(!remainingDimensions &&
-           "A banking dimension must be paired with a factor");
-  } else {
-    remainingAttrs = DictionaryAttr::get(
-        context,
-        {builder.getNamedAttr(bankingFactorsStr, remainingFactors),
-         builder.getNamedAttr(bankingDimensionsStr, remainingDimensions)});
-  }
+  DictionaryAttr remainingAttrs =
+      remainingFactors
+          ? DictionaryAttr::get(
+                context,
+                {builder.getNamedAttr(bankingFactorsStr, remainingFactors),
+                 builder.getNamedAttr(bankingDimensionsStr,
+                                      remainingDimensions)})
+          : DictionaryAttr::get(context);
 
   MemRefType newMemRefType =
       computeBankedMemRefType(originalMemRefType, currFactor, currDimension);
@@ -493,8 +491,7 @@ struct BankAffineLoadPattern
     BankingConfigAttributes currBankingConfig =
         getMemRefBankingConfig(originalMem);
     if (!currBankingConfig.factors) {
-      assert(!currBankingConfig.dimensions &&
-             "A banking dimension must be paired with a factor");
+      // No need to rewrite anymore.
       return failure();
     }
 
@@ -581,7 +578,7 @@ struct BankAffineStorePattern
     }
     auto currConfig = getMemRefBankingConfig(storeOp.getMemref());
     if (!currConfig.factors) {
-      assert(!currConfig.dimensions);
+      // No need to rewrite anymore.
       return failure();
     }
     Location loc = storeOp.getLoc();
@@ -760,6 +757,35 @@ LogicalResult cleanUpOldMemRefs(DenseSet<Value> &oldMemRefVals,
   return success();
 }
 
+void verifyBankingAttributesSize(Attribute bankingFactorsAttr,
+                                 Attribute bankingDimensionsAttr) {
+  if (auto factorsArrayAttr = dyn_cast<ArrayAttr>(bankingFactorsAttr)) {
+    assert(!factorsArrayAttr.empty() && "Banking factors should not be empty");
+    if (auto dimsArrayAttr = dyn_cast<ArrayAttr>(bankingDimensionsAttr)) {
+      assert(factorsArrayAttr.size() == dimsArrayAttr.size() &&
+             "Banking factors/dimensions must be paired together");
+    } else {
+      auto dimsIntAttr = dyn_cast<IntegerAttr>(bankingDimensionsAttr);
+      assert(dimsIntAttr && "banking.dimensions can either be an integer or an "
+                            "array of integers");
+      assert(factorsArrayAttr.size() == 1 &&
+             "Banking factors/dimensions must be paired together");
+    }
+  } else {
+    auto factorsIntAttr = dyn_cast<IntegerAttr>(bankingFactorsAttr);
+    assert(factorsIntAttr &&
+           "banking.factors can either be an integer or an array of integers");
+    if (auto dimsArrayAttr = dyn_cast<ArrayAttr>(bankingDimensionsAttr)) {
+      assert(dimsArrayAttr.size() == 1 &&
+             "Banking factors/dimensions must be paired together");
+    } else {
+      auto dimsIntAttr = dyn_cast<IntegerAttr>(bankingDimensionsAttr);
+      assert(dimsIntAttr && "banking.dimensions can either be an integer or an "
+                            "array of integers");
+    }
+  }
+}
+
 void MemoryBankingPass::setAllBankingAttributes(Operation *operation,
                                                 MLIRContext *context) {
   ArrayAttr defaultFactorsAttr = ArrayAttr::get(
@@ -811,6 +837,9 @@ void MemoryBankingPass::setAllBankingAttributes(Operation *operation,
           originalDef->setAttr(bankingDimensionsStr,
                                getDimensionsAttr(specifiedOrDefaultDims));
         }
+
+        verifyBankingAttributesSize(originalDef->getAttr(bankingFactorsStr),
+                                    originalDef->getAttr(bankingDimensionsStr));
       } else if (isa<BlockArgument>(memref)) {
         auto blockArg = cast<BlockArgument>(memref);
         auto *parentOp = blockArg.getOwner()->getParentOp();
@@ -827,6 +856,10 @@ void MemoryBankingPass::setAllBankingAttributes(Operation *operation,
         if (!funcOp.getArgAttr(argIndex, bankingDimensionsStr))
           funcOp.setArgAttr(argIndex, bankingDimensionsStr,
                             getDimensionsAttr(specifiedOrDefaultDims));
+
+        verifyBankingAttributesSize(
+            funcOp.getArgAttr(argIndex, bankingFactorsStr),
+            funcOp.getArgAttr(argIndex, bankingDimensionsStr));
       }
       return WalkResult::advance();
     });
@@ -851,6 +884,12 @@ void MemoryBankingPass::runOnOperation() {
     return;
   }
 
+  if (bankingDimensions.size() > bankingFactors.size()) {
+    getOperation().emitError(
+        "A banking dimension must be paired with a factor");
+    signalPassFailure();
+    return;
+  }
   // `bankingFactors` is guaranteed to have elements and at least one of them is
   // greater than 1 beyond this point.
 
@@ -875,8 +914,6 @@ void MemoryBankingPass::runOnOperation() {
       for (auto memrefVal : memrefsInPar) {
         auto currConfig = getMemRefBankingConfig(memrefVal);
         if (!currConfig.factors) {
-          assert(!currConfig.dimensions &&
-                 "A banking dimension must be paired with a factor");
           continue;
         }
         auto [it, inserted] = memoryToBanks.insert(
