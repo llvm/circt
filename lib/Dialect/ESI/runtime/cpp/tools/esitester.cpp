@@ -52,8 +52,8 @@ int main(int argc, const char *argv[]) {
 
   try {
     // TODO: Use proper command line parsing to set debug level.
-    Context ctxt = Context::withLogger<StreamLogger>(Logger::Level::Debug);
-    // Context ctxt = Context::withLogger<StreamLogger>(Logger::Level::Info);
+    // Context ctxt = Context::withLogger<StreamLogger>(Logger::Level::Debug);
+    Context ctxt = Context::withLogger<StreamLogger>(Logger::Level::Info);
     std::unique_ptr<AcceleratorConnection> acc = ctxt.connect(backend, conn);
     const auto &info = *acc->getService<services::SysInfo>();
     Manifest manifest(ctxt, info.getJsonManifest());
@@ -261,7 +261,7 @@ static void dmaWriteTest(AcceleratorConnection *conn, Accelerator *acc,
   ReadChannelPort &outPort = outPortIter->second.getRawRead("data");
   outPort.connect();
 
-  size_t xferCount = 2;
+  size_t xferCount = 24;
   uint64_t last = 0;
   MessageData data;
   toHostMMIO->write(0, xferCount);
@@ -281,8 +281,7 @@ static void dmaWriteTest(AcceleratorConnection *conn, Accelerator *acc,
 }
 
 static void dmaWriteTest(AcceleratorConnection *conn, Accelerator *acc) {
-  // for (size_t width : {32, 64, 128, 256, 384, 504, 512})
-  for (size_t width : {64, 512})
+  for (size_t width : {32, 64, 128, 256, 384, 504, 512})
     dmaWriteTest(conn, acc, width);
 }
 
@@ -334,7 +333,6 @@ static void bandWidthTest(AcceleratorConnection *conn, Accelerator *acc,
 }
 
 static void bandwidthTest(AcceleratorConnection *conn, Accelerator *acc) {
-  // for (size_t width : {32, 64, 128, 256, 384, 504})
-  for (size_t width : {512})
+  for (size_t width : {32, 64, 128, 256, 384, 504, 512})
     bandWidthTest(conn, acc, width, 160000);
 }
