@@ -11,6 +11,7 @@
 
 add_subdirectory(AIG)
 add_subdirectory(Arc)
+add_subdirectory(BLIF)
 add_subdirectory(Calyx)
 add_subdirectory(Comb)
 add_subdirectory(DC)
