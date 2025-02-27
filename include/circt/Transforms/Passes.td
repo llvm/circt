@@ -132,7 +132,7 @@ def MemoryBanking : Pass<"memory-banking", "::mlir::func::FuncOp"> {
            "The elements specified in banking factors should be greater than 1;"
            "The elements specified in banking factors will be paired with the ones specified in banking dimensions."
            "In principle, the number of elements in banking factors should be equal to banking dimensions',"
-           "with the only exception that there is one banking factor with zero banking dimension.">,
+           "with a single exception case: there is one banking factor with zero banking dimensions.">,
     ListOption<"bankingDimensionsList", "dimensions", "unsigned",
            "The dimensions along which to bank the memory. If unspecified and"
            "there is only one factor, the innermost dimension with size > 1 is used.">
