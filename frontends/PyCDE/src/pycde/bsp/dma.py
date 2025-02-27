@@ -31,10 +31,13 @@ def OneItemBuffersToHost(client_type: Type):
 
     clk = Clock()
     rst = Reset()
+    # The channel whose messages we are sending to the host.
     input_channel = InputChannel(client_type)
 
+    # Since we cannot produce service requests (shortcoming of the ESI
+    # compiler), the module (usually a service implementation) must issue the
+    # service requests for us then connect the input ports.
     mmio = Input(esi.MMIO.read_write.type)
-
     xfer_data_type = StructType([("valid", Bits(8)),
                                  ("client_data", client_type)])
     hostmem = Input(esi.HostMem.write_req_bundle_type(xfer_data_type))

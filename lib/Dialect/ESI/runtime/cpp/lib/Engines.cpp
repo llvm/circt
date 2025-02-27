@@ -71,8 +71,10 @@ public:
   /// Offset into the MMIO space to which the buffer pointer is written.
   static constexpr size_t BufferPtrOffset = 8;
 
-  OneItemBuffersToHostReadPort(const Type *type, OneItemBuffersToHost *engine)
-      : ReadChannelPort(type), engine(engine) {
+  OneItemBuffersToHostReadPort(const Type *type, OneItemBuffersToHost *engine,
+                               AppIDPath idPath, const std::string &channelName)
+      : ReadChannelPort(type), engine(engine), idPath(idPath),
+        channelName(channelName) {
     bufferSize = (type->getBitWidth() / 8) + 1;
   }
 
@@ -83,6 +85,8 @@ public:
   // Check for buffer fill.
   bool pollImpl() override;
 
+  std::string identifier() const { return idPath.toStr() + "." + channelName; }
+
 protected:
   // Size of buffer based on type.
   size_t bufferSize;
@@ -92,6 +96,10 @@ protected:
   std::unique_ptr<services::HostMem::HostMemRegion> buffer;
   // Number of times the poll function has been called.
   uint64_t pollCount = 0;
+
+  // Identifing information.
+  AppIDPath idPath;
+  std::string channelName;
 };
 
 class OneItemBuffersToHost : public Engine {
@@ -117,14 +125,18 @@ public:
   // Only throw errors on connect.
   void connect() override;
 
+  // Create a real read port if requested. Create an error-throwing write port
+  // if requested.
   std::unique_ptr<ChannelPort> createPort(AppIDPath idPath,
                                           const std::string &channelName,
                                           BundleType::Direction dir,
                                           const Type *type) override {
     if (BundlePort::isWrite(dir))
       return std::make_unique<UnknownWriteChannelPort>(
-          type, "OneItemBuffersToHost: cannot create write port");
-    return std::make_unique<OneItemBuffersToHostReadPort>(type, this);
+          type, idPath.toStr() + "." + channelName +
+                    " OneItemBuffersToHost: cannot create write port");
+    return std::make_unique<OneItemBuffersToHostReadPort>(type, this, idPath,
+                                                          channelName);
   }
 
 protected:
@@ -155,12 +167,14 @@ void OneItemBuffersToHost::connect() {
   BundlePort *port = acc.resolvePort(mmioPath, lastPath);
   if (port == nullptr)
     throw std::runtime_error(
-        "OneItemBuffersToHost: could not find MMIO port at " +
+        thisPath.toStr() +
+        " OneItemBuffersToHost: could not find MMIO port at " +
         mmioPath.toStr());
   mmio = dynamic_cast<services::MMIO::MMIORegion *>(port);
   if (!mmio)
     throw std::runtime_error(
-        "OneItemBuffersToHost: MMIO port is not an MMIO port");
+        thisPath.toStr() +
+        " OneItemBuffersToHost: MMIO port is not an MMIO port");
 
   // If we have a valid MMIO port, we can connect.
   connected = true;
@@ -190,10 +204,10 @@ bool OneItemBuffersToHostReadPort::pollImpl() {
   // has accepted the data, re-use the buffer.
   MessageData data(bufferData, bufferSize - 1);
   engine->conn.getLogger().debug(
-      [data](std::string &subsystem, std::string &msg,
-             std::unique_ptr<std::map<std::string, std::any>> &details) {
+      [this, data](std::string &subsystem, std::string &msg,
+                   std::unique_ptr<std::map<std::string, std::any>> &details) {
         subsystem = "OneItemBuffersToHost";
-        msg = "Got message contents 0x" + data.toHex();
+        msg = identifier() + " got message contents 0x" + data.toHex();
       });
   if (callback(std::move(data))) {
     writeBufferPtr();
