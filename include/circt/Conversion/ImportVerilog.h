@@ -49,6 +49,9 @@ struct ImportVerilogOptions {
   /// Generate debug information in the form of debug dialect ops in the IR.
   bool debugInfo = false;
 
+  /// Interpret `always @(*)` as `always_comb`.
+  bool lowerAlwaysAtStarAsComb = true;
+
   //===--------------------------------------------------------------------===//
   // Include paths
   //===--------------------------------------------------------------------===//

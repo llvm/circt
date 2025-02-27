@@ -40,11 +40,11 @@ static bool isEpsilonDelay(Value value) {
   return false;
 }
 
-/// Check whether an operation is a `llhd.drive` with no enable condition and an
-/// epsilon delay. This corresponds to a blocking assignment in Verilog.
-static bool isUnconditionalBlockingDrive(Operation *op) {
+/// Check whether an operation is a `llhd.drive` with an epsilon delay. This
+/// corresponds to a blocking assignment in Verilog.
+static bool isBlockingDrive(Operation *op) {
   if (auto driveOp = dyn_cast<DrvOp>(op))
-    return !driveOp.getEnable() && isEpsilonDelay(driveOp.getTime());
+    return isEpsilonDelay(driveOp.getTime());
   return false;
 }
 
@@ -278,7 +278,7 @@ struct DriveNode : public OpNode {
             LatticeValue *valueAfter)
       : OpNode(Kind::Drive, op, valueBefore, valueAfter), slot(op.getSignal()),
         value(op.getValue()), def(def) {
-    assert(isUnconditionalBlockingDrive(op));
+    assert(isBlockingDrive(op));
   }
 
   static bool classof(const LatticeNode *n) { return n->kind == Kind::Drive; }
@@ -608,7 +608,7 @@ void Promoter::findPromotableSlots() {
             // Ignore uses outside of the region.
             if (user->getParentRegion() != &region)
               return true;
-            return isa<PrbOp>(user) || isUnconditionalBlockingDrive(user);
+            return isa<PrbOp>(user) || isBlockingDrive(user);
           }))
         continue;
 
@@ -765,12 +765,14 @@ void Promoter::constructLattice() {
 
       // Handle drives.
       if (auto driveOp = dyn_cast<DrvOp>(op)) {
-        if (!isUnconditionalBlockingDrive(&op))
+        if (!isBlockingDrive(&op))
           continue;
         if (!slotOrder.contains(driveOp.getSignal()))
           continue;
-        auto *def =
-            lattice.createDef(driveOp.getValue(), DriveCondition::always());
+        auto condition = DriveCondition::always();
+        if (auto enable = driveOp.getEnable())
+          condition = DriveCondition::conditional(enable);
+        auto *def = lattice.createDef(driveOp.getValue(), condition);
         auto *node = lattice.createNode<DriveNode>(driveOp, def, valueBefore,
                                                    lattice.createValue());
         valueBefore = node->valueAfter;
