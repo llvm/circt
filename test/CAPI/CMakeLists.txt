@@ -13,6 +13,7 @@ target_link_libraries(circt-capi-ir-test
   CIRCTCAPISV
   CIRCTCAPIFSM
   CIRCTCAPIExportFIRRTL
+  CIRCTCAPIExportSMTLIB
   CIRCTCAPIExportVerilog
 )
 
@@ -63,6 +64,21 @@ add_llvm_executable(circt-capi-arc-test
 )
 llvm_update_compile_flags(circt-capi-arc-test)
 
+add_llvm_executable(circt-capi-smtlib-test
+  PARTIAL_SOURCES_INTENDED
+  smtlib.c
+)
+llvm_update_compile_flags(circt-capi-smtlib-test)
+
+target_link_libraries(circt-capi-smtlib-test
+  PRIVATE
+
+  MLIRCAPIIR
+  MLIRCAPIFunc
+  CIRCTCAPISMT
+  CIRCTCAPIExportSMTLIB
+)
+
 target_link_libraries(circt-capi-arc-test
   PRIVATE
 
@@ -95,6 +111,7 @@ target_link_libraries(circt-capi-rtg-test
 
   MLIRCAPIIR
   CIRCTCAPIRTG
+  CIRCTCAPIRTGTest
 )
 
 add_llvm_executable(circt-capi-rtgtest-test

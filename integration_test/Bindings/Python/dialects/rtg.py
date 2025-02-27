@@ -13,8 +13,8 @@ with Context() as ctx, Location.unknown():
   m = Module.create()
   with InsertionPoint(m.body):
     cpuTy = rtgtest.CPUType.get()
-    dictTy = rtg.DictType.get(ctx, [(StringAttr.get('cpu0'), cpuTy),
-                                    (StringAttr.get('cpu1'), cpuTy)])
+    dictTy = rtg.DictType.get([(StringAttr.get('cpu0'), cpuTy),
+                               (StringAttr.get('cpu1'), cpuTy)], ctx)
 
     target = rtg.TargetOp('target_name', TypeAttr.get(dictTy))
     targetBlock = Block.create_at_start(target.bodyRegion, [])
@@ -32,8 +32,7 @@ with Context() as ctx, Location.unknown():
   # CHECK:   [[V1:%.+]] = rtgtest.cpu_decl <1>
   # CHECK:   rtg.yield [[V0]], [[V1]] : !rtgtest.cpu, !rtgtest.cpu
   # CHECK: }
-  # CHECK: rtg.test @test_name : !rtg.dict<cpu0: !rtgtest.cpu, cpu1: !rtgtest.cpu> {
-  # CHECK: ^bb{{.*}}(%{{.*}}: !rtgtest.cpu, %{{.*}}: !rtgtest.cpu):
+  # CHECK: rtg.test @test_name(cpu0 = %cpu0: !rtgtest.cpu, cpu1 = %cpu1: !rtgtest.cpu) {
   # CHECK: }
   print(m)
 
@@ -44,6 +43,9 @@ with Context() as ctx, Location.unknown():
     setTy = rtg.SetType.get(rtg.SequenceType.get())
     seq = rtg.SequenceOp('seq', TypeAttr.get(rtg.SequenceType.get([setTy])))
     seqBlock = Block.create_at_start(seq.bodyRegion, [setTy])
+
+    # CHECK: !rtg.sequence{{$}}
+    print(setTy.element_type)
 
   # CHECK: rtg.sequence @seq(%{{.*}}: !rtg.set<!rtg.sequence>) {
   # CHECK: }
@@ -62,7 +64,7 @@ with Context() as ctx, Location.unknown():
       seq_get = rtg.GetSequenceOp(rtg.SequenceType.get(), 'sequence_name')
       rtg.RandomizeSequenceOp(seq_get)
 
-  # CHECK: rtg.test @test_name : !rtg.dict<> {
+  # CHECK: rtg.test @test_name() {
   # CHECK-NEXT:   [[SEQ:%.+]] = rtg.get_sequence @sequence_name
   # CHECK-NEXT:   rtg.randomize_sequence [[SEQ]]
   # CHECK-NEXT: }
@@ -76,7 +78,7 @@ with Context() as ctx, Location.unknown():
   rtgtool.populate_randomizer_pipeline(pm, options)
   pm.run(m.operation)
 
-  # CHECK: rtg.test @test_name : !rtg.dict<> {
+  # CHECK: rtg.test @test_name() {
   # CHECK-NEXT: }
   print(m)
 
@@ -100,6 +102,9 @@ with Context() as ctx, Location.unknown():
     Block.create_at_start(
         seq.bodyRegion,
         [sequenceTy, labelTy, setTy, bagTy, ireg, randomizedSequenceTy])
+
+    # CHECK: index{{$}}
+    print(bagTy.element_type)
 
   # CHECK: rtg.sequence @seq(%{{.*}}: !rtg.sequence, %{{.*}}: !rtg.label, %{{.*}}: !rtg.set<index>, %{{.*}}: !rtg.bag<index>, %{{.*}}: !rtgtest.ireg, %{{.*}}: !rtg.randomized_sequence)
   print(m)
@@ -208,3 +213,11 @@ with Context() as ctx, Location.unknown():
   # CHECK: rtg.label_decl "label"
   # CHECK: rtg.label global {{%.+}}
   print(m)
+
+with Context() as ctx, Location.unknown():
+  circt.register_dialects(ctx)
+  attr = rtg.DefaultContextAttr.get(rtgtest.CPUType.get())
+  # CHECK: !rtgtest.cpu
+  print(attr.type)
+  # CHECK: #rtg.default : !rtgtest.cpu
+  print(attr)

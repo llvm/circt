@@ -71,8 +71,7 @@ verif.formal @FormalTestBody {} {
 verif.simulation @EmptySimulationTest {} {
 ^bb0(%clock: !seq.clock, %init: i1):
   %0 = hw.constant true
-  %1 = hw.constant 9001 : i42
-  verif.yield %0, %1 : i1, i42
+  verif.yield %0, %0 : i1, i1
 }
 
 //===----------------------------------------------------------------------===//

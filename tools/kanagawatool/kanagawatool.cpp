@@ -153,7 +153,7 @@ static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
 
 static void loadHighLevelControlflowTransformsPipeline(OpPassManager &pm) {
   pm.addPass(mlir::createLowerAffinePass());
-  pm.addPass(mlir::createConvertSCFToCFPass());
+  pm.addPass(mlir::createSCFToControlFlowPass());
   pm.addPass(createSimpleCanonicalizerPass());
 }
 

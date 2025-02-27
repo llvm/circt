@@ -29,8 +29,8 @@ def CPUDeclOp : RTGTestOp<"cpu_decl", [
 ]> {
   let summary = "declare a CPU";
   let description = [{
-    This operation is used to test the `ContextResourceOpInterface` and passes
-    taking advantage of it.
+    This operation is used to test the `ContextResourceAttrInterface` and
+    `ContextResourceTypeInterface` passes taking advantage of it.
   }];
 
   let arguments = (ins CPUAttr:$id);

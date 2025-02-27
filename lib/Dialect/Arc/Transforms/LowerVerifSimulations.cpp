@@ -100,10 +100,9 @@ void LowerVerifSimulationsPass::lowerSimulation(verif::SimulationOp op,
   implPorts[2].dir = PortInfo::Output;
   implPorts[2].loc = yieldOp->getOperand(0).getLoc();
 
-  auto exitCodeName = StringAttr::get(context, "exit_code");
-  auto exitCodeType = yieldOp->getOperand(1).getType();
-  implPorts[3].name = exitCodeName;
-  implPorts[3].type = exitCodeType;
+  auto successName = StringAttr::get(context, "success");
+  implPorts[3].name = successName;
+  implPorts[3].type = i1Type;
   implPorts[3].dir = PortInfo::Output;
   implPorts[3].loc = yieldOp->getOperand(1).getLoc();
 
@@ -161,11 +160,11 @@ void LowerVerifSimulationsPass::lowerSimulation(verif::SimulationOp op,
   builder.create<cf::BranchOp>(loc, &loopBlock);
   builder.setInsertionPointToEnd(&loopBlock);
 
-  // Sample the done and exit code signals.
+  // Sample the done and success signals.
   auto doneSample =
       builder.create<SimGetPortOp>(loc, i1Type, instArg, doneName);
-  auto exitCodeSample =
-      builder.create<SimGetPortOp>(loc, exitCodeType, instArg, exitCodeName);
+  auto successSample =
+      builder.create<SimGetPortOp>(loc, i1Type, instArg, successName);
 
   // Apply a full clock cycle to the design.
   builder.create<SimSetInputOp>(loc, instArg, clockName, highOp);
@@ -178,26 +177,17 @@ void LowerVerifSimulationsPass::lowerSimulation(verif::SimulationOp op,
   builder.create<cf::CondBranchOp>(loc, doneSample, &exitBlock, &loopBlock);
   builder.setInsertionPointToEnd(&exitBlock);
 
-  // Compute `exit_code | (exit_code != 0)` as a way of guaranteeing that
-  // the exit code will be non-zero even if bits are truncated by the operating
-  // system.
+  // Convert the i1 success signal into an i32 failure signal that can be used
+  // as an exit code.
   auto i32Type = builder.getI32Type();
-  auto nonZeroI32 = builder.create<arith::ExtUIOp>(
+  auto failureI32 = builder.create<arith::ExtUIOp>(
       loc, i32Type,
-      builder.create<arith::CmpIOp>(
-          loc, arith::CmpIPredicate::ne, exitCodeSample,
-          builder.create<hw::ConstantOp>(loc, exitCodeType, 0)));
-
-  Value codeI32 = exitCodeSample;
-  if (exitCodeType.getIntOrFloatBitWidth() < 32)
-    codeI32 = builder.create<arith::ExtUIOp>(loc, i32Type, codeI32);
-  else if (exitCodeType.getIntOrFloatBitWidth() > 32)
-    codeI32 = builder.create<arith::TruncIOp>(loc, i32Type, codeI32);
-  codeI32 = builder.create<arith::OrIOp>(loc, codeI32, nonZeroI32);
+      builder.create<arith::XOrIOp>(
+          loc, successSample, builder.create<hw::ConstantOp>(loc, i1Type, 1)));
 
   // Call exit with the computed exit code.
   builder.create<func::CallOp>(loc, TypeRange{}, builder.getStringAttr("exit"),
-                               ValueRange{codeI32});
+                               ValueRange{failureI32});
   builder.create<scf::YieldOp>(loc);
 
   // Create the final function return.

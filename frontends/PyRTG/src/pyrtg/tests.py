@@ -2,41 +2,45 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-import inspect
-
 from .circt import ir
-from .circt.dialects import rtg
+from .core import CodeGenRoot
+from .rtg import rtg
+from .support import _FromCirctValue
 
 
-class Test:
+class Test(CodeGenRoot):
   """
   Represents an RTG Test. Stores the test function and location.
   """
 
-  type: ir.Type
-
-  def __init__(self, test_func):
+  def __init__(self, test_func, args: list[tuple[str, ir.Type]]):
     self.test_func = test_func
-
-    sig = inspect.signature(test_func)
-    assert len(sig.parameters) == 0, "test arguments not supported yet"
-
-    self.type = rtg.DictType.get(None, [])
+    self.arg_names = [name for name, _ in args]
+    self.arg_types = [ty for _, ty in args]
 
   @property
   def name(self) -> str:
     return self.test_func.__name__
 
-  def codegen(self):
-    test = rtg.TestOp(self.name, ir.TypeAttr.get(self.type))
-    block = ir.Block.create_at_start(test.bodyRegion, [])
+  def _codegen(self):
+    test = rtg.TestOp(
+        self.name,
+        ir.TypeAttr.get(
+            rtg.DictType.get([
+                (ir.StringAttr.get(name), ty)
+                for (name, ty) in zip(self.arg_names, self.arg_types)
+            ])))
+    block = ir.Block.create_at_start(test.bodyRegion, self.arg_types)
     with ir.InsertionPoint(block):
-      self.test_func(*block.arguments)
+      self.test_func(*[_FromCirctValue(arg) for arg in block.arguments])
 
 
-def test(func):
+def test(*args, **kwargs):
   """
   Decorator for RTG test functions.
   """
 
-  return Test(func)
+  def wrapper(func):
+    return Test(func, list(args))
+
+  return wrapper

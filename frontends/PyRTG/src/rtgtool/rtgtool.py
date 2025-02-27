@@ -128,8 +128,8 @@ def frontend_codegen(args: argparse.Namespace) -> ir.Module:
     module = ir.Module.create()
     with ir.InsertionPoint(module.body):
       for _, obj in inspect.getmembers(file):
-        if isinstance(obj, pyrtg.tests.Test):
-          obj.codegen()
+        if isinstance(obj, pyrtg.core.CodeGenRoot):
+          obj._codegen()
     return module
 
   assert False, "input format must be one of the above"

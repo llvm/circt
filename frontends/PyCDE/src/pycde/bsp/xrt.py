@@ -12,7 +12,8 @@ from ..types import Array, Bits, Channel, UInt
 from .. import esi
 
 from .common import (ChannelEngineService, ChannelHostMem, ChannelMMIO,
-                     DummyFromHostEngine, DummyToHostEngine, Reset)
+                     DummyFromHostEngine, DummyToHostEngine, MMIOIndirection,
+                     Reset)
 
 import glob
 import pathlib
@@ -197,11 +198,15 @@ def XrtChannelTop(user_module):
       cmd, froms = esi.MMIO.read_write.type.pack(cmd=rw_mux.cmd)
       data.assign(froms["data"])
 
+      indirect_mmio = MMIOIndirection(clk=ports.clk,
+                                      rst=ports.rst,
+                                      upstream=cmd)
+
       ChannelMMIO(esi.MMIO,
                   appid=esi.AppID("__xrt_mmio"),
                   clk=ports.clk,
                   rst=ports.rst,
-                  cmd=cmd)
+                  cmd=indirect_mmio.downstream)
 
   return XrtChannelTop
 

@@ -21,6 +21,9 @@ import typing
 MagicNumber = 0x207D98E5_E5100E51  # random + ESI__ESI
 VersionNumber = 0  # Version 0: format subject to change
 
+IndirectionMagicNumber = 0x312bf0cc_E5100E51  # random + ESI__ESI
+IndirectionVersionNumber = 0  # Version 0: format subject to change
+
 
 class ESI_Manifest_ROM(Module):
   """Module which will be created later by CIRCT which will contain the
@@ -137,9 +140,9 @@ class ChannelMMIO(esi.ServiceImplementation):
   # TODO: only supports one outstanding transaction at a time. This is NOT
   # enforced or checked! Enforce this.
 
-  RegisterSpace = 0x1000
+  RegisterSpace = 0x100000
   RegisterSpaceBits = RegisterSpace.bit_length() - 1
-  AddressMask = 0xFFF
+  AddressMask = 0xFFFFF
 
   # Start at this address for assigning MMIO addresses to service requests.
   initial_offset: int = RegisterSpace
@@ -208,7 +211,8 @@ class ChannelMMIO(esi.ServiceImplementation):
     client_cmd_channels = esi.ChannelDemux(
         sel=sel_bits.pad_or_truncate(read_clients_clog2),
         input=client_cmd_chan,
-        num_outs=len(table))
+        num_outs=len(table),
+        instance_name="client_cmd_demux")
     client_data_channels = []
     for (idx, offset) in enumerate(sorted(table.keys())):
       bundle_wire = table[offset]
@@ -255,6 +259,91 @@ class ChannelMMIO(esi.ServiceImplementation):
         esi.MMIOReadWriteCmdType).wrap(client_cmd, cmd_valid)
     cmd_ready_wire.assign(client_addr_ready)
     return sel_bits, client_addr_chan
+
+
+class MMIOIndirection(Module):
+  """Some platforms do not support MMIO space greater than a certain size (e.g.
+  Vitis 2022's limit is 4k). This module implements a level of indirection to
+  provide access to a full 32-bit address space.
+
+  MMIO addresses:
+    - 0x0:  0 constant
+    - 0x8:  64 bit ESI magic number for Indirect MMIO (0x312bf0cc_E5100E51)
+    - 0x10: Version number for Indirect MMIO (0)
+    - 0x18: Location of read/write in the virtual MMIO space.
+    - 0x20: A read from this location will initiate a read in the virtual MMIO
+            space specified by the address stored in 0x18 and return the result.
+            A write to this location will initiate a write into the virtual MMIO
+            space to the virtual address specified in 0x18.
+  """
+  clk = Clock()
+  rst = Reset()
+
+  upstream = Input(esi.MMIO.read_write.type)
+  downstream = Output(esi.MMIO.read_write.type)
+
+  @generator
+  def build(ports):
+    # This implementation assumes there is only one outstanding upstream MMIO
+    # transaction in flight at once. TODO: enforce this or make it more robust.
+
+    reg_bits = 8
+    location_reg = UInt(reg_bits)(0x18)
+    indirect_mmio_reg = UInt(reg_bits)(0x20)
+    virt_address = Wire(UInt(32))
+
+    # Set up the upstream MMIO interface. Capture last upstream command in a
+    # mailbox which never empties to give access to the last command for all
+    # time.
+    upstream_resp_chan_wire = Wire(Channel(esi.MMIODataType))
+    upstream_cmd_chan = ports.upstream.unpack(
+        data=upstream_resp_chan_wire)["cmd"]
+    _, _, upstream_cmd_data = upstream_cmd_chan.snoop()
+
+    # Set up a channel demux to separate the MMIO commands which get processed
+    # locally with ones which should be transformed and fowarded downstream.
+    phys_loc = upstream_cmd_data.offset.as_uint(reg_bits)
+    fwd_upstream = NamedWire(phys_loc == indirect_mmio_reg, "fwd_upstream")
+    local_reg_cmd_chan, downstream_cmd_channel = esi.ChannelDemux(
+        upstream_cmd_chan, fwd_upstream, 2, "upstream_demux")
+
+    # Set up the downstream MMIO interface.
+    downstream_cmd_channel = downstream_cmd_channel.transform(
+        lambda cmd: esi.MMIOReadWriteCmdType({
+            "write": cmd.write,
+            "offset": virt_address,
+            "data": cmd.data
+        }))
+    ports.downstream, froms = esi.MMIO.read_write.type.pack(
+        cmd=downstream_cmd_channel)
+    downstream_data_chan = froms["data"]
+
+    # Process local regs.
+    (local_reg_cmd_valid, local_reg_cmd_ready,
+     local_reg_cmd) = local_reg_cmd_chan.snoop()
+    write_virt_address = (local_reg_cmd_valid & local_reg_cmd_ready &
+                          local_reg_cmd.write & (phys_loc == location_reg))
+    virt_address.assign(
+        local_reg_cmd.data.as_uint(32).reg(
+            name="virt_address",
+            clk=ports.clk,
+            ce=write_virt_address,
+        ))
+
+    # Build the pysical MMIO register space.
+    local_reg_resp_array = Array(Bits(64), 4)([
+        0x0,  # 0x0
+        IndirectionMagicNumber,  # 0x8
+        IndirectionVersionNumber,  # 0x10
+        virt_address.as_bits(64),  # 0x18
+    ])
+    local_reg_resp_chan = local_reg_cmd_chan.transform(
+        lambda cmd: local_reg_resp_array[cmd.offset.as_uint(2)])
+
+    # Mux together the local register responses and the downstream data to
+    # create the upstream response.
+    upstream_resp = esi.ChannelMux([local_reg_resp_chan, downstream_data_chan])
+    upstream_resp_chan_wire.assign(upstream_resp)
 
 
 @modparams
@@ -512,7 +601,10 @@ def TaggedWriteGearbox(input_bitwidth: int,
         # to complete the transmission.
         num_chunks = TaggedWriteGearboxImpl.num_chunks
         num_chunks_idx_bitwidth = clog2(num_chunks)
-        padding_numbits = output_bitwidth - (input_bitwidth % output_bitwidth)
+        if input_bitwidth % output_bitwidth == 0:
+          padding_numbits = 0
+        else:
+          padding_numbits = output_bitwidth - (input_bitwidth % output_bitwidth)
         assert padding_numbits % 8 == 0, "Padding must be a multiple of 8."
         client_data_padded = BitsSignal.concat(
             [Bits(padding_numbits)(0), client_data])
@@ -537,8 +629,10 @@ def TaggedWriteGearbox(input_bitwidth: int,
         clear.assign(upstream_xact & (counter.out == (num_chunks - 1)))
         increment.assign(upstream_xact)
         ready_for_client.assign(~upstream_valid)
-        counter_bytes = BitsSignal.concat([counter.out.as_bits(),
-                                           Bits(3)(0)]).as_uint()
+        address_padding_bits = clog2(output_bitwidth_bytes)
+        counter_bytes = BitsSignal.concat(
+            [counter.out.as_bits(),
+             Bits(address_padding_bits)(0)]).as_uint()
 
         # Construct the output channel. Shared logic across all three cases.
         tag_reg = client_tag_and_data.tag.reg(ports.clk,
