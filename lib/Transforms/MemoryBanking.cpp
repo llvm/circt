@@ -355,33 +355,27 @@ unsigned getCurrBankingInfo(BankingConfigAttributes bankingConfigAttrs,
 Attribute getRemainingBankingInfo(MLIRContext *context,
                                   BankingConfigAttributes bankingConfigAttrs,
                                   StringRef attrName) {
-  if (attrName.str() == bankingFactorsStr) {
-    if (auto arrayAttr = dyn_cast<ArrayAttr>(bankingConfigAttrs.factors)) {
+  auto getRemainingElements = [context](Attribute attr) -> Attribute {
+    if (auto arrayAttr = dyn_cast<ArrayAttr>(attr)) {
       assert(!arrayAttr.empty() &&
-             "BankingConfig factors ArrayAttr should not be empty");
+             "BankingConfig ArrayAttr should not be empty");
       return arrayAttr.size() > 1
                  ? ArrayAttr::get(context, arrayAttr.getValue().take_back(
                                                arrayAttr.size() - 1))
                  : nullptr;
     }
-    auto intAttr = dyn_cast<IntegerAttr>(bankingConfigAttrs.factors);
-    assert(intAttr && "BankingConfig factor must be an integer");
+    assert(dyn_cast<IntegerAttr>(attr) &&
+           "BankingConfig attribute must be an integer");
     return nullptr;
+  };
+
+  if (attrName.str() == bankingFactorsStr) {
+    return getRemainingElements(bankingConfigAttrs.factors);
   }
 
   assert(attrName.str() == bankingDimensionsStr &&
          "BankingConfig only contains 'factors' and 'dimensions' attributes");
-  if (auto arrayAttr = dyn_cast<ArrayAttr>(bankingConfigAttrs.dimensions)) {
-    assert(!arrayAttr.empty() &&
-           "BankingConfig dimensions ArrayAttr should not be empty");
-    return arrayAttr.size() > 1
-               ? ArrayAttr::get(context, arrayAttr.getValue().take_back(
-                                             arrayAttr.size() - 1))
-               : nullptr;
-  }
-  auto intAttr = dyn_cast<IntegerAttr>(bankingConfigAttrs.dimensions);
-  assert(intAttr && "BankingConfig dimension must be an integer");
-  return nullptr;
+  return getRemainingElements(bankingConfigAttrs.dimensions);
 }
 
 SmallVector<Value, 4> MemoryBankingPass::createBanks(OpBuilder &builder,
