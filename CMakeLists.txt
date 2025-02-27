@@ -538,14 +538,17 @@ llvm_canonicalize_cmake_booleans(CIRCT_SLANG_BUILD_FROM_SOURCE)
 if(CIRCT_SLANG_FRONTEND_ENABLED)
   message(STATUS "slang Verilog frontend is enabled")
   if(CIRCT_SLANG_BUILD_FROM_SOURCE)
+    # slang requires C++20
+    set(CMAKE_CXX_STANDARD 20)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
     # Build slang as part of CIRCT (see https://sv-lang.com/building.html)
     message(STATUS "Building slang from source")
     include(FetchContent)
     FetchContent_Declare(
       slang
       GIT_REPOSITORY https://github.com/MikePopoloski/slang.git
-      GIT_TAG v3.0
-      GIT_SHALLOW ON)
+      GIT_TAG bad0d6ba3dec20355b0156c535bbddf2f926ab37)
     set(FETCHCONTENT_TRY_FIND_PACKAGE_MODE "NEVER")
 
     # Force Slang to be built as a static library to avoid messing around with
@@ -560,6 +563,7 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
       set(CMAKE_CXX_FLAGS "")
     endif ()
     set(BUILD_SHARED_LIBS OFF)
+    set(SLANG_USE_MIMALLOC OFF)
     FetchContent_MakeAvailable(slang)
 
     set(CMAKE_CXX_FLAGS ${ORIGINAL_CMAKE_CXX_FLAGS})
@@ -568,7 +572,6 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     if(BUILD_SHARED_LIBS)
       set_target_properties(slang_slang PROPERTIES POSITION_INDEPENDENT_CODE ON)
       set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
-      set_target_properties(unordered_dense PROPERTIES POSITION_INDEPENDENT_CODE ON)
     endif()
 
     # The following feels *very* hacky, but CMake complains about the
@@ -576,18 +579,24 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     # linking) without the latter being in an export set. I think we'd want to
     # statically link slang into the CIRCTImportVerilog library, but seems to be
     # harder than it ought to be.
-    set_property(
-      GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang unordered_dense fmt)
+    get_target_property(slang_deps slang_slang INTERFACE_LINK_LIBRARIES)
+    foreach(alias ${slang_deps})
+      if (TARGET ${alias})
+        get_target_property(link ${alias} ALIASED_TARGET)
+        set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS ${link})
+        install(TARGETS ${link} EXPORT CIRCTTargets)
+      endif()
+    endforeach()
     
     # Disable the installation of headers coming from third-party libraries. We
     # won't use those APIs directly. Just make them static libraries for the sake
     # of running slang normally.
     set_target_properties(fmt PROPERTIES PUBLIC_HEADER "")
-    set_target_properties(unordered_dense PROPERTIES PUBLIC_HEADER "")
 
-    install(TARGETS slang_slang unordered_dense fmt EXPORT CIRCTTargets)
+    set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang)
+    install(TARGETS slang_slang EXPORT CIRCTTargets)
   else()
-    find_package(slang 3.0 REQUIRED)
+    find_package(slang 7.0 REQUIRED)
   endif()
 endif()
 

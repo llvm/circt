@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "slang/ast/EvalContext.h"
 #include "slang/ast/SystemSubroutine.h"
 #include "slang/syntax/AllSyntax.h"
 
@@ -583,7 +584,7 @@ struct RvalueExprVisitor {
       // The open range list on the right-hand side of the inside operator is a
       // comma-separated list of expressions or ranges.
       if (const auto *openRange =
-              listExpr->as_if<slang::ast::OpenRangeExpression>()) {
+              listExpr->as_if<slang::ast::ValueRangeExpression>()) {
         // Handle ranges.
         auto lowBound = context.convertToSimpleBitVector(
             context.convertRvalueExpression(openRange->left()));
@@ -890,21 +891,21 @@ struct RvalueExprVisitor {
       value = builder.create<moore::ConcatOp>(loc, operands).getResult();
     }
 
-    if (expr.sliceSize == 0) {
+    if (expr.getSliceSize() == 0) {
       return value;
     }
 
     auto type = cast<moore::IntType>(value.getType());
     SmallVector<Value> slicedOperands;
-    auto iterMax = type.getWidth() / expr.sliceSize;
-    auto remainSize = type.getWidth() % expr.sliceSize;
+    auto iterMax = type.getWidth() / expr.getSliceSize();
+    auto remainSize = type.getWidth() % expr.getSliceSize();
 
     for (size_t i = 0; i < iterMax; i++) {
       auto extractResultType = moore::IntType::get(
-          context.getContext(), expr.sliceSize, type.getDomain());
+          context.getContext(), expr.getSliceSize(), type.getDomain());
 
       auto extracted = builder.create<moore::ExtractOp>(
-          loc, extractResultType, value, i * expr.sliceSize);
+          loc, extractResultType, value, i * expr.getSliceSize());
       slicedOperands.push_back(extracted);
     }
     // Handle other wire
@@ -913,7 +914,7 @@ struct RvalueExprVisitor {
           context.getContext(), remainSize, type.getDomain());
 
       auto extracted = builder.create<moore::ExtractOp>(
-          loc, extractResultType, value, iterMax * expr.sliceSize);
+          loc, extractResultType, value, iterMax * expr.getSliceSize());
       slicedOperands.push_back(extracted);
     }
 
@@ -1108,7 +1109,7 @@ struct LvalueExprVisitor {
       value = builder.create<moore::ConcatRefOp>(loc, operands).getResult();
     }
 
-    if (expr.sliceSize == 0) {
+    if (expr.getSliceSize() == 0) {
       return value;
     }
 
@@ -1117,15 +1118,15 @@ struct LvalueExprVisitor {
     SmallVector<Value> slicedOperands;
     auto widthSum = type.getWidth();
     auto domain = type.getDomain();
-    auto iterMax = widthSum / expr.sliceSize;
-    auto remainSize = widthSum % expr.sliceSize;
+    auto iterMax = widthSum / expr.getSliceSize();
+    auto remainSize = widthSum % expr.getSliceSize();
 
     for (size_t i = 0; i < iterMax; i++) {
-      auto extractResultType = moore::RefType::get(
-          moore::IntType::get(context.getContext(), expr.sliceSize, domain));
+      auto extractResultType = moore::RefType::get(moore::IntType::get(
+          context.getContext(), expr.getSliceSize(), domain));
 
       auto extracted = builder.create<moore::ExtractRefOp>(
-          loc, extractResultType, value, i * expr.sliceSize);
+          loc, extractResultType, value, i * expr.getSliceSize());
       slicedOperands.push_back(extracted);
     }
     // Handle other wire
@@ -1134,7 +1135,7 @@ struct LvalueExprVisitor {
           moore::IntType::get(context.getContext(), remainSize, domain));
 
       auto extracted = builder.create<moore::ExtractRefOp>(
-          loc, extractResultType, value, iterMax * expr.sliceSize);
+          loc, extractResultType, value, iterMax * expr.getSliceSize());
       slicedOperands.push_back(extracted);
     }
 
@@ -1238,7 +1239,9 @@ slang::ConstantValue
 Context::evaluateConstant(const slang::ast::Expression &expr) {
   using slang::ast::EvalFlags;
   slang::ast::EvalContext evalContext(
-      compilation, EvalFlags::CacheResults | EvalFlags::SpecparamsAllowed);
+      slang::ast::ASTContext(compilation.getRoot(),
+                             slang::ast::LookupLocation::max),
+      EvalFlags::CacheResults | EvalFlags::SpecparamsAllowed);
   return expr.eval(evalContext);
 }
 
