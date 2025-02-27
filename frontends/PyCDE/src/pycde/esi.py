@@ -219,6 +219,7 @@ class EngineServiceRecord:
                engine: EngineModule,
                details: Optional[Dict[str, object]] = None):
     rec_appid = AppID(f"{engine.appid.name}_record", engine.appid.index)
+    details = optional_dict_to_dict_attr(details)
     self._rec = raw_esi.ServiceImplRecordOp(appID=rec_appid._appid,
                                             serviceImplName=engine.TypeName,
                                             implDetails=details,
@@ -274,7 +275,6 @@ class _ServiceGeneratorBundles:
                   engine: EngineModule,
                   details: Dict[str, object] = None):
     """Emit and return an engine record."""
-    details = optional_dict_to_dict_attr(details)
     with get_user_loc(), ir.InsertionPoint(self._rec):
       return EngineServiceRecord(engine, details)
 
@@ -642,10 +642,16 @@ class _HostMem(ServiceDecl):
     """Create a write request to the host memory out of a request channel."""
     # Extract the data type from the request channel and call the helper to get
     # the write bundle type for the req channel.
-    req_data_type = req.type.inner_type.data
-    write_bundle_type = self.write_req_bundle_type(req_data_type)
+    write_bundle_type = self.write_req_bundle_type(req.type.inner_type.data)
+    bundle = self.write_from_bundle(appid, write_bundle_type)
+    resp = bundle.unpack(req=req)['ackTag']
+    return resp
 
-    bundle = cast(
+  def write_from_bundle(self, appid: AppID,
+                        write_bundle_type: Bundle) -> BundleSignal:
+    self._materialize_service_decl()
+
+    return cast(
         BundleSignal,
         _FromCirctValue(
             raw_esi.RequestConnectionOp(

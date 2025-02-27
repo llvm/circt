@@ -111,21 +111,36 @@ public:
       : MMIO(conn, clients), ip(ip) {}
 
   uint64_t read(uint32_t addr) const override {
+    std::lock_guard<std::mutex> lock(m);
+
     // Write the address to the indirect location register.
     xrt_write(IndirectLocation, addr);
     // Read from the indirect register.
     uint64_t ret = xrt_read(IndirectMMIOReg);
-    conn.getLogger().debug("xrt",
-                           "MMIO[0x" + toHex(addr) + "] = 0x" + toHex(ret));
+
+    getConnection().getLogger().debug(
+        [addr, ret](std::string &subsystem, std::string &msg,
+                    std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "xrt_mmio";
+          msg = "MMIO[0x" + toHex(addr) + "] = 0x" + toHex(ret);
+        });
     return ret;
   }
   void write(uint32_t addr, uint64_t data) override {
+    std::lock_guard<std::mutex> lock(m);
+
     // Write the address to the indirect location register.
     xrt_write(IndirectLocation, addr);
     // Write to the indirect register.
     xrt_write(IndirectMMIOReg, data);
-    conn.getLogger().debug("xrt",
-                           "MMIO[0x" + toHex(addr) + "] <- 0x" + toHex(data));
+
+    conn.getLogger().debug(
+        [addr,
+         data](std::string &subsystem, std::string &msg,
+               std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "xrt_mmio";
+          msg = "MMIO[0x" + toHex(addr) + "] <- 0x" + toHex(data);
+        });
   }
 
   /// Read a physical register.
@@ -142,6 +157,7 @@ public:
 
 private:
   ::xrt::ip &ip;
+  mutable std::mutex m;
 };
 } // namespace
 
@@ -150,7 +166,7 @@ namespace {
 class XrtHostMem : public HostMem {
 public:
   XrtHostMem(XrtAccelerator &conn, ::xrt::device &device, int32_t memoryGroup)
-      : HostMem(conn), device(device), memoryGroup(memoryGroup){};
+      : HostMem(conn), device(device), memoryGroup(memoryGroup) {}
 
   struct XrtHostMemRegion : public HostMemRegion {
     XrtHostMemRegion(::xrt::device &device, std::size_t size,

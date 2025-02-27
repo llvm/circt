@@ -159,58 +159,6 @@ class MMIOAxiReadWriteDemux(Module):
     data_sel_ready.assign(read_ready & write_resp_ready)
 
 
-def XrtChannelTop(user_module):
-  """Wrap AXI-lite channels into a single req-resp bundle which feed the
-  Channel-based MMIO service. This involve a mux for the separate AXI read and
-  write channels then a demux for the response."""
-
-  class XrtChannelTop(Module):
-    clk = Clock()
-    rst = Input(Bits(1))
-
-    mmio_read_address = InputChannel(Bits(20))  # MMIO read: address channel.
-    mmio_read_data = OutputChannel(
-        AXI_Lite_Read_Resp)  # MMIO read: data response channel.
-
-    mmio_write_address = InputChannel(Bits(20))  # MMIO write: address channel.
-    mmio_write_data = InputChannel(Bits(32))  # MMIO write: data channel.
-    mmio_write_resp = OutputChannel(
-        Bits(2))  # MMIO write: write response channel.
-
-    @generator
-    def build(ports):
-      user_module(clk=ports.clk, rst=ports.rst)
-
-      data = Wire(Channel(esi.MMIODataType))
-      rw_mux = MMIOAxiReadWriteMux(clk=ports.clk,
-                                   rst=ports.rst,
-                                   read_address=ports.mmio_read_address,
-                                   write_address=ports.mmio_write_address,
-                                   write_data=ports.mmio_write_data)
-      sel = rw_mux.sel.buffer(ports.clk, ports.rst, 1)
-      rw_demux = MMIOAxiReadWriteDemux(clk=ports.clk,
-                                       rst=ports.rst,
-                                       data=data,
-                                       sel=sel)
-      ports.mmio_read_data = rw_demux.read_data
-      ports.mmio_write_resp = rw_mux.write_resp
-
-      cmd, froms = esi.MMIO.read_write.type.pack(cmd=rw_mux.cmd)
-      data.assign(froms["data"])
-
-      indirect_mmio = MMIOIndirection(clk=ports.clk,
-                                      rst=ports.rst,
-                                      upstream=cmd)
-
-      ChannelMMIO(esi.MMIO,
-                  appid=esi.AppID("__xrt_mmio"),
-                  clk=ports.clk,
-                  rst=ports.rst,
-                  cmd=indirect_mmio.downstream)
-
-  return XrtChannelTop
-
-
 def XrtBSP(user_module):
   """Use the Xilinx RunTime (XRT) shell to implement ESI services and build an
   image or emulation package.
@@ -316,41 +264,47 @@ def XrtBSP(user_module):
       clk = ports.ap_clk
       rst = ~ports.ap_resetn
 
-      # Instantiate the user module.
-      XrtChannelsTmplInst = XrtChannelTop(user_module)
-
       ChannelEngineService(DummyToHostEngine, DummyFromHostEngine)(
           None, appid=esi.AppID("__channel_engines"), clk=clk, rst=rst)
 
       # Set up the MMIO service and tie it to the AXI-lite channels.
-      read_address, arready = Channel(
-          XrtChannelsTmplInst.mmio_read_address.type).wrap(
-              ports.s_axi_control_ARADDR, ports.s_axi_control_ARVALID)
+      read_address, arready = Channel(ports.s_axi_control_ARADDR.type).wrap(
+          ports.s_axi_control_ARADDR, ports.s_axi_control_ARVALID)
       ports.s_axi_control_ARREADY = arready
-      write_address, awready = Channel(
-          XrtChannelsTmplInst.mmio_write_address.type).wrap(
-              ports.s_axi_control_AWADDR, ports.s_axi_control_AWVALID)
+      write_address, awready = Channel(ports.s_axi_control_AWADDR.type).wrap(
+          ports.s_axi_control_AWADDR, ports.s_axi_control_AWVALID)
       ports.s_axi_control_AWREADY = awready
-      write_data, wready = Channel(
-          XrtChannelsTmplInst.mmio_write_data.type).wrap(
-              ports.s_axi_control_WDATA, ports.s_axi_control_WVALID)
+      write_data, wready = Channel(ports.s_axi_control_WDATA.type).wrap(
+          ports.s_axi_control_WDATA, ports.s_axi_control_WVALID)
       ports.s_axi_control_WREADY = wready
 
-      xrt_channels = XrtChannelsTmplInst(
-          clk=ports.ap_clk,
-          rst=rst,
-          mmio_read_address=read_address,
-          mmio_write_address=write_address,
-          mmio_write_data=write_data,
-      )
+      user_module(clk=clk, rst=rst)
 
-      rdata, rvalid = xrt_channels.mmio_read_data.unwrap(
-          ports.s_axi_control_RREADY)
+      data = Wire(Channel(esi.MMIODataType))
+      rw_mux = MMIOAxiReadWriteMux(clk=clk,
+                                   rst=rst,
+                                   read_address=read_address,
+                                   write_address=write_address,
+                                   write_data=write_data)
+      sel = rw_mux.sel.buffer(clk, rst, 1)
+      rw_demux = MMIOAxiReadWriteDemux(clk=clk, rst=rst, data=data, sel=sel)
+
+      cmd, froms = esi.MMIO.read_write.type.pack(cmd=rw_mux.cmd)
+      data.assign(froms["data"])
+
+      indirect_mmio = MMIOIndirection(clk=clk, rst=rst, upstream=cmd)
+      ChannelMMIO(esi.MMIO,
+                  appid=esi.AppID("__xrt_mmio"),
+                  clk=clk,
+                  rst=rst,
+                  cmd=indirect_mmio.downstream)
+
+      rdata, rvalid = rw_demux.read_data.unwrap(ports.s_axi_control_RREADY)
       ports.s_axi_control_RVALID = rvalid
       ports.s_axi_control_RDATA = rdata.data
       ports.s_axi_control_RRESP = rdata.resp
 
-      wrresp_data, wrresp_valid = xrt_channels.mmio_write_resp.unwrap(
+      wrresp_data, wrresp_valid = rw_mux.write_resp.unwrap(
           ports.s_axi_control_BREADY)
       ports.s_axi_control_BVALID = wrresp_valid
       ports.s_axi_control_BRESP = wrresp_data
@@ -430,7 +384,7 @@ def XrtBSP(user_module):
       ports.m_axi_gmem_WVALID = data_req_valid
       ports.m_axi_gmem_WDATA = data_req_data.data
 
-      wstrb_lookup_table_len = HostMemDataWidthBytes
+      wstrb_lookup_table_len = HostMemDataWidthBytes + 1
       wstrb_lookup_table = Array(Bits(HostMemDataWidthBytes),
                                  wstrb_lookup_table_len)([
                                      Bits(HostMemDataWidthBytes)(2**vb - 1)
@@ -471,40 +425,3 @@ def XrtBSP(user_module):
       shutil.copy(__dir__ / "xsim.tcl", sys.output_directory / "xsim.tcl")
 
   return XrtTop
-
-
-def XrtCosimBSP(user_module):
-  """Use the XRT BSP with AXI channels implemented with ESI cosim. Mostly useful
-  for debugging the Xrt BSP."""
-
-  class XrtCosimBSP(Module):
-    clk = Clock()
-    rst = Input(Bits(1))
-
-    @generator
-    def build(ports):
-      XrtChannelsTmplInst = XrtChannelTop(user_module)
-      read_address = esi.ChannelService.from_host(esi.AppID("mmio_axi_rdaddr"),
-                                                  UInt(32))
-      read_address = read_address.transform(lambda x: x.as_bits(20))
-
-      write_address = esi.ChannelService.from_host(esi.AppID("mmio_axi_wraddr"),
-                                                   UInt(32))
-      write_address = write_address.transform(lambda x: x.as_bits(20))
-      write_data = esi.ChannelService.from_host(esi.AppID("mmio_axi_wrdata"),
-                                                UInt(32))
-      write_data = write_data.transform(lambda x: x.as_bits(32))
-      xrt = XrtChannelsTmplInst(clk=ports.clk,
-                                rst=ports.rst,
-                                read_address=read_address,
-                                write_address=write_address,
-                                write_data=write_data)
-      esi.ChannelService.to_host(
-          esi.AppID("mmio_axi_rddata"),
-          xrt.mmio_read_data.transform(lambda x: x.data.as_uint()))
-      esi.ChannelService.to_host(
-          esi.AppID("mmio_axi_wrresp"),
-          xrt.mmio_write_resp.transform(lambda x: x.as_uint(8)))
-
-  from .cosim import CosimBSP
-  return CosimBSP(XrtCosimBSP)
