@@ -25,7 +25,6 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FormatVariadic.h"
-#include "llvm/Support/raw_ostream.h"
 #include <numeric>
 
 namespace circt {
@@ -331,31 +330,26 @@ void updateFuncOpArgAttrs(func::FuncOp funcOp, unsigned argIndex,
 
 unsigned getCurrBankingInfo(BankingConfigAttributes bankingConfigAttrs,
                             StringRef attrName) {
-  if (attrName.str() == bankingFactorsStr) {
-    if (auto arrayAttr = dyn_cast<ArrayAttr>(bankingConfigAttrs.factors)) {
+  auto getFirstInteger = [](Attribute attr) -> unsigned {
+    if (auto arrayAttr = dyn_cast<ArrayAttr>(attr)) {
       assert(!arrayAttr.empty() &&
-             "BankingConfig factors ArrayAttr should not be empty");
+             "BankingConfig ArrayAttr should not be empty");
       auto intAttr = dyn_cast<IntegerAttr>(arrayAttr.getValue().front());
-      assert(intAttr && "BankingConfig factors must be integers");
+      assert(intAttr && "BankingConfig elements must be integers");
       return intAttr.getInt();
     }
-    auto intAttr = dyn_cast<IntegerAttr>(bankingConfigAttrs.factors);
-    assert(intAttr && "BankingConfig factor must be an integer");
+    auto intAttr = dyn_cast<IntegerAttr>(attr);
+    assert(intAttr && "BankingConfig attribute must be an integer");
     return intAttr.getInt();
+  };
+
+  if (attrName.str() == bankingFactorsStr) {
+    return getFirstInteger(bankingConfigAttrs.factors);
   }
 
   assert(attrName.str() == bankingDimensionsStr &&
          "BankingConfig only contains 'factors' and 'dimensions' attributes");
-  if (auto arrayAttr = dyn_cast<ArrayAttr>(bankingConfigAttrs.dimensions)) {
-    assert(!arrayAttr.empty() &&
-           "BankingConfig dimensions ArrayAttr should not be empty");
-    auto intAttr = dyn_cast<IntegerAttr>(arrayAttr.getValue().front());
-    assert(intAttr && "BankingConfig dimensions must be integers");
-    return intAttr.getInt();
-  }
-  auto intAttr = dyn_cast<IntegerAttr>(bankingConfigAttrs.dimensions);
-  assert(intAttr && "BankingConfig dimension must be an integer");
-  return intAttr.getInt();
+  return getFirstInteger(bankingConfigAttrs.dimensions);
 }
 
 Attribute getRemainingBankingInfo(MLIRContext *context,
@@ -788,8 +782,8 @@ void MemoryBankingPass::setAllBankingAttributes(Operation *operation,
   // affine operation.
   operation->walk([&](affine::AffineParallelOp affineParallelOp) {
     affineParallelOp.walk([&](Operation *op) {
-      if (!isa<affine::AffineWriteOpInterface>(op) &&
-          !isa<affine::AffineReadOpInterface>(op))
+      if (!isa<affine::AffineWriteOpInterface, affine::AffineReadOpInterface>(
+              op))
         return WalkResult::advance();
 
       auto read = dyn_cast<affine::AffineReadOpInterface>(op);
@@ -863,12 +857,17 @@ void MemoryBankingPass::runOnOperation() {
   setAllBankingAttributes(getOperation(), &getContext());
 
   OpBuilder builder(getOperation());
-  while (true) {
+  // We run this pass until convergence, i.e., `applyMemoryBanking` has reached
+  // its fixed point, which means every memory read/write operation has been
+  // rewritten to be using the newly created banks, and that the old memory
+  // references are erased.
+  bool banksCreated = false;
+  do {
     memoryToBanks.clear();
     oldMemRefVals.clear();
     opsToErase.clear();
 
-    bool noBanksCreated = true;
+    banksCreated = false;
     getOperation().walk([&](mlir::affine::AffineParallelOp parOp) {
       DenseSet<Value> memrefsInPar = collectMemRefs(parOp);
       // We run `createBanks` iff there exists some `memrefVal` s.t. it has
@@ -884,20 +883,15 @@ void MemoryBankingPass::runOnOperation() {
             std::make_pair(memrefVal, SmallVector<Value>{}));
         if (inserted)
           it->second = createBanks(builder, memrefVal);
-        noBanksCreated = false;
+        banksCreated = true;
       }
     });
 
     if (failed(applyMemoryBanking(getOperation(), &getContext()))) {
       signalPassFailure();
-    } else if (noBanksCreated)
-      // We stop the pass when IR stops changing:
-      // 1. there is no more banks are created;
-      // 2. `applyMemoryBanking` has reached its fixed point, which means every
-      // memory read/write operation has been rewritten to be using the newly
-      // created banks, and that the old memory references are erased.
       break;
-  }
+    }
+  } while (banksCreated);
 };
 
 LogicalResult MemoryBankingPass::applyMemoryBanking(Operation *operation,
