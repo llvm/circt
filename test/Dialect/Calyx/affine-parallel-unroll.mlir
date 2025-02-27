@@ -279,3 +279,84 @@ module {
     return
   }
 }
+
+// -----
+
+// Test non-conflicting constant writes after canonicalizing `scf.index_switch`
+
+// CHECK-LABEL:   func.func @const_writes(
+// CHECK-SAME:                   %[[VAL_0:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: memref<1x1xf32>,
+// CHECK-SAME:                   %[[VAL_1:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: memref<1x1xf32>) {
+// CHECK:           %[[VAL_2:.*]] = arith.constant 0 : index
+// CHECK:           %[[VAL_3:.*]] = arith.constant 1 : index
+// CHECK:           %[[VAL_4:.*]] = arith.constant 4.200000e+01 : f32
+// CHECK:           %[[VAL_5:.*]] = memref.alloc() : memref<1x1xf32>
+// CHECK:           %[[VAL_6:.*]] = memref.alloc() : memref<1x1xf32>
+// CHECK:           affine.parallel (%[[VAL_7:.*]]) = (0) to (1) {
+// CHECK:             scf.execute_region {
+// CHECK:               affine.store %[[VAL_4]], %[[VAL_6]]{{\[}}%[[VAL_3]] floordiv 2, %[[VAL_3]] floordiv 2] : memref<1x1xf32>
+// CHECK:               scf.yield
+// CHECK:             }
+// CHECK:             scf.execute_region {
+// CHECK:               affine.store %[[VAL_4]], %[[VAL_1]]{{\[}}%[[VAL_3]] floordiv 2, %[[VAL_2]] floordiv 2] : memref<1x1xf32>
+// CHECK:               scf.yield
+// CHECK:             }
+// CHECK:             scf.execute_region {
+// CHECK:               affine.store %[[VAL_4]], %[[VAL_5]]{{\[}}%[[VAL_2]] floordiv 2, %[[VAL_3]] floordiv 2] : memref<1x1xf32>
+// CHECK:               scf.yield
+// CHECK:             }
+// CHECK:             scf.execute_region {
+// CHECK:               affine.store %[[VAL_4]], %[[VAL_0]]{{\[}}%[[VAL_2]] floordiv 2, %[[VAL_2]] floordiv 2] : memref<1x1xf32>
+// CHECK:               scf.yield
+// CHECK:             }
+// CHECK:           } {calyx.unroll = true}
+// CHECK:           return
+// CHECK:         }
+
+#map = affine_map<(d0) -> (d0 mod 2)>
+
+module {
+  func.func @const_writes(%arg0: memref<1x1xf32>, %arg1: memref<1x1xf32>) {
+    %fortytwo = arith.constant 42.0 : f32
+    %zeroidx = arith.constant 0 : index
+    %alloc_0 = memref.alloc() : memref<1x1xf32>
+    %alloc_1 = memref.alloc() : memref<1x1xf32>
+    affine.parallel (%arg2, %arg3) = (0, 0) to (2, 2) {
+      %0 = affine.apply #map(%arg2)
+      scf.index_switch %0 
+        case 0 {
+          %1 = affine.apply #map(%arg3)
+          scf.index_switch %1 
+          case 0 {
+            affine.store %fortytwo, %arg0[%arg2 floordiv 2, %arg3 floordiv 2] : memref<1x1xf32>
+            scf.yield
+          }
+          case 1 {
+            affine.store %fortytwo, %alloc_0[%arg2 floordiv 2, %arg3 floordiv 2] : memref<1x1xf32>
+            scf.yield
+          }
+          default {
+          }
+          scf.yield
+        }
+        case 1 {
+          %1 = affine.apply #map(%arg3)
+          scf.index_switch %1 
+          case 0 {
+            affine.store %fortytwo, %arg1[%arg2 floordiv 2, %arg3 floordiv 2] : memref<1x1xf32>
+            scf.yield
+          }
+          case 1 {
+            affine.store %fortytwo, %alloc_1[%arg2 floordiv 2, %arg3 floordiv 2] : memref<1x1xf32>
+            scf.yield
+          }
+          default {
+          }
+          scf.yield
+        }
+        default {
+        }
+    }
+    return
+  }
+}
