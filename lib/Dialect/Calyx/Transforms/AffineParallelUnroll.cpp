@@ -166,17 +166,15 @@ LogicalResult MemoryBankConflictResolver::writeOpAnalysis(
       auto parentExecuteRegionOp =
           writeOp->getParentOfType<scf::ExecuteRegionOp>();
       auto key = std::pair(writeOp.getMemRef(), constIndicesIt->second);
-      auto writeOpIndicesIt = constantWriteOpIndices.find(key);
-      if (writeOpIndicesIt != constantWriteOpIndices.end() &&
-          writeOpIndicesIt->second != parentExecuteRegionOp) {
+      auto [writeOpIndicesIt, emplaced] =
+          constantWriteOpIndices.try_emplace(key, parentExecuteRegionOp);
+      if (!emplaced && writeOpIndicesIt->second != parentExecuteRegionOp) {
         // Cannot write to the same memory reference at the same indices more
         // than once in different parallel regions (but it's okay to write twice
         // within the same parallel region because everything is sequential),
         // because it will result in write contention.
         return WalkResult::interrupt();
       }
-      writeOpIndicesIt->second = parentExecuteRegionOp;
-
       return WalkResult::advance();
     });
 
@@ -375,6 +373,17 @@ void AffineParallelUnrollPass::runOnOperation() {
     signalPassFailure();
   }
 
+  // `AffineParallelUnroll` pattern introduces constant values, so running
+  // `canonicalizePatterns` before `MemoryBankConflictResolver` will help ease
+  // the analysis in `MemoryBankConflictResolver`.
+  RewritePatternSet canonicalizePatterns(ctx);
+  scf::IndexSwitchOp::getCanonicalizationPatterns(canonicalizePatterns, ctx);
+  if (failed(applyPatternsGreedily(getOperation(),
+                                   std::move(canonicalizePatterns)))) {
+    getOperation()->emitError("Failed to apply canonicalization.");
+    signalPassFailure();
+  }
+
   getOperation()->walk([&](AffineParallelOp parOp) {
     if (parOp->hasAttr("calyx.unroll")) {
       if (failed(MemoryBankConflictResolver().run(parOp))) {
@@ -383,14 +392,6 @@ void AffineParallelUnrollPass::runOnOperation() {
       }
     }
   });
-
-  RewritePatternSet canonicalizePatterns(ctx);
-  scf::IndexSwitchOp::getCanonicalizationPatterns(canonicalizePatterns, ctx);
-  if (failed(applyPatternsGreedily(getOperation(),
-                                   std::move(canonicalizePatterns)))) {
-    getOperation()->emitError("Failed to apply canonicalization.");
-    signalPassFailure();
-  }
 }
 
 std::unique_ptr<mlir::Pass> circt::calyx::createAffineParallelUnrollPass() {
