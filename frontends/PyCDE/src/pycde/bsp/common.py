@@ -601,7 +601,10 @@ def TaggedWriteGearbox(input_bitwidth: int,
         # to complete the transmission.
         num_chunks = TaggedWriteGearboxImpl.num_chunks
         num_chunks_idx_bitwidth = clog2(num_chunks)
-        padding_numbits = output_bitwidth - (input_bitwidth % output_bitwidth)
+        if input_bitwidth % output_bitwidth == 0:
+          padding_numbits = 0
+        else:
+          padding_numbits = output_bitwidth - (input_bitwidth % output_bitwidth)
         assert padding_numbits % 8 == 0, "Padding must be a multiple of 8."
         client_data_padded = BitsSignal.concat(
             [Bits(padding_numbits)(0), client_data])
@@ -626,8 +629,10 @@ def TaggedWriteGearbox(input_bitwidth: int,
         clear.assign(upstream_xact & (counter.out == (num_chunks - 1)))
         increment.assign(upstream_xact)
         ready_for_client.assign(~upstream_valid)
-        counter_bytes = BitsSignal.concat([counter.out.as_bits(),
-                                           Bits(3)(0)]).as_uint()
+        address_padding_bits = clog2(output_bitwidth_bytes)
+        counter_bytes = BitsSignal.concat(
+            [counter.out.as_bits(),
+             Bits(address_padding_bits)(0)]).as_uint()
 
         # Construct the output channel. Shared logic across all three cases.
         tag_reg = client_tag_and_data.tag.reg(ports.clk,
