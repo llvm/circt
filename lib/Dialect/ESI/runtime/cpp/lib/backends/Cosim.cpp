@@ -245,8 +245,10 @@ public:
     assert(desc.name() == name);
 
     // Initiate a stream of messages from the server.
-    context = std::make_unique<ClientContext>();
-    rpcClient->async()->ConnectToClientChannel(context.get(), &desc, this);
+    if (context)
+      return;
+    context = new ClientContext();
+    rpcClient->async()->ConnectToClientChannel(context, &desc, this);
     StartCall();
     StartRead(&incomingMessage);
   }
@@ -278,7 +280,8 @@ public:
     if (!context)
       return;
     context->TryCancel();
-    context.reset();
+    // Don't delete the context since gRPC still hold a reference to it.
+    // TODO: figure out how to delete it.
     ReadChannelPort::disconnect();
   }
 
@@ -290,7 +293,7 @@ protected:
   /// The name of the channel from the manifest.
   std::string name;
 
-  std::unique_ptr<ClientContext> context;
+  ClientContext *context;
   /// Storage location for the incoming message.
   esi::cosim::Message incomingMessage;
 };

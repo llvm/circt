@@ -33,7 +33,7 @@ from pycde.types import Bits, Channel, UInt
 import typing
 import sys
 
-# CHECK: [INFO] [CONNECT] connecting to backend
+# CHECK: [ INFO] [CONNECT] connecting to backend
 
 
 class PrintfExample(Module):
@@ -44,8 +44,6 @@ class PrintfExample(Module):
 
   @generator
   def construct(ports):
-    # CHECK: [DEBUG] [ESITESTER] Received PrintfExample message
-    # CHECK:                     data: 7000
     # CHECK: PrintfExample: 7
     arg_data = UInt(32)(7)
 
@@ -249,7 +247,7 @@ class EsiTesterTop(Module):
 
   @generator
   def construct(ports):
-    # PrintfExample(clk=ports.clk, rst=ports.rst)
+    PrintfExample(clk=ports.clk, rst=ports.rst)
     for width in [32, 64, 96, 128, 256, 384, 504, 512]:
       ReadMem(width)(appid=esi.AppID("readmem", width),
                      clk=ports.clk,
