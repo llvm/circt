@@ -181,8 +181,8 @@ def WriteMem(width: int) -> typing.Type['WriteMem']:
 
 
 def ToHostDMATest(width: int):
-  """Construct a module that sends a cycle count over a channel to the host the
-  specified number of times."""
+  """Construct a module that sends the transaction count over a channel to the
+  host the specified number of times."""
 
   class ToHostDMATest(Module):
     clk = Clock()

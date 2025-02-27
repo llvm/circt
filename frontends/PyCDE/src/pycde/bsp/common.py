@@ -340,40 +340,10 @@ class MMIOIndirection(Module):
     local_reg_resp_chan = local_reg_cmd_chan.transform(
         lambda cmd: local_reg_resp_array[cmd.offset.as_uint(2)])
 
+    # Mux together the local register responses and the downstream data to
+    # create the upstream response.
     upstream_resp = esi.ChannelMux([local_reg_resp_chan, downstream_data_chan])
     upstream_resp_chan_wire.assign(upstream_resp)
-
-    # # Build the command into the virtual space.
-    # virt_cmd = esi.MMIOReadWriteCmdType({
-    #     "write": upstream_mailbox.data.write,
-    #     "offset": virt_address,
-    #     "data": upstream_mailbox.data.data
-    # })
-    # downstream_cmd_chan, downstream_data_chan_ready = Channel(
-    #     esi.MMIOReadWriteCmdType).wrap(
-    #         virt_cmd, upstream_mailbox.valid & (phys_loc == indirect_mmio_reg))
-    # downstream_cmd_chan_wire.assign(downstream_cmd_chan)
-
-    # upstream_addr_words = NamedWire(upstream_mailbox.data.offset.as_bits()[3:6],
-    #                                 "upstream_addr_words")
-    # upstream_resp_data = upstream_data_resp_array[upstream_addr_words]
-    # upstream_resp_valid = Mux(
-    #     phys_loc == indirect_mmio_reg,
-    #     downstream_data_valid,
-    #     upstream_mailbox.valid,
-    # )
-    # upstream_cmd_ready.assign(
-    #     Mux(
-    #         phys_loc == indirect_mmio_reg,
-    #         downstream_data_chan_ready,
-    #         Bits(1)(1),
-    #     ))
-
-    # # Wrap the response.
-    # upstream_resp_chan, upstream_resp_ready = Channel(esi.MMIODataType).wrap(
-    #     upstream_resp_data, upstream_resp_valid)
-    # upstream_resp_ready_wire.assign(upstream_resp_ready)
-    # upstream_resp_chan_wire.assign(upstream_resp_chan)
 
 
 @modparams

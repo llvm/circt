@@ -235,8 +235,7 @@ public:
     shutdown = true;
     // Wake up the potentially sleeping thread.
     sentSuccessfullyCV.notify_one();
-    if (myThread.joinable())
-      myThread.join();
+    myThread.join();
   }
 
   // Deleting 'this' from within a callback is safe since this is how gRPC tells

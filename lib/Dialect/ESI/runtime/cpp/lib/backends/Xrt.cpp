@@ -166,7 +166,7 @@ namespace {
 class XrtHostMem : public HostMem {
 public:
   XrtHostMem(XrtAccelerator &conn, ::xrt::device &device, int32_t memoryGroup)
-      : HostMem(conn), device(device), memoryGroup(memoryGroup){}
+      : HostMem(conn), device(device), memoryGroup(memoryGroup) {}
 
   struct XrtHostMemRegion : public HostMemRegion {
     XrtHostMemRegion(::xrt::device &device, std::size_t size,

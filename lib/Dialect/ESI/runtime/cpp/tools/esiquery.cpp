@@ -34,8 +34,7 @@ int main(int argc, const char *argv[]) {
     return -1;
   }
 
-  // Context ctxt;
-  Context ctxt = Context::withLogger<StreamLogger>(Logger::Level::Debug);
+  Context ctxt;
 
   const char *backend = argv[1];
   const char *conn = argv[2];
