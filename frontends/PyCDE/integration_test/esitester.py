@@ -16,9 +16,12 @@
 # REQUIRES: esi-runtime, esi-cosim, rtl-sim, esitester
 # RUN: rm -rf %t
 # RUN: mkdir %t && cd %t
+# Run pure cosim since we don't yet have a FromHost DMA engine.
 # RUN: %PYTHON% %s %t cosim 2>&1
 # RUN: esi-cosim.py --source %t -- esitester cosim env wait | FileCheck %s
 # RUN: ESI_COSIM_MANIFEST_MMIO=1 esi-cosim.py --source %t -- esiquery cosim env info
+# Now test the ToHost DMA engine.
+# RUN: %PYTHON% %s %t cosim_dma 2>&1
 # RUN: esi-cosim.py --source %t -- esitester cosim env hostmemtest
 # RUN: esi-cosim.py --source %t -- esitester cosim env dmawritetest
 
@@ -180,9 +183,10 @@ def WriteMem(width: int) -> typing.Type['WriteMem']:
   return WriteMem
 
 
+@modparams
 def ToHostDMATest(width: int):
-  """Construct a module that sends the transaction count over a channel to the
-  host the specified number of times."""
+  """Construct a module that sends the write count over a channel to the host
+  the specified number of times. Exercises any DMA engine."""
 
   class ToHostDMATest(Module):
     clk = Clock()

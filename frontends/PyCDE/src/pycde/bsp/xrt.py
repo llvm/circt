@@ -260,12 +260,6 @@ def XrtBSP(user_module):
 
     @generator
     def construct(ports):
-      from ..dialects import sv
-      sv.VerbatimOp("initial begin", [])
-      sv.VerbatimOp("  $dumpfile(\"XrtTop.vcd\");", [])
-      sv.VerbatimOp("  $dumpvars(0, XrtTop);", [])
-      sv.VerbatimOp("end", [])
-
       System.current().platform = "fpga"
       clk = ports.ap_clk
       rst = ~ports.ap_resetn

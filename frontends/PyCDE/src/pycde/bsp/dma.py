@@ -4,8 +4,8 @@
 
 from __future__ import annotations
 
-from ..common import AppID, Clock, Input, InputChannel, Reset
-from ..constructs import Mux, NamedWire, Reg, Wire
+from ..common import Clock, Input, InputChannel, Reset
+from ..constructs import Mux, NamedWire, Wire
 from ..module import modparams, generator
 from ..types import Bits, Channel, StructType, Type, UInt
 from ..support import clog2
@@ -14,6 +14,14 @@ from .. import esi
 
 @modparams
 def OneItemBuffersToHost(client_type: Type):
+  """Create a simple, non-performant DMA-based channel communication. Protocol:
+
+  1) Host sends address of buffer address via MMIO write.
+  2) Device writes data on channel with a byte '1' to said buffer address.
+  3) Host polls the last byte in buffer for '1'.
+  4) Data is copied out of buffer, last byte is set to '0', goto 1.
+
+  Future improvement: support more than one buffer at once."""
 
   class OneItemBuffersToHost(esi.EngineModule):
 
@@ -36,18 +44,19 @@ def OneItemBuffersToHost(client_type: Type):
       clk = ports.clk
       rst = ports.rst
 
+      # Set up the MMIO interface to receive the buffer locations.
       mmio_resp_chan = Wire(Channel(Bits(64)))
-
       mmio_rw = ports.mmio
       mmio_cmd_chan_raw = mmio_rw.unpack(data=mmio_resp_chan)['cmd']
       mmio_cmd_chan, mmio_cmd_fork_resp = mmio_cmd_chan_raw.fork(clk, rst)
 
-      mmio_resp_data = Wire(Bits(64), "mmio_resp_data")
-      # Always respond 0.
-      mmio_resp_data.assign(0)
+      # Create a response channel which always responds with 0.
+      mmio_resp_data = NamedWire(Bits(64)(0), "mmio_resp_data")
       mmio_resp_chan.assign(
           mmio_cmd_fork_resp.transform(lambda _: mmio_resp_data))
 
+      # Create a mailbox for each register. Overkill for one register, but may
+      # be useful later on.
       _, _, mmio_cmd = mmio_cmd_chan.snoop()
       num_sinks = 2
       mmio_offset_words = NamedWire((mmio_cmd.offset.as_bits()[3:]).as_uint(),
@@ -72,8 +81,9 @@ def OneItemBuffersToHost(client_type: Type):
       ]
       [_, buffer_loc] = mailboxes
 
+      # Join the buffer location channel with the input channel and send a write
+      # message to hostmem.
       next_buffer_loc_chan = buffer_loc.output
-
       hostwr_type = esi.HostMem.write_req_channel_type(
           OneItemBuffersToHost.xfer_data_type)
       hostwr_joined = Channel.join(next_buffer_loc_chan, ports.input_channel)

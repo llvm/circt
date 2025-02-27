@@ -56,6 +56,12 @@ protected:
 
 //===----------------------------------------------------------------------===//
 // OneItemBuffersToHost engine
+//
+// Protocol:
+//  1) Host sends address of buffer address via MMIO write.
+//  2) Device writes data on channel with a byte '1' to said buffer address.
+//  3) Host polls the last byte in buffer for '1'.
+//  4) Data is copied out of buffer, last byte is set to '0', goto 1.
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -70,14 +76,21 @@ public:
     bufferSize = (type->getBitWidth() / 8) + 1;
   }
 
+  // Write the location of the buffer to the MMIO space.
   void writeBufferPtr();
+  // Connect allocate a buffer and prime the pump.
   void connectImpl(std::optional<unsigned>) override;
+  // Check for buffer fill.
   bool pollImpl() override;
 
 protected:
+  // Size of buffer based on type.
   size_t bufferSize;
+  // Owning engine.
   OneItemBuffersToHost *engine;
+  // Single buffer.
   std::unique_ptr<services::HostMem::HostMemRegion> buffer;
+  // Number of times the poll function has been called.
   uint64_t pollCount = 0;
 };
 
@@ -88,6 +101,7 @@ public:
   OneItemBuffersToHost(AcceleratorConnection &conn, AppIDPath idPath,
                        const ServiceImplDetails &details)
       : Engine(conn), thisPath(idPath) {
+    // Get the MMIO path but don't try to resolve it yet.
     auto mmioIDIter = details.find("mmio");
     if (mmioIDIter != details.end())
       mmioID = std::any_cast<AppID>(mmioIDIter->second);
@@ -100,32 +114,8 @@ public:
     return std::make_unique<OneItemBuffersToHost>(conn, idPath, details);
   }
 
-  void connect() override {
-    if (connected)
-      return;
-    if (!mmioID)
-      throw std::runtime_error("OneItemBuffersToHost: no mmio path");
-    hostMem = conn.getService<services::HostMem>();
-    if (!hostMem)
-      throw std::runtime_error("OneItemBuffersToHost: no host memory service");
-    hostMem->start();
-
-    Accelerator &acc = conn.getAccelerator();
-    AppIDPath mmioPath = thisPath;
-    mmioPath.pop_back();
-    mmioPath.push_back(*mmioID);
-    AppIDPath lastPath;
-    BundlePort *port = acc.resolvePort(mmioPath, lastPath);
-    if (port == nullptr)
-      throw std::runtime_error(
-          "OneItemBuffersToHost: could not find MMIO port at " +
-          mmioPath.toStr());
-    mmio = dynamic_cast<services::MMIO::MMIORegion *>(port);
-    if (!mmio)
-      throw std::runtime_error(
-          "OneItemBuffersToHost: MMIO port is not an MMIO port");
-    connected = true;
-  }
+  // Only throw errors on connect.
+  void connect() override;
 
   std::unique_ptr<ChannelPort> createPort(AppIDPath idPath,
                                           const std::string &channelName,
@@ -145,48 +135,67 @@ protected:
 };
 } // namespace
 
+void OneItemBuffersToHost::connect() {
+  // This is where we throw errors.
+  if (connected)
+    return;
+  if (!mmioID)
+    throw std::runtime_error("OneItemBuffersToHost: no mmio path specified");
+  hostMem = conn.getService<services::HostMem>();
+  if (!hostMem)
+    throw std::runtime_error("OneItemBuffersToHost: no host memory service");
+  hostMem->start();
+
+  // Resolve the MMIO port.
+  Accelerator &acc = conn.getAccelerator();
+  AppIDPath mmioPath = thisPath;
+  mmioPath.pop_back();
+  mmioPath.push_back(*mmioID);
+  AppIDPath lastPath;
+  BundlePort *port = acc.resolvePort(mmioPath, lastPath);
+  if (port == nullptr)
+    throw std::runtime_error(
+        "OneItemBuffersToHost: could not find MMIO port at " +
+        mmioPath.toStr());
+  mmio = dynamic_cast<services::MMIO::MMIORegion *>(port);
+  if (!mmio)
+    throw std::runtime_error(
+        "OneItemBuffersToHost: MMIO port is not an MMIO port");
+
+  // If we have a valid MMIO port, we can connect.
+  connected = true;
+}
+
 void OneItemBuffersToHostReadPort::writeBufferPtr() {
   uint8_t *bufferData = reinterpret_cast<uint8_t *>(buffer->getPtr());
   bufferData[bufferSize - 1] = 0;
-  memset(buffer->getPtr(), 0, 128);
-  buffer->flush();
+  // Write the *device-visible* address of the buffer to the MMIO space.
   engine->mmio->write(BufferPtrOffset,
                       reinterpret_cast<uint64_t>(buffer->getDevicePtr()));
 }
 
 void OneItemBuffersToHostReadPort::connectImpl(std::optional<unsigned>) {
   engine->connect();
-  buffer = engine->hostMem->allocate(128, {});
-  memset(buffer->getPtr(), 0, 128);
+  buffer = engine->hostMem->allocate(bufferSize, {});
   writeBufferPtr();
 }
 
 bool OneItemBuffersToHostReadPort::pollImpl() {
-  buffer->flush();
+  // Check to see if the buffer has been filled.
   uint8_t *bufferData = reinterpret_cast<uint8_t *>(buffer->getPtr());
-  if (pollCount++ % 100000 == 0) {
-    engine->conn.getLogger().debug(
-        [bufferData](
-            std::string &subsystem, std::string &msg,
-            std::unique_ptr<std::map<std::string, std::any>> &details) {
-          subsystem = "OneItemBuffersToHost";
-          msg = "Polling buffer contents 0x";
-          for (size_t i = 0; i < 128; ++i)
-            msg += toHex(bufferData[i]);
-        });
-  }
   if (bufferData[bufferSize - 1] == 0)
     return false;
-  engine->conn.getLogger().debug(
-      [bufferData](std::string &subsystem, std::string &msg,
-                   std::unique_ptr<std::map<std::string, std::any>> &details) {
-        subsystem = "OneItemBuffersToHost";
-        msg = "Polling buffer contents 0x";
-        for (size_t i = 0; i < 128; ++i)
-          msg += toHex(bufferData[i]);
-      });
+
+  // If it has, copy the data out. If the consumer (callback) reports that it
+  // has accepted the data, re-use the buffer.
   MessageData data(bufferData, bufferSize - 1);
-  if (callback(data)) {
+  engine->conn.getLogger().debug(
+      [data](std::string &subsystem, std::string &msg,
+             std::unique_ptr<std::map<std::string, std::any>> &details) {
+        subsystem = "OneItemBuffersToHost";
+        msg = "Got message contents 0x" + data.toHex();
+      });
+  if (callback(std::move(data))) {
     writeBufferPtr();
     return true;
   }

@@ -244,21 +244,19 @@ static void dmaWriteTest(AcceleratorConnection *conn, Accelerator *acc,
   Logger &logger = conn->getLogger();
   logger.info("esitester",
               "== Running DMA write test with width " + std::to_string(width));
-  auto dmaTestChildIter =
-      acc->getChildren().find(AppID("tohostdmatest", width));
-  if (dmaTestChildIter == acc->getChildren().end())
-    throw std::runtime_error("dma test failed. No tohostdma child found");
-  auto &toHostDMA = dmaTestChildIter->second->getPorts();
-  auto toHostMMIOIter = toHostDMA.find(AppID("ToHostDMATest"));
-  if (toHostMMIOIter == toHostDMA.end())
-    throw std::runtime_error("dma write test failed. No MMIO port found");
-  auto *toHostMMIO = toHostMMIOIter->second.getAs<services::MMIO::MMIORegion>();
+  AppIDPath lastPath;
+  BundlePort *toHostMMIOPort = acc->resolvePort(
+      {AppID("tohostdmatest", width), AppID("ToHostDMATest")}, lastPath);
+  if (!toHostMMIOPort)
+    throw std::runtime_error("dma write test failed. No tohostdmatest[" +
+                             std::to_string(width) + "] found");
+  auto *toHostMMIO = toHostMMIOPort->getAs<services::MMIO::MMIORegion>();
   if (!toHostMMIO)
     throw std::runtime_error("dma write test failed. MMIO port is not MMIO");
-  auto outPortIter = toHostDMA.find(AppID("out"));
-  if (outPortIter == toHostDMA.end())
-    throw std::runtime_error("dma test failed. No out port found");
-  ReadChannelPort &outPort = outPortIter->second.getRawRead("data");
+  lastPath.clear();
+  BundlePort *outPortBundle =
+      acc->resolvePort({AppID("tohostdmatest", width), AppID("out")}, lastPath);
+  ReadChannelPort &outPort = outPortBundle->getRawRead("data");
   outPort.connect();
 
   size_t xferCount = 24;
@@ -296,7 +294,7 @@ static void bandWidthTest(AcceleratorConnection *conn, Accelerator *acc,
                              std::to_string(width) + "] found");
   auto *toHostMMIO = toHostMMIOPort->getAs<services::MMIO::MMIORegion>();
   if (!toHostMMIO)
-    throw std::runtime_error("dma write test failed. MMIO port is not MMIO");
+    throw std::runtime_error("bandwidth test failed. MMIO port is not MMIO");
   lastPath.clear();
   BundlePort *outPortBundle =
       acc->resolvePort({AppID("tohostdmatest", width), AppID("out")}, lastPath);
