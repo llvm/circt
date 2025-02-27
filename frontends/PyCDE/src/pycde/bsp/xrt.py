@@ -12,8 +12,8 @@ from ..types import Array, Bits, Channel, UInt
 from .. import esi
 
 from .common import (ChannelEngineService, ChannelHostMem, ChannelMMIO,
-                     DummyFromHostEngine, DummyToHostEngine, MMIOIndirection,
-                     Reset)
+                     DummyFromHostEngine, MMIOIndirection, Reset)
+from .dma import OneItemBuffersToHost
 
 import glob
 import pathlib
@@ -264,7 +264,7 @@ def XrtBSP(user_module):
       clk = ports.ap_clk
       rst = ~ports.ap_resetn
 
-      ChannelEngineService(DummyToHostEngine, DummyFromHostEngine)(
+      ChannelEngineService(OneItemBuffersToHost, DummyFromHostEngine)(
           None, appid=esi.AppID("__channel_engines"), clk=clk, rst=rst)
 
       # Set up the MMIO service and tie it to the AXI-lite channels.

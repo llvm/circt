@@ -609,7 +609,7 @@ class CosimEngine : public Engine {
 public:
   CosimEngine(CosimAccelerator &conn, AppIDPath idPath,
               const ServiceImplDetails &details, const HWClientDetails &clients)
-      : conn(conn) {
+      : Engine(conn), conn(conn) {
     // Compute our parents idPath path.
     AppIDPath prefix = std::move(idPath);
     if (prefix.size() > 0)
