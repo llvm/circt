@@ -226,10 +226,11 @@ class ReadCosimChannelPort
     : public ReadChannelPort,
       public grpc::ClientReadReactor<esi::cosim::Message> {
 public:
-  ReadCosimChannelPort(ChannelServer::Stub *rpcClient, const ChannelDesc &desc,
+  ReadCosimChannelPort(AcceleratorConnection &conn,
+                       ChannelServer::Stub *rpcClient, const ChannelDesc &desc,
                        const Type *type, std::string name)
-      : ReadChannelPort(type), rpcClient(rpcClient), desc(desc), name(name),
-        context(nullptr) {}
+      : ReadChannelPort(type), conn(conn), rpcClient(rpcClient), desc(desc),
+        name(name), context(nullptr) {}
   virtual ~ReadCosimChannelPort() { disconnect(); }
 
   void connectImpl(std::optional<unsigned> bufferSize) override {
@@ -244,8 +245,10 @@ public:
     assert(desc.name() == name);
 
     // Initiate a stream of messages from the server.
-    context = std::make_unique<ClientContext>();
-    rpcClient->async()->ConnectToClientChannel(context.get(), &desc, this);
+    if (context)
+      return;
+    context = new ClientContext();
+    rpcClient->async()->ConnectToClientChannel(context, &desc, this);
     StartCall();
     StartRead(&incomingMessage);
   }
@@ -272,21 +275,25 @@ public:
 
   /// Disconnect this channel from the server.
   void disconnect() override {
+    Logger &logger = conn.getLogger();
+    logger.debug("cosim_read", "Disconnecting channel " + name);
     if (!context)
       return;
     context->TryCancel();
-    context.reset();
+    // Don't delete the context since gRPC still hold a reference to it.
+    // TODO: figure out how to delete it.
     ReadChannelPort::disconnect();
   }
 
 protected:
+  AcceleratorConnection &conn;
   ChannelServer::Stub *rpcClient;
   /// The channel description as provided by the server.
   ChannelDesc desc;
   /// The name of the channel from the manifest.
   std::string name;
 
-  std::unique_ptr<ClientContext> context;
+  ClientContext *context;
   /// Storage location for the incoming message.
   esi::cosim::Message incomingMessage;
 };
@@ -335,7 +342,7 @@ public:
     cmdArgPort = std::make_unique<WriteCosimChannelPort>(
         rpcClient->stub.get(), cmdArg, cmdType, "__cosim_mmio_read_write.arg");
     cmdRespPort = std::make_unique<ReadCosimChannelPort>(
-        rpcClient->stub.get(), cmdResp, i64Type,
+        conn, rpcClient->stub.get(), cmdResp, i64Type,
         "__cosim_mmio_read_write.result");
     auto *bundleType = new BundleType(
         "cosimMMIO", {{"arg", BundleType::Direction::To, cmdType},
@@ -359,10 +366,24 @@ public:
     auto arg = MessageData::from(cmd);
     std::future<MessageData> result = cmdMMIO->call(arg);
     result.wait();
-    return *result.get().as<uint64_t>();
+    uint64_t ret = *result.get().as<uint64_t>();
+    conn.getLogger().debug(
+        [addr, ret](std::string &subsystem, std::string &msg,
+                    std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "cosim_mmio";
+          msg = "MMIO[0x" + toHex(addr) + "] = 0x" + toHex(ret);
+        });
+    return ret;
   }
 
   void write(uint32_t addr, uint64_t data) override {
+    conn.getLogger().debug(
+        [addr,
+         data](std::string &subsystem, std::string &msg,
+               std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "cosim_mmio";
+          msg = "MMIO[0x" + toHex(addr) + "] <- 0x" + toHex(data);
+        });
     MMIOCmd cmd{.data = data, .offset = addr, .write = true};
     auto arg = MessageData::from(cmd);
     std::future<MessageData> result = cmdMMIO->call(arg);
@@ -415,6 +436,9 @@ public:
     // We have to locate the channels ourselves since this service might be used
     // to retrieve the manifest.
 
+    if (writeRespPort)
+      return;
+
     // TODO: The types here are WRONG. They need to be wrapped in Channels! Fix
     // this in a subsequent PR.
 
@@ -440,7 +464,7 @@ public:
         rpcClient->stub.get(), readResp, readRespType,
         "__cosim_hostmem_read_resp.data");
     readReqPort = std::make_unique<ReadCosimChannelPort>(
-        rpcClient->stub.get(), readArg, readReqType,
+        conn, rpcClient->stub.get(), readArg, readReqType,
         "__cosim_hostmem_read_req.data");
     readReqPort->connect(
         [this](const MessageData &req) { return serviceRead(req); });
@@ -464,7 +488,7 @@ public:
         rpcClient->stub.get(), writeResp, writeRespType,
         "__cosim_hostmem_write.result");
     writeReqPort = std::make_unique<ReadCosimChannelPort>(
-        rpcClient->stub.get(), writeArg, writeReqType,
+        conn, rpcClient->stub.get(), writeArg, writeReqType,
         "__cosim_hostmem_write.arg");
     auto *bundleType = new BundleType(
         "cosimHostMem",
@@ -528,6 +552,7 @@ public:
   struct CosimHostMemRegion : public HostMemRegion {
     CosimHostMemRegion(std::size_t size) {
       ptr = malloc(size);
+      memset(ptr, 0xFF, size);
       this->size = size;
     }
     virtual ~CosimHostMemRegion() { free(ptr); }
@@ -541,7 +566,15 @@ public:
 
   virtual std::unique_ptr<HostMemRegion>
   allocate(std::size_t size, HostMem::Options opts) const override {
-    return std::unique_ptr<HostMemRegion>(new CosimHostMemRegion(size));
+    auto ret = std::unique_ptr<HostMemRegion>(new CosimHostMemRegion(size));
+    acc.getLogger().debug(
+        [&](std::string &subsystem, std::string &msg,
+            std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "HostMem";
+          msg = "Allocated host memory region at 0x" + toHex(ret->getPtr()) +
+                " of size " + std::to_string(size);
+        });
+    return ret;
   }
   virtual bool mapMemory(void *ptr, std::size_t size,
                          HostMem::Options opts) const override {
@@ -634,7 +667,7 @@ CosimEngine::createPort(AppIDPath idPath, const std::string &channelName,
         conn.rpcClient->stub.get(), chDesc, type, fullChannelName);
   else
     port = std::make_unique<ReadCosimChannelPort>(
-        conn.rpcClient->stub.get(), chDesc, type, fullChannelName);
+        conn, conn.rpcClient->stub.get(), chDesc, type, fullChannelName);
   return port;
 }
 
