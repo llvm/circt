@@ -5,7 +5,7 @@ add_circt_library(CIRCTVerilogLspServerLib
   LSPServer.cpp
 
   ADDITIONAL_HEADER_DIRS
-  ${MLIR_MAIN_INCLUDE_DIR}/circt/Tools/crct-verilog-lsp-server
+  ${MLIR_MAIN_INCLUDE_DIR}/circt/Tools/circt-verilog-lsp-server
 
   LINK_LIBS PUBLIC
   CIRCTVerilogLspServerImpl

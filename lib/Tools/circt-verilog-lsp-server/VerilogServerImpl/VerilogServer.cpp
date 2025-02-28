@@ -108,7 +108,7 @@ private:
   llvm::SourceMgr sourceMgr;
 
   // The URI of the document.
-  const mlir::lsp::URIForFile &uri;
+  mlir::lsp::URIForFile uri;
 };
 
 } // namespace
@@ -138,8 +138,7 @@ void LSPDiagnosticClient::report(const slang::ReportedDiagnostic &slangDiag) {
   // Show only the diagnostics in the current file.
   if (loc.uri != document.getURI())
     return;
-  diags.emplace_back();
-  auto &mlirDiag = diags.back();
+  auto &mlirDiag = diags.emplace_back();
   mlirDiag.severity = getSeverity(slangDiag.severity);
   mlirDiag.range = loc.range;
   mlirDiag.source = "slang";
@@ -178,7 +177,6 @@ VerilogDocument::VerilogDocument(
   const llvm::MemoryBuffer *memBuffer = sourceMgr.getMemoryBuffer(bufferId);
 
   driver.options.libDirs = libDirs;
-  driver.sourceManager.setDisableProximatePaths(true);
   // Assign text to slang.
   auto slangBuffer =
       driver.sourceManager.assignText(uri.file(), memBuffer->getBuffer());
