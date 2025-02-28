@@ -923,7 +923,7 @@ void MemoryBankingPass::runOnOperation() {
       break;
     }
   } while (banksCreated);
-};
+}
 
 LogicalResult MemoryBankingPass::applyMemoryBanking(Operation *operation,
                                                     MLIRContext *ctx) {
