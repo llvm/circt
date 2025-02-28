@@ -1,4 +1,5 @@
 // RUN: circt-synth %s | FileCheck %s
+// RUN: circt-synth %s --top and | FileCheck %s --check-prefixes=TOP,CHECK
 // RUN: circt-synth %s --until-before aig-lowering | FileCheck %s --check-prefix=AIG
 // RUN: circt-synth %s --until-before aig-lowering --convert-to-comb | FileCheck %s --check-prefix=COMB
 
@@ -25,5 +26,12 @@ hw.module @and(in %a: i2, in %b: i2, in %c: i2, out and: i2) {
   // COMB-NOT: aig.and_inv
   %0 = comb.and %a, %b, %c : i2
   dbg.variable "test", %0 : i2
+  hw.output %0 : i2
+}
+
+// TOP-LABEL: hw.module @unrelated
+// TOP-NEXT: comb.add %a, %b
+hw.module @unrelated(in %a: i2, in %b: i2, out and: i2) {
+  %0 = comb.add %a, %b : i2
   hw.output %0 : i2
 }

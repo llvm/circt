@@ -171,4 +171,23 @@ def IndexSwitchToIf : Pass<"switch-to-if", "::mlir::ModuleOp"> {
   let dependentDialects = ["mlir::scf::SCFDialect"];
 }
 
+def HierarchicalRunner : Pass<"hierarchical-runner", "::mlir::ModuleOp"> {
+  let summary = "Run passes under hierarchy";
+  let description = [{
+    This pass runs a specified pipeline of passes on the hierarchy of modules
+    starting from a given top-level module. It allows for hierarchical
+    application of transformations, which can be useful for targeting specific
+    parts of a design or for applying different optimizations at different
+    levels of the module hierarchy.
+  }];
+  let options = [
+    Option<"pipelineStr", "pipeline", "std::string", "",
+           "The pipeline to run under hierarchy">,
+    Option<"topName", "top-name", "std::string", "",
+           "The name of the top-level module to run the pass on">,
+    Option<"includeBoundInstances", "include-bound-instances", "bool", "false",
+           "Whether to include bound instances in the hierarchy">
+  ];
+}
+
 #endif // CIRCT_TRANSFORMS_PASSES

@@ -1,5 +1,6 @@
 add_circt_library(CIRCTTransforms
   FlattenMemRefs.cpp
+  HierarchicalRunner.cpp
   IndexSwitchToIf.cpp
   InsertMergeBlocks.cpp
   MapArithToComb.cpp

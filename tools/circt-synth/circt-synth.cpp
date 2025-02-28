@@ -30,6 +30,7 @@
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
+#include "circt/Transforms/Passes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OwningOpRef.h"
 #include "mlir/Parser/Parser.h"
@@ -99,6 +100,10 @@ static cl::opt<bool>
                   cl::desc("Convert AIG to Comb at the end of the pipeline"),
                   cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<std::string> topName("top", cl::desc("Top module name"),
+                                    cl::value_desc("name"), cl::init(""),
+                                    cl::cat(mainCategory));
+
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -112,34 +117,38 @@ static bool untilReached(Until until) {
 //===----------------------------------------------------------------------===//
 
 static void populateSynthesisPipeline(PassManager &pm) {
-  // Add the AIG to Comb at the scope exit if requested.
-  auto addAIGToComb = llvm::make_scope_exit([&]() {
-    if (convertToComb) {
-      auto &mpm = pm.nest<hw::HWModuleOp>();
-      mpm.addPass(circt::createConvertAIGToComb());
-      mpm.addPass(createCSEPass());
-    }
-  });
+  auto pipeline = [](OpPassManager &mpm) {
+    // Add the AIG to Comb at the scope exit if requested.
+    auto addAIGToComb = llvm::make_scope_exit([&]() {
+      if (convertToComb) {
+        mpm.addPass(circt::createConvertAIGToComb());
+        mpm.addPass(createCSEPass());
+      }
+    });
+    mpm.addPass(circt::hw::createHWAggregateToCombPass());
+    mpm.addPass(circt::createConvertCombToAIG());
+    mpm.addPass(createCSEPass());
+    if (untilReached(UntilAIGLowering))
+      return;
+    mpm.addPass(createSimpleCanonicalizerPass());
+    mpm.addPass(createCSEPass());
+    mpm.addPass(aig::createLowerVariadic());
+    // TODO: LowerWordToBits is not scalable for large designs. Change to
+    // conditionally enable the pass once the rest of the pipeline was able
+    // to handle multibit operands properly.
+    mpm.addPass(aig::createLowerWordToBits());
+    mpm.addPass(createCSEPass());
+    mpm.addPass(createSimpleCanonicalizerPass());
+    // TODO: Add balancing, rewriting, FRAIG conversion, etc.
+    if (untilReached(UntilEnd))
+      return;
+  };
 
-  auto &mpm = pm.nest<hw::HWModuleOp>();
-  mpm.addPass(circt::hw::createHWAggregateToCombPass());
-  mpm.addPass(circt::createConvertCombToAIG());
-  mpm.addPass(createCSEPass());
-  if (untilReached(UntilAIGLowering))
-    return;
-  mpm.addPass(createSimpleCanonicalizerPass());
-  mpm.addPass(createCSEPass());
-  mpm.addPass(aig::createLowerVariadic());
-  // TODO: LowerWordToBits is not scalable for large designs. Change to
-  // conditionally enable the pass once the rest of the pipeline was able to
-  // handle multibit operands properly.
-  mpm.addPass(aig::createLowerWordToBits());
-  mpm.addPass(createCSEPass());
-  mpm.addPass(createSimpleCanonicalizerPass());
-  // TODO: Add balancing, rewriting, FRAIG conversion, etc.
-  if (untilReached(UntilEnd))
-    return;
-
+  if (topName.empty()) {
+    pipeline(pm.nest<hw::HWModuleOp>());
+  } else {
+    pm.addPass(circt::createHierarchicalRunner(topName, pipeline));
+  }
   // TODO: Add LUT mapping, etc.
 }
 
