@@ -86,8 +86,7 @@ void HierarchicalRunnerPass::runOnOperation() {
   auto am = getAnalysisManager();
   while (!worklist.empty()) {
     auto *node = worklist.pop_back_val();
-    if (!node)
-      continue;
+    assert(node && "node should not be null");
     auto op = node->getModule();
     if (!op || !visited.insert(op))
       continue;
