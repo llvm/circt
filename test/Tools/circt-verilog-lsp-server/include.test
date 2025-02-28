@@ -1,6 +1,8 @@
 // RUN: circt-verilog-lsp-server -lit-test < %s | FileCheck %s
 // RUN: circt-verilog-lsp-server --libdir %S/include -lit-test < %s | FileCheck %s --check-prefix=CHECK-INCLUDE
 // REQUIRES: slang
+// Internal issue in Slang v3 about jump depending on uninitialised value.
+// UNSUPPORTED: valgrind
 {"jsonrpc":"2.0","id":0,"method":"initialize","params":{"processId":123,"rootPath":"verilog","capabilities":{},"trace":"off"}}
 // -----
 {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{
