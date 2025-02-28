@@ -85,6 +85,11 @@ declare_mlir_python_sources(CIRCTBindingsPythonSources
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   SOURCES
     __init__.py
+)
+
+declare_mlir_python_sources(CIRCTBindingsPythonSources.Support
+  ADD_TO_PARENT CIRCTBindingsPythonSources
+  SOURCES
     support.py
     rtgtool_support.py
 )
