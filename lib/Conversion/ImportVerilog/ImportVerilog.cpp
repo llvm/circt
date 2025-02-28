@@ -242,6 +242,8 @@ LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
   driver.options.compilationFlags.emplace(
       slang::ast::CompilationFlags::LintMode,
       options.mode == ImportVerilogOptions::Mode::OnlyLint);
+  driver.options.compilationFlags.emplace(
+      slang::ast::CompilationFlags::DisableInstanceCaching, false);
   driver.options.topModules = options.topModules;
   driver.options.paramOverrides = options.paramOverrides;
 

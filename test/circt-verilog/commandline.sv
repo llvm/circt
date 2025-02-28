@@ -3,4 +3,4 @@
 // REQUIRES: slang
 
 // CHECK-HELP: OVERVIEW: Verilog and SystemVerilog frontend
-// CHECK-VERSION: slang version 7.
+// CHECK-VERSION: slang version 8.0.0+6befee62
