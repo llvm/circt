@@ -1,0 +1,84 @@
+{
+  "comments": {
+    "lineComment": "//",
+    "blockComment": [
+      "/*",
+      "*/"
+    ]
+  },
+  "brackets": [
+    [
+      "{",
+      "}"
+    ],
+    [
+      "[",
+      "]"
+    ],
+    [
+      "(",
+      ")"
+    ],
+    [
+      "begin",
+      "end"
+    ]
+  ],
+  "autoClosingPairs": [
+    [
+      "{",
+      "}"
+    ],
+    [
+      "[",
+      "]"
+    ],
+    [
+      "(",
+      ")"
+    ],
+    [
+      "begin",
+      "end"
+    ],
+    [
+      "\"",
+      "\""
+    ],
+    [
+      "'",
+      "'"
+    ]
+  ],
+  "surroundingPairs": [
+    [
+      "{",
+      "}"
+    ],
+    [
+      "[",
+      "]"
+    ],
+    [
+      "(",
+      ")"
+    ],
+    [
+      "begin",
+      "end"
+    ],
+    [
+      "\"",
+      "\""
+    ],
+    [
+      "'",
+      "'"
+    ]
+  ],
+  "wordPattern": "(-?\\d*\\.\\d\\w*)|([^\\`\\~\\!\\@\\#\\%\\^\\&\\*\\(\\)\\-\\=\\+\\[\\{\\]\\}\\\\\\|\\;\\:\\'\\\"\\,\\.\\<\\>\\/\\?\\s]+)",
+  "indentationRules": {
+    "increaseIndentPattern": "^\\s*(begin|case|fork|generate|if|else|for|repeat|while|task|function|specify|module|primitive|table|ifdef|ifndef|else|endif)\\b",
+    "decreaseIndentPattern": "^\\s*(end|endcase|join|endgenerate|endtask|endfunction|endspecify|endmodule|endprimitive|endtable|endif|else)\\b"
+  }
+}

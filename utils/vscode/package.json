@@ -1,0 +1,119 @@
+{
+  "name": "circt-verilog-lsp",
+  "displayName": "CIRCT Verilog LSP",
+  "description": "CIRCT Verilog LSP",
+  "version": "0.0.1",
+  "publisher": "circt-vs-code-extensions",
+  "homepage": "https://circt.llvm.org/",
+  "icon": "icon.png",
+  "engines": {
+    "vscode": "^1.67.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "CIRCT",
+    "Verilog",
+    "MLIR"
+  ],
+  "activationEvents": [
+    "onLanguage:verilog"
+  ],
+  "main": "./out/extension",
+  "scripts": {
+    "vscode:prepublish": "tsc -p ./",
+    "compile": "tsc -watch -p ./",
+    "format": "clang-format -i --glob=\"{src,test}/*.ts\"",
+    "package": "vsce package",
+    "publish": "vsce publish",
+    "git-clang-format": "git-clang-format"
+  },
+  "dependencies": {
+    "base64-js": "^1.5.1",
+    "chokidar": "3.5.2",
+    "vscode-languageclient": "^8.0.2-next.5"
+  },
+  "devDependencies": {
+    "@types/mocha": "^7.0.2",
+    "@types/node": "^14.18.63",
+    "@types/vscode": "~1.67.0",
+    "@vscode/vsce": "^2.32.0",
+    "clang-format": "^1.8.0",
+    "typescript": "^4.6.4",
+    "vscode-test": "^1.3.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/llvm/circt.git"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "verilog",
+        "aliases": [
+          "Verilog",
+          "verilog"
+        ],
+        "extensions": [
+          ".sv",
+          ".v"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "verilog",
+        "scopeName": "source.verilog",
+        "path": "./grammar.json"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "CIRCT",
+      "properties": {
+        "circt-verilog-lsp.verilog_server_path": {
+          "scope": "resource",
+          "type": "string",
+          "description": "The file path of the circt-verilog-lsp executable.",
+          "default": "circt-verilog-lsp-server"
+        },
+        "circt-verilog-lsp.verilog_source_location_root_directories": {
+          "scope": "resource",
+          "type": "array",
+          "description": "A list of source location root directories (e.g. chisel repository root)",
+          "default": [
+            "${workspaceFolder}"
+          ]
+        },
+        "circt-verilog-lsp.verilog_include_directories": {
+          "scope": "resource",
+          "type": "array",
+          "description": "A list of include directories for the verilog files processed by the server."
+        },
+        "circt-verilog-lsp.onSettingsChanged": {
+          "type": "string",
+          "default": "restart",
+          "description": "Action taken when a setting change requires a server restart to take effect.",
+          "enum": [
+            "prompt",
+            "restart",
+            "ignore"
+          ],
+          "enumDescriptions": [
+            "Prompt the user for restarting the server",
+            "Automatically restart the server",
+            "Do nothing"
+          ]
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "circt-verilog-lsp.restart",
+        "title": "circt-verilog-lsp: Restart language server"
+      }
+    ]
+  }
+}
