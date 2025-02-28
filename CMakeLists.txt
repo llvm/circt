@@ -566,7 +566,7 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     FetchContent_Declare(
       slang
       GIT_REPOSITORY https://github.com/MikePopoloski/slang.git
-      GIT_TAG bad0d6ba3dec20355b0156c535bbddf2f926ab37)
+      GIT_TAG v8.0)
     set(FETCHCONTENT_TRY_FIND_PACKAGE_MODE "NEVER")
 
     # Force Slang to be built as a static library to avoid messing around with
@@ -614,7 +614,7 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang)
     install(TARGETS slang_slang EXPORT CIRCTTargets)
   else()
-    find_package(slang 7.0 REQUIRED)
+    find_package(slang 8.0 REQUIRED)
   endif()
 endif()
 

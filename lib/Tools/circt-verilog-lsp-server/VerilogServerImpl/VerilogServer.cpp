@@ -191,6 +191,8 @@ VerilogDocument::VerilogDocument(
 
   driver.options.compilationFlags.emplace(
       slang::ast::CompilationFlags::LintMode, false);
+  driver.options.compilationFlags.emplace(
+      slang::ast::CompilationFlags::DisableInstanceCaching, false);
 
   if (!driver.processOptions()) {
     return;
