@@ -36,19 +36,33 @@ using namespace mlir;
 using namespace circt;
 
 namespace {
+struct BankingConfigAttributes {
+  Attribute factors;
+  Attribute dimensions;
+};
+
+constexpr std::string_view bankingFactorsStr = "banking.factors";
+constexpr std::string_view bankingDimensionsStr = "banking.dimensions";
 
 /// Partition memories used in `affine.parallel` operation by the
 /// `bankingFactor` throughout the program.
 struct MemoryBankingPass
     : public circt::impl::MemoryBankingBase<MemoryBankingPass> {
   MemoryBankingPass(const MemoryBankingPass &other) = default;
-  explicit MemoryBankingPass(
-      std::optional<unsigned> bankingFactor = std::nullopt,
-      std::optional<int> bankingDimension = std::nullopt) {}
+  explicit MemoryBankingPass(ArrayRef<unsigned> bankingFactors = {},
+                             ArrayRef<unsigned> bankingDimensions = {}) {}
 
   void runOnOperation() override;
 
+  LogicalResult applyMemoryBanking(Operation *, MLIRContext *);
+
+  SmallVector<Value, 4> createBanks(OpBuilder &builder, Value originalMem);
+
+  void setAllBankingAttributes(Operation *, MLIRContext *);
+
 private:
+  SmallVector<unsigned, 4> bankingFactors;
+  SmallVector<unsigned, 4> bankingDimensions;
   // map from original memory definition to newly allocated banks
   DenseMap<Value, SmallVector<Value>> memoryToBanks;
   DenseSet<Operation *> opsToErase;
@@ -58,22 +72,48 @@ private:
 };
 } // namespace
 
-// Collect all memref in the `parOp`'s region'
-DenseSet<Value> collectMemRefs(mlir::affine::AffineParallelOp parOp) {
-  DenseSet<Value> memrefVals;
-  parOp.walk([&](Operation *op) {
-    for (auto operand : op->getOperands()) {
-      if (isa<MemRefType>(operand.getType()))
-        memrefVals.insert(operand);
+BankingConfigAttributes getMemRefBankingConfig(Value originalMem) {
+  Attribute bankingFactorsAttr, bankingDimensionsAttr;
+  if (auto blockArg = dyn_cast<BlockArgument>(originalMem)) {
+    Block *block = blockArg.getOwner();
+
+    auto *parentOp = block->getParentOp();
+    auto funcOp = dyn_cast<func::FuncOp>(parentOp);
+    assert(funcOp &&
+           "Expected the original memory to be a FuncOp block argument!");
+    unsigned argIndex = blockArg.getArgNumber();
+    if (auto argAttrs = funcOp.getArgAttrDict(argIndex)) {
+      bankingFactorsAttr = argAttrs.get(bankingFactorsStr);
+      bankingDimensionsAttr = argAttrs.get(bankingDimensionsStr);
     }
+  } else {
+    Operation *originalDef = originalMem.getDefiningOp();
+    bankingFactorsAttr = originalDef->getAttr(bankingFactorsStr);
+    bankingDimensionsAttr = originalDef->getAttr(bankingDimensionsStr);
+  }
+  return BankingConfigAttributes{bankingFactorsAttr, bankingDimensionsAttr};
+}
+
+// Collect all memref in the `parOp`'s region'
+DenseSet<Value> collectMemRefs(affine::AffineParallelOp affineParallelOp) {
+  DenseSet<Value> memrefVals;
+  affineParallelOp.walk([&](Operation *op) {
+    if (!isa<affine::AffineWriteOpInterface>(op) &&
+        !isa<affine::AffineReadOpInterface>(op))
+      return WalkResult::advance();
+
+    auto read = dyn_cast<affine::AffineReadOpInterface>(op);
+    Value memref = read ? read.getMemRef()
+                        : cast<affine::AffineWriteOpInterface>(op).getMemRef();
+    memrefVals.insert(memref);
     return WalkResult::advance();
   });
   return memrefVals;
 }
 
 // Verify the banking configuration with different conditions.
-void verifyBankingConfigurations(unsigned bankingDimension,
-                                 unsigned bankingFactor,
+void verifyBankingConfigurations(unsigned bankingFactor,
+                                 unsigned bankingDimension,
                                  MemRefType originalType) {
   ArrayRef<int64_t> originalShape = originalType.getShape();
   assert(!originalShape.empty() && "memref shape should not be empty");
@@ -139,11 +179,10 @@ SmallVector<SmallVector<Attribute>> sliceSubBlock(ArrayRef<Attribute> allAttrs,
 // Handles the splitting of a GetGlobalOp into multiple banked memory and
 // creates new GetGlobalOp to represent each banked memory by slicing the data
 // in the original GetGlobalOp.
-SmallVector<Value, 4> handleGetGlobalOp(memref::GetGlobalOp getGlobalOp,
-                                        uint64_t bankingFactor,
-                                        unsigned bankingDimension,
-                                        MemRefType newMemRefType,
-                                        OpBuilder &builder) {
+SmallVector<Value, 4>
+handleGetGlobalOp(memref::GetGlobalOp getGlobalOp, uint64_t bankingFactor,
+                  unsigned bankingDimension, MemRefType newMemRefType,
+                  OpBuilder &builder, DictionaryAttr remainingAttrs) {
   SmallVector<Value, 4> banks;
   auto memTy = cast<MemRefType>(getGlobalOp.getType());
   ArrayRef<int64_t> originalShape = memTy.getShape();
@@ -196,6 +235,7 @@ SmallVector<Value, 4> handleGetGlobalOp(memref::GetGlobalOp getGlobalOp,
     builder.restoreInsertionPoint(getGlobalOpsInsertPt);
     auto newGetGlobalOp = builder.create<memref::GetGlobalOp>(
         getGlobalOp.getLoc(), newMemRefTy, newGlobalOp.getName());
+    newGetGlobalOp->setAttrs(remainingAttrs);
     builder.setInsertionPointAfter(newGetGlobalOp);
     getGlobalOpsInsertPt = builder.saveInsertionPoint();
 
@@ -206,16 +246,13 @@ SmallVector<Value, 4> handleGetGlobalOp(memref::GetGlobalOp getGlobalOp,
   return banks;
 }
 
-unsigned getSpecifiedOrDefaultBankingDim(std::optional<int> bankingDimensionOpt,
-                                         int64_t rank,
-                                         ArrayRef<int64_t> shape) {
+SmallVector<unsigned, 4>
+getSpecifiedOrDefaultBankingDim(const ArrayRef<unsigned> bankingDimensions,
+                                int64_t rank, ArrayRef<int64_t> shape) {
   // If the banking dimension is already specified, return it.
-  // Note, the banking dimension will always be nonempty because TableGen will
-  // assign it with a default value -1 if it's not specified by the user. Thus,
-  // -1 is the sentinel value to indicate the default behavior, which is the
-  // innermost dimension with shape greater than 1.
-  if (bankingDimensionOpt.has_value() && *bankingDimensionOpt >= 0) {
-    return static_cast<unsigned>(*bankingDimensionOpt);
+  if (!bankingDimensions.empty()) {
+    return SmallVector<unsigned, 4>(bankingDimensions.begin(),
+                                    bankingDimensions.end());
   }
 
   // Otherwise, find the innermost dimension with size > 1.
@@ -230,49 +267,7 @@ unsigned getSpecifiedOrDefaultBankingDim(std::optional<int> bankingDimensionOpt,
   }
 
   assert(bankingDimension >= 0 && "No eligible dimension for banking");
-  return static_cast<unsigned>(bankingDimension);
-}
-
-struct BankingAttributes {
-  unsigned factor;
-  unsigned dimension;
-};
-
-// Retrieve potentially specified banking factor/dimension attributes and
-// overwrite the command line or the default ones.
-BankingAttributes resolveBankingAttributes(Value originalMem,
-                                           const unsigned bankingFactor,
-                                           const unsigned bankingDimension) {
-  unsigned newFactor = bankingFactor;
-  unsigned newDimension = bankingDimension;
-  if (auto *originalDef = originalMem.getDefiningOp()) {
-    if (auto attrFactor = dyn_cast_if_present<IntegerAttr>(
-            originalDef->getAttr("banking.factor")))
-      newFactor = attrFactor.getInt();
-    if (auto attrDimension = dyn_cast_if_present<IntegerAttr>(
-            originalDef->getAttr("banking.dimension")))
-      newDimension = attrDimension.getInt();
-  }
-
-  else if (isa<BlockArgument>(originalMem)) {
-    auto blockArg = cast<BlockArgument>(originalMem);
-    auto *parentOp = blockArg.getOwner()->getParentOp();
-
-    auto funcOp = dyn_cast<func::FuncOp>(parentOp);
-    assert(funcOp &&
-           "Expected the original memory to be a FuncOp block argument!");
-
-    unsigned argIndex = blockArg.getArgNumber();
-    if (auto argAttrs = funcOp.getArgAttrDict(argIndex)) {
-      if (auto attrFactor =
-              dyn_cast_if_present<IntegerAttr>(argAttrs.get("banking.factor")))
-        newFactor = attrFactor.getInt();
-      if (auto attrDimension = dyn_cast_if_present<IntegerAttr>(
-              argAttrs.get("banking.dimension")))
-        newDimension = attrDimension.getInt();
-    }
-  }
-  return BankingAttributes{newFactor, newDimension};
+  return SmallVector<unsigned, 4>{static_cast<unsigned>(bankingDimension)};
 }
 
 // Update the argument types of `funcOp` by inserting `numInsertedArgs` number
@@ -303,10 +298,11 @@ void updateFuncOpArgumentTypes(func::FuncOp funcOp, unsigned argIndex,
   funcOp.setType(newFuncType);
 }
 
-// Update `funcOp`'s "arg_attrs" by inserting `numInsertedArgs` number of empty
-// DictionaryAttr after `argIndex`.
+// Update `funcOp`'s "arg_attrs" by inserting `numInsertedArgs` number of
+// `remainingAttrs` after `argIndex`.
 void updateFuncOpArgAttrs(func::FuncOp funcOp, unsigned argIndex,
-                          unsigned numInsertedArgs) {
+                          unsigned numInsertedArgs,
+                          DictionaryAttr remainingAttrs) {
   ArrayAttr existingArgAttrs = funcOp->getAttrOfType<ArrayAttr>("arg_attrs");
   SmallVector<Attribute, 4> updatedArgAttrs;
   unsigned numArguments = funcOp.getNumArguments();
@@ -324,8 +320,7 @@ void updateFuncOpArgAttrs(func::FuncOp funcOp, unsigned argIndex,
 
   // Initialize new attributes for the inserted arguments as empty dictionaries
   for (unsigned i = 0; i < numInsertedArgs; ++i) {
-    updatedArgAttrs[argIndex + 1 + i] =
-        DictionaryAttr::get(funcOp.getContext());
+    updatedArgAttrs[argIndex + 1 + i] = remainingAttrs;
   }
 
   // Set the updated attributes.
@@ -333,34 +328,97 @@ void updateFuncOpArgAttrs(func::FuncOp funcOp, unsigned argIndex,
                   ArrayAttr::get(funcOp.getContext(), updatedArgAttrs));
 }
 
-SmallVector<Value, 4> createBanks(Value originalMem, unsigned bankingFactor,
-                                  std::optional<int> bankingDimensionOpt) {
+unsigned getCurrBankingInfo(BankingConfigAttributes bankingConfigAttrs,
+                            StringRef attrName) {
+  auto getFirstInteger = [](Attribute attr) -> unsigned {
+    if (auto arrayAttr = dyn_cast<ArrayAttr>(attr)) {
+      assert(!arrayAttr.empty() &&
+             "BankingConfig ArrayAttr should not be empty");
+      auto intAttr = dyn_cast<IntegerAttr>(arrayAttr.getValue().front());
+      assert(intAttr && "BankingConfig elements must be integers");
+      return intAttr.getInt();
+    }
+    auto intAttr = dyn_cast<IntegerAttr>(attr);
+    assert(intAttr && "BankingConfig attribute must be an integer");
+    return intAttr.getInt();
+  };
+
+  if (attrName.str() == bankingFactorsStr) {
+    return getFirstInteger(bankingConfigAttrs.factors);
+  }
+
+  assert(attrName.str() == bankingDimensionsStr &&
+         "BankingConfig only contains 'factors' and 'dimensions' attributes");
+  return getFirstInteger(bankingConfigAttrs.dimensions);
+}
+
+Attribute getRemainingBankingInfo(MLIRContext *context,
+                                  BankingConfigAttributes bankingConfigAttrs,
+                                  StringRef attrName) {
+  auto getRemainingElements = [context](Attribute attr) -> Attribute {
+    if (auto arrayAttr = dyn_cast<ArrayAttr>(attr)) {
+      assert(!arrayAttr.empty() &&
+             "BankingConfig ArrayAttr should not be empty");
+      return arrayAttr.size() > 1
+                 ? ArrayAttr::get(context, arrayAttr.getValue().take_back(
+                                               arrayAttr.size() - 1))
+                 : nullptr;
+    }
+    assert(dyn_cast<IntegerAttr>(attr) &&
+           "BankingConfig attribute must be an integer");
+    return nullptr;
+  };
+
+  if (attrName.str() == bankingFactorsStr) {
+    return getRemainingElements(bankingConfigAttrs.factors);
+  }
+
+  assert(attrName.str() == bankingDimensionsStr &&
+         "BankingConfig only contains 'factors' and 'dimensions' attributes");
+  return getRemainingElements(bankingConfigAttrs.dimensions);
+}
+
+SmallVector<Value, 4> MemoryBankingPass::createBanks(OpBuilder &builder,
+                                                     Value originalMem) {
   MemRefType originalMemRefType = cast<MemRefType>(originalMem.getType());
-  unsigned rank = originalMemRefType.getRank();
-  ArrayRef<int64_t> shape = originalMemRefType.getShape();
 
-  unsigned bankingDimension =
-      getSpecifiedOrDefaultBankingDim(bankingDimensionOpt, rank, shape);
+  MLIRContext *context = builder.getContext();
 
-  auto currFactorDim =
-      resolveBankingAttributes(originalMem, bankingFactor, bankingDimension);
+  BankingConfigAttributes currBankingConfig =
+      getMemRefBankingConfig(originalMem);
 
-  verifyBankingConfigurations(currFactorDim.dimension, currFactorDim.factor,
-                              originalMemRefType);
+  unsigned currFactor =
+      getCurrBankingInfo(currBankingConfig, bankingFactorsStr);
+  unsigned currDimension =
+      getCurrBankingInfo(currBankingConfig, bankingDimensionsStr);
 
-  MemRefType newMemRefType = computeBankedMemRefType(
-      originalMemRefType, currFactorDim.factor, currFactorDim.dimension);
+  verifyBankingConfigurations(currFactor, currDimension, originalMemRefType);
+
+  Attribute remainingFactors =
+      getRemainingBankingInfo(context, currBankingConfig, bankingFactorsStr);
+  Attribute remainingDimensions =
+      getRemainingBankingInfo(context, currBankingConfig, bankingDimensionsStr);
+  DictionaryAttr remainingAttrs =
+      remainingFactors
+          ? DictionaryAttr::get(
+                context,
+                {builder.getNamedAttr(bankingFactorsStr, remainingFactors),
+                 builder.getNamedAttr(bankingDimensionsStr,
+                                      remainingDimensions)})
+          : DictionaryAttr::get(context);
+
+  MemRefType newMemRefType =
+      computeBankedMemRefType(originalMemRefType, currFactor, currDimension);
   SmallVector<Value, 4> banks;
   if (auto blockArgMem = dyn_cast<BlockArgument>(originalMem)) {
     Block *block = blockArgMem.getOwner();
     unsigned blockArgNum = blockArgMem.getArgNumber();
 
-    for (unsigned i = 0; i < currFactorDim.factor; ++i)
+    for (unsigned i = 0; i < currFactor; ++i)
       block->insertArgument(blockArgNum + 1 + i, newMemRefType,
                             blockArgMem.getLoc());
 
-    auto blockArgs =
-        block->getArguments().slice(blockArgNum + 1, currFactorDim.factor);
+    auto blockArgs = block->getArguments().slice(blockArgNum + 1, currFactor);
     banks.append(blockArgs.begin(), blockArgs.end());
 
     auto *parentOp = block->getParentOp();
@@ -369,53 +427,50 @@ SmallVector<Value, 4> createBanks(Value originalMem, unsigned bankingFactor,
     // Update the ArgumentTypes of `funcOp` so that we can correctly get
     // `getArgAttrDict` when resolving banking attributes across the iterations
     // of creating new banks.
-    updateFuncOpArgumentTypes(funcOp, blockArgNum, newMemRefType,
-                              currFactorDim.factor);
-    updateFuncOpArgAttrs(funcOp, blockArgNum, currFactorDim.factor);
+    updateFuncOpArgumentTypes(funcOp, blockArgNum, newMemRefType, currFactor);
+    updateFuncOpArgAttrs(funcOp, blockArgNum, currFactor, remainingAttrs);
   } else {
     Operation *originalDef = originalMem.getDefiningOp();
     Location loc = originalDef->getLoc();
-    OpBuilder builder(originalDef);
     builder.setInsertionPointAfter(originalDef);
     TypeSwitch<Operation *>(originalDef)
         .Case<memref::AllocOp>([&](memref::AllocOp allocOp) {
-          for (uint64_t bankCnt = 0; bankCnt < currFactorDim.factor;
-               ++bankCnt) {
+          for (uint64_t bankCnt = 0; bankCnt < currFactor; ++bankCnt) {
             auto bankAllocOp =
                 builder.create<memref::AllocOp>(loc, newMemRefType);
+            bankAllocOp->setAttrs(remainingAttrs);
             banks.push_back(bankAllocOp);
           }
         })
         .Case<memref::AllocaOp>([&](memref::AllocaOp allocaOp) {
-          for (uint64_t bankCnt = 0; bankCnt < currFactorDim.factor;
-               ++bankCnt) {
+          for (uint64_t bankCnt = 0; bankCnt < currFactor; ++bankCnt) {
             auto bankAllocaOp =
                 builder.create<memref::AllocaOp>(loc, newMemRefType);
+            bankAllocaOp->setAttrs(remainingAttrs);
             banks.push_back(bankAllocaOp);
           }
         })
         .Case<memref::GetGlobalOp>([&](memref::GetGlobalOp getGlobalOp) {
-          auto newBanks = handleGetGlobalOp(getGlobalOp, currFactorDim.factor,
-                                            currFactorDim.dimension,
-                                            newMemRefType, builder);
+          auto newBanks =
+              handleGetGlobalOp(getGlobalOp, currFactor, currDimension,
+                                newMemRefType, builder, remainingAttrs);
           banks.append(newBanks.begin(), newBanks.end());
         })
         .Default([](Operation *) {
           llvm_unreachable("Unhandled memory operation type");
         });
   }
+
   return banks;
 }
 
 // Replace the original load operations with newly created memory banks
 struct BankAffineLoadPattern
     : public OpRewritePattern<mlir::affine::AffineLoadOp> {
-  BankAffineLoadPattern(MLIRContext *context, uint64_t bankingFactor,
-                        std::optional<int> bankingDimensionOpt,
+  BankAffineLoadPattern(MLIRContext *context,
                         DenseMap<Value, SmallVector<Value>> &memoryToBanks,
                         DenseSet<Value> &oldMemRefVals)
       : OpRewritePattern<mlir::affine::AffineLoadOp>(context),
-        bankingFactor(bankingFactor), bankingDimensionOpt(bankingDimensionOpt),
         memoryToBanks(memoryToBanks), oldMemRefVals(oldMemRefVals) {}
 
   LogicalResult matchAndRewrite(mlir::affine::AffineLoadOp loadOp,
@@ -426,45 +481,47 @@ struct BankAffineLoadPattern
     auto loadIndices = loadOp.getIndices();
     MemRefType originalMemRefType = loadOp.getMemRefType();
     int64_t memrefRank = originalMemRefType.getRank();
-    ArrayRef<int64_t> shape = originalMemRefType.getShape();
 
-    auto bankingDimension =
-        getSpecifiedOrDefaultBankingDim(bankingDimensionOpt, memrefRank, shape);
+    BankingConfigAttributes currBankingConfig =
+        getMemRefBankingConfig(originalMem);
+    if (!currBankingConfig.factors) {
+      // No need to rewrite anymore.
+      return failure();
+    }
 
-    auto currFactorDim =
-        resolveBankingAttributes(originalMem, bankingFactor, bankingDimension);
+    unsigned currFactor =
+        getCurrBankingInfo(currBankingConfig, bankingFactorsStr);
+    unsigned currDimension =
+        getCurrBankingInfo(currBankingConfig, bankingDimensionsStr);
 
-    verifyBankingConfigurations(currFactorDim.dimension, currFactorDim.factor,
-                                originalMemRefType);
+    verifyBankingConfigurations(currFactor, currDimension, originalMemRefType);
 
     auto modMap = AffineMap::get(
         /*dimCount=*/memrefRank, /*symbolCount=*/0,
-        {rewriter.getAffineDimExpr(currFactorDim.dimension) %
-         currFactorDim.factor});
-    auto divMap =
-        AffineMap::get(memrefRank, 0,
-                       {rewriter.getAffineDimExpr(currFactorDim.dimension)
-                            .floorDiv(currFactorDim.factor)});
+        {rewriter.getAffineDimExpr(currDimension) % currFactor});
+    auto divMap = AffineMap::get(
+        memrefRank, 0,
+        {rewriter.getAffineDimExpr(currDimension).floorDiv(currFactor)});
 
     Value bankIndex =
         rewriter.create<affine::AffineApplyOp>(loc, modMap, loadIndices);
     Value offset =
         rewriter.create<affine::AffineApplyOp>(loc, divMap, loadIndices);
     SmallVector<Value, 4> newIndices(loadIndices.begin(), loadIndices.end());
-    newIndices[currFactorDim.dimension] = offset;
+    newIndices[currDimension] = offset;
 
     SmallVector<Type> resultTypes = {loadOp.getResult().getType()};
 
     SmallVector<int64_t, 4> caseValues;
-    for (unsigned i = 0; i < currFactorDim.factor; ++i)
+    for (unsigned i = 0; i < currFactor; ++i)
       caseValues.push_back(i);
 
     rewriter.setInsertionPoint(loadOp);
     scf::IndexSwitchOp switchOp = rewriter.create<scf::IndexSwitchOp>(
         loc, resultTypes, bankIndex, caseValues,
-        /*numRegions=*/currFactorDim.factor);
+        /*numRegions=*/currFactor);
 
-    for (unsigned i = 0; i < currFactorDim.factor; ++i) {
+    for (unsigned i = 0; i < currFactor; ++i) {
       Region &caseRegion = switchOp.getCaseRegions()[i];
       rewriter.setInsertionPointToStart(&caseRegion.emplaceBlock());
       Value bankedLoad = rewriter.create<mlir::affine::AffineLoadOp>(
@@ -483,16 +540,15 @@ struct BankAffineLoadPattern
 
     // We track Load's memory reference only if it is a block argument - this is
     // the only case where the reference isn't replaced.
-    if (Value memRef = loadOp.getMemref(); isa<BlockArgument>(memRef))
+    if (Value memRef = loadOp.getMemref(); isa<BlockArgument>(memRef)) {
       oldMemRefVals.insert(memRef);
+    }
     rewriter.replaceOp(loadOp, switchOp.getResult(0));
 
     return success();
   }
 
 private:
-  mutable unsigned bankingFactor;
-  mutable std::optional<int> bankingDimensionOpt;
   DenseMap<Value, SmallVector<Value>> &memoryToBanks;
   DenseSet<Value> &oldMemRefVals;
 };
@@ -500,14 +556,12 @@ private:
 // Replace the original store operations with newly created memory banks
 struct BankAffineStorePattern
     : public OpRewritePattern<mlir::affine::AffineStoreOp> {
-  BankAffineStorePattern(MLIRContext *context, uint64_t bankingFactor,
-                         std::optional<int> bankingDimensionOpt,
+  BankAffineStorePattern(MLIRContext *context,
                          DenseMap<Value, SmallVector<Value>> &memoryToBanks,
                          DenseSet<Operation *> &opsToErase,
                          DenseSet<Operation *> &processedOps,
                          DenseSet<Value> &oldMemRefVals)
       : OpRewritePattern<mlir::affine::AffineStoreOp>(context),
-        bankingFactor(bankingFactor), bankingDimensionOpt(bankingDimensionOpt),
         memoryToBanks(memoryToBanks), opsToErase(opsToErase),
         processedOps(processedOps), oldMemRefVals(oldMemRefVals) {}
 
@@ -516,50 +570,54 @@ struct BankAffineStorePattern
     if (processedOps.contains(storeOp)) {
       return failure();
     }
+    auto currConfig = getMemRefBankingConfig(storeOp.getMemref());
+    if (!currConfig.factors) {
+      // No need to rewrite anymore.
+      return failure();
+    }
     Location loc = storeOp.getLoc();
     auto originalMem = storeOp.getMemref();
     auto banks = memoryToBanks[originalMem];
     auto storeIndices = storeOp.getIndices();
     auto originalMemRefType = storeOp.getMemRefType();
     int64_t memrefRank = originalMemRefType.getRank();
-    ArrayRef<int64_t> shape = originalMemRefType.getShape();
 
-    auto bankingDimension =
-        getSpecifiedOrDefaultBankingDim(bankingDimensionOpt, memrefRank, shape);
+    BankingConfigAttributes currBankingConfig =
+        getMemRefBankingConfig(originalMem);
 
-    auto currFactorDim =
-        resolveBankingAttributes(originalMem, bankingFactor, bankingDimension);
+    unsigned currFactor =
+        getCurrBankingInfo(currBankingConfig, bankingFactorsStr);
+    unsigned currDimension =
+        getCurrBankingInfo(currBankingConfig, bankingDimensionsStr);
 
-    verifyBankingConfigurations(currFactorDim.dimension, currFactorDim.factor,
-                                originalMemRefType);
+    verifyBankingConfigurations(currFactor, currDimension, originalMemRefType);
 
     auto modMap = AffineMap::get(
         /*dimCount=*/memrefRank, /*symbolCount=*/0,
-        {rewriter.getAffineDimExpr(currFactorDim.dimension) % bankingFactor});
-    auto divMap =
-        AffineMap::get(memrefRank, 0,
-                       {rewriter.getAffineDimExpr(currFactorDim.dimension)
-                            .floorDiv(bankingFactor)});
+        {rewriter.getAffineDimExpr(currDimension) % currFactor});
+    auto divMap = AffineMap::get(
+        memrefRank, 0,
+        {rewriter.getAffineDimExpr(currDimension).floorDiv(currFactor)});
 
     Value bankIndex =
         rewriter.create<affine::AffineApplyOp>(loc, modMap, storeIndices);
     Value offset =
         rewriter.create<affine::AffineApplyOp>(loc, divMap, storeIndices);
     SmallVector<Value, 4> newIndices(storeIndices.begin(), storeIndices.end());
-    newIndices[currFactorDim.dimension] = offset;
+    newIndices[currDimension] = offset;
 
     SmallVector<Type> resultTypes = {};
 
     SmallVector<int64_t, 4> caseValues;
-    for (unsigned i = 0; i < bankingFactor; ++i)
+    for (unsigned i = 0; i < currFactor; ++i)
       caseValues.push_back(i);
 
     rewriter.setInsertionPoint(storeOp);
     scf::IndexSwitchOp switchOp = rewriter.create<scf::IndexSwitchOp>(
         loc, resultTypes, bankIndex, caseValues,
-        /*numRegions=*/bankingFactor);
+        /*numRegions=*/currFactor);
 
-    for (unsigned i = 0; i < bankingFactor; ++i) {
+    for (unsigned i = 0; i < currFactor; ++i) {
       Region &caseRegion = switchOp.getCaseRegions()[i];
       rewriter.setInsertionPointToStart(&caseRegion.emplaceBlock());
       rewriter.create<mlir::affine::AffineStoreOp>(
@@ -581,8 +639,6 @@ struct BankAffineStorePattern
   }
 
 private:
-  mutable unsigned bankingFactor;
-  mutable std::optional<int> bankingDimensionOpt;
   DenseMap<Value, SmallVector<Value>> &memoryToBanks;
   DenseSet<Operation *> &opsToErase;
   DenseSet<Operation *> &processedOps;
@@ -695,55 +751,208 @@ LogicalResult cleanUpOldMemRefs(DenseSet<Value> &oldMemRefVals,
   return success();
 }
 
+void verifyBankingAttributesSize(Attribute bankingFactorsAttr,
+                                 Attribute bankingDimensionsAttr) {
+  if (auto factorsArrayAttr = dyn_cast<ArrayAttr>(bankingFactorsAttr)) {
+    assert(!factorsArrayAttr.empty() && "Banking factors should not be empty");
+    if (auto dimsArrayAttr = dyn_cast<ArrayAttr>(bankingDimensionsAttr)) {
+      assert(factorsArrayAttr.size() == dimsArrayAttr.size() &&
+             "Banking factors/dimensions must be paired together");
+    } else {
+      auto dimsIntAttr = dyn_cast<IntegerAttr>(bankingDimensionsAttr);
+      assert(dimsIntAttr && "banking.dimensions can either be an integer or an "
+                            "array of integers");
+      assert(factorsArrayAttr.size() == 1 &&
+             "Banking factors/dimensions must be paired together");
+    }
+  } else {
+    auto factorsIntAttr = dyn_cast<IntegerAttr>(bankingFactorsAttr);
+    assert(factorsIntAttr &&
+           "banking.factors can either be an integer or an array of integers");
+    if (auto dimsArrayAttr = dyn_cast<ArrayAttr>(bankingDimensionsAttr)) {
+      assert(dimsArrayAttr.size() == 1 &&
+             "Banking factors/dimensions must be paired together");
+    } else {
+      auto dimsIntAttr = dyn_cast<IntegerAttr>(bankingDimensionsAttr);
+      assert(dimsIntAttr && "banking.dimensions can either be an integer or an "
+                            "array of integers");
+    }
+  }
+}
+
+void MemoryBankingPass::setAllBankingAttributes(Operation *operation,
+                                                MLIRContext *context) {
+  ArrayAttr defaultFactorsAttr = ArrayAttr::get(
+      context,
+      llvm::map_to_vector(bankingFactors, [&](unsigned factor) -> Attribute {
+        return IntegerAttr::get(IntegerType::get(context, 32), factor);
+      }));
+
+  auto getDimensionsAttr =
+      [&](SmallVector<unsigned, 4> specifiedOrDefaultDims) -> ArrayAttr {
+    return ArrayAttr::get(
+        context, llvm::map_to_vector(specifiedOrDefaultDims,
+                                     [&](unsigned dim) -> Attribute {
+                                       return IntegerAttr::get(
+                                           IntegerType::get(context, 32), dim);
+                                     }));
+  };
+
+  // Set or keep the memory banking related attributes for every memory-involved
+  // affine operation.
+  operation->walk([&](affine::AffineParallelOp affineParallelOp) {
+    affineParallelOp.walk([&](Operation *op) {
+      if (!isa<affine::AffineWriteOpInterface, affine::AffineReadOpInterface>(
+              op))
+        return WalkResult::advance();
+
+      auto read = dyn_cast<affine::AffineReadOpInterface>(op);
+      Value memref = read
+                         ? read.getMemRef()
+                         : cast<affine::AffineWriteOpInterface>(op).getMemRef();
+      MemRefType memrefType =
+          read ? read.getMemRefType()
+               : cast<affine::AffineWriteOpInterface>(op).getMemRefType();
+
+      if (auto *originalDef = memref.getDefiningOp()) {
+        // Set the default factors using the command line option.
+        if (!originalDef->getAttr(bankingFactorsStr)) {
+          originalDef->setAttr(bankingFactorsStr, defaultFactorsAttr);
+        }
+
+        // Set the default `dimensions` either by the command line option or
+        // inferencing if unspecified.
+        if (!originalDef->getAttr(bankingDimensionsStr)) {
+          SmallVector<unsigned, 4> specifiedOrDefaultDims =
+              getSpecifiedOrDefaultBankingDim(bankingDimensions,
+                                              memrefType.getRank(),
+                                              memrefType.getShape());
+
+          originalDef->setAttr(bankingDimensionsStr,
+                               getDimensionsAttr(specifiedOrDefaultDims));
+        }
+
+        verifyBankingAttributesSize(originalDef->getAttr(bankingFactorsStr),
+                                    originalDef->getAttr(bankingDimensionsStr));
+      } else if (isa<BlockArgument>(memref)) {
+        auto blockArg = cast<BlockArgument>(memref);
+        auto *parentOp = blockArg.getOwner()->getParentOp();
+        auto funcOp = dyn_cast<func::FuncOp>(parentOp);
+        assert(funcOp &&
+               "Expected the original memory to be a FuncOp block argument!");
+        unsigned argIndex = blockArg.getArgNumber();
+        SmallVector<unsigned, 4> specifiedOrDefaultDims =
+            getSpecifiedOrDefaultBankingDim(
+                bankingDimensions, memrefType.getRank(), memrefType.getShape());
+
+        if (!funcOp.getArgAttr(argIndex, bankingFactorsStr))
+          funcOp.setArgAttr(argIndex, bankingFactorsStr, defaultFactorsAttr);
+        if (!funcOp.getArgAttr(argIndex, bankingDimensionsStr))
+          funcOp.setArgAttr(argIndex, bankingDimensionsStr,
+                            getDimensionsAttr(specifiedOrDefaultDims));
+
+        verifyBankingAttributesSize(
+            funcOp.getArgAttr(argIndex, bankingFactorsStr),
+            funcOp.getArgAttr(argIndex, bankingDimensionsStr));
+      }
+      return WalkResult::advance();
+    });
+  });
+}
+
 void MemoryBankingPass::runOnOperation() {
-  if (getOperation().isExternal() || bankingFactor == 1)
+  this->bankingFactors = {bankingFactorsList.begin(), bankingFactorsList.end()};
+  this->bankingDimensions = {bankingDimensionsList.begin(),
+                             bankingDimensionsList.end()};
+
+  if (getOperation().isExternal() ||
+      (bankingFactors.empty() ||
+       std::all_of(bankingFactors.begin(), bankingFactors.end(),
+                   [](unsigned f) { return f == 1; })))
     return;
 
-  if (bankingFactor == 0) {
+  if (std::any_of(bankingFactors.begin(), bankingFactors.end(),
+                  [](int f) { return f == 0; })) {
     getOperation().emitError("banking factor must be greater than 1");
     signalPassFailure();
     return;
   }
 
-  getOperation().walk([&](mlir::affine::AffineParallelOp parOp) {
-    DenseSet<Value> memrefsInPar = collectMemRefs(parOp);
+  if (bankingDimensions.size() > bankingFactors.size()) {
+    getOperation().emitError(
+        "A banking dimension must be paired with a factor");
+    signalPassFailure();
+    return;
+  }
+  // `bankingFactors` is guaranteed to have elements and at least one of them is
+  // greater than 1 beyond this point.
 
-    for (auto memrefVal : memrefsInPar) {
-      auto [it, inserted] =
-          memoryToBanks.insert(std::make_pair(memrefVal, SmallVector<Value>{}));
-      if (inserted)
-        it->second = createBanks(memrefVal, bankingFactor, bankingDimension);
+  setAllBankingAttributes(getOperation(), &getContext());
+
+  OpBuilder builder(getOperation());
+  // We run this pass until convergence, i.e., `applyMemoryBanking` has reached
+  // its fixed point, which means every memory read/write operation has been
+  // rewritten to be using the newly created banks, and that the old memory
+  // references are erased.
+  bool banksCreated = false;
+  do {
+    memoryToBanks.clear();
+    oldMemRefVals.clear();
+    opsToErase.clear();
+
+    banksCreated = false;
+    getOperation().walk([&](mlir::affine::AffineParallelOp parOp) {
+      DenseSet<Value> memrefsInPar = collectMemRefs(parOp);
+      // We run `createBanks` iff there exists some `memrefVal` s.t. it has
+      // banking attributes attached to it.
+      for (auto memrefVal : memrefsInPar) {
+        auto currConfig = getMemRefBankingConfig(memrefVal);
+        if (!currConfig.factors) {
+          continue;
+        }
+        auto [it, inserted] = memoryToBanks.insert(
+            std::make_pair(memrefVal, SmallVector<Value>{}));
+        if (inserted)
+          it->second = createBanks(builder, memrefVal);
+        banksCreated = true;
+      }
+    });
+
+    if (failed(applyMemoryBanking(getOperation(), &getContext()))) {
+      signalPassFailure();
+      break;
     }
-  });
+  } while (banksCreated);
+};
 
-  auto *ctx = &getContext();
+LogicalResult MemoryBankingPass::applyMemoryBanking(Operation *operation,
+                                                    MLIRContext *ctx) {
   RewritePatternSet patterns(ctx);
 
   DenseSet<Operation *> processedOps;
-  patterns.add<BankAffineLoadPattern>(ctx, bankingFactor, bankingDimension,
-                                      memoryToBanks, oldMemRefVals);
-  patterns.add<BankAffineStorePattern>(ctx, bankingFactor, bankingDimension,
-                                       memoryToBanks, opsToErase, processedOps,
-                                       oldMemRefVals);
+  patterns.add<BankAffineLoadPattern>(ctx, memoryToBanks, oldMemRefVals);
+  patterns.add<BankAffineStorePattern>(ctx, memoryToBanks, opsToErase,
+                                       processedOps, oldMemRefVals);
   patterns.add<BankReturnPattern>(ctx, memoryToBanks);
 
   GreedyRewriteConfig config;
   config.strictMode = GreedyRewriteStrictness::ExistingOps;
-  if (failed(
-          applyPatternsGreedily(getOperation(), std::move(patterns), config))) {
-    signalPassFailure();
+  if (failed(applyPatternsGreedily(operation, std::move(patterns), config))) {
+    return failure();
   }
 
   // Clean up the old memref values
   if (failed(cleanUpOldMemRefs(oldMemRefVals, opsToErase))) {
-    signalPassFailure();
+    return failure();
   }
+
+  return success();
 }
 
 namespace circt {
 std::unique_ptr<mlir::Pass>
-createMemoryBankingPass(std::optional<unsigned> bankingFactor,
-                        std::optional<int> bankingDimension) {
-  return std::make_unique<MemoryBankingPass>(bankingFactor, bankingDimension);
+createMemoryBankingPass(ArrayRef<unsigned> bankingFactors,
+                        ArrayRef<unsigned> bankingDimensions) {
+  return std::make_unique<MemoryBankingPass>(bankingFactors, bankingDimensions);
 }
 } // namespace circt

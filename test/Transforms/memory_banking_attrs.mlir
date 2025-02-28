@@ -1,7 +1,6 @@
-// RUN: circt-opt %s -memory-banking="factor=3 dimension=1" --canonicalize --split-input-file | FileCheck %s
+// RUN: circt-opt %s -memory-banking="factors=3 dimensions=1" --canonicalize --split-input-file | FileCheck %s
 
 // CHECK: #[[$ATTR_0:.+]] = affine_map<(d0) -> (d0 mod 5)>
-// CHECK: #[[$ATTR_1:.+]] = affine_map<(d0) -> (d0 mod 3)>
 
 // CHECK-LABEL:   func.func @main(
 // CHECK-SAME:                    %[[VAL_0:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: memref<3x1xf32>,
@@ -73,18 +72,26 @@
 // CHECK:                 scf.yield %[[VAL_10]] : f32
 // CHECK:               }
 // CHECK:               %[[VAL_32:.*]] = arith.mulf %[[VAL_19]], %[[VAL_26]] : f32
-// CHECK:               %[[VAL_33:.*]] = affine.apply #[[$ATTR_1]](%[[VAL_16]])
+// CHECK:               %[[VAL_33:.*]] = affine.apply #[[$ATTR_0]](%[[VAL_16]])
 // CHECK:               scf.index_switch %[[VAL_33]]
 // CHECK:               case 0 {
-// CHECK:                 affine.store %[[VAL_32]], %[[VAL_11]]{{\[}}%[[VAL_16]] floordiv 3, %[[VAL_17]]] : memref<1x3xf32>
+// CHECK:                 affine.store %[[VAL_32]], %[[VAL_11]]{{\[}}%[[VAL_16]] floordiv 5, %[[VAL_17]]] : memref<1x3xf32>
 // CHECK:                 scf.yield
 // CHECK:               }
 // CHECK:               case 1 {
-// CHECK:                 affine.store %[[VAL_32]], %[[VAL_12]]{{\[}}%[[VAL_16]] floordiv 3, %[[VAL_17]]] : memref<1x3xf32>
+// CHECK:                 affine.store %[[VAL_32]], %[[VAL_12]]{{\[}}%[[VAL_16]] floordiv 5, %[[VAL_17]]] : memref<1x3xf32>
 // CHECK:                 scf.yield
 // CHECK:               }
 // CHECK:               case 2 {
-// CHECK:                 affine.store %[[VAL_32]], %[[VAL_13]]{{\[}}%[[VAL_16]] floordiv 3, %[[VAL_17]]] : memref<1x3xf32>
+// CHECK:                 affine.store %[[VAL_32]], %[[VAL_13]]{{\[}}%[[VAL_16]] floordiv 5, %[[VAL_17]]] : memref<1x3xf32>
+// CHECK:                 scf.yield
+// CHECK:               }
+// CHECK:               case 3 {
+// CHECK:                 affine.store %[[VAL_32]], %[[VAL_14]]{{\[}}%[[VAL_16]] floordiv 5, %[[VAL_17]]] : memref<1x3xf32>
+// CHECK:                 scf.yield
+// CHECK:               }
+// CHECK:               case 4 {
+// CHECK:                 affine.store %[[VAL_32]], %[[VAL_15]]{{\[}}%[[VAL_16]] floordiv 5, %[[VAL_17]]] : memref<1x3xf32>
 // CHECK:                 scf.yield
 // CHECK:               }
 // CHECK:               default {
@@ -95,8 +102,8 @@
 // CHECK:         }
 
 module {
-  func.func @main(%arg0: memref<3x5xf32> {banking.factor=5, banking.dimension=1}, %arg1: memref<5x3xf32>{banking.factor=5, banking.dimension=0}) -> (memref<5x3xf32>) {
-    %mem = memref.alloc() {banking.factor=5, banking.dimension=0} : memref<5x3xf32>
+  func.func @main(%arg0: memref<3x5xf32> {banking.factors=5, banking.dimensions=1}, %arg1: memref<5x3xf32>{banking.factors=5, banking.dimensions=0}) -> (memref<5x3xf32>) {
+    %mem = memref.alloc() {banking.factors=5, banking.dimensions=0} : memref<5x3xf32>
     affine.parallel (%i) = (0) to (5) {
       affine.parallel (%j) = (0) to (3) {
         %1 = affine.load %arg0[%j, %i] : memref<3x5xf32>
@@ -201,7 +208,7 @@ module {
 // CHECK:         }
 
 module {
-  func.func @overwrite(%arg0: memref<8x3xf32>, %arg1: memref<8x6xf32> {banking.factor=6, banking.dimension=1}) -> (memref<8x6xf32>) {
+  func.func @overwrite(%arg0: memref<8x3xf32>, %arg1: memref<8x6xf32> {banking.factors=6, banking.dimensions=1}) -> (memref<8x6xf32>) {
     %mem = memref.alloc() : memref<8x6xf32>
     affine.parallel (%i) = (0) to (8) {
       affine.parallel (%j) = (0) to (6) {

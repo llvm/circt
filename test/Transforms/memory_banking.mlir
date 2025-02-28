@@ -1,7 +1,7 @@
-// RUN: circt-opt %s -split-input-file -memory-banking="factor=2" | FileCheck %s --check-prefix UNROLL-BY-2
-// RUN: circt-opt %s -split-input-file -memory-banking="factor=1" | FileCheck %s --check-prefix UNROLL-BY-1
-// RUN: circt-opt %s -split-input-file -memory-banking="factor=8" | FileCheck %s --check-prefix UNROLL-BY-8
-// RUN: circt-opt %s -split-input-file -memory-banking="factor=2" | FileCheck %s --check-prefix ALLOC-UNROLL-2
+// RUN: circt-opt %s -split-input-file -memory-banking="factors=2" | FileCheck %s --check-prefix UNROLL-BY-2
+// RUN: circt-opt %s -split-input-file -memory-banking="factors=1" | FileCheck %s --check-prefix UNROLL-BY-1
+// RUN: circt-opt %s -split-input-file -memory-banking="factors=8" | FileCheck %s --check-prefix UNROLL-BY-8
+// RUN: circt-opt %s -split-input-file -memory-banking="factors=2" | FileCheck %s --check-prefix ALLOC-UNROLL-2
 
 // -----
 
