@@ -2,6 +2,7 @@ add_circt_dialect_library(CIRCTLLHDTransforms
   DesequentializationPass.cpp
   EarlyCodeMotionPass.cpp
   FunctionEliminationPass.cpp
+  HoistSignals.cpp
   Mem2Reg.cpp
   MemoryToBlockArgumentPass.cpp
   ProcessLoweringPass.cpp

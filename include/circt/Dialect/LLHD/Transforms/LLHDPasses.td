@@ -151,4 +151,8 @@ def Desequentialization : Pass<"llhd-desequentialize", "hw::HWModuleOp"> {
   ];
 }
 
+def HoistSignalsPass : Pass<"llhd-hoist-signals"> {
+  let summary = "Hoist probes and promote drives to process results";
+}
+
 #endif // CIRCT_DIALECT_LLHD_TRANSFORMS_PASSES
