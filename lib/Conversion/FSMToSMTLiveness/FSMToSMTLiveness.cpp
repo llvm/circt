@@ -76,7 +76,7 @@ void printFsmArgVals (const llvm::SmallVector<std::pair<mlir::Value, mlir::Value
 }
 
 
-int insertStates(llvm::SmallVector<std::string> &states, std::string& st){
+int insertStates_l(llvm::SmallVector<std::string> &states, std::string& st){
   for(auto [id, s]: llvm::enumerate(states)){
     if(s == st){
       return id;
@@ -86,14 +86,14 @@ int insertStates(llvm::SmallVector<std::string> &states, std::string& st){
   return states.size()-1;
 }
 
-Region* getOutputRegion(llvm::SmallVector<std::pair<mlir::Region*, int>> outputOfStateId, int stateId){
+Region* getOutputRegion_l(llvm::SmallVector<std::pair<mlir::Region*, int>> outputOfStateId, int stateId){
   for (auto oid: outputOfStateId)
     if (stateId == oid.second)
       return oid.first;
   abort();
 }
 
-circt::smt::IntPredicate getSmtPred(circt::comb::ICmpPredicate cmpPredicate){
+circt::smt::IntPredicate getSmtPred_l(circt::comb::ICmpPredicate cmpPredicate){
   switch (cmpPredicate) {
       case comb::ICmpPredicate::slt:
           return smt::IntPredicate::lt;
@@ -114,7 +114,7 @@ circt::smt::IntPredicate getSmtPred(circt::comb::ICmpPredicate cmpPredicate){
   }
 }
 
-mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b, llvm::SmallVector<mlir::Value> args){
+mlir::Value getCombValue_l(Operation &op, Location &loc, OpBuilder &b, llvm::SmallVector<mlir::Value> args){
   // we need to modulo all the operations considering the width of the mlir value!
   if (auto addOp = llvm::dyn_cast<comb::AddOp>(op)){
     auto tmp = b.create<smt::IntAddOp>(loc, b.getType<smt::IntType>(), args);
@@ -143,7 +143,7 @@ mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b, llvm::Small
     if(icmp.getPredicate() == circt::comb::ICmpPredicate::ne){
       return b.create<smt::DistinctOp>(loc, args);
     }
-    auto predicate = getSmtPred(icmp.getPredicate());
+    auto predicate = getSmtPred_l(icmp.getPredicate());
     return b.create<smt::IntCmpOp>(loc, predicate, args[0], args[1]);
   }
 }
@@ -180,17 +180,17 @@ mlir::Value getSmtValue(mlir::Value op, const llvm::SmallVector<std::pair<mlir::
     auto op2 = getSmtValue(op.getDefiningOp()->getOperand(1), fsmVarVals, inputFunctions, args, time,b, loc);
     
     llvm::SmallVector<mlir::Value> combArgs = {op1, op2};
-    return getCombValue(*op.getDefiningOp(), loc, b, combArgs);
+    return getCombValue_l(*op.getDefiningOp(), loc, b, combArgs);
   }
 }
 
 
-Transition parseTransition(fsm::TransitionOp t, int from, llvm::SmallVector<std::string> &states, 
+Transition parseTransition_l(fsm::TransitionOp t, int from, llvm::SmallVector<std::string> &states, 
     Location &loc, OpBuilder &b){
   std::string nextState = t.getNextState().str();
-  // llvm::outs()<<"\n\ntransition from "<<states[from]<<" to "<<states[insertStates(states, nextState)];
+  // llvm::outs()<<"\n\ntransition from "<<states[from]<<" to "<<states[insertStates_l(states, nextState)];
   // t->dump();
-  Transition tr = {.from = from, .to = insertStates(states, nextState)};
+  Transition tr = {.from = from, .to = insertStates_l(states, nextState)};
   if (!t.getGuard().empty()){
     tr.hasGuard = true;
     tr.guard = &t.getGuard();
@@ -296,7 +296,7 @@ LogicalResult MachineOpConverter::dispatch(){
   // as initial condition of the fsm
   std::string initialState = machineOp.getInitialState().str();
 
-  insertStates(states, initialState);
+  insertStates_l(states, initialState);
 
 
 
@@ -311,12 +311,12 @@ LogicalResult MachineOpConverter::dispatch(){
     auto range = b.getType<smt::BoolType>();
     smt::DeclareFunOp acFun = b.create<smt::DeclareFunOp>(loc, b.getType<smt::SMTFuncType>(varTypes, range), acFunName);
     stateFunctions.push_back(acFun);
-    insertStates(states, stateName);
+    insertStates_l(states, stateName);
   }
 
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
     std::string stateName = stateOp.getName().str();
-    auto fromState = insertStates(states, stateName);
+    auto fromState = insertStates_l(states, stateName);
     if (!stateOp.getOutput().empty()) {
       outputOfStateId.push_back({&stateOp.getOutput(), fromState});
     }
@@ -324,14 +324,14 @@ LogicalResult MachineOpConverter::dispatch(){
 
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
     std::string stateName = stateOp.getName().str();
-    auto fromState = insertStates(states, stateName);
+    auto fromState = insertStates_l(states, stateName);
     if (!stateOp.getTransitions().empty()) {
       for (auto tr :
            stateOp.getTransitions().front().getOps<fsm::TransitionOp>()) {
-        auto t = parseTransition(tr, fromState, states, loc, b);
+        auto t = parseTransition_l(tr, fromState, states, loc, b);
         if (!stateOp.getOutput().empty()) {
           t.hasOutput = true;
-          t.output = getOutputRegion(outputOfStateId, t.to); // now look for it! &stateOp.getOutput();
+          t.output = getOutputRegion_l(outputOfStateId, t.to); // now look for it! &stateOp.getOutput();
         } else {
           t.hasOutput = false;
         }
