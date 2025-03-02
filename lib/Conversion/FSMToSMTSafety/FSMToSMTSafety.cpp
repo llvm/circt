@@ -358,8 +358,17 @@ LogicalResult MachineOpConverter::dispatch() {
             // todo: check that updates requiring inputs for operations work
             if (auto outputOp = dyn_cast<fsm::OutputOp>(op)) {
               for (auto outs : outputOp->getOperands()) {
-                auto toRet = getSmtValue(outs, avToSmt, b, loc);
-                outputSmtValues.push_back(toRet);
+                auto found = false;
+                for (auto [i, fav]: llvm::enumerate(avToSmt)){
+                  if (outs == fav.first){
+                    outputSmtValues.push_back(forallArgs[i]);
+                    found = true;
+                  }
+                } 
+                if(!found) {
+                  auto toRet = getSmtValue(outs, avToSmt, b, loc);
+                  outputSmtValues.push_back(toRet);
+                }
               }
             }
           }
