@@ -360,7 +360,7 @@ LogicalResult MachineOpConverter::dispatch() {
               for (auto outs : outputOp->getOperands()) {
                 auto found = false;
                 for (auto [i, fav]: llvm::enumerate(avToSmt)){
-                  if (outs == fav.first){
+                  if (outs == fav.first && i < numArgs){
                     outputSmtValues.push_back(forallArgs[i]);
                     found = true;
                   }
