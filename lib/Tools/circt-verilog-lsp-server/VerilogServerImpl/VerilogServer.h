@@ -26,6 +26,8 @@ struct Diagnostic;
 struct Position;
 struct Location;
 struct TextDocumentContentChangeEvent;
+struct Range;
+struct InlayHint;
 class URIForFile;
 } // namespace lsp
 } // namespace mlir
@@ -37,6 +39,7 @@ using TextDocumentContentChangeEvent =
     mlir::lsp::TextDocumentContentChangeEvent;
 using URIForFile = mlir::lsp::URIForFile;
 using Diagnostic = mlir::lsp::Diagnostic;
+struct VerilogUserProvidedInlayHint;
 
 /// This class implements all of the Verilog related functionality necessary for
 /// a language server. This class allows for keeping the Verilog specific logic
@@ -69,6 +72,13 @@ public:
   /// Find all references of the object pointed at by the given position.
   void findReferencesOf(const URIForFile &uri, const mlir::lsp::Position &pos,
                         std::vector<mlir::lsp::Location> &references);
+
+  /// Get the inlay hints for the range within the given file.
+  void getInlayHints(const URIForFile &uri, const mlir::lsp::Range &range,
+                     std::vector<mlir::lsp::InlayHint> &inlayHints);
+
+  void putInlayHintsOnObjects(
+      const std::vector<circt::lsp::VerilogUserProvidedInlayHint> &params);
 
 private:
   struct Impl;

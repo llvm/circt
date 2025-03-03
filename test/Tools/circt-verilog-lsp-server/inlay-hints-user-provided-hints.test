@@ -1,0 +1,117 @@
+// RUN: circt-verilog-lsp-server -lit-test  --source-location-include-dir=%S  < %s | FileCheck %s
+// REQUIRES: slang
+{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"processId":123,"rootPath":"verilog","capabilities":{},"trace":"off"}}
+// -----
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{
+  "uri":"test:///foo.sv",
+  "languageId":"verilog",
+  "version":1,
+  "text":"module test(); wire foo; reg bar; endmodule"
+}}}
+// -----
+// Find definition of `out`
+{"jsonrpc":"2.0","id":1,"method":"verilog/putInlayHintsOnObjects","params":{
+  "textDocument":{"uri":"test:///foo.sv"},
+  "hints": [
+    {
+      "path": "foo",
+      "value": "hint for foo",
+      "root": "test"
+    },
+    {
+      "path": "bar",
+      "value": "hint for bar",
+      "root": "test",
+      "group": "A"
+    }
+  ]
+}}
+// CHECK:      "id": "refresh_inlay_hints_0",
+// CHECK-NEXT: "jsonrpc": "2.0",
+// CHECK-NEXT: "method": "workspace/inlayHint/refresh",
+// CHECK-NEXT: "params": null
+
+// -----
+{"jsonrpc":"2.0","id":2,"method":"textDocument/inlayHint","params":{
+  "textDocument":{"uri":"test:///foo.sv"},
+  "range": {
+    "start": {"line":0,"character":0},
+    "end": {"line":0,"character":35}
+  }
+}}
+// CHECK:      "id": 2,
+// CHECK-NEXT: "jsonrpc": "2.0",
+// CHECK-NEXT: "result": [
+// CHECK-NEXT:   {
+// CHECK-NEXT:     "kind": 2,
+// CHECK-NEXT:     "label": "hint for foo",
+// CHECK-NEXT:     "paddingLeft": true,
+// CHECK-NEXT:     "paddingRight": false,
+// CHECK-NEXT:     "position": {
+// CHECK-NEXT:       "character": 20,
+// CHECK-NEXT:       "line": 0
+// CHECK-NEXT:     }
+// CHECK-NEXT:   },
+// CHECK-NEXT:   {
+// CHECK-NEXT:     "kind": 2,
+// CHECK-NEXT:     "label": "hint for bar",
+// CHECK-NEXT:     "paddingLeft": true,
+// CHECK-NEXT:     "paddingRight": false,
+// CHECK-NEXT:     "position": {
+// CHECK-NEXT:       "character": 29,
+// CHECK-NEXT:      "line": 0
+// CHECK-NEXT:    }
+// CHECK-NEXT:  }
+// CHECK-NEXT: ]
+// -----
+{"jsonrpc":"2.0","id":3,"method":"verilog/putInlayHintsOnObjects","params":{
+  "textDocument":{"uri":"test:///foo.sv"},
+  "hints": [
+    {
+      "path": "foo",
+      "value": "additional hint for foo",
+      "root": "test"
+    },
+    {
+      "path": "bar",
+      "value": "new hint for bar",
+      "root": "test",
+      "group": "A"
+    }
+  ]
+}}
+// -----
+{"jsonrpc":"2.0","id":4,"method":"textDocument/inlayHint","params":{
+  "textDocument":{"uri":"test:///foo.sv"},
+  "range": {
+    "start": {"line":0,"character":0},
+    "end": {"line":0,"character":35}
+  }
+}}
+// CHECK:      "id": 4,
+// CHECK-NEXT: "jsonrpc": "2.0",
+// CHECK-NEXT: "result": [
+// CHECK-NEXT:   {
+// CHECK-NEXT:     "kind": 2,
+// CHECK-NEXT:     "label": "hint for foo/additional hint for foo",
+// CHECK-NEXT:     "paddingLeft": true,
+// CHECK-NEXT:     "paddingRight": false,
+// CHECK-NEXT:     "position": {
+// CHECK-NEXT:       "character": 20,
+// CHECK-NEXT:       "line": 0
+// CHECK-NEXT:     }
+// CHECK-NEXT:   },
+// CHECK-NEXT:   {
+// CHECK-NEXT:     "kind": 2,
+// CHECK-NEXT:     "label": "new hint for bar",
+// CHECK-NEXT:     "paddingLeft": true,
+// CHECK-NEXT:     "paddingRight": false,
+// CHECK-NEXT:     "position": {
+// CHECK-NEXT:       "character": 29,
+// CHECK-NEXT:       "line": 0
+// CHECK-NEXT:     }
+// CHECK-NEXT:   }
+// -----
+{"jsonrpc":"2.0","id":5,"method":"shutdown"}
+// -----
+{"jsonrpc":"2.0","method":"exit"}

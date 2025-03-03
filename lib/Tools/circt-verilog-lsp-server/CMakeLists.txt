@@ -3,6 +3,7 @@ add_subdirectory(VerilogServerImpl)
 add_circt_library(CIRCTVerilogLspServerLib
   CirctVerilogLspServerMain.cpp
   LSPServer.cpp
+  Protocol.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${MLIR_MAIN_INCLUDE_DIR}/circt/Tools/circt-verilog-lsp-server

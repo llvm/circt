@@ -46,24 +46,24 @@ export class CIRCTContext implements vscode.Disposable {
 
     // Watch any new documents to spawn servers when necessary.
     this.subscriptions.push(
-        vscode.workspace.onDidOpenTextDocument(startClientOnOpenDocument));
+      vscode.workspace.onDidOpenTextDocument(startClientOnOpenDocument));
     this.subscriptions.push(
-        vscode.workspace.onDidChangeWorkspaceFolders((event) => {
-          for (const folder of event.removed) {
-            const client = this.workspaceFolders.get(folder.uri.toString());
-            if (client) {
-              client.dispose();
-              this.workspaceFolders.delete(folder.uri.toString());
-            }
+      vscode.workspace.onDidChangeWorkspaceFolders((event) => {
+        for (const folder of event.removed) {
+          const client = this.workspaceFolders.get(folder.uri.toString());
+          if (client) {
+            client.dispose();
+            this.workspaceFolders.delete(folder.uri.toString());
           }
-        }));
+        }
+      }));
   }
 
   async getOrActivateLanguageClientForWorkspaceFolder(
-      workspaceFolder: vscode.WorkspaceFolder, languageId: string,
-      serverSettingName: string): Promise<vscodelc.LanguageClient> {
+    workspaceFolder: vscode.WorkspaceFolder, languageId: string,
+    serverSettingName: string): Promise<vscodelc.LanguageClient> {
     let workspaceFolderStr =
-        workspaceFolder ? workspaceFolder.uri.toString() : "";
+      workspaceFolder ? workspaceFolder.uri.toString() : "";
 
     // Get or create a client context for this folder.
     let folderContext = this.workspaceFolders.get(workspaceFolderStr);
@@ -75,7 +75,7 @@ export class CIRCTContext implements vscode.Disposable {
     let client = folderContext.clients.get(languageId);
     if (!client) {
       client = await this.activateWorkspaceFolder(
-          workspaceFolder, serverSettingName, languageId, this.outputChannel);
+        workspaceFolder, serverSettingName, languageId, this.outputChannel);
       folderContext.clients.set(languageId, client);
     }
     return client;
@@ -92,14 +92,14 @@ export class CIRCTContext implements vscode.Disposable {
    * Open or return a language server for the given uri and language.
    */
   async getOrActivateLanguageClient(uri: vscode.Uri, languageId: string):
-      Promise<vscodelc.LanguageClient> {
+    Promise<vscodelc.LanguageClient> {
     let serverSettingName = await this.getServerSettingName(languageId);
     if (serverSettingName === "") {
       return null;
     }
 
     // Check the scheme of the uri.
-    let validSchemes = [ "file" ];
+    let validSchemes = ["file"];
     if (!validSchemes.includes(uri.scheme)) {
       return null;
     }
@@ -107,47 +107,8 @@ export class CIRCTContext implements vscode.Disposable {
     // Resolve the workspace folder if this document is in one. We use the
     // workspace folder when determining if a server needs to be started.
     return this.getOrActivateLanguageClientForWorkspaceFolder(
-        vscode.workspace.getWorkspaceFolder(uri), languageId,
-        serverSettingName);
-  }
-
-  /**
-   *  Prepare a compilation database option for a server.
-   */
-  async prepareCompilationDatabaseServerOptions(
-      languageName: string, workspaceFolder: vscode.WorkspaceFolder,
-      configsToWatch: string[], additionalServerArgs: string[]) {
-
-    configsToWatch.push(`${languageName}_include_directories`);
-    configsToWatch.push(`${languageName}_source_location_root_directories`);
-    configsToWatch.push(`${languageName}_server_path`);
-
-    // Helper function to resolve directories from config and add server args
-    async function resolveConfigDirsAndAddArgs(
-        configKey: string, argPrefix: string, context: CIRCTContext) {
-      let dirsFromConfig = config.get<string[]>(configKey, workspaceFolder, []);
-      let resolvedDirs = [];
-      for (const dir of dirsFromConfig) {
-        if (dir === "") {
-          continue;
-        }
-        let resolvedPath =
-            await context.resolveDirectory(dir, "", workspaceFolder);
-        resolvedDirs.push(resolvedPath);
-      }
-
-      additionalServerArgs.push(
-          ...resolvedDirs.map((dir) => `${argPrefix}=${dir}`));
-    }
-
-    // Resolve include directories
-    await resolveConfigDirsAndAddArgs(`${languageName}_include_directories`,
-                                      `--${languageName}-include-dir`, this);
-
-    // Resolve source location root directories
-    await resolveConfigDirsAndAddArgs(
-        `${languageName}_source_location_root_directories`,
-        '--source-location-include-dir', this);
+      vscode.workspace.getWorkspaceFolder(uri), languageId,
+      serverSettingName);
   }
 
   /**
@@ -155,10 +116,40 @@ export class CIRCTContext implements vscode.Disposable {
    *  accessible compilation databases.
    */
   async prepareVerilogServerOptions(workspaceFolder: vscode.WorkspaceFolder,
-                                    configsToWatch: string[],
-                                    additionalServerArgs: string[]) {
-    await this.prepareCompilationDatabaseServerOptions(
-        "verilog", workspaceFolder, configsToWatch, additionalServerArgs);
+    configsToWatch: string[],
+    additionalServerArgs: string[]) {
+    let languageName = "verilog";
+
+    configsToWatch.push(`${languageName}_include_directories`);
+    configsToWatch.push(`${languageName}_source_location_root_directories`);
+    configsToWatch.push(`${languageName}_server_path`);
+
+    // Helper function to resolve directories from config and add server args
+    async function resolveConfigDirsAndAddArgs(
+      configKey: string, argPrefix: string, context: CIRCTContext) {
+      let dirsFromConfig = config.get<string[]>(configKey, workspaceFolder, []);
+      let resolvedDirs = [];
+      for (const dir of dirsFromConfig) {
+        if (dir === "") {
+          continue;
+        }
+        let resolvedPath =
+          await context.resolveDirectory(dir, "", workspaceFolder);
+        resolvedDirs.push(resolvedPath);
+      }
+
+      additionalServerArgs.push(
+        ...resolvedDirs.map((dir) => `${argPrefix}=${dir}`));
+    }
+
+    // Resolve include directories
+    await resolveConfigDirsAndAddArgs(`${languageName}_include_directories`,
+      `--libdir`, this);
+
+    // Resolve source location root directories
+    await resolveConfigDirsAndAddArgs(
+      `${languageName}_source_location_root_directories`,
+      '--source-location-include-dir', this);
   }
 
   /**
@@ -166,9 +157,9 @@ export class CIRCTContext implements vscode.Disposable {
    *  folder.
    */
   async activateWorkspaceFolder(workspaceFolder: vscode.WorkspaceFolder,
-                                serverSettingName: string, languageName: string,
-                                outputChannel: vscode.OutputChannel):
-      Promise<vscodelc.LanguageClient> {
+    serverSettingName: string, languageName: string,
+    outputChannel: vscode.OutputChannel):
+    Promise<vscodelc.LanguageClient> {
     let configsToWatch: string[] = [];
     let filepathsToWatch: string[] = [];
     let additionalServerArgs: string[] = [];
@@ -176,19 +167,21 @@ export class CIRCTContext implements vscode.Disposable {
     // Initialize additional configurations for this server.
     if (languageName === "verilog") {
       await this.prepareVerilogServerOptions(workspaceFolder, configsToWatch,
-                                             additionalServerArgs);
+        additionalServerArgs);
+    } else {
+      return;
     }
 
     // Try to activate the language client.
-    const [server, serverPath] = await this.startLanguageClient(
-        workspaceFolder, outputChannel, serverSettingName, languageName,
-        additionalServerArgs);
+    const [server, serverPath] = await this.startVerilogLanguageClient(
+      workspaceFolder, outputChannel, serverSettingName,
+      additionalServerArgs);
     configsToWatch.push(serverSettingName);
     filepathsToWatch.push(serverPath);
 
     // Watch for configuration changes on this folder.
     await configWatcher.activate(this, workspaceFolder, configsToWatch,
-                                 filepathsToWatch);
+      filepathsToWatch);
     return server;
   }
 
@@ -197,51 +190,51 @@ export class CIRCTContext implements vscode.Disposable {
    *  containing the opened server, or null if the server could not be started,
    *  and the resolved server path.
    */
-  async startLanguageClient(workspaceFolder: vscode.WorkspaceFolder,
-                            outputChannel: vscode.OutputChannel,
-                            serverSettingName: string, languageName: string,
-                            additionalServerArgs: string[]):
-      Promise<[ vscodelc.LanguageClient, string ]> {
+  async startVerilogLanguageClient(workspaceFolder: vscode.WorkspaceFolder,
+    outputChannel: vscode.OutputChannel,
+    serverSettingName: string,
+    additionalServerArgs: string[]):
+    Promise<[vscodelc.LanguageClient, string]> {
+    let languageName = "verilog";
     const clientTitle = languageName.toUpperCase() + " Language Client";
 
     // Get the path of the lsp-server that is used to provide language
     // functionality.
     var serverPath =
-        await this.resolveServerPath(serverSettingName, workspaceFolder);
+      await this.resolveServerPath(serverSettingName, workspaceFolder);
 
     // If the server path is empty, bail. We don't emit errors if the user
     // hasn't explicitly configured the server.
     if (serverPath === "") {
-      return [ null, serverPath ];
+      return [null, serverPath];
     }
 
     // Check that the file actually exists.
     if (!fs.existsSync(serverPath)) {
       vscode.window
-          .showErrorMessage(
-              `${clientTitle}: Unable to resolve path for '${
-                  serverSettingName}', please ensure the path is correct`,
-              "Open Setting")
-          .then((value) => {
-            if (value === "Open Setting") {
-              vscode.commands.executeCommand(
-                  "workbench.action.openWorkspaceSettings", {
-                    openToSide : false,
-                    query : `circt-verilog-lsp.${serverSettingName}`,
-                  });
-            }
-          });
-      return [ null, serverPath ];
+        .showErrorMessage(
+          `${clientTitle}: Unable to resolve path for '${serverSettingName}', please ensure the path is correct`,
+          "Open Setting")
+        .then((value) => {
+          if (value === "Open Setting") {
+            vscode.commands.executeCommand(
+              "workbench.action.openWorkspaceSettings", {
+              openToSide: false,
+              query: `circt-verilog-lsp.${serverSettingName}`,
+            });
+          }
+        });
+      return [null, serverPath];
     }
 
     // Configure the server options.
     const serverOptions: vscodelc.ServerOptions = {
-      command : serverPath,
-      args : additionalServerArgs,
+      command: serverPath,
+      args: additionalServerArgs,
     };
 
     // Configure file patterns relative to the workspace folder.
-    let filePattern: vscode.GlobPattern = "**/*." + languageName;
+    let filePattern: vscode.GlobPattern = "**/*.(sv|v)";
     let selectorPattern: string = null;
     if (workspaceFolder) {
       filePattern = new vscode.RelativePattern(workspaceFolder, filePattern);
@@ -258,7 +251,7 @@ export class CIRCTContext implements vscode.Disposable {
     let middleware = {};
     if (!workspaceFolder) {
       middleware = {
-        didOpen : (document, next) : Promise<void> => {
+        didOpen: (document, next): Promise<void> => {
           if (!vscode.workspace.getWorkspaceFolder(document.uri)) {
             return next(document);
           }
@@ -269,26 +262,26 @@ export class CIRCTContext implements vscode.Disposable {
 
     // Configure the client options.
     const clientOptions: vscodelc.LanguageClientOptions = {
-      documentSelector :
-          [ {language : languageName, pattern : selectorPattern} ],
-      synchronize : {
+      documentSelector:
+        [{ language: languageName, pattern: selectorPattern }],
+      synchronize: {
         // Notify the server about file changes to language files contained in
         // the workspace.
-        fileEvents : vscode.workspace.createFileSystemWatcher(filePattern),
+        fileEvents: vscode.workspace.createFileSystemWatcher(filePattern),
       },
-      outputChannel : outputChannel,
-      workspaceFolder : workspaceFolder,
-      middleware : middleware,
+      outputChannel: outputChannel,
+      workspaceFolder: workspaceFolder,
+      middleware: middleware,
 
       // Don't switch to output window when the server returns output.
-      revealOutputChannelOn : vscodelc.RevealOutputChannelOn.Never,
+      revealOutputChannelOn: vscodelc.RevealOutputChannelOn.Never,
     };
 
     // Create the language client and start the client.
     let languageClient = new vscodelc.LanguageClient(
-        languageName + "-lsp", clientTitle, serverOptions, clientOptions);
+      languageName + "-lsp", clientTitle, serverOptions, clientOptions);
     languageClient.start();
-    return [ languageClient, serverPath ];
+    return [languageClient, serverPath];
   }
 
   /**
@@ -302,8 +295,8 @@ export class CIRCTContext implements vscode.Disposable {
   }
 
   async resolveDirectory(directoryPath: string, defaultPath: string,
-                         workspaceFolder: vscode.WorkspaceFolder):
-      Promise<string> {
+    workspaceFolder: vscode.WorkspaceFolder):
+    Promise<string> {
     // If the path is already fully resolved, there is nothing to do.
     if (path.isAbsolute(directoryPath)) {
       return directoryPath;
@@ -318,7 +311,7 @@ export class CIRCTContext implements vscode.Disposable {
 
     if (workspaceFolder) {
       directoryPath = directoryPath.replace("${workspaceFolder}",
-                                            workspaceFolder.uri.fsPath);
+        workspaceFolder.uri.fsPath);
       // If the path is already fully resolved, there is nothing to do.
       if (path.isAbsolute(directoryPath)) {
         return directoryPath;
@@ -337,7 +330,7 @@ export class CIRCTContext implements vscode.Disposable {
    */
 
   async resolvePath(filePath: string, defaultPath: string,
-                    workspaceFolder: vscode.WorkspaceFolder): Promise<string> {
+    workspaceFolder: vscode.WorkspaceFolder): Promise<string> {
     const configPath = filePath;
 
     // If the path is already fully resolved, there is nothing to do.
@@ -375,11 +368,11 @@ export class CIRCTContext implements vscode.Disposable {
    * workspace folder.
    */
   async resolveServerPath(serverSettingName: string,
-                          workspaceFolder: vscode.WorkspaceFolder):
-      Promise<string> {
+    workspaceFolder: vscode.WorkspaceFolder):
+    Promise<string> {
     const serverPath = config.get<string>(serverSettingName, workspaceFolder);
     const defaultPath =
-        CIRCTContext.getDefaultServerFilename(serverSettingName);
+      CIRCTContext.getDefaultServerFilename(serverSettingName);
     return this.resolvePath(serverPath, defaultPath, workspaceFolder);
   }
 
@@ -388,10 +381,10 @@ export class CIRCTContext implements vscode.Disposable {
    * client is active.
    */
   getLanguageClient(uri: vscode.Uri,
-                    languageName: string): vscodelc.LanguageClient {
+    languageName: string): vscodelc.LanguageClient {
     let workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
     let workspaceFolderStr =
-        workspaceFolder ? workspaceFolder.uri.toString() : "";
+      workspaceFolder ? workspaceFolder.uri.toString() : "";
     let folderContext = this.workspaceFolders.get(workspaceFolderStr);
     if (!folderContext) {
       return null;
