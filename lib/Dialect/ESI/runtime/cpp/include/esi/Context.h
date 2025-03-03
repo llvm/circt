@@ -30,7 +30,7 @@ class AcceleratorConnection;
 /// context. It owns all the types, uniquifying them.
 class Context {
 public:
-  Context() : logger(std::make_unique<NullLogger>()) {}
+  Context() : logger(std::make_unique<ConsoleLogger>(Logger::Level::Warning)) {}
   Context(std::unique_ptr<Logger> logger) : logger(std::move(logger)) {}
 
   /// Create a context with a specific logger type.

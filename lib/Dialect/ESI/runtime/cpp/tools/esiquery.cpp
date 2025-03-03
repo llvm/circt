@@ -63,7 +63,7 @@ int main(int argc, const char *argv[]) {
     }
     return 0;
   } catch (std::exception &e) {
-    std::cerr << "Error: " << e.what() << std::endl;
+    ctxt.getLogger().error("esiquery", e.what());
     return -1;
   }
 }

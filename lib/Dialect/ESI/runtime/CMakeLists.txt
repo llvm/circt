@@ -74,6 +74,12 @@ else()
   endif()
 endif()
 
+FetchContent_Declare(
+  fmt
+  GIT_REPOSITORY https://github.com/fmtlib/fmt
+  GIT_TAG        11.1.4)
+FetchContent_MakeAvailable(fmt)
+
 # In a Python wheel build, we need to install libraries to different places.
 option(WHEEL_BUILD "Set up the build for a Python wheel." OFF)
 if (WHEEL_BUILD)
@@ -166,6 +172,7 @@ endif()
 target_link_libraries(ESICppRuntime PUBLIC
   ${ZLIB_LIBRARY}
   nlohmann_json::nlohmann_json
+  fmt::fmt-header-only
 )
 if(NOT MSVC)
   target_link_libraries(ESICppRuntime PRIVATE
