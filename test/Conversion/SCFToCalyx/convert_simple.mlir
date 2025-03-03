@@ -290,6 +290,35 @@ module {
 
 // -----
 
+// Test floating point sub
+
+// CHECK:             calyx.group @bb0_0 {
+// CHECK-DAG:               calyx.assign %std_addFN_0.left = %in0 : i32
+// CHECK-DAG:               calyx.assign %std_addFN_0.right = %cst : i32
+// CHECK-DAG:               calyx.assign %subf_0_reg.in = %std_addFN_0.out : i32
+// CHECK-DAG:               calyx.assign %subf_0_reg.write_en = %std_addFN_0.done : i1
+// CHECK-DAG:               %0 = comb.xor %std_addFN_0.done, %true : i1
+// CHECK-DAG:               calyx.assign %std_addFN_0.go = %0 ? %true : i1
+// CHECK-DAG:               calyx.assign %std_addFN_0.subOp = %true : i1
+// CHECK-DAG:               calyx.group_done %subf_0_reg.done : i1
+// CHECK-DAG:             }
+// CHECK:      calyx.group @ret_assign_0 {
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.in = %subf_0_reg.out : i32
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.write_en = %true : i1
+// CHECK-DAG:        calyx.group_done %ret_arg0_reg.done : i1
+// CHECK-DAG:      }
+
+module {
+  func.func @main(%arg0 : f32) -> f32 {
+    %0 = arith.constant 4.2 : f32
+    %1 = arith.subf %arg0, %0 : f32
+
+    return %1 : f32
+  }
+}
+
+// -----
+
 // Test floating point mul
 
 // CHECK:        %cst = calyx.constant @cst_0 <4.200000e+00 : f32> : i32

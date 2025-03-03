@@ -307,7 +307,7 @@ public:
                              AndIOp, XOrIOp, OrIOp, ExtUIOp, ExtSIOp, TruncIOp,
                              MulIOp, DivUIOp, DivSIOp, RemUIOp, RemSIOp,
                              /// floating point
-                             AddFOp, MulFOp, CmpFOp,
+                             AddFOp, SubFOp, MulFOp, CmpFOp,
                              /// others
                              SelectOp, IndexCastOp, CallOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
@@ -365,6 +365,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, RemUIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, RemSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, AddFOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, SubFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, MulFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, CmpFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRUIOp op) const;
@@ -785,6 +786,22 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
               {one, one, one, one, one, width, width, three, width, five, one});
   return buildLibraryBinaryPipeOp<calyx::AddFOpIEEE754>(rewriter, addf, addFOp,
                                                         addFOp.getOut());
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     SubFOp subf) const {
+  Location loc = subf.getLoc();
+  IntegerType one = rewriter.getI1Type(), three = rewriter.getIntegerType(3),
+              five = rewriter.getIntegerType(5),
+              width = rewriter.getIntegerType(
+                  subf.getType().getIntOrFloatBitWidth());
+  auto subFOp =
+      getState<ComponentLoweringState>()
+          .getNewLibraryOpInstance<calyx::AddFOpIEEE754>(
+              rewriter, loc,
+              {one, one, one, one, one, width, width, three, width, five, one});
+  return buildLibraryBinaryPipeOp<calyx::AddFOpIEEE754>(rewriter, subf, subFOp,
+                                                        subFOp.getOut());
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
@@ -2397,7 +2414,7 @@ public:
                       ShRSIOp, AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp,
                       CondBranchOp, BranchOp, MulIOp, DivUIOp, DivSIOp, RemUIOp,
                       RemSIOp, ReturnOp, arith::ConstantOp, IndexCastOp, FuncOp,
-                      ExtSIOp, CallOp, AddFOp, MulFOp, CmpFOp>();
+                      ExtSIOp, CallOp, AddFOp, SubFOp, MulFOp, CmpFOp>();
 
     RewritePatternSet legalizePatterns(&getContext());
     legalizePatterns.add<DummyPattern>(&getContext());
