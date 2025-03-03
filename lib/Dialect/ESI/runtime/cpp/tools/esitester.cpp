@@ -20,6 +20,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/Accelerator.h"
+#include "esi/CLI.h"
 #include "esi/Manifest.h"
 #include "esi/Services.h"
 
@@ -33,62 +34,78 @@ using namespace esi;
 static void registerCallbacks(AcceleratorConnection *, Accelerator *);
 static void hostmemTest(AcceleratorConnection *, Accelerator *, bool read,
                         bool write);
-static void dmaWriteTest(AcceleratorConnection *, Accelerator *);
-static void bandwidthTest(AcceleratorConnection *, Accelerator *);
+static void dmaTest(AcceleratorConnection *, Accelerator *);
+static void bandwidthTest(AcceleratorConnection *, Accelerator *,
+                          uint32_t xferCount,
+                          const std::vector<uint32_t> &widths);
 
 int main(int argc, const char *argv[]) {
-  // TODO: find a command line parser library rather than doing this by hand.
-  if (argc < 3) {
-    std::cerr << "Expected usage: " << argv[0]
-              << " <backend> <connection specifier> [command]" << std::endl;
-    return -1;
-  }
+  CliParser cli("esitester");
+  cli.description("Test an ESI system running the ESI tester image.");
+  cli.require_subcommand(1);
 
-  const char *backend = argv[1];
-  const char *conn = argv[2];
-  std::string cmd;
-  if (argc > 3)
-    cmd = argv[3];
+  CLI::App *loopSub = cli.add_subcommand("loop", "Loop indefinitely");
 
+  CLI::App *waitSub =
+      cli.add_subcommand("wait", "Wait for a certain number of seconds");
+  uint32_t waitTime = 1;
+  waitSub->add_option("-t,--time", waitTime, "Number of seconds to wait");
+
+  CLI::App *hostmemtestSub =
+      cli.add_subcommand("hostmem", "Run the host memory test");
+  bool read = true;
+  bool write = true;
+  hostmemtestSub->add_flag("-w,--write", write,
+                           "Enable host memory write test");
+  hostmemtestSub->add_flag("-r,--read", read, "Enable host memory read test");
+
+  CLI::App *dmatestSub =
+      cli.add_subcommand("dmawrite", "Run the DMA write test");
+
+  CLI::App *bandwidthSub =
+      cli.add_subcommand("bandwidth", "Run the bandwidth test");
+  uint32_t xferCount = 1000;
+  bandwidthSub->add_option("-c,--count", xferCount,
+                           "Number of transfers to perform");
+  std::vector<uint32_t> widths = {32, 64, 128, 256, 384, 504, 512};
+  bandwidthSub->add_option("-w,--width", widths,
+                           "Width of the transfers to perform (default: 32, "
+                           "64, 128, 256, 384, 504, 512)");
+
+  if (int rc = cli.esiParse(argc, argv))
+    return rc;
+  if (!cli.get_help_ptr()->empty())
+    return 0;
+
+  Context &ctxt = cli.getContext();
   try {
-    // TODO: Use proper command line parsing to set debug level.
-    // Context ctxt = Context::withLogger<StreamLogger>(Logger::Level::Debug);
-    Context ctxt = Context::withLogger<StreamLogger>(Logger::Level::Info);
-    std::unique_ptr<AcceleratorConnection> acc = ctxt.connect(backend, conn);
+    std::unique_ptr<AcceleratorConnection> acc = cli.connect();
     const auto &info = *acc->getService<services::SysInfo>();
     Manifest manifest(ctxt, info.getJsonManifest());
     Accelerator *accel = manifest.buildAccelerator(*acc);
     acc->getServiceThread()->addPoll(*accel);
 
-    if (cmd == "loop") {
+    if (*loopSub) {
       registerCallbacks(acc.get(), accel);
       while (true) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
       }
-    } else if (cmd == "wait") {
+    } else if (*waitSub) {
       registerCallbacks(acc.get(), accel);
-      std::this_thread::sleep_for(std::chrono::seconds(1));
-    } else if (cmd == "hostmemtest") {
-      hostmemTest(acc.get(), accel, true, true);
-    } else if (cmd == "hostmemreadtest") {
-      hostmemTest(acc.get(), accel, true, false);
-    } else if (cmd == "hostmemwritetest") {
-      hostmemTest(acc.get(), accel, false, true);
-    } else if (cmd == "dmawritetest") {
-      dmaWriteTest(acc.get(), accel);
-    } else if (cmd == "bandwidth") {
-      bandwidthTest(acc.get(), accel);
-    } else {
-      std::cerr << "Unknown command: " << cmd << std::endl;
-      return -1;
+      std::this_thread::sleep_for(std::chrono::seconds(waitTime));
+    } else if (*hostmemtestSub) {
+      hostmemTest(acc.get(), accel, read, write);
+    } else if (*dmatestSub) {
+      dmaTest(acc.get(), accel);
+    } else if (*bandwidthSub) {
+      bandwidthTest(acc.get(), accel, xferCount, widths);
     }
 
     acc->disconnect();
     std::cout << "Exiting successfully\n";
     return 0;
-
   } catch (std::exception &e) {
-    std::cout << "Error: " << e.what() << std::endl;
+    ctxt.getLogger().error("esitester", e.what());
     return -1;
   }
 }
@@ -278,7 +295,7 @@ static void dmaWriteTest(AcceleratorConnection *conn, Accelerator *acc,
   logger.info("esitester", "==   DMA write test complete");
 }
 
-static void dmaWriteTest(AcceleratorConnection *conn, Accelerator *acc) {
+static void dmaTest(AcceleratorConnection *conn, Accelerator *acc) {
   for (size_t width : {32, 64, 128, 256, 384, 504, 512})
     dmaWriteTest(conn, acc, width);
 }
@@ -330,7 +347,9 @@ static void bandWidthTest(AcceleratorConnection *conn, Accelerator *acc,
                   " bytes/sec");
 }
 
-static void bandwidthTest(AcceleratorConnection *conn, Accelerator *acc) {
-  for (size_t width : {32, 64, 128, 256, 384, 504, 512})
-    bandWidthTest(conn, acc, width, 160000);
+static void bandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
+                          uint32_t xferCount,
+                          const std::vector<uint32_t> &widths) {
+  for (size_t width : widths)
+    bandWidthTest(conn, acc, width, xferCount);
 }
