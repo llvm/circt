@@ -11,7 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Firtool/Firtool.h"
+#include "circt/Tools/Firtool/Firtool.h"
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/Passes.h"
 #include "circt/Dialect/Comb/CombDialect.h"
