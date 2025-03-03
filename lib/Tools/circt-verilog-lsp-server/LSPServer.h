@@ -10,7 +10,6 @@
 #define LIB_CIRCT_TOOLS_CIRCT_VERILOG_LSP_LSPSERVER_H
 
 #include <memory>
-
 namespace llvm {
 struct LogicalResult;
 } // namespace llvm

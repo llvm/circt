@@ -13,16 +13,18 @@
 //
 //===----------------------------------------------------------------------===//
 #include "VerilogServer.h"
+#include "../Protocol.h"
 #include "../Utils/LSPUtils.h"
 
 #include "circt/Support/LLVM.h"
 #include "circt/Tools/circt-verilog-lsp-server/CirctVerilogLspServerMain.h"
 #include "mlir/IR/Attributes.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Location.h"
 #include "mlir/IR/MLIRContext.h"
-#include "mlir/Tools/lsp-server-support/Logging.h"
 #include "mlir/Tools/lsp-server-support/Protocol.h"
+#include "mlir/Tools/lsp-server-support/SourceMgrUtils.h"
 #include "slang/ast/ASTVisitor.h"
 #include "slang/ast/Compilation.h"
 #include "slang/diagnostics/DiagnosticClient.h"
@@ -36,16 +38,20 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/StringSet.h"
+#include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SMLoc.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/raw_ostream.h"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
-
+#include <variant>
 using namespace mlir;
 using namespace mlir::lsp;
 
@@ -67,6 +73,29 @@ getSeverity(slang::DiagnosticSeverity severity) {
   llvm_unreachable("all slang diagnostic severities should be handled");
   return mlir::lsp::DiagnosticSeverity::Error;
 }
+
+static StringRef directionToString(slang::ast::ArgumentDirection direction) {
+  switch (direction) {
+  case slang::ast::ArgumentDirection::In:
+    return "in";
+  case slang::ast::ArgumentDirection::Out:
+    return "out";
+  case slang::ast::ArgumentDirection::InOut:
+    return "inout";
+  case slang::ast::ArgumentDirection::Ref:
+    return "ref";
+  }
+  return "<unknown direction>";
+}
+
+template <typename T>
+static void emitHint(llvm::raw_ostream &os, T symbol, bool includeName = true) {
+  if (includeName)
+    os << symbol->name << ": ";
+  os << directionToString(symbol->direction) << " "
+     << symbol->getType().toString() << ":";
+}
+
 namespace {
 
 // A global context carried around by the server.
@@ -74,6 +103,29 @@ struct VerilogServerContext {
   VerilogServerContext(const VerilogServerOptions &options)
       : options(options) {}
   const VerilogServerOptions &options;
+
+  struct ObjectInlayHint {
+    std::string value;
+    std::optional<std::string> group;
+    ObjectInlayHint(StringRef value, std::optional<std::string> group)
+        : value(value), group(std::move(group)){};
+  };
+
+  // A map from module name and symbol name to the hint.
+  llvm::StringMap<llvm::StringMap<llvm::SmallVector<ObjectInlayHint>>>
+      inlayHintMappings;
+
+  // Return user provided inlay hints for the given symbol.
+  ArrayRef<ObjectInlayHint> getInlayHintsForSymbol(StringRef moduleName,
+                                                   StringRef symbolName) const;
+
+  void putInlayHintsOnObjects(
+      const std::vector<VerilogUserProvidedInlayHint> &hints);
+
+private:
+  void putInlayHintsOnObjects(StringRef moduleName, StringRef symbolName,
+                              StringRef hint,
+                              const std::optional<std::string> &group);
 };
 
 class VerilogDocument;
@@ -159,6 +211,8 @@ public:
     return driver.sourceManager;
   }
 
+  const VerilogServerContext &getGlobalContext() { return globalContext; }
+
   // Return LSP location from slang location.
   mlir::lsp::Location getLspLocation(slang::SourceLocation loc) const;
   mlir::lsp::Location getLspLocation(slang::SourceRange range) const;
@@ -177,6 +231,18 @@ public:
   void findReferencesOf(const mlir::lsp::URIForFile &uri,
                         const mlir::lsp::Position &pos,
                         std::vector<mlir::lsp::Location> &references);
+
+  //===--------------------------------------------------------------------===//
+  // Inlay Hints
+  //===--------------------------------------------------------------------===//
+  void getInlayHints(const mlir::lsp::URIForFile &uri,
+                     const mlir::lsp::Range &range,
+                     std::vector<mlir::lsp::InlayHint> &inlayHints);
+
+  bool isInMainFile(slang::SourceLocation loc) const {
+    auto it = bufferIDMap.find(loc.buffer().getId());
+    return it != bufferIDMap.end() && it->second == sourceMgr.getMainFileID();
+  }
 
 private:
   std::optional<std::pair<uint32_t, SmallString<128>>>
@@ -240,6 +306,61 @@ void LSPDiagnosticClient::report(const slang::ReportedDiagnostic &slangDiag) {
   mlirDiag.range = loc.range;
   mlirDiag.source = "slang";
   mlirDiag.message = slangDiag.formattedMessage;
+}
+
+// ===----------------------------------------------------------------------===//
+// VerilogServerContext
+//===----------------------------------------------------------------------===//
+
+void VerilogServerContext::putInlayHintsOnObjects(
+    const std::vector<VerilogUserProvidedInlayHint> &hints) {
+  SmallVector<StringRef, 4> path;
+  for (const auto &hint : hints) {
+    StringRef root = hint.root ? StringRef(*hint.root) : StringRef();
+    path.clear();
+    StringRef(hint.path).split(path, '.');
+    if (path.size() == 1 && !root.empty()) {
+      putInlayHintsOnObjects(root, path[0], hint.value, hint.group);
+    } else {
+      // Currently not supported.
+      circt::lsp::Logger::error("Currently only support hints with root module "
+                                "and not nested hints.");
+    }
+  }
+}
+
+ArrayRef<VerilogServerContext::ObjectInlayHint>
+VerilogServerContext::getInlayHintsForSymbol(StringRef moduleName,
+                                             StringRef symbolName) const {
+  auto moduleIt = inlayHintMappings.find(moduleName);
+  if (moduleIt == inlayHintMappings.end())
+    return {};
+  auto symbolIt = moduleIt->second.find(symbolName);
+  if (symbolIt == moduleIt->second.end())
+    return {};
+  return symbolIt->second;
+}
+
+void VerilogServerContext::putInlayHintsOnObjects(
+    StringRef moduleName, StringRef symbolName, StringRef hint,
+    const std::optional<std::string> &group) {
+
+  auto &hints = inlayHintMappings[moduleName][symbolName];
+  // If the group is not provided, just append.
+  if (!group) {
+    hints.emplace_back(hint, group);
+    return;
+  }
+
+  // If the id is provided, check if we need to update hints.
+  for (auto &existingHint : hints) {
+    if (existingHint.group == *group) {
+      existingHint.value = hint;
+      return;
+    }
+  }
+
+  hints.emplace_back(hint, group);
 }
 
 //===----------------------------------------------------------------------===//
@@ -433,6 +554,10 @@ public:
                         mlir::lsp::Position pos,
                         std::vector<mlir::lsp::Location> &references);
 
+  void getInlayHints(const mlir::lsp::URIForFile &uri,
+                     const mlir::lsp::Range &range,
+                     std::vector<mlir::lsp::InlayHint> &inlayHints);
+
 private:
   /// Initialize the text file from the given file contents.
   void initialize(const mlir::lsp::URIForFile &uri, int64_t newVersion,
@@ -496,6 +621,12 @@ void VerilogTextFile::findReferencesOf(
   document->findReferencesOf(uri, pos, references);
 }
 
+void VerilogTextFile::getInlayHints(
+    const mlir::lsp::URIForFile &uri, const mlir::lsp::Range &range,
+    std::vector<mlir::lsp::InlayHint> &inlayHints) {
+  document->getInlayHints(uri, range, inlayHints);
+}
+
 namespace {
 
 // Index the AST to find symbol uses and definitions.
@@ -521,14 +652,20 @@ struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
                  isDefinition);
   }
 
-  // Handle references to the left-hand side of a parent assignment.
-  void visit(const slang::ast::LValueReferenceExpression &expr) {
+  // Handle named values, such as references to declared variables.
+  void visitExpression(const slang::ast::Expression &expr) {
     auto *symbol = expr.getSymbolReference(true);
     if (!symbol)
       return;
     insertSymbol(symbol, expr.sourceRange, /*isDefinition=*/false);
     visitDefault(expr);
   }
+
+  void visitSymbol(const slang::ast::Symbol &symbol) {
+    insertSymbol(&symbol, symbol.location, /*isDefinition=*/true);
+    visitDefault(symbol);
+  }
+
   void visit(const slang::ast::NetSymbol &expr) {
     insertSymbol(&expr, expr.location, /*isDefinition=*/true);
     visitDefault(expr);
@@ -544,17 +681,13 @@ struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
     visitDefault(expr);
   }
 
-  // Handle named values, such as references to declared variables.
-  void visit(const slang::ast::NamedValueExpression &expr) {
-    auto *symbol = expr.getSymbolReference(true);
-    if (!symbol)
-      return;
-    insertSymbol(symbol, expr.sourceRange, /*isDefinition=*/false);
-    visitDefault(expr);
-  }
-
   template <typename T>
   void visit(const T &t) {
+    if constexpr (std::is_base_of_v<slang::ast::Expression, T>)
+      visitExpression(t);
+    if constexpr (std::is_base_of_v<slang::ast::Symbol, T>)
+      visitSymbol(t);
+
     visitDefault(t);
   }
 
@@ -734,6 +867,14 @@ void circt::lsp::VerilogServer::findReferencesOf(
     fileIt->second->findReferencesOf(uri, pos, references);
 }
 
+void circt::lsp::VerilogServer::getInlayHints(
+    const URIForFile &uri, const mlir::lsp::Range &range,
+    std::vector<mlir::lsp::InlayHint> &inlayHints) {
+  auto fileIt = impl->files.find(uri.file());
+  if (fileIt != impl->files.end())
+    fileIt->second->getInlayHints(uri, range, inlayHints);
+}
+
 void VerilogIndex::insertSymbol(const slang::ast::Symbol *symbol,
                                 slang::SourceRange from, bool isDefinition) {
   assert(from.start().valid() && from.end().valid());
@@ -833,4 +974,180 @@ void VerilogDocument::findReferencesOf(
     return;
   for (auto referenceRange : it->second)
     references.push_back(getLspLocation(referenceRange));
+}
+
+//===----------------------------------------------------------------------===//
+// VerilogDocument: Inlay Hints
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct InlayHintVisitor : slang::ast::ASTVisitor<InlayHintVisitor, true, true> {
+  InlayHintVisitor(VerilogDocument &document, SMRange range,
+                   std::vector<mlir::lsp::InlayHint> &inlayHints)
+      : document(document), range(range), inlayHints(inlayHints) {}
+
+  // Check if the given location is within the range.
+  bool contains(slang::SourceLocation loc);
+
+  // Inlay hint for the function call.
+  void visit(const slang::ast::CallExpression &expr);
+  void visitCall(const slang::ast::CallExpression &expr,
+                 const slang::ast::SubroutineSymbol *subroutine);
+  void visitCall(const slang::ast::CallExpression &expr,
+                 const slang::ast::CallExpression::SystemCallInfo &info);
+
+  // Inlay hint for the module instantiation.
+  void visit(const slang::ast::InstanceSymbol &instance);
+
+  // Visitors for user provided inlay hints.
+  void visitExpression(const slang::ast::Expression &expr);
+  void visitSymbol(const slang::ast::Symbol &symbol);
+  void visitSymbolUse(const slang::ast::Symbol &symbol,
+                      slang::SourceLocation loc);
+
+  template <typename T>
+  void visit(const T &t) {
+    if constexpr (std::is_base_of_v<slang::ast::Expression, T>)
+      visitExpression(t);
+    if constexpr (std::is_base_of_v<slang::ast::Symbol, T>)
+      visitSymbol(t);
+    visitDefault(t);
+  }
+
+  template <typename T>
+  void visitInvalid(const T &t) {}
+
+private:
+  VerilogDocument &document;
+  SMRange range;
+
+  // Result of inlay hints.
+  std::vector<mlir::lsp::InlayHint> &inlayHints;
+
+  // Visited symbols to avoid duplicate hints.
+  llvm::StringSet<> visitedSymbols;
+};
+
+} // namespace
+
+bool InlayHintVisitor::contains(slang::SourceLocation loc) {
+  if (!loc.valid() || !document.isInMainFile(loc))
+    return false;
+  return mlir::lsp::contains(range, document.getSMLoc(loc));
+}
+
+void InlayHintVisitor::visit(const slang::ast::CallExpression &expr) {
+  std::visit([&](auto &subroutine) { return visitCall(expr, subroutine); },
+             expr.subroutine);
+  visitDefault(expr);
+}
+
+void InlayHintVisitor::visitCall(
+    const slang::ast::CallExpression &expr,
+    const slang::ast::SubroutineSymbol *subroutine) {
+  for (auto [operand, arg] :
+       llvm::zip(expr.arguments(), subroutine->getArguments())) {
+    if (!contains(operand->sourceRange.start()))
+      continue;
+    // Add an inlay hint for the beginning of the operand.
+    auto &hint = inlayHints.emplace_back(
+        mlir::lsp::InlayHintKind::Type,
+        document.getLspLocation(operand->sourceRange.start()).range.start);
+    llvm::raw_string_ostream os(hint.label);
+    emitHint(os, arg);
+    hint.paddingRight = true;
+  }
+}
+
+void InlayHintVisitor::visitCall(
+    const slang::ast::CallExpression &expr,
+    const slang::ast::CallExpression::SystemCallInfo &info) {
+  // TODO: Implement this.
+}
+
+void InlayHintVisitor::visit(const slang::ast::InstanceSymbol &instance) {
+  for (const auto &connect : instance.getPortConnections()) {
+    auto *portSymbol = connect->port.as_if<slang::ast::PortSymbol>();
+    if (portSymbol && connect->getExpression()) {
+      auto loc = connect->getExpression()->sourceRange;
+      if (!contains(loc.start()))
+        continue;
+
+      // Add an inlay hint for the beginning of the instance port connections.
+      auto &hint = inlayHints.emplace_back(
+          mlir::lsp::InlayHintKind::Type,
+          document.getLspLocation(loc.start()).range.start);
+      llvm::raw_string_ostream os(hint.label);
+      emitHint(os, portSymbol, /*includeName=*/false);
+      hint.paddingRight = true;
+    }
+  }
+  visitDefault(instance);
+}
+
+void InlayHintVisitor::visitSymbol(const slang::ast::Symbol &symbol) {
+  if (!visitedSymbols.insert(symbol.name).second)
+    return;
+  // Hint is added after the symbol name.
+  visitSymbolUse(symbol, symbol.location + symbol.name.size());
+}
+
+void InlayHintVisitor::visitExpression(const slang::ast::Expression &expr) {
+  auto *symbol = expr.getSymbolReference(true);
+  if (!symbol)
+    return;
+
+  visitSymbolUse(*symbol, expr.sourceRange.end());
+}
+
+// Attach user provided inlay hints for each symbol use.
+void InlayHintVisitor::visitSymbolUse(const slang::ast::Symbol &symbol,
+                                      slang::SourceLocation loc) {
+  if (!contains(loc))
+    return;
+
+  // Find the enclosing module name.
+  auto *instance = symbol.getParentScope()->getContainingInstance();
+  if (!instance)
+    return;
+
+  // Check user provided inlay hints for the symbol.
+  auto hints = document.getGlobalContext().getInlayHintsForSymbol(
+      instance->name, symbol.name);
+  if (hints.empty())
+    return;
+
+  // Add user provided inlay hints for the location.
+  mlir::lsp::Position pos(document.getSourceMgr(), document.getSMLoc(loc));
+  auto &inlayHint =
+      inlayHints.emplace_back(mlir::lsp::InlayHintKind::Parameter, pos);
+  inlayHint.paddingLeft = true;
+  bool first = true;
+  for (auto &[hint, _] : hints) {
+    // Use '/' as a separator for multiple user provided inlay hints.
+    if (!first)
+      inlayHint.label += '/';
+    first = false;
+    inlayHint.label += hint;
+  }
+}
+
+void VerilogDocument::getInlayHints(
+    const mlir::lsp::URIForFile &uri, const mlir::lsp::Range &range,
+    std::vector<mlir::lsp::InlayHint> &inlayHints) {
+  if (failed(compilation))
+    return;
+  SMRange rangeLoc = range.getAsSMRange(sourceMgr);
+
+  if (!rangeLoc.isValid())
+    return;
+
+  InlayHintVisitor visitor(*this, rangeLoc, inlayHints);
+  for (auto *inst : compilation.value()->getRoot().topInstances)
+    inst->body.visit(visitor);
+}
+
+void VerilogServer::putInlayHintsOnObjects(
+    const std::vector<VerilogUserProvidedInlayHint> &params) {
+  impl->context.putInlayHintsOnObjects(params);
 }

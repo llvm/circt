@@ -92,6 +92,11 @@
           "type": "array",
           "description": "A list of include directories for the verilog files processed by the server."
         },
+        "circt-verilog-lsp.verilog_static_inlay_hint_files": {
+          "scope": "resource",
+          "type": "array",
+          "description": "A list of files for adding inlay hints to objects"
+        },
         "circt-verilog-lsp.onSettingsChanged": {
           "type": "string",
           "default": "restart",
