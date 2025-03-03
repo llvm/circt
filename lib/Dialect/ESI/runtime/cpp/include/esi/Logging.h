@@ -165,6 +165,20 @@ private:
   std::ostream &errorStream;
 };
 
+/// A logger that writes to the console. Includes color support.
+class ConsoleLogger : public TSLogger {
+public:
+  /// Create a stream logger that logs to stdout, stderr.
+  ConsoleLogger(Level minLevel);
+  void logImpl(Level level, const std::string &subsystem,
+               const std::string &msg,
+               const std::map<std::string, std::any> *details) override;
+
+private:
+  /// The minimum log level to emit.
+  Level minLevel;
+};
+
 /// A logger that does nothing.
 class NullLogger : public Logger {
 public:
