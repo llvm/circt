@@ -546,3 +546,23 @@ module {
   }
 }
 
+// Test floating point to signed integer conversion
+
+// -----
+
+// CHECK:      calyx.group @bb0_0 {
+// CHECK-DAG:        calyx.assign %std_fptointFN_0.in = %in0 : i32
+// CHECK-DAG:        calyx.assign %std_fptointFN_0.signedOut = %true : i1
+// CHECK-DAG:        %0 = comb.xor %std_fptointFN_0.done, %true : i1
+// CHECK-DAG:        calyx.assign %std_fptointFN_0.go = %0 ? %true : i1
+// CHECK-DAG:        calyx.group_done %fptosi_0_reg.done : i1
+// CHECK-DAG:      }
+
+module {
+  func.func @main(%arg0 : f32) -> i64 {
+    %0 = arith.fptosi %arg0 : f32 to i64
+
+    return %0 : i64
+  }
+}
+

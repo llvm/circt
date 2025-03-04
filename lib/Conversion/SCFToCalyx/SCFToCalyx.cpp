@@ -307,7 +307,7 @@ public:
                              AndIOp, XOrIOp, OrIOp, ExtUIOp, ExtSIOp, TruncIOp,
                              MulIOp, DivUIOp, DivSIOp, RemUIOp, RemSIOp,
                              /// floating point
-                             AddFOp, SubFOp, MulFOp, CmpFOp,
+                             AddFOp, SubFOp, MulFOp, CmpFOp, FPToSIOp,
                              /// others
                              SelectOp, IndexCastOp, CallOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
@@ -368,6 +368,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, SubFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, MulFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, CmpFOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, FPToSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRUIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShLIOp op) const;
@@ -993,6 +994,43 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
       calyxCmpFOp.getLeft(), group);
   getState<ComponentLoweringState>().registerEvaluatingGroup(
       calyxCmpFOp.getRight(), group);
+
+  return success();
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     FPToSIOp fptosi) const {
+  Location loc = fptosi.getLoc();
+  IntegerType one = rewriter.getI1Type(),
+              inWidth = rewriter.getIntegerType(
+                  fptosi.getIn().getType().getIntOrFloatBitWidth()),
+              outWidth = rewriter.getIntegerType(
+                  fptosi.getOut().getType().getIntOrFloatBitWidth());
+  auto calyxFPToIntOp =
+      getState<ComponentLoweringState>()
+          .getNewLibraryOpInstance<calyx::FpToIntOpIEEE754>(
+              rewriter, loc, {one, one, one, inWidth, one, outWidth, one});
+  hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
+
+  StringRef opName = fptosi.getOperationName().split(".").second;
+  rewriter.setInsertionPointToStart(getComponent().getBodyBlock());
+  auto reg = createRegister(
+      loc, rewriter, getComponent(), outWidth.getIntOrFloatBitWidth(),
+      getState<ComponentLoweringState>().getUniqueName(opName));
+
+  auto group = createGroupForOp<calyx::GroupOp>(rewriter, fptosi);
+  OpBuilder builder(group->getRegion(0));
+  getState<ComponentLoweringState>().addBlockScheduleable(fptosi->getBlock(),
+                                                          group);
+  rewriter.setInsertionPointToEnd(group.getBodyBlock());
+  rewriter.create<calyx::AssignOp>(loc, calyxFPToIntOp.getIn(), fptosi.getIn());
+  rewriter.create<calyx::AssignOp>(loc, calyxFPToIntOp.getSignedOut(), c1);
+  fptosi.getResult().replaceAllUsesWith(reg.getOut());
+
+  rewriter.create<calyx::AssignOp>(
+      loc, calyxFPToIntOp.getGo(), c1,
+      comb::createOrFoldNot(loc, calyxFPToIntOp.getDone(), builder));
+  rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone());
 
   return success();
 }
@@ -2410,11 +2448,12 @@ public:
     // Only accept std operations which we've added lowerings for
     target.addIllegalDialect<FuncDialect>();
     target.addIllegalDialect<ArithDialect>();
-    target.addLegalOp<AddIOp, SelectOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp,
-                      ShRSIOp, AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp,
-                      CondBranchOp, BranchOp, MulIOp, DivUIOp, DivSIOp, RemUIOp,
-                      RemSIOp, ReturnOp, arith::ConstantOp, IndexCastOp, FuncOp,
-                      ExtSIOp, CallOp, AddFOp, SubFOp, MulFOp, CmpFOp>();
+    target
+        .addLegalOp<AddIOp, SelectOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp,
+                    AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp, CondBranchOp,
+                    BranchOp, MulIOp, DivUIOp, DivSIOp, RemUIOp, RemSIOp,
+                    ReturnOp, arith::ConstantOp, IndexCastOp, FuncOp, ExtSIOp,
+                    CallOp, AddFOp, SubFOp, MulFOp, CmpFOp, FPToSIOp>();
 
     RewritePatternSet legalizePatterns(&getContext());
     legalizePatterns.add<DummyPattern>(&getContext());

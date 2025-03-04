@@ -161,6 +161,10 @@ private:
           static constexpr std::string_view sFloatingPoint = "float/compareFN";
           return {sFloatingPoint};
         })
+        .Case<FpToIntOpIEEE754>([&](auto op) -> FailureOr<StringRef> {
+          static constexpr std::string_view sFloatingPoint = "float/fpToInt";
+          return {sFloatingPoint};
+        })
         .Default([&](auto op) {
           auto diag = op->emitOpError() << "not supported for emission";
           return diag;
@@ -683,7 +687,8 @@ void Emitter::emitComponent(ComponentInterface op) {
             emitLibraryPrimTypedByFirstOutputPort(
                 op, /*calyxLibName=*/{"std_sdiv_pipe"});
           })
-          .Case<AddFOpIEEE754, MulFOpIEEE754, CompareFOpIEEE754>(
+          .Case<AddFOpIEEE754, MulFOpIEEE754, CompareFOpIEEE754,
+                FpToIntOpIEEE754>(
               [&](auto op) { emitLibraryFloatingPoint(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside component");
@@ -1000,8 +1005,11 @@ void Emitter::emitLibraryPrimTypedByFirstOutputPort(
 
 void Emitter::emitLibraryFloatingPoint(Operation *op) {
   auto cell = cast<CellInterface>(op);
-  // magic number for the index of `left/right` input port
-  size_t inputPortIndex = cell.getInputPorts().size() - 3;
+  // magic number for the index of `left/right` input port for
+  // `AddF`/`MulF`/`CompareF`; `in` input port for `FpToInt`.
+  auto inputPorts = cell.getInputPorts();
+  assert(inputPorts.size() >= 2 && "There should be at least two input ports");
+  size_t inputPortIndex = inputPorts.size() - 2;
   unsigned bitWidth =
       cell.getInputPorts()[inputPortIndex].getType().getIntOrFloatBitWidth();
   // Since Calyx interacts with HardFloat, we'll also only be using expWidth and
@@ -1034,10 +1042,17 @@ void Emitter::emitLibraryFloatingPoint(Operation *op) {
   if (auto fpOp = dyn_cast<calyx::FloatingPointOpInterface>(op)) {
     opName = fpOp.getCalyxLibraryName();
   }
+
   indent() << getAttributes(op, /*atFormat=*/true) << cell.instanceName()
            << space() << equals() << space() << opName << LParen() << expWidth
-           << comma() << sigWidth << comma() << bitWidth << RParen()
-           << semicolonEndL();
+           << comma() << sigWidth << comma() << bitWidth;
+  if (auto fpToIntOp = dyn_cast<calyx::FpToIntOpIEEE754>(op)) {
+    // Special handling for `fpToInt` (Floating-Point to Integer conversion)
+    unsigned intWidth =
+        cell.getOutputPorts()[0].getType().getIntOrFloatBitWidth();
+    os << comma() << intWidth;
+  }
+  os << RParen() << semicolonEndL();
 }
 
 void Emitter::emitAssignment(AssignOp op) {

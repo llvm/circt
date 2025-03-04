@@ -488,22 +488,22 @@ def DivUPipeLibOp : ArithBinaryPipeLibraryOp<"divu"> {}
 def RemUPipeLibOp : ArithBinaryPipeLibraryOp<"remu"> {}
 def RemSPipeLibOp : ArithBinaryPipeLibraryOp<"rems"> {}
 
-class UnaryLibraryOp<string mnemonic, list<Trait> traits = []> :
-    CalyxLibraryOp<mnemonic, "std_", !listconcat(traits, [Combinational])> {
+class UnaryLibraryOp<string mnemonic, string prefix, list<Trait> traits = []> :
+    CalyxLibraryOp<mnemonic, prefix, !listconcat(traits, [Combinational])> {
   let results = (outs AnyInteger:$in, AnyInteger:$out);
 }
 
-def PadLibOp : UnaryLibraryOp<"pad"> {
+def PadLibOp : UnaryLibraryOp<"pad", "std_"> {
   let hasVerifier = 1;
 }
 
-def SliceLibOp : UnaryLibraryOp<"slice"> {
+def SliceLibOp : UnaryLibraryOp<"slice", "std_"> {
   let hasVerifier = 1;
 }
 
-def NotLibOp  : UnaryLibraryOp<"not"> {}
+def NotLibOp  : UnaryLibraryOp<"not", "std_"> {}
 
-def WireLibOp : UnaryLibraryOp<"wire", [SameTypeConstraint<"in", "out">]> {
+def WireLibOp : UnaryLibraryOp<"wire", "std_", [SameTypeConstraint<"in", "out">]> {
   let builders = [
     OpBuilder<(ins "StringRef":$sym_name, "::mlir::Type":$wireType), [{
       llvm::SmallVector<mlir::Type> resultTypes = {wireType, wireType};
@@ -513,4 +513,45 @@ def WireLibOp : UnaryLibraryOp<"wire", [SameTypeConstraint<"in", "out">]> {
   ];
 }
 
-def ExtSILibOp  : UnaryLibraryOp<"signext"> {}
+def ExtSILibOp  : UnaryLibraryOp<"signext", "std_"> {}
+
+class UnaryFloatingPointLibraryOp<string mnemonic, list<Trait> traits = []> :
+  UnaryLibraryOp<mnemonic, /*prefix=*/"", !listconcat(traits, [
+    DeclareOpInterfaceMethods<FloatingPointOpInterface>
+  ])> {}
+
+// This models the floating point to integer conversion interface in Berkeley HardFloat implementation. It rounds to the nearest (towards zero) integer, which is `round_minMag` in the Berkeley HardFloat library.
+def FpToIntOpIEEE754 : UnaryFloatingPointLibraryOp<"ieee754.fptoint"> {
+  let results = (outs I1:$clk, I1:$reset, I1:$go,
+    AnySignlessInteger:$in, I1: $signedOut, AnySignlessInteger:$out, I1:$done);
+
+  let extraClassDefinition = [{
+    SmallVector<StringRef> $cppClass::portNames() {
+      return {clkPort, resetPort, goPort, "in", "signedOut", "out", donePort};
+    }
+
+    SmallVector<Direction> $cppClass::portDirections() {
+      return {Input, Input, Input, Input, Input, Output, Output};
+    }
+
+    void $cppClass::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+      getCellAsmResultNames(setNameFn, *this, this->portNames());
+    }
+
+    bool $cppClass::isCombinational() { return false; }
+
+    SmallVector<DictionaryAttr> $cppClass::portAttributes() {
+      IntegerAttr isSet = IntegerAttr::get(IntegerType::get(getContext(), 1), 1);
+      NamedAttrList go, clk, reset, done;
+      go.append(goPort, isSet);
+      clk.append(clkPort, isSet);
+      reset.append(resetPort, isSet);
+      done.append(donePort, isSet);
+      return {clk.getDictionary(getContext()), reset.getDictionary(getContext()),
+              go.getDictionary(getContext()),
+              DictionaryAttr::get(getContext()), DictionaryAttr::get(getContext()),
+              DictionaryAttr::get(getContext()), done.getDictionary(getContext())
+      };
+    }
+  }];
+}
