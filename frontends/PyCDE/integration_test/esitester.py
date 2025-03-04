@@ -18,12 +18,12 @@
 # RUN: mkdir %t && cd %t
 # Run pure cosim since we don't yet have a FromHost DMA engine.
 # RUN: %PYTHON% %s %t cosim 2>&1
-# RUN: esi-cosim.py --source %t -- esitester cosim env wait | FileCheck %s
+# RUN: esi-cosim.py --source %t -- esitester -v cosim env wait | FileCheck %s
 # RUN: ESI_COSIM_MANIFEST_MMIO=1 esi-cosim.py --source %t -- esiquery cosim env info
 # Now test the ToHost DMA engine.
 # RUN: %PYTHON% %s %t cosim_dma 2>&1
-# RUN: esi-cosim.py --source %t -- esitester cosim env hostmemtest
-# RUN: esi-cosim.py --source %t -- esitester cosim env dmawritetest
+# RUN: esi-cosim.py --source %t -- esitester cosim env hostmem
+# RUN: esi-cosim.py --source %t -- esitester cosim env dmawrite
 
 import pycde
 from pycde import AppID, Clock, Module, Reset, generator, modparams
@@ -36,7 +36,7 @@ from pycde.types import Bits, Channel, UInt
 import typing
 import sys
 
-# CHECK: [ INFO] [CONNECT] connecting to backend
+# CHECK: [CONNECT] connecting to backend
 
 
 class PrintfExample(Module):
