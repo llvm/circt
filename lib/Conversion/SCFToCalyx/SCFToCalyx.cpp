@@ -309,7 +309,7 @@ public:
                              /// floating point
                              AddFOp, SubFOp, MulFOp, CmpFOp, FPToSIOp, SIToFPOp,
                              /// others
-                             SelectOp, IndexCastOp, CallOp>(
+                             SelectOp, IndexCastOp, BitcastOp, CallOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
               .template Case<FuncOp, scf::ConditionOp>([&](auto) {
                 /// Skip: these special cases will be handled separately.
@@ -382,6 +382,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, ExtSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ReturnOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, IndexCastOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, BitcastOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::AllocOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::AllocaOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter,
@@ -1501,6 +1502,12 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     BitcastOp op) const {
+  rewriter.replaceAllUsesWith(op.getOut(), op.getIn());
+  return success();
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      scf::WhileOp whileOp) const {
   // Only need to add the whileOp to the BlockSchedulables scheduler interface.
   // Everything else was handled in the `BuildWhileGroups` pattern.
@@ -2471,9 +2478,9 @@ public:
     target.addLegalOp<AddIOp, SelectOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp,
                       ShRSIOp, AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp,
                       CondBranchOp, BranchOp, MulIOp, DivUIOp, DivSIOp, RemUIOp,
-                      RemSIOp, ReturnOp, arith::ConstantOp, IndexCastOp, FuncOp,
-                      ExtSIOp, CallOp, AddFOp, SubFOp, MulFOp, CmpFOp, FPToSIOp,
-                      SIToFPOp>();
+                      RemSIOp, ReturnOp, arith::ConstantOp, IndexCastOp,
+                      BitcastOp, FuncOp, ExtSIOp, CallOp, AddFOp, SubFOp,
+                      MulFOp, CmpFOp, FPToSIOp, SIToFPOp>();
 
     RewritePatternSet legalizePatterns(&getContext());
     legalizePatterns.add<DummyPattern>(&getContext());
