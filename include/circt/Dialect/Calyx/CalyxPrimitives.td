@@ -520,14 +520,14 @@ class UnaryFloatingPointLibraryOp<string mnemonic, list<Trait> traits = []> :
     DeclareOpInterfaceMethods<FloatingPointOpInterface>
   ])> {}
 
+// This models the floating point to integer conversion interface in Berkeley HardFloat implementation. It rounds to the nearest (towards zero) integer, which is `round_minMag` in the Berkeley HardFloat library.
 def FpToIntOpIEEE754 : UnaryFloatingPointLibraryOp<"ieee754.fptoint"> {
   let results = (outs I1:$clk, I1:$reset, I1:$go,
     AnySignlessInteger:$in, I1: $signedOut, AnySignlessInteger:$out, I1:$done);
 
   let extraClassDefinition = [{
     SmallVector<StringRef> $cppClass::portNames() {
-      return {clkPort, resetPort, goPort, "in", "signedOut", "out", donePort
-      };
+      return {clkPort, resetPort, goPort, "in", "signedOut", "out", donePort};
     }
 
     SmallVector<Direction> $cppClass::portDirections() {
