@@ -1007,8 +1007,8 @@ void Emitter::emitLibraryPrimTypedByFirstOutputPort(
            << LParen() << bitWidth << RParen() << semicolonEndL();
 }
 
-unsigned getFPBitWidth(Operation *op, CellInterface &cell) {
-  if (auto intToFpOp = dyn_cast<IntToFpOpIEEE754>(op)) {
+unsigned getFPBitWidth(CellInterface &cell) {
+  if (isa<IntToFpOpIEEE754>(cell.getOperation())) {
     // `std_intToFp` has the float point value in the first output port.
     return cell.getOutputPorts()[0].getType().getIntOrFloatBitWidth();
   }
@@ -1037,7 +1037,7 @@ unsigned getIntWidth(Operation *op, CellInterface &cell, bool isIntToFp) {
 void Emitter::emitLibraryFloatingPoint(Operation *op) {
   auto cell = cast<CellInterface>(op);
 
-  unsigned fpBitWidth = getFPBitWidth(op, cell);
+  unsigned fpBitWidth = getFPBitWidth(cell);
   unsigned expWidth, sigWidth;
   switch (fpBitWidth) {
   case 16:
@@ -1069,7 +1069,7 @@ void Emitter::emitLibraryFloatingPoint(Operation *op) {
   indent() << getAttributes(op, /*atFormat=*/true) << cell.instanceName()
            << space() << equals() << space() << opName << LParen();
 
-  if (auto intToFpOp = dyn_cast<calyx::IntToFpOpIEEE754>(op)) {
+  if (isa<calyx::IntToFpOpIEEE754>(op)) {
     unsigned intWidth = getIntWidth(op, cell, /*isIntToFp=*/true);
     os << intWidth << comma();
   }
