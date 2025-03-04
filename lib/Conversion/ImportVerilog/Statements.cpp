@@ -186,7 +186,7 @@ struct StmtVisitor {
 
     Value initial;
     if (const auto *init = var.getInitializer()) {
-      initial = context.convertRvalueExpression(*init);
+      initial = context.convertRvalueExpression(*init, {}, true);
       if (!initial)
         return failure();
     }
