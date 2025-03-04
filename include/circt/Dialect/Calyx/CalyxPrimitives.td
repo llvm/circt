@@ -516,7 +516,7 @@ def WireLibOp : UnaryLibraryOp<"wire", "std_", [SameTypeConstraint<"in", "out">]
 def ExtSILibOp  : UnaryLibraryOp<"signext", "std_"> {}
 
 class UnaryFloatingPointLibraryOp<string mnemonic, list<Trait> traits = []> :
-  UnaryLibraryOp<mnemonic, "", !listconcat(traits, [
+  UnaryLibraryOp<mnemonic, /*prefix=*/"", !listconcat(traits, [
     DeclareOpInterfaceMethods<FloatingPointOpInterface>
   ])> {}
 
