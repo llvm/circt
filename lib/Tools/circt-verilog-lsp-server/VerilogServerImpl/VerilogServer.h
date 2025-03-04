@@ -39,7 +39,7 @@ using TextDocumentContentChangeEvent =
     mlir::lsp::TextDocumentContentChangeEvent;
 using URIForFile = mlir::lsp::URIForFile;
 using Diagnostic = mlir::lsp::Diagnostic;
-struct VerilogUserProvidedInlayHintParams;
+struct VerilogUserProvidedInlayHint;
 
 /// This class implements all of the Verilog related functionality necessary for
 /// a language server. This class allows for keeping the Verilog specific logic
@@ -77,8 +77,8 @@ public:
   void getInlayHints(const URIForFile &uri, const mlir::lsp::Range &range,
                      std::vector<mlir::lsp::InlayHint> &inlayHints);
 
-  void putUserProvidedInlayHints(
-      const circt::lsp::VerilogUserProvidedInlayHintParams &params);
+  void putInlayHintsOnObjects(
+      const std::vector<circt::lsp::VerilogUserProvidedInlayHint> &params);
 
 private:
   struct Impl;

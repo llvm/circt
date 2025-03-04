@@ -17,10 +17,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LIB_MLIR_TOOLS_MLIRPDLLLSPSERVER_PROTOCOL_H_
-#define LIB_MLIR_TOOLS_MLIRPDLLLSPSERVER_PROTOCOL_H_
+#ifndef LIB_CIRCT_TOOLS_CIRCTVERILOGSPLSERVER_PROTOCOL_H_
+#define LIB_CIRCT_TOOLS_CIRCTVERILOGSPLSERVER_PROTOCOL_H_
 
-#include "mlir/Tools/lsp-server-support/Protocol.h"
+#include "llvm/Support/JSON.h"
+#include <optional>
+#include <string>
+#include <vector>
 
 namespace circt {
 namespace lsp {
@@ -39,8 +42,8 @@ struct VerilogUserProvidedInlayHint {
   // The root module name (optional).
   std::optional<std::string> root;
 
-  // The id of the hint.
-  std::optional<int> id;
+  // The optional id of the hint.
+  std::optional<std::string> group;
 };
 
 /// Add support for JSON serialization.
@@ -48,7 +51,7 @@ bool fromJSON(const llvm::json::Value &value,
               VerilogUserProvidedInlayHint &result, llvm::json::Path path);
 
 struct VerilogUserProvidedInlayHintParams {
-  std::vector<VerilogUserProvidedInlayHint> values;
+  std::vector<VerilogUserProvidedInlayHint> hints;
 };
 
 /// Add support for JSON serialization.

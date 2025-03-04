@@ -10,9 +10,9 @@
 }}}
 // -----
 // Find definition of `out`
-{"jsonrpc":"2.0","id":1,"method":"verilog/putUserProvidedInlayHints","params":{
+{"jsonrpc":"2.0","id":1,"method":"verilog/putInlayHintsOnObjects","params":{
   "textDocument":{"uri":"test:///foo.sv"},
-  "values":[
+  "hints": [
     {
       "path": "foo",
       "value": "hint for foo",
@@ -22,11 +22,11 @@
       "path": "bar",
       "value": "hint for bar",
       "root": "test",
-      "id": 1
+      "group": "A"
     }
   ]
 }}
-// CHECK:      "id": "refresh_inlay_hints_1",
+// CHECK:      "id": "refresh_inlay_hints_0",
 // CHECK-NEXT: "jsonrpc": "2.0",
 // CHECK-NEXT: "method": "workspace/inlayHint/refresh",
 // CHECK-NEXT: "params": null
@@ -65,9 +65,9 @@
 // CHECK-NEXT:  }
 // CHECK-NEXT: ]
 // -----
-{"jsonrpc":"2.0","id":3,"method":"verilog/putUserProvidedInlayHints","params":{
+{"jsonrpc":"2.0","id":3,"method":"verilog/putInlayHintsOnObjects","params":{
   "textDocument":{"uri":"test:///foo.sv"},
-  "values":[
+  "hints": [
     {
       "path": "foo",
       "value": "additional hint for foo",
@@ -77,7 +77,7 @@
       "path": "bar",
       "value": "new hint for bar",
       "root": "test",
-      "id": 1
+      "group": "A"
     }
   ]
 }}

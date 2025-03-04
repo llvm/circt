@@ -66,7 +66,7 @@ struct LSPServer {
   // User Provided Inlay Hints
   //===--------------------------------------------------------------------===//
 
-  void onPutUserProvidedInlayHints(
+  void onPutInlayHintsOnObjects(
       const circt::lsp::VerilogUserProvidedInlayHintParams &params,
       Callback<std::nullptr_t> reply);
 
@@ -81,9 +81,11 @@ struct LSPServer {
   /// are ready to be processed.
   OutgoingNotification<PublishDiagnosticsParams> publishDiagnostics;
 
+  /// Request a client to refresh inlay hints.
   OutgoingRequest<std::nullptr_t> refreshInlayHints;
 
-  size_t nextRequestId = 1;
+  /// Counter used to uniqunize refresh requests id.
+  size_t nextRequestId = 0;
 
   /// Used to indicate that the 'shutdown' request was received from the
   /// Language Server client.
@@ -196,10 +198,10 @@ void LSPServer::onInlayHint(const InlayHintsParams &params,
 // User Provided Inlay Hints
 //===----------------------------------------------------------------------===//
 
-void LSPServer::onPutUserProvidedInlayHints(
+void LSPServer::onPutInlayHintsOnObjects(
     const circt::lsp::VerilogUserProvidedInlayHintParams &params,
     Callback<std::nullptr_t> reply) {
-  server.putUserProvidedInlayHints(params);
+  server.putInlayHintsOnObjects(params.hints);
   reply(nullptr);
 
   llvm::json::Value requestId = llvm::json::Value(
@@ -240,8 +242,8 @@ LogicalResult circt::lsp::runVerilogLSPServer(VerilogServer &server,
   messageHandler.method("textDocument/inlayHint", &lspServer,
                         &LSPServer::onInlayHint);
 
-  messageHandler.method("verilog/putUserProvidedInlayHints", &lspServer,
-                        &LSPServer::onPutUserProvidedInlayHints);
+  messageHandler.method("verilog/putInlayHintsOnObjects", &lspServer,
+                        &LSPServer::onPutInlayHintsOnObjects);
 
   // Diagnostics
   lspServer.publishDiagnostics =

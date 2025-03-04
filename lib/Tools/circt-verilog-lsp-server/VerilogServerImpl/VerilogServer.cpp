@@ -79,49 +79,29 @@ struct VerilogServerContext {
       : options(options) {}
   const VerilogServerOptions &options;
 
+  struct ObjectInlayHint {
+    std::string value;
+    std::optional<std::string> group;
+    ObjectInlayHint(StringRef value, std::optional<std::string> group)
+        : value(value), group(std::move(group)){};
+  };
+
   // A map from module name and symbol name to the hint.
-  llvm::StringMap<
-      llvm::StringMap<llvm::SmallVector<std::pair<std::string, int>, 2>>>
+  llvm::StringMap<llvm::StringMap<llvm::SmallVector<ObjectInlayHint>>>
       inlayHintMappings;
 
-  ArrayRef<std::pair<std::string, int>>
-  getInlayHintsForSymbol(StringRef moduleName, StringRef symbolName) const;
+  // Return user provided inlay hints for the given symbol.
+  ArrayRef<ObjectInlayHint> getInlayHintsForSymbol(StringRef moduleName,
+                                                   StringRef symbolName) const;
 
-  void putUserProvidedInlayHints(StringRef moduleName, StringRef symbolName,
-                                 StringRef hint, std::optional<int> id);
-  void
-  putUserProvidedInlayHints(const VerilogUserProvidedInlayHintParams &params);
+  void putInlayHintsOnObjects(
+      const std::vector<VerilogUserProvidedInlayHint> &hints);
+
+private:
+  void putInlayHintsOnObjects(StringRef moduleName, StringRef symbolName,
+                              StringRef hint,
+                              const std::optional<std::string> &id);
 };
-
-void VerilogServerContext::putUserProvidedInlayHints(
-    const VerilogUserProvidedInlayHintParams &params) {
-  SmallVector<StringRef, 4> hints;
-  for (const auto &hint : params.values) {
-    StringRef ref = StringRef(hint.path);
-    StringRef root = hint.root ? StringRef(*hint.root) : StringRef();
-    hints.clear();
-    ref.split(hints, '.');
-    if (hints.size() == 1 && !root.empty()) {
-      putUserProvidedInlayHints(root, hints[0], hint.value, hint.id);
-    } else {
-      // Currently not supported.
-      circt::lsp::Logger::error("Currently object path is not supported: " +
-                                hint.path);
-    }
-  }
-}
-
-ArrayRef<std::pair<std::string, int>>
-VerilogServerContext::getInlayHintsForSymbol(StringRef moduleName,
-                                             StringRef symbolName) const {
-  auto moduleIt = inlayHintMappings.find(moduleName);
-  if (moduleIt == inlayHintMappings.end())
-    return {};
-  auto symbolIt = moduleIt->second.find(symbolName);
-  if (symbolIt == moduleIt->second.end())
-    return {};
-  return symbolIt->second;
-}
 
 class VerilogDocument;
 using VerilogIndexSymbol =
@@ -307,23 +287,55 @@ void LSPDiagnosticClient::report(const slang::ReportedDiagnostic &slangDiag) {
 // VerilogServerContext
 //===----------------------------------------------------------------------===//
 
-void VerilogServerContext::putUserProvidedInlayHints(StringRef moduleName,
-                                                     StringRef symbolName,
-                                                     StringRef hint,
-                                                     std::optional<int> id) {
-  if (!id) {
-    inlayHintMappings[moduleName][symbolName].emplace_back(hint, -1);
-  } else {
-    // Update id.
-    auto &hints = inlayHintMappings[moduleName][symbolName];
-    auto *index =
-        std::find_if(hints.begin(), hints.end(),
-                     [id](const auto &hint) { return hint.second == *id; });
-    if (index != hints.end())
-      index->first = hint;
-    else
-      hints.emplace_back(hint, *id);
+void VerilogServerContext::putInlayHintsOnObjects(
+    const std::vector<VerilogUserProvidedInlayHint> &hints) {
+  SmallVector<StringRef, 4> path;
+  for (const auto &hint : hints) {
+    StringRef root = hint.root ? StringRef(*hint.root) : StringRef();
+    path.clear();
+    StringRef(hint.path).split(path, '.');
+    if (path.size() == 1 && !root.empty()) {
+      putInlayHintsOnObjects(root, path[0], hint.value, hint.group);
+    } else {
+      // Currently not supported.
+      circt::lsp::Logger::error("Currently only support hints with root module "
+                                "and not nested hints.");
+    }
   }
+}
+
+ArrayRef<VerilogServerContext::ObjectInlayHint>
+VerilogServerContext::getInlayHintsForSymbol(StringRef moduleName,
+                                             StringRef symbolName) const {
+  auto moduleIt = inlayHintMappings.find(moduleName);
+  if (moduleIt == inlayHintMappings.end())
+    return {};
+  auto symbolIt = moduleIt->second.find(symbolName);
+  if (symbolIt == moduleIt->second.end())
+    return {};
+  return symbolIt->second;
+}
+
+void VerilogServerContext::putInlayHintsOnObjects(
+    StringRef moduleName, StringRef symbolName, StringRef hint,
+    const std::optional<std::string> &group) {
+
+  auto &hints = inlayHintMappings[moduleName][symbolName];
+  // If the group is not provided, just append.
+  if (!group) {
+    hints.emplace_back(hint, group);
+    return;
+  }
+
+  // If the id is provided, check if we need to update hints.
+  for (auto &existingHint : hints) {
+    if (existingHint.group == *group) {
+      existingHint.value = hint;
+      return;
+    }
+  }
+
+  hints.emplace_back(hint, group);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1130,7 +1142,7 @@ void VerilogDocument::getInlayHints(
     inst->body.visit(visitor);
 }
 
-void VerilogServer::putUserProvidedInlayHints(
-    const VerilogUserProvidedInlayHintParams &params) {
-  impl->context.putUserProvidedInlayHints(params);
+void VerilogServer::putInlayHintsOnObjects(
+    const std::vector<VerilogUserProvidedInlayHint> &params) {
+  impl->context.putInlayHintsOnObjects(params);
 }
