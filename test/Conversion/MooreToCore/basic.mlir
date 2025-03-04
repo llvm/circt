@@ -1124,7 +1124,6 @@ moore.module @scfInsideProcess(in %in0: !moore.i32, in %in1: !moore.i32) {
 // CHECK-LABEL: @blockArgAsObservedValue
 moore.module @blockArgAsObservedValue(in %in0: !moore.i32, in %in1: !moore.i32) {
   %var = moore.variable : <!moore.i32>
-  // CHECK: [[PRB:%.+]] = llhd.prb %var : !hw.inout<i32>
   // CHECK: llhd.process
   moore.procedure always_comb {
     // CHECK: ^bb1:  // 2 preds: ^bb0, ^bb5
@@ -1135,7 +1134,21 @@ moore.module @blockArgAsObservedValue(in %in0: !moore.i32, in %in1: !moore.i32) 
     moore.blocking_assign %var, %0 : !moore.i32
     
     // CHECK: ^bb5:  // pred: ^bb4
-    // CHECK:   llhd.wait (%in0, %in1, [[PRB]] : i32, i32, i32), ^bb1
+    // CHECK:   llhd.wait (%in0, %in1 : i32, i32), ^bb1
+    moore.return
+  }
+}
+
+// CHECK-LABEL: @WaitOp
+moore.module @WaitOp(in %in0: !moore.i32, in %in1: !moore.ref<!moore.array<5 x i32>>, in %in2: !moore.ref<!moore.array<5 x i32>>) {
+  %var = moore.variable : <!moore.i32>
+  %readVar = moore.read %var : <!moore.i32>
+  moore.procedure always_latch {
+    moore.nonblocking_assign %var, %in0 : !moore.i32
+    moore.extract_ref %in1 from 0 : !moore.ref<!moore.array<5 x i32>> -> !moore.ref<i32>
+    moore.dyn_extract_ref %in2 from %readVar : !moore.ref<!moore.array<5 x i32>>, !moore.i32 -> !moore.ref<i32>
+    // CHECK: ^bb2:  // pred: ^bb1
+    // CHECK:   llhd.wait (%in0 : i32), ^bb1
     moore.return
   }
 }
