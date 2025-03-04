@@ -1501,6 +1501,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   return res;
 }
 
+// The Calyx language treats values as bit vectors, i.e., there is no type
+// system, so this is essentially a no-op.
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      BitcastOp op) const {
   rewriter.replaceAllUsesWith(op.getOut(), op.getIn());

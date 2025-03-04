@@ -585,3 +585,21 @@ module {
     return %0 : f32
   }
 }
+
+// Test `arith.bitcast` is a no-op
+
+// -----
+
+// CHECK:      calyx.group @ret_assign_0 {
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.in = %in0 : i64
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.write_en = %true : i1
+// CHECK-DAG:        calyx.group_done %ret_arg0_reg.done : i1
+// CHECK-DAG:      }
+
+module {
+  func.func @main(%arg0 : i64) -> f64 {
+    %0 = arith.bitcast %arg0 : i64 to f64
+
+    return %0 : f64
+  }
+}
