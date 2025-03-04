@@ -14,3 +14,4 @@ add_circt_dialect_library(CIRCTAIG
 )
 
 add_subdirectory(Transforms)
+add_subdirectory(Analysis)
