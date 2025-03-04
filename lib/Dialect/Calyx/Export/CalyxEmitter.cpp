@@ -169,6 +169,10 @@ private:
           static constexpr std::string_view sFloatingPoint = "float/intToFp";
           return {sFloatingPoint};
         })
+        .Case<DivSqrtOpIEEE754>([&](auto op) -> FailureOr<StringRef> {
+          static constexpr std::string_view sFloatingPoint = "float/divSqrtFN";
+          return {sFloatingPoint};
+        })
         .Default([&](auto op) {
           auto diag = op->emitOpError() << "not supported for emission";
           return diag;
@@ -692,7 +696,7 @@ void Emitter::emitComponent(ComponentInterface op) {
                 op, /*calyxLibName=*/{"std_sdiv_pipe"});
           })
           .Case<AddFOpIEEE754, MulFOpIEEE754, CompareFOpIEEE754,
-                FpToIntOpIEEE754, IntToFpOpIEEE754>(
+                FpToIntOpIEEE754, IntToFpOpIEEE754, DivSqrtOpIEEE754>(
               [&](auto op) { emitLibraryFloatingPoint(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside component");

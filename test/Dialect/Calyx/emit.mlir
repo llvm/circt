@@ -535,3 +535,53 @@ module attributes {calyx.entrypoint = "main"} {
     }
   } {toplevel}
 }
+
+// -----
+
+module attributes {calyx.entrypoint = "main"} {
+  // CHECK: import "primitives/float/divSqrtFN.futil";
+  calyx.component @main(%in0: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
+    %cst = calyx.constant @cst_0 <4.200000e+00 : f32> : i32
+    %true = hw.constant true
+    %false = hw.constant false
+    %divf_0_reg.in, %divf_0_reg.write_en, %divf_0_reg.clk, %divf_0_reg.reset, %divf_0_reg.out, %divf_0_reg.done = calyx.register @divf_0_reg : i32, i1, i1, i1, i32, i1
+    // CHECK-DAG: std_divSqrtFN_0 = std_divSqrtFN(8, 24, 32);
+    %std_divSqrtFN_0.clk, %std_divSqrtFN_0.reset, %std_divSqrtFN_0.go, %std_divSqrtFN_0.control, %std_divSqrtFN_0.sqrtOp, %std_divSqrtFN_0.left, %std_divSqrtFN_0.right, %std_divSqrtFN_0.roundingMode, %std_divSqrtFN_0.out, %std_divSqrtFN_0.exceptionalFlags, %std_divSqrtFN_0.done = calyx.ieee754.divSqrt @std_divSqrtFN_0 : i1, i1, i1, i1, i1, i32, i32, i3, i32, i5, i1
+    %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
+    calyx.wires {
+      calyx.assign %out0 = %ret_arg0_reg.out : i32
+      // CHECK-LABEL:    group bb0_0 {
+      // CHECK-NEXT:      std_divSqrtFN_0.left = in0;
+      // CHECK-NEXT:      std_divSqrtFN_0.right = cst_0.out;
+      // CHECK-NEXT:      divf_0_reg.in = std_divSqrtFN_0.out;
+      // CHECK-NEXT:      divf_0_reg.write_en = std_divSqrtFN_0.done;
+      // CHECK-NEXT:      std_divSqrtFN_0.go = !std_divSqrtFN_0.done ? 1'd1;
+      // CHECK-NEXT:      std_divSqrtFN_0.sqrtOp = 1'd0;
+      // CHECK-NEXT:      bb0_0[done] = divf_0_reg.done;
+      // CHECK-NEXT:    }
+      calyx.group @bb0_0 {
+        calyx.assign %std_divSqrtFN_0.left = %in0 : i32
+        calyx.assign %std_divSqrtFN_0.right = %cst : i32
+        calyx.assign %divf_0_reg.in = %std_divSqrtFN_0.out : i32
+        calyx.assign %divf_0_reg.write_en = %std_divSqrtFN_0.done : i1
+        %0 = comb.xor %std_divSqrtFN_0.done, %true : i1
+        calyx.assign %std_divSqrtFN_0.go = %0 ? %true : i1
+        calyx.assign %std_divSqrtFN_0.sqrtOp = %false : i1
+        calyx.group_done %divf_0_reg.done : i1
+      }
+      calyx.group @ret_assign_0 {
+        calyx.assign %ret_arg0_reg.in = %divf_0_reg.out : i32
+        calyx.assign %ret_arg0_reg.write_en = %true : i1
+        calyx.group_done %ret_arg0_reg.done : i1
+      }
+    }
+    calyx.control {
+      calyx.seq {
+        calyx.seq {
+          calyx.enable @bb0_0
+          calyx.enable @ret_assign_0
+        }
+      }
+    }
+  } {toplevel}
+}
