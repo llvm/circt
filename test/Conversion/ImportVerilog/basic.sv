@@ -710,13 +710,27 @@ module Expressions;
   
   // CHECK: [[TMP0:%.+]] = moore.string_constant "hello" : i40
   // CHECK: [[TMP1:%.+]] = moore.conversion [[TMP0]] : !moore.i40 -> !moore.string
-  // CHECK: [[TMP2:%.+]] = moore.string_constant "sad" : i24
+  // CHECK: [[TMP2:%.+]] = moore.string_constant "new" : i24
   // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.i24 -> !moore.string
   // CHECK: [[TMP4:%.+]] = moore.string_constant "world" : i40
   // CHECK: [[TMP5:%.+]] = moore.conversion [[TMP4]] : !moore.i40 -> !moore.string
   // CHECK: [[TMP6:%.+]] = moore.unpacked_array_concat [[TMP1]], [[TMP3]], [[TMP5]] : (!moore.string, !moore.string, !moore.string) -> open_uarray<string>
   // CHECK: %vec_s = moore.variable [[TMP6]] : <open_uarray<string>>
-  string vec_s [] = { "hello", "sad", "world" };
+  string vec_s [] = { "hello", "new", "world" };
+  // CHECK: [[TMP0:%.+]] = moore.read %vec_s : <open_uarray<string>>
+  // CHECK: [[TMP1:%.+]] = moore.string_constant "hello" : i40
+  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i40 -> !moore.string
+  // CHECK: [[TMP3:%.+]] = moore.unpacked_array_concat [[TMP0]], [[TMP2]] : (!moore.open_uarray<string>, !moore.string) -> queue<string, 0>
+  // CHECK: %queue_s = moore.variable [[TMP3]] : <queue<string, 0>>
+  string queue_s [$] = {vec_s, "hello"};
+  // CHECK: [[TMP0:%.+]] = moore.read %queue_s : <queue<string, 0>>
+  // CHECK: [[TMP1:%.+]] = moore.string_constant "hello" : i40
+  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i40 -> !moore.string
+  // CHECK: [[TMP3:%.+]] = moore.string_constant "new" : i24
+  // CHECK: [[TMP4:%.+]] = moore.conversion [[TMP3]] : !moore.i24 -> !moore.string
+  // CHECK: [[TMP5:%.+]] = moore.unpacked_array_concat [[TMP0]], [[TMP2]], [[TMP4]] : (!moore.queue<string, 0>, !moore.string, !moore.string) -> uarray<3 x string>
+  // CHECK: %unpack_s = moore.variable [[TMP5]] : <uarray<3 x string>>
+  string unpack_s [3] = {queue_s, "hello", "new"};
 
   logic arr_1 [63:0];
   // CHECK: %struct0 = moore.variable : <struct<{a: i32, b: i32}>>
@@ -1003,7 +1017,15 @@ module Expressions;
     // CHECK: moore.extract_ref %vec_1 from 11 : <l32> -> <l3>
     vec_1[15-:3] = y;
 
-    vec_s = { "hello", "sad", "world" };
+    // CHECK: [[TMP0:%.+]] = moore.string_constant "hello" : i40
+    // CHECK: [[TMP1:%.+]] = moore.conversion [[TMP0]] : !moore.i40 -> !moore.string
+    // CHECK: [[TMP2:%.+]] = moore.string_constant "new" : i24
+    // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.i24 -> !moore.string
+    // CHECK: [[TMP4:%.+]] = moore.string_constant "world" : i40
+    // CHECK: [[TMP5:%.+]] = moore.conversion [[TMP4]] : !moore.i40 -> !moore.string
+    // CHECK: [[TMP6:%.+]] = moore.unpacked_array_concat [[TMP1]], [[TMP3]], [[TMP5]] : (!moore.string, !moore.string, !moore.string) -> open_uarray<string>
+    // CHECK: moore.blocking_assign %vec_s, [[TMP6]] : open_uarray<string>
+    vec_s = { "hello", "new", "world" };
     //===------------------------------------------------------------------===//
     // Unary operators
 

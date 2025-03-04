@@ -1072,7 +1072,8 @@ def ConcatRefOp : MooreOp<"concat_ref", [
 }
 
 def UnpackedArrayConcatOp : MooreOp<"unpacked_array_concat", [Pure]> {
-  let summary = [{
+  let summary = "Unpacked array concatenation expression";
+  let description = [{
     This operation represents the SystemVerilog unpacked array concatenation,
     See IEEE 1800-2017 §10.10 "Unpacked array concatenation".
 
@@ -1084,7 +1085,6 @@ def UnpackedArrayConcatOp : MooreOp<"unpacked_array_concat", [Pure]> {
     elements as exist in that item, arranged in the same left-to-right order 
     as they would appear in the array item itself.
   }];
-  let description = [{}];
   let arguments = (ins Variadic<AnyType>:$values);
   let results = (outs AnyIndexedUnpackedArrayType:$result);
   let assemblyFormat = [{
