@@ -185,11 +185,13 @@ unsigned firrtlTypeGetBundleFieldIndex(MlirType type, MlirStringRef fieldName) {
 
 bool firrtlTypeIsARef(MlirType type) { return isa<RefType>(unwrap(type)); }
 
-MlirType firrtlTypeGetRef(MlirType target, bool forceable) {
+MlirType firrtlTypeGetRef(MlirType target, bool forceable,
+                          MlirAttribute layer) {
   auto baseType = dyn_cast<FIRRTLBaseType>(unwrap(target));
   assert(baseType && "target must be base type");
+  auto layerAttr = dyn_cast<SymbolRefAttr>(unwrap(layer));
 
-  return wrap(RefType::get(baseType, forceable));
+  return wrap(RefType::get(baseType, forceable, layerAttr));
 }
 
 bool firrtlTypeIsAAnyRef(MlirType type) {
