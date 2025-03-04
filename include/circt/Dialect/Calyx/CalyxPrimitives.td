@@ -521,13 +521,49 @@ class UnaryFloatingPointLibraryOp<string mnemonic, list<Trait> traits = []> :
   ])> {}
 
 // This models the floating point to integer conversion interface in Berkeley HardFloat implementation. It rounds to the nearest (towards zero) integer, which is `round_minMag` in the Berkeley HardFloat library.
-def FpToIntOpIEEE754 : UnaryFloatingPointLibraryOp<"ieee754.fptoint"> {
+def FpToIntOpIEEE754 : UnaryFloatingPointLibraryOp<"ieee754.fpToInt"> {
   let results = (outs I1:$clk, I1:$reset, I1:$go,
     AnySignlessInteger:$in, I1: $signedOut, AnySignlessInteger:$out, I1:$done);
 
   let extraClassDefinition = [{
     SmallVector<StringRef> $cppClass::portNames() {
       return {clkPort, resetPort, goPort, "in", "signedOut", "out", donePort};
+    }
+
+    SmallVector<Direction> $cppClass::portDirections() {
+      return {Input, Input, Input, Input, Input, Output, Output};
+    }
+
+    void $cppClass::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+      getCellAsmResultNames(setNameFn, *this, this->portNames());
+    }
+
+    bool $cppClass::isCombinational() { return false; }
+
+    SmallVector<DictionaryAttr> $cppClass::portAttributes() {
+      IntegerAttr isSet = IntegerAttr::get(IntegerType::get(getContext(), 1), 1);
+      NamedAttrList go, clk, reset, done;
+      go.append(goPort, isSet);
+      clk.append(clkPort, isSet);
+      reset.append(resetPort, isSet);
+      done.append(donePort, isSet);
+      return {clk.getDictionary(getContext()), reset.getDictionary(getContext()),
+              go.getDictionary(getContext()),
+              DictionaryAttr::get(getContext()), DictionaryAttr::get(getContext()),
+              DictionaryAttr::get(getContext()), done.getDictionary(getContext())
+      };
+    }
+  }];
+}
+
+// This models the integer to floating point conversion interface in Berkeley HardFloat implementation. It uses default rounding mode, which is `round_near_even` in the Berkeley HardFloat library.
+def IntToFpOpIEEE754 : UnaryFloatingPointLibraryOp<"ieee754.intToFp"> {
+  let results = (outs I1:$clk, I1:$reset, I1:$go,
+    AnySignlessInteger:$in, I1: $signedIn, AnySignlessInteger:$out, I1:$done);
+
+  let extraClassDefinition = [{
+    SmallVector<StringRef> $cppClass::portNames() {
+      return {clkPort, resetPort, goPort, "in", "signedIn", "out", donePort};
     }
 
     SmallVector<Direction> $cppClass::portDirections() {

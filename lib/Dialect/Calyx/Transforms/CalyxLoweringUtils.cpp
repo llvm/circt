@@ -712,8 +712,8 @@ void InlineCombGroups::recurseInlineCombGroups(
             calyx::DivUPipeLibOp, calyx::DivSPipeLibOp, calyx::RemSPipeLibOp,
             calyx::RemUPipeLibOp, mlir::scf::WhileOp, calyx::InstanceOp,
             calyx::ConstantOp, calyx::AddFOpIEEE754, calyx::MulFOpIEEE754,
-            calyx::CompareFOpIEEE754, calyx::FpToIntOpIEEE754>(
-            src.getDefiningOp()))
+            calyx::CompareFOpIEEE754, calyx::FpToIntOpIEEE754,
+            calyx::IntToFpOpIEEE754>(src.getDefiningOp()))
       continue;
 
     auto srcCombGroup = dyn_cast<calyx::CombGroupOp>(

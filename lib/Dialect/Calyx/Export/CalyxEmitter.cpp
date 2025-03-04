@@ -165,6 +165,10 @@ private:
           static constexpr std::string_view sFloatingPoint = "float/fpToInt";
           return {sFloatingPoint};
         })
+        .Case<IntToFpOpIEEE754>([&](auto op) -> FailureOr<StringRef> {
+          static constexpr std::string_view sFloatingPoint = "float/intToFp";
+          return {sFloatingPoint};
+        })
         .Default([&](auto op) {
           auto diag = op->emitOpError() << "not supported for emission";
           return diag;
@@ -688,7 +692,7 @@ void Emitter::emitComponent(ComponentInterface op) {
                 op, /*calyxLibName=*/{"std_sdiv_pipe"});
           })
           .Case<AddFOpIEEE754, MulFOpIEEE754, CompareFOpIEEE754,
-                FpToIntOpIEEE754>(
+                FpToIntOpIEEE754, IntToFpOpIEEE754>(
               [&](auto op) { emitLibraryFloatingPoint(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside component");
@@ -1005,18 +1009,25 @@ void Emitter::emitLibraryPrimTypedByFirstOutputPort(
 
 void Emitter::emitLibraryFloatingPoint(Operation *op) {
   auto cell = cast<CellInterface>(op);
-  // magic number for the index of `left/right` input port for
-  // `AddF`/`MulF`/`CompareF`; `in` input port for `FpToInt`.
-  auto inputPorts = cell.getInputPorts();
-  assert(inputPorts.size() >= 2 && "There should be at least two input ports");
-  size_t inputPortIndex = inputPorts.size() - 2;
-  unsigned bitWidth =
-      cell.getInputPorts()[inputPortIndex].getType().getIntOrFloatBitWidth();
+  unsigned fpBitWidth;
+  if (auto intToFpOp = dyn_cast<IntToFpOpIEEE754>(op))
+    // `std_intToFp` has the float point value in the first output port.
+    fpBitWidth = cell.getOutputPorts()[0].getType().getIntOrFloatBitWidth();
+  else {
+    auto inputPorts = cell.getInputPorts();
+    assert(inputPorts.size() >= 2 &&
+           "There should be at least two input ports");
+    // magic number for the index of `left/right` input port for
+    // `AddF`/`MulF`/`CompareF`; `in` input port for `FpToInt`.
+    size_t inputPortIndex = inputPorts.size() - 2;
+    fpBitWidth =
+        cell.getInputPorts()[inputPortIndex].getType().getIntOrFloatBitWidth();
+  }
   // Since Calyx interacts with HardFloat, we'll also only be using expWidth and
   // sigWidth. See
   // http://www.jhauser.us/arithmetic/HardFloat-1/doc/HardFloat-Verilog.html
   unsigned expWidth, sigWidth;
-  switch (bitWidth) {
+  switch (fpBitWidth) {
   case 16:
     expWidth = 5;
     sigWidth = 11;
@@ -1044,8 +1055,18 @@ void Emitter::emitLibraryFloatingPoint(Operation *op) {
   }
 
   indent() << getAttributes(op, /*atFormat=*/true) << cell.instanceName()
-           << space() << equals() << space() << opName << LParen() << expWidth
-           << comma() << sigWidth << comma() << bitWidth;
+           << space() << equals() << space() << opName << LParen();
+
+  if (auto intToFpOp = dyn_cast<calyx::IntToFpOpIEEE754>(op)) {
+    auto inputPorts = cell.getInputPorts();
+    assert(inputPorts.size() >= 2);
+    size_t integerInputIndex = inputPorts.size() - 2;
+    unsigned intWidth = cell.getInputPorts()[integerInputIndex]
+                            .getType()
+                            .getIntOrFloatBitWidth();
+    os << intWidth << comma();
+  }
+  os << expWidth << comma() << sigWidth << comma() << fpBitWidth;
   if (auto fpToIntOp = dyn_cast<calyx::FpToIntOpIEEE754>(op)) {
     // Special handling for `fpToInt` (Floating-Point to Integer conversion)
     unsigned intWidth =
