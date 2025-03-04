@@ -28,7 +28,8 @@ namespace esi {
 /// Common options and code for ESI runtime tools.
 class CliParser : public CLI::App {
 public:
-  CliParser(const std::string &toolName) : CLI::App(toolName) {
+  CliParser(const std::string &toolName)
+      : CLI::App(toolName), debug(false), verbose(false) {
     add_option("backend", backend, "Backend to use for connection")->required();
     add_option("connection", connStr,
                "Connection string to use for accelerator communication")

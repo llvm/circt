@@ -110,9 +110,11 @@ struct RegisterEngine {
   RegisterEngine(const char *name) { registerEngine(name, &TEngine::create); }
 };
 
+#define CONCAT_(prefix, suffix) prefix##suffix
+#define CONCAT(prefix, suffix) CONCAT_(prefix, suffix)
 #define REGISTER_ENGINE(Name, TEngine)                                         \
-  static ::esi::registry::internal::RegisterEngine<TEngine>                    \
-  __register_engine____LINE__(Name)
+  static ::esi::registry::internal::RegisterEngine<TEngine> CONCAT(            \
+      __register_engine__, __LINE__)(Name)
 
 } // namespace internal
 } // namespace registry

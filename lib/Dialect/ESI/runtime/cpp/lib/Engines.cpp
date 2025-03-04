@@ -15,6 +15,7 @@
 #include "esi/Engines.h"
 #include "esi/Accelerator.h"
 
+#include <algorithm>
 #include <cstring>
 
 using namespace esi;
@@ -217,6 +218,189 @@ bool OneItemBuffersToHostReadPort::pollImpl() {
 }
 
 REGISTER_ENGINE("OneItemBuffersToHost", OneItemBuffersToHost);
+
+//===----------------------------------------------------------------------===//
+// OneItemBuffersFromHost engine
+//
+// Protocol:
+//  1) Host allocates a buffer, copies data into it, and sets the last byte to
+//     '0'.  Said buffer is one byte longer than the data type needs.
+//  2) Host sends address of buffer address via MMIO write.
+//  3) Device reads data from said buffer address.
+//  4) Device writes '1' to the last byte of the buffer.
+//  5) Host polls the last byte in buffer for '1'.
+//  6) Goto 1.
+//
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+class OneItemBuffersFromHost;
+class OneItemBuffersFromHostWritePort : public WriteChannelPort {
+public:
+  /// Offset into the MMIO space to which the buffer pointer is written.
+  static constexpr size_t BufferPtrOffset = 8;
+  static constexpr size_t CompletionPtrOffset = 16;
+
+  OneItemBuffersFromHostWritePort(const Type *type,
+                                  OneItemBuffersFromHost *engine,
+                                  AppIDPath idPath,
+                                  const std::string &channelName)
+      : WriteChannelPort(type), engine(engine), idPath(idPath),
+        channelName(channelName) {
+    bufferSize = (type->getBitWidth() / 8);
+  }
+
+  // Connect allocate a buffer and prime the pump.
+  void connectImpl(std::optional<unsigned>) override;
+
+  void write(const MessageData &) override;
+  bool tryWrite(const MessageData &data) override;
+
+  std::string identifier() const { return idPath.toStr() + "." + channelName; }
+
+protected:
+  // Size of buffer based on type.
+  size_t bufferSize;
+  // Owning engine.
+  OneItemBuffersFromHost *engine;
+  // Single buffer.
+  std::unique_ptr<services::HostMem::HostMemRegion> data_buffer;
+  std::unique_ptr<services::HostMem::HostMemRegion> completion_buffer;
+  // Number of times the poll function has been called.
+  uint64_t pollCount = 0;
+
+  // Thread protection.
+  std::mutex bufferMutex;
+
+  // Identifing information.
+  AppIDPath idPath;
+  std::string channelName;
+};
+
+class OneItemBuffersFromHost : public Engine {
+  friend class OneItemBuffersFromHostWritePort;
+
+public:
+  OneItemBuffersFromHost(AcceleratorConnection &conn, AppIDPath idPath,
+                         const ServiceImplDetails &details)
+      : Engine(conn), thisPath(idPath) {
+    // Get the MMIO path but don't try to resolve it yet.
+    auto mmioIDIter = details.find("mmio");
+    if (mmioIDIter != details.end())
+      mmioID = std::any_cast<AppID>(mmioIDIter->second);
+  }
+
+  static std::unique_ptr<Engine> create(AcceleratorConnection &conn,
+                                        AppIDPath idPath,
+                                        const ServiceImplDetails &details,
+                                        const HWClientDetails &clients) {
+    return std::make_unique<OneItemBuffersFromHost>(conn, idPath, details);
+  }
+
+  // Only throw errors on connect.
+  void connect() override;
+
+  // Create a real write port if requested. Create an error-throwing read port
+  // if requested.
+  std::unique_ptr<ChannelPort> createPort(AppIDPath idPath,
+                                          const std::string &channelName,
+                                          BundleType::Direction dir,
+                                          const Type *type) override {
+    if (!BundlePort::isWrite(dir))
+      return std::make_unique<UnknownReadChannelPort>(
+          type, idPath.toStr() + "." + channelName +
+                    " OneItemBuffersFromHost: cannot create read port");
+    return std::make_unique<OneItemBuffersFromHostWritePort>(type, this, idPath,
+                                                             channelName);
+  }
+
+protected:
+  AppIDPath thisPath;
+  std::optional<AppID> mmioID;
+  services::MMIO::MMIORegion *mmio;
+  services::HostMem *hostMem;
+};
+
+} // namespace
+
+void OneItemBuffersFromHost::connect() {
+  // This is where we throw errors.
+  if (connected)
+    return;
+  if (!mmioID)
+    throw std::runtime_error("OneItemBuffersFromHost: no mmio path specified");
+  hostMem = conn.getService<services::HostMem>();
+  if (!hostMem)
+    throw std::runtime_error("OneItemBuffersFromHost: no host memory service");
+  hostMem->start();
+
+  // Resolve the MMIO port.
+  Accelerator &acc = conn.getAccelerator();
+  AppIDPath mmioPath = thisPath;
+  mmioPath.pop_back();
+  mmioPath.push_back(*mmioID);
+  AppIDPath lastPath;
+  BundlePort *port = acc.resolvePort(mmioPath, lastPath);
+  if (port == nullptr)
+    throw std::runtime_error(
+        thisPath.toStr() +
+        " OneItemBuffersFromHost: could not find MMIO port at " +
+        mmioPath.toStr());
+  mmio = dynamic_cast<services::MMIO::MMIORegion *>(port);
+  if (!mmio)
+    throw std::runtime_error(
+        thisPath.toStr() +
+        " OneItemBuffersFromHost: MMIO port is not an MMIO port");
+
+  // If we have a valid MMIO port, we can connect.
+  connected = true;
+}
+
+void OneItemBuffersFromHostWritePort::connectImpl(std::optional<unsigned>) {
+  engine->connect();
+  data_buffer =
+      engine->hostMem->allocate(std::max(bufferSize, (size_t)512), {});
+  completion_buffer = engine->hostMem->allocate(512, {});
+  // Set the last byte to '1' to indicate that the buffer is ready to be filled
+  // and sent to the device.
+  *static_cast<uint8_t *>(completion_buffer->getPtr()) = 1;
+}
+
+void OneItemBuffersFromHostWritePort::write(const MessageData &data) {
+  while (!tryWrite(data))
+    // Wait for the device to read the last data we sent.
+    std::this_thread::yield();
+}
+
+bool OneItemBuffersFromHostWritePort::tryWrite(const MessageData &data) {
+  // Check to see if there's an outstanding write.
+  volatile uint8_t *completion =
+      reinterpret_cast<uint8_t *>(completion_buffer->getPtr());
+  // for (size_t i = 0; i < bufferSize; ++i) {
+  //   printf("%02x ", bufferData[i]);
+  // }
+  // printf("\n");
+  if (*completion == 0)
+    return false;
+
+  // If the buffer is empty, use it.
+  std::lock_guard<std::mutex> lock(bufferMutex);
+  void *bufferData = data_buffer->getPtr();
+  std::memcpy(bufferData, data.getBytes(), data.getSize());
+  data_buffer->flush();
+  // Reset the buffer.
+  *completion = 0;
+  // Write the *device-visible* address of the buffer to the MMIO space.
+  engine->mmio->write(BufferPtrOffset,
+                      reinterpret_cast<uint64_t>(data_buffer->getDevicePtr()));
+  engine->mmio->write(
+      CompletionPtrOffset,
+      reinterpret_cast<uint64_t>(completion_buffer->getDevicePtr()));
+  return true;
+}
+
+REGISTER_ENGINE("OneItemBuffersFromHost", OneItemBuffersFromHost);
 
 //===----------------------------------------------------------------------===//
 // Engine / Bundle Engine Map
