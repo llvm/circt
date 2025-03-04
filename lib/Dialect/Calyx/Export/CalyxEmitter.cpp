@@ -1007,25 +1007,37 @@ void Emitter::emitLibraryPrimTypedByFirstOutputPort(
            << LParen() << bitWidth << RParen() << semicolonEndL();
 }
 
+unsigned getFPBitWidth(Operation *op, CellInterface &cell) {
+  if (auto intToFpOp = dyn_cast<IntToFpOpIEEE754>(op)) {
+    // `std_intToFp` has the float point value in the first output port.
+    return cell.getOutputPorts()[0].getType().getIntOrFloatBitWidth();
+  }
+
+  auto inputPorts = cell.getInputPorts();
+  assert(inputPorts.size() >= 2 && "There should be at least two input ports");
+
+  // magic number for the index of `left/right` input port for
+  // `AddF`/`MulF`/`CompareF`; `in` input port for `FpToInt`.
+  size_t inputPortIndex = inputPorts.size() - 2;
+  return cell.getInputPorts()[inputPortIndex].getType().getIntOrFloatBitWidth();
+}
+
+unsigned getIntWidth(Operation *op, CellInterface &cell, bool isIntToFp) {
+  auto inputPorts = cell.getInputPorts();
+  assert(inputPorts.size() >= 2);
+
+  size_t integerIndex = inputPorts.size() - 2;
+  if (!isIntToFp) {
+    // FpToInt case: output width determines integer width.
+    return cell.getOutputPorts()[0].getType().getIntOrFloatBitWidth();
+  }
+  return cell.getInputPorts()[integerIndex].getType().getIntOrFloatBitWidth();
+}
+
 void Emitter::emitLibraryFloatingPoint(Operation *op) {
   auto cell = cast<CellInterface>(op);
-  unsigned fpBitWidth;
-  if (auto intToFpOp = dyn_cast<IntToFpOpIEEE754>(op))
-    // `std_intToFp` has the float point value in the first output port.
-    fpBitWidth = cell.getOutputPorts()[0].getType().getIntOrFloatBitWidth();
-  else {
-    auto inputPorts = cell.getInputPorts();
-    assert(inputPorts.size() >= 2 &&
-           "There should be at least two input ports");
-    // magic number for the index of `left/right` input port for
-    // `AddF`/`MulF`/`CompareF`; `in` input port for `FpToInt`.
-    size_t inputPortIndex = inputPorts.size() - 2;
-    fpBitWidth =
-        cell.getInputPorts()[inputPortIndex].getType().getIntOrFloatBitWidth();
-  }
-  // Since Calyx interacts with HardFloat, we'll also only be using expWidth and
-  // sigWidth. See
-  // http://www.jhauser.us/arithmetic/HardFloat-1/doc/HardFloat-Verilog.html
+
+  unsigned fpBitWidth = getFPBitWidth(op, cell);
   unsigned expWidth, sigWidth;
   switch (fpBitWidth) {
   case 16:
@@ -1058,21 +1070,17 @@ void Emitter::emitLibraryFloatingPoint(Operation *op) {
            << space() << equals() << space() << opName << LParen();
 
   if (auto intToFpOp = dyn_cast<calyx::IntToFpOpIEEE754>(op)) {
-    auto inputPorts = cell.getInputPorts();
-    assert(inputPorts.size() >= 2);
-    size_t integerInputIndex = inputPorts.size() - 2;
-    unsigned intWidth = cell.getInputPorts()[integerInputIndex]
-                            .getType()
-                            .getIntOrFloatBitWidth();
+    unsigned intWidth = getIntWidth(op, cell, /*isIntToFp=*/true);
     os << intWidth << comma();
   }
+
   os << expWidth << comma() << sigWidth << comma() << fpBitWidth;
+
   if (auto fpToIntOp = dyn_cast<calyx::FpToIntOpIEEE754>(op)) {
-    // Special handling for `fpToInt` (Floating-Point to Integer conversion)
-    unsigned intWidth =
-        cell.getOutputPorts()[0].getType().getIntOrFloatBitWidth();
+    unsigned intWidth = getIntWidth(op, cell, /*isIntToFp=*/false);
     os << comma() << intWidth;
   }
+
   os << RParen() << semicolonEndL();
 }
 
