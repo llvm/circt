@@ -307,7 +307,7 @@ public:
                              AndIOp, XOrIOp, OrIOp, ExtUIOp, ExtSIOp, TruncIOp,
                              MulIOp, DivUIOp, DivSIOp, RemUIOp, RemSIOp,
                              /// floating point
-                             AddFOp, SubFOp, MulFOp, CmpFOp, FPToSIOp,
+                             AddFOp, SubFOp, MulFOp, CmpFOp, FPToSIOp, SIToFPOp,
                              /// others
                              SelectOp, IndexCastOp, CallOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
@@ -369,6 +369,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, MulFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, CmpFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, FPToSIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, SIToFPOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRUIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShLIOp op) const;
@@ -520,6 +521,48 @@ private:
                                                                group);
     getState<ComponentLoweringState>().registerEvaluatingGroup(
         opPipe.getRight(), group);
+
+    return success();
+  }
+
+  template <typename TCalyxLibOp, typename TSrcOp>
+  LogicalResult buildFpIntTypeCastOp(PatternRewriter &rewriter, TSrcOp op,
+                                     unsigned inputWidth, unsigned outputWidth,
+                                     StringRef signedPort) const {
+    Location loc = op.getLoc();
+    IntegerType one = rewriter.getI1Type(),
+                inWidth = rewriter.getIntegerType(inputWidth),
+                outWidth = rewriter.getIntegerType(outputWidth);
+    auto calyxOp =
+        getState<ComponentLoweringState>().getNewLibraryOpInstance<TCalyxLibOp>(
+            rewriter, loc, {one, one, one, inWidth, one, outWidth, one});
+    hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
+    StringRef opName = op.getOperationName().split(".").second;
+    rewriter.setInsertionPointToStart(getComponent().getBodyBlock());
+    auto reg = createRegister(
+        loc, rewriter, getComponent(), outWidth.getIntOrFloatBitWidth(),
+        getState<ComponentLoweringState>().getUniqueName(opName));
+
+    auto group = createGroupForOp<calyx::GroupOp>(rewriter, op);
+    OpBuilder builder(group->getRegion(0));
+    getState<ComponentLoweringState>().addBlockScheduleable(op->getBlock(),
+                                                            group);
+
+    rewriter.setInsertionPointToEnd(group.getBodyBlock());
+    rewriter.create<calyx::AssignOp>(loc, calyxOp.getIn(), op.getIn());
+    if (isa<calyx::FpToIntOpIEEE754>(calyxOp)) {
+      rewriter.create<calyx::AssignOp>(
+          loc, cast<calyx::FpToIntOpIEEE754>(calyxOp).getSignedOut(), c1);
+    } else if (isa<calyx::IntToFpOpIEEE754>(calyxOp)) {
+      rewriter.create<calyx::AssignOp>(
+          loc, cast<calyx::IntToFpOpIEEE754>(calyxOp).getSignedIn(), c1);
+    }
+    op.getResult().replaceAllUsesWith(reg.getOut());
+
+    rewriter.create<calyx::AssignOp>(
+        loc, calyxOp.getGo(), c1,
+        comb::createOrFoldNot(loc, calyxOp.getDone(), builder));
+    rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone());
 
     return success();
   }
@@ -1000,39 +1043,16 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      FPToSIOp fptosi) const {
-  Location loc = fptosi.getLoc();
-  IntegerType one = rewriter.getI1Type(),
-              inWidth = rewriter.getIntegerType(
-                  fptosi.getIn().getType().getIntOrFloatBitWidth()),
-              outWidth = rewriter.getIntegerType(
-                  fptosi.getOut().getType().getIntOrFloatBitWidth());
-  auto calyxFPToIntOp =
-      getState<ComponentLoweringState>()
-          .getNewLibraryOpInstance<calyx::FpToIntOpIEEE754>(
-              rewriter, loc, {one, one, one, inWidth, one, outWidth, one});
-  hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
+  return buildFpIntTypeCastOp<calyx::FpToIntOpIEEE754>(
+      rewriter, fptosi, fptosi.getIn().getType().getIntOrFloatBitWidth(),
+      fptosi.getOut().getType().getIntOrFloatBitWidth(), "signedOut");
+}
 
-  StringRef opName = fptosi.getOperationName().split(".").second;
-  rewriter.setInsertionPointToStart(getComponent().getBodyBlock());
-  auto reg = createRegister(
-      loc, rewriter, getComponent(), outWidth.getIntOrFloatBitWidth(),
-      getState<ComponentLoweringState>().getUniqueName(opName));
-
-  auto group = createGroupForOp<calyx::GroupOp>(rewriter, fptosi);
-  OpBuilder builder(group->getRegion(0));
-  getState<ComponentLoweringState>().addBlockScheduleable(fptosi->getBlock(),
-                                                          group);
-  rewriter.setInsertionPointToEnd(group.getBodyBlock());
-  rewriter.create<calyx::AssignOp>(loc, calyxFPToIntOp.getIn(), fptosi.getIn());
-  rewriter.create<calyx::AssignOp>(loc, calyxFPToIntOp.getSignedOut(), c1);
-  fptosi.getResult().replaceAllUsesWith(reg.getOut());
-
-  rewriter.create<calyx::AssignOp>(
-      loc, calyxFPToIntOp.getGo(), c1,
-      comb::createOrFoldNot(loc, calyxFPToIntOp.getDone(), builder));
-  rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone());
-
-  return success();
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     SIToFPOp sitofp) const {
+  return buildFpIntTypeCastOp<calyx::IntToFpOpIEEE754>(
+      rewriter, sitofp, sitofp.getIn().getType().getIntOrFloatBitWidth(),
+      sitofp.getOut().getType().getIntOrFloatBitWidth(), "signedIn");
 }
 
 template <typename TAllocOp>
@@ -2448,12 +2468,12 @@ public:
     // Only accept std operations which we've added lowerings for
     target.addIllegalDialect<FuncDialect>();
     target.addIllegalDialect<ArithDialect>();
-    target
-        .addLegalOp<AddIOp, SelectOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp,
-                    AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp, CondBranchOp,
-                    BranchOp, MulIOp, DivUIOp, DivSIOp, RemUIOp, RemSIOp,
-                    ReturnOp, arith::ConstantOp, IndexCastOp, FuncOp, ExtSIOp,
-                    CallOp, AddFOp, SubFOp, MulFOp, CmpFOp, FPToSIOp>();
+    target.addLegalOp<AddIOp, SelectOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp,
+                      ShRSIOp, AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp,
+                      CondBranchOp, BranchOp, MulIOp, DivUIOp, DivSIOp, RemUIOp,
+                      RemSIOp, ReturnOp, arith::ConstantOp, IndexCastOp, FuncOp,
+                      ExtSIOp, CallOp, AddFOp, SubFOp, MulFOp, CmpFOp, FPToSIOp,
+                      SIToFPOp>();
 
     RewritePatternSet legalizePatterns(&getContext());
     legalizePatterns.add<DummyPattern>(&getContext());
