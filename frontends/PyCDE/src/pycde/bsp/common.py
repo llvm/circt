@@ -912,9 +912,13 @@ def ChannelEngineService(
           mmio_appid = esi.AppID(idbase + ".mmio")
           eng_inputs["mmio"] = esi.MMIO.read_write(mmio_appid)
           eng_details["mmio"] = mmio_appid
-        if hasattr(engine_mod, "hostmem"):
-          eng_inputs["hostmem"] = esi.HostMem.write_from_bundle(
-              esi.AppID(idbase + ".hostmem"), engine_mod.hostmem.type)
+        if hasattr(engine_mod, "hostmem_write"):
+          eng_inputs["hostmem_write"] = esi.HostMem.write_from_bundle(
+              esi.AppID(idbase + ".hostmem_write"),
+              engine_mod.hostmem_write.type)
+        if hasattr(engine_mod, "hostmem_read"):
+          eng_inputs["hostmem_read"] = esi.HostMem.read_from_bundle(
+              esi.AppID(idbase + ".hostmem_read"), engine_mod.hostmem_read.type)
         engine = engine_mod(appid=eng_appid, **eng_inputs)
         engine_rec = bundles.emit_engine(engine, details=eng_details)
         engine_rec.add_record(bundle, {bc.name: {}})

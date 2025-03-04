@@ -12,8 +12,8 @@ from ..types import Array, Bits, Channel, UInt
 from .. import esi
 
 from .common import (ChannelEngineService, ChannelHostMem, ChannelMMIO,
-                     DummyFromHostEngine, MMIOIndirection, Reset)
-from .dma import OneItemBuffersToHost
+                     MMIOIndirection, Reset)
+from .dma import OneItemBuffersFromHost, OneItemBuffersToHost
 
 import glob
 import pathlib
@@ -264,7 +264,7 @@ def XrtBSP(user_module):
       clk = ports.ap_clk
       rst = ~ports.ap_resetn
 
-      ChannelEngineService(OneItemBuffersToHost, DummyFromHostEngine)(
+      ChannelEngineService(OneItemBuffersToHost, OneItemBuffersFromHost)(
           None, appid=esi.AppID("__channel_engines"), clk=clk, rst=rst)
 
       # Set up the MMIO service and tie it to the AXI-lite channels.
@@ -347,7 +347,7 @@ def XrtBSP(user_module):
       # TODO: Test reads > HostMemDataWidthBytes. I'm pretty sure this is wrong
       # for lengths >512bits but initially we won't be transferring >512 bits.
       ports.m_axi_gmem_ARSIZE = clog2(HostMemDataWidthBytes)
-      ports.m_axi_gmem_ARLEN = (read_req_data.length /
+      ports.m_axi_gmem_ARLEN = ((read_req_data.length - 1) /
                                 HostMemDataWidthBytes).as_uint(8)
       ports.m_axi_gmem_ARBURST = Bits(2)(1)  # INCR
 

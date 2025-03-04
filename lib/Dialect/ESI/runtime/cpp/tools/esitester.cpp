@@ -34,10 +34,12 @@ using namespace esi;
 static void registerCallbacks(AcceleratorConnection *, Accelerator *);
 static void hostmemTest(AcceleratorConnection *, Accelerator *, bool read,
                         bool write);
-static void dmaTest(AcceleratorConnection *, Accelerator *);
+static void dmaTest(AcceleratorConnection *, Accelerator *, bool read,
+                    bool write);
 static void bandwidthTest(AcceleratorConnection *, Accelerator *,
                           uint32_t xferCount,
-                          const std::vector<uint32_t> &widths);
+                          const std::vector<uint32_t> &widths, bool read,
+                          bool write);
 
 int main(int argc, const char *argv[]) {
   CliParser cli("esitester");
@@ -53,24 +55,32 @@ int main(int argc, const char *argv[]) {
 
   CLI::App *hostmemtestSub =
       cli.add_subcommand("hostmem", "Run the host memory test");
-  bool read = true;
-  bool write = true;
-  hostmemtestSub->add_flag("-w,--write", write,
+  bool hmRead = false;
+  bool hmWrite = false;
+  hostmemtestSub->add_flag("-w,--write", hmWrite,
                            "Enable host memory write test");
-  hostmemtestSub->add_flag("-r,--read", read, "Enable host memory read test");
+  hostmemtestSub->add_flag("-r,--read", hmRead, "Enable host memory read test");
 
-  CLI::App *dmatestSub =
-      cli.add_subcommand("dmawrite", "Run the DMA write test");
+  CLI::App *dmatestSub = cli.add_subcommand("dma", "Run the DMA test");
+  bool dmaRead = false;
+  bool dmaWrite = false;
+  dmatestSub->add_flag("-w,--write", dmaWrite, "Enable dma write test");
+  dmatestSub->add_flag("-r,--read", dmaRead, "Enable dma read test");
 
   CLI::App *bandwidthSub =
       cli.add_subcommand("bandwidth", "Run the bandwidth test");
   uint32_t xferCount = 1000;
   bandwidthSub->add_option("-c,--count", xferCount,
                            "Number of transfers to perform");
+  bool bandwidthRead = false;
+  bool bandwidthWrite = false;
   std::vector<uint32_t> widths = {32, 64, 128, 256, 384, 504, 512};
-  bandwidthSub->add_option("-w,--width", widths,
+  bandwidthSub->add_option("--widths", widths,
                            "Width of the transfers to perform (default: 32, "
                            "64, 128, 256, 384, 504, 512)");
+  bandwidthSub->add_flag("-w,--write", bandwidthWrite,
+                         "Enable bandwidth write");
+  bandwidthSub->add_flag("-r,--read", bandwidthRead, "Enable bandwidth read");
 
   if (int rc = cli.esiParse(argc, argv))
     return rc;
@@ -94,11 +104,12 @@ int main(int argc, const char *argv[]) {
       registerCallbacks(acc.get(), accel);
       std::this_thread::sleep_for(std::chrono::seconds(waitTime));
     } else if (*hostmemtestSub) {
-      hostmemTest(acc.get(), accel, read, write);
+      hostmemTest(acc.get(), accel, hmRead, hmWrite);
     } else if (*dmatestSub) {
-      dmaTest(acc.get(), accel);
+      dmaTest(acc.get(), accel, dmaRead, dmaWrite);
     } else if (*bandwidthSub) {
-      bandwidthTest(acc.get(), accel, xferCount, widths);
+      bandwidthTest(acc.get(), accel, xferCount, widths, bandwidthRead,
+                    bandwidthWrite);
     }
 
     acc->disconnect();
@@ -256,20 +267,20 @@ void hostmemTest(AcceleratorConnection *conn, Accelerator *acc, bool read,
                 write);
 }
 
-static void dmaWriteTest(AcceleratorConnection *conn, Accelerator *acc,
-                         size_t width) {
+static void dmaReadTest(AcceleratorConnection *conn, Accelerator *acc,
+                        size_t width) {
   Logger &logger = conn->getLogger();
   logger.info("esitester",
-              "== Running DMA write test with width " + std::to_string(width));
+              "== Running DMA read test with width " + std::to_string(width));
   AppIDPath lastPath;
   BundlePort *toHostMMIOPort = acc->resolvePort(
       {AppID("tohostdmatest", width), AppID("ToHostDMATest")}, lastPath);
   if (!toHostMMIOPort)
-    throw std::runtime_error("dma write test failed. No tohostdmatest[" +
+    throw std::runtime_error("dma read test failed. No tohostdmatest[" +
                              std::to_string(width) + "] found");
   auto *toHostMMIO = toHostMMIOPort->getAs<services::MMIO::MMIORegion>();
   if (!toHostMMIO)
-    throw std::runtime_error("dma write test failed. MMIO port is not MMIO");
+    throw std::runtime_error("dma read test failed. MMIO port is not MMIO");
   lastPath.clear();
   BundlePort *outPortBundle =
       acc->resolvePort({AppID("tohostdmatest", width), AppID("out")}, lastPath);
@@ -285,23 +296,98 @@ static void dmaWriteTest(AcceleratorConnection *conn, Accelerator *acc,
     if (width == 64) {
       uint64_t val = *data.as<uint64_t>();
       if (val < last)
-        throw std::runtime_error("dma write test failed. Out of order data");
+        throw std::runtime_error("dma read test failed. Out of order data");
       last = val;
     }
-    logger.info("esitester",
-                "Cycle count [" + std::to_string(i) + "] = 0x" + data.toHex());
+    logger.debug("esitester",
+                 "Cycle count [" + std::to_string(i) + "] = 0x" + data.toHex());
   }
   outPort.disconnect();
-  logger.info("esitester", "==   DMA write test complete");
+  logger.info("esitester", "==   DMA read test complete");
 }
 
-static void dmaTest(AcceleratorConnection *conn, Accelerator *acc) {
-  for (size_t width : {32, 64, 128, 256, 384, 504, 512})
-    dmaWriteTest(conn, acc, width);
+static void dmaWriteTest(AcceleratorConnection *conn, Accelerator *acc,
+                         size_t width) {
+  Logger &logger = conn->getLogger();
+  logger.info("esitester",
+              "== Running DMA write test with width " + std::to_string(width));
+  AppIDPath lastPath;
+  BundlePort *fromHostMMIOPort = acc->resolvePort(
+      {AppID("fromhostdmatest", width), AppID("FromHostDMATest")}, lastPath);
+  if (!fromHostMMIOPort)
+    throw std::runtime_error("dma read test for " + toString(width) +
+                             " bits failed. No fromhostdmatest[" +
+                             std::to_string(width) + "] found");
+  auto *fromHostMMIO = fromHostMMIOPort->getAs<services::MMIO::MMIORegion>();
+  if (!fromHostMMIO)
+    throw std::runtime_error("dma write test for " + toString(width) +
+                             " bits failed. MMIO port is not MMIO");
+  lastPath.clear();
+  BundlePort *outPortBundle = acc->resolvePort(
+      {AppID("fromhostdmatest", width), AppID("in")}, lastPath);
+  if (!outPortBundle)
+    throw std::runtime_error("dma write test for " + toString(width) +
+                             " bits failed. No out port found");
+  WriteChannelPort &writePort = outPortBundle->getRawWrite("data");
+  writePort.connect();
+
+  size_t xferCount = 24;
+  uint8_t *data = new uint8_t[width];
+  for (size_t i = 0; i < width / 8; ++i)
+    data[i] = 0;
+  fromHostMMIO->read(8);
+  fromHostMMIO->write(0, xferCount);
+  for (size_t i = 1; i < xferCount + 1; ++i) {
+    data[0] = i;
+    bool successWrite;
+    size_t attempts = 0;
+    do {
+      successWrite = writePort.tryWrite(MessageData(data, width / 8));
+      if (!successWrite) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      }
+    } while (!successWrite && ++attempts < 100);
+    if (!successWrite)
+      throw std::runtime_error("dma write test for " + toString(width) +
+                               " bits failed. Write failed");
+    uint64_t lastReadMMIO;
+    for (size_t a = 0; a < 20; ++a) {
+      lastReadMMIO = fromHostMMIO->read(8);
+      if (lastReadMMIO == i)
+        break;
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      if (a >= 19)
+        throw std::runtime_error("dma write for " + toString(width) +
+                                 " bits test failed. Read from MMIO failed");
+    }
+  }
+  writePort.disconnect();
+  delete[] data;
+  logger.info("esitester",
+              "==   DMA write test for " + toString(width) + " bits complete");
 }
 
-static void bandWidthTest(AcceleratorConnection *conn, Accelerator *acc,
-                          size_t width, size_t xferCount) {
+static void dmaTest(AcceleratorConnection *conn, Accelerator *acc, bool read,
+                    bool write) {
+  bool success = true;
+  if (write)
+    for (size_t width : {32, 64, 128, 256, 384, 504, 512})
+      try {
+        dmaWriteTest(conn, acc, width);
+      } catch (std::exception &e) {
+        success = false;
+        std::cerr << "DMA write test for " << width
+                  << "bits failed: " << e.what() << std::endl;
+      }
+  if (read)
+    for (size_t width : {32, 64, 128, 256, 384, 504, 512})
+      dmaReadTest(conn, acc, width);
+  if (!success)
+    throw std::runtime_error("DMA test failed");
+}
+
+static void bandwidthReadTest(AcceleratorConnection *conn, Accelerator *acc,
+                              size_t width, size_t xferCount) {
 
   AppIDPath lastPath;
   BundlePort *toHostMMIOPort = acc->resolvePort(
@@ -319,7 +405,7 @@ static void bandWidthTest(AcceleratorConnection *conn, Accelerator *acc,
   outPort.connect();
 
   Logger &logger = conn->getLogger();
-  logger.info("esitester", "Starting bandwidth test with " +
+  logger.info("esitester", "Starting bandwidth test read with " +
                                std::to_string(xferCount) + " x " +
                                std::to_string(width) + " bit transfers");
   MessageData data;
@@ -343,13 +429,68 @@ static void bandWidthTest(AcceleratorConnection *conn, Accelerator *acc,
   logger.info("esitester",
               "    bandwidth: " +
                   std::to_string((xferCount * (width / 8) * 1000000) /
-                                 duration.count()) +
-                  " bytes/sec");
+                                 duration.count() / 1024) +
+                  " kbytes/sec");
+}
+
+static void bandwidthWriteTest(AcceleratorConnection *conn, Accelerator *acc,
+                               size_t width, size_t xferCount) {
+
+  AppIDPath lastPath;
+  BundlePort *fromHostMMIOPort = acc->resolvePort(
+      {AppID("fromhostdmatest", width), AppID("FromHostDMATest")}, lastPath);
+  if (!fromHostMMIOPort)
+    throw std::runtime_error("bandwidth test failed. No tohostdmatest[" +
+                             std::to_string(width) + "] found");
+  auto *fromHostMMIO = fromHostMMIOPort->getAs<services::MMIO::MMIORegion>();
+  if (!fromHostMMIO)
+    throw std::runtime_error("bandwidth test failed. MMIO port is not MMIO");
+  lastPath.clear();
+  BundlePort *inPortBundle = acc->resolvePort(
+      {AppID("fromhostdmatest", width), AppID("in")}, lastPath);
+  WriteChannelPort &outPort = inPortBundle->getRawWrite("data");
+  outPort.connect();
+
+  Logger &logger = conn->getLogger();
+  logger.info("esitester", "Starting bandwidth write read with " +
+                               std::to_string(xferCount) + " x " +
+                               std::to_string(width) + " bit transfers");
+  std::vector<uint8_t> dataVec(width / 8);
+  for (size_t i = 0; i < width / 8; ++i)
+    dataVec[i] = i;
+  MessageData data(dataVec);
+  auto start = std::chrono::high_resolution_clock::now();
+  fromHostMMIO->write(0, xferCount);
+  for (size_t i = 0; i < xferCount; ++i) {
+    outPort.write(data);
+    logger.debug(
+        [i, &data](std::string &subsystem, std::string &msg,
+                   std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "esitester";
+          msg = "Cycle count [" + std::to_string(i) + "] = 0x" + data.toHex();
+        });
+  }
+  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::high_resolution_clock::now() - start);
+  logger.info("esitester",
+              "  Bandwidth test: " + std::to_string(xferCount) + " x " +
+                  std::to_string(width) + " bit transfers in " +
+                  std::to_string(duration.count()) + " microseconds");
+  logger.info("esitester",
+              "    bandwidth: " +
+                  std::to_string((xferCount * (width / 8) * 1000000) /
+                                 duration.count() / 1024) +
+                  " kbytes/sec");
 }
 
 static void bandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
                           uint32_t xferCount,
-                          const std::vector<uint32_t> &widths) {
-  for (size_t width : widths)
-    bandWidthTest(conn, acc, width, xferCount);
+                          const std::vector<uint32_t> &widths, bool read,
+                          bool write) {
+  if (read)
+    for (size_t width : widths)
+      bandwidthReadTest(conn, acc, width, xferCount);
+  if (write)
+    for (size_t width : widths)
+      bandwidthWriteTest(conn, acc, width, xferCount);
 }

@@ -788,6 +788,19 @@ class ChannelSignal(Signal):
     both_ready.assign(a_rdy & b_rdy)
     return abuf, bbuf
 
+  def wait_for_ready(self, other: ChannelSignal) -> ChannelSignal:
+    """Return a channel which doesn't issue valid unless some other channel is
+    ready to recieve data."""
+    from .constructs import Wire
+    from .types import Bits
+    _, other_ready, _ = other.snoop()
+    ready_wire = Wire(Bits(1))
+    data, valid = self.unwrap(ready_wire)
+    out_valid = valid & other_ready
+    out_chan, ready = self.type.wrap(data, out_valid)
+    ready_wire.assign(ready)
+    return out_chan
+
 
 class BundleSignal(Signal):
   """Signal for types.Bundle."""
