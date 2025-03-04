@@ -1005,8 +1005,11 @@ void Emitter::emitLibraryPrimTypedByFirstOutputPort(
 
 void Emitter::emitLibraryFloatingPoint(Operation *op) {
   auto cell = cast<CellInterface>(op);
-  // magic number for the index of `left/right` input port
-  size_t inputPortIndex = cell.getInputPorts().size() - 2;
+  // magic number for the index of `left/right` input port for
+  // `AddF`/`MulF`/`CompareF`; `in` input port for `FpToInt`.
+  auto inputPorts = cell.getInputPorts();
+  assert(inputPorts.size() >= 2 && "There should be at least two input ports");
+  size_t inputPortIndex = inputPorts.size() - 2;
   unsigned bitWidth =
       cell.getInputPorts()[inputPortIndex].getType().getIntOrFloatBitWidth();
   // Since Calyx interacts with HardFloat, we'll also only be using expWidth and
@@ -1043,7 +1046,7 @@ void Emitter::emitLibraryFloatingPoint(Operation *op) {
   indent() << getAttributes(op, /*atFormat=*/true) << cell.instanceName()
            << space() << equals() << space() << opName << LParen() << expWidth
            << comma() << sigWidth << comma() << bitWidth;
-  if (opName == "fpToInt") {
+  if (auto fpToIntOp = dyn_cast<calyx::FpToIntOpIEEE754>(op)) {
     // Special handling for `fpToInt` (Floating-Point to Integer conversion)
     unsigned intWidth =
         cell.getOutputPorts()[0].getType().getIntOrFloatBitWidth();
