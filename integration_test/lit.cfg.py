@@ -217,6 +217,12 @@ if config.z3_library != "":
   tools.append(ToolSubst(f"%libz3", config.z3_library))
   config.available_features.add('libz3')
 
+# Enable SymbiYosys if it has been detected.
+if config.sby_path != "":
+  tool_dirs.append(config.sby_path)
+  tools.append('sby')
+  config.available_features.add('sby')
+
 # Add mlir-runner if the execution engine is built.
 if config.mlir_enable_execution_engine:
   config.available_features.add('mlir-runner')
