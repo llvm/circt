@@ -475,17 +475,6 @@ DrvOp::ensureOnlySafeAccesses(const MemorySlot &slot,
 }
 
 //===----------------------------------------------------------------------===//
-// ConnectOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult llhd::ConnectOp::canonicalize(llhd::ConnectOp op,
-                                            PatternRewriter &rewriter) {
-  if (op.getLhs() == op.getRhs())
-    rewriter.eraseOp(op);
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // ProcessOp
 //===----------------------------------------------------------------------===//
 

@@ -8,23 +8,6 @@ hw.module @errors(in %in0: i32, out out0: i8) {
 
 // -----
 
-// expected-note @+1 {{prior use here}}
-hw.module @connect_different_types(inout %in: i8, inout %out: i32) {
-  // expected-error @+1 {{use of value '%out' expects different type}}
-  llhd.con %in, %out : !hw.inout<i8>
-}
-
-// -----
-
-hw.module @connect_non_signals(inout %in: i32, inout %out: i32) {
-  %0 = llhd.prb %in : !hw.inout<i32>
-  %1 = llhd.prb %out : !hw.inout<i32>
-  // expected-error @+1 {{'llhd.con' op operand #0 must be InOutType, but got 'i32'}}
-  llhd.con %0, %1 : i32
-}
-
-// -----
-
 hw.module @illegal_signal_to_array(inout %sig : !hw.array<3xi32>, in %ind : i2) {
   // expected-error @+1 {{'llhd.sig.array_slice' op result #0 must be InOutType of an ArrayType values, but got '!hw.array<3xi32>'}}
   %0 = llhd.sig.array_slice %sig at %ind : (!hw.inout<array<3xi32>>) -> !hw.array<3xi32>

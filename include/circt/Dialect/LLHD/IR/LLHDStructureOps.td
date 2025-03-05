@@ -85,30 +85,6 @@ def FinalOp : LLHDOp<"final", [
 }
 
 //===----------------------------------------------------------------------===//
-// ConnectOp
-//===----------------------------------------------------------------------===//
-
-def ConnectOp : LLHDOp<"con", [
-    SameTypeOperands,
-    HasParent<"hw::HWModuleOp">
-  ]> {
-  let summary = "Connect two signals.";
-  let description = [{
-    The `con` instruction connects two signals such that they essentially become
-    one signal. All driven values on one signal will be reflected on the other.
-  }];
-
-  let arguments = (ins InOutType:$lhs,
-                       InOutType:$rhs);
-
-  let assemblyFormat = [{
-    operands attr-dict `:` qualified(type($lhs))
-  }];
-
-  let hasCanonicalizeMethod = 1;
-}
-
-//===----------------------------------------------------------------------===//
 // WaitOp
 //===----------------------------------------------------------------------===//
 

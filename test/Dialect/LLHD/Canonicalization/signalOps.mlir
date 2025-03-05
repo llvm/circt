@@ -20,9 +20,3 @@ func.func @drv_folding(%sig: !hw.inout<i32>, %val: i32, %time: !llhd.time, %cond
   // CHECK-NEXT: return
   return
 }
-
-// CHECK-LABEL: @con_folding
-// CHECK-NOT: llhd.con
-hw.module @con_folding(inout %sig: i32) {
-  llhd.con %sig, %sig : !hw.inout<i32>
-}

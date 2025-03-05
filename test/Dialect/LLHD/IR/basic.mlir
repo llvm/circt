@@ -8,13 +8,6 @@ hw.module @basic(in %in0 : i32, out out0 : i32) {
   hw.output %0 : i32
 }
 
-// CHECK-LABEL: @connect_ports
-// CHECK-SAME: (inout %[[IN:.+]] : [[TYPE:.+]], inout %[[OUT:.+]] : [[TYPE]])
-// CHECK-NEXT: llhd.con %[[IN]], %[[OUT]] : !hw.inout<[[TYPE]]>
-hw.module @connect_ports(inout %in: i32, inout %out: i32) {
-  llhd.con %in, %out : !hw.inout<i32>
-}
-
 // CHECK-LABEL: @sigExtract
 hw.module @sigExtract(inout %arg0 : i32, in %arg1 : i5) {
   // CHECK-NEXT: %{{.*}} = llhd.sig.extract %arg0 from %arg1 : (!hw.inout<i32>) -> !hw.inout<i5>
