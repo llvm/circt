@@ -1472,12 +1472,12 @@ public:
 
 void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results
-      .add<MuxPad, MuxSharedCond, patterns::MuxEQOperands,
-           patterns::MuxEQOperandsSwapped, patterns::MuxNEQ, patterns::MuxNot,
-           patterns::MuxSameTrue, patterns::MuxSameFalse,
-           patterns::NarrowMuxLHS, patterns::NarrowMuxRHS, patterns::MuxPadSel>(
-          context);
+  results.add<MuxPad, MuxSharedCond, patterns::MuxEQOperands,
+              patterns::MuxEQOperandsSwapped, patterns::MuxNEQ,
+              patterns::MuxNot, patterns::MuxSameTrue, patterns::MuxSameFalse,
+              patterns::NarrowMuxLHS, patterns::NarrowMuxRHS,
+              patterns::MuxPadSel, patterns::MuxLHS0, patterns::MuxLHS1,
+              patterns::MuxRHS0, patterns::MuxRHS1>(context);
 }
 
 void Mux2CellIntrinsicOp::getCanonicalizationPatterns(

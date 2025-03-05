@@ -656,6 +656,38 @@ def MuxNEQ : Pat<
   (MoveNameHint $old, (MuxPrimOp (EQPrimOp $a, $b), $y, $x)),
   [(EqualTypes $x, $y), (KnownWidth $x)]>;
 
+// mux(cond, 0, b) -> and(~cond, b)
+def MuxLHS0 : Pat<
+  (MuxPrimOp:$old $cond, (ConstantOp:$a $_), $b),
+  (MoveNameHint $old, (AndPrimOp (NotPrimOp $cond), $b)),
+  [(ZeroConstantOp $a),
+   (EqualTypes $cond, $a),
+   (EqualTypes $cond, $b)]>;
+
+// mux(cond, 1, b) -> or(cond, b)
+def MuxLHS1 : Pat<
+  (MuxPrimOp:$old $cond, (ConstantOp:$a $_), $b),
+  (MoveNameHint $old, (OrPrimOp $cond, $b)),
+  [(OneConstantOp $a),
+   (EqualTypes $cond, $a),
+   (EqualTypes $cond, $b)]>;
+
+// mux(cond, a, 0) -> and(cond, a)
+def MuxRHS0 : Pat<
+  (MuxPrimOp:$old $cond, $a, (ConstantOp:$b $_)),
+  (MoveNameHint $old, (AndPrimOp $cond, $a)),
+  [(ZeroConstantOp $b),
+   (EqualTypes $cond, $a),
+   (EqualTypes $cond, $b)]>;
+
+// mux(cond, a, 1) -> or(~cond, a)
+def MuxRHS1 : Pat<
+  (MuxPrimOp:$old $cond, $a, (ConstantOp:$b $_)),
+  (MoveNameHint $old, (OrPrimOp (NotPrimOp $cond), $a)),
+  [(OneConstantOp $b),
+   (EqualTypes $cond, $a),
+   (EqualTypes $cond, $b)]>;
+
 // mux(cond : u0, a, b) -> mux(0 : u1, a, b)
 def MuxPadSel : Pat<
   (MuxPrimOp:$old $cond, $a, $b),
