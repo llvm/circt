@@ -418,7 +418,8 @@ def MulFOpIEEE754 : ArithBinaryFloatingPointLibraryOp<"ieee754.mul", [
 }
 
 // This models the division and square root, distinguished by `sqrtOp`,
-// operation interface in Berkeley HardFloat.
+// operation interface in Berkeley HardFloat. It computes `left`/`right`
+// if `sqrtOp` = 0; it ignores `right` and computes sqrt(`left`) if `sqrtOp` = 1.
 def DivSqrtOpIEEE754 : ArithBinaryFloatingPointLibraryOp<"ieee754.divSqrt", [
     SameTypeConstraint<"left", "out">
   ]> {

@@ -518,13 +518,9 @@ private:
     } else if (isa<calyx::DivSqrtOpIEEE754>(opPipe)) {
       auto opFOp = cast<calyx::DivSqrtOpIEEE754>(opPipe);
       hw::ConstantOp sqrtOp;
-      if (isa<arith::DivFOp>(op)) {
-        sqrtOp = createConstant(loc, rewriter, getComponent(), /*width=*/1,
-                                /*sqrt=*/0);
-      } else {
-        sqrtOp = createConstant(loc, rewriter, getComponent(), /*width=*/1,
-                                /*sqrt=*/1);
-      }
+      bool isSqrt = !isa<arith::DivFOp>(op);
+      sqrtOp =
+          createConstant(loc, rewriter, getComponent(), /*width=*/1, isSqrt);
       rewriter.create<calyx::AssignOp>(loc, opFOp.getSqrtOp(), sqrtOp);
     }
 
@@ -1075,11 +1071,13 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
               five = rewriter.getIntegerType(5),
               width = rewriter.getIntegerType(
                   divf.getType().getIntOrFloatBitWidth());
-  auto divFOp =
-      getState<ComponentLoweringState>()
-          .getNewLibraryOpInstance<calyx::DivSqrtOpIEEE754>(
-              rewriter, loc,
-              {one, one, one, one, one, width, width, three, width, five, one});
+  auto divFOp = getState<ComponentLoweringState>()
+                    .getNewLibraryOpInstance<calyx::DivSqrtOpIEEE754>(
+                        rewriter, loc,
+                        {/*clk=*/one, /*reset=*/one, /*go=*/one,
+                         /*control=*/one, /*sqrtOp=*/one, /*left=*/width,
+                         /*right=*/width, /*roundingMode=*/three, /*out=*/width,
+                         /*exceptionalFlags=*/five, /*done=*/one});
   return buildLibraryBinaryPipeOp<calyx::DivSqrtOpIEEE754>(
       rewriter, divf, divFOp, divFOp.getOut());
 }
