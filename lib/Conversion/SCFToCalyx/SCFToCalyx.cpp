@@ -275,7 +275,9 @@ public:
   void setPipeResReg(Operation *op, calyx::RegisterOp reg) {
     assert(isa<calyx::MultPipeLibOp>(op) || isa<calyx::DivUPipeLibOp>(op) ||
            isa<calyx::DivSPipeLibOp>(op) || isa<calyx::RemUPipeLibOp>(op) ||
-           isa<calyx::RemSPipeLibOp>(op));
+           isa<calyx::RemSPipeLibOp>(op) || isa<calyx::AddFOpIEEE754>(op) ||
+           isa<calyx::MulFOpIEEE754>(op) || isa<calyx::FpToIntOpIEEE754>(op) ||
+           isa<calyx::IntToFpOpIEEE754>(op));
     assert(resultRegs.count(op) == 0 &&
            "A register was already set for this pipe operation!\n");
     resultRegs[op] = reg;

@@ -829,117 +829,104 @@ module {
 
 // Test if ops with sequential condition check.
 
-module {
 // CHECK-LABEL:   calyx.component @main(
-// CHECK-SAME:                          %[[VAL_0:in0]]: i32,
-// CHECK-SAME:                          %[[VAL_1:.*]]: i1 {clk},
-// CHECK-SAME:                          %[[VAL_2:.*]]: i1 {reset},
-// CHECK-SAME:                          %[[VAL_3:.*]]: i1 {go}) -> (
-// CHECK-SAME:                          %[[VAL_4:out0]]: i32,
-// CHECK-SAME:                          %[[VAL_5:.*]]: i1 {done}) {
-// CHECK:           %[[VAL_6:.*]] = hw.constant true
-// CHECK:           %[[VAL_7:.*]] = hw.constant false
-// CHECK:           %[[VAL_8:.*]] = hw.constant 1 : i32
-// CHECK:           %[[VAL_9:.*]] = hw.constant 2 : i32
-// CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = calyx.std_slice @std_slice_1 : i32, i7
-// CHECK:           %[[VAL_12:.*]], %[[VAL_13:.*]] = calyx.std_slice @std_slice_0 : i32, i7
-// CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]], %[[VAL_16:.*]], %[[VAL_17:.*]], %[[VAL_18:.*]], %[[VAL_19:.*]] = calyx.register @load_1_reg : i32, i1, i1, i1, i32, i1
-// CHECK:           %[[VAL_20:.*]], %[[VAL_21:.*]], %[[VAL_22:.*]], %[[VAL_23:.*]], %[[VAL_24:.*]], %[[VAL_25:.*]] = calyx.register @load_0_reg : i32, i1, i1, i1, i32, i1
-// CHECK:           %[[VAL_26:.*]], %[[VAL_27:.*]], %[[VAL_28:.*]] = calyx.std_eq @std_eq_0 : i32, i32, i1
-// CHECK:           %[[VAL_29:.*]], %[[VAL_30:.*]], %[[VAL_31:.*]], %[[VAL_32:.*]], %[[VAL_33:.*]], %[[VAL_34:.*]] = calyx.register @cmpi_0_reg : i1, i1, i1, i1, i1, i1
-// CHECK:           %[[VAL_35:.*]], %[[VAL_36:.*]], %[[VAL_37:.*]], %[[VAL_38:.*]], %[[VAL_39:.*]], %[[VAL_40:.*]] = calyx.register @remui_0_reg : i32, i1, i1, i1, i32, i1
-// CHECK:           %[[VAL_41:.*]], %[[VAL_42:.*]], %[[VAL_43:.*]], %[[VAL_44:.*]], %[[VAL_45:.*]], %[[VAL_46:.*]], %[[VAL_47:.*]] = calyx.std_remu_pipe @std_remu_pipe_0 : i1, i1, i1, i32, i32, i32, i1
-// CHECK:           %[[VAL_48:.*]], %[[VAL_49:.*]], %[[VAL_50:.*]], %[[VAL_51:.*]], %[[VAL_52:.*]], %[[VAL_53:.*]], %[[VAL_54:.*]], %[[VAL_55:.*]] = calyx.seq_mem @mem_0 <[120] x 32> [7] {external = true} : i7, i1, i1, i1, i1, i32, i32, i1
-// CHECK:           %[[VAL_56:.*]], %[[VAL_57:.*]], %[[VAL_58:.*]], %[[VAL_59:.*]], %[[VAL_60:.*]], %[[VAL_61:.*]] = calyx.register @if_res_0_reg : i32, i1, i1, i1, i32, i1
-// CHECK:           %[[VAL_62:.*]], %[[VAL_63:.*]], %[[VAL_64:.*]], %[[VAL_65:.*]], %[[VAL_66:.*]], %[[VAL_67:.*]] = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
+// CHECK-SAME:                          %[[VAL_0:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: i32,
+// CHECK-SAME:                          %[[VAL_1:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: i1 {clk},
+// CHECK-SAME:                          %[[VAL_2:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: i1 {reset},
+// CHECK-SAME:                          %[[VAL_3:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: i1 {go}) -> (
+// CHECK-SAME:                          %[[VAL_4:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: i1 {done}) {
+// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]], %[[VAL_7:.*]], %[[VAL_8:.*]], %[[VAL_9:.*]], %[[VAL_10:.*]], %[[VAL_11:.*]], %[[VAL_12:.*]] = calyx.seq_mem @mem_1 <[120] x 32> [7] {external = true} : i7, i1, i1, i1, i1, i32, i32, i1
+// CHECK:           %[[VAL_13:.*]], %[[VAL_14:.*]], %[[VAL_15:.*]], %[[VAL_16:.*]], %[[VAL_17:.*]], %[[VAL_18:.*]], %[[VAL_19:.*]], %[[VAL_20:.*]] = calyx.seq_mem @mem_0 <[120] x 32> [7] {external = true} : i7, i1, i1, i1, i1, i32, i32, i1
+// CHECK:           %[[VAL_21:.*]], %[[VAL_22:.*]], %[[VAL_23:.*]], %[[VAL_24:.*]], %[[VAL_25:.*]] = calyx.instance @main_1_instance of @main_1 : i32, i1, i1, i1, i1
 // CHECK:           calyx.wires {
-// CHECK:             calyx.assign %[[VAL_4]] = %[[VAL_66]] : i32
-// CHECK:             calyx.group @then_br_0 {
-// CHECK:               calyx.assign %[[VAL_56]] = %[[VAL_24]] : i32
-// CHECK:               calyx.assign %[[VAL_57]] = %[[VAL_6]] : i1
-// CHECK:               calyx.group_done %[[VAL_61]] : i1
+// CHECK:           }
+// CHECK:           calyx.control {
+// CHECK:             calyx.seq {
+// CHECK:               calyx.invoke @main_1_instance[arg_mem_0 = mem_0, arg_mem_1 = mem_1](%[[VAL_21]] = %[[VAL_0]]) -> (i32)
 // CHECK:             }
-// CHECK:             calyx.group @else_br_0 {
-// CHECK:               calyx.assign %[[VAL_56]] = %[[VAL_18]] : i32
-// CHECK:               calyx.assign %[[VAL_57]] = %[[VAL_6]] : i1
-// CHECK:               calyx.group_done %[[VAL_61]] : i1
-// CHECK:             }
+// CHECK:           }
+// CHECK:         } {toplevel}
+
+// CHECK-LABEL:   calyx.component @main_1(
+// CHECK-SAME:                            %[[VAL_0:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: i32,
+// CHECK-SAME:                            %[[VAL_1:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: i1 {clk},
+// CHECK-SAME:                            %[[VAL_2:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: i1 {reset},
+// CHECK-SAME:                            %[[VAL_3:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: i1 {go}) -> (
+// CHECK-SAME:                            %[[VAL_4:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: i1 {done}) {
+// CHECK:           %[[VAL_5:.*]] = hw.constant true
+// CHECK:           %[[VAL_6:.*]] = hw.constant 2 : i32
+// CHECK:           %[[VAL_7:.*]] = hw.constant 1 : i32
+// CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = calyx.std_slice @std_slice_1 : i32, i7
+// CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = calyx.std_slice @std_slice_0 : i32, i7
+// CHECK:           %[[VAL_12:.*]], %[[VAL_13:.*]], %[[VAL_14:.*]] = calyx.std_eq @std_eq_0 : i32, i32, i1
+// CHECK:           %[[VAL_15:.*]], %[[VAL_16:.*]], %[[VAL_17:.*]], %[[VAL_18:.*]], %[[VAL_19:.*]], %[[VAL_20:.*]] = calyx.register @remui_0_reg : i32, i1, i1, i1, i32, i1
+// CHECK:           %[[VAL_21:.*]], %[[VAL_22:.*]], %[[VAL_23:.*]], %[[VAL_24:.*]], %[[VAL_25:.*]], %[[VAL_26:.*]], %[[VAL_27:.*]] = calyx.std_remu_pipe @std_remu_pipe_0 : i1, i1, i1, i32, i32, i32, i1
+// CHECK:           %[[VAL_28:.*]], %[[VAL_29:.*]], %[[VAL_30:.*]], %[[VAL_31:.*]], %[[VAL_32:.*]], %[[VAL_33:.*]], %[[VAL_34:.*]], %[[VAL_35:.*]] = calyx.seq_mem @arg_mem_1 <[120] x 32> [7] : i7, i1, i1, i1, i1, i32, i32, i1
+// CHECK:           %[[VAL_36:.*]], %[[VAL_37:.*]], %[[VAL_38:.*]], %[[VAL_39:.*]], %[[VAL_40:.*]], %[[VAL_41:.*]], %[[VAL_42:.*]], %[[VAL_43:.*]] = calyx.seq_mem @arg_mem_0 <[120] x 32> [7] : i7, i1, i1, i1, i1, i32, i32, i1
+// CHECK:           calyx.wires {
 // CHECK:             calyx.group @bb0_0 {
-// CHECK:               calyx.assign %[[VAL_44]] = %[[VAL_0]] : i32
-// CHECK:               calyx.assign %[[VAL_45]] = %[[VAL_9]] : i32
-// CHECK:               calyx.assign %[[VAL_35]] = %[[VAL_46]] : i32
-// CHECK:               calyx.assign %[[VAL_36]] = %[[VAL_47]] : i1
-// CHECK:               %[[VAL_68:.*]] = comb.xor %[[VAL_47]], %[[VAL_6]] : i1
-// CHECK:               calyx.assign %[[VAL_43]] = %[[VAL_68]] ? %[[VAL_6]] : i1
-// CHECK:               calyx.group_done %[[VAL_40]] : i1
+// CHECK:               calyx.assign %[[VAL_24]] = %[[VAL_0]] : i32
+// CHECK:               calyx.assign %[[VAL_25]] = %[[VAL_6]] : i32
+// CHECK:               calyx.assign %[[VAL_15]] = %[[VAL_26]] : i32
+// CHECK:               calyx.assign %[[VAL_16]] = %[[VAL_27]] : i1
+// CHECK:               %[[VAL_44:.*]] = comb.xor %[[VAL_27]], %[[VAL_5]] : i1
+// CHECK:               calyx.assign %[[VAL_23]] = %[[VAL_44]] ? %[[VAL_5]] : i1
+// CHECK:               calyx.group_done %[[VAL_20]] : i1
 // CHECK:             }
-// CHECK:             calyx.group @bb0_1 {
-// CHECK:               calyx.assign %[[VAL_26]] = %[[VAL_39]] : i32
-// CHECK:               calyx.assign %[[VAL_27]] = %[[VAL_39]] : i32
-// CHECK:               calyx.assign %[[VAL_29]] = %[[VAL_28]] : i1
-// CHECK:               calyx.assign %[[VAL_30]] = %[[VAL_6]] : i1
-// CHECK:               calyx.group_done %[[VAL_34]] : i1
+// CHECK:             calyx.comb_group @bb0_1 {
+// CHECK:               calyx.assign %[[VAL_12]] = %[[VAL_0]] : i32
+// CHECK:               calyx.assign %[[VAL_13]] = %[[VAL_19]] : i32
 // CHECK:             }
 // CHECK:             calyx.group @bb0_2 {
-// CHECK:               calyx.assign %[[VAL_10]] = %[[VAL_9]] : i32
-// CHECK:               calyx.assign %[[VAL_48]] = %[[VAL_11]] : i7
-// CHECK:               calyx.assign %[[VAL_51]] = %[[VAL_6]] : i1
-// CHECK:               calyx.assign %[[VAL_52]] = %[[VAL_7]] : i1
-// CHECK:               calyx.assign %[[VAL_20]] = %[[VAL_54]] : i32
-// CHECK:               calyx.assign %[[VAL_21]] = %[[VAL_55]] : i1
-// CHECK:               calyx.group_done %[[VAL_25]] : i1
+// CHECK:               calyx.assign %[[VAL_8]] = %[[VAL_7]] : i32
+// CHECK:               calyx.assign %[[VAL_28]] = %[[VAL_9]] : i7
+// CHECK:               calyx.assign %[[VAL_33]] = %[[VAL_0]] : i32
+// CHECK:               calyx.assign %[[VAL_32]] = %[[VAL_5]] : i1
+// CHECK:               calyx.assign %[[VAL_31]] = %[[VAL_5]] : i1
+// CHECK:               calyx.group_done %[[VAL_35]] : i1
 // CHECK:             }
 // CHECK:             calyx.group @bb0_3 {
-// CHECK:               calyx.assign %[[VAL_12]] = %[[VAL_8]] : i32
-// CHECK:               calyx.assign %[[VAL_48]] = %[[VAL_13]] : i7
-// CHECK:               calyx.assign %[[VAL_51]] = %[[VAL_6]] : i1
-// CHECK:               calyx.assign %[[VAL_52]] = %[[VAL_7]] : i1
-// CHECK:               calyx.assign %[[VAL_14]] = %[[VAL_54]] : i32
-// CHECK:               calyx.assign %[[VAL_15]] = %[[VAL_55]] : i1
-// CHECK:               calyx.group_done %[[VAL_19]] : i1
-// CHECK:             }
-// CHECK:             calyx.group @ret_assign_0 {
-// CHECK:               calyx.assign %[[VAL_62]] = %[[VAL_60]] : i32
-// CHECK:               calyx.assign %[[VAL_63]] = %[[VAL_6]] : i1
-// CHECK:               calyx.group_done %[[VAL_67]] : i1
+// CHECK:               calyx.assign %[[VAL_10]] = %[[VAL_6]] : i32
+// CHECK:               calyx.assign %[[VAL_36]] = %[[VAL_11]] : i7
+// CHECK:               calyx.assign %[[VAL_41]] = %[[VAL_19]] : i32
+// CHECK:               calyx.assign %[[VAL_40]] = %[[VAL_5]] : i1
+// CHECK:               calyx.assign %[[VAL_39]] = %[[VAL_5]] : i1
+// CHECK:               calyx.group_done %[[VAL_43]] : i1
 // CHECK:             }
 // CHECK:           }
 // CHECK:           calyx.control {
 // CHECK:             calyx.seq {
 // CHECK:               calyx.enable @bb0_0
-// CHECK:               calyx.enable @bb0_1
-// CHECK:               calyx.if %[[VAL_33]] {
+// CHECK:               calyx.if %[[VAL_14]] with @bb0_1 {
 // CHECK:                 calyx.seq {
 // CHECK:                   calyx.enable @bb0_2
-// CHECK:                   calyx.enable @then_br_0
 // CHECK:                 }
 // CHECK:               } else {
 // CHECK:                 calyx.seq {
 // CHECK:                   calyx.enable @bb0_3
-// CHECK:                   calyx.enable @else_br_0
 // CHECK:                 }
 // CHECK:               }
-// CHECK:               calyx.enable @ret_assign_0
 // CHECK:             }
 // CHECK:           }
-// CHECK:         } {toplevel}
-  func.func @main(%arg0 : i32) -> i32 {
-    %1 = memref.alloc() : memref<120xi32>
+// CHECK:         }
+
+module {
+  func.func @main(%arg0 : i32, %arg1: memref<120xi32>) {
+    %alloc = memref.alloc() : memref<120xi32>
     %idx_one = arith.constant 1 : index
+    %idx_two = arith.constant 2 : index
     %two = arith.constant 2: i32
     %rem = arith.remui %arg0, %two : i32
     %cond = arith.cmpi eq, %arg0, %rem : i32
 
-    %res = scf.if %cond -> i32 {
-      %idx = arith.addi %idx_one, %idx_one : index
-      %then_res = memref.load %1[%idx] : memref<120xi32>
-      scf.yield %then_res : i32
+    scf.if %cond {
+      memref.store %arg0, %alloc[%idx_one] : memref<120xi32>
+      scf.yield
     } else {
-      %idx = arith.muli %idx_one, %idx_one : index
-      %else_res = memref.load %1[%idx] : memref<120xi32>
-      scf.yield %else_res : i32
+      memref.store %rem, %arg1[%idx_two] : memref<120xi32>
+      scf.yield
     }
 
-    return %res : i32
+    return
   }
 }
