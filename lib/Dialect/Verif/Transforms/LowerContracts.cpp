@@ -14,6 +14,7 @@
 
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
+#include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/IR/IRMapping.h"
 
 using namespace circt;
@@ -78,9 +79,7 @@ LogicalResult cloneOp(OpBuilder &builder, Operation *opToClone,
 
 void assumeContractHolds(OpBuilder &builder, IRMapping &mapping,
                          ContractOp contract,
-                         SmallVector<Operation *> &opsToClone,
-                         std::queue<Operation *> &workList,
-                         DenseSet<Operation *> &seen) {
+                         std::queue<Operation *> &workList) {
   // Assume it holds by creating symbolic values for the results and inlining
   // the contract ops into the worklist, by default the clone logic replaces
   // contract ops with the assume variant
@@ -91,16 +90,13 @@ void assumeContractHolds(OpBuilder &builder, IRMapping &mapping,
   }
   auto &contractOps = contract.getBody().front().getOperations();
   for (auto it = contractOps.rbegin(); it != contractOps.rend(); ++it) {
-    if (!seen.contains(&*it)) {
-      workList.push(&*it);
-    }
+    workList.push(&*it);
   }
 }
 
 void buildOpsToClone(OpBuilder &builder, IRMapping &mapping, Operation *op,
-                     SmallVector<Operation *> &opsToClone,
                      std::queue<Operation *> &workList,
-                     DenseSet<Operation *> &seen, Operation *parent = nullptr) {
+                     Operation *parent = nullptr) {
   for (auto operand : op->getOperands()) {
     if (mapping.contains(operand))
       continue;
@@ -108,9 +104,7 @@ void buildOpsToClone(OpBuilder &builder, IRMapping &mapping, Operation *op,
     if (parent && parent->isAncestor(operand.getParentBlock()->getParentOp()))
       continue;
     if (auto *definingOp = operand.getDefiningOp()) {
-      if (!seen.contains(definingOp)) {
-        workList.push(definingOp);
-      }
+      workList.push(definingOp);
     } else {
       // Create symbolic values for arguments
       auto sym = builder.create<verif::SymbolicValueOp>(operand.getLoc(),
@@ -139,19 +133,17 @@ LogicalResult cloneFanIn(OpBuilder &builder, Operation *contractToClone,
     auto contract = dyn_cast<ContractOp>(*currentOp);
     // If it's not the contract being cloned, assume it holds
     if (contract && (currentOp != contractToClone)) {
-      assumeContractHolds(builder, mapping, contract, opsToClone, workList,
-                          seen);
+      assumeContractHolds(builder, mapping, contract, workList);
       // If a contract is assumed, it's nested ops are inlined into the worklist
       // so no need to walk the body or clone the op
       continue;
     }
 
     // Clone fan in for operands
-    buildOpsToClone(builder, mapping, currentOp, opsToClone, workList, seen);
+    buildOpsToClone(builder, mapping, currentOp, workList);
     // Clone fan in for nested ops
     currentOp->walk([&](Operation *nestedOp) {
-      buildOpsToClone(builder, mapping, nestedOp, opsToClone, workList, seen,
-                      currentOp);
+      buildOpsToClone(builder, mapping, nestedOp, workList, currentOp);
     });
 
     // Source contract is cloned externally
@@ -159,9 +151,11 @@ LogicalResult cloneFanIn(OpBuilder &builder, Operation *contractToClone,
       opsToClone.push_back(currentOp);
   }
 
-  // Clone the ops in reverse order so mapping is available for operands
-  for (auto it = opsToClone.rbegin(); it != opsToClone.rend(); ++it) {
-    if (failed(cloneOp(builder, *it, mapping, true)))
+  // Sort ops so mapping is available for all operands when cloning an op
+  computeTopologicalSorting(opsToClone);
+
+  for (auto *op : opsToClone) {
+    if (failed(cloneOp(builder, op, mapping, true)))
       return failure();
   }
   return success();
@@ -170,7 +164,6 @@ LogicalResult cloneFanIn(OpBuilder &builder, Operation *contractToClone,
 LogicalResult inlineContract(ContractOp &contract, OpBuilder &builder,
                              bool assumeContract) {
   IRMapping mapping;
-  DenseSet<Operation *> seen;
   if (!assumeContract) {
     // Inlining into formal op, need to clone fan in cone for contract
     if (failed(cloneFanIn(builder, contract, mapping)))

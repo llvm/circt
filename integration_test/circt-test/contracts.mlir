@@ -1,6 +1,6 @@
 // RUN: true
 
-// CHECK: 1 tests FAILED, 1 passed
+// CHECK: 2 tests FAILED, 2 passed
 
 hw.module @FullAdder(in %a: i1, in %b: i1, in %ci: i1, out s: i1, out co: i1) {
   %0 = comb.xor %a, %b : i1
@@ -49,4 +49,62 @@ hw.module @Adder4Failed(in %a: i4, in %b: i4, out z: i4) {
     verif.ensure %2 : i1
   }
   hw.output %0 : i4
+}
+
+hw.module @Mul3(in %a: i2, in %b: i2, out z: i4) {
+  %a0 = comb.extract %a from 0 : (i2) -> i1
+  %a1 = comb.extract %a from 1 : (i2) -> i1
+
+  %b0 = comb.extract %b from 0 : (i2) -> i1
+  %b1 = comb.extract %b from 1 : (i2) -> i1
+
+  %a0b0 = comb.and %a0, %b0 : i1
+  %a1b0 = comb.and %a1, %b0 : i1
+
+  %a0b1 = comb.and %a0, %b1 : i1
+  %a1b1 = comb.and %a1, %b1 : i1
+
+  %false = hw.constant false
+  %w = comb.concat %false, %false, %a1b0, %a0b0 : i1, i1, i1, i1
+  %x = comb.concat %false, %a1b1, %a0b1, %false : i1, i1, i1, i1
+  %y = hw.instance "adder" @Adder4(a: %w : i4, b: %x: i4) -> (z: i4)
+
+  %z = verif.contract %y : i4 {
+    %c = comb.concat %false, %false, %a : i1, i1, i2
+    %d = comb.concat %false, %false, %b : i1, i1, i2
+    %e = comb.mul %c, %d : i4
+    %f = comb.icmp eq %z, %e : i4
+    verif.ensure %f : i1
+  }
+  hw.output %z : i4
+}
+
+hw.module @Mul3Failed(in %a: i2, in %b: i2, out z: i4) {
+  %a0 = comb.extract %a from 0 : (i2) -> i1
+  %a1 = comb.extract %a from 1 : (i2) -> i1
+
+  %b0 = comb.extract %b from 0 : (i2) -> i1
+  %b1 = comb.extract %b from 1 : (i2) -> i1
+
+  %a0b0 = comb.and %a0, %b0 : i1
+  %a1b0 = comb.and %a1, %b0 : i1
+
+  %a0b1 = comb.and %a0, %b1 : i1
+  %a1b1 = comb.and %a1, %b1 : i1
+
+  %false = hw.constant false
+  %w = comb.concat %false, %false, %a1b0, %a0b0 : i1, i1, i1, i1
+  %x = comb.concat %false, %a1b1, %a0b1, %false : i1, i1, i1, i1
+  %y = hw.instance "adder" @Adder4(a: %w : i4, b: %x: i4) -> (z: i4)
+
+  %z = verif.contract %y : i4 {
+    %true = hw.constant true
+    // BUG: Wrong concat value
+    %c = comb.concat %true, %true, %a : i1, i1, i2
+    %d = comb.concat %false, %false, %b : i1, i1, i2
+    %e = comb.mul %c, %d : i4
+    %f = comb.icmp eq %z, %e : i4
+    verif.ensure %f : i1
+  }
+  hw.output %z : i4
 }

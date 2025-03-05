@@ -46,19 +46,19 @@ hw.module @Mul9(in %a: i42, out z: i42) {
 // CHECK-NEXT:    [[A0:%.+]] = verif.symbolic_value : i42
 // CHECK-NEXT:    [[A1:%.+]] = verif.symbolic_value : i42
 // CHECK-NEXT:    [[A2:%.+]] = verif.symbolic_value : i42
-// CHECK-NEXT:    [[TMP1:%.+]] = comb.extract [[A0]] from 0 : (i42) -> i41
-// CHECK-NEXT:    [[TMP2:%.+]] = comb.extract [[A1]] from 0 : (i42) -> i41
-// CHECK-NEXT:    [[TMP3:%.+]] = comb.or [[TMP1]], [[TMP2]] : i41
-// CHECK-NEXT:    [[TMP4:%.+]] = comb.extract [[A2]] from 0 : (i42) -> i41
-// CHECK-NEXT:    [[TMP5:%.+]] = comb.and [[TMP3]], [[TMP4]] : i41
-// CHECK-NEXT:    [[TMP3:%.+]] = comb.and [[TMP1]], [[TMP2]] : i41
-// CHECK-NEXT:    [[TMP4:%.+]] = comb.or [[TMP3]], [[TMP5]] : i41
-// CHECK-NEXT:    [[TMP1:%.+]] = comb.concat [[TMP4]], %false : i41, i1
-// CHECK-NEXT:    [[TMP2:%.+]] = comb.xor [[A0]], [[A1]], [[A2]] : i42
-// CHECK-NEXT:    [[TMP3:%.+]] = comb.add [[A0]], [[A1]], [[A2]] : i42
-// CHECK-NEXT:    [[TMP4:%.+]] = comb.add [[TMP2]], [[TMP1]] : i42
-// CHECK-NEXT:    [[TMP1:%.+]] = comb.icmp eq [[TMP3]], [[TMP4]] : i42
-// CHECK-NEXT:    verif.assert [[TMP1]] : i1
+// CHECK-NEXT:    [[TMP1:%.+]] = comb.xor %0, %1, %2 : i42
+// CHECK-NEXT:    [[TMP2:%.+]] = comb.extract %0 from 0 : (i42) -> i41
+// CHECK-NEXT:    [[TMP3:%.+]] = comb.extract %1 from 0 : (i42) -> i41
+// CHECK-NEXT:    [[TMP4:%.+]] = comb.and [[TMP2]], [[TMP3]] : i41
+// CHECK-NEXT:    [[TMP5:%.+]] = comb.or [[TMP2]], [[TMP3]] : i41
+// CHECK-NEXT:    [[TMP3:%.+]] = comb.extract %2 from 0 : (i42) -> i41
+// CHECK-NEXT:    [[TMP2:%.+]] = comb.and [[TMP5]], [[TMP3]] : i41
+// CHECK-NEXT:    [[TMP3:%.+]] = comb.or [[TMP4]], [[TMP2]] : i41
+// CHECK-NEXT:    [[TMP2:%.+]] = comb.concat [[TMP3]], %false : i41, i1
+// CHECK-NEXT:    [[TMP3:%.+]] = comb.add %0, %1, %2 : i42
+// CHECK-NEXT:    [[TMP4:%.+]] = comb.add [[TMP1]], [[TMP2]] : i42
+// CHECK-NEXT:    [[TMP2:%.+]] = comb.icmp eq [[TMP3]], [[TMP4]] : i42
+// CHECK-NEXT:    verif.assert [[TMP2]] : i1
 // CHECK-NEXT: }
 
 hw.module @CarrySaveCompress3to2(
@@ -96,21 +96,21 @@ hw.module @CarrySaveCompress3to2(
 // CHECK-NEXT:   %c8_i8 = hw.constant 8 : i8
 // CHECK-NEXT:   [[TMP0:%.+]] = verif.symbolic_value : i8
 // CHECK-NEXT:   [[TMP1:%.+]] = verif.symbolic_value : i8
-// CHECK-NEXT:   [[TMP2:%.+]] = comb.extract [[TMP1]] from 0 : (i8) -> i4
-// CHECK-NEXT:   [[TMP3:%.+]] = comb.concat [[TMP2]], %c0_i4 : i4, i4
-// CHECK-NEXT:   [[TMP4:%.+]] = comb.extract [[TMP0]] from 2 : (i8) -> i1
-// CHECK-NEXT:   [[TMP5:%.+]] = comb.mux [[TMP4]], [[TMP3]], [[TMP1]] : i8
-// CHECK-NEXT:   [[TMP6:%.+]] = comb.extract [[TMP5]] from 0 : (i8) -> i6
-// CHECK-NEXT:   [[TMP7:%.+]] = comb.concat [[TMP6]], %c0_i2 : i6, i2
-// CHECK-NEXT:   [[TMP8:%.+]] = comb.extract [[TMP0]] from 1 : (i8) -> i1
-// CHECK-NEXT:   [[TMP9:%.+]] = comb.mux [[TMP8]], [[TMP7]], [[TMP5]] : i8
-// CHECK-NEXT:   [[TMP10:%.+]] = comb.extract [[TMP9]] from 0 : (i8) -> i7
-// CHECK-NEXT:   [[TMP11:%.+]] = comb.concat [[TMP10]], %false : i7, i1
-// CHECK-NEXT:   [[TMP12:%.+]] = comb.extract [[TMP0]] from 0 : (i8) -> i1
-// CHECK-NEXT:   [[TMP13:%.+]] = comb.mux [[TMP12]], [[TMP11]], [[TMP9]] : i8
-// CHECK-NEXT:   [[TMP14:%.+]] = comb.icmp ult [[TMP0]], %c8_i8 : i8
+// CHECK-NEXT:   [[TMP2:%.+]] = comb.extract %0 from 0 : (i8) -> i1
+// CHECK-NEXT:   [[TMP3:%.+]] = comb.extract %0 from 1 : (i8) -> i1
+// CHECK-NEXT:   [[TMP4:%.+]] = comb.extract %0 from 2 : (i8) -> i1
+// CHECK-NEXT:   [[TMP5:%.+]] = comb.extract %1 from 0 : (i8) -> i4
+// CHECK-NEXT:   [[TMP6:%.+]] = comb.concat [[TMP5]], %c0_i4 : i4, i4
+// CHECK-NEXT:   [[TMP7:%.+]] = comb.mux [[TMP4]], [[TMP6]], %1 : i8
+// CHECK-NEXT:   [[TMP8:%.+]] = comb.extract [[TMP7]] from 0 : (i8) -> i6
+// CHECK-NEXT:   [[TMP9:%.+]] = comb.concat [[TMP8]], %c0_i2 : i6, i2
+// CHECK-NEXT:   [[TMP10:%.+]] = comb.mux [[TMP3]], [[TMP9]], [[TMP7]] : i8
+// CHECK-NEXT:   [[TMP11:%.+]] = comb.extract [[TMP10]] from 0 : (i8) -> i7
+// CHECK-NEXT:   [[TMP12:%.+]] = comb.concat [[TMP11]], %false : i7, i1
+// CHECK-NEXT:   [[TMP13:%.+]] = comb.mux [[TMP2]], [[TMP12]], %10 : i8
+// CHECK-NEXT:   [[TMP14:%.+]] = comb.icmp ult %0, %c8_i8 : i8
 // CHECK-NEXT:   verif.assume [[TMP14]] : i1
-// CHECK-NEXT:   [[TMP15:%.+]] = comb.shl [[TMP1]], [[TMP0]] : i8
+// CHECK-NEXT:   [[TMP15:%.+]] = comb.shl %1, %0 : i8
 // CHECK-NEXT:   [[TMP16:%.+]] = comb.icmp eq [[TMP13]], [[TMP15]] : i8
 // CHECK-NEXT:   verif.assert [[TMP16]] : i1
 // CHECK-NEXT: }
@@ -182,10 +182,10 @@ hw.module @NoContract(in %a: i42, out z: i42) {
 // CHECK-NEXT:    %c2_i42 = hw.constant 2 : i42
 // CHECK-NEXT:    [[TMP0:%.+]] = verif.symbolic_value : i42
 // CHECK-NEXT:    [[TMP1:%.+]] = verif.symbolic_value : i42
-// CHECK-NEXT:    [[TMP2:%.+]] = comb.icmp ult [[TMP0]], %c2_i42 : i42
-// CHECK-NEXT:    verif.assert [[TMP2]] : i1
 // CHECK-NEXT:    [[TMP3:%.+]] = comb.extract [[TMP0]] from 0 : (i42) -> i41
 // CHECK-NEXT:    [[TMP4:%.+]] = comb.concat [[TMP3]], %false : i41, i1
+// CHECK-NEXT:    [[TMP2:%.+]] = comb.icmp ult [[TMP0]], %c2_i42 : i42
+// CHECK-NEXT:    verif.assert [[TMP2]] : i1
 // CHECK-NEXT:    [[TMP5:%.+]] = comb.icmp eq [[TMP1]], [[TMP4]] : i42
 // CHECK-NEXT:    verif.assume [[TMP5]] : i1
 // CHECK-NEXT:    verif.assert [[TMP5]] : i1
@@ -232,9 +232,9 @@ hw.module @TwoContracts(in %a: i42, out z: i42) {
 // CHECK-NEXT:    [[TMP0:%.+]] = verif.symbolic_value : i42
 // CHECK-NEXT:    [[TMP1:%.+]] = verif.symbolic_value : i1
 // CHECK-NEXT:    [[TMP2:%.+]] = verif.symbolic_value : i42
-// CHECK-NEXT:    [[TMP3:%.+]] = comb.mul [[TMP2]], [[TMP2]] : i42
 // CHECK-NEXT:    [[TMP4:%.+]] = comb.extract [[TMP2]] from 0 : (i42) -> i41
 // CHECK-NEXT:    [[TMP5:%.+]] = comb.concat [[TMP4]], %false : i41, i1
+// CHECK-NEXT:    [[TMP3:%.+]] = comb.mul [[TMP2]], [[TMP2]] : i42
 // CHECK-NEXT:    [[TMP6:%.+]] = scf.if [[TMP1]] -> (i42) {
 // CHECK-NEXT:      [[TMP8:%.+]] = comb.add [[TMP5]], [[TMP3]] : i42
 // CHECK-NEXT:      scf.yield [[TMP8]] : i42
@@ -261,4 +261,55 @@ hw.module @NestedContract(in %a: i42, in %b: i42, in %s: i1, out z: i42) {
     verif.ensure %4 : i1
   }
   hw.output %2 : i42
+}
+
+// CHECK-LABEL: verif.formal @Mul3_CheckContract_0
+// CHECK-NEXT:   %c0_i2 = hw.constant 0 : i2
+// CHECK-NEXT:   %false = hw.constant false
+// CHECK-NEXT:   [[TMP0:%.+]] = verif.symbolic_value : i2
+// CHECK-NEXT:   [[TMP1:%.+]] = verif.symbolic_value : i2
+// CHECK-NEXT:   [[TMP2:%.+]] = comb.extract [[TMP0]] from 1 : (i2) -> i1
+// CHECK-NEXT:   [[TMP3:%.+]] = comb.extract [[TMP1]] from 0 : (i2) -> i1
+// CHECK-NEXT:   [[TMP4:%.+]] = comb.extract [[TMP0]] from 0 : (i2) -> i1
+// CHECK-NEXT:   [[TMP5:%.+]] = comb.extract [[TMP1]] from 1 : (i2) -> i1
+// CHECK-NEXT:   [[TMP6:%.+]] = comb.and [[TMP4]], [[TMP3]] : i1
+// CHECK-NEXT:   [[TMP7:%.+]] = comb.and [[TMP2]], [[TMP5]] : i1
+// CHECK-NEXT:   [[TMP8:%.+]] = comb.and [[TMP4]], [[TMP5]] : i1
+// CHECK-NEXT:   [[TMP9:%.+]] = comb.concat %false, [[TMP7]], [[TMP8]], %false : i1, i1, i1, i1
+// CHECK-NEXT:   [[TMP10:%.+]] = comb.and [[TMP2]], [[TMP3]] : i1
+// CHECK-NEXT:   [[TMP11:%.+]] = comb.concat %c0_i2, [[TMP10]], [[TMP6]] : i2, i1, i1
+// CHECK-NEXT:   [[TMP12:%.+]] = comb.add [[TMP11]], [[TMP9]] : i4
+// CHECK-NEXT:   [[TMP13:%.+]] = comb.concat %c0_i2, %0 : i2, i2
+// CHECK-NEXT:   [[TMP14:%.+]] = comb.concat %c0_i2, %1 : i2, i2
+// CHECK-NEXT:   [[TMP15:%.+]] = comb.mul [[TMP13]], [[TMP14]] : i4
+// CHECK-NEXT:   [[TMP16:%.+]] = comb.icmp eq [[TMP12]], [[TMP15]] : i4
+// CHECK-NEXT:   verif.assert [[TMP16]] : i1
+// CHECK-NEXT: }
+
+hw.module @Mul3(in %a: i2, in %b: i2, out z: i4) {
+  %a0 = comb.extract %a from 0 : (i2) -> i1
+  %a1 = comb.extract %a from 1 : (i2) -> i1
+
+  %b0 = comb.extract %b from 0 : (i2) -> i1
+  %b1 = comb.extract %b from 1 : (i2) -> i1
+
+  %a0b0 = comb.and %a0, %b0 : i1
+  %a1b0 = comb.and %a1, %b0 : i1
+
+  %a0b1 = comb.and %a0, %b1 : i1
+  %a1b1 = comb.and %a1, %b1 : i1
+
+  %false = hw.constant false
+  %w = comb.concat %false, %false, %a1b0, %a0b0 : i1, i1, i1, i1
+  %x = comb.concat %false, %a1b1, %a0b1, %false : i1, i1, i1, i1
+  %y = comb.add %w, %x : i4
+
+  %z = verif.contract %y : i4 {
+    %c = comb.concat %false, %false, %a : i1, i1, i2
+    %d = comb.concat %false, %false, %b : i1, i1, i2
+    %e = comb.mul %c, %d : i4
+    %f = comb.icmp eq %z, %e : i4
+    verif.ensure %f : i1
+  }
+  hw.output %z : i4
 }
