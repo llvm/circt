@@ -41,7 +41,6 @@ namespace {
 struct SimConversionState {
   hw::HWModuleOp module;
   bool usedSynthesisMacro = false;
-  bool usedUPFSimMacro = false;
   SetVector<StringAttr> dpiCallees;
 };
 
@@ -100,7 +99,6 @@ public:
                                            rewriter.getStringAttr("_pargs_f"));
 
     state.usedSynthesisMacro = true;
-    state.usedUPFSimMacro = true;
     rewriter.create<sv::IfDefOp>(
         loc, "SYNTHESIS",
         [&]() {
@@ -117,38 +115,18 @@ public:
           rewriter.create<sv::AssignOp>(loc, regf, cstFalse);
         },
         [&]() {
-          rewriter.create<sv::IfDefOp>(
-              loc, "UPF_SIMULATION",
-              [&]() {
-                auto zero = rewriter.create<hw::ConstantOp>(
-                    loc, APInt(type.getIntOrFloatBitWidth(), 0));
-                auto assign = rewriter.create<sv::AssignOp>(loc, regv, zero);
-                circt::sv::setSVAttributes(
-                    assign,
-                    sv::SVAttributeAttr::get(
-                        rewriter.getContext(),
-                        "This dummy assignment exists to avoid undriven lint "
-                        "warnings (e.g., Verilator UNDRIVEN).",
-                        /*emitAsComment=*/true));
-                auto cstFalse =
-                    rewriter.create<hw::ConstantOp>(loc, APInt(1, 0));
-                rewriter.create<sv::AssignOp>(loc, regf, cstFalse);
-              },
-              [&]() {
-                rewriter.create<sv::InitialOp>(loc, [&] {
-                  auto zero32 =
-                      rewriter.create<hw::ConstantOp>(loc, APInt(32, 0));
-                  auto tmpResultType = rewriter.getIntegerType(32);
-                  auto str = rewriter.create<sv::ConstantStrOp>(
-                      loc, op.getFormatString());
-                  auto call = rewriter.create<sv::SystemFunctionOp>(
-                      loc, tmpResultType, "value$plusargs",
-                      ArrayRef<Value>{str, regv});
-                  auto test = rewriter.create<comb::ICmpOp>(
-                      loc, comb::ICmpPredicate::ne, call, zero32, true);
-                  rewriter.create<sv::BPAssignOp>(loc, regf, test);
-                });
-              });
+          rewriter.create<sv::InitialOp>(loc, [&] {
+            auto zero32 = rewriter.create<hw::ConstantOp>(loc, APInt(32, 0));
+            auto tmpResultType = rewriter.getIntegerType(32);
+            auto str =
+                rewriter.create<sv::ConstantStrOp>(loc, op.getFormatString());
+            auto call = rewriter.create<sv::SystemFunctionOp>(
+                loc, tmpResultType, "value$plusargs",
+                ArrayRef<Value>{str, regv});
+            auto test = rewriter.create<comb::ICmpOp>(
+                loc, comb::ICmpPredicate::ne, call, zero32, true);
+            rewriter.create<sv::BPAssignOp>(loc, regf, test);
+          });
         });
 
     auto readf = rewriter.create<sv::ReadInOutOp>(loc, regf);
@@ -338,7 +316,6 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
       lowerDPIFunc.lower(func);
 
     std::atomic<bool> usedSynthesisMacro = false;
-    std::atomic<bool> usedUPFSimMacro = false;
     auto lowerModule = [&](hw::HWModuleOp module) {
       SimConversionState state;
       ConversionTarget target(*context);
@@ -366,8 +343,6 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
 
       if (state.usedSynthesisMacro)
         usedSynthesisMacro = true;
-      if (state.usedUPFSimMacro)
-        usedUPFSimMacro = true;
       return result;
     };
 
@@ -386,20 +361,6 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
         auto builder = ImplicitLocOpBuilder::atBlockBegin(
             UnknownLoc::get(context), circuit.getBody());
         builder.create<sv::MacroDeclOp>("SYNTHESIS");
-      }
-    }
-
-    if (usedUPFSimMacro) {
-      Operation *op = circuit.lookupSymbol("UPF_SIMULATION");
-      if (op) {
-        if (!isa<sv::MacroDeclOp>(op)) {
-          op->emitOpError("should be a macro declaration");
-          return signalPassFailure();
-        }
-      } else {
-        auto builder = ImplicitLocOpBuilder::atBlockBegin(
-            UnknownLoc::get(context), circuit.getBody());
-        builder.create<sv::MacroDeclOp>("UPF_SIMULATION");
       }
     }
   }
