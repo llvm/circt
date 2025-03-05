@@ -110,6 +110,44 @@ struct AssertionExprVisitor {
     }
     return repeatedValue;
   }
+
+  Value visit(const slang::ast::SequenceConcatExpr &expr) {
+    // Create a sequence of delayed operations, combined with a concat operation
+    if (expr.elements.empty())
+      return {};
+
+    SmallVector<Value> sequenceElements;
+
+    for (const auto &concatElement : expr.elements) {
+      Value sequenceValue =
+          context.convertAssertionExpression(*concatElement.sequence, loc);
+      if (!sequenceValue)
+        continue;
+
+      Type valueType = sequenceValue.getType();
+      if (!valueType.isInteger(1) && !mlir::isa<ltl::SequenceType>(valueType)) {
+        mlir::emitError(
+            loc,
+            "SequenceConcatExpr element must be of type i1 or ltl.sequence");
+        return {};
+      }
+
+      mlir::IntegerAttr delayRange;
+      if (concatElement.delay.max.has_value()) {
+        delayRange = mlir::IntegerAttr::get(builder.getIntegerType(64),
+                                            concatElement.delay.max.value() -
+                                                concatElement.delay.min);
+      }
+      auto delayedSequence = builder.create<ltl::DelayOp>(
+          loc, sequenceValue,
+          builder.getI64IntegerAttr(concatElement.delay.min), delayRange);
+      sequenceElements.push_back(delayedSequence);
+    }
+
+    if (!sequenceElements.empty())
+      return builder.createOrFold<ltl::ConcatOp>(loc, sequenceElements);
+
+    return {};
   }
 
   /// Emit an error for all other expressions.
