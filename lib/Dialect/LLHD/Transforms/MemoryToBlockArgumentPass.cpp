@@ -74,7 +74,7 @@ static void getDFClosure(SmallVectorImpl<Block *> &initialSet, Operation *op,
 static void addBlockOperandToTerminator(Operation *terminator,
                                         Block *successsor, Value toAppend) {
   if (auto wait = dyn_cast<llhd::WaitOp>(terminator)) {
-    wait.getDestOpsMutable().append(toAppend);
+    wait.getDestOperandsMutable().append(toAppend);
   } else if (auto br = dyn_cast<mlir::cf::BranchOp>(terminator)) {
     br.getDestOperandsMutable().append(toAppend);
   } else if (auto condBr = dyn_cast<mlir::cf::CondBranchOp>(terminator)) {

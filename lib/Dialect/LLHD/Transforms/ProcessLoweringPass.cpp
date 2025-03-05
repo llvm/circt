@@ -69,10 +69,10 @@ static LogicalResult isProcValidToLower(llhd::ProcessOp op) {
 
   if (auto wait = dyn_cast<llhd::WaitOp>(last.getTerminator())) {
     // No optional time argument is allowed
-    if (wait.getTime()) {
+    if (wait.getDelay()) {
       LLVM_DEBUG({
-        llvm::dbgs() << "llhd.wait terminators with optional time "
-                        "argument cannot be lowered to structural LLHD\n";
+        llvm::dbgs() << "llhd.wait terminators with delay cannot be lowered to "
+                        "structural LLHD\n";
       });
       return failure();
     }

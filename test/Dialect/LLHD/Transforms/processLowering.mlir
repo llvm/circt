@@ -144,7 +144,7 @@ hw.module @noOptionalTime() {
     cf.br ^bb1
   ^bb1:
     %time = llhd.constant_time #llhd.time<0ns, 0d, 0e>
-    llhd.wait for %time, ^bb1
+    llhd.wait delay %time, ^bb1
   }
 }
 
