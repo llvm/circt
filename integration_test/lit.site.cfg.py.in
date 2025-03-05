@@ -60,6 +60,7 @@ config.mlir_enable_execution_engine = "@MLIR_ENABLE_EXECUTION_ENGINE@"
 config.slang_frontend_enabled = "@CIRCT_SLANG_FRONTEND_ENABLED@"
 config.arcilator_jit_enabled = @ARCILATOR_JIT_ENABLED@
 config.driver = "@CIRCT_SOURCE_DIR@/tools/circt-rtl-sim/driver.cpp"
+config.sby_path = "@SBY_PATH@"
 
 # Support substitution of the tools_dir with user parameters. This is
 # used when we can't determine the tool dir at configuration time.
