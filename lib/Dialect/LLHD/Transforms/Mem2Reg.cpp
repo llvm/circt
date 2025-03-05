@@ -759,7 +759,7 @@ void Promoter::captureAcrossWait(PrbOp probeOp, ArrayRef<WaitOp> waitOps,
               .append(item.reachingDef);
     } else if (auto waitOp = dyn_cast<WaitOp>(block->getTerminator())) {
       if (mergePoints.contains(waitOp.getDest()))
-        waitOp.getDestOpsMutable().append(item.reachingDef);
+        waitOp.getDestOperandsMutable().append(item.reachingDef);
     }
 
     for (auto *child : item.domNode->children())

@@ -113,3 +113,53 @@ hw.module @check_illegal_drv(inout %sig : i1) {
   %time = llhd.constant_time #llhd.time<1ns, 0d, 0e>
   "llhd.drv"(%sig, %c, %time) {} : (!hw.inout<i1>, i32, !llhd.time) -> ()
 }
+
+// -----
+
+hw.module @YieldFromFinal(in %arg0: i42) {
+  llhd.final {
+    // expected-error @below {{'llhd.halt' op has 1 yield operands, but enclosing 'llhd.final' returns 0}}
+    llhd.halt %arg0 : i42
+  }
+}
+
+// -----
+
+hw.module @WaitYieldCount(in %arg0: i42) {
+  llhd.process {
+    // expected-error @below {{'llhd.wait' op has 1 yield operands, but enclosing 'llhd.process' returns 0}}
+    llhd.wait yield (%arg0 : i42), ^bb1
+  ^bb1:
+    llhd.halt
+  }
+}
+
+
+// -----
+
+hw.module @HaltYieldCount(in %arg0: i42) {
+  llhd.process {
+    // expected-error @below {{'llhd.halt' op has 1 yield operands, but enclosing 'llhd.process' returns 0}}
+    llhd.halt %arg0 : i42
+  }
+}
+
+// -----
+
+hw.module @WaitYieldTypes(in %arg0: i42) {
+  llhd.process -> i42, i9001 {
+    // expected-error @below {{type of yield operand 1 ('i42') does not match enclosing 'llhd.process' result type ('i9001')}}
+    llhd.wait yield (%arg0, %arg0 : i42, i42), ^bb1
+  ^bb1:
+    llhd.halt
+  }
+}
+
+// -----
+
+hw.module @HaltYieldTypes(in %arg0: i42) {
+  llhd.process -> i42, i9001 {
+    // expected-error @below {{type of yield operand 1 ('i42') does not match enclosing 'llhd.process' result type ('i9001')}}
+    llhd.halt %arg0, %arg0 : i42, i42
+  }
+}

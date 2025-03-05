@@ -1,13 +1,13 @@
-//===- LLHDStructureOps.td - Process and Entity defs -------*- tablegen -*-===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-//
-// This describes the LLHD Process, Entity and control flow MLIR ops.
-//
+
+//===----------------------------------------------------------------------===//
+// ProcessOp
 //===----------------------------------------------------------------------===//
 
 def ProcessOp : LLHDOp<"process", [
@@ -15,44 +15,41 @@ def ProcessOp : LLHDOp<"process", [
   RecursiveMemoryEffects,
   HasParent<"hw::HWModuleOp">
 ]> {
-  let summary = "create a process";
+  let summary = "A process that runs concurrently during simulation";
   let description = [{
-    A `llhd.process` represents control-flow in a timed fashion. It allows a
-    procedural description of how a circuit's output signals change in
-    reaction to changing input signals. It has a region with arbitrarily
-    many basic blocks. The first block is the entry block and cannot be
-    targeted by the terminators. It uses `llhd.wait` as a terminator to add
-    timed control-flow. Immediate control-flow with `br` or `cond_br` is
-    also possible. Every process must either contain an infinite loop or
-    terminate with the `llhd.halt` terminator.
+    An `llhd.process` op encapsulates a region of IR that executes concurrently
+    during simulation. Execution can be suspended using the `llhd.wait`
+    terminator, which also includes a list of values that will cause the process
+    execution to resume whenever they change. The `llhd.halt` terminator can be
+    used to suspend execution forever. The process may have results, in which
+    case any `llhd.wait` or `llhd.halt` terminators must provide a list of
+    values to yield for the process results whenever execution is suspended. The
+    process holds these result values until it is resumed and new result values
+    are yielded.
 
-    How does a process compare to functions and entities?
-
-    | Unit     | Paradigm     | Timing    | Models                         |
-    |----------|--------------|-----------|--------------------------------|
-    | Function | control-flow | immediate | Computation in zero time       |
-    | Process  | control-flow | timed     | Behavioral circuit description |
-    | Entity   | data-flow    | timed     | Structural circuit description |
-
-    Examples:
-
+    Example:
     ```mlir
     hw.module @top() {
-      llhd.process {
-        br ^bb1
+      %0, %1 = llhd.process -> i42, i9001 {
+        llhd.wait yield (%2, %3 : i42, i9001), ^bb1
       ^bb1:
-        llhd.halt
+        llhd.halt %4, %5 : i42, i9001
       }
     }
     ```
   }];
-
+  let results = (outs Variadic<AnyType>:$results);
   let regions = (region MinSizedRegion<1>: $body);
-
-  let assemblyFormat = "attr-dict-with-keyword $body";
-
+  let assemblyFormat = [{
+    (`->` type($results)^)?
+    attr-dict-with-keyword $body
+  }];
   let hasCanonicalizeMethod = 1;
 }
+
+//===----------------------------------------------------------------------===//
+// FinalOp
+//===----------------------------------------------------------------------===//
 
 def FinalOp : LLHDOp<"final", [
   NoRegionArguments,
@@ -87,6 +84,10 @@ def FinalOp : LLHDOp<"final", [
   let assemblyFormat = "attr-dict-with-keyword $body";
 }
 
+//===----------------------------------------------------------------------===//
+// ConnectOp
+//===----------------------------------------------------------------------===//
+
 def ConnectOp : LLHDOp<"con", [
     SameTypeOperands,
     HasParent<"hw::HWModuleOp">
@@ -107,50 +108,73 @@ def ConnectOp : LLHDOp<"con", [
   let hasCanonicalizeMethod = 1;
 }
 
+//===----------------------------------------------------------------------===//
+// WaitOp
+//===----------------------------------------------------------------------===//
+
 def WaitOp : LLHDOp<"wait", [
-    Terminator,
-    AttrSizedOperandSegments,
-    HasParent<"ProcessOp">,
-  ]> {
-  let summary = "Suspends execution of a process.";
+  AttrSizedOperandSegments,
+  HasParent<"ProcessOp">,
+  Terminator,
+]> {
+  let summary = "Suspend execution of a process";
   let description = [{
-    The `wait` instruction suspends execution of a process until any of the
-    observed signals change or a fixed time interval has passed. Execution
-    resumes at the specified basic block with the passed arguments.
-    * This is a terminator instruction.
-    * This instruction is only allowed in processes (`llhd.process`).
+    The `llhd.wait` terminator suspends execution of the parent process until
+    any of the `observed` values change or a fixed `delay` has passed. Execution
+    resumes at the `dest` block with the `destOperands` arguments. The
+    `yieldOperands` are yielded as the result values of the parent process.
 
     Example:
-
     ```mlir
-    llhd.wait ^bb1
-    llhd.wait for %time, ^bb1(%time : !llhd.time)
-    llhd.wait (%0, %1 : !hw.inout<i64>, !hw.inout<i1>), ^bb1(%1 : !hw.inout<i1>)
-    llhd.wait for %time, (%0, %1 : !hw.inout<i64>, !hw.inout<i1>),
-      ^bb1(%1, %0 : !hw.inout<i1>, !hw.inout<i64>)
+    llhd.wait ^bb1(%0, %1 : i42, i9001)
+    llhd.wait yield (%0, %1 : i42, i9001), ^bb1
+    llhd.wait delay %time, ^bb1
+    llhd.wait (%0, %1 : i42, i9001), ^bb1
     ```
   }];
-
-  let arguments = (ins Variadic<HWValueType>:$observed,
-                       Optional<LLHDTimeType>:$time,
-                       Variadic<AnyType>:$destOps);
-
+  let arguments = (ins
+    Variadic<AnyType>:$yieldOperands,
+    Optional<LLHDTimeType>:$delay,
+    Variadic<HWValueType>:$observed,
+    Variadic<AnyType>:$destOperands
+  );
   let successors = (successor AnySuccessor:$dest);
-
   let assemblyFormat = [{
-    (`for` $time^ `,`)? (`(`$observed^ `:` qualified(type($observed))`)` `,`)?
-    $dest (`(` $destOps^ `:` qualified(type($destOps)) `)`)? attr-dict
+    (`yield` `(` $yieldOperands^ `:` type($yieldOperands) `)` `,`)?
+    (`delay` $delay^ `,`)?
+    (`(`$observed^ `:` qualified(type($observed))`)` `,`)?
+    $dest (`(` $destOperands^ `:` qualified(type($destOperands)) `)`)?
+    attr-dict
   }];
+  let hasVerifier = 1;
 }
 
+//===----------------------------------------------------------------------===//
+// HaltOp
+//===----------------------------------------------------------------------===//
+
 def HaltOp : LLHDOp<"halt", [
+  ParentOneOf<["ProcessOp", "FinalOp"]>,
   Terminator,
-  ParentOneOf<["ProcessOp", "FinalOp"]>
 ]> {
-  let summary = "Terminates execution of a process.";
+  let summary = "Terminate execution of a process";
   let description = [{
-    The `halt` instruction terminates execution of a process. All processes
-    must halt eventually or consist of an infinite loop.
+    The `llhd.halt` terminator suspends execution of the parent process forever,
+    effectively terminating it. The `yieldOperands` are yielded as the result
+    values of the parent process.
+
+    Example:
+    ```mlir
+    llhd.halt
+    llhd.halt %0, %1 : i42, i9001
+    ```
   }];
-  let assemblyFormat = "attr-dict";
+  let arguments = (ins
+    Variadic<AnyType>:$yieldOperands
+  );
+  let assemblyFormat = [{
+    ($yieldOperands^ `:` type($yieldOperands))?
+    attr-dict
+  }];
+  let hasVerifier = 1;
 }
