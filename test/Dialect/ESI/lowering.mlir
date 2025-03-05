@@ -58,6 +58,15 @@ hw.module @test(in %clk: !seq.clock, in %rst:i1) {
   // HW-NOT: esi
 }
 
+// https://github.com/llvm/circt/issues/8295
+hw.module @bug8295(out x: !esi.channel<i4>, out sv: i1, out sr: i1, out sd: i4) {
+  %sv, %sr, %sd = esi.snoop.vr %x : !esi.channel<i4>
+  %data = hw.constant 0 : i4
+  %valid = hw.constant 1 : i1
+  %x, %ready = esi.wrap.vr %data, %valid : i4
+  hw.output %x, %sv, %sr, %sd : !esi.channel<i4>, i1, i1, i4
+}
+
 hw.module @add11(in %clk: !seq.clock, in %ints: !esi.channel<i32>, out mutatedInts: !esi.channel<i32>, out c4: i4) {
   %i, %i_valid = esi.unwrap.vr %ints, %rdy : i32
   %c11 = hw.constant 11 : i32
