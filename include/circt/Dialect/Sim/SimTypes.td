@@ -26,4 +26,19 @@ def FormatStringType : SimTypeDef<"FormatString"> {
   }];
 }
 
+
+def EdgeTriggerType : SimTypeDef<"EdgeTrigger"> {
+  let summary = "Trigger derived from an edge event.";
+  let parameters = (ins "::circt::hw::EventControl":$edgeEvent);
+  let mnemonic = "trigger.edge";
+  let assemblyFormat = "`<` $edgeEvent `>`";
+}
+
+def InitTriggerType : SimTypeDef<"InitTrigger"> {
+  let summary = "Trigger derived from the simulation start event.";
+  let mnemonic = "trigger.init";
+}
+
+def AnyTriggerType : AnyTypeOf<[EdgeTriggerType, InitTriggerType]>;
+
 #endif // CIRCT_DIALECT_SIM_SIMTYPES_TD
