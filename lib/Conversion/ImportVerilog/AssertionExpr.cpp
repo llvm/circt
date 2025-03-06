@@ -204,6 +204,104 @@ struct AssertionExprVisitor {
     llvm_unreachable("All enum values handled in switch");
   }
 
+  Value visit(const slang::ast::BinaryAssertionExpr &expr) {
+    auto lhs = context.convertAssertionExpression(expr.left, loc);
+    auto rhs = context.convertAssertionExpression(expr.right, loc);
+    if (!lhs || !rhs)
+      return {};
+    SmallVector<Value, 2> operands = {lhs, rhs};
+    using slang::ast::BinaryAssertionOperator;
+    switch (expr.op) {
+    case BinaryAssertionOperator::And:
+      return builder.create<ltl::AndOp>(loc, operands);
+    case BinaryAssertionOperator::Or:
+      return builder.create<ltl::OrOp>(loc, operands);
+    case BinaryAssertionOperator::Intersect:
+      return builder.create<ltl::IntersectOp>(loc, operands);
+    case BinaryAssertionOperator::Throughout: {
+      auto lhsRepeat = builder.create<ltl::RepeatOp>(
+          loc, lhs, builder.getI64IntegerAttr(0), mlir::IntegerAttr{});
+      return builder.create<ltl::IntersectOp>(
+          loc, SmallVector<Value, 2>{lhsRepeat, rhs});
+    }
+    case BinaryAssertionOperator::Within: {
+      auto constOne =
+          builder.create<hw::ConstantOp>(loc, builder.getI1Type(), 1);
+      auto oneRepeat = builder.create<ltl::RepeatOp>(
+          loc, constOne, builder.getI64IntegerAttr(0), mlir::IntegerAttr{});
+      auto repeatDelay = builder.create<ltl::DelayOp>(
+          loc, oneRepeat, builder.getI64IntegerAttr(1),
+          builder.getI64IntegerAttr(0));
+      auto lhsDelay =
+          builder.create<ltl::DelayOp>(loc, lhs, builder.getI64IntegerAttr(1),
+                                       builder.getI64IntegerAttr(0));
+      auto combined = builder.create<ltl::ConcatOp>(
+          loc, SmallVector<Value, 3>{repeatDelay, lhsDelay, constOne});
+      return builder.create<ltl::IntersectOp>(
+          loc, SmallVector<Value, 2>{combined, rhs});
+    }
+    case BinaryAssertionOperator::Iff: {
+      auto ored = builder.create<ltl::OrOp>(loc, operands);
+      auto notOred = builder.create<ltl::NotOp>(loc, ored);
+      auto anded = builder.create<ltl::AndOp>(loc, operands);
+      return builder.create<ltl::OrOp>(loc,
+                                       SmallVector<Value, 2>{notOred, anded});
+    }
+    case BinaryAssertionOperator::Until:
+      return builder.create<ltl::UntilOp>(loc, operands);
+    case BinaryAssertionOperator::UntilWith: {
+      auto untilOp = builder.create<ltl::UntilOp>(loc, operands);
+      auto andOp = builder.create<ltl::AndOp>(loc, operands);
+      auto notUntil = builder.create<ltl::NotOp>(loc, untilOp);
+      return builder.create<ltl::OrOp>(
+          loc, SmallVector<Value, 2>{notUntil, andOp});
+    }
+    case BinaryAssertionOperator::Implies: {
+      auto notLhs = builder.create<ltl::NotOp>(loc, lhs);
+      return builder.create<ltl::OrOp>(loc,
+                                       SmallVector<Value, 2>{notLhs, rhs});
+    }
+    case BinaryAssertionOperator::OverlappedImplication:
+      return builder.create<ltl::ImplicationOp>(loc, operands);
+    case BinaryAssertionOperator::NonOverlappedImplication: {
+      auto constOne =
+          builder.create<hw::ConstantOp>(loc, builder.getI1Type(), 1);
+      auto lhsDelay =
+          builder.create<ltl::DelayOp>(loc, lhs, builder.getI64IntegerAttr(1),
+                                       builder.getI64IntegerAttr(0));
+      auto antecedent = builder.create<ltl::ConcatOp>(
+          loc, SmallVector<Value, 2>{lhsDelay, constOne});
+      return builder.create<ltl::ImplicationOp>(
+          loc, SmallVector<Value, 2>{antecedent, rhs});
+    }
+    case BinaryAssertionOperator::OverlappedFollowedBy: {
+      auto notRhs = builder.create<ltl::NotOp>(loc, rhs);
+      auto implication = builder.create<ltl::ImplicationOp>(
+          loc, SmallVector<Value, 2>{lhs, notRhs});
+      return builder.create<ltl::NotOp>(loc, implication);
+    }
+    case BinaryAssertionOperator::NonOverlappedFollowedBy: {
+      auto constOne =
+          builder.create<hw::ConstantOp>(loc, builder.getI1Type(), 1);
+      auto notRhs = builder.create<ltl::NotOp>(loc, rhs);
+      auto lhsDelay =
+          builder.create<ltl::DelayOp>(loc, lhs, builder.getI64IntegerAttr(1),
+                                       builder.getI64IntegerAttr(0));
+      auto antecedent = builder.create<ltl::ConcatOp>(
+          loc, SmallVector<Value, 2>{lhsDelay, constOne});
+      auto implication = builder.create<ltl::ImplicationOp>(
+          loc, SmallVector<Value, 2>{antecedent, notRhs});
+      return builder.create<ltl::NotOp>(loc, implication);
+    }
+    case BinaryAssertionOperator::SUntil:
+    case BinaryAssertionOperator::SUntilWith:
+      mlir::emitError(loc, "unsupported binary operator: ")
+          << slang::ast::toString(expr.op);
+      return {};
+    }
+    llvm_unreachable("All enum values handled in switch");
+  }
+
   /// Emit an error for all other expressions.
   template <typename T>
   Value visit(T &&node) {
