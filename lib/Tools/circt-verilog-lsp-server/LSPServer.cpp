@@ -7,9 +7,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "LSPServer.h"
+#include "Protocol.h"
 #include "VerilogServerImpl/VerilogServer.h"
 #include "mlir/Tools/lsp-server-support/Protocol.h"
 #include "mlir/Tools/lsp-server-support/Transport.h"
+#include "llvm/Support/JSON.h"
+#include <cstddef>
 #include <optional>
 
 #define DEBUG_TYPE "circt-verilog-lsp-server"
@@ -53,6 +56,21 @@ struct LSPServer {
                    Callback<std::vector<Location>> reply);
 
   //===--------------------------------------------------------------------===//
+  // Inlay Hints
+  //===--------------------------------------------------------------------===//
+
+  void onInlayHint(const InlayHintsParams &params,
+                   Callback<std::vector<InlayHint>> reply);
+
+  //===--------------------------------------------------------------------===//
+  // User Provided Inlay Hints
+  //===--------------------------------------------------------------------===//
+
+  void onPutInlayHintsOnObjects(
+      const circt::lsp::VerilogUserProvidedInlayHintParams &params,
+      Callback<std::nullptr_t> reply);
+
+  //===--------------------------------------------------------------------===//
   // Fields
   //===--------------------------------------------------------------------===//
 
@@ -62,6 +80,12 @@ struct LSPServer {
   /// An outgoing notification used to send diagnostics to the client when they
   /// are ready to be processed.
   OutgoingNotification<PublishDiagnosticsParams> publishDiagnostics;
+
+  /// Request a client to refresh inlay hints.
+  OutgoingRequest<std::nullptr_t> refreshInlayHints;
+
+  /// Counter used to uniqunize refresh requests id.
+  size_t nextRequestId = 0;
 
   /// Used to indicate that the 'shutdown' request was received from the
   /// Language Server client.
@@ -85,10 +109,11 @@ void LSPServer::onInitialize(const InitializeParams &params,
               {"save", true},
 
           },
-
       },
       {"definitionProvider", true},
       {"referencesProvider", true},
+      {"inlayHintProvider",
+       llvm::json::Object{{"resolveSupport", true}, {"refreshSupport", true}}},
   };
 
   llvm::json::Object result{
@@ -159,6 +184,32 @@ void LSPServer::onReference(const ReferenceParams &params,
 }
 
 //===----------------------------------------------------------------------===//
+// Inlay Hints
+//===----------------------------------------------------------------------===//
+
+void LSPServer::onInlayHint(const InlayHintsParams &params,
+                            Callback<std::vector<InlayHint>> reply) {
+  std::vector<InlayHint> hints;
+  server.getInlayHints(params.textDocument.uri, params.range, hints);
+  reply(std::move(hints));
+}
+
+//===----------------------------------------------------------------------===//
+// User Provided Inlay Hints
+//===----------------------------------------------------------------------===//
+
+void LSPServer::onPutInlayHintsOnObjects(
+    const circt::lsp::VerilogUserProvidedInlayHintParams &params,
+    Callback<std::nullptr_t> reply) {
+  server.putInlayHintsOnObjects(params.hints);
+  reply(nullptr);
+
+  llvm::json::Value requestId = llvm::json::Value(
+      "refresh_inlay_hints_" + std::to_string(nextRequestId++));
+  refreshInlayHints(nullptr, requestId);
+}
+
+//===----------------------------------------------------------------------===//
 // Entry Point
 //===----------------------------------------------------------------------===//
 
@@ -187,10 +238,28 @@ LogicalResult circt::lsp::runVerilogLSPServer(VerilogServer &server,
   messageHandler.method("textDocument/references", &lspServer,
                         &LSPServer::onReference);
 
+  // Inlay Hints
+  messageHandler.method("textDocument/inlayHint", &lspServer,
+                        &LSPServer::onInlayHint);
+
+  messageHandler.method("verilog/putInlayHintsOnObjects", &lspServer,
+                        &LSPServer::onPutInlayHintsOnObjects);
+
   // Diagnostics
   lspServer.publishDiagnostics =
       messageHandler.outgoingNotification<PublishDiagnosticsParams>(
           "textDocument/publishDiagnostics");
+
+  lspServer.refreshInlayHints =
+      messageHandler.outgoingRequest<std::nullptr_t, std::nullptr_t>(
+          "workspace/inlayHint/refresh",
+          [&](llvm::json::Value id, llvm::Expected<std::nullptr_t> value) {
+            if (auto err = value.takeError()) {
+              Logger::error("Error refreshing inlay hints: {}", err);
+              return;
+            }
+            return;
+          });
 
   // Run the main loop of the transport.
   if (llvm::Error error = transport.run(messageHandler)) {

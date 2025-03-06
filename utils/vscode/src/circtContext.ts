@@ -59,6 +59,43 @@ export class CIRCTContext implements vscode.Disposable {
         }));
   }
 
+  async registerStaticInlayHints(client: vscodelc.LanguageClient,
+                                 workspaceFolder: vscode.WorkspaceFolder):
+      Promise<void> {
+    const staticInlayHintsPath =
+        config.get<string[]>("verilog_static_inlay_hint_files");
+    if (!staticInlayHintsPath)
+      return;
+
+    // See docs/VerilogLSP.md for the custom command to put inlay hints.
+    type VerilogUserProvidedInlayHint = {
+      group?: string; name : string; path : string;
+      root?: string;
+    };
+
+    type VerilogUserProvidedInlayHintsParams = {
+      hints: VerilogUserProvidedInlayHint[];
+    };
+
+    let inlayHints: VerilogUserProvidedInlayHint[] = [];
+
+    for (const path of staticInlayHintsPath) {
+      const resolvedPath = await this.resolvePath(path, "", workspaceFolder);
+      if (!resolvedPath) {
+        continue;
+      }
+      // Parse the JSON file.
+      const content = fs.readFileSync(resolvedPath, "utf8");
+      inlayHints.push(...JSON.parse(content));
+    }
+
+    let params: VerilogUserProvidedInlayHintsParams = {
+      hints : inlayHints,
+    };
+
+    await client.sendRequest("verilog/putInlayHintsOnObjects", params);
+  }
+
   async getOrActivateLanguageClientForWorkspaceFolder(
       workspaceFolder: vscode.WorkspaceFolder, languageId: string,
       serverSettingName: string): Promise<vscodelc.LanguageClient> {
@@ -77,6 +114,8 @@ export class CIRCTContext implements vscode.Disposable {
       client = await this.activateWorkspaceFolder(
           workspaceFolder, serverSettingName, languageId, this.outputChannel);
       folderContext.clients.set(languageId, client);
+      if (languageId === "verilog")
+        await this.registerStaticInlayHints(client, workspaceFolder);
     }
     return client;
   }
@@ -112,11 +151,13 @@ export class CIRCTContext implements vscode.Disposable {
   }
 
   /**
-   *  Prepare a compilation database option for a server.
+   *  Prepare the server options for a Verilog server, e.g. populating any
+   *  accessible compilation databases.
    */
-  async prepareCompilationDatabaseServerOptions(
-      languageName: string, workspaceFolder: vscode.WorkspaceFolder,
-      configsToWatch: string[], additionalServerArgs: string[]) {
+  async prepareVerilogServerOptions(workspaceFolder: vscode.WorkspaceFolder,
+                                    configsToWatch: string[],
+                                    additionalServerArgs: string[]) {
+    let languageName = "verilog";
 
     configsToWatch.push(`${languageName}_include_directories`);
     configsToWatch.push(`${languageName}_source_location_root_directories`);
@@ -142,23 +183,12 @@ export class CIRCTContext implements vscode.Disposable {
 
     // Resolve include directories
     await resolveConfigDirsAndAddArgs(`${languageName}_include_directories`,
-                                      `--${languageName}-include-dir`, this);
+                                      `--libdir`, this);
 
     // Resolve source location root directories
     await resolveConfigDirsAndAddArgs(
         `${languageName}_source_location_root_directories`,
         '--source-location-include-dir', this);
-  }
-
-  /**
-   *  Prepare the server options for a Verilog server, e.g. populating any
-   *  accessible compilation databases.
-   */
-  async prepareVerilogServerOptions(workspaceFolder: vscode.WorkspaceFolder,
-                                    configsToWatch: string[],
-                                    additionalServerArgs: string[]) {
-    await this.prepareCompilationDatabaseServerOptions(
-        "verilog", workspaceFolder, configsToWatch, additionalServerArgs);
   }
 
   /**
@@ -177,11 +207,13 @@ export class CIRCTContext implements vscode.Disposable {
     if (languageName === "verilog") {
       await this.prepareVerilogServerOptions(workspaceFolder, configsToWatch,
                                              additionalServerArgs);
+    } else {
+      return;
     }
 
     // Try to activate the language client.
-    const [server, serverPath] = await this.startLanguageClient(
-        workspaceFolder, outputChannel, serverSettingName, languageName,
+    const [server, serverPath] = await this.startVerilogLanguageClient(
+        workspaceFolder, outputChannel, serverSettingName,
         additionalServerArgs);
     configsToWatch.push(serverSettingName);
     filepathsToWatch.push(serverPath);
@@ -197,11 +229,12 @@ export class CIRCTContext implements vscode.Disposable {
    *  containing the opened server, or null if the server could not be started,
    *  and the resolved server path.
    */
-  async startLanguageClient(workspaceFolder: vscode.WorkspaceFolder,
-                            outputChannel: vscode.OutputChannel,
-                            serverSettingName: string, languageName: string,
-                            additionalServerArgs: string[]):
+  async startVerilogLanguageClient(workspaceFolder: vscode.WorkspaceFolder,
+                                   outputChannel: vscode.OutputChannel,
+                                   serverSettingName: string,
+                                   additionalServerArgs: string[]):
       Promise<[ vscodelc.LanguageClient, string ]> {
+    let languageName = "verilog";
     const clientTitle = languageName.toUpperCase() + " Language Client";
 
     // Get the path of the lsp-server that is used to provide language
@@ -241,7 +274,7 @@ export class CIRCTContext implements vscode.Disposable {
     };
 
     // Configure file patterns relative to the workspace folder.
-    let filePattern: vscode.GlobPattern = "**/*." + languageName;
+    let filePattern: vscode.GlobPattern = "**/*.(sv|v)";
     let selectorPattern: string = null;
     if (workspaceFolder) {
       filePattern = new vscode.RelativePattern(workspaceFolder, filePattern);
