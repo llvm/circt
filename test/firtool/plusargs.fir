@@ -36,7 +36,7 @@ circuit PlusArgTest:
     ; CHECK-NEXT:     sv.bpassign [[FOUND_BAR_REG]], [[FOUND_BAR_VAL]] : i1
     ; CHECK-NEXT:   }
     ; CHECK-NEXT: }
-    ; CHECK-NEXT: [[FOUND_BAR:%.+]] = sv.read_inout [[FOUND_BAR_REG]] : !hw.inout<i1>
+    ; CHECK-NEXT: [[FOUND_BAR_READ:%.+]] = sv.read_inout [[FOUND_BAR_REG]] : !hw.inout<i1>
     ; CHECK-NEXT: [[RESULT_BAR:%.+]] = sv.read_inout [[RESULT_BAR_REG]] : !hw.inout<i32>
-
+    ; CHECK-NEXT: [[FOUND_BAR:%.+]] = comb.icmp ceq [[FOUND_BAR_READ]], %true : i1
     ; CHECK: [[FOUND_FOO]], [[FOUND_BAR]], [[RESULT_BAR]] : i1, i1, i32

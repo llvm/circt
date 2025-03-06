@@ -34,8 +34,10 @@ hw.module @plusargs_value(out test: i1, out value: i5) {
   // CHECK-NEXT:     sv.bpassign [[BAR_FOUND_DECL]], [[TMP2]]
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
-  // CHECK-NEXT: [[BAR_FOUND:%.*]] = sv.read_inout [[BAR_FOUND_DECL]]
+  // CHECK-NEXT: [[BAR_FOUND_READ:%.*]] = sv.read_inout [[BAR_FOUND_DECL]]
   // CHECK-NEXT: [[BAR_VALUE:%.*]] = sv.read_inout [[BAR_VALUE_DECL]]
+  // CHECK-NEXT: %true = hw.constant true
+  // CHECK-NEXT: [[BAR_FOUND:%.*]] = comb.icmp ceq [[BAR_FOUND_READ]], %true : i1
   // CHECK-NEXT: hw.output [[BAR_FOUND]], [[BAR_VALUE]] : i1, i5
   %0, %1 = sim.plusargs.value "bar" : i5
   hw.output %0, %1 : i1, i5

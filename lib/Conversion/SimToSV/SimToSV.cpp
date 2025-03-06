@@ -129,8 +129,13 @@ public:
           });
         });
 
-    auto readf = rewriter.create<sv::ReadInOutOp>(loc, regf);
-    auto readv = rewriter.create<sv::ReadInOutOp>(loc, regv);
+    Value readf = rewriter.create<sv::ReadInOutOp>(loc, regf);
+    Value readv = rewriter.create<sv::ReadInOutOp>(loc, regv);
+
+    auto cstTrue = rewriter.create<hw::ConstantOp>(loc, APInt(1, 1));
+    readf = rewriter.create<comb::ICmpOp>(loc, comb::ICmpPredicate::ceq, readf,
+                                          cstTrue);
+
     rewriter.replaceOp(op, {readf, readv});
     return success();
   }
