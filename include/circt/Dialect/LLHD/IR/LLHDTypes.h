@@ -23,4 +23,14 @@
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/LLHD/IR/LLHDAttributes.h.inc"
 
+namespace llvm {
+template <>
+struct PointerLikeTypeTraits<circt::llhd::TimeAttr>
+    : public PointerLikeTypeTraits<mlir::Attribute> {
+  static inline circt::llhd::TimeAttr getFromVoidPointer(void *p) {
+    return circt::llhd::TimeAttr::getFromOpaquePointer(p);
+  }
+};
+} // namespace llvm
+
 #endif // CIRCT_DIALECT_LLHD_IR_LLHDTYPES_H
