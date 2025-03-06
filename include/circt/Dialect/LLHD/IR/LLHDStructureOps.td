@@ -116,7 +116,7 @@ def WaitOp : LLHDOp<"wait", [
   );
   let successors = (successor AnySuccessor:$dest);
   let assemblyFormat = [{
-    (`yield` `(` $yieldOperands^ `:` type($yieldOperands) `)` `,`)?
+    (`yield` ` ` `(` $yieldOperands^ `:` type($yieldOperands) `)` `,`)?
     (`delay` $delay^ `,`)?
     (`(`$observed^ `:` qualified(type($observed))`)` `,`)?
     $dest (`(` $destOperands^ `:` qualified(type($destOperands)) `)`)?
