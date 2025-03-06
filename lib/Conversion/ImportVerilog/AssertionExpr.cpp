@@ -150,6 +150,60 @@ struct AssertionExprVisitor {
     return {};
   }
 
+  Value visit(const slang::ast::UnaryAssertionExpr &expr) {
+    auto value = context.convertAssertionExpression(expr.expr, loc);
+    if (!value)
+      return {};
+    using slang::ast::UnaryAssertionOperator;
+    switch (expr.op) {
+    case UnaryAssertionOperator::Not:
+      return builder.create<ltl::NotOp>(loc, value);
+    case UnaryAssertionOperator::SEventually:
+      if (expr.range.has_value()) {
+        mlir::emitError(loc, "Strong eventually with range not supported");
+        return {};
+      } else {
+        return builder.create<ltl::EventuallyOp>(loc, value);
+      }
+    case UnaryAssertionOperator::Always:
+      if (expr.range.has_value()) {
+        auto minRepetitions = mlir::IntegerAttr::get(builder.getIntegerType(64),
+                                                     expr.range.value().min);
+        mlir::IntegerAttr repetitionRange;
+        if (expr.range.value().max.has_value()) {
+          repetitionRange = mlir::IntegerAttr::get(
+              builder.getIntegerType(64),
+              expr.range.value().max.value() - expr.range.value().min);
+        }
+        return builder.create<ltl::RepeatOp>(loc, value, minRepetitions,
+                                             repetitionRange);
+      } else {
+        mlir::IntegerAttr repetitionRange;
+        return builder.create<ltl::RepeatOp>(
+            loc, value, builder.getI64IntegerAttr(0), repetitionRange);
+      }
+    case UnaryAssertionOperator::NextTime:
+      if (expr.range.has_value()) {
+        auto minRepetitions = mlir::IntegerAttr::get(builder.getIntegerType(64),
+                                                     expr.range.value().min);
+        return builder.create<ltl::DelayOp>(loc, value, minRepetitions,
+                                            builder.getI64IntegerAttr(0));
+
+      } else {
+        return builder.create<ltl::DelayOp>(loc, value,
+                                            builder.getI64IntegerAttr(1),
+                                            builder.getI64IntegerAttr(0));
+      }
+    case UnaryAssertionOperator::Eventually:
+    case UnaryAssertionOperator::SNextTime:
+    case UnaryAssertionOperator::SAlways:
+      mlir::emitError(loc, "unsupported unary operator: ")
+          << slang::ast::toString(expr.op);
+      return {};
+    }
+    llvm_unreachable("All enum values handled in switch");
+  }
+
   /// Emit an error for all other expressions.
   template <typename T>
   Value visit(T &&node) {
