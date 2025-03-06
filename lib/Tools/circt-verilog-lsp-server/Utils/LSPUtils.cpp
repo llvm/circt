@@ -11,8 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "LSPUtils.h"
+#include "mlir/Support/IndentedOstream.h"
 #include "mlir/Tools/lsp-server-support/Logging.h"
-
 void circt::lsp::Logger::error(Twine message) {
   mlir::lsp::Logger::error("{}", message);
 }
@@ -23,4 +23,9 @@ void circt::lsp::Logger::info(Twine message) {
 
 void circt::lsp::Logger::debug(Twine message) {
   mlir::lsp::Logger::debug("{}", message);
+}
+
+void circt::lsp::printReindented(llvm::raw_ostream &os, StringRef content) {
+  mlir::raw_indented_ostream indentedOs(os);
+  indentedOs.printReindented(content);
 }

@@ -7,6 +7,7 @@
 // CHECK-NEXT:  "result": {
 // CHECK-NEXT:    "capabilities": {
 // CHECK-NEXT:      "definitionProvider": true,
+// CHECK-NEXT:      "hoverProvider": true,
 // CHECK-NEXT:      "inlayHintProvider": {
 // CHECK-NEXT:        "refreshSupport": true,
 // CHECK-NEXT:        "resolveSupport": true

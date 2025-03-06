@@ -1,0 +1,77 @@
+// RUN: circt-verilog-lsp-server -lit-test  --source-location-include-dir=%S  < %s | FileCheck %s
+// REQUIRES: slang
+// UNSUPPORTED: valgrind
+{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"processId":123,"rootPath":"verilog","capabilities":{},"trace":"off"}}
+// -----
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{
+  "uri":"test:///foo.sv",
+  "languageId":"verilog",
+  "version":1,
+  "text":"module test(// @[include/test.mlir:2:5]\noutput out// @[include/test.mlir:2:{24,25}]\n); assign out = 1'h1; // @[include/test.mlir:3:14, :4:9]\nendmodule"
+}}}
+// -----
+// Find hover of `out`
+{"jsonrpc":"2.0","id":1,"method":"textDocument/hover","params":{
+  "textDocument":{"uri":"test:///foo.sv"},
+  "position":{"line":2,"character":10}
+}}
+// CHECK:       "id": 1,
+// CHECK-NEXT:  "jsonrpc": "2.0",
+// CHECK-NEXT:  "result": {
+// CHECK-NEXT:    "contents": {
+// CHECK-NEXT:      "kind": "markdown",
+// CHECK-NEXT:      "value":
+// CHECK-SAME:        "### Type
+// CHECK-SAME:        `logic`
+// CHESK-SAME:        ***
+// CHECK-SAME:        ### Definition
+// CHECK-SAME:        ```verilog\n
+// CHECK-SAME:        output out// @[include/test.mlir:2:{24,25}]\n
+// CHECK-SAME:        ```\n
+// CHECK-SAME:        [Go To Definition](test:///foo.sv#L2)\n
+// CHECK-SAME:        ***\n"
+// CHECK-NEXT:    },
+// CHECK-NEXT:    "range": {
+// CHECK-NEXT:      "end": {
+// CHECK-NEXT:        "character": 14,
+// CHECK-NEXT:        "line": 2
+// CHECK-NEXT:      },
+// CHECK-NEXT:      "start": {
+// CHECK-NEXT:        "character": 10,
+// CHECK-NEXT:        "line": 2
+// CHECK-NEXT:      }
+// CHECK-NEXT:    }
+// -----
+// Find definition of `include/test.mlir:2:5`
+{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{
+  "textDocument":{"uri":"test:///foo.sv"},
+  "position":{"line":0,"character":20}
+}}
+// CHECK:       "id": 2,
+// CHECK-NEXT:  "jsonrpc": "2.0",
+// CHECK-NEXT:  "result": {
+// CHECK-NEXT:    "contents": {
+// CHECK-NEXT:      "kind": "markdown",
+// CHECK-NEXT:      "value":
+// CHECK-SAME:        "### External Source\n
+// CHECK-SAME:        ```mlir\n
+// CHECK-SAME:        module {\n
+// CHECK-SAME:            hw.module @test(out out: i1) {\n
+// CHECK-SAME:                %0 = hw.constant true\n
+// CHECK-SAME:        ```\n
+// CHECK-SAME:        [Go To External Source]({{.*}}test.mlir#L1)"
+// CHECK-NEXT:    },
+// CHECK-NEXT:    "range": {
+// CHECK-NEXT:      "end": {
+// CHECK-NEXT:        "character": 38,
+// CHECK-NEXT:        "line": 0
+// CHECK-NEXT:      },
+// CHECK-NEXT:      "start": {
+// CHECK-NEXT:        "character": 17,
+// CHECK-NEXT:        "line": 0
+// CHECK-NEXT:      }
+// CHECK-NEXT:    }
+// -----
+{"jsonrpc":"2.0","id":3,"method":"shutdown"}
+// -----
+{"jsonrpc":"2.0","method":"exit"}

@@ -63,6 +63,13 @@ struct LSPServer {
                    Callback<std::vector<InlayHint>> reply);
 
   //===--------------------------------------------------------------------===//
+  // Hover
+  //===--------------------------------------------------------------------===//
+
+  void onHover(const TextDocumentPositionParams &params,
+               Callback<std::optional<Hover>> reply);
+
+  //===--------------------------------------------------------------------===//
   // User Provided Inlay Hints
   //===--------------------------------------------------------------------===//
 
@@ -112,6 +119,7 @@ void LSPServer::onInitialize(const InitializeParams &params,
       },
       {"definitionProvider", true},
       {"referencesProvider", true},
+      {"hoverProvider", true},
       {"inlayHintProvider",
        llvm::json::Object{{"resolveSupport", true}, {"refreshSupport", true}}},
   };
@@ -210,6 +218,15 @@ void LSPServer::onPutInlayHintsOnObjects(
 }
 
 //===----------------------------------------------------------------------===//
+// Hover
+//===----------------------------------------------------------------------===//
+
+void LSPServer::onHover(const TextDocumentPositionParams &params,
+                        Callback<std::optional<Hover>> reply) {
+  reply(server.findHover(params.textDocument.uri, params.position));
+}
+
+//===----------------------------------------------------------------------===//
 // Entry Point
 //===----------------------------------------------------------------------===//
 
@@ -244,6 +261,8 @@ LogicalResult circt::lsp::runVerilogLSPServer(VerilogServer &server,
 
   messageHandler.method("verilog/putInlayHintsOnObjects", &lspServer,
                         &LSPServer::onPutInlayHintsOnObjects);
+  // Hover
+  messageHandler.method("textDocument/hover", &lspServer, &LSPServer::onHover);
 
   // Diagnostics
   lspServer.publishDiagnostics =
