@@ -29,6 +29,7 @@ struct TextDocumentContentChangeEvent;
 struct Range;
 struct InlayHint;
 class URIForFile;
+struct Hover;
 } // namespace lsp
 } // namespace mlir
 
@@ -79,6 +80,10 @@ public:
 
   void putInlayHintsOnObjects(
       const std::vector<circt::lsp::VerilogUserProvidedInlayHint> &params);
+
+  /// Get the hover information for the given position.
+  std::optional<mlir::lsp::Hover> findHover(const URIForFile &uri,
+                                            const mlir::lsp::Position &pos);
 
 private:
   struct Impl;

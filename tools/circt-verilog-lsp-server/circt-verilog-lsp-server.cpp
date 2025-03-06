@@ -67,6 +67,17 @@ int main(int argc, char **argv) {
       llvm::cl::desc("Root directory of file source locations"),
       llvm::cl::value_desc("directory"), llvm::cl::Prefix);
 
+
+  //===--------------------------------------------------------------------===//
+  // Hover Context
+  //===--------------------------------------------------------------------===//
+
+  llvm::cl::opt<int32_t> hoverLineContext{
+      "hover-line-context",
+      llvm::cl::desc("Number of lines to include in the hover context"),
+      llvm::cl::init(3),
+  };
+
   //===--------------------------------------------------------------------===//
   // Testing
   //===--------------------------------------------------------------------===//
@@ -101,6 +112,7 @@ int main(int argc, char **argv) {
                                      prettyPrint);
 
   // Configure the servers and start the main language server.
-  circt::lsp::VerilogServerOptions options(libDirs, sourceLocationIncludeDirs);
+  circt::lsp::VerilogServerOptions options(libDirs, sourceLocationIncludeDirs,
+                                           hoverLineContext);
   return failed(circt::lsp::CirctVerilogLspServerMain(options, transport));
 }
