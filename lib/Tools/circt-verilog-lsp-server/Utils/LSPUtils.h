@@ -13,6 +13,8 @@ void error(Twine message);
 void info(Twine message);
 void debug(Twine message);
 } // namespace Logger
+
+void printReindented(llvm::raw_ostream &os, StringRef content);
 } // namespace lsp
 } // namespace circt
 #endif // CIRCT_SUPPORT_LSPUTILS_H

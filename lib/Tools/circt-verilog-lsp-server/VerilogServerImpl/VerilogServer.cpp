@@ -96,6 +96,39 @@ static void emitHint(llvm::raw_ostream &os, T symbol, bool includeName = true) {
      << symbol->getType().toString() << ":";
 }
 
+// ===----------------------------------------------------------------------===//
+// Markup Helpers
+// ===----------------------------------------------------------------------===//
+
+static llvm::raw_ostream &addHeading(llvm::raw_ostream &os, int level,
+                                     StringRef heading) {
+  for (int i = 0; i < level; ++i)
+    os << '#';
+  os << ' ' << heading << '\n';
+  return os;
+}
+
+static llvm::raw_ostream &addCodeBlock(llvm::raw_ostream &os,
+                                       StringRef language, StringRef content) {
+  os << "```" << language << '\n';
+  circt::lsp::printReindented(os, content);
+  if (!content.ends_with('\n'))
+    os << '\n';
+  os << "```\n";
+  return os;
+}
+
+static llvm::raw_ostream &addLink(llvm::raw_ostream &os, StringRef label,
+                                  StringRef uri, int line) {
+  os << "[" << label << "](" << uri << "#L" << line << ")";
+  return os;
+}
+
+static llvm::raw_ostream &addRuler(llvm::raw_ostream &os) {
+  os << "\n***\n";
+  return os;
+}
+
 namespace {
 
 // A global context carried around by the server.
@@ -156,12 +189,12 @@ public:
                             const char *, VerilogIndexSymbol>::LeafSize,
                         llvm::IntervalMapHalfOpenInfo<const char *>>;
 
-  MapT &getIntervalMap() { return intervalMap; }
-
   /// A mapping from a symbol to their references.
   using ReferenceMap = SmallDenseMap<const slang::ast::Symbol *,
                                      SmallVector<slang::SourceRange>>;
   const ReferenceMap &getReferences() const { return references; }
+
+  std::optional<VerilogIndexSymbol> lookup(SMLoc loc, SMRange *range = nullptr);
 
 private:
   /// Parse source location emitted by ExportVerilog.
@@ -203,9 +236,6 @@ public:
   const mlir::lsp::URIForFile &getURI() const { return uri; }
 
   llvm::SourceMgr &getSourceMgr() { return sourceMgr; }
-  llvm::SmallDenseMap<uint32_t, uint32_t> &getBufferIDMap() {
-    return bufferIDMap;
-  }
 
   const slang::SourceManager &getSlangSourceManager() const {
     return driver.sourceManager;
@@ -219,6 +249,20 @@ public:
 
   // Return SMLoc from slang location.
   llvm::SMLoc getSMLoc(slang::SourceLocation loc);
+
+  // Return the URI for the given location.
+  std::optional<mlir::lsp::URIForFile>
+  getExternalURI(mlir::FileLineColRange loc);
+
+  // Return the source line containing the given location.
+  StringRef getSourceLine(slang::SourceLocation loc);
+
+  // Check if the given location is in the main file.
+  bool isInMainFile(slang::SourceLocation loc) const;
+
+  // Get or open a file and return the buffer ID and path.
+  std::optional<std::pair<uint32_t, SmallString<128>>>
+  getOrOpenFile(StringRef filePath);
 
   //===--------------------------------------------------------------------===//
   // Definitions and References
@@ -235,18 +279,29 @@ public:
   //===--------------------------------------------------------------------===//
   // Inlay Hints
   //===--------------------------------------------------------------------===//
+
   void getInlayHints(const mlir::lsp::URIForFile &uri,
                      const mlir::lsp::Range &range,
                      std::vector<mlir::lsp::InlayHint> &inlayHints);
 
-  bool isInMainFile(slang::SourceLocation loc) const {
-    auto it = bufferIDMap.find(loc.buffer().getId());
-    return it != bufferIDMap.end() && it->second == sourceMgr.getMainFileID();
-  }
+  //===--------------------------------------------------------------------===//
+  // Hover
+  //===--------------------------------------------------------------------===//
+
+  std::optional<mlir::lsp::Hover>
+  findHover(const mlir::lsp::URIForFile &uri,
+            const mlir::lsp::Position &hoverPos);
+  void buildHoverForSymbol(const slang::ast::Symbol *symbol,
+                           llvm::raw_ostream &os);
+  void buildHoverForLoc(mlir::FileLineColRange loc, llvm::raw_ostream &os);
+
+  // Return source text for hover from an external file.
+  StringRef getExternalSourceTextForHover(mlir::FileLineColRange loc);
 
 private:
-  std::optional<std::pair<uint32_t, SmallString<128>>>
-  getOrOpenFile(StringRef filePath);
+  // ===-------------------------------------------------------------------===//
+  // Fields
+  // ===-------------------------------------------------------------------===//
 
   VerilogServerContext &globalContext;
 
@@ -522,6 +577,11 @@ VerilogDocument::getOrOpenFile(StringRef filePath) {
   return std::nullopt;
 }
 
+bool VerilogDocument::isInMainFile(slang::SourceLocation loc) const {
+  auto it = bufferIDMap.find(loc.buffer().getId());
+  return it != bufferIDMap.end() && it->second == sourceMgr.getMainFileID();
+}
+
 //===----------------------------------------------------------------------===//
 // VerilogTextFile
 //===----------------------------------------------------------------------===//
@@ -557,6 +617,9 @@ public:
   void getInlayHints(const mlir::lsp::URIForFile &uri,
                      const mlir::lsp::Range &range,
                      std::vector<mlir::lsp::InlayHint> &inlayHints);
+
+  std::optional<mlir::lsp::Hover> findHover(const mlir::lsp::URIForFile &uri,
+                                            mlir::lsp::Position pos);
 
 private:
   /// Initialize the text file from the given file contents.
@@ -710,6 +773,18 @@ void VerilogIndex::initialize(slang::ast::Compilation &compilation) {
 
   // Parse the source location from the main file.
   parseSourceLocation();
+}
+
+std::optional<VerilogIndexSymbol> VerilogIndex::lookup(SMLoc loc,
+                                                       SMRange *range) {
+  auto it = intervalMap.find(loc.getPointer());
+  if (!it.valid() || loc.getPointer() < it.start())
+    return std::nullopt;
+
+  if (range)
+    *range = SMRange(SMLoc::getFromPointer(it.start()),
+                     SMLoc::getFromPointer(it.stop()));
+  return it.value();
 }
 
 void VerilogIndex::parseSourceLocation(StringRef toParse) {
@@ -914,11 +989,8 @@ void VerilogDocument::getLocationsOf(
     const mlir::lsp::URIForFile &uri, const mlir::lsp::Position &defPos,
     std::vector<mlir::lsp::Location> &locations) {
   SMLoc posLoc = defPos.getAsSMLoc(sourceMgr);
-  const auto &intervalMap = index.getIntervalMap();
-  auto it = intervalMap.find(posLoc.getPointer());
-
-  // Found no element in the given index.
-  if (!it.valid() || posLoc.getPointer() < it.start())
+  auto it = index.lookup(posLoc);
+  if (!it)
     return;
 
   auto element = it.value();
@@ -960,12 +1032,11 @@ void VerilogDocument::findReferencesOf(
     const mlir::lsp::URIForFile &uri, const mlir::lsp::Position &pos,
     std::vector<mlir::lsp::Location> &references) {
   SMLoc posLoc = pos.getAsSMLoc(sourceMgr);
-  const auto &intervalMap = index.getIntervalMap();
-  auto intervalIt = intervalMap.find(posLoc.getPointer());
-  if (!intervalIt.valid() || posLoc.getPointer() < intervalIt.start())
+  auto element = index.lookup(posLoc);
+  if (!element)
     return;
 
-  const auto *symbol = cast<const slang::ast::Symbol *>(intervalIt.value());
+  const auto *symbol = dyn_cast<const slang::ast::Symbol *>(*element);
   if (!symbol)
     return;
 
@@ -1147,7 +1218,140 @@ void VerilogDocument::getInlayHints(
     inst->body.visit(visitor);
 }
 
+// ===----------------------------------------------------------------------===//
+// VerilogDocument: Hover
+// ===----------------------------------------------------------------------===//
+
+void VerilogDocument::buildHoverForSymbol(const slang::ast::Symbol *symbol,
+                                          llvm::raw_ostream &os) {
+  if (auto *type = symbol->getDeclaredType())
+    addHeading(os, 3, "Type") << "`" << type->getType().toString() << "`";
+  addRuler(os);
+  addHeading(os, 3, "Definition");
+  addCodeBlock(os, "verilog", getSourceLine(symbol->location));
+  auto loc = getLspLocation(symbol->location);
+  addLink(os, "Go To Definition", loc.uri.uri(),
+          getSlangSourceManager().getLineNumber(symbol->location));
+  addRuler(os);
+}
+
+void VerilogDocument::buildHoverForLoc(mlir::FileLineColRange loc,
+                                       llvm::raw_ostream &os) {
+  auto content = getExternalSourceTextForHover(loc);
+  if (content.empty())
+    return;
+  auto filename = loc.getFilename();
+  auto ext = llvm::sys::path::extension(filename.getValue());
+  addHeading(os, 3, "External Source");
+  addCodeBlock(os, ext.drop_front(), content);
+  auto sourceURI = getExternalURI(loc);
+  if (!sourceURI)
+    return;
+  addLink(os, "Go To External Source", sourceURI->uri(), loc.getStartLine());
+}
+
+std::optional<mlir::lsp::Hover>
+VerilogDocument::findHover(const mlir::lsp::URIForFile &uri,
+                           const mlir::lsp::Position &hoverPos) {
+  SMLoc posLoc = hoverPos.getAsSMLoc(sourceMgr);
+  SMRange smRange;
+  auto it = index.lookup(posLoc, &smRange);
+
+  // Found no element in the given index.
+  if (!it)
+    return {};
+
+  mlir::lsp::Hover hover(mlir::lsp::Range(sourceMgr, smRange));
+  llvm::raw_string_ostream strOs(hover.contents.value);
+  if (auto *symbol = dyn_cast<const slang::ast::Symbol *>(it.value())) {
+    buildHoverForSymbol(symbol, strOs);
+  } else {
+    auto loc = cast<Attribute>(it.value());
+    if (auto fileLoc = dyn_cast<mlir::FileLineColRange>(loc))
+      buildHoverForLoc(fileLoc, strOs);
+  }
+  return hover;
+}
+
+/// Get the URI for an external file location.
+/// Returns the URI if the file can be opened and converted, otherwise returns
+/// nullopt.
+std::optional<mlir::lsp::URIForFile>
+VerilogDocument::getExternalURI(mlir::FileLineColRange loc) {
+  auto file = loc.getFilename();
+  auto fileInfo = getOrOpenFile(file);
+  if (!fileInfo)
+    return std::nullopt;
+  auto *buffer = sourceMgr.getMemoryBuffer(fileInfo->first);
+
+  auto uri = mlir::lsp::URIForFile::fromFile(buffer->getBufferIdentifier());
+  if (auto e = uri.takeError())
+    return std::nullopt;
+  return uri.get();
+}
+
+/// Get the source line containing the given location.
+/// Returns the trimmed line of text containing the location.
+StringRef VerilogDocument::getSourceLine(slang::SourceLocation loc) {
+  auto text = getSlangSourceManager().getSourceText(loc.buffer());
+  auto offest = loc.offset();
+  // Find line boundaries around the location
+  auto start = text.find_last_of('\n', offest);
+  auto end = text.find_first_of('\n', offest);
+  return StringRef(text.substr(start, end - start)).trim();
+}
+
+/// Get source text from an external file for hover information.
+/// Returns a snippet of text around the given location based on hover context
+/// settings. The snippet includes lines before and after based on
+/// `hoverContextLineCount` option.
+StringRef
+VerilogDocument::getExternalSourceTextForHover(mlir::FileLineColRange loc) {
+  auto &sgr = getSourceMgr();
+  auto fileInfo = getOrOpenFile(loc.getFilename());
+  if (!fileInfo)
+    return StringRef();
+
+  auto [bufferId, filePath] = *fileInfo;
+  auto *buffer = sgr.getMemoryBuffer(bufferId);
+  int32_t startLine = loc.getStartLine();
+
+  // Find starting location accounting for context lines before
+  auto startLoc = sgr.FindLocForLineAndColumn(
+      bufferId,
+      std::max(1, startLine - globalContext.options.hoverContextLineCount), 1);
+  StringRef content(startLoc.getPointer(),
+                    buffer->getBufferEnd() - startLoc.getPointer());
+
+  // Extract the desired number of lines after the start location
+  for (auto i = 0;
+       i < globalContext.options.hoverContextLineCount && !content.empty();
+       ++i) {
+    auto firstLine = content.find_first_of('\n');
+    content = content.drop_front(firstLine + 1);
+  }
+
+  // Return the extracted snippet
+  return StringRef(startLoc.getPointer(),
+                   content.data() - startLoc.getPointer());
+}
+
+std::optional<mlir::lsp::Hover>
+VerilogTextFile::findHover(const mlir::lsp::URIForFile &uri,
+                           mlir::lsp::Position hoverPos) {
+  return document->findHover(uri, hoverPos);
+}
+
 void VerilogServer::putInlayHintsOnObjects(
     const std::vector<VerilogUserProvidedInlayHint> &params) {
   impl->context.putInlayHintsOnObjects(params);
+}
+
+std::optional<mlir::lsp::Hover>
+circt::lsp::VerilogServer::findHover(const URIForFile &uri,
+                                     const Position &hoverPos) {
+  auto fileIt = impl->files.find(uri.file());
+  if (fileIt != impl->files.end())
+    return fileIt->second->findHover(uri, hoverPos);
+  return std::nullopt;
 }
