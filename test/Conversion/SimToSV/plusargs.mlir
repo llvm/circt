@@ -26,25 +26,18 @@ hw.module @plusargs_value(out test: i1, out value: i5) {
   // CHECK-SAME:     emitAsComment
   // CHECK-NEXT:   sv.assign [[BAR_FOUND_DECL]], %false
   // CHECK-NEXT: } else {
-  // CHECK-NEXT:   sv.ifdef  @UPF_SIMULATION {
-  // CHECK-NEXT:     %c0_i5 = hw.constant 0 : i5
-  // CHECK-NEXT:     sv.assign [[BAR_VALUE_DECL]], %c0_i5 {sv.attributes = [
-  // CHECK-SAME:       #sv.attribute<"This dummy assignment exists to avoid undriven lint warnings
-  // CHECK-SAME:       emitAsComment
-  // CHECK-NEXT:     %false = hw.constant false
-  // CHECK-NEXT:     sv.assign [[BAR_FOUND_DECL]], %false
-  // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     sv.initial {
-  // CHECK-NEXT:       %c0_i32 = hw.constant 0 : i32
-  // CHECK-NEXT:       [[BAR_STR:%.*]] = sv.constantStr "bar"
-  // CHECK-NEXT:       [[TMP:%.*]] = sv.system "value$plusargs"([[BAR_STR]], [[BAR_VALUE_DECL]])
-  // CHECK-NEXT:       [[TMP2:%.*]] = comb.icmp bin ne [[TMP]], %c0_i32
-  // CHECK-NEXT:       sv.bpassign [[BAR_FOUND_DECL]], [[TMP2]]
-  // CHECK-NEXT:     }
+  // CHECK-NEXT:   sv.initial {
+  // CHECK-NEXT:     %c0_i32 = hw.constant 0 : i32
+  // CHECK-NEXT:     [[BAR_STR:%.*]] = sv.constantStr "bar"
+  // CHECK-NEXT:     [[TMP:%.*]] = sv.system "value$plusargs"([[BAR_STR]], [[BAR_VALUE_DECL]])
+  // CHECK-NEXT:     [[TMP2:%.*]] = comb.icmp bin ne [[TMP]], %c0_i32
+  // CHECK-NEXT:     sv.bpassign [[BAR_FOUND_DECL]], [[TMP2]]
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
-  // CHECK-NEXT: [[BAR_FOUND:%.*]] = sv.read_inout [[BAR_FOUND_DECL]]
+  // CHECK-NEXT: [[BAR_FOUND_READ:%.*]] = sv.read_inout [[BAR_FOUND_DECL]]
   // CHECK-NEXT: [[BAR_VALUE:%.*]] = sv.read_inout [[BAR_VALUE_DECL]]
+  // CHECK-NEXT: %true = hw.constant true
+  // CHECK-NEXT: [[BAR_FOUND:%.*]] = comb.icmp ceq [[BAR_FOUND_READ]], %true : i1
   // CHECK-NEXT: hw.output [[BAR_FOUND]], [[BAR_VALUE]] : i1, i5
   %0, %1 = sim.plusargs.value "bar" : i5
   hw.output %0, %1 : i1, i5
