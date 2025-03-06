@@ -521,14 +521,20 @@ struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
                  isDefinition);
   }
 
-  // Handle references to the left-hand side of a parent assignment.
-  void visit(const slang::ast::LValueReferenceExpression &expr) {
+  // Handle named values, such as references to declared variables.
+  void visitExpression(const slang::ast::Expression &expr) {
     auto *symbol = expr.getSymbolReference(true);
     if (!symbol)
       return;
     insertSymbol(symbol, expr.sourceRange, /*isDefinition=*/false);
     visitDefault(expr);
   }
+
+  void visitSymbol(const slang::ast::Symbol &symbol) {
+    insertSymbol(&symbol, symbol.location, /*isDefinition=*/true);
+    visitDefault(symbol);
+  }
+
   void visit(const slang::ast::NetSymbol &expr) {
     insertSymbol(&expr, expr.location, /*isDefinition=*/true);
     visitDefault(expr);
@@ -544,17 +550,13 @@ struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
     visitDefault(expr);
   }
 
-  // Handle named values, such as references to declared variables.
-  void visit(const slang::ast::NamedValueExpression &expr) {
-    auto *symbol = expr.getSymbolReference(true);
-    if (!symbol)
-      return;
-    insertSymbol(symbol, expr.sourceRange, /*isDefinition=*/false);
-    visitDefault(expr);
-  }
-
   template <typename T>
   void visit(const T &t) {
+    if constexpr (std::is_base_of_v<slang::ast::Expression, T>)
+      visitExpression(t);
+    if constexpr (std::is_base_of_v<slang::ast::Symbol, T>)
+      visitSymbol(t);
+
     visitDefault(t);
   }
 
@@ -656,10 +658,11 @@ void VerilogIndex::parseSourceLocation() {
       break;
 
     text = text.drop_front(loc + start.size());
-    auto end = text.find_first_of(']');
-    if (end == StringRef::npos)
-      continue;
-    auto toParse = text.take_front(end);
+    auto endPos = text.find_first_of("]\n");
+    if (endPos == StringRef::npos)
+      break;
+    auto toParse = text.take_front(endPos);
+    circt::lsp::Logger::info(toParse);
     parseSourceLocation(toParse);
   }
 }
