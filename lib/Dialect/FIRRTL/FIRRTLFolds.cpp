@@ -1476,8 +1476,8 @@ void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
               patterns::MuxEQOperandsSwapped, patterns::MuxNEQ,
               patterns::MuxNot, patterns::MuxSameTrue, patterns::MuxSameFalse,
               patterns::NarrowMuxLHS, patterns::NarrowMuxRHS,
-              patterns::MuxPadSel, patterns::MuxLHS0, patterns::MuxLHS1,
-              patterns::MuxRHS0, patterns::MuxRHS1>(context);
+              patterns::MuxPadSel, patterns::MuxLhsZero, patterns::MuxLhsOne,
+              patterns::MuxRhsZero, patterns::MuxRhsOne>(context);
 }
 
 void Mux2CellIntrinsicOp::getCanonicalizationPatterns(
@@ -2256,6 +2256,77 @@ struct FoldResetMux : public mlir::RewritePattern {
 };
 } // namespace
 
+namespace {
+/// This canonicalizer provides the following patterns:
+///   reset(reg) = 0 ==> connect(reg, and(reg, x)) ==> reg -> 0
+///   reset(reg) = 0 ==> connect(reg, and(x, reg)) ==> reg -> 0
+///   reset(reg) = 1 ==> connect(reg, or(reg, x))  ==> reg -> 1
+///   reset(reg) = 1 ==> connect(reg, or(x, reg))  ==> reg -> 1
+///
+/// Justification: The initial value of a register is indeterminant, which means
+/// we are free to choose any initial value when optimizing the circuit. For the
+/// AND patterns, if the reset is zero, and we assume the initial value is zero,
+/// then the register will always be zero. For the OR patterns, if the reset is
+/// one, and we assume the initial value is one, then the register will always
+/// be one.
+struct RegResetAndOrOfSelf : public mlir::OpRewritePattern<RegResetOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(RegResetOp op,
+                                PatternRewriter &rewriter) const override {
+    // Do not fold the register away if it is important.
+    if (hasDontTouch(op.getOperation()) || !AnnotationSet(op).empty() ||
+        op.isForceable())
+      return failure();
+
+    // This canonicalization only applies when the register holds 1 bit.
+    auto type = dyn_cast<UIntType>(op.getResult().getType());
+    if (!type || type.getWidthOrSentinel() != 1)
+      return failure();
+
+    // This canonicalization only applies when the reset is a constant.
+    auto reset =
+        dyn_cast_or_null<ConstantOp>(op.getResetValue().getDefiningOp());
+    if (!reset)
+      return failure();
+
+    auto value = reset.getValue();
+
+    // Find the one true connect, or bail.
+    auto connect = getSingleConnectUserOf(op.getResult());
+    if (!connect)
+      return failure();
+
+    auto *src = connect.getSrc().getDefiningOp();
+    if (!src)
+      return failure();
+
+    if (value == 0) {
+      if (auto srcAnd = dyn_cast<AndPrimOp>(src)) {
+        if (srcAnd.getLhs().getDefiningOp() == op ||
+            srcAnd.getRhs().getDefiningOp() == op) {
+          rewriter.eraseOp(connect);
+          replaceOpAndCopyName(rewriter, op, reset.getResult());
+          return success();
+        }
+      }
+    }
+
+    if (value == 1) {
+      if (auto srcOr = dyn_cast<OrPrimOp>(src)) {
+        if (srcOr.getLhs().getDefiningOp() == op ||
+            srcOr.getRhs().getDefiningOp() == op) {
+          rewriter.eraseOp(connect);
+          replaceOpAndCopyName(rewriter, op, reset.getResult());
+          return success();
+        }
+      }
+    }
+
+    return failure();
+  }
+};
+} // namespace
+
 static bool isDefinedByOneConstantOp(Value v) {
   if (auto c = v.getDefiningOp<ConstantOp>())
     return c.getValue().isOne();
@@ -2279,7 +2350,9 @@ canonicalizeRegResetWithOneReset(RegResetOp reg, PatternRewriter &rewriter) {
 
 void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-  results.add<patterns::RegResetWithZeroReset, FoldResetMux>(context);
+  results
+      .add<patterns::RegResetWithZeroReset, FoldResetMux, RegResetAndOrOfSelf>(
+          context);
   results.add(canonicalizeRegResetWithOneReset);
   results.add(demoteForceableIfUnused<RegResetOp>);
 }
@@ -3156,10 +3229,66 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   return success();
 }
 
+/// This canonicalizer provides the following patterns:
+///   connect(reg, and(reg, x)) ==> reg -> 0
+///   connect(reg, and(x, reg)) ==> reg -> 0
+///   connect(reg, or(reg, x))  ==> reg -> 1
+///   connect(reg, or(x, reg))  ==> reg -> 1
+///
+/// Justification: The initial value of a register is indeterminant, which means
+/// We are free to choose any initial value when optimizing the circuit. For the
+/// AND patterns, if we assume the initial value is zero, then the register will
+/// always be zero. For the OR patterns, if we assume the initial value is one,
+/// then the register will always be one.
+static LogicalResult foldRegAndOrOfSelf(RegOp reg, PatternRewriter &rewriter) {
+  // This canonicalization only applies when the register holds 1 bit.
+  auto type = dyn_cast<UIntType>(reg.getResult().getType());
+  if (!type || type.getWidthOrSentinel() != 1)
+    return failure();
+
+  // Find the one true connect, or bail.
+  auto connect = getSingleConnectUserOf(reg.getResult());
+  if (!connect)
+    return failure();
+
+  auto *src = connect.getSrc().getDefiningOp();
+  if (!src)
+    return failure();
+
+  // connect(reg, and(reg, x)) ==> reg -> 0
+  // connect(reg, and(x, reg)) ==> reg -> 0
+  if (auto srcAnd = dyn_cast<AndPrimOp>(src)) {
+    if (srcAnd.getLhs().getDefiningOp() == reg ||
+        srcAnd.getRhs().getDefiningOp() == reg) {
+      auto attr = getIntAttr(type, APInt(1, 0));
+      replaceOpWithNewOpAndCopyName<ConstantOp>(rewriter, reg, type, attr);
+      rewriter.eraseOp(connect);
+      return success();
+    }
+  }
+
+  // connect(reg, or(reg, x)) ==> reg -> 1
+  // connect(reg, or(x, reg)) ==> reg -> 1
+  if (auto srcOr = dyn_cast<OrPrimOp>(src)) {
+    if (srcOr.getLhs().getDefiningOp() == reg ||
+        srcOr.getRhs().getDefiningOp() == reg) {
+      auto attr = getIntAttr(type, APInt(1, 1));
+      replaceOpWithNewOpAndCopyName<ConstantOp>(rewriter, reg, type, attr);
+      rewriter.eraseOp(connect);
+      return success();
+    }
+  }
+
+  return failure();
+}
+
 LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
-  if (!hasDontTouch(op.getOperation()) && !op.isForceable() &&
-      succeeded(foldHiddenReset(op, rewriter)))
-    return success();
+  if (!hasDontTouch(op.getOperation()) && !op.isForceable()) {
+    if (succeeded(foldHiddenReset(op, rewriter)))
+      return success();
+    if (succeeded(foldRegAndOrOfSelf(op, rewriter)))
+      return success();
+  }
 
   if (succeeded(demoteForceableIfUnused(op, rewriter)))
     return success();
