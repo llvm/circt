@@ -64,6 +64,14 @@ static bool isAncestor(Block *block, Block *other) {
 }
 
 //===----------------------------------------------------------------------===//
+// Clone-ability.
+//===----------------------------------------------------------------------===//
+
+static bool cloneable(Operation *op) {
+  return isa<ConstantOp, SpecialConstantOp, SubfieldOp, SubindexOp>(op);
+}
+
+//===----------------------------------------------------------------------===//
 // Effectfulness Analysis.
 //===----------------------------------------------------------------------===//
 
@@ -357,6 +365,10 @@ private:
   void moveLayersToBack(Operation *op);
   void moveLayersToBack(Block *block);
 
+  void erase(Operation *op);
+  void sinkOpByCloning(Operation *op);
+  void sinkOpByMoving(Operation *op, Block *dest);
+
   FModuleOp moduleOp;
   const EffectInfo &effectInfo;
   bool changed = false;
@@ -403,22 +415,50 @@ void ModuleLayerSink::moveLayersToBack(Block *block) {
   }
 }
 
+void ModuleLayerSink::erase(Operation *op) {
+  op->erase();
+  changed = true;
+}
+
+void ModuleLayerSink::sinkOpByCloning(Operation *op) {
+  // Copy the op down to each block where there is a user.
+  // Use a cache to ensure we don't create more than one copy per block.
+  DenseMap<Block *, Operation *> cache;
+  for (unsigned i = 0, e = op->getNumResults(); i < e; ++i) {
+    for (auto &use : llvm::make_early_inc_range(op->getResult(i).getUses())) {
+      auto *dest = use.getOwner()->getBlock();
+      if (dest != op->getBlock()) {
+        auto &clone = cache[dest];
+        if (!clone)
+          clone = OpBuilder::atBlockBegin(dest).clone(*op);
+        use.set(clone->getResult(i));
+        changed = true;
+      }
+    }
+  }
+
+  // If there are no remaining uses of the original op, erase it.
+  if (op->use_empty())
+    erase(op);
+}
+
+void ModuleLayerSink::sinkOpByMoving(Operation *op, Block *dest) {
+  if (dest != op->getBlock()) {
+    op->moveBefore(dest, dest->begin());
+    changed = true;
+  }
+}
+
 bool ModuleLayerSink::operator()() {
   moveLayersToBack(moduleOp.getBodyBlock());
   DemandInfo demandInfo(effectInfo, moduleOp);
   walkBwd(moduleOp.getBodyBlock(), [&](Operation *op) {
     auto demand = demandInfo.getDemandFor(op);
-    if (!demand) {
-      op->erase();
-      changed = true;
-      return;
-    }
-
-    if (demand == op->getBlock())
-      return;
-
-    op->moveBefore(demand.block, demand.block->begin());
-    changed = true;
+    if (!demand)
+      return erase(op);
+    if (cloneable(op))
+      return sinkOpByCloning(op);
+    sinkOpByMoving(op, demand.block);
   });
 
   return changed;
