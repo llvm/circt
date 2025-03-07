@@ -571,7 +571,11 @@ firrtl.module @Mux(in %in: !firrtl.uint<4>,
                    out %out3: !firrtl.uint<1>,
                    out %out4: !firrtl.uint<4>,
                    out %out5: !firrtl.uint<1>,
-                   out %out6: !firrtl.uint<1>) {
+                   out %out6: !firrtl.uint<1>,
+                   out %out7: !firrtl.uint<1>,
+                   out %out8: !firrtl.uint<1>,
+                   out %out9: !firrtl.uint<1>,
+                   out %out10: !firrtl.uint<1>) {
   // CHECK: firrtl.matchingconnect %out, %in
   %0 = firrtl.int.mux2cell (%cond, %in, %in) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %0 : !firrtl.uint<4>, !firrtl.uint<4>
@@ -634,6 +638,32 @@ firrtl.module @Mux(in %in: !firrtl.uint<4>,
   // CHECK-NEXT: mux4cell(%[[SEL]],
   %17 = firrtl.int.mux4cell (%val1, %val1, %val2, %val1, %val2) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.matchingconnect %out6, %17 : !firrtl.uint<1>
+
+  // mux(cond, 0, x) -> and(~cond, x)
+  // CHECK: [[V1:%.+]] = firrtl.not %cond
+  // CHECK-NEXT: [[V2:%.+]] = firrtl.and [[V1]], %val1
+  // CHECK-NEXT: firrtl.matchingconnect %out7, [[V2]]
+  %18 = firrtl.mux (%cond, %c0_ui1, %val1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %out7, %18 : !firrtl.uint<1>, !firrtl.uint<1>
+
+  // mux(cond, 1, x) -> or(cond, x)
+  // CHECK: [[V:%.+]] = firrtl.or %cond, %val1
+  // CHECK-NEXT: firrtl.matchingconnect %out8, [[V]]
+  %19 = firrtl.mux (%cond, %c1_ui1, %val1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %out8, %19 : !firrtl.uint<1>, !firrtl.uint<1>
+
+  // mux(cond, x, 0) -> and(cond, x)
+  // CHECK: [[V:%.+]] = firrtl.and %cond, %val1
+  // CHECK-NEXT: firrtl.matchingconnect %out9, [[V]]
+  %20 = firrtl.mux (%cond, %val1, %c0_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %out9, %20 : !firrtl.uint<1>, !firrtl.uint<1>
+
+  // mux(cond, x, 1) -> or(~cond, x)
+  // CHECK: [[V1:%.+]] = firrtl.not %cond
+  // CHECK-NEXT: [[V2:%.+]] = firrtl.or [[V1]], %val1
+  // CHECK-NEXT: firrtl.matchingconnect %out10, [[V2]]
+  %21 = firrtl.mux (%cond, %val1, %c1_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %out10, %21 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @Pad
