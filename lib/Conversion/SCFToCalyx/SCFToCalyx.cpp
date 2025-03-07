@@ -515,8 +515,8 @@ private:
                                /*subtract=*/1);
       }
       rewriter.create<calyx::AssignOp>(loc, opFOp.getSubOp(), subOp);
-    } else if (isa<calyx::DivSqrtOpIEEE754>(opPipe)) {
-      auto opFOp = cast<calyx::DivSqrtOpIEEE754>(opPipe);
+    } else if (auto opFOp =
+                   dyn_cast<calyx::DivSqrtOpIEEE754>(opPipe.getOperation())) {
       bool isSqrt = !isa<arith::DivFOp>(op);
       hw::ConstantOp sqrtOp =
           createConstant(loc, rewriter, getComponent(), /*width=*/1, isSqrt);
