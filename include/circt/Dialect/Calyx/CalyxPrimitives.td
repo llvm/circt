@@ -12,6 +12,9 @@
 
 include "mlir/IR/BuiltinAttributeInterfaces.td"
 
+def I3  : I<3>;
+def I5  : I<5>;
+
 /// Base class for Calyx primitives.
 class CalyxPrimitive<string mnemonic, list<Trait> traits = []> :
   CalyxCell<mnemonic, traits> {
@@ -342,8 +345,8 @@ def AddFOpIEEE754 : ArithBinaryFloatingPointLibraryOp<"ieee754.add", [
   SameTypeConstraint<"left", "out">
   ]> {
   let results = (outs I1:$clk, I1:$reset, I1:$go, I1:$control, I1:$subOp,
-    AnySignlessInteger:$left, AnySignlessInteger:$right, AnySignlessInteger:$roundingMode, AnySignlessInteger:$out,
-    AnySignlessInteger:$exceptionalFlags, I1:$done);
+    AnySignlessInteger:$left, AnySignlessInteger:$right, I3:$roundingMode, AnySignlessInteger:$out,
+    I5:$exceptionalFlags, I1:$done);
 
   let extraClassDefinition = [{
     SmallVector<StringRef> $cppClass::portNames() {
@@ -384,8 +387,8 @@ def MulFOpIEEE754 : ArithBinaryFloatingPointLibraryOp<"ieee754.mul", [
     SameTypeConstraint<"left", "out">
   ]> {
   let results = (outs I1:$clk, I1:$reset, I1:$go, I1:$control,
-    AnySignlessInteger:$left, AnySignlessInteger:$right, AnySignlessInteger:$roundingMode, AnySignlessInteger:$out,
-    AnySignlessInteger:$exceptionalFlags, I1:$done);
+    AnySignlessInteger:$left, AnySignlessInteger:$right, I3:$roundingMode, AnySignlessInteger:$out,
+    I5:$exceptionalFlags, I1:$done);
   let assemblyFormat = "$sym_name attr-dict `:` qualified(type(results))";
   let extraClassDefinition = [{
     SmallVector<StringRef> $cppClass::portNames() {
@@ -424,8 +427,8 @@ def DivSqrtOpIEEE754 : ArithBinaryFloatingPointLibraryOp<"ieee754.divSqrt", [
     SameTypeConstraint<"left", "out">
   ]> {
   let results = (outs I1:$clk, I1:$reset, I1:$go, I1:$control, I1:$sqrtOp,
-    AnySignlessInteger:$left, AnySignlessInteger:$right, AnySignlessInteger:$roundingMode, AnySignlessInteger:$out,
-    AnySignlessInteger:$exceptionalFlags, I1:$done);
+    AnySignlessInteger:$left, AnySignlessInteger:$right, I3:$roundingMode, AnySignlessInteger:$out,
+    I5:$exceptionalFlags, I1:$done);
   let assemblyFormat = "$sym_name attr-dict `:` qualified(type(results))";
   let extraClassDefinition = [{
     SmallVector<StringRef> $cppClass::portNames() {
@@ -468,7 +471,7 @@ def DivSqrtOpIEEE754 : ArithBinaryFloatingPointLibraryOp<"ieee754.divSqrt", [
 def CompareFOpIEEE754 : ArithBinaryFloatingPointLibraryOp<"ieee754.compare", []> {
   let results = (outs I1:$clk, I1:$reset, I1:$go,
     AnySignlessInteger:$left, AnySignlessInteger:$right, I1:$signaling,
-    I1:$lt, I1: $eq, I1: $gt, I1: $unordered, AnySignlessInteger: $exceptionalFlags, I1: $done);
+    I1:$lt, I1: $eq, I1: $gt, I1: $unordered, I5: $exceptionalFlags, I1: $done);
   let assemblyFormat = "$sym_name attr-dict `:` qualified(type(results))";
   let extraClassDefinition = [{
     SmallVector<StringRef> $cppClass::portNames() {
