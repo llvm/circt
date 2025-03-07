@@ -28,7 +28,7 @@
 import pycde
 from pycde import AppID, Clock, Module, Reset, generator, modparams
 from pycde.bsp import get_bsp
-from pycde.constructs import ControlReg, Counter, Reg, Wire
+from pycde.constructs import ControlReg, Counter, NamedWire, Reg, Wire
 from pycde.esi import CallService, ChannelService
 import pycde.esi as esi
 from pycde.types import Bits, Channel, UInt
@@ -245,6 +245,59 @@ def ToHostDMATest(width: int):
   return ToHostDMATest
 
 
+def FromHostDMATest(width: int):
+  """Construct a module that receives the write count over a channel from the
+  host the specified number of times. Exercises any DMA engine."""
+
+  class FromHostDMATest(Module):
+    clk = Clock()
+    rst = Reset()
+
+    @generator
+    def build(ports):
+      last_read = Wire(UInt(width))
+
+      # Get the MMIO space for commands.
+      cmd_chan_wire = Wire(Channel(esi.MMIOReadWriteCmdType))
+      resp_ready_wire = Wire(Bits(1))
+      cmd, cmd_valid = cmd_chan_wire.unwrap(resp_ready_wire)
+      mmio_xact = cmd_valid & resp_ready_wire
+      response_data = last_read.as_bits(64)
+      response_chan, response_ready = Channel(response_data.type).wrap(
+          response_data, cmd_valid)
+      resp_ready_wire.assign(response_ready)
+
+      # read_count is the specified number of times to recieve data.
+      read_count_ce = mmio_xact & cmd.write & (cmd.offset == UInt(32)(0))
+      read_count = cmd.data.as_uint().reg(clk=ports.clk,
+                                          rst=ports.rst,
+                                          rst_value=0,
+                                          ce=read_count_ce)
+      in_data_xact = NamedWire(Bits(1), "in_data_xact")
+      read_counter = Counter(32)(clk=ports.clk,
+                                 rst=ports.rst,
+                                 clear=read_count_ce,
+                                 increment=in_data_xact)
+
+      mmio_rw = esi.MMIO.read_write(appid=AppID("FromHostDMATest"))
+      mmio_rw_cmd_chan = mmio_rw.unpack(data=response_chan)['cmd']
+      cmd_chan_wire.assign(mmio_rw_cmd_chan)
+
+      in_chan = ChannelService.from_host(name=AppID("in"), type=UInt(width))
+      in_ready = NamedWire(read_counter.out < read_count, "in_ready")
+      in_data, in_valid = in_chan.unwrap(in_ready)
+      NamedWire(in_data, "in_data")
+      in_data_xact.assign(in_valid & in_ready)
+
+      last_read.assign(
+          in_data.reg(clk=ports.clk,
+                      rst=ports.rst,
+                      ce=in_data_xact,
+                      name="last_read"))
+
+  return FromHostDMATest
+
+
 class EsiTesterTop(Module):
   clk = Clock()
   rst = Reset()
@@ -262,6 +315,9 @@ class EsiTesterTop(Module):
       ToHostDMATest(width)(appid=esi.AppID("tohostdmatest", width),
                            clk=ports.clk,
                            rst=ports.rst)
+      FromHostDMATest(width)(appid=esi.AppID("fromhostdmatest", width),
+                             clk=ports.clk,
+                             rst=ports.rst)
 
 
 if __name__ == "__main__":

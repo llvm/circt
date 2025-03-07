@@ -13,9 +13,8 @@ from ..types import (Bits, Bundle, BundledChannel, Channel, ChannelDirection,
 from ..constructs import ControlReg, NamedWire, Reg, Wire
 from .. import esi
 
-from .common import (ChannelEngineService, ChannelHostMem, ChannelMMIO,
-                     DummyFromHostEngine, DummyToHostEngine)
-from .dma import OneItemBuffersToHost
+from .common import (ChannelEngineService, ChannelHostMem, ChannelMMIO)
+from .dma import OneItemBuffersFromHost, OneItemBuffersToHost
 
 from ..circt import ir
 from ..circt.dialects import esi as raw_esi
@@ -52,7 +51,7 @@ def CosimBSP(user_module: Type[Module], emulate_dma: bool = False) -> Module:
     def build(ports):
       user_module(clk=ports.clk, rst=ports.rst)
       if emulate_dma:
-        ChannelEngineService(OneItemBuffersToHost, DummyFromHostEngine)(
+        ChannelEngineService(OneItemBuffersToHost, OneItemBuffersFromHost)(
             None,
             appid=esi.AppID("__channel_engines"),
             clk=ports.clk,
