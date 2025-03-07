@@ -118,17 +118,18 @@ struct MergeCallArgs : public OpConversionPattern<CallOp> {
   MergeCallArgs(MLIRContext *ctxt, const CallPrepPrecomputed &info)
       : OpConversionPattern(ctxt), info(info) {}
 
-  void rewrite(CallOp, OpAdaptor adaptor,
-               ConversionPatternRewriter &rewriter) const final;
-  LogicalResult match(CallOp) const override { return success(); }
+  LogicalResult
+  matchAndRewrite(CallOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override final;
 
 private:
   const CallPrepPrecomputed &info;
 };
 } // anonymous namespace
 
-void MergeCallArgs::rewrite(CallOp call, OpAdaptor adaptor,
-                            ConversionPatternRewriter &rewriter) const {
+LogicalResult
+MergeCallArgs::matchAndRewrite(CallOp call, OpAdaptor adaptor,
+                               ConversionPatternRewriter &rewriter) const {
   auto loc = call.getLoc();
   rewriter.setInsertionPoint(call);
   auto method = call->getParentOfType<kanagawa::MethodLikeOpInterface>();
@@ -151,6 +152,8 @@ void MergeCallArgs::rewrite(CallOp call, OpAdaptor adaptor,
     call.getOperandsMutable().clear();
     call.getOperandsMutable().append(newArg.getResult());
   });
+
+  return success();
 }
 
 namespace {
@@ -160,17 +163,18 @@ struct MergeMethodArgs : public OpConversionPattern<MethodOp> {
   MergeMethodArgs(MLIRContext *ctxt, const CallPrepPrecomputed &info)
       : OpConversionPattern(ctxt), info(info) {}
 
-  void rewrite(MethodOp, OpAdaptor adaptor,
-               ConversionPatternRewriter &rewriter) const final;
-  LogicalResult match(MethodOp) const override { return success(); }
+  LogicalResult
+  matchAndRewrite(MethodOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final override;
 
 private:
   const CallPrepPrecomputed &info;
 };
 } // anonymous namespace
 
-void MergeMethodArgs::rewrite(MethodOp func, OpAdaptor adaptor,
-                              ConversionPatternRewriter &rewriter) const {
+LogicalResult
+MergeMethodArgs::matchAndRewrite(MethodOp func, OpAdaptor adaptor,
+                                 ConversionPatternRewriter &rewriter) const {
   auto loc = func.getLoc();
   auto *ctxt = getContext();
 
@@ -204,6 +208,8 @@ void MergeMethodArgs::rewrite(MethodOp func, OpAdaptor adaptor,
   }
 
   rewriter.eraseOp(func);
+
+  return success();
 }
 
 namespace {
