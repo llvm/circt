@@ -515,9 +515,10 @@ private:
                                /*subtract=*/1);
       }
       rewriter.create<calyx::AssignOp>(loc, opFOp.getSubOp(), subOp);
-    } else if (auto opFOp = dyn_cast<calyx::DivSqrtOpIEEE754>(opPipe)) {
+    } else if (isa<calyx::DivSqrtOpIEEE754>(opPipe)) {
+      auto opFOp = cast<calyx::DivSqrtOpIEEE754>(opPipe);
       bool isSqrt = !isa<arith::DivFOp>(op);
-      hw::ConstantOp sqrtOp sqrtOp =
+      hw::ConstantOp sqrtOp =
           createConstant(loc, rewriter, getComponent(), /*width=*/1, isSqrt);
       rewriter.create<calyx::AssignOp>(loc, opFOp.getSqrtOp(), sqrtOp);
     }
