@@ -234,3 +234,23 @@ with Context() as ctx, Location.unknown():
   print(attr.type)
   # CHECK: #rtg.all_contexts : !rtgtest.cpu
   print(attr)
+
+with Context() as ctx, Location.unknown():
+  circt.register_dialects(ctx)
+  indexTy = IndexType.get()
+
+  fixed_array = rtg.ArrayType.get(indexTy, 5)
+  # CHECK: size=5
+  print(f"size={fixed_array.size}")
+  # CHECK: element_type=index
+  print(f"element_type={fixed_array.element_type}")
+  # CHECK: !rtg.array<5 x index>
+  print(fixed_array)
+
+  dynamic_array = rtg.ArrayType.get(indexTy)
+  # CHECK: size=None
+  print(f"size={dynamic_array.size}")
+  # CHECK: element_type=index
+  print(f"element_type={dynamic_array.element_type}")
+  # CHECK: !rtg.array<index>
+  print(dynamic_array)

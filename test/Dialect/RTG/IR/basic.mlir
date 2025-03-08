@@ -170,3 +170,7 @@ rtg.target @memories : !rtg.dict<base: !rtg.isa.immediate<32>, mem: !rtg.isa.mem
   %3 = rtg.isa.memory_size %1 : !rtg.isa.memory<32>
   rtg.yield %2, %1, %3 : !rtg.isa.immediate<32>, !rtg.isa.memory<32>, index
 }
+
+// CHECK-LABEL: rtg.test @arrays
+// CHECK-SAME: (arr0 = [[ARR0:%.+]]: !rtg.array<5 x index>, arr1 = [[ARR1:%.+]]: !rtg.array<index>)
+rtg.test @arrays(arr0 = %arr0: !rtg.array<5 x index>, arr1 = %arr1: !rtg.array<index>) { }

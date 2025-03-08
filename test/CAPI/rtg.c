@@ -102,6 +102,36 @@ static void testDictType(MlirContext ctx) {
   mlirTypeDump(emptyDictTy);
 }
 
+static void testArrayType(MlirContext ctx) {
+  MlirType i32Type = mlirIntegerTypeGet(ctx, 32);
+  MlirType fixedArrayTy = rtgArrayTypeGet(5, i32Type);
+  MlirType dynamicArrayTy = rtgDynamicArrayTypeGet(i32Type);
+
+  // CHECK: is_array
+  fprintf(stderr,
+          rtgTypeIsAArray(fixedArrayTy) ? "is_array\n" : "isnot_array\n");
+  // CHECK: isnot_dynarray
+  fprintf(stderr, rtgTypeIsADynamicArray(fixedArrayTy) ? "is_dynarray\n"
+                                                       : "isnot_dynarray\n");
+  // CHECK: size=5
+  fprintf(stderr, "size=%llu\n", rtgArrayTypeGetSize(fixedArrayTy));
+  // CHECK: i32
+  mlirTypeDump(rtgArrayTypeGetElementType(fixedArrayTy));
+  // CHECK: !rtg.array<5 x i32>
+  mlirTypeDump(fixedArrayTy);
+
+  // CHECK: is_array
+  fprintf(stderr,
+          rtgTypeIsAArray(dynamicArrayTy) ? "is_array\n" : "isnot_array\n");
+  // CHECK: is_dynarray
+  fprintf(stderr, rtgTypeIsADynamicArray(dynamicArrayTy) ? "is_dynarray\n"
+                                                         : "isnot_dynarray\n");
+  // CHECK: i32
+  mlirTypeDump(rtgArrayTypeGetElementType(dynamicArrayTy));
+  // CHECK: !rtg.array<i32>
+  mlirTypeDump(dynamicArrayTy);
+}
+
 static void testLabelVisibilityAttr(MlirContext ctx) {
   MlirAttribute labelVisibility =
       rtgLabelVisibilityAttrGet(ctx, RTG_LABEL_VISIBILITY_GLOBAL);
@@ -183,6 +213,7 @@ int main(int argc, char **argv) {
   testSetType(ctx);
   testBagType(ctx);
   testDictType(ctx);
+  testArrayType(ctx);
 
   testLabelVisibilityAttr(ctx);
   testDefaultContextAttr(ctx);

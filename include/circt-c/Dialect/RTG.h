@@ -99,6 +99,26 @@ MLIR_CAPI_EXPORTED MlirType rtgMemoryTypeGet(MlirContext ctx,
 /// Returns the address with of an RTG memory type.
 MLIR_CAPI_EXPORTED uint32_t rtgMemoryTypeGetAddressWidth(MlirType type);
 
+/// Creates a fixed-size RTG array type in the context.
+MLIR_CAPI_EXPORTED MlirType rtgArrayTypeGet(uint64_t size,
+                                            MlirType elementType);
+
+/// Creates a dynamic-size RTG array type in the context.
+MLIR_CAPI_EXPORTED MlirType rtgDynamicArrayTypeGet(MlirType elementType);
+
+/// If the type is an RTG array.
+MLIR_CAPI_EXPORTED bool rtgTypeIsAArray(MlirType type);
+
+/// If the type is a dynamically-sized RTG array.
+MLIR_CAPI_EXPORTED bool rtgTypeIsADynamicArray(MlirType type);
+
+/// Returns the size of the RTG array. Only valid if it is not dynamically
+/// sized.
+MLIR_CAPI_EXPORTED uint64_t rtgArrayTypeGetSize(MlirType type);
+
+/// Returns the element type of the RTG array.
+MLIR_CAPI_EXPORTED MlirType rtgArrayTypeGetElementType(MlirType type);
+
 //===----------------------------------------------------------------------===//
 // Attribute API.
 //===----------------------------------------------------------------------===//

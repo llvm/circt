@@ -120,6 +120,26 @@ def DictType : RTGTypeDef<"Dict"> {
   let genVerifyDecl = 1;
 }
 
+def ArrayType : RTGTypeDef<"Array"> {
+  let summary = "an array type with fixed or dynamic size";
+  let description = [{
+    Represents an array type that can have either a fixed size or dynamic size.
+    The array contains elements of a specified type.
+
+    Examples:
+    - Fixed-size array of 5 i32 elements: `!rtg.array<5, i32>`
+    - Dynamic-size array of i32 elements: `!rtg.array<i32>`
+  }];
+
+  let parameters = (ins
+    OptionalParameter<"std::optional<uint64_t>", "size if fixed">:$size,
+    "::mlir::Type":$elementType
+  );
+
+  let mnemonic = "array";
+  let assemblyFormat = "`<` ( $size^ `x` ` ` )? $elementType `>`";
+}
+
 //===----------------------------------------------------------------------===//
 // Types for ISA targets
 //===----------------------------------------------------------------------===//

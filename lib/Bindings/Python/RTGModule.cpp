@@ -100,6 +100,27 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
               std::vector<std::pair<MlirAttribute, MlirType>>(),
           nb::arg("ctxt") = nullptr);
 
+  mlir_type_subclass(m, "ArrayType", rtgTypeIsAArray)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, MlirType elementType, std::optional<uint64_t> size,
+             MlirContext ctxt) {
+            if (size.has_value())
+              return cls(rtgArrayTypeGet(*size, elementType));
+            return cls(rtgDynamicArrayTypeGet(elementType));
+          },
+          nb::arg("self"), nb::arg("element_type"),
+          nb::arg("size") = std::nullopt, nb::arg("ctxt") = nullptr)
+      .def_property_readonly(
+          "element_type",
+          [](MlirType self) { return rtgArrayTypeGetElementType(self); })
+      .def_property_readonly("size",
+                             [](MlirType self) -> std::optional<uint64_t> {
+                               if (rtgTypeIsADynamicArray(self))
+                                 return std::nullopt;
+                               return rtgArrayTypeGetSize(self);
+                             });
+
   // Types for ISA targets
   //===--------------------------------------------------------------------===//
 

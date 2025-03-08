@@ -115,6 +115,34 @@ MlirType rtgDictTypeGet(MlirContext ctxt, intptr_t numEntries,
   return wrap(DictType::get(unwrap(ctxt), entries));
 }
 
+// ArrayType
+//===----------------------------------------------------------------------===//
+
+MlirType rtgArrayTypeGet(uint64_t size, MlirType elementType) {
+  return wrap(ArrayType::get(unwrap(elementType).getContext(), size,
+                             unwrap(elementType)));
+}
+
+MlirType rtgDynamicArrayTypeGet(MlirType elementType) {
+  return wrap(ArrayType::get(unwrap(elementType).getContext(), std::nullopt,
+                             unwrap(elementType)));
+}
+
+bool rtgTypeIsAArray(MlirType type) { return isa<ArrayType>(unwrap(type)); }
+
+bool rtgTypeIsADynamicArray(MlirType type) {
+  auto arrTy = dyn_cast<ArrayType>(unwrap(type));
+  return arrTy && !arrTy.getSize();
+}
+
+uint64_t rtgArrayTypeGetSize(MlirType type) {
+  return *cast<ArrayType>(unwrap(type)).getSize();
+}
+
+MlirType rtgArrayTypeGetElementType(MlirType type) {
+  return wrap(cast<ArrayType>(unwrap(type)).getElementType());
+}
+
 // ImmediateType
 //===----------------------------------------------------------------------===//
 
