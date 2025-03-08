@@ -115,6 +115,20 @@ MlirType rtgDictTypeGet(MlirContext ctxt, intptr_t numEntries,
   return wrap(DictType::get(unwrap(ctxt), entries));
 }
 
+// ArrayType
+//===----------------------------------------------------------------------===//
+
+MlirType rtgArrayTypeGet(MlirType elementType) {
+  return wrap(
+      ArrayType::get(unwrap(elementType).getContext(), unwrap(elementType)));
+}
+
+bool rtgTypeIsAArray(MlirType type) { return isa<ArrayType>(unwrap(type)); }
+
+MlirType rtgArrayTypeGetElementType(MlirType type) {
+  return wrap(cast<ArrayType>(unwrap(type)).getElementType());
+}
+
 // ImmediateType
 //===----------------------------------------------------------------------===//
 

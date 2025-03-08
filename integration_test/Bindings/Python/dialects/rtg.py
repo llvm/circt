@@ -224,3 +224,12 @@ with Context() as ctx, Location.unknown():
   print(f"width={memoryblock_type.address_width}")
   # CHECK: !rtg.isa.memoryblock<32>
   print(memoryblock_type)
+
+with Context() as ctx, Location.unknown():
+  circt.register_dialects(ctx)
+  indexTy = IndexType.get()
+  arr = rtg.ArrayType.get(indexTy)
+  # CHECK: element_type=index
+  print(f"element_type={arr.element_type}")
+  # CHECK: !rtg.array<index>
+  print(arr)
