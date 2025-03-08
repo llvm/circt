@@ -89,6 +89,15 @@ MLIR_CAPI_EXPORTED MlirType rtgImmediateTypeGet(MlirContext ctx,
 /// Returns the width of the RTG immediate type.
 MLIR_CAPI_EXPORTED uint32_t rtgImmediateTypeGetWidth(MlirType type);
 
+/// Creates an RTG array type in the context.
+MLIR_CAPI_EXPORTED MlirType rtgArrayTypeGet(MlirType elementType);
+
+/// If the type is an RTG array.
+MLIR_CAPI_EXPORTED bool rtgTypeIsAArray(MlirType type);
+
+/// Returns the element type of the RTG array.
+MLIR_CAPI_EXPORTED MlirType rtgArrayTypeGetElementType(MlirType type);
+
 //===----------------------------------------------------------------------===//
 // Attribute API.
 //===----------------------------------------------------------------------===//

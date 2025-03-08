@@ -218,3 +218,12 @@ with Context() as ctx, Location.unknown():
   print(f"value={immediate_attr.value}")
   # CHECK: #rtg.isa.immediate<32, 42>
   print(immediate_attr)
+
+with Context() as ctx, Location.unknown():
+  circt.register_dialects(ctx)
+  indexTy = IndexType.get()
+  arr = rtg.ArrayType.get(indexTy)
+  # CHECK: element_type=index
+  print(f"element_type={arr.element_type}")
+  # CHECK: !rtg.array<index>
+  print(arr)

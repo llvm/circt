@@ -103,6 +103,18 @@ static void testDictType(MlirContext ctx) {
   mlirTypeDump(emptyDictTy);
 }
 
+static void testArrayType(MlirContext ctx) {
+  MlirType i32Type = mlirIntegerTypeGet(ctx, 32);
+  MlirType arrayTy = rtgArrayTypeGet(i32Type);
+
+  // CHECK: is_array
+  fprintf(stderr, rtgTypeIsAArray(arrayTy) ? "is_array\n" : "isnot_array\n");
+  // CHECK: i32
+  mlirTypeDump(rtgArrayTypeGetElementType(arrayTy));
+  // CHECK: !rtg.array<i32>
+  mlirTypeDump(arrayTy);
+}
+
 static void testLabelVisibilityAttr(MlirContext ctx) {
   MlirAttribute labelVisibility =
       rtgLabelVisibilityAttrGet(ctx, RTG_LABEL_VISIBILITY_GLOBAL);
@@ -174,6 +186,7 @@ int main(int argc, char **argv) {
   testSetType(ctx);
   testBagType(ctx);
   testDictType(ctx);
+  testArrayType(ctx);
 
   testLabelVisibilityAttr(ctx);
   testDefaultContextAttr(ctx);
