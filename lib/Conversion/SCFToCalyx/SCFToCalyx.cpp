@@ -294,22 +294,22 @@ public:
     funcOp.walk([&](Operation *_op) {
       opBuiltSuccessfully &=
           TypeSwitch<mlir::Operation *, bool>(_op)
-              .template Case<arith::ConstantOp, ReturnOp, BranchOpInterface,
-                             /// SCF
-                             scf::YieldOp, scf::WhileOp, scf::ForOp, scf::IfOp,
-                             scf::ParallelOp, scf::ReduceOp,
-                             scf::ExecuteRegionOp,
-                             /// memref
-                             memref::AllocOp, memref::AllocaOp, memref::LoadOp,
-                             memref::StoreOp, memref::GetGlobalOp,
-                             /// standard arithmetic
-                             AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp,
-                             AndIOp, XOrIOp, OrIOp, ExtUIOp, ExtSIOp, TruncIOp,
-                             MulIOp, DivUIOp, DivSIOp, RemUIOp, RemSIOp,
-                             /// floating point
-                             AddFOp, SubFOp, MulFOp, CmpFOp, FPToSIOp, SIToFPOp,
-                             /// others
-                             SelectOp, IndexCastOp, BitcastOp, CallOp>(
+              .template Case<
+                  arith::ConstantOp, ReturnOp, BranchOpInterface,
+                  /// SCF
+                  scf::YieldOp, scf::WhileOp, scf::ForOp, scf::IfOp,
+                  scf::ParallelOp, scf::ReduceOp, scf::ExecuteRegionOp,
+                  /// memref
+                  memref::AllocOp, memref::AllocaOp, memref::LoadOp,
+                  memref::StoreOp, memref::GetGlobalOp,
+                  /// standard arithmetic
+                  AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp, AndIOp,
+                  XOrIOp, OrIOp, ExtUIOp, ExtSIOp, TruncIOp, MulIOp, DivUIOp,
+                  DivSIOp, RemUIOp, RemSIOp,
+                  /// floating point
+                  AddFOp, SubFOp, MulFOp, CmpFOp, FPToSIOp, SIToFPOp, DivFOp,
+                  /// others
+                  SelectOp, IndexCastOp, BitcastOp, CallOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
               .template Case<FuncOp, scf::ConditionOp>([&](auto) {
                 /// Skip: these special cases will be handled separately.
@@ -370,6 +370,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, CmpFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, FPToSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, SIToFPOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, DivFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRUIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShLIOp op) const;
@@ -514,6 +515,12 @@ private:
                                /*subtract=*/1);
       }
       rewriter.create<calyx::AssignOp>(loc, opFOp.getSubOp(), subOp);
+    } else if (auto opFOp =
+                   dyn_cast<calyx::DivSqrtOpIEEE754>(opPipe.getOperation())) {
+      bool isSqrt = !isa<arith::DivFOp>(op);
+      hw::ConstantOp sqrtOp =
+          createConstant(loc, rewriter, getComponent(), /*width=*/1, isSqrt);
+      rewriter.create<calyx::AssignOp>(loc, opFOp.getSqrtOp(), sqrtOp);
     }
 
     // Register the values for the pipeline.
@@ -1054,6 +1061,24 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   return buildFpIntTypeCastOp<calyx::IntToFpOpIEEE754>(
       rewriter, sitofp, sitofp.getIn().getType().getIntOrFloatBitWidth(),
       sitofp.getOut().getType().getIntOrFloatBitWidth(), "signedIn");
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     DivFOp divf) const {
+  Location loc = divf.getLoc();
+  IntegerType one = rewriter.getI1Type(), three = rewriter.getIntegerType(3),
+              five = rewriter.getIntegerType(5),
+              width = rewriter.getIntegerType(
+                  divf.getType().getIntOrFloatBitWidth());
+  auto divFOp = getState<ComponentLoweringState>()
+                    .getNewLibraryOpInstance<calyx::DivSqrtOpIEEE754>(
+                        rewriter, loc,
+                        {/*clk=*/one, /*reset=*/one, /*go=*/one,
+                         /*control=*/one, /*sqrtOp=*/one, /*left=*/width,
+                         /*right=*/width, /*roundingMode=*/three, /*out=*/width,
+                         /*exceptionalFlags=*/five, /*done=*/one});
+  return buildLibraryBinaryPipeOp<calyx::DivSqrtOpIEEE754>(
+      rewriter, divf, divFOp, divFOp.getOut());
 }
 
 template <typename TAllocOp>
@@ -2482,7 +2507,7 @@ public:
                       CondBranchOp, BranchOp, MulIOp, DivUIOp, DivSIOp, RemUIOp,
                       RemSIOp, ReturnOp, arith::ConstantOp, IndexCastOp,
                       BitcastOp, FuncOp, ExtSIOp, CallOp, AddFOp, SubFOp,
-                      MulFOp, CmpFOp, FPToSIOp, SIToFPOp>();
+                      MulFOp, CmpFOp, FPToSIOp, SIToFPOp, DivFOp>();
 
     RewritePatternSet legalizePatterns(&getContext());
     legalizePatterns.add<DummyPattern>(&getContext());
