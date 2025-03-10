@@ -1272,7 +1272,39 @@ Value Context::convertToSimpleBitVector(Value value) {
                                                  value);
     }
   }
-
+  if(llvm::isa<moore::StringType>(value.getType())){
+    auto readop = value.getDefiningOp();
+    if(auto declop = readop->getOperand(0).getDefiningOp()){
+      Operation *assignop = nullptr;
+      for(auto user: declop->getResults().getUsers()){
+          if(llvm::isa<moore::BlockingAssignOp>(user)){
+            assignop = user;
+          }
+      }
+      if(declop->getOperands().size() == 0){
+        //if the string is not initialized, the declop->getOperands().size() == 0
+        //so we need to find assign op to get the value
+        if(assignop == nullptr)mlir::emitError(value.getLoc()) << "nullValue\n";
+        else {  
+          auto initValue = assignop->getOperand(1).getDefiningOp()->getOperand(0);
+          if(llvm::isa<moore::RefType>(initValue.getType())){
+            initValue.getDefiningOp()->dump();
+            initValue = initValue.getDefiningOp()->getOperand(0).getDefiningOp()->getOperand(0);
+          }
+          return builder.create<moore::ConversionOp>(value.getLoc(), initValue.getType(), value);
+        }
+        return {};
+      }
+      mlir::Value initValue;
+      if(assignop == nullptr){//if the string no assign op ,use initial value
+        assignop = declop;
+        initValue = assignop->getOperand(0).getDefiningOp()->getOperand(0);
+      }else{
+        initValue = assignop->getOperand(1).getDefiningOp()->getOperand(0);
+      }
+      return builder.create<moore::ConversionOp>(value.getLoc(), initValue.getType(), value);
+    }
+  }
   mlir::emitError(value.getLoc()) << "expression of type " << value.getType()
                                   << " cannot be cast to a simple bit vector";
   return {};

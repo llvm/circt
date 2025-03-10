@@ -137,6 +137,10 @@ struct FormatStringParser {
                  << "string format specifier with width not supported";
         emitLiteral(lit->getValue());
         return success();
+      }else if(auto nvexp = arg.as_if<slang::ast::NamedValueExpression>()) {
+        auto ops = builder.create<moore::ConversionOp>(loc, moore::FormatStringType::get(context.builder.getContext()), context.convertLvalueExpression(arg));
+        fragments.push_back(ops);
+        return success();
       }
       return mlir::emitError(argLoc)
              << "expression cannot be formatted as string";
