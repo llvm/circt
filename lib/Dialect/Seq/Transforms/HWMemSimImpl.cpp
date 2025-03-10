@@ -21,10 +21,16 @@
 #include "circt/Dialect/Seq/SeqAttributes.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
+#include "circt/Support/LLVM.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Support/FileUtilities.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/ToolOutputFile.h"
 
 using namespace circt;
 using namespace hw;
@@ -64,15 +70,19 @@ public:
   HWMemSimImpl(ReadEnableMode readEnableMode, bool addMuxPragmas,
                bool disableMemRandomization, bool disableRegRandomization,
                bool addVivadoRAMAddressConflictSynthesisBugWorkaround,
-               Namespace &mlirModuleNamespace)
+               Namespace &mlirModuleNamespace, llvm::raw_ostream &output,
+               llvm::SmallVectorImpl<Attribute> &symbols)
       : readEnableMode(readEnableMode), addMuxPragmas(addMuxPragmas),
         disableMemRandomization(disableMemRandomization),
         disableRegRandomization(disableRegRandomization),
         addVivadoRAMAddressConflictSynthesisBugWorkaround(
             addVivadoRAMAddressConflictSynthesisBugWorkaround),
-        mlirModuleNamespace(mlirModuleNamespace) {}
+        mlirModuleNamespace(mlirModuleNamespace), output(output),
+        symbols(symbols) {}
 
   void generateMemory(HWModuleOp op, FirMemory mem);
+  llvm::raw_ostream &output;
+  llvm::SmallVectorImpl<Attribute> &symbols;
 };
 
 struct HWMemSimImplPass : public impl::HWMemSimImplBase<HWMemSimImplPass> {
@@ -202,7 +212,11 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   sv::RegOp reg = b.create<sv::RegOp>(
       UnpackedArrayType::get(dataType, mem.depth), b.getStringAttr("Memory"));
 
-  if (addVivadoRAMAddressConflictSynthesisBugWorkaround) {
+  if (true || addVivadoRAMAddressConflictSynthesisBugWorkaround) {
+    if (!reg.getInnerSymAttr())
+      reg.setInnerSymAttr(hw::InnerSymAttr::get(
+          b.getStringAttr(moduleNamespace.newName(reg.getName()))));
+
     if (mem.readLatency == 0) {
       // If the read latency is zero, we regard the memory as write-first.
       // We add a SV attribute to specify a ram style to use LUTs for Vivado
@@ -213,6 +227,14 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
           reg, sv::SVAttributeAttr::get(b.getContext(), "ram_style",
                                         R"("distributed")",
                                         /*emitAsComment=*/false));
+      auto idx = symbols.size();
+      output << "set_property ram_style distributed [get_cells "
+                "-hierarchical { {{"
+             << idx << "}}/{{" << idx + 1 << "}} }]\n";
+      symbols.push_back(mlir::FlatSymbolRefAttr::get(op.getSymNameAttr()));
+      auto ref = hw::InnerRefAttr::get(op.getSymNameAttr(),
+                                       reg.getInnerSymAttr().getSymName());
+      symbols.push_back(ref);
     } else if (mem.readLatency == 1 && numPorts > 1) {
       // If the read address is registered and the RAM has multiple ports,
       // force write-first behaviour by setting rw_addr_collision. This avoids
@@ -221,6 +243,15 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       circt::sv::setSVAttributes(
           reg, sv::SVAttributeAttr::get(b.getContext(), "rw_addr_collision",
                                         R"("yes")", /*emitAsComment=*/false));
+
+      auto idx = symbols.size();
+      output << "set_property rw_addr_collision yes [get_cells "
+                "-hierarchical { {{"
+             << idx << "}}/{{" << idx + 1 << "}} }]\n";
+      symbols.push_back(mlir::FlatSymbolRefAttr::get(op.getSymNameAttr()));
+      auto ref = hw::InnerRefAttr::get(op.getSymNameAttr(),
+                                       reg.getInnerSymAttr().getSymName());
+      symbols.push_back(ref);
     }
   }
 
@@ -719,6 +750,10 @@ void HWMemSimImplPass::runOnOperation() {
   SmallVector<HWModuleGeneratedOp> toErase;
   bool anythingChanged = false;
 
+  SmallString<128> outputString;
+  llvm::raw_svector_ostream outputStream(outputString);
+  SmallVector<Attribute> symbols;
+
   for (auto op :
        llvm::make_early_inc_range(topModule.getOps<HWModuleGeneratedOp>())) {
     auto oldModule = cast<HWModuleGeneratedOp>(op);
@@ -751,7 +786,7 @@ void HWMemSimImplPass::runOnOperation() {
         HWMemSimImpl(readEnableMode, addMuxPragmas, disableMemRandomization,
                      disableRegRandomization,
                      addVivadoRAMAddressConflictSynthesisBugWorkaround,
-                     mlirModuleNamespace)
+                     mlirModuleNamespace, outputStream, symbols)
             .generateMemory(newModule, mem);
         if (auto fragments = oldModule->getAttr(emit::getFragmentsAttrName()))
           newModule->setAttr(emit::getFragmentsAttrName(), fragments);
@@ -759,6 +794,18 @@ void HWMemSimImplPass::runOnOperation() {
 
       oldModule.erase();
       anythingChanged = true;
+    }
+
+    if (symbols.size() > 0) {
+      auto builder = OpBuilder::atBlockEnd(topModule.getBody(0));
+      auto verbatim = builder.create<sv::VerbatimOp>(
+          builder.getUnknownLoc(), outputString, ValueRange{},
+          builder.getArrayAttr(symbols));
+      auto outputFile = hw::OutputFileAttr::get(topModule.getContext(),
+                                                  builder.getStringAttr("vivado_ram.xdc"),
+                                                  builder.getBoolAttr(true),
+                                                  builder.getBoolAttr(false));
+      verbatim->setAttr("output_file", outputFile);
     }
   }
 
