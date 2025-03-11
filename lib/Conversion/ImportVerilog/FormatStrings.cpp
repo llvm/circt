@@ -137,11 +137,34 @@ struct FormatStringParser {
                  << "string format specifier with width not supported";
         emitLiteral(lit->getValue());
         return success();
-      }else if(auto nvexp = arg.as_if<slang::ast::NamedValueExpression>()) {
-        auto ops = builder.create<moore::ConversionOp>(loc, moore::FormatStringType::get(context.builder.getContext()), context.convertLvalueExpression(arg));
+      } else if (auto nvexp = arg.as_if<slang::ast::NamedValueExpression>()) {
+        auto ops = builder.create<moore::ConversionOp>(
+            loc, moore::FormatStringType::get(context.builder.getContext()),
+            context.convertLvalueExpression(arg));
         fragments.push_back(ops);
         return success();
+      } else if (auto *concat =
+                     arg.as_if<slang::ast::ConcatenationExpression>()) {
+        // concatenation may contain string literal or named value
+        moore::ConversionOp ops = nullptr;
+        for (auto &op : concat->operands()) {
+          if (auto *lit = op->as_if<slang::ast::StringLiteral>()) {
+            if (options.width)
+              return mlir::emitError(loc)
+                     << "string format specifier with width not supported";
+            emitLiteral(lit->getValue());
+          } else if (auto nvexp =
+                         op->as_if<slang::ast::NamedValueExpression>()) {
+            ops = builder.create<moore::ConversionOp>(
+                loc, moore::FormatStringType::get(context.builder.getContext()),
+                context.convertLvalueExpression(arg));
+          }
+        }
+        if (ops != nullptr) // if there is {str,str1},only need to push one
+          fragments.push_back(ops); // ops,another will be remove after
+        return success();
       }
+
       return mlir::emitError(argLoc)
              << "expression cannot be formatted as string";
 
