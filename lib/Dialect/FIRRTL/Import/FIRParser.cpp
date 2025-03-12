@@ -4838,6 +4838,9 @@ private:
   ParseResult parseIntModule(CircuitOp circuit, unsigned indent);
   ParseResult parseModule(CircuitOp circuit, bool isPublic, unsigned indent);
   ParseResult parseFormal(CircuitOp circuit, unsigned indent);
+  ParseResult parseSimulation(CircuitOp circuit, unsigned indent);
+  template <class Op>
+  ParseResult parseFormalLike(CircuitOp circuit, unsigned indent);
 
   ParseResult parseLayerName(SymbolRefAttr &result);
   ParseResult parseOptionalEnabledLayers(ArrayAttr &result);
@@ -5128,6 +5131,7 @@ ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
     case FIRToken::kw_public:
     case FIRToken::kw_layer:
     case FIRToken::kw_option:
+    case FIRToken::kw_simulation:
     case FIRToken::kw_type:
       // All module declarations should have the same indentation
       // level. Use this fact to differentiate between module
@@ -5391,19 +5395,33 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
   return success();
 }
 
-/// formal-old ::= 'formal' id 'of' id ',' 'bound' '=' int info?
-/// formal-new ::= 'formal' id 'of' id ':' info? INDENT (param NEWLINE)* DEDENT
+/// formal ::= 'formal' formal-like
 ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
   consumeToken(FIRToken::kw_formal);
+  return parseFormalLike<FormalOp>(circuit, indent);
+}
+
+/// formal ::= 'formal' formal-like
+ParseResult FIRCircuitParser::parseSimulation(CircuitOp circuit,
+                                              unsigned indent) {
+  consumeToken(FIRToken::kw_simulation);
+  return parseFormalLike<SimulationOp>(circuit, indent);
+}
+
+/// formal-like ::= formal-like-old | formal-like-new
+/// formal-like-old ::= id 'of' id ',' 'bound' '=' int info?
+/// formal-like-new ::= id 'of' id ':' info? INDENT (param NEWLINE)* DEDENT
+template <class Op>
+ParseResult FIRCircuitParser::parseFormalLike(CircuitOp circuit,
+                                              unsigned indent) {
   StringRef id, moduleName;
   int64_t bound = 0;
   LocWithInfo info(getToken().getLoc(), this);
   auto builder = circuit.getBodyBuilder();
 
-  // Parse the name and target module of the formal test.
-  // `formal`
-  if (parseId(id, "expected formal test name") ||
-      parseToken(FIRToken::kw_of, "expected 'of' in formal test") ||
+  // Parse the name and target module of the test.
+  if (parseId(id, "expected test name") ||
+      parseToken(FIRToken::kw_of, "expected 'of' in test") ||
       parseId(moduleName, "expected module name"))
     return failure();
 
@@ -5424,7 +5442,7 @@ ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
     params.set("bound", builder.getIntegerAttr(builder.getI32Type(), bound));
   } else {
     // Parse the new style declaration with a `:` and parameter list.
-    if (parseToken(FIRToken::colon, "expected ':' in formal test") ||
+    if (parseToken(FIRToken::colon, "expected ':' in test") ||
         info.parseOptionalInfo())
       return failure();
     while (getIndentation() > indent) {
@@ -5440,8 +5458,8 @@ ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
     }
   }
 
-  builder.create<firrtl::FormalOp>(info.getLoc(), id, moduleName,
-                                   params.getDictionary(getContext()));
+  builder.create<Op>(info.getLoc(), id, moduleName,
+                     params.getDictionary(getContext()));
   return success();
 }
 
@@ -5460,11 +5478,11 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
   case FIRToken::kw_extmodule:
     return parseExtModule(circuit, indent);
   case FIRToken::kw_formal:
-    if (requireFeature({4, 0, 0}, "inline formal tests"))
+    if (requireFeature({4, 0, 0}, "formal tests"))
       return failure();
     return parseFormal(circuit, indent);
   case FIRToken::kw_intmodule:
-    if (requireFeature({1, 2, 0}, "inline formal tests") ||
+    if (requireFeature({1, 2, 0}, "intrinsic modules") ||
         removedFeature({4, 0, 0}, "intrinsic modules"))
       return failure();
     return parseIntModule(circuit, indent);
@@ -5481,6 +5499,10 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
     if (getToken().getKind() == FIRToken::kw_module)
       return parseModule(circuit, /*isPublic=*/true, indent);
     return emitError(getToken().getLoc(), "only modules may be public");
+  case FIRToken::kw_simulation:
+    if (requireFeature({4, 2, 0}, "simulation tests"))
+      return failure();
+    return parseSimulation(circuit, indent);
   case FIRToken::kw_type:
     return parseTypeDecl();
   case FIRToken::kw_option:
@@ -5805,6 +5827,7 @@ ParseResult FIRCircuitParser::parseCircuit(
     case FIRToken::kw_module:
     case FIRToken::kw_option:
     case FIRToken::kw_public:
+    case FIRToken::kw_simulation:
     case FIRToken::kw_type: {
       auto indent = getIndentation();
       if (!indent.has_value())

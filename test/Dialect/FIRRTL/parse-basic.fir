@@ -1890,6 +1890,33 @@ circuit Foo:
     d_map = {a = 42, b = "hello", c = [9001], d = {foo = 1337}}
 
 ;// -----
+FIRRTL version 4.2.0
+; CHECK-LABEL: circuit "Foo"
+circuit Foo:
+
+  ; CHECK-LABEL: firrtl.extmodule @Foo(
+  extmodule Foo:
+    input clock: Clock
+    input init: UInt<1>
+    output done: UInt<1>
+    output success: UInt<1>
+
+  ; CHECK: firrtl.simulation @someNameA, @Foo {bound = 20 : i32}
+  simulation someNameA of Foo, bound = 20
+
+  ; CHECK: firrtl.simulation @someNameB, @Foo {
+  ; CHECK-SAME: a_int = 42
+  ; CHECK-SAME: b_string = "hello"
+  ; CHECK-SAME: c_array = [42 : ui32, "hello", [9001 : ui32], {foo = 1337 : ui32}]
+  ; CHECK-SAME: d_map = {a = 42 : ui32, b = "hello", c = [9001 : ui32], d = {foo = 1337 : ui32}}
+  ; CHECK-SAME: }
+  simulation someNameB of Foo:
+    a_int = 42
+    b_string = "hello"
+    c_array = [42, "hello", [9001], {foo = 1337}]
+    d_map = {a = 42, b = "hello", c = [9001], d = {foo = 1337}}
+
+;// -----
 FIRRTL version 3.9.0
 circuit Foo:
 
