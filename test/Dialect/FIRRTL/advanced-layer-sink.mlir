@@ -479,8 +479,9 @@ firrtl.circuit "Top" {
   // CHECK:     %w = firrtl.wire : !firrtl.bundle<a: uint<1>, b: uint<1>>
   // CHECK:     %0 = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<1>, b: uint<1>>
   // CHECK:     %1 = firrtl.subfield %w[b] : !firrtl.bundle<a: uint<1>, b: uint<1>>
-  // CHECK:     firrtl.matchingconnect %0, %c0_ui1 : !firrtl.uint<1>
-  // CHECK:     firrtl.matchingconnect %1, %c0_ui1 : !firrtl.uint<1>
+  // CHECK:     %c0_ui1_0 = firrtl.constant 0 : !firrtl.uint<1>
+  // CHECK:     firrtl.matchingconnect %0, %c0_ui1_0 : !firrtl.uint<1>
+  // CHECK:     firrtl.matchingconnect %1, %c0_ui1_0 : !firrtl.uint<1>
   // CHECK:     "unknown"(%1) : (!firrtl.uint<1>) -> ()
   // CHECK:   }
   // CHECK: }
@@ -643,6 +644,36 @@ firrtl.circuit "Top" {
       firrtl.layerblock @A {
         "unknown"(%node) : (!firrtl.uint<1>) -> ()
       }
+    }
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// Cloning of constants.
+//===----------------------------------------------------------------------===//
+
+firrtl.circuit "Top" {
+  firrtl.layer @A bind {}
+  firrtl.layer @B bind {}
+
+  // CHECK: firrtl.module @Top() {
+  // CHECK-NOT: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  // CHECK:   firrtl.layerblock @A {
+  // CHECK:     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  // CHECK:     "unknown"(%c0_ui1) : (!firrtl.uint<1>) -> ()
+  // CHECK:   }
+  // CHECK:   firrtl.layerblock @A {
+  // CHECK:     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  // CHECK:     "unknown"(%c0_ui1) : (!firrtl.uint<1>) -> ()
+  // CHECK:   }
+  // CHECK: }
+  firrtl.module @Top() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.layerblock @A {
+      "unknown"(%c0_ui1) : (!firrtl.uint<1>) -> ()
+    }
+    firrtl.layerblock @A {
+      "unknown"(%c0_ui1) : (!firrtl.uint<1>) -> ()
     }
   }
 }
