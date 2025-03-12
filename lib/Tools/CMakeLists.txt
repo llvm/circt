@@ -1,5 +1,6 @@
 add_subdirectory(circt-bmc)
 add_subdirectory(circt-lec)
+add_subdirectory(Firtool)
 add_subdirectory(rtgtool)
 
 if(CIRCT_SLANG_FRONTEND_ENABLED)
