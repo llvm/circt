@@ -575,6 +575,8 @@ private:
                                       CircuitLoweringState &loweringState);
   LogicalResult lowerFormalBody(verif::FormalOp formalOp,
                                 CircuitLoweringState &loweringState);
+  LogicalResult lowerSimulationBody(verif::SimulationOp simulationOp,
+                                    CircuitLoweringState &loweringState);
 };
 
 } // end anonymous namespace
@@ -618,6 +620,7 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   SmallVector<hw::HWModuleOp, 32> modulesToProcess;
   SmallVector<verif::FormalOp> formalOpsToProcess;
+  SmallVector<verif::SimulationOp> simulationOpsToProcess;
 
   AnnotationSet circuitAnno(circuit);
   moveVerifAnno(getOperation(), circuitAnno, extractAssertAnnoClass,
@@ -676,6 +679,19 @@ void FIRRTLModuleLowering::runOnOperation() {
               newFormalOp.getBody().emplaceBlock();
               state.recordModuleMapping(oldFormalOp, newFormalOp);
               formalOpsToProcess.push_back(newFormalOp);
+              return success();
+            })
+            .Case<SimulationOp>([&](auto oldSimulationOp) {
+              auto loc = oldSimulationOp.getLoc();
+              auto builder = OpBuilder::atBlockEnd(topLevelModule);
+              auto newSimulationOp = builder.create<verif::SimulationOp>(
+                  loc, oldSimulationOp.getNameAttr(),
+                  oldSimulationOp.getParametersAttr());
+              auto &body = newSimulationOp.getRegion().emplaceBlock();
+              body.addArgument(seq::ClockType::get(builder.getContext()), loc);
+              body.addArgument(builder.getI1Type(), loc);
+              state.recordModuleMapping(oldSimulationOp, newSimulationOp);
+              simulationOpsToProcess.push_back(newSimulationOp);
               return success();
             })
             .Default([&](Operation *op) {
@@ -745,6 +761,13 @@ void FIRRTLModuleLowering::runOnOperation() {
   result = mlir::failableParallelForEach(
       &getContext(), formalOpsToProcess,
       [&](auto op) { return lowerFormalBody(op, state); });
+  if (failed(result))
+    return signalPassFailure();
+
+  // Lower all simulation op bodies.
+  result = mlir::failableParallelForEach(
+      &getContext(), simulationOpsToProcess,
+      [&](auto op) { return lowerSimulationBody(op, state); });
   if (failed(result))
     return signalPassFailure();
 
@@ -1444,6 +1467,35 @@ FIRRTLModuleLowering::lowerFormalBody(verif::FormalOp formalOp,
   // Instantiate the module with the given symbolic inputs.
   builder.create<hw::InstanceOp>(formalOp.getLoc(), newModule,
                                  newModule.getNameAttr(), symbolicInputs);
+  return success();
+}
+
+/// Run on each `verif.simulation` to populate its body based on the original
+/// `firrtl.simulation` operation.
+LogicalResult
+FIRRTLModuleLowering::lowerSimulationBody(verif::SimulationOp simulationOp,
+                                          CircuitLoweringState &loweringState) {
+  auto builder = OpBuilder::atBlockEnd(simulationOp.getBody());
+
+  // Find the module targeted by the `firrtl.simulation` operation.
+  auto oldSimulationOp =
+      cast<SimulationOp>(loweringState.getOldModule(simulationOp));
+  auto moduleName = oldSimulationOp.getModuleNameAttr().getAttr();
+  auto oldModule = cast<FModuleLike>(
+      *loweringState.getInstanceGraph().lookup(moduleName)->getModule());
+  auto newModule =
+      dyn_cast_or_null<hw::HWModuleLike>(loweringState.getNewModule(oldModule));
+  if (!newModule)
+    return oldSimulationOp->emitOpError()
+           << "could not find module " << oldModule.getNameAttr();
+
+  // Instantiate the module with the simulation op's block arguments as inputs,
+  // and yield the module's outputs.
+  SmallVector<Value> inputs(simulationOp.getBody()->args_begin(),
+                            simulationOp.getBody()->args_end());
+  auto instOp = builder.create<hw::InstanceOp>(simulationOp.getLoc(), newModule,
+                                               newModule.getNameAttr(), inputs);
+  builder.create<verif::YieldOp>(simulationOp.getLoc(), instOp.getResults());
   return success();
 }
 
