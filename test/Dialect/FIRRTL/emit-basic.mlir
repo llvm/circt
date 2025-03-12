@@ -869,15 +869,34 @@ firrtl.circuit "Foo" {
     firrtl.int.generic "circt_verif_assert"  %8 : (!firrtl.uint<1>) -> ()
   }
 
-  // CHECK-LABEL: formal someTestName of Foo :
+  // CHECK-LABEL: formal someFormalTest of Foo :
   // CHECK-NEXT: a_int = 42
   // CHECK-NEXT: b_string = "hello"
   // CHECK-NEXT: c_array = [42, "hello", [9001], {foo = 1337}]
   // CHECK-NEXT: d_map = {a = 42, b = "hello", c = [9001], d = {foo = 1337}}
-  firrtl.formal @someTestName, @Foo {
+  firrtl.formal @someFormalTest, @Foo {
     a_int = 42,
     b_string = "hello",
     c_array = [42, "hello", [9001], {foo = 1337}],
     d_map = {a = 42, b = "hello", c = [9001], d = {foo = 1337}}
   }
+
+  // CHECK-LABEL: simulation someSimulationTest of SimulationTop :
+  // CHECK-NEXT: a_int = 42
+  // CHECK-NEXT: b_string = "hello"
+  // CHECK-NEXT: c_array = [42, "hello", [9001], {foo = 1337}]
+  // CHECK-NEXT: d_map = {a = 42, b = "hello", c = [9001], d = {foo = 1337}}
+  firrtl.simulation @someSimulationTest, @SimulationTop {
+    a_int = 42,
+    b_string = "hello",
+    c_array = [42, "hello", [9001], {foo = 1337}],
+    d_map = {a = 42, b = "hello", c = [9001], d = {foo = 1337}}
+  }
+
+  firrtl.extmodule @SimulationTop(
+    in clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>
+  )
 }
