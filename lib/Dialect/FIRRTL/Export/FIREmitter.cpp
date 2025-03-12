@@ -61,6 +61,9 @@ struct Emitter {
   void emitDeclaration(LayerOp op);
   void emitDeclaration(OptionOp op);
   void emitDeclaration(FormalOp op);
+  void emitDeclaration(SimulationOp op);
+  void emitFormalLike(Operation *op, StringRef keyword, StringAttr symName,
+                      StringAttr moduleName, DictionaryAttr params);
   void emitEnabledLayers(ArrayRef<Attribute> layers);
 
   void emitParamAssign(ParamDeclAttr param, Operation *op,
@@ -409,9 +412,8 @@ void Emitter::emitCircuit(CircuitOp op) {
             emitModule(op);
             ps << PP::newline;
           })
-          .Case<LayerOp>([&](auto op) { emitDeclaration(op); })
-          .Case<OptionOp>([&](auto op) { emitDeclaration(op); })
-          .Case<FormalOp>([&](auto op) { emitDeclaration(op); })
+          .Case<LayerOp, OptionOp, FormalOp, SimulationOp>(
+              [&](auto op) { emitDeclaration(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside circuit");
           });
@@ -653,16 +655,30 @@ void Emitter::emitDeclaration(OptionOp op) {
 
 /// Emit a formal test definition.
 void Emitter::emitDeclaration(FormalOp op) {
+  emitFormalLike(op, "formal", op.getSymNameAttr(),
+                 op.getModuleNameAttr().getAttr(), op.getParameters());
+}
+
+/// Emit a simulation test definition.
+void Emitter::emitDeclaration(SimulationOp op) {
+  emitFormalLike(op, "simulation", op.getSymNameAttr(),
+                 op.getModuleNameAttr().getAttr(), op.getParameters());
+}
+
+/// Emit a formal or simulation test definition.
+void Emitter::emitFormalLike(Operation *op, StringRef keyword,
+                             StringAttr symName, StringAttr moduleName,
+                             DictionaryAttr params) {
   startStatement();
   ps.cbox(4, IndentStyle::Block);
-  ps << "formal " << PPExtString(legalize(op.getSymNameAttr()));
-  ps << " of " << PPExtString(legalize(op.getModuleNameAttr().getAttr()));
+  ps << keyword << " " << PPExtString(legalize(symName));
+  ps << " of " << PPExtString(legalize(moduleName));
   ps << PP::nbsp << ":" << PP::end;
   emitLocation(op);
 
   ps.scopedBox(PP::bbox2, [&]() {
     setPendingNewline();
-    for (auto param : op.getParameters()) {
+    for (auto param : params) {
       startStatement();
       ps << PPExtString(param.getName()) << PP::nbsp << "=" << PP::nbsp;
       emitParamValue(param.getValue(), op);
