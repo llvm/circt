@@ -52,7 +52,7 @@ static void testLabelType(MlirContext ctx) {
 
   // CHECK: is_label
   fprintf(stderr, rtgTypeIsALabel(labelTy) ? "is_label\n" : "isnot_label\n");
-  // CHECK: !rtg.label
+  // CHECK: !rtg.isa.label
   mlirTypeDump(labelTy);
 }
 
@@ -138,6 +138,29 @@ static void testDefaultContextAttr(MlirContext ctx) {
   mlirTypeDump(mlirAttributeGetType(defaultCtxtAttr));
 }
 
+static void testImmediate(MlirContext ctx) {
+  MlirType immediateTy = rtgImmediateTypeGet(ctx, 32);
+  // CHECK: is_immediate
+  fprintf(stderr, rtgTypeIsAImmediate(immediateTy) ? "is_immediate\n"
+                                                   : "isnot_immediate\n");
+  // CHECK: !rtg.isa.immediate<32>
+  mlirTypeDump(immediateTy);
+  // CHECK: width=32
+  fprintf(stderr, "width=%u\n", rtgImmediateTypeGetWidth(immediateTy));
+
+  MlirAttribute immediateAttr = rtgImmediateAttrGet(ctx, 32, 42);
+  // CHECK: is_immediate_attr
+  fprintf(stderr, rtgAttrIsAImmediate(immediateAttr)
+                      ? "is_immediate_attr\n"
+                      : "isnot_immediate_attr\n");
+  // CHECK: #rtg.isa.immediate<32, 42>
+  mlirAttributeDump(immediateAttr);
+  // CHECK: width=32
+  fprintf(stderr, "width=%u\n", rtgImmediateAttrGetWidth(immediateAttr));
+  // CHECK: value=42
+  fprintf(stderr, "value=%llu\n", rtgImmediateAttrGetValue(immediateAttr));
+}
+
 int main(int argc, char **argv) {
   MlirContext ctx = mlirContextCreate();
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__rtg__(), ctx);
@@ -152,6 +175,7 @@ int main(int argc, char **argv) {
 
   testLabelVisibilityAttr(ctx);
   testDefaultContextAttr(ctx);
+  testImmediate(ctx);
 
   mlirContextDestroy(ctx);
 

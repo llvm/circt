@@ -1,5 +1,11 @@
 // RUN: circt-opt %s --split-input-file --verify-diagnostics
 
+rtg.test @constantTooBig() {
+  // expected-error @below {{cannot represent 4 with 2 bits}}
+  rtg.constant #rtg.isa.immediate<2, 4>
+}
+
+// -----
 
 func.func @seq0() {
   return
