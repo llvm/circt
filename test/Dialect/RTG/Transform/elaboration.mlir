@@ -7,12 +7,18 @@ func.func @dummy4(%arg0: index, %arg1: index, %arg2: !rtg.bag<index>, %arg3: !rt
 func.func @dummy5(%arg0: i1) -> () {return}
 func.func @dummy6(%arg0: !rtg.isa.immediate<2>) -> () {return}
 
-// CHECK-LABEL: @constantImmediate
-rtg.test @constantImmediate() {
+// CHECK-LABEL: @immediates
+rtg.test @immediates() {
   // CHECK-NEXT: [[V0:%.+]] = rtg.constant #rtg.isa.immediate<2, -1>
   // CHECK-NEXT: func.call @dummy6([[V0]]) : (!rtg.isa.immediate<2>) -> ()
   %0 = rtg.constant #rtg.isa.immediate<2, -1>
   func.call @dummy6(%0) : (!rtg.isa.immediate<2>) -> ()
+
+  // CHECK-NEXT: [[V1:%.+]] = rtg.constant #rtg.isa.immediate<2, 1>
+  // CHECK-NEXT: func.call @dummy6([[V1]]) : (!rtg.isa.immediate<2>) -> ()
+  %1 = index.constant 1
+  %2 = rtg.isa.int_to_immediate %1 : !rtg.isa.immediate<2>
+  func.call @dummy6(%2) : (!rtg.isa.immediate<2>) -> ()
 }
 
 // Test the set operations and passing a sequence to another one via argument
@@ -596,4 +602,15 @@ rtg.test @emptyBagSelect() {
   // expected-error @below {{cannot select from an empty bag}}
   %1 = rtg.bag_select_random %0 : !rtg.bag<!rtg.isa.label>
   rtg.label local %1
+}
+
+// -----
+
+func.func @dummy6(%arg0: !rtg.isa.immediate<2>) -> () {return}
+
+rtg.test @integerTooBig() {
+  %1 = index.constant 8
+  // expected-error @below {{cannot represent 8 with 2 bits}}
+  %2 = rtg.isa.int_to_immediate %1 : !rtg.isa.immediate<2>
+  func.call @dummy6(%2) : (!rtg.isa.immediate<2>) -> ()
 }

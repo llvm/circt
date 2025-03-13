@@ -588,3 +588,26 @@ def YieldOp : RTGOp<"yield", [Pure, Terminator]> {
 
   let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
 }
+
+//===----------------------------------------------------------------------===//
+// ISA Target Operations
+//===----------------------------------------------------------------------===//
+
+class RTGISAOp<string mnemonic, list<Trait> traits = []> :
+    Op<RTGDialect, "isa." # mnemonic, traits>;
+
+//===- ISA Immediate Handling Operations ----------------------------------===//
+
+def IntToImmediateOp : RTGISAOp<"int_to_immediate", [Pure]> {
+  let summary = "construct an immediate from an integer";
+  let description = [{
+    Create an immediate of static bit-width from the provided integer. If the
+    integer does not fit in the specified bit-width, an error shall be emitted
+    when executing this operation.
+  }];
+
+  let arguments = (ins Index:$input);
+  let results = (outs ImmediateType:$result);
+
+  let assemblyFormat = "$input `:` qualified(type($result)) attr-dict";
+}
