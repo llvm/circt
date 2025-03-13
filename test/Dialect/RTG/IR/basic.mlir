@@ -4,6 +4,11 @@
 rtg.test @constants() {
   // CHECK-NEXT: rtg.constant #rtg.isa.immediate<2, -1> : !rtg.isa.immediate<2>
   %0 = rtg.constant #rtg.isa.immediate<2, -1>
+
+  // CHECK-NEXT: [[V0:%.+]] = index.constant 5
+  // CHECK-NEXT: rtg.isa.int_to_immediate [[V0]] : !rtg.isa.immediate<32>
+  %1 = index.constant 5
+  %2 = rtg.isa.int_to_immediate %1 : !rtg.isa.immediate<32>
 }
 
 // CHECK-LABEL: rtg.sequence @ranomizedSequenceType
