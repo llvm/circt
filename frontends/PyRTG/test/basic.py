@@ -77,32 +77,32 @@ def test0():
   pass
 
 
-# MLIR-LABEL: rtg.test @test_args
+# MLIR-LABEL: rtg.test @test1_args
 # MLIR-SAME: (entry0 = [[SET:%.+]]: !rtg.set<index>)
 # MLIR-NEXT: [[RAND:%.+]] = rtg.set_select_random [[SET]] : !rtg.set<index>
 # MLIR-NEXT: rtg.label_decl "L_{{[{][{]0[}][}]}}", [[RAND]]
 # MLIR-NEXT: rtg.label local
 # MLIR-NEXT: }
 
-# ELABORATED-LABEL: rtg.test @test_args_Tgt0
+# ELABORATED-LABEL: rtg.test @test1_args_Tgt0
 # CHECK: rtg.label_decl "L_0"
 # CHECK-NEXT: rtg.label local
 # CHECK-NEXT: }
 
-# ASM-LABEL: Begin of test_args
+# ASM-LABEL: Begin of test1_args
 # ASM-EMPTY:
 # ASM-NEXT: L_0:
 # ASM-EMPTY:
-# ASM: End of test_args
+# ASM: End of test1_args
 
 
 @test(("entry0", Set.type(Integer.type())))
-def test_args(set: Set):
+def test1_args(set: Set):
   i = set.get_random()
   Label.declare(r"L_{{0}}", i).place()
 
 
-# MLIR-LABEL: rtg.test @test_labels
+# MLIR-LABEL: rtg.test @test2_labels
 # MLIR-NEXT: index.constant 5
 # MLIR-NEXT: index.constant 3
 # MLIR-NEXT: index.constant 2
@@ -158,7 +158,7 @@ def test_args(set: Set):
 
 # MLIR-NEXT: }
 
-# ELABORATED-LABEL: rtg.test @test_labels
+# ELABORATED-LABEL: rtg.test @test2_labels
 # ELABORATED-NEXT: [[L0:%.+]] = rtg.label_decl "l0"
 # ELABORATED-NEXT: rtg.label global [[L0]]
 # ELABORATED-NEXT: [[L1:%.+]] = rtg.label_decl "l1_0"
@@ -188,7 +188,7 @@ def test_args(set: Set):
 
 # ELABORATED-NEXT: }
 
-# ASM-LABEL: Begin of test_labels
+# ASM-LABEL: Begin of test2_labels
 # ASM-EMPTY:
 # ASM-NEXT: .global l0
 # ASM-NEXT: l0:
@@ -211,11 +211,11 @@ def test_args(set: Set):
 # ASM-NEXT: s1:
 
 # ASM-EMPTY:
-# ASM: End of test_labels
+# ASM: End of test2_labels
 
 
 @test()
-def test_labels():
+def test2_labels():
   l0 = Label.declare("l0")
   l1 = Label.declare_unique("l1")
   l2 = Label.declare_unique("l1")
@@ -260,7 +260,7 @@ def test_labels():
   seq1()
 
 
-# MLIR-NEXT: rtg.test @test_registers_and_immediates()
+# MLIR-LABEL: rtg.test @test3_registers_and_immediates()
 # MLIR-NEXT: [[IMM32:%.+]] = rtg.constant #rtg.isa.immediate<32, 32>
 # MLIR-NEXT: [[IMM21:%.+]] = rtg.constant #rtg.isa.immediate<21, 16>
 # MLIR-NEXT: [[IMM13:%.+]] = rtg.constant #rtg.isa.immediate<13, 9>
@@ -279,7 +279,7 @@ def test_labels():
 
 
 @test()
-def test_registers_and_immediates():
+def test3_registers_and_immediates():
   vreg = IntegerRegister.virtual()
   imm12 = Immediate(12, 8)
   rtgtest.ADDI(vreg, IntegerRegister.t0(), imm12)
@@ -287,3 +287,16 @@ def test_registers_and_immediates():
   rtgtest.BEQ(vreg, IntegerRegister.t2(), Immediate(13, 9))
   rtgtest.JAL(vreg, Immediate(21, 16))
   rtgtest.AUIPC(vreg, Immediate(32, 32))
+
+
+# MLIR-LABEL: rtg.test @test4_integer_to_immediate()
+# MLIR-NEXT: [[V0:%.+]] = rtg.fixed_reg
+# MLIR-NEXT: [[V1:%.+]] = index.constant 2
+# MLIR-NEXT: [[V2:%.+]] = rtg.isa.int_to_immediate [[V1]] : !rtg.isa.immediate<12>
+# MLIR-NEXT: rtgtest.rv32i.addi [[V0]], [[V0]], [[V2]]
+
+
+@test()
+def test4_integer_to_immediate():
+  rtgtest.ADDI(IntegerRegister.t0(), IntegerRegister.t0(),
+               Immediate(12, Integer(2)))

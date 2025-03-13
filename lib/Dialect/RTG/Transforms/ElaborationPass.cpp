@@ -1169,6 +1169,17 @@ public:
     return DeletionKind::Delete;
   }
 
+  FailureOr<DeletionKind> visitOp(IntToImmediateOp op) {
+    size_t input = get<size_t>(op.getInput());
+    auto width = op.getType().getWidth();
+    auto emitError = [&]() { return op->emitError(); };
+    if (failed(ImmediateAttr::verifyInvariants(emitError, width, input)))
+      return failure();
+
+    state[op.getResult()] = ImmediateAttr::get(op.getContext(), width, input);
+    return DeletionKind::Delete;
+  }
+
   FailureOr<DeletionKind> visitOp(OnContextOp op) {
     ContextResourceAttrInterface from = currentContext,
                                  to = cast<ContextResourceAttrInterface>(
