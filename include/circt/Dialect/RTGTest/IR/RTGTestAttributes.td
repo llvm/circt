@@ -36,14 +36,6 @@ def CPUAttr : RTGTestAttrDef<"CPU", [ContextResourceAttrInterface]> {
   }];
 }
 
-let dialect = RTGTestDialect in {
-def Imm5  : ImmediateAttrBase<5>;
-def Imm12 : ImmediateAttrBase<12>;
-def Imm13 : ImmediateAttrBase<13>;
-def Imm21 : ImmediateAttrBase<21>;
-def Imm32 : ImmediateAttrBase<32>;
-}
-
 class IntegerRegisterAttrBase<string cppName, string name, int classIndex>
   : RTGTestAttrDef<cppName, [RegisterAttrInterface]> {
 

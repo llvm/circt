@@ -49,7 +49,7 @@ Operation *RTGTestDialect::materializeConstant(OpBuilder &builder,
   return TypeSwitch<Attribute, Operation *>(value)
       .Case<CPUAttr>([&](auto attr) -> Operation * {
         if (isa<CPUType>(type))
-          return builder.create<CPUDeclOp>(loc, type, attr);
+          return builder.create<rtg::ConstantOp>(loc, attr);
         return nullptr;
       })
       .Case<rtg::RegisterAttrInterface>([&](auto attr) -> Operation * {
@@ -57,8 +57,6 @@ Operation *RTGTestDialect::materializeConstant(OpBuilder &builder,
           return builder.create<rtg::FixedRegisterOp>(loc, attr);
         return nullptr;
       })
-      .Case<Imm5Attr, Imm12Attr, Imm13Attr, Imm21Attr, Imm32Attr>(
-          [&](auto attr) { return builder.create<ImmediateOp>(loc, attr); })
       .Default([](auto attr) { return nullptr; });
 }
 
