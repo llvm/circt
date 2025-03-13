@@ -14,4 +14,4 @@ from .integers import Integer
 from .bags import Bag
 from .sequences import sequence, Sequence, RandomizedSequence
 from .target import target, entry
-from .resources import IntegerRegister, Imm5, Imm12, Imm13, Imm21, Imm32
+from .resources import IntegerRegister, Immediate
