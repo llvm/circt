@@ -14,7 +14,7 @@ rtg.test @test0() {
   %1 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
   %2 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
   %3 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
-  %imm = rtgtest.immediate #rtgtest.imm12<0>
+  %imm = rtg.constant #rtg.isa.immediate<12, 0>
   rtgtest.rv32i.jalr %0, %2, %imm
   rtgtest.rv32i.jalr %1, %0, %imm
   rtgtest.rv32i.jalr %3, %1, %imm
@@ -35,7 +35,7 @@ rtg.test @withFixedRegs() {
   %1 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
   %2 = rtg.fixed_reg #rtgtest.s0
   %3 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
-  %imm = rtgtest.immediate #rtgtest.imm12<0>
+  %imm = rtg.constant #rtg.isa.immediate<12, 0>
   rtgtest.rv32i.jalr %0, %2, %imm
   rtgtest.rv32i.jalr %1, %0, %imm
   rtgtest.rv32i.jalr %3, %1, %imm
@@ -48,7 +48,7 @@ rtg.test @spilling() {
   %0 = rtg.virtual_reg [#rtgtest.ra]
   // expected-error @below {{need to spill this register, but not supported yet}}
   %1 = rtg.virtual_reg [#rtgtest.ra]
-  %imm = rtgtest.immediate #rtgtest.imm12<0>
+  %imm = rtg.constant #rtg.isa.immediate<12, 0>
   rtgtest.rv32i.jalr %0, %1, %imm
 }
 

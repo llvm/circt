@@ -314,11 +314,11 @@ rtg.test @scfFor() {
 rtg.test @fixedRegisters() {
   // CHECK-NEXT: [[RA:%.+]] = rtg.fixed_reg #rtgtest.ra
   // CHECK-NEXT: [[SP:%.+]] = rtg.fixed_reg #rtgtest.sp
-  // CHECK-NEXT: [[IMM:%.+]] = rtgtest.immediate #rtgtest.imm12<0>
+  // CHECK-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<12, 0>
   // CHECK-NEXT: rtgtest.rv32i.jalr [[RA]], [[SP]], [[IMM]]
   %ra = rtg.fixed_reg #rtgtest.ra
   %sp = rtg.fixed_reg #rtgtest.sp
-  %imm = rtgtest.immediate #rtgtest.imm12<0>
+  %imm = rtg.constant #rtg.isa.immediate<12, 0>
   rtgtest.rv32i.jalr %ra, %sp, %imm
 }
 
@@ -326,12 +326,12 @@ rtg.test @fixedRegisters() {
 rtg.test @virtualRegisters() {
   // CHECK-NEXT: [[R0:%.+]] = rtg.virtual_reg [#rtgtest.a0 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg]
   // CHECK-NEXT: [[R1:%.+]] = rtg.virtual_reg [#rtgtest.s0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg]
-  // CHECK-NEXT: [[IMM:%.+]] = rtgtest.immediate #rtgtest.imm12<0>
+  // CHECK-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<12, 0>
   // CHECK-NEXT: rtgtest.rv32i.jalr [[R0]], [[R1]], [[IMM]]
   // CHECK-NEXT: rtgtest.rv32i.jalr [[R0]], [[R1]], [[IMM]]
   %r0 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1]
   %r1 = rtg.virtual_reg [#rtgtest.s0, #rtgtest.s1]
-  %imm = rtgtest.immediate #rtgtest.imm12<0>
+  %imm = rtg.constant #rtg.isa.immediate<12, 0>
   rtgtest.rv32i.jalr %r0, %r1, %imm
   rtgtest.rv32i.jalr %r0, %r1, %imm
 
@@ -400,8 +400,8 @@ rtg.test @contexts(cpu0 = %cpu0: !rtgtest.cpu, cpu1 = %cpu1: !rtgtest.cpu) {
 }
 
 rtg.target @contextCpu : !rtg.dict<cpu0: !rtgtest.cpu, cpu1: !rtgtest.cpu> {
-  %cpu0 = rtgtest.cpu_decl <0>
-  %cpu1 = rtgtest.cpu_decl <1>
+  %cpu0 = rtg.constant #rtgtest.cpu<0>
+  %cpu1 = rtg.constant #rtgtest.cpu<1>
   %0 = rtg.get_sequence @switchCpuSeq : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
   %1 = rtg.get_sequence @switchNestedCpuSeq : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
   rtg.context_switch #rtg.default : !rtgtest.cpu -> #rtgtest.cpu<0> : !rtgtest.cpu, %0 : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
@@ -553,7 +553,7 @@ rtg.sequence @seq(%arg0: !rtgtest.cpu, %arg1: !rtgtest.cpu, %seq: !rtg.sequence)
 rtg.target @invalidRandomizationTarget : !rtg.dict<cpu: !rtgtest.cpu> {
   %0 = rtg.get_sequence @seq : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
   rtg.context_switch #rtg.default : !rtgtest.cpu -> #rtgtest.cpu<0>, %0 : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
-  %1 = rtgtest.cpu_decl <0>
+  %1 = rtg.constant #rtgtest.cpu<0>
   rtg.yield %1 : !rtgtest.cpu
 }
 
@@ -570,7 +570,7 @@ rtg.test @invalidRandomization(cpu = %cpu: !rtgtest.cpu) {
 rtg.sequence @seq() {}
 
 rtg.target @target : !rtg.dict<cpu: !rtgtest.cpu> {
-  %0 = rtgtest.cpu_decl <0>
+  %0 = rtg.constant #rtgtest.cpu<0>
   rtg.yield %0 : !rtgtest.cpu
 }
 
