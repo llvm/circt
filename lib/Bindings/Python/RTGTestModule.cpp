@@ -38,46 +38,6 @@ void circt::python::populateDialectRTGTestSubmodule(nb::module_ &m) {
           },
           nb::arg("self"), nb::arg("ctxt") = nullptr);
 
-  mlir_type_subclass(m, "Imm5Type", rtgtestTypeIsAImm5)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, MlirContext ctxt) {
-            return cls(rtgtestImm5TypeGet(ctxt));
-          },
-          nb::arg("self"), nb::arg("ctxt") = nullptr);
-
-  mlir_type_subclass(m, "Imm12Type", rtgtestTypeIsAImm12)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, MlirContext ctxt) {
-            return cls(rtgtestImm12TypeGet(ctxt));
-          },
-          nb::arg("self"), nb::arg("ctxt") = nullptr);
-
-  mlir_type_subclass(m, "Imm13Type", rtgtestTypeIsAImm13)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, MlirContext ctxt) {
-            return cls(rtgtestImm13TypeGet(ctxt));
-          },
-          nb::arg("self"), nb::arg("ctxt") = nullptr);
-
-  mlir_type_subclass(m, "Imm21Type", rtgtestTypeIsAImm21)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, MlirContext ctxt) {
-            return cls(rtgtestImm21TypeGet(ctxt));
-          },
-          nb::arg("self"), nb::arg("ctxt") = nullptr);
-
-  mlir_type_subclass(m, "Imm32Type", rtgtestTypeIsAImm32)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, MlirContext ctxt) {
-            return cls(rtgtestImm32TypeGet(ctxt));
-          },
-          nb::arg("self"), nb::arg("ctxt") = nullptr);
-
   mlir_attribute_subclass(m, "CPUAttr", rtgtestAttrIsACPU)
       .def_classmethod(
           "get",
@@ -343,59 +303,4 @@ void circt::python::populateDialectRTGTestSubmodule(nb::module_ &m) {
             return cls(rtgtestRegT6AttrGet(ctxt));
           },
           nb::arg("self"), nb::arg("ctxt") = nullptr);
-
-  mlir_attribute_subclass(m, "Imm5Attr", rtgtestAttrIsAImm5)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, unsigned value, MlirContext ctxt) {
-            return cls(rtgtestImm5AttrGet(ctxt, value));
-          },
-          nb::arg("self"), nb::arg("value"), nb::arg("ctxt") = nullptr)
-      .def_property_readonly("value", [](MlirAttribute self) {
-        return rtgtestImm5AttrGetValue(self);
-      });
-
-  mlir_attribute_subclass(m, "Imm12Attr", rtgtestAttrIsAImm12)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, unsigned value, MlirContext ctxt) {
-            return cls(rtgtestImm12AttrGet(ctxt, value));
-          },
-          nb::arg("self"), nb::arg("value"), nb::arg("ctxt") = nullptr)
-      .def_property_readonly("value", [](MlirAttribute self) {
-        return rtgtestImm12AttrGetValue(self);
-      });
-
-  mlir_attribute_subclass(m, "Imm13Attr", rtgtestAttrIsAImm13)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, unsigned value, MlirContext ctxt) {
-            return cls(rtgtestImm13AttrGet(ctxt, value));
-          },
-          nb::arg("self"), nb::arg("value"), nb::arg("ctxt") = nullptr)
-      .def_property_readonly("value", [](MlirAttribute self) {
-        return rtgtestImm13AttrGetValue(self);
-      });
-
-  mlir_attribute_subclass(m, "Imm21Attr", rtgtestAttrIsAImm21)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, unsigned value, MlirContext ctxt) {
-            return cls(rtgtestImm21AttrGet(ctxt, value));
-          },
-          nb::arg("self"), nb::arg("value"), nb::arg("ctxt") = nullptr)
-      .def_property_readonly("value", [](MlirAttribute self) {
-        return rtgtestImm21AttrGetValue(self);
-      });
-
-  mlir_attribute_subclass(m, "Imm32Attr", rtgtestAttrIsAImm32)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, unsigned value, MlirContext ctxt) {
-            return cls(rtgtestImm32AttrGet(ctxt, value));
-          },
-          nb::arg("self"), nb::arg("value"), nb::arg("ctxt") = nullptr)
-      .def_property_readonly("value", [](MlirAttribute self) {
-        return rtgtestImm32AttrGetValue(self);
-      });
 }

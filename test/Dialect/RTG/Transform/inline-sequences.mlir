@@ -62,7 +62,7 @@ rtg.test @interleaveSequences() {
 rtg.sequence @nested0() {
   %ra = rtg.fixed_reg #rtgtest.ra
   %sp = rtg.fixed_reg #rtgtest.s0
-  %imm = rtgtest.immediate #rtgtest.imm12<1>
+  %imm = rtg.constant #rtg.isa.immediate<12, 1>
   rtgtest.rv32i.jalr %ra, %sp, %imm
 }
 
@@ -72,7 +72,7 @@ rtg.sequence @nested1() {
   rtg.embed_sequence %1
   %ra = rtg.fixed_reg #rtgtest.ra
   %sp = rtg.fixed_reg #rtgtest.sp
-  %imm = rtgtest.immediate #rtgtest.imm12<0>
+  %imm = rtg.constant #rtg.isa.immediate<12, 0>
   rtgtest.rv32i.jalr %ra, %sp, %imm
 }
 
@@ -80,11 +80,11 @@ rtg.sequence @nested1() {
 rtg.test @nestedSequences() {
   // CHECK-NEXT: [[RA0:%.+]] = rtg.fixed_reg #rtgtest.ra : !rtgtest.ireg
   // CHECK-NEXT: [[S0:%.+]] = rtg.fixed_reg #rtgtest.s0 : !rtgtest.ireg
-  // CHECK-NEXT: [[IMM1:%.+]] = rtgtest.immediate #rtgtest.imm12<1> : !rtgtest.imm12
+  // CHECK-NEXT: [[IMM1:%.+]] = rtg.constant #rtg.isa.immediate<12, 1>
   // CHECK-NEXT: rtgtest.rv32i.jalr [[RA0]], [[S0]], [[IMM1]]
   // CHECK-NEXT: [[RA1:%.+]] = rtg.fixed_reg #rtgtest.ra : !rtgtest.ireg
   // CHECK-NEXT: [[SP:%.+]] = rtg.fixed_reg #rtgtest.sp : !rtgtest.ireg
-  // CHECK-NEXT: [[IMM0:%.+]] = rtgtest.immediate #rtgtest.imm12<0> : !rtgtest.imm12
+  // CHECK-NEXT: [[IMM0:%.+]] = rtg.constant #rtg.isa.immediate<12, 0>
   // CHECK-NEXT: rtgtest.rv32i.jalr [[RA1]], [[SP]], [[IMM0]]
   %0 = rtg.get_sequence @nested1 : !rtg.sequence
   %1 = rtg.randomize_sequence %0
