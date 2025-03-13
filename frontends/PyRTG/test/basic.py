@@ -20,10 +20,10 @@ class Tgt0:
     return Set.create(Integer(0), Integer(1))
 
 
-# MLIR-LABEL: rtg.target @Tgt1 : !rtg.dict<entry0: index, entry1: !rtg.label>
+# MLIR-LABEL: rtg.target @Tgt1 : !rtg.dict<entry0: index, entry1: !rtg.isa.label>
 # MLIR-NEXT: [[C0:%.+]] = index.constant 0
 # MLIR-NEXT: [[LBL:%.+]] = rtg.label_decl "l0"
-# MLIR-NEXT: rtg.yield [[C0]], [[LBL]] : index, !rtg.label
+# MLIR-NEXT: rtg.yield [[C0]], [[LBL]] : index, !rtg.isa.label
 # MLIR-NEXT: }
 
 
@@ -40,7 +40,7 @@ class Tgt1:
 
 
 # MLIR-LABEL: rtg.sequence @seq0
-# MLIR-SAME: ([[SET:%.+]]: !rtg.set<!rtg.label>)
+# MLIR-SAME: ([[SET:%.+]]: !rtg.set<!rtg.isa.label>)
 # MLIR-NEXT: [[LABEL:%.+]] = rtg.set_select_random [[SET]]
 # MLIR-NEXT: rtg.label local [[LABEL]]
 # MLIR-NEXT: }
@@ -114,15 +114,15 @@ def test_args(set: Set):
 # MLIR-NEXT: rtg.label external [[L1]]
 # MLIR-NEXT: rtg.label local [[L2]]
 
-# MLIR-NEXT: [[SET0:%.+]] = rtg.set_create [[L0]], [[L1]] : !rtg.label
-# MLIR-NEXT: [[SET1:%.+]] = rtg.set_create [[L2]] : !rtg.label
-# MLIR-NEXT: [[EMPTY_SET:%.+]] = rtg.set_create  : !rtg.label
-# MLIR-NEXT: [[SET2_1:%.+]] = rtg.set_union [[SET0]], [[SET1]] : !rtg.set<!rtg.label>
-# MLIR-NEXT: [[SET2:%.+]] = rtg.set_union [[SET2_1]], [[EMPTY_SET]] : !rtg.set<!rtg.label>
-# MLIR-NEXT: [[RL0:%.+]] = rtg.set_select_random [[SET2]] : !rtg.set<!rtg.label>
+# MLIR-NEXT: [[SET0:%.+]] = rtg.set_create [[L0]], [[L1]] : !rtg.isa.label
+# MLIR-NEXT: [[SET1:%.+]] = rtg.set_create [[L2]] : !rtg.isa.label
+# MLIR-NEXT: [[EMPTY_SET:%.+]] = rtg.set_create  : !rtg.isa.label
+# MLIR-NEXT: [[SET2_1:%.+]] = rtg.set_union [[SET0]], [[SET1]] : !rtg.set<!rtg.isa.label>
+# MLIR-NEXT: [[SET2:%.+]] = rtg.set_union [[SET2_1]], [[EMPTY_SET]] : !rtg.set<!rtg.isa.label>
+# MLIR-NEXT: [[RL0:%.+]] = rtg.set_select_random [[SET2]] : !rtg.set<!rtg.isa.label>
 # MLIR-NEXT: rtg.label local [[RL0]]
-# MLIR-NEXT: [[SET2_MINUS_SET0:%.+]] = rtg.set_difference [[SET2]], [[SET0]] : !rtg.set<!rtg.label>
-# MLIR-NEXT: [[RL1:%.+]] = rtg.set_select_random [[SET2_MINUS_SET0]] : !rtg.set<!rtg.label>
+# MLIR-NEXT: [[SET2_MINUS_SET0:%.+]] = rtg.set_difference [[SET2]], [[SET0]] : !rtg.set<!rtg.isa.label>
+# MLIR-NEXT: [[RL1:%.+]] = rtg.set_select_random [[SET2_MINUS_SET0]] : !rtg.set<!rtg.isa.label>
 # MLIR-NEXT: rtg.label local [[RL1]]
 
 # MLIR-NEXT: rtg.label_decl "L_{{[{][{]0[}][}]}}", %idx5
@@ -130,21 +130,21 @@ def test_args(set: Set):
 # MLIR-NEXT: rtg.label_decl "L_{{[{][{]0[}][}]}}", %idx3
 # MLIR-NEXT: rtg.label local
 
-# MLIR-NEXT: [[BAG0:%.+]] = rtg.bag_create (%idx2 x [[L0:%.+]], %idx1 x [[L1:%.+]]) : !rtg.label
-# MLIR-NEXT: [[BAG1:%.+]] = rtg.bag_create (%idx1 x [[L2:%.+]]) : !rtg.label
-# MLIR-NEXT: [[EMPTY_BAG:%.+]] = rtg.bag_create  : !rtg.label
-# MLIR-NEXT: [[BAG2_1:%.+]] = rtg.bag_union [[BAG0]], [[BAG1]] : !rtg.bag<!rtg.label>
-# MLIR-NEXT: [[BAG2:%.+]] = rtg.bag_union [[BAG2_1]], [[EMPTY_BAG]] : !rtg.bag<!rtg.label>
-# MLIR-NEXT: [[RL2:%.+]] = rtg.bag_select_random [[BAG2]] : !rtg.bag<!rtg.label>
-# MLIR-NEXT: [[SUB:%.+]] = rtg.bag_create (%idx1 x [[RL2]]) : !rtg.label
-# MLIR-NEXT: [[BAG3:%.+]] = rtg.bag_difference [[BAG2]], [[SUB]] inf : !rtg.bag<!rtg.label>
+# MLIR-NEXT: [[BAG0:%.+]] = rtg.bag_create (%idx2 x [[L0:%.+]], %idx1 x [[L1:%.+]]) : !rtg.isa.label
+# MLIR-NEXT: [[BAG1:%.+]] = rtg.bag_create (%idx1 x [[L2:%.+]]) : !rtg.isa.label
+# MLIR-NEXT: [[EMPTY_BAG:%.+]] = rtg.bag_create  : !rtg.isa.label
+# MLIR-NEXT: [[BAG2_1:%.+]] = rtg.bag_union [[BAG0]], [[BAG1]] : !rtg.bag<!rtg.isa.label>
+# MLIR-NEXT: [[BAG2:%.+]] = rtg.bag_union [[BAG2_1]], [[EMPTY_BAG]] : !rtg.bag<!rtg.isa.label>
+# MLIR-NEXT: [[RL2:%.+]] = rtg.bag_select_random [[BAG2]] : !rtg.bag<!rtg.isa.label>
+# MLIR-NEXT: [[SUB:%.+]] = rtg.bag_create (%idx1 x [[RL2]]) : !rtg.isa.label
+# MLIR-NEXT: [[BAG3:%.+]] = rtg.bag_difference [[BAG2]], [[SUB]] inf : !rtg.bag<!rtg.isa.label>
 # MLIR-NEXT: rtg.label local [[RL2]]
-# MLIR-NEXT: [[BAG4:%.+]] = rtg.bag_difference [[BAG3]], [[BAG1]] : !rtg.bag<!rtg.label>
-# MLIR-NEXT: [[RL3:%.+]] = rtg.bag_select_random [[BAG4]] : !rtg.bag<!rtg.label>
+# MLIR-NEXT: [[BAG4:%.+]] = rtg.bag_difference [[BAG3]], [[BAG1]] : !rtg.bag<!rtg.isa.label>
+# MLIR-NEXT: [[RL3:%.+]] = rtg.bag_select_random [[BAG4]] : !rtg.bag<!rtg.isa.label>
 # MLIR-NEXT: rtg.label local [[RL3]]
 
-# MLIR-NEXT: [[SEQ:%.+]] = rtg.get_sequence @seq0 : !rtg.sequence<!rtg.set<!rtg.label>>
-# MLIR-NEXT: [[SUBST:%.+]] = rtg.substitute_sequence [[SEQ]]([[SET0]]) : !rtg.sequence<!rtg.set<!rtg.label>>
+# MLIR-NEXT: [[SEQ:%.+]] = rtg.get_sequence @seq0 : !rtg.sequence<!rtg.set<!rtg.isa.label>>
+# MLIR-NEXT: [[SUBST:%.+]] = rtg.substitute_sequence [[SEQ]]([[SET0]]) : !rtg.sequence<!rtg.set<!rtg.isa.label>>
 # MLIR-NEXT: [[RAND1:%.+]] = rtg.randomize_sequence [[SUBST]]
 # MLIR-NEXT: rtg.embed_sequence [[RAND1]]
 # MLIR-NEXT: [[RAND2:%.+]] = rtg.randomize_sequence [[SUBST]]

@@ -874,6 +874,10 @@ public:
     return visitUnhandledOp(op);
   }
 
+  FailureOr<DeletionKind> visitOp(ConstantOp op) {
+    return visitConstantLike(op);
+  }
+
   FailureOr<DeletionKind> visitOp(GetSequenceOp op) {
     SmallVector<ElaboratorValue> replacements;
     state[op.getResult()] =

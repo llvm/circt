@@ -1,5 +1,11 @@
 // RUN: circt-opt %s --verify-roundtrip | FileCheck %s
 
+// CHECK-LABEL: @constants
+rtg.test @constants() {
+  // CHECK-NEXT: rtg.constant #rtg.isa.immediate<2, -1> : !rtg.isa.immediate<2>
+  %0 = rtg.constant #rtg.isa.immediate<2, -1>
+}
+
 // CHECK-LABEL: rtg.sequence @ranomizedSequenceType
 // CHECK-SAME: (%{{.*}}: !rtg.randomized_sequence)
 rtg.sequence @ranomizedSequenceType(%seq: !rtg.randomized_sequence) {}
@@ -20,8 +26,8 @@ rtg.sequence @seq0() {
 }
 
 // CHECK-LABEL: rtg.sequence @seqAttrsAndTypeElements
-// CHECK-SAME: (%arg0: !rtg.sequence<!rtg.sequence<!rtg.label, !rtg.set<index>>>) attributes {rtg.some_attr} {
-rtg.sequence @seqAttrsAndTypeElements(%arg0: !rtg.sequence<!rtg.sequence<!rtg.label, !rtg.set<index>>>) attributes {rtg.some_attr} {}
+// CHECK-SAME: (%arg0: !rtg.sequence<!rtg.sequence<!rtg.isa.label, !rtg.set<index>>>) attributes {rtg.some_attr} {
+rtg.sequence @seqAttrsAndTypeElements(%arg0: !rtg.sequence<!rtg.sequence<!rtg.isa.label, !rtg.set<index>>>) attributes {rtg.some_attr} {}
 
 // CHECK-LABEL: rtg.sequence @seq1
 // CHECK-SAME: (%arg0: i32, %arg1: !rtg.sequence)

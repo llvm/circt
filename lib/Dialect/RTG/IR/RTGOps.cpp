@@ -21,6 +21,22 @@ using namespace circt;
 using namespace rtg;
 
 //===----------------------------------------------------------------------===//
+// ConstantOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+ConstantOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
+                             ValueRange operands, DictionaryAttr attributes,
+                             OpaqueProperties properties, RegionRange regions,
+                             SmallVectorImpl<Type> &inferredReturnTypes) {
+  inferredReturnTypes.push_back(
+      properties.as<Properties *>()->getValue().getType());
+  return success();
+}
+
+OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) { return getValueAttr(); }
+
+//===----------------------------------------------------------------------===//
 // SequenceOp
 //===----------------------------------------------------------------------===//
 
