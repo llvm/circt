@@ -137,6 +137,10 @@ struct Context {
   /// Helper function to convert a value to a MLIR I1 value.
   Value convertToI1(Value value);
 
+  // Convert a slang timing control for LTL
+  Value convertLTLTimingControl(const slang::ast::TimingControl &ctrl,
+                                const Value &seqOrPro);
+
   /// Helper function to convert a value to its "truthy" boolean value.
   Value convertToBool(Value value);
 

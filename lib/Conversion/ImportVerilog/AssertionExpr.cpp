@@ -302,6 +302,18 @@ struct AssertionExprVisitor {
     llvm_unreachable("All enum values handled in switch");
   }
 
+  Value visit(const slang::ast::ClockingAssertionExpr &expr) {
+    auto assertionExpr = context.convertAssertionExpression(expr.expr, loc);
+    if (!assertionExpr)
+      return {};
+    auto result = context.convertLTLTimingControl(expr.clocking, assertionExpr);
+    if (!result) {
+      mlir::emitError(loc, "Failed to convert clocking assertion expression");
+      return {};
+    }
+    return result;
+  }
+
   /// Emit an error for all other expressions.
   template <typename T>
   Value visit(T &&node) {
