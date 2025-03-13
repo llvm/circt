@@ -12,86 +12,22 @@ from .circt import ir
 from typing import Union
 
 
-class Imm5(Value):
+class Immediate(Value):
 
-  def __init__(self, value: Union[ir.Value, int]) -> Imm5:
+  def __init__(self, width: int, value: Union[ir.Value, int]) -> Immediate:
+    self._width = width
     self._value = value
 
   def _get_ssa_value(self) -> ir.Value:
     if isinstance(self._value, int):
-      self = rtgtest.ImmediateOp(rtgtest.Imm5Attr.get(self._value))
+      self = rtg.ConstantOp(rtg.ImmediateAttr.get(self._width, self._value))
     return self._value
 
   def get_type(self) -> ir.Type:
-    return type()
+    return rtg.ImmediateType.get(self._width)
 
-  def type(*args: ir.Type) -> ir.Type:
-    return rtgtest.Imm5Type.get()
-
-
-class Imm12(Value):
-
-  def __init__(self, value: Union[ir.Value, int]) -> Imm12:
-    self._value = value
-
-  def _get_ssa_value(self) -> ir.Value:
-    if isinstance(self._value, int):
-      self = rtgtest.ImmediateOp(rtgtest.Imm12Attr.get(self._value))
-    return self._value
-
-  def type(*args: ir.Type) -> ir.Type:
-    return rtgtest.Imm12Type.get()
-
-
-class Imm13(Value):
-
-  def __init__(self, value: Union[ir.Value, int]) -> Imm13:
-    self._value = value
-
-  def _get_ssa_value(self) -> ir.Value:
-    if isinstance(self._value, int):
-      self = rtgtest.ImmediateOp(rtgtest.Imm13Attr.get(self._value))
-    return self._value
-
-  def get_type(self) -> ir.Type:
-    return type()
-
-  def type(*args: ir.Type) -> ir.Type:
-    return rtgtest.Imm12Type.get()
-
-
-class Imm21(Value):
-
-  def __init__(self, value: Union[ir.Value, int]) -> Imm21:
-    self._value = value
-
-  def _get_ssa_value(self) -> ir.Value:
-    if isinstance(self._value, int):
-      self = rtgtest.ImmediateOp(rtgtest.Imm21Attr.get(self._value))
-    return self._value
-
-  def get_type(self) -> ir.Type:
-    return type()
-
-  def type(*args: ir.Type) -> ir.Type:
-    return rtgtest.Imm21Type.get()
-
-
-class Imm32(Value):
-
-  def __init__(self, value: Union[ir.Value, int]) -> Imm32:
-    self._value = value
-
-  def _get_ssa_value(self) -> ir.Value:
-    if isinstance(self._value, int):
-      self = rtgtest.ImmediateOp(rtgtest.Imm32Attr.get(self._value))
-    return self._value
-
-  def get_type(self) -> ir.Type:
-    return type()
-
-  def type(*args: ir.Type) -> ir.Type:
-    return rtgtest.Imm32Type.get()
+  def type(width: int) -> ir.Type:
+    return rtg.ImmediateType.get(width)
 
 
 class IntegerRegister(Value):

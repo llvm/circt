@@ -31,21 +31,9 @@ def _FromCirctValue(value: ir.Value) -> Value:
   if isinstance(type, rtgtest.IntegerRegisterType):
     from .resources import IntegerRegister
     return IntegerRegister(value)
-  if isinstance(type, rtgtest.Imm5Type):
-    from .resources import Imm5
-    return Imm5(value)
-  if isinstance(type, rtgtest.Imm12Type):
-    from .resources import Imm12
-    return Imm12(value)
-  if isinstance(type, rtgtest.Imm13Type):
-    from .resources import Imm13
-    return Imm13(value)
-  if isinstance(type, rtgtest.Imm21Type):
-    from .resources import Imm21
-    return Imm21(value)
-  if isinstance(type, rtgtest.Imm32Type):
-    from .resources import Imm32
-    return Imm32(value)
+  if isinstance(type, rtg.ImmediateType):
+    from .resources import Immediate
+    return Immediate(type.width, value)
   assert False, "Unsupported value"
 
 
