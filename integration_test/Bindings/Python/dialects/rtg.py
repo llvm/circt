@@ -218,3 +218,11 @@ with Context() as ctx, Location.unknown():
   print(f"value={immediate_attr.value}")
   # CHECK: #rtg.isa.immediate<32, 42>
   print(immediate_attr)
+
+with Context() as ctx, Location.unknown():
+  circt.register_dialects(ctx)
+  memoryTy = rtg.MemoryType.get(32)
+  # CHECK: address_width=32
+  print(f'address_width={memoryTy.address_width}')
+  # CHECK: !rtg.isa.memory<32>
+  print(memoryTy)

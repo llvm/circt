@@ -628,3 +628,48 @@ def IntToImmediateOp : RTGISAOp<"int_to_immediate", [Pure]> {
 
   let assemblyFormat = "$input `:` qualified(type($result)) attr-dict";
 }
+
+//===- ISA Memory Handling Operations -------------------------------------===//
+
+def MemoryAllocOp : RTGISAOp<"memory_alloc", [
+  HasParent<"rtg::TargetOp">,
+]> {
+  let summary = "allocate a memory with the provided properties";
+  let description = [{
+    This operation declares a memory to be allocated with the provided
+    properties. It is only allowed to declare new memories in the `rtg.target`
+    operations and must be passed as argument to the `rtg.test`.
+  }];
+
+  let arguments = (ins Index:$minSize, Index:$alignment);
+  let results = (outs MemoryType:$result);
+
+  let assemblyFormat = [{
+    $minSize `,` $alignment `:` qualified(type($result)) attr-dict
+  }];
+}
+
+def MemoryGetBaseAddressOp : RTGISAOp<"memory_get_base_address", [
+  Pure,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "get the memory base address as an immediate";
+  let description = [{
+    This operation returns the base address of the given memory. The bit-width
+    of the returned immediate must match the address width of the given memory.
+  }];
+
+  let arguments = (ins MemoryType:$memory);
+  let results = (outs ImmediateType:$result);
+
+  let assemblyFormat = "$memory `:` qualified(type($memory)) attr-dict";
+}
+
+def MemorySizeOp : RTGISAOp<"memory_size", [Pure]> {
+  let summary = "get the size of the memory in bytes";
+
+  let arguments = (ins MemoryType:$memory);
+  let results = (outs Index:$result);
+
+  let assemblyFormat = "$memory `:` qualified(type($memory)) attr-dict";
+}

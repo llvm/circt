@@ -153,3 +153,17 @@ rtg.test @interleaveSequences(seq0 = %seq0: !rtg.randomized_sequence, seq1 = %se
   // CHECK: rtg.interleave_sequences %seq0, %seq1 batch 4 {rtg.some_attr}
   rtg.interleave_sequences %seq0, %seq1 batch 4 {rtg.some_attr}
 }
+
+// CHECK-LABEL: rtg.target @memories
+rtg.target @memories : !rtg.dict<base: !rtg.isa.immediate<32>, mem: !rtg.isa.memory<32>, size: index> {
+  // CHECK-NEXT: [[V0:%.+]] = index.constant 8
+  // CHECK-NEXT: [[V1:%.+]] = rtg.isa.memory_alloc [[V0]], [[V0]] : !rtg.isa.memory<32>
+  // CHECK-NEXT: [[V2:%.+]] = rtg.isa.memory_get_base_address [[V1]] : !rtg.isa.memory<32>
+  // CHECK-NEXT: [[V3:%.+]] = rtg.isa.memory_size [[V1]] : !rtg.isa.memory<32>
+  // CHECK-NEXT: rtg.yield [[V2]], [[V1]], [[V3]] :
+  %0 = index.constant 8
+  %1 = rtg.isa.memory_alloc %0, %0 : !rtg.isa.memory<32>
+  %2 = rtg.isa.memory_get_base_address %1 : !rtg.isa.memory<32>
+  %3 = rtg.isa.memory_size %1 : !rtg.isa.memory<32>
+  rtg.yield %2, %1, %3 : !rtg.isa.immediate<32>, !rtg.isa.memory<32>, index
+}

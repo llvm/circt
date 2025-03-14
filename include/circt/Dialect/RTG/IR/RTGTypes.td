@@ -157,4 +157,15 @@ class ImmediateOfWidth<int width> : Type<
   "a " # width # "-bit immediate">,
   BuildableType<"::circt::rtg::ImmediateType::get($_builder.getContext(), " # width # ")">;
 
+def MemoryType : RTGISATypeDef<"Memory"> {
+  let summary = "handle to a memory";
+  let description = [{
+    This type is used to represent memory resources that can be accessed and
+    manipulated.
+  }];
+
+  let parameters = (ins "uint32_t":$addressWidth);
+  let assemblyFormat = "`<` $addressWidth `>`";
+}
+
 #endif // CIRCT_DIALECT_RTG_IR_RTGTYPES_TD

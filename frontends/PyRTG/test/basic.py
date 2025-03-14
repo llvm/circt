@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag, rtgtest, Immediate, IntegerRegister
+from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag, rtgtest, Immediate, IntegerRegister, Memory
 
 # MLIR-LABEL: rtg.target @Tgt0 : !rtg.dict<entry0: !rtg.set<index>>
 # MLIR-NEXT: [[C0:%.+]] = index.constant 0
@@ -37,6 +37,27 @@ class Tgt1:
   @entry
   def entry1():
     return Label.declare("l0")
+
+
+# MLIR-LABEL: rtg.target @Tgt2 : !rtg.dict<memory0: !rtg.isa.memory<32>, memory1: !rtg.isa.memory<32>>
+# MLIR-NEXT: [[C0:%.+]] = index.constant 8
+# MLIR-NEXT: [[C1:%.+]] = index.constant 2
+# MLIR-NEXT: [[MEM0:%.+]] = rtg.isa.memory_alloc [[C0]], [[C1]] : !rtg.isa.memory<32>
+# MLIR-NEXT: [[MEM1:%.+]] = rtg.isa.memory_alloc [[C0]], [[C1]] : !rtg.isa.memory<32>
+# MLIR-NEXT: rtg.yield [[MEM0]], [[MEM1]] : !rtg.isa.memory<32>, !rtg.isa.memory<32>
+# MLIR-NEXT: }
+
+
+@target
+class Tgt2:
+
+  @entry
+  def memory0():
+    return Memory.declare(size=8, align=Integer(2), address_width=32)
+
+  @entry
+  def memory1():
+    return Memory.declare(size=Integer(8), align=2, address_width=32)
 
 
 # MLIR-LABEL: rtg.sequence @seq0
@@ -325,3 +346,19 @@ def test5_success_fail():
   test5_success_fail.success_label().place()
   test5_success_fail.failure_label("msg1").place()
   test5_success_fail.failure_label("msg2").place()
+
+
+# MLIR-LABEL: rtg.test @test6_memories(mem = {{%.+}}: !rtg.isa.memory<32>)
+# MLIR-NEXT: [[REG:%.+]] = rtg.fixed_reg #rtgtest.t0 : !rtgtest.ireg
+# MLIR-NEXT: [[SIZE:%.+]] = rtg.isa.memory_size %mem : !rtg.isa.memory<32>
+# MLIR-NEXT: [[IMM:%.+]] = rtg.isa.int_to_immediate [[SIZE]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: rtgtest.rv32i.auipc [[REG]], [[IMM]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: [[BASE:%.+]] = rtg.isa.memory_get_base_address %mem : !rtg.isa.memory<32>
+# MLIR-NEXT: rtgtest.rv32i.auipc [[REG]], [[BASE]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: rtg.test.failure
+
+
+@test(("mem", Memory.type(32)))
+def test6_memories(mem):
+  rtgtest.AUIPC(IntegerRegister.t0(), Immediate(32, mem.size()))
+  rtgtest.AUIPC(IntegerRegister.t0(), mem.base_address())

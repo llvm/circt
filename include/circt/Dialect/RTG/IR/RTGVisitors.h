@@ -54,9 +54,12 @@ public:
             SetCreateOp, SetSelectRandomOp, SetDifferenceOp, SetUnionOp,
             SetSizeOp,
             // Immediates
-            IntToImmediateOp>([&](auto expr) -> ResultType {
-          return thisCast->visitOp(expr, args...);
-        })
+            IntToImmediateOp,
+            // Memories
+            MemoryAllocOp, MemoryGetBaseAddressOp, MemorySizeOp>(
+            [&](auto expr) -> ResultType {
+              return thisCast->visitOp(expr, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           if (op->getDialect() ==
               op->getContext()->getLoadedDialect<RTGDialect>())
@@ -117,6 +120,9 @@ public:
   HANDLE(FixedRegisterOp, Unhandled);
   HANDLE(VirtualRegisterOp, Unhandled);
   HANDLE(IntToImmediateOp, Unhandled);
+  HANDLE(MemoryAllocOp, Unhandled);
+  HANDLE(MemoryGetBaseAddressOp, Unhandled);
+  HANDLE(MemorySizeOp, Unhandled);
 #undef HANDLE
 };
 

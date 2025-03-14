@@ -29,7 +29,7 @@ class Immediate(Value):
     return self._value
 
   def get_type(self) -> ir.Type:
-    return rtg.ImmediateType.get(self.width)
+    return rtg.ImmediateType.get(self._width)
 
   def type(width: int) -> ir.Type:
     return rtg.ImmediateType.get(width)

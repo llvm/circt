@@ -161,6 +161,17 @@ static void testImmediate(MlirContext ctx) {
   fprintf(stderr, "value=%llu\n", rtgImmediateAttrGetValue(immediateAttr));
 }
 
+static void testMemoryType(MlirContext ctx) {
+  MlirType memoryTy = rtgMemoryTypeGet(ctx, 32);
+  // CHECK: is_memory
+  fprintf(stderr,
+          rtgTypeIsAMemory(memoryTy) ? "is_memory\n" : "isnot_memory\n");
+  // CHECK: addressWidth=32
+  fprintf(stderr, "addressWidth=%u\n", rtgMemoryTypeGetAddressWidth(memoryTy));
+  // CHECK: !rtg.isa.memory<32>
+  mlirTypeDump(memoryTy);
+}
+
 int main(int argc, char **argv) {
   MlirContext ctx = mlirContextCreate();
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__rtg__(), ctx);
@@ -176,6 +187,7 @@ int main(int argc, char **argv) {
   testLabelVisibilityAttr(ctx);
   testDefaultContextAttr(ctx);
   testImmediate(ctx);
+  testMemoryType(ctx);
 
   mlirContextDestroy(ctx);
 

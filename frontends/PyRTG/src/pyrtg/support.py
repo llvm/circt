@@ -34,6 +34,9 @@ def _FromCirctValue(value: ir.Value) -> Value:
   if isinstance(type, rtg.ImmediateType):
     from .resources import Immediate
     return Immediate(type.width, value)
+  if isinstance(type, rtg.MemoryType):
+    from .memories import Memory
+    return Memory(value)
   assert False, "Unsupported value"
 
 
