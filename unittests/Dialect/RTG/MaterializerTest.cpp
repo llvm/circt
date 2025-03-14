@@ -9,6 +9,8 @@
 #include "circt/Dialect/RTG/IR/RTGAttributes.h"
 #include "circt/Dialect/RTG/IR/RTGDialect.h"
 #include "circt/Dialect/RTG/IR/RTGOps.h"
+#include "circt/Dialect/RTGTest/IR/RTGTestDialect.h"
+#include "circt/Dialect/RTGTest/IR/RTGTestTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "gtest/gtest.h"
@@ -21,7 +23,7 @@ namespace {
 
 TEST(MaterializerTest, ImmediateAttr) {
   MLIRContext context;
-  context.loadDialect<RTGDialect>();
+  context.loadDialect<RTGDialect, rtgtest::RTGTestDialect>();
   Location loc(UnknownLoc::get(&context));
   auto moduleOp = ModuleOp::create(loc);
   OpBuilder builder = OpBuilder::atBlockBegin(moduleOp.getBody());
@@ -34,6 +36,13 @@ TEST(MaterializerTest, ImmediateAttr) {
 
   ASSERT_TRUE(op0 && isa<ConstantOp>(op0));
   ASSERT_EQ(op1, nullptr);
+
+  auto contextAttr =
+      AllContextsAttr::get(&context, rtgtest::CPUType::get(&context));
+  auto *op2 = context.getLoadedDialect<RTGDialect>()->materializeConstant(
+      builder, contextAttr, contextAttr.getType(), loc);
+
+  ASSERT_TRUE(op2 && isa<ConstantOp>(op2));
 }
 
 } // namespace

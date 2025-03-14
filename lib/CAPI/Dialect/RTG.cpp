@@ -213,3 +213,14 @@ uint32_t rtgImmediateAttrGetWidth(MlirAttribute attr) {
 uint64_t rtgImmediateAttrGetValue(MlirAttribute attr) {
   return cast<ImmediateAttr>(unwrap(attr)).getValue();
 }
+
+// AllContexts
+//===----------------------------------------------------------------------===//
+
+bool rtgAttrIsAAllContextsAttr(MlirAttribute attr) {
+  return isa<AllContextsAttr>(unwrap(attr));
+}
+
+MlirAttribute rtgAllContextsAttrGet(MlirContext ctxt, MlirType type) {
+  return wrap(AllContextsAttr::get(unwrap(ctxt), unwrap(type)));
+}

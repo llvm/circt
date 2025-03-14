@@ -127,6 +127,9 @@ rtg.target @context_switch : !rtg.dict<> {
 
 // CHECK-LABEL: @contexts
 rtg.test @contexts(ctxt0 = %ctxt0: !rtgtest.cpu) {
+  // CHECK: rtg.constant #rtg.all_contexts : !rtgtest.cpu
+  rtg.constant #rtg.all_contexts : !rtgtest.cpu
+
   // CHECK: rtg.on_context {{%.+}}, {{%.+}} : !rtgtest.cpu
   %seq = rtg.get_sequence @seq0 : !rtg.sequence
   rtg.on_context %ctxt0, %seq : !rtgtest.cpu

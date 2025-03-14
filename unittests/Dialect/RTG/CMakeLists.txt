@@ -5,5 +5,6 @@ add_circt_unittest(CIRCTRTGTests
 target_link_libraries(CIRCTRTGTests
   PRIVATE
   CIRCTRTGDialect
+  CIRCTRTGTestDialect
   MLIRIR
 )

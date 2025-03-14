@@ -16,3 +16,4 @@ from .sequences import sequence, Sequence, RandomizedSequence
 from .target import target, entry
 from .resources import IntegerRegister, Immediate
 from .memories import Memory
+from .contexts import CPUCore

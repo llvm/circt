@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag, rtgtest, Immediate, IntegerRegister, Memory
+from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag, rtgtest, Immediate, IntegerRegister, Memory, CPUCore
 
 # MLIR-LABEL: rtg.target @Tgt0 : !rtg.dict<entry0: !rtg.set<index>>
 # MLIR-NEXT: [[C0:%.+]] = index.constant 0
@@ -58,6 +58,25 @@ class Tgt2:
   @entry
   def memory1():
     return Memory.declare(size=Integer(8), align=2, address_width=32)
+
+
+# MLIR-LABEL: rtg.target @Tgt3 : !rtg.dict<all: !rtgtest.cpu, cpu0: !rtgtest.cpu>
+# MLIR-NEXT: [[ALL:%.+]] = rtg.constant #rtg.all_contexts : !rtgtest.cpu
+# MLIR-NEXT: [[CPU0:%.+]] = rtg.constant #rtgtest.cpu<0> : !rtgtest.cpu
+# MLIR-NEXT: rtg.yield [[ALL]], [[CPU0]] : !rtgtest.cpu, !rtgtest.cpu
+# MLIR-NEXT: }
+
+
+@target
+class Tgt3:
+
+  @entry
+  def all():
+    return CPUCore.all()
+
+  @entry
+  def cpu0():
+    return CPUCore(0)
 
 
 # MLIR-LABEL: rtg.sequence @seq0

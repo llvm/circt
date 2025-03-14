@@ -145,6 +145,14 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
           },
           nb::arg("self"), nb::arg("type"), nb::arg("ctxt") = nullptr);
 
+  mlir_attribute_subclass(m, "AllContextsAttr", rtgAttrIsAAllContextsAttr)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, MlirType type, MlirContext ctxt) {
+            return cls(rtgAllContextsAttrGet(ctxt, type));
+          },
+          nb::arg("self"), nb::arg("type"), nb::arg("ctxt") = nullptr);
+
   // Attributes for ISA targets
   //===--------------------------------------------------------------------===//
 

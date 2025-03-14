@@ -48,6 +48,10 @@ Operation *RTGDialect::materializeConstant(OpBuilder &builder, Attribute value,
     if (type == attr.getType())
       return builder.create<ConstantOp>(loc, attr);
 
+  if (auto attr = dyn_cast<ContextResourceAttrInterface>(value))
+    if (type == attr.getType())
+      return builder.create<ConstantOp>(loc, attr);
+
   return nullptr;
 }
 

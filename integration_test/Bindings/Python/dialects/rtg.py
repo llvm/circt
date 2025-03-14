@@ -226,3 +226,11 @@ with Context() as ctx, Location.unknown():
   print(f'address_width={memoryTy.address_width}')
   # CHECK: !rtg.isa.memory<32>
   print(memoryTy)
+
+with Context() as ctx, Location.unknown():
+  circt.register_dialects(ctx)
+  attr = rtg.AllContextsAttr.get(rtgtest.CPUType.get())
+  # CHECK: !rtgtest.cpu
+  print(attr.type)
+  # CHECK: #rtg.all_contexts : !rtgtest.cpu
+  print(attr)

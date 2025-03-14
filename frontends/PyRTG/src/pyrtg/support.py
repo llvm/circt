@@ -37,6 +37,9 @@ def _FromCirctValue(value: ir.Value) -> Value:
   if isinstance(type, rtg.MemoryType):
     from .memories import Memory
     return Memory(value)
+  if isinstance(type, rtgtest.CPUType):
+    from .contexts import CPUCore
+    return CPUCore(value)
   assert False, "Unsupported value"
 
 

@@ -38,6 +38,20 @@ def DefaultContextAttr : RTGAttrDef<"DefaultContext", [
   let assemblyFormat = "";
 }
 
+def AllContextsAttr : RTGAttrDef<"AllContexts", [
+  DeclareAttrInterfaceMethods<ContextResourceAttrInterface>,
+]> {
+  let summary = "all contexts of its type";
+  let description = [{
+    This attribute can be used to refer to all contexts of its type instead of
+    having to collect all values in a set.
+  }];
+
+  let mnemonic = "all_contexts";
+  let parameters = (ins AttributeSelfTypeParameter<"">:$type);
+  let assemblyFormat = "";
+}
+
 //===----------------------------------------------------------------------===//
 // Attributes for ISA targets
 //===----------------------------------------------------------------------===//
