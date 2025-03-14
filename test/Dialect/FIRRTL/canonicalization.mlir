@@ -2959,6 +2959,14 @@ firrtl.module @Verification(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>, ou
   // CHECK-NOT: firrtl.int.isX
   %x = firrtl.int.isX %c0 : !firrtl.uint<1>
   firrtl.matchingconnect %o, %x : !firrtl.uint<1>
+
+  // Never fired when enabled.
+  // CHECK-NOT: firrtl.assert
+  firrtl.assert %clock, %p, %p, "assert1" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK-NOT: firrtl.assume
+  firrtl.assume %clock, %p, %p, "assume1" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK-NOT: firrtl.int.unclocked_assume
+  firrtl.int.unclocked_assume %p, %p, "assume_edged1" : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
 // COMMON-LABEL:  firrtl.module @MultibitMux

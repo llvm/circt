@@ -3204,16 +3204,19 @@ static LogicalResult canonicalizeImmediateVerifOp(Op op,
 void AssertOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                            MLIRContext *context) {
   results.add(canonicalizeImmediateVerifOp<AssertOp>);
+  results.add<patterns::AssertXWhenX>(context);
 }
 
 void AssumeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                            MLIRContext *context) {
   results.add(canonicalizeImmediateVerifOp<AssumeOp>);
+  results.add<patterns::AssumeXWhenX>(context);
 }
 
 void UnclockedAssumeIntrinsicOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
   results.add(canonicalizeImmediateVerifOp<UnclockedAssumeIntrinsicOp>);
+  results.add<patterns::UnclockedAssumeIntrinsicXWhenX>(context);
 }
 
 void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,

@@ -23,24 +23,27 @@ circuit Top: %[[
 
   module Child:
     input p : UInt<1>
+    input e : UInt<1>
     input c : Clock
 
     layerblock Verification:
       layerblock Assert:
-        assert(c, p, p, "in child")
+        assert(c, p, e, "in child")
         
   public module Top:
     input p : UInt<1>
+    input e : UInt<1>
     input c : Clock
 
     layerblock Verification:
       layerblock Assert:
-        assert(c, p, p, "before child")
+        assert(c, p, e, "before child")
     
     inst child of Child
     connect child.p, p
+    connect child.e, e
     connect child.c, c
 
     layerblock Verification:
       layerblock Assert:
-        assert(c, p, p, "after child")
+        assert(c, p, e, "after child")
