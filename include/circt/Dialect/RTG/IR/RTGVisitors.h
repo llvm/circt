@@ -44,7 +44,7 @@ public:
             // Registers
             FixedRegisterOp, VirtualRegisterOp,
             // RTG tests
-            TestOp, TargetOp, YieldOp,
+            TestOp, TargetOp, YieldOp, TestSuccessOp, TestFailureOp,
             // Integers
             RandomNumberInRangeOp,
             // Sequences
@@ -112,6 +112,8 @@ public:
   HANDLE(TestOp, Unhandled);
   HANDLE(TargetOp, Unhandled);
   HANDLE(YieldOp, Unhandled);
+  HANDLE(TestSuccessOp, Unhandled);
+  HANDLE(TestFailureOp, Unhandled);
   HANDLE(FixedRegisterOp, Unhandled);
   HANDLE(VirtualRegisterOp, Unhandled);
   HANDLE(IntToImmediateOp, Unhandled);

@@ -63,9 +63,11 @@ def seq1():
 
 
 # MLIR-LABEL: rtg.test @test0
+# MLIR-NEXT: rtg.test.failure
 # MLIR-NEXT: }
 
 # ELABORATED-LABEL: rtg.test @test0
+# ELABORATED-NEXT: rtg.test.failure
 # ELABORATED-NEXT: }
 
 # ASM-LABEL: Begin of test0
@@ -82,12 +84,14 @@ def test0():
 # MLIR-NEXT: [[RAND:%.+]] = rtg.set_select_random [[SET]] : !rtg.set<index>
 # MLIR-NEXT: rtg.label_decl "L_{{[{][{]0[}][}]}}", [[RAND]]
 # MLIR-NEXT: rtg.label local
+# MLIR-NEXT: rtg.test.failure
 # MLIR-NEXT: }
 
 # ELABORATED-LABEL: rtg.test @test1_args_Tgt0
-# CHECK: rtg.label_decl "L_0"
-# CHECK-NEXT: rtg.label local
-# CHECK-NEXT: }
+# ELABORATED: rtg.label_decl "L_0"
+# ELABORATED-NEXT: rtg.label local
+# ELABORATED-NEXT: rtg.test.failure
+# ELABORATED-NEXT: }
 
 # ASM-LABEL: Begin of test1_args
 # ASM-EMPTY:
@@ -156,6 +160,7 @@ def test1_args(set: Set):
 # MLIR-NEXT: [[RAND4:%.+]] = rtg.randomize_sequence [[SEQ1]]
 # MLIR-NEXT: rtg.embed_sequence [[RAND4]]
 
+# MLIR-NEXT: rtg.test.failure
 # MLIR-NEXT: }
 
 # ELABORATED-LABEL: rtg.test @test2_labels
@@ -186,6 +191,7 @@ def test1_args(set: Set):
 # ELABORATED-NEXT: [[L5:%.+]] = rtg.label_decl "s1"
 # ELABORATED-NEXT: rtg.label local [[L5]]
 
+# ELABORATED-NEXT: rtg.test.failure
 # ELABORATED-NEXT: }
 
 # ASM-LABEL: Begin of test2_labels
@@ -275,6 +281,7 @@ def test2_labels():
 # MLIR-NEXT: rtgtest.rv32i.beq [[VREG]], [[T2]], [[IMM13]] : !rtg.isa.immediate<13>
 # MLIR-NEXT: rtgtest.rv32i.jal [[VREG]], [[IMM21]] : !rtg.isa.immediate<21>
 # MLIR-NEXT: rtgtest.rv32i.auipc [[VREG]], [[IMM32]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: rtg.test.failure
 # MLIR-NEXT: }
 
 
@@ -300,3 +307,21 @@ def test3_registers_and_immediates():
 def test4_integer_to_immediate():
   rtgtest.ADDI(IntegerRegister.t0(), IntegerRegister.t0(),
                Immediate(12, Integer(2)))
+
+
+# MLIR-LABEL: rtg.test @test5_success_fail()
+# MLIR-NEXT: rtg.test.failure "msg0"
+# MLIR-NEXT: rtg.test.success
+# MLIR-NEXT: [[V0:%.+]] = rtg.label_unique_decl "test_success"
+# MLIR-NEXT: rtg.label local [[V0]]
+# MLIR-NEXT: [[V1:%.+]] = rtg.label_unique_decl "test_failure"
+# MLIR-NEXT: rtg.label local [[V1]]
+
+
+@test()
+def test5_success_fail():
+  test5_success_fail.fail("msg0")
+  test5_success_fail.succeed()
+  test5_success_fail.success_label().place()
+  test5_success_fail.failure_label("msg1").place()
+  test5_success_fail.failure_label("msg2").place()

@@ -81,6 +81,14 @@ public:
     return success();
   }
 
+  // FIXME: this operation should be lowered before this pass, just ignore it
+  // here for now
+  LogicalResult emit(TestSuccessOp op) { return success(); }
+
+  // FIXME: this operation should be lowered before this pass, just ignore it
+  // here for now
+  LogicalResult emit(TestFailureOp op) { return success(); }
+
   LogicalResult emit(LabelDeclOp op) {
     if (!op.getArgs().empty())
       return op->emitError(
@@ -125,12 +133,13 @@ public:
         continue;
       }
 
-      auto res = TypeSwitch<Operation *, LogicalResult>(&op)
-                     .Case<InstructionOpInterface, LabelDeclOp, LabelOp>(
-                         [&](auto op) { return emit(op); })
-                     .Default([](auto op) {
-                       return op->emitError("emitter unknown RTG operation");
-                     });
+      auto res =
+          TypeSwitch<Operation *, LogicalResult>(&op)
+              .Case<InstructionOpInterface, LabelDeclOp, LabelOp, TestSuccessOp,
+                    TestFailureOp>([&](auto op) { return emit(op); })
+              .Default([](auto op) {
+                return op->emitError("emitter unknown RTG operation");
+              });
 
       if (failed(res))
         return failure();

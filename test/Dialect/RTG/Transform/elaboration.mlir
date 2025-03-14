@@ -508,6 +508,14 @@ rtg.test @interleaveSequences() {
   rtg.embed_sequence %6
 }
 
+// CHECK-LABEL: rtg.test @testSuccessAndFailure()
+rtg.test @testSuccessAndFailure() {
+  // CHECK-NEXT: rtg.test.success
+  rtg.test.success
+  // CHECK-NEXT: rtg.test.failure "Error Message"
+  rtg.test.failure "Error Message"
+}
+
 // -----
 
 rtg.test @nestedRegionsNotSupported() {
