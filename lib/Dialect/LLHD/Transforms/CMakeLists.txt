@@ -1,4 +1,6 @@
 add_circt_dialect_library(CIRCTLLHDTransforms
+  Deseq.cpp
+  DeseqDNF.cpp
   DesequentializationPass.cpp
   EarlyCodeMotionPass.cpp
   FunctionEliminationPass.cpp
