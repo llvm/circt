@@ -17,3 +17,4 @@ from .target import target, entry
 from .resources import IntegerRegister, Immediate
 from .memories import Memory
 from .contexts import CPUCore
+from .arrays import Array
