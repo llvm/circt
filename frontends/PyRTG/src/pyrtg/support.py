@@ -10,6 +10,9 @@ def _FromCirctValue(value: ir.Value) -> Value:
   type = support.type_to_pytype(value.type)
   from .rtg import rtg
   from .rtgtest import rtgtest
+  if isinstance(type, rtg.ArrayType):
+    from .arrays import Array
+    return Array(value)
   if isinstance(type, rtg.LabelType):
     from .labels import Label
     return Label(value)

@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag, rtgtest, Immediate, IntegerRegister
+from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag, rtgtest, Immediate, IntegerRegister, Array
 
 # MLIR-LABEL: rtg.target @Tgt0 : !rtg.dict<entry0: !rtg.set<index>>
 # MLIR-NEXT: [[C0:%.+]] = index.constant 0
@@ -37,6 +37,44 @@ class Tgt1:
   @entry
   def entry1():
     return Label.declare("l0")
+
+
+# MLIR-LABEL: rtg.target @Tgt4
+# MLIR-NEXT: [[IDX12:%.+]] = index.constant 12
+# MLIR-NEXT: [[IDX11:%.+]] = index.constant 11
+# MLIR-NEXT: [[IDX10:%.+]] = index.constant 10
+# MLIR-NEXT: [[IDX0:%.+]] = index.constant 0
+# MLIR-NEXT: [[IDX1:%.+]] = index.constant 1
+# MLIR-NEXT: [[IDX2:%.+]] = index.constant 2
+# MLIR-NEXT: [[IDX3:%.+]] = index.constant 3
+# MLIR-NEXT: [[ARR0:%.+]] = rtg.array_create [[IDX1]], [[IDX2]], [[IDX3]] : index
+# MLIR-NEXT: [[RES0:%.+]] = rtg.array_extract [[ARR0]][[[IDX2]]] : !rtg.array<index>
+# MLIR-NEXT: [[ARR1:%.+]] = rtg.array_create : !rtg.array<index>
+# MLIR-NEXT: [[ARR2:%.+]] = rtg.array_create [[IDX0]], [[IDX1]], [[IDX2]] : index
+# MLIR-NEXT: [[ARR3:%.+]] = rtg.array_create [[IDX10]], [[IDX11]], [[IDX12]] : index
+# MLIR-NEXT: [[ARR4:%.+]] = rtg.array_create [[ARR2]], [[ARR3]] : !rtg.array<index>
+# MLIR-NEXT: rtg.yield [[RES0]], [[ARR1]], [[ARR4]] : index, !rtg.array<!rtg.array<index>>, !rtg.array<!rtg.array<index>>
+
+
+@target
+class Tgt4:
+
+  @entry
+  def arr0():
+    arr0 = Array.create([Integer(1), Integer(2), Integer(3)], Integer.type())
+    return arr0[2]
+
+  @entry
+  def arr1():
+    return Array.create([], Array.type(Integer.type()))
+
+  @entry
+  def arr2():
+    return Array.create([
+        Array.create([Integer(y * 10 + x)
+                      for x in range(3)], Integer.type())
+        for y in range(2)
+    ], Array.type(Integer.type()))
 
 
 # MLIR-LABEL: rtg.sequence @seq0
