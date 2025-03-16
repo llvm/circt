@@ -15,3 +15,4 @@ from .bags import Bag
 from .sequences import sequence, Sequence, RandomizedSequence
 from .target import target, entry
 from .resources import IntegerRegister, Immediate
+from .arrays import Array

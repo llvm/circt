@@ -158,6 +158,10 @@ def type_to_pytype(t) -> ir.Type:
   except ValueError:
     pass
   try:
+    return rtg.ArrayType(t)
+  except ValueError:
+    pass
+  try:
     return rtgtest.IntegerRegisterType(t)
   except ValueError:
     pass
