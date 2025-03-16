@@ -140,6 +140,16 @@ def ArrayType : RTGTypeDef<"Array"> {
   let assemblyFormat = "`<` ( $size^ `x` ` ` )? $elementType `>`";
 }
 
+def FixedSizeArrayType : Type<
+  And<[CPred<"llvm::isa<::circt::rtg::ArrayType>($_self)">,
+       CPred<"llvm::cast<::circt::rtg::ArrayType>($_self).getSize().has_value()">]>,
+  "a fixed-size array">;
+
+def DynamicArrayType : Type<
+  And<[CPred<"llvm::isa<::circt::rtg::ArrayType>($_self)">,
+       CPred<"llvm::cast<::circt::rtg::ArrayType>($_self).getSize() == std::nullopt">]>,
+  "a dynamic array">;
+
 //===----------------------------------------------------------------------===//
 // Types for ISA targets
 //===----------------------------------------------------------------------===//

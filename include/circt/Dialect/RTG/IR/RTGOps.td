@@ -455,6 +455,49 @@ def BagUniqueSizeOp : RTGOp<"bag_unique_size", [Pure]> {
   }];
 }
 
+//===- Array Operations -------------------------------------------------===//
+
+def ArrayCreateOp : RTGOp<"array_create", [
+  Pure,
+  RangedTypesMatchWith<"elements must match the array element type",
+                       "result", "elements",
+                       "SmallVector<mlir::Type>(" #
+                         "cast<ArrayType>($_self).getSize().value(), " #
+                         "cast<ArrayType>($_self).getElementType())">
+]> {
+  let summary = "create a fixed-sized array";
+  let description = [{
+    This operation creates an array from a list of values of the same type with
+    matching size.
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$elements);
+  let results = (outs FixedSizeArrayType:$result);
+
+  let assemblyFormat = [{
+    ` ` `[` $elements `]` `:` qualified(type($result)) attr-dict
+  }];
+}
+
+def ArrayGetOp : RTGOp<"array_get", [
+  Pure,
+  TypesMatchWith<"result type must match array element type",
+                 "array", "result",
+                 "cast<ArrayType>($_self).getElementType()">,
+]> {
+  let summary = "get an element from an array";
+  let description = [{
+    This operation returns the element at the given index of the array.
+  }];
+
+  let arguments = (ins ArrayType:$array, Index:$index);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    $array `[` $index `]` `:` qualified(type($array)) attr-dict
+  }];
+}
+
 //===- Integer Operations -------------------------------------------------===//
 
 def RandomNumberInRangeOp : RTGOp<"random_number_in_range", []> {
