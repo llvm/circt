@@ -237,8 +237,11 @@ def AffineParallelUnroll : Pass<"affine-parallel-unroll", "::mlir::func::FuncOp"
 def AffineToSCF : Pass<"calyx-affine-to-scf", "::mlir::func::FuncOp"> {
   let summary = "Lowers the Affine dialect to the SCF dialect while attaching "
         "relevant information used for the SCFToCalyx or the LoopScheduleToCalyx pass.";
-  let dependentDialects = ["mlir::memref::MemRefDialect",
-        "mlir::scf::SCFDialect", "mlir::arith::ArithDialect"];
+  let dependentDialects = [
+    "mlir::memref::MemRefDialect",
+    "mlir::scf::SCFDialect",
+    "mlir::arith::ArithDialect"
+  ];
   let constructor = "circt::calyx::createAffineToSCFPass()";
 }
 

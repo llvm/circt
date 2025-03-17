@@ -18,9 +18,6 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "llvm/Support/raw_ostream.h"
-
-#define DEBUG_TYPE "calyx-affine-to-scf"
 
 namespace circt {
 namespace calyx {

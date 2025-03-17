@@ -25,4 +25,5 @@ add_circt_dialect_library(CIRCTCalyxTransforms
   MLIRPass
   MLIRSCFDialect
   MLIRTransformUtils
+  MLIRAffineDialect
   )
