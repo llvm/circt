@@ -212,7 +212,7 @@ def LoopScheduleToCalyx : Pass<"lower-loopschedule-to-calyx", "mlir::ModuleOp"> 
 }
 
 //===----------------------------------------------------------------------===//
-// PipelineTHW
+// PipelineToHW
 //===----------------------------------------------------------------------===//
 
 // TODO: @mortbopet: There is a possible non-neglible speedup that can be achieved
