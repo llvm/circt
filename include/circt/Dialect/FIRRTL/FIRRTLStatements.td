@@ -17,6 +17,7 @@ include "FIRRTLDialect.td"
 include "FIRRTLEnums.td"
 include "FIRRTLOpInterfaces.td"
 include "FIRRTLTypes.td"
+include "circt/Dialect/HW/HWAttributesNaming.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
@@ -406,6 +407,30 @@ def LayerBlockOp : FIRRTLOp<
   }];
   let hasVerifier = 1;
   let hasCanonicalizeMethod = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// Bind Op
+//===----------------------------------------------------------------------===//
+
+def BindOp : FIRRTLOp<"bind",
+    [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Indirect instantiation statement";
+  let description = [{
+    Indirectly instantiate a module from the context of another module. BindOp
+    pairs with a `firrtl.instance` which tracks all information except the
+    emission point for the bind.
+
+    See `sv.bind` for the system verilog equivalent.
+  }];
+  let arguments = (ins InnerRefAttr:$instance);
+  let assemblyFormat = "$instance attr-dict";
+  let builders = [
+    OpBuilder<(ins "StringAttr":$mod, "StringAttr":$name), [{
+      auto instance = hw::InnerRefAttr::get(mod, name);
+      build(odsBuilder, odsState, instance);
+    }]>
+  ];
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLSTATEMENTS_TD

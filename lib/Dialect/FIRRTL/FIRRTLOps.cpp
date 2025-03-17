@@ -6395,6 +6395,39 @@ void HierarchicalModuleNameOp::getAsmResultNames(
 }
 
 //===----------------------------------------------------------------------===//
+// BindOp
+//===----------------------------------------------------------------------===//
+
+namespace {
+template <class Op>
+Op findInnerSym(StringAttr name, Block *body) {
+  for (auto &op : llvm::reverse(body->getOperations()))
+    if (auto target = dyn_cast<Op>(op))
+      if (auto innerSym = target.getInnerSym())
+        if (innerSym->getSymName() == name)
+          return target;
+  return {};
+}
+} // namespace
+
+LogicalResult BindOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto circuit = getOperation()->getParentOfType<CircuitOp>();
+  auto module = dyn_cast_or_null<FModuleOp>(
+      symbolTable.lookupSymbolIn(circuit, getInstance().getModule()));
+  if (!module)
+    return emitError("Referenced module doesn't exist ")
+           << getInstance().getModule() << "::" << getInstance().getName();
+  auto inst =
+      findInnerSym<InstanceOp>(getInstance().getName(), module.getBodyBlock());
+  if (!inst)
+    return emitError("Referenced instance doesn't exist ")
+           << getInstance().getModule() << "::" << getInstance().getName();
+  if (!inst.getDoNotPrint())
+    return emitError("Referenced instance isn't marked as doNotPrint");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//
 
