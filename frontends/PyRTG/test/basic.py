@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag, rtgtest, Immediate, IntegerRegister, Array
+from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag, rtgtest, Immediate, IntegerRegister, Array, Bool
 
 # MLIR-LABEL: rtg.target @Tgt0 : !rtg.dict<entry0: !rtg.set<index>>
 # MLIR-NEXT: [[C0:%.+]] = index.constant 0
@@ -338,3 +338,31 @@ def test3_registers_and_immediates():
 def test4_integer_to_immediate():
   rtgtest.ADDI(IntegerRegister.t0(), IntegerRegister.t0(),
                Immediate(12, Integer(2)))
+
+
+# MLIR-LABEL: rtg.test @test7_bools
+# MLIR: index.bool.constant false
+# MLIR: index.bool.constant true
+# MLIR: index.cmp eq(%a, %b)
+# MLIR: index.cmp ne(%a, %b)
+# MLIR: index.cmp ult(%a, %b)
+# MLIR: index.cmp ugt(%a, %b)
+# MLIR: index.cmp ule(%a, %b)
+# MLIR: index.cmp uge(%a, %b)
+
+
+@sequence(Bool.type())
+def consumer(b):
+  pass
+
+
+@test(("a", Integer.type()), ("b", Integer.type()))
+def test7_bools(a, b):
+  consumer(Bool(True))
+  consumer(Bool(False))
+  consumer(a == b)
+  consumer(a != b)
+  consumer(a < b)
+  consumer(a > b)
+  consumer(a <= b)
+  consumer(a >= b)

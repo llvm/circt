@@ -31,6 +31,9 @@ def _FromCirctValue(value: ir.Value) -> Value:
   if isinstance(type, ir.IndexType):
     from .integers import Integer
     return Integer(value)
+  if isinstance(type, ir.IntegerType) and type.width == 1:
+    from .integers import Bool
+    return Bool(value)
   if isinstance(type, rtgtest.IntegerRegisterType):
     from .resources import IntegerRegister
     return IntegerRegister(value)
