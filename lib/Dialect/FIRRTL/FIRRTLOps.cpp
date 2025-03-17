@@ -6405,6 +6405,29 @@ void HierarchicalModuleNameOp::getAsmResultNames(
 }
 
 //===----------------------------------------------------------------------===//
+// BindOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult BindOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  auto ref = getInstanceAttr();
+  auto target = ns.lookup(ref);
+  if (!target)
+    return emitError() << "target " << ref << " cannot be resolved";
+
+  if (!target.isOpOnly())
+    return emitError() << "target " << ref << " is not an operation";
+
+  auto instance = dyn_cast<InstanceOp>(target.getOp());
+  if (!instance)
+    return emitError() << "target " << ref << " is not an instance";
+
+  if (!instance.getDoNotPrint())
+    return emitError() << "target " << ref << " is not marked doNotPrint";
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//
 

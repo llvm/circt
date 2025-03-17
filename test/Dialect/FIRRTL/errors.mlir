@@ -2885,3 +2885,43 @@ firrtl.circuit "SimulationPortType3" {
     out success: !firrtl.reset
   )
 }
+
+// -----
+
+firrtl.circuit "BindTargetMissingModule" {
+  firrtl.module @BindTargetMissing() {}
+  // expected-error @below {{target #hw.innerNameRef<@XXX::@YYY> cannot be resolved}}
+  firrtl.bind <@XXX::@YYY>
+}
+
+// -----
+
+firrtl.circuit "BindTargetMissingInstance" {
+  firrtl.module @BindTargetMissingInstance() {}
+  // expected-error @below {{target #hw.innerNameRef<@BindTargetMissingInstance::@YYY> cannot be resolved}}
+  firrtl.bind <@BindTargetMissingInstance::@YYY>
+}
+
+// -----
+
+firrtl.circuit "BindTargetNotAnInstance" {
+  firrtl.module @Target() {}
+  firrtl.module @BindTargetMissingDoNotPrintFlag() {
+    %wire = firrtl.wire sym @target : !firrtl.uint<8>
+  }
+
+  // expected-error @below {{target #hw.innerNameRef<@BindTargetMissingDoNotPrintFlag::@target> is not an instance}}
+  firrtl.bind <@BindTargetMissingDoNotPrintFlag::@target>
+}
+
+// -----
+
+firrtl.circuit "BindTargetMissingDoNotPrintFlag" {
+  firrtl.module @Target() {}
+  firrtl.module @BindTargetMissingDoNotPrintFlag() {
+    firrtl.instance target sym @target @Target()
+  }
+
+  // expected-error @below {{target #hw.innerNameRef<@BindTargetMissingDoNotPrintFlag::@target> is not marked doNotPrint}}
+  firrtl.bind <@BindTargetMissingDoNotPrintFlag::@target>
+}
