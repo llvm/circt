@@ -6,11 +6,11 @@
 // CHECK-SAME:                    %[[VAL_2:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: memref<4x6xf32>) {
 // CHECK:           %[[VAL_3:.*]] = arith.constant 1 : index
 // CHECK:           %[[VAL_4:.*]] = arith.constant 1 : index
-// CHECK:           %[[VAL_5:.*]] = arith.constant 0 : index
-// CHECK:           %[[VAL_6:.*]] = arith.constant 2 : index
+// CHECK:           %[[VAL_5:.*]] = arith.constant 2 : index
+// CHECK:           %[[VAL_6:.*]] = arith.constant 3 : index
 // CHECK:           %[[VAL_7:.*]] = arith.constant 0 : index
-// CHECK:           %[[VAL_8:.*]] = arith.constant 3 : index
-// CHECK:           scf.parallel (%[[VAL_9:.*]], %[[VAL_10:.*]]) = (%[[VAL_5]], %[[VAL_7]]) to (%[[VAL_6]], %[[VAL_8]]) step (%[[VAL_3]], %[[VAL_4]]) {
+// CHECK:           %[[VAL_8:.*]] = arith.constant 0 : index
+// CHECK:           scf.parallel (%[[VAL_9:.*]], %[[VAL_10:.*]]) = (%[[VAL_7]], %[[VAL_8]]) to (%[[VAL_5]], %[[VAL_6]]) step (%[[VAL_3]], %[[VAL_4]]) {
 // CHECK:             scf.execute_region {
 // CHECK:               memref.store %[[VAL_0]], %[[VAL_1]]{{\[}}%[[VAL_9]], %[[VAL_10]]] : memref<4x6xf32>
 // CHECK:               scf.yield
@@ -22,6 +22,7 @@
 // CHECK:             scf.reduce
 // CHECK:           } {calyx.unroll = true}
 // CHECK:           return
+// CHECK:         }
 
 module {
   func.func @main(%arg0: f32, %arg1: memref<4x6xf32>, %arg2: memref<4x6xf32>) {
