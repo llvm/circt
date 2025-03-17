@@ -466,23 +466,22 @@ private:
     for (auto *user : cmpIOp->getUsers()) {
       if (auto ifOp = dyn_cast<scf::IfOp>(user))
         getState<ComponentLoweringState>().setCondReg(ifOp, condReg);
-      }
+    }
 
-      assert(calyx::isPipeLibOpRes(cmpIOp.getLhs()) !=
-             calyx::isPipeLibOpRes(cmpIOp.getRhs()));
-      Operation *pipeOp = calyx::isPipeLibOpRes(cmpIOp.getLhs())
-                              ? cmpIOp.getLhs().getDefiningOp()
-                              : cmpIOp.getRhs().getDefiningOp();
-      condReg = getState<ComponentLoweringState>().getPipeResReg(pipeOp);
+    assert(calyx::isPipeLibOpRes(cmpIOp.getLhs()) !=
+           calyx::isPipeLibOpRes(cmpIOp.getRhs()));
+    Operation *pipeOp = calyx::isPipeLibOpRes(cmpIOp.getLhs())
+                            ? cmpIOp.getLhs().getDefiningOp()
+                            : cmpIOp.getRhs().getDefiningOp();
+    condReg = getState<ComponentLoweringState>().getPipeResReg(pipeOp);
 
-      auto groupOp = cast<calyx::GroupOp>(group);
-      getState<ComponentLoweringState>().addBlockScheduleable(
-          cmpIOp->getBlock(), groupOp);
+    auto groupOp = cast<calyx::GroupOp>(group);
+    getState<ComponentLoweringState>().addBlockScheduleable(cmpIOp->getBlock(),
+                                                            groupOp);
 
-      buildAssignmentsForRegisterWrite(
-          rewriter, groupOp,
-          getState<ComponentLoweringState>().getComponentOp(), resReg,
-          condReg.getOut());
+    buildAssignmentsForRegisterWrite(
+        rewriter, groupOp, getState<ComponentLoweringState>().getComponentOp(),
+        resReg, condReg.getOut());
   }
 
   template <typename CmpILibOp>
