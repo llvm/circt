@@ -2217,24 +2217,30 @@ LogicalResult LayerOp::verify() {
 // InstanceOp
 //===----------------------------------------------------------------------===//
 
-void InstanceOp::build(
-    OpBuilder &builder, OperationState &result, TypeRange resultTypes,
-    StringRef moduleName, StringRef name, NameKindEnum nameKind,
-    ArrayRef<Direction> portDirections, ArrayRef<Attribute> portNames,
-    ArrayRef<Attribute> annotations, ArrayRef<Attribute> portAnnotations,
-    ArrayRef<Attribute> layers, bool lowerToBind, StringAttr innerSym) {
+void InstanceOp::build(OpBuilder &builder, OperationState &result,
+                       TypeRange resultTypes, StringRef moduleName,
+                       StringRef name, NameKindEnum nameKind,
+                       ArrayRef<Direction> portDirections,
+                       ArrayRef<Attribute> portNames,
+                       ArrayRef<Attribute> annotations,
+                       ArrayRef<Attribute> portAnnotations,
+                       ArrayRef<Attribute> layers, bool lowerToBind,
+                       bool doNotPrint, StringAttr innerSym) {
   build(builder, result, resultTypes, moduleName, name, nameKind,
         portDirections, portNames, annotations, portAnnotations, layers,
-        lowerToBind,
+        lowerToBind, doNotPrint,
         innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
 }
 
-void InstanceOp::build(
-    OpBuilder &builder, OperationState &result, TypeRange resultTypes,
-    StringRef moduleName, StringRef name, NameKindEnum nameKind,
-    ArrayRef<Direction> portDirections, ArrayRef<Attribute> portNames,
-    ArrayRef<Attribute> annotations, ArrayRef<Attribute> portAnnotations,
-    ArrayRef<Attribute> layers, bool lowerToBind, hw::InnerSymAttr innerSym) {
+void InstanceOp::build(OpBuilder &builder, OperationState &result,
+                       TypeRange resultTypes, StringRef moduleName,
+                       StringRef name, NameKindEnum nameKind,
+                       ArrayRef<Direction> portDirections,
+                       ArrayRef<Attribute> portNames,
+                       ArrayRef<Attribute> annotations,
+                       ArrayRef<Attribute> portAnnotations,
+                       ArrayRef<Attribute> layers, bool lowerToBind,
+                       bool doNotPrint, hw::InnerSymAttr innerSym) {
   result.addTypes(resultTypes);
   result.getOrAddProperties<Properties>().setModuleName(
       SymbolRefAttr::get(builder.getContext(), moduleName));
@@ -2249,6 +2255,9 @@ void InstanceOp::build(
       builder.getArrayAttr(layers));
   if (lowerToBind)
     result.getOrAddProperties<Properties>().setLowerToBind(
+        builder.getUnitAttr());
+  if (doNotPrint)
+    result.getOrAddProperties<Properties>().setDoNotPrint(
         builder.getUnitAttr());
   if (innerSym)
     result.getOrAddProperties<Properties>().setInnerSym(innerSym);
@@ -2272,7 +2281,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        FModuleLike module, StringRef name,
                        NameKindEnum nameKind, ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind,
-                       hw::InnerSymAttr innerSym) {
+                       bool doNotPrint, hw::InnerSymAttr innerSym) {
 
   // Gather the result types.
   SmallVector<Type> resultTypes;
@@ -2298,7 +2307,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       module.getPortDirectionsAttr(), module.getPortNamesAttr(),
       builder.getArrayAttr(annotations), portAnnotationsAttr,
       module.getLayersAttr(), lowerToBind ? builder.getUnitAttr() : UnitAttr(),
-      innerSym);
+      doNotPrint ? builder.getUnitAttr() : UnitAttr(), innerSym);
 }
 
 void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
@@ -2306,7 +2315,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
                        StringRef name, NameKindEnum nameKind,
                        ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> layers, bool lowerToBind,
-                       hw::InnerSymAttr innerSym) {
+                       bool doNotPrint, hw::InnerSymAttr innerSym) {
   // Gather the result types.
   SmallVector<Type> newResultTypes;
   SmallVector<Direction> newPortDirections;
@@ -2321,7 +2330,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
 
   return build(builder, odsState, newResultTypes, moduleName, name, nameKind,
                newPortDirections, newPortNames, annotations, newPortAnnotations,
-               layers, lowerToBind, innerSym);
+               layers, lowerToBind, doNotPrint, innerSym);
 }
 
 LogicalResult InstanceOp::verify() {
@@ -2365,7 +2374,8 @@ InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
   auto newOp = builder.create<InstanceOp>(
       getLoc(), newResultTypes, getModuleName(), getName(), getNameKind(),
       newPortDirections, newPortNames, getAnnotations().getValue(),
-      newPortAnnotations, getLayers(), getLowerToBind(), getInnerSymAttr());
+      newPortAnnotations, getLayers(), getLowerToBind(), getDoNotPrint(),
+      getInnerSymAttr());
 
   for (unsigned oldIdx = 0, newIdx = 0, numOldPorts = getNumResults();
        oldIdx != numOldPorts; ++oldIdx) {
@@ -2438,7 +2448,8 @@ InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   return OpBuilder(*this).create<InstanceOp>(
       getLoc(), newPortTypes, getModuleName(), getName(), getNameKind(),
       newPortDirections, newPortNames, getAnnotations().getValue(),
-      newPortAnnos, getLayers(), getLowerToBind(), getInnerSymAttr());
+      newPortAnnos, getLayers(), getLowerToBind(), getDoNotPrint(),
+      getInnerSymAttr());
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {

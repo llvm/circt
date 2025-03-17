@@ -85,7 +85,7 @@ struct SpecializeOptionPass
                 inst.getNameKindAttr(), inst.getPortDirectionsAttr(),
                 inst.getPortNamesAttr(), inst.getAnnotationsAttr(),
                 inst.getPortAnnotationsAttr(), builder.getArrayAttr({}),
-                UnitAttr{}, inst.getInnerSymAttr());
+                UnitAttr{}, UnitAttr{}, inst.getInnerSymAttr());
             inst.replaceAllUsesWith(newInst);
             inst.erase();
 
