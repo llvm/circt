@@ -881,6 +881,7 @@ Type toBitVector(T type) {
   return type;
 }
 
+// Returns `true` if `value` is the result of a pipelined binary operation.
 bool isPipeLibOpRes(Value value);
 
 } // namespace calyx

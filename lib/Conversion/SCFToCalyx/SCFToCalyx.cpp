@@ -444,25 +444,32 @@ private:
                         scf::ExecuteRegionOp executeRegionOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter, CallOp callOp) const;
 
-  void handleCmpIOp(PatternRewriter &rewriter, CmpIOp cmpIOp, Operation *group,
-                    calyx::RegisterOp &condReg, calyx::RegisterOp &resReg,
-                    bool &isSequential) const {
+  // Sets up the necessary state and resources for a `CmpIOp` in
+  // `buildLibraryBinaryPipeOp` if `cmpIOp` has sequential logic based on its
+  // operands.
+  void setupCmpIOp(PatternRewriter &rewriter, CmpIOp cmpIOp, Operation *group,
+                   calyx::RegisterOp &condReg, calyx::RegisterOp &resReg,
+                   bool &isSequential) const {
     isSequential = calyx::isPipeLibOpRes(cmpIOp.getLhs()) ||
                    calyx::isPipeLibOpRes(cmpIOp.getRhs());
-    if (isSequential) {
-      StringRef opName = cmpIOp.getOperationName().split(".").second;
-      Type width = cmpIOp.getResult().getType();
+    if (!isSequential)
+      return;
 
-      condReg = createRegister(
-          cmpIOp.getLoc(), rewriter, getComponent(),
-          width.getIntOrFloatBitWidth(),
-          getState<ComponentLoweringState>().getUniqueName(opName));
+    StringRef opName = cmpIOp.getOperationName().split(".").second;
+    Type width = cmpIOp.getResult().getType();
 
-      for (auto *user : cmpIOp->getUsers()) {
-        if (auto ifOp = dyn_cast<scf::IfOp>(user))
-          getState<ComponentLoweringState>().setCondReg(ifOp, condReg);
+    condReg = createRegister(
+        cmpIOp.getLoc(), rewriter, getComponent(),
+        width.getIntOrFloatBitWidth(),
+        getState<ComponentLoweringState>().getUniqueName(opName));
+
+    for (auto *user : cmpIOp->getUsers()) {
+      if (auto ifOp = dyn_cast<scf::IfOp>(user))
+        getState<ComponentLoweringState>().setCondReg(ifOp, condReg);
       }
 
+      assert(calyx::isPipeLibOpRes(cmpIOp.getLhs()) !=
+             calyx::isPipeLibOpRes(cmpIOp.getRhs()));
       Operation *pipeOp = calyx::isPipeLibOpRes(cmpIOp.getLhs())
                               ? cmpIOp.getLhs().getDefiningOp()
                               : cmpIOp.getRhs().getDefiningOp();
@@ -476,7 +483,16 @@ private:
           rewriter, groupOp,
           getState<ComponentLoweringState>().getComponentOp(), resReg,
           condReg.getOut());
-    }
+  }
+
+  template <typename CmpILibOp>
+  LogicalResult buildCmpIOpHelper(PatternRewriter &rewriter, CmpIOp op) const {
+    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
+                        calyx::isPipeLibOpRes(op.getRhs());
+
+    if (isSequential)
+      return buildLibraryOp<calyx::GroupOp, CmpILibOp>(rewriter, op);
+    return buildLibraryOp<calyx::CombGroupOp, CmpILibOp>(rewriter, op);
   }
 
   /// buildLibraryOp will build a TCalyxLibOp inside a TGroupOp based on the
@@ -516,7 +532,7 @@ private:
     calyx::RegisterOp condReg = nullptr, resReg = nullptr;
     if (isa<CmpIOp>(op)) {
       auto cmpIOp = cast<CmpIOp>(op);
-      handleCmpIOp(rewriter, cmpIOp, group, condReg, resReg, isSequential);
+      setupCmpIOp(rewriter, cmpIOp, group, condReg, resReg, isSequential);
     }
 
     rewriter.setInsertionPointToEnd(group.getBodyBlock());
@@ -1556,89 +1572,30 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      CmpIOp op) const {
   switch (op.getPredicate()) {
-  case CmpIPredicate::eq: {
-    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
-                        calyx::isPipeLibOpRes(op.getRhs());
-    return isSequential
-               ? buildLibraryOp<calyx::GroupOp, calyx::EqLibOp>(rewriter, op)
-               : buildLibraryOp<calyx::CombGroupOp, calyx::EqLibOp>(rewriter,
-                                                                    op);
-  }
-  case CmpIPredicate::ne: {
-    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
-                        calyx::isPipeLibOpRes(op.getRhs());
-    return isSequential
-               ? buildLibraryOp<calyx::GroupOp, calyx::NeqLibOp>(rewriter, op)
-               : buildLibraryOp<calyx::CombGroupOp, calyx::NeqLibOp>(rewriter,
-                                                                     op);
-  }
-  case CmpIPredicate::uge: {
-    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
-                        calyx::isPipeLibOpRes(op.getRhs());
-    return isSequential
-               ? buildLibraryOp<calyx::GroupOp, calyx::GeLibOp>(rewriter, op)
-               : buildLibraryOp<calyx::CombGroupOp, calyx::GeLibOp>(rewriter,
-                                                                    op);
-  }
-  case CmpIPredicate::ult: {
-    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
-                        calyx::isPipeLibOpRes(op.getRhs());
-    return isSequential
-               ? buildLibraryOp<calyx::GroupOp, calyx::LtLibOp>(rewriter, op)
-               : buildLibraryOp<calyx::CombGroupOp, calyx::LtLibOp>(rewriter,
-                                                                    op);
-  }
-  case CmpIPredicate::ugt: {
-    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
-                        calyx::isPipeLibOpRes(op.getRhs());
-    return isSequential
-               ? buildLibraryOp<calyx::GroupOp, calyx::GtLibOp>(rewriter, op)
-               : buildLibraryOp<calyx::CombGroupOp, calyx::GtLibOp>(rewriter,
-                                                                    op);
-  }
-  case CmpIPredicate::ule: {
-    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
-                        calyx::isPipeLibOpRes(op.getRhs());
-    return isSequential
-               ? buildLibraryOp<calyx::GroupOp, calyx::LeLibOp>(rewriter, op)
-               : buildLibraryOp<calyx::CombGroupOp, calyx::LeLibOp>(rewriter,
-                                                                    op);
-  }
-  case CmpIPredicate::sge: {
-    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
-                        calyx::isPipeLibOpRes(op.getRhs());
-    return isSequential
-               ? buildLibraryOp<calyx::GroupOp, calyx::SgeLibOp>(rewriter, op)
-               : buildLibraryOp<calyx::CombGroupOp, calyx::SgeLibOp>(rewriter,
-                                                                     op);
-  }
-  case CmpIPredicate::slt: {
-    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
-                        calyx::isPipeLibOpRes(op.getRhs());
-    return isSequential
-               ? buildLibraryOp<calyx::GroupOp, calyx::SltLibOp>(rewriter, op)
-               : buildLibraryOp<calyx::CombGroupOp, calyx::SltLibOp>(rewriter,
-                                                                     op);
-  }
-  case CmpIPredicate::sgt: {
-    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
-                        calyx::isPipeLibOpRes(op.getRhs());
-    return isSequential
-               ? buildLibraryOp<calyx::GroupOp, calyx::SgtLibOp>(rewriter, op)
-               : buildLibraryOp<calyx::CombGroupOp, calyx::SgtLibOp>(rewriter,
-                                                                     op);
-  }
-  case CmpIPredicate::sle: {
-    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
-                        calyx::isPipeLibOpRes(op.getRhs());
-    return isSequential
-               ? buildLibraryOp<calyx::GroupOp, calyx::SleLibOp>(rewriter, op)
-               : buildLibraryOp<calyx::CombGroupOp, calyx::SleLibOp>(rewriter,
-                                                                     op);
-  }
+  case CmpIPredicate::eq:
+    return buildCmpIOpHelper<calyx::EqLibOp>(rewriter, op);
+  case CmpIPredicate::ne:
+    return buildCmpIOpHelper<calyx::NeqLibOp>(rewriter, op);
+  case CmpIPredicate::uge:
+    return buildCmpIOpHelper<calyx::GeLibOp>(rewriter, op);
+  case CmpIPredicate::ult:
+    return buildCmpIOpHelper<calyx::LtLibOp>(rewriter, op);
+  case CmpIPredicate::ugt:
+    return buildCmpIOpHelper<calyx::GtLibOp>(rewriter, op);
+  case CmpIPredicate::ule:
+    return buildCmpIOpHelper<calyx::LeLibOp>(rewriter, op);
+  case CmpIPredicate::sge:
+    return buildCmpIOpHelper<calyx::SgeLibOp>(rewriter, op);
+  case CmpIPredicate::slt:
+    return buildCmpIOpHelper<calyx::SltLibOp>(rewriter, op);
+  case CmpIPredicate::sgt:
+    return buildCmpIOpHelper<calyx::SgtLibOp>(rewriter, op);
+  case CmpIPredicate::sle:
+    return buildCmpIOpHelper<calyx::SleLibOp>(rewriter, op);
   }
   llvm_unreachable("unsupported comparison predicate");
 }
+
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      TruncIOp op) const {
   return buildLibraryOp<calyx::CombGroupOp, calyx::SliceLibOp>(
