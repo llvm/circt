@@ -444,6 +444,41 @@ private:
                         scf::ExecuteRegionOp executeRegionOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter, CallOp callOp) const;
 
+  void handleCmpIOp(PatternRewriter &rewriter, CmpIOp cmpIOp, Operation *group,
+                    calyx::RegisterOp &condReg, calyx::RegisterOp &resReg,
+                    bool &isSequential) const {
+    isSequential = calyx::isPipeLibOpRes(cmpIOp.getLhs()) ||
+                   calyx::isPipeLibOpRes(cmpIOp.getRhs());
+    if (isSequential) {
+      StringRef opName = cmpIOp.getOperationName().split(".").second;
+      Type width = cmpIOp.getResult().getType();
+
+      condReg = createRegister(
+          cmpIOp.getLoc(), rewriter, getComponent(),
+          width.getIntOrFloatBitWidth(),
+          getState<ComponentLoweringState>().getUniqueName(opName));
+
+      for (auto *user : cmpIOp->getUsers()) {
+        if (auto ifOp = dyn_cast<scf::IfOp>(user))
+          getState<ComponentLoweringState>().setCondReg(ifOp, condReg);
+      }
+
+      Operation *pipeOp = calyx::isPipeLibOpRes(cmpIOp.getLhs())
+                              ? cmpIOp.getLhs().getDefiningOp()
+                              : cmpIOp.getRhs().getDefiningOp();
+      condReg = getState<ComponentLoweringState>().getPipeResReg(pipeOp);
+
+      auto groupOp = cast<calyx::GroupOp>(group);
+      getState<ComponentLoweringState>().addBlockScheduleable(
+          cmpIOp->getBlock(), groupOp);
+
+      buildAssignmentsForRegisterWrite(
+          rewriter, groupOp,
+          getState<ComponentLoweringState>().getComponentOp(), resReg,
+          condReg.getOut());
+    }
+  }
+
   /// buildLibraryOp will build a TCalyxLibOp inside a TGroupOp based on the
   /// source operation TSrcOp.
   template <typename TGroupOp, typename TCalyxLibOp, typename TSrcOp>
@@ -481,40 +516,7 @@ private:
     calyx::RegisterOp condReg = nullptr, resReg = nullptr;
     if (isa<CmpIOp>(op)) {
       auto cmpIOp = cast<CmpIOp>(op);
-      isSequential = calyx::isPipeLibOpRes(cmpIOp.getLhs()) ||
-                     calyx::isPipeLibOpRes(cmpIOp.getRhs());
-      if (isSequential) {
-        StringRef opName = op.getOperationName().split(".").second;
-        Type width = op.getResult().getType();
-        // If `op`'s condition depends on some non-combinational computations,
-        // we need to manually perform them in a group, store the result of the
-        // computations in `condReg`, and use the result of `condReg` as the
-        // guard to execute the if-else statement.
-        condReg = createRegister(
-            op.getLoc(), rewriter, getComponent(),
-            width.getIntOrFloatBitWidth(),
-            getState<ComponentLoweringState>().getUniqueName(opName));
-
-        for (auto *user : op->getUsers()) {
-          if (auto ifOp = dyn_cast<scf::IfOp>(user))
-            getState<ComponentLoweringState>().setCondReg(ifOp, condReg);
-        }
-
-        Operation *pipeOp = calyx::isPipeLibOpRes(cmpIOp.getLhs())
-                                ? cmpIOp.getLhs().getDefiningOp()
-                                : cmpIOp.getRhs().getDefiningOp();
-        condReg = getState<ComponentLoweringState>().getPipeResReg(pipeOp);
-
-        // We know it must be a `GroupOp` instead of a `CombGroupOp` if
-        // `isSequential`.
-        auto groupOp = cast<calyx::GroupOp>(group);
-        getState<ComponentLoweringState>().addBlockScheduleable(op->getBlock(),
-                                                                groupOp);
-        buildAssignmentsForRegisterWrite(
-            rewriter, groupOp,
-            getState<ComponentLoweringState>().getComponentOp(), resReg,
-            calyxOp.getOut());
-      }
+      handleCmpIOp(rewriter, cmpIOp, group, condReg, resReg, isSequential);
     }
 
     rewriter.setInsertionPointToEnd(group.getBodyBlock());
