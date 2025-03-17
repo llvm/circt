@@ -142,9 +142,9 @@ class IfLoweringStateInterface {
 public:
   void setCondReg(scf::IfOp op, calyx::RegisterOp regOp) {
     Operation *operation = op.getOperation();
-    assert(condReg.count(operation) == 0 &&
-           "A condition register was already set for this scf::IfOp!\n");
-    condReg[operation] = regOp;
+    auto [it, succeeded] = condReg.insert(std::make_pair(operation, regOp));
+    assert(succeeded &&
+           "A condition register was already set for this scf::IfOp!");
   }
 
   calyx::RegisterOp getCondReg(scf::IfOp op) {
@@ -201,6 +201,7 @@ public:
   }
 
 private:
+  // The register to hold the result of a non-combinational guard.
   DenseMap<Operation *, calyx::RegisterOp> condReg;
   DenseMap<Operation *, calyx::GroupOp> thenGroup;
   DenseMap<Operation *, calyx::GroupOp> elseGroup;
@@ -273,15 +274,14 @@ public:
 class PipeOpLoweringStateInterface {
 public:
   void setPipeResReg(Operation *op, calyx::RegisterOp reg) {
-    assert(isa<calyx::MultPipeLibOp>(op) || isa<calyx::DivUPipeLibOp>(op) ||
-           isa<calyx::DivSPipeLibOp>(op) || isa<calyx::RemUPipeLibOp>(op) ||
-           isa<calyx::RemSPipeLibOp>(op) || isa<calyx::AddFOpIEEE754>(op) ||
-           isa<calyx::MulFOpIEEE754>(op) || isa<calyx::FpToIntOpIEEE754>(op) ||
-           isa<calyx::IntToFpOpIEEE754>(op) ||
-           isa<calyx::DivSqrtOpIEEE754>(op));
-    assert(resultRegs.count(op) == 0 &&
+    assert(
+        (isa<calyx::MultPipeLibOp, calyx::DivUPipeLibOp, calyx::DivSPipeLibOp,
+             calyx::RemUPipeLibOp, calyx::RemSPipeLibOp, calyx::AddFOpIEEE754,
+             calyx::MulFOpIEEE754, calyx::FpToIntOpIEEE754,
+             calyx::IntToFpOpIEEE754, calyx::DivSqrtOpIEEE754>(op)));
+    auto [it, succeeded] = resultRegs.insert(std::make_pair(op, reg));
+    assert(succeeded &&
            "A register was already set for this pipe operation!\n");
-    resultRegs[op] = reg;
   }
   // Get the register for a specific pipe operation
   calyx::RegisterOp getPipeResReg(Operation *op) {
@@ -292,6 +292,8 @@ public:
   }
 
 private:
+  // Maps the result of a pipelined binary operation to the register that stores
+  // the result.
   DenseMap<Operation *, calyx::RegisterOp> resultRegs;
 };
 
@@ -446,21 +448,7 @@ private:
   /// source operation TSrcOp.
   template <typename TGroupOp, typename TCalyxLibOp, typename TSrcOp>
   LogicalResult buildLibraryOp(PatternRewriter &rewriter, TSrcOp op,
-                               TypeRange srcTypes, TypeRange dstTypes,
-                               calyx::RegisterOp srcReg = nullptr,
-                               calyx::RegisterOp dstReg = nullptr) const {
-    auto isPipeLibOp = [](Value val) -> bool {
-      if (Operation *defOp = val.getDefiningOp()) {
-        return isa<calyx::MultPipeLibOp, calyx::DivUPipeLibOp,
-                   calyx::DivSPipeLibOp, calyx::RemUPipeLibOp,
-                   calyx::RemSPipeLibOp>(defOp);
-      }
-      return false;
-    };
-
-    assert((srcReg && dstReg) || (!srcReg && !dstReg));
-    bool isSequential = srcReg && dstReg;
-
+                               TypeRange srcTypes, TypeRange dstTypes) const {
     SmallVector<Type> types;
     for (Type srcType : srcTypes)
       types.push_back(calyx::toBitVector(srcType));
@@ -489,39 +477,61 @@ private:
     /// Create assignments to the inputs of the library op.
     auto group = createGroupForOp<TGroupOp>(rewriter, op);
 
-    if (isSequential) {
-      auto groupOp = cast<calyx::GroupOp>(group);
-      getState<ComponentLoweringState>().addBlockScheduleable(op->getBlock(),
-                                                              groupOp);
+    bool isSequential = false;
+    calyx::RegisterOp condReg = nullptr, resReg = nullptr;
+    if (isa<CmpIOp>(op)) {
+      auto cmpIOp = cast<CmpIOp>(op);
+      isSequential = calyx::isPipeLibOpRes(cmpIOp.getLhs()) ||
+                     calyx::isPipeLibOpRes(cmpIOp.getRhs());
+      if (isSequential) {
+        StringRef opName = op.getOperationName().split(".").second;
+        Type width = op.getResult().getType();
+        // If `op`'s condition depends on some non-combinational computations,
+        // we need to manually perform them in a group, store the result of the
+        // computations in `condReg`, and use the result of `condReg` as the
+        // guard to execute the if-else statement.
+        condReg = createRegister(
+            op.getLoc(), rewriter, getComponent(),
+            width.getIntOrFloatBitWidth(),
+            getState<ComponentLoweringState>().getUniqueName(opName));
+
+        for (auto *user : op->getUsers()) {
+          if (auto ifOp = dyn_cast<scf::IfOp>(user))
+            getState<ComponentLoweringState>().setCondReg(ifOp, condReg);
+        }
+
+        Operation *pipeOp = calyx::isPipeLibOpRes(cmpIOp.getLhs())
+                                ? cmpIOp.getLhs().getDefiningOp()
+                                : cmpIOp.getRhs().getDefiningOp();
+        condReg = getState<ComponentLoweringState>().getPipeResReg(pipeOp);
+
+        // We know it must be a `GroupOp` instead of a `CombGroupOp` if
+        // `isSequential`.
+        auto groupOp = cast<calyx::GroupOp>(group);
+        getState<ComponentLoweringState>().addBlockScheduleable(op->getBlock(),
+                                                                groupOp);
+        buildAssignmentsForRegisterWrite(
+            rewriter, groupOp,
+            getState<ComponentLoweringState>().getComponentOp(), resReg,
+            calyxOp.getOut());
+      }
     }
 
     rewriter.setInsertionPointToEnd(group.getBodyBlock());
 
     for (auto dstOp : enumerate(opInputPorts)) {
-      if (isPipeLibOp(dstOp.value()))
-        rewriter.create<calyx::AssignOp>(op.getLoc(), dstOp.value(),
-                                         srcReg.getOut());
-      else
-        rewriter.create<calyx::AssignOp>(op.getLoc(), dstOp.value(),
-                                         op->getOperand(dstOp.index()));
+      auto srcOp = calyx::isPipeLibOpRes(dstOp.value())
+                       ? condReg.getOut()
+                       : op->getOperand(dstOp.index());
+      rewriter.create<calyx::AssignOp>(op.getLoc(), dstOp.value(), srcOp);
     }
 
     /// Replace the result values of the source operator with the new operator.
     for (auto res : enumerate(opOutputPorts)) {
       getState<ComponentLoweringState>().registerEvaluatingGroup(res.value(),
                                                                  group);
-      if (isSequential)
-        op->getResult(res.index()).replaceAllUsesWith(dstReg.getOut());
-      else
-        op->getResult(res.index()).replaceAllUsesWith(res.value());
-    }
-
-    if (isSequential) {
-      auto groupOp = cast<calyx::GroupOp>(group);
-      buildAssignmentsForRegisterWrite(
-          rewriter, groupOp,
-          getState<ComponentLoweringState>().getComponentOp(), dstReg,
-          calyxOp.getOut());
+      auto dstOp = isSequential ? resReg.getOut() : res.value();
+      op->getResult(res.index()).replaceAllUsesWith(dstOp);
     }
 
     return success();
@@ -530,12 +540,9 @@ private:
   /// buildLibraryOp which provides in- and output types based on the operands
   /// and results of the op argument.
   template <typename TGroupOp, typename TCalyxLibOp, typename TSrcOp>
-  LogicalResult buildLibraryOp(PatternRewriter &rewriter, TSrcOp op,
-                               calyx::RegisterOp srcReg = nullptr,
-                               calyx::RegisterOp dstReg = nullptr) const {
+  LogicalResult buildLibraryOp(PatternRewriter &rewriter, TSrcOp op) const {
     return buildLibraryOp<TGroupOp, TCalyxLibOp, TSrcOp>(
-        rewriter, op, op.getOperandTypes(), op->getResultTypes(), srcReg,
-        dstReg);
+        rewriter, op, op.getOperandTypes(), op->getResultTypes());
   }
 
   /// Creates a group named by the basic block which the input op resides in.
@@ -1546,61 +1553,87 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      CmpIOp op) const {
-  auto isPipeLibOp = [](Value val) -> bool {
-    if (Operation *defOp = val.getDefiningOp()) {
-      return isa<calyx::MultPipeLibOp, calyx::DivUPipeLibOp,
-                 calyx::DivSPipeLibOp, calyx::RemUPipeLibOp,
-                 calyx::RemSPipeLibOp>(defOp);
-    }
-    return false;
-  };
-
   switch (op.getPredicate()) {
   case CmpIPredicate::eq: {
-    StringRef opName = op.getOperationName().split(".").second;
-    Type width = op.getResult().getType();
-    bool isSequential = isPipeLibOp(op.getLhs()) || isPipeLibOp(op.getRhs());
-    if (isSequential) {
-      auto condReg = createRegister(
-          op.getLoc(), rewriter, getComponent(), width.getIntOrFloatBitWidth(),
-          getState<ComponentLoweringState>().getUniqueName(opName));
-
-      for (auto *user : op->getUsers()) {
-        if (auto ifOp = dyn_cast<scf::IfOp>(user))
-          getState<ComponentLoweringState>().setCondReg(ifOp, condReg);
-      }
-
-      calyx::RegisterOp pipeResReg;
-      if (isPipeLibOp(op.getLhs()))
-        pipeResReg = getState<ComponentLoweringState>().getPipeResReg(
-            op.getLhs().getDefiningOp());
-      else
-        pipeResReg = getState<ComponentLoweringState>().getPipeResReg(
-            op.getRhs().getDefiningOp());
-
-      return buildLibraryOp<calyx::GroupOp, calyx::EqLibOp>(
-          rewriter, op, pipeResReg, condReg);
-    }
-    return buildLibraryOp<calyx::CombGroupOp, calyx::EqLibOp>(rewriter, op);
+    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
+                        calyx::isPipeLibOpRes(op.getRhs());
+    return isSequential
+               ? buildLibraryOp<calyx::GroupOp, calyx::EqLibOp>(rewriter, op)
+               : buildLibraryOp<calyx::CombGroupOp, calyx::EqLibOp>(rewriter,
+                                                                    op);
   }
-  case CmpIPredicate::ne:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::NeqLibOp>(rewriter, op);
-  case CmpIPredicate::uge:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::GeLibOp>(rewriter, op);
-  case CmpIPredicate::ult:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::LtLibOp>(rewriter, op);
-  case CmpIPredicate::ugt:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::GtLibOp>(rewriter, op);
-  case CmpIPredicate::ule:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::LeLibOp>(rewriter, op);
-  case CmpIPredicate::sge:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::SgeLibOp>(rewriter, op);
-  case CmpIPredicate::slt:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::SltLibOp>(rewriter, op);
-  case CmpIPredicate::sgt:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::SgtLibOp>(rewriter, op);
-  case CmpIPredicate::sle:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::SleLibOp>(rewriter, op);
+  case CmpIPredicate::ne: {
+    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
+                        calyx::isPipeLibOpRes(op.getRhs());
+    return isSequential
+               ? buildLibraryOp<calyx::GroupOp, calyx::NeqLibOp>(rewriter, op)
+               : buildLibraryOp<calyx::CombGroupOp, calyx::NeqLibOp>(rewriter,
+                                                                     op);
+  }
+  case CmpIPredicate::uge: {
+    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
+                        calyx::isPipeLibOpRes(op.getRhs());
+    return isSequential
+               ? buildLibraryOp<calyx::GroupOp, calyx::GeLibOp>(rewriter, op)
+               : buildLibraryOp<calyx::CombGroupOp, calyx::GeLibOp>(rewriter,
+                                                                    op);
+  }
+  case CmpIPredicate::ult: {
+    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
+                        calyx::isPipeLibOpRes(op.getRhs());
+    return isSequential
+               ? buildLibraryOp<calyx::GroupOp, calyx::LtLibOp>(rewriter, op)
+               : buildLibraryOp<calyx::CombGroupOp, calyx::LtLibOp>(rewriter,
+                                                                    op);
+  }
+  case CmpIPredicate::ugt: {
+    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
+                        calyx::isPipeLibOpRes(op.getRhs());
+    return isSequential
+               ? buildLibraryOp<calyx::GroupOp, calyx::GtLibOp>(rewriter, op)
+               : buildLibraryOp<calyx::CombGroupOp, calyx::GtLibOp>(rewriter,
+                                                                    op);
+  }
+  case CmpIPredicate::ule: {
+    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
+                        calyx::isPipeLibOpRes(op.getRhs());
+    return isSequential
+               ? buildLibraryOp<calyx::GroupOp, calyx::LeLibOp>(rewriter, op)
+               : buildLibraryOp<calyx::CombGroupOp, calyx::LeLibOp>(rewriter,
+                                                                    op);
+  }
+  case CmpIPredicate::sge: {
+    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
+                        calyx::isPipeLibOpRes(op.getRhs());
+    return isSequential
+               ? buildLibraryOp<calyx::GroupOp, calyx::SgeLibOp>(rewriter, op)
+               : buildLibraryOp<calyx::CombGroupOp, calyx::SgeLibOp>(rewriter,
+                                                                     op);
+  }
+  case CmpIPredicate::slt: {
+    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
+                        calyx::isPipeLibOpRes(op.getRhs());
+    return isSequential
+               ? buildLibraryOp<calyx::GroupOp, calyx::SltLibOp>(rewriter, op)
+               : buildLibraryOp<calyx::CombGroupOp, calyx::SltLibOp>(rewriter,
+                                                                     op);
+  }
+  case CmpIPredicate::sgt: {
+    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
+                        calyx::isPipeLibOpRes(op.getRhs());
+    return isSequential
+               ? buildLibraryOp<calyx::GroupOp, calyx::SgtLibOp>(rewriter, op)
+               : buildLibraryOp<calyx::CombGroupOp, calyx::SgtLibOp>(rewriter,
+                                                                     op);
+  }
+  case CmpIPredicate::sle: {
+    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
+                        calyx::isPipeLibOpRes(op.getRhs());
+    return isSequential
+               ? buildLibraryOp<calyx::GroupOp, calyx::SleLibOp>(rewriter, op)
+               : buildLibraryOp<calyx::CombGroupOp, calyx::SleLibOp>(rewriter,
+                                                                     op);
+  }
   }
   llvm_unreachable("unsupported comparison predicate");
 }

@@ -881,6 +881,8 @@ Type toBitVector(T type) {
   return type;
 }
 
+bool isPipeLibOpRes(Value value);
+
 } // namespace calyx
 } // namespace circt
 

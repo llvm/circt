@@ -961,5 +961,15 @@ PredicateInfo getPredicateInfo(CmpFPredicate pred) {
   return info;
 }
 
+bool isPipeLibOpRes(const Value value) {
+  if (Operation *defOp = value.getDefiningOp()) {
+    return isa<calyx::MultPipeLibOp, calyx::DivUPipeLibOp, calyx::DivSPipeLibOp,
+               calyx::RemUPipeLibOp, calyx::RemSPipeLibOp, calyx::AddFOpIEEE754,
+               calyx::MulFOpIEEE754, calyx::CompareFOpIEEE754,
+               calyx::DivSqrtOpIEEE754>(defOp);
+  }
+  return false;
+}
+
 } // namespace calyx
 } // namespace circt
