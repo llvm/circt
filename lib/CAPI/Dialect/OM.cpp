@@ -87,6 +87,9 @@ MlirType omStringTypeGet(MlirContext ctx) {
   return wrap(StringType::get(unwrap(ctx)));
 }
 
+/// Is the Type a MapType.
+bool omTypeIsAMapType(MlirType type) { return isa<MapType>(unwrap(type)); }
+
 /// Return a key type of a map.
 MlirType omMapTypeGetKeyType(MlirType type) {
   return wrap(cast<MapType>(unwrap(type)).getKeyType());
