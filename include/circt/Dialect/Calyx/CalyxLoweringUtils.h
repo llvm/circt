@@ -881,6 +881,10 @@ Type toBitVector(T type) {
   return type;
 }
 
+// Returns whether `value` is the result of a sequential Calyx library
+// operation.
+bool parentIsSeqCell(Value value);
+
 } // namespace calyx
 } // namespace circt
 

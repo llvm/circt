@@ -140,6 +140,20 @@ using Scheduleable =
 
 class IfLoweringStateInterface {
 public:
+  void setCondReg(scf::IfOp op, calyx::RegisterOp regOp) {
+    Operation *operation = op.getOperation();
+    auto [it, succeeded] = condReg.insert(std::make_pair(operation, regOp));
+    assert(succeeded &&
+           "A condition register was already set for this scf::IfOp!");
+  }
+
+  calyx::RegisterOp getCondReg(scf::IfOp op) {
+    auto it = condReg.find(op.getOperation());
+    if (it != condReg.end())
+      return it->second;
+    return nullptr;
+  }
+
   void setThenGroup(scf::IfOp op, calyx::GroupOp group) {
     Operation *operation = op.getOperation();
     assert(thenGroup.count(operation) == 0 &&
@@ -187,6 +201,8 @@ public:
   }
 
 private:
+  // The register to hold the result of a non-combinational guard.
+  DenseMap<Operation *, calyx::RegisterOp> condReg;
   DenseMap<Operation *, calyx::GroupOp> thenGroup;
   DenseMap<Operation *, calyx::GroupOp> elseGroup;
   DenseMap<Operation *, DenseMap<unsigned, calyx::RegisterOp>> resultRegs;
@@ -255,6 +271,31 @@ public:
   }
 };
 
+/// Stores the state information for condition checks involving sequential
+/// computation.
+class SeqOpLoweringStateInterface {
+public:
+  void setSeqResReg(Operation *op, calyx::RegisterOp reg) {
+    auto cellOp = dyn_cast<calyx::CellInterface>(op);
+    assert(cellOp && !cellOp.isCombinational());
+    auto [it, succeeded] = resultRegs.insert(std::make_pair(op, reg));
+    assert(succeeded &&
+           "A register was already set for this sequential operation!");
+  }
+  // Get the register for a specific pipe operation
+  calyx::RegisterOp getSeqResReg(Operation *op) {
+    auto it = resultRegs.find(op);
+    assert(it != resultRegs.end() &&
+           "No register was set for this sequential operation!");
+    return it->second;
+  }
+
+private:
+  // Maps the result of a sequential operation to the register that stores
+  // the result.
+  DenseMap<Operation *, calyx::RegisterOp> resultRegs;
+};
+
 /// Handles the current state of lowering of a Calyx component. It is mainly
 /// used as a key/value store for recording information during partial lowering,
 /// which is required at later lowering passes.
@@ -262,6 +303,7 @@ class ComponentLoweringState : public calyx::ComponentLoweringStateInterface,
                                public WhileLoopLoweringStateInterface,
                                public ForLoopLoweringStateInterface,
                                public IfLoweringStateInterface,
+                               public SeqOpLoweringStateInterface,
                                public calyx::SchedulerInterface<Scheduleable> {
 public:
   ComponentLoweringState(calyx::ComponentOp component)
@@ -401,6 +443,61 @@ private:
                         scf::ExecuteRegionOp executeRegionOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter, CallOp callOp) const;
 
+  // Sets up the necessary state and resources for a `CmpIOp` in
+  // `buildLibraryBinaryPipeOp` if `cmpIOp` has sequential logic based on its
+  // operands.
+  void setupCmpIOp(PatternRewriter &rewriter, CmpIOp cmpIOp, Operation *group,
+                   calyx::RegisterOp &condReg, calyx::RegisterOp &resReg,
+                   bool &isSeqCondCheck) const {
+    bool lhsIsSeqOp = calyx::parentIsSeqCell(cmpIOp.getLhs());
+    bool rhsIsSeqOp = calyx::parentIsSeqCell(cmpIOp.getRhs());
+
+    isSeqCondCheck =
+        (lhsIsSeqOp || rhsIsSeqOp) && isa<scf::IfOp>(cmpIOp->getParentOp());
+    if (!isSeqCondCheck)
+      return;
+
+    StringRef opName = cmpIOp.getOperationName().split(".").second;
+    Type width = cmpIOp.getResult().getType();
+
+    condReg = createRegister(
+        cmpIOp.getLoc(), rewriter, getComponent(),
+        width.getIntOrFloatBitWidth(),
+        getState<ComponentLoweringState>().getUniqueName(opName));
+
+    for (auto *user : cmpIOp->getUsers()) {
+      if (auto ifOp = dyn_cast<scf::IfOp>(user))
+        getState<ComponentLoweringState>().setCondReg(ifOp, condReg);
+    }
+
+    assert(
+        lhsIsSeqOp != rhsIsSeqOp &&
+        "unexpected sequential operation on both sides; please open an issue");
+    Operation *seqOp = calyx::parentIsSeqCell(cmpIOp.getLhs())
+                           ? cmpIOp.getLhs().getDefiningOp()
+                           : cmpIOp.getRhs().getDefiningOp();
+    condReg = getState<ComponentLoweringState>().getSeqResReg(seqOp);
+
+    auto groupOp = cast<calyx::GroupOp>(group);
+    getState<ComponentLoweringState>().addBlockScheduleable(cmpIOp->getBlock(),
+                                                            groupOp);
+
+    buildAssignmentsForRegisterWrite(
+        rewriter, groupOp, getState<ComponentLoweringState>().getComponentOp(),
+        resReg, condReg.getOut());
+  }
+
+  template <typename CmpILibOp>
+  LogicalResult buildCmpIOpHelper(PatternRewriter &rewriter, CmpIOp op) const {
+    bool isSeqCondCheck = isa<scf::IfOp>(op->getParentOp()) &&
+                          (calyx::parentIsSeqCell(op.getLhs()) ||
+                           calyx::parentIsSeqCell(op.getRhs()));
+
+    if (isSeqCondCheck)
+      return buildLibraryOp<calyx::GroupOp, CmpILibOp>(rewriter, op);
+    return buildLibraryOp<calyx::CombGroupOp, CmpILibOp>(rewriter, op);
+  }
+
   /// buildLibraryOp will build a TCalyxLibOp inside a TGroupOp based on the
   /// source operation TSrcOp.
   template <typename TGroupOp, typename TCalyxLibOp, typename TSrcOp>
@@ -433,17 +530,31 @@ private:
 
     /// Create assignments to the inputs of the library op.
     auto group = createGroupForOp<TGroupOp>(rewriter, op);
+
+    bool isSeqCondCheck = false;
+    calyx::RegisterOp condReg = nullptr, resReg = nullptr;
+    if (isa<CmpIOp>(op)) {
+      auto cmpIOp = cast<CmpIOp>(op);
+      setupCmpIOp(rewriter, cmpIOp, group, condReg, resReg, isSeqCondCheck);
+    }
+
     rewriter.setInsertionPointToEnd(group.getBodyBlock());
-    for (auto dstOp : enumerate(opInputPorts))
-      rewriter.create<calyx::AssignOp>(op.getLoc(), dstOp.value(),
-                                       op->getOperand(dstOp.index()));
+
+    for (auto dstOp : enumerate(opInputPorts)) {
+      auto srcOp = calyx::parentIsSeqCell(dstOp.value())
+                       ? condReg.getOut()
+                       : op->getOperand(dstOp.index());
+      rewriter.create<calyx::AssignOp>(op.getLoc(), dstOp.value(), srcOp);
+    }
 
     /// Replace the result values of the source operator with the new operator.
     for (auto res : enumerate(opOutputPorts)) {
       getState<ComponentLoweringState>().registerEvaluatingGroup(res.value(),
                                                                  group);
-      op->getResult(res.index()).replaceAllUsesWith(res.value());
+      auto dstOp = isSeqCondCheck ? resReg.getOut() : res.value();
+      op->getResult(res.index()).replaceAllUsesWith(dstOp);
     }
+
     return success();
   }
 
@@ -477,6 +588,7 @@ private:
     auto reg = createRegister(
         op.getLoc(), rewriter, getComponent(), width.getIntOrFloatBitWidth(),
         getState<ComponentLoweringState>().getUniqueName(opName));
+
     // Operation pipelines are not combinational, so a GroupOp is required.
     auto group = createGroupForOp<calyx::GroupOp>(rewriter, op);
     OpBuilder builder(group->getRegion(0));
@@ -529,6 +641,8 @@ private:
                                                                group);
     getState<ComponentLoweringState>().registerEvaluatingGroup(
         opPipe.getRight(), group);
+
+    getState<ComponentLoweringState>().setSeqResReg(out.getDefiningOp(), reg);
 
     return success();
   }
@@ -1462,28 +1576,29 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      CmpIOp op) const {
   switch (op.getPredicate()) {
   case CmpIPredicate::eq:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::EqLibOp>(rewriter, op);
+    return buildCmpIOpHelper<calyx::EqLibOp>(rewriter, op);
   case CmpIPredicate::ne:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::NeqLibOp>(rewriter, op);
+    return buildCmpIOpHelper<calyx::NeqLibOp>(rewriter, op);
   case CmpIPredicate::uge:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::GeLibOp>(rewriter, op);
+    return buildCmpIOpHelper<calyx::GeLibOp>(rewriter, op);
   case CmpIPredicate::ult:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::LtLibOp>(rewriter, op);
+    return buildCmpIOpHelper<calyx::LtLibOp>(rewriter, op);
   case CmpIPredicate::ugt:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::GtLibOp>(rewriter, op);
+    return buildCmpIOpHelper<calyx::GtLibOp>(rewriter, op);
   case CmpIPredicate::ule:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::LeLibOp>(rewriter, op);
+    return buildCmpIOpHelper<calyx::LeLibOp>(rewriter, op);
   case CmpIPredicate::sge:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::SgeLibOp>(rewriter, op);
+    return buildCmpIOpHelper<calyx::SgeLibOp>(rewriter, op);
   case CmpIPredicate::slt:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::SltLibOp>(rewriter, op);
+    return buildCmpIOpHelper<calyx::SltLibOp>(rewriter, op);
   case CmpIPredicate::sgt:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::SgtLibOp>(rewriter, op);
+    return buildCmpIOpHelper<calyx::SgtLibOp>(rewriter, op);
   case CmpIPredicate::sle:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::SleLibOp>(rewriter, op);
+    return buildCmpIOpHelper<calyx::SleLibOp>(rewriter, op);
   }
   llvm_unreachable("unsupported comparison predicate");
 }
+
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      TruncIOp op) const {
   return buildLibraryOp<calyx::CombGroupOp, calyx::SliceLibOp>(
@@ -2127,11 +2242,16 @@ private:
         Location loc = ifOp->getLoc();
 
         auto cond = ifOp.getCondition();
-        auto condGroup = getState<ComponentLoweringState>()
-                             .getEvaluatingGroup<calyx::CombGroupOp>(cond);
 
-        auto symbolAttr = FlatSymbolRefAttr::get(
-            StringAttr::get(getContext(), condGroup.getSymName()));
+        FlatSymbolRefAttr symbolAttr = nullptr;
+        auto condReg = getState<ComponentLoweringState>().getCondReg(ifOp);
+        if (!condReg) {
+          auto condGroup = getState<ComponentLoweringState>()
+                               .getEvaluatingGroup<calyx::CombGroupOp>(cond);
+
+          symbolAttr = FlatSymbolRefAttr::get(
+              StringAttr::get(getContext(), condGroup.getSymName()));
+        }
 
         bool initElse = !ifOp.getElseRegion().empty();
         auto ifCtrlOp = rewriter.create<calyx::IfOp>(
