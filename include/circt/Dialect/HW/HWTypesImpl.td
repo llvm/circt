@@ -111,6 +111,24 @@ def UnpackedArrayTypeImpl : HWType<"UnpackedArray", [DeclareTypeInterfaceMethods
   }];
 }
 
+def HiZTypeImpl : HWType<"HiZ"> {
+  let summary = "high impedance capable type";
+  let description = [{
+    HiZ type is used for values which could be undriven.  HiZ types can be
+    cast out of (read) or conditionally driven.
+  }];
+
+  let mnemonic = "hiZ";
+  let parameters = (ins "::mlir::Type":$elementType);
+  let genVerifyDecl = 1;
+  let assemblyFormat = "`<` custom<HWElementType>($elementType) `>`";
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "Type":$elementType), [{
+       return $_get(elementType.getContext(), elementType);
+    }]>
+  ];
+}
+
 def InOutTypeImpl : HWType<"InOut"> {
   let summary = "inout type";
   let description = [{
