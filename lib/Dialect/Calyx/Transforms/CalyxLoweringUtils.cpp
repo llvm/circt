@@ -961,7 +961,7 @@ PredicateInfo getPredicateInfo(CmpFPredicate pred) {
   return info;
 }
 
-bool isSeqLibOpRes(const Value value) {
+bool parentIsSeqCell(const Value value) {
   if (Operation *defOp = value.getDefiningOp()) {
     auto cellOp = dyn_cast_or_null<calyx::CellInterface>(defOp);
     return cellOp && !cellOp.isCombinational();

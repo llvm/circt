@@ -449,9 +449,11 @@ private:
   void setupCmpIOp(PatternRewriter &rewriter, CmpIOp cmpIOp, Operation *group,
                    calyx::RegisterOp &condReg, calyx::RegisterOp &resReg,
                    bool &isSeqCondCheck) const {
-    isSeqCondCheck = (calyx::isSeqLibOpRes(cmpIOp.getLhs()) ||
-                      calyx::isSeqLibOpRes(cmpIOp.getRhs())) &&
-                     isa<scf::IfOp>(cmpIOp->getParentOp());
+    bool lhsIsSeqOp = calyx::parentIsSeqCell(cmpIOp.getLhs());
+    bool rhsIsSeqOp = calyx::parentIsSeqCell(cmpIOp.getRhs());
+
+    isSeqCondCheck =
+        (lhsIsSeqOp || rhsIsSeqOp) && isa<scf::IfOp>(cmpIOp->getParentOp());
     if (!isSeqCondCheck)
       return;
 
@@ -468,9 +470,10 @@ private:
         getState<ComponentLoweringState>().setCondReg(ifOp, condReg);
     }
 
-    assert(calyx::isSeqLibOpRes(cmpIOp.getLhs()) !=
-           calyx::isSeqLibOpRes(cmpIOp.getRhs()));
-    Operation *seqOp = calyx::isSeqLibOpRes(cmpIOp.getLhs())
+    assert(
+        lhsIsSeqOp != rhsIsSeqOp &&
+        "unexpected sequential operation on both sides; please open an issue");
+    Operation *seqOp = calyx::parentIsSeqCell(cmpIOp.getLhs())
                            ? cmpIOp.getLhs().getDefiningOp()
                            : cmpIOp.getRhs().getDefiningOp();
     condReg = getState<ComponentLoweringState>().getSeqResReg(seqOp);
@@ -486,9 +489,9 @@ private:
 
   template <typename CmpILibOp>
   LogicalResult buildCmpIOpHelper(PatternRewriter &rewriter, CmpIOp op) const {
-    bool isSeqCondCheck = (calyx::isSeqLibOpRes(op.getLhs()) ||
-                           calyx::isSeqLibOpRes(op.getRhs())) &&
-                          isa<scf::IfOp>(op->getParentOp());
+    bool isSeqCondCheck = isa<scf::IfOp>(op->getParentOp()) &&
+                          (calyx::parentIsSeqCell(op.getLhs()) ||
+                           calyx::parentIsSeqCell(op.getRhs()));
 
     if (isSeqCondCheck)
       return buildLibraryOp<calyx::GroupOp, CmpILibOp>(rewriter, op);
@@ -538,7 +541,7 @@ private:
     rewriter.setInsertionPointToEnd(group.getBodyBlock());
 
     for (auto dstOp : enumerate(opInputPorts)) {
-      auto srcOp = calyx::isSeqLibOpRes(dstOp.value())
+      auto srcOp = calyx::parentIsSeqCell(dstOp.value())
                        ? condReg.getOut()
                        : op->getOperand(dstOp.index());
       rewriter.create<calyx::AssignOp>(op.getLoc(), dstOp.value(), srcOp);
