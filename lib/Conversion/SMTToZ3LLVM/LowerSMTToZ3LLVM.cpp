@@ -796,8 +796,8 @@ struct CheckOpLowering : public SMTLoweringPattern<CheckOp> {
                   ConversionPatternRewriter &rewriter) const final {
     Location loc = op.getLoc();
     auto ptrTy = LLVM::LLVMPointerType::get(rewriter.getContext());
-    auto printfType =
-        LLVM::LLVMFunctionType::get(rewriter.getI32Type(), {ptrTy}, true);
+    auto printfType = LLVM::LLVMFunctionType::get(
+        LLVM::LLVMVoidType::get(rewriter.getContext()), {ptrTy}, true);
 
     auto getHeaderString = [](const std::string &title) {
       unsigned titleSize = title.size() + 2; // Add a space left and right
