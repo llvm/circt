@@ -271,28 +271,27 @@ public:
   }
 };
 
-class PipeOpLoweringStateInterface {
+/// Stores the state information for condition checks involving sequential
+/// computation.
+class SeqOpLoweringStateInterface {
 public:
-  void setPipeResReg(Operation *op, calyx::RegisterOp reg) {
-    assert(
-        (isa<calyx::MultPipeLibOp, calyx::DivUPipeLibOp, calyx::DivSPipeLibOp,
-             calyx::RemUPipeLibOp, calyx::RemSPipeLibOp, calyx::AddFOpIEEE754,
-             calyx::MulFOpIEEE754, calyx::FpToIntOpIEEE754,
-             calyx::IntToFpOpIEEE754, calyx::DivSqrtOpIEEE754>(op)));
+  void setSeqResReg(Operation *op, calyx::RegisterOp reg) {
+    auto cellOp = dyn_cast<calyx::CellInterface>(op);
+    assert(cellOp && !cellOp.isCombinational());
     auto [it, succeeded] = resultRegs.insert(std::make_pair(op, reg));
     assert(succeeded &&
-           "A register was already set for this pipe operation!\n");
+           "A register was already set for this sequential operation!");
   }
   // Get the register for a specific pipe operation
-  calyx::RegisterOp getPipeResReg(Operation *op) {
+  calyx::RegisterOp getSeqResReg(Operation *op) {
     auto it = resultRegs.find(op);
     assert(it != resultRegs.end() &&
-           "No register was set for this pipe operation!\n");
+           "No register was set for this sequential operation!");
     return it->second;
   }
 
 private:
-  // Maps the result of a pipelined binary operation to the register that stores
+  // Maps the result of a sequential operation to the register that stores
   // the result.
   DenseMap<Operation *, calyx::RegisterOp> resultRegs;
 };
@@ -304,7 +303,7 @@ class ComponentLoweringState : public calyx::ComponentLoweringStateInterface,
                                public WhileLoopLoweringStateInterface,
                                public ForLoopLoweringStateInterface,
                                public IfLoweringStateInterface,
-                               public PipeOpLoweringStateInterface,
+                               public SeqOpLoweringStateInterface,
                                public calyx::SchedulerInterface<Scheduleable> {
 public:
   ComponentLoweringState(calyx::ComponentOp component)
@@ -449,10 +448,11 @@ private:
   // operands.
   void setupCmpIOp(PatternRewriter &rewriter, CmpIOp cmpIOp, Operation *group,
                    calyx::RegisterOp &condReg, calyx::RegisterOp &resReg,
-                   bool &isSequential) const {
-    isSequential = calyx::isPipeLibOpRes(cmpIOp.getLhs()) ||
-                   calyx::isPipeLibOpRes(cmpIOp.getRhs());
-    if (!isSequential)
+                   bool &isSeqCondCheck) const {
+    isSeqCondCheck = (calyx::isSeqLibOpRes(cmpIOp.getLhs()) ||
+                      calyx::isSeqLibOpRes(cmpIOp.getRhs())) &&
+                     isa<scf::IfOp>(cmpIOp->getParentOp());
+    if (!isSeqCondCheck)
       return;
 
     StringRef opName = cmpIOp.getOperationName().split(".").second;
@@ -468,12 +468,12 @@ private:
         getState<ComponentLoweringState>().setCondReg(ifOp, condReg);
     }
 
-    assert(calyx::isPipeLibOpRes(cmpIOp.getLhs()) !=
-           calyx::isPipeLibOpRes(cmpIOp.getRhs()));
-    Operation *pipeOp = calyx::isPipeLibOpRes(cmpIOp.getLhs())
-                            ? cmpIOp.getLhs().getDefiningOp()
-                            : cmpIOp.getRhs().getDefiningOp();
-    condReg = getState<ComponentLoweringState>().getPipeResReg(pipeOp);
+    assert(calyx::isSeqLibOpRes(cmpIOp.getLhs()) !=
+           calyx::isSeqLibOpRes(cmpIOp.getRhs()));
+    Operation *seqOp = calyx::isSeqLibOpRes(cmpIOp.getLhs())
+                           ? cmpIOp.getLhs().getDefiningOp()
+                           : cmpIOp.getRhs().getDefiningOp();
+    condReg = getState<ComponentLoweringState>().getSeqResReg(seqOp);
 
     auto groupOp = cast<calyx::GroupOp>(group);
     getState<ComponentLoweringState>().addBlockScheduleable(cmpIOp->getBlock(),
@@ -486,10 +486,11 @@ private:
 
   template <typename CmpILibOp>
   LogicalResult buildCmpIOpHelper(PatternRewriter &rewriter, CmpIOp op) const {
-    bool isSequential = calyx::isPipeLibOpRes(op.getLhs()) ||
-                        calyx::isPipeLibOpRes(op.getRhs());
+    bool isSeqCondCheck = (calyx::isSeqLibOpRes(op.getLhs()) ||
+                           calyx::isSeqLibOpRes(op.getRhs())) &&
+                          isa<scf::IfOp>(op->getParentOp());
 
-    if (isSequential)
+    if (isSeqCondCheck)
       return buildLibraryOp<calyx::GroupOp, CmpILibOp>(rewriter, op);
     return buildLibraryOp<calyx::CombGroupOp, CmpILibOp>(rewriter, op);
   }
@@ -527,17 +528,17 @@ private:
     /// Create assignments to the inputs of the library op.
     auto group = createGroupForOp<TGroupOp>(rewriter, op);
 
-    bool isSequential = false;
+    bool isSeqCondCheck = false;
     calyx::RegisterOp condReg = nullptr, resReg = nullptr;
     if (isa<CmpIOp>(op)) {
       auto cmpIOp = cast<CmpIOp>(op);
-      setupCmpIOp(rewriter, cmpIOp, group, condReg, resReg, isSequential);
+      setupCmpIOp(rewriter, cmpIOp, group, condReg, resReg, isSeqCondCheck);
     }
 
     rewriter.setInsertionPointToEnd(group.getBodyBlock());
 
     for (auto dstOp : enumerate(opInputPorts)) {
-      auto srcOp = calyx::isPipeLibOpRes(dstOp.value())
+      auto srcOp = calyx::isSeqLibOpRes(dstOp.value())
                        ? condReg.getOut()
                        : op->getOperand(dstOp.index());
       rewriter.create<calyx::AssignOp>(op.getLoc(), dstOp.value(), srcOp);
@@ -547,7 +548,7 @@ private:
     for (auto res : enumerate(opOutputPorts)) {
       getState<ComponentLoweringState>().registerEvaluatingGroup(res.value(),
                                                                  group);
-      auto dstOp = isSequential ? resReg.getOut() : res.value();
+      auto dstOp = isSeqCondCheck ? resReg.getOut() : res.value();
       op->getResult(res.index()).replaceAllUsesWith(dstOp);
     }
 
@@ -638,7 +639,7 @@ private:
     getState<ComponentLoweringState>().registerEvaluatingGroup(
         opPipe.getRight(), group);
 
-    getState<ComponentLoweringState>().setPipeResReg(out.getDefiningOp(), reg);
+    getState<ComponentLoweringState>().setSeqResReg(out.getDefiningOp(), reg);
 
     return success();
   }

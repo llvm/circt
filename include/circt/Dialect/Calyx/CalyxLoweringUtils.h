@@ -881,8 +881,9 @@ Type toBitVector(T type) {
   return type;
 }
 
-// Returns `true` if `value` is the result of a pipelined binary operation.
-bool isPipeLibOpRes(Value value);
+// Returns `true` if `value` is the result of a sequential Calyx library
+// operation.
+bool isSeqLibOpRes(Value value);
 
 } // namespace calyx
 } // namespace circt

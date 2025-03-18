@@ -961,12 +961,10 @@ PredicateInfo getPredicateInfo(CmpFPredicate pred) {
   return info;
 }
 
-bool isPipeLibOpRes(const Value value) {
+bool isSeqLibOpRes(const Value value) {
   if (Operation *defOp = value.getDefiningOp()) {
-    return isa<calyx::MultPipeLibOp, calyx::DivUPipeLibOp, calyx::DivSPipeLibOp,
-               calyx::RemUPipeLibOp, calyx::RemSPipeLibOp, calyx::AddFOpIEEE754,
-               calyx::MulFOpIEEE754, calyx::CompareFOpIEEE754,
-               calyx::DivSqrtOpIEEE754>(defOp);
+    auto cellOp = dyn_cast_or_null<calyx::CellInterface>(defOp);
+    return cellOp && !cellOp.isCombinational();
   }
   return false;
 }
