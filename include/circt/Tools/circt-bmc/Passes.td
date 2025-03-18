@@ -32,7 +32,7 @@ def LowerToBMC : Pass<"lower-to-bmc", "::mlir::ModuleOp"> {
 
   let dependentDialects = [
     "mlir::func::FuncDialect", "mlir::LLVM::LLVMDialect",
-    "circt::verif::VerifDialect"
+    "circt::verif::VerifDialect", "circt::comb::CombDialect"
   ];
 }
 
