@@ -47,13 +47,6 @@ endmodule
 
 // -----
 module Foo;
-  int x;
-  // expected-error @below {{delayed continuous assignments not supported}}
-  assign #1ns x = x;
-endmodule
-
-// -----
-module Foo;
   int a;
   // expected-error @below {{unsupported statement}}
   initial release a;
