@@ -161,8 +161,12 @@ rtg.test @arrays(arr = %arr: !rtg.array<index>) {
   // CHECK-NEXT: [[V0:%.+]] = rtg.array_create [[ARR]], [[ARR]] : !rtg.array<index>
   // CHECK-NEXT: [[V1:%.+]] = rtg.array_create : index
   // CHECK-NEXT: [[V2:%.+]] = rtg.array_extract [[V0]][[[IDX1]]] : !rtg.array<!rtg.array<index>>
+  // CHECK-NEXT: [[V3:%.+]] = rtg.array_inject [[V2]][[[IDX1]]], [[IDX1]] : !rtg.array<index>
+  // CHECK-NEXT: rtg.array_size [[V3]] : !rtg.array<index>
   %idx1 = index.constant 1
   %0 = rtg.array_create %arr, %arr : !rtg.array<index>
   %1 = rtg.array_create : index
   %2 = rtg.array_extract %0[%idx1] : !rtg.array<!rtg.array<index>>
+  %3 = rtg.array_inject %2[%idx1], %idx1 : !rtg.array<index>
+  %4 = rtg.array_size %3 : !rtg.array<index>
 }
