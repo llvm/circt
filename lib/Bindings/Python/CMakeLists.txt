@@ -54,6 +54,7 @@ set(PYTHON_BINDINGS_LINK_LIBS
   MLIRCAPIIndex
   MLIRCAPISMT
   MLIRCAPIExportSMTLIB
+  MLIRCAPISCF
   # needed for mlirFrozenRewritePatternSetDestroy
   # but not the actual passes
   MLIRCAPITransforms
@@ -150,6 +151,18 @@ declare_mlir_dialect_python_bindings(
     dialects/hw.py
   DIALECT_NAME hw)
 
+# We need the 'arith.py' file because 'scf.py' imports from it. We are not
+# calling the function that constructs arith ops and thus don't need to
+# register and link against the dialect.
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${MLIR_MAIN_SRC_DIR}/python/mlir"
+  TD_FILE dialects/ArithOps.td
+  SOURCES
+    dialects/arith.py
+  DIALECT_NAME arith
+  GEN_ENUM_BINDINGS)
+
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
   ROOT_DIR "${MLIR_MAIN_SRC_DIR}/python/mlir"
@@ -240,6 +253,14 @@ declare_mlir_dialect_python_bindings(
   SOURCES
     dialects/verif.py
   DIALECT_NAME verif)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${MLIR_MAIN_SRC_DIR}/python/mlir"
+  TD_FILE dialects/SCFOps.td
+  SOURCES
+    dialects/scf.py
+  DIALECT_NAME scf)
 
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
