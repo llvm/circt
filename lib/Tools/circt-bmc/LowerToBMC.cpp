@@ -95,8 +95,8 @@ void LowerToBMCPass::runOnOperation() {
     terminator->erase();
   }
 
-  // Double the bound given to the BMC op, as a clock cycle takes 2 BMC
-  // iterations
+  // Double the bound given to the BMC op unless in rising clocks only mode, as
+  // a clock cycle involves two negations
   verif::BoundedModelCheckingOp bmcOp;
   auto numRegs = hwModule->getAttrOfType<IntegerAttr>("num_regs");
   auto initialValues = hwModule->getAttrOfType<ArrayAttr>("initial_values");
@@ -109,8 +109,8 @@ void LowerToBMCPass::runOnOperation() {
       }
     }
     bmcOp = builder.create<verif::BoundedModelCheckingOp>(
-        loc, 2 * bound, cast<IntegerAttr>(numRegs).getValue().getZExtValue(),
-        initialValues);
+        loc, risingClocksOnly ? bound : 2 * bound,
+        cast<IntegerAttr>(numRegs).getValue().getZExtValue(), initialValues);
   } else {
     hwModule->emitOpError("no num_regs or initial_values attribute found - "
                           "please run externalize "
@@ -146,11 +146,12 @@ void LowerToBMCPass::runOnOperation() {
   {
     OpBuilder::InsertionGuard guard(builder);
     // Initialize clock to 0 if it exists, otherwise just yield nothing
+    // We initialize to 1 if we're in rising clocks only mode
     auto *initBlock = builder.createBlock(&bmcOp.getInit());
     builder.setInsertionPointToStart(initBlock);
     if (hasClk) {
-      auto initVal =
-          builder.create<hw::ConstantOp>(loc, builder.getI1Type(), 0);
+      auto initVal = builder.create<hw::ConstantOp>(loc, builder.getI1Type(),
+                                                    risingClocksOnly ? 1 : 0);
       auto toClk = builder.create<seq::ToClockOp>(loc, initVal);
       builder.create<verif::YieldOp>(loc, ValueRange{toClk});
     } else {
@@ -167,8 +168,10 @@ void LowerToBMCPass::runOnOperation() {
       auto cNeg1 = builder.create<hw::ConstantOp>(loc, builder.getI1Type(), -1);
       auto nClk = builder.create<comb::XorOp>(loc, fromClk, cNeg1);
       auto toClk = builder.create<seq::ToClockOp>(loc, nClk);
-      // Only yield clock value
-      builder.create<verif::YieldOp>(loc, ValueRange{toClk});
+      // Only yield clock value - don't change it if in rising clocks only mode
+      builder.create<verif::YieldOp>(
+          loc, risingClocksOnly ? ValueRange{loopBlock->getArgument(0)}
+                                : ValueRange{toClk});
     } else {
       builder.create<verif::YieldOp>(loc, ValueRange{});
     }
