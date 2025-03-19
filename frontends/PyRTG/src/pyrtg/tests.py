@@ -26,16 +26,23 @@ class Test(CodeGenRoot):
     return self.test_func.__name__
 
   def _codegen(self):
+    # Sort arguments by name
+    name_type_pairs = list(enumerate(zip(self.arg_names, self.arg_types)))
+    name_type_pairs.sort(key=lambda x: x[1][0])
+
     test = rtg.TestOp(
         self.name,
         ir.TypeAttr.get(
-            rtg.DictType.get([
-                (ir.StringAttr.get(name), ty)
-                for (name, ty) in zip(self.arg_names, self.arg_types)
-            ])))
+            rtg.DictType.get([(ir.StringAttr.get(name), ty)
+                              for _, (name, ty) in name_type_pairs])))
     block = ir.Block.create_at_start(test.bodyRegion, self.arg_types)
     with ir.InsertionPoint(block):
-      self.test_func(*[_FromCirctValue(arg) for arg in block.arguments])
+      # Make sure we apply the inverse permutation to the block arguments to pass them to the python function at the right indices.
+      sorted_args = [None] * len(block.arguments)
+      for arg, (i, _) in zip(block.arguments, name_type_pairs):
+        sorted_args[i] = arg
+
+      self.test_func(*[_FromCirctValue(arg) for arg in sorted_args])
       self.fail("Reached end of test without result status.")
       if self.success_lbl:
         self.success_lbl.place()

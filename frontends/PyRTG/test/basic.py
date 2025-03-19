@@ -444,3 +444,13 @@ def test7_bools(a, b):
   consumer(a > b)
   consumer(a <= b)
   consumer(a >= b)
+
+
+# MLIR-LABEL: rtg.test @test8_sort_arguments
+# MLIR-SAME: (a = %a: i1, b = %b: i1)
+# MLIR: rtg.substitute_sequence {{.*}}(%b)
+
+
+@test(("b", Bool.type()), ("a", Bool.type()))
+def test8_sort_arguments(b, a):
+  consumer(b)
