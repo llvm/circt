@@ -10,6 +10,8 @@ from .index import index
 from .core import Value
 from .integers import Integer
 
+from typing import Union
+
 
 class Array(Value):
   """
@@ -44,6 +46,15 @@ class Array(Value):
                ]), "all elements must have the same type"
     return rtg.ArrayCreateOp(
         rtg.ArrayType.get(elements[0].get_type(), len(elements)), elements)
+
+  def create_dynamic(size: Union[int, Integer], value: Value) -> Array:
+    """
+    Create a dynamically sized array of the provided size. All elements will be
+    initialized to the provided value.
+    """
+
+    size = size if isinstance(size, Integer) else Integer(size)
+    return rtg.ArrayDynamicCreateOp(size, value)
 
   def from_list(py_list) -> Array:
     """
@@ -81,6 +92,10 @@ class Array(Value):
         rtg.ArrayType.get(py_list[0].get_type(), len(py_list)), py_list)
 
   def __getitem__(self, i) -> Value:
+    """
+    Access an element in the array at the specified index (read-only).
+    """
+
     assert isinstance(i, (int, Integer)), "slicing not supported yet"
 
     idx = i
@@ -89,10 +104,23 @@ class Array(Value):
 
     return rtg.ArrayGetOp(self._value, idx)
 
+  def set(self, index: Union[int, Integer], value: Value) -> Array:
+    """
+    Set an element at the specified index in the array.
+    """
+
+    index = index if isinstance(index, Integer) else Integer(index)
+    self = rtg.ArraySetOp(self._value, index, value)
+    return self
+
   def size(self) -> Integer:
+    """
+    Get the number of elements in the array.
+    """
+
     size = rtg.ArrayType(self.get_type()).size
     if size == None:
-      raise TypeError("dynamic arrays not yet supported")
+      return rtg.ArraySizeOp(self._value)
 
     return Integer(size)
 

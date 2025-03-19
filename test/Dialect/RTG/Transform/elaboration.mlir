@@ -7,6 +7,7 @@ func.func @dummy4(%arg0: index, %arg1: index, %arg2: !rtg.bag<index>, %arg3: !rt
 func.func @dummy5(%arg0: i1) -> () {return}
 func.func @dummy6(%arg0: !rtg.isa.immediate<2>) -> () {return}
 func.func @dummy7(%arg0: !rtg.array<0 x index>) -> () {return}
+func.func @dummy8(%arg0: !rtg.array<index>) -> () {return}
 
 // CHECK-LABEL: @immediates
 rtg.test @immediates() {
@@ -531,6 +532,23 @@ rtg.test @arrays() {
   %1 = rtg.array_create [%idx1, %idx2] : !rtg.array<2 x index>
   %2 = rtg.array_get %1[%idx1] : !rtg.array<2 x index>
   func.call @dummy2(%2) : (index) -> ()
+
+  // CHECK-NEXT: func.call @dummy2([[IDX2]]) : (index) -> ()
+  %3 = rtg.array_dyn_create %idx2, %idx1 : index
+  %4 = rtg.array_set %3[%idx1], %idx2 : !rtg.array<index>
+  %5 = rtg.array_get %4[%idx1] : !rtg.array<index>
+  func.call @dummy2(%5) : (index) -> ()
+
+  // CHECK-NEXT: func.call @dummy2([[IDX2]]) : (index) -> ()
+  %6 = rtg.array_cast %1 : !rtg.array<2 x index>
+  %7 = rtg.array_size %6 : !rtg.array<index>
+  func.call @dummy2(%7) : (index) -> ()
+
+  // CHECK-NEXT: [[IDX1:%.+]] = index.constant 1
+  // CHECK-NEXT: [[ARR0:%.+]] = rtg.array_create [[[IDX1]], [[IDX2]]] : !rtg.array<2 x index>
+  // CHECK-NEXT: [[ARR1:%.+]] = rtg.array_cast [[ARR0]] : !rtg.array<2 x index>
+  // CHECK-NEXT: func.call @dummy8([[ARR1]]) : (!rtg.array<index>) -> ()
+  func.call @dummy8(%4) : (!rtg.array<index>) -> ()
 }
 
 // CHECK-LABEL: rtg.test @arithOps
@@ -665,6 +683,18 @@ rtg.test @oobArrayAccess() {
   // expected-error @below {{invalid to access index 0 of an array with 0 elements}}
   %2 = rtg.array_get %1[%0] : !rtg.array<0 x index>
   func.call @dummy6(%2) : (index) -> ()
+}
+
+// -----
+
+func.func @dummy6(%arg0: !rtg.array<index>) -> () {return}
+
+rtg.test @oobArrayAccess() {
+  %0 = index.constant 0
+  %1 = rtg.array_dyn_create %0, %0 : index
+  // expected-error @below {{invalid to access index 0 of an array with 0 elements}}
+  %2 = rtg.array_set %1[%0], %0 : !rtg.array<index>
+  func.call @dummy6(%2) : (!rtg.array<index>) -> ()
 }
 
 // -----

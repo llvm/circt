@@ -93,7 +93,10 @@ class Tgt3:
 # MLIR-NEXT: [[ARR2:%.+]] = rtg.array_create [[[IDX0]], [[IDX1]], [[IDX2]]] : !rtg.array<3 x index>
 # MLIR-NEXT: [[ARR3:%.+]] = rtg.array_create [[[IDX10]], [[IDX11]], [[IDX12]]] : !rtg.array<3 x index>
 # MLIR-NEXT: [[ARR4:%.+]] = rtg.array_create [[[ARR2]], [[ARR3]]] : !rtg.array<2 x !rtg.array<3 x index>>
-# MLIR-NEXT: rtg.yield [[RES0]], [[ARR1]], [[ARR4]] : index, !rtg.array<0 x !rtg.array<5 x index>>, !rtg.array<2 x !rtg.array<3 x index>>
+# MLIR-NEXT: [[ARR5:%.+]] = rtg.array_dyn_create [[IDX2]], [[IDX1]] : index
+# MLIR-NEXT: [[ARR6:%.+]] = rtg.array_set [[ARR5]][[[IDX1]]], [[IDX3]] : !rtg.array<index>
+# MLIR-NEXT: [[SIZE:%.+]] = rtg.array_size [[ARR6]] : !rtg.array<index>
+# MLIR-NEXT: rtg.yield [[RES0]], [[ARR1]], [[ARR4]], [[SIZE]] : index, !rtg.array<0 x !rtg.array<5 x index>>, !rtg.array<2 x !rtg.array<3 x index>>, index
 
 
 @target
@@ -112,6 +115,10 @@ class Tgt4:
   def arr2():
     return Array.from_list(
         [[Integer(y * 10 + x) for x in range(3)] for y in range(2)])
+
+  @entry
+  def arr3():
+    return Array.create_dynamic(2, Integer(1)).set(1, Integer(3)).size()
 
 
 # MLIR-LABEL: rtg.sequence @seq0

@@ -174,12 +174,26 @@ rtg.target @memories : !rtg.dict<base: !rtg.isa.immediate<32>, mem: !rtg.isa.mem
 // CHECK-LABEL: rtg.test @arrays
 // CHECK-SAME: (arr0 = [[ARR0:%.+]]: !rtg.array<5 x index>, arr1 = [[ARR1:%.+]]: !rtg.array<index>)
 rtg.test @arrays(arr0 = %arr0: !rtg.array<5 x index>, arr1 = %arr1: !rtg.array<index>) {
+  // CHECK-NEXT: [[IDX0:%.+]] = index.constant 0
   // CHECK-NEXT: [[IDX1:%.+]] = index.constant 1
   // CHECK-NEXT: [[V0:%.+]] = rtg.array_create [[[ARR1]], [[ARR1]]] : !rtg.array<2 x !rtg.array<index>>
   // CHECK-NEXT: [[V1:%.+]] = rtg.array_create [] : !rtg.array<0 x index>
-  // CHECK-NEXT: [[V2:%.+]] = rtg.array_get [[V0]][[[IDX1]]] : !rtg.array<2 x !rtg.array<index>>
+  // CHECK-NEXT: rtg.array_get [[V0]][[[IDX1]]] : !rtg.array<2 x !rtg.array<index>>
+  // CHECK-NEXT: rtg.array_set [[V0]][[[IDX1]]], [[ARR1]] : !rtg.array<2 x !rtg.array<index>>
+  // CHECK-NEXT: [[V4:%.+]] = rtg.array_dyn_create [[IDX1]], [[IDX1]] : index
+  // CHECK-NEXT: rtg.array_get [[V4]][[[IDX0]]] : !rtg.array<index>
+  // CHECK-NEXT: rtg.array_set [[V4]][[[IDX0]]], [[IDX0]] : !rtg.array<index>
+  // CHECK-NEXT: rtg.array_cast [[V0]] : !rtg.array<2 x !rtg.array<index>>
+  // CHECK-NEXT: rtg.array_size [[V4]] : !rtg.array<index>
+  %idx0 = index.constant 0
   %idx1 = index.constant 1
   %0 = rtg.array_create [%arr1, %arr1] : !rtg.array<2 x !rtg.array<index>>
   %1 = rtg.array_create [] : !rtg.array<0 x index>
   %2 = rtg.array_get %0[%idx1] : !rtg.array<2 x !rtg.array<index>>
+  %3 = rtg.array_set %0[%idx1], %arr1 : !rtg.array<2 x !rtg.array<index>>
+  %4 = rtg.array_dyn_create %idx1, %idx1 : index
+  %5 = rtg.array_get %4[%idx0] : !rtg.array<index>
+  %6 = rtg.array_set %4[%idx0], %idx0 : !rtg.array<index>
+  %7 = rtg.array_cast %0 : !rtg.array<2 x !rtg.array<index>>
+  %8 = rtg.array_size %4 : !rtg.array<index>
 }

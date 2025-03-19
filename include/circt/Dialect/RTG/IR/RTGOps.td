@@ -479,6 +479,27 @@ def ArrayCreateOp : RTGOp<"array_create", [
   }];
 }
 
+def ArrayDynamicCreateOp : RTGOp<"array_dyn_create", [
+  Pure,
+  TypesMatchWith<
+    "result must by a dynamic array with the type of the value as element type",
+    "value", "result",
+    "ArrayType::get($_self.getContext(), std::nullopt, $_self)">,
+]> {
+  let summary = "create a dynamically sized array";
+  let description = [{
+    This operation creates an array of the provided size and initializes all
+    elements to the provided value.
+  }];
+
+  let arguments = (ins Index:$size, AnyType:$value);
+  let results = (outs DynamicArrayType:$result);
+
+  let assemblyFormat = [{
+    $size `,` $value `:` qualified(type($value)) attr-dict
+  }];
+}
+
 def ArrayGetOp : RTGOp<"array_get", [
   Pure,
   TypesMatchWith<"result type must match array element type",
@@ -495,6 +516,55 @@ def ArrayGetOp : RTGOp<"array_get", [
 
   let assemblyFormat = [{
     $array `[` $index `]` `:` qualified(type($array)) attr-dict
+  }];
+}
+
+def ArraySetOp : RTGOp<"array_set", [
+  Pure,
+  AllTypesMatch<["array", "result"]>,
+  TypesMatchWith<"value type must match array element type",
+                 "array", "value",
+                 "cast<ArrayType>($_self).getElementType()">,
+]> {
+  let summary = "get an element from an array";
+  let description = [{
+    This operation produces a new array of the same type as the input array and
+    sets the element at the given index to the given value. All other values
+    remain the same. An OOB access is (possibly immediate) undefined behavior.
+  }];
+
+  let arguments = (ins ArrayType:$array, Index:$index, AnyType:$value);
+  let results = (outs ArrayType:$result);
+
+  let assemblyFormat = [{
+    $array `[` $index `]` `,` $value `:` qualified(type($array)) attr-dict
+  }];
+}
+
+def ArraySizeOp : RTGOp<"array_size", [Pure]> {
+  let summary = "return the size of a dynamic array";
+
+  let arguments = (ins DynamicArrayType:$array);
+  let results = (outs Index:$result);
+
+  let assemblyFormat = "$array `:` qualified(type($array)) attr-dict";
+}
+
+def ArrayCastOp : RTGOp<"array_cast", [
+  Pure,
+  TypesMatchWith<
+    "result must by a dynamic array with matching element type",
+    "array", "result",
+    "ArrayType::get($_self.getContext(), std::nullopt, " #
+                   "cast<ArrayType>($_self).getElementType())">,
+]> {
+  let summary = "cast a fixed-size array to a dynamic array";
+
+  let arguments = (ins FixedSizeArrayType:$array);
+  let results = (outs DynamicArrayType:$result);
+
+  let assemblyFormat = [{
+    $array `:` qualified(type($array)) attr-dict
   }];
 }
 
