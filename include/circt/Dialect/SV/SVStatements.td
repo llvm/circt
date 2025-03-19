@@ -913,6 +913,22 @@ def MacroDefOp : SVOp<"macro.def",
   }];
 }
 
+def IncludeStyle
+    : I32EnumAttr<
+          "IncludeStyle",
+          "Double-quoted local include, or angle bracketed system include",
+          [I32EnumAttrCase<"Local", 0, "local">,
+           I32EnumAttrCase<"System", 1, "system">]> {
+  let genSpecializedAttr = 0;
+}
+
+def IncludeStyleAttr : EnumAttr<SVDialect, IncludeStyle, "include_style">;
+
+def IncludeOp : SVOp<"include"> {
+  let summary = "preprocessor `include directive";
+  let arguments = (ins IncludeStyleAttr:$style, StrAttr:$target);
+  let assemblyFormat = [{ $style $target attr-dict }];
+}
 
 //===----------------------------------------------------------------------===//
 // Function/Call
