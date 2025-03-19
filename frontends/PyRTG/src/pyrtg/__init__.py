@@ -8,6 +8,7 @@ from .tests import test
 from .labels import Label
 from .rtg import rtg
 from .rtgtest import rtgtest
+from .scf import scf
 from .index import index
 from .sets import Set
 from .integers import Integer, Bool
@@ -18,3 +19,4 @@ from .resources import IntegerRegister, Immediate
 from .memories import Memory
 from .contexts import CPUCore
 from .arrays import Array
+from .control_flow import If, Else, EndIf, For, Foreach

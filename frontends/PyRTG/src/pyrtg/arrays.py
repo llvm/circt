@@ -89,6 +89,13 @@ class Array(Value):
 
     return rtg.ArrayGetOp(self._value, idx)
 
+  def size(self) -> Integer:
+    size = rtg.ArrayType(self.get_type()).size
+    if size == None:
+      raise TypeError("dynamic arrays not yet supported")
+
+    return Integer(size)
+
   def _get_ssa_value(self) -> ir.Value:
     return self._value
 
