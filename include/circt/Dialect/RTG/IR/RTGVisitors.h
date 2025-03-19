@@ -54,7 +54,7 @@ public:
             SetCreateOp, SetSelectRandomOp, SetDifferenceOp, SetUnionOp,
             SetSizeOp,
             // Arrays
-            ArrayCreateOp, ArrayExtractOp,
+            ArrayCreateOp, ArrayExtractOp, ArrayInjectOp, ArraySizeOp,
             // Immediates
             IntToImmediateOp,
             // Memory Blocks
@@ -112,6 +112,8 @@ public:
   HANDLE(BagUniqueSizeOp, Unhandled);
   HANDLE(ArrayCreateOp, Unhandled);
   HANDLE(ArrayExtractOp, Unhandled);
+  HANDLE(ArrayInjectOp, Unhandled);
+  HANDLE(ArraySizeOp, Unhandled);
   HANDLE(LabelDeclOp, Unhandled);
   HANDLE(LabelUniqueDeclOp, Unhandled);
   HANDLE(LabelOp, Unhandled);
