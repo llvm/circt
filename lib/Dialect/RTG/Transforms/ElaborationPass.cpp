@@ -18,6 +18,7 @@
 #include "circt/Dialect/RTG/IR/RTGVisitors.h"
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
 #include "circt/Support/Namespace.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Index/IR/IndexDialect.h"
 #include "mlir/Dialect/Index/IR/IndexOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -1399,6 +1400,54 @@ public:
     return DeletionKind::Delete;
   }
 
+  FailureOr<DeletionKind> visitOp(arith::AddIOp op) {
+    if (!isa<IndexType>(op.getType()))
+      return op->emitError("only index operands supported");
+
+    size_t lhs = get<size_t>(op.getLhs());
+    size_t rhs = get<size_t>(op.getRhs());
+    state[op.getResult()] = lhs + rhs;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(arith::AndIOp op) {
+    if (!op.getType().isSignlessInteger(1))
+      return op->emitError("only 'i1' operands supported");
+
+    bool lhs = get<bool>(op.getLhs());
+    bool rhs = get<bool>(op.getRhs());
+    state[op.getResult()] = lhs && rhs;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(arith::XOrIOp op) {
+    if (!op.getType().isSignlessInteger(1))
+      return op->emitError("only 'i1' operands supported");
+
+    bool lhs = get<bool>(op.getLhs());
+    bool rhs = get<bool>(op.getRhs());
+    state[op.getResult()] = lhs != rhs;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(arith::OrIOp op) {
+    if (!op.getType().isSignlessInteger(1))
+      return op->emitError("only 'i1' operands supported");
+
+    bool lhs = get<bool>(op.getLhs());
+    bool rhs = get<bool>(op.getRhs());
+    state[op.getResult()] = lhs || rhs;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(arith::SelectOp op) {
+    bool cond = get<bool>(op.getCondition());
+    auto trueVal = state[op.getTrueValue()];
+    auto falseVal = state[op.getFalseValue()];
+    state[op.getResult()] = cond ? trueVal : falseVal;
+    return DeletionKind::Delete;
+  }
+
   FailureOr<DeletionKind> visitOp(index::AddOp op) {
     size_t lhs = get<size_t>(op.getLhs());
     size_t rhs = get<size_t>(op.getRhs());
@@ -1439,6 +1488,9 @@ public:
   FailureOr<DeletionKind> dispatchOpVisitor(Operation *op) {
     return TypeSwitch<Operation *, FailureOr<DeletionKind>>(op)
         .Case<
+            // Arith ops
+            arith::AddIOp, arith::XOrIOp, arith::AndIOp, arith::OrIOp,
+            arith::SelectOp,
             // Index ops
             index::AddOp, index::CmpOp,
             // SCF ops

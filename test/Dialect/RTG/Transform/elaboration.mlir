@@ -534,6 +534,21 @@ rtg.test @arrays() {
   func.call @dummy2(%5) : (index) -> ()
 }
 
+// CHECK-LABEL: rtg.test @arithOps
+rtg.test @arithOps() {
+  // CHECK-NEXT: [[V0:%.+]] = index.constant 6
+  // CHECK-NEXT: func.call @dummy2([[V0]])
+
+  %0 = arith.constant 3 : index
+  %1 = arith.constant true
+  %2 = arith.addi %0, %0 : index
+  %3 = arith.andi %1, %1 : i1
+  %4 = arith.xori %3, %1 : i1
+  %5 = arith.ori %4, %1 : i1
+  %6 = arith.select %5, %2, %0 : index
+  func.call @dummy2(%6) : (index) -> ()
+}
+
 // -----
 
 rtg.test @nestedRegionsNotSupported() {
@@ -663,4 +678,36 @@ rtg.test @oobArrayAccess() {
   // expected-error @below {{invalid to access index 0 of an array with 0 elements}}
   %2 = rtg.array_inject %1[%0], %0 : !rtg.array<index>
   func.call @dummy6(%2) : (!rtg.array<index>) -> ()
+}
+
+// -----
+
+rtg.test @arith_invalid_type() {
+  %0 = arith.constant 3 : i32
+  // expected-error @below {{only index operands supported}}
+  %1 = arith.addi %0, %0 : i32
+}
+
+// -----
+
+rtg.test @arith_invalid_type() {
+  %0 = arith.constant 3 : i32
+  // expected-error @below {{only 'i1' operands supported}}
+  %1 = arith.andi %0, %0 : i32
+}
+
+// -----
+
+rtg.test @arith_invalid_type() {
+  %0 = arith.constant 3 : i32
+  // expected-error @below {{only 'i1' operands supported}}
+  %1 = arith.xori %0, %0 : i32
+}
+
+// -----
+
+rtg.test @arith_invalid_type() {
+  %0 = arith.constant 3 : i32
+  // expected-error @below {{only 'i1' operands supported}}
+  %1 = arith.ori %0, %0 : i32
 }
