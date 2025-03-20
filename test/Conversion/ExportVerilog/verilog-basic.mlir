@@ -801,3 +801,9 @@ sv.bind #hw.innerNameRef<@SiFive_MulDiv::@__ETC_SiFive_MulDiv_assert>
 // CHECK-NEXT:  ._io_req_ready_output (1'h0)
 // CHECK-NEXT:  .resetSignalName      (reset),
 // CHECK-NEXT:  .clock                (clock)
+
+// CHECK: `include "foo/bar"
+sv.include local "foo/bar"
+
+// CHECK: `include <foo/bar>
+sv.include system "foo/bar"

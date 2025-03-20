@@ -4062,6 +4062,7 @@ private:
   LogicalResult visitSV(FuncCallProceduralOp op);
   LogicalResult visitSV(FuncCallOp op);
   LogicalResult visitSV(ReturnOp op);
+  LogicalResult visitSV(IncludeOp op);
 
 public:
   ModuleEmitter &emitter;
@@ -4449,6 +4450,20 @@ LogicalResult StmtEmitter::visitSV(ReturnOp op) {
   auto parent = op->getParentOfType<sv::FuncOp>();
   ModulePortInfo ports(parent.getPortList(false));
   return emitOutputLikeOp(op, ports);
+}
+
+LogicalResult StmtEmitter::visitSV(IncludeOp op) {
+  startStatement();
+  ps << "`include" << PP::nbsp;
+
+  if (op.getStyle() == IncludeStyle::System)
+    ps << "<" << op.getTarget() << ">";
+  else
+    ps << "\"" << op.getTarget() << "\"";
+
+  emitLocationInfo(op.getLoc());
+  setPendingNewline();
+  return success();
 }
 
 LogicalResult StmtEmitter::visitSV(FuncDPIImportOp importOp) {
@@ -6713,7 +6728,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           collectPorts(op);
           // External modules are _not_ emitted.
         })
-        .Case<VerbatimOp, IfDefOp, MacroDefOp, FuncDPIImportOp>(
+        .Case<VerbatimOp, IfDefOp, MacroDefOp, IncludeOp, FuncDPIImportOp>(
             [&](Operation *op) {
               // Emit into a separate file using the specified file name or
               // replicate the operation in each outputfile.
@@ -6857,6 +6872,7 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
       .Case<MacroDefOp, FuncDPIImportOp>(
           [&](auto op) { ModuleEmitter(state).emitStatement(op); })
       .Case<FuncOp>([&](auto op) { ModuleEmitter(state).emitFunc(op); })
+      .Case<IncludeOp>([&](auto op) { ModuleEmitter(state).emitStatement(op); })
       .Default([&](auto *op) {
         state.encounteredError = true;
         op->emitError("unknown operation (ExportVerilog::emitOperation)");
