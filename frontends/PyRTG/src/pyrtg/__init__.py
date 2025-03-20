@@ -17,4 +17,5 @@ from .sequences import sequence, Sequence, RandomizedSequence
 from .target import target, entry
 from .resources import IntegerRegister, Immediate
 from .arrays import Array
+from .contexts import CPUCore
 from .control_flow import If, Else, EndIf, For, Foreach
