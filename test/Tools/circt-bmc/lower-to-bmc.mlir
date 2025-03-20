@@ -63,6 +63,9 @@ hw.module @comb(in %in0: i32, in %in1: i32, out out: i32) attributes {num_regs =
 // CHECKRISING-NEXT:      [[FALSE:%.+]] = hw.constant true
 // CHECKRISING-NEXT:      [[INIT_CLK:%.+]] = seq.to_clock [[FALSE]]
 // CHECKRISING-NEXT:      verif.yield [[INIT_CLK]]
+// CHECKRISING-NEXT:    } loop {
+// CHECKRISING-NEXT:    ^bb0([[CLK:%.+]]: !seq.clock):
+// CHECKRISING-NEXT:      verif.yield [[CLK]]
 
 hw.module @seq(in %clk : !seq.clock, in %in0 : i32, in %in1 : i32, in %reg_state : i32, out out : i32, out reg_input : i32) attributes {num_regs = 1 : i32, initial_values = [unit]} {
   %0 = comb.add %in0, %in1 : i32
