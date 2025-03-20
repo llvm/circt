@@ -124,6 +124,9 @@ class Array(Value):
 
     return Integer(size)
 
+  def as_dyn(self) -> Array:
+    return rtg.ArrayCastOp(self)
+
   def _get_ssa_value(self) -> ir.Value:
     return self._value
 
