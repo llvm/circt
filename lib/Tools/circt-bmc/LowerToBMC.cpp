@@ -163,15 +163,20 @@ void LowerToBMCPass::runOnOperation() {
     builder.setInsertionPointToStart(loopBlock);
     if (hasClk) {
       loopBlock->addArgument(seq::ClockType::get(ctx), loc);
-      auto fromClk =
-          builder.create<seq::FromClockOp>(loc, loopBlock->getArgument(0));
-      auto cNeg1 = builder.create<hw::ConstantOp>(loc, builder.getI1Type(), -1);
-      auto nClk = builder.create<comb::XorOp>(loc, fromClk, cNeg1);
-      auto toClk = builder.create<seq::ToClockOp>(loc, nClk);
-      // Only yield clock value - don't change it if in rising clocks only mode
-      builder.create<verif::YieldOp>(
-          loc, risingClocksOnly ? ValueRange{loopBlock->getArgument(0)}
-                                : ValueRange{toClk});
+      if (risingClocksOnly) {
+        // In rising clocks only mode we don't need to toggle the clock
+        builder.create<verif::YieldOp>(loc,
+                                       ValueRange{loopBlock->getArgument(0)});
+      } else {
+        auto fromClk =
+            builder.create<seq::FromClockOp>(loc, loopBlock->getArgument(0));
+        auto cNeg1 =
+            builder.create<hw::ConstantOp>(loc, builder.getI1Type(), -1);
+        auto nClk = builder.create<comb::XorOp>(loc, fromClk, cNeg1);
+        auto toClk = builder.create<seq::ToClockOp>(loc, nClk);
+        // Only yield clock value
+        builder.create<verif::YieldOp>(loc, ValueRange{toClk});
+      }
     } else {
       builder.create<verif::YieldOp>(loc, ValueRange{});
     }
