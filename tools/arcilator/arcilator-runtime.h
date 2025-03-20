@@ -60,6 +60,30 @@ ARC_ENV_DECL_GET_PRINT_STREAM(id) {
 }
 #endif // ARC_NO_DEFAULT_GET_PRINT_STREAM
 
+// Handler for out-of-bounds index on an array_get operation
+// base:    Array base address
+// size:    Number of array elements
+// eltBits: Number of bits per element
+// oobAddr: Referenced address outside of array bounds
+// oobIdx:  Out-of-bounds index
+// Return value: Pointer to the new result value of the array_get operation
+#define ARC_ENV_DECL_ARRAY_GET_OOB_HANDLER(base, size, eltBits, oobAddr,       \
+                                           oobIdx)                             \
+  ARC_EXPORT const void *_arc_env_array_get_oob_handler(                       \
+      const void *base, uint64_t size, uint32_t eltBits, const void *oobAddr,  \
+      uint64_t oobIdx)
+
+#ifndef ARC_NO_DEFAULT_ARRAY_GET_OOB_HANDLER
+#include <iostream>
+ARC_ENV_DECL_ARRAY_GET_OOB_HANDLER(base, as, eb, oa, oi) {
+  (void)eb;
+  (void)oa;
+  std::cerr << "ARCENV-WARNING: Out-of-bounds array access caught: Index = "
+            << oi << ", Size = " << as << ", Base = " << base << std::endl;
+  return base;
+}
+#endif // ARC_NO_DEFAULT_ARRAY_GET_OOB_HANDLER
+
 // ----------------
 
 struct Signal {
