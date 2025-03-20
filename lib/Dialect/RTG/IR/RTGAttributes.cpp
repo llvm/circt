@@ -16,6 +16,25 @@ using namespace circt;
 using namespace rtg;
 
 //===----------------------------------------------------------------------===//
+// ImmediateAttr
+//===----------------------------------------------------------------------===//
+
+Type ImmediateAttr::getType() const {
+  return ImmediateType::get(getContext(), getWidth());
+}
+
+LogicalResult
+ImmediateAttr::verify(function_ref<InFlightDiagnostic()> emitError,
+                      uint32_t width, uint64_t value) {
+
+  if (static_cast<uint32_t>(llvm::bit_width(value)) > width)
+    return emitError() << "cannot represent " << value << " with " << width
+                       << " bits";
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

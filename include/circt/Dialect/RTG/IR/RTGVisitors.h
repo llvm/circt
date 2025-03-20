@@ -32,6 +32,8 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<
+            // Constants
+            ConstantOp,
             // Bags
             BagCreateOp, BagSelectRandomOp, BagDifferenceOp, BagUnionOp,
             BagUniqueSizeOp,
@@ -82,6 +84,7 @@ public:
     return static_cast<ConcreteType *>(this)->visit##OPKIND##Op(op, args...);  \
   }
 
+  HANDLE(ConstantOp, Unhandled);
   HANDLE(SequenceOp, Unhandled);
   HANDLE(GetSequenceOp, Unhandled);
   HANDLE(SubstituteSequenceOp, Unhandled);
@@ -120,10 +123,11 @@ public:
   ResultType dispatchTypeVisitor(Type type, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Type, ResultType>(type)
-        .template Case<SequenceType, SetType, BagType, DictType, LabelType,
-                       IndexType, IntegerType>([&](auto expr) -> ResultType {
-          return thisCast->visitType(expr, args...);
-        })
+        .template Case<ImmediateType, SequenceType, SetType, BagType, DictType,
+                       LabelType, IndexType, IntegerType>(
+            [&](auto expr) -> ResultType {
+              return thisCast->visitType(expr, args...);
+            })
         .template Case<ContextResourceTypeInterface>(
             [&](auto expr) -> ResultType {
               return thisCast->visitContextResourceType(expr, args...);
@@ -163,6 +167,7 @@ public:
                                                                     args...);  \
   }
 
+  HANDLE(ImmediateType, Unhandled);
   HANDLE(SequenceType, Unhandled);
   HANDLE(SetType, Unhandled);
   HANDLE(BagType, Unhandled);

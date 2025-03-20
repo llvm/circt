@@ -25,6 +25,21 @@ include "circt/Dialect/RTG/IR/RTGISAAssemblyInterfaces.td"
 class RTGOp<string mnemonic, list<Trait> traits = []> :
     Op<RTGDialect, mnemonic, traits>;
 
+
+def ConstantOp : RTGOp<"constant", [
+  Pure,
+  ConstantLike,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>
+]> {
+  let summary = "create an SSA value from an attribute";
+
+  let arguments = (ins TypedAttrInterface:$value);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = "$value attr-dict";
+  let hasFolder = 1;
+}
+
 //===- Sequence Handling Operations ---------------------------------------===//
 
 def SequenceOp : RTGOp<"sequence", [
