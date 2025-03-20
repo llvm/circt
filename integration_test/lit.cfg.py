@@ -213,7 +213,7 @@ if config.z3_path != "":
   config.available_features.add('z3')
 
 # Enable libz3 if it has been detected.
-if config.z3_library != "":
+if config.z3_library not in ("", "Z3_LIBRARIES-NOTFOUND"):
   tools.append(ToolSubst(f"%libz3", config.z3_library))
   config.available_features.add('libz3')
 
