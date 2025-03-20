@@ -37,6 +37,9 @@ def _FromCirctValue(value: ir.Value) -> Value:
   if isinstance(type, rtgtest.IntegerRegisterType):
     from .resources import IntegerRegister
     return IntegerRegister(value)
+  if isinstance(type, rtgtest.CPUType):
+    from .contexts import CPUCore
+    return CPUCore(value)
   if isinstance(type, rtg.ImmediateType):
     from .resources import Immediate
     return Immediate(type.width, value)
