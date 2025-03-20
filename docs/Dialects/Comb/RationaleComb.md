@@ -9,7 +9,6 @@ other [MLIR Rationale docs](https://mlir.llvm.org/docs/Rationale/).
 - [`comb` Dialect Rationale](#comb-dialect-rationale)
   - [Introduction to the `comb` Dialect](#introduction-to-the-comb-dialect)
   - [Type System for `comb` Dialect](#type-system-for-comb-dialect)
-    - [Zero-bit integer width is not supported](#zero-bit-integer-width-is-not-supported)
   - [Comb Operations](#comb-operations)
     - [Fully associative operations are variadic](#fully-associative-operations-are-variadic)
     - [Operators carry signs instead of types](#operators-carry-signs-instead-of-types)
@@ -33,29 +32,11 @@ substrate that may be extended with higher level dialects mixed into it.
 TODO: Simple integer types, eventually parametrically wide integer type
 `hw.int<width>`.  Supports type aliases.  See HW rationale for more info.
 
-### Zero-bit integer width is not supported
-
-Combinational operations like add and multiply work on values of signless
-standard integer types, e.g. `i42`, but they do not allow zero bit inputs.  This
-design point is motivated by a couple of reasons:
-
-1) The semantics of some operations (e.g. `comb.sext`) do not have an obvious
-   definition with a zero bit input.
-
-1) Zero bit operations are useless for operations that are definable, and their
-   presence makes the compiler more complicated.
-
-On the second point, consider an example like `comb.mux` which could allow zero
-bit inputs and therefore produce zero bit results.  Allowing that as a design
-point would require us to special case this in our cost models, and we would
-have that optimizes it away.
-
-By rejecting zero bit operations, we choose to put the complexity into the
-lowering passes that generate the HW dialect (e.g. LowerToHW from FIRRTL).
-
-Note that this decision only affects the core operations in the `comb` dialect
-itself - it is perfectly reasonable to define your operations and mix them into
-other `comb` constructs. 
+Operations in the `comb` dialect support zero-width integers.  Any well-defined
+value of type `i0` is assumed to be of zero value, from which sign semantics
+can be infered for signed operations.  In particular, division on `i0` is
+undefined, as it would only yield division by zero.  Similarly, replication of
+an `i0` value cannot yield a non-zero-width integer.
 
 ## Comb Operations
 
