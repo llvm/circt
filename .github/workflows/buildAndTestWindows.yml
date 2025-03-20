@@ -18,7 +18,7 @@ jobs:
       contents: write # Upload assets to release.
     with:
       runner: windows-2022
-      cmake_build_type: release
+      cmake_build_type: relwithdebinfo
       llvm_enable_assertions: ON
       build_shared_libs: OFF
       llvm_force_enable_stats: ON
