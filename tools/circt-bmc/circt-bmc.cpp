@@ -102,6 +102,11 @@ static cl::opt<bool>
                           cl::desc("Log executions of toplevel module passes"),
                           cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool> risingClocksOnly(
+    "rising-clocks-only",
+    cl::desc("Only consider the circuit and property on rising clock edges"),
+    cl::init(false), cl::cat(mainCategory));
+
 #ifdef CIRCT_BMC_ENABLE_JIT
 
 enum OutputFormat { OutputMLIR, OutputLLVM, OutputSMTLIB, OutputRunJIT };
@@ -178,10 +183,13 @@ static LogicalResult executeBMC(MLIRContext &context) {
   LowerToBMCOptions lowerToBMCOptions;
   lowerToBMCOptions.bound = clockBound;
   lowerToBMCOptions.topModule = moduleName;
+  lowerToBMCOptions.risingClocksOnly = risingClocksOnly;
   pm.addPass(createLowerToBMC(lowerToBMCOptions));
   pm.addPass(createConvertHWToSMT());
   pm.addPass(createConvertCombToSMT());
-  pm.addPass(createConvertVerifToSMT());
+  ConvertVerifToSMTOptions convertVerifToSMTOptions;
+  convertVerifToSMTOptions.risingClocksOnly = risingClocksOnly;
+  pm.addPass(createConvertVerifToSMT(convertVerifToSMTOptions));
   pm.addPass(createSimpleCanonicalizerPass());
 
   if (outputFormat != OutputMLIR && outputFormat != OutputSMTLIB) {

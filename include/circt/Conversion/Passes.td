@@ -723,6 +723,12 @@ def ConvertVerifToSMT : Pass<"convert-verif-to-smt", "mlir::ModuleOp"> {
     "mlir::scf::SCFDialect",
     "mlir::func::FuncDialect"
   ];
+  let options = [
+    Option<"risingClocksOnly", "rising-clocks-only", "bool",
+           /*default=*/"false",
+           "When lowering verif.bmc ops, only consider the circuit and property"
+           "on rising clock edges.">,
+  ];
 }
 
 //===----------------------------------------------------------------------===//

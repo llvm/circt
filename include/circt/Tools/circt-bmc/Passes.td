@@ -28,6 +28,9 @@ def LowerToBMC : Pass<"lower-to-bmc", "::mlir::ModuleOp"> {
     Option<"insertMainFunc", "insert-main", "bool",
            /*default=*/"false",
            "Whether a main function should be inserted for AOT compilation.">,
+    Option<"risingClocksOnly", "rising-clocks-only", "bool",
+           /*default=*/"false",
+           "Only consider the circuit and property on rising clock edges.">,
   ];
 
   let dependentDialects = [

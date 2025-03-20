@@ -158,6 +158,15 @@ func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
 // CHECK:    return [[C9]], [[C10]], [[ARG3]], [[ARG4]]
 // CHECK:  }
 
+// RUN: circt-opt %s --convert-verif-to-smt="rising-clocks-only=true" --reconcile-unrealized-casts -allow-unregistered-dialect | FileCheck %s --check-prefix=CHECK1
+// CHECK1-LABEL:  func.func @test_bmc() -> i1 {
+// CHECK1:        [[CIRCUIT:%.+]]:4 = func.call @bmc_circuit(
+// CHECK1:        [[SMTCHECK:%.+]] = smt.check
+// CHECK1:        [[ORI:%.+]] = arith.ori [[SMTCHECK]], {{%.*}}
+// CHECK1:        [[LOOP:%.+]]:2 = func.call @bmc_loop({{%.*}}, {{%.*}})
+// CHECK1:        [[F:%.+]] = smt.declare_fun : !smt.bv<32>
+// CHECK1:        scf.yield [[LOOP]]#0, [[F]], [[CIRCUIT]]#1, [[CIRCUIT]]#2, [[CIRCUIT]]#3, [[LOOP]]#1, [[ORI]]
+
 func.func @test_bmc() -> (i1) {
   %bmc = verif.bmc bound 10 num_regs 3 initial_values [unit, 42, unit]
   init {
