@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Import/FIRAnnotations.h"
@@ -2913,8 +2914,11 @@ ParseResult FIRStmtParser::parsePrintf() {
   if (parseExp(clock, "expected clock expression in printf") ||
       parseToken(FIRToken::comma, "expected ','") ||
       parseExp(condition, "expected condition in printf") ||
-      parseToken(FIRToken::comma, "expected ','") ||
-      parseGetSpelling(formatString) ||
+      parseToken(FIRToken::comma, "expected ','"))
+    return failure();
+
+  auto formatStringLoc = getToken().getLoc();
+  if (parseGetSpelling(formatString) ||
       parseToken(FIRToken::string, "expected format string in printf"))
     return failure();
 
@@ -2936,10 +2940,58 @@ ParseResult FIRStmtParser::parsePrintf() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  auto formatStrUnescaped = FIRToken::getStringValue(formatString);
+  // Validate the format string and remove any "special" substitutions.  Only do
+  // this for FIRRTL versions >= 4.2.0.  If at a different FIRRTL version, then
+  // just parse this as if it was a string.
+  SmallVector<Attribute, 4> specialSubstitutions;
+  SmallString<64> validatedFormatString;
+  if (version < missingSpecFIRVersion)
+    validatedFormatString = formatString;
+  else {
+    for (size_t i = 0, e = formatString.size(); i != e; ++i) {
+      auto c = formatString[i];
+      switch (c) {
+      case '{': {
+        if (formatString[i + 1] != '{') {
+          validatedFormatString.push_back(c);
+          break;
+        }
+        // Handle a special substitution.
+        i += 2;
+        size_t start = i;
+        while (formatString[i] != '}')
+          ++i;
+        if (formatString[i] != '}') {
+          llvm::errs() << "expected '}' to terminate special substitution";
+          return failure();
+        }
+
+        auto specialString = formatString.slice(start, i);
+        auto special = symbolizePrintfSubstitution(specialString);
+        if (!special) {
+          emitError(formatStringLoc)
+              << "unknown printf substitution '" << specialString
+              << "' (did you misspell it?)";
+          return failure();
+        }
+
+        validatedFormatString.append("{{}}");
+        specialSubstitutions.push_back(
+            PrintfSubstitutionAttr::get(getContext(), *special));
+
+        ++i;
+        break;
+      }
+      default:
+        validatedFormatString.push_back(c);
+      }
+    }
+  }
+
+  auto formatStrUnescaped = FIRToken::getStringValue(validatedFormatString);
   builder.create<PrintFOp>(clock, condition,
                            builder.getStringAttr(formatStrUnescaped), operands,
-                           name);
+                           name, builder.getArrayAttr(specialSubstitutions));
   return success();
 }
 

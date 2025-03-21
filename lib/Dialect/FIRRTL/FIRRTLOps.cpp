@@ -5765,7 +5765,11 @@ static ParseResult parsePrintfAttrs(OpAsmParser &p,
 
 static void printPrintfAttrs(OpAsmPrinter &p, Operation *op,
                              DictionaryAttr attr) {
-  printElideEmptyName(p, op, attr, {"formatString"});
+  SmallVector<StringRef, 2> elides{"formatString"};
+  if (op->getAttrOfType<ArrayAttr>("specialSubstitutions").empty())
+    elides.push_back("specialSubstitutions");
+
+  printElideEmptyName(p, op, attr, elides);
 }
 
 static ParseResult parseStopAttrs(OpAsmParser &p, NamedAttrList &resultAttrs) {
