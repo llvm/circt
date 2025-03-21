@@ -449,16 +449,9 @@ private:
   template <typename TCalyxLibOp>
   void setupCmpIOp(PatternRewriter &rewriter, CmpIOp cmpIOp, Operation *group,
                    calyx::RegisterOp &condReg, calyx::RegisterOp &resReg,
-                   bool &isSeqCondCheck, TCalyxLibOp calyxOp) const {
+                   TCalyxLibOp calyxOp) const {
     bool lhsIsSeqOp = calyx::parentIsSeqCell(cmpIOp.getLhs());
     bool rhsIsSeqOp = calyx::parentIsSeqCell(cmpIOp.getRhs());
-
-    bool isIfOpGuard =
-        std::any_of(cmpIOp->getUsers().begin(), cmpIOp->getUsers().end(),
-                    [](auto op) { return isa<scf::IfOp>(op); });
-    isSeqCondCheck = (lhsIsSeqOp || rhsIsSeqOp) && isIfOpGuard;
-    if (!isSeqCondCheck)
-      return;
 
     StringRef opName = cmpIOp.getOperationName().split(".").second;
     Type width = cmpIOp.getResult().getType();
@@ -478,9 +471,9 @@ private:
         "unexpected sequential operation on both sides; please open an issue");
     // If `cmpIOp`'s lhs/rhs operand is the result of a sequential operation,
     // its result will be stored in a register.
-    resReg = cast<calyx::RegisterOp>(calyx::parentIsSeqCell(cmpIOp.getLhs())
-                                         ? cmpIOp.getLhs().getDefiningOp()
-                                         : cmpIOp.getRhs().getDefiningOp());
+    resReg =
+        cast<calyx::RegisterOp>(lhsIsSeqOp ? cmpIOp.getLhs().getDefiningOp()
+                                           : cmpIOp.getRhs().getDefiningOp());
 
     auto groupOp = cast<calyx::GroupOp>(group);
     getState<ComponentLoweringState>().addBlockScheduleable(cmpIOp->getBlock(),
@@ -488,11 +481,11 @@ private:
 
     rewriter.setInsertionPointToEnd(groupOp.getBodyBlock());
     auto loc = cmpIOp.getLoc();
-    rewriter.create<calyx::AssignOp>(
-        loc, condReg.getIn(),
-        calyxOp.getResult(
-            2)); // `calyxOp` will be one of `EqLibOp`, `SleLibOp`, etc. The
-                 // 2'th `result` corresponds to the output result of `calyxOp`.
+    // `calyxOp` will be one of `EqLibOp`, `SleLibOp`, etc. The
+    // 2'th `result` corresponds to the output result of `calyxOp`.
+    int64_t outputIndex = 2;
+    rewriter.create<calyx::AssignOp>(loc, condReg.getIn(),
+                                     calyxOp.getResult(outputIndex));
     rewriter.create<calyx::AssignOp>(
         loc, condReg.getWriteEn(),
         createConstant(loc, rewriter,
@@ -548,12 +541,11 @@ private:
     /// Create assignments to the inputs of the library op.
     auto group = createGroupForOp<TGroupOp>(rewriter, op);
 
-    bool isSeqCondCheck = false;
+    bool isSeqCondCheck = isa<calyx::GroupOp>(group);
     calyx::RegisterOp condReg = nullptr, resReg = nullptr;
-    if (isa<CmpIOp>(op)) {
+    if (isa<CmpIOp>(op) && isSeqCondCheck) {
       auto cmpIOp = cast<CmpIOp>(op);
-      setupCmpIOp(rewriter, cmpIOp, group, condReg, resReg, isSeqCondCheck,
-                  calyxOp);
+      setupCmpIOp(rewriter, cmpIOp, group, condReg, resReg, calyxOp);
     }
 
     rewriter.setInsertionPointToEnd(group.getBodyBlock());
