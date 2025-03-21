@@ -6690,9 +6690,10 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       file.addToFilelist = addToFilelist;
       file.isVerilog = outputPath.ends_with(".sv");
 
-      // Back-annotate the op with an OutputFileAttr if there wasn't one. This
-      // is so output files are explicit in the final MLIR after export.
-      if (!attr) {
+      // Back-annotate the op with an OutputFileAttr if there wasn't one. If it
+      // was a directory, back-annotate the final file path. This is so output
+      // files are explicit in the final MLIR after export.
+      if (!attr || attr.isDirectory()) {
         auto excludeFromFileListAttr =
             BoolAttr::get(op->getContext(), !addToFilelist);
         auto includeReplicatedOpsAttr =
