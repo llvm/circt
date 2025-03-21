@@ -63,7 +63,9 @@ public:
             // For statements
             ForOp,
             // Sampled value functiions
-            SampledOp>([&](auto expr) -> ResultType {
+            SampledOp,
+            // Time system functions
+            TimeOp, STimeOp>([&](auto expr) -> ResultType {
           return thisCast->visitSV(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -189,6 +191,10 @@ public:
 
   // Sampled Value Functions
   HANDLE(SampledOp, Unhandled);
+
+  // Time System Functions
+  HANDLE(TimeOp, Unhandled);
+  HANDLE(STimeOp, Unhandled);
 #undef HANDLE
 };
 

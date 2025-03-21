@@ -248,7 +248,8 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
   if (isa<ReadInOutOp, AggregateConstantOp, ArrayIndexInOutOp,
           IndexedPartSelectInOutOp, StructFieldInOutOp, IndexedPartSelectOp,
           ParamValueOp, XMROp, XMRRefOp, SampledOp, EnumConstantOp,
-          SystemFunctionOp, UnpackedArrayCreateOp, UnpackedOpenArrayCastOp>(op))
+          SystemFunctionOp, STimeOp, TimeOp, UnpackedArrayCreateOp,
+          UnpackedOpenArrayCastOp>(op))
     return true;
 
   // These are Verif dialect expressions.
@@ -2351,6 +2352,10 @@ private:
   // Sampled value functions
   SubExprInfo visitSV(SampledOp op);
 
+  // Time system functions
+  SubExprInfo visitSV(TimeOp op);
+  SubExprInfo visitSV(STimeOp op);
+
   // Other
   using TypeOpVisitor::visitTypeOp;
   SubExprInfo visitTypeOp(ConstantOp op);
@@ -3218,6 +3223,22 @@ SubExprInfo ExprEmitter::visitSV(SampledOp op) {
   auto info = emitSubExpr(op.getExpression(), LowestPrecedence);
   ps << ")";
   return info;
+}
+
+SubExprInfo ExprEmitter::visitSV(TimeOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  ps << "$time";
+  return {Symbol, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitSV(STimeOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  ps << "$stime";
+  return {Symbol, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitComb(MuxOp op) {

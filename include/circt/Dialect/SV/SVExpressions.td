@@ -266,6 +266,28 @@ def SampledOp : SVOp<"system.sampled", [Pure, SameOperandsAndResultType]> {
   let assemblyFormat = "$expression attr-dict `:` qualified(type($expression))";
 }
 
+def TimeOp : SVOp<"system.time", [Pure]> {
+  let summary = "`$time` system function";
+  let description = [{
+    Return a 64-bit integer value representing the time at which the function
+    was called.
+  }];
+  let arguments = (ins);
+  let results = (outs I64:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
+}
+
+def STimeOp : SVOp<"system.stime", [Pure]> {
+  let summary = "`$time` system function";
+  let description = [{
+    Return a 32-bit integer value representing the time at which the function
+    was called.
+  }];
+  let arguments = (ins);
+  let results = (outs I32:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
+}
+
 def UnpackedArrayCreateOp : SVOp<"unpacked_array_create", [Pure, SameTypeOperands]> {
   let summary = "Create an unpacked array";
   let description = [{

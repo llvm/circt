@@ -283,6 +283,13 @@ hw.module @test1(in %arg0: i1, in %arg1: i1, in %arg8: i8) {
     sv.readmem %memForReadMem, "file2.txt", MemBaseHex : !hw.inout<uarray<8xi32>>
   }
 
+
+  // CHECK-NEXT: sv.system.time : i64
+  %time = sv.system.time : i64
+
+  // CHECK-NEXT: sv.system.stime : i32
+  %stime = sv.system.stime : i32
+
   // CHECK-NEXT: hw.output
   hw.output
 }
