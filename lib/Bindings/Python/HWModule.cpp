@@ -236,12 +236,16 @@ void circt::python::populateDialectHWSubmodule(nb::module_ &m) {
       });
 
   mlir_attribute_subclass(m, "OutputFileAttr", hwAttrIsAOutputFileAttr)
-      .def_classmethod("get_from_filename", [](nb::object cls,
-                                               MlirAttribute fileName,
-                                               bool excludeFromFileList,
-                                               bool includeReplicatedOp) {
-        return cls(hwOutputFileGetFromFileName(fileName, excludeFromFileList,
-                                               includeReplicatedOp));
+      .def_classmethod(
+          "get_from_filename",
+          [](nb::object cls, MlirAttribute fileName, bool excludeFromFileList,
+             bool includeReplicatedOp) {
+            return cls(hwOutputFileGetFromFileName(
+                fileName, excludeFromFileList, includeReplicatedOp));
+          })
+      .def_property_readonly("filename", [](MlirAttribute self) {
+        MlirStringRef cStr = hwOutputFileGetFileName(self);
+        return std::string(cStr.data, cStr.length);
       });
 
   mlir_attribute_subclass(m, "InnerSymAttr", hwAttrIsAInnerSymAttr)

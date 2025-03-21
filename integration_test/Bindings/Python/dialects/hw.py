@@ -97,6 +97,7 @@ with Context() as ctx, Location.unknown():
 
   outfile = hw.OutputFileAttr.get_from_filename(StringAttr.get("file.txt"),
                                                 True, True)
+  assert outfile.filename == "file.txt"
   print(outfile)
   # CHECK: #hw.output_file<"file.txt", excludeFromFileList, includeReplicatedOps>
 
