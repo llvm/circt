@@ -407,6 +407,14 @@ def RegOp : HardwareDeclOp<"reg", [Forceable, DeclareOpInterfaceMethods<CombData
       assert(resultTypes.size() >= 1u && "mismatched number of return types");
       odsState.addTypes(resultTypes);
     }]>,
+    OpBuilder<(ins "::mlir::TypeRange":$resultTypes, "::mlir::ValueRange":$operands,
+                   CArg<"const Properties &","{}">:$properties), [{
+      assert(operands.size() == 1u && "mismatched number of parameters");
+      odsState.addOperands(operands);
+      odsState.useProperties(const_cast<Properties &>(properties));
+      assert(resultTypes.size() >= 1u && "mismatched number of return types");
+      odsState.addTypes(resultTypes);
+    }]>,
     OpBuilder<(ins "::mlir::Type":$elementType,
                    "::mlir::Value":$clockVal,
                    "::mlir::StringAttr":$name,
