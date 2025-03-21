@@ -30,11 +30,9 @@
 // and continue the analysis through the instance graph.
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
-#include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
@@ -65,6 +63,10 @@ class DiscoverLoops {
   /// drives the sink.
   using DrivenByGraphType =
       SmallVector<std::pair<FieldRef, SmallVector<unsigned>>, 64>;
+  /// Given two nodes in the connectivity graph, record the operation that
+  /// drives the connectivity. This is only required for reporting and helps
+  /// debug combinational cycles.
+  using DriverOpMapType = DenseMap<unsigned, DenseMap<unsigned, Operation *>>;
 
 public:
   DiscoverLoops(
@@ -72,7 +74,22 @@ public:
       const DenseMap<FModuleLike, DrivenBysMapType> &otherModulePortPaths,
       DrivenBysMapType &thisModulePortPaths)
       : module(module), instanceGraph(instanceGraph),
-        modulePortPaths(otherModulePortPaths), portPaths(thisModulePortPaths) {}
+        modulePortPaths(otherModulePortPaths), portPaths(thisModulePortPaths) {
+    // Default mode, still searching for existence of cycles.
+    reportPath = false;
+  }
+
+  DiscoverLoops(
+      FModuleOp module, InstanceGraph &instanceGraph,
+      const DenseMap<FModuleLike, DrivenBysMapType> &otherModulePortPaths,
+      DrivenBysMapType &thisModulePortPaths, const FieldRef &dst,
+      const FieldRef &src)
+      : module(module), instanceGraph(instanceGraph),
+        modulePortPaths(otherModulePortPaths), portPaths(thisModulePortPaths),
+        srcInputPort(src), dstOutputPort(dst) {
+    // Combinational cycle already found, now report all the paths.
+    reportPath = true;
+  }
 
   LogicalResult processModule() {
     LLVM_DEBUG(llvm::dbgs() << "\n processing module :" << module.getName());
@@ -94,13 +111,15 @@ public:
     }
 
     walk(module, [&](Operation *op) {
+      // Record the op, to be used for reporting paths, once a cycle is
+      // detected.
+      visitingOp = op;
       llvm::TypeSwitch<Operation *>(op)
           .Case<hw::CombDataFlow>([&](hw::CombDataFlow df) {
             // computeDataFlow returns a pair of FieldRefs, first element is the
             // destination and the second is the source.
             for (auto [dest, source] : df.computeDataFlow())
               addDrivenBy(dest, source);
-
           })
           .Case<Forceable>([&](Forceable forceableOp) {
             // Any declaration that can be forced.
@@ -183,6 +202,7 @@ public:
               for (auto src : op->getOperands())
                 recordDataflow(res, src);
           });
+      visitingOp = nullptr;
     });
   }
 
@@ -216,6 +236,7 @@ public:
     auto srcNode = getOrAddNode(src);
     auto dstNode = getOrAddNode(dst);
     drivenBy[dstNode].second.push_back(srcNode);
+    driverOpsMap[dstNode][srcNode] = visitingOp;
   }
 
   // Add `dstVal` as being driven by `srcVal`.
@@ -394,7 +415,7 @@ public:
           // Check if sinkPort is a driver of sourcePort.
           auto drivenBysToSrcPort = modulePaths->second.find(modSrcPortField);
           if (drivenBysToSrcPort != modulePaths->second.end())
-            if (llvm::find(drivenBysToSrcPort->second, modSinkPortField) !=
+            if (drivenBysToSrcPort->second.find(modSinkPortField) !=
                 drivenBysToSrcPort->second.end()) {
               // This case can occur when there are multiple RWProbes on the
               // port, which refer to the same base value. So, each of such
@@ -465,8 +486,8 @@ public:
     SmallVector<bool> onStack(numNodes, false);
     SmallVector<unsigned> dfsStack;
 
-    auto hasCycle = [&](unsigned rootNode, DenseSet<unsigned> &visited,
-                        bool recordPortPaths = false) {
+    auto pathExists = [&](unsigned rootNode, DenseSet<unsigned> &visited,
+                          bool recordPortPaths = false) {
       if (visited.contains(rootNode))
         return success();
       dfsStack.push_back(rootNode);
@@ -504,18 +525,31 @@ public:
           } else if (onStack[neighbor]) {
             // Cycle found !!
             SmallVector<FieldRef, 16> path;
-            auto loopNode = neighbor;
+            auto beginPath = neighbor;
+            auto endPath = neighbor;
+            if (reportPath) {
+              // Report the path that exists between an output port and an input
+              // port. This maynot be a cycle.
+              beginPath = rootNode;
+              endPath = neighbor;
+            }
             // Construct the cyclic path.
             do {
               SmallVector<unsigned>::iterator it =
-                  llvm::find_if(drivenBy[loopNode].second,
+                  llvm::find_if(drivenBy[beginPath].second,
                                 [&](unsigned node) { return onStack[node]; });
-              if (it == drivenBy[loopNode].second.end())
+              if (it == drivenBy[beginPath].second.end())
                 break;
 
-              path.push_back(drivenBy[loopNode].first);
-              loopNode = *it;
-            } while (loopNode != neighbor);
+              path.push_back(drivenBy[beginPath].first);
+              beginPath = *it;
+            } while (beginPath != endPath);
+            if (reportPath) {
+              // The last element was not inserted, doesn't matter for reporting
+              // cycles, since it is same as the first one. But for paths, this
+              // is required.
+              path.push_back(drivenBy[beginPath].first);
+            }
 
             reportLoopFound(path, drivenBy[neighbor].first.getLoc());
             return failure();
@@ -524,8 +558,19 @@ public:
       }
       return success();
     };
-
     DenseSet<unsigned> visited;
+    if (reportPath) {
+      unsigned srcInputPortId = nodes[srcInputPort];
+      onStack[srcInputPortId] = true;
+      // Insert the input port into the visited and onStack, this will ensure
+      // that the `hasCycle` fails, and reports the path from the output port to
+      // the input port.
+      visited.insert(srcInputPortId);
+      auto ret = pathExists(nodes[dstOutputPort], visited, false);
+      assert(ret.failed());
+      return failure();
+    }
+
     for (unsigned node = 0; node < graph.size(); ++node) {
       bool isPort = false;
       if (auto arg = dyn_cast<BlockArgument>(drivenBy[node].first.getValue()))
@@ -536,18 +581,24 @@ public:
           isPort = true;
         }
 
-      if (hasCycle(node, visited, isPort).failed())
+      if (pathExists(node, visited, isPort).failed())
         return failure();
     }
     return success();
   }
 
   void reportLoopFound(SmallVectorImpl<FieldRef> &path, Location loc) {
-    auto errorDiag = mlir::emitError(
-        module.getLoc(), "detected combinational cycle in a FIRRTL module");
+    auto errorDiag =
+        reportPath
+            ? mlir::emitRemark(module.getLoc(), "module involved in cycle")
+            : mlir::emitError(
+                  module.getLoc(),
+                  "detected combinational cycle in a FIRRTL module");
     // Find a value we can name
     std::string firstName;
     FieldRef *it = llvm::find_if(path, [&](FieldRef v) {
+      if (v.getDefiningOp<InstanceOp>())
+        return false;
       firstName = getName(v);
       return !firstName.empty();
     });
@@ -569,10 +620,22 @@ public:
 
     bool lastWasDots = false;
     errorDiag << module.getName() << ".{" << getName(*it);
+    FieldRef prevField = *it;
+    using FieldPair = std::pair<FieldRef, FieldRef>;
+    SmallVector<FieldPair> portNodes;
+    const FieldPair empty = {{}, {}};
+    FieldPair portPairs = empty;
     for (auto v : llvm::concat<FieldRef>(
              llvm::make_range(std::next(it), path.end()),
              llvm::make_range(path.begin(), std::next(it)))) {
       auto name = getName(v);
+      unsigned dstNode = nodes[prevField];
+      unsigned srcNode = nodes[v];
+      if (driverOpsMap.contains(dstNode) &&
+          driverOpsMap[dstNode].contains(srcNode)) {
+        Operation *o = driverOpsMap[dstNode][srcNode];
+        errorDiag.attachNote(o->getLoc()) << "involved in cycle";
+      }
       if (!name.empty()) {
         errorDiag << " <- " << name;
         lastWasDots = false;
@@ -581,8 +644,45 @@ public:
           errorDiag << " <- ...";
         lastWasDots = true;
       }
+      if (auto inst = v.getDefiningOp<InstanceOp>()) {
+        if (portPairs == empty) {
+          portPairs.first = v;
+        } else {
+          assert(portPairs.first.getDefiningOp() == inst);
+          portPairs.second = v;
+          portNodes.emplace_back(portPairs);
+          portPairs = empty;
+        }
+      }
+      prevField = v;
     }
     errorDiag << "}";
+    while (!portNodes.empty()) {
+      auto portPair = portNodes.pop_back_val();
+      auto dst = portPair.first;
+      auto src = portPair.second;
+      auto inst = dst.getDefiningOp<InstanceOp>();
+      auto refMod = inst.getReferencedModule<FModuleOp>(instanceGraph);
+      if (!refMod)
+        continue;
+
+      auto modulePaths = modulePortPaths.find(refMod);
+      if (modulePaths == modulePortPaths.end())
+        continue;
+      auto map = modulePaths->getSecond();
+      auto dstPortNum = cast<OpResult>(dst.getValue()).getResultNumber();
+      auto srcPortNum = cast<OpResult>(src.getValue()).getResultNumber();
+      auto refModDstPort = refMod.getArgument(dstPortNum);
+      auto refModSrcPort = refMod.getArgument(srcPortNum);
+      FieldRef dstPort(refModDstPort, dst.getFieldID());
+      FieldRef srcPort(refModSrcPort, src.getFieldID());
+
+      DrivenBysMapType dummy;
+      DiscoverLoops rdf(refMod, instanceGraph, modulePortPaths, dummy, dstPort,
+                        srcPort);
+      auto x = rdf.processModule();
+      assert(x.failed());
+    }
   }
 
   void dumpMap() {
@@ -696,6 +796,10 @@ private:
 
   /// An eqv class of all the RWProbes that refer to the same base value.
   llvm::EquivalenceClasses<unsigned> rwProbeClasses;
+  DriverOpMapType driverOpsMap;
+  Operation *visitingOp = nullptr;
+  const FieldRef srcInputPort = {}, dstOutputPort = {};
+  bool reportPath = false;
 };
 
 /// This pass constructs a local graph for each module to detect
