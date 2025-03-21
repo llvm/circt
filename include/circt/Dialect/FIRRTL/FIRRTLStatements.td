@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLSTATEMENTS_TD
 #define CIRCT_DIALECT_FIRRTL_FIRRTLSTATEMENTS_TD
 
+include "FIRRTLAttributes.td"
 include "FIRRTLDialect.td"
 include "FIRRTLEnums.td"
 include "FIRRTLOpInterfaces.td"
@@ -111,8 +112,10 @@ def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOperands, FConnectLike]> {
 def PrintFOp : FIRRTLOp<"printf"> {
   let summary = "Formatted Print Statement";
 
-  let arguments = (ins ClockType:$clock, UInt1Type:$cond, StrAttr:$formatString,
-                       Variadic<FIRRTLBaseType>:$substitutions, StrAttr:$name);
+  let arguments = (
+    ins ClockType:$clock, UInt1Type:$cond, StrAttr:$formatString,
+        Variadic<FIRRTLBaseType>:$substitutions, StrAttr:$name,
+        DefaultValuedAttr<PrintfSubstitutionEnumArrayAttr, "{}">:$specialSubstitutions);
   let results = (outs);
 
   let assemblyFormat = [{

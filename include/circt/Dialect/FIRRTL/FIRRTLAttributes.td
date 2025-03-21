@@ -13,8 +13,10 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_TD
 #define CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_TD
 
+include "FIRRTLEnums.td"
 include "FIRRTLDialect.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
+include "mlir/IR/EnumAttr.td"
 include "circt/Types.td"
 
 //===----------------------------------------------------------------------===//
@@ -186,6 +188,16 @@ def InternalPathAttr : AttrDef<FIRRTLDialect, "InternalPath"> {
 
 def InternalPathArrayAttr
   : TypedArrayAttrBase<InternalPathAttr, "InternalPath array attribute">;
+
+//===----------------------------------------------------------------------===//
+// Printf attributes
+//===----------------------------------------------------------------------===//
+
+def PrintfSubstitutionEnumAttr
+  : EnumAttr<FIRRTLDialect, PrintfSubstitutionEnum, "printfSubstitution">;
+
+def PrintfSubstitutionEnumArrayAttr
+  : TypedArrayAttrBase<PrintfSubstitutionEnumAttr, "Array of special printf substitutuions">;
 
 //===----------------------------------------------------------------------===//
 // Miscellaneous attributes
