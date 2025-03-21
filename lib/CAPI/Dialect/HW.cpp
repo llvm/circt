@@ -307,6 +307,11 @@ hwOutputFileGetFromFileName(MlirAttribute fileName, bool excludeFromFileList,
       excludeFromFileList, includeReplicatedOp));
 }
 
+MlirStringRef hwOutputFileGetFileName(MlirAttribute outputFile) {
+  auto outputFileAttr = cast<OutputFileAttr>(unwrap(outputFile));
+  return wrap(outputFileAttr.getFilename().getValue());
+}
+
 MLIR_CAPI_EXPORTED HWInstanceGraph hwInstanceGraphGet(MlirOperation operation) {
   return wrap(new InstanceGraph{unwrap(operation)});
 }

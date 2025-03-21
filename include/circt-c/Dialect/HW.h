@@ -191,6 +191,8 @@ MLIR_CAPI_EXPORTED MlirAttribute hwParamVerbatimAttrGet(MlirAttribute text);
 MLIR_CAPI_EXPORTED bool hwAttrIsAOutputFileAttr(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirAttribute hwOutputFileGetFromFileName(
     MlirAttribute text, bool excludeFromFileList, bool includeReplicatedOp);
+MLIR_CAPI_EXPORTED MlirStringRef
+hwOutputFileGetFileName(MlirAttribute outputFile);
 
 //===----------------------------------------------------------------------===//
 // InstanceGraph API.
