@@ -9,6 +9,7 @@ add_circt_dialect_library(CIRCTCalyxTransforms
   CalyxLoweringUtils.cpp
   AffineParallelUnroll.cpp
   AffineToSCF.cpp
+  AffinePloopUnparallelize.cpp
 
   DEPENDS
   CIRCTCalyxTransformsIncGen

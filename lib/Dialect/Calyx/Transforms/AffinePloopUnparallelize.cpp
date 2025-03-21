@@ -1,0 +1,151 @@
+//===- AffinePloopUnparallize.cpp
+//----------------------------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#include "circt/Dialect/Calyx/CalyxPasses.h"
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Affine/Utils.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Arith/Transforms/Passes.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/Visitors.h"
+#include "mlir/Pass/PassManager.h"
+#include "mlir/Support/LogicalResult.h"
+#include "mlir/Transforms/DialectConversion.h"
+
+namespace circt {
+namespace calyx {
+#define GEN_PASS_DEF_AFFINEPLOOPUNPARALLELIZE
+#include "circt/Dialect/Calyx/CalyxPasses.h.inc"
+} // namespace calyx
+} // namespace circt
+
+using namespace mlir;
+using namespace mlir::arith;
+using namespace mlir::memref;
+using namespace mlir::scf;
+using namespace mlir::func;
+using namespace circt;
+
+class AffinePloopUnparallelize
+    : public OpConversionPattern<affine::AffineParallelOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+public:
+  LogicalResult
+  matchAndRewrite(affine::AffineParallelOp affineParallelOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (affineParallelOp.getIVs().size() != 1)
+      return rewriter.notifyMatchFailure(affineParallelOp,
+                                         "currently only support single IV");
+
+    auto loc = affineParallelOp.getLoc();
+    auto upperBoundTuple = mlir::affine::expandAffineMap(
+        rewriter, loc, affineParallelOp.getUpperBoundsMap(),
+        affineParallelOp.getUpperBoundsOperands());
+    if (!upperBoundTuple)
+      return rewriter.notifyMatchFailure(affineParallelOp,
+                                         "does not have upper bounds");
+    Value upperBound = (*upperBoundTuple)[0];
+
+    auto lowerBoundTuple = mlir::affine::expandAffineMap(
+        rewriter, loc, affineParallelOp.getLowerBoundsMap(),
+        affineParallelOp.getLowerBoundsOperands());
+    if (!lowerBoundTuple)
+      return rewriter.notifyMatchFailure(affineParallelOp,
+                                         "does not have lower bounds");
+    Value lowerBound = (*lowerBoundTuple)[0];
+
+    auto step = affineParallelOp.getSteps()[0];
+
+    auto factorAttr =
+        affineParallelOp->getAttrOfType<IntegerAttr>("unparallelize.factor");
+    if (!factorAttr)
+      return rewriter.notifyMatchFailure(affineParallelOp,
+                                         "Missing 'unparallelize.factor'");
+
+    int64_t factor = factorAttr.getInt();
+
+    auto outerLoop = rewriter.create<affine::AffineForOp>(
+        loc, lowerBound, rewriter.getDimIdentityMap(), upperBound,
+        rewriter.getDimIdentityMap(), step * factor);
+
+    rewriter.setInsertionPointToStart(outerLoop.getBody());
+    AffineMap lbMap = AffineMap::get(
+        /*dimCount=*/0, /*symbolCount=*/0,
+        /*results=*/rewriter.getAffineConstantExpr(0), rewriter.getContext());
+    AffineMap ubMap = AffineMap::get(
+        0, 0, rewriter.getAffineConstantExpr(factor), rewriter.getContext());
+    auto innerParallel = rewriter.create<affine::AffineParallelOp>(
+        loc, /*resultTypes=*/TypeRange(),
+        /*reductions=*/SmallVector<arith::AtomicRMWKind>(),
+        /*lowerBoundsMap=*/lbMap, /*lowerBoundsOperands=*/SmallVector<Value>(),
+        /*upperBoundsMap=*/ubMap, /*upperBoundsOperands=*/SmallVector<Value>(),
+        /*steps=*/SmallVector<int64_t>({step}));
+
+    rewriter.setInsertionPointToStart(innerParallel.getBody());
+
+    // `newIndex` will be the newly created `affine.for`'s IV added with the
+    // inner `affine.parallel`'s IV.
+    auto addMap = AffineMap::get(
+        2, 0, rewriter.getAffineDimExpr(0) + rewriter.getAffineDimExpr(1),
+        rewriter.getContext());
+
+    auto newIndex = rewriter.create<affine::AffineApplyOp>(
+        loc, addMap,
+        ValueRange{outerLoop.getInductionVar(), innerParallel.getIVs()[0]});
+
+    Block *pLoopBody = affineParallelOp.getBody();
+    IRMapping operandMap;
+    operandMap.map(affineParallelOp.getIVs()[0], newIndex);
+    for (auto it = pLoopBody->begin(); it != std::prev(pLoopBody->end());
+         ++it) {
+      rewriter.clone(*it, operandMap);
+    }
+    innerParallel->setAttr("unparallelized", rewriter.getUnitAttr());
+
+    rewriter.eraseOp(affineParallelOp);
+
+    return success();
+  }
+};
+
+namespace {
+class AffinePloopUnparallelizePass
+    : public circt::calyx::impl::AffinePloopUnparallelizeBase<
+          AffinePloopUnparallelizePass> {
+  void runOnOperation() override;
+};
+} // namespace
+
+void AffinePloopUnparallelizePass::runOnOperation() {
+  MLIRContext *ctx = &getContext();
+
+  ConversionTarget target(*ctx);
+  target.addLegalDialect<arith::ArithDialect, memref::MemRefDialect,
+                         scf::SCFDialect, affine::AffineDialect>();
+
+  target.addDynamicallyLegalOp<affine::AffineParallelOp>(
+      [](affine::AffineParallelOp op) {
+        return op->hasAttr("unparallelized");
+      });
+
+  RewritePatternSet patterns(ctx);
+  patterns.add<AffinePloopUnparallelize>(ctx);
+  if (failed(applyPartialConversion(getOperation(), target,
+                                    std::move(patterns)))) {
+    signalPassFailure();
+  }
+}
+
+std::unique_ptr<mlir::Pass> circt::calyx::createAffinePloopUnparallelizePass() {
+  return std::make_unique<AffinePloopUnparallelizePass>();
+}
