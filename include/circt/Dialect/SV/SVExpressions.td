@@ -266,7 +266,7 @@ def SampledOp : SVOp<"system.sampled", [Pure, SameOperandsAndResultType]> {
   let assemblyFormat = "$expression attr-dict `:` qualified(type($expression))";
 }
 
-def TimeOp : SVOp<"system.time", [Pure]> {
+def TimeOp : SVOp<"system.time", []> {
   let summary = "`$time` system function";
   let description = [{
     Return a 64-bit integer value representing the time at which the function
@@ -277,7 +277,7 @@ def TimeOp : SVOp<"system.time", [Pure]> {
   let assemblyFormat = "attr-dict `:` type($result)";
 }
 
-def STimeOp : SVOp<"system.stime", [Pure]> {
+def STimeOp : SVOp<"system.stime", []> {
   let summary = "`$time` system function";
   let description = [{
     Return a 32-bit integer value representing the time at which the function
