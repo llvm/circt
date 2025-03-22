@@ -404,7 +404,7 @@ static void lowerModuleBody(FModuleOp mod,
     auto newOp = theBuilder.create<InstanceOp>(
         instPorts, inst.getModuleName(), inst.getName(), inst.getNameKind(),
         annos.getValue(), inst.getLayers(), inst.getLowerToBind(),
-        inst.getInnerSymAttr());
+        inst.getDoNotPrint(), inst.getInnerSymAttr());
 
     auto oldDict = inst->getDiscardableAttrDictionary();
     auto newDict = newOp->getDiscardableAttrDictionary();
