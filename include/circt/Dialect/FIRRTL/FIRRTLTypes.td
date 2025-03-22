@@ -91,11 +91,11 @@ def PassiveType : FIRRTLDialectType<
 
 def SizedType : FIRRTLDialectType<CPred<"type_isa<FIRRTLBaseType>($_self) && "
     "!type_cast<FIRRTLBaseType>($_self).hasUninferredWidth()">,
-    "a sized type (contains no uninferred widths)", 
+    "a sized type (contains no uninferred widths)",
     "::circt::firrtl::FIRRTLBaseType">;
 def SizedOrForeignType : AnyTypeOf<[SizedType, ForeignType]>;
 def SizedPassiveType : FIRRTLDialectType<And<[SizedType.predicate,PassiveType.predicate]>,
-    "a sized passive base type (contains no uninferred widths, or flips)", 
+    "a sized passive base type (contains no uninferred widths, or flips)",
     "::circt::firrtl::FIRRTLBaseType">;
 def SizedPassiveOrForeignType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
 
@@ -235,5 +235,19 @@ def DoubleType : FIRRTLDialectTypeHelper<"DoubleType", "double type">,
 
 def PathType : FIRRTLDialectTypeHelper<"PathType", "path type">,
   BuildableType<"::circt::firrtl::PathType::get($_builder.getContext())">;
+
+//===----------------------------------------------------------------------===//
+// Format String Types
+//===----------------------------------------------------------------------===//
+
+def FStringTimeType :
+  FIRRTLDialectTypeHelper<"FStringTimeType",
+    "a format string type that represents the current simulation time">,
+  BuildableType<"::circt::firrtl::FStringTimeType::get($_builder.getContext())">;
+
+def PrintfOperandType : FIRRTLDialectType<
+  CPred<"type_isa<FIRRTLBaseType, FStringTimeType>($_self)">,
+    "a printf operand type (a FIRRTL base type or a format string type)",
+    "::circt::firrtl::FIRRTLType">;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD

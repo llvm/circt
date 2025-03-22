@@ -66,10 +66,11 @@ public:
             // Property expressions.
             StringConstantOp, FIntegerConstantOp, BoolConstantOp,
             DoubleConstantOp, ListCreateOp, ListConcatOp, UnresolvedPathOp,
-            PathOp, IntegerAddOp, IntegerMulOp, IntegerShrOp>(
-            [&](auto expr) -> ResultType {
-              return thisCast->visitExpr(expr, args...);
-            })
+            PathOp, IntegerAddOp, IntegerMulOp, IntegerShrOp,
+            // Format String expressions
+            TimeOp>([&](auto expr) -> ResultType {
+          return thisCast->visitExpr(expr, args...);
+        })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidExpr(op, args...);
         });
@@ -225,6 +226,9 @@ public:
   HANDLE(IntegerAddOp, Unhandled);
   HANDLE(IntegerMulOp, Unhandled);
   HANDLE(IntegerShrOp, Unhandled);
+
+  // Format string expressions
+  HANDLE(TimeOp, Unhandled);
 #undef HANDLE
 };
 

@@ -6305,6 +6305,18 @@ LayerBlockOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
+// Format Sring operations
+//===----------------------------------------------------------------------===//
+
+// FIRRTLType TimeOp::inferReturnType(mlir::MLIRContext *context) {
+//   return FormatStringType::get(context);
+// }
+
+void TimeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), "time");
+}
+
+//===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//
 
