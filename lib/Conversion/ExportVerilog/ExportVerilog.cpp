@@ -6689,6 +6689,19 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       file.emitReplicatedOps = emitReplicatedOps;
       file.addToFilelist = addToFilelist;
       file.isVerilog = outputPath.ends_with(".sv");
+
+      // Back-annotate the op with an OutputFileAttr if there wasn't one. If it
+      // was a directory, back-annotate the final file path. This is so output
+      // files are explicit in the final MLIR after export.
+      if (!attr || attr.isDirectory()) {
+        auto excludeFromFileListAttr =
+            BoolAttr::get(op->getContext(), !addToFilelist);
+        auto includeReplicatedOpsAttr =
+            BoolAttr::get(op->getContext(), emitReplicatedOps);
+        auto outputFileAttr = hw::OutputFileAttr::get(
+            destFile, excludeFromFileListAttr, includeReplicatedOpsAttr);
+        op->setAttr("output_file", outputFileAttr);
+      }
     };
 
     // Separate the operation into dedicated output file, or emit into the
