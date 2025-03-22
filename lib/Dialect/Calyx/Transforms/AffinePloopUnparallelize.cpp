@@ -20,6 +20,7 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 namespace circt {
 namespace calyx {
@@ -91,6 +92,11 @@ public:
         /*upperBoundsMap=*/ubMap, /*upperBoundsOperands=*/SmallVector<Value>(),
         /*steps=*/SmallVector<int64_t>({step}));
 
+    if (!innerParallel.getBody()->empty()) {
+      Operation &lastOp = innerParallel.getBody()->back();
+      if (isa<affine::AffineYieldOp>(lastOp))
+        lastOp.erase();
+    }
     rewriter.setInsertionPointToStart(innerParallel.getBody());
 
     // `newIndex` will be the newly created `affine.for`'s IV added with the
@@ -103,16 +109,27 @@ public:
         loc, addMap,
         ValueRange{outerLoop.getInductionVar(), innerParallel.getIVs()[0]});
 
-    Block *pLoopBody = affineParallelOp.getBody();
-    IRMapping operandMap;
-    operandMap.map(affineParallelOp.getIVs()[0], newIndex);
-    for (auto it = pLoopBody->begin(); it != std::prev(pLoopBody->end());
-         ++it) {
-      rewriter.clone(*it, operandMap);
-    }
-    innerParallel->setAttr("unparallelized", rewriter.getUnitAttr());
+    Block *srcBlock = affineParallelOp.getBody();
+    Block *destBlock = innerParallel.getBody();
 
-    rewriter.eraseOp(affineParallelOp);
+    // Move all operations except the terminator from `srcBlock` to `destBlock`.
+    destBlock->getOperations().splice(
+        destBlock->end(),          // insert at the end of `destBlock`
+        srcBlock->getOperations(), // move ops from `srcBlock`
+        srcBlock->begin(),         // start at beginning of `srcBlock`
+        std::prev(srcBlock->end()) // stop before the terminator op
+    );
+
+    // Remap occurrences of the old induction variable in the moved ops.
+    destBlock->walk([&](Operation *op) {
+      for (OpOperand &operand : op->getOpOperands()) {
+        if (operand.get() == affineParallelOp.getIVs()[0])
+          operand.set(newIndex);
+      }
+    });
+
+    rewriter.setInsertionPointToEnd(destBlock);
+    rewriter.create<affine::AffineYieldOp>(loc);
 
     return success();
   }
@@ -133,15 +150,12 @@ void AffinePloopUnparallelizePass::runOnOperation() {
   target.addLegalDialect<arith::ArithDialect, memref::MemRefDialect,
                          scf::SCFDialect, affine::AffineDialect>();
 
-  target.addDynamicallyLegalOp<affine::AffineParallelOp>(
-      [](affine::AffineParallelOp op) {
-        return op->hasAttr("unparallelized");
-      });
-
   RewritePatternSet patterns(ctx);
   patterns.add<AffinePloopUnparallelize>(ctx);
-  if (failed(applyPartialConversion(getOperation(), target,
-                                    std::move(patterns)))) {
+  GreedyRewriteConfig config;
+  config.strictMode = GreedyRewriteStrictness::ExistingOps;
+  if (failed(
+          applyPatternsGreedily(getOperation(), std::move(patterns), config))) {
     signalPassFailure();
   }
 }
