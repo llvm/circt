@@ -186,7 +186,7 @@ public:
   static bool classof(Type type) {
     return llvm::isa<FIRRTLDialect>(type.getDialect()) &&
            !llvm::isa<PropertyType, RefType, LHSType, OpenBundleType,
-                      OpenVectorType>(type);
+                      OpenVectorType, FormatStringType>(type);
   }
 
   /// Returns true if this is a non-const "passive" that which is not analog.
