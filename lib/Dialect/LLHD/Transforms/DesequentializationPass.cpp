@@ -218,10 +218,9 @@ public:
       Value curr = worklist.pop_back_val();
       auto *defOp = curr.getDefiningOp();
       if (!defOp) {
-        if (!alreadyAdded.contains(curr)) {
+        if (alreadyAdded.insert(curr).second) {
           primitives.push_back(curr);
           primitiveSampledInPast.push_back(sampledInPast(curr));
-          alreadyAdded.insert(curr);
         }
         continue;
       }
@@ -236,19 +235,17 @@ public:
                 op.getLhs().getType().isSignlessInteger(1)) {
               worklist.append(llvm::to_vector(op->getOperands()));
             } else {
-              if (!alreadyAdded.contains(curr)) {
+              if (alreadyAdded.insert(curr).second) {
                 primitives.push_back(curr);
                 primitiveSampledInPast.push_back(sampledInPast(curr));
-                alreadyAdded.insert(curr);
               }
             }
           })
           .Case<hw::ConstantOp>([](auto op) { /* ignore */ })
           .Default([&](auto op) {
-            if (!alreadyAdded.contains(curr)) {
+            if (alreadyAdded.insert(curr).second) {
               primitives.push_back(curr);
               primitiveSampledInPast.push_back(sampledInPast(curr));
-              alreadyAdded.insert(curr);
             }
           });
     }
@@ -292,8 +289,16 @@ public:
     LLVM_DEBUG({
       llvm::dbgs() << "  - Truth table:\n";
 
-      for (auto [t, d] : llvm::zip(truthTable, dontCare))
-        llvm::dbgs() << "    " << FVInt(std::move(t), std::move(d)) << "\n";
+      for (auto [t, d] : llvm::zip(truthTable, dontCare)) {
+        SmallVector<char> str;
+        t.toString(str, 2, false);
+        llvm::dbgs() << "    ";
+        for (unsigned i = 0; i < result.getBitWidth() - str.size(); ++i)
+          llvm::dbgs() << '0';
+        llvm::dbgs() << str << "\n";
+
+        // llvm::dbgs() << "    " << FVInt(t & ~d, std::move(d)) << "\n";
+      }
 
       SmallVector<char> str;
       result.toString(str, 2, false);
@@ -588,7 +593,7 @@ void DesequentializationPass::runOnProcess(llhd::ProcessOp procOp) const {
 
   OpBuilder builder(procOp);
   WalkResult result = procOp.walk([&](llhd::DrvOp op) {
-    LLVM_DEBUG({ llvm::dbgs() << "\n  Lowering Drive Operation\n"; });
+    LLVM_DEBUG({ llvm::dbgs() << "\n  Lowering " << op << "\n"; });
 
     if (!op.getEnable()) {
       LLVM_DEBUG({ llvm::dbgs() << "  - No enable condition -> skip\n"; });
