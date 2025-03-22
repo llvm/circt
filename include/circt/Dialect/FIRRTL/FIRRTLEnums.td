@@ -125,6 +125,22 @@ def Reference: I32EnumAttrCase<"Reference", 4, "reference">;
 def TargetKind : I32EnumAttr<"TargetKind", "object model target kind",
   [DontTouch, Instance, MemberInstance, MemberReference, Reference]>  {}
 
+//===----------------------------------------------------------------------===//
+// Printf Substitutions Attributes
+//===----------------------------------------------------------------------===//
+
+def PrintfSubstitutionEnum : I32EnumAttr<
+  "PrintfSubstitution",
+  "A special substitution for a FIRRTL printf",
+  [
+    I32EnumAttrCase<"SimulationTime", 0, "SimulationTime">
+  ]
+> {
+
+  let genSpecializedAttr = 0;
+
+}
+
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLENUMS_TD

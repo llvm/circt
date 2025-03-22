@@ -372,7 +372,7 @@ private:
     SymbolTable symbolTable;
     hw::InnerSymbolTableCollection istc;
     hw::InnerRefNamespace irn{symbolTable, istc};
-    SymInfos(Operation *op) : symbolTable(op), istc(op) {};
+    SymInfos(Operation *op) : symbolTable(op), istc(op){};
   };
   std::optional<std::reference_wrapper<SymInfos>> symInfos;
 
@@ -834,7 +834,38 @@ void Emitter::emitStatement(PrintFOp op) {
     ps << "," << PP::space;
     emitExpression(op.getCond());
     ps << "," << PP::space;
-    ps.writeQuotedEscaped(op.getFormatString());
+
+    // Replace the generic "{{}}" special substitutions with their attributes.
+    // E.g.:
+    //
+    //     "hello {{}} world", [SimulationTime]
+    //
+    // Becomes:
+    //
+    //     "hello {{SimulationTime}} world"
+    SmallString<64> formatString;
+    auto origFormatString = op.getFormatString();
+    auto substitutionIdx = 0;
+    for (size_t i = 0, e = origFormatString.size(); i != e; ++i) {
+      auto c = origFormatString[i];
+      switch (c) {
+      case '{':
+        if (origFormatString.slice(i, i + 4) == "{{}}") {
+          formatString.append("{{");
+          formatString.append(stringifyPrintfSubstitution(
+              cast<PrintfSubstitutionAttr>(
+                  op.getSpecialSubstitutions()[substitutionIdx++])
+                  .getValue()));
+          formatString.append("}}");
+        }
+        i += 3;
+        break;
+      default:
+        formatString.push_back(c);
+      }
+    }
+    ps.writeQuotedEscaped(formatString);
+
     for (auto operand : op.getSubstitutions()) {
       ps << "," << PP::space;
       emitExpression(operand);
@@ -884,7 +915,8 @@ void Emitter::emitStatement(ConnectOp op) {
   } else {
     auto emitLHS = [&]() { emitExpression(op.getDest()); };
     if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
-      emitAssignLike(emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
+      emitAssignLike(
+          emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
     } else {
       emitAssignLike(
           emitLHS, [&]() { emitExpression(op.getSrc()); }, PPExtString("<="));
@@ -910,7 +942,8 @@ void Emitter::emitStatement(MatchingConnectOp op) {
   } else {
     auto emitLHS = [&]() { emitExpression(op.getDest()); };
     if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
-      emitAssignLike(emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
+      emitAssignLike(
+          emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
     } else {
       emitAssignLike(
           emitLHS, [&]() { emitExpression(op.getSrc()); }, PPExtString("<="));
