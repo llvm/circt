@@ -139,6 +139,7 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         os << ">";
       })
       .Case<AnyRefType>([&](AnyRefType type) { os << "anyref"; })
+      .Case<FormatStringType>([&](FormatStringType type) { os << "fstring"; })
       .Default([&](auto) { anyFailed = true; });
   return failure(anyFailed);
 }
@@ -465,6 +466,9 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     return result =
                BaseTypeAliasType::get(StringAttr::get(context, name), type),
            success();
+  }
+  if (name == "fstring") {
+    return result = FormatStringType::get(context), success();
   }
 
   return {};
