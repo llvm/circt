@@ -139,6 +139,7 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         os << ">";
       })
       .Case<AnyRefType>([&](AnyRefType type) { os << "anyref"; })
+      .Case<FormatStringType>([&](FormatStringType type) { os << "fstring"; })
       .Default([&](auto) { anyFailed = true; });
   return failure(anyFailed);
 }
@@ -465,6 +466,9 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     return result =
                BaseTypeAliasType::get(StringAttr::get(context, name), type),
            success();
+  }
+  if (name == "fstring") {
+    return result = FormatStringType::get(context), success();
   }
 
   return {};
@@ -1324,9 +1328,8 @@ struct circt::firrtl::detail::BundleTypeStorage
 
   BundleTypeStorage(ArrayRef<BundleType::BundleElement> elements, bool isConst)
       : detail::FIRRTLBaseTypeStorage(isConst),
-        elements(elements.begin(), elements.end()), props{true,    false, false,
-                                                          isConst, false, false,
-                                                          false} {
+        elements(elements.begin(), elements.end()),
+        props{true, false, false, isConst, false, false, false} {
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
@@ -1581,9 +1584,8 @@ struct circt::firrtl::detail::OpenBundleTypeStorage : mlir::TypeStorage {
 
   OpenBundleTypeStorage(ArrayRef<OpenBundleType::BundleElement> elements,
                         bool isConst)
-      : elements(elements.begin(), elements.end()), props{true,    false, false,
-                                                          isConst, false, false,
-                                                          false},
+      : elements(elements.begin(), elements.end()),
+        props{true, false, false, isConst, false, false, false},
         isConst(static_cast<char>(isConst)) {
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());

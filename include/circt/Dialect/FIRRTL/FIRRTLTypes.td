@@ -236,4 +236,7 @@ def DoubleType : FIRRTLDialectTypeHelper<"DoubleType", "double type">,
 def PathType : FIRRTLDialectTypeHelper<"PathType", "path type">,
   BuildableType<"::circt::firrtl::PathType::get($_builder.getContext())">;
 
+def FormatStringType : FIRRTLDialectTypeHelper<"FormatStringType", "path type">,
+  BuildableType<"::circt::firrtl::FormatStringType::get($_builder.getContext())">;
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD

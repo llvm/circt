@@ -62,6 +62,7 @@ class PathType;
 class BoolType;
 class DoubleType;
 class BaseTypeAliasType;
+class FormatStringType;
 
 /// A collection of bits indicating the recursive properties of a type.
 struct RecursiveTypeProperties {
