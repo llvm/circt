@@ -275,11 +275,11 @@ class BaseSubfieldOp<string name, Type btype, Type rtype> : FIRRTLExprOp<name> {
       return build($_builder, $_state, input, *fieldIndex);
     }]>
   ];
-  
+
   let inferTypeDecl = [{
     static FIRRTLType inferReturnType(Type inType , uint32_t fieldIndex,
                                       std::optional<Location> loc);
-    
+
     static FIRRTLType inferReturnType(ValueRange operands,
                                       mlir::DictionaryAttr attrs,
                                       mlir::OpaqueProperties properties,
@@ -340,7 +340,7 @@ def SubindexOp : FIRRTLExprOp<"subindex"> {
   let inferTypeDecl = [{
     static FIRRTLType inferReturnType(Type inType , uint32_t fieldIndex,
                                       std::optional<Location> loc);
-    
+
     static FIRRTLType inferReturnType(ValueRange operands,
                                       mlir::DictionaryAttr attrs,
                                       mlir::OpaqueProperties properties,
@@ -382,7 +382,7 @@ def OpenSubindexOp : FIRRTLExprOp<"opensubindex"> {
   let inferTypeDecl = [{
     static FIRRTLType inferReturnType(Type inType , uint32_t fieldIndex,
                                       std::optional<Location> loc);
-    
+
     static FIRRTLType inferReturnType(ValueRange operands,
                                       mlir::DictionaryAttr attrs,
                                       mlir::OpaqueProperties properties,
@@ -1189,7 +1189,7 @@ def ObjectSubfieldOp : FIRRTLOp<"object.subfield",
 
     static Type inferReturnType(Type inType , uint32_t fieldIndex,
                                       std::optional<Location> loc);
-    
+
     static Type inferReturnType(ValueRange operands,
                                 mlir::DictionaryAttr attrs,
                                 mlir::OpaqueProperties properties,
@@ -1541,7 +1541,7 @@ def RefSubOp : FIRRTLExprOp<"ref.sub"> {
   let inferTypeDecl = [{
     static FIRRTLType inferReturnType(Type inType , uint32_t fieldIndex,
                                       std::optional<Location> loc);
-    
+
     static FIRRTLType inferReturnType(ValueRange operands,
                                       mlir::DictionaryAttr attrs,
                                       mlir::OpaqueProperties properties,
