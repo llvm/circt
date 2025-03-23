@@ -627,6 +627,10 @@ bool isInDesign(hw::HWSymbolCache &symCache, Operation *op,
   if (op->getNumRegions() > 0)
     return false;
 
+  // Special case some operations which we want to clone.
+  if (isa<TimeOp>(op))
+    return false;
+
   // Otherwise, operations with memory effects as a part design.
   return !mlir::isMemoryEffectFree(op);
 }
