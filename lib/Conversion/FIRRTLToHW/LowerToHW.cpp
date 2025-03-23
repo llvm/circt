@@ -1726,6 +1726,9 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(XMRRefOp op);
   LogicalResult visitExpr(XMRDerefOp op);
 
+  // Format String Operations
+  LogicalResult visitExpr(TimeOp op);
+
   // Statements
   LogicalResult lowerVerificationStatement(
       Operation *op, StringRef labelPrefix, Value clock, Value predicate,
@@ -2399,6 +2402,12 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
 /// format strings. Zero bit operands are rewritten as one bit zeros and signed
 /// integers are wrapped in $signed().
 Value FIRRTLLowering::getLoweredFmtOperand(Value operand) {
+  // Handle special substitutions.
+  if (type_isa<FStringType>(operand.getType())) {
+    if (isa<TimeOp>(operand.getDefiningOp()))
+      return builder.create<sv::TimeOp>();
+  }
+
   auto loweredValue = getLoweredValue(operand);
   if (!loweredValue) {
     // If this is a zero bit operand, just pass a one bit zero.
@@ -4279,6 +4288,11 @@ LogicalResult FIRRTLLowering::visitExpr(XMRDerefOp op) {
   return setLoweringTo<seq::ToClockOp>(op, readXmr);
 }
 
+// Do nothing when lowering this operation.  We need to handle this at its usage
+// sites to guarantee creation of `sv::TimeOp` that is colocated with the
+// `sv::FWriteOp`.
+LogicalResult FIRRTLLowering::visitExpr(TimeOp op) { return success(); }
+
 //===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//
@@ -4486,16 +4500,59 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   if (!clock || !cond)
     return failure();
 
-  SmallVector<Value, 4> operands;
-  operands.reserve(op.getSubstitutions().size());
-  for (auto operand : op.getSubstitutions()) {
-    Value loweredValue = getLoweredFmtOperand(operand);
-    if (!loweredValue)
-      return failure();
-    operands.push_back(loweredValue);
+  // Update the format string to replace "special" substitutions based on
+  // substitution type.
+  SmallString<32> formatString;
+  for (size_t i = 0, e = op.getFormatString().size(), subIdx = 0; i != e; ++i) {
+    char c = op.getFormatString()[i];
+    switch (c) {
+    // Maybe a "%?" normal substitution.
+    case '%':
+      formatString.push_back(c);
+      c = op.getFormatString()[++i];
+      switch (c) {
+      // A normal substitution.  Update the substitution index.
+      case 'b':
+      case 'c':
+      case 'd':
+      case 'x':
+        ++subIdx;
+        break;
+      default:
+        break;
+      }
+      formatString.push_back(c);
+      break;
+    // Maybe a "{{}}" special substitution.
+    case '{': {
+      // Not a special substituion.
+      if (op.getFormatString().slice(i, i + 4) != "{{}}") {
+        formatString.push_back(c);
+        break;
+      }
+      // Special substitution.  Look at the defining op to know how to lower it.
+      auto substitution = op.getSubstitutions()[subIdx++];
+      assert(type_isa<FStringType>(substitution.getType()) &&
+             "the operand for a '{{}}' substitution must be an 'fstring' type");
+      if (auto timeOp = dyn_cast<TimeOp>(substitution.getDefiningOp())) {
+        formatString.append("%0t");
+      } else {
+        op.emitError("has a substitution with an unimplemented lowering")
+                .attachNote(substitution.getLoc())
+            << "op with an unimplemented lowering is here";
+        return failure();
+      }
+      i += 3;
+      break;
+    }
+    // Default is to let characters through.
+    default:
+      formatString.push_back(c);
+    }
   }
 
   // Emit an "#ifndef SYNTHESIS" guard into the always block.
+  bool failed = false;
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToAlwaysBlock(clock, [&]() {
@@ -4508,14 +4565,28 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
           builder.create<sv::MacroRefExprOp>(cond.getType(), "PRINTF_COND_");
       ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond, true);
 
+      SmallVector<Value, 4> operands;
       addIfProceduralBlock(ifCond, [&]() {
         // Emit the sv.fwrite, writing to fd specified by `PRINTF_FD.
         Value fd = builder.create<sv::MacroRefExprOp>(
             builder.getIntegerType(32), "PRINTF_FD_");
-        builder.create<sv::FWriteOp>(fd, op.getFormatString(), operands);
+        // Lower the operands handling any special substitutions that need to be
+        // lowered on a per-use basis.
+        for (auto operand : op.getSubstitutions()) {
+          Value loweredValue = getLoweredFmtOperand(operand);
+          if (!loweredValue)
+            failed = true;
+          operands.push_back(loweredValue);
+        }
+        if (failed)
+          return;
+        builder.create<sv::FWriteOp>(fd, formatString, operands);
       });
     });
   });
+
+  if (failed)
+    return failure();
 
   return success();
 }

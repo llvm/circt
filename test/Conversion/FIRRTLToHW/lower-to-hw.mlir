@@ -338,8 +338,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: [[ADD:%.+]] = comb.add
 
     // CHECK: [[ADDSIGNED:%.+]] = comb.add
-    // CHECK: [[SUMSIGNED:%.+]] = sv.system "signed"([[ADDSIGNED]])
-    // CHECK: [[DSIGNED:%.+]] = sv.system "signed"(%d)
 
     // CHECK:      sv.ifdef @SYNTHESIS {
     // CHECK-NEXT: } else  {
@@ -360,7 +358,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND__1, %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
+    // CHECK-NEXT:       [[SUMSIGNED:%.+]] = sv.system "signed"([[ADDSIGNED]])
+    // CHECK-NEXT:       [[DSIGNED:%.+]] = sv.system "signed"(%d)
     // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Hi signed %d %d\0A"([[SUMSIGNED]], [[DSIGNED]]) : i5, i4
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     %PRINTF_COND__2 = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND__2, %reset : i1
+    // CHECK-NEXT:     sv.if [[AND]] {
+    // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
+    // CHECK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
+    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "[%0t]: %d"([[TIME]], %a) : i64, i4
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
@@ -373,6 +380,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %1 = firrtl.add %c, %c : (!firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.sint<5>
 
     firrtl.printf %clock, %reset, "Hi signed %d %d\0A"(%1, %d) : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<5>, !firrtl.sint<4>
+
+    %time = firrtl.fstring.time : !firrtl.fstring
+    firrtl.printf %clock, %reset, "[{{}}]: %d" (%time, %a) : !firrtl.clock, !firrtl.uint<1>, !firrtl.fstring, !firrtl.uint<4>
 
     firrtl.skip
 
