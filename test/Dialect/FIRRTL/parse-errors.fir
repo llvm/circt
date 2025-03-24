@@ -1667,3 +1667,49 @@ circuit Top:
   public module Top:
     ; expected-error @below {{contracts are a FIRRTL 4.2.0+ feature}}
     contract:
+
+// -----
+FIRRTL version 4.0.0
+circuit DuplicateWhenElse:
+  public module DuplicateWhenElse:
+    input reset: UInt<1>
+    output _t: UInt<1>
+    wire _t_2: UInt<1>
+
+    when reset :
+      node n4 = _t_2
+      connect _t, n4
+    else :
+      ; expected-error @+1 {{redefinition of name 'n4' - FIRRTL has flat namespace and requires all declarations in a module to have unique names}}
+      node n4 = _t_2   ; 'n4' is duplicated across scopes
+      connect _t, n4
+
+// -----
+FIRRTL version 4.0.0
+circuit SameScopeRedef:
+  public module SameScopeRedef:
+    input reset: UInt<1>
+    output _t: UInt<1>
+    wire _t_2: UInt<1>
+
+    ; expected-note @+1 {{previous definition here}}
+    node x = _t_2
+    ; expected-error @+1 {{redefinition of name 'x'}}
+    node x = _t_2   ; 'x' is duplicated in same scope
+    connect _t, x
+
+// -----
+FIRRTL version 4.0.0
+circuit NestedWhenRedef:
+  public module NestedWhenRedef:
+    input reset: UInt<1>
+    output _t: UInt<1>
+    wire _t_2: UInt<1>
+
+    when reset :
+      ; expected-note @+1 {{previous definition here}}
+      node val = _t_2
+      when reset :
+        ; expected-error @+1 {{redefinition of name 'val'}}
+        node val = _t_2   ; 'val' is duplicated in nested when
+      connect _t, val
