@@ -8,6 +8,10 @@ circuit PrintTest:
     input cond : UInt<1>
     input var : UInt<32>
     printf(clock, cond, "test %d\n", var)
+    fprintf(clock, cond, "test.txt", "test %d\n", var)
+    fprintf(clock, cond, "test.txt", "hello")
+    fprintf(clock, cond, "%m.txt", "test %d\n", var)
+
 
     ; CHECK:      sv.ifdef  @SYNTHESIS {
     ; CHECK-NEXT: } else {

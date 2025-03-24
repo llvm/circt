@@ -121,6 +121,27 @@ def PrintFOp : FIRRTLOp<"printf"> {
   }];
 }
 
+def FPrintFOp : FIRRTLOp<"fprintf"> {
+  let summary = "Formatted File Print Statement";
+
+  let description = [{
+    This operation is similar to the "firrtl.printf" operation, but it prints
+    to a file instead of stdout.
+
+    Output file name is interpreted as a format string in SystemVerilog so users can use %m to give a unique
+    name to each instance.
+  }];
+
+  let arguments = (ins ClockType:$clock, UInt1Type:$cond, StrAttr:$outputFile, StrAttr:$formatString,
+                       Variadic<FIRRTLBaseType>:$substitutions, StrAttr:$name);
+  let results = (outs);
+
+  let assemblyFormat = [{
+    $clock `,` $cond `,` $outputFile `,` $formatString `` custom<PrintfAttrs>(attr-dict) ` `
+    (`(` $substitutions^ `)`)? `:` type($clock) `,` type($cond) (`,` qualified(type($substitutions))^)?
+  }];
+}
+
 def SkipOp : FIRRTLOp<"skip", [Pure]> {
   let summary = "Skip statement";
   let description = [{

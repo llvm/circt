@@ -805,8 +805,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 
   // Helper function to emit #ifndef guard.
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
-    b.create<sv::IfDefOp>(
-        guard, []() {}, body);
+    b.create<sv::IfDefOp>(guard, []() {}, body);
   };
 
   if (state.usedPrintf) {
@@ -1738,7 +1737,12 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(ConnectOp op);
   LogicalResult visitStmt(MatchingConnectOp op);
   LogicalResult visitStmt(ForceOp op);
-  LogicalResult visitStmt(PrintFOp op);
+  template <class T>
+  LogicalResult visitPrintfStmt(T op, StringAttr outputFile);
+  LogicalResult visitStmt(PrintFOp op) { return visitPrintfStmt(op, {}); }
+  LogicalResult visitStmt(FPrintFOp op) {
+    return visitPrintfStmt(op, op.getOutputFileAttr());
+  }
   LogicalResult visitStmt(StopOp op);
   LogicalResult visitStmt(AssertOp op);
   LogicalResult visitStmt(AssumeOp op);
@@ -1793,6 +1797,9 @@ private:
   /// caches a known ReadInOutOp for the given value and is managed by
   /// `getReadValue(v)`.
   DenseMap<Value, Value> readInOutCreated;
+
+  /// This keeps track of the file descriptors for each file name.
+  DenseMap<StringAttr, sv::RegOp> fileNameToFileDescriptor;
 
   // We auto-unique graph-level blocks to reduce the amount of generated
   // code and ensure that side effects are properly ordered in FIRRTL.
@@ -2620,8 +2627,7 @@ void FIRRTLLowering::addToAlwaysBlock(
       auto createIfOp = [&]() {
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
-        insideIfOp = builder.create<sv::IfOp>(
-            reset, []() {}, []() {});
+        insideIfOp = builder.create<sv::IfOp>(reset, []() {}, []() {});
       };
       if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};
@@ -4480,7 +4486,8 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseInitialOp op) {
 
 // Printf is a macro op that lowers to an sv.ifdef.procedural, an sv.if,
 // and an sv.fwrite all nested together.
-LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
+template <class T>
+LogicalResult FIRRTLLowering::visitPrintfStmt(T op, StringAttr outputFile) {
   auto clock = getLoweredNonClockValue(op.getClock());
   auto cond = getLoweredValue(op.getCond());
   if (!clock || !cond)
@@ -4498,6 +4505,37 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   // Emit an "#ifndef SYNTHESIS" guard into the always block.
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
+    if (outputFile) {
+      // ifndef SYNTHESIS
+      //   reg fd_<outputFile>;
+      //   initial begin
+      //     fd_<outputFile> = $fopen($sformatf("<outputFile>"));
+      //   end
+      // endif
+      auto &fd = fileNameToFileDescriptor[outputFile];
+      if (!fd) {
+        fd = builder.create<sv::RegOp>(
+            builder.getIntegerType(32),
+            builder.getStringAttr("fd_" + outputFile.getValue()));
+
+        addToInitialBlock([&]() {
+          auto constant = builder.create<sv::ConstantStrOp>(outputFile);
+          auto sformatf =
+              builder
+                  .create<sv::SystemFunctionOp>(
+                      hw::StringType::get(builder.getContext()),
+                      builder.getStringAttr("sformatf"), ValueRange{constant})
+                  ->getResult(0);
+          auto fopen =
+              builder
+                  .create<sv::SystemFunctionOp>(builder.getIntegerType(32),
+                                                builder.getStringAttr("fopen"),
+                                                ValueRange{sformatf})
+                  ->getResult(0);
+          builder.create<sv::BPAssignOp>(fd, fopen);
+        });
+      }
+    }
     addToAlwaysBlock(clock, [&]() {
       circuitState.usedPrintf = true;
       circuitState.addFragment(theModule, "PRINTF_FD_FRAGMENT");
@@ -4510,8 +4548,15 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
 
       addIfProceduralBlock(ifCond, [&]() {
         // Emit the sv.fwrite, writing to fd specified by `PRINTF_FD.
-        Value fd = builder.create<sv::MacroRefExprOp>(
-            builder.getIntegerType(32), "PRINTF_FD_");
+        Value fd;
+        if (outputFile) {
+          auto it = fileNameToFileDescriptor.find(outputFile);
+          assert(it != fileNameToFileDescriptor.end() && "must be registered");
+          fd = builder.create<sv::ReadInOutOp>(it->second);
+        } else {
+          fd = builder.create<sv::MacroRefExprOp>(builder.getIntegerType(32),
+                                                  "PRINTF_FD_");
+        }
         builder.create<sv::FWriteOp>(fd, op.getFormatString(), operands);
       });
     });

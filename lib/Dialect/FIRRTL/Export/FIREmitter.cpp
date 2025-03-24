@@ -78,7 +78,10 @@ struct Emitter {
   void emitStatement(NodeOp op);
   void emitStatement(StopOp op);
   void emitStatement(SkipOp op);
+  template <class T>
+  void emitPrintfStatement(T op, StringAttr fileName);
   void emitStatement(PrintFOp op);
+  void emitStatement(FPrintFOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(MatchingConnectOp op);
   void emitStatement(PropAssignOp op);
@@ -372,7 +375,7 @@ private:
     SymbolTable symbolTable;
     hw::InnerSymbolTableCollection istc;
     hw::InnerRefNamespace irn{symbolTable, istc};
-    SymInfos(Operation *op) : symbolTable(op), istc(op) {};
+    SymInfos(Operation *op) : symbolTable(op), istc(op){};
   };
   std::optional<std::reference_wrapper<SymInfos>> symInfos;
 
@@ -690,7 +693,7 @@ void Emitter::emitStatementsInBlock(Block &block) {
       continue;
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
-              PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp,
+              PrintFOp, FPrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp,
               MatchingConnectOp, PropAssignOp, InstanceOp, InstanceChoiceOp,
               AttachOp, MemOp, InvalidValueOp, SeqMemOp, CombMemOp,
               MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp,
@@ -826,7 +829,8 @@ void Emitter::emitStatement(SkipOp op) {
   emitLocationAndNewLine(op);
 }
 
-void Emitter::emitStatement(PrintFOp op) {
+template <class T>
+void Emitter::emitPrintfStatement(T op, StringAttr fileName) {
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "printf(" << PP::ibox0;
@@ -845,6 +849,12 @@ void Emitter::emitStatement(PrintFOp op) {
     }
   });
   emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(PrintFOp op) { emitPrintfStatement(op, {}); }
+
+void Emitter::emitStatement(FPrintFOp op) {
+  emitPrintfStatement(op, op.getOutputFileAttr());
 }
 
 template <class T>
