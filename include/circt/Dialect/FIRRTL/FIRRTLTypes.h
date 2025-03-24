@@ -62,7 +62,7 @@ class PathType;
 class BoolType;
 class DoubleType;
 class BaseTypeAliasType;
-class FStringTimeType;
+class FStringType;
 
 /// A collection of bits indicating the recursive properties of a type.
 struct RecursiveTypeProperties {
@@ -186,7 +186,7 @@ public:
   static bool classof(Type type) {
     return llvm::isa<FIRRTLDialect>(type.getDialect()) &&
            !llvm::isa<PropertyType, RefType, LHSType, OpenBundleType,
-                      OpenVectorType, FStringTimeType>(type);
+                      OpenVectorType, FStringType>(type);
   }
 
   /// Returns true if this is a non-const "passive" that which is not analog.

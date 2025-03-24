@@ -870,14 +870,11 @@ void Emitter::emitStatement(PrintFOp op) {
       case '{':
         if (origFormatString.slice(i, i + 4) == "{{}}") {
           formatString.append("{{");
-          FIRRTLTypeSwitch<FIRRTLType>(
-              type_cast<FIRRTLType>(
-                  op.getSubstitutions()[substitutionIdx++].getType()))
-              .Case<FStringTimeType>(
-                  [&](auto) { formatString.append("SimulationTime"); })
-              .Default([&](auto) {
-                emitError(op, "unsupported fstring substitution type");
-              });
+          if (isa<TimeOp>(
+                  op.getSubstitutions()[substitutionIdx++].getDefiningOp()))
+            formatString.append("SimulationTime");
+          else
+            emitError(op, "unsupported fstring substitution type");
           formatString.append("}}");
         }
         i += 3;

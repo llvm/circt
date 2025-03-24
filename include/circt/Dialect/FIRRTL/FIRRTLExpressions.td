@@ -1698,7 +1698,7 @@ def TimeOp : FIRRTLOp<"fstring.time", [HasCustomSSAName, Pure]> {
   }];
 
   let arguments = (ins);
-  let results = (outs FStringTimeType:$result);
+  let results = (outs FStringType:$result);
   let assemblyFormat = [{
     attr-dict `:` type($result)
   }];

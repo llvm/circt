@@ -180,8 +180,8 @@ firrtl.module @Contracts(in %a: !firrtl.uint<42>, in %b: !firrtl.bundle<x: uint<
 // CHECK-LABEL: firrtl.module @FormatString
 firrtl.module @FormatString() {
 
-  // CHECK-NEXT: %time = firrtl.fstring.time : !firrtl.fstring.time
-  %time = firrtl.fstring.time : !firrtl.fstring.time
+  // CHECK-NEXT: %time = firrtl.fstring.time : !firrtl.fstring
+  %time = firrtl.fstring.time : !firrtl.fstring
 
 }
 

@@ -578,11 +578,11 @@ def DoubleImpl : PropImplType<"Double"> {
   let typeName = "firrtl.propDouble";
 }
 
-def FStringTimeImpl : FIRRTLImplType<"FStringTime", [], "::circt::firrtl::FIRRTLType" > {
-  let summary = "A format string type that represents the current simulatoin time";
+def FStringImpl : FIRRTLImplType<"FString", [], "::circt::firrtl::FIRRTLType" > {
+  let summary = "A format string type";
   let parameters = (ins);
   let genStorageClass = true;
-  let typeName = "firrtl.fstring.time";
+  let typeName = "firrtl.fstring";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD

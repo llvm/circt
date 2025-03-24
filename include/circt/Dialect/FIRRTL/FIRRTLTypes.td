@@ -240,13 +240,16 @@ def PathType : FIRRTLDialectTypeHelper<"PathType", "path type">,
 // Format String Types
 //===----------------------------------------------------------------------===//
 
-def FStringTimeType :
-  FIRRTLDialectTypeHelper<"FStringTimeType",
-    "a format string type that represents the current simulation time">,
-  BuildableType<"::circt::firrtl::FStringTimeType::get($_builder.getContext())">;
+def FStringType :
+  FIRRTLDialectTypeHelper<"FStringType",
+    "a format string type">,
+  BuildableType<"::circt::firrtl::FStringType::get($_builder.getContext())">;
 
+// TODO: Migrate off of this by making the operands for `PrintfOp` use only
+// `FStringType`.  This requires conversion ops that convert from
+// `FIRRTLBaseType` to `FStringType`.
 def PrintfOperandType : FIRRTLDialectType<
-  CPred<"type_isa<FIRRTLBaseType, FStringTimeType>($_self)">,
+  CPred<"type_isa<FIRRTLBaseType, FStringType>($_self)">,
     "a printf operand type (a FIRRTL base type or a format string type)",
     "::circt::firrtl::FIRRTLType">;
 
