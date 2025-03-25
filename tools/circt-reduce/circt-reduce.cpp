@@ -19,6 +19,7 @@
 #include "circt/Reduce/GenericReductions.h"
 #include "circt/Reduce/Tester.h"
 #include "circt/Support/Version.h"
+#include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -63,6 +64,11 @@ static cl::opt<bool>
     keepBest("keep-best", cl::init(true),
              cl::desc("Keep overwriting the output with better reductions"),
              cl::cat(mainCategory));
+
+static cl::opt<bool>
+    emitBytecode("emit-bytecode",
+                 cl::desc("Emit bytecode when generating MLIR output"),
+                 cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool>
     skipInitial("skip-initial", cl::init(false),
@@ -142,6 +148,10 @@ static LogicalResult writeOutput(ModuleOp module) {
         << outputFilename << "\": " << errorMessage << "\n";
     return failure();
   }
+  if (emitBytecode)
+    return writeBytecodeToFile(module, output->os(),
+                               mlir::BytecodeWriterConfig(getCirctVersion()));
+
   module.print(output->os());
   output->keep();
   return success();
