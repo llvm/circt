@@ -26,8 +26,8 @@ using namespace circt;
 
 Tester::Tester(StringRef testScript, ArrayRef<std::string> testScriptArgs,
                bool testMustFail, bool emitBytecode)
-    : testScript(testScript), testScriptArgs(testScriptArgs),
-      testMustFail(testMustFail), emitBytecode(emitBytecode) {}
+    : emitBytecode(emitBytecode), testScript(testScript),
+      testScriptArgs(testScriptArgs), testMustFail(testMustFail) {}
 
 std::pair<bool, size_t> Tester::isInteresting(ModuleOp module) const {
   auto test = get(module);
@@ -140,6 +140,7 @@ void TestCase::ensureFileOnDisk() {
         llvm::report_fatal_error(
             llvm::Twine("Error emitting the IR to file `") + filepath + "`",
             false);
+      file->os().close();
     } else {
       module.print(file->os());
       file->os().close();
