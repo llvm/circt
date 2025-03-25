@@ -847,9 +847,8 @@ void Emitter::emitStatement(PrintFOp op) {
     //     "hello {{SimulationTime}} world"
     SmallString<64> formatString;
     auto origFormatString = op.getFormatString();
-    auto substitutionIdx = 0;
     SmallVector<Value, 4> substitutions;
-    for (size_t i = 0, e = origFormatString.size(); i != e; ++i) {
+    for (size_t i = 0, e = origFormatString.size(), opIdx = 0; i != e; ++i) {
       auto c = origFormatString[i];
       switch (c) {
       case '%': {
@@ -860,7 +859,7 @@ void Emitter::emitStatement(PrintFOp op) {
         case 'c':
         case 'd':
         case 'x':
-          substitutions.push_back(op.getSubstitutions()[substitutionIdx++]);
+          substitutions.push_back(op.getSubstitutions()[opIdx++]);
           break;
         default:
           break;
@@ -871,8 +870,7 @@ void Emitter::emitStatement(PrintFOp op) {
       case '{':
         if (origFormatString.slice(i, i + 4) == "{{}}") {
           formatString.append("{{");
-          if (isa<TimeOp>(
-                  op.getSubstitutions()[substitutionIdx++].getDefiningOp()))
+          if (isa<TimeOp>(op.getSubstitutions()[opIdx++].getDefiningOp()))
             formatString.append("SimulationTime");
           else
             emitError(op, "unsupported fstring substitution type");

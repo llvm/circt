@@ -2942,12 +2942,12 @@ ParseResult FIRStmtParser::parsePrintf() {
   locationProcessor.setLoc(startTok.getLoc());
 
   // Validate the format string and remove any "special" substitutions.  Only do
-  // this for FIRRTL versions >= 4.2.0.  If at a different FIRRTL version, then
+  // this for FIRRTL versions > 5.0.0.  If at a different FIRRTL version, then
   // just parse this as if it was a string.
   SmallVector<Attribute, 4> specialSubstitutions;
   SmallString<64> validatedFormatString;
   SmallVector<Value, 4> operands;
-  if (version < missingSpecFIRVersion) {
+  if (version < FIRVersion(5, 0, 0)) {
     validatedFormatString = formatString;
     operands.append(specOperands);
   } else {

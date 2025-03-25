@@ -2034,7 +2034,7 @@ circuit Foo:
     printf(clock, UInt<1>(1), "[{{SimulationTime}}]: hello world")
 
 ;// -----
-FIRRTL version 4.2.0
+FIRRTL version 5.0.0
 circuit Foo:
   public module Foo:
     input clock: Clock
