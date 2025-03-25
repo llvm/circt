@@ -202,7 +202,7 @@ static LogicalResult execute(MLIRContext &context) {
     for (auto &arg : testerArgs)
       llvm::errs() << "  with argument `" << arg << "`\n";
   });
-  Tester tester(testerCommand, testerArgs, testMustFail);
+  Tester tester(testerCommand, testerArgs, testMustFail, emitBytecode);
   auto initialTest = tester.get(module.get());
   if (!skipInitial && !initialTest.isInteresting()) {
     mlir::emitError(UnknownLoc::get(&context), "input is not interesting");

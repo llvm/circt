@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Reduce/Tester.h"
+#include "circt/Support/Version.h"
+#include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/IR/Verifier.h"
 #include "llvm/Support/ToolOutputFile.h"
 
@@ -23,9 +25,9 @@ using namespace circt;
 //===----------------------------------------------------------------------===//
 
 Tester::Tester(StringRef testScript, ArrayRef<std::string> testScriptArgs,
-               bool testMustFail)
+               bool testMustFail, bool emitBytecode)
     : testScript(testScript), testScriptArgs(testScriptArgs),
-      testMustFail(testMustFail) {}
+      testMustFail(testMustFail), emitBytecode(emitBytecode) {}
 
 std::pair<bool, size_t> Tester::isInteresting(ModuleOp module) const {
   auto test = get(module);
@@ -131,12 +133,21 @@ void TestCase::ensureFileOnDisk() {
 
     // Write to the output.
     file = std::make_unique<llvm::ToolOutputFile>(filepath, fd);
-    module.print(file->os());
-    file->os().close();
-    if (file->os().has_error())
-      llvm::report_fatal_error(llvm::Twine("Error emitting the IR to file `") +
-                                   filepath + "`",
-                               false);
+    if (tester.emitBytecode) {
+      if (failed(writeBytecodeToFile(
+              module, file->os(),
+              mlir::BytecodeWriterConfig(getCirctVersion()))))
+        llvm::report_fatal_error(
+            llvm::Twine("Error emitting the IR to file `") + filepath + "`",
+            false);
+    } else {
+      module.print(file->os());
+      file->os().close();
+      if (file->os().has_error())
+        llvm::report_fatal_error(
+            llvm::Twine("Error emitting the IR to file `") + filepath + "`",
+            false);
+    }
 
     // Update the file size.
     size = file->os().tell();
