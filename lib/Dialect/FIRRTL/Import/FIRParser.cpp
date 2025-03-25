@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Import/FIRAnnotations.h"
@@ -1902,6 +1903,7 @@ private:
                             SymbolRefAttr layerSym);
   ParseResult parseAttach();
   ParseResult parseMemPort(MemDirAttr direction);
+  ParseResult parseFormatString();
   ParseResult parsePrintf();
   ParseResult parseSkip();
   ParseResult parseStop();
@@ -2913,15 +2915,18 @@ ParseResult FIRStmtParser::parsePrintf() {
   if (parseExp(clock, "expected clock expression in printf") ||
       parseToken(FIRToken::comma, "expected ','") ||
       parseExp(condition, "expected condition in printf") ||
-      parseToken(FIRToken::comma, "expected ','") ||
-      parseGetSpelling(formatString) ||
+      parseToken(FIRToken::comma, "expected ','"))
+    return failure();
+
+  auto formatStringLoc = getToken().getLoc();
+  if (parseGetSpelling(formatString) ||
       parseToken(FIRToken::string, "expected format string in printf"))
     return failure();
 
-  SmallVector<Value, 4> operands;
+  SmallVector<Value, 4> specOperands;
   while (consumeIf(FIRToken::comma)) {
-    operands.push_back({});
-    if (parseExp(operands.back(), "expected operand in printf"))
+    specOperands.push_back({});
+    if (parseExp(specOperands.back(), "expected operand in printf"))
       return failure();
   }
   if (parseToken(FIRToken::r_paren, "expected ')'"))
@@ -2936,7 +2941,79 @@ ParseResult FIRStmtParser::parsePrintf() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  auto formatStrUnescaped = FIRToken::getStringValue(formatString);
+  // Validate the format string and remove any "special" substitutions.  Only do
+  // this for FIRRTL versions > 5.0.0.  If at a different FIRRTL version, then
+  // just parse this as if it was a string.
+  SmallVector<Attribute, 4> specialSubstitutions;
+  SmallString<64> validatedFormatString;
+  SmallVector<Value, 4> operands;
+  if (version < FIRVersion(5, 0, 0)) {
+    validatedFormatString = formatString;
+    operands.append(specOperands);
+  } else {
+    for (size_t i = 0, e = formatString.size(), opIdx = 0; i != e; ++i) {
+      auto c = formatString[i];
+      switch (c) {
+      // FIRRTL percent format strings.  If this is actually a format string,
+      // then grab one of the "spec" operands.
+      case '%': {
+        validatedFormatString.push_back(c);
+        c = formatString[++i];
+        switch (c) {
+        case 'b':
+        case 'c':
+        case 'd':
+        case 'x':
+          operands.push_back(specOperands[opIdx++]);
+          break;
+        // Let anything we don't know about through.  This allows for wildcat
+        // use of `%m` if a user wants.
+        default:
+          break;
+        }
+        validatedFormatString.push_back(c);
+        break;
+      }
+      // FIRRTL special format strings.  If this is a special format string,
+      // then create an operation for it and put its result in the operand list.
+      // This will cause the operands to interleave with the spec operands.
+      // Replace any special format string with the generic '{{}}' placeholder.
+      case '{': {
+        if (formatString[i + 1] != '{') {
+          validatedFormatString.push_back(c);
+          break;
+        }
+        // Handle a special substitution.
+        i += 2;
+        size_t start = i;
+        while (formatString[i] != '}')
+          ++i;
+        if (formatString[i] != '}') {
+          llvm::errs() << "expected '}' to terminate special substitution";
+          return failure();
+        }
+
+        auto specialString = formatString.slice(start, i);
+        if (specialString == "SimulationTime") {
+          operands.push_back(builder.create<TimeOp>());
+        } else {
+          emitError(formatStringLoc)
+              << "unknown printf substitution '" << specialString
+              << "' (did you misspell it?)";
+          return failure();
+        }
+
+        validatedFormatString.append("{{}}");
+        ++i;
+        break;
+      }
+      default:
+        validatedFormatString.push_back(c);
+      }
+    }
+  }
+
+  auto formatStrUnescaped = FIRToken::getStringValue(validatedFormatString);
   builder.create<PrintFOp>(clock, condition,
                            builder.getStringAttr(formatStrUnescaped), operands,
                            name);

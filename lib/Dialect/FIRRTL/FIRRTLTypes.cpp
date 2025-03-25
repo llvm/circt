@@ -139,6 +139,7 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         os << ">";
       })
       .Case<AnyRefType>([&](AnyRefType type) { os << "anyref"; })
+      .Case<FStringType>([&](auto) { os << "fstring"; })
       .Default([&](auto) { anyFailed = true; });
   return failure(anyFailed);
 }
@@ -466,6 +467,9 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
                BaseTypeAliasType::get(StringAttr::get(context, name), type),
            success();
   }
+  if (name == "fstring") {
+    return result = FStringType::get(context), success();
+  }
 
   return {};
 }
@@ -675,6 +679,10 @@ RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
       })
       .Case<LHSType>(
           [](auto type) { return type.getType().getRecursiveTypeProperties(); })
+      .Case<FStringType>([](auto type) {
+        return RecursiveTypeProperties{true,  false, false, false,
+                                       false, false, false};
+      })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return RecursiveTypeProperties{};
