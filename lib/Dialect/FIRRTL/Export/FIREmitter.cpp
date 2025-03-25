@@ -857,6 +857,7 @@ void Emitter::emitStatement(PrintFOp op) {
         c = origFormatString[++i];
         switch (c) {
         case 'b':
+        case 'c':
         case 'd':
         case 'x':
           substitutions.push_back(op.getSubstitutions()[substitutionIdx++]);

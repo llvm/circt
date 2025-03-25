@@ -2961,6 +2961,7 @@ ParseResult FIRStmtParser::parsePrintf() {
         c = formatString[++i];
         switch (c) {
         case 'b':
+        case 'c':
         case 'd':
         case 'x':
           operands.push_back(specOperands[opIdx++]);
