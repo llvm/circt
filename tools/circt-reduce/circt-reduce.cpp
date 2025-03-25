@@ -148,11 +148,18 @@ static LogicalResult writeOutput(ModuleOp module) {
         << outputFilename << "\": " << errorMessage << "\n";
     return failure();
   }
-  if (emitBytecode)
-    return writeBytecodeToFile(module, output->os(),
-                               mlir::BytecodeWriterConfig(getCirctVersion()));
+  if (emitBytecode) {
+    if (failed(writeBytecodeToFile(
+            module, output->os(),
+            mlir::BytecodeWriterConfig(getCirctVersion())))) {
+      mlir::emitError(UnknownLoc::get(module.getContext()),
+                      "failed to emit bytecode to file \"")
+          << outputFilename << "\n";
+      return failure();
+    }
+  } else
+    module.print(output->os());
 
-  module.print(output->os());
   output->keep();
   return success();
 }
