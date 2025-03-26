@@ -32,6 +32,9 @@ public:
 
   ID getID() const { return id; }
   virtual std::ptrdiff_t getBitWidth() const { return -1; }
+  virtual bool isCompatible(const Type *other) const {
+    return this->getID() == other->getID();
+  }
 
 protected:
   ID id;
@@ -72,6 +75,15 @@ public:
   ChannelType(const ID &id, const Type *inner) : Type(id), inner(inner) {}
   const Type *getInner() const { return inner; }
   std::ptrdiff_t getBitWidth() const override { return inner->getBitWidth(); };
+
+  bool isCompatible(const Type *other) const override {
+    if (Type::isCompatible(other))
+      return true;
+
+    if (auto otherChannel = dynamic_cast<const ChannelType *>(other))
+      return getInner()->isCompatible(otherChannel->getInner());
+    return false;
+  }
 
 private:
   const Type *inner;

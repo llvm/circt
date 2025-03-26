@@ -78,7 +78,7 @@ hw.module @fork(in %t : !dc.token, in %clk : !seq.clock {"dc.clock"}, in %rst : 
 
 // CHECK-LABEL:   hw.module @bufferToken(
 // CHECK:              in %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !seq.clock {dc.clock}, in %[[VAL_2:.*]] : i1 {dc.reset}, out out0 : !esi.channel<i0>) {
-// CHECK:           %[[VAL_3:.*]] = esi.buffer %[[VAL_1]], %[[VAL_2]], %[[VAL_0]] {stages = 2 : i64} : i0
+// CHECK:           %[[VAL_3:.*]] = esi.buffer %[[VAL_1]], %[[VAL_2]], %[[VAL_0]] {stages = 2 : i64} : !esi.channel<i0> -> !esi.channel<i0>
 // CHECK:           hw.output %[[VAL_3]] : !esi.channel<i0>
 // CHECK:         }
 hw.module @bufferToken(in %t1 : !dc.token, in %clk : !seq.clock {"dc.clock"}, in %rst : i1 {"dc.reset"}, out out0: !dc.token) {
@@ -91,7 +91,7 @@ hw.module @bufferToken(in %t1 : !dc.token, in %clk : !seq.clock {"dc.clock"}, in
 // CHECK-SAME:              in %[[VAL_1:.*]] : !seq.clock {dc.clock}, 
 // CHECK-SAME:              in %[[VAL_2:.*]] : i1 {dc.reset},
 // CHECK-SAME:              out out0 : !esi.channel<i64>) {
-// CHECK:           %[[VAL_3:.*]] = esi.buffer %[[VAL_1]], %[[VAL_2]], %[[VAL_0]] {stages = 2 : i64} : i64
+// CHECK:           %[[VAL_3:.*]] = esi.buffer %[[VAL_1]], %[[VAL_2]], %[[VAL_0]] {stages = 2 : i64} : !esi.channel<i64> -> !esi.channel<i64>
 // CHECK:           hw.output %[[VAL_3]] : !esi.channel<i64>
 // CHECK:         }
 hw.module @bufferValue(in %v1 : !dc.value<i64>, in %clk : !seq.clock {"dc.clock"}, in %rst : i1 {"dc.reset"}, out out0: !dc.value<i64>) {

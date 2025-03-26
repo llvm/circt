@@ -115,6 +115,7 @@ class Simulator:
     with (self.run_dir / "compile_stdout.log").open("w") as stdout, (
         self.run_dir / "compile_stderr.log").open("w") as stderr:
       for cmd in cmds:
+        stderr.write(" ".join(cmd) + "\n")
         cp = subprocess.run(cmd,
                             env=Simulator.get_env(),
                             capture_output=True,
@@ -232,6 +233,8 @@ class Verilator(Simulator):
         "--top-module",
         self.sources.top,
         "-DSIMULATION",
+        "-Wno-TIMESCALEMOD",
+        "-Wno-fatal",
         "-sv",
         "--build",
         "--exe",

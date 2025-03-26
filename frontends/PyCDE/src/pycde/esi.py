@@ -354,8 +354,11 @@ class ServiceImplementationModuleBuilder(ModuleLikeBuilderBase):
     # pass, the IR can be invalid and the indexers assumes it is valid.
     sys.generate(skip_appid_index=True)
     # Now that the bundles should be assigned, we can cleanup the bundles and
-    # delete the service request op.
+    # delete the service request op reference.
     bundles.cleanup()
+
+    # Verify the generator did not produce invalid IR.
+    sys.mod.operation.verify()
 
     return rc
 
