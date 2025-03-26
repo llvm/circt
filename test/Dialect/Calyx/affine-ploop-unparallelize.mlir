@@ -9,7 +9,7 @@
 // CHECK:                 affine.store %[[VAL_1]], %[[VAL_0]]{{\[}}%[[VAL_2]] + %[[VAL_3]], %[[VAL_4]]] : memref<16x4xf32>
 // CHECK:               }
 // CHECK:             }
-// CHECK:           }
+// CHECK:           } {unparallelized}
 // CHECK:           return
 // CHECK:         }
 
