@@ -554,8 +554,10 @@ class ModuleBuilder(ModuleLikeBuilderBase):
       elif signal is None:
         if len(self.generators) > 0:
           raise PortError(
-              f"Port {name} cannot be None (disconnected ports only allowed "
+              f"Port '{name}' cannot be None (disconnected ports only allowed "
               "on extern mods.")
+        if port.type.bitwidth < 0:
+          raise PortError(f"Port '{name}' cannot be None.")
         circt_inputs[name] = create_const_zero(port.type).value
       else:
         # If it's not a signal, assume the user wants to specify a constant and
@@ -641,6 +643,9 @@ class Module(_PyProxy, metaclass=ModuleLikeType):
         # Pass through the appid if it was provided.
         kwargs["appid"] = appid
 
+    for name, signal in inputs.items():
+      if not isinstance(signal, Signal):
+        raise PortError(f"Input '{name}' must be a Signal")
     self.inst = self._builder.instantiate(self, inputs, **kwargs)
     if appid is not None:
       self.inst.operation.attributes[AppID.AttributeName] = appid._appid
@@ -748,7 +753,7 @@ class ImportedModSpec(ModuleBuilder):
     return hw_module
 
 
-def import_hw_module(hw_module: hw.HWModuleOp):
+def import_hw_module(sys, hw_module: hw.HWModuleOp):
   """Import a CIRCT module into PyCDE. Returns a standard Module subclass which
   operates just like an external PyCDE module.
 
@@ -768,8 +773,14 @@ def import_hw_module(hw_module: hw.HWModuleOp):
   modattrs["BuilderType"] = ImportedModSpec
   modattrs["hw_module"] = hw_module
 
+  modattrs["add_metadata"] = staticmethod(
+      lambda meta, sys=sys: add_metadata(sys, name, meta))
+
   # Use the name and ports to construct a class object like what externmodule
   # would wrap.
   cls = type(name, (Module,), modattrs)
+
+  def add_metadata(sys, symbol: str, meta: Optional[Metadata]):
+    return cls._builder.add_metadata(sys, symbol, meta)
 
   return cls

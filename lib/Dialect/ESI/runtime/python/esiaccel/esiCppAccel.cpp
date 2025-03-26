@@ -21,6 +21,7 @@
 #include <pybind11/pybind11.h>
 namespace py = pybind11;
 
+#include <pybind11/functional.h>
 #include <pybind11/stl.h>
 
 using namespace esi;
@@ -322,6 +323,24 @@ PYBIND11_MODULE(esiCppAccel, m) {
           },
           py::return_value_policy::take_ownership)
       .def("connect", &FuncService::Function::connect);
+
+  py::class_<CallService::Callback, ServicePort>(m, "Callback")
+      .def("connect", [](CallService::Callback &self,
+                         std::function<py::object(py::object)> pyCallback) {
+        self.connect([pyCallback](const MessageData &req) -> MessageData {
+          py::gil_scoped_acquire acquire{};
+          std::vector<uint8_t> arg(req.getBytes(),
+                                   req.getBytes() + req.getSize());
+          py::bytearray argObj((const char *)arg.data(), arg.size());
+          auto ret = pyCallback(argObj);
+          if (ret.is_none())
+            return MessageData();
+          py::buffer_info info(py::buffer(ret).request());
+          std::vector<uint8_t> dataVec((uint8_t *)info.ptr,
+                                       (uint8_t *)info.ptr + info.size);
+          return MessageData(dataVec);
+        });
+      });
 
   // Store this variable (not commonly done) as the "children" method needs for
   // "Instance" to be defined first.

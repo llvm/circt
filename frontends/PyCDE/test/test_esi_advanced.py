@@ -68,8 +68,8 @@ class Join(Module):
 # CHECK-NEXT:       [[R0:%.+]] = comb.and bin [[R3]], %valid : i1
 # CHECK-NEXT:       %chanOutput, %ready = esi.wrap.vr %rawOutput, [[R0]] : ui8
 # CHECK-NEXT:       %chanOutput_0, %ready_1 = esi.wrap.vr %rawOutput, [[R0]] : ui8
-# CHECK-NEXT:       [[R1:%.+]] = esi.buffer %clk, %rst, %chanOutput {stages = 1 : i64} : ui8
-# CHECK-NEXT:       [[R2:%.+]] = esi.buffer %clk, %rst, %chanOutput_0 {stages = 1 : i64} : ui8
+# CHECK-NEXT:       [[R1:%.+]] = esi.buffer %clk, %rst, %chanOutput {stages = 1 : i64} : !esi.channel<ui8> -> !esi.channel<ui8>
+# CHECK-NEXT:       [[R2:%.+]] = esi.buffer %clk, %rst, %chanOutput_0 {stages = 1 : i64} : !esi.channel<ui8> -> !esi.channel<ui8>
 # CHECK-NEXT:       [[R3]] = comb.and bin %ready, %ready_1 : i1
 # CHECK-NEXT:       hw.output [[R1]], [[R2]] : !esi.channel<ui8>, !esi.channel<ui8>
 @unittestmodule(run_passes=True, emit_outputs=True)

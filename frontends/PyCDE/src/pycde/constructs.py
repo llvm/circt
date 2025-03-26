@@ -192,11 +192,16 @@ def ControlReg(clk: Signal,
 
     return ControlReg
 
-  return ControlReg(len(asserts), len(resets))(clk=clk,
-                                               rst=rst,
-                                               asserts=asserts,
-                                               resets=resets,
-                                               instance_name=name).out
+  cr_mod = ControlReg(len(asserts), len(resets))
+  if isinstance(asserts, List):
+    asserts = cr_mod.asserts.type(asserts)
+  if isinstance(resets, List):
+    resets = cr_mod.resets.type(resets)
+  return cr_mod(clk=clk,
+                rst=rst,
+                asserts=asserts,
+                resets=resets,
+                instance_name=name).out
 
 
 def Mux(sel: BitVectorSignal, *data_inputs: typing.List[Signal]) -> Signal:

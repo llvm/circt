@@ -79,7 +79,7 @@ if config.bindings_python_enabled:
 tool_dirs = [
     config.circt_tools_dir, config.mlir_tools_dir, config.llvm_tools_dir
 ]
-tools = ['circt-rtl-sim.py', 'esi-cosim-runner.py']
+tools = ['circt-rtl-sim.py']
 
 # Enable Icarus Verilog as a fallback if no other ieee-sim was detected.
 if config.iverilog_path != "":

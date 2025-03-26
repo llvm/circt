@@ -180,10 +180,10 @@ public:
   ~WriteCosimChannelPort() = default;
 
   void connectImpl(std::optional<unsigned> bufferSize) override {
-    if (desc.type() != getType()->getID())
-      throw std::runtime_error("Channel '" + name +
-                               "' has wrong type. Expected " +
-                               getType()->getID() + ", got " + desc.type());
+    // if (desc.type() != getType()->getID())
+    //   throw std::runtime_error("Channel '" + name +
+    //                            "' has wrong type. Expected " +
+    //                            getType()->getID() + ", got " + desc.type());
     if (desc.dir() != ChannelDesc::Direction::ChannelDesc_Direction_TO_SERVER)
       throw std::runtime_error("Channel '" + name +
                                "' is not a to server channel");
@@ -235,10 +235,10 @@ public:
 
   void connectImpl(std::optional<unsigned> bufferSize) override {
     // Sanity checking.
-    if (desc.type() != getType()->getID())
-      throw std::runtime_error("Channel '" + name +
-                               "' has wrong type. Expected " +
-                               getType()->getID() + ", got " + desc.type());
+    // if (desc.type() != getType()->getID())
+    //   throw std::runtime_error("Channel '" + name +
+    //                            "' has wrong type. Expected " +
+    //                            getType()->getID() + ", got " + desc.type());
     if (desc.dir() != ChannelDesc::Direction::ChannelDesc_Direction_TO_CLIENT)
       throw std::runtime_error("Channel '" + name +
                                "' is not a to client channel");
@@ -264,6 +264,16 @@ public:
     const std::string &messageString = incomingMessage.data();
     MessageData data(reinterpret_cast<const uint8_t *>(messageString.data()),
                      messageString.size());
+    Logger &logger = conn.getLogger();
+    logger.debug(
+        [this,
+         &data](std::string &subsystem, std::string &msg,
+                std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "cosim_read";
+          msg = "Received message on channel '" + name + "'";
+          details = std::make_unique<std::map<std::string, std::any>>();
+          details->emplace("data", data);
+        });
     while (!callback(data))
       // Blocking here could cause deadlocks in specific situations.
       // TODO: Implement a way to handle this better.

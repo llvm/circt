@@ -689,16 +689,18 @@ std::ostream &operator<<(std::ostream &os, const ModuleInfo &m) {
     os << *m.name << " ";
   if (m.version)
     os << *m.version << " ";
+  if (m.name || m.version)
+    os << std::endl;
   if (m.repo || m.commitHash) {
-    os << "(";
+    os << "  Version control: ";
     if (m.repo)
       os << *m.repo;
     if (m.commitHash)
       os << "@" << *m.commitHash;
-    os << ")";
+    os << std::endl;
   }
   if (m.summary)
-    os << ": " << *m.summary;
+    os << "  " << *m.summary;
   os << "\n";
 
   if (!m.constants.empty()) {

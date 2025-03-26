@@ -737,20 +737,32 @@ class ChannelSignal(Signal):
     else:
       raise TypeError("Unknown signaling standard")
 
-  def buffer(self, clk: ClockSignal, reset: BitsSignal,
-             stages: int) -> ChannelSignal:
+  def buffer(
+      self,
+      clk: ClockSignal,
+      reset: BitsSignal,
+      stages: int,
+      output_signaling: Optional[ChannelSignaling] = None,
+  ) -> ChannelSignal:
     """Insert a channel buffer with `stages` stages on the channel. Return the
     output of that buffer."""
+    from .types import Channel
+
+    if output_signaling is None:
+      res_type = self.type
+    else:
+      inner_type = self.type.inner
+      res_type = Channel(inner_type, output_signaling, self.type.data_delay)
 
     from .dialects import esi
     return ChannelSignal(
         esi.ChannelBufferOp(
-            self.type,
+            res_type,
             clk,
             reset,
             self.value,
             stages=stages,
-        ), self.type)
+        ), res_type)
 
   def snoop(self) -> Tuple[Bits(1), Bits(1), Type]:
     """Combinationally snoop on the internal signals of a channel."""
@@ -861,11 +873,18 @@ class BundleSignal(Signal):
       self,
       new_bundle_type: "Bundle",
       to_chan_transform: Optional[Callable[[Signal], Signal]] = None,
-      from_chan_transform: Optional[Callable[[Signal], Signal]] = None
+      from_chan_transform: Optional[Callable[[Signal], Signal]] = None,
+      clk: Optional[ClockSignal] = None,
+      rst: Optional[BitsSignal] = None,
   ) -> BundleSignal:
     """Coerce a two-channel, bidirectional bundle to a different two-channel,
     bidirectional bundle type. Transform functions can be provided to transform
     the individual channels for situations where the types do not match."""
+
+    def check_clk_rst():
+      if clk is None or rst is None:
+        raise ValueError("Clock and reset must be provided for "
+                         "coercion of signaling types.")
 
     from .constructs import Wire
     sig_to_chan, sig_from_chan = self.type.get_to_from()
@@ -877,6 +896,11 @@ class BundleSignal(Signal):
       from_channel = from_channel_wire.transform(from_chan_transform)
     else:
       from_channel = from_channel_wire
+    if from_channel.type.signaling != sig_from_chan.channel.signaling:
+      check_clk_rst()
+      from_channel = from_channel.buffer(
+          clk, rst, 1, output_signaling=sig_from_chan.channel.signaling)
+
     if from_channel.type != sig_from_chan.channel:
       raise TypeError(
           f"Expected channel type {sig_from_chan.channel}, got {from_channel.type} on FROM channel"
@@ -887,6 +911,10 @@ class BundleSignal(Signal):
     to_channel = to_channels[sig_to_chan.name]
     if to_chan_transform is not None:
       to_channel = to_channel.transform(to_chan_transform)
+    if to_channel.type.signaling != sig_to_chan.channel.signaling:
+      check_clk_rst()
+      to_channel = to_channel.buffer(
+          clk, rst, 1, output_signaling=sig_to_chan.channel.signaling)
     if to_channel.type != ret_to_chan.channel:
       raise TypeError(
           f"Expected channel type {ret_to_chan.channel}, got {to_channel.type} on TO channel"
