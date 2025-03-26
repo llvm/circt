@@ -283,7 +283,7 @@ def AffinePloopUnparallelize : Pass<"affine-ploop-unparallelize", "::mlir::func:
           }
           default {}
         }
-      }
+      } {unparallelized}
       ```
   }];
 }
