@@ -10,7 +10,7 @@ from ..constructs import (AssignableSignal, ControlReg, Counter, Mux, NamedWire,
                           Reg, Wire)
 from .. import esi
 from ..module import Module, generator, modparams
-from ..signals import BitsSignal, BundleSignal, ChannelSignal
+from ..signals import BitsSignal, BundleSignal, ChannelSignal, ClockSignal
 from ..support import clog2
 from ..types import (Array, Bits, Bundle, BundledChannel, Channel,
                      ChannelDirection, StructType, Type, UInt)
@@ -548,8 +548,8 @@ def TaggedWriteGearbox(input_bitwidth: int,
 
   if output_bitwidth % 8 != 0:
     raise ValueError("Output bitwidth must be a multiple of 8.")
-  if input_bitwidth % 8 != 0:
-    raise ValueError("Input bitwidth must be a multiple of 8.")
+  input_pad_bits = input_bitwidth % 8
+  input_bitwidth += input_pad_bits
 
   class TaggedWriteGearboxImpl(Module):
     clk = Clock()
@@ -576,6 +576,8 @@ def TaggedWriteGearbox(input_bitwidth: int,
       ready_for_client = Wire(Bits(1))
       client_tag_and_data, client_valid = ports.in_.unwrap(ready_for_client)
       client_data = client_tag_and_data.data
+      if input_pad_bits > 0:
+        client_data = client_data.pad_or_truncate(input_bitwidth)
       client_xact = ready_for_client & client_valid
       input_bitwidth_bytes = input_bitwidth // 8
       output_bitwidth_bytes = output_bitwidth // 8
@@ -888,6 +890,8 @@ def ChannelEngineService(
 
     @generator
     def build(ports, bundles: esi._ServiceGeneratorBundles):
+      clk = ports.clk
+      rst = ports.rst
 
       def build_engine_appid(client_appid: List[esi.AppID],
                              channel_name: str) -> str:
@@ -907,6 +911,13 @@ def ChannelEngineService(
         }
         eng_details: Dict[str, object] = {"engine_inst": eng_appid}
         if input_channel is not None:
+          if (engine_mod.input_channel.type.signaling
+              != input_channel.type.signaling):
+            input_channel = input_channel.buffer(
+                clk,
+                rst,
+                stages=1,
+                output_signaling=engine_mod.input_channel.type.signaling)
           eng_inputs["input_channel"] = input_channel
         if hasattr(engine_mod, "mmio"):
           mmio_appid = esi.AppID(idbase + ".mmio")

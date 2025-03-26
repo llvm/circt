@@ -137,7 +137,10 @@ class System:
   #     "canonicalize",
   # ]
 
-  def import_mlir(self, module, lowering=None) -> Dict[str, Any]:
+  def import_mlir(self,
+                  module,
+                  lowering=None,
+                  filename: Optional[str] = None) -> Dict[str, Any]:
     """Import mlir asm created elsewhere into our space."""
 
     compat_mod = ir.Module.parse(str(module))
@@ -162,6 +165,9 @@ class System:
           ret[ir.StringAttr(op.attributes["sym_name"]).value] = op
         # TODO: do symbol renaming.
         self.body.append(op)
+      if filename is not None and not isinstance(op, hw.TypeScopeOp):
+        op.attributes["output_file"] = hw.OutputFileAttr.get_from_filename(
+            ir.StringAttr.get(filename), False, True)
     return ret
 
   def create_physical_region(self, name: str = None):
@@ -285,6 +291,7 @@ class System:
       "builtin.module(convert-fsm-to-sv)",
       "builtin.module(lower-hwarith-to-hw)",
       "builtin.module(lower-seq-to-sv)",
+      "builtin.module(hw.module(lower-hw-to-sv))",
       "builtin.module(lower-comb)",
       "builtin.module(cse, canonicalize, cse)",
       "builtin.module(hw.module(prettify-verilog), hw.module(hw-cleanup))",

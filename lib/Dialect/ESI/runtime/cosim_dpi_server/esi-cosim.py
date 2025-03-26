@@ -115,6 +115,7 @@ class Simulator:
     with (self.run_dir / "compile_stdout.log").open("w") as stdout, (
         self.run_dir / "compile_stderr.log").open("w") as stderr:
       for cmd in cmds:
+        stderr.write(" ".join(cmd) + "\n")
         cp = subprocess.run(cmd,
                             env=Simulator.get_env(),
                             capture_output=True,
@@ -157,8 +158,9 @@ class Simulator:
       simEnv = Simulator.get_env()
       if self.debug:
         simEnv["COSIM_DEBUG_FILE"] = "cosim_debug.log"
-        # Slow the simulation down to one tick per millisecond.
-        simEnv["DEBUG_PERIOD"] = "1"
+        if "DEBUG_PERIOD" not in simEnv:
+          # Slow the simulation down to one tick per millisecond.
+          simEnv["DEBUG_PERIOD"] = "1"
       simProc = subprocess.Popen(self.run_command(gui),
                                  stdout=simStdout,
                                  stderr=simStderr,
@@ -232,6 +234,8 @@ class Verilator(Simulator):
         "--top-module",
         self.sources.top,
         "-DSIMULATION",
+        "-Wno-TIMESCALEMOD",
+        "-Wno-fatal",
         "-sv",
         "--build",
         "--exe",

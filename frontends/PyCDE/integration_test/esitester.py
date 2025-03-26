@@ -23,7 +23,7 @@
 # Now test the ToHost DMA engine.
 # RUN: %PYTHON% %s %t cosim_dma 2>&1
 # RUN: esi-cosim.py --source %t -- esitester cosim env hostmem
-# RUN: esi-cosim.py --source %t -- esitester cosim env dmawrite
+# RUN: esi-cosim.py --source %t -- esitester cosim env dma -w -r
 
 import pycde
 from pycde import AppID, Clock, Module, Reset, generator, modparams

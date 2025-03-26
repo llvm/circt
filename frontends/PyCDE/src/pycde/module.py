@@ -554,8 +554,10 @@ class ModuleBuilder(ModuleLikeBuilderBase):
       elif signal is None:
         if len(self.generators) > 0:
           raise PortError(
-              f"Port {name} cannot be None (disconnected ports only allowed "
+              f"Port '{name}' cannot be None (disconnected ports only allowed "
               "on extern mods.")
+        if port.type.bitwidth < 0:
+          raise PortError(f"Port '{name}' cannot be None.")
         circt_inputs[name] = create_const_zero(port.type).value
       else:
         # If it's not a signal, assume the user wants to specify a constant and
@@ -641,6 +643,9 @@ class Module(_PyProxy, metaclass=ModuleLikeType):
         # Pass through the appid if it was provided.
         kwargs["appid"] = appid
 
+    for name, signal in inputs.items():
+      if not isinstance(signal, Signal):
+        raise PortError(f"Input '{name}' must be a Signal")
     self.inst = self._builder.instantiate(self, inputs, **kwargs)
     if appid is not None:
       self.inst.operation.attributes[AppID.AttributeName] = appid._appid
