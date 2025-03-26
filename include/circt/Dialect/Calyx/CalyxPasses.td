@@ -251,8 +251,7 @@ def AffinePloopUnparallelize : Pass<"affine-ploop-unparallelize", "::mlir::func:
   let constructor = "circt::calyx::createAffinePloopUnparallelizePass()";
   let description = [{
       Unparallelize `affine.parallel` op to `affine.for` by the factor
-      specified in the attribute.
-      An example:
+      specified in the attribute. For example:
       ```
       #map_mod = affine_map<d0 -> d0 mod 2>
       affine.parallel (%ip) = (0) to (6) {
