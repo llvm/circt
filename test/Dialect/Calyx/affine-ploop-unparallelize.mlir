@@ -38,9 +38,9 @@ module {
 // CHECK:                 affine.parallel (%[[VAL_5:.*]]) = (0) to (1) {
 // CHECK:                   affine.store %[[VAL_1]], %[[VAL_0]]{{\[}}%[[VAL_2]] + %[[VAL_3]], %[[VAL_4]] + %[[VAL_5]]] : memref<16x4xf32>
 // CHECK:                 }
-// CHECK:               }
+// CHECK:               } {unparallelized}
 // CHECK:             }
-// CHECK:           }
+// CHECK:           } {unparallelized}
 // CHECK:           return
 // CHECK:         }
 
