@@ -212,6 +212,7 @@ struct CircuitLoweringState {
   std::atomic<bool> usedPrintf{false};
   std::atomic<bool> usedAssertVerboseCond{false};
   std::atomic<bool> usedStopCond{false};
+  std::atomic<bool> usedFPrintf{false};
 
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
                        firrtl::VerificationFlavor verificationFlavor,
@@ -807,6 +808,70 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
     b.create<sv::IfDefOp>(guard, []() {}, body);
   };
+
+  if (state.usedFPrintf) {
+    // Define the ports for the fprintf function
+    SmallVector<hw::ModulePort> ports;
+
+    // Input port for filename
+    hw::ModulePort namePort;
+    namePort.name = b.getStringAttr("name");
+    namePort.type = hw::StringType::get(b.getContext());
+    namePort.dir = hw::ModulePort::Direction::Input;
+    ports.push_back(namePort);
+
+    // Output port for file descriptor
+    hw::ModulePort fdPort;
+    fdPort.name = b.getStringAttr("fd");
+    fdPort.type = b.getIntegerType(32);
+    fdPort.dir = hw::ModulePort::Direction::Output;
+    ports.push_back(fdPort);
+
+    // Create module type with the ports
+    auto moduleType = hw::ModuleType::get(b.getContext(), ports);
+
+    SmallVector<NamedAttribute> perArgumentsAttr;
+    perArgumentsAttr.push_back(
+        {sv::FuncOp::getExplicitlyReturnedAttrName(), b.getUnitAttr()});
+
+    SmallVector<Attribute> argumentAttr = {
+        DictionaryAttr::get(b.getContext(), {}),
+        DictionaryAttr::get(b.getContext(), perArgumentsAttr)};
+
+    // Create the function declaration
+    auto func = b.create<sv::FuncOp>(
+        "__circt_lib_logging::FileDescriptor::get", moduleType,
+        /*perArgumentAttrs=*/
+        b.getArrayAttr(
+            {b.getDictionaryAttr({}), b.getDictionaryAttr(perArgumentsAttr)}),
+        /*inputLocs=*/
+        ArrayAttr(), ArrayAttr(),
+        b.getStringAttr(
+            "__circt_lib_logging::FileDescriptor::get") // verilogName
+    );
+    func.setPrivate();
+
+    b.create<sv::MacroDeclOp>("__CIRCT_LIB_LOGGING");
+    // Create the fragment containing the FileDescriptor class
+    b.create<emit::FragmentOp>("FPRINTF_FD_FRAGMENT", [&] {
+      emitGuard("__CIRCT_LIB_LOGGING", [&]() {
+        b.create<sv::VerbatimOp>(R"(// CIRCT Logging Library
+package __circt_lib_logging;
+    class FileDescriptor;
+        static int global_id [string];
+        static function int get(string name);
+            if (!global_id.exists(name))
+                global_id[name] = $fopen(name);
+            return global_id[name];
+        endfunction
+    endclass
+endpackage
+)");
+
+        b.create<sv::MacroDefOp>("__CIRCT_LIB_LOGGING", "");
+      });
+    });
+  }
 
   if (state.usedPrintf) {
     b.create<sv::MacroDeclOp>("PRINTF_FD");
@@ -4506,6 +4571,8 @@ LogicalResult FIRRTLLowering::visitPrintfStmt(T op, StringAttr outputFile) {
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     if (outputFile) {
+      circuitState.usedFPrintf = true;
+      circuitState.addFragment(theModule, "FPRINTF_FD_FRAGMENT");
       // ifndef SYNTHESIS
       //   reg fd_<outputFile>;
       //   initial begin
@@ -4526,13 +4593,15 @@ LogicalResult FIRRTLLowering::visitPrintfStmt(T op, StringAttr outputFile) {
                       hw::StringType::get(builder.getContext()),
                       builder.getStringAttr("sformatf"), ValueRange{constant})
                   ->getResult(0);
-          auto fopen =
+          auto fdResult =
               builder
-                  .create<sv::SystemFunctionOp>(builder.getIntegerType(32),
-                                                builder.getStringAttr("fopen"),
-                                                ValueRange{sformatf})
+                  .create<sv::FuncCallProceduralOp>(
+                      mlir::TypeRange{builder.getIntegerType(32)},
+                      builder.getStringAttr(
+                          "__circt_lib_logging::FileDescriptor::get"),
+                      ValueRange{sformatf})
                   ->getResult(0);
-          builder.create<sv::BPAssignOp>(fd, fopen);
+          builder.create<sv::BPAssignOp>(fd, fdResult);
         });
       }
     }

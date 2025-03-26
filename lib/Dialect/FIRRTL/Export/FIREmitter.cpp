@@ -375,7 +375,7 @@ private:
     SymbolTable symbolTable;
     hw::InnerSymbolTableCollection istc;
     hw::InnerRefNamespace irn{symbolTable, istc};
-    SymInfos(Operation *op) : symbolTable(op), istc(op){};
+    SymInfos(Operation *op) : symbolTable(op), istc(op) {};
   };
   std::optional<std::reference_wrapper<SymInfos>> symInfos;
 
