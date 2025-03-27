@@ -5769,12 +5769,12 @@ static void printPrintfAttrs(OpAsmPrinter &p, Operation *op,
 }
 
 static ParseResult parseFPrintfAttrs(OpAsmParser &p,
-                                    NamedAttrList &resultAttrs) {
+                                     NamedAttrList &resultAttrs) {
   return parseElideEmptyName(p, resultAttrs);
 }
 
 static void printFPrintfAttrs(OpAsmPrinter &p, Operation *op,
-                             DictionaryAttr attr) {
+                              DictionaryAttr attr) {
   printElideEmptyName(p, op, attr, {"formatString", "outputFile"});
 }
 
