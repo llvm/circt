@@ -81,7 +81,10 @@ struct Emitter {
   void emitStatement(NodeOp op);
   void emitStatement(StopOp op);
   void emitStatement(SkipOp op);
+  template <class T>
+  void emitPrintfLike(T op, StringAttr fileName);
   void emitStatement(PrintFOp op);
+  void emitStatement(FPrintFOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(MatchingConnectOp op);
   void emitStatement(PropAssignOp op);
@@ -708,7 +711,7 @@ void Emitter::emitStatementsInBlock(Block &block) {
       continue;
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
-              PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp,
+              PrintFOp, FPrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp,
               MatchingConnectOp, PropAssignOp, InstanceOp, InstanceChoiceOp,
               AttachOp, MemOp, InvalidValueOp, SeqMemOp, CombMemOp,
               MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp,
@@ -844,14 +847,21 @@ void Emitter::emitStatement(SkipOp op) {
   emitLocationAndNewLine(op);
 }
 
-void Emitter::emitStatement(PrintFOp op) {
+template <class T>
+void Emitter::emitPrintfLike(T op, StringAttr fileName) {
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
+    if (fileName)
+      ps << "f";
     ps << "printf(" << PP::ibox0;
     emitExpression(op.getClock());
     ps << "," << PP::space;
     emitExpression(op.getCond());
     ps << "," << PP::space;
+    if (fileName) {
+      ps.writeQuotedEscaped(fileName.getValue());
+      ps << "," << PP::space;
+    }
 
     // Replace the generic "{{}}" special substitutions with their attributes.
     // E.g.:
@@ -910,6 +920,12 @@ void Emitter::emitStatement(PrintFOp op) {
     }
   });
   emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(PrintFOp op) { emitPrintfLike(op, {}); }
+
+void Emitter::emitStatement(FPrintFOp op) {
+  emitPrintfLike(op, op.getOutputFileAttr());
 }
 
 template <class T>
