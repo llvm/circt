@@ -523,8 +523,8 @@ def FormalOp : FIRRTLOp<"formal", [
   let summary = "Define a formal unit test";
   let description = [{
     The `firrtl.formal` operation defines a formal verification unit test. The
-    defines a unique symbol name that can be used to refer to it. The design to
-    be tested and any necessary test harness is defined by the separate
+    op defines a unique symbol name that can be used to refer to it. The design
+    to be tested and any necessary test harness is defined by the separate
     `firrtl.module` op referenced by `moduleName`. Additional parameters may be
     specified for the unit test. Input ports of the target module are considered
     to be symbolic values during the test; output ports are ignored.
@@ -538,6 +538,57 @@ def FormalOp : FIRRTLOp<"formal", [
     firrtl.module @MyTest(in %a: !firrtl.uint<42>) {}
     firrtl.formal @myTestA, @MyTest {bound = 42}
     firrtl.formal @myTestB, @MyTest {mode = "induction", userAttr = 9001}
+    ```
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    FlatSymbolRefAttr:$moduleName,
+    DictionaryAttr:$parameters
+  );
+  let assemblyFormat = [{
+    $sym_name `,` $moduleName $parameters attr-dict-with-keyword
+  }];
+}
+
+def SimulationOp : FIRRTLOp<"simulation", [
+  HasParent<"firrtl::CircuitOp">,
+  DeclareOpInterfaceMethods<Symbol>,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Define a simulation unit test";
+  let description = [{
+    The `firrtl.simulation` operation defines a simulation unit test. The op
+    defines a unique symbol name that can be used to refer to it. The design to
+    be tested and any necessary test harness is defined by the separate
+    `firrtl.module` op referenced by `moduleName`. Additional parameters may be
+    specified for the unit test. The target module must have the following port
+    signature:
+
+    ```mlir
+    (
+      in %clock: !firrtl.clock,
+      in %init: !firrtl.uint<1>,
+      out %done: !firrtl.uint<1>,
+      out %success: !firrtl.uint<1>
+    )
+    ```
+
+    This operation may be used to mark unit tests in a FIRRTL design, which
+    other tools may later pick up and run automatically. It is intended to lower
+    to the `verif.simulation` operation. See `verif.simulation` for more
+    details.
+
+    Example:
+    ```mlir
+    firrtl.extmodule @MyTest(
+      in clock: !firrtl.clock,
+      in init: !firrtl.uint<1>,
+      out done: !firrtl.uint<1>,
+      out success: !firrtl.uint<1>
+    )
+    firrtl.simulation @myTestA, @MyTest {bound = 1000}
+    firrtl.simulation @myTestB, @MyTest {asserts = "error", userAttr = 9001}
     ```
   }];
 
