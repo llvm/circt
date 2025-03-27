@@ -326,8 +326,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 //    input c: SInt<4>
 //    input d: SInt<4>
 //    printf(clock, reset, "No operands!\n")
-//    printf(clock, reset, "Hi %x %x\n", add(a, a), b)
-//    printf(clock, reset, "Hi signed %d %d\n", add(c, c), d)
+//    printf(clock, reset, "Hi %0x %0x\n", add(a, a), b)
+//    printf(clock, reset, "Hi signed %0d %0d\n", add(c, c), d)
 
   // CHECK-LABEL: hw.module private @Print
   // CHECK-SAME: attributes {emit.fragments = [@PRINTF_FD_FRAGMENT, @PRINTF_COND_FRAGMENT]}
@@ -352,7 +352,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND__0, %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
-    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Hi %x %x\0A"([[ADD]], %b) : i5, i4
+    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Hi %0x %0x\0A"([[ADD]], %b) : i5, i4
     // CHECK-NEXT:     }
     // CHECK-NEXT:     %PRINTF_COND__1 = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND__1, %reset : i1
@@ -360,14 +360,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
     // CHECK-NEXT:       [[SUMSIGNED:%.+]] = sv.system "signed"([[ADDSIGNED]])
     // CHECK-NEXT:       [[DSIGNED:%.+]] = sv.system "signed"(%d)
-    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Hi signed %d %d\0A"([[SUMSIGNED]], [[DSIGNED]]) : i5, i4
+    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Hi signed %0d %0d\0A"([[SUMSIGNED]], [[DSIGNED]]) : i5, i4
     // CHECK-NEXT:     }
     // CHECK-NEXT:     %PRINTF_COND__2 = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND__2, %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
     // CHECK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
-    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "[%0t]: %d"([[TIME]], %a) : i64, i4
+    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "[%0t]: %0d"([[TIME]], %a) : i64, i4
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }

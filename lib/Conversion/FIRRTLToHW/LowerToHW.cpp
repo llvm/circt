@@ -4544,7 +4544,8 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
     return failure();
 
   // Update the format string to replace "special" substitutions based on
-  // substitution type.
+  // substitution type.  Additionally, convert all known format strings to their
+  // zero-width Verilog versions.  E.g., `%d` becomes `%0d`.
   SmallString<32> formatString;
   for (size_t i = 0, e = op.getFormatString().size(), subIdx = 0; i != e; ++i) {
     char c = op.getFormatString()[i];
@@ -4554,11 +4555,13 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
       formatString.push_back(c);
       c = op.getFormatString()[++i];
       switch (c) {
-      // A normal substitution.  Update the substitution index.
+      // A normal substitution.  Update the substitution index.  Add a '0' width
+      // specifier as this always produces better output.
       case 'b':
       case 'c':
       case 'd':
       case 'x':
+        formatString.push_back('0');
         ++subIdx;
         break;
       default:
