@@ -131,7 +131,8 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(in %ro_addr_0: i4
 //CHECK:             sv.for %i = %c0_i4 to %c-6_i4 step %c1_i4 : i4 {
 //CHECK:               sv.for %j = %c0_i6 to %c-32_i6 step %c-32_i6_2 : i6 {
 //CHECK:                 %RANDOM = sv.macro.ref.expr.se @RANDOM
-//CHECK:                 %[[PART_SELECT:.+]] = sv.indexed_part_select_inout %_RANDOM_MEM[%j : 32] : !hw.inout<i32>, i6
+//CHECK:                 %[[TRUNCATE_J:.+]] = comb.extract %j from 0 : (i6) -> i4
+//CHECK:                 %[[PART_SELECT:.+]] = sv.indexed_part_select_inout %_RANDOM_MEM[%[[TRUNCATE_J]] : 32] : !hw.inout<i32>, i4
 //CHECK:                 sv.bpassign %[[PART_SELECT]], %RANDOM : i32
 //CHECK:               }
 //CHECK:               %[[MEM_INDEX:.+]] = sv.array_index_inout %Memory[%i] : !hw.inout<uarray<10xi16>>, i4
