@@ -112,7 +112,7 @@ def PrintFOp : FIRRTLOp<"printf"> {
   let summary = "Formatted Print Statement";
 
   let arguments = (ins ClockType:$clock, UInt1Type:$cond, StrAttr:$formatString,
-                       Variadic<FIRRTLBaseType>:$substitutions, StrAttr:$name);
+                       Variadic<PrintfOperandType>:$substitutions, StrAttr:$name);
   let results = (outs);
 
   let assemblyFormat = [{

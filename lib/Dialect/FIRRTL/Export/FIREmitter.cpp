@@ -79,7 +79,7 @@ struct Emitter {
   void emitStatement(StopOp op);
   void emitStatement(SkipOp op);
   template <class T>
-  void emitPrintfStatement(T op, StringAttr fileName);
+  void emitPrintfLike(T op, StringAttr fileName);
   void emitStatement(PrintFOp op);
   void emitStatement(FPrintFOp op);
   void emitStatement(ConnectOp op);
@@ -148,6 +148,8 @@ struct Emitter {
   void emitExpression(PadPrimOp op) { emitPrimExpr("pad", op, op.getAmount()); }
   void emitExpression(ShlPrimOp op) { emitPrimExpr("shl", op, op.getAmount()); }
   void emitExpression(ShrPrimOp op) { emitPrimExpr("shr", op, op.getAmount()); }
+
+  void emitExpression(TimeOp op) {};
 
   // Funnel all ops without attrs into `emitPrimExpr`.
 #define HANDLE(OPTYPE, MNEMONIC)                                               \
@@ -830,10 +832,12 @@ void Emitter::emitStatement(SkipOp op) {
 }
 
 template <class T>
-void Emitter::emitPrintfStatement(T op, StringAttr fileName) {
+void Emitter::emitPrintfLike(T op, StringAttr fileName) {
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
-    ps << (fileName ? "fprintf(" : "printf(") << PP::ibox0;
+    if (fileName)
+      ps << "f";
+    ps << "printf(" << PP::ibox0;
     emitExpression(op.getClock());
     ps << "," << PP::space;
     emitExpression(op.getCond());
@@ -842,8 +846,55 @@ void Emitter::emitPrintfStatement(T op, StringAttr fileName) {
       ps.writeQuotedEscaped(fileName.getValue());
       ps << "," << PP::space;
     }
-    ps.writeQuotedEscaped(op.getFormatString());
-    for (auto operand : op.getSubstitutions()) {
+
+    // Replace the generic "{{}}" special substitutions with their attributes.
+    // E.g.:
+    //
+    //     "hello {{}} world"(%time)
+    //
+    // Becomes:
+    //
+    //     "hello {{SimulationTime}} world"
+    SmallString<64> formatString;
+    auto origFormatString = op.getFormatString();
+    SmallVector<Value, 4> substitutions;
+    for (size_t i = 0, e = origFormatString.size(), opIdx = 0; i != e; ++i) {
+      auto c = origFormatString[i];
+      switch (c) {
+      case '%': {
+        formatString.push_back(c);
+        c = origFormatString[++i];
+        switch (c) {
+        case 'b':
+        case 'c':
+        case 'd':
+        case 'x':
+          substitutions.push_back(op.getSubstitutions()[opIdx++]);
+          break;
+        default:
+          break;
+        }
+        formatString.push_back(c);
+        break;
+      }
+      case '{':
+        if (origFormatString.slice(i, i + 4) == "{{}}") {
+          formatString.append("{{");
+          if (isa<TimeOp>(op.getSubstitutions()[opIdx++].getDefiningOp()))
+            formatString.append("SimulationTime");
+          else
+            emitError(op, "unsupported fstring substitution type");
+          formatString.append("}}");
+        }
+        i += 3;
+        break;
+      default:
+        formatString.push_back(c);
+      }
+    }
+    ps.writeQuotedEscaped(formatString);
+
+    for (auto operand : substitutions) {
       ps << "," << PP::space;
       emitExpression(operand);
     }
@@ -855,10 +906,10 @@ void Emitter::emitPrintfStatement(T op, StringAttr fileName) {
   emitLocationAndNewLine(op);
 }
 
-void Emitter::emitStatement(PrintFOp op) { emitPrintfStatement(op, {}); }
+void Emitter::emitStatement(PrintFOp op) { emitPrintfLike(op, {}); }
 
 void Emitter::emitStatement(FPrintFOp op) {
-  emitPrintfStatement(op, op.getOutputFileAttr());
+  emitPrintfLike(op, op.getOutputFileAttr());
 }
 
 template <class T>
@@ -1242,10 +1293,11 @@ void Emitter::emitExpression(Value value) {
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
           UnresolvedPathOp, GenericIntrinsicOp,
           // Reference expressions
-          RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp>(
-          [&](auto op) {
-            ps.scopedBox(PP::ibox0, [&]() { emitExpression(op); });
-          })
+          RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
+          // Format String expressions
+          TimeOp>([&](auto op) {
+        ps.scopedBox(PP::ibox0, [&]() { emitExpression(op); });
+      })
       .Default([&](auto op) {
         emitOpError(op, "not supported as expression");
         ps << "<unsupported-expr-" << PPExtString(op->getName().stripDialect())

@@ -176,4 +176,13 @@ firrtl.module @Contracts(in %a: !firrtl.uint<42>, in %b: !firrtl.bundle<x: uint<
   }
 }
 
+// Format string support
+// CHECK-LABEL: firrtl.module @FormatString
+firrtl.module @FormatString() {
+
+  // CHECK-NEXT: %time = firrtl.fstring.time : !firrtl.fstring
+  %time = firrtl.fstring.time : !firrtl.fstring
+
+}
+
 }
