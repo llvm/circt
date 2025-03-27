@@ -1745,6 +1745,38 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
+  // CHECK-LABEL: hw.module.extern @Foo
+  // CHECK-SAME:    in %clock : !seq.clock
+  // CHECK-SAME:    in %init : i1
+  // CHECK-SAME:    out done : i1
+  // CHECK-SAME:    out success : i1
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>
+  )
+  // CHECK-LABEL: verif.simulation @MyTest1
+  // CHECK-SAME:    {hello = 42 : i64} {
+  // CHECK-NEXT:  ([[CLOCK:%.+]]: !seq.clock, [[INIT:%.+]]: i1):
+  // CHECK-NEXT:    [[DONE:%.+]], [[SUCCESS:%.+]] = hw.instance "Foo" @Foo
+  // CHECK-SAME:      (clock: [[CLOCK]]: !seq.clock, init: [[INIT]]: i1) -> (done: i1, success: i1)
+  // CHECK-NEXT:    verif.yield [[DONE]], [[SUCCESS]] : i1, i1
+  // CHECK-NEXT:  }
+  firrtl.simulation @MyTest1, @Foo {hello = 42 : i64}
+  // CHECK-LABEL: verif.simulation @MyTest2
+  // CHECK-SAME:    {world = "abc"} {
+  // CHECK-NEXT:  ([[CLOCK:%.+]]: !seq.clock, [[INIT:%.+]]: i1):
+  // CHECK-NEXT:    [[DONE:%.+]], [[SUCCESS:%.+]] = hw.instance "Foo" @Foo
+  // CHECK-SAME:      (clock: [[CLOCK]]: !seq.clock, init: [[INIT]]: i1) -> (done: i1, success: i1)
+  // CHECK-NEXT:    verif.yield [[DONE]], [[SUCCESS]] : i1, i1
+  // CHECK-NEXT:  }
+  firrtl.simulation @MyTest2, @Foo {world = "abc"}
+}
+
+// -----
+
+firrtl.circuit "Foo" {
   // CHECK-LABEL: hw.module @Foo
   firrtl.module @Foo(in %a: !firrtl.uint<42>, in %b: !firrtl.uint<1337>) {
     // CHECK: verif.contract {
