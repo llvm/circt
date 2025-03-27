@@ -310,25 +310,21 @@ static void populateMooreToCoreLowering(PassManager &pm) {
 
 /// Convert LLHD dialect IR into core dialect IR
 static void populateLLHDLowering(PassManager &pm) {
-  pm.addPass(createInlinerPass());
   {
-    auto &anyPM = pm.nestAny();
-    anyPM.addPass(mlir::createSROA());
+    auto &modulePM = pm.nest<hw::HWModuleOp>();
+    modulePM.addPass(mlir::createSROA());
+    modulePM.addPass(llhd::createMem2RegPass());
+    modulePM.addPass(llhd::createHoistSignalsPass());
+    modulePM.addPass(llhd::createDeseqPass());
+    modulePM.addPass(mlir::createCSEPass());
+    modulePM.addPass(mlir::createCanonicalizerPass());
   }
-  pm.addNestedPass<hw::HWModuleOp>(llhd::createEarlyCodeMotion());
-  pm.addNestedPass<hw::HWModuleOp>(llhd::createTemporalCodeMotion());
-  {
-    auto &anyPM = pm.nestAny();
-    anyPM.addPass(mlir::createCSEPass());
-    anyPM.addPass(mlir::createCanonicalizerPass());
-  }
-  pm.addNestedPass<hw::HWModuleOp>(llhd::createDesequentialization());
   pm.addPass(llhd::createProcessLowering());
-  pm.addNestedPass<hw::HWModuleOp>(llhd::createSig2Reg());
   {
-    auto &anyPM = pm.nestAny();
-    anyPM.addPass(mlir::createCSEPass());
-    anyPM.addPass(mlir::createCanonicalizerPass());
+    auto &modulePM = pm.nest<hw::HWModuleOp>();
+    modulePM.addPass(llhd::createSig2Reg());
+    modulePM.addPass(mlir::createCSEPass());
+    modulePM.addPass(mlir::createCanonicalizerPass());
   }
 }
 
