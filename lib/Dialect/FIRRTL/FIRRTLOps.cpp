@@ -5768,6 +5768,16 @@ static void printPrintfAttrs(OpAsmPrinter &p, Operation *op,
   printElideEmptyName(p, op, attr, {"formatString"});
 }
 
+static ParseResult parseFPrintfAttrs(OpAsmParser &p,
+                                    NamedAttrList &resultAttrs) {
+  return parseElideEmptyName(p, resultAttrs);
+}
+
+static void printFPrintfAttrs(OpAsmPrinter &p, Operation *op,
+                             DictionaryAttr attr) {
+  printElideEmptyName(p, op, attr, {"formatString", "outputFile"});
+}
+
 static ParseResult parseStopAttrs(OpAsmParser &p, NamedAttrList &resultAttrs) {
   return parseElideEmptyName(p, resultAttrs);
 }

@@ -375,7 +375,7 @@ private:
     SymbolTable symbolTable;
     hw::InnerSymbolTableCollection istc;
     hw::InnerRefNamespace irn{symbolTable, istc};
-    SymInfos(Operation *op) : symbolTable(op), istc(op) {};
+    SymInfos(Operation *op) : symbolTable(op), istc(op){};
   };
   std::optional<std::reference_wrapper<SymInfos>> symInfos;
 
@@ -833,11 +833,15 @@ template <class T>
 void Emitter::emitPrintfStatement(T op, StringAttr fileName) {
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
-    ps << "printf(" << PP::ibox0;
+    ps << (fileName ? "fprintf(" : "printf(") << PP::ibox0;
     emitExpression(op.getClock());
     ps << "," << PP::space;
     emitExpression(op.getCond());
     ps << "," << PP::space;
+    if (fileName) {
+      ps.writeQuotedEscaped(fileName.getValue());
+      ps << "," << PP::space;
+    }
     ps.writeQuotedEscaped(op.getFormatString());
     for (auto operand : op.getSubstitutions()) {
       ps << "," << PP::space;

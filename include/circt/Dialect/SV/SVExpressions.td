@@ -288,27 +288,6 @@ def STimeOp : SVOp<"system.stime", []> {
   let assemblyFormat = "attr-dict `:` type($result)";
 }
 
-// def SFormatFOp : SVOp<"system.sformatf", []> {
-//   let summary = "`$sformatf` system function";
-//   let description = [{
-//     Return a string value formatted according to the given format string.
-//   }];
-//   let arguments = (ins StrAttr:$format_string, Variadic<AnyType>:$substitutions);
-//   let results = (outs HWStringType:$result);
-//   let assemblyFormat = "attr-dict `:` type($result)";
-// }
-// 
-// 
-// def FOpenOp : SVOp<"system.fopen", []> {
-//   let summary = "`$fopen` system function";
-//   let description = [{
-//     Open file discriptor.
-//   }];
-//   let arguments = (ins HWStringType:$fileName);
-//   let results = (outs I32:$result);
-//   let assemblyFormat = "attr-dict `:` type($result)";
-// }
-
 def UnpackedArrayCreateOp : SVOp<"unpacked_array_create", [Pure, SameTypeOperands]> {
   let summary = "Create an unpacked array";
   let description = [{

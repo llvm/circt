@@ -137,7 +137,7 @@ def FPrintFOp : FIRRTLOp<"fprintf"> {
   let results = (outs);
 
   let assemblyFormat = [{
-    $clock `,` $cond `,` $outputFile `,` $formatString `` custom<PrintfAttrs>(attr-dict) ` `
+    $clock `,` $cond `,` $outputFile `,` $formatString `` custom<FPrintfAttrs>(attr-dict) ` `
     (`(` $substitutions^ `)`)? `:` type($clock) `,` type($cond) (`,` qualified(type($substitutions))^)?
   }];
 }
