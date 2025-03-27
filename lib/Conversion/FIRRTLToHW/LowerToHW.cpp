@@ -806,7 +806,8 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 
   // Helper function to emit #ifndef guard.
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
-    b.create<sv::IfDefOp>(guard, []() {}, body);
+    b.create<sv::IfDefOp>(
+        guard, []() {}, body);
   };
 
   if (state.usedFPrintf) {
@@ -2701,7 +2702,8 @@ void FIRRTLLowering::addToAlwaysBlock(
       auto createIfOp = [&]() {
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
-        insideIfOp = builder.create<sv::IfOp>(reset, []() {}, []() {});
+        insideIfOp = builder.create<sv::IfOp>(
+            reset, []() {}, []() {});
       };
       if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};
