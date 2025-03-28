@@ -481,8 +481,11 @@ private:
 
     rewriter.setInsertionPointToEnd(groupOp.getBodyBlock());
     auto loc = cmpIOp.getLoc();
-    // `calyxOp` will be one of `EqLibOp`, `SleLibOp`, etc. The
-    // 2'th `result` corresponds to the output result of `calyxOp`.
+    assert(
+        (isa<calyx::EqLibOp, calyx::NeqLibOp, calyx::SleLibOp, calyx::SltLibOp,
+             calyx::LeLibOp, calyx::LtLibOp, calyx::GeLibOp, calyx::GtLibOp,
+             calyx::SgeLibOp, calyx::SgtLibOp>(calyxOp.getOperation())) &&
+        "Must be a Calyx comparison library operation.");
     int64_t outputIndex = 2;
     rewriter.create<calyx::AssignOp>(loc, condReg.getIn(),
                                      calyxOp.getResult(outputIndex));
