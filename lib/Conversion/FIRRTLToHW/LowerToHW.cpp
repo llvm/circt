@@ -4565,11 +4565,10 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
         [[fallthrough]];
       case 'c':
         ++subIdx;
-        break;
+        [[fallthrough]];
       default:
-        break;
+        formatString.push_back(c);
       }
-      formatString.push_back(c);
       break;
     // Maybe a "{{}}" special substitution.
     case '{': {
