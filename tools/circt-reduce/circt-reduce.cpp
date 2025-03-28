@@ -157,8 +157,9 @@ static LogicalResult writeOutput(ModuleOp module) {
           << outputFilename << "\n";
       return failure();
     }
-  } else
+  } else {
     module.print(output->os());
+  }
 
   output->keep();
   return success();
