@@ -191,3 +191,11 @@ rtg.test @tuples() {
   %0 = rtg.tuple_create %idx0, %true : index, i1
   %1 = rtg.tuple_extract %0 at 1 : tuple<index, i1>
 }
+
+// CHECK-LABEL: @memoryBlocks : !rtg.dict<mem_block: !rtg.isa.memory_block<32>>
+rtg.target @memoryBlocks : !rtg.dict<mem_block: !rtg.isa.memory_block<32>> {
+  // CHECK: rtg.isa.memory_block_declare [0x0 - 0x8] : !rtg.isa.memory_block<32>
+  %0 = rtg.isa.memory_block_declare [0x0 - 0x8] : !rtg.isa.memory_block<32>
+  
+  rtg.yield %0 : !rtg.isa.memory_block<32>
+}

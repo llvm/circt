@@ -645,6 +645,16 @@ rtg.test @comments() {
   rtg.comment "this is a comment"
 }
 
+rtg.target @memoryBlocks : !rtg.dict<mem_block: !rtg.isa.memory_block<32>> {
+  %0 = rtg.isa.memory_block_declare [0x0 - 0x8] : !rtg.isa.memory_block<32>
+  rtg.yield %0 : !rtg.isa.memory_block<32>
+}
+
+// CHECK-LABEL: @memoryBlockTest_memoryBlocks
+rtg.test @memoryBlockTest(mem_block = %arg0: !rtg.isa.memory_block<32>) {
+  // CHECK-NEXT: }
+}
+
 // -----
 
 rtg.test @nestedRegionsNotSupported() {

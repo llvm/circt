@@ -645,6 +645,93 @@ void ArrayCreateOp::print(OpAsmPrinter &p) {
 }
 
 //===----------------------------------------------------------------------===//
+// MemoryBlockDeclareOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult MemoryBlockDeclareOp::verify() {
+  if (getBaseAddress().getBitWidth() != getType().getAddressWidth())
+    return emitOpError(
+        "base address width must match memory block address width");
+
+  if (getEndAddress().getBitWidth() != getType().getAddressWidth())
+    return emitOpError(
+        "end address width must match memory block address width");
+
+  if (getBaseAddress().ugt(getEndAddress()))
+    return emitOpError(
+        "base address must be smaller than or equal to the end address");
+
+  return success();
+}
+
+ParseResult MemoryBlockDeclareOp::parse(OpAsmParser &parser,
+                                        OperationState &result) {
+  SmallVector<OpAsmParser::UnresolvedOperand> operands;
+  MemoryBlockType memoryBlockType;
+  APInt start, end;
+
+  if (parser.parseLSquare())
+    return failure();
+
+  auto startLoc = parser.getCurrentLocation();
+  if (parser.parseInteger(start))
+    return failure();
+
+  if (parser.parseMinus())
+    return failure();
+
+  auto endLoc = parser.getCurrentLocation();
+  if (parser.parseInteger(end) || parser.parseRSquare() ||
+      parser.parseColonType(memoryBlockType) ||
+      parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  auto width = memoryBlockType.getAddressWidth();
+  auto adjustAPInt = [&](APInt value, llvm::SMLoc loc) -> FailureOr<APInt> {
+    if (value.getBitWidth() > width) {
+      if (!value.isIntN(width))
+        return parser.emitError(
+                   loc,
+                   "address out of range for memory block with address width ")
+               << width;
+
+      return value.trunc(width);
+    }
+
+    if (value.getBitWidth() < width)
+      return value.zext(width);
+
+    return value;
+  };
+
+  auto startRes = adjustAPInt(start, startLoc);
+  auto endRes = adjustAPInt(end, endLoc);
+  if (failed(startRes) || failed(endRes))
+    return failure();
+
+  auto intType = IntegerType::get(result.getContext(), width);
+  result.addAttribute(getBaseAddressAttrName(result.name),
+                      IntegerAttr::get(intType, *startRes));
+  result.addAttribute(getEndAddressAttrName(result.name),
+                      IntegerAttr::get(intType, *endRes));
+
+  result.addTypes(memoryBlockType);
+  return success();
+}
+
+void MemoryBlockDeclareOp::print(OpAsmPrinter &p) {
+  SmallVector<char> str;
+  getBaseAddress().toString(str, 16, false, false, false);
+  p << " [0x" << str;
+  p << " - 0x";
+  str.clear();
+  getEndAddress().toString(str, 16, false, false, false);
+  p << str << "] : " << getType();
+  p.printOptionalAttrDict((*this)->getAttrs(),
+                          {getBaseAddressAttrName(), getEndAddressAttrName()});
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

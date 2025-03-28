@@ -95,6 +95,7 @@ struct SetStorage;
 struct VirtualRegisterStorage;
 struct UniqueLabelStorage;
 struct TupleStorage;
+struct MemoryBlockStorage;
 
 /// Simple wrapper around a 'StringAttr' such that we know to materialize it as
 /// a label declaration instead of calling the builtin dialect constant
@@ -113,7 +114,8 @@ using ElaboratorValue =
     std::variant<TypedAttr, BagStorage *, bool, size_t, SequenceStorage *,
                  RandomizedSequenceStorage *, InterleavedSequenceStorage *,
                  SetStorage *, VirtualRegisterStorage *, UniqueLabelStorage *,
-                 LabelValue, ArrayStorage *, TupleStorage *>;
+                 LabelValue, ArrayStorage *, TupleStorage *,
+                 MemoryBlockStorage *>;
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 llvm::hash_code hash_value(const LabelValue &val) {
@@ -403,6 +405,20 @@ struct TupleStorage {
   const SmallVector<ElaboratorValue> values;
 };
 
+/// Storage object for '!rtg.isa.memoryblock`-typed values.
+struct MemoryBlockStorage {
+  MemoryBlockStorage(const APInt &baseAddress, const APInt &endAddress)
+      : baseAddress(baseAddress), endAddress(endAddress) {}
+
+  // The base address of the memory. The width of the APInt also represents the
+  // address width of the memory. This is an APInt to support memories of
+  // >64-bit machines.
+  const APInt baseAddress;
+
+  // The last address of the memory.
+  const APInt endAddress;
+};
+
 /// An 'Internalizer' object internalizes storages and takes ownership of them.
 /// When the initializer object is destroyed, all owned storages are also
 /// deallocated and thus must not be accessed anymore.
@@ -561,6 +577,13 @@ static void print(const TupleStorage *val, llvm::raw_ostream &os) {
   llvm::interleaveComma(val->values, os,
                         [&](const ElaboratorValue &val) { os << val; });
   os << ")>";
+}
+
+static void print(const MemoryBlockStorage *val, llvm::raw_ostream &os) {
+  os << "<memory-block {"
+     << ", address-width=" << val->baseAddress.getBitWidth()
+     << ", base-address=" << val->baseAddress
+     << ", end-address=" << val->endAddress << "}>";
 }
 
 static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
@@ -1457,6 +1480,12 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(CommentOp op) { return DeletionKind::Keep; }
+
+  FailureOr<DeletionKind> visitOp(MemoryBlockDeclareOp op) {
+    state[op.getResult()] = sharedState.internalizer.create<MemoryBlockStorage>(
+        op.getEndAddress(), op.getBaseAddress());
+    return DeletionKind::Delete;
+  }
 
   FailureOr<DeletionKind> visitOp(scf::IfOp op) {
     bool cond = get<bool>(op.getCondition());
