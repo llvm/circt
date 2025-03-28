@@ -152,11 +152,11 @@ def ArrayType : RTGTypeDef<"Array"> {
 // Types for ISA targets
 //===----------------------------------------------------------------------===//
 
-class RTGISATypeDef<string name, list<Trait> traits = []>
-  : RTGTypeDef<name, traits> { let mnemonic = "isa." # !tolower(name); }
+class RTGISATypeDef<string name, string mnemo, list<Trait> traits = []>
+  : RTGTypeDef<name, traits> { let mnemonic = "isa." # mnemo; }
 
 
-def LabelType : RTGISATypeDef<"Label"> {
+def LabelType : RTGISATypeDef<"Label", "label"> {
   let summary = "a reference to a label";
   let description = [{
     This type represents a label. Payload dialects can add operations to cast
@@ -167,7 +167,7 @@ def LabelType : RTGISATypeDef<"Label"> {
   let assemblyFormat = "";
 }
 
-def ImmediateType : RTGISATypeDef<"Immediate"> {
+def ImmediateType : RTGISATypeDef<"Immediate", "immediate"> {
   let summary = "an ISA immediate";
   let description = [{
     This type represents immediates of arbitrary but fixed bit-width.
@@ -181,8 +181,24 @@ def ImmediateType : RTGISATypeDef<"Immediate"> {
 
 class ImmediateOfWidth<int width> : Type<
   And<[CPred<"llvm::isa<::circt::rtg::ImmediateType>($_self)">,
-       CPred<"llvm::cast<::circt::rtg::ImmediateType>($_self).getWidth() == " # width>]>,
+       CPred<"llvm::cast<::circt::rtg::ImmediateType>($_self).getWidth() == " #
+             width>]>,
   "a " # width # "-bit immediate">,
-  BuildableType<"::circt::rtg::ImmediateType::get($_builder.getContext(), " # width # ")">;
+  BuildableType<"::circt::rtg::ImmediateType::get($_builder.getContext(), " #
+                width # ")">;
+
+def MemoryBlockType : RTGISATypeDef<"MemoryBlock", "memory_block"> {
+  let summary = "handle to a memory block";
+  let description = [{
+    A memory block is representing a continuous region in a memory map with a
+    fixed size and base address. It can refer to actual memory or a memory
+    mapped device.
+
+    It is assumed that there is only a single address space.
+  }];
+
+  let parameters = (ins "uint32_t":$addressWidth);
+  let assemblyFormat = "`<` $addressWidth `>`";
+}
 
 #endif // CIRCT_DIALECT_RTG_IR_RTGTYPES_TD

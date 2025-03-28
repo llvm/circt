@@ -133,6 +133,17 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
         return rtgImmediateTypeGetWidth(self);
       });
 
+  mlir_type_subclass(m, "MemoryBlockType", rtgTypeIsAMemoryBlock)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, uint32_t addressWidth, MlirContext ctxt) {
+            return cls(rtgMemoryBlockTypeGet(ctxt, addressWidth));
+          },
+          nb::arg("self"), nb::arg("address_width"), nb::arg("ctxt") = nullptr)
+      .def_property_readonly("address_width", [](MlirType self) {
+        return rtgMemoryBlockTypeGetAddressWidth(self);
+      });
+
   //===--------------------------------------------------------------------===//
   // Attributes
   //===--------------------------------------------------------------------===//

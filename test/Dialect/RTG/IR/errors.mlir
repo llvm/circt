@@ -226,3 +226,31 @@ rtg.test @tupleExtractOOB(tup = %tup : tuple<index, i1>) {
   // expected-error @below {{index (2) must be smaller than number of elements in tuple (2)}}
   rtg.tuple_extract %tup at 2 : tuple<index, i1>
 }
+
+// -----
+
+rtg.target @memoryBlockAddressDoesNotFit : !rtg.dict<> {
+  // expected-error @below {{address out of range for memory block with address width 2}}
+  rtg.isa.memory_block_declare [0x0 - 0x8] : !rtg.isa.memory_block<2>
+}
+
+// -----
+
+rtg.target @memoryBlockBaseAddrWidthMismatch : !rtg.dict<> {
+  // expected-error @below {{base address width must match memory block address width}}
+  "rtg.isa.memory_block_declare"() <{baseAddress=0x0 : i32, endAddress=0x8 : i64}> : () -> !rtg.isa.memory_block<64>
+}
+
+// -----
+
+rtg.target @memoryBlockEndAddrWidthMismatch : !rtg.dict<> {
+  // expected-error @below {{end address width must match memory block address width}}
+  "rtg.isa.memory_block_declare"() <{baseAddress=0x0 : i64, endAddress=0x8 : i32}> : () -> !rtg.isa.memory_block<64>
+}
+
+// -----
+
+rtg.target @memoryBlockBaseAddressLargerThanEndAddress : !rtg.dict<> {
+  // expected-error @below {{base address must be smaller than or equal to the end address}}
+  rtg.isa.memory_block_declare [0x9 - 0x8] : !rtg.isa.memory_block<64>
+}
