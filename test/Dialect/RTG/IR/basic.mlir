@@ -153,3 +153,11 @@ rtg.test @interleaveSequences(seq0 = %seq0: !rtg.randomized_sequence, seq1 = %se
   // CHECK: rtg.interleave_sequences %seq0, %seq1 batch 4 {rtg.some_attr}
   rtg.interleave_sequences %seq0, %seq1 batch 4 {rtg.some_attr}
 }
+
+// CHECK-LABEL: @memoryBlocks : !rtg.dict<mem_block: !rtg.isa.memoryblock<32>>
+rtg.target @memoryBlocks : !rtg.dict<mem_block: !rtg.isa.memoryblock<32>> {
+  // CHECK: rtg.isa.memoryblock_declare 8, 0 : i32
+  %0 = rtg.isa.memoryblock_declare 8, 0 : i32
+  
+  rtg.yield %0 : !rtg.isa.memoryblock<32>
+}

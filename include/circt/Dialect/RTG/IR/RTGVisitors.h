@@ -54,7 +54,9 @@ public:
             SetCreateOp, SetSelectRandomOp, SetDifferenceOp, SetUnionOp,
             SetSizeOp,
             // Immediates
-            IntToImmediateOp>([&](auto expr) -> ResultType {
+            IntToImmediateOp,
+            // Memory Blocks
+            MemoryBlockDeclareOp>([&](auto expr) -> ResultType {
           return thisCast->visitOp(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -115,6 +117,7 @@ public:
   HANDLE(FixedRegisterOp, Unhandled);
   HANDLE(VirtualRegisterOp, Unhandled);
   HANDLE(IntToImmediateOp, Unhandled);
+  HANDLE(MemoryBlockDeclareOp, Unhandled);
 #undef HANDLE
 };
 

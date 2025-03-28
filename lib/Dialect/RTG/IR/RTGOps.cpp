@@ -539,6 +539,20 @@ LogicalResult TargetOp::verifyRegions() {
 }
 
 //===----------------------------------------------------------------------===//
+// MemoryBlockDeclareOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult MemoryBlockDeclareOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    SmallVectorImpl<Type> &inferredReturnTypes) {
+  inferredReturnTypes.push_back(MemoryBlockType::get(
+      context,
+      properties.as<Properties *>()->baseAddress.getValue().getBitWidth()));
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
