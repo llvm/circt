@@ -508,6 +508,16 @@ rtg.test @interleaveSequences() {
   rtg.embed_sequence %6
 }
 
+rtg.target @memoryBlocks : !rtg.dict<mem_block: !rtg.isa.memoryblock<32>> {
+  %0 = rtg.isa.memoryblock_declare 8, 0 : i32
+  rtg.yield %0 : !rtg.isa.memoryblock<32>
+}
+
+// CHECK-LABEL: @memoryBlockTest_memoryBlocks
+rtg.test @memoryBlockTest(mem_block = %arg0: !rtg.isa.memoryblock<32>) {
+  // CHECK-NEXT: }
+}
+
 // -----
 
 rtg.test @nestedRegionsNotSupported() {

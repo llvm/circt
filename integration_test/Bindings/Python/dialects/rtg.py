@@ -218,3 +218,9 @@ with Context() as ctx, Location.unknown():
   print(f"value={immediate_attr.value}")
   # CHECK: #rtg.isa.immediate<32, 42>
   print(immediate_attr)
+
+  memoryblock_type = rtg.MemoryBlockType.get(32)
+  # CHECK: width=32
+  print(f"width={memoryblock_type.address_width}")
+  # CHECK: !rtg.isa.memoryblock<32>
+  print(memoryblock_type)

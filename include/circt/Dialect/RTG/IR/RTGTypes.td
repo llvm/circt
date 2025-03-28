@@ -157,4 +157,17 @@ class ImmediateOfWidth<int width> : Type<
   "a " # width # "-bit immediate">,
   BuildableType<"::circt::rtg::ImmediateType::get($_builder.getContext(), " # width # ")">;
 
+def MemoryBlockType : RTGISATypeDef<"MemoryBlock"> {
+  let summary = "handle to a memory block";
+  let description = [{
+    A memory block is representing a continuous region in a memory map with a fixed size
+    and base address. It can refer to actual memory or a memory mapped device.
+
+    It is assumed that there is only a single address space.
+  }];
+
+  let parameters = (ins "uint32_t":$addressWidth);
+  let assemblyFormat = "`<` $addressWidth `>`";
+}
+
 #endif // CIRCT_DIALECT_RTG_IR_RTGTYPES_TD
