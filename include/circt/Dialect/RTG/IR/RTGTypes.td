@@ -157,9 +157,4 @@ class ImmediateOfWidth<int width> : Type<
   "a " # width # "-bit immediate">,
   BuildableType<"::circt::rtg::ImmediateType::get($_builder.getContext(), " # width # ")">;
 
-class ImmTypeBase<int width> : TypeDef<RTGDialect, "Imm" # width, []> {
-  let summary = "represents a " # width # "-bit immediate";
-  let mnemonic = "imm" # width;
-}
-
 #endif // CIRCT_DIALECT_RTG_IR_RTGTYPES_TD

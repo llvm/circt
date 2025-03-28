@@ -3,8 +3,8 @@
 // CHECK-LABEL: @cpus
 // CHECK-SAME: !rtgtest.cpu
 rtg.target @cpus : !rtg.dict<cpu: !rtgtest.cpu> {
-  // CHECK: rtgtest.cpu_decl <0>
-  %0 = rtgtest.cpu_decl <0>
+  // CHECK: rtg.constant #rtgtest.cpu<0> : !rtgtest.cpu
+  %0 = rtg.constant #rtgtest.cpu<0>
   rtg.yield %0 : !rtgtest.cpu
 }
 
@@ -85,23 +85,9 @@ rtg.test @registers(reg = %reg: !rtgtest.ireg) {
   rtg.virtual_reg [#rtgtest.ra, #rtgtest.sp]
 }
 
-// CHECK-LABEL: @immediates
-rtg.test @immediates() {
-  // CHECK: rtgtest.immediate #rtgtest.imm5<3> : !rtgtest.imm5
-  rtgtest.immediate #rtgtest.imm5<3> : !rtgtest.imm5
-  // CHECK: rtgtest.immediate #rtgtest.imm12<3> : !rtgtest.imm12
-  rtgtest.immediate #rtgtest.imm12<3> : !rtgtest.imm12
-  // CHECK: rtgtest.immediate #rtgtest.imm13<3> : !rtgtest.imm13
-  rtgtest.immediate #rtgtest.imm13<3> : !rtgtest.imm13
-  // CHECK: rtgtest.immediate #rtgtest.imm21<3> : !rtgtest.imm21
-  rtgtest.immediate #rtgtest.imm21<3> : !rtgtest.imm21
-  // CHECK: rtgtest.immediate #rtgtest.imm32<3> : !rtgtest.imm32
-  rtgtest.immediate #rtgtest.imm32<3> : !rtgtest.imm32
-}
-
 // CHECK-LABEL: @instructions
-// CHECK-SAME: (imm = [[IMM:%.+]]: !rtgtest.imm12, imm13 = [[IMM13:%.+]]: !rtgtest.imm13, imm21 = [[IMM21:%.+]]: !rtgtest.imm21, imm32 = [[IMM32:%.+]]: !rtgtest.imm32, imm5 = [[IMM5:%.+]]: !rtgtest.imm5, label = [[LABEL:%.+]]: !rtg.isa.label, rd = [[RD:%.+]]: !rtgtest.ireg, rs = [[RS:%.+]]: !rtgtest.ireg)
-rtg.test @instructions(imm = %imm: !rtgtest.imm12, imm13 = %imm13: !rtgtest.imm13, imm21 = %imm21: !rtgtest.imm21, imm32 = %imm32: !rtgtest.imm32, imm5 = %imm5: !rtgtest.imm5, label = %label: !rtg.isa.label, rd = %rd: !rtgtest.ireg, rs = %rs: !rtgtest.ireg) {
+// CHECK-SAME: (imm = [[IMM:%.+]]: !rtg.isa.immediate<12>, imm13 = [[IMM13:%.+]]: !rtg.isa.immediate<13>, imm21 = [[IMM21:%.+]]: !rtg.isa.immediate<21>, imm32 = [[IMM32:%.+]]: !rtg.isa.immediate<32>, imm5 = [[IMM5:%.+]]: !rtg.isa.immediate<5>, label = [[LABEL:%.+]]: !rtg.isa.label, rd = [[RD:%.+]]: !rtgtest.ireg, rs = [[RS:%.+]]: !rtgtest.ireg)
+rtg.test @instructions(imm = %imm: !rtg.isa.immediate<12>, imm13 = %imm13: !rtg.isa.immediate<13>, imm21 = %imm21: !rtg.isa.immediate<21>, imm32 = %imm32: !rtg.isa.immediate<32>, imm5 = %imm5: !rtg.isa.immediate<5>, label = %label: !rtg.isa.label, rd = %rd: !rtgtest.ireg, rs = %rs: !rtgtest.ireg) {
   // CHECK: rtgtest.rv32i.jalr [[RD]], [[RS]], [[IMM]]
   rtgtest.rv32i.jalr %rd, %rs, %imm
   // CHECK: rtgtest.rv32i.lb [[RD]], [[RS]], [[IMM]]
@@ -118,18 +104,18 @@ rtg.test @instructions(imm = %imm: !rtgtest.imm12, imm13 = %imm13: !rtgtest.imm1
   rtgtest.rv32i.ecall
   // CHECK: rtgtest.rv32i.ebreak
   rtgtest.rv32i.ebreak
-  // CHECK: rtgtest.rv32i.beq [[RD]], [[RS]], [[IMM13]] : !rtgtest.imm13
-  rtgtest.rv32i.beq %rd, %rs, %imm13 : !rtgtest.imm13
-  // CHECK: rtgtest.rv32i.bne [[RD]], [[RS]], [[IMM13]] : !rtgtest.imm13
-  rtgtest.rv32i.bne %rd, %rs, %imm13 : !rtgtest.imm13
-  // CHECK: rtgtest.rv32i.blt [[RD]], [[RS]], [[IMM13]] : !rtgtest.imm13
-  rtgtest.rv32i.blt %rd, %rs, %imm13 : !rtgtest.imm13
-  // CHECK: rtgtest.rv32i.bge [[RD]], [[RS]], [[IMM13]] : !rtgtest.imm13
-  rtgtest.rv32i.bge %rd, %rs, %imm13 : !rtgtest.imm13
-  // CHECK: rtgtest.rv32i.bltu [[RD]], [[RS]], [[IMM13]] : !rtgtest.imm13
-  rtgtest.rv32i.bltu %rd, %rs, %imm13 : !rtgtest.imm13
-  // CHECK: rtgtest.rv32i.bgeu [[RD]], [[RS]], [[IMM13]] : !rtgtest.imm13
-  rtgtest.rv32i.bgeu %rd, %rs, %imm13 : !rtgtest.imm13
+  // CHECK: rtgtest.rv32i.beq [[RD]], [[RS]], [[IMM13]] : !rtg.isa.immediate<13>
+  rtgtest.rv32i.beq %rd, %rs, %imm13 : !rtg.isa.immediate<13>
+  // CHECK: rtgtest.rv32i.bne [[RD]], [[RS]], [[IMM13]] : !rtg.isa.immediate<13>
+  rtgtest.rv32i.bne %rd, %rs, %imm13 : !rtg.isa.immediate<13>
+  // CHECK: rtgtest.rv32i.blt [[RD]], [[RS]], [[IMM13]] : !rtg.isa.immediate<13>
+  rtgtest.rv32i.blt %rd, %rs, %imm13 : !rtg.isa.immediate<13>
+  // CHECK: rtgtest.rv32i.bge [[RD]], [[RS]], [[IMM13]] : !rtg.isa.immediate<13>
+  rtgtest.rv32i.bge %rd, %rs, %imm13 : !rtg.isa.immediate<13>
+  // CHECK: rtgtest.rv32i.bltu [[RD]], [[RS]], [[IMM13]] : !rtg.isa.immediate<13>
+  rtgtest.rv32i.bltu %rd, %rs, %imm13 : !rtg.isa.immediate<13>
+  // CHECK: rtgtest.rv32i.bgeu [[RD]], [[RS]], [[IMM13]] : !rtg.isa.immediate<13>
+  rtgtest.rv32i.bgeu %rd, %rs, %imm13 : !rtg.isa.immediate<13>
   // CHECK: rtgtest.rv32i.beq [[RD]], [[RS]], [[LABEL]] : !rtg.isa.label
   rtgtest.rv32i.beq %rd, %rs, %label : !rtg.isa.label
   // CHECK: rtgtest.rv32i.bne [[RD]], [[RS]], [[LABEL]] : !rtg.isa.label
@@ -171,12 +157,12 @@ rtg.test @instructions(imm = %imm: !rtgtest.imm12, imm13 = %imm13: !rtgtest.imm1
   // CHECK: rtgtest.rv32i.sw [[RD]], [[RS]], [[IMM]] {rtg.some_attr}
   rtgtest.rv32i.sw %rd, %rs, %imm {rtg.some_attr}
 
-  // CHECK: rtgtest.rv32i.lui [[RD]], [[IMM32]] : !rtgtest.imm32 {rtg.some_attr}
-  rtgtest.rv32i.lui %rd, %imm32 : !rtgtest.imm32 {rtg.some_attr}
-  // CHECK: rtgtest.rv32i.auipc [[RD]], [[IMM32]] : !rtgtest.imm32 {rtg.some_attr}
-  rtgtest.rv32i.auipc %rd, %imm32 : !rtgtest.imm32 {rtg.some_attr}
-  // CHECK: rtgtest.rv32i.jal [[RD]], [[IMM21]] : !rtgtest.imm21 {rtg.some_attr}
-  rtgtest.rv32i.jal %rd, %imm21 : !rtgtest.imm21 {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.lui [[RD]], [[IMM32]] : !rtg.isa.immediate<32> {rtg.some_attr}
+  rtgtest.rv32i.lui %rd, %imm32 : !rtg.isa.immediate<32> {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.auipc [[RD]], [[IMM32]] : !rtg.isa.immediate<32> {rtg.some_attr}
+  rtgtest.rv32i.auipc %rd, %imm32 : !rtg.isa.immediate<32> {rtg.some_attr}
+  // CHECK: rtgtest.rv32i.jal [[RD]], [[IMM21]] : !rtg.isa.immediate<21> {rtg.some_attr}
+  rtgtest.rv32i.jal %rd, %imm21 : !rtg.isa.immediate<21> {rtg.some_attr}
 
   // CHECK: rtgtest.rv32i.lui [[RD]], [[LABEL]] : !rtg.isa.label {rtg.some_attr}
   rtgtest.rv32i.lui %rd, %label : !rtg.isa.label {rtg.some_attr}
@@ -204,13 +190,6 @@ rtg.test @instructions(imm = %imm: !rtgtest.imm12, imm13 = %imm13: !rtgtest.imm1
   rtgtest.rv32i.srli %rd, %rs, %imm5 {rtg.some_attr}
   // CHECK: rtgtest.rv32i.srai [[RD]], [[RS]], [[IMM5]] {rtg.some_attr}
   rtgtest.rv32i.srai %rd, %rs, %imm5 {rtg.some_attr}
-}
-
-// -----
-
-rtg.test @immediateTooBig() {
-  // expected-error @below {{cannot represent 2000000 with 12 bits}}
-  rtgtest.immediate #rtgtest.imm12<2000000> : !rtgtest.imm12
 }
 
 // -----

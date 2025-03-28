@@ -18,29 +18,6 @@ using namespace circt;
 using namespace rtgtest;
 
 //===----------------------------------------------------------------------===//
-// CPUDeclOp
-//===----------------------------------------------------------------------===//
-
-mlir::OpFoldResult CPUDeclOp::fold(FoldAdaptor adaptor) { return getId(); }
-
-//===----------------------------------------------------------------------===//
-// ImmediateOp
-//===----------------------------------------------------------------------===//
-
-mlir::OpFoldResult ImmediateOp::fold(FoldAdaptor adaptor) {
-  return getImmAttr();
-}
-
-LogicalResult ImmediateOp::inferReturnTypes(
-    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attributes, OpaqueProperties properties,
-    mlir::RegionRange regions, SmallVectorImpl<Type> &inferredReturnTypes) {
-  inferredReturnTypes.push_back(
-      cast<TypedAttr>(properties.as<Properties *>()->getImm()).getType());
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // ConstantTestOp
 //===----------------------------------------------------------------------===//
 
