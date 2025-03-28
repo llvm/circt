@@ -1449,7 +1449,7 @@ circuit Layers:
 
 ;// -----
 ; CHECK-LABEL: firrtl.circuit "BasicProps"
-FIRRTL version 4.3.0
+FIRRTL version 5.1.0
 circuit BasicProps :
   public module BasicProps :
   ; CHECK-LABEL: module private @Integer
@@ -1655,7 +1655,7 @@ circuit WireOfProbesAndNames:
     wire probe : Probe<UInt<1>>
 
 ;// -----
-FIRRTL version 4.3.0
+FIRRTL version 5.1.0
 
 ; CHECK-LABEL: circuit "AnyRef"
 circuit AnyRef:
@@ -1890,7 +1890,7 @@ circuit Foo:
     d_map = {a = 42, b = "hello", c = [9001], d = {foo = 1337}}
 
 ;// -----
-FIRRTL version 4.3.0
+FIRRTL version 5.1.0
 ; CHECK-LABEL: circuit "Foo"
 circuit Foo:
 
@@ -2007,7 +2007,7 @@ circuit Foo:
     b <= a
 
 ;// -----
-FIRRTL version 4.3.0
+FIRRTL version 5.1.0
 ; CHECK-LABEL: firrtl.circuit "Contracts"
 circuit Contracts:
   ; CHECK-LABEL: firrtl.module @Contracts(
