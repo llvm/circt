@@ -8,19 +8,24 @@ from .rtg import rtg
 from .rtgtest import rtgtest
 from .core import Value
 from .circt import ir
+from .integers import Integer
 
 from typing import Union
 
 
 class Immediate(Value):
 
-  def __init__(self, width: int, value: Union[ir.Value, int]) -> Immediate:
+  def __init__(self, width: int, value: Union[ir.Value, int,
+                                              Integer]) -> Immediate:
     self._width = width
     self._value = value
 
   def _get_ssa_value(self) -> ir.Value:
     if isinstance(self._value, int):
       self = rtg.ConstantOp(rtg.ImmediateAttr.get(self._width, self._value))
+    if isinstance(self._value, Integer):
+      self = rtg.IntToImmediateOp(rtg.ImmediateType.get(self._width),
+                                  self._value)
     return self._value
 
   def get_type(self) -> ir.Type:
