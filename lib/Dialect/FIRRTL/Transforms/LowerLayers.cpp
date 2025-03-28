@@ -602,9 +602,28 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
             }
 
       // For any other ops, create input ports for any captured operands.
-      for (auto operand : op->getOperands()) {
-        if (!isAncestorOfValueOwner(layerBlock, operand))
-          createInputPort(operand, op->getLoc());
+      for (size_t i = 0, e = op->getNumOperands(); i != e; ++i) {
+        auto operand = op->getOperand(i);
+
+        // If the operand is in this layer block, do nothing.
+        if(isAncestorOfValueOwner(layerBlock, operand))
+          continue;
+
+        // If the operand is "special", e.g., it has no port representation,
+        // then we need to clone it.
+        //
+        // TODO: Change this to recursively clone.  This will matter once
+        // FString operations have operands.
+        if (type_isa<FStringType>(operand.getType())) {
+          OpBuilder::InsertionGuard guard(builder);
+          builder.setInsertionPoint(op);
+          op->setOperand(i,
+                         builder.clone(*operand.getDefiningOp())->getResult(0));
+          continue;
+        }
+
+        // Create a port to capture the operand.
+        createInputPort(operand, op->getLoc());
       }
 
       if (auto verbatim = dyn_cast<sv::VerbatimOp>(op))
