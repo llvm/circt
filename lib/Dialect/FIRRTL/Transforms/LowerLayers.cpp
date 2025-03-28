@@ -606,7 +606,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         auto operand = op->getOperand(i);
 
         // If the operand is in this layer block, do nothing.
-        if(isAncestorOfValueOwner(layerBlock, operand))
+        if (isAncestorOfValueOwner(layerBlock, operand))
           continue;
 
         // If the operand is "special", e.g., it has no port representation,
