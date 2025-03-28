@@ -136,19 +136,21 @@ void TestCase::ensureFileOnDisk() {
     if (tester.emitBytecode) {
       if (failed(writeBytecodeToFile(
               module, file->os(),
-              mlir::BytecodeWriterConfig(getCirctVersion()))))
+              mlir::BytecodeWriterConfig(getCirctVersion())))) {
+        file->os().close();
         llvm::report_fatal_error(
             llvm::Twine("Error emitting the IR to file `") + filepath + "`",
             false);
-      file->os().close();
+      }
     } else {
       module.print(file->os());
-      file->os().close();
-      if (file->os().has_error())
-        llvm::report_fatal_error(
-            llvm::Twine("Error emitting the IR to file `") + filepath + "`",
-            false);
     }
+
+    file->os().close();
+    if (file->os().has_error())
+      llvm::report_fatal_error(llvm::Twine("Error emitting the IR to file `") +
+                                   filepath + "`",
+                               false);
 
     // Update the file size.
     size = file->os().tell();
