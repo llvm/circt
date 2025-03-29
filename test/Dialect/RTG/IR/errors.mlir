@@ -1,5 +1,18 @@
 // RUN: circt-opt %s --split-input-file --verify-diagnostics
 
+rtg.test @constantTooBig() {
+  // expected-error @below {{integer value out-of-range for bit-width 2}}
+  rtg.constant #rtg.isa.immediate<2, 4>
+}
+
+// -----
+
+rtg.test @immediateWidthMismatch() {
+  // expected-error @below {{explicit immediate type bit-width does not match attribute bit-width, 1 vs 2}}
+  rtg.constant #rtg.isa.immediate<2, 1> : !rtg.isa.immediate<1>
+}
+
+// -----
 
 func.func @seq0() {
   return

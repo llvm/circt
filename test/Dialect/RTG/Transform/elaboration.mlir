@@ -5,6 +5,15 @@ func.func @dummy2(%arg0: index) -> () {return}
 func.func @dummy3(%arg0: !rtg.sequence) -> () {return}
 func.func @dummy4(%arg0: index, %arg1: index, %arg2: !rtg.bag<index>, %arg3: !rtg.bag<index>) -> () {return}
 func.func @dummy5(%arg0: i1) -> () {return}
+func.func @dummy6(%arg0: !rtg.isa.immediate<2>) -> () {return}
+
+// CHECK-LABEL: @constantImmediate
+rtg.test @constantImmediate() {
+  // CHECK-NEXT: [[V0:%.+]] = rtg.constant #rtg.isa.immediate<2, -1>
+  // CHECK-NEXT: func.call @dummy6([[V0]]) : (!rtg.isa.immediate<2>) -> ()
+  %0 = rtg.constant #rtg.isa.immediate<2, -1>
+  func.call @dummy6(%0) : (!rtg.isa.immediate<2>) -> ()
+}
 
 // Test the set operations and passing a sequence to another one via argument
 // CHECK-LABEL: rtg.test @setOperations
@@ -574,17 +583,17 @@ rtg.test @contextSwitchNotAvailable(cpu = %cpu: !rtgtest.cpu) {
 // -----
 
 rtg.test @emptySetSelect() {
-  %0 = rtg.set_create : !rtg.label
+  %0 = rtg.set_create : !rtg.isa.label
   // expected-error @below {{cannot select from an empty set}}
-  %1 = rtg.set_select_random %0 : !rtg.set<!rtg.label>
+  %1 = rtg.set_select_random %0 : !rtg.set<!rtg.isa.label>
   rtg.label local %1
 }
 
 // -----
 
 rtg.test @emptyBagSelect() {
-  %0 = rtg.bag_create : !rtg.label
+  %0 = rtg.bag_create : !rtg.isa.label
   // expected-error @below {{cannot select from an empty bag}}
-  %1 = rtg.bag_select_random %0 : !rtg.bag<!rtg.label>
+  %1 = rtg.bag_select_random %0 : !rtg.bag<!rtg.isa.label>
   rtg.label local %1
 }

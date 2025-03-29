@@ -115,8 +115,37 @@ MlirType rtgDictTypeGet(MlirContext ctxt, intptr_t numEntries,
   return wrap(DictType::get(unwrap(ctxt), entries));
 }
 
+// ImmediateType
+//===----------------------------------------------------------------------===//
+
+bool rtgTypeIsAImmediate(MlirType type) {
+  return isa<ImmediateType>(unwrap(type));
+}
+
+MlirType rtgImmediateTypeGet(MlirContext ctx, uint32_t width) {
+  return wrap(ImmediateType::get(unwrap(ctx), width));
+}
+
+uint32_t rtgImmediateTypeGetWidth(MlirType type) {
+  return cast<ImmediateType>(unwrap(type)).getWidth();
+}
+
 //===----------------------------------------------------------------------===//
 // Attribute API.
+//===----------------------------------------------------------------------===//
+
+// DefaultContext
+//===----------------------------------------------------------------------===//
+
+bool rtgAttrIsADefaultContextAttr(MlirAttribute attr) {
+  return isa<DefaultContextAttr>(unwrap(attr));
+}
+
+MlirAttribute rtgDefaultContextAttrGet(MlirContext ctxt, MlirType type) {
+  return wrap(DefaultContextAttr::get(unwrap(ctxt), unwrap(type)));
+}
+
+// Label Visibility
 //===----------------------------------------------------------------------===//
 
 bool rtgAttrIsALabelVisibilityAttr(MlirAttribute attr) {
@@ -152,10 +181,22 @@ MlirAttribute rtgLabelVisibilityAttrGet(MlirContext ctxt,
   return wrap(LabelVisibilityAttr::get(unwrap(ctxt), convert(visibility)));
 }
 
-bool rtgAttrIsADefaultContextAttr(MlirAttribute attr) {
-  return isa<DefaultContextAttr>(unwrap(attr));
+// ImmediateAttr
+//===----------------------------------------------------------------------===//
+
+bool rtgAttrIsAImmediate(MlirAttribute attr) {
+  return isa<ImmediateAttr>(unwrap(attr));
 }
 
-MlirAttribute rtgDefaultContextAttrGet(MlirContext ctxt, MlirType type) {
-  return wrap(DefaultContextAttr::get(unwrap(ctxt), unwrap(type)));
+MlirAttribute rtgImmediateAttrGet(MlirContext ctx, uint32_t width,
+                                  uint64_t value) {
+  return wrap(rtg::ImmediateAttr::get(unwrap(ctx), APInt(width, value)));
+}
+
+uint32_t rtgImmediateAttrGetWidth(MlirAttribute attr) {
+  return cast<ImmediateAttr>(unwrap(attr)).getValue().getBitWidth();
+}
+
+uint64_t rtgImmediateAttrGetValue(MlirAttribute attr) {
+  return cast<ImmediateAttr>(unwrap(attr)).getValue().getZExtValue();
 }

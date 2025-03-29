@@ -23,6 +23,13 @@ using namespace mlir::python::nanobind_adaptors;
 void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
   m.doc() = "RTG dialect Python native extension";
 
+  //===--------------------------------------------------------------------===//
+  // Types
+  //===--------------------------------------------------------------------===//
+
+  // Sequence Types
+  //===--------------------------------------------------------------------===//
+
   mlir_type_subclass(m, "SequenceType", rtgTypeIsASequence)
       .def_classmethod(
           "get",
@@ -48,13 +55,8 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
           },
           nb::arg("self"), nb::arg("ctxt") = nullptr);
 
-  mlir_type_subclass(m, "LabelType", rtgTypeIsALabel)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, MlirContext ctxt) {
-            return cls(rtgLabelTypeGet(ctxt));
-          },
-          nb::arg("self"), nb::arg("ctxt") = nullptr);
+  // Common Datastructure Types
+  //===--------------------------------------------------------------------===//
 
   mlir_type_subclass(m, "SetType", rtgTypeIsASet)
       .def_classmethod(
@@ -98,6 +100,43 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
               std::vector<std::pair<MlirAttribute, MlirType>>(),
           nb::arg("ctxt") = nullptr);
 
+  // Types for ISA targets
+  //===--------------------------------------------------------------------===//
+
+  mlir_type_subclass(m, "LabelType", rtgTypeIsALabel)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, MlirContext ctxt) {
+            return cls(rtgLabelTypeGet(ctxt));
+          },
+          nb::arg("self"), nb::arg("ctxt") = nullptr);
+
+  mlir_type_subclass(m, "ImmediateType", rtgTypeIsAImmediate)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, uint32_t width, MlirContext ctx) {
+            return cls(rtgImmediateTypeGet(ctx, width));
+          },
+          nb::arg("self"), nb::arg("width"), nb::arg("ctx") = nullptr)
+      .def_property_readonly("width", [](MlirType self) {
+        return rtgImmediateTypeGetWidth(self);
+      });
+
+  //===--------------------------------------------------------------------===//
+  // Attributes
+  //===--------------------------------------------------------------------===//
+
+  mlir_attribute_subclass(m, "DefaultContextAttr", rtgAttrIsADefaultContextAttr)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, MlirType type, MlirContext ctxt) {
+            return cls(rtgDefaultContextAttrGet(ctxt, type));
+          },
+          nb::arg("self"), nb::arg("type"), nb::arg("ctxt") = nullptr);
+
+  // Attributes for ISA targets
+  //===--------------------------------------------------------------------===//
+
   nb::enum_<RTGLabelVisibility>(m, "LabelVisibility")
       .value("LOCAL", RTG_LABEL_VISIBILITY_LOCAL)
       .value("GLOBAL", RTG_LABEL_VISIBILITY_GLOBAL)
@@ -116,11 +155,18 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
         return rtgLabelVisibilityAttrGetValue(self);
       });
 
-  mlir_attribute_subclass(m, "DefaultContextAttr", rtgAttrIsADefaultContextAttr)
+  mlir_attribute_subclass(m, "ImmediateAttr", rtgAttrIsAImmediate)
       .def_classmethod(
           "get",
-          [](nb::object cls, MlirType type, MlirContext ctxt) {
-            return cls(rtgDefaultContextAttrGet(ctxt, type));
+          [](nb::object cls, uint32_t width, uint64_t value, MlirContext ctx) {
+            return cls(rtgImmediateAttrGet(ctx, width, value));
           },
-          nb::arg("self"), nb::arg("type"), nb::arg("ctxt") = nullptr);
+          nb::arg("self"), nb::arg("width"), nb::arg("value"),
+          nb::arg("ctx") = nullptr)
+      .def_property_readonly(
+          "width",
+          [](MlirAttribute self) { return rtgImmediateAttrGetWidth(self); })
+      .def_property_readonly("value", [](MlirAttribute self) {
+        return rtgImmediateAttrGetValue(self);
+      });
 }
