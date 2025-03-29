@@ -1430,6 +1430,9 @@ struct FIRModuleContext : public FIRParser {
                           insertNameIntoGlobalScope);
   }
 
+  // Removes a symbol from symbolTable (Workaround since symbolTable is private)
+  void removeSymbolEntry(StringRef name);
+
   /// Resolved a symbol table entry to a value.  Emission of error is optional.
   ParseResult resolveSymbolEntry(Value &result, SymbolValueEntry &entry,
                                  SMLoc loc, bool fatal = true);
@@ -1511,6 +1514,11 @@ private:
 
 } // end anonymous namespace
 
+// Removes a symbol from symbolTable (Workaround since symbolTable is private)
+void FIRModuleContext::removeSymbolEntry(StringRef name) {
+  symbolTable.erase(name);
+}
+
 /// Add a symbol entry with the specified name, returning failure if the name
 /// is already defined.
 ///
@@ -1522,12 +1530,22 @@ ParseResult FIRModuleContext::addSymbolEntry(StringRef name,
                                              bool insertNameIntoGlobalScope) {
   // Do a lookup by trying to do an insertion.  Do so in a way that we can tell
   // if we hit a missing element (SMLoc is null).
-  auto entryIt =
-      symbolTable.try_emplace(name, SMLoc(), SymbolValueEntry()).first;
-  if (entryIt->second.first.isValid()) {
-    emitError(loc, "redefinition of name '" + name + "'")
-            .attachNote(translateLocation(entryIt->second.first))
-        << "previous definition here";
+  auto [entryIt, inserted] =
+      symbolTable.try_emplace(name, SMLoc(), SymbolValueEntry());
+
+  // If insertion failed, the name already exists
+  if (!inserted) {
+    if (entryIt->second.first.isValid()) {
+      // Valid activeSMLoc: active symbol in current scope redeclared
+      emitError(loc, "redefinition of name '" + name + "' ")
+              .attachNote(translateLocation(entryIt->second.first))
+          << "previous definition here.";
+    } else {
+      // Invalid activeSMLoc: symbol from a completed scope redeclared
+      emitError(loc, "redefinition of name '" + name + "' ")
+          << "- FIRRTL has flat namespace and requires all "
+          << "declarations in a module to have unique names.";
+    }
     return failure();
   }
 
@@ -1536,7 +1554,6 @@ ParseResult FIRModuleContext::addSymbolEntry(StringRef name,
   entryIt->second = {loc, entry};
   if (currentScope && !insertNameIntoGlobalScope)
     currentScope->scopedDecls.push_back(&*entryIt);
-
   return success();
 }
 
@@ -4878,10 +4895,12 @@ ParseResult FIRStmtParser::parseContract(unsigned blockIndent) {
 
   // Declare the results.
   for (auto [id, loc, value, result] :
-       llvm::zip(ids, locs, values, contract.getResults()))
+       llvm::zip(ids, locs, values, contract.getResults())) {
+    // Remove previous symbol to avoid duplicates
+    moduleContext.removeSymbolEntry(id);
     if (failed(moduleContext.addSymbolEntry(id, result, loc)))
       return failure();
-
+  }
   return success();
 }
 
