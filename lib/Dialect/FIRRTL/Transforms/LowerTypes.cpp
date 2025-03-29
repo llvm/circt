@@ -1508,7 +1508,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       op.getNameKindAttr(), direction::packAttribute(context, newDirs),
       builder->getArrayAttr(newNames), op.getAnnotations(),
       builder->getArrayAttr(newPortAnno), op.getLayersAttr(),
-      op.getLowerToBindAttr(),
+      op.getLowerToBindAttr(), op.getDoNotPrintAttr(),
       sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
 
   newInstance->setDiscardableAttrs(op->getDiscardableAttrDictionary());

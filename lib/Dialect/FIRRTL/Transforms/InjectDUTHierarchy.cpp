@@ -177,7 +177,7 @@ void InjectDUTHierarchy::runOnOperation() {
   auto wrapperInst =
       b.create<InstanceOp>(b.getUnknownLoc(), wrapper, wrapper.getModuleName(),
                            NameKindEnum::DroppableName, ArrayRef<Attribute>{},
-                           ArrayRef<Attribute>{}, false,
+                           ArrayRef<Attribute>{}, false, false,
                            hw::InnerSymAttr::get(b.getStringAttr(
                                dutNS.newName(wrapper.getModuleName()))));
   for (const auto &pair : llvm::enumerate(wrapperInst.getResults())) {
