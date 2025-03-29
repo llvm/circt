@@ -797,6 +797,6 @@ firrtl.circuit "Verbatim" {
 // CHECK:        firrtl.module private @[[VL:.+]]() {
 // CHECK-NEXT:     firrtl.constant 1
 // CHECK-NEXT:     firrtl.node sym @node
-// CHECK-NEXT:     sv.verbatim 
+// CHECK-NEXT:     sv.verbatim
 // CHECK-SAME:     !firrtl.uint<10> {symbols = [#hw.innerNameRef<@[[VL]]::@node>]}
 // CHECK-NEXT:   }
