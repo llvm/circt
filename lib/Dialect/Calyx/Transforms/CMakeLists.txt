@@ -10,6 +10,7 @@ add_circt_dialect_library(CIRCTCalyxTransforms
   AffineParallelUnroll.cpp
   AffineToSCF.cpp
   AffinePloopUnparallelize.cpp
+  ExcludeExecuteRegionCanonicalize.cpp
 
   DEPENDS
   CIRCTCalyxTransformsIncGen
