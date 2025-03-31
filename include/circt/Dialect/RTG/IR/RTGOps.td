@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/BuiltinTypes.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/CommonAttrConstraints.td"
@@ -523,6 +524,36 @@ def ArraySizeOp : RTGOp<"array_size", [Pure]> {
   let results = (outs Index:$result);
 
   let assemblyFormat = "$array `:` qualified(type($array)) attr-dict";
+}
+
+//===- Tuple Operations ---------------------------------------------------===//
+
+def TupleCreateOp : RTGOp<"tuple_create", [
+  Pure,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "create a tuple";
+
+  let arguments = (ins Variadic<AnyType>:$elements);
+  let results = (outs Builtin_Tuple:$result);
+
+  let assemblyFormat = [{
+    ($elements^ `:` qualified(type($elements)))? attr-dict
+  }];
+}
+
+def TupleExtractOp : RTGOp<"tuple_extract", [
+  Pure,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "get an element from a tuple";
+
+  let arguments = (ins Builtin_Tuple:$tuple, IndexAttr:$index);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    $tuple `at` $index `:` qualified(type($tuple)) attr-dict
+  }];
 }
 
 //===- Integer Operations -------------------------------------------------===//

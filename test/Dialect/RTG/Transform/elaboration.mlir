@@ -7,6 +7,7 @@ func.func @dummy4(%arg0: index, %arg1: index, %arg2: !rtg.bag<index>, %arg3: !rt
 func.func @dummy5(%arg0: i1) -> () {return}
 func.func @dummy6(%arg0: !rtg.isa.immediate<2>) -> () {return}
 func.func @dummy7(%arg0: !rtg.array<index>) -> () {return}
+func.func @dummy8(%arg0: tuple<index, index>) -> () {return}
 
 // CHECK-LABEL: @immediates
 rtg.test @immediates() {
@@ -547,6 +548,23 @@ rtg.test @arithOps() {
   %5 = arith.ori %4, %1 : i1
   %6 = arith.select %5, %2, %0 : index
   func.call @dummy2(%6) : (index) -> ()
+}
+
+// CHECK-LABEL: rtg.test @tuples
+rtg.test @tuples() {
+  %idx0 = index.constant 0
+  %idx1 = index.constant 1
+  %0 = rtg.tuple_create %idx1, %idx0 : index, index
+  %1 = rtg.tuple_extract %0 at 1 : tuple<index, index>
+
+  // CHECK-NEXT: %idx1 = index.constant 1
+  // CHECK-NEXT: %idx0 = index.constant 0
+  // CHECK-NEXT: [[V0:%.+]] = rtg.tuple_create %idx1, %idx0 : index, index
+  // CHECK-NEXT: func.call @dummy8([[V0]])
+  func.call @dummy8(%0) : (tuple<index, index>) -> ()
+
+  // CHECK-NEXT: func.call @dummy2(%idx0)
+  func.call @dummy2(%1) : (index) -> ()
 }
 
 // -----

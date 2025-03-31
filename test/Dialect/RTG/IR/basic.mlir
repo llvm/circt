@@ -170,3 +170,15 @@ rtg.test @arrays(arr = %arr: !rtg.array<index>) {
   %3 = rtg.array_inject %2[%idx1], %idx1 : !rtg.array<index>
   %4 = rtg.array_size %3 : !rtg.array<index>
 }
+
+// CHECK-LABEL: rtg.test @tuples
+rtg.test @tuples() {
+  // CHECK-NEXT: [[IDX0:%.+]] = index.constant 0
+  // CHECK-NEXT: [[TRUE:%.+]] = index.bool.constant true
+  // CHECK-NEXT: [[TUPLE:%.+]] = rtg.tuple_create [[IDX0]], [[TRUE]] : index, i1
+  // CHECK-NEXT: rtg.tuple_extract [[TUPLE]] at 1 : tuple<index, i1>
+  %idx0 = index.constant 0
+  %true = index.bool.constant true
+  %0 = rtg.tuple_create %idx0, %true : index, i1
+  %1 = rtg.tuple_extract %0 at 1 : tuple<index, i1>
+}
