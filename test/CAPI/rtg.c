@@ -175,7 +175,7 @@ static void testImmediate(MlirContext ctx) {
           rtgImmediateAttrGetValue(immediateAttr));
 }
 
-static void testMemoryBlock(MlirContext ctx) {
+static void testMemories(MlirContext ctx) {
   MlirType memoryBlockTy = rtgMemoryBlockTypeGet(ctx, 32);
 
   // CHECK: is_memory_block
@@ -187,6 +187,15 @@ static void testMemoryBlock(MlirContext ctx) {
   // CHECK: address_width=32
   fprintf(stderr, "address_width=%u\n",
           rtgMemoryBlockTypeGetAddressWidth(memoryBlockTy));
+
+  MlirType memoryTy = rtgMemoryTypeGet(ctx, 32);
+  // CHECK: is_memory
+  fprintf(stderr,
+          rtgTypeIsAMemory(memoryTy) ? "is_memory\n" : "isnot_memory\n");
+  // CHECK: addressWidth=32
+  fprintf(stderr, "addressWidth=%u\n", rtgMemoryTypeGetAddressWidth(memoryTy));
+  // CHECK: !rtg.isa.memory<32>
+  mlirTypeDump(memoryTy);
 }
 
 int main(int argc, char **argv) {
@@ -205,7 +214,7 @@ int main(int argc, char **argv) {
   testLabelVisibilityAttr(ctx);
   testDefaultContextAttr(ctx);
   testImmediate(ctx);
-  testMemoryBlock(ctx); // Add the new test
+  testMemories(ctx);
 
   mlirContextDestroy(ctx);
 

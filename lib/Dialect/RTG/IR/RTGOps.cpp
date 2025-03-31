@@ -732,6 +732,24 @@ void MemoryBlockDeclareOp::print(OpAsmPrinter &p) {
 }
 
 //===----------------------------------------------------------------------===//
+// MemoryBaseAddressOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult MemoryBaseAddressOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    SmallVectorImpl<Type> &inferredReturnTypes) {
+  if (operands.empty())
+    return failure();
+  auto memTy = dyn_cast<MemoryType>(operands[0].getType());
+  if (!memTy)
+    return failure();
+  inferredReturnTypes.push_back(
+      ImmediateType::get(context, memTy.getAddressWidth()));
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
