@@ -455,6 +455,45 @@ def BagUniqueSizeOp : RTGOp<"bag_unique_size", [Pure]> {
   }];
 }
 
+//===- Array Operations -------------------------------------------------===//
+
+def ArrayCreateOp : RTGOp<"array_create", [
+  Pure,
+  SameTypeOperands,
+]> {
+  let summary = "create an array with an initial list of elements";
+  let description = [{
+    This operation creates an array from a list of values. The element on the
+    left-most position in the MLIR assembly format ends up at index 0.
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$elements);
+  let results = (outs ArrayType:$result);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
+def ArrayExtractOp : RTGOp<"array_extract", [
+  Pure,
+  TypesMatchWith<"result type must match array element type",
+                 "array", "result",
+                 "cast<ArrayType>($_self).getElementType()">,
+]> {
+  let summary = "get an element from an array";
+  let description = [{
+    This operation returns the element at the given index of the array.
+    Accessing out-of-bounds indices is (immediate) UB.
+  }];
+
+  let arguments = (ins ArrayType:$array, Index:$index);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    $array `[` $index `]` `:` qualified(type($array)) attr-dict
+  }];
+}
+
 //===- Integer Operations -------------------------------------------------===//
 
 def RandomNumberInRangeOp : RTGOp<"random_number_in_range", []> {

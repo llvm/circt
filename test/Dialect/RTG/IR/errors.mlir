@@ -189,3 +189,18 @@ rtg.test @test() {
   // expected-error @below {{must have at least one sequence in the list}}
   %0 = rtg.interleave_sequences
 }
+
+// -----
+
+// expected-note @below {{prior use here}}
+rtg.test @test(a = %a: i32, b = %b: index) {
+  // expected-error @below {{use of value '%a' expects different type than prior uses: 'index' vs 'i32'}}
+  rtg.array_create %a, %b : index
+}
+
+// -----
+
+rtg.test @test(a = %a: i32, b = %b: index) {
+  // expected-error @below {{requires all operands to have the same type}}
+  "rtg.array_create"(%a, %b) : (i32, index) -> (!rtg.array<index>)
+}
