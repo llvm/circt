@@ -925,27 +925,38 @@ public:
     return std::get<ValueTy>(state.at(val));
   }
 
-  FailureOr<DeletionKind> visitConstantLike(Operation *op) {
-    assert(op->hasTrait<OpTrait::ConstantLike>() &&
-           "op is expected to be constant-like");
+  FailureOr<DeletionKind> visitPureOp(Operation *op) {
+    SmallVector<Attribute> operands;
+    for (auto operand : op->getOperands()) {
+      auto evalValue = state[operand];
+      if (std::holds_alternative<TypedAttr>(evalValue))
+        operands.push_back(std::get<TypedAttr>(evalValue));
+      else
+        return visitUnhandledOp(op);
+    }
 
-    SmallVector<OpFoldResult, 1> result;
-    auto foldResult = op->fold(result);
-    (void)foldResult; // Make sure there is a user when assertions are off.
-    assert(succeeded(foldResult) &&
-           "constant folder of a constant-like must always succeed");
-    auto attr = dyn_cast<TypedAttr>(result[0].dyn_cast<Attribute>());
-    if (!attr)
-      return op->emitError(
-          "only typed attributes supported for constant-like operations");
+    SmallVector<OpFoldResult> results;
+    if (failed(op->fold(operands, results)))
+      return visitUnhandledOp(op);
 
-    auto intAttr = dyn_cast<IntegerAttr>(attr);
-    if (intAttr && isa<IndexType>(attr.getType()))
-      state[op->getResult(0)] = size_t(intAttr.getInt());
-    else if (intAttr && intAttr.getType().isSignlessInteger(1))
-      state[op->getResult(0)] = bool(intAttr.getInt());
-    else
-      state[op->getResult(0)] = attr;
+    // We don't support in-place folders.
+    if (results.size() != op->getNumResults())
+      return visitUnhandledOp(op);
+
+    for (auto [res, val] : llvm::zip(results, op->getResults())) {
+      auto attr = llvm::dyn_cast_or_null<TypedAttr>(res.dyn_cast<Attribute>());
+      if (!attr)
+        return op->emitError(
+            "only typed attributes supported for constant-like operations");
+
+      auto intAttr = dyn_cast<IntegerAttr>(attr);
+      if (intAttr && isa<IndexType>(attr.getType()))
+        state[op->getResult(0)] = size_t(intAttr.getInt());
+      else if (intAttr && intAttr.getType().isSignlessInteger(1))
+        state[op->getResult(0)] = bool(intAttr.getInt());
+      else
+        state[op->getResult(0)] = attr;
+    }
 
     return DeletionKind::Delete;
   }
@@ -956,8 +967,9 @@ public:
   }
 
   FailureOr<DeletionKind> visitExternalOp(Operation *op) {
-    if (op->hasTrait<OpTrait::ConstantLike>())
-      return visitConstantLike(op);
+    auto memOp = dyn_cast<MemoryEffectOpInterface>(op);
+    if (op->hasTrait<OpTrait::ConstantLike>() || (memOp && memOp.hasNoEffect()))
+      return visitPureOp(op);
 
     // TODO: we only have this to be able to write tests for this pass without
     // having to add support for more operations for now, so it should be
@@ -968,9 +980,7 @@ public:
     return visitUnhandledOp(op);
   }
 
-  FailureOr<DeletionKind> visitOp(ConstantOp op) {
-    return visitConstantLike(op);
-  }
+  FailureOr<DeletionKind> visitOp(ConstantOp op) { return visitPureOp(op); }
 
   FailureOr<DeletionKind> visitOp(GetSequenceOp op) {
     SmallVector<ElaboratorValue> replacements;
@@ -1201,7 +1211,7 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(FixedRegisterOp op) {
-    return visitConstantLike(op);
+    return visitPureOp(op);
   }
 
   FailureOr<DeletionKind> visitOp(VirtualRegisterOp op) {

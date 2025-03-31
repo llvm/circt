@@ -31,6 +31,14 @@ def ConstantTestOp : RTGTestOp<"constant_test", [
   let hasFolder = 1;
 }
 
+def GetHartIdOp : RTGTestOp<"get_hartid", [Pure]> {
+  let arguments = (ins CPUType:$cpu);
+  let results = (outs Index:$hartid);
+
+  let assemblyFormat = "$cpu attr-dict";
+  let hasFolder = 1;
+}
+
 //===- Instruction Formats -------------------------------------------------===//
 
 class InstFormatIOpBase<string mnemonic, int opcode7, int funct3>
