@@ -32,6 +32,7 @@ declare_mlir_python_sources(PyRTGSources
   pyrtg/resources.py
   pyrtg/rtgtest.py
   pyrtg/scf.py
+  pyrtg/tuples.py
   rtgtool/rtgtool.py
 )
 
