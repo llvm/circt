@@ -163,5 +163,14 @@ rtg.target @memoryBlocks : !rtg.dict<mem_block: !rtg.isa.memoryblock<32>> {
 }
 
 // CHECK-LABEL: rtg.test @arrays
-// CHECK-SAME: (arr = {{%.+}}: !rtg.array<index>)
-rtg.test @arrays(arr = %arr: !rtg.array<index>) { }
+// CHECK-SAME: (arr = [[ARR:%.+]]: !rtg.array<index>)
+rtg.test @arrays(arr = %arr: !rtg.array<index>) {
+  // CHECK-NEXT: [[IDX1:%.+]] = index.constant 1
+  // CHECK-NEXT: [[V0:%.+]] = rtg.array_create [[ARR]], [[ARR]] : !rtg.array<index>
+  // CHECK-NEXT: [[V1:%.+]] = rtg.array_create : index
+  // CHECK-NEXT: [[V2:%.+]] = rtg.array_extract [[V0]][[[IDX1]]] : !rtg.array<!rtg.array<index>>
+  %idx1 = index.constant 1
+  %0 = rtg.array_create %arr, %arr : !rtg.array<index>
+  %1 = rtg.array_create : index
+  %2 = rtg.array_extract %0[%idx1] : !rtg.array<!rtg.array<index>>
+}
