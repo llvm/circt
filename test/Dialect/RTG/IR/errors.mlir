@@ -189,3 +189,17 @@ rtg.test @test() {
   // expected-error @below {{must have at least one sequence in the list}}
   %0 = rtg.interleave_sequences
 }
+
+// -----
+
+rtg.test @emptyTuple() {
+  // expected-error @below {{empty tuples not allowed}}
+  %0 = rtg.tuple_create
+}
+
+// -----
+
+rtg.test @tupleExtractOOB(tup = %tup : tuple<index, i1>) {
+  // expected-error @below {{index (2) must be smaller than number of elements in tuple (2)}}
+  rtg.tuple_extract %tup at 2 : tuple<index, i1>
+}
