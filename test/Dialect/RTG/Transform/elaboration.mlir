@@ -596,6 +596,14 @@ rtg.test @tuples() {
   func.call @dummy2(%1) : (index) -> ()
 }
 
+// CHECK-LABEL: rtg.test @useFolders_singleCoreTarget
+rtg.test @useFolders(single_core = %single_core: !rtgtest.cpu) {
+  // CHECK-NEXT: index.constant 0
+  // CHECK-NEXT: call @dummy2
+  %0 = rtgtest.get_hartid %single_core
+  func.call @dummy2(%0) : (index) -> ()
+}
+
 // -----
 
 rtg.test @nestedRegionsNotSupported() {
