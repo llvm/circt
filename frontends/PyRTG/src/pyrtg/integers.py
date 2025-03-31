@@ -7,8 +7,9 @@ from __future__ import annotations
 from .circt import ir
 from .core import Value
 from .index import index
+from .rtg import rtg
 
-import typing
+from typing import Union
 
 
 class Integer(Value):
@@ -19,12 +20,25 @@ class Integer(Value):
   away during randomization.
   """
 
-  def __init__(self, value: typing.Union[ir.Value, int]) -> Integer:
+  def __init__(self, value: Union[ir.Value, int]) -> Integer:
     """
     Use this constructor to create an Integer from a builtin Python int.
     """
 
     self._value = value
+
+  def random(lower_bound: Union[int, Integer],
+             upper_bound: Union[int, Integer]) -> Integer:
+    """
+    Get a random number in the given range (lower inclusive, upper exclusive).
+    """
+
+    if isinstance(lower_bound, int):
+      lower_bound = Integer(lower_bound)
+    if isinstance(upper_bound, int):
+      upper_bound = Integer(upper_bound)
+
+    return rtg.RandomNumberInRangeOp(lower_bound, upper_bound)
 
   def __add__(self, other: Integer) -> Integer:
     return index.AddOp(self._get_ssa_value(), other._get_ssa_value())
@@ -84,7 +98,7 @@ class Bool(Value):
   away during randomization.
   """
 
-  def __init__(self, value: typing.Union[ir.Value, bool]) -> Bool:
+  def __init__(self, value: Union[ir.Value, bool]) -> Bool:
     """
     Use this constructor to create a Bool from a builtin Python bool.
     """
