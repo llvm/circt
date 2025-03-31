@@ -494,6 +494,37 @@ def ArrayExtractOp : RTGOp<"array_extract", [
   }];
 }
 
+def ArrayInjectOp : RTGOp<"array_inject", [
+  Pure,
+  AllTypesMatch<["array", "result"]>,
+  TypesMatchWith<"value type must match array element type",
+                 "array", "value",
+                 "cast<ArrayType>($_self).getElementType()">,
+]> {
+  let summary = "set an element in an array";
+  let description = [{
+    This operation produces a new array of the same type as the input array and
+    sets the element at the given index to the given value. All other values
+    remain the same. An OOB access is (immediate) undefined behavior.
+  }];
+
+  let arguments = (ins ArrayType:$array, Index:$index, AnyType:$value);
+  let results = (outs ArrayType:$result);
+
+  let assemblyFormat = [{
+    $array `[` $index `]` `,` $value `:` qualified(type($array)) attr-dict
+  }];
+}
+
+def ArraySizeOp : RTGOp<"array_size", [Pure]> {
+  let summary = "return the size of an array";
+
+  let arguments = (ins ArrayType:$array);
+  let results = (outs Index:$result);
+
+  let assemblyFormat = "$array `:` qualified(type($array)) attr-dict";
+}
+
 //===- Integer Operations -------------------------------------------------===//
 
 def RandomNumberInRangeOp : RTGOp<"random_number_in_range", []> {
