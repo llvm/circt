@@ -46,6 +46,12 @@ def _FromCirctValue(value: ir.Value) -> Value:
   if isinstance(type, ir.TupleType):
     from .tuples import Tuple
     return Tuple(value)
+  if isinstance(type, rtg.MemoryType):
+    from .memories import Memory
+    return Memory(value)
+  if isinstance(type, rtg.MemoryBlockType):
+    from .memories import MemoryBlock
+    return MemoryBlock(value)
   assert False, "Unsupported value"
 
 

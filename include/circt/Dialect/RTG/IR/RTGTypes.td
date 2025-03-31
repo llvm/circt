@@ -187,6 +187,18 @@ class ImmediateOfWidth<int width> : Type<
   BuildableType<"::circt::rtg::ImmediateType::get($_builder.getContext(), " #
                 width # ")">;
 
+def MemoryType : RTGISATypeDef<"Memory", "memory"> {
+  let summary = "handle to a memory";
+  let description = [{
+    This type is used to represent memory resources that are allocated from
+    memory blocks and can be accessed and manipulated by payload dialect
+    operations.
+  }];
+
+  let parameters = (ins "uint32_t":$addressWidth);
+  let assemblyFormat = "`<` $addressWidth `>`";
+}
+
 def MemoryBlockType : RTGISATypeDef<"MemoryBlock", "memory_block"> {
   let summary = "handle to a memory block";
   let description = [{

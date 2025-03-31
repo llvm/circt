@@ -98,6 +98,16 @@ MLIR_CAPI_EXPORTED bool rtgTypeIsAArray(MlirType type);
 /// Returns the element type of the RTG array.
 MLIR_CAPI_EXPORTED MlirType rtgArrayTypeGetElementType(MlirType type);
 
+/// If the type is an RTG memory.
+MLIR_CAPI_EXPORTED bool rtgTypeIsAMemory(MlirType type);
+
+/// Creates an RTG memory type in the context.
+MLIR_CAPI_EXPORTED MlirType rtgMemoryTypeGet(MlirContext ctx,
+                                             uint32_t addressWidth);
+
+/// Returns the address with of an RTG memory type.
+MLIR_CAPI_EXPORTED uint32_t rtgMemoryTypeGetAddressWidth(MlirType type);
+
 /// If the type is an RTG memory block.
 MLIR_CAPI_EXPORTED bool rtgTypeIsAMemoryBlock(MlirType type);
 
