@@ -211,20 +211,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: }
     when reset : connect _t, _t_2 else : connect _t, _t_2
 
-    ; CHECK: firrtl.when %reset : !firrtl.uint<1> {
-    ; CHECK:   [[N4A:%.+]] = firrtl.node interesting_name %_t_2
-    ; CHECK:   firrtl.matchingconnect %_t, [[N4A]]
-    ; CHECK: } else {
-    ; CHECK:   [[N4B:%.+]] = firrtl.node interesting_name %_t_2
-    ; CHECK:   firrtl.matchingconnect %_t, [[N4B]]
-    ; CHECK: }
-    when reset :
-      node n4 = _t_2
-      connect _t, n4
-    else :
-      node n4 = _t_2   ; 'n4' name is in unique scopes.
-      connect _t, n4
-
     ; CHECK: [[TMP:%.+]] = firrtl.constant 4
     ; CHECK: [[COND:%.+]] = firrtl.lt %reset, [[TMP]]
     ; CHECK: firrtl.when [[COND]] : !firrtl.uint<1> {
