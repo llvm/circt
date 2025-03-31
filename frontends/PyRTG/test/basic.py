@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag, rtgtest, Immediate, IntegerRegister, Array, Bool
+from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag, rtgtest, Immediate, IntegerRegister, Array, Bool, Tuple
 
 # MLIR-LABEL: rtg.target @Tgt0 : !rtg.dict<entry0: !rtg.set<index>>
 # MLIR-NEXT: [[C0:%.+]] = index.constant 0
@@ -388,3 +388,15 @@ def int_consumer(b):
 @test(("a", Integer.type()), ("b", Integer.type()))
 def test8_random_integer(a, b):
   int_consumer(Integer.random(a, b))
+
+
+# MLIR-LABEL: rtg.test @test9_tuples
+# MLIR-NEXT: [[V0:%.+]] = rtg.tuple_create %a, %b : index, i1
+# MLIR-NEXT: rtg.tuple_extract [[V0]] at 1 : tuple<index, i1>
+
+
+@test(("a", Integer.type()), ("b", Bool.type()),
+      ("tup", Tuple.type(Integer.type(), Bool.type())))
+def test9_tuples(a, b, tup):
+  tup = Tuple.create(a, b)
+  consumer(tup[1])
