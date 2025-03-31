@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag, rtgtest, Immediate, IntegerRegister, Array, Bool
+from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag, rtgtest, Immediate, IntegerRegister, Array, Bool, MemoryBlock, Memory
 
 # MLIR-LABEL: rtg.target @Tgt0 : !rtg.dict<entry0: !rtg.set<index>>
 # MLIR-NEXT: [[C0:%.+]] = index.constant 0
@@ -37,6 +37,19 @@ class Tgt1:
   @entry
   def entry1():
     return Label.declare("l0")
+
+
+# MLIR-LABEL: rtg.target @Tgt2
+# MLIR-NEXT: [[V0:%.+]] = rtg.isa.memoryblock_declare 64, 0 : i32
+# MLIR-NEXT: rtg.yield [[V0]] : !rtg.isa.memoryblock<32>
+
+
+@target
+class Tgt2:
+
+  @entry
+  def mem_blk_0():
+    return MemoryBlock.declare(size=64, base_address=0, address_width=32)
 
 
 # MLIR-LABEL: rtg.target @Tgt4
@@ -342,6 +355,25 @@ def test3_registers_and_immediates():
 def test4_integer_to_immediate():
   rtgtest.ADDI(IntegerRegister.t0(), IntegerRegister.t0(),
                Immediate(12, Integer(2)))
+
+
+# MLIR-LABEL: rtg.test @test6_memories
+# MLIR-NEXT: [[REG:%.+]] = rtg.fixed_reg #rtgtest.t0 : !rtgtest.ireg
+# MLIR-NEXT: [[IDX8:%.+]] = index.constant 8
+# MLIR-NEXT: [[IDX4:%.+]] = index.constant 4
+# MLIR-NEXT: [[MEM:%.+]] = rtg.isa.memory_alloc %mem_blk, [[IDX8]], [[IDX4]] : !rtg.isa.memoryblock<32>
+# MLIR-NEXT: [[SIZE:%.+]] = rtg.isa.memory_size [[MEM]] : !rtg.isa.memory<32>
+# MLIR-NEXT: [[IMM:%.+]] = rtg.isa.int_to_immediate [[SIZE]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: rtgtest.rv32i.auipc [[REG]], [[IMM]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: [[BASE:%.+]] = rtg.isa.memory_base_address [[MEM]] : !rtg.isa.memory<32>
+# MLIR-NEXT: rtgtest.rv32i.auipc [[REG]], [[BASE]] : !rtg.isa.immediate<32>
+
+
+@test(("mem_blk", MemoryBlock.type(32)))
+def test6_memories(mem_blk):
+  mem = Memory.alloc(mem_blk, size=8, align=4)
+  rtgtest.AUIPC(IntegerRegister.t0(), Immediate(32, mem.size()))
+  rtgtest.AUIPC(IntegerRegister.t0(), mem.base_address())
 
 
 # MLIR-LABEL: rtg.test @test7_bools

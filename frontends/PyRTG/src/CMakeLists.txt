@@ -22,6 +22,7 @@ declare_mlir_python_sources(PyRTGSources
   pyrtg/index.py
   pyrtg/integers.py
   pyrtg/labels.py
+  pyrtg/memories.py
   pyrtg/rtg.py
   pyrtg/sequences.py
   pyrtg/sets.py

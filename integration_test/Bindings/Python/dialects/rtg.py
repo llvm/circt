@@ -225,6 +225,12 @@ with Context() as ctx, Location.unknown():
   # CHECK: !rtg.isa.memoryblock<32>
   print(memoryblock_type)
 
+  memoryTy = rtg.MemoryType.get(32)
+  # CHECK: address_width=32
+  print(f'address_width={memoryTy.address_width}')
+  # CHECK: !rtg.isa.memory<32>
+  print(memoryTy)
+
 with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
   indexTy = IndexType.get()

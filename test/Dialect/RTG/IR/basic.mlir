@@ -154,12 +154,21 @@ rtg.test @interleaveSequences(seq0 = %seq0: !rtg.randomized_sequence, seq1 = %se
   rtg.interleave_sequences %seq0, %seq1 batch 4 {rtg.some_attr}
 }
 
-// CHECK-LABEL: @memoryBlocks : !rtg.dict<mem_block: !rtg.isa.memoryblock<32>>
-rtg.target @memoryBlocks : !rtg.dict<mem_block: !rtg.isa.memoryblock<32>> {
+// CHECK-LABEL: @memoryBlocks
+rtg.target @memoryBlocks : !rtg.dict<mem_base_address: !rtg.isa.immediate<32>, mem_block: !rtg.isa.memoryblock<32>, mem_size: index> {
   // CHECK: rtg.isa.memoryblock_declare 8, 0 : i32
   %0 = rtg.isa.memoryblock_declare 8, 0 : i32
+
+  // CHECK: [[IDX8:%.+]] = index.constant 8
+  // CHECK: [[V1:%.+]] = rtg.isa.memory_alloc %0, [[IDX8]], [[IDX8]] : !rtg.isa.memoryblock<32>
+  // CHECK: [[V2:%.+]] = rtg.isa.memory_base_address [[V1]] : !rtg.isa.memory<32>
+  // CHECK: [[V3:%.+]] = rtg.isa.memory_size [[V1]] : !rtg.isa.memory<32>
+  %idx8 = index.constant 8
+  %1 = rtg.isa.memory_alloc %0, %idx8, %idx8 : !rtg.isa.memoryblock<32>
+  %2 = rtg.isa.memory_base_address %1 : !rtg.isa.memory<32>
+  %3 = rtg.isa.memory_size %1 : !rtg.isa.memory<32>
   
-  rtg.yield %0 : !rtg.isa.memoryblock<32>
+  rtg.yield %2, %0, %3 : !rtg.isa.immediate<32>, !rtg.isa.memoryblock<32>, index
 }
 
 // CHECK-LABEL: rtg.test @arrays
