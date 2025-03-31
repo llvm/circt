@@ -161,3 +161,7 @@ rtg.target @memoryBlocks : !rtg.dict<mem_block: !rtg.isa.memoryblock<32>> {
   
   rtg.yield %0 : !rtg.isa.memoryblock<32>
 }
+
+// CHECK-LABEL: rtg.test @arrays
+// CHECK-SAME: (arr = {{%.+}}: !rtg.array<index>)
+rtg.test @arrays(arr = %arr: !rtg.array<index>) { }
