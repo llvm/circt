@@ -20,3 +20,4 @@ from .arrays import Array
 from .contexts import CPUCore
 from .control_flow import If, Else, EndIf, For, Foreach
 from .memories import Memory, MemoryBlock
+from .tuples import Tuple
