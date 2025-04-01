@@ -138,17 +138,26 @@ static void testLabelVisibilityAttr(MlirContext ctx) {
   }
 }
 
-static void testDefaultContextAttr(MlirContext ctx) {
+static void testContextAttrs(MlirContext ctx) {
   MlirType cpuTy = rtgtestCPUTypeGet(ctx);
-  MlirAttribute defaultCtxtAttr = rtgDefaultContextAttrGet(ctx, cpuTy);
 
+  // DefaultContext
+  MlirAttribute defaultCtxtAttr = rtgDefaultContextAttrGet(ctx, cpuTy);
   // CHECK: is_default_context
   fprintf(stderr, rtgAttrIsADefaultContextAttr(defaultCtxtAttr)
                       ? "is_default_context\n"
                       : "isnot_default_context\n");
-
   // CHECK: !rtgtest.cpu
   mlirTypeDump(mlirAttributeGetType(defaultCtxtAttr));
+
+  // AnyContext
+  MlirAttribute anyCtxtAttr = rtgAnyContextAttrGet(ctx, cpuTy);
+  // CHECK: is_any_context
+  fprintf(stderr, rtgAttrIsAAnyContextAttr(anyCtxtAttr)
+                      ? "is_any_context\n"
+                      : "isnot_any_context\n");
+  // CHECK: !rtgtest.cpu
+  mlirTypeDump(mlirAttributeGetType(anyCtxtAttr));
 }
 
 static void testImmediate(MlirContext ctx) {
@@ -212,7 +221,7 @@ int main(int argc, char **argv) {
   testArrayType(ctx);
 
   testLabelVisibilityAttr(ctx);
-  testDefaultContextAttr(ctx);
+  testContextAttrs(ctx);
   testImmediate(ctx);
   testMemories(ctx);
 

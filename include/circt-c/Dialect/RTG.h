@@ -162,6 +162,13 @@ MLIR_CAPI_EXPORTED uint32_t rtgImmediateAttrGetWidth(MlirAttribute attr);
 /// Returns the value of the RTG immediate attribute.
 MLIR_CAPI_EXPORTED uint64_t rtgImmediateAttrGetValue(MlirAttribute attr);
 
+/// If the attribute is an RTG any context attribute.
+MLIR_CAPI_EXPORTED bool rtgAttrIsAAnyContextAttr(MlirAttribute attr);
+
+/// Creates an RTG any context attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgAnyContextAttrGet(MlirContext ctxt,
+                                                      MlirType type);
+
 #ifdef __cplusplus
 }
 #endif
