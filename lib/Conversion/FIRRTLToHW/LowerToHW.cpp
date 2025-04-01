@@ -4550,9 +4550,18 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
     char c = op.getFormatString()[i];
     switch (c) {
     // Maybe a "%?" normal substitution.
-    case '%':
+    case '%': {
       formatString.push_back(c);
+
+      // Parse the width specifier.
+      SmallString<6> width;
       c = op.getFormatString()[++i];
+      while (isdigit(c)) {
+        width.push_back(c);
+        c = op.getFormatString()[++i];
+      }
+
+      // Parse the radix.
       switch (c) {
       // A normal substitution.  If this is a radix specifier, add an explicit
       // `0` width.  E.g., lower `%x` to `%0x`.  Almost nobody wants the Verilog
@@ -4561,7 +4570,10 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
       case 'b':
       case 'd':
       case 'x':
-        formatString.push_back('0');
+        if (width.empty())
+          formatString.push_back('0');
+        else
+          formatString.append(width);
         [[fallthrough]];
       case 'c':
         ++subIdx;
@@ -4570,6 +4582,7 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
         formatString.push_back(c);
       }
       break;
+    }
     // Maybe a "{{}}" special substitution.
     case '{': {
       // Not a special substituion.

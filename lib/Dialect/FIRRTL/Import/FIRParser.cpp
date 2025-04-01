@@ -2975,18 +2975,43 @@ ParseResult FIRStmtParser::parsePrintf() {
       // then grab one of the "spec" operands.
       case '%': {
         validatedFormatString.push_back(c);
+
+        // Parse the width specifier.
+        SmallString<6> width;
         c = formatString[++i];
+        while (isdigit(c)) {
+          width.push_back(c);
+          c = formatString[++i];
+        }
+
+        // Parse the radix.
         switch (c) {
-        case 'b':
         case 'c':
+          if (!width.empty()) {
+            emitError(formatStringLoc) << "ASCII character format specifiers "
+                                          "('%c') may not specify a width";
+            return failure();
+          }
+          [[fallthrough]];
+        case 'b':
         case 'd':
         case 'x':
+          if (!width.empty())
+            validatedFormatString.append(width);
           operands.push_back(specOperands[opIdx++]);
           break;
-        // Let anything we don't know about through.  This allows for wildcat
-        // use of `%m` if a user wants.
-        default:
+        case '%':
+          if (!width.empty()) {
+            emitError(formatStringLoc)
+                << "literal percents ('%%') may not specify a width";
+            return failure();
+          }
           break;
+        // Anything else is illegal.
+        default:
+          emitError(formatStringLoc)
+              << "unknown printf substitution '%" << width << c << "'";
+          return failure();
         }
         validatedFormatString.push_back(c);
         break;

@@ -1,22 +1,25 @@
-; RUN: firtool %s --format=fir --ir-sv | FileCheck %s
+; RUN: firtool %s | FileCheck %s
 
-FIRRTL version 4.0.0
+FIRRTL version 5.1.0
 circuit PrintTest:
-  ; CHECK-LABEL: @PrintTest
+  ; CHECK-LABEL: module PrintTest
   public module PrintTest :
     input clock : Clock
     input cond : UInt<1>
-    input var : UInt<32>
-    printf(clock, cond, "test %b %c %d %x\n", var, var, var, var)
+    input a : UInt<8>
 
-    ; CHECK:      sv.ifdef  @SYNTHESIS {
-    ; CHECK-NEXT: } else {
-    ; CHECK-NEXT:   sv.always posedge %clock {
-    ; CHECK-NEXT:     [[PRINTF_COND:%.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
-    ; CHECK-NEXT:     [[COND:%.+]] = comb.and bin [[PRINTF_COND]], %cond : i1
-    ; CHECK-NEXT:     sv.if [[COND]] {
-    ; CHECK-NEXT:       [[PRINTF_FD:%.+]] = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
-    ; CHECK-NEXT:       sv.fwrite [[PRINTF_FD]], "test %0b %c %0d %0x\0A"(%var, %var, %var, %var) : i32
-    ; CHECK-NEXT:     }
-    ; CHECK-NEXT:   }
-    ; CHECK-NEXT: }
+
+    ; CHECK: $fwrite(`PRINTF_FD_, "binary: %0b %0b %8b\n", a, a, a);
+    printf(clock, cond, "binary: %b %0b %8b\n", a, a, a)
+
+    ; CHECK-NEXT: $fwrite(`PRINTF_FD_, "decimal: %0d %0d %3d\n", a, a, a);
+    printf(clock, cond, "decimal: %d %0d %3d\n", a, a, a)
+
+    ; CHECK-NEXT: $fwrite(`PRINTF_FD_, "hexadecimal: %0x %0x %2x\n", a, a, a);
+    printf(clock, cond, "hexadecimal: %x %0x %2x\n", a, a, a)
+
+    ; CHECK-NEXT: $fwrite(`PRINTF_FD_, "ASCII character: %c\n", a);
+    printf(clock, cond, "ASCII character: %c\n", a)
+
+    ; CHECK-NEXT: $fwrite(`PRINTF_FD_, "literals: %%\n");
+    printf(clock, cond, "literals: %%\n")
