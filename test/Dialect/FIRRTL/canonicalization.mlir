@@ -2294,17 +2294,65 @@ firrtl.module @ForceableRegResetToNode(in %clock: !firrtl.clock, in %dummy : !fi
 }
 
 // https://github.com/llvm/circt/issues/8348
-// CHECK-LABEL: firrtl.module @RegResetInvalidResetValueType
-// We cannot replace a regreset with its reset value, when the reset value's type does not match.
-firrtl.module @RegResetInvalidResetValueType(in %c : !firrtl.clock, out %out : !firrtl.uint<2>) {
-  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-  %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+// CHECK-LABEL: firrtl.module @RegResetCoerceIntResetValue
+// When we replace a regreset with its reset value, we must ensure the reset-value is the correct type.
+firrtl.module @RegResetCoerceIntResetValue(in %c : !firrtl.clock,
+  out %out_si1 : !firrtl.sint<1>, out %out_si2 : !firrtl.sint<2>,
+  out %out_ui1 : !firrtl.uint<1>, out %out_ui2 : !firrtl.uint<2>
+) {
   %c1_asyncreset = firrtl.specialconstant 1 : !firrtl.asyncreset
-  // CHECK: %reg = firrtl.regreset
-  %reg = firrtl.regreset %c, %c1_asyncreset, %c0_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<2>
-  // CHECK: firrtl.matchingconnect %out, %reg : !firrtl.uint<2>
-  firrtl.matchingconnect %out, %reg : !firrtl.uint<2>
-  firrtl.matchingconnect %reg, %c0_ui2 : !firrtl.uint<2>
+
+  %c1_si1 = firrtl.constant 1 : !firrtl.sint<1>
+  %c1_si2 = firrtl.constant 1 : !firrtl.sint<2>
+
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+
+  // SInt Extension.
+  // CHECK: firrtl.matchingconnect %out_si2, %c-1_si2 : !firrtl.sint<2>
+  %reg_si2 = firrtl.regreset %c, %c1_asyncreset, %c1_si1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.sint<1>, !firrtl.sint<2>
+  firrtl.matchingconnect %out_si2, %reg_si2 : !firrtl.sint<2>
+
+  // SInt Truncation.
+  // CHECK: firrtl.matchingconnect %out_si1, %c-1_si1 : !firrtl.sint<1>
+  %reg_si1 = firrtl.regreset %c, %c1_asyncreset, %c1_si2 : !firrtl.clock, !firrtl.asyncreset, !firrtl.sint<2>, !firrtl.sint<1>
+  firrtl.matchingconnect %out_si1, %reg_si1 : !firrtl.sint<1>
+
+  // UInt Extension.
+  // CHECK: firrtl.matchingconnect %out_ui2, %c1_ui2 : !firrtl.uint<2>
+  %reg_ui2 = firrtl.regreset %c, %c1_asyncreset, %c1_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<2>
+  firrtl.matchingconnect %out_ui2, %reg_ui2 : !firrtl.uint<2>
+
+  // UInt Truncation.
+  // CHECK: firrtl.matchingconnect %out_ui1, %c1_ui1 : !firrtl.uint<1>
+  %reg_ui1 = firrtl.regreset %c, %c1_asyncreset, %c1_ui2 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<2>, !firrtl.uint<1>
+  firrtl.matchingconnect %out_ui1, %reg_ui1 : !firrtl.uint<1>
+}
+
+// CHECK-LABEL: firrtl.module @RegResetCoerceBundleResetValue
+firrtl.module @RegResetCoerceBundleResetValue(in %c : !firrtl.clock, out %out : !firrtl.bundle<a: sint<2>, b: sint<1>>) {
+  // CHECK: %0 = firrtl.aggregateconstant [-1 : si2, -1 : si1] : !firrtl.bundle<a: sint<2>, b: sint<1>>
+  // CHECK: firrtl.matchingconnect %out, %0 : !firrtl.bundle<a: sint<2>, b: sint<1>>
+  %c1_asyncreset = firrtl.specialconstant 1 : !firrtl.asyncreset
+  %v = firrtl.aggregateconstant [-1 : si1, 1 : si2] : !firrtl.bundle<a: sint<1>, b: sint<2>>
+  %r = firrtl.regreset %c, %c1_asyncreset, %v :
+    !firrtl.clock, !firrtl.asyncreset,
+    !firrtl.bundle<a: sint<1>, b: sint<2>>,
+    !firrtl.bundle<a: sint<2>, b: sint<1>>
+  firrtl.matchingconnect %out,  %r : !firrtl.bundle<a: sint<2>, b: sint<1>>
+}
+
+// CHECK-LABEL: firrtl.module @RegResetCoerceVectorResetValue
+firrtl.module @RegResetCoerceVectorResetValue(in %c : !firrtl.clock, out %out : !firrtl.vector<sint<2>, 1>) {
+  // CHECK: %0 = firrtl.aggregateconstant [-1 : si2] : !firrtl.vector<sint<2>, 1>
+  // CHECK: firrtl.matchingconnect %out, %0 : !firrtl.vector<sint<2>, 1>
+  %c1_asyncreset = firrtl.specialconstant 1 : !firrtl.asyncreset
+  %v = firrtl.aggregateconstant [-1 : si1] : !firrtl.vector<sint<1>, 1>
+  %r = firrtl.regreset %c, %c1_asyncreset, %v :
+    !firrtl.clock, !firrtl.asyncreset,
+    !firrtl.vector<sint<1>, 1>,
+    !firrtl.vector<sint<2>, 1>
+  firrtl.matchingconnect %out,  %r : !firrtl.vector<sint<2>, 1>
 }
 
 // https://github.com/llvm/circt/issues/929
