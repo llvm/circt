@@ -327,7 +327,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 //    input d: SInt<4>
 //    printf(clock, reset, "No operands!\n")
 //    printf(clock, reset, "Hi %0x %0x\n", add(a, a), b)
-//    printf(clock, reset, "Hi signed %0d %0d\n", add(c, c), d)
+//    printf(clock, reset, "Hi signed %d %0d\n", add(c, c), d)
 
   // CHECK-LABEL: hw.module private @Print
   // CHECK-SAME: attributes {emit.fragments = [@PRINTF_FD_FRAGMENT, @PRINTF_COND_FRAGMENT]}
@@ -352,19 +352,19 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
-    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Binary: %0b %0b %4b\0A"([[ADD]], %b, [[ADD]]) : i5, i4, i5
+    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Binary: %b %0b %4b\0A"([[ADD]], %b, [[ADD]]) : i5, i4, i5
     // CHECK-NEXT:     }
     // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
-    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Decimal: %0d %0d %4d\0A"([[ADD]], %b, [[ADD]]) : i5, i4, i5
+    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Decimal: %d %0d %4d\0A"([[ADD]], %b, [[ADD]]) : i5, i4, i5
     // CHECK-NEXT:     }
     // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
-    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Hexadecimal: %0x %0x %4x\0A"([[ADD]], %b, [[ADD]]) : i5, i4, i5
+    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Hexadecimal: %x %0x %4x\0A"([[ADD]], %b, [[ADD]]) : i5, i4, i5
     // CHECK-NEXT:     }
     // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
@@ -378,14 +378,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
     // CHECK-NEXT:       [[SUMSIGNED:%.+]] = sv.system "signed"([[ADDSIGNED]])
     // CHECK-NEXT:       [[DSIGNED:%.+]] = sv.system "signed"(%d)
-    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Hi signed %0d %0d\0A"([[SUMSIGNED]], [[DSIGNED]]) : i5, i4
+    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Hi signed %d %d\0A"([[SUMSIGNED]], [[DSIGNED]]) : i5, i4
     // CHECK-NEXT:     }
     // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
     // CHECK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
-    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "[%0t]: %0d %m"([[TIME]], %a) : i64, i4
+    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "[%0t]: %d %m"([[TIME]], %a) : i64, i4
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }

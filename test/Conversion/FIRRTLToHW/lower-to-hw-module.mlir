@@ -72,8 +72,8 @@ firrtl.circuit "Simple" {
     %myext:2 = firrtl.instance myext @MyParameterizedExtModule(in in: !firrtl.uint<1>, out out: !firrtl.uint<8>)
 
     // CHECK: %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
-    // CHECK: sv.fwrite %PRINTF_FD_, "%0x"(%xyz.out4) : i4
-    // CHECK: sv.fwrite %PRINTF_FD_, "Something interesting! %0x"(%myext.out) : i8
+    // CHECK: sv.fwrite %PRINTF_FD_, "%x"(%xyz.out4) : i4
+    // CHECK: sv.fwrite %PRINTF_FD_, "Something interesting! %x"(%myext.out) : i8
 
     firrtl.connect %myext#0, %reset : !firrtl.uint<1>, !firrtl.uint<1>
 

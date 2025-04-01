@@ -4575,16 +4575,12 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
 
       // Parse the radix.
       switch (c) {
-      // A normal substitution.  If this is a radix specifier, add an explicit
-      // `0` width.  E.g., lower `%x` to `%0x`.  Almost nobody wants the Verilog
-      // width behavior and this is a much saner lowering.  Do not do this for
-      // `%c` as the spec is unclear if this is allowed.
+      // A normal substitution.  If this is a radix specifier, include the width
+      // if one exists.
       case 'b':
       case 'd':
       case 'x':
-        if (width.empty())
-          formatString.push_back('0');
-        else
+        if (!width.empty())
           formatString.append(width);
         [[fallthrough]];
       case 'c':
