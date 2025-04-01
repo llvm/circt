@@ -487,6 +487,24 @@ def BagUniqueSizeOp : RTGOp<"bag_unique_size", [Pure]> {
   }];
 }
 
+def BagConvertToSetOp : RTGOp<"bag_convert_to_set", [
+  Pure,
+  TypesMatchWith<"element type of set must match the bag's element type",
+                 "input", "result",
+                 "SetType::get(cast<BagType>($_self).getElementType())">,
+]> {
+  let summary = "convert a bag to a set";
+  let description = [{
+    This operation converts a bag to a set by dropping all duplicate elements.
+    For example, the bag `{a, a, b}` is converted to `{a, b}`.
+  }];
+
+  let arguments = (ins BagType:$input);
+  let results = (outs SetType:$result);
+
+  let assemblyFormat = "$input `:` qualified(type($input)) attr-dict";
+}
+
 //===- Array Operations -------------------------------------------------===//
 
 def ArrayCreateOp : RTGOp<"array_create", [

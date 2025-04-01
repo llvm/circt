@@ -409,8 +409,11 @@ def test90_tuples(a, b, tup):
 
 # MLIR-LABEL: rtg.test @test91_sets
 # MLIR-NEXT: rtg.set_cartesian_product %a, %b : !rtg.set<index>, !rtg.set<i1>
+# MLIR: rtg.bag_convert_to_set %c : !rtg.bag<index>
 
 
-@test(("a", Set.type(Integer.type())), ("b", Set.type(Bool.type())))
-def test91_sets(a, b):
+@test(("a", Set.type(Integer.type())), ("b", Set.type(Bool.type())),
+      ("c", Bag.type(Integer.type())))
+def test91_sets(a, b, c):
   seq2(Set.cartesian_product(a, b))
+  int_consumer(c.to_set().get_random())

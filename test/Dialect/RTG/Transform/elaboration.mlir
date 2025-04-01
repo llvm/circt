@@ -10,6 +10,7 @@ func.func @dummy7(%arg0: !rtg.array<index>) -> () {return}
 func.func @dummy8(%arg0: tuple<index, index>) -> () {return}
 func.func @dummy9(%arg0: !rtg.set<tuple<index, i1, !rtgtest.ireg>>) -> () {return}
 func.func @dummy10(%arg0: !rtg.set<tuple<index>>) -> () {return}
+func.func @dummy11(%arg0: !rtg.set<index>) -> () {return}
 
 // CHECK-LABEL: @immediates
 rtg.test @immediates() {
@@ -117,6 +118,11 @@ rtg.test @bagOperations() {
   %diff2 = rtg.bag_difference %bag, %new_bag inf : !rtg.bag<index>
   %4 = rtg.bag_select_random %diff2 : !rtg.bag<index> {rtg.elaboration_custom_seed = 5}
   func.call @dummy4(%3, %4, %diff, %diff2) : (index, index, !rtg.bag<index>, !rtg.bag<index>) -> ()
+
+  // CHECK-NEXT: [[SET:%.+]] = rtg.set_create [[V0]], [[V2]] :
+  // CHECK-NEXT: func.call @dummy11([[SET]])
+  %5 = rtg.bag_convert_to_set %bag0 : !rtg.bag<index>
+  func.call @dummy11(%5) : (!rtg.set<index>) -> ()
 }
 
 // CHECK-LABEL: rtg.test @setSize

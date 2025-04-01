@@ -129,6 +129,14 @@ class Bag(Value):
     self._value = self.exclude(r)._get_ssa_value()
     return r
 
+  def to_set(self) -> Value:
+    """
+    Returns this bag converted to a set, i.e., all duplicates are dropped. Does
+    not modify this object.
+    """
+
+    return rtg.BagConvertToSetOp(self)
+
   def _get_ssa_value(self) -> ir.Value:
     return self._value
 

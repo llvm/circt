@@ -1246,6 +1246,16 @@ public:
     return DeletionKind::Delete;
   }
 
+  FailureOr<DeletionKind> visitOp(BagConvertToSetOp op) {
+    auto bag = get<BagStorage *>(op.getInput())->bag;
+    SetVector<ElaboratorValue> set;
+    for (auto [k, v] : bag)
+      set.insert(k);
+    state[op.getResult()] = sharedState.internalizer.internalize<SetStorage>(
+        std::move(set), op.getType());
+    return DeletionKind::Delete;
+  }
+
   FailureOr<DeletionKind> visitOp(FixedRegisterOp op) {
     return visitPureOp(op);
   }
