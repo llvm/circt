@@ -899,4 +899,23 @@ firrtl.circuit "Foo" {
     out done: !firrtl.uint<1>,
     out success: !firrtl.uint<1>
   )
+
+  // CHECK-LABEL: module Printf
+  firrtl.module @Printf(in %clock: !firrtl.clock, in %i8: !firrtl.uint<8>) attributes {convention = #firrtl<convention scalarized>} {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.const.uint<1>
+
+    // CHECK: printf(clock, UInt<1>(1), "%b, %0b, %8b", i8, i8, i8)
+    firrtl.printf %clock, %c1_ui1, "%b, %0b, %8b" (%i8, %i8, %i8) : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>, !firrtl.uint<8>
+    // CHECK: printf(clock, UInt<1>(1), "%d, %0d, %8d", i8, i8, i8)
+    firrtl.printf %clock, %c1_ui1, "%d, %0d, %8d" (%i8, %i8, %i8) : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>, !firrtl.uint<8>
+    // CHECK: printf(clock, UInt<1>(1), "%x, %0x, %8x", i8, i8, i8)
+    firrtl.printf %clock, %c1_ui1, "%x, %0x, %8x" (%i8, %i8, %i8) : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>, !firrtl.uint<8>
+
+    // CHECK: printf(clock, UInt<1>(1), "%c", i8)
+    firrtl.printf %clock, %c1_ui1, "%c" (%i8) : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.uint<8>
+
+    // CHECK: printf(clock, UInt<1>(1), "%%")
+    firrtl.printf %clock, %c1_ui1, "%%" : !firrtl.clock, !firrtl.const.uint<1>
+  }
+
 }

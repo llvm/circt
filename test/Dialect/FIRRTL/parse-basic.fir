@@ -1182,6 +1182,24 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: firrtl.matchingconnect %nonconst_w, [[CAST]] : !firrtl.sint<4>
     connect nonconst_w, s4
 
+  ; CHECK-LABEL: firrtl.module @Printf
+  public module Printf:
+    input clock: Clock
+    input i8: UInt<8>
+
+    ; CHECK:      firrtl.printf %clock, %c1_ui1, "%b, %0b, %8b" (%i8, %i8, %i8) : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>, !firrtl.uint<8>
+    printf(clock, UInt<1>(1), "%b, %0b, %8b", i8, i8, i8)
+    ; CHECK-NEXT: firrtl.printf %clock, %c1_ui1, "%d, %0d, %8d" (%i8, %i8, %i8) : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>, !firrtl.uint<8>
+    printf(clock, UInt<1>(1), "%d, %0d, %8d", i8, i8, i8)
+    ; CHECK-NEXT: firrtl.printf %clock, %c1_ui1, "%x, %0x, %8x" (%i8, %i8, %i8) : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>, !firrtl.uint<8>
+    printf(clock, UInt<1>(1), "%x, %0x, %8x", i8, i8, i8)
+
+    ; CHECK-NEXT: firrtl.printf %clock, %c1_ui1, "%c" (%i8) : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.uint<8>
+    printf(clock, UInt<1>(1), "%c", i8)
+
+    ; CHECK-NEXT: firrtl.printf %clock, %c1_ui1, "%%" : !firrtl.clock, !firrtl.const.uint<1>
+    printf(clock, UInt<1>(1), "%%")
+
 ;// -----
 
 ; CHECK-LABEL: firrtl.circuit "Foo_v3p0p0"

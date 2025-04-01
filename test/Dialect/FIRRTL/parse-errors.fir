@@ -369,6 +369,30 @@ circuit PrintfExpr:
 
 ;// -----
 
+FIRRTL version 5.1.0
+circuit PrintfUnknownFormatSpecifier:
+  public module PrintfUnknownFormatSpecifier:
+    input clock: Clock
+    printf(clock, UInt<1>(1), "%m") ; expected-error {{unknown printf substitution '%m'}}
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit PrintfIllegalCharWidth:
+  public module PrintfIllegalCharWidth:
+    input clock: Clock
+    printf(clock, UInt<1>(1), "%42c") ; expected-error {{ASCII character format specifiers ('%c') may not specify a width}}
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit PrintfPercentWithWidth:
+  public module PrintfPercentWithWidth:
+    input clock: Clock
+    printf(clock, UInt<1>(1), "%42%") ; expected-error {{literal percents ('%%') may not specify a width}}
+
+;// -----
+
 FIRRTL version 4.0.0
 circuit ProbeFlipType:
   public module ProbeFlipType:

@@ -869,18 +869,29 @@ void Emitter::emitStatement(PrintFOp op) {
       switch (c) {
       case '%': {
         formatString.push_back(c);
+
+        // Parse the width specifier.
+        SmallString<6> width;
         c = origFormatString[++i];
+        while (isdigit(c)) {
+          width.push_back(c);
+          c = origFormatString[++i];
+        }
+
+        // Parse the radix.
         switch (c) {
         case 'b':
-        case 'c':
         case 'd':
         case 'x':
+          if (!width.empty())
+            formatString.append(width);
+          [[fallthrough]];
+        case 'c':
           substitutions.push_back(op.getSubstitutions()[opIdx++]);
-          break;
+          [[fallthrough]];
         default:
-          break;
+          formatString.push_back(c);
         }
-        formatString.push_back(c);
         break;
       }
       case '{':
