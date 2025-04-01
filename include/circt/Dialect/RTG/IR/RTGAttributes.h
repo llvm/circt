@@ -14,6 +14,16 @@
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinAttributes.h"
 
+namespace circt {
+namespace rtg {
+namespace detail {
+
+struct ImmediateAttrStorage;
+
+} // namespace detail
+} // namespace rtg
+} // namespace circt
+
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/RTG/IR/RTGAttributes.h.inc"
 

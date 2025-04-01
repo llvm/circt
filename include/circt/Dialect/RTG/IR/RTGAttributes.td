@@ -21,43 +21,6 @@ include "mlir/IR/Interfaces.td"
 class RTGAttrDef<string name, list<Trait> traits = []> 
   : AttrDef<RTGDialect, name, traits>;
 
-class ImmediateAttrBase<int width> : RTGAttrDef<"Imm" # width, [
-  DeclareAttrInterfaceMethods<TypedAttrInterface>,
-]> {
-  let summary = "represents a " # width # "-bit immediate value";
-
-  let mnemonic = "imm" # width;
-  let parameters = (ins "uint32_t":$value);
-
-  let assemblyFormat = "`<` $value `>`";
-
-  let extraClassDeclaration = [{
-    llvm::APInt getAPInt() const {
-      return llvm::APInt(}] # width # [{, getValue());
-    }
-  }];
-
-  let extraClassDefinition = [{
-    Type $cppClass::getType() const {
-      return Imm}] # width # [{Type::get(getContext());
-    }
-
-    LogicalResult $cppClass::verify(
-      ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
-      uint32_t value) {
-
-      if (32 - llvm::countl_zero(value) > }] # width # [{)
-        return emitError() << "cannot represent " << value << " with }] #
-          width # [{ bits";
-
-      return success();
-    }
-  }];
-
-  let genVerifyDecl = 1;
-}
-
-
 def DefaultContextAttr : RTGAttrDef<"DefaultContext", [
   DeclareAttrInterfaceMethods<ContextResourceAttrInterface>,
 ]> {
@@ -94,6 +57,7 @@ def ImmediateAttr : RTGISAAttrDef<"Immediate", [
   let parameters = (ins "llvm::APInt":$value);
 
   let hasCustomAssemblyFormat = true;
+  let genStorageClass = false;
 }
 
 #endif // CIRCT_DIALECT_RTG_IR_RTGATTRIBUTES_TD

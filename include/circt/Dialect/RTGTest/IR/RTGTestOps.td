@@ -21,40 +21,6 @@ class RTGTestOp<string mnemonic, list<Trait> traits = []> :
   Op<RTGTestDialect, mnemonic, traits>;
 
 
-def CPUDeclOp : RTGTestOp<"cpu_decl", [
-  Pure,
-  ConstantLike,
-  ContextResourceDefining,
-  FirstAttrDerivedResultType,
-]> {
-  let summary = "declare a CPU";
-  let description = [{
-    This operation is used to test the `ContextResourceAttrInterface` and
-    `ContextResourceTypeInterface` passes taking advantage of it.
-  }];
-
-  let arguments = (ins CPUAttr:$id);
-  let results = (outs CPUType:$cpu);
-
-  let assemblyFormat = "$id attr-dict";
-  let hasFolder = 1;
-}
-
-def ImmediateOp : RTGTestOp<"immediate", [
-  Pure,
-  ConstantLike,
-  FirstAttrDerivedResultType,
-  DeclareOpInterfaceMethods<InferTypeOpInterface>,
-]> {
-  let summary = "declare an immediate value";
-
-  let arguments = (ins AnyAttrOf<[Imm5, Imm12, Imm13, Imm21, Imm32]>:$imm);
-  let results = (outs AnyType:$result);
-
-  let assemblyFormat = "$imm attr-dict";
-  let hasFolder = 1;
-}
-
 def ConstantTestOp : RTGTestOp<"constant_test", [
   Pure, ConstantLike,
 ]> {
@@ -72,14 +38,14 @@ class InstFormatIOpBase<string mnemonic, int opcode7, int funct3>
 
   let arguments = (ins IntegerRegisterType:$rd,
                        IntegerRegisterType:$rs,
-                       Imm12Type:$imm);
+                       ImmediateOfWidth<12>:$imm);
 
   let assemblyFormat = "$rd `,` $rs `,` $imm attr-dict";
 
   let extraClassDefinition = [{
     void $cppClass::printInstructionBinary(llvm::raw_ostream &os,
                                            FoldAdaptor adaptor) {
-      auto binary = cast<Imm12Attr>(adaptor.getImm()).getAPInt()
+      auto binary = cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue()
         .concat(APInt(5, cast<rtg::RegisterAttrInterface>(
           adaptor.getRs()).getClassIndex()))
         .concat(APInt(3, }] # funct3 # [{))
@@ -99,7 +65,7 @@ class InstFormatIOpBase<string mnemonic, int opcode7, int funct3>
               .getRegisterAssembly()
          << ", "
          // The assembler only accepts signed values here.
-         << cast<Imm12Attr>(adaptor.getImm()).getAPInt().getSExtValue()
+         << cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue()
          << "("
          << cast<rtg::RegisterAttrInterface>(adaptor.getRs())
               .getRegisterAssembly()
@@ -137,7 +103,7 @@ class InstFormatBOpBase<string mnemonic, int opcode7, int funct3>
 
   let arguments = (ins IntegerRegisterType:$rs1,
                        IntegerRegisterType:$rs2,
-                       AnyTypeOf<[Imm13Type, LabelType]>:$imm);
+                       AnyTypeOf<[ImmediateOfWidth<13>, LabelType]>:$imm);
 
   let assemblyFormat = [{
     $rs1 `,` $rs2 `,` $imm `:` qualified(type($imm)) attr-dict
@@ -146,10 +112,10 @@ class InstFormatBOpBase<string mnemonic, int opcode7, int funct3>
   let extraClassDefinition = [{
     void $cppClass::printInstructionBinary(llvm::raw_ostream &os,
                                            FoldAdaptor adaptor) {
-      assert (isa<Imm13Attr>(adaptor.getImm()) &&
+      assert (isa<rtg::ImmediateAttr>(adaptor.getImm()) &&
               "binary of labels not supported");
 
-      auto imm = cast<Imm13Attr>(adaptor.getImm()).getAPInt();
+      auto imm = cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue();
       auto rs1 = cast<rtg::RegisterAttrInterface>(adaptor.getRs1());
       auto rs2 = cast<rtg::RegisterAttrInterface>(adaptor.getRs2());
 
@@ -184,7 +150,7 @@ class InstFormatBOpBase<string mnemonic, int opcode7, int funct3>
       }
 
       // The assembler is fine with unsigned and signed values here.
-      os << cast<Imm13Attr>(adaptor.getImm()).getValue();
+      cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue().print(os, /*isSigned=*/false);
     }
   }];
 }
@@ -238,7 +204,7 @@ class InstFormatSOpBase<string mnemonic, int opcode7, int funct3>
 
   let arguments = (ins IntegerRegisterType:$rs1,
                        IntegerRegisterType:$rs2,
-                       Imm12Type:$imm);
+                       ImmediateOfWidth<12>:$imm);
 
   let assemblyFormat = "$rs1 `,` $rs2 `,` $imm attr-dict";
 
@@ -247,7 +213,7 @@ class InstFormatSOpBase<string mnemonic, int opcode7, int funct3>
                                            FoldAdaptor adaptor) {
       auto rs1 = cast<rtg::RegisterAttrInterface>(adaptor.getRs1());
       auto rs2 = cast<rtg::RegisterAttrInterface>(adaptor.getRs2());
-      auto imm = cast<Imm12Attr>(adaptor.getImm()).getAPInt();
+      auto imm = cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue();
 
       auto binary = imm.extractBits(7, 5)
       .concat(llvm::APInt(5, rs2.getClassIndex()))
@@ -269,7 +235,7 @@ class InstFormatSOpBase<string mnemonic, int opcode7, int funct3>
               .getRegisterAssembly()
          << ", "
          // The assembler only accepts signed values here.
-         << cast<Imm12Attr>(adaptor.getImm()).getAPInt().getSExtValue()
+         << cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue()
          << "("
          << cast<rtg::RegisterAttrInterface>(adaptor.getRs2())
               .getRegisterAssembly()
@@ -282,18 +248,18 @@ class InstFormatUOpBase<string mnemonic, int opcode7>
   : RTGTestOp<"rv32i." # mnemonic, [InstructionOpAdaptor]> {
 
   let arguments = (ins IntegerRegisterType:$rd,
-                       AnyTypeOf<[Imm32Type, LabelType]>:$imm);
+                       AnyTypeOf<[ImmediateOfWidth<32>, LabelType]>:$imm);
 
   let assemblyFormat = "$rd `,` $imm `:` type($imm) attr-dict";
 
   let extraClassDefinition = [{
     void $cppClass::printInstructionBinary(llvm::raw_ostream &os,
                                            FoldAdaptor adaptor) {
-      assert (isa<Imm32Attr>(adaptor.getImm()) &&
+      assert (isa<rtg::ImmediateAttr>(adaptor.getImm()) &&
               "binary of labels not supported");
 
       auto rd = cast<rtg::RegisterAttrInterface>(adaptor.getRd());
-      auto imm = cast<Imm32Attr>(adaptor.getImm()).getAPInt();
+      auto imm = cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue();
 
       auto binary = imm.extractBits(20, 12)
       .concat(llvm::APInt(5, rd.getClassIndex()))
@@ -318,7 +284,7 @@ class InstFormatUOpBase<string mnemonic, int opcode7>
       }
 
       // The assembler wants an unsigned value here.
-      os << cast<Imm32Attr>(adaptor.getImm()).getValue();
+      cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue().print(os, /*isSigned=*/false);
     }
   }];
 }
@@ -327,18 +293,18 @@ class InstFormatJOpBase<string mnemonic, int opcode7>
   : RTGTestOp<"rv32i." # mnemonic, [InstructionOpAdaptor]> {
 
   let arguments = (ins IntegerRegisterType:$rd,
-                       AnyTypeOf<[Imm21Type, LabelType]>:$imm);
+                       AnyTypeOf<[ImmediateOfWidth<21>, LabelType]>:$imm);
 
   let assemblyFormat = "$rd `,` $imm `:` type($imm) attr-dict";
 
   let extraClassDefinition = [{
     void $cppClass::printInstructionBinary(llvm::raw_ostream &os,
                                            FoldAdaptor adaptor) {
-      assert (isa<Imm21Attr>(adaptor.getImm()) &&
+      assert (isa<rtg::ImmediateAttr>(adaptor.getImm()) &&
               "binary of labels not supported");
 
       auto rd = cast<rtg::RegisterAttrInterface>(adaptor.getRd());
-      auto imm = cast<Imm21Attr>(adaptor.getImm()).getAPInt();
+      auto imm = cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue();
 
       auto binary = imm.extractBits(1, 20)
       .concat(imm.extractBits(10, 1))
@@ -366,7 +332,7 @@ class InstFormatJOpBase<string mnemonic, int opcode7>
       }
 
       // The assembler is fine with signed and unsigned values here.
-      os << cast<Imm21Attr>(adaptor.getImm()).getAPInt().getSExtValue();
+      os << cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue();
     }
   }];
 }
@@ -376,7 +342,7 @@ class InstFormatIAOpBase<string mnemonic, int opcode7, int funct3>
 
   let arguments = (ins IntegerRegisterType:$rd,
                        IntegerRegisterType:$rs,
-                       Imm12Type:$imm);
+                       ImmediateOfWidth<12>:$imm);
 
   let assemblyFormat = "$rd `,` $rs `,` $imm attr-dict";
 
@@ -385,7 +351,7 @@ class InstFormatIAOpBase<string mnemonic, int opcode7, int funct3>
                                            FoldAdaptor adaptor) {
       auto rd = cast<rtg::RegisterAttrInterface>(adaptor.getRd());
       auto rs = cast<rtg::RegisterAttrInterface>(adaptor.getRs());
-      auto imm = cast<Imm12Attr>(adaptor.getImm()).getAPInt();
+      auto imm = cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue();
 
       auto binary = imm
       .concat(llvm::APInt(5, rs.getClassIndex()))
@@ -409,7 +375,7 @@ class InstFormatIAOpBase<string mnemonic, int opcode7, int funct3>
               .getRegisterAssembly()
          << ", "
          // The assembler only accepts signed values here.
-         << cast<Imm12Attr>(adaptor.getImm()).getAPInt().getSExtValue();
+         << cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue();
     }
   }];
 }
@@ -420,7 +386,7 @@ class InstFormatShiftOpBase<string mnemonic, int opcode7,
 
   let arguments = (ins IntegerRegisterType:$rd,
                        IntegerRegisterType:$rs,
-                       Imm5Type:$imm);
+                       ImmediateOfWidth<5>:$imm);
 
   let assemblyFormat = "$rd `,` $rs `,` $imm attr-dict";
 
@@ -429,7 +395,7 @@ class InstFormatShiftOpBase<string mnemonic, int opcode7,
                                            FoldAdaptor adaptor) {
       auto rd = cast<rtg::RegisterAttrInterface>(adaptor.getRd());
       auto rs = cast<rtg::RegisterAttrInterface>(adaptor.getRs());
-      auto imm = cast<Imm5Attr>(adaptor.getImm()).getAPInt();
+      auto imm = cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue();
 
       auto binary = llvm::APInt(7, }] # funct7 # [{)
       .concat(imm.extractBits(5, 0))
@@ -452,9 +418,9 @@ class InstFormatShiftOpBase<string mnemonic, int opcode7,
          << ", "
          << cast<rtg::RegisterAttrInterface>(adaptor.getRs())
               .getRegisterAssembly()
-         << ", "
-         // The assembler only accepts an unsigned value here.
-         << cast<Imm5Attr>(adaptor.getImm()).getValue();
+         << ", ";
+      // The assembler only accepts an unsigned value here.
+      cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue().print(os, /*isSigned=*/false);
     }
   }];
 }
