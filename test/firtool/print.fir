@@ -1,6 +1,6 @@
 ; RUN: firtool %s | FileCheck %s
 
-FIRRTL version 5.1.0
+FIRRTL version 5.0.0
 circuit PrintTest:
   ; CHECK-LABEL: module PrintTest
   public module PrintTest :
@@ -23,3 +23,6 @@ circuit PrintTest:
 
     ; CHECK-NEXT: $fwrite(`PRINTF_FD_, "literals: %%\n");
     printf(clock, cond, "literals: %%\n")
+
+    ; CHECK-NEXT: $fwrite(`PRINTF_FD_, "[%0t]: %m\n", $time);
+    printf(clock, cond, "[{{SimulationTime}}]: {{HierarchicalModuleName}}\n")

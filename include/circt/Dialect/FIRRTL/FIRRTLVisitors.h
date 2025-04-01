@@ -68,7 +68,7 @@ public:
             DoubleConstantOp, ListCreateOp, ListConcatOp, UnresolvedPathOp,
             PathOp, IntegerAddOp, IntegerMulOp, IntegerShrOp,
             // Format String expressions
-            TimeOp>([&](auto expr) -> ResultType {
+            TimeOp, HierarchicalModuleNameOp>([&](auto expr) -> ResultType {
           return thisCast->visitExpr(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -229,6 +229,7 @@ public:
 
   // Format string expressions
   HANDLE(TimeOp, Unhandled);
+  HANDLE(HierarchicalModuleNameOp, Unhandled);
 #undef HANDLE
 };
 
