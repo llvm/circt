@@ -205,6 +205,12 @@ with Context() as ctx, Location.unknown():
   # CHECK: #rtg.default : !rtgtest.cpu
   print(attr)
 
+  attr = rtg.AnyContextAttr.get(rtgtest.CPUType.get())
+  # CHECK: !rtgtest.cpu
+  print(attr.type)
+  # CHECK: #rtg.any_context : !rtgtest.cpu
+  print(attr)
+
   immediate_type = rtg.ImmediateType.get(32)
   # CHECK: width=32
   print(f"width={immediate_type.width}")
