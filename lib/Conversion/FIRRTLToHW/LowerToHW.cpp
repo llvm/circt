@@ -1520,7 +1520,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   Value getLoweredNonClockValue(Value value);
   Value getLoweredAndExtendedValue(Value value, Type destType);
   Value getLoweredAndExtOrTruncValue(Value value, Type destType);
-  Value getLoweredFmtOperand(Value operand);
+  std::optional<Value> getLoweredFmtOperand(Value operand);
   LogicalResult setLowering(Value orig, Value result);
   LogicalResult setPossiblyFoldedLowering(Value orig, Value result);
   template <typename ResultOpType, typename... CtorArgTypes>
@@ -1771,6 +1771,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   // Format String Operations
   LogicalResult visitExpr(TimeOp op);
+  LogicalResult visitExpr(HierarchicalModuleNameOp op);
 
   // Statements
   LogicalResult lowerVerificationStatement(
@@ -2442,20 +2443,29 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
 }
 
 /// Return a lowered version of 'operand' suitable for use with substitution /
-/// format strings. Zero bit operands are rewritten as one bit zeros and signed
-/// integers are wrapped in $signed().
-Value FIRRTLLowering::getLoweredFmtOperand(Value operand) {
+/// format strings. There are three possible results:
+///
+///   1. Does not contain a value if no lowering is set.  This is an error.
+///   2. The lowering contains an empty value.  This means that the operand
+///      should be dropped.
+///   3. The lowering contains a value.  This means the operand should be used.
+///
+/// Zero bit operands are rewritten as one bit zeros and signed integers are
+/// wrapped in $signed().
+std::optional<Value> FIRRTLLowering::getLoweredFmtOperand(Value operand) {
   // Handle special substitutions.
   if (type_isa<FStringType>(operand.getType())) {
     if (isa<TimeOp>(operand.getDefiningOp()))
       return builder.create<sv::TimeOp>();
+    if (isa<HierarchicalModuleNameOp>(operand.getDefiningOp()))
+      return {nullptr};
   }
 
   auto loweredValue = getLoweredValue(operand);
   if (!loweredValue) {
     // If this is a zero bit operand, just pass a one bit zero.
     if (!isZeroBitFIRRTLType(operand.getType()))
-      return nullptr;
+      return {};
     loweredValue = getOrCreateIntConstant(1, 0);
   }
 
@@ -4331,10 +4341,12 @@ LogicalResult FIRRTLLowering::visitExpr(XMRDerefOp op) {
   return setLoweringTo<seq::ToClockOp>(op, readXmr);
 }
 
-// Do nothing when lowering this operation.  We need to handle this at its usage
-// sites to guarantee creation of `sv::TimeOp` that is colocated with the
-// `sv::FWriteOp`.
+// Do nothing when lowering fstring operations.  These need to be handled at
+// their usage sites (at the PrintfOps).
 LogicalResult FIRRTLLowering::visitExpr(TimeOp op) { return success(); }
+LogicalResult FIRRTLLowering::visitExpr(HierarchicalModuleNameOp op) {
+  return success();
+}
 
 //===----------------------------------------------------------------------===//
 // Statements
@@ -4594,14 +4606,25 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
       auto substitution = op.getSubstitutions()[subIdx++];
       assert(type_isa<FStringType>(substitution.getType()) &&
              "the operand for a '{{}}' substitution must be an 'fstring' type");
-      if (auto timeOp = dyn_cast<TimeOp>(substitution.getDefiningOp())) {
-        formatString.append("%0t");
-      } else {
-        op.emitError("has a substitution with an unimplemented lowering")
-                .attachNote(substitution.getLoc())
-            << "op with an unimplemented lowering is here";
+      auto result =
+          TypeSwitch<Operation *, LogicalResult>(substitution.getDefiningOp())
+              .Case<TimeOp>([&](auto) {
+                formatString.append("%0t");
+                return success();
+              })
+              .Case<HierarchicalModuleNameOp>([&](auto) {
+                formatString.append("%m");
+                return success();
+              })
+              .Default([&](auto) {
+                op.emitError("has a substitution with an unimplemented "
+                             "lowering")
+                        .attachNote(substitution.getLoc())
+                    << "op with an unimplemented lowering is here";
+                return failure();
+              });
+      if (failed(result))
         return failure();
-      }
       i += 3;
       break;
     }
@@ -4633,10 +4656,11 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
         // Lower the operands handling any special substitutions that need to be
         // lowered on a per-use basis.
         for (auto operand : op.getSubstitutions()) {
-          Value loweredValue = getLoweredFmtOperand(operand);
+          std::optional<Value> loweredValue = getLoweredFmtOperand(operand);
           if (!loweredValue)
             failed = true;
-          operands.push_back(loweredValue);
+          if (*loweredValue)
+            operands.push_back(*loweredValue);
         }
         if (failed)
           return;
@@ -4780,13 +4804,15 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       if (!loweredValue)
         return failure();
 
+      if (!*loweredValue)
+        break;
       // For SVA assert/assume statements, wrap any message ops in $sampled() to
       // guarantee that these will print with the same value as when the
       // assertion triggers.  (See SystemVerilog 2017 spec section 16.9.3 for
       // more information.)
       if (flavor == VerificationFlavor::SVA)
-        loweredValue = builder.create<sv::SampledOp>(loweredValue);
-      messageOps.push_back(loweredValue);
+        loweredValue = builder.create<sv::SampledOp>(*loweredValue);
+      messageOps.push_back(*loweredValue);
     }
   }
 

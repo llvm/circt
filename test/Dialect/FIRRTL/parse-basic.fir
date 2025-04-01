@@ -2061,8 +2061,8 @@ circuit Foo:
   public module Foo:
     input clock: Clock
     ; In FIRRTL versions < 4.2.0, the following is not a "special substitution".
-    ; CHECK{{LITERAL}}: firrtl.printf %clock, %c1_ui1, "[{{SimulationTime}}]: hello world "
-    printf(clock, UInt<1>(1), "[{{SimulationTime}}]: hello world")
+    ; CHECK{{LITERAL}}: firrtl.printf %clock, %c1_ui1, "[{{SimulationTime}}]: hello from {{HierarchicalModuleName}}"
+    printf(clock, UInt<1>(1), "[{{SimulationTime}}]: hello from {{HierarchicalModuleName}}")
 
 ;// -----
 FIRRTL version 5.0.0
@@ -2071,5 +2071,6 @@ circuit Foo:
     input clock: Clock
     ; In FIRRTL versions >= 4.2.0, the following is not a "special substitution".
     ; CHECK:            %time = firrtl.fstring.time : !firrtl.fstring
-    ; CHECK{{LITERAL}}: firrtl.printf %clock, %c1_ui1, "[{{}}]: hello world "(%time)
-    printf(clock, UInt<1>(1), "[{{SimulationTime}}]: hello world")
+    ; CHECK:            %hierarchicalmodulename = firrtl.fstring.hierarchicalmodulename : !firrtl.fstring
+    ; CHECK{{LITERAL}}: firrtl.printf %clock, %c1_ui1, "[{{}}]: hello world {{}}"(%time, %hierarchicalmodulename)
+    printf(clock, UInt<1>(1), "[{{SimulationTime}}]: hello from {{HierarchicalModuleName}}")

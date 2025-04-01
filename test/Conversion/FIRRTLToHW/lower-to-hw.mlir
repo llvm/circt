@@ -385,7 +385,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
     // CHECK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
-    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "[%0t]: %0d"([[TIME]], %a) : i64, i4
+    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "[%0t]: %0d %m"([[TIME]], %a) : i64, i4
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
@@ -406,7 +406,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.printf %clock, %reset, "Hi signed %d %d\0A"(%1, %d) : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<5>, !firrtl.sint<4>
 
     %time = firrtl.fstring.time : !firrtl.fstring
-    firrtl.printf %clock, %reset, "[{{}}]: %d" (%time, %a) : !firrtl.clock, !firrtl.uint<1>, !firrtl.fstring, !firrtl.uint<4>
+    %hierarchicalmodulename = firrtl.fstring.hierarchicalmodulename : !firrtl.fstring
+    firrtl.printf %clock, %reset, "[{{}}]: %d {{}}" (%time, %a, %hierarchicalmodulename) : !firrtl.clock, !firrtl.uint<1>, !firrtl.fstring, !firrtl.uint<4>, !firrtl.fstring
 
     firrtl.skip
 

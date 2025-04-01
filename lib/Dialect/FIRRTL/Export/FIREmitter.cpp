@@ -897,10 +897,15 @@ void Emitter::emitStatement(PrintFOp op) {
       case '{':
         if (origFormatString.slice(i, i + 4) == "{{}}") {
           formatString.append("{{");
-          if (isa<TimeOp>(op.getSubstitutions()[opIdx++].getDefiningOp()))
-            formatString.append("SimulationTime");
-          else
-            emitError(op, "unsupported fstring substitution type");
+          TypeSwitch<Operation *>(
+              op.getSubstitutions()[opIdx++].getDefiningOp())
+              .Case<TimeOp>(
+                  [&](auto) { formatString.append("SimulationTime"); })
+              .Case<HierarchicalModuleNameOp>(
+                  [&](auto) { formatString.append("HierarchicalModuleName"); })
+              .Default([&](auto) {
+                emitError(op, "unsupported fstring substitution type");
+              });
           formatString.append("}}");
         }
         i += 3;

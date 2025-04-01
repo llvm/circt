@@ -3038,6 +3038,8 @@ ParseResult FIRStmtParser::parsePrintf() {
         auto specialString = formatString.slice(start, i);
         if (specialString == "SimulationTime") {
           operands.push_back(builder.create<TimeOp>());
+        } else if (specialString == "HierarchicalModuleName") {
+          operands.push_back(builder.create<HierarchicalModuleNameOp>());
         } else {
           emitError(formatStringLoc)
               << "unknown printf substitution '" << specialString

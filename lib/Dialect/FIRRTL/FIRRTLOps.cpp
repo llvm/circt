@@ -6378,6 +6378,11 @@ void TimeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), "time");
 }
 
+void HierarchicalModuleNameOp::getAsmResultNames(
+    OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), "hierarchicalmodulename");
+}
+
 //===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//
