@@ -138,6 +138,14 @@ rtg.sequence @seq() {
 
 // -----
 
+rtg.sequence @setCartesianProduct() {
+  // expected-error @below {{at least one set must be provided}}
+  // expected-error @below {{failed to infer returned types}}
+  %0 = "rtg.set_cartesian_product"() : () -> (!rtg.set<tuple<index>>)
+}
+
+// -----
+
 rtg.sequence @seq() {
   // expected-error @below {{expected 1 or more operands, but found 0}}
   rtg.bag_union : !rtg.bag<i32>
