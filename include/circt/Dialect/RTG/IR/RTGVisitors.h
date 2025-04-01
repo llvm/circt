@@ -52,7 +52,9 @@ public:
             RandomizeSequenceOp, EmbedSequenceOp, InterleaveSequencesOp,
             // Sets
             SetCreateOp, SetSelectRandomOp, SetDifferenceOp, SetUnionOp,
-            SetSizeOp>([&](auto expr) -> ResultType {
+            SetSizeOp,
+            // Immediates
+            IntToImmediateOp>([&](auto expr) -> ResultType {
           return thisCast->visitOp(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -112,6 +114,7 @@ public:
   HANDLE(YieldOp, Unhandled);
   HANDLE(FixedRegisterOp, Unhandled);
   HANDLE(VirtualRegisterOp, Unhandled);
+  HANDLE(IntToImmediateOp, Unhandled);
 #undef HANDLE
 };
 
