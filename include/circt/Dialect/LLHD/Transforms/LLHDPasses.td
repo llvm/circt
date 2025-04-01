@@ -155,4 +155,14 @@ def HoistSignalsPass : Pass<"llhd-hoist-signals"> {
   let summary = "Hoist probes and promote drives to process results";
 }
 
+def DeseqPass : Pass<"llhd-deseq", "hw::HWModuleOp"> {
+  let summary = "Convert sequential processes to registers";
+  let dependentDialects = [
+    "comb::CombDialect",
+    "hw::HWDialect",
+    "mlir::scf::SCFDialect",
+    "seq::SeqDialect",
+  ];
+}
+
 #endif // CIRCT_DIALECT_LLHD_TRANSFORMS_PASSES
