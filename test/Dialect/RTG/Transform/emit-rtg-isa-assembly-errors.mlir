@@ -6,7 +6,7 @@ rtg.test @test0() {
   %label = rtg.label_decl "label_name"
 
   // expected-error @below {{labels cannot be emitted as binary}}
-  rtgtest.rv32i.beq %rd, %rs, %label : !rtg.label
+  rtgtest.rv32i.beq %rd, %rs, %label : !rtg.isa.label
 }
 
 // -----
