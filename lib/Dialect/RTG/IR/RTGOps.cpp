@@ -268,6 +268,28 @@ LogicalResult SetCreateOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// SetCartesianProductOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SetCartesianProductOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    SmallVectorImpl<Type> &inferredReturnTypes) {
+  if (operands.empty()) {
+    if (loc)
+      return mlir::emitError(*loc) << "at least one set must be provided";
+    return failure();
+  }
+
+  SmallVector<Type> elementTypes;
+  for (auto operand : operands)
+    elementTypes.push_back(cast<SetType>(operand.getType()).getElementType());
+  inferredReturnTypes.push_back(
+      SetType::get(TupleType::get(context, elementTypes)));
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // BagCreateOp
 //===----------------------------------------------------------------------===//
 

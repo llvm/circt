@@ -1119,6 +1119,42 @@ public:
     return DeletionKind::Delete;
   }
 
+  // {a0,a1} x {b0,b1} x {c0,c1} -> {(a0), (a1)} -> {(a0,b0), (a0,b1), (a1,b0),
+  // (a1,b1)} -> {(a0,b0,c0), (a0,b0,c1), (a0,b1,c0), (a0,b1,c1), (a1,b0,c0),
+  // (a1,b0,c1), (a1,b1,c0), (a1,b1,c1)}
+  FailureOr<DeletionKind> visitOp(SetCartesianProductOp op) {
+    SetVector<ElaboratorValue> result;
+    SmallVector<SmallVector<ElaboratorValue>> tuples;
+    tuples.push_back({});
+
+    for (auto input : op.getInputs()) {
+      auto &set = get<SetStorage *>(input)->set;
+      if (set.empty()) {
+        SetVector<ElaboratorValue> empty;
+        state[op.getResult()] =
+            sharedState.internalizer.internalize<SetStorage>(std::move(empty),
+                                                             op.getType());
+        return DeletionKind::Delete;
+      }
+
+      for (unsigned i = 0, e = tuples.size(); i < e; ++i) {
+        for (auto setEl : set.getArrayRef().drop_back()) {
+          tuples.push_back(tuples[i]);
+          tuples.back().push_back(setEl);
+        }
+        tuples[i].push_back(set.back());
+      }
+    }
+
+    for (auto &tup : tuples)
+      result.insert(
+          sharedState.internalizer.internalize<TupleStorage>(std::move(tup)));
+
+    state[op.getResult()] = sharedState.internalizer.internalize<SetStorage>(
+        std::move(result), op.getType());
+    return DeletionKind::Delete;
+  }
+
   FailureOr<DeletionKind> visitOp(BagCreateOp op) {
     MapVector<ElaboratorValue, uint64_t> bag;
     for (auto [val, multiple] :
