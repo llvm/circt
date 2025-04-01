@@ -9,6 +9,7 @@ from .rtgtest import rtgtest
 from .core import Value
 from .circt import ir
 from .support import _FromCirctValue
+from .sequences import Sequence
 
 import ctypes
 import sys
@@ -34,12 +35,39 @@ class CPUCore(Value):
   when generating randomized tests.
   """
 
-  def __init__(self, hartid: Union[int, ir.Value]) -> CPUCore:
+  def __init__(self, hartid: Union[int, ir.Attribute, ir.Value]) -> CPUCore:
     """
     Creates a CPUCore instance for a specific hardware thread ID.
     """
 
-    self._value = hartid
+    if isinstance(hartid, ir.Value):
+      self._attr = None
+      self._value = hartid
+      return
+
+    self._attr = hartid if isinstance(
+        hartid, ir.Attribute) else rtgtest.CPUAttr.get(hartid)
+    self._value = self._attr
+
+  @staticmethod
+  def any() -> CPUCore:
+    """
+    Creates a CPUCore instance referring to any core. This is useful when
+    specifying a sequence to use for switching from one core to another.
+    """
+
+    return CPUCore(rtg.AnyContextAttr.get(rtgtest.CPUType.get()))
+
+  @staticmethod
+  def register_switch(from_core: CPUCore, to_core: CPUCore,
+                      seq: Sequence) -> None:
+    """
+    Register a sequence with arguments of types [CPUCore, CPUCore, Sequence] to
+    be usable for switching from context 'from_core' to context 'to_core' and back.
+    """
+
+    assert from_core._attr is not None and to_core._attr is not None, "must have attribute available"
+    rtg.ContextSwitchOp(from_core._attr, to_core._attr, seq)
 
   def __enter__(self):
     # TODO: just adding all variables in the context is not particularly nice.
@@ -115,8 +143,8 @@ class CPUCore(Value):
     ctypes.pythonapi.PyFrame_LocalsToFast(ctypes.py_object(s), ctypes.c_int(1))
 
   def _get_ssa_value(self) -> ir.Value:
-    if isinstance(self._value, int):
-      self = rtg.ConstantOp(rtgtest.CPUAttr.get(self._value))
+    if isinstance(self._value, ir.Attribute):
+      self = rtg.ConstantOp(self._value)
     return self._value
 
   def get_type(self) -> ir.Type:
