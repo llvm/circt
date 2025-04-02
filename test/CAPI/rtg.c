@@ -8,6 +8,7 @@
 
 // RUN: circt-capi-rtg-test 2>&1 | FileCheck %s
 
+#include <inttypes.h>
 #include <stdio.h>
 
 #include "circt-c/Dialect/RTG.h"
@@ -158,7 +159,8 @@ static void testImmediate(MlirContext ctx) {
   // CHECK: width=32
   fprintf(stderr, "width=%u\n", rtgImmediateAttrGetWidth(immediateAttr));
   // CHECK: value=42
-  fprintf(stderr, "value=%llu\n", rtgImmediateAttrGetValue(immediateAttr));
+  fprintf(stderr, "value=%" PRIu64 "\n",
+          rtgImmediateAttrGetValue(immediateAttr));
 }
 
 int main(int argc, char **argv) {
