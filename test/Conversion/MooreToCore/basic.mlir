@@ -533,6 +533,28 @@ moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.s
   moore.output %0, %3, %4 : !moore.i32, !moore.struct<{exp_bits: i32, man_bits: i32}>, !moore.struct<{exp_bits: i32, man_bits: i32}>
 }
 
+// CHECK-LABEL: func @ArrayCreate
+// CHECK-SAME: () ->  !hw.array<2xi8>
+func.func @ArrayCreate() -> !moore.array<2x!moore.i8> {
+  // CHECK-NEXT: %c42_i8 = hw.constant 42 : i8 
+  %c0 = moore.constant 42 : !moore.i8
+  // CHECK-NEXT: [[ARR:%.*]] = hw.array_create %c42_i8, %c42_i8 : i8
+  %arr = moore.array_create %c0, %c0 : !moore.i8, !moore.i8 -> !moore.array<2x!moore.i8>
+  // CHECK-NEXT: return [[ARR:%.*]] : !hw.array<2xi8>
+  return %arr : !moore.array<2x!moore.i8>
+}
+
+// CHECK-LABEL: func @UnpackedArrayCreate
+// CHECK-SAME: () ->  !hw.array<2xi8>
+func.func @UnpackedArrayCreate() -> !moore.uarray<2x!moore.i8> {
+  // CHECK-NEXT: %c7_i8 = hw.constant 7 : i8 
+  %a = moore.constant 7 : !moore.i8
+  // CHECK-NEXT: [[ARR:%.*]] = hw.array_create %c7_i8, %c7_i8 : i8
+  %arr = moore.array_create %a, %a : !moore.i8, !moore.i8 -> !moore.uarray<2x!moore.i8>
+  // CHECK-NEXT: return [[ARR:%.*]] : !hw.array<2xi8>
+  return %arr : !moore.uarray<2x!moore.i8>
+}
+
 // CHECK-LABEL:   hw.module @UnpackedStruct
 moore.module @UnpackedStruct() {
   // CHECK: %[[C1_32:.*]] = hw.constant 1 : i32
