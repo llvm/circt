@@ -12,7 +12,17 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT: emit.fragment @FPRINTF_FD_FRAGMENT {
   // CHECK-NEXT:   sv.ifdef  @__CIRCT_LIB_LOGGING {
   // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     sv.verbatim "// CIRCT Logging Library\0Apackage __circt_lib_logging;\0A  class FileDescriptor;\0A    static int global_id [string];\0A    static function int get(string name);\0A      if (!global_id.exists(name))\0A        global_id[name] = $fopen(name);\0A      return global_id[name];\0A    endfunction\0A  endclass\0Aendpackage\0A"
+  // CHECK-NEXT:     sv.verbatim "// CIRCT Logging Library
+  // CHECK-SAME:       package __circt_lib_logging;
+  // CHECK-SAME:         class FileDescriptor;
+  // CHECK-SAME:           static int global_id [string];
+  // CHECK-SAME:           static function int get(string name);
+  // CHECK-SAME:             if (global_id.exists(name) == 32'h0)
+  // CHECK-SAME:               global_id[name] = $fopen(name);
+  // CHECK-SAME:             return global_id[name];
+  // CHECK-SAME:           endfunction
+  // CHECK-SAME:         endclass
+  // CHECK-SAME:       endpackage
   // CHECK-NEXT:     sv.macro.def @__CIRCT_LIB_LOGGING ""
   // CHECK-NEXT:   }
   // CHECK-NEXT: }

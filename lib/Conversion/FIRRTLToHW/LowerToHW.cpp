@@ -882,7 +882,7 @@ package __circt_lib_logging;
   class FileDescriptor;
     static int global_id [string];
     static function int get(string name);
-      if (!global_id.exists(name))
+      if (global_id.exists(name) == 32'h0)
         global_id[name] = $fopen(name);
       return global_id[name];
     endfunction
