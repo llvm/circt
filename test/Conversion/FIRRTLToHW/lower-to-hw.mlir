@@ -326,14 +326,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 //    input c: SInt<4>
 //    input d: SInt<4>
 //    printf(clock, reset, "No operands!\n")
-//    printf(clock, reset, "Hi %x %x\n", add(a, a), b)
-//    printf(clock, reset, "Hi signed %d %d\n", add(c, c), d)
+//    printf(clock, reset, "Hi %0x %0x\n", add(a, a), b)
+//    printf(clock, reset, "Hi signed %d %0d\n", add(c, c), d)
 
   // CHECK-LABEL: hw.module private @Print
   // CHECK-SAME: attributes {emit.fragments = [@PRINTF_FD_FRAGMENT, @PRINTF_COND_FRAGMENT]}
   firrtl.module private @Print(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
-                       in %a: !firrtl.uint<4>, in %b: !firrtl.uint<4>,
-                       in %c: !firrtl.sint<4>, in %d: !firrtl.sint<4>) {
+                               in %a: !firrtl.uint<4>, in %b: !firrtl.uint<4>,
+                               in %c: !firrtl.sint<4>, in %d: !firrtl.sint<4>) {
     // CHECK: [[CLOCK:%.+]] = seq.from_clock %clock
     // CHECK: [[ADD:%.+]] = comb.add
 
@@ -342,54 +342,77 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK:      sv.ifdef @SYNTHESIS {
     // CHECK-NEXT: } else  {
     // CHECK-NEXT:   sv.always posedge [[CLOCK]] {
-    // CHECK-NEXT:     %PRINTF_COND_ = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
-    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND_, %reset
+    // CHECK-NEXT:     %[[PRINTF_COND:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND]], %reset
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
-    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "No operands!\0A"
+    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "No operands and literal: %%\0A"
     // CHECK-NEXT:     }
-    // CHECK-NEXT:     %PRINTF_COND__0 = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
-    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND__0, %reset : i1
+    // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
-    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Hi %x %x\0A"([[ADD]], %b) : i5, i4
+    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Binary: %b %0b %4b\0A"([[ADD]], %b, [[ADD]]) : i5, i4, i5
     // CHECK-NEXT:     }
-    // CHECK-NEXT:     %PRINTF_COND__1 = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
-    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND__1, %reset : i1
+    // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
+    // CHECK-NEXT:     sv.if [[AND]] {
+    // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
+    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Decimal: %d %0d %4d\0A"([[ADD]], %b, [[ADD]]) : i5, i4, i5
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
+    // CHECK-NEXT:     sv.if [[AND]] {
+    // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
+    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Hexadecimal: %x %0x %4x\0A"([[ADD]], %b, [[ADD]]) : i5, i4, i5
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
+    // CHECK-NEXT:     sv.if [[AND]] {
+    // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
+    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "ASCII Character: %c\0A"([[ADD]]) : i5
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
     // CHECK-NEXT:       [[SUMSIGNED:%.+]] = sv.system "signed"([[ADDSIGNED]])
     // CHECK-NEXT:       [[DSIGNED:%.+]] = sv.system "signed"(%d)
     // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Hi signed %d %d\0A"([[SUMSIGNED]], [[DSIGNED]]) : i5, i4
     // CHECK-NEXT:     }
-    // CHECK-NEXT:     %PRINTF_COND__2 = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
-    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND__2, %reset : i1
+    // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
     // CHECK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
-    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "[%0t]: %d"([[TIME]], %a) : i64, i4
+    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "[%0t]: %d %m"([[TIME]], %a) : i64, i4
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
-    firrtl.printf %clock, %reset, "No operands!\0A" : !firrtl.clock, !firrtl.uint<1>
+    firrtl.printf %clock, %reset, "No operands and literal: %%\0A" : !firrtl.clock, !firrtl.uint<1>
 
     %0 = firrtl.add %a, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
-    firrtl.printf %clock, %reset, "Hi %x %x\0A"(%0, %b) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<4>
+    firrtl.printf %clock, %reset, "Binary: %b %0b %4b\0A"(%0, %b, %0) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<4>, !firrtl.uint<5>
+
+    firrtl.printf %clock, %reset, "Decimal: %d %0d %4d\0A"(%0, %b, %0) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<4>, !firrtl.uint<5>
+
+    firrtl.printf %clock, %reset, "Hexadecimal: %x %0x %4x\0A"(%0, %b, %0) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<4>, !firrtl.uint<5>
+
+    firrtl.printf %clock, %reset, "ASCII Character: %c\0A"(%0) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<5>
 
     %1 = firrtl.add %c, %c : (!firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.sint<5>
 
     firrtl.printf %clock, %reset, "Hi signed %d %d\0A"(%1, %d) : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<5>, !firrtl.sint<4>
 
     %time = firrtl.fstring.time : !firrtl.fstring
-    firrtl.printf %clock, %reset, "[{{}}]: %d" (%time, %a) : !firrtl.clock, !firrtl.uint<1>, !firrtl.fstring, !firrtl.uint<4>
+    %hierarchicalmodulename = firrtl.fstring.hierarchicalmodulename : !firrtl.fstring
+    firrtl.printf %clock, %reset, "[{{}}]: %d {{}}" (%time, %a, %hierarchicalmodulename) : !firrtl.clock, !firrtl.uint<1>, !firrtl.fstring, !firrtl.uint<4>, !firrtl.fstring
 
     firrtl.skip
 
     // CHECK: hw.output
-   }
-
-
+  }
 
 // module Stop3 :
 //    input clock1: Clock
@@ -1740,6 +1763,38 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT: [[A:%.+]] = verif.symbolic_value : i42
   // CHECK-NEXT: hw.instance "Foo" @Foo(a: [[A]]: i42) -> (z: i42)
   firrtl.formal @MyTest2, @Foo {world = "abc"}
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+  // CHECK-LABEL: hw.module.extern @Foo
+  // CHECK-SAME:    in %clock : !seq.clock
+  // CHECK-SAME:    in %init : i1
+  // CHECK-SAME:    out done : i1
+  // CHECK-SAME:    out success : i1
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>
+  )
+  // CHECK-LABEL: verif.simulation @MyTest1
+  // CHECK-SAME:    {hello = 42 : i64} {
+  // CHECK-NEXT:  ([[CLOCK:%.+]]: !seq.clock, [[INIT:%.+]]: i1):
+  // CHECK-NEXT:    [[DONE:%.+]], [[SUCCESS:%.+]] = hw.instance "Foo" @Foo
+  // CHECK-SAME:      (clock: [[CLOCK]]: !seq.clock, init: [[INIT]]: i1) -> (done: i1, success: i1)
+  // CHECK-NEXT:    verif.yield [[DONE]], [[SUCCESS]] : i1, i1
+  // CHECK-NEXT:  }
+  firrtl.simulation @MyTest1, @Foo {hello = 42 : i64}
+  // CHECK-LABEL: verif.simulation @MyTest2
+  // CHECK-SAME:    {world = "abc"} {
+  // CHECK-NEXT:  ([[CLOCK:%.+]]: !seq.clock, [[INIT:%.+]]: i1):
+  // CHECK-NEXT:    [[DONE:%.+]], [[SUCCESS:%.+]] = hw.instance "Foo" @Foo
+  // CHECK-SAME:      (clock: [[CLOCK]]: !seq.clock, init: [[INIT]]: i1) -> (done: i1, success: i1)
+  // CHECK-NEXT:    verif.yield [[DONE]], [[SUCCESS]] : i1, i1
+  // CHECK-NEXT:  }
+  firrtl.simulation @MyTest2, @Foo {world = "abc"}
 }
 
 // -----

@@ -3395,14 +3395,80 @@ void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult
-FormalOp::verifySymbolUses(::mlir::SymbolTableCollection &symbolTable) {
-  // The referenced symbol is restricted to FModuleOps
-  auto referencedModule = symbolTable.lookupNearestSymbolFrom<FModuleOp>(
-      *this, getModuleNameAttr());
-  if (!referencedModule)
-    return (*this)->emitOpError("invalid symbol reference");
+FormalOp::verifySymbolUses(mlir::SymbolTableCollection &symbolTable) {
+  auto *op = symbolTable.lookupNearestSymbolFrom(*this, getModuleNameAttr());
+  if (!op)
+    return emitOpError() << "targets unknown module " << getModuleNameAttr();
+
+  if (!isa<FModuleLike>(op)) {
+    auto d = emitOpError() << "target " << getModuleNameAttr()
+                           << " is not a module";
+    d.attachNote(op->getLoc()) << "target defined here";
+    return d;
+  }
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// SimulationOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+SimulationOp::verifySymbolUses(mlir::SymbolTableCollection &symbolTable) {
+  auto *op = symbolTable.lookupNearestSymbolFrom(*this, getModuleNameAttr());
+  if (!op)
+    return emitOpError() << "targets unknown module " << getModuleNameAttr();
+
+  auto complain = [&] {
+    auto d = emitOpError() << "target " << getModuleNameAttr() << " ";
+    d.attachNote(op->getLoc()) << "target defined here";
+    return d;
+  };
+
+  auto module = dyn_cast<FModuleLike>(op);
+  if (!module)
+    return complain() << "is not a module";
+
+  auto numPorts = module.getPortDirections().size();
+  if (numPorts != 4)
+    return complain() << "must have 4 ports, got " << numPorts << " instead";
+
+  auto checkPort = [&](unsigned idx, StringRef expName, Direction expDir,
+                       llvm::function_ref<bool(Type)> checkType,
+                       StringRef expType) {
+    auto name = module.getPortNameAttr(idx);
+    if (name != expName) {
+      complain() << "port " << idx << " must be called \"" << expName
+                 << "\", got " << name << " instead";
+      return false;
+    }
+    if (auto dir = module.getPortDirection(idx); dir != expDir) {
+      auto stringify = [](Direction dir) {
+        return dir == Direction::In ? "an input" : "an output";
+      };
+      complain() << "port " << name << " must be " << stringify(expDir)
+                 << ", got " << stringify(dir) << " instead";
+      return false;
+    }
+    if (auto type = module.getPortType(idx); !checkType(type)) {
+      complain() << "port " << name << " must be a '!firrtl." << expType
+                 << "', got " << type << " instead";
+      return false;
+    }
+    return true;
+  };
+
+  auto isClock = [](Type type) { return isa<ClockType>(type); };
+  auto isBool = [](Type type) {
+    if (auto uintType = dyn_cast<UIntType>(type))
+      return uintType.getWidth() == 1;
+    return false;
+  };
+  return success(checkPort(0, "clock", Direction::In, isClock, "clock") &&
+                 checkPort(1, "init", Direction::In, isBool, "uint<1>") &&
+                 checkPort(2, "done", Direction::Out, isBool, "uint<1>") &&
+                 checkPort(3, "success", Direction::Out, isBool, "uint<1>"));
 }
 
 //===----------------------------------------------------------------------===//
@@ -6320,6 +6386,11 @@ LayerBlockOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 void TimeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), "time");
+}
+
+void HierarchicalModuleNameOp::getAsmResultNames(
+    OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), "hierarchicalmodulename");
 }
 
 //===----------------------------------------------------------------------===//

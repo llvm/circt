@@ -1430,6 +1430,9 @@ struct FIRModuleContext : public FIRParser {
                           insertNameIntoGlobalScope);
   }
 
+  // Removes a symbol from symbolTable (Workaround since symbolTable is private)
+  void removeSymbolEntry(StringRef name);
+
   /// Resolved a symbol table entry to a value.  Emission of error is optional.
   ParseResult resolveSymbolEntry(Value &result, SymbolValueEntry &entry,
                                  SMLoc loc, bool fatal = true);
@@ -1511,6 +1514,11 @@ private:
 
 } // end anonymous namespace
 
+// Removes a symbol from symbolTable (Workaround since symbolTable is private)
+void FIRModuleContext::removeSymbolEntry(StringRef name) {
+  symbolTable.erase(name);
+}
+
 /// Add a symbol entry with the specified name, returning failure if the name
 /// is already defined.
 ///
@@ -1522,12 +1530,22 @@ ParseResult FIRModuleContext::addSymbolEntry(StringRef name,
                                              bool insertNameIntoGlobalScope) {
   // Do a lookup by trying to do an insertion.  Do so in a way that we can tell
   // if we hit a missing element (SMLoc is null).
-  auto entryIt =
-      symbolTable.try_emplace(name, SMLoc(), SymbolValueEntry()).first;
-  if (entryIt->second.first.isValid()) {
-    emitError(loc, "redefinition of name '" + name + "'")
-            .attachNote(translateLocation(entryIt->second.first))
-        << "previous definition here";
+  auto [entryIt, inserted] =
+      symbolTable.try_emplace(name, SMLoc(), SymbolValueEntry());
+
+  // If insertion failed, the name already exists
+  if (!inserted) {
+    if (entryIt->second.first.isValid()) {
+      // Valid activeSMLoc: active symbol in current scope redeclared
+      emitError(loc, "redefinition of name '" + name + "' ")
+              .attachNote(translateLocation(entryIt->second.first))
+          << "previous definition here.";
+    } else {
+      // Invalid activeSMLoc: symbol from a completed scope redeclared
+      emitError(loc, "redefinition of name '" + name + "' ")
+          << "- FIRRTL has flat namespace and requires all "
+          << "declarations in a module to have unique names.";
+    }
     return failure();
   }
 
@@ -1536,7 +1554,6 @@ ParseResult FIRModuleContext::addSymbolEntry(StringRef name,
   entryIt->second = {loc, entry};
   if (currentScope && !insertNameIntoGlobalScope)
     currentScope->scopedDecls.push_back(&*entryIt);
-
   return success();
 }
 
@@ -2970,18 +2987,43 @@ ParseResult FIRStmtParser::parsePrintfLike() {
       // then grab one of the "spec" operands.
       case '%': {
         validatedFormatString.push_back(c);
+
+        // Parse the width specifier.
+        SmallString<6> width;
         c = formatString[++i];
+        while (isdigit(c)) {
+          width.push_back(c);
+          c = formatString[++i];
+        }
+
+        // Parse the radix.
         switch (c) {
-        case 'b':
         case 'c':
+          if (!width.empty()) {
+            emitError(formatStringLoc) << "ASCII character format specifiers "
+                                          "('%c') may not specify a width";
+            return failure();
+          }
+          [[fallthrough]];
+        case 'b':
         case 'd':
         case 'x':
+          if (!width.empty())
+            validatedFormatString.append(width);
           operands.push_back(specOperands[opIdx++]);
           break;
-        // Let anything we don't know about through.  This allows for wildcat
-        // use of `%m` if a user wants.
-        default:
+        case '%':
+          if (!width.empty()) {
+            emitError(formatStringLoc)
+                << "literal percents ('%%') may not specify a width";
+            return failure();
+          }
           break;
+        // Anything else is illegal.
+        default:
+          emitError(formatStringLoc)
+              << "unknown printf substitution '%" << width << c << "'";
+          return failure();
         }
         validatedFormatString.push_back(c);
         break;
@@ -3008,6 +3050,8 @@ ParseResult FIRStmtParser::parsePrintfLike() {
         auto specialString = formatString.slice(start, i);
         if (specialString == "SimulationTime") {
           operands.push_back(builder.create<TimeOp>());
+        } else if (specialString == "HierarchicalModuleName") {
+          operands.push_back(builder.create<HierarchicalModuleNameOp>());
         } else {
           emitError(formatStringLoc)
               << "unknown printf substitution '" << specialString
@@ -4906,10 +4950,12 @@ ParseResult FIRStmtParser::parseContract(unsigned blockIndent) {
 
   // Declare the results.
   for (auto [id, loc, value, result] :
-       llvm::zip(ids, locs, values, contract.getResults()))
+       llvm::zip(ids, locs, values, contract.getResults())) {
+    // Remove previous symbol to avoid duplicates
+    moduleContext.removeSymbolEntry(id);
     if (failed(moduleContext.addSymbolEntry(id, result, loc)))
       return failure();
-
+  }
   return success();
 }
 
@@ -4943,6 +4989,9 @@ private:
   ParseResult parseIntModule(CircuitOp circuit, unsigned indent);
   ParseResult parseModule(CircuitOp circuit, bool isPublic, unsigned indent);
   ParseResult parseFormal(CircuitOp circuit, unsigned indent);
+  ParseResult parseSimulation(CircuitOp circuit, unsigned indent);
+  template <class Op>
+  ParseResult parseFormalLike(CircuitOp circuit, unsigned indent);
 
   ParseResult parseLayerName(SymbolRefAttr &result);
   ParseResult parseOptionalEnabledLayers(ArrayAttr &result);
@@ -5233,6 +5282,7 @@ ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
     case FIRToken::kw_public:
     case FIRToken::kw_layer:
     case FIRToken::kw_option:
+    case FIRToken::kw_simulation:
     case FIRToken::kw_type:
       // All module declarations should have the same indentation
       // level. Use this fact to differentiate between module
@@ -5496,19 +5546,33 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
   return success();
 }
 
-/// formal-old ::= 'formal' id 'of' id ',' 'bound' '=' int info?
-/// formal-new ::= 'formal' id 'of' id ':' info? INDENT (param NEWLINE)* DEDENT
+/// formal ::= 'formal' formal-like
 ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
   consumeToken(FIRToken::kw_formal);
+  return parseFormalLike<FormalOp>(circuit, indent);
+}
+
+/// simulation ::= 'simulation' formal-like
+ParseResult FIRCircuitParser::parseSimulation(CircuitOp circuit,
+                                              unsigned indent) {
+  consumeToken(FIRToken::kw_simulation);
+  return parseFormalLike<SimulationOp>(circuit, indent);
+}
+
+/// formal-like ::= formal-like-old | formal-like-new
+/// formal-like-old ::= id 'of' id ',' 'bound' '=' int info?
+/// formal-like-new ::= id 'of' id ':' info? INDENT (param NEWLINE)* DEDENT
+template <class Op>
+ParseResult FIRCircuitParser::parseFormalLike(CircuitOp circuit,
+                                              unsigned indent) {
   StringRef id, moduleName;
   int64_t bound = 0;
   LocWithInfo info(getToken().getLoc(), this);
   auto builder = circuit.getBodyBuilder();
 
-  // Parse the name and target module of the formal test.
-  // `formal`
-  if (parseId(id, "expected formal test name") ||
-      parseToken(FIRToken::kw_of, "expected 'of' in formal test") ||
+  // Parse the name and target module of the test.
+  if (parseId(id, "expected test name") ||
+      parseToken(FIRToken::kw_of, "expected 'of' in test") ||
       parseId(moduleName, "expected module name"))
     return failure();
 
@@ -5529,7 +5593,7 @@ ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
     params.set("bound", builder.getIntegerAttr(builder.getI32Type(), bound));
   } else {
     // Parse the new style declaration with a `:` and parameter list.
-    if (parseToken(FIRToken::colon, "expected ':' in formal test") ||
+    if (parseToken(FIRToken::colon, "expected ':' in test") ||
         info.parseOptionalInfo())
       return failure();
     while (getIndentation() > indent) {
@@ -5545,8 +5609,8 @@ ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
     }
   }
 
-  builder.create<firrtl::FormalOp>(info.getLoc(), id, moduleName,
-                                   params.getDictionary(getContext()));
+  builder.create<Op>(info.getLoc(), id, moduleName,
+                     params.getDictionary(getContext()));
   return success();
 }
 
@@ -5565,11 +5629,11 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
   case FIRToken::kw_extmodule:
     return parseExtModule(circuit, indent);
   case FIRToken::kw_formal:
-    if (requireFeature({4, 0, 0}, "inline formal tests"))
+    if (requireFeature({4, 0, 0}, "formal tests"))
       return failure();
     return parseFormal(circuit, indent);
   case FIRToken::kw_intmodule:
-    if (requireFeature({1, 2, 0}, "inline formal tests") ||
+    if (requireFeature({1, 2, 0}, "intrinsic modules") ||
         removedFeature({4, 0, 0}, "intrinsic modules"))
       return failure();
     return parseIntModule(circuit, indent);
@@ -5586,6 +5650,10 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
     if (getToken().getKind() == FIRToken::kw_module)
       return parseModule(circuit, /*isPublic=*/true, indent);
     return emitError(getToken().getLoc(), "only modules may be public");
+  case FIRToken::kw_simulation:
+    if (requireFeature(nextFIRVersion, "simulation tests"))
+      return failure();
+    return parseSimulation(circuit, indent);
   case FIRToken::kw_type:
     return parseTypeDecl();
   case FIRToken::kw_option:
@@ -5910,6 +5978,7 @@ ParseResult FIRCircuitParser::parseCircuit(
     case FIRToken::kw_module:
     case FIRToken::kw_option:
     case FIRToken::kw_public:
+    case FIRToken::kw_simulation:
     case FIRToken::kw_type: {
       auto indent = getIndentation();
       if (!indent.has_value())

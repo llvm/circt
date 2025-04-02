@@ -413,6 +413,13 @@ PrbOp::ensureOnlySafeAccesses(const MemorySlot &slot,
   return success();
 }
 
+void PrbOp::getEffects(
+    SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
+        &effects) {
+  if (mayHaveSSADominance(*getOperation()->getParentRegion()))
+    effects.emplace_back(MemoryEffects::Read::get(), &getSignalMutable());
+}
+
 //===----------------------------------------------------------------------===//
 // DrvOp
 //===----------------------------------------------------------------------===//

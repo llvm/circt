@@ -10,6 +10,7 @@
 #include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
 #include "mlir/Analysis/Liveness.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/IR/Matchers.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "llhd-hoist-signals"
@@ -24,15 +25,17 @@ namespace llhd {
 using namespace mlir;
 using namespace circt;
 using namespace llhd;
+using llvm::PointerUnion;
+using llvm::SmallSetVector;
 
 //===----------------------------------------------------------------------===//
 // Probe Hoisting
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// The struct performing the hoisting in a single region.
-struct Hoister {
-  Hoister(Region &region) : region(region) {}
+/// The struct performing the hoisting of probes in a single region.
+struct ProbeHoister {
+  ProbeHoister(Region &region) : region(region) {}
   void hoist();
 
   void findValuesLiveAcrossWait(Liveness &liveness);
@@ -50,7 +53,7 @@ struct Hoister {
 };
 } // namespace
 
-void Hoister::hoist() {
+void ProbeHoister::hoist() {
   Liveness liveness(region.getParentOp());
   findValuesLiveAcrossWait(liveness);
   hoistProbes();
@@ -67,7 +70,7 @@ void Hoister::hoist() {
 /// different points in time. Only values that are explicitly carried across
 /// `llhd.wait`, where the LLHD dialect has control over the control flow
 /// semantics, may have probes in their fan-in cone hoisted out.
-void Hoister::findValuesLiveAcrossWait(Liveness &liveness) {
+void ProbeHoister::findValuesLiveAcrossWait(Liveness &liveness) {
   // First find all values that are live across `llhd.wait` operations. We are
   // only interested in values defined in the current region.
   SmallVector<Value> worklist;
@@ -104,7 +107,7 @@ void Hoister::findValuesLiveAcrossWait(Liveness &liveness) {
     }
   }
 
-  LLVM_DEBUG(llvm::dbgs() << liveAcrossWait.size()
+  LLVM_DEBUG(llvm::dbgs() << "Found " << liveAcrossWait.size()
                           << " values live across wait\n");
 }
 
@@ -113,7 +116,15 @@ void Hoister::findValuesLiveAcrossWait(Liveness &liveness) {
 /// all predecessors are `llhd.wait` ops, and the entry block. Only waits
 /// without any side-effecting op in between themselves and the beginning of the
 /// block can be hoisted.
-void Hoister::hoistProbes() {
+void ProbeHoister::hoistProbes() {
+  auto findExistingProbe = [&](Value signal) {
+    for (auto *user : signal.getUsers())
+      if (auto probeOp = dyn_cast<PrbOp>(user))
+        if (probeOp->getParentRegion()->isProperAncestor(&region))
+          return probeOp;
+    return PrbOp{};
+  };
+
   for (auto &block : region) {
     // We can only hoist probes in blocks where all predecessors have wait
     // terminators.
@@ -159,11 +170,440 @@ void Hoister::hoistProbes() {
         probeOp.erase();
       } else {
         LLVM_DEBUG(llvm::dbgs() << "- Hoisting " << probeOp << "\n");
-        probeOp->moveBefore(region.getParentOp());
-        hoistedOp = probeOp;
+        if (auto existingOp = findExistingProbe(probeOp.getSignal())) {
+          probeOp.replaceAllUsesWith(existingOp.getResult());
+          probeOp.erase();
+          hoistedOp = existingOp;
+        } else {
+          if (auto *defOp = probeOp.getSignal().getDefiningOp())
+            probeOp->moveAfter(defOp);
+          else
+            probeOp->moveBefore(region.getParentOp());
+          hoistedOp = probeOp;
+        }
       }
     }
   }
+}
+
+//===----------------------------------------------------------------------===//
+// Drive Operand Tracking
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// An operand value on a drive operation. Can represent constant `IntegerAttr`
+/// or `TimeAttr` operands, regular `Value` operands, a typed dont-care value,
+/// or a null value.
+struct DriveValue {
+  typedef PointerUnion<Value, IntegerAttr, TimeAttr, Type> Data;
+  Data data;
+
+  // Create a null `DriveValue`.
+  DriveValue() : data(Value{}) {}
+
+  // Create a don't care `DriveValue`.
+  static DriveValue dontCare(Type type) { return DriveValue(type); }
+
+  /// Create a `DriveValue` from a non-null constant `IntegerAttr`.
+  DriveValue(IntegerAttr attr) : data(attr) {}
+
+  /// Create a `DriveValue` from a non-null constant `TimeAttr`.
+  DriveValue(TimeAttr attr) : data(attr) {}
+
+  // Create a `DriveValue` from a non-null `Value`. If the value is defined by a
+  // constant-like op, stores the constant attribute instead.
+  DriveValue(Value value) : data(value) {
+    Attribute attr;
+    if (auto *defOp = value.getDefiningOp())
+      if (m_Constant(&attr).match(defOp))
+        TypeSwitch<Attribute>(attr).Case<IntegerAttr, TimeAttr>(
+            [&](auto attr) { data = attr; });
+  }
+
+  bool operator==(const DriveValue &other) const { return data == other.data; }
+  bool operator!=(const DriveValue &other) const { return data != other.data; }
+
+  bool isDontCare() const { return isa<Type>(data); }
+  explicit operator bool() const { return bool(data); }
+
+  Type getType() const {
+    return TypeSwitch<Data, Type>(data)
+        .Case<Value, IntegerAttr, TimeAttr>([](auto x) { return x.getType(); })
+        .Case<Type>([](auto type) { return type; });
+  }
+
+private:
+  explicit DriveValue(Data data) : data(data) {}
+};
+
+/// The operands of an `llhd.drv`, represented as `DriveValue`s.
+struct DriveOperands {
+  DriveValue value;
+  DriveValue delay;
+  DriveValue enable;
+};
+
+/// A set of drives to a single slot. Tracks the drive operations, the operands
+/// of the drive before each terminator, and which operands have a uniform
+/// value.
+struct DriveSet {
+  /// The drive operations covered by the information in this struct.
+  SmallPtrSet<Operation *, 2> ops;
+  /// The drive operands at each terminator.
+  SmallDenseMap<Operation *, DriveOperands, 2> operands;
+  /// The drive operands that are uniform across all terminators, or null if
+  /// non-uniform.
+  DriveOperands uniform;
+};
+} // namespace
+
+static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                     const DriveValue &dv) {
+  if (!dv.data)
+    os << "null";
+  else
+    TypeSwitch<DriveValue::Data>(dv.data)
+        .Case<Value, IntegerAttr, TimeAttr>([&](auto x) { os << x; })
+        .Case<Type>([&](auto) { os << "dont-care"; });
+  return os;
+}
+
+//===----------------------------------------------------------------------===//
+// Drive Hoisting
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// The struct performing the hoisting of drives in a process.
+struct DriveHoister {
+  DriveHoister(ProcessOp processOp) : processOp(processOp) {}
+  void hoist();
+
+  void findHoistableSlots();
+  void collectDriveSets();
+  void finalizeDriveSets();
+  void hoistDrives();
+
+  /// The process we are hoisting drives out of.
+  ProcessOp processOp;
+
+  /// The slots for which we are trying to hoist drives. Mostly `llhd.sig` ops
+  /// in practice. This establishes a deterministic order for slots, such that
+  /// everything else in the pass can operate using unordered maps and sets.
+  SmallSetVector<Value, 8> slots;
+  SmallVector<Operation *> suspendOps;
+  SmallDenseMap<Value, DriveSet> driveSets;
+};
+} // namespace
+
+void DriveHoister::hoist() {
+  findHoistableSlots();
+  collectDriveSets();
+  finalizeDriveSets();
+  hoistDrives();
+}
+
+/// Identify any slots driven under the current region which are candidates for
+/// hoisting. This checks if the slots escape or alias in any way which we
+/// cannot reason about.
+void DriveHoister::findHoistableSlots() {
+  SmallPtrSet<Value, 8> seenSlots;
+  processOp.walk([&](DrvOp op) {
+    auto slot = op.getSignal();
+    if (!seenSlots.insert(slot).second)
+      return;
+
+    // We can only hoist drives to slots declared by a `llhd.sig` op outside the
+    // current region.
+    if (!slot.getDefiningOp<llhd::SignalOp>())
+      return;
+    if (!slot.getParentRegion()->isProperAncestor(&processOp.getBody()))
+      return;
+
+    // Ensure the slot is not used in any way we cannot reason about.
+    if (!llvm::all_of(slot.getUsers(), [&](auto *user) {
+          // Ignore uses outside of the region.
+          if (!processOp.getBody().isAncestor(user->getParentRegion()))
+            return true;
+          return isa<PrbOp, DrvOp>(user);
+        }))
+      return;
+
+    slots.insert(slot);
+  });
+  LLVM_DEBUG(llvm::dbgs() << "Found " << slots.size()
+                          << " slots for drive hoisting\n");
+}
+
+/// Collect the operands of all hoistable drives into a per-slot drive set.
+/// After this function returns, the `driveSets` contains a drive set for each
+/// slot that has at least one hoistable drive. Each drive set lists the drive
+/// operands for each suspending terminator. If a slot is not driven before a
+/// terminator, the drive set will not contain an entry for that terminator.
+/// Also populates `suspendOps` with all `llhd.wait` and `llhd.halt` ops.
+void DriveHoister::collectDriveSets() {
+  auto trueAttr = BoolAttr::get(processOp.getContext(), true);
+  for (auto &block : processOp.getBody()) {
+    // We can only hoist drives before wait or halt terminators.
+    auto *terminator = block.getTerminator();
+    if (!isa<WaitOp, HaltOp>(terminator))
+      continue;
+    suspendOps.push_back(terminator);
+
+    SmallPtrSet<Value, 8> drivenSlots;
+    for (auto &op : llvm::make_early_inc_range(
+             llvm::reverse(block.without_terminator()))) {
+      auto driveOp = dyn_cast<DrvOp>(op);
+
+      // We can only hoist drives that have no side-effecting ops between
+      // themselves and the terminator of the block. If we see a side-effecting
+      // op, give up on this block.
+      if (!driveOp) {
+        if (isMemoryEffectFree(&op))
+          continue;
+        else
+          break;
+      }
+
+      // Check if we can hoist drives to this signal.
+      if (!slots.contains(driveOp.getSignal())) {
+        LLVM_DEBUG(llvm::dbgs()
+                   << "- Skipping (slot unhoistable) " << driveOp << "\n");
+        continue;
+      }
+
+      // Skip this drive if we have already seen a later drive for this slot.
+      if (!drivenSlots.insert(driveOp.getSignal()).second) {
+        LLVM_DEBUG(llvm::dbgs()
+                   << "- Skipping (driven later) " << driveOp << "\n");
+        continue;
+      }
+
+      // Add the operands of this drive to the drive set for the driven slot.
+      auto operands = DriveOperands{
+          driveOp.getValue(),
+          driveOp.getTime(),
+          driveOp.getEnable() ? DriveValue(driveOp.getEnable())
+                              : DriveValue(trueAttr),
+      };
+      auto &driveSet = driveSets[driveOp.getSignal()];
+      driveSet.ops.insert(driveOp);
+      driveSet.operands.insert({terminator, operands});
+    }
+  }
+}
+
+/// Make sure all drive sets specify a drive value for each terminator. If a
+/// terminator is missing, add a drive with its enable set to false. Also
+/// determine which values are uniform and available outside the process, such
+/// that we don't create unnecessary process results.
+void DriveHoister::finalizeDriveSets() {
+  auto falseAttr = BoolAttr::get(processOp.getContext(), false);
+  for (auto &[slot, driveSet] : driveSets) {
+    // Insert drives with enable set to false for any terminators that are
+    // missing. This ensures that the drive set contains information for every
+    // terminator.
+    for (auto *suspendOp : suspendOps) {
+      auto operands = DriveOperands{
+          DriveValue::dontCare(
+              cast<hw::InOutType>(slot.getType()).getElementType()),
+          DriveValue::dontCare(TimeType::get(processOp.getContext())),
+          DriveValue(falseAttr),
+      };
+      driveSet.operands.insert({suspendOp, operands});
+    }
+
+    // Determine which drive operands have a uniform value across all
+    // terminators. A null `DriveValue` indicates that there is no uniform
+    // value.
+    auto unify = [](DriveValue &accumulator, DriveValue other) {
+      if (other.isDontCare())
+        return;
+      if (accumulator == other)
+        return;
+      accumulator = accumulator.isDontCare() ? other : DriveValue();
+    };
+    assert(!driveSet.operands.empty());
+    driveSet.uniform = driveSet.operands.begin()->second;
+    for (auto [terminator, otherOperands] : driveSet.operands) {
+      unify(driveSet.uniform.value, otherOperands.value);
+      unify(driveSet.uniform.delay, otherOperands.delay);
+      unify(driveSet.uniform.enable, otherOperands.enable);
+    }
+
+    // Discard uniform non-constant values. We cannot directly use SSA values
+    // defined outside the process in the extracted drive, since those values
+    // may change at different times than the current process executes and
+    // updates its results.
+    auto clearIfNonConst = [&](DriveValue &driveValue) {
+      if (isa_and_nonnull<Value>(driveValue.data))
+        driveValue = DriveValue();
+    };
+    clearIfNonConst(driveSet.uniform.value);
+    clearIfNonConst(driveSet.uniform.delay);
+    clearIfNonConst(driveSet.uniform.enable);
+  }
+
+  LLVM_DEBUG({
+    for (auto slot : slots) {
+      const auto &driveSet = driveSets[slot];
+      llvm::dbgs() << "Drives to " << slot << "\n";
+      if (driveSet.uniform.value)
+        llvm::dbgs() << "- Uniform value: " << driveSet.uniform.value << "\n";
+      if (driveSet.uniform.delay)
+        llvm::dbgs() << "- Uniform delay: " << driveSet.uniform.delay << "\n";
+      if (driveSet.uniform.enable)
+        llvm::dbgs() << "- Uniform enable: " << driveSet.uniform.enable << "\n";
+      for (auto *suspendOp : suspendOps) {
+        auto operands = driveSet.operands.lookup(suspendOp);
+        llvm::dbgs() << "- At " << *suspendOp << "\n";
+        if (!driveSet.uniform.value)
+          llvm::dbgs() << "  - Value: " << operands.value << "\n";
+        if (!driveSet.uniform.delay)
+          llvm::dbgs() << "  - Delay: " << operands.delay << "\n";
+        if (!driveSet.uniform.enable)
+          llvm::dbgs() << "  - Enable: " << operands.enable << "\n";
+      }
+    }
+  });
+}
+
+/// Hoist drive operations out of the process. This function adds yield operands
+/// to carry the operands of the hoisted drives out of the process, and adds
+/// corresponding process results. It then creates replacement drives outside of
+/// the process and uses the new result values for the drive operands.
+void DriveHoister::hoistDrives() {
+  if (driveSets.empty())
+    return;
+  LLVM_DEBUG(llvm::dbgs() << "Hoisting drives of " << driveSets.size()
+                          << " slots\n");
+
+  // A builder to construct constant values outside the region.
+  OpBuilder builder(processOp);
+  SmallDenseMap<Attribute, Value> materializedConstants;
+
+  auto materialize = [&](DriveValue driveValue) -> Value {
+    OpBuilder builder(processOp);
+    return TypeSwitch<DriveValue::Data, Value>(driveValue.data)
+        .Case<Value>([](auto value) { return value; })
+        .Case<IntegerAttr>([&](auto attr) {
+          auto &slot = materializedConstants[attr];
+          if (!slot)
+            slot = builder.create<hw::ConstantOp>(processOp.getLoc(), attr);
+          return slot;
+        })
+        .Case<TimeAttr>([&](auto attr) {
+          auto &slot = materializedConstants[attr];
+          if (!slot)
+            slot =
+                builder.create<llhd::ConstantTimeOp>(processOp.getLoc(), attr);
+          return slot;
+        })
+        .Case<Type>([&](auto type) {
+          // TODO: This should probably create something like a `llhd.dontcare`.
+          unsigned numBits = hw::getBitWidth(type);
+          assert(numBits >= 0);
+          Value value = builder.create<hw::ConstantOp>(
+              processOp.getLoc(), builder.getIntegerType(numBits), 0);
+          if (value.getType() != type)
+            value =
+                builder.create<hw::BitcastOp>(processOp.getLoc(), type, value);
+          return value;
+        });
+  };
+
+  // Add the non-uniform drive operands as yield operands of any `llhd.wait` and
+  // `llhd.halt` terminators.
+  for (auto *suspendOp : suspendOps) {
+    LLVM_DEBUG(llvm::dbgs()
+               << "- Adding yield operands to " << *suspendOp << "\n");
+    MutableOperandRange yieldOperands =
+        TypeSwitch<Operation *, MutableOperandRange>(suspendOp)
+            .Case<WaitOp, HaltOp>(
+                [](auto op) { return op.getYieldOperandsMutable(); });
+
+    auto addYieldOperand = [&](DriveValue uniform, DriveValue nonUniform) {
+      if (!uniform)
+        yieldOperands.append(materialize(nonUniform));
+    };
+
+    for (auto slot : slots) {
+      auto &driveSet = driveSets[slot];
+      auto operands = driveSet.operands.lookup(suspendOp);
+      addYieldOperand(driveSet.uniform.value, operands.value);
+      addYieldOperand(driveSet.uniform.delay, operands.delay);
+      addYieldOperand(driveSet.uniform.enable, operands.enable);
+    }
+  }
+
+  // Add process results corresponding to the added yield operands.
+  SmallVector<Type> resultTypes(processOp->getResultTypes());
+  auto oldNumResults = resultTypes.size();
+  auto addResultType = [&](DriveValue uniform, DriveValue nonUniform) {
+    if (!uniform)
+      resultTypes.push_back(nonUniform.getType());
+  };
+  for (auto slot : slots) {
+    auto &driveSet = driveSets[slot];
+    auto operands = driveSet.operands.begin()->second;
+    addResultType(driveSet.uniform.value, operands.value);
+    addResultType(driveSet.uniform.delay, operands.delay);
+    addResultType(driveSet.uniform.enable, operands.enable);
+  }
+  auto newProcessOp = builder.create<ProcessOp>(processOp.getLoc(), resultTypes,
+                                                processOp->getOperands(),
+                                                processOp->getAttrs());
+  newProcessOp.getBody().takeBody(processOp.getBody());
+  processOp.replaceAllUsesWith(
+      newProcessOp->getResults().slice(0, oldNumResults));
+  processOp.erase();
+  processOp = newProcessOp;
+
+  // Hoist the actual drive operations. We either materialize uniform values
+  // directly, since they are guaranteed to be able outside the process at this
+  // point, or use the new process results.
+  builder.setInsertionPointAfter(processOp);
+  auto newResultIdx = oldNumResults;
+
+  auto useResultValue = [&](DriveValue uniform) {
+    if (!uniform)
+      return processOp.getResult(newResultIdx++);
+    return materialize(uniform);
+  };
+
+  auto removeIfUnused = [](Value value) {
+    if (value)
+      if (auto *defOp = value.getDefiningOp())
+        if (defOp && isOpTriviallyDead(defOp))
+          defOp->erase();
+  };
+
+  auto trueAttr = builder.getBoolAttr(true);
+  for (auto slot : slots) {
+    auto &driveSet = driveSets[slot];
+
+    // Create the new drive outside of the process.
+    auto value = useResultValue(driveSet.uniform.value);
+    auto delay = useResultValue(driveSet.uniform.delay);
+    auto enable = driveSet.uniform.enable != DriveValue(trueAttr)
+                      ? useResultValue(driveSet.uniform.enable)
+                      : Value{};
+    auto newDrive =
+        builder.create<DrvOp>(slot.getLoc(), slot, value, delay, enable);
+    LLVM_DEBUG(llvm::dbgs() << "- Add " << newDrive << "\n");
+
+    // Remove the old drives inside of the process.
+    for (auto *oldOp : driveSet.ops) {
+      auto oldDrive = cast<DrvOp>(oldOp);
+      LLVM_DEBUG(llvm::dbgs() << "- Remove " << oldDrive << "\n");
+      auto delay = oldDrive.getTime();
+      auto enable = oldDrive.getEnable();
+      oldDrive.erase();
+      removeIfUnused(delay);
+      removeIfUnused(enable);
+    }
+    driveSet.ops.clear();
+  }
+  assert(newResultIdx == processOp->getNumResults());
 }
 
 //===----------------------------------------------------------------------===//
@@ -188,6 +628,9 @@ void HoistSignalsPass::runOnOperation() {
     }
     return WalkResult::advance();
   });
-  for (auto *region : regions)
-    Hoister(*region).hoist();
+  for (auto *region : regions) {
+    ProbeHoister(*region).hoist();
+    if (auto processOp = dyn_cast<ProcessOp>(region->getParentOp()))
+      DriveHoister(processOp).hoist();
+  }
 }

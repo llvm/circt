@@ -20,16 +20,16 @@ with Context() as ctx, Location.unknown():
     targetBlock = Block.create_at_start(target.bodyRegion, [])
     with InsertionPoint(targetBlock):
       cpuAttr = rtgtest.CPUAttr.get(0)
-      cpu0 = rtgtest.CPUDeclOp(cpuAttr)
-      cpu1 = rtgtest.CPUDeclOp(rtgtest.CPUAttr.get(cpuAttr.id + 1))
+      cpu0 = rtg.ConstantOp(cpuAttr)
+      cpu1 = rtg.ConstantOp(rtgtest.CPUAttr.get(cpuAttr.id + 1))
       rtg.YieldOp([cpu0, cpu1])
 
     test = rtg.TestOp('test_name', TypeAttr.get(dictTy))
     Block.create_at_start(test.bodyRegion, [cpuTy, cpuTy])
 
   # CHECK: rtg.target @target_name : !rtg.dict<cpu0: !rtgtest.cpu, cpu1: !rtgtest.cpu> {
-  # CHECK:   [[V0:%.+]] = rtgtest.cpu_decl <0>
-  # CHECK:   [[V1:%.+]] = rtgtest.cpu_decl <1>
+  # CHECK:   [[V0:%.+]] = rtg.constant #rtgtest.cpu<0>
+  # CHECK:   [[V1:%.+]] = rtg.constant #rtgtest.cpu<1>
   # CHECK:   rtg.yield [[V0]], [[V1]] : !rtgtest.cpu, !rtgtest.cpu
   # CHECK: }
   # CHECK: rtg.test @test_name(cpu0 = %cpu0: !rtgtest.cpu, cpu1 = %cpu1: !rtgtest.cpu) {
@@ -106,7 +106,7 @@ with Context() as ctx, Location.unknown():
     # CHECK: index{{$}}
     print(bagTy.element_type)
 
-  # CHECK: rtg.sequence @seq(%{{.*}}: !rtg.sequence, %{{.*}}: !rtg.label, %{{.*}}: !rtg.set<index>, %{{.*}}: !rtg.bag<index>, %{{.*}}: !rtgtest.ireg, %{{.*}}: !rtg.randomized_sequence)
+  # CHECK: rtg.sequence @seq(%{{.*}}: !rtg.sequence, %{{.*}}: !rtg.isa.label, %{{.*}}: !rtg.set<index>, %{{.*}}: !rtg.bag<index>, %{{.*}}: !rtgtest.ireg, %{{.*}}: !rtg.randomized_sequence)
   print(m)
 
 with Context() as ctx, Location.unknown():
@@ -184,23 +184,6 @@ with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
   m = Module.create()
   with InsertionPoint(m.body):
-    # CHECK: rtgtest.immediate #rtgtest.imm5<3> : !rtgtest.imm5
-    rtgtest.ImmediateOp(rtgtest.Imm5Attr.get(3))
-    # CHECK: rtgtest.immediate #rtgtest.imm12<3> : !rtgtest.imm12
-    rtgtest.ImmediateOp(rtgtest.Imm12Attr.get(3))
-    # CHECK: rtgtest.immediate #rtgtest.imm13<3> : !rtgtest.imm13
-    rtgtest.ImmediateOp(rtgtest.Imm13Attr.get(3))
-    # CHECK: rtgtest.immediate #rtgtest.imm21<3> : !rtgtest.imm21
-    rtgtest.ImmediateOp(rtgtest.Imm21Attr.get(3))
-    # CHECK: rtgtest.immediate #rtgtest.imm32<3> : !rtgtest.imm32
-    rtgtest.ImmediateOp(rtgtest.Imm32Attr.get(3))
-
-  print(m)
-
-with Context() as ctx, Location.unknown():
-  circt.register_dialects(ctx)
-  m = Module.create()
-  with InsertionPoint(m.body):
     seq = rtg.SequenceOp('seq', TypeAttr.get(rtg.SequenceType.get([])))
     block = Block.create_at_start(seq.bodyRegion, [])
     with InsertionPoint(block):
@@ -221,3 +204,17 @@ with Context() as ctx, Location.unknown():
   print(attr.type)
   # CHECK: #rtg.default : !rtgtest.cpu
   print(attr)
+
+  immediate_type = rtg.ImmediateType.get(32)
+  # CHECK: width=32
+  print(f"width={immediate_type.width}")
+  # CHECK: !rtg.isa.immediate<32>
+  print(immediate_type)
+
+  immediate_attr = rtg.ImmediateAttr.get(32, 42)
+  # CHECK: width=32
+  print(f"width={immediate_attr.width}")
+  # CHECK: value=42
+  print(f"value={immediate_attr.value}")
+  # CHECK: #rtg.isa.immediate<32, 42>
+  print(immediate_attr)

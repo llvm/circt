@@ -154,27 +154,11 @@ def type_to_pytype(t) -> ir.Type:
   except ValueError:
     pass
   try:
+    return rtg.ImmediateType(t)
+  except ValueError:
+    pass
+  try:
     return rtgtest.IntegerRegisterType(t)
-  except ValueError:
-    pass
-  try:
-    return rtgtest.Imm5Type(t)
-  except ValueError:
-    pass
-  try:
-    return rtgtest.Imm12Type(t)
-  except ValueError:
-    pass
-  try:
-    return rtgtest.Imm13Type(t)
-  except ValueError:
-    pass
-  try:
-    return rtgtest.Imm21Type(t)
-  except ValueError:
-    pass
-  try:
-    return rtgtest.Imm32Type(t)
   except ValueError:
     pass
 

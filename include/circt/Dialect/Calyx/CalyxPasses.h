@@ -32,6 +32,7 @@ std::unique_ptr<mlir::Pass> createGroupInvariantCodeMotionPass();
 std::unique_ptr<mlir::Pass> createAffineParallelUnrollPass();
 std::unique_ptr<mlir::Pass> createAffineToSCFPass();
 std::unique_ptr<mlir::Pass> createAffinePloopUnparallelizePass();
+std::unique_ptr<mlir::Pass> createExcludeExecuteRegionCanonicalizePass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

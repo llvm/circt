@@ -211,20 +211,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: }
     when reset : connect _t, _t_2 else : connect _t, _t_2
 
-    ; CHECK: firrtl.when %reset : !firrtl.uint<1> {
-    ; CHECK:   [[N4A:%.+]] = firrtl.node interesting_name %_t_2
-    ; CHECK:   firrtl.matchingconnect %_t, [[N4A]]
-    ; CHECK: } else {
-    ; CHECK:   [[N4B:%.+]] = firrtl.node interesting_name %_t_2
-    ; CHECK:   firrtl.matchingconnect %_t, [[N4B]]
-    ; CHECK: }
-    when reset :
-      node n4 = _t_2
-      connect _t, n4
-    else :
-      node n4 = _t_2   ; 'n4' name is in unique scopes.
-      connect _t, n4
-
     ; CHECK: [[TMP:%.+]] = firrtl.constant 4
     ; CHECK: [[COND:%.+]] = firrtl.lt %reset, [[TMP]]
     ; CHECK: firrtl.when [[COND]] : !firrtl.uint<1> {
@@ -1196,6 +1182,24 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: firrtl.matchingconnect %nonconst_w, [[CAST]] : !firrtl.sint<4>
     connect nonconst_w, s4
 
+  ; CHECK-LABEL: firrtl.module @Printf
+  public module Printf:
+    input clock: Clock
+    input i8: UInt<8>
+
+    ; CHECK:      firrtl.printf %clock, %c1_ui1, "%b, %0b, %8b" (%i8, %i8, %i8) : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>, !firrtl.uint<8>
+    printf(clock, UInt<1>(1), "%b, %0b, %8b", i8, i8, i8)
+    ; CHECK-NEXT: firrtl.printf %clock, %c1_ui1, "%d, %0d, %8d" (%i8, %i8, %i8) : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>, !firrtl.uint<8>
+    printf(clock, UInt<1>(1), "%d, %0d, %8d", i8, i8, i8)
+    ; CHECK-NEXT: firrtl.printf %clock, %c1_ui1, "%x, %0x, %8x" (%i8, %i8, %i8) : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>, !firrtl.uint<8>
+    printf(clock, UInt<1>(1), "%x, %0x, %8x", i8, i8, i8)
+
+    ; CHECK-NEXT: firrtl.printf %clock, %c1_ui1, "%c" (%i8) : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.uint<8>
+    printf(clock, UInt<1>(1), "%c", i8)
+
+    ; CHECK-NEXT: firrtl.printf %clock, %c1_ui1, "%%" : !firrtl.clock, !firrtl.const.uint<1>
+    printf(clock, UInt<1>(1), "%%")
+
 ;// -----
 
 ; CHECK-LABEL: firrtl.circuit "Foo_v3p0p0"
@@ -1449,7 +1453,7 @@ circuit Layers:
 
 ;// -----
 ; CHECK-LABEL: firrtl.circuit "BasicProps"
-FIRRTL version 4.2.0
+FIRRTL version 5.1.0
 circuit BasicProps :
   public module BasicProps :
   ; CHECK-LABEL: module private @Integer
@@ -1655,7 +1659,7 @@ circuit WireOfProbesAndNames:
     wire probe : Probe<UInt<1>>
 
 ;// -----
-FIRRTL version 4.2.0
+FIRRTL version 5.1.0
 
 ; CHECK-LABEL: circuit "AnyRef"
 circuit AnyRef:
@@ -1890,6 +1894,33 @@ circuit Foo:
     d_map = {a = 42, b = "hello", c = [9001], d = {foo = 1337}}
 
 ;// -----
+FIRRTL version 5.1.0
+; CHECK-LABEL: circuit "Foo"
+circuit Foo:
+
+  ; CHECK-LABEL: firrtl.extmodule @Foo(
+  extmodule Foo:
+    input clock: Clock
+    input init: UInt<1>
+    output done: UInt<1>
+    output success: UInt<1>
+
+  ; CHECK: firrtl.simulation @someNameA, @Foo {bound = 20 : i32}
+  simulation someNameA of Foo, bound = 20
+
+  ; CHECK: firrtl.simulation @someNameB, @Foo {
+  ; CHECK-SAME: a_int = 42
+  ; CHECK-SAME: b_string = "hello"
+  ; CHECK-SAME: c_array = [42 : ui32, "hello", [9001 : ui32], {foo = 1337 : ui32}]
+  ; CHECK-SAME: d_map = {a = 42 : ui32, b = "hello", c = [9001 : ui32], d = {foo = 1337 : ui32}}
+  ; CHECK-SAME: }
+  simulation someNameB of Foo:
+    a_int = 42
+    b_string = "hello"
+    c_array = [42, "hello", [9001], {foo = 1337}]
+    d_map = {a = 42, b = "hello", c = [9001], d = {foo = 1337}}
+
+;// -----
 FIRRTL version 3.9.0
 circuit Foo:
 
@@ -1980,7 +2011,7 @@ circuit Foo:
     b <= a
 
 ;// -----
-FIRRTL version 4.2.0
+FIRRTL version 5.1.0
 ; CHECK-LABEL: firrtl.circuit "Contracts"
 circuit Contracts:
   ; CHECK-LABEL: firrtl.module @Contracts(
@@ -2030,8 +2061,8 @@ circuit Foo:
   public module Foo:
     input clock: Clock
     ; In FIRRTL versions < 4.2.0, the following is not a "special substitution".
-    ; CHECK{{LITERAL}}: firrtl.printf %clock, %c1_ui1, "[{{SimulationTime}}]: hello world "
-    printf(clock, UInt<1>(1), "[{{SimulationTime}}]: hello world")
+    ; CHECK{{LITERAL}}: firrtl.printf %clock, %c1_ui1, "[{{SimulationTime}}]: hello from {{HierarchicalModuleName}}"
+    printf(clock, UInt<1>(1), "[{{SimulationTime}}]: hello from {{HierarchicalModuleName}}")
 
 ;// -----
 FIRRTL version 5.0.0
@@ -2040,5 +2071,6 @@ circuit Foo:
     input clock: Clock
     ; In FIRRTL versions >= 4.2.0, the following is not a "special substitution".
     ; CHECK:            %time = firrtl.fstring.time : !firrtl.fstring
-    ; CHECK{{LITERAL}}: firrtl.printf %clock, %c1_ui1, "[{{}}]: hello world "(%time)
-    printf(clock, UInt<1>(1), "[{{SimulationTime}}]: hello world")
+    ; CHECK:            %hierarchicalmodulename = firrtl.fstring.hierarchicalmodulename : !firrtl.fstring
+    ; CHECK{{LITERAL}}: firrtl.printf %clock, %c1_ui1, "[{{}}]: hello world {{}}"(%time, %hierarchicalmodulename)
+    printf(clock, UInt<1>(1), "[{{SimulationTime}}]: hello from {{HierarchicalModuleName}}")

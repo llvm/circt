@@ -576,6 +576,8 @@ private:
                                       CircuitLoweringState &loweringState);
   LogicalResult lowerFormalBody(verif::FormalOp formalOp,
                                 CircuitLoweringState &loweringState);
+  LogicalResult lowerSimulationBody(verif::SimulationOp simulationOp,
+                                    CircuitLoweringState &loweringState);
 };
 
 } // end anonymous namespace
@@ -619,6 +621,7 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   SmallVector<hw::HWModuleOp, 32> modulesToProcess;
   SmallVector<verif::FormalOp> formalOpsToProcess;
+  SmallVector<verif::SimulationOp> simulationOpsToProcess;
 
   AnnotationSet circuitAnno(circuit);
   moveVerifAnno(getOperation(), circuitAnno, extractAssertAnnoClass,
@@ -669,14 +672,26 @@ void FIRRTLModuleLowering::runOnOperation() {
               state.recordModuleMapping(&op, loweredMod);
               return success();
             })
-            .Case<FormalOp>([&](auto oldFormalOp) {
+            .Case<FormalOp>([&](auto oldOp) {
               auto builder = OpBuilder::atBlockEnd(topLevelModule);
-              auto newFormalOp = builder.create<verif::FormalOp>(
-                  oldFormalOp.getLoc(), oldFormalOp.getNameAttr(),
-                  oldFormalOp.getParametersAttr());
-              newFormalOp.getBody().emplaceBlock();
-              state.recordModuleMapping(oldFormalOp, newFormalOp);
-              formalOpsToProcess.push_back(newFormalOp);
+              auto newOp = builder.create<verif::FormalOp>(
+                  oldOp.getLoc(), oldOp.getNameAttr(),
+                  oldOp.getParametersAttr());
+              newOp.getBody().emplaceBlock();
+              state.recordModuleMapping(oldOp, newOp);
+              formalOpsToProcess.push_back(newOp);
+              return success();
+            })
+            .Case<SimulationOp>([&](auto oldOp) {
+              auto loc = oldOp.getLoc();
+              auto builder = OpBuilder::atBlockEnd(topLevelModule);
+              auto newOp = builder.create<verif::SimulationOp>(
+                  loc, oldOp.getNameAttr(), oldOp.getParametersAttr());
+              auto &body = newOp.getRegion().emplaceBlock();
+              body.addArgument(seq::ClockType::get(builder.getContext()), loc);
+              body.addArgument(builder.getI1Type(), loc);
+              state.recordModuleMapping(oldOp, newOp);
+              simulationOpsToProcess.push_back(newOp);
               return success();
             })
             .Default([&](Operation *op) {
@@ -746,6 +761,13 @@ void FIRRTLModuleLowering::runOnOperation() {
   result = mlir::failableParallelForEach(
       &getContext(), formalOpsToProcess,
       [&](auto op) { return lowerFormalBody(op, state); });
+  if (failed(result))
+    return signalPassFailure();
+
+  // Lower all simulation op bodies.
+  result = mlir::failableParallelForEach(
+      &getContext(), simulationOpsToProcess,
+      [&](auto op) { return lowerSimulationBody(op, state); });
   if (failed(result))
     return signalPassFailure();
 
@@ -1483,22 +1505,18 @@ LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
 /// Run on each `verif.formal` to populate its body based on the original
 /// `firrtl.formal` operation.
 LogicalResult
-FIRRTLModuleLowering::lowerFormalBody(verif::FormalOp formalOp,
+FIRRTLModuleLowering::lowerFormalBody(verif::FormalOp newOp,
                                       CircuitLoweringState &loweringState) {
-  auto builder = OpBuilder::atBlockEnd(&formalOp.getBody().front());
+  auto builder = OpBuilder::atBlockEnd(&newOp.getBody().front());
 
   // Find the module targeted by the `firrtl.formal` operation. The `FormalOp`
   // verifier guarantees the module exists and that it is an `FModuleOp`. This
   // we can then translate to the corresponding `HWModuleOp`.
-  auto oldFormalOp = cast<FormalOp>(loweringState.getOldModule(formalOp));
-  auto moduleName = oldFormalOp.getModuleNameAttr().getAttr();
+  auto oldOp = cast<FormalOp>(loweringState.getOldModule(newOp));
+  auto moduleName = oldOp.getModuleNameAttr().getAttr();
   auto oldModule = cast<FModuleOp>(
       loweringState.getInstanceGraph().lookup(moduleName)->getModule());
-  auto newModule =
-      dyn_cast_or_null<hw::HWModuleOp>(loweringState.getNewModule(oldModule));
-  if (!newModule)
-    return oldFormalOp->emitOpError()
-           << "could not find module " << oldModule.getSymNameAttr();
+  auto newModule = cast<hw::HWModuleOp>(loweringState.getNewModule(oldModule));
 
   // Create a symbolic input for every input of the lowered module.
   SmallVector<Value> symbolicInputs;
@@ -1507,8 +1525,33 @@ FIRRTLModuleLowering::lowerFormalBody(verif::FormalOp formalOp,
         builder.create<verif::SymbolicValueOp>(arg.getLoc(), arg.getType()));
 
   // Instantiate the module with the given symbolic inputs.
-  builder.create<hw::InstanceOp>(formalOp.getLoc(), newModule,
+  builder.create<hw::InstanceOp>(newOp.getLoc(), newModule,
                                  newModule.getNameAttr(), symbolicInputs);
+  return success();
+}
+
+/// Run on each `verif.simulation` to populate its body based on the original
+/// `firrtl.simulation` operation.
+LogicalResult
+FIRRTLModuleLowering::lowerSimulationBody(verif::SimulationOp newOp,
+                                          CircuitLoweringState &loweringState) {
+  auto builder = OpBuilder::atBlockEnd(newOp.getBody());
+
+  // Find the module targeted by the `firrtl.simulation` operation.
+  auto oldOp = cast<SimulationOp>(loweringState.getOldModule(newOp));
+  auto moduleName = oldOp.getModuleNameAttr().getAttr();
+  auto oldModule = cast<FModuleLike>(
+      *loweringState.getInstanceGraph().lookup(moduleName)->getModule());
+  auto newModule =
+      cast<hw::HWModuleLike>(loweringState.getNewModule(oldModule));
+
+  // Instantiate the module with the simulation op's block arguments as inputs,
+  // and yield the module's outputs.
+  SmallVector<Value> inputs(newOp.getBody()->args_begin(),
+                            newOp.getBody()->args_end());
+  auto instOp = builder.create<hw::InstanceOp>(newOp.getLoc(), newModule,
+                                               newModule.getNameAttr(), inputs);
+  builder.create<verif::YieldOp>(newOp.getLoc(), instOp.getResults());
   return success();
 }
 
@@ -1542,7 +1585,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   Value getLoweredNonClockValue(Value value);
   Value getLoweredAndExtendedValue(Value value, Type destType);
   Value getLoweredAndExtOrTruncValue(Value value, Type destType);
-  Value getLoweredFmtOperand(Value operand);
+  std::optional<Value> getLoweredFmtOperand(Value operand);
   LogicalResult setLowering(Value orig, Value result);
   LogicalResult setPossiblyFoldedLowering(Value orig, Value result);
   template <typename ResultOpType, typename... CtorArgTypes>
@@ -1793,6 +1836,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   // Format String Operations
   LogicalResult visitExpr(TimeOp op);
+  LogicalResult visitExpr(HierarchicalModuleNameOp op);
 
   // Statements
   LogicalResult lowerVerificationStatement(
@@ -2472,20 +2516,29 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
 }
 
 /// Return a lowered version of 'operand' suitable for use with substitution /
-/// format strings. Zero bit operands are rewritten as one bit zeros and signed
-/// integers are wrapped in $signed().
-Value FIRRTLLowering::getLoweredFmtOperand(Value operand) {
+/// format strings. There are three possible results:
+///
+///   1. Does not contain a value if no lowering is set.  This is an error.
+///   2. The lowering contains an empty value.  This means that the operand
+///      should be dropped.
+///   3. The lowering contains a value.  This means the operand should be used.
+///
+/// Zero bit operands are rewritten as one bit zeros and signed integers are
+/// wrapped in $signed().
+std::optional<Value> FIRRTLLowering::getLoweredFmtOperand(Value operand) {
   // Handle special substitutions.
   if (type_isa<FStringType>(operand.getType())) {
     if (isa<TimeOp>(operand.getDefiningOp()))
       return builder.create<sv::TimeOp>();
+    if (isa<HierarchicalModuleNameOp>(operand.getDefiningOp()))
+      return {nullptr};
   }
 
   auto loweredValue = getLoweredValue(operand);
   if (!loweredValue) {
     // If this is a zero bit operand, just pass a one bit zero.
     if (!isZeroBitFIRRTLType(operand.getType()))
-      return nullptr;
+      return {};
     loweredValue = getOrCreateIntConstant(1, 0);
   }
 
@@ -4361,10 +4414,12 @@ LogicalResult FIRRTLLowering::visitExpr(XMRDerefOp op) {
   return setLoweringTo<seq::ToClockOp>(op, readXmr);
 }
 
-// Do nothing when lowering this operation.  We need to handle this at its usage
-// sites to guarantee creation of `sv::TimeOp` that is colocated with the
-// `sv::FWriteOp`.
+// Do nothing when lowering fstring operations.  These need to be handled at
+// their usage sites (at the PrintfOps).
 LogicalResult FIRRTLLowering::visitExpr(TimeOp op) { return success(); }
+LogicalResult FIRRTLLowering::visitExpr(HierarchicalModuleNameOp op) {
+  return success();
+}
 
 //===----------------------------------------------------------------------===//
 // Statements
@@ -4575,28 +4630,41 @@ LogicalResult FIRRTLLowering::visitPrintfStmt(T op, StringAttr outputFile) {
     return failure();
 
   // Update the format string to replace "special" substitutions based on
-  // substitution type.
+  // substitution type and lower normal substitusion.
   SmallString<32> formatString;
   for (size_t i = 0, e = op.getFormatString().size(), subIdx = 0; i != e; ++i) {
     char c = op.getFormatString()[i];
     switch (c) {
     // Maybe a "%?" normal substitution.
-    case '%':
+    case '%': {
       formatString.push_back(c);
+
+      // Parse the width specifier.
+      SmallString<6> width;
       c = op.getFormatString()[++i];
+      while (isdigit(c)) {
+        width.push_back(c);
+        c = op.getFormatString()[++i];
+      }
+
+      // Parse the radix.
       switch (c) {
-      // A normal substitution.  Update the substitution index.
+      // A normal substitution.  If this is a radix specifier, include the width
+      // if one exists.
       case 'b':
-      case 'c':
       case 'd':
       case 'x':
+        if (!width.empty())
+          formatString.append(width);
+        [[fallthrough]];
+      case 'c':
         ++subIdx;
-        break;
+        [[fallthrough]];
       default:
-        break;
+        formatString.push_back(c);
       }
-      formatString.push_back(c);
       break;
+    }
     // Maybe a "{{}}" special substitution.
     case '{': {
       // Not a special substituion.
@@ -4608,14 +4676,25 @@ LogicalResult FIRRTLLowering::visitPrintfStmt(T op, StringAttr outputFile) {
       auto substitution = op.getSubstitutions()[subIdx++];
       assert(type_isa<FStringType>(substitution.getType()) &&
              "the operand for a '{{}}' substitution must be an 'fstring' type");
-      if (auto timeOp = dyn_cast<TimeOp>(substitution.getDefiningOp())) {
-        formatString.append("%0t");
-      } else {
-        op.emitError("has a substitution with an unimplemented lowering")
-                .attachNote(substitution.getLoc())
-            << "op with an unimplemented lowering is here";
+      auto result =
+          TypeSwitch<Operation *, LogicalResult>(substitution.getDefiningOp())
+              .Case<TimeOp>([&](auto) {
+                formatString.append("%0t");
+                return success();
+              })
+              .Case<HierarchicalModuleNameOp>([&](auto) {
+                formatString.append("%m");
+                return success();
+              })
+              .Default([&](auto) {
+                op.emitError("has a substitution with an unimplemented "
+                             "lowering")
+                        .attachNote(substitution.getLoc())
+                    << "op with an unimplemented lowering is here";
+                return failure();
+              });
+      if (failed(result))
         return failure();
-      }
       i += 3;
       break;
     }
@@ -4689,10 +4768,11 @@ LogicalResult FIRRTLLowering::visitPrintfStmt(T op, StringAttr outputFile) {
         // Lower the operands handling any special substitutions that need to be
         // lowered on a per-use basis.
         for (auto operand : op.getSubstitutions()) {
-          Value loweredValue = getLoweredFmtOperand(operand);
+          std::optional<Value> loweredValue = getLoweredFmtOperand(operand);
           if (!loweredValue)
             failed = true;
-          operands.push_back(loweredValue);
+          if (*loweredValue)
+            operands.push_back(*loweredValue);
         }
         if (failed)
           return;
@@ -4836,13 +4916,15 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       if (!loweredValue)
         return failure();
 
+      if (!*loweredValue)
+        break;
       // For SVA assert/assume statements, wrap any message ops in $sampled() to
       // guarantee that these will print with the same value as when the
       // assertion triggers.  (See SystemVerilog 2017 spec section 16.9.3 for
       // more information.)
       if (flavor == VerificationFlavor::SVA)
-        loweredValue = builder.create<sv::SampledOp>(loweredValue);
-      messageOps.push_back(loweredValue);
+        loweredValue = builder.create<sv::SampledOp>(*loweredValue);
+      messageOps.push_back(*loweredValue);
     }
   }
 

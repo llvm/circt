@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag, rtgtest, Imm5, Imm12, Imm13, Imm21, Imm32, IntegerRegister
+from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag, rtgtest, Immediate, IntegerRegister
 
 # MLIR-LABEL: rtg.target @Tgt0 : !rtg.dict<entry0: !rtg.set<index>>
 # MLIR-NEXT: [[C0:%.+]] = index.constant 0
@@ -20,10 +20,10 @@ class Tgt0:
     return Set.create(Integer(0), Integer(1))
 
 
-# MLIR-LABEL: rtg.target @Tgt1 : !rtg.dict<entry0: index, entry1: !rtg.label>
+# MLIR-LABEL: rtg.target @Tgt1 : !rtg.dict<entry0: index, entry1: !rtg.isa.label>
 # MLIR-NEXT: [[C0:%.+]] = index.constant 0
 # MLIR-NEXT: [[LBL:%.+]] = rtg.label_decl "l0"
-# MLIR-NEXT: rtg.yield [[C0]], [[LBL]] : index, !rtg.label
+# MLIR-NEXT: rtg.yield [[C0]], [[LBL]] : index, !rtg.isa.label
 # MLIR-NEXT: }
 
 
@@ -40,7 +40,7 @@ class Tgt1:
 
 
 # MLIR-LABEL: rtg.sequence @seq0
-# MLIR-SAME: ([[SET:%.+]]: !rtg.set<!rtg.label>)
+# MLIR-SAME: ([[SET:%.+]]: !rtg.set<!rtg.isa.label>)
 # MLIR-NEXT: [[LABEL:%.+]] = rtg.set_select_random [[SET]]
 # MLIR-NEXT: rtg.label local [[LABEL]]
 # MLIR-NEXT: }
@@ -77,32 +77,32 @@ def test0():
   pass
 
 
-# MLIR-LABEL: rtg.test @test_args
+# MLIR-LABEL: rtg.test @test1_args
 # MLIR-SAME: (entry0 = [[SET:%.+]]: !rtg.set<index>)
 # MLIR-NEXT: [[RAND:%.+]] = rtg.set_select_random [[SET]] : !rtg.set<index>
 # MLIR-NEXT: rtg.label_decl "L_{{[{][{]0[}][}]}}", [[RAND]]
 # MLIR-NEXT: rtg.label local
 # MLIR-NEXT: }
 
-# ELABORATED-LABEL: rtg.test @test_args_Tgt0
+# ELABORATED-LABEL: rtg.test @test1_args_Tgt0
 # CHECK: rtg.label_decl "L_0"
 # CHECK-NEXT: rtg.label local
 # CHECK-NEXT: }
 
-# ASM-LABEL: Begin of test_args
+# ASM-LABEL: Begin of test1_args
 # ASM-EMPTY:
 # ASM-NEXT: L_0:
 # ASM-EMPTY:
-# ASM: End of test_args
+# ASM: End of test1_args
 
 
 @test(("entry0", Set.type(Integer.type())))
-def test_args(set: Set):
+def test1_args(set: Set):
   i = set.get_random()
   Label.declare(r"L_{{0}}", i).place()
 
 
-# MLIR-LABEL: rtg.test @test_labels
+# MLIR-LABEL: rtg.test @test2_labels
 # MLIR-NEXT: index.constant 5
 # MLIR-NEXT: index.constant 3
 # MLIR-NEXT: index.constant 2
@@ -114,15 +114,15 @@ def test_args(set: Set):
 # MLIR-NEXT: rtg.label external [[L1]]
 # MLIR-NEXT: rtg.label local [[L2]]
 
-# MLIR-NEXT: [[SET0:%.+]] = rtg.set_create [[L0]], [[L1]] : !rtg.label
-# MLIR-NEXT: [[SET1:%.+]] = rtg.set_create [[L2]] : !rtg.label
-# MLIR-NEXT: [[EMPTY_SET:%.+]] = rtg.set_create  : !rtg.label
-# MLIR-NEXT: [[SET2_1:%.+]] = rtg.set_union [[SET0]], [[SET1]] : !rtg.set<!rtg.label>
-# MLIR-NEXT: [[SET2:%.+]] = rtg.set_union [[SET2_1]], [[EMPTY_SET]] : !rtg.set<!rtg.label>
-# MLIR-NEXT: [[RL0:%.+]] = rtg.set_select_random [[SET2]] : !rtg.set<!rtg.label>
+# MLIR-NEXT: [[SET0:%.+]] = rtg.set_create [[L0]], [[L1]] : !rtg.isa.label
+# MLIR-NEXT: [[SET1:%.+]] = rtg.set_create [[L2]] : !rtg.isa.label
+# MLIR-NEXT: [[EMPTY_SET:%.+]] = rtg.set_create  : !rtg.isa.label
+# MLIR-NEXT: [[SET2_1:%.+]] = rtg.set_union [[SET0]], [[SET1]] : !rtg.set<!rtg.isa.label>
+# MLIR-NEXT: [[SET2:%.+]] = rtg.set_union [[SET2_1]], [[EMPTY_SET]] : !rtg.set<!rtg.isa.label>
+# MLIR-NEXT: [[RL0:%.+]] = rtg.set_select_random [[SET2]] : !rtg.set<!rtg.isa.label>
 # MLIR-NEXT: rtg.label local [[RL0]]
-# MLIR-NEXT: [[SET2_MINUS_SET0:%.+]] = rtg.set_difference [[SET2]], [[SET0]] : !rtg.set<!rtg.label>
-# MLIR-NEXT: [[RL1:%.+]] = rtg.set_select_random [[SET2_MINUS_SET0]] : !rtg.set<!rtg.label>
+# MLIR-NEXT: [[SET2_MINUS_SET0:%.+]] = rtg.set_difference [[SET2]], [[SET0]] : !rtg.set<!rtg.isa.label>
+# MLIR-NEXT: [[RL1:%.+]] = rtg.set_select_random [[SET2_MINUS_SET0]] : !rtg.set<!rtg.isa.label>
 # MLIR-NEXT: rtg.label local [[RL1]]
 
 # MLIR-NEXT: rtg.label_decl "L_{{[{][{]0[}][}]}}", %idx5
@@ -130,21 +130,21 @@ def test_args(set: Set):
 # MLIR-NEXT: rtg.label_decl "L_{{[{][{]0[}][}]}}", %idx3
 # MLIR-NEXT: rtg.label local
 
-# MLIR-NEXT: [[BAG0:%.+]] = rtg.bag_create (%idx2 x [[L0:%.+]], %idx1 x [[L1:%.+]]) : !rtg.label
-# MLIR-NEXT: [[BAG1:%.+]] = rtg.bag_create (%idx1 x [[L2:%.+]]) : !rtg.label
-# MLIR-NEXT: [[EMPTY_BAG:%.+]] = rtg.bag_create  : !rtg.label
-# MLIR-NEXT: [[BAG2_1:%.+]] = rtg.bag_union [[BAG0]], [[BAG1]] : !rtg.bag<!rtg.label>
-# MLIR-NEXT: [[BAG2:%.+]] = rtg.bag_union [[BAG2_1]], [[EMPTY_BAG]] : !rtg.bag<!rtg.label>
-# MLIR-NEXT: [[RL2:%.+]] = rtg.bag_select_random [[BAG2]] : !rtg.bag<!rtg.label>
-# MLIR-NEXT: [[SUB:%.+]] = rtg.bag_create (%idx1 x [[RL2]]) : !rtg.label
-# MLIR-NEXT: [[BAG3:%.+]] = rtg.bag_difference [[BAG2]], [[SUB]] inf : !rtg.bag<!rtg.label>
+# MLIR-NEXT: [[BAG0:%.+]] = rtg.bag_create (%idx2 x [[L0:%.+]], %idx1 x [[L1:%.+]]) : !rtg.isa.label
+# MLIR-NEXT: [[BAG1:%.+]] = rtg.bag_create (%idx1 x [[L2:%.+]]) : !rtg.isa.label
+# MLIR-NEXT: [[EMPTY_BAG:%.+]] = rtg.bag_create  : !rtg.isa.label
+# MLIR-NEXT: [[BAG2_1:%.+]] = rtg.bag_union [[BAG0]], [[BAG1]] : !rtg.bag<!rtg.isa.label>
+# MLIR-NEXT: [[BAG2:%.+]] = rtg.bag_union [[BAG2_1]], [[EMPTY_BAG]] : !rtg.bag<!rtg.isa.label>
+# MLIR-NEXT: [[RL2:%.+]] = rtg.bag_select_random [[BAG2]] : !rtg.bag<!rtg.isa.label>
+# MLIR-NEXT: [[SUB:%.+]] = rtg.bag_create (%idx1 x [[RL2]]) : !rtg.isa.label
+# MLIR-NEXT: [[BAG3:%.+]] = rtg.bag_difference [[BAG2]], [[SUB]] inf : !rtg.bag<!rtg.isa.label>
 # MLIR-NEXT: rtg.label local [[RL2]]
-# MLIR-NEXT: [[BAG4:%.+]] = rtg.bag_difference [[BAG3]], [[BAG1]] : !rtg.bag<!rtg.label>
-# MLIR-NEXT: [[RL3:%.+]] = rtg.bag_select_random [[BAG4]] : !rtg.bag<!rtg.label>
+# MLIR-NEXT: [[BAG4:%.+]] = rtg.bag_difference [[BAG3]], [[BAG1]] : !rtg.bag<!rtg.isa.label>
+# MLIR-NEXT: [[RL3:%.+]] = rtg.bag_select_random [[BAG4]] : !rtg.bag<!rtg.isa.label>
 # MLIR-NEXT: rtg.label local [[RL3]]
 
-# MLIR-NEXT: [[SEQ:%.+]] = rtg.get_sequence @seq0 : !rtg.sequence<!rtg.set<!rtg.label>>
-# MLIR-NEXT: [[SUBST:%.+]] = rtg.substitute_sequence [[SEQ]]([[SET0]]) : !rtg.sequence<!rtg.set<!rtg.label>>
+# MLIR-NEXT: [[SEQ:%.+]] = rtg.get_sequence @seq0 : !rtg.sequence<!rtg.set<!rtg.isa.label>>
+# MLIR-NEXT: [[SUBST:%.+]] = rtg.substitute_sequence [[SEQ]]([[SET0]]) : !rtg.sequence<!rtg.set<!rtg.isa.label>>
 # MLIR-NEXT: [[RAND1:%.+]] = rtg.randomize_sequence [[SUBST]]
 # MLIR-NEXT: rtg.embed_sequence [[RAND1]]
 # MLIR-NEXT: [[RAND2:%.+]] = rtg.randomize_sequence [[SUBST]]
@@ -158,7 +158,7 @@ def test_args(set: Set):
 
 # MLIR-NEXT: }
 
-# ELABORATED-LABEL: rtg.test @test_labels
+# ELABORATED-LABEL: rtg.test @test2_labels
 # ELABORATED-NEXT: [[L0:%.+]] = rtg.label_decl "l0"
 # ELABORATED-NEXT: rtg.label global [[L0]]
 # ELABORATED-NEXT: [[L1:%.+]] = rtg.label_decl "l1_0"
@@ -188,7 +188,7 @@ def test_args(set: Set):
 
 # ELABORATED-NEXT: }
 
-# ASM-LABEL: Begin of test_labels
+# ASM-LABEL: Begin of test2_labels
 # ASM-EMPTY:
 # ASM-NEXT: .global l0
 # ASM-NEXT: l0:
@@ -211,11 +211,11 @@ def test_args(set: Set):
 # ASM-NEXT: s1:
 
 # ASM-EMPTY:
-# ASM: End of test_labels
+# ASM: End of test2_labels
 
 
 @test()
-def test_labels():
+def test2_labels():
   l0 = Label.declare("l0")
   l1 = Label.declare_unique("l1")
   l2 = Label.declare_unique("l1")
@@ -260,30 +260,43 @@ def test_labels():
   seq1()
 
 
-# MLIR-NEXT: rtg.test @test_registers_and_immediates()
-# MLIR-NEXT: [[IMM32:%.+]] = rtgtest.immediate #rtgtest.imm32<32> : !rtgtest.imm32
-# MLIR-NEXT: [[IMM21:%.+]] = rtgtest.immediate #rtgtest.imm21<16> : !rtgtest.imm21
-# MLIR-NEXT: [[IMM13:%.+]] = rtgtest.immediate #rtgtest.imm13<9> : !rtgtest.imm13
+# MLIR-LABEL: rtg.test @test3_registers_and_immediates()
+# MLIR-NEXT: [[IMM32:%.+]] = rtg.constant #rtg.isa.immediate<32, 32>
+# MLIR-NEXT: [[IMM21:%.+]] = rtg.constant #rtg.isa.immediate<21, 16>
+# MLIR-NEXT: [[IMM13:%.+]] = rtg.constant #rtg.isa.immediate<13, 9>
 # MLIR-NEXT: [[T2:%.+]] = rtg.fixed_reg #rtgtest.t2 : !rtgtest.ireg
-# MLIR-NEXT: [[IMM5:%.+]] = rtgtest.immediate #rtgtest.imm5<4> : !rtgtest.imm5
+# MLIR-NEXT: [[IMM5:%.+]] = rtg.constant #rtg.isa.immediate<5, 4>
 # MLIR-NEXT: [[T1:%.+]] = rtg.fixed_reg #rtgtest.t1 : !rtgtest.ireg
-# MLIR-NEXT: [[IMM12:%.+]] = rtgtest.immediate #rtgtest.imm12<8> : !rtgtest.imm12
+# MLIR-NEXT: [[IMM12:%.+]] = rtg.constant #rtg.isa.immediate<12, 8>
 # MLIR-NEXT: [[T0:%.+]] = rtg.fixed_reg #rtgtest.t0 : !rtgtest.ireg
 # MLIR-NEXT: [[VREG:%.+]] = rtg.virtual_reg [#rtgtest.t0 : !rtgtest.ireg, #rtgtest.t1 : !rtgtest.ireg, #rtgtest.t2 : !rtgtest.ireg, #rtgtest.t3 : !rtgtest.ireg, #rtgtest.t4 : !rtgtest.ireg, #rtgtest.t5 : !rtgtest.ireg, #rtgtest.t6 : !rtgtest.ireg, #rtgtest.a7 : !rtgtest.ireg, #rtgtest.a6 : !rtgtest.ireg, #rtgtest.a5 : !rtgtest.ireg, #rtgtest.a4 : !rtgtest.ireg, #rtgtest.a3 : !rtgtest.ireg, #rtgtest.a2 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg, #rtgtest.a0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg, #rtgtest.s2 : !rtgtest.ireg, #rtgtest.s3 : !rtgtest.ireg, #rtgtest.s4 : !rtgtest.ireg, #rtgtest.s5 : !rtgtest.ireg, #rtgtest.s6 : !rtgtest.ireg, #rtgtest.s7 : !rtgtest.ireg, #rtgtest.s8 : !rtgtest.ireg, #rtgtest.s9 : !rtgtest.ireg, #rtgtest.s10 : !rtgtest.ireg, #rtgtest.s11 : !rtgtest.ireg, #rtgtest.s0 : !rtgtest.ireg, #rtgtest.ra : !rtgtest.ireg, #rtgtest.sp : !rtgtest.ireg]
 # MLIR-NEXT: rtgtest.rv32i.addi [[VREG]], [[T0]], [[IMM12]]
 # MLIR-NEXT: rtgtest.rv32i.slli [[VREG]], [[T1]], [[IMM5]]
-# MLIR-NEXT: rtgtest.rv32i.beq [[VREG]], [[T2]], [[IMM13]] : !rtgtest.imm13
-# MLIR-NEXT: rtgtest.rv32i.jal [[VREG]], [[IMM21]] : !rtgtest.imm21
-# MLIR-NEXT: rtgtest.rv32i.auipc [[VREG]], [[IMM32]] : !rtgtest.imm32
+# MLIR-NEXT: rtgtest.rv32i.beq [[VREG]], [[T2]], [[IMM13]] : !rtg.isa.immediate<13>
+# MLIR-NEXT: rtgtest.rv32i.jal [[VREG]], [[IMM21]] : !rtg.isa.immediate<21>
+# MLIR-NEXT: rtgtest.rv32i.auipc [[VREG]], [[IMM32]] : !rtg.isa.immediate<32>
 # MLIR-NEXT: }
 
 
 @test()
-def test_registers_and_immediates():
+def test3_registers_and_immediates():
   vreg = IntegerRegister.virtual()
-  imm12 = Imm12(8)
+  imm12 = Immediate(12, 8)
   rtgtest.ADDI(vreg, IntegerRegister.t0(), imm12)
-  rtgtest.SLLI(vreg, IntegerRegister.t1(), Imm5(4))
-  rtgtest.BEQ(vreg, IntegerRegister.t2(), Imm13(9))
-  rtgtest.JAL(vreg, Imm21(16))
-  rtgtest.AUIPC(vreg, Imm32(32))
+  rtgtest.SLLI(vreg, IntegerRegister.t1(), Immediate(5, 4))
+  rtgtest.BEQ(vreg, IntegerRegister.t2(), Immediate(13, 9))
+  rtgtest.JAL(vreg, Immediate(21, 16))
+  rtgtest.AUIPC(vreg, Immediate(32, 32))
+
+
+# MLIR-LABEL: rtg.test @test4_integer_to_immediate()
+# MLIR-NEXT: [[V0:%.+]] = rtg.fixed_reg
+# MLIR-NEXT: [[V1:%.+]] = index.constant 2
+# MLIR-NEXT: [[V2:%.+]] = rtg.isa.int_to_immediate [[V1]] : !rtg.isa.immediate<12>
+# MLIR-NEXT: rtgtest.rv32i.addi [[V0]], [[V0]], [[V2]]
+
+
+@test()
+def test4_integer_to_immediate():
+  rtgtest.ADDI(IntegerRegister.t0(), IntegerRegister.t0(),
+               Immediate(12, Integer(2)))

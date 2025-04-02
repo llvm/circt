@@ -874,6 +874,10 @@ public:
     return visitUnhandledOp(op);
   }
 
+  FailureOr<DeletionKind> visitOp(ConstantOp op) {
+    return visitConstantLike(op);
+  }
+
   FailureOr<DeletionKind> visitOp(GetSequenceOp op) {
     SmallVector<ElaboratorValue> replacements;
     state[op.getResult()] =
@@ -1162,6 +1166,19 @@ public:
           size_t(getUniformlyInRange(sharedState.rng, lower, upper));
     }
 
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(IntToImmediateOp op) {
+    size_t input = get<size_t>(op.getInput());
+    auto width = op.getType().getWidth();
+    auto emitError = [&]() { return op->emitError(); };
+    if (input > APInt::getAllOnes(width).getZExtValue())
+      return emitError() << "cannot represent " << input << " with " << width
+                         << " bits";
+
+    state[op.getResult()] =
+        ImmediateAttr::get(op.getContext(), APInt(width, input));
     return DeletionKind::Delete;
   }
 

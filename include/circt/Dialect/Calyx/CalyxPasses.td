@@ -287,4 +287,22 @@ def AffinePloopUnparallelize : Pass<"affine-ploop-unparallelize", "::mlir::func:
       ```
   }];
 }
+
+def ExcludeExecuteRegionCanonicalize : Pass<"exclude-exec-region-canonicalize", "::mlir::func::FuncOp"> {
+  let summary = "Canonicalize all legal operations except `scf.execute_region`";
+  let dependentDialects = [
+     "mlir::memref::MemRefDialect",
+     "mlir::scf::SCFDialect",
+     "mlir::arith::ArithDialect",
+     "mlir::affine::AffineDialect"
+  ];
+  let constructor = "circt::calyx::createExcludeExecuteRegionCanonicalizePass()";
+  let description = [{
+    The AffineParallelUnroll pass unrolls the body of `affine.parallel`
+    to multiple copies of `scf.execute_region`s. Since the semantics
+    of those `scf.execute_region` has deviated from the original MLIR
+    definition, a new canonicalization pass that does not operate on
+    `scf.execute_region` is needed.
+  }];
+}
 #endif // CIRCT_DIALECT_CALYX_CALYXPASSES_TD

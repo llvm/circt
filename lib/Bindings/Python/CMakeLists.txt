@@ -75,6 +75,10 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension
     nanobind
 )
 
+if (CIRCT_INCLUDE_TESTS)
+  target_compile_definitions(CIRCTBindingsPythonExtension INTERFACE CIRCT_INCLUDE_TESTS)
+endif()
+
 add_dependencies(CIRCTBindingsPythonExtension circt-headers)
 
 ################################################################################
