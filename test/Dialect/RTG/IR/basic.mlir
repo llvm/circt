@@ -67,6 +67,7 @@ func.func @sets(%arg0: i32, %arg1: i32) -> !rtg.set<tuple<i32, i32>> {
   // CHECK: rtg.set_union [[SET]], [[DIFF]] : !rtg.set<i32>
   // CHECK: rtg.set_size [[SET]] : !rtg.set<i32>
   // CHECK: rtg.set_cartesian_product [[SET]], [[SET]] : !rtg.set<i32>, !rtg.set<i32>
+  // CHECK: rtg.set_convert_to_bag [[SET]] : !rtg.set<i32>
   %set = rtg.set_create %arg0, %arg1 : i32
   %r = rtg.set_select_random %set : !rtg.set<i32>
   %empty = rtg.set_create : i32
@@ -74,6 +75,7 @@ func.func @sets(%arg0: i32, %arg1: i32) -> !rtg.set<tuple<i32, i32>> {
   %union = rtg.set_union %set, %diff : !rtg.set<i32>
   %size = rtg.set_size %set : !rtg.set<i32>
   %prod = rtg.set_cartesian_product %set, %set : !rtg.set<i32>, !rtg.set<i32>
+  %bag = rtg.set_convert_to_bag %set : !rtg.set<i32>
 
   return %prod : !rtg.set<tuple<i32, i32>>
 }
