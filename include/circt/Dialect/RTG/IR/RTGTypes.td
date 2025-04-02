@@ -90,6 +90,11 @@ def BagType : RTGTypeDef<"Bag"> {
 
   let mnemonic = "bag";
   let assemblyFormat = "`<` $elementType `>`";
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "::mlir::Type":$elementType),
+      "return $_get(elementType.getContext(), elementType);">,
+  ];
 }
 
 class SetTypeOf<Type elementType> : ContainerType<
