@@ -390,6 +390,24 @@ def SetCartesianProductOp : RTGOp<"set_cartesian_product", [
   let assemblyFormat = "$inputs `:` qualified(type($inputs)) attr-dict";
 }
 
+def SetConvertToBagOp : RTGOp<"set_convert_to_bag", [
+  Pure,
+  TypesMatchWith<"element type of set must match the bag's element type",
+                 "input", "result",
+                 "BagType::get(cast<SetType>($_self).getElementType())">,
+]> {
+  let summary = "convert a set to a bag";
+  let description = [{
+    This operation converts a set to a bag. Each element in the set occurs
+    exactly once in the resulting bag.
+  }];
+
+  let arguments = (ins SetType:$input);
+  let results = (outs BagType:$result);
+
+  let assemblyFormat = "$input `:` qualified(type($input)) attr-dict";
+}
+
 //===- Bag Operations ------------------------------------------------------===//
 
 def BagCreateOp : RTGOp<"bag_create", [Pure, SameVariadicOperandSize]> {
