@@ -683,6 +683,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %qux, %dummy : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
+  // CHECK-LABEL: hw.module @DoNotPrintTest()
+  firrtl.module @DoNotPrintTest() {
+    // CHECK: hw.instance "foo" @foo() -> () {doNotPrint}
+    firrtl.instance foo {doNotPrint} @foo()
+  }
 
   // CHECK-LABEL: hw.module private @attributes_preservation
   // CHECK-SAME: firrtl.foo = "bar"

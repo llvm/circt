@@ -671,6 +671,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         instanceName, NameKindEnum::DroppableName,
         /*annotations=*/ArrayRef<Attribute>{},
         /*portAnnotations=*/ArrayRef<Attribute>{}, /*lowerToBind=*/true,
+        /*doNotPrint=*/false,
         /*innerSym=*/
         (innerSyms.empty() ? hw::InnerSymAttr{}
                            : hw::InnerSymAttr::get(builder.getStringAttr(

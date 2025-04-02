@@ -4253,7 +4253,7 @@ ParseResult FIRStmtParser::parseInstance() {
   hw::InnerSymAttr sym = {};
   auto result = builder.create<InstanceOp>(
       referencedModule, id, NameKindEnum::InterestingName,
-      annotations.getValue(), portAnnotations, false, sym);
+      annotations.getValue(), portAnnotations, false, false, sym);
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues

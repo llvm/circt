@@ -249,14 +249,13 @@ struct CircuitLoweringState {
     // Pre-populate the dutModules member with a list of all modules that are
     // determined to be under the DUT.
     auto inDUT = [&](igraph::ModuleOpInterface child) {
-      auto isBind = [](igraph::InstanceRecord *instRec) {
-        auto inst = instRec->getInstance();
-        if (auto *finst = dyn_cast<InstanceOp>(&inst))
-          return finst->getLowerToBind();
+      auto isPhony = [](igraph::InstanceRecord *instRec) {
+        if (auto inst = instRec->getInstance<InstanceOp>())
+          return inst.getLowerToBind() || inst.getDoNotPrint();
         return false;
       };
       if (auto parent = dyn_cast<igraph::ModuleOpInterface>(*dut))
-        return getInstanceGraph().isAncestor(child, parent, isBind);
+        return getInstanceGraph().isAncestor(child, parent, isPhony);
       return dut == child;
     };
     circuitOp->walk([&](FModuleLike moduleOp) {
@@ -3459,7 +3458,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   auto newInstance = builder.create<hw::InstanceOp>(
       newModule, oldInstance.getNameAttr(), operands, parameters, innerSym);
 
-  if (oldInstance.getLowerToBind())
+  if (oldInstance.getLowerToBind() || oldInstance.getDoNotPrint())
     newInstance.setDoNotPrintAttr(builder.getUnitAttr());
 
   if (newInstance.getInnerSymAttr())
