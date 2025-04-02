@@ -918,6 +918,9 @@ firrtl.circuit "Foo" {
 
     // CHECK: printf(clock, UInt<1>(1), "%%")
     firrtl.printf %clock, %c1_ui1, "%%" : !firrtl.clock, !firrtl.const.uint<1>
+
+    // CHECK: fprintf(clock, UInt<1>(1), "test.txt", "%%")
+    firrtl.fprintf %clock, %c1_ui1, "test.txt", "%%" : !firrtl.clock, !firrtl.const.uint<1>
   }
 
 }

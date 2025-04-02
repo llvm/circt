@@ -833,7 +833,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   };
 
   if (state.usedFPrintf) {
-    // Define the ports for the fprintf function
+    // Define a type for the file descriptor getter.
     SmallVector<hw::ModulePort> ports;
 
     // Input port for filename
@@ -867,7 +867,6 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
         /*perArgumentAttrs=*/
         b.getArrayAttr(
             {b.getDictionaryAttr({}), b.getDictionaryAttr(perArgumentsAttr)}),
-        /*inputLocs=*/
         ArrayAttr(), ArrayAttr(),
         b.getStringAttr(
             "__circt_lib_logging::FileDescriptor::get") // verilogName
@@ -875,19 +874,19 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     func.setPrivate();
 
     b.create<sv::MacroDeclOp>("__CIRCT_LIB_LOGGING");
-    // Create the fragment containing the FileDescriptor class
+    // Create the fragment containing the FileDescriptor class.
     b.create<emit::FragmentOp>("FPRINTF_FD_FRAGMENT", [&] {
       emitGuard("__CIRCT_LIB_LOGGING", [&]() {
         b.create<sv::VerbatimOp>(R"(// CIRCT Logging Library
 package __circt_lib_logging;
-    class FileDescriptor;
-        static int global_id [string];
-        static function int get(string name);
-            if (!global_id.exists(name))
-                global_id[name] = $fopen(name);
-            return global_id[name];
-        endfunction
-    endclass
+  class FileDescriptor;
+    static int global_id [string];
+    static function int get(string name);
+      if (!global_id.exists(name))
+        global_id[name] = $fopen(name);
+      return global_id[name];
+    endfunction
+  endclass
 endpackage
 )");
 
@@ -4678,11 +4677,11 @@ LogicalResult FIRRTLLowering::visitPrintfStmt(T op, StringAttr outputFile) {
              "the operand for a '{{}}' substitution must be an 'fstring' type");
       auto result =
           TypeSwitch<Operation *, LogicalResult>(substitution.getDefiningOp())
-              .Case<TimeOp>([&](auto) {
+              .template Case<TimeOp>([&](auto) {
                 formatString.append("%0t");
                 return success();
               })
-              .Case<HierarchicalModuleNameOp>([&](auto) {
+              .template Case<HierarchicalModuleNameOp>([&](auto) {
                 formatString.append("%m");
                 return success();
               })
@@ -4714,7 +4713,7 @@ LogicalResult FIRRTLLowering::visitPrintfStmt(T op, StringAttr outputFile) {
       // ifndef SYNTHESIS
       //   reg fd_<outputFile>;
       //   initial begin
-      //     fd_<outputFile> = $fopen($sformatf("<outputFile>"));
+      //     fd_<outputFile> = $fopen("<outputFile>));
       //   end
       // endif
       auto &fd = fileNameToFileDescriptor[outputFile];
@@ -4725,19 +4724,13 @@ LogicalResult FIRRTLLowering::visitPrintfStmt(T op, StringAttr outputFile) {
 
         addToInitialBlock([&]() {
           auto constant = builder.create<sv::ConstantStrOp>(outputFile);
-          auto sformatf =
-              builder
-                  .create<sv::SystemFunctionOp>(
-                      hw::StringType::get(builder.getContext()),
-                      builder.getStringAttr("sformatf"), ValueRange{constant})
-                  ->getResult(0);
           auto fdResult =
               builder
                   .create<sv::FuncCallProceduralOp>(
                       mlir::TypeRange{builder.getIntegerType(32)},
                       builder.getStringAttr(
                           "__circt_lib_logging::FileDescriptor::get"),
-                      ValueRange{sformatf})
+                      ValueRange{constant})
                   ->getResult(0);
           builder.create<sv::BPAssignOp>(fd, fdResult);
         });

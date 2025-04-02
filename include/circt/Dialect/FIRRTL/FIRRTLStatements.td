@@ -127,13 +127,10 @@ def FPrintFOp : FIRRTLOp<"fprintf"> {
   let description = [{
     This operation is similar to the "firrtl.printf" operation, but it prints
     to a file instead of stdout.
-
-    Output file name is interpreted as a format string in SystemVerilog so users can use %m to give a unique
-    name to each instance.
   }];
 
   let arguments = (ins ClockType:$clock, UInt1Type:$cond, StrAttr:$outputFile, StrAttr:$formatString,
-                       Variadic<FIRRTLBaseType>:$substitutions, StrAttr:$name);
+                       Variadic<PrintfOperandType>:$substitutions, StrAttr:$name);
   let results = (outs);
 
   let assemblyFormat = [{

@@ -847,8 +847,8 @@ void Emitter::emitStatement(SkipOp op) {
   emitLocationAndNewLine(op);
 }
 
-template <class T>
-void Emitter::emitPrintfLike(T op, StringAttr fileName) {
+template <class OpTy>
+void Emitter::emitPrintfLike(OpTy op, StringAttr fileName) {
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
     if (fileName)
@@ -909,9 +909,9 @@ void Emitter::emitPrintfLike(T op, StringAttr fileName) {
           formatString.append("{{");
           TypeSwitch<Operation *>(
               op.getSubstitutions()[opIdx++].getDefiningOp())
-              .Case<TimeOp>(
+              .template Case<TimeOp>(
                   [&](auto) { formatString.append("SimulationTime"); })
-              .Case<HierarchicalModuleNameOp>(
+              .template Case<HierarchicalModuleNameOp>(
                   [&](auto) { formatString.append("HierarchicalModuleName"); })
               .Default([&](auto) {
                 emitError(op, "unsupported fstring substitution type");

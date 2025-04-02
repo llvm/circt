@@ -6,6 +6,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 "sifive.enterprise.firrtl.ExtractAssertionsAnnotation", directory = "dir3",  filename = "./dir3/filename3" }]}
 {
   // Headers
+  // CHECK:     sv.func private @"__circt_lib_logging::FileDescriptor::get"(in %name : !hw.string, out fd : i32 {sv.func.explicitly_returned})
+  // CHECK-SAME: attributes {verilogName = "__circt_lib_logging::FileDescriptor::get"}
+  // CHECK-NEXT: sv.macro.decl @__CIRCT_LIB_LOGGING
+  // CHECK-NEXT: emit.fragment @FPRINTF_FD_FRAGMENT {
+  // CHECK-NEXT:   sv.ifdef  @__CIRCT_LIB_LOGGING {
+  // CHECK-NEXT:   } else {
+  // CHECK-NEXT:     sv.verbatim "// CIRCT Logging Library\0Apackage __circt_lib_logging;\0A  class FileDescriptor;\0A    static int global_id [string];\0A    static function int get(string name);\0A      if (!global_id.exists(name))\0A        global_id[name] = $fopen(name);\0A      return global_id[name];\0A    endfunction\0A  endclass\0Aendpackage\0A"
+  // CHECK-NEXT:     sv.macro.def @__CIRCT_LIB_LOGGING ""
+  // CHECK-NEXT:   }
+  // CHECK-NEXT: }
   // CHECK:      emit.fragment @PRINTF_COND_FRAGMENT {
   // CHECK:        sv.ifdef @PRINTF_COND_ {
   // CHECK-NEXT:   } else {
@@ -330,7 +340,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 //    printf(clock, reset, "Hi signed %d %0d\n", add(c, c), d)
 
   // CHECK-LABEL: hw.module private @Print
-  // CHECK-SAME: attributes {emit.fragments = [@PRINTF_FD_FRAGMENT, @PRINTF_COND_FRAGMENT]}
+  // CHECK-SAME: attributes {emit.fragments = [@PRINTF_FD_FRAGMENT, @PRINTF_COND_FRAGMENT, @FPRINTF_FD_FRAGMENT]}
   firrtl.module private @Print(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
                                in %a: !firrtl.uint<4>, in %b: !firrtl.uint<4>,
                                in %c: !firrtl.sint<4>, in %d: !firrtl.sint<4>) {
@@ -341,6 +351,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK:      sv.ifdef @SYNTHESIS {
     // CHECK-NEXT: } else  {
+    // CHECK-NEXT:   %fd_file.txt = sv.reg : !hw.inout<i32>
+    // CHECK-NEXT:   sv.initial {
+    // CHECK-NEXT:     %[[FD:.+]] = sv.constantStr "file.txt"
+    // CHECK-NEXT:     %[[FD_RESULT:.+]] = sv.func.call.procedural @"__circt_lib_logging::FileDescriptor::get"(%[[FD]]) : (!hw.string) -> i32
+    // CHECK-NEXT:     sv.bpassign %fd_file.txt, %[[FD_RESULT]] : i32
+    // CHECK-NEXT:   }
     // CHECK-NEXT:   sv.always posedge [[CLOCK]] {
     // CHECK-NEXT:     %[[PRINTF_COND:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND]], %reset
@@ -387,6 +403,13 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
     // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "[%0t]: %d %m"([[TIME]], %a) : i64, i4
     // CHECK-NEXT:     }
+    // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
+    // CHECK-NEXT:     sv.if [[AND]] {
+    // CHECK-NEXT:       %[[FPRINTF_FD_:.+]] = sv.read_inout %fd_file.txt : !hw.inout<i32>
+    // CHECK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
+    // CHECK-NEXT:       sv.fwrite %[[FPRINTF_FD_]], "[%0t]: %d %m"([[TIME]], %a) : i64, i4
+    // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.printf %clock, %reset, "No operands and literal: %%\0A" : !firrtl.clock, !firrtl.uint<1>
@@ -408,6 +431,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %time = firrtl.fstring.time : !firrtl.fstring
     %hierarchicalmodulename = firrtl.fstring.hierarchicalmodulename : !firrtl.fstring
     firrtl.printf %clock, %reset, "[{{}}]: %d {{}}" (%time, %a, %hierarchicalmodulename) : !firrtl.clock, !firrtl.uint<1>, !firrtl.fstring, !firrtl.uint<4>, !firrtl.fstring
+
+    firrtl.fprintf %clock, %reset, "file.txt", "[{{}}]: %d {{}}" (%time, %a, %hierarchicalmodulename) : !firrtl.clock, !firrtl.uint<1>, !firrtl.fstring, !firrtl.uint<4>, !firrtl.fstring
+
 
     firrtl.skip
 
