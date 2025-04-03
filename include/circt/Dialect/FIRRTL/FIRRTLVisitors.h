@@ -243,8 +243,8 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<
             AttachOp, ConnectOp, MatchingConnectOp, RefDefineOp, ForceOp,
-            PrintFOp, SkipOp, StopOp, WhenOp, AssertOp, AssumeOp, CoverOp,
-            PropAssignOp, RefForceOp, RefForceInitialOp, RefReleaseOp,
+            PrintFOp, FPrintFOp, SkipOp, StopOp, WhenOp, AssertOp, AssumeOp,
+            CoverOp, PropAssignOp, RefForceOp, RefForceInitialOp, RefReleaseOp,
             RefReleaseInitialOp, FPGAProbeIntrinsicOp, VerifAssertIntrinsicOp,
             VerifAssumeIntrinsicOp, UnclockedAssumeIntrinsicOp,
             VerifCoverIntrinsicOp, VerifRequireIntrinsicOp,
@@ -280,6 +280,7 @@ public:
   HANDLE(RefDefineOp);
   HANDLE(ForceOp);
   HANDLE(PrintFOp);
+  HANDLE(FPrintFOp);
   HANDLE(SkipOp);
   HANDLE(StopOp);
   HANDLE(WhenOp);

@@ -212,6 +212,7 @@ struct CircuitLoweringState {
   std::atomic<bool> usedPrintf{false};
   std::atomic<bool> usedAssertVerboseCond{false};
   std::atomic<bool> usedStopCond{false};
+  std::atomic<bool> usedFPrintf{false};
 
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
                        firrtl::VerificationFlavor verificationFlavor,
@@ -814,6 +815,72 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     b.create<sv::IfDefOp>(
         guard, []() {}, body);
   };
+
+  if (state.usedFPrintf) {
+    // Define a type for the file descriptor getter.
+    SmallVector<hw::ModulePort> ports;
+
+    // Input port for filename
+    hw::ModulePort namePort;
+    namePort.name = b.getStringAttr("name");
+    namePort.type = hw::StringType::get(b.getContext());
+    namePort.dir = hw::ModulePort::Direction::Input;
+    ports.push_back(namePort);
+
+    // Output port for file descriptor
+    hw::ModulePort fdPort;
+    fdPort.name = b.getStringAttr("fd");
+    fdPort.type = b.getIntegerType(32);
+    fdPort.dir = hw::ModulePort::Direction::Output;
+    ports.push_back(fdPort);
+
+    // Create module type with the ports
+    auto moduleType = hw::ModuleType::get(b.getContext(), ports);
+
+    SmallVector<NamedAttribute> perArgumentsAttr;
+    perArgumentsAttr.push_back(
+        {sv::FuncOp::getExplicitlyReturnedAttrName(), b.getUnitAttr()});
+
+    SmallVector<Attribute> argumentAttr = {
+        DictionaryAttr::get(b.getContext(), {}),
+        DictionaryAttr::get(b.getContext(), perArgumentsAttr)};
+
+    // Create the function declaration
+    auto func = b.create<sv::FuncOp>(
+        /*sym_name=*/
+        "__circt_lib_logging::FileDescriptor::get", moduleType,
+        /*perArgumentAttrs=*/
+        b.getArrayAttr(
+            {b.getDictionaryAttr({}), b.getDictionaryAttr(perArgumentsAttr)}),
+        /*inputLocs=*/
+        ArrayAttr(),
+        /*resultLocs=*/
+        ArrayAttr(),
+        /*verilogName=*/
+        b.getStringAttr("__circt_lib_logging::FileDescriptor::get"));
+    func.setPrivate();
+
+    b.create<sv::MacroDeclOp>("__CIRCT_LIB_LOGGING");
+    // Create the fragment containing the FileDescriptor class.
+    b.create<emit::FragmentOp>("FPRINTF_FD_FRAGMENT", [&] {
+      emitGuard("__CIRCT_LIB_LOGGING", [&]() {
+        b.create<sv::VerbatimOp>(R"(// CIRCT Logging Library
+package __circt_lib_logging;
+  class FileDescriptor;
+    static int global_id [string];
+    static function int get(string name);
+      if (global_id.exists(name) == 32'h0)
+        global_id[name] = $fopen(name);
+      return global_id[name];
+    endfunction
+  endclass
+endpackage
+)");
+
+        b.create<sv::MacroDefOp>("__CIRCT_LIB_LOGGING", "");
+      });
+    });
+  }
 
   if (state.usedPrintf) {
     b.create<sv::MacroDeclOp>("PRINTF_FD");
@@ -1769,7 +1836,12 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(ConnectOp op);
   LogicalResult visitStmt(MatchingConnectOp op);
   LogicalResult visitStmt(ForceOp op);
-  LogicalResult visitStmt(PrintFOp op);
+  template <class T>
+  LogicalResult visitPrintfLike(T op, StringAttr outputFile);
+  LogicalResult visitStmt(PrintFOp op) { return visitPrintfLike(op, {}); }
+  LogicalResult visitStmt(FPrintFOp op) {
+    return visitPrintfLike(op, op.getOutputFileAttr());
+  }
   LogicalResult visitStmt(StopOp op);
   LogicalResult visitStmt(AssertOp op);
   LogicalResult visitStmt(AssumeOp op);
@@ -1824,6 +1896,9 @@ private:
   /// caches a known ReadInOutOp for the given value and is managed by
   /// `getReadValue(v)`.
   DenseMap<Value, Value> readInOutCreated;
+
+  /// This keeps track of the file descriptors for each file name.
+  DenseMap<StringAttr, sv::RegOp> fileNameToFileDescriptor;
 
   // We auto-unique graph-level blocks to reduce the amount of generated
   // code and ensure that side effects are properly ordered in FIRRTL.
@@ -4544,9 +4619,10 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseInitialOp op) {
   return success();
 }
 
-// Printf is a macro op that lowers to an sv.ifdef.procedural, an sv.if,
+// Printf/FPrintf is a macro op that lowers to an sv.ifdef.procedural, an sv.if,
 // and an sv.fwrite all nested together.
-LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
+template <class T>
+LogicalResult FIRRTLLowering::visitPrintfLike(T op, StringAttr outputFile) {
   auto clock = getLoweredNonClockValue(op.getClock());
   auto cond = getLoweredValue(op.getCond());
   if (!clock || !cond)
@@ -4601,11 +4677,11 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
              "the operand for a '{{}}' substitution must be an 'fstring' type");
       auto result =
           TypeSwitch<Operation *, LogicalResult>(substitution.getDefiningOp())
-              .Case<TimeOp>([&](auto) {
+              .template Case<TimeOp>([&](auto) {
                 formatString.append("%0t");
                 return success();
               })
-              .Case<HierarchicalModuleNameOp>([&](auto) {
+              .template Case<HierarchicalModuleNameOp>([&](auto) {
                 formatString.append("%m");
                 return success();
               })
@@ -4631,6 +4707,37 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   bool failed = false;
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
+    // If the op is fprintf, initilize a file descriptor from a static class
+    // function.
+    if (outputFile) {
+      circuitState.usedFPrintf = true;
+      circuitState.addFragment(theModule, "FPRINTF_FD_FRAGMENT");
+      // `ifndef SYNTHESIS
+      //   reg fd_<outputFile>;
+      //   initial begin
+      //     fd_<outputFile> = $fopen("<outputFile>));
+      //   end
+      // `endif
+      auto &fd = fileNameToFileDescriptor[outputFile];
+      if (!fd) {
+        fd = builder.create<sv::RegOp>(
+            builder.getIntegerType(32),
+            builder.getStringAttr("fd_" + outputFile.getValue()));
+
+        addToInitialBlock([&]() {
+          auto constant = builder.create<sv::ConstantStrOp>(outputFile);
+          auto fdResult =
+              builder
+                  .create<sv::FuncCallProceduralOp>(
+                      mlir::TypeRange{builder.getIntegerType(32)},
+                      builder.getStringAttr(
+                          "__circt_lib_logging::FileDescriptor::get"),
+                      ValueRange{constant})
+                  ->getResult(0);
+          builder.create<sv::BPAssignOp>(fd, fdResult);
+        });
+      }
+    }
     addToAlwaysBlock(clock, [&]() {
       circuitState.usedPrintf = true;
       circuitState.addFragment(theModule, "PRINTF_FD_FRAGMENT");
@@ -4643,9 +4750,17 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
 
       SmallVector<Value, 4> operands;
       addIfProceduralBlock(ifCond, [&]() {
-        // Emit the sv.fwrite, writing to fd specified by `PRINTF_FD.
-        Value fd = builder.create<sv::MacroRefExprOp>(
-            builder.getIntegerType(32), "PRINTF_FD_");
+        // Emit the sv.fwrite, writing to fd specified by `PRINTF_FD` for
+        // printf, or the file descriptor opened using $fopen for fprintf.
+        Value fd;
+        if (outputFile) {
+          auto it = fileNameToFileDescriptor.find(outputFile);
+          assert(it != fileNameToFileDescriptor.end() && "must be registered");
+          fd = builder.create<sv::ReadInOutOp>(it->second);
+        } else {
+          fd = builder.create<sv::MacroRefExprOp>(builder.getIntegerType(32),
+                                                  "PRINTF_FD_");
+        }
         // Lower the operands handling any special substitutions that need to be
         // lowered on a per-use basis.
         for (auto operand : op.getSubstitutions()) {

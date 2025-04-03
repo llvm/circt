@@ -1,6 +1,6 @@
 ; RUN: circt-translate -import-firrtl -verify-diagnostics -split-input-file %s | circt-opt | FileCheck %s
 
-FIRRTL version 4.1.0
+FIRRTL version 5.1.0
 circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK-LABEL: firrtl.module @MyModule(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
@@ -1200,6 +1200,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: firrtl.printf %clock, %c1_ui1, "%%" : !firrtl.clock, !firrtl.const.uint<1>
     printf(clock, UInt<1>(1), "%%")
 
+    ; CHECK-NEXT: firrtl.fprintf %clock, %c1_ui1, "test.txt", "%%" : !firrtl.clock, !firrtl.const.uint<1>
+    fprintf(clock, UInt<1>(1), "test.txt", "%%")
+
 ;// -----
 
 ; CHECK-LABEL: firrtl.circuit "Foo_v3p0p0"
@@ -2074,3 +2077,21 @@ circuit Foo:
     ; CHECK:            %hierarchicalmodulename = firrtl.fstring.hierarchicalmodulename : !firrtl.fstring
     ; CHECK{{LITERAL}}: firrtl.printf %clock, %c1_ui1, "[{{}}]: hello world {{}}"(%time, %hierarchicalmodulename)
     printf(clock, UInt<1>(1), "[{{SimulationTime}}]: hello from {{HierarchicalModuleName}}")
+
+;// -----
+FIRRTL version 5.1.0
+circuit Foo:
+  public module Foo:
+    input clock: Clock
+    ; CHECK:            %[[TIME:.+]] = firrtl.fstring.time : !firrtl.fstring
+    ; CHECK:            %[[HIERARCHICALMODULENAME:.+]] = firrtl.fstring.hierarchicalmodulename : !firrtl.fstring
+    ; CHECK{{LITERAL}}: firrtl.fprintf %clock, %c1_ui1, "test.txt", "[{{}}]: hello world {{}}"(%[[TIME]], %[[HIERARCHICALMODULENAME]])
+    fprintf(clock, UInt<1>(1), "test.txt", "[{{SimulationTime}}]: hello from {{HierarchicalModuleName}}")
+
+;// -----
+FIRRTL version 5.0.0
+circuit Foo:
+  public module Foo:
+    input clock: Clock
+    ; expected-error @+1 {{fprintf are a FIRRTL 5.1.0+ feature, but the specified FIRRTL version was 5.0.0}}
+    fprintf(clock, UInt<1>(1), "test.txt", "[{{SimulationTime}}]: hello from {{HierarchicalModuleName}}")

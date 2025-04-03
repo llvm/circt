@@ -81,7 +81,12 @@ struct Emitter {
   void emitStatement(NodeOp op);
   void emitStatement(StopOp op);
   void emitStatement(SkipOp op);
+  void emitFormatString(Operation *op, StringRef formatString, OperandRange ops,
+                        llvm::SmallVectorImpl<Value> &substitutions);
+  template <class T>
+  void emitPrintfLike(T op, StringAttr fileName);
   void emitStatement(PrintFOp op);
+  void emitStatement(FPrintFOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(MatchingConnectOp op);
   void emitStatement(PropAssignOp op);
@@ -708,7 +713,7 @@ void Emitter::emitStatementsInBlock(Block &block) {
       continue;
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
-              PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp,
+              PrintFOp, FPrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp,
               MatchingConnectOp, PropAssignOp, InstanceOp, InstanceChoiceOp,
               AttachOp, MemOp, InvalidValueOp, SeqMemOp, CombMemOp,
               MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp,
@@ -844,78 +849,90 @@ void Emitter::emitStatement(SkipOp op) {
   emitLocationAndNewLine(op);
 }
 
-void Emitter::emitStatement(PrintFOp op) {
+void Emitter::emitFormatString(Operation *op, StringRef origFormatString,
+                               OperandRange substitutionOperands,
+                               llvm::SmallVectorImpl<Value> &substitutions) {
+  // Replace the generic "{{}}" special substitutions with their attributes.
+  // E.g.:
+  //
+  //     "hello {{}} world"(%time)
+  //
+  // Becomes:
+  //
+  //     "hello {{SimulationTime}} world"
+  SmallString<64> formatString;
+  for (size_t i = 0, e = origFormatString.size(), opIdx = 0; i != e; ++i) {
+    auto c = origFormatString[i];
+    switch (c) {
+    case '%': {
+      formatString.push_back(c);
+
+      // Parse the width specifier.
+      SmallString<6> width;
+      c = origFormatString[++i];
+      while (isdigit(c)) {
+        width.push_back(c);
+        c = origFormatString[++i];
+      }
+
+      // Parse the radix.
+      switch (c) {
+      case 'b':
+      case 'd':
+      case 'x':
+        if (!width.empty())
+          formatString.append(width);
+        [[fallthrough]];
+      case 'c':
+        substitutions.push_back(substitutionOperands[opIdx++]);
+        [[fallthrough]];
+      default:
+        formatString.push_back(c);
+      }
+      break;
+    }
+    case '{':
+      if (origFormatString.slice(i, i + 4) == "{{}}") {
+        formatString.append("{{");
+        TypeSwitch<Operation *>(substitutionOperands[opIdx++].getDefiningOp())
+            .Case<TimeOp>(
+                [&](auto time) { formatString.append("SimulationTime"); })
+            .Case<HierarchicalModuleNameOp>([&](auto time) {
+              formatString.append("HierarchicalModuleName");
+            })
+            .Default([&](auto) {
+              emitError(op, "unsupported fstring substitution type");
+            });
+        formatString.append("}}");
+      }
+      i += 3;
+      break;
+    default:
+      formatString.push_back(c);
+    }
+  }
+  ps.writeQuotedEscaped(formatString);
+}
+
+template <class OpTy>
+void Emitter::emitPrintfLike(OpTy op, StringAttr fileName) {
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
+    if (fileName)
+      ps << "f";
     ps << "printf(" << PP::ibox0;
     emitExpression(op.getClock());
     ps << "," << PP::space;
     emitExpression(op.getCond());
     ps << "," << PP::space;
-
-    // Replace the generic "{{}}" special substitutions with their attributes.
-    // E.g.:
-    //
-    //     "hello {{}} world"(%time)
-    //
-    // Becomes:
-    //
-    //     "hello {{SimulationTime}} world"
-    SmallString<64> formatString;
-    auto origFormatString = op.getFormatString();
-    SmallVector<Value, 4> substitutions;
-    for (size_t i = 0, e = origFormatString.size(), opIdx = 0; i != e; ++i) {
-      auto c = origFormatString[i];
-      switch (c) {
-      case '%': {
-        formatString.push_back(c);
-
-        // Parse the width specifier.
-        SmallString<6> width;
-        c = origFormatString[++i];
-        while (isdigit(c)) {
-          width.push_back(c);
-          c = origFormatString[++i];
-        }
-
-        // Parse the radix.
-        switch (c) {
-        case 'b':
-        case 'd':
-        case 'x':
-          if (!width.empty())
-            formatString.append(width);
-          [[fallthrough]];
-        case 'c':
-          substitutions.push_back(op.getSubstitutions()[opIdx++]);
-          [[fallthrough]];
-        default:
-          formatString.push_back(c);
-        }
-        break;
-      }
-      case '{':
-        if (origFormatString.slice(i, i + 4) == "{{}}") {
-          formatString.append("{{");
-          TypeSwitch<Operation *>(
-              op.getSubstitutions()[opIdx++].getDefiningOp())
-              .Case<TimeOp>(
-                  [&](auto) { formatString.append("SimulationTime"); })
-              .Case<HierarchicalModuleNameOp>(
-                  [&](auto) { formatString.append("HierarchicalModuleName"); })
-              .Default([&](auto) {
-                emitError(op, "unsupported fstring substitution type");
-              });
-          formatString.append("}}");
-        }
-        i += 3;
-        break;
-      default:
-        formatString.push_back(c);
-      }
+    if (fileName) {
+      ps.writeQuotedEscaped(fileName.getValue());
+      ps << "," << PP::space;
     }
-    ps.writeQuotedEscaped(formatString);
 
+    SmallVector<Value, 4> substitutions;
+    emitFormatString(op, op.getFormatString(), op.getSubstitutions(),
+                     substitutions);
     for (auto operand : substitutions) {
       ps << "," << PP::space;
       emitExpression(operand);
@@ -926,6 +943,12 @@ void Emitter::emitStatement(PrintFOp op) {
     }
   });
   emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(PrintFOp op) { emitPrintfLike(op, {}); }
+
+void Emitter::emitStatement(FPrintFOp op) {
+  emitPrintfLike(op, op.getOutputFileAttr());
 }
 
 template <class T>
