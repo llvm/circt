@@ -218,6 +218,9 @@ struct StorageKeyInfo {
   }
 };
 
+// Values with structural equivalence intended to be internalized.
+//===----------------------------------------------------------------------===//
+
 /// Storage object for an '!rtg.set<T>'.
 struct SetStorage {
   SetStorage(SetVector<ElaboratorValue> &&set, Type type)
@@ -344,28 +347,6 @@ struct InterleavedSequenceStorage {
   const unsigned hashcode;
 };
 
-/// Represents a unique virtual register.
-struct VirtualRegisterStorage {
-  VirtualRegisterStorage(ArrayAttr allowedRegs) : allowedRegs(allowedRegs) {}
-
-  // NOTE: we don't need an 'isEqual' function and 'hashcode' here because
-  // VirtualRegisters are never internalized.
-
-  // The list of fixed registers allowed to be selected for this virtual
-  // register.
-  const ArrayAttr allowedRegs;
-};
-
-struct UniqueLabelStorage {
-  UniqueLabelStorage(StringAttr name) : name(name) {}
-
-  // NOTE: we don't need an 'isEqual' function and 'hashcode' here because
-  // VirtualRegisters are never internalized.
-
-  /// The label name. For unique labels, this is just the prefix.
-  const StringAttr name;
-};
-
 /// Storage object for '!rtg.array`-typed values.
 struct ArrayStorage {
   ArrayStorage(Type type, SmallVector<ElaboratorValue> &&array)
@@ -405,10 +386,65 @@ struct TupleStorage {
   const SmallVector<ElaboratorValue> values;
 };
 
+// Values with identity not intended to be internalized.
+//===----------------------------------------------------------------------===//
+
+/// Base class for storages that represent values with identity, i.e., two
+/// values are not considered equivalent if they are structurally the same, but
+/// each definition of such a value is unique. E.g., unique labels or virtual
+/// registers. These cannot be materialized anew in each nested sequence, but
+/// must be passed as arguments.
+struct IdentityValue {
+
+  IdentityValue(Type type) : type(type) {}
+
+#ifndef NDEBUG
+
+  /// In debug mode, track whether this value was already materialized to
+  /// assert if it's illegally materialized multiple times.
+  ///
+  /// Instead of deleting operations defining these values and materializing
+  /// them again, we could retain the operations. However, we still need
+  /// specific storages to represent these values in some cases, e.g., to get
+  /// the size of a memory allocation. Also, elaboration of nested control-flow
+  /// regions (e.g. `scf.for`) relies on materialization of such values lazily
+  /// instead of cloning the operations eagerly.
+  bool alreadyMaterialized = false;
+
+#endif
+
+  const Type type;
+};
+
+/// Represents a unique virtual register.
+struct VirtualRegisterStorage : IdentityValue {
+  VirtualRegisterStorage(ArrayAttr allowedRegs, Type type)
+      : IdentityValue(type), allowedRegs(allowedRegs) {}
+
+  // NOTE: we don't need an 'isEqual' function and 'hashcode' here because
+  // VirtualRegisters are never internalized.
+
+  // The list of fixed registers allowed to be selected for this virtual
+  // register.
+  const ArrayAttr allowedRegs;
+};
+
+struct UniqueLabelStorage : IdentityValue {
+  UniqueLabelStorage(StringAttr name)
+      : IdentityValue(LabelType::get(name.getContext())), name(name) {}
+
+  // NOTE: we don't need an 'isEqual' function and 'hashcode' here because
+  // VirtualRegisters are never internalized.
+
+  /// The label name. For unique labels, this is just the prefix.
+  const StringAttr name;
+};
+
 /// Storage object for '!rtg.isa.memoryblock`-typed values.
-struct MemoryBlockStorage {
-  MemoryBlockStorage(const APInt &baseAddress, const APInt &endAddress)
-      : baseAddress(baseAddress), endAddress(endAddress) {}
+struct MemoryBlockStorage : IdentityValue {
+  MemoryBlockStorage(const APInt &baseAddress, const APInt &endAddress,
+                     Type type)
+      : IdentityValue(type), baseAddress(baseAddress), endAddress(endAddress) {}
 
   // The base address of the memory. The width of the APInt also represents the
   // address width of the memory. This is an APInt to support memories of
@@ -431,6 +467,9 @@ public:
   /// situations.
   template <typename StorageTy, typename... Args>
   StorageTy *internalize(Args &&...args) {
+    static_assert(!std::is_base_of_v<IdentityValue, StorageTy> &&
+                  "values with identity must not be internalized");
+
     StorageTy storage(std::forward<Args>(args)...);
 
     auto existing = getInternSet<StorageTy>().insert_as(
@@ -445,6 +484,9 @@ public:
 
   template <typename StorageTy, typename... Args>
   StorageTy *create(Args &&...args) {
+    static_assert(std::is_base_of_v<IdentityValue, StorageTy> &&
+                  "values with structural equivalence must be internalized");
+
     return new (allocator.Allocate<StorageTy>())
         StorageTy(std::forward<Args>(args)...);
   }
@@ -601,15 +643,50 @@ static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
 
 namespace {
 
+/// State that should be shared by all elaborator and materializer instances.
+struct SharedState {
+  SharedState(SymbolTable &table, unsigned seed) : table(table), rng(seed) {}
+
+  SymbolTable &table;
+  std::mt19937 rng;
+  Namespace names;
+  Internalizer internalizer;
+};
+
+/// A collection of state per RTG test.
+struct TestState {
+  /// The name of the test.
+  StringAttr name;
+
+  /// Keep track of the sequences we have randomized and materialized for this
+  /// test. We do not have to track them in the shared state because a value
+  /// defined by a `randomize_sequence` operation cannot cross from one test to
+  /// another, but it may be passed to a nested region which is why we cannot
+  /// keep track of it in the materializer itself. We could treat it just like
+  /// all other IdentityValues, but that is not necessary for sequences since
+  /// their identity is defined by the symbol reference to the 'rtg.sequence'
+  /// op once it has been randomized instead of the SSA-value defining op.
+  DenseMap<RandomizedSequenceStorage *, SequenceOp> materializedSequences;
+
+  /// The context switches registered for this test.
+  MapVector<
+      std::pair<ContextResourceAttrInterface, ContextResourceAttrInterface>,
+      SequenceStorage *>
+      contextSwitches;
+};
+
 /// Construct an SSA value from a given elaborated value.
 class Materializer {
 public:
-  Materializer(OpBuilder builder) : builder(builder) {}
+  Materializer(OpBuilder builder, TestState &testState,
+               SharedState &sharedState,
+               SmallVector<ElaboratorValue> &blockArgs)
+      : builder(builder), testState(testState), sharedState(sharedState),
+        blockArgs(blockArgs) {}
 
   /// Materialize IR representing the provided `ElaboratorValue` and return the
   /// `Value` or a null value on failure.
   Value materialize(ElaboratorValue val, Location loc,
-                    std::queue<RandomizedSequenceStorage *> &elabRequests,
                     function_ref<InFlightDiagnostic()> emitError) {
     auto iter = materializedValues.find(val);
     if (iter != materializedValues.end())
@@ -617,8 +694,33 @@ public:
 
     LLVM_DEBUG(llvm::dbgs() << "Materializing " << val << "\n\n");
 
+    // In debug mode, track whether values with identity were already
+    // materialized before and assert in such a situation.
     return std::visit(
-        [&](auto val) { return visit(val, loc, elabRequests, emitError); },
+        [&](auto value) {
+          if constexpr (std::is_base_of_v<IdentityValue,
+                                          std::remove_pointer_t<
+                                              std::decay_t<decltype(value)>>>) {
+            if (identityValueRoot.contains(value)) {
+#ifndef NDEBUG
+              bool &materialized =
+                  static_cast<IdentityValue *>(value)->alreadyMaterialized;
+              assert(!materialized && "must not already be materialized");
+              materialized = true;
+#endif
+
+              return visit(value, loc, emitError);
+            }
+
+            Value arg = builder.getBlock()->addArgument(value->type, loc);
+            blockArgs.push_back(val);
+            blockArgTypes.push_back(arg.getType());
+            materializedValues[val] = arg;
+            return arg;
+          }
+
+          return visit(value, loc, emitError);
+        },
         val);
   }
 
@@ -628,9 +730,8 @@ public:
   /// Otherwise, all operations after the materializer's insertion point are
   /// deleted until `op` is reached. An error is returned if the operation is
   /// before the insertion point.
-  LogicalResult
-  materialize(Operation *op, DenseMap<Value, ElaboratorValue> &state,
-              std::queue<RandomizedSequenceStorage *> &elabRequests) {
+  LogicalResult materialize(Operation *op,
+                            DenseMap<Value, ElaboratorValue> &state) {
     if (op->getNumRegions() > 0)
       return op->emitOpError("ops with nested regions must be elaborated away");
 
@@ -670,8 +771,7 @@ public:
         return diag;
       };
 
-      Value val = materialize(state.at(operand.get()), op->getLoc(),
-                              elabRequests, emitError);
+      Value val = materialize(state.at(operand.get()), op->getLoc(), emitError);
       if (!val)
         return failure();
 
@@ -691,12 +791,24 @@ public:
       op->erase();
   }
 
+  /// Tell this materializer that it is responsible for materializing the given
+  /// identity value at the earliest position it is needed, and should't
+  /// request the value via block argument.
+  void registerIdentityValue(IdentityValue *val) {
+    identityValueRoot.insert(val);
+  }
+
+  ArrayRef<Type> getBlockArgTypes() const { return blockArgTypes; }
+
   template <typename OpTy, typename... Args>
   OpTy create(Location location, Args &&...args) {
     return builder.create<OpTy>(location, std::forward<Args>(args)...);
   }
 
 private:
+  SequenceOp elaborateSequence(const RandomizedSequenceStorage *seq,
+                               SmallVector<ElaboratorValue> &elabArgs);
+
   void deleteOpsUntil(function_ref<bool(Block::iterator)> stop) {
     auto ip = builder.getInsertionPoint();
     while (ip != builder.getBlock()->end() && !stop(ip)) {
@@ -709,7 +821,6 @@ private:
   }
 
   Value visit(TypedAttr val, Location loc,
-              std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     // For index attributes (and arithmetic operations on them) we use the
     // index dialect.
@@ -738,7 +849,6 @@ private:
   }
 
   Value visit(size_t val, Location loc,
-              std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     Value res = builder.create<index::ConstantOp>(loc, val);
     materializedValues[val] = res;
@@ -746,7 +856,6 @@ private:
   }
 
   Value visit(bool val, Location loc,
-              std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     Value res = builder.create<index::BoolConstantOp>(loc, val);
     materializedValues[val] = res;
@@ -754,12 +863,11 @@ private:
   }
 
   Value visit(ArrayStorage *val, Location loc,
-              std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     SmallVector<Value> elements;
     elements.reserve(val->array.size());
     for (auto el : val->array) {
-      auto materialized = materialize(el, loc, elabRequests, emitError);
+      auto materialized = materialize(el, loc, emitError);
       if (!materialized)
         return Value();
 
@@ -772,12 +880,11 @@ private:
   }
 
   Value visit(SetStorage *val, Location loc,
-              std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     SmallVector<Value> elements;
     elements.reserve(val->set.size());
     for (auto el : val->set) {
-      auto materialized = materialize(el, loc, elabRequests, emitError);
+      auto materialized = materialize(el, loc, emitError);
       if (!materialized)
         return Value();
 
@@ -790,15 +897,13 @@ private:
   }
 
   Value visit(BagStorage *val, Location loc,
-              std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     SmallVector<Value> values, weights;
     values.reserve(val->bag.size());
     weights.reserve(val->bag.size());
     for (auto [val, weight] : val->bag) {
-      auto materializedVal = materialize(val, loc, elabRequests, emitError);
-      auto materializedWeight =
-          materialize(weight, loc, elabRequests, emitError);
+      auto materializedVal = materialize(val, loc, emitError);
+      auto materializedWeight = materialize(weight, loc, emitError);
       if (!materializedVal || !materializedWeight)
         return Value();
 
@@ -811,30 +916,68 @@ private:
     return res;
   }
 
+  Value visit(MemoryBlockStorage *val, Location loc,
+              function_ref<InFlightDiagnostic()> emitError) {
+    emitError() << "materializing a memory block not supported yet";
+    return Value();
+  }
+
   Value visit(SequenceStorage *val, Location loc,
-              std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     emitError() << "materializing a non-randomized sequence not supported yet";
     return Value();
   }
 
   Value visit(RandomizedSequenceStorage *val, Location loc,
-              std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
-    elabRequests.push(val);
-    Value seq = builder.create<GetSequenceOp>(
-        loc, SequenceType::get(builder.getContext(), {}), val->name);
-    Value res = builder.create<RandomizeSequenceOp>(loc, seq);
+    // To know which values we have to pass by argument (and not just pass all
+    // that migth be used eagerly), we have to elaborate the sequence family if
+    // not already done so.
+    // We need to get back the sequence to reference, and the list of elaborated
+    // values to pass as arguments.
+    SmallVector<ElaboratorValue> elabArgs;
+    SequenceOp seqOp = elaborateSequence(val, elabArgs);
+    if (!seqOp)
+      return {};
+
+    // Materialize all the values we need to pass as arguments and collect their
+    // types.
+    SmallVector<Value> args;
+    SmallVector<Type> argTypes;
+    for (auto arg : elabArgs) {
+      Value materialized = materialize(arg, loc, emitError);
+      if (!materialized)
+        return {};
+
+      args.push_back(materialized);
+      argTypes.push_back(materialized.getType());
+    }
+
+    Value res = builder.create<GetSequenceOp>(
+        loc, SequenceType::get(builder.getContext(), argTypes),
+        seqOp.getSymName());
+
+    // Only materialize a substitute_sequence op when we have arguments to
+    // substitute since this op does not support 0 arguments.
+    if (!args.empty())
+      res = builder.create<SubstituteSequenceOp>(loc, res, args);
+
+    res = builder.create<RandomizeSequenceOp>(loc, res);
+
     materializedValues[val] = res;
     return res;
   }
 
   Value visit(InterleavedSequenceStorage *val, Location loc,
-              std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     SmallVector<Value> sequences;
-    for (auto seqVal : val->sequences)
-      sequences.push_back(materialize(seqVal, loc, elabRequests, emitError));
+    for (auto seqVal : val->sequences) {
+      Value materialized = materialize(seqVal, loc, emitError);
+      if (!materialized)
+        return {};
+
+      sequences.push_back(materialized);
+    }
 
     if (sequences.size() == 1)
       return sequences[0];
@@ -846,7 +989,6 @@ private:
   }
 
   Value visit(VirtualRegisterStorage *val, Location loc,
-              std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     Value res = builder.create<VirtualRegisterOp>(loc, val->allowedRegs);
     materializedValues[val] = res;
@@ -854,7 +996,6 @@ private:
   }
 
   Value visit(UniqueLabelStorage *val, Location loc,
-              std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     Value res = builder.create<LabelUniqueDeclOp>(loc, val->name, ValueRange());
     materializedValues[val] = res;
@@ -862,7 +1003,6 @@ private:
   }
 
   Value visit(const LabelValue &val, Location loc,
-              std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     Value res = builder.create<LabelDeclOp>(loc, val.name, ValueRange());
     materializedValues[val] = res;
@@ -870,12 +1010,11 @@ private:
   }
 
   Value visit(TupleStorage *val, Location loc,
-              std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     SmallVector<Value> materialized;
     materialized.reserve(val->values.size());
     for (auto v : val->values)
-      materialized.push_back(materialize(v, loc, elabRequests, emitError));
+      materialized.push_back(materialize(v, loc, emitError));
     Value res = builder.create<TupleCreateOp>(loc, materialized);
     materializedValues[val] = res;
     return res;
@@ -894,6 +1033,20 @@ private:
   OpBuilder builder;
 
   SmallVector<Operation *> toDelete;
+
+  TestState &testState;
+  SharedState &sharedState;
+
+  /// Keep track of the block arguments we had to add to this materializer's
+  /// block for identity values and also remember which elaborator values are
+  /// expected to be passed as arguments from outside.
+  SmallVector<ElaboratorValue> &blockArgs;
+  SmallVector<Type> blockArgTypes;
+
+  /// Identity values in this set are materialized by this materializer,
+  /// otherwise they are added as block arguments and the block that wants to
+  /// embed this sequence is expected to provide a value for it.
+  DenseSet<IdentityValue *> identityValueRoot;
 };
 
 //===----------------------------------------------------------------------===//
@@ -904,40 +1057,13 @@ private:
 /// removed.
 enum class DeletionKind { Keep, Delete };
 
-/// Elaborator state that should be shared by all elaborator instances.
-struct ElaboratorSharedState {
-  ElaboratorSharedState(SymbolTable &table, unsigned seed)
-      : table(table), rng(seed) {}
-
-  SymbolTable &table;
-  std::mt19937 rng;
-  Namespace names;
-  Internalizer internalizer;
-
-  /// The worklist used to keep track of the test and sequence operations to
-  /// make sure they are processed top-down (BFS traversal).
-  std::queue<RandomizedSequenceStorage *> worklist;
-};
-
-/// A collection of state per RTG test.
-struct TestState {
-  /// The name of the test.
-  StringAttr name;
-
-  /// The context switches registered for this test.
-  MapVector<
-      std::pair<ContextResourceAttrInterface, ContextResourceAttrInterface>,
-      SequenceStorage *>
-      contextSwitches;
-};
-
 /// Interprets the IR to perform and lower the represented randomizations.
 class Elaborator : public RTGOpVisitor<Elaborator, FailureOr<DeletionKind>> {
 public:
   using RTGBase = RTGOpVisitor<Elaborator, FailureOr<DeletionKind>>;
   using RTGBase::visitOp;
 
-  Elaborator(ElaboratorSharedState &sharedState, TestState &testState,
+  Elaborator(SharedState &sharedState, TestState &testState,
              Materializer &materializer,
              ContextResourceAttrInterface currentContext = {})
       : sharedState(sharedState), testState(testState),
@@ -1294,9 +1420,10 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(VirtualRegisterOp op) {
-    state[op.getResult()] =
-        sharedState.internalizer.create<VirtualRegisterStorage>(
-            op.getAllowedRegsAttr());
+    auto *val = sharedState.internalizer.create<VirtualRegisterStorage>(
+        op.getAllowedRegsAttr(), op.getType());
+    state[op.getResult()] = val;
+    materializer.registerIdentityValue(val);
     return DeletionKind::Delete;
   }
 
@@ -1369,8 +1496,10 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(LabelUniqueDeclOp op) {
-    state[op.getLabel()] = sharedState.internalizer.create<UniqueLabelStorage>(
+    auto *val = sharedState.internalizer.create<UniqueLabelStorage>(
         substituteFormatString(op.getFormatStringAttr(), op.getArgs()));
+    state[op.getLabel()] = val;
+    materializer.registerIdentityValue(val);
     return DeletionKind::Delete;
   }
 
@@ -1424,8 +1553,10 @@ public:
 
     if (from == to) {
       Value seqVal = materializer.materialize(
-          get<SequenceStorage *>(op.getSequence()), op.getLoc(),
-          sharedState.worklist, emitError);
+          get<SequenceStorage *>(op.getSequence()), op.getLoc(), emitError);
+      if (!seqVal)
+        return failure();
+
       Value randSeqVal =
           materializer.create<RandomizeSequenceOp>(op.getLoc(), seqVal);
       materializer.create<EmbedSequenceOp>(op.getLoc(), randSeqVal);
@@ -1470,16 +1601,25 @@ public:
         sharedState.internalizer.internalize<RandomizedSequenceStorage>(
             sharedState.names.newName(familyName.getValue()), to,
             testState.name, seq);
-    Value seqVal = materializer.materialize(randSeq, op.getLoc(),
-                                            sharedState.worklist, emitError);
-    materializer.create<EmbedSequenceOp>(op.getLoc(), seqVal);
+    Value seqVal = materializer.materialize(randSeq, op.getLoc(), emitError);
+    if (!seqVal)
+      return failure();
 
+    materializer.create<EmbedSequenceOp>(op.getLoc(), seqVal);
     return DeletionKind::Delete;
   }
 
   FailureOr<DeletionKind> visitOp(ContextSwitchOp op) {
     testState.contextSwitches[{op.getFromAttr(), op.getToAttr()}] =
         get<SequenceStorage *>(op.getSequence());
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(MemoryBlockDeclareOp op) {
+    auto *val = sharedState.internalizer.create<MemoryBlockStorage>(
+        op.getBaseAddress(), op.getEndAddress(), op.getType());
+    state[op.getResult()] = val;
+    materializer.registerIdentityValue(val);
     return DeletionKind::Delete;
   }
 
@@ -1501,12 +1641,6 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(CommentOp op) { return DeletionKind::Keep; }
-
-  FailureOr<DeletionKind> visitOp(MemoryBlockDeclareOp op) {
-    state[op.getResult()] = sharedState.internalizer.create<MemoryBlockStorage>(
-        op.getEndAddress(), op.getBaseAddress());
-    return DeletionKind::Delete;
-  }
 
   FailureOr<DeletionKind> visitOp(scf::IfOp op) {
     bool cond = get<bool>(op.getCondition());
@@ -1692,7 +1826,7 @@ public:
         return failure();
 
       if (*result == DeletionKind::Keep)
-        if (failed(materializer.materialize(&op, state, sharedState.worklist)))
+        if (failed(materializer.materialize(&op, state)))
           return failure();
 
       LLVM_DEBUG({
@@ -1714,7 +1848,7 @@ public:
 
 private:
   // State to be shared between all elaborator instances.
-  ElaboratorSharedState &sharedState;
+  SharedState &sharedState;
 
   // State to a specific RTG test and the sequences placed within it.
   TestState &testState;
@@ -1730,6 +1864,43 @@ private:
   ContextResourceAttrInterface currentContext;
 };
 } // namespace
+
+SequenceOp
+Materializer::elaborateSequence(const RandomizedSequenceStorage *seq,
+                                SmallVector<ElaboratorValue> &elabArgs) {
+  if (auto materializedSeq = testState.materializedSequences.find(seq);
+      materializedSeq != testState.materializedSequences.end())
+    return materializedSeq->getSecond();
+
+  auto familyOp =
+      sharedState.table.lookup<SequenceOp>(seq->sequence->familyName);
+  // TODO: don't clone if this is the only remaining reference to this
+  // sequence
+  OpBuilder builder(familyOp);
+  auto seqOp = builder.cloneWithoutRegions(familyOp);
+  seqOp.setSymName(seq->name);
+  seqOp.getBodyRegion().emplaceBlock();
+  sharedState.table.insert(seqOp);
+  assert(seqOp.getSymName() == seq->name && "should not have been renamed");
+
+  LLVM_DEBUG(llvm::dbgs() << "\n=== Elaborating sequence family @"
+                          << familyOp.getSymName() << " into @"
+                          << seqOp.getSymName() << " under context "
+                          << seq->context << "\n\n");
+
+  Materializer materializer(OpBuilder::atBlockBegin(seqOp.getBody()), testState,
+                            sharedState, elabArgs);
+  Elaborator elaborator(sharedState, testState, materializer, seq->context);
+  if (failed(
+          elaborator.elaborate(familyOp.getBodyRegion(), seq->sequence->args)))
+    return {};
+
+  seqOp.setSequenceType(
+      SequenceType::get(builder.getContext(), materializer.getBlockArgTypes()));
+  materializer.finalize();
+
+  return seqOp;
+}
 
 //===----------------------------------------------------------------------===//
 // Elaborator Pass
@@ -1803,58 +1974,23 @@ void ElaborationPass::cloneTargetsIntoTests(SymbolTable &table) {
 
 LogicalResult ElaborationPass::elaborateModule(ModuleOp moduleOp,
                                                SymbolTable &table) {
-  ElaboratorSharedState state(table, seed);
+  SharedState state(table, seed);
 
   // Update the name cache
   state.names.add(moduleOp);
 
   // Initialize the worklist with the test ops since they cannot be placed by
   // other ops.
-  DenseMap<StringAttr, TestState> testStates;
   for (auto testOp : moduleOp.getOps<TestOp>()) {
+    TestState testState;
+    testState.name = testOp.getSymNameAttr();
     LLVM_DEBUG(llvm::dbgs()
                << "\n=== Elaborating test @" << testOp.getSymName() << "\n\n");
-    Materializer materializer(OpBuilder::atBlockBegin(testOp.getBody()));
-    testStates[testOp.getSymNameAttr()].name = testOp.getSymNameAttr();
-    Elaborator elaborator(state, testStates[testOp.getSymNameAttr()],
-                          materializer);
+    SmallVector<ElaboratorValue> blockArgs;
+    Materializer materializer(OpBuilder::atBlockBegin(testOp.getBody()),
+                              testState, state, blockArgs);
+    Elaborator elaborator(state, testState, materializer);
     if (failed(elaborator.elaborate(testOp.getBodyRegion())))
-      return failure();
-
-    materializer.finalize();
-  }
-
-  // Do top-down BFS traversal such that elaborating a sequence further down
-  // does not fix the outcome for multiple placements.
-  while (!state.worklist.empty()) {
-    auto *curr = state.worklist.front();
-    state.worklist.pop();
-
-    if (table.lookup<SequenceOp>(curr->name))
-      continue;
-
-    auto familyOp = table.lookup<SequenceOp>(curr->sequence->familyName);
-    // TODO: don't clone if this is the only remaining reference to this
-    // sequence
-    OpBuilder builder(familyOp);
-    auto seqOp = builder.cloneWithoutRegions(familyOp);
-    seqOp.getBodyRegion().emplaceBlock();
-    seqOp.setSymName(curr->name);
-    seqOp.setSequenceType(
-        SequenceType::get(builder.getContext(), ArrayRef<Type>{}));
-    table.insert(seqOp);
-    assert(seqOp.getSymName() == curr->name && "should not have been renamed");
-
-    LLVM_DEBUG(llvm::dbgs()
-               << "\n=== Elaborating sequence family @" << familyOp.getSymName()
-               << " into @" << seqOp.getSymName() << " under context "
-               << curr->context << "\n\n");
-
-    Materializer materializer(OpBuilder::atBlockBegin(seqOp.getBody()));
-    Elaborator elaborator(state, testStates[curr->test], materializer,
-                          curr->context);
-    if (failed(elaborator.elaborate(familyOp.getBodyRegion(),
-                                    curr->sequence->args)))
       return failure();
 
     materializer.finalize();
