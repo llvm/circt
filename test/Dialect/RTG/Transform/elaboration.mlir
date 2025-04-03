@@ -415,6 +415,40 @@ rtg.test @virtualRegisters() {
   }
 }
 
+// CHECK-LABEL:  rtg.sequence @valuesWithIdentitySeq{{.*}}(%arg0: !rtgtest.ireg, %arg1: !rtgtest.ireg, %arg2: !rtgtest.ireg) {
+// CHECK: rtgtest.rv32i.jalr %arg0, %arg0
+// CHECK: rtgtest.rv32i.jalr %arg1, %arg2
+
+// CHECK-LABEL:  rtg.test @valuesWithIdentity() {
+// CHECK: [[VREG0:%.+]] = rtg.virtual_reg [#rtgtest.a0 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg]
+// CHECK: [[VREG1:%.+]] = rtg.virtual_reg [#rtgtest.a0 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg]
+// CHECK: rtgtest.rv32i.jalr [[VREG0]], [[VREG1]]
+// CHECK: [[VREG2:%.+]] = rtg.virtual_reg [#rtgtest.a0 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg]
+// CHECK: [[V0:%.+]] = rtg.get_sequence @valuesWithIdentitySeq{{.*}} :
+// CHECK: rtg.substitute_sequence [[V0]]([[VREG0]], [[VREG2]], [[VREG1]]) :
+
+rtg.sequence @valuesWithIdentitySeq(%imm: !rtg.isa.immediate<12>, %reg: !rtgtest.ireg, %set0: !rtg.set<!rtgtest.ireg>, %set1: !rtg.set<!rtgtest.ireg>) {
+  rtgtest.rv32i.jalr %reg, %reg, %imm
+  %r0 = rtg.set_select_random %set0 : !rtg.set<!rtgtest.ireg>
+  %r1 = rtg.set_select_random %set1 : !rtg.set<!rtgtest.ireg>
+  rtgtest.rv32i.jalr %r0, %r1, %imm
+}
+
+rtg.test @valuesWithIdentity() {
+  %r0 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1]
+  %r1 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1]
+  %r2 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1]
+  %r3 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1]
+  %imm = rtg.constant #rtg.isa.immediate<12, 0>
+  rtgtest.rv32i.jalr %r0, %r3, %imm
+  %set0 = rtg.set_create %r1, %r2 : !rtgtest.ireg
+  %set1 = rtg.set_create %r3 : !rtgtest.ireg
+  %s0 = rtg.get_sequence @valuesWithIdentitySeq : !rtg.sequence<!rtg.isa.immediate<12>, !rtgtest.ireg, !rtg.set<!rtgtest.ireg>, !rtg.set<!rtgtest.ireg>>
+  %s1 = rtg.substitute_sequence %s0(%imm, %r0, %set0, %set1) : !rtg.sequence<!rtg.isa.immediate<12>, !rtgtest.ireg, !rtg.set<!rtgtest.ireg>, !rtg.set<!rtgtest.ireg>>
+  %s2 = rtg.randomize_sequence %s1
+  rtg.embed_sequence %s2
+}
+
 // CHECK-LABEL: @labels
 rtg.test @labels() {
   // CHECK-NEXT: [[L0:%.+]] = rtg.label_unique_decl "label0"

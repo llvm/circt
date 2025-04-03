@@ -243,10 +243,8 @@ def test1_args(set: Set):
 # ELABORATED-NEXT: rtg.label local
 # ELABORATED-NEXT: rtg.label local
 
-# ELABORATED-NEXT: [[L3:%.+]] = rtg.label_decl "l1_2"
-# ELABORATED-NEXT: rtg.label local [[L3]]
-# ELABORATED-NEXT: [[L4:%.+]] = rtg.label_decl "l1_3"
-# ELABORATED-NEXT: rtg.label local [[L4]]
+# ELABORATED-NEXT: rtg.label local [[L1]]
+# ELABORATED-NEXT: rtg.label local [[L1]]
 # ELABORATED-NEXT: rtg.label local [[L0]]
 
 # ELABORATED-NEXT: [[L5:%.+]] = rtg.label_decl "s1"
@@ -272,8 +270,8 @@ def test1_args(set: Set):
 # ASM-NEXT: l1_1:
 # ASM-NEXT: l0:
 
-# ASM-NEXT: l1_2:
-# ASM-NEXT: l1_3:
+# ASM-NEXT: l1_0:
+# ASM-NEXT: l1_0:
 # ASM-NEXT: l0:
 
 # ASM-NEXT: s1:
