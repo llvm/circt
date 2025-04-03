@@ -91,6 +91,30 @@ rtg.test @nestedSequences() {
   rtg.embed_sequence %1
 }
 
+rtg.sequence @seqWithArgs(%imm: !rtg.isa.immediate<12>, %seq: !rtg.randomized_sequence) {
+  %sp = rtg.fixed_reg #rtgtest.sp
+  rtgtest.rv32i.jalr %sp, %sp, %imm
+  rtg.embed_sequence %seq
+}
+
+// CHECK-LABEL: @substitutions
+rtg.test @substitutions() {
+  // CHECK-NEXT: [[IMM0:%.+]] = rtg.constant #rtg.isa.immediate<12, 0> : !rtg.isa.immediate<12>
+  // CHECK-NEXT: [[SP:%.+]] = rtg.fixed_reg #rtgtest.sp : !rtgtest.ireg
+  // CHECK-NEXT: rtgtest.rv32i.jalr [[SP]], [[SP]], [[IMM0]]
+  // CHECK-NEXT: [[RA:%.+]] = rtg.fixed_reg #rtgtest.ra : !rtgtest.ireg
+  // CHECK-NEXT: [[S0:%.+]] = rtg.fixed_reg #rtgtest.s0 : !rtgtest.ireg
+  // CHECK-NEXT: [[IMM1:%.+]] = rtg.constant #rtg.isa.immediate<12, 1> : !rtg.isa.immediate<12>
+  // CHECK-NEXT: rtgtest.rv32i.jalr [[RA]], [[S0]], [[IMM1]]
+  %imm = rtg.constant #rtg.isa.immediate<12, 0>
+  %0 = rtg.get_sequence @seqWithArgs : !rtg.sequence<!rtg.isa.immediate<12>, !rtg.randomized_sequence>
+  %1 = rtg.get_sequence @nested0 : !rtg.sequence
+  %2 = rtg.randomize_sequence %1
+  %3 = rtg.substitute_sequence %0(%imm, %2) : !rtg.sequence<!rtg.isa.immediate<12>, !rtg.randomized_sequence>
+  %4 = rtg.randomize_sequence %3
+  rtg.embed_sequence %4
+}
+
 // -----
 
 rtg.test @test0(seq = %seq : !rtg.randomized_sequence) {
