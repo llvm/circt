@@ -742,7 +742,7 @@ rtg.test @randomIntegers() {
 // -----
 
 rtg.sequence @seq0(%seq: !rtg.randomized_sequence) {
-  // expected-error @below {{attempting to place sequence seq1_0 derived from seq1 under context #rtgtest.cpu<0> : !rtgtest.cpu, but it was previously randomized for context 'default'}}
+  // expected-error @below {{attempting to place sequence derived from seq1 under context #rtgtest.cpu<0> : !rtgtest.cpu, but it was previously randomized for context 'default'}}
   rtg.embed_sequence %seq
 }
 rtg.sequence @seq1() { }
