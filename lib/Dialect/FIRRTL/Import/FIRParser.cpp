@@ -1921,9 +1921,9 @@ private:
   ParseResult parseAttach();
   ParseResult parseMemPort(MemDirAttr direction);
 
-// Parse a format string and build operations for FIRRTL "special" substitutions.
-// Set `formatStringResult` to the validated format string and `operands` to the
-// list of actual operands.
+  // Parse a format string and build operations for FIRRTL "special"
+  // substitutions. Set `formatStringResult` to the validated format string and
+  // `operands` to the list of actual operands.
   ParseResult parseFormatString(SMLoc formatStringLoc, StringRef formatString,
                                 ArrayRef<Value> specOperands,
                                 StringAttr &formatStringResult,
@@ -2933,9 +2933,9 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   return moduleContext.addSymbolEntry(id, memoryData, startLoc, true);
 }
 
-// Parse a format string and build operations for FIRRTL "special" substitutions.
-// Set `formatStringResult` to the validated format string and `operands` to the
-// list of actual operands.
+// Parse a format string and build operations for FIRRTL "special"
+// substitutions. Set `formatStringResult` to the validated format string and
+// `operands` to the list of actual operands.
 ParseResult FIRStmtParser::parseFormatString(SMLoc formatStringLoc,
                                              StringRef formatString,
                                              ArrayRef<Value> specOperands,
