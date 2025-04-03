@@ -1920,9 +1920,14 @@ private:
                             SymbolRefAttr layerSym);
   ParseResult parseAttach();
   ParseResult parseMemPort(MemDirAttr direction);
-  template <typename T, bool isFPrintF>
-  ParseResult parsePrintfLike();
-  ParseResult parseFormatString();
+
+// Parse a format string and build operations for FIRRTL "special" substitutions.
+// Set `formatStringResult` to the validated format string and `operands` to the
+// list of actual operands.
+  ParseResult parseFormatString(SMLoc formatStringLoc, StringRef formatString,
+                                ArrayRef<Value> specOperands,
+                                StringAttr &formatStringResult,
+                                SmallVectorImpl<Value> &operands);
   ParseResult parsePrintf();
   ParseResult parseFPrintf();
   ParseResult parseSkip();
@@ -2928,57 +2933,22 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   return moduleContext.addSymbolEntry(id, memoryData, startLoc, true);
 }
 
-/// printf ::= 'printf(' exp exp StringLit exp* ')' name? info?
-/// fprintf ::= 'fprintf(' exp exp StringLit StringLit exp* ')' name? info?
-template <typename T, bool isFPrintF>
-ParseResult FIRStmtParser::parsePrintfLike() {
-  auto startTok =
-      consumeToken(isFPrintF ? FIRToken::lp_fprintf : FIRToken::lp_printf);
-
-  Value clock, condition;
-  StringRef outputFile, formatString;
-  if (parseExp(clock, "expected clock expression in printf/fprintf") ||
-      parseToken(FIRToken::comma, "expected ','") ||
-      parseExp(condition, "expected condition in printf/fprintf") ||
-      parseToken(FIRToken::comma, "expected ','") ||
-      ((isFPrintF &&
-        (parseGetSpelling(outputFile) ||
-         parseToken(FIRToken::string, "expected output file in fprintf") ||
-         parseToken(FIRToken::comma, "expected ','")))))
-    return failure();
-
-  auto formatStringLoc = getToken().getLoc();
-  if (parseGetSpelling(formatString) ||
-      parseToken(FIRToken::string, "expected format string in printf"))
-    return failure();
-
-  SmallVector<Value, 4> specOperands;
-  while (consumeIf(FIRToken::comma)) {
-    specOperands.push_back({});
-    if (parseExp(specOperands.back(), "expected operand in printf/fprintf"))
-      return failure();
-  }
-  if (parseToken(FIRToken::r_paren, "expected ')'"))
-    return failure();
-
-  StringAttr name;
-  if (parseOptionalName(name))
-    return failure();
-
-  if (parseOptionalInfo())
-    return failure();
-
-  locationProcessor.setLoc(startTok.getLoc());
-
+// Parse a format string and build operations for FIRRTL "special" substitutions.
+// Set `formatStringResult` to the validated format string and `operands` to the
+// list of actual operands.
+ParseResult FIRStmtParser::parseFormatString(SMLoc formatStringLoc,
+                                             StringRef formatString,
+                                             ArrayRef<Value> specOperands,
+                                             StringAttr &formatStringResult,
+                                             SmallVectorImpl<Value> &operands) {
   // Validate the format string and remove any "special" substitutions.  Only do
   // this for FIRRTL versions > 5.0.0.  If at a different FIRRTL version, then
   // just parse this as if it was a string.
   SmallVector<Attribute, 4> specialSubstitutions;
   SmallString<64> validatedFormatString;
-  SmallVector<Value, 4> operands;
   if (version < FIRVersion(5, 0, 0)) {
     validatedFormatString = formatString;
-    operands.append(specOperands);
+    operands.append(specOperands.begin(), specOperands.end());
   } else {
     for (size_t i = 0, e = formatString.size(), opIdx = 0; i != e; ++i) {
       auto c = formatString[i];
@@ -3069,27 +3039,100 @@ ParseResult FIRStmtParser::parsePrintfLike() {
     }
   }
 
-  auto formatStrUnescaped =
+  formatStringResult =
       builder.getStringAttr(FIRToken::getStringValue(validatedFormatString));
-  if (isFPrintF) {
-    auto outputFileUnescaped = FIRToken::getStringValue(outputFile);
-    builder.create<FPrintFOp>(clock, condition,
-                              builder.getStringAttr(outputFileUnescaped),
-                              formatStrUnescaped, operands, name);
-    return success();
-  }
-  builder.create<PrintFOp>(clock, condition, formatStrUnescaped, operands,
-                           name);
   return success();
 }
 
 /// printf ::= 'printf(' exp exp StringLit exp* ')' name? info?
 ParseResult FIRStmtParser::parsePrintf() {
-  return parsePrintfLike<PrintFOp, false>();
+  auto startTok = consumeToken(FIRToken::lp_printf);
+
+  Value clock, condition;
+  StringRef formatString;
+  if (parseExp(clock, "expected clock expression in printf") ||
+      parseToken(FIRToken::comma, "expected ','") ||
+      parseExp(condition, "expected condition in printf") ||
+      parseToken(FIRToken::comma, "expected ','"))
+    return failure();
+
+  auto formatStringLoc = getToken().getLoc();
+  if (parseGetSpelling(formatString) ||
+      parseToken(FIRToken::string, "expected format string in printf"))
+    return failure();
+
+  SmallVector<Value, 4> specOperands;
+  while (consumeIf(FIRToken::comma)) {
+    specOperands.push_back({});
+    if (parseExp(specOperands.back(), "expected operand in printf"))
+      return failure();
+  }
+
+  StringAttr name;
+  if (parseToken(FIRToken::r_paren, "expected ')'") ||
+      parseOptionalName(name) || parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  StringAttr formatStrUnescaped;
+  SmallVector<Value> operands;
+  if (parseFormatString(formatStringLoc, formatString, specOperands,
+                        formatStrUnescaped, operands))
+    return failure();
+
+  builder.create<PrintFOp>(clock, condition, formatStrUnescaped, operands,
+                           name);
+  return success();
 }
 
+/// fprintf ::= 'fprintf(' exp exp StringLit StringLit exp* ')' name? info?
 ParseResult FIRStmtParser::parseFPrintf() {
-  return parsePrintfLike<FPrintFOp, true>();
+  if (requireFeature(nextFIRVersion, "fprintf"))
+    return failure();
+  auto startTok = consumeToken(FIRToken::lp_fprintf);
+
+  Value clock, condition;
+  StringRef outputFile, formatString;
+  if (parseExp(clock, "expected clock expression in fprintf") ||
+      parseToken(FIRToken::comma, "expected ','") ||
+      parseExp(condition, "expected condition in fprintf") ||
+      parseToken(FIRToken::comma, "expected ','") ||
+      parseGetSpelling(outputFile) ||
+      parseToken(FIRToken::string, "expected output file in fprintf") ||
+      parseToken(FIRToken::comma, "expected ','"))
+    return failure();
+
+  auto formatStringLoc = getToken().getLoc();
+  if (parseGetSpelling(formatString) ||
+      parseToken(FIRToken::string, "expected format string in printf"))
+    return failure();
+
+  SmallVector<Value, 4> specOperands;
+  while (consumeIf(FIRToken::comma)) {
+    specOperands.push_back({});
+    if (parseExp(specOperands.back(), "expected operand in fprintf"))
+      return failure();
+  }
+
+  StringAttr name;
+  if (parseToken(FIRToken::r_paren, "expected ')'") ||
+      parseOptionalName(name) || parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  StringAttr formatStrUnescaped;
+  SmallVector<Value> operands;
+  if (parseFormatString(formatStringLoc, formatString, specOperands,
+                        formatStrUnescaped, operands))
+    return failure();
+
+  auto outputFileUnescaped = FIRToken::getStringValue(outputFile);
+  builder.create<FPrintFOp>(clock, condition,
+                            builder.getStringAttr(outputFileUnescaped),
+                            formatStrUnescaped, operands, name);
+  return success();
 }
 
 /// skip ::= 'skip' info?

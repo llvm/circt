@@ -129,13 +129,15 @@ def FPrintFOp : FIRRTLOp<"fprintf"> {
     to a file instead of stdout.
   }];
 
-  let arguments = (ins ClockType:$clock, UInt1Type:$cond, StrAttr:$outputFile, StrAttr:$formatString,
-                       Variadic<PrintfOperandType>:$substitutions, StrAttr:$name);
+  let arguments = (ins ClockType:$clock, UInt1Type:$cond, StrAttr:$outputFile,
+                       StrAttr:$formatString, Variadic<PrintfOperandType>:$substitutions,
+                       StrAttr:$name);
   let results = (outs);
 
   let assemblyFormat = [{
-    $clock `,` $cond `,` $outputFile `,` $formatString `` custom<FPrintfAttrs>(attr-dict) ` `
-    (`(` $substitutions^ `)`)? `:` type($clock) `,` type($cond) (`,` qualified(type($substitutions))^)?
+    $clock `,` $cond `,` $outputFile `,` $formatString ``
+    custom<FPrintfAttrs>(attr-dict) ` ` (`(` $substitutions^ `)`)? `:`
+    type($clock) `,` type($cond) (`,` qualified(type($substitutions))^)?
   }];
 }
 
