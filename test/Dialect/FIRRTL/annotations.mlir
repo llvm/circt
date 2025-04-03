@@ -27,7 +27,8 @@ firrtl.circuit "Foo" attributes {
       data = "CircuitName",
       target = "Foo"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.module @Foo() {}
 }
@@ -55,7 +56,8 @@ firrtl.circuit "Foo" attributes {
       data = "ExtModule Target",
       target = "~Foo|Blackbox"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   // CHECK:      firrtl.module @Foo
   // CHECK-SAME:   annotations =
@@ -92,7 +94,8 @@ firrtl.circuit "Foo" attributes {
       data = "c",
       target = "~Foo|Foo/bar:Bar"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   // CHECK-NEXT: firrtl.module @Bar()
   // CHECK-SAME:   annotations =
@@ -145,7 +148,8 @@ firrtl.circuit "Foo" attributes {
       data = 4,
       target = "Foo.Foo.bar.c"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   // CHECK-NEXT: firrtl.module @Bar
   // CHECK-SAME:   in %a
@@ -194,7 +198,8 @@ firrtl.circuit "Foo"  attributes {
       data = "b",
       target = "Foo.Foo.bar"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   // CHECK: firrtl.module @Foo
   firrtl.module @Foo() {
@@ -223,7 +228,8 @@ firrtl.circuit "Foo" attributes {
       data = "b",
       target = "Foo.Foo.bar"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   // CHECK: firrtl.module @Foo
   firrtl.module @Foo() {
@@ -268,7 +274,8 @@ firrtl.circuit "Foo" attributes {
       data = "d",
       target = "~Foo|Foo>bar.w.data.qux"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   // CHECK: firrtl.module @Foo
   firrtl.module @Foo() {
@@ -305,7 +312,8 @@ firrtl.circuit "Foo" attributes {
       data = "b",
       target = "Foo.Foo.baz"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.module @Foo(
     in %clock: !firrtl.clock,
@@ -345,7 +353,8 @@ firrtl.circuit "Foo" attributes {
       data = "b",
       target = "Foo.Foo.bar"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.module @Foo() {
     %bar = firrtl.wire : !firrtl.uint<1>
@@ -372,7 +381,8 @@ firrtl.circuit "Foo" attributes {
       data = "b",
       target = "Foo.Foo.baz"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
     %bar = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
@@ -403,7 +413,8 @@ firrtl.circuit "Foo" attributes {
       data = "b",
       target = "Foo.Foo.bar"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.module @Foo() {
     %bar = chirrtl.seqmem Undefined : !chirrtl.cmemory<uint<1>, 8>
@@ -430,7 +441,8 @@ firrtl.circuit "Foo" attributes {
       data = "two",
       target = "~Foo|Foo>bar[1].baz"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.module @Foo() {
     %bar = firrtl.wire : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
@@ -458,7 +470,8 @@ firrtl.circuit "Foo" attributes {
       target = "~Foo|Foo>bar[1].baz",
       data = "two"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.module @Foo(in %clock: !firrtl.clock) {
     %bar = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
@@ -482,7 +495,8 @@ firrtl.circuit "Foo" attributes {
       data = "a",
       target = "~Foo|Foo>w[9]"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.module @Foo() {
     %w = firrtl.wire  : !firrtl.vector<uint<1>, 18>
@@ -510,7 +524,8 @@ firrtl.circuit "Foo" attributes {
       data = "b",
       target = "Foo.Foo.foo"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.extmodule @Bar(in bar: !firrtl.uint<1>)
   firrtl.module @Foo(in %foo: !firrtl.uint<1>) {
@@ -535,7 +550,8 @@ firrtl.circuit "Foo" attributes {
       class = "circt.test",
       target = "~Foo|Foo/Foo:Example"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.module @Example() {}
   firrtl.module @Foo() {
@@ -565,7 +581,8 @@ firrtl.circuit "Foo" attributes {
       data = "b",
       target = "~Foo|Foo/bar:Bar/baz:Baz"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.module @Baz() {}
   firrtl.module @Bar() {
@@ -592,7 +609,8 @@ firrtl.circuit "memportAnno"  attributes {
       class = "circt.test",
       target = "~memportAnno|memportAnno/foo:Foo>memory.w"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.module @memportAnno() {
     firrtl.instance foo @Foo()
@@ -608,7 +626,7 @@ firrtl.circuit "memportAnno"  attributes {
   }
 }
 
-// CHECK-LABEL: firrtl.circuit "memportAnno"  {
+// CHECK-LABEL: firrtl.circuit "memportAnno"
 // CHECK:        hw.hierpath private @nla [@memportAnno::@[[FOO_SYM:.+]], @Foo]
 // CHECK: firrtl.instance foo sym @[[FOO_SYM]] @Foo
 // CHECK:        %memory_w = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portAnnotations
@@ -624,7 +642,8 @@ firrtl.circuit "instportAnno" attributes {
       class = "circt.test",
       target = "~instportAnno|instportAnno/bar:Bar>baz.a"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.module @Baz(out %a: !firrtl.uint<1>) {
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
@@ -658,7 +677,8 @@ firrtl.circuit "Aggregates" attributes {
       class = "circt.test",
       target = "~Aggregates|Aggregates>bundle.a.b.c"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.module @Aggregates() {
     // CHECK: {annotations = [{circt.fieldID = 14 : i32, class = "circt.test"}]}
@@ -703,7 +723,8 @@ firrtl.circuit "FooNL"  attributes {
       nl = "nl3",
       target = "~FooNL|FooL>w3"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 }  {
   firrtl.module @BarNL() {
     %w = firrtl.wire  sym @w : !firrtl.uint
@@ -740,7 +761,8 @@ firrtl.circuit "MemPortsNL" attributes {
       nl = "nl",
       target = "~MemPortsNL|MemPortsNL/child:Child>bar.r"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 }  {
   firrtl.module @Child() {
     %bar_r = firrtl.mem Undefined  {depth = 16 : i64, name = "bar", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
@@ -759,7 +781,8 @@ firrtl.circuit "Test" attributes {
       class = "circt.test",
       target = "~Test|PortTest>in"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.module @PortTest(in %in : !firrtl.uint<1>) {}
   firrtl.module @Test() {
@@ -776,7 +799,8 @@ firrtl.circuit "Test" attributes {
       class = "circt.test",
       target = "~Test|PortTest>in.a"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   // CHECK: firrtl.module @PortTest(in %in: !firrtl.bundle<a: uint<1>> [{circt.fieldID = 1 : i32, class = "circt.test"}])
   firrtl.module @PortTest(in %in : !firrtl.bundle<a: uint<1>>) {}
@@ -793,7 +817,8 @@ firrtl.circuit "Test" attributes {
       class = "circt.test",
       target = "~Test|Test>exttest"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   // CHECK: hw.hierpath private @nla [@Test::@[[EXTTEST:.+]], @ExtTest]
   // CHECK: firrtl.extmodule @ExtTest() attributes {annotations = [{circt.nonlocal = @nla, class = "circt.test"}]}
@@ -814,7 +839,8 @@ firrtl.circuit "Test" attributes {
       class = "circt.test",
       target = "~Test|Test>exttest.in"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   // CHECK: hw.hierpath private @nla [@Test::@[[EXTTEST:.+]], @ExtTest]
   // CHECK: firrtl.extmodule @ExtTest(in in: !firrtl.uint<1> [{circt.nonlocal = @nla, class = "circt.test"}])
@@ -841,7 +867,8 @@ firrtl.circuit "Test" attributes {
       convention = "scalarized",
       includeHierarchy = false
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   // CHECK: attributes {body_type_lowering = #firrtl<convention scalarized>, convention = #firrtl<convention scalarized>}
   firrtl.module @Test() attributes {convention = #firrtl<convention internal>} {}
@@ -862,7 +889,8 @@ firrtl.circuit "Test" attributes {
       convention = "scalarized",
       includeHierarchy = true
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   // CHECK: @Test() attributes {body_type_lowering = #firrtl<convention scalarized>, convention = #firrtl<convention scalarized>}
   firrtl.module @Test() attributes {convention = #firrtl<convention internal>} {
@@ -895,7 +923,8 @@ firrtl.circuit "Test" attributes {
       target = "~Test|Test>mem",
       prefix = "Prefix_"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.module @Test() {
     // CHECK: %comb = chirrtl.combmem {prefix = "Prefix_"} : !chirrtl.cmemory<vector<uint<1>, 2>, 256>
@@ -957,7 +986,8 @@ firrtl.circuit "Foo"  attributes {
       class = "firrtl.transforms.DontTouchAnnotation",
       target = "~Foo|Foo/bar:Bar>_T.a"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   // CHECK:      hw.hierpath private @nla [@Foo::@[[BAR_SYM:.+]], @Bar]
   // CHECK-NEXT: firrtl.module @Foo
@@ -1202,7 +1232,8 @@ firrtl.circuit "GCTInterface"  attributes {
           ]
         }
       }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.module private @view_companion() {
     firrtl.skip
@@ -1365,7 +1396,8 @@ firrtl.circuit "GCTDataTap" attributes {
         }
       ]
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.extmodule private @BlackBox(out probe: !firrtl.rwprobe<uint<5>>) attributes {defname = "BlackBox"}
   firrtl.module private @InnerMod() {
@@ -1437,7 +1469,8 @@ firrtl.circuit "GCTMemTap" attributes {
         "~GCTMemTap|GCTMemTap>mem[1]"
       ]
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.module @GCTMemTap() {
     %mem = chirrtl.combmem  : !chirrtl.cmemory<uint<1>, 2>
@@ -1556,7 +1589,8 @@ firrtl.circuit "GrandCentralViewsBundle"  attributes {
           ]
         }
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   // CHECK:      firrtl.module @Companion
   // CHECK-SAME:   in %[[port_0:[a-zA-Z0-9_]+]]: !firrtl.uint<1>
@@ -1608,9 +1642,10 @@ firrtl.circuit "Top"  attributes {
         }
       ]
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
-  // CHECK-LABEL: firrtl.circuit "Top"  {
+  // CHECK-LABEL: firrtl.circuit "Top"
   // CHECK-NOT:   "sifive.enterprise.grandcentral.DataTapsAnnotation"
   // CHECK:  firrtl.module private @Bar(out %inv__bore: !firrtl.probe<uint<1>>)
   firrtl.module private @Bar() {
@@ -1655,7 +1690,8 @@ firrtl.circuit "Top"  attributes {
         }
       ]
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.extmodule private @ExtBar()
   // CHECK: firrtl.extmodule private @ExtBar(out random_something_external: !firrtl.probe<uint<1>>)
@@ -1747,7 +1783,8 @@ firrtl.circuit "GrandCentralParentIsNotLCA"  attributes {
           ]
         }
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   // CHECK:        firrtl.module @Bar
   // CHECK-SAME:     out %[[a_refPort:[a-zA-Z0-9_]+]]: !firrtl.probe<uint<1>>
@@ -1848,7 +1885,8 @@ firrtl.circuit "GrandCentralViewInsideCompanion" attributes {
         ]
       }
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   // CHECK:      firrtl.module @Companion
   firrtl.module @Companion(out %b: !firrtl.uint<2>) {
@@ -1896,7 +1934,8 @@ firrtl.circuit "TraceNameAnnotation" attributes {
       chiselTarget = "~TraceNameAnnotation|TraceNameAnnotation>w",
       target = "~TraceNameAnnotation|TraceNameAnnotation>w"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   // CHECK:      firrtl.extmodule @Foo()
   // CHECK-SAME:   {chiselTarget = "~TraceNameAnnotation|Foo"
@@ -1932,7 +1971,8 @@ firrtl.circuit "Top"  attributes {
         }
       ]
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.module private @Foo() {
     %sum = firrtl.wire : !firrtl.uint
@@ -1962,7 +2002,8 @@ firrtl.circuit "Top"  attributes {
         }
       ]
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.extmodule private @BlackBox() attributes {defname = "BlackBox"}
   // CHECK:  firrtl.extmodule private @BlackBox
@@ -2021,7 +2062,8 @@ firrtl.circuit "MemoryInitializationAnnotations" attributes {
       hexOrBinary = "h",
       target = "~MemoryInitializationAnnotations|MemoryInitializationAnnotations>m6"
     }
-  ]
+  ],
+  version = #firrtl.version<major = 5, minor = 0, patch = 0>
 } {
   firrtl.module @MemoryInitializationAnnotations() {
     // CHECK:      %m1_r = firrtl.mem
@@ -2061,7 +2103,8 @@ firrtl.circuit "Top" attributes {
     {
       class = "sifive.enterprise.firrtl.MarkDUTAnnotation",
       target = "~Top|DUT"
-    }]
+    }],
+    version = #firrtl.version<major = 5, minor = 0, patch = 0>
   } {
   // CHECK-LABEL: firrtl.module
   // CHECK-NOT:     private
@@ -2085,7 +2128,8 @@ firrtl.circuit "Top" attributes {
       class = "circt.OutputDirAnnotation",
       dirname = "foobarbaz",
       target = "~Top|Top"
-    }]
+    }],
+    version = #firrtl.version<major = 5, minor = 0, patch = 0>
   } {
   // CHECK-LABEL: firrtl.module @Top
   // CHECK-SAME:  attributes {output_file = #hw.output_file<"foobarbaz{{/|\\\\}}">}
@@ -2101,7 +2145,8 @@ firrtl.circuit "Top" attributes {
       class = "circt.OutputDirAnnotation",
       dirname = "foobarbaz/",
       target = "~Top|Top"
-    }]
+    }],
+    version = #firrtl.version<major = 5, minor = 0, patch = 0>
   } {
   // CHECK-LABEL: firrtl.module @Top
   // CHECK-SAME:  attributes {output_file = #hw.output_file<"foobarbaz{{/|\\\\}}">}
@@ -2117,7 +2162,8 @@ firrtl.circuit "Top" attributes {
       class = "circt.OutputDirAnnotation",
       dirname = "foobarbaz/qux",
       target = "~Top|Top"
-    }]
+    }],
+    version = #firrtl.version<major = 5, minor = 0, patch = 0>
   } {
   // CHECK-LABEL: firrtl.module @Top
   // CHECK-SAME:  attributes {output_file = #hw.output_file<"foobarbaz{{/|\\\\}}qux{{/|\\\\}}">}
@@ -2132,7 +2178,8 @@ firrtl.circuit "Top" attributes {
     {
       class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation",
       target = "~Top|Top>reset"
-    }]
+    }],
+    version = #firrtl.version<major = 5, minor = 0, patch = 0>
   } {
   // CHECK-LABEL: firrtl.module @Top
   // CHECK-SAME: (in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}])
@@ -2148,7 +2195,8 @@ firrtl.circuit "Top" attributes {
     {
       class = "sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation",
       target = "~Top|Top"
-    }]
+    }],
+    version = #firrtl.version<major = 5, minor = 0, patch = 0>
   } {
   // CHECK-LABEL: firrtl.module @Top
   // CHECK-SAME: (in %reset: !firrtl.asyncreset) attributes {annotations = [{class = "circt.ExcludeFromFullResetAnnotation"}]}

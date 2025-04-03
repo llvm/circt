@@ -5963,7 +5963,8 @@ ParseResult FIRCircuitParser::parseCircuit(
 
   // Create the top-level circuit op in the MLIR module.
   OpBuilder b(mlirModule.getBodyRegion());
-  auto circuit = b.create<CircuitOp>(info.getLoc(), name);
+  auto circuit = b.create<CircuitOp>(
+      info.getLoc(), name, /*annotations=*/getConstants().emptyArrayAttr);
 
   // A timer to get execution time of annotation parsing.
   auto parseAnnotationTimer = ts.nest("Parse annotations");
