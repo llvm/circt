@@ -290,35 +290,6 @@ struct SequenceStorage {
   const SmallVector<ElaboratorValue> args;
 };
 
-/// Storage object for an '!rtg.randomized_sequence'.
-struct RandomizedSequenceStorage {
-  RandomizedSequenceStorage(StringRef name,
-                            ContextResourceAttrInterface context,
-                            StringAttr test, SequenceStorage *sequence)
-      : hashcode(llvm::hash_combine(name, context, test, sequence)), name(name),
-        context(context), test(test), sequence(sequence) {}
-
-  bool isEqual(const RandomizedSequenceStorage *other) const {
-    return hashcode == other->hashcode && name == other->name &&
-           context == other->context && test == other->test &&
-           sequence == other->sequence;
-  }
-
-  // The cached hashcode to avoid repeated computations.
-  const unsigned hashcode;
-
-  // The name of this fully substituted and elaborated sequence.
-  const StringRef name;
-
-  // The context under which this sequence is placed.
-  const ContextResourceAttrInterface context;
-
-  // The test in which this sequence is placed.
-  const StringAttr test;
-
-  const SequenceStorage *sequence;
-};
-
 /// Storage object for interleaved '!rtg.randomized_sequence'es.
 struct InterleavedSequenceStorage {
   InterleavedSequenceStorage(SmallVector<ElaboratorValue> &&sequences,
@@ -454,6 +425,20 @@ struct MemoryBlockStorage : IdentityValue {
   const APInt baseAddress;
 };
 
+/// Storage object for an '!rtg.randomized_sequence'.
+struct RandomizedSequenceStorage : IdentityValue {
+  RandomizedSequenceStorage(ContextResourceAttrInterface context,
+                            SequenceStorage *sequence)
+      : IdentityValue(
+            RandomizedSequenceType::get(sequence->familyName.getContext())),
+        context(context), sequence(sequence) {}
+
+  // The context under which this sequence is placed.
+  const ContextResourceAttrInterface context;
+
+  const SequenceStorage *sequence;
+};
+
 /// An 'Internalizer' object internalizes storages and takes ownership of them.
 /// When the initializer object is destroyed, all owned storages are also
 /// deallocated and thus must not be accessed anymore.
@@ -572,9 +557,9 @@ static void print(SequenceStorage *val, llvm::raw_ostream &os) {
 }
 
 static void print(RandomizedSequenceStorage *val, llvm::raw_ostream &os) {
-  os << "<randomized-sequence @" << val->name << " derived from @"
+  os << "<randomized-sequence derived from @"
      << val->sequence->familyName.getValue() << " under context "
-     << val->context << " in test " << val->test << "(";
+     << val->context << "(";
   llvm::interleaveComma(val->sequence->args, os,
                         [&](const ElaboratorValue &val) { os << val; });
   os << ") at " << val << ">";
@@ -655,16 +640,6 @@ struct SharedState {
 struct TestState {
   /// The name of the test.
   StringAttr name;
-
-  /// Keep track of the sequences we have randomized and materialized for this
-  /// test. We do not have to track them in the shared state because a value
-  /// defined by a `randomize_sequence` operation cannot cross from one test to
-  /// another, but it may be passed to a nested region which is why we cannot
-  /// keep track of it in the materializer itself. We could treat it just like
-  /// all other IdentityValues, but that is not necessary for sequences since
-  /// their identity is defined by the symbol reference to the 'rtg.sequence'
-  /// op once it has been randomized instead of the SSA-value defining op.
-  DenseMap<RandomizedSequenceStorage *, SequenceOp> materializedSequences;
 
   /// The context switches registered for this test.
   MapVector<
@@ -1149,11 +1124,10 @@ public:
 
   FailureOr<DeletionKind> visitOp(RandomizeSequenceOp op) {
     auto *seq = get<SequenceStorage *>(op.getSequence());
-
-    auto name = sharedState.names.newName(seq->familyName.getValue());
     auto *randomizedSeq =
-        sharedState.internalizer.internalize<RandomizedSequenceStorage>(
-            name, currentContext, testState.name, seq);
+        sharedState.internalizer.create<RandomizedSequenceStorage>(
+            currentContext, seq);
+    materializer.registerIdentityValue(randomizedSeq);
     state[op.getResult()] =
         sharedState.internalizer.internalize<InterleavedSequenceStorage>(
             randomizedSeq);
@@ -1176,8 +1150,7 @@ public:
     if (std::holds_alternative<RandomizedSequenceStorage *>(value)) {
       auto *seq = std::get<RandomizedSequenceStorage *>(value);
       if (seq->context != currentContext) {
-        auto err = op->emitError("attempting to place sequence ")
-                   << seq->name << " derived from "
+        auto err = op->emitError("attempting to place sequence derived from ")
                    << seq->sequence->familyName.getValue() << " under context "
                    << currentContext
                    << ", but it was previously randomized for context ";
@@ -1592,9 +1565,8 @@ public:
     auto *seq = sharedState.internalizer.internalize<SequenceStorage>(
         familyName, std::move(args));
     auto *randSeq =
-        sharedState.internalizer.internalize<RandomizedSequenceStorage>(
-            sharedState.names.newName(familyName.getValue()), to,
-            testState.name, seq);
+        sharedState.internalizer.create<RandomizedSequenceStorage>(to, seq);
+    materializer.registerIdentityValue(randSeq);
     Value seqVal = materializer.materialize(randSeq, op.getLoc(), emitError);
     if (!seqVal)
       return failure();
@@ -1860,20 +1832,17 @@ private:
 SequenceOp
 Materializer::elaborateSequence(const RandomizedSequenceStorage *seq,
                                 SmallVector<ElaboratorValue> &elabArgs) {
-  if (auto materializedSeq = testState.materializedSequences.find(seq);
-      materializedSeq != testState.materializedSequences.end())
-    return materializedSeq->getSecond();
-
   auto familyOp =
       sharedState.table.lookup<SequenceOp>(seq->sequence->familyName);
   // TODO: don't clone if this is the only remaining reference to this
   // sequence
   OpBuilder builder(familyOp);
   auto seqOp = builder.cloneWithoutRegions(familyOp);
-  seqOp.setSymName(seq->name);
+  auto name = sharedState.names.newName(seq->sequence->familyName.getValue());
+  seqOp.setSymName(name);
   seqOp.getBodyRegion().emplaceBlock();
   sharedState.table.insert(seqOp);
-  assert(seqOp.getSymName() == seq->name && "should not have been renamed");
+  assert(seqOp.getSymName() == name && "should not have been renamed");
 
   LLVM_DEBUG(llvm::dbgs() << "\n=== Elaborating sequence family @"
                           << familyOp.getSymName() << " into @"
