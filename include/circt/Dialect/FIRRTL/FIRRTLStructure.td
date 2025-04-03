@@ -197,7 +197,7 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
     into the external module, to be used for generating XMRs. Each RefType
     port must be removed by LowerXMR pass.
   }];
-  let arguments = 
+  let arguments =
       (ins SymbolNameAttr:$sym_name,
            OptionalAttr<StrAttr>:$defname,
            ParamDeclArrayAttr:$parameters,
@@ -241,7 +241,7 @@ def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
   let description = [{
     The "firrtl.intmodule" operation represents a compiler intrinsic.
   }];
-  let arguments = 
+  let arguments =
       (ins SymbolNameAttr:$sym_name,
            StrAttr:$intrinsic,
            ParamDeclArrayAttr:$parameters,
@@ -303,7 +303,7 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
            AnnotationArrayAttr:$annotations,
            DefaultValuedAttr<LayerArrayAttr, "{}">:$layers
       );
-      
+
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
@@ -418,7 +418,7 @@ def ExtClassOp : FIRRTLModuleLike<"extclass", [
     firrtl.extclass @MyImportedClass(in in_str: !firrtl.string, out out_str: !firrtl.string)
     ```
   }];
-  let arguments = (ins SymbolNameAttr:$sym_name, 
+  let arguments = (ins SymbolNameAttr:$sym_name,
                        DenseBoolArrayAttr:$portDirections,
                        ArrayRefAttr:$portNames, ArrayRefAttr:$portTypes,
                        ArrayRefAttr:$portSymbols, ArrayRefAttr:$portLocations);
