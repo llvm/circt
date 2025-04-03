@@ -2885,3 +2885,31 @@ firrtl.circuit "SimulationPortType3" {
     out success: !firrtl.reset
   )
 }
+
+// -----
+
+firrtl.circuit "BindTargetMissingModule" {
+  firrtl.module @BindTargetMissing() {}
+  // expected-error @below {{Referenced module doesn't exist "XXX"::"YYY}}
+  firrtl.bind <@XXX::@YYY>
+}
+
+// -----
+
+firrtl.circuit "BindTargetMissingInstance" {
+  firrtl.module @BindTargetMissingInstance() {}
+  // expected-error @below {{Referenced instance doesn't exist "BindTargetMissingInstance"::"YYY"}}
+  firrtl.bind <@BindTargetMissingInstance::@YYY>
+}
+
+// -----
+
+firrtl.circuit "BindTargetMissingDoNotPrintFlag" {
+  firrtl.module @Target() {}
+  firrtl.module @BindTargetMissingDoNotPrintFlag() {
+    firrtl.instance target sym @target @Target()
+  }
+
+  // expected-error @below  {{Referenced instance isn't marked as doNotPrint}}
+  firrtl.bind <@BindTargetMissingDoNotPrintFlag::@target>
+}
