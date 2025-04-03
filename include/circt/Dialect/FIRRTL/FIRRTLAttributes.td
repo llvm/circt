@@ -188,6 +188,82 @@ def InternalPathArrayAttr
   : TypedArrayAttrBase<InternalPathAttr, "InternalPath array attribute">;
 
 //===----------------------------------------------------------------------===//
+// Circuit version attribute
+//===----------------------------------------------------------------------===//
+
+def VersionAttr : AttrDef<FIRRTLDialect, "Version"> {
+  let summary = "A FIRRTL version";
+  let description = [{
+    This attribute records a specific version of the FIRRTL specification.
+
+    This consists of a major, minor, and patch version.
+  }];
+
+  let mnemonic = "version";
+  let parameters = (ins "uint16_t":$major, "uint16_t":$minor, "uint16_t":$patch);
+  let assemblyFormat = [{
+    `<` struct($major, $minor, $patch) `>`
+  }];
+
+  let extraClassDeclaration = [{
+    explicit constexpr operator uint64_t() const {
+      return uint64_t(getMajor()) << 32 | uint64_t(getMinor()) << 16 | uint64_t(getPatch());
+    }
+
+    constexpr bool operator<(VersionAttr other) const {
+      return uint64_t(*this) < uint64_t(other);
+    }
+
+    constexpr bool operator>(VersionAttr other) const {
+      return uint64_t(*this) > uint64_t(other);
+    }
+
+    constexpr bool operator<=(VersionAttr other) const {
+      return uint64_t(*this) <= uint64_t(other);
+    }
+
+    constexpr bool operator>=(VersionAttr other) const {
+      return uint64_t(*this) >= uint64_t(other);
+    }
+
+    /// The minimum FIRRTL version supported by CIRCT.
+    static VersionAttr getMinimumVersion(::mlir::MLIRContext *context) {
+      return get(context, 2, 0, 0);
+    }
+
+    /// The next version of FIRRTL that is not yet released.
+    ///
+    /// Features use this version if they have been landed on the main branch of
+    /// `chipsalliance/firrtl-spec`, but have not been part of a release
+    /// yet. Once a new version of the spec is released, all uses of
+    /// `nextFIRVersion` in the parser are replaced with the concrete version
+    /// `{x, y, z}`, and this declaration here is bumped to the next probable
+    /// version number.
+    static VersionAttr getNextVersion(::mlir::MLIRContext *context) {
+      return get(context, 5, 1, 0);
+    }
+
+    /// A marker for parser features that are currently missing from the spec.
+    ///
+    /// Features use this version if they have _not_ been added to the
+    /// documentation in the `chipsalliance/firrtl-spec` repository. This allows
+    /// us to distinguish features that are released in the next version of the
+    /// spec and features that are still missing from the spec.
+    static VersionAttr getMissingVersion(::mlir::MLIRContext *context) {
+      return getNextVersion(context);
+    }
+
+    /// The version of FIRRTL that the exporter produces. This is always the
+    /// next version, since it contains any new developments.
+    static VersionAttr getExportVersion(::mlir::MLIRContext *context) {
+      return getNextVersion(context);
+    }
+
+  }];
+}
+
+
+//===----------------------------------------------------------------------===//
 // Miscellaneous attributes
 //===----------------------------------------------------------------------===//
 
