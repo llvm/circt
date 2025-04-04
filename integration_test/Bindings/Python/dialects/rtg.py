@@ -24,7 +24,7 @@ with Context() as ctx, Location.unknown():
       cpu1 = rtg.ConstantOp(rtgtest.CPUAttr.get(cpuAttr.id + 1))
       rtg.YieldOp([cpu0, cpu1])
 
-    test = rtg.TestOp('test_name', TypeAttr.get(dictTy))
+    test = rtg.TestOp('test_name', 'test_name', TypeAttr.get(dictTy))
     Block.create_at_start(test.bodyRegion, [cpuTy, cpuTy])
 
   # CHECK: rtg.target @target_name : !rtg.dict<cpu0: !rtgtest.cpu, cpu1: !rtgtest.cpu> {
@@ -58,11 +58,17 @@ with Context() as ctx, Location.unknown():
     seq = rtg.SequenceOp('sequence_name', TypeAttr.get(rtg.SequenceType.get()))
     Block.create_at_start(seq.bodyRegion, [])
 
-    test = rtg.TestOp('test_name', TypeAttr.get(rtg.DictType.get()))
+    test = rtg.TestOp('test_name', 'test_name',
+                      TypeAttr.get(rtg.DictType.get()))
     block = Block.create_at_start(test.bodyRegion, [])
     with InsertionPoint(block):
       seq_get = rtg.GetSequenceOp(rtg.SequenceType.get(), 'sequence_name')
       rtg.RandomizeSequenceOp(seq_get)
+
+    target = rtg.TargetOp('target', TypeAttr.get(rtg.DictType.get()))
+    block = Block.create_at_start(target.bodyRegion, [])
+    with InsertionPoint(block):
+      rtg.YieldOp([])
 
   # CHECK: rtg.test @test_name() {
   # CHECK-NEXT:   [[SEQ:%.+]] = rtg.get_sequence @sequence_name
@@ -78,7 +84,7 @@ with Context() as ctx, Location.unknown():
   rtgtool.populate_randomizer_pipeline(pm, options)
   pm.run(m.operation)
 
-  # CHECK: rtg.test @test_name() {
+  # CHECK: rtg.test @test_name_target() template "test_name" target @target {
   # CHECK-NEXT: }
   print(m)
 

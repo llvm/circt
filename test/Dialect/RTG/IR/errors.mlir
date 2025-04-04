@@ -96,7 +96,42 @@ rtg.target @target : !rtg.dict<a: i32> {
 // -----
 
 // expected-error @below {{argument types must match dict entry types}}
-"rtg.test"() <{sym_name="test", target=!rtg.dict<a: i32>}> ({^bb0(%b: i8):}) : () -> ()
+"rtg.test"() <{sym_name="test", templateName="test", targetType=!rtg.dict<a: i32>}> ({^bb0(%b: i8):}) : () -> ()
+
+// -----
+
+// expected-error @below {{template name must not be empty}}
+"rtg.test"() <{sym_name="test", templateName="", targetType=!rtg.dict<>}> ({^bb0:}) : () -> ()
+
+// -----
+
+// expected-error @below {{'target' does not reference a valid 'rtg.target' operation}}
+rtg.test @test(a = %a: i32) target @target {
+}
+
+// -----
+
+rtg.target @target : !rtg.dict<> { }
+
+// expected-error @below {{referenced 'rtg.target' op's type is invalid: missing entry called 'a' of type 'i32'}}
+rtg.test @test(a = %a: i32) target @target {
+}
+
+// -----
+
+rtg.target @target : !rtg.dict<a: index> {
+  %0 = index.constant 0
+  rtg.yield %0 : index
+}
+
+// expected-error @below {{referenced 'rtg.target' op's type is invalid: missing entry called 'a' of type 'i32'}}
+rtg.test @test(a = %a: i32) target @target {
+}
+
+// -----
+
+// expected-error @below {{template name must not be empty}}
+rtg.test @test() template "" {}
 
 // -----
 

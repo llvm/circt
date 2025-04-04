@@ -208,3 +208,6 @@ rtg.test @tuples() {
   %0 = rtg.tuple_create %idx0, %true : index, i1
   %1 = rtg.tuple_extract %0 at 1 : tuple<index, i1>
 }
+
+// CHECK-LABEL: rtg.test @template() template "temp_name" target @target {
+rtg.test @template() template "temp_name" target @target { }
