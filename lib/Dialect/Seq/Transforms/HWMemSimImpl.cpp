@@ -602,7 +602,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
           // ```
           //   for (int i = 0; i < mem.depth; i++) begin
           //     for (int j = 0; j < randomMeg.size; j += 32)
-          //       randomMem[j[mem.width-1]: +: 32] = `RANDOM
+          //       randomMem[j[mem.width-1: +: 32] = `RANDOM
           //     Memory[i] = randomMem[mem.dataWidth - 1: 0];
           // ```
           b.create<sv::ForOp>(
