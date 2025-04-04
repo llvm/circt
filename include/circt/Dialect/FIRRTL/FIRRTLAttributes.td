@@ -206,7 +206,7 @@ def VersionAttr : AttrDef<FIRRTLDialect, "Version"> {
   }];
 
   let extraClassDeclaration = [{
-    explicit constexpr operator uint64_t() const {
+    constexpr operator uint64_t() const {
       return uint64_t(getMajor()) << 32 | uint64_t(getMinor()) << 16 | uint64_t(getPatch());
     }
 
