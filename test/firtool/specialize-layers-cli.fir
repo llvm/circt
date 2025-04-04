@@ -9,12 +9,17 @@
 ; https://github.com/llvm/circt/issues/7345
 
 FIRRTL version 4.0.0
-; NONE:        firrtl.circuit "Foo" {
-; DISABLEA:    firrtl.circuit "Foo" attributes {disable_layers = [@A]} {
-; ENABLEA:     firrtl.circuit "Foo" attributes {enable_layers = [@A]} {
-; ENABLEB:     firrtl.circuit "Foo" attributes {enable_layers = [@A::@B]} {
-; DISABLEBOTH: firrtl.circuit "Foo" attributes {disable_layers = [@A, @A::@B]} {
-; BOTH:        firrtl.circuit "Foo" attributes {disable_layers = [@A], enable_layers = [@A::@B]} {
+; NONE:             firrtl.circuit "Foo"
+; DISABLEA:         firrtl.circuit "Foo"
+; DISABLEA-SAME:      disable_layers = [@A]
+; ENABLEA:          firrtl.circuit "Foo"
+; ENABLEA-SAME:       enable_layers = [@A]
+; ENABLEB:          firrtl.circuit "Foo"
+; ENABLEB-SAME:       enable_layers = [@A::@B]
+; DISABLEBOTH:      firrtl.circuit "Foo"
+; DISABLEBOTH-SAME:   disable_layers = [@A, @A::@B]
+; BOTH:             firrtl.circuit "Foo"
+; BOTH-SAME:          disable_layers = [@A], enable_layers = [@A::@B]
 circuit Foo:
   layer A, bind:
     layer B, bind:

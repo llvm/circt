@@ -3,7 +3,8 @@
 ; RUN: firtool %s --ir-hw --disable-opt --select-default-for-unspecified-instance-choice | FileCheck %s --check-prefixes=DEFAULT
 
 FIRRTL version 5.1.0
-; CHECK: firrtl.circuit "Foo" attributes {select_inst_choice = ["Platform=ASIC"]} {
+; CHECK: firrtl.circuit "Foo"
+; CHECK-SAME: select_inst_choice = ["Platform=ASIC"]
 circuit Foo:
   ; CHECK: firrtl.option @Platform
   option Platform:

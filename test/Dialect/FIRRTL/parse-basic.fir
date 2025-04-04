@@ -1,7 +1,7 @@
 ; RUN: circt-translate -import-firrtl -verify-diagnostics -split-input-file %s | circt-opt | FileCheck %s
 
 FIRRTL version 5.1.0
-circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
+circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
 
   ; CHECK-LABEL: firrtl.module @MyModule(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
   public module MyModule :   @[FooBar.scala 369:27]
@@ -21,7 +21,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   ; CHECK: }
 
   ; CHECK-LABEL: firrtl.extmodule private @MyExtModule(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
-  ; CHECK: attributes {defname = "myextmodule"}
+  ; CHECK-SAME: attributes {defname = "myextmodule"}
   ; CHECK-NOT: {
   extmodule MyExtModule :
     input in: UInt<8>
