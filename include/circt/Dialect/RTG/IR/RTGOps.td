@@ -687,6 +687,7 @@ def TestOp : RTGOp<"test", [
   SingleBlock,
   NoTerminator,
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
   HasParent<"mlir::ModuleOp">
 ]> {
   let summary = "the root of a test";
@@ -701,8 +702,15 @@ def TestOp : RTGOp<"test", [
     with that target.
 
     By default each test can be matched with all targets that fulfill its
-    requirements, but the user should be able to specify more constraints on the
-    matching procedure.
+    requirements, but the user can also directly provide a target via the
+    'target' attribute. In that case, the test will only be randomized against
+    that target.
+
+    The 'templateName' attribute specifies the name of the original test
+    template (mostly for result reporting purposes). This is because a test
+    (template) can be matched against many targets and during this process one
+    test per match is created, but all of them preserve the same test template
+    name.
 
     The body of this operation shall be processed the same way as an
     `rtg.sequence`'s body with the exception of the block arguments.
@@ -712,11 +720,14 @@ def TestOp : RTGOp<"test", [
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name,
-                       TypeAttrOf<DictType>:$target);
+                       StrAttr:$templateName,
+                       TypeAttrOf<DictType>:$targetType,
+                       OptionalAttr<SymbolNameAttr>:$target);
   let regions = (region SizedRegion<1>:$bodyRegion);
 
   let hasCustomAssemblyFormat = 1;
   let hasRegionVerifier = 1;
+  let hasVerifier = 1;
 }
 
 def TargetOp : RTGOp<"target", [
