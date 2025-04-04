@@ -211,3 +211,6 @@ rtg.target @memoryBlocks : !rtg.dict<mem_base_address: !rtg.isa.immediate<32>, m
   
   rtg.yield %2, %0, %3 : !rtg.isa.immediate<32>, !rtg.isa.memory_block<32>, index
 }
+
+// CHECK-LABEL: rtg.test @template() template "temp_name" target @target {
+rtg.test @template() template "temp_name" target @target { }
