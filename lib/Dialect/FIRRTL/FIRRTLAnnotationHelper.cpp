@@ -746,8 +746,8 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
   if (!sourceAttr)
     return failure();
 
-  auto sourceTargetStr =
-      canonicalizeTarget(sourceAttr.getValue(), state.circuit.getVersionOrDefault());
+  auto sourceTargetStr = canonicalizeTarget(
+      sourceAttr.getValue(), state.circuit.getVersionOrDefault());
   std::optional<AnnoPathValue> srcTarget = resolvePath(
       sourceTargetStr, state.circuit, state.symTbl, state.targetCaches);
   if (!srcTarget)
