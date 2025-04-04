@@ -206,23 +206,23 @@ def VersionAttr : AttrDef<FIRRTLDialect, "Version"> {
   }];
 
   let extraClassDeclaration = [{
-    constexpr operator uint64_t() const {
+    operator uint64_t() const {
       return uint64_t(getMajor()) << 32 | uint64_t(getMinor()) << 16 | uint64_t(getPatch());
     }
 
-    constexpr bool operator<(VersionAttr other) const {
+    bool operator<(VersionAttr other) const {
       return uint64_t(*this) < uint64_t(other);
     }
 
-    constexpr bool operator>(VersionAttr other) const {
+    bool operator>(VersionAttr other) const {
       return uint64_t(*this) > uint64_t(other);
     }
 
-    constexpr bool operator<=(VersionAttr other) const {
+    bool operator<=(VersionAttr other) const {
       return uint64_t(*this) <= uint64_t(other);
     }
 
-    constexpr bool operator>=(VersionAttr other) const {
+    bool operator>=(VersionAttr other) const {
       return uint64_t(*this) >= uint64_t(other);
     }
 
