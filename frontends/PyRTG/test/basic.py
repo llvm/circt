@@ -4,6 +4,15 @@
 
 from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag, rtgtest, Immediate, IntegerRegister, Array, Bool, Tuple, embed_comment, MemoryBlock, Memory
 
+# MLIR-LABEL: rtg.target @Singleton : !rtg.dict<>
+# MLIR-NEXT: }
+
+
+@target
+class Singleton:
+  pass
+
+
 # MLIR-LABEL: rtg.target @Tgt0 : !rtg.dict<entry0: !rtg.set<index>>
 # MLIR-NEXT: [[C0:%.+]] = index.constant 0
 # MLIR-NEXT: [[C1:%.+]] = index.constant 1
