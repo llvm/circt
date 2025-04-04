@@ -73,7 +73,10 @@ struct SharedParserConstants {
         amountIdentifier(StringAttr::get(context, "amount")),
         placeholderInnerRef(
             hw::InnerRefAttr::get(StringAttr::get(context, "module"),
-                                  StringAttr::get(context, "placeholder"))) {}
+                                  StringAttr::get(context, "placeholder"))),
+        minimumFIRVersion(VersionAttr::getMinimumVersion(context)),
+        nextFIRVersion(VersionAttr::getNextVersion((context))),
+        missingSpecFIRVersion(VersionAttr::getMissingVersion(context)) {}
 
   /// The context we're parsing into.
   MLIRContext *const context;
@@ -96,6 +99,15 @@ struct SharedParserConstants {
   /// Cached placeholder inner-ref used until fixed up.
   const hw::InnerRefAttr placeholderInnerRef;
 
+  /// The minimum FIRRTL version that this parser can support.
+  const VersionAttr minimumFIRVersion;
+
+  /// The next version of FIRRTL that is not yet released.
+  const VersionAttr nextFIRVersion;
+
+  /// A marker for parser features that are currently missing from the spec.
+  const VersionAttr missingSpecFIRVersion;
+
 private:
   SharedParserConstants(const SharedParserConstants &) = delete;
   void operator=(const SharedParserConstants &) = delete;
@@ -112,7 +124,7 @@ namespace {
 /// things like types and helper logic.
 struct FIRParser {
   FIRParser(SharedParserConstants &constants, FIRLexer &lexer,
-            FIRVersion version)
+            VersionAttr version)
       : version(version), constants(constants), lexer(lexer),
         locatorFilenameCache(constants.loIdentifier /*arbitrary non-null id*/) {
   }
@@ -173,28 +185,35 @@ struct FIRParser {
   // Version and Feature Checking
   //===--------------------------------------------------------------------===//
 
-  ParseResult requireFeature(FIRVersion minimum, StringRef feature) {
+  ParseResult requireFeature(VersionAttr minimum, StringRef feature) {
     return requireFeature(minimum, feature, getToken().getLoc());
   }
 
-  ParseResult requireFeature(FIRVersion minimum, StringRef feature, SMLoc loc) {
+  ParseResult requireFeature(VersionAttr minimum, StringRef feature,
+                             SMLoc loc) {
     if (version < minimum)
       return emitError(loc)
-             << feature << " are a FIRRTL " << minimum
-             << "+ feature, but the specified FIRRTL version was " << version;
+             << feature << " are a FIRRTL " << minimum.getMajor() << "."
+             << minimum.getMinor() << "." << minimum.getPatch()
+             << "+ feature, but the specified FIRRTL version was "
+             << version.getMajor() << "." << version.getMinor() << "."
+             << version.getPatch();
     return success();
   }
 
-  ParseResult removedFeature(FIRVersion removedVersion, StringRef feature) {
+  ParseResult removedFeature(VersionAttr removedVersion, StringRef feature) {
     return removedFeature(removedVersion, feature, getToken().getLoc());
   }
 
-  ParseResult removedFeature(FIRVersion removedVersion, StringRef feature,
+  ParseResult removedFeature(VersionAttr removedVersion, StringRef feature,
                              SMLoc loc) {
     if (version >= removedVersion)
       return emitError(loc)
-             << feature << " were removed in FIRRTL " << removedVersion
-             << ", but the specified FIRRTL version was " << version;
+             << feature << " were removed in FIRRTL "
+             << removedVersion.getMajor() << "." << removedVersion.getMinor()
+             << "." << removedVersion.getPatch()
+             << ", but the specified FIRRTL version was " << version.getMajor()
+             << "." << version.getMinor() << "." << version.getPatch();
     return success();
   }
 
@@ -295,7 +314,7 @@ struct FIRParser {
                                   bool allowAggregates = false);
 
   /// The version of FIRRTL to use for this parser.
-  FIRVersion version;
+  VersionAttr version;
 
 private:
   FIRParser(const FIRParser &) = delete;
@@ -550,7 +569,8 @@ ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
     consumeToken();
     return success();
   case FIRToken::radix_specified_integer: {
-    if (requireFeature({2, 4, 0}, "radix-specified integer literals"))
+    if (requireFeature(VersionAttr::get(getContext(), 2, 4, 0),
+                       "radix-specified integer literals"))
       return failure();
     if (spelling[0] == '-') {
       isNegative = true;
@@ -572,9 +592,9 @@ ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
     return success();
   }
   case FIRToken::string: {
-    if (FIRVersion(3, 0, 0) <= version)
-      return emitError(
-          "String-encoded integer literals are unsupported after FIRRTL 3.0.0");
+    if (removedFeature(VersionAttr::get(getContext(), 3, 0, 0),
+                       "String-encoded integer literals"))
+      return failure();
 
     // Drop the quotes.
     assert(spelling.front() == '"' && spelling.back() == '"');
@@ -669,15 +689,17 @@ ParseResult FIRParser::parseVersionLit(const Twine &message) {
   if (a.getAsInteger(10, aInt) || b.getAsInteger(10, bInt) ||
       c.getAsInteger(10, cInt))
     return emitError("failed to parse version string"), failure();
-  version.major = aInt.getLimitedValue(UINT32_MAX);
-  version.minor = bInt.getLimitedValue(UINT32_MAX);
-  version.patch = cInt.getLimitedValue(UINT32_MAX);
-  if (version.major != aInt || version.minor != bInt || version.patch != cInt)
+  version = VersionAttr::get(getContext(), aInt.getLimitedValue(UINT32_MAX),
+                             bInt.getLimitedValue(UINT32_MAX),
+                             cInt.getLimitedValue(UINT32_MAX));
+  if (version.getMajor() != aInt || version.getMinor() != bInt ||
+      version.getPatch() != cInt)
     return emitError("integers out of range"), failure();
-  if (version < minimumFIRVersion)
+  if (version < getConstants().minimumFIRVersion)
     return emitError() << "FIRRTL version must be >=" << minimumFIRVersion,
            failure();
   consumeToken(FIRToken::version);
+
   return success();
 }
 
@@ -893,7 +915,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     break;
 
   case FIRToken::kw_Inst: {
-    if (requireFeature(missingSpecFIRVersion, "Inst types"))
+    if (requireFeature(getConstants().missingSpecFIRVersion, "Inst types"))
       return failure();
 
     consumeToken(FIRToken::kw_Inst);
@@ -921,7 +943,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
   }
 
   case FIRToken::kw_AnyRef: {
-    if (requireFeature(missingSpecFIRVersion, "AnyRef types"))
+    if (requireFeature(getConstants().missingSpecFIRVersion, "AnyRef types"))
       return failure();
 
     consumeToken(FIRToken::kw_AnyRef);
@@ -975,7 +997,8 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
 
     SmallVector<StringRef> layers;
     if (consumeIf(FIRToken::comma)) {
-      if (requireFeature({4, 0, 0}, "colored probes"))
+      if (requireFeature(VersionAttr::get(getContext(), 4, 0, 0),
+                         "colored probes"))
         return failure();
       // Probe Color
       do {
@@ -1094,37 +1117,38 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
   }
 
   case FIRToken::kw_String:
-    if (requireFeature({3, 1, 0}, "Strings"))
+    if (requireFeature(VersionAttr::get(getContext(), 3, 1, 0), "Strings"))
       return failure();
     consumeToken(FIRToken::kw_String);
     result = StringType::get(getContext());
     break;
   case FIRToken::kw_Integer:
-    if (requireFeature({3, 1, 0}, "Integers"))
+    if (requireFeature(VersionAttr::get(getContext(), 3, 1, 0), "Integers"))
       return failure();
     consumeToken(FIRToken::kw_Integer);
     result = FIntegerType::get(getContext());
     break;
   case FIRToken::kw_Bool:
-    if (requireFeature(missingSpecFIRVersion, "Bools"))
+    if (requireFeature(getConstants().missingSpecFIRVersion, "Bools"))
       return failure();
     consumeToken(FIRToken::kw_Bool);
     result = BoolType::get(getContext());
     break;
   case FIRToken::kw_Double:
-    if (requireFeature(missingSpecFIRVersion, "Doubles"))
+    if (requireFeature(getConstants().missingSpecFIRVersion, "Doubles"))
       return failure();
     consumeToken(FIRToken::kw_Double);
     result = DoubleType::get(getContext());
     break;
   case FIRToken::kw_Path:
-    if (requireFeature(missingSpecFIRVersion, "Paths"))
+    if (requireFeature(getConstants().missingSpecFIRVersion, "Paths"))
       return failure();
     consumeToken(FIRToken::kw_Path);
     result = PathType::get(getContext());
     break;
   case FIRToken::kw_List:
-    if (requireFeature({4, 0, 0}, "Lists") || parseListType(result))
+    if (requireFeature(VersionAttr::get(getContext(), 4, 0, 0), "Lists") ||
+        parseListType(result))
       return failure();
     break;
   }
@@ -1362,7 +1386,7 @@ namespace {
 /// currently parsing into.
 struct FIRModuleContext : public FIRParser {
   explicit FIRModuleContext(SharedParserConstants &constants, FIRLexer &lexer,
-                            FIRVersion version)
+                            VersionAttr version)
       : FIRParser(constants, lexer, version) {}
 
   // The expression-oriented nature of firrtl syntax produces tons of constant
@@ -1783,7 +1807,7 @@ struct FIRStmtParser : public FIRParser {
   explicit FIRStmtParser(Block &blockToInsertInto,
                          FIRModuleContext &moduleContext,
                          InnerSymFixups &innerSymFixups,
-                         const SymbolTable &circuitSymTbl, FIRVersion version,
+                         const SymbolTable &circuitSymTbl, VersionAttr version,
                          SymbolRefAttr layerSym = {})
       : FIRParser(moduleContext.getConstants(), moduleContext.getLexer(),
                   version),
@@ -2070,7 +2094,8 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
   case FIRToken::lp_integer_mul:
   case FIRToken::lp_integer_shr:
   case FIRToken::lp_integer_shl:
-    if (requireFeature({4, 0, 0}, "Integer arithmetic expressions"))
+    if (requireFeature(VersionAttr::get(getContext(), 4, 0, 0),
+                       "Integer arithmetic expressions"))
       return failure();
     break;
   default:
@@ -2117,7 +2142,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return failure();
     break;
   case FIRToken::kw_String: {
-    if (requireFeature({3, 1, 0}, "Strings"))
+    if (requireFeature(VersionAttr::get(getContext(), 3, 1, 0), "Strings"))
       return failure();
     locationProcessor.setLoc(getToken().getLoc());
     consumeToken(FIRToken::kw_String);
@@ -2134,7 +2159,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     break;
   }
   case FIRToken::kw_Integer: {
-    if (requireFeature({3, 1, 0}, "Integers"))
+    if (requireFeature(VersionAttr::get(getContext(), 3, 1, 0), "Integers"))
       return failure();
     locationProcessor.setLoc(getToken().getLoc());
     consumeToken(FIRToken::kw_Integer);
@@ -2150,7 +2175,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     break;
   }
   case FIRToken::kw_Bool: {
-    if (requireFeature(missingSpecFIRVersion, "Bools"))
+    if (requireFeature(getConstants().missingSpecFIRVersion, "Bools"))
       return failure();
     locationProcessor.setLoc(getToken().getLoc());
     consumeToken(FIRToken::kw_Bool);
@@ -2171,7 +2196,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     break;
   }
   case FIRToken::kw_Double: {
-    if (requireFeature(missingSpecFIRVersion, "Doubles"))
+    if (requireFeature(getConstants().missingSpecFIRVersion, "Doubles"))
       return failure();
     locationProcessor.setLoc(getToken().getLoc());
     consumeToken(FIRToken::kw_Double);
@@ -2193,7 +2218,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     break;
   }
   case FIRToken::kw_List: {
-    if (requireFeature({4, 0, 0}, "Lists"))
+    if (requireFeature(VersionAttr::get(getContext(), 4, 0, 0), "Lists"))
       return failure();
     if (isLeadingStmt)
       return emitError("unexpected List<>() as start of statement");
@@ -2205,7 +2230,9 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
   case FIRToken::lp_list_concat: {
     if (isLeadingStmt)
       return emitError("unexpected list_create() as start of statement");
-    if (requireFeature({4, 0, 0}, "List concat") || parseListConcatExp(result))
+    if (requireFeature(VersionAttr::get(getContext(), 4, 0, 0),
+                       "List concat") ||
+        parseListConcatExp(result))
       return failure();
     break;
   }
@@ -2213,12 +2240,14 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
   case FIRToken::lp_path:
     if (isLeadingStmt)
       return emitError("unexpected path() as start of statement");
-    if (requireFeature(missingSpecFIRVersion, "Paths") || parsePathExp(result))
+    if (requireFeature(getConstants().missingSpecFIRVersion, "Paths") ||
+        parsePathExp(result))
       return failure();
     break;
 
   case FIRToken::lp_intrinsic:
-    if (requireFeature({4, 0, 0}, "generic intrinsics") ||
+    if (requireFeature(VersionAttr::get(getContext(), 4, 0, 0),
+                       "generic intrinsics") ||
         parseIntrinsicExp(result))
       return failure();
     break;
@@ -2277,7 +2306,8 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
   case FIRToken::lp_shr:
     // For FIRRTL versions earlier than 4.0.0, insert pad(_, 1) around any
     // unsigned shr This ensures the minimum width is 1 (but can be greater)
-    if (version < FIRVersion(4, 0, 0) && type_isa<UIntType>(result.getType()))
+    if (version < VersionAttr::get(getContext(), 4, 0, 0) &&
+        type_isa<UIntType>(result.getType()))
       result = builder.create<PadPrimOp>(result, 1);
     break;
   default:
@@ -2706,7 +2736,7 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   case FIRToken::kw_regreset:
     /// The "invalidate", "connect", and "regreset" keywords were added
     /// in 3.0.0.
-    if (version < FIRVersion(3, 0, 0))
+    if (version < VersionAttr::get(getContext(), 3, 0, 0))
       kind = FIRToken::identifier;
     break;
   default:
@@ -2727,7 +2757,7 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   case FIRToken::kw_connect:
     return parseConnect();
   case FIRToken::kw_propassign:
-    if (requireFeature({3, 1, 0}, "properties"))
+    if (requireFeature(VersionAttr::get(getContext(), 3, 1, 0), "properties"))
       return failure();
     return parsePropAssign();
   case FIRToken::kw_invalidate:
@@ -2761,16 +2791,19 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   case FIRToken::lp_release_initial:
     return parseRefReleaseInitial();
   case FIRToken::kw_group:
-    if (requireFeature({3, 2, 0}, "optional groups") ||
-        removedFeature({3, 3, 0}, "optional groups"))
+    if (requireFeature(VersionAttr::get(getContext(), 3, 2, 0),
+                       "optional groups") ||
+        removedFeature(VersionAttr::get(getContext(), 3, 3, 0),
+                       "optional groups"))
       return failure();
     return parseLayerBlockOrGroup(stmtIndent);
   case FIRToken::kw_layerblock:
-    if (requireFeature({3, 3, 0}, "layers"))
+    if (requireFeature(VersionAttr::get(getContext(), 3, 3, 0), "layers"))
       return failure();
     return parseLayerBlockOrGroup(stmtIndent);
   case FIRToken::lp_intrinsic:
-    if (requireFeature({4, 0, 0}, "generic intrinsics"))
+    if (requireFeature(VersionAttr::get(getContext(), 4, 0, 0),
+                       "generic intrinsics"))
       return failure();
     return parseIntrinsicStmt();
   default: {
@@ -2946,7 +2979,7 @@ ParseResult FIRStmtParser::parseFormatString(SMLoc formatStringLoc,
   // just parse this as if it was a string.
   SmallVector<Attribute, 4> specialSubstitutions;
   SmallString<64> validatedFormatString;
-  if (version < FIRVersion(5, 0, 0)) {
+  if (version < VersionAttr::get(getContext(), 5, 0, 0)) {
     validatedFormatString = formatString;
     operands.append(specOperands.begin(), specOperands.end());
   } else {
@@ -3088,7 +3121,7 @@ ParseResult FIRStmtParser::parsePrintf() {
 
 /// fprintf ::= 'fprintf(' exp exp StringLit StringLit exp* ')' name? info?
 ParseResult FIRStmtParser::parseFPrintf() {
-  if (requireFeature(nextFIRVersion, "fprintf"))
+  if (requireFeature(getConstants().nextFIRVersion, "fprintf"))
     return failure();
   auto startTok = consumeToken(FIRToken::lp_fprintf);
 
@@ -4255,7 +4288,8 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
         parseOptionalInfo())
       return failure();
 
-    if (removedFeature({3, 0, 0}, "'is invalid' statements", loc))
+    if (removedFeature(VersionAttr::get(getContext(), 3, 0, 0),
+                       "'is invalid' statements", loc))
       return failure();
 
     locationProcessor.setLoc(loc);
@@ -4266,7 +4300,8 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
   if (parseToken(FIRToken::less_equal, "expected '<=' in statement"))
     return failure();
 
-  if (removedFeature({3, 0, 0}, "'<=' connections", loc))
+  if (removedFeature(VersionAttr::get(getContext(), 3, 0, 0),
+                     "'<=' connections", loc))
     return failure();
 
   Value rhs;
@@ -4351,7 +4386,8 @@ ParseResult FIRStmtParser::parseInstanceChoice() {
   if (auto isExpr = parseExpWithLeadingKeyword(startTok))
     return *isExpr;
 
-  if (requireFeature(missingSpecFIRVersion, "option groups/instance choices"))
+  if (requireFeature(getConstants().missingSpecFIRVersion,
+                     "option groups/instance choices"))
     return failure();
 
   StringRef id;
@@ -4462,7 +4498,7 @@ ParseResult FIRStmtParser::parseObject() {
   if (auto isExpr = parseExpWithLeadingKeyword(startTok))
     return *isExpr;
 
-  if (requireFeature(missingSpecFIRVersion, "object statements"))
+  if (requireFeature(getConstants().missingSpecFIRVersion, "object statements"))
     return failure();
 
   StringRef id;
@@ -4818,7 +4854,8 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   // Parse the 'with' specifier if present.
   Value resetSignal, resetValue;
   if (consumeIf(FIRToken::kw_with)) {
-    if (removedFeature({3, 0, 0}, "'reg with' registers"))
+    if (removedFeature(VersionAttr::get(getContext(), 3, 0, 0),
+                       "'reg with' registers"))
       return failure();
 
     if (parseToken(FIRToken::colon, "expected ':' in reg"))
@@ -4930,7 +4967,7 @@ ParseResult FIRStmtParser::parseRegisterWithReset() {
 /// contract ::= 'contract' (id,+ '=' exp,+) ':' info? contract_body
 /// contract_body ::= simple_stmt | INDENT simple_stmt+ DEDENT
 ParseResult FIRStmtParser::parseContract(unsigned blockIndent) {
-  if (requireFeature(missingSpecFIRVersion, "contracts"))
+  if (requireFeature(getConstants().missingSpecFIRVersion, "contracts"))
     return failure();
 
   auto startTok = consumeToken(FIRToken::kw_contract);
@@ -5011,7 +5048,7 @@ namespace {
 /// like circuit and module.
 struct FIRCircuitParser : public FIRParser {
   explicit FIRCircuitParser(SharedParserConstants &state, FIRLexer &lexer,
-                            ModuleOp mlirModule, FIRVersion version)
+                            ModuleOp mlirModule, VersionAttr version)
       : FIRParser(state, lexer, version), mlirModule(mlirModule) {}
 
   ParseResult
@@ -5128,7 +5165,8 @@ ParseResult FIRCircuitParser::parseOptionalEnabledLayers(ArrayAttr &result) {
     return success();
   }
 
-  if (requireFeature({4, 0, 0}, "modules with layers enabled"))
+  if (requireFeature(VersionAttr::get(getContext(), 4, 0, 0),
+                     "modules with layers enabled"))
     return failure();
 
   SmallVector<Attribute> layers;
@@ -5224,8 +5262,10 @@ ParseResult FIRCircuitParser::parseRefList(ArrayRef<PortInfo> portList,
 
   // Ref statements were added in 2.0.0 and removed in 4.0.0.
   if (getToken().is(FIRToken::kw_ref) &&
-      (requireFeature({2, 0, 0}, "ref statements") ||
-       removedFeature({4, 0, 0}, "ref statements")))
+      (requireFeature(VersionAttr::get(getContext(), 2, 0, 0),
+                      "ref statements") ||
+       removedFeature(VersionAttr::get(getContext(), 4, 0, 0),
+                      "ref statements")))
     return failure();
 
   // Parse the ref statements.
@@ -5371,7 +5411,7 @@ ParseResult FIRCircuitParser::parseClass(CircuitOp circuit, unsigned indent) {
   SmallVector<SMLoc> portLocs;
   LocWithInfo info(getToken().getLoc(), this);
 
-  if (requireFeature(missingSpecFIRVersion, "classes"))
+  if (requireFeature(getConstants().missingSpecFIRVersion, "classes"))
     return failure();
 
   consumeToken(FIRToken::kw_class);
@@ -5409,7 +5449,7 @@ ParseResult FIRCircuitParser::parseExtClass(CircuitOp circuit,
   SmallVector<SMLoc> portLocs;
   LocWithInfo info(getToken().getLoc(), this);
 
-  if (requireFeature(missingSpecFIRVersion, "classes"))
+  if (requireFeature(getConstants().missingSpecFIRVersion, "classes"))
     return failure();
 
   consumeToken(FIRToken::kw_extclass);
@@ -5466,7 +5506,7 @@ ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
   if (parseParameterList(parameters) || parseRefList(portList, internalPaths))
     return failure();
 
-  if (version >= FIRVersion({4, 0, 0})) {
+  if (version >= VersionAttr::get(getContext(), 4, 0, 0)) {
     for (auto [pi, loc] : llvm::zip_equal(portList, portLocs)) {
       if (auto ftype = type_dyn_cast<FIRRTLType>(pi.type)) {
         if (ftype.hasUninferredWidth())
@@ -5547,12 +5587,13 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
 
   // The main module is implicitly public.
   if (name == circuit.getName()) {
-    if (!isPublic && removedFeature({4, 0, 0}, "private main modules", modLoc))
+    if (!isPublic && removedFeature(VersionAttr::get(getContext(), 4, 0, 0),
+                                    "private main modules", modLoc))
       return failure();
     isPublic = true;
   }
 
-  if (isPublic && version >= FIRVersion({4, 0, 0})) {
+  if (isPublic && version >= VersionAttr::get(getContext(), 4, 0, 0)) {
     for (auto [pi, loc] : llvm::zip_equal(portList, portLocs)) {
       if (auto ftype = type_dyn_cast<FIRRTLType>(pi.type)) {
         if (ftype.hasUninferredWidth())
@@ -5663,8 +5704,10 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
   case FIRToken::kw_class:
     return parseClass(circuit, indent);
   case FIRToken::kw_declgroup:
-    if (requireFeature({3, 2, 0}, "optional groups") ||
-        removedFeature({3, 3, 0}, "optional groups"))
+    if (requireFeature(VersionAttr::get(getContext(), 3, 2, 0),
+                       "optional groups") ||
+        removedFeature(VersionAttr::get(getContext(), 3, 3, 0),
+                       "optional groups"))
       return failure();
     return parseLayer(circuit);
   case FIRToken::kw_extclass:
@@ -5672,35 +5715,39 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
   case FIRToken::kw_extmodule:
     return parseExtModule(circuit, indent);
   case FIRToken::kw_formal:
-    if (requireFeature({4, 0, 0}, "formal tests"))
+    if (requireFeature(VersionAttr::get(getContext(), 4, 0, 0), "formal tests"))
       return failure();
     return parseFormal(circuit, indent);
   case FIRToken::kw_intmodule:
-    if (requireFeature({1, 2, 0}, "intrinsic modules") ||
-        removedFeature({4, 0, 0}, "intrinsic modules"))
+    if (requireFeature(VersionAttr::get(getContext(), 1, 2, 0),
+                       "intrinsic modules") ||
+        removedFeature(VersionAttr::get(getContext(), 4, 0, 0),
+                       "intrinsic modules"))
       return failure();
     return parseIntModule(circuit, indent);
   case FIRToken::kw_layer:
-    if (requireFeature({3, 3, 0}, "layers"))
+    if (requireFeature(VersionAttr::get(getContext(), 3, 3, 0), "layers"))
       return failure();
     return parseLayer(circuit);
   case FIRToken::kw_module:
     return parseModule(circuit, /*isPublic=*/false, indent);
   case FIRToken::kw_public:
-    if (requireFeature({3, 3, 0}, "public modules"))
+    if (requireFeature(VersionAttr::get(getContext(), 3, 3, 0),
+                       "public modules"))
       return failure();
     consumeToken();
     if (getToken().getKind() == FIRToken::kw_module)
       return parseModule(circuit, /*isPublic=*/true, indent);
     return emitError(getToken().getLoc(), "only modules may be public");
   case FIRToken::kw_simulation:
-    if (requireFeature(nextFIRVersion, "simulation tests"))
+    if (requireFeature(getConstants().nextFIRVersion, "simulation tests"))
       return failure();
     return parseSimulation(circuit, indent);
   case FIRToken::kw_type:
     return parseTypeDecl();
   case FIRToken::kw_option:
-    if (requireFeature(missingSpecFIRVersion, "option groups/instance choices"))
+    if (requireFeature(getConstants().missingSpecFIRVersion,
+                       "option groups/instance choices"))
       return failure();
     return parseOptionDecl(circuit);
   default:
@@ -5802,7 +5849,8 @@ ParseResult FIRCircuitParser::parseLayer(CircuitOp circuit) {
       return failure();
     }
     if (layerConvention == LayerConvention::Inline &&
-        requireFeature({4, 1, 0}, "inline layers"))
+        requireFeature(VersionAttr::get(getContext(), 4, 1, 0),
+                       "inline layers"))
       return failure();
     consumeToken();
 
@@ -5963,8 +6011,9 @@ ParseResult FIRCircuitParser::parseCircuit(
 
   // Create the top-level circuit op in the MLIR module.
   OpBuilder b(mlirModule.getBodyRegion());
-  auto circuit = b.create<CircuitOp>(
-      info.getLoc(), name, /*annotations=*/getConstants().emptyArrayAttr);
+  auto circuit =
+      b.create<CircuitOp>(info.getLoc(), name, getConstants().emptyArrayAttr);
+  circuit.setVersionAttr(version);
 
   // A timer to get execution time of annotation parsing.
   auto parseAnnotationTimer = ts.nest("Parse annotations");
@@ -6170,7 +6219,7 @@ circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
                           /*column=*/0)));
   SharedParserConstants state(context, options);
   FIRLexer lexer(sourceMgr, context);
-  if (FIRCircuitParser(state, lexer, *module, minimumFIRVersion)
+  if (FIRCircuitParser(state, lexer, *module, /*version=*/{})
           .parseCircuit(annotationsBufs, ts))
     return nullptr;
 
