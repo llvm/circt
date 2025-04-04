@@ -150,10 +150,11 @@ static std::optional<AnnoPathValue> noResolve(DictionaryAttr anno,
 /// resolves it.
 static std::optional<AnnoPathValue> stdResolveImpl(StringRef rawPath,
                                                    ApplyState &state) {
-  auto pathStr = canonicalizeTarget(rawPath);
+  auto pathStr =
+      canonicalizeTarget(rawPath, state.circuit.getVersionOrDefault());
   StringRef path{pathStr};
 
-  auto tokens = tokenizePath(path);
+  auto tokens = tokenizePath(path, state.circuit.getVersionOrDefault());
   if (!tokens) {
     mlir::emitError(state.circuit.getLoc())
         << "Cannot tokenize annotation path " << rawPath;

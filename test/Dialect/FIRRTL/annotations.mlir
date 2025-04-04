@@ -2203,3 +2203,29 @@ firrtl.circuit "Top" attributes {
   // expected-warning @+1 {{'sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation' is deprecated, use 'circt.ExcludeFromFullResetAnnotation' instead}}
   firrtl.module @Top(in %reset: !firrtl.asyncreset) {}
 }
+
+// -----
+// FIRRTL version 6 annotation targets parse
+firrtl.circuit "Foo" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "Foo",
+      data = "module"
+    },
+    {
+      class = "circt.test",
+      target = "Foo>a",
+      data = "wire"
+    }
+  ],
+  version = #firrtl.version<major = 6, minor = 0, patch = 0>
+} {
+  // CHECK-LABEL: firrtl.module @Foo
+   // CHECK-SAME:   annotations = [{class = "circt.test", data = "module"}]
+  firrtl.module @Foo() {
+    // CHECK:      %a = firrtl.wire
+    // CHECK-SAME:   annotations = [{class = "circt.test", data = "wire"}]
+    %a = firrtl.wire : !firrtl.uint<1>
+  }
+}

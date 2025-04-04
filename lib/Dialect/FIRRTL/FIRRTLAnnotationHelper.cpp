@@ -115,9 +115,13 @@ static FailureOr<unsigned> findFieldID(AnnoTarget &ref,
 }
 
 void TokenAnnoTarget::toVector(SmallVectorImpl<char> &out) const {
-  out.push_back('~');
-  out.append(circuit.begin(), circuit.end());
-  out.push_back('|');
+  // If there is no circuit, then this is a FIRRTL 6+ target.  Don't include a
+  // circuit.
+  if (!circuit.empty()) {
+    out.push_back('~');
+    out.append(circuit.begin(), circuit.end());
+    out.push_back('|');
+  }
   for (auto modInstPair : instances) {
     out.append(modInstPair.first.begin(), modInstPair.first.end());
     out.push_back('/');
@@ -137,9 +141,14 @@ void TokenAnnoTarget::toVector(SmallVectorImpl<char> &out) const {
   }
 }
 
-std::string firrtl::canonicalizeTarget(StringRef target) {
+std::string firrtl::canonicalizeTarget(StringRef target, VersionAttr version) {
 
   if (target.empty())
+    return target.str();
+
+  // In FIRRTL 6+, there is only one annotation format and no canonicalization
+  // is needed.
+  if (version.getMajor() >= 6)
     return target.str();
 
   // If this is a normal Target (not a Named), erase that field in the JSON
@@ -166,7 +175,8 @@ std::string firrtl::canonicalizeTarget(StringRef target) {
 std::optional<AnnoPathValue>
 firrtl::resolveEntities(TokenAnnoTarget path, CircuitOp circuit,
                         SymbolTable &symTbl, CircuitTargetCache &cache) {
-  // Validate circuit name.
+  // Validate circuit name.  If there is _no_ circuit name, then don't validate
+  // it.  This allows FIRRTL version 6+ to just work as it has no circuit name.
   if (!path.circuit.empty() && circuit.getName() != path.circuit) {
     mlir::emitError(circuit.getLoc())
         << "circuit name doesn't match annotation '" << path.circuit << '\'';
@@ -288,15 +298,26 @@ firrtl::resolveEntities(TokenAnnoTarget path, CircuitOp circuit,
 
 /// split a target string into it constituent parts.  This is the primary parser
 /// for targets.
-std::optional<TokenAnnoTarget> firrtl::tokenizePath(StringRef origTarget) {
+std::optional<TokenAnnoTarget> firrtl::tokenizePath(StringRef origTarget,
+                                                    VersionAttr version) {
   // An empty string is not a legal target.
   if (origTarget.empty())
     return {};
   StringRef target = origTarget;
   TokenAnnoTarget retval;
-  std::tie(retval.circuit, target) = target.split('|');
-  if (!retval.circuit.empty() && retval.circuit[0] == '~')
-    retval.circuit = retval.circuit.drop_front();
+  // If the version is before FIRRTL 6, then there is a circuit to parse.
+  if (version.getMajor() < 6) {
+    std::tie(retval.circuit, target) = target.split('|');
+    if (!retval.circuit.empty() && retval.circuit[0] == '~')
+      retval.circuit = retval.circuit.drop_front();
+  } else {
+    // Reject 6- annotations.
+    if (origTarget[0] == '~')
+      return {};
+    // Reject legay annotations.
+    if (origTarget.contains('.') && !origTarget.contains('>'))
+      return {};
+  }
   while (target.count(':')) {
     StringRef nla;
     std::tie(nla, target) = target.split(':');
@@ -332,10 +353,10 @@ std::optional<AnnoPathValue> firrtl::resolvePath(StringRef rawPath,
                                                  CircuitOp circuit,
                                                  SymbolTable &symTbl,
                                                  CircuitTargetCache &cache) {
-  auto pathStr = canonicalizeTarget(rawPath);
+  auto pathStr = canonicalizeTarget(rawPath, circuit.getVersionOrDefault());
   StringRef path{pathStr};
 
-  auto tokens = tokenizePath(path);
+  auto tokens = tokenizePath(path, circuit.getVersionOrDefault());
   if (!tokens) {
     mlir::emitError(circuit.getLoc())
         << "Cannot tokenize annotation path " << rawPath;
@@ -564,9 +585,10 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
         tryGetAs<StringAttr>(bDict, anno, "sink", loc, dataTapsClass, path);
     std::string wirePathStr;
     if (sinkNameAttr)
-      wirePathStr = canonicalizeTarget(sinkNameAttr.getValue());
+      wirePathStr = canonicalizeTarget(sinkNameAttr.getValue(),
+                                       state.circuit.getVersionOrDefault());
     if (!wirePathStr.empty())
-      if (!tokenizePath(wirePathStr))
+      if (!tokenizePath(wirePathStr, state.circuit.getVersionOrDefault()))
         wirePathStr.clear();
     std::optional<AnnoPathValue> wireTarget;
     if (!wirePathStr.empty())
@@ -598,8 +620,9 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
           tryGetAs<StringAttr>(bDict, anno, "module", loc, dataTapsClass, path);
       if (!internalPathAttr || !moduleAttr)
         return failure();
-      auto moduleTargetStr = canonicalizeTarget(moduleAttr.getValue());
-      if (!tokenizePath(moduleTargetStr))
+      auto moduleTargetStr = canonicalizeTarget(
+          moduleAttr.getValue(), state.circuit.getVersionOrDefault());
+      if (!tokenizePath(moduleTargetStr, state.circuit.getVersionOrDefault()))
         return failure();
       std::optional<AnnoPathValue> moduleTarget = resolvePath(
           moduleTargetStr, state.circuit, state.symTbl, state.targetCaches);
@@ -623,8 +646,9 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
           tryGetAs<StringAttr>(bDict, anno, "source", loc, dataTapsClass, path);
       if (!sourceAttr)
         return failure();
-      auto sourcePathStr = canonicalizeTarget(sourceAttr.getValue());
-      if (!tokenizePath(sourcePathStr))
+      auto sourcePathStr = canonicalizeTarget(
+          sourceAttr.getValue(), state.circuit.getVersionOrDefault());
+      if (!tokenizePath(sourcePathStr, state.circuit.getVersionOrDefault()))
         return failure();
       LLVM_DEBUG(llvm::dbgs() << "\n Drill xmr path from :" << sourcePathStr
                               << " to " << wirePathStr);
@@ -722,7 +746,8 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
   if (!sourceAttr)
     return failure();
 
-  auto sourceTargetStr = canonicalizeTarget(sourceAttr.getValue());
+  auto sourceTargetStr =
+      canonicalizeTarget(sourceAttr.getValue(), state.circuit.getVersionOrDefault());
   std::optional<AnnoPathValue> srcTarget = resolvePath(
       sourceTargetStr, state.circuit, state.symTbl, state.targetCaches);
   if (!srcTarget)
@@ -743,8 +768,9 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
            << "The full Annotation is reprodcued here: " << anno << "\n";
   }
 
-  auto wireTargetStr = canonicalizeTarget(tap.getValue());
-  if (!tokenizePath(wireTargetStr))
+  auto wireTargetStr =
+      canonicalizeTarget(tap.getValue(), state.circuit.getVersionOrDefault());
+  if (!tokenizePath(wireTargetStr, state.circuit.getVersionOrDefault()))
     return failure();
   std::optional<AnnoPathValue> wireTarget = resolvePath(
       wireTargetStr, state.circuit, state.symTbl, state.targetCaches);

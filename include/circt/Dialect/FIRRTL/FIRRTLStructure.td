@@ -58,6 +58,10 @@ def CircuitOp : FIRRTLOp<"circuit",
 
     /// Return body of this circuit.
     Block *getBodyBlock();
+
+    VersionAttr getVersionOrDefault() {
+      return getVersion().value_or(VersionAttr::getNextVersion(getContext()));
+    }
   }];
 
   let assemblyFormat = "$name `` custom<CircuitOpAttrs>(attr-dict) $body";

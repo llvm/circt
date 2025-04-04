@@ -143,7 +143,7 @@ struct PathResolver {
     if (!target.consume_front(":"))
       return emitError(loc, "expected ':' in target string");
 
-    auto token = tokenizePath(target);
+    auto token = tokenizePath(target, circuit.getVersionOrDefault());
     if (!token)
       return emitError(loc)
              << "cannot tokenize annotation path \"" << target << "\"";
