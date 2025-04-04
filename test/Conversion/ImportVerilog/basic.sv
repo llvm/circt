@@ -1136,7 +1136,7 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.read %arr2  : <uarray<2 x i32>>
     // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP1:%.+]] : !moore.uarray<2 x i32> -> !moore.i64
     // CHECK: [[TMP4:%.+]] = moore.conversion [[TMP2:%.+]] : !moore.uarray<2 x i32> -> !moore.i64
-    // CHECK: [[TMP4:%.+]] = moore.eq [[TMP3:%.+]], [[TMP4:%.+]] : i64 -> i1
+    // CHECK: [[TMP5:%.+]] = moore.eq [[TMP3:%.+]], [[TMP4:%.+]] : i64 -> i1
     x = arr1 == arr2;
 
     // CHECK: [[TMP1:%.+]] = moore.read %a
