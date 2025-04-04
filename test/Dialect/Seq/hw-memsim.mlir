@@ -474,7 +474,30 @@ hw.module.generated @TestFragment, @FIRRTLMem(
 // CHECK-SAME:    emit.fragments = [@Fragment]
 
 // Test an i1 memory.
- hw.module.generated @ram_2x1, @FIRRTLMem(in %R0_addr : i1, in %R0_en : i1, in %R0_clk : i1, out R0_data : i1, in %W0_addr : i1, in %W0_en : i1, in %W0_clk : i1, in %W0_data : i1) attributes {depth = 2 : i64, emit.fragments = [@RANDOM_INIT_REG_FRAGMENT, @RANDOM_INIT_MEM_FRAGMENT, @RANDOM_INIT_FRAGMENT], initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 1 : ui32, writeClockIDs = [0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+ hw.module.generated @ram_2x1, @FIRRTLMem(
+  in %R0_addr : i1,
+  in %R0_en : i1,
+  in %R0_clk : i1,
+  out R0_data : i1,
+  in %W0_addr : i1,
+  in %W0_en : i1,
+  in %W0_clk : i1,
+  in %W0_data : i1
+  ) attributes {
+  depth = 2 : i64,
+  initFilename = "",
+  initIsBinary = false,
+  initIsInline = false,
+  maskGran = 1 : ui32,
+  numReadPorts = 1 : ui32,
+  numReadWritePorts = 0 : ui32,
+  numWritePorts = 1 : ui32,
+  readLatency = 0 : ui32,
+  readUnderWrite = 0 : i32,
+  width = 1 : ui32,
+  writeClockIDs = [0 : i32],
+  writeLatency = 1 : ui32,
+  writeUnderWrite = 1 : i32}
 
 // CHECK-LABEL: hw.module private @ram_2x1
 // CHECK:        %[[c0_i6:.+]] = hw.constant 0 : i6
