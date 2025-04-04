@@ -602,7 +602,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
           // ```
           //   for (int i = 0; i < mem.depth; i++) begin
           //     for (int j = 0; j < randomMeg.size; j += 32)
-          //       randomMem[j[mem.width-1: +: 32] = `RANDOM
+          //       randomMem[j[mem.width-1]: +: 32] = `RANDOM
           //     Memory[i] = randomMem[mem.dataWidth - 1: 0];
           // ```
           b.create<sv::ForOp>(
@@ -613,8 +613,13 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
                     "j", [&](BlockArgument innerIndVar) {
                       auto rhs = b.create<sv::MacroRefExprSEOp>(
                           b.getIntegerType(randomWidth), "RANDOM");
-                      auto truncInnerIndVar = b.createOrFold<comb::ExtractOp>(
-                          innerIndVar, 0, llvm::Log2_64_Ceil(mem.dataWidth));
+                      Value truncInnerIndVar;
+                      if (mem.dataWidth <= 1)
+                        truncInnerIndVar =
+                            b.create<hw::ConstantOp>(b.getI1Type(), 0);
+                      else
+                        truncInnerIndVar = b.createOrFold<comb::ExtractOp>(
+                            innerIndVar, 0, llvm::Log2_64_Ceil(mem.dataWidth));
                       auto lhs = b.create<sv::IndexedPartSelectInOutOp>(
                           randomMemReg, truncInnerIndVar, randomWidth, false);
                       b.create<sv::BPAssignOp>(lhs, rhs);
