@@ -1272,6 +1272,14 @@ Value Context::convertToSimpleBitVector(Value value) {
                                                  value);
     }
   }
+  if (auto unpacked = dyn_cast<moore::UnpackedType>(value.getType())) {
+    if (auto bits = unpacked.getBitSize()) {
+      auto sbvType =
+          moore::IntType::get(value.getContext(), *bits, unpacked.getDomain());
+      return builder.create<moore::ConversionOp>(value.getLoc(), sbvType,
+                                                 value);
+    }
+  }
 
   mlir::emitError(value.getLoc()) << "expression of type " << value.getType()
                                   << " cannot be cast to a simple bit vector";
