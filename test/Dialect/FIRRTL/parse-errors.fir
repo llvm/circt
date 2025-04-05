@@ -887,7 +887,7 @@ FIRRTL version 3.0.0
 circuit UnsupportedStringEncodedIntegerLiterals:
   module UnsupportedStringEncodedIntegerLiterals:
     output foo: UInt<8>
-    ; expected-error @below {{String-encoded integer literals are unsupported after FIRRTL 3.0.0}}
+    ; expected-error @below {{String-encoded integer literals were removed in FIRRTL 3.0.0, but the specified FIRRTL version was 3.0.0}}
     connect foo, UInt("h2a")
 
 ;// -----

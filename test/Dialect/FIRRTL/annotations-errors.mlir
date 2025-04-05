@@ -570,3 +570,75 @@ firrtl.circuit "Top" attributes {
   // expected-error @below {{circt.OutputDirAnnotation target already has an output file}}
   firrtl.module @Top() {}
 }
+
+// -----
+// A FIRRTL version 6 annotation is rejected in versions < 6
+// expected-error @+2 {{circuit name doesn't match annotation}}
+// expected-error @+1 {{Unable to resolve target of annotation}}
+firrtl.circuit "Foo" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "Foo>a"
+    }
+  ],
+  version = #firrtl.version<major = 5, minor = 1, patch = 0>
+} {
+  firrtl.module @Foo() {
+    %a = firrtl.wire : !firrtl.uint<1>
+  }
+}
+
+// -----
+// A FIRRTL version 5 annotation is rejected in version 6
+// expected-error @+2 {{Cannot tokenize annotation path ~Foo|Foo>a}}
+// expected-error @+1 {{Unable to resolve target of annotation}}
+firrtl.circuit "Foo" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "~Foo|Foo>a"
+    }
+  ],
+  version = #firrtl.version<major = 6, minor = 0, patch = 0>
+} {
+  firrtl.module @Foo() {
+    %a = firrtl.wire : !firrtl.uint<1>
+  }
+}
+
+// -----
+// A FIRRTL version 5 annotation is rejected in version 6
+// expected-error @+2 {{Cannot tokenize annotation path Foo.Foo}}
+// expected-error @+1 {{Unable to resolve target of annotation}}
+firrtl.circuit "Foo" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "Foo.Foo"
+    }
+  ],
+  version = #firrtl.version<major = 6, minor = 0, patch = 0>
+} {
+  firrtl.module @Foo() {
+    %a = firrtl.wire : !firrtl.uint<1>
+  }
+}
+
+// -----
+// A FIRRTL version 5 annotation is rejected in version 6
+// expected-error @+2 {{Cannot tokenize annotation path Foo.Foo.a}}
+// expected-error @+1 {{Unable to resolve target of annotation}}
+firrtl.circuit "Foo" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "Foo.Foo.a"
+    }
+  ],
+  version = #firrtl.version<major = 6, minor = 0, patch = 0>
+} {
+  firrtl.module @Foo() {
+    %a = firrtl.wire : !firrtl.uint<1>
+  }
+}

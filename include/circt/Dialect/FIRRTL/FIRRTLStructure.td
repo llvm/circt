@@ -34,6 +34,7 @@ def CircuitOp : FIRRTLOp<"circuit",
   let arguments = (ins
     StrAttr:$name,
     DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
+    OptionalAttr<VersionAttr>:$version,
     OptionalAttr<SymbolRefArrayAttr>:$enable_layers,
     OptionalAttr<SymbolRefArrayAttr>:$disable_layers,
     OptionalAttr<LayerSpecializationAttr>:$default_layer_specialization,
@@ -45,7 +46,7 @@ def CircuitOp : FIRRTLOp<"circuit",
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "StringAttr":$name,
-               CArg<"ArrayAttr","ArrayAttr()">:$annotations)>
+                   CArg<"ArrayAttr","ArrayAttr()">:$annotations)>
   ];
 
   let extraClassDeclaration = [{
@@ -57,6 +58,10 @@ def CircuitOp : FIRRTLOp<"circuit",
 
     /// Return body of this circuit.
     Block *getBodyBlock();
+
+    VersionAttr getVersionOrDefault() {
+      return getVersion().value_or(VersionAttr::getNextVersion(getContext()));
+    }
   }];
 
   let assemblyFormat = "$name `` custom<CircuitOpAttrs>(attr-dict) $body";

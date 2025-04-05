@@ -236,10 +236,11 @@ private:
 /// Return an input \p target string in canonical form.  This converts a Legacy
 /// Annotation (e.g., A.B.C) into a modern annotation (e.g., ~A|B>C).  Trailing
 /// subfield/subindex references are preserved.
-std::string canonicalizeTarget(StringRef target);
+std::string canonicalizeTarget(StringRef target, VersionAttr version);
 
 /// Parse a FIRRTL annotation path into its constituent parts.
-std::optional<TokenAnnoTarget> tokenizePath(StringRef origTarget);
+std::optional<TokenAnnoTarget> tokenizePath(StringRef origTarget,
+                                            VersionAttr version);
 
 /// Convert a parsed target string to a resolved target structure.  This
 /// resolves all names and aggregates from a parsed target.
