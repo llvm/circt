@@ -93,6 +93,11 @@ void circtRtgToolOptionsSetOutputPath(CirctRtgToolOptions options,
   unwrap(options)->setOutputPath(std::string(path));
 }
 
+void circtRtgToolOptionsSetMemoriesAsImmediates(CirctRtgToolOptions options,
+                                                bool enable) {
+  unwrap(options)->setMemoriesAsImmediates(enable);
+}
+
 //===----------------------------------------------------------------------===//
 // Pipeline Population API.
 //===----------------------------------------------------------------------===//
