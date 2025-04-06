@@ -9,6 +9,7 @@
 set(PyRTG_TEST_DEPENDS
   FileCheck count not
   PyRTG
+  PyRTGTool
 )
 
 configure_lit_site_cfg(

@@ -3,6 +3,6 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from .support import wrap_opviews_with_values
-from .circt.dialects import rtgtest
+from .base.dialects import rtgtest
 
 wrap_opviews_with_values(rtgtest, rtgtest.__name__)

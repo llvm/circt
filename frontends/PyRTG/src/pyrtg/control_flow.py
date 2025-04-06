@@ -7,7 +7,7 @@ from __future__ import annotations
 from .integers import Bool, Integer
 from .arrays import Array
 from .core import Value
-from .circt import ir
+from .base import ir
 from .scf import scf
 from .support import _FromCirctValue
 
