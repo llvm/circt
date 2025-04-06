@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from .core import CodeGenRoot, Value
 from .support import _FromCirctValue
-from .circt import ir, support
+from .base import ir, support
 from .rtg import rtg
 
 

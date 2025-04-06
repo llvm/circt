@@ -7,7 +7,7 @@ from __future__ import annotations
 from .rtg import rtg
 from .rtgtest import rtgtest
 from .core import Value
-from .circt import ir
+from .base import ir
 from .integers import Integer
 
 from typing import Union

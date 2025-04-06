@@ -3,6 +3,6 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from .support import wrap_opviews_with_values
-from .circt.dialects import scf
+from .base.dialects import scf
 
 wrap_opviews_with_values(scf, scf.__name__, ["IfOp", "ForOp"])
