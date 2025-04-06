@@ -44,3 +44,11 @@ def test(*args, **kwargs):
     return Test(func, list(args))
 
   return wrapper
+
+
+def embed_comment(comment: str) -> None:
+  """
+  Embeds a comment in the instruction stream.
+  """
+
+  rtg.CommentOp(comment)

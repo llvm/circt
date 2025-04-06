@@ -210,6 +210,10 @@ rtg.test @test0() {
   // CHECK-NEXT:    # srai ra, s0, 31
   // CHECK-NEXT:    .word 0x41F45093
   rtgtest.rv32i.srai %rd, %rs, %imm5
+
+  // CHECK-ALLOWED-NEXT:    # this is a comment
+  // CHECK-NEXT:    # this is a comment
+  rtg.comment "this is a comment"
 }
 
 // CHECK-EMPTY:

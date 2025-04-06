@@ -4,7 +4,7 @@
 
 from . import tests
 from . import core
-from .tests import test
+from .tests import test, embed_comment
 from .labels import Label
 from .rtg import rtg
 from .rtgtest import rtgtest

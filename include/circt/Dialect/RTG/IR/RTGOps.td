@@ -641,6 +641,16 @@ def RandomNumberInRangeOp : RTGOp<"random_number_in_range", []> {
   let assemblyFormat = "` ` `[` $lowerBound `,` $upperBound `)` attr-dict";
 }
 
+//===- Misc Operations ----------------------------------------------------===//
+
+def CommentOp : RTGOp<"comment", []> {
+  let summary = "emit a comment in instruction stream";
+
+  let arguments = (ins StrAttr:$comment);
+
+  let assemblyFormat = "$comment attr-dict";
+}
+
 //===- ISA Register Handling Operations -----------------------------------===//
 
 def FixedRegisterOp : RTGOp<"fixed_reg", [

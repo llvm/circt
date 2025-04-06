@@ -58,7 +58,9 @@ public:
             // Tuples
             TupleCreateOp, TupleExtractOp,
             // Immediates
-            IntToImmediateOp>([&](auto expr) -> ResultType {
+            IntToImmediateOp,
+            // Misc ops
+            CommentOp>([&](auto expr) -> ResultType {
           return thisCast->visitOp(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -119,6 +121,7 @@ public:
   HANDLE(ArraySizeOp, Unhandled);
   HANDLE(TupleCreateOp, Unhandled);
   HANDLE(TupleExtractOp, Unhandled);
+  HANDLE(CommentOp, Unhandled);
   HANDLE(LabelDeclOp, Unhandled);
   HANDLE(LabelUniqueDeclOp, Unhandled);
   HANDLE(LabelOp, Unhandled);

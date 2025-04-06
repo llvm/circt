@@ -1456,6 +1456,8 @@ public:
     return DeletionKind::Delete;
   }
 
+  FailureOr<DeletionKind> visitOp(CommentOp op) { return DeletionKind::Keep; }
+
   FailureOr<DeletionKind> visitOp(scf::IfOp op) {
     bool cond = get<bool>(op.getCondition());
     auto &toElaborate = cond ? op.getThenRegion() : op.getElseRegion();
