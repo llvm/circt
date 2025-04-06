@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from .circt import ir
+from .base import ir
 from .core import Value
 from .rtg import rtg
 from .integers import Integer
