@@ -45,6 +45,11 @@ void rtg::populateRandomizerPipeline(mlir::PassManager &pm,
     pm.addPass(rtg::createElaborationPass(passOptions));
   }
   pm.addPass(rtg::createInlineSequencesPass());
+  {
+    MemoryAllocationPassOptions passOptions;
+    passOptions.useImmediates = options.getMemoriesAsImmediates();
+    pm.addNestedPass<rtg::TestOp>(rtg::createMemoryAllocationPass());
+  }
   pm.addPass(rtg::createLowerUniqueLabelsPass());
   pm.addNestedPass<rtg::TestOp>(rtg::createLinearScanRegisterAllocationPass());
   {
