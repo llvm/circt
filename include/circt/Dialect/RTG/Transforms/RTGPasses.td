@@ -114,4 +114,24 @@ def LowerUniqueLabelsPass : Pass<"rtg-lower-unique-labels", "mlir::ModuleOp"> {
   ];
 }
 
+def MemoryAllocationPass : Pass<"rtg-memory-allocation", "rtg::TestOp"> {
+  let summary = "lower memories to immediates or labels";
+  let description = [{
+    This pass lowers 'memory_alloc' and other memory handling operations to
+    immediates or labels by computing offsets within memory blocks according to
+    the memory allocation's size and alignments.
+  }];
+
+  let options = [
+    Option<"useImmediates", "use-immediates", "bool", /*default=*/"true", [{
+        Whether the pass should lower memories to immediates instead of labels.
+      }]>,
+  ];
+
+  let statistics = [
+    Statistic<"numMemoriesAllocated", "num-memories-allocated",
+              "Number of memories allocated from memory blocks.">,
+  ];
+}
+
 #endif // CIRCT_DIALECT_RTG_TRANSFORMS_RTGPASSES_TD
