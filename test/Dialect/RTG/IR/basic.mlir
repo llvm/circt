@@ -9,6 +9,9 @@ rtg.test @constants() {
   // CHECK-NEXT: rtg.isa.int_to_immediate [[V0]] : !rtg.isa.immediate<32>
   %1 = index.constant 5
   %2 = rtg.isa.int_to_immediate %1 : !rtg.isa.immediate<32>
+
+  // CHECK-NEXT: rtg.comment "this is a comment"
+  rtg.comment "this is a comment"
 }
 
 // CHECK-LABEL: rtg.sequence @ranomizedSequenceType

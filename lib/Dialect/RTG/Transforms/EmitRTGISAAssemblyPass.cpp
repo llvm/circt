@@ -104,6 +104,11 @@ public:
     return success();
   }
 
+  LogicalResult emit(CommentOp op) {
+    os << llvm::indent(4) << "# " << op.getComment() << "\n";
+    return success();
+  }
+
   LogicalResult emitTest(rtg::TestOp test, bool emitHeaderFooter = false) {
     if (emitHeaderFooter)
       os << "# Begin of " << test.getSymName() << "\n\n";
@@ -125,12 +130,13 @@ public:
         continue;
       }
 
-      auto res = TypeSwitch<Operation *, LogicalResult>(&op)
-                     .Case<InstructionOpInterface, LabelDeclOp, LabelOp>(
-                         [&](auto op) { return emit(op); })
-                     .Default([](auto op) {
-                       return op->emitError("emitter unknown RTG operation");
-                     });
+      auto res =
+          TypeSwitch<Operation *, LogicalResult>(&op)
+              .Case<InstructionOpInterface, LabelDeclOp, LabelOp, CommentOp>(
+                  [&](auto op) { return emit(op); })
+              .Default([](auto op) {
+                return op->emitError("emitter unknown RTG operation");
+              });
 
       if (failed(res))
         return failure();
