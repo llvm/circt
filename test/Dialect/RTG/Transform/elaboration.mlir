@@ -13,6 +13,7 @@ func.func @dummy10(%arg0: !rtg.set<tuple<index>>) -> () {return}
 func.func @dummy11(%arg0: !rtg.set<index>) -> () {return}
 func.func @dummy12(%arg0: !rtg.bag<index>) -> () {return}
 func.func @dummy13(%arg0: !rtg.isa.memoryblock<32>) -> () {return}
+func.func @dummy14(%arg0: !rtg.isa.memory<32>) -> () {return}
 
 rtg.target @singletonTarget : !rtg.dict<singleton: index> {
   %0 = index.constant 0
@@ -635,9 +636,21 @@ rtg.target @memoryBlocks : !rtg.dict<mem_block: !rtg.isa.memoryblock<32>> {
 
 // CHECK-LABEL: @memoryBlockTest_memoryBlocks
 rtg.test @memoryBlockTest(mem_block = %arg0: !rtg.isa.memoryblock<32>) {
-  func.call @dummy13(%arg0) : (!rtg.isa.memoryblock<32>) -> ()
   // CHECK-NEXT: func.call @dummy13(%mem_block)
-  // CHECK-NEXT: }
+  func.call @dummy13(%arg0) : (!rtg.isa.memoryblock<32>) -> ()
+
+  // CHECK-NEXT: [[IDX8:%.+]] = index.constant 8 
+  // CHECK-NEXT: [[IDX4:%.+]] = index.constant 4
+  // CHECK-NEXT: [[MEM:%.+]] = rtg.isa.memory_alloc %mem_block, [[IDX8]], [[IDX4]] : !rtg.isa.memoryblock<32>
+  // CHECK-NEXT: func.call @dummy14([[MEM]])
+  %idx4 = index.constant 4
+  %idx8 = index.constant 8 
+  %0 = rtg.isa.memory_alloc %arg0, %idx8, %idx4 : !rtg.isa.memoryblock<32>
+  func.call @dummy14(%0) : (!rtg.isa.memory<32>) -> ()
+
+  // CHECK-NEXT: func.call @dummy2([[IDX8]])
+  %1 = rtg.isa.memory_size %0 : !rtg.isa.memory<32> 
+  func.call @dummy2(%1) : (index) -> ()
 }
 
 // CHECK-LABEL: rtg.test @arrays

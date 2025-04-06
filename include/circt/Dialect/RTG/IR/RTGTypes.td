@@ -210,4 +210,6 @@ def MemoryBlockType : RTGISATypeDef<"MemoryBlock"> {
   let assemblyFormat = "`<` $addressWidth `>`";
 }
 
+def ISAMemory : AnyTypeOf<[MemoryType, ImmediateType, LabelType]>;
+
 #endif // CIRCT_DIALECT_RTG_IR_RTGTYPES_TD
