@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag, rtgtest, Immediate, IntegerRegister, Array, Bool, MemoryBlock, Memory, Tuple
+from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag, rtgtest, Immediate, IntegerRegister, Array, Bool, MemoryBlock, Memory, Tuple, embed_comment
 
 # MLIR-LABEL: rtg.target @Singleton : !rtg.dict<>
 # MLIR-NEXT: }
@@ -225,6 +225,8 @@ def test1_args(set: Set):
 # MLIR-NEXT: [[RAND4:%.+]] = rtg.randomize_sequence [[SEQ1]]
 # MLIR-NEXT: rtg.embed_sequence [[RAND4]]
 
+# MLIR-NEXT: rtg.comment "this is a comment"
+
 # MLIR-NEXT: }
 
 # ELABORATED-LABEL: rtg.test @test2_labels
@@ -253,6 +255,8 @@ def test1_args(set: Set):
 # ELABORATED-NEXT: [[L5:%.+]] = rtg.label_decl "s1"
 # ELABORATED-NEXT: rtg.label local [[L5]]
 
+# ELABORATED-NEXT: rtg.comment "this is a comment"
+
 # ELABORATED-NEXT: }
 
 # ASM-LABEL: Begin of test2_labels
@@ -276,6 +280,8 @@ def test1_args(set: Set):
 # ASM-NEXT: l0:
 
 # ASM-NEXT: s1:
+
+# ASM-NEXT: # this is a comment
 
 # ASM-EMPTY:
 # ASM: End of test2_labels
@@ -325,6 +331,8 @@ def test2_labels():
   seq0.randomize(set0)()
 
   seq1()
+
+  embed_comment("this is a comment")
 
 
 # MLIR-LABEL: rtg.test @test3_registers_and_immediates()
