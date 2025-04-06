@@ -94,6 +94,7 @@ struct InterleavedSequenceStorage;
 struct SetStorage;
 struct VirtualRegisterStorage;
 struct UniqueLabelStorage;
+struct MemoryStorage;
 struct MemoryBlockStorage;
 struct TupleStorage;
 
@@ -114,8 +115,8 @@ using ElaboratorValue =
     std::variant<TypedAttr, BagStorage *, bool, size_t, SequenceStorage *,
                  RandomizedSequenceStorage *, InterleavedSequenceStorage *,
                  SetStorage *, VirtualRegisterStorage *, UniqueLabelStorage *,
-                 LabelValue, MemoryBlockStorage *, ArrayStorage *,
-                 TupleStorage *>;
+                 LabelValue, MemoryStorage *, MemoryBlockStorage *,
+                 ArrayStorage *, TupleStorage *>;
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 llvm::hash_code hash_value(const LabelValue &val) {
@@ -425,6 +426,17 @@ struct MemoryBlockStorage : IdentityValue {
   const APInt baseAddress;
 };
 
+/// Storage object for '!rtg.isa.memory`-typed values.
+struct MemoryStorage : IdentityValue {
+  MemoryStorage(MemoryBlockStorage *memoryBlock, size_t size, size_t alignment)
+      : IdentityValue(memoryBlock->type), memoryBlock(memoryBlock), size(size),
+        alignment(alignment) {}
+
+  MemoryBlockStorage *memoryBlock;
+  const size_t size;
+  const size_t alignment;
+};
+
 /// Storage object for an '!rtg.randomized_sequence'.
 struct RandomizedSequenceStorage : IdentityValue {
   RandomizedSequenceStorage(ContextResourceAttrInterface context,
@@ -596,6 +608,11 @@ static void print(const UniqueLabelStorage *val, llvm::raw_ostream &os) {
 
 static void print(const LabelValue &val, llvm::raw_ostream &os) {
   os << "<label " << val.name << ">";
+}
+
+static void print(const MemoryStorage *val, llvm::raw_ostream &os) {
+  os << "<memory {" << val->memoryBlock << ", size=" << val->size
+     << ", alignment=" << val->alignment << "}>";
 }
 
 static void print(const MemoryBlockStorage *val, llvm::raw_ostream &os) {
@@ -899,6 +916,19 @@ private:
         loc, val->type, IntegerAttr::get(builder.getIndexType(), val->size),
         IntegerAttr::get(builder.getIntegerType(val->baseAddress.getBitWidth()),
                          val->baseAddress));
+    materializedValues[val] = res;
+    return res;
+  }
+
+  Value visit(MemoryStorage *val, Location loc,
+              function_ref<InFlightDiagnostic()> emitError) {
+    auto memBlock = materialize(val->memoryBlock, loc, emitError);
+    auto memSize = materialize(val->size, loc, emitError);
+    auto memAlign = materialize(val->alignment, loc, emitError);
+    if (!(memBlock && memSize && memAlign))
+      return {};
+
+    Value res = builder.create<MemoryAllocOp>(loc, memBlock, memSize, memAlign);
     materializedValues[val] = res;
     return res;
   }
@@ -1594,6 +1624,23 @@ public:
         op.getSize().getZExtValue(), op.getBaseAddress(), op.getType());
     state[op.getResult()] = val;
     materializer.registerIdentityValue(val);
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(MemoryAllocOp op) {
+    size_t size = get<size_t>(op.getSize());
+    size_t alignment = get<size_t>(op.getAlignment());
+    auto *memBlock = get<MemoryBlockStorage *>(op.getMemoryBlock());
+    auto *val = sharedState.internalizer.create<MemoryStorage>(memBlock, size,
+                                                               alignment);
+    state[op.getResult()] = val;
+    materializer.registerIdentityValue(val);
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(MemorySizeOp op) {
+    auto *memory = get<MemoryStorage *>(op.getMemory());
+    state[op.getResult()] = memory->size;
     return DeletionKind::Delete;
   }
 
