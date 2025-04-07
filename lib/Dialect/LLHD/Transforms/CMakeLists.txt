@@ -3,6 +3,7 @@ add_circt_dialect_library(CIRCTLLHDTransforms
   EarlyCodeMotionPass.cpp
   FunctionEliminationPass.cpp
   HoistSignals.cpp
+  LowerProcesses.cpp
   Mem2Reg.cpp
   MemoryToBlockArgumentPass.cpp
   ProcessLoweringPass.cpp
@@ -21,5 +22,6 @@ add_circt_dialect_library(CIRCTLLHDTransforms
   MLIRControlFlowDialect
   MLIRFuncDialect
   MLIRIR
+  MLIRSCFDialect
   MLIRTransformUtils
 )

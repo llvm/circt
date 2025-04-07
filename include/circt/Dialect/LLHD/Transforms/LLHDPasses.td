@@ -155,4 +155,11 @@ def HoistSignalsPass : Pass<"llhd-hoist-signals"> {
   let summary = "Hoist probes and promote drives to process results";
 }
 
+def LowerProcessesPass : Pass<"llhd-lower-processes", "hw::HWModuleOp"> {
+  let summary = "Convert combinational LLHD processes to SCF execute regions";
+  let dependentDialects = [
+    "mlir::scf::SCFDialect",
+  ];
+}
+
 #endif // CIRCT_DIALECT_LLHD_TRANSFORMS_PASSES
