@@ -82,7 +82,8 @@ class Integer(Value):
 
     return self._value
 
-  def type(*args: ir.Type) -> ir.Type:
+  @staticmethod
+  def ty(*args: ir.Type) -> ir.Type:
     """
     Returns the index type.
     """
@@ -114,7 +115,8 @@ class Bool(Value):
 
     return self._value
 
-  def type(*args: ir.Type) -> ir.Type:
+  @staticmethod
+  def ty(*args: ir.Type) -> ir.Type:
     """
     Returns the 'i1' type representing a boolean.
     """

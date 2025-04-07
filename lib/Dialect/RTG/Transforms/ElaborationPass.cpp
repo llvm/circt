@@ -429,8 +429,9 @@ struct MemoryBlockStorage : IdentityValue {
 /// Storage object for '!rtg.isa.memory`-typed values.
 struct MemoryStorage : IdentityValue {
   MemoryStorage(MemoryBlockStorage *memoryBlock, size_t size, size_t alignment)
-      : IdentityValue(memoryBlock->type), memoryBlock(memoryBlock), size(size),
-        alignment(alignment) {}
+      : IdentityValue(MemoryType::get(memoryBlock->type.getContext(),
+                                      memoryBlock->baseAddress.getBitWidth())),
+        memoryBlock(memoryBlock), size(size), alignment(alignment) {}
 
   MemoryBlockStorage *memoryBlock;
   const size_t size;
@@ -611,8 +612,8 @@ static void print(const LabelValue &val, llvm::raw_ostream &os) {
 }
 
 static void print(const MemoryStorage *val, llvm::raw_ostream &os) {
-  os << "<memory {" << val->memoryBlock << ", size=" << val->size
-     << ", alignment=" << val->alignment << "}>";
+  os << "<memory {" << ElaboratorValue(val->memoryBlock)
+     << ", size=" << val->size << ", alignment=" << val->alignment << "}>";
 }
 
 static void print(const MemoryBlockStorage *val, llvm::raw_ostream &os) {
@@ -682,11 +683,11 @@ public:
     if (iter != materializedValues.end())
       return iter->second;
 
-    LLVM_DEBUG(llvm::dbgs() << "Materializing " << val << "\n\n");
+    LLVM_DEBUG(llvm::dbgs() << "Materializing " << val);
 
     // In debug mode, track whether values with identity were already
     // materialized before and assert in such a situation.
-    return std::visit(
+    Value res = std::visit(
         [&](auto value) {
           if constexpr (std::is_base_of_v<IdentityValue,
                                           std::remove_pointer_t<
@@ -712,6 +713,10 @@ public:
           return visit(value, loc, emitError);
         },
         val);
+
+    LLVM_DEBUG(llvm::dbgs() << " to\n" << res << "\n\n");
+
+    return res;
   }
 
   /// If `op` is not in the same region as the materializer insertion point, a
