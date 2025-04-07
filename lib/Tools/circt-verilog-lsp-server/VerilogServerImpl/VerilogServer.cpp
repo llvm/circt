@@ -198,6 +198,8 @@ VerilogDocument::VerilogDocument(
     return;
   }
 
+  driver.diagEngine.setIgnoreAllWarnings(false);
+
   if (!driver.parseAllSources()) {
     circt::lsp::Logger::error(Twine("Failed to parse Verilog file ") +
                               uri.file());
