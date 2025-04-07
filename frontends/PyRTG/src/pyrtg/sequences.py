@@ -67,6 +67,8 @@ class SequenceDeclaration(CodeGenRoot):
     self.get()(*args)
 
   def _codegen(self) -> None:
+    self._already_generated = True
+
     seq = rtg.SequenceOp(self.name,
                          ir.TypeAttr.get(rtg.SequenceType.get(self.arg_types)))
     block = ir.Block.create_at_start(seq.bodyRegion, self.arg_types)
@@ -177,7 +179,8 @@ class Sequence(Value):
   def get_type(self) -> ir.Type:
     return self._value.type
 
-  def type(*args: ir.Type) -> ir.Type:
+  @staticmethod
+  def ty(*args: ir.Type) -> ir.Type:
     """
     Returns the sequence type with the given argument types.
     """
@@ -224,7 +227,8 @@ class RandomizedSequence(Value):
   def get_type(self) -> ir.Type:
     return self._value.type
 
-  def type(*args: ir.Type) -> ir.Type:
+  @staticmethod
+  def ty(*args: ir.Type) -> ir.Type:
     """
     Returns the randomized sequence type.
     """

@@ -108,7 +108,8 @@ class Array(Value):
   def get_type(self) -> ir.Type:
     return self._value.type
 
-  def type(*args) -> ir.Type:
+  @staticmethod
+  def ty(*args) -> ir.Type:
     """
     Returns the array type for the given element type.
     """
