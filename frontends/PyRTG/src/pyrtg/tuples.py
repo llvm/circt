@@ -45,7 +45,8 @@ class Tuple(Value):
   def get_type(self) -> ir.Type:
     return self._value.type
 
-  def type(*args) -> ir.Type:
+  @staticmethod
+  def ty(*args) -> ir.Type:
     """
     Returns the tuple type for the given element types.
     """

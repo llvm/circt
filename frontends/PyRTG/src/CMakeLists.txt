@@ -27,6 +27,7 @@ declare_mlir_python_sources(PyRTGSources.Core
   SOURCES
     arrays.py
     bags.py
+    configs.py
     control_flow.py
     core.py
     index.py
@@ -34,11 +35,10 @@ declare_mlir_python_sources(PyRTGSources.Core
     labels.py
     memories.py
     rtg.py
+    scf.py
     sequences.py
     sets.py
-    target.py
     tests.py
-    scf.py
     tuples.py
 )
 

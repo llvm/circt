@@ -132,7 +132,8 @@ def frontend_codegen(args: argparse.Namespace) -> ir.Module:
     module = ir.Module.create()
     with ir.InsertionPoint(module.body):
       for _, obj in inspect.getmembers(file):
-        if isinstance(obj, pyrtg.core.CodeGenRoot):
+        if isinstance(obj,
+                      pyrtg.core.CodeGenRoot) and not obj._already_generated:
           obj._codegen()
     return module
 

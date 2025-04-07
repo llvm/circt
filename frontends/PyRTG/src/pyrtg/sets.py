@@ -123,7 +123,8 @@ class Set(Value):
   def get_type(self) -> ir.Type:
     return self._value.type
 
-  def type(*args: ir.Type) -> ir.Type:
+  @staticmethod
+  def ty(*args: ir.Type) -> ir.Type:
     """
     Returns the set type for the given element type.
     """

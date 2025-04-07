@@ -8,7 +8,7 @@ from .rtg import rtg
 from .rtgtest import rtgtest
 from .core import Value
 from .base import ir
-from .support import _FromCirctValue
+from .support import _FromCirctValue, _collect_values_recursively
 from .sequences import Sequence
 
 import ctypes
@@ -73,14 +73,11 @@ class CPUCore(Value):
     # TODO: just adding all variables in the context is not particularly nice.
     # Maybe we can analyze the Python AST and only add the variables actually
     # used in the nested block in the future.
-    arg_names = [
-        varname for varname, value in sys._getframe(1).f_locals.items()
-        if isinstance(value, Value)
-    ]
-    args = [
-        value for _, value in sys._getframe(1).f_locals.items()
-        if isinstance(value, Value)
-    ]
+    args = []
+    arg_names = []
+    visited = set()
+    for varname, obj in sys._getframe(1).f_locals.items():
+      _collect_values_recursively(obj, varname, args, arg_names, visited)
 
     curr = ir.InsertionPoint.current.block.owner.operation
     while curr.name != 'builtin.module':
@@ -100,12 +97,20 @@ class CPUCore(Value):
     rtg.OnContextOp(self, seq)
 
     s = inspect.stack()[1][0]
-    _context_stack.get().append((block, dict(s.f_locals)))
+    _context_stack.get().append((block, dict(s.f_locals), arg_names, args))
 
     ir.InsertionPoint(block).__enter__()
 
-    s.f_locals.update(
-        dict(zip(arg_names, [_FromCirctValue(arg) for arg in block.arguments])))
+    for path, arg in zip(arg_names, block.arguments):
+      if '.' in path:
+        parts = path.split('.')
+        obj = s.f_locals[parts[0]]
+        for part in parts[1:-1]:
+          obj = getattr(obj, part)
+        setattr(obj, parts[-1], _FromCirctValue(arg))
+      else:
+        s.f_locals[path] = _FromCirctValue(arg)
+
     ctypes.pythonapi.PyFrame_LocalsToFast(ctypes.py_object(s), ctypes.c_int(1))
 
     return self
@@ -115,31 +120,25 @@ class CPUCore(Value):
       return
 
     s = inspect.stack()[1][0]
-    block, scope = _context_stack.get().pop()
-    new_lcls: Dict[str, Value] = {}
-    lcls_to_del: Set[str] = set()
-    for (varname, value) in s.f_locals.items():
-      # Only operate on Values.
-      if not isinstance(value, Value):
-        continue
+    block, scope, arg_names, args = _context_stack.get().pop()
 
-      # If the value was in the original scope and it hasn't changed, don't
-      # touch it.
-      if varname in scope and scope[varname] is value:
-        continue
-
-      if varname in scope:
-        new_lcls[varname] = scope[varname]
+    for path, arg in zip(arg_names, args):
+      if '.' in path:
+        parts = path.split('.')
+        base_name = parts[0]
+        obj = s.f_locals[base_name]
+        for part in parts[1:-1]:
+          obj = getattr(obj, part)
+        setattr(obj, parts[-1], arg)
       else:
-        lcls_to_del.add(varname)
+        s.f_locals[path] = arg
 
     ir.InsertionPoint(block).__exit__(exc_type, exc_value, exc_traceback)
 
-    for varname in lcls_to_del:
-      s.f_locals[varname] = None
+    for (varname, _) in s.f_locals.items():
+      if varname not in scope or scope[varname] is None:
+        s.f_locals[varname] = None
 
-    # Restore existing locals to their original values.
-    s.f_locals.update(new_lcls)
     ctypes.pythonapi.PyFrame_LocalsToFast(ctypes.py_object(s), ctypes.c_int(1))
 
   def _get_ssa_value(self) -> ir.Value:
@@ -150,5 +149,6 @@ class CPUCore(Value):
   def get_type(self) -> ir.Type:
     return rtgtest.CPUType.get()
 
-  def type(*args) -> ir.Type:
+  @staticmethod
+  def ty(*args) -> ir.Type:
     return rtgtest.CPUType.get()

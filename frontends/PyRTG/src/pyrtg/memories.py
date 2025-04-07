@@ -43,7 +43,8 @@ class MemoryBlock(Value):
   def get_type(self) -> ir.Type:
     return self._value.type
 
-  def type(address_width: int) -> ir.Type:
+  @staticmethod
+  def ty(address_width: int) -> ir.Type:
     return rtg.MemoryBlockType.get(address_width)
 
 
@@ -93,5 +94,6 @@ class Memory(Value):
   def get_type(self) -> ir.Type:
     return self._value.type
 
-  def type(address_width: int) -> ir.Type:
+  @staticmethod
+  def ty(address_width: int) -> ir.Type:
     return rtg.MemoryType.get(address_width)
