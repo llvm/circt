@@ -571,15 +571,10 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
 
     # Force Slang to be built as a static library to avoid messing around with
     # RPATHs and installing a slang dylib alongside CIRCT. The static library
-    # will embed Slang into ImportVerilog.
+    # will embed Slang into ImportVerilog and circt-verilog-lsp-server.
     set(ORIGINAL_CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
     set(ORIGINAL_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
 
-    if (MSVC)
-      set(CMAKE_CXX_FLAGS "/EHsc")
-    else ()
-      set(CMAKE_CXX_FLAGS "")
-    endif ()
     set(BUILD_SHARED_LIBS OFF)
     set(SLANG_USE_MIMALLOC OFF)
     FetchContent_MakeAvailable(slang)
