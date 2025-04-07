@@ -82,12 +82,12 @@ class Integer(Value):
 
     return self._value
 
-  def type(*args: ir.Type) -> ir.Type:
+  @staticmethod
+  def ty() -> ir.Type:
     """
     Returns the index type.
     """
 
-    assert len(args) == 0, "Integer type does not take type arguments"
     return ir.IndexType.get()
 
 
@@ -114,10 +114,10 @@ class Bool(Value):
 
     return self._value
 
-  def type(*args: ir.Type) -> ir.Type:
+  @staticmethod
+  def ty() -> ir.Type:
     """
     Returns the 'i1' type representing a boolean.
     """
 
-    assert len(args) == 0, "Bool type does not take type arguments"
     return ir.IntegerType.get_signless(1)

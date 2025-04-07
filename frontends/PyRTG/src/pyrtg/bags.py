@@ -143,7 +143,8 @@ class Bag(Value):
   def get_type(self) -> ir.Type:
     return self._value.type
 
-  def type(*args: ir.Type) -> ir.Type:
+  @staticmethod
+  def ty(*args: ir.Type) -> ir.Type:
     """
     Returns the bag type for the given element type.
     """

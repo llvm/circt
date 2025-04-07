@@ -31,7 +31,8 @@ class Immediate(Value):
   def get_type(self) -> ir.Type:
     return rtg.ImmediateType.get(self._width)
 
-  def type(width: int) -> ir.Type:
+  @staticmethod
+  def ty(width: int) -> ir.Type:
     return rtg.ImmediateType.get(width)
 
 
@@ -188,5 +189,6 @@ class IntegerRegister(Value):
   def get_type(self) -> ir.Type:
     return rtgtest.IntegerRegisterType.get()
 
-  def type(*args) -> ir.Type:
+  @staticmethod
+  def ty(*args) -> ir.Type:
     return rtgtest.IntegerRegisterType.get()
