@@ -15,6 +15,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/AffineExpr.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Visitors.h"
 #include "mlir/Pass/PassManager.h"
@@ -72,6 +73,11 @@ public:
     if (!factorAttr)
       return rewriter.notifyMatchFailure(affineParallelOp,
                                          "Missing 'unparallelize.factor'");
+
+    SmallVector<scf::IndexSwitchOp> indexSwitchOps;
+    affineParallelOp->walk([&](scf::IndexSwitchOp indexSwitchOp) {
+      indexSwitchOps.push_back(indexSwitchOp);
+    });
 
     int64_t factor = factorAttr.getInt();
 
@@ -132,6 +138,42 @@ public:
     rewriter.setInsertionPointToEnd(destBlock);
     rewriter.create<affine::AffineYieldOp>(loc);
 
+    for (auto indexSwitchOp : indexSwitchOps) {
+      if (failed(simplifyIndexSwitch(outerLoop, innerParallel, indexSwitchOp,
+                                     factor)))
+        return rewriter.notifyMatchFailure(
+            indexSwitchOp, "Failed to simplify the index switch operation");
+    }
+
+    return success();
+  }
+
+private:
+  // Simplifies `indexSwitchOp` if its argument only depends on
+  // `affineParallelOp`'s induction variable.
+  LogicalResult simplifyIndexSwitch(affine::AffineForOp affineForOp,
+                                    affine::AffineParallelOp affineParallelOp,
+                                    scf::IndexSwitchOp indexSwitchOp,
+                                    int64_t factor) const {
+    auto switchArg = indexSwitchOp.getArg();
+    if (auto affineApplyOp =
+            dyn_cast<affine::AffineApplyOp>(switchArg.getDefiningOp())) {
+      if (affineApplyOp->getNumOperands() != 1 ||
+          affineApplyOp->getNumResults() != 1)
+        return success();
+
+      auto affineMap = affineApplyOp.getAffineMap();
+      auto binExpr = dyn_cast<AffineBinaryOpExpr>(affineMap.getResult(0));
+      if (!binExpr || binExpr.getKind() != AffineExprKind::Mod)
+        return success();
+
+      auto rhs = binExpr.getRHS();
+      auto constRhs = dyn_cast<AffineConstantExpr>(rhs);
+      if (!constRhs || factor != constRhs.getValue())
+        return success();
+
+      indexSwitchOp.setOperand(affineParallelOp.getIVs().front());
+    }
     return success();
   }
 };
