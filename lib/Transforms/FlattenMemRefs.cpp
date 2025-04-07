@@ -442,10 +442,9 @@ public:
 
     RewritePatternSet patterns(ctx);
     SetVector<StringRef> rewrittenCallees;
-    patterns.add<LoadOpConversion, StoreOpConversion, 
-                 AllocOpConversion, AllocaOpConversion,
-                 GlobalOpConversion, GetGlobalOpConversion, ReshapeOpConversion,
-                 OperandConversionPattern<func::ReturnOp>,
+    patterns.add<LoadOpConversion, StoreOpConversion, AllocOpConversion,
+                 AllocaOpConversion, GlobalOpConversion, GetGlobalOpConversion,
+                 ReshapeOpConversion, OperandConversionPattern<func::ReturnOp>,
                  OperandConversionPattern<memref::DeallocOp>,
                  CondBranchOpConversion,
                  OperandConversionPattern<memref::DeallocOp>,
