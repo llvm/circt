@@ -1227,6 +1227,8 @@ bool Deseq::matchDrive(DriveInfo &drive) {
   // clock.
   if (resetInfos.size() == 2 && clockInfos.empty()) {
     // Guess a sensible clock. Prefer posedge clocks and zero-valued resets.
+    // Prefer the first trigger in the wait op's observed value list as the
+    // clock.
     unsigned clockIdx = 0;
     if (resetInfos[0].activeHigh && !resetInfos[1].activeHigh)
       clockIdx = 0;
@@ -1235,6 +1237,10 @@ bool Deseq::matchDrive(DriveInfo &drive) {
     else if (matchPattern(resetInfos[1].value, m_Zero()))
       clockIdx = 0;
     else if (matchPattern(resetInfos[0].value, m_Zero()))
+      clockIdx = 1;
+    else if (resetInfos[0].reset == triggers[0])
+      clockIdx = 0;
+    else if (resetInfos[1].reset == triggers[0])
       clockIdx = 1;
 
     // Move the clock from `resetInfos` over into the `clockInfos` list.
