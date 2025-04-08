@@ -91,6 +91,7 @@ def FinalOp : LLHDOp<"final", [
 def WaitOp : LLHDOp<"wait", [
   AttrSizedOperandSegments,
   HasParent<"ProcessOp">,
+  Pure,
   Terminator,
 ]> {
   let summary = "Suspend execution of a process";
@@ -131,6 +132,7 @@ def WaitOp : LLHDOp<"wait", [
 
 def HaltOp : LLHDOp<"halt", [
   ParentOneOf<["ProcessOp", "FinalOp"]>,
+  Pure,
   Terminator,
 ]> {
   let summary = "Terminate execution of a process";
