@@ -410,9 +410,9 @@ struct RvalueExprVisitor {
     SmallVector<Value> operands;
     for (auto *operand : expr.operands()) {
       auto value = context.convertRvalueExpression(*operand);
-      if (!value)
-        continue;
       value = context.convertToSimpleBitVector(value);
+      if (!value)
+        return {};
       operands.push_back(value);
     }
     return builder.create<moore::ConcatOp>(loc, operands);
@@ -872,12 +872,9 @@ struct RvalueExprVisitor {
         value = context.convertRvalueExpression(*stream.operand);
       }
 
+      value = context.convertToSimpleBitVector(value);
       if (!value)
         return {};
-      value = context.convertToSimpleBitVector(value);
-      if (!value) {
-        return {};
-      }
       operands.push_back(value);
     }
     Value value;
@@ -974,7 +971,7 @@ struct LvalueExprVisitor {
     for (auto *operand : expr.operands()) {
       auto value = context.convertLvalueExpression(*operand);
       if (!value)
-        continue;
+        return {};
       operands.push_back(value);
     }
     return builder.create<moore::ConcatRefOp>(loc, operands);
