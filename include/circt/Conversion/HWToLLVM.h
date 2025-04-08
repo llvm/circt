@@ -50,7 +50,8 @@ void populateHWToLLVMConversionPatterns(
     mlir::LLVMTypeConverter &converter, RewritePatternSet &patterns,
     Namespace &globals,
     DenseMap<std::pair<Type, ArrayAttr>, mlir::LLVM::GlobalOp>
-        &constAggregateGlobalsMap);
+        &constAggregateGlobalsMap,
+    StringRef arrayGetOOBSymAttr);
 
 /// Create an HW to LLVM conversion pass.
 std::unique_ptr<OperationPass<ModuleOp>> createConvertHWToLLVMPass();
