@@ -13,7 +13,6 @@
           "tpe": {
             "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
             "ref": {
-              "circuit": "Top",
               "module": "DUT",
               "path": [],
               "ref": "signed",

@@ -14,7 +14,6 @@
           "tpe": {
             "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
             "ref": {
-              "circuit": "Top",
               "module": "DUT",
               "path": [],
               "ref": "w",
@@ -39,7 +38,6 @@
               {
                 "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
                 "ref": {
-                  "circuit": "Top",
                   "module": "DUT",
                   "path": [],
                   "ref": "w",
@@ -61,7 +59,6 @@
               {
                 "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
                 "ref": {
-                  "circuit": "Top",
                   "module": "DUT",
                   "path": [],
                   "ref": "w",
@@ -95,7 +92,6 @@
                   {
                     "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
                     "ref": {
-                      "circuit": "Top",
                       "module": "DUT",
                       "path": [],
                       "ref": "w",
@@ -121,7 +117,6 @@
                   {
                     "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
                     "ref": {
-                      "circuit": "Top",
                       "module": "DUT",
                       "path": [],
                       "ref": "w",
@@ -147,7 +142,6 @@
                   {
                     "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
                     "ref": {
-                      "circuit": "Top",
                       "module": "DUT",
                       "path": [],
                       "ref": "w",
@@ -178,7 +172,6 @@
                   {
                     "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
                     "ref": {
-                      "circuit": "Top",
                       "module": "DUT",
                       "path": [],
                       "ref": "w",
@@ -204,7 +197,6 @@
                   {
                     "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
                     "ref": {
-                      "circuit": "Top",
                       "module": "DUT",
                       "path": [],
                       "ref": "w",
@@ -230,7 +222,6 @@
                   {
                     "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
                     "ref": {
-                      "circuit": "Top",
                       "module": "DUT",
                       "path": [],
                       "ref": "w",
@@ -273,7 +264,6 @@
                     "tpe": {
                       "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
                       "ref": {
-                        "circuit": "Top",
                         "module": "DUT",
                         "path": [],
                         "ref": "w",
@@ -302,7 +292,6 @@
                     "tpe": {
                       "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
                       "ref": {
-                        "circuit": "Top",
                         "module": "DUT",
                         "path": [],
                         "ref": "w",
@@ -337,7 +326,6 @@
                     "tpe": {
                       "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
                       "ref": {
-                        "circuit": "Top",
                         "module": "DUT",
                         "path": [],
                         "ref": "w",
@@ -366,7 +354,6 @@
                     "tpe": {
                       "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
                       "ref": {
-                        "circuit": "Top",
                         "module": "DUT",
                         "path": [],
                         "ref": "w",
@@ -413,7 +400,6 @@
                       "tpe": {
                         "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
                         "ref": {
-                          "circuit": "Top",
                           "module": "DUT",
                           "path": [],
                           "ref": "w",
@@ -442,7 +428,6 @@
                       "tpe": {
                         "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
                         "ref": {
-                          "circuit": "Top",
                           "module": "DUT",
                           "path": [],
                           "ref": "w",
@@ -478,7 +463,6 @@
           "tpe": {
             "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
             "ref": {
-              "circuit": "Top",
               "module": "Submodule",
               "path": [],
               "ref": "w",
@@ -503,7 +487,6 @@
               {
                 "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
                 "ref": {
-                  "circuit": "Top",
                   "module": "Submodule",
                   "path": [],
                   "ref": "w",
@@ -525,7 +508,6 @@
               {
                 "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
                 "ref": {
-                  "circuit": "Top",
                   "module": "Submodule",
                   "path": [],
                   "ref": "w",
@@ -562,7 +544,6 @@
                     "tpe": {
                       "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
                       "ref": {
-                        "circuit": "Top",
                         "module": "Submodule",
                         "path": [],
                         "ref": "w",
@@ -591,7 +572,6 @@
                     "tpe": {
                       "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
                       "ref": {
-                        "circuit": "Top",
                         "module": "Submodule",
                         "path": [],
                         "ref": "w",
@@ -626,7 +606,6 @@
                     "tpe": {
                       "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
                       "ref": {
-                        "circuit": "Top",
                         "module": "Submodule",
                         "path": [],
                         "ref": "w",
@@ -655,7 +634,6 @@
                     "tpe": {
                       "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
                       "ref": {
-                        "circuit": "Top",
                         "module": "Submodule",
                         "path": [],
                         "ref": "w",
@@ -690,7 +668,6 @@
           "tpe": {
             "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
             "ref": {
-              "circuit": "Top",
               "module": "ExtModuleWithPort",
               "path": [],
               "ref": "source",
