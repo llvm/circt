@@ -18,6 +18,7 @@
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/Utils/ReshapeOpsUtils.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -397,26 +398,26 @@ static void populateFlattenMemRefsLegality(ConversionTarget &target) {
 }
 
 // Materializes a multidimensional memory to unidimensional memory by using a
-// memref.subview operation.
+// memref.collapse_shape operation.
 // TODO: This is also possible for dynamically shaped memories.
-static Value materializeSubViewFlattening(OpBuilder &builder, MemRefType type,
-                                          ValueRange inputs, Location loc) {
+static Value materializeCollapseShapeFlattening(OpBuilder &builder,
+                                                MemRefType type,
+                                                ValueRange inputs,
+                                                Location loc) {
   assert(type.hasStaticShape() &&
          "Can only subview flatten memref's with static shape (for now...).");
   MemRefType sourceType = cast<MemRefType>(inputs[0].getType());
   int64_t memSize = sourceType.getNumElements();
-  unsigned dims = sourceType.getShape().size();
+  ArrayRef<int64_t> sourceShape = sourceType.getShape();
+  ArrayRef<int64_t> targetShape = ArrayRef<int64_t>(memSize);
 
-  // Build offset, sizes and strides
-  SmallVector<OpFoldResult> sizes(dims, builder.getIndexAttr(0));
-  SmallVector<OpFoldResult> offsets(dims, builder.getIndexAttr(1));
-  offsets[offsets.size() - 1] = builder.getIndexAttr(memSize);
-  SmallVector<OpFoldResult> strides(dims, builder.getIndexAttr(1));
+  // Build ReassociationIndices to collapse completely to 1D MemRef.
+  auto indices = getReassociationIndicesForCollapse(sourceShape, targetShape);
+  assert(indices.has_value() && "expected a valid collapse");
 
   // Generate the appropriate return type:
-  MemRefType outType = MemRefType::get({memSize}, type.getElementType());
-  return builder.create<memref::SubViewOp>(loc, outType, inputs[0], sizes,
-                                           offsets, strides);
+  return builder.create<memref::CollapseShapeOp>(loc, inputs[0],
+                                                 indices.value());
 }
 
 static void populateTypeConversionPatterns(TypeConverter &typeConverter) {
@@ -489,7 +490,7 @@ public:
 
     // Add a target materializer to handle memory flattening through
     // memref.subview operations.
-    typeConverter.addTargetMaterialization(materializeSubViewFlattening);
+    typeConverter.addTargetMaterialization(materializeCollapseShapeFlattening);
 
     if (applyPartialConversion(getOperation(), target, std::move(patterns))
             .failed()) {
