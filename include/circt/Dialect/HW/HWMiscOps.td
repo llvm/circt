@@ -19,11 +19,13 @@ include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/Interfaces/InferIntRangeInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def ConstantOp
  : HWOp<"constant", [Pure, ConstantLike, FirstAttrDerivedResultType,
-         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+         DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
   let summary = "Produce a constant value";
   let description = [{
     The constant operation produces a constant value of standard integer type

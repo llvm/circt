@@ -15,6 +15,7 @@
 //===----------------------------------------------------------------------===//
 
 include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/Interfaces/InferIntRangeInterface.td"
 include "mlir/IR/EnumAttr.td"
 
 // Base class for binary operators.
@@ -60,7 +61,7 @@ class UTVariadicOp<string mnemonic, list<Trait> traits = []> :
 }
 
 // Arithmetic and Logical Operations.
-def AddOp : UTVariadicOp<"add", [Commutative]>;
+def AddOp : UTVariadicOp<"add", [Commutative, DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]>;
 def MulOp : UTVariadicOp<"mul", [Commutative]>;
 let hasFolder = true in {
   def DivUOp : UTBinOp<"divu">;
@@ -203,7 +204,7 @@ def ExtractOp : CombOp<"extract", [Pure]> {
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
-def ConcatOp : CombOp<"concat", [InferTypeOpInterface, Pure]> {
+def ConcatOp : CombOp<"concat", [InferTypeOpInterface, Pure, DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
   let summary = "Concatenate a variadic list of operands together.";
   let description = [{
     See the comb rationale document for details on operand ordering.
