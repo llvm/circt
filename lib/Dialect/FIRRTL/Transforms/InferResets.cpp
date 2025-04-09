@@ -1028,12 +1028,10 @@ LogicalResult InferResetsPass::inferAndUpdateResets() {
     llvm::dbgs() << "\n";
     debugHeader("Infer reset types") << "\n\n";
   });
-  for (auto it = resetClasses.begin(), end = resetClasses.end(); it != end;
-       ++it) {
+  for (const auto &it : resetClasses) {
     if (!it->isLeader())
       continue;
-    ResetNetwork net = llvm::make_range(resetClasses.member_begin(it),
-                                        resetClasses.member_end());
+    ResetNetwork net = resetClasses.members(*it);
 
     // Infer whether this should be a sync or async reset.
     auto kind = inferReset(net);

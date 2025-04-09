@@ -613,14 +613,12 @@ public:
         llvm::dbgs() << "\n node:" << getName(drivenBy[node.first].first)
                      << "=> probe:" << getName(drivenBy[node.second].first);
       }
-      for (auto i = rwProbeClasses.begin(), e = rwProbeClasses.end(); i != e;
-           ++i) { // Iterate over all of the equivalence sets.
+      for (const auto &i :
+           rwProbeClasses) { // Iterate over all of the equivalence sets.
         if (!i->isLeader())
           continue; // Ignore non-leader sets.
         // Print members in this set.
-        llvm::interleave(llvm::make_range(rwProbeClasses.member_begin(i),
-                                          rwProbeClasses.member_end()),
-                         llvm::dbgs(), "\n");
+        llvm::interleave(rwProbeClasses.members(*i), llvm::dbgs(), "\n");
         llvm::dbgs() << "\n dataflow at leader::" << i->getData() << "\n =>"
                      << rwProbeRefersTo[i->getData()];
         llvm::dbgs() << "\n Done\n"; // Finish set.
@@ -653,10 +651,7 @@ public:
             rwProbeClasses.getLeaderValue(getOrAddNode(defOp.getDataRef()));
         // For all the probes, that are in the same eqv class, i.e., refer to
         // the same value.
-        for (auto probe :
-             llvm::make_range(rwProbeClasses.member_begin(
-                                  rwProbeClasses.findValue(rwProbeNode)),
-                              rwProbeClasses.member_end())) {
+        for (auto probe : rwProbeClasses.members(rwProbeNode)) {
           auto probeVal = drivenBy[probe].first;
           // If the probe is a port, then record the path from the probe to the
           // input port.
