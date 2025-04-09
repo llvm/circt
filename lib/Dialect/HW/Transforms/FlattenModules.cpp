@@ -12,6 +12,7 @@
 #include "circt/Support/BackedgeBuilder.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/Inliner.h"
 #include "mlir/Transforms/InliningUtils.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/Debug.h"
@@ -28,6 +29,7 @@ namespace hw {
 using namespace circt;
 using namespace hw;
 using namespace igraph;
+using mlir::InlinerConfig;
 using mlir::InlinerInterface;
 
 namespace {
@@ -97,6 +99,8 @@ void FlattenModulesPass::runOnOperation() {
   auto &instanceGraph = getAnalysis<hw::InstanceGraph>();
   DenseSet<Operation *> handled;
 
+  InlinerConfig config;
+
   // Iterate over all instances in the instance graph. This ensures we visit
   // every module, even private top modules (private and never instantiated).
   for (auto *startNode : instanceGraph) {
@@ -130,7 +134,8 @@ void FlattenModulesPass::runOnOperation() {
         bool isLastModuleUse = --numUsesLeft == 0;
 
         PrefixingInliner inliner(&getContext(), inst.getInstanceName());
-        if (failed(mlir::inlineRegion(inliner, &module.getBody(), inst,
+        if (failed(mlir::inlineRegion(inliner, config.getCloneCallback(),
+                                      &module.getBody(), inst,
                                       inst.getOperands(), inst.getResults(),
                                       std::nullopt, !isLastModuleUse))) {
           inst.emitError("failed to inline '")
