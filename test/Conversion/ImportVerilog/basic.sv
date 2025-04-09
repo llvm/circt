@@ -859,6 +859,14 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.concat [[TMP1]] : (!moore.i1) -> i1
     // CHECK: moore.replicate [[TMP2]] : i1 -> i32
     a = {32{1'b0}};
+    // CHECK: [[TMP1:%.+]] = moore.read %a : <i32>
+    // CHECK: [[TMP2:%.+]] = moore.read %c : <i32>
+    // CHECK: moore.concat [[TMP1]], [[TMP2]] : (!moore.i32, !moore.i32) -> i64
+    a = {a, {0{b}}, c};
+    // CHECK: [[TMP1:%.+]] = moore.read %a : <i32>
+    // CHECK: [[TMP2:%.+]] = moore.read %c : <i32>
+    // CHECK: moore.concat [[TMP1]], [[TMP2]] : (!moore.i32, !moore.i32) -> i64
+    a = {a, {0{b}}, {0{a, {0{b}}, c}}, c};
     // CHECK: [[TMP1:%.+]] = moore.read %vec_1 : <l32>
     // CHECK: moore.extract [[TMP1]] from 1 : l32 -> l3
     y = vec_1[3:1];

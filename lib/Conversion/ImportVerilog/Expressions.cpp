@@ -409,6 +409,11 @@ struct RvalueExprVisitor {
   Value visit(const slang::ast::ConcatenationExpression &expr) {
     SmallVector<Value> operands;
     for (auto *operand : expr.operands()) {
+      // Handle empty replications like `{0{...}}` which may occur within
+      // concatenations. Slang assigns them a `void` type which we can check for
+      // here.
+      if (operand->type->isVoid())
+        continue;
       auto value = context.convertRvalueExpression(*operand);
       value = context.convertToSimpleBitVector(value);
       if (!value)
@@ -421,9 +426,6 @@ struct RvalueExprVisitor {
   // Handle replications.
   Value visit(const slang::ast::ReplicationExpression &expr) {
     auto type = context.convertType(*expr.type);
-    if (isa<moore::VoidType>(type))
-      return {};
-
     auto value = context.convertRvalueExpression(expr.concat());
     if (!value)
       return {};
