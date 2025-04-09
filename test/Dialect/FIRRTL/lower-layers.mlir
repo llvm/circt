@@ -322,6 +322,10 @@ firrtl.circuit "Test" {
     }
   }
 
+  //===--------------------------------------------------------------------===//
+  // Cloning of special operations
+  //===--------------------------------------------------------------------===//
+
   // An FString operation is outside the layer block.  This needs to be cloned.
   //
   // CHECK: firrtl.module private @[[A:.+]]() {
@@ -335,6 +339,21 @@ firrtl.circuit "Test" {
        %clock = firrtl.wire : !firrtl.clock
       %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
       firrtl.printf %clock, %c1_ui1, "{{}}" (%time) : !firrtl.clock, !firrtl.uint<1>, !firrtl.fstring
+    }
+  }
+
+  // XMR Ref ops used by force_initial are cloned.
+  //
+  // CHECK:      firrtl.module private @XmrRef_A()
+  // CHECK:        %0 = firrtl.xmr.ref @RefXmrRef_path : !firrtl.rwprobe<uint<1>, @A>
+  // CHECK-NEXT:   firrtl.ref.force_initial %c1_ui1, %0, %c1_ui1
+  hw.hierpath private @XmrRef_path [@XmrRef::@a]
+  firrtl.module @XmrRef() {
+    %0 = firrtl.xmr.ref @RefXmrRef_path : !firrtl.rwprobe<uint<1>, @A>
+    firrtl.layerblock @A {
+      %a = firrtl.wire sym @a : !firrtl.uint<1>
+      %c1_ui1 = firrtl.constant 1 : !firrtl.const.uint<1>
+      firrtl.ref.force_initial %c1_ui1, %0, %c1_ui1 : !firrtl.const.uint<1>, !firrtl.rwprobe<uint<1>, @A>, !firrtl.const.uint<1>
     }
   }
 

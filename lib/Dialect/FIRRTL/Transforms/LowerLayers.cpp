@@ -622,6 +622,15 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
           continue;
         }
 
+        // If the operand is an XMR ref, then we _have_ to clone it.
+        auto *definingOp = operand.getDefiningOp();
+        if (isa_and_nonnull<XMRRefOp>(definingOp)) {
+          OpBuilder::InsertionGuard guard(builder);
+          builder.setInsertionPoint(op);
+          op->setOperand(i, builder.clone(*definingOp)->getResult(0));
+          continue;
+        }
+
         // Create a port to capture the operand.
         createInputPort(operand, op->getLoc());
       }
