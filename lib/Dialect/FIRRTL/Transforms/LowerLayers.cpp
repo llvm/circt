@@ -13,6 +13,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HierPathCache.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/Utils.h"
@@ -51,6 +52,18 @@ struct ConnectInfo {
 /// The delimiters that should be used for a given generated name.  These vary
 /// for modules and files, as well as by convention.
 enum class Delimiter { BindModule = '_', BindFile = '-', InlineMacro = '$' };
+
+/// This struct contains pre-allocated "safe" names that parallel regions can
+/// use to create names in the global namespace.  This is allocated per-layer
+/// block.
+struct LayerBlockGlobals {
+
+  /// If the layer needs to create a module, use this name.
+  StringRef moduleName;
+
+  /// If the layer needs to create a hw::HierPathOp, use this name.
+  StringRef hierPathName;
+};
 
 } // namespace
 
@@ -91,6 +104,16 @@ static void appendName(SymbolRefAttr name, SmallString<32> &output,
 static SmallString<32> moduleNameForLayer(StringRef moduleName,
                                           SymbolRefAttr layerName) {
   SmallString<32> result;
+  appendName(moduleName, result, /*toLower=*/false,
+             /*delimiter=*/Delimiter::BindModule);
+  appendName(layerName, result, /*toLower=*/false,
+             /*delimiter=*/Delimiter::BindModule);
+  return result;
+}
+
+static SmallString<32> hierPathNameForLayer(StringRef moduleName,
+                                            SymbolRefAttr layerName) {
+  SmallString<32> result("__lowerLayers_path");
   appendName(moduleName, result, /*toLower=*/false,
              /*delimiter=*/Delimiter::BindModule);
   appendName(layerName, result, /*toLower=*/false,
@@ -158,8 +181,7 @@ class LowerLayersPass
 
   /// Safely build a new module with a given namehint.  This handles geting a
   /// lock to modify the top-level circuit.
-  FModuleOp buildNewModule(OpBuilder &builder, LayerBlockOp layerBlock,
-                           SmallVectorImpl<PortInfo> &ports);
+  FModuleOp buildNewModule(OpBuilder &builder, LayerBlockOp layerBlock);
 
   /// Strip layer colors from the module's interface.
   FailureOr<InnerRefMap> runOnModuleLike(FModuleLike moduleLike);
@@ -173,10 +195,6 @@ class LowerLayersPass
 
   /// Update the value's type to remove any layers from any probe types.
   void removeLayersFromValue(Value value);
-
-  /// Remove any layers from the result of the cast. If the cast becomes a nop,
-  /// remove the cast itself from the IR.
-  void removeLayersFromRefCast(RefCastOp cast);
 
   /// Lower an inline layerblock to an ifdef block.
   void lowerInlineLayerBlock(LayerOp layer, LayerBlockOp layerBlock);
@@ -195,14 +213,18 @@ class LowerLayersPass
   /// Indicates exclusive access to modify the circuitNamespace and the circuit.
   llvm::sys::SmartMutex<true> *circuitMutex;
 
-  /// A map of layer blocks to module name that should be created for it.
-  DenseMap<LayerBlockOp, StringRef> moduleNames;
+  /// A map of layer blocks to "safe" global names which are fine to create in
+  /// the circuit namespace.
+  DenseMap<LayerBlockOp, LayerBlockGlobals> layerBlockGlobals;
 
   /// A map from inline layers to their macro names.
   DenseMap<LayerOp, FlatSymbolRefAttr> macroNames;
 
   /// A mapping of symbol name to layer operation.
   DenseMap<SymbolRefAttr, LayerOp> symbolToLayer;
+
+  /// Utility for creating hw::HierPathOp.
+  hw::HierPathCache *hierPathCache;
 };
 
 /// Multi-process safe function to build a module in the circuit and return it.
@@ -210,15 +232,14 @@ class LowerLayersPass
 /// generated if there are conflicts with the namehint in the circuit-level
 /// namespace.
 FModuleOp LowerLayersPass::buildNewModule(OpBuilder &builder,
-                                          LayerBlockOp layerBlock,
-                                          SmallVectorImpl<PortInfo> &ports) {
+                                          LayerBlockOp layerBlock) {
   auto location = layerBlock.getLoc();
-  auto namehint = moduleNames.lookup(layerBlock);
+  auto namehint = layerBlockGlobals.lookup(layerBlock).moduleName;
   llvm::sys::SmartScopedLock<true> instrumentationLock(*circuitMutex);
   FModuleOp newModule = builder.create<FModuleOp>(
       location, builder.getStringAttr(namehint),
-      ConventionAttr::get(builder.getContext(), Convention::Internal), ports,
-      ArrayAttr{});
+      ConventionAttr::get(builder.getContext(), Convention::Internal),
+      ArrayRef<PortInfo>{}, ArrayAttr{});
   if (auto dir = getOutputFile(layerBlock.getLayerNameAttr())) {
     assert(dir.isDirectory());
     newModule->setAttr("output_file", dir);
@@ -232,22 +253,6 @@ void LowerLayersPass::removeLayersFromValue(Value value) {
   if (!type || !type.getLayer())
     return;
   value.setType(type.removeLayer());
-}
-
-void LowerLayersPass::removeLayersFromRefCast(RefCastOp cast) {
-  auto result = cast.getResult();
-  auto oldType = result.getType();
-  if (oldType.getLayer()) {
-    auto input = cast.getInput();
-    auto srcType = input.getType();
-    auto newType = oldType.removeLayer();
-    if (newType == srcType) {
-      result.replaceAllUsesWith(input);
-      cast->erase();
-      return;
-    }
-    result.setType(newType);
-  }
 }
 
 void LowerLayersPass::removeLayersFromPorts(FModuleLike moduleLike) {
@@ -324,30 +329,166 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
   StringRef circuitName = circuitOp.getName();
   hw::InnerSymbolNamespace ns(moduleOp);
 
+  // A cache of nodes we've created for values which are captured, but cannot
+  // have a symbol attached to them.  This is done to avoid creating the same
+  // node multiple times.
+  DenseMap<Value, NodeOp> nodeCache;
+
+  // Get or create a node within this module.  This is used when we need to
+  // create an XMRDerefOp to an expression.
+  auto getOrCreateNodeOp = [&](Value operand, ImplicitLocOpBuilder &builder,
+                               StringRef nameHint) -> NodeOp {
+    auto it = nodeCache.find(operand);
+    if (it != nodeCache.end())
+      return it->getSecond();
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointAfter(operand.getDefiningOp());
+    return nodeCache
+        .insert({operand,
+                 builder.create<NodeOp>(operand.getLoc(), operand, nameHint)})
+        .first->getSecond();
+  };
+
+  // Determine the replacement for an operand within the current region.  Keep a
+  // densemap of replacements around to avoid creating the same hardware
+  // multiple times.
+  DenseMap<Value, Value> replacements;
+  auto getReplacement = [&](Operation *user, Value value) -> Value {
+    auto it = replacements.find(value);
+    if (it != replacements.end())
+      return it->getSecond();
+
+    ImplicitLocOpBuilder localBuilder(value.getLoc(), &getContext());
+    Value replacement;
+
+    auto layerBlockOp = user->getParentOfType<LayerBlockOp>();
+    localBuilder.setInsertionPointToStart(layerBlockOp.getBody());
+
+    // If the operand is "special", e.g., it has no XMR representation, then we
+    // need to clone it.
+    //
+    // TODO: Change this to recursively clone.  This will matter once FString
+    // operations have operands.
+    if (type_isa<FStringType>(value.getType())) {
+      localBuilder.setInsertionPoint(user);
+      replacement = localBuilder.clone(*value.getDefiningOp())->getResult(0);
+      replacements.insert({value, replacement});
+      return replacement;
+    }
+
+    // If the operand is an XMR ref, then we _have_ to clone it.
+    auto *definingOp = value.getDefiningOp();
+    if (isa_and_present<XMRRefOp>(definingOp)) {
+      replacement = localBuilder.clone(*definingOp)->getResult(0);
+      replacements.insert({value, replacement});
+      return replacement;
+    }
+
+    // Determine the replacement value for the captured operand.  There are
+    // three cases that can occur:
+    //
+    // 1. Capturing something zero-width.  Create a zero-width constant zero.
+    // 2. Capture an expression or instance port.  Drop a node and XMR deref
+    //    that.
+    // 3. Capture something that can handle an inner sym.  XMR deref that.
+    //
+    // Note: (3) can be either an operation or a _module_ port.
+    auto baseType = type_cast<FIRRTLBaseType>(value.getType());
+    if (baseType && baseType.getBitWidthOrSentinel() == 0) {
+      OpBuilder::InsertionGuard guard(localBuilder);
+      auto zeroUIntType = UIntType::get(localBuilder.getContext(), 0);
+      replacement = localBuilder.createOrFold<BitCastOp>(
+          value.getType(), localBuilder.create<ConstantOp>(
+                               zeroUIntType, getIntZerosAttr(zeroUIntType)));
+    } else {
+      auto *definingOp = value.getDefiningOp();
+      hw::InnerRefAttr innerRef;
+      if (definingOp) {
+        // TODO: Always create a node.  This is a trade-off between
+        // optimizations and dead code.  By adding the node, this allows the
+        // original path to be better optimized, but will leave dead code in the
+        // design.  If the node is not created, then the output is less
+        // optimized.  Err on the side of dead code.  This _should_ be able to
+        // be removed eventually [1].  A node should only be necessary for
+        // operations which cannot have a symbol attached to them, i.e.,
+        // expressions or instance ports.
+        //
+        // [1]: https://github.com/llvm/circt/issues/8426
+        definingOp = getOrCreateNodeOp(value, localBuilder, "_layer_probe");
+        innerRef = getInnerRefTo(
+            definingOp, [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
+      } else {
+        auto portIdx = cast<BlockArgument>(value).getArgNumber();
+        innerRef = getInnerRefTo(
+            cast<FModuleLike>(*moduleOp), portIdx,
+            [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
+      }
+
+      hw::HierPathOp hierPathOp;
+      {
+        // TODO: Move to before parallel region to avoid the lock.
+        auto insertPoint = OpBuilder::InsertPoint(moduleOp->getBlock(),
+                                                  Block::iterator(moduleOp));
+        llvm::sys::SmartScopedLock<true> circuitLock(*circuitMutex);
+        hierPathOp = hierPathCache->getOrCreatePath(
+            localBuilder.getArrayAttr({innerRef}), localBuilder.getLoc(),
+            insertPoint, layerBlockGlobals.lookup(layerBlockOp).hierPathName);
+        hierPathOp.setVisibility(SymbolTable::Visibility::Private);
+      }
+
+      replacement = localBuilder.create<XMRDerefOp>(
+          value.getType(), hierPathOp.getSymNameAttr());
+    }
+
+    replacements.insert({value, replacement});
+
+    return replacement;
+  };
+
   // A map of instance ops to modules that this pass creates.  This is used to
   // check if this was an instance that we created and to do fast module
   // dereferencing (avoiding a symbol table).
   DenseMap<InstanceOp, FModuleOp> createdInstances;
 
-  // Post-order traversal that expands a layer block into its parent. For each
-  // layer block found do the following:
+  // Check that the preconditions for this pass are met.  Reject any ops which
+  // must have been removed before this runs.
+  auto opPreconditionCheck = [](Operation *op) -> LogicalResult {
+    // LowerXMR op removal postconditions.
+    if (isa<RefCastOp, RefDefineOp, RefResolveOp, RefSendOp, RefSubOp,
+            RWProbeOp>(op))
+      return op->emitOpError()
+             << "cannot be handled by the lower-layers pass.  This should have "
+                "already been removed by the lower-xmr pass.";
+
+    return success();
+  };
+
+  // Post-order traversal that expands a layer block into its parent. Because of
+  // the pass precondition that this runs _after_ `LowerXMR`, not much has to
+  // happen here.  All of the following do happen, though:
   //
-  // 1. Create and connect one ref-type output port for each value defined in
-  //    this layer block that drives an instance marked lowerToBind and move
-  //    this instance outside the layer block.
-  // 2. Create one input port for each value captured by this layer block.
-  // 3. Create a new module for this layer block and move the (mutated) body of
-  //    this layer block to the new module.
-  // 4. Instantiate the new module outside the layer block and hook it up.
-  // 5. Erase the layer block.
+  // 1. Any layer coloring is stripped.
+  // 2. Layers with Inline convention are converted to SV ifdefs.
+  // 3. Layers with Bind convention are converted to new modules and then
+  //    instantiated at their original location.  Any captured values are either
+  //    moved, cloned, or converted to XMR deref ops.
+  // 4. Move instances created from earlier (3) conversions out of later (3)
+  //    conversions.  This is necessary to avoid a SystemVerilog-illegal
+  //    bind-under-bind.  (See Section 23.11 of 1800-2023.)
+  // 5. Keep track of special ops (ops with inner symbols or verbatims) which
+  //    need to have something updated because of the new instance hierarchy
+  //    being created.
+  //
+  // Remember, this is post-order, in-order.  Child layer blocks are visited
+  // before parents.  Any nested regions _within_ the layer block are also
+  // visited before the outer layer block.
   auto result = moduleOp.walk<mlir::WalkOrder::PostOrder>([&](Operation *op) {
+    if (failed(opPreconditionCheck(op)))
+      return WalkResult::interrupt();
+
     // Strip layer requirements from any op that might represent a probe.
     if (auto wire = dyn_cast<WireOp>(op)) {
       removeLayersFromValue(wire.getResult());
-      return WalkResult::advance();
-    }
-    if (auto sub = dyn_cast<RefSubOp>(op)) {
-      removeLayersFromValue(sub.getResult());
       return WalkResult::advance();
     }
     if (auto instance = dyn_cast<InstanceOp>(op)) {
@@ -356,15 +497,12 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         removeLayersFromValue(result);
       return WalkResult::advance();
     }
-    if (auto cast = dyn_cast<RefCastOp>(op)) {
-      removeLayersFromRefCast(cast);
-      return WalkResult::advance();
-    }
 
     auto layerBlock = dyn_cast<LayerBlockOp>(op);
     if (!layerBlock)
       return WalkResult::advance();
 
+    // After this point, we are dealing with a layer block.
     auto layer = symbolToLayer.lookup(layerBlock.getLayerName());
 
     if (layer.getConvention() == LayerConvention::Inline) {
@@ -372,116 +510,73 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       return WalkResult::advance();
     }
 
+    // After this point, we are dealing with a bind convention layer block.
     assert(layer.getConvention() == LayerConvention::Bind);
-    Block *body = layerBlock.getBody(0);
+
+    // Clear the replacements so that none are re-used across layer blocks.
+    replacements.clear();
     OpBuilder builder(moduleOp);
-
-    // Ports that need to be created for the module derived from this layer
-    // block.
-    SmallVector<PortInfo> ports;
-
-    // Connection that need to be made to the instance of the derived module.
-    SmallVector<ConnectInfo> connectValues;
-
-    // Create an input port for an operand that is captured from outside.
-    auto createInputPort = [&](Value operand, Location loc) {
-      const auto &[portName, _] = getFieldName(FieldRef(operand, 0), true);
-
-      // If the value is a ref, we must resolve the ref inside the parent,
-      // passing the input as a value instead of a ref. Inside the layer, we
-      // convert (ref.send) the value back into a ref.
-      auto type = operand.getType();
-      if (auto refType = dyn_cast<RefType>(type))
-        type = refType.getType();
-
-      ports.push_back({builder.getStringAttr(portName), type, Direction::In,
-                       /*symName=*/{},
-                       /*location=*/loc});
-      // Update the layer block's body with arguments as we will swap this body
-      // into the module when we create it.  If this is a ref type, then add a
-      // refsend to convert from the non-ref type input port.
-      Value replacement = body->addArgument(type, loc);
-      if (isa<RefType>(operand.getType())) {
-        OpBuilder::InsertionGuard guard(builder);
-        builder.setInsertionPointToStart(body);
-        replacement = builder.create<RefSendOp>(loc, replacement);
-      }
-      operand.replaceUsesWithIf(replacement, [&](OpOperand &use) {
-        auto *user = use.getOwner();
-        if (!layerBlock->isAncestor(user))
-          return false;
-        if (auto connectLike = dyn_cast<FConnectLike>(user)) {
-          if (use.getOperandNumber() == 0)
-            return false;
-        }
-        return true;
-      });
-
-      connectValues.push_back({operand, ConnectKind::NonRef});
-    };
-
-    // Set the location intelligently.  Use the location of the capture if this
-    // is a port created for forwarding from a parent layer block to a nested
-    // layer block.  Otherwise, use unknown.
-    auto getPortLoc = [&](Value port) -> Location {
-      Location loc = UnknownLoc::get(port.getContext());
-      if (auto *destOp = port.getDefiningOp())
-        if (auto instOp = dyn_cast<InstanceOp>(destOp)) {
-          auto modOpIt = createdInstances.find(instOp);
-          if (modOpIt != createdInstances.end()) {
-            auto portNum = cast<OpResult>(port).getResultNumber();
-            loc = modOpIt->getSecond().getPortLocation(portNum);
-          }
-        }
-      return loc;
-    };
-
-    // Create an output probe port port and adds a ref.define/ref.send to
-    // drive the port if this was not already capturing a ref type.
-    auto createOutputPort = [&](Value dest, Value src) {
-      auto loc = getPortLoc(dest);
-      auto portNum = ports.size();
-      const auto &[portName, _] = getFieldName(FieldRef(dest, 0), true);
-
-      RefType refType;
-      if (auto oldRef = dyn_cast<RefType>(dest.getType()))
-        refType = oldRef;
-      else
-        refType = RefType::get(
-            type_cast<FIRRTLBaseType>(dest.getType()).getPassiveType(),
-            /*forceable=*/false);
-
-      ports.push_back({builder.getStringAttr(portName), refType, Direction::Out,
-                       /*symName=*/{}, /*location=*/loc});
-      Value replacement = body->addArgument(refType, loc);
-      if (isa<RefType>(dest.getType())) {
-        dest.replaceUsesWithIf(replacement, [&](OpOperand &use) {
-          auto *user = use.getOwner();
-          if (!layerBlock->isAncestor(user))
-            return false;
-          if (auto connectLike = dyn_cast<FConnectLike>(user)) {
-            if (use.getOperandNumber() == 0)
-              return true;
-          }
-          return false;
-        });
-        connectValues.push_back({dest, ConnectKind::Ref});
-        return;
-      }
-      connectValues.push_back({dest, ConnectKind::NonRef});
-      OpBuilder::InsertionGuard guard(builder);
-      builder.setInsertionPointAfterValue(src);
-      builder.create<RefDefineOp>(
-          loc, body->getArgument(portNum),
-          builder.create<RefSendOp>(loc, src)->getResult(0));
-    };
-
     SmallVector<hw::InnerSymAttr> innerSyms;
-    SmallVector<RWProbeOp> rwprobes;
     SmallVector<sv::VerbatimOp> verbatims;
+    DenseSet<Operation *> spilledSubOps;
     auto layerBlockWalkResult = layerBlock.walk([&](Operation *op) {
+      // Error if pass preconditions are not met.
+      if (failed(opPreconditionCheck(op)))
+        return WalkResult::interrupt();
+
+      // Specialized handling of subfields, subindexes, and subaccesses which
+      // need to be spilled and nodes that referred to spilled nodes.  If these
+      // are kept in the module, then the XMR is going to be bidirectional.  Fix
+      // this for subfield and subindex by moving these ops outside the
+      // layerblock.  Try to fix this for subaccess and error if the move can't
+      // be made because the index is defined inside the layerblock.  (This case
+      // is exceedingly rare given that subaccesses are almost always unexepcted
+      // when this pass runs.)  Additionally, if any nodes are seen that are
+      // transparently referencing a spilled op, spill the node, too.  The node
+      // provides an anchor for an inner symbol (which subfield, subindex, and
+      // subaccess do not).
+      if (isa<SubfieldOp, SubindexOp>(op)) {
+        auto input = op->getOperand(0);
+        if (!firrtl::type_cast<FIRRTLBaseType>(input.getType()).isPassive() &&
+            !isAncestorOfValueOwner(layerBlock, input)) {
+          op->moveBefore(layerBlock);
+          spilledSubOps.insert(op);
+        }
+        return WalkResult::advance();
+      }
+      if (auto subOp = dyn_cast<SubaccessOp>(op)) {
+        auto input = subOp.getInput();
+        if (firrtl::type_cast<FIRRTLBaseType>(input.getType()).isPassive())
+          return WalkResult::advance();
+
+        if (!isAncestorOfValueOwner(layerBlock, input) &&
+            !isAncestorOfValueOwner(layerBlock, subOp.getIndex())) {
+          subOp->moveBefore(layerBlock);
+          spilledSubOps.insert(op);
+          return WalkResult::advance();
+        }
+        auto diag = op->emitOpError()
+                    << "has a non-passive operand and captures a value defined "
+                       "outside its enclosing bind-convention layerblock.  The "
+                       "'LowerLayers' pass cannot lower this as it would "
+                       "create an output port on the resulting module.";
+        diag.attachNote(layerBlock.getLoc())
+            << "the layerblock is defined here";
+        return WalkResult::interrupt();
+      }
+      if (auto nodeOp = dyn_cast<NodeOp>(op)) {
+        auto *definingOp = nodeOp.getInput().getDefiningOp();
+        if (definingOp &&
+            spilledSubOps.contains(nodeOp.getInput().getDefiningOp())) {
+          op->moveBefore(layerBlock);
+          return WalkResult::advance();
+        }
+      }
+
       // Record any operations inside the layer block which have inner symbols.
       // Theses may have symbol users which need to be updated.
+      //
+      // Note: this needs to _not_ index spilled NodeOps above.
       if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op))
         if (auto innerSym = symOp.getInnerSymAttr())
           innerSyms.push_back(innerSym);
@@ -511,119 +606,19 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         return WalkResult::advance();
       }
 
-      // Handle subfields, subindexes, and subaccesses which are indexing into
-      // non-passive values.  If these are kept in the module, then the module
-      // must create bi-directional ports.  This doesn't make sense as the
-      // FIRRTL spec states that no layerblock may write to values outside it.
-      // Fix this for subfield and subindex by moving these ops outside the
-      // layerblock.  Try to fix this for subaccess and error if the move can't
-      // be made because the index is defined inside the layerblock.  (This case
-      // is exceedingly rare given that subaccesses are almost always unexepcted
-      // when this pass runs.)
-      if (isa<SubfieldOp, SubindexOp>(op)) {
-        auto input = op->getOperand(0);
-        if (!firrtl::type_cast<FIRRTLBaseType>(input.getType()).isPassive() &&
-            !isAncestorOfValueOwner(layerBlock, input))
-          op->moveBefore(layerBlock);
-        return WalkResult::advance();
-      }
-
-      if (auto subOp = dyn_cast<SubaccessOp>(op)) {
-        auto input = subOp.getInput();
-        if (firrtl::type_cast<FIRRTLBaseType>(input.getType()).isPassive())
-          return WalkResult::advance();
-
-        if (!isAncestorOfValueOwner(layerBlock, input) &&
-            !isAncestorOfValueOwner(layerBlock, subOp.getIndex())) {
-          subOp->moveBefore(layerBlock);
-          return WalkResult::advance();
-        }
-        auto diag = op->emitOpError()
-                    << "has a non-passive operand and captures a value defined "
-                       "outside its enclosing bind-convention layerblock.  The "
-                       "'LowerLayers' pass cannot lower this as it would "
-                       "create an output port on the resulting module.";
-        diag.attachNote(layerBlock.getLoc())
-            << "the layerblock is defined here";
-        return WalkResult::interrupt();
-      }
-
-      if (auto rwprobe = dyn_cast<RWProbeOp>(op)) {
-        rwprobes.push_back(rwprobe);
-        return WalkResult::advance();
-      }
-
-      if (auto connect = dyn_cast<FConnectLike>(op)) {
-        auto src = connect.getSrc();
-        auto dst = connect.getDest();
-        auto srcInLayerBlock = isAncestorOfValueOwner(layerBlock, src);
-        auto dstInLayerBlock = isAncestorOfValueOwner(layerBlock, dst);
-        if (!srcInLayerBlock && !dstInLayerBlock) {
-          connect->moveBefore(layerBlock);
-          return WalkResult::advance();
-        }
-        // Create an input port.
-        if (!srcInLayerBlock) {
-          createInputPort(src, op->getLoc());
-          return WalkResult::advance();
-        }
-        // Create an output port.
-        if (!dstInLayerBlock) {
-          createOutputPort(dst, src);
-          if (!isa<RefType>(dst.getType()))
-            connect.erase();
-          return WalkResult::advance();
-        }
-        // Source and destination in layer block.  Nothing to do.
-        return WalkResult::advance();
-      }
-
-      // Pre-emptively de-squiggle connections that we are creating.  This will
-      // later be cleaned up by the de-squiggling pass.  However, there is no
-      // point in creating deeply squiggled connections if we don't have to.
-      //
-      // This pattern matches the following structure.  Move the ref.resolve
-      // outside the layer block.  The matchingconnect will be moved outside in
-      // the next loop iteration:
-      //     %0 = ...
-      //     %1 = ...
-      //     firrtl.layerblock {
-      //       %2 = ref.resolve %0
-      //       firrtl.matchingconnect %1, %2
-      //     }
-      if (auto refResolve = dyn_cast<RefResolveOp>(op))
-        if (refResolve.getResult().hasOneUse() &&
-            refResolve.getRef().getParentBlock() != body)
-          if (auto connect = dyn_cast<MatchingConnectOp>(
-                  *refResolve.getResult().getUsers().begin()))
-            if (connect.getDest().getParentBlock() != body) {
-              refResolve->moveBefore(layerBlock);
-              return WalkResult::advance();
-            }
-
-      // For any other ops, create input ports for any captured operands.
+      // Handle captures.  For any captured operands, convert them to a suitable
+      // replacement value.  The `getReplacement` function will automatically
+      // reuse values whenever possible.
       for (size_t i = 0, e = op->getNumOperands(); i != e; ++i) {
         auto operand = op->getOperand(i);
 
         // If the operand is in this layer block, do nothing.
+        //
+        // Note: This check is what avoids handling ConnectOp destinations.
         if (isAncestorOfValueOwner(layerBlock, operand))
           continue;
 
-        // If the operand is "special", e.g., it has no port representation,
-        // then we need to clone it.
-        //
-        // TODO: Change this to recursively clone.  This will matter once
-        // FString operations have operands.
-        if (type_isa<FStringType>(operand.getType())) {
-          OpBuilder::InsertionGuard guard(builder);
-          builder.setInsertionPoint(op);
-          op->setOperand(i,
-                         builder.clone(*operand.getDefiningOp())->getResult(0));
-          continue;
-        }
-
-        // Create a port to capture the operand.
-        createInputPort(operand, op->getLoc());
+        op->setOperand(i, getReplacement(op, operand));
       }
 
       if (auto verbatim = dyn_cast<sv::VerbatimOp>(op))
@@ -636,33 +631,22 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       return WalkResult::interrupt();
 
     // Create the new module.  This grabs a lock to modify the circuit.
-    FModuleOp newModule = buildNewModule(builder, layerBlock, ports);
+    FModuleOp newModule = buildNewModule(builder, layerBlock);
     SymbolTable::setSymbolVisibility(newModule,
                                      SymbolTable::Visibility::Private);
     newModule.getBody().takeBody(layerBlock.getRegion());
 
     LLVM_DEBUG({
-      llvm::dbgs() << "      New Module: " << moduleNames.lookup(layerBlock)
-                   << "\n";
-      llvm::dbgs() << "        ports:\n";
-      for (size_t i = 0, e = ports.size(); i != e; ++i) {
-        auto port = ports[i];
-        auto value = connectValues[i];
-        llvm::dbgs() << "          - name: " << port.getName() << "\n"
-                     << "            type: " << port.type << "\n"
-                     << "            direction: " << port.direction << "\n"
-                     << "            value: " << value.value << "\n"
-                     << "            kind: "
-                     << (value.kind == ConnectKind::NonRef ? "NonRef" : "Ref")
-                     << "\n";
-      }
+      llvm::dbgs() << "      New Module: "
+                   << layerBlockGlobals.lookup(layerBlock).moduleName << "\n";
     });
 
-    // Replace the original layer block with an instance.  Hook up the instance.
-    // Intentionally create instance with probe ports which do not have an
-    // associated layer.  This is illegal IR that will be made legal by the end
-    // of the pass.  This is done to avoid having to revisit and rewrite each
-    // instance everytime it is moved into a parent layer.
+    // Replace the original layer block with an instance.  Hook up the
+    // instance. Intentionally create instance with probe ports which do
+    // not have an associated layer.  This is illegal IR that will be
+    // made legal by the end of the pass.  This is done to avoid having
+    // to revisit and rewrite each instance everytime it is moved into a
+    // parent layer.
     builder.setInsertionPointAfter(layerBlock);
     auto instanceName = instanceNameForLayer(layerBlock.getLayerName());
     auto instanceOp = builder.create<InstanceOp>(
@@ -695,34 +679,6 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
                               << splice.second << "\n";);
     }
 
-    // Update RWProbe operations.
-    for (auto rwprobe : rwprobes) {
-      auto targetRef = rwprobe.getTarget();
-      auto mapped = innerRefMap.find(targetRef);
-      if (mapped == innerRefMap.end()) {
-        assert(targetRef.getModule() == moduleOp.getNameAttr());
-        auto ist = hw::InnerSymbolTable::get(moduleOp);
-        if (failed(ist))
-          return WalkResult::interrupt();
-        auto target = ist->lookup(targetRef.getName());
-        assert(target);
-        auto fieldref = getFieldRefForTarget(target);
-        rwprobe
-            .emitError(
-                "rwprobe capture not supported with bind convention layer")
-            .attachNote(fieldref.getLoc())
-            .append("rwprobe target outside of bind layer");
-        return WalkResult::interrupt();
-      }
-
-      if (mapped->second.second != newModule.getModuleNameAttr())
-        return rwprobe.emitError("rwprobe target refers to different module"),
-               WalkResult::interrupt();
-
-      rwprobe.setTargetAttr(
-          hw::InnerRefAttr::get(mapped->second.second, targetRef.getName()));
-    }
-
     // Update verbatims that target operations extracted alongside.
     if (!verbatims.empty()) {
       mlir::AttrTypeReplacer replacer;
@@ -737,34 +693,6 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         replacer.replaceElementsIn(verbatim);
     }
 
-    // Connect instance ports to values.
-    assert(ports.size() == connectValues.size() &&
-           "the number of instance ports and values to connect to them must be "
-           "equal");
-    for (unsigned portNum = 0, e = newModule.getNumPorts(); portNum < e;
-         ++portNum) {
-      OpBuilder::InsertionGuard guard(builder);
-      builder.setInsertionPointAfterValue(instanceOp.getResult(portNum));
-      if (instanceOp.getPortDirection(portNum) == Direction::In) {
-        auto src = connectValues[portNum].value;
-        if (isa<RefType>(src.getType()))
-          src = builder.create<RefResolveOp>(
-              newModule.getPortLocationAttr(portNum), src);
-        builder.create<MatchingConnectOp>(
-            newModule.getPortLocationAttr(portNum),
-            instanceOp.getResult(portNum), src);
-      } else if (isa<RefType>(instanceOp.getResult(portNum).getType()) &&
-                 connectValues[portNum].kind == ConnectKind::Ref)
-        builder.create<RefDefineOp>(getPortLoc(connectValues[portNum].value),
-                                    connectValues[portNum].value,
-                                    instanceOp.getResult(portNum));
-      else
-        builder.create<MatchingConnectOp>(
-            getPortLoc(connectValues[portNum].value),
-            connectValues[portNum].value,
-            builder.create<RefResolveOp>(newModule.getPortLocationAttr(portNum),
-                                         instanceOp.getResult(portNum)));
-    }
     layerBlock.erase();
 
     return WalkResult::advance();
@@ -820,14 +748,22 @@ void LowerLayersPass::runOnOperation() {
   circuitMutex = &mutex;
 
   CircuitNamespace ns(circuitOp);
+  hw::HierPathCache hpc(
+      &ns, OpBuilder::InsertPoint(getOperation().getBodyBlock(),
+                                  getOperation().getBodyBlock()->begin()));
+  hierPathCache = &hpc;
+
   for (auto &op : *circuitOp.getBodyBlock()) {
     // Determine names for all modules that will be created.  Do this serially
     // to avoid non-determinism from creating these in the parallel region.
     if (auto moduleOp = dyn_cast<FModuleOp>(op)) {
       moduleOp->walk([&](LayerBlockOp layerBlockOp) {
-        auto name = moduleNameForLayer(moduleOp.getModuleName(),
-                                       layerBlockOp.getLayerName());
-        moduleNames.insert({layerBlockOp, ns.newName(name)});
+        auto moduleName = moduleNameForLayer(moduleOp.getModuleName(),
+                                             layerBlockOp.getLayerName());
+        auto hierPathName = hierPathNameForLayer(moduleOp.getModuleName(),
+                                                 layerBlockOp.getLayerName());
+        layerBlockGlobals.insert(
+            {layerBlockOp, {ns.newName(moduleName), ns.newName(hierPathName)}});
       });
       continue;
     }
@@ -980,6 +916,9 @@ void LowerLayersPass::runOnOperation() {
   for (auto layerOp :
        llvm::make_early_inc_range(circuitOp.getBodyBlock()->getOps<LayerOp>()))
     layerOp.erase();
+
+  // Cleanup state.
+  hierPathCache = nullptr;
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createLowerLayersPass() {
