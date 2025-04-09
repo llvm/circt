@@ -725,6 +725,23 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.instance foo {doNotPrint} @foo()
   }
 
+  // Check that explicit bind ops are lowered to sv.bind, even if they are
+  // buried in an emit block.
+
+  firrtl.module @BoundModule() {}
+
+  // CHECK-LABEL: hw.module @ExplicitBindTest()
+  firrtl.module @ExplicitBindTest() {
+    // CHECK: hw.instance "boundInstance" sym @boundInstance @BoundModule() -> () {doNotPrint}
+    firrtl.instance boundInstance sym @boundInstance {doNotPrint} @BoundModule()
+  }
+
+  // CHECK: emit.file "some-file.sv"
+  emit.file "some-file.sv" {
+    // CHECK: sv.bind <@ExplicitBindTest::@boundInstance>
+    firrtl.bind <@ExplicitBindTest::@boundInstance>
+  }
+
   // CHECK-LABEL: hw.module private @attributes_preservation
   // CHECK-SAME: firrtl.foo = "bar"
   // CHECK-SAME: output_file = #hw.output_file<"output_fileTest.sv", excludeFromFileList>
