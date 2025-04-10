@@ -18,6 +18,7 @@
 #include "mlir/IR/Visitors.h"
 #include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/Inliner.h"
 #include "mlir/Transforms/InliningUtils.h"
 #include "llvm/Support/LogicalResult.h"
 
@@ -68,6 +69,7 @@ void FunctionEliminationPass::runOnOperation() {
 LogicalResult FunctionEliminationPass::runOnModule(hw::HWModuleOp module) {
   FunctionInliner inliner(&getContext());
   SymbolTableCollection table;
+  mlir::InlinerConfig config;
 
   SmallVector<CallOpInterface> calls;
   module.walk([&](func::CallOp op) { calls.push_back(op); });
@@ -81,8 +83,8 @@ LogicalResult FunctionEliminationPass::runOnModule(hw::HWModuleOp module) {
     auto func = cast<CallableOpInterface>(
         table.lookupNearestSymbolFrom(module, symbol.getLeafReference()));
 
-    if (succeeded(
-            mlir::inlineCall(inliner, call, func, func.getCallableRegion()))) {
+    if (succeeded(mlir::inlineCall(inliner, config.getCloneCallback(), call,
+                                   func, func.getCallableRegion()))) {
       call->erase();
       continue;
     }

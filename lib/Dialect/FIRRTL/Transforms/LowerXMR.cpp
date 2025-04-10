@@ -130,7 +130,7 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
     CircuitNamespace ns(getOperation());
     circuitNamespace = &ns;
 
-    llvm::EquivalenceClasses<Value, ValueComparator> eq;
+    llvm::EquivalenceClasses<Value> eq;
     dataFlowClasses = &eq;
 
     InstanceGraph &instanceGraph = getAnalysis<InstanceGraph>();
@@ -370,14 +370,12 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
     }
 
     LLVM_DEBUG({
-      for (auto I = dataFlowClasses->begin(), E = dataFlowClasses->end();
-           I != E; ++I) { // Iterate over all of the equivalence sets.
+      for (const auto &I :
+           *dataFlowClasses) { // Iterate over all of the equivalence sets.
         if (!I->isLeader())
           continue; // Ignore non-leader sets.
         // Print members in this set.
-        llvm::interleave(llvm::make_range(dataFlowClasses->member_begin(I),
-                                          dataFlowClasses->member_end()),
-                         llvm::dbgs(), "\n");
+        llvm::interleave(dataFlowClasses->members(*I), llvm::dbgs(), "\n");
         llvm::dbgs() << "\n dataflow at leader::" << I->getData() << "\n =>";
         auto iter = dataflowAt.find(I->getData());
         if (iter != dataflowAt.end()) {
@@ -887,15 +885,7 @@ private:
   /// no NextNodeOnPath, which denotes a leaf node on the path.
   SmallVector<XMRNode> refSendPathList;
 
-  /// llvm::EquivalenceClasses wants comparable elements. This comparator uses
-  /// uses pointer comparison on the Impl.
-  struct ValueComparator {
-    bool operator()(const Value &lhs, const Value &rhs) const {
-      return lhs.getImpl() < rhs.getImpl();
-    }
-  };
-
-  llvm::EquivalenceClasses<Value, ValueComparator> *dataFlowClasses;
+  llvm::EquivalenceClasses<Value> *dataFlowClasses;
   // Instance and module ref ports that needs to be removed.
   DenseMap<Operation *, llvm::BitVector> refPortsToRemoveMap;
 
