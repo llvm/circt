@@ -45,4 +45,8 @@ void RangeAnalysisCombPass::runOnOperation() {
   solver.load<IntegerRangeAnalysis>();
   if (failed(solver.initializeAndRun(op)))
     return signalPassFailure();
+
+  // RewritePatternSet patterns(ctx);
+  // populateIntRangeNarrowingPatterns(patterns, solver);
+  
 }
