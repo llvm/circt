@@ -132,7 +132,7 @@ void FlattenModulesPass::runOnOperation() {
           continue;
 
         bool isLastModuleUse = --numUsesLeft == 0;
-
+        mlir::InlinerConfig config;
         PrefixingInliner inliner(&getContext(), inst.getInstanceName());
         if (failed(mlir::inlineRegion(inliner, config.getCloneCallback(),
                                       &module.getBody(), inst,
