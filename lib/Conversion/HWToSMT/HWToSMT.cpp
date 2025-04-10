@@ -8,10 +8,10 @@
 
 #include "circt/Conversion/HWToSMT.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/SMT/SMTOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/SMT/IR/SMTOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -38,7 +38,8 @@ struct HWConstantOpConversion : OpConversionPattern<ConstantOp> {
     if (adaptor.getValue().getBitWidth() < 1)
       return rewriter.notifyMatchFailure(op.getLoc(),
                                          "0-bit constants not supported");
-    rewriter.replaceOpWithNewOp<smt::BVConstantOp>(op, adaptor.getValue());
+    rewriter.replaceOpWithNewOp<mlir::smt::BVConstantOp>(op,
+                                                         adaptor.getValue());
     return success();
   }
 };
@@ -111,11 +112,11 @@ struct ArrayCreateOpConversion : OpConversionPattern<ArrayCreateOp> {
 
     unsigned width = adaptor.getInputs().size();
 
-    Value arr = rewriter.create<smt::DeclareFunOp>(loc, arrTy);
+    Value arr = rewriter.create<mlir::smt::DeclareFunOp>(loc, arrTy);
     for (auto [i, el] : llvm::enumerate(adaptor.getInputs())) {
-      Value idx = rewriter.create<smt::BVConstantOp>(loc, width - i - 1,
-                                                     llvm::Log2_64_Ceil(width));
-      arr = rewriter.create<smt::ArrayStoreOp>(loc, arr, idx, el);
+      Value idx = rewriter.create<mlir::smt::BVConstantOp>(
+          loc, width - i - 1, llvm::Log2_64_Ceil(width));
+      arr = rewriter.create<mlir::smt::ArrayStoreOp>(loc, arr, idx, el);
     }
 
     rewriter.replaceOp(op, arr);
@@ -139,14 +140,16 @@ struct ArrayGetOpConversion : OpConversionPattern<ArrayGetOp> {
       return rewriter.notifyMatchFailure(op.getLoc(),
                                          "unsupported array element type");
 
-    Value oobVal = rewriter.create<smt::DeclareFunOp>(loc, type);
-    Value numElementsVal = rewriter.create<smt::BVConstantOp>(
+    Value oobVal = rewriter.create<mlir::smt::DeclareFunOp>(loc, type);
+    Value numElementsVal = rewriter.create<mlir::smt::BVConstantOp>(
         loc, numElements - 1, llvm::Log2_64_Ceil(numElements));
-    Value inBounds = rewriter.create<smt::BVCmpOp>(
-        loc, smt::BVCmpPredicate::ule, adaptor.getIndex(), numElementsVal);
-    Value indexed = rewriter.create<smt::ArraySelectOp>(loc, adaptor.getInput(),
-                                                        adaptor.getIndex());
-    rewriter.replaceOpWithNewOp<smt::IteOp>(op, inBounds, indexed, oobVal);
+    Value inBounds =
+        rewriter.create<mlir::smt::BVCmpOp>(loc, mlir::smt::BVCmpPredicate::ule,
+                                            adaptor.getIndex(), numElementsVal);
+    Value indexed = rewriter.create<mlir::smt::ArraySelectOp>(
+        loc, adaptor.getInput(), adaptor.getIndex());
+    rewriter.replaceOpWithNewOp<mlir::smt::IteOp>(op, inBounds, indexed,
+                                                  oobVal);
     return success();
   }
 };
@@ -189,18 +192,18 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
   converter.addConversion([](IntegerType type) -> std::optional<Type> {
     if (type.getWidth() <= 0)
       return std::nullopt;
-    return smt::BitVectorType::get(type.getContext(), type.getWidth());
+    return mlir::smt::BitVectorType::get(type.getContext(), type.getWidth());
   });
   converter.addConversion([](seq::ClockType type) -> std::optional<Type> {
-    return smt::BitVectorType::get(type.getContext(), 1);
+    return mlir::smt::BitVectorType::get(type.getContext(), 1);
   });
   converter.addConversion([&](ArrayType type) -> std::optional<Type> {
     auto rangeType = converter.convertType(type.getElementType());
     if (!rangeType)
       return {};
-    auto domainType = smt::BitVectorType::get(
+    auto domainType = mlir::smt::BitVectorType::get(
         type.getContext(), llvm::Log2_64_Ceil(type.getNumElements()));
-    return smt::ArrayType::get(type.getContext(), domainType, rangeType);
+    return mlir::smt::ArrayType::get(type.getContext(), domainType, rangeType);
   });
 
   // Default target materialization to convert from illegal types to legal
@@ -215,25 +218,27 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
 
   // Convert a 'smt.bool'-typed value to a 'smt.bv<N>'-typed value
   converter.addTargetMaterialization(
-      [&](OpBuilder &builder, smt::BitVectorType resultType, ValueRange inputs,
-          Location loc) -> Value {
+      [&](OpBuilder &builder, mlir::smt::BitVectorType resultType,
+          ValueRange inputs, Location loc) -> Value {
         if (inputs.size() != 1)
           return Value();
 
-        if (!isa<smt::BoolType>(inputs[0].getType()))
+        if (!isa<mlir::smt::BoolType>(inputs[0].getType()))
           return Value();
 
         unsigned width = resultType.getWidth();
-        Value constZero = builder.create<smt::BVConstantOp>(loc, 0, width);
-        Value constOne = builder.create<smt::BVConstantOp>(loc, 1, width);
-        return builder.create<smt::IteOp>(loc, inputs[0], constOne, constZero);
+        Value constZero =
+            builder.create<mlir::smt::BVConstantOp>(loc, 0, width);
+        Value constOne = builder.create<mlir::smt::BVConstantOp>(loc, 1, width);
+        return builder.create<mlir::smt::IteOp>(loc, inputs[0], constOne,
+                                                constZero);
       });
 
   // Convert an unrealized conversion cast from 'smt.bool' to i1
   // into a direct conversion from 'smt.bool' to 'smt.bv<1>'.
   converter.addTargetMaterialization(
-      [&](OpBuilder &builder, smt::BitVectorType resultType, ValueRange inputs,
-          Location loc) -> Value {
+      [&](OpBuilder &builder, mlir::smt::BitVectorType resultType,
+          ValueRange inputs, Location loc) -> Value {
         if (inputs.size() != 1 || resultType.getWidth() != 1)
           return Value();
 
@@ -246,28 +251,28 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
         if (!castOp || castOp.getInputs().size() != 1)
           return Value();
 
-        if (!isa<smt::BoolType>(castOp.getInputs()[0].getType()))
+        if (!isa<mlir::smt::BoolType>(castOp.getInputs()[0].getType()))
           return Value();
 
-        Value constZero = builder.create<smt::BVConstantOp>(loc, 0, 1);
-        Value constOne = builder.create<smt::BVConstantOp>(loc, 1, 1);
-        return builder.create<smt::IteOp>(loc, castOp.getInputs()[0], constOne,
-                                          constZero);
+        Value constZero = builder.create<mlir::smt::BVConstantOp>(loc, 0, 1);
+        Value constOne = builder.create<mlir::smt::BVConstantOp>(loc, 1, 1);
+        return builder.create<mlir::smt::IteOp>(loc, castOp.getInputs()[0],
+                                                constOne, constZero);
       });
 
   // Convert a 'smt.bv<1>'-typed value to a 'smt.bool'-typed value
   converter.addTargetMaterialization(
-      [&](OpBuilder &builder, smt::BoolType resultType, ValueRange inputs,
+      [&](OpBuilder &builder, mlir::smt::BoolType resultType, ValueRange inputs,
           Location loc) -> Value {
         if (inputs.size() != 1)
           return Value();
 
-        auto bvType = dyn_cast<smt::BitVectorType>(inputs[0].getType());
+        auto bvType = dyn_cast<mlir::smt::BitVectorType>(inputs[0].getType());
         if (!bvType || bvType.getWidth() != 1)
           return Value();
 
-        Value constOne = builder.create<smt::BVConstantOp>(loc, 1, 1);
-        return builder.create<smt::EqOp>(loc, inputs[0], constOne);
+        Value constOne = builder.create<mlir::smt::BVConstantOp>(loc, 1, 1);
+        return builder.create<mlir::smt::EqOp>(loc, inputs[0], constOne);
       });
 
   // Default source materialization to convert from illegal types to legal
@@ -294,7 +299,7 @@ void ConvertHWToSMTPass::runOnOperation() {
   target.addIllegalDialect<hw::HWDialect>();
   target.addIllegalOp<seq::FromClockOp>();
   target.addIllegalOp<seq::ToClockOp>();
-  target.addLegalDialect<smt::SMTDialect>();
+  target.addLegalDialect<mlir::smt::SMTDialect>();
   target.addLegalDialect<mlir::func::FuncDialect>();
 
   RewritePatternSet patterns(&getContext());

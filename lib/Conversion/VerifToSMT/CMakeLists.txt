@@ -10,11 +10,11 @@ add_circt_conversion_library(CIRCTVerifToSMT
   LINK_LIBS PUBLIC
   CIRCTHW
   CIRCTHWToSMT
-  CIRCTSMT
   CIRCTVerif
   MLIRArithDialect
   MLIRFuncDialect
   MLIRSCFDialect
+  MLIRSMT
   MLIRTransforms
   MLIRTransformUtils
   MLIRReconcileUnrealizedCasts

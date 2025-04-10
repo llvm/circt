@@ -8,8 +8,6 @@
 
 #include "circt/Conversion/VerifToSMT.h"
 #include "circt/Conversion/HWToSMT.h"
-#include "circt/Dialect/SMT/SMTOps.h"
-#include "circt/Dialect/SMT/SMTTypes.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/Namespace.h"
@@ -17,6 +15,8 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/SMT/IR/SMTOps.h"
+#include "mlir/Dialect/SMT/IR/SMTTypes.h"
 #include "mlir/IR/ValueRange.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"

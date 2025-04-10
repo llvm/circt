@@ -7,19 +7,19 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/SMT.h"
-#include "circt/Dialect/SMT/SMTDialect.h"
-#include "circt/Dialect/SMT/SMTOps.h"
+#include "mlir/Dialect/SMT/IR/SMTDialect.h"
+#include "mlir/Dialect/SMT/IR/SMTOps.h"
 
 #include "mlir/CAPI/Registration.h"
 
-using namespace circt;
+using namespace mlir;
 using namespace smt;
 
 //===----------------------------------------------------------------------===//
 // Dialect API.
 //===----------------------------------------------------------------------===//
 
-MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(SMT, smt, circt::smt::SMTDialect)
+MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(SMT, smt, mlir::smt::SMTDialect)
 
 //===----------------------------------------------------------------------===//
 // Type API.
