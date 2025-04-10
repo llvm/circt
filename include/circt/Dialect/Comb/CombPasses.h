@@ -18,6 +18,10 @@
 #include <memory>
 #include <optional>
 
+namespace mlir {
+class DataFlowSolver;
+}
+
 namespace circt {
 namespace comb {
 
@@ -26,7 +30,12 @@ namespace comb {
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/Comb/Passes.h.inc"
 
+/// Add patterns for int range based narrowing.
+void populateCombNarrowingPatterns(RewritePatternSet &patterns,
+    mlir::DataFlowSolver &solver);
+
 } // namespace comb
 } // namespace circt
+
 
 #endif // CIRCT_DIALECT_COMB_COMBPASSES_H
