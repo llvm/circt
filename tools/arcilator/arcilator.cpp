@@ -461,7 +461,7 @@ static LogicalResult processBuffer(
 
     mlir::ExecutionEngineOptions engineOptions;
     engineOptions.jitCodeGenOptLevel = llvm::CodeGenOptLevel::Aggressive;
-    static std::function<llvm::Error(llvm::Module *)> transformer =
+    std::function<llvm::Error(llvm::Module *)> transformer =
         mlir::makeOptimizingTransformer(
             /*optLevel=*/3, /*sizeLevel=*/0,
             /*targetMachine=*/nullptr);
