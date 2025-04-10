@@ -19,7 +19,6 @@ target_link_libraries(circt-lec
   CIRCTHWToSMT
   CIRCTLECTransforms
   CIRCTOMTransforms
-  CIRCTSMT
   CIRCTSMTToZ3LLVM
   CIRCTSupport
   CIRCTVerif
@@ -33,6 +32,7 @@ target_link_libraries(circt-lec
   MLIRLLVMIRTransforms
   MLIRLLVMToLLVMIRTranslation
   MLIRLLVMToLLVMIRTranslation
+  MLIRSMT
   MLIRTargetLLVMIRExport
 
   ${CIRCT_LEC_JIT_DEPS}
