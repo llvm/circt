@@ -72,11 +72,11 @@ void LowerToBMCPass::runOnOperation() {
   Location loc = moduleOp->getLoc();
   builder.setInsertionPointToEnd(moduleOp.getBody());
   auto ptrTy = LLVM::LLVMPointerType::get(ctx);
-  auto voidTy = LLVM::LLVMVoidType::get(ctx);
+  auto i32Ty = builder.getI32Type();
 
   // Lookup or declare printf function.
   auto printfFunc =
-      LLVM::lookupOrCreateFn(moduleOp, "printf", ptrTy, voidTy, true);
+      LLVM::lookupOrCreateFn(moduleOp, "printf", ptrTy, i32Ty, true);
   if (failed(printfFunc)) {
     moduleOp->emitError("failed to lookup or create printf");
     return signalPassFailure();

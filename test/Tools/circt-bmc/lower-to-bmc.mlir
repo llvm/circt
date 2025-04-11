@@ -1,6 +1,6 @@
 // RUN: circt-opt --lower-to-bmc="top-module=comb bound=10" %s | FileCheck %s
 
-// CHECK:  llvm.func @printf(!llvm.ptr, ...)
+// CHECK:  llvm.func @printf(!llvm.ptr, ...) -> i32
 // CHECK:  func.func @comb() {
 // CHECK:    [[BMC:%.+]] = verif.bmc bound 20 num_regs 0 initial_values [] init {
 // CHECK:    } loop {
@@ -29,7 +29,7 @@ hw.module @comb(in %in0: i32, in %in1: i32, out out: i32) attributes {num_regs =
 
 // RUN: circt-opt --lower-to-bmc="top-module=seq bound=10" %s | FileCheck %s --check-prefix=CHECK1
 
-// CHECK1:  llvm.func @printf(!llvm.ptr, ...)
+// CHECK1:  llvm.func @printf(!llvm.ptr, ...) -> i32
 // CHECK1:  func.func @seq() {
 // CHECK1:    [[BMC:%.+]] = verif.bmc bound 20 num_regs 1 initial_values [unit] init {
 // CHECK1:      [[FALSE:%.+]] = hw.constant false
@@ -76,7 +76,7 @@ hw.module @seq(in %clk : !seq.clock, in %in0 : i32, in %in1 : i32, in %reg_state
 
 // RUN: circt-opt --lower-to-bmc="top-module=nondominance bound=10" %s | FileCheck %s --check-prefix=CHECK2
 
-// CHECK2:  llvm.func @printf(!llvm.ptr, ...)
+// CHECK2:  llvm.func @printf(!llvm.ptr, ...) -> i32
 // CHECK2:  func.func @nondominance() {
 // CHECK2:    [[BMC:%.+]] = verif.bmc bound 20 num_regs 1 initial_values [unit] init {
 // CHECK2:      [[FALSE:%.+]] = hw.constant false
