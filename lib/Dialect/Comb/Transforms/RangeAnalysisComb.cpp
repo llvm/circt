@@ -49,13 +49,18 @@ return success();
 }
 
 
-struct CombAddNarrow : public mlir::OpRewritePattern<comb::AddOp> {
-  CombAddNarrow(MLIRContext *context, DataFlowSolver &s) 
-      : OpRewritePattern(context), solver(s) {}
-  using OpRewritePattern::OpRewritePattern;
+// TODO - figure out how to match against all comb operators here?
+template <typename CombOpTy>
+struct CombOpNarrow : public mlir::OpRewritePattern<CombOpTy> {
+  CombOpNarrow(MLIRContext *context, DataFlowSolver &s) 
+      : OpRewritePattern<CombOpTy>(context), solver(s) {}
+  // using OpRewritePattern::OpRewritePattern;
 
-  LogicalResult matchAndRewrite(comb::AddOp op,
+  LogicalResult matchAndRewrite(CombOpTy op,
                                 PatternRewriter &rewriter) const override {
+    
+    auto op_width = op.getType().getIntOrFloatBitWidth();
+    
     SmallVector<ConstantIntRanges> ranges;
     if (failed(collectRanges(solver, op->getOperands(), ranges)))
       return rewriter.notifyMatchFailure(op, "input without specified range");
@@ -69,8 +74,26 @@ struct CombAddNarrow : public mlir::OpRewritePattern<comb::AddOp> {
     }
     if (remove_width == 0)
       return rewriter.notifyMatchFailure(op, "no bits to remove");
-    else 
-      return rewriter.notifyMatchFailure(op, "Could remove " + std::to_string(remove_width) + " bits - but didn't yet...");
+    else {
+      Value lhs = op.getOperand(0);
+      Value rhs = op.getOperand(1);
+      
+      Location loc = op.getLoc();
+      auto newWidth = op_width - remove_width;
+      // Create a replacement type for the extracted bits
+      auto replaceType = rewriter.getIntegerType(newWidth);
+      
+      // Extract the lsbs from each operand
+      auto extractLhsOp = rewriter.create<comb::ExtractOp>(loc, replaceType, lhs, 0);
+      auto extractRhsOp = rewriter.create<comb::ExtractOp>(loc, replaceType, rhs, 0);
+      auto narrowOp     = rewriter.create<CombOpTy>(loc, extractLhsOp, extractRhsOp);
+
+      auto zero = rewriter.create<hw::ConstantOp>(loc, APInt::getZero(remove_width));
+      auto replaceOp = rewriter.create<comb::ConcatOp>(loc, op.getType(), ValueRange{zero, narrowOp});
+      // Replace the original operation with the new one
+      rewriter.replaceOp(op, replaceOp);
+      return success();
+    }
   }
 
   private:
@@ -107,5 +130,7 @@ void RangeAnalysisCombPass::runOnOperation() {
 
 void comb::populateCombNarrowingPatterns(
   RewritePatternSet &patterns, DataFlowSolver &solver) {
-  patterns.add<CombAddNarrow>(patterns.getContext(), solver);
+  patterns.add<CombOpNarrow<comb::AddOp>,
+               CombOpNarrow<comb::MulOp>,  
+               CombOpNarrow<comb::SubOp>>(patterns.getContext(), solver);
 }
