@@ -74,12 +74,10 @@ public:
       return rewriter.notifyMatchFailure(affineParallelOp,
                                          "Missing 'unparallelize.factor'");
 
-    SmallVector<scf::IndexSwitchOp> indexSwitchOps;
-    affineParallelOp->walk([&](scf::IndexSwitchOp indexSwitchOp) {
-      indexSwitchOps.push_back(indexSwitchOp);
-    });
-
     int64_t factor = factorAttr.getInt();
+
+    SmallVector<scf::IndexSwitchOp> simplifiableIndexSwitchOps =
+        collectSimplifiableIndexSwitchOps(affineParallelOp, factor);
 
     auto outerLoop = rewriter.create<affine::AffineForOp>(
         loc, lowerBound, rewriter.getDimIdentityMap(), upperBound,
@@ -138,43 +136,43 @@ public:
     rewriter.setInsertionPointToEnd(destBlock);
     rewriter.create<affine::AffineYieldOp>(loc);
 
-    for (auto indexSwitchOp : indexSwitchOps) {
-      if (failed(simplifyIndexSwitch(outerLoop, innerParallel, indexSwitchOp,
-                                     factor)))
-        return rewriter.notifyMatchFailure(
-            indexSwitchOp, "Failed to simplify the index switch operation");
+    for (auto indexSwitchOp : simplifiableIndexSwitchOps) {
+      indexSwitchOp.setOperand(innerParallel.getIVs().front());
     }
 
     return success();
   }
 
 private:
-  // Simplifies `indexSwitchOp` if its argument only depends on
-  // `affineParallelOp`'s induction variable.
-  LogicalResult simplifyIndexSwitch(affine::AffineForOp affineForOp,
-                                    affine::AffineParallelOp affineParallelOp,
-                                    scf::IndexSwitchOp indexSwitchOp,
+  SmallVector<scf::IndexSwitchOp>
+  collectSimplifiableIndexSwitchOps(affine::AffineParallelOp affineParallelOp,
                                     int64_t factor) const {
-    auto switchArg = indexSwitchOp.getArg();
-    if (auto affineApplyOp =
-            dyn_cast<affine::AffineApplyOp>(switchArg.getDefiningOp())) {
-      if (affineApplyOp->getNumOperands() != 1 ||
+    SmallVector<scf::IndexSwitchOp> result;
+    affineParallelOp->walk([&](scf::IndexSwitchOp indexSwitchOp) {
+      auto switchArg = indexSwitchOp.getArg();
+      auto affineApplyOp =
+          dyn_cast_or_null<affine::AffineApplyOp>(switchArg.getDefiningOp());
+      if (!affineApplyOp || affineApplyOp->getNumOperands() != 1 ||
           affineApplyOp->getNumResults() != 1)
-        return success();
+        return WalkResult::advance();
 
       auto affineMap = affineApplyOp.getAffineMap();
       auto binExpr = dyn_cast<AffineBinaryOpExpr>(affineMap.getResult(0));
       if (!binExpr || binExpr.getKind() != AffineExprKind::Mod)
-        return success();
+        return WalkResult::advance();
+
+      if (affineApplyOp.getOperand(0) != affineParallelOp.getIVs().front())
+        return WalkResult::advance();
 
       auto rhs = binExpr.getRHS();
       auto constRhs = dyn_cast<AffineConstantExpr>(rhs);
       if (!constRhs || factor != constRhs.getValue())
-        return success();
+        return WalkResult::advance();
 
-      indexSwitchOp.setOperand(affineParallelOp.getIVs().front());
-    }
-    return success();
+      result.push_back(indexSwitchOp);
+      return WalkResult::advance();
+    });
+    return result;
   }
 };
 
