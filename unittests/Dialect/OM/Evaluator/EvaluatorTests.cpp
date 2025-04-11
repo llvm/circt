@@ -1189,4 +1189,86 @@ TEST(EvaluatorTests, ListConcatField) {
                    .getValue());
 }
 
+TEST(EvaluatorTests, NestedReferenceValue) {
+  StringRef mod =
+      "om.class @Empty() {"
+      "  om.class.fields"
+      "}"
+      "om.class @Any() -> (object: !om.any, string: !om.any) {"
+      "  %0 = om.object @Empty() : () -> !om.class.type<@Empty>"
+      "  %1 = om.any_cast %0 : (!om.class.type<@Empty>) -> !om.any"
+      "  %2 = om.constant \"foo\" : !om.string"
+      "  %3 = om.any_cast %2 : (!om.string) -> !om.any"
+      "  om.class.fields %1, %3 : !om.any, !om.any"
+      "}"
+      "om.class @InnerClass1(%anyListIn: !om.list<!om.any>)  -> (any_list1: "
+      "!om.list<!om.any>) {"
+      "  om.class.fields %anyListIn : !om.list<!om.any>"
+      "}"
+      "om.class @InnerClass2(%anyListIn: !om.list<!om.any>)  -> (any_list2: "
+      "!om.list<!om.any>) {"
+      "  om.class.fields %anyListIn : !om.list<!om.any>"
+      "}"
+      "om.class @OuterClass2()  -> (om: !om.class.type<@InnerClass2>) {"
+      "  %0 = om.object @InnerClass2(%5) : (!om.list<!om.any>) -> "
+      "!om.class.type<@InnerClass2>"
+      "  %1 = om.object @Any() : () -> !om.class.type<@Any>"
+      "  %2 = om.object.field %1, [@object] : (!om.class.type<@Any>) -> "
+      "!om.any"
+      "  %3 = om.object @Any() : () -> !om.class.type<@Any>"
+      "  %4 = om.object.field %3, [@object] : (!om.class.type<@Any>) -> "
+      "!om.any"
+      "  %5 = om.list_create %2, %4 : !om.any"
+      "  om.class.fields %0 : !om.class.type<@InnerClass2>"
+      "}"
+      "om.class @OuterClass1()  -> (om: !om.any) {"
+      "  %0 = om.object @InnerClass1(%8) : (!om.list<!om.any>) -> "
+      "!om.class.type<@InnerClass1>"
+      "  %1 = om.any_cast %0 : (!om.class.type<@InnerClass1>) -> !om.any"
+      "  %2 = om.object @OuterClass2() : () -> !om.class.type<@OuterClass2>"
+      "  %3 = om.object.field %2, [@om] : (!om.class.type<@OuterClass2>) -> "
+      "!om.class.type<@InnerClass2>"
+      "  %4 = om.any_cast %3 : (!om.class.type<@InnerClass2>) -> !om.any"
+      "  %5 = om.object @OuterClass2() : () -> !om.class.type<@OuterClass2>"
+      "  %6 = om.object.field %5, [@om] : (!om.class.type<@OuterClass2>) -> "
+      "!om.class.type<@InnerClass2>"
+      "  %7 = om.any_cast %6 : (!om.class.type<@InnerClass2>) -> !om.any"
+      "  %8 = om.list_create %4, %7 : !om.any"
+      "  om.class.fields %1 : !om.any"
+      "}";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto result =
+      evaluator.instantiate(StringAttr::get(&context, "OuterClass1"), {});
+
+  ASSERT_TRUE(succeeded(result));
+
+  ASSERT_TRUE(isa<evaluator::ObjectValue>(
+      llvm::cast<evaluator::ListValue>(
+          llvm::cast<evaluator::ObjectValue>(
+              llvm::cast<evaluator::ListValue>(
+                  llvm::cast<evaluator::ObjectValue>(
+                      llvm::cast<evaluator::ObjectValue>(result->get())
+                          ->getField("om")
+                          ->get())
+                      ->getField("any_list1")
+                      ->get())
+                  ->getElements()[0]
+                  .get())
+              ->getField("any_list2")
+              ->get())
+          ->getElements()[0]
+          .get()));
+}
+
 } // namespace
