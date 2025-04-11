@@ -20,7 +20,6 @@ target_link_libraries(circt-bmc
   CIRCTHWToSMT
   CIRCTOMTransforms
   CIRCTSeq
-  CIRCTSMT
   CIRCTSMTToZ3LLVM
   CIRCTSupport
   CIRCTVerif
@@ -33,6 +32,7 @@ target_link_libraries(circt-bmc
   MLIRIR
   MLIRLLVMIRTransforms
   MLIRLLVMToLLVMIRTranslation
+  MLIRSMT
   MLIRTargetLLVMIRExport
 
   ${CIRCT_BMC_JIT_DEPS}

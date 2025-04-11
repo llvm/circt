@@ -12,10 +12,10 @@
 
 #include "circt/Target/ExportSMTLIB.h"
 #include "circt/Dialect/HW/HWDialect.h"
-#include "circt/Dialect/SMT/SMTOps.h"
-#include "circt/Dialect/SMT/SMTVisitors.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/SMT/IR/SMTOps.h"
+#include "mlir/Dialect/SMT/IR/SMTVisitors.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Support/IndentedOstream.h"
 #include "mlir/Tools/mlir-translate/Translation.h"
@@ -25,6 +25,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
+using namespace mlir;
 using namespace smt;
 using namespace ExportSMTLIB;
 
