@@ -53,7 +53,8 @@ void ExcludeExecuteRegionCanonicalizePass::runOnOperation() {
 
   // Add op-specific canonicalization patterns
   for (const RegisteredOperationName &op : ctx->getRegisteredOperations()) {
-    if (op.getStringRef() == "scf.execute_region")
+    if (op.getStringRef() == "scf.execute_region" ||
+        op.getStringRef() == "scf.parallel")
       continue;
 
     op.getCanonicalizationPatterns(patterns, ctx);
