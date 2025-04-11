@@ -264,8 +264,10 @@ static LogicalResult executeBMC(MLIRContext &context) {
     SmallVector<StringRef, 4> sharedLibraries(sharedLibs.begin(),
                                               sharedLibs.end());
     mlir::ExecutionEngineOptions engineOptions;
-    engineOptions.transformer = mlir::makeOptimizingTransformer(
-        /*optLevel*/ 3, /*sizeLevel=*/0, /*targetMachine=*/nullptr);
+    static std::function<llvm::Error(llvm::Module *)> transformer =
+        mlir::makeOptimizingTransformer(
+            /*optLevel*/ 3, /*sizeLevel=*/0, /*targetMachine=*/nullptr);
+    engineOptions.transformer = transformer;
     engineOptions.jitCodeGenOptLevel = llvm::CodeGenOptLevel::Aggressive;
     engineOptions.sharedLibPaths = sharedLibraries;
     engineOptions.enableObjectDump = true;
