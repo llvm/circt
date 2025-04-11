@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HierPathBuilder.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -129,6 +130,11 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
     // circuit-level symbols.
     CircuitNamespace ns(getOperation());
     circuitNamespace = &ns;
+
+    hw::HierPathBuilder pb(
+        &ns, OpBuilder::InsertPoint(getOperation().getBodyBlock(),
+                                    getOperation().getBodyBlock()->begin()));
+    hierPathBuilder = &pb;
 
     llvm::EquivalenceClasses<Value> eq;
     dataFlowClasses = &eq;
@@ -408,8 +414,7 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
     opsToRemove.clear();
     xmrPathSuffix.clear();
     circuitNamespace = nullptr;
-    pathCache.clear();
-    pathInsertPoint = {};
+    hierPathBuilder = nullptr;
   }
 
   /// Generate the ABI ref_<module> prefix string into `prefix`.
@@ -496,7 +501,8 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
     if (!refSendPath.empty())
       // Compute the HierPathOp that stores the path.
       ref = FlatSymbolRefAttr::get(
-          getOrCreatePath(builder.getArrayAttr(refSendPath), builder)
+          hierPathBuilder
+              ->getOrCreatePath(builder.getArrayAttr(refSendPath), builder)
               .getSymNameAttr());
 
     return success();
@@ -828,43 +834,6 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
 
   bool isZeroWidth(FIRRTLBaseType t) { return t.getBitWidthOrSentinel() == 0; }
 
-  /// Return a HierPathOp for the provided pathArray.  This will either return
-  /// an existing HierPathOp or it will create and return a new one.
-  hw::HierPathOp getOrCreatePath(ArrayAttr pathArray,
-                                 ImplicitLocOpBuilder &builder) {
-    assert(pathArray && !pathArray.empty());
-    // Return an existing HierPathOp if one exists with the same path.
-    auto pathIter = pathCache.find(pathArray);
-    if (pathIter != pathCache.end())
-      return pathIter->second;
-
-    // Reset the insertion point after this function returns.
-    OpBuilder::InsertionGuard guard(builder);
-
-    // Set the insertion point to either the known location where the pass
-    // inserts HierPathOps or to the start of the circuit.
-    if (pathInsertPoint.isSet())
-      builder.restoreInsertionPoint(pathInsertPoint);
-    else
-      builder.setInsertionPointToStart(getOperation().getBodyBlock());
-
-    // Create the new HierPathOp and insert it into the pathCache.
-    hw::HierPathOp path =
-        pathCache
-            .insert({pathArray,
-                     builder.create<hw::HierPathOp>(
-                         circuitNamespace->newName("xmrPath"), pathArray)})
-            .first->second;
-    path.setVisibility(SymbolTable::Visibility::Private);
-
-    // Save the insertion point so other unique HierPathOps will be created
-    // after this one.
-    pathInsertPoint = builder.saveInsertionPoint();
-
-    // Return the new path.
-    return path;
-  }
-
 private:
   /// Cached module namespaces.
   DenseMap<Operation *, hw::InnerSymbolNamespace> moduleNamespaces;
@@ -897,12 +866,9 @@ private:
 
   CircuitNamespace *circuitNamespace;
 
-  /// A cache of already created HierPathOps.  This is used to avoid repeatedly
-  /// creating the same HierPathOp.
-  DenseMap<Attribute, hw::HierPathOp> pathCache;
-
-  /// The insertion point where the pass inserts HierPathOps.
-  OpBuilder::InsertPoint pathInsertPoint = {};
+  /// Utility to create HerPathOps at a predefined location in the circuit.
+  /// This handles caching and keeps the order consistent.
+  hw::HierPathBuilder *hierPathBuilder;
 
   /// Per-module helpers for creating operations within modules.
   DenseMap<FModuleOp, ModuleState> moduleStates;

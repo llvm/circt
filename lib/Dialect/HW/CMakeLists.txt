@@ -1,6 +1,7 @@
 set(CIRCT_HW_Sources
   ConversionPatterns.cpp
   CustomDirectiveImpl.cpp
+  HierPathBuilder.cpp
   HWAttributes.cpp
   HWEnums.cpp
   HWDialect.cpp
