@@ -82,7 +82,6 @@ public:
     auto outerLoop = rewriter.create<affine::AffineForOp>(
         loc, lowerBound, rewriter.getDimIdentityMap(), upperBound,
         rewriter.getDimIdentityMap(), step * factor);
-    outerLoop->setAttr("unparallelized", rewriter.getUnitAttr());
 
     rewriter.setInsertionPointToStart(outerLoop.getBody());
     AffineMap lbMap = AffineMap::get(
