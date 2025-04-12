@@ -144,6 +144,9 @@ public:
   }
 
 private:
+  // Collect all simplifiable `scf.index_switch` ops in `affineParallelOp`. An
+  // `scf.index_switch` op is simpliiable if its argument only depends on
+  // `affineParallelOp`'s loop IV and if it's a result of a modulo expression.
   SmallVector<scf::IndexSwitchOp>
   collectSimplifiableIndexSwitchOps(affine::AffineParallelOp affineParallelOp,
                                     int64_t factor) const {
