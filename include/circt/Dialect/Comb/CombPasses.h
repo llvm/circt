@@ -32,10 +32,9 @@ namespace comb {
 
 /// Add patterns for int range based narrowing.
 void populateCombNarrowingPatterns(RewritePatternSet &patterns,
-    mlir::DataFlowSolver &solver);
+                                   mlir::DataFlowSolver &solver);
 
 } // namespace comb
 } // namespace circt
-
 
 #endif // CIRCT_DIALECT_COMB_COMBPASSES_H
