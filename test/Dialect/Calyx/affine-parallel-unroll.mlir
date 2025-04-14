@@ -447,6 +447,7 @@ module {
           case 0 {
             %2 = scf.index_switch %arg12 -> f32
             case 0 {
+              // This load will be hoisted after unrolling and simplifying the access indices.
               %3 = affine.load %arg4[%arg10 + %arg11 floordiv 2, %arg9 floordiv 2] : memref<2x2xf32>
               scf.yield %3 : f32
             }
@@ -462,6 +463,7 @@ module {
           case 1 {
             %2 = scf.index_switch %arg12 -> f32
             case 0 {
+              // This load will be hoisted after unrolling and simplifying the access indices.
               %3 = affine.load %arg5[%arg10 + %arg11 floordiv 2, %arg9 floordiv 2] : memref<2x2xf32>
               scf.yield %3 : f32
             }
