@@ -9,6 +9,6 @@
 #ifndef BINDINGS_PYTHON_SMT_OPS
 #define BINDINGS_PYTHON_SMT_OPS
 
-include "circt/Dialect/SMT/SMT.td"
+include "mlir/Dialect/SMT/IR/SMT.td"
 
 #endif // BINDINGS_PYTHON_SMT_OPS

@@ -231,5 +231,5 @@ add_circt_public_c_api_library(CIRCTCAPISMT
 
   LINK_LIBS PUBLIC
   MLIRCAPIIR
-  CIRCTSMT
+  MLIRSMT
 )

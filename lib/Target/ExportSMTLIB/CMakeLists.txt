@@ -8,9 +8,9 @@ add_circt_translation_library(CIRCTExportSMTLIB
 
   LINK_LIBS PUBLIC
   CIRCTHW
-  CIRCTSMT
   CIRCTSupport
   MLIRFuncDialect
   MLIRIR
+  MLIRSMT
   MLIRTranslateLib
 )

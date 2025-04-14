@@ -10,6 +10,6 @@ add_circt_conversion_library(CIRCTCombToSMT
   LINK_LIBS PUBLIC
   CIRCTComb
   CIRCTHWToSMT
-  CIRCTSMT
+  MLIRSMT
   MLIRTransforms
 )
