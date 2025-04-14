@@ -272,6 +272,15 @@ def QueueType : MooreTypeDef<"Queue", [], "moore::UnpackedType"> {
   ];
 }
 
+def Moore_UArrayCmpPredicateAttr : I64EnumAttr<
+    "UArrayCmpPredicate", "",
+    [
+      I64EnumAttrCase<"eq", 0>,
+      I64EnumAttrCase<"ne", 1>
+    ]> {
+  let cppNamespace = "::circt::moore";
+}
+
 
 //===----------------------------------------------------------------------===//
 // Structs
