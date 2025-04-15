@@ -7,7 +7,6 @@ add_circt_dialect_library(CIRCTHWTransforms
   VerifyInnerRefNamespace.cpp
   FlattenModules.cpp
   FooWires.cpp
-  InferIntRangeInterfaceImpls.cpp
 
   DEPENDS
   CIRCTHWTransformsIncGen
@@ -21,5 +20,5 @@ add_circt_dialect_library(CIRCTHWTransforms
   MLIRIR
   MLIRPass
   MLIRTransformUtils
-  MLIRInferIntRangeInterface
+  MLIRInferIntRangeCommon
 )

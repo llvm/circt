@@ -27,7 +27,7 @@ using namespace mlir::dataflow;
 
 namespace circt {
 namespace comb {
-#define GEN_PASS_DEF_RANGEANALYSISCOMB
+#define GEN_PASS_DEF_COMBINTRANGENARROWING
 #include "circt/Dialect/Comb/Passes.h.inc"
 } // namespace comb
 } // namespace circt
@@ -107,15 +107,15 @@ private:
 };
 
 namespace {
-class RangeAnalysisCombPass
-    : public circt::comb::impl::RangeAnalysisCombBase<RangeAnalysisCombPass> {
+class CombIntRangeNarrowingPass
+    : public circt::comb::impl::CombIntRangeNarrowingBase<CombIntRangeNarrowingPass> {
 public:
-  using RangeAnalysisCombBase::RangeAnalysisCombBase;
+  using CombIntRangeNarrowingBase::CombIntRangeNarrowingBase;
   void runOnOperation() override;
 };
 } // namespace
 
-void RangeAnalysisCombPass::runOnOperation() {
+void CombIntRangeNarrowingPass::runOnOperation() {
   Operation *op = getOperation();
   MLIRContext *ctx = op->getContext();
   DataFlowSolver solver;

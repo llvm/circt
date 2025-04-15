@@ -31,7 +31,7 @@ namespace comb {
 #include "circt/Dialect/Comb/Passes.h.inc"
 
 /// Add patterns for int range based narrowing.
-void populateCombNarrowingPatterns(RewritePatternSet &patterns,
+void populateCombNarrowingPatterns(mlir::RewritePatternSet &patterns,
                                    mlir::DataFlowSolver &solver);
 
 } // namespace comb

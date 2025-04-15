@@ -23,7 +23,7 @@ def LowerComb : Pass<"lower-comb"> {
 }
 
 
-def RangeAnalysisComb : Pass<"range-analysis-comb"> {
+def CombIntRangeNarrowing : Pass<"comb-int-range-narrowing"> {
   let summary = "Compute an interval bound on the range of values that an operation can return.";
   let description = [{
     Compute a basic value range analysis, by propagating integer intervals through the domain.
