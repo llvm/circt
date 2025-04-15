@@ -1,0 +1,58 @@
+#  Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+#  See https://llvm.org/LICENSE.txt for license information.
+#  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+from __future__ import annotations
+
+from .circt import ir
+from .rtg import rtg
+from .index import index
+from .core import Value
+from .integers import Integer
+
+
+class Array(Value):
+  """
+  Represents a statically typed array for any kind of values.
+  """
+
+  def __init__(self, value: ir.Value) -> Array:
+    """
+    Intended for library internal usage only.
+    """
+
+    self._value = value
+
+  def create(elements: list[Value], element_type: ir.Type) -> Array:
+    """
+    Create an array containing the provided values. All elements must have the
+    same type.
+    """
+
+    if not all([e.get_type() == element_type for e in elements]):
+      raise TypeError(
+          "all elements of an RTG array must be of the specified element type")
+
+    return rtg.ArrayCreateOp(rtg.ArrayType.get(element_type), elements)
+
+  def __getitem__(self, i) -> Value:
+    assert isinstance(i, (int, Integer)), "slicing not supported yet"
+
+    idx = i
+    if isinstance(i, int):
+      idx = index.ConstantOp(i)
+
+    return rtg.ArrayExtractOp(self._value, idx)
+
+  def _get_ssa_value(self) -> ir.Value:
+    return self._value
+
+  def get_type(self) -> ir.Type:
+    return self._value.type
+
+  def type(element_type: ir.Type) -> ir.Type:
+    """
+    Returns the array type for the given element type.
+    """
+
+    return rtg.ArrayType.get(element_type)
