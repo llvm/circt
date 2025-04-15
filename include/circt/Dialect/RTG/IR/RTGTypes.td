@@ -120,6 +120,19 @@ def DictType : RTGTypeDef<"Dict"> {
   let genVerifyDecl = 1;
 }
 
+def ArrayType : RTGTypeDef<"Array"> {
+  let summary = "an array type with dynamic size";
+  let description = [{
+    Represents an array type with dynamic size. The array contains elements of
+    the specified type only.
+  }];
+
+  let parameters = (ins "::mlir::Type":$elementType);
+
+  let mnemonic = "array";
+  let assemblyFormat = "`<` $elementType `>`";
+}
+
 //===----------------------------------------------------------------------===//
 // Types for ISA targets
 //===----------------------------------------------------------------------===//

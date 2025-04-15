@@ -153,3 +153,7 @@ rtg.test @interleaveSequences(seq0 = %seq0: !rtg.randomized_sequence, seq1 = %se
   // CHECK: rtg.interleave_sequences %seq0, %seq1 batch 4 {rtg.some_attr}
   rtg.interleave_sequences %seq0, %seq1 batch 4 {rtg.some_attr}
 }
+
+// CHECK-LABEL: rtg.test @arrays
+// CHECK-SAME: (arr = {{%.+}}: !rtg.array<index>)
+rtg.test @arrays(arr = %arr: !rtg.array<index>) { }
