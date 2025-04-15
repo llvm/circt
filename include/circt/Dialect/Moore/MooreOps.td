@@ -614,6 +614,15 @@ def SExtOp : ExtOpBase<"sext"> {
 // Expressions
 //===----------------------------------------------------------------------===//
 
+def Moore_UArrayCmpPredicateAttr : I64EnumAttr<
+    "UArrayCmpPredicate", "",
+    [
+      I64EnumAttrCase<"eq", 0>,
+      I64EnumAttrCase<"ne", 1>
+    ]> {
+  let cppNamespace = "circt::moore";
+}
+
 def NegOp : MooreOp<"neg", [Pure, SameOperandsAndResultType]> {
   let summary = "Arithmetic negation";
   let description = [{
@@ -890,9 +899,9 @@ def ShrOp : ShiftOpBase<"shr"> { let summary = "Logical right shift"; }
 def AShrOp : ShiftOpBase<"ashr"> { let summary = "Arithmetic right shift"; }
 
 def Moore_UArrayCmpOp : MooreOp<"uarray_cmp", [
-  Pure, 
+  Pure,
   Commutative,
-  SameTypeOperands, 
+  SameTypeOperands,
   ]> {
   let description = [{
     Performs an elementwise comparison of two unpacked arrays
@@ -906,7 +915,11 @@ def Moore_UArrayCmpOp : MooreOp<"uarray_cmp", [
 
     The result is `1` if the comparison is true and `0` otherwise.
   }];
-  let arguments = (ins Moore_UArrayCmpPredicateAttr:$predicate, UnpackedArrayType:$lhs, UnpackedArrayType:$rhs);
+  let arguments = (ins 
+  Moore_UArrayCmpPredicateAttr:$predicate,
+  UnpackedArrayType:$lhs,
+  UnpackedArrayType:$rhs
+  );
   let results = (outs BitType:$result);
   let assemblyFormat = [{
     $predicate $lhs `,` $rhs attr-dict `:` type($lhs) `->` type($result)

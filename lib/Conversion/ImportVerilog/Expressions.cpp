@@ -290,13 +290,13 @@ struct RvalueExprVisitor {
     }
 
     case BinaryOperator::Equality:
-      if (dyn_cast<moore::UnpackedArrayType>(lhs.getType()))
+      if (isa<moore::UnpackedArrayType>(lhs.getType()))
         return builder.create<moore::UArrayCmpOp>(
             loc, circt::moore::UArrayCmpPredicate::eq, lhs, rhs);
       else
         return createBinary<moore::EqOp>(lhs, rhs);
     case BinaryOperator::Inequality:
-      if (dyn_cast<moore::UnpackedArrayType>(lhs.getType()))
+      if (isa<moore::UnpackedArrayType>(lhs.getType()))
         return builder.create<moore::UArrayCmpOp>(
             loc, circt::moore::UArrayCmpPredicate::ne, lhs, rhs);
       else
