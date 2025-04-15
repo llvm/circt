@@ -2083,10 +2083,19 @@ FIRRTL version 5.1.0
 circuit Foo:
   public module Foo:
     input clock: Clock
-    ; CHECK:            %[[TIME:.+]] = firrtl.fstring.time : !firrtl.fstring
-    ; CHECK:            %[[HIERARCHICALMODULENAME:.+]] = firrtl.fstring.hierarchicalmodulename : !firrtl.fstring
-    ; CHECK{{LITERAL}}: firrtl.fprintf %clock, %c1_ui1, "test.txt", "[{{}}]: hello world {{}}"(%[[TIME]], %[[HIERARCHICALMODULENAME]])
-    fprintf(clock, UInt<1>(1), "test.txt", "[{{SimulationTime}}]: hello from {{HierarchicalModuleName}}")
+    ; CHECK:            %[[HIERARCHICALMODULENAME_0:.+]] = firrtl.fstring.hierarchicalmodulename : !firrtl.fstring
+    ; CHECK-NEXT:       %[[TIME:.+]] = firrtl.fstring.time : !firrtl.fstring
+    ; CHECK-NEXT:       %[[HIERARCHICALMODULENAME_1:.+]] = firrtl.fstring.hierarchicalmodulename : !firrtl.fstring
+    ; CHECK{{LITERAL}}: firrtl.fprintf %clock, %c1_ui1, "{{}}.txt" (%[[HIERARCHICALMODULENAME_0]]), "[{{}}]: hello world {{}}"(%[[TIME]], %[[HIERARCHICALMODULENAME_1]])
+    fprintf(clock, UInt<1>(1), "{{HierarchicalModuleName}}.txt", "[{{SimulationTime}}]: hello from {{HierarchicalModuleName}}")
+
+;// -----
+FIRRTL version 5.1.0
+circuit Foo:
+  public module Foo:
+    input clock: Clock
+    ; expected-error @+1 {{Only a hierarchical module name can be used as a substitution for fprintf output file name}}
+    fprintf(clock, UInt<1>(1), "{{SimulationTime}}.txt", "hello")
 
 ;// -----
 FIRRTL version 5.0.0

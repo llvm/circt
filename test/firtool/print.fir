@@ -23,8 +23,10 @@ circuit PrintTest:
     input a : UInt<8>
 
     ; CHECK:       reg [31:0] fd_test_txt;
+    ; CHECK-NEXT:  reg [31:0] fd_25m_txt;
     ; CHECK-NEXT:  initial begin
     ; CHECK-NEXT:    fd_test_txt = __circt_lib_logging::FileDescriptor::get("test.txt");
+    ; CHECK-NEXT:    fd_25m_txt = __circt_lib_logging::FileDescriptor::get($sformatf("%m.txt"));
     ; CHECK-NEXT:  end
 
     ; CHECK: $fwrite(`PRINTF_FD_, "binary: %b %0b %8b\n", a, a, a);
@@ -48,5 +50,7 @@ circuit PrintTest:
     ; CHECK-NEXT: $fwrite(fd_test_txt, "hello");
     fprintf(clock, cond, "test.txt", "hello")
 
-    ; CHECK-NEXT:         $fwrite(fd_test_txt, "[%0t]: %m\n", $time);
+    ; CHECK-NEXT: $fwrite(fd_test_txt, "[%0t]: %m\n", $time);
     fprintf(clock, cond, "test.txt", "[{{SimulationTime}}]: {{HierarchicalModuleName}}\n")
+    ; CHECK-NEXT: $fwrite(fd_25m_txt, "[%0t]: %m\n", $time);
+    fprintf(clock, cond, "{{HierarchicalModuleName}}.txt", "[{{SimulationTime}}]: {{HierarchicalModuleName}}\n")

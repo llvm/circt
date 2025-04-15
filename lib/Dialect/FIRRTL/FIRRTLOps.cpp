@@ -5852,7 +5852,18 @@ static ParseResult parseFPrintfAttrs(OpAsmParser &p,
 
 static void printFPrintfAttrs(OpAsmPrinter &p, Operation *op,
                               DictionaryAttr attr) {
-  printElideEmptyName(p, op, attr, {"formatString", "outputFile"});
+  printElideEmptyName(p, op, attr,
+                      {"formatString", "outputFile", "operandSegmentSizes"});
+}
+
+LogicalResult FPrintFOp::verify() {
+  for (auto operand : getOutputFileSubstitutions())
+    if (!operand.getDefiningOp<firrtl::HierarchicalModuleNameOp>())
+      return mlir::emitError(operand.getLoc())
+             << "Only a hierarchical module name can be used as a substitution "
+                "for fprintf output file name";
+
+  return success();
 }
 
 static ParseResult parseStopAttrs(OpAsmParser &p, NamedAttrList &resultAttrs) {

@@ -1842,12 +1842,13 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(ConnectOp op);
   LogicalResult visitStmt(MatchingConnectOp op);
   LogicalResult visitStmt(ForceOp op);
+  // Lower a printf-like operation. `fileDescriptorInfo` is a pair of the
+  // file name and whether it requires format string substitution.
   template <class T>
-  LogicalResult visitPrintfLike(T op, StringAttr outputFile);
+  LogicalResult visitPrintfLike(
+      T op, llvm::PointerIntPair<StringAttr, 1> outputFileAndRequiresSubst);
   LogicalResult visitStmt(PrintFOp op) { return visitPrintfLike(op, {}); }
-  LogicalResult visitStmt(FPrintFOp op) {
-    return visitPrintfLike(op, op.getOutputFileAttr());
-  }
+  LogicalResult visitStmt(FPrintFOp op);
   LogicalResult visitStmt(StopOp op);
   LogicalResult visitStmt(AssertOp op);
   LogicalResult visitStmt(AssumeOp op);
@@ -4640,20 +4641,16 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseInitialOp op) {
   return success();
 }
 
-// Printf/FPrintf is a macro op that lowers to an sv.ifdef.procedural, an sv.if,
-// and an sv.fwrite all nested together.
-template <class T>
-LogicalResult FIRRTLLowering::visitPrintfLike(T op, StringAttr outputFile) {
-  auto clock = getLoweredNonClockValue(op.getClock());
-  auto cond = getLoweredValue(op.getCond());
-  if (!clock || !cond)
-    return failure();
-
+// Replace FIRRTL "special" substitutions {{..}} with verilog equivalents.
+static LogicalResult resolveFormatString(Location loc,
+                                         StringRef originalFormatString,
+                                         mlir::OperandRange operands,
+                                         StringAttr &result) {
   // Update the format string to replace "special" substitutions based on
   // substitution type and lower normal substitusion.
   SmallString<32> formatString;
-  for (size_t i = 0, e = op.getFormatString().size(), subIdx = 0; i != e; ++i) {
-    char c = op.getFormatString()[i];
+  for (size_t i = 0, e = originalFormatString.size(), subIdx = 0; i != e; ++i) {
+    char c = originalFormatString[i];
     switch (c) {
     // Maybe a "%?" normal substitution.
     case '%': {
@@ -4661,10 +4658,10 @@ LogicalResult FIRRTLLowering::visitPrintfLike(T op, StringAttr outputFile) {
 
       // Parse the width specifier.
       SmallString<6> width;
-      c = op.getFormatString()[++i];
+      c = originalFormatString[++i];
       while (isdigit(c)) {
         width.push_back(c);
-        c = op.getFormatString()[++i];
+        c = originalFormatString[++i];
       }
 
       // Parse the radix.
@@ -4688,12 +4685,12 @@ LogicalResult FIRRTLLowering::visitPrintfLike(T op, StringAttr outputFile) {
     // Maybe a "{{}}" special substitution.
     case '{': {
       // Not a special substituion.
-      if (op.getFormatString().slice(i, i + 4) != "{{}}") {
+      if (originalFormatString.slice(i, i + 4) != "{{}}") {
         formatString.push_back(c);
         break;
       }
       // Special substitution.  Look at the defining op to know how to lower it.
-      auto substitution = op.getSubstitutions()[subIdx++];
+      auto substitution = operands[subIdx++];
       assert(type_isa<FStringType>(substitution.getType()) &&
              "the operand for a '{{}}' substitution must be an 'fstring' type");
       auto result =
@@ -4707,8 +4704,8 @@ LogicalResult FIRRTLLowering::visitPrintfLike(T op, StringAttr outputFile) {
                 return success();
               })
               .Default([&](auto) {
-                op.emitError("has a substitution with an unimplemented "
-                             "lowering")
+                emitError(loc, "has a substitution with an unimplemented "
+                               "lowering")
                         .attachNote(substitution.getLoc())
                     << "op with an unimplemented lowering is here";
                 return failure();
@@ -4724,8 +4721,28 @@ LogicalResult FIRRTLLowering::visitPrintfLike(T op, StringAttr outputFile) {
     }
   }
 
+  result = StringAttr::get(loc->getContext(), formatString);
+  return success();
+}
+
+// Printf/FPrintf is a macro op that lowers to an sv.ifdef.procedural, an sv.if,
+// and an sv.fwrite all nested together.
+template <class T>
+LogicalResult FIRRTLLowering::visitPrintfLike(
+    T op, llvm::PointerIntPair<StringAttr, 1> outputFileAndRequiresSubst) {
+  auto clock = getLoweredNonClockValue(op.getClock());
+  auto cond = getLoweredValue(op.getCond());
+  if (!clock || !cond)
+    return failure();
+
+  StringAttr formatString;
+  if (failed(resolveFormatString(op.getLoc(), op.getFormatString(),
+                                 op.getSubstitutions(), formatString)))
+    return failure();
+
   // Emit an "#ifndef SYNTHESIS" guard into the always block.
   bool failed = false;
+  auto outputFile = outputFileAndRequiresSubst.getPointer();
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     // If the op is fprintf, initilize a file descriptor from a static class
@@ -4746,14 +4763,23 @@ LogicalResult FIRRTLLowering::visitPrintfLike(T op, StringAttr outputFile) {
             builder.getStringAttr("fd_" + outputFile.getValue()));
 
         addToInitialBlock([&]() {
-          auto constant = builder.create<sv::ConstantStrOp>(outputFile);
+          Value fileNameVal = builder.create<sv::ConstantStrOp>(outputFile);
+          if (outputFileAndRequiresSubst.getInt()) {
+            fileNameVal = builder
+                              .create<sv::SystemFunctionOp>(
+                                  hw::StringType::get(builder.getContext()),
+                                  builder.getStringAttr("sformatf"),
+                                  ValueRange{fileNameVal})
+                              ->getResult(0);
+          }
+
           auto fdResult =
               builder
                   .create<sv::FuncCallProceduralOp>(
                       mlir::TypeRange{builder.getIntegerType(32)},
                       builder.getStringAttr(
                           "__circt_lib_logging::FileDescriptor::get"),
-                      ValueRange{constant})
+                      ValueRange{fileNameVal})
                   ->getResult(0);
           builder.create<sv::BPAssignOp>(fd, fdResult);
         });
@@ -4802,6 +4828,20 @@ LogicalResult FIRRTLLowering::visitPrintfLike(T op, StringAttr outputFile) {
     return failure();
 
   return success();
+}
+
+LogicalResult FIRRTLLowering::visitStmt(FPrintFOp op) {
+  StringAttr outputFileAttr;
+  if (failed(resolveFormatString(op.getLoc(), op.getOutputFileAttr(),
+                                 op.getOutputFileSubstitutions(),
+                                 outputFileAttr)))
+    return failure();
+
+  llvm::PointerIntPair<StringAttr, 1> outputFileAndRequiresSubst;
+  outputFileAndRequiresSubst.setPointer(outputFileAttr);
+  outputFileAndRequiresSubst.setInt(op.getOutputFileAttr() != outputFileAttr);
+
+  return visitPrintfLike(op, outputFileAndRequiresSubst);
 }
 
 // Stop lowers into a nested series of behavioral statements plus $fatal

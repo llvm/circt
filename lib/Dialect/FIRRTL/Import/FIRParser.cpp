@@ -3097,14 +3097,17 @@ ParseResult FIRStmtParser::parseFPrintf() {
   if (parseExp(clock, "expected clock expression in fprintf") ||
       parseToken(FIRToken::comma, "expected ','") ||
       parseExp(condition, "expected condition in fprintf") ||
-      parseToken(FIRToken::comma, "expected ','") ||
-      parseGetSpelling(outputFile) ||
-      parseToken(FIRToken::string, "expected output file in fprintf") ||
       parseToken(FIRToken::comma, "expected ','"))
     return failure();
 
+  auto outputFileLoc = getToken().getLoc();
+  if (parseGetSpelling(outputFile) ||
+      parseToken(FIRToken::string, "expected output file in fprintf"))
+    return failure();
+
   auto formatStringLoc = getToken().getLoc();
-  if (parseGetSpelling(formatString) ||
+  if (parseToken(FIRToken::comma, "expected ','") ||
+      parseGetSpelling(formatString) ||
       parseToken(FIRToken::string, "expected format string in printf"))
     return failure();
 
@@ -3122,16 +3125,21 @@ ParseResult FIRStmtParser::parseFPrintf() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
+  StringAttr outputFileNameStrUnescaped;
+  SmallVector<Value> outputFileOperands;
+  if (parseFormatString(outputFileLoc, outputFile, {},
+                        outputFileNameStrUnescaped, outputFileOperands))
+    return failure();
+
   StringAttr formatStrUnescaped;
   SmallVector<Value> operands;
   if (parseFormatString(formatStringLoc, formatString, specOperands,
                         formatStrUnescaped, operands))
     return failure();
 
-  auto outputFileUnescaped = FIRToken::getStringValue(outputFile);
-  builder.create<FPrintFOp>(clock, condition,
-                            builder.getStringAttr(outputFileUnescaped),
-                            formatStrUnescaped, operands, name);
+  builder.create<FPrintFOp>(clock, condition, outputFileNameStrUnescaped,
+                            outputFileOperands, formatStrUnescaped, operands,
+                            name);
   return success();
 }
 
