@@ -366,3 +366,17 @@ def test7_bools(a, b):
   consumer(a > b)
   consumer(a <= b)
   consumer(a >= b)
+
+
+# MLIR-LABEL: rtg.test @test8_random_integer
+# MLIR-NEXT: rtg.random_number_in_range [%a, %b)
+
+
+@sequence(Integer.type())
+def int_consumer(b):
+  pass
+
+
+@test(("a", Integer.type()), ("b", Integer.type()))
+def test8_random_integer(a, b):
+  int_consumer(Integer.random(a, b))
