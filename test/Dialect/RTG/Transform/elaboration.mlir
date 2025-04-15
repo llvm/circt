@@ -6,6 +6,7 @@ func.func @dummy3(%arg0: !rtg.sequence) -> () {return}
 func.func @dummy4(%arg0: index, %arg1: index, %arg2: !rtg.bag<index>, %arg3: !rtg.bag<index>) -> () {return}
 func.func @dummy5(%arg0: i1) -> () {return}
 func.func @dummy6(%arg0: !rtg.isa.immediate<2>) -> () {return}
+func.func @dummy7(%arg0: !rtg.array<index>) -> () {return}
 
 // CHECK-LABEL: @immediates
 rtg.test @immediates() {
@@ -508,6 +509,22 @@ rtg.test @interleaveSequences() {
   rtg.embed_sequence %6
 }
 
+// CHECK-LABEL: rtg.test @arrays
+rtg.test @arrays() {
+  // CHECK-NEXT: [[V0:%.+]] = rtg.array_create : index
+  // CHECK-NEXT: func.call @dummy7([[V0]]) : (!rtg.array<index>) -> ()
+  %0 = rtg.array_create : index
+  func.call @dummy7(%0) : (!rtg.array<index>) -> ()
+
+  // CHECK-NEXT: [[IDX2:%.+]] = index.constant 2
+  // CHECK-NEXT: func.call @dummy2([[IDX2]]) : (index) -> ()
+  %idx1 = index.constant 1
+  %idx2 = index.constant 2
+  %1 = rtg.array_create %idx1, %idx2 : index
+  %2 = rtg.array_extract %1[%idx1] : !rtg.array<index>
+  func.call @dummy2(%2) : (index) -> ()
+}
+
 // -----
 
 rtg.test @nestedRegionsNotSupported() {
@@ -613,4 +630,16 @@ rtg.test @integerTooBig() {
   // expected-error @below {{cannot represent 8 with 2 bits}}
   %2 = rtg.isa.int_to_immediate %1 : !rtg.isa.immediate<2>
   func.call @dummy6(%2) : (!rtg.isa.immediate<2>) -> ()
+}
+
+// -----
+
+func.func @dummy6(%arg0: index) -> () {return}
+
+rtg.test @oobArrayAccess() {
+  %0 = index.constant 0
+  %1 = rtg.array_create : index
+  // expected-error @below {{invalid to access index 0 of an array with 0 elements}}
+  %2 = rtg.array_extract %1[%0] : !rtg.array<index>
+  func.call @dummy6(%2) : (index) -> ()
 }

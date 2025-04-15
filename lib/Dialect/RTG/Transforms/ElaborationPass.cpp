@@ -85,6 +85,7 @@ static uint32_t getUniformlyInRange(std::mt19937 &rng, uint32_t a, uint32_t b) {
 //===----------------------------------------------------------------------===//
 
 namespace {
+struct ArrayStorage;
 struct BagStorage;
 struct SequenceStorage;
 struct RandomizedSequenceStorage;
@@ -110,7 +111,7 @@ using ElaboratorValue =
     std::variant<TypedAttr, BagStorage *, bool, size_t, SequenceStorage *,
                  RandomizedSequenceStorage *, InterleavedSequenceStorage *,
                  SetStorage *, VirtualRegisterStorage *, UniqueLabelStorage *,
-                 LabelValue>;
+                 LabelValue, ArrayStorage *>;
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 llvm::hash_code hash_value(const LabelValue &val) {
@@ -361,6 +362,29 @@ struct UniqueLabelStorage {
   const StringAttr name;
 };
 
+/// Storage object for '!rtg.array`-typed values.
+struct ArrayStorage {
+  ArrayStorage(Type type, SmallVector<ElaboratorValue> &&array)
+      : hashcode(llvm::hash_combine(
+            type, llvm::hash_combine_range(array.begin(), array.end()))),
+        type(type), array(array) {}
+
+  bool isEqual(const ArrayStorage *other) const {
+    return hashcode == other->hashcode && type == other->type &&
+           array == other->array;
+  }
+
+  // The cached hashcode to avoid repeated computations.
+  const unsigned hashcode;
+
+  /// The type of the array. This is necessary because an array of size 0
+  /// cannot be reconstructed without knowing the original element type.
+  const Type type;
+
+  /// The label name. For unique labels, this is just the prefix.
+  const SmallVector<ElaboratorValue> array;
+};
+
 /// An 'Internalizer' object internalizes storages and takes ownership of them.
 /// When the initializer object is destroyed, all owned storages are also
 /// deallocated and thus must not be accessed anymore.
@@ -395,7 +419,9 @@ private:
   template <typename StorageTy>
   DenseSet<HashedStorage<StorageTy>, StorageKeyInfo<StorageTy>> &
   getInternSet() {
-    if constexpr (std::is_same_v<StorageTy, SetStorage>)
+    if constexpr (std::is_same_v<StorageTy, ArrayStorage>)
+      return internedArrays;
+    else if constexpr (std::is_same_v<StorageTy, SetStorage>)
       return internedSets;
     else if constexpr (std::is_same_v<StorageTy, BagStorage>)
       return internedBags;
@@ -417,6 +443,8 @@ private:
   // The sets holding the internalized objects. We use one set per storage type
   // such that we can have a simpler equality checking function (no need to
   // compare some sort of TypeIDs).
+  DenseSet<HashedStorage<ArrayStorage>, StorageKeyInfo<ArrayStorage>>
+      internedArrays;
   DenseSet<HashedStorage<SetStorage>, StorageKeyInfo<SetStorage>> internedSets;
   DenseSet<HashedStorage<BagStorage>, StorageKeyInfo<BagStorage>> internedBags;
   DenseSet<HashedStorage<SequenceStorage>, StorageKeyInfo<SequenceStorage>>
@@ -478,6 +506,13 @@ static void print(InterleavedSequenceStorage *val, llvm::raw_ostream &os) {
   llvm::interleaveComma(val->sequences, os,
                         [&](const ElaboratorValue &val) { os << val; });
   os << "] batch-size " << val->batchSize << " at " << val << ">";
+}
+
+static void print(ArrayStorage *val, llvm::raw_ostream &os) {
+  os << "<array [";
+  llvm::interleaveComma(val->array, os,
+                        [&](const ElaboratorValue &val) { os << val; });
+  os << "] at " << val << ">";
 }
 
 static void print(SetStorage *val, llvm::raw_ostream &os) {
@@ -662,6 +697,24 @@ private:
               std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     Value res = builder.create<index::BoolConstantOp>(loc, val);
+    materializedValues[val] = res;
+    return res;
+  }
+
+  Value visit(ArrayStorage *val, Location loc,
+              std::queue<RandomizedSequenceStorage *> &elabRequests,
+              function_ref<InFlightDiagnostic()> emitError) {
+    SmallVector<Value> elements;
+    elements.reserve(val->array.size());
+    for (auto el : val->array) {
+      auto materialized = materialize(el, loc, elabRequests, emitError);
+      if (!materialized)
+        return Value();
+
+      elements.push_back(materialized);
+    }
+
+    auto res = builder.create<ArrayCreateOp>(loc, val->type, elements);
     materializedValues[val] = res;
     return res;
   }
@@ -1133,6 +1186,29 @@ public:
     }
 
     return StringAttr::get(formatString.getContext(), original);
+  }
+
+  FailureOr<DeletionKind> visitOp(ArrayCreateOp op) {
+    SmallVector<ElaboratorValue> array;
+    array.reserve(op.getElements().size());
+    for (auto val : op.getElements())
+      array.emplace_back(state.at(val));
+
+    state[op.getResult()] = sharedState.internalizer.internalize<ArrayStorage>(
+        op.getResult().getType(), std::move(array));
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(ArrayExtractOp op) {
+    auto array = get<ArrayStorage *>(op.getArray())->array;
+    size_t idx = get<size_t>(op.getIndex());
+
+    if (array.size() <= idx)
+      return op->emitError("invalid to access index ")
+             << idx << " of an array with " << array.size() << " elements";
+
+    state[op.getResult()] = array[idx];
+    return DeletionKind::Delete;
   }
 
   FailureOr<DeletionKind> visitOp(LabelDeclOp op) {

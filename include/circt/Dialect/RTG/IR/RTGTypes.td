@@ -131,6 +131,11 @@ def ArrayType : RTGTypeDef<"Array"> {
 
   let mnemonic = "array";
   let assemblyFormat = "`<` $elementType `>`";
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "mlir::Type":$elementType),
+      "return $_get(elementType.getContext(), elementType);">,
+  ];
 }
 
 //===----------------------------------------------------------------------===//

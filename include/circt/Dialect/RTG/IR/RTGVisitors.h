@@ -53,6 +53,8 @@ public:
             // Sets
             SetCreateOp, SetSelectRandomOp, SetDifferenceOp, SetUnionOp,
             SetSizeOp,
+            // Arrays
+            ArrayCreateOp, ArrayExtractOp,
             // Immediates
             IntToImmediateOp>([&](auto expr) -> ResultType {
           return thisCast->visitOp(expr, args...);
@@ -106,6 +108,8 @@ public:
   HANDLE(BagDifferenceOp, Unhandled);
   HANDLE(BagUnionOp, Unhandled);
   HANDLE(BagUniqueSizeOp, Unhandled);
+  HANDLE(ArrayCreateOp, Unhandled);
+  HANDLE(ArrayExtractOp, Unhandled);
   HANDLE(LabelDeclOp, Unhandled);
   HANDLE(LabelUniqueDeclOp, Unhandled);
   HANDLE(LabelOp, Unhandled);
