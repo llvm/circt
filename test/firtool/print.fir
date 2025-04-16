@@ -55,7 +55,7 @@ circuit PrintTest:
     fprintf(clock, cond, "test.txt", "[{{SimulationTime}}]: {{HierarchicalModuleName}}\n")
 
     ; CHECK-NEXT: $fwrite([[FD_0]], "static file name (w/o substitution)\n");
-    fprintf(clock, cond, "test.txt", a, "static file name (w/o substitution)\n")
+    fprintf(clock, cond, "test.txt", "static file name (w/o substitution)\n")
 
     node c = UInt<8>(97)
     ; CHECK-NEXT: $fwrite([[FD_1]], "[%0t]: static file name (w/ substitution)\n", $time);
