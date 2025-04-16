@@ -430,3 +430,9 @@ hw.module @test_open_array(in %clock : i1, in %in_0 : i8, in %in_1 : i8) {
     sv.func.call.procedural @open_array(%1) : (!sv.open_uarray<i8>) -> ()
   }
 }
+
+// CHECK-LABEL: hw.module @test_sformatf(in %a : i8) {
+// CHECK-NEXT:  sv.sformatf "foo%d"(%a) : i8
+hw.module @test_sformatf(in %a : i8) {
+  %0 = sv.sformatf "foo%d"(%a) : i8
+}
