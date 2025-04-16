@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/ExportVerilog.h"
+#include "circt/Conversion/Passes.h"
 #include "circt/Conversion/VerifToSV.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
@@ -491,6 +492,8 @@ static LogicalResult executeWithHandler(MLIRContext *context,
   PassManager pm(context);
   pm.enableVerifier(opts.verifyPasses);
   pm.addPass(verif::createLowerFormalToHWPass());
+  pm.addPass(createLowerSimToSVPass());
+  pm.addPass(createLowerSeqToSVPass());
   pm.addNestedPass<hw::HWModuleOp>(createLowerVerifToSVPass());
   pm.addNestedPass<hw::HWModuleOp>(sv::createHWLegalizeModulesPass());
   pm.addNestedPass<hw::HWModuleOp>(sv::createPrettifyVerilogPass());
