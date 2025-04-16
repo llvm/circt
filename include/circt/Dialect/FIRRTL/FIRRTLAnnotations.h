@@ -105,6 +105,10 @@ public:
   void removeMember(StringAttr name);
   void removeMember(StringRef name);
 
+  /// Returns true if this is an annotation which can be safely deleted without
+  /// consequence.
+  bool canBeDeleted();
+
   using iterator = llvm::ArrayRef<NamedAttribute>::iterator;
   iterator begin() const { return getDict().begin(); }
   iterator end() const { return getDict().end(); }
@@ -242,6 +246,10 @@ public:
   static bool setDontTouch(Operation *op, bool dontTouch);
   static bool addDontTouch(Operation *op);
   static bool removeDontTouch(Operation *op);
+
+  /// Check if every annotation can be deleted.
+  bool canBeDeleted() const;
+  static bool canBeDeleted(Operation *op);
 
   bool operator==(const AnnotationSet &other) const {
     return annotations == other.annotations;

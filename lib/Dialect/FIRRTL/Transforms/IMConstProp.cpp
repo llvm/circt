@@ -65,7 +65,7 @@ static bool isDeletableWireOrRegOrNode(Operation *op) {
     return true;
 
   // Otherwise, don't delete if has anything keeping it around or unknown.
-  return AnnotationSet(op).empty() && !hasDontTouch(op) &&
+  return AnnotationSet(op).canBeDeleted() && !hasDontTouch(op) &&
          hasDroppableName(op) && !cast<Forceable>(op).isForceable();
 }
 

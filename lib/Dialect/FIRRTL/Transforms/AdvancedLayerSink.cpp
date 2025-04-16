@@ -91,7 +91,7 @@ public:
 
   /// True if the given operation is NOT moveable due to some effect.
   bool effectful(Operation *op) const {
-    if (!AnnotationSet(op).empty() || hasDontTouch(op))
+    if (!AnnotationSet(op).canBeDeleted() || hasDontTouch(op))
       return true;
     if (auto name = dyn_cast<FNamableOp>(op))
       if (!name.hasDroppableName())
@@ -130,6 +130,9 @@ private:
     for (auto annos : moduleOp.getPortAnnotations())
       if (!cast<ArrayAttr>(annos).empty())
         return markEffectful(moduleOp);
+
+    if (!AnnotationSet(moduleOp).canBeDeleted())
+      return markEffectful(moduleOp);
 
     auto *op = moduleOp.getOperation();
     // Regular modules may be pure.
