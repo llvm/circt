@@ -1144,9 +1144,9 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.read %arr2
     // CHECK: moore.uarray_cmp eq [[TMP1]], [[TMP2]] : <2 x i32> -> i1
     x = arr1 == arr2;
-    // CHECK: [[TMP1:%.+]] = moore.read %arr1
-    // CHECK: [[TMP2:%.+]] = moore.read %arr2
-    // CHECK: moore.uarray_cmp ne [[TMP1]], [[TMP2]] : <2 x i32> -> i1
+    // CHECK: [[TMP3:%.+]] = moore.read %arr1
+    // CHECK: [[TMP4:%.+]] = moore.read %arr2
+    // CHECK: moore.uarray_cmp ne [[TMP3]], [[TMP4]] : <2 x i32> -> i1
     x = arr1 != arr2;
 
     // CHECK: [[TMP1:%.+]] = moore.read %a
