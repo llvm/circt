@@ -356,6 +356,43 @@ firrtl.circuit "DeleteInstance" {
 }
 
 // -----
+firrtl.circuit "Top" {
+  // CHECK-NOT: @nla_1
+  // CHECK: @nla_2
+  hw.hierpath private @nla_1 [@Foo1::@dead, @EncodingModule]
+  hw.hierpath private @nla_2 [@Foo2::@live, @EncodingModule]
+  // CHECK-LABEL: private @EncodingModule
+  // CHECK-NOT: @nla_1
+  // CHECK-SAME: @nla_2
+  firrtl.module private @EncodingModule(in %in: !firrtl.uint<1>, out %a: !firrtl.uint<1> [{circt.nonlocal = @nla_1, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64, type = "OMReferenceTarget"}, {circt.nonlocal = @nla_2, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1 : i64, type = "OMReferenceTarget"}]) {
+    firrtl.matchingconnect %a, %in : !firrtl.uint<1>
+  }
+  // CHECK-NOT: @Foo1
+  firrtl.module private @Foo1(in %in: !firrtl.uint<1>) {
+    %c_in, %c_a = firrtl.instance c sym @dead @EncodingModule(in in: !firrtl.uint<1>, out a: !firrtl.uint<1>)
+    firrtl.matchingconnect %c_in, %in : !firrtl.uint<1>
+  }
+  // CHECK-LABEL: @Foo2
+  firrtl.module private @Foo2(in %in: !firrtl.uint<1>, out %a: !firrtl.uint<1>) {
+    %c_in, %c_a = firrtl.instance c sym @live @EncodingModule(in in: !firrtl.uint<1>, out a: !firrtl.uint<1>)
+    firrtl.matchingconnect %a, %c_a : !firrtl.uint<1>
+    firrtl.matchingconnect %c_in, %in : !firrtl.uint<1>
+  }
+  // CHECK-LABEL: @Top
+  // CHECK-NOT: @Foo1
+  // CHECK-NOT: firrtl.matchingconnect %foo1_in, %in
+  // CHECK: @Foo2
+  firrtl.module @Top(in %in: !firrtl.uint<1>, out %a: !firrtl.uint<1>) {
+    %foo1_in = firrtl.instance foo1 @Foo1(in in: !firrtl.uint<1>)
+    firrtl.matchingconnect %foo1_in, %in : !firrtl.uint<1>
+    %foo2_in, %foo2_a = firrtl.instance foo2 @Foo2(in in: !firrtl.uint<1>, out a: !firrtl.uint<1>)
+    firrtl.matchingconnect %a, %foo2_a : !firrtl.uint<1>
+    firrtl.matchingconnect %foo2_in, %in : !firrtl.uint<1>
+
+  }
+}
+
+// -----
 
 firrtl.circuit "Top" {
   // CHECK: hw.hierpath private @nla_1
@@ -524,6 +561,60 @@ firrtl.circuit "DeadPublic" {
   // CHECK: module @DeadPublic
   firrtl.module @DeadPublic() {
      firrtl.instance pdc @PublicDeadChild()
+  }
+}
+
+// -----
+// OMIR annotation should not block removal.
+//   - See: https://github.com/llvm/circt/issues/6199
+//
+// CHECK-LABEL: firrtl.circuit "OMIRRemoval"
+firrtl.circuit "OMIRRemoval" {
+  firrtl.module @OMIRRemoval() {
+    // CHECK-NOT: %tmp_0
+    %tmp_0 = firrtl.wire {
+      annotations = [
+        {
+           class = "freechips.rocketchip.objectmodel.OMIRTracker",
+           id = 0 : i64,
+           type = "OMReferenceTarget"
+        }
+      ]} : !firrtl.uint<1>
+
+    // CHECK-NOT: %tmp_1
+    %tmp_1 = firrtl.wire {
+      annotations = [
+        {
+           class = "freechips.rocketchip.objectmodel.OMIRTracker",
+           id = 1 : i64,
+           type = "OMMemberReferenceTarget"
+        }
+      ]} : !firrtl.uint<2>
+
+    // CHECK-NOT: %tmp_2
+    %tmp_2 = firrtl.wire {
+      annotations = [
+        {
+           class = "freechips.rocketchip.objectmodel.OMIRTracker",
+           id = 3 : i64,
+           type = "OMMemberInstanceTarget"
+        }
+      ]} : !firrtl.uint<3>
+
+    // Adding one additional annotation will block removal.
+    //
+    // CHECK: %tmp_3
+    %tmp_3 = firrtl.wire {
+      annotations = [
+        {
+           class = "freechips.rocketchip.objectmodel.OMIRTracker",
+           id = 4 : i64,
+           type = "OMMemberInstanceTarget"
+        },
+        {
+           class = "circt.test"
+        }
+      ]} : !firrtl.uint<4>
   }
 }
 

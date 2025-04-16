@@ -861,7 +861,7 @@ firrtl.module @Orr(in %in0 : !firrtl.uint<0>, in %in2 : !firrtl.uint<2>,
                    out %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>,
                    out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>,
                    out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>,
-                   out %g: !firrtl.uint<1>, in %h : !firrtl.uint<64>,
+                   out %g: !firrtl.uint<1>, in %h : !firrtl.uint<64>, 
                    out %j : !firrtl.uint<1>) {
   %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
@@ -910,7 +910,7 @@ firrtl.module @Xorr(in %in0 : !firrtl.uint<0>, in %in2 : !firrtl.uint<2>,
                     out %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>,
                     out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>,
                     out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>,
-                    out %g: !firrtl.uint<1>, in %h : !firrtl.uint<64>,
+                    out %g: !firrtl.uint<1>, in %h : !firrtl.uint<64>, 
                     out %j : !firrtl.uint<1>) {
   %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
   %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
@@ -3514,6 +3514,73 @@ firrtl.module @HasBeenReset(in %clock: !firrtl.clock, in %reset1: !firrtl.uint<1
   %constClockR1 = firrtl.node sym @constClockR1 %c5 : !firrtl.uint<1>
 }
 
+// OMIR annotations should not block removal.
+//   - See: https://github.com/llvm/circt/issues/6199
+//
+// CHECK-LABEL: firrtl.module @OMIRRemoval
+firrtl.module @OMIRRemoval(in %source : !firrtl.uint<1>) {
+  // CHECK-NOT: %tmp_0
+  %tmp_0 = firrtl.wire {
+    annotations = [
+      {
+         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         id = 0 : i64,
+         type = "OMReferenceTarget"
+      }
+    ]} : !firrtl.uint<1>
+  %a = firrtl.wire : !firrtl.uint<1>
+  firrtl.matchingconnect %tmp_0, %source : !firrtl.uint<1>
+  // CHECK: firrtl.matchingconnect %a, %source
+  firrtl.matchingconnect %a, %tmp_0 : !firrtl.uint<1>
+
+  // CHECK-NOT: %tmp_1
+  %tmp_1 = firrtl.wire {
+    annotations = [
+      {
+         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         id = 1 : i64,
+         type = "OMMemberReferenceTarget"
+      }
+    ]} : !firrtl.uint<1>
+  %b = firrtl.wire : !firrtl.uint<1>
+  firrtl.matchingconnect %tmp_1, %source : !firrtl.uint<1>
+  // CHECK: firrtl.matchingconnect %b, %source
+  firrtl.matchingconnect %b, %tmp_1 : !firrtl.uint<1>
+
+  // CHECK-NOT: %tmp_2
+  %tmp_2 = firrtl.wire {
+    annotations = [
+      {
+         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         id = 2 : i64,
+         type = "OMMemberInstanceTarget"
+      }
+    ]} : !firrtl.uint<1>
+  %c = firrtl.wire : !firrtl.uint<1>
+  firrtl.matchingconnect %tmp_2, %source : !firrtl.uint<1>
+  // CHECK: firrtl.matchingconnect %c, %source
+  firrtl.matchingconnect %c, %tmp_2 : !firrtl.uint<1>
+
+  // Adding one additional annotation will block removal.
+  //
+  // CHECK: %tmp_3
+  %tmp_3 = firrtl.wire {
+    annotations = [
+      {
+         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         id = 0 : i64,
+         type = "OMReferenceTarget"
+      },
+      {
+         class = "circt.test"
+      }
+    ]} : !firrtl.uint<1>
+  %d = firrtl.wire : !firrtl.uint<1>
+  firrtl.matchingconnect %tmp_3, %source : !firrtl.uint<1>
+  // CHECK: firrtl.matchingconnect %d, %tmp_3
+  firrtl.matchingconnect %d, %tmp_3 : !firrtl.uint<1>
+}
+
 // CHECK-LABEL: firrtl.module @Whens
 firrtl.module @Whens(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %reset: !firrtl.uint<1>) {
   %true = firrtl.constant 1: !firrtl.uint<1>
@@ -3562,10 +3629,10 @@ firrtl.module @Probes(in %clock: !firrtl.clock) {
 firrtl.module @sizeof(in %clock: !firrtl.clock,
                       in %vec: !firrtl.vector<uint<3>,3>,
                       in %bundle: !firrtl.bundle<a: uint<2>, b: uint<2>>) {
-  // CHECK: %c4_ui32 = firrtl.constant 4 : !firrtl.uint<32>
-  // CHECK: %c9_ui32 = firrtl.constant 9 : !firrtl.uint<32>
-  // CHECK: %c1_ui32 = firrtl.constant 1 : !firrtl.uint<32>
-  // CHECK: %n_c = firrtl.node interesting_name %c1_ui32
+  // CHECK: %c4_ui32 = firrtl.constant 4 : !firrtl.uint<32> 
+  // CHECK: %c9_ui32 = firrtl.constant 9 : !firrtl.uint<32> 
+  // CHECK: %c1_ui32 = firrtl.constant 1 : !firrtl.uint<32> 
+  // CHECK: %n_c = firrtl.node interesting_name %c1_ui32 
   // CHECK: %n_vec = firrtl.node interesting_name %c9_ui32
   // CHECK: %n_bundle = firrtl.node interesting_name %c4_ui32
   %s_c = firrtl.int.sizeof %clock : (!firrtl.clock) -> !firrtl.uint<32>

@@ -180,3 +180,58 @@ firrtl.circuit "UnusedOutput"  {
     firrtl.matchingconnect %b, %singleDriver_b : !firrtl.uint<1>
   }
 }
+
+// -----
+
+// OMIR annotations should not block removal.
+//   - See: https://github.com/llvm/circt/issues/6199
+//
+// CHECK-LABEL: firrtl.circuit "OMIRRemoval"
+firrtl.circuit "OMIRRemoval" {
+  // CHECK-NOT: %a
+  // CHECK-NOT: %b
+  // CHECK-NOT: %c
+  // CHECK:     %d
+  firrtl.module private @Foo(
+    out %a: !firrtl.uint<1> [
+      {
+         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         id = 0 : i64,
+         type = "OMReferenceTarget"
+      }
+    ],
+    out %b: !firrtl.uint<2> [
+      {
+         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         id = 1 : i64,
+         type = "OMMemberReferenceTarget"
+      }
+    ],
+    in %c: !firrtl.uint<3> [
+      {
+         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         id = 3 : i64,
+         type = "OMMemberInstanceTarget"
+      }
+    ],
+    in %d: !firrtl.uint<4> [
+      {
+         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         id = 4 : i64,
+         type = "OMMemberInstanceTarget"
+      },
+      // Adding one additional annotation will block removal.
+      {
+         class = "circt.test"
+      }
+    ]
+  ) {}
+  firrtl.module @OMIRRemoval() {
+    %foo_a, %foo_b, %foo_c, %foo_d = firrtl.instance foo @Foo(
+      out a: !firrtl.uint<1>,
+      out b: !firrtl.uint<2>,
+      in  c: !firrtl.uint<3>,
+      in  d: !firrtl.uint<4>
+    )
+  }
+}

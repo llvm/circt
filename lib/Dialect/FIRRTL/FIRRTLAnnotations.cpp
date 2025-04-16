@@ -439,7 +439,15 @@ void Annotation::removeMember(StringRef name) {
 }
 
 bool Annotation::canBeDeleted() {
-  return false;
+
+  // The only annotations which can be deleted are OM-affiliated.
+  if (!isClass(omirTrackerAnnoClass))
+    return false;
+
+  auto tpe = getMember<StringAttr>("type");
+  return tpe &&
+         (tpe == "OMReferenceTarget" || tpe == "OMMemberReferenceTarget" ||
+          tpe == "OMMemberInstanceTarget");
 }
 
 void Annotation::dump() { attr.dump(); }
