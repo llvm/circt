@@ -247,7 +247,7 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
   if (isa<ReadInOutOp, AggregateConstantOp, ArrayIndexInOutOp,
           IndexedPartSelectInOutOp, StructFieldInOutOp, IndexedPartSelectOp,
-          ParamValueOp, XMROp, XMRRefOp, SampledOp, EnumConstantOp,
+          ParamValueOp, XMROp, XMRRefOp, SampledOp, EnumConstantOp, SFormatFOp,
           SystemFunctionOp, STimeOp, TimeOp, UnpackedArrayCreateOp,
           UnpackedOpenArrayCastOp>(op))
     return true;
@@ -2315,6 +2315,7 @@ private:
   SubExprInfo visitSV(SystemFunctionOp op);
   SubExprInfo visitSV(ReadInterfaceSignalOp op);
   SubExprInfo visitSV(XMROp op);
+  SubExprInfo visitSV(SFormatFOp op);
   SubExprInfo visitSV(XMRRefOp op);
   SubExprInfo visitVerbatimExprOp(Operation *op, ArrayAttr symbols);
   SubExprInfo visitSV(VerbatimExprOp op) {
@@ -3223,6 +3224,28 @@ SubExprInfo ExprEmitter::visitSV(SampledOp op) {
   auto info = emitSubExpr(op.getExpression(), LowestPrecedence);
   ps << ")";
   return info;
+}
+
+SubExprInfo ExprEmitter::visitSV(SFormatFOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  ps << "$sformatf(";
+  ps.scopedBox(PP::ibox0, [&]() {
+    ps.writeQuotedEscaped(op.getFormatString());
+    // TODO: if any of these breaks, it'd be "nice" to break
+    // after the comma, instead of:
+    // $fwrite(5, "...", a + b,
+    //         longexpr_goes
+    //         + here, c);
+    // (without forcing breaking between all elements, like braced list)
+    for (auto operand : op.getSubstitutions()) {
+      ps << "," << PP::space;
+      emitSubExpr(operand, LowestPrecedence);
+    }
+  });
+  ps << ")";
+  return {Symbol, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitSV(TimeOp op) {

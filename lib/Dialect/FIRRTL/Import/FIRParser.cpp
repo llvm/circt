@@ -3105,9 +3105,18 @@ ParseResult FIRStmtParser::parseFPrintf() {
       parseToken(FIRToken::string, "expected output file in fprintf"))
     return failure();
 
+  SmallVector<Value, 4> outputFileSpecOperands;
+  while (consumeIf(FIRToken::comma)) {
+    // Stop parsing operands when we see the format string.
+    if (getToken().getKind() == FIRToken::string)
+      break;
+    outputFileSpecOperands.push_back({});
+    if (parseExp(outputFileSpecOperands.back(), "expected operand in fprintf"))
+      return failure();
+  }
+
   auto formatStringLoc = getToken().getLoc();
-  if (parseToken(FIRToken::comma, "expected ','") ||
-      parseGetSpelling(formatString) ||
+  if (parseGetSpelling(formatString) ||
       parseToken(FIRToken::string, "expected format string in printf"))
     return failure();
 
@@ -3127,7 +3136,7 @@ ParseResult FIRStmtParser::parseFPrintf() {
 
   StringAttr outputFileNameStrUnescaped;
   SmallVector<Value> outputFileOperands;
-  if (parseFormatString(outputFileLoc, outputFile, {},
+  if (parseFormatString(outputFileLoc, outputFile, outputFileSpecOperands,
                         outputFileNameStrUnescaped, outputFileOperands))
     return failure();
 

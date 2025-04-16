@@ -131,19 +131,11 @@ def FPrintFOp : FIRRTLOp<"fprintf", [AttrSizedOperandSegments]> {
   }];
 
   let arguments = (ins ClockType:$clock, UInt1Type:$cond, StrAttr:$outputFile,
-                       // Use FStringType instead of PrintfOperandType to reject hardware types.
-                       Variadic<FStringType>:$outputFileSubstitutions,
+                       Variadic<PrintfOperandType>:$outputFileSubstitutions,
                        StrAttr:$formatString, Variadic<PrintfOperandType>:$substitutions,
                        StrAttr:$name);
   let results = (outs);
-
-  let hasVerifier = 1;
-
-  let assemblyFormat = [{
-    $clock `,` $cond `,` $outputFile (` ` `(` $outputFileSubstitutions^ `)`)? `,` $formatString ``
-    custom<FPrintfAttrs>(attr-dict) ` ` (`(` $substitutions^ `)`)? `:`
-    type($clock) `,` type($cond) (`,` qualified(type($substitutions))^)?
-  }];
+  let hasCustomAssemblyFormat = 1;
 }
 
 def SkipOp : FIRRTLOp<"skip", [Pure]> {

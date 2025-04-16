@@ -199,6 +199,43 @@ static void tryCopyName(Operation *dst, Operation *src) {
       dst->setAttr("sv.namehint", attr);
 }
 
+namespace {
+
+struct FPrintfOutputFileInfo {
+  FPrintfOutputFileInfo(mlir::OperandRange substitutions,
+                        StringAttr outputFileName)
+      : substitutions(substitutions), outputFileName(outputFileName) {
+    isDynamicFileName = llvm::any_of(substitutions, [](Value v) {
+      auto *op = v.getDefiningOp();
+      if (!op)
+        return true;
+      // HierarchicalModuleNameOp is a constant.
+      return !(isa<HierarchicalModuleNameOp>(op) ||
+               op->hasTrait<mlir::OpTrait::ConstantLike>());
+    });
+  }
+
+  StringAttr getOutputFileName() const { return outputFileName; }
+
+  bool isDynamicOutputFileName() const { return isDynamicFileName; }
+
+  bool isSubstitutionRequired() const { return !substitutions.empty(); }
+
+  mlir::OperandRange getSubst() const { return substitutions; }
+
+private:
+  // Set true if the file name is dynamic, i.e. $time or normal hardware value
+  // is substituted.
+  bool isDynamicFileName;
+
+  // FIRRTL operands.
+  mlir::OperandRange substitutions;
+
+  StringAttr outputFileName;
+};
+
+} // namespace
+
 //===----------------------------------------------------------------------===//
 // firrtl.module Lowering Pass
 //===----------------------------------------------------------------------===//
@@ -1578,6 +1615,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   Value getLoweredAndExtendedValue(Value value, Type destType);
   Value getLoweredAndExtOrTruncValue(Value value, Type destType);
   std::optional<Value> getLoweredFmtOperand(Value operand);
+  LogicalResult loweredFmtOperands(OperandRange operands,
+                                   SmallVectorImpl<Value> &loweredOperands);
   LogicalResult setLowering(Value orig, Value result);
   LogicalResult setPossiblyFoldedLowering(Value orig, Value result);
   template <typename ResultOpType, typename... CtorArgTypes>
@@ -1842,11 +1881,12 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(ConnectOp op);
   LogicalResult visitStmt(MatchingConnectOp op);
   LogicalResult visitStmt(ForceOp op);
+
   // Lower a printf-like operation. `fileDescriptorInfo` is a pair of the
   // file name and whether it requires format string substitution.
   template <class T>
-  LogicalResult visitPrintfLike(
-      T op, llvm::PointerIntPair<StringAttr, 1> outputFileAndRequiresSubst);
+  LogicalResult
+  visitPrintfLike(T op, const std::optional<FPrintfOutputFileInfo> &outputFile);
   LogicalResult visitStmt(PrintFOp op) { return visitPrintfLike(op, {}); }
   LogicalResult visitStmt(FPrintFOp op);
   LogicalResult visitStmt(StopOp op);
@@ -2571,6 +2611,20 @@ std::optional<Value> FIRRTLLowering::getLoweredFmtOperand(Value operand) {
           loweredValue.getType(), "signed", loweredValue);
 
   return loweredValue;
+}
+
+LogicalResult
+FIRRTLLowering::loweredFmtOperands(mlir::OperandRange operands,
+                                   SmallVectorImpl<Value> &loweredOperands) {
+  for (auto operand : operands) {
+    std::optional<Value> loweredValue = getLoweredFmtOperand(operand);
+    if (!loweredValue)
+      return failure();
+    // Skip if the lowered value is null.
+    if (*loweredValue)
+      loweredOperands.push_back(*loweredValue);
+  }
+  return success();
 }
 
 /// Set the lowered value of 'orig' to 'result', remembering this in a map.
@@ -4729,7 +4783,7 @@ static LogicalResult resolveFormatString(Location loc,
 // and an sv.fwrite all nested together.
 template <class T>
 LogicalResult FIRRTLLowering::visitPrintfLike(
-    T op, llvm::PointerIntPair<StringAttr, 1> outputFileAndRequiresSubst) {
+    T op, const std::optional<FPrintfOutputFileInfo> &outputFileInfo) {
   auto clock = getLoweredNonClockValue(op.getClock());
   auto cond = getLoweredValue(op.getCond());
   if (!clock || !cond)
@@ -4742,12 +4796,12 @@ LogicalResult FIRRTLLowering::visitPrintfLike(
 
   // Emit an "#ifndef SYNTHESIS" guard into the always block.
   bool failed = false;
-  auto outputFile = outputFileAndRequiresSubst.getPointer();
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     // If the op is fprintf, initilize a file descriptor from a static class
     // function.
-    if (outputFile) {
+    if (outputFileInfo && !outputFileInfo->isDynamicOutputFileName()) {
+      auto outputFile = outputFileInfo->getOutputFileName();
       circuitState.usedFPrintf = true;
       circuitState.addFragment(theModule, "FPRINTF_FD_FRAGMENT");
       // `ifndef SYNTHESIS
@@ -4763,14 +4817,18 @@ LogicalResult FIRRTLLowering::visitPrintfLike(
             builder.getStringAttr("fd_" + outputFile.getValue()));
 
         addToInitialBlock([&]() {
-          Value fileNameVal = builder.create<sv::ConstantStrOp>(outputFile);
-          if (outputFileAndRequiresSubst.getInt()) {
-            fileNameVal = builder
-                              .create<sv::SystemFunctionOp>(
-                                  hw::StringType::get(builder.getContext()),
-                                  builder.getStringAttr("sformatf"),
-                                  ValueRange{fileNameVal})
-                              ->getResult(0);
+          Value fileNameVal = builder.create<sv::ConstantStrOp>(
+              outputFileInfo->getOutputFileName());
+          if (outputFileInfo->isSubstitutionRequired()) {
+            SmallVector<Value> fileNameOperands;
+            if (llvm::failed(loweredFmtOperands(outputFileInfo->getSubst(),
+                                                fileNameOperands))) {
+              failed = true;
+              return;
+            }
+
+            fileNameVal = builder.create<sv::SFormatFOp>(
+                outputFileInfo->getOutputFileName(), fileNameOperands);
           }
 
           auto fdResult =
@@ -4800,23 +4858,42 @@ LogicalResult FIRRTLLowering::visitPrintfLike(
         // Emit the sv.fwrite, writing to fd specified by `PRINTF_FD` for
         // printf, or the file descriptor opened using $fopen for fprintf.
         Value fd;
-        if (outputFile) {
-          auto it = fileNameToFileDescriptor.find(outputFile);
-          assert(it != fileNameToFileDescriptor.end() && "must be registered");
-          fd = builder.create<sv::ReadInOutOp>(it->second);
+        if (outputFileInfo) {
+          if (outputFileInfo->isDynamicOutputFileName()) {
+            SmallVector<Value> fileNameOperands;
+            for (auto substitution : outputFileInfo->getSubst()) {
+              std::optional<Value> loweredValue =
+                  getLoweredFmtOperand(substitution);
+              if (!loweredValue)
+                failed = true;
+              if (*loweredValue)
+                fileNameOperands.push_back(*loweredValue);
+            }
+            auto fileName = builder.create<sv::SFormatFOp>(
+                outputFileInfo->getOutputFileName(), fileNameOperands);
+            fd = builder
+                     .create<sv::FuncCallProceduralOp>(
+                         mlir::TypeRange{builder.getIntegerType(32)},
+                         builder.getStringAttr(
+                             "__circt_lib_logging::FileDescriptor::get"),
+                         ValueRange{fileName})
+                     ->getResult(0);
+          } else {
+            auto it = fileNameToFileDescriptor.find(
+                outputFileInfo->getOutputFileName());
+            assert(it != fileNameToFileDescriptor.end() &&
+                   "must be registered");
+            fd = builder.create<sv::ReadInOutOp>(it->second);
+          }
         } else {
           fd = builder.create<sv::MacroRefExprOp>(builder.getIntegerType(32),
                                                   "PRINTF_FD_");
         }
         // Lower the operands handling any special substitutions that need to be
         // lowered on a per-use basis.
-        for (auto operand : op.getSubstitutions()) {
-          std::optional<Value> loweredValue = getLoweredFmtOperand(operand);
-          if (!loweredValue)
-            failed = true;
-          if (*loweredValue)
-            operands.push_back(*loweredValue);
-        }
+        if (llvm::failed(loweredFmtOperands(op.getSubstitutions(), operands)))
+          failed = true;
+
         if (failed)
           return;
         builder.create<sv::FWriteOp>(fd, formatString, operands);
@@ -4837,11 +4914,9 @@ LogicalResult FIRRTLLowering::visitStmt(FPrintFOp op) {
                                  outputFileAttr)))
     return failure();
 
-  llvm::PointerIntPair<StringAttr, 1> outputFileAndRequiresSubst;
-  outputFileAndRequiresSubst.setPointer(outputFileAttr);
-  outputFileAndRequiresSubst.setInt(op.getOutputFileAttr() != outputFileAttr);
-
-  return visitPrintfLike(op, outputFileAndRequiresSubst);
+  FPrintfOutputFileInfo outputFile(op.getOutputFileSubstitutions(),
+                                   outputFileAttr);
+  return visitPrintfLike(op, outputFile);
 }
 
 // Stop lowers into a nested series of behavioral statements plus $fatal
