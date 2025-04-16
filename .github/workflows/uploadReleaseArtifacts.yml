@@ -15,7 +15,7 @@ on:
           - windows
 
       # The following options only influence workflow_dispatch, and are ignored otherwise.
-      runTests:
+      run_tests:
         description: Run CIRCT tests
         default: false
         type: boolean
@@ -29,10 +29,10 @@ on:
         required: true
         type: choice
         options:
-          - Release
-          - RelWithDebInfo
-          - Debug
-        default: Release
+          - release
+          - relwithdebinfo
+          - debug
+        default: release
 
   # Run every day at 0700 UTC which is:
   #   - 0000 PDT / 2300 PST
@@ -43,7 +43,7 @@ on:
 jobs:
   publish-sources:
     if: github.ref_type == 'tag'
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     permissions:
       contents: write # Upload assets to release.
     steps:
@@ -76,145 +76,75 @@ jobs:
 
   # This job sets up the build matrix.
   choose-matrix:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
-      - name: Add Linux
-        id: add-linux
-        if: github.event_name != 'workflow_dispatch' || inputs.os == 'linux'
-        env:
-          os: linux
-          runner: ubuntu-20.04
-          arch: x64
-          tar: tar czf
-          archive: tar.gz
-          sha256: shasum -a 256
-          cont: '\'
-          setup:
-          cmake_c_compiler: clang-12
-          cmake_cxx_compiler: clang++-12
+      # Clone CIRCT as shallow as possible.  We just need the `.github`
+      # directory.
+      - name: Get CIRCT and LLVM
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+          submodules: "false"
+      - name: Get Configuration
+        id: get-config
         run: |
-          json=$(echo '${{ toJSON(env) }}' | jq -c)
-          echo $json
-          echo "out=$json" >> $GITHUB_OUTPUT
-      - name: Add macOS
-        id: add-macos
-        if: github.event_name == 'release' || ( github.event_name == 'workflow_dispatch' && inputs.os == 'macos' )
-        env:
-          os: macos
-          runner: macos-13
-          arch: x64
-          tar: gtar czf
-          archive: tar.gz
-          sha256: shasum -a 256
-          cont: '\'
-          setup:
-          cmake-args:
-          cmake_c_compiler: clang
-          cmake_cxx_compiler: clang++
-        run: |
-          json=$(echo '${{ toJSON(env) }}' | jq -c)
-          echo $json
-          echo "out=$json" >> $GITHUB_OUTPUT
-      - name: Add Windows
-        id: add-windows
-        if: github.event_name == 'release' || ( github.event_name == 'workflow_dispatch' && inputs.os == 'windows' )
-        env:
-          os: windows
-          runner: windows-2022
-          arch: x64
-          tar: tar czf
-          archive: zip
-          sha256: sha256sum
-          cont: '`'
-          setup: ./utils/find-vs.ps1
-          cmake-args:
-          cmake_c_compiler: cl
-          cmake_cxx_compiler: cl
-        run: |
-          json=$(echo '${{ toJSON(env) }}' | jq -c)
-          echo $json
-          echo "out=$json" >> $GITHUB_OUTPUT
-      - name: Add Build Config for firtool and om-linker
-        id: add-build-config-firtool
-        run: |
-          # Default configuration template.
-          json='{"name":"firtool","install_target":"install-firtool install-om-linker","package_name_prefix":"firrtl-bin","mode":"release","assert":"OFF","shared":"OFF","stats":"ON"}'
-          case ${{ github.event_name }} in
-            # Workflow dispatch looks to input knobs for asserts and build type.
-            workflow_dispatch)
-              json=$(echo $json | jq -c '.assert = "${{ inputs.llvm_enable_assertions && 'ON' || 'OFF' }}" | .mode = "${{ inputs.cmake_build_type }}"')
-            ;;
-            # Scheulded runs are Release but with Asserts + Debug.
-            schedule)
-              json=$(echo $json | jq -c '.assert = "ON" | .mode = "relwithdebinfo"')
-            ;;
-          esac
-          echo "out=$json" >> $GITHUB_OUTPUT
-      - name: Add Build Config for CIRCT-full (shared)
-        id: add-build-config-circt-full-shared
-        run: |
-          json='{"name":"CIRCT-full shared","install_target":"install","package_name_prefix":"circt-full-shared","mode":"release","assert":"OFF","shared":"ON","stats":"ON"}'
-          echo "out=$json" >> $GITHUB_OUTPUT
-      - name: Add Build Config for CIRCT-full (static)
-        id: add-build-config-circt-full-static
-        run: |
-          json='{"name":"CIRCT-full static","install_target":"install","package_name_prefix":"circt-full-static","mode":"release","assert":"OFF","shared":"OFF","stats":"ON"}'
-          echo "out=$json" >> $GITHUB_OUTPUT
-      - name: Build JSON Payloads
-        id: build-json-payloads
-        run: |
-          echo '${{ steps.add-build-config-firtool.outputs.out }}' '${{ steps.add-build-config-circt-full-shared.outputs.out }}' '${{ steps.add-build-config-circt-full-static.outputs.out }}' | jq -sc . > build_configs.json
-          echo '${{ steps.add-linux.outputs.out }}' '${{ steps.add-macos.outputs.out }}' '${{ steps.add-windows.outputs.out }}' | jq -sc . > runners.json
+          config=$(.github/bin/uploadReleaseArtifacts.sh \
+            -b ${{ inputs.cmake_build_type }} \
+            -e ${{ github.event_name }} \
+            -o ${{ inputs.os }} \
+            ${{ inputs.llvm_enable_assertions && '-a' || ' ' }} \
+            ${{ inputs.run_tests && '-t' || ' ' }})
 
-          cat runners.json build_configs.json | jq -sc '[combinations | add]' > matrix-raw.json
-
-          # Exclude job, `BUILD_SHARED_LIBS` option is not supported on Windows
-          cat matrix-raw.json | jq -c 'del(.[] | select(.os == "windows" and .shared == "ON"))' > matrix.json
-          echo matrix=`cat matrix.json` >> $GITHUB_OUTPUT
-
-          echo "Generated Matrix" >> $GITHUB_STEP_SUMMARY
+          echo "Build Matrix:" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
-          cat matrix.json | jq >> $GITHUB_STEP_SUMMARY
+          echo "$config" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
-          case ${{ github.event_name }} in
-            workflow_dispatch)
-              ENV='{"runTests":${{ inputs.runTests }}}'
-            ;;
-            schedule)
-              ENV='{"runTests":false}'
-            ;;
-            *)
-              ENV='{"runTests":true}'
-            ;;
-          esac
-          echo environment=$ENV >> $GITHUB_OUTPUT
+          static=$(echo "$config" | jq -c '.static')
+          native=$(echo "$config" | jq -c '.native')
 
-          echo "Environment Configuration:" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
-          echo $ENV | jq >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "static=$static" >> $GITHUB_OUTPUT
+          echo "native=$native" >> $GITHUB_OUTPUT
     outputs:
-      matrix: ${{ steps.build-json-payloads.outputs.matrix }}
-      environment: ${{ steps.build-json-payloads.outputs.environment }}
+      static: ${{ steps.get-config.outputs.static }}
+      native: ${{ steps.get-config.outputs.native }}
 
-  publish:
+  publish-static:
     needs:
       - choose-matrix
+    if: ${{ needs.choose-matrix.outputs.static != '[]' }}
     strategy:
       matrix:
-        generated: ${{ fromJSON(needs.choose-matrix.outputs.matrix) }}
+        generated: ${{ fromJSON(needs.choose-matrix.outputs.static) }}
+    permissions:
+      contents: write # Upload assets to release.
+    uses: ./.github/workflows/unifiedBuildTestAndInstallStatic.yml
+    with:
+      cmake_build_type: ${{ matrix.generated.cmake_build_type }}
+      llvm_enable_assertions: ${{ matrix.generated.llvm_enable_assertions }}
+      llvm_force_enable_stats: ${{ matrix.generated.llvm_force_enable_stats }}
+      run_tests: ${{ matrix.generated.run_tests }}
+      install_target: ${{ matrix.generated.install_target }}
+      package_name_prefix: ${{ matrix.generated.package_name_prefix }}
+
+  publish-native:
+    needs:
+      - choose-matrix
+    if: ${{ needs.choose-matrix.outputs.native != '[]' }}
+    strategy:
+      matrix:
+        generated: ${{ fromJSON(needs.choose-matrix.outputs.native) }}
     permissions:
       contents: write # Upload assets to release.
     uses: ./.github/workflows/unifiedBuildTestAndInstall.yml
     with:
       runner: ${{ matrix.generated.runner }}
-      cmake_build_type: ${{ matrix.generated.mode }}
-      build_shared_libs: ${{ matrix.generated.shared }}
-      llvm_enable_assertions: ${{ matrix.generated.assert }}
-      llvm_force_enable_stats: ${{ matrix.generated.stats }}
-      runTests: ${{ fromJSON(needs.choose-matrix.outputs.environment).runTests }}
-      install: ${{ matrix.generated.install_target }}
+      cmake_build_type: ${{ matrix.generated.cmake_build_type }}
+      build_shared_libs: ${{ matrix.generated.build_shared_libs }}
+      llvm_enable_assertions: ${{ matrix.generated.llvm_enable_assertions }}
+      llvm_force_enable_stats: ${{ matrix.generated.llvm_force_enable_stats }}
+      run_tests: ${{ matrix.generated.run_tests }}
+      install_target: ${{ matrix.generated.install_target }}
       package_name_prefix: ${{ matrix.generated.package_name_prefix }}
       cmake_c_compiler: ${{ matrix.generated.cmake_c_compiler }}
       cmake_cxx_compiler: ${{ matrix.generated.cmake_cxx_compiler }}
