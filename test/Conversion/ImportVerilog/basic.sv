@@ -11,9 +11,29 @@ timeprecision 10fs;
 timeunit 100ps/10fs;
 `timescale 100ps/10fs;
 
-// Ignore type aliases and enum variant names imported into the parent scope.
+// Ignore type aliases, forward declarations of type aliases, and enum variant
+// names imported into the parent scope. These are resolved by Slang.
+typedef MyInt;
 typedef int MyInt;
+typedef MyInt;
+typedef MyInt;
 typedef enum { VariantA, VariantB } MyEnum;
+
+module Typedefs1;
+  typedef MyInt2;
+  typedef int MyInt2;
+  typedef MyInt2;
+  typedef MyInt2;
+  typedef enum { VariantC, VariantD } MyEnum2;
+endmodule
+
+function void Typedefs2();
+  typedef MyInt2;
+  typedef int MyInt2;
+  typedef MyInt2;
+  typedef MyInt2;
+  typedef enum { VariantC, VariantD } MyEnum2;
+endfunction
 
 // Ignore imports.
 import Package::*;
