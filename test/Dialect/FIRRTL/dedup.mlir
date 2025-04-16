@@ -158,6 +158,16 @@ firrtl.circuit "Annotations" {
     // Subannotations should be handled correctly.
     // CHECK: %g = firrtl.wire {annotations = [{circt.fieldID = 1 : i32, circt.nonlocal = @annos_nla2, class = "subanno"}]}
     %g = firrtl.wire {annotations = [{circt.fieldID = 1 : i32, class = "subanno"}]} : !firrtl.bundle<a: uint<1>>
+    
+    // Should deduplicate wires where only one has a symbol
+    // CHECK: %h = firrtl.wire sym @h : !firrtl.uint
+    // CHECK: %i = firrtl.wire sym @sym : !firrtl.uint
+    %h = firrtl.wire sym @h : !firrtl.uint
+    %i = firrtl.wire : !firrtl.uint
+
+    // Should merge multiple different symbols.
+    // CHECK: %j = firrtl.wire sym [<@sym_0,0,public>, <@j,1,private>]
+    %j = firrtl.wire sym [<@j, 1, private>] : !firrtl.bundle<a: uint<1>>
   }
   // CHECK-NOT: firrtl.module private @Annotations1
   firrtl.module private @Annotations1() attributes {annotations = [{class = "one"}]} {
@@ -168,6 +178,9 @@ firrtl.circuit "Annotations" {
     %l = firrtl.wire {annotations = [{class = "both"}]} : !firrtl.uint<1>
     %m = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
     %n = firrtl.wire : !firrtl.bundle<a: uint<1>>
+    %o = firrtl.wire : !firrtl.uint
+    %p = firrtl.wire sym @p : !firrtl.uint
+    %q = firrtl.wire sym [<@q, 0, private>] : !firrtl.bundle<a: uint<1>>
   }
   firrtl.module @Annotations() {
     // CHECK: firrtl.instance annotations0 sym @annotations0  @Annotations0()
