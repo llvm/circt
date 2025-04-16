@@ -439,9 +439,8 @@ void Annotation::removeMember(StringRef name) {
 }
 
 bool Annotation::canBeDeleted() {
-
   // The only annotations which can be deleted are OM-affiliated.
-  if (!isClass(omirTrackerAnnoClass))
+  if (!isClass("circt.tracker"))
     return false;
 
   auto tpe = getMember<StringAttr>("type");
