@@ -3523,7 +3523,7 @@ firrtl.module @OMIRRemoval(in %source : !firrtl.uint<1>) {
   %tmp_0 = firrtl.wire {
     annotations = [
       {
-         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         class = "circt.tracker",
          id = 0 : i64,
          type = "OMReferenceTarget"
       }
@@ -3537,7 +3537,7 @@ firrtl.module @OMIRRemoval(in %source : !firrtl.uint<1>) {
   %tmp_1 = firrtl.wire {
     annotations = [
       {
-         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         class = "circt.tracker",
          id = 1 : i64,
          type = "OMMemberReferenceTarget"
       }
@@ -3551,7 +3551,7 @@ firrtl.module @OMIRRemoval(in %source : !firrtl.uint<1>) {
   %tmp_2 = firrtl.wire {
     annotations = [
       {
-         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         class = "circt.tracker",
          id = 2 : i64,
          type = "OMMemberInstanceTarget"
       }
@@ -3567,7 +3567,7 @@ firrtl.module @OMIRRemoval(in %source : !firrtl.uint<1>) {
   %tmp_3 = firrtl.wire {
     annotations = [
       {
-         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         class = "circt.tracker",
          id = 0 : i64,
          type = "OMReferenceTarget"
       },

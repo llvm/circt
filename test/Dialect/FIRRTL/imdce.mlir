@@ -364,7 +364,7 @@ firrtl.circuit "Top" {
   // CHECK-LABEL: private @EncodingModule
   // CHECK-NOT: @nla_1
   // CHECK-SAME: @nla_2
-  firrtl.module private @EncodingModule(in %in: !firrtl.uint<1>, out %a: !firrtl.uint<1> [{circt.nonlocal = @nla_1, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64, type = "OMReferenceTarget"}, {circt.nonlocal = @nla_2, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1 : i64, type = "OMReferenceTarget"}]) {
+  firrtl.module private @EncodingModule(in %in: !firrtl.uint<1>, out %a: !firrtl.uint<1> [{circt.nonlocal = @nla_1, class = "circt.tracker", id = 0 : i64, type = "OMReferenceTarget"}, {circt.nonlocal = @nla_2, class = "circt.tracker", id = 1 : i64, type = "OMReferenceTarget"}]) {
     firrtl.matchingconnect %a, %in : !firrtl.uint<1>
   }
   // CHECK-NOT: @Foo1
@@ -575,7 +575,7 @@ firrtl.circuit "OMIRRemoval" {
     %tmp_0 = firrtl.wire {
       annotations = [
         {
-           class = "freechips.rocketchip.objectmodel.OMIRTracker",
+           class = "circt.tracker",
            id = 0 : i64,
            type = "OMReferenceTarget"
         }
@@ -585,7 +585,7 @@ firrtl.circuit "OMIRRemoval" {
     %tmp_1 = firrtl.wire {
       annotations = [
         {
-           class = "freechips.rocketchip.objectmodel.OMIRTracker",
+           class = "circt.tracker",
            id = 1 : i64,
            type = "OMMemberReferenceTarget"
         }
@@ -595,7 +595,7 @@ firrtl.circuit "OMIRRemoval" {
     %tmp_2 = firrtl.wire {
       annotations = [
         {
-           class = "freechips.rocketchip.objectmodel.OMIRTracker",
+           class = "circt.tracker",
            id = 3 : i64,
            type = "OMMemberInstanceTarget"
         }
@@ -607,7 +607,7 @@ firrtl.circuit "OMIRRemoval" {
     %tmp_3 = firrtl.wire {
       annotations = [
         {
-           class = "freechips.rocketchip.objectmodel.OMIRTracker",
+           class = "circt.tracker",
            id = 4 : i64,
            type = "OMMemberInstanceTarget"
         },

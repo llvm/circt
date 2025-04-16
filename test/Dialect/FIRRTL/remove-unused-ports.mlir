@@ -195,28 +195,28 @@ firrtl.circuit "OMIRRemoval" {
   firrtl.module private @Foo(
     out %a: !firrtl.uint<1> [
       {
-         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         class = "circt.tracker",
          id = 0 : i64,
          type = "OMReferenceTarget"
       }
     ],
     out %b: !firrtl.uint<2> [
       {
-         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         class = "circt.tracker",
          id = 1 : i64,
          type = "OMMemberReferenceTarget"
       }
     ],
     in %c: !firrtl.uint<3> [
       {
-         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         class = "circt.tracker",
          id = 3 : i64,
          type = "OMMemberInstanceTarget"
       }
     ],
     in %d: !firrtl.uint<4> [
       {
-         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         class = "circt.tracker",
          id = 4 : i64,
          type = "OMMemberInstanceTarget"
       },
