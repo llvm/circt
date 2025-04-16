@@ -617,6 +617,8 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
     {memTapSourceClass, {stdResolve, applyWithoutTarget<true>}},
     {memTapPortClass, {stdResolve, applyWithoutTarget<true>}},
     {memTapBlackboxClass, {stdResolve, applyWithoutTarget<true>}},
+    // OMIR Annotations
+    {omirTrackerAnnoClass, {stdResolve, applyWithoutTarget<true>}},
     // Miscellaneous Annotations
     {conventionAnnoClass, {stdResolve, applyConventionAnno}},
     {typeLoweringAnnoClass, {stdResolve, applyBodyTypeLoweringAnno}},

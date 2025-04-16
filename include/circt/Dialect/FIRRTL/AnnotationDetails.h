@@ -50,6 +50,9 @@ constexpr const char *traceNameAnnoClass =
 constexpr const char *traceAnnoClass =
     "chisel3.experimental.Trace$TraceAnnotation";
 
+constexpr const char *omirTrackerAnnoClass =
+    "freechips.rocketchip.objectmodel.OMIRTracker";
+
 constexpr const char *blackBoxInlineAnnoClass =
     "firrtl.transforms.BlackBoxInlineAnno";
 constexpr const char *blackBoxPathAnnoClass =
