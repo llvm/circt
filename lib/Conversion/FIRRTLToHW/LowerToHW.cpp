@@ -201,6 +201,7 @@ static void tryCopyName(Operation *dst, Operation *src) {
 
 namespace {
 
+// A helper strutc to hold information about fprintf output file.
 struct FPrintfOutputFileInfo {
   FPrintfOutputFileInfo(mlir::OperandRange substitutions,
                         StringAttr outputFileName)
@@ -228,9 +229,10 @@ private:
   // is substituted.
   bool isDynamicFileName;
 
-  // FIRRTL operands.
+  // "FIRRTL" pre-lowered operands.
   mlir::OperandRange substitutions;
 
+  // "Verilog" format string.
   StringAttr outputFileName;
 };
 
@@ -1615,8 +1617,9 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   Value getLoweredAndExtendedValue(Value value, Type destType);
   Value getLoweredAndExtOrTruncValue(Value value, Type destType);
   std::optional<Value> getLoweredFmtOperand(Value operand);
-  LogicalResult loweredFmtOperands(OperandRange operands,
+  LogicalResult loweredFmtOperands(ValueRange operands,
                                    SmallVectorImpl<Value> &loweredOperands);
+  FailureOr<Value> getFileDescriptor(const FPrintfOutputFileInfo &info);
   LogicalResult setLowering(Value orig, Value result);
   LogicalResult setPossiblyFoldedLowering(Value orig, Value result);
   template <typename ResultOpType, typename... CtorArgTypes>
@@ -2614,7 +2617,7 @@ std::optional<Value> FIRRTLLowering::getLoweredFmtOperand(Value operand) {
 }
 
 LogicalResult
-FIRRTLLowering::loweredFmtOperands(mlir::OperandRange operands,
+FIRRTLLowering::loweredFmtOperands(mlir::ValueRange operands,
                                    SmallVectorImpl<Value> &loweredOperands) {
   for (auto operand : operands) {
     std::optional<Value> loweredValue = getLoweredFmtOperand(operand);
@@ -2625,6 +2628,33 @@ FIRRTLLowering::loweredFmtOperands(mlir::OperandRange operands,
       loweredOperands.push_back(*loweredValue);
   }
   return success();
+}
+
+FailureOr<Value>
+FIRRTLLowering::getFileDescriptor(const FPrintfOutputFileInfo &info) {
+
+  Value fileName;
+  if (info.isSubstitutionRequired()) {
+    SmallVector<Value> fileNameOperands;
+    if (failed(loweredFmtOperands(info.getSubst(), fileNameOperands)))
+      return failure();
+
+    fileName =
+        builder
+            .create<sv::SFormatFOp>(info.getOutputFileName(), fileNameOperands)
+            .getResult();
+  } else {
+    // If substitution is not required, just use the output file name.
+    fileName =
+        builder.create<sv::ConstantStrOp>(info.getOutputFileName()).getResult();
+  }
+
+  return builder
+      .create<sv::FuncCallProceduralOp>(
+          mlir::TypeRange{builder.getIntegerType(32)},
+          builder.getStringAttr("__circt_lib_logging::FileDescriptor::get"),
+          ValueRange{fileName})
+      ->getResult(0);
 }
 
 /// Set the lowered value of 'orig' to 'result', remembering this in a map.
@@ -4817,29 +4847,12 @@ LogicalResult FIRRTLLowering::visitPrintfLike(
             builder.getStringAttr("fd_" + outputFile.getValue()));
 
         addToInitialBlock([&]() {
-          Value fileNameVal = builder.create<sv::ConstantStrOp>(
-              outputFileInfo->getOutputFileName());
-          if (outputFileInfo->isSubstitutionRequired()) {
-            SmallVector<Value> fileNameOperands;
-            if (llvm::failed(loweredFmtOperands(outputFileInfo->getSubst(),
-                                                fileNameOperands))) {
-              failed = true;
-              return;
-            }
-
-            fileNameVal = builder.create<sv::SFormatFOp>(
-                outputFileInfo->getOutputFileName(), fileNameOperands);
+          auto fdOrError = getFileDescriptor(*outputFileInfo);
+          if (llvm::failed(fdOrError)) {
+            failed = true;
+            return;
           }
-
-          auto fdResult =
-              builder
-                  .create<sv::FuncCallProceduralOp>(
-                      mlir::TypeRange{builder.getIntegerType(32)},
-                      builder.getStringAttr(
-                          "__circt_lib_logging::FileDescriptor::get"),
-                      ValueRange{fileNameVal})
-                  ->getResult(0);
-          builder.create<sv::BPAssignOp>(fd, fdResult);
+          builder.create<sv::BPAssignOp>(fd, *fdOrError);
         });
       }
     }
@@ -4860,24 +4873,12 @@ LogicalResult FIRRTLLowering::visitPrintfLike(
         Value fd;
         if (outputFileInfo) {
           if (outputFileInfo->isDynamicOutputFileName()) {
-            SmallVector<Value> fileNameOperands;
-            for (auto substitution : outputFileInfo->getSubst()) {
-              std::optional<Value> loweredValue =
-                  getLoweredFmtOperand(substitution);
-              if (!loweredValue)
-                failed = true;
-              if (*loweredValue)
-                fileNameOperands.push_back(*loweredValue);
+            auto fdOrError = getFileDescriptor(*outputFileInfo);
+            if (llvm::failed(fdOrError)) {
+              failed = true;
+              return;
             }
-            auto fileName = builder.create<sv::SFormatFOp>(
-                outputFileInfo->getOutputFileName(), fileNameOperands);
-            fd = builder
-                     .create<sv::FuncCallProceduralOp>(
-                         mlir::TypeRange{builder.getIntegerType(32)},
-                         builder.getStringAttr(
-                             "__circt_lib_logging::FileDescriptor::get"),
-                         ValueRange{fileName})
-                     ->getResult(0);
+            fd = *fdOrError;
           } else {
             auto it = fileNameToFileDescriptor.find(
                 outputFileInfo->getOutputFileName());
@@ -5043,20 +5044,16 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
 
   if (!isCover && opMessageAttr && !opMessageAttr.getValue().empty()) {
     message = opMessageAttr;
-    for (auto operand : opOperands) {
-      auto loweredValue = getLoweredFmtOperand(operand);
-      if (!loweredValue)
-        return failure();
+    if (failed(loweredFmtOperands(opOperands, messageOps)))
+      return failure();
 
-      if (!*loweredValue)
-        break;
+    if (flavor == VerificationFlavor::SVA) {
       // For SVA assert/assume statements, wrap any message ops in $sampled() to
       // guarantee that these will print with the same value as when the
       // assertion triggers.  (See SystemVerilog 2017 spec section 16.9.3 for
       // more information.)
-      if (flavor == VerificationFlavor::SVA)
-        loweredValue = builder.create<sv::SampledOp>(*loweredValue);
-      messageOps.push_back(*loweredValue);
+      for (auto &loweredValue : messageOps)
+        loweredValue = builder.create<sv::SampledOp>(loweredValue);
     }
   }
 
