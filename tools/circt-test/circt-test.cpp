@@ -94,6 +94,11 @@ struct Options {
       cl::desc("Do not use contracts to simplify and parallelize tests"),
       cl::init(false), cl::cat(cat)};
 
+  cl::opt<verif::SymbolicValueLowering> symbolicValueLowering{
+      "symbolic-values", cl::desc("Control how symbolic values are lowered"),
+      cl::init(verif::SymbolicValueLowering::ExtModule),
+      verif::symbolicValueLoweringCLValues(), cl::cat(cat)};
+
   cl::opt<bool> emitIR{"ir", cl::desc("Emit IR after initial lowering"),
                        cl::init(false), cl::cat(cat)};
 
@@ -492,6 +497,8 @@ static LogicalResult executeWithHandler(MLIRContext *context,
   PassManager pm(context);
   pm.enableVerifier(opts.verifyPasses);
   pm.addPass(verif::createLowerFormalToHWPass());
+  pm.addPass(
+      verif::createLowerSymbolicValuesPass({opts.symbolicValueLowering}));
   pm.addPass(createLowerSimToSVPass());
   pm.addPass(createLowerSeqToSVPass());
   pm.addNestedPass<hw::HWModuleOp>(createLowerVerifToSVPass());

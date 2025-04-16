@@ -306,6 +306,8 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
                                       const FirtoolOptions &opt) {
   pm.nestAny().addPass(verif::createStripContractsPass());
   pm.addPass(verif::createLowerFormalToHWPass());
+  pm.addPass(
+      verif::createLowerSymbolicValuesPass({opt.getSymbolicValueLowering()}));
 
   if (opt.shouldExtractTestCode())
     pm.addPass(sv::createSVExtractTestCodePass(
@@ -752,6 +754,12 @@ struct FirtoolCmdOptions {
       llvm::cl::desc(
           "Specialize instance choice to default, if no option selected"),
       llvm::cl::init(false)};
+
+  llvm::cl::opt<verif::SymbolicValueLowering> symbolicValueLowering{
+      "symbolic-values",
+      llvm::cl::desc("Control how symbolic values are lowered"),
+      llvm::cl::init(verif::SymbolicValueLowering::ExtModule),
+      verif::symbolicValueLoweringCLValues()};
 };
 } // namespace
 
@@ -840,4 +848,5 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   fixupEICGWrapper = clOptions->fixupEICGWrapper;
   addCompanionAssume = clOptions->addCompanionAssume;
   selectDefaultInstanceChoice = clOptions->selectDefaultInstanceChoice;
+  symbolicValueLowering = clOptions->symbolicValueLowering;
 }
