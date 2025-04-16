@@ -5,6 +5,12 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+//
+// Implemenation of the interval range analysis interface.
+// The overflow flags are not set for the comb operations since they is
+// no meaningful concept of overflow detection in comb.
+//
+//===----------------------------------------------------------------------===//
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Comb/CombPasses.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -21,7 +27,6 @@ using namespace mlir;
 using namespace mlir::intrange;
 using namespace circt;
 using namespace circt::comb;
-
 //===----------------------------------------------------------------------===//
 // AddOp
 //===----------------------------------------------------------------------===//
@@ -149,16 +154,18 @@ void comb::ShrSOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
 void comb::ConcatOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
                                        SetIntRangeFn setResultRange) {
   // Compute concat as an unsigned integer of bits
-  auto total_width = 0;
-  auto res_width = getResult().getType().getIntOrFloatBitWidth();
+  const auto res_width = getResult().getType().getIntOrFloatBitWidth();
+  auto total_width = res_width;
   APInt umin = APInt::getZero(res_width);
   APInt umax = APInt::getZero(res_width);
-  for (int i = getNumOperands() - 1; i >= 0; --i) {
+  for (unsigned int i = 0; i < getNumOperands(); ++i) {
+    assert(total_width >= getOperand(i).getType().getIntOrFloatBitWidth() &&
+           "ConcatOp: total width in interval range calculation is negative");
+    total_width -= getOperand(i).getType().getIntOrFloatBitWidth();
     auto umin_upd = argRanges[i].umin().zext(res_width).ushl_sat(total_width);
     auto umax_upd = argRanges[i].umax().zext(res_width).ushl_sat(total_width);
     umin = umin.uadd_sat(umin_upd);
     umax = umax.uadd_sat(umax_upd);
-    total_width += getOperand(i).getType().getIntOrFloatBitWidth();
   }
   auto urange = ConstantIntRanges::fromUnsigned(umin, umax);
   setResultRange(getResult(), urange);
@@ -191,7 +198,7 @@ void comb::ReplicateOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
   APInt umax = APInt::getZero(res_width);
   auto umin_in = argRanges[0].umin().zext(res_width);
   auto umax_in = argRanges[0].umax().zext(res_width);
-  for (auto total_width = 0; total_width < res_width;
+  for (unsigned int total_width = 0; total_width < res_width;
        total_width += operand_width) {
     auto umin_upd = umin_in.ushl_sat(total_width);
     auto umax_upd = umax_in.ushl_sat(total_width);

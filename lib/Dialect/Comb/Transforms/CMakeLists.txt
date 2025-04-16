@@ -1,6 +1,6 @@
 add_circt_dialect_library(CIRCTCombTransforms
   LowerComb.cpp
-  RangeAnalysisComb.cpp
+  IntRangeOptimizations.cpp
 
   DEPENDS
   CIRCTCombTransformsIncGen

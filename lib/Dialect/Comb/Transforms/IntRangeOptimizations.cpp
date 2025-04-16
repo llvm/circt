@@ -76,6 +76,7 @@ struct CombOpNarrow : public mlir::OpRewritePattern<CombOpTy> {
       return rewriter.notifyMatchFailure(
           op, "all bits to remove - replace by zero");
     else {
+      // Replace operator by narrower version of itself
       Value lhs = op.getOperand(0);
       Value rhs = op.getOperand(1);
 
@@ -92,11 +93,12 @@ struct CombOpNarrow : public mlir::OpRewritePattern<CombOpTy> {
       auto narrowOp =
           rewriter.create<CombOpTy>(loc, extractLhsOp, extractRhsOp);
 
+      // Concatenate zeros to match the original operator width
       auto zero =
           rewriter.create<hw::ConstantOp>(loc, APInt::getZero(remove_width));
       auto replaceOp = rewriter.create<comb::ConcatOp>(
           loc, op.getType(), ValueRange{zero, narrowOp});
-      // Replace the original operation with the new one
+
       rewriter.replaceOp(op, replaceOp);
       return success();
     }
@@ -108,7 +110,8 @@ private:
 
 namespace {
 class CombIntRangeNarrowingPass
-    : public circt::comb::impl::CombIntRangeNarrowingBase<CombIntRangeNarrowingPass> {
+    : public circt::comb::impl::CombIntRangeNarrowingBase<
+          CombIntRangeNarrowingPass> {
 public:
   using CombIntRangeNarrowingBase::CombIntRangeNarrowingBase;
   void runOnOperation() override;
