@@ -614,7 +614,7 @@ def SExtOp : ExtOpBase<"sext"> {
 // Expressions
 //===----------------------------------------------------------------------===//
 
-def Moore_UArrayCmpPredicateAttr : I64EnumAttr<
+def UArrayCmpPredicateAttr : I64EnumAttr<
     "UArrayCmpPredicate", "",
     [
       I64EnumAttrCase<"eq", 0>,
@@ -898,11 +898,11 @@ def ShlOp : ShiftOpBase<"shl"> { let summary = "Logical left shift"; }
 def ShrOp : ShiftOpBase<"shr"> { let summary = "Logical right shift"; }
 def AShrOp : ShiftOpBase<"ashr"> { let summary = "Arithmetic right shift"; }
 
-def Moore_UArrayCmpOp : MooreOp<"uarray_cmp", [
+def UArrayCmpOp : MooreOp<"uarray_cmp", [
   Pure,
   Commutative,
   SameTypeOperands,
-  ]> {
+]> {
   let description = [{
     Performs an elementwise comparison of two unpacked arrays
     using the specified predicate (for example, "eq" for equality or "ne" for inequality)
@@ -916,9 +916,9 @@ def Moore_UArrayCmpOp : MooreOp<"uarray_cmp", [
     The result is `1` if the comparison is true and `0` otherwise.
   }];
   let arguments = (ins 
-  Moore_UArrayCmpPredicateAttr:$predicate,
-  UnpackedArrayType:$lhs,
-  UnpackedArrayType:$rhs
+    UArrayCmpPredicateAttr:$predicate,
+    UnpackedArrayType:$lhs,
+    UnpackedArrayType:$rhs
   );
   let results = (outs BitType:$result);
   let assemblyFormat = [{
