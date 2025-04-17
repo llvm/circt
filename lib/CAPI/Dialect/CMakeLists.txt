@@ -21,7 +21,6 @@ set(LLVM_OPTIONAL_SOURCES
   RTGTest.cpp
   SV.cpp
   Seq.cpp
-  SMT.cpp
   Verif.cpp
 )
 
@@ -224,12 +223,4 @@ add_circt_public_c_api_library(CIRCTCAPIEmit
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTEmit
-)
-
-add_circt_public_c_api_library(CIRCTCAPISMT
-  SMT.cpp
-
-  LINK_LIBS PUBLIC
-  MLIRCAPIIR
-  MLIRSMT
 )

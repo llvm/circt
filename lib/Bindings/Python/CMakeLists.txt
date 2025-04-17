@@ -48,11 +48,11 @@ set(PYTHON_BINDINGS_LINK_LIBS
   CIRCTCAPIRTG
   CIRCTCAPIRtgTool
   CIRCTCAPISeq
-  CIRCTCAPISMT
   CIRCTCAPISV
   CIRCTCAPIVerif
   CIRCTCAPITransforms
   MLIRCAPIIndex
+  MLIRCAPISMT
   # needed for mlirFrozenRewritePatternSetDestroy
   # but not the actual passes
   MLIRCAPITransforms
