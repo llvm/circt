@@ -9,7 +9,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK:     sv.func private @"__circt_lib_logging::FileDescriptor::get"(in %name : !hw.string, out fd : i32 {sv.func.explicitly_returned})
   // CHECK-SAME: attributes {verilogName = "__circt_lib_logging::FileDescriptor::get"}
   // CHECK-NEXT: sv.macro.decl @__CIRCT_LIB_LOGGING
-  // CHECK-NEXT: emit.fragment @FPRINTF_FD_FRAGMENT {
+  // CHECK-NEXT: emit.fragment @CIRCT_LIB_LOGGING_FRAGMENT {
   // CHECK-NEXT:   sv.ifdef  @__CIRCT_LIB_LOGGING {
   // CHECK-NEXT:   } else {
   // CHECK-NEXT:     sv.verbatim "// CIRCT Logging Library
@@ -350,7 +350,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 //    printf(clock, reset, "Hi signed %d %0d\n", add(c, c), d)
 
   // CHECK-LABEL: hw.module private @Print
-  // CHECK-SAME: attributes {emit.fragments = [@PRINTF_FD_FRAGMENT, @PRINTF_COND_FRAGMENT, @FPRINTF_FD_FRAGMENT]}
+  // CHECK-SAME: attributes {emit.fragments = [@PRINTF_COND_FRAGMENT, @PRINTF_FD_FRAGMENT, @CIRCT_LIB_LOGGING_FRAGMENT]}
   firrtl.module private @Print(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
                                in %a: !firrtl.uint<4>, in %b: !firrtl.uint<4>,
                                in %c: !firrtl.sint<4>, in %d: !firrtl.sint<4>) {
