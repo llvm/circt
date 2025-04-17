@@ -20,14 +20,11 @@ using namespace mlir::intrange;
 using namespace circt;
 using namespace circt::hw;
 
-
 //===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
 
 void hw::ConstantOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
-                                          SetIntRangeFn setResultRange) {
-    setResultRange(getResult(), ConstantIntRanges::constant(getValue()));
+                                       SetIntRangeFn setResultRange) {
+  setResultRange(getResult(), ConstantIntRanges::constant(getValue()));
 }
-
-
