@@ -502,7 +502,8 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
       // Compute the HierPathOp that stores the path.
       ref = FlatSymbolRefAttr::get(
           hierPathBuilder
-              ->getOrCreatePath(builder.getArrayAttr(refSendPath), builder)
+              ->getOrCreatePath(builder.getArrayAttr(refSendPath),
+                                builder.getLoc())
               .getSymNameAttr());
 
     return success();

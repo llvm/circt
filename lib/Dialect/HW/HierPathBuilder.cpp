@@ -16,8 +16,7 @@
 namespace circt {
 namespace hw {
 
-HierPathOp HierPathBuilder::getOrCreatePath(ArrayAttr pathArray,
-                                            ImplicitLocOpBuilder &builder) {
+HierPathOp HierPathBuilder::getOrCreatePath(ArrayAttr pathArray, Location loc) {
 
   assert(pathArray && !pathArray.empty());
   // Return an existing HierPathOp if one exists with the same path.
@@ -25,16 +24,15 @@ HierPathOp HierPathBuilder::getOrCreatePath(ArrayAttr pathArray,
   if (pathIter != pathCache.end())
     return pathIter->second;
 
-  // Reset the insertion point after this function returns.
-  OpBuilder::InsertionGuard guard(builder);
-
-  builder.restoreInsertionPoint(pathInsertPoint);
+  // Create a builder and move its insertion point to the original insertion
+  // point.
+  OpBuilder builder(pathInsertPoint.getBlock(), pathInsertPoint.getPoint());
 
   // Create the new HierPathOp and insert it into the pathCache.
   hw::HierPathOp path =
       pathCache
           .insert({pathArray, builder.create<hw::HierPathOp>(
-                                  ns->newName("xmrPath"), pathArray)})
+                                  loc, ns->newName("xmrPath"), pathArray)})
           .first->second;
   path.setVisibility(SymbolTable::Visibility::Private);
 
