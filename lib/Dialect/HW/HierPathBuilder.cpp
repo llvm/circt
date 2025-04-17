@@ -19,10 +19,15 @@ namespace hw {
 HierPathOp HierPathBuilder::getOrCreatePath(ArrayAttr pathArray, Location loc) {
 
   assert(pathArray && !pathArray.empty());
-  // Return an existing HierPathOp if one exists with the same path.
+  // Return an existing HierPathOp if one exists with the same path.  Add
+  // location information to the existing HierPathOp if it is being reused.
   auto pathIter = pathCache.find(pathArray);
-  if (pathIter != pathCache.end())
-    return pathIter->second;
+  if (pathIter != pathCache.end()) {
+    auto &hierPathOp = pathIter->getSecond();
+    hierPathOp->setLoc(
+        FusedLoc::get(loc.getContext(), hierPathOp->getLoc(), loc));
+    return hierPathOp;
+  }
 
   // Create a builder and move its insertion point to the original insertion
   // point.
