@@ -519,6 +519,24 @@ def FWriteOp : SVOp<"fwrite", [ProceduralOp]> {
   }];
 }
 
+def FFlushOp : SVOp<"fflush", [ProceduralOp]> {
+  let summary = "'$fflush' statement";
+
+  let description = [{
+    The $fflush system task flushes the output buffer of the specified file
+    descriptor. If no file descriptor is specified, all open files are flushed.
+
+    See IEEE 1800-2023 Section 21.3.6.
+  }];
+
+  let arguments = (ins Optional<I32>:$fd);
+  let results = (outs);
+
+  let assemblyFormat = [{
+     (`fd` $fd^)? attr-dict
+  }];
+}
+
 def VerbatimOp : SVOp<"verbatim"> {
   let summary = "Verbatim opaque text emitted inline.";
   let description = [{

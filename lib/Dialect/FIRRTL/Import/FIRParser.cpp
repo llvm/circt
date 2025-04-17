@@ -1930,6 +1930,7 @@ private:
                                 SmallVectorImpl<Value> &operands);
   ParseResult parsePrintf();
   ParseResult parseFPrintf();
+  ParseResult parseFFlush();
   ParseResult parseSkip();
   ParseResult parseStop();
   ParseResult parseAssert();
@@ -2736,6 +2737,8 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parsePrintf();
   case FIRToken::lp_fprintf:
     return parseFPrintf();
+  case FIRToken::lp_fflush:
+    return parseFFlush();
   case FIRToken::kw_skip:
     return parseSkip();
   case FIRToken::lp_stop:
@@ -3149,6 +3152,51 @@ ParseResult FIRStmtParser::parseFPrintf() {
   builder.create<FPrintFOp>(clock, condition, outputFileNameStrUnescaped,
                             outputFileOperands, formatStrUnescaped, operands,
                             name);
+  return success();
+}
+
+/// fflush ::= 'fflush(' exp exp (StringLit exp*)? ')' info?
+ParseResult FIRStmtParser::parseFFlush() {
+  if (requireFeature(nextFIRVersion, "fflush"))
+    return failure();
+
+  auto startTok = consumeToken(FIRToken::lp_fflush);
+
+  Value clock, condition;
+  if (parseExp(clock, "expected clock expression in 'fflush'") ||
+      parseToken(FIRToken::comma, "expected ','") ||
+      parseExp(condition, "expected condition in 'fflush'"))
+    return failure();
+
+  locationProcessor.setLoc(startTok.getLoc());
+  StringAttr outputFileNameStrUnescaped;
+  SmallVector<Value> outputFileOperands;
+  // Parse file name if present.
+  if (consumeIf(FIRToken::comma)) {
+    SmallVector<Value, 4> outputFileSpecOperands;
+    auto outputFileLoc = getToken().getLoc();
+    StringRef outputFile;
+    if (parseGetSpelling(outputFile) ||
+        parseToken(FIRToken::string, "expected output file in fflush"))
+      return failure();
+
+    while (consumeIf(FIRToken::comma)) {
+      outputFileSpecOperands.push_back({});
+      if (parseExp(outputFileSpecOperands.back(), "expected operand in fflush"))
+        return failure();
+    }
+
+    if (parseFormatString(outputFileLoc, outputFile, outputFileSpecOperands,
+                          outputFileNameStrUnescaped, outputFileOperands))
+      return failure();
+  }
+
+  if (parseToken(FIRToken::r_paren, "expected ')' in 'fflush'") ||
+      parseOptionalInfo())
+    return failure();
+
+  builder.create<FFlushOp>(clock, condition, outputFileNameStrUnescaped,
+                           outputFileOperands);
   return success();
 }
 

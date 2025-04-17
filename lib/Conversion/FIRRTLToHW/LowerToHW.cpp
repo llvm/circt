@@ -1906,6 +1906,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                                 const FileDescriptorInfo &fileDescriptorInfo);
   LogicalResult visitStmt(PrintFOp op) { return visitPrintfLike(op, {}); }
   LogicalResult visitStmt(FPrintFOp op);
+  LogicalResult visitStmt(FFlushOp op);
   LogicalResult visitStmt(StopOp op);
   LogicalResult visitStmt(AssertOp op);
   LogicalResult visitStmt(AssumeOp op);
@@ -4942,6 +4943,34 @@ LogicalResult FIRRTLLowering::visitStmt(FPrintFOp op) {
   FileDescriptorInfo outputFile(outputFileAttr,
                                 op.getOutputFileSubstitutions());
   return visitPrintfLike(op, outputFile);
+}
+
+// FFlush lowers into $fflush statement.
+LogicalResult FIRRTLLowering::visitStmt(FFlushOp op) {
+  auto clock = getLoweredNonClockValue(op.getClock());
+  auto cond = getLoweredValue(op.getCond());
+  if (!clock || !cond)
+    return failure();
+
+  auto fn = [&](Value fd) {
+    builder.create<sv::FFlushOp>(op.getLoc(), fd);
+    return success();
+  };
+
+  if (!op.getOutputFileAttr())
+    return lowerStatementWithFd({}, clock, cond, fn);
+
+  // If output file is specified, resolve the format string and lower it with a
+  // file descriptor associated with the output file.
+  StringAttr outputFileAttr;
+  if (failed(resolveFormatString(op.getLoc(), op.getOutputFileAttr(),
+                                 op.getOutputFileSubstitutions(),
+                                 outputFileAttr)))
+    return failure();
+
+  return lowerStatementWithFd(
+      FileDescriptorInfo(outputFileAttr, op.getOutputFileSubstitutions()),
+      clock, cond, fn);
 }
 
 // Stop lowers into a nested series of behavioral statements plus $fatal
