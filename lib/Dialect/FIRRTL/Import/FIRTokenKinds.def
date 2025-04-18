@@ -169,6 +169,7 @@ TOK_KEYWORD(write)
 // FIRToken::lp_foo enums.
 TOK_LPKEYWORD(printf)
 TOK_LPKEYWORD(fprintf)
+TOK_LPKEYWORD(fflush)
 TOK_LPKEYWORD(stop)
 TOK_LPKEYWORD(assert)
 TOK_LPKEYWORD(assume)

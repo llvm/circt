@@ -242,16 +242,17 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<AttachOp, ConnectOp, MatchingConnectOp, RefDefineOp,
-                       ForceOp, PrintFOp, FPrintFOp, SkipOp, StopOp, WhenOp,
-                       AssertOp, AssumeOp, CoverOp, PropAssignOp, RefForceOp,
-                       RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
-                       FPGAProbeIntrinsicOp, VerifAssertIntrinsicOp,
-                       VerifAssumeIntrinsicOp, UnclockedAssumeIntrinsicOp,
-                       VerifCoverIntrinsicOp, VerifRequireIntrinsicOp,
-                       VerifEnsureIntrinsicOp, LayerBlockOp, MatchOp,
-                       ViewIntrinsicOp, BindOp>([&](auto opNode) -> ResultType {
-          return thisCast->visitStmt(opNode, args...);
-        })
+                       ForceOp, PrintFOp, FPrintFOp, FFlushOp, SkipOp, StopOp,
+                       WhenOp, AssertOp, AssumeOp, CoverOp, PropAssignOp,
+                       RefForceOp, RefForceInitialOp, RefReleaseOp,
+                       RefReleaseInitialOp, FPGAProbeIntrinsicOp,
+                       VerifAssertIntrinsicOp, VerifAssumeIntrinsicOp,
+                       UnclockedAssumeIntrinsicOp, VerifCoverIntrinsicOp,
+                       VerifRequireIntrinsicOp, VerifEnsureIntrinsicOp,
+                       LayerBlockOp, MatchOp, ViewIntrinsicOp, BindOp>(
+            [&](auto opNode) -> ResultType {
+              return thisCast->visitStmt(opNode, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidStmt(op, args...);
         });
@@ -281,6 +282,7 @@ public:
   HANDLE(ForceOp);
   HANDLE(PrintFOp);
   HANDLE(FPrintFOp);
+  HANDLE(FFlushOp);
   HANDLE(SkipOp);
   HANDLE(StopOp);
   HANDLE(WhenOp);

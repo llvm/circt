@@ -2099,3 +2099,22 @@ circuit Foo:
     input clock: Clock
     ; expected-error @+1 {{fprintf are a FIRRTL 5.1.0+ feature, but the specified FIRRTL version was 5.0.0}}
     fprintf(clock, UInt<1>(1), "test.txt", "[{{SimulationTime}}]: hello from {{HierarchicalModuleName}}")
+
+;// -----
+FIRRTL version 5.1.0
+circuit Foo:
+  public module Foo:
+    input clock: Clock
+    ; CHECK: firrtl.fflush %clock, %c1_ui1
+    fflush(clock, UInt<1>(1))
+    ; CHECK: firrtl.fflush %clock, %c1_ui1
+    ; CHECK-SAME{{LITERAL}}: "{{}}{{}}%d.txt"(%hierarchicalmodulename, %time, %c), "[{{}}]: hello from {{}}"(%time_0, %hierarchicalmodulename_1) : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.fstring, !firrtl.fstring, !firrtl.uint<8>, !firrtl.fstring, !firrtl.fstring
+    fflush(clock, UInt<1>(1), "foo%d{{HierarchicalModuleName}}.txt", UInt<1>(1))
+
+;// -----
+FIRRTL version 5.0.0
+circuit Foo:
+  public module Foo:
+    input clock: Clock
+    ; expected-error @+1 {{fflush are a FIRRTL 5.1.0+ feature, but the specified FIRRTL version was 5.0.0}}
+    fflush(clock, UInt<1>(1))

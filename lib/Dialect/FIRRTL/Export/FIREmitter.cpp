@@ -87,6 +87,7 @@ struct Emitter {
   void emitPrintfLike(T op, StringAttr fileName);
   void emitStatement(PrintFOp op);
   void emitStatement(FPrintFOp op);
+  void emitStatement(FFlushOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(MatchingConnectOp op);
   void emitStatement(PropAssignOp op);
@@ -713,12 +714,12 @@ void Emitter::emitStatementsInBlock(Block &block) {
       continue;
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
-              PrintFOp, FPrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp,
-              MatchingConnectOp, PropAssignOp, InstanceOp, InstanceChoiceOp,
-              AttachOp, MemOp, InvalidValueOp, SeqMemOp, CombMemOp,
-              MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp,
-              RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
-              LayerBlockOp, GenericIntrinsicOp>(
+              PrintFOp, FPrintFOp, FFlushOp, AssertOp, AssumeOp, CoverOp,
+              ConnectOp, MatchingConnectOp, PropAssignOp, InstanceOp,
+              InstanceChoiceOp, AttachOp, MemOp, InvalidValueOp, SeqMemOp,
+              CombMemOp, MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp,
+              RefDefineOp, RefForceOp, RefForceInitialOp, RefReleaseOp,
+              RefReleaseInitialOp, LayerBlockOp, GenericIntrinsicOp>(
             [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           startStatement();
@@ -968,6 +969,28 @@ void Emitter::emitStatement(FPrintFOp op) {
     if (!op.getName().empty()) {
       ps << PP::space << ": " << PPExtString(legalize(op.getNameAttr()));
     }
+  });
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(FFlushOp op) {
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "fflush(" << PP::ibox0;
+    emitExpression(op.getClock());
+    ps << "," << PP::space;
+    emitExpression(op.getCond());
+    if (op.getOutputFileAttr()) {
+      ps << "," << PP::space;
+      SmallVector<Value, 4> substitutions;
+      emitFormatString(op, op.getOutputFileAttr(),
+                       op.getOutputFileSubstitutions(), substitutions);
+      if (!substitutions.empty()) {
+        ps << "," << PP::space;
+        interleaveComma(substitutions);
+      }
+    }
+    ps << ")" << PP::end;
   });
   emitLocationAndNewLine(op);
 }

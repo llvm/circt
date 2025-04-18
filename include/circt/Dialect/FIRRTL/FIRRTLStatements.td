@@ -138,6 +138,32 @@ def FPrintFOp : FIRRTLOp<"fprintf", [AttrSizedOperandSegments]> {
   let hasCustomAssemblyFormat = 1;
 }
 
+def FFlushOp : FIRRTLOp<"fflush"> {
+  let summary = "FFlush statement";
+  let description = [{
+    This operation flushes the output buffer of the specified file descriptor. If
+    no file descriptor is specified, the output buffer of the default output
+    file descriptor is flushed.
+  }];
+
+  let arguments = (ins ClockType:$clock, UInt1Type:$cond,
+                       OptionalAttr<StrAttr>: $outputFile,
+                       Variadic<PrintfOperandType>:$outputFileSubstitutions);
+  let results = (outs);
+
+  let assemblyFormat = [{
+      $clock `,` $cond (`,` $outputFile `(` $outputFileSubstitutions^ `)`)?
+      attr-dict `:` type($clock) `,` type($cond)
+      (`,` qualified(type($outputFileSubstitutions))^)?
+  }];
+  let hasVerifier = 1;
+  let builders = [
+    OpBuilder<(ins "Value":$clock, "Value":$cond), [{
+      build(odsBuilder, odsState, clock, cond, {}, ValueRange{});
+    }]>
+  ];
+}
+
 def SkipOp : FIRRTLOp<"skip", [Pure]> {
   let summary = "Skip statement";
   let description = [{

@@ -39,6 +39,7 @@ firrtl.module @simulation(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, in
   firrtl.when %p : !firrtl.uint<1> {
     firrtl.printf %clock, %enable, "CIRCT Rocks!" : !firrtl.clock, !firrtl.uint<1>
     firrtl.fprintf %clock, %enable, "test.txt", "CIRCT Rocks!" : !firrtl.clock, !firrtl.uint<1>
+    firrtl.fflush %clock, %enable : !firrtl.clock, !firrtl.uint<1>
     firrtl.stop %clock, %enable, 0 : !firrtl.clock, !firrtl.uint<1>
     firrtl.assert %clock, %p, %enable, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.assume %clock, %p, %enable, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
@@ -47,6 +48,7 @@ firrtl.module @simulation(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, in
   } else {
     firrtl.printf %clock, %reset, "CIRCT Rocks!" : !firrtl.clock, !firrtl.uint<1>
     firrtl.fprintf %clock, %enable, "test.txt", "CIRCT Rocks!" : !firrtl.clock, !firrtl.uint<1>
+    firrtl.fflush %clock, %enable : !firrtl.clock, !firrtl.uint<1>
     firrtl.stop %clock, %enable, 1 : !firrtl.clock, !firrtl.uint<1>
     firrtl.assert %clock, %p, %enable, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.assume %clock, %p, %enable, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
@@ -59,6 +61,8 @@ firrtl.module @simulation(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, in
 // CHECK-NEXT:   firrtl.printf %clock, %[[PRINT_ENABLE]], "CIRCT Rocks!"  : !firrtl.clock, !firrtl.uint<1>
 // CHECK-NEXT:   %[[FPRINTF_ENABLE:.+]] = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.fprintf %clock, %[[FPRINTF_ENABLE]], "test.txt", "CIRCT Rocks!" : !firrtl.clock, !firrtl.uint<1>
+// CHECK-NEXT:   %[[FFLUSH_ENABLE:.+]] = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.fflush %clock, %[[FFLUSH_ENABLE]] : !firrtl.clock, !firrtl.uint<1>
 // CHECK-NEXT:   %[[STOP_ENABLE:.+]] = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.stop %clock, %[[STOP_ENABLE]], 0 : !firrtl.clock, !firrtl.uint<1>
 // CHECK-NEXT:   %[[ASSERT_ENABLE:.+]] = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
@@ -74,6 +78,8 @@ firrtl.module @simulation(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, in
 // CHECK-NEXT:   firrtl.printf %clock, %[[ELSE_PRINT_ENABLE]], "CIRCT Rocks!"  : !firrtl.clock, !firrtl.uint<1>
 // CHECK-NEXT:   %[[ELSE_FPRINT_ENABLE:.+]] = firrtl.and %[[NOT_P]], %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.fprintf %clock, %[[ELSE_FPRINT_ENABLE]], "test.txt", "CIRCT Rocks!"  : !firrtl.clock, !firrtl.uint<1>
+// CHECK-NEXT:   %[[ELSE_FFLUSH_ENABLE:.+]] = firrtl.and %[[NOT_P]], %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.fflush %clock, %[[ELSE_FFLUSH_ENABLE]] : !firrtl.clock, !firrtl.uint<1>
 // CHECK-NEXT:   %[[ELSE_STOP_ENABLE:.+]] = firrtl.and %[[NOT_P]], %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.stop %clock, %[[ELSE_STOP_ENABLE]], 1 : !firrtl.clock, !firrtl.uint<1>
 // CHECK-NEXT:   %[[ELSE_ASSERT_ENABLE:.+]] = firrtl.and %[[NOT_P]], %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>

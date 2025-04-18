@@ -6510,6 +6510,16 @@ void FPrintFOp::print(OpAsmPrinter &p) {
 }
 
 //===----------------------------------------------------------------------===//
+// FFlushOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult FFlushOp::verify() {
+  if (!getOutputFileAttr() && !getOutputFileSubstitutions().empty())
+    return emitOpError("substitutions without output file are not allowed");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // BindOp
 //===----------------------------------------------------------------------===//
 

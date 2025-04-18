@@ -921,6 +921,12 @@ firrtl.circuit "Foo" {
 
     // CHECK: fprintf(clock, UInt<1>(1), "test.txt", "%%")
     firrtl.fprintf %clock, %c1_ui1, "test.txt", "%%" : !firrtl.clock, !firrtl.const.uint<1>
-  }
 
+    // CHECK: fflush(clock, UInt<1>(1))
+    firrtl.fflush %clock, %c1_ui1 : !firrtl.clock, !firrtl.const.uint<1>
+
+    // CHECK{LITERAL}: fflush(clock, UInt<1>(1), "test%d{{SimulationTime}}.txt", UInt<1>(1))
+    %time = firrtl.fstring.time : !firrtl.fstring
+    firrtl.fflush %clock, %c1_ui1, "test%d{{}}.txt"(%c1_ui1, %time) : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.const.uint<1>, !firrtl.fstring
+  }
 }

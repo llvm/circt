@@ -67,3 +67,12 @@ circuit PrintTest:
     ; CHECK-NEXT: $fwrite([[FD_2]],
     ; CHECK-NEXT:         "[%0t]: dynamic file name\n", $time);
     fprintf(clock, cond, "{{SimulationTime}}%d.txt", a, "[{{SimulationTime}}]: dynamic file name\n")
+
+    ; CHECK-NEXT: $fflush(`PRINTF_FD_);
+    fflush(clock, cond)
+
+    ; CHECK-NEXT: [[FD_3:[a-zA-Z0-9_]+]] = __circt_lib_logging::FileDescriptor::get($sformatf("%0t%d.txt",
+    ; CHECK-NEXT:                          $time,
+    ; CHECK-NEXT:                          a));
+    ; CHECK-NEXT: $fflush([[FD_3]]);
+    fflush(clock, cond, "{{SimulationTime}}%d.txt", a);
