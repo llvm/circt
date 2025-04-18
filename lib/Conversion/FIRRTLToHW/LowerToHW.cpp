@@ -202,7 +202,8 @@ static void tryCopyName(Operation *dst, Operation *src) {
 namespace {
 
 // A helper strutc to hold information about output file descriptor.
-struct FileDescriptorInfo {
+class FileDescriptorInfo {
+public:
   FileDescriptorInfo(StringAttr outputFileName, mlir::ValueRange substitutions)
       : outputFileFormat(outputFileName), substitutions(substitutions) {
     assert(outputFileName ||
