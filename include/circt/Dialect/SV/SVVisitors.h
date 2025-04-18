@@ -32,6 +32,7 @@ public:
             IndexedPartSelectInOutOp, IndexedPartSelectOp, StructFieldInOutOp,
             ConstantXOp, ConstantZOp, ConstantStrOp, MacroRefExprOp,
             MacroRefExprSEOp, UnpackedArrayCreateOp, UnpackedOpenArrayCastOp,
+            SFormatFOp,
             // Declarations.
             RegOp, WireOp, LogicOp, LocalParamOp, XMROp, XMRRefOp,
             // Control flow.
@@ -113,6 +114,7 @@ public:
   HANDLE(MacroRefExprSEOp, Unhandled);
   HANDLE(UnpackedArrayCreateOp, Unhandled);
   HANDLE(UnpackedOpenArrayCastOp, Unhandled);
+  HANDLE(SFormatFOp, Unhandled);
 
   // Control flow.
   HANDLE(OrderedOutputOp, Unhandled);

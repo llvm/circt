@@ -3097,11 +3097,23 @@ ParseResult FIRStmtParser::parseFPrintf() {
   if (parseExp(clock, "expected clock expression in fprintf") ||
       parseToken(FIRToken::comma, "expected ','") ||
       parseExp(condition, "expected condition in fprintf") ||
-      parseToken(FIRToken::comma, "expected ','") ||
-      parseGetSpelling(outputFile) ||
-      parseToken(FIRToken::string, "expected output file in fprintf") ||
       parseToken(FIRToken::comma, "expected ','"))
     return failure();
+
+  auto outputFileLoc = getToken().getLoc();
+  if (parseGetSpelling(outputFile) ||
+      parseToken(FIRToken::string, "expected output file in fprintf"))
+    return failure();
+
+  SmallVector<Value, 4> outputFileSpecOperands;
+  while (consumeIf(FIRToken::comma)) {
+    // Stop parsing operands when we see the format string.
+    if (getToken().getKind() == FIRToken::string)
+      break;
+    outputFileSpecOperands.push_back({});
+    if (parseExp(outputFileSpecOperands.back(), "expected operand in fprintf"))
+      return failure();
+  }
 
   auto formatStringLoc = getToken().getLoc();
   if (parseGetSpelling(formatString) ||
@@ -3122,16 +3134,21 @@ ParseResult FIRStmtParser::parseFPrintf() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
+  StringAttr outputFileNameStrUnescaped;
+  SmallVector<Value> outputFileOperands;
+  if (parseFormatString(outputFileLoc, outputFile, outputFileSpecOperands,
+                        outputFileNameStrUnescaped, outputFileOperands))
+    return failure();
+
   StringAttr formatStrUnescaped;
   SmallVector<Value> operands;
   if (parseFormatString(formatStringLoc, formatString, specOperands,
                         formatStrUnescaped, operands))
     return failure();
 
-  auto outputFileUnescaped = FIRToken::getStringValue(outputFile);
-  builder.create<FPrintFOp>(clock, condition,
-                            builder.getStringAttr(outputFileUnescaped),
-                            formatStrUnescaped, operands, name);
+  builder.create<FPrintFOp>(clock, condition, outputFileNameStrUnescaped,
+                            outputFileOperands, formatStrUnescaped, operands,
+                            name);
   return success();
 }
 

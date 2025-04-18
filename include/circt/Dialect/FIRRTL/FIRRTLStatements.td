@@ -122,7 +122,7 @@ def PrintFOp : FIRRTLOp<"printf"> {
   }];
 }
 
-def FPrintFOp : FIRRTLOp<"fprintf"> {
+def FPrintFOp : FIRRTLOp<"fprintf", [AttrSizedOperandSegments]> {
   let summary = "Formatted File Print Statement";
 
   let description = [{
@@ -131,15 +131,11 @@ def FPrintFOp : FIRRTLOp<"fprintf"> {
   }];
 
   let arguments = (ins ClockType:$clock, UInt1Type:$cond, StrAttr:$outputFile,
+                       Variadic<PrintfOperandType>:$outputFileSubstitutions,
                        StrAttr:$formatString, Variadic<PrintfOperandType>:$substitutions,
                        StrAttr:$name);
   let results = (outs);
-
-  let assemblyFormat = [{
-    $clock `,` $cond `,` $outputFile `,` $formatString ``
-    custom<FPrintfAttrs>(attr-dict) ` ` (`(` $substitutions^ `)`)? `:`
-    type($clock) `,` type($cond) (`,` qualified(type($substitutions))^)?
-  }];
+  let hasCustomAssemblyFormat = 1;
 }
 
 def SkipOp : FIRRTLOp<"skip", [Pure]> {

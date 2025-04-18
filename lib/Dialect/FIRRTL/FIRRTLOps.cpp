@@ -5852,7 +5852,8 @@ static ParseResult parseFPrintfAttrs(OpAsmParser &p,
 
 static void printFPrintfAttrs(OpAsmPrinter &p, Operation *op,
                               DictionaryAttr attr) {
-  printElideEmptyName(p, op, attr, {"formatString", "outputFile"});
+  printElideEmptyName(p, op, attr,
+                      {"formatString", "outputFile", "operandSegmentSizes"});
 }
 
 static ParseResult parseStopAttrs(OpAsmParser &p, NamedAttrList &resultAttrs) {
@@ -6402,6 +6403,110 @@ void TimeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void HierarchicalModuleNameOp::getAsmResultNames(
     OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), "hierarchicalmodulename");
+}
+
+ParseResult FPrintFOp::parse(::mlir::OpAsmParser &parser,
+                             ::mlir::OperationState &result) {
+  // Parse required clock and condition operands
+  OpAsmParser::UnresolvedOperand clock, cond;
+  if (parser.parseOperand(clock) || parser.parseComma() ||
+      parser.parseOperand(cond) || parser.parseComma())
+    return failure();
+
+  auto parseFormatString =
+      [&parser](llvm::SMLoc &loc, StringAttr &result,
+                SmallVectorImpl<OpAsmParser::UnresolvedOperand> &operands)
+      -> ParseResult {
+    loc = parser.getCurrentLocation();
+    // NOTE: Don't use parseAttribute. "format_string" : !firrtl.clock is
+    // considered as a typed attr.
+    std::string resultStr;
+    if (parser.parseString(&resultStr))
+      return failure();
+    result = parser.getBuilder().getStringAttr(resultStr);
+
+    // This is an optional
+    if (parser.parseOperandList(operands, AsmParser::Delimiter::OptionalParen))
+      return failure();
+    return success();
+  };
+
+  // Parse output file and format string substitutions
+  SmallVector<OpAsmParser::UnresolvedOperand> outputFileSubstitutions,
+      substitutions;
+  llvm::SMLoc outputFileLoc, formatStringLoc;
+
+  if (parseFormatString(
+          outputFileLoc,
+          result.getOrAddProperties<FPrintFOp::Properties>().outputFile,
+          outputFileSubstitutions) ||
+      parser.parseComma() ||
+      parseFormatString(
+          formatStringLoc,
+          result.getOrAddProperties<FPrintFOp::Properties>().formatString,
+          substitutions))
+    return failure();
+
+  if (parseFPrintfAttrs(parser, result.attributes))
+    return failure();
+
+  // Parse types
+  Type clockType, condType;
+  SmallVector<Type> restTypes;
+
+  if (parser.parseColon() || parser.parseType(clockType) ||
+      parser.parseComma() || parser.parseType(condType))
+    return failure();
+
+  if (succeeded(parser.parseOptionalComma())) {
+    if (parser.parseTypeList(restTypes))
+      return failure();
+  }
+
+  // Set operand segment sizes
+  result.getOrAddProperties<FPrintFOp::Properties>().operandSegmentSizes = {
+      1, 1, static_cast<int32_t>(outputFileSubstitutions.size()),
+      static_cast<int32_t>(substitutions.size())};
+
+  // Resolve all operands
+  if (parser.resolveOperand(clock, clockType, result.operands) ||
+      parser.resolveOperand(cond, condType, result.operands) ||
+      parser.resolveOperands(
+          outputFileSubstitutions,
+          ArrayRef(restTypes).take_front(outputFileSubstitutions.size()),
+          outputFileLoc, result.operands) ||
+      parser.resolveOperands(
+          substitutions,
+          ArrayRef(restTypes).drop_front(outputFileSubstitutions.size()),
+          formatStringLoc, result.operands))
+    return failure();
+
+  return success();
+}
+
+void FPrintFOp::print(OpAsmPrinter &p) {
+  p << " " << getClock() << ", " << getCond() << ", ";
+  p.printAttributeWithoutType(getOutputFileAttr());
+  if (!getOutputFileSubstitutions().empty()) {
+    p << "(";
+    p.printOperands(getOutputFileSubstitutions());
+    p << ")";
+  }
+  p << ", ";
+  p.printAttributeWithoutType(getFormatStringAttr());
+  printFPrintfAttrs(p, *this, (*this)->getAttrDictionary());
+  if (!getSubstitutions().empty()) {
+    p << "(";
+    p.printOperands(getSubstitutions());
+    p << ")";
+  }
+  p << " : " << getClock().getType() << ", " << getCond().getType();
+  if (!getOutputFileSubstitutions().empty() || !getSubstitutions().empty()) {
+    for (auto type : getOperands().drop_front(2).getTypes()) {
+      p << ", ";
+      p.printType(type);
+    }
+  }
 }
 
 //===----------------------------------------------------------------------===//

@@ -1902,6 +1902,15 @@ hw.module @intrinsic(in %clk: i1, out io1: i1, out io2: i1, out io3: i1, out io4
   hw.output %0, %2, %4, %3 : i1, i1, i1, i5
 }
 
+// CHECK-LABEL: module sformatf
+hw.module @sformatf(in %a: i1, out o: i1) {
+  // CHECK: assign o = $test$plusargs($sformatf("test%d", a))
+  %0 = sv.sformatf "test%d" (%a) : i1
+  %1 = sv.system "test$plusargs"(%0) : (!hw.string) -> i1
+
+  hw.output %1 : i1
+}
+
 hw.module @bindInMod() {
   sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst>
   sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst3>

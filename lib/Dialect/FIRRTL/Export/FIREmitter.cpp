@@ -914,21 +914,14 @@ void Emitter::emitFormatString(Operation *op, StringRef origFormatString,
   ps.writeQuotedEscaped(formatString);
 }
 
-template <class OpTy>
-void Emitter::emitPrintfLike(OpTy op, StringAttr fileName) {
+void Emitter::emitStatement(PrintFOp op) {
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
-    if (fileName)
-      ps << "f";
     ps << "printf(" << PP::ibox0;
     emitExpression(op.getClock());
     ps << "," << PP::space;
     emitExpression(op.getCond());
     ps << "," << PP::space;
-    if (fileName) {
-      ps.writeQuotedEscaped(fileName.getValue());
-      ps << "," << PP::space;
-    }
 
     SmallVector<Value, 4> substitutions;
     emitFormatString(op, op.getFormatString(), op.getSubstitutions(),
@@ -945,10 +938,38 @@ void Emitter::emitPrintfLike(OpTy op, StringAttr fileName) {
   emitLocationAndNewLine(op);
 }
 
-void Emitter::emitStatement(PrintFOp op) { emitPrintfLike(op, {}); }
-
 void Emitter::emitStatement(FPrintFOp op) {
-  emitPrintfLike(op, op.getOutputFileAttr());
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "fprintf(" << PP::ibox0;
+    emitExpression(op.getClock());
+    ps << "," << PP::space;
+    emitExpression(op.getCond());
+    ps << "," << PP::space;
+
+    SmallVector<Value, 4> outputFileSubstitutions;
+    emitFormatString(op, op.getOutputFile(), op.getOutputFileSubstitutions(),
+                     outputFileSubstitutions);
+    if (!outputFileSubstitutions.empty()) {
+      ps << "," << PP::space;
+      interleaveComma(outputFileSubstitutions);
+    }
+
+    ps << "," << PP::space;
+    SmallVector<Value, 4> substitutions;
+    emitFormatString(op, op.getFormatString(), op.getSubstitutions(),
+                     substitutions);
+    if (!substitutions.empty()) {
+      ps << "," << PP::space;
+      interleaveComma(substitutions);
+    }
+
+    ps << ")" << PP::end;
+    if (!op.getName().empty()) {
+      ps << PP::space << ": " << PPExtString(legalize(op.getNameAttr()));
+    }
+  });
+  emitLocationAndNewLine(op);
 }
 
 template <class T>

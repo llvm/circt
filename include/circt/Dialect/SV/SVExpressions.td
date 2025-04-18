@@ -201,6 +201,21 @@ def ConstantStrOp : SVOp<"constantStr", [Pure]> {
   let assemblyFormat = " $str attr-dict";
 }
 
+def SFormatFOp : SVOp<"sformatf", [Pure]> {
+  let summary = "'$sformatf' task";
+  let description = [{
+    This operations represents `$sformatf` task that produces a string from
+    a format string and substitutions.
+
+    See section 21.3.3 of 1800-2023 for more details.
+  }];
+
+  let arguments = (ins StrAttr: $format_string, Variadic<AnyType>:$substitutions);
+  let results = (outs HWStringType:$result);
+  let assemblyFormat =
+    "$format_string attr-dict (`(` $substitutions^ `)` `:` qualified(type($substitutions)))?";
+}
+
 def LocalParamOp : SVOp<"localparam",
       [FirstAttrDerivedResultType, Pure, HasCustomSSAName]> {
   let summary = "Declare a localparam";

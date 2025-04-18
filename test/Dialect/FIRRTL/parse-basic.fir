@@ -2083,10 +2083,14 @@ FIRRTL version 5.1.0
 circuit Foo:
   public module Foo:
     input clock: Clock
-    ; CHECK:            %[[TIME:.+]] = firrtl.fstring.time : !firrtl.fstring
-    ; CHECK:            %[[HIERARCHICALMODULENAME:.+]] = firrtl.fstring.hierarchicalmodulename : !firrtl.fstring
-    ; CHECK{{LITERAL}}: firrtl.fprintf %clock, %c1_ui1, "test.txt", "[{{}}]: hello world {{}}"(%[[TIME]], %[[HIERARCHICALMODULENAME]])
-    fprintf(clock, UInt<1>(1), "test.txt", "[{{SimulationTime}}]: hello from {{HierarchicalModuleName}}")
+    input c: UInt<8>
+    ; CHECK:            %[[HIERARCHICALMODULENAME_0:.+]] = firrtl.fstring.hierarchicalmodulename : !firrtl.fstring
+    ; CHECK-NEXT:       %[[TIME_0:.+]] = firrtl.fstring.time : !firrtl.fstring
+    ; CHECK-NEXT:       %[[TIME_1:.+]] = firrtl.fstring.time : !firrtl.fstring
+    ; CHECK-NEXT:       %[[HIERARCHICALMODULENAME_1:.+]] = firrtl.fstring.hierarchicalmodulename : !firrtl.fstring
+    ; CHECK{{LITERAL}}:      firrtl.fprintf %clock, %c1_ui1, "{{}}{{}}%d.txt" (%[[HIERARCHICALMODULENAME_0]], %[[TIME_0]], %c),
+    ; CHECK-SAME{{LITERAL}}:   "[{{}}]: hello world {{}}"(%[[TIME_1]], %[[HIERARCHICALMODULENAME_1]])
+    fprintf(clock, UInt<1>(1), "{{HierarchicalModuleName}}{{SimulationTime}}%d.txt", c, "[{{SimulationTime}}]: hello from {{HierarchicalModuleName}}")
 
 ;// -----
 FIRRTL version 5.0.0
