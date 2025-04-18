@@ -18,6 +18,12 @@ namespace hw {
 
 HierPathOp HierPathBuilder::getOrCreatePath(ArrayAttr pathArray, Location loc,
                                             StringRef nameHint) {
+  return getOrCreatePath(pathArray, loc, pathInsertPoint, nameHint);
+}
+
+HierPathOp HierPathBuilder::getOrCreatePath(ArrayAttr pathArray, Location loc,
+                                            OpBuilder::InsertPoint &insertPoint,
+                                            StringRef nameHint) {
 
   assert(pathArray && !pathArray.empty());
   // Return an existing HierPathOp if one exists with the same path.  Add
@@ -32,7 +38,7 @@ HierPathOp HierPathBuilder::getOrCreatePath(ArrayAttr pathArray, Location loc,
 
   // Create a builder and move its insertion point to the original insertion
   // point.
-  OpBuilder builder(pathInsertPoint.getBlock(), pathInsertPoint.getPoint());
+  OpBuilder builder(insertPoint.getBlock(), insertPoint.getPoint());
 
   // Create the new HierPathOp and insert it into the pathCache.
   hw::HierPathOp path =
@@ -44,7 +50,7 @@ HierPathOp HierPathBuilder::getOrCreatePath(ArrayAttr pathArray, Location loc,
 
   // Save the insertion point so other unique HierPathOps will be created
   // after this one.
-  pathInsertPoint = builder.saveInsertionPoint();
+  insertPoint = builder.saveInsertionPoint();
 
   // Return the new path.
   return path;
