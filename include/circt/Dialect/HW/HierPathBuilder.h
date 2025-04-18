@@ -32,7 +32,8 @@ public:
   HierPathBuilder(Namespace *ns, OpBuilder::InsertPoint insertionPoint)
       : ns(ns), pathInsertPoint(insertionPoint) {}
 
-  HierPathOp getOrCreatePath(ArrayAttr pathArray, Location loc);
+  HierPathOp getOrCreatePath(ArrayAttr pathArray, Location loc,
+                             StringRef nameHint = "xmrPath");
 
 private:
   /// A namespace in which symbols for hierarchical path ops will be created.

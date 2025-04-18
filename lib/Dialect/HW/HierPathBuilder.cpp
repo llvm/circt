@@ -16,7 +16,8 @@
 namespace circt {
 namespace hw {
 
-HierPathOp HierPathBuilder::getOrCreatePath(ArrayAttr pathArray, Location loc) {
+HierPathOp HierPathBuilder::getOrCreatePath(ArrayAttr pathArray, Location loc,
+                                            StringRef nameHint) {
 
   assert(pathArray && !pathArray.empty());
   // Return an existing HierPathOp if one exists with the same path.  Add
@@ -37,7 +38,7 @@ HierPathOp HierPathBuilder::getOrCreatePath(ArrayAttr pathArray, Location loc) {
   hw::HierPathOp path =
       pathCache
           .insert({pathArray, builder.create<hw::HierPathOp>(
-                                  loc, ns->newName("xmrPath"), pathArray)})
+                                  loc, ns->newName(nameHint), pathArray)})
           .first->second;
   path.setVisibility(SymbolTable::Visibility::Private);
 
