@@ -1,4 +1,4 @@
-//===- HierPathBuilder.cpp - HierPathOp Builder Utility -------------------===//
+//===- HierPathCache.h - HierPathOp Caching Utility -----------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,24 +6,24 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Implementation of a utility for creating Hierarchical Path operation.s
+// Implementation of a utility for creating Hierarchical Path operations.
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/HW/HierPathBuilder.h"
+#include "circt/Dialect/HW/HierPathCache.h"
 #include "circt/Dialect/HW/HWOps.h"
 
 namespace circt {
 namespace hw {
 
-HierPathOp HierPathBuilder::getOrCreatePath(ArrayAttr pathArray, Location loc,
-                                            StringRef nameHint) {
+HierPathOp HierPathCache::getOrCreatePath(ArrayAttr pathArray, Location loc,
+                                          StringRef nameHint) {
   return getOrCreatePath(pathArray, loc, pathInsertPoint, nameHint);
 }
 
-HierPathOp HierPathBuilder::getOrCreatePath(ArrayAttr pathArray, Location loc,
-                                            OpBuilder::InsertPoint &insertPoint,
-                                            StringRef nameHint) {
+HierPathOp HierPathCache::getOrCreatePath(ArrayAttr pathArray, Location loc,
+                                          OpBuilder::InsertPoint &insertPoint,
+                                          StringRef nameHint) {
 
   assert(pathArray && !pathArray.empty());
   // Return an existing HierPathOp if one exists with the same path.  Add

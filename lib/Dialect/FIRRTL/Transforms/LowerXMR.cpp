@@ -16,7 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "circt/Dialect/HW/HierPathBuilder.h"
+#include "circt/Dialect/HW/HierPathCache.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -131,10 +131,10 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
     CircuitNamespace ns(getOperation());
     circuitNamespace = &ns;
 
-    hw::HierPathBuilder pb(
+    hw::HierPathCache pc(
         &ns, OpBuilder::InsertPoint(getOperation().getBodyBlock(),
                                     getOperation().getBodyBlock()->begin()));
-    hierPathBuilder = &pb;
+    hierPathCache = &pc;
 
     llvm::EquivalenceClasses<Value> eq;
     dataFlowClasses = &eq;
@@ -414,7 +414,7 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
     opsToRemove.clear();
     xmrPathSuffix.clear();
     circuitNamespace = nullptr;
-    hierPathBuilder = nullptr;
+    hierPathCache = nullptr;
   }
 
   /// Generate the ABI ref_<module> prefix string into `prefix`.
@@ -501,7 +501,7 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
     if (!refSendPath.empty())
       // Compute the HierPathOp that stores the path.
       ref = FlatSymbolRefAttr::get(
-          hierPathBuilder
+          hierPathCache
               ->getOrCreatePath(builder.getArrayAttr(refSendPath),
                                 builder.getLoc())
               .getSymNameAttr());
@@ -869,7 +869,7 @@ private:
 
   /// Utility to create HerPathOps at a predefined location in the circuit.
   /// This handles caching and keeps the order consistent.
-  hw::HierPathBuilder *hierPathBuilder;
+  hw::HierPathCache *hierPathCache;
 
   /// Per-module helpers for creating operations within modules.
   DenseMap<FModuleOp, ModuleState> moduleStates;
