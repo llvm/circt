@@ -985,9 +985,9 @@ void Emitter::emitStatement(FFlushOp op) {
       SmallVector<Value, 4> substitutions;
       emitFormatString(op, op.getOutputFileAttr(),
                        op.getOutputFileSubstitutions(), substitutions);
-      for (auto operand : substitutions) {
+      if (!substitutions.empty()) {
         ps << "," << PP::space;
-        emitExpression(operand);
+        interleaveComma(substitutions);
       }
     }
     ps << ")" << PP::end;

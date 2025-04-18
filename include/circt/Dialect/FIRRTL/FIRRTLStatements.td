@@ -146,13 +146,15 @@ def FFlushOp : FIRRTLOp<"fflush"> {
     file descriptor is flushed.
   }];
 
-  let arguments = (ins ClockType:$clock, UInt1Type:$cond, OptionalAttr<StrAttr>: $outputFile,
+  let arguments = (ins ClockType:$clock, UInt1Type:$cond,
+                       OptionalAttr<StrAttr>: $outputFile,
                        Variadic<PrintfOperandType>:$outputFileSubstitutions);
   let results = (outs);
 
   let assemblyFormat = [{
       $clock `,` $cond (`,` $outputFile `(` $outputFileSubstitutions^ `)`)?
-      attr-dict `:` type($clock) `,` type($cond) (`,` qualified(type($outputFileSubstitutions))^)?
+      attr-dict `:` type($clock) `,` type($cond)
+      (`,` qualified(type($outputFileSubstitutions))^)?
   }];
   let hasVerifier = 1;
   let builders = [
