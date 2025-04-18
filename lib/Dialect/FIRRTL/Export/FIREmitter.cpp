@@ -950,20 +950,20 @@ void Emitter::emitStatement(FPrintFOp op) {
     SmallVector<Value, 4> outputFileSubstitutions;
     emitFormatString(op, op.getOutputFile(), op.getOutputFileSubstitutions(),
                      outputFileSubstitutions);
-    for (auto operand : outputFileSubstitutions) {
+    if (!outputFileSubstitutions.empty()) {
       ps << "," << PP::space;
-      emitExpression(operand);
+      interleaveComma(outputFileSubstitutions);
     }
 
     ps << "," << PP::space;
-
     SmallVector<Value, 4> substitutions;
     emitFormatString(op, op.getFormatString(), op.getSubstitutions(),
                      substitutions);
-    for (auto operand : substitutions) {
+    if (!substitutions.empty()) {
       ps << "," << PP::space;
-      emitExpression(operand);
+      interleaveComma(substitutions);
     }
+
     ps << ")" << PP::end;
     if (!op.getName().empty()) {
       ps << PP::space << ": " << PPExtString(legalize(op.getNameAttr()));

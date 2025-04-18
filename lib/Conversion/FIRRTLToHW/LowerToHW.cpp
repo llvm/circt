@@ -220,15 +220,15 @@ struct FileDescriptorInfo {
 
   FileDescriptorInfo() = default;
 
-  StringAttr getOutputFileFormat() const { return outputFileFormat; }
-
-  bool isDynamicOutputFileName() const { return isDynamicFileName; }
-
+  // Substitution is required if substitution oprends are not empty.
   bool isSubstitutionRequired() const { return !substitutions.empty(); }
 
-  mlir::ValueRange getSubst() const { return substitutions; }
-
+  // If the output file is not specified, the default file descriptor is used.
   bool isDefaultFd() const { return !outputFileFormat; }
+
+  StringAttr getOutputFileFormat() const { return outputFileFormat; }
+  mlir::ValueRange getSubstitutions() const { return substitutions; }
+  bool isDynamicOutputFileName() const { return isDynamicFileName; }
 
 private:
   // Set true if the file name is dynamic, i.e. $time or normal hardware value
@@ -2731,7 +2731,7 @@ FIRRTLLowering::callFileDescriptorLib(const FileDescriptorInfo &info) {
   Value fileName;
   if (info.isSubstitutionRequired()) {
     SmallVector<Value> fileNameOperands;
-    if (failed(loweredFmtOperands(info.getSubst(), fileNameOperands)))
+    if (failed(loweredFmtOperands(info.getSubstitutions(), fileNameOperands)))
       return failure();
 
     fileName = builder

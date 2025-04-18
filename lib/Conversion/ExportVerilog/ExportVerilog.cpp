@@ -3235,7 +3235,7 @@ SubExprInfo ExprEmitter::visitSV(SFormatFOp op) {
     ps.writeQuotedEscaped(op.getFormatString());
     // TODO: if any of these breaks, it'd be "nice" to break
     // after the comma, instead of:
-    // $fwrite(5, "...", a + b,
+    // $sformatf("...", a + b,
     //         longexpr_goes
     //         + here, c);
     // (without forcing breaking between all elements, like braced list)
