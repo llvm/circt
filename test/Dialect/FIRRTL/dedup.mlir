@@ -161,12 +161,12 @@ firrtl.circuit "Annotations" {
     
     // Should deduplicate wires where only one has a symbol
     // CHECK: %h = firrtl.wire sym @h : !firrtl.uint
-    // CHECK: %i = firrtl.wire sym @sym : !firrtl.uint
+    // CHECK: %i = firrtl.wire sym @p : !firrtl.uint
     %h = firrtl.wire sym @h : !firrtl.uint
     %i = firrtl.wire : !firrtl.uint
 
     // Should merge multiple different symbols.
-    // CHECK: %j = firrtl.wire sym [<@sym_0,0,public>, <@j,1,private>]
+    // CHECK: %j = firrtl.wire sym [<@q,0,private>, <@j,1,private>] : !firrtl.bundle<a: uint<1>>
     %j = firrtl.wire sym [<@j, 1, private>] : !firrtl.bundle<a: uint<1>>
   }
   // CHECK-NOT: firrtl.module private @Annotations1
@@ -240,6 +240,31 @@ firrtl.circuit "PortAnnotations" {
     %portannos0_in = firrtl.instance portannos0 @PortAnnotations0(in a: !firrtl.uint<1>)
     // CHECK: firrtl.instance portannos1 sym @[[PORTANNOS_1]] @PortAnnotations
     %portannos1_in = firrtl.instance portannos1 @PortAnnotations1(in b: !firrtl.uint<1>)
+  }
+}
+
+// Check that we are merging inner symbols correctly when deduplicating.
+// CHECK-LABEL: firrtl.circuit "InnerSymOpTarget"
+firrtl.circuit "InnerSymOpTarget" {
+  // CHECK: hw.hierpath private @path0 [@InnerSymOpTarget::@foo0, @Foo0::@A]
+  hw.hierpath private @path0 [@InnerSymOpTarget::@foo0, @Foo0::@A]
+  // CHECK: hw.hierpath private @path1 [@InnerSymOpTarget::@foo0, @Foo0::@C]
+  hw.hierpath private @path1 [@InnerSymOpTarget::@foo0, @Foo0::@C]
+  // CHECK: hw.hierpath private @path2 [@InnerSymOpTarget::@foo1, @Foo0::@A_0]
+  hw.hierpath private @path2 [@InnerSymOpTarget::@foo1, @Foo1::@A]
+  // CHECK: hw.hierpath private @path3 [@InnerSymOpTarget::@foo1, @Foo0::@C]
+  hw.hierpath private @path3 [@InnerSymOpTarget::@foo1, @Foo1::@B]
+  firrtl.module private @Foo0() {
+    // CHECK: %w0 = firrtl.wire sym [<@A,0,private>, <@C,1,public>, <@A_0,2,private>]
+    %w0 = firrtl.wire sym [<@A, 0, private>, <@C, 1, private>]: !firrtl.vector<uint<1>, 4>
+  }
+  firrtl.module private @Foo1() {
+    %w1 = firrtl.wire sym [<@A, 2, private>, <@B, 1, public>]: !firrtl.vector<uint<1>, 4>
+  }
+  firrtl.module @InnerSymOpTarget() {
+    firrtl.instance foo0 sym @foo0 @Foo0()
+    // CHECK: firrtl.instance foo1 sym @foo1 @Foo0()
+    firrtl.instance foo1 sym @foo1 @Foo1()
   }
 }
 
@@ -452,15 +477,15 @@ firrtl.circuit "ExtModuleTest" {
 // https://github.com/llvm/circt/issues/2713
 // CHECK-LABEL: firrtl.circuit "Foo"
 firrtl.circuit "Foo"  {
-  // CHECK: hw.hierpath private @nla_1 [@Foo::@b, @A::@a]
+  // CHECK: hw.hierpath private @nla_1 [@Foo::@b, @A::@b_0]
   hw.hierpath private @nla_1 [@Foo::@b, @B::@b]
-  // CHECK: firrtl.extmodule private @A(out a: !firrtl.clock sym @a [{circt.nonlocal = @nla_1}])
-  firrtl.extmodule private @A(out a: !firrtl.clock) attributes {defname = "a"}
-  firrtl.extmodule private @B(out a: !firrtl.clock sym @b [{circt.nonlocal = @nla_1}]) attributes {defname = "a"}
+  // CHECK: firrtl.extmodule private @A(out a: !firrtl.clock sym @b_0 [{circt.nonlocal = @nla_1}], out b: !firrtl.clock sym @b)
+  firrtl.extmodule private @A(out a: !firrtl.clock, out b: !firrtl.clock sym @b) attributes {defname = "a"}
+  firrtl.extmodule private @B(out a: !firrtl.clock sym @b [{circt.nonlocal = @nla_1}], out b: !firrtl.clock) attributes {defname = "a"}
   firrtl.module @Foo() {
-    %b0_out = firrtl.instance a @A(out a: !firrtl.clock)
-    // CHECK: firrtl.instance b sym @b  @A(out a: !firrtl.clock)
-    %b1_out = firrtl.instance b sym @b @B(out a: !firrtl.clock)
+    %a0, %b0 = firrtl.instance a @A(out a: !firrtl.clock, out b: !firrtl.clock)
+    // CHECK: firrtl.instance b sym @b @A(out a: !firrtl.clock, out b: !firrtl.clock)
+    %a1, %b1 = firrtl.instance b sym @b @B(out a: !firrtl.clock, out b: !firrtl.clock)
   }
 }
 

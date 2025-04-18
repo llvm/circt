@@ -1316,6 +1316,53 @@ private:
     }
   }
 
+  hw::InnerSymAttr mergeInnerSymbols(RenameMap &renameMap, FModuleLike toModule,
+                                     hw::InnerSymAttr toSym,
+                                     hw::InnerSymAttr fromSym) {
+    if (fromSym && !fromSym.getProps().empty()) {
+      auto &isn = getNamespace(toModule);
+      // The properties for the new inner symbol..
+      SmallVector<hw::InnerSymPropertiesAttr> newProps;
+      // If the "to" op already has an inner symbol, copy all its properties.
+      if (toSym)
+        llvm::append_range(newProps, toSym);
+      // Add each property from the fromSym to the toSym.
+      for (auto fromProp : fromSym) {
+        hw::InnerSymPropertiesAttr newProp;
+        auto *it = llvm::find_if(newProps, [&](auto p) {
+          return p.getFieldID() == fromProp.getFieldID();
+        });
+        if (it != newProps.end()) {
+          // If we already have an inner sym with the same field id, use
+          // that.
+          newProp = *it;
+          // If the old symbol is public, we need to make the new one public.
+          if (fromProp.getSymVisibility().getValue() == "public" &&
+              newProp.getSymVisibility().getValue() != "public") {
+            *it = hw::InnerSymPropertiesAttr::get(context, newProp.getName(),
+                                                  newProp.getFieldID(),
+                                                  fromProp.getSymVisibility());
+          }
+        } else {
+          // We need to add a new property to the inner symbol for this field.
+          auto newName = isn.newName(fromProp.getName().getValue());
+          newProp = hw::InnerSymPropertiesAttr::get(
+              context, StringAttr::get(context, newName), fromProp.getFieldID(),
+              fromProp.getSymVisibility());
+          newProps.push_back(newProp);
+        }
+        renameMap[fromProp.getName()] = newProp.getName();
+      }
+      // Sort the fields by field id.
+      llvm::sort(newProps, [](auto &p, auto &q) {
+        return p.getFieldID() < q.getFieldID();
+      });
+      // Return the merged inner symbol.
+      return hw::InnerSymAttr::get(context, newProps);
+    }
+    return hw::InnerSymAttr();
+  }
+
   // Record the symbol name change of the operation or any of its ports when
   // merging two operations.  The renamed symbols are used to update the
   // target of any NLAs.  This will add symbols to the "to" operation if needed.
@@ -1324,12 +1371,12 @@ private:
                         Operation *from) {
     // If the "from" operation has an inner_sym, we need to make sure the
     // "to" operation also has an `inner_sym` and then record the renaming.
-    if (auto fromSym = getInnerSymName(from)) {
-      auto toSym =
-          getOrAddInnerSym(to, [&](auto _) -> hw::InnerSymbolNamespace & {
-            return getNamespace(toModule);
-          });
-      renameMap[fromSym] = toSym;
+    if (auto fromInnerSym = dyn_cast<hw::InnerSymbolOpInterface>(from)) {
+      auto toInnerSym = cast<hw::InnerSymbolOpInterface>(to);
+      if (auto newSymAttr = mergeInnerSymbols(renameMap, toModule,
+                                              toInnerSym.getInnerSymAttr(),
+                                              fromInnerSym.getInnerSymAttr()))
+        toInnerSym.setInnerSymbolAttr(newSymAttr);
     }
 
     // If there are no port symbols on the "from" operation, we are done here.
@@ -1337,9 +1384,7 @@ private:
     if (!fromPortSyms || fromPortSyms.empty())
       return;
     // We have to map each "fromPort" to each "toPort".
-    auto &moduleNamespace = getNamespace(toModule);
     auto portCount = fromPortSyms.size();
-    auto portNames = to->getAttrOfType<ArrayAttr>("portNames");
     auto toPortSyms = to->getAttrOfType<ArrayAttr>("portSymbols");
 
     // Create an array of new port symbols for the "to" operation, copy in the
@@ -1351,27 +1396,12 @@ private:
       newPortSyms.assign(toPortSyms.begin(), toPortSyms.end());
 
     for (unsigned portNo = 0; portNo < portCount; ++portNo) {
-      // If this fromPort doesn't have a symbol, move on to the next one.
-      if (!fromPortSyms[portNo])
-        continue;
-      auto fromSym = cast<hw::InnerSymAttr>(fromPortSyms[portNo]);
-
-      // If this toPort doesn't have a symbol, assign one.
-      hw::InnerSymAttr toSym;
-      if (!newPortSyms[portNo]) {
-        // Get a reasonable base name for the port.
-        StringRef symName = "inner_sym";
-        if (portNames)
-          symName = cast<StringAttr>(portNames[portNo]).getValue();
-        // Create the symbol and store it into the array.
-        toSym = hw::InnerSymAttr::get(
-            StringAttr::get(context, moduleNamespace.newName(symName)));
-        newPortSyms[portNo] = toSym;
-      } else
-        toSym = cast<hw::InnerSymAttr>(newPortSyms[portNo]);
-
-      // Record the renaming.
-      renameMap[fromSym.getSymName()] = toSym.getSymName();
+      if (auto newPortSym = mergeInnerSymbols(
+              renameMap, toModule,
+              llvm::cast_if_present<hw::InnerSymAttr>(newPortSyms[portNo]),
+              cast<hw::InnerSymAttr>(fromPortSyms[portNo]))) {
+        newPortSyms[portNo] = newPortSym;
+      }
     }
 
     // Commit the new symbol attribute.
