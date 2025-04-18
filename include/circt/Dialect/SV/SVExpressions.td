@@ -202,9 +202,12 @@ def ConstantStrOp : SVOp<"constantStr", [Pure]> {
 }
 
 def SFormatFOp : SVOp<"sformatf", [Pure]> {
-  let summary = "sformatf";
+  let summary = "'$sformatf' task";
   let description = [{
-    This operation produces a constant string literal.
+    This operations represents `$sformatf` task that produces a string from
+    a format string and substitutions.
+
+    See section 21.3.3 of 1800-2023 for more details.
   }];
 
   let arguments = (ins StrAttr: $format_string, Variadic<AnyType>:$substitutions);
