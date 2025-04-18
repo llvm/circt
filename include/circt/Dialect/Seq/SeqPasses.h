@@ -22,6 +22,7 @@ namespace seq {
 
 #define GEN_PASS_DECL_EXTERNALIZECLOCKGATE
 #define GEN_PASS_DECL_HWMEMSIMIMPL
+#define GEN_PASS_DECL_SINKCLOCKGATES
 #include "circt/Dialect/Seq/SeqPasses.h.inc"
 
 std::unique_ptr<mlir::Pass> createLowerSeqHLMemPass();
@@ -31,6 +32,7 @@ std::unique_ptr<mlir::Pass> createLowerSeqFIFOPass();
 std::unique_ptr<mlir::Pass>
 createHWMemSimImplPass(const HWMemSimImplOptions &options = {});
 std::unique_ptr<mlir::Pass> createLowerSeqShiftRegPass();
+std::unique_ptr<mlir::Pass> createSinkClockGatesPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
