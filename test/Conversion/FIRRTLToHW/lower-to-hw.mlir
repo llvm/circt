@@ -361,16 +361,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK:      sv.ifdef @SYNTHESIS {
     // CHECK-NEXT: } else  {
-    // CHECK-NEXT:   %[[FD_0:.+]] = sv.reg : !hw.inout<i32>
-    // CHECK-NEXT:   %[[FD_1:.+]] = sv.reg name "fd_%m%c.txt" : !hw.inout<i32>
-    // CHECK-NEXT:   sv.initial {
-    // CHECK-NEXT:     %[[FILE_NAME:.+]] = sv.constantStr "file.txt"
-    // CHECK-NEXT:     %[[FD_RESULT:.+]] = sv.func.call.procedural @"__circt_lib_logging::FileDescriptor::get"(%[[FILE_NAME]]) : (!hw.string) -> i32
-    // CHECK-NEXT:     sv.bpassign %[[FD_0]], %[[FD_RESULT]] : i32
-    // CHECK-NEXT:     %[[FILE_NAME:.+]] = sv.sformatf "%m%c.txt"(%c97_i8)
-    // CHECK-NEXT:     %[[FD_RESULT:.+]] = sv.func.call.procedural @"__circt_lib_logging::FileDescriptor::get"(%[[FILE_NAME]]) : (!hw.string) -> i32
-    // CHECK-NEXT:     sv.bpassign %[[FD_1]], %[[FD_RESULT]] : i32
-    // CHECK-NEXT:   }
     // CHECK-NEXT:   sv.always posedge [[CLOCK]] {
     // CHECK-NEXT:     %[[PRINTF_COND:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND]], %reset
@@ -417,31 +407,23 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
     // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "[%0t]: %d %m"([[TIME]], %a) : i64, i4
     // CHECK-NEXT:     }
-    // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
-    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
-    // CHECK-NEXT:     sv.if [[AND]] {
-    // CHECK-NEXT:       %[[FPRINTF_FD_:.+]] = sv.read_inout %fd_file.txt : !hw.inout<i32>
-    // CHECK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
-    // CHECK-NEXT:       sv.fwrite %[[FPRINTF_FD_]], "[%0t]: %d %m"([[TIME]], %a) : i64, i4
-    // CHECK-NEXT:     }
-    // CHECK-NEXT:     [[COND:%.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
-    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin [[COND]], %reset : i1
-    // CHECK-NEXT:     sv.if [[AND]] {
-    // CHECK-NEXT:       [[FD_STATIC:%.+]] = sv.read_inout %[[FD_1]] : !hw.inout<i32>
-    // CHECK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
-    // CHECK-NEXT:       sv.fwrite [[FD_STATIC]], "[%0t]: static file name (w/ substitution)\0A"([[TIME]]) : i64
-    // CHECK-NEXT:     }
-    // CHECK-NEXT:     [[COND:%.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
-    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin [[COND]], %reset : i1
-    // CHECK-NEXT:     sv.if [[AND]] {
-    // CHECK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
-    // CHECK-NEXT:       [[FNAME:%.+]] = sv.sformatf "%0t%d.txt"([[TIME]], %a) : i64, i4
-    // CHECK-NEXT:       [[FD_DYN:%.+]] = sv.func.call.procedural @"__circt_lib_logging::FileDescriptor::get"([[FNAME]]) : (!hw.string) -> i32
-    // CHECK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
-    // CHECK-NEXT:       sv.fwrite [[FD_DYN]], "[%0t]: dynamic file name\0A"([[TIME]]) : i64
-    // CHECK-NEXT:     }
-    // CHECK-NEXT:   }
-    // CHECK-NEXT: }
+    // CEHCK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
+    // CEHCK-NEXT:     %[[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
+    // CEHCK-NEXT:     sv.if %[[AND]] {
+    // CEHCK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
+    // CEHCK-NEXT:       [[STR:%.+]] = sv.sformatf "%0t%d.txt"(%[[TIME]], %a) : i64, i4
+    // CEHCK-NEXT:       [[FD:%.+]] = sv.func.call.procedural @"__circt_lib_logging::FileDescriptor::get"(%[[STR]]) : (!hw.string) -> i32
+    // CEHCK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
+    // CEHCK-NEXT:       sv.fwrite %[[FD]], "[%0t]: dynamic file name\0A"(%[[TIME]]) : i64
+    // CEHCK-NEXT:     }
+    // CEHCK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
+    // CEHCK-NEXT:     %[[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
+    // CEHCK-NEXT:     sv.if %[[AND]] {
+    // CEHCK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
+    // CEHCK-NEXT:       [[STR:%.+]] = sv.sformatf "%0t%d.txt"(%[[TIME]], %a) : i64, i4
+    // CEHCK-NEXT:       [[FD:%.+]] = sv.func.call.procedural @"__circt_lib_logging::FileDescriptor::get"(%[[STR]]) : (!hw.string) -> i32
+    // CEHCK-NEXT:       sv.fflush fd %[[FD]]
+    // CEHCK-NEXT:     }
     firrtl.printf %clock, %reset, "No operands and literal: %%\0A" : !firrtl.clock, !firrtl.uint<1>
 
     %0 = firrtl.add %a, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
@@ -462,10 +444,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %hierarchicalmodulename = firrtl.fstring.hierarchicalmodulename : !firrtl.fstring
     firrtl.printf %clock, %reset, "[{{}}]: %d {{}}" (%time, %a, %hierarchicalmodulename) : !firrtl.clock, !firrtl.uint<1>, !firrtl.fstring, !firrtl.uint<4>, !firrtl.fstring
 
-    firrtl.fprintf %clock, %reset, "file.txt", "[{{}}]: %d {{}}" (%time, %a, %hierarchicalmodulename) : !firrtl.clock, !firrtl.uint<1>, !firrtl.fstring, !firrtl.uint<4>, !firrtl.fstring
-    %c97_ui8 = firrtl.constant 97 : !firrtl.uint<8>
-    firrtl.fprintf %clock, %reset, "{{}}%c.txt"(%hierarchicalmodulename, %c97_ui8), "[{{}}]: static file name (w/ substitution)\0A"(%time) : !firrtl.clock, !firrtl.uint<1>, !firrtl.fstring, !firrtl.uint<8>, !firrtl.fstring
     firrtl.fprintf %clock, %reset, "{{}}%d.txt"(%time, %a), "[{{}}]: dynamic file name\0A"(%time) : !firrtl.clock, !firrtl.uint<1>, !firrtl.fstring, !firrtl.uint<4>, !firrtl.fstring
+    firrtl.fflush %clock, %reset, "{{}}%d.txt"(%time, %a) : !firrtl.clock, !firrtl.uint<1>, !firrtl.fstring, !firrtl.uint<4>
+
     firrtl.skip
 
     // CHECK: hw.output

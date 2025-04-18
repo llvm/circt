@@ -562,8 +562,8 @@ static bool isAssertOp(hw::HWSymbolCache &symCache, Operation *op) {
     return false;
   }
 
-  return isa<AssertOp, FinishOp, FWriteOp, AssertConcurrentOp, FatalOp,
-             verif::AssertOp, verif::ClockedAssertOp>(op);
+  return isa<AssertOp, FinishOp, FWriteOp, FFlushOp, AssertConcurrentOp,
+             FatalOp, verif::AssertOp, verif::ClockedAssertOp>(op);
 }
 
 static bool isCoverOp(hw::HWSymbolCache &symCache, Operation *op) {
@@ -628,7 +628,7 @@ bool isInDesign(hw::HWSymbolCache &symCache, Operation *op,
     return false;
 
   // Special case some operations which we want to clone.
-  if (isa<TimeOp>(op))
+  if (isa<TimeOp, sv::FuncCallProceduralOp>(op))
     return false;
 
   // Otherwise, operations with memory effects as a part design.
