@@ -1,5 +1,4 @@
-//===- RangeAnalysisComb.cpp - Lower some ops in comb -------------------*- C++
-//-*-===//
+//===- IntRangeOptimizations.cpp - Narrow ops in comb ------------*- C++-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -27,7 +26,7 @@ using namespace mlir::dataflow;
 
 namespace circt {
 namespace comb {
-#define GEN_PASS_DEF_COMBINTRANGENARROWING
+#define GEN_PASS_DEF_COMBINTRANGEOPTIMIZATIONS
 #include "circt/Dialect/Comb/Passes.h.inc"
 } // namespace comb
 } // namespace circt

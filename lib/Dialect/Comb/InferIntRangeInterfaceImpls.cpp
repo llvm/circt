@@ -1,4 +1,4 @@
-//===- InferIntRangeInterfaceImpls.cpp - Integer range impls for comb -===//
+//===- InferIntRangeInterfaceImpls.cpp - Integer range impls for comb -----===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Implemenation of the interval range analysis interface.
+// Implementation of the interval range analysis interface.
 // The overflow flags are not set for the comb operations since they is
 // no meaningful concept of overflow detection in comb.
 //
@@ -191,7 +191,7 @@ void comb::ExtractOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
 //===----------------------------------------------------------------------===//
 void comb::ReplicateOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
                                           SetIntRangeFn setResultRange) {
-  // Compute concat as an unsigned integer of bits
+  // Compute replicate as an unsigned integer of bits
   const auto operand_width = getOperand().getType().getIntOrFloatBitWidth();
   const auto res_width = getResult().getType().getIntOrFloatBitWidth();
   APInt umin = APInt::getZero(res_width);
