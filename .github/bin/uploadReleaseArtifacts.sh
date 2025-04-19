@@ -153,7 +153,7 @@ EOF
 configLinuxRunner=$(cat <<EOF
 [
   {
-    "runner": "ubuntu-22.04",
+    "runner": "ubuntu-24.04",
     "cmake_c_compiler": "clang",
     "cmake_cxx_compiler": "clang++"
   }
