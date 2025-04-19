@@ -33,6 +33,10 @@ on:
           - relwithdebinfo
           - debug
         default: release
+      manual_release:
+        description: Trigger a manual full release build
+        default: false
+        type: boolean
 
   # Run every day at 0700 UTC which is:
   #   - 0000 PDT / 2300 PST
@@ -88,12 +92,17 @@ jobs:
       - name: Get Configuration
         id: get-config
         run: |
-          config=$(.github/bin/uploadReleaseArtifacts.sh \
-            -b ${{ inputs.cmake_build_type }} \
-            -e ${{ github.event_name }} \
-            -o ${{ inputs.os }} \
-            ${{ inputs.llvm_enable_assertions && '-a' || ' ' }} \
-            ${{ inputs.run_tests && '-t' || ' ' }})
+          config=
+          if [[ ${{ github.event_name }} == "release" || ${{ inputs.manual_release }} == "true" ]]; then
+            config=$(.github/bin/uploadReleaseArtifacts.sh -e release)
+          else
+            config=$(.github/bin/uploadReleaseArtifacts.sh \
+              -b ${{ inputs.cmake_build_type }} \
+              -e ${{ github.event_name }} \
+              -o ${{ inputs.os }} \
+              ${{ inputs.llvm_enable_assertions && '-a' || ' ' }} \
+              ${{ inputs.run_tests && '-t' || ' ' }})
+          fi
 
           echo "Build Matrix:" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
