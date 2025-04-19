@@ -473,8 +473,7 @@ static LogicalResult processBuffer(
     if (failed(parsePassPipeline(StringRef(highFIRRTLPassPlugin), pm)))
       return failure();
 
-  if (failed(firtool::populateCHIRRTLToLowFIRRTL(pm, firtoolOptions,
-                                                 inputFilename)))
+  if (failed(firtool::populateCHIRRTLToLowFIRRTL(pm, firtoolOptions)))
     return failure();
 
   if (!lowFIRRTLPassPlugin.empty())
@@ -484,7 +483,8 @@ static LogicalResult processBuffer(
   // Lower if we are going to verilog or if lowering was specifically
   // requested.
   if (outputFormat != OutputIRFir) {
-    if (failed(firtool::populateLowFIRRTLToHW(pm, firtoolOptions)))
+    if (failed(
+            firtool::populateLowFIRRTLToHW(pm, firtoolOptions, inputFilename)))
       return failure();
     if (!hwPassPlugin.empty())
       if (failed(parsePassPipeline(StringRef(hwPassPlugin), pm)))
