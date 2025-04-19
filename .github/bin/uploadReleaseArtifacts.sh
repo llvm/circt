@@ -132,6 +132,9 @@ mapfile -t OPT_OS < <(echo "${OPT_OS[@]}" | tr ' ' '\n' | sort -u)
 #-------------------------------------------------------------------------------
 
 # Configuration for a run of the static UBTI script.
+#
+# Note: arcillator cannot be built statically.  Turn off tests so that this
+# won't error when trying to link arcillator.
 configStatic=$(cat <<EOF
 [
   {
