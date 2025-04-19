@@ -209,14 +209,6 @@ public:
     assert(outputFileName ||
            substitutions.empty() &&
                "substitutions must be empty when output file name is empty");
-    isDynamicFileName = llvm::any_of(substitutions, [](Value v) {
-      auto *op = v.getDefiningOp();
-      if (!op)
-        return true;
-      // HierarchicalModuleNameOp is a constant.
-      return !(isa<HierarchicalModuleNameOp>(op) ||
-               op->hasTrait<mlir::OpTrait::ConstantLike>());
-    });
   }
 
   FileDescriptorInfo() = default;
@@ -229,13 +221,8 @@ public:
 
   StringAttr getOutputFileFormat() const { return outputFileFormat; }
   mlir::ValueRange getSubstitutions() const { return substitutions; }
-  bool isDynamicOutputFileName() const { return isDynamicFileName; }
 
 private:
-  // Set true if the file name is dynamic, i.e. $time or normal hardware value
-  // is substituted.
-  bool isDynamicFileName;
-
   // "Verilog" format string for the output file.
   StringAttr outputFileFormat = {};
 
@@ -2652,34 +2639,6 @@ LogicalResult FIRRTLLowering::lowerStatementWithFd(
   bool failed = false;
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
-    // If the file descriptor is a file, initilize a file descriptor from a
-    // static class function.
-    if (!fileDescriptor.isDefaultFd() &&
-        !fileDescriptor.isDynamicOutputFileName()) {
-      auto outputFile = fileDescriptor.getOutputFileFormat();
-      // `ifndef SYNTHESIS
-      //   reg fd_<outputFile>;
-      //   initial begin
-      //     fd_<outputFile> = $fopen("<outputFile>));
-      //   end
-      // `endif
-      auto &fd = fileNameToFileDescriptor[outputFile];
-      if (!fd) {
-        fd = builder.create<sv::RegOp>(
-            builder.getIntegerType(32),
-            builder.getStringAttr("fd_" + outputFile.getValue()));
-
-        addToInitialBlock([&]() {
-          auto fdOrError = callFileDescriptorLib(fileDescriptor);
-          if (llvm::failed(fdOrError)) {
-            failed = true;
-            return;
-          }
-          builder.create<sv::BPAssignOp>(fd, *fdOrError);
-        });
-      }
-    }
-
     addToAlwaysBlock(clock, [&]() {
       // TODO: This is not printf specific anymore. Replace "Printf" with "FD"
       // or similar but be aware that changing macro name breaks existing uses.
@@ -2700,23 +2659,13 @@ LogicalResult FIRRTLLowering::lowerStatementWithFd(
                                                   "PRINTF_FD_");
           circuitState.addFragment(theModule, "PRINTF_FD_FRAGMENT");
         } else {
-          if (fileDescriptor.isDynamicOutputFileName()) {
-            // If the file name is dynamic, call the library function to get the
-            // FD.
-            auto fdOrError = callFileDescriptorLib(fileDescriptor);
-            if (llvm::failed(fdOrError)) {
-              failed = true;
-              return;
-            }
-            fd = *fdOrError;
-          } else {
-            // Otherwise, read the FD from the register.
-            auto it = fileNameToFileDescriptor.find(
-                fileDescriptor.getOutputFileFormat());
-            assert(it != fileNameToFileDescriptor.end() &&
-                   "must be registered");
-            fd = builder.create<sv::ReadInOutOp>(it->second);
+          // Call the library function to get the FD.
+          auto fdOrError = callFileDescriptorLib(fileDescriptor);
+          if (llvm::failed(fdOrError)) {
+            failed = true;
+            return;
           }
+          fd = *fdOrError;
         }
         failed = llvm::failed(fn(fd));
       });
