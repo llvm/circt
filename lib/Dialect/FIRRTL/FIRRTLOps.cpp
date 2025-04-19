@@ -6494,12 +6494,12 @@ void FPrintFOp::print(OpAsmPrinter &p) {
   }
   p << ", ";
   p.printAttributeWithoutType(getFormatStringAttr());
-  printFPrintfAttrs(p, *this, (*this)->getAttrDictionary());
   if (!getSubstitutions().empty()) {
     p << "(";
     p.printOperands(getSubstitutions());
     p << ")";
   }
+  printFPrintfAttrs(p, *this, (*this)->getAttrDictionary());
   p << " : " << getClock().getType() << ", " << getCond().getType();
   if (!getOutputFileSubstitutions().empty() || !getSubstitutions().empty()) {
     for (auto type : getOperands().drop_front(2).getTypes()) {

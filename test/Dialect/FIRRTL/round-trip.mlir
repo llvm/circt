@@ -186,4 +186,14 @@ firrtl.module @FormatString() {
 
 }
 
+// CHECK-LABEL: firrtl.module @Fprintf
+firrtl.module @Fprintf(
+  in %clock : !firrtl.clock,
+  in %reset : !firrtl.reset,
+  in %a : !firrtl.uint<1>
+) {
+  // CHECK-NEXT: firrtl.fprintf %clock, %a, "test%d.txt"(%a), "%x, %b"(%a, %reset) {name = "foo"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.reset
+  firrtl.fprintf %clock, %a, "test%d.txt"(%a), "%x, %b"(%a, %reset) {name = "foo"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.reset
+}
+
 }
