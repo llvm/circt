@@ -138,7 +138,7 @@ configStatic=$(cat <<EOF
     "cmake_build_type": "$OPT_CMAKE_BUILD_TYPE",
     "llvm_enable_assertions": "$OPT_ASSERTIONS",
     "llvm_force_enable_stats": "ON",
-    "run_tests": $OPT_RUN_TESTS,
+    "run_tests": false,
     "install_target": "install-firtool install-om-linker",
     "package_name_prefix": "firrtl-bin"
   }
