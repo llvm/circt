@@ -214,10 +214,14 @@ moore.module @Expressions(
 
   // CHECK: moore.eq [[A]], [[B]] : i32 -> i1
   moore.eq %a, %b : i32 -> i1
+  // CHECK: moore.uarray_cmp eq [[ARRAY1]], [[ARRAY1]] : <4 x i8> -> i1
+  moore.uarray_cmp eq %array1, %array1 : <4 x i8> -> i1
   // CHECK: moore.ne [[A]], [[B]] : i32 -> i1
   moore.ne %a, %b : i32 -> i1
   // CHECK: moore.ne [[C]], [[D]] : l32 -> l1
   moore.ne %c, %d : l32 -> l1
+  // CHECK: moore.uarray_cmp ne [[ARRAY1]], [[ARRAY1]] : <4 x i8> -> i1
+  moore.uarray_cmp ne %array1, %array1 : <4 x i8> -> i1
   // CHECK: moore.case_eq [[A]], [[B]] : i32
   moore.case_eq %a, %b : i32
   // CHECK: moore.case_ne [[A]], [[B]] : i32
