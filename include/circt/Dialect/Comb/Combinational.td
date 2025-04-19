@@ -15,6 +15,7 @@
 //===----------------------------------------------------------------------===//
 
 include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/Interfaces/InferIntRangeInterface.td"
 include "mlir/IR/EnumAttr.td"
 
 // Base class for binary operators.
@@ -60,24 +61,24 @@ class UTVariadicOp<string mnemonic, list<Trait> traits = []> :
 }
 
 // Arithmetic and Logical Operations.
-def AddOp : UTVariadicOp<"add", [Commutative]>;
-def MulOp : UTVariadicOp<"mul", [Commutative]>;
+def AddOp : UTVariadicOp<"add", [Commutative, DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]>;
+def MulOp : UTVariadicOp<"mul", [Commutative, DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]>;
 let hasFolder = true in {
-  def DivUOp : UTBinOp<"divu">;
-  def DivSOp : UTBinOp<"divs">;
-  def ModUOp : UTBinOp<"modu">;
-  def ModSOp : UTBinOp<"mods">;
+  def DivUOp : UTBinOp<"divu", [DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]>;
+  def DivSOp : UTBinOp<"divs", [DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]>;
+  def ModUOp : UTBinOp<"modu", [DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]>;
+  def ModSOp : UTBinOp<"mods", [DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]>;
   let hasCanonicalizeMethod = true in {
-    def ShlOp : UTBinOp<"shl">;
-    def ShrUOp : UTBinOp<"shru">;
-    def ShrSOp : UTBinOp<"shrs">;
-    def SubOp : UTBinOp<"sub">;
+    def ShlOp : UTBinOp<"shl",   [DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]>;
+    def ShrUOp : UTBinOp<"shru", [DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]>;
+    def ShrSOp : UTBinOp<"shrs", [DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]>;
+    def SubOp : UTBinOp<"sub",   [DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]>;
   }
 }
 
-def AndOp : UTVariadicOp<"and", [Commutative]>;
-def OrOp  : UTVariadicOp<"or", [Commutative]>;
-def XorOp : UTVariadicOp<"xor", [Commutative]> {
+def AndOp : UTVariadicOp<"and", [Commutative, DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]>;
+def OrOp  : UTVariadicOp<"or",  [Commutative, DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]>;
+def XorOp : UTVariadicOp<"xor", [Commutative, DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
   let extraClassDeclaration = [{
     /// Return true if this is a two operand xor with an all ones constant as
     /// its RHS operand.
@@ -114,7 +115,7 @@ def ICmpPredicate : I64EnumAttr<
      ICmpPredicateUGT, ICmpPredicateUGE, ICmpPredicateCEQ, ICmpPredicateCNE,
      ICmpPredicateWEQ, ICmpPredicateWNE]>;
 
-def ICmpOp : CombOp<"icmp", [Pure, SameTypeOperands]> {
+def ICmpOp : CombOp<"icmp", [Pure, SameTypeOperands, DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
   let summary = "Compare two integer values";
   let description = [{
     This operation compares two integers using a predicate.  If the predicate is
@@ -178,7 +179,7 @@ def ParityOp : UnaryI1ReductionOp<"parity">;
 //===----------------------------------------------------------------------===//
 
 // Extract a range of bits from the specified input.
-def ExtractOp : CombOp<"extract", [Pure]> {
+def ExtractOp : CombOp<"extract", [Pure, DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
   let summary = "Extract a range of bits into a smaller value, lowBit "
                 "specifies the lowest bit included.";
 
@@ -203,7 +204,7 @@ def ExtractOp : CombOp<"extract", [Pure]> {
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
-def ConcatOp : CombOp<"concat", [InferTypeOpInterface, Pure]> {
+def ConcatOp : CombOp<"concat", [InferTypeOpInterface, Pure, DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
   let summary = "Concatenate a variadic list of operands together.";
   let description = [{
     See the comb rationale document for details on operand ordering.
@@ -237,7 +238,7 @@ def ConcatOp : CombOp<"concat", [InferTypeOpInterface, Pure]> {
   }];
 }
 
-def ReplicateOp : CombOp<"replicate", [Pure]> {
+def ReplicateOp : CombOp<"replicate", [Pure, DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
   let summary = "Concatenate the operand a constant number of times";
 
   let arguments = (ins HWIntegerType:$input);
@@ -268,7 +269,7 @@ def ReplicateOp : CombOp<"replicate", [Pure]> {
 
 // Select one of two values based on a condition.
 def MuxOp : CombOp<"mux",
- [Pure, AllTypesMatch<["trueValue", "falseValue", "result"]>]> {
+ [Pure, AllTypesMatch<["trueValue", "falseValue", "result"]>,DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRangesFromOptional"]>]> {
   let summary = "Return one or the other operand depending on a selector bit";
   let description = [{
     ```

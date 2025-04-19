@@ -20,4 +20,5 @@ add_circt_dialect_library(CIRCTHWTransforms
   MLIRIR
   MLIRPass
   MLIRTransformUtils
+  MLIRInferIntRangeCommon
 )
