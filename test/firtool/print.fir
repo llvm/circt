@@ -27,6 +27,7 @@ circuit PrintTest:
     input cond : UInt<1>
     input a : UInt<8>
 
+    ; CHECK: if ((`PRINTF_COND_) & cond) begin
     ; CHECK: $fwrite(`PRINTF_FD_, "binary: %b %0b %8b\n", a, a, a);
     printf(clock, cond, "binary: %b %0b %8b\n", a, a, a)
 
@@ -43,8 +44,10 @@ circuit PrintTest:
     printf(clock, cond, "literals: %%\n")
 
     ; CHECK-NEXT: $fwrite(`PRINTF_FD_, "[%0t]: %m\n", $time);
+    ; CHECK-NEXT: end
     printf(clock, cond, "[{{SimulationTime}}]: {{HierarchicalModuleName}}\n")
 
+    ; CHECK:      if (cond) begin
     ; CHECK-NEXT: ___circt_lib_logging3A3AFileDescriptor3A3Aget_0_1 = __circt_lib_logging::FileDescriptor::get("test.txt");
     ; CHECK-NEXT: $fwrite(___circt_lib_logging3A3AFileDescriptor3A3Aget_0_1, "hello");
     fprintf(clock, cond, "test.txt", "hello")
@@ -63,4 +66,5 @@ circuit PrintTest:
     fflush(clock, cond)
 
     ; CHECK-NEXT: $fflush(___circt_lib_logging3A3AFileDescriptor3A3Aget_0);
+    ; CHECK-NEXT: end
     fflush(clock, cond, "{{SimulationTime}}%d.txt", a);

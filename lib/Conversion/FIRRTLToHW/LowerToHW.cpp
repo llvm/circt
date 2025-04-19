@@ -1882,16 +1882,16 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   // Lower statemens that use file descriptors such as printf, fprintf and
   // fflush. `fn` is a function that takes a file descriptor and build an always
   // and if-procedural block.
-  LogicalResult
-  lowerStatementWithFd(const FileDescriptorInfo &fileDescriptorInfo,
-                       Value clock, Value cond,
-                       const std::function<LogicalResult(Value)> &fn);
+  LogicalResult lowerStatementWithFd(
+      const FileDescriptorInfo &fileDescriptorInfo, Value clock, Value cond,
+      const std::function<LogicalResult(Value)> &fn, bool usePrintfCond);
   // Lower a printf-like operation. `fileDescriptorInfo` is a pair of the
   // file name and whether it requires format string substitution.
   template <class T>
   LogicalResult visitPrintfLike(T op,
-                                const FileDescriptorInfo &fileDescriptorInfo);
-  LogicalResult visitStmt(PrintFOp op) { return visitPrintfLike(op, {}); }
+                                const FileDescriptorInfo &fileDescriptorInfo,
+                                bool usePrintfCond);
+  LogicalResult visitStmt(PrintFOp op) { return visitPrintfLike(op, {}, true); }
   LogicalResult visitStmt(FPrintFOp op);
   LogicalResult visitStmt(FFlushOp op);
   LogicalResult visitStmt(StopOp op);
@@ -2634,7 +2634,7 @@ FIRRTLLowering::loweredFmtOperands(mlir::ValueRange operands,
 
 LogicalResult FIRRTLLowering::lowerStatementWithFd(
     const FileDescriptorInfo &fileDescriptor, Value clock, Value cond,
-    const std::function<LogicalResult(Value)> &fn) {
+    const std::function<LogicalResult(Value)> &fn, bool usePrintfCond) {
   // Emit an "#ifndef SYNTHESIS" guard into the always block.
   bool failed = false;
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
@@ -2643,12 +2643,16 @@ LogicalResult FIRRTLLowering::lowerStatementWithFd(
       // TODO: This is not printf specific anymore. Replace "Printf" with "FD"
       // or similar but be aware that changing macro name breaks existing uses.
       circuitState.usedPrintf = true;
-      circuitState.addFragment(theModule, "PRINTF_COND_FRAGMENT");
+      if (usePrintfCond)
+        circuitState.addFragment(theModule, "PRINTF_COND_FRAGMENT");
 
       // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
-      Value ifCond =
-          builder.create<sv::MacroRefExprOp>(cond.getType(), "PRINTF_COND_");
-      ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond, true);
+      Value ifCond = cond;
+      if (usePrintfCond) {
+        ifCond =
+            builder.create<sv::MacroRefExprOp>(cond.getType(), "PRINTF_COND_");
+        ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond, true);
+      }
 
       addIfProceduralBlock(ifCond, [&]() {
         // Create a value specified by `PRINTF_FD` for printf, or the file
@@ -4858,9 +4862,8 @@ static LogicalResult resolveFormatString(Location loc,
 // Printf/FPrintf is a macro op that lowers to an sv.ifdef.procedural, an sv.if,
 // and an sv.fwrite all nested together.
 template <class T>
-LogicalResult
-FIRRTLLowering::visitPrintfLike(T op,
-                                const FileDescriptorInfo &fileDescriptorInfo) {
+LogicalResult FIRRTLLowering::visitPrintfLike(
+    T op, const FileDescriptorInfo &fileDescriptorInfo, bool usePrintfCond) {
   auto clock = getLoweredNonClockValue(op.getClock());
   auto cond = getLoweredValue(op.getCond());
   if (!clock || !cond)
@@ -4879,7 +4882,8 @@ FIRRTLLowering::visitPrintfLike(T op,
     return success();
   };
 
-  return lowerStatementWithFd(fileDescriptorInfo, clock, cond, fn);
+  return lowerStatementWithFd(fileDescriptorInfo, clock, cond, fn,
+                              usePrintfCond);
 }
 
 LogicalResult FIRRTLLowering::visitStmt(FPrintFOp op) {
@@ -4891,7 +4895,7 @@ LogicalResult FIRRTLLowering::visitStmt(FPrintFOp op) {
 
   FileDescriptorInfo outputFile(outputFileAttr,
                                 op.getOutputFileSubstitutions());
-  return visitPrintfLike(op, outputFile);
+  return visitPrintfLike(op, outputFile, false);
 }
 
 // FFlush lowers into $fflush statement.
@@ -4907,7 +4911,7 @@ LogicalResult FIRRTLLowering::visitStmt(FFlushOp op) {
   };
 
   if (!op.getOutputFileAttr())
-    return lowerStatementWithFd({}, clock, cond, fn);
+    return lowerStatementWithFd({}, clock, cond, fn, false);
 
   // If output file is specified, resolve the format string and lower it with a
   // file descriptor associated with the output file.
@@ -4919,7 +4923,7 @@ LogicalResult FIRRTLLowering::visitStmt(FFlushOp op) {
 
   return lowerStatementWithFd(
       FileDescriptorInfo(outputFileAttr, op.getOutputFileSubstitutions()),
-      clock, cond, fn);
+      clock, cond, fn, false);
 }
 
 // Stop lowers into a nested series of behavioral statements plus $fatal
