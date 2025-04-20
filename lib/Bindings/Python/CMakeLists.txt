@@ -53,6 +53,7 @@ set(PYTHON_BINDINGS_LINK_LIBS
   CIRCTCAPITransforms
   MLIRCAPIIndex
   MLIRCAPISMT
+  MLIRCAPIExportSMTLIB
   # needed for mlirFrozenRewritePatternSetDestroy
   # but not the actual passes
   MLIRCAPITransforms
@@ -243,14 +244,6 @@ declare_mlir_dialect_python_bindings(
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
-  TD_FILE dialects/SMTOps.td
-  SOURCES
-    dialects/smt.py
-  DIALECT_NAME smt)
-
-declare_mlir_dialect_python_bindings(
-  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
-  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   TD_FILE dialects/EmitOps.td
   SOURCES
     dialects/emit.py
@@ -277,6 +270,7 @@ add_mlir_python_modules(CIRCTPythonModules
   INSTALL_PREFIX "python_packages/circt_core/circt"
   DECLARED_SOURCES
     MLIRPythonSources.Core
+    MLIRPythonSources.Dialects.smt
     CIRCTBindingsPythonExtension
     CIRCTBindingsPythonSources
   COMMON_CAPI_LINK_LIBS
