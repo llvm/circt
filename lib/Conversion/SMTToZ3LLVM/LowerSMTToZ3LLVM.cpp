@@ -150,7 +150,7 @@ protected:
           builder.getBlock()->getParent()->getParentOfType<ModuleOp>();
       builder.setInsertionPointToEnd(module.getBody());
       auto funcOpResult = LLVM::lookupOrCreateFn(
-          module, name, funcType.getParams(), funcType.getReturnType(),
+          builder, module, name, funcType.getParams(), funcType.getReturnType(),
           funcType.getVarArg());
       assert(succeeded(funcOpResult) && "expected to lookup or create printf");
       funcOp = funcOpResult.value();

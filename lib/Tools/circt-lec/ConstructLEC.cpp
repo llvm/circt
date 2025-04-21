@@ -73,8 +73,8 @@ void ConstructLECPass::runOnOperation() {
   auto voidTy = LLVM::LLVMVoidType::get(&getContext());
 
   // Lookup or declare printf function.
-  auto printfFunc =
-      LLVM::lookupOrCreateFn(getOperation(), "printf", ptrTy, voidTy, true);
+  auto printfFunc = LLVM::lookupOrCreateFn(builder, getOperation(), "printf",
+                                           ptrTy, voidTy, true);
   if (failed(printfFunc)) {
     getOperation()->emitError("failed to lookup or create printf");
     return signalPassFailure();
