@@ -35,8 +35,7 @@ struct StripDebugInfoWithPred
   // Return stripped location for the given `loc`.
   mlir::Location getStrippedLoc(Location loc) {
     SetVector<Location> newLocations;
-    SmallVector<Location, 8> worklist;
-    worklist.push_back(loc);
+    SmallVector<Location, 8> worklist({loc});
     while (!worklist.empty()) {
       auto currentLoc = worklist.pop_back_val();
       if (auto fusedLoc = dyn_cast<FusedLoc>(currentLoc)) {
