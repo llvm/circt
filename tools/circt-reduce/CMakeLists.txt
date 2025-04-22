@@ -14,6 +14,7 @@ set(LIBS
   CIRCTFIRRTLReductions
   CIRCTReduceLib
   MLIRIR
+  MLIRBytecodeWriter
   MLIRParser
   MLIRSupport
   MLIRTransforms

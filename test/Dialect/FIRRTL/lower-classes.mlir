@@ -168,6 +168,7 @@ firrtl.circuit "PathModule" {
   // CHECK: hw.hierpath private [[INST_PATH:@.+]] [@PathModule::@child]
   // CHECK: hw.hierpath private [[LOCAL_PATH:@.+]] [@Child]
   // CHECK: hw.hierpath private [[MODULE_PATH:@.+]] [@PathModule::@child, @Child::[[NONLOCAL_SYM:@.+]]]
+  // CHECK: hw.hierpath private [[EXT_PORT_PATH:@.+]] [@ExtChild::[[EXT_PORT_SYM:@.+]]]
 
   // CHECK: firrtl.module @PathModule(in %in: !firrtl.uint<1> sym [[PORT_SYM]]) {
   firrtl.module @PathModule(in %in : !firrtl.uint<1> [{class = "circt.tracker", id = distinct[0]<>}]) {
@@ -178,6 +179,8 @@ firrtl.circuit "PathModule" {
     // CHECK: firrtl.instance child sym @child @Child()
     firrtl.instance child sym @child {annotations = [{class = "circt.tracker", id = distinct[4]<>}]} @Child()
 
+    firrtl.instance ext_child @ExtChild(in foo: !firrtl.uint<1>)
+
     %path_test = firrtl.object @PathTest()
   }
   // CHECK: hw.hierpath private [[NONLOCAL_PATH:@.+]] [@PathModule::@child, @Child]
@@ -187,6 +190,10 @@ firrtl.circuit "PathModule" {
     // CHECK: %non_local = firrtl.wire sym [[NONLOCAL_SYM]] : !firrtl.uint<8>
     %non_local = firrtl.wire {annotations = [{circt.nonlocal = @NonLocal, class = "circt.tracker", id = distinct[3]<>}]} : !firrtl.uint<8>
   }
+
+  // CHECK: firrtl.extmodule private @ExtChild(in foo: !firrtl.uint<1> sym [[EXT_PORT_SYM]])
+  firrtl.extmodule private @ExtChild(in foo: !firrtl.uint<1> [{class = "circt.tracker", id = distinct[6]<>}])
+
   // CHECK: om.class @PathModule_Class(%basepath: !om.basepath) {
   // CHECK:   om.basepath_create %basepath
   // CHECK:   om.object @Child_Class
@@ -224,6 +231,9 @@ firrtl.circuit "PathModule" {
     %instance = firrtl.path instance distinct[4]<>
 
     %module_path = firrtl.path reference distinct[5]<>
+
+    // CHECK: om.path_create reference %basepath [[EXT_PORT_PATH]]
+    %ext_port_path = firrtl.path reference distinct[6]<>
   }
   // CHECK: -> (propOut: !om.list<!om.integer>)
   firrtl.module @ListCreate(in %propIn: !firrtl.integer, out %propOut: !firrtl.list<integer>) attributes {convention = #firrtl<convention scalarized>} {

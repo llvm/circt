@@ -13,6 +13,8 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/Support/Debug.h"
 
+#include <deque>
+
 using namespace circt;
 using namespace hw;
 using namespace seq;
@@ -396,6 +398,12 @@ FirRegLowering::tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
 
 void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
                                 Value next) {
+  // If-then-else tree limit.
+  constexpr size_t limit = 1024;
+
+  // Count of emitted if-then-else ops.
+  size_t counter = 0;
+
   // Get the fanout from this register before we build the tree. While we are
   // creating the tree of if/else statements from muxes, we only want to turn
   // muxes that are on the register's fanout into if/else statements. This is
@@ -405,9 +413,9 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
   // enable.
   auto firReg = term.getDefiningOp<seq::FirRegOp>();
 
-  SmallVector<std::tuple<Block *, Value, Value, Value>> worklist;
+  std::deque<std::tuple<Block *, Value, Value, Value>> worklist;
   auto addToWorklist = [&](Value reg, Value term, Value next) {
-    worklist.push_back({builder.getBlock(), reg, term, next});
+    worklist.emplace_back(builder.getBlock(), reg, term, next);
   };
 
   auto getArrayIndex = [&](Value reg, Value idx) {
@@ -423,7 +431,9 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
     OpBuilder::InsertionGuard guard(builder);
     Block *block;
     Value reg, term, next;
-    std::tie(block, reg, term, next) = worklist.pop_back_val();
+    std::tie(block, reg, term, next) = worklist.front();
+    worklist.pop_front();
+
     builder.setInsertionPointToEnd(block);
     if (areEquivalentValues(term, next))
       continue;
@@ -433,10 +443,15 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
     auto mux = next.getDefiningOp<comb::MuxOp>();
     if (mux && mux.getTwoState() &&
         reachableMuxes->isMuxReachableFrom(firReg, mux)) {
+      if (counter >= limit) {
+        builder.create<sv::PAssignOp>(term.getLoc(), reg, next);
+        continue;
+      }
       addToIfBlock(
           builder, mux.getCond(),
           [&]() { addToWorklist(reg, term, mux.getTrueValue()); },
           [&]() { addToWorklist(reg, term, mux.getFalseValue()); });
+      ++counter;
       continue;
     }
     // If the next value is an array creation, split the value into

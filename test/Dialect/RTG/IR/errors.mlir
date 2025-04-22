@@ -1,5 +1,18 @@
 // RUN: circt-opt %s --split-input-file --verify-diagnostics
 
+rtg.test @constantTooBig() {
+  // expected-error @below {{integer value out-of-range for bit-width 2}}
+  rtg.constant #rtg.isa.immediate<2, 4>
+}
+
+// -----
+
+rtg.test @immediateWidthMismatch() {
+  // expected-error @below {{explicit immediate type bit-width does not match attribute bit-width, 1 vs 2}}
+  rtg.constant #rtg.isa.immediate<2, 1> : !rtg.isa.immediate<1>
+}
+
+// -----
 
 func.func @seq0() {
   return
@@ -175,4 +188,19 @@ rtg.target @target : !rtg.dict<> {
 rtg.test @test() {
   // expected-error @below {{must have at least one sequence in the list}}
   %0 = rtg.interleave_sequences
+}
+
+// -----
+
+// expected-note @below {{prior use here}}
+rtg.test @test(a = %a: i32, b = %b: index) {
+  // expected-error @below {{use of value '%a' expects different type than prior uses: 'index' vs 'i32'}}
+  rtg.array_create %a, %b : index
+}
+
+// -----
+
+rtg.test @test(a = %a: i32, b = %b: index) {
+  // expected-error @below {{requires all operands to have the same type}}
+  "rtg.array_create"(%a, %b) : (i32, index) -> (!rtg.array<index>)
 }

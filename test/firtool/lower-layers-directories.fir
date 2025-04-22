@@ -25,7 +25,6 @@ circuit Testbench: %[[
           "tpe": {
             "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
             "ref": {
-              "circuit": "Testbench",
               "module": "DUT",
               "path": [],
               "ref": "a",

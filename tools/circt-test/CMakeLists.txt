@@ -4,7 +4,9 @@ set(libs
   CIRCTHW
   CIRCTOM
   CIRCTSeq
+  CIRCTSeqToSV
   CIRCTSim
+  CIRCTSimToSV
   CIRCTSV
   CIRCTSVTransforms
   CIRCTVerif

@@ -2293,6 +2293,20 @@ firrtl.module @ForceableRegResetToNode(in %clock: !firrtl.clock, in %dummy : !fi
   firrtl.connect %foo, %reg: !firrtl.uint<1>, !firrtl.uint<1>
 }
 
+// https://github.com/llvm/circt/issues/8348
+// CHECK-LABEL: firrtl.module @RegResetInvalidResetValueType
+// We cannot replace a regreset with its reset value, when the reset value's type does not match.
+firrtl.module @RegResetInvalidResetValueType(in %c : !firrtl.clock, out %out : !firrtl.uint<2>) {
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+  %c1_asyncreset = firrtl.specialconstant 1 : !firrtl.asyncreset
+  // CHECK: %reg = firrtl.regreset
+  %reg = firrtl.regreset %c, %c1_asyncreset, %c0_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<2>
+  // CHECK: firrtl.matchingconnect %out, %reg : !firrtl.uint<2>
+  firrtl.matchingconnect %out, %reg : !firrtl.uint<2>
+  firrtl.matchingconnect %reg, %c0_ui2 : !firrtl.uint<2>
+}
+
 // https://github.com/llvm/circt/issues/929
 // CHECK-LABEL: firrtl.module @MuxInvalidTypeOpt
 firrtl.module @MuxInvalidTypeOpt(in %in : !firrtl.uint<1>, out %out : !firrtl.uint<4>) {

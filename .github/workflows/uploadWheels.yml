@@ -22,9 +22,9 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - os: ubuntu-20.04
+          - os: ubuntu-22.04
             cibw_build: cp310-manylinux_x86_64
-          - os: ubuntu-20.04
+          - os: ubuntu-22.04
             cibw_build: cp313-manylinux_x86_64
 
     steps:
@@ -62,7 +62,7 @@ jobs:
 
   push_wheels:
     name: Push wheels
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     if: github.repository == 'llvm/circt' && (github.ref_type == 'tag' || github.event_name == 'schedule' || ((github.event_name == 'workflow_dispatch') && inputs.upload-to-pypi))
     needs: build_wheels
     environment:

@@ -1122,7 +1122,6 @@ Example:
         "tpe": {
           "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
           "ref": {
-            "circuit": "GCTInterface",
             "module": "GCTInterface",
             "path": [],
             "ref": "a",

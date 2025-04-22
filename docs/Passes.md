@@ -4,6 +4,10 @@ This document describes the available CIRCT passes and their contracts.
 
 [TOC]
 
+## General Passes
+
+[include "CIRCTGeneralPasses.md"]
+
 ## Conversion Passes
 
 [include "CIRCTConversionPasses.md"]
@@ -79,3 +83,11 @@ This document describes the available CIRCT passes and their contracts.
 ## SystemC Dialect Passes
 
 [include "SystemCPasses.md"]
+
+## LEC (logical equivalence checking) Passes
+
+[include "CIRCTLECPasses.md"]
+
+## BMC (bounded model checking) Passes
+
+[include "CIRCTBMCPasses.md"]

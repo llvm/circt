@@ -2659,3 +2659,269 @@ firrtl.circuit "Foo" {
     }
   }
 }
+
+// -----
+
+firrtl.circuit "FormalTargetUnknown" {
+  firrtl.extmodule @FormalTargetUnknown()
+  // expected-error @below {{op targets unknown module @A}}
+  firrtl.formal @foo, @A {}
+}
+
+// -----
+
+firrtl.circuit "FormalTargetInvalid" {
+  firrtl.extmodule @FormalTargetInvalid()
+  // expected-error @below {{op target @A is not a module}}
+  firrtl.formal @foo, @A {}
+  // expected-note @below {{target defined here}}
+  firrtl.layer @A inline {}
+}
+
+// -----
+
+firrtl.circuit "SimulationTargetUnknown" {
+  firrtl.extmodule @SimulationTargetUnknown()
+  // expected-error @below {{op targets unknown module @A}}
+  firrtl.simulation @foo, @A {}
+}
+
+// -----
+
+firrtl.circuit "SimulationTargetInvalid" {
+  firrtl.extmodule @SimulationTargetInvalid()
+  // expected-error @below {{op target @A is not a module}}
+  firrtl.simulation @foo, @A {}
+  // expected-note @below {{target defined here}}
+  firrtl.layer @A inline {}
+}
+
+// -----
+
+firrtl.circuit "SimulationPortCount" {
+  firrtl.extmodule @SimulationPortCount()
+  // expected-error @below {{op target @Foo must have 4 ports, got 0 instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo()
+}
+
+// -----
+
+firrtl.circuit "SimulationPortName0" {
+  firrtl.extmodule @SimulationPortName0()
+  // expected-error @below {{op target @Foo port 0 must be called "clock", got "foo" instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in foo: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortName1" {
+  firrtl.extmodule @SimulationPortName1()
+  // expected-error @below {{op target @Foo port 1 must be called "init", got "foo" instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in foo: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortName2" {
+  firrtl.extmodule @SimulationPortName2()
+  // expected-error @below {{op target @Foo port 2 must be called "done", got "foo" instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out foo: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortName3" {
+  firrtl.extmodule @SimulationPortName3()
+  // expected-error @below {{op target @Foo port 3 must be called "success", got "foo" instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out foo: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortDirection0" {
+  firrtl.extmodule @SimulationPortDirection0()
+  // expected-error @below {{op target @Foo port "clock" must be an input, got an output instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    out clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortDirection1" {
+  firrtl.extmodule @SimulationPortDirection1()
+  // expected-error @below {{op target @Foo port "init" must be an input, got an output instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    out init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortDirection2" {
+  firrtl.extmodule @SimulationPortDirection2()
+  // expected-error @below {{op target @Foo port "done" must be an output, got an input instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    in done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortDirection3" {
+  firrtl.extmodule @SimulationPortDirection3()
+  // expected-error @below {{op target @Foo port "success" must be an output, got an input instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    in success: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortType0" {
+  firrtl.extmodule @SimulationPortType0()
+  // expected-error @below {{op target @Foo port "clock" must be a '!firrtl.clock', got '!firrtl.reset' instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.reset,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortType1" {
+  firrtl.extmodule @SimulationPortType1()
+  // expected-error @below {{op target @Foo port "init" must be a '!firrtl.uint<1>', got '!firrtl.reset' instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in init: !firrtl.reset,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortType2" {
+  firrtl.extmodule @SimulationPortType2()
+  // expected-error @below {{op target @Foo port "done" must be a '!firrtl.uint<1>', got '!firrtl.reset' instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.reset,
+    out success: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortType3" {
+  firrtl.extmodule @SimulationPortType3()
+  // expected-error @below {{op target @Foo port "success" must be a '!firrtl.uint<1>', got '!firrtl.reset' instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.reset
+  )
+}
+
+// -----
+
+firrtl.circuit "BindTargetMissingModule" {
+  firrtl.module @BindTargetMissing() {}
+  // expected-error @below {{target #hw.innerNameRef<@XXX::@YYY> cannot be resolved}}
+  firrtl.bind <@XXX::@YYY>
+}
+
+// -----
+
+firrtl.circuit "BindTargetMissingInstance" {
+  firrtl.module @BindTargetMissingInstance() {}
+  // expected-error @below {{target #hw.innerNameRef<@BindTargetMissingInstance::@YYY> cannot be resolved}}
+  firrtl.bind <@BindTargetMissingInstance::@YYY>
+}
+
+// -----
+
+firrtl.circuit "BindTargetNotAnInstance" {
+  firrtl.module @Target() {}
+  firrtl.module @BindTargetMissingDoNotPrintFlag() {
+    %wire = firrtl.wire sym @target : !firrtl.uint<8>
+  }
+
+  // expected-error @below {{target #hw.innerNameRef<@BindTargetMissingDoNotPrintFlag::@target> is not an instance}}
+  firrtl.bind <@BindTargetMissingDoNotPrintFlag::@target>
+}
+
+// -----
+
+firrtl.circuit "BindTargetMissingDoNotPrintFlag" {
+  firrtl.module @Target() {}
+  firrtl.module @BindTargetMissingDoNotPrintFlag() {
+    firrtl.instance target sym @target @Target()
+  }
+
+  // expected-error @below {{target #hw.innerNameRef<@BindTargetMissingDoNotPrintFlag::@target> is not marked doNotPrint}}
+  firrtl.bind <@BindTargetMissingDoNotPrintFlag::@target>
+}

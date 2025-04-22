@@ -807,22 +807,19 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
   /// To:
   ///   {"~Foo|Foo>a", {".b", "[0]"}}
   /// The format of a ReferenceTarget object like:
-  ///   circuit: String
   ///   module: String
   ///   path: Seq[(Instance, OfModule)]
   ///   ref: String
   ///   component: Seq[TargetToken]
   auto refToTarget =
       [&](DictionaryAttr refTarget) -> std::optional<std::string> {
-    auto circuitAttr =
-        tryGetAs<StringAttr>(refTarget, refTarget, "circuit", loc, clazz, path);
     auto moduleAttr =
         tryGetAs<StringAttr>(refTarget, refTarget, "module", loc, clazz, path);
     auto pathAttr =
         tryGetAs<ArrayAttr>(refTarget, refTarget, "path", loc, clazz, path);
     auto componentAttr = tryGetAs<ArrayAttr>(refTarget, refTarget, "component",
                                              loc, clazz, path);
-    if (!circuitAttr || !moduleAttr || !pathAttr || !componentAttr)
+    if (!moduleAttr || !pathAttr || !componentAttr)
       return {};
 
     // Parse non-local annotations.
@@ -906,8 +903,8 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     if (!refAttr)
       return {};
 
-    return (Twine("~" + circuitAttr.getValue() + "|" + moduleAttr.getValue() +
-                  strpath + ">" + refAttr.getValue()) +
+    return (Twine("~|" + moduleAttr.getValue() + strpath + ">" +
+                  refAttr.getValue()) +
             componentStr)
         .str();
   };

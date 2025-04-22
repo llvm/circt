@@ -20,7 +20,6 @@
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/OM/OMPasses.h"
-#include "circt/Dialect/SMT/SMTDialect.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
@@ -30,6 +29,7 @@
 #include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/Transforms/Passes.h"
+#include "mlir/Dialect/SMT/IR/SMTDialect.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OwningOpRef.h"
@@ -242,6 +242,9 @@ static LogicalResult executeBMC(MLIRContext &context) {
   };
 
   std::unique_ptr<mlir::ExecutionEngine> engine;
+  std::function<llvm::Error(llvm::Module *)> transformer =
+      mlir::makeOptimizingTransformer(
+          /*optLevel*/ 3, /*sizeLevel=*/0, /*targetMachine=*/nullptr);
   {
     auto timer = ts.nest("Setting up the JIT");
     auto entryPoint =
@@ -264,8 +267,7 @@ static LogicalResult executeBMC(MLIRContext &context) {
     SmallVector<StringRef, 4> sharedLibraries(sharedLibs.begin(),
                                               sharedLibs.end());
     mlir::ExecutionEngineOptions engineOptions;
-    engineOptions.transformer = mlir::makeOptimizingTransformer(
-        /*optLevel*/ 3, /*sizeLevel=*/0, /*targetMachine=*/nullptr);
+    engineOptions.transformer = transformer;
     engineOptions.jitCodeGenOptLevel = llvm::CodeGenOptLevel::Aggressive;
     engineOptions.sharedLibPaths = sharedLibraries;
     engineOptions.enableObjectDump = true;
@@ -328,7 +330,7 @@ int main(int argc, char **argv) {
     circt::hw::HWDialect,
     circt::om::OMDialect,
     circt::seq::SeqDialect,
-    circt::smt::SMTDialect,
+    mlir::smt::SMTDialect,
     circt::verif::VerifDialect,
     mlir::arith::ArithDialect,
     mlir::BuiltinDialect,

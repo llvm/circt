@@ -382,11 +382,12 @@ struct SimInstantiateOpLowering
     Type convertedIndex = typeConverter->convertType(rewriter.getIndexType());
 
     FailureOr<LLVM::LLVMFuncOp> mallocFunc =
-        LLVM::lookupOrCreateMallocFn(moduleOp, convertedIndex);
+        LLVM::lookupOrCreateMallocFn(rewriter, moduleOp, convertedIndex);
     if (failed(mallocFunc))
       return mallocFunc;
 
-    FailureOr<LLVM::LLVMFuncOp> freeFunc = LLVM::lookupOrCreateFreeFn(moduleOp);
+    FailureOr<LLVM::LLVMFuncOp> freeFunc =
+        LLVM::lookupOrCreateFreeFn(rewriter, moduleOp);
     if (failed(freeFunc))
       return freeFunc;
 
@@ -553,7 +554,7 @@ struct SimEmitValueOpLowering
 
     // Lookup of create printf function symbol.
     auto printfFunc = LLVM::lookupOrCreateFn(
-        moduleOp, "printf", LLVM::LLVMPointerType::get(getContext()),
+        rewriter, moduleOp, "printf", LLVM::LLVMPointerType::get(getContext()),
         LLVM::LLVMVoidType::get(getContext()), true);
     if (failed(printfFunc))
       return printfFunc;

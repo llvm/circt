@@ -63,7 +63,10 @@ int main(int argc, char **argv) {
               << std::endl;
   }
 
+#ifdef TRACE
   VerilatedVcdC *tfp = nullptr;
+#endif
+
   if (waveformFile) {
 #ifdef TRACE
     tfp = new VerilatedVcdC();
@@ -93,8 +96,10 @@ int main(int argc, char **argv) {
   for (timeStamp = 0; timeStamp < 8 && !Verilated::gotFinish(); timeStamp++) {
     dut.eval();
     dut.clk = !dut.clk;
+#ifdef TRACE
     if (tfp)
       tfp->dump(timeStamp);
+#endif
   }
 
   // Take simulation out of reset.
@@ -104,8 +109,11 @@ int main(int argc, char **argv) {
   for (; !Verilated::gotFinish() && !stopSimulation; timeStamp++) {
     dut.eval();
     dut.clk = !dut.clk;
+
+#ifdef TRACE
     if (tfp)
       tfp->dump(timeStamp);
+#endif
     if (debugPeriod)
       std::this_thread::sleep_for(std::chrono::milliseconds(debugPeriod));
   }
@@ -113,8 +121,10 @@ int main(int argc, char **argv) {
   // Tell the simulator that we're going to exit. This flushes the output(s) and
   // frees whatever memory may have been allocated.
   dut.final();
+#ifdef TRACE
   if (tfp)
     tfp->close();
+#endif
 
   std::cout << "[driver] Ending simulation at tick #" << timeStamp << std::endl;
   return 0;

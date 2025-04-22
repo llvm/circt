@@ -171,6 +171,9 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                       ObjectFieldOp>([&](auto op) {
                   return getPartiallyEvaluatedValue(op.getType(), loc);
                 })
+                .Case<TupleGetOp>([&](auto op) {
+                  return evaluateTupleGet(op, actualParams, loc);
+                })
                 .Case<ObjectOp>([&](auto op) {
                   return getPartiallyEvaluatedValue(op.getType(), op.getLoc());
                 })
@@ -803,6 +806,10 @@ LogicalResult circt::om::evaluator::ReferenceValue::finalizeImpl() {
   if (failed(result))
     return result;
   value = std::move(result.value());
+  // the stripped value also needs to be finalized
+  if (failed(finalizeEvaluatorValue(value)))
+    return failure();
+
   return success();
 }
 

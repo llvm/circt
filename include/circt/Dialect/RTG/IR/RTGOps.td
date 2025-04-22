@@ -25,6 +25,21 @@ include "circt/Dialect/RTG/IR/RTGISAAssemblyInterfaces.td"
 class RTGOp<string mnemonic, list<Trait> traits = []> :
     Op<RTGDialect, mnemonic, traits>;
 
+
+def ConstantOp : RTGOp<"constant", [
+  Pure,
+  ConstantLike,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>
+]> {
+  let summary = "create an SSA value from an attribute";
+
+  let arguments = (ins TypedAttrInterface:$value);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = "$value attr-dict";
+  let hasFolder = 1;
+}
+
 //===- Sequence Handling Operations ---------------------------------------===//
 
 def SequenceOp : RTGOp<"sequence", [
@@ -440,6 +455,45 @@ def BagUniqueSizeOp : RTGOp<"bag_unique_size", [Pure]> {
   }];
 }
 
+//===- Array Operations -------------------------------------------------===//
+
+def ArrayCreateOp : RTGOp<"array_create", [
+  Pure,
+  SameTypeOperands,
+]> {
+  let summary = "create an array with an initial list of elements";
+  let description = [{
+    This operation creates an array from a list of values. The element on the
+    left-most position in the MLIR assembly format ends up at index 0.
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$elements);
+  let results = (outs ArrayType:$result);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
+def ArrayExtractOp : RTGOp<"array_extract", [
+  Pure,
+  TypesMatchWith<"result type must match array element type",
+                 "array", "result",
+                 "cast<ArrayType>($_self).getElementType()">,
+]> {
+  let summary = "get an element from an array";
+  let description = [{
+    This operation returns the element at the given index of the array.
+    Accessing out-of-bounds indices is (immediate) UB.
+  }];
+
+  let arguments = (ins ArrayType:$array, Index:$index);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    $array `[` $index `]` `:` qualified(type($array)) attr-dict
+  }];
+}
+
 //===- Integer Operations -------------------------------------------------===//
 
 def RandomNumberInRangeOp : RTGOp<"random_number_in_range", []> {
@@ -572,4 +626,27 @@ def YieldOp : RTGOp<"yield", [Pure, Terminator]> {
   let assemblyFormat = "($operands^ `:` type($operands))? attr-dict";
 
   let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
+}
+
+//===----------------------------------------------------------------------===//
+// ISA Target Operations
+//===----------------------------------------------------------------------===//
+
+class RTGISAOp<string mnemonic, list<Trait> traits = []> :
+    Op<RTGDialect, "isa." # mnemonic, traits>;
+
+//===- ISA Immediate Handling Operations ----------------------------------===//
+
+def IntToImmediateOp : RTGISAOp<"int_to_immediate", [Pure]> {
+  let summary = "construct an immediate from an integer";
+  let description = [{
+    Create an immediate of static bit-width from the provided integer. If the
+    integer does not fit in the specified bit-width, an error shall be emitted
+    when executing this operation.
+  }];
+
+  let arguments = (ins Index:$input);
+  let results = (outs ImmediateType:$result);
+
+  let assemblyFormat = "$input `:` qualified(type($result)) attr-dict";
 }

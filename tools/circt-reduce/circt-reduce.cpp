@@ -19,6 +19,7 @@
 #include "circt/Reduce/GenericReductions.h"
 #include "circt/Reduce/Tester.h"
 #include "circt/Support/Version.h"
+#include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -63,6 +64,11 @@ static cl::opt<bool>
     keepBest("keep-best", cl::init(true),
              cl::desc("Keep overwriting the output with better reductions"),
              cl::cat(mainCategory));
+
+static cl::opt<bool>
+    emitBytecode("emit-bytecode",
+                 cl::desc("Emit bytecode when generating MLIR output"),
+                 cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool>
     skipInitial("skip-initial", cl::init(false),
@@ -142,7 +148,19 @@ static LogicalResult writeOutput(ModuleOp module) {
         << outputFilename << "\": " << errorMessage << "\n";
     return failure();
   }
-  module.print(output->os());
+  if (emitBytecode) {
+    if (failed(writeBytecodeToFile(
+            module, output->os(),
+            mlir::BytecodeWriterConfig(getCirctVersion())))) {
+      mlir::emitError(UnknownLoc::get(module.getContext()),
+                      "failed to emit bytecode to file \"")
+          << outputFilename << "\n";
+      return failure();
+    }
+  } else {
+    module.print(output->os());
+  }
+
   output->keep();
   return success();
 }
@@ -192,7 +210,7 @@ static LogicalResult execute(MLIRContext &context) {
     for (auto &arg : testerArgs)
       llvm::errs() << "  with argument `" << arg << "`\n";
   });
-  Tester tester(testerCommand, testerArgs, testMustFail);
+  Tester tester(testerCommand, testerArgs, testMustFail, emitBytecode);
   auto initialTest = tester.get(module.get());
   if (!skipInitial && !initialTest.isInteresting()) {
     mlir::emitError(UnknownLoc::get(&context), "input is not interesting");

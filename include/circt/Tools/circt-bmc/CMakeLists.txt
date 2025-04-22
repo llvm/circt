@@ -4,4 +4,4 @@ mlir_tablegen(BMCTransforms.capi.h.inc -gen-pass-capi-header --prefix BMCTransfo
 mlir_tablegen(BMCTransforms.capi.cpp.inc -gen-pass-capi-impl --prefix BMCTransforms)
 add_public_tablegen_target(CIRCTBMCTransformsIncGen)
 
-add_mlir_doc(Passes CIRCTBMCPasses ./ -gen-pass-doc)
+add_circt_doc(Passes CIRCTBMCPasses -gen-pass-doc)

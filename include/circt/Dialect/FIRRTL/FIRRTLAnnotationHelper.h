@@ -155,7 +155,7 @@ struct AnnoTargetCache {
     TypeSwitch<Operation *>(op)
         .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp,
               chirrtl::CombMemOp, chirrtl::SeqMemOp, chirrtl::MemoryPortOp,
-              chirrtl::MemoryDebugPortOp, PrintFOp>([&](auto op) {
+              chirrtl::MemoryDebugPortOp, PrintFOp, FPrintFOp>([&](auto op) {
           // To be safe, check attribute and non-empty name before adding.
           if (auto name = op.getNameAttr(); name && !name.getValue().empty())
             targets.insert({name, OpAnnoTarget(op)});

@@ -2269,10 +2269,14 @@ canonicalizeRegResetWithOneReset(RegResetOp reg, PatternRewriter &rewriter) {
   if (!isDefinedByOneConstantOp(reg.getResetSignal()))
     return failure();
 
+  auto resetValue = reg.getResetValue();
+  if (reg.getType(0) != resetValue.getType())
+    return failure();
+
   // Ignore 'passthrough'.
   (void)dropWrite(rewriter, reg->getResult(0), {});
   replaceOpWithNewOpAndCopyName<NodeOp>(
-      rewriter, reg, reg.getResetValue(), reg.getNameAttr(), reg.getNameKind(),
+      rewriter, reg, resetValue, reg.getNameAttr(), reg.getNameKind(),
       reg.getAnnotationsAttr(), reg.getInnerSymAttr(), reg.getForceable());
   return success();
 }

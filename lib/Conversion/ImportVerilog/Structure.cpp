@@ -55,6 +55,9 @@ struct BaseVisitor {
 
   // Skip typedefs.
   LogicalResult visit(const slang::ast::TypeAliasType &) { return success(); }
+  LogicalResult visit(const slang::ast::ForwardingTypedefSymbol &) {
+    return success();
+  }
 
   // Skip imports. The AST already has its names resolved.
   LogicalResult visit(const slang::ast::ExplicitImportSymbol &) {

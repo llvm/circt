@@ -270,77 +270,6 @@ static void testRegisters(MlirContext ctx) {
   }
 }
 
-static void testImmediates(MlirContext ctx) {
-  MlirType imm5Type = rtgtestImm5TypeGet(ctx);
-  // CHECK: is_imm5
-  fprintf(stderr, rtgtestTypeIsAImm5(imm5Type) ? "is_imm5\n" : "isnot_imm5\n");
-  // CHECK: !rtgtest.imm5
-  mlirTypeDump(imm5Type);
-
-  MlirType imm12Type = rtgtestImm12TypeGet(ctx);
-  // CHECK: is_imm12
-  fprintf(stderr,
-          rtgtestTypeIsAImm12(imm12Type) ? "is_imm12\n" : "isnot_imm12\n");
-  // CHECK: !rtgtest.imm12
-  mlirTypeDump(imm12Type);
-
-  MlirType imm13Type = rtgtestImm13TypeGet(ctx);
-  // CHECK: is_imm13
-  fprintf(stderr,
-          rtgtestTypeIsAImm13(imm13Type) ? "is_imm13\n" : "isnot_imm13\n");
-  // CHECK: !rtgtest.imm13
-  mlirTypeDump(imm13Type);
-
-  MlirType imm21Type = rtgtestImm21TypeGet(ctx);
-  // CHECK: is_imm21
-  fprintf(stderr,
-          rtgtestTypeIsAImm21(imm21Type) ? "is_imm21\n" : "isnot_imm21\n");
-  // CHECK: !rtgtest.imm21
-  mlirTypeDump(imm21Type);
-
-  MlirType imm32Type = rtgtestImm32TypeGet(ctx);
-  // CHECK: is_imm32
-  fprintf(stderr,
-          rtgtestTypeIsAImm32(imm32Type) ? "is_imm32\n" : "isnot_imm32\n");
-  // CHECK: !rtgtest.imm32
-  mlirTypeDump(imm32Type);
-
-  MlirAttribute imm5Attr = rtgtestImm5AttrGet(ctx, 3);
-  // CHECK: is_imm5
-  fprintf(stderr, rtgtestAttrIsAImm5(imm5Attr) ? "is_imm5\n" : "isnot_imm5\n");
-  // CHECK: 3
-  fprintf(stderr, "%u\n", rtgtestImm5AttrGetValue(imm5Attr));
-  // CHECK: #rtgtest.imm5<3>
-  mlirAttributeDump(imm5Attr);
-
-  MlirAttribute imm12Attr = rtgtestImm12AttrGet(ctx, 3);
-  // CHECK: is_imm12
-  fprintf(stderr,
-          rtgtestAttrIsAImm12(imm12Attr) ? "is_imm12\n" : "isnot_imm12\n");
-  // CHECK: 3
-  fprintf(stderr, "%u\n", rtgtestImm12AttrGetValue(imm12Attr));
-  // CHECK: #rtgtest.imm12<3>
-  mlirAttributeDump(imm12Attr);
-
-  MlirAttribute imm21Attr = rtgtestImm21AttrGet(ctx, 3);
-  // CHECK: is_imm21
-  fprintf(stderr,
-          rtgtestAttrIsAImm21(imm21Attr) ? "is_imm21\n" : "isnot_imm21\n");
-  // CHECK: 3
-  fprintf(stderr, "%u\n", rtgtestImm21AttrGetValue(imm21Attr));
-  // CHECK: #rtgtest.imm21<3>
-  mlirAttributeDump(imm21Attr);
-
-  MlirAttribute imm32Attr = rtgtestImm32AttrGet(ctx, 3);
-  // CHECK: is_imm32
-  fprintf(stderr,
-          rtgtestAttrIsAImm32(imm32Attr) ? "is_imm32\n" : "isnot_imm32\n");
-  // CHECK: 3
-  fprintf(stderr, "%u\n", rtgtestImm32AttrGetValue(imm32Attr));
-  // CHECK: #rtgtest.imm32<3>
-  mlirAttributeDump(imm32Attr);
-}
-
 int main(int argc, char **argv) {
   MlirContext ctx = mlirContextCreate();
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__rtgtest__(), ctx);
@@ -349,7 +278,6 @@ int main(int argc, char **argv) {
   testIntegerRegisterType(ctx);
   testCPUAttr(ctx);
   testRegisters(ctx);
-  testImmediates(ctx);
 
   mlirContextDestroy(ctx);
 

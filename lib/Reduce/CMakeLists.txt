@@ -6,6 +6,7 @@ add_circt_library(CIRCTReduceLib
 
   LINK_LIBS PUBLIC
   MLIRIR
+  MLIRBytecodeWriter
   MLIRSupport
   MLIRTransforms
   MLIRReduceLib

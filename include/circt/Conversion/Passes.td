@@ -698,7 +698,7 @@ def ConvertCombToSMT : Pass<"convert-comb-to-smt"> {
   // Need to depend on HWDialect because some 'comb' canonicalization patterns
   // build 'hw.constant' operations.
   let dependentDialects = [
-    "smt::SMTDialect", "hw::HWDialect", "mlir::func::FuncDialect"
+    "mlir::smt::SMTDialect", "hw::HWDialect", "mlir::func::FuncDialect"
   ];
 }
 
@@ -708,7 +708,7 @@ def ConvertCombToSMT : Pass<"convert-comb-to-smt"> {
 
 def ConvertHWToSMT : Pass<"convert-hw-to-smt", "mlir::ModuleOp"> {
   let summary = "Convert HW ops and constants to SMT ops";
-  let dependentDialects = ["smt::SMTDialect", "mlir::func::FuncDialect"];
+  let dependentDialects = ["mlir::smt::SMTDialect", "mlir::func::FuncDialect"];
 }
 
 //===----------------------------------------------------------------------===//
@@ -718,7 +718,7 @@ def ConvertHWToSMT : Pass<"convert-hw-to-smt", "mlir::ModuleOp"> {
 def ConvertVerifToSMT : Pass<"convert-verif-to-smt", "mlir::ModuleOp"> {
   let summary = "Convert Verif ops to SMT ops";
   let dependentDialects = [
-    "smt::SMTDialect",
+    "mlir::smt::SMTDialect",
     "mlir::arith::ArithDialect",
     "mlir::scf::SCFDialect",
     "mlir::func::FuncDialect"
@@ -754,7 +754,7 @@ def LowerArcToLLVM : Pass<"lower-arc-to-llvm", "mlir::ModuleOp"> {
 def LowerSMTToZ3LLVM : Pass<"lower-smt-to-z3-llvm", "mlir::ModuleOp"> {
   let summary = "Lower the SMT dialect to LLVM IR calling the Z3 API";
   let dependentDialects = [
-    "smt::SMTDialect", "mlir::LLVM::LLVMDialect", "mlir::scf::SCFDialect",
+    "mlir::smt::SMTDialect", "mlir::LLVM::LLVMDialect", "mlir::scf::SCFDialect",
     "mlir::cf::ControlFlowDialect", "mlir::func::FuncDialect"
   ];
   let options = [

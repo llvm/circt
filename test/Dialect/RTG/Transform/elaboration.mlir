@@ -5,6 +5,22 @@ func.func @dummy2(%arg0: index) -> () {return}
 func.func @dummy3(%arg0: !rtg.sequence) -> () {return}
 func.func @dummy4(%arg0: index, %arg1: index, %arg2: !rtg.bag<index>, %arg3: !rtg.bag<index>) -> () {return}
 func.func @dummy5(%arg0: i1) -> () {return}
+func.func @dummy6(%arg0: !rtg.isa.immediate<2>) -> () {return}
+func.func @dummy7(%arg0: !rtg.array<index>) -> () {return}
+
+// CHECK-LABEL: @immediates
+rtg.test @immediates() {
+  // CHECK-NEXT: [[V0:%.+]] = rtg.constant #rtg.isa.immediate<2, -1>
+  // CHECK-NEXT: func.call @dummy6([[V0]]) : (!rtg.isa.immediate<2>) -> ()
+  %0 = rtg.constant #rtg.isa.immediate<2, -1>
+  func.call @dummy6(%0) : (!rtg.isa.immediate<2>) -> ()
+
+  // CHECK-NEXT: [[V1:%.+]] = rtg.constant #rtg.isa.immediate<2, 1>
+  // CHECK-NEXT: func.call @dummy6([[V1]]) : (!rtg.isa.immediate<2>) -> ()
+  %1 = index.constant 1
+  %2 = rtg.isa.int_to_immediate %1 : !rtg.isa.immediate<2>
+  func.call @dummy6(%2) : (!rtg.isa.immediate<2>) -> ()
+}
 
 // Test the set operations and passing a sequence to another one via argument
 // CHECK-LABEL: rtg.test @setOperations
@@ -305,11 +321,11 @@ rtg.test @scfFor() {
 rtg.test @fixedRegisters() {
   // CHECK-NEXT: [[RA:%.+]] = rtg.fixed_reg #rtgtest.ra
   // CHECK-NEXT: [[SP:%.+]] = rtg.fixed_reg #rtgtest.sp
-  // CHECK-NEXT: [[IMM:%.+]] = rtgtest.immediate #rtgtest.imm12<0>
+  // CHECK-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<12, 0>
   // CHECK-NEXT: rtgtest.rv32i.jalr [[RA]], [[SP]], [[IMM]]
   %ra = rtg.fixed_reg #rtgtest.ra
   %sp = rtg.fixed_reg #rtgtest.sp
-  %imm = rtgtest.immediate #rtgtest.imm12<0>
+  %imm = rtg.constant #rtg.isa.immediate<12, 0>
   rtgtest.rv32i.jalr %ra, %sp, %imm
 }
 
@@ -317,12 +333,12 @@ rtg.test @fixedRegisters() {
 rtg.test @virtualRegisters() {
   // CHECK-NEXT: [[R0:%.+]] = rtg.virtual_reg [#rtgtest.a0 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg]
   // CHECK-NEXT: [[R1:%.+]] = rtg.virtual_reg [#rtgtest.s0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg]
-  // CHECK-NEXT: [[IMM:%.+]] = rtgtest.immediate #rtgtest.imm12<0>
+  // CHECK-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<12, 0>
   // CHECK-NEXT: rtgtest.rv32i.jalr [[R0]], [[R1]], [[IMM]]
   // CHECK-NEXT: rtgtest.rv32i.jalr [[R0]], [[R1]], [[IMM]]
   %r0 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1]
   %r1 = rtg.virtual_reg [#rtgtest.s0, #rtgtest.s1]
-  %imm = rtgtest.immediate #rtgtest.imm12<0>
+  %imm = rtg.constant #rtg.isa.immediate<12, 0>
   rtgtest.rv32i.jalr %r0, %r1, %imm
   rtgtest.rv32i.jalr %r0, %r1, %imm
 
@@ -391,8 +407,8 @@ rtg.test @contexts(cpu0 = %cpu0: !rtgtest.cpu, cpu1 = %cpu1: !rtgtest.cpu) {
 }
 
 rtg.target @contextCpu : !rtg.dict<cpu0: !rtgtest.cpu, cpu1: !rtgtest.cpu> {
-  %cpu0 = rtgtest.cpu_decl <0>
-  %cpu1 = rtgtest.cpu_decl <1>
+  %cpu0 = rtg.constant #rtgtest.cpu<0>
+  %cpu1 = rtg.constant #rtgtest.cpu<1>
   %0 = rtg.get_sequence @switchCpuSeq : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
   %1 = rtg.get_sequence @switchNestedCpuSeq : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
   rtg.context_switch #rtg.default : !rtgtest.cpu -> #rtgtest.cpu<0> : !rtgtest.cpu, %0 : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
@@ -493,6 +509,22 @@ rtg.test @interleaveSequences() {
   rtg.embed_sequence %6
 }
 
+// CHECK-LABEL: rtg.test @arrays
+rtg.test @arrays() {
+  // CHECK-NEXT: [[V0:%.+]] = rtg.array_create : index
+  // CHECK-NEXT: func.call @dummy7([[V0]]) : (!rtg.array<index>) -> ()
+  %0 = rtg.array_create : index
+  func.call @dummy7(%0) : (!rtg.array<index>) -> ()
+
+  // CHECK-NEXT: [[IDX2:%.+]] = index.constant 2
+  // CHECK-NEXT: func.call @dummy2([[IDX2]]) : (index) -> ()
+  %idx1 = index.constant 1
+  %idx2 = index.constant 2
+  %1 = rtg.array_create %idx1, %idx2 : index
+  %2 = rtg.array_extract %1[%idx1] : !rtg.array<index>
+  func.call @dummy2(%2) : (index) -> ()
+}
+
 // -----
 
 rtg.test @nestedRegionsNotSupported() {
@@ -544,7 +576,7 @@ rtg.sequence @seq(%arg0: !rtgtest.cpu, %arg1: !rtgtest.cpu, %seq: !rtg.sequence)
 rtg.target @invalidRandomizationTarget : !rtg.dict<cpu: !rtgtest.cpu> {
   %0 = rtg.get_sequence @seq : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
   rtg.context_switch #rtg.default : !rtgtest.cpu -> #rtgtest.cpu<0>, %0 : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
-  %1 = rtgtest.cpu_decl <0>
+  %1 = rtg.constant #rtgtest.cpu<0>
   rtg.yield %1 : !rtgtest.cpu
 }
 
@@ -561,7 +593,7 @@ rtg.test @invalidRandomization(cpu = %cpu: !rtgtest.cpu) {
 rtg.sequence @seq() {}
 
 rtg.target @target : !rtg.dict<cpu: !rtgtest.cpu> {
-  %0 = rtgtest.cpu_decl <0>
+  %0 = rtg.constant #rtgtest.cpu<0>
   rtg.yield %0 : !rtgtest.cpu
 }
 
@@ -574,17 +606,40 @@ rtg.test @contextSwitchNotAvailable(cpu = %cpu: !rtgtest.cpu) {
 // -----
 
 rtg.test @emptySetSelect() {
-  %0 = rtg.set_create : !rtg.label
+  %0 = rtg.set_create : !rtg.isa.label
   // expected-error @below {{cannot select from an empty set}}
-  %1 = rtg.set_select_random %0 : !rtg.set<!rtg.label>
+  %1 = rtg.set_select_random %0 : !rtg.set<!rtg.isa.label>
   rtg.label local %1
 }
 
 // -----
 
 rtg.test @emptyBagSelect() {
-  %0 = rtg.bag_create : !rtg.label
+  %0 = rtg.bag_create : !rtg.isa.label
   // expected-error @below {{cannot select from an empty bag}}
-  %1 = rtg.bag_select_random %0 : !rtg.bag<!rtg.label>
+  %1 = rtg.bag_select_random %0 : !rtg.bag<!rtg.isa.label>
   rtg.label local %1
+}
+
+// -----
+
+func.func @dummy6(%arg0: !rtg.isa.immediate<2>) -> () {return}
+
+rtg.test @integerTooBig() {
+  %1 = index.constant 8
+  // expected-error @below {{cannot represent 8 with 2 bits}}
+  %2 = rtg.isa.int_to_immediate %1 : !rtg.isa.immediate<2>
+  func.call @dummy6(%2) : (!rtg.isa.immediate<2>) -> ()
+}
+
+// -----
+
+func.func @dummy6(%arg0: index) -> () {return}
+
+rtg.test @oobArrayAccess() {
+  %0 = index.constant 0
+  %1 = rtg.array_create : index
+  // expected-error @below {{invalid to access index 0 of an array with 0 elements}}
+  %2 = rtg.array_extract %1[%0] : !rtg.array<index>
+  func.call @dummy6(%2) : (index) -> ()
 }

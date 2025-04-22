@@ -817,7 +817,7 @@ StringAttr circt::firrtl::getOrAddInnerSym(
     const hw::InnerSymTarget &target,
     llvm::function_ref<hw::InnerSymbolNamespace &()> getNamespace) {
   if (target.isPort()) {
-    if (auto mod = dyn_cast<FModuleOp>(target.getOp())) {
+    if (auto mod = dyn_cast<FModuleLike>(target.getOp())) {
       auto portIdx = target.getPort();
       assert(portIdx < mod.getNumPorts());
       auto [attr, sym] =
@@ -837,7 +837,7 @@ StringAttr circt::firrtl::getOrAddInnerSym(
     }
   }
 
-  assert(0 && "target must be port of FModuleOp or InnerSymbol");
+  assert(0 && "target must be port of FModuleLike or InnerSymbol");
   return {};
 }
 
@@ -860,10 +860,10 @@ StringAttr circt::firrtl::getOrAddInnerSym(const hw::InnerSymTarget &target,
 hw::InnerRefAttr
 circt::firrtl::getInnerRefTo(const hw::InnerSymTarget &target,
                              GetNamespaceCallback getNamespace) {
-  auto mod = target.isPort() ? dyn_cast<FModuleOp>(target.getOp())
+  auto mod = target.isPort() ? dyn_cast<FModuleLike>(target.getOp())
                              : target.getOp()->getParentOfType<FModuleOp>();
   assert(mod &&
-         "must be an operation inside an FModuleOp or port of FModuleOp");
+         "must be an operation inside an FModuleOp or port of FModuleLike");
   return hw::InnerRefAttr::get(SymbolTable::getSymbolName(mod),
                                getOrAddInnerSym(target, getNamespace));
 }

@@ -458,6 +458,14 @@ void ComponentLoweringStateInterface::addInstance(StringRef calleeName,
   instanceMap[calleeName] = instanceOp;
 }
 
+bool ComponentLoweringStateInterface::isSeqGuardCmpLibOp(Operation *op) {
+  return seqGuardCmpLibOps.contains(op);
+}
+
+void ComponentLoweringStateInterface::addSeqGuardCmpLibOp(Operation *op) {
+  seqGuardCmpLibOps.insert(op);
+}
+
 //===----------------------------------------------------------------------===//
 // CalyxLoweringState
 //===----------------------------------------------------------------------===//
@@ -716,6 +724,10 @@ void InlineCombGroups::recurseInlineCombGroups(
             calyx::IntToFpOpIEEE754, calyx::DivSqrtOpIEEE754>(
             src.getDefiningOp()))
       continue;
+
+    if (state.isSeqGuardCmpLibOp(src.getDefiningOp())) {
+      continue;
+    }
 
     auto srcCombGroup = dyn_cast<calyx::CombGroupOp>(
         state.getEvaluatingGroup(src).getOperation());

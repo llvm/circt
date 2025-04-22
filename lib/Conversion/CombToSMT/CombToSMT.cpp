@@ -9,8 +9,8 @@
 #include "circt/Conversion/CombToSMT.h"
 #include "circt/Conversion/HWToSMT.h"
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/SMT/SMTOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/SMT/IR/SMTOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -19,6 +19,7 @@ namespace circt {
 #include "circt/Conversion/Passes.h.inc"
 } // namespace circt
 
+using namespace mlir;
 using namespace circt;
 using namespace comb;
 
@@ -253,7 +254,7 @@ struct VariadicToBinaryOpConversion : OpConversionPattern<SourceOp> {
 
 namespace {
 struct ConvertCombToSMTPass
-    : public impl::ConvertCombToSMTBase<ConvertCombToSMTPass> {
+    : public circt::impl::ConvertCombToSMTBase<ConvertCombToSMTPass> {
   void runOnOperation() override;
 };
 } // namespace

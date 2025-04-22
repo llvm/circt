@@ -66,10 +66,11 @@ public:
             // Property expressions.
             StringConstantOp, FIntegerConstantOp, BoolConstantOp,
             DoubleConstantOp, ListCreateOp, ListConcatOp, UnresolvedPathOp,
-            PathOp, IntegerAddOp, IntegerMulOp, IntegerShrOp>(
-            [&](auto expr) -> ResultType {
-              return thisCast->visitExpr(expr, args...);
-            })
+            PathOp, IntegerAddOp, IntegerMulOp, IntegerShrOp,
+            // Format String expressions
+            TimeOp, HierarchicalModuleNameOp>([&](auto expr) -> ResultType {
+          return thisCast->visitExpr(expr, args...);
+        })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidExpr(op, args...);
         });
@@ -225,6 +226,10 @@ public:
   HANDLE(IntegerAddOp, Unhandled);
   HANDLE(IntegerMulOp, Unhandled);
   HANDLE(IntegerShrOp, Unhandled);
+
+  // Format string expressions
+  HANDLE(TimeOp, Unhandled);
+  HANDLE(HierarchicalModuleNameOp, Unhandled);
 #undef HANDLE
 };
 
@@ -236,14 +241,15 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<
-            AttachOp, ConnectOp, MatchingConnectOp, RefDefineOp, ForceOp,
-            PrintFOp, SkipOp, StopOp, WhenOp, AssertOp, AssumeOp, CoverOp,
-            PropAssignOp, RefForceOp, RefForceInitialOp, RefReleaseOp,
-            RefReleaseInitialOp, FPGAProbeIntrinsicOp, VerifAssertIntrinsicOp,
-            VerifAssumeIntrinsicOp, UnclockedAssumeIntrinsicOp,
-            VerifCoverIntrinsicOp, VerifRequireIntrinsicOp,
-            VerifEnsureIntrinsicOp, LayerBlockOp, MatchOp, ViewIntrinsicOp>(
+        .template Case<AttachOp, ConnectOp, MatchingConnectOp, RefDefineOp,
+                       ForceOp, PrintFOp, FPrintFOp, FFlushOp, SkipOp, StopOp,
+                       WhenOp, AssertOp, AssumeOp, CoverOp, PropAssignOp,
+                       RefForceOp, RefForceInitialOp, RefReleaseOp,
+                       RefReleaseInitialOp, FPGAProbeIntrinsicOp,
+                       VerifAssertIntrinsicOp, VerifAssumeIntrinsicOp,
+                       UnclockedAssumeIntrinsicOp, VerifCoverIntrinsicOp,
+                       VerifRequireIntrinsicOp, VerifEnsureIntrinsicOp,
+                       LayerBlockOp, MatchOp, ViewIntrinsicOp, BindOp>(
             [&](auto opNode) -> ResultType {
               return thisCast->visitStmt(opNode, args...);
             })
@@ -275,6 +281,8 @@ public:
   HANDLE(RefDefineOp);
   HANDLE(ForceOp);
   HANDLE(PrintFOp);
+  HANDLE(FPrintFOp);
+  HANDLE(FFlushOp);
   HANDLE(SkipOp);
   HANDLE(StopOp);
   HANDLE(WhenOp);
@@ -296,6 +304,7 @@ public:
   HANDLE(LayerBlockOp);
   HANDLE(MatchOp);
   HANDLE(ViewIntrinsicOp);
+  HANDLE(BindOp);
 
 #undef HANDLE
 };

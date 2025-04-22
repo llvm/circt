@@ -1,0 +1,188 @@
+name: Unified Build, Test, and Install (Static)
+description: |
+  This reusable workflow is intended to be used to build completely static
+  tools.  This uses Alpine Linux to build CIRCT using musl libc which can be
+  used to make completely statically linked binaries.
+
+  This workflow should be used if you are trying to publish universal Linux
+  binaries.
+
+on:
+  workflow_dispatch:
+    inputs:
+      cmake_build_type:
+        required: true
+        type: choice
+        options:
+          - release
+          - relwithdebinfo
+          - debug
+        default: relwithdebinfo
+      llvm_enable_assertions:
+        required: true
+        type: choice
+        options:
+          - on
+          - off
+      llvm_force_enable_stats:
+        required: true
+        type: choice
+        options:
+          - on
+          - off
+      run_tests:
+        description: "Run tests"
+        required: true
+        type: boolean
+        default: false
+      install_target:
+        description: "Install steps to run (empty if do not install)"
+        required: false
+        type: string
+      package_name_prefix:
+        description: "The prefix for package name (has no effect unless \"install\" is set)"
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      cmake_build_type:
+        required: true
+        type: string
+      llvm_enable_assertions:
+        required: true
+        type: string
+      llvm_force_enable_stats:
+        required: true
+        type: string
+      run_tests:
+        description: "If true, then run tests, otherwise skip tests"
+        required: true
+        type: boolean
+      install_target:
+        description: "Install steps to run"
+        required: false
+        type: string
+      package_name_prefix:
+        description: "The prefix for package name"
+        required: false
+        type: string
+
+jobs:
+  build-test-and-install:
+    runs-on: ubuntu-latest
+    container: "alpine"
+    permissions:
+      contents: write # Upload assets to release.
+    steps:
+# Per-operating system setup
+      - name: Setup (linux)
+        run: |
+          apk update
+          apk add bash clang19 cmake curl file git gzip perl-utils python3 samurai tar
+# Clone the repository
+      - name: Clone llvm/circt
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          submodules: "true"
+      - name: Unshallow llvm/circt
+        run: |
+          git config --global --add safe.directory /__w/circt/circt
+          git fetch --unshallow --no-recurse-submodules
+# Setup Caching
+      - name: sccache
+        if: inputs.cmake_build_type == 'release'
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: alpine-${{ inputs.cmake_build_type }}-${{ inputs.llvm_enable_assertions }}-${{ inputs.llvm_force_enable_stats}}
+          max-size: 500M
+          variant: sccache
+      - name: Configure sccache
+        id: configure-sccache
+        if: inputs.cmake_build_type == 'release'
+        shell: bash
+        run:
+          echo enable_sccache="-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_OUTPUT
+# Configure
+      - name: Configure CIRCT
+        run: |
+          mkdir build
+          cd build
+          cmake -G Ninja -S "$(pwd)/../llvm/llvm" $EXTRA_CMAKE_ARGS -DCMAKE_BUILD_TYPE=${{ inputs.cmake_build_type }} -DLLVM_BUILD_TOOLS=ON -DLLVM_BUILD_EXAMPLES=OFF -DLLVM_ENABLE_ASSERTIONS=${{ inputs.llvm_enable_assertions }} -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_EXTERNAL_PROJECTS=circt -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=".." -DLLVM_STATIC_LINK_CXX_STDLIB=ON -DLLVM_BUILD_STATIC=ON -DLLVM_LINK_LLVM_DYLIB=OFF -DLLVM_ENABLE_PIC=OFF -DLLVM_PARALLEL_LINK_JOBS=1 -DLLVM_TARGETS_TO_BUILD="host" -DLLVM_FORCE_ENABLE_STATS=${{ inputs.llvm_force_enable_stats }} -DLLVM_ENABLE_ZSTD=OFF -DVERILATOR_DISABLE=ON -DCIRCT_RELEASE_TAG_ENABLED=ON -DCIRCT_RELEASE_TAG=firtool -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ ${{ steps.configure-sccache.outputs.enable_sccache }} -DCMAKE_INSTALL_PREFIX="$(pwd)/../install" -DLLVM_INSTALL_UTILS=ON
+# Optionally test
+      - name: Test CIRCT
+        if: inputs.run_tests
+        run: |
+          ninja -C build check-circt check-circt-unit
+      - name: Install
+        if: inputs.install_target
+        run: |
+          ninja -C build ${{ inputs.install_target }}
+          file install/*
+          file install/bin/*
+      - name: Name Install Directory
+        id: name_dir
+        if: inputs.install_target
+        shell: bash
+        run: |
+          BASE=$(git describe --tag)
+          SANITIZED=$(echo -n $BASE | tr '/' '-')
+          echo "value=$SANITIZED" >> "$GITHUB_OUTPUT"
+
+          ARCH=$(echo ${{ runner.arch }} | tr '[:upper:]' '[:lower:]')
+          echo arch="$ARCH" >> $GITHUB_OUTPUT
+
+          OS=$(echo ${{ runner.os }} | tr '[:upper:]' '[:lower:]')
+          echo os="$OS" >> $GITHUB_OUTPUT
+
+          ARCHIVE="tar.gz"
+          echo archive="$ARCHIVE" >> $GITHUB_OUTPUT
+
+          TAR="tar czf"
+          echo tar="$TAR" >> $GITHUB_OUTPUT
+
+          SHA256="shasum -a 256"
+          echo sha256="$SHA256" >> $GITHUB_OUTPUT
+      - name: Name Archive
+        id: name_archive
+        if: inputs.install_target
+        shell: bash
+        run: |
+          NAME=${{ inputs.package_name_prefix }}-${{ steps.name_dir.outputs.os }}-${{ steps.name_dir.outputs.arch }}.${{ steps.name_dir.outputs.archive }}
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+      - name: Package Binaries Linux and MacOS
+        if: inputs.install_target
+        run: |
+          mv install ${{ steps.name_dir.outputs.value }}
+          ${{ steps.name_dir.outputs.tar }} ${{ steps.name_archive.outputs.name }} ${{ steps.name_dir.outputs.value }}
+      - name: Show Tarball
+        if: inputs.install_target
+        shell: bash
+        run: |
+          ls -l ${{ steps.name_archive.outputs.name }}
+          ${{ steps.name_dir.outputs.sha256 }} ${{ steps.name_archive.outputs.name }} | cut -d ' ' -f1 > ${{ steps.name_archive.outputs.name }}.sha256
+
+# Upload build artifacts
+      - name: Upload Binary (Non-Tag)
+        uses: actions/upload-artifact@v4
+        if: inputs.install_target && github.ref_type != 'tag'
+        with:
+          name: ${{ steps.name_archive.outputs.name }}
+          path: ${{ steps.name_archive.outputs.name }}
+          retention-days: 7
+      - name: Upload SHA256 (Non-Tag)
+        uses: actions/upload-artifact@v4
+        if: inputs.install_target && github.ref_type != 'tag'
+        with:
+          name: ${{ steps.name_archive.outputs.name }}.sha256
+          path: ${{ steps.name_archive.outputs.name }}.sha256
+          retention-days: 7
+
+      - name: Upload Binaries (Tag)
+        uses: AButler/upload-release-assets@v3.0
+        if: inputs.install_target && github.ref_type == 'tag'
+        with:
+          # The * will grab the .sha256 as well
+          files: ${{ steps.name_archive.outputs.name }}*
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          release-tag: ${{ github.ref_name }} # Upload to release tag when manually run.

@@ -5,4 +5,4 @@ mlir_tablegen(Transforms.capi.h.inc -gen-pass-capi-header --prefix CIRCTTransfor
 mlir_tablegen(Transforms.capi.cpp.inc -gen-pass-capi-impl --prefix CIRCTTransforms)
 add_public_tablegen_target(CIRCTTransformsPassIncGen)
 
-add_mlir_doc(Passes CIRCTGeneralPasses ./ -gen-pass-doc)
+add_circt_doc(Passes CIRCTGeneralPasses -gen-pass-doc)

@@ -76,7 +76,7 @@ void LowerToBMCPass::runOnOperation() {
 
   // Lookup or declare printf function.
   auto printfFunc =
-      LLVM::lookupOrCreateFn(moduleOp, "printf", ptrTy, voidTy, true);
+      LLVM::lookupOrCreateFn(builder, moduleOp, "printf", ptrTy, voidTy, true);
   if (failed(printfFunc)) {
     moduleOp->emitError("failed to lookup or create printf");
     return signalPassFailure();

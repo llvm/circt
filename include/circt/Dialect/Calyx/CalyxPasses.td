@@ -245,4 +245,64 @@ def AffineToSCF : Pass<"calyx-affine-to-scf", "::mlir::func::FuncOp"> {
   let constructor = "circt::calyx::createAffineToSCFPass()";
 }
 
+def AffinePloopUnparallelize : Pass<"affine-ploop-unparallelize", "::mlir::func::FuncOp"> {
+  let summary = "Unparallelize `affine.parallel` op to `affine.for`";
+  let dependentDialects = ["mlir::affine::AffineDialect"];
+  let constructor = "circt::calyx::createAffinePloopUnparallelizePass()";
+  let description = [{
+      Unparallelize `affine.parallel` op to `affine.for` by the factor
+      specified in the attribute. For example:
+      ```
+      #map_mod = affine_map<d0 -> d0 mod 2>
+      affine.parallel (%ip) = (0) to (6) {
+        %mod = affine.apply #map_mod(%ip)
+        scf.index_switch %mod:
+        case 1 {
+          affine.store %cst, %mem0[%ip floordiv 2] : memref<3xf32>
+        }
+        case 0 {
+          affine.store %cst, %mem1[%ip floordiv 2] : memref<3xf32>
+        }
+        default {}
+      } {unparallelize.factor = 2}
+
+      =>
+
+      #map_sum = affine_map<(d0, d1) -> (d0 + d1)>
+      #map_mod = affine_map<d0 -> d0 mod 2>
+      affine.for %if = 0 to 6 step 2 {
+        affine.parallel (%ip) = (0) to (2) {
+          %i = affine.apply #map_sum(%if, %ip)
+          %mod = affine.apply #map_mod(%i)
+          scf.index_switch %mod:
+          case 0 {
+            affine.store %cst, %mem0[%i floordiv 2] : memref<3xf32>
+          }
+          case 1 {
+            affine.store %cst, %mem1[%i floordiv 2] : memref<3xf32>
+          }
+          default {}
+        }
+      }
+      ```
+  }];
+}
+
+def ExcludeExecuteRegionCanonicalize : Pass<"exclude-exec-region-canonicalize", "::mlir::func::FuncOp"> {
+  let summary = "Canonicalize all legal operations except `scf.execute_region`";
+  let dependentDialects = [
+     "mlir::memref::MemRefDialect",
+     "mlir::scf::SCFDialect",
+     "mlir::arith::ArithDialect",
+     "mlir::affine::AffineDialect"
+  ];
+  let constructor = "circt::calyx::createExcludeExecuteRegionCanonicalizePass()";
+  let description = [{
+    The AffineParallelUnroll pass unrolls the body of `affine.parallel`
+    to multiple copies of `scf.execute_region`s. Since the semantics
+    of those `scf.execute_region` has deviated from the original MLIR
+    definition, a new canonicalization pass that does not operate on
+    `scf.execute_region` is needed.
+  }];
+}
 #endif // CIRCT_DIALECT_CALYX_CALYXPASSES_TD

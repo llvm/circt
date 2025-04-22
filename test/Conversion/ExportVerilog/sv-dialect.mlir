@@ -273,6 +273,10 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
       // CHECK-NEXT: `INIT_RANDOM(val, val, val)
       sv.macro.ref @INIT_RANDOM (%val, %val, %val) : i8, i8, i8
 
+      // CHECK-NEXT: $fflush();
+      sv.fflush
+      // CHECK-NEXT: $fflush(32'h80000002);
+      sv.fflush fd %fd
     }// CHECK-NEXT:   {{end$}}
   } {sv.attributes = [#sv.attribute<"sv attr">]}
   // CHECK-NEXT:  end // initial
@@ -1900,6 +1904,15 @@ hw.module @intrinsic(in %clk: i1, out io1: i1, out io2: i1, out io3: i1, out io4
   // CHECK: assign io4 = [[tmp]]
 
   hw.output %0, %2, %4, %3 : i1, i1, i1, i5
+}
+
+// CHECK-LABEL: module sformatf
+hw.module @sformatf(in %a: i1, out o: i1) {
+  // CHECK: assign o = $test$plusargs($sformatf("test%d", a))
+  %0 = sv.sformatf "test%d" (%a) : i1
+  %1 = sv.system "test$plusargs"(%0) : (!hw.string) -> i1
+
+  hw.output %1 : i1
 }
 
 hw.module @bindInMod() {

@@ -322,6 +322,22 @@ firrtl.circuit "Test" {
     }
   }
 
+  // An FString operation is outside the layer block.  This needs to be cloned.
+  //
+  // CHECK: firrtl.module private @[[A:.+]]() {
+  // CHECK:   %time = firrtl.fstring.time
+  // CHECK:   firrtl.printf %clock, %c1_ui1, "{{.*}}" (%time)
+  // CHECK: }
+  // CHECK: firrtl.module @FStringOp
+  firrtl.module @FStringOp() {
+    %time = firrtl.fstring.time : !firrtl.fstring
+    firrtl.layerblock @A {
+       %clock = firrtl.wire : !firrtl.clock
+      %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+      firrtl.printf %clock, %c1_ui1, "{{}}" (%time) : !firrtl.clock, !firrtl.uint<1>, !firrtl.fstring
+    }
+  }
+
   //===--------------------------------------------------------------------===//
   // Resolving Colored Probes
   //===--------------------------------------------------------------------===//
@@ -781,6 +797,6 @@ firrtl.circuit "Verbatim" {
 // CHECK:        firrtl.module private @[[VL:.+]]() {
 // CHECK-NEXT:     firrtl.constant 1
 // CHECK-NEXT:     firrtl.node sym @node
-// CHECK-NEXT:     sv.verbatim 
+// CHECK-NEXT:     sv.verbatim
 // CHECK-SAME:     !firrtl.uint<10> {symbols = [#hw.innerNameRef<@[[VL]]::@node>]}
 // CHECK-NEXT:   }

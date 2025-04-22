@@ -1,5 +1,16 @@
 // RUN: circt-opt %s --verify-roundtrip | FileCheck %s
 
+// CHECK-LABEL: @constants
+rtg.test @constants() {
+  // CHECK-NEXT: rtg.constant #rtg.isa.immediate<2, -1> : !rtg.isa.immediate<2>
+  %0 = rtg.constant #rtg.isa.immediate<2, -1>
+
+  // CHECK-NEXT: [[V0:%.+]] = index.constant 5
+  // CHECK-NEXT: rtg.isa.int_to_immediate [[V0]] : !rtg.isa.immediate<32>
+  %1 = index.constant 5
+  %2 = rtg.isa.int_to_immediate %1 : !rtg.isa.immediate<32>
+}
+
 // CHECK-LABEL: rtg.sequence @ranomizedSequenceType
 // CHECK-SAME: (%{{.*}}: !rtg.randomized_sequence)
 rtg.sequence @ranomizedSequenceType(%seq: !rtg.randomized_sequence) {}
@@ -20,8 +31,8 @@ rtg.sequence @seq0() {
 }
 
 // CHECK-LABEL: rtg.sequence @seqAttrsAndTypeElements
-// CHECK-SAME: (%arg0: !rtg.sequence<!rtg.sequence<!rtg.label, !rtg.set<index>>>) attributes {rtg.some_attr} {
-rtg.sequence @seqAttrsAndTypeElements(%arg0: !rtg.sequence<!rtg.sequence<!rtg.label, !rtg.set<index>>>) attributes {rtg.some_attr} {}
+// CHECK-SAME: (%arg0: !rtg.sequence<!rtg.sequence<!rtg.isa.label, !rtg.set<index>>>) attributes {rtg.some_attr} {
+rtg.sequence @seqAttrsAndTypeElements(%arg0: !rtg.sequence<!rtg.sequence<!rtg.isa.label, !rtg.set<index>>>) attributes {rtg.some_attr} {}
 
 // CHECK-LABEL: rtg.sequence @seq1
 // CHECK-SAME: (%arg0: i32, %arg1: !rtg.sequence)
@@ -141,4 +152,17 @@ rtg.test @interleaveSequences(seq0 = %seq0: !rtg.randomized_sequence, seq1 = %se
   rtg.interleave_sequences %seq0 {rtg.some_attr}
   // CHECK: rtg.interleave_sequences %seq0, %seq1 batch 4 {rtg.some_attr}
   rtg.interleave_sequences %seq0, %seq1 batch 4 {rtg.some_attr}
+}
+
+// CHECK-LABEL: rtg.test @arrays
+// CHECK-SAME: (arr = [[ARR:%.+]]: !rtg.array<index>)
+rtg.test @arrays(arr = %arr: !rtg.array<index>) {
+  // CHECK-NEXT: [[IDX1:%.+]] = index.constant 1
+  // CHECK-NEXT: [[V0:%.+]] = rtg.array_create [[ARR]], [[ARR]] : !rtg.array<index>
+  // CHECK-NEXT: [[V1:%.+]] = rtg.array_create : index
+  // CHECK-NEXT: [[V2:%.+]] = rtg.array_extract [[V0]][[[IDX1]]] : !rtg.array<!rtg.array<index>>
+  %idx1 = index.constant 1
+  %0 = rtg.array_create %arr, %arr : !rtg.array<index>
+  %1 = rtg.array_create : index
+  %2 = rtg.array_extract %0[%idx1] : !rtg.array<!rtg.array<index>>
 }

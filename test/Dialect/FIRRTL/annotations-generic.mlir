@@ -2,10 +2,20 @@
 
 // A ReferenceTarget/ComponentName pointing at a module/extmodule port should
 // work.
-firrtl.circuit "Foo" attributes {rawAnnotations = [
-  {class = "circt.test", data = "a", target = "~Foo|Bar>bar"},
-  {class = "circt.test", data = "b", target = "Foo.Foo.foo"}
-]} {
+firrtl.circuit "Foo" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      data = "a",
+      target = "~Foo|Bar>bar"
+    },
+    {
+      class = "circt.test",
+      data = "b",
+      target = "Foo.Foo.foo"
+    }
+  ]
+} {
   firrtl.extmodule @Bar(in bar: !firrtl.uint<1>)
   firrtl.module @Foo(in %foo: !firrtl.uint<1>) {
     %bar_bar = firrtl.instance bar @Bar(in bar: !firrtl.uint<1>)

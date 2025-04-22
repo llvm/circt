@@ -49,6 +49,17 @@ set(CIRCT_CONFIG_TOOLS_DIR)
 set(CIRCT_CONFIG_INCLUDE_EXPORTS)
 set(CIRCT_CONFIG_INCLUDE_DIRS)
 
+# For compatibility with projects that add '<build>/lib/cmake/circt' to
+# their CMAKE_MODULE_PATH, place API modules next to it.
+# Copy without source permissions because the source could be read-only,
+# but we need to write into the copied folder.
+file(COPY .
+  DESTINATION ${circt_cmake_builddir}
+  NO_SOURCE_PERMISSIONS
+  FILES_MATCHING PATTERN *.cmake
+  PATTERN CMakeFiles EXCLUDE
+)
+
 # Generate CIRCTConfig.cmake for the install tree.
 set(CIRCT_CONFIG_CODE "
 # Compute the installation prefix from this CIRCTConfig.cmake file location.

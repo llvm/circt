@@ -59,7 +59,6 @@ circuit TestHarness: %[[
           "tpe": {
             "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
             "ref": {
-              "circuit": "TestHarness",
               "module": "DUT",
               "path": [],
               "ref": "a",

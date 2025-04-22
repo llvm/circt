@@ -898,6 +898,19 @@ struct DynExtractRefOpConversion : public OpConversionPattern<DynExtractRefOp> {
   }
 };
 
+struct ArrayCreateOpConversion : public OpConversionPattern<ArrayCreateOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ArrayCreateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+    rewriter.replaceOpWithNewOp<hw::ArrayCreateOp>(op, resultType,
+                                                   adaptor.getElements());
+    return success();
+  }
+};
+
 struct StructCreateOpConversion : public OpConversionPattern<StructCreateOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -1780,7 +1793,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
     ExtractOpConversion, DynExtractOpConversion, DynExtractRefOpConversion,
     ReadOpConversion,
     StructExtractOpConversion, StructExtractRefOpConversion,
-    ExtractRefOpConversion, StructCreateOpConversion, ConditionalOpConversion,
+    ExtractRefOpConversion, StructCreateOpConversion, ConditionalOpConversion, ArrayCreateOpConversion,
     YieldOpConversion, OutputOpConversion, StringConstantOpConv,
 
     // Patterns of unary operations.

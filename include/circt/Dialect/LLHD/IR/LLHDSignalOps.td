@@ -52,6 +52,7 @@ def SignalOp : LLHDOp<"sig", [
 def PrbOp : LLHDOp<"prb", [
     DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
     DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
+    DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
     TypesMatchWith<
       "type of 'result' and underlying type of 'signal' have to match.",
       "signal", "result", "llvm::cast<hw::InOutType>($_self).getElementType()">
@@ -60,7 +61,9 @@ def PrbOp : LLHDOp<"prb", [
   let description = [{
     This operation probes a signal and returns the value it
     currently carries as a new SSA operand. The result type is always
-    the type carried by the signal.
+    the type carried by the signal. In SSACFG regions, the operation has a read
+    side effect on the signal operand. In graph regions, the operation is
+    memory-effect free.
 
     Example:
 
@@ -71,9 +74,8 @@ def PrbOp : LLHDOp<"prb", [
     ```
   }];
 
-  let arguments = (ins Arg<InOutType, "the signal to probe from",
-                           [MemRead]>: $signal);
-  let results = (outs HWValueType: $result);
+  let arguments = (ins InOutType:$signal);
+  let results = (outs HWValueType:$result);
 
   let assemblyFormat = "$signal attr-dict `:` qualified(type($signal))";
 }

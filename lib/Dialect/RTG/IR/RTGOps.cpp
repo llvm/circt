@@ -21,6 +21,22 @@ using namespace circt;
 using namespace rtg;
 
 //===----------------------------------------------------------------------===//
+// ConstantOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+ConstantOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
+                             ValueRange operands, DictionaryAttr attributes,
+                             OpaqueProperties properties, RegionRange regions,
+                             SmallVectorImpl<Type> &inferredReturnTypes) {
+  inferredReturnTypes.push_back(
+      properties.as<Properties *>()->getValue().getType());
+  return success();
+}
+
+OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) { return getValueAttr(); }
+
+//===----------------------------------------------------------------------===//
 // SequenceOp
 //===----------------------------------------------------------------------===//
 
@@ -520,6 +536,44 @@ LogicalResult TargetOp::verifyRegions() {
     return emitOpError("terminator operand types must match dict entry types");
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ArrayCreateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ArrayCreateOp::verify() {
+  if (!getElements().empty() &&
+      getElements()[0].getType() != getType().getElementType())
+    return emitOpError("operand types must match array element type, expected ")
+           << getType().getElementType() << " but got "
+           << getElements()[0].getType();
+
+  return success();
+}
+
+ParseResult ArrayCreateOp::parse(OpAsmParser &parser, OperationState &result) {
+  SmallVector<OpAsmParser::UnresolvedOperand> operands;
+  Type elementType;
+
+  if (parser.parseOperandList(operands) || parser.parseColon() ||
+      parser.parseType(elementType) ||
+      parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  if (failed(parser.resolveOperands(operands, elementType, result.operands)))
+    return failure();
+
+  result.addTypes(ArrayType::get(elementType));
+
+  return success();
+}
+
+void ArrayCreateOp::print(OpAsmPrinter &p) {
+  p << ' ';
+  p.printOperands(getElements());
+  p << " : " << getType().getElementType();
+  p.printOptionalAttrDict((*this)->getAttrs(), {});
 }
 
 //===----------------------------------------------------------------------===//

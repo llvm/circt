@@ -446,16 +446,12 @@ private:
   // Sets up the necessary state and resources for a `CmpIOp` in
   // `buildLibraryBinaryPipeOp` if `cmpIOp` has sequential logic based on its
   // operands.
+  template <typename TCalyxLibOp>
   void setupCmpIOp(PatternRewriter &rewriter, CmpIOp cmpIOp, Operation *group,
                    calyx::RegisterOp &condReg, calyx::RegisterOp &resReg,
-                   bool &isSeqCondCheck) const {
+                   TCalyxLibOp calyxOp) const {
     bool lhsIsSeqOp = calyx::parentIsSeqCell(cmpIOp.getLhs());
     bool rhsIsSeqOp = calyx::parentIsSeqCell(cmpIOp.getRhs());
-
-    isSeqCondCheck =
-        (lhsIsSeqOp || rhsIsSeqOp) && isa<scf::IfOp>(cmpIOp->getParentOp());
-    if (!isSeqCondCheck)
-      return;
 
     StringRef opName = cmpIOp.getOperationName().split(".").second;
     Type width = cmpIOp.getResult().getType();
@@ -473,25 +469,42 @@ private:
     assert(
         lhsIsSeqOp != rhsIsSeqOp &&
         "unexpected sequential operation on both sides; please open an issue");
-    Operation *seqOp = calyx::parentIsSeqCell(cmpIOp.getLhs())
-                           ? cmpIOp.getLhs().getDefiningOp()
-                           : cmpIOp.getRhs().getDefiningOp();
-    condReg = getState<ComponentLoweringState>().getSeqResReg(seqOp);
+    // If `cmpIOp`'s lhs/rhs operand is the result of a sequential operation,
+    // its result will be stored in a register.
+    resReg =
+        cast<calyx::RegisterOp>(lhsIsSeqOp ? cmpIOp.getLhs().getDefiningOp()
+                                           : cmpIOp.getRhs().getDefiningOp());
 
     auto groupOp = cast<calyx::GroupOp>(group);
     getState<ComponentLoweringState>().addBlockScheduleable(cmpIOp->getBlock(),
                                                             groupOp);
 
-    buildAssignmentsForRegisterWrite(
-        rewriter, groupOp, getState<ComponentLoweringState>().getComponentOp(),
-        resReg, condReg.getOut());
+    rewriter.setInsertionPointToEnd(groupOp.getBodyBlock());
+    auto loc = cmpIOp.getLoc();
+    assert(
+        (isa<calyx::EqLibOp, calyx::NeqLibOp, calyx::SleLibOp, calyx::SltLibOp,
+             calyx::LeLibOp, calyx::LtLibOp, calyx::GeLibOp, calyx::GtLibOp,
+             calyx::SgeLibOp, calyx::SgtLibOp>(calyxOp.getOperation())) &&
+        "Must be a Calyx comparison library operation.");
+    int64_t outputIndex = 2;
+    rewriter.create<calyx::AssignOp>(loc, condReg.getIn(),
+                                     calyxOp.getResult(outputIndex));
+    rewriter.create<calyx::AssignOp>(
+        loc, condReg.getWriteEn(),
+        createConstant(loc, rewriter,
+                       getState<ComponentLoweringState>().getComponentOp(), 1,
+                       1));
+    rewriter.create<calyx::GroupDoneOp>(loc, condReg.getDone());
+
+    getState<ComponentLoweringState>().addSeqGuardCmpLibOp(cmpIOp);
   }
 
   template <typename CmpILibOp>
   LogicalResult buildCmpIOpHelper(PatternRewriter &rewriter, CmpIOp op) const {
-    bool isSeqCondCheck = isa<scf::IfOp>(op->getParentOp()) &&
-                          (calyx::parentIsSeqCell(op.getLhs()) ||
-                           calyx::parentIsSeqCell(op.getRhs()));
+    bool isIfOpGuard = std::any_of(op->getUsers().begin(), op->getUsers().end(),
+                                   [](auto op) { return isa<scf::IfOp>(op); });
+    bool isSeqCondCheck = isIfOpGuard && (calyx::parentIsSeqCell(op.getLhs()) ||
+                                          calyx::parentIsSeqCell(op.getRhs()));
 
     if (isSeqCondCheck)
       return buildLibraryOp<calyx::GroupOp, CmpILibOp>(rewriter, op);
@@ -531,11 +544,11 @@ private:
     /// Create assignments to the inputs of the library op.
     auto group = createGroupForOp<TGroupOp>(rewriter, op);
 
-    bool isSeqCondCheck = false;
+    bool isSeqCondCheck = isa<calyx::GroupOp>(group);
     calyx::RegisterOp condReg = nullptr, resReg = nullptr;
-    if (isa<CmpIOp>(op)) {
+    if (isa<CmpIOp>(op) && isSeqCondCheck) {
       auto cmpIOp = cast<CmpIOp>(op);
-      setupCmpIOp(rewriter, cmpIOp, group, condReg, resReg, isSeqCondCheck);
+      setupCmpIOp(rewriter, cmpIOp, group, condReg, resReg, calyxOp);
     }
 
     rewriter.setInsertionPointToEnd(group.getBodyBlock());
@@ -551,7 +564,7 @@ private:
     for (auto res : enumerate(opOutputPorts)) {
       getState<ComponentLoweringState>().registerEvaluatingGroup(res.value(),
                                                                  group);
-      auto dstOp = isSeqCondCheck ? resReg.getOut() : res.value();
+      auto dstOp = isSeqCondCheck ? condReg.getOut() : res.value();
       op->getResult(res.index()).replaceAllUsesWith(dstOp);
     }
 

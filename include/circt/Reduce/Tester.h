@@ -37,7 +37,7 @@ class TestCase;
 class Tester {
 public:
   Tester(llvm::StringRef testScript, llvm::ArrayRef<std::string> testScriptArgs,
-         bool testMustFail);
+         bool testMustFail, bool emitBytecode);
 
   /// Runs the interestingness testing script on a MLIR test case file. Returns
   /// true if the interesting behavior is present in the test case or false
@@ -52,6 +52,9 @@ public:
 
   /// Create a new test case for the given file already on disk.
   TestCase get(llvm::Twine filepath) const;
+
+  /// If true, use MLIR bytecode on-disk.  Otherwise, use MLIR text.
+  const bool emitBytecode;
 
 private:
   /// The binary to execute in order to check a reduction attempt for

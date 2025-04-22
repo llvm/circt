@@ -969,7 +969,7 @@ void ExtractInstancesPass::groupInstances() {
         wrapper.getLoc(), wrapper, wrapperName, NameKindEnum::DroppableName,
         ArrayRef<Attribute>{},
         /*portAnnotations=*/ArrayRef<Attribute>{}, /*lowerToBind=*/false,
-        hw::InnerSymAttr::get(wrapperInstName));
+        /*doNotPrint=*/false, hw::InnerSymAttr::get(wrapperInstName));
     unsigned portIdx = 0;
     for (auto inst : insts)
       for (auto result : inst.getResults())

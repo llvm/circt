@@ -16,6 +16,9 @@
 // CHECK: sv.error "assert:"
 // CHECK: sv.error "assertNotX:"
 // CHECK: sv.error "check [verif-library-assert] is included"
+// CHECK: sv.func.call.procedural @fn
+// CHECK: sv.fwrite
+// CHECK: sv.fflush
 // CHECK: sv.fatal 1
 // CHECK: foo_assert
 // CHECK: hw.module private @issue1246_assume(in %clock : i1) attributes {
@@ -48,6 +51,8 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
   hw.module.extern @foo_cover(in %a : i1) attributes {"firrtl.extract.cover.extra"}
   hw.module.extern @foo_assume(in %a : i1) attributes {"firrtl.extract.assume.extra"}
   hw.module.extern @foo_assert(in %a : i1) attributes {"firrtl.extract.assert.extra"}
+  sv.func private @fn(out out : i32 {sv.func.explicitly_returned})
+
   hw.module @issue1246(in %clock: i1) attributes {emit.fragments = [@some_fragment]} {
     sv.always posedge %clock  {
       sv.ifdef.procedural @SYNTHESIS {
@@ -58,6 +63,9 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
           sv.error "assert:"
           sv.error "assertNotX:"
           sv.error "check [verif-library-assert] is included"
+          %out = sv.func.call.procedural @fn () : () -> (i32)
+          sv.fwrite %out, "foo"
+          sv.fflush fd %out
           sv.fatal 1
           sv.assume %clock, immediate
           sv.cover %clock, immediate

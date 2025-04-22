@@ -10,8 +10,9 @@ from .rtg import rtg
 from .rtgtest import rtgtest
 from .index import index
 from .sets import Set
-from .integers import Integer
+from .integers import Integer, Bool
 from .bags import Bag
 from .sequences import sequence, Sequence, RandomizedSequence
 from .target import target, entry
-from .resources import IntegerRegister, Imm5, Imm12, Imm13, Imm21, Imm32
+from .resources import IntegerRegister, Immediate
+from .arrays import Array
