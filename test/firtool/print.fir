@@ -43,12 +43,8 @@ circuit PrintTest:
     ; CHECK-NEXT: $fwrite(32'h80000002, "literals: %%\n");
     printf(clock, cond, "literals: %%\n")
 
-<<<<<<< HEAD
-    ; CHECK-NEXT: $fwrite(`PRINTF_FD_, "[%0t]: %m\n", $time);
-    ; CHECK-NEXT: end
-=======
     ; CHECK-NEXT: $fwrite(32'h80000002, "[%0t]: %m\n", $time);
->>>>>>> 42546ada2 ([LowerToHW] Remove PRINTF_FD macro)
+    ; CHECK-NEXT: end
     printf(clock, cond, "[{{SimulationTime}}]: {{HierarchicalModuleName}}\n")
 
     ; CHECK:      if (cond) begin
