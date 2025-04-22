@@ -106,8 +106,9 @@ private:
   DataFlowSolver &solver;
 };
 
-struct CombIntRangeNarrowingPass : comb::impl::CombIntRangeNarrowingBase<CombIntRangeNarrowingPass> {
-  
+struct CombIntRangeNarrowingPass
+    : comb::impl::CombIntRangeNarrowingBase<CombIntRangeNarrowingPass> {
+
   using CombIntRangeNarrowingBase::CombIntRangeNarrowingBase;
   void runOnOperation() override;
 };

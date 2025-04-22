@@ -154,7 +154,6 @@ void comb::ConcatOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
   auto total_width = res_width;
   APInt umin = APInt::getZero(res_width);
   APInt umax = APInt::getZero(res_width);
-  // for (unsigned int i = 0; i < getNumOperands(); ++i) {
   for (auto [operand, arg] : llvm::zip(getOperands(), argRanges)) {
     assert(total_width >= operand.getType().getIntOrFloatBitWidth() &&
            "ConcatOp: total width in interval range calculation is negative");
