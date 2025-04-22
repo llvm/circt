@@ -11,6 +11,7 @@
 // no meaningful concept of overflow detection in comb.
 //
 //===----------------------------------------------------------------------===//
+
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Comb/CombPasses.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -178,7 +179,6 @@ void comb::ConcatOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
 void comb::ExtractOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
                                         SetIntRangeFn setResultRange) {
   // Right-shift and truncate (trunaction implicitly handled)
-  // auto res_width = getResult().getType().getIntOrFloatBitWidth();
   auto low_bit = getLowBit();
   auto umin = argRanges[0].umin().ushl_sat(low_bit);
   auto umax = argRanges[0].umax().ushl_sat(low_bit);

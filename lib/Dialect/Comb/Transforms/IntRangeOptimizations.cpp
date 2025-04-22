@@ -26,7 +26,7 @@ using namespace mlir::dataflow;
 
 namespace circt {
 namespace comb {
-#define GEN_PASS_DEF_COMBINTRANGEOPTIMIZATIONS
+#define GEN_PASS_DEF_COMBINTRANGENARROWING
 #include "circt/Dialect/Comb/Passes.h.inc"
 } // namespace comb
 } // namespace circt
@@ -49,7 +49,7 @@ static LogicalResult collectRanges(DataFlowSolver &solver, ValueRange values,
 }
 
 template <typename CombOpTy>
-struct CombOpNarrow : public mlir::OpRewritePattern<CombOpTy> {
+struct CombOpNarrow : public OpRewritePattern<CombOpTy> {
   CombOpNarrow(MLIRContext *context, DataFlowSolver &s)
       : OpRewritePattern<CombOpTy>(context), solver(s) {}
 
@@ -74,33 +74,31 @@ struct CombOpNarrow : public mlir::OpRewritePattern<CombOpTy> {
     else if (remove_width == op_width)
       return rewriter.notifyMatchFailure(
           op, "all bits to remove - replace by zero");
-    else {
-      // Replace operator by narrower version of itself
-      Value lhs = op.getOperand(0);
-      Value rhs = op.getOperand(1);
 
-      Location loc = op.getLoc();
-      auto newWidth = op_width - remove_width;
-      // Create a replacement type for the extracted bits
-      auto replaceType = rewriter.getIntegerType(newWidth);
+    // Replace operator by narrower version of itself
+    Value lhs = op.getOperand(0);
+    Value rhs = op.getOperand(1);
 
-      // Extract the lsbs from each operand
-      auto extractLhsOp =
-          rewriter.create<comb::ExtractOp>(loc, replaceType, lhs, 0);
-      auto extractRhsOp =
-          rewriter.create<comb::ExtractOp>(loc, replaceType, rhs, 0);
-      auto narrowOp =
-          rewriter.create<CombOpTy>(loc, extractLhsOp, extractRhsOp);
+    Location loc = op.getLoc();
+    auto newWidth = op_width - remove_width;
+    // Create a replacement type for the extracted bits
+    auto replaceType = rewriter.getIntegerType(newWidth);
 
-      // Concatenate zeros to match the original operator width
-      auto zero =
-          rewriter.create<hw::ConstantOp>(loc, APInt::getZero(remove_width));
-      auto replaceOp = rewriter.create<comb::ConcatOp>(
-          loc, op.getType(), ValueRange{zero, narrowOp});
+    // Extract the lsbs from each operand
+    auto extractLhsOp =
+        rewriter.create<comb::ExtractOp>(loc, replaceType, lhs, 0);
+    auto extractRhsOp =
+        rewriter.create<comb::ExtractOp>(loc, replaceType, rhs, 0);
+    auto narrowOp = rewriter.create<CombOpTy>(loc, extractLhsOp, extractRhsOp);
 
-      rewriter.replaceOp(op, replaceOp);
-      return success();
-    }
+    // Concatenate zeros to match the original operator width
+    auto zero =
+        rewriter.create<hw::ConstantOp>(loc, APInt::getZero(remove_width));
+    auto replaceOp = rewriter.create<comb::ConcatOp>(
+        loc, op.getType(), ValueRange{zero, narrowOp});
+
+    rewriter.replaceOp(op, replaceOp);
+    return success();
   }
 
 private:
@@ -109,8 +107,7 @@ private:
 
 namespace {
 class CombIntRangeNarrowingPass
-    : public circt::comb::impl::CombIntRangeNarrowingBase<
-          CombIntRangeNarrowingPass> {
+    : public comb::impl::CombIntRangeNarrowingBase<CombIntRangeNarrowingPass> {
 public:
   using CombIntRangeNarrowingBase::CombIntRangeNarrowingBase;
   void runOnOperation() override;
