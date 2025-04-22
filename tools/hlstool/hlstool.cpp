@@ -225,6 +225,14 @@ static cl::opt<bool> withDC("dc", cl::desc("Use the DC flow"), cl::init(false),
 static LoweringOptionsOption loweringOptions(mainCategory);
 
 // --------------------------------------------------------------------------
+// Calyx options
+// --------------------------------------------------------------------------
+static cl::opt<std::string> topLevelFunction("top-level-function",
+                                             cl::desc("Top level function"),
+                                             cl::init(""),
+                                             cl::cat(mainCategory));
+
+// --------------------------------------------------------------------------
 // (Configurable) pass pipelines
 // --------------------------------------------------------------------------
 
@@ -412,8 +420,9 @@ static LogicalResult doHLSFlowCalyx(
   });
 
   // Lower to Calyx
-  addIRLevel(IRLevel::Core,
-             [&]() { pm.addPass(circt::createSCFToCalyxPass()); });
+  addIRLevel(IRLevel::Core, [&]() {
+    pm.addPass(circt::createSCFToCalyxPass(topLevelFunction));
+  });
 
   // Run Calyx transforms
   addIRLevel(IRLevel::PostCompile, [&]() {
