@@ -22,7 +22,6 @@ def LowerComb : Pass<"lower-comb"> {
   }];
 }
 
-
 def CombIntRangeNarrowing : Pass<"comb-int-range-narrowing"> {
   let summary = "Reduce comb operations bitwidth based on integer range analysis.";
   let description = [{
@@ -32,4 +31,5 @@ def CombIntRangeNarrowing : Pass<"comb-int-range-narrowing"> {
     is often an over-approximation, a more precise analysis would require a union of intervals.
   }];
 }
+
 #endif // CIRCT_DIALECT_COMB_PASSES_TD

@@ -5,15 +5,11 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+
 #include "circt/Dialect/HW/HWOps.h"
 
 #include "mlir/Interfaces/InferIntRangeInterface.h"
 #include "mlir/Interfaces/Utils/InferIntRangeCommon.h"
-
-#include "llvm/Support/Debug.h"
-#include <optional>
-
-#define DEBUG_TYPE "int-range-analysis"
 
 using namespace mlir;
 using namespace mlir::intrange;

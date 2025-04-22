@@ -19,11 +19,6 @@
 #include "mlir/Interfaces/InferIntRangeInterface.h"
 #include "mlir/Interfaces/Utils/InferIntRangeCommon.h"
 
-#include "llvm/Support/Debug.h"
-#include <optional>
-
-#define DEBUG_TYPE "int-range-analysis"
-
 using namespace mlir;
 using namespace mlir::intrange;
 using namespace circt;
@@ -159,12 +154,13 @@ void comb::ConcatOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
   auto total_width = res_width;
   APInt umin = APInt::getZero(res_width);
   APInt umax = APInt::getZero(res_width);
-  for (unsigned int i = 0; i < getNumOperands(); ++i) {
-    assert(total_width >= getOperand(i).getType().getIntOrFloatBitWidth() &&
+  // for (unsigned int i = 0; i < getNumOperands(); ++i) {
+  for (auto [operand, arg] : llvm::zip(getOperands(), argRanges)) {
+    assert(total_width >= operand.getType().getIntOrFloatBitWidth() &&
            "ConcatOp: total width in interval range calculation is negative");
-    total_width -= getOperand(i).getType().getIntOrFloatBitWidth();
-    auto umin_upd = argRanges[i].umin().zext(res_width).ushl_sat(total_width);
-    auto umax_upd = argRanges[i].umax().zext(res_width).ushl_sat(total_width);
+    total_width -= operand.getType().getIntOrFloatBitWidth();
+    auto umin_upd = arg.umin().zext(res_width).ushl_sat(total_width);
+    auto umax_upd = arg.umax().zext(res_width).ushl_sat(total_width);
     umin = umin.uadd_sat(umin_upd);
     umax = umax.uadd_sat(umax_upd);
   }
@@ -189,6 +185,7 @@ void comb::ExtractOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
 //===----------------------------------------------------------------------===//
 // ReplicateOp
 //===----------------------------------------------------------------------===//
+
 void comb::ReplicateOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
                                           SetIntRangeFn setResultRange) {
   // Compute replicate as an unsigned integer of bits

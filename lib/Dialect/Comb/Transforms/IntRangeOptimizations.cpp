@@ -48,6 +48,7 @@ static LogicalResult collectRanges(DataFlowSolver &solver, ValueRange values,
   return success();
 }
 
+namespace {
 template <typename CombOpTy>
 struct CombOpNarrow : public OpRewritePattern<CombOpTy> {
   CombOpNarrow(MLIRContext *context, DataFlowSolver &s)
@@ -105,10 +106,8 @@ private:
   DataFlowSolver &solver;
 };
 
-namespace {
-class CombIntRangeNarrowingPass
-    : public comb::impl::CombIntRangeNarrowingBase<CombIntRangeNarrowingPass> {
-public:
+struct CombIntRangeNarrowingPass : comb::impl::CombIntRangeNarrowingBase<CombIntRangeNarrowingPass> {
+  
   using CombIntRangeNarrowingBase::CombIntRangeNarrowingBase;
   void runOnOperation() override;
 };
