@@ -63,6 +63,33 @@ def LowerContractsPass : Pass<"lower-contracts", "mlir::ModuleOp"> {
   }];
 }
 
+def LowerSymbolicValuesPass : Pass<"verif-lower-symbolic-values",
+                                   "mlir::ModuleOp"> {
+  let summary = "Lower symbolic values to blackbox instances or wires";
+  let description = [{
+    Converts `verif.symbolic_value` ops into one of the following
+    representations that formal tools can work with:
+
+    - Instances of an external module, which most formal tools can treat as an
+      internal port boundary with symbolic values assigned to the module
+      outputs.
+    - Wire declarations marked with `(* anyseq *)`, which Yosys treats like a
+      top-level input port.
+  }];
+  let options = [
+    Option<
+      "mode", "mode",
+      "SymbolicValueLowering", "SymbolicValueLowering::ExtModule",
+      "Control how symbolic values are lowered",
+      "symbolicValueLoweringCLValues()"
+    >,
+  ];
+  let dependentDialects = [
+    "hw::HWDialect",
+    "sv::SVDialect",
+  ];
+}
+
 def SimplifyAssumeEqPass : Pass<"simplify-assume-eq", "hw::HWModuleOp"> {
   let summary = "Use assume equal statements to simplify symbolic values";
   let description = [{
