@@ -25,7 +25,8 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 def ConstantOp
  : HWOp<"constant", [Pure, ConstantLike, FirstAttrDerivedResultType,
          DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-         DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
+         DeclareOpInterfaceMethods<InferIntRangeInterface, 
+                                   ["inferResultRanges"]>]> {
   let summary = "Produce a constant value";
   let description = [{
     The constant operation produces a constant value of standard integer type

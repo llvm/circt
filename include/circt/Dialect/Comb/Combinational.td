@@ -31,9 +31,7 @@ class BinOp<string mnemonic, list<Trait> traits = []> :
 // Binary operator with uniform input/result types.
 class UTBinOp<string mnemonic, list<Trait> traits = []> :
       BinOp<mnemonic,
-               traits # 
-               [SameTypeOperands, 
-                SameOperandsAndResultType, 
+               traits # [SameTypeOperands, SameOperandsAndResultType, 
                 DeclareOpInterfaceMethods<InferIntRangeInterface, 
                                           ["inferResultRanges"]>]> {
   let assemblyFormat = "(`bin` $twoState^)? $lhs `,` $rhs attr-dict `:` qualified(type($result))";
@@ -48,9 +46,7 @@ class VariadicOp<string mnemonic, list<Trait> traits = []> :
 
 class UTVariadicOp<string mnemonic, list<Trait> traits = []> :
       VariadicOp<mnemonic, 
-                  traits # 
-                  [SameTypeOperands, 
-                   SameOperandsAndResultType, 
+                  traits # [SameTypeOperands, SameOperandsAndResultType, 
                    DeclareOpInterfaceMethods<InferIntRangeInterface, 
                                              ["inferResultRanges"]>]> {
 
@@ -218,8 +214,7 @@ def ExtractOp : CombOp<"extract",
 // Other Operations
 //===----------------------------------------------------------------------===//
 def ConcatOp : CombOp<"concat", 
-  [InferTypeOpInterface, 
-   Pure, 
+  [InferTypeOpInterface, Pure, 
    DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
   let summary = "Concatenate a variadic list of operands together.";
   let description = [{
@@ -286,10 +281,9 @@ def ReplicateOp : CombOp<"replicate",
 }
 
 // Select one of two values based on a condition.
-def MuxOp : CombOp<"mux",
- [Pure, 
-  AllTypesMatch<["trueValue", "falseValue", "result"]>,
-  DeclareOpInterfaceMethods<InferIntRangeInterface, 
+def MuxOp : CombOp<"mux", 
+  [Pure,   AllTypesMatch<["trueValue", "falseValue", "result"]>,
+   DeclareOpInterfaceMethods<InferIntRangeInterface, 
                             ["inferResultRangesFromOptional"]>]> {
   let summary = "Return one or the other operand depending on a selector bit";
   let description = [{
