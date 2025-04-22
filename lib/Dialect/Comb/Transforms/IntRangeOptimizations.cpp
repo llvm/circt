@@ -57,7 +57,7 @@ struct CombOpNarrow : public OpRewritePattern<CombOpTy> {
   LogicalResult matchAndRewrite(CombOpTy op,
                                 PatternRewriter &rewriter) const override {
 
-    auto op_width = op.getType().getIntOrFloatBitWidth();
+    auto opWidth = op.getType().getIntOrFloatBitWidth();
 
     SmallVector<ConstantIntRanges> ranges;
     if (failed(collectRanges(solver, op->getOperands(), ranges)))
@@ -65,14 +65,14 @@ struct CombOpNarrow : public OpRewritePattern<CombOpTy> {
     if (failed(collectRanges(solver, op->getResults(), ranges)))
       return rewriter.notifyMatchFailure(op, "output without specified range");
 
-    auto remove_width = ranges[0].umax().countLeadingZeros();
+    auto removeWidth = ranges[0].umax().countLeadingZeros();
     for (const ConstantIntRanges &range : ranges) {
-      auto range_can_remove = range.umax().countLeadingZeros();
-      remove_width = std::min(remove_width, range_can_remove);
+      auto rangeCanRemove = range.umax().countLeadingZeros();
+      removeWidth = std::min(removeWidth, rangeCanRemove);
     }
-    if (remove_width == 0)
+    if (removeWidth == 0)
       return rewriter.notifyMatchFailure(op, "no bits to remove");
-    else if (remove_width == op_width)
+    else if (removeWidth == opWidth)
       return rewriter.notifyMatchFailure(
           op, "all bits to remove - replace by zero");
 
@@ -81,7 +81,7 @@ struct CombOpNarrow : public OpRewritePattern<CombOpTy> {
     Value rhs = op.getOperand(1);
 
     Location loc = op.getLoc();
-    auto newWidth = op_width - remove_width;
+    auto newWidth = opWidth - removeWidth;
     // Create a replacement type for the extracted bits
     auto replaceType = rewriter.getIntegerType(newWidth);
 
@@ -94,7 +94,7 @@ struct CombOpNarrow : public OpRewritePattern<CombOpTy> {
 
     // Concatenate zeros to match the original operator width
     auto zero =
-        rewriter.create<hw::ConstantOp>(loc, APInt::getZero(remove_width));
+        rewriter.create<hw::ConstantOp>(loc, APInt::getZero(removeWidth));
     auto replaceOp = rewriter.create<comb::ConcatOp>(
         loc, op.getType(), ValueRange{zero, narrowOp});
 

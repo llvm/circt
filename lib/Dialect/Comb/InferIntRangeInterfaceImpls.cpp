@@ -150,18 +150,18 @@ void comb::ShrSOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
 void comb::ConcatOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
                                        SetIntRangeFn setResultRange) {
   // Compute concat as an unsigned integer of bits
-  const auto res_width = getResult().getType().getIntOrFloatBitWidth();
-  auto total_width = res_width;
-  APInt umin = APInt::getZero(res_width);
-  APInt umax = APInt::getZero(res_width);
+  const auto resWidth = getResult().getType().getIntOrFloatBitWidth();
+  auto totalWidth = resWidth;
+  APInt umin = APInt::getZero(resWidth);
+  APInt umax = APInt::getZero(resWidth);
   for (auto [operand, arg] : llvm::zip(getOperands(), argRanges)) {
-    assert(total_width >= operand.getType().getIntOrFloatBitWidth() &&
+    assert(totalWidth >= operand.getType().getIntOrFloatBitWidth() &&
            "ConcatOp: total width in interval range calculation is negative");
-    total_width -= operand.getType().getIntOrFloatBitWidth();
-    auto umin_upd = arg.umin().zext(res_width).ushl_sat(total_width);
-    auto umax_upd = arg.umax().zext(res_width).ushl_sat(total_width);
-    umin = umin.uadd_sat(umin_upd);
-    umax = umax.uadd_sat(umax_upd);
+    totalWidth -= operand.getType().getIntOrFloatBitWidth();
+    auto uminUpd = arg.umin().zext(resWidth).ushl_sat(totalWidth);
+    auto umaxUpd = arg.umax().zext(resWidth).ushl_sat(totalWidth);
+    umin = umin.uadd_sat(uminUpd);
+    umax = umax.uadd_sat(umaxUpd);
   }
   auto urange = ConstantIntRanges::fromUnsigned(umin, umax);
   setResultRange(getResult(), urange);
@@ -174,9 +174,9 @@ void comb::ConcatOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
 void comb::ExtractOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
                                         SetIntRangeFn setResultRange) {
   // Right-shift and truncate (trunaction implicitly handled)
-  auto low_bit = getLowBit();
-  auto umin = argRanges[0].umin().ushl_sat(low_bit);
-  auto umax = argRanges[0].umax().ushl_sat(low_bit);
+  auto lowBit = getLowBit();
+  auto umin = argRanges[0].umin().ushl_sat(lowBit);
+  auto umax = argRanges[0].umax().ushl_sat(lowBit);
   auto urange = ConstantIntRanges::fromUnsigned(umin, umax);
   setResultRange(getResult(), urange);
 };
@@ -188,18 +188,18 @@ void comb::ExtractOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
 void comb::ReplicateOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
                                           SetIntRangeFn setResultRange) {
   // Compute replicate as an unsigned integer of bits
-  const auto operand_width = getOperand().getType().getIntOrFloatBitWidth();
-  const auto res_width = getResult().getType().getIntOrFloatBitWidth();
-  APInt umin = APInt::getZero(res_width);
-  APInt umax = APInt::getZero(res_width);
-  auto umin_in = argRanges[0].umin().zext(res_width);
-  auto umax_in = argRanges[0].umax().zext(res_width);
-  for (unsigned int total_width = 0; total_width < res_width;
-       total_width += operand_width) {
-    auto umin_upd = umin_in.ushl_sat(total_width);
-    auto umax_upd = umax_in.ushl_sat(total_width);
-    umin = umin.uadd_sat(umin_upd);
-    umax = umax.uadd_sat(umax_upd);
+  const auto operandWidth = getOperand().getType().getIntOrFloatBitWidth();
+  const auto resWidth = getResult().getType().getIntOrFloatBitWidth();
+  APInt umin = APInt::getZero(resWidth);
+  APInt umax = APInt::getZero(resWidth);
+  auto uminIn = argRanges[0].umin().zext(resWidth);
+  auto umaxIn = argRanges[0].umax().zext(resWidth);
+  for (unsigned int totalWidth = 0; totalWidth < resWidth;
+       totalWidth += operandWidth) {
+    auto uminUpd = uminIn.ushl_sat(totalWidth);
+    auto umaxUpd = umaxIn.ushl_sat(totalWidth);
+    umin = umin.uadd_sat(uminUpd);
+    umax = umax.uadd_sat(umaxUpd);
   }
   auto urange = ConstantIntRanges::fromUnsigned(umin, umax);
   setResultRange(getResult(), urange);
