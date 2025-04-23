@@ -18,6 +18,8 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Scheduling/Problems.h"
+#include "mlir/Analysis/DataFlow/DeadCodeAnalysis.h"
+#include "mlir/Analysis/DataFlow/IntegerRangeAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -29,6 +31,7 @@
 
 using namespace mlir;
 using namespace mlir::affine;
+using namespace mlir::dataflow;
 using namespace circt;
 using namespace circt::analysis;
 using namespace circt::scheduling;
@@ -264,6 +267,64 @@ void FIRRTLInstanceInfoPass::runOnOperation() {
 }
 
 //===----------------------------------------------------------------------===//
+// Comb IntRange Analysis
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct TestCombIntegerRangeAnalysisPass
+    : public PassWrapper<TestCombIntegerRangeAnalysisPass,
+                         OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestCombIntegerRangeAnalysisPass)
+
+  void runOnOperation() override;
+  StringRef getArgument() const override {
+    return "test-comb-intrange-analysis";
+  }
+  StringRef getDescription() const override {
+    return "Perform integer range analysis on comb dialect and set results as "
+           "attributes";
+  }
+};
+} // namespace
+
+void TestCombIntegerRangeAnalysisPass::runOnOperation() {
+  Operation *op = getOperation();
+  MLIRContext *ctx = op->getContext();
+  DataFlowSolver solver;
+  solver.load<DeadCodeAnalysis>();
+  solver.load<IntegerRangeAnalysis>();
+  if (failed(solver.initializeAndRun(op)))
+    return signalPassFailure();
+  op->walk([&](Operation *op) {
+    for (auto value : op->getResults()) {
+      if (auto *range = solver.lookupState<IntegerValueRangeLattice>(value)) {
+        assert(op->getResults().size() == 1 &&
+               "Expected a single result for the operation analysis");
+        assert(!range->getValue().isUninitialized() &&
+               "Expected a valid range for the value");
+        auto interval = range->getValue().getValue();
+        auto umin = interval.umin();
+        auto uminAttr =
+            IntegerAttr::get(IntegerType::get(ctx, umin.getBitWidth()), umin);
+        auto umax = interval.umax();
+        auto umaxAttr =
+            IntegerAttr::get(IntegerType::get(ctx, umax.getBitWidth()), umax);
+        auto smin = interval.umin();
+        auto sminAttr =
+            IntegerAttr::get(IntegerType::get(ctx, smin.getBitWidth()), smin);
+        auto smax = interval.umax();
+        auto smaxAttr =
+            IntegerAttr::get(IntegerType::get(ctx, smax.getBitWidth()), smax);
+        op->setAttr("integer.urange",
+                    ArrayAttr::get(ctx, {uminAttr, umaxAttr}));
+        op->setAttr("integer.srange",
+                    ArrayAttr::get(ctx, {sminAttr, smaxAttr}));
+      }
+    }
+  });
+}
+
+//===----------------------------------------------------------------------===//
 // Pass registration
 //===----------------------------------------------------------------------===//
 
@@ -284,6 +345,9 @@ void registerAnalysisTestPasses() {
   });
   registerPass([]() -> std::unique_ptr<Pass> {
     return std::make_unique<FIRRTLInstanceInfoPass>();
+  });
+  registerPass([]() -> std::unique_ptr<Pass> {
+    return std::make_unique<TestCombIntegerRangeAnalysisPass>();
   });
 }
 } // namespace test
