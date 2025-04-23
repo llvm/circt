@@ -797,7 +797,8 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       ckgEnableName("en"), ckgTestEnableName("test_en"), ckgInstName("ckg"),
       exportModuleHierarchy(false), stripFirDebugInfo(true),
       stripDebugInfo(false), fixupEICGWrapper(false), addCompanionAssume(false),
-      disableCSEinClasses(false), selectDefaultInstanceChoice(false) {
+      disableCSEinClasses(false), selectDefaultInstanceChoice(false),
+      symbolicValueLowering(verif::SymbolicValueLowering::ExtModule) {
   if (!clOptions.isConstructed())
     return;
   outputFilename = clOptions->outputFilename;
