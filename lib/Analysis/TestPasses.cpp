@@ -278,11 +278,11 @@ struct TestCombIntegerRangeAnalysisPass
 
   void runOnOperation() override;
   StringRef getArgument() const override {
-    return "test-comb-intrange-analysis";
+    return "test-comb-int-range-analysis";
   }
   StringRef getDescription() const override {
     return "Perform integer range analysis on comb dialect and set results as "
-           "attributes";
+           "attributes.";
   }
 };
 } // namespace
@@ -295,30 +295,35 @@ void TestCombIntegerRangeAnalysisPass::runOnOperation() {
   solver.load<IntegerRangeAnalysis>();
   if (failed(solver.initializeAndRun(op)))
     return signalPassFailure();
+  
+  // Append the integer range analysis as an operation attribute.
   op->walk([&](Operation *op) {
     for (auto value : op->getResults()) {
       if (auto *range = solver.lookupState<IntegerValueRangeLattice>(value)) {
+        // All analyzed comb operations should return a single result.
         assert(op->getResults().size() == 1 &&
                "Expected a single result for the operation analysis");
         assert(!range->getValue().isUninitialized() &&
                "Expected a valid range for the value");
         auto interval = range->getValue().getValue();
-        auto umin = interval.umin();
-        auto uminAttr =
-            IntegerAttr::get(IntegerType::get(ctx, umin.getBitWidth()), umin);
-        auto umax = interval.umax();
-        auto umaxAttr =
-            IntegerAttr::get(IntegerType::get(ctx, umax.getBitWidth()), umax);
-        auto smin = interval.umin();
-        auto sminAttr =
-            IntegerAttr::get(IntegerType::get(ctx, smin.getBitWidth()), smin);
-        auto smax = interval.umax();
+        auto smax = interval.smax();
         auto smaxAttr =
             IntegerAttr::get(IntegerType::get(ctx, smax.getBitWidth()), smax);
-        op->setAttr("integer.urange",
-                    ArrayAttr::get(ctx, {uminAttr, umaxAttr}));
-        op->setAttr("integer.srange",
-                    ArrayAttr::get(ctx, {sminAttr, smaxAttr}));
+        op->setAttr("smax", smaxAttr);
+        auto smin = interval.smin();
+        auto sminAttr =
+            IntegerAttr::get(IntegerType::get(ctx, smin.getBitWidth()), smin);
+        op->setAttr("smin", sminAttr);
+        auto umax = interval.umax();
+        auto umaxAttr = IntegerAttr::get(
+            IntegerType::get(ctx, umax.getBitWidth(), IntegerType::Unsigned),
+            umax);
+        op->setAttr("umax", umaxAttr);
+        auto umin = interval.umin();
+        auto uminAttr = IntegerAttr::get(
+            IntegerType::get(ctx, umin.getBitWidth(), IntegerType::Unsigned),
+            umin);
+        op->setAttr("umin", uminAttr);
       }
     }
   });
