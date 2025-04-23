@@ -26,15 +26,10 @@ HierPathOp HierPathCache::getOrCreatePath(ArrayAttr pathArray, Location loc,
                                           StringRef nameHint) {
 
   assert(pathArray && !pathArray.empty());
-  // Return an existing HierPathOp if one exists with the same path.  Add
-  // location information to the existing HierPathOp if it is being reused.
+  // Return an existing HierPathOp if one exists with the same path.
   auto pathIter = pathCache.find(pathArray);
-  if (pathIter != pathCache.end()) {
-    auto &hierPathOp = pathIter->getSecond();
-    hierPathOp->setLoc(
-        FusedLoc::get(loc.getContext(), hierPathOp->getLoc(), loc));
-    return hierPathOp;
-  }
+  if (pathIter != pathCache.end())
+    return pathIter->second;
 
   // Create a builder and move its insertion point to the original insertion
   // point.
